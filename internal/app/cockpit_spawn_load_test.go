@@ -22,7 +22,6 @@ func TestSpawnRankTakesOnlyALoadTheDaemonRead(t *testing.T) {
 	if l := s.machines[0]; l.loadOK {
 		t.Errorf("a load the daemon could not read ranks as known, load %.2f", l.load)
 	}
-	// A daemon from before load_ok sent a load it read.
 	m.LocalLoad = federation.Load{Cores: 4, Load1: 1}
 	m.spawnRank(s)
 	if l := s.machines[0]; !l.loadOK || l.load != 1 {

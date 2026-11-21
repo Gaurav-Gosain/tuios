@@ -15,8 +15,8 @@ import (
 func TestLargestClearRectTakesEveryBlocker(t *testing.T) {
 	img := cellRect{X: 0, Y: 0, W: 20, H: 20}
 	blockers := []cellRect{
-		{X: 15, Y: 0, W: 10, H: 20}, // right strip
-		{X: 0, Y: 15, W: 20, H: 10}, // bottom strip
+		{X: 15, Y: 0, W: 10, H: 20},
+		{X: 0, Y: 15, W: 20, H: 10},
 	}
 	got, ok := largestClearRect(img, blockers)
 	if !ok {
@@ -49,8 +49,6 @@ func TestOccludersAboveIgnoresWhatCannotCover(t *testing.T) {
 	}
 }
 
-// occlusionHarness places one image in one window and lets a test drop another
-// window on top of it.
 type occlusionHarness struct {
 	kp    *KittyPassthrough
 	host  *recWriter
@@ -58,8 +56,6 @@ type occlusionHarness struct {
 	infos map[string]*WindowPositionInfo
 }
 
-// newOcclusionHarness places a 20x10 cell image at the top left of a 100x30
-// window on a 200x60 screen.
 func newOcclusionHarness(t *testing.T) *occlusionHarness {
 	t.Helper()
 	withClientCaps(t, &HostCapabilities{
@@ -88,7 +84,6 @@ func newOcclusionHarness(t *testing.T) *occlusionHarness {
 	}
 }
 
-// refresh runs one render pass and returns what went to the host.
 func (h *occlusionHarness) refresh() string {
 	h.kp.RefreshAllPlacements(func() map[string]*WindowPositionInfo { return h.infos })
 	out := h.kp.FlushPending()
@@ -107,9 +102,8 @@ func (h *occlusionHarness) refresh() string {
 // the crop deleted the placement and this failed.
 func TestAPartlyCoveredImageIsCroppedNotHidden(t *testing.T) {
 	h := newOcclusionHarness(t)
-	h.refresh() // settle: the image is placed at full size
+	h.refresh()
 
-	// A window covering the right half of the image, from column 12 rightwards.
 	h.infos["over"] = &WindowPositionInfo{
 		WindowX: 12, WindowY: 0, Width: 40, Height: 30,
 		Visible: true, WindowZ: 9, ScreenWidth: 200, ScreenHeight: 60,
@@ -122,13 +116,9 @@ func TestAPartlyCoveredImageIsCroppedNotHidden(t *testing.T) {
 	if strings.Contains(out, "a=d,d=i") {
 		t.Errorf("the image was deleted rather than cropped:\n%q", out)
 	}
-	// The visible strip runs from the image's left edge to column 12, which is
-	// 11 cells wide once the window's 1-cell border is accounted for.
 	if !strings.Contains(out, ",c=11") {
 		t.Errorf("the placement was not narrowed to the clear strip:\n%q", out)
 	}
-	// A crop off one side needs a source rectangle, or the host scales the
-	// whole bitmap into the narrower cell box instead of cropping it.
 	if !strings.Contains(out, ",x=") || !strings.Contains(out, ",w=") {
 		t.Errorf("no source rectangle, so the image is squeezed rather than cropped:\n%q", out)
 	}
@@ -174,7 +164,6 @@ func TestSubtractRectIsExact(t *testing.T) {
 	img := cellRect{X: 0, Y: 0, W: 10, H: 10}
 
 	t.Run("a corner leaves two pieces covering everything else", func(t *testing.T) {
-		// Covers the bottom right quadrant.
 		got := subtractRect(img, cellRect{X: 5, Y: 5, W: 20, H: 20})
 		if covered := totalArea(got); covered != 75 {
 			t.Errorf("pieces cover %d cells, want 75 (100 less the 25 covered): %+v", covered, got)
@@ -212,8 +201,6 @@ func totalArea(rs []cellRect) int {
 	return n
 }
 
-// assertDisjointAndClear checks the pieces do not overlap each other, stay
-// inside the image, and none of them touches the blocker.
 func assertDisjointAndClear(t *testing.T, pieces []cellRect, img, blocker cellRect) {
 	t.Helper()
 	for i, a := range pieces {
@@ -245,7 +232,6 @@ func TestClearRegionCapsTheDecomposition(t *testing.T) {
 	if _, ok := clearRegion(nil, img, blockers, maxVisibleSlices); ok {
 		t.Error("a decomposition past the cap reported success instead of asking for the fallback")
 	}
-	// One blocker stays well inside the cap.
 	if got, ok := clearRegion(nil, img, blockers[:1], maxVisibleSlices); !ok || len(got) == 0 {
 		t.Errorf("one blocker should decompose, got %+v ok=%v", got, ok)
 	}
@@ -257,8 +243,6 @@ func TestClearRegionCapsTheDecomposition(t *testing.T) {
 // read: parts of the image went missing and others were placed twice.
 func TestClearRegionKeepsEveryPiece(t *testing.T) {
 	img := cellRect{X: 0, Y: 0, W: 20, H: 8}
-	// Two short bars, the first splitting the image into four pieces and the
-	// second cutting the band below it.
 	blockers := []cellRect{{X: 5, Y: 2, W: 3, H: 1}, {X: 12, Y: 5, W: 3, H: 1}}
 	got, ok := clearRegion(nil, img, blockers, 20)
 	if !ok {
@@ -294,7 +278,6 @@ func TestACornerCoverKeepsBothStrips(t *testing.T) {
 	h := newOcclusionHarness(t)
 	h.refresh()
 
-	// The image sits at (1,1) and is 20x10. Cover its bottom right corner only.
 	h.infos["over"] = &WindowPositionInfo{
 		WindowX: 12, WindowY: 6, Width: 40, Height: 30,
 		Visible: true, WindowZ: 9, ScreenWidth: 200, ScreenHeight: 60,
@@ -307,8 +290,6 @@ func TestACornerCoverKeepsBothStrips(t *testing.T) {
 	if strings.Contains(out, "a=d,d=i,i=1,q=2") {
 		t.Errorf("the image was hidden rather than cropped:\n%q", out)
 	}
-	// The two pieces must use different placement ids or the second replaces
-	// the first.
 	if ids := placedIDs(out); len(ids) < 2 {
 		t.Errorf("the two pieces did not get distinct placement ids:\n%q", out)
 	}
@@ -334,7 +315,6 @@ func TestSlicesShrinkBackToOne(t *testing.T) {
 	}
 	ids := placedIDs(two)
 
-	// Move the window so it covers a full-height band instead: one piece.
 	h.infos["over"].WindowY = 0
 	out := h.refresh()
 
@@ -343,8 +323,6 @@ func TestSlicesShrinkBackToOne(t *testing.T) {
 	}
 }
 
-// placedIDs is the distinct placement ids the a=p commands in out use, in
-// order.
 func placedIDs(out string) []string {
 	var ids []string
 	seen := map[string]bool{}

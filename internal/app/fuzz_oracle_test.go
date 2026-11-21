@@ -15,23 +15,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// The oracle. A fuzzer is worth exactly as much as this file: without it the
-// loop is a very slow way to discover that the program does not segfault.
-//
-// Every rule here is one the suite already pins for a particular arrangement,
-// generalised to hold after any action. Where the existing test walks a fixed
-// matrix, the rule below is stated without reference to the arrangement, so a
-// combination nobody wrote a case for is still covered.
-//
-// Rules are ordered cheapest first, and Check returns at the first rule that
-// breaks. That keeps the common path (nothing is wrong) off the expensive
-// render, and it makes the shrinker's job well defined: one failing run names
-// one rule.
-
-// fuzzTicks is a monotonic stand-in for wall time. Ticks carry a timestamp and
-// several code paths compare it against a stored one, so a run driven by
-// time.Now would take a different branch on a slow machine and stop
-// reproducing.
 var fuzzTicks atomic.Int64
 
 func fuzzClock() time.Time {
@@ -42,15 +25,6 @@ func vio(rule, format string, args ...any) []fuzz.Violation {
 	return []fuzz.Violation{{Rule: rule, Detail: fmt.Sprintf(format, args...)}}
 }
 
-// fuzzRules is the oracle, in the order Check runs it: cheapest first, so the
-// common case where nothing is wrong stays off the expensive render.
-//
-// rules lists every Violation a check can raise, in the order it raises them.
-// One function often decides several distinct properties, and it is the
-// property, not the function, that a report names and a shrinker holds fixed,
-// so the registry enumerates properties. Getting that wrong is not cosmetic: an
-// attached display matches a Violation's Rule against these names, and a name
-// no violation ever carries is a rule that reads as passing while it fails.
 var fuzzRules = []struct {
 	rules []fuzz.RuleInfo
 	check func(*fuzzOS) []fuzz.Violation
@@ -110,17 +84,10 @@ var fuzzRules = []struct {
 	}, checkDividersUseTheirOwnGlyphs},
 }
 
-// fuzzCheckRules belong to Check itself rather than to any one check function.
-// A panic escaping a rule can surface at any point in the sweep, so it sits at
-// the end of the registry where it cannot claim that the rules before it were
-// skipped.
 var fuzzCheckRules = []fuzz.RuleInfo{
 	{Name: "render-panic", Family: "process", Doc: "a rule panicked composing a frame, which in the real render loop kills the process"},
 }
 
-// Rules names the oracle for an attached display. It is the optional half of
-// the observer seam: without it a display still sees actions and failures, with
-// it the display can show every rule and how it fared.
 func (f *fuzzOS) Rules() []fuzz.RuleInfo {
 	out := make([]fuzz.RuleInfo, 0, len(fuzzRules)+len(fuzzCheckRules))
 	for _, r := range fuzzRules {
@@ -129,16 +96,9 @@ func (f *fuzzOS) Rules() []fuzz.RuleInfo {
 	return append(out, fuzzCheckRules...)
 }
 
-// Check runs the oracle against the current model.
-//
-// A panic raised by a rule is a finding rather than a crash. Update recovers
-// its own panics, but the render does not: View runs inside bubbletea's frame
-// loop, where a panic takes the process down and the user loses every pane. So
-// the oracle recovers one here and reports it, which also lets the shrinker
-// minimise it instead of the run dying with the binary.
 func (f *fuzzOS) Check() (found []fuzz.Violation) {
 	if f.m.QuitRequested {
-		return nil // see Apply
+		return nil
 	}
 	defer func() {
 		if r := recover(); r != nil {
@@ -159,9 +119,6 @@ func (f *fuzzOS) Check() (found []fuzz.Violation) {
 	return nil
 }
 
-// Update recovers a panic rather than letting it out, so a panic is not a
-// crash; it is a log line and a frame that did nothing. That makes it invisible
-// to a fuzzer that only watches for a crash, which is why it is checked first.
 func checkNoRecoveredPanic(f *fuzzOS) []fuzz.Violation {
 	for _, msg := range f.m.LogMessages {
 		if strings.Contains(msg.Message, "recovered panic") {
@@ -172,9 +129,6 @@ func checkNoRecoveredPanic(f *fuzzOS) []fuzz.Violation {
 	return nil
 }
 
-// The indexes the rest of the model dereferences. A focus index past the end of
-// the slice is a crash the next time anything reaches for the focused pane, and
-// a workspace outside the range is a lookup that silently returns nothing.
 func checkModelIndexes(f *fuzzOS) []fuzz.Violation {
 	m := f.m
 	if m.FocusedWindow < -1 || m.FocusedWindow >= len(m.Windows) {
@@ -194,7 +148,6 @@ func checkModelIndexes(f *fuzzOS) []fuzz.Violation {
 	return nil
 }
 
-// slidingPane reports whether a snap animation is in flight for w.
 func slidingPane(m *OS, w *terminal.Window) bool {
 	for _, anim := range m.Animations {
 		if anim.Type == ui.AnimationSnap && anim.Window == w {
@@ -204,32 +157,17 @@ func slidingPane(m *OS, w *terminal.Window) bool {
 	return false
 }
 
-// The three-way size agreement, generalised off the matrix in
-// pane_size_announce_test.go: whatever the arrangement, a guest is told the
-// size it can draw in, the emulator holds that grid, and the frame the pane
-// renders fits the box the renderer clips it to.
 func checkPaneSizeAgreement(f *fuzzOS) []fuzz.Violation {
 	m := f.m
 	if f.deferring() {
-		// A live deferral means the announcement is stale on purpose: the size
-		// is still moving and the expensive half is being held back. Asserting
-		// agreement here would assert the opposite of the documented design.
-		// The next Tick settles it, and the rule applies again from there.
 		return nil
 	}
 	for _, w := range visibleFuzzPanes(m) {
-		// A pane sliding to its slot keeps the emulator at the size it had when
-		// the slide started and catches up in one resize when it lands (see
-		// landSnapAnimations). The model's clock does not advance a slide, and a
-		// run can turn motion on in the middle (a settings overlay stepping its
-		// value), so the frame can be one the slide has not finished.
 		if slidingPane(m, w) {
 			continue
 		}
 		cw, ch := w.ContentWidth(), w.ContentHeight()
 		if cw <= 0 || ch <= 0 {
-			// A pane with no room to draw is a legitimate state on a viewport
-			// too small to hold one, and the sizes below are meaningless there.
 			continue
 		}
 		if ew, eh := w.Terminal.Width(), w.Terminal.Height(); ew != cw || eh != ch {
@@ -250,15 +188,6 @@ func checkPaneSizeAgreement(f *fuzzOS) []fuzz.Violation {
 	return nil
 }
 
-// noteMoves records the panes whose drawable size has left the settled
-// baseline. It is called after every action, deferral or not, and between the
-// keys of one action that sends several. A host resize away and back leaves the
-// pane the size it started at, and the announcements it took in between were
-// each for a size it really had; comparing only the two settled endpoints sees
-// no change at all and charges both as spurious. Recording the excursion as it
-// happens is what tells the two apart. A text of two keys that move a zoom to
-// another pane and back is the same excursion in one action: without a look
-// between the keys it passed for a pane told twice with nothing changed.
 func (f *fuzzOS) noteMoves() {
 	for id, size := range drawableSizes(f.m) {
 		if before, ok := f.settledDrawable[id]; ok && size != before {
@@ -267,15 +196,6 @@ func (f *fuzzOS) noteMoves() {
 	}
 }
 
-// Generalised from a unit test that checked a workspace switch alone (now
-// removed; e2e workspace_switch_replay covers the switch): not just a
-// workspace switch, but any action at all. A pane whose drawable size did not
-// move must not have been told anything, because every announcement is a
-// SIGWINCH and a full-screen program redraws on each one.
-// The baseline is the last settled state rather than the previous action,
-// because a resize defers its PTY half and drains it on a later action. Charging
-// that drain to whichever action happened to trigger it would report the drain
-// as spurious every time, which is the opposite of what the rule is for.
 func checkNoSpuriousResize(f *fuzzOS) []fuzz.Violation {
 	now := drawableSizes(f.m)
 	f.noteMoves()
@@ -299,29 +219,13 @@ func checkNoSpuriousResize(f *fuzzOS) []fuzz.Violation {
 	return bad
 }
 
-// Generalised from assertNoOverlap and TestApplyLayoutNeverOverlaps: tiled
-// panes partition their region, so no two of them may claim a cell. Two panes
-// over one cell means whichever draws second wins and the other's guest is
-// invisible.
 func checkLayoutIsDisjoint(f *fuzzOS) []fuzz.Violation {
-	// Only when something claims to be partitioning. With auto-tiling off the
-	// panes are free-floating windows a user may deliberately stack, and the
-	// scrolling layout is a strip wider than the viewport that is scrolled
-	// along rather than a partition of it.
 	if !f.m.AutoTiling || f.m.LayoutModeName() == LayoutModeScrolling || !f.hasRoomToDraw() {
 		return nil
 	}
-	// A pane being moved or resized follows the pointer until the button
-	// comes up, over whatever it passes.
 	if f.m.Dragging || f.m.Resizing {
 		return nil
 	}
-	// A pane sliding to its slot is drawn between two layouts, and the panes
-	// of a split can overlap on the way. The slide ends at the slot, so the
-	// layout is judged when it has landed. A run can turn motion on in the
-	// middle (a settings overlay stepping its value), which is how a retile
-	// after that left the panes at their starting rectangles in this model,
-	// whose clock does not advance a slide.
 	for _, anim := range f.m.Animations {
 		if anim.Type == ui.AnimationSnap {
 			return nil
@@ -329,18 +233,9 @@ func checkLayoutIsDisjoint(f *fuzzOS) []fuzz.Violation {
 	}
 	wins := tiledRects(f.m)
 	for _, w := range wins {
-		// A zoomed pane covers the others by design and they are not drawn, so
-		// there is no rectangle to partition while one is up.
 		if w.Zoomed {
 			return nil
 		}
-		// A pane clamped to the floor is the layout saying the region cannot
-		// hold this many panes. Overlap is the documented consequence of the
-		// clamp, so there is no partition to assert until the region grows.
-		// The floor is the size both tilers actually clamp to, in
-		// internal/layout/tiling.go and internal/layout/bsp.go. Naming
-		// MinWindowWidth here instead asked about a size the clamp raises panes
-		// off, so the escape could never fire for the clamp it was written for.
 		if w.Width <= config.DefaultWindowWidth || w.Height <= config.DefaultWindowHeight {
 			return nil
 		}
@@ -359,18 +254,11 @@ func checkLayoutIsDisjoint(f *fuzzOS) []fuzz.Violation {
 	return nil
 }
 
-// Generalised from TestGestureCannotSurviveAFrameWithNoButtonHeld. The original
-// pins the backstop in isolation; here the rule is that no sequence of any
-// inputs can reach a frame where a gesture is live and no button is down.
-// A stuck gesture is the pane that stops accepting input for the rest of the
-// session.
 func checkGestureNeedsAButton(f *fuzzOS) []fuzz.Violation {
 	m := f.m
 	if m.pointerDown {
 		return nil
 	}
-	// Ending the gesture is what the frame does, so the rule is checked where
-	// the frame checks it: after the backstop has had its chance to run.
 	m.endGestureWithoutButton()
 	switch {
 	case m.Resizing:
@@ -390,9 +278,6 @@ func checkGestureNeedsAButton(f *fuzzOS) []fuzz.Violation {
 	return nil
 }
 
-// The scrollbar is an overlay in the pane's own last content column, so a
-// column outside that range is a thumb painted over the neighbour or over the
-// divider.
 func checkScrollbarColumn(f *fuzzOS) []fuzz.Violation {
 	for _, w := range visibleFuzzPanes(f.m) {
 		if !windowNeedsScrollbar(w, &f.m.Settings) {
@@ -407,10 +292,6 @@ func checkScrollbarColumn(f *fuzzOS) []fuzz.Violation {
 	return nil
 }
 
-// The frame is what the host terminal is handed. One row too many scrolls the
-// screen and pushes the top line into the host's scrollback; one column too
-// many wraps and corrupts every row below. Neither is recoverable without a
-// full redraw, and both have shipped.
 func checkFrameFitsTheHost(f *fuzzOS) []fuzz.Violation {
 	m := f.m
 	rows := f.frameRows()
@@ -428,27 +309,15 @@ func checkFrameFitsTheHost(f *fuzzOS) []fuzz.Violation {
 	return nil
 }
 
-// The rail's addressing rules, from sidebar_invariants_test.go, plus the
-// stronger one from sidebar_strip_hits_test.go: a recorded rectangle covers
-// exactly the cells the renderer painted for that target, both edge columns
-// included. Several real bugs were a target one column bigger or smaller than
-// it looked.
 func checkRailAddressing(f *fuzzOS) []fuzz.Violation {
 	m := f.m
 	if !f.m.Settings.SidebarEnabled || m.GetSidebarWidth() <= 0 {
 		return nil
 	}
-	// The hits and nav lists are published by the render, so a viewport too small
-	// to compose a frame at all leaves nothing to judge: the buffers still hold
-	// the last frame that was drawn, at a geometry that no longer applies, and
-	// the app never presented them. Every other geometry rule here already
-	// declines on a viewport with no room to draw in.
 	if f.frameRows() == nil {
 		return nil
 	}
 
-	// Index for index: every hit names a nav row, in order. nav also carries
-	// the rows scrolled out of sight, so the relation is a subsequence.
 	j := 0
 	for i, hit := range m.SidebarHits {
 		want := navRowOf(hit)
@@ -481,9 +350,6 @@ func checkRailAddressing(f *fuzzOS) []fuzz.Violation {
 					i, h.X0, h.Y0, i-1, prev.X0, prev.Y0)
 			}
 		}
-		// Both edge columns, and both edge rows, belong to the target that
-		// recorded them. A rect wider than the paint routes a click on the
-		// neighbour here; narrower, and the cell that looks clickable is not.
 		for _, c := range [][2]int{{h.X0, h.Y0}, {h.X1 - 1, h.Y0}, {h.X0, h.Y1 - 1}, {h.X1 - 1, h.Y1 - 1}} {
 			got, ok := m.sidebarRowAt(c[0], c[1])
 			if !ok || got != h {
@@ -503,10 +369,6 @@ func checkRailAddressing(f *fuzzOS) []fuzz.Violation {
 	return nil
 }
 
-// The cache contract, in the direction that is a correctness bug: the rail's
-// drawn output moved and the signature did not, so the next frame serves the
-// stale rail. The opposite direction (a signature that moves for undrawn state)
-// costs a rebuild rather than a wrong pixel and has its own table test.
 func checkRailSignatureFollowsTheRail(f *fuzzOS) []fuzz.Violation {
 	m := f.m
 	if !f.m.Settings.SidebarEnabled || m.GetSidebarWidth() <= 0 {
@@ -525,15 +387,8 @@ func checkRailSignatureFollowsTheRail(f *fuzzOS) []fuzz.Violation {
 	return vio("rail-signature", "the rail redrew with the signature unmoved at %s", sig)
 }
 
-// Nothing paints into a cell a pane's guest owns. Each pane writes a marker of
-// its own, and the marker has to survive the composition: a divider that ran
-// one cell too far, a toast that reached out of the dock, or a tooltip that
-// clamped into the pane area all show up here as a missing marker.
 func checkGuestCellsAreNotPaintedOver(f *fuzzOS) []fuzz.Violation {
 	m := f.m
-	// The rule is about the chrome that is never supposed to reach into a pane:
-	// a divider that ran one cell too far, a toast that leaned out of the dock,
-	// a tooltip that clamped inward, the scrollbar thumb.
 	panes := visibleFuzzPanes(m)
 	if len(panes) == 0 || !f.framePaintsPanes() {
 		return nil
@@ -541,7 +396,7 @@ func checkGuestCellsAreNotPaintedOver(f *fuzzOS) []fuzz.Violation {
 	marks := make([]string, len(panes))
 	for i, w := range panes {
 		if w.ContentWidth() < len(paneMarker(i)) || w.ContentHeight() < 1 {
-			return nil // too small to hold a marker, so the check says nothing
+			return nil
 		}
 		marks[i] = paneMarker(i)
 		w.LockIO()
@@ -553,55 +408,21 @@ func checkGuestCellsAreNotPaintedOver(f *fuzzOS) []fuzz.Violation {
 	for i, w := range panes {
 		x, y := w.X+w.BorderOffset(), w.Y+w.BorderOffset()
 		n := len([]rune(marks[i]))
-		// The sidebar and the dock are reserved bands, drawn above the panes by
-		// design, and with auto-tiling off a pane may sit under one: floating
-		// panes keep the rectangle the user gave them, and ClampWindowsToView only
-		// guarantees a corner of each stays in the content region. The chrome owns
-		// those cells, so the question this rule asks does not apply there. Same
-		// reasoning as the overlap rule's own escape for free-floating panes.
-		// The whole marker is tested, not just the cell it starts in: a marker
-		// beginning outside the band and running into it is the same arrangement,
-		// and checking the first cell alone reported it as a violation.
 		if m.InDockBand(y) || bandCovers(m, x, y, n) {
 			continue
 		}
 		if !paneCellsAreOnScreen(m, x, y, n) {
 			continue
 		}
-		// A pane in copy mode shows its scrollback, not the screen the
-		// marker was written to.
 		if w.InCopyMode() {
 			continue
 		}
-		// A pane squeezed below the box its own border needs has no cell of its
-		// own to own: its title bar and the neighbours' share the rows. New panes
-		// are not refused for lack of room (only a split asked for is, see
-		// SplitRefusal), so a region that cannot hold them all leaves some at
-		// one or two rows, and the layout rule says the same of it by excusing
-		// panes at the floor.
 		if !w.Tiled && (w.Width < 3 || w.Height < 3) {
 			continue
 		}
-		// A pane the user stacked another one on top of. With auto-tiling off the
-		// panes are free-floating windows that may be deliberately overlapped, so
-		// whichever draws later owns the cell and the marker underneath it is
-		// meant to be hidden. This is the escape the overlap rule already makes
-		// for the same arrangement. Under tiling the rectangles partition the
-		// region, so nothing covers anything and the rule keeps its full strength
-		// there; what it is for, chrome reaching into a pane, is untouched either
-		// way, because the dividers, toasts, tooltips and scrollbar are not panes.
 		if coveredByAPaneAbove(m, panes, i, x, y, n) {
 			continue
 		}
-		// An armed leader with no mode pill shows the floating badge at the
-		// top of the screen. It is drawn over the panes on purpose, like the
-		// which-key menu that the same state opens after its delay: it lasts
-		// only while the leader waits for its key, and a pane region that gave
-		// it a row would resize every pane on each press of the leader. With
-		// shared borders and the dock hidden, the row it floats on is a pane's
-		// first line rather than a title border. Only the badge's own cells
-		// are excused, and only for the leader: the recording and nest badges
-		// stay up for minutes, so they are held to the rule.
 		if leaderBadgeCovers(m, x, y, n) {
 			continue
 		}
@@ -614,27 +435,6 @@ func checkGuestCellsAreNotPaintedOver(f *fuzzOS) []fuzz.Violation {
 	return nil
 }
 
-// writeMarkerAtOrigin clears a pane's screen and writes mark into its top-left
-// cell, whatever modes its guest left set.
-//
-// A plain CUP home is not enough. With origin mode (DECOM) on, home is the top
-// left corner of the margins, not of the screen, and a right margin (DECSLRM)
-// wraps the marker before it ends. Both are the emulator doing what the guest
-// asked, so a marker they move is not chrome painting over a pane.
-//
-// The check changes as little of the guest's state as it can, because the
-// actions after it still run under that state:
-//
-//   - The top and bottom margins are never touched. With origin mode off, home
-//     is the screen's corner whatever they are, and the marker is one row.
-//   - Origin mode goes off only if it is on, and back on after the marker.
-//   - The left and right margins open to the full width only if DECLRMM is on,
-//     and then they go back to what ScrollRegion reports. That is the only
-//     state the check reads back from the emulator.
-//
-// All of it goes through Write, as sequences. The Restore calls are for a
-// reattach: the ghostty backend queues them and replays them on its next read,
-// which cleared the marker it had just written.
 func writeMarkerAtOrigin(t vt.Terminal, mark string) {
 	const decom, declrmm = 6, 69
 	modes := t.GetModes()
@@ -645,7 +445,7 @@ func writeMarkerAtOrigin(t vt.Terminal, mark string) {
 		seq.WriteString("\x1b[?6l")
 	}
 	if modes[declrmm] {
-		seq.WriteString("\x1b[s") // DECSLRM with no parameters: the full width
+		seq.WriteString("\x1b[s")
 	}
 	seq.WriteString("\x1b[H\x1b[2J")
 	seq.WriteString(mark)
@@ -658,24 +458,10 @@ func writeMarkerAtOrigin(t vt.Terminal, mark string) {
 	_, _ = t.Write([]byte(seq.String()))
 }
 
-// paneCellsAreOnScreen reports whether the n cells starting at (x,y) are cells
-// the frame has at all.
-//
-// With auto-tiling off a pane keeps the rectangle it was given, and a host that
-// shrank under it can leave that rectangle past the edge; ClampWindowsToView
-// only guarantees a corner stays in the content region. There is no frame cell
-// to read there, so the rule has nothing to say.
-//
-// Measured against the render size rather than against the length of the row,
-// because a short row is the frame having trimmed the blanks off a pane that is
-// on screen and painted nothing, and that is a violation the rule still has to
-// report.
 func paneCellsAreOnScreen(m *OS, x, y, n int) bool {
 	return x >= 0 && y >= 0 && x+n <= m.GetRenderWidth() && y < m.GetRenderHeight()
 }
 
-// bandCovers reports whether the sidebar's reserved band takes any of the n
-// cells starting at (x,y).
 func bandCovers(m *OS, x, y, n int) bool {
 	for c := x; c < x+n; c++ {
 		if m.SidebarBandContains(c, y) {
@@ -685,9 +471,6 @@ func bandCovers(m *OS, x, y, n int) bool {
 	return false
 }
 
-// leaderBadgeCovers reports whether the floating badge, shown for an armed
-// leader, reaches any of the n cells starting at (x,y). The badge is its text
-// with one cell of padding on each side.
 func leaderBadgeCovers(m *OS, x, y, n int) bool {
 	text, kind := m.statusBadge()
 	if kind != badgeLeader || y != m.badgeY(kind) {
@@ -697,12 +480,6 @@ func leaderBadgeCovers(m *OS, x, y, n int) bool {
 	return x < end && x+n > badgeX
 }
 
-// coveredByAPaneAbove reports whether another visible pane draws over any of the
-// n cells starting at (x,y), in front of the pane that owns them.
-//
-// The compositor gives each pane a layer at its own Z, floating panes above the
-// separators, and settles a tie by the order the layers were appended, which is
-// the order of m.Windows. That is the order reproduced here.
 func coveredByAPaneAbove(m *OS, panes []*terminal.Window, i, x, y, n int) bool {
 	w := panes[i]
 	for j, v := range panes {
@@ -727,28 +504,15 @@ func fuzzPaneDrawsAbove(a *terminal.Window, ai int, b *terminal.Window, bi int) 
 	return ai > bi
 }
 
-// fuzzPaneZ asks the renderer where it puts a pane rather than keeping a copy
-// of the arithmetic: the copy drifted once, when the floating band moved.
 func fuzzPaneZ(w *terminal.Window) int {
 	return windowLayerZ(w, false)
 }
 
-// deferring reports whether an announcement is being held back on purpose,
-// which is the one state where a stale announcement is correct. A resize still
-// in flight is one; a pointer gesture holding every pane's announcement until
-// the button comes up is the other. It reads the flags rather than calling
-// resizeDeferralActive, because that call ends a stale deferral as a side
-// effect and an oracle must not move the state it is judging.
 func (f *fuzzOS) deferring() bool {
 	return f.m.viewportResizing || f.m.Resizing || len(f.m.PendingResizes) > 0 ||
 		f.m.announceGestureHeld
 }
 
-// A divider is drawn in the style the frame is drawn in, so every cell it owns
-// has to come out of that style's own glyph set. The table test walks nine
-// styles against three dock positions and three sidebar states from a settled
-// start; this asks the same question after any sequence, which is where a style
-// changed at runtime under a live layout gets checked.
 func checkDividersUseTheirOwnGlyphs(f *fuzzOS) []fuzz.Violation {
 	m := f.m
 	if !f.m.Settings.SharedBorders || !f.framePaintsPanes() {
@@ -768,31 +532,13 @@ func checkDividersUseTheirOwnGlyphs(f *fuzzOS) []fuzz.Violation {
 	return nil
 }
 
-// framePaintsPanes reports whether this frame is the ordinary one: panes tiled
-// across the region with nothing drawn over them. The rules that read the
-// composed frame are all statements about that frame. An overlay, a zoom, or a
-// scrolling strip each legitimately covers or omits a pane, so asserting
-// against them there would be asserting that the feature does not work.
 func (f *fuzzOS) framePaintsPanes() bool {
 	m := f.m
-	// AnyOverlayOpen reports the draggable overlay panels only, which is what its
-	// callers want and what its one production caller pairs with
-	// ContextMenuActive. The context menu is drawn over the panes like the rest,
-	// so this rule needs the same pair rather than the panel half alone.
-	// A held move or resize draws the panes it is moving without their
-	// content until the button comes up.
 	if !f.hasRoomToDraw() || m.AnyOverlayOpen() || m.ContextMenuActive() || m.ShowHelp || m.ShowLogs ||
 		m.Dragging || m.Resizing ||
-		// The rename dialog, the screensaver and a pinned picture-in-picture
-		// view draw over the panes too.
-		// Rename is not one of eachOverlayGate's kinds, so AnyOverlayOpen
-		// does not report it.
 		m.Renaming() || m.ScreensaverActive() || m.pipWanted() {
 		return false
 	}
-	// A rail the keyboard reached while it was hidden is drawn over the panes
-	// without taking a column from them (SidebarRevealedForFocus), so it covers
-	// whatever is under it, a divider included.
 	if m.SidebarRevealedForFocus {
 		return false
 	}
@@ -807,16 +553,11 @@ func (f *fuzzOS) framePaintsPanes() bool {
 	return true
 }
 
-// hasRoomToDraw reports whether there is a content region at all. On a viewport
-// too small to hold one, panes clamp to a one-cell minimum and stack on top of
-// each other; nothing is drawn, so the geometry rules have nothing to say.
 func (f *fuzzOS) hasRoomToDraw() bool {
 	b := f.m.GetBSPBounds()
 	return b.W > 0 && b.H > 0 && f.m.GetRenderWidth() > 0 && f.m.GetRenderHeight() > 0
 }
 
-// visibleFuzzPanes is the set every rule above is stated over: the panes on the
-// current workspace that the frame actually draws.
 func visibleFuzzPanes(m *OS) []*terminal.Window {
 	var out []*terminal.Window
 	for _, w := range m.Windows {
@@ -827,7 +568,6 @@ func visibleFuzzPanes(m *OS) []*terminal.Window {
 	return out
 }
 
-// frameRows composes the frame the host would receive, stripped of styling.
 func (f *fuzzOS) frameRows() []string {
 	if f.m.GetRenderWidth() <= 0 || f.m.GetRenderHeight() <= 0 {
 		return nil
@@ -835,13 +575,6 @@ func (f *fuzzOS) frameRows() []string {
 	return strings.Split(stripANSIForTrace(lipgloss.Sprint(f.m.GetCanvas(true).Render())), "\n")
 }
 
-// renderGrid is the frame as cells, indexed by screen column. It used to be
-// the runes of each row, which puts every cell after a wide character one
-// index early: a window renamed "世界" drew those two runes into four columns
-// of the sidebar on the same row as a pane's marker, and the rule read the
-// marker two columns late and reported the pane as painted over. A wide
-// cluster takes its first rune in its first column and 0 in the columns it
-// covers; the marks of a cluster ride on its first rune.
 func (f *fuzzOS) renderGrid() [][]rune {
 	rows := f.frameRows()
 	g := make([][]rune, len(rows))

@@ -8,18 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The scope of the guest-cells rule, pinned in both directions.
-//
-// The rule says nothing may paint into a cell a pane's guest owns. Nineteen
-// fuzzer findings were one arrangement: auto-tiling off, where panes are
-// free-floating windows a user may deliberately stack, so the pane in front
-// owns the cell and the marker underneath it is meant to be hidden. The overlap
-// rule already makes that escape for the same arrangement.
-//
-// The risk in adding it is that the escape swallows the bugs the rule exists
-// for, so the two tests below fence it: under tiling it must never fire, and it
-// must only ever excuse another pane, never the chrome.
-
 // TestGuestCellsEscapeNeverFiresUnderTiling is the guard on the escape. Tiled
 // panes partition their region, so no pane is ever in front of another one's
 // cells and the rule is exactly as strong as it was before the escape existed.
@@ -57,7 +45,6 @@ func TestGuestCellsExcusesOnlyAPaneInFront(t *testing.T) {
 	front.X, front.Y, front.Width, front.Height = 10, 0, 20, 10
 
 	panes := visibleFuzzPanes(m)
-	// front is later in m.Windows, so the compositor draws it over back.
 	if !coveredByAPaneAbove(m, panes, 0, back.X, back.Y, 9) {
 		t.Error("a pane stacked under another one is not reported as covered")
 	}
@@ -65,8 +52,6 @@ func TestGuestCellsExcusesOnlyAPaneInFront(t *testing.T) {
 		t.Error("the pane in front is reported as covered by the one behind it")
 	}
 
-	// A cell the other pane's rectangle does not reach is nobody else's, so
-	// whatever is drawn there is still the rule's business.
 	if coveredByAPaneAbove(m, panes, 0, back.X+30, back.Y, 9) {
 		t.Error("a cell outside every other pane is reported as covered")
 	}
@@ -146,7 +131,6 @@ func TestSpuriousWinchStillCatchesAnAnnouncementForNothing(t *testing.T) {
 		t.Fatalf("the settled fixture already reports %s", vs[0].Detail)
 	}
 
-	// An announcement with nothing behind it: no action, no size change.
 	for _, rec := range f.told {
 		rec.calls++
 		break

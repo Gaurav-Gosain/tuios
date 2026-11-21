@@ -9,11 +9,6 @@ import (
 	"github.com/charmbracelet/colorprofile"
 )
 
-// The benchmark here pins the cost of the diff drawing: a frame of the largest
-// diff stays inside its budget.
-
-// bigReview is a review of 400 files, the first of 5000 lines in one hunk
-// and every other a hunk of a dozen: the most review-diff hands over.
 func bigReview(b *testing.B) *OS {
 	b.Helper()
 	m := shotOS(b)

@@ -16,59 +16,22 @@ import (
 	"tuios.dev/vt"
 )
 
-// The pictures in a screenshot.
-//
-// A pane's kitty and sixel images are drawn by the host terminal, so they are
-// in no cell the capture reads. A screenshot finds them in what this client
-// already keeps to show them:
-//   - a kitty placement, from the passthrough's placements and the payload it
-//     kept for the image (kitty_keep.go);
-//   - a kitty Unicode placeholder, from the placeholder cells and the box of
-//     its virtual placement;
-//   - a sixel image, from its marker cells and the decoded image the sixel
-//     passthrough holds.
-//
-// So a screenshot shows the images this client shows, and no others. A
-// served client (SSH, web) has its own passthroughs, holding only the panes
-// that client can see.
-//
-// Finding the images is cheap and happens with the cells, on the capture.
-// Decoding them is the slow part and happens in the render command, off the
-// update loop, for the images on the picture only and under
-// shotImageMaxPixels. Nothing here runs unless a screenshot is taken.
-
-// shotImageMaxPixels bounds the pixels one screenshot decodes, across all its
-// images. It is the reply preview's bound (replyPreviewMaxPixels), for the
-// same reason: every image size is the guest's to choose. An image past what
-// is left is left out of the picture.
 const shotImageMaxPixels = 24 << 20
 
-// shotPiece is one image on a capture, before its pixels are decoded.
 type shotPiece struct {
-	// key names the decoded image, so pieces of one image decode it once.
-	key any
-	// declared is the image's area as far as it is known before decoding,
-	// 0 when it is not.
-	declared int
-	decode   func(maxPixels int) (image.Image, error)
-	// source gives the rectangle of the decoded image that fills the box.
-	source func(pix image.Image) image.Rectangle
-	// col, row, cols, rows are the image's whole box in grid cells, and sub
-	// is the part of it the capture shows, in cells of the box. An empty sub
-	// is the whole box.
+	key                  any
+	declared             int
+	decode               func(maxPixels int) (image.Image, error)
+	source               func(pix image.Image) image.Rectangle
 	col, row, cols, rows int
 	sub                  image.Rectangle
 	z                    int32
 }
 
-// decodeShotPieces decodes the pieces' images and returns them as shot
-// images, in drawing order.
 func decodeShotPieces(pieces []shotPiece) []shot.Image {
 	if len(pieces) == 0 {
 		return nil
 	}
-	// sort.SliceStable is linked already. slices.SortStableFunc would add
-	// its own copy of the sort for this one type.
 	sort.SliceStable(pieces, func(i, j int) bool { return pieces[i].z < pieces[j].z })
 	type result struct {
 		pix image.Image
@@ -108,8 +71,6 @@ func decodeShotPieces(pieces []shotPiece) []shot.Image {
 	return out
 }
 
-// subShotImage narrows an image to a rectangle of its box, given in cells of
-// the box, with the matching part of its source.
 func subShotImage(img shot.Image, sub image.Rectangle) shot.Image {
 	src := img.Source
 	if src.Empty() {
@@ -127,14 +88,6 @@ func subShotImage(img shot.Image, sub image.Rectangle) shot.Image {
 	return img
 }
 
-// kittyShotSource is the rectangle of a kitty image that fills a placement's
-// box of cols by rows cells.
-//
-// kitty draws an image at its own pixel size unless the guest gave the box
-// with c= and r=, and then it scales the image to fill the box. A placement
-// record keeps only the box, so which of the two it was is read back from its
-// size: a box that is the image's own size rounded up to whole cells is the
-// image at its own size, and the rest of the box is empty.
 func kittyShotSource(pix image.Image, cols, rows, sx, sy, sw, sh, xoff, yoff, cellW, cellH int) image.Rectangle {
 	b := pix.Bounds()
 	if sw <= 0 {
@@ -150,9 +103,6 @@ func kittyShotSource(pix image.Image, cols, rows, sx, sy, sw, sh, xoff, yoff, ce
 	return image.Rect(b.Min.X+sx, b.Min.Y+sy, b.Min.X+sx+sw, b.Min.Y+sy+sh)
 }
 
-// virtualShotSource is the rectangle of an image that fills the box of a
-// virtual placement: kitty fits the image in the box, keeping its aspect
-// ratio, and centres it.
 func virtualShotSource(pix image.Image, cols, rows, cellW, cellH int) image.Rectangle {
 	b := pix.Bounds()
 	if cellW <= 0 || cellH <= 0 {
@@ -169,31 +119,24 @@ func virtualShotSource(pix image.Image, cols, rows, cellW, cellH int) image.Rect
 	return image.Rect(int(math.Round(x0)), int(math.Round(y0)), int(math.Round(x0+sw)), int(math.Round(y0+sh)))
 }
 
-// shotCellHit is one image cell found on a captured grid.
 type shotCellHit struct {
 	x, y int
 	key  shotHitKey
-	r, c int // the cell's row and column inside the image
+	r, c int
 }
 
-// shotHitKey says which image a cell belongs to.
 type shotHitKey struct {
 	sixel     bool
 	id        uint32
 	placement uint32
 }
 
-// shotHitRect is a rectangle of cells of one image: at x, y on the grid, w by
-// h cells, starting at row r and column c of the image.
 type shotHitRect struct {
 	key        shotHitKey
 	x, y, w, h int
 	r, c       int
 }
 
-// groupShotHits joins image cells into rectangles: a run of cells along a row
-// whose image columns follow on, and then runs in rows below that line up.
-// hits are in row-major order.
 func groupShotHits(hits []shotCellHit) []shotHitRect {
 	var runs []shotHitRect
 	for _, h := range hits {
@@ -230,7 +173,6 @@ func groupShotHits(hits []shotCellHit) []shotHitRect {
 	return out
 }
 
-// shotDiacritics is the reverse of kitty.Diacritic.
 var shotDiacritics = sync.OnceValue(func() map[rune]int {
 	m := make(map[rune]int, 297)
 	first := kitty.Diacritic(0)
@@ -244,9 +186,6 @@ var shotDiacritics = sync.OnceValue(func() map[rune]int {
 	return m
 })
 
-// placeholderHit reads a kitty placeholder cell. The emulator gives every
-// placeholder cell its own row and column as it stores it (vt's
-// rewriteKittyPlaceholder), so a cell is read on its own.
 func placeholderHit(x, y int, cell *uv.Cell) (shotCellHit, bool) {
 	id, ok := vt.KittyPlaceholderImageID(cell.Content, cell.Style.Fg)
 	if !ok || id == 0 {
@@ -279,8 +218,6 @@ func placeholderHit(x, y int, cell *uv.Cell) (shotCellHit, bool) {
 		key: shotHitKey{id: id, placement: placeholderPlacementID(cell.Style.UnderlineColor)}}, true
 }
 
-// placeholderPlacementID reads the placement id a placeholder cell carries in
-// its underline colour.
 func placeholderPlacementID(c color.Color) uint32 {
 	switch v := c.(type) {
 	case nil:
@@ -297,9 +234,6 @@ func placeholderPlacementID(c color.Color) uint32 {
 	return uint32(r>>8)<<16 | uint32(g>>8)<<8 | uint32(b>>8)
 }
 
-// scanImageCells finds the sixel and kitty placeholder cells of a screen and
-// blanks them on the grid, which would otherwise draw them as missing glyphs.
-// The grid has the screen's size.
 func scanImageCells(t interface {
 	CellAt(x, y int) *uv.Cell
 }, g *shot.Grid) []shotCellHit {
@@ -328,7 +262,6 @@ func scanImageCells(t interface {
 	return hits
 }
 
-// shotKittyPlacement is what a capture needs of one kitty placement.
 type shotKittyPlacement struct {
 	kept                 *keptImage
 	guestX, absoluteLine int
@@ -342,10 +275,6 @@ type shotKittyPlacement struct {
 	showCols, showRows   int
 }
 
-// captureKitty reads what a capture needs from the passthrough: the window's
-// placements on the screen it shows, every image a placeholder cell may name,
-// the virtual boxes of those images and the host's cell size. An empty
-// windowID reads the placements the host is showing now, for every window.
 func (kp *KittyPassthrough) captureKitty(windowID string, alt bool, hostIDs []uint32) (
 	placements []shotKittyPlacement, kept map[uint32]*keptImage, boxes map[uint32]map[uint32]virtualBox, cellW, cellH int,
 ) {
@@ -408,15 +337,12 @@ func (kp *KittyPassthrough) captureKitty(windowID string, alt bool, hostIDs []ui
 	return placements, kept, boxes, cellW, cellH
 }
 
-// shotSixel is what a capture needs of one sixel image.
 type shotSixel struct {
 	img          *vt.SixelImage
 	cellW, cellH int
 	rows, cols   int
 }
 
-// captureSixel reads the sixel images with the given ids, and the
-// rectangles the host is showing now when frame is set.
 func (sp *SixelPassthrough) captureSixel(ids []uint32, frame bool) (map[uint32]shotSixel, []sixelRect) {
 	if sp == nil {
 		return nil, nil
@@ -439,8 +365,6 @@ func (sp *SixelPassthrough) captureSixel(ids []uint32, frame bool) (map[uint32]s
 	return out, rects
 }
 
-// sixelPiece is the piece for a rectangle of a sixel image's cells, at x, y
-// on the grid.
 func sixelPiece(id uint32, s shotSixel, x, y, r0, c0, r1, c1 int) shotPiece {
 	img := s.img
 	return shotPiece{
@@ -457,8 +381,6 @@ func sixelPiece(id uint32, s shotSixel, x, y, r0, c0, r1, c1 int) shotPiece {
 			}, nil
 		},
 		source: func(image.Image) image.Rectangle {
-			// A sixel image covers its cells from their top-left corner at its
-			// own pixel size, and the rest of the last row and column is empty.
 			return image.Rect(0, 0, s.cols*s.cellW, s.rows*s.cellH)
 		},
 		col: x - c0, row: y - r0, cols: s.cols, rows: s.rows,
@@ -466,8 +388,6 @@ func sixelPiece(id uint32, s shotSixel, x, y, r0, c0, r1, c1 int) shotPiece {
 	}
 }
 
-// kittyPiece is the piece for a kitty placement whose whole box has its
-// top-left cell at col, row.
 func kittyPiece(p shotKittyPlacement, col, row, cellW, cellH int) shotPiece {
 	k := p.kept
 	return shotPiece{
@@ -482,7 +402,6 @@ func kittyPiece(p shotKittyPlacement, col, row, cellW, cellH int) shotPiece {
 	}
 }
 
-// placeholderPieces turns grouped placeholder cells into pieces.
 func placeholderPieces(rects []shotHitRect, kept map[uint32]*keptImage, boxes map[uint32]map[uint32]virtualBox, cellW, cellH int) []shotPiece {
 	var out []shotPiece
 	for _, r := range rects {
@@ -492,8 +411,6 @@ func placeholderPieces(rects []shotHitRect, kept map[uint32]*keptImage, boxes ma
 		}
 		box, ok := boxes[r.key.id][r.key.placement]
 		if !ok {
-			// A cell that names no placement, or one tuios did not see, takes
-			// the image's only box when it has one.
 			for _, b := range boxes[r.key.id] {
 				box = b
 				break
@@ -501,9 +418,6 @@ func placeholderPieces(rects []shotHitRect, kept map[uint32]*keptImage, boxes ma
 		}
 		cols, rows := box.cols, box.rows
 		if cols <= 0 || rows <= 0 {
-			// Without a box the image is at its own size, so the cells say how
-			// far it reaches. Its last row and column are the most this run
-			// shows.
 			cols, rows = max(cols, r.c+r.w), max(rows, r.r+r.h)
 		}
 		out = append(out, shotPiece{
@@ -521,7 +435,6 @@ func placeholderPieces(rects []shotHitRect, kept map[uint32]*keptImage, boxes ma
 	return out
 }
 
-// hitIDs splits the image ids found on a grid by kind.
 func hitIDs(hits []shotCellHit) (sixelIDs, kittyIDs []uint32) {
 	for _, h := range hits {
 		if h.key.sixel {
@@ -535,10 +448,6 @@ func hitIDs(hits []shotCellHit) (sixelIDs, kittyIDs []uint32) {
 	return sixelIDs, kittyIDs
 }
 
-// windowShotPieces finds the images on a window's screen, the grid the
-// capture just read from it, and blanks their cells on the grid. The caller
-// holds the window's IO lock, which is taken before the passthrough locks as
-// the PTY reader takes it.
 func (m *OS) windowShotPieces(windowID string, alt bool, t vt.Terminal, g *shot.Grid) []shotPiece {
 	hits := scanImageCells(t, g)
 	sixelIDs, kittyIDs := hitIDs(hits)
@@ -552,7 +461,6 @@ func (m *OS) windowShotPieces(windowID string, alt bool, t vt.Terminal, g *shot.
 	return pieces
 }
 
-// hitPieces turns the image cells found on a grid into pieces.
 func hitPieces(hits []shotCellHit, sixelIDs []uint32, kept map[uint32]*keptImage, boxes map[uint32]map[uint32]virtualBox, cellW, cellH int, sp *SixelPassthrough) []shotPiece {
 	if len(hits) == 0 {
 		return nil
@@ -577,10 +485,6 @@ func hitPieces(hits []shotCellHit, sixelIDs []uint32, kept map[uint32]*keptImage
 	return append(pieces, kitty...)
 }
 
-// screenShotPieces finds the images on the composed screen: the kitty
-// placements and sixel rectangles the host is showing, where it shows them,
-// and the placeholder cells hits found on the composed grid. Positions are
-// screen cells.
 func (m *OS) screenShotPieces(hits []shotCellHit) []shotPiece {
 	_, kittyIDs := hitIDs(hits)
 	placements, kept, boxes, cellW, cellH := m.KittyPassthrough.captureKitty("", false, kittyIDs)
@@ -615,16 +519,11 @@ func (m *OS) screenShotPieces(hits []shotCellHit) []shotPiece {
 		}
 	}
 	pieces = append(pieces, placeholderPieces(kittyRects, kept, boxes, cellW, cellH)...)
-	// The reply editor's previews and the launcher's icons are tuios's own
-	// kitty pictures, placed beside the passthrough rather than through it, so
-	// it does not list them.
 	pieces = append(pieces, m.replyPreview.shotPieces()...)
 	pieces = append(pieces, m.replyPreview.placeholderShotPieces(kittyRects)...)
 	return append(pieces, m.launcherIcons.shotPieces()...)
 }
 
-// cropShotPieces moves pieces found in screen cells onto a grid cut out at
-// x0, y0.
 func cropShotPieces(pieces []shotPiece, x0, y0 int) []shotPiece {
 	for i := range pieces {
 		pieces[i].col -= x0

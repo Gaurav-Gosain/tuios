@@ -42,8 +42,6 @@ func TestMetaKeyRulesAgreeWithTheRail(t *testing.T) {
 	}
 }
 
-// needOS is sectionsTestOS with only the plain shell left in the attached
-// session, so every agent row on the rail is one the test put there.
 func needOS(t *testing.T) *OS {
 	t.Helper()
 	m, _ := sectionsTestOS(t, 120, 40)

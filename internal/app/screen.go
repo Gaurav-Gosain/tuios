@@ -10,12 +10,6 @@ import (
 	"github.com/charmbracelet/colorprofile"
 )
 
-// A client with a screen writes its own frames: the program runs without
-// Bubble Tea's renderer (WithOwnScreen), compose diffs the canvas into the
-// screen, and View hands the screen the modes and the cursor. See
-// internal/termio. Without a screen, View returns the frame as a string for
-// Bubble Tea's renderer, as it always has.
-
 // UseScreen gives this client a screen that writes to out. environ is the
 // client terminal's environment, profile its colour profile, and o how its
 // output is carried. The program must take WithOwnScreen(true).
@@ -30,9 +24,6 @@ func (m *OS) CloseScreen() {
 	}
 }
 
-// screenFrame takes a composed frame into the screen and returns the token
-// View compares to decide whether the frame is new: it changes only when the
-// frame changed a cell, as the frame string did.
 func (m *OS) screenFrame() viewContent {
 	canvas, frame := m.composeFrameParts()
 	changed := false
@@ -44,8 +35,6 @@ func (m *OS) screenFrame() viewContent {
 		changed = m.screen.FrameRows(&canvas.Buffer, rows)
 		m.frameRowsAll = false
 		clear(m.frameRows)
-		// The theme transition and the workspace slide copy the old frame
-		// from the canvas (canvasIsFrame), so there is no text to keep.
 		frame = ""
 	} else {
 		changed = m.screen.FrameString(frame, m.GetRenderWidth(), m.GetRenderHeight())
@@ -57,17 +46,11 @@ func (m *OS) screenFrame() viewContent {
 	return viewContent("\x00frame" + strconv.FormatUint(m.screenSeq, 10))
 }
 
-// screenReleaseMsg hands the terminal to a program execProcess runs, and
-// screenBackMsg takes it back when the program ends, carrying the message
-// the caller asked for.
 type (
 	screenReleaseMsg struct{}
 	screenBackMsg    struct{ inner tea.Msg }
 )
 
-// execProcess is tea.ExecProcess for this client. Bubble Tea gives the
-// terminal to the command by stopping its renderer; a client with a screen
-// releases the screen first and takes it back after.
 func (m *OS) execProcess(c *exec.Cmd, done tea.ExecCallback) tea.Cmd {
 	if m.screen == nil {
 		return tea.ExecProcess(c, done)
@@ -78,8 +61,6 @@ func (m *OS) execProcess(c *exec.Cmd, done tea.ExecCallback) tea.Cmd {
 	)
 }
 
-// takeScreenBack draws the whole screen again after the terminal was another
-// program's.
 func (m *OS) takeScreenBack() {
 	if m.screen == nil {
 		return

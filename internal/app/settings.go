@@ -13,112 +13,47 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// settingControl is the kind of editor a setting row uses.
 type settingControl int
 
 const (
-	controlEnum   settingControl = iota // ‹ value › cycler
-	controlBool                         // [ on ] / [ off ] toggle
-	controlInt                          // ‹ n › numeric stepper
-	controlString                       // free-text field edited inline
-	// controlColor is a swatch and its value, opening the colour picker. It has
-	// no stepper: there is no next colour to step to, and typing a hex into a
-	// text field was never the way to choose one.
+	controlEnum settingControl = iota
+	controlBool
+	controlInt
+	controlString
 	controlColor
-	// controlStatus is a word that says how something stands, with no stepper.
-	// Enter or a click anywhere on the row runs its activate hook. The Agents
-	// tab's rows are these.
 	controlStatus
 )
 
-// settingItem is one row on the settings page. adjust changes the value by dir
-// (-1 or +1 for enum/int, either flips a bool) and applies it live; the input
-// handler persists afterward.
 type settingItem struct {
-	// Path is the registry option this row reaches, empty for a row that is
-	// not one (the daemon log level's own spelling, a section header). The
-	// coverage test reads it to tell an option with no way to reach it from one
-	// that is deliberately absent.
-	Path  string
-	Label string
-	// Aside is a short note drawn quietly after the label, such as whether
-	// an agent is on PATH.
-	Aside   string
-	Desc    string
-	Control settingControl
-	Options []string
-	// Placeholder is the example value, shown on the description line. It is
-	// deliberately not drawn in the value's place: an example there reads as the
-	// value in force.
-	Placeholder string
-	// Unset is what the field shows when nothing is set: what happens instead,
-	// in the row's own terms.
-	Unset   string
-	value   func(m *OS) string
-	boolVal func(m *OS) bool
-	adjust  func(m *OS, dir int)
-	// setStr commits an edited controlString value.
-	setStr func(m *OS, v string)
-	// swatch is the colour a controlColor row shows, given the ground it will be
-	// painted on. It is the colour in force rather than the value stored, so an
-	// unset row still shows what it is inheriting.
-	swatch func(ground color.Color, s *config.Settings) color.Color
-	// ink is the colour a controlStatus row writes its value in.
-	ink func(pal overlay.Palette) color.Color
-	// activate, when set, runs on Enter/click instead of adjusting the value
-	// (e.g. the Theme row opens the theme picker). It returns a command so a
-	// row can open something that has to start running: the effect picker's
-	// preview is an animation, and a hook that could return nothing had no way
-	// to schedule the first frame.
-	activate func(m *OS) tea.Cmd
-	// meter is where the value sits in its range, 0 to 1. Set for the numeric
-	// rows whose range is bounded, so the row says how far along it is and not
-	// only what the number is: "gap 3" answers nothing without knowing that the
-	// most it goes to is 8.
-	meter func(m *OS) float64
-	// setNum writes a number straight to a bounded numeric setting, and numMin
-	// and numMax are the ends it may be written between. Set for every numeric
-	// row alongside adjust.
-	//
-	// adjust alone is a stepper, and a stepper is the wrong instrument for a
-	// number with a wide range: Enter on a row simply incremented it, so
-	// reaching 2000 from 300 meant holding a key. With these the row opens into
-	// an editor that takes a typed number or slides to one, and the same two
-	// ends the stepper clamps against are what the editor validates and the
-	// slider spans.
+	Path           string
+	Label          string
+	Aside          string
+	Desc           string
+	Control        settingControl
+	Options        []string
+	Placeholder    string
+	Unset          string
+	value          func(m *OS) string
+	boolVal        func(m *OS) bool
+	adjust         func(m *OS, dir int)
+	setStr         func(m *OS, v string)
+	swatch         func(ground color.Color, s *config.Settings) color.Color
+	ink            func(pal overlay.Palette) color.Color
+	activate       func(m *OS) tea.Cmd
+	meter          func(m *OS) float64
 	setNum         func(m *OS, v int)
 	numMin, numMax int
-	// derived is set on a row built from its registry entry, whose value is
-	// the config's and nothing else's. Those are the rows that can say how
-	// they differ from the default, be reset to it, and be undone, because
-	// writing the path back is the whole of the change. A hand-written row
-	// moves state of its own beside the config (the keycast overlay, the
-	// session's pane geometry), and writing its path alone would leave that
-	// state behind.
-	derived bool
-	// differs is the changed check of a hand-written row that stands in for a
-	// registry path. Such a row cannot use the derived rows' check, which reads
-	// the config, because its value in force is not always the config's: the
-	// pane geometry rows show the session's, and the keycast and spotlight rows
-	// show the live toggle. So the row says what is in force, in the config's
-	// spelling, and differsFromDefault compares that with the registry
-	// default. Without it these rows never showed the changed dot.
-	differs func(m *OS) bool
-	// reset puts a hand-written row back to its default, for a row whose
-	// default is not a value its control can write: a mail alert row goes
-	// back to following the agent row by clearing its key. resetShown is how
-	// the default reads in the row's note.
-	reset      func(m *OS)
-	resetShown string
+	derived        bool
+	differs        func(m *OS) bool
+	reset          func(m *OS)
+	resetShown     string
 }
 
-// settingsCategory groups related settings under a tab.
 type settingsCategory struct {
 	Name  string
 	Items []settingItem
 }
 
-// cycleEnum returns the option dir steps away from current, wrapping around.
 func cycleEnum(options []string, current string, dir int) string {
 	if len(options) == 0 {
 		return current
@@ -134,7 +69,6 @@ func cycleEnum(options []string, current string, dir int) string {
 	return options[idx]
 }
 
-// clampInt bounds v to [lo, hi].
 func clampInt(v, lo, hi int) int {
 	if v < lo {
 		return lo
@@ -145,12 +79,7 @@ func clampInt(v, lo, hi int) int {
 	return v
 }
 
-// applyAppearanceLive repaints all windows so a chrome change is visible
-// immediately; when retile is set it also reflows the tiling layout for
-// changes that affect window geometry (dock position, borders, title bars).
 func (m *OS) applyAppearanceLive(retile bool) {
-	// max_fps may have moved, and auto may have just been chosen with no rate
-	// found yet.
 	m.applyFrameRate()
 	m.detectDisplayRate(false)
 	m.adoptConfigPaneGeometry()
@@ -160,18 +89,9 @@ func (m *OS) applyAppearanceLive(retile bool) {
 	if retile && m.AutoTiling {
 		m.TileAllWindows()
 	}
-	// The pane geometry inputs are session state (see os.go), so a change here
-	// is news to the session's other clients. Deduplicated at the source: a
-	// call that changed nothing sends nothing.
 	m.SyncStateToDaemon()
 }
 
-// adoptConfigPaneGeometry lands a *config-side* change to the pane geometry
-// inputs in the model. It compares the globals to the last config values this
-// OS saw rather than adopting them outright, because the model's values are
-// session state: a client that adopted the session's shared borders must not
-// have them silently reset to its own config file by an unrelated appearance
-// change riding the same funnel.
 func (m *OS) adoptConfigPaneGeometry() {
 	if m.Settings.SharedBorders != m.lastConfigSharedBorders {
 		m.lastConfigSharedBorders = m.Settings.SharedBorders
@@ -195,26 +115,16 @@ func (m *OS) adoptConfigPaneGeometry() {
 // one grows a third.
 func (m *OS) ApplyAppearanceLive(retile bool) { m.applyAppearanceLive(retile) }
 
-// applyTheme switches the active terminal theme at runtime and repaints. The
-// sentinel "none" disables theming and restores standard terminal colors.
 func (m *OS) applyTheme(name string) {
 	if name == themeNone {
 		_ = theme.Initialize(theme.NoneID)
 	} else {
 		_ = theme.Initialize(name)
 	}
-	// Push the new palette into every emulator: SGR indexed colors resolve
-	// through the emulator's color table at render time, so without this the
-	// chrome recolors but terminal content keeps the old palette until fresh
-	// guest output arrives. MarkAllDirty then forces a repaint with dropped
-	// caches.
 	m.UpdateAllWindowThemes()
 	m.MarkAllDirty()
 }
 
-// applyBorderColors pushes the configured border color overrides into the theme
-// package and repaints so the new colors show immediately. Empty values clear
-// the override and restore the theme-derived colors.
 func (m *OS) applyBorderColors() {
 	var overrides theme.BorderOverrides
 	if m.UserConfig != nil {
@@ -224,29 +134,12 @@ func (m *OS) applyBorderColors() {
 	m.MarkAllDirty()
 }
 
-// persistSettings writes the current config to disk. Called after any settings
-// change so it survives a restart.
-//
-// A read-only session skips the write and says so once. The change itself has
-// already been applied, so the session behaves as asked for as long as it
-// lasts; what it does not do is decide the config file's contents on behalf of
-// whoever else is attached. See OSOptions.ConfigReadOnly.
-// The write itself is a command, not something this does. Marshalling the
-// config and putting it on disk was happening inline, so every arrow-key press
-// on a settings row spent a file write on the goroutine that must not block, and
-// a held key spent one per repeat. Reading the config into bytes stays here
-// (memory, and the config is the model's own); the file lands off the Update
-// goroutine, the way the applist history does.
 func (m *OS) persistSettings() tea.Cmd {
 	if m.UserConfig == nil {
 		return nil
 	}
 	if m.ConfigReadOnly {
-		// No file for the daemon to follow, so only this client switches.
 		cmd := m.applyAgentsSwitch()
-		// The Learn tour has no config file to save to, and its settings
-		// panel already says "this session only". A warning on the first
-		// change would read as something going wrong.
 		if !m.configReadOnlyTold && !m.LearnMode {
 			m.configReadOnlyTold = true
 			m.ShowNotification("Settings apply to this session only. The config file is not changed.", "warning", 0)
@@ -259,8 +152,6 @@ func (m *OS) persistSettings() tea.Cmd {
 		return nil
 	}
 	apply := m.applyHostsCmd()
-	// The agent switch applies on this client now. The daemon follows the
-	// file this writes. See agents_off.go.
 	agents := m.applyAgentsSwitch()
 	write = m.queueSettingsSave(write)
 	save := func() tea.Msg {
@@ -269,17 +160,12 @@ func (m *OS) persistSettings() tea.Cmd {
 			return settingsSaveFailedMsg{err: err}
 		}
 		if !note.Empty() {
-			// The change is saved, in config.toml rather than the read-only
-			// file that holds the key. That is said, and a changed host still
-			// applies.
 			said := func() tea.Msg { return settingsSaveRedirectedMsg{note: note} }
 			if apply != nil {
 				return tea.Batch(said, apply)()
 			}
 			return said()
 		}
-		// A host the person changed here applies now. The daemon's own
-		// reload of the file waits for the person on a new host.
 		if apply != nil {
 			return apply()
 		}
@@ -291,24 +177,16 @@ func (m *OS) persistSettings() tea.Cmd {
 	return tea.Batch(agents, save)
 }
 
-// settingsSaveFailedMsg carries a failed config write back to the Update
-// goroutine, which is the only place a notification can be raised from.
 type settingsSaveFailedMsg struct{ err error }
 
-// settingsSaveRedirectedMsg says a save went to config.toml because the file
-// that holds the key is read-only, such as a file a Nix store link provides.
 type settingsSaveRedirectedMsg struct{ note config.WriteNote }
 
-// setAppearance runs fn against the held config's appearance section when a
-// config is present, so live changes can be persisted.
 func (m *OS) setAppearance(fn func(a *config.AppearanceConfig)) {
 	if m.UserConfig != nil {
 		fn(&m.UserConfig.Appearance)
 	}
 }
 
-// setDebug runs fn against the held config's [debug] section when a config is
-// present, so a change to a diagnostic toggle can be persisted.
 func (m *OS) setDebug(fn func(d *config.DebugConfig)) {
 	if m.UserConfig != nil {
 		fn(&m.UserConfig.Debug)
@@ -336,17 +214,10 @@ func (m *OS) ToggleFocusFollowsMouse() tea.Cmd {
 
 const themeNone = "none"
 
-// fpsOptions are the frame caps the settings row offers: auto, then the rates
-// displays are sold at. A rate configured in the file that is not here (75,
-// say) still shows as itself, and the next step goes to the first entry.
 var fpsOptions = []string{fpsAutoLabel, "30", "60", "90", "120", "144", "165", "240"}
 
-// fpsAutoLabel is how the row spells max_fps = "auto".
 const fpsAutoLabel = "Auto"
 
-// enumItem builds an enum setting bound to a string config global via getters
-// and a setter that updates the global, mirrors to the persisted config, and
-// applies the change live.
 func enumItem(label, desc string, options []string, get func() string, set func(m *OS, v string)) settingItem {
 	return settingItem{
 		Label:   label,
@@ -360,8 +231,6 @@ func enumItem(label, desc string, options []string, get func() string, set func(
 	}
 }
 
-// boolItem builds a boolean toggle. show maps the stored value to what the row
-// displays (e.g. "hide" flags are shown inverted as "on = visible").
 func boolItem(label, desc string, get func() bool, set func(m *OS, v bool)) settingItem {
 	return settingItem{
 		Label:   label,
@@ -372,21 +241,10 @@ func boolItem(label, desc string, get func() bool, set func(m *OS, v bool)) sett
 	}
 }
 
-// settingsCategories is the settings page: which options appear, under which
-// tab, in which order.
-//
-// Almost every row is a registry path, and the row itself is derived from what
-// the registry already says about it (see settings_registry.go). What is spelled
-// out here is the ordering and the grouping, which is the part the registry has
-// no opinion about. A row written by hand is one whose behaviour the registry
-// cannot describe, and it names the path it stands in for so the coverage test
-// can see it.
 func (m *OS) settingsCategories() []settingsCategory {
 	appearance := settingsCategory{
 		Name: "Appearance",
 		Items: m.resolveRows([]settingsRow{
-			// First on the page, where a person who wants only the
-			// multiplexer looks for it. See agents_off.go.
 			opt("agents.enabled"),
 			custom("appearance.theme", m.themeItem()),
 			custom("", m.themeEditItem()),
@@ -402,8 +260,6 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.window_title_align"),
 			opt("appearance.window_title_format"),
 			opt("appearance.host_title"),
-			// Hand-written: the value in force is the session's pane geometry,
-			// not this client's config. See sharedBordersItem.
 			custom("appearance.shared_borders", m.sharedBordersItem()),
 			opt("appearance.hide_window_buttons"),
 			opt("appearance.window_button_style"),
@@ -423,9 +279,6 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.tiling_scheme"),
 			opt("appearance.drop_preview"),
 			opt("appearance.drop_preview_delay"),
-			// Hand-written for the reason sharedBordersItem is: both are session
-			// state and a row reading the config would show a value the layout
-			// is not using.
 			custom("appearance.master_ratio", m.masterRatioItem()),
 			opt("appearance.master_position"),
 			opt("appearance.master_count"),
@@ -451,11 +304,6 @@ func (m *OS) settingsCategories() []settingsCategory {
 		}),
 	}
 
-	// The backgrounds painted on cells that have none of their own: the
-	// default for every surface first, then each surface's own, which follows
-	// it until it is set. A tab of their own because six colour rows would
-	// have put the rest of Appearance under a scroll at a desktop height, and
-	// because they read as one control with one precedence rule.
 	backgrounds := settingsCategory{
 		Name: "Backgrounds",
 		Items: m.resolveRows([]settingsRow{
@@ -468,11 +316,6 @@ func (m *OS) settingsCategories() []settingsCategory {
 		}),
 	}
 
-	// The sidebar rows were appended to Appearance while there were six of them,
-	// to keep the tab strip on one row. There are thirteen now, which buried the rest
-	// of Appearance under a scroll; a tab of their own costs the strip a second
-	// row, and panelBody already budgets the body against TabRowCount, so that
-	// row comes out of the scrolling list rather than out of the viewport.
 	sidebar := settingsCategory{
 		Name: "Sidebar",
 		Items: m.resolveRows([]settingsRow{
@@ -509,24 +352,13 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.sidebar.peek"),
 			opt("appearance.sidebar.tooltips"),
 			opt("appearance.sidebar.git_refresh_ms"),
-			// Filed here rather than under Appearance, which is where it used to
-			// sit: the registry already calls it a sidebar option, it counts paths
-			// for the rail's git section, and Appearance had no room for it.
 			opt("appearance.git_dirty"),
-			// Moved here from Appearance when the pane background row joined it,
-			// which would otherwise have made Appearance scroll at a desktop
-			// height. It decides which sessions the rail offers, so it is a rail
-			// option in all but its key, like git_dirty above.
 			opt("appearance.global_session"),
 		}),
 	}
-	// The agent row's tokens, under the sections they belong to. With the
-	// agent features off the rail has no agent rows, so the row goes.
 	if m.agentsOn() {
 		sidebar.Items = slices.Insert(sidebar.Items, 4, m.resolveRows([]settingsRow{custom("", m.agentRowItem())})...)
 	}
-	// How long an agent row rests before it folds means nothing until an
-	// agent has run, so the row waits for one like the other agent rows.
 	if m.agentsSeen() {
 		sidebar.Items = append(sidebar.Items, m.resolveRows([]settingsRow{
 			opt("appearance.sidebar.agent_rest_fold"),
@@ -537,9 +369,6 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("appearance.sidebar.subagent_hide_finished"),
 		})...)
 	}
-	// When both edges display sessions, the old rail's sections, file and
-	// agent options do nothing. Keep them accessible only when a rail can
-	// actually use ordinary sections, instead of showing irrelevant controls.
 	left, right := m.sidebarSessionConfig(sidebarLeft), m.sidebarSessionConfig(sidebarRight)
 	if left != nil && right != nil && left.Session != "" && right.Session != "" {
 		sidebar.Items = nil
@@ -550,14 +379,6 @@ func (m *OS) settingsCategories() []settingsCategory {
 	}
 	sidebar.Items = slices.Insert(sidebar.Items, 0, m.sidebarSessionSettingItems()...)
 
-	// The marks a pane paints over its own output, in the order a person meets
-	// them: the selection first, then the search, then the copy mode cursor.
-	// Each background is followed by the text colour that sits on it, so the
-	// pair reads as one thing.
-	//
-	// A tab of their own for the reason the sidebar rows have one: Appearance
-	// was already at the height of the panel, and nine more rows would have
-	// put the rest of it under a scroll.
 	selection := settingsCategory{
 		Name: "Selection",
 		Items: m.resolveRows([]settingsRow{
@@ -684,13 +505,6 @@ func (m *OS) settingsCategories() []settingsCategory {
 		}),
 	}
 
-	// [notifications] is nineteen options and was none of the page. An alert
-	// that fires when it should not is the setting people go looking for first,
-	// and until now the only place to change it was the file.
-	//
-	// The agent rows sit under their own heading row, after the alerts every
-	// message has, and are folded under it until an agent has been seen: they
-	// were fourteen of the tab's eighteen rows for a person who runs none.
 	alertRows := []settingsRow{
 		opt("notifications.duration"),
 		opt("notifications.warning_duration"),
@@ -704,11 +518,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 		opt("notifications.log_hidden"),
 		opt("notifications.machine_offer"),
 	}
-	// The machines answered Never, each with a row that takes it off the
-	// list. See machine_offer.go.
 	alertRows = append(alertRows, m.machineOfferNeverItems()...)
-	// The agent alerts, under their heading row. With the agent features
-	// off both go, heading and all.
 	if m.agentsOn() {
 		alertRows = append(alertRows, custom("", m.agentAlertsGroupItem()))
 	}
@@ -806,8 +616,6 @@ func (m *OS) settingsCategories() []settingsCategory {
 		}),
 	}
 
-	// The agent rows of the daemon mean nothing with the agent features
-	// off, so they go with them. The rows below them move up.
 	if m.agentsOn() {
 		daemon.Items = append(daemon.Items[:2:2], append(m.resolveRows([]settingsRow{
 			opt("daemon.agent_autodetect"),
@@ -823,8 +631,6 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("tasks.attachment_session_mib"),
 		}), daemon.Items[2:]...)...)
 	}
-	// The restart row leads the tab, where a person who came to the daemon's
-	// settings after an update looks first.
 	if m.DaemonRestartAvailable() {
 		daemon.Items = append([]settingItem{m.restartDaemonItem()}, daemon.Items...)
 	}
@@ -840,8 +646,6 @@ func (m *OS) settingsCategories() []settingsCategory {
 		}),
 	}
 
-	// The two path options, screenshot.directory and screenshot.font_file, have
-	// no row here. See settingsUIExcluded for why.
 	screenshot := settingsCategory{
 		Name: "Screenshot",
 		Items: m.resolveRows([]settingsRow{
@@ -876,7 +680,6 @@ func (m *OS) settingsCategories() []settingsCategory {
 		notifications, startup, screenshot, screensaver, spotlight, advanced, daemon,
 		m.hostsCategory(),
 	}
-	// The Agents tab goes with the agent features. See settings_agents.go.
 	m.agentsPage.tab = -1
 	if m.agentsPageAvailable() {
 		m.agentsPage.tab = len(cats)
@@ -885,17 +688,9 @@ func (m *OS) settingsCategories() []settingsCategory {
 	return append(cats, tape)
 }
 
-// themeItem is the theme row. Hand-written because the value is a name from an
-// open set rather than one of a closed list, so Enter opens the picker with its
-// previews rather than stepping to a next theme nobody can name in advance.
 func (m *OS) themeItem() settingItem {
 	options := append([]string{themeNone}, theme.AvailableThemes()...)
 	desc := "Color theme. Press enter to open the picker."
-	// The theme is still one per process. Everything else on this page is this
-	// session's own, so a served client that changes the theme changes it for
-	// every other client attached to the same server, and the row says so
-	// rather than letting them find out from somebody else's screen. Only on a
-	// served session, because a local attach is the only client there is.
 	if m.ConfigReadOnly {
 		desc = "Color theme. Press enter to open the picker. Shared with every client on this server."
 	}
@@ -911,8 +706,6 @@ func (m *OS) themeItem() settingItem {
 			m.setThemeSelection(v)
 		})
 	item.activate = func(m *OS) tea.Cmd { m.OpenThemePicker(); return nil }
-	// The configured name, not the active id: with no theme set, tuios
-	// follows Omarchy, and that is the default rather than a change.
 	item.differs = differsFromDefault("appearance.theme", func(m *OS) string {
 		if m.UserConfig != nil {
 			return m.UserConfig.Appearance.Theme
@@ -922,10 +715,6 @@ func (m *OS) themeItem() settingItem {
 	return item
 }
 
-// glyphItem is the glyph set row, the theme's opposite number: the theme says
-// what colour the chrome is and the set says what shape it is. Hand-written for
-// the reason the theme row is, and Enter opens the picker that previews the
-// shapes.
 func (m *OS) glyphItem() settingItem {
 	options := theme.AvailableGlyphSets()
 	item := enumItem("Glyph set", "Shapes for the border, controls, rules and rail marks. Press enter to open the picker.",
@@ -937,15 +726,6 @@ func (m *OS) glyphItem() settingItem {
 	return item
 }
 
-// screensaverEffectItem is the screen saver effect row. Hand-written because
-// the accepted set went from five values to thirty-six when the effects engine
-// grew, and a cycler that steps one value per keypress stopped being a control
-// at that size: the next largest closed list on the page has ten.
-//
-// Left and right still cycle, so the row is no worse than it was for anyone who
-// knows the name they want. Enter opens the picker, which searches the set and
-// runs each effect over the screen as you move through it, because the names
-// alone say nothing about what lands on screen.
 func (m *OS) screensaverEffectItem() settingItem {
 	item := enumItem("Effect",
 		"The animation the screen saver runs. Press enter to open the picker.",
@@ -957,10 +737,6 @@ func (m *OS) screensaverEffectItem() settingItem {
 	return item
 }
 
-// dockComponentsItem opens the dock layout editor. It reaches no single
-// registry path: the dock's three lists are lists rather than scalars, so the
-// registry does not carry them and no derived row could express one.
-// themeEditItem opens the theme editor on the theme in use.
 func (m *OS) themeEditItem() settingItem {
 	return settingItem{
 		Label:   "Edit theme",
@@ -980,9 +756,6 @@ func (m *OS) themeEditItem() settingItem {
 	}
 }
 
-// shareLookItem shares the look in the setups discussion: the comment goes
-// on the clipboard and the discussion opens. The page closes first, so the
-// screenshot shows the screen and not the page.
 func (m *OS) shareLookItem() settingItem {
 	return settingItem{
 		Label:   "Share my look",
@@ -1014,11 +787,6 @@ func (m *OS) dockComponentsItem() settingItem {
 	}
 }
 
-// sectionLayoutItem opens the rail layout editor. The path is a scalar and the
-// registry carries it, so a text row was possible and that is exactly what it
-// was: a comma-separated string with colons in it, typed blind. Order, share
-// and membership are three edits on one value, and a row that holds a value has
-// nowhere to put three.
 func (m *OS) sectionLayoutItem() settingItem {
 	return settingItem{
 		Path:    "appearance.sidebar.sections",
@@ -1039,11 +807,6 @@ func (m *OS) sectionLayoutItem() settingItem {
 	}
 }
 
-// agentRowItem shows what the agent rows are configured to draw: the tokens in
-// force and how many value rules colour them. The table behind it is a list of
-// tables with an ordered rule list under each, which is not a shape a settings
-// row can edit, so this row says what is set and where to set it. Enter names
-// the file.
 func (m *OS) agentRowItem() settingItem {
 	return settingItem{
 		Label:   "Agent row",
@@ -1071,13 +834,7 @@ func (m *OS) agentRowItem() settingItem {
 	}
 }
 
-// maxFPSItem is the frame-rate cap. Hand-written for two reasons: the config
-// holds a number or "auto", and a stepper walking to 240 one frame at a time is
-// not how anyone sets this; and auto shows the rate it picked, "Auto (144)",
-// which is not a value the config holds.
 func (m *OS) maxFPSItem() settingItem {
-	// A number shows the rate in force, so 0 reads as 60 and a value past
-	// the cap reads as the cap.
 	current := func(m *OS) string {
 		if strings.EqualFold(m.optionValue("appearance.max_fps"), config.FPSAuto) {
 			return fpsAutoLabel
@@ -1103,9 +860,6 @@ func (m *OS) maxFPSItem() settingItem {
 	return item
 }
 
-// showKeysItem is the keycast toggle. Hand-written because the overlay's live
-// state is a model field the renderer reads directly, so the row has to move
-// both it and the config.
 func (m *OS) showKeysItem() settingItem {
 	item := boolItem("Show keys", "Show each key you press in the bottom right corner.",
 		func() bool { return m.ShowKeys },
@@ -1117,8 +871,6 @@ func (m *OS) showKeysItem() settingItem {
 	return item
 }
 
-// agentAlertRows are the Alerts tab's rows about agents, under the heading row
-// agentAlertsGroupItem draws.
 var agentAlertRows = []settingsRow{
 	opt("notifications.agent.enabled"),
 	opt("notifications.agent.notify"),
@@ -1136,11 +888,6 @@ var agentAlertRows = []settingsRow{
 	opt("notifications.agent.states.errored"),
 }
 
-// mailAlertRows are the Alerts tab's rows for [notifications.mail], after the
-// agent rows. Four of them are hand-written: a key left out follows the same
-// key in [notifications.agent], and a derived toggle would show the registry
-// default instead of the value in force. These show the value in force, and a
-// change writes the mail key, which from then on stands on its own.
 func (m *OS) mailAlertRows() []settingsRow {
 	return []settingsRow{
 		custom("notifications.mail.enabled", m.mailAlertItem("notifications.mail.enabled", "Mail alerts",
@@ -1159,23 +906,16 @@ func (m *OS) mailAlertRows() []settingsRow {
 	}
 }
 
-// mailAlertItem is one hand-written [notifications.mail] toggle. It shows
-// the value in force and writes the mail key.
 func (m *OS) mailAlertItem(path, label, desc string, get func(config.MailAlertPolicy) bool) settingItem {
 	item := boolItem(label, desc+" Unset follows the agent row.",
 		func() bool { return get(m.mailAlertPolicy()) },
 		func(m *OS, v bool) { m.setOption(path, strconv.FormatBool(v)) })
-	// Changed means the mail key is set, so the row no longer follows the
-	// agent row. Reset clears the key, and the row follows it again.
 	item.differs = func(m *OS) bool { return m.optionValue(path) != "" }
 	item.reset = func(m *OS) { m.setOption(path, "") }
 	item.resetShown = "the agent row"
 	return item
 }
 
-// agentAlertsOpen reports whether the Alerts tab shows its agent rows: as
-// the person last set the heading row, and otherwise once an agent has been
-// seen.
 func (m *OS) agentAlertsOpen() bool {
 	if m.settingsAgentsOpen != nil {
 		return *m.settingsAgentsOpen
@@ -1183,8 +923,6 @@ func (m *OS) agentAlertsOpen() bool {
 	return m.agentsSeen()
 }
 
-// agentAlertsGroupItem is the heading row over the agent alerts: it names the
-// group and folds or unfolds it. It is not an option; nothing is written.
 func (m *OS) agentAlertsGroupItem() settingItem {
 	return settingItem{
 		Label:   "Agents",
@@ -1203,9 +941,6 @@ func (m *OS) agentAlertsGroupItem() settingItem {
 	}
 }
 
-// spotlightItem is the beam toggle. Hand-written because the live state is a
-// model field the render path reads directly, so the row has to move both it
-// and the config. The keycast row is hand-written for the same reason.
 func (m *OS) spotlightItem() settingItem {
 	item := boolItem("Spotlight", "Light the area around the cursor and dim the rest.",
 		func() bool { return m.SpotlightOn() },
@@ -1217,8 +952,6 @@ func (m *OS) spotlightItem() settingItem {
 	return item
 }
 
-// calmItem is the calm mode switch. Hand-written, as the spotlight row is,
-// because turning calm off also reports and resets the held messages.
 func (m *OS) calmItem() settingItem {
 	item := boolItem("Calm mode", "Stop motion and blinking. Show only messages that need you.",
 		func() bool { return m.CalmOn() },
@@ -1241,8 +974,6 @@ func (m *OS) OpenSettings() {
 	m.SettingsEditing = false
 	m.settingsEdit.Set("")
 	if m.settingsSearch.open {
-		// Ranked again, because a value the search matched may have changed
-		// while the page was shut.
 		m.settingsSearch.hits = m.searchSettings(m.settingsCategories(), m.settingsSearch.query.String())
 	}
 }
@@ -1295,11 +1026,6 @@ func (m *OS) CloseSettings() {
 	m.settingsEdit.Set("")
 }
 
-// settingsCurrentItems returns the items in the active category, clamping the
-// category and selection indices.
-//
-// While the search line is open the items are the rows it found, from every
-// tab, so every action on "the selected row" acts on the row found.
 func (m *OS) settingsCurrentItems() []settingItem {
 	cats := m.settingsCategories()
 	if len(cats) == 0 {
@@ -1393,12 +1119,6 @@ func (m *OS) SettingsActivate() tea.Cmd {
 	return m.SettingsAdjust(1)
 }
 
-// settingsRowTakesANumber reports whether a row opens into the number editor.
-//
-// Enter used to step a numeric row by one, which is the same thing the arrow
-// keys already do and no way at all to reach a number at the other end of a
-// wide range. A row that knows its ends and can be written to directly opens
-// instead, where the number can be typed or slid to.
 func (m *OS) settingsRowTakesANumber(item settingItem) bool {
 	return item.Control == controlInt && item.setNum != nil && item.numMax > item.numMin
 }
@@ -1414,7 +1134,6 @@ func (m *OS) SettingsEditingNumber() bool {
 	return ok && m.settingsRowTakesANumber(item)
 }
 
-// settingsSelectedItem is the row the cursor is on.
 func (m *OS) settingsSelectedItem() (settingItem, bool) {
 	items := m.settingsCurrentItems()
 	if m.settingsList.Cursor < 0 || m.settingsList.Cursor >= len(items) {
@@ -1463,22 +1182,15 @@ func (m *OS) SettingsEditNumberSlide(dir int) {
 	}
 	cur, ok := m.SettingsEditNumberValue()
 	if !ok {
-		// Nothing typed yet, or not a number: slide from where the setting is.
 		cur = settingsNumberOf(item.value(m))
 	}
 	step := 1
-	// A range wide enough that stepping by one would take a thousand presses
-	// slides by a hundredth of itself, so a slide crosses it in about as many
-	// presses whatever it spans. The arrows outside the editor still step by
-	// one, for the times a number has to be exact.
 	if span := item.numMax - item.numMin; span > 200 {
 		step = span / 100
 	}
 	m.settingsEdit.Set(strconv.Itoa(clampInt(cur+dir*step, item.numMin, item.numMax)))
 }
 
-// settingsNumberOf reads the leading integer out of a row's rendered value,
-// which may carry a trailing unit such as the percent sign.
 func settingsNumberOf(text string) int {
 	end := 0
 	for end < len(text) && (text[end] == '-' || (text[end] >= '0' && text[end] <= '9')) {
@@ -1508,9 +1220,6 @@ func (m *OS) SettingsBeginEdit() {
 	m.SettingsEditing = true
 	m.settingsEdit.Set(item.value(m))
 	if item.Control == controlInt {
-		// The number alone, without the unit the row shows it with: the editor
-		// takes a number and a stray percent sign in the buffer is a value that
-		// will not parse when it is committed.
 		m.settingsEdit.Set(strconv.Itoa(settingsNumberOf(m.settingsEdit.String())))
 	}
 }
@@ -1540,7 +1249,6 @@ func (m *OS) SettingsEditClear() {
 	}
 }
 
-// settingsEditClean keeps what the field may hold of typed text.
 func (m *OS) settingsEditClean(text string) string {
 	text = cleanControl(text)
 	if m.SettingsEditingNumber() {
@@ -1572,10 +1280,6 @@ func (m *OS) SettingsEditCommit() tea.Cmd {
 		m.settingsRecord(item, func() {
 			switch {
 			case m.settingsRowTakesANumber(item):
-				// A buffer that is not a number leaves the setting alone. The
-				// alternative is writing a zero for a typo, which for a
-				// scrollback of ten thousand lines is a keystroke that throws
-				// the lot away.
 				if v, err := strconv.Atoi(value); err == nil {
 					item.setNum(m, clampInt(v, item.numMin, item.numMax))
 				}

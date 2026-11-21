@@ -10,13 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// Dropping a dragged pane on another one in BSP. The middle of the target swaps
-// the two, and each edge splits the target, the dragged pane taking the half
-// toward that edge while its old neighbour fills the slot it left.
-//
-// What is highlighted during the drag and what the release does are both read
-// from TiledDropAt, at the pointer, so the two cannot disagree.
-
 // Drop is what releasing the held pane at a point would do.
 type Drop struct {
 	Target *terminal.Window
@@ -56,11 +49,6 @@ func (m *OS) TiledDropAt(x, y int) (Drop, bool) {
 	return m.tiledDropAt(x, y, nil)
 }
 
-// tiledDropAt is TiledDropAt, taking the landing rectangle from last when it
-// was worked out for the same target and edge. Between retiles the rectangle
-// only changes when one of those does, and a retile refreshes it without last
-// (see refreshDropZone). Working it out copies and lays out the whole tree,
-// which a drag would otherwise pay on every motion event.
 func (m *OS) tiledDropAt(x, y int, last *Drop) (Drop, bool) {
 	held := m.LiveWindowDrag()
 	if held == nil || !m.AutoTiling || !m.UseBSPLayout || m.UseScrollingLayout || m.zoomedWindow() != nil {
@@ -90,8 +78,6 @@ func (m *OS) tiledDropAt(x, y int, last *Drop) (Drop, bool) {
 		drop.Land = last.Land
 		return drop, true
 	}
-	// Worked out on a copy, because removing the held pane first can grow the
-	// target: a drop on its own neighbour splits the space both of them had.
 	moved := tree.Serialize().Deserialize()
 	if !moved.MoveWindow(heldID, targetID, drop.Dir) {
 		drop.Land = layout.Rect{X: m.TiledX, Y: m.TiledY, W: m.TiledWidth, H: m.TiledHeight}
@@ -104,13 +90,6 @@ func (m *OS) tiledDropAt(x, y int, last *Drop) (Drop, bool) {
 	return drop, true
 }
 
-// dropEdge is the edge of r a drop at (x, y) splits toward, or
-// PreselectionNone for the middle of r. An edge's zone is the outer quarter of
-// r on that side. It is there only when splitting r at ratio, the ratio the
-// tree gives a new split, leaves both parts at least the minimum pane size
-// across that axis, so a drop never makes a pane smaller than the layout
-// allows. In a corner the edge the pointer is deeper into wins, and a tie goes
-// to the side.
 func dropEdge(r layout.Rect, x, y, gap int, ratio float64) layout.PreselectionDir {
 	edge, depth := layout.PreselectionNone, 1.0
 	consider := func(dir layout.PreselectionDir, from, zone int) {
@@ -131,11 +110,6 @@ func dropEdge(r layout.Rect, x, y, gap int, ratio float64) layout.PreselectionDi
 	return edge
 }
 
-// splitHolds reports whether a length split at ratio, the way the layout
-// splits it (see layout.childBounds), leaves both parts at least least long.
-// An even split is not assumed: a tree whose new splits start at 0.3 gives
-// the near part less than half, and a check at 0.5 would let it fall below the
-// minimum.
 func splitHolds(length, gap int, ratio float64, least int) bool {
 	near := int(float64(length) * ratio)
 	return near >= least && length-near-gap >= least
@@ -183,9 +157,6 @@ func (m *OS) UpdateDropZone(x, y int) tea.Cmd {
 	return tea.Tick(delay, func(time.Time) tea.Msg { return dropZoneDueMsg{gen: gen} })
 }
 
-// sameDropZone takes drop's landing rectangle when drop is the zone already
-// recorded, the same target and edge, and reports whether it was. The zone's
-// delay and whether it shows carry over untouched.
 func (m *OS) sameDropZone(drop Drop) bool {
 	last := m.dropZone
 	if last == nil || last.Target != drop.Target || last.Dir != drop.Dir {
@@ -195,17 +166,6 @@ func (m *OS) sameDropZone(drop Drop) bool {
 	return true
 }
 
-// refreshDropZone works the highlight out again where the pointer last was,
-// without the cached landing rectangle. ApplyBSPLayout calls it: a retile
-// under a held drag (a pane exiting, a peer's change, a new box) moves where
-// an edge drop lands while the target and the edge stay the same, and a
-// pointer held still would otherwise keep showing the old rectangle. The
-// motion path does not retile, so the cache still serves every motion event.
-//
-// The same zone keeps its delay and whether it shows. A retile that puts the
-// pointer over another zone, or over none, clears it: a retile has no command
-// to arm a delay with, and showing the new zone at once would skip the delay.
-// The next motion finds no zone and arms the one under it as any entry does.
 func (m *OS) refreshDropZone() {
 	if m.dropZone == nil {
 		return
@@ -216,12 +176,8 @@ func (m *OS) refreshDropZone() {
 	m.ClearDropZone()
 }
 
-// dropZoneDueMsg is the delay of the zone armed as gen running out.
 type dropZoneDueMsg struct{ gen uint64 }
 
-// showDropZone draws the zone the pointer is on, when the delay that ran out
-// was armed for it. A delay armed for a zone the pointer has since left, or
-// for a drag that has ended, finds the generation moved on and does nothing.
 func (m *OS) showDropZone(msg dropZoneDueMsg) {
 	if msg.gen != m.dropZoneGen || m.dropZone == nil {
 		return
@@ -255,9 +211,6 @@ func (m *OS) MoveWindowIntoSplit(dragged, target *terminal.Window, dir layout.Pr
 	if !tree.MoveWindow(m.GetWindowIntID(dragged.ID), m.GetWindowIntID(target.ID), dir) {
 		return false
 	}
-	// The drop hands the pane back to the layout. With the manipulation mark
-	// still on it the retile would leave it at the pointer and only note its
-	// slot (see LiveWindowDrag).
 	dragged.IsBeingManipulated = false
 	m.ApplyBSPLayout()
 	return true

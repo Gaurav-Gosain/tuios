@@ -17,12 +17,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The beam is a colour transform over a frame that already exists, so every
-// property worth holding is a property of one pass over one canvas: what it
-// leaves alone, what it must not leave alone, and what it must not allocate.
-
-// spotlightTestCanvas is a canvas of coloured text with coloured blanks in it,
-// which is what a composed pane looks like to the pass.
 func spotlightTestCanvas(t testing.TB, w, h int) *lipgloss.Canvas {
 	t.Helper()
 	canvas := lipgloss.NewCanvas(w, h)
@@ -42,15 +36,8 @@ func spotlightTestCanvas(t testing.TB, w, h int) *lipgloss.Canvas {
 	return canvas
 }
 
-// newSpotlightTestState is a beam state with its ground already read, so a test
-// can call apply without an OS around it.
 func newSpotlightTestState() *spotlightState { return &spotlightState{} }
 
-// spotlightRestore puts every cell back to the style spotlightTestCanvas gave
-// it, so the pass can be measured over the same input again.
-//
-// It writes through the pointers CellAt returns and allocates nothing, which
-// the tests below check before they trust it.
 func spotlightRestore(canvas *lipgloss.Canvas, fg, bg color.Color) {
 	for y := range canvas.Height() {
 		for x := range canvas.Width() {
@@ -76,9 +63,6 @@ func spotlightRestore(canvas *lipgloss.Canvas, fg, bg color.Color) {
 // resolves and every cell goes to SGR 2.
 func TestSpotlightAllocatesNothing(t *testing.T) {
 	skipAllocCountsUnderRace(t)
-	// Boxed once, outside the measurement: an interface parameter taking a
-	// color.RGBA value allocates at every call, which would be counted as the
-	// pass's own.
 	var fg color.Color = color.RGBA{R: 200, G: 200, B: 200, A: 0xFF}
 	var bg color.Color = color.RGBA{R: 40, G: 40, B: 60, A: 0xFF}
 	var cube color.Color = ansi.IndexedColor(214)
@@ -104,18 +88,10 @@ func TestSpotlightAllocatesNothing(t *testing.T) {
 			tc.restore(canvas)
 			s := newSpotlightTestState()
 
-			// The restore is inside the measured function, so it has to be
-			// free or the number below is not the pass's.
 			if base := testing.AllocsPerRun(20, func() { tc.restore(canvas) }); base != 0 {
 				t.Fatalf("restoring the canvas allocates %.0f times; the measurement below would not be the pass's", base)
 			}
 
-			// AllocsPerRun counts every allocation in the process, so a
-			// goroutine an earlier test left winding down is charged to the
-			// pass: a full package run in a loaded container measured 2 per
-			// frame this way. The least of three measurements is taken. An
-			// allocation the pass makes itself is in every one of them, so
-			// this still fails for any pass that allocates.
 			frame := func() {
 				s.apply(canvas, realCols/2, realRows/2, 10, 60, true, [2]spotlightSpan{})
 				tc.restore(canvas)
@@ -131,9 +107,6 @@ func TestSpotlightAllocatesNothing(t *testing.T) {
 	}
 }
 
-// spotlightMixedCanvas is what a themeless screen looks like to the pass: some
-// cells carrying a colour it can scale, some carrying one of the host's own
-// sixteen, and some carrying none at all.
 func spotlightMixedCanvas(t testing.TB, w, h int) *lipgloss.Canvas {
 	t.Helper()
 	canvas := lipgloss.NewCanvas(w, h)
@@ -155,8 +128,6 @@ func spotlightMixedCanvas(t testing.TB, w, h int) *lipgloss.Canvas {
 	return canvas
 }
 
-// spotlightRestoreMixed puts a mixed canvas back the way spotlightMixedCanvas
-// left it, without allocating.
 func spotlightRestoreMixed(canvas *lipgloss.Canvas, inks []color.Color) {
 	for y := range canvas.Height() {
 		for x := range canvas.Width() {
@@ -166,7 +137,6 @@ func spotlightRestoreMixed(canvas *lipgloss.Canvas, inks []color.Color) {
 	}
 }
 
-// mouseBeamOS is a client with the beam on and following the pointer.
 func mouseBeamOS(t *testing.T) *OS {
 	t.Helper()
 	win := newTestWindow(t, "spotlight-motion", 40, 10)
@@ -176,8 +146,6 @@ func mouseBeamOS(t *testing.T) *OS {
 	m.UserConfig.Spotlight.Follow = config.SpotlightFollowMouse
 	m.Settings.NormalFPS = config.DefaultSettings().NormalFPS
 	m.spotlight.on = true
-	// The throttle sits after the input handler, so a model with none never
-	// reaches it and the test would prove nothing.
 	withSpyInputHandler(t)
 	return m
 }
@@ -235,12 +203,6 @@ func BenchmarkSpotlightApply(b *testing.B) {
 	canvas := spotlightTestCanvas(b, realCols, realRows)
 	s := newSpotlightTestState()
 	cx, cy := realCols/2, realRows/2
-	// The pass edits in place, so applying it to its own output carries each
-	// colour a step further and keeps minting colours the cache has not seen.
-	// A real frame is composed fresh each time and carries the palette it
-	// carried last frame, which is what running to convergence reproduces.
-	// BenchmarkSpotlightCanvas measures the same thing without the trick, by
-	// composing the frame each iteration; this one is the pass on its own.
 	for range 64 {
 		s.apply(canvas, cx, cy, 10, 60, true, [2]spotlightSpan{})
 	}
@@ -275,7 +237,7 @@ func BenchmarkSpotlightCanvas(b *testing.B) {
 			}
 			canvas := m.GetCanvas(false)
 			if on {
-				m.applySpotlight(canvas) // warm the blend cache
+				m.applySpotlight(canvas)
 			}
 
 			b.ReportAllocs()
@@ -326,10 +288,6 @@ func cellStyleAt(canvas *lipgloss.Canvas, x, y int) uv.Style {
 // matters, which is bytes on the wire. A pass that dimmed only the glyphs would
 // double the escape sequences in the rendered frame.
 func TestSpotlightDoesNotSplitStyleRuns(t *testing.T) {
-	// Both screens: a themed one, where every cell is scaled, and a themeless
-	// one, where the pass writes a colour to some cells and SGR 2 to others. A
-	// mixed screen must not defeat the run cache: the cells that share a
-	// source colour and a level still come out of it as one style.
 	for _, themeID := range []string{"catppuccin_mocha", ""} {
 		name := themeID
 		if name == "" {
@@ -343,11 +301,6 @@ func TestSpotlightDoesNotSplitStyleRuns(t *testing.T) {
 			newSpotlightTestState().apply(canvas, 40, 12, 8, 60, true, [2]spotlightSpan{})
 			dimmedSGR := strings.Count(canvas.Render(), "\x1b[")
 
-			// A row that crosses the beam pays a handful of style changes for
-			// the two rim crossings and nothing else, because the levels inside
-			// a row change only where the rim passes. Splitting at every blank
-			// instead costs one per word: on this fixture that is 712 sequences
-			// against 208.
 			if limit := plainSGR + 8*canvas.Height(); dimmedSGR > limit {
 				t.Errorf("the pass produced %d escape sequences against %d before it (limit %d); "+
 					"the style runs were split", dimmedSGR, plainSGR, limit)
@@ -361,10 +314,6 @@ func TestSpotlightDoesNotSplitStyleRuns(t *testing.T) {
 // placeholder makes it render as a cell of its own, which puts a phantom column
 // after every wide character on the screen.
 func TestSpotlightLeavesWideGlyphPlaceholdersAlone(t *testing.T) {
-	// Both branches, because only one of them can get this wrong. The blend
-	// path skips a placeholder anyway, since a zero cell carries no colour to
-	// carry anywhere; the faint path writes an attribute without asking about
-	// colour, so the guard is what stops it there.
 	for _, themeID := range []string{"catppuccin_mocha", ""} {
 		name := "themed"
 		if themeID == "" {
@@ -389,10 +338,6 @@ func TestSpotlightLeavesWideGlyphPlaceholdersAlone(t *testing.T) {
 	}
 }
 
-// spotlightBrightness is how much light a colour carries, as the mean of its
-// three channels over 255. It is not a luminance and does not need to be: the
-// tests below compare one colour with a scaled copy of itself, so any monotonic
-// reading of the channels answers them.
 func spotlightBrightness(t *testing.T, c color.Color) float64 {
 	t.Helper()
 	if isNilColor(c) {
@@ -497,9 +442,6 @@ func TestSpotlightStandsAMouseBeamOnTheCursor(t *testing.T) {
 			x, y, cursor.X, cursor.Y)
 	}
 
-	// The stand-in is recomputed rather than latched. A position nothing else
-	// would produce is written over it, so a latched beam is caught by the
-	// number rather than by the fact that it did not change.
 	const staleX, staleY = 71, 23
 	if staleX == cursor.X && staleY == cursor.Y {
 		t.Fatal("the stale position is the cursor, so this cannot tell the two apart")
@@ -510,12 +452,10 @@ func TestSpotlightStandsAMouseBeamOnTheCursor(t *testing.T) {
 			"the stand-in was latched on the first frame", x, y, cursor.X, cursor.Y)
 	}
 
-	// And the pointer takes it from there.
 	m.LastMouseX, m.LastMouseY = 11, 4
 	if x, y = m.spotlightAnchor(); x != 11 || y != 4 {
 		t.Errorf("the beam sat at (%d,%d) after the pointer moved to (11,4)", x, y)
 	}
-	// The pointer owns it now, so the cursor is never read again.
 	m.spotlight.x, m.spotlight.y = 11, 4
 	if x, y = m.spotlightAnchor(); x != 11 || y != 4 {
 		t.Errorf("the beam moved to (%d,%d) with the pointer still at (11,4)", x, y)

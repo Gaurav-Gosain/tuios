@@ -10,28 +10,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The pointer on the dock's message block holds the message there.
-//
-// A message burns down on a timer the person did not start, and a long one is
-// still being read when the timer runs out. While the pointer is on the block
-// the clock is stopped: the burn holds, nothing expires, and when the pointer
-// leaves, every live message gets back the time it was held for. A message the
-// block had to cut also shows a label above the dock with the first lines of
-// it, the way a clipped workspace pill says its full name.
-
-// notifTooltipLines is the most lines of a message the label shows. Past that
-// it is the message view's job, which a click on the block opens.
 const notifTooltipLines = 4
 
-// notifMaxHold is the longest the pointer holds the messages. A pointer left on
-// the block, or a terminal that lost focus without saying so, must not keep a
-// message up for ever.
 const notifMaxHold = 60 * time.Second
 
-// notifPaused reports whether the pointer is holding the live messages. With
-// none left there is nothing to hold, and the hold is dropped, so a message
-// that arrives later starts on the wall clock and not on a stale hold. A hold
-// past notifMaxHold ends here.
 func (m *OS) notifPaused() bool {
 	if m.notifHoverAt.IsZero() {
 		return false
@@ -47,8 +29,6 @@ func (m *OS) notifPaused() bool {
 	return true
 }
 
-// notifNow is the clock the live messages age by: the wall clock, or the
-// moment the pointer came onto the block while it is there.
 func (m *OS) notifNow() time.Time {
 	if m.notifPaused() {
 		return m.notifHoverAt
@@ -67,10 +47,6 @@ func (m *OS) NotifHoldEnd() {
 	m.notifHoldSpent = true
 }
 
-// notifHoverEnd lets the clock run again and credits each live message with
-// the time it was held: from the later of the hold's start and its own, so a
-// message that arrived during the hold gets only the time it was up, and never
-// more than notifMaxHold.
 func (m *OS) notifHoverEnd() {
 	if m.notifHoverAt.IsZero() {
 		return
@@ -95,8 +71,6 @@ func (m *OS) notifHoverEnd() {
 	}
 }
 
-// notifBlockAt reports whether screen (x, y) is on the message block the last
-// frame drew.
 func (m *OS) notifBlockAt(x, y int) bool {
 	z := m.notifHit
 	return z.Active && len(m.Notifications) > 0 && y == z.Y && x >= z.X0 && x < z.X1
@@ -123,8 +97,6 @@ func (m *OS) DockNotifHoverAt(x, y int) bool {
 	return on
 }
 
-// notifHoverChangesAt reports whether a motion to (x, y) changes the hold or
-// the label, for the motion filter. See dockHoverChangesAt.
 func (m *OS) notifHoverChangesAt(x, y int) bool {
 	on := m.notifBlockAt(x, y)
 	paused := m.notifPaused()
@@ -138,8 +110,6 @@ func (m *OS) notifHoverChangesAt(x, y int) bool {
 	return wantLabel != (m.Tooltip.Source == tooltipDockNotif)
 }
 
-// renderDockNotifTooltip shows the first lines of a cut message above the
-// block, wrapped to the block's width cap, and how to read the rest.
 func (m *OS) renderDockNotifTooltip() *lipgloss.Layer {
 	if !m.tooltipVisible(tooltipDockNotif) {
 		return nil

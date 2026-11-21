@@ -26,79 +26,33 @@ import (
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
-// The pane navigator, after tmux's choose-tree and fzf-pane-switch.
-//
-// The choose_tree action opens a full-screen overlay: a tree of sessions,
-// their workspaces and their panes, on this machine and on the machines in
-// [hosts], beside a preview of the highlighted pane. Typing after / filters
-// the panes by their name, title, folder, running command and screen text.
-// Enter goes to the highlighted row: it switches the session, the workspace
-// and the pane.
-//
-// What it reads, and when. The tree opens at once from what this client
-// already holds: the attached session's panes and the rail's cached listing of
-// the others. One command then asks each daemon for the rest (each pane's
-// folder and the last navTextLines lines of its screen) off the UI goroutine,
-// and the rows fill in when it answers. Nothing is kept once the navigator
-// closes, so there is no index to keep up to date.
-//
-// The navigator is the person's own client, so it reads their panes with the
-// person's own connection. The CLI form, list-windows --all --text, reads the
-// same text through capture-pane, under that verb's grants.
-
-// navTextLines is how many of a pane's last lines are searched and previewed.
 const navTextLines = 40
 
-// navMaxCaptures caps the panes whose text one load reads, across every
-// session and machine.
 const navMaxCaptures = 150
 
-// navCallTimeout bounds one verb call of a load. navLoadBudget bounds the
-// whole load: a machine that is slow to answer costs its own rows and not the
-// rest.
 const (
 	navCallTimeout = 2 * time.Second
 	navLoadBudget  = 8 * time.Second
 )
 
-// navPane is one pane in the navigator.
 type navPane struct {
-	ID         string
-	Name       string
-	Title      string
-	Command    string
-	Cwd        string
-	Workspace  int
-	Focused    bool
-	AgentState string
-	// Cmdline is the command line running in the pane, when its shell
-	// marks its commands (OSC 133). The row reads an ssh target from it.
-	Cmdline string
-	// DoneSeen says a finished agent's pane has been looked at since, so
-	// its mark is the resting one. Known for the panes of this machine's
-	// sessions. Another machine's panes leave it false, since the seen
-	// record is this client's and their listing has no completion count.
-	DoneSeen bool
-	// Subagents is how many subagents the pane's agent is running, which
-	// draws a pane at rest as waiting. Known for the panes of this
-	// machine's sessions.
-	Subagents int
-	// Text is the last lines of the pane's screen, oldest first. For a pane
-	// this client draws, the preview reads the live screen instead.
-	Text []string
-	// lower is Text in lower case, for the search, made once when Text is
-	// set rather than on every key and frame.
-	lower []string
-	// Styled is Text with its colours and attributes, as SGR and printable
-	// text only (see navParser). The preview draws it. It is empty for
-	// a pane this client draws, whose preview reads the live screen.
-	Styled []string
-	// TextSkipped says the load did not read the pane's screen, because it
-	// had read as many as it reads in one go.
+	ID          string
+	Name        string
+	Title       string
+	Command     string
+	Cwd         string
+	Workspace   int
+	Focused     bool
+	AgentState  string
+	Cmdline     string
+	DoneSeen    bool
+	Subagents   int
+	Text        []string
+	lower       []string
+	Styled      []string
 	TextSkipped bool
 }
 
-// setText sets the pane's text and the lower case copy the search reads.
 func (p *navPane) setText(text []string) {
 	p.Text = text
 	p.lower = make([]string, len(text))
@@ -107,39 +61,20 @@ func (p *navPane) setText(text []string) {
 	}
 }
 
-// navSession is one session in the navigator.
 type navSession struct {
-	// Host is the machine the session is on. Empty is the machine this client
-	// is attached to.
-	Host  string
-	Name  string
-	Title string
-	// Current is the session this client shows.
-	Current bool
-	// Note says why the session's panes are not listed: its machine is not
-	// up, or it did not answer.
+	Host           string
+	Name           string
+	Title          string
+	Current        bool
 	Note           string
 	WorkspaceNames map[int]string
 	Panes          []navPane
-	// Count is how many panes the session has, from the listing, for a
-	// session whose panes are not known yet.
-	Count int
-	// Shell is the base name of the shell the session's panes run, so a
-	// pane at its prompt can say what it is running. Empty when the daemon
-	// did not say.
-	Shell string
+	Count          int
+	Shell          string
 }
 
-// key is the session's identity in the navigator.
 func (s *navSession) key() string { return s.Host + "\x00" + s.Name }
 
-// keepAgentMarks gives each pane of a session the load read on this machine
-// the agent state, the seen bit and the subagent count of its row in from,
-// the row built from the rail's tree. The tree's reading is this client's:
-// it folds in the seen record, an open ask and a finished turn at rest,
-// which list-windows does not carry. Taking the load's state instead drew a
-// finished pane as unread again once the load landed. A pane from has no row
-// for, one made since the navigator opened, keeps what the load read.
 func (s *navSession) keepAgentMarks(from *navSession) {
 	for i := range s.Panes {
 		p := &s.Panes[i]
@@ -152,9 +87,6 @@ func (s *navSession) keepAgentMarks(from *navSession) {
 	}
 }
 
-// workspaceLabel is a workspace's number, with its name when it has one.
-// indexOffset is the client's base-index shift, applied to the number so the
-// navigator reads the same as the dock and the digit keys.
 func (s *navSession) workspaceLabel(ws, indexOffset int) string {
 	n := strconv.Itoa(ws - indexOffset)
 	if name := s.WorkspaceNames[ws]; name != "" {
@@ -163,7 +95,6 @@ func (s *navSession) workspaceLabel(ws, indexOffset int) string {
 	return n
 }
 
-// workspaces is the workspaces that hold a pane, in order.
 func (s *navSession) workspaces() []int {
 	var out []int
 	for _, p := range s.Panes {
@@ -175,7 +106,6 @@ func (s *navSession) workspaces() []int {
 	return out
 }
 
-// navRowKind is what a navigator row stands for.
 type navRowKind int
 
 const (
@@ -184,40 +114,24 @@ const (
 	navRowPane
 )
 
-// navRow is one row of the list.
 type navRow struct {
 	Kind      navRowKind
 	Session   int
 	Workspace int
 	Pane      int
-	// Snippet is the screen line a search found the pane by, when it was
-	// found by its text and not by its name.
-	Snippet string
+	Snippet   string
 }
 
-// navigatorState is the navigator while it is open.
 type navigatorState struct {
-	open     bool
-	sessions []navSession
-	// expanded holds the rows a person opened or closed, by key. A row not
-	// in it has its default: the current session open, the others shut,
-	// and every workspace of an open session open.
+	open      bool
+	sessions  []navSession
 	expanded  map[string]bool
 	searching bool
-	// list is the cursor, the window and the search line's text and caret.
-	list listnav.State
-	// loading is true while the detail load is out. gen tells its answer
-	// from the answer to a navigator since closed.
-	loading bool
-	gen     uint64
-	// cancel stops the load that is out, if one is.
-	cancel context.CancelFunc
-	// layout is how the list is drawn: config.NavigatorLayoutTree, Flat or
-	// Cards.
-	layout string
-	// typeFirst is set when the navigator opened on the search line
-	// (panes.navigator_search). esc with nothing typed then closes it, as
-	// esc in the list does.
+	list      listnav.State
+	loading   bool
+	gen       uint64
+	cancel    context.CancelFunc
+	layout    string
 	typeFirst bool
 }
 
@@ -266,8 +180,6 @@ func (m *OS) OpenNavigator() tea.Cmd {
 	return m.navigatorLoad()
 }
 
-// navigatorLayoutChoice is the layout the navigator opens in: the one the v
-// key last chose on this client, else the configured one.
 func (m *OS) navigatorLayoutChoice() string {
 	if m.navLayoutPick != "" {
 		return m.navLayoutPick
@@ -298,14 +210,10 @@ func (m *OS) NavigatorCycleLayout() {
 	m.MarkAllDirty()
 }
 
-// navFlat reports whether the list is a list of panes rather than a tree:
-// a search is in force, or the layout is flat or cards. A flat list has no
-// folds.
 func (m *OS) navFlat() bool {
 	return m.navSearch() || m.navigator.layout == config.NavigatorLayoutFlat || m.navigator.layout == config.NavigatorLayoutCards
 }
 
-// navCards reports whether a pane takes two lines of the list.
 func (m *OS) navCards() bool { return m.navigator.layout == config.NavigatorLayoutCards }
 
 // CloseNavigator takes the navigator down and drops what it read.
@@ -320,8 +228,6 @@ func (m *OS) CloseNavigator() {
 	m.MarkAllDirty()
 }
 
-// navigatorCursorToCurrent puts the cursor on the focused pane of the
-// current session.
 func (m *OS) navigatorCursorToCurrent() {
 	for i, r := range m.navigatorRows() {
 		if r.Kind != navRowPane {
@@ -335,10 +241,6 @@ func (m *OS) navigatorCursorToCurrent() {
 	}
 }
 
-// navigatorSessions is the tree as this client holds it now: the attached
-// session's panes from live state, the other sessions on the attached
-// machine from the rail's cached listing, and the sessions of every other
-// machine by name only.
 func (m *OS) navigatorSessions() []navSession {
 	var out []navSession
 	current := m.navigatorCurrentSession()
@@ -356,11 +258,6 @@ func (m *OS) navigatorSessions() []navSession {
 		}
 		s := navSession{Name: n.ID, Title: n.Title, Count: n.WindowCount}
 		for _, w := range n.Children {
-			// The tree already folded this client's seen record into the
-			// node (foreignSessionInput), so the row copies it. Without
-			// DoneSeen a finished pane read as unread here however often it
-			// was looked at, and without Subagents a pane at rest lost its
-			// waiting mark.
 			s.Panes = append(s.Panes, navPane{
 				ID:         w.ID,
 				Name:       w.Title,
@@ -397,8 +294,6 @@ func (m *OS) navigatorSessions() []navSession {
 	return out
 }
 
-// navigatorCurrentSession is the attached session from live state, with each
-// pane's screen text read from this client's own copy of it.
 func (m *OS) navigatorCurrentSession() navSession {
 	name := m.SessionName
 	if name == "" {
@@ -433,9 +328,6 @@ func (m *OS) navigatorCurrentSession() navSession {
 	return s
 }
 
-// navClientShell is the base name of the shell this client asks a session
-// it makes to run: the one the daemon runs in the attached session's panes
-// unless that session was made by another client with another shell.
 func (m *OS) navClientShell() string {
 	preferred := ""
 	if m.UserConfig != nil {
@@ -445,8 +337,6 @@ func (m *OS) navClientShell() string {
 	return filepath.Base(shell)
 }
 
-// navScreenText is the last n non-blank-tailed lines of a pane's screen as
-// plain text, read from the client's own copy.
 func navScreenText(w *terminal.Window, n int) []string {
 	if w == nil || w.Terminal == nil {
 		return nil
@@ -464,7 +354,6 @@ func navScreenText(w *terminal.Window, n int) []string {
 			case c == nil:
 				b.WriteByte(' ')
 			case c.Content == "" && c.Width == 0:
-				// The tail of a wide glyph.
 			case c.Content == "":
 				b.WriteByte(' ')
 			default:
@@ -476,7 +365,6 @@ func navScreenText(w *terminal.Window, n int) []string {
 	return navLastLines(lines, n)
 }
 
-// navLastLines drops the blank lines at the end and keeps the last n.
 func navLastLines(lines []string, n int) []string {
 	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
 		lines = lines[:len(lines)-1]
@@ -487,16 +375,6 @@ func navLastLines(lines []string, n int) []string {
 	return lines
 }
 
-// navigatorLoad reads what the tree does not hold yet, off the UI goroutine:
-// for every session but the current one, its panes with their folders and
-// commands, its workspace names, and each pane's last lines.
-//
-// Each machine is read in a goroutine of its own, so a slow machine costs its
-// own rows and not the others'. All of them share one deadline, navLoadBudget,
-// and a session not read by then is marked as not answering in time. Closing
-// the navigator cancels the load. A call that fails leaves its connection out
-// of step (see session.ErrVerbClientBroken), so the machine is dialled again
-// for the next session, once.
 func (m *OS) navigatorLoad() tea.Cmd {
 	gen := m.navigator.gen
 	build := m.DaemonClient.ClientVersion()
@@ -629,7 +507,6 @@ func (m *OS) navigatorLoad() tea.Cmd {
 	}
 }
 
-// navCallTimeoutFor is navCallTimeout, cut to what is left of the load.
 func navCallTimeoutFor(ctx context.Context) time.Duration {
 	t := navCallTimeout
 	if d, ok := ctx.Deadline(); ok {
@@ -638,13 +515,6 @@ func navCallTimeoutFor(ctx context.Context) time.Duration {
 	return max(t, time.Millisecond)
 }
 
-// navHoldForTest lets the end-to-end tests decide when a load reads.
-//
-// The hold_nav knob names a file. While it exists, a load that started while
-// it existed waits before it reads anything, until the file goes or the
-// load's deadline passes. A number in the file holds only that many loads, counted from
-// the start of the process, so a test can hold one load and let the next run.
-// Ordinary runs never set the knob.
 func navHoldForTest() func(context.Context) {
 	path := testknob.String("hold_nav")
 	if path == "" {
@@ -663,9 +533,6 @@ func navHoldForTest() func(context.Context) {
 			if _, err := os.Stat(path); err != nil {
 				return
 			}
-			// A load past its deadline goes on, to answer that it ran out
-			// of time. A cancelled one still waits for the file, so a test
-			// can hand its answer back after a newer load's.
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 				return
 			}
@@ -674,11 +541,8 @@ func navHoldForTest() func(context.Context) {
 	}
 }
 
-// navHeldLoads counts the loads navHoldForTest has seen.
 var navHeldLoads atomic.Int64
 
-// navMaxCapturesInForce is navMaxCaptures, or the number the end-to-end
-// tests set in the nav_captures knob to reach the cap with a few panes.
 func navMaxCapturesInForce() int {
 	if v, err := strconv.Atoi(testknob.String("nav_captures")); err == nil && v >= 0 {
 		return v
@@ -686,11 +550,6 @@ func navMaxCapturesInForce() int {
 	return navMaxCaptures
 }
 
-// navLoadSession reads a session's panes and workspace names.
-//
-// ok is false when the panes could not be read. inStep is false when a call
-// failed in a way that leaves the connection out of step, and the caller dials
-// again before its next call.
 func navLoadSession(ctx context.Context, c *session.VerbClient, host, name string) (s navSession, ok, inStep bool) {
 	raw, err := c.CallWithTimeout("list-windows", map[string]any{"session": name}, navCallTimeoutFor(ctx))
 	if err != nil {
@@ -731,7 +590,6 @@ func navLoadSession(ctx context.Context, c *session.VerbClient, host, name strin
 	s.Count = len(s.Panes)
 	raw, err = c.CallWithTimeout("session-info", map[string]any{"session": name}, navCallTimeoutFor(ctx))
 	if err != nil {
-		// The panes are worth more than the workspace names. They are kept.
 		return s, true, navInStep(err)
 	}
 	{
@@ -749,17 +607,11 @@ func navLoadSession(ctx context.Context, c *session.VerbClient, host, name strin
 	return s, true, true
 }
 
-// navInStep reports whether a failed call left its connection usable: the
-// daemon answered with an error, so the reply was read.
 func navInStep(err error) bool {
 	_, answered := errors.AsType[*session.VerbCallError](err)
 	return answered
 }
 
-// navCapture reads a pane's last lines with a styled capture-pane, and
-// parses them (see navParser) into plain text and styled text. It
-// reports false when the call failed in a way that leaves the connection out
-// of step.
 func navCapture(ctx context.Context, c *session.VerbClient, sessionName, window string, parser *navParser) (plain, styled []string, inStep bool) {
 	raw, err := c.CallWithTimeout("capture-pane", map[string]any{
 		"session": sessionName, "window": window, "source": "recent", "lines": navTextLines, "styled": true,
@@ -794,8 +646,6 @@ func (m *OS) ApplyNavigatorLoaded(msg NavigatorLoadedMsg) {
 			}
 			title, note := s.Title, loaded.Note
 			if note != "" && len(s.Panes) > 0 {
-				// Keep the cached rows, with the note that says they could
-				// not be read fresh.
 				s.Note = note
 				break
 			}
@@ -814,8 +664,6 @@ func (m *OS) ApplyNavigatorLoaded(msg NavigatorLoadedMsg) {
 	m.MarkAllDirty()
 }
 
-// navRowKey names a row so the cursor can find it again after the tree
-// changes under it.
 func (m *OS) navRowKey(r navRow) string {
 	s := &m.navigator.sessions[r.Session]
 	switch r.Kind {
@@ -827,7 +675,6 @@ func (m *OS) navRowKey(r navRow) string {
 	return s.key()
 }
 
-// navigatorSelectedKey is the key of the row under the cursor.
 func (m *OS) navigatorSelectedKey() (string, bool) {
 	rows := m.navigatorRows()
 	if m.navigator.list.Cursor < 0 || m.navigator.list.Cursor >= len(rows) {
@@ -836,7 +683,6 @@ func (m *OS) navigatorSelectedKey() (string, bool) {
 	return m.navRowKey(rows[m.navigator.list.Cursor]), true
 }
 
-// navigatorHasKey reports whether a row with key is listed.
 func (m *OS) navigatorHasKey(key string) bool {
 	for _, r := range m.navigatorRows() {
 		if m.navRowKey(r) == key {
@@ -846,7 +692,6 @@ func (m *OS) navigatorHasKey(key string) bool {
 	return false
 }
 
-// navigatorSelectKey puts the cursor on the row with key, when it is listed.
 func (m *OS) navigatorSelectKey(key string) {
 	for i, r := range m.navigatorRows() {
 		if m.navRowKey(r) == key {
@@ -856,7 +701,6 @@ func (m *OS) navigatorSelectKey(key string) {
 	}
 }
 
-// navExpanded reports whether a session or a workspace row is open.
 func (m *OS) navExpanded(key string, def bool) bool {
 	if v, ok := m.navigator.expanded[key]; ok {
 		return v
@@ -864,16 +708,12 @@ func (m *OS) navExpanded(key string, def bool) bool {
 	return def
 }
 
-// navigatorRows is the list as it is drawn: the tree, or with a search the
-// panes that match, best first.
 func (m *OS) navigatorRows() []navRow {
 	if m.navSearch() {
 		return m.navigatorSearchRows()
 	}
 	var rows []navRow
 	if m.navFlat() {
-		// Every pane, in the tree's order. A session whose panes are not
-		// known yet stands for them.
 		for si := range m.navigator.sessions {
 			s := &m.navigator.sessions[si]
 			if len(s.Panes) == 0 {
@@ -911,18 +751,6 @@ func (m *OS) navigatorRows() []navRow {
 	return rows
 }
 
-// navigatorSearchRows is every pane that matches the query, best first. A
-// pane's name, title, command, folder, session and workspace are matched
-// fuzzily. Its screen text is matched as typed, ignoring case: a fuzzy match
-// over a screen of text finds nearly anything. A session whose panes are not
-// known is listed when its name matches.
-//
-// Both kinds of hit are ranked by the same fuzzy score, and a field hit wins
-// a tie. A text hit scores its best whole occurrence of the query as one
-// unbroken run (fuzzy.Matcher.FindRun). A field hit used to outrank every text hit, and that let a pane whose
-// fields spell the query out of order, across a random id and a temp folder,
-// take the cursor from the pane that shows the query whole: the joined fields
-// are long enough to hold most short queries scattered.
 func (m *OS) navigatorSearchRows() []navRow {
 	q := strings.TrimSpace(m.navigator.list.Query.String())
 	lq := strings.ToLower(q)
@@ -943,8 +771,6 @@ func (m *OS) navigatorSearchRows() []navRow {
 		for pi, p := range s.Panes {
 			fields := strings.Join([]string{p.Name, p.Title, p.Command, p.Cwd, s.Title, s.Host, s.WorkspaceNames[p.Workspace]}, " ")
 			row := navRow{Kind: navRowPane, Session: si, Workspace: p.Workspace, Pane: pi}
-			// Scores are doubled so the field hit's tie break of one point
-			// cannot pass a text hit that scored one point more.
 			best, found := 0, false
 			if r, ok := mt.Find(q, fields); ok {
 				best, found = 2*r.Score+1, true
@@ -953,13 +779,6 @@ func (m *OS) navigatorSearchRows() []navRow {
 				if !strings.Contains(line, lq) {
 					continue
 				}
-				// Each whole occurrence is scored as the run it is.
-				// Find would score the first spread of the query's
-				// characters in the line, which can come before the
-				// occurrence and score far less. Lower case on both sides
-				// keeps smart case out of a match that was made ignoring
-				// case. A line the matcher still refuses scores nothing
-				// and is kept.
 				score := 0
 
 				for at := 0; at <= len(line)-len(lq); {
@@ -992,9 +811,6 @@ func (m *OS) navigatorSearchRows() []navRow {
 	return rows
 }
 
-// navSearch reports whether a search is in force: a query with more than
-// spaces in it. Every reader of the query asks this, so the list, the folds
-// and the glyphs agree on whether the tree or the results are showing.
 func (m *OS) navSearch() bool { return strings.TrimSpace(m.navigator.list.Query.String()) != "" }
 
 // NavigatorRowCount is how many rows the list has.
@@ -1097,8 +913,6 @@ func (m *OS) NavigatorPaste(s string) {
 	}
 }
 
-// navigatorRefiltered puts the cursor on the best match after the search
-// changed, or on the current pane when there is no search.
 func (m *OS) navigatorRefiltered() {
 	m.navigator.list.Cursor, m.navigator.list.Scroll = 0, 0
 	if !m.navSearch() {
@@ -1129,9 +943,6 @@ func (m *OS) NavigatorActivate(i int) {
 	m.sidebarLeaveForJump()
 	if !s.Current {
 		if s.Host != "" && s.Host != m.attachedMachine() {
-			// Off the Update goroutine and in every link state, as the rail
-			// opens it. The workspace or pane the row names is focused when
-			// the switch lands. See host_open.go.
 			m.openRemoteSessionAt(s.Host, s.Name, workspace, paneID)
 			return
 		}

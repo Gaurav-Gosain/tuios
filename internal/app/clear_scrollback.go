@@ -7,16 +7,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// clearScrollbackTimeout bounds the daemon's clear. The daemon waits for its
-// emulator to take the output queued before the clear, which is none at a
-// prompt.
 const clearScrollbackTimeout = 10 * time.Second
 
-// clearScrollbackDoneMsg is the daemon's answer to a clear.
 type clearScrollbackDoneMsg struct{ err error }
 
-// clearScrollbackRequest is what the daemon clear needs, copied off the model
-// so it can run off the update goroutine.
 type clearScrollbackRequest struct {
 	Session, Window, Host, Build string
 }
@@ -37,7 +31,6 @@ func (m *OS) ClearScrollback() tea.Cmd {
 		m.ShowNotification("No pane is open. Open a pane to clear its scrollback.", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
-	// The history the copy view shows is about to go.
 	if w.InCopyMode() {
 		w.ExitCopyMode()
 	}
@@ -70,7 +63,6 @@ func (m *OS) ClearScrollback() tea.Cmd {
 	return nil
 }
 
-// clearScrollbackInDaemon asks the session's daemon to clear the pane.
 func clearScrollbackInDaemon(req clearScrollbackRequest) error {
 	c, err := dialSessionDaemon(req.Host, req.Build)
 	if err != nil {
@@ -85,8 +77,6 @@ func clearScrollbackInDaemon(req clearScrollbackRequest) error {
 	return err
 }
 
-// applyClearScrollbackDone reports a clear that failed. A clear that worked
-// shows itself: the pane's stream brings it.
 func (m *OS) applyClearScrollbackDone(msg clearScrollbackDoneMsg) {
 	if msg.err == nil {
 		return
@@ -95,7 +85,6 @@ func (m *OS) applyClearScrollbackDone(msg clearScrollbackDoneMsg) {
 	m.ShowNotification(clearScrollbackNote(msg.err), "warning", m.Settings.NotificationDuration)
 }
 
-// clearScrollbackNote is the message for a clear that failed.
 func clearScrollbackNote(err error) string {
 	if session.IsFullScreenError(err) {
 		return "A full-screen program uses the pane. Quit the program, then clear the scrollback."

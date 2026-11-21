@@ -11,19 +11,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The accent colour picker, opened from a pane's menu and driven with its
-// keys, read off the panel and off the rail row it previews on. The hue
-// strip's drag, the rail cache key and its allocation budget stay in package
-// app: they read the picker's hit boxes and the rail's signature, which no
-// screen shows.
-
 func accentFixture(t *testing.T) *apptest.Fixture {
 	t.Helper()
 	return apptest.New(t, apptest.Panes(1), apptest.Size(120, 30),
 		apptest.Config(func(c *config.UserConfig) { c.Appearance.FramePanels = true }))
 }
 
-// openAccentPicker opens the picker from the focused pane's menu.
 func openAccentPicker(t *testing.T, f *apptest.Fixture) {
 	t.Helper()
 	px, py := f.PaneCenter()
@@ -35,10 +28,8 @@ func openAccentPicker(t *testing.T, f *apptest.Fixture) {
 	}
 }
 
-// hexField reads the hex field; a focused field carries a › before the #.
 var hexField = regexp.MustCompile(`hex +›?(#[0-9a-f]{6})`)
 
-// shownHex is the colour the picker's hex field shows, "" with no picker.
 func shownHex(t *testing.T, f *apptest.Fixture) string {
 	t.Helper()
 	if m := hexField.FindStringSubmatch(f.Text()); m != nil {
@@ -47,7 +38,6 @@ func shownHex(t *testing.T, f *apptest.Fixture) string {
 	return ""
 }
 
-// railMark is the colour of the identity mark on the pane's rail row.
 func railMark(t *testing.T, f *apptest.Fixture) string {
 	t.Helper()
 	for y, row := range f.Screen() {
@@ -67,8 +57,6 @@ func hexOf(c color.Color) string {
 	return fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8)
 }
 
-// storedAccent is the accent the pane keeps, "" for none. It is what the
-// rail draws once the picker is shut.
 func storedAccent(f *apptest.Fixture) string {
 	if a, ok := f.M.WindowAccent(f.M.GetFocusedWindow().ID); ok {
 		return a.Hex()
@@ -151,13 +139,10 @@ func TestAccentPickerCancelRestores(t *testing.T) {
 func TestAccentGridAndHexConverge(t *testing.T) {
 	f := accentFixture(t)
 	openAccentPicker(t, f)
-	// The picker opens on the hue strip; tab to the grid, the control whose
-	// arrows move the grid cursor.
 	for i := 0; ; i++ {
 		if i == 16 {
 			t.Fatal("no tab stop moves the grid cursor under the arrows")
 		}
-		// The cursor may start against an edge, so either way counts.
 		col := f.M.AccentPicker.Col
 		f.Keys("left")
 		if f.M.AccentPicker.Col != col {

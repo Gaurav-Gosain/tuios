@@ -6,8 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// withDockWorkspaceTabFormat saves and restores the tab-format global, which
-// is package state shared with every other test in the run.
 func withDockWorkspaceTabFormat(t *testing.T) {
 	t.Helper()
 	prev := config.Global.DockWorkspaceTabFormat
@@ -30,7 +28,7 @@ func TestWorkspaceTabFormatReachesTheStrip(t *testing.T) {
 	want := map[int]string{1: "1", 2: "2: review", 3: "3"}
 	for _, tab := range tabs {
 		if tab.Add {
-			continue // the "+" tab is a control, not a workspace label
+			continue
 		}
 		if got := want[tab.Workspace]; tab.Label != got {
 			t.Errorf("workspace %d's chip reads %q with the format on, want %q", tab.Workspace, tab.Label, got)

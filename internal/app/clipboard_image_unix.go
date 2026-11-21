@@ -7,13 +7,10 @@ import (
 	"syscall"
 )
 
-// prepareClipCmd puts a clipboard helper in a process group of its own, so a
-// timeout can end it and everything it started.
 func prepareClipCmd(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }
 
-// killClipCmd kills a clipboard helper's whole process group.
 func killClipCmd(cmd *exec.Cmd) {
 	if cmd.Process == nil {
 		return

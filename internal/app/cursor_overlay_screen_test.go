@@ -7,13 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/apptest"
 )
 
-// A panel covers the pane, so the pane's cursor has nothing to point at, and
-// the panels that take typing draw their own caret as a character: a cursor
-// in the pane behind would be a second mark next to it. The model starts in
-// terminal mode, where the pane's cursor is shown, so these tests do not lean
-// on window management hiding it.
-
-// cursorFixture is one pane with a prompt in it, and where its cursor is.
 func cursorFixture(t *testing.T) (f *apptest.Fixture, x, y int) {
 	t.Helper()
 	f = apptest.New(t, apptest.Panes(1))
@@ -54,9 +47,6 @@ func TestOverlayDrawsNoFakeCursorEither(t *testing.T) {
 	if _, _, ok := f.Cursor(); ok {
 		t.Fatal("the palette did not hide the terminal's cursor; TestOverlayDrawsNoCursor says why")
 	}
-	// The pane keeps its last drawing until it has new output, so the guest
-	// writes while the palette is open, as one does, without moving its
-	// cursor: a style reset.
 	f.Output("\x1b[m")
 	at, beside := f.Cell(x, y), f.Cell(x+1, y)
 	if at.Content != " " && at.Content != "" {

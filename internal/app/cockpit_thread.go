@@ -21,32 +21,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 )
 
-// The thread as cards: what the selected agent said and did, drawn from its
-// transcript the way DESIGN.md 4.4 lays it out. Your prompts sit in a panel
-// with an accent bar, the agent's words under a label with its harness and
-// the time, reads and searches fold to one line and merge, an edit opens on
-// its diff (drawn by internal/diffview, the review's renderer), a failed
-// command unfolds its output, and a todo list is a plan with a progress rule.
-//
-// The cards are built from the entries the client already holds and kept
-// with the thread until it, the width or the folds change.
-
-// ckGlyphOpen is an open card's fold mark, and the down mark of a control
-// that opens a menu. It and ckGlyphFold are a pair of the same weight and
-// size as the text: the Codicon chevrons in a Nerd Font, which are drawn
-// with the text's stroke, and the modifier arrowheads otherwise. The Font
-// Awesome chevrons read heavier and larger than the words beside them, the
-// closed one most of all, and the white triangle was a different shape from
-// the closed mark.
 var ckGlyphOpen = ckGlyph{"\ueab4", "˅", "v"}
 
-// ckDiffShown is how many lines of a diff a card shows until it is expanded.
 const ckDiffShown = 8
 
-// ckFailShown is how many lines of a failed command's output a card shows.
 const ckFailShown = 6
 
-// threadDiff is a diff as agent-transcript sends it.
 type threadDiff struct {
 	File      string       `json:"file"`
 	Added     int          `json:"added"`
@@ -55,15 +35,12 @@ type threadDiff struct {
 	Hunks     []threadHunk `json:"hunks"`
 }
 
-// threadHunk is one hunk of a threadDiff.
 type threadHunk struct {
 	OldStart int              `json:"old_start"`
 	NewStart int              `json:"new_start"`
 	Lines    []threadDiffLine `json:"lines"`
 }
 
-// threadDiffLine is one line of a hunk, with the changed words in UTF-16
-// units of its text.
 type threadDiffLine struct {
 	Op    string `json:"op"`
 	Text  string `json:"text"`
@@ -73,55 +50,31 @@ type threadDiffLine struct {
 	} `json:"words"`
 }
 
-// ckLine is one line of a card, before it is drawn.
 type ckLine struct {
-	// bg is the line's ground from column bgAt to the width, nil for the
-	// canvas.
-	bg   color.Color
-	bgAt int
-	// bar is a mark in the first cell, such as a card's edge.
-	bar    string
-	barInk color.Color
-	indent int
-	segs   []ckSeg
-	right  []ckSeg
-	// raw is a styled string drawn at indent in place of segs, such as a
-	// diff line from diffview.
-	raw string
-	// hit is what a click on the line does: "fold:" and an entry's id.
-	hit string
-	// label marks a speaker's label, which starts after a blank line.
-	label bool
-	// wrap says the next line goes on with the same paragraph, so copy mode
-	// joins them.
-	wrap bool
-	// cont says the line goes on with the line above with nothing between,
-	// as a wrapped code row does, so copy mode joins them that way.
-	cont bool
-	// mark is drawn at column markAt in markInk over what the line draws,
-	// such as a code row's cut mark. Copy mode leaves it out.
+	bg      color.Color
+	bgAt    int
+	bar     string
+	barInk  color.Color
+	indent  int
+	segs    []ckSeg
+	right   []ckSeg
+	raw     string
+	hit     string
+	label   bool
+	wrap    bool
+	cont    bool
 	mark    string
 	markAt  int
 	markInk color.Color
-	// lmark is drawn in markInk in the cell before indent, such as the mark
-	// of a code row scrolled sideways. Copy mode leaves it out.
-	lmark string
-	// code is the code block the line is part of, "" for none: the entry's
-	// id, a slash, and the block's place in the message.
-	code string
+	lmark   string
+	code    string
 }
 
-// blank reports whether the line draws nothing.
 func (ln ckLine) blank() bool {
 	return ln.bg == nil && ln.bar == "" && ln.raw == "" && len(ln.segs) == 0
 }
 
-// ckReadTool is the word a read or search folds under, "" for any other
-// tool. A run of them is one line.
 func ckReadTool(tool string) string {
-	// Claude Code's names, then those of the other harnesses whose
-	// transcripts tuios reads: Codex, Gemini CLI, Qwen Code, Copilot CLI and
-	// Amp.
 	switch strings.ToLower(tool) {
 	case "read", "ls", "notebookread",
 		"read_file", "read_many_files", "list_directory", "view", "view_image":
@@ -135,9 +88,6 @@ func ckReadTool(tool string) string {
 	return ""
 }
 
-// threadCardLines draws the thread of a transcript agent as cards, the newest
-// at the bottom. With changes it draws the edits
-// of the last turn alone, each whole.
 func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, changes bool, now time.Time) ([]string, []string) {
 	l := m.cockpitLook()
 	pal := l.pal
@@ -145,7 +95,6 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	if who == "" {
 		who = "agent"
 	}
-	// Paths show relative to the folder the agent works in.
 	t.root = m.ckAgentRoot(e)
 	entries := t.entries
 	if changes {
@@ -165,10 +114,7 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 			results[en.ToolID] = en
 		}
 	}
-	// Each item carries its lines drawn: a line is drawn once, when its
-	// card is built, and a rebuild only joins them.
 	var items []ckItem
-	// prompts are the items that are prompts, for the thread's ruler.
 	var prompts []int
 	var c *ckCanvas
 	draw := func(ls []ckLine) []string {
@@ -181,12 +127,8 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	}
 	c = c.reset(width, 1, l.canvas)
 	blank := c.render()
-	// cur is the entry the loop draws, for copy mode's Markdown yank.
 	cur := ""
 	add := func(ls ...ckLine) { items = ckAddItem(items, ckItem{lines: ls, out: draw(ls), id: cur}, blank) }
-	// cached draws an entry's card once per width, fold and theme: a diff's
-	// highlighting and a long text's wrapping are the costly part, and a
-	// thread that grows by one entry draws only that one.
 	gen := theme.Generation()
 	cached := func(en threadEntry, variant int, build func() []ckLine) {
 		key := ckCardKey{width: width, theme: gen, look: m.Inbox.ck.lookGen, ascii: l.ascii, nerd: l.nerd, depth: l.pal.Depth, root: t.root,
@@ -203,8 +145,6 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 		t.cards[en.ID] = ckCard{key: key, item: it}
 		items = ckAddItem(items, it, blank)
 	}
-	// A finished turn folds its work to one line under its prompt. The
-	// Changes tab draws edits alone and folds nothing.
 	var steps []transcriptview.Step
 	var turns []transcriptview.Turn
 	var turnOf []int
@@ -224,15 +164,11 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	}
 	prevText := false
 	working := e.State == string(session.AgentStateWorking)
-	// While the agent works its newest todo list is pinned above the
-	// thread, so in the thread it is folded to its count.
 	pinned := !changes && t.pinned
 	for i := from; i < len(entries); i++ {
 		en := ckEntryIn(t.root, entries[i])
 		cur = en.ID
 		isEdit := en.Kind == "tool_call" && en.Diff != nil
-		// The Changes tab is the agent's work: an edit outside its folder,
-		// such as Claude Code's plan file, is in the thread only.
 		if changes && (!isEdit || !ckInRoot(t.root, entries[i].Diff.File)) {
 			continue
 		}
@@ -247,16 +183,12 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 				cached(key, boolInt(open), func() []ckLine { return []ckLine{m.ckTurnLine(l, tn, id, what, span, width, open)} })
 				prevText = false
 			}
-			// A message to or from another agent stays in view in a folded
-			// turn: it is what the turn told the fleet.
 			if !open && tn.Hidden(steps, i) && !(en.Kind == "tool_call" && len(en.Calls) > 0) {
 				continue
 			}
 		}
 		switch {
 		case en.Image != nil:
-			// An image the person pasted or a tool gave back: a card under
-			// its prompt or its call.
 			add(m.ckImageCard(l, t, en, width)...)
 		case en.Kind == "text" && en.Role == "tool" || transcriptview.Interrupt(en.Role, en.Kind, en.Text):
 			add(ckQuietLine(l, en))
@@ -304,14 +236,11 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 		case isEdit:
 			cached(en, 0, func() []ckLine { return m.ckDiffCard(l, t, en, width, changes) })
 		case en.Kind == "tool_call" && ckReadTool(en.Tool) != "":
-			// A run of reads and searches is one line, and opens on the
-			// files it read.
 			j := i
 			var calls []threadEntry
 			images := 0
 			for ; j < len(entries) && (entries[j].Kind == "tool_result" || entries[j].Role == "tool" && entries[j].Image == nil || entries[j].Kind == "tool_call" && ckReadTool(entries[j].Tool) != ""); j++ {
 				if entries[j].Role == "tool" {
-					// A result, or an image a read gave.
 					if entries[j].Kind == "text" {
 						images++
 					}
@@ -335,7 +264,6 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 			}
 			add(ls...)
 		case en.Kind == "tool_call" && len(en.Calls) > 0:
-			// A message to another agent or to the person, drawn as one.
 			res := results[en.ToolID]
 			open := t.expandAll || t.folded[en.ID]
 			card := func() []ckLine { return m.ckTalkCard(l, e, t, en, res, width, open) }
@@ -351,12 +279,9 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 			open := t.expandAll || t.folded[en.ID]
 			card := func() []ckLine { return m.ckToolCard(l, en, res.Text, width, open, t.expandAll) }
 			if p := pills[en.ID]; len(p) > 0 {
-				// The pills follow the pill cursor, so this card is drawn
-				// each time.
 				add(append(card(), m.ckPillLines(l, p, t.pill, width)...)...)
 				break
 			}
-			// The card changes with its result, which can come later.
 			key := en
 			key.sum = en.sum*1099511628211 ^ res.sum
 			cached(key, 0, card)
@@ -369,8 +294,6 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 		c := (*ckCanvas)(nil).reset(width, 1, l.canvas)
 		return []string{ckRender(c, width, ckLine{indent: 2, segs: []ckSeg{{t: "No edits in the last turn.", fg: pal.FgDim}}})}, []string{""}
 	}
-	// Every item, oldest first. The thread keeps the lines until it, the
-	// width or a fold changes; scrolling picks from them.
 	var out, hits []string
 	for i, it := range items {
 		if len(prompts) > 0 && prompts[0] == i {
@@ -387,13 +310,10 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 	return out, hits
 }
 
-// ckPrompt reports whether en is drawn as a prompt of the person's.
 func ckPrompt(en threadEntry) bool {
 	return en.Image == nil && en.Kind == "text" && en.Role == "user" && !transcriptview.Interrupt(en.Role, en.Kind, en.Text)
 }
 
-// ckTurns splits a thread's entries into turns, and gives each entry its
-// turn. The last turn is finished once the agent rests on its answer.
 func ckTurns(e sidebarAgentEntry, entries []threadEntry) ([]transcriptview.Step, []transcriptview.Turn, []int) {
 	steps := make([]transcriptview.Step, len(entries))
 	for i := range entries {
@@ -410,11 +330,8 @@ func ckTurns(e sidebarAgentEntry, entries []threadEntry) ([]transcriptview.Step,
 	return steps, turns, turnOf
 }
 
-// ckTurnHead is where a turn's summary line goes: under its prompt, or first
-// for a thread that starts inside the turn.
 func ckTurnHead(steps []transcriptview.Step, tn *transcriptview.Turn) int {
 	if s := steps[tn.Start]; s.Role == "user" && s.Kind == "text" && tn.Start+1 < tn.End {
-		// After the prompt and the images pasted with it.
 		i := tn.Start + 1
 		for i+1 < tn.End && steps[i].Role == "user" && steps[i].Image {
 			i++
@@ -424,8 +341,6 @@ func ckTurnHead(steps []transcriptview.Step, tn *transcriptview.Turn) int {
 	return tn.Start
 }
 
-// ckTurnLine is a turn's summary line: the fold mark, what the turn did and
-// how long it took. A failure in it is lit. A click opens or closes the turn.
 func (m *OS) ckTurnLine(l ckLook, tn *transcriptview.Turn, id, what, span string, width int, open bool) ckLine {
 	pal := l.pal
 	mark := ckGlyphFold
@@ -442,8 +357,6 @@ func (m *OS) ckTurnLine(l ckLook, tn *transcriptview.Turn, id, what, span string
 	room := max(width-ansi.StringWidth(fail+span)-4, 8)
 	segs := []ckSeg{{t: l.g(mark) + " ", fg: pal.FgMute}, {t: ckTrunc(what, room), fg: pal.FgDim}}
 	if fail != "" {
-		// A failure is lit. A stop or a decline is the person's own call,
-		// so it is only named.
 		if tn.Failed > 0 {
 			segs = append(segs, ckSeg{t: fail, fg: pal.Warn, attrs: ckBold})
 		} else {
@@ -456,20 +369,17 @@ func (m *OS) ckTurnLine(l ckLook, tn *transcriptview.Turn, id, what, span string
 	return ckLine{segs: segs, hit: "fold:" + id}
 }
 
-// ckItem is a card's lines and the lines drawn, and the entry they draw.
 type ckItem struct {
 	lines []ckLine
 	out   []string
 	id    string
 }
 
-// ckCard is an entry's card as last built, and what it was built from.
 type ckCard struct {
 	key  ckCardKey
 	item ckItem
 }
 
-// ckCardKey is what a card's lines depend on beside the entry's id.
 type ckCardKey struct {
 	width                   int
 	theme, look             uint64
@@ -477,36 +387,23 @@ type ckCardKey struct {
 	ascii, nerd             bool
 	folded, expand, changes bool
 	variant                 int
-	// status is a tool call's, which its result can change.
-	status string
-	// sum is the entry's text hash: a message written again keeps its id.
-	sum uint64
-	// root is the folder the card's paths are shown relative to.
-	root string
-	// codeX counts the sideways scrolls of the entry's code blocks.
-	codeX int
-	// blocks counts the drawings of rich blocks that came in and the
-	// switches between a picture and its source. See cockpit_blocks.go.
-	blocks int
+	status                  string
+	sum                     uint64
+	root                    string
+	codeX                   int
+	blocks                  int
 }
 
-// ckAddItem appends a card's lines. A card or a new speaker starts after a
-// blank line; folded tool lines run together. Kept out of line: the thread
-// calls it from every case, and inlined it was most of the thread's code.
-//
 //go:noinline
 func ckAddItem(items []ckItem, it ckItem, blank string) []ckItem {
 	if n := len(items); n > 0 && len(it.lines) > 0 && (it.lines[0].bg != nil || it.lines[0].label) {
 		if prev := items[n-1]; len(prev.lines) > 0 && !prev.lines[len(prev.lines)-1].blank() {
-			// Clipped, so a card the thread keeps is never written into.
 			items[n-1] = ckItem{lines: append(slices.Clip(prev.lines), ckLine{}), out: append(slices.Clip(prev.out), blank), id: prev.id}
 		}
 	}
 	return append(items, it)
 }
 
-// ckLastTodos is the index of the newest todo list, which is the one drawn
-// whole.
 func (m *OS) ckLastTodos(entries []threadEntry) int {
 	for i, en := range slices.Backward(entries) {
 		if en.Kind == "todos" {
@@ -516,10 +413,6 @@ func (m *OS) ckLastTodos(entries []threadEntry) int {
 	return -1
 }
 
-// ckQuietLine is a line of the thread that is not a card: where the person
-// stopped the agent, or an image a tool result holds, under its call. Kept
-// out of line, as ckAddItem is.
-//
 //go:noinline
 func ckQuietLine(l ckLook, en threadEntry) ckLine {
 	pal := l.pal
@@ -529,11 +422,6 @@ func ckQuietLine(l ckLook, en threadEntry) ckLine {
 	return ckLine{indent: 2, segs: []ckSeg{{t: "You stopped the agent", fg: pal.FgDim, attrs: ckItalic}, {t: "  " + ckClock(en.At), fg: pal.FgMute}}}
 }
 
-// ckThoughtLines is a thinking entry: one line that says how long the agent
-// thought and starts the thought, and the whole thought under it when open.
-// A click on the line opens or closes it; a thought with no text has nothing
-// to open.
-//
 //go:noinline
 func ckThoughtLines(l ckLook, en threadEntry, steps []transcriptview.Step, i, width int, open bool) []ckLine {
 	pal := l.pal
@@ -551,7 +439,6 @@ func ckThoughtLines(l ckLook, en threadEntry, steps []transcriptview.Step, i, wi
 	segs := []ckSeg{{t: l.g(mark) + " ", fg: pal.FgMute}, {t: what, fg: pal.FgDim, attrs: ckItalic}}
 	line := ckLine{segs: segs}
 	if text == "" {
-		// Nothing to open, so no fold mark.
 		return []ckLine{ckFoldMark(l, line, false, false)}
 	}
 	line.hit = "fold:" + en.ID
@@ -567,10 +454,6 @@ func ckThoughtLines(l ckLook, en threadEntry, steps []transcriptview.Step, i, wi
 	return ls
 }
 
-// ckTurnWords is a turn's line: how long it worked and what it did, such as
-// "Worked for 2m 42s · ran 6 commands and read 3 files". A turn still at
-// work says "Working for 3m", in whole minutes, so the line changes once a
-// minute and not every second.
 func ckTurnWords(tn *transcriptview.Turn, now time.Time) string {
 	what := tn.Summary()
 	lower := strings.ToLower(what[:1]) + what[1:]
@@ -586,9 +469,6 @@ func ckTurnWords(tn *transcriptview.Turn, now time.Time) string {
 	return what
 }
 
-// threadPinsTodos reports whether the thread pins its newest todo list
-// above itself: the agent works, the Thread tab shows, and the list has an
-// item not done.
 func (m *OS) threadPinsTodos(e sidebarAgentEntry, t *agentThread) bool {
 	if t == nil || e.State != string(session.AgentStateWorking) || m.cockpitTab() != "Thread" {
 		return false
@@ -638,8 +518,6 @@ func (m *OS) ThreadPinnedLines(e sidebarAgentEntry, width, room int) []string {
 	return out
 }
 
-// ckSaidLines appends what the person said when they declined a call.
-//
 //go:noinline
 func ckSaidLines(l ckLook, ls []ckLine, said string, width int) []ckLine {
 	if said == "" {
@@ -652,7 +530,6 @@ func ckSaidLines(l ckLook, ls []ckLine, said string, width int) []ckLine {
 	return ls
 }
 
-// ckWorse is the worse of two tool statuses: an error, then a run, then ok.
 func ckWorse(a, b string) string {
 	rank := func(s string) int {
 		switch s {
@@ -671,8 +548,6 @@ func ckWorse(a, b string) string {
 	return a
 }
 
-// ckAgentRoot is the folder an agent works in: its worktree, else its pane's
-// folder when this client holds the pane. "" when neither is known.
 func (m *OS) ckAgentRoot(e sidebarAgentEntry) string {
 	if p := m.ckWorktreeOf(e).path; p != "" {
 		return p
@@ -686,8 +561,6 @@ func (m *OS) ckAgentRoot(e sidebarAgentEntry) string {
 	return ""
 }
 
-// ckInRoot reports whether path p is in folder root. Every path is in an
-// unknown root.
 func ckInRoot(root, p string) bool {
 	if root == "" || !filepath.IsAbs(p) {
 		return true
@@ -696,10 +569,6 @@ func ckInRoot(root, p string) bool {
 	return p == root || strings.HasPrefix(p, root+"/")
 }
 
-// ckRelPath is path p as the agent's work shows it: relative to root when p
-// is in it, else with ~ for the home folder. A relative path is kept. With
-// root unknown (the pane is in another session or on another machine), it is
-// the path's last three parts, so a long absolute path does not fill the line.
 func ckRelPath(root, p string) string {
 	if !filepath.IsAbs(p) {
 		return p
@@ -719,8 +588,6 @@ func ckRelPath(root, p string) string {
 	return ckHomePath(p)
 }
 
-// ckRelTarget is a tool call's target with a path in it made relative to
-// root. A shell command is kept as written.
 func ckRelTarget(root, tool, target string) string {
 	if transcriptview.ShellTool(tool) || !filepath.IsAbs(strings.TrimSpace(target)) {
 		return target
@@ -728,8 +595,6 @@ func ckRelTarget(root, tool, target string) string {
 	return ckRelPath(root, strings.TrimSpace(target))
 }
 
-// ckEntryIn is en with its target and its diff's file relative to root. The
-// thread's own entry is not changed: copy mode yanks what the agent wrote.
 func ckEntryIn(root string, en threadEntry) threadEntry {
 	en.Target = ckRelTarget(root, en.Tool, en.Target)
 	if en.Diff != nil {
@@ -740,7 +605,6 @@ func ckEntryIn(root string, en threadEntry) threadEntry {
 	return en
 }
 
-// ckClock is a transcript time as the label shows it: hours and minutes.
 func ckClock(at int64) string {
 	if at <= 0 {
 		return ""
@@ -748,8 +612,6 @@ func ckClock(at int64) string {
 	return time.UnixMilli(at).Format("15:04")
 }
 
-// ckToolTarget is what a tool line says the call acted on: for a shell
-// call, the program it ran without bash -lc, cd dir && and the like.
 func ckToolTarget(tool, target string) string {
 	if transcriptview.ShellTool(tool) {
 		return transcriptview.CommandLabel(target)
@@ -757,8 +619,6 @@ func ckToolTarget(tool, target string) string {
 	return target
 }
 
-// toolLineLabel is a "Tool: target" line, as the daemon writes what an agent
-// or a subagent runs now, with a shell call's target as its command label.
 func toolLineLabel(line string) string {
 	if tool, target, ok := strings.Cut(line, ": "); ok && transcriptview.ShellTool(tool) {
 		return tool + ": " + transcriptview.CommandLabel(target)
@@ -766,8 +626,6 @@ func toolLineLabel(line string) string {
 	return line
 }
 
-// ckToolLine is a folded tool call: the fold mark, the kind, what it acted
-// on, and its status on the right, the word beside the mark.
 func (m *OS) ckToolLine(l ckLook, kind, target, status string, width int) ckLine {
 	pal := l.pal
 	mark, ink := l.g(ckGlyphReview), overlay.MixColors(pal.Success, pal.FgMute, 0.5)
@@ -783,20 +641,15 @@ func (m *OS) ckToolLine(l ckLook, kind, target, status string, width int) ckLine
 		mark, ink = l.g(ckGlyphWorking), pal.Busy
 		right = []ckSeg{{t: "running ", fg: pal.FgMute}}
 	case transcriptview.StatusDeclined:
-		// The person's choice, not a failure: no warning colour.
 		mark, ink = l.g(ckGlyphIdle), pal.FgMute
 		right = []ckSeg{{t: "declined ", fg: pal.FgDim}}
 	}
-	// The last cell stays clear: the thread's ruler is drawn there.
 	right = append(right, ckSeg{t: " " + mark, fg: ink}, ckSeg{t: " "})
 	room := max(width-ansi.StringWidth(kind)-ckWidth(right...)-7, 4)
 	return ckLine{segs: []ckSeg{{t: l.g(ckGlyphFold) + " ", fg: pal.FgMute}, {t: kind, fg: pal.FgDim, attrs: ckBold},
 		{t: "  " + ckTrunc(target, room), fg: pal.FgMute}}, right: right}
 }
 
-// ckFoldMark sets a tool line's fold mark: the open mark when open, the
-// fold mark when it has more to show, and a blank cell when it has nothing
-// more, so its text stays in line with the others.
 func ckFoldMark(l ckLook, ln ckLine, more, open bool) ckLine {
 	g := ""
 	switch {
@@ -811,18 +664,12 @@ func ckFoldMark(l ckLook, ln ckLine, more, open bool) ckLine {
 	return ln
 }
 
-// ckToolCard is a tool call: its line, and when open the whole command and
-// the head of its output. A failed call shows the end of its output folded,
-// and a declined one what the person said. The line folds only when it has
-// more to show than it shows folded.
-//
 //go:noinline
 func (m *OS) ckToolCard(l ckLook, en threadEntry, out string, width int, open, all bool) []ckLine {
 	pal := l.pal
 	label := printableTitle(ckToolTarget(en.Tool, en.Target))
 	head := m.ckToolLine(l, printableTitle(en.Tool), label, en.Status, width)
 	hit := "fold:" + en.ID
-	// The command whole: the line cuts it, or drops a cd in front.
 	cmd := strings.TrimSpace(en.Target)
 	cmdMore := cmd != "" && (head.segs[2].t != "  "+label || strings.ContainsRune(cmd, '\n') || printableTitle(cmd) != label)
 	wrapW := max(width-8, 8)
@@ -830,7 +677,6 @@ func (m *OS) ckToolCard(l ckLook, en threadEntry, out string, width int, open, a
 	var folded []ckLine
 	switch {
 	case en.Status == transcriptview.StatusDeclined:
-		// What the person said when they declined, if anything.
 		folded = ckSaidLines(l, nil, out, width)
 		outLines = nil
 	case en.Status == "error":
@@ -894,8 +740,6 @@ func (m *OS) ckToolCard(l ckLook, en threadEntry, out string, width int, open, a
 	return ls
 }
 
-// ckOutputLines is a command's output as a card shows it, wrapped at width:
-// tabs as spaces and each line's indent kept, as a terminal showed them.
 func ckOutputLines(text string, width int, ascii bool) []string {
 	var out []string
 	for line := range strings.SplitSeq(strings.TrimRight(text, " \t\r\n"), "\n") {
@@ -916,8 +760,6 @@ func ckOutputLines(text string, width int, ascii bool) []string {
 	return out
 }
 
-// ckExpandTabs puts spaces for each tab in line up to the next stop of 8
-// cells, as a terminal does.
 func ckExpandTabs(line string) string {
 	if !strings.Contains(line, "\t") {
 		return line
@@ -937,9 +779,6 @@ func ckExpandTabs(line string) string {
 	return b.String()
 }
 
-// ckReadGroup is a run of reads and searches: one line that counts them and
-// names the files, and when open a line for each call with its whole path.
-//
 //go:noinline
 func (m *OS) ckReadGroup(l ckLook, id string, calls []threadEntry, images, width int, open bool) []ckLine {
 	pal := l.pal
@@ -993,9 +832,6 @@ func (m *OS) ckReadGroup(l ckLook, id string, calls []threadEntry, images, width
 	return ls
 }
 
-// ckPlanCard is a todo list as a plan: done rows struck and muted, the
-// running row bold, and a rule that fills as rows are done. An older list
-// folds to its count.
 func (m *OS) ckPlanCard(l ckLook, en threadEntry, width int, whole bool) []ckLine {
 	pal := l.pal
 	done := 0
@@ -1034,13 +870,8 @@ func (m *OS) ckPlanCard(l ckLook, en threadEntry, width int, whole bool) []ckLin
 	return append(ls, ckLine{bg: l.panel}, ckLine{})
 }
 
-// ckPlanText is a plan the agent proposed: its first lines, all of them once
-// expanded.
 func (m *OS) ckPlanText(l ckLook, t *agentThread, en threadEntry, width int) []ckLine {
 	pal := l.pal
-	// The plan is Markdown, drawn as the agent's words are. A plan the
-	// transcript does not carry, such as one kept in a file, is its header
-	// alone, with no count of no lines.
 	var lines []ckLine
 	if strings.TrimSpace(en.Plan) != "" {
 		lines = m.ckMarkdown(l, en.Plan, max(width-6, 8))
@@ -1077,9 +908,6 @@ func (m *OS) ckPlanText(l ckLook, t *agentThread, en threadEntry, width int) []c
 	return append(ls, ckLine{bg: l.panel}, ckLine{})
 }
 
-// ckDiffCard is an edit opened on its diff: line numbers, signs, the code
-// highlighted and the changed words lit, as the review draws them. The first
-// lines show until e expands every card; a click on the header folds it.
 func (m *OS) ckDiffCard(l ckLook, t *agentThread, en threadEntry, width int, whole bool) []ckLine {
 	pal := l.pal
 	d := en.Diff
@@ -1113,11 +941,8 @@ func (m *OS) ckDiffCard(l ckLook, t *agentThread, en threadEntry, width int, who
 	codeW := max(width-gw-diffview.SignWidth-1, 8)
 	for hi, h := range d.Hunks {
 		if shown >= limit {
-			// Nothing past the limit is drawn, so nothing past it is
-			// highlighted: a 400-line diff costs what its first lines do.
 			break
 		}
-		// Only the lines the card shows are made and highlighted.
 		take := min(len(h.Lines), limit-shown)
 		texts := make([]string, take)
 		for i, ln := range h.Lines[:take] {
@@ -1145,9 +970,6 @@ func (m *OS) ckDiffCard(l ckLook, t *agentThread, en threadEntry, width int, who
 				break
 			}
 			shown++
-			// The changed words are in UTF-16 units of the raw text: each
-			// goes to bytes of the raw text, then through the tab
-			// expansion and the runes the card drops.
 			var changed []diffview.Range
 			for _, w := range ln.Words {
 				changed = append(changed, diffview.Range{
@@ -1167,8 +989,6 @@ func (m *OS) ckDiffCard(l ckLook, t *agentThread, en threadEntry, width int, who
 	return append(ls, ckLine{bg: l.panel, indent: gw + 3, segs: foot}, ckLine{})
 }
 
-// ckDiffCounts are a diff's added and removed counts, calm: carried toward
-// the secondary ink.
 func ckDiffCounts(l ckLook, add, del int) []ckSeg {
 	var segs []ckSeg
 	if add > 0 {
@@ -1183,8 +1003,6 @@ func ckDiffCounts(l ckLook, add, del int) []ckSeg {
 	return append(segs, ckSeg{t: "  "})
 }
 
-// ckSideSpans highlights a hunk's lines, each side as one text, so a string
-// or comment that spans lines keeps its colour.
 func ckSideSpans(file string, lines []threadDiffLine, texts []string) [][]diffview.Span {
 	out := make([][]diffview.Span, len(lines))
 	for _, side := range []string{"-", "+"} {
@@ -1206,8 +1024,6 @@ func ckSideSpans(file string, lines []threadDiffLine, texts []string) [][]diffvi
 	return out
 }
 
-// ckCodeText is a diff line as the card draws it: tabs as four spaces, and
-// only the runes the terminal can show.
 func ckCodeText(raw string, ascii bool) string {
 	var b strings.Builder
 	b.Grow(len(raw))
@@ -1222,7 +1038,6 @@ func ckCodeText(raw string, ascii bool) string {
 	return b.String()
 }
 
-// ckCodeOffset is where byte off of raw lands in ckCodeText(raw).
 func ckCodeOffset(raw string, off int, ascii bool) int {
 	n := 0
 	for i, r := range raw {
@@ -1239,7 +1054,6 @@ func ckCodeOffset(raw string, off int, ascii bool) int {
 	return n
 }
 
-// ckUTF16Byte turns an offset in UTF-16 code units into one in bytes of s.
 func ckUTF16Byte(s string, u int) int {
 	n := 0
 	for i, r := range s {
@@ -1254,8 +1068,6 @@ func ckUTF16Byte(s string, u int) int {
 	return len(s)
 }
 
-// ckDiffTheme is the diff theme on the card's ground, kept until the theme
-// or the depth changes.
 func (m *OS) ckDiffTheme(l ckLook) *diffview.Theme {
 	ck := &m.Inbox.ck
 	key := strconv.FormatUint(theme.Generation(), 10) + l.pal.Depth.String()
@@ -1271,7 +1083,6 @@ func (m *OS) ckDiffTheme(l ckLook) *diffview.Theme {
 	return ck.dv
 }
 
-// ckRender draws one card line at width on c, a blank canvas one line high.
 func ckRender(c *ckCanvas, width int, ln ckLine) string {
 	if ln.bg != nil {
 		c.fill(ln.bgAt, 0, width-ln.bgAt, 1, ln.bg)
@@ -1297,18 +1108,6 @@ func ckRender(c *ckCanvas, width int, ln ckLine) string {
 	return c.render()
 }
 
-// threadActivityLine is the live activity row: the card of the call the
-// agent runs now, drawn as the thread's newest line before the transcript
-// has the call. It says what the agent does ("Bash  go test ./...  2m
-// running"), from the daemon's now key, which a hook or a protocol pane
-// sets, or from a working program's OSC 7501 message.
-// transcriptview.ActivityShown decides when it shows. It is the first line
-// the call's own card draws, so when the transcript catches up the card
-// takes its row and nothing on screen moves. A read the newest read group
-// will join draws no row: the group's line counts it once the call lands.
-// The time is how long the activity has run as of this frame, drawn from
-// the first minute and only when the thread saw it start. It rides the redraws the cockpit already
-// makes, the minute tick among them, and no timer of its own.
 func (m *OS) threadActivityLine(l ckLook, e sidebarAgentEntry, t *agentThread, width int, now time.Time) (string, bool) {
 	if e.Host != "" {
 		return "", false
@@ -1336,8 +1135,6 @@ func (m *OS) threadActivityLine(l ckLook, e sidebarAgentEntry, t *agentThread, w
 		text = transcriptview.ActivityRow(tool, target)
 	}
 	if t != nil && (t.act != text || !t.actSeen) {
-		// The first frame that draws a thread finds its activity under way,
-		// so it has no time. Every later change is a start the thread saw.
 		t.act, t.actAt, t.actTimed, t.actSeen = text, now, t.actSeen, true
 	}
 	if text == "" || reads && ckReadTool(tool) != "" {
@@ -1353,11 +1150,9 @@ func (m *OS) threadActivityLine(l ckLook, e sidebarAgentEntry, t *agentThread, w
 	} else {
 		ln = m.ckToolCard(l, en, "", width, false, false)[0]
 	}
-	// The row is not the card yet: it opens nothing.
 	ln.hit = ""
 	ln = ckFoldMark(l, ln, false, false)
 	if t != nil && t.actTimed {
-		// Under a minute the time says nothing the running mark does not.
 		if age := agentElapsed("working", t.actAt.UnixNano(), now); age != "" && !strings.HasPrefix(age, "<") {
 			ln.right = append([]ckSeg{{t: age + "  ", fg: l.pal.FgMute}}, ln.right...)
 		}
@@ -1365,9 +1160,6 @@ func (m *OS) threadActivityLine(l ckLook, e sidebarAgentEntry, t *agentThread, w
 	return ckRender((*ckCanvas)(nil).reset(width, 1, l.canvas), width, ln), true
 }
 
-// ckJoinsReads reports whether a read that comes after a read call and then
-// entries joins that call's group: only results and the images reads gave
-// come between.
 func ckJoinsReads(entries []threadEntry) bool {
 	for _, en := range entries {
 		if en.Kind != "tool_result" && (en.Role != "tool" || en.Image != nil) {

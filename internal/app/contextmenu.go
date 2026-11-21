@@ -50,31 +50,13 @@ const (
 	CtxTargetFileRow
 )
 
-// fileMenuTarget is the listing row a files-section menu was opened on.
-//
-// It is captured when the menu opens and carried to the row that runs, so an
-// action reached from the menu acts on the name the user pointed at rather than
-// on the row the keyboard cursor happens to be sitting on. Right-clicking a row
-// does not move the cursor, and it must not have to.
-//
-// Dir is the folder that was listed at that moment, kept for the same reason
-// filePromptState keeps one: a reply already in flight can replace the listing
-// between the right-click and the row being chosen, and the operation has to act
-// on what the user was looking at.
 type fileMenuTarget struct {
-	Dir string
-	// Name is the entry, or "" when the menu was opened on the section's blank
-	// space, on its header, or on a row whose name has since left the listing.
-	Name string
-	// IsDir says the entry is a folder, which is the whole of what a folder's
-	// menu and a file's have to differ by.
+	Dir   string
+	Name  string
 	IsDir bool
-	// Up marks the ".." row. It names the folder above, which is not a name in
-	// the listing and so is not a target for a rename or a delete.
-	Up bool
+	Up    bool
 }
 
-// Active reports whether the target names something a menu can be about at all.
 func (t fileMenuTarget) Active() bool { return t.Dir != "" }
 
 // ContextMenuItem is one row of a context menu.
@@ -156,18 +138,13 @@ type ContextMenu struct {
 	// user can see, not against a List.Scroll that may have moved since.
 	ScrollFrom int
 
-	// depth counts the submenus opened in a row to reach this menu.
 	depth int
 }
 
-// selectable reports whether row i can be highlighted and run.
 func (cm *ContextMenu) selectable(i int) bool {
 	return i >= 0 && i < len(cm.Items) && !cm.Items[i].Sep && !cm.Items[i].Dim
 }
 
-// home puts the cursor on the first runnable row, which may not be row zero
-// (a dimmed action or a separator), and the window at the top. A menu with no
-// runnable row has its cursor at -1.
 func (cm *ContextMenu) home() {
 	cm.List = listnav.State{Cursor: -1}
 	for i := range cm.Items {
@@ -178,10 +155,6 @@ func (cm *ContextMenu) home() {
 	}
 }
 
-// selectWarn lands the selection on the menu's first destructive row, for the
-// callers whose whole intent is that row (the rail's kill key). A menu with no
-// destructive row, or whose only one is dimmed, keeps the selection it opened
-// with rather than jumping somewhere arbitrary.
 func (cm *ContextMenu) selectWarn() {
 	for i, it := range cm.Items {
 		if it.Warn && cm.selectable(i) {
@@ -201,8 +174,6 @@ func (cm *ContextMenu) HitTest(x, y int) int {
 	if cm.ItemH <= 0 {
 		return -1
 	}
-	// The first drawn row is item ScrollFrom, not item zero, whenever the menu
-	// is taller than the screen and has scrolled.
 	idx := cm.ScrollFrom + (y-cm.FirstRowY)/cm.ItemH
 	if y < cm.FirstRowY || idx < 0 || idx >= len(cm.Items) {
 		return -1
@@ -242,8 +213,6 @@ func (m *OS) ContextMenuSelectedAction() string {
 	return cm.Items[cm.List.Cursor].Action
 }
 
-// carryMenuTarget hands what the menu was opened on to the dispatch of the row
-// being taken. See TakeMenuWorkspace.
 func (m *OS) carryMenuTarget(cm *ContextMenu) {
 	m.menuWorkspace, m.menuSession, m.menuRepo, m.menuFile = cm.Workspace, cm.SessionID, cm.Repo, cm.File
 	m.menuFrom = cm
@@ -279,9 +248,6 @@ func (m *OS) ContextMenuMove(delta int) {
 	if cm == nil || len(cm.Items) == 0 {
 		return
 	}
-	// The list rule, over the rows that can be run: the menu wrapped at its
-	// ends before any other list did, and now it does so only when the lists
-	// do.
 	n := len(cm.Items)
 	cm.List.Move(delta, n, m.contextMenuVisible(n), m.listWraps(), cm.selectable)
 }
@@ -302,8 +268,6 @@ func (m *OS) ContextMenuClick(x, y int) (action string, consumed bool) {
 	}
 	idx := cm.HitTest(x, y)
 	if idx < 0 {
-		// On the menu but not on a runnable row (chrome, separator, dimmed):
-		// swallow the click so it cannot reach the pane underneath.
 		return "", true
 	}
 	action = cm.Items[idx].Action
@@ -325,14 +289,6 @@ func (m *OS) ContextMenuHover(x, y int) {
 	}
 }
 
-// ============================================================================
-// Hints, read from the keybind registry
-// ============================================================================
-
-// subPrefixTables maps each sub-prefix table to the action that opens it. A
-// sub-prefix action's own key is only the last keystroke of its chord, so the
-// key of the action that leads there is looked up too. Both lookups go
-// through the registry, so the whole chord follows a rebind.
 var subPrefixTables = []struct {
 	table config.Table
 	entry string
@@ -345,25 +301,12 @@ var subPrefixTables = []struct {
 	{config.TableLayoutPrefix, "prefix_layout"},
 }
 
-// windowModeTables are the tables window management mode reads its keys from.
 var windowModeTables = []config.Table{
 	config.TableWindowManagement, config.TableWorkspaces, config.TableLayout,
 	config.TableModeControl, config.TableSystem, config.TableNavigation,
 	config.TableRestoreMinimized,
 }
 
-// contextMenuHint returns the one key that runs action in mode, formatted the
-// way a person types it. It reads the live registry, so a rebound action shows
-// its new key and an unbound one shows no hint at all.
-//
-// A key of the mode itself comes first (window mode's tables, or terminal
-// mode's), then the global keys, then the prefix chord, which works in either
-// mode: the leader, for a sub-prefix action the key that opens its sub-prefix,
-// then the action's own key. The rail's keys come last (see firstKey). An
-// action with none of these in terminal mode, such as rename_window, shows no
-// hint there: its window-mode key would reach the pane. An
-// action has one name now, and new_window has a window-mode key as well as a
-// prefix one, so the mode is what picks between them; the name no longer can.
 func contextMenuHint(registry *config.KeybindRegistry, action string, s *config.Settings, mode Mode) string {
 	if registry == nil || action == "" {
 		return ""
@@ -393,13 +336,10 @@ func contextMenuHint(registry *config.KeybindRegistry, action string, s *config.
 		}
 		entry := registry.Keys(config.TablePrefixMode, sp.entry)
 		if len(entry) == 0 {
-			return "" // no way in, so there is no chord to show
+			return ""
 		}
 		return s.LeaderKey + " " + entry[0] + " " + k
 	}
-	// In window mode any other table's key still works (GetKeys sweeps
-	// them). In terminal mode it would be typed into the pane, so only the
-	// rail's own keys, which act while the rail has the keyboard, are left.
 	if mode != TerminalMode {
 		return firstKey(registry, action)
 	}
@@ -409,14 +349,6 @@ func contextMenuHint(registry *config.KeybindRegistry, action string, s *config.
 	return ""
 }
 
-// firstKey returns the first key bound to an action, or "".
-//
-// GetKeys sweeps the window, prefix and terminal sections and stops there, so
-// an action that lives only in one of the rail's two scopes would answer with
-// no hint at all. Those two are asked after it rather than folded into it: they
-// are the rail's own keymaps, they are consulted only while the rail owns the
-// keyboard, and a rail key must not start showing up as the hint for a
-// window-mode action that happens to share its name.
 func firstKey(registry *config.KeybindRegistry, action string) string {
 	for _, keys := range [][]string{
 		registry.GetKeys(action),

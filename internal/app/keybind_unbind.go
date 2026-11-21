@@ -7,25 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// Unbinding from the overlay. Two verbs, because a user who wants a key gone
-// means one of two different things:
-//
-//   - "tuios should stop taking this key, the program in my pane wants it."
-//     That is KeybindFreeKey: the key comes off every action in every scope,
-//     because a key still claimed by one of them still never reaches the pane.
-//   - "this action should not be on this key." That is KeybindUnbindSelected:
-//     one key, one action, and the action keeps whatever other keys it had.
-//
-// Both are written to config.toml as an empty list on the actions that ran out
-// of keys, which is what stops the default coming back at the next load. See
-// config/keybind_unbind.go for the encoding.
-
-// keybindApply reloads the registry from the edited config, rebuilds the
-// report, and returns the command that writes the file.
-//
-// The reload happens before the write is even started, so the overlay is
-// showing the consequence of the edit (a freed key, a new conflict, an action
-// left unbound) rather than the state before it.
 func (m *OS) keybindApply() tea.Cmd {
 	m.KeybindRegistry.Reload(m.UserConfig)
 	m.ListKeys = config.ListKeymap(m.UserConfig)
@@ -34,8 +15,6 @@ func (m *OS) keybindApply() tea.Cmd {
 	return m.persistSettings()
 }
 
-// keybindEditable reports whether there is a config and a registry to edit, and
-// says so once if there is not.
 func (m *OS) keybindEditable() bool {
 	if m.UserConfig == nil || m.KeybindRegistry == nil {
 		m.ShowNotification("No config is loaded, so keybindings cannot be changed here", "error", 0)
@@ -73,8 +52,6 @@ func (m *OS) KeybindUnbindSelected() tea.Cmd {
 		msg += ". It now has no key"
 	}
 	cmd := m.keybindApply()
-	// Said after the reload, so a key that is still taken elsewhere is reported
-	// from the config as it now stands rather than as it was.
 	if rest := m.keybindOtherClaims(b.Key); rest != "" {
 		msg += ". " + rest
 	}
@@ -91,13 +68,7 @@ func (m *OS) KeybindFreeKey(key string) tea.Cmd {
 	}
 	removals := m.UserConfig.Keybindings.FreeKey(key)
 	if len(removals) == 0 {
-		// Not a failure. A key nothing binds is a key the pane already gets,
-		// unless something built in takes it, which held says.
 		if held := m.keybindStillHeld(key); held != "" {
-			// A warning rather than a note: the user asked for the key back and
-			// is not getting it. An "info" with no duration is also dropped
-			// outright by notificationLifetime, so this would have been said to
-			// nobody.
 			m.ShowNotification("Nothing binds "+key+", but "+held, "warning", 0)
 			return nil
 		}
@@ -112,8 +83,6 @@ func (m *OS) KeybindFreeKey(key string) tea.Cmd {
 	msg := "Freed " + key + ", taken off " + strings.Join(actions, ", ")
 	cmd := m.keybindApply()
 	if held := m.keybindStillHeld(key); held != "" {
-		// A partial result reported as a whole one is the worst outcome here:
-		// the user would go back to their program and find the key still gone.
 		m.ShowNotification(msg+". It still will not reach the pane: "+held, "warning", 0)
 		return cmd
 	}
@@ -171,8 +140,6 @@ func (m *OS) KeybindResolveSelectedConflict() tea.Cmd {
 
 // KeybindFreeSelectedKey frees the key of the binding under the cursor.
 func (m *OS) KeybindFreeSelectedKey() tea.Cmd {
-	// The Conflicts tab names a key too, and freeing it there means the same
-	// thing it means on a binding row.
 	if c, ok := m.KeybindSelectedConflict(); ok {
 		return m.KeybindFreeKey(c.Key)
 	}
@@ -196,15 +163,11 @@ func (m *OS) KeybindFreeCapturedKey() tea.Cmd {
 		return nil
 	}
 	cmd := m.KeybindFreeKey(key)
-	// Re-asked so the recorder's own verdict for the key is the one after the
-	// edit, not the one that prompted it.
 	m.KeybindCapture(key)
 	m.keybinds.armed = false
 	return cmd
 }
 
-// keybindStillHeld is the sentence naming what takes a key from the pane once
-// the config has stopped claiming it, or "" when nothing does.
 func (m *OS) keybindStillHeld(key string) string {
 	if m.KeybindRegistry == nil {
 		return ""
@@ -216,8 +179,6 @@ func (m *OS) keybindStillHeld(key string) string {
 	return strings.Join(held, ", and ")
 }
 
-// keybindOtherClaims names the scopes that still act on a key, for the message
-// after a single-action unbind.
 func (m *OS) keybindOtherClaims(key string) string {
 	if m.KeybindRegistry == nil {
 		return ""

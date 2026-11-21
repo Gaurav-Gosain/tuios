@@ -15,10 +15,8 @@ func TestNewOS_DoesNotClobberAppearanceGlobals(t *testing.T) {
 	original := config.Global.Motion
 	defer func() { config.Global.Motion = original }()
 
-	// Simulate a CLI flag having forced animations off at startup.
 	config.Global.Motion = config.MotionNone
 
-	// A user config that enables animations, as it would be on disk.
 	cfg := config.DefaultConfig()
 	cfg.Appearance.Motion = config.MotionFull
 

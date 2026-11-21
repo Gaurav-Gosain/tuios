@@ -12,19 +12,12 @@ func (m *OS) MarkAllDirty() {
 			m.Windows[i].MarkContentDirty()
 		}
 	}
-	m.cachedViewContent = "" // Invalidate view cache
+	m.cachedViewContent = ""
 	m.sidebarCache.invalidate()
 	m.secondarySidebarCache.invalidate()
 	m.pip.dirty = true
 }
 
-// markZenDirty marks the windows whose zen-mode border visibility is about to
-// change as dirty, so their CachedLayer is rebuilt with (or without) the
-// frame. The focused window always keeps its border, so only the unfocused
-// windows need the repaint. Marking them dirty is also what makes View()
-// compose a fresh frame instead of serving the cached one; without it the
-// melt/reveal would never be drawn even when the tick knows it crossed the
-// idle threshold.
 func (m *OS) markZenDirty() {
 	m.terminalMu.Lock()
 	defer m.terminalMu.Unlock()
@@ -35,19 +28,15 @@ func (m *OS) markZenDirty() {
 		}
 		w.MarkContentDirty()
 	}
-	m.cachedViewContent = "" // Invalidate view cache so View() re-composes
+	m.cachedViewContent = ""
 }
 
 // MarkTerminalsWithNewContent marks terminals that have new content as dirty.
 func (m *OS) MarkTerminalsWithNewContent() bool {
-	// A docked session's pane is deliberately not in m.Windows, but its
-	// subscription uses the same output signal and frame budget.
 	if len(m.Windows) == 0 && !m.sidebarSessionOutputPending() {
 		return false
 	}
 
-	// Skip all terminal updates if we're actively dragging/resizing ANY window
-	// This prevents content updates from interfering with mouse coordinate calculations
 	if m.InteractionMode || m.Dragging || m.Resizing {
 		return false
 	}
@@ -57,15 +46,12 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 
 	hasChanges := false
 	activeTerminals := 0
-	// A pane made since the last pass takes this client's frame rate.
 	m.setPaneFrameInterval()
 	m.clearViewedWorkspaceMarks()
 
 	for i := range m.Windows {
 		window := m.Windows[i]
 
-		// Skip invalid terminals
-		// For daemon-mode windows, we don't have a local PTY but still need to update
 		if window.Terminal == nil {
 			continue
 		}
@@ -75,34 +61,19 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 
 		activeTerminals++
 
-		// A write of kitty graphics alone changed no cell (see
-		// terminal.graphicsOnly). The frame is needed only to draw what the
-		// passthrough queued for the next frame; a frame it already wrote
-		// itself needs nothing.
 		graphics := window.HasGraphicsOutput.Swap(false)
 
-		// Skip content checking for minimized windows or windows on a different workspace.
-		// Their PTY data is still consumed (preventing buffer overflow), but we avoid
-		// marking them dirty and triggering unnecessary rendering work.
 		if window.Minimized || window.Workspace != m.CurrentWorkspace {
-			// Drain the new-output flag so it doesn't accumulate. The one
-			// hidden pane whose output is drawn is the pinned one, in the
-			// picture-in-picture view, and it is paced like an unfocused
-			// pane below: every third pass, with the flag kept between so
-			// the last output is still drawn once the pane goes quiet.
 			if isRailPane(window) {
 				_, m.railPaneView.noted = window.EmulatorWrites()
 			}
 			out := window.HasNewOutput.Swap(false)
-			// Output on a workspace out of view marks its dock tab, once.
 			if out && !window.Minimized && m.noteWorkspaceMark(window.Workspace, workspaceMarkActivity) {
 				hasChanges = true
 			}
 			if out && m.cockpitNoteOutput(window) {
 				hasChanges = true
 			}
-			// The rail pane lives on a workspace nobody is on, and the rail
-			// draws it. It is paced like a visible pane.
 			if out && m.railPaneNoteOutput(window) {
 				hasChanges = true
 				continue
@@ -119,14 +90,10 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 			continue
 		}
 
-		// Skip content checking for windows that are being moved/resized
-		// This prevents btop and other rapidly-updating programs from interfering
 		if window.IsBeingManipulated {
 			continue
 		}
 
-		// Only mark dirty when the terminal actually received new output.
-		// This avoids the old unconditional dirty-marking that defeated frame skipping.
 		if isRailPane(window) {
 			_, m.railPaneView.noted = window.EmulatorWrites()
 		}
@@ -138,15 +105,6 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 			continue
 		}
 
-		// Mark the window dirty. Every visible pane with output is drawn in
-		// the frame: output frames are spaced a frame period apart (see
-		// paneFrameWait), so this runs at most once a frame.
-		//
-		// Unfocused panes used to be drawn on every third pass only, to
-		// save CPU when every signal from every pane composed a frame. With
-		// passes bounded by the frame rate that rule only made them uneven:
-		// nine animating panes at 120 frames a second showed their guests at
-		// 72 to 100.
 		window.MarkContentDirty()
 		hasChanges = true
 		if window.ID == m.pip.windowID {
@@ -160,7 +118,7 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 			if w.HasNewOutput.Swap(false) {
 				w.MarkContentDirty()
 				hasChanges = true
-				m.cachedViewContent = "" // the rail is composed into the cached frame
+				m.cachedViewContent = ""
 			}
 		}
 	}
@@ -201,21 +159,17 @@ func (m *OS) FlushPTYBuffersAfterResize() {
 	m.terminalMu.Lock()
 	defer m.terminalMu.Unlock()
 
-	// Mark all windows as dirty to force full redraw
 	for i := range m.Windows {
 		window := m.Windows[i]
 		if window == nil || window.Terminal == nil {
 			continue
 		}
-		// For daemon-mode windows, we don't have a local PTY but still need to update
 		if window.Pty == nil && !window.DaemonMode {
 			continue
 		}
 
-		// Mark content as dirty to trigger re-rendering
 		window.MarkContentDirty()
 
-		// Invalidate cache to force fresh render
 		window.InvalidateCache()
 	}
 }

@@ -9,13 +9,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// dimTestWindow is a pane with coloured guest output in it, which is what the
-// dim has anything to do to.
 func dimTestWindow(t testing.TB, w, h int) *terminal.Window {
 	t.Helper()
 	win := newTestWindow(t, "dim", w, h)
-	// Explicit SGR, so the cells carry colours of their own rather than the
-	// terminal default the dim deliberately leaves alone.
 	for i := range h {
 		_ = i
 		win.WriteOutput([]byte("\x1b[38;2;200;200;200;48;2;40;40;60mhello world\x1b[0m\r\n"))
@@ -24,8 +20,6 @@ func dimTestWindow(t testing.TB, w, h int) *terminal.Window {
 	return win
 }
 
-// withDim turns the dim on for one test, with a theme so there is a ground to
-// carry toward.
 func withDim(t *testing.T, percent int) {
 	t.Helper()
 	prevDim := config.Global.DimUnfocused
@@ -56,18 +50,12 @@ func TestDimQuietsAnUnfocusedPaneAndLeavesTheFocusedOneAlone(t *testing.T) {
 	if strings.Contains(unfocused, "200;200;200") {
 		t.Errorf("the unfocused frame kept the guest's undimmed colour:\n%q", unfocused)
 	}
-	// The text is the guest's and must survive being quieted.
 	if !strings.Contains(unfocused, "hello world") {
 		t.Error("the dim ate the content")
 	}
 }
 
 func TestTheDimIsPartOfTheContentCacheKey(t *testing.T) {
-	// FocusWindow gives the pane being left the lighter invalidation that keeps
-	// its cached string on purpose. Without the dim in the key, the pane you
-	// just stepped away from would serve the undimmed frame until its guest
-	// next wrote something, which is the whole of what a user would report as
-	// "it only dims sometimes".
 	withDim(t, 50)
 	win := dimTestWindow(t, 40, 6)
 	m := newTestOS(win)
@@ -76,8 +64,6 @@ func TestTheDimIsPartOfTheContentCacheKey(t *testing.T) {
 	if win.ContentDirty {
 		t.Fatal("the frame was not cached, so this proves nothing")
 	}
-	// No dirty marking at all: only the focus changes, exactly as it does when
-	// FocusWindow moves on.
 	focused := m.renderTerminal(win, true, false)
 	if focused == unfocused {
 		t.Error("the cached dimmed frame was served to a focused pane")

@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// popupOS builds a client holding one tiled pane and one popup, sized so the
-// arithmetic in the assertions is readable: a 120x40 screen with the dock's two
-// rows taken off leaves a 120x38 pane region.
 func popupOS(t testing.TB, width, height string) (*OS, *terminal.Window) {
 	t.Helper()
 	tiled := newTestWindow(t, "tiled", 80, 24)
@@ -50,8 +47,6 @@ func TestAPopupIsNotInTheWindowCycle(t *testing.T) {
 		t.Fatalf("the cycle lists %d windows including the popup, want only the tiled pane", len(cyclable))
 	}
 
-	// Cycling from the tiled pane comes back to it rather than landing on the
-	// popup, in both directions.
 	m.CycleToNextVisibleWindow()
 	if m.FocusedWindow != 0 {
 		t.Errorf("cycling forward landed on window %d, want the tiled pane at 0", m.FocusedWindow)
@@ -81,8 +76,6 @@ func TestAPopupCannotBeMinimized(t *testing.T) {
 		}
 	}
 
-	// The tiled pane beside it still minimizes, so the guard is about popups and
-	// not about minimizing.
 	m.MinimizeWindow(0)
 	if !m.Windows[0].Minimized {
 		t.Error("an ordinary pane no longer minimizes")
@@ -127,8 +120,6 @@ func TestAPopupRecentresWhenTheClientResizes(t *testing.T) {
 // setter and the popup's box moves to the tiled percentage.
 func TestAPopupIsNotSizedByPercent(t *testing.T) {
 	m, popup := popupOS(t, "50%", "40%")
-	// The percentage setters drive the tiling resize path; the popup helpers
-	// leave the layout maps nil because their tests never resize.
 	m.AutoTiling = true
 	m.WorkspaceHasCustom = map[int]bool{}
 	m.WorkspaceLayouts = map[int][]WindowLayout{}

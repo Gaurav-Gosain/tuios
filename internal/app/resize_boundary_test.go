@@ -7,10 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// twoPaneSideBySide builds a tiling OS with two daemon panes splitting the row:
-// a left pane whose right edge is a shared divider and a right pane whose right
-// edge is the screen boundary. This is the exact layout in which the primary
-// width keys (< and >) were silently no-ops for the rightmost pane.
 func twoPaneSideBySide(t *testing.T) (m *OS, left, right *terminal.Window) {
 	t.Helper()
 	const width, height = 120, 40
@@ -22,7 +18,7 @@ func twoPaneSideBySide(t *testing.T) (m *OS, left, right *terminal.Window) {
 	m = &OS{
 		Settings:             config.Global,
 		Windows:              []*terminal.Window{left, right},
-		FocusedWindow:        1, // focus the RIGHT (boundary) pane
+		FocusedWindow:        1,
 		WorkspaceFocus:       map[int]int{},
 		WorkspaceHasCustom:   map[int]bool{},
 		WorkspaceLayouts:     map[int][]WindowLayout{},
@@ -45,7 +41,7 @@ func TestResizeWidthMovesLeftDividerForBoundaryPane(t *testing.T) {
 
 	beforeRightW, beforeLeftW := right.Width, left.Width
 
-	m.ResizeFocusedWindowWidth(4) // >
+	m.ResizeFocusedWindowWidth(4)
 	if right.Width <= beforeRightW {
 		t.Fatalf("grow was a no-op on the boundary pane: right width %d -> %d", beforeRightW, right.Width)
 	}
@@ -57,7 +53,7 @@ func TestResizeWidthMovesLeftDividerForBoundaryPane(t *testing.T) {
 	}
 
 	grownLeftW := left.Width
-	m.ResizeFocusedWindowWidth(-4) // <
+	m.ResizeFocusedWindowWidth(-4)
 	if left.Width <= grownLeftW {
 		t.Fatalf("shrink was a no-op on the boundary pane: left width %d -> %d", grownLeftW, left.Width)
 	}
@@ -67,10 +63,10 @@ func TestResizeWidthMovesLeftDividerForBoundaryPane(t *testing.T) {
 // a pane whose right edge is a real divider keeps resizing via that edge.
 func TestResizeWidthNonBoundaryPaneStillMovesRightEdge(t *testing.T) {
 	m, left, right := twoPaneSideBySide(t)
-	m.FocusedWindow = 0 // focus the LEFT (non-boundary) pane
+	m.FocusedWindow = 0
 
 	beforeLeftW, beforeRightW := left.Width, right.Width
-	m.ResizeFocusedWindowWidth(4) // >
+	m.ResizeFocusedWindowWidth(4)
 	if left.Width <= beforeLeftW {
 		t.Fatalf("grow did not widen the left pane: %d -> %d", beforeLeftW, left.Width)
 	}

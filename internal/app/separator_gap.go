@@ -4,23 +4,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// panesBorderless reports whether the panes this client is arranging drop their
-// own border boxes in favour of one divider drawn between them.
-//
-// It is the single answer to a question three parts of the app need, and that
-// the shared-borders setting alone does not answer: which border a pane
-// draws, whether a separator is painted between two of them, and how many
-// columns the layout keeps free for that separator. The setting is only half of
-// it. Shared borders merge nothing unless tiling is arranging the panes, so a
-// floating pane keeps its own box.
-//
-// Every tiler merges, the scrolling strip included: its columns stand side by
-// side like any other tiled panes, and the divider between two of them is
-// drawn from their rectangles the way the master-stack dividers are.
-//
-// It reads the session-settled m.SharedBorders, never config.SharedBorders:
-// this is geometry, and geometry inputs have to be identical on every client of
-// a session (see the field comment in os.go).
 func (m *OS) panesBorderless() bool {
 	return m.SharedBorders && m.AutoTiling
 }
@@ -30,18 +13,6 @@ func (m *OS) panesBorderless() bool {
 // border to drag.
 func (m *OS) PanesBorderless() bool { return m.panesBorderless() }
 
-// separatorGap is the columns the layout keeps between two neighbouring panes.
-//
-// Borderless panes need one whatever the user asked for: their rectangles are
-// guest output from edge to edge, and the divider the user sees is an overlay
-// painted in the column between them, so a gap of zero there leaves the divider
-// nowhere to go. Panes drawing their own borders need none by default. Their
-// two adjacent border columns already divide them, so a third column would draw
-// nothing, and every pane on that side of every split would be a column
-// narrower for it.
-//
-// appearance.gap is what the user adds on top of that floor, which is i3's
-// inner gap: empty ground between the panes, not a wider divider.
 func (m *OS) separatorGap() int {
 	if m.panesBorderless() {
 		return max(m.PaneGap, 1)
@@ -53,26 +24,8 @@ func (m *OS) separatorGap() int {
 // gestures have to know which cells between two panes are the divider.
 func (m *OS) SeparatorGap() int { return m.separatorGap() }
 
-// reclaimSeparatorGaps re-lays-out every workspace's panes at the gap the
-// layout now reserves, so a column held open for a divider that is no longer
-// drawn goes back to the panes beside it instead of sitting empty.
-//
-// It runs on the toggle itself rather than lazily when a workspace next comes
-// into view, for two reasons. Every workspace is still standing in the
-// arrangement the tiler gave it at this moment, so redoing its rectangles is
-// safe; once tiling is off the user is free to drag those panes about, and
-// redoing the layout then would throw that arrangement away. And a workspace
-// left holding the gap is the stranding this area has produced before: panes
-// drawing their own boxes inside rectangles still spaced for a separator, with
-// nobody to settle them but a retile that never runs.
-//
-// Geometry is applied directly rather than eased into. A pane growing by a
-// single column has nothing to travel, and the mode switch it follows is
-// structural.
 func (m *OS) reclaimSeparatorGaps() {
 	if m.UseScrollingLayout {
-		// The strip is only laid out for the workspace on screen; the others
-		// are placed again, at the gap then in force, when they are shown.
 		m.scrollingSetPositionsInstant()
 		return
 	}
@@ -105,8 +58,6 @@ func (m *OS) reclaimSeparatorGaps() {
 	}
 }
 
-// tilablePanes returns the panes a tiler would arrange on a workspace, in the
-// order it would arrange them.
 func (m *OS) tilablePanes(workspace int) []*terminal.Window {
 	var panes []*terminal.Window
 	for _, w := range m.Windows {
@@ -117,19 +68,7 @@ func (m *OS) tilablePanes(workspace int) []*terminal.Window {
 	return panes
 }
 
-// placePane puts a pane at a rectangle and gives it the border that rectangle
-// was partitioned for.
-//
-// The border allowance is settled before the resize because it decides how much
-// of the rectangle the guest can draw in: announcing the new size first would
-// tell the guest a box measured against the border it is about to stop drawing.
-// The flag is written directly rather than through SetTiled, which resizes to
-// the rectangle the pane has now: one announcement at a size the pane never
-// occupied, then a second at the real one. Both are SIGWINCHes and a
-// full-screen guest repaints for each.
 func (m *OS) placePane(win *terminal.Window, x, y, w, h int, borderless bool) {
-	// A snap animation owns its window's geometry until it finishes and would
-	// stamp its own rectangle back over this one on the next tick.
 	m.CancelSnapAnimation(win)
 	win.X, win.Y = x, y
 	win.Tiled = borderless

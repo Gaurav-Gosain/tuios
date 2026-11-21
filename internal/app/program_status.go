@@ -10,15 +10,6 @@ import (
 	"tuios.dev/progstatus"
 )
 
-// A pane's OSC 7501 records (the Program Status Protocol), as the client draws
-// them. The daemon parses and stores them and sets the pane's agent state from
-// the most urgent one; the client shows what the agent state cannot carry: the
-// program's own name, its progress, and every record when it reported more
-// than one. Everything here is the program's own text, so it is drawn through
-// printableTitle like every other string a pane wrote.
-
-// programStatusFromWire converts the synced records, keeping cur when nothing
-// changed so a redraw does not churn the slice.
 func programStatusFromWire(cur []sessiontree.ProgramRecord, in []session.ProgramStatusRecord) []sessiontree.ProgramRecord {
 	if len(in) == 0 {
 		return nil
@@ -36,9 +27,6 @@ func programStatusFromWire(cur []sessiontree.ProgramRecord, in []session.Program
 	return out
 }
 
-// programSummary is the record a pane shows, picked the way the daemon picks
-// the one its agent state comes from (progstatus.Summary): the most urgent,
-// the root among equals, then the newest.
 func programSummary(recs []sessiontree.ProgramRecord) (sessiontree.ProgramRecord, bool) {
 	conv := make([]progstatus.Record, len(recs))
 	for i, r := range recs {
@@ -56,8 +44,6 @@ func programSummary(recs []sessiontree.ProgramRecord) (sessiontree.ProgramRecord
 	return sessiontree.ProgramRecord{}, false
 }
 
-// programProgressText is "40%" for a working or blocked record that carries a
-// progress, and "" otherwise.
 func programProgressText(r sessiontree.ProgramRecord) string {
 	if r.Progress < 0 || r.Progress > 100 {
 		return ""
@@ -68,9 +54,6 @@ func programProgressText(r sessiontree.ProgramRecord) string {
 	return strconv.Itoa(r.Progress) + "%"
 }
 
-// programRecordLine is one record as a line of a detail panel:
-// "build/test: cargo working 40%: Compiling". The id is left out for the root
-// record, the app when the record has none.
 func programRecordLine(r sessiontree.ProgramRecord) string {
 	var head []string
 	if app := printableTitle(r.App); app != "" {
@@ -102,9 +85,6 @@ func programRecordLine(r sessiontree.ProgramRecord) string {
 	return line
 }
 
-// programStatusLines are the detail lines for a pane's records, under a
-// heading. A pane with one record says it in one line, since the row above
-// already shows the summary.
 func programStatusLines(recs []sessiontree.ProgramRecord) []string {
 	if len(recs) == 0 {
 		return nil
@@ -117,8 +97,6 @@ func programStatusLines(recs []sessiontree.ProgramRecord) []string {
 	return lines
 }
 
-// paneProgramStatus is the records a pane of this machine reported, as this
-// client holds them.
 func (m *OS) paneProgramStatus(sessionID, windowID string) []sessiontree.ProgramRecord {
 	w, sum := m.findPane(sessionID, windowID)
 	switch {

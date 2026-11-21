@@ -6,25 +6,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// daemonExitQueue is the capacity of DaemonExitChan. Two is enough for every
-// case there is: the daemon can report the session gone and then drop the
-// connection, and nothing after that matters, because the first of the two
-// already quits the program.
 const daemonExitQueue = 2
 
-// DaemonExitChan carries the two daemon events that end a client: the attached
-// session was destroyed, and the connection to the daemon was lost.
-//
-// Both arrive on the daemon read-loop goroutine, which must not touch the
-// model, so they cross into the Bubble Tea event loop here. The local attach
-// client has a *tea.Program at hand and Sends the messages straight in; the SSH
-// and web hosts build the model before their program exists, so this channel is
-// how they say the same thing. Without it those two clients kept rendering a
-// dead session for ever.
-//
-// It is separate from ClientEventChan because that channel drops events when it
-// is full, and a dropped join notice costs a toast while a dropped disconnect
-// costs the user their exit.
 func (m *OS) daemonExitChan() chan tea.Msg {
 	if m.DaemonExitChan == nil {
 		m.DaemonExitChan = make(chan tea.Msg, daemonExitQueue)
@@ -39,8 +22,6 @@ func ListenForDaemonExit(ch chan tea.Msg) tea.Cmd {
 	return listenDaemonExitUntil(nil, ch)
 }
 
-// listenDaemonExitUntil waits for the next message on its channel and returns nil once
-// stop is closed, so a session that ends leaves no listener parked.
 func listenDaemonExitUntil(stop <-chan struct{}, ch chan tea.Msg) tea.Cmd {
 	return listenOnce(stop, ch, func(msg tea.Msg) tea.Msg { return msg })
 }
@@ -114,8 +95,6 @@ func (m *OS) ExitNotice() string {
 			"Connect again after the daemon starts."
 
 	case ExitDaemonUpgraded:
-		// Said as the old image hands over, before the exec: it stays true if
-		// the exec fails and the daemon goes on as it was.
 		return "The daemon is being upgraded to " + m.upgradedTo() + ".\n" +
 			"Your programs are still running.\n" +
 			"Connect again to continue."
@@ -134,8 +113,6 @@ func (m *OS) ExitNotice() string {
 	}
 }
 
-// upgradedTo is the version a live upgrade made the daemon, or "a new version"
-// when the daemon did not say.
 func (m *OS) upgradedTo() string {
 	if m.DaemonClient != nil {
 		if v, ok := m.DaemonClient.UpgradedTo(); ok && v != "" {

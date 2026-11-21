@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// withClientCaps installs client capabilities for the duration of a test and
-// restores whatever was there before. GetHostCapabilities prefers these.
 func withClientCaps(t *testing.T, caps *HostCapabilities) {
 	t.Helper()
 	prev := clientCapabilities.Load()
@@ -30,8 +28,6 @@ func TestKittyPassthrough_RemoteClientNeverReadsFiles(t *testing.T) {
 		t.Error("expected a remote client to re-encode file transmissions as direct data")
 	}
 
-	// A local passthrough with the same host caps should still honor file
-	// transfer, proving the difference is the RemoteClient flag, not the caps.
 	local := NewKittyPassthroughWithOptions(KittyPassthroughOptions{
 		Output: &bytes.Buffer{},
 	})

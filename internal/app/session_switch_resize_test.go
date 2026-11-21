@@ -23,7 +23,6 @@ func TestSyncDaemonPTYDimensionsSkipsUnchanged(t *testing.T) {
 	mk := func(id string, w, h int) *terminal.Window {
 		win := &terminal.Window{ID: id, Workspace: 1, Width: w, Height: h, Tiled: true, DaemonMode: true}
 		win.DaemonResizeFunc = func(int, int) error { calls++; return nil }
-		// The reattach path seeds the size the daemon PTY already carries.
 		win.SeedAnnouncedSize(win.ContentWidth(), win.ContentHeight())
 		return win
 	}
@@ -34,14 +33,12 @@ func TestSyncDaemonPTYDimensionsSkipsUnchanged(t *testing.T) {
 		t.Fatalf("same-size reattach issued %d PTY resizes, want 0", calls)
 	}
 
-	// A pane that genuinely lands at a new size still resizes, exactly once.
 	m.Windows[0].Width = 80
 	m.SyncDaemonPTYDimensions()
 	if calls != 1 {
 		t.Fatalf("changed-size pane issued %d PTY resizes, want 1", calls)
 	}
 
-	// And a second sync at the settled size announces nothing further.
 	m.SyncDaemonPTYDimensions()
 	if calls != 1 {
 		t.Fatalf("settled sync re-announced (%d), want 1", calls)

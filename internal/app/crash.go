@@ -19,28 +19,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// What tuios does when it reaches a state it should not have reached.
-//
-// The panic barriers came first and the report came second, which is the wrong
-// way round and is why this file exists. Update and the graphics flush have
-// recovered per-event panics for a while: the pane survives, a line goes into
-// the in-app log, and a file lands in the state directory. None of that reaches
-// the person at the keyboard. LogError draws nothing (see os_notify.go: the log
-// ring is only visible behind leader D l), so the whole of what a user saw when
-// tuios hit an impossible state was one frame that did not update. A bug nobody
-// can see is a bug nobody reports.
-//
-// A CrashReport is the snapshot the overlay draws and the clipboard carries. It
-// is built once, at the moment of the panic, and it is a plain value from then
-// on: no pointers back into the model, no methods that read live state. That is
-// deliberate and it is the whole design. The overlay renders after something
-// has already gone wrong, so anything it reads could be the thing that broke.
-// Copying the facts out once, behind its own recover, is what lets the drawing
-// code be ordinary.
-//
-// What the report may carry is the second rule, and it is a privacy rule. See
-// crashFacts.
-
 // CrashReport is one panic and the facts that place it.
 //
 // Every field is a string or an int filled in at capture time. Rendering,
@@ -72,14 +50,6 @@ type CrashFact struct {
 	Value string
 }
 
-// buildStamp is the version this binary was linked with. internal/app cannot
-// read main.version, and a report that cannot say which build produced it
-// cannot be placed against a commit, so the main package hands it over at
-// startup through SetBuildIdentity.
-//
-// Atomic because the SSH server builds a model per connection while other
-// sessions run. It is written once before any of them start; the atomic is for
-// the race detector's benefit, not for a real contention.
 var buildStamp atomic.Pointer[buildFacts]
 
 type buildFacts struct {
@@ -100,19 +70,12 @@ type buildFacts struct {
 func SetBuildIdentity(s release.Stamps) release.Stamps {
 	s = s.WithModuleVersion()
 	buildStamp.Store(&buildFacts{version: s.Version, commit: s.Commit})
-	// herdr plugins are told which tuios runs them.
 	herdrplugin.RunningVersion = s.Version
-	// XTVERSION names the build to the programs in a pane.
 	vt.SetBuildVersion(s.Version)
-	// TERM_PROGRAM_VERSION names it to the programs in a pane too.
 	guestenv.SetBuildVersion(s.Version)
 	return s
 }
 
-// buildIdentity is the version and commit a report should name. It prefers the
-// stamp the main package supplied and falls back to what the go command
-// embedded, so a build made without ldflags still says something true rather
-// than nothing.
 func buildIdentity() (version, commit string) {
 	if b := buildStamp.Load(); b != nil {
 		version, commit = b.version, b.commit
@@ -172,10 +135,6 @@ func NewCrashReport(where string, panicValue any, stack []byte, facts []CrashFac
 	}
 }
 
-// crashHeadFacts are the facts that open the block: what caught it and which
-// build it was. They lead because they are what someone reads out loud when
-// they show the screen to somebody else, and because a report that loses
-// everything below the fold must not lose the version.
 func crashHeadFacts(where string) []CrashFact {
 	version, commit := buildIdentity()
 	return []CrashFact{
@@ -185,9 +144,6 @@ func crashHeadFacts(where string) []CrashFact {
 	}
 }
 
-// crashMachineFacts are the toolchain and the platform. They close the block
-// because they are the least likely of the facts to be the answer and the most
-// likely to be reconstructable from the rest of the report.
 func crashMachineFacts() []CrashFact {
 	return []CrashFact{
 		{Label: "Emulator", Value: vt.Backend},
@@ -256,8 +212,6 @@ func (r *CrashReport) Markdown(stackLines int) string {
 	return b.String()
 }
 
-// clipStack returns the first n lines of a stack and how many it dropped. A
-// non-positive n keeps all of it.
 func clipStack(stack string, n int) (string, int) {
 	if n <= 0 {
 		return stack, 0
@@ -269,15 +223,6 @@ func clipStack(stack string, n int) (string, int) {
 	return strings.Join(lines[:n], "\n"), len(lines) - n
 }
 
-// issueURLLimit is the longest issue URL tuios will build.
-//
-// A prefilled issue is a GET, so the whole report travels in the query string,
-// and every hop has an opinion about how long that may be. Browsers stop
-// somewhere past 32k, but the server in front of GitHub answers 414 well before
-// that, and xdg-open hands the address to a desktop that has its own argv
-// limits. 6000 is comfortably under every one of them and holds the facts plus
-// a useful head of the trace, which is the part that identifies the bug. The
-// rest is in the crash log and on the clipboard.
 const issueURLLimit = 6000
 
 // IssueURL is a new-issue address with the report already filled in.
@@ -302,13 +247,10 @@ func (r *CrashReport) IssueURL() string {
 			return candidate
 		}
 	}
-	// Even one line of trace does not fit, so the panic value is a very long
-	// one. Say where the rest is rather than build an address nothing accepts.
 	q.Set("body", r.shortBody())
 	return base + "?" + q.Encode()
 }
 
-// shortBody is the issue body for a report too large to carry its own trace.
 func (r *CrashReport) shortBody() string {
 	var b strings.Builder
 	b.WriteString("### What happened\n\ntuios reached a state it does not expect.\n\n")
@@ -369,26 +311,6 @@ func WriteCrashLog(report *CrashReport) string {
 	return path
 }
 
-// crashFacts is everything the report says about the running client beyond the
-// build and the machine.
-//
-// The rule this function is written to: a crash report carries the shape of the
-// session and never its contents. What tuios is doing is a bug report; what the
-// user is doing is theirs. So the counts, the modes, the sizes and tuios' own
-// action names go in, and pane contents, scrollback, the working directory,
-// window and pane titles, the session name and the environment stay out. Every
-// one of those five can hold a hostname, a token, a client's name or a path
-// that says who someone works for, and none of them has ever helped place a
-// panic in a stack trace.
-//
-// The panic message itself is the one judgement call. It is written by tuios,
-// not by the user, so it carries tuios' own vocabulary; and a report without it
-// says nothing at all. It goes in.
-//
-// This runs from inside a recover, on a model that has just failed, so it
-// cannot assume any of it is sound. Every read is nil-guarded and the whole
-// thing sits behind its own barrier: a report with a missing row is worth far
-// more than a second panic on the way to drawing one.
 func (m *OS) crashFacts(where string) (facts []CrashFact) {
 	facts = crashHeadFacts(where)
 	if m == nil {
@@ -418,9 +340,6 @@ func (m *OS) crashFacts(where string) (facts []CrashFact) {
 	return append(facts, crashMachineFacts()...)
 }
 
-// clientKind names where the person looking at this screen is sitting. It is
-// the first thing a bug report needs, because a third of tuios behaves
-// differently across the three.
 func (m *OS) clientKind() string {
 	switch {
 	case m.BrowserClient:
@@ -447,9 +366,6 @@ func (m *OS) crashModeName() string {
 	return "window"
 }
 
-// crashPaneCount reports the panes on screen and the panes in the session, in
-// that order. The two differ across workspaces, and a bug that only happens
-// with panes parked elsewhere is one the visible count would hide.
 func (m *OS) crashPaneCount() string {
 	total := len(m.Windows)
 	visible := total
@@ -459,12 +375,6 @@ func (m *OS) crashPaneCount() string {
 	return fmt.Sprintf("%d visible, %d in session", visible, total)
 }
 
-// crashRecentActions lists the keybind actions this client last ran.
-//
-// This is as close to "how to reproduce" as tuios can honestly get from a
-// session that was not being recorded. They are tuios' own action names, the
-// same words the keybind table uses, so a maintainer can follow them; they are
-// not keystrokes and they are not text, so nothing the user typed is in here.
 func (m *OS) crashRecentActions() string {
 	acts := m.RecentActions()
 	if len(acts) == 0 {
@@ -473,13 +383,6 @@ func (m *OS) crashRecentActions() string {
 	return strings.Join(acts, " → ")
 }
 
-// crashTapeState says whether a replayable script of this session exists.
-//
-// A tape is the only artifact tuios has that can actually reproduce a bug, and
-// it exists only when the user chose to record. When one is running the report
-// says so, because that recording is worth more than everything else in the
-// report put together. When one is not, the report says nothing rather than
-// implying tuios could have replayed this and did not.
 func (m *OS) crashTapeState() string {
 	if m.TapeRecorder != nil && m.TapeRecorder.IsRecording() {
 		return "recording, save it after you dismiss this"

@@ -12,25 +12,6 @@ import (
 	"github.com/adrg/xdg"
 )
 
-// The entry points. Three of them, because the same engine has to run in three
-// very different budgets:
-//
-//	CI, bounded and fast:
-//	  go test ./internal/app/ -run TestFuzzModel
-//
-//	locally, unbounded, coverage guided:
-//	  go test ./internal/app/ -run '^$' -fuzz FuzzModel -fuzztime 30m
-//
-//	locally, a wider seeded sweep without the fuzzing engine:
-//	  TUIOS_FUZZ_SEEDS=20000 TUIOS_FUZZ_STEPS=600 go test ./internal/app/ \
-//	    -run TestFuzzModelSweep -timeout 3h
-//
-// A failure from any of them prints a seed and a minimal script. Re-running the
-// seed reproduces it, and TUIOS_FUZZ_SCRIPT replays the script on its own.
-
-// fuzzSteps is the run length for the bounded entry points. It is short on
-// purpose: a bug that needs 2000 actions to appear almost always also appears
-// in 300, and every action costs a full frame composition in the oracle.
 const fuzzSteps = 300
 
 // TestFuzzModel is the CI gate. It is bounded by a seed count rather than by
@@ -56,11 +37,6 @@ func TestFuzzModelSweep(t *testing.T) {
 	runFuzzSeeds(t, first, envInt(t, "TUIOS_FUZZ_SEEDS", 1000), envInt(t, "TUIOS_FUZZ_STEPS", fuzzSteps))
 }
 
-// fuzzFloorW and fuzzFloorH are the host sizes the default campaigns stay above.
-// Below the layout's own minimum pane size the panes clamp, stack, and take
-// negative origins, and every finding there belongs to one class; with no floor
-// a run reports that class within two actions and never reaches anything else.
-// TUIOS_FUZZ_FLOOR_W=0 TUIOS_FUZZ_FLOOR_H=0 runs the campaign that hunts it.
 const (
 	fuzzFloorW = 60
 	fuzzFloorH = 20
@@ -91,8 +67,6 @@ func runFuzzSeeds(t *testing.T, first uint64, count, steps int) {
 	}
 }
 
-// fuzzBudget leaves room inside the test binary's own timeout to report a
-// finding. A fuzzer killed by the harness mid-shrink prints nothing usable.
 func fuzzBudget(t *testing.T) time.Duration {
 	if d, ok := t.Deadline(); ok {
 		if left := time.Until(d) - 90*time.Second; left > 0 {
@@ -107,10 +81,6 @@ func fuzzBudget(t *testing.T) time.Duration {
 // come for free; the action-level shrinking that produces a readable repro is
 // still ours, because a minimal byte slice is not a minimal action sequence.
 func FuzzModel(f *testing.F) {
-	// Seeds that reach the arrangements the matrix tests care about, so the
-	// engine starts from inside the interesting region rather than walking to
-	// it. The bytes are opaque to a reader; what matters is that they are
-	// stable and that each decodes to a run reaching a different corner.
 	for _, s := range [][]byte{
 		{},
 		{0x00},
@@ -120,23 +90,11 @@ func FuzzModel(f *testing.F) {
 	} {
 		f.Add(s)
 	}
-	// fuzzScratch rather than a bare TempDir: a recovered panic writes a crash
-	// report under XDG_STATE_HOME, and a campaign that finds one keeps finding
-	// it, so without the redirect every worker wrote reports into the
-	// developer's own state directory.
 	dir := fuzzScratch(f)
-	// Counted across the corpus entries of one run; the engine's own
-	// campaign runs workers in other processes, which this does not see.
 	var flaky atomic.Int32
 	f.Cleanup(func() { checkFlakyRuns(f, int(flaky.Load())) })
 	f.Cleanup(func() { reportFuzzWorkerStderr(f) })
 	f.Fuzz(func(t *testing.T, in []byte) {
-		// The corpus entry decides the run; the seed is carried only so a
-		// finding can be re-run through the seeded loop as well.
-		// The floor goes to the shrinker as well as to the generator. With it set
-		// on one side only, the shrinker halves a host size step by step until the
-		// run leaves the region it was exploring and lands in the class below the
-		// floor, and every report reads as that class whatever was found.
 		res, err := fuzz.Run(func() (fuzz.Target, error) { return newFuzzTarget(dir) },
 			fuzz.Config{
 				Actions:      fuzz.GenerateBytesFloor(in, fuzzSteps, fuzzFloorW, fuzzFloorH),
@@ -181,16 +139,9 @@ func TestFuzzScript(t *testing.T) {
 	t.Logf("%d actions replayed clean", len(actions))
 }
 
-// fuzzScratch is the sidebar state directory, and it also moves the crash-log
-// directory off the developer's real state home. A recovered panic writes a
-// report, and a long sweep that finds one repeatedly would otherwise leave
-// thousands of files in ~/.local/state.
 func fuzzScratch(t testing.TB) string {
 	t.Helper()
 	dir := t.TempDir()
-	// The reload is what makes the redirect take. CrashLogDir reads
-	// xdg.StateHome, which was resolved at package init, so the Setenv alone
-	// left the reports going wherever that had already pointed.
 	t.Cleanup(xdg.Reload)
 	t.Setenv("XDG_STATE_HOME", dir)
 	xdg.Reload()

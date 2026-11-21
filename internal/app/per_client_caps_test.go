@@ -25,8 +25,6 @@ func TestTwoSessionsKeepTheirOwnTerminal(t *testing.T) {
 	b := NewOS(OSOptions{Caps: plain, UserConfig: config.DefaultConfig()})
 	t.Cleanup(func() { a.Cleanup(); b.Cleanup() })
 
-	// A third client connects and installs its terminal process-wide, exactly
-	// as the SSH handler does on every new connection.
 	clientCapabilities.Store(&HostCapabilities{TerminalName: "dumb", CellWidth: 1, CellHeight: 1})
 
 	if got := a.hostCaps().TerminalName; got != "kitty" {
@@ -36,8 +34,6 @@ func TestTwoSessionsKeepTheirOwnTerminal(t *testing.T) {
 		t.Errorf("session B reports terminal %q, want xterm", got)
 	}
 
-	// Cell size drives every measurement of an image against its pane, so a
-	// session reading another's cell draws at the wrong scale.
 	if w, h := a.hostCellSize(); w != 10 || h != 22 {
 		t.Errorf("session A cell is %dx%d, want 10x22", w, h)
 	}
@@ -45,8 +41,6 @@ func TestTwoSessionsKeepTheirOwnTerminal(t *testing.T) {
 		t.Errorf("session B cell is %dx%d, want 7x15", w, h)
 	}
 
-	// The user-visible consequence: whether the screenshot preview may use the
-	// pixel tier at all.
 	a.PostRenderWriter = NewPostRenderWriter(os.Stdout)
 	b.PostRenderWriter = NewPostRenderWriter(os.Stdout)
 	if !a.screenshotGraphicsReady() {
@@ -56,8 +50,6 @@ func TestTwoSessionsKeepTheirOwnTerminal(t *testing.T) {
 		t.Error("session B is on xterm and must not get the pixel tier")
 	}
 
-	// The passthroughs are built per session too, so their enable decision
-	// cannot be re-made by a later connection either.
 	if !a.KittyPassthrough.IsEnabled() {
 		t.Error("session A's kitty passthrough must be enabled")
 	}

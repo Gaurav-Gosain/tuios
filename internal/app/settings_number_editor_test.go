@@ -6,12 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// Enter on a numeric row used to step it by one, which is what the arrow keys
-// already did and no way at all to reach a number at the other end of a wide
-// range: getting a scrollback from 300 to 20000 meant holding a key. The row
-// opens into an editor instead, where the number can be typed or slid to.
-
-// numberRowOS is the settings page open on a bounded numeric row.
 func numberRowOS(t *testing.T, path string) *OS {
 	t.Helper()
 	m := &OS{Settings: config.Global, Width: 120, Height: 40}

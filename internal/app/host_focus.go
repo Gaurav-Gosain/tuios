@@ -4,19 +4,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// Host terminal focus.
-//
-// The view asks the host terminal for focus events (DECSET 1004), and a
-// terminal that supports them reports each time its window gains or loses
-// focus. The client keeps the last report and passes every change to the
-// daemon, which keeps one per attached client (session.sessionHostFocus).
-//
-// Until the terminal says anything the focus is unknown, and unknown is read as
-// looking. A terminal without focus events therefore behaves exactly as tuios
-// did before the signal existed: every rule that asks "is the person looking"
-// answers yes, as it always did.
-
-// hostFocusState is the host terminal's focus as its last event reported it.
 type hostFocusState uint8
 
 const (
@@ -32,9 +19,6 @@ func (m *OS) HostLooking() bool {
 	return m.hostFocus != hostFocusOut
 }
 
-// noteHostFocus records a focus event, tells a focused local pane, and, in a
-// daemon session, returns the command that reports it to the daemon. A repeat
-// of the same focus sends nothing.
 func (m *OS) noteHostFocus(focused bool) tea.Cmd {
 	next := hostFocusOut
 	if focused {
@@ -45,10 +29,6 @@ func (m *OS) noteHostFocus(focused bool) tea.Cmd {
 	}
 	was := m.HostLooking()
 	m.hostFocus = next
-	// A local pane hears the change from here, unless it is the first report
-	// of focus: unknown already counted as looking. A daemon pane hears it
-	// from the daemon, which knows whether another client still shows the
-	// session (session.Daemon.reportHostFocus).
 	if w := m.GetFocusedWindow(); w != nil && !w.DaemonMode && was != m.HostLooking() {
 		m.reportPaneFocus(w, focused)
 	}
@@ -62,10 +42,6 @@ func (m *OS) noteHostFocus(focused bool) tea.Cmd {
 	}
 }
 
-// notePaneFocus tells each local pane whether it has focus on a screen someone
-// could be looking at, for the focus report a guest is sent when it turns on
-// focus reporting. A terminal that never reports focus counts as looking. A
-// daemon pane is answered by the daemon, which keeps its own record.
 func (m *OS) notePaneFocus() {
 	looking := m.HostLooking()
 	for i, w := range m.Windows {

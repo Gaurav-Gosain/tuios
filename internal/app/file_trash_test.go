@@ -9,11 +9,6 @@ import (
 	"time"
 )
 
-// The trash tests point trashDirFunc at a temporary tree. Nothing here goes
-// anywhere near the user's own trash, and the real home trash path is checked
-// separately without writing to it.
-
-// tempTrash redirects the trash at a directory made for this test.
 func tempTrash(t *testing.T) string {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "Trash")
@@ -23,7 +18,6 @@ func tempTrash(t *testing.T) string {
 	return dir
 }
 
-// trashInfoOf reads the .trashinfo written for a name.
 func trashInfoOf(t *testing.T, trash, name string) string {
 	t.Helper()
 	body, err := os.ReadFile(filepath.Join(trash, "info", name+".trashinfo"))
@@ -87,14 +81,11 @@ func TestTrashEncodesAnAwkwardName(t *testing.T) {
 	if strings.ContainsAny(strings.SplitN(info, "\n", 3)[1], " \"'`") {
 		t.Errorf("the Path line was not encoded:\n%s", info)
 	}
-	// It has to decode back to the path it came from, or a restore goes
-	// somewhere else.
 	if got := trashDecode(t, info); got != path {
 		t.Errorf("the encoded path reads back as %q, want %q", got, path)
 	}
 }
 
-// trashDecode reverses trashInfoPath for one info file's Path line.
 func trashDecode(t *testing.T, info string) string {
 	t.Helper()
 	for line := range strings.SplitSeq(info, "\n") {
@@ -120,7 +111,6 @@ func trashDecode(t *testing.T, info string) string {
 	return ""
 }
 
-// fmtSscanHex parses two hex digits.
 func fmtSscanHex(s string, v *int) (int, error) {
 	n := 0
 	for i := 0; i < len(s); i++ {
@@ -181,8 +171,6 @@ func TestTrashLeavesNoInfoBehindWhenTheMoveFails(t *testing.T) {
 	path := filepath.Join(dir, "report.txt")
 	mustWrite(t, path, "body")
 
-	// The trash's files folder is made unwritable, so the claim is written and
-	// the move that follows it fails.
 	if err := os.MkdirAll(filepath.Join(trash, "files"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +196,6 @@ func TestTrashLeavesNoInfoBehindWhenTheMoveFails(t *testing.T) {
 		t.Errorf("a failed trash left %d info files behind: %v", len(entries), names)
 	}
 
-	// And a trash that never claimed a name leaves nothing either.
 	if _, err := trashPaths([]string{filepath.Join(dir, "missing.txt")}, time.Now()); err == nil {
 		t.Error("trashing a missing file was allowed")
 	}

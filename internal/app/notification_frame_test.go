@@ -33,7 +33,6 @@ func TestNotificationKeepsTheFrameDrawing(t *testing.T) {
 	m := newTestOS(win)
 	m.Width, m.Height = 120, 40
 
-	// Baseline: an idle session with nothing on screen may skip the frame.
 	if _, _ = m.Update(TickerMsg(time.Now())); !m.renderSkipped {
 		t.Fatal("an idle tick with nothing on screen should skip the frame")
 	}
@@ -46,13 +45,8 @@ func TestNotificationKeepsTheFrameDrawing(t *testing.T) {
 		t.Fatal("a tick with a message on screen skipped the frame; the dock's burn-down rule would freeze partway")
 	}
 
-	// The requested 40ms is below the severity floor, so the message is still
-	// up: a duration is a floor now, not the answer. Age it past the floor by
-	// hand rather than sleeping six seconds for it.
 	m.Notifications[0].StartTime = time.Now().Add(-2 * m.Settings.NotificationDuration)
 
-	// The tick that retires it must still draw, or the message leaves the model
-	// and stays on the screen: that is the same freeze in a different place.
 	if _, _ = m.Update(TickerMsg(time.Now())); m.renderSkipped {
 		t.Fatal("the tick that retired the message skipped the frame; it would stay drawn in the cached dock")
 	}
@@ -60,7 +54,6 @@ func TestNotificationKeepsTheFrameDrawing(t *testing.T) {
 		t.Fatalf("the tick should have retired the expired message, got %d", len(m.Notifications))
 	}
 
-	// With nothing left, ticks may go back to skipping.
 	if _, _ = m.Update(TickerMsg(time.Now())); !m.renderSkipped {
 		t.Error("a tick with no message left should skip the frame again")
 	}
@@ -79,7 +72,6 @@ func TestStickyErrorWaitsForDismissal(t *testing.T) {
 		t.Fatalf("an error should be sticky by default, got %+v", m.Notifications)
 	}
 
-	// However old it gets, it stays.
 	m.Notifications[0].StartTime = time.Now().Add(-time.Hour)
 	if m.CleanupNotifications() || len(m.Notifications) != 1 {
 		t.Fatal("a sticky error expired on a timer the user did not start")
@@ -138,9 +130,6 @@ func TestNotificationTickComposesOnlyWhenTheBurnMoves(t *testing.T) {
 		return true
 	}
 
-	// An hour, so a cell of the burn takes minutes and only age moves it. With the
-	// real duration a cell takes about 100 ms, and a runner that paused for that
-	// long between two ticks moved the burn by itself, so "no cell moved" was false.
 	const hour = time.Hour
 	m.ShowNotification("attached to the session", "info", hour)
 	if !tick() {
@@ -158,12 +147,10 @@ func TestNotificationTickComposesOnlyWhenTheBurnMoves(t *testing.T) {
 	if tick() {
 		t.Error("a tick right after the frame that drew the message composed again; no cell moved")
 	}
-	// A third of a cell into the burn: the rule still rounds to where it was.
 	age(0.3)
 	if tick() {
 		t.Error("a tick before the burn crossed a cell composed a frame identical to the last")
 	}
-	// One cell in: the rule is a cell shorter, and that has to reach the screen.
 	age(1)
 	if !tick() {
 		t.Fatal("the tick on which the burn crossed a cell skipped the frame; the rule would freeze")
@@ -175,7 +162,6 @@ func TestNotificationTickComposesOnlyWhenTheBurnMoves(t *testing.T) {
 		t.Error("a tick after the burn step was drawn composed again; no cell moved")
 	}
 
-	// A second message takes the block: a new top message, and one queued.
 	m.ShowNotification("a second message", "info", hour)
 	if !tick() {
 		t.Error("the tick after a new message arrived skipped the frame")
@@ -235,8 +221,6 @@ func TestNotificationTickSleepsUntilTheBurnMoves(t *testing.T) {
 		}
 	}
 
-	// span-1 cells go out one at a time, then the last frame takes the message
-	// off the dock.
 	if frames < span {
 		t.Errorf("the burn drew %d frames for a rule of %d cells; lit cells per frame %v", frames, span, lits)
 	}

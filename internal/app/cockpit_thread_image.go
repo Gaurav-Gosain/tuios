@@ -13,54 +13,28 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// Image cards: an image in the conversation, one the person pasted into a
-// prompt or one a tool result holds (a Read of a PNG), drawn in the thread.
-//
-// The bytes come from the transcript, through agent-transcript's image read,
-// for the thread on screen only and once per entry. They go through the reply
-// previews' pipeline (inbox_reply_preview.go), which bounds what it keeps:
-// kitty graphics placed after the frame where the host has them, block glyphs
-// at 256 colours and truecolor, and the card's head line alone at 16 colours.
-//
-// A kitty picture is placed from the frame's own hits: each row of the card
-// carries "timg:row/rows/cols/id", so the placement is where the frame drew
-// the card's rows. A card the window cuts is placed on the rows in the
-// window, cropped to them, and one that another panel covers is not placed.
-// A click on the card opens the image view.
-
-// ckImgRows and ckImgCols bound an image card's picture, in cells.
 const (
 	ckImgRows = 12
 	ckImgCols = 64
 )
 
-// ckImgIndent is where an image card's picture starts in the thread.
 const ckImgIndent = 4
 
-// ckThreadImagesMax bounds the images one thread reads.
 const ckThreadImagesMax = 16
 
-// ckThreadImage is an image of a thread: its bytes once read, or why they
-// were not.
 type ckThreadImage struct {
-	img     *composer.Image
-	err     string
-	loading bool
-	// cols and rows are the picture's own box, for a picture drawn to fit
-	// one, such as a Mermaid diagram. Zero fits the image to the card.
+	img        *composer.Image
+	err        string
+	loading    bool
 	cols, rows int
 }
 
-// threadImageMsg carries an image's bytes back to the Update goroutine.
 type threadImageMsg struct {
 	key, id string
 	data    []byte
 	err     error
 }
 
-// threadImagesCmd reads the images of the shown thread not read yet, and
-// prepares the pictures its cards need at the width last drawn. It is nil when
-// there is nothing to do.
 func (m *OS) threadImagesCmd(t *agentThread) tea.Cmd {
 	if !t.read {
 		return nil
@@ -105,7 +79,6 @@ func (m *OS) threadImagesCmd(t *agentThread) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// applyThreadImage takes an image's bytes, and prepares its picture.
 func (m *OS) applyThreadImage(msg threadImageMsg) tea.Cmd {
 	t := m.Inbox.threads.byKey[msg.key]
 	if t == nil || t.images == nil {
@@ -135,8 +108,6 @@ func (m *OS) applyThreadImage(msg threadImageMsg) tea.Cmd {
 	return m.threadPicturesCmd(t)
 }
 
-// threadPicturesCmd prepares the pictures of t's image cards for the box the
-// width last drawn gives them, in the way the host shows them now.
 func (m *OS) threadPicturesCmd(t *agentThread) tea.Cmd {
 	if t.imgWidth <= 0 || len(t.images) == 0 {
 		return nil
@@ -188,9 +159,6 @@ func (m *OS) threadPicturesCmd(t *agentThread) tea.Cmd {
 	}
 }
 
-// ckImageBox is the cell box of an image card's picture in a thread width
-// cells wide. A small image keeps its own size: an icon is not drawn twelve
-// rows tall.
 func (m *OS) ckImageBox(img *composer.Image, width int) (int, int) {
 	maxCols, maxRows := min(width-ckImgIndent-2, ckImgCols), ckImgRows
 	if img.Width > 0 && img.Height > 0 {
@@ -204,8 +172,6 @@ func (m *OS) ckImageBox(img *composer.Image, width int) (int, int) {
 	return ckFitBox(img, max(maxCols, 1), max(maxRows, 1), m.replyPreviewer().CellAspect(), 1)
 }
 
-// ckImageCard is an image's card: a head line that names it and says how to
-// open it, and the picture's rows under it.
 func (m *OS) ckImageCard(l ckLook, t *agentThread, en threadEntry, width int) []ckLine {
 	pal := l.pal
 	t.imgWidth = width
@@ -233,13 +199,10 @@ func (m *OS) ckImageCard(l ckLook, t *agentThread, en threadEntry, width int) []
 	cols, rows := m.ckImageBox(ti.img, width)
 	var cells []string
 	if mode == composer.PreviewPixels {
-		// A host that draws placeholders gets the picture as cells that
-		// scroll and clip with the thread.
 		cells = m.placeholderLines(ti.img, cols, rows)
 	}
 	if mode == composer.PreviewCells {
 		if cells = p.Cells(ti.img, cols, rows); cells == nil {
-			// Still being prepared: the rows keep their place.
 			cells = make([]string, rows)
 		}
 	}
@@ -254,9 +217,6 @@ func (m *OS) ckImageCard(l ckLook, t *agentThread, en threadEntry, width int) []
 	return append(ls, ckLine{})
 }
 
-// ckImgHit reads an image card's hit: the picture row, its rows and columns,
-// and the entry id. A head line has row -1. The id is last, since an id holds
-// "-" and ".".
 func ckImgHit(action string) (row, rows, cols int, id string, ok bool) {
 	rest, ok := strings.CutPrefix(action, "timg:")
 	if !ok {
@@ -278,10 +238,6 @@ func ckImgHit(action string) (row, rows, cols int, id string, ok bool) {
 	return row, rows, cols, parts[3], true
 }
 
-// threadImagePlacements adds the kitty pictures of the image cards the last
-// frame drew, at the cells it drew them. A card the window cuts shows the
-// rows in the window: the picture is cropped to them. Nothing is placed while
-// another panel, a menu or the image view is over the thread.
 func (m *OS) threadImagePlacements(want []previewPlacement) []previewPlacement {
 	if !m.ShowInbox || !m.threadShown() || m.Inbox.ck.img != nil || m.ContextMenu != nil || !m.overlayOnTop("inbox") || !m.replyPixelsReady() {
 		return want
@@ -294,12 +250,7 @@ func (m *OS) threadImagePlacements(want []previewPlacement) []previewPlacement {
 	if t == nil || len(t.images) == 0 {
 		return want
 	}
-	// Placeholder cells place the picture themselves; the host needs the
-	// picture and its virtual placement while any of its rows is drawn.
 	virtual := m.threadPlaceholders()
-	// The hits are in the order the frame drew the lines, so the rows of a
-	// card on screen come one after the other: a run of the same card, each
-	// row one line under the last. The run is the part to show.
 	type run struct {
 		id               string
 		x, y             int
@@ -333,8 +284,6 @@ func (m *OS) threadImagePlacements(want []previewPlacement) []previewPlacement {
 	return want
 }
 
-// cockpitOpenThreadImage opens the image view on an image of the shown
-// thread, named by its card's hit.
 func (m *OS) cockpitOpenThreadImage(action string) tea.Cmd {
 	_, _, _, id, ok := ckImgHit("timg:" + action)
 	if !ok {
@@ -359,8 +308,6 @@ func (m *OS) cockpitOpenThreadImage(action string) tea.Cmd {
 	return m.CockpitImagePicture()
 }
 
-// ckImageWhat names an image of the conversation: its type and, when the
-// transcript or the bytes say it, its size.
 func ckImageWhat(en threadEntry, img *composer.Image) string {
 	kind, w, h := "", 0, 0
 	if en.Image != nil {
@@ -389,8 +336,6 @@ func ckImageWhat(en threadEntry, img *composer.Image) string {
 	return what
 }
 
-// ckThreadMinute is the minute the working turn's line depends on, 0 when the
-// thread has no working turn.
 func ckThreadMinute(working bool, now time.Time) int64 {
 	if !working {
 		return 0
@@ -398,8 +343,6 @@ func ckThreadMinute(working bool, now time.Time) int64 {
 	return now.Unix() / 60
 }
 
-// threadPicsVersion is the previews' version for a thread with images, 0 for
-// one without, so a draft's pictures do not draw other threads again.
 func (m *OS) threadPicsVersion(t *agentThread) uint64 {
 	if len(t.images) == 0 {
 		return 0

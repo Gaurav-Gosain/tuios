@@ -17,8 +17,6 @@ func TestSidebarSanitizesTitles(t *testing.T) {
 	overlay.SetNerdFonts(false)
 	t.Cleanup(func() { overlay.SetNerdFonts(false) })
 	if got := printableTitle(" nvim \x1b]0;x\x07"); got != "nvim ]0;x" {
-		// The escape byte and the bell go; printable remnants of a title
-		// sequence stay (they are the shell's bug to fix, not tofu).
 		t.Errorf("printableTitle = %q", got)
 	}
 	overlay.SetASCII(true)
@@ -28,10 +26,6 @@ func TestSidebarSanitizesTitles(t *testing.T) {
 	}
 }
 
-// sidebarMultiSessionOS builds an OS attached to "main" with agent-flagged
-// windows and the sidebar on, plus a synthetic three-session tree the way a
-// daemon-backed client would see one. The tree order is the daemon's creation
-// order: main, scratch, deploy.
 func sidebarMultiSessionOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	t.Helper()
 	m := newNarrowOS(t, w, h)
@@ -96,9 +90,6 @@ func TestSidebarASCIIFallback(t *testing.T) {
 		}
 	}
 
-	// Default mode: private-use codepoints only where the dock already uses
-	// them (the pill caps); anything else is the kind of tofu the rail must
-	// never emit.
 	config.Global.UseASCIIOnly = false
 	overlay.SetASCII(false)
 	sanctioned := map[rune]bool{}
@@ -118,8 +109,6 @@ func TestSidebarASCIIFallback(t *testing.T) {
 	}
 }
 
-// stripSidebarANSI drops SGR escape sequences so rune audits see only what is
-// actually printed.
 func stripSidebarANSI(s string) string {
 	var b strings.Builder
 	inEsc := false

@@ -20,9 +20,6 @@ import (
 // in this file, how a person reaches it.
 func TestSettingsPanelReachesEveryOption(t *testing.T) {
 	m := &OS{Settings: config.Global, Width: 120, Height: 40, SidebarAgentsSeen: true}
-	// The Alerts tab folds its agent rows under a heading row until an agent
-	// has been seen. Folded is one change on that row away, so it counts as
-	// reachable; the rows are read unfolded.
 	open := true
 	m.settingsAgentsOpen = &open
 
@@ -62,8 +59,6 @@ func TestSettingsPanelReachesEveryOption(t *testing.T) {
 			len(missing), strings.Join(missing, "\n  "), missing[0])
 	}
 
-	// An exclusion for a path the registry dropped is a stale note that would
-	// go on excusing an option that no longer exists.
 	for path := range settingsUIExcluded {
 		if _, ok := config.LookupOption(path); !ok {
 			t.Errorf("settingsUIExcluded names %q, which the registry no longer carries", path)
@@ -71,22 +66,10 @@ func TestSettingsPanelReachesEveryOption(t *testing.T) {
 	}
 }
 
-// settingsUIExcluded names every registry option the settings page deliberately
-// does not carry, one path at a time and with the reason on the line.
-//
-// Individually rather than by prefix on purpose: a wildcard would swallow the
-// next option added under it, which is the drift this file exists to stop. An
-// option belongs here only when a person has a better way to reach it than a
-// row, never because writing the row was inconvenient.
 var settingsUIExcluded = map[string]string{
-	// Read only by the tuios mermaid command. The window manager draws no
-	// diagrams, so a row would change nothing a person sees in it.
 	"mermaid.theme":      "read only by tuios mermaid, which takes --theme too",
 	"mermaid.background": "read only by tuios mermaid, which takes --background too",
 
-	// The deprecated flat spellings. Each is an alias of a nested path that has
-	// a row of its own, so a row here would be a second control for one value,
-	// disagreeing with the first whenever the file used the other spelling.
 	"appearance.sidebar_enabled":         "alias of appearance.sidebar.enabled",
 	"appearance.sidebar_position":        "alias of appearance.sidebar.position",
 	"appearance.sidebar_width":           "alias of appearance.sidebar.width",
@@ -99,35 +82,13 @@ var settingsUIExcluded = map[string]string{
 	"appearance.workspace_transition_ms": "old name of motion.workspace_ms",
 	"appearance.zoom_animation":          "old name of motion.zoom",
 
-	// The two section switches. They fold into appearance.sidebar.sections on
-	// load, which is the one place membership lives: a layout may carry two
-	// spacers and a boolean per section has nowhere to put the second one. The
-	// Sections editor is the row that turns a section off, so a row here would
-	// be a second control for the same thing, disagreeing with the editor the
-	// moment either was used.
 	"appearance.sidebar.show_windows": "folded into appearance.sidebar.sections; the Sections editor is the row",
 	"appearance.sidebar.show_agents":  "folded into appearance.sidebar.sections; the Sections editor is the row",
 	"appearance.hide_clock":           "the positive spelling appearance.show_clock has the row",
 
-	// A shell command the host runs on its own, with no further gesture from
-	// anyone. The panel is reachable by every attached client: a web client,
-	// an ssh client holding any authorized key, or anyone at all under
-	// `tuios ssh --no-auth`. A row here is a way for whoever connected to run
-	// a command on the machine hosting the session. It stays settable
-	// through the config file and through set-config, both of which are the
-	// host's own doing.
-	"notifications.agent.command": "a shell command the host runs; not for a panel any client can open",
-	// The same for the copy command: every yank runs it on the machine of
-	// the client, which for tuios ssh and the web client is the server.
+	"notifications.agent.command":       "a shell command the host runs; not for a panel any client can open",
 	"appearance.selection.copy_command": "a shell command the host runs on each yank; not for a panel any client can open",
 
-	// Two filesystem paths on the machine hosting the session. A row would let
-	// whoever attached point server-side writes and server-side reads at any
-	// path, and any attached client can open the panel, which is the reason
-	// notifications.agent.command has no row either. Both stay settable through
-	// the config file and set-config, which are the host's own doing. A path is
-	// also the one value no accepted set can check, so a row could not validate
-	// what it took.
 	"screenshot.directory": "a server-side write path; not for a panel any client can open",
 	"screenshot.font_file": "a server-side read path; not for a panel any client can open",
 }

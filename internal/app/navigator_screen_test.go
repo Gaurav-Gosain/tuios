@@ -37,7 +37,6 @@ func TestNavParseStyledPassesOnlySGR(t *testing.T) {
 			t.Fatalf("the parse let %q through: %q", bad, all)
 		}
 	}
-	// Every sequence left is SGR.
 	var state byte
 	for s := all; len(s) > 0; {
 		seq, width, n, newState := ansi.DecodeSequence(s, state, nil)
@@ -56,9 +55,9 @@ func TestNavParseStyledPassesOnlySGR(t *testing.T) {
 // emulator that keeps them, and is checked on its own.
 func TestNavPrintableDropsFormatCharacters(t *testing.T) {
 	for in, want := range map[string]string{
-		"a\u202eb": "ab", // right-to-left override
-		"a\u2066b": "ab", // left-to-right isolate
-		"a\u200bb": "ab", // zero-width space
+		"a\u202eb": "ab",
+		"a\u2066b": "ab",
+		"a\u200bb": "ab",
 		"a\x07b":   "ab",
 		"é":        "é",
 	} {

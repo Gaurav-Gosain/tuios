@@ -14,9 +14,7 @@ import (
 // workspace is not stuck as custom), which is what previously broke.
 func TestRestoreWorkspaceLayoutRoundTripKeepsRetiling(t *testing.T) {
 	m := &OS{
-		Settings: config.Global,
-		// The layout reads the model's session-settled geometry, seeded from
-		// the globals the way NewOS seeds it.
+		Settings:             config.Global,
 		SharedBorders:        config.Global.SharedBorders,
 		PaneGap:              config.Global.PaneGap,
 		AutoTiling:           true,
@@ -26,9 +24,7 @@ func TestRestoreWorkspaceLayoutRoundTripKeepsRetiling(t *testing.T) {
 		CurrentWorkspace:     1,
 	}
 
-	// Simulate a switch away from workspace 1 (saves its layout).
 	m.SaveCurrentLayout()
-	// Simulate switching back to workspace 1 (restores the just-saved layout).
 	m.RestoreWorkspaceLayout(1)
 
 	if m.WorkspaceHasCustom[1] {
@@ -36,18 +32,12 @@ func TestRestoreWorkspaceLayoutRoundTripKeepsRetiling(t *testing.T) {
 	}
 }
 
-// twoWorkspaceOS builds an auto-tiling model with two panes tiled on workspace 1
-// and one on workspace 2, in the given border mode.
 func twoWorkspaceOS(t *testing.T, shared bool) *OS {
 	t.Helper()
 	origShared, origAnim := config.Global.SharedBorders, config.Global.Motion
 	origStyle, origASCII, origSidebar := config.Global.BorderStyle, config.Global.UseASCIIOnly, config.Global.SidebarEnabled
 	config.Global.SharedBorders = shared
-	// Tiling applies geometry through an animation when animations are on, which
-	// would leave the panes at their nominal size for the length of the test.
 	config.Global.Motion = config.MotionNone
-	// The ASCII set draws every corner as "+", which would hide a pane box among
-	// the separator glyphs.
 	config.Global.BorderStyle = "rounded"
 	config.Global.UseASCIIOnly = false
 	config.Global.SidebarEnabled = false
@@ -58,9 +48,7 @@ func twoWorkspaceOS(t *testing.T, shared bool) *OS {
 	})
 
 	m := &OS{
-		Settings: config.Global,
-		// The layout reads the model's session-settled geometry, seeded from
-		// the globals the way NewOS seeds it.
+		Settings:             config.Global,
 		SharedBorders:        config.Global.SharedBorders,
 		PaneGap:              config.Global.PaneGap,
 		NumWorkspaces:        9,
@@ -88,14 +76,6 @@ func twoWorkspaceOS(t *testing.T, shared bool) *OS {
 	return m
 }
 
-// separatorCarriesFocusColor reports whether any separator run is drawn in the
-// focus color rather than the unfocused one.
-//
-// The composed frame is where the structural half of this is checked, but it
-// carries no color under test: lipgloss resolves to a profile with no color when
-// the process has no terminal, so every cell composes as bare text. The runs the
-// overlay hands the compositor are the last point the color still exists, so the
-// hue half of the assertion is made there.
 func separatorCarriesFocusColor(t *testing.T, m *OS) bool {
 	t.Helper()
 	focusColor := theme.BorderFocusedWindow()
@@ -127,8 +107,6 @@ func TestTilingToggleOnAnotherWorkspaceKeepsRestingBorders(t *testing.T) {
 		t.Run(fmt.Sprintf("shared-%t", shared), func(t *testing.T) {
 			m := twoWorkspaceOS(t, shared)
 
-			// A user resize is what marks the workspace custom, and the custom flag
-			// is what makes the switch back skip its retile.
 			m.MarkLayoutCustom()
 
 			m.SwitchToWorkspace(2)
@@ -177,15 +155,12 @@ func TestAbandonedGestureLeavesNoWindowFlagged(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			m := twoWorkspaceOS(t, true)
 
-			// A resize drag in flight on the focused pane.
 			m.Resizing = true
 			m.InteractionMode = true
 			m.DraggedWindowIndex = 0
 			m.Windows[0].IsBeingManipulated = true
 
 			leave(m)
-			// The pointer is not held any more, which is all the per-frame backstop
-			// needs. It is the only thing that runs for a pane no longer on screen.
 			m.pointerDown = false
 			m.endGestureWithoutButton()
 			m.clearStaleManipulation()
@@ -209,9 +184,7 @@ func TestAbandonedGestureLeavesNoWindowFlagged(t *testing.T) {
 // check permanently, disabling auto-retiling after a single round-trip.
 func TestRestoreWorkspaceLayoutDoesNotForceCustom(t *testing.T) {
 	m := &OS{
-		Settings: config.Global,
-		// The layout reads the model's session-settled geometry, seeded from
-		// the globals the way NewOS seeds it.
+		Settings:      config.Global,
 		SharedBorders: config.Global.SharedBorders,
 		PaneGap:       config.Global.PaneGap,
 		AutoTiling:    true,

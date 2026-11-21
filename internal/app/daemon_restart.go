@@ -22,35 +22,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/restartplan"
 )
 
-// Restarting the daemon from the app.
-//
-// The daemon runs the build it started with until it stops, so after an
-// update it runs the old one. The way to move it used to be to detach, run
-// tuios kill-server and start tuios again, and nothing on the way said what
-// that stopped. The app now does it in place: the command palette, the
-// Daemon tab of the settings, the rail's menu for this machine and the
-// version notice all open one dialog.
-//
-// The dialog runs `tuios restart-server` of the newest tuios installed, which
-// is also the binary the new daemon runs (release.NewestInstalled). It runs it
-// twice: once with --dry-run for the plan the dialog shows, and once to
-// restart, reading the steps it writes as they happen. So the list the person
-// agrees to and the restart that runs come from the same code, and that code
-// is the new build's.
-//
-// The daemon going away is what a restart is, so while one runs the lost
-// connection is expected and does not end the client. When the new daemon
-// answers, the client quits and the local entry point starts the newest tuios
-// again as `tuios attach <session>`: an exec on Unix, a child on Windows (see
-// RestartExec). The person lands back in the session, on the new build of
-// both the daemon and the client.
-
-// paletteRestartDaemonName is the palette's row for the dialog.
 const paletteRestartDaemonName = "Restart the daemon"
 
-// restartHint ends a message about a daemon too old for something: the way
-// to move it to the new build. The palette entry is only on a client that
-// can restart its daemon, so an ssh or a browser client is told the command.
 func (m *OS) restartHint() string {
 	if m.DaemonRestartAvailable() {
 		return `To update it, use "Restart the daemon" in the command palette.`
@@ -58,24 +31,17 @@ func (m *OS) restartHint() string {
 	return restartHintPlain
 }
 
-// restartHintPlain is restartHint where the client is not known: the command,
-// which works from any shell on the daemon's machine.
 const restartHintPlain = "To update it, run 'tuios restart-server' on the machine it runs on."
 
-// restartPhase is where the restart dialog is.
 type restartPhase int
 
 const (
 	restartClosed restartPhase = iota
-	// restartReading waits for the plan.
 	restartReading
-	// restartConfirm shows the plan and asks.
 	restartConfirm
-	// restartStopping, restartStarting and restartReattaching are the steps.
 	restartStopping
 	restartStarting
 	restartReattaching
-	// restartFailed says what went wrong and what to do next.
 	restartFailed
 )
 
@@ -89,36 +55,21 @@ const (
 	restartRowCount
 )
 
-// restartReport is one line of `tuios restart-server --json`. The CLI writes
-// it and this file reads it, with the one type in internal/restartplan.
 type restartReport = restartplan.Report
 
-// daemonRestart is the dialog's state. The zero value is closed.
 type daemonRestart struct {
-	phase restartPhase
-	// gen makes a message from an abandoned dialog ignorable.
-	gen int
-	// list is the cursor on the two answers.
-	list listnav.State
-	plan restartReport
-	// scroll is the first plan line shown when the plan is taller than the
-	// screen. scrollMax and scrollPage are what the last frame could show:
-	// the largest scroll, and the lines in view.
+	phase                         restartPhase
+	gen                           int
+	list                          listnav.State
+	plan                          restartReport
 	scroll, scrollMax, scrollPage int
-	// done is the restart's result, once the command wrote it.
-	done *restartReport
-	// err and fix are what a failure says.
-	err, fix string
-	// lost says the connection to the daemon is gone, so the only way on
-	// from a failure is out.
-	lost bool
-	// asked says the plan was asked for.
-	asked bool
-	steps chan tea.Msg
+	done                          *restartReport
+	err, fix                      string
+	lost                          bool
+	asked                         bool
+	steps                         chan tea.Msg
 }
 
-// running reports whether a restart is under way: the steps between the
-// answer and the exec, when the daemon going away is expected.
 func (r *daemonRestart) running() bool {
 	return r.phase >= restartStopping && r.phase <= restartReattaching
 }
@@ -181,8 +132,6 @@ func (m *OS) OpenDaemonRestart() {
 	m.restart = daemonRestart{phase: restartReading, gen: m.restart.gen + 1, list: listnav.State{Cursor: RestartRowCancel}}
 }
 
-// restartPlanCmd reads the plan for a dialog that has just opened. It runs
-// after every message, and costs one comparison when no dialog waits.
 func (m *OS) restartPlanCmd() tea.Cmd {
 	r := &m.restart
 	if r.phase != restartReading || r.asked {
@@ -248,7 +197,6 @@ func (m *OS) DaemonRestartActivate(idx int) tea.Cmd {
 	return nil
 }
 
-// readRestartPlan runs restart-server --dry-run of the newest tuios.
 func readRestartPlan() (restartReport, error) {
 	bin, _, err := release.NewestInstalled()
 	if err != nil {
@@ -269,12 +217,8 @@ func readRestartPlan() (restartReport, error) {
 	return plan, nil
 }
 
-// startDaemonRestart pushes the layout, then runs the restart in the
-// background and listens to its steps.
 func (m *OS) startDaemonRestart() tea.Cmd {
 	r := &m.restart
-	// The daemon saves what it holds when it stops, so it must hold this
-	// client's layout first.
 	m.SyncStateToDaemon()
 	r.phase = restartStopping
 	r.steps = make(chan tea.Msg, 8)
@@ -282,9 +226,6 @@ func (m *OS) startDaemonRestart() tea.Cmd {
 	return listenRestart(m.stopSignal(), r.steps)
 }
 
-// runRestartCommand runs restart-server --yes and sends each step it writes.
-// The digest is of the plan the person agreed to: the command refuses when
-// what a restart stops changed since.
 func runRestartCommand(bin, digest string, gen int, ch chan<- tea.Msg) {
 	cmd := exec.Command(bin, "restart-server", "--yes", "--json", "--expect", digest)
 	var stderr bytes.Buffer
@@ -306,8 +247,6 @@ func runRestartCommand(bin, digest string, gen int, ch chan<- tea.Msg) {
 	}
 	scanErr := sc.Err()
 	if scanErr != nil {
-		// A line over the scanner's limit stops the scan. Read the rest, so
-		// the command does not block on a full pipe and Wait can return.
 		_, _ = io.Copy(io.Discard, out)
 	}
 	err = cmd.Wait()
@@ -317,7 +256,6 @@ func runRestartCommand(bin, digest string, gen int, ch chan<- tea.Msg) {
 	ch <- restartEndMsg{gen: gen, err: err, stderr: stderr.String()}
 }
 
-// listenRestart waits for the next step. It returns nil once stop is closed.
 func listenRestart(stop <-chan struct{}, ch <-chan tea.Msg) tea.Cmd {
 	return func() tea.Msg {
 		select {
@@ -329,7 +267,6 @@ func listenRestart(stop <-chan struct{}, ch <-chan tea.Msg) tea.Cmd {
 	}
 }
 
-// handleRestartMsg applies one message of the restart.
 func (m *OS) handleRestartMsg(msg tea.Msg) tea.Cmd {
 	r := &m.restart
 	switch msg := msg.(type) {
@@ -369,8 +306,6 @@ func (m *OS) handleRestartMsg(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		if d := r.done; d != nil && d.Error == "" && d.Restarted && slices.Contains(d.Missing, m.SessionName) {
-			// The new daemon answers, and this session is not on it. An
-			// attach to it would fail, so the dialog says so instead.
 			r.lost = true
 			m.failRestart("The daemon restarted on "+d.After+", and session "+m.SessionLabel(m.SessionName)+" did not come back.",
 				"Run 'tuios resurrect' to see the saved sessions, then 'tuios attach' to one.")
@@ -380,7 +315,6 @@ func (m *OS) handleRestartMsg(msg tea.Msg) tea.Cmd {
 			r.phase = restartReattaching
 			m.RestartExec = &RestartExec{Binary: r.plan.Binary, Session: m.SessionName}
 			gen := r.gen
-			// One frame of "reattaching" before the screen goes.
 			return tea.Tick(150*time.Millisecond, func(time.Time) tea.Msg { return restartQuitMsg{gen: gen} })
 		}
 		switch {
@@ -404,7 +338,6 @@ func (m *OS) handleRestartMsg(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-// failRestart moves the dialog to its failure.
 func (m *OS) failRestart(what, fix string) {
 	r := &m.restart
 	r.phase = restartFailed
@@ -412,16 +345,12 @@ func (m *OS) failRestart(what, fix string) {
 	m.LogError("Daemon restart: %s %s", what, fix)
 }
 
-// quitAfterRestartFailure ends the client after a failure that left no
-// daemon to go back to, with the failure for the entry point to print.
 func (m *OS) quitAfterRestartFailure() tea.Cmd {
 	m.RestartFailure = &RestartFailure{What: m.restart.err, Fix: m.restart.fix}
 	m.ExitReason = ExitRestartFailed
 	return m.QuitCmd()
 }
 
-// noteRestartDisconnect takes a lost connection while a restart runs. It
-// reports whether it took it: the caller quits the client otherwise.
 func (m *OS) noteRestartDisconnect() bool {
 	r := &m.restart
 	if r.running() {
@@ -434,8 +363,6 @@ func (m *OS) noteRestartDisconnect() bool {
 	return false
 }
 
-// capitalFix starts a fix from the command with a capital, as a sentence of
-// its own in the dialog.
 func capitalFix(fix string) string {
 	if fix == "" {
 		return ""
@@ -443,13 +370,11 @@ func capitalFix(fix string) string {
 	return strings.ToUpper(fix[:1]) + fix[1:]
 }
 
-// lastNonEmptyLine is the last line of s with text on it.
 func lastNonEmptyLine(s string) string {
 	lines := strings.Split(strings.TrimSpace(s), "\n")
 	return strings.TrimSpace(lines[len(lines)-1])
 }
 
-// plainOneLine drops what a terminal would read as control from one line.
 func plainOneLine(s string) string {
 	return strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f {
@@ -462,9 +387,6 @@ func plainOneLine(s string) string {
 // DaemonRestartSelected is the row under the cursor.
 func (m *OS) DaemonRestartSelected() int { return m.restart.list.Cursor }
 
-// restartDaemonItem is the Daemon tab's row: the version the daemon runs, in
-// the warning colour when it is not this window's, and enter or a click opens
-// the restart dialog.
 func (m *OS) restartDaemonItem() settingItem {
 	return settingItem{
 		Label:   "Restart the daemon",

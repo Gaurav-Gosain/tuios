@@ -12,14 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// A pane under shared borders has no border of its own, so the only thing that
-// says where one ends is the divider grid. These tests read the grid as motion
-// rather than as a still: they step a transition through its duration and assert
-// the invariant the grid holds on every frame of it, which is that each divider
-// is an edge of a pane the frame is actually drawing.
-
-// transitionOS builds an auto-tiling session of n panes with animations on, and
-// restores the globals it moves when the test ends.
 func transitionOS(t *testing.T, n int, shared, bsp bool) *OS {
 	t.Helper()
 	restoreTransitionConfig(t)
@@ -33,8 +25,6 @@ func restoreTransitionConfig(t *testing.T) {
 	t.Helper()
 	shared, anim := config.Global.SharedBorders, config.Global.Motion
 	dock, style, ascii := config.Global.DockbarPosition, config.Global.BorderStyle, config.Global.UseASCIIOnly
-	// The dividers meet the dock's hairline, and the ASCII set draws every
-	// junction as "+", so both are part of the shape these tests read.
 	config.Global.DockbarPosition = "bottom"
 	config.Global.BorderStyle = "rounded"
 	config.Global.UseASCIIOnly = false
@@ -47,9 +37,7 @@ func restoreTransitionConfig(t *testing.T) {
 func newTransitionOS(t *testing.T, n int, bsp bool) *OS {
 	t.Helper()
 	m := &OS{
-		Settings: config.Global,
-		// The layout reads the model's session-settled geometry, seeded from
-		// the globals the way NewOS seeds it.
+		Settings:         config.Global,
 		SharedBorders:    config.Global.SharedBorders,
 		PaneGap:          config.Global.PaneGap,
 		Windows:          make([]*terminal.Window, 0, n),
@@ -68,8 +56,6 @@ func newTransitionOS(t *testing.T, n int, bsp bool) *OS {
 	for i := range n {
 		m.Windows = append(m.Windows, newTransitionWindow(t, i))
 	}
-	// Both modes build the BSP tree first: in the real app it is there from BSP
-	// being the default, and it stays behind when the user switches away.
 	m.TileAllWindows()
 	settle(m)
 	if !bsp {
@@ -87,7 +73,6 @@ func newTransitionWindow(t *testing.T, i int) *terminal.Window {
 	return win
 }
 
-// settle runs every in-flight animation to completion.
 func settle(m *OS) {
 	for range 200 {
 		if len(m.Animations) == 0 {
@@ -97,8 +82,6 @@ func settle(m *OS) {
 	}
 }
 
-// seekTransition puts every in-flight animation at the given fraction of its
-// duration. The engine reads the wall clock, so the start time is what moves.
 func seekTransition(m *OS, f float64) {
 	now := time.Now()
 	for _, a := range m.Animations {
@@ -107,7 +90,6 @@ func seekTransition(m *OS, f float64) {
 	m.UpdateAnimations()
 }
 
-// transitionScenarios are the layout changes a pane animates through.
 var transitionScenarios = []struct {
 	name  string
 	panes int
@@ -122,8 +104,6 @@ var transitionScenarios = []struct {
 	{"close", 4, func(_ *testing.T, m *OS) { m.DeleteWindow(1) }},
 }
 
-// spawnPane adds a pane the way AddWindow does, at the floating box a new window
-// is placed at before the tiler snaps it into its slot.
 func spawnPane(t *testing.T, m *OS) {
 	t.Helper()
 	win := newTransitionWindow(t, len(m.Windows))
@@ -137,9 +117,6 @@ func spawnPane(t *testing.T, m *OS) {
 	}
 }
 
-// transitionSteps are the points through a transition the frames are read at.
-// The last one is the frame before the animation completes, which is what has to
-// already be the settled frame for the transition not to end in a jump.
 var transitionSteps = []float64{0, 0.2, 0.4, 0.6, 0.8, 0.999}
 
 func forEachTransition(t *testing.T, body func(t *testing.T, m *OS, shared, bsp bool, run func(*testing.T, *OS))) {
@@ -159,8 +136,6 @@ func forEachTransition(t *testing.T, body func(t *testing.T, m *OS, shared, bsp 
 	}
 }
 
-// gridCells renders the separator overlay and returns the cell each divider
-// glyph lands on.
 func gridCells(m *OS) map[[2]int]rune {
 	cells := map[[2]int]rune{}
 	for _, l := range m.renderSeparatorOverlay() {
@@ -173,10 +148,6 @@ func gridCells(m *OS) map[[2]int]rune {
 	return cells
 }
 
-// onSomePaneEdge reports whether the cell is an edge of a pane that no pane
-// above it covers there. That is the whole claim the grid makes on a frame in
-// motion: every divider is a boundary of a pane being drawn, and it is only
-// drawn where the pane it belongs to is the one in front.
 func onSomePaneEdge(stack []layout.Rect, x, y int) bool {
 	for depth, r := range stack {
 		onRing := x >= r.X-1 && x <= r.X+r.W && y >= r.Y-1 && y <= r.Y+r.H &&
@@ -215,8 +186,6 @@ func TestTransitionDividersFollowThePanes(t *testing.T) {
 			stack := m.tiledPaneRects()
 			for cell, ch := range gridCells(m) {
 				x, y := cell[0], cell[1]
-				// A divider carries on for one cell onto the chrome's rule, which
-				// is outside the region the panes divide up.
 				if y < bounds.Y || y >= bounds.Y+bounds.H || x < bounds.X || x >= bounds.X+bounds.W {
 					continue
 				}
@@ -249,9 +218,6 @@ func TestTransitionKeepsOutOfGuestCells(t *testing.T) {
 					if !inside {
 						continue
 					}
-					// Being inside a pane is only allowed where a pane in front
-					// of it owns the cell, the same way that pane's body covers
-					// the one behind.
 					if !onSomePaneEdge(stack[depth+1:], x, y) {
 						t.Fatalf("t=%.3f: divider at (%d,%d) is inside pane %v with nothing in front of it",
 							step, x, y, r)

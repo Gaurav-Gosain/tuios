@@ -13,12 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// Where a pick in the machine picker goes. The rows name machines the way this
-// machine's daemon knows them, and each pick has to reach the daemon that can
-// act on it. The e2e tests in global_new_window_test.go and
-// global_remote_pick_test.go prove the same rules against real daemons.
-
-// notified reports whether any notification on screen says text.
 func notified(m *OS, text string) bool {
 	for _, n := range m.Notifications {
 		if strings.Contains(n.Message, text) {
@@ -50,8 +44,6 @@ func TestAClickInTheSessionPickerMakesASession(t *testing.T) {
 	if build < 0 {
 		t.Fatal("the fixture's machine is not listed")
 	}
-	// Making a session on build connects for real. With no client the
-	// attempt fails at once and says so, which proves the session path ran.
 	m.DaemonClient = nil
 	if cmd := m.hostPickerActivate(build); cmd != nil {
 		t.Fatal("ASSERTION: a click in the session picker returned a window command")
@@ -64,10 +56,6 @@ func TestAClickInTheSessionPickerMakesASession(t *testing.T) {
 	}
 }
 
-// attachedTo puts m on a session on build, with build's own view of its
-// hosts: it calls this machine "beta", and it has a link to "gpu" that is
-// down. This machine's table knows "build" and "workstation" and nothing
-// build knows.
 func attachedTo(t *testing.T, m *OS) {
 	t.Helper()
 	m.AttachedHost = "build"
@@ -133,7 +121,6 @@ func TestFromAnotherMachineThisMachineNeedsALinkBack(t *testing.T) {
 			t.Fatalf("ASSERTION: this machine is offered with no link back from build: %+v", it)
 		}
 	}
-	// A session is still made here: the session picker keeps the row.
 	m.HostPickerPurpose = HostPickerNewSession
 	if items := m.buildHostPickerItems(); items[0].Label != thisMachineLabel() || !items[0].Up {
 		t.Error("ASSERTION: the session picker refuses this machine from build")
@@ -301,7 +288,7 @@ func TestAPickIsCheckedAgainstTheLinkAsItIsNow(t *testing.T) {
 // Negative control: returning refreshFederationCmd alone from the
 // HostsChangedMsg case fails here.
 func TestAHostPushKeepsTheClientEventListenerArmed(t *testing.T) {
-	ownSocket(t) // the host refresh dials a daemon, and must find none
+	ownSocket(t)
 	m := &OS{Settings: config.Global, ClientEventChan: make(chan ClientEvent, 1)}
 	_, cmd := m.Update(HostsChangedMsg{})
 	if cmd == nil {

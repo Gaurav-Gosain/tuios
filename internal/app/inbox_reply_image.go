@@ -12,52 +12,21 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 )
 
-// Attaching an image to a reply.
-//
-// The image is read on this machine, the one the person is at, with the
-// clipboard tools the pane image paste uses (clipboard_image.go). Three things
-// attach one, and each puts it in the draft as a block, [Image #1 · 1280×720
-// png], at the cursor:
-//
-//   - ctrl+v in the reply. When the clipboard holds an image and no text, the
-//     image is attached. When it holds text, the text is pasted as before.
-//   - An empty bracketed paste, which some terminals send when the clipboard
-//     holds only an image.
-//   - A paste that is only the path of an image file on this machine, which is
-//     what a terminal sends for a file dropped on it.
-//
-// The bytes stay in the draft, in memory, until the reply is sent. The daemon
-// on the pane's machine writes them to a file when it types the reply.
-//
-// A read is slow, and the person may close the draft or start another one
-// meanwhile. The result names the draft it was read for, and is dropped unless
-// that draft is still the open one, so a slow clipboard never lands in a newer
-// draft.
-
-// replyImageMsg is an image read for a reply's draft, or the text of a paste
-// that turned out not to be one.
 type replyImageMsg struct {
 	comp *composer.Model
 	img  *composer.Image
 	err  error
-	// text is a paste to put in the draft as text: a path that named no
-	// image this machine could read.
 	text string
 }
 
-// replyImagesOK reports whether this client can read an image for a reply.
 func (m *OS) replyImagesOK() bool {
 	return m.imagePasteReason() == ""
 }
 
-// inboxReplyClipboard is ctrl+v in the reply: the clipboard's image when it
-// holds one and no text, its text otherwise.
 func (m *OS) inboxReplyClipboard(ed *inboxReplyEditor) tea.Cmd {
 	return m.composerClipboardCmd(ed.comp, ed.window)
 }
 
-// composerClipboardCmd is ctrl+v in a draft: the clipboard's image when it
-// holds one and no text, its text otherwise.
 func (m *OS) composerClipboardCmd(comp *composer.Model, window string) tea.Cmd {
 	if !comp.TakesImages() || !m.replyImagesOK() || m.imagePaste.keyProbeOff {
 		return m.RequestHostPaste()
@@ -69,8 +38,6 @@ func (m *OS) composerClipboardCmd(comp *composer.Model, window string) tea.Cmd {
 	return forReply(comp, probeImageCmd(clip, window, imagePasteKey))
 }
 
-// composerLive reports whether comp is a draft open now: the Inbox reply's,
-// the New agent sheet's task or the mail editor's. A read for any other draft is dropped.
 func (m *OS) composerLive(comp *composer.Model) bool {
 	if comp == nil {
 		return false
@@ -87,7 +54,6 @@ func (m *OS) composerLive(comp *composer.Model) bool {
 	return m.AgentMail.Composing && m.AgentMail.Comp == comp
 }
 
-// forReply marks the clipboard probe's answer as the draft's.
 func forReply(comp *composer.Model, probe tea.Cmd) tea.Cmd {
 	return func() tea.Msg {
 		msg := probe()
@@ -99,14 +65,10 @@ func forReply(comp *composer.Model, probe tea.Cmd) tea.Cmd {
 	}
 }
 
-// inboxReplyPasteCmd is the work a paste into the reply needs off the update
-// loop: an empty paste looks for a clipboard image, and a path to an image
-// file reads the file. Any other paste is text, put in the draft at once.
 func (m *OS) inboxReplyPasteCmd(ed *inboxReplyEditor, text string) tea.Cmd {
 	return m.composerPasteCmd(ed.comp, ed.window, text)
 }
 
-// composerPasteCmd is inboxReplyPasteCmd for any draft.
 func (m *OS) composerPasteCmd(comp *composer.Model, window, text string) tea.Cmd {
 	if !comp.TakesImages() || !m.replyImagesOK() {
 		comp.Paste(text, m.ProcessingRemoteKeys)
@@ -144,7 +106,6 @@ func (m *OS) composerPasteCmd(comp *composer.Model, window, text string) tea.Cmd
 	}
 }
 
-// applyReplyImageProbe acts on what the clipboard held for a reply.
 func (m *OS) applyReplyImageProbe(msg imageProbeMsg) tea.Cmd {
 	if msg.keyProbeOff {
 		m.imagePaste.keyProbeOff = true
@@ -167,7 +128,6 @@ func (m *OS) applyReplyImageProbe(msg imageProbeMsg) tea.Cmd {
 	return m.replyPreviewCmd()
 }
 
-// applyReplyImage puts a read image in the draft it was read for.
 func (m *OS) applyReplyImage(msg replyImageMsg) {
 	if !m.composerLive(msg.comp) {
 		return
@@ -187,13 +147,8 @@ func (m *OS) applyReplyImage(msg replyImageMsg) {
 	}
 }
 
-// imageExts are the file names a pasted path is read as an image for.
 var imageExts = map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true, ".bmp": true, ".tif": true, ".tiff": true}
 
-// imagePathOfPaste is the image file a paste names, when the paste is one
-// path and nothing else: a file:// URL, a quoted path, or one with its
-// spaces escaped, as terminals paste a dropped file. It does not look at the
-// file.
 func imagePathOfPaste(text string) (string, bool) {
 	s := strings.TrimSpace(text)
 	if s == "" || strings.ContainsAny(s, "\n\r") || len(s) > 4096 {
@@ -221,8 +176,6 @@ func imagePathOfPaste(text string) (string, bool) {
 	return filepath.Clean(s), true
 }
 
-// unescapeShell takes out the backslashes a terminal puts before spaces and
-// other characters of a dropped file's path.
 func unescapeShell(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
@@ -234,14 +187,6 @@ func unescapeShell(s string) string {
 	return b.String()
 }
 
-// readImageFile reads a regular file of at most MaxImageBytes.
-//
-// The path comes from a paste, so it can name anything: a named pipe called
-// shot.png blocks an open for reading until a writer comes, and the read would
-// hold its background task for good. The path is checked before it is opened,
-// anything that is not a regular file is refused, and the open does not block
-// where the platform has O_NONBLOCK. The open file is checked again, so a
-// pipe swapped in between the two is refused too.
 func readImageFile(path string) ([]byte, error) {
 	errNotFile := errors.New("not a regular file")
 	before, err := os.Stat(path)

@@ -59,9 +59,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// strip renders where every column sits on the strip and where this client's
-// viewport is, so a failure says what was on screen rather than that a number
-// was wrong.
 func strip(m *OS, label string) string {
 	sl := m.GetOrCreateScrollingLayout()
 	w := m.ScrollingViewWidth()
@@ -88,7 +85,6 @@ func strip(m *OS, label string) string {
 	return b.String()
 }
 
-// scrollingFleet is two clients on one session, both in the scrolling layout.
 type scrollingFleet struct {
 	r  *rig
 	p  *peer
@@ -99,8 +95,6 @@ func newScrollingFleet(t *testing.T, panes, cols, rows int) *scrollingFleet {
 	return newScrollingFleetSized(t, panes, cols, rows, cols, rows)
 }
 
-// newScrollingFleetSized lets the two clients run at different terminal sizes,
-// which is the case a shared offset has to be safe under.
 func newScrollingFleetSized(t *testing.T, panes, aCols, aRows, bCols, bRows int) *scrollingFleet {
 	t.Helper()
 	prevAnim := config.Global.Motion
@@ -114,8 +108,6 @@ func newScrollingFleetSized(t *testing.T, panes, aCols, aRows, bCols, bRows int)
 	ex.route(p.c, p.m, "B")
 	ex.settleBox(r, p)
 
-	// A turns tiling on and picks the scrolling layout, which is session state:
-	// B adopts the mode from the sync.
 	r.m.AutoTiling = true
 	r.m.ApplyLayoutModeName(config.LayoutModeScrolling)
 	r.m.TileAllWindows()
@@ -135,8 +127,6 @@ func (f *scrollingFleet) settle() {
 	f.p.m.CompleteAllAnimations()
 }
 
-// focusOn moves one client's focus to the window at index i the way a click or
-// a column step does, and pushes.
 func focusOn(m *OS, i int) {
 	m.FocusWindow(i)
 	m.SyncStateToDaemon()
@@ -153,7 +143,6 @@ func TestPeerAdoptsADeliberateScroll(t *testing.T) {
 	f.settle()
 	before := b.GetOrCreateScrollingLayout().ViewportX
 
-	// What the wheel does on B, and the push every input makes after it.
 	b.ScrollingScrollViewport(3)
 	b.SyncStateToDaemon()
 	f.settle()
@@ -230,8 +219,6 @@ func TestWorkspaceSwitchLandsBothClientsOnOneStrip(t *testing.T) {
 	f := newScrollingFleet(t, 3, 100, 30)
 	a, b := f.r.m, f.p.m
 
-	// Parked away from where revealing the focused column would put it, so the
-	// two clients agreeing afterwards cannot be a coincidence of both revealing.
 	focusOn(a, len(a.Windows)-1)
 	f.settle()
 	a.ScrollingScrollViewport(-1)
@@ -243,8 +230,6 @@ func TestWorkspaceSwitchLandsBothClientsOnOneStrip(t *testing.T) {
 			parked, b.GetOrCreateScrollingLayout().ViewportX)
 	}
 
-	// Away to an empty workspace, which has a strip of its own at its own
-	// offset of zero, and back.
 	a.SwitchToWorkspace(2)
 	a.SyncStateToDaemon()
 	f.settle()

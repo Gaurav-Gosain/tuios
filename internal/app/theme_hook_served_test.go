@@ -35,7 +35,7 @@ func TestServedClientsDoNotRunTheThemeHook(t *testing.T) {
 			m.Client = tc.kind
 			r := record(t, m)
 
-			m.noteThemeChange() // the first frame only records
+			m.noteThemeChange()
 			_ = theme.Initialize("catppuccin_latte")
 			m.noteThemeChange()
 			m.HookManager.Wait()

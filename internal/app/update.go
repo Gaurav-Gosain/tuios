@@ -89,12 +89,6 @@ type SessionKilledMsg struct {
 	Err   error
 }
 
-// listenOnce returns a command that reads one value from ch and turns it into
-// a message with wrap. It returns a nil command for a nil channel. The command
-// yields nil once stop is closed, which is what ends the listener of a session
-// that has ended (nothing closes ch itself), or once ch is closed, so the
-// listener stops instead of spinning. A nil stop never ends it. The caller
-// re-arms it after each message it handles.
 func listenOnce[T any](stop <-chan struct{}, ch <-chan T, wrap func(T) tea.Msg) tea.Cmd {
 	if ch == nil {
 		return nil
@@ -112,14 +106,10 @@ func listenOnce[T any](stop <-chan struct{}, ch <-chan T, wrap func(T) tea.Msg) 
 	}
 }
 
-// listenSessionKillUntil waits for the next message on its channel and returns nil once
-// stop is closed, so a session that ends leaves no listener parked.
 func listenSessionKillUntil(stop <-chan struct{}, ch chan SessionKilledMsg) tea.Cmd {
 	return listenOnce(stop, ch, func(res SessionKilledMsg) tea.Msg { return res })
 }
 
-// listenSessionCreateUntil waits for the next message on its channel and returns nil once
-// stop is closed, so a session that ends leaves no listener parked.
 func listenSessionCreateUntil(stop <-chan struct{}, ch chan SessionCreatedMsg) tea.Cmd {
 	return listenOnce(stop, ch, func(res SessionCreatedMsg) tea.Msg { return res })
 }
@@ -129,8 +119,6 @@ func ListenForClipboardSet(ch chan ClipboardSetMsg) tea.Cmd {
 	return listenClipboardSetUntil(nil, ch)
 }
 
-// listenClipboardSetUntil waits for the next message on its channel and returns nil once
-// stop is closed, so a session that ends leaves no listener parked.
 func listenClipboardSetUntil(stop <-chan struct{}, ch chan ClipboardSetMsg) tea.Cmd {
 	return listenOnce(stop, ch, func(msg ClipboardSetMsg) tea.Msg { return msg })
 }
@@ -156,14 +144,10 @@ type RemoteCommandMsg struct {
 	ConfigValue  string   // For set_config
 	ConfigNoSave bool     // For set_config: apply without saving (set-config --no-save)
 	RequestID    string   // For response tracking
-	// afterSync is how many state syncs had arrived when this command did,
-	// and released marks one that waited for them. See remote_after_sync.go.
-	afterSync uint64
-	released  bool
+	afterSync    uint64
+	released     bool
 }
 
-// remoteSwitchSessionMsg switches this client to another session, after the
-// routed request that asked for it has been answered. See switch_session.
 type remoteSwitchSessionMsg struct{ name string }
 
 // RemoteKeyMsg represents a single key to be processed from a remote send-keys command.
@@ -180,8 +164,6 @@ type RemoteKeysDoneMsg struct {
 	RequestID string
 }
 
-// Multi-client message types for daemon mode
-
 // StateSyncMsg is a session state arriving from the daemon. SourceID names the
 // peer whose push it carries, and is empty for a state the daemon sent on its
 // own account: a mutation of its own, or the reconcile answer to this client's
@@ -192,9 +174,7 @@ type StateSyncMsg struct {
 	SourceID    string
 	// Attach is the client's attach generation when the state arrived. See
 	// TUIClient.AttachGeneration and QueueStateSync.
-	Attach uint64
-	// arrival numbers this state among the syncs that reached the client.
-	// See remote_after_sync.go.
+	Attach  uint64
 	arrival uint64
 }
 
@@ -336,10 +316,6 @@ const (
 // This allows the Update method to delegate to the input package without creating a circular dependency.
 type InputHandler func(msg tea.Msg, o *OS) (tea.Model, tea.Cmd)
 
-// inputHandler is the registered input handler function.
-// This will be set by the main package to break the circular dependency.
-// Atomic because every SSH connection handler registers it (with the same
-// function) while other sessions' update loops are reading it.
 var inputHandler atomic.Pointer[InputHandler]
 
 // SetInputHandler registers the input handler function.
@@ -348,7 +324,6 @@ func SetInputHandler(handler InputHandler) {
 	inputHandler.Store(&handler)
 }
 
-// getInputHandler returns the registered input handler, or nil if none is set.
 func getInputHandler() InputHandler {
 	if h := inputHandler.Load(); h != nil {
 		return *h
@@ -356,11 +331,6 @@ func getInputHandler() InputHandler {
 	return nil
 }
 
-// reportConfigWarnings puts the config problems found at load time in front of
-// the user. They are written to the in-app log (leader D l) rather than to
-// stdout, because loading happens before the alternate screen is entered and
-// anything printed then is wiped by the first frame. A notification points at
-// the log so the problems are noticed rather than merely recorded.
 func (m *OS) reportConfigWarnings() {
 	if caps := m.hostCaps(); caps != nil {
 		for _, w := range caps.Warnings {
@@ -370,13 +340,9 @@ func (m *OS) reportConfigWarnings() {
 		}
 	}
 	for _, notice := range m.ConfigNotices {
-		// Logged at INFO whatever the verbosity, because the notification
-		// below sends the user to the log to read it.
 		m.Log("INFO", "Config: %s", notice)
 	}
 	if len(m.ConfigWarnings) == 0 {
-		// Notices get their own, milder line, and only when there is no
-		// problem to report: the log holds both either way.
 		if n := len(m.ConfigNotices); n > 0 {
 			m.ShowNotification(
 				plural.Count(n, "setting")+" "+plural.Word(n, "works", "work")+
@@ -428,108 +394,76 @@ func (m *OS) Init() tea.Cmd {
 		listenDnDUntil(m.stopSignal(), m.ensureDnDInbox()),
 	}
 
-	// Ask an SSH client's terminal whether it draws sixel, or a local one
-	// that answered the startup probe late. See sixel_probe.go.
 	if cmd := m.sixelProbe(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 
-	// Ask the terminal whether it takes OSC 7501 reports. See
-	// host_program_status.go.
 	if cmd := m.hostProgramStatusProbe(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 
-	// Ask the terminal for its own colours where the startup probe could not,
-	// and follow its light and dark switch. See host_colors.go.
 	if cmd := m.hostColorQueries(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 
-	// The dock's components. Everything that used to hold the maintenance tick
-	// at the normal frame rate for a clock is here instead, on its own deadline.
 	if cmd := m.InitDockComponents(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 
-	// Arm the screen saver's idle timer for a session nobody has typed in yet.
-	// Without this a tuios left alone from the moment it opened would never
-	// start one, because arming otherwise hangs off input.
 	if cmd := m.armScreensaver(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 
-	// Follow the config file, for every client that has a kind.
 	if cmd := m.startConfigWatch(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
-	// And the Omarchy theme, on a machine with Omarchy.
 	if cmd := m.startOmarchyFollow(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 
-	// Listen for state sync from other clients (daemon/SSH/web mode)
 	if m.StateSyncChan != nil {
 		cmds = append(cmds, listenStateSyncUntil(m.stopSignal(), m.StateSyncChan))
 	}
 
-	// Listen for client join/leave events (daemon/SSH/web mode)
 	if m.ClientEventChan != nil {
 		cmds = append(cmds, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan))
 	}
 
-	// The TML surfaces the daemon pushes, and what their inputs left to do.
-	// See tml.go.
 	cmds = append(cmds, m.listenForTML())
 
-	// The plugins' cells, which keep a slot of their own. See plugin_ui.go.
 	if m.pluginCellsIn != nil {
 		cmds = append(cmds, m.listenPluginCells())
 	}
 
-	// The session's mail so far, read once. Everything after this arrives as
-	// a push, so an idle client never asks again.
 	if cmd := m.agentMailLoad(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 
-	// Whether an agent integration is installed, which counts as having seen
-	// an agent for the chrome that waits for one. Read once.
 	if cmd := m.checkAgentIntegrationCmd(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 
-	// The Inbox: everything waiting for the person in every session, kept
-	// current by the daemon's attention events.
 	if cmd := m.startInboxWatch(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 
-	// The copies between machines, kept current by the daemon's transfer
-	// events. See transfers.go.
 	if cmd := m.startTransfersWatch(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 
-	// Listen for the daemon events that end this client.
 	if cmd := listenDaemonExitUntil(m.stopSignal(), m.daemonExitChan()); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 
-	// Listen for verbs the daemon routed here.
 	if m.RemoteCommandChan != nil {
 		cmds = append(cmds, listenRemoteCommandsUntil(m.stopSignal(), m.RemoteCommandChan))
 	}
 
-	// If this is a restored daemon session, enable callbacks after a delay
-	// This allows buffered PTY output to settle before callbacks start tracking changes
 	if m.IsDaemonSession && m.RestoredFromState {
 		cmds = append(cmds, EnableCallbacksAfterDelay())
 		cmds = append(cmds, TriggerAltScreenRedrawCmd())
 	}
 
-	// Keep the foreign-session window cache warm so the sidebar can expand other
-	// sessions. Kick once on attach, then repeat on an interval.
 	if m.DaemonClient != nil {
 		after, refresh := m.foreignSessionRefreshPlan()
 		if refresh {
@@ -537,8 +471,6 @@ func (m *OS) Init() tea.Cmd {
 		}
 		cmds = append(cmds, m.foreignSessionRefreshTick(after))
 
-		// One poll for the federated hosts. The answer says whether any are
-		// configured, and a daemon with none never gets asked again.
 		m.federationPolling = true
 		cmds = append(cmds, refreshFederationCmd())
 	}
@@ -546,14 +478,10 @@ func (m *OS) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// listenWindowExitsUntil waits for the next message on its channel and returns nil once
-// stop is closed, so a session that ends leaves no listener parked.
 func listenWindowExitsUntil(stop <-chan struct{}, exitChan chan string) tea.Cmd {
 	return listenOnce(stop, exitChan, func(windowID string) tea.Msg { return WindowExitMsg{WindowID: windowID} })
 }
 
-// listenStateSyncUntil waits for the next message on its channel and returns nil once
-// stop is closed, so a session that ends leaves no listener parked.
 func listenStateSyncUntil(stop <-chan struct{}, syncChan chan StateSyncMsg) tea.Cmd {
 	return listenOnce(stop, syncChan, func(sync StateSyncMsg) tea.Msg {
 		if hold := stateSyncTestHold(); hold > 0 {
@@ -563,13 +491,10 @@ func listenStateSyncUntil(stop <-chan struct{}, syncChan chan StateSyncMsg) tea.
 	})
 }
 
-// listenClientEventsUntil waits for the next message on its channel and returns nil once
-// stop is closed, so a session that ends leaves no listener parked.
 func listenClientEventsUntil(stop <-chan struct{}, eventChan chan ClientEvent) tea.Cmd {
 	return listenOnce(stop, eventChan, clientEventMsg)
 }
 
-// clientEventMsg maps a ClientEvent to the message the update loop handles.
 func clientEventMsg(event ClientEvent) tea.Msg {
 	switch event.Type {
 	case "joined":
@@ -612,8 +537,6 @@ func clientEventMsg(event ClientEvent) tea.Msg {
 	case "paste-refused":
 		return PasteRefusedMsg{Message: event.Reason}
 	case "agent-mail-mark":
-		// The payload carries the thread to mark in ReadIDs[0]; see
-		// jumpToNotifTarget.
 		var thread uint64
 		if len(event.Mail.ReadIDs) > 0 {
 			thread = event.Mail.ReadIDs[0]
@@ -628,50 +551,27 @@ func clientEventMsg(event ClientEvent) tea.Msg {
 	}
 }
 
-// tickNeedsWork reports whether this maintenance tick has anything to do. It is
-// the idle gate: false means no animation, interaction, script, notification,
-// dock stat, marquee, or settling title is live, and one cheap atomic pass over
-// the windows found no exited process, no unflushed output, and no stranded
-// manipulation. Everything it checks is an O(1) flag or an atomic load, so the
-// gate stays bounded no matter how many idle shells are open.
 func (m *OS) tickNeedsWork() bool {
 	return m.tickAtFrameRate() || len(m.Notifications) > 0 ||
 		len(m.pendingAgentAlerts) > 0 || m.programAlertHeld() || m.pointerMotionPending ||
 		m.cockpitHoldDue(time.Now()) || m.tickPolledWork()
 }
 
-// tickAtFrameRate reports whether something moves on every frame and the
-// maintenance tick has to run at the frame rate: an animation, a gesture, the
-// prefix, a script, a marquee, a tooltip on its way, or a rail title settling.
 func (m *OS) tickAtFrameRate() bool {
 	return m.InteractionMode || m.HasActiveAnimations() || m.PrefixActive || m.ScriptMode ||
 		m.SidebarMarqueeActive() || m.TooltipPending() || m.sidebarTitlePending
 }
 
-// tickPolledWork reports the work the idle gate finds by looking rather than
-// by being told: a stranded gesture, a zen crossing, a moved daemon listing,
-// and per window an exited process, unflushed output, a stranded
-// manipulation, or a title that has drifted from the rail.
 func (m *OS) tickPolledWork() bool {
 	if len(m.Animations) > 0 || m.Dragging || m.Resizing {
 		return true
 	}
-	// A gesture's announcement hold that nothing is holding any more. The sweep
-	// below is what ends it, and a hold the idle diet slept through is exactly
-	// the stranded hold this has to catch: one bool, then one comparison.
 	if m.staleAnnounceHold() {
 		return true
 	}
-	// Zen mode (mouse): the borders melt away once the pointer sits still past
-	// the reveal window, and come back the instant it moves again. The motion
-	// event forces its own frame, but the timeout crossing has no event, so a
-	// work tick that lands on the far side of the threshold must repaint.
 	if m.Settings.ZenMode == config.ZenModeMouse && m.zenHidden != m.zenBordersHidden(false) {
 		return true
 	}
-	// A moved daemon listing can carry a new title for a window this client
-	// stopped watching. The per-window drift check below cannot see that, because
-	// the local title it compares against is the one that froze. One atomic load.
 	if m.DaemonClient != nil && m.DaemonClient.CacheGen() != m.sidebarTitleGen {
 		return true
 	}
@@ -682,11 +582,6 @@ func (m *OS) tickPolledWork() bool {
 		if w.ProcessExited() || w.HasNewOutput.Load() || w.HasGraphicsOutput.Load() || w.IsBeingManipulated {
 			return true
 		}
-		// A title that has drifted from what the rail shows needs a work tick to
-		// adopt it. Keying the wake on HasNewOutput misses an isolated title-only
-		// change on the focused pane: the render consumes that flag before any
-		// tick observes it, so the rail would hold the stale title until the next
-		// output. The compare is a cheap string check per window.
 		if windowRowTitle(w) != m.railTitleShown(w) {
 			return true
 		}
@@ -694,14 +589,8 @@ func (m *OS) tickPolledWork() bool {
 	return false
 }
 
-// notifTickSlack is added to the time notifNextMove gives, so the tick lands
-// just past the moment the rule moves rather than a rounding short of it.
 const notifTickSlack = time.Millisecond
 
-// notifTickWait is how long the maintenance tick sleeps when a live message
-// is the only thing that moves on its own. It wakes when the message block
-// next draws differently (see notifNextMove), and never sooner than one frame.
-// A sticky message that nothing ages gives notifNoMove.
 func (m *OS) notifTickWait(now time.Time) time.Duration {
 	frame := m.framePeriod()
 	wait, ok := m.notifNextMove(now)
@@ -714,20 +603,14 @@ func (m *OS) notifTickWait(now time.Time) time.Duration {
 	return max(wait+notifTickSlack, frame)
 }
 
-// notifNoMove is the wait notifTickWait gives when no live message will ever
-// draw differently on its own: a sticky one.
 const notifNoMove = time.Duration(math.MaxInt64)
 
-// autoScrollTick schedules the next AutoScrollTickMsg, which keeps scrolling
-// while a drag is held outside the content area.
 func autoScrollTick() tea.Cmd {
 	return tea.Tick(50*time.Millisecond, func(t time.Time) tea.Msg {
 		return AutoScrollTickMsg{}
 	})
 }
 
-// listenPTYDataUntil waits for the next message on its channel and returns nil once
-// stop is closed, so a session that ends leaves no listener parked.
 func listenPTYDataUntil(stop <-chan struct{}, ch <-chan struct{}) tea.Cmd {
 	return func() tea.Msg {
 		select {
@@ -751,12 +634,6 @@ func EnableCallbacksAfterDelay() tea.Cmd {
 	})
 }
 
-// viewportResizeSettleDelay is how long the model waits for a terminal-resize
-// storm to stop before it does the expensive half of a resize.
-//
-// Long enough that a drag of the terminal's own edge, which delivers one size
-// per frame for as long as the pointer is down, never pays it mid-gesture;
-// short enough that letting go feels immediate.
 const viewportResizeSettleDelay = 120 * time.Millisecond
 
 // ViewportResizeSettledMsg says no new terminal size has arrived for
@@ -774,10 +651,6 @@ func viewportResizeSettleCmd(gen uint64) tea.Cmd {
 	})
 }
 
-// interactionSettleDelay is how long content polling stays parked after a drag
-// or resize ends. Shells redraw their prompt when the SIGWINCH lands, not when
-// the pointer comes up, so resuming the moment the button is released polls a
-// prompt that is still being written.
 const interactionSettleDelay = 150 * time.Millisecond
 
 // InteractionSettledMsg says that delay has passed and the interaction mode the
@@ -805,12 +678,6 @@ func TriggerAltScreenRedrawCmd() tea.Cmd {
 	}
 }
 
-// Session poll cadences. The client re-fetches the daemon's session list so a
-// non-attached session's window tree, and the titles of its own windows it no
-// longer subscribes to, stay current in the sidebar. The fast cadence runs while
-// a consumer (sidebar or switcher) can show the result; otherwise the slow
-// cadence is a fallback that keeps the cache from going stale without costing
-// anything at true idle, where a lone-session client refreshes nothing at all.
 const (
 	foreignSessionRefreshActive = 3 * time.Second
 	foreignSessionRefreshIdle   = 30 * time.Second
@@ -828,8 +695,6 @@ type ForeignSessionRefreshTickMsg struct {
 // A daemon that pushes it is not polled. See session/daemon_listing_push.go.
 type SessionsChangedMsg struct{}
 
-// foreignSessionRefreshTick arms the next listing poll under a new generation.
-// A daemon that pushes listing changes is not polled, so nothing is armed.
 func (m *OS) foreignSessionRefreshTick(after time.Duration) tea.Cmd {
 	m.foreignTickGen++
 	if m.DaemonClient != nil {
@@ -841,11 +706,6 @@ func (m *OS) foreignSessionRefreshTick(after time.Duration) tea.Cmd {
 	})
 }
 
-// foreignSessionReplanCmd is what opening the rail returns: one refresh now,
-// and the poll re-armed at the cadence the open rail wants. The idle plan
-// armed at attach, thirty seconds and no refresh for a lone session, would
-// otherwise keep running until it fired, and the rail would label sessions as
-// of half a minute ago. Nil when nothing asked for a re-plan.
 func (m *OS) foreignSessionReplanCmd() tea.Cmd {
 	if !m.foreignSessionReplan {
 		return nil
@@ -861,13 +721,6 @@ func (m *OS) foreignSessionReplanCmd() tea.Cmd {
 	return tea.Batch(refreshForeignSessionsCmd(m.DaemonClient), m.foreignSessionRefreshTick(after))
 }
 
-// foreignSessionRefreshPlan decides whether the next poll should hit the daemon
-// and how long to wait before re-arming. A consumer is on screen when the
-// sidebar reserves columns or the go-to picker is open;
-// poll fast then, even for a lone session, because the listing is where the
-// rail reads the titles of windows this client has unsubscribed from. Off screen, fall back to a slow
-// cache-warming poll while foreign sessions exist, and do nothing at all for a
-// lone session, which is what keeps a hidden sidebar free at idle.
 func (m *OS) foreignSessionRefreshPlan() (after time.Duration, refresh bool) {
 	if m.DaemonClient == nil {
 		return foreignSessionRefreshIdle, false
@@ -881,15 +734,6 @@ func (m *OS) foreignSessionRefreshPlan() (after time.Duration, refresh bool) {
 	return foreignSessionRefreshIdle, true
 }
 
-// refreshForeignSessionsCmd refreshes the cached session list off the UI
-// goroutine so BuildSessionTree, which must never block, can read foreign
-// sessions' windows from the cache. A blocking refresh on the UI goroutine once
-// froze the client while the daemon was busy; a Cmd runs in its own goroutine,
-// and TryRefreshSessionList drops the request if one is already in flight.
-//
-// The rail draws other sessions from that cache, so a refresh that changed it
-// answers with foreignSessionsChangedMsg, which draws a frame. A refresh that
-// changed nothing answers with nothing and costs no frame.
 func refreshForeignSessionsCmd(client *session.TUIClient) tea.Cmd {
 	if client == nil {
 		return nil
@@ -904,8 +748,6 @@ func refreshForeignSessionsCmd(client *session.TUIClient) tea.Cmd {
 	}
 }
 
-// foreignSessionsChangedMsg says a session-list refresh changed the cached
-// listing: another session's windows, titles or agent rows moved.
 type foreignSessionsChangedMsg struct{}
 
 // Update handles all incoming messages and updates the application state.
@@ -918,27 +760,18 @@ type foreignSessionsChangedMsg struct{}
 // one somebody writes. One comparison, once, is the whole cost, and it answers
 // nil without allocating for a client whose rail has no files section.
 func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Nest mode does not outlive a window mode a message left the client in.
 	defer m.settleNest()
-	// With window mode off, a client left in window mode goes back to the
-	// pane. Deferred after settleNest, so it runs first and nest mode sees
-	// the mode it leaves.
 	defer m.settleWindowModeOff()
-	// The frame the last View composed is stored now: write it. Nothing
-	// else changes, so the View after this message serves the same frame.
 	if _, ok := msg.(flushMsg); ok {
 		m.handleFlush()
 		m.renderSkipped = true
 		return m, m.frameIdleTickCmd()
 	}
-	// A test's request for the counters changes nothing either.
 	if _, ok := msg.(tickStatsDumpMsg); ok {
 		m.DumpTickStats()
 		m.renderSkipped = true
 		return m, nil
 	}
-	// The maintenance tick, armed for the next job that is due. One from an
-	// arming a later one replaced is dropped.
 	if dt, ok := msg.(deadlineTickMsg); ok {
 		if dt.gen != m.tick.gen {
 			m.renderSkipped = true
@@ -948,10 +781,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		msg = TickerMsg(dt.at)
 	}
 	model, cmd := m.update(msg)
-	// The pane of a person step of the add sheet may have ended.
 	m.machineSheetAfter()
-	// Whatever this message did may have moved the box of quick look's picture,
-	// or the position in its text.
 	if qc := m.quickLookPicture(); qc != nil {
 		cmd = tea.Batch(cmd, qc)
 	}
@@ -967,19 +797,13 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if qc := m.quickLookFilmRead(); qc != nil {
 		cmd = tea.Batch(cmd, qc)
 	}
-	// Input may switch the center workspace, edit an edge's session assignment,
-	// or finish a rail resize. Reconcile after it has changed the model.
 	switch msg.(type) {
 	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseReleaseMsg, tea.WindowSizeMsg:
 		cmd = tea.Batch(cmd, m.refreshSidebarSessions())
 	}
-	// A pane state that changed is reported to the host terminal, batched.
-	// See host_program_status.go.
 	if hc := m.hostProgramStatusAfter(); hc != nil {
 		cmd = tea.Batch(cmd, hc)
 	}
-	// The drag and drop bridge follows its switches, and what it has for the
-	// terminal goes out, whichever message put it there. See dnd_host.go.
 	m.dndHostSync()
 	if hc := m.dndHostFlush(); hc != nil {
 		cmd = tea.Batch(cmd, hc)
@@ -987,22 +811,14 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if dc := m.dndDropDeadline(); dc != nil {
 		cmd = tea.Batch(cmd, dc)
 	}
-	// The View after this message may compose a frame, or move the cursor
-	// for input; flushCmd brings the write back once that frame is stored.
 	if m.frameRate.program != nil && (!m.renderSkipped || isPersonInput(msg) || m.flushWhileIdle(msg)) {
 		cmd = tea.Batch(cmd, flushCmd)
 	}
 	return model, cmd
 }
 
-// update is Update's body for every message but flushMsg.
 func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.applyScrollAnchors()
-	// The origin of a key is on its message. A RemoteKeyMsg is a key that
-	// send-keys typed, so it is never the person's, whatever another chain
-	// did to the flag. A key or click from the person's own terminal can
-	// arrive between two keys of a chain, and it is the person's: it must not
-	// be refused as one send-keys typed.
 	switch {
 	case isRemoteKey(msg):
 		prev := m.ProcessingRemoteKeys
@@ -1012,8 +828,6 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ProcessingRemoteKeys = false
 		defer func() { m.ProcessingRemoteKeys = true }()
 	}
-	// A focus move a command makes is marked on the push that carries it,
-	// so the daemon does not read it as the person turning to the pane.
 	if isPersonInput(msg) {
 		m.commandFocusMoved = false
 	} else if _, routed := msg.(RemoteCommandMsg); routed || m.ProcessingRemoteKeys {
@@ -1030,9 +844,6 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.quietFrame = false
 	m.reportActivity(msg)
 	m.rendererRestarted(msg)
-	// Input wakes the frame ticker before it is handled, so the frame it
-	// makes does not wait on a slow tick. So does a raw write, which Bubble
-	// Tea flushes on the same ticker.
 	if isPersonInput(msg) {
 		m.noteFrame()
 		m.noteAnsweredInput(msg)
@@ -1045,29 +856,15 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = tea.Batch(cmd, noteCmd, pixelCmd)
 	}
 	m.msgClock = time.Time{}
-	// The one place a moved chrome is noticed. See settleChrome.
 	m.settleChrome()
-	// Focus reports for every path that moved the focus without FocusWindow.
 	m.reportFocusChange()
 	m.reconcilePrevFocus()
-	// A session switch does not land in FocusWindow. By now a switch-then-focus
-	// route has focused its pane, so only the pane left in front is marked.
 	m.markSwitchSeen()
 	m.noteGotoPlace()
 	m.recordScrollAnchors()
-	// Asked again after the handler, not only before it, because the handler
-	// itself is one of the things that lengthens a pane's history: a workspace
-	// switch primes every pane it shows from the daemon's copy. Deriving only
-	// on the next message would draw one frame with the viewport already slid.
 	m.applyScrollAnchors()
 	sync := m.FilesSyncCmd()
-	// The git section asks on the same beat and for the same reason: the focused
-	// pane's directory is what both are about, and every handler that can move
-	// it is covered by one comparison here rather than by a hook in each.
 	gitSync := m.GitSyncCmd()
-	// The opposite edge may be the only rail that names files or git. Its
-	// presentation state is scoped to that edge; the directory and repository
-	// readings themselves are shared because both follow the same pane.
 	var secondFiles, secondGit tea.Cmd
 	if m.secondarySidebarWidth() > 0 {
 		m.withSecondaryRail(func() bool {
@@ -1075,70 +872,35 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return true
 		})
 	}
-	// A live meter toggle changes which dock components need to poll.
 	dockSync := m.DockMetersSyncCmd()
-	// The rail's custom section on the same beat: the focused pane and the
-	// rail's size are what its command is told, and the layout is what says
-	// whether it runs at all.
 	railSync := m.RailCustomSyncCmd()
-	// The rail pane on the same beat: the layout, the rail's size and the
-	// session's windows are what decide whether it is asked for, sized,
-	// streamed or left alone. See rail_pane.go.
 	if pane := m.RailPaneSyncCmd(); pane != nil {
 		railSync = tea.Batch(railSync, pane)
 	}
-	// Same shape as the files sync: the rail opening is one of the fifty
-	// handlers, and the poll it re-plans is armed here rather than in each of
-	// the five places that can open it.
 	replan := m.foreignSessionReplanCmd()
-	// A load a handler started gets its loading frame armed here, for the
-	// same reason: one check rather than a timer in each place a load starts.
 	loading := m.loadingFrameCmd()
-	// A finished subagent's row that subagent_hide_finished hides gets its
-	// frame armed here on the same beat.
 	if hide := m.subagentHideCmd(); hide != nil {
 		loading = tea.Batch(loading, hide)
 	}
-	// The motion clock: armed here, after whatever the message changed, so an
-	// overlay opened by any of the handlers starts its fade on the frame it
-	// first appears in. See motion.go.
 	motion := m.motionCmd()
-	// The Agents tab's report and the integration notices, on the same beat:
-	// the settings page opening and a pane starting an agent are both things
-	// any handler can do. See settings_agents.go.
 	agents := m.agentsSyncCmd()
-	// A reply editor the rows moved the cursor away from closes, keeping
-	// its draft.
 	m.CockpitReplyCheck()
-	// Copy mode over a thread the view no longer shows ends.
 	m.CockpitCopyCheck()
-	// A one-key menu a newer layer covers closes. See cockpit_layers.go.
 	if m.ShowInbox || m.Inbox.ck.lastTop != CockpitBase {
 		m.CockpitLayerCheck()
 	}
-	// Checkpoints a frame of the agents view drew for an older state: a
-	// turn that ended with no input is read now. A flag check when not.
 	if side := m.CockpitSideWanted(); side != nil {
 		agents = tea.Batch(agents, side)
 	}
-	// The selected agent's artifacts, read once and again when a surface
-	// opens or closes.
 	if arts := m.CockpitArtifactsWanted(); arts != nil {
 		agents = tea.Batch(agents, arts)
 	}
-	// A verdict the open fan comparison does not show yet is read now. A
-	// nil check when the comparison is closed.
 	if cmp := m.cockpitCompareStale(); cmp != nil {
 		agents = tea.Batch(agents, cmp)
 	}
-	// The restart dialog's plan, on the same beat: the palette, a menu, the
-	// settings and the notice can each open the dialog. See daemon_restart.go.
 	if plan := m.restartPlanCmd(); plan != nil {
 		agents = tea.Batch(agents, plan)
 	}
-	// The maintenance tick last, after every sync above has said what it asked
-	// for: it is armed for the earliest job that is due, and not at all when
-	// none is. See nextWake.
 	tick := m.tickWakeCmd()
 	if sync == nil && replan == nil && gitSync == nil && secondFiles == nil && secondGit == nil && dockSync == nil && railSync == nil && loading == nil && motion == nil && agents == nil && tick == nil {
 		return model, cmd
@@ -1146,12 +908,7 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return model, tea.Batch(cmd, sync, replan, gitSync, secondFiles, secondGit, dockSync, railSync, loading, motion, agents, tick)
 }
 
-// handleMsg is Update's body: one switch over every message the client can see.
 func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
-	// The crash overlay owns the keyboard while it is up, and it is answered
-	// here rather than in internal/input because everything the input package
-	// consults to route a key is model state, and the model is what has just
-	// failed. Three keys, read before any of it. See crash_overlay.go.
 	if m.crash != nil {
 		if key, ok := msg.(tea.KeyPressMsg); ok {
 			if c, consumed := m.handleCrashKey(key); consumed {
@@ -1161,18 +918,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 	}
 
-	// Per-event panic isolation. A panic in a single message handler (reachable
-	// from malformed guest input, a bad tape/state-sync payload, or a rarely-hit
-	// UI branch) must not tear down every window: bubbletea only recovers at the
-	// top of Program.Run, where it restores the terminal and exits. Recover here,
-	// put the crash overlay up, and return the model unchanged so the other
-	// windows survive the bad event. Named returns let the deferred recover set
-	// them.
-	//
-	// Logging alone is not enough. LogError draws nothing on its own (the log
-	// ring is behind leader D l), so without the overlay a user who hit an
-	// impossible state would see only a frame that did not update, and a bug
-	// nobody can see is a bug nobody reports.
 	defer func() {
 		if r := recover(); r != nil {
 			stack := debug.Stack()
@@ -1183,30 +928,22 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 	}()
 
-	// Any non-tick message invalidates the render cache
 	if _, isTick := msg.(TickerMsg); !isTick {
 		m.renderSkipped = false
 	}
 
-	// The host terminal's answers about its own colours. See host_colors.go.
 	if c, ok := m.handleHostColorMsg(msg); ok {
 		return m, c
 	}
-	// The host's XTVERSION answer, after the startup probe. See
-	// cell_bound_images.go.
 	if m.handleHostVersion(msg) {
 		return m, nil
 	}
-	// An SSH client's DA1 answer. See sixel_probe.go.
 	if m.handleSixelProbe(msg) {
 		return m, nil
 	}
-	// The terminal's OSC 7501 answer, and the report batch timer. See
-	// host_program_status.go.
 	if c, ok := m.handleHostProgramStatusMsg(msg); ok {
 		return m, c
 	}
-	// The terminal's drag and drop messages. See dnd_host.go.
 	if m.handleHostDnD(msg) {
 		return m, nil
 	}
@@ -1218,22 +955,8 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case sidebarSessionEvent:
 		return m, m.handleSidebarSessionEvent(msg)
 	case PTYDataMsg:
-		// PTY output arrived: mark dirty terminals and re-render immediately.
-		// This is the primary render trigger, replacing tick-driven rendering.
-		// Graphics refresh (kitty/sixel) happens in GetCanvas during View().
-		//
-		// Unless a frame went out less than a frame period ago: then the
-		// output waits for the frame at the end of the period, and the panes
-		// keep their new-output flags until it comes. See paneFrameWait.
 		listen := listenPTYDataUntil(m.stopSignal(), m.PTYDataChan)
 		open, changed, due := m.takePaneOutput(time.Now())
-		// Nothing marked means nothing to draw: the output was on a hidden
-		// pane, or it was kitty graphics the passthrough already wrote.
-		//
-		// Except during a drag or a resize, when MarkTerminalsWithNewContent
-		// marks nothing on purpose. The frames the output drew then are the
-		// ones that show the gesture between motion events, as they did
-		// before graphics output stopped composing frames, so they stay.
 		gesture := m.InteractionMode || m.Dragging || m.Resizing
 		m.renderSkipped = !changed && !(open && gesture)
 		if due != nil {
@@ -1256,9 +979,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, due
 
 	case GitStateMsg:
-		// The reading the git section asked for. It is applied rather than
-		// acted on: the section draws whatever the last answer was, and a
-		// reading for a directory the focus has already left is dropped inside.
 		m.ApplyGitState(msg)
 		return m, nil
 
@@ -1266,8 +986,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, m.HandlePendingCopy(msg.Seq)
 
 	case imageProbeMsg:
-		// What the clipboard held when an image paste looked. See
-		// image_paste.go.
 		return m, m.applyImageProbe(msg)
 
 	case ImagePastedMsg:
@@ -1314,19 +1032,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case replyPreviewMsg:
 		m.applyReplyPreview(msg)
 		if m.mermaidCellsWait {
-			// A Mermaid picture drawn as glyphs waits for them: its rows
-			// are laid out again.
 			m.mermaidCellsWait = false
 			m.blockView++
 			m.blocksChanged()
 		}
-		// A picture of the Markdown in quick look may be one of them.
 		if ql := &m.quickLook; ql.open && len(ql.mdImgs) > 0 {
 			ql.mdGen++
 		}
 		if m.kbPreviewShown() {
-			// The card preview draws pictures too, and its frame is kept
-			// until the board changes: a picture that came in is a change.
 			m.cockpitTouch()
 		}
 		return m, nil
@@ -1404,8 +1117,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case PasteTimeoutMsg:
-		// The terminal never answered the clipboard query. Say so, because the
-		// alternative is a paste key that looks broken. See clipboard_paste.go.
 		if m.pasteTimedOut(msg) {
 			m.ShowNotification("The terminal did not send the clipboard. Use your terminal's paste key.",
 				"warning", m.Settings.NotificationDuration)
@@ -1413,14 +1124,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case AutoScrollTickMsg:
-		// A drag in the agents view's thread held past its edge.
 		if m.ShowInbox && m.cockpitAutoScroll() {
 			return m, autoScrollTick()
 		}
 		if !m.AutoScrollActive || m.AutoScrollDir == 0 {
 			return m, nil
 		}
-		// Find the target window for auto-scrolling
 		var w *terminal.Window
 		if m.DraggedWindowIndex >= 0 && m.DraggedWindowIndex < len(m.Windows) {
 			w = m.Windows[m.DraggedWindowIndex]
@@ -1432,7 +1141,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			cm := w.CopyMode
 			for range 2 {
 				if m.AutoScrollDir < 0 {
-					// Scroll up: use same logic as moveUp (keep cursor mid-screen)
 					midPoint := w.Height / 2
 					if cm.CursorY > midPoint {
 						cm.CursorY--
@@ -1443,7 +1151,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 						cm.CursorY--
 					}
 				} else {
-					// Scroll down: use same logic as moveDown
 					midPoint := w.Height / 2
 					if cm.CursorY < midPoint {
 						cm.CursorY++
@@ -1455,7 +1162,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 					}
 				}
 			}
-			// Update visual selection end
 			if cm.State.InVisual() {
 				scrollbackLen := 0
 				if w.Terminal != nil {
@@ -1472,20 +1178,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, autoScrollTick()
 
 	case screensaverArmMsg:
-		// The deferred idle timer fired. It is not proof of idleness, so the
-		// handler re-checks the elapsed time and re-arms for the remainder.
-		// Nothing renders here unless the saver actually starts.
 		return m, m.handleScreensaverArm()
 
 	case effectPreviewFrameMsg:
-		// The effect picker's preview asking for its next frame. Like the saver
-		// it drives itself, so the maintenance tick never reads picker state and
-		// the idle path is the same whether a picker has ever been opened.
 		return m, m.handleEffectPreviewFrame(msg)
 
 	case AgentReportMsg:
-		// An agent in a pane reporting its state in process, with no daemon to
-		// send set-agent-state to. See agent_report.go.
 		if err := m.ReportAgentState(AgentReport(msg)); err != nil {
 			m.LogWarn("agent report: %v", err)
 		}
@@ -1499,7 +1197,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, cmd
 
 	case learnQuitMsg:
-		// A quit in Learn mode, which FilterLearnMode caught. See learn_mode.go.
 		m.handleLearnQuit()
 		return m, nil
 
@@ -1511,133 +1208,59 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case TickerMsg:
-		// Maintenance tick: animations, dock stats, script playback, process cleanup.
-		// Does NOT trigger rendering unless animations/interactions are active.
 		m.tickStats.Ticks++
 		m.idleFrameTicker(time.Time(msg))
 		m.releaseEmulatorScratch(time.Time(msg))
 
-		// Idle diet: when nothing periodic needs attention the per-tick scans have
-		// no work, so skip them and hold the frame. Process exits and PTY output
-		// wake the loop through their own channels; the gate itself does one
-		// cheap atomic pass to catch a pending exit, unflushed output, or a
-		// stranded manipulation before deciding to sleep. The tick is not
-		// re-armed here: Update arms the next one for the next job that is due,
-		// and none at all when nothing is (see nextWake).
 		if !m.tickNeedsWork() {
 			m.renderSkipped = true
 			return m, nil
 		}
 		m.tickStats.Work++
 
-		// An agent row held in its group a moment moves now.
 		m.cockpitSettleHold(time.Time(msg))
 
-		// Agent alerts whose settle window has closed. Done before the window
-		// sweep below so an alert about a pane that exited this tick is dropped
-		// by its own re-validation rather than by a nil window.
 		m.flushDueAgentAlerts(time.Time(msg))
 		m.flushProgramAlerts(time.Time(msg))
 
-		// This ensures windows close even if the exit channel message was missed
 		for i := len(m.Windows) - 1; i >= 0; i-- {
 			if m.Windows[i].ProcessExited() {
 				m.DeleteWindow(i)
 			}
 		}
 
-		// Update animations. Whether any were running is captured BEFORE the
-		// update, because the tick that finishes the last one is the tick that
-		// matters most: Animation.Update leaves the VT alone while a transition
-		// is in flight and only resizes it on the final tick, so that tick is
-		// where the panes first render at the size they actually settled at. Ask
-		// HasActiveAnimations afterwards and it answers "none", the frame-skip
-		// below decides nothing needs drawing, and View serves the previous
-		// frame: the last thing the user sees is the second-to-last animation
-		// step, with every pane still drawn to its pre-animation size. Nothing
-		// dirties the model after that, so the wrong frame is final.
 		hadAnimations := m.HasActiveAnimations()
 		m.UpdateAnimations()
 
 		m.endGestureWithoutButton()
 
-		// And a gesture's announcement hold cannot outlive the button either.
 		m.releaseStaleAnnounceHold()
 
-		// Retire interaction state no gesture is holding any more. A mouse
-		// release is the only thing that clears IsBeingManipulated, and it is
-		// lost whenever the pointer leaves the surface the events come from
-		// mid-drag; the pane it was set on then renders its cached frame
-		// forever.
 		m.clearStaleManipulation()
 
-		// Leave script mode once a finished script's completion indicator has
-		// been shown. This re-arms Ctrl+P (the palette binding), which is
-		// intercepted for script pause/resume while ScriptMode is set. It also
-		// takes the indicator off screen, so the tick that does it has to draw:
-		// nothing else is guaranteed to follow it.
 		leftScriptMode := m.maybeExitFinishedScript()
 
-		// Step tape playback. A step that holds (a Sleep, a wait, a pane not
-		// there yet) ends only the step: the rest of the tick still runs, so a
-		// tape that sleeps still draws the prefix menu, a message's burn and
-		// the rest of what the tick draws.
 		var cmds []tea.Cmd
 		if cmd := m.stepScript(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 
-		// Tick handles animations, interactions, whichkey, dock stats, and scripts.
-		// PTY content changes are handled by PTYDataMsg (event-driven).
 		hasAnimations := m.HasActiveAnimations()
 
-		// Debounce rail titles: a burst of title changes adopts at most one per
-		// interval. railTitleChanged means the rail must redraw; sidebarTitlePending
-		// keeps the tick running until the final title settles.
 		railTitleChanged := m.updateRailTitles()
 
-		// Messages expire here, on the tick, and not inside render composition.
-		//
-		// Retiring them in the renderer would mean expiry only happens on a
-		// frame already being drawn for some other reason. Once a session goes
-		// quiet the last frame is served from the render cache, so the expired
-		// toast would stay painted on it for as long as nothing else happened
-		// (seventeen seconds in the recorded case).
-		//
-		// The tick that retires something draws one more frame so the message
-		// actually leaves the screen, which is what notifExpired carries. A live
-		// message wakes the tick when the hairline under it next loses a cell
-		// (notifNextMove), and a tick composes for it only when the burn has
-		// moved a cell since the frame that last drew it (notifBurnMoved).
 		notifExpired := m.CleanupNotifications()
 
-		// The next tick is armed by nextWake after this message: at the frame
-		// rate while something moves, at the next cell of a burning message,
-		// and not at all when nothing is due.
-
-		// Sync background windows that have accumulated output.
-		// This catches windows whose HasNewOutput flag was preserved by
-		// the throttling logic, ensuring they eventually render.
 		_, hasBackgroundChanges, frameDue := m.takePaneOutput(time.Time(msg))
 		if frameDue != nil {
 			cmds = append(cmds, frameDue)
 		}
 
-		// Zen mode (mouse): the borders melt once the pointer sits still past
-		// the reveal window. tickNeedsWork already wakes this tick for the
-		// crossing, but needsRender below has no zen term, so without this the
-		// frame would be marked skippable and View() would serve the cached
-		// frame with the borders still painted: zenHidden would never converge
-		// and the tick would keep doing work at 10fps forever with nothing
-		// visible to show for it. Marking the affected windows dirty also
-		// rebuilds their CachedLayer, which still holds the bordered render
-		// and is reused until the window is dirty.
 		zenCrossed := m.Settings.ZenMode == config.ZenModeMouse && m.zenHidden != m.zenBordersHidden(false)
 		if zenCrossed {
 			m.markZenDirty()
 		}
 
-		// Render on tick if something periodic needs visual updates OR background windows changed
 		needsRender := hadAnimations || hasAnimations || m.InteractionMode || m.PrefixActive ||
 			hasBackgroundChanges || m.notifBurnMoved() || notifExpired || leftScriptMode ||
 			m.SidebarMarqueeActive() || m.TooltipPending() || railTitleChanged || zenCrossed ||
@@ -1646,46 +1269,25 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.renderSkipped = true
 			return m, tea.Batch(cmds...)
 		}
-		// A frame for the message block alone is the burn moving one cell, or
-		// a message leaving. It goes out through kickFlush like any other,
-		// and it must not wake the frame ticker to the frame rate for the
-		// next idleTickerAfter: the next such frame is a whole cell away.
 		m.quietFrame = !(hadAnimations || hasAnimations || m.InteractionMode || m.PrefixActive ||
 			hasBackgroundChanges || leftScriptMode || m.SidebarMarqueeActive() || m.TooltipPending() ||
 			railTitleChanged || zenCrossed || m.pointerMotionPending)
 		m.renderSkipped = false
 		m.pointerMotionPending = false
 		m.tickStats.Render++
-		// This tick is about to draw, so it counts against the interaction frame
-		// budget too. Without this a motion event landing just after a tick
-		// would draw again immediately and the budget would not hold.
 		if m.InteractionMode {
 			m.lastInteractionRender = time.Now()
 		}
-		// Graphics refresh (kitty/sixel) happens in GetCanvas during View().
 
 		return m, tea.Batch(cmds...)
 
 	case dockComponentMsg:
-		// A component said something. The frame is drawn only if what it said
-		// changed the bar: an interval component polling a value that has not
-		// moved costs an execution and no render at all, which is the whole
-		// difference between this and the sixty-frames-a-second clock it
-		// replaced.
-		//
-		// An update from an engine a reload has replaced is dropped and its
-		// listener is not re-armed: the current engine has its own.
 		if msg.From != m.dockEngine {
 			m.renderSkipped = true
 			return m, nil
 		}
 		changed := m.handleDockComponent(msg)
 		m.renderSkipped = !changed
-		// The frame for a component alone (the clock's next second, a
-		// meter's new reading) goes out through kickFlush like any other. It
-		// must not wake the frame ticker to the frame rate for the next
-		// idleTickerAfter: the next such frame is a second or more away, and
-		// a clock with seconds woke the ticker about 35 times for each one.
 		m.quietFrame = changed
 		return m, ListenForDockComponents(m.dockEngine)
 
@@ -1712,18 +1314,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.ShowNotification("Switch failed: "+err.Error(), "error", m.Settings.NotificationDuration*2)
 			return m, cmd
 		}
-		// A session the daemon just built carries AutoTiling false, and the switch
-		// has already stamped that onto the client. [startup] applies to it
-		// through the same rule every switch uses: a session nobody arranged
-		// takes the config, one somebody laid out keeps its layout.
 		m.applyStartupToUnarranged()
-		// The rail relays out around a session that did not exist last frame;
-		// follow it by name so the cursor lands on it rather than on whatever
-		// took its index.
 		m.sidebarFollowSession = msg.Name
 		if msg.Global {
-			// A global session is created empty, so this is the first pane in
-			// it and the picker is the point.
 			m.NewWindowHere()
 		}
 		return m, cmd
@@ -1731,29 +1324,19 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case SessionKilledMsg:
 		cmd := listenSessionKillUntil(m.stopSignal(), m.sessionKillChan())
 		if msg.Err != nil {
-			// A kill the worktree-deletion note asked for failed: the failed
-			// kill announces itself, so the next kill's note must not be
-			// silenced on its behalf.
 			m.pendingWorktreeKill = false
 			m.ShowNotification("Kill failed: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
 			return m, cmd
 		}
-		// A kill asked for by the worktree-deletion note stays quiet: the note
-		// on screen is the one record of where the stashed changes went, and
-		// this one would replace it with less news.
 		if m.pendingWorktreeKill {
 			m.pendingWorktreeKill = false
 		} else {
 			m.ShowNotification("Killed session: "+msg.Label, "success", m.Settings.NotificationDuration)
 		}
-		// Go-to lists a snapshot, so the row of a session that no longer
-		// exists would sit there until the picker was reopened.
 		m.refreshGotoRows()
 		return m, cmd
 
 	case ClipboardSetMsg:
-		// A pane set the clipboard. Whether the host clipboard gets it is
-		// appearance.selection.osc52_write's decision. See clipboard_osc52.go.
 		return m, tea.Batch(
 			m.paneClipboardWrite(msg),
 			listenClipboardSetUntil(m.stopSignal(), m.PendingClipboardSet),
@@ -1783,9 +1366,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case NotificationMsg:
-		// Guest desktop notification or bell delivered off the PTY goroutine;
-		// apply it here on the Bubble Tea goroutine where notification state is
-		// owned, and where the pane it came from can be named safely.
 		if msg.Bell {
 			if msg.WindowID != "" {
 				m.noteWindowBell(msg.WindowID)
@@ -1803,16 +1383,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, listenNotificationUntil(m.stopSignal(), m.PendingNotification)
 
 	case CwdChangedMsg:
-		// OSC 7 working-directory change delivered off the PTY goroutine. Filter
-		// to the focused window and schedule a debounced project-tape check. This
-		// never executes anything; it only decides whether to look.
 		cmd := m.onCwdChange(msg)
 		return m, tea.Batch(cmd, listenCwdChangeUntil(m.stopSignal(), m.PendingCwdChange))
 
 	case fileDirChangedMsg:
-		// The listed folder, or a folder open in the tree, changed on disk.
-		// See sidebar_files_watch.go. A change that names nothing is the
-		// root's: a daemon push and an older watch say only that.
 		root, dirs := m.fileWatch.takeDirty()
 		cmd := m.refreshChangedTree(dirs, root)
 		if root || len(dirs) == 0 {
@@ -1820,10 +1394,8 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		}
 		return m, tea.Batch(cmd, listenForFileChange(m.stopSignal(), m.fileWatchChan(), msg.at))
 	case LearnFilesChangedMsg:
-		// A file of the browser build's fake shell changed. See learn_mode.go.
 		return m, m.learnFilesChanged()
 	case fileTreeListMsg:
-		// A folder open in the tree, read on its own goroutine.
 		cmd := m.HandleFileTreeList(msg)
 		m.renderSkipped = false
 		return m, cmd
@@ -1831,27 +1403,20 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.onNvimNavigation(msg)
 		return m, listenNvimNavigationUntil(m.stopSignal(), m.PendingNvimNavigation)
 	case dndDropTimeoutMsg:
-		// A drop that has not moved for a while ends. See dnd_drag.go.
 		live := m.dndDrag
 		cmd := m.onDnDDropTimeout(msg)
 		m.renderSkipped = m.dndDrag == live
 		return m, cmd
 	case dndHostWrittenMsg:
-		// The last write to the terminal for the bridge is done; Update's
-		// tail sends the next. See dnd_host.go.
 		m.dndHost.writing = false
 		m.renderSkipped = true
 		return m, nil
 	case dndWakeMsg:
-		// A pane's program sent drag and drop messages. See dnd.go.
 		m.handleDnDWake()
 		m.renderSkipped = false
 		return m, listenDnDUntil(m.stopSignal(), m.ensureDnDInbox())
 
 	case fileListMsg:
-		// A directory read that finished on its own goroutine. The handler drops
-		// a reply whose generation has been superseded, so a slow mount cannot
-		// overwrite the listing the user is looking at now.
 		m.HandleFileList(msg)
 		m.renderSkipped = false
 		return m, nil
@@ -1872,9 +1437,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, cmd
 
 	case fileOpMsg:
-		// A create, rename, delete or paste that finished on its own goroutine.
-		// The handler says what happened and asks for the listing again through
-		// the generation-stamped read, rather than editing the rows in memory.
 		cmd := m.HandleFileOp(msg)
 		m.renderSkipped = false
 		return m, cmd
@@ -1887,22 +1449,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applySpawnStarted(msg)
 		return m, nil
 	case worktreeCreatedMsg:
-		// A worktree create that finished on its own goroutine, possibly after a
-		// clone's worth of minutes. The handler attaches to the session it made,
-		// or says what failed; both touch the model, which is why they run here.
 		return m, m.handleWorktreeCreated(msg)
 
 	case worktreeRemovedMsg:
-		// A worktree removal that finished on its own goroutine. The handler
-		// says what became of it and quits this client when the deleted
-		// session was the one it was attached to; both touch the model, which
-		// is why they run here.
 		return m, m.handleWorktreeRemoved(msg)
 
 	case worktreeTollMsg:
-		// The delete row's toll, fetched after the dialog opened. It only
-		// lands when the same dialog is still open on the same session: one
-		// closed and reopened on another session gets its own fetch.
 		if m.ShowSessionClose && m.SessionCloseWindow == "" && m.SessionCloseWorkspace == 0 &&
 			m.sessionCloseTarget() == msg.Name {
 			t := msg.Toll
@@ -1911,13 +1463,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case worktreeRemoveQuitMsg:
-		// The dwell after an attached worktree deletion ran out. The user has
-		// had the whole dwell to switch to another session, so the quit follows
-		// the deleted session by name: still here means QuitSession — the one
-		// quit path, with QuitRequested making the daemon's session-ended
-		// announcement read as the deliberate exit it is — and gone from here
-		// means the ordinary other-session kill, which cannot touch what this
-		// client is in now.
 		if m.SessionName == msg.Name {
 			m.QuitSession()
 			return m, m.QuitCmd()
@@ -1926,7 +1471,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case tapeDebounceMsg:
-		// The focused cwd held still long enough; evaluate it for a project tape.
 		m.handleTapeDebounce(msg.gen)
 		return m, nil
 
@@ -1940,16 +1484,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				break
 			}
 		}
-		// Ensure we're in window management mode if no windows remain
 		if len(m.Windows) == 0 {
 			m.ChooseMode(WindowManagementMode, ModeCauseNoPane)
 		}
 		return m, listenWindowExitsUntil(m.stopSignal(), m.WindowExitChan)
 
 	case EnableCallbacksMsg:
-		// Re-enable VT emulator callbacks after buffered output has settled
-		// This prevents the race condition where buffered PTY output overwrites
-		// the restored IsAltScreen state
 		m.LogInfo("[CALLBACKS] Re-enabling callbacks for all windows")
 		for _, w := range m.Windows {
 			if w.DaemonMode {
@@ -1961,19 +1501,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case ForeignSessionRefreshTickMsg:
 		if msg.Gen != m.foreignTickGen {
-			// A timer a re-plan already replaced. Letting it re-arm would run
-			// two poll loops from here on.
 			return m, nil
 		}
-		// The listing this tick refreshes is also the only thing that knows which
-		// windows still exist anywhere, so the client's window-keyed state is
-		// pruned here, against the listing the last refresh left behind.
 		m.pruneWindowKeyedState()
-		// Nothing on screen changed: the pruned state belongs to windows that
-		// no longer exist, and a refresh that changes the listing answers with
-		// foreignSessionsChangedMsg, which draws. Composing a frame for the
-		// tick itself cost a whole frame every three seconds at idle, with the
-		// sidebar open.
 		m.renderSkipped = true
 		after, refresh := m.foreignSessionRefreshPlan()
 		if !refresh {
@@ -1982,11 +1512,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, tea.Batch(refreshForeignSessionsCmd(m.DaemonClient), m.foreignSessionRefreshTick(after))
 
 	case SessionsChangedMsg:
-		// The push stands in for the poll tick: prune against the listing
-		// the last refresh left behind, then refresh if a consumer wants it.
-		// A consumer that appears later refreshes when it opens.
-		// It came off the client event channel, which is read one event at
-		// a time, so the listener is armed again here.
 		m.pruneWindowKeyedState()
 		m.renderSkipped = true
 		listen := listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
@@ -1997,33 +1522,20 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case windowLinkListedMsg:
 		cmd := m.followWindowLink(msg.target, msg.rawURL, msg.sessions)
-		// The focus moved outside the input handler, which is what pushes a
-		// mutation to the daemon otherwise.
 		if m.IsDaemonSession {
 			m.SyncStateToDaemon()
 		}
 		return m, cmd
 
 	case foreignSessionsChangedMsg:
-		// The rail's render cache keys on the listing's generation, so this
-		// frame rebuilds the rows the refresh moved.
-		// The push prunes before its refresh, so prune again against the
-		// listing the refresh brought.
 		m.pruneWindowKeyedState()
 		m.renderSkipped = false
-		// An agent of another session gets its state from this listing.
 		return m, m.threadRetryOnState()
 
 	case FederationHostsMsg:
-		// Storing a snapshot is the whole handler. The network work happened in
-		// the Cmd that produced this message, which is the rule this feature is
-		// most at risk of breaking.
 		m.applyFederationSnapshot(msg)
 		m.sidebarCache.invalidate()
-		// A rail click that waits for this machine dials when the link is up.
 		open := tea.Batch(m.advanceHostOpen(), m.resumeAfterHostOpen())
-		// A sign-in page the person asked for before the daemon had one
-		// opens on the snapshot that brings it.
 		signIn := tea.Batch(open, m.takePendingSignIns())
 		if after, refresh := m.federationRefreshPlan(); refresh {
 			return m, tea.Batch(signIn, m.federationRefreshTick(after))
@@ -2034,9 +1546,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, m.applyHostRetry(msg)
 
 	case NewWindowOnHostMsg:
-		// The window itself arrives on the daemon's state push, the way any
-		// window another client made arrives. This carries only the failure,
-		// which is the half a push cannot say.
 		m.ApplyNewWindowOnHost(msg)
 		return m, nil
 
@@ -2065,14 +1574,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case TMLWakeMsg:
-		// A TML surface was pushed, an answer came back, or a click left a
-		// side effect. See tml.go.
 		return m, m.handleTMLWake()
 
 	case PluginApprovalsMsg:
 		m.setPluginAsks(msg.Asks)
-		// It came off the client event channel, which is read one event at
-		// a time, so the listener is armed again here.
 		return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
 
 	case userActionAskedMsg:
@@ -2087,8 +1592,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case sketchDrawnMsg:
-		// A diagram came in from the sketch plugin: the rich blocks are drawn
-		// again, which take it from loom's cache, and so are the surfaces.
 		m.redrawDiagrams()
 		return m, nil
 
@@ -2105,9 +1608,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case PaneMarkMsg:
-		// A pane out of view rang the bell or printed. One push per pane
-		// until this client looks at it again. It came off the client event
-		// channel, so the listener is armed again here.
 		if m.notePaneMark(msg.Mark) {
 			m.MarkAllDirty()
 		} else {
@@ -2116,16 +1616,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
 
 	case HostsChangedMsg:
-		// The daemon's host table changed under this client. The poll is armed
-		// again whatever it was doing, because the daemon with no hosts, which
-		// stopped it, may now have one; the answer says whether to keep going.
 		m.federationPolling = true
-		// The push came off the client event channel, which is read one
-		// event at a time, so the listener is armed again here. Without it the
-		// first host push was the last event this client heard: every later
-		// link change waited for the minute backstop poll, and in that minute
-		// the picker offered machines that were down and refused ones that
-		// were up.
 		return m, tea.Batch(refreshFederationCmd(), listenClientEventsUntil(m.stopSignal(), m.ClientEventChan))
 
 	case tcAgentsMsg:
@@ -2144,20 +1635,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case machineSheetMsg:
-		// The add sheet's engine ran in a Cmd. This stores what it said.
 		return m, m.applyMachineSheetMsg(msg)
 
 	case HostTestDoneMsg:
-		// Storing the results is the whole handler. The ssh children ran in the
-		// Cmd that produced this message.
 		m.applyHostTest(msg)
 		return m, nil
 
 	case FederationRefreshTickMsg:
 		if msg.Gen != m.federationTickGen {
-			// A timer the snapshot's own re-arm already replaced. Letting it
-			// fire would run a second poll loop beside the first, and the pair
-			// would double every period.
 			return m, nil
 		}
 		after, refresh := m.federationRefreshPlan()
@@ -2167,8 +1652,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, tea.Batch(refreshFederationCmd(), m.federationRefreshTick(after))
 
 	case subagentHideMsg:
-		// A finished subagent's row is due to go, so the rail is drawn now,
-		// rebuilt for the rows of other sessions its signature does not read.
 		m.sidebarCache.invalidate()
 		m.secondarySidebarCache.invalidate()
 		m.renderSkipped = false
@@ -2179,38 +1662,20 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case loadingShownMsg:
-		// A load may have run past the loading delay, so its state is drawn
-		// now rather than whenever something else next asks for a frame.
 		m.renderSkipped = false
 		return m, nil
 
 	case TriggerAltScreenRedrawMsg:
-		// The attach handed over each pane's screen as the daemon holds it,
-		// so a pane on the alternate screen is redrawn from that and its
-		// program is left alone. Resizing the pane one cell smaller and back
-		// to make the program repaint is not a no-op: the daemon's emulator
-		// drops the top row on the way down, and a program that repaints only
-		// what it believes changed, or that reads its size once after both
-		// SIGWINCHes and sees no change, leaves the screen shifted.
 		m.TriggerAltScreenRedraws()
 		return m, nil
 
 	case tea.KeyPressMsg, tea.KeyReleaseMsg, tea.MouseClickMsg, tea.MouseMotionMsg,
 		tea.MouseReleaseMsg, tea.MouseWheelMsg, tea.ClipboardMsg,
 		tea.PasteMsg, tea.PasteStartMsg, tea.PasteEndMsg, StripTouchMsg:
-		// Reset idle counter on any user input to restore full tick rate
-		// A resize drag is live only while the pointer is still reporting. This
-		// is what lets the deferral in resize_deferral.go expire when a mouse
-		// release is lost, without a timeout that would cut short a slow drag:
-		// any further motion refreshes it.
 		switch mm := msg.(type) {
 		case tea.KeyPressMsg:
-			// Typing means the person has moved on from the message the
-			// pointer may be resting on, so its hold ends.
 			m.NotifHoldEnd()
-			// And from a finished worktree setup's card.
 			m.hideSetupCard()
-			// And from the image it just pasted.
 			m.hidePastePreview()
 		case tea.MouseWheelMsg:
 			m.notePointerEvent(time.Now())
@@ -2219,12 +1684,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.notePointerEvent(time.Now())
 			m.dndHostMouseSeen()
 			m.pointerDown = true
-			// A button is down, so a gesture may be starting and the sizes it
-			// passes through are none of the guest's business until it ends.
-			// Armed here rather than in each gesture's own setup so that every
-			// gesture is covered, including ones added later: see
-			// announce_batch.go. The release is not armed here, because the
-			// handler still has the drop to lay out; it ends the hold itself.
 			m.holdGestureAnnouncements()
 		case tea.MouseReleaseMsg:
 			m.notePointerEvent(time.Now())
@@ -2233,60 +1692,28 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		case tea.MouseMotionMsg:
 			m.notePointerEvent(time.Now())
 			m.dndHostMouseSeen()
-			// Motion names the buttons still held, so it is the most current
-			// answer to whether one is, and it corrects a press whose own event
-			// never arrived.
 			m.pointerDown = mm.Button != tea.MouseNone
-			// Motion with no button held while a drag is supposedly in
-			// progress means the release happened somewhere we never heard
-			// about, which is what a pointer leaving the surface the events
-			// come from does: the button comes up out of reach and what comes
-			// back is motion reporting no buttons. Left alone the pane stays
-			// glued to the pointer and is dragged around a tiled layout with
-			// nothing pressed, which is exactly how tiled panes end up at
-			// overlapping positions.
 			if (m.Dragging || m.Resizing) && mm.Button == tea.MouseNone {
 				m.endLostGesture()
 			}
 		}
-		// Any user input must produce a fresh frame. Without this a tick that
-		// marked the frame skippable would make View return the cached content,
-		// so state changed by this event (overlay selection, drag offset, etc.)
-		// would not be drawn until some other redraw happened.
 		m.renderSkipped = false
 
-		// The screen saver eats the input that dismisses it. Anything else and
-		// the first keystroke after walking back to the desk lands in a shell
-		// nobody can see yet. The pointer bookkeeping above still ran, so a
-		// button state that changed while the saver was up is not lost.
 		if m.screensaver.active {
 			return m, m.dismissScreensaver()
 		}
-		// Input restarts the idle countdown. The time is taken now, before the
-		// handler runs, so a slow handler does not shorten the next wait.
 		m.screensaver.lastInput = time.Now()
 
-		// A shake of the pointer toggles the beam, when the person asked for
-		// that gesture. It is fed here rather than from the motion handler
-		// because motion is routed away from that handler whenever capture
-		// mode or the scrollback browser is up, and the handler itself returns
-		// early for a context menu, a rail drag, a workspace pill drag and an
-		// overlay drag. Every motion event passes this line exactly once, and
-		// it passes before the handler, so the frame this event composes
-		// already carries the beam the shake asked for. See shake.go.
 		var shakeCmd tea.Cmd
 		if mm, isMotion := msg.(tea.MouseMotionMsg); isMotion {
 			shakeCmd = m.noteShakeMotion(mm, time.Now())
 		}
 
-		// A key typed while a paste reads its buffer waits for the paste.
-		// See pasteHold.
 		input := m.fixHostKeyMods(msg)
 		if m.holdKeyForPaste(input) {
 			return m, shakeCmd
 		}
 
-		// Delegate to the registered input handler
 		handler := getInputHandler()
 		if handler == nil {
 			return m, tea.Batch(shakeCmd, m.armScreensaver())
@@ -2295,34 +1722,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		if shakeCmd != nil {
 			cmd = tea.Batch(cmd, shakeCmd)
 		}
-		// Arming happens after the handler, not before, because the keystroke
-		// that switches the saver on in the settings page is itself an input
-		// event: arming first would read the old setting and leave a session
-		// that was just enabled with no timer until someone typed again.
-		// armScreensaver starts one only when none is in flight, so holding a
-		// key down does not queue a timer per repeat.
 		if saverCmd := m.armScreensaver(); saverCmd != nil {
 			cmd = tea.Batch(cmd, saverCmd)
 		}
 
-		// Motion events arrive far faster than a frame can be composed: the
-		// pointer emits one per cell it crosses, and a terminal on a large
-		// screen reports hundreds a second, while a frame costs milliseconds
-		// and more the wider the screen. bubbletea composes a frame after
-		// every message, so drawing each one builds a backlog that grows for
-		// as long as the pointer moves: the drag trails the pointer, and hover
-		// over a panel or the rail lags it by seconds (issue #1058).
-		//
-		// So motion draws at most once per frame period. Only the redundant
-		// intermediate frames are dropped, never the input: the handler above
-		// has applied this event, so the model always holds the newest pointer
-		// position, and the next frame shows it. A skipped move sets
-		// pointerMotionPending, which wakes the maintenance tick for the end of
-		// the frame period (see nextWake) and draws the last position the
-		// pointer reached. A pointer at rest never sets it, so the idle tick
-		// stays idle. A press, a release or a key is not motion and draws at
-		// once. The period runs from the end of the last frame, written: see
-		// motionBudgetFrom.
 		if _, isMotion := msg.(tea.MouseMotionMsg); isMotion {
 			now := time.Now()
 			if now.Sub(m.motionBudgetFrom()) < m.framePeriod() {
@@ -2336,102 +1739,52 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		oldWidth, oldHeight := m.Width, m.Height
-		// Clamp our widths and heights to 1, as to avoid any unforseen 'resolution' errors
 		m.Width = max(1, msg.Width)
 		m.Height = max(1, msg.Height)
 		m.MarkAllDirty()
-		// The renderer erases and redraws the host screen on a resize, which
-		// takes every sixel image with it.
 		m.SixelPassthrough.Invalidate()
-		// A resize is drawn immediately and finished later. Everything below
-		// lays the panes out at the new size; the expensive half (resizing each
-		// emulator's backing store for real, telling the PTY and the daemon,
-		// and asking every guest to redraw) waits until the sizes stop
-		// arriving. Without this a drag of the terminal's own edge pays that
-		// whole bill once per delivered size.
 		m.viewportResizing = true
 		m.renderSkipped = false
 		m.viewportResizeGen++
-		// The timestamp, not the flag, is what keeps the deferral alive. The
-		// settle below is the normal way it ends; noteResizeStep is what makes
-		// sure it ends at all if the settle never arrives, which it does not
-		// when a panic in this handler is recovered, since the recovery returns
-		// a nil command and takes the settle with it.
 		m.noteResizeStep(time.Now())
 		settle := viewportResizeSettleCmd(m.viewportResizeGen)
 
-		// Apply the one-shot [startup] preferences now that the real terminal
-		// size is known: NewOS runs before the first WindowSizeMsg, so opening a
-		// window or tiling there would place them against a zero-sized screen.
 		if !m.startupApplied {
 			m.startupApplied = true
 			m.applyStartupPreferences()
-			// A client that attaches while the session's focus is on a
-			// scratch pane shows the group, as a sync would.
 			m.syncScratchView()
-			// Said once, on the first frame that has a screen to say it on.
 			m.warnOnBuildMismatch()
 			m.announceRestart()
 			m.announceUpgradeFollowed()
 		}
 
-		// Notify daemon of our terminal size for multi-client size calculation
-		// This allows the daemon to compute effective size = min(all clients)
-		//
-		// The chrome reserve rides the same message: the sidebar's breakpoints
-		// are measured against the render width, so a viewport that moved can
-		// have moved what this client keeps for itself as well.
 		if m.IsDaemonSession && m.DaemonClient != nil {
 			m.DaemonClient.SetOwnLayoutReserve(m.OwnLayoutReserve())
 			_ = m.DaemonClient.NotifyTerminalSize(msg.Width, msg.Height)
 		}
 
-		// When restored from state, we need to retile if tiling is enabled
-		// to properly fit windows to the new terminal size.
-		// The BSP tree structure is preserved, only positions/sizes are recalculated.
-		// However, if the size is the same (e.g., web reload), skip retiling to preserve layout.
 		if m.RestoredFromState {
 			m.RestoredFromState = false
 			sizeChanged := oldWidth != msg.Width || oldHeight != msg.Height
 			if sizeChanged {
-				// In daemon mode, the previous implementation waited for
-				// SessionResizeMsg before tiling. That broke when the effective
-				// size didn't change (e.g. a web client reattaches to a session
-				// whose cached min-of-all-clients matches or is larger than
-				// the browser viewport), no SessionResizeMsg ever arrives and
-				// the restored layout stays at the stale saved dimensions.
-				// Tile using the browser's actual size now; if the daemon
-				// later reports a different effective size via SessionResizeMsg,
-				// the handler there will re-tile anyway.
 				if m.IsDaemonSession && m.AutoTiling {
 					m.LogInfo("[RESIZE] Daemon mode restore: tiling to %dx%d (was %dx%d)",
 						msg.Width, msg.Height, oldWidth, oldHeight)
-					// Fall back to this client's own viewport only when the
-					// daemon has not said what the session's size is. A
-					// SessionResizeMsg cannot be relied on to correct it: the
-					// daemon only announces a size that changed, so a client
-					// whose join left the minimum where it was hears nothing
-					// and would render at its own width inside a session sized
-					// for someone smaller. The attach reply carries the
-					// effective size, which is the answer here.
 					if m.EffectiveWidth <= 0 || m.EffectiveHeight <= 0 {
 						m.EffectiveWidth = msg.Width
 						m.EffectiveHeight = msg.Height
 					}
 					m.TileAllWindows()
 				} else if m.AutoTiling {
-					// Non-daemon mode: tile immediately
 					m.LogInfo("[RESIZE] Retiling restored session to fit new terminal size (%dx%d -> %dx%d)",
 						oldWidth, oldHeight, msg.Width, msg.Height)
 					m.TileAllWindows()
 				} else {
-					// In floating mode, scale windows proportionally if dimensions changed
 					if oldWidth > 0 && oldHeight > 0 {
 						m.LogInfo("[RESIZE] Scaling restored windows from %dx%d -> %dx%d",
 							oldWidth, oldHeight, msg.Width, msg.Height)
 						m.ScaleWindowsToTerminal(oldWidth, oldHeight, msg.Width, msg.Height)
 					} else {
-						// No previous size, just clamp to current size
 						m.ClampWindowsToView()
 					}
 				}
@@ -2439,10 +1792,8 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				m.LogInfo("[RESIZE] Restored session, same size (%dx%d), preserving layout", msg.Width, msg.Height)
 			}
 
-			// Flush PTY buffers for restored session resize
 			m.FlushPTYBuffersAfterResize()
 
-			// Clear and re-place kitty/sixel images after restore resize
 			if m.KittyPassthrough != nil {
 				m.KittyPassthrough.HideAllPlacements()
 			}
@@ -2450,23 +1801,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, settle
 		}
 
-		// Retile windows if in tiling mode
 		if m.AutoTiling {
 			m.TileAllWindows()
 		} else if msg.Width < oldWidth || msg.Height < oldHeight {
-			// Terminal got smaller in floating mode: clamp windows back into view
 			m.ClampWindowsToView()
 		}
 
-		// NOTE: Don't HideAllPlacements on kitty here. The delete+re-place cycle
-		// can lose image data on some terminals. RefreshAllPlacements runs every
-		// render and will reposition in place via `a=p` (the image data persists
-		// across `d=i` deletes per the kitty protocol).
-
-		// The PTY resize, the SIGWINCH it carries and the whole-screen redraw
-		// every guest answers with land in ViewportResizeSettledMsg instead.
-		// An open image view needs its picture at the new size, and a side
-		// column the new width hides lets its live pane go.
 		if cmd := tea.Batch(m.CockpitImagePicture(), m.cockpitLiveFollow(), m.QuickLookSync()); cmd != nil {
 			return m, tea.Batch(settle, cmd)
 		}
@@ -2474,54 +1814,27 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case ViewportResizeSettledMsg:
 		if msg.Gen != m.viewportResizeGen {
-			// A newer resize has already superseded this one; its own settle
-			// will end the deferral, and ending it here would pay the expensive
-			// half in the middle of the storm this exists to coalesce.
 			return m, nil
 		}
-		// Deliberately not conditional on viewportResizing: this is the settle
-		// for the newest resize, so whatever state the flag is in, the deferred
-		// work is due now. Draining an empty PendingResizes costs nothing.
 		m.endResizeDeferral()
-		// A taller terminal shows more launcher rows, and the new ones have had
-		// no icon asked for. The settle is the right moment for that rather than
-		// every delivered size.
 		return m, m.LauncherIconWork()
 
 	case InteractionSettledMsg:
-		// A gesture started inside the delay owns the mode now, and its own
-		// release will hand it back.
 		if !m.Dragging && !m.Resizing {
 			m.InteractionMode = false
 		}
 		return m, nil
 
 	case tea.MouseMsg:
-		// Catch-all for any other mouse events to prevent them from leaking
 		return m, nil
 
 	case tea.FocusMsg:
-		// The host terminal gained focus. See host_focus.go.
-		//
-		// The dock's timers read the wall clock again, so a clock that slept
-		// through a suspend shows the time now rather than after its next
-		// dockWallCheck. Focus coming back is often the first sign of a wake.
 		m.dockEngine.Replan()
 		return m, m.noteHostFocus(true)
 
 	case tea.BlurMsg:
-		// The host terminal lost focus. A key held when the window went away
-		// will never report its release, so the hold ends here rather than
-		// outliving it.
 		m.EndHold()
-		// The pointer leaves with the focus, and no motion will say so, so
-		// the message hold ends here too.
 		m.NotifHoldEnd()
-		// The pointer shape is the last OSC 22 tuios sent, and the terminal
-		// paints it wherever the pointer lands while focus is away, including
-		// over other applications' content when it comes back. No motion will
-		// restate it (motion that would is filtered out over pane content), so
-		// retire it now.
 		m.ResetPointerShape()
 		return m, m.noteHostFocus(false)
 
@@ -2529,50 +1842,30 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		if m.screen != nil {
 			m.screen.SetColorProfile(msg.Profile)
 		}
-		// The colour profile the frame writer steps colours down to. The chrome
-		// is drawn for it rather than drawn in truecolor and stepped down, so it
-		// is learned from the same message the writer was configured from, and
-		// every cached row built for another depth is dropped.
 		if theme.ColorProfile() != msg.Profile {
 			depth := theme.Depth()
 			theme.SetColorProfile(msg.Profile)
-			// The panes hold the theme's colours at the depth they were
-			// given, so a new depth gives them again.
 			if theme.Depth() != depth {
 				m.UpdateAllWindowThemes()
 			}
-			// A profile with no colour shows images as the box, not glyphs.
 			m.refreshImageSymbols()
 			m.MarkAllDirty()
 		}
 		return m, nil
 
 	case tea.KeyboardEnhancementsMsg:
-		// The host answered the Kitty keyboard protocol query, so tuios now knows
-		// which of the things it asked for it actually got.
-		//
-		// Success is silent. A protocol handshake succeeding is not news to the
-		// person using the terminal, and a notification for it spends the one
-		// channel that exists for things they have to act on.
 		first := m.KeyboardFlags == 0
 		m.NoteKeyboardEnhancements(msg)
-		// A hold key the terminal cannot support does have to say so, or the user
-		// presses a key that does nothing and has no way to find out why.
 		if reason := m.HoldModeUnsupportedReason(); reason != "" && first {
 			m.ShowNotification(reason, "warning", m.Settings.NotificationDuration)
 		}
 		return m, nil
 
-	// Multi-client daemon messages
 	case StateSyncMsg:
-		// A state of the session this client has left describes none of
-		// the panes it now shows. Applied, it replaced them.
 		if m.staleAttach(msg.Attach) {
 			return m, tea.Batch(listenStateSyncUntil(m.stopSignal(), m.StateSyncChan), m.noteStateSyncApplied(msg.arrival))
 		}
-		// Another client updated state: apply incrementally
 		if msg.State != nil {
-			// Track what changed for notifications
 			oldWindowCount := m.windowCountForNotice()
 			oldWorkspace := m.CurrentWorkspace
 			oldWindows := m.windowLabelsForNotice()
@@ -2581,59 +1874,36 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			if err := m.ApplyStateSyncFrom(msg.State, msg.SourceID); err != nil {
 				m.LogError("Failed to apply state sync: %v", err)
 			} else {
-				// The daemon-created startup window arrives here; if the user asked
-				// to start in terminal mode, enter it now that there is a focused
-				// window to type into.
 				m.maybeEnterPendingTerminalMode()
-				// The focus says whether a scratch group is on the screen, and
-				// a scratch pane that arrives takes the keyboard.
 				m.syncScratchView()
 				m.maybeFocusScratch()
 				m.leaveEmptyScratchView()
 
-				// Show notifications for significant changes
 				newWindowCount := m.windowCountForNotice()
 				newMade := m.panesMadeForNotice()
 				newWorkspace := m.CurrentWorkspace
 
-				// Window count change notification. A window that moved to
-				// or from another session says so: it did not close and was
-				// not made.
 				if note, ok := m.windowMoveNotice(msg.State, oldWindows); ok {
 					m.ShowNotification(note, "info", 2*time.Second)
 				} else if newMade == oldMade {
-					// Only TML surfaces came or went. A program put them on
-					// the screen, and the person did not make a window.
 				} else if newWindowCount > oldWindowCount {
 					m.showAmbientNotification(fmt.Sprintf("Window created (%d total)", newWindowCount), "info", 2*time.Second)
 				} else if newWindowCount < oldWindowCount {
 					m.showAmbientNotification(fmt.Sprintf("Window closed (%d remaining)", newWindowCount), "info", 2*time.Second)
 				}
 
-				// Workspace change notification. A scratch group shown or
-				// hidden is not a workspace the user switched to.
 				if oldWorkspace != newWorkspace && !session.IsScratchWorkspace(oldWorkspace) && !session.IsScratchWorkspace(newWorkspace) {
 					m.ShowNotification(fmt.Sprintf("Switched to workspace %d", m.workspaceDisplayNumber(newWorkspace)), "info", 2*time.Second)
 				}
-				// After the count note, so the dock draws this one.
 				m.flushPiPNote()
 				if note := m.heldNotice; note != "" {
 					m.heldNotice = ""
 					m.ShowNotification(note, "info", m.Settings.NotificationDuration)
 				}
 
-				// A rename by this client or any other arrives on this push, so
-				// an open switcher follows it without being reopened.
 				m.refreshGotoRows()
-				// A sync can have folded, shown or hidden this client's rail,
-				// which is chrome the session's reserve is settled from.
-				// settleChrome says so once the sync is applied, outside it,
-				// where nothing may speak at all.
 			}
 		}
-		// Continue listening for more state syncs. An agent's state comes
-		// on this push, and an open thread with no transcript yet asks again
-		// when it changes: no key may come to ask for it.
 		return m, tea.Batch(listenStateSyncUntil(m.stopSignal(), m.StateSyncChan), m.refreshSidebarSessions(), m.noteStateSyncApplied(msg.arrival), m.threadRetryOnState())
 
 	case heldRemoteTimeoutMsg:
@@ -2664,7 +1934,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case PasteBufferFetchedMsg:
 		cmd := m.handlePasteBufferFetched(msg)
 		if msg.held {
-			// The paste is in, or failed, so the keys typed after it go now.
 			cmd = tea.Batch(cmd, m.releasePasteHold())
 		}
 		return m, cmd
@@ -2689,10 +1958,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			m.ShowNotification(what+" failed: "+msg.Err.Error(), "error", m.Settings.NotificationDuration*2)
 			return m, nil
 		}
-		// The attached session's new name rides the state push. The listing
-		// the rail and the switcher read is refreshed off this goroutine, and
-		// the switcher is rebuilt again once it lands: rebuilt only now, it
-		// kept a row for the old name beside the new one.
 		m.refreshGotoRows()
 		return m, m.refreshListingCmd()
 
@@ -2720,21 +1985,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		if m.staleAttach(msg.Attach) {
 			return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
 		}
-		// Another client joined the session
 		m.sessionClients = msg.ClientCount
 		m.ShowNotification(fmt.Sprintf("Client joined (%d connected)", msg.ClientCount), "info", 2*time.Second)
-		// Continue listening for more client events
 		return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
 
 	case AgentMailMsg:
-		// The mailbox is the session's, and this one's was read afresh at
-		// the switch.
 		if m.staleAttach(msg.Attach) {
 			return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
 		}
-		// A message an agent left, or a receipt for one an agent read. Applied
-		// here and nowhere else, so the mirror is only ever touched on this
-		// goroutine.
 		m.noteAgentMail(msg.Payload)
 		m.noteAgentsSeen()
 		return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
@@ -2751,13 +2009,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, m.applyAgentAction(msg)
 
 	case InboxRewatchMsg:
-		// The client moved to another machine's daemon, which holds the
-		// Inbox now (inbox_route.go).
 		return m, tea.Batch(m.restartInboxWatch(), listenClientEventsUntil(m.stopSignal(), m.ClientEventChan))
 
 	case AgentMailLoadMsg:
-		// A session switch asked for the new session's ring. The read runs in
-		// the command, off this goroutine.
 		return m, tea.Batch(m.agentMailLoad(), listenClientEventsUntil(m.stopSignal(), m.ClientEventChan))
 
 	case AgentMailMarkMsg:
@@ -2765,8 +2019,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case AgentMailLoadedMsg:
 		m.applyAgentMailLoaded(msg)
-		// An Inbox action that switched session to answer mail opens the
-		// thread now that the session's ring is here.
 		return m, m.takePendingInboxThread()
 
 	case inboxWatchMsg:
@@ -2951,137 +2203,66 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		if m.staleAttach(msg.Attach) {
 			return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
 		}
-		// Another client left the session
 		m.sessionClients = msg.ClientCount
 		m.ShowNotification(fmt.Sprintf("Client left (%d connected)", msg.ClientCount), "info", 2*time.Second)
-		// Continue listening for more client events
 		return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
 
 	case SessionResizeMsg:
-		// An answer about the session this client has left. Applied, it
-		// laid this session's panes out in the other's box, and raised the
-		// generation past this session's own count, so the daemon took
-		// this client's layouts for current when they were not.
 		if m.staleAttach(msg.Attach) {
 			return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
 		}
-		// The box the panes are laid out in from here on is this answer's,
-		// so the next push says so. See session/layout_gen.go.
 		m.layoutGenApplied = max(m.layoutGenApplied, msg.Generation)
 		m.sessionClients = msg.ClientCount
-		// The session's size or chrome reserve changed. See pane_view.go for
-		// how a size that differs from this client's is drawn.
-		//
-		// The agreed chrome reserve is half of the same answer and moves the
-		// panes' box exactly as the size does, so a change to either one is a
-		// re-layout. Before it was here a client folded its own chrome into the
-		// box privately, and two clients with different chrome laid the same
-		// panes out in different boxes.
 		if m.EffectiveWidth != msg.Width || m.EffectiveHeight != msg.Height || m.SessionReserve != msg.Reserve {
 			oldWidth, oldHeight := m.GetLayoutWidth(), m.GetLayoutHeight()
-			// Only a size change is worth telling the user about. The reserve
-			// moves when somebody opens a rail, which is a thing they can see
-			// happening and not a thing to announce as a resize.
 			sizeChanged := m.EffectiveWidth != msg.Width || m.EffectiveHeight != msg.Height
 			m.EffectiveWidth = msg.Width
 			m.EffectiveHeight = msg.Height
 			m.SessionReserve = msg.Reserve
 			m.MarkAllDirty()
-			// Retile if the effective render size changed
 			if m.AutoTiling {
 				m.TileAllWindows()
 			} else if m.GetLayoutWidth() < oldWidth || m.GetLayoutHeight() < oldHeight {
-				// Floating panes keep their own geometry, so a session that
-				// shrank around this client leaves them hanging over an edge
-				// that has moved in. The same clamp the host terminal's own
-				// resize does, for the resize this client did not cause.
 				m.ClampWindowsToView()
 			}
-			// CRITICAL: Force sync all daemon PTY dimensions after tiling
-			// This ensures PTYs match the new window dimensions even if no animation was created
-			// (e.g., when window was already at target position but PTY had stale dimensions)
 			m.SyncDaemonPTYDimensions()
 			if sizeChanged {
 				m.showAmbientNotification(fmt.Sprintf("Session size: %dx%d (%d clients)", msg.Width, msg.Height, msg.ClientCount), "info", 2*time.Second)
 			}
 		} else if m.DaemonClient.SessionSizedBySelf() {
-			// The box stayed and this client sets the size now. No retile
-			// runs, and the client before it can have left PTYs at sizes of its
-			// own: a renderer takes its insets off each pane. The daemon
-			// ignores a size a PTY already has.
-			// A sliding pane is told its size when the slide lands.
 			for _, w := range m.Windows {
 				if w.DaemonMode && w.DaemonResizeFunc != nil && m.snapInFlight(w) == nil {
 					_ = w.DaemonResizeFunc(w.ContentWidth(), w.ContentHeight())
 				}
 			}
 		}
-		// The layout just worked out from this answer is pushed, whoever
-		// caused it, unless this client already pushed one for it. Nothing
-		// else would push it: a retile on a session resize sends nothing,
-		// and the daemon then kept the rectangles from before the box moved
-		// until the next key. The push names its generation, so one tiled
-		// in a box the daemon has since moved on from is kept out. See
-		// session/layout_gen.go.
 		if m.layoutGenApplied > m.layoutGenPushed {
 			m.SyncStateToDaemon()
 		}
-		// A session that changed size can have changed what this client keeps
-		// for itself, because the sidebar's breakpoints are measured against the
-		// render width. settleChrome announces it after this message, and the
-		// loop closes: this client's own reserve is a function of the render
-		// width alone, so the second round finds it unmoved and sends nothing.
-		// Continue listening for more client events
 		return m, tea.Batch(listenClientEventsUntil(m.stopSignal(), m.ClientEventChan), m.refreshSidebarSessions())
 
 	case ForceRefreshMsg:
-		// Force re-render
 		m.MarkAllDirty()
-		// Continue listening for more client events
 		return m, listenClientEventsUntil(m.stopSignal(), m.ClientEventChan)
 
 	case DaemonDisconnectedMsg:
-		// A restart from the app stops the daemon on purpose. The dialog
-		// shows the steps, and the client goes on until they end.
 		if m.noteRestartDisconnect() {
 			return m, listenDaemonExitUntil(m.stopSignal(), m.daemonExitChan())
 		}
-		// The daemon connection was lost and cannot be recovered; quit cleanly
-		// so the user is not left staring at a frozen, unresponsive session.
-		// After a deliberate quit the drop is the expected consequence of
-		// killing the session, not a failure, so leave the reason alone.
 		if m.AttachedHost != "" && !m.QuitRequested {
-			// A link to another machine dropping is recoverable, and the first
-			// thing to try is getting it back. The session on the host keeps
-			// running, so the panes on screen stay where they are while this
-			// client dials again. Only when that has genuinely failed does it
-			// come back to the session it left here.
-			//
-			// The client lives on in each case below, so the listener is
-			// armed again for the next connection's end. Without it the
-			// first drop was the last one heard, and a link that dropped a
-			// second time left a frozen session with no reconnect.
 			listen := listenDaemonExitUntil(m.stopSignal(), m.daemonExitChan())
 			if cmd := m.beginHostReconnect(msg.Err); cmd != nil {
 				return m, tea.Batch(cmd, listen)
 			}
 			if m.ReconnectingToHost() {
-				// A connection that is already being replaced reporting its
-				// own end a second time must not start a second attempt, and
-				// must not throw the panes away.
 				return m, listen
 			}
 			if m.HostReconnectDeferred() {
-				// A rail click waits for another session. Its outcome
-				// decides: it lands and replaces this connection, or it
-				// fails and the reconnect starts then.
 				return m, listen
 			}
 			m.ExitReason = ExitHostLost
 			return m, m.QuitCmd()
 		}
-		// The daemon on this machine may be restarting: wait a moment for
-		// the new one, and attach to the session it restored.
 		if cmd := m.beginDaemonReconnect(); cmd != nil {
 			return m, tea.Batch(cmd, listenDaemonExitUntil(m.stopSignal(), m.daemonExitChan()))
 		}
@@ -3109,28 +2290,15 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, m.handleHostReconnectResult(msg)
 
 	case SessionEndedMsg:
-		// The old daemon ending its sessions is part of a restart.
 		if m.restart.running() {
 			return m, listenDaemonExitUntil(m.stopSignal(), m.daemonExitChan())
 		}
-		// The session was destroyed underneath this client. Its windows are
-		// gone and its PTYs are closed, so there is nothing left to render and
-		// nothing to sync back. Record why and quit; the caller reports it and
-		// exits non-zero.
-		//
-		// Unless this client asked for it: quitting a daemon session kills it,
-		// and the daemon announces that back to us. Reporting the user's own
-		// quit as an unexpected termination is what made a deliberate exit
-		// print an error.
 		if !m.QuitRequested {
 			m.ExitReason = ExitSessionKilled
 		}
-		// The session did not end: the daemon took this client off it for
-		// showing the session inside itself.
 		if m.DaemonClient != nil && m.DaemonClient.NestedRefusal() != "" {
 			m.ExitReason = ExitNestedRefused
 		}
-		// Nor here: another client or detach-client took this client off.
 		if m.DaemonClient != nil && m.DaemonClient.DetachedReason() != "" {
 			m.ExitReason = ExitDetached
 		}
@@ -3147,8 +2315,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, m.handleWelcomeSaved(msg)
 
 	case configWatchMsg:
-		// A delivery from the file watcher: re-arm the listener, then apply it
-		// like a reload from anywhere else.
 		_, cmd := m.Update(msg.msg)
 		return m, tea.Batch(cmd, listenForConfigReload(m.configReloads))
 
@@ -3157,9 +2323,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, tea.Batch(cmd, listenForThemeReload(m.themeReloads))
 
 	case ThemeFilesReloadedMsg:
-		// The files were read and put in force on the watcher goroutine, once
-		// for the process. This session repaints with them: the panes take the
-		// edited sixteen, and the chrome rebuilds from the new generation.
 		m.UpdateAllWindowThemes()
 		m.MarkAllDirty()
 		if len(msg.Problems) > 0 {
@@ -3168,8 +2331,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			}
 			m.ShowNotification(msg.Problems[0], "warning", m.Settings.NotificationWarningDuration)
 		}
-		// tuios theme reload also means the terminal's colours may have
-		// changed, as a wallpaper tool changes both. Ask for them again.
 		if m.asksHostColors() {
 			return m, tea.Batch(hostColorRequests()...)
 		}
@@ -3184,13 +2345,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case ConfigReloadedMsg:
-		// Apply the config parsed by the watcher goroutine here, on the Bubble
-		// Tea goroutine, so the render loop never reads this session's settings
-		// mid-write.
 		cmd := m.ApplyReloadedConfig(msg.Config)
-		// An include that names a missing file, or makes a cycle, is skipped
-		// and the rest applies. The person is told, because a file they meant
-		// to include and that does nothing looks like a broken setting.
 		if msg.Config != nil && len(msg.Config.LoadWarnings) > 0 {
 			for _, w := range msg.Config.LoadWarnings {
 				m.LogWarn("Config: %s", w)
@@ -3200,24 +2355,17 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, tea.Batch(cmd, m.refreshSidebarSessions())
 
 	case ConfigReloadFailedMsg:
-		// The file on disk cannot be used and the running config stands. The
-		// user is told which, because a save that changed nothing for a reason
-		// nobody can see is the worst answer available.
 		if msg.Err != nil {
 			m.ShowNotification("Config not reloaded: "+msg.Err.Error(), "error", 0)
 		}
 		return m, nil
 
 	case screenshotResultMsg:
-		// The render happened off this goroutine; the panel and the
-		// notification are opened here, which is the only place they may be.
 		cmd := m.HandleScreenshotResult(msg)
 		m.MarkAllDirty()
 		return m, cmd
 
 	case lookShareAuthorMsg:
-		// gh answered with the login. The export reads the config, so it
-		// runs here. See look_share.go.
 		return m, m.handleLookShareAuthor(msg)
 
 	case lookShareDoneMsg:
@@ -3225,15 +2373,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case screenshotCopiedMsg:
-		// The clipboard helper answered. Nothing waited for it, which is the
-		// point: this only decides where to say what it said.
 		m.HandleScreenshotCopied(msg)
 		m.MarkAllDirty()
 		return m, nil
 
 	case launcherIconsMsg:
-		// Icons decoded off the Update goroutine, filed away here so the store
-		// is only ever written on this one.
 		m.applyLauncherIcons(msg)
 		if m.ShowLauncher {
 			m.MarkAllDirty()
@@ -3241,15 +2385,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case PathAppsMsg:
-		// A finished $PATH scan, handed over here so the launcher's rows are
-		// only ever built on this goroutine.
 		m.applyPathApps(msg.Entries)
 		if !m.ShowLauncher {
 			return m, nil
 		}
 		m.MarkAllDirty()
-		// The rows changed, so the icons the visible ones want changed with
-		// them.
 		return m, m.LauncherIconWork()
 
 	case HostApplyFailedMsg:
@@ -3257,10 +2397,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case settingsSaveFailedMsg:
-		// The write happens in a command now, so a failure has to come back here
-		// to be said out loud: the change is live either way, and the user needs
-		// to know it will not outlive the session.
-		// The change is in no file, so the next save carries it again.
 		config.RewindSave(m.UserConfig, msg.err)
 		m.ShowNotification("Could not save settings: "+msg.err.Error(), "error", 0)
 		return m, nil
@@ -3270,38 +2406,24 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case tapeLayoutRefreshMsg:
-		// Fired a beat after a project tape finished. Re-fetch every pane's
-		// content from the daemon and repaint, so panes created during the tape
-		// (splits whose early output the client subscribed too late to catch)
-		// show what actually ran.
 		m.refreshAllPanesAfterTape()
 		return m, nil
 
 	case ScriptCommandMsg:
 		m.scriptInFlight = false
-		// A tape that failed, or was left, while this command was on its
-		// way has nothing more to run.
 		if !m.ScriptMode || m.ScriptFailure != "" {
 			return m, nil
 		}
-		// Execute tape command through the executor
 		if executor := m.ScriptExecutor; executor != nil {
 			if err := executor.Execute(msg.Command); err != nil {
 				m.failScript(msg.Command, err)
 			} else {
-				// Tape playback mutates the model outside the input handler, so
-				// it has to push the result like any other mutation would.
 				m.SyncStateToDaemon()
 			}
 		}
 		return m, m.takeScriptCmds()
 
 	case RemoteCommandMsg:
-		// Execute remote command from CLI. The listener is re-armed on every
-		// path out of this case, including the early returns, or a channel-fed
-		// host would take exactly one routed verb per session.
-		// A command that waited for a state is run again from
-		// releaseHeldRemote, and the listener was re-armed when it came.
 		var relisten tea.Cmd
 		if !msg.released {
 			relisten = listenRemoteCommandsUntil(m.stopSignal(), m.RemoteCommandChan)
@@ -3310,43 +2432,33 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			return m, tea.Batch(relisten, wait)
 		}
 		var err error
-		// persistCmd writes a routed config change to disk, off this goroutine.
 		var persistCmd tea.Cmd
 		var cmd tea.Cmd
 		var notificationMsg string
-		var resultData map[string]any // Rich data to return
+		var resultData map[string]any
 
 		switch msg.CommandType {
 		case "tape_command":
-			// Show what command is being run
 			if len(msg.TapeArgs) > 0 {
 				notificationMsg = fmt.Sprintf("Remote: %s %s", msg.TapeCommand, msg.TapeArgs[0])
 			} else {
 				notificationMsg = fmt.Sprintf("Remote: %s", msg.TapeCommand)
 			}
 
-			// Handle query/inspection commands first (these are read-only, no side effects)
 			switch msg.TapeCommand {
 			case "ListWindows":
-				// Return list of all windows (read-only, no notification)
 				resultData = m.GetWindowListData()
-				// Send result directly and return early to avoid side effects
 				if m.DaemonClient != nil && msg.RequestID != "" {
 					_ = m.DaemonClient.SendCommandResultWithData(msg.RequestID, true, "command executed", resultData)
 				}
 				return m, relisten
 			case "GetSessionInfo":
-				// Return session information (read-only, no notification)
 				resultData = m.GetSessionInfoData()
 				if m.DaemonClient != nil && msg.RequestID != "" {
 					_ = m.DaemonClient.SendCommandResultWithData(msg.RequestID, true, "command executed", resultData)
 				}
 				return m, relisten
 			case "ShareLook":
-				// tuios look share: the client has the screen to capture and
-				// the terminal that carries the clipboard. TapeArgs are the
-				// name and the author, either one empty. The result is sent
-				// when the share is done. See look_share.go.
 				var name, author string
 				if len(msg.TapeArgs) > 0 {
 					name = msg.TapeArgs[0]
@@ -3356,11 +2468,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				}
 				return m, tea.Batch(m.ShareLook(name, author, msg.RequestID), relisten)
 			case "GetWindow":
-				// Return info about a specific window (read-only, no notification)
 				if len(msg.TapeArgs) > 0 {
 					resultData, err = m.GetWindowData(msg.TapeArgs[0])
 				} else {
-					// Return focused window
 					resultData, err = m.GetFocusedWindowData()
 				}
 				if m.DaemonClient != nil && msg.RequestID != "" {
@@ -3372,9 +2482,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				}
 				return m, relisten
 			default:
-				// NewWindow and CloseWindow never arrive here: they are daemon
-				// owned, so the daemon runs them itself and the client hears the
-				// result as a state push like any other.
 				tapeCmd := &tape.Command{
 					Type: tape.CommandType(msg.TapeCommand),
 					Args: msg.TapeArgs,
@@ -3383,64 +2490,36 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				err = executor.Execute(tapeCmd)
 				cmd = m.takeScriptCmds()
 			}
-			// Retile if in tiling mode after command execution
 			if m.AutoTiling {
 				m.TileAllWindows()
 			}
 		case "send_keys":
-			// Show what keys are being sent
 			notificationMsg = fmt.Sprintf("Remote: send-keys %s", msg.Keys)
 
-			// Parse keys and start sequential processing
 			cmd, err = m.startRemoteSendKeys(msg.Keys, msg.Literal, msg.Raw, msg.WindowTarget, msg.RequestID)
 			if err == nil {
-				// Keys will be processed sequentially via RemoteKeyMsg
-				// Show notification now, result will be sent after all keys processed
 				m.showRemoteNotice(notificationMsg)
 				return m, tea.Batch(cmd, relisten)
 			}
-		// capture_pane never arrives here: the daemon renders the pane from its
-		// own VT emulator whether or not a client is attached, because that is
-		// the same rendering of the same PTY and routing it only added a way for
-		// the two to disagree.
 		case "set_config":
-			// Show what config is being changed
 			notificationMsg = fmt.Sprintf("Remote: set %s=%s", msg.ConfigPath, msg.ConfigValue)
 
 			if msg.ConfigNoSave {
-				// set-config --no-save: the value applies here and every
-				// later save leaves its keys alone, so a hook can change the
-				// display without touching the config files. See
-				// config/hold.go.
 				notificationMsg += " (not saved)"
 				err = m.UserConfig.HoldOption(msg.ConfigPath, func() error {
 					return m.SetConfig(msg.ConfigPath, msg.ConfigValue)
 				})
 			} else {
-				// A set that saves ends a hold on the same option.
 				m.UserConfig.ReleaseOption(msg.ConfigPath)
 				err = m.SetConfig(msg.ConfigPath, msg.ConfigValue)
-				// Write it down, the way the settings panel does. Without this the
-				// routed path changed the running session and nothing else, so
-				// set-config reported success, get-config read the value back from
-				// memory, and the file never grew the section. Every value set this
-				// way was lost on the next restart, in every section, which is why
-				// this reuses persistSettings rather than fixing one of them: it
-				// carries the read-only gating for remote clients and the
-				// stale-write sequencing with it.
 				if err == nil {
 					persistCmd = m.persistSettings()
 				}
 			}
-			// Retile if in tiling mode after config change
 			if m.AutoTiling {
 				m.TileAllWindows()
 			}
 		case "list_dock_components":
-			// Read-only: what the bar is made of, what each cell last said, and
-			// what its command last did. The last two are the debugging story
-			// for a component that is not drawing, and the reason an agent can
-			// verify a cell it just wrote rather than guess at it.
 			resultData = map[string]any{
 				"type":       "dock_component_list",
 				"components": m.DockComponentsData(),
@@ -3448,17 +2527,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			if m.DaemonClient != nil && msg.RequestID != "" {
 				if sendErr := m.DaemonClient.SendCommandResultWithData(
 					msg.RequestID, true, "command executed", resultData); sendErr != nil {
-					// A discarded encode error here is a ten second timeout at
-					// the caller with nothing to go on, which is exactly how
-					// this was found.
 					m.LogError("dock: could not answer list-dock-components: %v", sendErr)
 				}
 			}
 			return m, relisten
 		case "list_hooks":
-			// Read-only: what this client's hook table holds and what each
-			// command last did. The daemon merges it with its own table, so
-			// list-hooks answers for both sides at once.
 			resultData = map[string]any{
 				"type":  "hook_list",
 				"hooks": m.HookRows(),
@@ -3471,10 +2544,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			}
 			return m, relisten
 		case "pip":
-			// The pip verb: pin a pane as this client's picture-in-picture
-			// view, or unpin it. TapeArgs are the window id ("" for the
-			// focused pane) and "off". The view is this client's alone, so
-			// nothing is pushed to the daemon for it.
 			window, off := "", false
 			if len(msg.TapeArgs) > 0 {
 				window = msg.TapeArgs[0]
@@ -3493,24 +2562,18 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			}
 			return m, relisten
 		case "swap_windows":
-			// herdr's pane.swap: the daemon names the pair. TapeArgs are the
-			// source and the target window ids.
 			if len(msg.TapeArgs) != 2 {
 				err = errfmt.Errorf("swap_windows needs two window ids")
 			} else {
 				err = m.SwapWindowsByID(msg.TapeArgs[0], msg.TapeArgs[1])
 			}
 		case "zoom_window":
-			// herdr's pane.zoom: TapeArgs are the window id and on or off.
 			if len(msg.TapeArgs) != 2 {
 				err = errfmt.Errorf("zoom_window needs a window id and on or off")
 			} else {
 				err = m.ZoomWindowByID(msg.TapeArgs[0], msg.TapeArgs[1] == "on")
 			}
 		case "resize_window":
-			// herdr's pane.resize: TapeArgs are the window id, the way the
-			// border moves, and the share of the pane region it moves by.
-			// The answer says whether the pane changed.
 			if len(msg.TapeArgs) != 3 {
 				err = errfmt.Errorf("resize_window needs a window id, a direction and an amount")
 				break
@@ -3525,8 +2588,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				resultData = map[string]any{"changed": changed}
 			}
 		case "set_client_title":
-			// herdr's client.window_title.set and .clear: TapeArgs are the
-			// title, or nothing to clear it. The daemon cleaned the title.
 			title := ""
 			if len(msg.TapeArgs) > 0 {
 				title = msg.TapeArgs[0]
@@ -3534,10 +2595,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			resultData = map[string]any{"changed": m.ClientTitle != title}
 			m.ClientTitle = title
 		case "switch_session":
-			// herdr's workspace.focus and switch-session: show another
-			// session. TapeArgs are the name, and for switch-session to
-			// another machine the host, "create" or "", and the directory
-			// of a session create makes there.
 			if len(msg.TapeArgs) < 1 || msg.TapeArgs[0] == "" {
 				err = errfmt.Errorf("switch_session needs a session name")
 				break
@@ -3551,9 +2608,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				host = ""
 			}
 			if host != "" && host != m.attachedMachine() {
-				// Another machine: the attach there is made off this
-				// goroutine, and the answer waits for it, so the caller
-				// learns whether the switch landed.
 				create := len(msg.TapeArgs) > 2 && msg.TapeArgs[2] == "create"
 				cwd := ""
 				if len(msg.TapeArgs) > 3 {
@@ -3564,19 +2618,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				}
 				return m, relisten
 			}
-			// This machine, or the one the client is attached to. The answer
-			// goes first, because the switch detaches this client from the
-			// session the daemon routed the request through.
 			if m.DaemonClient != nil && msg.RequestID != "" {
 				_ = m.DaemonClient.SendCommandResult(msg.RequestID, true, "command executed")
 			}
 			return m, tea.Batch(func() tea.Msg { return remoteSwitchSessionMsg{name: name} }, relisten)
 		case "leave_session":
-			// remove-worktree is about to kill the session this client
-			// shows. TapeArgs are that session and the live sessions it may
-			// go to. The answer names the one it picked and goes before the
-			// switch, as for switch_session, so the daemon kills only once
-			// the switch has shown. An error leaves the client to the kill.
 			if len(msg.TapeArgs) < 2 || msg.TapeArgs[0] != m.SessionName {
 				err = errfmt.Errorf("leave_session names a session this client does not show")
 				break
@@ -3587,15 +2633,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			}
 			return m, tea.Batch(func() tea.Msg { return remoteSwitchSessionMsg{name: to} }, relisten)
 		case "notice":
-			// A line from the daemon for the dock, such as why a split did
-			// not follow ssh. Nothing changed, so nothing is pushed.
 			if len(msg.TapeArgs) > 0 {
 				m.heldNotice = msg.TapeArgs[0]
 				m.ShowNotification(m.heldNotice, "info", m.Settings.NotificationDuration)
 			}
 			return m, relisten
 		case "refresh_dock":
-			// Re-run one component now, or every one when unnamed.
 			name := ""
 			if len(msg.TapeArgs) > 0 {
 				name = msg.TapeArgs[0]
@@ -3604,11 +2647,8 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 				notificationMsg = "Remote: refresh-dock " + name
 			}
 		case "tape_script":
-			// Execute a full tape script
 			notificationMsg = "Remote: running a tape"
 
-			// Parse the tape and start the player. The result is sent when
-			// the tape ends, by reportScriptResult.
 			cmd, err = m.executeTapeScript(msg.TapeScript, msg.RequestID)
 			if err == nil {
 				if m.tapeStatusShown() {
@@ -3622,24 +2662,16 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 		m.MarkAllDirty()
 
-		// A routed command mutates this model without going through the input
-		// handler, which is the only other place a daemon session pushes state.
-		// Without this the mutation lives on the client alone and the daemon,
-		// which answers every read verb, keeps reporting the pre-command state.
-		// Push before the result is sent, so a caller that reads back
-		// immediately after a successful command sees what it just did.
 		if err == nil {
 			m.SyncStateToDaemon()
 		}
 
-		// Show notification for the remote command
 		if err != nil {
 			m.ShowNotification(fmt.Sprintf("Remote error: %v", err), "error", m.Settings.NotificationDuration)
 		} else if notificationMsg != "" {
 			m.showRemoteNotice(notificationMsg)
 		}
 
-		// Send result back if we have a daemon client
 		if m.DaemonClient != nil && msg.RequestID != "" {
 			if err != nil {
 				_ = m.DaemonClient.SendCommandResult(msg.RequestID, false, err.Error())
@@ -3656,14 +2688,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case RemoteKeyMsg:
-		// Process a single key from a remote send-keys command
 		var cmd tea.Cmd
 
-		// A key sent from outside has moved on from a pasted image as much
-		// as a typed one, so it takes the paste preview down the same way.
 		m.hidePastePreview()
 
-		// Process this key through the input handler
 		if handler := getInputHandler(); handler != nil {
 			newModel, keyCmd := handler(msg.Key, m)
 			if newOS, ok := newModel.(*OS); ok {
@@ -3672,7 +2700,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			cmd = keyCmd
 		}
 
-		// The chain's next message: the next key, or the end after the last.
 		var next tea.Msg = RemoteKeysDoneMsg{RequestID: msg.RequestID}
 		if len(msg.RemainingKeys) > 0 {
 			next = RemoteKeyMsg{
@@ -3684,22 +2711,14 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, remoteKeyThen(cmd, next, remoteKeyCmdWait)
 
 	case RemoteKeysDoneMsg:
-		// This chain's keys have all been processed. Another chain may still
-		// run: its keys stay marked, and animations stay off, until it ends.
 		m.remoteKeyChains = max(m.remoteKeyChains-1, 0)
 		if m.remoteKeyChains == 0 {
 			m.ProcessingRemoteKeys = false
 			m.Settings.AnimationsSuppressed = false
 		}
 
-		// No retile here. Each key has already done what the same key does
-		// when a person presses it, layout included. This used to drop the
-		// workspace's tree and tile it again from nothing, which undid every
-		// layout change the keys had made: a width key resized the PTYs, and
-		// the rebuilt tree put the tiles back to equal halves.
 		m.MarkAllDirty()
 
-		// Send result back
 		if m.DaemonClient != nil && msg.RequestID != "" {
 			_ = m.DaemonClient.SendCommandResult(msg.RequestID, true, "keys sent")
 		}
@@ -3711,22 +2730,8 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	return m, nil
 }
 
-// activityCarry is how recent this client's input must be to be reported
-// when the session's policy changes to latest. The person who changed it
-// gave input a moment before, through the palette or a command typed in a
-// pane, and is the one the session should follow first.
 const activityCarry = 2 * time.Second
 
-// reportActivity tells the daemon about the person's input, which is what
-// makes this client the latest one under the window_size latest policy.
-// Reported before the input is handled, so a key that resizes nothing is
-// still counted. See session.TUIClient.ReportActivity.
-//
-// Only the latest policy reads it, so under a policy the daemon names as
-// another one nothing is sent. When the policy changes to latest, a client that had input in the
-// last activityCarry reports it once, so the daemon has a starting point.
-// Every client reporting then would make the latest one whichever report
-// happened to arrive last.
 func (m *OS) reportActivity(msg tea.Msg) {
 	if !m.IsDaemonSession || m.DaemonClient == nil {
 		return
@@ -3734,25 +2739,11 @@ func (m *OS) reportActivity(msg tea.Msg) {
 	input := isActivityInput(msg)
 	if input {
 		m.lastActivity = m.msgClock
-		// Input from this terminal is the person using the session. Keys a
-		// routed send-keys or a tape presses arrive as other messages and
-		// are not reported. See session.MsgSessionUsed.
 		m.DaemonClient.ReportUsed(m.msgClock)
 	}
-	// The policy is unknown against a daemon that does not name it in the
-	// attach reply, and during a session switch until the reply lands. Such
-	// a client reports, as every client did before.
 	policy := m.DaemonClient.SessionWindowSize()
 	named := policy == config.WindowSizeLatest
-	// A move to another session is not a policy change. The input that
-	// asked for the move belongs to the session it left, so only input
-	// given since the move is carried.
 	if name := m.DaemonClient.SessionName(); name != m.activitySession {
-		// The use is the other way round. The report above goes out before
-		// the message is handled, so a key or a click that switched
-		// sessions was reported for the session left. Input in the last
-		// activityCarry is what made the move, so the session moved to is
-		// the one the person is using now.
 		if m.activitySession != "" && !m.lastActivity.IsZero() &&
 			m.msgClock.Sub(m.lastActivity) < activityCarry {
 			m.DaemonClient.ReportUsed(m.msgClock)
@@ -3770,12 +2761,6 @@ func (m *OS) reportActivity(msg tea.Msg) {
 	m.wasLatest = named
 }
 
-// isActivityInput reports whether a message is the person acting at this
-// client: a key, a paste, a click, a wheel turn, or a drag. A move with no
-// button held is not, so a pointer resting on the other screen does not take
-// the session. Neither is a key release, a focus report, a resize, or any
-// reply the host terminal sends on its own: bubbletea parses each of those
-// into a message of its own type.
 func isActivityInput(msg tea.Msg) bool {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg, tea.PasteMsg, tea.MouseClickMsg, tea.MouseWheelMsg:
@@ -3786,25 +2771,13 @@ func isActivityInput(msg tea.Msg) bool {
 	return false
 }
 
-// isRemoteKey reports whether msg is a key that send-keys typed.
 func isRemoteKey(msg tea.Msg) bool {
 	_, ok := msg.(RemoteKeyMsg)
 	return ok
 }
 
-// remoteKeyCmdWait is how long the next key of a send-keys chain waits for
-// the commands the key before it started.
 const remoteKeyCmdWait = time.Second
 
-// remoteKeyThen runs a send-keys key's command, then sends next, the chain's
-// next message. The next key waits for the command so that what it started
-// (a list it loads, a dialog it opens) is in place first, as it is for a
-// person who types after seeing the result. It waits no longer than wait: a
-// key can arm a long timer, such as the agents view's minute tick, and Bubble
-// Tea runs a batch inside a sequence to its last command, so the chain and
-// the send-keys call waited for the timer. After wait the chain goes on, and
-// the command's messages still arrive when it ends. Exactly one of the two
-// sends next.
 func remoteKeyThen(cmd tea.Cmd, next tea.Msg, wait time.Duration) tea.Cmd {
 	if cmd == nil {
 		return func() tea.Msg { return next }
@@ -3834,8 +2807,6 @@ func remoteKeyThen(cmd tea.Cmd, next tea.Msg, wait time.Duration) tea.Cmd {
 	return tea.Batch(tea.Sequence(cmd, inOrder), late)
 }
 
-// isPersonInput reports whether msg came from the terminal the client runs
-// in: a key, a click or a paste. Keys send-keys types arrive as RemoteKeyMsg.
 func isPersonInput(msg tea.Msg) bool {
 	switch msg.(type) {
 	case tea.KeyPressMsg, tea.KeyReleaseMsg, tea.MouseClickMsg, tea.MouseReleaseMsg,

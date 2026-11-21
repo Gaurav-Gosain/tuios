@@ -10,104 +10,39 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The frame's cell buffer and the layers composed onto it.
-//
-// This used to be lipgloss's Canvas and Compositor, and the profile of a
-// keystroke frame put more than half of the compose in the two of them doing
-// work the frame did not need. The Compositor measured every layer's content
-// twice per frame, once when the layer was added to its root and once when it
-// flattened the tree, and a grapheme-width pass over a pane's whole body is
-// not cheap. It then re-parsed every layer's string into cells on every frame,
-// including the panes whose layer had not changed since the last one, which
-// is most of them. And the Canvas underneath was a RenderBuffer, so every cell
-// written paid a damage comparison and a touched-line update for a buffer
-// that is cleared and rebuilt from scratch each frame anyway.
-//
-// What replaces them keeps the observable output byte for byte and drops the
-// rest. frameCanvas is a plain uv.Buffer. composeLayersIn orders the layers the
-// way the Compositor did and draws each one either straight from its string,
-// as before, or from a cellLayer: the cells that string parsed to the last
-// time it was seen. A pane's layer keeps its string between keystrokes in
-// other panes, so its cells are parsed once per rebuild and copied thereafter.
-
-// frameCanvas is the composed frame as cells. It stands in for the
-// lipgloss.Canvas GetCanvas used to return and offers the same surface:
-// CellAt hands back a pointer into the buffer, so the spotlight pass and the
-// tests that inspect a cell keep working unchanged.
 type frameCanvas struct {
 	uv.Buffer
-	renderer frameRenderer
-	blank    uv.Line
-	// ground and groundKey are the desktop row the canvas is cleared to while
-	// the desktop background is on, and the ground it was built for. See
-	// ClearTo.
+	renderer  frameRenderer
+	blank     uv.Line
 	ground    uv.Line
 	groundKey string
 }
 
-// WidthMethod is the method a StyledString uses to cut the string into cells.
-// lipgloss set its canvas to grapheme width, and the layers were drawn under
-// it, so the same method here keeps every cluster on the same column.
 func (c *frameCanvas) WidthMethod() uv.WidthMethod {
 	return ansi.GraphemeWidth
 }
 
-// Render is the frame as the string bubbletea takes, with trailing blanks
-// trimmed the way lipgloss trimmed them. See frame_render.go.
 func (c *frameCanvas) Render() string {
 	return c.renderer.render(c.Lines)
 }
 
-// cellLayer is a layer's string parsed to cells, kept so a layer that comes
-// back unchanged on the next frame is copied rather than parsed again.
-//
-// The buffer is a few columns wider than the layer. A wide glyph on a layer's
-// last column spills its second half past the layer's edge when drawn straight
-// onto the canvas, because the clip in uv.Line.Set is against the line the
-// cell lands on and not the layer's own bounds. Parsing into a buffer exactly
-// the layer's width would turn that glyph into blanks and the two paths would
-// disagree by a cell. The margin lets the head cell keep its width, and the
-// copy hands only head cells to the canvas, whose Line.Set then spills or
-// clips exactly as it did before.
 type cellLayer struct {
-	content string
-	w, h    int
-	buf     uv.Buffer
-	// spill marks the rows holding a wide cell whose head is on the last
-	// column, so its second half lands past the layer's edge. Those rows are
-	// drawn cell by cell.
-	spill []bool
-	blank uv.Line
-	gen   uint64
-	// fillRect, fillInner and fillOuter are the backgrounds painted into buf,
-	// if any, so a change of any of them reparses. See background.go.
+	content              string
+	w, h                 int
+	buf                  uv.Buffer
+	spill                []bool
+	blank                uv.Line
+	gen                  uint64
 	fillRect             image.Rectangle
 	fillInner, fillOuter string
 }
 
-// wideMargin is the room past a layer's right edge that a head cell on the
-// last column may need. Under grapheme width no cluster is wider than two
-// cells; the margin is larger so a wcwidth fallback cannot reach it either.
 const wideMargin = 8
 
-// WidthMethod matches frameCanvas, so the cells parsed here are the cells the
-// canvas would have parsed.
 func (cl *cellLayer) WidthMethod() uv.WidthMethod {
 	return ansi.GraphemeWidth
 }
 
-// update reparses the layer when its string changed and is a comparison
-// otherwise. The comparison is a pointer check when the layer kept its
-// string, which a cached pane layer does, and a memcmp when a producer built
-// an equal string afresh, which is still far cheaper than parsing it.
-//
-// w and h are the layer's own measurements, taken once by lipgloss.NewLayer;
-// the Compositor measured the string again, twice, on every frame.
-//
-// fill is the background to paint into the parsed cells, and is part of what
-// the cells are keyed on: a layer whose string did not change but whose ground
-// did (an option was switched, the theme changed, a pane moved under a clip)
-// is parsed again rather than copied with the old paint.
 func (cl *cellLayer) update(content string, w, h int, fill *layerFill) {
 	if cl.same(content, fill) {
 		return
@@ -133,14 +68,11 @@ func (cl *cellLayer) update(content string, w, h int, fill *layerFill) {
 	}
 }
 
-// same reports whether the cells hold content painted with fill already.
 func (cl *cellLayer) same(content string, fill *layerFill) bool {
 	return cl.content == content && cl.w >= 0 && cl.fillRect == fill.rect &&
 		cl.fillInner == fill.inner.key && cl.fillOuter == fill.outer.key
 }
 
-// clearLines sets every cell to the blank cell, a row at a time, copying
-// from blank. It returns blank, grown to the widest line if it was shorter.
 func clearLines(lines []uv.Line, blank uv.Line) uv.Line {
 	w := 0
 	for _, l := range lines {
@@ -158,15 +90,10 @@ func clearLines(lines []uv.Line, blank uv.Line) uv.Line {
 	return blank
 }
 
-// Clear blanks the canvas. uv.Buffer.Clear assigns cell by cell; a row copy
-// is the same result in a fraction of the time.
 func (c *frameCanvas) Clear() {
 	c.blank = clearLines(c.Lines, c.blank)
 }
 
-// ClearTo blanks the canvas onto the desktop's ground: every cell no layer
-// covers is desktop, so the desktop background is the value the canvas starts
-// from rather than a pass after the layers. Off, it is Clear.
 func (c *frameCanvas) ClearTo(g ground) {
 	if !g.on() {
 		c.Clear()
@@ -189,8 +116,6 @@ func (c *frameCanvas) ClearTo(g ground) {
 	}
 }
 
-// cellLayerScreen is the uv.Screen a layer is parsed onto. It is the layer's
-// own buffer with the canvas's width method.
 type cellLayerScreen struct {
 	*cellLayer
 }
@@ -200,15 +125,6 @@ func (s *cellLayerScreen) CellAt(x, y int) *uv.Cell     { return s.buf.CellAt(x,
 func (s *cellLayerScreen) SetCell(x, y int, c *uv.Cell) { s.buf.SetCell(x, y, c) }
 func (s *cellLayerScreen) WidthMethod() uv.WidthMethod  { return ansi.GraphemeWidth }
 
-// blit copies the parsed cells onto the canvas at (x, y).
-//
-// What it reproduces is the sequence of writes a StyledString.Draw makes
-// there: the layer's rectangle cleared to blanks, then each head cell set left
-// to right, with uv.Line.Set splitting any wide cell it lands on and clipping
-// at the canvas edge. A row whose edges meet no wide cell on either side is
-// the same sequence collapsed to one copy, since every cell in it is then set
-// exactly once to the value the source holds. The rest go through Line.Set a
-// cell at a time.
 func (cl *cellLayer) blit(canvas *frameCanvas, x, y int) {
 	for row := range cl.h {
 		cy := y + row
@@ -235,53 +151,21 @@ func (cl *cellLayer) blit(canvas *frameCanvas, x, y int) {
 	}
 }
 
-// isPlaceholder reports whether a canvas cell is the continuation of a wide
-// cell, which a write over it has to split.
 func isPlaceholder(c *uv.Cell) bool {
 	return c.Width == 0
 }
 
-// composedLayer is one layer with the bounds the compositor gives it.
 type composedLayer struct {
 	layer  *lipgloss.Layer
 	bounds image.Rectangle
 	cells  *cellLayer
-	// pane marks a layer in the layout frame: a pane, its scrollbar, a
-	// separator. In a view of a larger session it is drawn shifted and
-	// clipped. See pane_view.go.
-	pane bool
+	pane   bool
 }
 
-// composeLayersIn draws layers onto the canvas in ascending z order.
-//
-// Layers with equal Z keep their input order, so later panes draw above
-// earlier panes, matching pointer hit tests. The empty root layer has Z=0.
-// A layer with an id is drawn from its cellLayer, parsed the first
-// time its string is seen and kept across frames under that id; a layer
-// without one is parsed straight onto the canvas as before.
-//
-// The first paneLayers layers are in the layout frame. While the frame is a
-// view of a larger session (m.sessionView), those are drawn shifted onto the
-// screen and clipped to the view's pane area. Their bounds for the backgrounds stay the layout ones, so
-// a pane's fill lands on its own cells wherever the view puts them.
 func (m *OS) composeLayersIn(canvas *frameCanvas, layers []*lipgloss.Layer, paneLayers int) {
 	m.composeLayers(canvas, layers, paneLayers, nil)
 }
 
-// A frame that changed nothing but the direct pane keeps the canvas.
-//
-// The direct pane (pane_cells.go) is copied onto the canvas after every
-// layer, and while it is drawn nothing is open over it and no effect runs.
-// So when every layer of a frame is the layer of the last frame (the same
-// cells at the same place and depth), no pass wrote over the layers on either
-// frame, and the canvas was not drawn by anything else in between, the
-// canvas already holds this frame's layers. Only the pane's cells are copied
-// again, and only the rows they change are passed to the screen as changed.
-// A key typed into a lone pane beside the rail and the dock costs a row, not
-// the screen.
-
-// keptCanvas is what the canvas holds after a frame that may be kept: the
-// layers it was drawn from, the ground it was cleared to and its size.
 type keptCanvas struct {
 	valid  bool
 	ground string
@@ -295,21 +179,12 @@ type keptLayer struct {
 	z      int
 }
 
-// keepRequest is how GetCanvas asks composeLayers for its frame: the ground
-// to clear the canvas to, the direct pane, and whether the frame may keep the
-// canvas (a direct pane is drawn and no pass outside the compositor runs).
-//
-// The direct pane's cells are copied right after its box layer is drawn, at
-// the pane's own depth, so every layer above it (a drag's label, quick look,
-// a menu) is drawn over its cells, as it would be over the pane's text.
 type keepRequest struct {
 	ground   ground
 	keepable bool
 	pane     *directPane
 }
 
-// matches reports whether the ordered layers, with their cells already
-// updated, are the layers the canvas was drawn from.
 func (k *keptCanvas) matches(canvas *frameCanvas, g ground, ordered []composedLayer) bool {
 	if !k.valid || k.w != canvas.Width() || k.h != canvas.Height() || k.ground != g.key || len(k.layers) != len(ordered) {
 		return false
@@ -323,7 +198,6 @@ func (k *keptCanvas) matches(canvas *frameCanvas, g ground, ordered []composedLa
 	return true
 }
 
-// record keeps what the canvas was drawn from.
 func (k *keptCanvas) record(canvas *frameCanvas, g ground, ordered []composedLayer) {
 	k.valid = true
 	k.w, k.h, k.ground = canvas.Width(), canvas.Height(), g.key
@@ -334,10 +208,6 @@ func (k *keptCanvas) record(canvas *frameCanvas, g ground, ordered []composedLay
 	}
 }
 
-// composeLayers is composeLayersIn for GetCanvas, which passes keep: the
-// canvas is cleared to keep.ground and drawn, or kept as the last frame left
-// it when keep.keepable allows and nothing else changed. It reports whether
-// the canvas was kept.
 func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer, paneLayers int, keep *keepRequest) bool {
 	m.composeGen++
 	if m.layerCells == nil {
@@ -345,15 +215,9 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer, paneLa
 	}
 
 	ordered := m.composeScratch[:0]
-	// The Compositor's root: an empty layer at the origin that never draws
-	// but does sort.
 	ordered = append(ordered, composedLayer{bounds: image.Rect(0, 0, 0, 1)})
 	now := time.Now()
 	view := m.sessionView
-	// A workspace slide draws the panes through the same shift and clip a
-	// view of a larger session does, and the old workspace's kept cells in
-	// the part of the pane area the new one has not reached yet. See
-	// workspace_slide.go.
 	slide, sliding := m.slideAt(now)
 	if sliding {
 		if !view.on {
@@ -377,9 +241,6 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer, paneLa
 			cl.gen = m.composeGen
 			entry.cells = cl
 		}
-		// The layer's own size, measured once when it was built. A layer here
-		// has no children, so it is the size of the content and nothing else,
-		// which is what the Compositor's bounds were.
 		entry.bounds = image.Rect(l.GetX(), l.GetY(), l.GetX()+l.Width(), l.GetY()+l.Height())
 		ordered = append(ordered, entry)
 	}
@@ -387,27 +248,16 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer, paneLa
 		return layerZ(a.layer) - layerZ(b.layer)
 	})
 
-	// The backgrounds, resolved once for the frame. With every one off no
-	// layer below looks anything up. See background.go.
 	grounds := m.frameGrounds()
 	painted := grounds.any()
 
-	// The motion passes. The scrim goes on once, under the first modal layer;
-	// a fade goes on right after its own overlay is drawn; the shimmer right
-	// after the rail. Each is a pass over cells already on the canvas, in draw
-	// order, so none of them reaches a layer drawn above it. See scrim.go,
-	// motion.go and shimmer.go.
 	popup, popupDim := m.popupScrimTarget()
 	scrimmed := m.Settings.ModalDim <= 0 && popupDim <= 0
-	// The dock and the rails sit above the panes, so they take the popup's
-	// scrim after they are drawn. Only TML also shades the dialog ground.
 	dialogScrim := popup != "" && m.isTMLPopup(m.GetFocusedWindow())
 	chromeScrim := false
 	fading := m.motion.fading > 0
 	shimmer := len(m.motion.rail) > 0
 
-	// The direct pane, drawn into the canvas from its emulator after its
-	// box layer.
 	var pane *directPane
 	var paneID string
 	var paneRect image.Rectangle
@@ -415,11 +265,6 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer, paneLa
 		pane, paneID, paneRect = keep.pane, keep.pane.w.ID, paneContentRect(keep.pane.w)
 	}
 
-	// Whether this frame draws its layers and nothing over them: no pass
-	// below runs (quiet), every layer is drawn from its cells, and no layer
-	// above the direct pane covers any of it (plain). The pane's cells are
-	// copied again on a kept canvas, so a layer over them would be written
-	// over.
 	quiet := keep != nil && keep.keepable && !sliding && !view.on && popup == "" && !fading && !shimmer &&
 		!m.gradient.on && m.hints == nil && m.paneLabels == nil && !m.dropZoneShown && !m.dropRingOn()
 	if quiet && m.Settings.ModalDim > 0 {
@@ -449,8 +294,6 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer, paneLa
 				fill = m.layerFill(e.layer.GetID(), e.bounds, e.layer.Width(), e.layer.Height(), &grounds)
 			}
 			if !e.cells.same(e.layer.GetContent(), &fill) {
-				// Parsed now, so the frame is drawn from the new cells
-				// and can be kept next time.
 				e.cells.update(e.layer.GetContent(), e.layer.Width(), e.layer.Height(), &fill)
 				reparsed = true
 			}
@@ -518,8 +361,6 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer, paneLa
 		if !cl.bounds.Overlaps(area) {
 			continue
 		}
-		// The old workspace goes in under the first piece of chrome that
-		// covers any of the pane area, so the chrome stays on top of it.
 		if !slideDrawn && cl.bounds.Overlaps(slide.area) {
 			m.drawSlideOld(canvas, slide)
 			slideDrawn = true
@@ -530,7 +371,6 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer, paneLa
 			scrimmed, chromeScrim = true, true
 		}
 		if !scrimmed && m.Settings.ModalDim > 0 && scrimBehind(cl.layer.GetID()) {
-			// Image glyphs first, so the scrim fades them like text.
 			m.drawImageSymbols(canvas)
 			m.applyScrim(canvas, m.Settings.ModalDim)
 			scrimmed = true
@@ -572,8 +412,6 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer, paneLa
 	if !slideDrawn {
 		m.drawSlideOld(canvas, slide)
 	}
-	// A kept canvas, or a pane whose layer was not drawn: its cells go on
-	// last, as nothing is drawn over them.
 	if pane != nil && !paneDrawn {
 		m.copyDirectPane(canvas, pane, kept)
 	}
@@ -581,15 +419,10 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer, paneLa
 		m.checkFrame(canvas, ordered, painted, &grounds, ground, pane, kept)
 	}
 	if pane != nil {
-		// The pane's rectangle holds its cells alone only when no layer
-		// above it covered them and no pass ran over the canvas.
 		m.directHold.pure = plain
 		m.directHold.saved = nil
 	}
 
-	// A cached layer that was not on this frame is dropped. A pane on another
-	// workspace parses again when it comes back, which is the price of not
-	// holding every pane's cells for as long as the pane lives.
 	if !m.keepLayerCells {
 		for id, cl := range m.layerCells {
 			if cl.gen != m.composeGen {
@@ -609,35 +442,22 @@ func (m *OS) composeLayers(canvas *frameCanvas, layers []*lipgloss.Layer, paneLa
 	return kept
 }
 
-// drawComposedLayer draws one layer onto the canvas: from its parsed cells
-// when it has an id, and straight from its string otherwise.
 func (m *OS) drawComposedLayer(canvas *frameCanvas, cl composedLayer, painted bool, grounds *frameGrounds, area image.Rectangle) {
 	if cl.cells != nil {
 		var fill layerFill
 		if painted {
 			fill = m.layerFill(cl.layer.GetID(), cl.bounds, cl.layer.Width(), cl.layer.Height(), grounds)
 		}
-		// Parsed here, in draw order, and not when the layers were
-		// collected: two layers on one frame that share an id share the
-		// cellLayer too, and each has to hold its own cells at the moment
-		// it is drawn. Nothing on the frame today shares an id, and
-		// nothing enforces that either.
 		cl.cells.update(cl.layer.GetContent(), cl.layer.Width(), cl.layer.Height(), &fill)
 		cl.cells.blit(canvas, cl.bounds.Min.X, cl.bounds.Min.Y)
 		return
 	}
 	uv.NewStyledString(cl.layer.GetContent()).Draw(canvas, cl.bounds)
-	// A layer with no id has no surface of its own, so its transparent
-	// cells are the desktop's. Every layer the frame builds today has an
-	// id; this keeps one added without from punching a hole.
 	if g := grounds[surfaceDesktop]; g.on() {
 		paintGround(canvas.Lines, cl.bounds.Intersect(area), g)
 	}
 }
 
-// drawPaneLayer draws a layout-frame layer at its place on the screen, at,
-// clipped to the view's pane area. The cell path is the same parse and copy
-// drawComposedLayer makes; only the copy is cut at the clip.
 func (m *OS) drawPaneLayer(canvas *frameCanvas, cl composedLayer, at, clip image.Rectangle, painted bool, grounds *frameGrounds) {
 	if cl.cells == nil {
 		uv.NewStyledString(cl.layer.GetContent()).Draw(&clippedScreen{canvas, clip}, at)
@@ -655,13 +475,6 @@ func (m *OS) drawPaneLayer(canvas *frameCanvas, cl composedLayer, at, clip image
 	cl.cells.blitClipped(canvas, at.Min.X, at.Min.Y, clip)
 }
 
-// blitClipped is blit for a layer that crosses the clip: only the cells
-// inside the clip are written. A wide cell cut by the clip's right edge is
-// left to the chrome drawn over that edge.
-//
-// As in blit, a row whose clipped span meets no wide cell at either edge, on
-// the canvas or in the layer, is one copy. A wide cell at an edge is split or
-// spilled by Line.Set, so those rows are set a cell at a time.
 func (cl *cellLayer) blitClipped(canvas *frameCanvas, x, y int, clip image.Rectangle) {
 	for row := range cl.h {
 		cy := y + row
@@ -693,8 +506,6 @@ func (cl *cellLayer) blitClipped(canvas *frameCanvas, x, y int, clip image.Recta
 	}
 }
 
-// clippedScreen is the canvas seen through a clip, for a layer drawn from its
-// string: a cell outside the clip is dropped.
 type clippedScreen struct {
 	*frameCanvas
 	clip image.Rectangle
@@ -706,7 +517,6 @@ func (s *clippedScreen) SetCell(x, y int, c *uv.Cell) {
 	}
 }
 
-// layerZ is a layer's z, with the compositor's root at zero.
 func layerZ(l *lipgloss.Layer) int {
 	if l == nil {
 		return 0

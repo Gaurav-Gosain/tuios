@@ -12,7 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// withASCII puts the session in ASCII-only mode for the test.
 func withASCII(t *testing.T) {
 	t.Helper()
 	prev := config.Global.UseASCIIOnly
@@ -32,7 +31,7 @@ func withASCII(t *testing.T) {
 // No warm-up here on purpose: this is the first frame the process draws.
 func TestASCIIModeIsRightOnTheFirstFrame(t *testing.T) {
 	withASCII(t)
-	overlay.SetASCII(false) // as a fresh process starts, before any frame
+	overlay.SetASCII(false)
 
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
 	m := newNarrowOS(t, 120, 40)

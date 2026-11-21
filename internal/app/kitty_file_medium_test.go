@@ -13,7 +13,6 @@ import (
 
 const kittyMediumWin = "window-medium-0000-0000-000000000000"
 
-// kittyFileCmd is an a=T of a 2x2 RGBA image read from a file medium.
 func kittyFileCmd(medium vt.KittyGraphicsMedium, path string) *vt.KittyCommand {
 	return &vt.KittyCommand{
 		Action:   vt.KittyActionTransmitPlace,
@@ -26,8 +25,6 @@ func kittyFileCmd(medium vt.KittyGraphicsMedium, path string) *vt.KittyCommand {
 	}
 }
 
-// remoteKitty is a passthrough whose host is reached over ssh, so it cannot
-// read this machine's files and tuios sends it the bytes.
 func remoteKitty(t *testing.T) (*KittyPassthrough, *countingWriter) {
 	t.Helper()
 	withClientCaps(t, &HostCapabilities{KittyGraphics: true, TerminalName: "kitty", CellWidth: 10, CellHeight: 20})
@@ -39,7 +36,6 @@ func remoteKitty(t *testing.T) (*KittyPassthrough, *countingWriter) {
 	return kp, host
 }
 
-// sendKitty forwards cmd and flushes whatever it queued to the host.
 func sendKitty(kp *KittyPassthrough, cmd *vt.KittyCommand) {
 	kp.ForwardCommand(cmd, nil, kittyMediumWin, 0, 0, 80, 24, 1, 1, 0, 0, 0, false, func([]byte) {})
 	if data := kp.FlushPending(); len(data) > 0 {
@@ -47,8 +43,6 @@ func sendKitty(kp *KittyPassthrough, cmd *vt.KittyCommand) {
 	}
 }
 
-// secretFile writes 16 bytes, the size of a 2x2 RGBA image, to a file that
-// stands for one the pane's output must not be able to name.
 func secretFile(t *testing.T, dir, name string) string {
 	t.Helper()
 	path := filepath.Join(dir, name)
@@ -74,9 +68,6 @@ func TestKittyShmNameCannotLeaveDevShm(t *testing.T) {
 	}
 }
 
-// homeSecret writes a secret file in a directory that is not a temporary
-// one. The test process's own home is under /tmp, so the temporary
-// directories are narrowed to one directory beside it for the test.
 func homeSecret(t *testing.T, name string) string {
 	t.Helper()
 	root := t.TempDir()
@@ -160,9 +151,6 @@ func TestKittyShmNameWithSlashIsNotForwarded(t *testing.T) {
 	}
 }
 
-// useKittyTempDirs makes dirs the only fixed temporary directories for a
-// test, and clears TMPDIR. A TMPDIR the test sets later still counts when vt
-// accepts it.
 func useKittyTempDirs(t *testing.T, dirs ...string) {
 	t.Helper()
 	fixed := map[string]bool{"/tmp": true, "/dev/shm": true, "/var/tmp": true}
@@ -188,11 +176,6 @@ func useKittyTempDirs(t *testing.T, dirs ...string) {
 	t.Setenv("TMPDIR", "")
 }
 
-// kittyTestTempDir returns a fresh directory that the kitty file checks
-// treat as the only temporary one. The checks refuse a file outside a
-// temporary directory, and they ignore a TMPDIR inside the home directory
-// (say ~/.cache/tmp), so a test that took its file from os.TempDir would
-// fail whenever TMPDIR points there.
 func kittyTestTempDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -230,7 +213,6 @@ func TestKittyTmpdirAboveHomeIsIgnored(t *testing.T) {
 			t.Fatalf("TMPDIR=%s let a file in the home directory through: %d bytes", tmpdir, n)
 		}
 	}
-	// A TMPDIR beside the home directory still counts.
 	tmp := filepath.Join(root, "tmp")
 	if err := os.Mkdir(tmp, 0o700); err != nil {
 		t.Fatal(err)

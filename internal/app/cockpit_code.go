@@ -9,32 +9,17 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
-// A click on a code block's header, or C for the lowest block on screen,
-// copies the block's code as the agent wrote it.
-//
-// A code line wider than the thread is cut at the block's edge. The block
-// scrolls sideways under a sideways wheel or shift and the wheel, and under
-// ( and ) for the lowest such block on screen. Its lines move together, and
-// its gutter, ground and edge stay. How far each block is scrolled is the
-// thread's, by the block's key, so it holds while the thread grows.
-
-// ckCodeWheelStep and ckCodeKeyStep are how far one wheel notch and one key
-// move a code block, in cells.
 const (
 	ckCodeWheelStep = 3
 	ckCodeKeyStep   = 8
 )
 
-// ckCodeView is where a frame drew a thread's lines: line i of the thread
-// is on screen row top+i, for start <= i < end, from column x0 to x1.
 type ckCodeView struct {
 	t           *agentThread
 	x0, x1, top int
 	start, end  int
 }
 
-// cockpitCodeAt is the thread and the key of the code block drawn at x, y,
-// "" for none.
 func (m *OS) cockpitCodeAt(x, y int) (*agentThread, string) {
 	v := m.Inbox.ck.code
 	if v.t == nil || x < v.x0 || x >= v.x1 {
@@ -47,8 +32,6 @@ func (m *OS) cockpitCodeAt(x, y int) (*agentThread, string) {
 	return v.t, v.t.lines[i].code
 }
 
-// cockpitCodeLowest is the thread and the key of the lowest code block on
-// screen, wider than the thread when wide, "" for none.
 func (m *OS) cockpitCodeLowest(wide bool) (*agentThread, string) {
 	v := m.Inbox.ck.code
 	if v.t == nil {
@@ -62,8 +45,6 @@ func (m *OS) cockpitCodeLowest(wide bool) (*agentThread, string) {
 	return nil, ""
 }
 
-// scrollCode moves the code block key dx cells sideways, held to its
-// bounds, and reports whether it moved.
 func (t *agentThread) scrollCode(key string, dx int) bool {
 	x := min(max(t.codeX[key]+dx, 0), t.codeMax[key])
 	if x == t.codeX[key] {
@@ -125,12 +106,8 @@ func (m *OS) CockpitCodeScroll(dir int) {
 	}
 }
 
-// ckCodeCopyHit is the start of the hit of a code block's header: a click
-// copies the block whose key follows it.
 const ckCodeCopyHit = "code-copy:"
 
-// ckCode is a code block's code as the thread holds it. open says its fence
-// was never closed.
 type ckCode struct {
 	text string
 	open bool
@@ -147,11 +124,6 @@ func (m *OS) CockpitCodeCopy() tea.Cmd {
 	return m.cockpitCopyCode(t, key)
 }
 
-// cockpitCopyCode puts the code of block key of t on the clipboard and in
-// the paste buffers, the way a yank in copy mode does, and says how many
-// lines it copied. A block whose message the daemon cut, and whose fence
-// was not closed before the cut, is copied as far as the thread holds it,
-// and the status line says so.
 func (m *OS) cockpitCopyCode(t *agentThread, key string) tea.Cmd {
 	c, ok := t.code[key]
 	if !ok {
@@ -164,13 +136,11 @@ func (m *OS) cockpitCopyCode(t *agentThread, key string) tea.Cmd {
 	}
 	m.ShowNotification(word, "success", m.Settings.NotificationDuration)
 	if m.Settings.CopyCommand != "" {
-		// Yank keeps the paste buffer itself.
 		return m.Yank(c.text)
 	}
 	return tea.Batch(tea.SetClipboard(c.text), m.SaveToPasteBuffers(c.text))
 }
 
-// entryCut reports whether the daemon cut the text of entry id.
 func (t *agentThread) entryCut(id string) bool {
 	for i := range t.entries {
 		if t.entries[i].ID == id {

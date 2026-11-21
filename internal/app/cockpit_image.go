@@ -17,34 +17,15 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// The image view: one picture of the draft at the largest size the screen
-// holds, over the whole agents view (DESIGN.md 3.10, frame f). It names the
-// image, its size in pixels and bytes and where it came from. o opens it in
-// the desktop's viewer, c saves a copy and copies its path, s saves a copy,
-// left and right step through the draft's images, + and - zoom, and esc or a
-// click outside the picture closes it.
-//
-// The picture goes through the reply previews' pipeline: kitty graphics
-// placed after the frame where the host has them, block glyphs from
-// shot/mosaic where it does not, and a line of words at 16 colours. It is
-// prepared once per image and size, off the update loop.
-
-// ckZoomSteps are the zoom levels, as shares of the largest fit.
 var ckZoomSteps = [...]float64{1, 0.75, 0.5, 0.35}
 
-// ckImageView is the open image view.
 type ckImageView struct {
-	imgs []*composer.Image
-	idx  int
-	zoom int
-	who  string
-	// from says where an image of the conversation came from, in place of
-	// who for a draft's.
-	from string
-	// saved is where each image was saved, by index, so c and s write
-	// one copy.
-	saved map[int]string
-	// box is the picture's cell box in the last frame, on the screen.
+	imgs         []*composer.Image
+	idx          int
+	zoom         int
+	who          string
+	from         string
+	saved        map[int]string
 	box          overlay.Rect
 	cols, rows   int
 	mode         composer.PreviewMode
@@ -54,7 +35,6 @@ type ckImageView struct {
 // CockpitImageOpen reports whether the image view is up.
 func (m *OS) CockpitImageOpen() bool { return m.ShowInbox && m.Inbox.ck.img != nil }
 
-// cockpitOpenImage opens the view on the draft's image i.
 func (m *OS) cockpitOpenImage(i int) tea.Cmd {
 	ed := m.Inbox.reply.editor
 	if ed == nil {
@@ -66,7 +46,6 @@ func (m *OS) cockpitOpenImage(i int) tea.Cmd {
 	}
 	m.Inbox.ck.img = &ckImageView{imgs: imgs, idx: i, who: ed.who, saved: map[int]string{}}
 	m.cockpitTouch()
-	// A click opens the view, and the mouse path asks for no picture.
 	return m.CockpitImagePicture()
 }
 
@@ -104,14 +83,11 @@ func (m *OS) CockpitImageKey(key string) tea.Cmd {
 	return nil
 }
 
-// cockpitCloseImage closes the image view.
 func (m *OS) cockpitCloseImage() {
 	m.Inbox.ck.img = nil
 	m.cockpitTouch()
 }
 
-// cockpitImageClick handles a click while the view is up: one outside the
-// picture closes it.
 func (m *OS) cockpitImageClick(x, y int) {
 	v := m.Inbox.ck.img
 	if !v.box.Contains(x, y) {
@@ -119,8 +95,6 @@ func (m *OS) cockpitImageClick(x, y int) {
 	}
 }
 
-// cockpitSaveImage writes the image to the screenshot folder, once, and
-// returns its path, "" when it could not be written.
 func (m *OS) cockpitSaveImage() string {
 	v := m.Inbox.ck.img
 	if path, ok := v.saved[v.idx]; ok {
@@ -145,9 +119,6 @@ func (m *OS) cockpitSaveImage() string {
 	return path
 }
 
-// ckWriteNew writes data to a new file in dir named name, or name with a
-// number in front when one is there already. It never replaces a file and
-// never follows a link: the file is created with O_EXCL.
 func ckWriteNew(dir, name string, data []byte) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
@@ -172,7 +143,6 @@ func ckWriteNew(dir, name string, data []byte) (string, error) {
 	}
 }
 
-// drawImageView draws the image view over the whole canvas.
 func (m *OS) drawImageView(c *ckCanvas, l ckLook, top int) {
 	v := m.Inbox.ck.img
 	pal := l.pal
@@ -201,7 +171,6 @@ func (m *OS) drawImageView(c *ckCanvas, l ckLook, top int) {
 	px, py, cols, rows := v.placeX, v.plcY-top, v.cols, v.rows
 	switch {
 	case img.Width <= 0 || img.Height <= 0:
-		// A format tuios cannot decode, such as WebP: no picture comes.
 		msg := "tuios cannot draw this image."
 		if p.CanOpen() {
 			msg += " o opens it in the viewer."
@@ -243,9 +212,6 @@ func (m *OS) drawImageView(c *ckCanvas, l ckLook, top int) {
 	c.text(x0, fy, rx-2, hints...)
 }
 
-// cockpitImageLayout places the view's picture for a canvas of w by h cells
-// whose first row is screen row top: the largest box that holds its shape,
-// zoomed, centred in the area under the header.
 func (m *OS) cockpitImageLayout(w, h, top int) {
 	v := m.Inbox.ck.img
 	margin := 2
@@ -277,13 +243,11 @@ func (m *OS) CockpitImagePicture() tea.Cmd {
 	return m.cockpitImagePicture()
 }
 
-// ckFitBox is the largest box of at most maxCols by maxRows cells that holds
-// img's shape, scaled by zoom. aspect is a cell's height over its width.
 func ckFitBox(img *composer.Image, maxCols, maxRows int, aspect, zoom float64) (int, int) {
 	if img.Width <= 0 || img.Height <= 0 {
 		return max(int(float64(maxCols)*zoom), 1), max(int(float64(maxRows)*zoom), 1)
 	}
-	ratio := float64(img.Width) / float64(img.Height) * aspect // cols per row
+	ratio := float64(img.Width) / float64(img.Height) * aspect
 	rows := float64(maxRows)
 	cols := rows * ratio
 	if cols > float64(maxCols) {
@@ -293,7 +257,6 @@ func ckFitBox(img *composer.Image, maxCols, maxRows int, aspect, zoom float64) (
 	return max(int(math.Round(cols*zoom)), 1), max(int(math.Round(rows*zoom)), 1)
 }
 
-// cockpitImagePicture prepares the view's picture when it is not ready.
 func (m *OS) cockpitImagePicture() tea.Cmd {
 	v := m.Inbox.ck.img
 	if v == nil || v.cols <= 0 || v.mode == composer.PreviewText {
@@ -322,8 +285,6 @@ func (m *OS) cockpitImagePicture() tea.Cmd {
 	}
 }
 
-// cockpitImagePlacement is the view's picture as a kitty placement, when the
-// view is up in pixel mode.
 func (m *OS) cockpitImagePlacement() (previewPlacement, bool) {
 	v := m.Inbox.ck.img
 	if !m.CockpitImageOpen() || v.mode != composer.PreviewPixels || v.cols <= 0 {

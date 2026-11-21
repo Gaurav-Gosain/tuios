@@ -48,8 +48,6 @@ func TestAThemeTransitionEndsAndLetsTheClockLapse(t *testing.T) {
 		t.Fatal("the first frame after the change did not keep the old one")
 	}
 
-	// A frame mid-way draws; the frame after the end draws once more and
-	// the clock stops.
 	m.renderSkipped = true
 	dueNow(m)
 	m.handleMotionFrame(motionFrameMsg{gen: m.motion.gen})
@@ -57,8 +55,6 @@ func TestAThemeTransitionEndsAndLetsTheClockLapse(t *testing.T) {
 		t.Error("a motion frame during the transition was skipped")
 	}
 
-	// The next frame is due one interval after the last was due, however
-	// late that one was handled.
 	frame := m.themeTransitionFrame()
 	late := time.Now().Add(-frame / 2)
 	i := effectIndex("theme transition")
@@ -68,8 +64,6 @@ func TestAThemeTransitionEndsAndLetsTheClockLapse(t *testing.T) {
 		t.Errorf("a frame handled %v late put the next one at %v past the last, want %v",
 			frame/2, m.motion.due[i].Sub(late), frame)
 	}
-	// A second of frames, each handled 4 ms after it was due, is still a
-	// second of frames at the full rate.
 	start := time.Now()
 	at := start.Add(frame)
 	n := 0
@@ -80,8 +74,6 @@ func TestAThemeTransitionEndsAndLetsTheClockLapse(t *testing.T) {
 	if rate := int(time.Second / frame); n < rate-1 {
 		t.Errorf("frames handled 4 ms late came %d times a second, want %d", n, rate)
 	}
-	// A stall does not make the clock catch up: the frames it missed are
-	// gone, and the next waits a whole interval from a new grid.
 	stalled := at.Add(time.Second)
 	for k := range 3 {
 		next := nextDue(at, stalled, frame)
@@ -104,7 +96,6 @@ func TestAThemeTransitionEndsAndLetsTheClockLapse(t *testing.T) {
 		t.Error("the kept frame outlived the transition")
 	}
 
-	// Motion none: a change of theme is a cut.
 	m.Settings.Motion = config.MotionNone
 	m.applyTheme("catppuccin_latte")
 	m.motionCmd()

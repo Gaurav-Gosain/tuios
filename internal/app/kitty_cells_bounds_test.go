@@ -24,7 +24,7 @@ func TestKittyBoxFromHostileSizes(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		cmd      vt.KittyCommand
-		min, max [2]int // cols, rows
+		min, max [2]int
 	}{
 		{"s past int range with c", vt.KittyCommand{Columns: 12, Width: 1 << 62, Height: 1}, [2]int{12, 1}, [2]int{12, 1}},
 		{"v past int range with r", vt.KittyCommand{Rows: 3, Width: 1, Height: 1 << 62}, [2]int{1, 3}, [2]int{1, 3}},

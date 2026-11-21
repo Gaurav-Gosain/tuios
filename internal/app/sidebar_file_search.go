@@ -9,8 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// Search is bounded so a large or remote tree cannot keep the picker waiting.
-// When the time is up, the results found so far are shown as partial.
 const (
 	fileSearchMaxDirs  = 1500
 	fileSearchMaxFiles = 5000

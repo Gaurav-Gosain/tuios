@@ -18,18 +18,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// Capture mode and the post-capture preview.
-//
-// The whole surface works on a terminal with no graphics support. The
-// selection, the size chip and the preview are cells; kitty graphics add one
-// thing and one thing only, which is seeing the pixel frame before leaving the
-// terminal. Nothing here needs a tick: capture mode is driven entirely by the
-// input events that already wake the loop, and the preview is a static panel,
-// so no field added by this file is ever read by tickNeedsWork.
-
-// The panel's runtime strings. They are drawn into fixed slots in a panel that
-// is at most a few dozen columns wide, so each one is a short sentence that
-// says one thing.
 const (
 	shotStatusSaving     = "Saving the image…"
 	shotStatusCopied     = "Copied."
@@ -39,20 +27,11 @@ const (
 	shotCopyImage        = "copy image"
 )
 
-// captureState is capture mode. Every field is zero when the mode is off, so
-// entering and leaving it is one assignment either way.
 type captureState struct {
-	Active bool
-	// Hover is the window index under the pointer, or -1.
-	Hover int
-	// Keyboard marks an entry with no mouse, which changes the hint strip and
-	// makes tab and enter the way through.
-	Keyboard bool
-	// Dragging is a region selection in progress.
-	Dragging bool
-	// OverOverlay marks a capture opened while an overlay was on screen. The
-	// panes are under the overlay then, so none is offered: a click or enter
-	// takes the whole screen and a drag takes a region of it.
+	Active      bool
+	Hover       int
+	Keyboard    bool
+	Dragging    bool
 	OverOverlay bool
 	AnchorX     int
 	AnchorY     int
@@ -61,84 +40,41 @@ type captureState struct {
 	wasTerminal bool
 }
 
-// screenshotResultMsg carries a finished render back to the Update goroutine,
-// which is the only place a notification or a panel can be opened from.
 type screenshotResultMsg struct {
-	// capture is the serial of the capture this result belongs to. The panel is
-	// already open by the time this arrives, so the serial is what says whether
-	// it is still open on this capture: a result for an older one updates
-	// nothing, and a result for one the user already dismissed removes its own
-	// file.
-	capture  int
-	path     string
-	format   shot.Format
-	grid     *shot.Grid
-	frame    *shot.Frame
-	warnings []string
-	// png is the picture the preview's pixel tier places, already shrunk to the
-	// panel's box. Empty on a host with no kitty graphics, which is every host
-	// the text tier already serves.
-	png []byte
-	// transmit is png wrapped in the chunked upload escapes, built here rather
-	// than in the render goroutine's flush: base64 of a megabyte inside the
-	// frame's synchronized-update bracket is a frame nobody sees drawn.
-	transmit []byte
-	// pixelW and pixelH are png's own size, so the pixel tier can keep the
-	// capture's shape instead of filling whatever cell box the panel has.
+	capture        int
+	path           string
+	format         shot.Format
+	grid           *shot.Grid
+	frame          *shot.Frame
+	warnings       []string
+	png            []byte
+	transmit       []byte
 	pixelW, pixelH int
-	// bytes is the size of the file that was written, so the panel does not
-	// have to read it back off the Update goroutine.
-	bytes int
-	err   error
+	bytes          int
+	err            error
 }
 
-// screenshotCopiedMsg is the answer from a clipboard copy. The copy is its own
-// command and gates nothing: the file is written and the preview is up by the
-// time this is sent.
 type screenshotCopiedMsg struct {
 	capture int
 	err     error
 }
 
-// screenshotPreview is the panel that opens after a capture.
 type screenshotPreview struct {
-	Open bool
-	// Path is the file that was written. Escape deletes it.
-	Path   string
-	Format shot.Format
-	// Grid is the captured cells, redrawn in the panel body at the text tier.
-	Grid *shot.Grid
-	// Scroll is the first grid row shown, for a capture taller than the body.
-	Scroll int
-	// ScrollX is the first grid column shown, for a capture wider than the body.
-	ScrollX int
-	// Pending says the artifacts have not landed yet. The cells are exact from
-	// the first frame; what is missing is the file, its size and the picture.
-	Pending bool
-	// Note is the one quiet line about what the panel cannot show.
-	Note string
-	// Status carries a reason a control is missing, in plain words.
-	Status string
-	// CopyLabel is what c will actually do here, empty when nothing will.
-	CopyLabel string
-	// Bytes is the file size, for the header line.
-	Bytes int
-	// PNG is the picture the pixel tier places, empty on a host that cannot
-	// show one. It is shrunk to the panel's own box: the preview is looked at
-	// through a few hundred pixels, and uploading the file's own two or three
-	// megabytes to see them scaled down cost the host seventy milliseconds of
-	// decoding inside the frame's synchronized-update bracket.
-	PNG []byte
-	// Transmit is PNG already wrapped in the chunked upload escapes, built off
-	// the Update goroutine so the render flush only concatenates.
-	Transmit []byte
-	// PixelW and PixelH are the picture's own size. The pixel tier draws into a
-	// cell box, and a box chosen without them stretches the capture to fill it.
+	Open           bool
+	Path           string
+	Format         shot.Format
+	Grid           *shot.Grid
+	Scroll         int
+	ScrollX        int
+	Pending        bool
+	Note           string
+	Status         string
+	CopyLabel      string
+	Bytes          int
+	PNG            []byte
+	Transmit       []byte
 	PixelW, PixelH int
-	// Capture is the serial number of the capture this panel is showing. It is
-	// what tells the host's resident picture apart from this one; see
-	// screenshotPlacementState.
-	Capture int
+	Capture        int
 }
 
 // CaptureActive reports whether capture mode has the input.
@@ -206,8 +142,6 @@ func (m *OS) CaptureHoverNext(delta int) {
 	m.Capture.Hover = visible[at]
 }
 
-// captureVisibleWindows lists the indices a capture can aim at, in the order
-// tab walks them.
 func (m *OS) captureVisibleWindows() []int {
 	if m.Capture.OverOverlay {
 		return nil
@@ -222,9 +156,6 @@ func (m *OS) captureVisibleWindows() []int {
 	return out
 }
 
-// rect is the selection rectangle in absolute cells, normalized so the drag
-// reads the same in any direction. The far edge is exclusive, so a press and
-// release on one cell is a 1x1 selection rather than a 0x0 one.
 func (c captureState) rect() (x0, y0, x1, y1 int) {
 	x0, x1 = min(c.AnchorX, c.CursorX), max(c.AnchorX, c.CursorX)
 	y0, y1 = min(c.AnchorY, c.CursorY), max(c.AnchorY, c.CursorY)
@@ -241,9 +172,6 @@ func (m *OS) ScreenshotWindow(index int) tea.Cmd {
 		return nil
 	}
 	win := m.Windows[index]
-	// A pane on its own is drawn on the ground the pane background paints. A
-	// region capture is not: it reads the composed frame, whose pane cells
-	// already carry the paint and whose chrome does not.
 	palette := capture.WithPaneBackground(m.shotPalette(), m.Settings.PaneBackgroundResolved(), theme.CurrentThemeID())
 	grid, pieces := m.windowShot(win, palette, m.screenshotSettings().Cursor)
 	if grid == nil {
@@ -279,10 +207,6 @@ func (m *OS) ScreenshotRegion(x0, y0, x1, y1 int) tea.Cmd {
 	return m.renderScreenshot(grid, label, true, pieces)
 }
 
-// settleImagesForCapture lays the kitty images out again without capture
-// mode's chrome, when that chrome cut them on the last frame. The mode has
-// closed by the time a region is taken, but the placements still have the
-// gaps its hint strip and marquee left, and the capture reads them.
 func (m *OS) settleImagesForCapture() {
 	kp := m.KittyPassthrough
 	if kp == nil {
@@ -293,9 +217,6 @@ func (m *OS) settleImagesForCapture() {
 	}
 }
 
-// windowShot reads a live window's cells into a render grid, under the same
-// read lock every other reader of that emulator takes, and finds the images
-// on its screen.
 func (m *OS) windowShot(win *terminal.Window, palette *shot.Palette, cursor bool) (*shot.Grid, []shotPiece) {
 	if win == nil {
 		return nil, nil
@@ -309,7 +230,6 @@ func (m *OS) windowShot(win *terminal.Window, palette *shot.Palette, cursor bool
 	return g, m.windowShotPieces(win.ID, win.IsAltScreen(), win.Terminal, g)
 }
 
-// terminalGrid walks an emulator's visible screen into a render grid.
 func terminalGrid(t vt.Terminal, palette *shot.Palette, cursor bool) *shot.Grid {
 	if t == nil || palette == nil {
 		return nil
@@ -335,10 +255,6 @@ func terminalGrid(t vt.Terminal, palette *shot.Palette, cursor bool) *shot.Grid 
 	return g
 }
 
-// composedGrid renders the current frame into a throwaway emulator and cuts a
-// rectangle out of it. Only the client has a viewport, a layout and composed
-// chrome, so this is the one place a region capture can happen; the emulator
-// is one allocation per capture, on demand, and is dropped straight after.
 func (m *OS) composedGrid(x0, y0, x1, y1 int) *shot.Grid {
 	w, h := m.GetRenderWidth(), m.GetRenderHeight()
 	x0, y0 = max(x0, 0), max(y0, 0)
@@ -353,8 +269,6 @@ func (m *OS) composedGrid(x0, y0, x1, y1 int) *shot.Grid {
 	return cropGrid(g, x0, y0, x1, y1)
 }
 
-// composedShot is composedGrid for a screenshot: it also finds the images on
-// the composed screen, placed on the cut-out grid.
 func (m *OS) composedShot(x0, y0, x1, y1 int) (*shot.Grid, []shotPiece) {
 	w, h := m.GetRenderWidth(), m.GetRenderHeight()
 	x0, y0 = max(x0, 0), max(y0, 0)
@@ -370,25 +284,11 @@ func (m *OS) composedShot(x0, y0, x1, y1 int) (*shot.Grid, []shotPiece) {
 	return cropGrid(g, x0, y0, x1, y1), cropShotPieces(pieces, x0, y0)
 }
 
-// frameToGrid parses a composed frame string through a throwaway emulator and
-// returns its cells.
-//
-// The newline substitution is the whole reason this is its own function.
-// composedFrame().Text() separates rows with a bare newline, because that is what
-// lipgloss joins with and what a host terminal's line discipline turns into a
-// full return. An emulator in the default mode reads a bare line feed as "down
-// one row, same column", so a frame whose rows are not padded to the full
-// width cascades: every row lands one further right than the last and the
-// capture comes out as a diagonal smear. Adding the carriage return is what
-// the host would have done.
 func frameToGrid(frame string, w, h int, palette *shot.Palette) *shot.Grid {
 	g, _ := frameToGridHits(frame, w, h, palette, false)
 	return g
 }
 
-// frameToGridHits is frameToGrid that, with images set, also keeps the kitty
-// placeholder cells of the frame and returns the image cells it finds, blanked
-// on the grid.
 func frameToGridHits(frame string, w, h int, palette *shot.Palette, images bool) (*shot.Grid, []shotCellHit) {
 	if w <= 0 || h <= 0 {
 		return nil, nil
@@ -410,7 +310,6 @@ func frameToGridHits(frame string, w, h int, palette *shot.Palette, images bool)
 	return g, scanImageCells(em, g)
 }
 
-// cropGrid cuts a rectangle out of a grid.
 func cropGrid(g *shot.Grid, x0, y0, x1, y1 int) *shot.Grid {
 	x0, y0 = max(x0, 0), max(y0, 0)
 	x1, y1 = min(x1, g.Cols), min(y1, g.Rows)
@@ -427,25 +326,14 @@ func cropGrid(g *shot.Grid, x0, y0, x1, y1 int) *shot.Grid {
 	return out
 }
 
-// shotPalette is this client's colours for the renderer. Unlike the daemon,
-// the client has selected a tint of its own, so the process theme is the right
-// answer here.
 func (m *OS) shotPalette() *shot.Palette {
 	p, warn := capture.Palette(theme.CurrentThemeID())
 	if warn == "" {
 		return p
 	}
-	// No theme resolved, so every colour in the frame is a palette index and
-	// the guess above is the xterm defaults. The host terminal is the one
-	// resolving those indices on screen, and it will say what it resolves them
-	// to, so ask it rather than guess. See HostCapabilities.ANSI.
 	return m.liveHostPalette(hostPalette(m.hostCaps(), p))
 }
 
-// liveHostPalette overlays what the terminal has said since the startup probe:
-// the answers Bubble Tea brought in, and the colours of the scheme it switched
-// to. See host_colors.go. A capture taken after a switch to dark is drawn on
-// the dark ground the screen is on, not the light one tuios started on.
 func (m *OS) liveHostPalette(p *shot.Palette) *shot.Palette {
 	h := &m.host
 	if h.gen == 0 || p == nil {
@@ -466,15 +354,11 @@ func (m *OS) liveHostPalette(p *shot.Palette) *shot.Palette {
 	return &out
 }
 
-// shotColor turns a colour into a renderer colour.
 func shotColor(c color.Color) shot.Color {
 	r, g, b, _ := c.RGBA()
 	return shot.RGB(uint8(r>>8), uint8(g>>8), uint8(b>>8))
 }
 
-// hostPalette overlays whatever the host terminal said about its own colours
-// onto a fallback palette, and returns the fallback untouched when it said
-// nothing.
 func hostPalette(caps *HostCapabilities, fallback *shot.Palette) *shot.Palette {
 	if caps == nil || fallback == nil {
 		return fallback
@@ -483,9 +367,6 @@ func hostPalette(caps *HostCapabilities, fallback *shot.Palette) *shot.Palette {
 		return fallback
 	}
 	out := *fallback
-	// Only the slots the terminal answered for. One it said nothing about keeps
-	// the fallback: taking the zero value there would paint it black, which is
-	// worse than the guess this is replacing.
 	for i, packed := range caps.ANSI {
 		if caps.ANSIMask&(1<<uint(i)) != 0 {
 			out.ANSI[i] = unpackShotColor(packed)
@@ -500,18 +381,10 @@ func hostPalette(caps *HostCapabilities, fallback *shot.Palette) *shot.Palette {
 	return &out
 }
 
-// unpackShotColor turns a 0xRRGGBB word into a renderer colour.
 func unpackShotColor(packed uint32) shot.Color {
 	return shot.RGB(uint8(packed>>16), uint8(packed>>8), uint8(packed))
 }
 
-// screenshotSettings resolves the [screenshot] section this client holds, and
-// hands the renderer the font the host says it draws with.
-//
-// That last part is why a default capture on kitty comes out with the user's
-// own icons in it. Nobody should have to find a .ttf path and put it in a
-// config file to get a picture of their own terminal that looks like their own
-// terminal; the terminal already knows, and it answers when asked.
 func (m *OS) screenshotSettings() capture.Settings {
 	cfg := config.ScreenshotConfig{}
 	if m.UserConfig != nil {
@@ -521,42 +394,20 @@ func (m *OS) screenshotSettings() capture.Settings {
 	s.PaneBackground = m.Settings.PaneBackgroundResolved()
 	if caps := m.hostCaps(); caps != nil {
 		s.HostFontFamily, s.HostBoldFamily = caps.FontFamily, caps.BoldFontFamily
-		// The shape of a cell, from the terminal that owns it. Without it the
-		// raster comes out at whatever shape the font's line box happens to
-		// give, which on the built-in face is eleven percent narrower per cell
-		// than kitty's own, and the picture leans tall.
 		s.HostCellW, s.HostCellH = caps.CellWidth, caps.CellHeight
 	}
 	return s
 }
 
-// renderScreenshot opens the preview on this frame and renders on the next.
-//
-// The cells are already in hand the instant a capture happens: the grid was
-// built synchronously by the caller, and it is the whole of what the panel's
-// text tier draws. Only the file, the clipboard and the pixel picture are slow.
-// So the panel opens here, seeded and marked pending, and the artifacts catch
-// up under their own serial. Waiting for the render, write and copy before
-// opening the panel would delay it by seconds, or lose it if the copy blocks.
-//
-// Everything that touches a disk or a font file is inside the command. The
-// settings resolution stays here because it only reads memory this goroutine
-// owns, but capture.Frame reads a font file, so it is inside the command.
 func (m *OS) renderScreenshot(grid *shot.Grid, label string, plain bool, pieces []shotPiece) tea.Cmd {
 	settings := m.screenshotSettings()
 	settings.Title = m.Settings.FormatScreenshotTitle(settings.Title, label, m.FocusedWindow+1, m.focusedCWD())
-	// The serial is bumped before the panel is filled in, so the panel carries
-	// the number that says which capture it is showing.
 	m.shotCaptures++
 	serial := m.shotCaptures
 	wantPreview := m.screenshotPreviewWanted()
 	if wantPreview {
 		m.openPendingPreview(grid, settings.Format, serial)
 	}
-	// The pixel tier needs a PNG whatever the saved format is, and only a host
-	// that can show one pays for it. The budget is read after the panel is up,
-	// because it is measured from the panel: the footer a pending panel draws
-	// is what sets how many body rows there are to fill.
 	maxW, maxH := 0, 0
 	if wantPreview && m.screenshotGraphicsReady() {
 		maxW, maxH = m.screenshotPreviewPixelBudget()
@@ -566,15 +417,10 @@ func (m *OS) renderScreenshot(grid *shot.Grid, label string, plain bool, pieces 
 		msg := screenshotResultMsg{capture: serial, format: settings.Format, grid: grid}
 		palette, paletteWarn := capture.Palette(settings.ThemeID)
 		if !plain {
-			// A window capture's backdrop is washed from the pane's ground, so
-			// it is the painted one when there is one.
 			palette = capture.WithPaneBackground(palette, settings.PaneBackground, settings.ThemeID)
 		}
 		frame, warnings := capture.Frame(settings, palette, grid, plain)
 		if paletteWarn != "" {
-			// The no-theme notice rides with the rest of the warnings rather
-			// than being raised on its own, so it arrives with the capture it
-			// describes instead of ahead of it.
 			warnings = append([]string{paletteWarn}, warnings...)
 		}
 		if len(frame.Font.Data) == 0 && shot.HasPrivateUse(grid) {
@@ -582,9 +428,6 @@ func (m *OS) renderScreenshot(grid *shot.Grid, label string, plain bool, pieces 
 		}
 		msg.frame, msg.warnings = frame, warnings
 
-		// The pictures are decoded here, off the update loop. The grid the
-		// panel shows is left as it is: the rendered one is a copy with the
-		// images on it.
 		rendered := grid
 		if images := decodeShotPieces(pieces); len(images) > 0 {
 			withImages := *grid
@@ -618,13 +461,6 @@ func (m *OS) renderScreenshot(grid *shot.Grid, label string, plain bool, pieces 
 	}
 }
 
-// renderCaptureBytes produces the file's bytes, and the pixels the preview will
-// be shrunk from when one is wanted.
-//
-// A PNG capture rasterizes once and the same pixels serve both. Any other
-// format rasters the preview at scale 1, always: rastering at the file's own
-// scale costs a whole second on a full-screen capture, for a picture that is
-// then shrunk into a box a few hundred pixels wide.
 func renderCaptureBytes(format shot.Format, g *shot.Grid, f *shot.Frame, wantPixels bool) ([]byte, *image.RGBA, error) {
 	if format == shot.FormatPNG {
 		img, err := shot.Raster(g, f)
@@ -648,16 +484,11 @@ func renderCaptureBytes(format shot.Format, g *shot.Grid, f *shot.Frame, wantPix
 	small.Scale = 1
 	img, rerr := shot.Raster(g, &small)
 	if rerr != nil {
-		// The file is written either way. A preview that cannot be rastered is
-		// a panel with no picture in it, which is the panel every terminal
-		// without kitty graphics already gets.
 		return data, nil, nil
 	}
 	return data, img, nil
 }
 
-// openPendingPreview puts the panel up on this frame with the captured cells in
-// it and nothing claimed that is not yet true.
 func (m *OS) openPendingPreview(grid *shot.Grid, format shot.Format, serial int) {
 	m.ShotPreview = screenshotPreview{
 		Open:    true,
@@ -668,20 +499,9 @@ func (m *OS) openPendingPreview(grid *shot.Grid, format shot.Format, serial int)
 		Capture: serial,
 	}
 	m.raiseOverlay(overlayKindShot)
-	// The whole point of opening here is that the panel is on screen on the
-	// next frame. A capture that ended a gesture mode would probably have
-	// redrawn anyway; a capture from the command palette or a keybinding would
-	// not, and "probably" is what the reports were made of.
 	m.MarkAllDirty()
 }
 
-// copyScreenshotCmd puts a file on the clipboard off the Update goroutine.
-//
-// This is a command and never an inline call. wl-copy and xclip fork a child
-// that goes on serving the selection, so the call can take as long as the next
-// thing to touch the clipboard takes to arrive; running it inline froze the
-// whole TUI, and running it inside the render command held the preview hostage
-// to it. Nothing waits on the answer now.
 func copyScreenshotCmd(serial int, path string, mediaType string) tea.Cmd {
 	return func() tea.Msg {
 		data, err := os.ReadFile(path) // #nosec G304 - this process just wrote it
@@ -693,8 +513,6 @@ func copyScreenshotCmd(serial int, path string, mediaType string) tea.Cmd {
 	}
 }
 
-// screenshotCopyWanted reads the config switch that decides whether a copy is
-// attempted at all.
 func (m *OS) screenshotCopyWanted() bool {
 	if m.UserConfig == nil {
 		return true
@@ -702,7 +520,6 @@ func (m *OS) screenshotCopyWanted() bool {
 	return m.UserConfig.Screenshot.CopyEnabled()
 }
 
-// screenshotPreviewWanted reads the config switch for the preview panel.
 func (m *OS) screenshotPreviewWanted() bool {
 	if m.UserConfig == nil {
 		return true
@@ -710,12 +527,6 @@ func (m *OS) screenshotPreviewWanted() bool {
 	return m.UserConfig.Screenshot.PreviewEnabled()
 }
 
-// screenshotIsLocal reports whether this process is on the user's own machine,
-// which is the only condition under which it may run a clipboard helper.
-//
-// A tuios ssh client and a browser tab both run this code on the server. The
-// helper there would write the operator's clipboard, not the user's. So the
-// answer is no unless this is a local attach.
 func (m *OS) screenshotIsLocal() bool {
 	return !m.IsRemoteClient() && capture.ImageRoute().Available
 }
@@ -743,9 +554,6 @@ func (m *OS) HandleScreenshotResult(msg screenshotResultMsg) tea.Cmd {
 		return nil
 	}
 	if discarded {
-		// Silently. The panel already said the capture was deleted, at the
-		// moment esc was pressed; saying it again half a second later would be
-		// the app talking about its own bookkeeping.
 		_ = os.Remove(msg.path)
 		return nil
 	}
@@ -754,8 +562,6 @@ func (m *OS) HandleScreenshotResult(msg screenshotResultMsg) tea.Cmd {
 		m.ShowNotification(w, "warning", m.Settings.NotificationWarningDuration)
 	}
 	if !showing {
-		// The panel moved on or was closed with enter. The file was still
-		// asked for, so it stays, and this is the one line that says so.
 		m.ShowNotification("Saved to "+shortenPath(msg.path), "success", m.Settings.NotificationDuration)
 		return m.screenshotCopyCmd(msg)
 	}
@@ -771,18 +577,9 @@ func (m *OS) HandleScreenshotResult(msg screenshotResultMsg) tea.Cmd {
 	p.Bytes = msg.bytes
 	p.Note = m.screenshotPreviewNote(msg)
 	p.CopyLabel, p.Status = m.screenshotCopyOffer(msg)
-	// No success notification while the panel is up. The panel is the
-	// notification, and two announcements of one event is one too many.
 	return m.screenshotCopyCmd(msg)
 }
 
-// screenshotCopyCmd starts the automatic copy, when the config asks for one and
-// this client is the machine whose clipboard it would be.
-//
-// Only the newest capture copies. An older render finishing late would
-// otherwise put the wrong picture on the clipboard after the user had already
-// taken another one, which is the same out-of-order symptom in a different
-// costume.
 func (m *OS) screenshotCopyCmd(msg screenshotResultMsg) tea.Cmd {
 	if msg.path == "" || msg.capture != m.shotCaptures {
 		return nil
@@ -809,10 +606,6 @@ func (m *OS) HandleScreenshotCopied(msg screenshotCopiedMsg) {
 	m.ShowNotification(shotStatusCopied, "success", m.Settings.NotificationDuration)
 }
 
-// screenshotPreviewNote is the one quiet line saying what the text tier cannot
-// show. It is not an apology: the cells in the panel are the most faithful
-// preview possible, because they come from the same renderer the content did.
-// What they cannot carry is the pixel dressing, and saying so beats pretending.
 func (m *OS) screenshotPreviewNote(msg screenshotResultMsg) string {
 	if msg.frame == nil || msg.frame.Mode == shot.FrameNone {
 		return ""
@@ -824,19 +617,11 @@ func (m *OS) screenshotPreviewNote(msg screenshotResultMsg) string {
 	return fmt.Sprintf("Frame and wash at %dx. The frame shows in the saved file.", scale)
 }
 
-// screenshotCopyOffer decides what the panel's c key will do here, and returns
-// the reason line when the answer is nothing.
-//
-// The whole point is that a key on the footer either works or is not drawn.
-// A "copy" that silently does nothing on an SSH session is the inert control
-// this project forbids.
 func (m *OS) screenshotCopyOffer(msg screenshotResultMsg) (label, status string) {
 	textFormat := msg.format == shot.FormatANSI || msg.format == shot.FormatText ||
 		msg.format == shot.FormatSVG || msg.format == shot.FormatHTML
 	if m.IsRemoteClient() {
 		if textFormat {
-			// OSC 52 reaches the user's real terminal wherever they are, so
-			// the text formats copy honestly even over ssh.
 			return shotCopyAsText, "Files save on the server. Text still copies to you."
 		}
 		return "", "Files save on the server. This session cannot copy an image."
@@ -893,19 +678,13 @@ func (m *OS) CloseScreenshotPreview(discard bool) {
 			m.ShowNotification(shotStatusDeleted, "info", m.Settings.NotificationDuration)
 		}
 	case pending:
-		// The file does not exist yet, so the answer is given now and the
-		// removal happens when there is something to remove.
 		m.discardCapture(serial)
 		m.ShowNotification(shotStatusDeleted, "info", m.Settings.NotificationDuration)
 	}
 }
 
-// shotDiscardLimit bounds the discarded-serial list. Every capture returns
-// exactly one result, so the list drains as fast as it fills; the cap is there
-// so a command that somehow never answers cannot grow it without end.
 const shotDiscardLimit = 32
 
-// discardCapture writes down that a capture still being rendered is not wanted.
 func (m *OS) discardCapture(serial int) {
 	if serial <= 0 {
 		return
@@ -916,8 +695,6 @@ func (m *OS) discardCapture(serial int) {
 	m.shotDiscarded = append(m.shotDiscarded, serial)
 }
 
-// takeDiscardedCapture reports whether a capture was dismissed while it was
-// still rendering, and forgets it either way.
 func (m *OS) takeDiscardedCapture(serial int) bool {
 	for i, s := range m.shotDiscarded {
 		if s != serial {
@@ -965,8 +742,6 @@ func (m *OS) ScrollScreenshotPreview(dx, dy int) {
 	p.ScrollX = clampInt(p.ScrollX+dx, 0, max(0, p.Grid.Cols-bodyW))
 }
 
-// shortenPath replaces the home prefix with ~ so a notification fits the slot
-// it is drawn into.
 func shortenPath(p string) string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" || !strings.HasPrefix(p, home) {
@@ -993,8 +768,6 @@ func (m *OS) BeginCaptureDrag(x, y int) {
 		return
 	}
 	m.Capture.Dragging = true
-	// A pointer is driving now, so the hint strip stops offering the keyboard
-	// path and starts offering the drag the user is already doing.
 	m.Capture.Keyboard = false
 	m.Capture.AnchorX, m.Capture.AnchorY = x, y
 	m.Capture.CursorX, m.Capture.CursorY = x, y
@@ -1011,17 +784,12 @@ func (m *OS) UpdateCapturePointer(x, y int, held bool) {
 		return
 	}
 	if !held {
-		// A bare hover with no button retires a drag whose release went
-		// missing, the way every other gesture in this codebase does.
 		m.Capture.Dragging = false
 	}
 	m.Capture.Hover = m.CaptureWindowAt(x, y)
 	m.Capture.Keyboard = false
 }
 
-// captureClickSlop is how small a drag still counts as a click. A hand moves a
-// cell or two between press and release, and a one-cell screenshot is never
-// what anyone meant.
 const captureClickSlop = 2
 
 // FinishCaptureDrag ends the gesture and starts the capture it selected.
@@ -1038,8 +806,6 @@ func (m *OS) FinishCaptureDrag() tea.Cmd {
 	m.EndCapture()
 	if x1-x0 <= captureClickSlop && y1-y0 <= captureClickSlop {
 		if target < 0 {
-			// A click on empty desktop takes the whole screen, which is the
-			// only thing there is to capture there.
 			return m.ScreenshotScreen()
 		}
 		return m.ScreenshotWindow(target)
@@ -1057,34 +823,12 @@ func (m *OS) ScrollScreenshotPreviewHome() {
 // screenshot_window action all land here.
 func (m *OS) ScreenshotFocusedWindow() tea.Cmd { return m.ScreenshotWindow(m.FocusedWindow) }
 
-// screenshotPlacementState is where the preview's picture was last drawn, so a
-// frame that changed nothing emits no escape at all.
-//
-// capture is which capture the drawn picture belongs to, and it is a serial
-// number rather than the file name. The name is stamped to the second, so two
-// captures inside one second share it; keying the upload on the name meant the
-// second capture was drawn from the first capture's pixels, which is the "it
-// shows the previous screenshot" report. A content hash would answer the same
-// question, but it answers a different one as well (two captures of an
-// unchanged screen are one picture to a hash and two captures to the user),
-// and it costs a hash of a whole PNG on the Update goroutine. The serial is
-// exact, free, and cannot collide.
 type screenshotPlacementState struct {
 	x, y, cols, rows int
 	capture          int
-	// hostW and hostH are the host terminal's size in cells when the picture
-	// was drawn. A resize takes the picture with it: the host is repainting
-	// its whole screen at a new size, and what is under this id afterwards is
-	// not what was put there. The panel's own arithmetic does not always
-	// notice, because a centred panel lands on the same cell after a resize of
-	// one row or one column, and then every other field here was equal and the
-	// flush drew nothing. So the size the picture was drawn at is part of what
-	// makes a drawn picture this one.
-	hostW, hostH int
+	hostW, hostH     int
 }
 
-// focusedCWD is the focused window's folder, for a screenshot title's {cwd},
-// or "" when no window has the focus.
 func (m *OS) focusedCWD() string {
 	if w := m.GetFocusedWindow(); w != nil {
 		return w.CWD()

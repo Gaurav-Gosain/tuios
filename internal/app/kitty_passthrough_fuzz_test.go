@@ -13,34 +13,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// Fuzzing the kitty graphics passthrough: what several panes' guests send, and
-// what reaches the host terminal because of it.
-//
-// The passthrough is a boundary. Every pane's guest writes kitty commands, and
-// they all land on one host terminal, which has one image id namespace and
-// executes whatever escape sequences arrive. So what goes to the host has to
-// be graphics and cursor bookkeeping only, and what one pane's guest causes
-// has to touch only the images tuios allocated for that pane.
-//
-// The ways this could fail, written down before the target:
-//
-//  1. A guest's bytes reach the host outside a graphics command: a control
-//     byte, a stray escape, a CSI that is not the cursor save, move and
-//     restore the passthrough brackets a placement with.
-//  2. A graphics command sent to the host carries control data or payload
-//     characters a well-formed command cannot, so the host parses the rest
-//     as something else.
-//  3. A command one pane's guest sent names a host image id tuios never
-//     allocated for that pane: the guest's own id forwarded untranslated,
-//     or another pane's host id, so pane A overwrites or deletes pane B's
-//     image.
-//  4. A reply to a guest names an id other than the one that guest used, so
-//     the guest cannot match it or learns a host id.
-//  5. A panic on a chunk stream that never ends, a placement of an image
-//     never sent, or a delete of everything.
-
-// lockedBuffer is the host terminal: the async frame writer and the render
-// path may both write.
 type lockedBuffer struct {
 	mu sync.Mutex
 	b  bytes.Buffer
@@ -61,16 +33,12 @@ func (l *lockedBuffer) take() []byte {
 }
 
 var (
-	hostAPCBody = regexp.MustCompile(`^[A-Za-z0-9=,\-]*(;[A-Za-z0-9+/=]*)?$`)
-	hostCUP     = regexp.MustCompile(`^\x1b\[[0-9]+;[0-9]+H`)
-	apcImageID  = regexp.MustCompile(`(?:^|,)i=([0-9]+)`)
-	// apcFreesImage matches a delete that frees the image data, d=I.
+	hostAPCBody   = regexp.MustCompile(`^[A-Za-z0-9=,\-]*(;[A-Za-z0-9+/=]*)?$`)
+	hostCUP       = regexp.MustCompile(`^\x1b\[[0-9]+;[0-9]+H`)
+	apcImageID    = regexp.MustCompile(`(?:^|,)i=([0-9]+)`)
 	apcFreesImage = regexp.MustCompile(`^a=d,(?:.*,)?d=I(?:,|$)`)
 )
 
-// hostTokens splits host output into the sequences the passthrough may send
-// and reports the first byte that is none of them. It returns the bodies of
-// the graphics commands.
 func hostTokens(out []byte) (apcs []string, bad string) {
 	s := string(out)
 	for len(s) > 0 {
@@ -106,15 +74,12 @@ func trimQ(s string) string {
 	return s
 }
 
-// kittyStep reads one guest command from the fuzz input.
 type kittyStep struct {
 	win     int
 	body    string
 	imageID uint32
-	// op is a lifecycle event instead of a guest command: "close",
-	// "clear" or "refresh", with shift moving the panes for a refresh.
-	op    string
-	shift int
+	op      string
+	shift   int
 }
 
 func decodeKittySteps(in []byte) []kittyStep {
@@ -135,7 +100,6 @@ func decodeKittySteps(in []byte) []kittyStep {
 		payload := base64.StdEncoding.EncodeToString(px)
 		ids := ""
 		if id != 0 {
-			// By id, or by number as cbirds names its images.
 			key := ",i="
 			if b1&0x20 != 0 {
 				key = ",I="
@@ -153,7 +117,6 @@ func decodeKittySteps(in []byte) []kittyStep {
 		case 3:
 			body = "a=d,d=" + string("aAiIpPcCzZnN"[int(b3)%12]) + ids
 		case 4:
-			// The first chunk of a chunked transmission.
 			half := len(payload) / 8 * 4
 			body = "a=T,f=" + f + ",s=" + strconv.Itoa(w) + ",v=" + strconv.Itoa(h) + ids + ",m=1;" + payload[:half]
 		case 5:
@@ -163,8 +126,6 @@ func decodeKittySteps(in []byte) []kittyStep {
 		case 7:
 			body = "a=p,U=1" + ids + ",c=2,r=2"
 		case 8:
-			// An animation frame edit of an image the pane may never have
-			// sent.
 			body = "a=f,r=1,x=0,y=0,s=1,v=1,f=24" + ids + ";" + base64.StdEncoding.EncodeToString(px[:3])
 		case 9:
 			body = "a=T,f=100" + ids + ",q=" + strconv.Itoa(int(b3%3)) + ";" + payload
@@ -184,17 +145,12 @@ func decodeKittySteps(in []byte) []kittyStep {
 }
 
 func FuzzKittyPassthrough(f *testing.F) {
-	// Pane B transmits and places image 1, then pane A transmits its own
-	// image 1 without placing it.
 	f.Add([]byte{0x03, 0x00, 0x00, 0x10, 0x02, 0x00, 0x01, 0x20})
 	f.Add([]byte{0x02, 0x05, 0x04, 0x00, 0x02, 0x05, 0x05, 0x00, 0x02, 0x00, 0x02, 0x11})
 	f.Add([]byte{0x03, 0x00, 0x00, 0x00, 0x02, 0x00, 0x03, 0x00, 0x03, 0x00, 0x03, 0x02})
 	f.Add([]byte{0x04, 0x10, 0x06, 0x00, 0x05, 0x00, 0x07, 0x00, 0x00, 0x00, 0x08, 0x01})
-	// Both panes place an image, then a refresh, a clear and a close.
 	f.Add([]byte{0x02, 0x05, 0x00, 0x10, 0x03, 0x05, 0x00, 0x20, 0x02, 0x00, 0x0c, 0x03,
 		0x03, 0x00, 0x0b, 0x00, 0x02, 0x00, 0x0a, 0x00, 0x03, 0x00, 0x0c, 0x01})
-	// Pane A sends image number 1 twice, placing each, then deletes all
-	// placements, which frees the first, and deletes by number.
 	f.Add([]byte{0x02, 0x20, 0x00, 0x10, 0x02, 0x20, 0x00, 0x20, 0x02, 0x00, 0x03, 0x00,
 		0x02, 0x20, 0x02, 0x00, 0x02, 0x20, 0x03, 0x0b})
 
@@ -210,18 +166,6 @@ func FuzzKittyPassthrough(f *testing.F) {
 		})
 		wins := []string{"pane-a-0000000000000000", "pane-b-1111111111111111"}
 
-		// owner is the pane each host id was allocated for. An id is the
-		// pane's when tuios allocated it during one of that pane's steps, or
-		// when it sits in the pane's id map. The map alone is not enough: a
-		// transmission under the auto-assign id 0 gets a fresh host id that
-		// is never mapped, and a delete removes the mapping it names.
-		//
-		// A closed pane's ids below lowHostIDs go back to a free list and the
-		// next allocation takes one from there instead of counting a new id
-		// out. So a close gives up ownership of a freed id once it has sent
-		// the host a d=I delete for it, and an unowned id that left the free
-		// list during a step belongs to that step's pane. An id freed without
-		// that delete keeps its owner, so reusing it fails the target.
 		owner := map[uint64]string{}
 		freeIDs := func() map[uint32]struct{} {
 			kp.mu.Lock()
@@ -247,8 +191,6 @@ func FuzzKittyPassthrough(f *testing.F) {
 				}
 			}
 		}
-		// The panes side by side on a 100x30 host, each 30x10 with a
-		// one-cell border. A refresh may move them.
 		geometry := func(shift int) map[string]*WindowPositionInfo {
 			out := map[string]*WindowPositionInfo{}
 			for i, w := range wins {
@@ -262,8 +204,6 @@ func FuzzKittyPassthrough(f *testing.F) {
 			}
 			return out
 		}
-		// Each pane's emulator turns image numbers into ids before the
-		// passthrough sees a command. The harness stands in for it.
 		guestImages := map[string]*vt.KittyGuestImages{}
 		for n, st := range steps {
 			win := wins[st.win]
@@ -298,16 +238,11 @@ func FuzzKittyPassthrough(f *testing.F) {
 						deleted[hostID] = true
 					}
 					got := owner[hostID]
-					// A refresh redraws every pane, so an id there only has to
-					// be one tuios allocated. A close or clear is about one pane.
 					if hostID != 0 && (got == "" || (st.op != "refresh" && got != win)) {
 						t.Fatalf("step %d: the %s of %s sent image id %d (owner %q):\n%q",
 							n, st.op, win[:6], hostID, got, body)
 					}
 				}
-				// A freed id stops being the pane's only once the host has
-				// been told to delete it. An id freed without that delete
-				// keeps its owner, so handing it to another pane fails.
 				for id := range freeIDs() {
 					if deleted[uint64(id)] {
 						delete(owner, uint64(id))
@@ -354,8 +289,6 @@ func FuzzKittyPassthrough(f *testing.F) {
 					deleted[hostID] = true
 				}
 			}
-			// A numbered image a newer upload replaced is freed during a
-			// command, as a close frees its pane's images.
 			for id := range freeIDs() {
 				if deleted[uint64(id)] {
 					delete(owner, uint64(id))

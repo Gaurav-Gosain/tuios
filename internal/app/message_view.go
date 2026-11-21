@@ -13,51 +13,27 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// The message view is the one place a message is read in full.
-//
-// A message reaches the person on two surfaces that both have to cut it: the
-// dock's block, which is one row and at most NotificationMaxWidth cells, and a
-// row of the log viewer, which is one line of a list. Neither can grow without
-// covering the panes, so both hand the whole message to this panel instead: a
-// click on a cut message in the dock, enter on a log row, and prefix+N for the
-// newest message all open it. The text is wrapped, every line of it can be
-// scrolled to, and y puts it on the clipboard.
-
-// overlayKindMessage is the message view's overlay kind and layer id.
 const overlayKindMessage = "message"
 
-// messageViewWidth is the panel's preferred inner width: wide enough that a
-// path or a command line wraps a few times rather than many.
 const messageViewWidth = 76
 
-// maxRecentMessages bounds the messages prefix+N can reopen. Only the newest
-// is reachable from the key, so there is no reason to keep many.
 const maxRecentMessages = 32
 
-// messageEntry is one message as the view shows it.
 type messageEntry struct {
-	// ID is the notification's, empty for a log line. It keeps a message from
-	// being remembered twice.
-	ID    string
-	Text  string
-	Level string // a notification type ("error") or a log level ("ERROR")
-	Time  time.Time
-	// Source names where the message came from: a pane's title, or "tuios"
-	// for a message the app raised itself.
+	ID     string
+	Text   string
+	Level  string
+	Time   time.Time
 	Source string
-	// Target is the pane or thread the message is about, nil when there is
-	// none. Enter in the view goes there.
 	Target *NotifTarget
 }
 
-// messageViewState is the open view. Runtime only.
 type messageViewState struct {
 	open   bool
 	entry  messageEntry
 	scroll int
 }
 
-// openMessageView shows one message in full.
 func (m *OS) openMessageView(e messageEntry) {
 	m.msgView = messageViewState{open: true, entry: e}
 }
@@ -76,7 +52,6 @@ func (m *OS) OpenLastMessage() bool {
 	return true
 }
 
-// rememberMessage keeps a shown message for prefix+N.
 func (m *OS) rememberMessage(e messageEntry) {
 	if e.ID != "" && slices.ContainsFunc(m.recentMessages, func(r messageEntry) bool { return r.ID == e.ID }) {
 		return
@@ -87,7 +62,6 @@ func (m *OS) rememberMessage(e messageEntry) {
 	}
 }
 
-// notificationEntry is a live notification as the view shows it.
 func (m *OS) notificationEntry(n Notification) messageEntry {
 	return messageEntry{
 		ID:     n.ID,
@@ -99,13 +73,10 @@ func (m *OS) notificationEntry(n Notification) messageEntry {
 	}
 }
 
-// logEntry is a log line as the view shows it.
 func logEntry(l LogMessage) messageEntry {
 	return messageEntry{Text: l.Message, Level: l.Level, Time: l.Time, Source: l.Source}
 }
 
-// notifSourceName names where a message came from, resolved when the message
-// is raised so a pane closed since still has its name.
 func (m *OS) notifSourceName(t *NotifTarget) string {
 	if t == nil {
 		return ""
@@ -128,15 +99,10 @@ func (m *OS) notifSourceName(t *NotifTarget) string {
 	return "A pane"
 }
 
-// messageGoesSomewhere reports whether enter in the view has a place to go. A
-// clipboard ask is left out: it is allowed only by a click on the dock, so a
-// key pressed from habit cannot give a pane the clipboard.
 func (e messageEntry) goesSomewhere() bool {
 	return e.Target != nil && e.Target.ClipboardAsk == 0
 }
 
-// messageLevelWord is the level as a word, the same for a notification type and
-// a log level.
 func messageLevelWord(level string) string {
 	switch strings.ToLower(level) {
 	case "error":
@@ -150,8 +116,6 @@ func messageLevelWord(level string) string {
 	}
 }
 
-// messageLevelColor is the level's ink: the tokens the log viewer and the dock
-// read by.
 func messageLevelColor(level string, pal overlay.Palette) color.Color {
 	switch strings.ToLower(level) {
 	case "error":
@@ -163,8 +127,6 @@ func messageLevelColor(level string, pal overlay.Palette) color.Color {
 	}
 }
 
-// wrapMessage breaks a message onto lines of at most width cells. A line break
-// in the message stays a line break.
 func wrapMessage(text string, width int) []string {
 	var out []string
 	for line := range strings.SplitSeq(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
@@ -173,16 +135,11 @@ func wrapMessage(text string, width int) []string {
 	return out
 }
 
-// Caps on the text a message carries. A notification is a pane's to write, so
-// its text is held to the size the daemon holds a pane's notification to. A
-// log line can be an error with a stack in it, so it gets more room.
 const (
 	notifTextCap = 512
 	logTextCap   = 4096
 )
 
-// capText trims s to n bytes on a rune boundary, and ends a trimmed text with
-// the ellipsis so the cut shows.
 func capText(s string, n int) string {
 	if len(s) <= n {
 		return s
@@ -194,19 +151,14 @@ func capText(s string, n int) string {
 	return s[:cut] + overlay.Ellipsis()
 }
 
-// wrapCacheSize is how many wrapped texts are kept. The view, the hover label
-// and the log viewer's detail each wrap one text per frame.
 const wrapCacheSize = 4
 
-// wrapCacheEntry is one wrapped text.
 type wrapCacheEntry struct {
 	text  string
 	width int
 	lines []string
 }
 
-// wrapCached is wrapMessage for a text drawn on every frame: it wraps a text at
-// a width once and keeps the lines until other texts push it out.
 func (m *OS) wrapCached(text string, width int) []string {
 	for _, e := range m.wrapCache {
 		if e.lines != nil && e.width == width && e.text == text {
@@ -219,7 +171,6 @@ func (m *OS) wrapCached(text string, width int) []string {
 	return lines
 }
 
-// messageViewHints is the view's footer.
 func (m *OS) messageViewHints() []overlay.Hint {
 	hints := []overlay.Hint{
 		{Key: hintListMoveLetters, Label: "scroll"},
@@ -235,15 +186,8 @@ func (m *OS) messageViewHints() []overlay.Hint {
 	return append(hints, overlay.Hint{Key: "esc", Label: "close"})
 }
 
-// messageViewExtra is the body lines that are not message text: the line that
-// says when and from where, and the rule under it. A message that scrolls
-// spends one more on the line that says where in it the view is.
 const messageViewExtra = 2
 
-// messageViewLayout is the view's fitted width, the message wrapped to it, how
-// many of its lines fit, and the largest scroll offset. The keys, the wheel and
-// the renderer all measure through here, so the range that scrolls is the range
-// that is drawn.
 func (m *OS) messageViewLayout() (width int, lines []string, rows, maxScroll int, hints []overlay.Hint) {
 	width = m.panelWidth(messageViewWidth)
 	lines = m.wrapCached(m.msgView.entry.Text, max(width-2, 1))
@@ -295,7 +239,6 @@ func (m *OS) MessageViewActivate() bool {
 	return true
 }
 
-// renderMessageView draws the view as an overlay panel.
 func (m *OS) renderMessageView(layers []*lipgloss.Layer) []*lipgloss.Layer {
 	if !m.msgView.open {
 		return layers

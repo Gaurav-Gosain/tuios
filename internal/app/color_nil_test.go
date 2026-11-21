@@ -45,8 +45,6 @@ func TestWrappedNilColourDoesNotPanic(t *testing.T) {
 		if safeColorEquals(realCol, color.RGBA{R: 99, G: 20, B: 30, A: 255}) {
 			t.Error("differing colours should not be equal")
 		}
-		// Two wrapped-nil colours of the same dynamic type are equal by
-		// identity and must not reach the panicking RGBA() call.
 		if !safeColorEquals(wrappedNil, (*color.RGBA)(nil)) {
 			t.Error("two wrapped-nil colours of the same type should be equal")
 		}

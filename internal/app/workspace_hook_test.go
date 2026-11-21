@@ -36,8 +36,6 @@ func TestSwitchToWorkspaceFiresHook(t *testing.T) {
 		t.Fatalf("CurrentWorkspace = %d, want 2", m.CurrentWorkspace)
 	}
 
-	// FireHookContext hands the hook to the manager before it returns, and
-	// Wait joins every hook fired so far.
 	mgr.Wait()
 	if _, err := os.Stat(marker); err != nil {
 		t.Error("after-workspace-switch hook never ran")

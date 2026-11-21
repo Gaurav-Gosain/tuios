@@ -9,10 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// dockReloadRuntime stands in for the Bubble Tea runtime, as far as the dock
-// is concerned: every command runs on its own goroutine, and the dock messages
-// it produces are fed back through Update on the test goroutine. A listener the
-// model has abandoned stays parked exactly as it would in the real program.
 type dockReloadRuntime struct {
 	msgs chan tea.Msg
 }
@@ -35,7 +31,6 @@ func (r *dockReloadRuntime) run(cmd tea.Cmd) {
 	}()
 }
 
-// drain delivers dock messages to the model until none arrives for a while.
 func (r *dockReloadRuntime) drain(m *OS) {
 	for {
 		select {
@@ -48,10 +43,6 @@ func (r *dockReloadRuntime) drain(m *OS) {
 	}
 }
 
-// drainUntil drains like drain until ok holds, for up to five seconds, and
-// reports whether it held. A quiet spell is not enough on its own to say a
-// command has answered: the custom component runs a real process, and on a
-// loaded machine it can take longer than drain's 50ms to answer.
 func (r *dockReloadRuntime) drainUntil(m *OS, ok func() bool) bool {
 	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
 		r.drain(m)
@@ -62,9 +53,6 @@ func (r *dockReloadRuntime) drainUntil(m *OS, ok func() bool) bool {
 	return ok()
 }
 
-// settledGoroutines waits for the goroutine count to reach want or below, and
-// returns the count it saw last. A stopped engine's goroutines leave on their
-// own schedule, so a single read would race them.
 func settledGoroutines(want int) int {
 	deadline := time.Now().Add(5 * time.Second)
 	n := runtime.NumGoroutine()
@@ -75,7 +63,6 @@ func settledGoroutines(want int) int {
 	return n
 }
 
-// stableGoroutines returns the goroutine count once it has stopped moving.
 func stableGoroutines() int {
 	prev := runtime.NumGoroutine()
 	for range 50 {

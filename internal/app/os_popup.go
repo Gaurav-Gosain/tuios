@@ -5,29 +5,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// A popup is a floating pane that runs one command and closes when the command
-// exits. The daemon opens it and marks it; this file is the client's half, which
-// is the box.
-//
-// The box is computed here rather than adopted from the sync, the way the zoom
-// box is and for the same reason: a popup is centred in the content region, and
-// the content region is this client's own size less the reserve the session
-// agreed. A peer of another size that adopted the rectangle would draw the popup
-// in a corner or off the edge, and would hand the shared shell a second size.
-// So the size the caller asked for travels and every client resolves it against
-// its own bounds.
-
-// popupRect is the box a popup fills on this client: the size the caller asked
-// for, centred on the screen and kept inside the content region. Inside a
-// scratch box it is centred in the box.
-//
-// The content region is the box the session agreed the panes go in, beside a
-// reserved sidebar band and clear of the dock rows, and it is the same box
-// zoomRect measures against, so a popup can never be drawn over the chrome.
-//
-// A request wider or taller than the region gives up its space rather than the
-// region: it is cut down to the region instead of overhanging it. That is the
-// tiler's rule (internal/layout.spans) applied to a size a person typed.
 func (m *OS) popupRect(w *terminal.Window) (x, y, width, height int) {
 	topMargin := m.PaneTop()
 	leftMargin := m.PaneLeft()
@@ -40,11 +17,6 @@ func (m *OS) popupRect(w *terminal.Window) (x, y, width, height int) {
 	x = leftMargin + (contentWidth-width)/2
 	y = topMargin + (contentHeight-height)/2
 	if _, _, inScratch := m.scratchRegion(); !inScratch {
-		// Centred on the screen, which is where the eye looks for a
-		// question, and then moved into the content region if it would
-		// cross the rail or the dock. A region beside a rail has its middle
-		// off the screen's, so centring on the region put every popup to
-		// one side.
 		if sw := m.GetRenderWidth(); sw > 0 {
 			x = clampInt((sw-width)/2, leftMargin, leftMargin+contentWidth-width)
 		}
@@ -55,17 +27,7 @@ func (m *OS) popupRect(w *terminal.Window) (x, y, width, height int) {
 	return x, y, width, height
 }
 
-// applyPopupRect puts one popup in this client's popup box and tells its guest,
-// through the shared path so the daemon-hosted PTY is told its new size too.
-// It is idempotent, so it can be run on any pass that might have moved the box.
-//
-// deferring is the tiler's own answer to resizeDeferralActive, threaded through
-// the way applyZoomRect takes it: while the pointer is dragging an edge the box
-// is given visually and the real announcement waits for the release.
 func (m *OS) applyPopupRect(w *terminal.Window, deferring bool) {
-	// A snap still in flight owns this pane's rectangle and would stamp its own
-	// back on the next tick, so it is retired first. The same thing every other
-	// placer does before it sets a box.
 	m.CancelSnapAnimation(w)
 	x, y, width, height := m.popupRect(w)
 	if w.X == x && w.Y == y && w.Width == width && w.Height == height {
@@ -74,12 +36,6 @@ func (m *OS) applyPopupRect(w *terminal.Window, deferring bool) {
 	m.placePaneAt(w, x, y, width, height, deferring)
 }
 
-// applyPopupRects re-centres every popup on the current workspace.
-//
-// It runs unconditionally rather than only when a popup arrives, because the box
-// also moves when this client resizes, when the sidebar band changes width and
-// when the session's reserve is renegotiated. A retile is exactly when that has
-// happened, so this is called from the same place applyZoomRect is.
 func (m *OS) applyPopupRects(deferring bool) {
 	for _, w := range m.Windows {
 		if w == nil || !w.IsPopup || w.Minimized {

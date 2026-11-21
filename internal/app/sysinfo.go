@@ -17,33 +17,26 @@ func (m *OS) GetCPUGraph() string {
 		return "CPU: n/a"
 	}
 
-	// Get current usage
 	current := 0.0
 	if len(m.CPUHistory) > 0 {
 		current = m.CPUHistory[len(m.CPUHistory)-1]
 	}
 
-	// Create a mini bar graph
 	var graphBuilder strings.Builder
 	const maxBars = 10
 
-	// If we have less samples, pad with spaces on the left
 	startPadding := maxBars - len(m.CPUHistory)
 	if startPadding > 0 {
 		graphBuilder.WriteString(strings.Repeat(" ", startPadding))
 	}
 
-	// Add the actual graph bars
 	for i, usage := range m.CPUHistory {
 		if i >= maxBars {
 			break
 		}
-		// Convert to 0-8 scale for vertical bars
 		height := min(int(usage/12.5), 8)
 
-		// Use block characters for the graph (or ASCII equivalents)
 		if m.Settings.UseASCIIOnly {
-			// ASCII fallback: use simple characters
 			switch height {
 			case 0:
 				graphBuilder.WriteRune('_')
@@ -57,7 +50,6 @@ func (m *OS) GetCPUGraph() string {
 				graphBuilder.WriteRune('#')
 			}
 		} else {
-			// Unicode block characters
 			switch height {
 			case 0:
 				graphBuilder.WriteRune('▁')
@@ -94,7 +86,6 @@ func (m *OS) GetRAMUsage() string {
 // UpdateRAMUsage updates the cached RAM usage.
 func (m *OS) UpdateRAMUsage() {
 	now := time.Now()
-	// Update every 2 seconds (RAM changes slowly)
 	if now.Sub(m.LastRAMUpdate) < 2*time.Second {
 		return
 	}
@@ -121,33 +112,23 @@ func (m *OS) UpdateCPUHistory() {
 		return
 	}
 	if !m.cpuHasLast {
-		// The first reading is only a baseline: a percentage needs two.
 		m.cpuLast, m.cpuHasLast = ticks, true
 		return
 	}
 	usage := cpuBusyPercent(m.cpuLast, ticks)
 	m.cpuLast = ticks
 
-	// Keep last 10 samples for a compact graph
 	if len(m.CPUHistory) >= 10 {
 		m.CPUHistory = m.CPUHistory[1:]
 	}
 	m.CPUHistory = append(m.CPUHistory, usage)
 }
 
-// cpuTicks is one reading of the machine-wide cumulative CPU time counters, in
-// whatever unit the platform counts. Only the difference between two readings
-// means anything. Each platform's readCPUTicks (sysinfo_<goos>.go) fills it; a
-// platform without one reports false and the dock shows "CPU: n/a".
 type cpuTicks struct {
-	idle  uint64 // time all CPUs spent idle
-	total uint64 // time all CPUs spent in any state, idle included
+	idle  uint64
+	total uint64
 }
 
-// cpuBusyPercent is the share of the time between two readings that the CPUs
-// spent busy, from 0 to 100. A counter that went backwards (a wrap, or a
-// reading from a different processor group on Windows) yields 0 rather than
-// a wild figure.
 func cpuBusyPercent(prev, cur cpuTicks) float64 {
 	if cur.total <= prev.total || cur.idle < prev.idle {
 		return 0

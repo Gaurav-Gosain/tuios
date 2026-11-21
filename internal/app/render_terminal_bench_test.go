@@ -21,8 +21,6 @@ func BenchmarkRenderTerminalUnfocused(b *testing.B) {
 
 	b.ReportAllocs()
 	for b.Loop() {
-		// Mark dirty each iteration so the cache short circuit does not turn
-		// this into a measurement of a map lookup.
 		win.MarkContentDirty()
 		_ = m.renderTerminal(win, false, false)
 	}

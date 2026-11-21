@@ -9,13 +9,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The border box may skip lipgloss's word wrap only when the pane body is
-// already exactly the pane's rectangle. Getting that wrong does not slow the
-// screen down, it corrupts it, and the ways a cell grid disagrees with a byte
-// or a rune count are all Unicode: a wide rune covering two columns, a
-// combining mark covering none, a joined emoji covering two across many runes.
-// Every case here is one of those, and three of them sit the awkward glyph at
-// the last column of the grid, where a pane has the least room to be wrong.
 var preShapedCases = []struct {
 	name string
 	text string
@@ -40,8 +33,6 @@ const (
 	preShapedRows = 8
 )
 
-// preShapedWindow builds a bordered pane whose emulator is exactly its content
-// rectangle, painted with the given text.
 func preShapedWindow(t *testing.T, id, text string) *terminal.Window {
 	t.Helper()
 	win := newTestWindow(t, id, preShapedCols+2, preShapedRows+2)
@@ -51,8 +42,6 @@ func preShapedWindow(t *testing.T, id, text string) *terminal.Window {
 	return win
 }
 
-// withoutPreShaping runs fn with the border box forced back through the wrap,
-// which is what TUIOS_NO_PRESHAPED does for a running client.
 func withoutPreShaping(t *testing.T, fn func()) {
 	t.Helper()
 	preShapedDisabled = true

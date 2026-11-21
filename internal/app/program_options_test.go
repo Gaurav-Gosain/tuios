@@ -54,15 +54,6 @@ func TestEveryProgramTakesTheSharedOptions(t *testing.T) {
 			if newProgram == nil {
 				return
 			}
-			// The explorers behind tuios help -i, config browse and keybinds
-			// browse are not clients. They draw no panes, run their own small
-			// model, and keep Bubble Tea's signal handler, so a kill still
-			// gives the terminal back. ProgramOptions removes that handler,
-			// because a client's command owns its signals. The look list of
-			// tuios look pick is the same kind of program. So is tuios hosts
-			// setup on a terminal: an inline program that asks for the
-			// choices the flags did not make. A kill must end it, so the
-			// setup stops at a step boundary and gives the terminal back.
 			switch path {
 			case "internal/explore/explore.go", "cmd/tuios/look_pick.go", "cmd/tuios/host_setup_tty.go":
 				return
@@ -93,31 +84,17 @@ func TestEveryProgramTakesTheSharedOptions(t *testing.T) {
 			if name == "WithOutput" {
 				return true
 			}
-			// The browser build is its own transport, with no sip or wish
-			// to supply the input and size, and it runs a wrapper model the
-			// shared filter does not recognise, so it installs one that
-			// unwraps and calls FilterMouseMotion.
 			if path == "cmd/tuios-wasm/main_js.go" &&
 				(name == "WithInput" || name == "WithWindowSize" || name == "WithFilter") {
 				return true
 			}
-			// The tutor reads the terminal through an input that also takes
-			// the keys "show me" types, and it runs a wrapper model, so its
-			// filter turns a quit into the tutor's menu and then calls
-			// FilterLearnMode and FilterMouseMotion on the OS inside.
 			if path == "internal/tutor/tutor.go" && (name == "WithInput" || name == "WithFilter") {
 				return true
 			}
-			// A client on a terminal that is not this process's, such as a
-			// test's pipe, takes its input, environment and colour profile
-			// from the terminal value, as wish and sip supply a session's.
 			if path == "internal/localclient/localclient.go" &&
 				(name == "WithInput" || name == "WithEnvironment" || name == "WithColorProfile") {
 				return true
 			}
-			// The GUI bridge is a transport with no terminal at all: its
-			// input is frames from a renderer, its size is the renderer's
-			// grid, and nothing is drawn.
 			if path == "internal/guibridge/bridge.go" &&
 				(name == "WithInput" || name == "WithWindowSize" || name == "WithoutRenderer") {
 				return true
@@ -155,8 +132,6 @@ func TestMotionFilterFollowsTheBeam(t *testing.T) {
 	o := filterOS(t)
 	o.UserConfig.Appearance.Links = "off"
 	o.UserConfig.Spotlight.Follow = config.SpotlightFollowMouse
-	// A pane's border: chrome, not pane content, so no other clause claims it.
-	// (The dock band has a clause of its own now, for its controls' hover.)
 	overChrome := tea.MouseMotionMsg{X: 31, Y: 10}
 
 	if FilterMouseMotion(o, overChrome) != nil {
@@ -172,8 +147,6 @@ func TestMotionFilterFollowsTheBeam(t *testing.T) {
 	}
 }
 
-// sweepOS is a served client with four tiled panes, the shape a pointer sweep
-// meets on a remote desktop.
 func sweepOS(tb testing.TB) *OS {
 	tb.Helper()
 	cfg := config.DefaultConfig()
@@ -263,7 +236,6 @@ func TestPointerSweepOverTheDockPassesOnlyItsTargets(t *testing.T) {
 		o.Update(msg)
 		o.View()
 	}
-	// Onto and off each target, and the one motion that leaves the last.
 	if limit := 2*targets + 1; passed > limit {
 		t.Errorf("a sweep across %d dock cells passed %d motions; %d targets allow at most %d",
 			o.Width, passed, targets, limit)

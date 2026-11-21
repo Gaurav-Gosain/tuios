@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// sessionPaletteTestOS builds an OS with two windows and no daemon client, the
-// same standalone shape session_tree_test.go exercises, ready for the palette
-// builder and its actions.
 func sessionPaletteTestOS(t *testing.T) (*OS, *terminal.Window, *terminal.Window) {
 	t.Helper()
 	first := &terminal.Window{ID: "w1", CustomName: "first"}

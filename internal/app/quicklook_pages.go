@@ -15,25 +15,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The pages of a PDF in quick look.
-//
-// ql.res is the page on the screen, and pageWant the page the keys asked for. They
-// differ while a read is out, and the panel says which page it is reading. Update
-// asks quickLookPageRead after every message: it shows a held page at once, or
-// starts one read. So a held key moves pageWant and the read goes to where it ended.
-// A read for a page nobody wants now is cancelled, which kills pdftoppm on this
-// machine. A link has no way to stop it, so there the next read waits.
-//
-// With nothing to do, it reads the next page and then the one before, so J shows
-// a page at once. A link whose last read took 300 ms or more gets no such reads.
-// Everything here goes when the file changes or the preview closes.
 const (
 	quickLookPagesHeld  = 5
 	quickLookPagesBytes = 32 << 20
 	quickLookPageSlow   = 300 * time.Millisecond
 )
 
-// quickLookPageMsg carries a finished page read back to the loop.
 type quickLookPageMsg struct {
 	target    quickLookTarget
 	page      int
@@ -42,18 +29,15 @@ type quickLookPageMsg struct {
 	cancelled bool
 }
 
-// quickLookBarBox is the page bar's track in the panel's body, for the mouse.
 type quickLookBarBox struct {
 	ok          bool
 	x0, x1, row int
 }
 
-// quickLookPaged reports whether r is a PDF with pages to move through.
 func quickLookPaged(r *quickLookResult) bool {
 	return r != nil && (r.kind == "pdf" || r.kind == "image") && r.pages > 1
 }
 
-// quickLookPageTo moves to a page, held to the file's pages.
 func (m *OS) quickLookPageTo(page int) bool {
 	ql := &m.quickLook
 	if !ql.open || !quickLookPaged(ql.res) {
@@ -64,7 +48,6 @@ func (m *OS) quickLookPageTo(page int) bool {
 	return true
 }
 
-// quickLookDropPages lets go of what is held for the file's pages.
 func (m *OS) quickLookDropPages() {
 	ql := &m.quickLook
 	if ql.pageCancel != nil {
@@ -83,7 +66,6 @@ func (m *OS) quickLookDropPages() {
 	ql.stripPics = nil
 }
 
-// quickLookHeldPage is a page held in memory, or nil.
 func (ql *quickLookState) quickLookHeldPage(page int) *quickLookResult {
 	for _, r := range ql.pageHeld {
 		if r.page == page {
@@ -93,7 +75,6 @@ func (ql *quickLookState) quickLookHeldPage(page int) *quickLookResult {
 	return nil
 }
 
-// quickLookPageSize is the bytes a held page keeps.
 func quickLookPageSize(r *quickLookResult) int {
 	if r.img != nil {
 		return len(r.img.Data)
@@ -101,7 +82,6 @@ func quickLookPageSize(r *quickLookResult) int {
 	return 0
 }
 
-// quickLookPagesSize is the bytes all the held pages keep.
 func (ql *quickLookState) quickLookPagesSize() int {
 	n := 0
 	for _, r := range ql.pageHeld {
@@ -110,8 +90,6 @@ func (ql *quickLookState) quickLookPagesSize() int {
 	return n
 }
 
-// quickLookHoldPage keeps a page, and lets go of the pages furthest from the one
-// asked for until the cache is within its bounds.
 func (ql *quickLookState) quickLookHoldPage(res *quickLookResult) {
 	if ql.quickLookHeldPage(res.page) == nil {
 		ql.pageHeld = append(ql.pageHeld, res)
@@ -130,9 +108,6 @@ func (ql *quickLookState) quickLookHoldPage(res *quickLookResult) {
 	}
 }
 
-// quickLookPageRead shows the page asked for when it is held, or starts the next
-// read. Update asks after every message. It is nil unless a read is due, and only
-// one read runs at a time.
 func (m *OS) quickLookPageRead() tea.Cmd {
 	ql := &m.quickLook
 	r := ql.res
@@ -165,7 +140,6 @@ func (m *OS) quickLookPageRead() tea.Cmd {
 	return nil
 }
 
-// quickLookReadPage reads one page off the loop.
 func (m *OS) quickLookReadPage(page int) tea.Cmd {
 	ql := &m.quickLook
 	t, pages, size, kind := ql.target, ql.res.pages, ql.res.size, ql.res.kind
@@ -187,7 +161,6 @@ func (m *OS) quickLookReadPage(page int) tea.Cmd {
 			return msg
 		}
 		res := quickLookDecode(t, raw, err, ascii)
-		// A page that failed stays a page: its note shows, and J and K go on.
 		res.kind = kind
 		res.page, res.pages = page, pages
 		res.size = max(res.size, size)
@@ -196,7 +169,6 @@ func (m *OS) quickLookReadPage(page int) tea.Cmd {
 	}
 }
 
-// quickLookWantReply asks for a page, on this machine or the one with the file.
 func quickLookWantReply(ctx context.Context, call func(host, verb string, params map[string]any) (json.RawMessage, error), t quickLookTarget, want session.PreviewWant) (json.RawMessage, error) {
 	if t.host == "" {
 		out, err := session.PreviewLocalWant(ctx, t.path, want)
@@ -209,8 +181,6 @@ func quickLookWantReply(ctx context.Context, call func(host, verb string, params
 	if want.Page > 0 {
 		params["page"] = want.Page
 	}
-	// An older daemon ignores these. It counts the pages and sends the picture, and
-	// a film's first frame with no at_ms in its answer, which is how it is told.
 	if want.PagesKnown {
 		params["pages_known"] = true
 	}
@@ -235,8 +205,6 @@ func quickLookWantReply(ctx context.Context, call func(host, verb string, params
 	return call(t.host, "file-preview", params)
 }
 
-// applyQuickLookPage files a finished page away, or asks for the row the cursor
-// moved to while it ran.
 func (m *OS) applyQuickLookPage(msg quickLookPageMsg) tea.Cmd {
 	ql := &m.quickLook
 	ql.fetching, ql.pageOut, ql.pageCancel = false, 0, nil
@@ -257,8 +225,6 @@ func (m *OS) applyQuickLookPage(msg quickLookPageMsg) tea.Cmd {
 	return nil
 }
 
-// quickLookPagePx is the long side a page is asked for at: the pixels of the panes'
-// area, so full size needs no second read, up to what a preview asks for at most.
 func (m *OS) quickLookPagePx() int {
 	cw, ch := m.hostCellSize()
 	if cw <= 0 || ch <= 0 {
@@ -267,7 +233,6 @@ func (m *OS) quickLookPagePx() int {
 	return min(max(m.GetRenderWidth()*cw, m.GetRenderHeight()*ch), quickLookMaxPx)
 }
 
-// quickLookPagePosition is "Page 3 of 12", and says when that page is on its way.
 func quickLookPagePosition(r *quickLookResult, want int) string {
 	s := quickLookUnit(r) + " " + strconv.Itoa(want) + " of " + strconv.Itoa(r.pages)
 	if r.page != want {
@@ -276,7 +241,6 @@ func quickLookPagePosition(r *quickLookResult, want int) string {
 	return s
 }
 
-// quickLookUnit is what the file has many of.
 func quickLookUnit(r *quickLookResult) string {
 	if r.kind == "image" {
 		return "Frame"
@@ -284,8 +248,6 @@ func quickLookUnit(r *quickLookResult) string {
 	return "Page"
 }
 
-// quickLookDrawBar draws the bar on the last row of the body: where the file is, a
-// track with a thumb that a click moves, and where the file ends. pos is out of span.
 func quickLookDrawBar(c *ckCanvas, pal overlay.Palette, ql *quickLookState, here, last string, pos, span int64, y, w int) {
 	label := ckSeg{t: here + "  ", fg: pal.Fg}
 	end := ckSeg{t: "  " + last, fg: pal.FgMute}
@@ -306,8 +268,6 @@ func quickLookDrawBar(c *ckCanvas, pal overlay.Palette, ql *quickLookState, here
 	ql.pageBar = quickLookBarBox{ok: true, x0: x0, x1: x1, row: y}
 }
 
-// quickLookBarClick moves to the place under a click on the bar. x and y are on the
-// screen. It reports whether the click was on the bar, and a drag goes on from it.
 func (m *OS) quickLookBarClick(x, y int) bool {
 	ql := &m.quickLook
 	b := ql.pageBar
@@ -320,7 +280,6 @@ func (m *OS) quickLookBarClick(x, y int) bool {
 	return true
 }
 
-// quickLookBarMove moves to the place at column x of the panel's body.
 func (m *OS) quickLookBarMove(x int) {
 	ql := &m.quickLook
 	b := ql.pageBar
@@ -356,8 +315,6 @@ func (m *OS) QuickLookBarRelease() bool {
 	return drag
 }
 
-// quickLookDrawPageWords draws a page as its words, for a host that cannot draw the
-// picture.
 func quickLookDrawPageWords(c *ckCanvas, pal overlay.Palette, lines []string, top, rows, w int) {
 	for i := 0; i < rows && i < len(lines); i++ {
 		c.text(1, top+i, w-1, ckSeg{t: lines[i], fg: pal.Fg})

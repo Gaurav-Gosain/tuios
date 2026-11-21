@@ -8,18 +8,9 @@ import (
 	"tuios.dev/shot"
 )
 
-// A palette index cannot say what colour it is: only the terminal drawing it
-// can. Everything tuios renders unthemed comes out as indices, so anything that
-// turns a finished frame back into cells of its own has to ask the host or
-// guess. It guessed with the xterm defaults, where index 4 is a navy so dark it
-// is hard to read, and the screen saver over an unthemed session redrew every
-// directory name in a blue the terminal had never shown.
-
 // TestTheHostPaletteIsReadOutOfAProbe pins the parse against the reply shapes
 // terminals actually send.
 func TestTheHostPaletteIsReadOutOfAProbe(t *testing.T) {
-	// Four hex digits per channel, string terminator: what xterm and ghostty
-	// answer. Two digits and a BEL are both in use as well.
 	response := "\x1b]4;0;rgb:0000/0000/0000\x1b\\" +
 		"\x1b]4;4;rgb:3b3b/7878/ffff\x1b\\" +
 		"\x1b]4;15;rgb:ff/ff/ff\x07" +
@@ -96,8 +87,6 @@ func TestTheHostPaletteWinsOverTheGuess(t *testing.T) {
 	if want := shot.RGB(0x3b, 0x78, 0xff); got.ANSI[4] != want {
 		t.Errorf("index 4 is %v, want the host's %v", got.ANSI[4], want)
 	}
-	// And the slots the host did not mention keep the fallback rather than
-	// going black.
 	if got.ANSI[2] != fallback.ANSI[2] {
 		t.Errorf("index 2 changed to %v without the host saying anything about it", got.ANSI[2])
 	}

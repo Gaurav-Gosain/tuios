@@ -12,20 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The dock as an ordered list of named components.
-//
-// Every segment the bar draws is a name in one of three lists, and a name the
-// user can move, drop, or put their own command beside. What that buys, beyond
-// the customisation, is a single place where the bar's membership is decided:
-// the layout pass and the draw pass read the same plan, which is what the
-// triple-computed layout in this package kept failing to do.
-//
-// A built-in keeps whatever condition it always had, so naming a component
-// makes it eligible to draw rather than certain to. That is what lets the
-// default lists reproduce the bar byte for byte.
-
-// dockPlan is the resolved arrangement for one frame: which components are on
-// which side, in which order.
 type dockPlan struct {
 	Left   []string
 	Center []string
@@ -33,12 +19,8 @@ type dockPlan struct {
 	placed map[string]bool
 }
 
-// Has reports whether a component is placed anywhere.
 func (p dockPlan) Has(name string) bool { return p.placed[name] }
 
-// buildDockPlan resolves the config's lists, dropping names that no built-in
-// and no [dock.custom] table defines. A dropped name is reported through
-// ConfigWarnings at load; here it just does not draw.
 func buildDockPlan(cfg *config.UserConfig) dockPlan {
 	plan := dockPlan{placed: map[string]bool{}}
 	if cfg == nil {
@@ -72,41 +54,20 @@ func buildDockPlan(cfg *config.UserConfig) dockPlan {
 	plan.Left = keep("left", cfg.Dock.DockList("left"))
 	plan.Center = keep("center", cfg.Dock.DockList("center"))
 	plan.Right = keep("right", cfg.Dock.DockList("right"))
-	// A component with a fixed side that was listed elsewhere is appended to the
-	// side it actually draws on, so it never reserves width on one side while
-	// drawing on another. The config warning says so at load.
 	plan.Center = append(plan.Center, misplaced["center"]...)
 	plan.Right = append(plan.Right, misplaced["right"]...)
 	return plan
 }
 
-// ensureDockPlan fills in the plan for a model that has not built one.
-//
-// Every dock path goes through this, because a model that was assembled without
-// running Init (a test fixture, an embed host, a frame drawn before the engine
-// started) still has a bar to draw, and a bar with no plan is a bar with no
-// components. Absent config resolves to the default arrangement, which is the
-// same answer buildDockPlan gives a config file with no [dock] table.
 func (m *OS) ensureDockPlan() {
 	if m.dockPlan.placed == nil {
 		m.rebuildDockPlan()
 	}
 }
 
-// dockRefreshableComponents is the set the engine schedules: the three
-// built-ins that move on their own, plus every custom cell the plan placed.
-//
-// Everything else on the bar is drawn from model state on the frames that were
-// happening anyway, so it has nothing to schedule and costs nothing to hold.
 func dockRefreshableComponents(cfg *config.UserConfig, plan dockPlan, showClock bool, s *config.Settings) []*dockengine.Component {
 	var comps []*dockengine.Component
 
-	// Scheduled only when it will actually draw. The clock sits in the default
-	// list now, so an "or" here woke a component every minute for every session
-	// that had left show_clock off. The meters below read the same way for the
-	// same reason: the list says where, the switch says whether. Its cadence
-	// comes from the format, so 15:04 wakes once a minute rather than sixty
-	// times a second.
 	if plan.Has(config.DockComponentClock) && showClock {
 		format := cfg.Dock.DockClockFormat(s)
 		comps = append(comps, &dockengine.Component{
@@ -118,8 +79,6 @@ func dockRefreshableComponents(cfg *config.UserConfig, plan dockPlan, showClock 
 			},
 		})
 	}
-	// The meters keep their own switches: the lists say where they go, show_cpu
-	// and show_ram still say whether they are on.
 	if plan.Has(config.DockComponentCPU) && s.ShowCPU {
 		comps = append(comps, &dockengine.Component{
 			Name:    config.DockComponentCPU,
@@ -144,8 +103,6 @@ func dockRefreshableComponents(cfg *config.UserConfig, plan dockPlan, showClock 
 			spec := cfg.Dock.Custom[key]
 			refresh, err := config.ParseDockRefresh(spec.Refresh)
 			if err != nil {
-				// The warning was raised at load; a component whose contract
-				// does not parse falls back to the safest one there is.
 				refresh = config.DockRefresh{Kind: config.DockRefreshOnce}
 			}
 			width := spec.MaxWidth
@@ -164,19 +121,10 @@ func dockRefreshableComponents(cfg *config.UserConfig, plan dockPlan, showClock 
 	return comps
 }
 
-// The CPU and RAM readouts are re-measured every dock.meter_interval_ms. The
-// RAM figure self-throttles to this, and the CPU graph has one bar per sample, so
-// a faster cadence only moves the graph off the screen sooner.
-
-// dockCustomHit is where a custom cell was drawn, recorded by the renderer as
-// it draws for the reason every other dock rect is: a handler that worked the
-// columns out again is a second implementation that can disagree with the frame
-// the user clicked on.
 type dockCustomHit struct {
 	X0, X1, Y int
 	Name      string
-	// Button is a button of the "buttons" row plus one, or 0. See dock_buttons.go.
-	Button int
+	Button    int
 }
 
 // DockCustomComponentAt returns the custom component covering the absolute cell
@@ -190,24 +138,10 @@ func (m *OS) DockCustomComponentAt(x, y int) string {
 	return ""
 }
 
-// dockCustomCell is one custom component drawn as a bar cell: the component's
-// own text, with a column either side, on the Panel step the rest of the dock's
-// quiet chrome rests on.
-//
-// The ground matters more than it looks. A component may emit SGR, including a
-// reset, and a reset on a transparent background punches a hole through the bar
-// that the overlay tests exist to forbid. Rendering the cell over Panel means
-// the worst a component can do to its neighbours is nothing.
 func (m *OS) dockCustomCell(name string) string {
-	// The clock keeps its own switch, the way the meters do: the list says
-	// where it goes, show_clock still says whether it is on. Gated here rather
-	// than per side, so a clock moved to the left or the centre obeys the same
-	// switch without the caller having to remember.
 	if name == config.DockComponentClock && (!m.Settings.ShowClock || m.Settings.HideClock) {
 		return ""
 	}
-	// The copies between machines draw from the mirror, not from the
-	// engine, and nothing while no copy exists. See transfers_render.go.
 	if name == config.DockComponentTransfers {
 		return m.transfersDockCell()
 	}
@@ -216,9 +150,6 @@ func (m *OS) dockCustomCell(name string) string {
 	}
 	text := m.dockEngine.Text(name)
 	if name == config.DockComponentClock && text == "" {
-		// The clock is a built-in that carries a value, so it draws through the
-		// same cell as a user's component does. It falls back to the wall clock
-		// for the first frame, before the engine has filled it.
 		text = m.DockClockText()
 	}
 	if name == config.DockComponentSession {
@@ -230,15 +161,6 @@ func (m *OS) dockCustomCell(name string) string {
 	return renderDockCell(text, m.dockCellStyle(name), m.groundUI())
 }
 
-// renderDockCell draws a cell's text with a column either side. A cell with no
-// style rests on Panel in FgDim, as every cell did before styles existed. A
-// styled one takes its own colours; an unset background still falls back to
-// Panel, for the SGR-reset reason dockCustomCell gives. A value that is not a
-// colour counts as unset, because lipgloss turns it into no colour at all,
-// which is the hole that fallback exists to close; the config warns about it.
-// A role such as accent is read off the dock's own palette.
-// An unset foreground is the dim ink made readable on the background the cell
-// really has. The caps are drawn in that background colour.
 func renderDockCell(text string, st config.DockCellStyle, pal overlay.Palette) string {
 	bg := pal.Panel
 	if c := theme.ConfigColorOn(st.Bg, &pal); c != nil {
@@ -252,9 +174,6 @@ func renderDockCell(text string, st config.DockCellStyle, pal overlay.Palette) s
 	if st.CapLeft == "" && st.CapRight == "" {
 		return body
 	}
-	// At 16 colours an unset ground is the terminal's own, so a cap has no
-	// colour to take and would read as a glyph beside the cell. Blanks of the
-	// same width keep the geometry, as workspacePill does.
 	if overlay.IsNoColor(bg) {
 		return strings.Repeat(" ", lipgloss.Width(st.CapLeft)) + body + strings.Repeat(" ", lipgloss.Width(st.CapRight))
 	}
@@ -268,8 +187,6 @@ func renderDockCell(text string, st config.DockCellStyle, pal overlay.Palette) s
 	return body
 }
 
-// dockCellStyle is the style a cell component's table asks for: [dock.session]
-// for the session component, [dock.custom.NAME] for a custom one.
 func (m *OS) dockCellStyle(name string) config.DockCellStyle {
 	if m.UserConfig == nil {
 		return config.DockCellStyle{}
@@ -283,10 +200,6 @@ func (m *OS) dockCellStyle(name string) config.DockCellStyle {
 	return config.DockCellStyle{}
 }
 
-// dockSessionText is the session component's text: the session name, the
-// current workspace and the focused pane's place in it, through
-// [dock.session] format. Read from model state each frame, so it needs no
-// refresh of its own.
 func (m *OS) dockSessionText() string {
 	format := ""
 	if m.UserConfig != nil {
@@ -299,8 +212,6 @@ func (m *OS) dockSessionText() string {
 	return config.FormatDockSession(format, m.SessionName, m.workspaceDisplayNumber(m.dockWorkspace()), pane)
 }
 
-// dockCustomCells renders the custom components on one side, in list order,
-// skipping the ones with nothing to say.
 func (m *OS) dockCustomCells(names []string) (cells []string, widths []int, keys []string) {
 	for _, name := range names {
 		if !dockCellComponent(name) {
@@ -317,21 +228,15 @@ func (m *OS) dockCustomCells(names []string) (cells []string, widths []int, keys
 	return cells, widths, keys
 }
 
-// dockCellComponent reports whether a component draws as a bar cell from a
-// value the engine holds, rather than from model state the renderer reads.
 func dockCellComponent(name string) bool {
 	return strings.HasPrefix(name, config.DockCustomPrefix) || strings.HasPrefix(name, config.DockPluginPrefix) || name == config.DockComponentClock ||
 		name == config.DockComponentTransfers || name == config.DockComponentSession
 }
 
-// dockCellClickable reports whether a cell records where it was drawn, for a
-// click: a custom component, which runs its on-click command, and the
-// copies, which open the Copies panel.
 func dockCellClickable(name string) bool {
 	return strings.HasPrefix(name, config.DockCustomPrefix) || strings.HasPrefix(name, config.DockPluginPrefix) || name == config.DockComponentTransfers
 }
 
-// dockCustomWidth is the room a side's custom cells want.
 func (m *OS) dockCustomWidth(names []string) int {
 	_, widths, _ := m.dockCustomCells(names)
 	total := 0
@@ -444,13 +349,7 @@ func (m *OS) DockComponents() []DockComponentInfo {
 					info.LastRun = c.LastRun().UTC().Format(time.RFC3339)
 				}
 			}
-			// A built-in drawn from model state is visible whenever its own
-			// condition holds, which is not knowable here; a refreshable one is
-			// visible exactly when it has text.
 			info.Visible = info.Refresh == "render" || info.Text != ""
-			// The meters and the clock keep their own switch: the plan says
-			// where they go, the switch says whether they draw at all. A
-			// component a switch turns off says so, and names the switch.
 			if off := m.dockSwitchedOff(name); off != "" {
 				info.Visible = false
 				info.Off = off
@@ -458,36 +357,20 @@ func (m *OS) DockComponents() []DockComponentInfo {
 			out = append(out, info)
 		}
 	}
-	// The rail's custom section, after the bar's three sides. It is listed
-	// here because this listing is where a component that draws nothing says
-	// why, and a rail section that drew nothing has the same question to
-	// answer.
 	if m.railCustomEnabled() || m.railCustomConfig().HasCommand() {
 		out = append(out, m.railCustomInfo())
 	}
 	return out
 }
 
-// renderDockRightCells draws the right block's cells in plan order and reports
-// where each custom one landed inside the block.
-//
-// The degradation order is the design's, and it is not arbitrary. The meters
-// are readouts nobody can act on, so they already yielded their columns to the
-// minimized entries; a custom cell yields before either, because it is the one
-// thing on the bar tuios cannot reason about the value of. What is left when
-// nothing fits is the same thing that was left before components existed.
 func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, []dockCustomHit) {
-	// One pass over the plan builds the segments in draw order. The two meters
-	// are one segment, emitted where the first of them is named, so a plan of
-	// ["cpu", "custom/x"] draws the readouts and then the cell.
 	type segment struct {
-		text   string
-		width  int
-		name   string
-		custom bool // yields first when room runs out
-		hit    bool // records a hit rectangle
-		meters bool // stands for whatever is left of the CPU and RAM readouts
-		// buttons stands for the button row, drawn at whatever fit is left.
+		text    string
+		width   int
+		name    string
+		custom  bool
+		hit     bool
+		meters  bool
 		buttons bool
 	}
 
@@ -552,10 +435,6 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 			return b.String(), hits
 		}
 
-		// A custom cell yields before a meter does, because it is the one thing
-		// on the bar tuios cannot reason about the value of. Then the CPU graph
-		// before the RAM figure: a clipped graph reads as noise where a clipped
-		// figure still reads as a figure.
 		if i := lastSegmentMatching(len(segs), func(i int) bool { return segs[i].custom }); i >= 0 {
 			segs = append(segs[:i], segs[i+1:]...)
 			continue
@@ -571,8 +450,6 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 			}
 			continue
 		}
-		// The buttons go last, and they leave a sign as they go: the words
-		// first, then a button at a time into the more button.
 		if i := lastSegmentMatching(len(segs), func(i int) bool { return segs[i].buttons }); i >= 0 {
 			switch {
 			case !fit.compact:
@@ -585,13 +462,10 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 			}
 			continue
 		}
-		// Nothing left to give up. Whatever remains is drawn and the bar's own
-		// backstop truncates it.
 		return b.String(), hits
 	}
 }
 
-// lastSegmentMatching is the index of the last of n segments matching pred, or -1.
 func lastSegmentMatching(n int, pred func(int) bool) int {
 	for i := n - 1; i >= 0; i-- {
 		if pred(i) {
@@ -601,8 +475,6 @@ func lastSegmentMatching(n int, pred func(int) bool) int {
 	return -1
 }
 
-// dockSwitchedOff names the setting that keeps a placed built-in off the bar,
-// or returns "" when nothing does.
 func (m *OS) dockSwitchedOff(name string) string {
 	switch name {
 	case config.DockComponentCPU:

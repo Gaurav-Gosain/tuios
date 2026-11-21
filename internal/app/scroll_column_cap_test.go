@@ -25,13 +25,11 @@ import (
 func TestScrollingColumnCap(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
-		cap     int // scroll_column_max
-		resizeW int // cell width after resize_master_grow storms
-		wantCap int // max cells a column may occupy at the strip's width
+		cap     int
+		resizeW int
+		wantCap int
 	}{
-		// The default ceiling: the resize keys cannot pass 90% of the strip.
 		{name: "default-90", cap: 90, resizeW: 72, wantCap: 72},
-		// A raised ceiling: the resize keys reach the full strip width.
 		{name: "raised-100", cap: 100, resizeW: 80, wantCap: 80},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -41,8 +39,6 @@ func TestScrollingColumnCap(t *testing.T) {
 
 			sl := m.GetOrCreateScrollingLayout()
 			sl.FocusedCol = 0
-			// Storm the > key: 100 presses of 4 cells each. The cap, not the
-			// count, decides the final width.
 			for range 100 {
 				m.scrollingResizeColumn(4)
 			}
@@ -57,7 +53,6 @@ func TestScrollingColumnCap(t *testing.T) {
 				t.Fatalf("resize_master_grow leaves the column at %d cells, want %d", got, tc.resizeW)
 			}
 
-			// Maximize lands on the same ceiling, never past it.
 			m.ScrollingMaximizeColumn()
 			m.CompleteAllAnimations()
 			maxW := sl.ResolveColumnWidth(0, viewW)
@@ -80,11 +75,8 @@ func TestScrollingColumnCap(t *testing.T) {
 // 0.333 in a single press).
 func TestScrollingCycleWidthRespectsTheCeiling(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		cap  int
-		// The preset one press from 0.9 lands on: 0.333 (wrap) when the
-		// ceiling is 90 and 1.0 is filtered out, 1.0 (the new endpoint)
-		// when the ceiling is 100 and 1.0 is in the chain.
+		name        string
+		cap         int
 		wantAfter09 float64
 	}{
 		{name: "default-90-skips-1.0", cap: 90, wantAfter09: 0.333},

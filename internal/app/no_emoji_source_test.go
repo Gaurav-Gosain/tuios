@@ -15,36 +15,20 @@ import (
 	"testing"
 )
 
-// emojiDataPath is the pinned copy of the Unicode emoji property file. See
-// testdata/unicode/README.md for where it came from.
 const emojiDataPath = "testdata/unicode/emoji-data.txt"
 
-// emojiSourceAllowed lists the non-test files whose string literals may hold
-// emoji code points, each with the reason. Every entry is data that describes
-// another program's output or input, not text tuios shows as its own. A new
-// entry is a decision somebody makes in review, which is the point.
 var emojiSourceAllowed = map[string]string{
-	// Detection code that matches the option cursors other agents draw.
-	"internal/harness/answers.go": "matches option cursors agent CLIs draw",
-	"harness/prompt.go":           "matches prompt cursors agent CLIs draw",
-	// The fuzzers feed the emulator emoji on purpose, to test widths.
-	"vt/vtgen/vtgen.go":      "emulator width input",
-	"internal/fuzz/pools.go": "emulator width input",
-	// The prompt parser skips the icons eza and tree print before a name.
-	"internal/scrollback/parser.go": "matches icons other programs print",
-	// The browser tour's fake Claude Code draws Claude Code's own spinner.
-	"internal/webshell/agent.go": "imitates another program's screen",
-	// Quick look maps the arrow glyphs a drawn diagram uses to ASCII.
-	// macOS Option-key output is what the keyboard sends, not what we show.
+	"internal/harness/answers.go":      "matches option cursors agent CLIs draw",
+	"harness/prompt.go":                "matches prompt cursors agent CLIs draw",
+	"vt/vtgen/vtgen.go":                "emulator width input",
+	"internal/fuzz/pools.go":           "emulator width input",
+	"internal/scrollback/parser.go":    "matches icons other programs print",
+	"internal/webshell/agent.go":       "imitates another program's screen",
 	"internal/config/keynormalizer.go": "macOS Option-key character map",
 }
 
-// emojiSourceRoots are the trees the lint reads.
 var emojiSourceRoots = []string{"internal", "cmd", "vt", "harness"}
 
-// loadEmojiRunes reads the code points emoji-data.txt gives any emoji
-// property. ASCII is left out: '#', '*' and the digits are Emoji=Yes only as
-// keycap bases, and they are plain text everywhere tuios uses them.
 func loadEmojiRunes(t *testing.T) map[rune]string {
 	t.Helper()
 	f, err := os.Open(emojiDataPath)
@@ -85,12 +69,7 @@ func loadEmojiRunes(t *testing.T) map[rune]string {
 	if err := sc.Err(); err != nil {
 		t.Fatal(err)
 	}
-	// U+FE0F asks for emoji presentation of whatever precedes it, which is the
-	// thing to keep out even when the base alone would be text.
 	out[0xFE0F] = "Emoji_Presentation selector"
-	// Not emoji, but held to the same rule: the return key is drawn one way,
-	// overlay.EnterGlyph in a hint (EnterKey where it is spelled out), and
-	// this second glyph for it is missing from many fonts.
 	out[0x23CE] = "second return glyph; use overlay.EnterGlyph"
 	if len(out) < 1000 {
 		t.Fatalf("read %d emoji code points; the data file is not what this test expects", len(out))
@@ -153,10 +132,6 @@ func TestNoEmojiInSourceStrings(t *testing.T) {
 	}
 }
 
-// emojiLiteralHits parses one Go file and reports every emoji code point in
-// its string and rune literals, after unquoting, so an escape such as
-// "\U0001F44D" or "\xf0\x9f\x91\x8d" is caught as surely as the literal
-// character.
 func emojiLiteralHits(fset *token.FileSet, path, rel string, emoji map[rune]string) ([]string, error) {
 	f, err := parser.ParseFile(fset, path, nil, 0)
 	if err != nil {

@@ -13,13 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The policy for getting a lost link back, pinned where it can be read.
-//
-// The behaviour these hold is the one the maintainer asked for: a link that
-// drops is dialed again without him asking, the pane he was working in stays on
-// screen while that happens, and a failure that trying again cannot fix stops
-// at once with the reason rather than being retried until the budget runs out.
-
 // TestTheBudgetOutlastsWhatItWaitsOn is the number that decides whether the
 // client gives up too early.
 //
@@ -105,8 +98,6 @@ func TestALostLinkKeepsThePaneOnScreen(t *testing.T) {
 		t.Errorf("ASSERTION: the dock says nothing about the link being dialed again: %q", note)
 	}
 
-	// The dead connection reporting itself a second time must not restart the
-	// clock or start a second run of dials.
 	first := m.hostReconnect
 	if cmd := m.beginHostReconnect(errors.New("again")); cmd != nil {
 		t.Error("ASSERTION: a second disconnect started a second run of dials")
@@ -129,7 +120,6 @@ func TestASwitchTheUserAskedForEndsTheReconnect(t *testing.T) {
 	_ = m.beginHostReconnect(errors.New("the pipe closed"))
 	stale := m.hostReconnect.gen
 
-	// The shipped path a deliberate switch runs through.
 	m.WorkspaceTrees = map[int]*layout.BSPTree{}
 	m.WorkspaceScrollingLayouts = map[int]*layout.ScrollingLayout{}
 	m.WindowToBSPID = map[string]int{}
@@ -141,7 +131,6 @@ func TestASwitchTheUserAskedForEndsTheReconnect(t *testing.T) {
 	if m.ReconnectingToHost() {
 		t.Error("ASSERTION: a session the user chose still has a reconnect running against the one they left")
 	}
-	// A dial that finishes now belongs to nobody and must be dropped.
 	if cmd := m.handleHostReconnectResult(hostReconnectResultMsg{gen: stale}); cmd != nil {
 		t.Error("ASSERTION: a dial from the abandoned attempt was applied to the session the user switched to")
 	}

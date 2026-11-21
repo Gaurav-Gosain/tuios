@@ -12,7 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// commandOS is scratchOS with [[keybindings.command]] entries.
 func commandOS(t *testing.T, daemon bool, entries ...config.CommandBinding) *OS {
 	t.Helper()
 	m := scratchOS(t, daemon)
@@ -56,7 +55,6 @@ func TestScratchEntriesKeepTheirOwnPanes(t *testing.T) {
 	if len(m.Windows) != 3 {
 		t.Fatalf("windows = %d, want 3: no pane is made or closed", len(m.Windows))
 	}
-	// The built-in scratch group is a third, separate one.
 	if m.scratchIndex() >= 0 {
 		t.Fatal("an entry's pane counts as the built-in scratch group")
 	}
@@ -299,7 +297,6 @@ func TestPressAfterAStopReportCreatesAgain(t *testing.T) {
 	scratchOpener = func(scratchRequest) error { asked++; return nil }
 	t.Cleanup(func() { scratchOpener = prev })
 
-	// The stopped pane arrived and is still held, shown.
 	m.Windows = append(m.Windows, &terminal.Window{ID: "dead", IsPopup: true, IsScratch: true, IsFloating: true, ScratchName: "broken", Workspace: 1})
 	m.handleScratchOpened(ScratchOpenedMsg{Label: "broken", Err: ScratchStoppedError{Code: 7, WindowID: "dead"}})
 
@@ -311,7 +308,6 @@ func TestPressAfterAStopReportCreatesAgain(t *testing.T) {
 	if asked != 1 {
 		t.Fatalf("asked %d times, want 1", asked)
 	}
-	// Once the push drops the pane, the note of it goes too.
 	m.Windows = m.Windows[:1]
 	m.scratchIndexNamed("broken")
 	if len(m.deadScratch) != 0 {

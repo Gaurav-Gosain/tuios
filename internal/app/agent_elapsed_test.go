@@ -25,7 +25,6 @@ func TestAgentElapsedFormat(t *testing.T) {
 		{"days", "errored", 50 * time.Hour, "2d"},
 		{"idle stays blank", "idle", time.Hour, ""},
 		{"no state", "", time.Hour, ""},
-		// A daemon on a slightly ahead clock must not print a negative age.
 		{"clock skew", "working", -2 * time.Minute, "<1m"},
 	}
 	for _, tc := range cases {

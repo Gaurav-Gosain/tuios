@@ -12,92 +12,37 @@ import (
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
-// # The path picker
-//
-// A small list anchored at the focused pane's cursor that types a path into
-// the pane. It lists the pane's folder, filters it as the user types, walks
-// into a folder on Tab and out again on shift+Tab, and on Enter pastes the
-// path it built at the cursor. It is what a shell's completion does for one
-// path, with the folder visible and a fuzzy filter, and it works the same in
-// any program that takes typed text: a shell, an agent's prompt, an editor.
-//
-// It is anchored like the context menu, not stacked like the panels: it
-// belongs to one cell of one pane, is dismissed by the next click elsewhere,
-// and has no use for a drag offset or a place in the click-to-raise order.
-//
-// # Where the folder comes from
-//
-// The pane's shell's own working directory, as the kernel holds it, the same
-// source the files section uses for a local pane. An OSC 7 report is taken
-// only for its spelling when it names that same folder: any program in the
-// pane can print one, and a picker that listed whatever a pane claimed would
-// type paths into a folder the shell is not in. A pane on another machine has
-// only its daemon's answer, which that daemon has already judged.
-//
-// # How a folder is read
-//
-// Through readListing, the files section's reader: the daemon that holds the
-// pane lists it, with the link's read rules, and a pane on another machine is
-// listed by the daemon on that machine. The read is a command, stamped with a
-// generation, so a slow mount never holds the client and a late answer for a
-// folder the user has left is dropped. A listing is bounded by the reader's
-// cap, and only the rows that fit are drawn.
-
-// pathPickerRows is the most rows the list shows at once.
 const pathPickerRows = 10
 
-// pathPicker is the open picker's state. nil on the OS when it is closed.
 type pathPicker struct {
-	// windowID is the pane the path goes to.
 	windowID string
-	// base is the pane's folder when the picker opened, absolute. A relative
-	// path is relative to it.
-	base string
-	// origin is how the path starts: "" for relative to base, "/" for the
-	// root, "~" for the home folder of the pane's machine.
-	origin string
-	// segs is the path walked so far below origin, one name per step. ".."
-	// is a step up.
-	segs []string
-	// query is the filter text typed after the path.
-	query textedit.Line
-	// hidden lists the names that start with a dot.
-	hidden bool
-	// home is the home folder on the pane's machine, empty when it is not
-	// known. The title shows a folder under it as ~/...
-	home string
+	base     string
+	origin   string
+	segs     []string
+	query    textedit.Line
+	hidden   bool
+	home     string
 
-	// dir is the folder the entries belong to, as it was asked for.
 	dir     string
 	entries []fileEntry
 	err     string
-	// loaded is set once the first listing arrived. Nothing is drawn before
-	// it, so the picker never opens as an empty box that then grows.
-	loaded bool
-	// loading is set while a read is out. The previous rows stay up until it
-	// answers, so walking into a folder does not flash an empty list.
+	loaded  bool
 	loading bool
 	gen     uint64
 
-	// matches holds indexes into entries, best first.
-	matches []int
-	matcher fuzzy.Matcher
-	cursor  int
-	scroll  int
-	hover   int
-	// nameWidth is the widest name in entries, measured once per listing so
-	// the box does not change width as the filter narrows the list.
+	matches   []int
+	matcher   fuzzy.Matcher
+	cursor    int
+	scroll    int
+	hover     int
 	nameWidth int
 
-	// Where the box landed on the last frame, for the mouse.
 	boundsX, boundsY, boundsW, boundsH int
-	// rowY maps a screen row to the match it shows, -1 for none.
-	rowTop  int
-	rowIdx  []int
-	visible bool
+	rowTop                             int
+	rowIdx                             []int
+	visible                            bool
 }
 
-// pathPickerListMsg is one finished folder read for the picker.
 type pathPickerListMsg struct {
 	gen     uint64
 	dir     string
@@ -159,10 +104,6 @@ func (m *OS) OpenPathPicker() tea.Cmd {
 	}
 }
 
-// pathPickerHome is the home folder on the pane's machine. A pane on another
-// machine asks its daemon to list "~" with room for one name: the daemon
-// expands it to its own home and names the folder it listed. A daemon too old
-// to expand it names "~" back, and the title then keeps the full path.
 func pathPickerHome(local bool, client *session.TUIClient, origin string) string {
 	if local {
 		home, _ := os.UserHomeDir()
@@ -178,10 +119,6 @@ func pathPickerHome(local bool, client *session.TUIClient, origin string) string
 	return filepath.Clean(listing.Dir)
 }
 
-// pathPickerBase is the folder the picker opens on. For a local pane it is
-// the shell's folder as the kernel holds it, spelled the way the pane's OSC 7
-// report spells it when the two are the same folder. It runs off the update
-// goroutine, because it reads the process table.
 func pathPickerBase(local bool, pgid int, cwd, cached string) string {
 	if !local {
 		return cwd
@@ -204,9 +141,6 @@ func (m *OS) HandlePathPickerList(msg pathPickerListMsg) {
 	if p == nil {
 		return
 	}
-	// The first answer carries the pane's folder. It is kept even when a
-	// key typed before it arrived has asked for another folder since,
-	// because every relative step is relative to it.
 	if msg.base != "" && p.base == "" {
 		p.base = msg.base
 	}
@@ -232,7 +166,6 @@ func (m *OS) HandlePathPickerList(msg pathPickerListMsg) {
 	p.refilter()
 }
 
-// boolInt is 1 for true.
 func boolInt(b bool) int {
 	if b {
 		return 1
@@ -240,7 +173,6 @@ func boolInt(b bool) int {
 	return 0
 }
 
-// listDir is the folder the walked path names, in the form the reader takes.
 func (p *pathPicker) listDir() string {
 	switch p.origin {
 	case "/":
@@ -254,8 +186,6 @@ func (p *pathPicker) listDir() string {
 	return filepath.Join(append([]string{p.base}, p.segs...)...)
 }
 
-// prefix is the path walked so far as the filter line shows it: "Apps/rex/",
-// "~/", "/etc/", or "" at the pane's folder.
 func (p *pathPicker) prefix() string {
 	rel := strings.Join(p.segs, "/")
 	if rel != "" {
@@ -270,7 +200,6 @@ func (p *pathPicker) prefix() string {
 	return rel
 }
 
-// refilter rebuilds the matches for the query and keeps the cursor on them.
 func (p *pathPicker) refilter() {
 	p.matches = p.matches[:0]
 	showHidden := p.hidden || strings.HasPrefix(p.query.String(), ".")
@@ -292,7 +221,6 @@ func (p *pathPicker) refilter() {
 	p.cursor = clampInt(p.cursor, 0, max(len(p.matches)-1, 0))
 }
 
-// selected is the entry under the cursor.
 func (p *pathPicker) selected() (fileEntry, bool) {
 	if p.cursor < 0 || p.cursor >= len(p.matches) {
 		return fileEntry{}, false
@@ -428,7 +356,6 @@ func (m *OS) PathPickerUp() tea.Cmd {
 	return m.pathPickerUp()
 }
 
-// pathPickerDescend walks into the folder under the cursor.
 func (m *OS) pathPickerDescend() tea.Cmd {
 	p := m.pathPicker
 	e, ok := p.selected()
@@ -440,9 +367,6 @@ func (m *OS) pathPickerDescend() tea.Cmd {
 	return m.pathPickerRead()
 }
 
-// pathPickerUp takes the last step off the path. Past the pane's folder it
-// walks up with "..". At the root or the home folder it goes back to the
-// pane's folder, which is the same as erasing the "/" or "~/" typed.
 func (m *OS) pathPickerUp() tea.Cmd {
 	p := m.pathPicker
 	switch {
@@ -461,7 +385,6 @@ func (m *OS) pathPickerUp() tea.Cmd {
 	return m.pathPickerRead()
 }
 
-// pathPickerRead asks for the folder the path now names.
 func (m *OS) pathPickerRead() tea.Cmd {
 	p := m.pathPicker
 	p.gen++
@@ -517,11 +440,6 @@ func (m *OS) PathPickerAccept() {
 	}
 }
 
-// pathPickerText is the text typed for a path: the walked steps and the last
-// name below origin, quoted the way the pane's shell reads it back, by the
-// rules a dropped file follows (quoteDropPath). Under "~" the tilde stays
-// outside the quotes in the shells that expand it only there. refusal says
-// why the path cannot be typed at all.
 func pathPickerText(d pasteDialect, origin, walked, tail string) (text, refusal string) {
 	rel := walked
 	if tail != "" {
@@ -591,8 +509,6 @@ func (m *OS) PathPickerWheel(x, y int, up bool) bool {
 	if p == nil || !p.visible || !p.contains(x, y) {
 		return false
 	}
-	// The best match is drawn at the bottom, next to the filter line, so the
-	// wheel up shows the matches further down the order.
 	if up {
 		m.PathPickerMove(1)
 	} else {
@@ -605,7 +521,6 @@ func (p *pathPicker) contains(x, y int) bool {
 	return x >= p.boundsX && x < p.boundsX+p.boundsW && y >= p.boundsY && y < p.boundsY+p.boundsH
 }
 
-// matchAt is the match a screen row shows, or -1.
 func (p *pathPicker) matchAt(y int) int {
 	i := y - p.rowTop
 	if i < 0 || i >= len(p.rowIdx) {

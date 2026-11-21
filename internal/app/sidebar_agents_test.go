@@ -38,7 +38,6 @@ func TestAgentsControlsPersist(t *testing.T) {
 		t.Errorf("after a second step sort=%q, want recent", restored.sidebarAgentsSort())
 	}
 
-	// Back to the defaults.
 	m.SidebarCycleAgentsFilter()
 	m.SidebarCycleAgentsSort()
 	restored = &OS{Settings: config.Global}

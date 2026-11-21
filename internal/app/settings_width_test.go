@@ -8,13 +8,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// ansiEscape strips SGR sequences, leaving the cells a terminal would show. A
-// frame read this way is also the monochrome frame: it is what is left when the
-// terminal has no palette to give.
 var ansiEscape = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
-// plainFrame renders the settings panel and returns its lines with the colour
-// dropped, plus the geometry the renderer recorded as it drew them.
 func plainFrame(t *testing.T, m *OS) ([]string, overlay.Geometry) {
 	t.Helper()
 	content, geo, _ := m.renderSettings()
@@ -25,8 +20,6 @@ func plainFrame(t *testing.T, m *OS) ([]string, overlay.Geometry) {
 	return lines, geo
 }
 
-// tabRowOf returns the one row the tab strip drew, taken from the geometry
-// rather than by searching the frame.
 func tabRowOf(t *testing.T, lines []string, geo overlay.Geometry) string {
 	t.Helper()
 	y := -1
@@ -42,7 +35,6 @@ func tabRowOf(t *testing.T, lines []string, geo overlay.Geometry) string {
 	return lines[y]
 }
 
-// settingsTabNames is the section list the strip has to carry.
 func settingsTabNames(m *OS) []string {
 	cats := m.settingsCategories()
 	names := make([]string, len(cats))
@@ -83,7 +75,6 @@ func TestSettingsTabRowIsOneLineAtEveryWidth(t *testing.T) {
 				t.Fatalf("w=%d: the active tab %q was not drawn", w, names[active])
 			}
 
-			// The affordance appears only when there is something that way.
 			row := tabRowOf(t, lines, geo)
 			first, last := -1, -1
 			for i, r := range geo.Tabs {
@@ -139,9 +130,6 @@ func TestSettingsTabRectsMatchDrawnCells(t *testing.T) {
 				if got := strings.TrimSpace(span); got != names[i] {
 					t.Errorf("w=%d active=%d: tab %d rect covers %q, want %q", w, active, i, got, names[i])
 				}
-				// Both edge columns belong to this tab and nothing else: the span
-				// holds the whole label, so neither edge has eaten a neighbour's
-				// cell nor left one of its own outside.
 				if !strings.Contains(span, names[i]) {
 					t.Errorf("w=%d: tab %d span %q lost an edge column of %q", w, i, span, names[i])
 				}
@@ -151,7 +139,6 @@ func TestSettingsTabRectsMatchDrawnCells(t *testing.T) {
 				prevX1 = r.X1
 			}
 
-			// A click on the first and last column of each drawn tab selects it.
 			m.renderSettingsHit()
 			h := m.settingsHit()
 			for i, r := range h.Geo.Tabs {

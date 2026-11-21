@@ -13,9 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// tapeReviewViewportRows is how many lines of tape content the review dialog
-// shows at once before scrolling. The trust store's size cap keeps the whole
-// file viewable within a few scrolls.
 const tapeReviewViewportRows = 16
 
 // TapeReviewState holds the project-tape review/trust dialog. It is populated by
@@ -57,7 +54,6 @@ func (m *OS) OpenTapeReview() {
 	m.openTapeReviewForDir(dir)
 }
 
-// openTapeReviewForDir builds and shows the dialog for a specific project root.
 func (m *OS) openTapeReviewForDir(dir string) {
 	store := m.ensureTapeTrust()
 	if store == nil {
@@ -72,7 +68,6 @@ func (m *OS) openTapeReviewForDir(dir string) {
 	}
 
 	if res.Status == trust.StatusDenied {
-		// A denied path is inert and never prompts.
 		m.ShowNotification("This project tape is denied (never for this path)", "info", m.Settings.NotificationDuration)
 		return
 	}
@@ -105,7 +100,6 @@ func (m *OS) CloseTapeReview() {
 	m.TapeReview = nil
 }
 
-// tapeReviewRunOnce runs the reviewed content without persisting trust.
 func (m *OS) tapeReviewRunOnce() {
 	r := m.TapeReview
 	if r == nil {
@@ -116,8 +110,6 @@ func (m *OS) tapeReviewRunOnce() {
 	m.runProjectTape(content, dir)
 }
 
-// tapeReviewTrustAndRun persists trust for the reviewed (path, hash) pair and
-// then runs the reviewed content.
 func (m *OS) tapeReviewTrustAndRun() {
 	r := m.TapeReview
 	if r == nil {
@@ -137,7 +129,6 @@ func (m *OS) tapeReviewTrustAndRun() {
 	m.runProjectTape(content, dir)
 }
 
-// tapeReviewNever records a deny entry for the path and clears the indicator.
 func (m *OS) tapeReviewNever() {
 	r := m.TapeReview
 	if r == nil {
@@ -159,8 +150,6 @@ func (m *OS) tapeReviewNever() {
 	m.CloseTapeReview()
 }
 
-// tapeReviewRevoke removes trust for a trusted tape, returning it to the
-// untrusted-but-promptable state.
 func (m *OS) tapeReviewRevoke() {
 	r := m.TapeReview
 	if r == nil {
@@ -186,8 +175,6 @@ func (m *OS) HandleTapeReviewInput(key string) bool {
 		return false
 	}
 
-	// Scrolling is available in every mode, on the list keys, letters
-	// included: no answer of the dialog is a list letter by default.
 	if delta, ok := listDelta(m.ListKeys, key, listOverlayRows); ok {
 		r.Scroll = min(max(r.Scroll+delta, 0), m.tapeReviewMaxScroll())
 		return true
@@ -199,7 +186,6 @@ func (m *OS) HandleTapeReviewInput(key string) bool {
 	}
 
 	if r.Status == trust.StatusIneligible {
-		// An ineligible tape offers no run or trust option; only dismissal.
 		return true
 	}
 
@@ -215,7 +201,6 @@ func (m *OS) HandleTapeReviewInput(key string) bool {
 		return true
 	}
 
-	// Untrusted (including changed-since-trusted).
 	switch key {
 	case "r":
 		m.tapeReviewRunOnce()
@@ -230,7 +215,6 @@ func (m *OS) HandleTapeReviewInput(key string) bool {
 	return true
 }
 
-// tapeContentLines returns the reviewed content split into display lines.
 func (r *TapeReviewState) tapeContentLines() []string {
 	if len(r.Content) == 0 {
 		return nil
@@ -238,14 +222,10 @@ func (r *TapeReviewState) tapeContentLines() []string {
 	return strings.Split(strings.ReplaceAll(string(r.Content), "\t", "    "), "\n")
 }
 
-// tapeReviewRows is how many lines of the tape the dialog shows on the screen
-// it is actually drawn on: the preferred viewport, or fewer when the screen is
-// short. The header, the content box's own frame and the footer come off first.
 func (m *OS) tapeReviewRows() int {
 	return m.dialogRows(tapeReviewViewportRows, 14)
 }
 
-// tapeReviewMaxScroll is the furthest the content can scroll.
 func (m *OS) tapeReviewMaxScroll() int {
 	if m.TapeReview == nil {
 		return 0
@@ -274,21 +254,15 @@ func (m *OS) RenderTapeReview() string {
 	value := func(s string) string { return overlay.Style(bg).Foreground(pal.Fg).Render(s) }
 
 	var lines []string
-	// Header: path + trust status. A long path keeps its tail, which is the
-	// part that says which project this is.
 	lines = append(lines, label("path  ")+value(tailFit(shortTapePath(r.Path), max(width-6, 1))))
 	lines = append(lines, label("trust ")+tapeStatusLabel(r.Status, r.Changed, bg, pal))
 
-	// What running it will do, from a cheap header parse (no execution).
 	lines = append(lines, label("runs  ")+value(overlay.Truncate(tapeRunSummary(r.Header, r.Dir), max(width-6, 1))))
 	if r.Status == trust.StatusIneligible && r.Reason != "" {
 		lines = append(lines, overlay.Style(bg).Foreground(pal.Warning).Render("ignored: "+r.Reason))
 	}
 	lines = append(lines, "")
 
-	// Body: the full tape content, scrollable. It rests on the Card step, the
-	// same one a key chip uses, so the tape reads as quoted material without a
-	// second border inside the panel.
 	if r.Status != trust.StatusIneligible {
 		content := r.tapeContentLines()
 		start := min(r.Scroll, m.tapeReviewMaxScroll())
@@ -318,13 +292,8 @@ func (m *OS) RenderTapeReview() string {
 	return out
 }
 
-// tapeReviewWidth is the dialog's preferred inner width: enough for a tape's
-// own lines without wrapping the ones that matter.
 const tapeReviewWidth = 72
 
-// tapeReviewHints are the actions the dialog offers for its current status.
-// They are the point of the dialog, so every one of them is named at every
-// width and the panel wraps them rather than dropping any.
 func tapeReviewHints(r *TapeReviewState) []overlay.Hint {
 	switch r.Status {
 	case trust.StatusIneligible:
@@ -345,8 +314,6 @@ func tapeReviewHints(r *TapeReviewState) []overlay.Hint {
 	}
 }
 
-// tailFit shortens s from the left, keeping its last width cells behind an
-// ellipsis. Paths read from the right.
 func tailFit(s string, width int) string {
 	if width <= 0 {
 		return ""
@@ -361,7 +328,6 @@ func tailFit(s string, width int) string {
 	return "..." + string(runes[len(runes)-(width-3):])
 }
 
-// tapeStatusLabel renders the trust status in the status token that matches it.
 func tapeStatusLabel(status trust.Status, changed bool, bg color.Color, pal overlay.Palette) string {
 	word, fg := "untrusted", pal.Warning
 	switch {
@@ -375,8 +341,6 @@ func tapeStatusLabel(status trust.Status, changed bool, bg color.Color, pal over
 	return overlay.Style(bg).Foreground(fg).Render(word)
 }
 
-// tapeRunSummary describes, from the parsed header alone, what running the tape
-// will do. It executes nothing.
 func tapeRunSummary(h tape.ProjectHeader, dir string) string {
 	if h.Scope == tape.ScopeCurrent {
 		return "in the current session (Scope current)"
@@ -391,7 +355,6 @@ func tapeRunSummary(h tape.ProjectHeader, dir string) string {
 	return "session \"" + name + "\""
 }
 
-// shortTapePath abbreviates a home-rooted path with ~ for the dialog header.
 func shortTapePath(path string) string {
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		if rel, ok := strings.CutPrefix(path, home); ok {

@@ -9,15 +9,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// Glyph picker layout constants, matching the theme picker's so the two panels
-// are the same object with a different preview.
 const (
 	glyphPickerInnerWidth  = 52
 	glyphPickerVisibleRows = 10
 )
 
-// glyphPickerHints is the footer, shared by the renderer and the sizing helper
-// so both measure the same panel.
 var glyphPickerHints = []overlay.Hint{
 	{Key: "type", Label: "filter"},
 	{Key: hintListMove, Label: "preview"},
@@ -25,17 +21,12 @@ var glyphPickerHints = []overlay.Hint{
 	{Key: "esc", Label: "cancel"},
 }
 
-// glyphPickerLayout returns the fitted inner width and visible row count.
 func (m *OS) glyphPickerLayout() (width, rows int, hints []overlay.Hint) {
 	width = m.panelWidth(glyphPickerInnerWidth)
-	// Body lines that are not set rows: the search input, its rule, and the
-	// two lines describing the selected set.
 	rows, hints = m.panelBody(glyphPickerVisibleRows, 4, width, nil, glyphPickerHints)
 	return width, rows, hints
 }
 
-// renderGlyphPicker draws the searchable glyph-set picker with a live shape
-// preview per set, returning the panel, geometry, and per-row hit rects.
 func (m *OS) renderGlyphPicker() (string, overlay.Geometry, []overlayRowHit) {
 	items := m.glyphPickerItems()
 	width, visible, hints := m.glyphPickerLayout()
@@ -54,8 +45,6 @@ func (m *OS) renderGlyphPicker() (string, overlay.Geometry, []overlayRowHit) {
 	})
 }
 
-// glyphRow renders one set: its name on the left and the shape strip on the
-// right, with a highlight bar when selected.
 func (m *OS) glyphRow(id string, selected bool, pal overlay.Palette, width int) string {
 	st := overlay.RowState{Cursor: selected, Focused: true}
 	bg := pal.Ground(st, pal.Surface)
@@ -69,8 +58,6 @@ func (m *OS) glyphRow(id string, selected bool, pal overlay.Palette, width int) 
 	sample := m.GlyphPickerSamples[id]
 	strip := sample.Frame
 	stripW := lipgloss.Width(strip)
-	// On a panel too narrow for a name and a strip, the name wins: the strip is
-	// a preview of something the row already names.
 	if stripW+8 > width {
 		strip, stripW = "", 0
 	}
@@ -79,22 +66,11 @@ func (m *OS) glyphRow(id string, selected bool, pal overlay.Palette, width int) 
 	left := overlay.Style(bg).Foreground(pal.Accent).Bold(true).Render(marker) +
 		overlay.Style(bg).Foreground(nameColor).Bold(selected).Render(name)
 
-	// The strip is drawn in the chrome's own ink rather than the row's, because
-	// it is a preview of chrome.
 	shape := overlay.Style(bg).Foreground(pal.Fg).Render(strip)
 	gap := max(width-lipgloss.Width(left)-stripW, 1)
 	return pal.Mark(left+overlay.Style(bg).Render(strings.Repeat(" ", gap)), st) + shape
 }
 
-// glyphPickerDetail is the two lines under the list: what the selected set says
-// and what of it draws.
-//
-// The distinction is the one list-glyphs reports in two columns. A set states
-// only the roles it changes, and a role whose glyph is the wrong width for its
-// slot is dropped back to the default silently, because a window control the
-// pointer no longer lands on is the worse failure. The detail line says so,
-// because a set that looks selected and draws someone else's shapes is a gap
-// too.
 func (m *OS) glyphPickerDetail(items []string, pal overlay.Palette, width int) []string {
 	bg := pal.Surface
 	blank := overlay.Style(bg).Render(" ")
@@ -129,8 +105,6 @@ func (m *OS) glyphPickerDetail(items []string, pal overlay.Palette, width int) [
 	if len(sample.Dropped) == 0 {
 		return append(lines, blank)
 	}
-	// Named individually: "two roles were dropped" sends the author back to the
-	// file to work out which, and the width rule is the reason every time.
 	dropped := "Wrong width. tuios draws the default: " + strings.Join(sample.Dropped, ", ")
 	return append(lines, overlay.Style(bg).Foreground(pal.Warning).
 		Render("  "+overlay.Truncate(dropped, max(width-2, 1))))

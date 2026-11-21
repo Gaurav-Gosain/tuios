@@ -14,35 +14,18 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The worktree setup card: a small box at the top right of the pane area
-// that shows the stages of the attached session's worktree setup. The
-// checkout, then the setup with its last four lines, then the agent.
-//
-// It is drawn from the setup record that arrives with the session state, so
-// it changes only when a state push does, and it arms no timer. A running
-// setup's card stays up. A finished one goes on the person's next key, and a
-// passed one also stops being drawn once it is setupCardPassedFor old, which
-// the next frame for any other reason notices.
-
-// setupCardPassedFor is how long after a pass the card still shows, when no
-// key has hidden it before. It is read at render time only.
 const setupCardPassedFor = time.Minute
 
-// setupCardWidth is the card's inner width, at most.
 const setupCardWidth = 56
 
-// setupCardLayerID names the card's layer.
 const setupCardLayerID = "worktree-setup-card"
 
-// setupCardState is what the client keeps about the card: the setup a key
-// hid, by its start time, and the layer last built.
 type setupCardState struct {
 	hidden int64
 	key    string
 	layer  *lipgloss.Layer
 }
 
-// setupCardRecord is the setup the card shows, nil when it shows none.
 func (m *OS) setupCardRecord() *session.WorktreeSetup {
 	wt := m.SessionWorktree
 	if wt == nil || wt.Setup == nil {
@@ -62,15 +45,12 @@ func (m *OS) setupCardRecord() *session.WorktreeSetup {
 	return s
 }
 
-// hideSetupCard hides a finished setup's card. A key is the person moving
-// on, and the key still goes where it was going.
 func (m *OS) hideSetupCard() {
 	if s := m.setupCardRecord(); s != nil && s.State != session.SetupPending && s.State != session.SetupRunning {
 		m.setupCard.hidden = s.StartedAt
 	}
 }
 
-// renderSetupCard draws the card, nil when there is none to draw or no room.
 func (m *OS) renderSetupCard() *lipgloss.Layer {
 	s := m.setupCardRecord()
 	if s == nil {
@@ -87,7 +67,6 @@ func (m *OS) renderSetupCard() *lipgloss.Layer {
 	}
 	pal := theme.UI()
 	rows := setupCardRows(s, branch, inner, pal)
-	// The top right corner of the panes, a cell in from each edge.
 	corner := overlay.Rect{X0: region.Max.X - 1, Y0: region.Min.Y + 1, X1: region.Max.X - 1, Y1: region.Min.Y + 1}
 	x, y, _ := overlay.Place(corner, inner+2, len(rows), overlayRect(region), overlay.Placement{Side: overlay.SideBelow, Align: overlay.AlignEnd})
 	key := fmt.Sprintf("%d:%d:%d", x, y, inner) + "\x00" + strings.Join(rows, "\n")
@@ -98,7 +77,6 @@ func (m *OS) renderSetupCard() *lipgloss.Layer {
 	return m.setupCard.layer
 }
 
-// setupCardRows draws the card's rows: a framed box of inner width w.
 func setupCardRows(s *session.WorktreeSetup, branch string, w int, pal overlay.Palette) []string {
 	bg := pal.Surface
 	label := func(stage string) string { return fmt.Sprintf("%-9s", stage) }
@@ -157,8 +135,6 @@ func setupCardRows(s *session.WorktreeSetup, branch string, w int, pal overlay.P
 	return box.Render(bg, pal)
 }
 
-// setupMarks are the stage marks: done, failed, working and waiting, in
-// ASCII when the chrome asks for it.
 func setupMarks() (done, failed, working, waiting string) {
 	if overlay.UseASCII() {
 		return "+", "x", "*", "-"
@@ -166,7 +142,6 @@ func setupMarks() (done, failed, working, waiting string) {
 	return "✓", "✗", "●", "○"
 }
 
-// setupStateWord is the word in the card's top border.
 func setupStateWord(s *session.WorktreeSetup) string {
 	switch s.State {
 	case session.SetupPending:
@@ -180,7 +155,6 @@ func setupStateWord(s *session.WorktreeSetup) string {
 	return s.State
 }
 
-// setupTook is " in 12s" for a setup that has both times, "" otherwise.
 func setupTook(s *session.WorktreeSetup) string {
 	if s.StartedAt == 0 || s.FinishedAt < s.StartedAt {
 		return ""

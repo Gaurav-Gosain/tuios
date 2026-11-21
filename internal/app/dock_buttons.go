@@ -11,20 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The dock's button row: the "buttons" built-in.
-//
-// It is for a person who does not know a leader key yet. Each button runs a
-// keybinding action through the same dispatcher a key does, so a button and
-// its key can never do different things, and nothing here starts a process:
-// the row is drawn from this table on frames that were happening anyway.
-//
-// The row gives up room in steps, and each step leaves a sign. First the
-// words go and the icons stay, then buttons go from the end and a "more"
-// button takes their place. The more button lists the buttons that went, so
-// every button stays one click away at any width.
-
-// dockButton is one button: the word it shows, the action it runs, its icons,
-// and the sentence its hover label says.
 type dockButton struct {
 	label  string
 	action string
@@ -33,7 +19,6 @@ type dockButton struct {
 	hint   string
 }
 
-// dockButtons is the row, in the order it is drawn.
 var dockButtons = [...]dockButton{
 	{"Menu", config.OpenMenuPrefix + "start", fa.Bars.String(), "=", "Open the menu"},
 	{"New", "new_window", fa.Plus.String(), "+", "Open a new terminal"},
@@ -43,11 +28,8 @@ var dockButtons = [...]dockButton{
 	{"Settings", "open_settings", fa.Cog.String(), "*", "Open settings"},
 }
 
-// dockButtonMenu is the Menu button. Only the Simple profile shows it: the
-// short menu is the way in for a person who knows no key.
 const dockButtonMenu = 0
 
-// dockButtonRow is the buttons the row shows, as indexes into dockButtons.
 func (m *OS) dockButtonRow() []int {
 	first := dockButtonMenu + 1
 	if m.Settings.Simple {
@@ -60,18 +42,13 @@ func (m *OS) dockButtonRow() []int {
 	return row
 }
 
-// dockButtonMore is the button index the more button records. It is past the
-// end of the table, so it can never name a real button.
 const dockButtonMore = len(dockButtons)
 
-// dockButtonsFit is how the row is drawn in the room it has: with words or
-// with icons only, and how many buttons show before the more button.
 type dockButtonsFit struct {
 	compact bool
 	shown   int
 }
 
-// dockButtonIcon is a button's icon for the configured glyphs.
 func (m *OS) dockButtonIcon(i int) string {
 	if i == dockButtonMore {
 		if m.Settings.NerdFontsOff() {
@@ -85,13 +62,6 @@ func (m *OS) dockButtonIcon(i int) string {
 	return dockButtons[i].nerd
 }
 
-// renderDockButtons draws the row for one fit and reports where each button
-// landed, in columns from the row's own first column.
-//
-// A button is a chip on the Card step with a column of bare bar between two
-// chips, so each one reads as its own target. The button under the pointer
-// takes the accent. At 16 colours there is no Card step, and the words with
-// their gaps are the buttons.
 func (m *OS) renderDockButtons(fit dockButtonsFit) (string, []dockCustomHit) {
 	pal := m.groundUI()
 	var b strings.Builder
@@ -131,8 +101,6 @@ func (m *OS) renderDockButtons(fit dockButtonsFit) (string, []dockCustomHit) {
 	return b.String(), hits
 }
 
-// dockButtonsWidth is the room the row takes at one fit, or 0 when the dock
-// does not list it.
 func (m *OS) dockButtonsWidth(fit dockButtonsFit) int {
 	if !m.dockPlan.Has(config.DockComponentButtons) {
 		return 0
@@ -158,8 +126,6 @@ func (m *OS) DockButtonAt(x, y int) int {
 // or "" when the click opened the more menu instead.
 func (m *OS) PressDockButton(i, x, y int) string {
 	if i == dockButtonMenu {
-		// A click opens the short menu where the pointer is, as a menu the
-		// pointer can use, not as a panel of keys.
 		cm := &ContextMenu{Title: "Menu", Target: CtxTargetDock, WindowIndex: -1, AnchorX: x, AnchorY: y, ItemH: 1}
 		cm.Items = m.menu("start", 0)
 		cm.home()
@@ -198,7 +164,6 @@ func (m *OS) DockButtonHoverAt(x, y int) bool {
 	return true
 }
 
-// dockButtonTooltipText is the hover label of button i.
 func dockButtonTooltipText(i int) string {
 	if i == dockButtonMore {
 		return "More buttons"
@@ -206,8 +171,6 @@ func dockButtonTooltipText(i int) string {
 	return dockButtons[i].hint
 }
 
-// renderDockButtonTooltip draws the hovered button's label one row off the
-// bar, as the session controls' labels are drawn.
 func (m *OS) renderDockButtonTooltip() *lipgloss.Layer {
 	if !m.tooltipVisible(tooltipDockButton) {
 		return nil

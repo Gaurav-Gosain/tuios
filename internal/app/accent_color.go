@@ -65,8 +65,6 @@ func (a Accent) Color() color.Color {
 	return accentShown(a.RGB())
 }
 
-// slotIndex returns the palette index a slot accent stands for, and whether it
-// is one that should travel as an index rather than as RGB.
 func (a Accent) slotIndex() (color.Color, bool) {
 	if !a.IsSlot() || theme.IsEnabled() {
 		return nil, false
@@ -88,9 +86,6 @@ func (a Accent) Label() string {
 	return a.Hex()
 }
 
-// fold packs the accent into one value for the rail's render signature. A slot
-// and an RGB value can never collide because a slot lands in the low byte with
-// the tag bit clear.
 func (a Accent) fold() uint64 {
 	if a.IsSlot() {
 		return uint64(a.Slot)
@@ -98,16 +93,11 @@ func (a Accent) fold() uint64 {
 	return 1<<32 | uint64(a.R)<<16 | uint64(a.G)<<8 | uint64(a.B)
 }
 
-// toRGBA flattens any color.Color to 8-bit channels.
 func toRGBA(c color.Color) color.RGBA {
 	r, g, b, _ := c.RGBA()
 	return color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: 0xff}
 }
 
-// parseHexColor reads #rgb or #rrggbb, with or without the hash, as
-// overlay.ParseHex does. What it adds is space: it is fed what a person typed,
-// so space around the whole value and between the hash and the digits is
-// dropped. A second hash is still refused.
 func parseHexColor(s string) (color.RGBA, bool) {
 	s = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(s), "#"))
 	if strings.HasPrefix(s, "#") {
@@ -116,12 +106,10 @@ func parseHexColor(s string) (color.RGBA, bool) {
 	return overlay.ParseHex(s)
 }
 
-// isHexDigit reports whether r can go in the hex field.
 func isHexDigit(r rune) bool {
 	return (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')
 }
 
-// hslToRGB converts hue in degrees and saturation/lightness in 0..1.
 func hslToRGB(h, s, l float64) color.RGBA {
 	h = math.Mod(math.Mod(h, 360)+360, 360)
 	s = math.Min(math.Max(s, 0), 1)
@@ -148,8 +136,6 @@ func hslToRGB(h, s, l float64) color.RGBA {
 	return color.RGBA{R: round(r), G: round(g), B: round(b), A: 0xff}
 }
 
-// rgbToHSL is the inverse of hslToRGB. A grey has no hue to report, so it
-// returns 0 there and callers keep whatever hue they were holding.
 func rgbToHSL(c color.RGBA) (h, s, l float64) {
 	r, g, b := float64(c.R)/255, float64(c.G)/255, float64(c.B)/255
 	maxV := math.Max(r, math.Max(g, b))
@@ -182,14 +168,6 @@ func rgbToHSL(c color.RGBA) (h, s, l float64) {
 // done against whatever terminal happens to run them.
 func SetAccentColorProfile(p colorprofile.Profile) { theme.SetColorProfile(p) }
 
-// accentColorProfile is the colour profile the frame is written through.
-//
-// It matters here and nowhere else: the picker offers sixteen million colours,
-// and on a terminal that cannot show them the writer quietly steps every one of
-// them down on the way out. A picker that kept printing the exact hex next to a
-// cell painted in some other colour would be lying about the one thing it is
-// for. A pipe or a monochrome terminal has nothing to step down to, so those
-// are treated as exact and the writer drops what it cannot show.
 func accentColorProfile() colorprofile.Profile {
 	p := theme.ColorProfile()
 	if p <= colorprofile.ASCII {
@@ -198,15 +176,10 @@ func accentColorProfile() colorprofile.Profile {
 	return p
 }
 
-// accentShown is the colour a cell painted with c actually shows on this
-// terminal: c itself with truecolour, the nearest palette entry without.
 func accentShown(c color.RGBA) color.Color {
 	return accentColorProfile().Convert(c)
 }
 
-// accentFallbackLabel names what c was stepped down to, or "" when the terminal
-// can show c exactly. The picker prints it beside the hex so the user is told
-// about the substitution rather than left to notice it.
 func accentFallbackLabel(c color.RGBA) string {
 	switch v := accentShown(c).(type) {
 	case ansi.IndexedColor:
@@ -218,11 +191,6 @@ func accentFallbackLabel(c color.RGBA) string {
 	}
 }
 
-// accentContrast picks a marker colour that reads on a swatch, so the cursor is
-// findable on a white cell and on a black one.
 func accentContrast(c color.RGBA) color.Color { return theme.ContrastText(c) }
 
-// accentMonochrome reports whether this terminal can paint no colour at all, in
-// which case every background-painted swatch in the picker renders as blank
-// space and the controls made of them stop being visible.
 func accentMonochrome() bool { return accentColorProfile() <= colorprofile.ASCII }

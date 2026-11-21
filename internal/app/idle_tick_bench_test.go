@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// idleOS builds an OS holding n idle daemon windows: live emulators, no pending
-// output, no animations, nothing in flight. It is the fixture for the idle-cost
-// guard, mirroring one attached client with a handful of quiet shells.
 func idleOS(t testing.TB, n int) *OS {
 	t.Helper()
 	wins := make([]*terminal.Window, 0, n)
@@ -34,7 +31,6 @@ func idleOS(t testing.TB, n int) *OS {
 // cost. See docs/perf.md for recorded baselines.
 func BenchmarkIdleTick(b *testing.B) {
 	m := idleOS(b, 3)
-	// Prime the frame-skip state the idle path relies on.
 	m.Update(TickerMsg(time.Now()))
 
 	b.ReportAllocs()
@@ -59,7 +55,6 @@ func BenchmarkIdleTick(b *testing.B) {
 // the last check ("a tick is armed").
 func TestIdleTickSkipsScans(t *testing.T) {
 	m := idleOS(t, 3)
-	// Settle any first-frame output so the model reaches true idle.
 	for range 5 {
 		m.Update(TickerMsg(time.Now()))
 	}
@@ -83,9 +78,6 @@ func TestIdleTickSkipsScans(t *testing.T) {
 	}
 }
 
-// foldConfiguredIdleOS is idleOS with the rail on and the fold of agent rows
-// at rest configured, on a clock that moves a minute every read, and no agent
-// ever seen: the setup of someone with no agents who kept the defaults.
 func foldConfiguredIdleOS(tb testing.TB) *OS {
 	tb.Helper()
 	m := idleOS(tb, 3)
@@ -120,11 +112,6 @@ func BenchmarkIdleTickFoldConfigured(b *testing.B) {
 	b.ReportMetric(float64(render)/float64(b.N), "render/tick")
 }
 
-// railCustomIdleOS is idleOS with the rail on and its custom section placed
-// and loaded in a real dock engine, with a command on an event refresh. The
-// focused pane reports a folder, which is the case that would stat. It
-// returns once the run at start has landed, so a measurement sees only the
-// idle path and not a subprocess starting beside it.
 func railCustomIdleOS(tb testing.TB) *OS {
 	tb.Helper()
 	m := idleOS(tb, 3)

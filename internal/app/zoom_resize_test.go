@@ -57,10 +57,8 @@ func TestToggleZoomResizesDaemonTerminal(t *testing.T) {
 				defer mu.Unlock()
 				return lastW, lastH, calls
 			}
-			// settle stands in for the frames a user would sit through.
 			settle := func() { m.CompleteAllAnimations() }
 
-			// Zoom in: the daemon must be told the enlarged content size.
 			m.ToggleZoom()
 			if !win.Zoomed {
 				t.Fatal("window did not zoom")
@@ -78,8 +76,6 @@ func TestToggleZoomResizesDaemonTerminal(t *testing.T) {
 				t.Fatalf("zoom-in resized daemon to %dx%d, want %dx%d", zw, zh, wantW, wantH)
 			}
 
-			// Zoom out: the daemon must be told the restored content size
-			// (38x18: the 40x20 box less its non-tiled border).
 			m.ToggleZoom()
 			if win.Zoomed {
 				t.Fatal("window did not restore")

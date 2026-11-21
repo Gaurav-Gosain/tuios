@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// The browser build has no ssh and no engine to set up a machine with, so
-// the add sheet never opens there.
-
 const overlayKindMachineSheet = "machinesheet"
 
 type machineSheet struct{}

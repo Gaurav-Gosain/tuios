@@ -29,7 +29,6 @@ func TestDaemonCloseKeepsTheOtherPanesPut(t *testing.T) {
 		before[m.GetWindowByIntID(id).ID] = r
 	}
 
-	// The daemon closes window-0004 and pushes the survivors.
 	const gone = "window-0004"
 	state := &session.SessionState{
 		Name:             "test-session",
@@ -58,8 +57,6 @@ func TestDaemonCloseKeepsTheOtherPanesPut(t *testing.T) {
 		after[m.GetWindowByIntID(id).ID] = r
 	}
 
-	// window-0004 split window-0003, so window-0003 inherits their shared box and
-	// is allowed to grow. Nothing else has any reason to move.
 	for _, id := range []string{"window-0001", "window-0002"} {
 		if after[id] != before[id] {
 			t.Errorf("closing %s moved %s from %+v to %+v", gone, id, before[id], after[id])

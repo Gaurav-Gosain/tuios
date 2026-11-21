@@ -6,13 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The Hosts section of the settings page.
-//
-// Each test drives the page the way a person does: focus a row, edit it, commit
-// it, and read the file that came out. A test that only asked whether the row
-// exists would pass on a section that is drawn and wired to nothing, which is
-// the failure this repository has shipped before.
-
 // A served session does not own the config file, and it must not run ssh from
 // the serving machine on behalf of whoever connected.
 func TestAReadOnlySessionDoesNotTestTheLinks(t *testing.T) {

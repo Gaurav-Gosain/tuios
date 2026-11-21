@@ -19,7 +19,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// quickLookHasDetails reports whether the Markdown on the panel has closed sections.
 func quickLookHasDetails(ql *quickLookState) bool {
 	return ql.res != nil && ql.res.kind == "markdown" && !ql.mdOpen && strings.Contains(ql.res.md, "<details")
 }
@@ -31,26 +30,13 @@ func (m *OS) QuickLookOpenDetails() {
 	}
 }
 
-// Pictures and whole tables in a Markdown file. The file is laid out by the
-// renderer the agents thread uses (cockpit_markdown.go), with a block kind
-// plugged in here through ckMD.hook: an image alone in its paragraph is drawn
-// as a picture, read from beside the file on the machine that has it, through
-// the previews' pipeline (inbox_reply_preview.go). An image on the web is one
-// line of its words: quick look reads no address. Tables keep every cell
-// (ckMD.whole).
-
 const (
-	// quickLookMDImagesMax bounds the pictures one file reads.
-	quickLookMDImagesMax = 16
-	// quickLookMDImageRows bounds a picture's rows.
-	quickLookMDImageRows = 20
-	// quickLookMDImageIndent is where a picture starts in the body.
+	quickLookMDImagesMax   = 16
+	quickLookMDImageRows   = 20
 	quickLookMDImageIndent = 2
-	// quickLookMDWordsMax bounds the words shown for an image, in cells.
-	quickLookMDWordsMax = 48
+	quickLookMDWordsMax    = 48
 )
 
-// quickLookMDImageMsg carries a picture of a Markdown file back to the loop.
 type quickLookMDImageMsg struct {
 	res  *quickLookResult
 	key  string
@@ -58,7 +44,6 @@ type quickLookMDImageMsg struct {
 	note string
 }
 
-// quickLookMDLayout lays out the Markdown on the panel at width.
 func (m *OS) quickLookMDLayout(l ckLook, r *quickLookResult, width int, open bool) []ckLine {
 	md := &ckMD{m: m, l: l, heads: true, blockScope: "ql:" + r.target.host + ":" + r.target.path}
 	md.pics = m.quickLookPics(r)
@@ -74,9 +59,6 @@ func (m *OS) quickLookMDLayout(l ckLook, r *quickLookResult, width int, open boo
 	return lines
 }
 
-// quickLookMDHeadMarks are the lines of the headings the ruler marks, on a
-// ruler rows high for lines lines: every heading to the third level, or
-// fewer levels when their marks would take too many rows, or none.
 func quickLookMDHeadMarks(at, level []int, lines, rows int) []int {
 	var marks []int
 	for top := 3; top >= 1; top-- {
@@ -93,8 +75,6 @@ func quickLookMDHeadMarks(at, level []int, lines, rows int) []int {
 	return nil
 }
 
-// quickLookDark reports whether the panel's ground is dark, for the <picture>
-// source to show. A ground the terminal keeps for itself is taken as dark.
 func quickLookDark(l ckLook) bool {
 	c := l.pal.Canvas
 	if c == nil {
@@ -106,8 +86,6 @@ func quickLookDark(l ckLook) bool {
 	return hostLuminance(c) < 128
 }
 
-// quickLookMDSource is where an image of the file is: a path on the file's
-// machine, or ok false for a web address and anything else not a file.
 func quickLookMDSource(t quickLookTarget, src string) (string, bool) {
 	if u, err := url.Parse(src); err == nil && u.Scheme != "" && len(u.Scheme) > 1 {
 		if u.Scheme != "file" {
@@ -134,13 +112,10 @@ func quickLookMDSource(t quickLookTarget, src string) (string, bool) {
 	return filepath.Clean(src), true
 }
 
-// quickLookMDImage lays out an image of the file: its picture and its words
-// under it, or its words and why there is no picture.
 func (m *OS) quickLookMDImage(md *ckMD, r *quickLookResult, b markdown.Block, first, rest []ckSeg, width int) {
 	ql := &m.quickLook
 	pal := md.l.pal
 	avail := max(width-ckSegsWidth(rest), 4)
-	// The words are one short line: an image's words can be a paragraph.
 	words := ckTrunc(strings.Join(strings.Fields(b.Text), " "), quickLookMDWordsMax)
 	if words == "" {
 		words = "image"
@@ -154,8 +129,6 @@ func (m *OS) quickLookMDImage(md *ckMD, r *quickLookResult, b markdown.Block, fi
 	}
 	key, ok := quickLookMDSource(r.target, b.URL)
 	if !ok || !markdown.Drawable(b.URL, "") {
-		// Quick look reads no address on the web, and draws no SVG or AVIF:
-		// the words stand in, and open the address when it is one.
 		md.text([]ckSeg{{t: "Image: " + words, fg: pal.FgDim, attrs: ckBold, link: ckLinkTarget(b.URL)}}, first, rest, avail)
 		return
 	}
@@ -188,11 +161,7 @@ func (m *OS) quickLookMDImage(md *ckMD, r *quickLookResult, b markdown.Block, fi
 	var cells []string
 	switch p.Mode() {
 	case composer.PreviewPixels:
-		// A host that draws placeholders gets the picture as cells that
-		// scroll and clip with the text.
 		cells = m.placeholderLines(ti.img, cols, rows)
-		// The cells name the picture at this box, so the box must be
-		// prepared: a new width (full size, a resize) is a new box.
 		p.mu.Lock()
 		ready := p.pics[pixelsKey(ti.img, cols, rows)] != nil
 		p.mu.Unlock()
@@ -206,7 +175,6 @@ func (m *OS) quickLookMDImage(md *ckMD, r *quickLookResult, b markdown.Block, fi
 		}
 		p.mu.Unlock()
 		if cells == nil {
-			// Still being prepared: the rows keep their place.
 			ql.mdNeed = true
 		}
 	}
@@ -219,13 +187,10 @@ func (m *OS) quickLookMDImage(md *ckMD, r *quickLookResult, b markdown.Block, fi
 		md.lines = append(md.lines, ln)
 	}
 	if b.Text != "" {
-		// The caption is one line: the words can be a paragraph.
 		md.text([]ckSeg{{t: ckTrunc(strings.Join(strings.Fields(b.Text), " "), avail), fg: pal.FgMute, attrs: ckItalic}}, rest, rest, avail)
 	}
 }
 
-// quickLookMDImageBox is the cell box of a picture in a body width cells
-// wide. A small image keeps its own size.
 func (m *OS) quickLookMDImageBox(img *composer.Image, width int) (int, int) {
 	maxCols, maxRows := max(width-quickLookMDImageIndent-1, 1), quickLookMDImageRows
 	if h := m.quickLook.bodyRows; h > 4 {
@@ -242,9 +207,6 @@ func (m *OS) quickLookMDImageBox(img *composer.Image, width int) (int, int) {
 	return ckFitBox(img, max(maxCols, 1), max(maxRows, 1), m.replyPreviewer().CellAspect(), 1)
 }
 
-// quickLookMDImagesCmd reads the pictures the layout asked for, and prepares
-// those read at the size the layout gives them. It is nil when the layout
-// asked for nothing since the last call.
 func (m *OS) quickLookMDImagesCmd() tea.Cmd {
 	ql := &m.quickLook
 	if !ql.mdNeed || ql.res == nil || ql.res.kind != "markdown" || ql.mdImgsFor != ql.res {
@@ -299,7 +261,6 @@ func (m *OS) quickLookMDImagesCmd() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// applyQuickLookMDImage takes a picture of the file on the panel.
 func (m *OS) applyQuickLookMDImage(msg quickLookMDImageMsg) tea.Cmd {
 	ql := &m.quickLook
 	if !ql.open || ql.mdImgsFor != msg.res {
@@ -315,8 +276,6 @@ func (m *OS) applyQuickLookMDImage(msg quickLookMDImageMsg) tea.Cmd {
 	return m.quickLookMDImagesCmd()
 }
 
-// quickLookMDMarks notes, for the lines of the Markdown on the body from line
-// from, where the frame drew pictures: the host places them after the frame.
 func (m *OS) quickLookMDMarks(lines []ckLine, from, rows, top int) {
 	ql := &m.quickLook
 	ql.mdPics = ql.mdPics[:0]
@@ -345,8 +304,6 @@ func (m *OS) quickLookMDMarks(lines []ckLine, from, rows, top int) {
 	}
 }
 
-// quickLookPics is quick look's ckPics: the rows are a picture of the
-// Markdown's, read from the file r.
 func (m *OS) quickLookPics(r *quickLookResult) *ckPics {
 	ql := &m.quickLook
 	return &ckPics{hit: "qimg:", indent: quickLookMDImageIndent,
@@ -376,9 +333,6 @@ func (m *OS) quickLookPics(r *quickLookResult) *ckPics {
 		}}
 }
 
-// quickLookBlockClick shows the source of the rich block whose header is on
-// screen row y, or its picture again. A click at column x on the switch of a
-// Mermaid block draws it as a picture, or as text.
 func (m *OS) quickLookBlockClick(x, y int) {
 	ql := &m.quickLook
 	if ql.res == nil || ql.res.kind != "markdown" || ql.copy != nil || ql.textW <= 0 {
@@ -399,8 +353,6 @@ func (m *OS) quickLookBlockClick(x, y int) {
 	}
 }
 
-// quickLookMDImageHit reads a picture row's hit: the row, the picture's rows
-// and columns, and its key. The key is last, since a path holds "/".
 func quickLookMDImageHit(action string) (row, rows, cols int, key string, ok bool) {
 	rest, ok := strings.CutPrefix(action, "qimg:")
 	if !ok {

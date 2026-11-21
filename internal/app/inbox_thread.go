@@ -19,44 +19,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 )
 
-// The agent thread: what the selected agent in the agents view said and did,
-// beside the list on a wide screen and in its place on a narrow one.
-//
-//   - For an agent whose transcript the daemon reads (Claude Code, Codex,
-//     Gemini CLI, Qwen Code, Copilot CLI, Amp), the conversation, read with
-//     agent-transcript (the
-//     person's own verb, with the attach nonce: secrets masked, every string
-//     bounded, control characters gone). The client subscribes to the
-//     transcript event of the selected pane alone, and reads again from its
-//     cursor when the transcript grows. When the selection moves, the
-//     subscription moves with it.
-//   - For any other agent, and for one whose pane is not joined to its
-//     transcript yet, the recap of its turns (agent-activity) and the mail
-//     between it and other agents.
-//   - Under either, the approval the agent waits on, if the Inbox holds one:
-//     1, 2 and 3 answer it, with the same settle time and second press for a
-//     risky allow as in the attention list.
-//   - Under that, the reply editor, opened with r.
-//
-// The reads and the subscription go to the daemon that holds the pane. On a
-// client attached through a host, that is the far daemon, over the link: the
-// session on screen is the far daemon's, and so is the attach nonce. Sent to
-// this machine's daemon, the nonce proves nothing and the read is refused as
-// not_human. The far daemon holds the read to its own rules for a link: the
-// nonce of an attach that came over the link-human socket, and transcripts in the
-// link policy. See session/verb_agent_transcript.go.
-//
-// Everything the agent wrote is drawn as the agent's: a quiet gutter mark and
-// the dim ink. Nothing in it is a link or a key. At most threadsKept threads
-// are kept in memory, and nothing is read while the view is closed.
-
-// threadsKept is how many threads the client keeps.
 const threadsKept = 3
 
-// threadReadTimeout bounds one transcript or recap read.
 const threadReadTimeout = 5 * time.Second
 
-// threadEntry is one transcript entry as the thread draws it.
 type threadEntry struct {
 	ID     string `json:"id"`
 	Role   string `json:"role"`
@@ -70,23 +36,15 @@ type threadEntry struct {
 		Text   string `json:"text"`
 		Status string `json:"status"`
 	} `json:"todos"`
-	At     int64       `json:"at"`
-	ToolID string      `json:"tool_id"`
-	Diff   *threadDiff `json:"diff"`
-	// Image is set on an image entry the daemon can serve.
-	Image *transcriptview.Image `json:"image"`
-	// Calls are what a tool call said to other agents or to the person
-	// through tuios, drawn as message cards.
-	Calls []transcriptview.AgentCall `json:"calls"`
-	// Truncated says the daemon cut the entry's text.
-	Truncated bool `json:"truncated"`
-	// sum is a hash of the text and the plan, set when the entry is taken
-	// in, for the key of its card: a message written again, or still being
-	// written, keeps its id and changes its text.
-	sum uint64
+	At        int64                      `json:"at"`
+	ToolID    string                     `json:"tool_id"`
+	Diff      *threadDiff                `json:"diff"`
+	Image     *transcriptview.Image      `json:"image"`
+	Calls     []transcriptview.AgentCall `json:"calls"`
+	Truncated bool                       `json:"truncated"`
+	sum       uint64
 }
 
-// threadSum hashes an entry's text and plan, FNV-1a.
 func threadSum(e *threadEntry) uint64 {
 	h := uint64(14695981039346656037)
 	for _, s := range [2]string{e.Text, e.Plan} {
@@ -98,110 +56,53 @@ func threadSum(e *threadEntry) uint64 {
 	return h
 }
 
-// agentThread is one agent's thread.
 type agentThread struct {
-	// root is the folder the agent works in, which the thread shows paths
-	// relative to (ckAgentRoot), set each time the thread is drawn.
-	root    string
-	key     string
-	session string
-	window  string
-	harness string
-	entries []threadEntry
-	cursor  string
-	read    bool
-	loading bool
-	// again says the transcript grew while a read was out, so another
-	// read follows it.
-	again    bool
-	err      string
-	recapKey string
-	recap    *session.AgentActivityRecap
-	// fallback says the daemon has no transcript for the pane: its harness
-	// has a reader, but the pane is not joined to a file yet, or the daemon
-	// is older. The thread shows the recap. fallbackAt is the agent's state
-	// time then, and a new state tries the transcript again.
-	fallback   bool
-	fallbackAt int64
-	// gen changes when what the thread shows changes, for the drawn lines.
-	gen uint64
-	// echoAsked says the thread asked list-queued for the person's queued
-	// replies, to show them (thread_echo.go).
-	echoAsked bool
-	// body is the conversation's lines as last drawn, and bodyAt what they
-	// were drawn from, so a frame drawn for another reason does not wrap
-	// and style the conversation again.
-	body   []string
-	bodyAt threadBodyKey
-	// hits are what a click on each line of body does, "" for nothing.
-	hits []string
-	// folded are the cards whose fold the person flipped, by entry id, and
-	// the turns, by "turn:" and the id of the turn's first entry;
-	// expandAll shows every line of every card (e).
-	folded    map[string]bool
-	expandAll bool
-	// follow is where the person reads the thread: how far up from the
-	// newest line, and what arrived while it held still. taken counts the
-	// entries that arrived after the first page, for its count of unseen
-	// ones, and prompts are the lines of body each prompt starts on.
-	follow  transcriptview.Follow
-	taken   int
-	prompts []int
-	// fromTop is set when the Changes tab opens: its next layout shows the
-	// first line, not the newest.
-	fromTop bool
-	// cards are the entries' cards as last built, by entry id.
-	cards map[string]ckCard
-	// codeX is how far each code block is scrolled sideways, in cells, by
-	// the block's key (ckLine.code), and codeMax how far it can go, written
-	// when its card is built. codeGen counts the scrolls of each entry's
-	// blocks, by entry id, for the entry's card key.
+	root                    string
+	key                     string
+	session                 string
+	window                  string
+	harness                 string
+	entries                 []threadEntry
+	cursor                  string
+	read                    bool
+	loading                 bool
+	again                   bool
+	err                     string
+	recapKey                string
+	recap                   *session.AgentActivityRecap
+	fallback                bool
+	fallbackAt              int64
+	gen                     uint64
+	echoAsked               bool
+	body                    []string
+	bodyAt                  threadBodyKey
+	hits                    []string
+	folded                  map[string]bool
+	expandAll               bool
+	follow                  transcriptview.Follow
+	taken                   int
+	prompts                 []int
+	fromTop                 bool
+	cards                   map[string]ckCard
 	codeX, codeMax, codeGen map[string]int
-	// code is each code block's code as the thread holds it, by key, for
-	// a copy of the block.
-	code map[string]ckCode
-	// act is the activity row's text as last drawn, "" for no row, and
-	// actAt when it changed to that. actTimed says the thread saw that
-	// activity start, so actAt is when it started, to within one redraw: an
-	// activity already under way when the thread was first drawn (actSeen
-	// false) has no time.
-	act               string
-	actAt             time.Time
-	actTimed, actSeen bool
-	// actRow says the last frame drew the row as the thread's newest line,
-	// one line past the body, which Follow counts.
-	actRow bool
-	// pill is the child pill under the pill cursor, "" for none. See
-	// cockpit_thread_kids.go.
-	pill string
-	// images are the thread's images by entry id, and imgWidth the width
-	// their cards were last drawn at. See cockpit_thread_image.go.
-	images   map[string]*ckThreadImage
-	imgWidth int
-	// pinned says the last frame pinned the todo list above the thread
-	// (ThreadPinnedLines), so the thread folds its copy.
-	pinned bool
-	// lines are body's lines as laid out, and lineIDs the entry each one
-	// belongs to, for copy mode. viewW and viewH are the thread's view in
-	// the last frame.
-	lines        []ckLine
-	lineIDs      []string
-	viewW, viewH int
-	// viewX and viewY are the screen cell of the view's top left corner in
-	// the last frame, for the mouse (cockpit_mouse.go).
-	viewX, viewY int
-	// keep is how many of the newest turns the thread draws, 0 for every
-	// turn, and older says turns older than those are left out. A long
-	// conversation is drawn only as far up as the view needs: its oldest
-	// cards cost the most to open and are the least read.
-	keep  int
-	older bool
-	// toTop says a key asked for the first line before every turn was
-	// drawn.
-	toTop bool
+	code                    map[string]ckCode
+	act                     string
+	actAt                   time.Time
+	actTimed, actSeen       bool
+	actRow                  bool
+	pill                    string
+	images                  map[string]*ckThreadImage
+	imgWidth                int
+	pinned                  bool
+	lines                   []ckLine
+	lineIDs                 []string
+	viewW, viewH            int
+	viewX, viewY            int
+	keep                    int
+	older                   bool
+	toTop                   bool
 }
 
-// threadBodyKey is what a thread's drawn lines depend on.
 type threadBodyKey struct {
 	gen, mailGen, theme uint64
 	look                uint64
@@ -210,36 +111,24 @@ type threadBodyKey struct {
 	ascii               bool
 	title, message      string
 	expand, changes     bool
-	// working is the agent's state: the last turn folds once it rests.
-	working bool
-	// kids is ckKidsSig: the child pills' inputs.
-	kids uint64
-	// pics is the previews' version: an image card's picture arrived.
-	pics uint64
-	// keep is agentThread.keep.
-	keep int
-	// card is whether the Done card under the thread shows the recap.
-	card bool
-	// echo is the replies' echoes' generation.
-	echo uint64
+	working             bool
+	kids                uint64
+	pics                uint64
+	keep                int
+	card                bool
+	echo                uint64
 }
 
-// threadsState is the threads kept and the transcript subscription.
 type threadsState struct {
-	byKey map[string]*agentThread
-	order []string
-	// watchKey is the thread whose transcript events the client follows.
+	byKey    map[string]*agentThread
+	order    []string
 	watchKey string
 	stop     context.CancelFunc
 	events   chan tea.Msg
-	// open is the thread shown in place of the list on a narrow screen.
-	open bool
-	// copy is copy mode over the shown thread, nil when it is off. See
-	// cockpit_copy.go.
-	copy *ckThreadCopy
+	open     bool
+	copy     *ckThreadCopy
 }
 
-// threadPageMsg is an agent-transcript reply.
 type threadPageMsg struct {
 	key     string
 	entries []threadEntry
@@ -248,26 +137,19 @@ type threadPageMsg struct {
 	more    bool
 	after   bool
 	err     error
-	// stateAt is the agent's state time when the read went out.
 	stateAt int64
 }
 
-// threadRecapMsg is an agent-activity reply for a thread.
 type threadRecapMsg struct {
 	key, recapKey string
 	recap         *session.AgentActivityRecap
 	err           error
 }
 
-// threadGrewMsg says the followed transcript grew.
 type threadGrewMsg struct{ key string }
 
-// threadWatchEnded says the subscription ended.
 type threadWatchEnded struct{ key string }
 
-// threadTranscriptHarness reports whether the daemon reads a harness's
-// transcript: the harnesses whose manifests have a [transcript] block with a
-// reader internal/transcriptview has.
 func threadTranscriptHarness(h string) bool {
 	switch h {
 	case "claude-code", "codex", "gemini-cli", "qwen", "copilot", "amp", "opencode", "cursor-agent", "pi":
@@ -276,9 +158,6 @@ func threadTranscriptHarness(h string) bool {
 	return false
 }
 
-// threadReadsTranscript reports whether an agent's thread shows its
-// transcript, and not the recap: its harness has a reader, and the daemon
-// did not say the pane has no transcript.
 func (m *OS) threadReadsTranscript(e sidebarAgentEntry) bool {
 	if !threadTranscriptHarness(e.Harness) {
 		return false
@@ -287,7 +166,6 @@ func (m *OS) threadReadsTranscript(e sidebarAgentEntry) bool {
 	return t == nil || !t.fallback
 }
 
-// thread is the kept thread of an agent, made when it is first shown.
 func (m *OS) thread(e sidebarAgentEntry) *agentThread {
 	ts := &m.Inbox.threads
 	key := agentKey(e)
@@ -310,7 +188,6 @@ func (m *OS) thread(e sidebarAgentEntry) *agentThread {
 	return t
 }
 
-// threadShown reports whether a thread is on screen now.
 func (m *OS) threadShown() bool {
 	return m.ShowInbox && m.Inbox.Peek == nil && (m.cockpitWideFocus() || m.Inbox.threads.open)
 }
@@ -324,7 +201,6 @@ func (m *OS) InboxThreadFetch() tea.Cmd {
 	if m.ShowInbox {
 		m.cockpitSync()
 	}
-	// The thread on screen is viewed: its row's unseen mark goes.
 	if m.threadShown() {
 		if e, ok := m.cockpitAgent(); ok {
 			m.markAgentViewed(e)
@@ -342,8 +218,6 @@ func (m *OS) InboxThreadFetch() tea.Cmd {
 	t := m.thread(e)
 	var cmds []tea.Cmd
 	if e.Host != "" {
-		// The conversation is read on that machine, and the person's
-		// replies queued there show here, from its queue.
 		m.stopThreadWatch()
 		if !t.echoAsked {
 			t.echoAsked = true
@@ -352,14 +226,10 @@ func (m *OS) InboxThreadFetch() tea.Cmd {
 		return nil
 	}
 	if !t.echoAsked {
-		// The person's replies queued for the pane show again, as a new
-		// client or a view opened again finds them.
 		t.echoAsked = true
 		cmds = append(cmds, m.echoQueueCmd(e.Host, e.SessionID, e.WindowID, printableTitle(e.Title), true))
 	}
 	if t.fallback && e.StateAt != t.fallbackAt && !t.loading {
-		// The agent moved on since the daemon had no transcript. The hook
-		// that joins the pane to its file may have run.
 		t.fallback, t.read = false, false
 	}
 	if m.threadReadsTranscript(e) {
@@ -384,15 +254,10 @@ func (m *OS) InboxThreadFetch() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// threadRetryOnState reads the thread on screen again when it fell back to
-// the recap because the daemon had no transcript, and the agent's state has
-// changed since: the hook that joins the pane to its file may have run. It
-// is nil otherwise, so a state push costs a few comparisons.
 func (m *OS) threadRetryOnState() tea.Cmd {
 	if !m.threadShown() {
 		return nil
 	}
-	// The rows are built again from the push before the agent is read.
 	m.cockpitSync()
 	e, ok := m.cockpitAgent()
 	if !ok {
@@ -405,14 +270,8 @@ func (m *OS) threadRetryOnState() tea.Cmd {
 	return m.InboxThreadFetch()
 }
 
-// agentCaller is how the agents view reaches the daemon that holds an
-// agent's pane, for the thread and the checkpoints: the far daemon through
-// the link on a client attached through a host, else what the Inbox calls. Each call dials: a read follows a transcript event,
-// and the events are already coalesced into one read in flight.
 func (m *OS) agentCaller() inboxVerbCall { return m.inboxActCaller() }
 
-// threadPageCmd reads a transcript page: the newest entries, or those after
-// cursor.
 func (m *OS) threadPageCmd(t *agentThread, after string) tea.Cmd {
 	call, nonce := m.agentCaller(), m.inboxNonce()
 	key, sess, window := t.key, t.session, t.window
@@ -443,7 +302,6 @@ func (m *OS) threadPageCmd(t *agentThread, after string) tea.Cmd {
 	}
 }
 
-// threadRecapCmd reads an agent's recap.
 func (m *OS) threadRecapCmd(t *agentThread, recapKey string) tea.Cmd {
 	call, key, sess, window := m.agentCaller(), t.key, t.session, t.window
 	return func() tea.Msg {
@@ -452,7 +310,6 @@ func (m *OS) threadRecapCmd(t *agentThread, recapKey string) tea.Cmd {
 	}
 }
 
-// applyThreadPage takes a transcript page.
 func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 	t := m.Inbox.threads.byKey[msg.key]
 	if t == nil {
@@ -464,8 +321,6 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 		t.read = true
 		t.err = threadReadError(msg.err, m.AttachedHost)
 		if threadNoTranscript(msg.err) && !msg.after {
-			// No file to read for this pane: show the recap, as for a
-			// harness with no reader, until the agent's state changes.
 			t.fallback, t.fallbackAt, t.err, t.recapKey = true, msg.stateAt, "", ""
 			m.stopThreadWatch()
 			return m.InboxThreadFetch()
@@ -474,13 +329,8 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 	}
 	t.read, t.err = true, ""
 	if !msg.after || msg.reset {
-		// A whole page draws every card again: the file may have been
-		// written anew under the same ids.
 		t.entries, t.cards = nil, nil
 	}
-	// An entry with an id the thread holds replaces it where it is: a tool
-	// call's status changes once its result is in, and Gemini CLI writes a
-	// message again, whole, when one of its calls finishes.
 	at := make(map[string]int, len(t.entries))
 	for i, e := range t.entries {
 		at[e.ID] = i
@@ -494,13 +344,9 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 		at[e.ID] = len(t.entries)
 		t.entries = append(t.entries, e)
 		if msg.after && !msg.reset && e.Kind != "tool_result" {
-			// A result finishes a call the thread already counted.
 			t.taken++
 		}
 	}
-	// A result can arrive on a later page than the call it finishes. Fold it
-	// into retained calls too, otherwise a cached running card hides failures.
-	// Walk backwards to pair each result with its nearest preceding call.
 	results := make(map[string]string)
 	for i := len(t.entries) - 1; i >= 0; i-- {
 		e := &t.entries[i]
@@ -513,18 +359,14 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 		case "tool_call":
 			if status, ok := results[e.ToolID]; ok {
 				e.Status = status
-				// A call can draw as several adjacent cards sharing one id (a
-				// multi-file patch), so keep the result until the group ends.
 				if i == 0 || t.entries[i-1].Kind != "tool_call" || t.entries[i-1].ToolID != e.ToolID {
 					delete(results, e.ToolID)
 				}
 			}
 		}
 	}
-	// The thread draws the newest; the page bound holds the rest.
 	if n := len(t.entries); n > 200 {
 		t.entries = append(t.entries[:0], t.entries[n-200:]...)
-		// The cards of the entries cut go with them.
 		if len(t.cards) > len(t.entries) {
 			keep := make(map[string]bool, len(t.entries))
 			for _, en := range t.entries {
@@ -540,30 +382,23 @@ func (m *OS) applyThreadPage(msg threadPageMsg) tea.Cmd {
 	if msg.cursor != "" {
 		t.cursor = msg.cursor
 	}
-	// A reply's own entry has come: its echo goes.
 	m.echoTake(t)
 	if msg.more || t.again {
 		t.again = false
 		t.loading = true
 		return m.threadPageCmd(t, t.cursor)
 	}
-	// The page may name images: the thread on screen reads them now, not
-	// at the next key.
 	if e, ok := m.cockpitAgent(); ok && agentKey(e) == t.key && m.threadShown() {
 		return m.threadImagesCmd(t)
 	}
 	return nil
 }
 
-// threadNoTranscript reports an error that says the pane has no transcript
-// the daemon can read, so the thread shows the recap instead.
 func threadNoTranscript(err error) bool {
 	code := session.VerbErrCode(err)
 	return code == session.ErrVerbNoTranscript || code == session.ErrVerbUnsupportedHarness
 }
 
-// threadReadError is a failed read as the thread says it. host is the
-// machine the client is attached through, "" for this one.
 func threadReadError(err error, host string) string {
 	daemon := "The daemon"
 	if host != "" {
@@ -576,13 +411,8 @@ func threadReadError(err error, host string) string {
 		case session.ErrVerbUnknownVerb:
 			return daemon + " cannot read transcripts. " + restartHintPlain
 		case session.ErrVerbNotHuman:
-			// No nonce of a live attach: the daemon restarted under this
-			// client, or the client runs in a pane, or the link did not come
-			// from a person's client.
 			return daemon + " did not accept this client as the person, so it did not send the conversation. Attach again from a terminal outside tuios."
 		case session.ErrVerbForbidden:
-			// The far daemon's link policy. The hint names what is missing
-			// and the table that grants it, on that machine.
 			if h := ce.Hint; host != "" && h != nil && len(h.Missing) > 0 && h.Table != "" {
 				quoted := make([]string, len(h.Missing))
 				for i, c := range h.Missing {
@@ -596,7 +426,6 @@ func threadReadError(err error, host string) string {
 	return "The transcript could not be read: " + err.Error()
 }
 
-// applyThreadRecap takes an agent-activity reply.
 func (m *OS) applyThreadRecap(msg threadRecapMsg) {
 	t := m.Inbox.threads.byKey[msg.key]
 	if t == nil || t.recapKey != msg.recapKey {
@@ -610,7 +439,6 @@ func (m *OS) applyThreadRecap(msg threadRecapMsg) {
 	}
 }
 
-// startThreadWatch follows the transcript events of one pane.
 func (m *OS) startThreadWatch(t *agentThread) tea.Cmd {
 	ts := &m.Inbox.threads
 	if m.Inbox.call != nil || m.DaemonClient == nil {
@@ -622,7 +450,6 @@ func (m *OS) startThreadWatch(t *agentThread) tea.Cmd {
 	build := m.DaemonClient.ClientVersion()
 	dial := func() (*session.VerbClient, error) { return session.DialVerbClientAs(build) }
 	if m.AttachedHost != "" {
-		// The far daemon emits the pane's transcript events.
 		dial = m.verbDialer()
 	}
 	key, sess, window := t.key, t.session, t.window
@@ -640,15 +467,11 @@ func (m *OS) startThreadWatch(t *agentThread) tea.Cmd {
 		}, threadReadTimeout); err != nil {
 			return
 		}
-		// Catch up from the kept cursor after subscribing.
 		ch <- threadGrewMsg{key: key}
-		// Follow subsequent transcript changes until the subscription ends.
 		for ctx.Err() == nil {
 			if _, err := client.ReadEventLine(0); err != nil {
 				return
 			}
-			// Only the latest growth matters: the read takes everything
-			// after the cursor.
 			select {
 			case ch <- threadGrewMsg{key: key}:
 			default:
@@ -658,9 +481,6 @@ func (m *OS) startThreadWatch(t *agentThread) tea.Cmd {
 	return listenThread(m.stopSignal(), ch, key)
 }
 
-// listenThread waits for one delivery from the transcript subscription.
-// It returns nil once stop is closed, which is how a session that has ended
-// lets go of it.
 func listenThread(stop <-chan struct{}, ch <-chan tea.Msg, key string) tea.Cmd {
 	return func() tea.Msg {
 		select {
@@ -675,7 +495,6 @@ func listenThread(stop <-chan struct{}, ch <-chan tea.Msg, key string) tea.Cmd {
 	}
 }
 
-// stopThreadWatch ends the transcript subscription.
 func (m *OS) stopThreadWatch() {
 	ts := &m.Inbox.threads
 	if ts.stop != nil {
@@ -684,8 +503,6 @@ func (m *OS) stopThreadWatch() {
 	ts.stop, ts.events, ts.watchKey = nil, nil, ""
 }
 
-// applyThreadGrew reads what the followed transcript added, and listens for
-// more.
 func (m *OS) applyThreadGrew(msg threadGrewMsg) tea.Cmd {
 	ts := &m.Inbox.threads
 	if ts.watchKey != msg.key || ts.events == nil {
@@ -704,17 +521,12 @@ func (m *OS) applyThreadGrew(msg threadGrewMsg) tea.Cmd {
 	return tea.Batch(listen, m.threadPageCmd(t, t.cursor))
 }
 
-// applyThreadWatchEnded forgets a subscription that ended, so the next fetch
-// starts it again.
 func (m *OS) applyThreadWatchEnded(msg threadWatchEnded) {
 	if ts := &m.Inbox.threads; ts.watchKey == msg.key {
 		ts.stop, ts.events, ts.watchKey = nil, nil, ""
 	}
 }
 
-// threadBody is the thread's text, oldest first: the conversation for a
-// transcript agent, the recap and the mail for the rest. It holds at least
-// the last room lines, and is kept on the thread until what it shows changes.
 func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time, card bool) []string {
 	t := m.Inbox.threads.byKey[agentKey(e)]
 	if t == nil {
@@ -737,8 +549,6 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time, car
 	for {
 		key.keep = t.keep
 		if t.body != nil && t.bodyAt == key {
-			// The view needs room lines and a page more to scroll into.
-			// Short of that, the thread takes twice the turns.
 			if !t.older || len(t.body) >= room+ckKeepMargin {
 				t.toTop = false
 				return t.body
@@ -753,12 +563,8 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time, car
 		t.hits, t.prompts, t.lines, t.lineIDs = nil, nil, nil, nil
 		t.body, t.bodyAt = m.threadBodyLines(e, t, width, room, now, key.card), key
 		if t.body == nil {
-			// An empty body is a body: the cache above takes a nil body
-			// for none, and would draw it again on every turn of the loop.
 			t.body = []string{}
 		}
-		// More turns drawn: the view stays on the lines it showed, or goes
-		// to the first line for a key that asked for it.
 		if at := slices.Index(t.lineIDs, first); kept != 0 && kept != key.keep && at > 0 {
 			t.follow.Older(at)
 			if t.toTop {
@@ -768,39 +574,26 @@ func (m *OS) threadBody(e sidebarAgentEntry, width, room int, now time.Time, car
 	}
 }
 
-// threadReadLimit is how many of the newest entries a thread reads.
 const threadReadLimit = 200
 
-// ckKeepTurns is how many of the newest turns a thread draws first, and
-// ckKeepMargin how many lines past the view it keeps drawn.
 const (
 	ckKeepTurns  = 8
 	ckKeepMargin = 60
 )
 
-// threadKeepAll makes the thread draw every turn, for a key that goes to its
-// first line.
 func threadKeepAll(t *agentThread) {
 	if t.older {
 		t.keep, t.toTop = 1<<30, true
 	}
 }
 
-// threadMinute is the minute a thread's lines depend on: a recap says how
-// long ago a turn ended, and a transcript's cards carry clock times only, so
-// a minute passing builds them again for nothing.
 func (m *OS) threadMinute(e sidebarAgentEntry, now time.Time) int64 {
 	if m.threadReadsTranscript(e) {
-		// Only the working turn's line, "Working for 3m", moves with
-		// the clock.
 		return ckThreadMinute(e.State == string(session.AgentStateWorking), now)
 	}
 	return now.Unix() / 60
 }
 
-// threadBodyLines draws threadBody. A conversation is drawn from its newest
-// entry back, until room lines are drawn: the thread shows the bottom, and
-// two hundred entries wrapped and styled on every change cost milliseconds.
 func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room int, now time.Time, card bool) []string {
 	pal := m.cockpitPalette()
 	bg := pal.Canvas
@@ -814,8 +607,6 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 	if e.Host != "" {
 		note(printableTitle(e.Title) + " runs on " + printableTitle(e.Host) + ". Attach there to read its conversation.")
 		if t != nil {
-			// The replies sent to it, as this machine knows them, with
-			// their cancel and retry.
 			echo, hits := m.threadEchoLines(t.key, width, e.StateAt)
 			t.hits = append(make([]string, len(out)), hits...)
 			out = append(out, echo...)
@@ -833,11 +624,8 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 		}
 		out, t.hits = m.threadCardLines(e, t, width, m.cockpitTab() == "Changes", now)
 		if m.cockpitTab() != "Changes" {
-			// The replies sent that the transcript does not hold yet.
 			echo, hits := m.threadEchoLines(t.key, width, e.StateAt)
 			if n := len(t.lines); len(echo) > 0 && n > 0 && !t.lines[n-1].blank() {
-				// The blank line the thread puts before a prompt's card,
-				// so the card lands on the echo's rows.
 				c := (*ckCanvas)(nil).reset(width, 1, m.cockpitLook().canvas)
 				echo, hits = append([]string{c.render()}, echo...), append([]string{""}, hits...)
 			}
@@ -854,8 +642,6 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 	start := len(out)
 	switch {
 	case card:
-		// The Done card under the thread says the recap; the thread does
-		// not say it twice.
 	case t.recap != nil && !recapEmpty(t.recap):
 		for _, s := range recapSentences(t.recap, 0, now, t.recap.Folder) {
 			note(s)
@@ -868,8 +654,6 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 	}
 	echo, hits := m.threadEchoLines(t.key, width, e.StateAt)
 	if m.echoesBefore(t.key, e.StateAt) {
-		// The agent's state changed after the replies were sent: what it
-		// says now answers them, so it goes under them.
 		says := append([]string(nil), out[start:]...)
 		out = append(append(out[:start], echo...), says...)
 		t.hits = append(append(make([]string, start), hits...), make([]string, len(says))...)
@@ -888,7 +672,6 @@ func (m *OS) threadBodyLines(e sidebarAgentEntry, t *agentThread, width, room in
 	return out
 }
 
-// threadMail is the last mail between the agent and other agents.
 func (m *OS) threadMail(e sidebarAgentEntry, width int, bg color.Color, pal overlay.Palette) []string {
 	var picked []int
 	for i := range m.AgentMail.Messages {
@@ -919,8 +702,6 @@ func (m *OS) threadMail(e sidebarAgentEntry, width int, bg color.Color, pal over
 	return out
 }
 
-// threadAgentLine is one line of the agent's: the gutter mark in the edge
-// ink, the text in the dim ink.
 func threadAgentLine(text string, width int, bg color.Color, pal overlay.Palette) string {
 	st := overlay.Style(bg)
 	mark := "│ "
@@ -931,7 +712,6 @@ func threadAgentLine(text string, width int, bg color.Color, pal overlay.Palette
 		st.Foreground(overlay.Readable(pal.FgDim, bg)).Render(text), width, bg)
 }
 
-// firstNonEmptyStr is a when it is not empty, b otherwise.
 func firstNonEmptyStr(a, b string) string {
 	if a != "" {
 		return a
@@ -939,9 +719,6 @@ func firstNonEmptyStr(a, b string) string {
 	return b
 }
 
-// threadWrap breaks an entry's text onto lines of at most width cells: at its
-// own line breaks, then at spaces. Blank lines are kept, at most one in a
-// row, and every line is made printable.
 func threadWrap(text string, width int) []string {
 	out, _ := threadWrapMore(text, width)
 	return out
@@ -963,7 +740,6 @@ func (m *OS) InboxAgentsViewPane() tea.Cmd {
 	ck := &m.Inbox.ck
 	back := ckBack{key: ck.key, akey: ck.akey, scroll: ck.scroll}
 	m.CloseInbox()
-	// The view opens again on this agent, as far down the fleet as it was.
 	ck.back = &back
 	m.inboxJump(session.AttentionItem{Session: e.SessionID, Window: e.WindowID})
 	if w := m.GetFocusedWindow(); w != nil && w.ID == e.WindowID && !w.Zoomed {
@@ -974,7 +750,6 @@ func (m *OS) InboxAgentsViewPane() tea.Cmd {
 	return nil
 }
 
-// threadNothingYet is what an empty recap thread says.
 func threadNothingYet(harness string) string {
 	if threadTranscriptHarness(harness) {
 		return "Nothing to show yet. The conversation shows when tuios finds the agent's transcript. Install the hooks to find it at once: tuios integration install " + harness

@@ -19,21 +19,14 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// fakeClipboard is a clipboard the fake tools read. No test here touches the
-// real one: every command goes through run, and run never starts a process.
 type fakeClipboard struct {
-	types []string
-	image []byte
-	// ran records every command line, so a test can say which tool was used.
-	ran []string
-	// hang makes every command wait for its context.
-	hang bool
-	// slowInfo is how long osascript's clipboard info takes, as its start
-	// does on a real Mac.
+	types    []string
+	image    []byte
+	ran      []string
+	hang     bool
 	slowInfo time.Duration
 }
 
-// isPowerShell is any of the PowerShells the Windows and WSL backends run.
 func isPowerShell(name string) bool {
 	return name == "powershell" || filepath.Base(name) == "powershell.exe"
 }
@@ -53,7 +46,6 @@ func (f *fakeClipboard) env(goos string, vars map[string]string, tools ...string
 	}
 }
 
-// answer is what the fake tool prints.
 func (f *fakeClipboard) answer(ctx context.Context, name string, args ...string) ([]byte, error) {
 	line := name + " " + strings.Join(args, " ")
 	f.ran = append(f.ran, line)
@@ -112,8 +104,6 @@ var fakePNG = []byte("\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDRfake")
 
 var wayland = map[string]string{"XDG_RUNTIME_DIR": "/run/user/1", "WAYLAND_DISPLAY": "wayland-0"}
 
-// wsl is what a shell under WSL2 with WSLg inherits: the distribution and the
-// interop socket, and WSLg's Wayland and X11 displays beside them.
 var wsl = map[string]string{
 	"WSL_DISTRO_NAME": "Debian",
 	"WSL_INTEROP":     "/run/WSL/1804_interop",
@@ -122,7 +112,6 @@ var wsl = map[string]string{
 	"DISPLAY":         ":0",
 }
 
-// withVars is vars with extra set on top.
 func withVars(vars map[string]string, extra map[string]string) map[string]string {
 	out := maps.Clone(vars)
 	maps.Copy(out, extra)
@@ -145,12 +134,10 @@ func TestTheImageToolIsChosenPerPlatform(t *testing.T) {
 		{"macos", f.env("darwin", nil, "osascript"), imageClipDarwin, true},
 		{"macos over ssh", f.env("darwin", map[string]string{"SSH_CONNECTION": "1.2.3.4 5 6.7.8.9 22"}, "osascript"), 0, false},
 		{"windows", f.env("windows", nil, "powershell"), imageClipWindows, true},
-		// Inside ssh, a display the client inherited is the far desktop's.
 		{"wayland inside ssh", f.env("linux", map[string]string{"XDG_RUNTIME_DIR": "/run/user/1", "WAYLAND_DISPLAY": "wayland-0", "SSH_CONNECTION": "1 2 3 4"}, "wl-paste", "xclip"), 0, false},
 		{"far x11 inside ssh", f.env("linux", map[string]string{"DISPLAY": ":0", "SSH_TTY": "/dev/pts/3"}, "xclip"), 0, false},
 		{"ssh -X", f.env("linux", map[string]string{"DISPLAY": "localhost:10.0", "SSH_CONNECTION": "1 2 3 4"}, "xclip"), imageClipX11, true},
 		{"ssh -X on ipv4", f.env("linux", map[string]string{"DISPLAY": "127.0.0.1:10.0", "SSH_TTY": "/dev/pts/3"}, "xclip"), imageClipX11, true},
-		// WSLg's displays carry no image from Windows, so WSL comes first.
 		{"wsl with wslg", f.env("linux", wsl, "wl-paste", "xclip", "powershell.exe"), imageClipWSL, true},
 		{"wsl without the windows path", f.env("linux", wsl, "xclip", wslDefaultPowerShell), imageClipWSL, true},
 		{"wsl named by the interop socket only", f.env("linux", map[string]string{"WSL_INTEROP": "/run/WSL/1_interop"}, "powershell.exe"), imageClipWSL, true},
@@ -237,8 +224,6 @@ func TestAHungClipboardToolTimesOut(t *testing.T) {
 	}
 }
 
-// imagePasteOS is a client with one pane whose typed input is recorded, a
-// fake clipboard and a fake daemon.
 func imagePasteOS(t *testing.T, f *fakeClipboard) (*OS, *strings.Builder, *[]map[string]any) {
 	t.Helper()
 	w, typed := layoutWindow(t, "w1")
@@ -258,8 +243,6 @@ func imagePasteOS(t *testing.T, f *fakeClipboard) (*OS, *strings.Builder, *[]map
 	return m, typed, &calls
 }
 
-// driveImagePaste runs a command and feeds every message it yields back through Update,
-// the way the program loop does, until nothing is left.
 func driveImagePaste(t *testing.T, m *OS, cmd tea.Cmd) []tea.Msg {
 	t.Helper()
 	var seen []tea.Msg
@@ -282,8 +265,6 @@ func driveImagePaste(t *testing.T, m *OS, cmd tea.Cmd) []tea.Msg {
 		switch msg.(type) {
 		case imageProbeMsg, ImagePastedMsg:
 			_, next := m.Update(msg)
-			// A text paste asked for is where an image paste ends. Its
-			// command waits on a terminal that is not here.
 			if !m.pastePending {
 				queue = append(queue, next)
 			}
@@ -426,8 +407,6 @@ func TestAPathIsQuotedOnlyWhenAShellWouldSplitIt(t *testing.T) {
 	}
 }
 
-// scriptTools is an environment whose clipboard tools are the shell scripts
-// in dir, run the way the real ones are. Nothing reaches a real clipboard.
 func scriptTools(t *testing.T, scripts map[string]string) imageClipboardEnv {
 	t.Helper()
 	if runtime.GOOS == "windows" {

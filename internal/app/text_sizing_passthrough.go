@@ -114,36 +114,20 @@ func eraseAt(buf *[]byte, x, y, cols, rows int) {
 	}
 }
 
-// emitOSC66 writes CUP + OSC 66 at a screen position.
-// contentTopY and contentEndX bound the window's content area: contentTopY is
-// its first row and contentEndX its right edge (exclusive), both 0-based.
-//
-// Every cell this writes goes straight to the host, behind the renderer's
-// back, so the renderer never learns it has to repaint what was there. A write
-// outside the content area therefore stays on screen until something else on
-// that row changes. The row above the first content row is the pane's title
-// bar, and erasing it there is what broke opencode's border: opencode probes
-// for text sizing with an OSC 66 at the top left of its screen on start-up.
 func emitOSC66(buf *[]byte, x, y, scale, scaledWidth, contentTopY, contentEndX int, rawOSC []byte) {
 	*buf = append(*buf, "\x1b7"...)
 	*buf = append(*buf, fmt.Sprintf("\x1b[%d;%dH", y+1, x+1)...)
 	*buf = append(*buf, rawOSC...)
-	// Erase from end of scaled text to end of content area (NOT end of line,
-	// which would destroy window borders and other UI elements).
-	// Also erase the row above to clean up wrapped command text, when that row
-	// is still inside the content area.
 	eraseWidth := contentEndX - (x + scaledWidth)
 	if eraseWidth > 0 {
 		spaces := make([]byte, eraseWidth)
 		for i := range spaces {
 			spaces[i] = ' '
 		}
-		// Erase on scale rows
 		for row := range scale {
 			*buf = append(*buf, fmt.Sprintf("\x1b[%d;%dH", y+row+1, x+scaledWidth+1)...)
 			*buf = append(*buf, spaces...)
 		}
-		// Erase on the row above (command text wrapping area)
 		if y > 0 && y-1 >= contentTopY {
 			*buf = append(*buf, fmt.Sprintf("\x1b[%d;%dH", y, x+scaledWidth+1)...)
 			*buf = append(*buf, spaces...)
@@ -179,7 +163,6 @@ func (m *OS) RefreshTextSizing() {
 		viewportTop := scrollbackLen - w.ScrollbackOffset
 		viewportBottom := viewportTop + contentHeight
 
-		// Detect if anything changed since last frame
 		curState := textSizingWinState{
 			scrollback:   scrollbackLen,
 			scrollOffset: w.ScrollbackOffset,
@@ -187,11 +170,10 @@ func (m *OS) RefreshTextSizing() {
 			count: len(placements),
 		}
 		if m.TextSizingState.lastState[w.ID] == curState {
-			continue // Nothing changed, skip
+			continue
 		}
 		m.TextSizingState.lastState[w.ID] = curState
 
-		// Prune placements far out of view
 		var kept []*textSizingPlacement
 		for _, p := range placements {
 			if p.AbsLine >= viewportTop-50 {
@@ -205,8 +187,6 @@ func (m *OS) RefreshTextSizing() {
 
 		for _, p := range kept {
 			visible := p.AbsLine >= viewportTop && p.AbsLine < viewportBottom
-			// On the screen, where a view of a larger session draws the pane.
-			// See pane_view.go.
 			view := m.sessionView
 			wx, wy := w.X+view.dx, w.Y+view.dy
 			hostX := wx + borderOff + p.GuestX
@@ -214,7 +194,6 @@ func (m *OS) RefreshTextSizing() {
 			scaledWidth := p.TextLen * p.Scale
 			eraseCols := min(scaledWidth, 120)
 
-			// Clip: must fit entirely within window content area AND screen
 			if visible {
 				if hostY < wy+borderOff || hostY+p.Scale > wy+w.Height-borderOff {
 					visible = false
@@ -235,7 +214,6 @@ func (m *OS) RefreshTextSizing() {
 				continue
 			}
 
-			// Erase old position if it moved
 			if p.IsPlaced && (p.PlacedAtX != hostX || p.PlacedAtY != hostY) {
 				eraseAt(&m.TextSizingState.pendingOutput, p.PlacedAtX, p.PlacedAtY, eraseCols, p.Scale)
 			}
@@ -301,11 +279,6 @@ func (m *OS) FlushTextSizing() {
 	m.WriteHost(buf)
 }
 
-// cleanOSC66 rebuilds a replayed OSC 66 with its body stripped of control
-// characters. The sequence goes to the host terminal as is, and its body is
-// text the pane printed. It is done here, once, because the ghostty backend
-// hands over the payload as the parser left it. The result is a new slice,
-// so the caller's buffer can be reused.
 func cleanOSC66(raw []byte) []byte {
 	body := raw
 	if bytes.HasPrefix(body, []byte("\x1b]")) {

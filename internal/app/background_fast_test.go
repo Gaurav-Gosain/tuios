@@ -14,16 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The fullscreen fast path paints the pane, chrome and dock backgrounds into
-// its frame string, and the compositor paints them on parsed cells. They are
-// two implementations of one rule, so these tests put the same content
-// through both and compare what the host would draw, cell by cell.
-
-// fastPathContent is one of every kind of cell the paint has to tell apart:
-// text on the default colours, text with an application background (basic,
-// 256 and truecolor), text with only a foreground, reverse video, an underline
-// colour, wide characters, a background run erased to the right edge so it
-// meets the right border, and blank rows below.
 const fastPathContent = "plain default\r\n" +
 	"\x1b[41mRED\x1b[0m mid \x1b[48;2;1;2;3mTRUE\x1b[m \x1b[48;5;17mIDX\x1b[m end\r\n" +
 	"\x1b[32mgreen\x1b[39m \x1b[38;2;200;100;50mink\x1b[m \x1b[7mreversed\x1b[27m back\r\n" +
@@ -33,8 +23,6 @@ const fastPathContent = "plain default\r\n" +
 	"\x1b[7m\x1b[K\x1b[m\r\n" +
 	"last line"
 
-// fastPathOS is a lone pane filling the region, which is the shape the fast
-// path takes, holding fastPathContent.
 func fastPathOS(t testing.TB, dockPos string) (*OS, *terminal.Window) {
 	t.Helper()
 	m := keystrokeOS(t, 1, 80, 24)
@@ -49,8 +37,6 @@ func fastPathOS(t testing.TB, dockPos string) (*OS, *terminal.Window) {
 	return m, win
 }
 
-// sessionBorderOn gives the session a colour and turns on appearance
-// session_border, so every border carries the session's tint.
 func sessionBorderOn(m *OS, _ *terminal.Window) {
 	m.Settings.SessionBorder, m.Settings.SessionColors = true, true
 	m.SessionName = "work"
@@ -58,16 +44,12 @@ func sessionBorderOn(m *OS, _ *terminal.Window) {
 	m.sessionColors = map[string]Accent{"work": a}
 }
 
-// hostCells parses a frame the way the host's renderer does.
 func hostCells(frame string, w, h int) uv.ScreenBuffer {
 	buf := uv.NewScreenBuffer(w, h)
 	uv.NewStyledString(frame).Draw(buf, buf.Bounds())
 	return buf
 }
 
-// fastAndComposed renders the current state once through the fast path and
-// once through the compositor, and returns the two frames as the host parses
-// them.
 func fastAndComposed(t *testing.T, m *OS, wantFast bool) (fast, composed uv.ScreenBuffer) {
 	t.Helper()
 	if _, ok := m.fullscreenFastWindow(); ok != wantFast {
@@ -88,9 +70,6 @@ func fastAndComposed(t *testing.T, m *OS, wantFast bool) (fast, composed uv.Scre
 	return hostCells(fastFrame, rw, rh), hostCells(composedFrame, rw, rh)
 }
 
-// sameCells compares two parsed frames cell by cell and reports the first
-// few differences. It returns how many cells carry the ground bg, so a case
-// can tell that it painted something.
 func sameCells(t *testing.T, fast, composed uv.ScreenBuffer, bg color.Color) int {
 	t.Helper()
 	painted, bad := 0, 0
@@ -131,7 +110,7 @@ func TestFastPathPaintMatchesTheCompositor(t *testing.T) {
 		name  string
 		theme string
 		set   func(s *config.Settings)
-		bg    color.Color // a ground the frame has to show somewhere, nil for none
+		bg    color.Color
 	}{
 		{name: "off", set: func(*config.Settings) {}},
 		{name: "all colour", set: func(s *config.Settings) { s.Background = surfaceHex }, bg: surfaceRGBA},
@@ -162,8 +141,6 @@ func TestFastPathPaintMatchesTheCompositor(t *testing.T) {
 			m.Mode = WindowManagementMode
 		}},
 		{name: "unfocused", dock: "bottom", wantFast: true, prepare: func(m *OS, _ *terminal.Window) {
-			// The emulator's own Render, and the lipgloss border box around it
-			// when its rows are ragged.
 			m.FocusedWindow = -1
 		}},
 		{name: "session border, focused", dock: "bottom", wantFast: true, prepare: sessionBorderOn},
@@ -307,8 +284,6 @@ func TestFastPainterFollowsThePen(t *testing.T) {
 			p.parser = ansi.NewParser()
 			p.fgNil, p.bgNil = true, true
 			p.block(src, g)
-			// No piece prints a space, so a cell holding one is a cell the
-			// text never reached, which the paint must leave alone.
 			plain := hostCells(src, 20, 8)
 			painted := hostCells(string(p.out), 20, 8)
 			for y := range 8 {

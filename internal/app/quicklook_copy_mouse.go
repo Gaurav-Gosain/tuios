@@ -6,19 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The mouse over quick look. The panel is on top, so the pointer over it is
-// the panel's: no hover, focus or motion reaches what is under it, and a
-// press on it keeps its release.
-//
-// A drag over the text or the Markdown selects, as in a pane: the first move
-// starts copy mode, implicit, over the rows as the panel draws them, and the
-// release copies with appearance.copy_on_select. A double click selects a
-// word and a triple click a line. The next plain click or key ends the
-// selection. In copy mode the copy_mode key started, a click moves the
-// cursor. The wheel scrolls the text and copy mode stays on. internal/input
-// moves the cursor (copymode_grid_mouse.go); this file maps the screen to the
-// text.
-
 // QuickLookMouse is the press on the text, nil while quick look is closed.
 func (m *OS) QuickLookMouse() *CopyMouseGesture {
 	if !m.quickLook.open {
@@ -36,7 +23,6 @@ func (m *OS) QuickLookCopyCell(x, y int) (cx, cy, rows int, ok bool) {
 		if cm, _ := m.QuickLookCopy(); cm == nil {
 			return 0, 0, 0, false
 		}
-		// The body starts one cell in from the panel's border.
 		return x - (ql.box.X0 + 1 + q.x0), y - (ql.box.Y0 + 1 + q.y0), q.h, true
 	}
 	if !ql.open || ql.textW <= 0 {
@@ -91,7 +77,6 @@ func (m *OS) QuickLookCopyFinish(text string) tea.Cmd {
 	return tea.Batch(m.CopyToClipboard(text), m.SaveToPasteBuffers(text))
 }
 
-// quickLookCopyWheel scrolls copy mode's view by delta rows, up negative.
 func (m *OS) quickLookCopyWheel(delta int) bool {
 	q := m.quickLook.copy
 	if cm, _ := m.QuickLookCopy(); cm == nil || q == nil {

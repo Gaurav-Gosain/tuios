@@ -9,24 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
-// The launcher is its own overlay rather than a tier inside the command
-// palette, because the two lists answer different questions.
-//
-// A palette row is a verb tuios performs: Split Vertical, Toggle Zoom, Switch
-// Session. A launcher row is a thing you start. Ranking them against each other
-// means one query straddles both ideas, and the palette had to carry a constant
-// (paletteRunPenalty) whose whole job was to stop "new" from offering newgrp
-// above New Window. That constant was the tell: two lists that need a handicap
-// to share a box are two lists.
-//
-// The split also buys the rows things the palette could not give them. Every
-// program carried the same "[Run]" tag, which said nothing; the count in the
-// footer said "N of M commands" about a few thousand executables; and a program
-// wants a second verb (type it out, below) that no command row has any use for.
-//
-// The palette keeps one row that opens this overlay, so nothing is lost for a
-// user who only remembers one box.
-
 // LauncherItem is one row: a program, and where the live query matched its
 // name.
 type LauncherItem struct {
@@ -74,19 +56,9 @@ func (m *OS) CloseLauncher() {
 	m.ShowLauncher = false
 	m.launcherList.Reset()
 	m.LauncherItems = nil
-	// A drawn icon outlives the panel that placed it, so it is taken down here
-	// rather than left for the next frame to paint over.
 	m.clearLauncherIcons()
 }
 
-// rebuildLauncherItems builds one row per known program, in the order an empty
-// query shows them. Called when the launcher opens and when a scan lands, never
-// per frame.
-//
-// The history ordering is applied here rather than in the filter because the
-// filter runs on every frame the launcher is drawn and this list is several
-// thousand rows long. Launch history only moves when something is launched,
-// which closes the launcher, so once per open is exactly often enough.
 func (m *OS) rebuildLauncherItems() {
 	entries := m.knownPathApps()
 	items := make([]LauncherItem, 0, len(entries))
@@ -96,8 +68,6 @@ func (m *OS) rebuildLauncherItems() {
 	m.LauncherItems = orderByHistory(items, m.launchHistory)
 }
 
-// launcherItems returns the rows, building them if this OS reached the list
-// without opening the overlay.
 func (m *OS) launcherItems() []LauncherItem {
 	if m.LauncherItems == nil {
 		m.rebuildLauncherItems()
@@ -119,10 +89,6 @@ func (m *OS) launcherItems() []LauncherItem {
 // find Code without either of them outranking a program actually called that.
 func FilterLauncherItems(items []LauncherItem, query string, hist *applist.Frecency) []LauncherItem {
 	if query == "" {
-		// With nothing typed the whole list is on offer and it is already in the
-		// order history put it in (see rebuildLauncherItems). Returning it as it
-		// stands is what keeps drawing an unfiltered launcher free of a pass
-		// over several thousand rows per frame.
 		return items
 	}
 	var m fuzzy.Matcher
@@ -159,24 +125,14 @@ func FilterLauncherItems(items []LauncherItem, query string, hist *applist.Frece
 		if named[i] || !matchesAlias(item.Entry, query) {
 			continue
 		}
-		// The positions index the label, and this row did not match its label,
-		// so there is nothing to highlight.
 		item.Match = nil
 		out = append(out, item)
 	}
 	return out
 }
 
-// maxAliasHits caps the tail of rows admitted on a keyword rather than a name.
-//
-// A short query is a subsequence of a great many keywords ("Internet", "WWW",
-// "Utility"), and those rows arrive unranked behind every scored hit. Without a
-// cap, typing two characters buries the answer under a hundred entries that
-// merely contain those letters somewhere in their metadata, and the count in
-// the footer stops meaning anything.
 const maxAliasHits = 12
 
-// matchesAlias reports whether query matches any of an entry's other names.
 func matchesAlias(e applist.Entry, query string) bool {
 	for _, a := range e.Aliases() {
 		if fuzzy.Match(query, a) {
@@ -186,11 +142,6 @@ func matchesAlias(e applist.Entry, query string) bool {
 	return false
 }
 
-// orderByHistory puts the programs with launch history in front, strongest
-// first, and leaves everything else in the order the sources listed them.
-//
-// This is what an empty launcher should open on: the things this person
-// actually runs, rather than the alphabetical head of /usr/bin.
 func orderByHistory(items []LauncherItem, hist *applist.Frecency) []LauncherItem {
 	if hist == nil {
 		return items
@@ -206,13 +157,10 @@ func orderByHistory(items []LauncherItem, hist *applist.Frecency) []LauncherItem
 	if len(known) == 0 {
 		return items
 	}
-	// A stable sort keeps source order between programs with equal history, so
-	// the list does not shuffle under the cursor.
 	stableSortByBoost(known, hist)
 	return append(known, rest...)
 }
 
-// filteredLauncherItems returns the rows matching the current query.
 func (m *OS) filteredLauncherItems() []LauncherItem {
 	return FilterLauncherItems(m.launcherItems(), m.launcherList.Query.String(), m.launchHistory)
 }
@@ -223,13 +171,6 @@ func (m *OS) LauncherPageRows() int {
 	return max(visible, 1)
 }
 
-// launcherPicker is the launcher's list behaviour. See list_picker.go. Enter
-// execs the program as the new pane's process, and Tab opens a shell pane with
-// the command line waiting to be added to: Tab rather than a modifier on Enter,
-// because a modified Enter is not expressible under the legacy keyboard
-// encoding, and Tab already means "give me the rest of this to finish". A
-// move or a refilter changes which rows are on screen, so it asks for their
-// icons.
 func launcherPicker() *listPicker {
 	return &listPicker{
 		kind:  "launcher",
@@ -257,7 +198,6 @@ func launcherPicker() *listPicker {
 	}
 }
 
-// launcherSelection returns the entry under the cursor.
 func (m *OS) launcherSelection(idx int) (applist.Entry, bool) {
 	filtered := m.filteredLauncherItems()
 	if idx < 0 || idx >= len(filtered) {
@@ -266,20 +206,6 @@ func (m *OS) launcherSelection(idx int) (applist.Entry, bool) {
 	return filtered[idx].Entry, true
 }
 
-// launcherTarget resolves the row a verb was pressed on and closes the
-// launcher, or explains why there is nothing to act on and leaves it up.
-//
-// Closing on no selection is what made both verbs look broken. The list is
-// filled by a scan that runs off the Update goroutine, so on the first open of
-// a session there is nothing selected yet however precisely the query was
-// typed; pressing the key then threw the query away, dismissed the panel and
-// said nothing, which reads as the key not working. The wait it needs is the
-// scan, not the pane's shell.
-//
-// Staying open is the whole repair: the query survives, the rows arrive behind
-// it, and the same keypress works a moment later. The notification is there
-// because a key that does nothing visible is indistinguishable from a key that
-// is not bound.
 func (m *OS) launcherTarget(idx int) (applist.Entry, bool) {
 	e, ok := m.launcherSelection(idx)
 	if ok {
@@ -290,14 +216,6 @@ func (m *OS) launcherTarget(idx int) (applist.Entry, bool) {
 	return applist.Entry{}, false
 }
 
-// launcherEmptyReason says why there is nothing to act on, which is two
-// different things: the scan has not landed, or it has and nothing matches.
-//
-// The wording deliberately does not repeat the panel's own empty line. A
-// notification that reads the same as text already on screen cannot be asserted
-// on, and a test that waits for it passes against a build that never raised it.
-// Saying "no program matches" before the first scan is simply wrong, and it is
-// the answer that would send someone looking for a program they do have.
 func (m *OS) launcherEmptyReason() string {
 	if len(m.LauncherItems) == 0 {
 		return "Still finding the programs on this machine"

@@ -12,8 +12,6 @@ import (
 func searchOS(t *testing.T) *OS {
 	t.Helper()
 	useTempConfig(t)
-	// The session's pane geometry is seeded from the config the way the
-	// factory seeds it, so the rows that show it read the default too.
 	m := &OS{
 		Settings: config.Global, Width: 120, Height: 44, UserConfig: config.DefaultConfig(),
 		MasterRatio: config.Global.MasterRatioFraction(), ScrollColumnWidth: config.Global.ScrollColumnWidth,
@@ -23,7 +21,6 @@ func searchOS(t *testing.T) *OS {
 	return m
 }
 
-// searchFor opens the search line with query and returns the rows found.
 func searchFor(m *OS, query string) ([]settingItem, []settingsHit) {
 	m.SettingsSearchStart("")
 	m.SettingsSearchSetQuery(query)

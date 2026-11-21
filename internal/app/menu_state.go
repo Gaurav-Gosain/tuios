@@ -6,15 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The leader and its menus: the one writer of PrefixActive, SubMenu, Menu and
-// LastPrefixTime. MenuState (lock_mode.go) names the three that say which
-// menu waits for a key; LastPrefixTime is when the leader was armed, which
-// the which-key panel waits from. Each change below writes all of them, so a
-// menu cannot be left open behind a closed leader (the leader twice once
-// cleared PrefixActive alone and left the workspace menu taking the next
-// key). internal/lint holds every other write to them out of the app
-// (TestOnlyMenuStateWritesTheLeader).
-
 // ArmLeader opens the leader menu, with no sub-menu or declared menu, and
 // starts the which-key wait.
 func (m *OS) ArmLeader() {
@@ -65,8 +56,6 @@ func (m *OS) SetMenuState(s MenuState) {
 	m.setMenus(s, false, "lock mode")
 }
 
-// setMenus writes the menu state, and the which-key start when arm says so.
-// A change is logged at verbose level.
 func (m *OS) setMenus(s MenuState, arm bool, cause string) {
 	if was := m.MenuState(); was != s && verboseLog() {
 		m.LogInfo("menu: %s to %s (%s)", menuStateName(was), menuStateName(s), cause)
@@ -77,7 +66,6 @@ func (m *OS) setMenus(s MenuState, arm bool, cause string) {
 	}
 }
 
-// menuStateName is s as the verbose log says it.
 func menuStateName(s MenuState) string {
 	switch {
 	case s.Menu != "":

@@ -8,15 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/scrollback"
 )
 
-// What the preview pane draws over the output it shows.
-//
-// Three faults were visible in one screenshot: a line selection that stopped
-// at the last character of each line, so a block of selected text had a ragged
-// right edge and did not read as a selection; a search match drawn with its
-// text in its own background colour, so the thing you searched for was
-// invisible inside a solid block; and a panel fill that survived only where
-// nothing had been drawn.
-
 func vimLineState(lines []string) *scrollback.VimState {
 	return &scrollback.VimState{Lines: lines}
 }
@@ -31,8 +22,6 @@ func TestASearchMatchIsReadable(t *testing.T) {
 
 	vim := vimLineState([]string{"find me here"})
 	vim.Search.Set("me")
-	// The cursor is parked off this line, so the only mark on it is the
-	// match: a cursor cell would split the run and make the check vacuous.
 	vim.CursorY = 5
 	vim.SearchMatches = []scrollback.VimSearchMatch{{Line: 0, StartX: 5, EndX: 7}}
 
@@ -40,11 +29,9 @@ func TestASearchMatchIsReadable(t *testing.T) {
 		lipgloss.Color("#112233"), lipgloss.Color("#cccccc"), lipgloss.Color("#445566"), lipgloss.Color("#cccccc"), searchBg, searchFg,
 		lipgloss.Color("#cccccc"))
 
-	// The match has to be painted at all, or this proves nothing.
 	if !strings.Contains(out, "48;2;136;119;34") {
 		t.Fatal("ASSERTION: the match is not painted, so there is nothing to read")
 	}
-	// And its text must not be its own background colour.
 	if strings.Contains(out, "38;2;136;119;34;48;2;136;119;34") {
 		t.Error("the match is drawn with its text in its own background colour, so it is invisible")
 	}

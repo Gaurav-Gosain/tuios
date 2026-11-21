@@ -55,7 +55,6 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 		return
 	}
 
-	// Check dock area
 	topMargin := m.viewReserve().Top
 	if m.Settings.DockbarPosition == "top" && y < topMargin {
 		m.SetPointerShape(PointerDefault)
@@ -66,18 +65,12 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 		return
 	}
 
-	// In tiled mode with shared borders, check separator lines
 	if m.panesBorderless() {
-		// The same lines the separator overlay draws, so the resize cursor is
-		// only offered over a divider that is really there.
 		for _, s := range m.separatorSplits() {
 			if s.Vertical && x == s.Pos && y >= s.From && y <= s.To {
 				m.SetPointerShape(PointerEWResize)
 				return
 			}
-			// The strip's horizontal dividers stand between windows stacked
-			// in one column, which always share its height evenly: a drag
-			// there does nothing, so it offers no resize pointer.
 			if !s.Vertical && !m.UseScrollingLayout && y == s.Pos && x >= s.From && x <= s.To {
 				m.SetPointerShape(PointerNSResize)
 				return
@@ -85,7 +78,6 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 		}
 	}
 
-	// Find window under cursor (topmost by Z)
 	topIdx := -1
 	topZ := -1
 	for i, win := range m.Windows {
@@ -107,9 +99,6 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 
 	win := m.Windows[topIdx]
 
-	// A pane with no border of its own has no edge to offer, whatever the
-	// setting says: BorderOffset is the pane's own answer, and the divider
-	// between borderless panes was already handled above.
 	borderOff := win.BorderOffset()
 	if borderOff == 0 {
 		m.SetPointerShape(PointerDefault)
@@ -121,7 +110,6 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 	onTop := y == win.Y
 	onBottom := y == win.Y+win.Height-1
 
-	// Corners → diagonal resize
 	if (onLeft && onTop) || (onRight && onBottom) {
 		m.SetPointerShape(PointerNWSEResize)
 		return
@@ -131,19 +119,16 @@ func (m *OS) UpdatePointerForPosition(x, y int) {
 		return
 	}
 
-	// Vertical edges → horizontal resize
 	if onLeft || onRight {
 		m.SetPointerShape(PointerEWResize)
 		return
 	}
 
-	// Top border → grab (title bar)
 	if onTop {
 		m.SetPointerShape(PointerGrab)
 		return
 	}
 
-	// Bottom border → vertical resize
 	if onBottom {
 		m.SetPointerShape(PointerNSResize)
 		return

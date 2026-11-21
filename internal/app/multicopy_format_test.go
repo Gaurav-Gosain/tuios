@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The three multi copy formats, held to exact output, and the untrusted pane
-// title held to not being able to change the shape of any of them.
-
 var multiCopyTestPanes = []MultiCopyPane{
 	{Index: 0, WindowID: "w-a", Title: "root@node-01", Lines: []string{"headnode\t0002c6a6\t20260522T154557Z"}},
 	{Index: 3, WindowID: "w-b", Title: "", Lines: []string{"ip  0  IP", "icmp  1  ICMP"}},
@@ -22,7 +19,6 @@ func TestFormatMultiCopyPlain(t *testing.T) {
 	if got != want {
 		t.Errorf("plain =\n%q\nwant\n%q", got, want)
 	}
-	// An unknown format is plain, never an empty clipboard.
 	if FormatMultiCopy("yaml", multiCopyTestPanes) != want {
 		t.Error("an unknown format did not fall back to plain")
 	}
@@ -68,12 +64,10 @@ func TestFormatMultiCopyJSON(t *testing.T) {
 	if len(lines) != 1 || lines[0] != "headnode\t0002c6a6\t20260522T154557Z" {
 		t.Errorf("json lines = %v", lines)
 	}
-	// "<" is text here, not HTML.
 	lt := FormatMultiCopy(config.MultiCopyFormatJSON, []MultiCopyPane{{Lines: []string{"a<b>&c"}}})
 	if !strings.Contains(lt, `"a<b>&c"`) {
 		t.Errorf("json escaped HTML characters: %s", lt)
 	}
-	// No panes is an empty array, not null.
 	if strings.TrimSpace(FormatMultiCopy(config.MultiCopyFormatJSON, nil)) != "[]" {
 		t.Error("json with no panes is not []")
 	}

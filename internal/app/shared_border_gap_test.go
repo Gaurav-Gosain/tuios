@@ -40,9 +40,6 @@ func TestSharedBordersKeepEveryPanesFirstColumn(t *testing.T) {
 		for _, n := range []int{2, 3, 4, 5, 7} {
 			t.Run(fmt.Sprintf("%s/%d-panes", mode, n), func(t *testing.T) {
 				m := gapTestOS(t, n)
-				// Both modes get the BSP tree built first: in the real app the
-				// tree is there from BSP being the default, and it stays behind
-				// when the user switches to master-stack.
 				m.UseBSPLayout = true
 				m.TileAllWindows()
 				m.ApplyLayoutModeName(mode)

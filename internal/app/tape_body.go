@@ -7,41 +7,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/tape"
 )
 
-// A project tape body is deliberately NOT the full recorder tape language. The
-// recorder grammar is one keystroke-command per line and does not cleanly
-// express layout construction: `Type "x" Enter` drops the trailing Enter,
-// `Split vertical` drops its direction, and `Focus "name"` maps to a command the
-// executor does not implement. Rather than bend that grammar (and its fuzz
-// tests) to a different job, a project tape body is compiled by the small,
-// explicit interpreter below into the exact executor commands that do work.
-//
-// Supported body commands (one per line, keyword case-insensitive):
-//
-//	Type "text" [Enter]       type text into the focused pane, optional submit
-//	Run "cmd"                 shorthand for Type "cmd" Enter
-//	Enter                     submit a line in the focused pane
-//	Split <dir>               split the focused pane: vertical, horizontal (v/h ok),
-//	                          or the side the new pane takes: left, right, up, down
-//	NewWindow ["name"]        create a new tiled pane
-//	RenameWindow "name"       name the focused pane (Rename is an alias)
-//	Focus "name"              focus a pane by name
-//	Sleep <duration>          pause (e.g. 500ms, 1s)
-//	EnableTiling|DisableTiling toggle tiling
-//
-// Blank lines and lines beginning with # are ignored, as is any unrecognized
-// command (robust to hostile or future input).
-
-// tapeStructuralSettle is the pause inserted after a command that creates a pane
-// (Split, NewWindow). In a daemon session the pane is created asynchronously
-// (the daemon makes it, starts its shell, and pushes it back), so the next
-// command waits this out both for the pane to exist and for its shell to be
-// ready to accept input, before typing into it.
 const tapeStructuralSettle = 900 * time.Millisecond
 
-// compileProjectBody turns a project tape body into the executor command list
-// that builds its layout. It emits a settle Sleep after every pane-creating
-// command so the interactive player, which runs one command per tick, does not
-// race the daemon's asynchronous window creation.
 func compileProjectBody(body string) []tape.Command {
 	var cmds []tape.Command
 	settle := tape.Command{Type: tape.CommandTypeSleep, Delay: tapeStructuralSettle}
@@ -100,14 +67,11 @@ func compileProjectBody(body string) []tape.Command {
 		case "disabletiling":
 			cmds = append(cmds, tape.Command{Type: tape.CommandTypeDisableTiling})
 		default:
-			// A comment (# ...) or any unrecognized command: skip it.
 		}
 	}
 	return cmds
 }
 
-// normalizeSplitDir folds the accepted split-direction spellings to the ones
-// the executor understands: the two axes, or the side the new pane takes.
 func normalizeSplitDir(s string) string {
 	switch d := strings.ToLower(strings.Trim(s, `"`)); d {
 	case "h", "horizontal":
@@ -119,10 +83,6 @@ func normalizeSplitDir(s string) string {
 	}
 }
 
-// tokenizeTapeLine splits one body line into a keyword and its arguments. A
-// double-quoted run is one token with the quotes stripped (\" is a literal
-// quote); everything else is whitespace-delimited. A leading # comments the line
-// out (returns no tokens).
 func tokenizeTapeLine(line string) []string {
 	line = strings.TrimSpace(line)
 	if line == "" || strings.HasPrefix(line, "#") {
@@ -150,7 +110,6 @@ func tokenizeTapeLine(line string) []string {
 			escaped = true
 		case c == '"':
 			if inQuote {
-				// End of a quoted token; keep it even if empty.
 				toks = append(toks, b.String())
 				b.Reset()
 				inQuote = false

@@ -8,8 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// benchOS builds an OS with n tiled windows filling a 207x55 viewport, each
-// with painted content, which is the state a frame is composed from.
 func benchOS(tb testing.TB, n int) *OS {
 	tb.Helper()
 
@@ -24,8 +22,6 @@ func benchOS(tb testing.TB, n int) *OS {
 		Height:           realRows,
 	}
 
-	// Tile the windows in a grid so each one is a realistic fraction of the
-	// screen rather than n copies of the whole thing.
 	cols := 1
 	for cols*cols < n {
 		cols++
@@ -73,7 +69,6 @@ func BenchmarkCompositorGetCanvas(b *testing.B) {
 
 		b.Run(fmt.Sprintf("windows-%d/one-dirty", n), func(b *testing.B) {
 			m := benchOS(b, n)
-			// Prime every layer so the idle windows have a cache to hold.
 			for _, w := range m.Windows {
 				w.MarkContentDirty()
 			}

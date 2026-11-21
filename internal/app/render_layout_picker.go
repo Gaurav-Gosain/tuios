@@ -10,7 +10,6 @@ import (
 
 const layoutPickerWidth = 58
 
-// renderLayoutPicker renders the layout save/load overlay on the shared grammar.
 func (m *OS) renderLayoutPicker() (string, overlay.Geometry, []overlayRowHit) {
 	if m.LayoutPickerMode == "save" {
 		pal := m.overlayUI()
@@ -57,7 +56,6 @@ func (m *OS) renderLayoutPicker() (string, overlay.Geometry, []overlayRowHit) {
 			if item.AutoTiling {
 				detail += " · tiling"
 			}
-			// On a narrow panel the detail is dropped before the name is.
 			if width-lipgloss.Width(detail)-6 < 12 {
 				detail = fmt.Sprintf("%d", len(item.Windows))
 			}

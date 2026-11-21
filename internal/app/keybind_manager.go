@@ -23,45 +23,19 @@ const (
 // KeybindTabNames are the tab labels, indexed by the constants above.
 var KeybindTabNames = []string{"Bindings", "Conflicts", "Guests", "Record"}
 
-// keybindManager is the overlay's state. It is a field rather than a set of
-// bools on OS because the recorder alone needs five of them, and a recorder
-// half-mixed into the model is how the arm flag ends up surviving a close.
 type keybindManager struct {
-	// report is the analysis, built once when the overlay opens. Rebuilding it
-	// per frame would re-read the pane's foreground process on the render path,
-	// which is the one thing this must not do.
 	report config.KeybindReport
 
-	// lists is each tab's cursor and window, so a tab keeps its place when
-	// the person comes back to it, as the theme editor's tabs do. The
-	// Bindings tab's Query is its filter.
-	lists [keybindTabCount]listnav.State
-	// filtered memoises FilteredKeybindRows against filteredFor, the query it
-	// was computed for. Invalidated by setting filtered to nil, which is what
-	// every path that changes the query or the report does.
+	lists       [keybindTabCount]listnav.State
 	filtered    []config.Binding
 	filteredFor string
 
-	// armed is whether the next key press is data rather than a command. It is
-	// one-shot: capturing a key disarms it, so there is always a key that means
-	// "stop capturing" and it is the next one.
-	armed bool
-	// captured is the last key recorded, and fate is what tuios does with it.
-	captured string
-	fate     config.KeyFate
-	// bindSection and bindAction are what a captured key would be bound to.
-	//
-	// The target is chosen before the key is pressed, not after. Recording a key
-	// and then asking which of two hundred actions to attach it to needs a
-	// second picker and gives the recorder two jobs; arming from a selected row
-	// on the Bindings tab means the answer is already on screen. Arming from the
-	// Record tab leaves them empty, which is the inspect-only case: press a key,
-	// find out what it does, bind nothing.
+	armed       bool
+	captured    string
+	fate        config.KeyFate
 	bindSection string
 	bindAction  string
-	// bound is the key most recently written to the config, so the recorder can
-	// say the write happened rather than looking unchanged.
-	bound string
+	bound       string
 }
 
 // OpenKeybindManager builds the report for the focused pane and shows the
@@ -93,12 +67,6 @@ func (m *OS) CloseKeybindManager() {
 	m.keybinds = keybindManager{}
 }
 
-// buildKeybindReport gathers what tuios can observe about the focused pane and
-// hands it to the analysis.
-//
-// Every field is optional and an unavailable one is left zero rather than
-// guessed: PaneFacts is written so that a report built with nothing known says
-// nothing about the pane instead of saying the pane is empty.
 func (m *OS) buildKeybindReport() config.KeybindReport {
 	if m.KeybindRegistry == nil {
 		return config.KeybindReport{}
@@ -107,11 +75,6 @@ func (m *OS) buildKeybindReport() config.KeybindReport {
 	if w := m.GetFocusedWindow(); w != nil {
 		facts.Command = w.ForegroundCommand()
 		facts.HasForeground = w.HasForegroundProcess()
-		// A daemon-backed pane has no local PTY to ask, but the daemon's own
-		// poll already shipped the same observation on the wire
-		// (WindowState.ForegroundCmd, empty at a shell prompt). Reading it
-		// keeps the observed tier alive for attached, SSH and web clients,
-		// at most one poll interval stale.
 		if facts.Command == "" && w.ForegroundCmd != "" {
 			facts.Command = w.ForegroundCmd
 			facts.HasForeground = true
@@ -130,7 +93,6 @@ func (m *OS) KeybindReport() config.KeybindReport { return m.keybinds.report }
 // KeybindQuery is the current filter text.
 func (m *OS) KeybindQuery() string { return m.keybinds.lists[KeybindTabBindings].Query.String() }
 
-// keybindList is the list state of the tab that shows.
 func (m *OS) keybindList() *listnav.State { return &m.keybinds.lists[m.KeybindTab] }
 
 // KeybindArmed is whether the recorder is waiting for a key.
@@ -164,7 +126,6 @@ func (m *OS) KeybindSelectedBinding() (config.Binding, bool) {
 	return rows[i], true
 }
 
-// keybindRowCount is how many rows the active tab has after filtering.
 func (m *OS) keybindRowCount() int {
 	switch m.KeybindTab {
 	case KeybindTabBindings:
@@ -194,12 +155,6 @@ func (m *OS) FilteredKeybindRows() []config.Binding {
 	return m.keybinds.filtered
 }
 
-// filterKeybindRows does the matching.
-//
-// The query runs against the chord, the action, its description and the scope
-// joined into one candidate, so "close" finds the action and "ctrl+b" finds the
-// chord without the user having to know which field they are searching. Fuzzy
-// rather than substring, so it behaves like the palette and the theme picker.
 func (m *OS) filterKeybindRows(q string) []config.Binding {
 	all := m.keybinds.report.Bindings
 	if q == "" {
@@ -212,8 +167,6 @@ func (m *OS) filterKeybindRows(q string) []config.Binding {
 	hits := fuzzy.Filter(q, hay)
 	out := make([]config.Binding, 0, len(hits))
 	for _, h := range hits {
-		// Hit.Index is the candidate's position in the input, so the binding it
-		// came from is a direct lookup rather than a search back through hay.
 		if h.Index >= 0 && h.Index < len(all) {
 			out = append(out, all[h.Index])
 		}
@@ -244,8 +197,6 @@ func (m *OS) KeybindSetTab(tab int) {
 		return
 	}
 	m.KeybindTab = tab
-	// Leaving the Record tab disarms: an armed recorder that survived a tab
-	// switch would eat the next keystroke somewhere it is not being shown.
 	if tab != KeybindTabRecord {
 		m.keybinds.armed = false
 	}
@@ -278,7 +229,6 @@ func (m *OS) KeybindQueryPaste(s string) {
 	}
 }
 
-// keybindRefiltered puts the list back at the top after the filter changed.
 func (m *OS) keybindRefiltered() {
 	m.keybinds.filtered = nil
 	m.keybinds.lists[KeybindTabBindings].Refiltered(0)
@@ -332,13 +282,8 @@ func (m *OS) KeybindCommitBinding() tea.Cmd {
 	if target == nil {
 		return nil
 	}
-	// Appended rather than replacing, so recording a second key for an action
-	// adds an alternative instead of silently dropping the one that was there.
 	for _, existing := range target[action] {
 		if config.SameKey(existing, key) {
-			// An "info" with no duration never reaches the screen at all
-			// (notificationLifetime drops it), so this said nothing. It is a
-			// refusal, which is a warning.
 			m.ShowNotification(key+" is already bound to "+action, "warning", 0)
 			return nil
 		}

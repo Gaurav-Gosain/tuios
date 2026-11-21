@@ -53,8 +53,6 @@ func TestDisplayRenameLeavesTheIdentityKeysAlone(t *testing.T) {
 		t.Fatalf("ID = %q, want the identity name %q: renaming the identity orphans the session's persisted state", after.ID, "work")
 	}
 
-	// The rail's own row targets are the other half of the split: a click or an
-	// enter has to address the session the daemon knows, whatever the row says.
 	withSidebar(t, true, "left", config.SidebarDefaultWidth)
 	m.Settings = config.Global
 	m.Width, m.Height = 120, 30
@@ -73,8 +71,6 @@ func TestDisplayRenameLeavesTheIdentityKeysAlone(t *testing.T) {
 		t.Error("no session row was drawn")
 	}
 
-	// The rail's drag order is keyed on the identity too, and it is persisted,
-	// so a miss here corrupts sidebar.json rather than just the frame.
 	inputs := []sessiontree.SessionInput{
 		{Name: "work", DisplayName: "Payments API"},
 		{Name: "other"},

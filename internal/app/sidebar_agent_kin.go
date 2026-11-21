@@ -8,30 +8,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The children's headline: one line under a parent agent's row that says how
-// its child agents are doing, "4 agents · 1 needs you · 2 working · 1 done",
-// and folds their rows away when the person shuts it.
-//
-// It counts the agents other agents started (the parent link, see
-// sidebar_agent_nest.go), every level under the parent, since those are the
-// rows the fold hides. A harness's own subagents are left out: they have a
-// heading and a count of their own (subagents.go), in their own words (run,
-// done, failed), and a pane at rest with subagents at work already reads
-// "waiting". Counting them here too would say the same work twice.
-//
-// Everything is read from the rows the section already built: no verb, no
-// timer. The open or shut state is client memory, kept beside the subagent
-// headings' and under the same generation, so the rail's signature sees a
-// toggle without a field of its own.
-
-// sidebarKinKey is the key a parent's headline keeps its fold under, in the
-// map the subagent headings use. The prefix keeps the two apart.
 func sidebarKinKey(sessionID, windowID string) string {
 	return "kin\x00" + sidebarSubagentKey(sessionID, windowID)
 }
 
-// sidebarKinOpen reports whether a parent's child rows are drawn under its
-// headline. Open until the person shuts it.
 func (m *OS) sidebarKinOpen(sessionID, windowID string) bool {
 	if open, ok := m.sidebarSubagentFold[sidebarKinKey(sessionID, windowID)]; ok {
 		return open
@@ -56,8 +36,6 @@ func (m *OS) SidebarToggleKin(sessionID, windowID string) bool {
 	return true
 }
 
-// sidebarHasKin reports whether an agent pane of this machine is the parent
-// of another agent pane the rail lists.
 func (m *OS) sidebarHasKin(sessionID, windowID string) bool {
 	for _, e := range m.agentEntries(m.BuildSessionTree().Sessions) {
 		if e.Host == "" && e.Parent != nil && e.Parent.Session == sessionID && e.Parent.Window == windowID {
@@ -67,10 +45,6 @@ func (m *OS) sidebarHasKin(sessionID, windowID string) bool {
 	return false
 }
 
-// sidebarKinHeads puts a headline row under each parent row of a nested list
-// (sidebarNestAgents), and leaves out the rows under a shut one. A parent's
-// children are the rows after it with a deeper Nest. A list with no nesting
-// is returned as it is.
 func (m *OS) sidebarKinHeads(agents []sidebarAgentEntry) []sidebarAgentEntry {
 	nested := false
 	for _, e := range agents {
@@ -108,9 +82,6 @@ func (m *OS) sidebarKinHeads(agents []sidebarAgentEntry) []sidebarAgentEntry {
 	return out
 }
 
-// sidebarKinHeadline is the headline of a parent's child rows: how many, then
-// how many are in each state, the ones that want the person first. A state
-// with none is left out.
 func sidebarKinHeadline(kids []sidebarAgentEntry) string {
 	order := []string{"needs_input", "errored", "limit_reached", "working", string(agentStateWaiting), "done", "idle"}
 	counts := make(map[string]int, len(order))
@@ -136,9 +107,6 @@ func sidebarKinHeadline(kids []sidebarAgentEntry) string {
 	return strings.Join(parts, sidebarAgentSep())
 }
 
-// sidebarKinState is the state a child counts under: its display state, with
-// a finished turn counted as done whether or not the person saw it, and
-// anything at rest that is not done counted as idle.
 func sidebarKinState(e sidebarAgentEntry) string {
 	switch s := displayState(e.State, e.DoneSeen, e.Subagents); s {
 	case "needs_input", "errored", "limit_reached", "working", string(agentStateWaiting):
@@ -150,8 +118,6 @@ func sidebarKinState(e sidebarAgentEntry) string {
 	return "idle"
 }
 
-// sidebarKinNames is the second line of a shut headline on a tall section:
-// the names of the agents it holds.
 func sidebarKinNames(kids []sidebarAgentEntry) string {
 	names := make([]string, 0, len(kids))
 	for _, k := range kids {
@@ -160,9 +126,6 @@ func sidebarKinNames(kids []sidebarAgentEntry) string {
 	return strings.Join(names, ", ")
 }
 
-// sidebarKinRow draws a headline line: the fold mark in the children's mark
-// column, then the headline. The second line of a tall section names the
-// children while they are folded away.
 func (m *OS) sidebarKinRow(e sidebarAgentEntry, cw int, pal overlay.Palette, st sidebarRowState, second bool) string {
 	rowBg := sidebarRowBg(st, pal)
 	pad := sidebarStyle(rowBg, nil)

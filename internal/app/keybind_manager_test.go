@@ -6,8 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// keybindOS builds a model with a registry and the overlay open, which is the
-// only state these cases need.
 func keybindOS(t *testing.T) *OS {
 	t.Helper()
 	cfg := config.DefaultConfig()
@@ -41,8 +39,6 @@ func TestBindingTakesEffectWithoutARestart(t *testing.T) {
 	if got := m.KeybindRegistry.Action(config.TableTerminalMode, "ctrl+alt+f9"); got != "terminal_next_window" {
 		t.Errorf("the registry resolves the new key to %q; it was not reloaded", got)
 	}
-	// And the freshly bound key is now in the report's swallow set, because
-	// terminal_mode keys never reach the pane.
 	var swallowed bool
 	for _, s := range m.KeybindReport().Swallowed {
 		if s.Key == "ctrl+alt+f9" {

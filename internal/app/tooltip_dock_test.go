@@ -7,12 +7,9 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// dockTooltipAt hovers a session control and returns the label layer it drew.
-// The delay is faked rather than waited out: the clock is arriving motion, and
-// what is under test is what the frame does once it has elapsed.
 func dockTooltipAt(t *testing.T, m *OS, a DockSessionAction) (*lipgloss.Layer, dockSessionHit) {
 	t.Helper()
-	m.renderDockString() // the rects a hover is tested against are recorded as they are drawn
+	m.renderDockString()
 	for _, h := range m.dockSessionHits {
 		if h.Action != a {
 			continue

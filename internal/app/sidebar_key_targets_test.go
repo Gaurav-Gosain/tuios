@@ -5,14 +5,6 @@ import (
 	"testing"
 )
 
-// The rail's keys act on the row the cursor is on. That was true of rename and
-// accent and untrue of the kill key, which forced the row's kind to session
-// before opening the menu: on a terminal row it opened the session's menu, and
-// on a footer control it opened the attached session's menu. These pin the rule
-// for every key that names a target, so the next one added has a table to fail
-// against.
-
-// railCursorOnto parks the rail cursor on the first nav row of a kind.
 func railCursorOnto(t *testing.T, m *OS, kind sidebarRowKind) {
 	t.Helper()
 	i := m.sidebarFirstRowOfKind(kind)
@@ -31,9 +23,6 @@ func TestRailKillKeyOpensTheCursorRowsMenu(t *testing.T) {
 		wantTarget ContextMenuTarget
 		wantWarn   string
 	}{
-		// "Kill session, go to next" comes first but is dimmed with no daemon
-		// listing behind it, and selectWarn steps over dimmed rows the way the
-		// arrow keys do.
 		{"a session row", sidebarRowSession, CtxTargetDesktop, "Kill session and quit"},
 		{"a terminal row", sidebarRowWindow, CtxTargetPane, "Close pane"},
 		{"an agent row", sidebarRowAgent, CtxTargetPane, "Close pane"},
@@ -55,8 +44,6 @@ func TestRailKillKeyOpensTheCursorRowsMenu(t *testing.T) {
 			if cm.Target != tc.wantTarget {
 				t.Errorf("menu target = %v, want %v for %s", cm.Target, tc.wantTarget, tc.name)
 			}
-			// The menu opens on the row's own destructive action, which is what is
-			// left of the key meaning "kill" once the row picks the menu.
 			if cm.List.Cursor < 0 || cm.List.Cursor >= len(cm.Items) {
 				t.Fatalf("selection %d is off the menu", cm.List.Cursor)
 			}
@@ -66,8 +53,6 @@ func TestRailKillKeyOpensTheCursorRowsMenu(t *testing.T) {
 			if !cm.Items[cm.List.Cursor].Warn {
 				t.Error("the selected row is not the destructive one")
 			}
-			// A pane menu must be about the pane the cursor named, not whichever
-			// one happened to be focused.
 			if tc.wantTarget == CtxTargetPane {
 				if got := m.Windows[cm.WindowIndex].ID; got != row.WindowID {
 					t.Errorf("menu is about pane %s, want the cursor row's %s", got, row.WindowID)

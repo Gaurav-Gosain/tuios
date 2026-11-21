@@ -46,7 +46,6 @@ func TestCloseWorkspaceAsksThenClosesItsPanes(t *testing.T) {
 		t.Fatal("the dialog stayed open")
 	}
 
-	// Cancel closes nothing, and an empty workspace asks nothing.
 	m.CurrentWorkspace = 1
 	m.OpenWorkspaceClose()
 	m.SessionCloseActivate(SessionCloseRowCancel)

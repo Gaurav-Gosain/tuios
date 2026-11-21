@@ -17,63 +17,20 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The scratch terminal, after tmux-floax: one key shows a small layout of
-// panes in a box over the current workspace, and the same key hides it again.
-//
-// A scratch group is a workspace of its own (see session/scratch_workspace.go):
-// its panes are ordinary tiled windows on a workspace numbered from
-// session.ScratchWorkspaceBase up. Showing the group makes that workspace the
-// current one on this client, with the workspace the user left drawn under
-// it (the backdrop) and the pane region cut down to the scratch box
-// (scratchRegion). Hiding the group goes back. So everything that works on the
-// current workspace works inside the scratch with no code of its own: split,
-// focus movement, resize, zoom, close, multifocus, the BSP tree and its sync,
-// layout save and the daemon's restore. And a hidden group is simply a
-// workspace nobody is on, which every list, the dock, the renderer, tiling and
-// focus already leave alone.
-//
-// Each group has its own workspace, so each [[keybindings.command]] entry of
-// type scratch keeps its own layout. One group is on the screen at a time: a
-// show from inside another group switches straight to the new one.
-//
-// The session's current workspace stays the one the user left: this client
-// sends that one (BuildSessionState), and the focus on a scratch pane is what
-// tells every client to show the group (syncScratchView).
-//
-// When the last pane of a group closes, the group ends and the view goes
-// back. The next press starts a new group.
-//
-// The key reaches this client even while a scratch pane has the focus. A
-// binding is looked up here before a key is passed to the pane.
-
-// scratchName is the name the built-in scratch terminal carries on its border
-// and in session state.
 const scratchName = config.DefaultScratchName
 
-// scratchSpec is one scratch terminal: the built-in one, or a
-// [[keybindings.command]] entry of type scratch. Each has its own pane, found
-// by Name.
 type scratchSpec struct {
-	// Name keys the pane in session state (WindowState.ScratchName).
-	Name string
-	// Title is what the popup border shows.
-	Title string
-	// Command is the argv the pane runs. Empty runs the user's shell.
-	Command []string
-	// Width and Height are the popup's size, as tuios popup takes them.
+	Name          string
+	Title         string
+	Command       []string
 	Width, Height string
 }
 
-// builtinScratch is the scratch terminal toggle_scratch shows: the user's
-// shell, sized by [scratch].
 func (m *OS) builtinScratch() scratchSpec {
 	cfg := m.scratchConfig()
 	return scratchSpec{Name: scratchName, Title: scratchName, Width: cfg.WidthSpec(), Height: cfg.HeightSpec()}
 }
 
-// scratchSpecFor is the spec behind a scratch pane's name, for a show that
-// did not come from its key (a focus jump). ok is false for a name the config
-// no longer has.
 func (m *OS) scratchSpecFor(name string) (scratchSpec, bool) {
 	if name == "" || name == scratchName {
 		return m.builtinScratch(), true
@@ -88,8 +45,6 @@ func (m *OS) scratchSpecFor(name string) (scratchSpec, bool) {
 	return m.commandScratchSpec(c, nil), true
 }
 
-// scratchNameOf is the name a scratch pane is kept under. A pane from before
-// scratch names is the built-in one.
 func scratchNameOf(w *terminal.Window) string {
 	if w.ScratchName == "" {
 		return scratchName
@@ -97,19 +52,10 @@ func scratchNameOf(w *terminal.Window) string {
 	return w.ScratchName
 }
 
-// scratchPendingMax is the backstop on a create that is on its way. A create
-// is on its way from the press until the daemon refuses it or the pane
-// arrives, and a second press in that time does nothing, so a double press
-// cannot ask for two panes. The backstop only matters when the daemon never
-// answers.
 const scratchPendingMax = 10 * time.Second
 
-// scratchPendingHostMax is scratchPendingMax in a session on another machine.
-// The call there can take the link's 30 seconds to open, plus the create's
-// own wait, and a second press inside that time must not ask again.
 const scratchPendingHostMax = 45 * time.Second
 
-// scratchPendingLimit is the backstop in force for this session.
 func (m *OS) scratchPendingLimit() time.Duration {
 	if m.AttachedHost != "" {
 		return scratchPendingHostMax
@@ -127,8 +73,6 @@ type ScratchOpenedMsg struct {
 	Err  error
 }
 
-// scratchStoppedWait is how long the create waits to see whether the command
-// exits at once, as a command that is not installed does.
 const scratchStoppedWait = 1500 * time.Millisecond
 
 // ScratchStoppedError is a scratch command that exited within
@@ -144,10 +88,8 @@ func (e ScratchStoppedError) Error() string {
 	return fmt.Sprintf("stopped with exit code %d", e.Code)
 }
 
-// scratchOpener creates the pane through the daemon. Tests replace it.
 var scratchOpener = openScratchPopup
 
-// scratchConfig is the [scratch] table in force.
 func (m *OS) scratchConfig() config.ScratchConfig {
 	if m.UserConfig == nil {
 		return config.ScratchConfig{}
@@ -155,14 +97,10 @@ func (m *OS) scratchConfig() config.ScratchConfig {
 	return m.UserConfig.Scratch
 }
 
-// isScratch reports whether w is a pane of a scratch group. The mark is the
-// daemon's, so a pane the user opened with the same name is not one.
 func isScratch(w *terminal.Window) bool {
 	return w != nil && w.IsScratch
 }
 
-// scratchIndexNamed is the index of a pane of the group kept under name, or
-// -1. It is the pane the group had the focus on, when the client knows it.
 func (m *OS) scratchIndexNamed(name string) int {
 	m.forgetGoneDeadScratch()
 	first := -1
@@ -180,7 +118,6 @@ func (m *OS) scratchIndexNamed(name string) int {
 	return first
 }
 
-// forgetGoneDeadScratch drops the dead panes the client no longer holds.
 func (m *OS) forgetGoneDeadScratch() {
 	if len(m.deadScratch) == 0 {
 		return
@@ -201,7 +138,6 @@ func (m *OS) InScratchView() bool {
 	return session.IsScratchWorkspace(m.CurrentWorkspace)
 }
 
-// scratchAction is what one press of the toggle does.
 type scratchAction int
 
 const (
@@ -211,18 +147,11 @@ const (
 	scratchHide
 )
 
-// scratchPlan is what one press of the toggle does. It is worked out apart
-// from doing it, so a test can read the decision without a daemon.
 type scratchPlan struct {
 	action scratchAction
-	// index is a pane of the group, for show and hide.
-	index int
+	index  int
 }
 
-// planScratch decides what the toggle does now.
-//
-// The group on the screen means hide. A group that exists means show it. None
-// means create, unless a create is already on its way.
 func (m *OS) planScratch(name string) scratchPlan {
 	if i := m.scratchIndexNamed(name); i >= 0 {
 		if m.Windows[i].Workspace == m.CurrentWorkspace {
@@ -242,8 +171,6 @@ func (m *OS) ToggleScratch() tea.Cmd {
 	return m.toggleScratch(m.builtinScratch())
 }
 
-// toggleScratch is ToggleScratch for any scratch: the built-in one or a
-// command entry's.
 func (m *OS) toggleScratch(spec scratchSpec) tea.Cmd {
 	plan := m.planScratch(spec.Name)
 	switch plan.action {
@@ -260,14 +187,6 @@ func (m *OS) toggleScratch(spec scratchSpec) tea.Cmd {
 	return nil
 }
 
-// rememberScratchReturn records the pane and the mode to go back to when the
-// scratch group hides. The mode is the one chosen beneath any borrow: shown
-// while the hold key is down, the mode in effect is the hold's window
-// management, and hiding the group handed that back to a person who had been
-// typing in a pane.
-//
-// The scratch view is not a lease (mode.go): it lasts across any number of
-// actions and choices, and showing it is itself a choice of terminal mode.
 func (m *OS) rememberScratchReturn() {
 	m.scratchReturnMode = m.chosenMode()
 	m.scratchReturnID = ""
@@ -276,9 +195,6 @@ func (m *OS) rememberScratchReturn() {
 	}
 }
 
-// showScratch shows the group of the pane at i, with the focus on that pane,
-// in terminal mode. The switch into the group's workspace does the rest
-// (enterScratchWorkspace).
 func (m *OS) showScratch(i int) {
 	w := m.Windows[i]
 	if !m.InScratchView() {
@@ -296,8 +212,6 @@ func (m *OS) showScratch(i int) {
 	m.MarkAllDirty()
 }
 
-// leaveScratchView goes back to the workspace the scratch group was shown
-// over, to the pane that had the focus before, in the mode it was in.
 func (m *OS) leaveScratchView() {
 	if !m.InScratchView() {
 		return
@@ -322,9 +236,6 @@ func (m *OS) leaveScratchView() {
 	m.MarkAllDirty()
 }
 
-// enterScratchWorkspace is the bookkeeping of a switch from an ordinary
-// workspace into a scratch one, run by switchToWorkspaceHeld before it
-// retiles: the workspace left is the backdrop, and the group always tiles.
 func (m *OS) enterScratchWorkspace(from, to int) {
 	if !session.IsScratchWorkspace(from) {
 		m.scratchBase = from
@@ -336,15 +247,12 @@ func (m *OS) enterScratchWorkspace(from, to int) {
 	}
 }
 
-// leaveScratchWorkspace is the bookkeeping of a switch from a scratch
-// workspace to an ordinary one: the tiling mode the user left comes back.
 func (m *OS) leaveScratchWorkspace() {
 	m.AutoTiling = m.scratchBaseTiling
 	m.scratchBase = 0
 	m.scratchViewName = ""
 }
 
-// scratchNameOnWorkspace is the name of the group on a scratch workspace.
 func (m *OS) scratchNameOnWorkspace(ws int) (string, bool) {
 	for _, w := range m.Windows {
 		if w.Workspace == ws && isScratch(w) {
@@ -354,8 +262,6 @@ func (m *OS) scratchNameOnWorkspace(ws int) (string, bool) {
 	return "", false
 }
 
-// scratchWorkspaceFree is the lowest scratch workspace no window is on, for a
-// group made without a daemon.
 func (m *OS) scratchWorkspaceFree() int {
 	used := map[int]bool{}
 	for _, w := range m.Windows {
@@ -368,8 +274,6 @@ func (m *OS) scratchWorkspaceFree() int {
 	return ws
 }
 
-// leaveEmptyScratchView goes back when the group on the screen has no pane
-// left: its last pane closed, and the group ended.
 func (m *OS) leaveEmptyScratchView() {
 	if !m.InScratchView() || m.scratchPending != "" {
 		return
@@ -382,10 +286,6 @@ func (m *OS) leaveEmptyScratchView() {
 	m.leaveScratchView()
 }
 
-// syncScratchView shows or leaves a group to match the focus a state push
-// set. The focus is session state and the scratch view is not, so a client
-// that focuses a scratch pane makes every client of the session show its
-// group, and a focus back on an ordinary pane takes every client out.
 func (m *OS) syncScratchView() {
 	if !m.hasFocusedWindow() {
 		return
@@ -399,10 +299,6 @@ func (m *OS) syncScratchView() {
 	}
 }
 
-// scratchRegion is the scratch box while a group is on the screen: the outer
-// box, which the frame is drawn on, and the inner one, which the group's panes
-// tile. The size is the group's spec, read from the config on every call, in
-// the pane region the session agreed.
 func (m *OS) scratchRegion() (outer, inner layout.Rect, ok bool) {
 	if !m.InScratchView() {
 		return layout.Rect{}, layout.Rect{}, false
@@ -456,8 +352,6 @@ func (m *OS) PaneHeight() int {
 	return m.GetUsableHeight()
 }
 
-// scratchDir is the folder the scratch shell starts in: the focused pane's,
-// when it is a folder on this machine, else the home folder.
 func (m *OS) scratchDir() string {
 	raw := ""
 	if w := m.GetFocusedWindow(); w != nil && w.Host == "" {
@@ -466,10 +360,6 @@ func (m *OS) scratchDir() string {
 	return localFolder(raw)
 }
 
-// localFolder is the folder a command started for a pane on this machine
-// runs in. raw is where the pane says it is, an OSC 7 report or a path; the
-// answer is that folder when it is one here, and the home folder otherwise.
-// It stats the folder, which can block on a network filesystem.
 func localFolder(raw string) string {
 	if dir, _ := localCwdPath(raw); dir != "" {
 		if info, err := os.Stat(dir); err == nil && info.IsDir() {
@@ -483,8 +373,6 @@ func localFolder(raw string) string {
 	return home
 }
 
-// createScratch makes the scratch terminal: through the daemon in a daemon
-// session, here otherwise.
 func (m *OS) createScratch(spec scratchSpec) tea.Cmd {
 	if !m.IsDaemonSession || m.DaemonClient == nil {
 		m.createLocalScratch(m.scratchDir(), spec)
@@ -492,15 +380,9 @@ func (m *OS) createScratch(spec scratchSpec) tea.Cmd {
 	}
 	var dir, from string
 	if m.AttachedHost != "" {
-		// The pane starts on the session's machine, so the folder is the
-		// focused pane's path there. Empty lets that daemon pick its own.
-		// scratchDir is not asked: it stats a folder here.
 		dir = m.remotePaneDir()
 	} else {
 		dir = m.scratchDir()
-		// The daemon reads the focused pane's folder when the scratch
-		// starts. This client's copy of it is from the last state the
-		// daemon sent, which a cd does not send.
 		if w := m.GetFocusedWindow(); w != nil && w.Host == "" {
 			from = w.ID
 		}
@@ -526,8 +408,6 @@ func (m *OS) createScratch(spec scratchSpec) tea.Cmd {
 	}
 }
 
-// createLocalScratch makes a scratch group in a session without a daemon: a
-// free scratch workspace, shown, with one pane.
 func (m *OS) createLocalScratch(dir string, spec scratchSpec) {
 	ws := m.scratchWorkspaceFree()
 	m.scratchViewName = spec.Name
@@ -548,9 +428,6 @@ func (m *OS) createLocalScratch(dir string, spec scratchSpec) {
 	m.showScratch(len(m.Windows) - 1)
 }
 
-// newLocalPopup makes a popup pane in a session without a daemon and appends
-// it. The command starts at the popup's size, so its first frame is drawn for
-// the box it is in. An empty command runs the user's shell.
 func (m *OS) newLocalPopup(dir, title, widthSpec, heightSpec string, command []string) *terminal.Window {
 	probe := &terminal.Window{PopupWidth: widthSpec, PopupHeight: heightSpec}
 	x, y, width, height := m.popupRect(probe)
@@ -580,25 +457,17 @@ func (m *OS) newLocalPopup(dir, title, widthSpec, heightSpec string, command []s
 	return w
 }
 
-// scratchRequest is what the daemon call needs, copied off the model so the
-// call can run off the update goroutine.
 type scratchRequest struct {
-	Session     string
-	Name, Title string
-	Command     []string
-	Dir         string
-	// DirFrom is the window whose folder the daemon reads now, which wins
-	// over Dir when it can be read.
+	Session       string
+	Name, Title   string
+	Command       []string
+	Dir           string
 	DirFrom       string
 	Width, Height string
 	Workspace     int
-	// Host is the machine the session is on, "" for this one. Build is this
-	// client's version, for the handshake through the link.
-	Host, Build string
+	Host, Build   string
 }
 
-// openScratchPopup asks the session's daemon for the scratch terminal. It
-// runs as a command, never from Update, for the reason labelVerbCmd gives.
 func openScratchPopup(req scratchRequest) error {
 	c, err := dialSessionDaemon(req.Host, req.Build)
 	if err != nil {
@@ -606,9 +475,7 @@ func openScratchPopup(req scratchRequest) error {
 	}
 	defer func() { _ = c.Close() }()
 	params := map[string]any{
-		"session": req.Session,
-		// The box's frame names the group, so its first pane takes the
-		// title its shell sets.
+		"session":      req.Session,
 		"name":         "",
 		"width":        req.Width,
 		"height":       req.Height,
@@ -625,9 +492,6 @@ func openScratchPopup(req scratchRequest) error {
 	if req.DirFrom != "" {
 		params["cwd_from"] = req.DirFrom
 	}
-	// Wait a moment for the command to exit. One that exits at once (a typo,
-	// a program that is not installed) is reported with its code, and the
-	// create ends. The daemon keeps the popup when the wait runs out.
 	params["wait"] = true
 	params["timeout"] = int(scratchStoppedWait / time.Millisecond)
 	raw, err := c.CallWithTimeout("popup", params, scratchStoppedWait+5*time.Second)
@@ -648,30 +512,18 @@ func openScratchPopup(req scratchRequest) error {
 	return nil
 }
 
-// handleScratchOpened reports a failed create and ends it. A create the
-// daemon accepted stays on its way until its pane arrives in a state push,
-// where maybeFocusScratch takes it: until then this client does not hold the
-// pane, and a second press would ask for another.
 func (m *OS) handleScratchOpened(msg ScratchOpenedMsg) {
 	if msg.Err == nil {
 		return
 	}
 	m.scratchPending = ""
 	if scratchExists(msg.Err) && msg.Name != "" {
-		// The daemon has the pane already: a press that raced an earlier
-		// create, or a create whose answer was lost on the link. Show it.
-		// When this client does not hold it yet, the push brings it, and
-		// the create stays on its way until then.
 		m.scratchPending = msg.Name
 		m.scratchPendingAt = time.Now()
 		m.maybeFocusScratch()
 		return
 	}
 	if stopped, ok := errors.AsType[ScratchStoppedError](msg.Err); ok {
-		// The daemon closed the pane, but the push that removes it can come
-		// after this answer, on the client's own connection. Until then a
-		// press must not find it: it would show or hide a dead pane and say
-		// nothing, where the person must get the command or its report.
 		if stopped.WindowID != "" {
 			if m.deadScratch == nil {
 				m.deadScratch = map[string]bool{}
@@ -688,16 +540,12 @@ func (m *OS) handleScratchOpened(msg ScratchOpenedMsg) {
 	m.ShowNotification("The scratch terminal did not open. "+why, "error", m.Settings.NotificationDuration*2)
 }
 
-// scratchExists reports the daemon's refusal of a second scratch pane of a
-// name, which means the pane is there to show.
 func scratchExists(err error) bool {
 	callErr, ok := errors.AsType[*session.VerbCallError](err)
 	return ok && callErr.Code == session.ErrVerbInvalidParams && callErr.Hint != nil &&
 		callErr.Hint.Param == "scratch" && callErr.Message == session.ErrScratchExists.Error()
 }
 
-// maybeFocusScratch ends the create on its way once its pane arrives, and
-// shows it the way a press does, so the user can type into it at once.
 func (m *OS) maybeFocusScratch() {
 	if m.scratchPending == "" {
 		return
@@ -711,17 +559,9 @@ func (m *OS) maybeFocusScratch() {
 		return
 	}
 	m.scratchPending = ""
-	// Always, even when the daemon's push already focused it: the show is
-	// also what enters terminal mode.
 	m.showScratch(i)
 }
 
-// windowCountForNotice is the window count the created and closed notices
-// report. The scratch terminal and the rail pane are not counted: the scratch
-// terminal's show and hide, and the rail pane's start and stop, are not a
-// window the person made or closed. The rail pane arrives on a push soon
-// after an attach, and counted, its "Window created (2 total)" covered the
-// mode notice the person had just asked for, on a dock that shows one window.
 func (m *OS) windowCountForNotice() int {
 	n := 0
 	for _, w := range m.Windows {
@@ -732,9 +572,6 @@ func (m *OS) windowCountForNotice() int {
 	return n
 }
 
-// panesMadeForNotice counts the windows windowCountForNotice counts, less
-// the TML surfaces: a program opens and closes those, so their coming and
-// going is no window the person made or closed.
 func (m *OS) panesMadeForNotice() int {
 	n := 0
 	for _, w := range m.Windows {
@@ -745,8 +582,6 @@ func (m *OS) panesMadeForNotice() int {
 	return n
 }
 
-// windowLabelsForNotice is the label of every window the created and closed
-// notices count, by window id.
 func (m *OS) windowLabelsForNotice() map[string]string {
 	labels := make(map[string]string, len(m.Windows))
 	for _, w := range m.Windows {
@@ -757,10 +592,6 @@ func (m *OS) windowLabelsForNotice() map[string]string {
 	return labels
 }
 
-// windowMoveNotice is the notice for a push in which a window moved to or
-// from another session, with before the windows shown before the push. It
-// reports false when no window that left or arrived in the push moved, and
-// the created and closed notices apply.
 func (m *OS) windowMoveNotice(state *session.SessionState, before map[string]string) (string, bool) {
 	if state == nil || len(state.WindowMoves) == 0 {
 		return "", false
@@ -795,10 +626,6 @@ func (m *OS) HideShownScratch() bool {
 	return true
 }
 
-// noteLocalScratchExit reports a local scratch pane whose command exited
-// within scratchStoppedWait of its start. The daemon path reports it from
-// the popup call instead (openScratchPopup). The pane is not started again,
-// so a command that cannot run does not loop.
 func (m *OS) noteLocalScratchExit(w *terminal.Window) {
 	started, ok := m.scratchStarted[w.ID]
 	delete(m.scratchStarted, w.ID)
@@ -812,10 +639,6 @@ func (m *OS) noteLocalScratchExit(w *terminal.Window) {
 	m.ShowNotification(fmt.Sprintf("The command %s stopped at once.", label), "error", m.Settings.NotificationDuration)
 }
 
-// pruneOrphanScratches closes each scratch pane whose entry the config no
-// longer has: an entry removed, renamed, or given a new description with no
-// name, which changes its name. Hidden, such a pane had no key to show it and
-// ran on. The built-in scratch terminal always has its key.
 func (m *OS) pruneOrphanScratches() {
 	for i := len(m.Windows) - 1; i >= 0; i-- {
 		w := m.Windows[i]
@@ -835,13 +658,8 @@ func (m *OS) pruneOrphanScratches() {
 	m.leaveEmptyScratchView()
 }
 
-// scratchBackdropZ moves every layer of the workspace a scratch group is
-// shown over below the group's frame and panes.
 const scratchBackdropZ = -10000
 
-// renderScratchFrame is the scratch box while a group is on the screen: a
-// border with the group's name, filled, between the backdrop and the group's
-// panes. The fill keeps the backdrop out of the gaps between the panes.
 func (m *OS) renderScratchFrame() *lipgloss.Layer {
 	outer, _, ok := m.scratchRegion()
 	if !ok || outer.W < 2 || outer.H < 2 {
@@ -868,7 +686,6 @@ func (m *OS) renderScratchFrame() *lipgloss.Layer {
 	return lipgloss.NewLayer(style.Render(strings.Join(rows, "\n"))).X(outer.X).Y(outer.Y).Z(-1).ID("scratch-frame")
 }
 
-// truncateRunes cuts s to at most n runes.
 func truncateRunes(s string, n int) string {
 	r := []rune(s)
 	if len(r) <= n {
@@ -883,9 +700,6 @@ func (m *OS) ScratchBox() (layout.Rect, bool) {
 	return outer, ok
 }
 
-// dockWorkspace is the workspace the dock names: the one a scratch group is
-// shown over, while a group is on the screen. The group's own number means
-// nothing to a person.
 func (m *OS) dockWorkspace() int {
 	if m.InScratchView() {
 		return max(m.scratchBase, 1)

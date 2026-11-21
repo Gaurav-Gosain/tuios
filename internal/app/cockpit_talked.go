@@ -9,20 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The Talked with line: under the focus header, a chip for each agent the
-// selected one exchanged mail or asks with, newest exchange first, with its
-// state mark and how many messages went between them. A click on a chip
-// selects that agent, as a click on a name in a message card does, and the
-// jump goes on the list ctrl+o walks back. Chips the line has no room for
-// fold into a "+3" chip that opens them as a menu. The line is not drawn when
-// there is no mail, or when not even one chip and the "+N" chip fit, so a
-// person who runs no agents that talk sees no new chrome.
-//
-// Everything comes from the client's mirror of the mail ring and the agents
-// the cockpit lists. The line is worked out again only when the ring, the
-// selected agent or the fleet changes.
-
-// ckTalkPeer is one agent of the Talked with line.
 type ckTalkPeer struct {
 	window string
 	peer   ckPeer
@@ -30,8 +16,6 @@ type ckTalkPeer struct {
 	last   int64
 }
 
-// ckTalkCache is the Talked with line's agents as last worked out, and what
-// they were worked out from.
 type ckTalkCache struct {
 	key   string
 	gen   uint64
@@ -39,9 +23,6 @@ type ckTalkCache struct {
 	list  []ckTalkPeer
 }
 
-// ckTalkedWith is every agent the pane e exchanged mail or asks with, by the
-// mirror of the ring, the newest exchange first. The person is left out: the
-// mailbox is theirs.
 func (m *OS) ckTalkedWith(e sidebarAgentEntry) []ckTalkPeer {
 	if e.Host != "" || e.Fold > 0 || e.Child != nil {
 		return nil
@@ -99,7 +80,6 @@ func (m *OS) ckTalkedWith(e sidebarAgentEntry) []ckTalkPeer {
 	return list
 }
 
-// ckTalkChip is one chip of the line: the agent's mark, name and count.
 func (l ckLook) ckTalkChip(tp ckTalkPeer) []ckSeg {
 	pal := l.pal
 	mark, ink := l.g(ckGlyphIdle), pal.FgMute
@@ -118,9 +98,6 @@ func (l ckLook) ckTalkChip(tp ckTalkPeer) []ckSeg {
 	return append(segs, ckSeg{t: " " + strconv.Itoa(tp.n) + " ", fg: pal.FgMute, bg: l.cursor})
 }
 
-// drawTalkedWith draws the Talked with line of e at row y, in w cells from
-// x, and reports whether it drew one. top is the canvas's first row on the
-// screen, for the clicks.
 func (m *OS) drawTalkedWith(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y, w, top int) bool {
 	ck := &m.Inbox.ck
 	ck.talkShown = 0
@@ -139,8 +116,6 @@ func (m *OS) drawTalkedWith(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y, w,
 	more := func(n int) []ckSeg {
 		return []ckSeg{{t: " +" + strconv.Itoa(n) + " ", fg: pal.FgDim, bg: l.cursor, attrs: ckBold}}
 	}
-	// As many chips as fit, with room kept for the "+N" chip when some are
-	// left over.
 	shown := 0
 	for shown < len(list) {
 		need := used + gap + ckWidth(chips[shown]...)
@@ -154,7 +129,6 @@ func (m *OS) drawTalkedWith(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y, w,
 		shown++
 	}
 	if shown == 0 {
-		// Not even one chip fits: the line would wrap, so it is left out.
 		return false
 	}
 	ck.talkShown = shown
@@ -175,7 +149,6 @@ func (m *OS) drawTalkedWith(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y, w,
 	return true
 }
 
-// cockpitTalkClick selects the agent of a Talked with chip by its window.
 func (m *OS) cockpitTalkClick(window string) tea.Cmd {
 	e, ok := m.cockpitAgent()
 	if !ok {

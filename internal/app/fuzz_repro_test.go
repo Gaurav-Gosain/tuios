@@ -10,16 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/fuzz"
 )
 
-// The corpus of shrunk repros, replayed on every ordinary test run.
-//
-// A finding that only lives in the fuzzer's seed set is a finding the suite
-// rediscovers by luck: the campaigns walk pseudo-random sequences and a fix that
-// regresses may not be caught for thousands of seeds. Each script here broke a
-// named oracle rule once, so replaying it costs a few frames and pins the fix
-// where it can be seen.
-//
-// To add one, drop the `--- script ---` block a campaign printed into
-// testdata/fuzz-repros as a .txt file and name it after the rule it broke.
 const fuzzReproDir = "testdata/fuzz-repros"
 
 func TestFuzzRepros(t *testing.T) {
@@ -33,9 +23,6 @@ func TestFuzzRepros(t *testing.T) {
 	}
 }
 
-// fuzzKnownDir holds repros of product bugs the fuzzer found and nobody has
-// fixed yet. Each must still break its rule: a fix that makes one pass moves
-// it up into fuzzReproDir, where it guards the fix.
 const fuzzKnownDir = fuzzReproDir + "/known"
 
 func TestFuzzKnownBugs(t *testing.T) {
@@ -49,8 +36,6 @@ func TestFuzzKnownBugs(t *testing.T) {
 	}
 }
 
-// reproFiles lists the repro scripts in dir. A missing dir has none: git
-// keeps no empty folder, so the known folder goes away with its last bug.
 func reproFiles(t *testing.T, dir string) []string {
 	t.Helper()
 	entries, err := os.ReadDir(dir)
@@ -87,18 +72,8 @@ func replayRepro(t *testing.T, dir, path string) fuzz.Result {
 	return res
 }
 
-// maxFlakyRuns is how many runs of one test may break a rule without
-// reproducing. The model reads the wall clock, so a replay can differ, and one
-// such run in a test is tolerated; more says the harness or the model has
-// stopped being replayable, and that must not hide behind the rule. It goes to
-// zero once the model is handed its clock (R6).
 const maxFlakyRuns = 1
 
-// fuzzVerdict judges one fuzz run. A run that broke a rule fails the test
-// unless its minimal script is one of the known bugs (fuzzKnownDir), which
-// TestFuzzKnownBugs already holds, or the finding did not reproduce: then the
-// model's replays differ, which a script cannot pin down, so it is logged and
-// reported as flaky for the caller to count against maxFlakyRuns.
 func fuzzVerdict(t *testing.T, label string, res fuzz.Result) (flaky bool) {
 	t.Helper()
 	if !res.Failed {
@@ -116,7 +91,6 @@ func fuzzVerdict(t *testing.T, label string, res fuzz.Result) (flaky bool) {
 	return false
 }
 
-// checkFlakyRuns fails tb when more runs than maxFlakyRuns did not reproduce.
 func checkFlakyRuns(tb testing.TB, flaky int) {
 	tb.Helper()
 	if flaky > maxFlakyRuns {
@@ -124,7 +98,6 @@ func checkFlakyRuns(tb testing.TB, flaky int) {
 	}
 }
 
-// knownBug reports which known repro, if any, is exactly this script.
 func knownBug(t *testing.T, actions []fuzz.Action) (string, bool) {
 	t.Helper()
 	want := fuzz.Script(actions)

@@ -7,12 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The editor is checked by what it writes into the layout string, because that
-// string is the whole of its output: the rail reads it, the config file holds
-// it, and a keystroke that moved the highlight and not the layout is the
-// failure these tests exist to catch.
-
-// editorOS opens the rail layout editor on a fresh config.
 func editorOS(t *testing.T) *OS {
 	t.Helper()
 	useTempConfig(t)
@@ -23,7 +17,6 @@ func editorOS(t *testing.T) *OS {
 	return m
 }
 
-// selectRow puts the cursor on the first row of a name and kind.
 func selectRow(t *testing.T, m *OS, name string, kind railRowKind) {
 	t.Helper()
 	for i, row := range m.sectionEditorRows() {
@@ -97,7 +90,6 @@ func TestSectionEditorUndoLeavesAnUnnamedLayoutUnnamed(t *testing.T) {
 	if got := m.UserConfig.Appearance.Sidebar.Sections; got != "" {
 		t.Errorf("undo left the config naming %q, want it naming none", got)
 	}
-	// And the rail is back on the shipped layout rather than stuck on the edit.
 	if !sidebarLayoutHas(sidebarSectionFiles, &m.Settings) {
 		t.Error("undo left the files section off the rail")
 	}
@@ -115,10 +107,6 @@ func TestSectionEditorUndoLeavesAnUnnamedLayoutUnnamed(t *testing.T) {
 // renderSectionEditor). A scrolled panel routes the click to the wrong row.
 func TestSectionEditorClickHitsTheRowItDrew(t *testing.T) {
 	m := editorOS(t)
-	// A panel short enough to scroll, and the selection at the bottom of the
-	// list, because a list that fits cannot tell a rectangle taken from the
-	// drawn line apart from one taken from the row index. That is the scrolled
-	// case this test exists for.
 	m.Height, m.Width = 22, 120
 	_, visible, _ := m.sectionEditorLayout()
 	for len(m.sectionEditorRows()) <= visible {
@@ -131,8 +119,6 @@ func TestSectionEditorClickHitsTheRowItDrew(t *testing.T) {
 	if m.sectionList.Scroll == 0 {
 		t.Fatalf("the panel did not scroll with %d rows; the test premise is wrong", len(rows))
 	}
-	// The first rectangle is on the panel's first body line and points at the
-	// first row the scroll left visible.
 	if hits[0].Rect.Y0 != geo.BodyY {
 		t.Errorf("the first rectangle is at %d, want the panel's first body line %d",
 			hits[0].Rect.Y0, geo.BodyY)
@@ -156,8 +142,6 @@ func TestSectionEditorClickHitsTheRowItDrew(t *testing.T) {
 			t.Errorf("row %d is a heading and was recorded as clickable", h.Idx)
 		}
 	}
-	// A rectangle's own row is the one it acts on: click the files entry and
-	// files comes off the rail.
 	var want int
 	for i, row := range rows {
 		if row.Name == "files" && row.Kind == railRowPlaced {

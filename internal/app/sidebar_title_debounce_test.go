@@ -8,8 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// backdate moves a window's adopted-title timestamp into the past so the
-// debounce window can be crossed without sleeping.
 func backdate(m *OS, id string, d time.Duration) {
 	e := m.sidebarTitles[id]
 	e.at = e.at.Add(-d)
@@ -25,7 +23,6 @@ func TestRailTitleDebounce(t *testing.T) {
 	win.SetTitle("cmd-a")
 	m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
 
-	// Seed: a first title shows at once.
 	if changed := m.updateRailTitles(); changed {
 		t.Fatal("seeding a first title should not report a change")
 	}
@@ -33,8 +30,6 @@ func TestRailTitleDebounce(t *testing.T) {
 		t.Fatalf("shown after seed = %q, want %q", got, "cmd-a")
 	}
 
-	// A burst right after adoption is held: the rail keeps the last adopted title
-	// and the change stays pending.
 	win.SetTitle("cmd-b")
 	if changed := m.updateRailTitles(); changed {
 		t.Fatal("a change inside the debounce window must not be adopted yet")
@@ -46,8 +41,6 @@ func TestRailTitleDebounce(t *testing.T) {
 		t.Fatal("a deferred change must leave a pending flag so the tick settles it")
 	}
 
-	// More churn, then the interval passes: the CURRENT title wins, not an
-	// intermediate one, and the pending flag clears.
 	win.SetTitle("cmd-final")
 	backdate(m, "w1", railTitleDebounce)
 	if changed := m.updateRailTitles(); !changed {
@@ -70,13 +63,12 @@ func TestTickNeedsWorkWakesOnTitleDrift(t *testing.T) {
 	win := &terminal.Window{ID: "w1"}
 	win.SetTitle("cmd-a")
 	m := &OS{Settings: config.Global, Windows: []*terminal.Window{win}}
-	m.updateRailTitles() // seed shown = cmd-a
+	m.updateRailTitles()
 
 	if m.tickNeedsWork() {
 		t.Fatal("a synced rail with nothing else live must let the tick sleep")
 	}
 
-	// No output flag is set, mirroring an isolated OSC title change.
 	win.SetTitle("cmd-b")
 	if !m.tickNeedsWork() {
 		t.Fatal("a drifted title must wake the maintenance tick")

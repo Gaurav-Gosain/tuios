@@ -1,10 +1,5 @@
 package app
 
-// secondaryRailView holds presentation state that belongs to the opt-in rail,
-// not to the original one. The original rail's fields stay on OS so existing
-// session persistence and keyboard controls retain their legacy meaning.
-// swapSecondaryRail is used only on the UI goroutine, around a synchronous
-// draw or input gesture; it never spans an asynchronous command.
 type secondaryRailView struct {
 	hits           []sidebarRowHit
 	nav            []sidebarNavRow
@@ -52,9 +47,6 @@ func (m *OS) swapSecondaryRail() {
 	m.SidebarSectionSplit, s.sectionSplit = s.sectionSplit, m.SidebarSectionSplit
 	m.sidebarSplit, s.split = s.split, m.sidebarSplit
 	m.sidebarSplitGeom, s.splitGeom = s.splitGeom, m.sidebarSplitGeom
-	// Both edges read the same focused pane's directory and repository. The
-	// listing is shared (one daemon watch per client), while each edge keeps
-	// its own local files visibility switch and scroll/cursor state.
 	m.filesView.Show, s.filesShow = s.filesShow, m.filesView.Show
 	m.SidebarPeek, s.peek = s.peek, m.SidebarPeek
 	m.SidebarAgentFilter, s.agentFilter = s.agentFilter, m.SidebarAgentFilter

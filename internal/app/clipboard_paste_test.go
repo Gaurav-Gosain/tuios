@@ -57,7 +57,6 @@ func TestUnansweredPasteIsReported(t *testing.T) {
 		t.Fatalf("the message does not say what happened: %q", msg)
 	}
 
-	// A second timer for the same query says nothing more.
 	m.Notifications = nil
 	_, _ = m.Update(PasteTimeoutMsg{Seq: seq})
 	if lastMessage(m) != "" {

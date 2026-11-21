@@ -21,80 +21,43 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// The questions a copy asks: cancel a copy, answer a file that is there,
-// send a file from the rail to another machine, and send a dropped file to
-// the machine of the pane it was dropped on. They are one centred dialog with
-// a kind, drawn by overlay.Dialog like the rail's file prompts, because each
-// is a sentence and a few answers.
-//
-// The conflict question opens from the Copies panel, on a copy in state
-// conflict, and never by itself. A tuios cp in a pane asks the same question
-// in its own terminal, and the daemon cannot say whether the copy has a
-// person at a terminal behind it. A dialog that opened by itself would ask a
-// second time for every such copy. The dock item says "1 copy asks" instead,
-// and enter on the row in the panel opens the question.
-
-// overlayKindCopyDialog is the copy dialog's overlay kind.
 const overlayKindCopyDialog = "copydialog"
 
-// overlayKindTransfers is the Copies panel's overlay kind.
 const overlayKindTransfers = "transfers"
 
-// copyDialogWidth is the dialog's preferred inner width.
 const copyDialogWidth = 58
 
-// transferReceiveDir is the folder a send from the rail goes into on the
-// other machine unless the person types another.
 const transferReceiveDir = "~/Downloads/tuios/"
 
-// copyDialogKind is what the dialog asks.
 type copyDialogKind int
 
 const (
-	// copyDialogCancel asks before a copy is cancelled.
 	copyDialogCancel copyDialogKind = iota + 1
-	// copyDialogConflict asks what to do with a file that is there.
 	copyDialogConflict
-	// copyDialogSendHost picks the machine a send goes to.
 	copyDialogSendHost
-	// copyDialogSendDir asks for the folder on that machine.
 	copyDialogSendDir
-	// copyDialogDrop asks whether to send dropped files or paste the text.
 	copyDialogDrop
 )
 
-// copyConflictChoices are the conflict question's answers, in drawn order,
-// and the choice each sends.
 var copyConflictChoices = []string{"Replace", "Keep both", "Skip"}
 
 var copyConflictWire = []string{"replace", "keep-both", "skip"}
 
-// copyDialog is the open question.
 type copyDialog struct {
-	kind copyDialogKind
-	// row is the copy a cancel or a conflict question is about.
-	row session.TransferRow
-	// rows are the answers, in drawn order.
-	rows []string
-	// list is the cursor on the answers.
-	list listnav.State
-	// all is the conflict question's check box: the answer is for every
-	// file of the copy.
-	all bool
-	// input and err are the folder field of a send, and why it was refused.
+	kind  copyDialogKind
+	row   session.TransferRow
+	rows  []string
+	list  listnav.State
+	all   bool
 	input textedit.Line
 	err   string
-	// src, name and hosts are a send: what goes, its name, and the
-	// machines it can go to ("" is this machine).
 	src   session.Endpoint
 	name  string
 	hosts []string
 	host  string
-	// drop is a dropped file's question.
-	drop *dropAsk
+	drop  *dropAsk
 }
 
-// dropAsk is a paste of paths into a pane on another machine.
 type dropAsk struct {
 	window string
 	host   string
@@ -103,7 +66,6 @@ type dropAsk struct {
 	size   int64
 }
 
-// pendingDrop is a send of dropped files whose copies have not all ended.
 type pendingDrop struct {
 	window string
 	host   string
@@ -116,7 +78,6 @@ type pendingDrop struct {
 // CopyDialogOpen reports whether the copy dialog owns the keyboard.
 func (m *OS) CopyDialogOpen() bool { return m.transfers.dialog != nil }
 
-// openCopyDialog shows a question.
 func (m *OS) openCopyDialog(d *copyDialog) {
 	switch d.kind {
 	case copyDialogCancel:
@@ -134,8 +95,6 @@ func (m *OS) CloseCopyDialog() {
 	m.transfersChanged()
 }
 
-// copyDialogRows is how many answer rows the dialog draws, the check box
-// included.
 func (d *copyDialog) rowCount() int {
 	n := len(d.rows)
 	if d.kind == copyDialogConflict && d.row.ConflictCount > 1 {
@@ -173,7 +132,6 @@ func (m *OS) CopyDialogKey(key, text string) tea.Cmd {
 	}
 	if key == "esc" {
 		if d.kind == copyDialogSendDir {
-			// Back to the machines, the step before.
 			m.openSendHosts(d.src, d.name, d.hosts)
 			return nil
 		}
@@ -236,7 +194,6 @@ func (m *OS) CopyDialogActivate(idx int) tea.Cmd {
 		return m.transferCallCmd("transfer-cancel", d.row.Name, map[string]any{"id": d.row.ID})
 	case copyDialogConflict:
 		if idx >= len(d.rows) {
-			// The check box row.
 			d.all = !d.all
 			return nil
 		}
@@ -324,7 +281,6 @@ func (m *OS) SidebarFileSend() tea.Cmd {
 	return nil
 }
 
-// openSendHosts shows the machines a send can go to.
 func (m *OS) openSendHosts(src session.Endpoint, name string, hosts []string) {
 	rows := make([]string, len(hosts))
 	for i, h := range hosts {
@@ -334,9 +290,6 @@ func (m *OS) openSendHosts(src session.Endpoint, name string, hosts []string) {
 	m.transfersChanged()
 }
 
-// startSendCmd makes the folder on the machine and starts the copy into it.
-// A file that is there with other bytes keeps both: the copy gets the name
-// "name (from HOST).ext". Nothing is replaced.
 func (m *OS) startSendCmd(src session.Endpoint, name, host, dir string) tea.Cmd {
 	call := m.transferCaller()
 	onHost := m.verbOnHostCaller()
@@ -363,8 +316,6 @@ func (m *OS) startSendCmd(src session.Endpoint, name, host, dir string) tea.Cmd 
 	}
 }
 
-// verbOnHostCaller calls a verb on a machine's daemon: this one for "", and a
-// host's through this daemon's link.
 func (m *OS) verbOnHostCaller() func(host, verb string, params map[string]any) (json.RawMessage, error) {
 	if m.transfers.call != nil {
 		call := m.transfers.call
@@ -393,14 +344,11 @@ func (m *OS) verbOnHostCaller() func(host, verb string, params map[string]any) (
 	}
 }
 
-// dropProbeMsg is what a paste of paths into a pane on another machine
-// turned out to be: files on this machine, or text.
 type dropProbeMsg struct {
 	ask      dropAsk
 	fallback bool
 }
 
-// dropSentMsg is the answer to drop-files.
 type dropSentMsg struct {
 	ask   dropAsk
 	paths []string
@@ -447,7 +395,6 @@ func (m *OS) DropPaste(text string) tea.Cmd {
 	}
 }
 
-// applyDropProbe asks about the files, or pastes the text that was not files.
 func (m *OS) applyDropProbe(msg dropProbeMsg) {
 	if msg.fallback {
 		if w := m.windowByID(msg.ask.window); w != nil {
@@ -459,7 +406,6 @@ func (m *OS) applyDropProbe(msg dropProbeMsg) {
 	m.openCopyDialog(&copyDialog{kind: copyDialogDrop, drop: &ask})
 }
 
-// sendDropCmd sends the dropped files to the pane's machine.
 func (m *OS) sendDropCmd(ask *dropAsk) tea.Cmd {
 	call := m.transferCaller()
 	a := *ask
@@ -479,8 +425,6 @@ func (m *OS) sendDropCmd(ask *dropAsk) tea.Cmd {
 	}
 }
 
-// applyDropSent waits for the copies of a drop. The far paths are pasted when
-// every copy is checked.
 func (m *OS) applyDropSent(msg dropSentMsg) tea.Cmd {
 	if msg.err != nil {
 		m.ShowNotification(transferCallFailed(transferCallMsg{Verb: "drop-files", Name: dropName(msg.ask.paths), Err: msg.err})+" Nothing was pasted.", "error", m.Settings.NotificationDuration*2)
@@ -502,9 +446,6 @@ func (m *OS) applyDropSent(msg dropSentMsg) tea.Cmd {
 	return tea.Batch(append(cmds, m.transfersLingerCmd())...)
 }
 
-// dropCopyEnded counts a copy of a drop that ended, and reports whether the
-// copy belongs to one. When the last copy of a drop ends checked, the far
-// paths are pasted.
 func (m *OS) dropCopyEnded(row session.TransferRow) (tea.Cmd, bool) {
 	for _, pd := range m.transfers.drops {
 		if !slices.Contains(pd.ids, row.ID) {
@@ -525,7 +466,6 @@ func (m *OS) dropCopyEnded(row session.TransferRow) (tea.Cmd, bool) {
 	return nil, false
 }
 
-// finishDrop pastes a drop's far paths once its copies all ended checked.
 func (m *OS) finishDrop(pd *pendingDrop) tea.Cmd {
 	m.transfers.drops = slices.DeleteFunc(m.transfers.drops, func(x *pendingDrop) bool { return x == pd })
 	if pd.failed {
@@ -552,7 +492,6 @@ func (m *OS) finishDrop(pd *pendingDrop) tea.Cmd {
 	return nil
 }
 
-// dropName names what a drop sends: the file, or how many.
 func dropName(paths []string) string {
 	if len(paths) == 1 {
 		return filepath.Base(paths[0])
@@ -560,14 +499,6 @@ func dropName(paths []string) string {
 	return countOf(len(paths), "file")
 }
 
-// parseDroppedPaths reads a paste as the paths a terminal sends for files
-// dropped on it, and reports whether the paste is only paths.
-//
-// The forms are the ones the terminals use: iTerm2, Terminal.app, Ghostty and
-// WezTerm escape each space and shell character with a backslash; kitty and
-// GNOME Terminal put a path in single quotes; WezTerm can use double quotes;
-// some terminals send file:// URLs, one a line. Paths are separated by
-// spaces or line breaks. Each must be absolute.
 func parseDroppedPaths(s string) ([]string, bool) {
 	s = strings.TrimSpace(s)
 	if s == "" || len(s) > 64<<10 || strings.ContainsRune(s, 0) {
@@ -650,7 +581,6 @@ func parseDroppedPaths(s string) ([]string, bool) {
 	return words, true
 }
 
-// copyDialogTitle is the word in the dialog's top border.
 func (d *copyDialog) title() string {
 	switch d.kind {
 	case copyDialogCancel:
@@ -667,7 +597,6 @@ func (d *copyDialog) title() string {
 	return ""
 }
 
-// lines is the dialog's sentences, first the question.
 func (d *copyDialog) lines() []string {
 	name := printableTitle(d.row.Name)
 	switch d.kind {
@@ -691,8 +620,6 @@ func (d *copyDialog) lines() []string {
 	return nil
 }
 
-// conflictLines says which file is there, and how it differs from the one
-// the copy brings.
 func conflictLines(row session.TransferRow) []string {
 	if len(row.Conflicts) == 0 {
 		return []string{"A file is there on " + transferPlace(row.Dst.Host) + "."}
@@ -732,7 +659,6 @@ func conflictLines(row session.TransferRow) []string {
 	return out
 }
 
-// renderCopyDialog draws the open question, with its clickable rows.
 func (m *OS) renderCopyDialog() (string, overlay.Geometry, []overlayRowHit) {
 	d := m.transfers.dialog
 	pal := m.overlayUI()
@@ -782,9 +708,6 @@ func (m *OS) renderCopyDialog() (string, overlay.Geometry, []overlayRowHit) {
 	return content, geo, nil
 }
 
-// copyDialogRow draws one answer, or the check box. The cursor row is on
-// the Surface ground with the sigil, as the rail's confirmations are; a
-// destructive answer takes the warn ink under the cursor.
 func (m *OS) copyDialogRow(d *copyDialog, idx, width int, pal overlay.Palette) string {
 	bg := pal.Canvas
 	cursor := d.list.Cursor == idx

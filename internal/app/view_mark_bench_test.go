@@ -7,8 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// viewMarkOS is a client showing part of a 300x80 session on a 207x55
-// screen, scrolled off its top left corner, so the mark has arrows on it.
 func viewMarkOS() *OS {
 	m := &OS{Settings: config.Global, Width: realCols, Height: realRows,
 		EffectiveWidth: 300, EffectiveHeight: 80}

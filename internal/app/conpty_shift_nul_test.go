@@ -29,17 +29,10 @@ func TestConPTYShiftNULIsNotCtrlSpace(t *testing.T) {
 		writes []string
 		want   []string
 	}{
-		// The report: the leader, then Shift+U. The phantom Ctrl+Space closed
-		// the which-key menu before the U arrived.
 		{"leader then shift+u", []string{"\x02", "\x00U"}, []string{"ctrl+b", "U"}},
-		// Caps Lock and a shifted symbol take the same path.
 		{"shifted symbol", []string{"\x00!"}, []string{"!"}},
-		// A real Ctrl+Space is one NUL on its own, and it still arrives.
 		{"ctrl+space", []string{"\x00"}, []string{"ctrl+space"}},
-		// A real Ctrl+Space followed in the same read by a key with no text
-		// keeps both, in order.
 		{"ctrl+space then up", []string{"\x00\x1b[A"}, []string{"ctrl+space", "up"}},
-		// Two real Ctrl+Space presses some time apart are both kept.
 		{"ctrl+space twice", []string{"\x00", "\x00"}, []string{"ctrl+space", "ctrl+space"}},
 	} {
 		t.Run(tc.what, func(t *testing.T) {
@@ -51,11 +44,6 @@ func TestConPTYShiftNULIsNotCtrlSpace(t *testing.T) {
 	}
 }
 
-// keysThroughFilter writes each chunk to a ultraviolet terminal reader as one
-// read, 100 ms apart, and runs what it decodes through FilterMouseMotion with
-// a small copy of bubbletea's event loop: a batch runs its commands at once,
-// a sequence runs them in order, and every result goes back through the
-// filter. It returns the key presses the filter passes on, as strings.
 func keysThroughFilter(t *testing.T, o *OS, writes []string) []string {
 	t.Helper()
 	pr, pw := io.Pipe()
@@ -108,7 +96,6 @@ func keysThroughFilter(t *testing.T, o *OS, writes []string) []string {
 					go run(cmd)
 				}
 			default:
-				// bubbletea's sequenceMsg is unexported: a slice of commands.
 				if v := reflect.ValueOf(msg); v.Kind() == reflect.Slice && v.Type().Elem() == reflect.TypeFor[tea.Cmd]() {
 					cmds := make([]tea.Cmd, v.Len())
 					for i := range cmds {

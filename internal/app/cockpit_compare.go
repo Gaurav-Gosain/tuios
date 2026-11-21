@@ -14,54 +14,27 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// The fan comparison of the agents view (DESIGN.md 3.4, frame g): every
-// attempt of a fan side by side, with the judge's verdict on top. c on an
-// attempt opens it, J asks an agent to judge, K twice keeps one attempt and
-// removes the others with their changes stashed, and esc goes back.
-//
-// Cost: compare-fan runs when the view opens and after j and r, never on a
-// timer. It reads git in each worktree under the daemon's own timeout. The
-// verdict arrives with the session listing the view already follows, and a
-// new one reads the comparison again.
-
-// ckCompareTimeout bounds compare-fan, which runs git in every attempt.
 const ckCompareTimeout = 30 * time.Second
 
-// ckJudgeTimeout bounds judge-fan, which waits for the judge to be ready.
 const ckJudgeTimeout = 3 * time.Minute
 
-// ckCompare is the open comparison.
 type ckCompare struct {
-	// session is the fan session it was opened on, and gen counts its reads.
-	session string
-	gen     uint64
-	loading bool
-	err     string
-	res     *ckCompareResult
-	// focus is the attempt the keys act on, and focusOn the session it goes
-	// to once the attempts are read.
-	focus   int
-	focusOn string
-	// armed is the attempt k was pressed on once, "" when none. The first
-	// k reads the attempts again, so the files a keep deletes are listed as
-	// they are now; armedGen is that read, and a second k waits for it.
-	armed    string
-	armedGen uint64
-	// confirm says the second k asked for one more read: the keep runs
-	// when it shows what the warning showed, keepSig. warnScroll is the
-	// first line of the warning drawn.
-	confirm    bool
-	keepSig    string
-	warnScroll int
-	// busy says what runs now ("judge", "keep"), and note what last ended.
-	busy, note string
-	// verdictAt is the verdict the result holds. askedAt is the newest
-	// verdict the session listing showed that a read was asked for, so each
-	// new verdict is read once, never in a loop.
+	session            string
+	gen                uint64
+	loading            bool
+	err                string
+	res                *ckCompareResult
+	focus              int
+	focusOn            string
+	armed              string
+	armedGen           uint64
+	confirm            bool
+	keepSig            string
+	warnScroll         int
+	busy, note         string
 	verdictAt, askedAt int64
 }
 
-// ckCompareResult is compare-fan's answer.
 type ckCompareResult struct {
 	Group    string         `json:"group"`
 	FanID    string         `json:"fan_id"`
@@ -80,7 +53,6 @@ type ckCompareResult struct {
 	} `json:"verdict"`
 }
 
-// ckFanAttempt is one row of compare-fan.
 type ckFanAttempt struct {
 	Session   string `json:"session"`
 	Branch    string `json:"branch"`
@@ -99,26 +71,21 @@ type ckFanAttempt struct {
 		Command string `json:"command"`
 		State   string `json:"state"`
 	} `json:"verify"`
-	FileList []worktree.FileStat `json:"file_list"`
-	Lines    []worktree.DiffLine `json:"lines"`
-	Notes    []string            `json:"notes"`
-	// Ignored are files git ignores in the attempt's worktree, which a keep
-	// deletes with it, IgnoredCount how many there are in all, and
-	// IgnoredError why they could not be listed.
-	Ignored      []string `json:"ignored"`
-	IgnoredCount int      `json:"ignored_count"`
-	IgnoredError string   `json:"ignored_error"`
-	IgnoredHash  string   `json:"ignored_hash"`
+	FileList     []worktree.FileStat `json:"file_list"`
+	Lines        []worktree.DiffLine `json:"lines"`
+	Notes        []string            `json:"notes"`
+	Ignored      []string            `json:"ignored"`
+	IgnoredCount int                 `json:"ignored_count"`
+	IgnoredError string              `json:"ignored_error"`
+	IgnoredHash  string              `json:"ignored_hash"`
 }
 
-// ckCompareMsg is compare-fan's answer for read gen.
 type ckCompareMsg struct {
 	gen uint64
 	res *ckCompareResult
 	err error
 }
 
-// ckFanActMsg is the end of a judge-fan or keep-fan call.
 type ckFanActMsg struct {
 	gen        uint64
 	verb, text string
@@ -128,8 +95,6 @@ type ckFanActMsg struct {
 // CockpitCompareOpen reports whether the comparison is up.
 func (m *OS) CockpitCompareOpen() bool { return m.ShowInbox && m.Inbox.ck.cmp != nil }
 
-// ckFanSession is the session of the fan the selected row belongs to, "" when
-// it is not an attempt of a fan on this machine.
 func (m *OS) ckFanSession() string {
 	e, ok := m.cockpitAgent()
 	if !ok || e.Host != "" || m.ckWorktreeOf(e).group == "" {
@@ -145,7 +110,6 @@ func (m *OS) CockpitCompare() tea.Cmd {
 		m.ShowNotification("Select an attempt of a fan to compare its attempts.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
-	// The attempt under the cursor is where the keys start.
 	m.Inbox.ck.cmp = &ckCompare{session: s, focusOn: s}
 	m.cockpitTouch()
 	return m.ckCompareFetch()
@@ -157,7 +121,6 @@ func (m *OS) CockpitCompareClose() {
 	m.cockpitTouch()
 }
 
-// ckCompareFetch reads the comparison again.
 func (m *OS) ckCompareFetch() tea.Cmd {
 	cp := m.Inbox.ck.cmp
 	if cp == nil || (m.DaemonClient == nil && m.Inbox.call == nil) {
@@ -179,7 +142,6 @@ func (m *OS) ckCompareFetch() tea.Cmd {
 	}
 }
 
-// applyCompare takes compare-fan's answer.
 func (m *OS) applyCompare(msg ckCompareMsg) tea.Cmd {
 	cp := m.Inbox.ck.cmp
 	if cp == nil || msg.gen != cp.gen {
@@ -204,7 +166,6 @@ func (m *OS) applyCompare(msg ckCompareMsg) tea.Cmd {
 	}
 	if v := msg.res.Verdict; v != nil && v.At != cp.verdictAt {
 		cp.verdictAt, cp.note = v.At, ""
-		// The verdict's pick is where the keys start.
 		for i, r := range msg.res.Rows {
 			if r.Session == v.Pick && cp.armed == "" {
 				cp.focus = i
@@ -215,7 +176,6 @@ func (m *OS) applyCompare(msg ckCompareMsg) tea.Cmd {
 	if !cp.confirm {
 		return nil
 	}
-	// The read the second k asked for: keep only what was shown.
 	cp.confirm = false
 	cp.armedGen = cp.gen
 	if a, ok := cp.ckFocused(); !ok || a.Session != cp.armed || ckIgnoredFailed(msg.res.Rows, cp.focus) != "" {
@@ -229,8 +189,6 @@ func (m *OS) applyCompare(msg ckCompareMsg) tea.Cmd {
 	return m.ckKeepNow()
 }
 
-// ckKeepSig is what a keep of attempt keep removes, as a read showed it:
-// the other attempts and the ignored files in each.
 func ckKeepSig(rows []ckFanAttempt, keep int) string {
 	var b strings.Builder
 	for i, r := range rows {
@@ -245,8 +203,6 @@ func ckKeepSig(rows []ckFanAttempt, keep int) string {
 	return b.String()
 }
 
-// ckIgnoredFailed names the attempts whose ignored files could not be
-// listed, with why, "" when every list was read. A keep waits for a list.
 func ckIgnoredFailed(rows []ckFanAttempt, keep int) string {
 	var parts []string
 	for i, r := range rows {
@@ -257,8 +213,6 @@ func ckIgnoredFailed(rows []ckFanAttempt, keep int) string {
 	return strings.Join(parts, sepWord())
 }
 
-// cockpitCompareStale reads the comparison again when the listing carries a
-// verdict the view does not show yet. Update asks it after every listing.
 func (m *OS) cockpitCompareStale() tea.Cmd {
 	cp := m.Inbox.ck.cmp
 	if cp == nil || cp.loading || cp.res == nil {
@@ -277,7 +231,6 @@ func (m *OS) cockpitCompareStale() tea.Cmd {
 	return nil
 }
 
-// ckLetter is an attempt's letter: A, B, C.
 func ckLetter(i int) string { return string(rune('A' + i%26)) }
 
 // CockpitCompareKey takes a key while the comparison is up.
@@ -291,11 +244,6 @@ func (m *OS) CockpitCompareKey(key string) tea.Cmd {
 	if cp.res != nil {
 		n = len(cp.res.Rows)
 	}
-	// This view keeps its own keys rather than the list keys of
-	// [keybindings.lists]: J and K are its judge and keep answers, left and
-	// right move between attempts, and j, k, up and down scroll the warnings
-	// as they move everywhere else in the view. Only the page keys come from
-	// the list keymap, and they page by listPage rows.
 	motion := m.ListKeys.Keys(key, false)
 	switch {
 	case key == "K", key == "up", key == "down", key == "j", key == "k", motion == listnav.PageUp, motion == listnav.PageDown:
@@ -339,7 +287,6 @@ func (m *OS) CockpitCompareKey(key string) tea.Cmd {
 	return nil
 }
 
-// ckCompareAction runs a button of the comparison.
 func (m *OS) ckCompareAction(action string) tea.Cmd {
 	cp := m.Inbox.ck.cmp
 	if cp == nil {
@@ -364,7 +311,6 @@ func (m *OS) ckCompareAction(action string) tea.Cmd {
 	return nil
 }
 
-// ckFocused is the attempt the keys act on.
 func (cp *ckCompare) ckFocused() (ckFanAttempt, bool) {
 	if cp.res == nil || cp.focus >= len(cp.res.Rows) {
 		return ckFanAttempt{}, false
@@ -372,7 +318,6 @@ func (cp *ckCompare) ckFocused() (ckFanAttempt, bool) {
 	return cp.res.Rows[cp.focus], true
 }
 
-// ckJudge is j: it starts an agent that judges the attempts.
 func (m *OS) ckJudge() tea.Cmd {
 	cp := m.Inbox.ck.cmp
 	if cp == nil || cp.busy != "" || cp.res == nil {
@@ -385,8 +330,6 @@ func (m *OS) ckJudge() tea.Cmd {
 	cp.busy, cp.note = "judge", ""
 	gen, sess, call := cp.gen, cp.session, m.inboxCaller()
 	return func() tea.Msg {
-		// The daemon finds the judge's program on its own PATH, as fan
-		// does: this client may be on another machine.
 		raw, err := call("judge-fan", map[string]any{"session": sess}, ckJudgeTimeout)
 		if err != nil {
 			return ckFanActMsg{gen: gen, verb: "judge", err: err}
@@ -407,8 +350,6 @@ func (m *OS) ckJudge() tea.Cmd {
 	}
 }
 
-// ckKeep is k: the first press says what a keep does, the second keeps the
-// focused attempt and removes the others, their changes stashed.
 func (m *OS) ckKeep() tea.Cmd {
 	cp := m.Inbox.ck.cmp
 	if cp == nil || cp.busy != "" {
@@ -419,31 +360,23 @@ func (m *OS) ckKeep() tea.Cmd {
 		return nil
 	}
 	if cp.armed != a.Session {
-		// The first k reads the attempts again: the warning lists the
-		// files a keep deletes as they are now.
 		cp.armed, cp.confirm, cp.warnScroll, cp.note = a.Session, false, 0, ""
 		cmd := m.ckCompareFetch()
 		cp.armedGen = cp.gen
 		return cmd
 	}
 	if cp.loading || cp.confirm || cp.armedGen != cp.gen {
-		// The second k waits for that read.
 		return nil
 	}
 	if ckIgnoredFailed(cp.res.Rows, cp.focus) != "" {
-		// No keep on a list that could not be read: the warning says why,
-		// and k reads the list again.
 		cmd := m.ckCompareFetch()
 		cp.armedGen = cp.gen
 		return cmd
 	}
-	// The second k reads once more, and keeps only when nothing changed.
 	cp.keepSig, cp.confirm, cp.note = ckKeepSig(cp.res.Rows, cp.focus), true, ""
 	return m.ckCompareFetch()
 }
 
-// ckKeepNow keeps the focused attempt and removes the others, as the last
-// read showed them.
 func (m *OS) ckKeepNow() tea.Cmd {
 	cp := m.Inbox.ck.cmp
 	a, ok := cp.ckFocused()
@@ -463,8 +396,6 @@ func (m *OS) ckKeepNow() tea.Cmd {
 	group, root, fanID := cp.res.Group, cp.res.RepoRoot, cp.res.FanID
 	letter := ckLetter(cp.focus)
 	return func() tea.Msg {
-		// The fan is named too, so a session renamed since the read is not
-		// kept in its place.
 		raw, err := call("keep-fan", map[string]any{"session": kept, "stash": true, "group": group, "repo_root": root, "fan_id": fanID,
 			"siblings": siblings, "ignored": ignored}, ckCompareTimeout)
 		if err != nil {
@@ -488,7 +419,6 @@ func (m *OS) ckKeepNow() tea.Cmd {
 	}
 }
 
-// applyFanAct takes the end of a judge or a keep.
 func (m *OS) applyFanAct(msg ckFanActMsg) tea.Cmd {
 	cp := m.Inbox.ck.cmp
 	if cp == nil || msg.gen != cp.gen {
@@ -520,15 +450,12 @@ func (m *OS) applyFanAct(msg ckFanActMsg) tea.Cmd {
 	return m.ckCompareFetch()
 }
 
-// ckCompareGo is enter: the focused attempt's pane.
 func (m *OS) ckCompareGo() tea.Cmd {
 	cp := m.Inbox.ck.cmp
 	a, ok := cp.ckFocused()
 	if !ok {
 		return nil
 	}
-	// The attempt's row, by its agent: an attempt whose turn finished is
-	// drawn as its finished item, whose row key is the item's.
 	for i, r := range m.cockpitRows() {
 		if !r.selectable() || r.agent < 0 || r.agent >= len(m.Inbox.ck.agents) {
 			continue

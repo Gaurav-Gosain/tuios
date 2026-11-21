@@ -6,9 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// wrapCase is one list: how to put rows in it, how to move it, and where its
-// cursor is. first and last are the rows a wrap lands on, which differ from 0
-// and n-1 in a list with headings.
 type wrapCase struct {
 	name        string
 	setup       func(m *OS)
@@ -82,7 +79,6 @@ func TestDaemonListsWrapAtTheirEnds(t *testing.T) {
 				t.Errorf("down on the last row (%d) went to %d, want the first (%d)", c.last, got, c.first)
 			}
 
-			// A page never wraps.
 			c.set(m, c.last)
 			c.move(m, 10)
 			if got := c.cursor(m); got != c.last {

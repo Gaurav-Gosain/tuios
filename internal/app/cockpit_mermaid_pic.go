@@ -17,33 +17,16 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// Mermaid pictures: a fenced Mermaid block in the agents thread or in quick
-// look's Markdown drawn as a picture, where the host has kitty graphics, in
-// place of its text drawing. [agents] mermaid picks the default, and the
-// block's header (or T) flips one block.
-//
-// The picture is drawn off the loop, once per source, width, cell size and
-// look, and comes back as a mermaidPicMsg. It then goes the way of an image
-// card (cockpit_thread_image.go) or a picture of quick look's Markdown: it is
-// one of the thread's images, so it is prepared, placed, scrolled and cropped
-// the same way, and a click on it opens the image view. Until it comes, and
-// when it cannot be drawn, the block keeps its text drawing.
-
 // MermaidPicture, when set, draws a Mermaid source as a PNG at most cols cells
 // wide and rows cells tall, for cells cellW by cellH pixels, in the colours of
 // pal and ansi on the ground bg, and gives the cells it fills. The binary sets
 // it, so the browser build links no rasteriser.
 var MermaidPicture func(src string, cols, rows, cellW, cellH int, pal overlay.Palette, ansi [16]color.Color, bg color.Color) (png []byte, c, r int, err error)
 
-// ckMermaidRows bounds the rows of a picture the thread shows. A taller
-// diagram shows its top rows and a line that says how to see the rest.
 const ckMermaidRows = 20
 
-// ckMermaidDrawRows bounds the rows a picture is drawn at: a taller diagram
-// is drawn smaller.
 const ckMermaidDrawRows = 3 * ckMermaidRows
 
-// mermaidPicKey is one picture: a source at a width, for a cell size and look.
 type mermaidPicKey struct {
 	src          string
 	cols, cw, ch int
@@ -51,14 +34,11 @@ type mermaidPicKey struct {
 	depth        overlay.Depth
 }
 
-// mermaidPic is a picture of a Mermaid block: its id among the thread's
-// images, and the image once drawn, or why it was not.
 type mermaidPic struct {
 	id string
 	ti *ckThreadImage
 }
 
-// mermaidPicMsg carries a drawn picture back to the loop.
 type mermaidPicMsg struct {
 	key        mermaidPicKey
 	img        *composer.Image
@@ -66,12 +46,8 @@ type mermaidPicMsg struct {
 	err        error
 }
 
-// mermaidSem lets one picture be drawn at a time, so a reply with many
-// diagrams takes one core.
 var mermaidSem = make(chan struct{}, 1)
 
-// mermaidShowsPicture reports whether the Mermaid block key is drawn as a
-// picture, and can whether this client can draw one at all.
 func (m *OS) mermaidShowsPicture(key string) (pic, can bool) {
 	mode := m.replyPreviewer().Mode()
 	if MermaidPicture == nil || mode == composer.PreviewText {
@@ -101,8 +77,6 @@ func (m *OS) ToggleBlockPicture(key string) {
 	m.blocksChanged()
 }
 
-// mermaidPicFor is the picture of src at most cols cells wide, asked for on
-// first use. It is nil when no program takes the drawing back.
 func (m *OS) mermaidPicFor(src string, cols int, pal overlay.Palette) *mermaidPic {
 	cw, ch := m.hostCellSize()
 	if cw <= 0 || ch <= 0 {
@@ -146,8 +120,6 @@ func (m *OS) mermaidPicFor(src string, cols int, pal overlay.Palette) *mermaidPi
 	return p
 }
 
-// applyMermaidPic takes a drawn picture: the blocks are laid out again, and
-// the picture is prepared for the host.
 func (m *OS) applyMermaidPic(msg mermaidPicMsg) tea.Cmd {
 	p := m.mermaidPics[msg.key]
 	if p == nil {
@@ -176,7 +148,6 @@ func (m *OS) applyMermaidPic(msg mermaidPicMsg) tea.Cmd {
 	return tea.Batch(m.threadPicPrepare(p.ti), m.quickLookMDImagesCmd())
 }
 
-// threadPicPrepare prepares a picture of the thread at its own box.
 func (m *OS) threadPicPrepare(ti *ckThreadImage) tea.Cmd {
 	p := m.replyPreviewer()
 	mode := p.Mode()
@@ -204,9 +175,6 @@ func (m *OS) threadPicPrepare(ti *ckThreadImage) tea.Cmd {
 	}
 }
 
-// ckPics is where a layout puts the pictures of its Mermaid blocks: the hit
-// of a picture's rows, their indent, the images the rows name, and the rows
-// as cells where the host draws them so.
 type ckPics struct {
 	hit    string
 	indent int
@@ -214,7 +182,6 @@ type ckPics struct {
 	cells  func(ti *ckThreadImage) []string
 }
 
-// threadPics is the thread's ckPics: the rows are an image card's.
 func (m *OS) threadPics(t *agentThread) *ckPics {
 	return &ckPics{hit: "timg:", indent: ckImgIndent,
 		add: func(id string, ti *ckThreadImage) {
@@ -239,9 +206,6 @@ func (m *OS) threadPics(t *agentThread) *ckPics {
 		}}
 }
 
-// mermaidPictureLines lays out the picture of a Mermaid block: its rows, at
-// most ckMermaidRows, and a line under a taller one. It reports false while
-// the picture is drawn and when it cannot be, and the block keeps its text.
 func (md *ckMD) mermaidPictureLines(src string, avail int) bool {
 	m, pal := md.m, md.l.pal
 	pics := md.pics

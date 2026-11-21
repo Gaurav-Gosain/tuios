@@ -41,9 +41,6 @@ type StreamResumer interface {
 // panes restored on attach are seen too.
 func (m *OS) SetStreamTap(t StreamTap) { m.streamTap = t }
 
-// tapSnapshot reports a restore to the tap, but only for a pane whose stream
-// is not running: the tap's emulator follows a running stream already, and a
-// snapshot taken mid-stream cannot be ordered against bytes already sent.
 func (m *OS) tapSnapshot(ptyID string, state *session.TerminalState) {
 	if m.streamTap == nil || ptyID == "" || m.SubscribedPTYs[ptyID] {
 		return
@@ -51,9 +48,6 @@ func (m *OS) tapSnapshot(ptyID string, state *session.TerminalState) {
 	m.streamTap.Snapshot(ptyID, state)
 }
 
-// snapshotHave is how many scrollback rows a snapshot request may skip because
-// this client already holds them. A tap's renderer starts each snapshot from a
-// blank emulator, so with a tap the request asks for the whole history.
 func (m *OS) snapshotHave(w *terminal.Window) int {
 	if m.streamTap != nil {
 		return 0

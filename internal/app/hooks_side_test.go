@@ -11,17 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// Which side runs a hook is now a decision, so it is pinned here.
-//
-// A hook fires from the side that owns the fact. The window set, the focused
-// window, the current workspace and a pane's agent state are the daemon's, so it
-// fires them and a client attached to a daemon session does not. That is what
-// makes three attached clients produce one firing rather than three, and it is
-// what makes the same hook fire when nobody is attached at all. A standalone
-// tuios has no daemon, so it fires everything itself.
-
-// sideRig builds a client with every hook registered and a recorder in place of
-// a shell.
 func sideRig(t *testing.T, daemonSession bool) (*OS, *hookRecorder) {
 	t.Helper()
 	m := &OS{IsDaemonSession: daemonSession, SessionName: "work", CurrentWorkspace: 1}
@@ -29,7 +18,6 @@ func sideRig(t *testing.T, daemonSession bool) (*OS, *hookRecorder) {
 	return m, r
 }
 
-// firedEvents lists which events reached the runner.
 func (r *hookRecorder) firedEvents(m *OS) map[hooks.Event]int {
 	m.HookManager.Wait()
 	r.mu.Lock()
@@ -59,7 +47,6 @@ func TestADaemonClientLeavesSessionSideHooksToTheDaemon(t *testing.T) {
 				e, fired[e])
 		}
 	}
-	// And the client still runs the ones that need its terminal.
 	for _, e := range []hooks.Event{hooks.AfterAttach, hooks.AfterDetach, hooks.AfterResize, hooks.AfterLayoutChange} {
 		if fired[e] != 1 {
 			t.Errorf("%s fired %d times in a daemon client, want 1: only this client can run it", e, fired[e])
@@ -132,7 +119,6 @@ func TestTheClientListsOnlyTheHooksItFires(t *testing.T) {
 		}
 	}
 
-	// A standalone client fires everything, so it lists everything.
 	standalone, _ := sideRig(t, false)
 	if got, want := len(standalone.HookRows()), len(hooks.AllEvents()); got != want {
 		t.Errorf("a standalone client listed %d hooks, want all %d", got, want)

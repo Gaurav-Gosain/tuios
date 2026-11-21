@@ -11,67 +11,26 @@ import (
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
-// The effect picker is the theme picker's third sibling. screensaver.effect
-// accepts thirty-six values, and a control that costs one keypress per stop is
-// the wrong shape for a set that size. The next largest closed list in the
-// panel is ten.
-//
-// Names alone would not fix it. orbittingvolley, synthgrid, binarypath and
-// errorcorrect say nothing about what lands on the screen, so this picker does
-// what the other two do: it previews. The theme picker recolours the whole
-// screen, the glyph set picker redraws the chrome, and this one runs the effect
-// over the screen you opened it from.
-//
-// The capture is the real composed screen, taken once when the picker opens and
-// reused for every selection. Nothing else would be honest: the effects resolve
-// each character back to the colour it was captured with, and several of them
-// behave differently over a cell that carries its own background, so an effect
-// previewed over invented sample text is a preview of a screen nobody has.
-//
-// It costs nothing when it is shut. The preview drives its own frames the way
-// the saver does, so the maintenance tick never learns it exists.
-
-// effectPreviewFrameMsg asks the running preview for its next frame. gen is the
-// generation it was scheduled for: a message from a preview that has already
-// been closed and reopened is dropped rather than starting a second chain of
-// frames alongside the live one.
 type effectPreviewFrameMsg struct{ gen int }
 
-// effectPreview is the animation running behind the picker panel. The zero
-// value is a preview that is not running.
 type effectPreview struct {
-	// capture is the composed screen the picker opened over, converted once.
 	capture      [][]tfx.InputCell
 	canvasWidth  int
 	canvasHeight int
-	// width and height are the render size the capture was taken at. A resize
-	// invalidates the capture, and this is what it is compared against.
-	width  int
-	height int
+	width        int
+	height       int
 
-	engine *tfx.Engine
-	effect tfx.Effect
-	// running is the effect actually on screen. It differs from the selected
-	// row only for "random", which resolves to a real effect each time it is
-	// built, and naming it is most of what the random row has to say.
+	engine  *tfx.Engine
+	effect  tfx.Effect
 	running string
 	frame   string
 
-	// gen counts openings. See effectPreviewFrameMsg.
-	gen int
-	// ticking is true while a frame message is in flight, so a rebuild does not
-	// start a second chain.
-	ticking bool
-	// resized records that the capture went stale under a resize. The picker
-	// stays up and says so rather than animating a screen that is gone.
-	resized bool
-	// capturing is true only inside captureEffectPreview, where it tells
-	// renderOverlays to draw no panels. See captureEffectPreview.
+	gen       int
+	ticking   bool
+	resized   bool
 	capturing bool
 }
 
-// effectPickerItems returns the effect names on offer, filtered by the current
-// query. "random" is always first, as it is in the registry's accepted list.
 func (m *OS) effectPickerItems() []string {
 	all := config.ScreensaverEffects
 	q := strings.ToLower(strings.TrimSpace(m.effectList.Query.String()))
@@ -97,13 +56,9 @@ func (m *OS) OpenEffectPicker() tea.Cmd {
 		}
 	}
 
-	// Captured before the panel is on screen, so the preview animates the
-	// screen the user was looking at rather than the picker sitting over it.
 	m.captureEffectPreview()
 	m.ShowEffectPicker = true
 
-	// Cascade down-right of the settings panel it was opened from, so both are
-	// visible and can be dragged as separate panels.
 	if m.ShowSettings {
 		so := m.overlayOffset("settings")
 		m.setOverlayOffset("effectpicker", so[0]+10, so[1]+3)
@@ -115,13 +70,6 @@ func (m *OS) OpenEffectPicker() tea.Cmd {
 	return m.effectPreviewTick()
 }
 
-// captureEffectPreview converts the composed screen into engine input.
-//
-// The panels are left out of it. The saver animates panes, chrome, the sidebar
-// and the dock, and the settings page is on screen only because someone is in
-// the middle of choosing an effect. Captured with it, the preview carries a
-// frozen copy of the settings panel that the live one then sits on top of,
-// half a panel out of register, which reads as a fault rather than a preview.
 func (m *OS) captureEffectPreview() {
 	p := &m.effectPreview
 	p.capture, p.canvasWidth, p.canvasHeight = nil, 0, 0
@@ -141,8 +89,6 @@ func (m *OS) captureEffectPreview() {
 	p.width, p.height = width, height
 }
 
-// buildEffectPreview puts the selected effect over the capture. It is called on
-// every move, so the row under the cursor is the one animating.
 func (m *OS) buildEffectPreview() {
 	p := &m.effectPreview
 	p.engine, p.effect, p.running, p.frame = nil, nil, "", ""
@@ -153,9 +99,6 @@ func (m *OS) buildEffectPreview() {
 	if m.effectList.Cursor < 0 || m.effectList.Cursor >= len(items) {
 		return
 	}
-	// Through the saver's own resolver and builder, not a copy of them: an
-	// effect that previews differently from the way it runs is a preview of
-	// nothing. random resolves here exactly as it does at start-up.
 	name, effect, fill := screensaverEffect(items[m.effectList.Cursor])
 	if effect == nil {
 		return
@@ -169,8 +112,6 @@ func (m *OS) buildEffectPreview() {
 	m.renderSkipped = false
 }
 
-// effectPreviewTick schedules the next preview frame, unless one is already in
-// flight or there is nothing to advance.
 func (m *OS) effectPreviewTick() tea.Cmd {
 	p := &m.effectPreview
 	if p.engine == nil || p.ticking {
@@ -180,22 +121,15 @@ func (m *OS) effectPreviewTick() tea.Cmd {
 	return effectPreviewFrameCmd(p.gen, &m.Settings)
 }
 
-// effectPreviewFrameCmd waits one frame and asks for the next one.
 func effectPreviewFrameCmd(gen int, s *config.Settings) tea.Cmd {
 	return tea.Tick(time.Second/time.Duration(screensaverRate(s)), func(time.Time) tea.Msg {
 		return effectPreviewFrameMsg{gen: gen}
 	})
 }
 
-// handleEffectPreviewFrame advances the preview by one frame. An effect that
-// finishes is rebuilt, so the preview loops for as long as the row is selected
-// and "random" shows a different effect each time round.
 func (m *OS) handleEffectPreviewFrame(msg effectPreviewFrameMsg) tea.Cmd {
 	p := &m.effectPreview
 	if msg.gen != p.gen {
-		// A frame left over from an earlier opening. Dropping it is the whole
-		// point of the generation: without it the old chain and the new one
-		// both run and the animation steps twice per frame.
 		return nil
 	}
 	p.ticking = false
@@ -205,9 +139,6 @@ func (m *OS) handleEffectPreviewFrame(msg effectPreviewFrameMsg) tea.Cmd {
 	if p.engine == nil {
 		return nil
 	}
-	// A resize invalidates the capture, and the screen it was taken from is
-	// underneath the picker now. The saver stops for this; so does the preview,
-	// and the panel says so instead of animating a screen that has moved.
 	if m.GetRenderWidth() != p.width || m.GetRenderHeight() != p.height {
 		m.stopEffectPreview()
 		p.resized = true
@@ -224,7 +155,6 @@ func (m *OS) handleEffectPreviewFrame(msg effectPreviewFrameMsg) tea.Cmd {
 	return m.effectPreviewTick()
 }
 
-// stopEffectPreview drops the animation and everything it held.
 func (m *OS) stopEffectPreview() {
 	p := &m.effectPreview
 	p.engine, p.effect = nil, nil
@@ -233,15 +163,11 @@ func (m *OS) stopEffectPreview() {
 	p.canvasWidth, p.canvasHeight = 0, 0
 }
 
-// effectPickerPreview previews the row under the cursor, after a move or a
-// refilter.
 func (m *OS) effectPickerPreview() tea.Cmd {
 	m.buildEffectPreview()
 	return m.effectPreviewTick()
 }
 
-// effectPicker is the effect picker's list behaviour. See list_picker.go.
-// Every move previews the new row, so it returns the preview's first frame.
 func effectPicker() *listPicker {
 	return &listPicker{
 		kind:  "effectpicker",
@@ -268,7 +194,6 @@ func (m *OS) CloseEffectPicker() {
 	m.effectList.Reset()
 	m.stopEffectPreview()
 	m.effectPreview.resized = false
-	// The panes under the animation have not drawn for as long as it was up.
 	m.MarkAllDirty()
 	m.renderSkipped = false
 }
@@ -290,9 +215,6 @@ func (m *OS) CancelEffectPicker() {
 func (m *OS) EffectPickerApplySelection() tea.Cmd {
 	items := m.effectPickerItems()
 	if m.effectList.Cursor < 0 || m.effectList.Cursor >= len(items) {
-		// Nothing to commit, so nothing is closed. Closing here would take away
-		// the query that found nothing along with the only key that gets back
-		// to a list, which is the trap the other two pickers name.
 		m.ShowNotification("No effect matches "+m.effectList.Query.String(),
 			"info", m.Settings.NotificationDuration)
 		return nil
@@ -303,39 +225,6 @@ func (m *OS) EffectPickerApplySelection() tea.Cmd {
 	return save
 }
 
-// effectOpenings is how long each effect hides the screen, over one reference
-// screen at 80x24, and whether it hides it at all.
-//
-// frames is not a time the picker can show anyone. Read the block below before
-// putting a number back on the panel.
-//
-// The metric is the last frame at which fewer than nine cells in ten of the
-// capture's glyph cells are readable, plus one. A cell is readable when it
-// shows its captured symbol, in its captured place, in a colour that stands off
-// the background it is drawn on. TestMeasureEffectOpenings carries the argument
-// for both halves and re-measures the table.
-//
-// What frames is not is a promise about anyone's screen. Several of these
-// effects do work per character, so the wait scales with how much text is on
-// screen and how big the screen is. Measured over four screens, pour ran from
-// 3.1 seconds on a bare prompt to 97.8 seconds at 200x50 on a full one, rain
-// from 2.6 to 65.2, and laseretch from 6.4 to 133.3. Others hardly move:
-// fireworks stayed inside 18.9 to 20.3 and matrix inside 25.1 to 37.6. So no
-// single scale factor fits them, and a number taken from here and shown to a
-// user is a measurement of a screen that is not theirs.
-//
-// What survives is the order and the size of the wait. wipe is at the top on
-// every screen measured and swarm at the bottom, and an effect that hides the
-// screen for most of a minute does that on any screen. So the picker takes a
-// band from this table and never a time, and the panel says the time depends on
-// the screen. effectOpeningBandOf is the only reader.
-//
-// Measuring the real screen instead was considered and does not fit: it means
-// running each effect to its end, and at 200x50 four of them are still going
-// after two minutes of animation. The picker would have to sit there.
-//
-// TestEffectOpeningTableCoversEveryEffect fails the build when the engine gains
-// or loses an effect, so a version bump cannot leave a row with no band.
 var effectOpenings = map[string]effectOpening{
 	"binarypath":      {frames: 801},
 	"blackhole":       {frames: 848},
@@ -375,68 +264,26 @@ var effectOpenings = map[string]effectOpening{
 	"wipe":            {frames: 54},
 }
 
-// effectOpening is one row of the table.
 type effectOpening struct {
-	// frames is the opening over the reference screen, in engine frames. It
-	// feeds a band and nothing else.
-	frames int
-	// keepsScreen is the one thing here that is not a measurement of one
-	// screen. It says the effect never takes a character off the screen, never
-	// moves one, and never draws one in a colour you cannot read it in: every
-	// captured glyph is legible in its own place on every frame of the run.
-	//
-	// highlight is the only effect that does this. It sweeps a band of brighter
-	// colour over text that never moves.
-	//
-	// A zero in frames does not imply it, and reading it that way is what put
-	// "The screen stays visible from the start." under rings, vhstape, waves
-	// and thunderstorm. The first three run from the untouched screen and take
-	// it away afterwards, for twenty-three, twelve and seven seconds; the
-	// fourth dims a fifth of a small screen at a time. All four measure zero
-	// under a metric that asks when the screen first reads well.
-	//
-	// TestEffectsWithNoOpeningNeverHideTheScreen holds every effect flagged
-	// here to the claim, on every frame, over six screen shapes.
+	frames      int
 	keepsScreen bool
 }
 
-// effectOpeningBand is how long an effect hides the screen, coarse enough to
-// stay true on a screen that is not the one the table was measured over.
 type effectOpeningBand int
 
 const (
-	// effectOpeningUnknown is an effect with no measurement, and the picker
-	// shows nothing for it. random lands here: it has no one opening.
 	effectOpeningUnknown effectOpeningBand = iota
-	// effectOpeningNone never hides the screen at all. See keepsScreen.
 	effectOpeningNone
 	effectOpeningShort
 	effectOpeningMedium
-	// effectOpeningLong is the band worth flagging. It is drawn in the warning
-	// colour on the row and under the list.
 	effectOpeningLong
 )
 
-// The band boundaries, in seconds over the reference screen.
-//
-// Both sit in a gap in the measurements rather than on a round number, so a
-// re-measurement that moves an effect by a few percent does not move it a band.
-// The nearest neighbours are unstable at 4.8 and spray at 6.1, then crumble at
-// 9.1 and spotlights at 10.7.
 const (
 	effectMediumOpening = 5.5
-	// effectSlowOpening is the point past which an opening is worth flagging.
-	// Ten seconds of a screen you cannot read is long enough to look like a
-	// fault.
-	effectSlowOpening = 10.0
+	effectSlowOpening   = 10.0
 )
 
-// effectOpeningBandOf is the band an effect falls in over the reference screen.
-//
-// It takes seconds from the table at the saver's paint rate and throws them
-// away again. Nothing else may read effectOpenings: a caller that wants the
-// number wants to show it, and the number is not true of the screen the user is
-// looking at.
 func effectOpeningBandOf(name string, s *config.Settings) effectOpeningBand {
 	opening, ok := effectOpenings[name]
 	if !ok {
@@ -445,8 +292,6 @@ func effectOpeningBandOf(name string, s *config.Settings) effectOpeningBand {
 	if opening.keepsScreen {
 		return effectOpeningNone
 	}
-	// The saver paints at screensaverRate, so that is the rate the frames in
-	// the table turn into seconds at.
 	switch seconds := float64(opening.frames) / float64(screensaverRate(s)); {
 	case seconds < effectMediumOpening:
 		return effectOpeningShort

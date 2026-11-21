@@ -53,25 +53,16 @@ func TestScreensaverStartsOverTheRealComposedScreen(t *testing.T) {
 			m.screensaver.canvasWidth, m.screensaver.canvasHeight, cols, rows)
 	}
 
-	// The frame must cover the screen. A short one lets panes show through the
-	// bottom of the animation.
 	lines := strings.Split(m.screensaver.frame, "\n")
 	if len(lines) != rows {
 		t.Errorf("the frame is %d rows, want %d", len(lines), rows)
 	}
 
-	// And the saver draws alone: everything under it is hidden anyway, and a
-	// panel drawn over an animation of that same panel only looks like part of
-	// the animation.
 	layers := m.renderOverlays()
 	if len(layers) != 1 {
 		t.Errorf("renderOverlays returned %d layers while the saver was up, want 1", len(layers))
 	}
 
-	// A pane filling the screen must not take the fullscreen fast path, which
-	// skips overlays entirely and would never draw the saver at all. The
-	// geometry has to be set up for the fast path to be eligible in the first
-	// place, or this asserts nothing.
 	win.X, win.Y = 0, m.GetTopMargin()
 	win.Width, win.Height = m.GetRenderWidth(), m.GetUsableHeight()
 	m.stopScreensaver()

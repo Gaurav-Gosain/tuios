@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// askItem is a question ask-human put to the person about window.
 func askItem(id, sess, window string, options ...string) session.AttentionItem {
 	it := item(id, session.AttentionAsk, sess, window, "Deploy to staging?", time.Now().UnixNano())
 	it.RequestID = "q" + id
@@ -46,7 +45,6 @@ func TestInboxAnswersAQuestionWithItsDigits(t *testing.T) {
 		t.Fatalf("a settled question was not answered: %q", lastNote(m))
 	}
 
-	// Enter goes to the pane that asked and sends nothing.
 	if cmd := m.InboxActivate(); cmd != nil {
 		t.Fatal("enter on a question sent something")
 	}

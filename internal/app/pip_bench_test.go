@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The picture-in-picture view's cost budget: nothing at idle, and a small
-// share of a frame while its pane floods.
-
 // TestPiPIdleAddsNoFrames is the idle guard. A pinned pane that writes nothing
 // must not make a maintenance tick compose a frame or do scan work.
 func TestPiPIdleAddsNoFrames(t *testing.T) {
@@ -33,8 +30,6 @@ func TestPiPIdleAddsNoFrames(t *testing.T) {
 	}
 }
 
-// pipFloodOS is a 160x44 client with a pane a that has the focus and a pane b
-// on workspace 2 that floods, b pinned or not.
 func pipFloodOS(b *testing.B, pinned bool) (*OS, func()) {
 	b.Helper()
 	m := gapTestOS(b, 2)
@@ -79,14 +74,12 @@ func BenchmarkPiPFlood(b *testing.B) {
 	}
 }
 
-// pipBenchCase is one row both benchmarks report.
 type pipBenchCase struct {
 	name   string
 	pinned bool
 	slow   bool
 }
 
-// setup turns the fast path off for the run when the row asks for it.
 func (c pipBenchCase) setup(b *testing.B) {
 	if !c.slow {
 		return

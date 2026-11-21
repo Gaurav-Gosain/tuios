@@ -29,8 +29,6 @@ func TestEveryClientEventKeepsTheListenerArmed(t *testing.T) {
 			t.Errorf("%T returned no command, so nothing is listening for the next event", msg)
 			continue
 		}
-		// The command it returned has to be the listener itself: put an event in
-		// the channel and see it come back out as a message.
 		m.ClientEventChan <- ClientEvent{Type: "resize", Width: 1, Height: 2, ClientCount: 3}
 		if !answersAtOnce(cmd, func(msg tea.Msg) bool { _, ok := msg.(SessionResizeMsg); return ok }) {
 			t.Errorf("%T returned a command that is not the client-event listener", msg)
@@ -38,10 +36,6 @@ func TestEveryClientEventKeepsTheListenerArmed(t *testing.T) {
 	}
 }
 
-// answersAtOnce reports whether cmd, or a command batched in it, returns a
-// message want accepts within a second. Each command runs on its own
-// goroutine, so a maintenance tick batched beside the listener is left to
-// fire on its own.
 func answersAtOnce(cmd tea.Cmd, want func(tea.Msg) bool) bool {
 	got := make(chan tea.Msg, 16)
 	var run func(tea.Cmd)

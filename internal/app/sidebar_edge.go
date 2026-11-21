@@ -2,9 +2,6 @@ package app
 
 import "github.com/Gaurav-Gosain/tuios/internal/config"
 
-// sidebarEdge identifies the screen edge a rail is drawn on. Keeping the edge
-// explicit in the geometry prevents a second rail from inheriting the legacy
-// rail's position merely because a caller read Settings.SidebarPosition.
 type sidebarEdge uint8
 
 const (
@@ -12,8 +9,6 @@ const (
 	sidebarRight
 )
 
-// legacySidebarEdge is the position of the existing rail. A hidden rail still
-// has a position for its controls when it is revealed for keyboard focus.
 func (m *OS) legacySidebarEdge() sidebarEdge {
 	if m.Settings.SidebarPosition == "right" {
 		return sidebarRight
@@ -21,8 +16,6 @@ func (m *OS) legacySidebarEdge() sidebarEdge {
 	return sidebarLeft
 }
 
-// railEdge is the edge of the rail currently drawn or handled. The secondary
-// rail temporarily swaps its view state, but does not change the legacy config.
 func (m *OS) railEdge() sidebarEdge {
 	if m.sidebarDrawing {
 		return m.sidebarDrawingEdge
@@ -30,9 +23,6 @@ func (m *OS) railEdge() sidebarEdge {
 	return m.legacySidebarEdge()
 }
 
-// sidebarEdgeX locates the first column of a rail of width w on an edge.
-// Both drawing and pointer geometry use it so they cannot disagree about
-// which side of the screen owns the reserved columns.
 func sidebarEdgeX(edge sidebarEdge, w, screenWidth int) int {
 	if edge == sidebarRight {
 		return screenWidth - w
@@ -70,9 +60,6 @@ func (m *OS) sidebarRailFocused() bool {
 	return m.SidebarFocused && m.sidebarDrawing == m.sidebarFocusSecondary
 }
 
-// withSecondaryRail scopes a pointer action to the opposite edge's state.
-// Restore the original state before returning to the update loop, including
-// when the gesture did not change a row.
 func (m *OS) withSecondaryRail(action func() bool) bool {
 	if m.UserConfig == nil || m.secondarySidebarWidth() == 0 {
 		return false

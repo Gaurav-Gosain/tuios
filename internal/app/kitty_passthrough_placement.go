@@ -8,26 +8,19 @@ import (
 	"slices"
 )
 
-// rectsOverlap checks if two rectangles overlap
 func rectsOverlap(x1, y1, w1, h1, x2, y2, w2, h2 int) bool {
 	return x1 < x2+w2 && x1+w1 > x2 && y1 < y2+h2 && y1+h1 > y2
 }
 
-// isOccludedByHigherWindow checks if an image region is fully occluded by a window with higher z-index
 func (kp *KittyPassthrough) isOccludedByHigherWindow(
 	screenX, screenY, width, height, windowZ int,
 	allWindows map[string]*WindowPositionInfo,
 	excludeWindowID string,
 ) bool {
 	for id, info := range allWindows {
-		// Off-workspace / minimized windows are now present in allWindows with
-		// Visible:false (so their own images get hidden rather than deleted).
-		// Such a window is not on screen and cannot occlude anything, even if
-		// its retained geometry still overlaps the image region.
 		if id == excludeWindowID || !info.Visible || info.WindowZ <= windowZ {
 			continue
 		}
-		// Check if higher-z window overlaps the image region
 		if rectsOverlap(screenX, screenY, width, height,
 			info.WindowX, info.WindowY, info.Width, info.Height) {
 			return true
@@ -44,26 +37,12 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		return
 	}
 
-	// A frame whose update has closed is released before this pass, so the
-	// placements computed below follow it in the same drain.
 	kp.releaseDueHeld(true)
 
-	// A resize can have scrolled the host's screen, and a placement goes with
-	// it, while tuios's own record of the placement has not changed. Each one
-	// goes out again, which costs a few bytes and no image data.
 	replaceAll := kp.hostScreenErased.Swap(false)
 
-	// Note: prior versions short-circuited this loop in web mode because
-	// xterm-addon-image could not update placements in place. sip now
-	// ships a custom kitty overlay (xterm-kitty-overlay.js) that renders
-	// placements as absolutely-positioned DOM canvases with proper
-	// update/delete semantics, so the standard refresh path works in
-	// both native and web modes.
-
-	// Get all windows upfront for occlusion detection
 	allWindows := getAllWindows()
 
-	// Update screen dimensions from any window info
 	for _, info := range allWindows {
 		if info.ScreenWidth > 0 && info.ScreenHeight > 0 {
 			kp.screenWidth = info.ScreenWidth
@@ -72,13 +51,6 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		}
 	}
 
-	// Decide, once per window, whether this pass holds the window's placements
-	// untouched because an interactive resize is mid-gesture (see the comment
-	// on the freeze below). Computed up front and shared by both the regular
-	// placement loop and the remote-video loop so that a window carrying both
-	// kinds of image freezes them together, and so a window whose only image is
-	// a self-placed video (removed from `placements` at handoff) still gets a
-	// freeze record at all.
 	if kp.frozenThisPass == nil {
 		kp.frozenThisPass = make(map[string]bool)
 	} else {
@@ -93,51 +65,6 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		if info == nil {
 			return
 		}
-		// Coalesce an interactive resize.
-		//
-		// A drag-resize changes the window size every render tick, and the guest
-		// has not redrawn at the new size yet (the PTY resize is deferred until
-		// the gesture settles, see resize_deferral.go). Re-clipping and re-placing
-		// the same stale image against each intermediate viewport size makes it
-		// visibly crop and jitter many times a second: the flicker. So while a
-		// window is being manipulated AND its size differs from the size the
-		// placement was last laid out at, the existing placement is left exactly
-		// where it is (kitty keeps the last a=p on screen), and no delete or
-		// re-place is emitted for it.
-		//
-		// resizeFreezeSize records the size seen on the PREVIOUS pass, and is
-		// written on every pass. The hold is therefore keyed on the size still
-		// moving, not on how the gesture ends: while the pointer drags, each tick
-		// differs from the last and the image is held; the tick after the pointer
-		// stops matches the last one and the image re-places once at the settled
-		// geometry. A plain window move (manipulated, unchanged size) is never
-		// frozen and still follows the pointer.
-		//
-		// Keying it on the flag instead stretches a browser pane. The flag is
-		// cleared by mouse release, and release is the event that goes missing
-		// when the pointer leaves the surface mid-drag. That is the case
-		// clearStaleManipulation exists for, and the one that sweep skips while
-		// InteractionMode is set. A hold released only by that flag then outlives
-		// its gesture forever, and a frozen pane is not an idle one: the guest has
-		// been resized, redraws at its new size and keeps streaming frames, every
-		// one of which is forwarded to the host as a fresh bitmap for the same
-		// image id. With no placement to go with them the host keeps scaling each
-		// new bitmap into the pre-resize cell rectangle. Measured on a 120x40
-		// screen whose pane was dragged from 118 to 78 content columns: the host
-		// held c=118,r=38 while every frame arriving was 780px wide, a 1.51x
-		// horizontal stretch that lasted until a click (press sets the flag,
-		// release clears it on every window) let the correct c=78,r=38 out.
-		// Keyed on the CONTENT rectangle, not the outer one. The two do not
-		// move together: dragging a tiled pane untiles it for the length of
-		// the gesture (untilePaneForDrag), which leaves the outer rectangle
-		// exactly where it was and takes a border's worth off every edge of the
-		// content. Watching the outer rectangle sees nothing happen, so the
-		// hold never arms and the placement is recomputed against a content
-		// area two cells narrower and two shorter than the bitmap the host is
-		// holding: the image jumps a cell and loses its right-hand and bottom
-		// edges for the length of a drag. The content rectangle is also the
-		// one the guest is told about and the one the placement is measured in,
-		// so it is the rectangle whose movement matters here.
 		cw, chh := paneContentCells(info)
 		prev, seen := kp.resizeFreezeSize[windowID]
 		kp.resizeFreezeSize[windowID] = [2]int{cw, chh}
@@ -153,21 +80,9 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 		markFreeze(windowID)
 	}
 
-	// Keep self-placed remote video images in step with their window. These are
-	// not in `placements`, so the loop below never sees them; here we (1) delete
-	// one whose pane left the screen it was shown on (a browser quitting back to
-	// the shell restores the main screen), (2) hide one that went offscreen or
-	// under a higher window and re-show it when it returns, and (3) re-place one
-	// with a=p when its window moved/resized, from the resident image data with
-	// no re-transmit, so the frame follows a drag/resize even while the browser
-	// sends no new frame. The desired geometry written here is what the async
-	// frame writer reads at write time; this loop is its only writer after the
-	// handoff.
 	for windowID, ids := range kp.remoteVideo {
 		info := allWindows[windowID]
 		if info != nil && frozen[windowID] {
-			// Mid drag-resize: hold the image exactly where it is, like the
-			// regular placement path. The settled geometry re-places it once.
 			continue
 		}
 		var buf bytes.Buffer
@@ -180,18 +95,6 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 			newHostX := info.WindowX + info.ContentOffsetX + st.guestX
 			newHostY := info.WindowY + info.ContentOffsetY + st.guestY
 
-			// Clamp the visible cell area to the box the panes are laid out in,
-			// so a frame cannot paint over the sidebar rail or the dock the way
-			// the regular path's clamp stops it doing. Like the regular path,
-			// also keep the final screen row free: an image reaching the last
-			// row makes the host terminal scroll and cascades into duplicate
-			// frames.
-			//
-			// Only the right and bottom edges are clamped here. This path's
-			// frames carry a source rectangle anchored at x=0,y=0
-			// (buildPlacedFrame), so it has no way to say "start part way into
-			// the image", and a pane hanging off the left of the box is left as
-			// it was rather than cropped wrong.
 			boxX0, boxY0, boxX1, boxY1 := info.placementBounds()
 			showCols, showRows := st.cols, st.rows
 			visible := info.Visible && newHostX >= boxX0 && newHostY >= boxY0 &&
@@ -214,15 +117,10 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 			) {
 				visible = false
 			}
-			// This path has no crop, so chrome over any part of the frame
-			// hides it, the same rule as a higher window above.
 			if visible && kp.overlapsChrome(cellRect{newHostX, newHostY, showCols, showRows}) {
 				visible = false
 			}
 
-			// Record the desired geometry BEFORE emitting, so the async frame
-			// writer's write-time read and its post-write convergence check
-			// always see the same target this pass decided on.
 			changed := replaceAll || st.hidden || newHostX != st.hostX || newHostY != st.hostY ||
 				showCols != st.showCols || showRows != st.showRows
 			st.hostX, st.hostY = newHostX, newHostY
@@ -230,8 +128,6 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 
 			if !visible {
 				if !st.hidden {
-					// d=i keeps the image bytes resident so re-showing is a
-					// plain a=p, no re-transmit.
 					fmt.Fprintf(&buf, "\x1b_Ga=d,d=i,i=%d,q=2\x1b\\", hostID)
 					st.hidden = true
 				}
@@ -279,63 +175,27 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 
 		kittyPassthroughLog("RefreshAllPlacements: windowID=%s, IsAltScreen=%v, visible=%v", windowID[:min(8, len(windowID))], info.IsAltScreen, info.Visible)
 
-		// Frozen mid drag-resize (see markFreeze above): hold this window's
-		// placement untouched for this tick.
 		if frozen[windowID] {
 			continue
 		}
 
-		// During window manipulation (drag/resize), let images reposition
-		// with the window. The change detection below (posChanged check)
-		// ensures we only re-place if the position actually changed.
-
-		// The viewport is the cells the guest was told it has, not the window
-		// rectangle less its border allowance. Those agree in a settled layout
-		// and part company exactly when this matters: a pane is given a new
-		// rectangle a frame or many frames before the guest is told about it (a
-		// live resize defers the announcement to the end of the gesture; a press
-		// on a tiled pane drops its borderless allowance without moving the
-		// rectangle). Measuring against the rectangle re-clips the image against
-		// a viewport it was never drawn for, and re-emits a placement for it,
-		// which is how a pane nobody touched changes shape because something
-		// else on screen did.
 		viewportTop := info.ScrollbackLen - info.ScrollOffset
 		viewportWidth, viewportHeight := paneContentCells(info)
 
-		// The windows drawn over this one, which every image in it is clipped
-		// against. Built once here rather than once per image: a pane being
-		// dragged refreshes on every frame, and the answer cannot differ
-		// between two images in the same pane.
 		blockers := kp.occludersAboveInto(kp.occluderScratch[:0], info.WindowZ, allWindows, windowID)
-		// Chrome drawn over every pane, such as capture mode's marquee, is a
-		// blocker for every image whatever its window's z.
 		blockers = append(blockers, kp.chromeOccluders...)
 		kp.occluderScratch = blockers[:0]
-		// A marquee is four thin edges, and cutting an image around all four
-		// takes more slices than one window over it does. Each blocker gets
-		// room for the pieces it can add, so a marquee dragged across an
-		// image keeps the whole picture outside its edges rather than falling
-		// back to the largest single rectangle.
-		// A placement has placementStride host ids for its slices.
 		sliceLimit := min(maxVisibleSlices+3*len(kp.chromeOccluders), int(placementStride))
-		// Reused for every image in this window, and across frames.
 		pieces := kp.sliceScratch[:0]
 
-		// Collect IDs to delete (for altscreen cleanup)
 		var idsToDelete []placementKey
 
 		for key, p := range placements {
 			hostID := key.host
-			// An a=p record whose rows a reflow moved above the oldest
-			// line of history can never be on screen again.
 			if key.slot != 0 && p.AbsoluteLine+max(p.Rows, 1) <= 0 {
 				kp.evictPlacement(windowID, key)
 				continue
 			}
-			// Handle screen mode mismatch:
-			// - Images placed on normal screen should be hidden when altscreen is active
-			// - Images placed on altscreen should be DELETED when back to normal screen
-			//   (cleanup after TUI apps like yazi exit)
 			if info.IsAltScreen != p.PlacedOnAltScreen {
 				kittyPassthroughLog("RefreshPlacement: altscreen mismatch (info=%v, placed=%v)",
 					info.IsAltScreen, p.PlacedOnAltScreen)
@@ -343,8 +203,6 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 					kp.deleteOnePlacement(p)
 					p.Hidden = true
 				}
-				// When exiting altscreen (now on normal screen), delete altscreen placements entirely
-				// This cleans up images from TUI apps like yazi when they exit
 				if !info.IsAltScreen && p.PlacedOnAltScreen {
 					kittyPassthroughLog("RefreshPlacement: cleaning up altscreen placement hostID=%d", hostID)
 					idsToDelete = append(idsToDelete, key)
@@ -352,32 +210,26 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				continue
 			}
 
-			// Calculate new position (where top-left of image would be)
 			relativeY := p.AbsoluteLine - viewportTop
 
-			// Calculate where the FULL image would end (for visibility check)
 			fullImageBottom := relativeY + p.Rows
 			fullImageRight := p.GuestX + p.Cols
 
-			// Check if ANY part of the image is visible in the viewport
-			// Image is visible if: top < viewportHeight AND bottom > 0 AND left < viewportWidth AND right > 0
 			anyPartVisible := info.Visible &&
 				relativeY < viewportHeight && fullImageBottom > 0 &&
 				p.GuestX < viewportWidth && fullImageRight > 0
 
-			// Calculate vertical clipping based on FULL image dimensions
 			clipTop := 0
 			clipBottom := 0
 			if anyPartVisible {
 				if relativeY < 0 {
-					clipTop = -relativeY // Clip rows above viewport
+					clipTop = -relativeY
 				}
 				if fullImageBottom > viewportHeight {
-					clipBottom = fullImageBottom - viewportHeight // Clip rows below viewport
+					clipBottom = fullImageBottom - viewportHeight
 				}
 			}
 
-			// Clamp to viewport: rows vertically, cols horizontally
 			maxShowableRows := min(p.Rows-clipTop-clipBottom, viewportHeight)
 			if maxShowableRows <= 0 {
 				maxShowableRows = 1
@@ -400,18 +252,6 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 			imageCellWidth := maxShowableCols
 			imageCellHeight := maxShowableRows
 
-			// Clip to the box the panes are laid out in, not to the raw screen.
-			// See WindowPositionInfo.LayoutX for why the two differ and why the
-			// difference is only ever visible on an image: the rail and the dock
-			// are composed over the pane layer, so a pane hanging under them
-			// still draws no cell there, while a kitty placement is painted by
-			// the host over the finished frame and covers whatever is beneath.
-			//
-			// A crop off the left or the top is a crop of the image as well as
-			// of the cell area, so it is carried in ClipLeft/ClipTop for
-			// placeOne to turn into a source rectangle. Cropping the cells alone
-			// would leave kitty scaling the whole bitmap into fewer cells, which
-			// is the squeeze 6c6283cd went to some trouble to remove.
 			boxX0, boxY0, boxX1, boxY1 := info.placementBounds()
 			clipLeft := 0
 			if anyPartVisible {
@@ -441,28 +281,14 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				}
 			}
 
-			// Hide images when host position is out of bounds.
 			if anyPartVisible && (newHostX < 0 || newHostY < 0) {
 				anyPartVisible = false
 			}
 			if anyPartVisible && (info.WindowX < 0 || info.WindowY < 0) {
 				anyPartVisible = false
 			}
-			// In native mode, an image whose bottom reaches the last screen row
-			// makes the host terminal scroll to make room, and the next frame
-			// then places at the same (now scrolled) Y, cascading into duplicate
-			// frames (see 2e288e6). Hiding any such image would blank a pane
-			// whose content legitimately fills to the screen edge, which is
-			// exactly what a full-window app like terminal-browser or awrit
-			// draws every frame. Instead of hiding, clamp the visible
-			// rows/cols so the image stops one row short of the bottom edge
-			// (keeping the final row free avoids the scroll) and one column short
-			// of the right edge. Hide only when nothing fits at all.
-			//
-			// Inline-graphics mode (web) skips this: the browser overlay clips
-			// via CSS overflow:hidden, and clamping there drops rows unnecessarily.
 			if !kp.inlineGraphics && anyPartVisible && info.ScreenHeight > 0 {
-				maxBottom := info.ScreenHeight - 1 // leave the final row free
+				maxBottom := info.ScreenHeight - 1
 				if newHostY+imageCellHeight > maxBottom {
 					fit := maxBottom - newHostY
 					if fit <= 0 {
@@ -486,21 +312,12 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				}
 			}
 
-			// Crop to whatever a window drawn over this one leaves clear,
-			// rather than hiding the picture because something touched it. The
-			// crops are applied exactly as the layout box's are above, because
-			// they are the same thing: a smaller rectangle of the same image.
-			// See kitty_occlusion.go for what one placement can and cannot
-			// show.
 			pieces = pieces[:0]
 			if anyPartVisible {
 				whole := cellRect{newHostX, newHostY, imageCellWidth, imageCellHeight}
 				region, exact := clearRegion(kp.regionScratch[:0], whole, blockers, sliceLimit)
 				kp.regionScratch = region
 				if !exact {
-					// Too many pieces to draw one placement each. The largest
-					// single rectangle is the fallback, which is what this did
-					// before it could do better.
 					if one, ok := largestClearRect(whole, blockers); ok {
 						region = append(region[:0], one)
 					} else {
@@ -522,8 +339,6 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 							Rows:       r.H,
 						})
 					}
-					// The first slice also answers for the placement as a
-					// whole, so the fields every other path reads stay true.
 					newHostX, newHostY = pieces[0].HostX, pieces[0].HostY
 					clipTop, clipLeft = pieces[0].ClipTop, pieces[0].ClipLeft
 					clipBottom = pieces[0].ClipBottom
@@ -537,26 +352,12 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 				clipTop, clipBottom, clipLeft, maxShowableRows, maxShowableCols, newHostX, newHostY, anyPartVisible)
 
 			if !anyPartVisible {
-				// A held placement would show it after the update closes,
-				// whether or not the host shows it now.
 				kp.dropHeldPlacements(hostID)
-				// Send a delete only if the image was currently visible.
-				// deleteOnePlacement sends d=p (placement id, image id) so
-				// the image bytes stay in storage and a subsequent scroll
-				// back into view can re-place without retransmitting.
 				if !p.Hidden {
 					kp.deleteOnePlacement(p)
 					p.Hidden = true
 				}
 			} else {
-				// Re-place only if position/clipping changed. Real kitty
-				// and our sip overlay both treat a=p with the same (i, p)
-				// as an in-place update of the existing placement.
-				// DataDirty is the streaming case: the position is unchanged
-				// but the image behind it was replaced, and the host will not
-				// redraw a placement whose image was swapped underneath it.
-				// forwardPlace sent this one already. If that is what
-				// this pass would draw, it is not sent again.
 				if p.sentAsIs {
 					p.sentAsIs = false
 					if !replaceAll && !p.Hidden && !p.DataDirty && len(pieces) == 1 &&
@@ -582,10 +383,6 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 					p.ClipLeft = clipLeft
 					p.MaxShowable = maxShowableRows
 					p.MaxShowableCols = maxShowableCols
-					// A held window's placement belongs to the frame
-					// the guest has not finished: it goes out with that
-					// frame, never ahead of it and never a tick after it.
-					// See kitty_sync_hold.go.
 					start := len(kp.pendingOutput)
 					kp.placeSlices(p)
 					kp.holdTail(windowID, hostID, start, tuiosMoved)
@@ -595,7 +392,6 @@ func (kp *KittyPassthrough) RefreshAllPlacements(getAllWindows func() map[string
 			}
 		}
 
-		// Clean up altscreen placements that are no longer needed
 		for _, id := range idsToDelete {
 			kp.dropPlacement(windowID, id)
 		}
@@ -610,9 +406,6 @@ func (kp *KittyPassthrough) HasPlacements() bool {
 			return true
 		}
 	}
-	// Self-placed remote video images are not in `placements` but still need the
-	// render loop to run its passes: RefreshAllPlacements clears them when a pane
-	// leaves its screen (browser quit), and the overlay path hides them.
 	for _, ids := range kp.remoteVideo {
 		if len(ids) > 0 {
 			return true
@@ -640,14 +433,10 @@ func (kp *KittyPassthrough) SetOverlayActive(active bool) {
 	var buf bytes.Buffer
 	for _, ids := range kp.remoteVideo {
 		for hostID, st := range ids {
-			// Images already hidden for geometry reasons (offscreen/occluded)
-			// have no on-screen placement to hide, and must not be re-shown
-			// when the overlay closes.
 			if st.hidden {
 				continue
 			}
 			if active {
-				// Hide but keep the image data so a=p can re-show it.
 				fmt.Fprintf(&buf, "\x1b_Ga=d,d=i,i=%d,q=2\x1b\\", hostID)
 			} else {
 				buf.Write(buildVideoReplace(hostID, st))
@@ -675,9 +464,6 @@ func (kp *KittyPassthrough) SetChromeOccluders(rects []cellRect) {
 	kp.chromeOccluders = append(kp.chromeOccluders[:0], rects...)
 }
 
-// replaceChromeOccluders sets the chrome occluders as SetChromeOccluders does,
-// and reports whether the placements need laying out again for it: the set
-// changed and images are showing.
 func (kp *KittyPassthrough) replaceChromeOccluders(rects []cellRect) bool {
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
@@ -688,7 +474,6 @@ func (kp *KittyPassthrough) replaceChromeOccluders(rects []cellRect) bool {
 	return kp.enabled && !kp.overlayActive
 }
 
-// overlapsChrome reports whether a rectangle touches any chrome occluder.
 func (kp *KittyPassthrough) overlapsChrome(r cellRect) bool {
 	return slices.ContainsFunc(kp.chromeOccluders, r.overlaps)
 }
@@ -696,9 +481,6 @@ func (kp *KittyPassthrough) overlapsChrome(r cellRect) bool {
 // HideAllPlacements hides all visible image placements. Used during resize
 // to prevent stale positions. RefreshAllPlacements will re-place them.
 func (kp *KittyPassthrough) HideAllPlacements() {
-	// In inline-graphics mode (web), the browser overlay manages
-	// placement visibility via CSS. Don't send delete commands that
-	// would wipe image data from the overlay's storage.
 	if kp.inlineGraphics {
 		return
 	}
@@ -706,8 +488,6 @@ func (kp *KittyPassthrough) HideAllPlacements() {
 	defer kp.mu.Unlock()
 	for _, placements := range kp.placements {
 		for _, p := range placements {
-			// A held placement would show it again once its update
-			// closes; see kitty_sync_hold.go.
 			kp.dropHeldPlacements(p.HostImageID)
 			if !p.Hidden {
 				kp.deleteOnePlacement(p)
@@ -718,24 +498,17 @@ func (kp *KittyPassthrough) HideAllPlacements() {
 	kp.flushToHost()
 }
 
-// deleteOnePlacement takes a placement down. A placement that shares its
-// image with others takes down only its own host placement ids. The image's
-// own placement, alone, takes down every placement of the image, which also
-// clears one the host was given without a p=.
 func (kp *KittyPassthrough) deleteOnePlacement(p *PassthroughPlacement) {
 	if p.slot != 0 || kp.sharesImage(p) {
 		kp.deletePlacementIDs(p)
 		return
 	}
 	if !kp.guestCapture {
-		// tuios is hiding this image itself; a held placement must not
-		// show it again. See kitty_sync_hold.go.
 		kp.dropHeldPlacements(p.HostImageID)
 	}
 	var buf bytes.Buffer
 	buf.WriteString("\x1b_G")
 	fmt.Fprintf(&buf, "a=d,d=i,i=%d,q=2\x1b\\", p.HostImageID)
-	// Trace caller for debugging
 	var caller string
 	if pc, _, line, ok := runtime.Caller(1); ok {
 		caller = fmt.Sprintf("%s:%d", runtime.FuncForPC(pc).Name(), line)
@@ -744,26 +517,14 @@ func (kp *KittyPassthrough) deleteOnePlacement(p *PassthroughPlacement) {
 	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 }
 
-// placeSlices draws an image as the set of rectangles that are clear of
-// whatever is on top of it, one a=p per rectangle.
-//
-// One placement shows one rectangle, so this is what lets an image with a
-// window over its corner keep the whole of the L instead of the larger of its
-// two strips. The placement ids run from the image's own upward, and the ones
-// left over from a frame with more slices are deleted, or a strip that is no
-// longer clear stays on the host's screen after the window moved off it.
 func (kp *KittyPassthrough) placeSlices(p *PassthroughPlacement) {
 	if len(p.Slices) == 0 {
-		// Every path that sets HostX and the clip fields directly, rather than
-		// going through the refresh, means the whole image.
 		kp.placeOne(p)
 		p.placedSlices = 1
 		return
 	}
 
 	base := kp.placementBaseFor(p)
-	// Saved because placeOne reads the placement's own fields, and the slices
-	// are what is being drawn this pass rather than what the image is.
 	saved := placementSlice{
 		HostX: p.HostX, HostY: p.HostY,
 		ClipTop: p.ClipTop, ClipLeft: p.ClipLeft, ClipBottom: p.ClipBottom,
@@ -787,8 +548,6 @@ func (kp *KittyPassthrough) placeSlices(p *PassthroughPlacement) {
 	p.MaxShowableCols, p.MaxShowable = saved.Cols, saved.Rows
 }
 
-// deleteOneSlice removes a single placement of an image, leaving the image and
-// its other placements alone. d=i without a p= would take them all.
 func (kp *KittyPassthrough) deleteOneSlice(p *PassthroughPlacement, placementID uint32) {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "\x1b_Ga=d,d=i,i=%d,p=%d,q=2\x1b\\", p.HostImageID, placementID)
@@ -799,34 +558,17 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 	caps := kp.hostCaps()
 	cellHeight := caps.CellHeight
 	if cellHeight <= 0 {
-		cellHeight = 20 // Fallback
+		cellHeight = 20
 	}
 
-	// Use a stable, non-zero placement ID so we can delete the previous
-	// placement unambiguously before creating a new one. Kitty's a=p with
-	// the same (i, p) replaces. Without p, kitty can stack placements.
 	kp.placementBaseFor(p)
 
 	var buf bytes.Buffer
-	buf.WriteString("\x1b7") // Save cursor position
+	buf.WriteString("\x1b7")
 	fmt.Fprintf(&buf, "\x1b[%d;%dH", p.HostY+1, p.HostX+1)
 	buf.WriteString("\x1b_G")
-	// C=1: do not move the cursor.
-	//
-	// The protocol's default is C=0, which moves the cursor to after the
-	// image's bottom right cell. tuios places images anywhere in a pane,
-	// including its last rows, so that move runs past the bottom of the screen
-	// and the host terminal scrolls to make room. The save and restore around
-	// this put the cursor back; they cannot put back a scroll. Every frame
-	// after it is then drawn one row out, which is the whole screen sliding up
-	// and the chrome smearing.
-	//
-	// tuios positions every image itself, with the absolute move above, so
-	// there is nothing the host's own cursor policy is needed for.
 	fmt.Fprintf(&buf, "a=p,i=%d,p=%d,C=1", p.HostImageID, p.PlacementID)
 
-	// MaxShowable is already calculated as: p.Rows - clipTop - clipBottom
-	// So it already accounts for clipping and is the number of rows to display
 	visibleRows := p.MaxShowable
 	if visibleRows <= 0 {
 		visibleRows = p.DisplayRows
@@ -835,14 +577,13 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 		visibleRows = p.Rows
 	}
 	if visibleRows <= 0 {
-		visibleRows = 1 // Minimum 1 row to avoid issues
+		visibleRows = 1
 	}
 
 	kittyPassthroughLog("placeOne: hostID=%d, pos=(%d,%d), origRows=%d, origCols=%d, clipTop=%d, clipBot=%d, visibleRows=%d, srcXYWH=(%d,%d,%d,%d), cellH=%d",
 		p.HostImageID, p.HostX, p.HostY, p.Rows, p.Cols, p.ClipTop, p.ClipBottom, visibleRows,
 		p.SourceX, p.SourceY, p.SourceWidth, p.SourceHeight, cellHeight)
 
-	// Use clamped cols if the image extends past the viewport
 	visibleCols := p.Cols
 	if p.MaxShowableCols > 0 && p.MaxShowableCols < visibleCols {
 		visibleCols = p.MaxShowableCols
@@ -854,37 +595,12 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 		fmt.Fprintf(&buf, ",r=%d", visibleRows)
 	}
 
-	// Source clipping parameters. Emit the full x,y,w,h rectangle when
-	// clipping is needed so kitty crops the source to exactly the visible
-	// slice. When combined with c,r, kitty maps that source pixel rect 1:1
-	// onto the cell area, avoiding vertical squash.
-	//
-	// Derive pixels-per-row from the image's ACTUAL native pixel dimensions
-	// (from the s/v transmit params) divided by its native cell rows. This is
-	// critical in web/daemon mode where the client's host cell height may
-	// differ from the daemon's (e.g. client cellH=22 but image was generated
-	// at daemon cellH=20 → 380/19=20). Using the client's cellHeight would
-	// produce source regions that overflow the image and xterm-addon-image
-	// rejects them.
-	// imageCols is the image's own width in cells. p.Cols may already have been
-	// capped to the pane, and dividing the image's pixels by a capped cell
-	// count answers a question nobody asked: it says how wide a cell would have
-	// to be for the image to fit, not how wide the cells actually are.
 	imageCols := p.ImageCols
 	if imageCols <= 0 {
 		imageCols = p.Cols
 	}
-	// Showing fewer cells than the image has needs a source rectangle whichever
-	// axis is short. Without one the cell count still narrows and kitty scales
-	// the whole bitmap into it, which on one axis alone is the stretch.
 	isClipping := p.ClipTop > 0 || p.ClipBottom > 0 || p.ClipLeft > 0 ||
 		visibleCols < imageCols || visibleRows < p.Rows
-	// The box shows the source rectangle (the whole image when the guest
-	// gave none) across imageCols by p.Rows cells, so the pixel edge of cell
-	// n is n * span / cells. It is worked out per edge, rounded, and never as
-	// a whole number of pixels per cell: 761 pixels over 96 columns is 7.93,
-	// and a truncated 7 cut the right 89 pixels off the picture and drifted
-	// each row of a scrolled one by most of a pixel.
 	spanW := sourceSpan(p.ImagePixelWidth, p.SourceX, p.SourceWidth)
 	spanH := sourceSpan(p.ImagePixelHeight, p.SourceY, p.SourceHeight)
 	colEdge := func(n int) int {
@@ -902,9 +618,6 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 	offsetX, offsetY := p.XOffset, p.YOffset
 	switch {
 	case isClipping && p.Native:
-		// The host draws these pixels one to one, so a cell is a cell's worth of
-		// pixels on the host. A crop off the left or the top starts at a cell's
-		// corner, where the offset no longer applies.
 		left, top := 0, 0
 		if p.ClipLeft > 0 {
 			left = p.ClipLeft*caps.CellWidth - offsetX
@@ -924,18 +637,10 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 		if srcW == 0 {
 			srcW = colEdge(imageCols)
 		}
-		// The width shown is measured against the image's own cell footprint,
-		// not against the already-capped p.Cols. Comparing with the capped one
-		// made this a no-op in the case that matters: an image wider than its
-		// pane has p.Cols == visibleCols == the pane, so no crop was emitted
-		// and kitty scaled the full bitmap width into the pane instead.
 		if visibleCols < imageCols {
 			srcW = colEdge(p.ClipLeft+visibleCols) - colEdge(p.ClipLeft)
 		}
 		srcH := rowEdge(p.ClipTop+visibleRows) - rowEdge(p.ClipTop)
-		// Clamp against the image's native pixel height so we never request
-		// a source region that overflows the image. xterm-addon-image rejects
-		// such requests (real kitty silently clamps).
 		if p.ImagePixelHeight > 0 && srcY+srcH > p.ImagePixelHeight {
 			srcH = max(p.ImagePixelHeight-srcY, 0)
 		}
@@ -966,10 +671,8 @@ func (kp *KittyPassthrough) placeOne(p *PassthroughPlacement) {
 	if p.ZIndex != 0 {
 		fmt.Fprintf(&buf, ",z=%d", p.ZIndex)
 	}
-	// Note: don't send U=1 to the host, because TUIOS renders guest content
-	// itself.
 	buf.WriteString(",q=2\x1b\\")
-	buf.WriteString("\x1b8") // Restore cursor position
+	buf.WriteString("\x1b8")
 	kittyPassthroughLog("placeOne: emitted kitty cmd: %q", buf.String())
 	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 }

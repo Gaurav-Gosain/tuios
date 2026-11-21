@@ -8,13 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The mailbox on the client. These are the claims a person can check on
-// screen: mail arrives and is announced, the rail counts it, the overlay
-// reads it, and a reply goes back out. Every route in is proved at the level
-// that dispatches it, not by the presence of an entry in a table.
-
-// mailOS is a client attached to "main" with the rail up, from the sections
-// fixture, plus a second agent pane the messages here are between.
 func mailOS(t *testing.T) *OS {
 	t.Helper()
 	m, _ := sectionsTestOS(t, 120, 30)
@@ -22,7 +15,6 @@ func mailOS(t *testing.T) *OS {
 	return m
 }
 
-// mail is a message as the daemon would push it.
 func mail(id uint64, from, fromLabel, to, toLabel, subject, text string) session.AgentMessage {
 	kind := "message"
 	if to == "" {
@@ -61,7 +53,6 @@ func TestMailToThePersonIsAnnouncedAndCounted(t *testing.T) {
 		t.Errorf("the dock message does not point at its thread: %+v", last.Target)
 	}
 
-	// Between two agents: counted on the recipient's row, and silent.
 	before := len(m.Notifications)
 	m.Update(AgentMailMsg{Payload: session.AgentMailPayload{
 		Message: mail(8, "cccccccc3333", "build", "bbbbbbbb2222", "refactor", "retest", "please retest"),
@@ -73,7 +64,6 @@ func TestMailToThePersonIsAnnouncedAndCounted(t *testing.T) {
 		t.Errorf("unread for the recipient pane = %d, want 1", got)
 	}
 
-	// The agent reads it: the receipt clears the row.
 	m.Update(AgentMailMsg{Payload: session.AgentMailPayload{ReadIDs: []uint64{8}, ReadAt: 2}})
 	if got := m.agentMailUnreadFor("bbbbbbbb2222"); got != 0 {
 		t.Errorf("after the receipt unread for the recipient pane = %d, want 0", got)
@@ -127,7 +117,6 @@ func TestRailMailTokenOpensTheMailbox(t *testing.T) {
 	m.TakeSidebarCmd()
 	m.CloseAgentMail()
 
-	// The keyboard: cursor on the token, enter.
 	m.EnterSidebarFocus()
 	idx := m.sidebarFirstRowOfKind(sidebarRowAgentMail)
 	if idx < 0 {
@@ -161,8 +150,6 @@ func TestPaletteListsAThreadWaitingForThePerson(t *testing.T) {
 // lands on the thread, where the reply is, not on the pane.
 func TestMailDockMessageOpensTheThread(t *testing.T) {
 	m := mailOS(t)
-	// From nobody in particular: a pane-less sender is the case where the only
-	// place the message can lead is the thread.
 	m.Update(AgentMailMsg{Payload: session.AgentMailPayload{
 		Message: mail(9, "", "", session.AgentInboxHuman, "human", "q", "q?"),
 	}})
@@ -226,7 +213,6 @@ func TestARoutedKeyReplyIsNotSignedAsThePerson(t *testing.T) {
 		t.Fatalf("a reply typed at the keyboard carries nonce %q, want abc123", got)
 	}
 
-	// One routed key anywhere in the draft is enough.
 	m.ProcessingRemoteKeys = true
 	m.AgentMailType("!")
 	m.ProcessingRemoteKeys = false
@@ -237,7 +223,6 @@ func TestARoutedKeyReplyIsNotSignedAsThePerson(t *testing.T) {
 		t.Errorf("a reply a routed key touched carries nonce %q, want none", got)
 	}
 
-	// A reply sent by a routed Enter is automated whoever typed the text.
 	m.AgentMailCancelReply()
 	m.AgentMail.Composing = true
 	m.AgentMail.Comp = m.newMailDraft("")
@@ -248,8 +233,6 @@ func TestARoutedKeyReplyIsNotSignedAsThePerson(t *testing.T) {
 	}
 	m.ProcessingRemoteKeys = false
 
-	// Closing the reply line clears the mark, and a fresh draft is the
-	// keyboard's again.
 	m.AgentMailCancelReply()
 	if m.AgentMail.draftAutomated() {
 		t.Error("the automated mark outlived the reply line")

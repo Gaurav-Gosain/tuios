@@ -12,14 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The collapsed strip says everything in two cells, which is enough to steer by
-// and not enough to read. The shared tooltip in tooltip.go fills that gap for
-// the pointer only; this is the rail's half of it, the words and where they go.
-
-// sidebarTooltipTrack records the pointer landing on something in the rail that
-// talks: a strip row, or one of the expanded rail's one-cell add controls.
-// Called from the motion handler, which is the only thing that knows the
-// pointer moved.
 func (m *OS) sidebarTooltipTrack(x, y int) {
 	for _, r := range m.sidebarStripRows {
 		if r.contains(y) {
@@ -27,8 +19,6 @@ func (m *OS) sidebarTooltipTrack(x, y int) {
 			return
 		}
 	}
-	// Keyed by the control's kind rather than by its row, since there is one of
-	// each and their headers move with the section budget.
 	if h, ok := m.sidebarRowAt(x, y); ok && sidebarAddKind(h.Kind) {
 		m.tooltipTrack(tooltipRailAdd, int(h.Kind))
 		return
@@ -40,14 +30,10 @@ func (m *OS) sidebarTooltipTrack(x, y int) {
 	m.tooltipClear()
 }
 
-// sidebarAddKind reports whether a row kind is one of the header add controls.
 func sidebarAddKind(k sidebarRowKind) bool {
 	return k == sidebarRowNewSession || k == sidebarRowNewWindow
 }
 
-// sidebarAddWords is what an add control says when it is asked. The words match
-// the actions elsewhere in the app, so the label and the palette never invent
-// two names for one thing.
 func sidebarAddWords(k sidebarRowKind) string {
 	if k == sidebarRowNewWindow {
 		return "new terminal"
@@ -55,16 +41,10 @@ func sidebarAddWords(k sidebarRowKind) string {
 	return "new session"
 }
 
-// renderRailAddTooltip composes the label for the add control under the
-// pointer. It anchors on the control's own line and opens away from the rail,
-// exactly as the strip's label does, so the two read as one behaviour at two
-// widths.
 func (m *OS) renderRailAddTooltip() *lipgloss.Layer {
 	if !m.tooltipVisible(tooltipRailAdd) {
 		return nil
 	}
-	// Latched here rather than at the end, so a control whose row has since gone
-	// still closes the tick gate instead of holding it open.
 	m.Tooltip.Shown = true
 
 	kind := sidebarRowKind(m.Tooltip.Key)
@@ -85,13 +65,8 @@ func (m *OS) renderRailAddTooltip() *lipgloss.Layer {
 	return m.railTooltipLayer(label, row)
 }
 
-// hostSignInTooltip is what the header of a machine that waits for a
-// Tailscale sign-in says when it is hovered.
 const hostSignInTooltip = federation.SignInSentence
 
-// renderRailHostTooltip composes the label for a machine header that waits
-// for a sign-in. It opens beside the rail on the header's own line, as the add
-// control's label does.
 func (m *OS) renderRailHostTooltip() *lipgloss.Layer {
 	if !m.tooltipVisible(tooltipRailHost) {
 		return nil
@@ -112,8 +87,6 @@ func (m *OS) renderRailHostTooltip() *lipgloss.Layer {
 	return m.railTooltipLayer(label, row)
 }
 
-// sidebarTooltipBadgeLabel is what the alarm badge says in words. Empty when
-// nothing is blocked, which is also when the badge is not drawn.
 func sidebarTooltipBadgeLabel(info sidebarStripBadgeInfo) string {
 	if info.Count == 0 {
 		return ""
@@ -125,9 +98,6 @@ func sidebarTooltipBadgeLabel(info sidebarStripBadgeInfo) string {
 	return plural.Count(info.Count, "agent") + " " + words
 }
 
-// sidebarTooltipSessionLabel is what a session cell says in words: the two
-// things its two cells stand for, plus what is loud about it and for how long,
-// which is the whole reason to hover a two-cell rail.
 func sidebarTooltipSessionLabel(s sessiontree.Node) string {
 	sep := " · "
 	if overlay.UseASCII() {
@@ -144,10 +114,6 @@ func sidebarTooltipSessionLabel(s sessiontree.Node) string {
 	return label
 }
 
-// sidebarTooltipTerminalLabel is what one row of the strip's terminals group
-// says in words: which pane it is, the workspace it went to when that is not
-// this one, and what it is doing if it is doing anything. The two cells carry
-// the focus mark and the state, so the name is the part only words can give.
 func sidebarTooltipTerminalLabel(e sidebarTerminalEntry) string {
 	sep := " · "
 	if overlay.UseASCII() {
@@ -166,11 +132,6 @@ func sidebarTooltipTerminalLabel(e sidebarTerminalEntry) string {
 	return label
 }
 
-// sidebarTooltipAgentLabel is what one row of the strip's agents group says in
-// words: which pane it is, whose session it is in when that is not this one,
-// which agent is running in it, what it is doing and for how long. The group's
-// two cells carry the state and nothing else, so this is where everything the
-// strip cannot draw lives, and the harness is the newest thing on that list.
 func sidebarTooltipAgentLabel(e sidebarAgentEntry) string {
 	sep := " · "
 	if overlay.UseASCII() {
@@ -187,8 +148,6 @@ func sidebarTooltipAgentLabel(e sidebarAgentEntry) string {
 		}
 	}
 	label := name
-	// Compared against the bare pane name, not the session-qualified one: the
-	// duplicate the suppression is about is "claude · claude".
 	if h := sidebarHarnessLabel(e.Harness); h != "" && !strings.EqualFold(h, bare) {
 		label += sep + h
 	}
@@ -196,19 +155,12 @@ func sidebarTooltipAgentLabel(e sidebarAgentEntry) string {
 	if age := agentElapsed(e.State, e.StateAt, time.Now()); age != "" {
 		label += " " + age
 	}
-	// The strip has no cell for the mark, so its label says it.
 	if e.Quiet {
 		label += sep + "quiet"
 	}
 	return label
 }
 
-// sidebarStateWords is the one phrase for each agent state, wherever tuios
-// spells a state out rather than drawing its mark: the rail's tooltips and
-// need token, the dock's alerts, the Inbox, the close dialog and the header
-// count. needs_input is "needs you" and done is "done"; they were "need input",
-// "needs input", "waiting on you", "blocked" and "finished" in different
-// places. unknown says so rather than passing for idle.
 func sidebarStateWords(state string) string {
 	switch state {
 	case "needs_input":
@@ -230,8 +182,6 @@ func sidebarStateWords(state string) string {
 	}
 }
 
-// agentNeedsYou is "needs you" agreeing with a count of agents: "1 agent
-// needs you", "2 agents need you". It was "1 agent need input".
 func agentNeedsYou(n int) string {
 	if n == 1 {
 		return "needs you"
@@ -239,26 +189,12 @@ func agentNeedsYou(n int) string {
 	return "need you"
 }
 
-// renderRailTooltip composes the hovered strip row's label as its own layer.
-//
-// The label is a single row on Surface: it anchors on the hovered line and opens
-// away from the rail, so it never covers the cell it is describing, and it
-// clamps to the pane area so a long session name truncates instead of running
-// off the screen.
 func (m *OS) renderRailTooltip() *lipgloss.Layer {
 	if !m.tooltipVisible(tooltipRailStrip) {
 		return nil
 	}
-	// Latched here rather than at the end: a row with nothing to say still ends
-	// the pending state, or the tick gate would be held open by a hover that is
-	// never going to draw anything.
 	m.Tooltip.Shown = true
 
-	// The label anchors on the slot's first line rather than on the line the
-	// pointer happens to be on, so it lands level with the mark it is naming and
-	// with the top edge of the band under it. Both are drawn on Surface, so
-	// aligned they read as one object opening out of the rail; a label floating
-	// one row down read as a second thing that happened to be nearby.
 	text, row := "", m.Tooltip.Key
 	for _, r := range m.sidebarStripRows {
 		if r.contains(m.Tooltip.Key) {

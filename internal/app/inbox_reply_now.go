@@ -10,28 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// Send now: alt+enter, or ctrl+enter, in the reply editor types the reply into the agent's
-// pane at once, even while the agent works, rather than queue it for the next
-// rest as enter does. The harness takes it as it takes a line the person types
-// into its box: most read it at their next tool boundary. It goes by
-// send-text with submit, the prompt path ask-agent and the queue's delivery
-// type with: one paste, a wait for it to be taken in, and the harness's own
-// submit key, with the pane checked for a prompt again right before that key.
-//
-// The queue is left as it is. A message already waiting there is still typed
-// at the next rest, after this one, so nothing is sent twice: this reply never
-// enters the queue, and the queued one is not taken out.
-//
-// Send now is for one agent on this machine, with text only. send-text takes
-// no images and no host, so a reply with an image, a reply to an agent on a
-// linked machine and a bulk reply are queued with enter, as before. The bulk
-// and linked editors keep alt+enter as a new line.
-
-// sendNowKeyName is the send-now key as the platform names it, the one this
-// host can send. On a Mac, Option+Enter reaches tuios only from a terminal
-// that uses Option as Alt, so with the kitty keyboard protocol the hint names
-// ctrl+enter, which then always arrives (⌃↩), and without it ⌥↩. Elsewhere it
-// is alt+enter.
 func (m *OS) sendNowKeyName() string {
 	if runtime.GOOS == "darwin" {
 		if overlay.UseASCII() {
@@ -48,9 +26,6 @@ func (m *OS) sendNowKeyName() string {
 	return "alt+" + overlay.EnterGlyph
 }
 
-// replyEnterQueues reports whether enter in the reply editor queues the reply
-// rather than send it at once: while the agent works. The footer names the
-// button by it, and offers alt+enter only then.
 func replyEnterQueues(state string) bool { return state == "working" }
 
 // InboxReplySendNow types the reply into the agent's pane now. An empty
@@ -62,7 +37,6 @@ func (m *OS) InboxReplySendNow() tea.Cmd {
 		return nil
 	}
 	if len(ed.targets) > 0 || ed.host != "" {
-		// Not reached: these editors keep alt+enter as a new line.
 		return m.InboxReplySend()
 	}
 	if ed.comp.Empty() {
@@ -70,8 +44,6 @@ func (m *OS) InboxReplySendNow() tea.Cmd {
 		return nil
 	}
 	if ed.comp.Automated() || m.ProcessingRemoteKeys {
-		// The same refusal as InboxReplySend: send-text as the person
-		// needs a key from the keyboard just as a queued reply does.
 		return m.InboxReplySend()
 	}
 	if n, _ := ed.comp.Images(); n > 0 {

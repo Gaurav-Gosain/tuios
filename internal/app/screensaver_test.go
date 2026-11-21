@@ -8,8 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// withSpyInputHandler swaps in a handler that records whether it was reached,
-// and puts the old one back afterwards.
 func withSpyInputHandler(t *testing.T) *bool {
 	t.Helper()
 	previous := getInputHandler()
@@ -256,8 +254,6 @@ func TestScreensaverHoldsOffWhileAPaneIsBusy(t *testing.T) {
 	cfg := enabledScreensaverConfig(t, 10)
 	m.UserConfig = cfg
 
-	// An agent that is working is the case a pane can report without a real
-	// child process, so it is the one a test can set.
 	win.AgentState = "working"
 	if m.screensaverMayStart(cfg.Screensaver) {
 		t.Error("the saver would have started over a working agent")
@@ -271,7 +267,6 @@ func TestScreensaverHoldsOffWhileAPaneIsBusy(t *testing.T) {
 		t.Error("the saver refused to start over an idle pane")
 	}
 
-	// And the setting that says to run anyway.
 	win.AgentState = "working"
 	yes := true
 	cfg.Screensaver.WhileBusy = &yes

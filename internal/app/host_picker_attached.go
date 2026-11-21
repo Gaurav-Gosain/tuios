@@ -8,32 +8,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The machines as the attached daemon names them.
-//
-// A window is made by the daemon that holds the session. While the client is
-// attached to a session on another machine, that is the other machine's
-// daemon, and it reads a host name in its own [hosts] table. The two tables
-// need not agree: alpha may call this machine "beta", and may not know a
-// machine this one calls "beta" at all. So the window picker lists alpha's
-// hosts by alpha's names, with alpha's link states, and this machine appears
-// only when one of alpha's hosts is this machine's own daemon. That is decided
-// by the daemon's run id (hello's instance), never by a name.
-
-// attachedHostView is what the attached daemon last said about its hosts.
 type attachedHostView struct {
-	// Host is the attached machine, by this machine's name for it. A view for
-	// another host than the one attached now is stale and not used.
-	Host string
-	// Hosts is the attached daemon's own list-hosts, in its order.
+	Host  string
 	Hosts []federation.HostReport
-	// Here is the attached daemon's name for this machine, "" when none of
-	// its hosts is this machine's daemon.
-	Here string
-	// Err is why the list could not be read, if it could not.
-	Err error
-	// OS is the attached daemon's GOOS, from its hello. Empty for a daemon
-	// too old to say.
-	OS string
+	Here  string
+	Err   error
+	OS    string
 }
 
 // AttachedHostsMsg carries a fresh attachedHostView into Update.
@@ -41,8 +21,6 @@ type AttachedHostsMsg struct {
 	View attachedHostView
 }
 
-// attachedHostsChan is the channel the fetch goroutine answers on, made on
-// first use.
 func (m *OS) attachedHostsChan() chan AttachedHostsMsg {
 	if m.attachedHostsCh == nil {
 		m.attachedHostsCh = make(chan AttachedHostsMsg, 4)
@@ -50,15 +28,10 @@ func (m *OS) attachedHostsChan() chan AttachedHostsMsg {
 	return m.attachedHostsCh
 }
 
-// listenAttachedHostsUntil waits for the next message on its channel and returns nil once
-// stop is closed, so a session that ends leaves no listener parked.
 func listenAttachedHostsUntil(stop <-chan struct{}, ch chan AttachedHostsMsg) tea.Cmd {
 	return listenOnce(stop, ch, func(msg AttachedHostsMsg) tea.Msg { return msg })
 }
 
-// refreshAttachedHosts asks the attached daemon for its hosts, off the UI
-// goroutine. It does nothing while the client is on this machine, where the
-// rail's own snapshot is the attached daemon's list.
 func (m *OS) refreshAttachedHosts() {
 	host := m.AttachedHost
 	if host == "" {
@@ -74,8 +47,6 @@ func (m *OS) refreshAttachedHosts() {
 	}()
 }
 
-// fetchAttachedHosts reads host's list-hosts through the link, and this
-// machine's daemon's run id, and finds this machine among host's hosts.
 func fetchAttachedHosts(host, build string) attachedHostView {
 	view := attachedHostView{Host: host}
 	here := localDaemonInstance()
@@ -109,8 +80,6 @@ func fetchAttachedHosts(host, build string) attachedHostView {
 	return view
 }
 
-// localDaemonInstance is this machine's daemon's run id, or "" when it cannot
-// be read. An empty id matches no host, so this machine is then left out.
 func localDaemonInstance() string {
 	c, err := session.DialVerbClient()
 	if err != nil {
@@ -130,10 +99,6 @@ func localDaemonInstance() string {
 	return res.Instance
 }
 
-// applyAttachedHosts stores a view and, when the open window picker was
-// still waiting for it, fills the picker in. A picker that already had its
-// rows keeps them, so nothing moves under the cursor; a pick still checks the
-// newest view.
 func (m *OS) applyAttachedHosts(msg AttachedHostsMsg) {
 	if msg.View.Host != m.AttachedHost {
 		return
@@ -147,8 +112,6 @@ func (m *OS) applyAttachedHosts(msg AttachedHostsMsg) {
 	m.hostList.Refiltered(FirstPickableHostRow(m.hostPickerRows()))
 }
 
-// attachedView is the view for the machine attached now, and whether there
-// is one.
 func (m *OS) attachedView() (attachedHostView, bool) {
 	if m.AttachedHost == "" || !m.attachedHostsLoaded || m.attachedHosts.Host != m.AttachedHost {
 		return attachedHostView{}, false
@@ -156,9 +119,6 @@ func (m *OS) attachedView() (attachedHostView, bool) {
 	return m.attachedHosts, true
 }
 
-// attachedWindowItems is the window picker's rows while the client is
-// attached to another machine: that machine first, then this machine if it
-// has a link here, then its other hosts by its names.
 func (m *OS) attachedWindowItems() []HostPickerItem {
 	items := []HostPickerItem{{
 		Name:   "",
@@ -198,8 +158,6 @@ func (m *OS) attachedWindowItems() []HostPickerItem {
 	return append(items, rest...)
 }
 
-// attachedHostUp reports whether the attached daemon's link to name is up, by
-// the newest view.
 func (m *OS) attachedHostUp(name string) bool {
 	view, ok := m.attachedView()
 	if !ok {
@@ -213,8 +171,6 @@ func (m *OS) attachedHostUp(name string) bool {
 	return false
 }
 
-// attachedReachable counts the machines a window in the attached session can
-// be put on, and whether that is known yet.
 func (m *OS) attachedReachable() (int, bool) {
 	view, ok := m.attachedView()
 	if !ok {
@@ -229,7 +185,6 @@ func (m *OS) attachedReachable() (int, bool) {
 	return n, true
 }
 
-// hostPickerWaiting reports whether the rows include the loading placeholder.
 func hostPickerWaiting(items []HostPickerItem) bool {
 	for _, it := range items {
 		if it.Pending {

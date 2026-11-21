@@ -11,14 +11,6 @@ import (
 	"testing"
 )
 
-// moduleSource parses every non-test Go file in the module. The guards that
-// hold the entry points to one construction read the tree rather than call
-// into cmd/tuios, cmd/tuios-web and internal/server, because the thing that
-// has to hold is "every place that builds one does it the same way", and the
-// failure they guard against is a site written later that does not.
-//
-// Directories that are not this module's source are skipped: the ghostty
-// checkout, node modules, the docs.
 func moduleSource(t testing.TB) (*token.FileSet, map[string]*ast.File) {
 	t.Helper()
 	root := moduleRoot(t)
@@ -55,7 +47,6 @@ func moduleSource(t testing.TB) (*token.FileSet, map[string]*ast.File) {
 	return fset, files
 }
 
-// moduleRoot walks up from the package directory to the go.mod.
 func moduleRoot(t testing.TB) string {
 	t.Helper()
 	dir, err := os.Getwd()
@@ -74,8 +65,6 @@ func moduleRoot(t testing.TB) string {
 	}
 }
 
-// selectorCall reports the package and name of a call written as pkg.Name(...),
-// and false for any other call.
 func selectorCall(call *ast.CallExpr) (pkg, name string, ok bool) {
 	sel, ok := call.Fun.(*ast.SelectorExpr)
 	if !ok {
@@ -88,8 +77,6 @@ func selectorCall(call *ast.CallExpr) (pkg, name string, ok bool) {
 	return ident.Name, sel.Sel.Name, true
 }
 
-// forEachFuncBody walks a file and calls visit for every function declaration
-// and literal with its body, innermost last.
 func forEachFuncBody(file *ast.File, visit func(name string, body *ast.BlockStmt)) {
 	ast.Inspect(file, func(n ast.Node) bool {
 		switch fn := n.(type) {
@@ -104,8 +91,6 @@ func forEachFuncBody(file *ast.File, visit func(name string, body *ast.BlockStmt
 	})
 }
 
-// directCalls lists the pkg.Name calls in a body that are not inside a nested
-// function literal, in source order.
 func directCalls(body *ast.BlockStmt) []*ast.CallExpr {
 	var out []*ast.CallExpr
 	ast.Inspect(body, func(n ast.Node) bool {

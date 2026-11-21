@@ -8,10 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// adoptSessionLabels copies the daemon-owned labels off a state push. They are
-// daemon-exclusive: the client never sends them back (BuildSessionState omits
-// them and the merge treats an empty incoming value as "not sent"), so this is
-// a read-only adoption and a client can never clear a label by syncing.
 func (m *OS) adoptSessionLabels(state *session.SessionState) {
 	m.SessionDisplayName = state.DisplayName
 	m.SessionAccent = state.Accent
@@ -19,20 +15,13 @@ func (m *OS) adoptSessionLabels(state *session.SessionState) {
 	m.SessionGlobal = state.Global
 	m.SessionSpace = state.Space
 	m.adoptNotes(state)
-	// The worktree record travels with the state, so the attached row is drawn
-	// from the same push every other label on it comes from. A copy, because
-	// the state snapshot is the daemon's and this outlives the call.
 	m.SessionWorktree = nil
 	if state.Worktree != nil {
 		wt := *state.Worktree
 		m.SessionWorktree = &wt
 	}
-	// The tab keys are what the next state's renumber is read against. See
-	// adoptWorkspaceRenumbering.
 	m.workspaceTabKeys = maps.Clone(state.WorkspaceTabKeys)
 	m.workspaceTabKeysKnown = true
-	// The OSC 1 names change rarely, and a push carries them every time, so
-	// an unchanged set is not copied again.
 	if !maps.Equal(m.paneIconNames, state.IconNames) {
 		m.paneIconNames = maps.Clone(state.IconNames)
 	}
@@ -43,10 +32,6 @@ func (m *OS) adoptSessionLabels(state *session.SessionState) {
 	m.WorkspaceNames = maps.Clone(state.WorkspaceNames)
 }
 
-// adoptNotes copies the return notes off a state push, and shows the
-// session's note in the dock when this client has just come to the session:
-// an attach or a switch. A note that changes while the client stays is not
-// shown again: the person who changed it has just read it.
 func (m *OS) adoptNotes(state *session.SessionState) {
 	m.SessionNote = state.Note
 	clear(m.paneNotes)
@@ -71,8 +56,6 @@ func (m *OS) adoptNotes(state *session.SessionState) {
 	}
 }
 
-// sessionNote is the return note of the named session: the attached one from
-// its state, any other from the cached listing.
 func (m *OS) sessionNote(name string) string {
 	if name == m.SessionName {
 		return m.SessionNote
@@ -83,7 +66,6 @@ func (m *OS) sessionNote(name string) string {
 	return ""
 }
 
-// paneNote is the return note of one pane, else the note of its session.
 func (m *OS) paneNote(sessionName, windowID string) string {
 	if sessionName == m.SessionName {
 		if n := m.paneNotes[windowID]; n != "" {
@@ -111,15 +93,6 @@ func (m *OS) SessionLabel(name string) string {
 	return name
 }
 
-// sessionTitle is the one name a session is shown by in every view: the rail's
-// title for it (sessiontree.BuildSession), which is its display name, else,
-// when tuios made the name up, the title its first agent pane set, else the
-// directory of its focused pane, else the name.
-// The rail said "demo" while the Inbox, the peek, the dock's alerts, the
-// palette and the close dialog said "session-0" for the same session.
-//
-// It is for showing only. Never use it as a key: the daemon addresses a
-// session by its name.
 func (m *OS) sessionTitle(name string) string {
 	if display := m.SessionLabel(name); display != name && display != "" {
 		return display
@@ -133,11 +106,6 @@ func (m *OS) sessionTitle(name string) string {
 	return name
 }
 
-// sessionPlace is where a session is, as the rail shows it: the directory label
-// for its focused pane and the git branch there, both from the daemon's listing
-// and both empty until the listing has said. The directory is offered only for
-// a name tuios generated, since "session-3" says nothing and a name a person
-// chose says more than a directory. The branch follows either.
 func (m *OS) sessionPlace(name string) (dir, branch string) {
 	if m.DaemonClient == nil {
 		return "", ""
@@ -149,11 +117,6 @@ func (m *OS) sessionPlace(name string) (dir, branch string) {
 	return dir, branch
 }
 
-// sessionAgentTitle is the title the session's first agent pane set, such as
-// Claude Code's task summary, offered only for a name tuios generated, as the
-// directory is. The attached session reads its live windows, so the label
-// follows the title as it changes. Any other session reads the cached listing.
-// See session.SessionAgentTitle for the rules. For showing only.
 func (m *OS) sessionAgentTitle(name string) string {
 	if !session.IsGeneratedSessionName(name) {
 		return ""
@@ -167,9 +130,6 @@ func (m *OS) sessionAgentTitle(name string) string {
 	return ""
 }
 
-// attachedAgentTitle is session.SessionAgentTitle over the live windows. A
-// pane's own name stands in for its title, as it does in the daemon's
-// listing, so the attached row and every other client agree.
 func (m *OS) attachedAgentTitle() string {
 	for _, w := range m.Windows {
 		if w == nil || w.AgentHarness == "" || hiddenFromLists(w) {
@@ -184,10 +144,6 @@ func (m *OS) attachedAgentTitle() string {
 	return ""
 }
 
-// workspaceDisplayNumber is the number a person sees and presses for the
-// daemon's workspace ws. The daemon numbers workspaces from 1; base_index
-// moves the label and every workspace digit key down by the same offset.
-// Scratch groups keep their own high numbering.
 func (m *OS) workspaceDisplayNumber(ws int) int {
 	if session.IsScratchWorkspace(ws) {
 		return ws
@@ -208,10 +164,6 @@ func (m *OS) WorkspaceLabel(ws int) string {
 	return strconv.Itoa(m.workspaceDisplayNumber(ws))
 }
 
-// workspaceGivenName is the name workspace ws has been given: its own name,
-// else the name its active pane's program gave with OSC 1. Empty when it has
-// neither, so a tab format can tell an unnamed workspace from one named after
-// its number.
 func (m *OS) workspaceGivenName(ws int) string {
 	if name := m.WorkspaceNames[ws]; name != "" {
 		return name
@@ -222,9 +174,6 @@ func (m *OS) workspaceGivenName(ws int) string {
 	return ""
 }
 
-// paneIconName is the name w's program gave with OSC 1. A daemon window's
-// comes with the daemon's state, which carries it for every pane, streamed or
-// not. A standalone window's comes from its own emulator.
 func (m *OS) paneIconName(w *terminal.Window) string {
 	if w.DaemonMode {
 		return m.paneIconNames[w.ID]
@@ -232,10 +181,6 @@ func (m *OS) paneIconName(w *terminal.Window) string {
 	return w.IconName()
 }
 
-// workspaceActivePane is the pane that speaks for workspace ws: the focused
-// one while ws is in view, else the one it last had the focus on, else its
-// first pane, as a switch to it would choose. Minimized panes, the rail pane
-// and scratch panes never speak for it. Nil when no pane does.
 func (m *OS) workspaceActivePane(ws int) *terminal.Window {
 	speaks := func(i int) bool {
 		if i < 0 || i >= len(m.Windows) {

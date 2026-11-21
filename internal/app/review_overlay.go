@@ -17,64 +17,25 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// Reviewing what an agent changed: the full-screen diff of a pane's worktree
-// against its base, the notes the person leaves on it, and the comparison of
-// a fan's attempts. It reads the review-diff and compare-fan verbs, runs no
-// git until it is opened, and draws nothing until then.
-//
-// It is reached from ctrl+b v on the focused pane, v on an Inbox row and v on
-// a rail agent row. The key is always bound, since calling it is an explicit
-// act; the prefix menu, help and the palette list it only once an agent has
-// been seen.
-//
-// The overlay opens once the first diff arrives. A pane with no repository
-// under it opens nothing and the dock says so.
-//
-// Who acts: the diff is read with this client's own connection. A note added,
-// edited or resolved here, and the notes sent with S, carry this client's
-// attach nonce, so the daemon records them as the person's and the message
-// says "from the person". A key that did not come from the keyboard (send-keys,
-// a tape) never does any of that: it may move around the diff, but a note it
-// typed is not saved, and S, x, V, K, the stage keys and the keep
-// confirmation refuse it,
-// because each of them acts as the person or with this client's authority.
-// The rest is the daemon's: review-note holds a note's author to its reach,
-// send-review goes through the delivery queue, verify-fan opens its windows
-// with no grants and keep-fan refuses a sibling with uncommitted work.
-
-// reviewDiffTimeout bounds one review-diff call. The daemon gives up on git
-// after 10 seconds.
 const reviewDiffTimeout = 15 * time.Second
 
-// reviewVerbTimeout bounds a note, send or verify call.
 const reviewVerbTimeout = 5 * time.Second
 
-// reviewFanTimeout bounds compare-fan with counts and keep-fan, which run git
-// in every attempt.
 const reviewFanTimeout = 30 * time.Second
 
-// reviewTickEvery is how often the compare view reads the attempts again
-// while a check runs in one of them. Nothing ticks otherwise.
 const reviewTickEvery = time.Second
 
-// reviewRemoteRefusal is what the dock says when a key that did not come from
-// the keyboard tries to act as the person in the review.
 const reviewRemoteRefusal = "A key from send-keys does not change a review: only keys from your keyboard write, send or keep as you"
 
-// reviewQuery is what one diff asks for.
 type reviewQuery struct {
 	Session     string
 	Window      string
 	Base        string
 	Uncommitted bool
-	// Against names another attempt of the same fan, diffed with Session.
-	Against string
-	// Dir is the pane's folder, sent only in Learn mode, where the fake
-	// review-diff has no daemon that knows where each pane is.
-	Dir string
+	Against     string
+	Dir         string
 }
 
-// reviewDiffResult is review-diff's answer, as the overlay reads it.
 type reviewDiffResult struct {
 	Session     string        `json:"session"`
 	Window      string        `json:"window"`
@@ -90,14 +51,12 @@ type reviewDiffResult struct {
 	Against     string        `json:"against"`
 }
 
-// reviewLastCommand is the newest command a shell in an attempt finished.
 type reviewLastCommand struct {
 	Cmdline string `json:"cmdline"`
 	Exit    *int   `json:"exit,omitempty"`
 	At      int64  `json:"at"`
 }
 
-// reviewFanRow is one attempt of compare-fan's answer.
 type reviewFanRow struct {
 	Session      string             `json:"session"`
 	Branch       string             `json:"branch"`
@@ -115,7 +74,6 @@ type reviewFanRow struct {
 	Note         string             `json:"note,omitempty"`
 }
 
-// reviewFanResult is compare-fan's answer.
 type reviewFanResult struct {
 	Group string         `json:"group"`
 	Repo  string         `json:"repo"`
@@ -123,15 +81,11 @@ type reviewFanResult struct {
 	Rows  []reviewFanRow `json:"rows"`
 }
 
-// reviewFileEntry is one row of the file list: a changed file, or a file that
-// is no longer changed but still carries notes.
 type reviewFileEntry struct {
 	file *review.File
 	path string
 }
 
-// reviewEditorKind is what the one-line editor at the foot or under a line
-// is typing.
 type reviewEditorKind int
 
 const (
@@ -140,129 +94,70 @@ const (
 	reviewEditVerify
 )
 
-// reviewEditor is the one line being typed: a note, a base or a verify
-// command. enter saves it and esc drops it.
 type reviewEditor struct {
-	kind  reviewEditorKind
-	draft string
-	// automated is set when a key that did not come from the keyboard
-	// touched the draft. Such a draft is never saved.
-	automated bool
-	// noteID is the note being edited, empty for a new one.
-	noteID string
-	// The anchor of a new note.
+	kind                    reviewEditorKind
+	draft                   string
+	automated               bool
+	noteID                  string
 	path, side, quote, hunk string
 	line                    int
-	// hunkIdx and lineIdx place the editor row under its line: the hunk,
-	// and the line within it, or -1 for a note on the whole hunk.
-	hunkIdx, lineIdx int
+	hunkIdx, lineIdx        int
 }
 
-// reviewCompare is the compare view of a fan's attempts.
 type reviewCompare struct {
-	shown   bool
-	loading bool
-	group   string
-	repo    string
-	base    string
-	rows    []reviewFanRow
-	cursor  int
-	// marks are the attempts m marked, oldest first, at most two.
-	marks []string
-	// from is the review the view was opened from, which esc goes back to,
-	// and fromWho the name it showed.
-	from    reviewQuery
-	fromWho string
-	// confirmKeep is the attempt K asks about, empty when nothing is asked.
+	shown       bool
+	loading     bool
+	group       string
+	repo        string
+	base        string
+	rows        []reviewFanRow
+	cursor      int
+	marks       []string
+	from        reviewQuery
+	fromWho     string
 	confirmKeep string
-	// tickGen tells the current refresh chain from one a newer check
-	// started.
-	tickGen uint64
+	tickGen     uint64
 }
 
-// reviewState is the review overlay.
 type reviewState struct {
-	// gen tells an answer to the current review from one to a review since
-	// closed or replaced.
-	gen uint64
-	// pending is set while the first diff of a review is being read. The
-	// overlay is not shown yet.
-	pending bool
-	open    bool
-	// loading is set while a diff is read again inside an open overlay, and
-	// loadingSince is when that read went out: the header says "reading"
-	// only once it has run past overlay.LoadingDelay.
-	loading      bool
-	loadingSince time.Time
-	who          string
-	query        reviewQuery
-	diff         *reviewDiffResult
-	notes        []review.Note
-	files        []reviewFileEntry
-	file         int
-	// listFocus is set while the keys move through the file list.
-	listFocus  bool
-	cursor     int
-	scroll     int
-	listScroll int
-	editor     *reviewEditor
-	// fan is the pane's fan, nil when it is not in one.
-	fan     *reviewFanResult
-	compare *reviewCompare
-	// backToCompare says esc returns to the compare view, for a review
-	// opened from it.
+	gen           uint64
+	pending       bool
+	open          bool
+	loading       bool
+	loadingSince  time.Time
+	who           string
+	query         reviewQuery
+	diff          *reviewDiffResult
+	notes         []review.Note
+	files         []reviewFileEntry
+	file          int
+	listFocus     bool
+	cursor        int
+	scroll        int
+	listScroll    int
+	editor        *reviewEditor
+	fan           *reviewFanResult
+	compare       *reviewCompare
 	backToCompare bool
-	// rowsWidth is the width the diff rows were last laid out at, so the
-	// keys move over the rows the person sees.
-	rowsWidth int
-	// pageRows is how many diff rows the last frame showed.
-	pageRows int
-	// frameRows are the diff rows the frame being drawn laid out, set by
-	// reviewDiffLines and cleared when renderReview returns, so the footer
-	// reads the row under the cursor without laying the file out again.
-	frameRows    []reviewRow
-	frameRowsSet bool
-	// loadErr is why the diff shown is missing, for a review opened from
-	// the compare view whose diff could not be read.
-	loadErr string
-	// openedAt is when this review was asked for.
-	openedAt time.Time
-	// split asks for the two sides next to each other, where the diff
-	// column is wide enough. It outlives the review, so the next one opens
-	// the way the last was left.
-	split bool
-	// xOff is how far the code is scrolled sideways, in cells, and xPath
-	// the file it was scrolled in: another file starts at the left edge.
-	xOff  int
-	xPath string
-	// listBack is how far the file list's paths are scrolled back from
-	// their ends, in cells. A long path shows its end, the part that tells
-	// files apart, so the keys scroll back towards its start. It is read
-	// only while the list has the keys, and tab sets it to zero.
-	listBack int
-	// look is the overlay's colours, and hunks what it keeps of each hunk
-	// drawn. Both are made while drawing, so a closed review costs nothing.
-	look  *reviewLook
-	hunks map[*review.File][]*reviewHunkLook
-	// index is the worktree's two index diffs, for the hunk marks, and
-	// stageMarks what they say of each hunk shown. Both are read only while
-	// the overlay is open. See review_stage.go.
-	index      *reviewIndex
-	stageMarks map[*review.File][]reviewHunkStage
-	// staging is set while a stage, an unstage or an undo runs.
-	staging bool
-	// undo is what z takes back, newest last.
-	undo []reviewUndoStep
-	// statusID is the dock message the review itself raised last. The
-	// overlay covers the dock, so it shows that one on its status line. It
-	// shows no other: a pane closing or a client resizing is the dock's news,
-	// and it waits there for the overlay to close like it does under every
-	// other full-screen surface.
-	statusID string
+	rowsWidth     int
+	pageRows      int
+	frameRows     []reviewRow
+	frameRowsSet  bool
+	loadErr       string
+	openedAt      time.Time
+	split         bool
+	xOff          int
+	xPath         string
+	listBack      int
+	look          *reviewLook
+	hunks         map[*review.File][]*reviewHunkLook
+	index         *reviewIndex
+	stageMarks    map[*review.File][]reviewHunkStage
+	staging       bool
+	undo          []reviewUndoStep
+	statusID      string
 }
 
-// reviewNotify raises a dock message for the review and has the overlay show
-// it on its status line while it is up. See reviewState.statusID.
 func (m *OS) reviewNotify(message, kind string, duration time.Duration) {
 	m.ShowNotification(message, kind, duration)
 	if k := len(m.Notifications); k > 0 && m.Notifications[k-1].Message == message {
@@ -270,9 +165,6 @@ func (m *OS) reviewNotify(message, kind string, duration time.Duration) {
 	}
 }
 
-// clearDiff forgets the diff shown, for a review of another attempt: the
-// overlay says it is reading rather than show the last attempt's changes
-// under the next one's name. listFocus is the side a review opens on.
 func (r *reviewState) clearDiff(listFocus bool) {
 	r.diff, r.notes, r.files, r.editor, r.loadErr = nil, nil, nil, nil, ""
 	r.hunks, r.xOff = nil, 0
@@ -280,21 +172,15 @@ func (r *reviewState) clearDiff(listFocus bool) {
 	r.resetPlace(listFocus)
 }
 
-// resetPlace puts the cursor on the first file's first row, with the keys on
-// the file list for listFocus and on the diff otherwise.
 func (r *reviewState) resetPlace(listFocus bool) {
 	r.file, r.cursor, r.scroll, r.listScroll, r.listFocus = 0, 0, 0, 0, listFocus
 	r.listBack = 0
 }
 
-// reviewOpensOnFiles reports whether a review opens with the file list
-// focused (review.focus).
 func (m *OS) reviewOpensOnFiles() bool {
 	return m.UserConfig != nil && m.UserConfig.Review.FocusInUse() == config.ReviewOpenOnFiles
 }
 
-// reviewOpensUncommitted reports whether a review opens on the uncommitted
-// changes only (review.scope).
 func (m *OS) reviewOpensUncommitted() bool {
 	return m.UserConfig != nil && m.UserConfig.Review.OpensUncommitted()
 }
@@ -357,7 +243,6 @@ type ReviewKeptMsg struct {
 	Err     error
 }
 
-// reviewKeepRow is one sibling keep-fan removed or left.
 type reviewKeepRow struct {
 	Session string `json:"session"`
 	Removed bool   `json:"removed"`
@@ -408,8 +293,6 @@ func (m *OS) ReviewFocusedPane() (tea.Cmd, bool) {
 	return m.openReview(m.SessionName, w.ID, who), true
 }
 
-// openLearnReview opens the review of a pane in Learn mode, where the diff
-// comes from the fake shell's repository through the verb seam.
 func (m *OS) openLearnReview(w *terminal.Window, who string) tea.Cmd {
 	r := &m.review
 	if r.pending {
@@ -424,13 +307,11 @@ func (m *OS) openLearnReview(w *terminal.Window, who string) tea.Cmd {
 // false with nothing selected, or on a daemon without review-diff, where v
 // does what an unbound key does.
 func (m *OS) InboxReview() (tea.Cmd, bool) {
-	// A card its agent is done with: the worktree that agent worked in.
 	if cmd, ok := m.CockpitCardReview(); ok {
 		return cmd, true
 	}
 	it, ok := m.inboxSelected()
 	if !ok {
-		// An agent with no Inbox item: review its pane.
 		e, ok := m.cockpitAgent()
 		if !ok {
 			return nil, false
@@ -467,7 +348,6 @@ func (m *OS) SidebarAgentReview(sessionID, windowID string) (tea.Cmd, bool) {
 	return m.openReview(sessionID, windowID, who), true
 }
 
-// openReview starts reading a pane's diff. The overlay opens when it arrives.
 func (m *OS) openReview(sessionName, windowID, who string) tea.Cmd {
 	if !m.IsDaemonSession {
 		m.reviewNotify("Review needs the daemon. Start a daemon session with: tuios new", "info", m.Settings.NotificationDuration)
@@ -491,8 +371,6 @@ func (m *OS) CloseReview() {
 	m.review = reviewState{gen: m.review.gen + 1, split: m.review.split}
 }
 
-// reviewLoadCmd reads a diff, and with probeFan also whether the pane is in a
-// fan, without counting anything in it.
 func (m *OS) reviewLoadCmd(q reviewQuery, probeFan bool) tea.Cmd {
 	call := m.inboxCaller()
 	gen := m.review.gen
@@ -525,8 +403,6 @@ func (m *OS) reviewLoadCmd(q reviewQuery, probeFan bool) tea.Cmd {
 		}
 		msg.Diff = res
 		if probeFan && q.Against == "" {
-			// A pane outside every fan answers with a refusal, which says
-			// only that there is nothing to compare.
 			if raw, err := call("compare-fan", map[string]any{"session": res.Session, "changes": false}, reviewVerbTimeout); err == nil {
 				var fan reviewFanResult
 				if jsonx.Unmarshal(raw, &fan) == nil && fan.Group != "" {
@@ -538,8 +414,6 @@ func (m *OS) reviewLoadCmd(q reviewQuery, probeFan bool) tea.Cmd {
 	}
 }
 
-// reviewDiffCall makes one review-diff call: the diff the overlay shows, or
-// an index diff for the stage marks.
 func reviewDiffCall(call inboxVerbCall, params map[string]any) (*reviewDiffResult, error) {
 	raw, err := call("review-diff", params, reviewDiffTimeout)
 	if err != nil {
@@ -552,7 +426,6 @@ func reviewDiffCall(call inboxVerbCall, params map[string]any) (*reviewDiffResul
 	return &res, nil
 }
 
-// reload reads the current diff again.
 func (m *OS) reviewReload() tea.Cmd {
 	r := &m.review
 	r.loading = true
@@ -560,7 +433,6 @@ func (m *OS) reviewReload() tea.Cmd {
 	return m.reviewLoadCmd(r.query, false)
 }
 
-// applyReviewDiff shows a diff that arrived.
 func (m *OS) applyReviewDiff(msg ReviewDiffMsg) {
 	r := &m.review
 	if msg.Gen != r.gen || (!r.pending && !r.open) {
@@ -579,8 +451,6 @@ func (m *OS) applyReviewDiff(msg ReviewDiffMsg) {
 		m.reviewNotify(text, "error", m.Settings.NotificationDuration*2)
 		return
 	}
-	// The same review read again keeps its place and its focus, even with no
-	// file to keep the place in.
 	samePlace := !first && r.diff != nil && r.query == msg.Query
 	prevPath := ""
 	if e := r.currentFile(); samePlace && e != nil {
@@ -602,13 +472,10 @@ func (m *OS) applyReviewDiff(msg ReviewDiffMsg) {
 	if samePlace {
 		r.file = max(slices.IndexFunc(r.files, func(e reviewFileEntry) bool { return e.path == prevPath }), 0)
 	} else {
-		// A review with no files opens on the diff, which says why.
 		r.resetPlace(m.reviewOpensOnFiles() && len(r.files) > 0)
 	}
 }
 
-// reviewErrorText says what went wrong with a review call, in the words the
-// person needs.
 func reviewErrorText(err error) string {
 	if callErr, ok := errors.AsType[*session.VerbCallError](err); ok {
 		switch callErr.Code {
@@ -629,8 +496,6 @@ func reviewErrorText(err error) string {
 	return err.Error()
 }
 
-// rebuildFiles lists the changed files, then any file that carries notes but
-// is no longer changed, so its notes can still be read and resolved.
 func (r *reviewState) rebuildFiles() {
 	r.files = r.files[:0]
 	if r.diff == nil {
@@ -653,7 +518,6 @@ func (r *reviewState) rebuildFiles() {
 	}
 }
 
-// currentFile is the file the diff column shows, nil for none.
 func (r *reviewState) currentFile() *reviewFileEntry {
 	if r.file < 0 || r.file >= len(r.files) {
 		return nil
@@ -661,7 +525,6 @@ func (r *reviewState) currentFile() *reviewFileEntry {
 	return &r.files[r.file]
 }
 
-// unsentNotes counts the notes S would send.
 func (r *reviewState) unsentNotes() int {
 	n := 0
 	for _, note := range r.notes {
@@ -672,7 +535,6 @@ func (r *reviewState) unsentNotes() int {
 	return n
 }
 
-// notesOn is the index of every note on path, in r.notes.
 func (r *reviewState) notesOn(path string) []int {
 	var out []int
 	if r.query.Against != "" {
@@ -738,8 +600,6 @@ func (m *OS) ReviewMove(delta int) {
 	r.cursor = reviewStep(rows, r.cursor, delta)
 }
 
-// reviewStep is the row delta steps from cur. A note wrapped onto several
-// rows is one step, and the cursor sits on its first row.
 func reviewStep(rows []reviewRow, cur, delta int) int {
 	cur = reviewNoteStart(rows, min(max(cur, 0), len(rows)-1))
 	step := 1
@@ -759,8 +619,6 @@ func reviewStep(rows []reviewRow, cur, delta int) int {
 	return cur
 }
 
-// reviewNoteStart is the first row of the note row i is part of, or i when
-// it is not a note's later row.
 func reviewNoteStart(rows []reviewRow, i int) int {
 	for i > 0 && i < len(rows) && rows[i].kind == reviewRowNote && !rows[i].first {
 		i--
@@ -859,7 +717,6 @@ func (m *OS) ReviewWheel(delta int) {
 	m.ReviewMove(delta)
 }
 
-// reviewRowUnderCursor is the diff row under the cursor.
 func (m *OS) reviewRowUnderCursor() (reviewRow, bool) {
 	r := &m.review
 	if r.listFocus {
@@ -914,7 +771,6 @@ func (m *OS) ReviewNote(hunk bool) {
 	r.editor = ed
 }
 
-// reviewNoteUnderCursor is the note the cursor is on.
 func (m *OS) reviewNoteUnderCursor() (review.Note, bool) {
 	row, ok := m.reviewRowUnderCursor()
 	if !ok || row.kind != reviewRowNote || row.note < 0 || row.note >= len(m.review.notes) {
@@ -951,7 +807,6 @@ func (m *OS) ReviewResolveNote() tea.Cmd {
 	return m.reviewNoteCmd("remove", map[string]any{"id": n.ID, "human_nonce": nonce})
 }
 
-// reviewNonce is this client's attach nonce, or a refusal in the dock.
 func (m *OS) reviewNonce() (string, bool) {
 	nonce := m.inboxNonce()
 	if nonce == "" {
@@ -961,7 +816,6 @@ func (m *OS) reviewNonce() (string, bool) {
 	return nonce, true
 }
 
-// reviewNoteCmd sends one review-note action on the reviewed pane.
 func (m *OS) reviewNoteCmd(action string, params map[string]any) tea.Cmd {
 	r := &m.review
 	call := m.inboxCaller()
@@ -988,7 +842,6 @@ func (m *OS) reviewNoteCmd(action string, params map[string]any) tea.Cmd {
 	}
 }
 
-// applyReviewNotes takes the notes a review-note call answered with.
 func (m *OS) applyReviewNotes(msg ReviewNotesMsg) {
 	r := &m.review
 	if msg.Gen != r.gen || !r.open {
@@ -1059,7 +912,6 @@ func (m *OS) ReviewSend() tea.Cmd {
 	}
 }
 
-// applyReviewSent says what happened to the notes sent.
 func (m *OS) applyReviewSent(msg ReviewSentMsg) {
 	r := &m.review
 	if msg.Err != nil {
@@ -1077,8 +929,6 @@ func (m *OS) applyReviewSent(msg ReviewSentMsg) {
 	notes := reviewCount(msg.Notes, "note")
 	text := notes + " sent to " + msg.Who
 	if m.learnFiles() {
-		// Nothing in the tab reads the notes, so the dock says what S does
-		// on a real machine instead of saying they went somewhere.
 		text = "On your machine, S sends " + notes + " to the agent in the pane " + msg.Who + ". Here, nothing leaves the tab."
 	} else if !msg.Delivering {
 		text = notes + " queued, sent when " + msg.Who + " is at rest"
@@ -1089,7 +939,6 @@ func (m *OS) applyReviewSent(msg ReviewSentMsg) {
 	m.reviewNotify(text, "info", m.Settings.NotificationDuration)
 }
 
-// reviewCount says n things: "1 note", "2 notes".
 func reviewCount(n int, what string) string {
 	if n == 1 {
 		return "1 " + what
@@ -1228,11 +1077,8 @@ func (m *OS) ReviewEditorSubmit() tea.Cmd {
 	return m.reviewNoteCmd("add", params)
 }
 
-// reviewTooNarrow is the status line for a split asked for on a column too
-// narrow to draw it.
 const reviewTooNarrow = "Too narrow for two columns. Widen the window, or press s for one column."
 
-// reviewStatusIs reports whether the review's status line is showing message.
 func (m *OS) reviewStatusIs(message string) bool {
 	for _, n := range m.Notifications {
 		if n.ID == m.review.statusID {
@@ -1254,8 +1100,6 @@ func (m *OS) ReviewToggleSplit() {
 	if e := r.currentFile(); r.split && e != nil && e.file != nil && len(e.file.Hunks) > 0 && !reviewSplitFits(e.file, width) {
 		m.reviewNotify(reviewTooNarrow, "info", m.Settings.NotificationDuration)
 	} else if !r.split && m.reviewStatusIs(reviewTooNarrow) {
-		// Back on one column, the line saying two do not fit is about a
-		// layout no longer asked for.
 		r.statusID = ""
 	}
 	if !had {
@@ -1282,7 +1126,6 @@ func (m *OS) ReviewToggleSplit() {
 	r.cursor = min(r.cursor, max(len(rows)-1, 0))
 }
 
-// reviewScrollStep is how far one sideways key scrolls the code.
 const reviewScrollStep = 8
 
 // ReviewScrollX scrolls the focused panel sideways by dir steps, left for

@@ -14,39 +14,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
-// Federation in the client: the rail draws every machine's sessions as one
-// group per machine, this machine first, in an order that does not move.
-//
-// The one rule this file exists to keep is that no part of it touches the
-// network from the Update goroutine. The daemon holds the links; the client
-// asks it for a snapshot inside a tea.Cmd, stores what comes back, and the rail
-// renders from the stored snapshot alone. A host that is powered off cannot
-// slow a frame down, because a frame never waits on one.
-//
-// A client whose daemon has no hosts configured stops polling after the first
-// answer, so the default install pays one verb call at attach and nothing after.
-// The daemon pushes MsgHostsChanged when its table changes, which is what
-// starts the poll again when the first host is added.
-//
-// The second rule is that a row stays where it is, so the row the user has just
-// clicked never moves out from under the pointer. The machine groups keep one
-// order whatever the client is attached to: this machine first, then the other
-// machines in the daemon's sorted order, overlaid with the order the user
-// dragged them into. The attached session is marked current in place, under
-// whichever machine holds it, which is the same promise BuildSessionTree makes
-// for a session switch on one machine.
-
 const (
-	// hostRefreshActive is the poll interval while the rail or the switcher is
-	// on screen. It is the same cadence the foreign-session cache uses, for the
-	// same reason: a status that is on screen should not be a minute stale.
 	hostRefreshActive = 5 * time.Second
-	// hostRefreshIdle is the poll interval with no consumer on screen.
-	hostRefreshIdle = 30 * time.Second
-	// hostRefreshPushed is the backstop poll while the daemon pushes every
-	// change to every host that is up. The push is what keeps the rail
-	// current; this only catches what no event covers, such as a client
-	// attaching on the host.
+	hostRefreshIdle   = 30 * time.Second
 	hostRefreshPushed = time.Minute
 )
 
@@ -152,38 +122,22 @@ type FederationRefreshTickMsg struct {
 // poll gate was set to.
 type HostsChangedMsg struct{}
 
-// federationRefreshTick arms the next host poll under a new generation.
 func (m *OS) federationRefreshTick(after time.Duration) tea.Cmd {
 	m.federationTickGen++
 	gen := m.federationTickGen
 	return m.tickUntilStop(after, func(time.Time) tea.Msg { return FederationRefreshTickMsg{Gen: gen} })
 }
 
-// federationRefreshPlan decides the next poll interval and whether to poll at
-// all. Polling stops for good once the daemon reports no hosts, which is the
-// default install, and starts again only on the daemon's push.
 func (m *OS) federationRefreshPlan() (after time.Duration, refresh bool) {
-	// federationPolling is the only gate. It is armed in Init and only when a
-	// daemon client exists, and the daemon is the only thing that knows about
-	// hosts, so a second check against the client would say nothing this does
-	// not already say.
 	if !m.federationPolling {
 		return hostRefreshIdle, false
 	}
-	// The person just opened a Tailscale sign-in page. The link comes up
-	// when they sign in, and the rail must say so in seconds. A status change
-	// is pushed, so this is the backstop for a push that does not arrive.
 	if m.hostSignInWatching() {
 		return hostRefreshActive, true
 	}
-	// A rail click waits for this machine's link. The session opens on the
-	// snapshot that says the link is up, so the poll runs fast until then.
 	if m.hostOpen != nil && !m.hostOpen.dialing {
 		return hostOpenPoll, true
 	}
-	// The push arrives on the attach connection. While the client is attached
-	// to another machine that connection goes to the far daemon, not to the
-	// one that pushes, so the rail keeps its poll.
 	if m.federationPushed && m.AttachedHost == "" {
 		return hostRefreshPushed, true
 	}
@@ -193,19 +147,10 @@ func (m *OS) federationRefreshPlan() (after time.Duration, refresh bool) {
 	return hostRefreshIdle, true
 }
 
-// refreshFederationCmd asks the local daemon for every host's status and
-// sessions, off the Update goroutine.
-//
-// It opens its own short verb connection rather than riding the attach
-// connection, which speaks the binary protocol and would need a new message
-// type and a protocol bump to carry this. A unix-socket dial and one verb call
-// per poll is cheaper than either.
 func refreshFederationCmd() tea.Cmd {
 	return func() tea.Msg {
 		client, err := session.DialVerbClient()
 		if err != nil {
-			// The daemon is the only thing that knows about hosts. If it cannot
-			// be reached the rail simply shows no host groups.
 			return FederationHostsMsg{}
 		}
 		defer func() { _ = client.Close() }()
@@ -234,11 +179,6 @@ func refreshFederationCmd() tea.Cmd {
 			return FederationHostsMsg{}
 		}
 
-		// list-host-sessions carries the local machine as its first entry. It
-		// is kept: while this client is attached on another machine, the rail
-		// draws this machine's sessions from it. hostGroupNodes drops it the
-		// rest of the time, when the rail draws the local sessions from live
-		// state.
 		msg := FederationHostsMsg{}
 		lastOK := map[string]int64{}
 		queued := map[string]int{}
@@ -283,10 +223,6 @@ func refreshFederationCmd() tea.Cmd {
 	}
 }
 
-// hostStatusReports fetches the last-contact times and the event modes the
-// session listing does not carry, and whether the daemon pushes host changes. A
-// failure here costs the rail a relative time and its push, and it polls as it
-// always did.
 func hostStatusReports(client *session.VerbClient) ([]federation.HostReport, bool, federation.Load) {
 	raw, err := client.Call("list-hosts", nil)
 	if err != nil {
@@ -307,8 +243,6 @@ func hostStatusReports(client *session.VerbClient) ([]federation.HostReport, boo
 	return res.Hosts, res.EventsPush, load
 }
 
-// applyFederationSnapshot stores a snapshot the poll returned. It runs on the
-// Update goroutine and does no I/O.
 func (m *OS) applyFederationSnapshot(msg FederationHostsMsg) {
 	m.federationPolling = msg.Configured > 0
 	m.federationPushed = msg.Pushed
@@ -317,8 +251,6 @@ func (m *OS) applyFederationSnapshot(msg FederationHostsMsg) {
 	m.federationGen++
 }
 
-// attachedMachine is the machine whose sessions the tree's main group holds:
-// this one, or the host the client is attached through.
 func (m *OS) attachedMachine() string {
 	if m.AttachedHost == "" {
 		return federation.LocalHostName
@@ -326,28 +258,12 @@ func (m *OS) attachedMachine() string {
 	return m.AttachedHost
 }
 
-// hostGroupNodes turns the stored snapshot into the rows of every machine but
-// the attached one: one header per machine, then that machine's sessions.
-//
-// A host that is not up keeps its header, carrying the reason or when it was
-// last seen, and the rows of its last listing, which the daemon keeps and marks
-// stale. That is section 7's rule on screen: the machine is still listed,
-// greyed, rather than disappearing and leaving the user to wonder whether they
-// imagined configuring it or what was running there. Its rows are muted and
-// wear no agent glyph, and are not targets.
-//
-// Each machine's sessions keep that daemon's creation order, overlaid with the
-// order the user dragged them into while attached there, so a machine's rows
-// read the same whether the client is on it or looking at it from elsewhere.
 func (m *OS) hostGroupNodes() []sessiontree.Node {
 	if len(m.FederationHosts) == 0 {
 		return nil
 	}
 	out := make([]sessiontree.Node, 0, len(m.FederationHosts)*2)
 	for _, h := range m.FederationHosts {
-		// The machine whose sessions the main group shows is not listed
-		// twice: this machine while the client is here, the attached host
-		// while it is away.
 		if h.Name == m.attachedMachine() {
 			continue
 		}
@@ -361,11 +277,7 @@ func (m *OS) hostGroupNodes() []sessiontree.Node {
 			HostLastOK:  h.LastOK,
 			HostQueued:  h.Queued,
 			WindowCount: len(h.Sessions),
-			// The machine's own glyph is the most urgent thing under it, so a
-			// folded group still says whether anything in there wants a
-			// person. That is the whole reason a header can be folded without
-			// hiding an alarm.
-			AgentState: hostWorstAgentState(h.Sessions),
+			AgentState:  hostWorstAgentState(h.Sessions),
 		})
 		sessions := orderByKey(h.Sessions, func(s FederationSession) string { return s.Name },
 			m.sidebarSessionOrderFor(h.Name))
@@ -382,24 +294,12 @@ func (m *OS) hostGroupNodes() []sessiontree.Node {
 				WindowCount: s.WindowCount,
 				Attached:    s.Attached,
 				AgentState:  s.AgentState,
-				// DoneSeen is never set for another machine's row. The unread
-				// bit says whether the person reading has looked at that pane,
-				// and there is no way to look at one from here, so a finished
-				// agent over there stays unread until that machine's own state
-				// moves on.
 			})
 		}
 	}
 	return out
 }
 
-// hostAttention counts the machine's sessions that want a person, and names
-// the most urgent state among them.
-//
-// A machine that is not up counts nothing. Its rows are the last listing that
-// reached this client, and a figure drawn from them would be reporting what
-// some panes were doing at a moment that has passed, on a machine nobody can
-// reach to check.
 func (m *OS) hostAttention(host string) (blocked int, worst string) {
 	if !m.hostIsUp(host) {
 		return 0, ""
@@ -422,13 +322,6 @@ func (m *OS) hostAttention(host string) (blocked int, worst string) {
 	return blocked, worst
 }
 
-// hostWorstAgentState is the most urgent state among a machine's sessions, by
-// the ranking the rail draws with.
-//
-// A machine that did not answer has no sessions in the snapshot, so it returns
-// empty and its header wears no glyph. That is the point rather than a side
-// effect: a header that kept the last alarm it saw would be reporting a pane's
-// state from a machine nobody can currently reach.
 func hostWorstAgentState(sessions []FederationSession) string {
 	best, state := 0, ""
 	for _, s := range sessions {
@@ -439,22 +332,12 @@ func hostWorstAgentState(sessions []FederationSession) string {
 	return state
 }
 
-// hostNodeID namespaces a host's rows so their ids can never collide with a
-// local session name. Nothing resolves these ids: they exist so the render
-// cache and the row loop have a stable key per row.
 func hostNodeID(host string) string { return "\x00host/" + host }
 
-// isRemoteNode reports whether a tree node belongs to a machine other than the
-// attached one. It is drawn in its machine's group, never dragged, renamed,
-// deleted, or switched to as a local session. A session under an up host is
-// the one thing a remote row can be: a target that attaches it in this client.
-// See drawHostRow.
 func isRemoteNode(n sessiontree.Node) bool {
 	return n.Kind == sessiontree.KindHost || n.Host != ""
 }
 
-// hostStatusByName is the link state the last snapshot reported for a host, or
-// "" when the snapshot does not name it.
 func (m *OS) hostStatusByName(name string) string {
 	for _, h := range m.FederationHosts {
 		if h.Name == name {
@@ -464,10 +347,6 @@ func (m *OS) hostStatusByName(name string) string {
 	return ""
 }
 
-// hostIsUp reports whether a host's link is up, which is the one state a remote
-// session can be opened from. A listing from any other state is cached, so its
-// rows are shown and are not targets. This machine is always up, and so is the
-// machine the client is attached to: the attach is the proof.
 func (m *OS) hostIsUp(name string) bool {
 	if name == federation.LocalHostName || name == m.attachedMachine() {
 		return true
@@ -475,26 +354,11 @@ func (m *OS) hostIsUp(name string) bool {
 	return m.hostStatusByName(name) == string(federation.StatusUp)
 }
 
-// remoteSessionName recovers the raw session name from a remote session node's
-// namespaced id. The id is hostNodeID(host)+":"+name, so the name is what
-// follows the last colon after the host prefix.
 func remoteSessionName(node sessiontree.Node) string {
 	prefix := hostNodeID(node.Host) + ":"
 	return strings.TrimPrefix(node.ID, prefix)
 }
 
-// The machine groups of the sessions section.
-
-// The global group: the sessions that hold panes from more than one machine.
-//
-// They are listed above the machines rather than under one. A global session
-// is held by some daemon, because a session has to live somewhere, but where
-// it is held is storage rather than meaning: its panes run wherever the user
-// put them. Filing it under the machine holding it would say it belongs to
-// that machine, which is the one thing it does not.
-
-// stripGlobalRows takes the global sessions out of a machine's rows and
-// returns them for the group above the machines.
 func stripGlobalRows(rows []sessiontree.Node) (kept, global []sessiontree.Node) {
 	kept = rows[:0:0]
 	for _, n := range rows {
@@ -507,10 +371,6 @@ func stripGlobalRows(rows []sessiontree.Node) (kept, global []sessiontree.Node) 
 	return kept, global
 }
 
-// stripGlobalRowsCounted is stripGlobalRows for another machine's group, whose
-// header carries its own count of the sessions under it. Taking rows out
-// without taking them off the count leaves the header claiming sessions the
-// group no longer shows.
 func stripGlobalRowsCounted(rows []sessiontree.Node, count int, global *[]sessiontree.Node) ([]sessiontree.Node, int) {
 	kept, found := stripGlobalRows(rows)
 	if len(found) == 0 {
@@ -520,12 +380,6 @@ func stripGlobalRowsCounted(rows []sessiontree.Node, count int, global *[]sessio
 	return kept, max(count-len(found), 0)
 }
 
-// isGlobalSessionRow reports whether a row is a global session's.
-//
-// The name is accepted as well as the mark. The mark is set when the session
-// is created, so a global session created before the mark existed has only its
-// name to say what it is, and the first one was called "global" exactly
-// because that was the only way to say it at the time.
 func isGlobalSessionRow(n sessiontree.Node) bool {
 	if n.Kind != sessiontree.KindSession {
 		return false
@@ -533,9 +387,6 @@ func isGlobalSessionRow(n sessiontree.Node) bool {
 	return n.Global || remoteSessionName(n) == GlobalSessionName
 }
 
-// globalGroupHeader is the row above the global sessions. It is shaped like a
-// machine's header, which is what puts it at that level in the rail, and it
-// folds like one.
 func (m *OS) globalGroupHeader(rows []sessiontree.Node) sessiontree.Node {
 	return sessiontree.Node{
 		Kind:        sessiontree.KindHost,
@@ -549,8 +400,6 @@ func (m *OS) globalGroupHeader(rows []sessiontree.Node) sessiontree.Node {
 	}
 }
 
-// worstNodeAgentState is the most urgent agent state among some rows, so a
-// folded group still says whether anything in it wants a person.
 func worstNodeAgentState(rows []sessiontree.Node) string {
 	best, state := 0, ""
 	for _, n := range rows {
@@ -561,19 +410,6 @@ func worstNodeAgentState(rows []sessiontree.Node) string {
 	return state
 }
 
-// sidebarMachineRows lays the sessions section out by machine.
-//
-// here is the attached machine's rows, already grouped by repository and with
-// folded repositories' members left out; remote is every other machine's rows
-// from hostGroupNodes. With no other machine the section is here alone, so a
-// person with one machine sees the rail they always had. With any other
-// machine every machine gets a header, this one included, because a section
-// that names some of its machines and not others leaves the reader to guess
-// which rows are the unnamed one's.
-//
-// The order is this machine first, then the others as the daemon sorts them,
-// overlaid with the user's drag order. It is the same order whatever the
-// client is attached to, which is the whole point: a row is where it was.
 func (m *OS) sidebarMachineRows(here, remote []sessiontree.Node) []sessiontree.Node {
 	m.SidebarHostIDs = m.SidebarHostIDs[:0]
 	m.sidebarMachineGroups = len(remote) > 0
@@ -581,11 +417,6 @@ func (m *OS) sidebarMachineRows(here, remote []sessiontree.Node) []sessiontree.N
 		return here
 	}
 
-	// The global session is taken out of whichever machine's group holds it
-	// and given a row of its own above them all. It is listed under a machine
-	// because some daemon has to hold it, but that is where it is stored
-	// rather than what it is: its panes run on several machines, so filing it
-	// under one of them says the wrong thing.
 	here, global := stripGlobalRows(here)
 
 	type machineGroup struct {
@@ -603,20 +434,6 @@ func (m *OS) sidebarMachineRows(here, remote []sessiontree.Node) []sessiontree.N
 		groups = append(groups, g)
 	}
 
-	// Put the groups back into the table's order before anything else looks at
-	// them.
-	//
-	// The attached machine's group is built from `here` rather than from the
-	// listing, because the listing leaves it out: its sessions are the ones
-	// already in hand. That made it the first group built, and therefore the
-	// first group in the order below, so attaching a session on another machine
-	// moved that machine up the rail and pushed the rest down. Which machine you
-	// are attached to is not an ordering, and the rail should not reshuffle
-	// underneath a switch.
-	//
-	// The table's order is the same for every client and does not depend on
-	// where this one happens to be attached, so it is the stable base. A drag
-	// order still wins, below.
 	byHost := make(map[string]machineGroup, len(groups))
 	for _, g := range groups {
 		byHost[g.header.Host] = g
@@ -629,8 +446,6 @@ func (m *OS) sidebarMachineRows(here, remote []sessiontree.Node) []sessiontree.N
 			seen[h.Name] = true
 		}
 	}
-	// A group the table does not name keeps its place after them. This machine
-	// is the usual one, and it is pinned first anyway.
 	for _, g := range groups {
 		if !seen[g.header.Host] {
 			ordered = append(ordered, g)
@@ -639,8 +454,6 @@ func (m *OS) sidebarMachineRows(here, remote []sessiontree.Node) []sessiontree.N
 	}
 	groups = ordered
 
-	// This machine is pinned first and is not dragged. The others take the
-	// user's order, or the draft order of a drag in progress.
 	var local []machineGroup
 	others := make([]machineGroup, 0, len(groups))
 	for _, g := range groups {
@@ -658,10 +471,6 @@ func (m *OS) sidebarMachineRows(here, remote []sessiontree.Node) []sessiontree.N
 	groups = append(local, others...)
 
 	out := make([]sessiontree.Node, 0, len(here)+len(remote)+2)
-	// The global group goes above the machines. It is drawn when there is a
-	// global session to show and also when there is not, because a group that
-	// appears only once you have made one is a group you cannot use to make
-	// one.
 	if len(global) > 0 || m.GlobalSessionOffered() {
 		header := m.globalGroupHeader(global)
 		out = append(out, header)
@@ -682,16 +491,8 @@ func (m *OS) sidebarMachineRows(here, remote []sessiontree.Node) []sessiontree.N
 	return out
 }
 
-// sidebarGroupIndent is the step a machine's rows take under its heading. Two
-// cells: one is not a step the eye reads at a glance, and three costs a
-// twenty-eight column rail a word off every name for nothing the second cell
-// does not already say.
 const sidebarGroupIndent = 2
 
-// sidebarRowIndent is the step the sessions section's rows take. It is the
-// group step while the section is laid out by machine, and nothing at all
-// otherwise, so the rail of a machine that stands alone is the rail it always
-// was.
 func (m *OS) sidebarRowIndent() int {
 	if m.sidebarMachineGroups {
 		return sidebarGroupIndent
@@ -699,10 +500,6 @@ func (m *OS) sidebarRowIndent() int {
 	return 0
 }
 
-// attachedMachineHeader is the group header for the machine the client is
-// attached to, which the snapshot does not carry as a group. It is up by
-// definition, and it counts sessions rather than rows: a repository's own row
-// is not a session.
 func (m *OS) attachedMachineHeader(name string, rows []sessiontree.Node) sessiontree.Node {
 	count := 0
 	for _, n := range rows {
@@ -745,12 +542,7 @@ func (m *OS) SidebarToggleHostCollapsed(host string) {
 	m.saveSidebarState()
 }
 
-// sidebarSessionOrderFor is the user's drag order for one machine's sessions:
-// SidebarOrder for this machine, and the per-host order for any other.
 func (m *OS) sidebarSessionOrderFor(host string) []string {
-	// The attached machine's daemon keeps the order every client shows, and
-	// its listing is already in it, except while a move of this client's is
-	// on its way there. See session_order.go.
 	if host == m.attachedMachine() && m.sessionOrderFromDaemon(host) && !m.sessionOrderPending(host) {
 		return nil
 	}
@@ -760,7 +552,6 @@ func (m *OS) sidebarSessionOrderFor(host string) []string {
 	return m.SidebarHostSessionOrder[host]
 }
 
-// setSidebarSessionOrder records a drag order for one machine's sessions.
 func (m *OS) setSidebarSessionOrder(host string, order []string) {
 	if host == federation.LocalHostName {
 		m.SidebarOrder = order
@@ -772,14 +563,6 @@ func (m *OS) setSidebarSessionOrder(host string, order []string) {
 	m.SidebarHostSessionOrder[host] = order
 }
 
-// drawHostRow draws one machine row and records what a person can reach on it.
-//
-// A machine's header is a target that folds the group. An up host's header
-// carries a "+" that creates a session there; the attached machine's carries
-// the section's own new-session control. A session row under an up host is a
-// target that attaches the session in this client. Every row under a host that
-// is not up is drawn and is not a target, because its listing is cached and
-// the machine cannot be reached right now.
 func (m *OS) drawHostRow(
 	node sessiontree.Node, cw, variant int, pal overlay.Palette, st sidebarRowState, canCreate, showCounts bool,
 	isCursor func(kind sidebarRowKind, sessionID, windowID string) bool,
@@ -790,8 +573,6 @@ func (m *OS) drawHostRow(
 	lines *[]string,
 ) {
 	if node.Global {
-		// The global group's header. It folds like a machine's, and its "+"
-		// makes another global session rather than a session on a machine.
 		collapsed := m.SidebarHostCollapsed(GlobalSessionName)
 		st.Cursor = st.Cursor || isCursor(sidebarRowHost, GlobalSessionName, "")
 		add := ""
@@ -814,8 +595,6 @@ func (m *OS) drawHostRow(
 		st.Cursor = st.Cursor || isCursor(sidebarRowHost, node.Host, "")
 		add := ""
 		if !collapsed && node.HostStatus == string(federation.StatusUp) {
-			// The attached machine's control is the section's: it creates on
-			// the daemon this client is on, which is that machine.
 			kind, id := sidebarRowHostNew, node.Host
 			if node.Host == m.attachedMachine() {
 				kind, id = sidebarRowNewSession, ""
@@ -832,9 +611,6 @@ func (m *OS) drawHostRow(
 		}
 		lit := false
 		if node.HostStatus == string(federation.StatusApproval) {
-			// The "sign in" label is a control of its own, as the "+" is on
-			// a host that is up: it opens the sign-in page, and the rest of
-			// the header still folds the group.
 			figure, _ := hostDownFigure(node, lipgloss.Width(printableTitle(node.Title)), cw, m.railClock())
 			if w := lipgloss.Width(figure); w > 0 && cw-1-w > 0 {
 				span := sidebarTokenSpan{Kind: sidebarRowHostSignIn, X0: cw - 1 - w, X1: cw - 1}
@@ -847,16 +623,11 @@ func (m *OS) drawHostRow(
 		return
 	}
 
-	// A session row. It is a target in every link state: a click on a host
-	// that is not up asks for the link and opens the session when it comes
-	// up. See host_open.go.
 	st.Cursor = st.Cursor || isCursor(sidebarRowHostSession, node.Host, remoteSessionName(node))
 	recordHit(sidebarRowHostSession, node.Host, remoteSessionName(node), -1, 1)
 	*lines = append(*lines, compose(st.mark(pal, m.sidebarRemoteSessionRow(node, cw, variant, pal, st, showCounts))))
 }
 
-// createRemoteSession creates a session on another machine and attaches it in
-// this client. The host's daemon creates it under the first free name.
 func (m *OS) createRemoteSession(host string) {
 	m.cancelHostOpen()
 	if !m.hostIsUp(host) {
@@ -871,11 +642,6 @@ func (m *OS) createRemoteSession(host string) {
 	m.applyStartupToUnarranged()
 }
 
-// localSessionIndexes maps a local session's id to its 1-based position in the
-// local rail, the number switch_session_N opens. It numbers railSessionOrder,
-// the order SwitchToSessionByIndex reads, so a row's label and its key agree;
-// a folded repository's sessions keep their numbers though their rows are
-// hidden. Remote sessions are absent: no number on this machine reaches them.
 func (m *OS) localSessionIndexes(nodes []sessiontree.Node) map[string]int {
 	indexes := make(map[string]int, len(nodes))
 	for i, s := range m.railSessionOrder(nodes) {
@@ -884,24 +650,16 @@ func (m *OS) localSessionIndexes(nodes []sessiontree.Node) map[string]int {
 	return indexes
 }
 
-// localSessionNodes drops the other machines' rows from a tree's session list.
-// The surfaces that only deal with the attached machine (the colour
-// arbitration, the collapsed glyph strip, session cycling) read the tree
-// through it.
 func localSessionNodes(nodes []sessiontree.Node) []sessiontree.Node {
 	for i, n := range nodes {
 		if !isRemoteNode(n) {
 			continue
 		}
-		// Host groups are appended after every local session, so the first
-		// remote row is the end of the local ones and no copy is needed.
 		return nodes[:i]
 	}
 	return nodes
 }
 
-// hostStatusLabel is the short word a host header shows on its right. It is one
-// word so the host name keeps the room.
 func hostStatusLabel(status string) string {
 	switch federation.Status(status) {
 	case federation.StatusUp:
@@ -917,19 +675,12 @@ func hostStatusLabel(status string) string {
 	case federation.StatusReconnecting:
 		return "reconnecting"
 	case federation.StatusApproval:
-		// Tailscale SSH waits for the person to sign in in a browser. A
-		// click or Enter on the header opens the page. See host_signin.go.
 		return "sign in"
 	default:
 		return "offline"
 	}
 }
 
-// hostDownLabel is the header word of a host that is not up. A machine that
-// dropped off the network after answering says when it was last heard from,
-// "seen 3m ago", since its rows under the header are that moment's listing. A
-// machine that answered and refused says why instead, because that is a thing
-// to fix: no daemon, no tuios, or the version.
 func hostDownLabel(status string, lastOK int64, now time.Time) string {
 	label := hostStatusLabel(status)
 	switch federation.Status(status) {
@@ -942,10 +693,6 @@ func hostDownLabel(status string, lastOK int64, now time.Time) string {
 	return label
 }
 
-// hostDownMark is the figure a machine that is not answering keeps when the
-// rail has no room for the word saying why. Without it a narrow rail drew the
-// header of a machine that is down like the header of one that is up, and
-// only the ink told them apart.
 func hostDownMark() string {
 	if overlay.UseASCII() {
 		return "x"
@@ -953,28 +700,14 @@ func hostDownMark() string {
 	return "✕"
 }
 
-// hostDownFigure is the right-hand figure of the header of a machine that is
-// not answering, and the cells its name may take beside it.
-//
-// The figure is the longest form the row's budget keeps beside the name (see
-// railRowFit): mail waiting for the machine and why it is down, "3 queued,
-// offline", then the mail alone, "3 queued", or the word alone, "offline". A
-// rail too narrow for any of them keeps the name, because "wo… offline" names
-// no machine at all. It still draws the last form outside the budget, at the
-// name's cost: the mail count when there is mail, since it is the one thing on
-// the row that changes when the link is back, and hostDownMark when there is
-// none, so the row still says the machine is down without its colour.
 func hostDownFigure(node sessiontree.Node, nameW, cw int, now time.Time) (figure string, nameRoom int) {
 	label := hostDownLabel(node.HostStatus, node.HostLastOK, now)
 	forms := []string{label}
 	last := hostDownMark()
 	switch federation.Status(node.HostStatus) {
 	case federation.StatusConnecting, federation.StatusReconnecting:
-		// On its way up, not down: the mark would say the wrong thing.
 		last = ""
 	case federation.StatusApproval:
-		// Nothing is wrong with the machine. It waits for the person, so it
-		// keeps the mark an agent that needs you wears.
 		last = agentStateIndicator("needs_input")
 	}
 	if node.HostQueued > 0 {
@@ -994,28 +727,10 @@ func hostDownFigure(node sessiontree.Node, nameW, cw int, now time.Time) (figure
 	return last, sidebarNameAvail(cw, lipgloss.Width(last))
 }
 
-// sidebarHostRow draws a machine's group header.
-//
-//	▾ local                +
-//	▾ build                +
-//	▸ pi                   3
-//	▸ work           offline
-//
-// The mark is the fold mark, open or shut, in both glyph modes rather than a
-// machine icon: the one thing the row has to say beyond its name is that it
-// folds and which way it is folded now, it is one cell wide in every font, and
-// the rail's other marks are about panes rather than machines. A shut group
-// shows how many sessions it is holding, ungated by the counts setting, since
-// that number is the only thing on the row saying the fold is not empty. A
-// host that is not answering keeps its row with one word saying why, because a
-// machine that vanished from the rail reads as a machine nobody configured.
 func (m *OS) sidebarHostRow(node sessiontree.Node, cw int, pal overlay.Palette, add string, st sidebarRowState, collapsed bool) string {
 	return m.sidebarHostRowLit(node, cw, pal, add, st, collapsed, false)
 }
 
-// sidebarHostRowLit is sidebarHostRow with the "sign in" control under the
-// keyboard cursor or the pointer when lit is true. It is then underlined, as
-// a link is, and keeps its colour.
 func (m *OS) sidebarHostRowLit(node sessiontree.Node, cw int, pal overlay.Palette, add string, st sidebarRowState, collapsed, lit bool) string {
 	rowBg := sidebarRowBg(st, pal)
 	up := node.HostStatus == string(federation.StatusUp)
@@ -1024,19 +739,13 @@ func (m *OS) sidebarHostRowLit(node sessiontree.Node, cw int, pal overlay.Palett
 
 	title := printableTitle(node.Title)
 	right, rightW := "", 0
-	// The name's room when the figure is drawn whatever it costs the name.
 	nameRoom := 0
 	switch {
 	case !up:
-		// A host that is not up says why, in the slot the add control would take.
-		// An unreachable machine has nothing to add a session to. See
-		// hostDownFigure for how the word gives way on a narrow rail.
 		var label string
 		label, nameRoom = hostDownFigure(node, lipgloss.Width(title), cw, m.railClock())
 		ink := pal.FgMute
 		if node.HostStatus == string(federation.StatusApproval) {
-			// A sign-in waits for the person, so it wears the colour of an
-			// agent that needs you, not the colour of an error.
 			ink = sidebarSeverityColor("needs_input", pal)
 		}
 		style := sidebarStyle(rowBg, ink)
@@ -1045,16 +754,6 @@ func (m *OS) sidebarHostRowLit(node sessiontree.Node, cw int, pal overlay.Palett
 		}
 		right = style.Render(label)
 	case blocked > 0:
-		// How many of this machine's sessions want a person, in the strip
-		// badge's language. It outranks both the session count and the add
-		// control, which is the rail's standing rule that an alarm outranks a
-		// label: a count of sessions is a fact you can get by unfolding, and a
-		// pane waiting for you is not.
-		//
-		// It is in this slot rather than in the fold mark's cell because that
-		// cell says which way the group is folded, and that has to keep
-		// working. A folded group is exactly when this figure matters most, so
-		// taking the mark's place would hide it in the one state it is for.
 		fig := strconv.Itoa(blocked) + agentStateIndicator(worst)
 		right = sidebarStyle(rowBg, sidebarSeverityColor(worst, pal)).Render(fig)
 		rightW = lipgloss.Width(fig)
@@ -1067,19 +766,6 @@ func (m *OS) sidebarHostRowLit(node sessiontree.Node, cw int, pal overlay.Palett
 		rightW = lipgloss.Width(add)
 	}
 
-	// A machine's name is secondary ink, and a machine that does not answer is
-	// muted with its rows.
-	//
-	// A heading is the least actionable thing on the rail: you do not act on a
-	// machine, you act on a session under it. Emphasis should drain downward,
-	// so the session names are the brightest ink and the heading sits one step
-	// under them.
-	//
-	// FgDim on a machine and FgDim on the session under it are the same ink,
-	// and an ink step alone cannot carry the distinction, so it is not carried
-	// by ink. The rule that runs out of the name to the right spine carries it,
-	// which is a different kind of mark rather than a louder one, so a heading
-	// still reads as a heading with colour switched off entirely.
 	here := node.Host == m.attachedMachine()
 	ink := pal.FgDim
 	if !up {
@@ -1090,17 +776,6 @@ func (m *OS) sidebarHostRowLit(node sessiontree.Node, cw int, pal overlay.Palett
 		mark = m.Settings.GetRailFoldShutGlyph()
 	}
 	glyph := sidebarStyle(rowBg, pal.FgMute).Render(mark)
-	// No bold. The rail spends its one bold voice on a row that wants a human,
-	// and a heading wearing the same weight as an alarm is what made that voice
-	// stop meaning anything.
-	//
-	// The word saying why a machine is not answering goes through the row's
-	// budget, see hostDownFigure. The other figures are drawn whatever they
-	// cost the name: the alarm outranks a label, a shut group's count is the
-	// only sign the fold is not empty, and the add control's click span is
-	// worked out before this row is drawn.
-	// A machine with a copy shows its progress at the end of the row,
-	// "→ 61%", in front of whatever else the row shows there.
 	if up {
 		if fig, w := m.transfersHostFigure(node.Host, rowBg, pal); w > 0 {
 			if right != "" {
@@ -1113,27 +788,10 @@ func (m *OS) sidebarHostRowLit(node sessiontree.Node, cw int, pal overlay.Palett
 		nameRoom = sidebarNameAvail(cw, rightW)
 	}
 	name := sidebarStyle(rowBg, ink).Render(overlay.Truncate(title, nameRoom))
-	// A folded group hides the session row that wears the focus mark, so the
-	// header takes it: the fold must not make the attached session vanish from
-	// the rail without a trace.
 	gutter := sidebarGutter(here && collapsed, "", rowBg, pal, &m.Settings)
 	return sidebarComposeRuledRow(0, gutter, glyph, name, right, cw, rowBg, pal, &m.Settings)
 }
 
-// sidebarRemoteSessionRow draws one session that lives on a machine the client
-// is not attached to. It sits on the same spine as a local session's row, with
-// the resting mark in the glyph cell, so a machine's rows read the same
-// whether the client is on it or not; what says it is elsewhere is the header
-// above it.
-//
-// The ink follows the link. A row under a machine that is answering reads at
-// the strength of a local resting row, because a click on it attaches the
-// session and the row must not look weaker than what it does. A row under a
-// machine that is not answering is a listing nobody can act on, and it is
-// muted with its header to say so.
-//
-// The count takes the same gate a local session row's count takes: a rail too
-// narrow for a name and a number keeps the name.
 func (m *OS) sidebarRemoteSessionRow(node sessiontree.Node, cw, variant int, pal overlay.Palette, st sidebarRowState, showCounts bool) string {
 	rowBg := sidebarRowBg(st, pal)
 	right, rightW := "", 0
@@ -1142,11 +800,6 @@ func (m *OS) sidebarRemoteSessionRow(node sessiontree.Node, cw, variant int, pal
 		right = sidebarStyle(rowBg, pal.FgMute).Render(count)
 		rightW = lipgloss.Width(count)
 	}
-	// The same ramp a local session row takes: the name is the brightest ink,
-	// and it does not move when the row is lit because the band says that. A
-	// machine that is not answering is the one exception, and it is muted with
-	// its heading, because its rows are a cached listing rather than sessions
-	// you can reach.
 	ink := pal.FgMute
 	if m.hostIsUp(node.Host) {
 		ink = pal.Fg
@@ -1159,15 +812,6 @@ func (m *OS) sidebarRemoteSessionRow(node sessiontree.Node, cw, variant int, pal
 	}
 	name := sidebarStyle(rowBg, ink).Render(overlay.Truncate(title, nameRoom))
 	gutter := sidebarStyle(rowBg, nil).Render(" ")
-	// The same glyph a session on this machine wears, from the same function.
-	// The sessions section answers "who needs me", and a row that answered it
-	// only for the machine the client happens to be attached to was answering
-	// half the question: an agent waiting for a person waits just as long on
-	// the build box.
-	//
-	// A machine that is not answering keeps the resting bullet whatever its
-	// last listing said, because its rows are a cached listing rather than
-	// sessions you can reach.
 	glyph := sidebarStyle(rowBg, pal.FgMute).Render(m.Settings.GetRailBullet())
 	if m.hostIsUp(node.Host) && agentStateIndicator(node.AgentState) != "" {
 		glyph = sidebarGlyph(node.AgentState, node.DoneSeen, node.Subagents, rowBg, pal, &m.Settings)

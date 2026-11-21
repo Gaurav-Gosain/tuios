@@ -35,7 +35,6 @@ func TestKeptImageDecodeBounds(t *testing.T) {
 		t.Fatal(err)
 	}
 	huge := append([]byte(nil), good.Bytes()...)
-	// IHDR starts at byte 8: length, "IHDR", width, height, ..., CRC.
 	binary.BigEndian.PutUint32(huge[16:], 100000)
 	binary.BigEndian.PutUint32(huge[20:], 100000)
 	binary.BigEndian.PutUint32(huge[29:], crc32.ChecksumIEEE(huge[12:29]))

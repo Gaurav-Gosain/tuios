@@ -8,10 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The routing these tests pin is the one thing in the link feature that is a
-// safety property rather than a convenience: a client running on a server must
-// not open a browser there, because nobody is sitting at that machine.
-
 // TestLinkFilePathAcceptsOnlyLocalFiles checks the parse that decides whether a
 // link names a file on the machine the panes are on.
 //
@@ -24,13 +20,13 @@ import (
 func TestLinkFilePathAcceptsOnlyLocalFiles(t *testing.T) {
 	cases := []struct {
 		url  string
-		want string // "" means not a local file
+		want string
 	}{
 		{"file:///etc/hosts", "/etc/hosts"},
 		{"file://localhost/etc/hosts", "/etc/hosts"},
 		{"file://someotherbox/etc/hosts", ""},
 		{"https://example.com/a", ""},
-		{"/etc/hosts", ""}, // a bare path is not a link
+		{"/etc/hosts", ""},
 	}
 	for _, c := range cases {
 		got, ok := linkFilePath(c.url)
@@ -85,7 +81,7 @@ func TestOnlyKnownSchemesReachTheDesktop(t *testing.T) {
 	allowed := []string{
 		"http://example.com/a",
 		"https://example.com/a",
-		"HTTPS://example.com/a", // the scheme is case-insensitive
+		"HTTPS://example.com/a",
 		"mailto:someone@example.com",
 		"ftp://example.com/a",
 	}
@@ -95,15 +91,13 @@ func TestOnlyKnownSchemesReachTheDesktop(t *testing.T) {
 		}
 	}
 
-	// Each of these resolves to a registered application on some desktop, and
-	// none of them is a link a pane's reader meant to click.
 	refused := []string{
 		"javascript:alert(1)",
 		"data:text/html,<script>x</script>",
 		"vscode://file/etc/passwd",
 		"ssh://root@example.com",
 		"smb://example.com/share",
-		"example.com/a", // no scheme at all
+		"example.com/a",
 		"",
 	}
 	for _, u := range refused {
@@ -112,8 +106,6 @@ func TestOnlyKnownSchemesReachTheDesktop(t *testing.T) {
 		}
 	}
 
-	// And the refusal is the clipboard, not silence. A click that appears to do
-	// nothing is worse than one that says what it did instead.
 	m := &OS{Settings: config.Global}
 	if cmd := m.OpenLink("vscode://file/etc/passwd"); cmd == nil {
 		t.Fatal("a refused scheme produced no clipboard fallback")
@@ -153,9 +145,6 @@ func TestTuiosWindowLinksParse(t *testing.T) {
 		"tuios://session/4262c319",
 		"tuios://pane/4262c319",
 		"https://window/4262c319",
-		// Below the 8-character short id: a prefix that short names a window
-		// one time in many, and the program printing the link chose it, not
-		// the person clicking.
 		"tuios://window/4262c31",
 		"tuios://window/4262c31/close",
 		"tuios://window/a/close",
@@ -198,8 +187,6 @@ func TestTuiosWindowLinkResolution(t *testing.T) {
 		t.Errorf("unique prefix resolved to %q, %v; want window 2", id, ok)
 	}
 
-	// Another session's panes resolve too, and a prefix shared across
-	// sessions is as ambiguous as one shared within the attached session.
 	m.SessionName = "home"
 	listing := []session.SessionInfo{
 		{Name: "home", Windows: []session.WindowSummary{{ID: "ffffffff-0000-0000-0000-000000000001"}}},
@@ -241,8 +228,6 @@ func TestTuiosWindowCloseConfirms(t *testing.T) {
 		t.Fatal("cancel closed the pane")
 	}
 
-	// A pane that appears ahead of the target while the dialog is open moves
-	// it in m.Windows. The confirmation still closes the pane it named.
 	m.OpenLink("tuios://window/a878cd43/close")
 	other := &terminal.Window{ID: "ffffffff-0000-0000-0000-000000000001"}
 	m.Windows = append([]*terminal.Window{other}, m.Windows...)

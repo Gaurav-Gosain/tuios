@@ -16,59 +16,20 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// Pasting an image from the clipboard into a pane.
-//
-// tuios reads the image here (clipboard_image.go), the daemon writes it to a
-// file on the machine where the pane's process runs (session/paste_image.go),
-// and the file's path is pasted into the pane as text. An agent that takes an
-// image by path, such as Claude Code or Codex, then gets the image, on this
-// machine or on another one.
-//
-// Three things start it:
-//
-//   - The paste_image action, bound to prefix V and in the command palette.
-//     It always reads the image, even when the clipboard holds text as well.
-//   - The paste key (terminal_paste_host, paste_clipboard). When the
-//     clipboard holds an image and no text, the key pastes the image. When it
-//     holds text, the key pastes the text exactly as before.
-//   - A bracketed paste from the host terminal that is empty. Some terminals
-//     send one when the clipboard holds only an image. Nothing else would come
-//     of it, so tuios looks for an image.
-//
-// Plain ctrl+v is not one of them. It reaches the pane as 0x16, the same as
-// before, so a program that reads the clipboard itself on ctrl+v, as Claude
-// Code does, still gets the key.
-
-// imagePasteMode is what started an image paste, which decides what happens
-// when the clipboard holds no image.
 type imagePasteMode int
 
 const (
-	// imagePasteAction is the paste_image action: no image is a message.
 	imagePasteAction imagePasteMode = iota
-	// imagePasteKey is the paste key: no image, or text beside it, is the
-	// text paste it always was.
 	imagePasteKey
-	// imagePasteEmpty is an empty bracketed paste: no image is nothing.
 	imagePasteEmpty
 )
 
-// imagePasteTimeout bounds the daemon's write, which for a pane on another
-// machine includes the bytes crossing the link.
 const imagePasteTimeout = 75 * time.Second
 
-// imagePasteState is the image paste's test seams. Nil fields use the system.
 type imagePasteState struct {
-	// detect finds the clipboard tool.
-	detect func() *imageClipboard
-	// call reaches the daemon with a verb.
-	call func(verb string, params map[string]any, timeout time.Duration) (json.RawMessage, error)
-	// save writes an image for a client with no daemon.
-	save func([]byte) (string, error)
-	// keyProbeOff stops the paste key from asking the clipboard for its
-	// types, after an ask that was too slow or that the tool said it cannot
-	// answer here. The text paste then runs at once, every press. The
-	// paste_image action still asks.
+	detect      func() *imageClipboard
+	call        func(verb string, params map[string]any, timeout time.Duration) (json.RawMessage, error)
+	save        func([]byte) (string, error)
 	keyProbeOff bool
 }
 
@@ -82,7 +43,6 @@ func (m *OS) SetImagePasteSeams(env *imageClipboardEnv, call func(verb string, p
 	}
 }
 
-// imageClipboardHere is the clipboard tool, or nil.
 func (m *OS) imageClipboardHere() *imageClipboard {
 	if m.imagePaste.detect != nil {
 		return m.imagePaste.detect()
@@ -90,8 +50,6 @@ func (m *OS) imageClipboardHere() *imageClipboard {
 	return detectImageClipboard(systemImageClipboardEnv())
 }
 
-// imagePasteReason says why this client cannot read a clipboard image, or ""
-// when it can.
 func (m *OS) imagePasteReason() string {
 	switch {
 	case m.BrowserClient:
@@ -104,19 +62,14 @@ func (m *OS) imagePasteReason() string {
 	return ""
 }
 
-// imageProbeMsg is what the clipboard held when an image paste looked.
 type imageProbeMsg struct {
-	window string
-	mode   imagePasteMode
-	data   []byte
-	err    error
-	// fallback asks for the text paste instead.
-	fallback bool
-	// keyProbeOff says the type ask was too slow or cannot work here, so the
-	// paste key stops making it.
+	window      string
+	mode        imagePasteMode
+	data        []byte
+	err         error
+	fallback    bool
 	keyProbeOff bool
-	// reply is the reply draft the image is for, nil for a pane.
-	reply *composer.Model
+	reply       *composer.Model
 }
 
 // ImagePastedMsg is the daemon's answer: the path to paste into window.
@@ -178,28 +131,14 @@ func (m *OS) PasteImageOnEmptyPaste() tea.Cmd {
 	return probeImageCmd(clip, w.ID, imagePasteEmpty)
 }
 
-// probeImageCmd lists the clipboard's types and, when the mode takes what is
-// there as an image, reads it. It runs off the update loop: the tools are
-// separate processes.
 func probeImageCmd(clip *imageClipboard, window string, mode imagePasteMode) tea.Cmd {
 	return func() tea.Msg {
 		ctx := context.Background()
 		msg := imageProbeMsg{window: window, mode: mode}
-		// The paste key's text paste waits behind this ask, so the key gives
-		// it a short bound. Past it the text is pasted, and the key does not
-		// ask again. An empty paste has nothing waiting behind it, so it takes
-		// the full bound: a clipboard tool run for the first time can take
-		// longer than the key's bound to start, and a timeout here turns the
-		// ask off for every later empty paste.
 		limit := imageClipTypesTimeout
 		if mode == imagePasteKey {
 			limit = imageClipKeyTimeout
 		}
-		// On macOS the type ask is osascript, whose start alone takes longer
-		// than the key's bound (#1179). pbpaste answers in milliseconds
-		// whether there is text. Text means the text paste, at once. No
-		// text means no text paste waits, so the type ask gets the full
-		// bound, and a slow answer does not stop the key from asking again.
 		nothingWaits := false
 		if mode != imagePasteAction {
 			if hasText, ok := clip.darwinHasText(ctx, imageClipKeyTimeout); ok {
@@ -211,13 +150,6 @@ func probeImageCmd(clip *imageClipboard, window string, mode imagePasteMode) tea
 				nothingWaits = !hasText || mode == imagePasteEmpty
 			}
 		}
-		// Under WSL the type ask is powershell.exe, a Windows process started
-		// across the interop bridge. Its start takes about the key's whole
-		// bound when it is warm, and can outlast the full bound when it is
-		// cold. A timeout there is a slow start, not a tool that cannot
-		// answer, so it does not turn the ask off: one press of the paste key
-		// would otherwise turn off the empty paste Windows Terminal sends for
-		// an image.
 		slowStart := clip.backend == imageClipWSL
 		types, err := clip.typesWithin(ctx, limit)
 		if err != nil && mode != imagePasteAction {
@@ -255,7 +187,6 @@ func probeImageCmd(clip *imageClipboard, window string, mode imagePasteMode) tea
 	}
 }
 
-// applyImageProbe acts on what the clipboard held.
 func (m *OS) applyImageProbe(msg imageProbeMsg) tea.Cmd {
 	if msg.reply != nil {
 		return m.applyReplyImageProbe(msg)
@@ -285,7 +216,6 @@ func (m *OS) applyImageProbe(msg imageProbeMsg) tea.Cmd {
 	return m.deliverImageCmd(msg.window, msg.data)
 }
 
-// deliverImageCmd has the image written where window's process runs.
 func (m *OS) deliverImageCmd(window string, data []byte) tea.Cmd {
 	if len(data) > session.PasteImageMaxBytes {
 		m.ShowNotification("The image is "+units.Bytes(int64(len(data)))+". The limit is "+units.Bytes(session.PasteImageMaxBytes)+". Nothing was pasted.",
@@ -349,8 +279,6 @@ func (m *OS) deliverImageCmd(window string, data []byte) tea.Cmd {
 	}
 }
 
-// applyImagePasted pastes the image's path into the window it was for, and
-// shows the image in the paste preview.
 func (m *OS) applyImagePasted(msg ImagePastedMsg) tea.Cmd {
 	if msg.Err != nil {
 		if session.VerbErrCode(msg.Err) == session.ErrVerbUnknownVerb {
@@ -389,16 +317,6 @@ func (m *OS) applyImagePasted(msg ImagePastedMsg) tea.Cmd {
 	return m.showPastePreview(msg.Window, msg.Path, msg.Data)
 }
 
-// pastePathText is the text pasted for a path: the path itself, quoted only
-// when it holds a character a shell would split or expand. The directories
-// tuios writes to on Linux and macOS hold none, so there it is the path as it
-// is.
-//
-// A Windows path (C:\...) goes in double quotes when it needs quoting at all:
-// cmd, PowerShell and the agents that read a path from a prompt all take that
-// form, and a Windows file name cannot hold a double quote. The machine the
-// path is for can be another one than this, so the shape of the path decides,
-// not the platform tuios runs on.
 func pastePathText(path string) string {
 	windows := pastePathIsWindows(path)
 	extra := "/._-+:@%,="
@@ -417,16 +335,11 @@ func pastePathText(path string) string {
 	return path
 }
 
-// pastePathIsWindows reports whether path starts with a drive letter.
 func pastePathIsWindows(path string) bool {
 	return len(path) >= 3 && path[1] == ':' && (path[2] == '\\' || path[2] == '/') &&
 		(path[0] >= 'a' && path[0] <= 'z' || path[0] >= 'A' && path[0] <= 'Z')
 }
 
-// imagePasteRefusal is the message for a paste the pane's machine refused by
-// its link policy, or "" for any other error. That machine names the
-// capabilities it lacks and its config table that grants them. The pane's
-// machine is the window's host, or the host this client is attached through.
 func (m *OS) imagePasteRefusal(window string, err error) string {
 	host := m.AttachedHost
 	if w := m.windowByID(window); w != nil && w.Host != "" {

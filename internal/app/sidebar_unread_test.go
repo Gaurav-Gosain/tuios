@@ -24,7 +24,6 @@ func TestATurnBetweenTwoSyncsReadsAsUnread(t *testing.T) {
 		})
 	}
 
-	// The first done, finished under the user's eyes, is seen.
 	m.FocusedWindow = 1
 	sync(session.AgentStateDone, 0)
 	m.FocusedWindow = 0
@@ -32,7 +31,6 @@ func TestATurnBetweenTwoSyncsReadsAsUnread(t *testing.T) {
 		t.Fatalf("first done: got %q seen=%v, want done seen", state, seen)
 	}
 
-	// working and done again, folded into one snapshot.
 	sync(session.AgentStateDone, 1)
 	if state, seen := m.railAgentState(w.ID, w.AgentState, w.AgentCompletionSeq); state != "done" || seen {
 		t.Fatalf("second done: got %q seen=%v, want an unread done", state, seen)
@@ -84,14 +82,12 @@ func TestASyncThatFocusesAPaneJudgesItsTurnByTheNewFocus(t *testing.T) {
 			},
 		}
 	}
-	// The first done, seen while the pane had the focus.
 	if err := m.ApplyStateSync(state("w-2", 0)); err != nil {
 		t.Fatalf("ApplyStateSync: %v", err)
 	}
 	if err := m.ApplyStateSync(state("w-1", 0)); err != nil {
 		t.Fatalf("ApplyStateSync: %v", err)
 	}
-	// One sync: back to w-2, and w-2 finished another turn meanwhile.
 	if err := m.ApplyStateSync(state("w-2", 1)); err != nil {
 		t.Fatalf("ApplyStateSync: %v", err)
 	}

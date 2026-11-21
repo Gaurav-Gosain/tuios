@@ -14,22 +14,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The tiling switch has one implementation and several doors: the keys, the
-// palette rows, the tape commands and the set-layout verb behind them. Each
-// door used to carry its own copy of the switch, and each copy forgot a
-// different step. These tests open every door a person has and hold them to
-// one screen, so a sixth copy cannot be added without being caught.
-
-// tilingDoor is one way of switching tiling.
 type tilingDoor struct {
 	name string
 	run  func(f *apptest.Fixture)
 }
 
-// tilingDoors lists every door: the leader key and the window-management
-// key, every tape command whose name ends in Tiling (found by reflection, so
-// a new one is included without being listed), and every palette row in the
-// Layout category, chosen by typing its name into the palette.
 func tilingDoors(t *testing.T) []tilingDoor {
 	t.Helper()
 	doors := []tilingDoor{
@@ -53,8 +42,6 @@ func tilingDoors(t *testing.T) []tilingDoor {
 	if tapeDoors < 3 {
 		t.Fatalf("reflection found %d tape tiling commands, the tree has at least ToggleTiling, EnableTiling and DisableTiling", tapeDoors)
 	}
-	// The palette rows that change the layout mode as a whole, which is
-	// what a door here is. The other Layout rows split, swap or resize panes.
 	layoutModeRows := map[string]bool{
 		"toggle_tiling": true, "toggle_shared_borders": true, "snap_fullscreen": true,
 		"layout_prefix_load": true, "next_saved_layout": true, "prev_saved_layout": true,
@@ -74,22 +61,14 @@ func tilingDoors(t *testing.T) []tilingDoor {
 	return doors
 }
 
-// windowMode leaves terminal mode for window management, as the leader and
-// escape do, so the single-letter keys act on panes.
 func windowMode(f *apptest.Fixture) { f.Keys("ctrl+b", "esc") }
 
-// sharedBorders is the setting under which a tiled pane draws no frame of
-// its own and a floating one does, which is what makes a missed step visible.
 var sharedBorders = apptest.Settings(func(s *config.Settings) { s.SharedBorders = true })
 
-// panesArea is the screen below the dock: what the doors must agree on. The
-// dock's message line says which door ran, in that door's words.
 func panesArea(f *apptest.Fixture) string {
 	return strings.Join(f.Screen()[2:], "\n")
 }
 
-// visiblePanes counts the panes on the current workspace that are not
-// minimized.
 func visiblePanes(f *apptest.Fixture) int {
 	n := 0
 	for _, w := range f.M.Windows {
@@ -117,12 +96,9 @@ func TestEveryWayOfTurningTilingOffAgrees(t *testing.T) {
 		{"scrolled strip", func(t *testing.T) *apptest.Fixture {
 			f := apptest.New(t, apptest.Panes(4), sharedBorders)
 			palette("Layout: scrolling (niri-style)")(f)
-			// Focus the last column; the strip scrolls to keep it in view.
 			for range 3 {
 				f.Keys("tab")
 			}
-			// Under shared borders a tiled pane draws no frame to look for,
-			// so the precondition reads where the panes are.
 			if !slices.ContainsFunc(f.M.Windows, func(w *terminal.Window) bool { return w.X < f.M.GetLeftMargin() }) {
 				t.Fatalf("the strip fits on screen, so nothing can be left behind:\n%s", f.Text())
 			}
@@ -153,7 +129,6 @@ func TestEveryWayOfTurningTilingOffAgrees(t *testing.T) {
 						return
 					}
 					turnedOff[door.name] = true
-					// A minimized pane comes back from the dock as it left.
 					windowMode(f)
 					f.Keys("M")
 					checkEveryPaneWhole(t, f)
@@ -182,10 +157,6 @@ func TestEveryWayOfTurningTilingOffAgrees(t *testing.T) {
 	}
 }
 
-// checkEveryPaneWhole brings each pane to the front in turn, as a person
-// does with tab, and checks the front pane draws its own frame whole on
-// screen: none kept the borderless look of tiling, and none was left off the
-// screen with nothing to scroll it back.
 func checkEveryPaneWhole(t *testing.T, f *apptest.Fixture) {
 	t.Helper()
 	seen := map[string]bool{}
@@ -253,7 +224,6 @@ func TestEveryWayOfTurningTilingOnAgrees(t *testing.T) {
 func TestTilingOnKeepsTheBSPArrangement(t *testing.T) {
 	f := apptest.New(t, apptest.Panes(3))
 	windowMode(f)
-	// Focus the first pane and widen it.
 	f.Keys("shift+tab", "shift+tab")
 	plain := panesArea(f)
 	f.Keys("L", "L", "L")
@@ -280,7 +250,6 @@ func TestTilingOnKeepsTheBSPArrangement(t *testing.T) {
 	}
 }
 
-// frameWidthAt is the width of the frame that starts at column x, or -1.
 func frameWidthAt(frames []apptest.Box, x int) int {
 	i := slices.IndexFunc(frames, func(b apptest.Box) bool { return b.X0 == x })
 	if i < 0 {

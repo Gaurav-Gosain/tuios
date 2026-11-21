@@ -16,86 +16,38 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
-// The Agents section of the settings page.
-//
-// It is tuios doctor agents as rows: one per harness tuios can integrate with,
-// saying whether the harness is on PATH and whether its integration is
-// installed, out of date or not installed, and one per harness tuios has no
-// integration for, with the reason. Enter on a row opens its actions, which are
-// tuios integration install and uninstall: the same calls, on the same files.
-// An action row names the file it changes, so choosing one is the confirmation.
-//
-// The report is read off the UI goroutine. It reads a file or two per harness
-// and searches PATH for each, which is too slow for a frame, so the rows are
-// drawn from the last report and a fresh one is asked for each time the page
-// opens and after every action. Nothing here runs per frame but the drawing.
-//
-// The same report drives one notice per client run: a pane that runs a harness
-// whose integration is out of date, or not installed where it could be, puts
-// up a toast naming the fix, once per harness.
-//
-// A remote client does not get the tab. Its config file and its home are the
-// server's, and installing hooks there on a visitor's say is not this page's
-// to do. The browser build has no harnesses to read.
-
-// agentsTabName is the tab's name, matched by OpenSettingsAt.
 const agentsTabName = "Agents"
 
-// paletteAgentsSettingsName is the palette's entry for the tab.
 const paletteAgentsSettingsName = "Agents: settings, install and update integrations"
 
-// agentsCommand is the program the hooks run, as tuios integration install
-// writes it by default.
 const agentsCommand = "tuios"
 
-// agentsPageState is the Agents tab's state.
 type agentsPageState struct {
-	// overview is the last report, nil until one has arrived.
-	overview *integration.Overview
-	// loading is set while a report is being read.
-	loading bool
-	// stale asks for a fresh report at the next chance.
-	stale bool
-	// wasOpen is whether the settings page was open after the last message,
-	// so the page opening can be told from it staying open.
-	wasOpen bool
-	// action is the harness whose action rows are open, "" for the list.
-	action string
-	// busy is set while an install or uninstall runs.
-	busy bool
-	// tab is the tab's index on the page as last built, -1 without it. The
-	// footer reads it to show the tab's own keys.
-	tab int
-	// panesSeen holds the harness names panes reported that this client has
-	// looked at, and noticed the harness ids it has decided the notice for.
-	// Each is decided once a run.
-	panesSeen map[string]bool
-	noticed   map[string]bool
-	// loadFor holds the harness names panes reported when the report in
-	// flight was asked for. Only those are decided when it lands: a report
-	// read before a pane started says nothing about an install made since.
-	loadFor map[string]bool
-	// noticeKeys maps a notice on the dock, by notification id, to its
-	// dismissal key, so a dismissal can be stored. See agentNoticeKey.
+	overview   *integration.Overview
+	loading    bool
+	stale      bool
+	wasOpen    bool
+	action     string
+	busy       bool
+	tab        int
+	panesSeen  map[string]bool
+	noticed    map[string]bool
+	loadFor    map[string]bool
 	noticeKeys map[string]string
 }
 
-// agentsOverviewMsg carries a report read off the UI goroutine.
 type agentsOverviewMsg struct {
 	overview integration.Overview
 }
 
-// agentsActionMsg is the outcome of an install or uninstall the page ran.
 type agentsActionMsg struct {
 	harness string
 	verb    agentVerb
 	result  integration.Result
 	err     error
-	// steps is what an uninstall did, part by part.
-	steps []integration.RemovalStep
+	steps   []integration.RemovalStep
 }
 
-// agentVerb is what an action row does.
 type agentVerb int
 
 const (
@@ -104,32 +56,18 @@ const (
 	agentUninstall
 )
 
-// agentsPageAvailable reports whether this client has the Agents tab: a
-// terminal on this machine, with the agent features on. A model built without
-// a client kind (ClientUnknown) does not get it either: the kind is what says
-// a person on this machine is looking, and pkg/tuios names ClientLocal or
-// ClientSSH for every model it builds, so only the tests and the fuzzer build
-// an unknown one.
 func (m *OS) agentsPageAvailable() bool {
 	return m.agentsOn() && m.Client == ClientLocal && !m.RemoteClient && runtime.GOOS != "js"
 }
 
-// agentsEnv is where the integrations live: this process's home and PATH, the
-// same as the CLI reads.
 func agentsEnv() integration.Env { return integration.SystemEnv() }
 
-// loadAgentsOverviewCmd reads the report in a command.
 func loadAgentsOverviewCmd() tea.Cmd {
 	return func() tea.Msg {
 		return agentsOverviewMsg{overview: integration.BuildOverview(agentsEnv(), agentsCommand)}
 	}
 }
 
-// agentsSyncCmd is asked after every message. It asks for a fresh report when
-// the settings page opens, and when a pane runs a harness this run has not
-// looked at yet. The notice for that harness is decided when the fresh report
-// lands, so an install made in a shell meanwhile is seen. The work per message
-// is a pass over the panes.
 func (m *OS) agentsSyncCmd() tea.Cmd {
 	p := &m.agentsPage
 	if !m.agentsPageAvailable() {
@@ -139,7 +77,6 @@ func (m *OS) agentsSyncCmd() tea.Cmd {
 		p.stale = true
 	}
 	if !m.ShowSettings && p.wasOpen {
-		// The action rows are a step inside one visit to the page.
 		p.action = ""
 	}
 	p.wasOpen = m.ShowSettings
@@ -156,7 +93,6 @@ func (m *OS) agentsSyncCmd() tea.Cmd {
 	return loadAgentsOverviewCmd()
 }
 
-// applyAgentsOverview stores a report. It runs on the Update goroutine.
 func (m *OS) applyAgentsOverview(msg agentsOverviewMsg) {
 	ov := msg.overview
 	m.agentsPage.overview = &ov
@@ -170,8 +106,6 @@ func (m *OS) applyAgentsOverview(msg agentsOverviewMsg) {
 	m.agentsPage.loadFor = nil
 }
 
-// agentPanesUnnoticed is the harness names panes on this machine report that
-// this run has not looked at yet, nil when there are none.
 func (m *OS) agentPanesUnnoticed() map[string]bool {
 	var out map[string]bool
 	for _, w := range m.Windows {
@@ -185,18 +119,12 @@ func (m *OS) agentPanesUnnoticed() map[string]bool {
 	return out
 }
 
-// noticeAgentIntegrations decides, once a run, for each harness name in names
-// that a pane still runs, and puts up a toast when its integration is out of
-// date, or not installed where it could be. A harness with no integration, or
-// one that is current, is marked and left alone.
 func (m *OS) noticeAgentIntegrations(names map[string]bool) {
 	p := &m.agentsPage
 	if p.overview == nil || len(names) == 0 {
 		return
 	}
 	for _, w := range m.Windows {
-		// A pane on another machine runs that machine's harness, whose
-		// integration is not the one installed here.
 		if w == nil || w.AgentHarness == "" || w.Host != "" || p.panesSeen[w.AgentHarness] || !names[w.AgentHarness] {
 			continue
 		}
@@ -209,7 +137,6 @@ func (m *OS) noticeAgentIntegrations(names map[string]bool) {
 			continue
 		}
 		p.noticed[st.Harness] = true
-		// A file tuios could not read says nothing about what to install.
 		if st.Unreadable {
 			continue
 		}
@@ -229,21 +156,10 @@ func (m *OS) noticeAgentIntegrations(names map[string]bool) {
 	}
 }
 
-// agentNoticeKey names one notice for the record of dismissals: the harness,
-// the state, and the version installed. A dismissed notice stays dismissed
-// across attaches until one of them changes, so a newer tuios that makes the
-// integration out of date again says so again.
 func agentNoticeKey(st integration.Status) string {
 	return st.Harness + ":" + st.State().String() + ":v" + strconv.Itoa(st.Version) + ":v" + strconv.Itoa(st.WantVersion)
 }
 
-// noteNoticesDismissed stores the dismissal of each integration notice among
-// gone, so it does not come back on the next attach. Only a click on the
-// dismiss end of a notice that was drawn comes here. Esc clears the whole dock
-// in every mode, also when the person pressed it for the pane, before the
-// notice was even drawn, and a click on the body opens the message: both
-// count for this run only, through noticed. A notice that timed out is not
-// stored either.
 func (m *OS) noteNoticesDismissed(gone []Notification) {
 	keys := m.agentsPage.noticeKeys
 	if len(keys) == 0 {
@@ -269,9 +185,6 @@ func (m *OS) noteNoticesDismissed(gone []Notification) {
 	}
 }
 
-// agentIntegrationNotice is the toast for a harness, "" when none is due. It
-// names the file the install writes, as the Agents tab's action row does,
-// and the key that installs it: activating the notice is the confirmation.
 func (m *OS) agentIntegrationNotice(st integration.Status) string {
 	verb := "install"
 	switch st.State() {
@@ -285,8 +198,6 @@ func (m *OS) agentIntegrationNotice(st integration.Status) string {
 	if t, ok := integration.LookupTarget(st.Harness); ok {
 		where = joinPaths(t.Paths(agentsEnv()))
 	}
-	// The key comes right after the state, as in the version notice, so the
-	// dock shows it even when it cuts the file.
 	how := "Click it to " + verb + " it in " + where + "."
 	if key := contextMenuHint(m.KeybindRegistry, "prefix_jump_notif", &m.Settings, m.Mode); key != "" {
 		how = key + " " + verb + "s it in " + where + "."
@@ -297,9 +208,6 @@ func (m *OS) agentIntegrationNotice(st integration.Status) string {
 	return st.Name + " integration is not installed. " + how
 }
 
-// installFromNotice opens the question that installs or updates a harness's
-// integration from its notice. A yes runs the Agents tab's action, so both
-// say the same result.
 func (m *OS) installFromNotice(id string) {
 	if m.refuseAgentsOff() {
 		return
@@ -342,8 +250,6 @@ func (m *OS) OpenAgentsSettings() {
 	m.OpenSettingsAt(agentsTabName)
 }
 
-// showAgentsTab puts the page on the Agents tab, from a search result or a
-// row that opens the action rows, with the cursor on row.
 func (m *OS) showAgentsTab(row int) {
 	m.settingsSearch = settingsSearchState{}
 	for i, c := range m.settingsCategories() {
@@ -363,8 +269,6 @@ func (m *OS) SettingsBack() bool {
 		return false
 	}
 	if !m.onAgentsTab() {
-		// The action rows are on a tab the page no longer shows. Esc there
-		// is about the page, so it closes it, and the rows go with it.
 		m.agentsPage.action = ""
 		return false
 	}
@@ -374,9 +278,6 @@ func (m *OS) SettingsBack() bool {
 	return true
 }
 
-// agentsHints is the footer on the Agents tab's list, and agentsActionHints
-// on its action rows. The rows have nothing to change with the arrows, and
-// esc goes back from the action rows.
 var (
 	agentsHints = []overlay.Hint{
 		{Key: hintListMove, Label: "move"},
@@ -393,12 +294,10 @@ var (
 	}
 )
 
-// onAgentsTab reports whether the page shows the Agents tab's rows.
 func (m *OS) onAgentsTab() bool {
 	return m.agentsPageAvailable() && !m.settingsSearch.open && m.agentsPage.tab >= 0 && m.SettingsCategory == m.agentsPage.tab
 }
 
-// agentsCategory is the Agents tab.
 func (m *OS) agentsCategory() settingsCategory {
 	cat := settingsCategory{Name: agentsTabName}
 	p := &m.agentsPage
@@ -443,8 +342,6 @@ func (m *OS) agentsCategory() settingsCategory {
 	return cat
 }
 
-// agentsInOrder puts the harnesses this machine has first: installed, on
-// PATH, or run here. The rest follow. Each half keeps the CLI's order.
 func agentsInOrder(all []integration.Status) []integration.Status {
 	out := slices.Clone(all)
 	here := func(s integration.Status) int {
@@ -457,7 +354,6 @@ func agentsInOrder(all []integration.Status) []integration.Status {
 	return out
 }
 
-// agentRowIndex is the list row of a harness, 0 when it has none.
 func (m *OS) agentRowIndex(id string) int {
 	ov := m.agentsPage.overview
 	if ov == nil {
@@ -473,7 +369,6 @@ func (m *OS) agentRowIndex(id string) int {
 	return i
 }
 
-// agentStateWord is the value a harness row shows.
 func agentStateWord(st integration.Status) string {
 	if st.Unreadable {
 		return "cannot read"
@@ -481,7 +376,6 @@ func agentStateWord(st integration.Status) string {
 	return st.State().String()
 }
 
-// agentStateInk is the colour of the value a harness row shows.
 func agentStateInk(st integration.Status) func(overlay.Palette) color.Color {
 	return func(pal overlay.Palette) color.Color {
 		switch st.State() {
@@ -496,7 +390,6 @@ func agentStateInk(st integration.Status) func(overlay.Palette) color.Color {
 	}
 }
 
-// agentItem is one harness's row in the list.
 func (m *OS) agentItem(st integration.Status) settingItem {
 	aside := "not on PATH"
 	if st.BinaryPath != "" {
@@ -529,13 +422,11 @@ func (m *OS) agentItem(st integration.Status) settingItem {
 	}
 }
 
-// lookupTarget is integration.LookupTarget without the found flag.
 func lookupTarget(id string) *integration.Target {
 	t, _ := integration.LookupTarget(id)
 	return t
 }
 
-// agentRowDesc is the line under a harness row.
 func agentRowDesc(st integration.Status) string {
 	var parts []string
 	switch st.State() {
@@ -576,8 +467,6 @@ func agentRowDesc(st integration.Status) string {
 	return strings.Join(parts, " ")
 }
 
-// agentActionItems are the rows that open on a harness: what can be done, each
-// naming the file it changes, and the way back.
 func (m *OS) agentActionItems(st integration.Status) []settingItem {
 	t, _ := integration.LookupTarget(st.Harness)
 	env := agentsEnv()
@@ -606,10 +495,6 @@ func (m *OS) agentActionItems(st integration.Status) []settingItem {
 	return items
 }
 
-// installedParts lists the parts of the integration that are installed, as
-// the uninstall row names them, and the files they are in: the hooks, the MCP
-// server and the status line, each only when it is there. Uninstall removes
-// every part, so it is offered when any one of them is installed.
 func installedParts(st integration.Status, t *integration.Target, env integration.Env) (parts, paths []string) {
 	if t == nil {
 		return nil, nil
@@ -634,7 +519,6 @@ func installedParts(st integration.Status, t *integration.Target, env integratio
 	return parts, paths
 }
 
-// agentActionItem is one action row. Its value is the file it changes.
 func (m *OS) agentActionItem(st integration.Status, verb agentVerb, label, desc string, paths []string) settingItem {
 	file := filepath.Base(paths[0])
 	return settingItem{
@@ -657,7 +541,6 @@ func (m *OS) agentActionItem(st integration.Status, verb agentVerb, label, desc 
 	}
 }
 
-// verbWord is the verb as the rows say it.
 func verbWord(v agentVerb) string {
 	switch v {
 	case agentUpdate:
@@ -668,7 +551,6 @@ func verbWord(v agentVerb) string {
 	return "install"
 }
 
-// joinWords lists words the way a sentence does: "a", "a and b", "a, b and c".
 func joinWords(words []string) string {
 	switch len(words) {
 	case 0:
@@ -679,7 +561,6 @@ func joinWords(words []string) string {
 	return strings.Join(words[:len(words)-1], ", ") + " and " + words[len(words)-1]
 }
 
-// joinPaths names files the way a person reads them.
 func joinPaths(paths []string) string {
 	shown := make([]string, len(paths))
 	for i, p := range paths {
@@ -688,10 +569,6 @@ func joinPaths(paths []string) string {
 	return joinWords(shown)
 }
 
-// runAgentAction runs an install or uninstall off the UI goroutine. They are
-// the calls tuios integration install and uninstall make. An update keeps the
-// program the installed hooks already run, so an install made with --command
-// keeps its path. A fresh install runs the CLI's default, tuios.
 func (m *OS) runAgentAction(st integration.Status, verb agentVerb) tea.Cmd {
 	if m.agentsPage.busy {
 		return nil
@@ -709,8 +586,6 @@ func (m *OS) runAgentAction(st integration.Status, verb agentVerb) tea.Cmd {
 			return msg
 		}
 		msg.result, msg.err = t.Install(env, st.InstallProgram(agentsCommand))
-		// The skill stub goes with the hooks, as tuios integration install
-		// writes it. A tuios skill the person wrote is left alone.
 		if msg.err == nil && t.SupportsSkill() {
 			_, _ = t.InstallSkill(env)
 		}
@@ -718,8 +593,6 @@ func (m *OS) runAgentAction(st integration.Status, verb agentVerb) tea.Cmd {
 	}
 }
 
-// applyAgentAction says what an action did, goes back to the list, and asks
-// for a fresh report. It runs on the Update goroutine.
 func (m *OS) applyAgentAction(msg agentsActionMsg) tea.Cmd {
 	p := &m.agentsPage
 	p.busy = false
@@ -735,7 +608,6 @@ func (m *OS) applyAgentAction(msg agentsActionMsg) tea.Cmd {
 			m.showAgentsTab(m.agentRowIndex(msg.harness))
 		}
 	}
-	// The fix is in: a later pane running the harness has nothing to say.
 	if p.noticed == nil {
 		p.panesSeen, p.noticed = map[string]bool{}, map[string]bool{}
 	}
@@ -749,7 +621,6 @@ func (m *OS) applyAgentAction(msg agentsActionMsg) tea.Cmd {
 	return loadAgentsOverviewCmd()
 }
 
-// agentActionOutcome is the sentence an action leaves, and its level.
 func agentActionOutcome(name string, msg agentsActionMsg) (string, string) {
 	if msg.verb == agentUninstall {
 		var failed []string
@@ -780,14 +651,11 @@ func agentActionOutcome(name string, msg agentsActionMsg) (string, string) {
 	if !msg.result.Changed {
 		return name + " integration is already installed and current.", "info"
 	}
-	// The file comes first, so the dock shows it before it cuts the rest.
 	done := "Installed in "
 	if msg.verb == agentUpdate {
 		done = "Updated in "
 	}
 	text := done + shortenHome(msg.result.Path) + "."
-	// A harness reads its hooks when it starts, so a pane that runs it now
-	// reports its state only after a restart.
 	if t, ok := integration.LookupTarget(msg.harness); ok && t.Reports != integration.ReportsSession {
 		text += " Restart " + name + " to make it report its state."
 	}

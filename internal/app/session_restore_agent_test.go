@@ -7,9 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// agentRestoreState is one session holding a single pane the daemon has already
-// detected an agent in, which is what a client attaching or switching to a
-// session with a running agent is handed.
 func agentRestoreState() *session.SessionState {
 	return &session.SessionState{
 		Name:             "work",

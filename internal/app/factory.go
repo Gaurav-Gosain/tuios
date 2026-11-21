@@ -174,9 +174,6 @@ type OSOptions struct {
 // fields are properly initialized.
 func NewOS(opts OSOptions) *OS {
 	opts.applyClientKind()
-	// option_glyphs = "auto" needs the Mac's keyboard layout. Read it in the
-	// background now, so the answer is in before the first key and no key
-	// waits for it. Nothing happens off macOS.
 	config.StartMacLayoutDetection()
 
 	numWorkspaces := opts.NumWorkspaces
@@ -184,40 +181,29 @@ func NewOS(opts OSOptions) *OS {
 		numWorkspaces = 9
 	}
 
-	// Snapshot the terminal this connection is on, once. Everything downstream
-	// reads the snapshot, so nothing in this session can be re-decided by the
-	// next client to connect.
 	caps := opts.Caps
 	if caps == nil {
 		caps = GetHostCapabilities()
 	}
 
-	// The appearance seed for this session. See OSOptions.Settings.
 	seed := config.Global
 	if opts.Settings != nil {
 		seed = *opts.Settings
 	}
 
 	os := &OS{
-		// Core state
-		FocusedWindow:   -1,
-		WindowExitChan:  make(chan string, 10),
-		PTYDataChan:     make(chan struct{}, 1),
-		StateSyncChan:   make(chan StateSyncMsg, 10),
-		ClientEventChan: make(chan ClientEvent, 10),
-		pluginCellsIn:   make(chan session.PluginUIPayload, 1),
-		// The two daemon events that end this client. Made here rather than on
-		// first use because the SSH and web hosts write to it from the daemon
-		// read loop, which starts before Init runs. See daemon_exit.go.
-		DaemonExitChan: make(chan tea.Msg, daemonExitQueue),
-		// Routed verbs, for the hosts that cannot Send into the program. The
-		// local attach client leaves this unused. See dock_remote.go.
+		FocusedWindow:     -1,
+		WindowExitChan:    make(chan string, 10),
+		PTYDataChan:       make(chan struct{}, 1),
+		StateSyncChan:     make(chan StateSyncMsg, 10),
+		ClientEventChan:   make(chan ClientEvent, 10),
+		pluginCellsIn:     make(chan session.PluginUIPayload, 1),
+		DaemonExitChan:    make(chan tea.Msg, daemonExitQueue),
 		RemoteCommandChan: make(chan RemoteCommandMsg, remoteCommandQueue),
 		MasterRatio:       seed.MasterRatioFraction(),
 		CurrentWorkspace:  1,
 		NumWorkspaces:     numWorkspaces,
 
-		// Workspace state maps
 		WorkspaceFocus:        make(map[int]int),
 		FocusHistory:          make(map[int][]string),
 		WorkspaceLayouts:      make(map[int][]WindowLayout),
@@ -227,10 +213,8 @@ func NewOS(opts OSOptions) *OS {
 		WorkspaceMasterSplits: make(map[int]layout.MasterSplits),
 		WorkspaceLayoutMode:   make(map[int]string),
 
-		// Resize tracking
 		PendingResizes: make(map[string][2]int),
 
-		// Keybindings
 		KeybindRegistry:   opts.KeybindRegistry,
 		ConfigReadOnly:    opts.ConfigReadOnly,
 		BrowserClient:     opts.BrowserClient,
@@ -243,11 +227,9 @@ func NewOS(opts OSOptions) *OS {
 		followUpgrades:    opts.FollowUpgrades,
 		RecentKeys:        []KeyEvent{},
 
-		// Dimensions
 		Width:  opts.Width,
 		Height: opts.Height,
 
-		// Mode flags
 		Client:          opts.Client,
 		IsDaemonSession: opts.IsDaemonSession,
 		IsSSHMode:       opts.IsSSHMode,
@@ -258,16 +240,12 @@ func NewOS(opts OSOptions) *OS {
 		RemoteClient:    opts.RemoteClient,
 		Caps:            caps,
 
-		// One struct copy of the seed, and from here on this session's own.
 		Settings: seed,
 
-		// Daemon connection
 		DaemonClient: opts.DaemonClient,
 		SessionName:  opts.SessionName,
 		AttachedHost: opts.AttachedHost,
 
-		// Pane geometry inputs start at this client's config and are settled
-		// across the session by state sync; see the field comment in os.go.
 		SharedBorders:           seed.SharedBorders,
 		PaneGap:                 seed.PaneGap,
 		ScrollColumnWidth:       seed.ScrollColumnWidth,
@@ -279,22 +257,13 @@ func NewOS(opts OSOptions) *OS {
 		}),
 	}
 
-	// Sidebar order and expand/collapse state survive restarts; a load failure
-	// just means the defaults (creation order, current session expanded).
 	os.loadSidebarState()
 
-	// The $PATH cache starts empty and is filled by the first palette open, so
-	// startup pays nothing for a launcher the user may never reach for. Launch
-	// history is read here because it is one small file and the first open wants
-	// it already ranked.
 	os.pathApps = applist.NewCache()
 	os.desktopApps = newDesktopCache()
 	os.guestApps = opts.GuestApps
 	os.launchHistory = applist.LoadFrecency(applist.DefaultPath())
 
-	// Initialize graphics passthrough. The passthroughs decide for themselves
-	// whether the host can display anything; a pane's emulator never emulates
-	// graphics locally.
 	os.KittyPassthrough = NewKittyPassthroughWithOptions(KittyPassthroughOptions{
 		ForceEnable:  opts.ForceGraphicsEnabled,
 		Output:       opts.GraphicsOutput,
@@ -302,31 +271,19 @@ func NewOS(opts OSOptions) *OS {
 		Caps:         caps,
 	})
 	os.SixelPassthrough = NewSixelPassthroughWithOptions(SixelPassthroughOptions{
-		// A known kitty host can carry sixel without forcing native sixel.
 		ForceEnable: opts.ForceGraphicsEnabled && !caps.KittyGraphics,
 		Output:      opts.GraphicsOutput,
 		Caps:        caps,
 		Symbols:     symbolKind(seed.ImageSymbols, caps.Term),
 	})
 
-	// Tell the terminal package what tuios can forward, so shells spawned
-	// locally advertise a terminal identity their image tools recognise. The
-	// passthroughs are the source of truth here: they already fold detection
-	// and the force flag together, and a nil passthrough means no forwarding.
 	terminal.SetGraphicsCapabilities(
 		os.KittyPassthrough != nil && os.KittyPassthrough.IsEnabled(),
 		os.SixelPassthrough != nil && os.SixelPassthrough.IsEnabled(),
 		caps.KittyAnimation,
 	)
 
-	// Initialize hooks manager and load user-defined hooks from config. Prefer
-	// the config the caller already loaded so we never trigger a second load
-	// (which used to re-apply appearance globals over CLI flags and, on the
-	// per-connection server paths, race other sessions). Loading is now pure and
-	// has no package-global side effects, so the fallback is safe too.
 	os.HookManager = hooks.NewManager()
-	// One log line per firing, at the same verbosity that records INFO logs. It
-	// is what answers "did my hook run at all".
 	hooks.SetVerbose(verboseLog())
 	cfg := opts.UserConfig
 	if cfg == nil {
@@ -335,19 +292,10 @@ func NewOS(opts OSOptions) *OS {
 		}
 	}
 	if cfg != nil {
-		// Hold the loaded config so the in-app settings page can persist live
-		// changes back to disk.
 		os.UserConfig = cfg
-		// The first start asks how the person wants to use tuios. A served
-		// client is on the operator's machine, so only a local one asks.
 		os.welcomeAsk = cfg.FirstRun && opts.Client == ClientLocal
 		os.ListKeys = config.ListKeymap(cfg)
-		// Collected here and reported from Init, once there is a TUI to report
-		// them in.
 		os.ConfigWarnings = config.ConfigWarnings(cfg)
-		// A setting the client cannot carry out is a notice, not a problem:
-		// the file is valid and the setting works on another client. It is
-		// only knowable here, where the client is known.
 		if opts.BrowserClient {
 			os.ConfigNotices = append(os.ConfigNotices, browserAlertNotices(cfg)...)
 			os.ConfigNotices = append(os.ConfigNotices,
@@ -364,24 +312,17 @@ func NewOS(opts OSOptions) *OS {
 		if cfg.Spotlight.IsEnabled() {
 			os.spotlight.on = true
 		}
-		// The file as it stands at start is the person's: they started the
-		// client. A later reload follows the rule in hook_reload.go.
 		os.HookManager.ReplaceFrom(clientHookTable(cfg))
 	}
 
-	// Default to BSP layout mode
 	os.UseBSPLayout = true
 
-	// What the startup probe learned about the terminal's own colours, as the
-	// first answer panes and the chrome get. See host_colors.go.
 	if os.asksHostColors() {
 		os.seedHostColors(caps)
 	}
 
-	// Initialize clipboard channel for OSC 52 propagation
 	os.PendingClipboardSet = make(chan ClipboardSetMsg, 1)
 
-	// Initialize PTY subscription tracking for daemon sessions
 	if opts.IsDaemonSession {
 		os.SubscribedPTYs = make(map[string]bool)
 	}

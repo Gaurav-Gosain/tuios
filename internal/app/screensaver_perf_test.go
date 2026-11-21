@@ -4,12 +4,6 @@ import (
 	"testing"
 )
 
-// The saver covers every cell the compositor would produce, so composing them
-// underneath it is the whole cost of a frame spent on cells nobody sees. It
-// ticks at the session's frame rate, which is 240 on a screen that will take
-// it, so that was four frames' worth of work in the time it had to draw one and
-// the animation ran visibly slow.
-
 // TestTheSaverFrameIsTheWholeFrame pins that the compositor is skipped while
 // the saver is running.
 func TestTheSaverFrameIsTheWholeFrame(t *testing.T) {
@@ -26,8 +20,6 @@ func TestTheSaverFrameIsTheWholeFrame(t *testing.T) {
 	}
 }
 
-// saverPerfOS is a client with one pane, big enough that composing it is real
-// work.
 func saverPerfOS(t *testing.T) *OS {
 	t.Helper()
 	win := newTestWindow(t, "saverperf00000000000000000000001", 80, 24)

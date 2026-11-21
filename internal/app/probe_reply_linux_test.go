@@ -10,8 +10,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// fionread is the ioctl that says how many bytes wait to be read. Linux names
-// it TIOCINQ.
 const fionread = unix.TIOCINQ
 
 // A signal that lands while the probe waits for the rest of a reply interrupts
@@ -39,8 +37,6 @@ func TestProbeReadSurvivesASignal(t *testing.T) {
 	go func() {
 		reader := <-tid
 		waitDrained(t, r)
-		// The probe is in its wait now. Interrupt it for a while, then
-		// send the tail.
 		for range 50 {
 			_ = unix.Tgkill(os.Getpid(), reader, unix.SIGURG)
 			time.Sleep(time.Millisecond)

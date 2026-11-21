@@ -18,16 +18,14 @@ func TestRestoreTerminalContentAppliesInputRoutingState(t *testing.T) {
 	win := newTestWindow(t, "restore-modes", 82, 26)
 	o := newTestOS(win)
 
-	// The snapshot the daemon sends for a browser pane whose enable sequences
-	// have long scrolled out of the bounded output buffer.
 	state := &session.TerminalState{
 		Width:  80,
 		Height: 24,
 		Modes: map[int]bool{
-			1003: true, // any-motion mouse tracking
-			1006: true, // SGR mouse encoding
-			1016: true, // SGR-pixel mouse encoding
-			2004: true, // bracketed paste
+			1003: true,
+			1006: true,
+			1016: true,
+			2004: true,
 		},
 		KittyKbdStack: []int{0, 31},
 	}

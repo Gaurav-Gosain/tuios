@@ -14,17 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The card lifecycle on the board. A card its agent is done with says how its
-// verify went (Verifying, Verify passed, Attempt N failed and why). v opens
-// the Changes view of the worktree the agent did the work in, while that pane
-// is open. M on a card in review is Ready to merge: c commits the work with
-// the card's title, p pushes the branch, o pushes it and opens the pull
-// request. They are the ship verbs, called from this client as the person; a
-// push and a pull request answer with what they would send first, and enter
-// sends it.
-
-// ckShip is the open Ready to merge choice: the card, and once a push or a
-// pull request said what it sends, the verb that waits for enter.
 type ckShip struct {
 	card    session.TaskRow
 	verb    string
@@ -34,7 +23,6 @@ type ckShip struct {
 	busy    bool
 }
 
-// ckShipMsg is a ship verb's answer, for the Ready to merge sheet sh.
 type ckShipMsg struct {
 	sh          *ckShip
 	verb, label string
@@ -44,7 +32,6 @@ type ckShipMsg struct {
 	url         string
 }
 
-// ckWorkPane is the pane here that did the card's work.
 func ckWorkPane(c session.TaskRow) (sess, win string, ok bool) {
 	w := c.Work
 	if c.Host != "" || w == nil || w.Host != "" || w.Session == "" || w.Window == "" {
@@ -53,8 +40,6 @@ func ckWorkPane(c session.TaskRow) (sess, win string, ok bool) {
 	return w.Session, w.Window, true
 }
 
-// ckLifeLine is what a free card's second line says of its lifecycle, and
-// in which ink; "" for a card with nothing to say.
 func ckLifeLine(pal overlay.Palette, c session.TaskRow) (string, color.Color) {
 	v := c.Verify
 	switch {
@@ -72,8 +57,6 @@ func ckLifeLine(pal overlay.Palette, c session.TaskRow) (string, color.Color) {
 	return "", nil
 }
 
-// ckLifeFocus are the Card tab's lines on the lifecycle: the row's line,
-// and in review what Ready to merge does or sends.
 func (m *OS) ckLifeFocus(pal overlay.Palette, c session.TaskRow) [][]ckSeg {
 	var out [][]ckSeg
 	if words, ink := ckLifeLine(pal, c); words != "" {
@@ -88,8 +71,6 @@ func (m *OS) ckLifeFocus(pal overlay.Palette, c session.TaskRow) [][]ckSeg {
 	return out
 }
 
-// ckLifeHints is M on a card in review whose work is here. v, the
-// changes, is on the key bar already.
 func (m *OS) ckLifeHints(c session.TaskRow) []overlay.Hint {
 	if _, _, ok := ckWorkPane(c); !ok || c.Holder != nil || c.Stage != session.TaskStageReview {
 		return nil
@@ -139,8 +120,6 @@ func (m *OS) CockpitShipKey(key string) tea.Cmd {
 	defer m.cockpitTouch()
 	if sh.busy {
 		if key == "esc" {
-			// The call goes on, and its answer is a toast that names the
-			// card (applyShip).
 			m.Inbox.ck.ship = nil
 			m.ShowNotification(sh.label+" on "+sh.card.ID+" goes on. A notice says when it is done.", "info", m.Settings.NotificationDuration)
 		}
@@ -160,8 +139,6 @@ func (m *OS) CockpitShipKey(key string) tea.Cmd {
 	return nil
 }
 
-// shipCall runs one ship verb on the card's work pane, with confirm when the
-// person saw what it sends.
 func (m *OS) shipCall(verb, label, confirm string) tea.Cmd {
 	sh := m.Inbox.ck.ship
 	if _, ok := m.signedNonce(); !ok {
@@ -196,10 +173,6 @@ func (m *OS) shipCall(verb, label, confirm string) tea.Cmd {
 	}
 }
 
-// applyShip takes a ship verb's answer. The answer is for the sheet that
-// sent it: when the person closed that sheet, and maybe opened Ready to
-// merge on another card, the answer is a toast that names its card and
-// changes no sheet.
 func (m *OS) applyShip(msg ckShipMsg) {
 	sh := msg.sh
 	open := sh != nil && m.Inbox.ck.ship == sh
@@ -231,12 +204,10 @@ func (m *OS) applyShip(msg ckShipMsg) {
 	}
 }
 
-// cockpitShipHints are Ready to merge's keys for the key bar.
 func (m *OS) cockpitShipHints() []overlay.Hint {
 	sh := m.Inbox.ck.ship
 	switch {
 	case sh.verb != "" && !sh.busy:
-		// The columns have no Card tab: the key bar says what goes.
 		what := strings.ToLower(sh.label) + " what the card shows"
 		if len(sh.lines) > 0 {
 			what = ckTrunc(printableTitle(sh.lines[0]), 72)

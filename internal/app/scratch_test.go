@@ -10,10 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// scratchOS is a client with one pane, "alpha", on workspace 1, 120x40, and
-// the default [scratch] table. daemon picks a daemon session or a local one.
-// The daemon client is not connected, so a test that shows or hides a group
-// runs local: a daemon session would push the state.
 func scratchOS(t *testing.T, daemon bool) *OS {
 	t.Helper()
 	m := dockSessionOS(t, 120, daemon)
@@ -33,8 +29,6 @@ func scratchOS(t *testing.T, daemon bool) *OS {
 	return m
 }
 
-// addScratch adds a pane of the scratch group name, on the group's
-// workspace (the one another pane of the group is on, or a free one).
 func addScratch(m *OS, name, id string) *terminal.Window {
 	ws := 0
 	for _, w := range m.Windows {
@@ -69,8 +63,6 @@ func TestScratchPlan(t *testing.T) {
 			addScratch(m, scratchName, "s1")
 			m.showScratch(1)
 		}, scratchHide},
-		// A pane the user opened, even one named scratch, is not in the
-		// group. Only the daemon's mark makes one.
 		{"other panes create", func(m *OS) {
 			m.Windows = append(m.Windows, &terminal.Window{ID: "plain", CustomName: scratchName, Workspace: 1})
 		}, scratchCreate},
@@ -405,8 +397,6 @@ func TestLayoutLeavesScratchOut(t *testing.T) {
 		m.WorkspaceFocus = map[int]int{}
 	}
 	s := addScratch(m, scratchName, "s1")
-	// On the layout's workspace, which a scratch pane never is, so the test
-	// reads the mark and not the workspace.
 	s.Workspace = 1
 	s.X, s.Y = 20, 5
 	if err := SaveLayoutTemplate("with-scratch", m); err != nil {
@@ -444,7 +434,7 @@ func TestMultifocusAllInsideTheGroup(t *testing.T) {
 func TestSyncScratchViewFollowsTheFocus(t *testing.T) {
 	m := scratchOS(t, false)
 	w := addScratch(m, scratchName, "s1")
-	m.FocusedWindow = 1 // as ApplyStateSync sets it from FocusedWindowID
+	m.FocusedWindow = 1
 	m.syncScratchView()
 	if !m.InScratchView() || m.CurrentWorkspace != w.Workspace {
 		t.Fatalf("a focus on a scratch pane: view=%v current=%d", m.InScratchView(), m.CurrentWorkspace)

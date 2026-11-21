@@ -40,8 +40,6 @@ func TestSetConfigSurvivesTheNextSet(t *testing.T) {
 				t.Fatalf("after the set, the session reads %q, want %q", got, tt.value)
 			}
 
-			// Any other registry option will do; the sidebar's width is a
-			// plain int that touches nothing this test reads.
 			if err := m.SetConfig("appearance.sidebar.width", "30"); err != nil {
 				t.Fatalf("second SetConfig = %v", err)
 			}

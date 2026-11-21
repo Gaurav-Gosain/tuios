@@ -8,21 +8,14 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// attrsLine carries one run of each text attribute the pane renderer is
-// expected to keep: underline in two styles and with a colour, bold, italic,
-// faint, blink, reverse and strikethrough.
 const attrsLine = "\x1b[4munder\x1b[0m \x1b[1mbold\x1b[0m \x1b[3mital\x1b[0m " +
 	"\x1b[4:3;58;5;196mcurl\x1b[0m \x1b[2mfaint\x1b[0m \x1b[5mblink\x1b[0m " +
 	"\x1b[7mrev\x1b[0m \x1b[9mstrike\x1b[0m \x1b[1;3;4mall\x1b[0m"
 
-// attrsOnly is the part of a style that no render path is allowed to change.
-// Colours are left out because the dim changes them on purpose.
 func attrsOnly(s uv.Style) uv.Style {
 	return uv.Style{Attrs: s.Attrs, Underline: s.Underline, UnderlineColor: s.UnderlineColor}
 }
 
-// checkRowAttrs parses frame back into cells and checks that every cell of
-// row y carries the attributes of want, the emulator's own cells for that row.
 func checkRowAttrs(t *testing.T, path, frame string, cols, rows, y int, want uv.Line) {
 	t.Helper()
 	canvas := &frameCanvas{}
@@ -68,12 +61,9 @@ func TestEveryRenderPathKeepsTextAttributes(t *testing.T) {
 		win := newTestWindow(t, "attrs", cols, rows)
 		m := newTestOS(win)
 		win.LockIO()
-		// The cursor is hidden so no cell wears the fake cursor's colours.
 		_, _ = win.Terminal.Write([]byte("\x1b[?25l" + attrsLine + "\r\n"))
 		win.UnlockIO()
 		win.MarkContentDirty()
-		// The line has to reach the renderer as the attributes it asks for,
-		// or the comparison below proves nothing.
 		if c := win.Terminal.CellAt(0, 0); c == nil || c.Style.Underline != uv.UnderlineSingle {
 			t.Fatalf("emulator did not underline the first cell: %+v", c)
 		}
@@ -126,8 +116,6 @@ func TestEveryRenderPathKeepsTextAttributes(t *testing.T) {
 		})
 	}
 
-	// A pane scrolled back reads the row from scrollback rather than from the
-	// grid, so it is its own path.
 	for _, focused := range []bool{true, false} {
 		name := "unfocused scrollback"
 		if focused {
@@ -148,8 +136,6 @@ func TestEveryRenderPathKeepsTextAttributes(t *testing.T) {
 			if sbLen == 0 {
 				t.Fatal("the attribute line did not reach scrollback")
 			}
-			// Scroll so the oldest scrollback line, the attribute line, is
-			// the top row of the view.
 			scrollBack(t, win, sbLen)
 			want := win.ScrollbackLine(0)
 			if len(want) == 0 || want[0].Style.Underline != uv.UnderlineSingle {

@@ -14,21 +14,6 @@ type PendingCopyMsg struct {
 	Seq uint64
 }
 
-// The clipboard write for a multi-click selection is deferred, because until
-// the multi-click window closes nobody knows what the gesture is.
-//
-// A triple-click arrives as a double-click followed by a third press. Copying
-// on each release wrote the word first and the line second, so every
-// triple-click clobbered the clipboard with the wrong text on the way to the
-// right one, and a paste that landed in between got the word. Waiting until no
-// further click can join the gesture means only its final reading is ever
-// written.
-//
-// Only the write waits. The highlight is applied on the press, so a
-// double-click still shows the word instantly and visibly widens to the line
-// on the third click. Deferring the feedback as well would trade one problem
-// for a laggier one.
-
 // CopyToClipboard writes text to the system clipboard now and says so. It is
 // the unambiguous path: a drag release, where the gesture ended when the button
 // came up and nothing can supersede it.
@@ -37,8 +22,6 @@ func (m *OS) CopyToClipboard(text string) tea.Cmd {
 		return nil
 	}
 	m.CancelPendingCopy()
-	// The sweep is written down before the selection goes, because the
-	// selection is where the region comes from and a copy usually clears it.
 	m.NoteCopyFlash(m.GetFocusedWindow())
 	m.ShowNotification(fmt.Sprintf("Copied %d chars", len(text)), "success", m.Settings.NotificationDuration)
 	return m.clipboardWriteCmd(text)
@@ -57,9 +40,6 @@ func (m *OS) DeferCopyToClipboard(text string, delay time.Duration) tea.Cmd {
 	}
 	m.selectionSeq++
 	m.pendingCopy = text
-	// The same, for the deferred path: by the time the timer fires the pane
-	// may have scrolled or the selection may be gone, so the region is taken
-	// now alongside the text.
 	m.NoteCopyFlash(m.GetFocusedWindow())
 	seq := m.selectionSeq
 	return tea.Tick(max(delay, time.Millisecond), func(time.Time) tea.Msg {
@@ -86,8 +66,6 @@ func (m *OS) HandlePendingCopy(seq uint64) tea.Cmd {
 	text := m.pendingCopy
 	m.pendingCopy = ""
 	m.ShowNotification(fmt.Sprintf("Copied %d chars", len(text)), "success", m.Settings.NotificationDuration)
-	// Only a mouse selection is deferred, and it is kept as a paste buffer
-	// like a drag's (input/mouse_select.go).
 	return tea.Batch(m.clipboardWriteCmd(text), m.SaveToPasteBuffers(text))
 }
 
@@ -95,33 +73,18 @@ func (m *OS) HandlePendingCopy(seq uint64) tea.Cmd {
 // for anything that needs to know a gesture has not settled yet.
 func (m *OS) PendingCopyText() string { return m.pendingCopy }
 
-// nativeClipboardAllowed reports whether this client may touch the machine's
-// own clipboard. A plain local TUI and a loopback SSH session are the same
-// person at this box; a remote SSH peer or a browser tab are not, and their
-// clipboard lives elsewhere (OSC 52 is how it is reached). See
-// clipboard_local.go.
 func (m *OS) nativeClipboardAllowed() bool {
-	// RemoteClient is the canonical "the human is not at this machine" flag in
-	// the ClientKind model. A loopback SSH session is the exception: it is the
-	// same person on the same box, so the native clipboard is still theirs.
 	if m.RemoteClient && !m.SSHIsLoopback {
 		return false
 	}
 	return ShouldUseNativeClipboard(m.SSHIsLoopback)
 }
 
-// clipboardWriteCmd writes text with the native tool when one applies, and
-// still returns the OSC 52 write. The double write is idempotent (same text):
-// OSC 52 is harmless where the native write already happened and is the only
-// path where the terminal carries it. VTE terminals (GNOME Terminal, Ptyxis)
-// never answer OSC 52, so the native write is what makes copy work there.
 func (m *OS) clipboardWriteCmd(text string) tea.Cmd {
-	set := tea.SetClipboard(text) // the Cmd that yields the OSC 52 write
+	set := tea.SetClipboard(text)
 	return func() tea.Msg {
 		if m.nativeClipboardAllowed() {
 			if tool := DetectClipboardTool(); tool != nil {
-				// Best-effort: a failed native write still leaves the OSC 52
-				// message below as the safety net.
 				_ = tool.Write(text)
 			}
 		}

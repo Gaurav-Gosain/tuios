@@ -10,10 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// worktreeRailOS is a rail attached to a plain session, beside two
-// repositories' worktree sessions: "tuios" with two branches and "docs" with
-// one. It is the shape the grouping exists for, and the plain session is the
-// control: nothing about it may change.
 func worktreeRailOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	t.Helper()
 	m := newNarrowOS(t, w, h)
@@ -32,8 +28,6 @@ func worktreeRailOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	return m, worktreeTree(false)
 }
 
-// worktreeTree is the listing the rail is built from. gone marks the second
-// tuios worktree's directory as removed.
 func worktreeTree(gone bool) sessiontree.Tree {
 	return sessiontree.Build([]sessiontree.SessionInput{
 		{Name: "main", Attached: true, IsCurrent: true, CurrentWorkspace: 1, Windows: []sessiontree.WindowInput{
@@ -60,9 +54,6 @@ func worktreeTree(gone bool) sessiontree.Tree {
 	})
 }
 
-// railRowLine is the drawn line of the first recorded row of the given kind and
-// id, and the row's hit rectangle, so a test can assert on what a person sees
-// and then act on the same row a pointer would.
 func railRowLine(t *testing.T, m *OS, lines []string, kind sidebarRowKind, id string) (string, sidebarRowHit) {
 	t.Helper()
 	for _, h := range m.SidebarHits {

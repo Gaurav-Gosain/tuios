@@ -6,30 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The mode legend: what the keys do in the mode the keyboard is in.
-//
-// One rule for every mode that takes the keyboard over with keys of its own
-// (copy mode, multi copy mode, hints mode). Its keys are a legend in the
-// dock's right-hand block, for as long as the mode is open, and never a
-// message. A message burns down and goes while the mode stays, it queues
-// behind other messages, and it is prose: the dock cut "Type a label to copy.
-// Shift+label types it. Ctrl+label opens it" in the middle of a word, so the
-// keys after the cut were never seen. The prefix menus have the same need and
-// meet it with the which-key panel.
-//
-// A legend is one list of key and label pairs, the most important first, each
-// with a priority. The dock fits it with the strip every panel footer uses
-// (overlay.FitHintStrip): modifier names shortened first, then whole pairs
-// dropped, the optional ones first and within a priority the last listed
-// first. So a narrow screen shows fewer keys, never part of one. Three things
-// stay at any width the dock has: the main action, the way out of the mode,
-// which is always esc or names it, and in hints mode the key that lists the
-// rest. No legend moves or scrolls: text that moves cannot be read at a
-// glance, and a frame that is redrawn to move it costs an idle session its
-// sleep.
-
-// modeLegend is the legend of the mode the keyboard is in, or nil when the
-// keyboard is in no mode with keys of its own.
 func (m *OS) modeLegend() []overlay.Hint {
 	if m.hints != nil {
 		return m.hintsLegend()
@@ -43,8 +19,6 @@ func (m *OS) modeLegend() []overlay.Hint {
 	return nil
 }
 
-// hintsLegend is hints mode's legend. Ctrl and a label is left out when the
-// config turns opening off, since it only copies then.
 func (m *OS) hintsLegend() []overlay.Hint {
 	legend := []overlay.Hint{
 		{Key: "label", Label: "copy", Priority: overlay.HintEssential},
@@ -59,7 +33,6 @@ func (m *OS) hintsLegend() []overlay.Hint {
 	)
 }
 
-// paneLabelsLegend is the pane labels' legend.
 func paneLabelsLegend() []overlay.Hint {
 	return []overlay.Hint{
 		{Key: "label", Label: "focus pane", Priority: overlay.HintEssential},
@@ -68,8 +41,6 @@ func paneLabelsLegend() []overlay.Hint {
 	}
 }
 
-// copyModeExitKey is the first key copy_mode_exit is on, as the dock draws
-// it, or "" when it is unbound.
 func (m *OS) copyModeExitKey() string {
 	if m.KeybindRegistry == nil {
 		return ""
@@ -84,18 +55,7 @@ func (m *OS) copyModeExitKey() string {
 	return keys[0]
 }
 
-// copyModeLegend is copy mode's legend for a sub-state.
-//
-// They are key/label pairs rather than a "hjkl:move" string because the dock
-// is the one place left saying what a key does in its own format. Rendered
-// through the strip a panel footer uses, copy mode reads like the rest of the
-// app.
-//
-// exit is the key copy_mode_exit is on, drawn for the dock, or "" when it is
-// unbound. See copyModeExitKey.
 func copyModeLegend(state terminal.CopyModeState, exit string) []overlay.Hint {
-	// The exit key goes between q and esc: esc stays last, where a person
-	// looks for the way out.
 	quit := "q/esc"
 	if exit != "" {
 		quit = "q/" + exit + "/esc"
@@ -105,7 +65,6 @@ func copyModeLegend(state terminal.CopyModeState, exit string) []overlay.Hint {
 		if exit == "" {
 			return h
 		}
-		// After y, before esc.
 		for i := range h {
 			if h[i].Key == "esc" {
 				return append(h[:i:i], append([]overlay.Hint{exitYank}, h[i:]...)...)
@@ -163,8 +122,6 @@ func copyModeLegend(state terminal.CopyModeState, exit string) []overlay.Hint {
 	return nil
 }
 
-// modeLegendWidth is the room a legend asks for with every pair shown: the
-// strip and a column either side.
 func modeLegendWidth(legend []overlay.Hint) int {
 	if len(legend) == 0 {
 		return 0
@@ -172,9 +129,6 @@ func modeLegendWidth(legend []overlay.Hint) int {
 	return overlay.HintStripWidth(legend) + 2
 }
 
-// renderModeLegend draws a legend as the dock's help block, no wider than
-// width: the footer's own strip, on the Panel step the block rests on, with a
-// column either side.
 func renderModeLegend(legend []overlay.Hint, width int, pal overlay.Palette) string {
 	strip, w := overlay.FitHintStrip(legend, width-2, pal.Panel, pal)
 	if w == 0 {

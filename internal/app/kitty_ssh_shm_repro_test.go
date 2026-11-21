@@ -9,8 +9,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// countingWriter stands in for the ssh session output. It accepts every write
-// and records the total bytes written.
 type countingWriter struct {
 	mu    sync.Mutex
 	total int
@@ -23,16 +21,12 @@ func (w *countingWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// Total returns the bytes written so far. It takes the same lock as Write, so
-// it is safe to call while the async frame writer goroutine is still active.
 func (w *countingWriter) Total() int {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.total
 }
 
-// makeShmFrame writes a real /dev/shm object with RGBA bytes and returns its
-// name (without the /dev/shm/ prefix, as a guest transmits it).
 func makeShmFrame(t *testing.T, w, h int) string {
 	t.Helper()
 	name := fmt.Sprintf("tuios-repro-%d", os.Getpid())
@@ -49,12 +43,8 @@ func makeShmFrame(t *testing.T, w, h int) string {
 	return name
 }
 
-// shmFrames is the content each test object was last written with, by name.
 var shmFrames sync.Map
 
-// resendShm writes a test object again with the content it last had, the way
-// a guest writes each frame's object: the terminal deletes an object once it
-// has read it, so the same name is only there again if the guest puts it back.
 func resendShm(t *testing.T, name string) {
 	t.Helper()
 	data, ok := shmFrames.Load(name)
@@ -66,9 +56,6 @@ func resendShm(t *testing.T, name string) {
 	}
 }
 
-// synthShmTransmitPlace builds the exact frame from the captured crash: an a=T
-// (transmit+place) command using shared-memory transport (t=s), imageID=1,
-// dataLen=0 inline, carrying only the shm name.
 func synthShmTransmitPlace(shmName string, w, h int) (*vt.KittyCommand, []byte) {
 	cmd := &vt.KittyCommand{
 		Action:   vt.KittyActionTransmitPlace,
@@ -80,7 +67,6 @@ func synthShmTransmitPlace(shmName string, w, h int) (*vt.KittyCommand, []byte) 
 		More:     false,
 		FilePath: shmName,
 	}
-	// Raw APC as a guest would send it: control params + base64 shm name.
 	raw := []byte("\x1b_Ga=T,t=s,i=1,f=32,s=" + fmt.Sprint(w) + ",v=" + fmt.Sprint(h) + ";" + b64(shmName) + "\x1b\\")
 	return cmd, raw
 }
@@ -146,9 +132,6 @@ func TestSSHShmFrameSurvives(t *testing.T) {
 		}
 	}
 
-	// Simulate ~10 browser frames. ForwardCommand runs on the VT callback
-	// goroutine in production; the render path (RefreshAllPlacements +
-	// FlushPending + WriteToHost) runs in View().
 	for range 10 {
 		resendShm(t, shmName)
 		kp.ForwardCommand(cmd, raw, winID,

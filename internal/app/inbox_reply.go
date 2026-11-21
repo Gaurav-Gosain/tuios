@@ -19,95 +19,35 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// Replying to an agent: the composer under the Inbox list (internal/composer)
-// that queues a message with queue-prompt, typed the moment the agent comes
-// to rest, and the queue's length at the right edge of the agent's rail row.
-//
-// The composer keeps line breaks and holds a long paste as one block. The
-// blocks are put back in their place before the message is queued, so the
-// daemon gets plain text, as it always has, within its 16 KiB bound. esc
-// keeps the draft for the pane, and r on the same pane brings it back.
-//
-// r opens it on a Finished or Errored item in the Inbox, and on a rail agent
-// row whose pane is not waiting on a prompt; from the rail the Inbox opens
-// with it and closes again once the reply is sent or cancelled. enter queues
-// the text, as the person, with this client's attach nonce: the daemon types
-// it when the agent is at rest (see session/agent_queue.go), so a reply to a
-// busy agent waits rather than landing in the middle of its turn, and a reply
-// never answers a prompt, which the daemon checks again right before it types.
-//
-// x on a rail row with a queue drops the newest message still waiting. A drop
-// of a message this client queued can be undone for inboxUndoWindow() with u on
-// the same row, which queues its text again.
-//
-// A key that did not come from the keyboard never sends: a draft send-keys
-// touched is refused, as the deny reason and the mail reply refuse one, since
-// a queued message from the person is typed without any check of the grants
-// of whoever drove the keys. For the same reason such a key never drops a
-// queued message with x or undoes a drop with u: both act as the person, with
-// the attach nonce.
-
-// inboxReplyMax bounds a reply, the daemon's bound for one queued message.
 const inboxReplyMax = 16 << 10
 
-// inboxReplyTimeout bounds one queue verb call.
 const inboxReplyTimeout = 5 * time.Second
 
-// inboxRemoteQueueRefusal is what the dock says when a key that did not come
-// from the keyboard tries to drop a queued message or undo a drop.
 const inboxRemoteQueueRefusal = "A key from send-keys does not change the queue: only keys from your keyboard queue or drop a message as you"
 
-// inboxReplySentMax is how many sent replies this client keeps the text of,
-// so a drop of one can be undone. inboxReplySentMaxBytes bounds what they
-// hold: a reply can carry 8 MB of images, and 16 of them would keep 128 MB
-// in the client for an undo that is rarely used. The oldest go first, and
-// the newest is always kept.
 const (
 	inboxReplySentMax      = 16
 	inboxReplySentMaxBytes = 16 << 20
 )
 
-// inboxReplyState is the reply editor and what it remembers.
 type inboxReplyState struct {
-	// editor is the open editor, nil when none is.
-	editor *inboxReplyEditor
-	// sent is the replies this client queued, by entry id.
-	sent map[string]inboxSentReply
-	// sentOrder is sent's ids, oldest first, for the bound.
-	sentOrder []string
-	// sentBytes is what sent holds, by inboxSentReply.size.
-	sentBytes int
-	// dropped is the last message x dropped, for u on the same row.
-	dropped *inboxReplyDrop
-	// drafts are the drafts esc closed, by pane, so r on the same pane
-	// opens them again. draftOrder is their keys, oldest first, for the
-	// bound.
+	editor     *inboxReplyEditor
+	sent       map[string]inboxSentReply
+	sentOrder  []string
+	sentBytes  int
+	dropped    *inboxReplyDrop
 	drafts     map[string]*composer.Model
 	draftOrder []string
-	// bulkDraft is the draft of a bulk reply that esc or ctrl+] closed, so
-	// the next bulk reply opens it again. nil when there is none.
-	bulkDraft *composer.Model
-	// sending are the drafts of replies out to the daemon, by send, so a
-	// reply the daemon refuses keeps its draft. Two replies to one pane can
-	// be out at once, so the key is the send and not the pane.
-	sending map[uint64]*composer.Model
-	// sendSeq numbers the sends.
-	sendSeq uint64
-	// holdSeq numbers the typing hold's release redraws, so one from an
-	// editor since closed does not arm again.
-	holdSeq uint64
+	bulkDraft  *composer.Model
+	sending    map[uint64]*composer.Model
+	sendSeq    uint64
+	holdSeq    uint64
 }
 
-// inboxReplyDraftsMax is how many closed drafts the client keeps. They live
-// in memory only and end with the client.
 const inboxReplyDraftsMax = 16
 
-// inboxReplyRows is how many rows the editor grows to before it scrolls,
-// when [agents] reply_rows is unset.
 const inboxReplyRows = 8
 
-// composerRows is the rows a multi-line editor grows to: [agents]
-// reply_rows, or def, the editor's own, when it is unset.
 func (m *OS) composerRows(def int) int {
 	if m.UserConfig == nil {
 		return def
@@ -115,49 +55,28 @@ func (m *OS) composerRows(def int) int {
 	return m.UserConfig.Agents.ReplyRowsOr(def)
 }
 
-// inboxDraftKey is the key of a pane's draft.
 func inboxDraftKey(sessionID, windowID string) string { return sessionID + "/" + windowID }
 
-// inboxReplyEditor is one reply being typed.
 type inboxReplyEditor struct {
-	session string
-	window  string
-	// host is the linked machine the pane is on, empty for this one. The
-	// reply then goes with host, and this machine's daemon passes it on.
-	host string
-	who  string
-	// context says where the agent is, as the editor's label shows it:
-	// "done 4m", "working".
-	context string
-	// comp is the draft. It records a key that did not come from the
-	// keyboard, and such a draft is never sent.
-	comp *composer.Model
-	// closeAfter closes the Inbox when the editor closes, for an editor the
-	// rail opened.
+	session    string
+	window     string
+	host       string
+	who        string
+	context    string
+	comp       *composer.Model
 	closeAfter bool
-	// targets are the agents a bulk reply goes to, nil for one agent. See
-	// inbox_bulk.go.
-	targets []replyTarget
-	// draftWires is the previewer's, the @ list's and the history's state.
-	// See draft_wiring.go.
+	targets    []replyTarget
 	draftWires
-	// typing is when the person typed into the draft, arrived is when each
-	// approval or question arrived or changed while the editor was open, and
-	// holdArmed is set while a redraw for the release is out. See
-	// inbox_typing_hold.go.
 	typing    composer.TypingHold
 	arrived   map[string]inboxArrival
 	holdArmed bool
 }
 
-// inboxSentReply is a reply this client queued, kept so a drop of it can be
-// undone: its text, and its parts when it was sent in parts.
 type inboxSentReply struct {
 	text  string
 	parts []composer.Part
 }
 
-// size is about the bytes r keeps: its text and each part's text and image.
 func (r inboxSentReply) size() int {
 	n := len(r.text)
 	for _, p := range r.parts {
@@ -169,7 +88,6 @@ func (r inboxSentReply) size() int {
 	return n
 }
 
-// inboxReplyDrop is one dropped message, for undo.
 type inboxReplyDrop struct {
 	session, window, who string
 	reply                inboxSentReply
@@ -205,14 +123,10 @@ type InboxQueueDroppedMsg struct {
 	Err  error
 }
 
-// inboxReplyKind reports whether an Inbox item is one r replies to with the
-// editor: a finished turn or an error, of a pane on this machine.
 func inboxReplyKind(it session.AttentionItem) bool {
 	return (it.Kind == session.AttentionFinished || it.Kind == session.AttentionErrored) && it.Window != ""
 }
 
-// inboxReplyAgent opens the reply editor for a finished or errored item. ok
-// is false when it did not, and InboxReply then answers as it always has.
 func (m *OS) inboxReplyAgent(it session.AttentionItem) (cmd tea.Cmd, ok bool) {
 	if !inboxReplyKind(it) {
 		return nil, false
@@ -230,20 +144,13 @@ func (m *OS) inboxReplyAgent(it session.AttentionItem) (cmd tea.Cmd, ok bool) {
 	return nil, true
 }
 
-// openInboxReply opens the editor for a pane, refusing a pane that waits on a
-// prompt: a reply queued for it would sit until the prompt is answered, and
-// the person should answer the prompt first.
 func (m *OS) openInboxReply(sessionID, windowID, who, context string, closeAfter bool) bool {
-	// The state the rail draws, so a pane with an ask-human question open
-	// is refused like one on a prompt, as its row reads.
 	if state, seq, _, ok := m.railPane(sessionID, windowID); ok {
 		if drawn, _ := m.railAgentState(windowID, state, seq); drawn == "needs_input" {
 			m.ShowNotification(who+" is waiting on a prompt. Answer it first ("+m.inboxKeyOr(config.ActionInboxPeek, "space")+" to peek).", "warning", m.Settings.NotificationDuration)
 			return false
 		}
 	}
-	// A client attached through a host replies too: the queue verbs go to
-	// that host's daemon, where the pane is (queueCaller).
 	if m.Inbox.call == nil && m.DaemonClient == nil {
 		return m.inboxCanMark("Replying")
 	}
@@ -267,10 +174,6 @@ func (m *OS) openInboxReply(sessionID, windowID, who, context string, closeAfter
 	return true
 }
 
-// openHostReply opens the editor for a pane on a linked machine. The reply
-// goes to this machine's daemon with host, which passes it on (see
-// session/queue_host.go). The far daemon refuses it while the agent waits on
-// a prompt, as it refuses any queued message then.
 func (m *OS) openHostReply(host, sessionID, windowID, who, context string) bool {
 	if sessionID == "" {
 		return false
@@ -279,8 +182,6 @@ func (m *OS) openHostReply(host, sessionID, windowID, who, context string) bool 
 		return false
 	}
 	if m.AttachedHost != "" {
-		// The reply would go through this machine's daemon, which does not
-		// take the nonce of the host this client is attached to.
 		m.ShowNotification("Replying to a third machine needs a client attached to this machine's daemon", "warning", m.Settings.NotificationDuration)
 		return false
 	}
@@ -289,8 +190,6 @@ func (m *OS) openHostReply(host, sessionID, windowID, who, context string) bool 
 	if comp == nil {
 		comp = composer.New(composer.Options{MaxRows: m.composerRows(inboxReplyRows), Placeholder: "Type your reply.", Images: true, ListKey: m.composerListKey, ListKeyHint: m.composerListKeyHint})
 	}
-	// The @ list offers no files of the far pane's folder. The history is
-	// kept under the far pane, as before.
 	wires := m.wireDraft(comp, "", "", false)
 	wires.histSession, wires.histWindow = sessionID, windowID
 	m.Inbox.reply.editor = &inboxReplyEditor{
@@ -305,8 +204,6 @@ func (m *OS) openHostReply(host, sessionID, windowID, who, context string) bool 
 	return true
 }
 
-// takeInboxDraft takes the kept draft of a pane out of the store, nil when
-// there is none.
 func (m *OS) takeInboxDraft(sessionID, windowID string) *composer.Model {
 	st := &m.Inbox.reply
 	k := inboxDraftKey(sessionID, windowID)
@@ -319,8 +216,6 @@ func (m *OS) takeInboxDraft(sessionID, windowID string) *composer.Model {
 	return comp
 }
 
-// keepInboxDraft stores a pane's draft for the next r on it. The oldest
-// draft goes past the bound.
 func (m *OS) keepInboxDraft(sessionID, windowID string, comp *composer.Model) {
 	st := &m.Inbox.reply
 	k := inboxDraftKey(sessionID, windowID)
@@ -337,8 +232,6 @@ func (m *OS) keepInboxDraft(sessionID, windowID string, comp *composer.Model) {
 	}
 }
 
-// restoreNotice puts a line under the draft of a reply the daemon refused, in
-// the open editor when it is that pane's, and in the dock otherwise.
 func (m *OS) restoreNotice(msg InboxRepliedMsg, notice string) {
 	if ed := m.Inbox.reply.editor; ed != nil && ed.session == msg.Session && ed.window == msg.Window {
 		ed.comp.SetNotice(notice)
@@ -347,10 +240,6 @@ func (m *OS) restoreNotice(msg InboxRepliedMsg, notice string) {
 	m.ShowNotification(notice+" Press r on "+msg.Who+" to open the draft.", "error", m.Settings.NotificationDuration*2)
 }
 
-// restoreInboxDraft gives a pane back the draft of a reply the daemon did not
-// take. The person may have started a new draft for the pane while the reply
-// was out: the editor may be open on it, or esc may have kept it. The draft
-// that was not sent then goes at the top of that one, so neither is lost.
 func (m *OS) restoreInboxDraft(sessionID, windowID string, comp *composer.Model) {
 	if ed := m.Inbox.reply.editor; ed != nil && ed.session == sessionID && ed.window == windowID {
 		ed.comp.PutBack(comp)
@@ -453,14 +342,10 @@ func (m *OS) InboxReplyKey(msg tea.KeyPressMsg) tea.Cmd {
 			cmd = m.replyEditorCmd(ed.comp)
 		}
 	case composer.EventCleared:
-		// A draft cleared by mistake is not lost: it goes to the history,
-		// unless keys from outside the keyboard touched it.
 		if !ed.comp.Automated() && !m.ProcessingRemoteKeys && len(ed.targets) == 0 {
 			cmd = m.replyHistoryAdd(ed.session, ed.window, ed.comp.Cleared())
 		}
 	}
-	// A view that closed takes its copy for the desktop viewer with it,
-	// and one that opened, or a strip that changed, may need pictures.
 	m.replyPreviewClosed()
 	return tea.Batch(cmd, m.replyPreviewCmd(), m.replyMentionCmd(), m.armInboxTypingRelease())
 }
@@ -471,7 +356,6 @@ func (m *OS) InboxReplyKey(msg tea.KeyPressMsg) tea.Cmd {
 func (m *OS) InboxReplyCancel() {
 	ed := m.Inbox.reply.editor
 	m.Inbox.reply.editor = nil
-	// The image view shows the draft's images: it goes with the editor.
 	m.Inbox.ck.img = nil
 	if ed == nil {
 		return
@@ -498,7 +382,6 @@ func (m *OS) InboxReplySend() tea.Cmd {
 		return nil
 	}
 	if ed.comp.Empty() {
-		// enter or Send on an empty draft says why nothing happened.
 		ed.comp.SetInfo("The reply is empty. Type a message to send it.")
 		return nil
 	}
@@ -517,12 +400,9 @@ func (m *OS) InboxReplySend() tea.Cmd {
 	}
 	parts = trimReplyParts(parts)
 	text := composer.JoinParts(parts)
-	// The text the thread's echo shows, before a block-only send empties it.
 	shown := text
 	blocks := ed.comp.Blocks() > 0
 	if !blocks && len(text) > inboxReplyMax {
-		// A draft with no block was typed or pasted inline, and has no
-		// paste to remove.
 		ed.comp.SetNotice("The message is larger than 16 KB. Make it shorter to send.")
 		return nil
 	}
@@ -531,10 +411,6 @@ func (m *OS) InboxReplySend() tea.Cmd {
 			ed.comp.SetNotice(why)
 			return nil
 		}
-		// The daemon decides how each block travels. text goes too, for a
-		// daemon older than parts, but only when it holds the whole message:
-		// one that cannot gets no text, refuses, and says to update. An
-		// image has no text, so a message with one never goes as text.
 		if n, _ := ed.comp.Images(); n > 0 || len(text) > inboxReplyMax {
 			text = ""
 		}
@@ -557,8 +433,6 @@ func (m *OS) InboxReplySend() tea.Cmd {
 		parts = nil
 	}
 	if len(ed.targets) > 0 {
-		// The same message to each. A reply one of them refuses gets a
-		// copy of the draft as that pane's own.
 		m.Inbox.agents.marks = nil
 		m.Inbox.agents.marksGen++
 		cmds := make([]tea.Cmd, 0, len(ed.targets))
@@ -577,9 +451,6 @@ func (m *OS) InboxReplySend() tea.Cmd {
 	return m.inboxQueueCmdOn(ed.host, ed.session, ed.window, ed.who, text, nonce, false, st.sendSeq, parts)
 }
 
-// trimReplyParts drops the message's leading blank lines and trailing space.
-// The first line's indent stays: it can be the indent of pasted code. Only
-// text parts are trimmed. A block is sent as it was pasted.
 func trimReplyParts(parts []composer.Part) []composer.Part {
 	for len(parts) > 0 && parts[0].Kind == composer.PartText {
 		parts[0].Text = strings.TrimLeft(parts[0].Text, "\n")
@@ -598,14 +469,11 @@ func trimReplyParts(parts []composer.Part) []composer.Part {
 	return parts
 }
 
-// Bounds of a reply in parts, the daemon's (session/queue_parts.go).
 const (
 	inboxReplyPartsMax = 64
 	inboxReplyBytesMax = 8 << 20
 )
 
-// replyPartsRefusal says why the daemon would refuse a reply in parts, or ""
-// when it would not, so the draft stays open with the reason.
 func replyPartsRefusal(parts []composer.Part) string {
 	if len(parts) > inboxReplyPartsMax {
 		return "The message has too many pastes. Remove a paste to send."
@@ -619,7 +487,6 @@ func replyPartsRefusal(parts []composer.Part) string {
 		if p.Kind == composer.PartText {
 			typed += len(p.Text)
 		} else {
-			// The label that names the file, as the daemon counts it.
 			typed += 64 + 256
 		}
 	}
@@ -632,11 +499,6 @@ func replyPartsRefusal(parts []composer.Part) string {
 	return ""
 }
 
-// queueCaller is how a queue verb (queue-prompt, list-queued, cancel-queued)
-// and send now reach the queue of a pane. The queue lives in the daemon that
-// runs the pane: on a client attached through a host, that host's daemon,
-// over the link (agentCaller). A pane on another host than that (host set)
-// goes to this machine's daemon, which passes the verb on with host.
 func (m *OS) queueCaller(host string) inboxVerbCall {
 	if host != "" {
 		return m.inboxCaller()
@@ -644,13 +506,10 @@ func (m *OS) queueCaller(host string) inboxVerbCall {
 	return m.agentCaller()
 }
 
-// inboxQueueCmd sends queue-prompt as the person.
 func (m *OS) inboxQueueCmd(sessionID, windowID, who, text, nonce string, requeue bool, send uint64, parts []composer.Part) tea.Cmd {
 	return m.inboxQueueCmdOn("", sessionID, windowID, who, text, nonce, requeue, send, parts)
 }
 
-// inboxQueueCmdOn is inboxQueueCmd for a pane on host, empty for this
-// machine.
 func (m *OS) inboxQueueCmdOn(host, sessionID, windowID, who, text, nonce string, requeue bool, send uint64, parts []composer.Part) tea.Cmd {
 	call := m.queueCaller(host)
 	params := map[string]any{"session": sessionID, "window": windowID, "text": text, "human_nonce": nonce}
@@ -682,16 +541,13 @@ func (m *OS) inboxQueueCmdOn(host, sessionID, windowID, who, text, nonce string,
 	}
 }
 
-// replyPart is one part of a reply on the wire, as queue-prompt takes it.
 type replyPart struct {
 	Kind string `json:"kind"`
 	Text string `json:"text,omitempty"`
 	N    int    `json:"n,omitempty"`
-	// Data is an image's file. JSON carries it in base64.
 	Data []byte `json:"data,omitempty"`
 }
 
-// wireReplyParts is a reply's parts as queue-prompt takes them.
 func wireReplyParts(parts []composer.Part) []replyPart {
 	out := make([]replyPart, len(parts))
 	for i, p := range parts {
@@ -706,11 +562,7 @@ func wireReplyParts(parts []composer.Part) []replyPart {
 	return out
 }
 
-// applyInboxReplied says what happened to a reply, and keeps its text so a
-// drop of it can be undone.
 func (m *OS) applyInboxReplied(msg InboxRepliedMsg) {
-	// The draft of a reply the daemon took is done with. The draft of one
-	// it refused is kept, so r on the pane opens it again.
 	if comp, ok := m.Inbox.reply.sending[msg.Send]; ok {
 		delete(m.Inbox.reply.sending, msg.Send)
 		if msg.Err != nil {
@@ -726,8 +578,6 @@ func (m *OS) applyInboxReplied(msg InboxRepliedMsg) {
 			switch callErr.Code {
 			case session.ErrVerbInvalidParams:
 				if msg.Parts != nil && msg.Text == "" && strings.Contains(callErr.Message, "text is required") {
-					// A daemon older than parts read no message: the reply
-					// was too large to send as text too, or held an image.
 					m.ShowNotification("This daemon cannot take images or large pastes. Your draft is kept. "+m.restartHint(), "error", m.Settings.NotificationDuration*2)
 					return
 				}
@@ -764,7 +614,6 @@ func (m *OS) applyInboxReplied(msg InboxRepliedMsg) {
 	}
 }
 
-// rememberInboxReply keeps a sent reply by its entry id.
 func (m *OS) rememberInboxReply(id string, r inboxSentReply) {
 	if id == "" {
 		return
@@ -785,7 +634,6 @@ func (m *OS) rememberInboxReply(id string, r inboxSentReply) {
 	}
 }
 
-// forgetSent drops the sent reply id, and its bytes from the count.
 func (st *inboxReplyState) forgetSent(id string) {
 	if r, ok := st.sent[id]; ok {
 		st.sentBytes -= r.size()
@@ -796,8 +644,6 @@ func (st *inboxReplyState) forgetSent(id string) {
 	}
 }
 
-// railQueued is how many messages wait for a pane of this machine, as the
-// rail knows it.
 func (m *OS) railQueued(sessionID, windowID string) int {
 	if sessionID == "" || sessionID == m.sidebarCurrentSessionID() {
 		for _, w := range m.Windows {
@@ -824,9 +670,6 @@ func (m *OS) SidebarAgentCancelQueued(sessionID, windowID string) (tea.Cmd, bool
 	if m.railQueued(sessionID, windowID) == 0 {
 		return nil, false
 	}
-	// Dropping a message cancels it as the person, with the attach nonce,
-	// which may take back a message the person queued. Only keys from the
-	// keyboard do that.
 	if m.ProcessingRemoteKeys {
 		m.ShowNotification(inboxRemoteQueueRefusal, "error", m.Settings.NotificationDuration)
 		return nil, true
@@ -865,8 +708,6 @@ func (m *OS) SidebarAgentCancelQueued(sessionID, windowID string) (tea.Cmd, bool
 			msg.Err = err
 			return msg
 		}
-		// The newest one still waiting. One being typed cannot be taken
-		// back.
 		id := ""
 		for _, v := range slices.Backward(list.Entries) {
 			if v.State != "delivering" {
@@ -894,8 +735,6 @@ func (m *OS) SidebarAgentCancelQueued(sessionID, windowID string) (tea.Cmd, bool
 	}, true
 }
 
-// applyInboxQueueDropped says what x did, and keeps the text of a message
-// this client queued for u.
 func (m *OS) applyInboxQueueDropped(msg InboxQueueDroppedMsg) {
 	if msg.Err == nil {
 		m.echoDropped(msg.Session, msg.Window, msg.ID)
@@ -921,18 +760,12 @@ func (m *OS) applyInboxQueueDropped(msg InboxQueueDroppedMsg) {
 	m.showUndoOffer("Dropped 1 queued message to " + msg.Who + ". " + key + " undoes.")
 }
 
-// sidebarAgentUndoDrop queues again the message x dropped from this row a
-// moment ago. ok is false when there is none, and u then marks the row
-// unread as it does.
 func (m *OS) sidebarAgentUndoDrop(sessionID, windowID string) (tea.Cmd, bool) {
 	st := &m.Inbox.reply
 	d := st.dropped
 	if d == nil || time.Since(d.at) >= m.inboxUndoWindow() || d.window != windowID || (sessionID != "" && d.session != sessionID) {
 		return nil, false
 	}
-	// The undo queues the text as the person, with the attach nonce, so a
-	// key from send-keys or a tape must not do it, as InboxReplySend
-	// refuses one. The drop stays, for the person's own u.
 	if m.ProcessingRemoteKeys {
 		m.ShowNotification(inboxRemoteQueueRefusal, "error", m.Settings.NotificationDuration)
 		return nil, true
@@ -945,7 +778,6 @@ func (m *OS) sidebarAgentUndoDrop(sessionID, windowID string) (tea.Cmd, bool) {
 	return m.inboxQueueCmd(d.session, d.window, d.who, d.reply.text, nonce, true, 0, d.reply.parts), true
 }
 
-// sidebarAgentKeyOr is the key an agent row action is bound to, or fallback.
 func (m *OS) sidebarAgentKeyOr(action, fallback string) string {
 	reg := m.KeybindRegistry
 	if reg == nil {
@@ -957,30 +789,19 @@ func (m *OS) sidebarAgentKeyOr(action, fallback string) string {
 	return fallback
 }
 
-// inboxReplyHints are the reply editor's key hints, when it is open.
 func (m *OS) inboxReplyHints() ([]overlay.Hint, bool) {
 	ed := m.Inbox.reply.editor
 	if ed == nil {
 		return nil, false
 	}
-	// The reply area's own line shows send, new line and image, so the
-	// footer keeps the other keys. Hints is the composer's cached slice: it
-	// is copied before it is cut.
 	hints := slices.DeleteFunc(slices.Clone(ed.comp.Hints(overlay.UseASCII())), func(h composer.Hint) bool {
 		return replyAreaHints[h.Label]
 	})
 	return composerHints(hints), true
 }
 
-// replyAreaHints are the labels of the composer's keys the reply area's own
-// line already shows.
 var replyAreaHints = map[string]bool{"send": true, "new line": true, "paste image": true}
 
-// sidebarAgentQueuedFigure is what a rail agent row shows at its right edge
-// in place of the elapsed time while messages wait in the pane's queue, empty
-// for none. A row that needs you keeps its wait there: how long it has waited
-// on you is the figure it must not lose, and nothing queued is typed until it
-// is answered anyway.
 func (m *OS) sidebarAgentQueuedFigure(e sidebarAgentEntry) string {
 	if e.Queued <= 0 || sidebarAgentGroup(e.State, e.DoneSeen) == sidebarGroupNeedsYou {
 		return ""
@@ -988,9 +809,6 @@ func (m *OS) sidebarAgentQueuedFigure(e sidebarAgentEntry) string {
 	return strconv.Itoa(e.Queued) + " queued"
 }
 
-// sidebarAgentQueuedFigures are the forms the queued figure takes on a row,
-// longest first: the words, then the count and a q. Empty when the row shows
-// no figure.
 func (m *OS) sidebarAgentQueuedFigures(e sidebarAgentEntry) []string {
 	full := m.sidebarAgentQueuedFigure(e)
 	if full == "" {

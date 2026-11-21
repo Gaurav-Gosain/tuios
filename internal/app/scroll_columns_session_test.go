@@ -7,18 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The report: "if i switched between sessions, the window size if its full
-// width or smth in scrolling mode, it reset the width to 50%".
-//
-// A session switch throws away everything this client holds for the session it
-// is leaving and rebuilds from the state the daemon keeps. The BSP layout
-// survives that, because its trees are in the state. The scrolling layout's
-// columns were not: the state carried only how far the strip was scrolled, so
-// the columns came back one per pane at the default width. A column widened
-// with the width key lost its width, and a column holding two stacked panes
-// came back as two columns.
-
-// scrollRig is a real daemon session in the scrolling layout with n panes.
 func scrollRig(t *testing.T, n int) *rig {
 	t.Helper()
 	prev := config.Global.Motion
@@ -33,8 +21,6 @@ func scrollRig(t *testing.T, n int) *rig {
 	return r
 }
 
-// roundTrip switches to another session and back, which is the gesture from the
-// report.
 func roundTrip(t *testing.T, r *rig) {
 	t.Helper()
 	home := r.m.SessionName
@@ -57,8 +43,6 @@ func TestAColumnKeepsItsWidthAcrossASessionSwitch(t *testing.T) {
 	sl := r.m.GetOrCreateScrollingLayout()
 	col := sl.FocusedCol
 	before := sl.ResolveColumnWidth(col, viewW)
-	// The width key until the column is at the widest preset, which is what
-	// "full width" is on the strip.
 	for range len(sl.PresetWidths) {
 		r.m.ScrollingCycleWidth()
 		if sl.Columns[col].Proportion >= 0.9 {

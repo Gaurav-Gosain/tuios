@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// cupRow matches a cursor position (CUP) and captures its 1-based row.
 var cupRow = regexp.MustCompile(`\x1b\[(\d+);(\d+)H`)
 
 // TestTextSizingProbeLeavesTitleBarAlone is the regression test for opencode
@@ -37,7 +36,6 @@ func TestTextSizingProbeLeavesTitleBarAlone(t *testing.T) {
 			m.Width, m.Height = 100, 40
 			m.setupTextSizingPassthrough(win)
 
-			// opencode's probe, byte for byte as captured from opencode 1.x.
 			win.LockIO()
 			_, _ = win.Terminal.Write([]byte("\x1b[H\x1b]66;w=1; \x1b\\"))
 			win.UnlockIO()
@@ -48,7 +46,7 @@ func TestTextSizingProbeLeavesTitleBarAlone(t *testing.T) {
 				t.Fatal("setup: the probe produced no passthrough output")
 			}
 
-			contentTop := win.Y + win.BorderOffset() // 0-based
+			contentTop := win.Y + win.BorderOffset()
 			for _, mm := range cupRow.FindAllStringSubmatch(out, -1) {
 				row, _ := strconv.Atoi(mm[1])
 				if row-1 < contentTop {

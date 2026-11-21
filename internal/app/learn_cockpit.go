@@ -6,14 +6,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// The agents view in Learn mode. The browser build has no daemon, so the
-// tour runs a fleet of pretend agents (internal/learn) that answers the
-// view's verbs through the seam tests use (SetInboxVerbCaller) and feeds the
-// Inbox the way the daemon's attention watcher does. The view itself is the
-// same code a daemon session runs. What is here is the little the fleet
-// cannot reach through a verb: the feed, the thread's refresh, and what the
-// New agent sheet reads from the host.
-
 // LearnInboxFeed makes ch the Inbox's feed in Learn mode, in place of the
 // watcher that reads the daemon's attention queue. ch carries the watcher's
 // messages, InboxSnapshotMsg and InboxEventsMsg. It returns the command that
@@ -33,7 +25,6 @@ type LearnTranscriptGrewMsg struct {
 	Session, Window string
 }
 
-// applyLearnTranscriptGrew reads a kept thread again after its agent wrote.
 func (m *OS) applyLearnTranscriptGrew(msg LearnTranscriptGrewMsg) tea.Cmd {
 	if !m.LearnMode {
 		return nil
@@ -74,8 +65,6 @@ func (m *OS) SetLearnSpawnInfo(fn func() LearnSpawnInfo) {
 	m.learnSpawn = fn
 }
 
-// learnSpawnInfoCmd is spawnInfoCmd in Learn mode: what the tour says, with
-// every agent it names installed.
 func (m *OS) learnSpawnInfoCmd(gen uint64, info LearnSpawnInfo) tea.Cmd {
 	return func() tea.Msg {
 		msg := spawnInfoMsg{gen: gen, repo: info.Repo, head: info.Head, branches: info.Branches}
@@ -128,7 +117,6 @@ func (m *OS) LearnSetFanAttempt(window string, a LearnFanAttempt) {
 		m.learnFans[window] = ckWorktree{branch: a.Branch, group: a.Group, fanID: a.FanID, prompt: printableTitle(a.Prompt),
 			repo: a.Repo, path: a.Repo, name: a.Session}
 	}
-	// The records are read again with the rows.
 	m.Inbox.ck.branches = nil
 	m.cockpitTouchRows()
 }

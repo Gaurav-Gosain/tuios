@@ -13,29 +13,13 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// Task dispatch on the board (internal/session/task_dispatch.go).
-//
-// The board's header names the dispatch of one board: the project of the
-// focused pane's folder, as the capture sheet picks it, or the session's own
-// cards when the folder has none. It says Manual, Pull or Auto (with the
-// agents auto runs and the cards that wait), and Paused,
-// Stopped or Quiet hours when a switch holds dispatch. ctrl+t turns the
-// board from manual to pull to auto, and ctrl+x pauses all dispatch or starts it
-// again. Both are chords: a printable key never changes what agents are
-// given. Turning dispatch on, or starting it again, is the person's: a key
-// that send-keys or a tape typed is refused. Pause is open to anyone.
-
-// ckDispatchMsg is a get-task-dispatch or set-task-dispatch reply. project
-// is the project the board is for, "" for the session's own cards.
 type ckDispatchMsg struct {
 	st      session.DispatchStatus
 	project string
 	err     error
-	// set says the reply is to a change the person made.
-	set bool
+	set     bool
 }
 
-// cockpitDispatchCmd reads the dispatch of the board the header names.
 func (m *OS) cockpitDispatchCmd() tea.Cmd {
 	if m.AttachedHost != "" || m.SessionName == "" || (m.DaemonClient == nil && m.Inbox.call == nil) {
 		return nil
@@ -60,8 +44,6 @@ func (m *OS) cockpitDispatchCmd() tea.Cmd {
 	}
 }
 
-// dispatchProjectOf is the project of dir, "" for a folder with no origin
-// this client can read.
 func dispatchProjectOf(dir string) string {
 	if dir == "" {
 		return ""
@@ -73,7 +55,6 @@ func dispatchProjectOf(dir string) string {
 	return url
 }
 
-// applyDispatch takes a dispatch reply.
 func (m *OS) applyDispatch(msg ckDispatchMsg) {
 	ck := &m.Inbox.ck
 	if msg.set {
@@ -96,8 +77,6 @@ func (m *OS) applyDispatch(msg ckDispatchMsg) {
 	m.cockpitTouch()
 }
 
-// applyDispatchEvent takes a task-dispatch event: the switches and modes as
-// they are now. A stop dispatch made on its own is said as a notice.
 func (m *OS) applyDispatchEvent(action, reason string, st *session.DispatchStatus) {
 	ck := &m.Inbox.ck
 	next := *st
@@ -122,8 +101,6 @@ func (m *OS) applyDispatchEvent(action, reason string, st *session.DispatchStatu
 	m.cockpitTouch()
 }
 
-// dispatchCounts is an auto board's "2 running, 1 waiting", "" for any
-// other board.
 func dispatchCounts(b *session.DispatchBoardRow) string {
 	if b == nil || b.Mode != session.DispatchAuto {
 		return ""
@@ -135,8 +112,6 @@ func dispatchCounts(b *session.DispatchBoardRow) string {
 	return out
 }
 
-// dispatchHeld is why dispatch gives no card on the shown board, "" when
-// nothing holds it.
 func dispatchHeld(st *session.DispatchStatus) string {
 	switch {
 	case st == nil:
@@ -153,7 +128,6 @@ func dispatchHeld(st *session.DispatchStatus) string {
 	return ""
 }
 
-// setDispatch sends one set-task-dispatch change.
 func (m *OS) setDispatch(params map[string]any, nonce string) tea.Cmd {
 	ck := &m.Inbox.ck
 	ck.dispatchBusy = true
@@ -173,8 +147,6 @@ func (m *OS) setDispatch(params map[string]any, nonce string) tea.Cmd {
 	}
 }
 
-// dispatchReady reports whether the board shows a dispatch the person may
-// change now.
 func (m *OS) dispatchReady() bool {
 	ck := &m.Inbox.ck
 	if !ck.board || ck.dispatchBusy {

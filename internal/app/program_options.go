@@ -47,14 +47,6 @@ func ProgramOptions(opts ...ProgramOption) []tea.ProgramOption {
 		opt(&setup)
 	}
 	topts := []tea.ProgramOption{
-		// The default rate. bubbletea runs a standing ticker at this rate for
-		// the life of the program whether or not a frame is pending, so the
-		// number is the idle wake-up rate of every client: at 120 an idle
-		// tuios woke 590 times a second and spent 1.0% of a core doing
-		// nothing; at the default 60 it is 370 and 0.6%. Every program calls
-		// OS.BindProgram right after NewProgram, which sets the ticker to the
-		// model's own max_fps (past bubbletea's clamp of 120) before the
-		// first frame, and moves it whenever max_fps changes.
 		tea.WithFPS(config.DefaultFPS),
 		tea.WithoutSignalHandler(),
 		tea.WithFilter(sizeFilter(setup.currentSize, FilterMouseMotion)),
@@ -96,24 +88,6 @@ func WithCurrentSize(size func() (width, height int)) ProgramOption {
 	return func(s *programSetup) { s.currentSize = size }
 }
 
-// sizeFilter makes every window size message carry the size from current,
-// then passes the message on to next. With no current it is next.
-//
-// Two goroutines send a served program its sizes, and nothing orders them.
-// Bubble Tea sends the start size from a goroutine of its own when the
-// program starts (Program.Run). The transport sends each resize from its read
-// loop. On a phone the first resize comes a moment after the start, when
-// tuios-web's touch key bar takes the bottom rows. When the resize reaches the
-// event loop first, the start size lands last, and the renderer and the model
-// lay out a 48 by 46 frame in a 47 by 41 terminal. The lines wrap, cells of
-// older frames stay on screen, and the renderer never writes them again
-// because its own buffer says they are right. The board then shows the splash
-// with a pane open, or no pane at all, until a full redraw (issue 1017).
-//
-// The transport stores each size before it sends it, so current is never
-// older than the message. A message that arrives late is rewritten to the
-// current size, and the renderer and the model resize to the terminal that is
-// really there. The renderer resizes on the message after this filter runs.
 func sizeFilter(current func() (width, height int), next func(tea.Model, tea.Msg) tea.Msg) func(tea.Model, tea.Msg) tea.Msg {
 	if current == nil {
 		return next
@@ -129,23 +103,13 @@ func sizeFilter(current func() (width, height int), next func(tea.Model, tea.Msg
 	}
 }
 
-// eventDebugLog says whether the event log is on: TUIOS_DEBUG_INTERNAL=1, or
-// TUIOS_EVENTS_LOG naming a file. The local command sets the variables at
-// startup before the program runs, so the first event sees them.
 var eventDebugLog = debuglog.EventsEnabled
 
-// debugLogEvent logs events to /tmp/tuios-events.log when TUIOS_DEBUG_INTERNAL=1,
-// or to the file TUIOS_EVENTS_LOG names.
-// Only logs KeyPressMsg, MouseMotionMsg, and unknown events in TerminalMode
-// to diagnose phantom keypresses.
 func debugLogEvent(m *OS, msg tea.Msg) {
 	if !eventDebugLog() {
 		return
 	}
 
-	// Note: we intentionally don't check HasMouseMode() here because
-	// accessing the VT emulator's modes map from this goroutine causes
-	// unrecoverable concurrent map read/write panics.
 	mouseMode := "unknown"
 
 	modeStr := "WinMgmt"
@@ -160,7 +124,6 @@ func debugLogEvent(m *OS, msg tea.Msg) {
 			time.Now().Format("15:04:05.000"), modeStr, mouseMode,
 			e.String(), e.Code, e.Mod, e.Text)
 	case tea.MouseMotionMsg:
-		// Only log in TerminalMode to avoid flooding
 		if m.Mode != TerminalMode {
 			return
 		}
@@ -197,147 +160,83 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 
-	// On Windows, ConPTY puts a NUL before a shifted character, which the
-	// decoder reads as Ctrl+Space. It goes before anything reads keys.
 	if msg = m.dropConPTYShiftNUL(msg); msg == nil {
 		return nil
 	}
 
-	// A report at a negative position reaches here in pieces, the last of
-	// them as typed keys. It is put back together before anything reads keys.
 	if msg = m.rejoinSplitMouse(msg); msg == nil {
 		return nil
 	}
 
-	// tuios-web's report of a finger's sideways drag. See strip_touch.go.
 	msg = stripTouchReport(msg)
 
-	// A terminal asked for SGR-pixel reports sends the pointer in pixels.
-	// Everything below, and everything in Update, works in cells.
 	msg = m.convertHostPixelMouse(msg)
 
 	if _, ok := msg.(tea.SuspendMsg); ok && m.RemoteClient {
-		// There is no process at the far end to suspend. wish and sip answer
-		// this the same way, and this filter stands in their slot.
 		return tea.ResumeMsg{}
 	}
 	if _, ok := msg.(tea.SuspendMsg); ok && m.screen != nil {
-		// The shell gets the terminal back as Bubble Tea's renderer would
-		// leave it; ResumeMsg takes it again (rendererRestarted).
 		m.screen.Release()
 	}
 
 	mm, ok := msg.(tea.MouseMotionMsg)
 	if !ok {
-		// Debug: log non-motion events (KeyPressMsg) before they reach Update
 		debugLogEvent(m, msg)
 		return msg
 	}
 
-	// Debug: log motion events
 	debugLogEvent(m, msg)
 
 	mouse := mm.Mouse()
-	// Every motion passes this line, dropped or not, so this is where the
-	// pointer's position is kept for the things that only need to know where
-	// it is. Nothing below reads it.
 	m.NotePointerSeen(mouse.X, mouse.Y)
 
 	if m.Dragging || m.Resizing {
 		return msg
 	}
 
-	// A press on quick look's text, or in the agents view's thread, becomes
-	// a selection when the pointer moves with the button down. The agents
-	// view passes its motion for the hover anyway; quick look needs the
-	// clause. See cockpit_mouse.go.
 	if m.Inbox.ck.mouse.Armed || m.quickLook.mouse.Armed {
 		return msg
 	}
 
-	// A drag between panes over OSC 72 follows the pointer, and the press
-	// before it waits for the pointer to move. See dnd.go.
 	if m.DnDActive() {
 		return msg
 	}
 
-	// A ctrl-click on pane content is a grab waiting for the pointer to move
-	// far enough to become a drag, and the handler that commits it can only
-	// cover it, and the link clause below passes only motion over a link, so it
-	// needs a clause of its own.
 	if m.CtrlDragPending {
 		return msg
 	}
 
 	movedCell := mouse.X != m.LastMouseX || mouse.Y != m.LastMouseY
 
-	// Zen mode's mouse variant reveals every border while the pointer moves
-	// and hides them when it rests, and the clock it reads is the time of the
-	// last motion that reached Update. It has to see the motion to keep that
-	// time current, one event per cell crossed, over the chrome as well as over
-	// pane content.
 	if m.Settings.ZenMode == config.ZenModeMouse && movedCell {
 		return msg
 	}
 
-	// A shake of the pointer toggles the spotlight, and the detector reads it
-	// off bare motion. This filter is a whitelist, so the gesture is dead until
-	// it has a clause here however well the detector works.
-	//
-	// Only a motion that reaches a different column is passed. The detector
-	// reads the column and nothing else, so an event that moves the pointer
-	// down a row carries it no news. The clause is false for every client that
-	// has not asked for the gesture, which is the default, and the guard is
-	// then unchanged.
 	if m.ShakeGestureOn() && mouse.X != m.LastMouseX {
 		return msg
 	}
 
-	// A beam that follows the pointer reads the pointer off LastMouseX/Y, which
-	// only a motion that reached Update has set. It has its own clause so it keeps
-	// following over chrome and with links off.
-	// Only a motion that reaches a different cell is passed, for the reason
-	// the link clause gives: the same cell composes the same frame.
 	if m.SpotlightOn() && movedCell && m.spotlightConfig().FollowMode() == config.SpotlightFollowMouse {
 		return msg
 	}
 
-	// An open context menu highlights the row under the pointer, which it can
-	// only do if it is told the pointer moved. This filter is a whitelist that
-	// drops every motion event it does not recognise, so a hover handler added
-	// anywhere downstream is dead until the event is allowed through here.
 	if m.ContextMenuActive() || m.PathPickerOpen() {
 		return msg
 	}
 
-	// A press on quick look's bar seeks as the pointer moves.
 	if m.quickLook.barDrag && movedCell {
 		return msg
 	}
 
-	// Allow motion events while a floating overlay panel is being dragged.
-	// Overlay drags don't set m.Dragging, so without this the motion events
-	// that move the panel are filtered out and the drag never tracks.
 	if m.OverlayDragActive() {
 		return msg
 	}
 
-	// A workspace pill drag rides motion for the same reason a sidebar drag
-	// does, and is whitelisted here for the same reason: the filter drops every
-	// motion event it does not recognise, so the reorder would never see the
-	// pointer leave the pill it was pressed on and every drag would arrive as a
-	// plain click.
 	if m.DockWorkspaceDragActive() {
 		return msg
 	}
 
-	// A sidebar session drag rides motion the same way an overlay drag does,
-	// and hover in the sidebar band needs motion to track the row under the
-	// pointer. HoverActive keeps one more event flowing after the pointer
-	// leaves the band, which is the event that clears the stale highlight.
 	if m.SidebarDragActive() || m.SidebarEdgeActive() || m.SidebarSplitActive() || m.FileDragActive() {
-		// A held divider may move outside the rail's old column band;
-		// dropping that motion would leave the width fixed at its old size.
 		return msg
 	}
 	if m.SidebarActive() {
@@ -346,35 +245,10 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		}
 	}
 
-	// Capture mode hovers a window under the bare pointer and rubber-bands with
-	// the button down, so it needs every motion event, held or not.
 	if m.CaptureActive() {
 		return msg
 	}
 
-	// A link in pane content underlines itself under the pointer, which needs
-	// the motion that crosses it.
-	//
-	// This is the one clause whose target is not a rectangle the chrome drew.
-	// This is the one clause whose target is not a rectangle the chrome drew.
-	// Any cell a program printed may carry a link, but passing every motion over
-	// any pane's content box, which is most of the screen, would compose one full
-	// frame per cell crossed in a sweep across an idle shell, for a hover that
-	// underlines nothing. So it asks the pane whether there is a link under the
-	// cell (see PointerOverLink), which is the question the handler was going to
-	// ask anyway, and passes the motion only when the answer is yes. Two things
-	// still bound it:
-	//
-	//   - appearance.links = off makes both tests below false, and the filter
-	//     then drops every motion this clause would pass.
-	//   - Only a motion that reaches a different cell is passed. A pointer
-	//     nudged inside one cell resolves to the same run and would compose an
-	//     identical frame.
-	//
-	// LinkHoverActive keeps one more event flowing after the pointer leaves a
-	// link, and that is the event that clears the underline.
-	// Panes are hit-tested where they are in the layout, which a view of a
-	// larger session shifts. See pane_view.go.
 	paneX, paneY, _ := m.PointerToLayout(mouse.X, mouse.Y)
 	if movedCell {
 		if m.LinkHoverActive() || m.PointerOverLink(paneX, paneY) {
@@ -382,30 +256,14 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		}
 	}
 
-	// Allow motion events for scrollback browser drag-to-select
 	if m.ShowScrollbackBrowser {
 		return msg
 	}
 
-	// The dock's session controls brighten under the pointer and a clipped
-	// workspace pill says its name, and both are tracked off motion over the
-	// band. Neither had a clause here, so on every client the motion was
-	// dropped before the handler that tracks them ran: the hover and both
-	// labels were dead unless some other clause happened to pass the event.
-	// A motion over the band, or the one that leaves it with something lit,
-	// passes when it would change the lit control or the label: onto a
-	// control, from one to the next, or off one. Passing every cell of the
-	// band composed a full frame per cell crossed on bare bar, each identical
-	// to the last.
 	if movedCell && (m.InDockBand(mouse.Y) || m.DockHoverActive()) && m.dockHoverChangesAt(mouse.X, mouse.Y) {
 		return msg
 	}
 
-	// The dots window-control style draws three unlabelled discs and names them
-	// by revealing their symbols under the pointer, so that style is dead
-	// without its motion. Like the sidebar's, one more event is let through
-	// after the pointer leaves the controls, and that is the event that clears
-	// the reveal.
 	if m.WindowButtonHoverActive() {
 		return msg
 	}
@@ -424,11 +282,6 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		}
 	}
 
-	// Focus-follows-mouse moves pane focus from bare motion over a pane, and
-	// every overlay menu highlights the row under the pointer as it moves. Both
-	// live downstream of this whitelist, so both are dead unless their motion is
-	// let through here. Without this, the opted-in focus-follows setting simply
-	// does nothing and non-context menus never track the cursor.
 	if m.Settings.FocusFollowsMouse || m.AnyOverlayOpen() {
 		return msg
 	}

@@ -10,11 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// A pane whose shell runs on another machine has to be tellable from one whose
-// shell is here. Nothing else on the frame differs, and the same typed line
-// means different things on the two, so this is a safety marker rather than a
-// label.
-
 func hostTitleSettings() *config.Settings {
 	s := config.DefaultSettings()
 	return &s
@@ -36,9 +31,6 @@ func TestANarrowBarGivesUpTheNameAndKeepsTheMachine(t *testing.T) {
 	s := hostTitleSettings()
 	const width = 24
 	long := "a-window-name-far-longer-than-the-bar-can-show"
-	// A machine name long enough to matter. A short one hides the fault: the
-	// truncation already reserves six columns, so "build:" happens to fit in
-	// the reserve whichever way round the two are joined.
 	w := &terminal.Window{ID: "w1", CustomName: long, Host: "workstation"}
 
 	got := getWindowTitle(w, 1, width, s)

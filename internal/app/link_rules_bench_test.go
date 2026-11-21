@@ -58,9 +58,6 @@ func BenchmarkRenderTerminalLinkRules(b *testing.B) {
 	}
 }
 
-// fillWindowCapitals paints every row with log-like text that has capitals and
-// hyphenated words but no ticket ID, so a ticket rule runs on every line and
-// matches none.
 func fillWindowCapitals(tb testing.TB, win *terminal.Window, cols, rows int) {
 	tb.Helper()
 	win.LockIO()

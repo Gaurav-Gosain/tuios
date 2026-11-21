@@ -8,8 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// withZenMode saves and restores the zen-mode global, which is package state
-// shared with every other test in the run.
 func withZenMode(t *testing.T) {
 	t.Helper()
 	prev := config.Global.ZenMode
@@ -27,12 +25,9 @@ func TestZenMouseTickMeltsAndConverges(t *testing.T) {
 	m.zenHidden = false
 	m.lastPointerAt = time.Now().Add(-(m.Settings.ZenReveal() + time.Second))
 
-	// Crossing: work due.
 	if !m.tickNeedsWork() {
 		t.Fatal("expected work at the crossing")
 	}
-	// A frame composed with the pointer idle records zenHidden=true, which is
-	// what the tick compares against next time.
 	m.zenHidden = m.zenBordersHidden(false)
 	if m.zenHidden != true {
 		t.Fatalf("zenHidden after idle frame = %v, want true", m.zenHidden)
@@ -57,8 +52,6 @@ func TestZenMouseTickForcesRenderOnCrossing(t *testing.T) {
 	m := newTestOS(win)
 	m.Width, m.Height = 120, 40
 
-	// The last composed frame had the borders visible (zenHidden=false) and
-	// the pointer has sat still past the reveal window, so the melt is due.
 	m.zenHidden = false
 	m.lastPointerAt = time.Now().Add(-(m.Settings.ZenReveal() + time.Second))
 
@@ -66,9 +59,6 @@ func TestZenMouseTickForcesRenderOnCrossing(t *testing.T) {
 		t.Fatal("tickNeedsWork = false at the idle crossing; the melt would never be scheduled")
 	}
 
-	// A tick that crosses the threshold must draw, not skip. Before the fix
-	// needsRender had no zen term, so this tick set renderSkipped and the
-	// melt never appeared.
 	if _, _ = m.Update(TickerMsg(time.Now())); m.renderSkipped {
 		t.Fatal("the tick that crossed the zen idle threshold skipped the frame; the melt would never be drawn")
 	}
@@ -90,11 +80,9 @@ func TestZenPointerRevealMarksDirty(t *testing.T) {
 		FocusedWindow: 0,
 	}
 
-	// The melt already happened: the composed frame has the borders hidden.
 	m.zenHidden = true
 	m.lastPointerAt = time.Now().Add(-(m.Settings.ZenReveal() + time.Second))
 
-	// Clear dirty flags so we can see who the reveal marks.
 	win.ClearDirtyFlags()
 	win2.ClearDirtyFlags()
 

@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// bigFileTree is the tree at its limits: a root of 2000 names whose first 64
-// are folders, every one of them open and holding 2000 names: 130,001 rows
-// with "..".
 func bigFileTree() *OS {
 	m := &OS{}
 	m.Settings.SidebarFilesStyle = config.SidebarFilesTree
@@ -37,7 +34,7 @@ func bigFileTree() *OS {
 // kept is every other frame and key.
 func BenchmarkFileTreeRows(b *testing.B) {
 	m := bigFileTree()
-	if n := len(m.fileRowsBuilt()); n != 1+fileViewMaxEntries*(fileTreeMaxOpen+1) { // and ".."
+	if n := len(m.fileRowsBuilt()); n != 1+fileViewMaxEntries*(fileTreeMaxOpen+1) {
 		b.Fatalf("built %d rows", n)
 	}
 	b.Run("rebuild", func(b *testing.B) {

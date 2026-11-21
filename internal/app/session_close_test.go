@@ -4,7 +4,6 @@ import (
 	"testing"
 )
 
-// sessionCloseOS is a session of three panes, agent states left to the caller.
 func sessionCloseOS(t testing.TB) *OS {
 	t.Helper()
 	m := dockSessionOS(t, 160, true)
@@ -50,7 +49,6 @@ func TestSessionCloseCancelChangesNothing(t *testing.T) {
 		t.Errorf("cancelling changed the pane count to %d, want %d", len(m.Windows), before)
 	}
 
-	// Click-away is the same answer as esc.
 	m.OpenSessionClose()
 	m.closeOverlay("sessionclose")
 	if m.ShowSessionClose || m.QuitRequested {

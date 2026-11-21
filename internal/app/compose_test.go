@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// composeReference gives each layer a unique rank by Z and input position.
-// The Compositor then provides an independent byte-for-byte rendering oracle.
 func composeReference(w, h int, layers []*lipgloss.Layer) string {
 	ranked := make([]*lipgloss.Layer, len(layers))
 	for i, layer := range layers {
@@ -29,8 +27,6 @@ func composeReference(w, h int, layers []*lipgloss.Layer) string {
 	return canvas.Render()
 }
 
-// composeUnderTest is the same frame through composeLayersIn, drawn twice on one
-// OS so the second pass runs from the cached cells rather than the parse.
 func composeUnderTest(t *testing.T, w, h int, layers []*lipgloss.Layer) (first, cached string) {
 	t.Helper()
 	m := &OS{Settings: config.Global}
@@ -48,10 +44,6 @@ func composeUnderTest(t *testing.T, w, h int, layers []*lipgloss.Layer) (first, 
 	return first, cached
 }
 
-// composeCases are the layer sets that exercise what the compositor has to get
-// right: wide glyphs on a layer's last column and on the canvas edge, marks that
-// combine across an escape, hyperlinks, layers that overlap, share a z, or lie
-// partly or wholly off the canvas, ragged lines, and an empty layer.
 func composeCases() map[string][]*lipgloss.Layer {
 	red := lipgloss.NewStyle().Foreground(lipgloss.Color("#ff0000"))
 	bg := lipgloss.NewStyle().Background(lipgloss.Color("4"))

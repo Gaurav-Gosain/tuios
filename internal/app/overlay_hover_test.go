@@ -18,8 +18,6 @@ func TestKillSessionGoNextFallsBackToQuit(t *testing.T) {
 		t.Error("the fallback did not record the quit intent")
 	}
 
-	// A named next session outside daemon mode cannot be switched to, so it
-	// also falls back to quitting.
 	m2 := NewOS(OSOptions{})
 	m2.Width, m2.Height = 120, 40
 	if cmd := m2.KillSessionGoNext("other"); cmd == nil {

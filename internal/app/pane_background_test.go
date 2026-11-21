@@ -11,17 +11,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// These run on whichever VT backend the test binary was built with, so the
-// same assertions cover the pure Go emulator and, under -tags ghostty,
-// libghostty-vt. The paint is applied to the cells a pane's layer parses to,
-// so what differs between the backends is only the cells they hand over.
-
 const paneBgHex = "#123456"
 
 var paneBgRGBA = color.RGBA{R: 0x12, G: 0x34, B: 0x56, A: 0xff}
 
-// paneBgOS is a client with the given windows and pane background, laid out
-// untiled at fixed places so a cell can be read at a known coordinate.
 func paneBgOS(t *testing.T, setting string, wins ...*terminal.Window) *OS {
 	t.Helper()
 	m := &OS{
@@ -40,9 +33,6 @@ func paneBgOS(t *testing.T, setting string, wins ...*terminal.Window) *OS {
 	return m
 }
 
-// paneBgWindow is a bordered pane at (x, y) holding one line with a red
-// background run, a default-coloured run, and nothing after it, so the three
-// kinds of cell the paint has to tell apart are all on row 0.
 func paneBgWindow(t *testing.T, id string, x, y, w, h int) *terminal.Window {
 	t.Helper()
 	win := newTestWindow(t, id, w, h)
@@ -53,7 +43,6 @@ func paneBgWindow(t *testing.T, id string, x, y, w, h int) *terminal.Window {
 	return win
 }
 
-// cellColors reads a composed cell's background and foreground.
 func cellColors(t *testing.T, c *frameCanvas, x, y int) (bg, fg color.Color) {
 	t.Helper()
 	cell := c.CellAt(x, y)
@@ -77,9 +66,8 @@ func samePaneColor(a, b color.Color) bool {
 func TestPaneBackgroundCoversEveryRenderPath(t *testing.T) {
 	withTheme(t, "")
 	cases := []struct {
-		name  string
-		setup func(t *testing.T, m *OS, win *terminal.Window)
-		// the cell to read, relative to the pane's content origin
+		name   string
+		setup  func(t *testing.T, m *OS, win *terminal.Window)
 		dx, dy int
 	}{
 		{name: "focused", dx: 20, dy: 0},
@@ -110,9 +98,6 @@ func TestPaneBackgroundCoversEveryRenderPath(t *testing.T) {
 			win.Tiled = true
 		}, dx: 20, dy: 2},
 		{name: "padded past the emulator", setup: func(_ *testing.T, _ *OS, win *terminal.Window) {
-			// The rectangle grows and the emulator does not, as it does for
-			// the length of a snap animation: the body is padded out to the
-			// box, and the padding is pane too.
 			win.Width += 12
 			win.MarkPositionDirty()
 		}, dx: 44, dy: 2},

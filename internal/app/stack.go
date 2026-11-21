@@ -13,23 +13,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// Stacks: several panes share one tile of the split tree. One of them is open
-// and has the tile; each of the others shows as a one-row title above or below
-// it, in stack order, and is minimized. Opening another member trades places
-// with the open one inside the same tile, so the split tree never changes
-// shape. This is Zellij's stacked panes, and the GUI's stacks (plan 2.8).
-//
-// A stack is the windows that carry the same Stack key, ordered by StackIndex.
-// Both travel with the window state, so every client draws the same stack and
-// lays out the same rows. The open member is the one that is not minimized.
-//
-// A member that leaves the stack by any other road (restored from the dock,
-// closed, floated) leaves it cleanly: an open member that goes hands its tile
-// to the next member first, so the stack keeps its place in the tree.
-
 var errNoStackPane = errors.New("no pane")
 
-// stackMembers returns the windows of a stack on its workspace, in order.
 func (m *OS) stackMembers(key string, workspace int) []*terminal.Window {
 	if key == "" {
 		return nil
@@ -44,8 +29,6 @@ func (m *OS) stackMembers(key string, workspace int) []*terminal.Window {
 	return v
 }
 
-// stackRows returns how many title rows a stack's open member gives up above
-// it and below it: one per member before it and one per member after it.
 func (m *OS) stackRows(w *terminal.Window) (above, below int) {
 	if w == nil || w.Stack == "" || w.Minimized || m.LayoutName() != LayoutModeBSP {
 		return 0, 0
@@ -58,8 +41,6 @@ func (m *OS) stackRows(w *terminal.Window) (above, below int) {
 	return at, len(members) - 1 - at
 }
 
-// stackTiled returns the tiled window id on the workspace on screen, or an
-// error that says why it cannot join a stack.
 func (m *OS) stackTiled(id string) (*terminal.Window, error) {
 	w := m.windowByID(id)
 	if w == nil {
@@ -111,8 +92,6 @@ func (m *OS) StackPanes(a, b string) error {
 	for _, x := range members {
 		next = max(next, x.StackIndex+1)
 	}
-	// The open member keeps the tile. If b is the open one of the two (a is
-	// a title row), b takes a's place in the order and a stays where it is.
 	open := m.stackOpen(wa.Stack, wa.Workspace)
 	if open == nil {
 		return errfmt.Errorf("the stack of %s has no open pane", a)
@@ -128,7 +107,6 @@ func (m *OS) StackPanes(a, b string) error {
 	return nil
 }
 
-// stackOpen returns the open member of a stack.
 func (m *OS) stackOpen(key string, workspace int) *terminal.Window {
 	for _, w := range m.stackMembers(key, workspace) {
 		if !w.Minimized {
@@ -138,9 +116,6 @@ func (m *OS) stackOpen(key string, workspace int) *terminal.Window {
 	return nil
 }
 
-// collapse makes a stack member a title row: minimized, off the dock's
-// highlight, at the size its open neighbour has, so its program keeps a
-// sensible screen.
 func (m *OS) collapse(w *terminal.Window) {
 	w.PreMinimizeX, w.PreMinimizeY = w.X, w.Y
 	w.PreMinimizeWidth, w.PreMinimizeHeight = w.Width, w.Height
@@ -197,7 +172,6 @@ func (m *OS) Unstack(id string) error {
 		return errfmt.Errorf("pane %s is not in a stack", id)
 	}
 	if !w.Minimized && !m.handOverStack(w, tree) {
-		// The only member: it already has a tile of its own.
 		m.leaveStack(w)
 		m.finishTreeEdit()
 		return nil
@@ -216,9 +190,6 @@ func (m *OS) Unstack(id string) error {
 	return nil
 }
 
-// handOverStack gives the tile of w, the open member of a stack, to the next
-// member and makes w a pane of its own, out of the stack and out of the tree.
-// It reports whether there was a member to hand over to.
 func (m *OS) handOverStack(w *terminal.Window, tree *layout.BSPTree) bool {
 	if w.Stack == "" || tree == nil {
 		return false
@@ -227,7 +198,6 @@ func (m *OS) handOverStack(w *terminal.Window, tree *layout.BSPTree) bool {
 	at := slices.Index(members, w)
 	var next *terminal.Window
 	for i := 1; i < len(members); i++ {
-		// The member after it, else the one before.
 		for _, j := range []int{at + i, at - i} {
 			if j >= 0 && j < len(members) && members[j].Minimized && next == nil {
 				next = members[j]
@@ -242,7 +212,6 @@ func (m *OS) handOverStack(w *terminal.Window, tree *layout.BSPTree) bool {
 	return true
 }
 
-// leaveStack takes w out of its stack. A stack of one is no stack.
 func (m *OS) leaveStack(w *terminal.Window) {
 	key, ws := w.Stack, w.Workspace
 	if key == "" {
@@ -253,15 +222,11 @@ func (m *OS) leaveStack(w *terminal.Window) {
 	if len(rest) == 1 {
 		rest[0].Stack, rest[0].StackIndex = "", 0
 		if rest[0].Minimized {
-			// A lone title row would have no tile: it opens.
 			rest[0].Minimized = false
 		}
 	}
 }
 
-// openOrphanStacks opens the first title row of any stack on the workspace
-// on screen whose open member went away by a road that did not hand its tile
-// over. The tiler then gives it a tile like any pane that has none.
 func (m *OS) openOrphanStacks() {
 	seen := map[string]bool{}
 	for _, w := range m.Windows {
@@ -279,8 +244,6 @@ func (m *OS) openOrphanStacks() {
 	}
 }
 
-// renderStackRows draws the title rows of every stack on the workspace on
-// screen, in the rows the open member gave up for them.
 func (m *OS) renderStackRows() []*lipgloss.Layer {
 	if m.LayoutName() != LayoutModeBSP {
 		return nil

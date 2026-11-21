@@ -14,40 +14,15 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// The rail's git section: which repository the focused pane is in, which branch
-// it has checked out, and how far that branch has drifted from its upstream.
-//
-// Two facts and no more, which is a decision. Dirtiness is the one git fact
-// that cannot be had without walking the working tree, so it is the one that
-// would make the rail stutter on a large repository, and it is also the fact
-// you are least likely to be surprised by: you know whether you have edited
-// something. See internal/gitstate for the cost model.
-
-// The refresh interval is appearance.sidebar.git_refresh_ms (default 2000 ms),
-// read through gitRefreshInterval. It is how often the section asks again about a directory it
-// is already showing. The reading itself is nearly free, because gitstate only
-// spends a subprocess when the commits have moved, so this is about how soon a
-// commit shows up on the rail rather than about cost.
-
-// gitView is what the section is showing.
 type gitView struct {
-	// Dir is the directory State describes, which is not necessarily the one
-	// the focused pane is in right now: a reading is taken on a goroutine and
-	// the old one stays on screen until the new one lands, so the section never
-	// blanks between two directories that are both repositories.
 	Dir   string
 	State gitstate.State
 	Dirty gitstate.Dirty
 	Found bool
 
-	// asked is the directory a reading is in flight for, and when it was asked.
-	// Kept apart from Dir so an answer that arrives for a directory the focus
-	// has already left can be dropped.
 	asked string
 	at    time.Time
 
-	// gen counts the readings taken in, for the rail's cache key: a reading
-	// changes what the section draws with nothing else moving.
 	gen uint64
 }
 
@@ -59,9 +34,6 @@ type GitStateMsg struct {
 	Found bool
 }
 
-// gitSectionEnabled reports whether the rail is drawing the section at all.
-// Asked once per message from Update, so it answers on the cheapest facts
-// first.
 func (m *OS) gitSectionEnabled() bool {
 	if !m.Settings.SidebarEnabled && !m.sidebarDrawing {
 		return false
@@ -87,9 +59,6 @@ func (m *OS) GitSyncCmd() tea.Cmd {
 	}
 	want := m.gitWantDir()
 	if want == "" {
-		// No pane, or a pane that has never said where it is. The section has
-		// nothing to be about, and holding the last repository on screen would
-		// be a claim about a pane that is not making it.
 		if m.gitView.Dir != "" || m.gitView.asked != "" {
 			m.gitView = gitView{}
 		}
@@ -104,18 +73,12 @@ func (m *OS) GitSyncCmd() tea.Cmd {
 		state, found := gitstate.Read(want)
 		msg := GitStateMsg{Dir: want, State: state, Found: found}
 		if found && dirty {
-			// Taken here, on the same goroutine, so the expensive half never
-			// reaches the render path either.
 			msg.Dirty, _ = gitstate.ReadDirty(state.Root)
 		}
 		return msg
 	}
 }
 
-// gitWantDir is the folder the section reads: the files section's, except
-// that for a local pane it is the folder the shell is in, which an OSC 7
-// report cannot move (paneShellDir). Where the shell's folder cannot be read,
-// such as on native Windows, it is the reported one.
 func (m *OS) gitWantDir() string {
 	w := m.GetFocusedWindow()
 	if w != nil && m.paneIsLocal(w) && !(m.filesView.Pinned && m.filesView.Origin == w.ID) {
@@ -137,7 +100,6 @@ func (m *OS) ApplyGitState(msg GitStateMsg) {
 	m.gitView.gen++
 }
 
-// gitRowKind is what a row of the section is.
 type gitRowKind uint8
 
 const (
@@ -151,10 +113,6 @@ type gitRowSpec struct {
 	Right string
 }
 
-// divergence is the "ahead behind" figure, or empty when there is nothing to
-// say. A branch level with its upstream prints nothing rather than two zeros:
-// the figure is for when something has drifted, and a pair of zeros on every
-// row is a column that is only ever noise.
 func divergence(ahead, behind int) string {
 	switch {
 	case ahead > 0 && behind > 0:
@@ -167,9 +125,6 @@ func divergence(ahead, behind int) string {
 	return ""
 }
 
-// dirtyFigure is the staged, changed and untracked counts, or empty when the
-// tree is clean. The letters are the ones a shell prompt already uses for them,
-// so the rail is not teaching a second vocabulary for the same three numbers.
 func dirtyFigure(d gitstate.Dirty) string {
 	if !d.Any() {
 		return ""
@@ -190,9 +145,6 @@ func dirtyFigure(d gitstate.Dirty) string {
 	return out
 }
 
-// problemFigure is the conflicted and divergent commits of a jj stack. It
-// outranks the dirt on the repository row: you know you edited something,
-// while jj keeps a conflict or a divergence without telling you.
 func problemFigure(st gitstate.State) string {
 	switch {
 	case st.Conflicts > 0:
@@ -203,7 +155,6 @@ func problemFigure(st gitstate.State) string {
 	return ""
 }
 
-// gitRows is what the section draws, top to bottom.
 func (m *OS) gitRows() []gitRowSpec {
 	if !m.gitView.Found {
 		return nil
@@ -211,11 +162,6 @@ func (m *OS) gitRows() []gitRowSpec {
 	st := m.gitView.State
 	rows := make([]gitRowSpec, 0, 2)
 	if st.Repo != "" {
-		// The repository row carries the dirt and the branch row carries the
-		// divergence, one figure each. Both on one row is more than twenty
-		// eight columns can hold beside a name, and splitting them puts each
-		// figure against the thing it is actually about: what is changed here,
-		// and how far this branch has drifted from where it came from.
 		right := problemFigure(st)
 		if right == "" {
 			right = dirtyFigure(m.gitView.Dirty)
@@ -235,12 +181,6 @@ func (m *OS) gitRows() []gitRowSpec {
 	return rows
 }
 
-// sidebarGitRow draws one row.
-//
-// The figure is fixed width and the name is what gives way, which is the rule
-// every list in this rail follows and the right way round here too: a branch
-// cut to "feature/long-nam…" still says which branch, where "↑12" cut to "↑1"
-// says something false.
 func (m *OS) sidebarGitRow(row gitRowSpec, cw int, pal overlay.Palette, st sidebarRowState) string {
 	rowBg := sidebarRowBg(st, pal)
 
@@ -257,8 +197,6 @@ func (m *OS) sidebarGitRow(row gitRowSpec, cw int, pal overlay.Palette, st sideb
 	ink := pal.FgDim
 	glyph := sidebarStyle(rowBg, pal.FgMute).Render(m.Settings.GetRailBullet())
 	if row.Kind == gitRowRepo {
-		// The repository is the name you act on, so it takes the brighter ink,
-		// the same way a session name outranks the machine it is under.
 		ink = pal.Fg
 		glyph = sidebarQuietDot(rowBg, pal, &m.Settings)
 	}
@@ -276,10 +214,6 @@ func (m *OS) sidebarGitRow(row gitRowSpec, cw int, pal overlay.Palette, st sideb
 	return sidebarComposeGroupRow(indent, gutter, glyph, name, right, cw, rowBg)
 }
 
-// gitDivergenceToken colours the two halves of the figure separately: commits
-// you have and the upstream does not are not the same news as commits it has
-// and you do not, and one ink for both would make a row that needs a pull look
-// like a row that needs a push.
 func gitDivergenceToken(text string, rowBg color.Color, pal overlay.Palette) string {
 	var out strings.Builder
 	for _, part := range splitDivergence(text) {
@@ -297,8 +231,6 @@ type divergencePart struct {
 	behind bool
 }
 
-// splitDivergence cuts the figure back into its halves, separator included, so
-// the two can be inked apart without the caller reassembling spacing.
 func splitDivergence(text string) []divergencePart {
 	runes := []rune(text)
 	parts := make([]divergencePart, 0, 2)
@@ -319,7 +251,6 @@ func splitDivergence(text string) []divergencePart {
 	return parts
 }
 
-// gitRefreshInterval is appearance.sidebar.git_refresh_ms.
 func (m *OS) gitRefreshInterval() time.Duration {
 	ms := m.Settings.SidebarGitRefreshMS
 	if ms <= 0 {

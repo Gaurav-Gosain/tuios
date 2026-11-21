@@ -2,8 +2,6 @@ package app
 
 import "testing"
 
-// detectEnv builds an injectable environment: getenv answers from vars, and a
-// tool is "installed" when its name is in tools.
 func detectEnv(vars map[string]string, tools ...string) detectClipboardToolEnv {
 	have := make(map[string]bool, len(tools))
 	for _, t := range tools {
@@ -22,7 +20,7 @@ func TestDetectClipboardTool(t *testing.T) {
 	cases := []struct {
 		name string
 		env  detectClipboardToolEnv
-		want string // "" means no tool
+		want string
 	}{
 		{"wayland names wl-clipboard", detectEnv(wayland, "wl-copy", "wl-paste"), "wl-clipboard"},
 		{"wayland needs both wl tools", detectEnv(wayland, "wl-copy"), ""},

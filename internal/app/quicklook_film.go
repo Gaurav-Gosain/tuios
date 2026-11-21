@@ -11,33 +11,16 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The position in a film in quick look.
-//
-// ql.res holds the frame on the screen, at res.atMs, and filmWant the position the
-// keys asked for. Update asks quickLookFilmRead after every message, so one read runs
-// at a time and a held key or a drag reads where it ended. A read nobody wants now
-// is cancelled on this machine. A frame is not kept when the position moves, because
-// a seek is one run of ffmpeg and a film has no pages to come back to.
-//
-// t shows the filmstrip: seven small frames across the film, read one at a time
-// after the main frame. They stay for as long as the file does.
-//
-// There is no playback. A host that cannot draw a frame gets no reads at all: the
-// position moves and the panel shows the film's facts.
 const (
 	quickLookStripFrames  = 7
 	quickLookStripPx      = 240
 	quickLookStripMinBody = 22
 	quickLookFilmPercent  = 5
 	quickLookWheelPercent = 1
-	// quickLookFilmEndMs is how far before the end G goes, where a frame still is.
-	quickLookFilmEndMs = 500
-	// quickLookFilmStrip marks a read that is for the filmstrip, in filmOut.
-	quickLookFilmStrip = -1
+	quickLookFilmEndMs    = 500
+	quickLookFilmStrip    = -1
 )
 
-// quickLookFilmMsg carries a finished frame back to the loop. strip is the filmstrip
-// frame it is for, or quickLookFilmStrip for the main frame.
 type quickLookFilmMsg struct {
 	target    quickLookTarget
 	atMs      int64
@@ -46,15 +29,12 @@ type quickLookFilmMsg struct {
 	cancelled bool
 }
 
-// quickLookFilm reports whether r is a film with a position to move.
 func quickLookFilm(r *quickLookResult) bool {
 	return r != nil && r.kind == "video" && r.durationMs > 0
 }
 
-// quickLookHasBar reports whether r draws the bar on the last row of the body.
 func quickLookHasBar(r *quickLookResult) bool { return quickLookPaged(r) || quickLookFilm(r) }
 
-// quickLookFilmTo moves to a position, held to the film.
 func (m *OS) quickLookFilmTo(atMs int64) bool {
 	ql := &m.quickLook
 	if !ql.open || !quickLookFilm(ql.res) {
@@ -69,7 +49,6 @@ func (m *OS) quickLookFilmTo(atMs int64) bool {
 	return true
 }
 
-// quickLookFilmPercentBy moves by a share of the film.
 func (m *OS) quickLookFilmPercentBy(percent int64, forward bool) bool {
 	ql := &m.quickLook
 	d := ql.res.durationMs * percent / 100
@@ -79,7 +58,6 @@ func (m *OS) quickLookFilmPercentBy(percent int64, forward bool) bool {
 	return m.quickLookFilmTo(ql.filmWant + d)
 }
 
-// quickLookClock is a time in a film: 0:42, or 1:02:03 from an hour on.
 func quickLookClock(ms int64) string {
 	s := ms / 1000
 	if s >= 3600 {
@@ -88,8 +66,6 @@ func quickLookClock(ms int64) string {
 	return strconv.FormatInt(s/60, 10) + ":" + pad2(s%60)
 }
 
-// quickLookFilmRead starts the next frame read. Update asks after every message. It
-// is nil unless a read is due, and only one read runs at a time.
 func (m *OS) quickLookFilmRead() tea.Cmd {
 	ql := &m.quickLook
 	r := ql.res
@@ -118,7 +94,6 @@ func (m *OS) quickLookFilmRead() tea.Cmd {
 	return nil
 }
 
-// quickLookReadFrame reads one frame off the loop.
 func (m *OS) quickLookReadFrame(atMs int64, strip, maxPx int) tea.Cmd {
 	ql := &m.quickLook
 	t := ql.target
@@ -144,8 +119,6 @@ func (m *OS) quickLookReadFrame(atMs int64, strip, maxPx int) tea.Cmd {
 	}
 }
 
-// applyQuickLookFilm files a finished frame away, or asks for the row the cursor
-// moved to while it ran.
 func (m *OS) applyQuickLookFilm(msg quickLookFilmMsg) tea.Cmd {
 	ql := &m.quickLook
 	ql.fetching, ql.pageCancel = false, nil
@@ -190,15 +163,12 @@ func (m *OS) QuickLookFilmstrip() {
 	ql.status = ""
 }
 
-// quickLookStripShows reports whether the panel gives rows to the filmstrip now. A
-// panel made smaller after t goes back to the main frame alone.
 func (m *OS) quickLookStripShows(bodyH int) bool {
 	ql := &m.quickLook
 	return ql.stripOn && quickLookFilm(ql.res) && bodyH >= quickLookStripMinBody &&
 		m.replyPreviewer().Mode() != composer.PreviewText
 }
 
-// quickLookStripBox is the cells of one filmstrip frame.
 func (m *OS) quickLookStripBox(innerW int) (cols, rows int) {
 	cw, ch := m.hostCellSize()
 	if cw <= 0 || ch <= 0 {
@@ -213,7 +183,6 @@ func (m *OS) quickLookStripBox(innerW int) (cols, rows int) {
 	return cols, rows
 }
 
-// drawQuickLookStrip draws the filmstrip on the rows above the bar.
 func (m *OS) drawQuickLookStrip(c *ckCanvas, w, h int) {
 	ql := &m.quickLook
 	p := m.replyPreviewer()
@@ -240,7 +209,6 @@ func (m *OS) drawQuickLookStrip(c *ckCanvas, w, h int) {
 	}
 }
 
-// quickLookFilmFacts is what the panel says of a film with no frame to draw.
 func quickLookFilmFacts(r *quickLookReply) string {
 	if r.VideoCodec == "" {
 		return ""
@@ -258,7 +226,6 @@ func quickLookFilmFacts(r *quickLookReply) string {
 	return s + ". Audio: " + quickLookCodecName(r.AudioCodec) + "."
 }
 
-// quickLookCodecName is a codec as people say it.
 func quickLookCodecName(codec string) string {
 	switch codec {
 	case "h264":

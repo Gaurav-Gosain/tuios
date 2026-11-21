@@ -13,11 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// These tests pin the reply editor's boundaries: no reply to a pane waiting
-// on a prompt or a question, no draft or queue key from send-keys acting as
-// the person, and the fallback on a daemon without queue-prompt.
-
-// queueFake answers the queue verbs and records what it was sent.
 type queueFake struct {
 	calls   []queueCall
 	err     error
@@ -58,7 +53,6 @@ func (q *queueFake) call(verb string, params map[string]any, _ time.Duration) (j
 	return nil, &session.VerbCallError{Code: session.ErrVerbUnknownVerb, Message: verb}
 }
 
-// last is the last call of verb.
 func (q *queueFake) last(verb string) (map[string]any, bool) {
 	for _, v := range slices.Backward(q.calls) {
 		if v.verb == verb {
@@ -68,7 +62,6 @@ func (q *queueFake) last(verb string) (map[string]any, bool) {
 	return nil, false
 }
 
-// replyOS is a client with an Inbox and a fake queue behind it.
 func replyOS(t *testing.T, items ...session.AttentionItem) (*OS, *queueFake) {
 	t.Helper()
 	forgetSidebarState(t)
@@ -79,7 +72,6 @@ func replyOS(t *testing.T, items ...session.AttentionItem) (*OS, *queueFake) {
 	return m, q
 }
 
-// runMsg runs a command and hands its message to Update.
 func runMsg(t *testing.T, m *OS, cmd tea.Cmd) {
 	t.Helper()
 	if cmd == nil {
@@ -178,8 +170,6 @@ func TestQueueKeysFromSendKeysAreRefused(t *testing.T) {
 	}
 }
 
-// forgetSidebarState removes the sidebar.json a test's focus changes write,
-// so the seen marks it left do not reach the next test in the binary.
 func forgetSidebarState(t *testing.T) {
 	t.Helper()
 	path := filepath.Join(sidebarStateDir(), sidebarStateFileName)

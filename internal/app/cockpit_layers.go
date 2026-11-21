@@ -1,29 +1,5 @@
 package app
 
-// The agents view's layers. Sixteen sub-views can sit over the list: copy
-// mode, the image view, the New agent sheet, a comparison, a surface, the new
-// card line, an answer that waits for enter, the peek, the reply, the reason
-// line, the search line, and the one-key menus (the header's dropdowns, Ready to merge,
-// snooze, the bulk sheet). Each keeps its own state in its own file. Which one is on
-// top, and so owns the keys, the key bar and the clicks, is decided here and
-// only here: CockpitTop. The key router, the key bar, the click handler and
-// the frame cache all read it, so the key bar always says what the next key
-// does. internal/lint holds the readers to it (TestCockpitLayersHaveOneDecider).
-//
-// The order is the order keys have always taken: copy mode first, then the
-// sheets that take every key, then the answer asks, the lines, and the
-// one-key menus last.
-//
-// The peek takes the keys of the prompt it reads, and any click closes it
-// without acting: it has no controls a click works.
-//
-// A one-key menu takes the next key, and any other key closes it. A click
-// that is not on it closes it too and does nothing else: the click is spent
-// on the dismissal, so a click meant to close Ready to merge or a confirm can
-// never also act under it. A one-key menu left open under a newer layer is
-// closed by CockpitLayerCheck after the message, so two of them never stand at
-// once.
-
 // CockpitLayer is what sits on top of the agents view and owns its keys.
 type CockpitLayer uint8
 
@@ -48,7 +24,6 @@ const (
 	cockpitLayers
 )
 
-// cockpitLayerNames name the layers in the verbose log.
 var cockpitLayerNames = [cockpitLayers]string{
 	"base", "copy", "image", "spawn", "compare", "artifact", "new card", "confirm", "peek",
 	"reply", "reason", "select", "menu", "ship", "snooze", "bulk sheet",
@@ -94,8 +69,6 @@ func (m *OS) CockpitTop() CockpitLayer {
 	return CockpitBase
 }
 
-// oneKey reports whether layer l takes the next key and closes on any other
-// key or on a click outside it.
 func (l CockpitLayer) oneKey() bool {
 	switch l {
 	case CockpitLayerConfirm, CockpitLayerSelect, CockpitLayerMenu, CockpitLayerShip, CockpitLayerSnooze, CockpitLayerBulkSheet:
@@ -104,10 +77,6 @@ func (l CockpitLayer) oneKey() bool {
 	return false
 }
 
-// transient reports whether layer l draws what the frame cache key does not
-// hold, so a frame with it on top is drawn afresh. The others are in the key
-// (the reply's draft, the thread under copy mode) or drawn by the frame
-// around them.
 func (l CockpitLayer) transient() bool {
 	switch l {
 	case CockpitLayerImage, CockpitLayerSpawn, CockpitLayerNewCard, CockpitLayerConfirm, CockpitLayerPeek,
@@ -117,8 +86,6 @@ func (l CockpitLayer) transient() bool {
 	return false
 }
 
-// cockpitOneKeyOpen reports whether one-key layer l holds state now, on top
-// or not.
 func (m *OS) cockpitOneKeyOpen(l CockpitLayer) bool {
 	st := &m.Inbox
 	switch l {
@@ -138,8 +105,6 @@ func (m *OS) cockpitOneKeyOpen(l CockpitLayer) bool {
 	return false
 }
 
-// cockpitCloseOneKey closes one-key layer l, as a key other than its own
-// does.
 func (m *OS) cockpitCloseOneKey(l CockpitLayer) {
 	st := &m.Inbox
 	switch l {
@@ -159,10 +124,6 @@ func (m *OS) cockpitCloseOneKey(l CockpitLayer) {
 	m.cockpitTouch()
 }
 
-// ownsAction reports whether a button with action is one of layer l's own
-// controls: a click on it goes on, where a click elsewhere dismisses l. A
-// confirm's are the card's answer buttons (a second click answers), a
-// dropdown's the header controls that open one (cockpit_menu.go), and the search line's the search field.
 func (l CockpitLayer) ownsAction(action string) bool {
 	switch l {
 	case CockpitLayerConfirm:
@@ -175,15 +136,9 @@ func (l CockpitLayer) ownsAction(action string) bool {
 	return false
 }
 
-// cockpitClickDismisses closes the one-key menu on top when a click at x, y
-// lands off it, and reports whether it did: the click is then spent.
 func (m *OS) cockpitClickDismisses(x, y int) bool {
 	top := m.CockpitTop()
 	if top == CockpitLayerPeek {
-		// The peek reads one agent's prompt and has no controls a click
-		// works: a click anywhere closes it and does nothing else, so a
-		// click on another agent's row never leaves the peek of the first
-		// answering the digits.
 		m.InboxPeekBack()
 		m.cockpitTouch()
 		m.cockpitLayerSettle("click off the peek")
@@ -210,8 +165,6 @@ func (m *OS) CockpitLayerCheck() {
 	m.cockpitLayerSettle("")
 }
 
-// cockpitLayerSettle closes the covered one-key menus and logs a change of
-// the top layer, with why when the caller knows it.
 func (m *OS) cockpitLayerSettle(why string) {
 	top := m.CockpitTop()
 	if top != CockpitBase {

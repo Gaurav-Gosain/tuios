@@ -8,15 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
-// TestRailFitsAShortRegion walks heights 0-15 with the rail expanded, and says
-// so: "the collapsed strip composes its own lines against the same height". It
-// composes them from a different function, with its own badge, its own two
-// stacked lists and its own two controls, and none of that was ever walked. The
-// overrun that test exists for is a rail emitting more lines than its region,
-// which paints over the dock and records hit rectangles outside the band, and
-// the strip can do it exactly as easily.
-
-// stripHeightOS is sectionsTestOS collapsed, which is the state under test.
 func stripHeightOS(t *testing.T, w, h int, pos string) (*OS, sessiontree.Tree) {
 	t.Helper()
 	m, tree := sectionsTestOS(t, w, h)
@@ -66,8 +57,6 @@ func TestCollapsedStripFitsWithFortySessions(t *testing.T) {
 							{ID: fmt.Sprintf("w%02d", i), Title: "shell", Workspace: 1},
 						},
 					}
-					// A handful want a human, so the badge and the agents group are
-					// both live and competing with the spine for the same lines.
 					if i%7 == 0 {
 						in.Windows[0].AgentState = "needs_input"
 					}
@@ -87,8 +76,6 @@ func TestCollapsedStripFitsWithFortySessions(t *testing.T) {
 				assertHitsStayInTheBand(t, m)
 				assertCursorIsOnARealRow(t, m)
 
-				// A list it cannot draw whole has to say so. Without the tail mark
-				// the strip reports thirty-seven sessions as however many fit.
 				if h >= 6 && !stripHasKind(m, sidebarStripMore) {
 					t.Errorf("forty sessions in %d rows drew no tail mark, so the spine ends by stopping rather than by saying it is cut", h)
 				}
@@ -97,7 +84,6 @@ func TestCollapsedStripFitsWithFortySessions(t *testing.T) {
 	}
 }
 
-// stripHasKind reports whether the strip recorded a slot of the given kind.
 func stripHasKind(m *OS, kind sidebarStripRowKind) bool {
 	for _, r := range m.sidebarStripRows {
 		if r.Kind == kind {

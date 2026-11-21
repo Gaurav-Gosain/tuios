@@ -37,8 +37,6 @@ func FuzzSaverFile(f *testing.F) {
 			for _, fr := range frames {
 				drawn += len(fr)
 			}
-			// A cell costs at most a colour run of about 22 bytes and a rune
-			// of 4, and comes from at least one byte of the file.
 			if bound := 32 * len(data); drawn > bound {
 				t.Fatalf("a %d byte file draws to %d bytes at %dx%d, more than %d", len(data), drawn, sz[0], sz[1], bound)
 			}

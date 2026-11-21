@@ -14,36 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// Which machine opens a link is the whole of this file, and it is the question
-// the rest of the feature exists to be careful about.
-//
-// There are two machines. The panes, the daemon and the tuios client process
-// all run on one of them; call it the pane machine. The person looking at the
-// screen sits at the other; call it the viewer machine. On a local run they are
-// the same machine and nothing is interesting. Under `tuios ssh` and
-// `tuios-web` they are not: the client code runs on the server, so calling
-// xdg-open there opens a browser on the server's console, in front of nobody.
-// That is the mistake this file is written to not make.
-//
-// The two kinds of link fall on opposite sides of that split:
-//
-//   - A file:// link names a file on the pane machine. The client process is
-//     always on the pane machine, in every deployment tuios has, so the path
-//     can be stat'd here and opened here. A pane is the right place to open it
-//     in, because a pane is a window onto exactly that machine.
-//
-//   - An http:// or https:// link has to be opened by a browser the person can
-//     see, which lives on the viewer machine. tuios has no way to run anything
-//     there: there is no escape sequence for "open this URL", and adding a
-//     protocol for running commands on the viewer's box is a much larger thing
-//     to own than a link. So a local client opens it and a remote one does not
-//     pretend to. What a remote client can do is put the address on the
-//     viewer's clipboard, because OSC 52 rides the same stream the frame does
-//     and lands on the viewer machine, which is the whole point of it.
-
-// linkFilePath returns the local filesystem path a file:// link names, and
-// whether it names one. A file:// URL with a host that is not this machine is
-// somebody else's filesystem and gets no special treatment.
 func linkFilePath(rawURL string) (string, bool) {
 	if !strings.HasPrefix(rawURL, "file://") {
 		return "", false
@@ -60,9 +30,6 @@ func (m *OS) OpenLink(rawURL string) tea.Cmd {
 	if rawURL == "" {
 		return nil
 	}
-	// A control byte or a space has no place in an address. The emulator
-	// strips control bytes from OSC 8 already; this also covers a URL that
-	// reached here some other way, and refuses rather than repairs it.
 	if !linkTextClean(rawURL) {
 		m.ShowNotification("tuios did not open the link. Its address has control characters or spaces.",
 			"warning", m.Settings.NotificationDuration)
@@ -78,10 +45,6 @@ func (m *OS) OpenLink(rawURL string) tea.Cmd {
 		return m.openLocalPath(path, 0, rawURL)
 	}
 
-	// A tuios:// address is an order to tuios itself, not a document for
-	// the desktop. It is handled before the scheme list, which exists to
-	// decide what may leave for the viewer's machine, and nothing about a
-	// window of this session belongs there.
 	if target, ok := parseTuiosLink(rawURL); ok {
 		return m.openWindowLink(target, rawURL)
 	}
@@ -91,25 +54,18 @@ func (m *OS) OpenLink(rawURL string) tea.Cmd {
 		return nil
 	}
 
-	// A file:// link that linkFilePath turned down names a file on another
-	// machine (file://otherhost/path). That file is not here to open, and
-	// handing the address to the desktop would open whatever this machine
-	// has at the same path.
 	if strings.HasPrefix(strings.ToLower(rawURL), "file:") {
 		m.ShowNotification("That file link names another machine. tuios did not open it. The address is on your clipboard.",
 			"warning", m.Settings.NotificationDuration)
 		return tea.SetClipboard(rawURL)
 	}
 
-	// The scheme decides whether this is handed to the desktop at all. See
-	// linkOpenableScheme.
 	if !linkOpenableScheme(rawURL) {
 		m.ShowNotification("tuios can not open that kind of link. The address is on your clipboard.",
 			"warning", m.Settings.NotificationDuration)
 		return tea.SetClipboard(rawURL)
 	}
 
-	// Not a local file, so it needs the viewer's own machine.
 	if m.IsRemoteClient() {
 		m.ShowNotification("Copied the link. A remote client can not open it for you.",
 			"info", m.Settings.NotificationDuration)
@@ -138,14 +94,6 @@ func (m *OS) OpenLink(rawURL string) tea.Cmd {
 	return watch
 }
 
-// frameLink reports whether a link belongs in the frame tuios emits to the
-// outer terminal. A tuios:// address is an order to tuios itself, never a
-// document for the desktop, and the outer terminal has no handler for the
-// scheme: its cmd+click would open a dialog. The inner emulator still carries
-// the link, so tuios's own clicks answer it.
-//
-// This runs per cell on the render hot path, so it reads six bytes and
-// folds them rather than lowering the whole address.
 func frameLink(u string) bool {
 	const scheme = "tuios:"
 	if len(u) < len(scheme) {
@@ -154,23 +102,13 @@ func frameLink(u string) bool {
 	return !strings.EqualFold(u[:len(scheme)], scheme)
 }
 
-// tuiosLink is the parse of a tuios://window address.
 type tuiosLink struct {
 	id    string
 	close bool
 }
 
-// tuiosLinkMinID is the shortest id a window link may carry: the 8-character
-// short form list-windows prints. A shorter prefix collides too easily with
-// the wrong window, and a program printing the link chooses the id, not the
-// person clicking it.
 const tuiosLinkMinID = 8
 
-// parseTuiosLink reads the window addresses the scheme carries:
-// tuios://window/<id> focuses the window and tuios://window/<id>/close closes
-// it. The id is the window's uuid or a prefix of it at least the short form
-// list-windows prints. Any other tuios:// shape is not an address tuios
-// answers, and the caller says so.
 func parseTuiosLink(rawURL string) (tuiosLink, bool) {
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Scheme != "tuios" || u.Host != "window" {
@@ -192,47 +130,30 @@ func parseTuiosLink(rawURL string) (tuiosLink, bool) {
 	return tuiosLink{id: rest}, true
 }
 
-// openWindowLink acts on a tuios://window link. The id resolves among the
-// attached session's windows and the windows of the daemon's other sessions:
-// a full uuid, or a prefix that names exactly one pane. A pane of another
-// session switches the client there first, as switch-session then
-// focus-window would. A prefix two panes share names nothing, because
-// focusing or closing the wrong pane one time in many is worse than saying
-// the address was ambiguous.
-//
-// The other sessions' windows come from a fresh listing, fetched off the UI
-// goroutine, never from the rail's cache: a cached pane may have closed, and
-// switching for it would move the person to a session for nothing.
 func (m *OS) openWindowLink(target tuiosLink, rawURL string) tea.Cmd {
 	if m.DaemonClient == nil {
 		return m.followWindowLink(target, rawURL, nil)
 	}
 	client := m.DaemonClient
 	return func() tea.Msg {
-		sessions, _ := client.RefreshSessionList() // on an error only the attached session's panes resolve
+		sessions, _ := client.RefreshSessionList()
 		return windowLinkListedMsg{target: target, rawURL: rawURL, sessions: sessions}
 	}
 }
 
-// followWindowLink acts on a window link once the other sessions' panes are
-// known.
 func (m *OS) followWindowLink(target tuiosLink, rawURL string, sessions []session.SessionInfo) tea.Cmd {
 	matches := m.resolveWindowLink(target.id, sessions)
 	if len(matches) != 1 {
 		return m.windowLinkMiss(rawURL)
 	}
 	if matches[0].session != "" && !m.openSession("", matches[0].session) {
-		return nil // openSession reported why
+		return nil
 	}
 	i := m.windowIndexByID(matches[0].id)
 	if i < 0 {
 		return m.windowLinkMiss(rawURL)
 	}
 	if target.close {
-		// The click lands wherever a program chose to print the link, and the
-		// link's visible text named whatever that program liked. The
-		// confirmation is what names the real target to the person holding
-		// the mouse.
 		m.OpenSessionCloseForWindow(i)
 		return nil
 	}
@@ -241,28 +162,20 @@ func (m *OS) followWindowLink(target tuiosLink, rawURL string, sessions []sessio
 	return nil
 }
 
-// windowLinkListedMsg carries a window link and the session listing fetched
-// for it.
 type windowLinkListedMsg struct {
 	target   tuiosLink
 	rawURL   string
 	sessions []session.SessionInfo
 }
 
-// windowLinkMiss says a window link named no pane, or more than one.
 func (m *OS) windowLinkMiss(rawURL string) tea.Cmd {
 	m.ShowNotification("The window link names no window on this machine, or names more than one. The address is on your clipboard.",
 		"warning", m.Settings.NotificationDuration)
 	return tea.SetClipboard(rawURL)
 }
 
-// windowLinkMatch is a pane a window link names: its session ("" for the
-// attached one) and its full id.
 type windowLinkMatch struct{ session, id string }
 
-// resolveWindowLink finds the panes an id or id prefix names, in the attached
-// session and in the listing of the daemon's other sessions. Every id is a
-// uuid of the same length, so a full id is a prefix of its own pane only.
 func (m *OS) resolveWindowLink(id string, sessions []session.SessionInfo) []windowLinkMatch {
 	var matches []windowLinkMatch
 	add := func(session, wid string) {
@@ -275,7 +188,7 @@ func (m *OS) resolveWindowLink(id string, sessions []session.SessionInfo) []wind
 	}
 	for _, s := range sessions {
 		if s.Name == m.SessionName {
-			continue // m.Windows is the attached session's live list
+			continue
 		}
 		for _, w := range s.Windows {
 			add(s.Name, w.ID)
@@ -284,8 +197,6 @@ func (m *OS) resolveWindowLink(id string, sessions []session.SessionInfo) []wind
 	return matches
 }
 
-// linkTextClean reports whether an address holds no control byte and no
-// space.
 func linkTextClean(s string) bool {
 	for _, r := range s {
 		if r <= 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
@@ -295,10 +206,6 @@ func linkTextClean(s string) bool {
 	return true
 }
 
-// linkHostLabel names where a link goes, for the message that confirms it.
-// The host is what tells a user whether the click went where they meant, and
-// for a link whose text differs from its target it is the second place the
-// target is shown, after the hover label.
 func linkHostLabel(rawURL string) string {
 	if u, err := url.Parse(rawURL); err == nil && u.Host != "" {
 		return sanitizeLinkText(u.Host)
@@ -306,53 +213,10 @@ func linkHostLabel(rawURL string) string {
 	return "the link"
 }
 
-// A link's address is attacker-controlled. Any program running in a pane can
-// print an OSC 8 escape carrying any URI at all, and unlike a bare URL, which
-// this file's scanner only ever produces from three schemes, a marked link's
-// address never passed through anything that looked at it.
-//
-// What is on the other end of openInOSViewer is xdg-open, `open`, or the
-// Windows protocol handler, and all three resolve a scheme to whatever
-// application the desktop registered for it. So an unfiltered address is a way
-// for a program in a pane to start an arbitrary registered application, with an
-// argument it chose, from one click on text whose visible label it also chose.
-// The label above the run names the real target, which is what makes this a
-// click the user consents to rather than one they are tricked into; the list
-// below is what stops the consent from being worth more than it looks.
-//
-// Nothing is executed through a shell either way: openInOSViewer builds an argv
-// and never a command line, so a semicolon or a backtick in an address is one
-// more character of one argument. The risk this list closes is the scheme, not
-// the quoting.
-//
-// The set is the one a terminal is actually asked for. file:// is absent
-// because it never reaches here: OpenLink routes it above, to a stat and a pane
-// on the machine the file is on. An application's own scheme is refused and
-// copied instead, which loses nothing a paste cannot do.
-//
-// The list lives in internal/hints (hints.OpenableScheme), because the link
-// rules that build a target from plain text are checked against the same set
-// before the text becomes a link at all.
-
-// linkOpenableScheme reports whether rawURL may be handed to the desktop's own
-// handler. An address with no scheme at all is refused: there is nothing for a
-// handler to resolve, and guessing http for it would be inventing a target the
-// program never wrote.
 func linkOpenableScheme(rawURL string) bool {
 	return hints.OpenableScheme(rawURL)
 }
 
-// openLocalPath opens a path that lives on the pane machine, in quick look,
-// at line when it is more than 0. A folder shows its listing there.
-//
-// Quick look reads the file in this process, which runs on the machine the
-// file is on in every deployment, so it is right under tuios ssh and
-// tuios-web too: the preview is drawn in the frame the viewer sees. The
-// person's editor is one key away inside it (QuickLookOpenEditor).
-//
-// A path that is gone is reported rather than guessed at. A file:// link in a
-// pane's scrollback can be minutes old, and the file it named may have been
-// built over or deleted since.
 func (m *OS) openLocalPath(path string, line int, rawURL string) tea.Cmd {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -363,8 +227,6 @@ func (m *OS) openLocalPath(path string, line int, rawURL string) tea.Cmd {
 	return m.OpenQuickLookPath(path, line, info.IsDir())
 }
 
-// openInEditor opens a file in a new pane running the person's editor, at
-// line when it is more than 0 and the editor takes a line (editorLineArgs).
 func (m *OS) openInEditor(path string, line int) tea.Cmd {
 	argv, err := editorArgv(m.Settings.SidebarEditor)
 	if err != nil {
@@ -379,11 +241,6 @@ func (m *OS) openInEditor(path string, line int) tea.Cmd {
 
 const editorCommandNote = "tuios can not read the File editor command. Change it in the sidebar settings."
 
-// editorArgv is the argv the editor pane runs. The File editor setting comes
-// first and $EDITOR, $VISUAL and vi follow. It is split the way a shell splits
-// words, so "code --wait" arrives as two arguments and a quoted path with a
-// space in it stays one. No shell runs it. Every path that opens a file in an
-// editor pane goes through here, so they all honour the setting and its quotes.
 func editorArgv(setting string) ([]string, error) {
 	editor := strings.TrimSpace(setting)
 	if editor == "" {
@@ -396,8 +253,6 @@ func editorArgv(setting string) ([]string, error) {
 	return argv, err
 }
 
-// linkEditor is the editor command when the File editor setting is empty:
-// $EDITOR, then $VISUAL, then vi, in the order every other tool uses.
 func linkEditor() string {
 	for _, key := range []string{"EDITOR", "VISUAL"} {
 		if v := strings.TrimSpace(os.Getenv(key)); v != "" {

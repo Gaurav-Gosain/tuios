@@ -19,7 +19,6 @@ func TestEveryStateMarkSurvivesTheTitleSanitiser(t *testing.T) {
 			t.Errorf("%s: the palette row %q is drawn as %q", state, label, got)
 		}
 	}
-	// Foreign ornaments in the same block are still stripped.
 	if got := printableTitle("◆ build ◇"); got != "build" {
 		t.Errorf("printableTitle kept a foreign ornament: %q", got)
 	}
@@ -74,7 +73,6 @@ func TestAskedPaneNeedsYou(t *testing.T) {
 		t.Error("@n does not find the pane with a question open")
 	}
 
-	// Answered or dismissed, the pane is itself again.
 	m.applyInboxSnapshot(InboxSnapshotMsg{})
 	if got := m.windowMarkState(m.Windows[0]); got != "" {
 		t.Errorf("with the question gone the pane still reads as %q", got)

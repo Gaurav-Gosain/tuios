@@ -11,54 +11,25 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The in-process fuzz target. It drives a real OS through the real
-// bubbletea Update for keys, mouse, and resizes, which is the whole point:
-// dispatching straight to the OS method a keybinding happens to call would skip
-// the routing layer, and the routing layer is where a click lands on the wrong
-// target.
-//
-// Everything is deterministic on purpose. Animations stay off because they are
-// driven by wall time, and every package-global the run can flip is snapshotted
-// and restored on Close, because a replay that inherits the previous replay's
-// SharedBorders is a replay that does not reproduce.
-
-// fuzzOS is the model under test plus the bookkeeping the oracle needs: the
-// size each pane was last told, so a spurious announcement can be spotted, and
-// the resting state of every global the actions can move.
 type fuzzOS struct {
-	m     *OS
-	told  map[string]*toldSize
-	saved configSnapshot
-	dir   func() string
-	seq   int
-	// drawable is the drawable size of every visible pane before the action now
-	// being applied, which is what the no-spurious-winch rule compares against.
-	drawable map[string][2]int
-	calls    map[string]int
-	// lastAction is carried into Check so a violation can name what caused it.
-	lastAction fuzz.Action
-	// prevSignature and prevRail let the cache rule see whether the rail's drawn
-	// output moved without its signature moving.
-	prevSignature string
-	prevRail      string
-	// settledDrawable and settledCalls are the baseline the no-spurious-winch
-	// rule compares against: the last state with no resize in flight.
-	settledDrawable map[string][2]int
-	// movedSinceSettled records the panes whose drawable size left the baseline
-	// at any point since it was taken, including while a resize was in flight.
+	m                 *OS
+	told              map[string]*toldSize
+	saved             configSnapshot
+	dir               func() string
+	seq               int
+	drawable          map[string][2]int
+	calls             map[string]int
+	lastAction        fuzz.Action
+	prevSignature     string
+	prevRail          string
+	settledDrawable   map[string][2]int
 	movedSinceSettled map[string]bool
 	settledCalls      map[string]int
-	// prevStateDir is the sidebar state directory to put back on Close. See Reset.
-	prevStateDir func() string
-	// unsandbox undoes fuzz.Sandbox on Close.
-	unsandbox func()
-	closed    bool
+	prevStateDir      func() string
+	unsandbox         func()
+	closed            bool
 }
 
-// configSnapshot is every package-global the action alphabet can move. Missing
-// one makes a finding unreproducible, so the list is exhaustive over the
-// Setting table and the sidebar and border actions rather than over what a
-// given run happens to touch.
 type configSnapshot struct {
 	shared, ascii, sessionColors     bool
 	anim                             string
@@ -85,9 +56,6 @@ func (c configSnapshot) restore() {
 	config.Global.SidebarWidth = c.sidebarWidth
 }
 
-// newFuzzTarget builds a target. stateDir is a scratch directory the sidebar's
-// persisted order is redirected into, so a run never writes the developer's
-// real state.
 func newFuzzTarget(stateDir string) (fuzz.Target, error) {
 	return &fuzzOS{saved: snapshotConfig(), dir: func() string { return stateDir }}, nil
 }
@@ -98,10 +66,6 @@ const (
 	fuzzPanes  = 3
 )
 
-// Reset builds the starting state: a daemon-attached client with three tiled
-// panes on workspace 1, the sidebar on the left, shared borders off, and
-// animations off. Everything the run does starts from here, so a shrunk
-// sequence replays exactly.
 func (f *fuzzOS) Reset() error {
 	f.releaseWindows()
 	f.saved.restore()
@@ -116,19 +80,11 @@ func (f *fuzzOS) Reset() error {
 	config.Global.SidebarWidth = config.SidebarDefaultWidth
 	config.Global.SessionColors = true
 
-	// Redirected for the life of the target, not just for this call. Actions
-	// write the state file too (collapsing the rail persists it), and
-	// XDG_STATE_HOME cannot be used to catch them, because the xdg package
-	// resolves its paths once at init and t.Setenv comes far too late. A run that
-	// left the redirect behind wrote a collapsed rail into the developer's own
-	// state file, which then made every later sidebar test render a glyph strip.
 	if f.prevStateDir == nil {
 		f.prevStateDir = sidebarStateDir
 	}
 	sidebarStateDir = f.dir
 
-	// Keys and the mouse go through the real input handler, so an action can
-	// do whatever a person can; the sandbox keeps that off this machine.
 	if fuzzInput == nil {
 		return errors.New("no input handler: fuzz_input_test.go hands it over at init")
 	}
@@ -141,13 +97,6 @@ func (f *fuzzOS) Reset() error {
 	}
 
 	cfg := config.DefaultConfig()
-	// No daemon client, on purpose. The panes are daemon-backed windows, which
-	// is what gives them an emulator and a resize hook without forking a shell,
-	// but the transport is left out: a client with no connection panics inside
-	// its own send, which would be reported as a finding in tuios and is not
-	// one. The daemon protocol is the PTY target's job, and that one runs a
-	// real daemon. Everything this oracle reads is client-side, and the PTY
-	// announcement it depends on arrives through DaemonResizeFunc per pane.
 	m := NewOS(OSOptions{
 		KeybindRegistry: config.NewKeybindRegistry(cfg),
 		UserConfig:      cfg,
@@ -161,11 +110,6 @@ func (f *fuzzOS) Reset() error {
 	m.AutoTiling = true
 	m.UseBSPLayout = true
 	m.CurrentWorkspace = 1
-	// The rail's collapsed state is persisted, and every seed and every shrink
-	// replay shares one state directory, so a run that collapsed the rail left
-	// the next one starting with it collapsed. That made a shrunk script wrong:
-	// the shrinker kept verifying against a rail it had inherited, so it dropped
-	// the action that collapsed it and printed a repro that no longer reproduced.
 	m.SidebarCollapsed = false
 
 	f.m, f.told = m, map[string]*toldSize{}
@@ -185,9 +129,6 @@ func (f *fuzzOS) Reset() error {
 	return nil
 }
 
-// addPane attaches a live daemon window with its own emulator, which is what
-// makes the guest-ownership and announced-size rules meaningful: a pane with no
-// emulator cannot be asked what size it thinks it is.
 func (f *fuzzOS) addPane() error {
 	f.seq++
 	id := fmt.Sprintf("fuzzpane%04d", f.seq)
@@ -214,9 +155,6 @@ func (f *fuzzOS) releaseWindows() {
 		w.Close()
 	}
 	f.m.Windows = nil
-	// The model goes with its panes: a new one is built on every Reset, and
-	// what the old one started (the rail's directory watch above all, an
-	// inotify instance on Linux) is stopped only by Cleanup.
 	f.m.Cleanup()
 }
 
@@ -238,28 +176,16 @@ func (f *fuzzOS) Close() {
 	}
 }
 
-// send pushes one message through the real Update. Update recovers panics
-// internally, so a panic is not a crash here; the oracle notices it by the
-// crash counter instead.
 func (f *fuzzOS) send(msg tea.Msg) {
 	f.m.Update(msg)
-	// The PTY channel is buffered at one and nothing drains it in a test, so a
-	// pane that produced output would eventually block its writer. Drain it.
 	select {
 	case <-f.m.PTYDataChan:
 	default:
 	}
 }
 
-// Apply performs one action. Everything that a user reaches through a key or a
-// pointer goes through Update; the few actions with no keystroke behind them
-// (creating a pane the daemon would have pushed, attaching, detaching) call the
-// same entry points the daemon paths call.
 func (f *fuzzOS) Apply(a fuzz.Action) error {
 	f.lastAction = a
-	// A person can quit through the routed keys, and then the program ends.
-	// The harness does not run the quit command, so the model is left closed
-	// down; nothing after it is a run worth checking.
 	if f.m.QuitRequested {
 		return nil
 	}
@@ -284,9 +210,6 @@ func (f *fuzzOS) Apply(a fuzz.Action) error {
 		f.send(tea.MouseMotionMsg{X: a.A, Y: a.B, Button: mouseButton(a.C)})
 	case fuzz.MouseRelease:
 		f.send(tea.MouseReleaseMsg{X: a.A, Y: a.B, Button: mouseButton(a.C)})
-		// A finished resize leaves InteractionMode on and arms a 150 ms timer
-		// that turns it off (InteractionSettleCmd). The harness runs no
-		// commands, so it delivers what the timer would, once the button is up.
 		f.send(InteractionSettledMsg{})
 	case fuzz.MouseWheel:
 		b := tea.MouseWheelUp
@@ -343,12 +266,6 @@ func (f *fuzzOS) Apply(a fuzz.Action) error {
 	case fuzz.ToggleSidebar:
 		m.ToggleSidebar()
 	case fuzz.SidebarCollapse:
-		// Through the entry point the keybinding and the strip's own control
-		// use, not the bare field. Collapsing changes the columns the rail
-		// reserves, so the panes have to be re-laid out into the region that
-		// leaves them; writing the field alone left them tiled for the old band
-		// and the rail painted over the pane beneath it, which is a finding
-		// about this file rather than about tuios.
 		m.SidebarSetCollapsed(!m.SidebarCollapsed)
 	case fuzz.SidebarPosition:
 		m.Settings.SidebarPosition = []string{"left", "right"}[a.A%2]
@@ -372,12 +289,6 @@ func (f *fuzzOS) Apply(a fuzz.Action) error {
 	case fuzz.Setting:
 		applyFuzzSetting(m, a.A, a.B)
 	case fuzz.Tick:
-		// A tick is where time passes, and passing time is what ends a resize
-		// deferral. Update returns the settle as a command and nothing here
-		// runs commands, so the timer is delivered by hand; without it the
-		// deferral stays fresh forever, every retile takes the visual-only
-		// branch, and no pane is ever told its real size. Weighting Tick below
-		// the actions that arm the deferral keeps the storm case reachable.
 		if m.viewportResizing {
 			f.send(ViewportResizeSettledMsg{Gen: m.viewportResizeGen})
 		}
@@ -393,16 +304,10 @@ func (f *fuzzOS) Apply(a fuzz.Action) error {
 	case fuzz.Burst:
 		f.guestWrite(burstText(a.A))
 	case fuzz.SecondClient, fuzz.DaemonRestart:
-		// Both need a daemon on the far end of a socket, and in process there
-		// is none: the model owns its panes directly. They are carried in the
-		// shared alphabet so a PTY finding replays here as far as it can, and
-		// the PTY target is where they do their work.
 	}
 	return nil
 }
 
-// guestWrite feeds bytes to the focused pane's emulator the way its own program
-// would.
 func (f *fuzzOS) guestWrite(s string) {
 	w := f.m.GetFocusedWindow()
 	if w == nil || w.Terminal == nil {
@@ -414,9 +319,6 @@ func (f *fuzzOS) guestWrite(s string) {
 	w.MarkContentDirty()
 }
 
-// burstText is n numbered lines. The number makes a line identifiable, which is
-// what lets the PTY oracle notice a pane rendering two stretches of a stream
-// with the middle missing; in process it is a cheap way to fill the scrollback.
 func burstText(n int) string {
 	n = min(max(n, 0), 5000)
 	var b strings.Builder
@@ -426,8 +328,6 @@ func burstText(n int) string {
 	return b.String()
 }
 
-// clampFuzzWorkspace keeps the index inside the model's own range, since the
-// out-of-range case is the model's own clamp and has its own test.
 func clampFuzzWorkspace(n, count int) int {
 	if count <= 0 {
 		return 1
@@ -439,9 +339,6 @@ func clampFuzzWorkspace(n, count int) int {
 	return w
 }
 
-// openOverlay picks one of the overlays a user can reach. Opening them through
-// their own entry points rather than through a chord makes the choice
-// deterministic, which is what the shrinker needs.
 func (f *fuzzOS) openOverlay(n int) {
 	m := f.m
 	switch n % 10 {
@@ -470,10 +367,6 @@ func (f *fuzzOS) openOverlay(n int) {
 	}
 }
 
-// applyFuzzSetting is the runtime-settings surface: the flips a user makes from
-// the settings panel or the command palette while panes are on screen. Each one
-// changes what a pane's frame looks like, which is why they belong in the
-// alphabet rather than in the fixture.
 func applyFuzzSetting(m *OS, which, value int) {
 	on := value&1 != 0
 	switch which % 12 {
@@ -483,9 +376,6 @@ func applyFuzzSetting(m *OS, which, value int) {
 		m.Settings.UseASCIIOnly = on
 		m.applyAppearanceLive(true)
 	case 2:
-		// Every style the settings page offers, not two of them: the divider
-		// glyph rule is a statement about all nine, and a style swapped under a
-		// live layout is the sequence the table test cannot reach.
 		if n := len(config.BorderStyles); n > 0 {
 			m.Settings.BorderStyle = config.BorderStyles[value%n]
 		}
@@ -527,9 +417,6 @@ func mouseButton(c int) tea.MouseButton {
 	return tea.MouseNone
 }
 
-// keyMsg turns a key name from the alphabet into the message bubbletea would
-// deliver. The named codes have to be spelled out because a keybinding matches
-// on the code, not on the text.
 func keyMsg(name string) tea.KeyPressMsg {
 	msg := tea.KeyPressMsg{}
 	for {
@@ -545,7 +432,6 @@ func keyMsg(name string) tea.KeyPressMsg {
 		case "shift":
 			msg.Mod |= tea.ModShift
 		default:
-			// Not a modifier, so the "+" belongs to the key itself.
 			return finishKey(msg, name)
 		}
 		name = rest

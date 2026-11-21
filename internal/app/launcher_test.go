@@ -13,9 +13,7 @@ import (
 func runTestOS(t *testing.T) *OS {
 	t.Helper()
 	return &OS{
-		Settings: config.Global,
-		// Open, because applyPathApps declines to build rows for a launcher
-		// nobody is looking at.
+		Settings:     config.Global,
 		ShowLauncher: true,
 
 		WorkspaceFocus:   map[int]int{},
@@ -37,8 +35,6 @@ func TestSeedsWaitForTheirOwnPane(t *testing.T) {
 	m.queueSeed("ffmpeg", "ffmpeg ")
 	m.queueSeed("htop", "htop ")
 
-	// The panes arrive in the other order, which is the case that matters: the
-	// queue is drained by name, not by position.
 	m.seedAdoptedWindows([]*terminal.Window{{ID: "w1", CustomName: "htop"}})
 	if len(m.pendingSeeds) != 1 || m.pendingSeeds[0].name != "ffmpeg" {
 		t.Fatalf("queue = %+v, want only ffmpeg still waiting", m.pendingSeeds)
@@ -79,7 +75,7 @@ func TestTypeProgramAsksWhichSessionItIsIn(t *testing.T) {
 	m.WindowExitChan = make(chan string, 4)
 	m.PTYDataChan = make(chan struct{}, 1)
 	defer closeWindows(m)
-	m.IsDaemonSession = true // but DaemonClient is nil, so there is no daemon
+	m.IsDaemonSession = true
 
 	m.TypeProgram(applist.Entry{Name: "ffmpeg", Path: "/usr/bin/ffmpeg", Dir: "/usr/bin"})
 

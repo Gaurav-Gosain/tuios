@@ -12,37 +12,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// Zoom is shared session state, and these are the two halves of what that has
-// to mean with two people looking at one session.
-//
-// A pane's PTY has one size, and zooming resizes it: toggleZoom routes the
-// zoomed rectangle through Window.Resize. So a client that does not know a pane
-// is zoomed is not merely drawing a different picture, it is drawing a guest
-// grid the shell is not running in. Worse, it counts the pane among the
-// tiled ones, tiles it back and pushes that, which takes the zoom away from the
-// person who asked for it.
-//
-// What travels is the flag. The rectangle does not: a zoomed pane covers the
-// content region of whichever client zoomed it, and every client works its own
-// out from the box the session agreed on, the same way it works out a tiled
-// layout.
-
-// twoClientsOnOneTiledSession brings up a tiled session with two full clients
-// on it, each with its own connection, its own OS and its own chrome, and
-// leaves the box settled and every pane's size agreed.
-//
-// The rails are on opposite edges on purpose. That is what makes the reserve
-// negotiation load-bearing, and the zoom box is measured against the negotiated
-// reserve rather than either client's own chrome, so a rail nobody shares is
-// exactly the way a zoomed rectangle could come out different on the two sides.
 func twoClientsOnOneTiledSession(t *testing.T) (*rig, *peer, *exchange) {
 	return clientsOnOneTiledSession(t, 2, false)
 }
 
-// panes is how many shells the session starts with, and shared is whether the
-// clients draw one border between two panes instead of one each. Shared borders
-// take the titles off the panes, so a test that reads a name out of the frame
-// asks for them off and the one about the dividers asks for them on.
 func clientsOnOneTiledSession(t *testing.T, panes int, shared bool) (*rig, *peer, *exchange) {
 	t.Helper()
 	prevAnim := config.Global.Motion
@@ -66,12 +39,6 @@ func clientsOnOneTiledSession(t *testing.T, panes int, shared bool) (*rig, *peer
 	r := newRigSized(t, panes, holderCols, holderRows)
 	r.tile()
 
-	// The tiling topology reaches the daemon before the second client attaches.
-	// A tree is adopted from the attach reply and from a strictly newer daemon
-	// state, never from a peer's push, so a client that joins a session no one
-	// has pushed builds its own tree against its own box, and two clients on
-	// two trees disagree about every rectangle, zoom or no zoom. That is a
-	// divergence of its own, not this one.
 	var daemonState atomic.Pointer[session.SessionState]
 	r.ctl.OnStateSync(func(st *session.SessionState, _, _ string) { daemonState.Store(st) })
 	r.m.SyncStateToDaemon()
@@ -104,8 +71,6 @@ func clientsOnOneTiledSession(t *testing.T, panes int, shared bool) (*rig, *peer
 	return r, p, ex
 }
 
-// nameZoomPanes gives the two panes names a frame can be read for, so the proof
-// is what is on the screen rather than a flag read back out of the model.
 func nameZoomPanes(t *testing.T, r *rig, ex *exchange) (string, string) {
 	t.Helper()
 	r.m.Windows[0].CustomName = "ZOOMED"
@@ -130,13 +95,6 @@ func winByPTY(m *OS, ptyID string) *terminal.Window {
 	return nil
 }
 
-// paneFrame is the composed frame cropped to the box the panes go in. The rail
-// is left out on purpose: it lists every pane by name whatever the layout is
-// doing, so a frame read whole says "HIDDEN is on screen" for a pane that
-// is not being drawn at all.
-//
-// With the session drawn as a view (pane_view.go), the panes are on the
-// screen where the view puts them, not at their layout columns.
 func paneFrame(m *OS) string {
 	left, width := m.GetLeftMargin(), m.GetContentWidth()
 	if v := m.computeSessionView(); v.on {
@@ -199,15 +157,11 @@ func TestZoomTravelsToTheOtherClient(t *testing.T) {
 		t.Fatalf("the two clients put the zoomed pane in different boxes:\n A %s\n B %s", rectOf(a), rectOf(b))
 	}
 
-	// The box is the one the session agreed on, not either client's own. Read
-	// off B, which is the client that did not zoom.
 	bounds := p.m.GetBSPBounds()
 	if b.X != bounds.X || b.Y != bounds.Y || b.Width != bounds.W || b.Height != bounds.H {
 		t.Fatalf("B's zoom box %s is not the box the panes go in %+v", rectOf(b), bounds)
 	}
 
-	// The pane B tiled away is the failure this exists for, so it is asserted
-	// on the frame rather than on the flag.
 	fa, fb := paneFrame(r.m), paneFrame(p.m)
 	t.Logf("A's frame while zoomed:\n%s", fa)
 	t.Logf("B's frame while zoomed:\n%s", fb)
@@ -218,7 +172,6 @@ func TestZoomTravelsToTheOtherClient(t *testing.T) {
 		t.Fatalf("B is still drawing the tiled layout underneath the zoom:\n%s", fb)
 	}
 
-	// A PTY has one size, and the zoom just changed it.
 	dw, dh := r.ptySize(zoomPTY)
 	if dw != a.ContentWidth() || dh != a.ContentHeight() || dw != b.ContentWidth() || dh != b.ContentHeight() {
 		t.Fatalf("pane %s: the daemon runs the shell at %dx%d, A draws it at %dx%d, B at %dx%d",
@@ -242,7 +195,6 @@ func TestUnzoomOutsideTilingRestoresTheRectangle(t *testing.T) {
 	r, p, ex := twoClientsOnOneTiledSession(t)
 	zoomPTY, _ := nameZoomPanes(t, r, ex)
 
-	// Tiling off on both, which is a session-level setting and travels.
 	r.m.AutoTiling = false
 	r.m.SyncStateToDaemon()
 	ex.settle(60, 300*time.Millisecond)
@@ -280,15 +232,6 @@ func TestUnzoomOutsideTilingRestoresTheRectangle(t *testing.T) {
 	}
 }
 
-// focusElsewhere points a client's focus at some pane other than the zoomed one
-// without telling anybody, which is the state every reader that used to ask
-// GetFocusedWindow().Zoomed got wrong.
-//
-// It is not a contrived state. Focus travels in the same broadcast the zoom
-// does and a client applies the two a step apart; a client sitting in its
-// sidebar has no focused pane at all; and a client whose focused id is not in
-// the list it was handed holds -1. Each of those is a frame in which "is the
-// focused pane zoomed" answers no while a pane is zoomed.
 func focusElsewhere(t *testing.T, m *OS, zoomPTY string) {
 	t.Helper()
 	for i, w := range m.Windows {
@@ -329,9 +272,6 @@ func TestAPeersZoomIsDrawnWhoeverIsFocused(t *testing.T) {
 		t.Fatalf("B drew the tiled layout underneath a pane the session has zoomed:\n%s", fb)
 	}
 
-	// The other shape of the same moment: a client with nothing focused at all,
-	// which is what a sidebar has the focus or a focused id that is not in the
-	// list leaves behind.
 	p.m.FocusedWindow = -1
 	p.m.MarkAllDirty()
 	fb = paneFrame(p.m)
@@ -352,7 +292,6 @@ func TestNoDividersAcrossAPeersZoom(t *testing.T) {
 	r, p, ex := clientsOnOneTiledSession(t, 2, true)
 	zoomPTY, _ := nameZoomPanes(t, r, ex)
 
-	// The dividers are there to begin with, or the test asserts nothing.
 	focusElsewhere(t, p.m, zoomPTY)
 	if n := len(p.m.renderSeparatorOverlay()); n == 0 {
 		t.Fatalf("this session draws no dividers, so there is nothing to keep off the zoom")

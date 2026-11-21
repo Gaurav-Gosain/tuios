@@ -15,8 +15,6 @@ func TestAllKeysPending(t *testing.T) {
 		t.Fatal("pending before the host ever answered")
 	}
 
-	// A host that answers without report-all keys never grants it, so there
-	// is nothing to wait for.
 	o.NoteKeyboardEnhancements(tea.KeyboardEnhancementsMsg{Flags: 5})
 	if o.hostGrantedAllKeys || o.AllKeysPending() {
 		t.Fatal("a host that never granted report-all keys counts as pending")
@@ -30,7 +28,6 @@ func TestAllKeysPending(t *testing.T) {
 		t.Fatal("pending while report-all keys is in effect")
 	}
 
-	// Back to the pane's flags: the next switch is waited for.
 	o.NoteKeyboardEnhancements(tea.KeyboardEnhancementsMsg{Flags: 5})
 	if !o.hostGrantedAllKeys || !o.AllKeysPending() {
 		t.Fatal("not pending after the host dropped report-all keys")

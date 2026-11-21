@@ -9,15 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// The agents section answers "what should I handle next", which is a different
-// question from the one the rest of the rail answers. Its two controls live in
-// its own header and nowhere else: a filter, because a rail watching six
-// sessions is not always a rail you want six sessions' worth of alarm from, and
-// a sort, because "what needs me", "loudest" and "newest" are all reasonable
-// readings of a list of running agents and none is right for everyone.
-
-// Agents-section filter and sort values. They are the strings written to
-// sidebar.json, so they are the wire format as much as they are the state.
 const (
 	sidebarAgentsAll      = "all"
 	sidebarAgentsSession  = "session"
@@ -26,9 +17,6 @@ const (
 	sidebarAgentsRecent   = "recent"
 )
 
-// sidebarAgentsFilter and sidebarAgentsSort read the model's controls, folding
-// an absent or unrecognised value (an older state file, a hand-edited one) back
-// to the default rather than rendering an empty section nobody asked for.
 func (m *OS) sidebarAgentsFilter() string {
 	if m.SidebarAgentFilter == sidebarAgentsSession {
 		return sidebarAgentsSession
@@ -36,9 +24,6 @@ func (m *OS) sidebarAgentsFilter() string {
 	return sidebarAgentsAll
 }
 
-// sidebarAgentsSort is needs-you unless the user picked another. An explicit
-// "priority" in a state file is a choice the user made with the header
-// control, so it stands; only an empty or unknown value takes the default.
 func (m *OS) sidebarAgentsSort() string {
 	switch m.SidebarAgentSort {
 	case sidebarAgentsPriority, sidebarAgentsRecent:
@@ -72,23 +57,13 @@ func (m *OS) SidebarCycleAgentsSort() {
 	m.saveSidebarState()
 }
 
-// The groups of the needs-you order, in the order they are drawn. Each is what
-// a row wants from the person looking at the rail.
 const (
-	// sidebarGroupNeedsYou is a pane blocked on a person: an approval, a
-	// question, or an error.
 	sidebarGroupNeedsYou = iota
-	// sidebarGroupFinished is a pane that finished and has not been looked at.
 	sidebarGroupFinished
-	// sidebarGroupWorking is a pane in flight. It needs nothing yet.
 	sidebarGroupWorking
-	// sidebarGroupIdle is everything at rest: idle, a finished pane already
-	// looked at, a pane whose state nothing can read, and any state this build
-	// does not know.
 	sidebarGroupIdle
 )
 
-// sidebarAgentGroup is the needs-you group a pane belongs to.
 func sidebarAgentGroup(state string, doneSeen bool) int {
 	switch {
 	case sidebarAttention(state):
@@ -102,17 +77,6 @@ func sidebarAgentGroup(state string, doneSeen bool) int {
 	}
 }
 
-// sidebarAgentPriority ranks a pane by how much it should be the next thing the
-// user touches. Done is not a state anything detects: it is idle and unread,
-// and it stops being done the moment you look at it, which is exactly what the
-// DoneSeen bit records. So a finished pane outranks nothing that is still
-// moving, and a finished pane already reviewed sinks below one still working.
-//
-// Deliberately not sessiontree.AgentRank, which puts done-unread above working.
-// That ranking answers "what is the loudest thing in this session" for the
-// session row's one rolled-up glyph, where a finished-unread pane may well be
-// the most interesting thing a session has to say. This one answers "what
-// should I handle next", and a working pane needs nothing from anybody.
 func sidebarAgentPriority(state string, doneSeen bool) int {
 	switch state {
 	case "errored":
@@ -122,22 +86,17 @@ func sidebarAgentPriority(state string, doneSeen bool) int {
 	case "working":
 		return 3
 	case "limit_reached":
-		// Nothing to do before the reset, but the work is not done: above a
-		// finished pane, below one that is moving.
 		return 2
 	case "done":
 		if doneSeen {
 			return 1
 		}
 		return 2
-	default: // idle, and any state this build does not know
+	default:
 		return 0
 	}
 }
 
-// sidebarFilterAgents drops the panes the section's filter hides. It returns the
-// kept entries and the total it was given, because the hint row a filter that
-// hides everything leaves behind says how many are there in all.
 func (m *OS) sidebarFilterAgents(agents []sidebarAgentEntry) ([]sidebarAgentEntry, int) {
 	total := len(agents)
 	if m.sidebarAgentsFilter() != sidebarAgentsSession {
@@ -153,17 +112,6 @@ func (m *OS) sidebarFilterAgents(agents []sidebarAgentEntry) ([]sidebarAgentEntr
 	return kept, total
 }
 
-// sidebarSortAgents orders the section. Every order is stable, so panes at the
-// same rank or the same instant keep the order the tree gave them and no row
-// moves under the pointer for a reason the user cannot see.
-//
-// The needs-you order is groups only. Inside a group the rows keep the tree's
-// order, which is spawn order: sessions as the daemon created them (or as the
-// user dragged them), panes in the order they were opened. So a row moves only
-// when its group changes, which is when what it wants from you changed, and
-// never because a neighbour did something. Priority sorts errored above
-// needs_input and recency sorts by the last state change, and both of those
-// reorder a group every time one of its members moves.
 func (m *OS) sidebarSortAgents(agents []sidebarAgentEntry) {
 	switch m.sidebarAgentsSort() {
 	case sidebarAgentsRecent:
@@ -181,30 +129,16 @@ func (m *OS) sidebarSortAgents(agents []sidebarAgentEntry) {
 	}
 }
 
-// sidebarFoldClock is the clock the rail's signature reads the minute from
-// for the fold. Tests replace it.
 var sidebarFoldClock = time.Now
 
-// sidebarAgentFoldID is the identity of the fold entry: no session is called
-// this, so the entry never matches a pane.
 const sidebarAgentFoldID = "\x00fold"
 
-// sidebarAgentFoldMin is the fewest rows the fold takes. One row folded into
-// one line saves nothing and hides a name.
 const sidebarAgentFoldMin = 2
 
-// sidebarAgentRests reports whether a row has been at rest long enough to
-// fold: idle, unknown or a finished turn already seen, in that state for at
-// least the threshold, not the focused pane, with nothing queued for it and
-// no subagents at work. A row that needs the person, a finished turn not yet
-// seen and a working agent never fold, and neither does a row whose agent
-// ended its turn with subagents still running: the work is not at rest. A
-// row the person settled folds at once, unless it works or needs them.
 func sidebarAgentRests(e sidebarAgentEntry, threshold time.Duration, now time.Time) bool {
 	if threshold <= 0 || e.Fold > 0 || e.Focused || e.Queued > 0 {
 		return false
 	}
-	// A settled agent the person put away folds at once, unless it works.
 	if e.Settled {
 		g := sidebarAgentGroup(e.State, e.DoneSeen)
 		return g != sidebarGroupNeedsYou && g != sidebarGroupWorking
@@ -221,12 +155,6 @@ func sidebarAgentRests(e sidebarAgentEntry, threshold time.Duration, now time.Ti
 	return now.Sub(time.Unix(0, e.StateAt)) >= threshold
 }
 
-// sidebarFoldAgents folds the rows long at rest into one entry at the end of
-// the section, "+3 at rest", when there are at least two of them and the
-// person has not unfolded them. The rest keep their order. It is computed
-// while the rail is rebuilt, from the state stamps the rows already carry, so
-// it costs no timer: the rail's signature folds the minute once an agent has
-// been seen, which is what moves a row over the threshold.
 func (m *OS) sidebarFoldAgents(agents []sidebarAgentEntry, now time.Time) []sidebarAgentEntry {
 	threshold := m.Settings.SidebarAgentRestFold
 	if threshold <= 0 || m.sidebarAgentsUnfolded || len(agents) < sidebarAgentFoldMin {
@@ -275,9 +203,6 @@ func (m *OS) RefoldAgentsAfterClickAway() {
 	m.refoldAgentsOnPaneFocus()
 }
 
-// refoldAgentsOnPaneFocus folds the rows at rest again when a pane takes the
-// focus while the rail does not have the keyboard: the end of an unfold a
-// click made. With the keyboard on the rail, ExitSidebarFocus does it.
 func (m *OS) refoldAgentsOnPaneFocus() {
 	if !m.sidebarAgentsUnfolded || m.SidebarFocused {
 		return
@@ -286,8 +211,6 @@ func (m *OS) refoldAgentsOnPaneFocus() {
 	m.sidebarCache.invalidate()
 }
 
-// sidebarAgentFoldRow draws the fold line, "+3 at rest", muted, at the name
-// column. On a tall section the second line names the folded panes.
 func (m *OS) sidebarAgentFoldRow(e sidebarAgentEntry, cw int, pal overlay.Palette, st sidebarRowState, names bool) string {
 	rowBg := sidebarRowBg(st, pal)
 	fg := pal.FgMute
@@ -304,15 +227,6 @@ func (m *OS) sidebarAgentFoldRow(e sidebarAgentEntry, cw int, pal overlay.Palett
 		sidebarStyle(rowBg, fg).Render(overlay.Truncate(text, max(sidebarNameAvail(cw, 0)-(indent-sidebarNameCol()), 1))), cw, rowBg)
 }
 
-// railAgentOrder is every agent pane on this machine in the order the rail's
-// agents section lists it: the section's own filter and sort, then the rows at
-// rest that the fold gathers into its line at the end, in their own order. It
-// reads the tree and the controls whether or not the section is in the rail's
-// layout, so the order a key walks is the one the section would show.
-//
-// Panes on other machines are left out, as CycleSession leaves out their
-// sessions: reaching one opens a connection, which a cycle key must not do by
-// surprise.
 func (m *OS) railAgentOrder() []sidebarAgentEntry {
 	all, _ := m.sidebarFilterAgents(m.agentEntries(m.BuildSessionTree().Sessions))
 	agents := all[:0:0]

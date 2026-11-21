@@ -9,7 +9,6 @@ import "charm.land/ssh"
 // library out of its download. See ssh_conn_js.go.
 type SSHConn = ssh.Session
 
-// sshClientTerm is the TERM the SSH client sent in its pty request.
 func sshClientTerm(s SSHConn) (string, bool) {
 	pty, _, ok := s.Pty()
 	return pty.Term, ok

@@ -10,29 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// One wiring for the daemon connection, shared by every client.
-//
-// The local attach client, the SSH server and tuios-web each used to register
-// the daemon client's callbacks themselves, three copies of the same list.
-// When the session-ended and disconnect handlers were added the local client
-// got them first and the two servers held their last frame for ever until a
-// later fix caught them up. The list lives here now, once, and the callbacks
-// deliver through the model's own channels, which Init listens on. A callback
-// runs on the daemon read-loop goroutine, so nothing in here touches the model:
-// every event is queued and applied in Update like any other message. The log
-// lines cannot use the model's own ring for the same reason, and they cannot go
-// to the standard logger unconditionally either: in a local client that logger
-// is the terminal the TUI is drawing on, and one line per state sync wrote
-// itself across the frame. They go out only when verbose logging is on, which
-// is when the local client has already pointed the logger at a file.
-//
-// TestEveryDaemonHandlerIsWiredHere pins that no entry point registers one of
-// these itself.
-
-// queueSidebarSessionState keeps the newest state for one rail when the UI is
-// slower than daemon pushes. A mutex also keeps an old client's late callback
-// from evicting a newer generation between receive and send. The UI only
-// receives; it never writes this channel.
 func queueSidebarSessionState(events chan sidebarSessionEvent, mu *sync.Mutex, event sidebarSessionEvent) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -45,7 +22,7 @@ func queueSidebarSessionState(events chan sidebarSessionEvent, mu *sync.Mutex, e
 		}
 	default:
 	}
-	events <- event // one buffered slot; only this function sends to it
+	events <- event
 }
 
 // WireSidebarSessionClient wires the separate passive viewer. Capture the
@@ -54,7 +31,6 @@ func (m *OS) WireSidebarSessionClient(client *session.TUIClient, edge sidebarEdg
 	events, states, done := m.sidebarSessionEvents, m.sidebarSessionStateEvents[edge], m.sidebarSessionDone
 	stateMu := &m.sidebarSessionStateMu[edge]
 	queueTerminal := func(event sidebarSessionEvent) {
-		// The terminal event has its own queue and is never displaced by state.
 		select {
 		case events <- event:
 		case <-done:
@@ -78,20 +54,11 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 	if client == nil {
 		return
 	}
-	// The listing poll is planned per connection: a daemon that pushes
-	// listing changes stopped it, and one that does not (an older host)
-	// needs it again. The new client's cache holds names only until its
-	// first refresh. Update re-plans both; see foreignSessionReplanCmd.
 	m.foreignSessionReplan = true
-	// A new connection starts with nothing said about focus. A client that
-	// replaces a lost one already knows, so it says so at once.
 	if m.hostFocus != hostFocusUnknown {
 		focused := m.hostFocus == hostFocusIn
 		go func() { _ = client.ReportHostFocus(focused) }()
 	}
-	// A verb the daemon routed to this client, applied in Update. Without this
-	// set-option, send-keys and refresh-dock timed out against a served client
-	// while the daemon still reported one attached.
 	client.OnRemoteCommand(func(payload *session.RemoteCommandPayload) error {
 		if m.QueueRemoteCommand(payload) {
 			clientLog("RemoteCommandChan full, dropped a routed %s", payload.CommandType)
@@ -108,48 +75,36 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 		clientLog("Client joined: %s (total: %d, size: %dx%d)", shortID(clientID), clientCount, width, height)
 		m.QueueClientEvent(ClientEvent{Type: "joined", ClientID: clientID, ClientCount: clientCount, Width: width, Height: height, Attach: client.AttachGeneration()})
 	})
-	// Mail an agent left in the session's ring, and receipts for mail an agent
-	// read. Queued like every other broadcast; the mirror is touched in Update.
 	client.OnAgentMail(func(payload session.AgentMailPayload) {
 		if m.QueueClientEvent(ClientEvent{Type: "agent-mail", Mail: payload, Attach: client.AttachGeneration()}) {
 			clientLog("ClientEventChan full, displaced an event for agent mail")
 		}
 	})
-	// The daemon's host table changed. The rail re-polls in Update, where the
-	// poll gate lives; see HostsChangedMsg.
 	client.OnHostsChanged(func(session.HostsChangedPayload) {
 		if m.QueueClientEvent(ClientEvent{Type: "hosts-changed"}) {
 			clientLog("ClientEventChan full, displaced an event for a hosts change")
 		}
 	})
-	// The daemon's session listing changed. The rail refreshes in Update,
-	// where the refresh plan lives; see SessionsChangedMsg.
 	client.OnSessionsChanged(func() {
 		if m.QueueClientEvent(ClientEvent{Type: "sessions-changed"}) {
 			clientLog("ClientEventChan full, displaced an event for a listing change")
 		}
 	})
-	// A pane this client does not stream rang the bell or printed. The dock
-	// marks its workspace tab in Update; see PaneMarkMsg.
 	client.OnPaneMark(func(mark session.PaneMarkPayload) {
 		if m.QueueClientEvent(ClientEvent{Type: "pane-mark", PaneMark: mark}) {
 			clientLog("ClientEventChan full, displaced an event for a pane mark")
 		}
 	})
-	// Native plugins that wait for the person's approval. See
-	// plugin_approval.go.
 	client.OnPluginApprovals(func(p session.PluginApprovalsPayload) {
 		if m.QueueClientEvent(ClientEvent{Type: "plugin-approvals", PluginAsks: p.Asks}) {
 			clientLog("ClientEventChan full, displaced an event for plugin approvals")
 		}
 	})
-	// A prompt opened or closed. See prompt.go.
 	client.OnPrompt(func(p session.PromptPayload) {
 		if m.QueueClientEvent(ClientEvent{Type: "prompt", Prompt: p}) {
 			clientLog("ClientEventChan full, displaced an event for a prompt")
 		}
 	})
-	// A plugin's cells or notice. See plugin_ui.go.
 	client.OnPluginUI(func(p session.PluginUIPayload) {
 		if p.Notice == "" && m.queuePluginCells(p) {
 			return
@@ -158,39 +113,24 @@ func (m *OS) WireDaemonClient(client *session.TUIClient) {
 			clientLog("ClientEventChan full, displaced an event for a plugin notice")
 		}
 	})
-	// A TML surface opened, changed or closed. Applied in Update; see
-	// tml.go.
 	m.initTML()
 	client.OnTMLSurface(m.queueTMLSurface)
-	// The TML calls of the connection this one replaces went on a
-	// connection of their own. See tml_host.go.
 	m.tml.far.drop()
-	// A paste the daemon refused twice, or one too large to send. The person
-	// is told, so a paste never vanishes. See session/paste_retry.go.
 	client.OnPasteRefused(func(_, message string) {
 		if m.QueueClientEvent(ClientEvent{Type: "paste-refused", Reason: message}) {
 			clientLog("ClientEventChan full, displaced an event for a refused paste")
 		}
 	})
-	// A folder the daemon watches for the files section changed. See
-	// sidebar_files_watch.go.
 	client.OnDirChanged(m.fileWatch.remoteDirChanged)
 	client.OnClientLeft(func(clientID string, clientCount int) {
 		clientLog("Client left: %s (remaining: %d)", shortID(clientID), clientCount)
 		m.QueueClientEvent(ClientEvent{Type: "left", ClientID: clientID, ClientCount: clientCount, Attach: client.AttachGeneration()})
 	})
-	// The session's size is the minimum over its clients. The geometry
-	// mutation (TileAllWindows, emulator resizes) happens in Update.
 	client.OnSessionResize(func(width, height, clientCount int, reserve session.LayoutReserve) {
 		clientLog("Session resize: %dx%d chrome %+v (clients: %d)", width, height, reserve, clientCount)
-		// Read here, on the client's read loop, where it is this resize's
-		// own: the loop took it just before calling this handler.
 		gen := client.SessionLayoutGeneration()
 		m.QueueClientEvent(ClientEvent{Type: "resize", ClientCount: clientCount, Width: width, Height: height, Reserve: reserve, Generation: gen, Attach: client.AttachGeneration()})
 	})
-	// The session killed out from under this client, and the daemon going
-	// away. Both leave nothing to render and nothing to reconnect to, so the
-	// client says why and quits. The queue is separate from ClientEventChan.
 	client.OnSessionEnded(func(name, reason string) {
 		clientLog("Session ended: %s (%s)", name, reason)
 		if m.QueueSessionEnded(name, reason) {
@@ -226,15 +166,10 @@ func (m *OS) UnwireDaemonClient(client *session.TUIClient) {
 	client.OnDisconnect(nil)
 }
 
-// staleAttach reports whether a message stamped with attach, the attach
-// generation it arrived under, came from a session this client has since left.
-// The read loop stamps it, so a message read before a switch carries the old
-// count however late Update gets to it. Zero is a message with no stamp.
 func (m *OS) staleAttach(attach uint64) bool {
 	return attach != 0 && m.DaemonClient != nil && attach != m.DaemonClient.AttachGeneration()
 }
 
-// clientLog is the standard logger, when verbose logging is on.
 func clientLog(format string, args ...any) {
 	if verboseLog() {
 		log.Printf("[CLIENT] "+format, args...)
@@ -288,8 +223,6 @@ func (m *OS) RestoreAttachedSession(state *session.SessionState) {
 	} else {
 		m.LogInfo("No existing state to restore")
 		m.adoptEmptySessionVersion(state)
-		// The reserve the daemon agreed, as RestoreFromState takes it for a
-		// session with windows.
 		if m.DaemonClient != nil {
 			m.SessionReserve = m.DaemonClient.SessionLayoutReserve()
 		}
@@ -297,23 +230,10 @@ func (m *OS) RestoreAttachedSession(state *session.SessionState) {
 
 	m.reportFocusChange()
 
-	// The session is now whole: state restored, PTYs wired, layout applied. A
-	// hook that inspects the session here sees what the user is about to see.
 	m.FireAttached()
 }
 
-// reportFocusChange sends the focus reports for a change of the focused
-// pane since the last report: CSI O to the pane that had focus, if it still
-// exists, and CSI I to the pane that has it now.
-//
-// It compares window IDs, not indices. Many paths set FocusedWindow directly
-// (an empty workspace, minimizing the last pane, closing the focused pane)
-// and an index can point at a different pane after a close. Update calls this
-// after every message, so those paths report too, and FocusWindow calls it so
-// that a focus change reports at once.
 func (m *OS) reportFocusChange() {
-	// A client that detached has told the pane it lost focus, and the
-	// messages it handles on its way out must not take that back.
 	if m.detachFired.Load() {
 		return
 	}
@@ -333,8 +253,6 @@ func (m *OS) reportFocusChange() {
 	}
 }
 
-// reportFocusLost tells the pane that has focus that it lost it, as this
-// client leaves.
 func (m *OS) reportFocusLost() {
 	id := m.focusReportedID
 	if id == "" {
@@ -348,8 +266,6 @@ func (m *OS) reportFocusLost() {
 	m.focusReportedID = ""
 }
 
-// adoptFocusReport records the focused pane without a report. A state sync
-// carries a focus change another client made, and that client reported it.
 func (m *OS) adoptFocusReport() {
 	m.focusReportedID = ""
 	if w := m.GetFocusedWindow(); w != nil {
@@ -357,7 +273,6 @@ func (m *OS) adoptFocusReport() {
 	}
 }
 
-// reportPaneFocus tells a guest about a focus change it requested.
 func (m *OS) reportPaneFocus(window *terminal.Window, focused bool) {
 	if window == nil || !window.FocusReportingOn() {
 		return
@@ -371,40 +286,17 @@ func (m *OS) reportPaneFocus(window *terminal.Window, focused bool) {
 	}
 }
 
-// adoptEmptySessionVersion records the daemon state version of a session that
-// arrived with no windows, which RestoreFromState is not run for.
-//
-// Every push this client makes echoes the version back as BaseVersion, and the
-// daemon reads a BaseVersion of 0 as a client that predates versioning and takes
-// its push as sent. A client that attached to an empty session never recorded
-// the version, so its first pushes said 0: a window the daemon created in the
-// meantime (tuios new-window from a script, say) was missing from them, and the
-// push that was taken as sent removed it. A session switch to an empty session
-// kept the previous session's version instead, which is a number about a
-// different session.
 func (m *OS) adoptEmptySessionVersion(state *session.SessionState) {
 	m.DaemonStateVersion = 0
 	if state != nil {
 		m.DaemonStateVersion = state.Version
 	}
-	// The session holds no tree this client has heard of, so whatever tree it
-	// builds from here on is news.
 	m.treeSeen = nil
 	m.treeDerived = nil
-	// The tiling and the layout mode are the session's too, and
-	// RestoreFromState, which takes them for a session with windows, does not
-	// run for one without. Kept from the session just left, a tiled client
-	// came to a new session with tiling on in its own model and off in the
-	// daemon's. The [startup] tiling that follows saw it on and did nothing,
-	// and the daemon made the first window floating (#480). A nil state is a
-	// session with nothing set, so tiling is off.
 	m.WorkspaceLayoutMode = nil
 	m.sessionLayoutMode = ""
 	if state != nil {
 		m.AutoTiling = state.AutoTiling
-		// The per-workspace modes are the session's, and kept from the session
-		// just left they followed the client here: the next switch found the
-		// map holding another session's choices and pushed them to this one.
 		m.WorkspaceLayoutMode = make(map[int]string, len(state.WorkspaceLayoutModes))
 		maps.Copy(m.WorkspaceLayoutMode, state.WorkspaceLayoutModes)
 		m.ApplyLayoutModeName(state.LayoutMode)
@@ -412,28 +304,18 @@ func (m *OS) adoptEmptySessionVersion(state *session.SessionState) {
 	} else {
 		m.AutoTiling = false
 	}
-	// The rail is the session's, and RestoreFromState, which takes it for a
-	// session with windows, does not run for one without. A new session made
-	// from the switcher is empty, and it has to be offered this client's
-	// rail as any other new session is.
 	m.joinSession(state)
 }
 
-// rehydrateWindows wires the restored windows to their daemon PTYs and lays
-// them out for this client's screen. RestoreFromState has already run.
 func (m *OS) rehydrateWindows() {
 	if err := m.RestoreTerminalStates(); err != nil {
 		m.LogWarn("Failed to restore terminal states: %v", err)
 	}
-	// Subscribes to the PTYs of the windows in the current workspace.
 	if err := m.SetupPTYOutputHandlers(); err != nil {
 		m.LogWarn("Failed to set up PTY handlers: %v", err)
 	}
-	// Re-tile for this client's screen, which is not the screen the state was
-	// saved from.
 	if m.AutoTiling {
 		m.TileAllWindows()
 	}
-	// The daemon's PTYs still have the size the last client left them at.
 	m.SyncDaemonPTYDimensions()
 }

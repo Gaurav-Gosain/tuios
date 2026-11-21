@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// bulkOS is the agents view over three agents, each waiting on a held
-// approval: a plain one, a risky one, and a plan. All three are marked.
 func bulkOS(t *testing.T) (*OS, *queueFake) {
 	t.Helper()
 	m, q := replyOS(t)
@@ -38,7 +36,6 @@ func bulkOS(t *testing.T) (*OS, *queueFake) {
 	return m, q
 }
 
-// sentApprovals are the reply-approval calls made, by request id.
 func sentApprovals(q *queueFake) map[string]string {
 	out := map[string]string{}
 	for _, c := range q.calls {
@@ -61,7 +58,6 @@ func TestBulkAllowLeavesOutWhatNeedsASecondLook(t *testing.T) {
 		t.Fatalf("sheet = %+v, want r1 to allow and two held back", sheet)
 	}
 	m.bulkSheetLines(80, 30)
-	// Too soon: nothing goes, and the sheet stays.
 	if cmd := m.InboxAgentsSheetKey("enter"); cmd != nil || m.Inbox.agents.sheet == nil {
 		t.Fatal("enter allowed before the list was on screen for the settle time")
 	}
@@ -71,7 +67,6 @@ func TestBulkAllowLeavesOutWhatNeedsASecondLook(t *testing.T) {
 		t.Fatalf("allowed %v, want r1 once and nothing else", got)
 	}
 
-	// An approval that changed after the list showed it is not allowed.
 	m, q = bulkOS(t)
 	m.InboxAgentsBulkAllow()
 	m.bulkSheetLines(80, 30)
@@ -150,8 +145,6 @@ func TestBulkReplyGoesToEach(t *testing.T) {
 	}
 }
 
-// runCmds runs a command and every command a batch holds, and drops what
-// they return.
 func runCmds(cmd tea.Cmd) {
 	if cmd == nil {
 		return

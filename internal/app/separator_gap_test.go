@@ -8,21 +8,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// A division is two panes facing each other across a split, and the cells the
-// layout left between their rectangles.
 type division struct {
 	a, b     *terminal.Window
 	cells    int
 	vertical bool
 }
 
-// wantCells is what a division between these two panes is allowed to hold.
-//
-// It reads the answer off the panes as drawn rather than off the setting that
-// put them that way. Borderless panes are guest output edge to edge, so the
-// divider the user sees needs a column of its own between them. Panes drawing
-// their own borders have two adjacent border columns doing that job already,
-// and a third column would draw nothing while costing both panes a column.
 func wantCells(d division) int {
 	if d.a.Tiled && d.b.Tiled {
 		return 1
@@ -30,9 +21,6 @@ func wantCells(d division) int {
 	return 0
 }
 
-// paneDivisions finds every pair of visible panes that face each other across a
-// split. Pairs further apart than a division could plausibly be are ignored:
-// they are separated by a third pane, not by a divider.
 func paneDivisions(m *OS) []division {
 	var vis []*terminal.Window
 	for _, w := range m.Windows {
@@ -61,9 +49,6 @@ func paneDivisions(m *OS) []division {
 	return out
 }
 
-// checkDivisions asserts no division holds a cell nothing is drawn in. It is
-// called from checkPaneSizes so that every layout transition the announce
-// matrix already walks is checked for a stranded gap as well.
 func checkDivisions(t *testing.T, m *OS, label string) {
 	t.Helper()
 	for _, d := range paneDivisions(m) {
@@ -108,9 +93,6 @@ func TestLiveToggleReclaimsTheDivider(t *testing.T) {
 				m.ToggleAutoTiling()
 				step("tiling on")
 
-				// Off again, then flip the setting underneath a layout that is
-				// no longer tiling, and back on: no combination may leave a
-				// column stranded.
 				m.ToggleAutoTiling()
 				setSharedBorders(m, !start)
 				step("tiling off, shared flipped")

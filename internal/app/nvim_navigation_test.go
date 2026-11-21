@@ -70,7 +70,6 @@ func TestNvimNavigationRequiresMatchingForwardedKey(t *testing.T) {
 	active := true
 	m.onNvimNavigation(NvimNavigationMsg{WindowID: left.ID, State: &active})
 
-	// Terminal output alone never moves focus.
 	m.onNvimNavigation(NvimNavigationMsg{WindowID: left.ID, Direction: "right"})
 	if m.FocusedWindow != 0 {
 		t.Fatal("an unsolicited OSC focus request moved focus")

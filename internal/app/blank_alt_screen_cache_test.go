@@ -8,15 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// These tests assert directly on renderTerminal's output and on the window's
-// cache state. A black box assertion on a captured PTY screen was tried first
-// and does not work for this class of bug: it passes against both the broken
-// and the fixed build, because whether the bad frame is on screen at the moment
-// the harness samples it is a matter of timing. The cache is the thing that
-// goes wrong, so the cache is what these tests inspect.
-
-// newTestWindow builds a daemon window with a live emulator and drains its data
-// channel, mirroring the setup used by the state sync race test.
 func newTestWindow(t testing.TB, id string, w, h int) *terminal.Window {
 	t.Helper()
 	ptyDataChan := make(chan struct{}, 1)
@@ -65,7 +56,6 @@ func TestBlankAltScreenFrameIsNotCached(t *testing.T) {
 	win := newTestWindow(t, "blank-alt-0001", 60, 20)
 	m := newTestOS(win)
 
-	// Paint the main screen, as a shell would.
 	win.LockIO()
 	_, _ = win.Terminal.Write([]byte("SHELLPROMPT"))
 	win.UnlockIO()
@@ -78,8 +68,6 @@ func TestBlankAltScreenFrameIsNotCached(t *testing.T) {
 		t.Fatal("setup: a non-blank frame should have been cached")
 	}
 
-	// The application enters the alternate screen, which clears it, and has not
-	// painted yet. This is the gap the bug lives in.
 	win.LockIO()
 	_, _ = win.Terminal.Write([]byte("\x1b[?1049h"))
 	win.UnlockIO()
@@ -90,8 +78,6 @@ func TestBlankAltScreenFrameIsNotCached(t *testing.T) {
 		t.Fatalf("setup: expected a blank frame just after alt screen entry, got %q", out)
 	}
 
-	// The blank frame must not have become the cached truth, and the window must
-	// still be asking to repaint.
 	if win.CachedContent != "" && isBlankRender(win.CachedContent) {
 		t.Error("a blank frame was cached; an idle application can never repair it")
 	}
@@ -99,13 +85,10 @@ func TestBlankAltScreenFrameIsNotCached(t *testing.T) {
 		t.Error("ContentDirty was cleared by a blank frame; nothing will re-read the emulator")
 	}
 
-	// Focus moves away before the application paints. The pane must not serve a
-	// blank cache.
 	if out := m.renderTerminal(win, false, false); isBlankRender(out) && win.CachedContent != "" {
 		t.Error("unfocused render served a blank cached frame")
 	}
 
-	// The application finally paints. An unfocused render must pick it up.
 	win.LockIO()
 	_, _ = win.Terminal.Write([]byte("\x1b[1;1HEDITORCONTENT"))
 	win.UnlockIO()
@@ -134,8 +117,6 @@ func TestUnfocusedRenderHonoursContentDirty(t *testing.T) {
 		t.Fatalf("setup: %q", out)
 	}
 
-	// New output arrives and the window is marked dirty without the cache being
-	// dropped, exactly as WriteToPTY does.
 	win.LockIO()
 	_, _ = win.Terminal.Write([]byte("\x1b[2;1HSECONDCONTENT"))
 	win.UnlockIO()

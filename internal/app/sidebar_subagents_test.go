@@ -28,13 +28,11 @@ func TestNarrowNoteKeepsTheSubagentCount(t *testing.T) {
 	row := func(e sidebarAgentEntry, cw int) string {
 		return ansi.Strip(m.sidebarAgentNoteRow(e, sidebarVariantFull, cw, pal, sidebarRowState{}))
 	}
-	// The line has cw-4 cells, and "ctx 91% · 3 subagents" takes 21.
 	for cw := 25; cw <= 40; cw++ {
 		got := row(e, cw)
 		if !strings.Contains(got, "ctx 91% · 3 subagents") {
 			t.Errorf("width %d dropped the count: %q", cw, got)
 		}
-		// "claude · ctx 91% · 3 subagents" takes 30.
 		if keeps := strings.Contains(got, "claude"); keeps != (cw-4 >= 30) {
 			t.Errorf("width %d kept the harness = %v: %q", cw, keeps, got)
 		}

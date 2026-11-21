@@ -5,19 +5,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The pointer's side of the link feature: what it is on, and what changes when
-// that moves.
-//
-// The rule for who owns a pointer event over pane content is the one the click
-// path already keeps: a pane in terminal mode whose guest asked for mouse
-// reporting owns the mouse, and tuios does not draw on top of a program that is
-// tracking the cursor itself. Underlining a link a click would forward to vim
-// anyway would be a promise tuios does not keep, so the default hover policy
-// suppresses the highlight under exactly the condition the click is forwarded
-// under, and nowhere else. link_hover = "always" hands the call to the user:
-// a pane whose links are meant for the modifier click wants the highlight even
-// while the guest tracks the mouse.
-
 // LinkHoverActive reports whether the pointer is on a link. The motion filter
 // reads it so one event still arrives after the pointer leaves, which is what
 // clears the highlight.
@@ -31,8 +18,6 @@ func (m *OS) HoveredLink() (PaneLink, bool) {
 	return m.linkHover, true
 }
 
-// linkHoverFor returns the run to highlight in this window, if any. The render
-// loop asks per pane, and only the pane under the pointer ever answers.
 func (m *OS) linkHoverFor(window *terminal.Window) (PaneLink, bool) {
 	if !m.linkHoverOn || window == nil || m.linkHover.WindowID != window.ID {
 		return PaneLink{}, false
@@ -185,18 +170,10 @@ func (m *OS) LinkAt(x, y int) (PaneLink, bool) {
 	return m.panePathAt(window, termX, termY, pathNow)
 }
 
-// hoverSuppressedByGuest applies the hover policy to a pane whose guest might
-// own the pointer. link_hover = "always" never suppresses; the default "safe"
-// keeps the underline off wherever the click would be forwarded, the same
-// three-part test the click handler applies.
 func (m *OS) hoverSuppressedByGuest(window *terminal.Window) bool {
 	return m.Settings.LinkHover != config.LinkHoverAlways && m.guestOwnsPointer(window)
 }
 
-// guestOwnsPointer reports whether the program in this pane is tracking the
-// mouse and would receive a click on it. It is the same three-part test the
-// click handler applies before forwarding: the pane is focused, tuios is in
-// terminal mode, and the guest asked for mouse reporting.
 func (m *OS) guestOwnsPointer(window *terminal.Window) bool {
 	if window == nil || window.Terminal == nil || m.Mode != TerminalMode {
 		return false
@@ -207,12 +184,8 @@ func (m *OS) guestOwnsPointer(window *terminal.Window) bool {
 	return window.Terminal.HasMouseMode()
 }
 
-// setLinkHover records a new run and repaints the panes that changed. Moving
-// from one cell of a link to the next is not a change, so a pointer travelling
-// along a link repaints once on arrival and not again.
 func (m *OS) setLinkHover(link PaneLink) {
 	if m.linkHoverOn && m.linkHover.Same(link) {
-		// The run is the same; only the cell the label hangs off moved.
 		m.linkHover.Row, m.linkHover.Col = link.Row, link.Col
 		return
 	}
@@ -225,8 +198,6 @@ func (m *OS) setLinkHover(link PaneLink) {
 	m.repaintWindowID(link.WindowID)
 }
 
-// clearLinkHover drops the run and repaints the pane that was carrying it.
-// Returns false so the callers above can end on it.
 func (m *OS) clearLinkHover() bool {
 	if !m.linkHoverOn {
 		return false
@@ -238,8 +209,6 @@ func (m *OS) clearLinkHover() bool {
 	return false
 }
 
-// repaintWindowID marks one pane's content dirty by id, so the compositor drops
-// its cached layer and the cell loop runs again with the new highlight.
 func (m *OS) repaintWindowID(id string) {
 	if id == "" {
 		return

@@ -12,17 +12,6 @@ import (
 	"testing"
 )
 
-// openOverlayKindsSource reads the gate table in eachOverlayGate out of this
-// package's own source and returns every kind it lists. openOverlayKinds and
-// AnyOverlayOpen both read that table.
-//
-// It reads the source instead of calling the function because the gates are not
-// all reachable from a test: one is a method, one is a field of another struct,
-// and the rest are plain flags. The first version of this guard turned on the
-// flags it could think of by hand, which is the same kind of hand-kept list the
-// bug is about, and it missed two kinds for exactly that reason. A parse of the
-// function cannot miss one: a new overlay has to write its key here to open at
-// all, and that is the row this reads.
 func openOverlayKindsSource(t *testing.T) []string {
 	t.Helper()
 
@@ -48,8 +37,6 @@ func openOverlayKindsSource(t *testing.T) []string {
 		for _, decl := range file.Decls {
 			switch d := decl.(type) {
 			case *ast.GenDecl:
-				// String constants, so a key written as a named constant
-				// (overlayKindShot) resolves to the kind it stands for.
 				if d.Tok != token.CONST {
 					continue
 				}
@@ -78,7 +65,6 @@ func openOverlayKindsSource(t *testing.T) []string {
 		t.Fatal("eachOverlayGate not found in the package source; this guard reads it and cannot check anything without it")
 	}
 
-	// Every row of the gate table in the body. The first field is the kind.
 	var kinds []string
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
 		table, ok := n.(*ast.CompositeLit)
@@ -121,13 +107,11 @@ func openOverlayKindsSource(t *testing.T) []string {
 	return kinds
 }
 
-// isIdent reports whether e is the identifier name.
 func isIdent(e ast.Expr, name string) bool {
 	id, ok := e.(*ast.Ident)
 	return ok && id.Name == name
 }
 
-// stringLit returns the value of an untyped string literal.
 func stringLit(e ast.Expr) (string, bool) {
 	lit, ok := e.(*ast.BasicLit)
 	if !ok || lit.Kind != token.STRING {

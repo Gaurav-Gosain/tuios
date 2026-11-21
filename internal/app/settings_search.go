@@ -9,21 +9,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
-// The settings page is fourteen tabs and nearly two hundred rows, and without
-// search the only way to a row is to know which tab it is filed under. The
-// search line finds a row from anything a person might remember about it: what
-// it is called, its config key, the value it has now, or a word from its
-// description. The results come from every tab at once, each marked with the
-// tab it lives on, and the row found is the real row: enter, the arrows and a
-// click act on it where it stands, so a person who found a setting never has to
-// go and find it again to change it.
-
-// settingsField is the part of a row a search matched.
 type settingsField int
 
-// The fields a row is searched by, in the order a match on each ranks: a hit
-// on the name a person reads beats one on the key, which beats one on the
-// value in force, which beats one in the description.
 const (
 	settingsFieldLabel settingsField = iota
 	settingsFieldKey
@@ -31,34 +18,21 @@ const (
 	settingsFieldDesc
 )
 
-// settingsHit is one row a search found.
 type settingsHit struct {
 	cat, item int
 	field     settingsField
-	// pos is the byte offsets the query matched in the field's text, for the
-	// highlight.
-	pos   []int
-	score int
+	pos       []int
+	score     int
 }
 
-// settingsSearchState is the search line and what it found.
 type settingsSearchState struct {
-	// open is whether the search line is up. While it is, printable keys go to
-	// the query and the list shows the results.
-	open bool
-	// query is the search text, with its caret.
-	query textedit.Line
-	hits  []settingsHit
-	// backCat and back are the tab and the row cursor and window the tab view
-	// had when the search opened, so closing the search puts the person back
-	// where they were.
+	open    bool
+	query   textedit.Line
+	hits    []settingsHit
 	backCat int
 	back    listnav.State
 }
 
-// settingsValueText is what a row shows as its value, as text a search can
-// match: a toggle's state in the words the row uses, a field's value or the
-// word for its being unset.
 func (m *OS) settingsValueText(item settingItem) string {
 	switch {
 	case item.Control == controlBool && item.boolVal != nil:
@@ -75,22 +49,13 @@ func (m *OS) settingsValueText(item settingItem) string {
 	return ""
 }
 
-// settingsDescCompact is the widest a description match may spread for a query
-// of n bytes. A fuzzy match against a whole sentence finds almost any short
-// query somewhere in it one letter at a time, which would put every row in the
-// results; a match that stays close to the query's own length is one a person
-// would recognise as the word they typed.
 func settingsDescCompact(n int) int { return n + n/2 + 1 }
 
-// searchSettings ranks every row of every category against query. An empty
-// query finds nothing: the search line is open but has not asked anything yet.
 func (m *OS) searchSettings(cats []settingsCategory, query string) []settingsHit {
 	query = strings.TrimSpace(query)
 	if query == "" {
 		return nil
 	}
-	// A key spells its words with underscores and dots, and a person types
-	// them with spaces.
 	keyQuery := strings.ReplaceAll(query, " ", "_")
 
 	var matcher fuzzy.Matcher
@@ -120,7 +85,6 @@ func (m *OS) searchSettings(cats []settingsCategory, query string) []settingsHit
 	return hits
 }
 
-// bestSettingsMatch is the best field of one row for a query, if any matched.
 func (m *OS) bestSettingsMatch(matcher *fuzzy.Matcher, item settingItem, query, keyQuery string) (settingsHit, bool) {
 	try := func(field settingsField, pattern, text string, compact bool) (settingsHit, bool) {
 		if text == "" {
@@ -133,7 +97,6 @@ func (m *OS) bestSettingsMatch(matcher *fuzzy.Matcher, item settingItem, query, 
 		if compact && r.End-r.Start > settingsDescCompact(len(pattern)) {
 			return settingsHit{}, false
 		}
-		// The matcher owns its position buffer and reuses it on the next call.
 		return settingsHit{field: field, pos: slices.Clone(r.Positions), score: r.Score}, true
 	}
 	if hit, ok := try(settingsFieldLabel, query, item.Label, false); ok {
@@ -148,9 +111,6 @@ func (m *OS) bestSettingsMatch(matcher *fuzzy.Matcher, item settingItem, query, 
 	return try(settingsFieldDesc, query, item.Desc, true)
 }
 
-// settingsSearchRows is the rows the open search shows, each with the hit
-// that found it. A hit whose row has since gone (a host removed from the
-// Hosts tab) is dropped rather than drawn as something else.
 func (m *OS) settingsSearchRows(cats []settingsCategory) ([]settingItem, []settingsHit) {
 	hits := m.settingsSearch.hits
 	items := make([]settingItem, 0, len(hits))
@@ -217,7 +177,6 @@ func (m *OS) SettingsSearchPaste(s string) {
 	}
 }
 
-// settingsSearchRefiltered ranks the rows against the query as it is now.
 func (m *OS) settingsSearchRefiltered() {
 	st := &m.settingsSearch
 	st.hits = m.searchSettings(m.settingsCategories(), st.query.String())

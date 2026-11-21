@@ -23,22 +23,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 )
 
-// The capability probe needs a console to talk to, which a test binary run by
-// go test does not have. TestHostProbeAsksTheWindowsConsole runs this binary
-// again as TestHostProbeChild on a pseudo console of its own, plays the host
-// terminal on the other side, and reads back how the child did.
-
-// probeChildEnv tells the binary it is the child on the pseudo console, and
-// whether the host's answers reach it: "host" on conpty.dll, "inbox" on the
-// inbox ConPTY.
 const probeChildEnv = "TUIOS_TEST_PROBE_CHILD"
 
-// conptyDirEnv names a folder holding conpty.dll and OpenConsole.exe from the
-// Microsoft.Windows.Console.ConPTY package, as for the ptyspawn tests.
 const conptyDirEnv = "TUIOS_E2E_CONPTY_DIR"
 
-// probeStagedEnv tells the binary it is the copy runStaged started beside the
-// package's files.
 const probeStagedEnv = "TUIOS_TEST_PROBE_STAGED"
 
 // TestHostProbeAsksTheWindowsConsole checks that the probe asks the host
@@ -83,7 +71,7 @@ func TestHostProbeAsksTheWindowsConsole(t *testing.T) {
 	}
 
 	got := make(chan []byte, 1)
-	var partial atomic.Value // what the child printed so far, for a timeout
+	var partial atomic.Value
 	go func() {
 		var out []byte
 		var cells, da1s int
@@ -92,9 +80,6 @@ func TestHostProbeAsksTheWindowsConsole(t *testing.T) {
 			n, err := pty.Read(buf)
 			out = append(out, buf[:n]...)
 			partial.Store(string(out))
-			// Each query is answered once, in the order asked: a 9x19 cell,
-			// which is not the 10x20 fallback, and sixel. OpenConsole asks
-			// for DA1 itself as it starts.
 			for ; cells < bytes.Count(out, []byte("\x1b[16t")); cells++ {
 				_, _ = pty.Write([]byte("\x1b[6;19;9t"))
 			}
@@ -123,11 +108,6 @@ func TestHostProbeAsksTheWindowsConsole(t *testing.T) {
 	}
 }
 
-// runStaged copies exe, with the conpty.dll and OpenConsole.exe from dir, into
-// a new folder and runs the test from there. A pane looks for the DLL beside
-// the executable. A process loads it with its first pane and keeps it, so the
-// test needs a process that has opened none. The copies go with the folder,
-// and nothing stays beside a binary built with go test -c.
 func runStaged(t *testing.T, exe, dir string) {
 	t.Helper()
 	stage := t.TempDir()
@@ -161,8 +141,6 @@ func TestHostProbeChild(t *testing.T) {
 		t.Skip("runs only on the pseudo console of TestHostProbeAsksTheWindowsConsole")
 	}
 
-	// in is left for the process exit to close. Closing a console handle
-	// waits for a read on it, and a failure below can leave one blocked.
 	in, err := os.OpenFile("CONIN$", os.O_RDWR, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -172,9 +150,6 @@ func TestHostProbeChild(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer out.Close()
-	// Output VT processing starts off, as in a classic console window, where
-	// the queries would be printed as text. The probe turns it on and puts
-	// both modes back.
 	outMode := consoleMode(t, out) &^ windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING
 	if err := windows.SetConsoleMode(windows.Handle(out.Fd()), outMode); err != nil {
 		t.Fatal(err)
@@ -207,17 +182,11 @@ func TestHostProbeChild(t *testing.T) {
 	}
 	defer func() { _ = term.Restore(int(in.Fd()), old) }()
 	handle := windows.Handle(in.Fd())
-	// A second DA1 answer, from a host that saw the query the console also
-	// answered, is not part of what is tested below.
 	time.Sleep(200 * time.Millisecond)
 	if err := xwindows.FlushConsoleInputBuffer(handle); err != nil {
 		t.Fatal(err)
 	}
 
-	// A focus change holds no text. The read gives up on time rather than
-	// blocking until a key arrives.
-	// The 5 s limit only stops a read that never returns; on time is within
-	// twice the timeout.
 	writeConsoleInput(t, handle, focusRecord())
 	const timeout = 300 * time.Millisecond
 	reply, took, ok := readWithin(in, timeout, 5*time.Second)
@@ -230,13 +199,6 @@ func TestHostProbeChild(t *testing.T) {
 		t.Fatalf("the read gave up after %v on a focus record, past its %v timeout", took, timeout)
 	}
 
-	// Nor does a stream of them, as from a mouse moving over the window, hold
-	// it past the timeout: the records are dropped a batch at a time, and the
-	// deadline is checked between batches. The stream stops after 2 s.
-	//
-	// The writer keeps a backlog topped up rather than writing in a loop: a
-	// loop of writes held the reader's console calls back on a busy machine,
-	// and the read gave up late though the code was right.
 	stop, wrote := make(chan struct{}), make(chan int, 1)
 	go func() {
 		n := 0
@@ -272,7 +234,6 @@ func TestHostProbeChild(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The positive half: text the console holds is read.
 	writeConsoleInput(t, handle, keyRecord('x', true), keyRecord('x', false))
 	if reply, _, ok := readWithin(in, time.Second, 5*time.Second); !ok || reply != "x" {
 		t.Fatalf("the read returned %q (finished %v), want %q", reply, ok, "x")
@@ -303,7 +264,6 @@ func TestPollReadableGivesUpAtAnExpiredDeadline(t *testing.T) {
 	}
 }
 
-// consoleMode is f's console mode.
 func consoleMode(t *testing.T, f *os.File) uint32 {
 	t.Helper()
 	var mode uint32
@@ -313,8 +273,6 @@ func consoleMode(t *testing.T, f *os.File) uint32 {
 	return mode
 }
 
-// readWithin runs readTTYResponse until it has read anything or timeout runs
-// out, and reports how long it took, or false if it has not returned by limit.
 func readWithin(in *os.File, timeout, limit time.Duration) (string, time.Duration, bool) {
 	done := make(chan string, 1)
 	start := time.Now()
@@ -338,7 +296,7 @@ func keyRecord(char rune, down bool) xwindows.InputRecord {
 	if down {
 		binary.LittleEndian.PutUint32(r.Event[0:4], 1)
 	}
-	binary.LittleEndian.PutUint16(r.Event[4:6], 1) // repeat count
+	binary.LittleEndian.PutUint16(r.Event[4:6], 1)
 	binary.LittleEndian.PutUint16(r.Event[10:12], uint16(char))
 	return r
 }

@@ -7,17 +7,6 @@ import (
 	"testing"
 )
 
-// Every placement tuios sends the host has to carry C=1.
-//
-// The protocol's default is C=0, which moves the cursor to after the image's
-// bottom right cell. tuios places images anywhere in a pane, including its last
-// rows, so that move runs past the bottom of the screen and the host terminal
-// scrolls to make room. The save and restore around a placement put the cursor
-// back; they cannot put back a scroll. Every frame after it is then drawn one
-// row out, which is the whole screen sliding up and the chrome smearing across
-// it, and nothing recovers until the screen is fully redrawn.
-
-// kittyPlacement matches an APC placement command and captures its parameters.
 var kittyPlacement = regexp.MustCompile(`\x1b_G([^;\x1b]*)`)
 
 // TestEveryHostPlacementPinsTheCursor walks the emitted bytes of each placement
@@ -33,7 +22,6 @@ func TestEveryHostPlacementPinsTheCursor(t *testing.T) {
 	}
 }
 
-// assertPinsCursor fails when a real placement in out does not carry C=1.
 func assertPinsCursor(t *testing.T, name, out string) {
 	t.Helper()
 	found := 0
@@ -43,8 +31,6 @@ func assertPinsCursor(t *testing.T, name, out string) {
 			continue
 		}
 		if strings.Contains(params, "U=1") {
-			// A virtual placement puts the image in cells the guest wrote, so
-			// the host never moves a cursor for it.
 			continue
 		}
 		found++
@@ -84,7 +70,6 @@ func TestThePlacementBuildersAllPinTheCursor(t *testing.T) {
 	}
 }
 
-// readSourceFile reads one file of this package.
 func readSourceFile(t *testing.T, name string) string {
 	t.Helper()
 	b, err := os.ReadFile(name)

@@ -10,9 +10,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// streamFileFrame writes one transmit-and-place frame naming a file, which is
-// what a shared-memory or file stream sends for every frame it draws: the same
-// image id, new pixels behind it, a placement asked for each time.
 func streamFileFrame(em *vt.Emulator, id, w, h int, path string) {
 	enc := base64.StdEncoding.EncodeToString([]byte(path))
 	_, _ = em.Write(fmt.Appendf(nil,
@@ -29,7 +26,7 @@ func streamFileFrame(em *vt.Emulator, id, w, h int, path string) {
 // forwarded, two placements sent, one picture on screen.
 func TestStreamedFileFrameIsPlacedEveryFrame(t *testing.T) {
 	_, em, _, refresh := placementHarness(t, 100, 40, 1)
-	refresh() // let the harness's own frame settle
+	refresh()
 
 	if idle := countCmd(refresh(), "a=p,"); idle != 0 {
 		t.Fatalf("a refresh with nothing new sent %d placements, want none", idle)
@@ -39,10 +36,6 @@ func TestStreamedFileFrameIsPlacedEveryFrame(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "frame")
 
 	for frame := 1; frame <= 4; frame++ {
-		// New pixels behind the same id, which is what a stream sends and what
-		// the placement has to follow. Re-advertising the same bytes is a
-		// different thing entirely (a frame the host is already showing), and
-		// is covered by TestRepeatFileFrameIsNotForwarded.
 		if err := os.WriteFile(path, []byte{byte(frame)}, 0o600); err != nil {
 			t.Fatal(err)
 		}

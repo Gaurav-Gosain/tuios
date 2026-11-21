@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// crowdedNamedDockOS is a 120-column bar with four named workspaces and n
-// minimized panes whose names do not fit beside them, so every frame has to
-// shorten the names.
 func crowdedNamedDockOS(t testing.TB, n int) *OS {
 	t.Helper()
 	m := dockCrowdedOS(t, 120, 4, n)

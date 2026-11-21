@@ -10,27 +10,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// These tests cover the path the [startup] settings are actually used on: a
-// client attaching to a daemon session that already holds the window the daemon
-// created for it. Two things went wrong there and neither is visible from an
-// OS built by hand.
-//
-// The session is not empty, because the daemon gave it a window, so the guard
-// on applyStartupPreferences skipped every [startup] setting the user asked
-// for. And the daemon, not the client, holds AutoTiling: a client that turns
-// tiling on without pushing that to the daemon has it turned straight back off
-// by the next state the daemon broadcasts, which is what made scrolling mode in
-// particular refuse to start tiled.
-
 const (
 	startupCols = 120
 	startupRows = 40
 	startupWait = 10 * time.Second
 )
 
-// startupRig is a real daemon, a session the daemon built with its own initial
-// window, a client OS attached to it the way cmd/tuios attaches, and a second
-// connection that watches what the daemon ends up holding.
 type startupRig struct {
 	t    *testing.T
 	m    *OS
@@ -39,11 +24,6 @@ type startupRig struct {
 	q    []*session.SessionState
 }
 
-// newStartupRig brings all of that up with the given [startup] config.
-//
-// It does not reuse the rehydration rig's attachClientOS: that one hardcodes a
-// default config, and the whole question here is what a non-default [startup]
-// section does on the attach path.
 func newStartupRig(t *testing.T, cfg *config.UserConfig, arrange bool) *startupRig {
 	t.Helper()
 	ownSocket(t)
@@ -65,9 +45,6 @@ func newStartupRig(t *testing.T, cfg *config.UserConfig, arrange bool) *startupR
 	if err := boot.Connect("test", startupCols, startupRows); err != nil {
 		t.Fatalf("bootstrap connect: %v", err)
 	}
-	// A detached create is how the daemon builds a session on its own: it comes
-	// back holding one real window with one real PTY, and that window is marked
-	// Unplaced because the daemon has no viewport to place it in.
 	if err := boot.CreateDetachedSession(name, startupCols, startupRows); err != nil {
 		t.Fatalf("create detached session: %v", err)
 	}
@@ -78,9 +55,6 @@ func newStartupRig(t *testing.T, cfg *config.UserConfig, arrange bool) *startupR
 
 	r := &startupRig{t: t}
 
-	// The watcher stays attached for the whole test and reads every state the
-	// daemon broadcasts, so what the daemon holds can be asserted on without
-	// asking the client under test to vouch for it.
 	watch := session.NewTUIClient()
 	if err := watch.Connect("test", startupCols, startupRows); err != nil {
 		t.Fatalf("watcher connect: %v", err)
@@ -130,8 +104,6 @@ func newStartupRig(t *testing.T, cfg *config.UserConfig, arrange bool) *startupR
 	if err := m.SetupPTYOutputHandlers(); err != nil {
 		t.Fatalf("setup pty handlers: %v", err)
 	}
-	// What the program loop does with a broadcast, queued so it is applied on
-	// the test's own goroutine rather than the read loop's.
 	c.OnStateSync(func(state *session.SessionState, _, _ string) {
 		r.mu.Lock()
 		r.q = append(r.q, state)
@@ -148,16 +120,6 @@ func newStartupRig(t *testing.T, cfg *config.UserConfig, arrange bool) *startupR
 	return r
 }
 
-// arrangeSession makes the session one a user arranged: a client attaches,
-// places the panes against a real viewport and pushes that, which is what clears
-// Unplaced daemon-side. It leaves tiling off, so a later attach that stamped
-// [startup] tiling over the arrangement would be visible.
-//
-// The push is retried because the daemon rejects one built from a version older
-// than its own: it reconciles the push away and sends the merged state back for
-// the client to build its next one from. A real client does that through its
-// program loop; this does it by hand, which is what makes the arrangement
-// something the test can rely on having happened.
 func arrangeSession(t *testing.T, r *startupRig, name string) {
 	t.Helper()
 	m, c := attachClientOS(t, name, startupCols, startupRows, false)
@@ -205,18 +167,12 @@ func (r *startupRig) record(state *session.SessionState) {
 	r.mu.Unlock()
 }
 
-// daemonState is the last state the daemon broadcast.
 func (r *startupRig) daemonState() *session.SessionState {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.seen
 }
 
-// bootFor is boot with the wait chosen, for the cases whose condition is that
-// nothing happens: those cannot wait for a signal, so they wait out the window
-// in which the settings would have been applied. Applying them is synchronous
-// with the first WindowSizeMsg, so the window only has to cover the sync that
-// follows it.
 func (r *startupRig) bootFor(cond func() bool, wait time.Duration) {
 	r.t.Helper()
 	r.m.Update(tea.WindowSizeMsg{Width: startupCols, Height: startupRows})
@@ -244,7 +200,6 @@ func (r *startupRig) bootFor(cond func() bool, wait time.Duration) {
 	}
 }
 
-// startupConfig is a config with the [startup] section under test.
 func startupConfig(tiled bool, layoutMode string) *config.UserConfig {
 	cfg := config.DefaultConfig()
 	cfg.Startup.Tiled = tiled

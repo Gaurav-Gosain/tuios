@@ -107,7 +107,6 @@ func TestPaneOverlayPalettesStayWithTheirClient(t *testing.T) {
 	}
 }
 
-// mustColor parses a hex colour the way the config does.
 func mustColor(t *testing.T, hex string) color.Color {
 	t.Helper()
 	c := theme.ConfigColor(hex)

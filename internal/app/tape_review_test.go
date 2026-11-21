@@ -9,8 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/tape/trust"
 )
 
-// checkTape returns the current trust status for the tape in dir, via a fresh
-// store read.
 func checkTape(t *testing.T, store *trust.Store, dir string) trust.Result {
 	t.Helper()
 	res, err := store.Check(filepath.Join(dir, trust.TapeFileName))
@@ -19,10 +17,6 @@ func checkTape(t *testing.T, store *trust.Store, dir string) trust.Result {
 	}
 	return res
 }
-
-// The reviewed content of these tapes runs through startTapePlayback (no daemon
-// in a unit test, so session scope falls back to the current session). ScriptMode
-// flipping true is the observable proof that the tape ran.
 
 func TestReviewRunOnceDoesNotPersistTrust(t *testing.T) {
 	m, store := newDetectOS(t, config.TapeAutorunAsk)
@@ -50,7 +44,6 @@ func TestReviewRunOnceDoesNotPersistTrust(t *testing.T) {
 func TestReviewIneligibleOffersNoRun(t *testing.T) {
 	m, _ := newDetectOS(t, config.TapeAutorunAsk)
 	dir := tapeDir(t, "Type \"echo hi\" Enter\n")
-	// Group/world-writable makes the tape ineligible.
 	if err := os.Chmod(filepath.Join(dir, trust.TapeFileName), 0o666); err != nil {
 		t.Fatalf("chmod: %v", err)
 	}
@@ -59,7 +52,6 @@ func TestReviewIneligibleOffersNoRun(t *testing.T) {
 	if m.TapeReview == nil || m.TapeReview.Status != trust.StatusIneligible {
 		t.Fatalf("status = %v, want ineligible", m.TapeReview)
 	}
-	// 'r' and 't' must do nothing on an ineligible tape.
 	m.HandleTapeReviewInput("r")
 	m.HandleTapeReviewInput("t")
 	if m.ScriptMode {
@@ -78,7 +70,6 @@ func TestReviewEditedTapeRepromptsAsChanged(t *testing.T) {
 		t.Fatalf("trust: %v", err)
 	}
 
-	// Edit the tape after trusting it.
 	if err := os.WriteFile(filepath.Join(dir, trust.TapeFileName), []byte("Type \"two\" Enter\n"), 0o600); err != nil {
 		t.Fatalf("rewrite: %v", err)
 	}
@@ -99,7 +90,6 @@ func TestAutoModeEditedTrustedTapeDoesNotRun(t *testing.T) {
 	if err := store.Trust(res.Path, res.Hash); err != nil {
 		t.Fatalf("trust: %v", err)
 	}
-	// Edit after trusting: the hash no longer matches, so it must not auto-run.
 	if err := os.WriteFile(filepath.Join(dir, trust.TapeFileName), []byte("Scope current\nType \"evil\" Enter\n"), 0o600); err != nil {
 		t.Fatalf("rewrite: %v", err)
 	}
@@ -123,7 +113,7 @@ func TestOffModeRunsNothingFromReview(t *testing.T) {
 func TestRunRefusesWhileAnotherTapeRuns(t *testing.T) {
 	m, _ := newDetectOS(t, config.TapeAutorunAsk)
 	dir := tapeDir(t, "Scope current\nType \"echo hi\" Enter\n")
-	m.ScriptMode = true // pretend a tape is already running
+	m.ScriptMode = true
 
 	before := m.ScriptPlayer
 	m.runProjectTape([]byte("Scope current\nType \"x\" Enter\n"), dir)
@@ -131,8 +121,6 @@ func TestRunRefusesWhileAnotherTapeRuns(t *testing.T) {
 		t.Fatalf("a second tape started while one was running")
 	}
 }
-
-// --- Auto-review (auto_review setting) ---
 
 func TestAutoReviewDeniedNeverOpens(t *testing.T) {
 	m, store := newDetectOS(t, config.TapeAutorunAsk)
@@ -208,7 +196,6 @@ func TestReviewTrustedTapeRunsAndRevokes(t *testing.T) {
 		t.Fatalf("trust: %v", err)
 	}
 
-	// Run a trusted tape with 'r'.
 	m.openTapeReviewForDir(dir)
 	if m.TapeReview.Status != trust.StatusTrusted {
 		t.Fatalf("status = %v, want trusted", m.TapeReview.Status)
@@ -217,7 +204,6 @@ func TestReviewTrustedTapeRunsAndRevokes(t *testing.T) {
 		t.Fatalf("trusted Run did not start the tape")
 	}
 
-	// Revoke with 'n'.
 	m.ScriptMode = false
 	m.openTapeReviewForDir(dir)
 	if !m.HandleTapeReviewInput("n") {

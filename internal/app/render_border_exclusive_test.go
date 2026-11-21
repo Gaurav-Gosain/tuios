@@ -8,19 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// A pane edge is drawn by one of two systems: the pane's own border box
-// (renderWindowBox, unless rendersBorderless says otherwise) or the shared
-// separator overlay (renderSeparatorOverlay). They are alternatives, so a frame
-// carrying both is the doubled-border fault.
-//
-// These assert against the composed frame rather than the layout, because the
-// layout was already correct in the frame that first showed the fault: the
-// rectangles had their separator gaps reserved and the panes drew boxes inside
-// them anyway.
-
-// borderModeOS builds an auto-tiling model of n windows in the given border
-// mode. The windows start untiled, which is what a freshly created pane looks
-// like and is the state that arms the deferral the transition test exercises.
 func borderModeOS(t *testing.T, n int, shared, animations bool) *OS {
 	t.Helper()
 	origShared, origAnim := config.Global.SharedBorders, config.Global.Motion
@@ -28,8 +15,6 @@ func borderModeOS(t *testing.T, n int, shared, animations bool) *OS {
 	origSidebar := config.Global.SidebarEnabled
 	config.Global.SharedBorders = shared
 	config.Global.SetAnimationsOn(animations)
-	// Other tests in this package mutate the style, and the ASCII set draws every
-	// corner as "+", which would hide a pane box among the separator glyphs.
 	config.Global.BorderStyle = "rounded"
 	config.Global.UseASCIIOnly = false
 	config.Global.SidebarEnabled = false
@@ -42,9 +27,7 @@ func borderModeOS(t *testing.T, n int, shared, animations bool) *OS {
 	})
 
 	m := &OS{
-		Settings: config.Global,
-		// The layout reads the model's session-settled geometry, seeded from
-		// the globals the way NewOS seeds it.
+		Settings:         config.Global,
 		SharedBorders:    config.Global.SharedBorders,
 		PaneGap:          config.Global.PaneGap,
 		NumWorkspaces:    9,
@@ -66,8 +49,6 @@ func borderModeOS(t *testing.T, n int, shared, animations bool) *OS {
 	return m
 }
 
-// frameGrid composes the frame and returns it as rows of runes with the styling
-// removed, so a cell can be read at a coordinate.
 func frameGrid(t *testing.T, m *OS) [][]rune {
 	t.Helper()
 	plain := stripANSIForTrace(fmt.Sprint(m.GetCanvas(false).Render()))
@@ -78,16 +59,6 @@ func frameGrid(t *testing.T, m *OS) [][]rune {
 	return g
 }
 
-// borderAudit counts, in the composed frame, the evidence each border system
-// leaves behind.
-//
-// The three counts cannot be confused for one another. A pane's own box puts its
-// top-left corner glyph exactly at the pane origin, a cell the overlay never
-// touches because its focus ring sits one cell outside the rectangle. The
-// overlay only draws in the gaps the shared layout reserves between rectangles,
-// and the non-shared layout reserves none, so a glyph outside every rectangle
-// came from the overlay. Junctions are overlay-only in either mode, since a box
-// is a plain rectangle and has no arms to grow.
 func borderAudit(t *testing.T, m *OS) (ownBoxes, strayRules, junctions int) {
 	t.Helper()
 	g := frameGrid(t, m)

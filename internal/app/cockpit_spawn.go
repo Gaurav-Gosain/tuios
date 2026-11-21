@@ -34,20 +34,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// The spawn sheet (DESIGN.md 3.3, frame d): n and the New agent button open
-// it over the cockpit. It asks for the task, the agent, the model, where the
-// agent works, the machine and how many attempts, and Start hands them to the
-// daemon's own verbs: fan for new worktrees (one or several attempts), and
-// start-agent for this folder. A pane appears, the task is typed into it once
-// the agent is at its prompt, and the cockpit shows it as any other agent.
-//
-// Cost: opening reads /proc/loadavg once and starts one command that loads the
-// harness manifests, looks each program up on PATH and reads the folder's git
-// state. Nothing polls while the sheet is open, and a closed sheet costs
-// nothing. The machines are ranked when the sheet opens and the order holds
-// still while it is open, so a row never moves under the pointer.
-
-// spawnField is one stop of the sheet's tab order.
 type spawnField uint8
 
 const (
@@ -66,113 +52,64 @@ const (
 	spFields
 )
 
-// spawnMaxAttempts is the most attempts one sheet starts (DESIGN.md 3.3).
 const spawnMaxAttempts = 8
 
-// spawnStartTimeout bounds a start: start-agent answers once the agent is at
-// its prompt, which it gives two minutes, and a worktree checkout of a large
-// repository is not instant.
 const spawnStartTimeout = 5 * time.Minute
 
-// spawnAgent is one harness the sheet offers.
 type spawnAgent struct {
-	// id is the manifest's id, and cmd the program that starts it.
-	id, cmd string
-	// seen is how many panes run it now.
-	seen int
-	// installed says cmd is on this client's PATH.
+	id, cmd   string
+	seen      int
 	installed bool
-	// launch is the manifest's [launch] table: the model, effort and
-	// permission flags the agent takes. The daemon checks the choice again.
-	launch harness.Launch
+	launch    harness.Launch
 }
 
-// spawnMachine is one machine the sheet offers.
 type spawnMachine struct {
-	// any is the "Any machine" row: the daemon picks the machine at Start
-	// (place-agent). It comes first when a link is configured.
-	any bool
-	// host is the [hosts] name, empty for this machine.
+	any        bool
 	host, name string
 	cores      int
 	load       float64
 	loadOK     bool
 	working    int
 	up         bool
-	// ready is what the machine's daemon said of each harness, by id:
-	// agent-readiness. Nil until it answers; an old daemon answers nothing.
-	ready map[string]session.AgentReadiness
-	// readyErr says the daemon could not answer agent-readiness.
-	readyErr bool
+	ready      map[string]session.AgentReadiness
+	readyErr   bool
 }
 
-// spawnSheet is the open sheet, or a closed one kept as a draft.
 type spawnSheet struct {
-	task, model, branch, base *composer.Model
-	field                     spawnField
-	agents                    []spawnAgent
-	agent                     int
-	// list says a list is open under the field listFor: every agent, the
-	// models the running agents use, or the branches. dd is the open list,
-	// the TUI's one dropdown (dropdown.go).
-	list    bool
-	listFor spawnField
-	dd      *dropdown
-	// models are the models running agents report, by harness id, and
-	// branches the repository's local branches.
-	models   map[string][]string
-	branches []string
-	// starting is set from Start until the daemon answers, so one sheet
-	// never starts twice at once.
-	starting bool
-	// shown is how many machines the last frame drew. A pick stays among
-	// them. at is the row of each field's control in the last frame, and
-	// atX its column, where a field's list opens.
-	shown   int
-	at, atX [spFields]int
-	// worktree is where the agent works: a new worktree, or this folder.
-	worktree bool
-	// taskWires tie the task's editor to the @ list of the folder's files
-	// and to the picture previews, as the reply's editor is tied.
-	taskWires draftWires
-	// effort and permission are the picked effort and permission mode,
-	// empty for the agent's own default. A value the picked agent does not
-	// list counts as empty (choice).
-	effort, permission string
-	// branchAuto is the branch the task last named. The branch field
-	// follows the task while it still holds that name.
-	branchAuto string
-	// The folder and what git says about it. read is false until the
-	// command that reads them answers; repo is empty outside a repository.
-	folder             string
-	read               bool
-	repo, head, origin string
-	dirty              int
-	machines           []spawnMachine
-	machine            int
-	attempts           int
-	// vary is the agent of each attempt, by index into agents. Attempt A
-	// is always the sheet's agent.
-	vary []int
-	// notice says why Start did nothing.
-	notice string
-	hits   []ckHit
-	// gen tells an answer for this opening from one for an earlier one.
-	gen uint64
-	// card is the task card n opened the sheet on, nil for none.
-	card *spawnCard
-	// place is what the daemon last said of "Any machine": the pick and
-	// why, or placeErr. placing is set while it is asked. placed says Start
-	// asked and the pick holds for this one Start: placedHost is where the
-	// agents go, and placedTaskHost that machine's name for this one.
+	task, model, branch, base  *composer.Model
+	field                      spawnField
+	agents                     []spawnAgent
+	agent                      int
+	list                       bool
+	listFor                    spawnField
+	dd                         *dropdown
+	models                     map[string][]string
+	branches                   []string
+	starting                   bool
+	shown                      int
+	at, atX                    [spFields]int
+	worktree                   bool
+	taskWires                  draftWires
+	effort, permission         string
+	branchAuto                 string
+	folder                     string
+	read                       bool
+	repo, head, origin         string
+	dirty                      int
+	machines                   []spawnMachine
+	machine                    int
+	attempts                   int
+	vary                       []int
+	notice                     string
+	hits                       []ckHit
+	gen                        uint64
+	card                       *spawnCard
 	place                      *session.PlaceAnswer
 	placeErr                   string
 	placing, placed            bool
 	placedHost, placedTaskHost string
 }
 
-// spawnPlacedMsg is the daemon's answer to place-agent for the sheet. start
-// says Start asked, and starts once the pick is in.
 type spawnPlacedMsg struct {
 	gen   uint64
 	ans   *session.PlaceAnswer
@@ -180,8 +117,6 @@ type spawnPlacedMsg struct {
 	start bool
 }
 
-// spawnInfoMsg carries what the sheet's opening command read, or, with ready
-// set, one machine's agent-readiness answer.
 type spawnInfoMsg struct {
 	gen                uint64
 	ready              *spawnReady
@@ -191,27 +126,21 @@ type spawnInfoMsg struct {
 	branches           []string
 }
 
-// spawnPreset is what ctrl+s keeps for the next new sheet: every choice but
-// the task and the branch. It is saved with the rail's state.
 type spawnPreset struct {
-	Agent  string `json:"agent,omitempty"`
-	Model  string `json:"model,omitempty"`
-	Effort string `json:"effort,omitempty"`
-	// Permission is never a mode that turns approvals off: a preset never
-	// picks one for the person.
+	Agent      string `json:"agent,omitempty"`
+	Model      string `json:"model,omitempty"`
+	Effort     string `json:"effort,omitempty"`
 	Permission string `json:"permission,omitempty"`
 	Folder     bool   `json:"this_folder,omitempty"`
 	Attempts   int    `json:"attempts,omitempty"`
 	Host       string `json:"host,omitempty"`
 }
 
-// spawnStartedMsg is the daemon's answer to a Start.
 type spawnStartedMsg struct {
 	sheet *spawnSheet
 	text  string
 	err   error
-	// warn says the agent started and its task was not sent.
-	warn bool
+	warn  bool
 }
 
 // CockpitSpawnOpen reports whether the spawn sheet is up.
@@ -224,7 +153,6 @@ func (m *OS) CockpitNewAgent() tea.Cmd {
 	if ck.spawn != nil {
 		return nil
 	}
-	// A reply being written is kept as the pane's draft, as esc keeps it.
 	if ed := m.Inbox.reply.editor; ed != nil {
 		ed.closeAfter = false
 		m.InboxReplyCancel()
@@ -251,8 +179,6 @@ func (m *OS) CockpitNewAgent() tea.Cmd {
 			}
 		}
 	}
-	// A kept draft keeps what was read for it, so its Start works at once;
-	// the command below reads it again.
 	s.field, s.list, s.notice, s.card = spTask, false, "", nil
 	ck.spawnGen++
 	s.gen = ck.spawnGen
@@ -263,8 +189,6 @@ func (m *OS) CockpitNewAgent() tea.Cmd {
 	ck.spawn = s
 	m.cockpitTouch()
 	if m.LearnMode && m.learnSpawn != nil {
-		// No programs and no git in the browser: the tour says what the
-		// sheet offers.
 		info := m.learnSpawn()
 		s.folder = info.Folder
 		return m.learnSpawnInfoCmd(s.gen, info)
@@ -272,21 +196,14 @@ func (m *OS) CockpitNewAgent() tea.Cmd {
 	return tea.Batch(spawnInfoCmd(s.gen, s.folder), m.spawnReadyCmd(s))
 }
 
-// spawnHostAny is the preset's host for the "Any machine" row.
 const spawnHostAny = "any"
 
-// anyPicked reports whether the "Any machine" row is picked.
 func (s *spawnSheet) anyPicked() bool {
 	return s.machine < len(s.machines) && s.machines[s.machine].any
 }
 
-// anyHere reports whether "Any machine" means this machine without asking:
-// an agent in this folder works where the folder is.
 func (s *spawnSheet) anyHere() bool { return !s.worktree }
 
-// spawnPlaceCmd asks the daemon which machine "Any machine" picks, off the
-// update loop. With start the pick is reserved and Start goes on with it.
-// Nothing is asked when the row is not there.
 func (m *OS) spawnPlaceCmd(s *spawnSheet, start bool) tea.Cmd {
 	if len(s.machines) == 0 || !s.machines[0].any || s.agent >= len(s.agents) || m.LearnMode {
 		return nil
@@ -312,8 +229,6 @@ func (m *OS) spawnPlaceCmd(s *spawnSheet, start bool) tea.Cmd {
 	}
 }
 
-// applySpawnPlaced takes the daemon's pick. A pick Start asked for starts the
-// agents there.
 func (m *OS) applySpawnPlaced(msg spawnPlacedMsg) tea.Cmd {
 	s := m.Inbox.ck.spawn
 	if s == nil || s.gen != msg.gen {
@@ -340,9 +255,6 @@ func (m *OS) applySpawnPlaced(msg spawnPlacedMsg) tea.Cmd {
 	return m.spawnStart()
 }
 
-// spawnWireTask ties the task's editor to the @ list of the folder the agent
-// starts in, and to the picture previews. It is done at each opening, since
-// the folder is read again.
 func (m *OS) spawnWireTask(s *spawnSheet) {
 	s.task.SetPreviewer(m.replyPreviewer())
 	c := m.newReplyMentions("", "")
@@ -353,9 +265,6 @@ func (m *OS) spawnWireTask(s *spawnSheet) {
 	s.taskWires = draftWires{mentions: c}
 }
 
-// spawnStashImages puts each image of the task into session's file store
-// and returns the task with each image as its stored path, or "" when the
-// task holds no image.
 func spawnStashImages(call inboxVerbCall, sess string, parts []composer.Part) (string, error) {
 	if !slices.ContainsFunc(parts, func(p composer.Part) bool { return p.Kind == composer.PartImage && p.Image != nil }) {
 		return "", nil
@@ -380,7 +289,6 @@ func spawnStashImages(call inboxVerbCall, sess string, parts []composer.Part) (s
 		if err := jsonx.Unmarshal(raw, &res); err != nil || res.Path == "" {
 			return "", errfmt.Errorf("keep the image %s for the agent: no stored path", name)
 		}
-		// The path is a word of its own in the task.
 		if t := b.String(); t != "" && !strings.HasSuffix(t, " ") && !strings.HasSuffix(t, "\n") {
 			b.WriteByte(' ')
 		}
@@ -390,29 +298,20 @@ func spawnStashImages(call inboxVerbCall, sess string, parts []composer.Part) (s
 	return strings.TrimSpace(b.String()), nil
 }
 
-// spawnReady is one machine's agent-readiness answer.
 type spawnReady struct {
 	host   string
 	agents map[string]session.AgentReadiness
-	// err says the daemon gave no answer: an old daemon has no such verb.
-	err bool
+	err    bool
 }
 
-// spawnReadyTimeout bounds one machine's answer. The daemon bounds each
-// check to 2 seconds and runs them at once.
 const spawnReadyTimeout = 5 * time.Second
 
-// spawnReadyCmd asks each machine's daemon which harnesses are installed
-// and signed in there, off the update loop, one command a machine. A row
-// says "checking" until its answer lands.
 func (m *OS) spawnReadyCmd(s *spawnSheet) tea.Cmd {
 	call, gen := m.inboxCaller(), s.gen
 	build := ""
 	if m.DaemonClient != nil {
 		build = m.DaemonClient.ClientVersion()
 	}
-	// The PATH goes only to the daemon this client runs beside, as Start
-	// sends it.
 	local := m.AttachedHost == ""
 	var cmds []tea.Cmd
 	for _, mc := range s.machines {
@@ -448,9 +347,6 @@ func (m *OS) spawnReadyCmd(s *spawnSheet) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// installedThere reports whether the picked agent is on the picked
-// machine: as its daemon said, or, before it answers, as this client finds
-// it for this machine. A far daemon that has not answered checks it itself.
 func (s *spawnSheet) installedThere() bool {
 	if s.agent >= len(s.agents) {
 		return false
@@ -464,7 +360,6 @@ func (s *spawnSheet) installedThere() bool {
 	return s.host() != "" || a.installed
 }
 
-// machineName is the picked machine as a person reads it.
 func (s *spawnSheet) machineName() string {
 	if s.anyPicked() && s.placed && s.place != nil {
 		return s.place.Name
@@ -475,9 +370,6 @@ func (s *spawnSheet) machineName() string {
 	return "this machine"
 }
 
-// spawnReadyWords is what machine mc says of the agent with id and cmd:
-// "claude ready", "claude not signed in", "claude not installed", or
-// "checking" until it answers. ok is false for a word that warns.
 func spawnReadyWords(mc spawnMachine, id, cmd string) (words string, ok bool) {
 	switch {
 	case mc.readyErr:
@@ -497,10 +389,6 @@ func spawnReadyWords(mc spawnMachine, id, cmd string) (words string, ok bool) {
 	return cmd + " ready", true
 }
 
-// spawnFolder is the directory "this folder" means: the folder the focused
-// pane's shell is in, or the client's own when that cannot be read. The sheet
-// runs git there and Start makes a worktree of it, so an OSC 7 report alone
-// never chooses it (paneShellDir).
 func (m *OS) spawnFolder() string {
 	if w := m.GetFocusedWindow(); w != nil && m.paneIsLocal(w) {
 		if dir, ok := paneShellDir(w, true); ok {
@@ -511,8 +399,6 @@ func (m *OS) spawnFolder() string {
 	return dir
 }
 
-// spawnSeen fills the agents from the panes that run one now, most first,
-// keeping the one picked.
 func (m *OS) spawnSeen(s *spawnSheet) {
 	count := map[string]int{}
 	s.models = map[string][]string{}
@@ -535,9 +421,6 @@ func (m *OS) spawnSeen(s *spawnSheet) {
 	m.spawnSortAgents(s)
 }
 
-// spawnSortAgents orders the agents: running ones by how many, then the
-// installed ones, then the rest. The picked agent stays picked, and a new
-// sheet picks the agent the last Start used, or the first.
 func (m *OS) spawnSortAgents(s *spawnSheet) {
 	picked := m.Inbox.ck.spawnLast
 	if s.agent < len(s.agents) && s.read {
@@ -560,8 +443,6 @@ func (m *OS) spawnSortAgents(s *spawnSheet) {
 		}
 		return 3
 	}
-	// Among agents that do not run, the common ones come first, in the
-	// order of frame d, then the rest by name.
 	common := func(a spawnAgent) int {
 		if i := slices.Index(spawnCommon, a.id); i >= 0 {
 			return i
@@ -580,13 +461,8 @@ func (m *OS) spawnSortAgents(s *spawnSheet) {
 	}
 }
 
-// spawnCommon are the harnesses most people run, by manifest id.
 var spawnCommon = []string{"claude-code", "codex", "gemini", "opencode"}
 
-// spawnRank lists the machines best fit first: by spare cores (cores minus
-// load, minus half a core per working agent), then the machines that report
-// no load by fewest working agents. A machine whose link is down is last and
-// cannot be picked.
 func (m *OS) spawnRank(s *spawnSheet) {
 	picked, pickedAny := "", false
 	if s.machine < len(s.machines) {
@@ -602,8 +478,6 @@ func (m *OS) spawnRank(s *spawnSheet) {
 	if i := strings.IndexByte(name, '.'); i > 0 {
 		name = name[:i]
 	}
-	// While attached, the tree's own sessions are the far machine's, and
-	// this machine's come in under the local host name.
 	hostWorking := func(host string) int {
 		switch {
 		case m.AttachedHost == "":
@@ -616,19 +490,13 @@ func (m *OS) spawnRank(s *spawnSheet) {
 		return working[host]
 	}
 	local := spawnMachine{name: cmp.Or(name, "this machine"), cores: runtime.NumCPU(), working: hostWorking(""), up: true}
-	// The local row is the machine of the client's own daemon, where an
-	// agent with no host starts, attached to another machine or not. Its
-	// load is the one that daemon reported, on every system.
 	if l := m.LocalLoad; l.Cores > 0 {
-		// A load the daemon could not read ranks as unknown, not as idle.
 		local.cores = l.Cores
 		local.load, local.loadOK = l.Load1, l.Known()
 	} else {
 		local.load, local.loadOK = spawnLoadAvg()
 	}
 	if m.LearnMode && m.learnSpawn != nil {
-		// A browser tab has no cores or load to rank by, and its host name
-		// is the runtime's.
 		local.name, local.cores, local.load, local.loadOK = cmp.Or(m.learnSpawn().Machine, local.name), 0, 0, false
 	}
 	ms := []spawnMachine{local}
@@ -638,14 +506,10 @@ func (m *OS) spawnRank(s *spawnSheet) {
 		}
 		sm := spawnMachine{host: h.Name, name: h.Name, working: hostWorking(h.Name), up: h.Status == string(federation.StatusUp)}
 		if h.Cores > 0 {
-			// The load the link's last hello carried, so the sheet ranks
-			// the machine with no call of its own.
 			sm.cores, sm.load, sm.loadOK = h.Cores, h.Load1, h.LoadOK
 		}
 		ms = append(ms, sm)
 	}
-	// Spare cores: the cores, held to spawnCoresMax so a host cannot win by
-	// claiming more, times the share of them the load leaves free.
 	score := func(x spawnMachine) float64 {
 		cores := float64(min(max(x.cores, 1), spawnCoresMax))
 		free := 1 - min(max(x.load/float64(max(x.cores, 1)), 0), 1)
@@ -668,10 +532,6 @@ func (m *OS) spawnRank(s *spawnSheet) {
 		}
 		return cmp.Compare(a.working, b.working)
 	})
-	// "Any machine" comes first when there is another machine to pick. A
-	// person picks it: the default is this machine, so a new agent never
-	// moves to another machine unless asked. A kept pick (the draft or the
-	// preset) holds.
 	if len(ms) > 1 && !m.LearnMode {
 		ms = append([]spawnMachine{{any: true, name: "Any machine", up: true}}, ms...)
 	}
@@ -686,10 +546,8 @@ func (m *OS) spawnRank(s *spawnSheet) {
 	}
 }
 
-// spawnCoresMax bounds the cores a machine is ranked by.
 const spawnCoresMax = 256
 
-// spawnLoadAvg is this machine's one-minute load, where the system says it.
 func spawnLoadAvg() (float64, bool) {
 	b, err := os.ReadFile("/proc/loadavg")
 	if err != nil {
@@ -700,9 +558,6 @@ func spawnLoadAvg() (float64, bool) {
 	return v, err == nil
 }
 
-// spawnInfoCmd reads, off the update loop, the harness manifests, which of
-// their programs are on PATH, and the folder's repository, branch, origin and
-// uncommitted files.
 func spawnInfoCmd(gen uint64, folder string) tea.Cmd {
 	return func() tea.Msg {
 		msg := spawnInfoMsg{gen: gen}
@@ -729,8 +584,6 @@ func spawnInfoCmd(gen uint64, folder string) tea.Cmd {
 	}
 }
 
-// spawnBranches are the repository's local branches, the most recent first,
-// at most 30. In jj they are the local bookmarks, newest commit first.
 func spawnBranches(root string) []string {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -749,8 +602,6 @@ func spawnBranches(root string) []string {
 	return names[:min(len(names), 30)]
 }
 
-// applySpawnInfo takes what the opening command read. Once the agents and
-// the repository are read, "Any machine" is asked for its pick.
 func (m *OS) applySpawnInfo(msg spawnInfoMsg) tea.Cmd {
 	s := m.Inbox.ck.spawn
 	if s == nil || s.gen != msg.gen {
@@ -792,8 +643,6 @@ func (m *OS) applySpawnInfo(msg spawnInfoMsg) tea.Cmd {
 	return m.spawnPlaceCmd(s, false)
 }
 
-// spawnCanWorktree reports whether a new worktree can be made: the folder is
-// in a repository, and a repository on another machine is found by its origin.
 func (s *spawnSheet) spawnCanWorktree() bool {
 	if s.repo == "" {
 		return false
@@ -801,8 +650,6 @@ func (s *spawnSheet) spawnCanWorktree() bool {
 	return s.host() == "" || s.origin != ""
 }
 
-// host is the machine picked, empty for this one. For "Any machine" it is
-// the daemon's pick once Start asked, and this machine before.
 func (s *spawnSheet) host() string {
 	if s.machine < len(s.machines) {
 		if s.machines[s.machine].any {
@@ -813,15 +660,12 @@ func (s *spawnSheet) host() string {
 	return ""
 }
 
-// spawnStops are the fields tab stops on, in order. The branch and the base
-// are skipped while the agent works in this folder.
 func (s *spawnSheet) stops() []spawnField {
 	out := make([]spawnField, 0, spFields)
 	for f := range spFields {
 		if (f == spBranch || f == spBase) && !s.worktree {
 			continue
 		}
-		// A choice the picked agent cannot take has no stop.
 		l := s.launch()
 		if (f == spModel && l.ModelFlag == "") || (f == spEffort && l.EffortFlag == "") || (f == spPermission && l.PermissionFlag == "") {
 			continue
@@ -831,7 +675,6 @@ func (s *spawnSheet) stops() []spawnField {
 	return out
 }
 
-// step moves the focus d stops along the tab order.
 func (s *spawnSheet) step(d int) {
 	stops := s.stops()
 	i := max(slices.Index(stops, s.field), 0)
@@ -839,7 +682,6 @@ func (s *spawnSheet) step(d int) {
 	s.list = false
 }
 
-// editor is the text field that has the keys, nil for any other field.
 func (s *spawnSheet) editor() *composer.Model {
 	switch s.field {
 	case spTask:
@@ -888,7 +730,6 @@ func (m *OS) CockpitSpawnKey(msg tea.KeyPressMsg) tea.Cmd {
 	return cmd
 }
 
-// agentID is the picked agent's id, "" for none.
 func (s *spawnSheet) agentID() string {
 	if s.agent < len(s.agents) {
 		return s.agents[s.agent].id
@@ -896,10 +737,7 @@ func (s *spawnSheet) agentID() string {
 	return ""
 }
 
-// spawnKey is CockpitSpawnKey's work.
 func (m *OS) spawnKey(s *spawnSheet, msg tea.KeyPressMsg) tea.Cmd {
-	// The sheet is drawn afresh on every frame it is up, so a key on it
-	// moves nothing the cockpit's own frame key holds.
 	key := msg.String()
 	if s.list {
 		return m.spawnListKey(s, key)
@@ -922,7 +760,6 @@ func (m *OS) spawnKey(s *spawnSheet, msg tea.KeyPressMsg) tea.Cmd {
 	}
 	if ed := s.editor(); ed != nil {
 		if s.field != spTask && (key == "up" || key == "down") {
-			// down on the model or the base opens its list, when it has one.
 			if key == "down" && len(s.listItems(s.field)) > 0 {
 				s.openList(s.field)
 				return nil
@@ -942,8 +779,6 @@ func (m *OS) spawnKey(s *spawnSheet, msg tea.KeyPressMsg) tea.Cmd {
 		case composer.EventCopy, composer.EventCut:
 			return m.CopyFromEditor(ed.Copied())
 		case composer.EventPaste:
-			// ctrl+v: the clipboard's image into the task, as in a
-			// reply, or its text into any field.
 			if ed == s.task {
 				return m.composerClipboardCmd(ed, "")
 			}
@@ -953,8 +788,6 @@ func (m *OS) spawnKey(s *spawnSheet, msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	left, right := key == "left" || key == "h" || key == "-", key == "right" || key == "l" || key == "+" || key == "="
-	// Up and down are the list keys of [keybindings.lists], letters included:
-	// a field that types text took its keys above.
 	motion := m.ListKeys.Keys(key, true)
 	up, down := motion == listnav.Up, motion == listnav.Down
 	switch s.field {
@@ -1034,14 +867,11 @@ func (m *OS) spawnKey(s *spawnSheet, msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// spawnItem is one row of a field's list.
 type spawnItem struct {
 	label, note, value string
 	muted              bool
 }
 
-// listItems are the rows of field f's list: every agent, the models the
-// running agents of the picked agent report, or the local branches.
 func (s *spawnSheet) listItems(f spawnField) []spawnItem {
 	var out []spawnItem
 	switch f {
@@ -1095,7 +925,6 @@ func (s *spawnSheet) listItems(f spawnField) []spawnItem {
 	return out
 }
 
-// openList opens field f's list, with the cursor on what the field holds.
 func (s *spawnSheet) openList(f spawnField) {
 	items := s.listItems(f)
 	if len(items) == 0 {
@@ -1129,7 +958,6 @@ func (s *spawnSheet) openList(f spawnField) {
 	}
 }
 
-// pickList takes row i of the open list.
 func (m *OS) pickList(s *spawnSheet, i int) {
 	items := s.listItems(s.listFor)
 	s.list = false
@@ -1150,14 +978,10 @@ func (m *OS) pickList(s *spawnSheet, i int) {
 	}
 }
 
-// spawnTaskRows is how many rows the task's editor shows before it scrolls.
 const spawnTaskRows = 6
 
-// spawnTaskBoxRows is how tall the sheet draws the task box when [agents]
-// reply_rows is unset. The editor scrolls inside it.
 const spawnTaskBoxRows = 3
 
-// launch is the picked agent's [launch] table.
 func (s *spawnSheet) launch() harness.Launch {
 	if s.agent < len(s.agents) {
 		return s.agents[s.agent].launch
@@ -1165,8 +989,6 @@ func (s *spawnSheet) launch() harness.Launch {
 	return harness.Launch{}
 }
 
-// choices are the values field f offers for the picked agent, with the
-// label and note of its default, the value that passes no flag.
 func (s *spawnSheet) choices(f spawnField) (values []string, def, note string) {
 	l := s.launch()
 	if f == spEffort {
@@ -1175,8 +997,6 @@ func (s *spawnSheet) choices(f spawnField) (values []string, def, note string) {
 	return l.Permissions, "default", "your settings for the agent"
 }
 
-// choice is the picked value of field f, empty when the picked agent does
-// not list it: a value picked for another agent passes no flag to this one.
 func (s *spawnSheet) choice(f spawnField) string {
 	values, _, _ := s.choices(f)
 	v := s.effort
@@ -1189,7 +1009,6 @@ func (s *spawnSheet) choice(f spawnField) string {
 	return v
 }
 
-// cycleChoice steps field f's value d places, the default first.
 func (s *spawnSheet) cycleChoice(f spawnField, d int) {
 	values, _, _ := s.choices(f)
 	all := append([]string{""}, values...)
@@ -1202,7 +1021,6 @@ func (s *spawnSheet) cycleChoice(f spawnField, d int) {
 	}
 }
 
-// launchChoice is attempt A's choice as harness.LaunchArgs takes it.
 func (s *spawnSheet) launchChoice() harness.LaunchChoice {
 	model := ""
 	if s.launch().ModelFlag != "" {
@@ -1211,9 +1029,6 @@ func (s *spawnSheet) launchChoice() harness.LaunchChoice {
 	return harness.LaunchChoice{Model: model, Effort: s.choice(spEffort), Permission: s.choice(spPermission)}
 }
 
-// spawnListKey handles a key while a field's list is open: the dropdown's
-// keys, and tab or shift+tab, which close it to move on. Any other key is
-// spent, so a letter typed while the list is open does not reach a field.
 func (m *OS) spawnListKey(s *spawnSheet, key string) tea.Cmd {
 	if key == "tab" || key == "shift+tab" || s.dd == nil {
 		s.list = false
@@ -1228,8 +1043,6 @@ func (m *OS) spawnListKey(s *spawnSheet, key string) tea.Cmd {
 	return nil
 }
 
-// spawnSavePreset keeps the sheet's choices, but not the task or the
-// branch, for the next new sheet.
 func (m *OS) spawnSavePreset(s *spawnSheet) {
 	pr := &spawnPreset{Model: strings.TrimSpace(s.model.Text()), Effort: s.choice(spEffort), Permission: s.choice(spPermission),
 		Folder: !s.worktree, Attempts: s.attempts, Host: s.host()}
@@ -1248,8 +1061,6 @@ func (m *OS) spawnSavePreset(s *spawnSheet) {
 	m.ShowNotification("Saved as the preset. A new sheet starts with these choices.", "info", m.Settings.NotificationDuration)
 }
 
-// spawnFollowTask names the branch after the task while the person has not
-// named it.
 func (m *OS) spawnFollowTask(s *spawnSheet) {
 	cur := strings.TrimSpace(s.branch.Text())
 	if cur != "" && cur != s.branchAuto {
@@ -1262,9 +1073,6 @@ func (m *OS) spawnFollowTask(s *spawnSheet) {
 	s.branchAuto = b
 }
 
-// spawnFreeBranch is name, or name-2, name-3 and on when the repository has
-// a branch of that name already: a worktree cannot check out a branch that
-// exists, so the name the task gives would fail at Start.
 func spawnFreeBranch(name string, have []string) string {
 	if name == "" || !slices.Contains(have, name) {
 		return name
@@ -1277,15 +1085,12 @@ func spawnFreeBranch(name string, have []string) string {
 	return name
 }
 
-// spawnStopWords are left out of a branch named after a task.
 var spawnStopWords = map[string]bool{
 	"a": true, "an": true, "the": true, "to": true, "of": true, "and": true, "or": true, "for": true,
 	"in": true, "on": true, "at": true, "with": true, "is": true, "are": true, "be": true, "it": true,
 	"this": true, "that": true, "make": true, "please": true, "can": true, "you": true, "we": true, "i": true,
 }
 
-// spawnBranchName is a branch named after the task: agent/ and its first
-// three words that say something.
 func spawnBranchName(task string) string {
 	var words []string
 	for _, w := range strings.FieldsFunc(strings.ToLower(task), func(r rune) bool {
@@ -1305,7 +1110,6 @@ func spawnBranchName(task string) string {
 	return "agent/" + strings.Join(words, "-")
 }
 
-// spawnSetWorktree sets where the agent works. This folder takes one attempt.
 func (m *OS) spawnSetWorktree(s *spawnSheet, on bool) {
 	switch {
 	case on && !s.spawnCanWorktree():
@@ -1321,7 +1125,6 @@ func (m *OS) spawnSetWorktree(s *spawnSheet, on bool) {
 	}
 }
 
-// spawnNoWorktree says why there can be no new worktree.
 func spawnNoWorktree(s *spawnSheet) string {
 	switch {
 	case !s.read:
@@ -1332,7 +1135,6 @@ func spawnNoWorktree(s *spawnSheet) string {
 	return "The repository has no origin remote, so " + s.host() + " cannot find it."
 }
 
-// spawnPickMachine picks machine i when it can take an agent.
 func (m *OS) spawnPickMachine(s *spawnSheet, i int) {
 	if i < 0 || i >= len(s.machines) || !s.machines[i].up || (s.shown > 0 && i >= s.shown) {
 		return
@@ -1346,8 +1148,6 @@ func (m *OS) spawnPickMachine(s *spawnSheet, i int) {
 	}
 }
 
-// spawnSetAttempts sets how many attempts start, from 1 to 8. More than one
-// needs new worktrees.
 func (m *OS) spawnSetAttempts(s *spawnSheet, n int) {
 	n = min(max(n, 1), spawnMaxAttempts)
 	if n > 1 && !s.worktree {
@@ -1363,8 +1163,6 @@ func (m *OS) spawnSetAttempts(s *spawnSheet, n int) {
 	s.vary, s.attempts, s.notice = s.vary[:n], n, ""
 }
 
-// spawnVary gives the attempts different agents: the installed ones and the
-// running ones in turn, starting from the sheet's agent.
 func (m *OS) spawnVary(s *spawnSheet) {
 	var pool []int
 	for i, a := range s.agents {
@@ -1381,7 +1179,6 @@ func (m *OS) spawnVary(s *spawnSheet) {
 	}
 }
 
-// attemptAgent is the agent of attempt i.
 func (s *spawnSheet) attemptAgent(i int) int {
 	if i == 0 || i >= len(s.vary) {
 		return s.agent
@@ -1389,7 +1186,6 @@ func (s *spawnSheet) attemptAgent(i int) int {
 	return s.vary[i]
 }
 
-// spawnClose closes the sheet and keeps it as the draft the next n opens.
 func (m *OS) spawnClose() {
 	ck := &m.Inbox.ck
 	if ck.spawn != nil {
@@ -1398,9 +1194,6 @@ func (m *OS) spawnClose() {
 	}
 }
 
-// modelOf is the model attempt i runs: the sheet's model for an attempt
-// of the sheet's agent, none for an attempt of another agent or for an
-// agent that takes no model.
 func (s *spawnSheet) modelOf(i int) string {
 	if s.attemptAgent(i) != s.agent {
 		return ""
@@ -1408,11 +1201,6 @@ func (s *spawnSheet) modelOf(i int) string {
 	return s.launchChoice().Model
 }
 
-// spec is the agent command of attempt i as fan reads it: the program, and
-// for attempt A's agent the model, effort and permission mode in the flags
-// its manifest names, each as one shell word. The other attempts run other
-// agents, which take their own defaults. fan splits the string the way a
-// shell does and expands nothing; spawnStart checked the choice already.
 func (s *spawnSheet) spec(i int) string {
 	cmd := s.agents[s.attemptAgent(i)].cmd
 	if s.attemptAgent(i) != s.agent {
@@ -1425,9 +1213,6 @@ func (s *spawnSheet) spec(i int) string {
 	return cmd
 }
 
-// spawnStart checks the sheet and starts the agents. The sheet closes at once
-// and is kept as the draft until the daemon says the start worked, so a
-// refused start loses nothing.
 func (m *OS) spawnStart() tea.Cmd {
 	s := m.Inbox.ck.spawn
 	if s == nil {
@@ -1439,14 +1224,11 @@ func (m *OS) spawnStart() tea.Cmd {
 		return nil
 	}
 	if _, ok := s.task.Submit(); !ok {
-		// Invisible characters were removed before any machine is asked;
-		// the task field says so, and the next Start sends what it shows.
 		return fail(spTask, "")
 	}
 	task := strings.TrimSpace(s.task.Text())
 	branch := strings.TrimSpace(s.branch.Text())
 	if s.anyPicked() && !s.anyHere() && !s.placed {
-		// The daemon picks the machine first, then Start goes on there.
 		switch {
 		case s.starting || s.placing:
 			return fail(spStart, "This sheet is starting its agents. Wait for the result.")
@@ -1468,8 +1250,6 @@ func (m *OS) spawnStart() tea.Cmd {
 	case s.starting:
 		return fail(spStart, "This sheet is starting its agents. Wait for the result.")
 	case !s.read:
-		// Until the manifests are read, an agent is known only by its id,
-		// which is not always a program.
 		return fail(spStart, "Reading the folder and the agents. Try again in a moment.")
 	case task == "":
 		return fail(spTask, "Write the task first.")
@@ -1497,7 +1277,6 @@ func (m *OS) spawnStart() tea.Cmd {
 	host := s.host()
 	params := map[string]any{"prompt": task}
 	if host == "" {
-		// The agent is looked up where this client finds programs.
 		params["env"] = map[string]string{"PATH": os.Getenv("PATH")}
 	}
 	verb, what := "start-agent", s.agents[s.agent].cmd
@@ -1524,8 +1303,6 @@ func (m *OS) spawnStart() tea.Cmd {
 		}
 		what = branch
 	} else {
-		// start-agent maps each choice to the agent's own flag, and
-		// refuses one the agent cannot take.
 		params["agent"] = s.agents[s.agent].cmd
 		ch := s.launchChoice()
 		for k, v := range map[string]string{"model": ch.Model, "effort": ch.Effort, "permission_mode": ch.Permission} {
@@ -1539,8 +1316,6 @@ func (m *OS) spawnStart() tea.Cmd {
 		if m.AttachedHost == "" && m.SessionName != "" {
 			params["session"] = m.SessionName
 		}
-		// The agent is named after its task, as a worktree's is after its
-		// branch, and not by the title its program sets.
 		if name := strings.TrimPrefix(spawnBranchName(task), "agent/"); name != "" {
 			params["name"] = name
 		}
@@ -1563,8 +1338,6 @@ func (m *OS) spawnStart() tea.Cmd {
 	call, nonce, card := m.inboxCaller(), m.inboxNonce(), s.card
 	parts, stashIn := s.task.Parts(), m.SessionName
 	if host != "" {
-		// A card on this machine goes with an agent on another one only
-		// through start-agent and that machine's link back (task_host).
 		if card != nil && verb == "start-agent" && placedTaskHost != "" {
 			params["task"], params["task_host"], params["task_session"] = card.id, placedTaskHost, card.session
 		}
@@ -1574,10 +1347,6 @@ func (m *OS) spawnStart() tea.Cmd {
 	if card != nil {
 		taskID = card.id
 	}
-	// The daemon takes the card in the call: start-agent claims it for the
-	// pane it opens, and fan stamps it with the fan it makes. A card of
-	// another session than the one the agent starts in is claimed after, as
-	// before, or not at all for a fan.
 	switch {
 	case card == nil:
 	case verb == "fan":
@@ -1597,23 +1366,15 @@ func (m *OS) spawnStart() tea.Cmd {
 			}
 			call = hostCaller(host, build)
 		}
-		// Each image goes to the session's file store first, and the task
-		// names it by the stored path, which the agent reads as a file.
 		if prompt, err := spawnStashImages(call, stashIn, parts); err != nil {
 			return spawnStartedMsg{sheet: s, err: err}
 		} else if prompt != "" {
 			params["prompt"] = prompt
 		}
 		raw, err := call(verb, params, spawnStartTimeout)
-		// A daemon from before the task parameter refuses it by name, and a
-		// card that cannot be taken refuses the call. The agent starts
-		// either way, and the card is claimed after, which says why it was
-		// not taken.
 		var callErr *session.VerbCallError
 		leftOut := ""
 		if err != nil && params["task"] != nil && errors.As(err, &callErr) && taskParamRefused(callErr) {
-			// admitTaskParam's message starts with the verb and names
-			// the card; the started line names both already.
 			leftOut = strings.TrimPrefix(callErr.Message, verb+" with task: ")
 			if rest, ok := strings.CutPrefix(leftOut, "task card "+taskID+" "); ok {
 				leftOut = "it " + rest
@@ -1651,8 +1412,6 @@ func (m *OS) spawnStart() tea.Cmd {
 		case res.TaskNote != "":
 			held = " " + printableTitle(res.TaskNote)
 		case leftOut != "" && verb == "fan":
-			// A fan claims nothing after, so this is the one place the
-			// person hears the card was left out.
 			held = " " + taskID + " was left out: " + printableTitle(leftOut)
 		}
 		switch {
@@ -1663,16 +1422,12 @@ func (m *OS) spawnStart() tea.Cmd {
 		case !res.Ready && res.Reason != "":
 			return spawnStartedMsg{sheet: s, warn: true, text: "Started " + what + " in " + res.Session + where + ". It is not ready: " + res.Reason + held}
 		case res.PromptStatus != "" && res.PromptStatus != session.PromptSent:
-			// The agent is up and its task did not go through: the
-			// notice says so, and not that all went well.
 			return spawnStartedMsg{sheet: s, warn: true, text: "Started " + what + " in " + res.Session + where + ". The task was not sent: " + res.PromptNote + held}
 		}
 		return spawnStartedMsg{sheet: s, text: "Started " + what + " in " + res.Session + where + "." + held}
 	}
 }
 
-// applySpawnStarted says what became of a start. A start that worked drops
-// its draft; one that failed keeps it for the next n.
 func (m *OS) applySpawnStarted(msg spawnStartedMsg) {
 	ck := &m.Inbox.ck
 	msg.sheet.starting = false
@@ -1688,8 +1443,6 @@ func (m *OS) applySpawnStarted(msg spawnStartedMsg) {
 		ck.spawnDraft = nil
 	}
 	if ck.spawn == msg.sheet {
-		// The sheet was open again: its task has started, so enter must
-		// not start it twice.
 		msg.sheet.task.Clear()
 		msg.sheet.branch.Clear()
 		msg.sheet.branchAuto = ""
@@ -1701,13 +1454,8 @@ func (m *OS) applySpawnStarted(msg spawnStartedMsg) {
 	m.ShowNotification(msg.text, "info", m.Settings.NotificationDuration)
 }
 
-// spawnClick handles a click on the sheet. A click outside it does nothing,
-// so a stray click never loses a draft.
 func (m *OS) spawnClick(x, y int) tea.Cmd {
 	s := m.Inbox.ck.spawn
-	// An open list takes the click first: a row picks, the rest of its box
-	// does nothing, and a click anywhere else closes it and does nothing
-	// else, but on the control that opened it, which closes it too.
 	if s.list && s.dd != nil {
 		row, inside := s.dd.RowAt(x, y)
 		switch {
@@ -1751,7 +1499,6 @@ func (m *OS) spawnClick(x, y int) tea.Cmd {
 			s.field = spAttempts
 			m.spawnVary(s)
 		case "chip":
-			// A click on an attempt gives it the next agent.
 			if n > 0 && n < len(s.vary) && len(s.agents) > 0 {
 				s.vary[n] = (s.vary[n] + 1) % len(s.agents)
 			}
@@ -1768,9 +1515,6 @@ func (m *OS) spawnClick(x, y int) tea.Cmd {
 	return nil
 }
 
-// taskParamRefused reports whether a refusal names one of the parameters the
-// sheet sends for a card. An older daemon names whichever unknown one it read
-// first.
 func taskParamRefused(err *session.VerbCallError) bool {
 	if err.Hint == nil {
 		return false
@@ -1782,8 +1526,6 @@ func taskParamRefused(err *session.VerbCallError) bool {
 	return false
 }
 
-// hostCaller calls verbs on host's daemon, one connection a call, through
-// this machine's daemon and its link.
 func hostCaller(host, build string) inboxVerbCall {
 	return func(verb string, params map[string]any, timeout time.Duration) (json.RawMessage, error) {
 		c, err := dialSessionDaemon(host, build)
@@ -1795,7 +1537,6 @@ func hostCaller(host, build string) inboxVerbCall {
 	}
 }
 
-// placeCall asks the daemon behind call to place an agent (place-agent).
 func placeCall(call inboxVerbCall, params map[string]any) (session.PlaceAnswer, error) {
 	var ans session.PlaceAnswer
 	raw, err := call("place-agent", params, 20*time.Second)

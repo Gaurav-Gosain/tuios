@@ -12,7 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// writeSidebarStateFile drops raw JSON where loadSidebarState will find it.
 func writeSidebarStateFile(t *testing.T, body string) {
 	t.Helper()
 	path := filepath.Join(sidebarStateDir(), sidebarStateFileName)
@@ -34,16 +33,13 @@ func writeSidebarStateFile(t *testing.T, body string) {
 // from the file. Nothing about the row may differ, including the colour the
 // chip is painted in.
 func TestLegacyAccentFileRendersIdentically(t *testing.T) {
-	const legacyID = "cccccccc3333" // "logs", the fixture pane with no agent state
+	const legacyID = "cccccccc3333"
 
-	// After: a pre-migration file, loaded through the migration.
 	after := accentTestOS(t, 120, 40)
 	writeSidebarStateFile(t, `{"accents":{"`+legacyID+`":4}}`)
 	after.SidebarAccents = nil
 	after.loadSidebarState()
 
-	// Before: the accent the old model would have held for index 4, which is an
-	// ANSI slot resolved against whatever theme is loaded.
 	before := accentTestOS(t, 120, 40)
 	after.Settings = config.Global
 	after.Settings = before.Settings
@@ -51,8 +47,6 @@ func TestLegacyAccentFileRendersIdentically(t *testing.T) {
 
 	beforeRows, afterRows := railStyledFrame(t, before), railStyledFrame(t, after)
 
-	// Guard against the comparison passing because neither side drew anything:
-	// the chip has to be on the row for its colour to be worth comparing.
 	chipRows := 0
 	for _, r := range beforeRows {
 		if strings.Contains(stripANSIForTrace(r), accentMark()) {
@@ -74,8 +68,6 @@ func TestLegacyAccentFileRendersIdentically(t *testing.T) {
 		}
 	}
 
-	// And the accent it loaded is still a slot, not a hex snapshot: it has to go
-	// on re-resolving when the theme changes, which is what a slot is for.
 	got, ok := after.WindowAccent(legacyID)
 	if !ok {
 		t.Fatal("the legacy accent did not survive the load")
@@ -107,7 +99,6 @@ func TestLegacyAccentIndexZeroIsBrightBlack(t *testing.T) {
 	if !got.IsSlot() || got.Slot != 0 {
 		t.Fatalf("index 0 loaded as %+v, want slot 0", got)
 	}
-	// Slot 0 is ANSI 8, bright black, which is what it has always been.
 	if want := toRGBA(theme8()); got.RGB() != want {
 		t.Errorf("slot 0 resolved to %s, want bright black %s", got.Hex(), overlay.Hex(want))
 	}
@@ -157,14 +148,10 @@ func TestAccentFileRoundTripsBothKinds(t *testing.T) {
 	}
 }
 
-// railStyledFrame renders the rail and returns its rows with the styling left
-// on, which is what a byte comparison across the migration has to be built on:
-// the colour of the accent chip is exactly the thing that must not have moved.
 func railStyledFrame(t *testing.T, m *OS) []string {
 	t.Helper()
 	lines, _ := m.sidebarPanelLines()
 	return append([]string(nil), lines...)
 }
 
-// theme8 is the bright-black ANSI slot, which is what accent index 0 means.
 func theme8() color.Color { return accentColor(0) }

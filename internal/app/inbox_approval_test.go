@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// heldApproval is an approval item the Inbox is holding for an answer.
 func heldApproval(id, requestID string, options ...string) session.AttentionItem {
 	it := item(id, session.AttentionApproval, "fan-2", "w-"+id, "approve Bash: go test", time.Now().UnixNano())
 	it.RequestID = requestID
@@ -42,8 +41,6 @@ func TestInboxReplyApprovalOnlySendsWhatThePromptTakes(t *testing.T) {
 		t.Errorf("notifications %+v", m.Notifications)
 	}
 
-	// With no daemon connection there is no nonce, so nothing can be sent
-	// as the person.
 	m.InboxMove(-1)
 	if cmd := replyEnter(m, session.ApprovalOnce); cmd != nil {
 		t.Fatal("an answer was sent with no daemon client to vouch for it")
@@ -66,7 +63,6 @@ func TestInboxSaysWhenAnotherClientAnswered(t *testing.T) {
 		t.Fatalf("notifications %+v", m.Notifications)
 	}
 
-	// This client's own answer is not news to it.
 	m = inboxOS(t, zeroSettle())
 	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{held}})
 	m.Inbox.replied = map[string]bool{"r1": true}
@@ -76,7 +72,6 @@ func TestInboxSaysWhenAnotherClientAnswered(t *testing.T) {
 	}
 }
 
-// lastNote is the newest notification's message, or empty.
 func lastNote(m *OS) string {
 	if len(m.Notifications) == 0 {
 		return ""
@@ -84,14 +79,10 @@ func lastNote(m *OS) string {
 	return m.Notifications[len(m.Notifications)-1].Message
 }
 
-// settleShown makes the held approval last drawn count as on screen long
-// enough to have been read.
 func settleShown(m *OS) {
 	m.Inbox.shown.since = time.Now().Add(-time.Minute)
 }
 
-// reachedSend says an answer passed every check the Inbox makes and got as
-// far as sending, which a test OS with no daemon client refuses.
 func reachedSend(m *OS) bool {
 	return strings.Contains(lastNote(m), "needs a client attached")
 }
@@ -115,7 +106,6 @@ func TestInboxSelectionFollowsTheItem(t *testing.T) {
 	}
 	m.renderInbox()
 
-	// An older approval opens and sorts first, pushing both down a row.
 	c := heldApproval("3", "r3", session.ApprovalOnce, session.ApprovalDeny)
 	c.Since = now - 3e9
 	c.Summary = "approve Bash: rm -rf build"
@@ -129,8 +119,6 @@ func TestInboxSelectionFollowsTheItem(t *testing.T) {
 		t.Fatalf("the selected, settled prompt was not answered: %q", lastNote(m))
 	}
 
-	// When the selected item closes, the cursor lands on a neighbour, which
-	// is a prompt the person has not read: it does not answer until drawn.
 	closed := b
 	closed.Closed = session.AttentionClosedResolved
 	m.applyInboxEvents(InboxEventsMsg{Events: []InboxEvent{{Action: session.AttentionClosed, Item: &closed}}})
@@ -152,25 +140,21 @@ func TestInboxAnswersOnlyWhatWasOnScreen(t *testing.T) {
 	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{held}})
 	m.OpenInbox("")
 
-	// Never drawn.
 	replyEnter(m, session.ApprovalOnce)
 	if reachedSend(m) || !strings.Contains(lastNote(m), "just changed") {
 		t.Fatalf("a prompt never drawn was answered: %q", lastNote(m))
 	}
-	// Drawn this instant.
 	m.renderInbox()
 	replyEnter(m, session.ApprovalOnce)
 	if reachedSend(m) {
 		t.Fatal("a prompt drawn this instant was answered")
 	}
-	// Drawn and read.
 	settleShown(m)
 	replyEnter(m, session.ApprovalOnce)
 	if !reachedSend(m) {
 		t.Fatalf("a settled prompt was not answered: %q", lastNote(m))
 	}
 
-	// The same hold on a new line, between the render and the key.
 	changed := held
 	changed.Summary = "approve Bash: rm -rf ~"
 	m.applyInboxEvents(InboxEventsMsg{Events: []InboxEvent{{Action: session.AttentionUpdated, Item: &changed}}})
@@ -185,7 +169,6 @@ func TestInboxAnswersOnlyWhatWasOnScreen(t *testing.T) {
 		t.Fatalf("the new line, once read, was not answered: %q", lastNote(m))
 	}
 
-	// A new hold on the same line is a new request, drawn afresh.
 	renewed := changed
 	renewed.RequestID = "r2"
 	m.applyInboxEvents(InboxEventsMsg{Events: []InboxEvent{{Action: session.AttentionUpdated, Item: &renewed}}})
@@ -208,7 +191,6 @@ func TestInboxShowsTheWholePrompt(t *testing.T) {
 	m.OpenInbox("")
 	out, _, _ := m.renderInbox()
 	plain := ansi.Strip(out)
-	// The card's edge starts each line it wraps onto.
 	flat := strings.Join(strings.Fields(strings.ReplaceAll(plain, "▌", " ")), " ")
 	for _, want := range []string{"the-end-of-the-command", "Always also allows Bash(go test:*) in .claude/settings.local.json"} {
 		if !strings.Contains(flat, want) {
@@ -216,8 +198,6 @@ func TestInboxShowsTheWholePrompt(t *testing.T) {
 		}
 	}
 
-	// A line this client would draw with characters left out is not
-	// answered here.
 	odd := held
 	odd.Summary = "approve Bash: echo \u200bhi"
 	m.applyInboxSnapshot(InboxSnapshotMsg{Items: []session.AttentionItem{odd}})

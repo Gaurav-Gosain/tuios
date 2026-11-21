@@ -9,21 +9,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The dock editor, driven the way a person drives it: opened from the
-// settings row the palette finds, with the arrows, shift and an arrow, and
-// enter, and read off the panel.
-
-// dockEditorTitle is the start of the editor's title.
 const dockEditorTitle = "Dock layout"
 
-// dockRegionLabels are the editor's region headings, and the region each
-// names.
 var dockRegionLabels = map[string]string{
 	"Left": "left", "Center": "center", "Right": "right", "Not on the bar": "available",
 }
 
-// openDockEditor opens the editor as the e2e test does: the palette finds the
-// Components row of settings, and enter on it opens the editor.
 func openDockEditor(t *testing.T, f *apptest.Fixture) {
 	t.Helper()
 	f.Keys("ctrl+p")
@@ -34,13 +25,8 @@ func openDockEditor(t *testing.T, f *apptest.Fixture) {
 	}
 }
 
-// dockRow is one row of the editor: its region and the component on it,
-// "nothing here" for an empty region.
 type dockRow struct{ region, name string }
 
-// selectedDockRow reads the selected row off the panel: the row with the
-// cursor mark, and the region heading nearest above it, "" when the panel has
-// scrolled that heading off.
 func selectedDockRow(t *testing.T, f *apptest.Fixture) dockRow {
 	t.Helper()
 	box := dockEditorBox(t, f)
@@ -63,12 +49,6 @@ func selectedDockRow(t *testing.T, f *apptest.Fixture) dockRow {
 	return dockRow{}
 }
 
-// walkDock moves the selection from the top of the editor down one row at a
-// time and hands each row to visit until visit returns false or the
-// selection comes back to a row it has been on: the last row, or the first
-// one again where the list wraps. The editor scrolls, so a row whose heading
-// is off screen keeps the region of the row before it; the first row is in
-// the first region.
 func walkDock(t *testing.T, f *apptest.Fixture, visit func(dockRow) bool) {
 	t.Helper()
 	f.Keys("home")
@@ -89,8 +69,6 @@ func walkDock(t *testing.T, f *apptest.Fixture, visit func(dockRow) bool) {
 	t.Fatal("the dock editor's selection never came back to a row it had been on")
 }
 
-// dockHeading reports whether a panel row is a region heading: a label
-// followed by a rule.
 func dockHeading(text string) (string, bool) {
 	for label := range dockRegionLabels {
 		if rest, ok := strings.CutPrefix(text, label+" "); ok && strings.Trim(rest, "─━-") == "" && rest != "" {
@@ -100,7 +78,6 @@ func dockHeading(text string) (string, bool) {
 	return "", false
 }
 
-// panelRow is the part of a screen row inside the panel's frame.
 func panelRow(row string, box apptest.Box) string {
 	r := []rune(row)
 	if box.X0+1 >= len(r) {
@@ -111,7 +88,6 @@ func panelRow(row string, box apptest.Box) string {
 
 func dockEditorBox(t *testing.T, f *apptest.Fixture) apptest.Box {
 	t.Helper()
-	// The panel's title is on the first row inside its frame.
 	screen := f.Screen()
 	whole, _ := f.Panels()
 	for _, b := range whole {
@@ -123,8 +99,6 @@ func dockEditorBox(t *testing.T, f *apptest.Fixture) apptest.Box {
 	return apptest.Box{}
 }
 
-// dockRegions reads what each region holds, in order, by walking the
-// editor. The selection is left on the last row.
 func dockRegions(t *testing.T, f *apptest.Fixture) map[string][]string {
 	t.Helper()
 	out := map[string][]string{}
@@ -139,8 +113,6 @@ func dockRegions(t *testing.T, f *apptest.Fixture) map[string][]string {
 	return out
 }
 
-// selectDock puts the selection on a component in a region by pressing the
-// arrows, and fails when the editor does not show it there.
 func selectDock(t *testing.T, f *apptest.Fixture, region, name string) {
 	t.Helper()
 	found := false
@@ -155,8 +127,6 @@ func selectDock(t *testing.T, f *apptest.Fixture, region, name string) {
 
 func dockFixture(t *testing.T) *apptest.Fixture {
 	t.Helper()
-	// Framed panels, so the editor's edges can be found over the settings
-	// panel it opens on.
 	f := apptest.New(t, apptest.Panes(1), apptest.Size(120, 44),
 		apptest.Config(func(c *config.UserConfig) { c.Appearance.FramePanels = true }))
 	openDockEditor(t, f)
@@ -275,9 +245,9 @@ func TestDockEditorAddsAPinnedComponentToItsOwnSide(t *testing.T) {
 	}
 
 	selectDock(t, f, side, pinned)
-	f.Keys("enter") // off the bar
+	f.Keys("enter")
 	selectDock(t, f, "available", pinned)
-	f.Keys("enter") // and back
+	f.Keys("enter")
 
 	if regions := dockRegions(t, f); !slices.Contains(regions[side], pinned) {
 		t.Errorf("%q went somewhere other than the %s it is pinned to: %v", pinned, side, regions)

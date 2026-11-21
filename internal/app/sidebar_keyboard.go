@@ -8,11 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// sidebarNavRow is one keyboard-navigable rail row: what the cursor can land on
-// and what activating it targets. It mirrors sidebarRowHit without the screen
-// rectangle, since the keyboard addresses rows by position in the list rather
-// than by pixel. The render populates m.SidebarNav in row order so the cursor
-// walks the same rows a click would hit.
 type sidebarNavRow struct {
 	Kind        sidebarRowKind
 	SessionID   string
@@ -20,15 +15,10 @@ type sidebarNavRow struct {
 	WindowIndex int
 }
 
-// sidebarNavRowsEqual reports whether two nav rows point at the same target, so
-// the render can mark the cursor row by identity instead of by a fragile index
-// shared across the render and the keyboard handler.
 func sidebarNavRowsEqual(a, b sidebarNavRow) bool {
 	return a.Kind == b.Kind && a.SessionID == b.SessionID && a.WindowID == b.WindowID
 }
 
-// sidebarCursorRow is the nav row the cursor is on, and whether the cursor is
-// valid (in range of the rows the last frame recorded).
 func (m *OS) sidebarCursorRow() (sidebarNavRow, bool) {
 	if m.sidebarCursorWantSet {
 		return m.sidebarCursorWant, true
@@ -48,26 +38,15 @@ func (m *OS) EnterSidebarFocus() {
 		return
 	}
 	m.sidebarFocusSecondary = m.sidebarDrawing
-	// Shown on this client alone, over the panes: the scope is this
-	// person's keyboard, not a change to the session's rail, so it takes no
-	// columns from anybody's panes. See OwnLayoutReserve.
 	if !m.Settings.SidebarEnabled {
 		m.SidebarRevealedForFocus = true
 		m.applySidebarFlag(true)
 	}
 	m.SidebarFocused = true
 	m.beginSidebarReturn()
-	// The rail comes back to the row it was left on, which is most of the point
-	// of leaving by activating one: enter on a terminal row goes to that pane,
-	// and returning does not start over at the attached session's row.
 	if m.restoreSidebarRow() {
 		return
 	}
-	// Nothing to come back to, or the row is gone. Revealing a hidden rail builds
-	// its nav rows only on the next render, so sidebarCurrentSessionNavIndex has
-	// nothing to match yet and would land the cursor on row 0. Follow the current
-	// session by identity so the next render anchors the cursor on it once the
-	// rows exist.
 	m.sidebarFollowSession = m.sidebarCurrentSessionID()
 	m.sidebarSetCursor(m.sidebarCurrentSessionNavIndex())
 }
@@ -78,15 +57,10 @@ func (m *OS) FocusOtherSidebar() {
 	if !m.SidebarFocused || m.sidebarWidthFor(m.sidebarPreferredWidth()) == 0 || m.secondarySidebarWidth() == 0 {
 		return
 	}
-	// HandleSidebarKey scopes the secondary rail around dispatch. The view
-	// fields will be restored when it returns; the focus owner is not swapped.
 	m.sidebarClearPeek()
 	m.sidebarFocusSecondary = !m.sidebarFocusSecondary
 }
 
-// sidebarSetCursor moves the keyboard cursor and re-derives the preview from
-// where it landed, so a browse down the sessions section previews row by row
-// exactly as hovering it does.
 func (m *OS) sidebarSetCursor(i int) {
 	m.sidebarCursorWantSet = false
 	m.SidebarCursor = i
@@ -106,7 +80,6 @@ func (m *OS) ExitSidebarFocus() {
 	}
 	m.SidebarFocused = false
 	m.sidebarFocusSecondary = false
-	// The rows at rest fold away again once the rail lets go of the keyboard.
 	m.sidebarAgentsUnfolded = false
 	m.recordSidebarRow()
 	m.sidebarClearPeek()
@@ -117,8 +90,6 @@ func (m *OS) ExitSidebarFocus() {
 	}
 }
 
-// railEdgeToward is the screen edge a focus direction runs into. Up and down
-// run into no rail.
 func railEdgeToward(direction string) (sidebarEdge, bool) {
 	switch direction {
 	case "left":
@@ -129,10 +100,6 @@ func railEdgeToward(direction string) (sidebarEdge, bool) {
 	return 0, false
 }
 
-// enterRailAtEdge gives the keyboard to the rail on the edge a focus key ran
-// into from the outermost pane, so the focus keys walk on into the rail
-// instead of stopping. A hidden rail is not revealed: there is nothing on that
-// edge to walk into.
 func (m *OS) enterRailAtEdge(direction string) {
 	edge, ok := railEdgeToward(direction)
 	if !ok || m.sidebarWidthFor(m.sidebarPreferredWidth()) == 0 {
@@ -170,8 +137,6 @@ func (m *OS) LeaveRailToward(direction string) bool {
 	return true
 }
 
-// sidebarCurrentSessionNavIndex is the cursor position of the attached session's
-// row, or 0 when it is not among the rows the last frame recorded.
 func (m *OS) sidebarCurrentSessionNavIndex() int {
 	cur := m.sidebarCurrentSessionID()
 	for i, r := range m.SidebarNav {
@@ -213,31 +178,19 @@ func (m *OS) SidebarCursorLast() {
 	}
 }
 
-// sidebarWantCursor moves the cursor to a row the last frame may not have
-// drawn. The next frame scrolls its section to it (issue #1102).
 func (m *OS) sidebarWantCursor(row sidebarNavRow) {
 	m.sidebarClearPeek()
 	m.sidebarCursorWant, m.sidebarCursorWantSet = row, true
 }
 
-// isFileListRow reports whether a row kind is a row of the files listing.
 func isFileListRow(kind sidebarRowKind) bool {
 	return kind == sidebarRowFileUp || kind == sidebarRowFileBack || kind == sidebarRowFileEntry
 }
 
-// fileNavRow is the nav row a row of the files section publishes.
 func fileNavRow(r fileRowSpec) sidebarNavRow {
 	return sidebarNavRow{Kind: r.Kind, WindowID: r.Key, WindowIndex: r.Index}
 }
 
-// sidebarFilesCursorMove steps the cursor over the names of the files section
-// rather than over the rows the last frame drew.
-//
-// The nav rows are the drawn rows, so a step past the last drawn name used to
-// leave the section for the next one while the names below the fold stayed
-// out of reach, and the section never scrolled (issue #1102). Here the step
-// lands on the next name of the whole listing, and the frame scrolls to it.
-// Past the listing's ends the step leaves the section the way it always has.
 func (m *OS) sidebarFilesCursorMove(delta int) bool {
 	cur, ok := m.sidebarCursorRow()
 	if !ok || !isFileListRow(cur.Kind) {
@@ -261,8 +214,6 @@ func (m *OS) sidebarFilesCursorMove(delta int) bool {
 		m.sidebarWantCursor(fileNavRow(rows[j]))
 		return true
 	}
-	// Off the end of the listing: on to the nav row past the section's last
-	// drawn name, or before its first.
 	edge := -1
 	for i, r := range m.SidebarNav {
 		if !isFileListRow(r.Kind) {
@@ -279,9 +230,6 @@ func (m *OS) sidebarFilesCursorMove(delta int) bool {
 	return true
 }
 
-// sidebarFilesCursorJump is g and G on a name of the files section: the first
-// or last name of the listing, or false when the cursor is on it already, so
-// the key goes on to the end of the rail.
 func (m *OS) sidebarFilesCursorJump(last bool) bool {
 	cur, ok := m.sidebarCursorRow()
 	if !ok || !isFileListRow(cur.Kind) {
@@ -329,12 +277,6 @@ func (m *OS) SidebarCursorCollapse() {
 	m.sidebarStepSection(-1)
 }
 
-// sidebarStepSection moves the cursor to the first row of the next (delta 1) or
-// previous (delta -1) section that has rows, stopping at the ends.
-//
-// It walks the rail's configured order rather than a fixed one, so h and l step
-// the sections in the order they are drawn in. A fixed list would have sent the
-// cursor up the rail on a layout that puts the files section above the panes.
 func (m *OS) sidebarStepSection(delta int) {
 	plans := m.sidebarPlans()
 	here := 0
@@ -354,8 +296,6 @@ func (m *OS) sidebarStepSection(delta int) {
 	}
 }
 
-// sidebarSectionOfKind is the section a row kind belongs to, or the count for a
-// control that belongs to none.
 func sidebarSectionOfKind(kind sidebarRowKind) sidebarSection {
 	switch kind {
 	case sidebarRowSession, sidebarRowHostSession, sidebarRowHostNew, sidebarRowHostSignIn, sidebarRowGlobalNew, sidebarRowHost, sidebarRowRepo:
@@ -371,10 +311,6 @@ func sidebarSectionOfKind(kind sidebarRowKind) sidebarSection {
 	}
 }
 
-// sidebarFirstRowOfSection is the index of the first nav row belonging to a
-// section, or -1. Sections whose rows come in more than one kind (the files
-// section's ".." and its names) need this rather than a search by kind, or the
-// cursor lands past the row a person is looking at.
 func (m *OS) sidebarFirstRowOfSection(section sidebarSection) int {
 	for i, r := range m.SidebarNav {
 		if sidebarSectionOfKind(r.Kind) == section {
@@ -384,7 +320,6 @@ func (m *OS) sidebarFirstRowOfSection(section sidebarSection) int {
 	return -1
 }
 
-// sidebarFirstRowOfKind is the index of the first nav row of a kind, or -1.
 func (m *OS) sidebarFirstRowOfKind(kind sidebarRowKind) int {
 	for i, r := range m.SidebarNav {
 		if r.Kind == kind {
@@ -428,36 +363,26 @@ func (m *OS) SidebarActivateCursor() bool {
 	case sidebarRowNewSession:
 		m.SidebarNewSessionHere()
 	case sidebarRowNewWindow:
-		// The new pane is the request, so the rail hands the keyboard back to it.
 		m.SidebarNewWindow(row.SessionID)
 		return true
 	case sidebarRowHostSession:
-		// The remote session opens in a pane, which is where the user asked to
-		// go, so the rail hands the keyboard back.
 		m.openRemoteSession(row.SessionID, row.WindowID)
 		return true
 	case sidebarRowHostNew:
 		m.createRemoteSession(row.SessionID)
 		return true
 	case sidebarRowHostSignIn:
-		// The page opens in a browser, so the keyboard stays in the rail.
 		m.queueSidebarCmd(m.openHostSignIn(row.SessionID))
 	case sidebarRowRailPaneStart:
 		m.RestartRailPane()
 	case sidebarRowCustomLink:
-		// The link opens outside the rail, as a sign-in page does, so the
-		// keyboard stays on the row.
 		m.queueSidebarCmd(m.OpenLink(row.WindowID))
 	case sidebarRowGlobalNew:
-		// A new global session is where the user asked to end up, so the rail
-		// hands the keyboard back the way the other create controls do.
 		m.SidebarNewGlobalSession()
 		return true
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
 	case sidebarRowRepo:
-		// Folding a group is a change to the rail, not a place to go, so the
-		// keyboard stays in the rail on the row that was folded.
 		m.SidebarToggleRepoCollapsed(row.SessionID)
 	case sidebarRowHost:
 		m.SidebarToggleHostCollapsed(row.SessionID)
@@ -474,8 +399,6 @@ func (m *OS) SidebarActivateCursor() bool {
 	case sidebarRowFileEntry:
 		m.queueSidebarCmd(m.fileViewEnterRow(row.WindowIndex, row.WindowID))
 	case sidebarRowDivider:
-		// Enter on the divider is the keyboard's double-click: the split goes
-		// back to the layout's own share.
 		m.SidebarResetSplit()
 	case sidebarRowSession:
 		m.sidebarSwitchSession(row.SessionID)
@@ -512,23 +435,15 @@ func (m *OS) SidebarReorderCursor(delta int) {
 		return
 	}
 	m.commitSessionOrder(order)
-	// The rail relays out next frame; follow the moved session so the cursor and
-	// its highlight ride to the new slot rather than staying on a fixed index.
 	if row.Kind == sidebarRowSession {
 		m.sidebarFollowSession = row.SessionID
 	}
 }
 
-// sidebarReorderHost moves one machine's group delta places among the other
-// machines and persists the order. The cursor tracks the header by identity,
-// so it rides with the moved group on its own.
 func (m *OS) sidebarReorderHost(host string, delta int) {
 	order := append([]string(nil), m.SidebarHostIDs...)
 	from := slices.Index(order, host)
 	if from < 0 {
-		// This machine. It is not in the order at all, so the swap below would
-		// do nothing and say nothing, which is how a person decides a feature
-		// is missing.
 		m.sidebarSayMachinePinned()
 		return
 	}
@@ -541,10 +456,6 @@ func (m *OS) sidebarReorderHost(host string, delta int) {
 	m.saveSidebarState()
 }
 
-// sidebarSayMachinePinned answers a move this machine cannot make. The rail
-// keeps this machine at the top of the sessions section whatever the others
-// are dragged into, and a refusal that draws nothing reads as a rail that
-// cannot be reordered at all.
 func (m *OS) sidebarSayMachinePinned() {
 	m.ShowNotification("This machine stays first. Move another machine instead.",
 		"info", m.Settings.NotificationDuration)
@@ -617,18 +528,11 @@ func (m *OS) SidebarOpenCursorMenu(destructive bool) {
 		WindowID:    row.WindowID,
 		WindowIndex: row.WindowIndex,
 	}, x, y)
-	// A row whose pane could not be reached opens no menu at all, and there is
-	// then nothing to land the selection on.
 	if destructive && m.ContextMenu != nil {
 		m.ContextMenu.selectWarn()
 	}
 }
 
-// sidebarRowHasMenu reports whether a row points at something a context menu
-// can be about: a session, a machine, a pane in either of the two sections
-// that list panes, or any row of the files section. The rail's own controls
-// point at the rail itself, which the right-click on blank rail already
-// covers.
 func sidebarRowHasMenu(row sidebarNavRow) bool {
 	switch row.Kind {
 	case sidebarRowSession, sidebarRowHost:
@@ -636,18 +540,12 @@ func sidebarRowHasMenu(row sidebarNavRow) bool {
 	case sidebarRowWindow, sidebarRowAgent:
 		return row.WindowID != "" || row.WindowIndex >= 0
 	case sidebarRowFileCd, sidebarRowFileClose, sidebarRowFileUp, sidebarRowFileBack, sidebarRowFileEntry:
-		// Every row of the files section points at the section, which is a
-		// thing the menu is about: the header and the ".." row still offer the
-		// two actions that need no name. See fileRowMenu.
 		return true
 	default:
 		return false
 	}
 }
 
-// sidebarCursorAnchor is where a cursor-opened menu anchors: the top-left of the
-// cursor row if it is on screen (it is, since the cursor auto-scrolls into
-// view), else the rail's top corner.
 func (m *OS) sidebarCursorAnchor(row sidebarNavRow) (int, int) {
 	for _, h := range m.SidebarHits {
 		if sidebarNavRowsEqual(navRowOf(h), row) {
@@ -661,15 +559,10 @@ func (m *OS) sidebarCursorAnchor(row sidebarNavRow) (int, int) {
 	return x, m.viewReserve().Top
 }
 
-// sidebarSetCursorToHit points the keyboard cursor at a clicked row, so a click
-// inside the rail while it holds keyboard focus keeps the cursor where the eye
-// went (the mouse and keyboard share one cursor).
 func (m *OS) sidebarSetCursorToHit(hit sidebarRowHit) {
 	target := navRowOf(hit)
 	for i, r := range m.SidebarNav {
 		if sidebarNavRowsEqual(r, target) {
-			// The pointer, not the cursor, owns the preview while the mouse is
-			// steering, so this only re-homes the cursor.
 			m.sidebarCursorWantSet = false
 			m.SidebarCursor = i
 			return
@@ -677,9 +570,6 @@ func (m *OS) sidebarSetCursorToHit(hit sidebarRowHit) {
 	}
 }
 
-// navRowOf is the nav row a hit rectangle points at: the same identity, minus
-// the geometry. It is what keeps the drawn rows, the hit rects, and the cursor
-// addressing one target set rather than three hand-matched copies.
 func navRowOf(h sidebarRowHit) sidebarNavRow {
 	return sidebarNavRow{
 		Kind:        h.Kind,
@@ -689,9 +579,6 @@ func navRowOf(h sidebarRowHit) sidebarNavRow {
 	}
 }
 
-// sidebarCursorWindow returns the live window the cursor row names, or nil when
-// the cursor is on a session row or on a window of a session this client is not
-// attached to (whose windows it does not hold).
 func (m *OS) sidebarCursorWindow() *terminal.Window {
 	row, ok := m.sidebarCursorRow()
 	if !ok || row.WindowID == "" {
@@ -760,18 +647,11 @@ func (m *OS) SidebarSetCollapsed(collapsed bool) {
 	if collapsed == m.SidebarCollapsed {
 		return
 	}
-	// Expanding cannot help on a screen whose breakpoint already pins the rail
-	// to the strip; saying so beats appearing to do nothing.
 	if !collapsed && sidebarVariant(m.sidebarWidthFor(m.sidebarStoredWidth())) == sidebarVariantGlyph {
 		m.ShowNotification("The screen is too narrow for a wider rail", "info", m.Settings.NotificationDuration)
 		return
 	}
 	m.SidebarCollapsed = collapsed
-	// Folding does not close the files section. Three columns cannot draw a
-	// listing, so the strip does not draw one, and unfolding brings the section
-	// back exactly as it brings the other three back. That is only safe because
-	// the section is a section: a mode that took the whole rail would leave a
-	// folded rail with nothing on screen mentioning the mode and no way out.
 	m.sidebarClearPeek()
 	m.tooltipClear()
 	if m.AutoTiling {
@@ -798,19 +678,11 @@ func (m *OS) SidebarNewSession() {
 		m.ShowNotification("Sessions need the daemon", "info", m.Settings.NotificationDuration)
 		return
 	}
-	m.clearSidebarReturn() // the new session is where the user asked to end up
+	m.clearSidebarReturn()
 	if m.AttachedHost != "" {
-		// The connection goes to another machine, and a create sent over it
-		// would make the session there.
 		m.makeSessionHere(false)
 		return
 	}
-	// Creating a session is a daemon round trip, and this runs on the Update
-	// goroutine. Doing it inline parked input, rendering and socket draining for
-	// as long as the daemon took, made worse by the background session poll
-	// holding the client's round-trip lock. Hand it to a goroutine and let the
-	// SessionCreatedMsg handler do the switching, which is the part that has to
-	// touch OS state.
 	name := m.nextSessionName()
 	client, ch := m.DaemonClient, m.sessionCreateChan()
 	w, h := m.GetContentWidth(), m.GetUsableHeight()
@@ -832,9 +704,6 @@ func (m *OS) SidebarNewGlobalSession() {
 	}
 	m.clearSidebarReturn()
 	if m.AttachedHost != "" {
-		// The global group is this machine's. From a session on another
-		// machine the create goes to this machine's daemon, not over the
-		// connection to that machine.
 		m.makeSessionHere(true)
 		return
 	}
@@ -861,13 +730,10 @@ func (m *OS) SidebarNewWindow(sessionID string) {
 		m.ShowNotification("Attach to that session first", "info", m.Settings.NotificationDuration)
 		return
 	}
-	m.clearSidebarReturn() // the new pane is where the user asked to end up
+	m.clearSidebarReturn()
 	m.NewWindowHere()
 }
 
-// sessionCreateChan is the buffered channel carrying creation results back to
-// Update, made on first use so a client that never creates a session pays
-// nothing.
 func (m *OS) sessionCreateChan() chan SessionCreatedMsg {
 	if m.PendingSessionCreate == nil {
 		m.PendingSessionCreate = make(chan SessionCreatedMsg, 4)
@@ -875,8 +741,6 @@ func (m *OS) sessionCreateChan() chan SessionCreatedMsg {
 	return m.PendingSessionCreate
 }
 
-// nextSessionName is the first free "session-N", the same scheme the CLI's
-// `tuios new` uses.
 func (m *OS) nextSessionName() string {
 	taken := make(map[string]bool)
 	if m.DaemonClient != nil {

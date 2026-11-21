@@ -9,8 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// splitOS is one tiled BSP pane on workspace 1, the state a fresh session with
-// one window is in.
 func splitOS(t *testing.T) *OS {
 	t.Helper()
 	prevAnim := config.Global.Motion
@@ -35,8 +33,6 @@ func splitOS(t *testing.T) *OS {
 	return m
 }
 
-// split is leader+- or leader+| on the focused pane, minus the PTY: it is the
-// tree half of SplitFocusedHorizontal/SplitFocusedVertical.
 func split(m *OS, targetID string, dir layout.PreselectionDir) *terminal.Window {
 	win := &terminal.Window{
 		ID:        fmt.Sprintf("window-%04d", len(m.Windows)+1),
@@ -53,8 +49,6 @@ func split(m *OS, targetID string, dir layout.PreselectionDir) *terminal.Window 
 	return win
 }
 
-// checkWorkspaceLayout asserts the panes the user can see on this workspace
-// exactly tile the content region, and that the tree agrees with the window list.
 func checkWorkspaceLayout(t *testing.T, m *OS, what string) {
 	t.Helper()
 
@@ -192,14 +186,12 @@ func TestClosingAPaneOnAnotherWorkspaceLeavesNoStaleTile(t *testing.T) {
 	m := splitOS(t)
 	split(m, "window-0001", layout.PreselectionRight)
 
-	// Two more panes on workspace 2, built the same way.
 	m.CurrentWorkspace = 2
 	m.Windows = append(m.Windows, &terminal.Window{ID: "window-0003", Workspace: 2, Width: 200, Height: 60})
 	m.FocusedWindow = len(m.Windows) - 1
 	m.TileAllWindows()
 	split(m, "window-0003", layout.PreselectionDown)
 
-	// Back to workspace 1; the shell in window-0004 exits on workspace 2.
 	m.CurrentWorkspace = 1
 	m.FocusedWindow = 0
 	gone := m.GetWindowIntID("window-0004")

@@ -27,7 +27,6 @@ func TestQuickLookHostHasParam(t *testing.T) {
 	}{
 		{"has offset", `{"verbs":[{"verb":"file-preview","params":[{"name":"path"},{"name":"offset"}]}]}`, nil, true},
 		{"older", `{"verbs":[{"verb":"file-preview","params":[{"name":"path"},{"name":"max_px"},{"name":"page"}]}]}`, nil, false},
-		// A failed question is not an older daemon: the read that follows says what is wrong.
 		{"no answer", ``, errors.New("no link"), true},
 		{"other verb only", `{"verbs":[{"verb":"file-read","params":[]}]}`, nil, true},
 	} {

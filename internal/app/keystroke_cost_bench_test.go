@@ -15,17 +15,11 @@ import (
 	"tuios.dev/vt"
 )
 
-// The cost of the frame one typed key makes in a pane, on a client with a
-// screen: a 200x60 terminal, one pane, the rail on the left and the dock at
-// the bottom. The key changes one cell of the pane, so every cell a frame
-// recomposes past that one is cost that follows the screen and not the change.
-
 const (
 	keyCols = 200
 	keyRows = 60
 )
 
-// countWriter counts the bytes the screen's writer goroutine hands it.
 type countWriter struct{ n atomic.Int64 }
 
 func (c *countWriter) Write(p []byte) (int, error) {
@@ -33,8 +27,6 @@ func (c *countWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// keyPaneOS is one tiled pane at 200x60 with the rail and the dock shown, on
-// a screen that writes to out.
 func keyPaneOS(tb testing.TB, out io.Writer) *OS {
 	tb.Helper()
 	orig := config.Global
@@ -51,15 +43,11 @@ func keyPaneOS(tb testing.TB, out io.Writer) *OS {
 	return m
 }
 
-// keyFrame is what a client does for a frame once the key's echo reached the
-// pane's emulator: View composes and hands the screen the frame, and the
-// flush commits it.
 func keyFrame(m *OS) {
 	_ = m.View()
 	m.screen.Commit()
 }
 
-// typeKey writes the echo of the i-th key into the focused pane.
 func typeKey(m *OS, i int) {
 	w := m.Windows[0]
 	w.LockIO()
@@ -69,16 +57,10 @@ func typeKey(m *OS, i int) {
 	m.renderSkipped = false
 }
 
-// keyWork is the work in cells of the frame just composed: every cell of
-// the canvas cleared, the cells of each layer copied onto it, the cells of
-// the layers parsed from their string because the string changed, and the
-// cells the screen compares and diffs against the last frame.
 type keyWork struct {
 	cleared, blitted, parsed, diffed int
 }
 
-// layerSeen is a layer's string as the last frame left it, by its bytes'
-// address, so a layer whose string was built afresh shows as a reparse.
 type layerSeen map[string]uintptr
 
 func measureFrame(m *OS, seen layerSeen) keyWork {
@@ -160,15 +142,15 @@ func TestKeptFrameShowsAFreshCompose(t *testing.T) {
 	kept := 0
 	for i := range 120 {
 		switch i % 12 {
-		case 3: // the rail: the pane's name
+		case 3:
 			m.Windows[0].CustomName = fmt.Sprintf("pane %d", i)
-		case 5: // the dock: the mode
+		case 5:
 			if m.Mode == TerminalMode {
 				m.Mode = WindowManagementMode
 			} else {
 				m.Mode = TerminalMode
 			}
-		case 7: // an overlay over the pane
+		case 7:
 			m.ShowCommandPalette = true
 		case 8:
 			m.ShowCommandPalette = false
@@ -211,9 +193,6 @@ func TestKeptFrameShowsAFreshCompose(t *testing.T) {
 // 1 ms is 5x above the second, so a shared runner can slow the frame a few
 // times without reaching it, and at the first.
 func TestKeystrokeFrameBudget(t *testing.T) {
-	// The bytes of n typed keys, from the start to the close of a screen.
-	// The first frame and the close are the same for any n, so the
-	// difference of two runs is the keys alone.
 	written := func(n int) int64 {
 		out := &countWriter{}
 		m := keyPaneOS(t, out)
@@ -246,10 +225,6 @@ func TestKeystrokeFrameBudget(t *testing.T) {
 		keyFrame(m)
 		i++
 	}
-	// The libghostty-vt backend reads the changed row through cgo and
-	// allocates for each read: CI measured 567 there against 376 on the pure
-	// Go emulator. Each backend has its own ceiling, about a quarter above
-	// what it measured.
 	maxAllocs := 470.0
 	if vt.Backend == "ghostty" {
 		maxAllocs = 700

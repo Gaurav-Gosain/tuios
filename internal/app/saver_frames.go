@@ -16,56 +16,36 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// A frames file: a screen saver a plugin brings as data, which tuios plays
-// with no process. docs/PLUGINS.md has the format, so a tool can write it.
-//
-// The file is read and every frame drawn once when the saver starts, as its
-// own box with no margin. Playing it costs one timer per frame and placing
-// one box on the screen. The box keeps no blank rows or trailing blanks, so
-// what the saver holds grows with the file, not with the screen.
-
 // PluginSavers, when set, maps a saver's name, plugin/ID/SAVER, to its frames
 // file, for the enabled plugins. The binary sets it, since this package does
 // not read plugins.
 var PluginSavers func() map[string]string
 
-// Bounds on a frames file, so a file cannot make tuios hold or draw much.
 const (
 	saverMaxBytes  = 4 << 20
 	saverMaxCols   = 400
 	saverMaxRows   = 200
 	saverMaxFrames = 2000
 	saverMinDelay  = 20 * time.Millisecond
-	// saverMaxDrawn bounds the drawn frames together. A file of single-cell
-	// colour runs draws to about twenty bytes a cell, so this is what keeps
-	// a file under saverMaxBytes from drawing to a hundred megabytes.
-	saverMaxDrawn = 16 << 20
+	saverMaxDrawn  = 16 << 20
 )
 
-// saverColorNames are the ANSI colours a colors block can name, in index
-// order. They follow the theme.
 var saverColorNames = []string{
 	"black", "red", "green", "yellow", "blue", "purple", "cyan", "white",
 	"bright_black", "bright_red", "bright_green", "bright_yellow", "bright_blue", "bright_purple", "bright_cyan", "bright_white",
 }
 
-// saverFrame is one frame of a frames file: its text, its colour letters and
-// how long it shows.
 type saverFrame struct {
 	text, colors []string
 	delay        time.Duration
 }
 
-// saverFile is a parsed frames file. Every frame has rows lines of text,
-// and of colours when it has any: size comes once, before the first frame.
 type saverFile struct {
 	cols, rows int
-	palette    map[byte]string // the SGR that starts a run of each letter
+	palette    map[byte]string
 	frames     []saverFrame
 }
 
-// parseSaverFile reads a frames file. An error says the line and what is
-// wrong, for tuios plugins check.
 func parseSaverFile(data []byte) (*saverFile, error) {
 	if len(data) > saverMaxBytes {
 		return nil, errfmt.Errorf("the file is larger than %d bytes", saverMaxBytes)
@@ -118,8 +98,6 @@ func parseSaverFile(data []byte) (*saverFile, error) {
 			if err1 != nil || err2 != nil || c < 1 || r < 1 || c > saverMaxCols || r > saverMaxRows {
 				return nil, fail("size must be 1 to %d columns and 1 to %d rows", saverMaxCols, saverMaxRows)
 			}
-			// render reads every frame at the one size, so a second size
-			// would leave the frames before it short.
 			if len(f.frames) > 0 {
 				return nil, fail("size comes once, before the first frame")
 			}
@@ -189,8 +167,6 @@ func get(f []string, i int) string {
 	return ""
 }
 
-// saverStyle reads a colour, #rrggbb or an ANSI colour by name, into the
-// SGR that starts a run in it.
 func saverStyle(spec string) (string, error) {
 	for i, name := range saverColorNames {
 		if spec == name {
@@ -205,9 +181,6 @@ func saverStyle(spec string) (string, error) {
 	return "", errfmt.Errorf("unknown colour %q. Use #rrggbb or an ANSI name such as bright_blue", spec)
 }
 
-// render draws every frame as its box, cut to a screen of width by height.
-// A box line keeps no trailing blank and the box no margin: framesSaver.show
-// places it. It fails when the frames draw to more than saverMaxDrawn.
 func (f *saverFile) render(width, height int) ([]string, error) {
 	out := make([]string, len(f.frames))
 	rows, cols := min(f.rows, height), min(f.cols, width)
@@ -223,7 +196,6 @@ func (f *saverFile) render(width, height int) ([]string, error) {
 			if fr.colors != nil {
 				colors = fr.colors[r]
 			}
-			// The cells past the last one that shows anything are left out.
 			end := 0
 			for x := range cols {
 				if (x < len(line) && line[x] > ' ') || (x < len(colors) && f.palette[colors[x]] != "") {
@@ -236,7 +208,6 @@ func (f *saverFile) render(width, height int) ([]string, error) {
 				if x < len(colors) {
 					sgr = f.palette[colors[x]]
 				}
-				// One SGR per run of the same colour.
 				if sgr != on {
 					if on != "" {
 						b.WriteString(ansi.ResetStyle)
@@ -262,17 +233,14 @@ func (f *saverFile) render(width, height int) ([]string, error) {
 	return out, nil
 }
 
-// framesSaver is a frames file playing.
 type framesSaver struct {
-	frames        []string // each frame's box, from render
+	frames        []string
 	delays        []time.Duration
 	at            int
-	width, height int // the screen
-	cols, rows    int // the box, cut to the screen
+	width, height int
+	cols, rows    int
 }
 
-// show is the screen with frame i centred on it. It runs once per frame, so
-// only one screen of text is held at a time.
 func (p *framesSaver) show(i int) string {
 	top := max((p.height-p.rows)/2, 0)
 	pad := strings.Repeat(" ", max((p.width-p.cols)/2, 0))
@@ -298,8 +266,6 @@ func (p *framesSaver) show(i int) string {
 	return b.String()
 }
 
-// startFramesSaver plays the frames file name names. It reports whether it
-// started.
 func (m *OS) startFramesSaver(name string, width, height int) bool {
 	if PluginSavers == nil {
 		return false

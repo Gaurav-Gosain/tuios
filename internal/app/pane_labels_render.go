@@ -12,15 +12,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The pane labels' frame is a pass over the canvas right after each pane is
-// drawn, as hints mode's is (hints_render.go). A pane drawn above another
-// covers that pane's label, the way it covers the pane.
-//
-// A label is drawn as large as the pane allows: in the block font below at
-// double width, then at single width, then as one row of text.
-
-// paneLabelFont is a block font five rows high for the keys a label can
-// hold. A '#' is a filled cell.
 var paneLabelFont = map[rune][5]string{
 	'0': {"###", "# #", "# #", "# #", "###"},
 	'1': {" # ", "## ", " # ", " # ", "###"},
@@ -60,12 +51,8 @@ var paneLabelFont = map[rune][5]string{
 	'z': {"###", "  #", " # ", "#  ", "###"},
 }
 
-// paneLabelFontRows is the height of the block font.
 const paneLabelFontRows = 5
 
-// paneLabelGlyphs renders a label in the block font, each font cell scale
-// columns wide, one blank font cell between keys. It returns nil when a key
-// has no glyph.
 func paneLabelGlyphs(label string, scale int) []string {
 	rows := make([]string, paneLabelFontRows)
 	for i, r := range label {
@@ -85,22 +72,12 @@ func paneLabelGlyphs(label string, scale int) []string {
 	return rows
 }
 
-// paneLabelInks are the styles a label is drawn in.
-//
-// At 16 colours the terminal's own slots are all there is, and a theme can
-// put two of them close together: on a light theme the slot PillFg takes
-// sits on the accent at well under 3:1. So the box there is the accent in
-// reverse video, and the glyphs and the name are holes in it, drawn in the
-// terminal's own background. That reads on any terminal, light or dark.
 type paneLabelInks struct {
-	accent, ink, typed color.Color
-	// reverse is the 16-colour form above.
-	reverse bool
-	// list is the ground of the hidden panes' list, with its inks.
+	accent, ink, typed           color.Color
+	reverse                      bool
 	listGround, listInk, listKey color.Color
 }
 
-// paneLabelColors works the inks out from the chrome palette.
 func paneLabelColors() paneLabelInks {
 	pal := theme.UI()
 	if theme.Depth() == overlay.Depth16 {
@@ -116,7 +93,6 @@ func paneLabelColors() paneLabelInks {
 	}
 }
 
-// box is the style of an empty cell of the label's box.
 func (k paneLabelInks) box() uv.Style {
 	if k.reverse {
 		return uv.Style{Fg: k.accent, Attrs: uv.AttrReverse}
@@ -124,12 +100,9 @@ func (k paneLabelInks) box() uv.Style {
 	return uv.Style{Bg: k.accent}
 }
 
-// glyph is a filled cell of the block font: a key typed already, or one
-// still to type.
 func (k paneLabelInks) glyph(typed bool) (string, uv.Style) {
 	switch {
 	case k.reverse && typed:
-		// A shade of the accent, between the box and a hole.
 		return "▒", uv.Style{Fg: k.accent}
 	case k.reverse:
 		return " ", uv.Style{}
@@ -139,7 +112,6 @@ func (k paneLabelInks) glyph(typed bool) (string, uv.Style) {
 	return "█", uv.Style{Fg: k.ink, Bg: k.accent}
 }
 
-// text is the style of text in the box.
 func (k paneLabelInks) text(bold, typed bool) uv.Style {
 	var st uv.Style
 	if k.reverse {
@@ -159,7 +131,6 @@ func (k paneLabelInks) text(bold, typed bool) uv.Style {
 	return st
 }
 
-// applyPaneLabels draws the label of the pane whose layer id is id.
 func (m *OS) applyPaneLabels(canvas *frameCanvas, id string) {
 	s := m.paneLabels
 	if s == nil {
@@ -173,12 +144,8 @@ func (m *OS) applyPaneLabels(canvas *frameCanvas, id string) {
 	if w == nil {
 		return
 	}
-	// Centred on the part of the pane that is on the screen, so a pane
-	// that is partly off it still shows its label.
 	rect := m.paneLabelVisible(w)
 	area := canvas.Bounds()
-	// In a view of a larger session the pane is drawn shifted and clipped,
-	// and its label goes with it. See pane_view.go.
 	if v := m.sessionView; v.on {
 		rect = rect.Add(image.Pt(v.dx, v.dy))
 		area = area.Intersect(v.clip)
@@ -203,13 +170,11 @@ func (m *OS) applyPaneLabels(canvas *frameCanvas, id string) {
 	}
 }
 
-// paneLabelDraw writes cells into the canvas inside clip.
 type paneLabelDraw struct {
 	canvas *frameCanvas
 	clip   image.Rectangle
 }
 
-// set writes one cell, when it is inside the clip.
 func (d *paneLabelDraw) set(x, y int, content string, width int, style uv.Style) {
 	if !image.Pt(x, y).In(d.clip) || y >= len(d.canvas.Lines) || x >= len(d.canvas.Lines[y]) {
 		return
@@ -217,7 +182,6 @@ func (d *paneLabelDraw) set(x, y int, content string, width int, style uv.Style)
 	d.canvas.Lines[y][x] = uv.Cell{Content: content, Width: width, Style: style}
 }
 
-// fill paints a box of blank cells in style.
 func (d *paneLabelDraw) fill(r image.Rectangle, style uv.Style) {
 	for y := r.Min.Y; y < r.Max.Y; y++ {
 		for x := r.Min.X; x < r.Max.X; x++ {
@@ -226,8 +190,6 @@ func (d *paneLabelDraw) fill(r image.Rectangle, style uv.Style) {
 	}
 }
 
-// text writes s from (x, y), at most width columns, and returns the column
-// after it.
 func (d *paneLabelDraw) text(x, y, width int, s string, style uv.Style) int {
 	s = ansi.Truncate(s, width, "…")
 	for _, r := range s {
@@ -247,16 +209,12 @@ func (d *paneLabelDraw) text(x, y, width int, s string, style uv.Style) int {
 	return x
 }
 
-// repair fixes the wide glyphs of the pane's own text the label cut in two.
 func (d *paneLabelDraw) repair(r image.Rectangle) {
 	for y := max(r.Min.Y, d.clip.Min.Y); y < min(r.Max.Y, d.clip.Max.Y) && y < len(d.canvas.Lines); y++ {
 		fixHintsWideCells(d.canvas.Lines[y], max(r.Min.X-1, d.clip.Min.X), min(r.Max.X+1, d.clip.Max.X))
 	}
 }
 
-// label draws the label box in the middle of rect, as large as fits, and
-// returns the row under it. roomBelow asks for a row to be left under the
-// box for the hidden panes' list.
 func (d *paneLabelDraw) label(rect image.Rectangle, p *paneLabel, typed string, inks paneLabelInks, roomBelow bool) int {
 	name := strings.TrimSpace(p.name)
 	reserve := 0
@@ -283,8 +241,6 @@ func (d *paneLabelDraw) label(rect image.Rectangle, p *paneLabel, typed string, 
 		box := centeredBox(rect, bw, bh, reserve)
 		d.fill(box, inks.box())
 		gx := box.Min.X + (bw-gw)/2
-		// The keys already typed are quieter, so the next key to press is
-		// the loud one. typedEnd is the column their glyphs end at.
 		typedEnd := 0
 		if typed != "" && len(typed) < len(p.label) {
 			typedEnd = len(paneLabelGlyphs(p.label[:len(typed)], scale)[0]) + scale
@@ -305,7 +261,6 @@ func (d *paneLabelDraw) label(rect image.Rectangle, p *paneLabel, typed string, 
 		d.repair(box)
 		return box.Max.Y
 	}
-	// Too small for the block font: one row, the label and the name.
 	line := " " + p.label + " "
 	if name != "" {
 		line += " " + name + " "
@@ -324,9 +279,6 @@ func (d *paneLabelDraw) label(rect image.Rectangle, p *paneLabel, typed string, 
 	return box.Max.Y
 }
 
-// list draws the panes the frame does not draw, one row each, under the
-// label at row top. A row is the label and the pane's name. What does not
-// fit is counted on the last row.
 func (d *paneLabelDraw) list(rect image.Rectangle, top int, hidden []paneLabel, typed string, inks paneLabelInks) {
 	top = max(top+1, rect.Min.Y)
 	room := rect.Max.Y - top
@@ -380,7 +332,6 @@ func (d *paneLabelDraw) list(rect image.Rectangle, top int, hidden []paneLabel, 
 	d.repair(box)
 }
 
-// paneLabelsMore says how many hidden panes the list has no room for.
 func paneLabelsMore(n int) string {
 	if n == 1 {
 		return "1 more pane"
@@ -388,8 +339,6 @@ func paneLabelsMore(n int) string {
 	return fmt.Sprintf("%d more panes", n)
 }
 
-// centeredBox is a w by h box in the middle of r. reserve rows are kept free
-// under it, so the box moves up by half of them.
 func centeredBox(r image.Rectangle, w, h, reserve int) image.Rectangle {
 	x := r.Min.X + (r.Dx()-w)/2
 	y := r.Min.Y + max((r.Dy()-h-reserve)/2, 0)

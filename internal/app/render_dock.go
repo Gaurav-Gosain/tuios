@@ -13,16 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// workspacePillFg is the ink one pill state is drawn in, over the ground the
-// pill rests on: the Panel step unless [dock.tabs] sets one.
-//
-// Both states go through theme.Readable, so the strip is legible by
-// measurement rather than by whichever theme it was last looked at under. At
-// rest that is FgDim: FgMute is the token for separators and disabled things
-// and it put a workspace you can switch to at 2.19:1, present but not readable,
-// which the quiet tier's move up the ramp lifts to 3.71:1 without making it text.
-// Active is the accent, which follows the terminal theme and so cannot be
-// trusted on its own; Charple alone measures 2.76:1 on Panel.
 func workspacePillFg(active bool, pal overlay.Palette, ground color.Color) color.Color {
 	if active {
 		return theme.Readable(pal.Accent, ground)
@@ -30,34 +20,10 @@ func workspacePillFg(active bool, pal overlay.Palette, ground color.Color) color
 	return theme.Readable(pal.FgDim, ground)
 }
 
-// dockStripArrowFg is the ink the overflow arrows are drawn in. They wear no
-// fill, so they are read against the bare canvas the bar sits on, where FgMute
-// measured 2.60:1. They are controls, not separators, and an overflow arrow
-// nobody can see is a strip that looks like it ends.
 func dockStripArrowFg(pal overlay.Palette) color.Color {
 	return theme.Readable(pal.FgDim, pal.Canvas)
 }
 
-// workspacePill renders one workspace pill for the dock strip. Every pill rests
-// on the same Panel step the minimized entries do, with a column of padding
-// either side of its label: the fill is what gives it a shape, and the bare
-// column between two of them is what keeps them apart.
-//
-// Active is the accent label, bold and underlined across the whole pill, on
-// that same quiet fill. An inverse slab is the loudest mark the grammar has and
-// it was being spent on the thing the user already knows; the underline says
-// the same in one attribute, survives ASCII mode and monochrome (both are
-// attributes, not glyphs), and leaves the mode pill as the bar's only saturated
-// element. Both states measure workspacePillWidth(label), so the strip does not
-// reflow as the current workspace moves along it.
-//
-// [dock.tabs] colours override the ground and the ink of each state, and
-// active_underline can drop the underline. With none of them set the pill is
-// the one described above.
-//
-// The label is passed in rather than derived: the tab that carries it also
-// carries the width the hit rectangle was cut to, and the two must be the same
-// string.
 func workspacePill(label string, active, dragged bool, t *config.DockTabsConfig, pal overlay.Palette, caps dockCaps, ink color.Color) string {
 	fg, ground := tabColor(t.InactiveFg, &pal), tabColor(t.InactiveBg, &pal)
 	if active {
@@ -69,10 +35,6 @@ func workspacePill(label string, active, dragged bool, t *config.DockTabsConfig,
 	if fg == nil {
 		fg = workspacePillFg(active, pal, ground)
 	}
-	// A picked-up pill comes up onto Surface, the same step the rail lifts a
-	// dragged row onto, so the gesture reads the same wherever it is made. It is
-	// a ground change and not an ink one, which leaves the accent free to go on
-	// saying which workspace is current while it is the one being moved.
 	if dragged {
 		ground = pal.Surface
 	}
@@ -88,21 +50,9 @@ func workspacePill(label string, active, dragged bool, t *config.DockTabsConfig,
 	} else if t.InactiveBold {
 		body = body.Bold(true)
 	}
-	// The caps take the fill's colour as their foreground, which is how a half
-	// circle reads as the rounded end of the pill rather than as a glyph beside
-	// it.
 	return capTab(body.Render(" "+label+" "), ground, caps)
 }
 
-// capTab puts the dock's workspace caps either side of a rendered tab, drawn in
-// the tab's ground. ASCII has none, and styling nothing still costs the frame
-// the escape sequences around it.
-//
-// At 16 colours the pill's fill is the terminal's own ground, and a flat tab
-// with no background has none either, so there is no colour for a cap to take:
-// drawn in the default ink it would read as a bracket round the label. The caps
-// become blanks of the same width, so the strip's geometry and its hit boxes do
-// not change with the depth or the colours.
 func capTab(tab string, ground color.Color, caps dockCaps) string {
 	lc, rc := caps.Left, caps.Right
 	if lc == "" && rc == "" {
@@ -115,26 +65,10 @@ func capTab(tab string, ground color.Color, caps dockCaps) string {
 	return ink.Render(lc) + tab + ink.Render(rc)
 }
 
-// tabColor is a configured [dock.tabs] colour on the dock's palette, or nil
-// when it is unset or not a colour. lipgloss turns a value it cannot parse
-// into no colour at all, which would paint the terminal's default in the
-// middle of the bar, so a bad value is dropped here, where validateDock has
-// already said it is ignored. A role such as accent is the dock's own.
 func tabColor(s string, pal *overlay.Palette) color.Color {
 	return theme.ConfigColorOn(s, pal)
 }
 
-// flatWorkspaceTab renders one [dock.tabs] style = "flat" tab: the label with a
-// column of padding either side. A colour the table does not set comes from the
-// palette the way the pills' do, so the strip still says where you are with no
-// colours configured: the current tab sits on the accent, as the mode chip
-// does, and the others are FgDim on the bar's own ground. At 16 colours the
-// accent ground is the slot drawn in reverse video, the same thing overlay.Chip
-// does there. A picked-up tab comes up onto Surface, the same lift a dragged
-// pill gets.
-//
-// With caps on, the tab takes the pills' rounded ends in its own ground (see
-// capTab), and active_underline underlines the current tab.
 func flatWorkspaceTab(label string, active, dragged bool, t *config.DockTabsConfig, pal overlay.Palette, caps dockCaps, ink color.Color) string {
 	tab, ground := flatTabBody(label, active, dragged, t, pal, ink)
 	if !t.Caps {
@@ -143,8 +77,6 @@ func flatWorkspaceTab(label string, active, dragged bool, t *config.DockTabsConf
 	return capTab(tab, ground, caps)
 }
 
-// flatTabBody is a flat tab without its caps, and the ground it is drawn on:
-// nil when the tab has no background of its own.
 func flatTabBody(label string, active, dragged bool, t *config.DockTabsConfig, pal overlay.Palette, ink color.Color) (string, color.Color) {
 	fg, bg, bold := tabColor(t.InactiveFg, &pal), tabColor(t.InactiveBg, &pal), t.InactiveBold
 	if ink != nil {
@@ -160,8 +92,6 @@ func flatTabBody(label string, active, dragged bool, t *config.DockTabsConfig, p
 		bg = pal.Surface
 	case active && bg == nil:
 		onAccent = true
-		// The accent ground is what marks the current tab when nothing else
-		// does, so it is bold with it.
 		bold = true
 		if fg == nil && theme.Depth() == overlay.Depth16 {
 			st = st.Bold(true).Foreground(pal.Accent).Reverse(true)
@@ -194,7 +124,6 @@ func flatTabBody(label string, active, dragged bool, t *config.DockTabsConfig, p
 	return st.Render(" " + label + " "), bg
 }
 
-// groundOr is c, or fallback when c is unset.
 func groundOr(c, fallback color.Color) color.Color {
 	if c == nil {
 		return fallback
@@ -202,8 +131,6 @@ func groundOr(c, fallback color.Color) color.Color {
 	return c
 }
 
-// dockTabGapText is what is drawn between two tabs: the flat style's styled
-// separator, or bare columns.
 func dockTabGapText(t *config.DockTabsConfig, pal overlay.Palette) string {
 	if !t.Flat() || t.Separator == "" {
 		return strings.Repeat(" ", dockWorkspacePillGap)
@@ -214,11 +141,7 @@ func dockTabGapText(t *config.DockTabsConfig, pal overlay.Palette) string {
 	return t.Separator
 }
 
-// dockTab renders one tab in whichever style [dock.tabs] asks for.
 func dockTab(t *config.DockTabsConfig, label string, active, dragged, attention bool, pal overlay.Palette, caps dockCaps) string {
-	// A workspace that wants a person takes [dock.tabs] attention_fg as its
-	// ink. Only a tab that is not current is marked: the current one is on
-	// screen already.
 	var ink color.Color
 	if attention && !active {
 		ink = tabColor(t.AttentionFg, &pal)
@@ -229,26 +152,18 @@ func dockTab(t *config.DockTabsConfig, label string, active, dragged, attention 
 	return workspacePill(label, active, dragged, t, pal, caps, ink)
 }
 
-// dockCaps are the glyphs either end of a workspace tab, from
-// [dock] workspace caps. ASCII mode makes both empty.
 type dockCaps struct{ Left, Right string }
 
 func dockCapsOf(s *config.Settings) dockCaps {
 	return dockCaps{s.GetDockWorkspaceCapLeft(), s.GetDockWorkspaceCapRight()}
 }
 
-// dockStripKey is everything the workspace strip is drawn from. The strip is
-// drawn by drawDockWorkspaceStrip, which takes nothing else, so an input that
-// is missing here is one the draw cannot read. The colour depth is here
-// because the readable inks are measured at the depth the overlay package
-// holds.
 type dockStripKey struct {
 	pills []dockWorkspaceTab
 	tabs  config.DockTabsConfig
 	look  dockStripLook
 }
 
-// dockStripLook is the part of the key Go can compare with ==.
 type dockStripLook struct {
 	pal       overlay.Palette
 	depth     overlay.Depth
@@ -263,16 +178,11 @@ type dockStripLook struct {
 	inner     int
 }
 
-// same reports whether k and o draw the same strip. The pills are compared by
-// value; the [dock.tabs] table holds a pointer and a slice, so it goes
-// through reflect, which allocates only when one of those is set.
 func (k *dockStripKey) same(o *dockStripKey) bool {
 	return k.look == o.look && slices.Equal(k.pills, o.pills) &&
 		reflect.DeepEqual(&k.tabs, &o.tabs)
 }
 
-// newDockStripKey reads the key from the planned strip and the strip's
-// settings.
 func newDockStripKey(s dockWorkspaceStrip, tabs config.DockTabsConfig, look dockStripLook) dockStripKey {
 	look.moreL, look.moreR, look.scrolls, look.inner = s.MoreLeft, s.MoreRight, s.Scrolls, s.Inner
 	if s.Add != nil {
@@ -281,8 +191,6 @@ func newDockStripKey(s dockWorkspaceStrip, tabs config.DockTabsConfig, look dock
 	return dockStripKey{pills: s.Pills, tabs: tabs, look: look}
 }
 
-// clone is k with nothing shared with the state it was read from, so a later
-// change to that state in place cannot make the kept key equal the new one.
 func (k dockStripKey) clone() dockStripKey {
 	k.pills = slices.Clone(k.pills)
 	if k.tabs.ActiveUnderline != nil {
@@ -293,30 +201,19 @@ func (k dockStripKey) clone() dockStripKey {
 	return k
 }
 
-// dockStripDrawn is a drawn strip and the targets in it, in columns from the
-// strip's first column.
 type dockStripDrawn struct {
 	text   string
 	hits   []dockWorkspaceHit
 	arrows []dockWorkspaceArrowHit
 }
 
-// dockStripMemo keeps the last strip drawn and the key it was drawn from. A
-// keystroke in a pane changes nothing the strip shows, and the strip was most
-// of the dock's cost on such a frame.
 type dockStripMemo struct {
 	ok    bool
 	key   dockStripKey
 	drawn dockStripDrawn
-	// next is the key read this frame. It lives here, and is compared through
-	// pointers, so the comparison copies neither key to the heap.
-	next dockStripKey
+	next  dockStripKey
 }
 
-// renderDockWorkspaceStrip draws the strip starting at column startX and records
-// every pill and arrow it draws into m.dockWorkspaceHits and
-// m.dockWorkspaceArrowHits. The strip is drawn again only when its key
-// changes.
 func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 	m.dockWorkspaceHits = m.dockWorkspaceHits[:0]
 	m.dockWorkspaceArrowHits = m.dockWorkspaceArrowHits[:0]
@@ -343,12 +240,6 @@ func (m *OS) renderDockWorkspaceStrip(s dockWorkspaceStrip, startX int) string {
 	return memo.drawn.text
 }
 
-// drawDockWorkspaceStrip draws the strip from k alone.
-//
-// The layout is: a bare column, the left gutter, the run of pills, the right
-// gutter, then the "+". The gutters exist only while the strip scrolls, and
-// hold their columns whether or not there is anything that way, so an arrow
-// appearing does not shift the pill under the pointer.
 func drawDockWorkspaceStrip(k *dockStripKey) dockStripDrawn {
 	l, pal, style := &k.look, k.look.pal, &k.tabs
 	var d dockStripDrawn
@@ -387,8 +278,6 @@ func drawDockWorkspaceStrip(k *dockStripKey) dockStripDrawn {
 		d.hits = append(d.hits, dockWorkspaceHit{X0: x, X1: x + t.Width, Workspace: t.Workspace})
 		x, drawn = x+t.Width, drawn+t.Width
 	}
-	// A scrolling strip holds its viewport open, so the "+" and the readout
-	// behind it stay put as the pills move under them.
 	if l.scrolls && drawn < l.inner {
 		b.WriteString(strings.Repeat(" ", l.inner-drawn))
 		x += l.inner - drawn
@@ -413,8 +302,6 @@ func (m *OS) renderDock() *lipgloss.Layer {
 	return lipgloss.NewLayer(fullDock).X(0).Y(dockbarYPos).Z(config.ZIndexDock).ID("dock")
 }
 
-// renderDockString returns the dock content and its top row, used both by the
-// layer path and the fullscreen fast path.
 func (m *OS) renderDockString() (string, int) {
 	m.ensureDockPlan()
 	layout := m.CalculateDockLayout()
@@ -424,11 +311,6 @@ func (m *OS) renderDockString() (string, int) {
 		Foreground(pal.FgMute).
 		MarginRight(2)
 
-	// The mode label arrives without its caps, so the pill is assembled here
-	// rather than found again by searching the string for the cap glyphs. It is
-	// the dock's only filled element, so it is the only one that has to earn its
-	// contrast: the foreground is picked against whatever colour the mode is,
-	// and bold buys the last of the legibility a saturated fill costs.
 	modeColor := layout.ModeInfo.Color
 	styledModeText := ""
 	if layout.ModeLabel != "" {
@@ -452,9 +334,6 @@ func (m *OS) renderDockString() (string, int) {
 	var dockItemsStr strings.Builder
 	itemNumber := 1
 
-	// Where each entry lands inside the centre block, measured off the styled
-	// string as it is built. Turned into screen columns below, once the centring
-	// spacer this block is placed against is known.
 	type itemSpan struct {
 		windowIndex, x0, x1 int
 	}
@@ -463,9 +342,6 @@ func (m *OS) renderDockString() (string, int) {
 	relX := 0
 	overflowX0, overflowX1 := 0, 0
 
-	// The centre block walks the plan too. Anything the plan puts before
-	// "windows" is drawn before the minimized entries, and the entries' relative
-	// spans carry the offset that produces.
 	for _, name := range m.dockPlan.Center {
 		if name != config.DockComponentWindows {
 			cell := m.dockCustomCell(name)
@@ -485,8 +361,6 @@ func (m *OS) renderDockString() (string, int) {
 			windowIndex := dockItem.WindowIndex
 			window := m.Windows[windowIndex]
 
-			// A minimized entry rests on the same Panel step the rest of the chrome
-			// uses; only the two states worth a saturated fill get one.
 			bgColor, fgColor := color.Color(pal.Panel), color.Color(pal.FgDim)
 			emphasis := false
 
@@ -502,9 +376,6 @@ func (m *OS) renderDockString() (string, int) {
 				fgColor = theme.ContrastText(bgColor)
 			}
 
-			// Flat by default: the caps repeated on every minimized window turned
-			// the row into beads. getDockItems pads the label, so the fill alone
-			// still reads as a cell.
 			caps := lipgloss.NewStyle().Foreground(bgColor)
 			nameLabel := lipgloss.NewStyle().
 				Background(bgColor).
@@ -527,26 +398,14 @@ func (m *OS) renderDockString() (string, int) {
 			itemNumber++
 		}
 
-		// The marker's own columns, measured as it is written for the same
-		// reason the entries' are: it is a target, and a target the renderer
-		// did not record is one the click path has to guess at.
 		if layout.TruncatedCount > 0 {
 			marker := " ..."
-			// Drawn in the same ink as the strip's overflow arrows: it wears no
-			// fill and, now that it opens go-to on the panes, it is a control
-			// rather than a separator. FgMute measured 2.60:1 against the bare
-			// canvas.
 			dockItemsStr.WriteString(lipgloss.NewStyle().Foreground(dockStripArrowFg(pal)).Render(marker))
 			overflowX0, overflowX1 = relX, relX+lipgloss.Width(marker)
 			relX = overflowX1
 		}
 	}
 
-	// The left block, assembled by walking the plan rather than by naming three
-	// segments in a fixed order. Columns are accumulated as the string is built,
-	// which is what lets the workspace strip be told where it starts and a custom
-	// cell record the rectangle that was just drawn rather than one derived
-	// afterwards from a layout that may have moved.
 	m.dockCustomHits = m.dockCustomHits[:0]
 	dockY := m.GetDockbarContentYPosition()
 	m.dockWorkspaceHits = m.dockWorkspaceHits[:0]
@@ -554,14 +413,10 @@ func (m *OS) renderDockString() (string, int) {
 
 	var leftB strings.Builder
 	leftX := 0
-	// The spotlight chip follows the mode pill, or opens the block when the
-	// plan has no mode pill. See spotlight_exit.go.
 	chip := m.spotlightChip()
 	chipW := lipgloss.Width(chip)
 	m.recordSpotlightChip(0, 0, dockY)
-	// The calm mark rides after it on the same terms. See calm.go.
 	calm := m.calmChip()
-	// The key mode chip rides after the calm mark. See key_modes.go.
 	calm += m.keyModeChip()
 	if !m.dockPlan.Has(config.DockComponentMode) {
 		if chip != "" {
@@ -583,8 +438,6 @@ func (m *OS) renderDockString() (string, int) {
 			}
 			chunk += calm
 		case config.DockComponentWorkspaces:
-			// Both dock paths render through here, so the tab hit rects are the
-			// drawn geometry rather than a second guess at it.
 			chunk = m.renderDockWorkspaceStrip(layout.WorkspaceStrip, leftX)
 		case config.DockComponentTrail:
 			chunk = styledTrailText
@@ -608,66 +461,39 @@ func (m *OS) renderDockString() (string, int) {
 
 	renderWidth := m.GetRenderWidth()
 
-	// The session controls take the bar's right-hand end before anything else is
-	// measured, and barWidth is the bar every other block is fitted into. They
-	// are built first because whether the leave control is there at all depends
-	// on the run path, not on the width, so their span is not something the rest
-	// of the layout can infer.
 	sessionStrip, sessionCells := m.buildDockSessionStrip()
 	stripW := lipgloss.Width(sessionStrip)
 	barWidth := max(renderWidth-stripW, 0)
 
 	actualLeftWidth := lipgloss.Width(leftInfo)
 	centerWidth := lipgloss.Width(dockItemsStr.String())
-	// A center with a custom cell (a clock, say) is anchored to the screen, so
-	// a message fits beside it rather than moving it. It clamps only when the
-	// bar itself is crowded. A center of minimized entries alone keeps sitting
-	// in the room the right block leaves, so a message keeps its full width.
 	anchored := centerWidth > 0 && layout.CustomCenter > 0
 	centerX := actualLeftWidth
 	if anchored {
 		centerX = max(actualLeftWidth, min((renderWidth-centerWidth)/2, barWidth-centerWidth-layout.CenterRightReserve))
 	}
 	rightRoom := max(barWidth-centerX-centerWidth, 0)
-	// The right block never takes more room than the left block and the dock
-	// items leave, so the bar as a whole stays inside the screen.
 	rightWidth := min(layout.RightWidth, rightRoom)
 
 	var rightInfo string
-	// notifRule is the run of hairline the message burns down over, drawn into
-	// the right-hand end of the separator row below. Empty when nothing is live.
 	var notifRule string
 
-	// The message is built against the room the left block and the dock items
-	// have actually left, not against an estimate, so its width needs no
-	// correction afterwards. Correcting it afterwards is what the generic
-	// truncation below would do, and the first thing that would cut is the
-	// block's trailing columns: the gap that keeps the message off the bar's
-	// right-hand end.
 	var notif notifBlock
 	var hasNotif bool
 	if rightRoom > 0 {
 		notif, hasNotif = m.dockNotificationBlock(barWidth, rightRoom)
 	}
 
-	// Where the right block's custom cells landed inside it. Converted to screen
-	// columns below, once the block's own first column is known.
 	var rightCustom []dockCustomHit
 
 	legend := m.dockModeLegend()
 	switch {
 	case hasNotif:
-		// What the tick compares against to tell whether the burn has moved.
 		m.notifDrawn = notif.drawn
-		// The message outranks the legend for its duration. A mode is a thing
-		// the user is holding and can read the keys for again in a moment; a
-		// message is a thing that just happened and will not be repeated.
 		rightInfo = notif.Text
 		notifRule = notif.Rule
 		rightWidth = notif.Width
 	case len(legend) > 0:
-		// The legend is fitted to the room by dropping whole keys, so the
-		// cut below never reaches it.
 		rightInfo = renderModeLegend(legend, rightWidth, pal)
 	default:
 		rightInfo, rightCustom = m.renderDockRightCells(rightWidth, sysInfoStyle)
@@ -682,10 +508,6 @@ func (m *OS) renderDockString() (string, int) {
 	leftSpacer := max(centerX-actualLeftWidth, 0)
 	rightSpacer := max(barWidth-centerX-centerWidth-rightWidth, 0)
 
-	// The message block's own columns, taken from the spacers this pass drew
-	// rather than from the bar's right-hand end. The block is the last thing in
-	// the bar, so everything in front of it added up is where it starts, and the
-	// burn rule above it is placed from the same number.
 	notifX0 := actualLeftWidth + leftSpacer + centerWidth + rightSpacer
 	m.notifHit = notifHitZones{
 		Active:    hasNotif,
@@ -702,16 +524,11 @@ func (m *OS) renderDockString() (string, int) {
 	}
 	if hasNotif && len(m.Notifications) > 0 {
 		m.notifHit.Drawn = m.drawnCopy(m.Notifications[len(m.Notifications)-1])
-		// A message this dock had to cut is one prefix+N can reopen, even a
-		// short notice cut by a narrow screen.
 		if notif.Cut {
 			m.rememberMessage(m.notificationEntry(m.notifHit.Drawn))
 		}
 	}
 
-	// The entries' screen columns, now that the spacer in front of them is known.
-	// Recorded from the geometry this pass drew, so a click hit-tests the bar the
-	// user is looking at rather than the one a later state would produce.
 	m.dockItemHits = m.dockItemHits[:0]
 	itemsX, itemY := actualLeftWidth+leftSpacer, m.GetDockbarContentYPosition()
 	for _, s := range itemSpans {
@@ -724,8 +541,6 @@ func (m *OS) renderDockString() (string, int) {
 			X0: itemsX + h.X0, X1: itemsX + h.X1, Y: itemY, Name: h.Name,
 		})
 	}
-	// The right block is drawn right-aligned inside the room it was given, so
-	// its cells sit against its right-hand end rather than its first column.
 	rightBlockX := notifX0 + rightWidth - lipgloss.Width(rightInfo)
 	for _, h := range rightCustom {
 		m.dockCustomHits = append(m.dockCustomHits, dockCustomHit{
@@ -744,20 +559,12 @@ func (m *OS) renderDockString() (string, int) {
 	dockBar, barW := assembleDockBar(leftInfo, actualLeftWidth, leftSpacer, dockItemsStr.String(), centerWidth,
 		rightSpacer, rightInfo, rightWidth)
 
-	// Backstop: whatever the parts add up to, the bar stops where the session
-	// controls begin. The controls are appended after it, so an overfull bar
-	// loses its own right-hand end and never the strip.
 	if barW > barWidth {
 		dockBar, barW = truncateToWidth(dockBar, barWidth), barWidth
 	}
 
-	// The strip's screen columns, now that the bar in front of it is drawn.
-	// Recorded from this pass for the reason the minimized entries are: whether
-	// the leave control exists at all comes from the run path, so a handler that
-	// recomputed the columns would need to re-derive that too and could disagree
-	// with the frame the user clicked.
 	m.dockSessionHits = m.dockSessionHits[:0]
-	sessionX := barWidth + 1 // the strip opens with a bare column
+	sessionX := barWidth + 1
 	for _, c := range sessionCells {
 		m.dockSessionHits = append(m.dockSessionHits, dockSessionHit{
 			X0: sessionX, X1: sessionX + c.Width, Y: itemY, Action: c.Action,
@@ -767,12 +574,6 @@ func (m *OS) renderDockString() (string, int) {
 	dockBar += sessionStrip
 	barW += stripW
 
-	// The styled hairline is kept until its width, glyph or colour changes.
-	// Keyed on the glyph as well as the width: the separator character follows
-	// the border style, which is switchable from the settings menu, and a
-	// width-only key would serve the old hairline until the next resize. The
-	// colour follows the theme. Styling with a width wraps the whole row by
-	// grapheme, which is close to half of what the dock would cost per frame.
 	sepChar, ruleColor := m.Settings.GetWindowSeparatorChar(), m.railRule()
 	if m.cachedSeparatorWidth != renderWidth || m.cachedSeparatorChar != sepChar || m.cachedSeparatorColor != ruleColor {
 		m.cachedSeparator = lipgloss.NewStyle().
@@ -785,15 +586,6 @@ func (m *OS) renderDockString() (string, int) {
 	}
 	separator := m.cachedSeparator
 
-	// The message burns down over the hairline directly above it, across the
-	// block's own columns. The lit run replaces that stretch of the separator
-	// rather than being drawn on top of it, so the row is still exactly one
-	// screen wide.
-	//
-	// It is placed at the block's recorded first column, not pinned to the right
-	// edge of the screen: the session controls hold the last columns, so a burn
-	// pinned there would be drawn under them, a rule's width away from the
-	// message it belongs to.
 	if ruleWidth := lipgloss.Width(notifRule); ruleWidth > 0 && notifX0 < renderWidth {
 		if room := renderWidth - notifX0; ruleWidth > room {
 			notifRule, ruleWidth = truncateToWidth(notifRule, room), room
@@ -803,9 +595,6 @@ func (m *OS) renderDockString() (string, int) {
 			hairline.Render(strings.Repeat(sepChar, renderWidth-notifX0-ruleWidth))
 	}
 
-	// Every row is one line, and the bar is padded out to the screen's width
-	// as JoinVertical padded it: the hairline is always that wide.
-	// JoinVertical measured and split both rows again on every frame.
 	if !m.Settings.DockCompact {
 		if pad := renderWidth - barW; pad > 0 {
 			dockBar += strings.Repeat(" ", pad)
@@ -814,8 +603,6 @@ func (m *OS) renderDockString() (string, int) {
 		}
 	}
 
-	// A compact dock is the bar alone. The rule, and the burn a message draws
-	// on it, are not drawn.
 	dockbarYPos := m.GetRenderHeight() - m.Settings.DockHeight()
 	switch {
 	case m.Settings.DockCompact:
@@ -829,11 +616,6 @@ func (m *OS) renderDockString() (string, int) {
 	return separator + "\n" + dockBar, dockbarYPos
 }
 
-// assembleDockBar lays the bar out as JoinHorizontal did for one-line parts:
-// the left block, a run of spaces, the dock items, a run of spaces, and the
-// right block right-aligned in its room. It returns the bar and its width,
-// which the callers' arithmetic already knows. A part holding a tab or a line
-// break goes through lipgloss, which lays those out.
 func assembleDockBar(left string, leftW, leftSpacer int, items string, itemsW, rightSpacer int, right string, rightW int) (string, int) {
 	if strings.ContainsAny(left+items+right, "\t\n") {
 		bar := lipgloss.JoinHorizontal(lipgloss.Top,

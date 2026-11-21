@@ -8,21 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// A pane's box is settled across a session's clients (the negotiated reserve),
-// but the arithmetic inside the box used to read process-global config that
-// nothing synced: shared borders and the pane gap. Two clients whose configs
-// disagreed there partitioned the same box into different rectangles, or the
-// same rectangles into different guest grids, and every ordinary state push
-// (a focus switch, alt+n) moved the shared PTYs between the two answers.
-//
-// These tests hold two full clients on one session whose *processes* disagree
-// about the geometry config, which is what a local client and a tuios-web
-// process with different config in force are. Process disagreement is
-// simulated by installing each side's globals before anything runs on that
-// side; after the fix the layout reads session-settled model state, so the
-// globals only decide what each client walks in with.
-
-// clientGlobals is one simulated client process's geometry config.
 type clientGlobals struct {
 	shared bool
 	gap    int
@@ -33,10 +18,6 @@ func (g clientGlobals) install() {
 	config.Global.PaneGap = g.gap
 }
 
-// routeSide is exchange.route with one side's globals installed before each of
-// that side's closures runs, simulating a separate process. It doubles as a
-// canary: if any layout path still reads the globals, the disagreeing tests
-// below see the resizes come back.
 func routeSide(ex *exchange, c *session.TUIClient, m *OS, label string, g clientGlobals) {
 	c.OnStateSync(func(state *session.SessionState, _, sourceID string) {
 		ex.enqueue(func() {
@@ -48,11 +29,6 @@ func routeSide(ex *exchange, c *session.TUIClient, m *OS, label string, g client
 		})
 	})
 	c.OnSessionResize(func(width, height, clientCount int, reserve session.LayoutReserve) {
-		// The generation is read on the read loop, as WireDaemonClient reads it.
-		// Without it the client pushes the generation it attached with, the
-		// daemon reads every later push as tiled in a stale layout, and keeps
-		// its own rectangles: a floated pane then reaches the peer at the
-		// daemon's nominal size.
 		gen := c.SessionLayoutGeneration()
 		ex.enqueue(func() {
 			ex.n++
@@ -68,10 +44,6 @@ func routeSide(ex *exchange, c *session.TUIClient, m *OS, label string, g client
 	})
 }
 
-// geometryRig brings up a tiled two-pane session under localG's process, joins
-// a peer under peerG's process, and settles the session: reserves agreed, the
-// local client's state (which carries the session's pane geometry) pushed and
-// adopted, and the exchange quiet.
 func geometryRig(t *testing.T, localG, peerG clientGlobals) (*rig, *peer, *exchange) {
 	t.Helper()
 	prevShared, prevGap := config.Global.SharedBorders, config.Global.PaneGap
@@ -85,8 +57,6 @@ func geometryRig(t *testing.T, localG, peerG clientGlobals) (*rig, *peer, *excha
 	localG.install()
 	r := newRigSized(t, 2, holderCols, holderRows)
 	r.tile()
-	// The session's pane geometry is on the daemon before the peer attaches,
-	// which is the usual case: the session existed before the second client.
 	r.m.SyncStateToDaemon()
 
 	peerG.install()
@@ -107,9 +77,6 @@ func geometryRig(t *testing.T, localG, peerG clientGlobals) (*rig, *peer, *excha
 	p.m.TileAllWindows()
 	p.m.SyncDaemonPTYDimensions()
 	settleGeometry(t, r, p, ex)
-	// And one tree. The local client's first tree op can land after the peer
-	// attached, so the peer may start with no tree and build its own; a test
-	// that starts there is measuring the rig, not the change it makes.
 	settleUntil(t, ex, "both clients to hold one tree", func() bool {
 		return !ex.queued() && treeShape(r.m) != "<no tree>" && treeShape(r.m) == treeShape(p.m)
 	})
@@ -117,12 +84,6 @@ func geometryRig(t *testing.T, localG, peerG clientGlobals) (*rig, *peer, *excha
 	return r, p, ex
 }
 
-// settleGeometry waits for the pair to genuinely converge (one agreed
-// arithmetic, one set of pane sizes, an empty queue) rather than for a fixed
-// quiet window. The lesson is settleBox's: on a loaded machine a broadcast can
-// outlive any constant, and one delivered after a fixed window expires lands
-// inside the measurement, where the settling it performs is exactly what the
-// test is counting.
 func settleGeometry(t *testing.T, r *rig, p *peer, ex *exchange) {
 	t.Helper()
 	deadline := time.Now().Add(rigWait)
@@ -135,9 +96,6 @@ func settleGeometry(t *testing.T, r *rig, p *peer, ex *exchange) {
 			return
 		}
 		if time.Now().After(deadline) {
-			// The trees, the rectangles, the boxes and the daemon's own pane
-			// sizes, so a failure that does not reproduce locally still says
-			// which side is wrong and why.
 			_, daemon := r.paneSizes()
 			t.Fatalf("the pair never settled on one arithmetic:\n local shared=%v gap=%d %s\n peer  shared=%v gap=%d %s\n"+
 				" local tree %s rects %s tiling=%v ws=%d box=%dx%d reserve=%+v\n"+
@@ -152,10 +110,6 @@ func settleGeometry(t *testing.T, r *rig, p *peer, ex *exchange) {
 	}
 }
 
-// settleUntil delivers broadcasts until cond holds, so an assertion can wait
-// for the event it needs rather than for a fixed window a loaded machine can
-// outlast, and so a message that never arrives is a named failure rather
-// than a vacuous pass.
 func settleUntil(t *testing.T, ex *exchange, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(rigWait)
@@ -195,8 +149,6 @@ func TestFloatedPaneStaysFloatedEverywhere(t *testing.T) {
 	}
 	settleUntil(t, ex, "the peer to learn pane "+shortID(floatedID)+" floats", peerCopy)
 	settleGeometry(t, r, p, ex)
-	// The peer's tree must have let go of the pane, or its tiled panes underfill
-	// the box forever and every sync reads as a stale layout.
 	if tree := p.m.WorkspaceTrees[p.m.CurrentWorkspace]; tree != nil {
 		intID := p.m.GetWindowIntID(floatedID)
 		for _, id := range tree.GetAllWindowIDs() {

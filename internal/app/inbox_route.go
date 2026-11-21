@@ -10,24 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// Which daemon the Inbox is.
-//
-// The Inbox a client shows, and every act of the person on it, belong to one
-// daemon: the daemon of the session the client is attached to. That is this
-// machine's daemon, or, on a client attached through a host (tuios attach
-// --host), that host's daemon over the link. The attach nonce that signs the
-// person's acts comes from that same daemon, so an act sent anywhere else
-// would be refused. The far daemon holds each act to its link policy for
-// this machine: dismissing, snoozing and answering need the respond grant
-// there, and its refusal names the grant and the table to change.
-//
-// inboxDialer and inboxActCaller are the one place that choice is made. The
-// watch (startInboxWatch) reads the queue through inboxDialer, and every act
-// (dismiss-attention, mark-attention, reply-approval, answer-ask,
-// peek-prompt, respond, release-agent-message, get-approval) goes through
-// inboxActCaller.
-
-// inboxDialer opens a verb connection to the daemon that holds the Inbox.
 func (m *OS) inboxDialer() inboxDial {
 	host, build := m.AttachedHost, ""
 	if m.DaemonClient != nil {
@@ -42,8 +24,6 @@ func (m *OS) inboxDialer() inboxDial {
 	}
 }
 
-// inboxActCaller is how an act on the Inbox, or a read of an agent's pane,
-// reaches the daemon that holds it. Tests set InboxState.call.
 func (m *OS) inboxActCaller() inboxVerbCall {
 	if m.Inbox.call != nil || m.AttachedHost == "" {
 		return m.inboxCaller()
@@ -59,8 +39,6 @@ func (m *OS) inboxActCaller() inboxVerbCall {
 	}
 }
 
-// inboxCanAct reports whether this client has a daemon to send the person's
-// acts to, and says why not when it has none.
 func (m *OS) inboxCanAct(what string) bool {
 	if m.DaemonClient != nil || m.Inbox.call != nil {
 		return true
@@ -69,9 +47,6 @@ func (m *OS) inboxCanAct(what string) bool {
 	return false
 }
 
-// inboxElsewhere refuses an act on an item of another machine than the one
-// whose Inbox this is, and says where it is. A client attached through a host
-// signs with that host's nonce, so it cannot act on a third machine's item.
 func (m *OS) inboxElsewhere(it session.AttentionItem, what string) bool {
 	if it.Host == "" {
 		return false
@@ -84,8 +59,6 @@ func (m *OS) inboxElsewhere(it session.AttentionItem, what string) bool {
 // now attached to.
 type InboxRewatchMsg struct{}
 
-// restartInboxWatch drops the Inbox of the daemon the client left and
-// follows the one it is attached to now.
 func (m *OS) restartInboxWatch() tea.Cmd {
 	if m.inboxEvents == nil {
 		return m.startInboxWatch()
@@ -99,10 +72,6 @@ func (m *OS) restartInboxWatch() tea.Cmd {
 	return m.startInboxWatch()
 }
 
-// inboxActErr is what the person reads when an act did not go through. A
-// refusal of the link policy of host, the machine the Inbox is on, names the
-// grant first, so the dock's line shows it, then the table on host that gives
-// it.
 func inboxActErr(err error, host string) string {
 	ce, ok := errors.AsType[*session.VerbCallError](err)
 	if !ok || ce.Code != session.ErrVerbForbidden || ce.Hint == nil || len(ce.Hint.Missing) == 0 || host == "" {

@@ -5,15 +5,6 @@ import (
 	"testing"
 )
 
-// The spacer is the first layout entry that wants a floor rather than a
-// ceiling. Every section takes only the lines its rows can fill; empty space
-// with nothing to grow into is the whole point of a spacer, so it is sized by
-// what it was asked for and not by what it holds.
-
-// spacerFrame renders the rail with a layout and a listing, and hands back the
-// plain lines. Every claim below is made against the drawn frame rather than
-// against the allocator, because a gap that the arithmetic agrees on and the
-// renderer does not draw is not a gap.
 func spacerFrame(t *testing.T, spec string, height int) []string {
 	t.Helper()
 	dir := fileViewTree(t)
@@ -29,8 +20,6 @@ func spacerFrame(t *testing.T, spec string, height int) []string {
 	return out
 }
 
-// railLineBlank reports whether a rail line has nothing on it. The edge rule
-// facing the panes is on every line, so blank means the content columns are.
 func railLineBlank(line string) bool {
 	return strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(line), "│")) == ""
 }
@@ -90,9 +79,6 @@ func TestSpacerGivesUpItsLinesFirst(t *testing.T) {
 	}
 	rowH := []int{1, 1, 1}
 	rows := []int{4, 1, 4}
-	// The two sections keep two rows each before the ladder starts taking whole
-	// lines off the rail, so four lines is the rail that has exactly nothing to
-	// spare on being empty.
 	const floors = 4
 
 	for avail := 0; avail <= 20; avail++ {
@@ -107,8 +93,6 @@ func TestSpacerGivesUpItsLinesFirst(t *testing.T) {
 		}
 	}
 
-	// And with room for everything the spacer is served, or "give up first"
-	// would have been "never get any".
 	if out := sidebarBudgetLines(20, plans, rows, rowH); out[1] < 4 {
 		t.Errorf("a 40 percent spacer took %d lines of a rail with room to spare: %v", out[1], out)
 	}
@@ -128,10 +112,6 @@ func TestSpacerGivesUpItsLinesFirst(t *testing.T) {
 // nothing and the offset stays at 0.
 func TestWheelOverASpacerScrollsTheSectionAboveIt(t *testing.T) {
 	dir := fileViewTree(t)
-	// The spacer is above the section the rail pins to its bottom edge, so the
-	// gap it makes is not the pinned block's floating blank: that one already
-	// belongs to the section over it, and a spacer that leant on it would look
-	// covered without being.
 	withSections(t, "sessions,spacer,terminals,files")
 	m := sidebarTestOS(t, 120, 24, "left")
 	openFilesOn(t, m, dir)
@@ -141,8 +121,6 @@ func TestWheelOverASpacerScrollsTheSectionAboveIt(t *testing.T) {
 		plain[i] = stripANSIForTrace(l)
 	}
 
-	// The middle of the gap the spacer made, which is the run of blanks under
-	// the sessions section.
 	at := lineOf(plain, "terminals")
 	if at < 0 {
 		t.Fatalf("no terminals section:\n%s", strings.Join(plain, "\n"))

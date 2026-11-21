@@ -7,33 +7,19 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
-// The agents view's header menus. The Board, Group and machine controls each
-// open the TUI's one dropdown (dropdown.go), the list the New agent sheet's
-// fields open, under the control. s opens the Group menu.
-//
-// A menu is a one-key layer (CockpitLayerMenu), so the key router, the key
-// bar and the click handler find it through CockpitTop like the others. It is
-// drawn last, over the whole view, at the place the control was drawn.
-
-// ckMenu is the open header menu: which control it hangs from, the list, and
-// what each row does.
 type ckMenu struct {
 	id    string
 	dd    *dropdown
 	picks []func(m *OS) tea.Cmd
 }
 
-// ckAnchor is where a control was drawn, in canvas cells, for its menu.
 type ckAnchor struct{ x, y, w int }
 
-// ckMenuControls are the header controls that open a menu, by action.
 var ckMenuControls = map[string]bool{"board": true, "group": true, "scope": true, "talked": true}
 
 // CockpitMenuOpen reports whether a header menu is open.
 func (m *OS) CockpitMenuOpen() bool { return m.Inbox.ck.menu != nil }
 
-// cockpitOpenMenu opens the menu of the control action, or closes it when it
-// is the one already open.
 func (m *OS) cockpitOpenMenu(action string) {
 	ck := &m.Inbox.ck
 	defer m.cockpitTouch()
@@ -49,8 +35,6 @@ func (m *OS) cockpitOpenMenu(action string) {
 	ck.menu = &ckMenu{id: action, dd: newDropdown(items), picks: picks}
 }
 
-// cockpitMenuItems are the rows of the control action's menu, and what each
-// one does.
 func (m *OS) cockpitMenuItems(action string) ([]ddItem, []func(m *OS) tea.Cmd) {
 	ck := &m.Inbox.ck
 	var items []ddItem
@@ -87,7 +71,6 @@ func (m *OS) cockpitMenuItems(action string) ([]ddItem, []func(m *OS) tea.Cmd) {
 			return nil
 		})
 	case "talked":
-		// The agents the Talked with line had no room for.
 		e, ok := m.cockpitAgent()
 		if !ok {
 			break
@@ -119,7 +102,6 @@ func (m *OS) cockpitMenuItems(action string) ([]ddItem, []func(m *OS) tea.Cmd) {
 	return items, picks
 }
 
-// cockpitMenuPick runs row i and closes the menu.
 func (m *OS) cockpitMenuPick(i int) tea.Cmd {
 	ck := &m.Inbox.ck
 	mn := ck.menu
@@ -149,10 +131,6 @@ func (m *OS) CockpitMenuKey(key string) tea.Cmd {
 	return nil
 }
 
-// cockpitMenuClick takes a click while a menu is open, and reports whether it
-// spent it: a row picks, and the rest of the box does nothing. A click outside
-// is left to the one-key dismissal, which closes the menu and does nothing
-// else, unless it is on the control that opened the menu, which closes it.
 func (m *OS) cockpitMenuClick(x, y int) (tea.Cmd, bool) {
 	mn := m.Inbox.ck.menu
 	if mn == nil {
@@ -168,8 +146,6 @@ func (m *OS) cockpitMenuClick(x, y int) (tea.Cmd, bool) {
 	return nil, true
 }
 
-// cockpitMenuHover lights the row under the pointer, and reports whether the
-// pointer is over the menu.
 func (m *OS) cockpitMenuHover(x, y int) bool {
 	mn := m.Inbox.ck.menu
 	if mn == nil {
@@ -182,8 +158,6 @@ func (m *OS) cockpitMenuHover(x, y int) bool {
 	return inside
 }
 
-// drawCockpitMenu draws the open menu under its control, over everything the
-// view drew. top is the canvas's first row on the screen.
 func (m *OS) drawCockpitMenu(c *ckCanvas, l ckLook, top int) {
 	ck := &m.Inbox.ck
 	mn := ck.menu
@@ -198,17 +172,13 @@ func (m *OS) drawCockpitMenu(c *ckCanvas, l ckLook, top int) {
 	drawDropdown(c, l, mn.dd, a.x-2, a.y, a.w+4, 0, c.h, top)
 }
 
-// agentsSortNames name the sorts, in agentsSort order.
 var agentsSortNames = [agentsSortCount]string{"needs you", "name", "recent", "session"}
 
-// inboxAgentsSortName is the sort in force, as the Group menu names it.
 func (m *OS) inboxAgentsSortName() string {
 	return agentsSortNames[m.Inbox.agents.sort%agentsSortCount]
 }
 
-// cockpitMenuHints are the menu's keys for the key bar.
 func (m *OS) cockpitMenuHints() []overlay.Hint {
-	// The menu moves on the list keys, letters included.
 	return m.listHints([]overlay.Hint{
 		{Key: hintListMoveLetters, Label: "move"},
 		{Key: overlay.EnterKey(), Label: "choose"},

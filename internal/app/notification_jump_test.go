@@ -8,7 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// jumpTestOS is two panes on two workspaces, wide enough to draw a dock.
 func jumpTestOS(t *testing.T) *OS {
 	t.Helper()
 	m := newNarrowOS(t, 120, 40)

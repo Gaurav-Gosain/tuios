@@ -9,8 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// keystrokeOS builds a host of n bordered panes filled with ordinary shell-like
-// text, the state a client is in between keystrokes.
 func keystrokeOS(tb testing.TB, n, cols, rows int) *OS {
 	tb.Helper()
 	m := &OS{
@@ -71,9 +69,6 @@ func BenchmarkKeystrokeFrame(b *testing.B) {
 	}
 }
 
-// tiledKeystrokeOS is keystrokeOS under the shipped defaults: BSP tiling with
-// shared borders, so the panes are borderless and the dividers between them
-// are the separator overlay.
 func tiledKeystrokeOS(tb testing.TB, n, cols, rows int) *OS {
 	tb.Helper()
 	m := &OS{

@@ -12,13 +12,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// benchAgentStates cycles through every state a rail row can be in, so the
-// benchmarks below pay for each branch of the row renderer.
 var benchAgentStates = slices.DeleteFunc(agentstate.Names(), func(n string) bool { return n == agentstate.None.Name() })
 
-// benchAgentOS is a rail watching twelve agents in the attached session, in
-// every state, with harnesses and notes, which is the fleet the agents section
-// is for.
 func benchAgentOS(b *testing.B) (*OS, sessiontree.Tree) {
 	b.Helper()
 	config.Global.SidebarEnabled = true
@@ -65,7 +60,7 @@ func BenchmarkSidebarAgentsRebuild(b *testing.B) {
 // reads is on the hot path even when nothing is redrawn.
 func BenchmarkSidebarAgentsCached(b *testing.B) {
 	m, _ := benchAgentOS(b)
-	m.sidebarPanel() // prime the cache
+	m.sidebarPanel()
 	b.ReportAllocs()
 	for b.Loop() {
 		m.sidebarPanel()
@@ -91,8 +86,6 @@ func BenchmarkSidebarAgentsFolded(b *testing.B) {
 	}
 }
 
-// noAgentRailOS is a rail over plain shells with the fold configured and no
-// agent ever seen, on a clock that moves a minute every read.
 func noAgentRailOS(tb testing.TB) *OS {
 	tb.Helper()
 	config.Global.SidebarEnabled = true

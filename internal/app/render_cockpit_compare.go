@@ -10,12 +10,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// ckCompareColMin is the narrowest an attempt's column is drawn. Fewer
-// columns are shown on a narrow screen, the focused one among them.
 const ckCompareColMin = 26
 
-// ckTint is c carried t of the way into ground, at the depth in force: at
-// 16 colours there are no tints.
 func ckTint(l ckLook, c, ground color.Color, t float64) color.Color {
 	switch l.pal.Depth {
 	case overlay.Depth16:
@@ -26,7 +22,6 @@ func ckTint(l ckLook, c, ground color.Color, t float64) color.Color {
 	return ckFlat(overlay.MixColors(c, ground, t))
 }
 
-// ckSpan is a duration as the comparison says it: "9m 05s", "2h 10m".
 func ckSpan(d time.Duration) string {
 	d = d.Round(time.Second)
 	switch {
@@ -39,7 +34,6 @@ func ckSpan(d time.Duration) string {
 	return strconv.Itoa(int(d.Hours())) + "h " + ckZero(int(d.Minutes())%60) + "m"
 }
 
-// ckZero writes n in two digits.
 func ckZero(n int) string {
 	if n < 10 {
 		return "0" + strconv.Itoa(n)
@@ -47,8 +41,6 @@ func ckZero(n int) string {
 	return strconv.Itoa(n)
 }
 
-// drawCompare draws the comparison of a fan's attempts at x, y, w cells wide,
-// down to y1.
 func (m *OS) drawCompare(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.Time) {
 	ck := &m.Inbox.ck
 	cp := ck.cmp
@@ -66,7 +58,6 @@ func (m *OS) drawCompare(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.T
 		return
 	}
 	rows := res.Rows
-	// The header: the fan, how far its attempts are, and the task.
 	done, last := 0, int64(0)
 	for _, r := range rows {
 		if r.State == "done" || r.State == "idle" {
@@ -103,10 +94,8 @@ func (m *OS) drawCompare(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.T
 	c.hline(x, ty+1, tx-x, "━", pal.Accent)
 	cy := ty + 3
 
-	// The judge's card.
 	cy = m.drawJudgeCard(c, l, x, cy, w, top, now) + 1
 
-	// What a keep does, or what the last action said.
 	pick := ""
 	if res.Verdict != nil {
 		pick = res.Verdict.Pick
@@ -129,7 +118,6 @@ func (m *OS) drawCompare(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.T
 		case cp.loading:
 			add("Reading the attempts again...", pal.Attention, ckBold)
 		case failed != "":
-			// No keep on a list that could not be read.
 			add("tuios could not list the files git ignores, so nothing is kept. "+failed, pal.Warn, ckBold)
 		default:
 			words := "Press K again to keep " + ckLetter(cp.focus) + ". " + ckJoin(others) + " are removed. Their branches stay, and their changes go to git stash."
@@ -137,8 +125,6 @@ func (m *OS) drawCompare(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.T
 				words = strings.Replace(words, " are removed. Their branches stay, and their", " is removed. Its branch stays, and its", 1)
 			}
 			add(words, pal.Attention, ckBold)
-			// Files git ignores are not stashed: they go with the worktree.
-			// Every one is named, attempt by attempt.
 			if lost := ckIgnoredLost(rows, cp.focus); len(lost) > 0 {
 				add("These files git ignores are deleted, not stashed:", pal.Warn, ckBold)
 				for _, l := range lost {
@@ -149,7 +135,6 @@ func (m *OS) drawCompare(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.T
 		if cp.note != "" && !cp.loading {
 			add(cp.note, pal.FgDim, 0)
 		}
-		// At most ckWarnRows rows, scrolled with up and down.
 		show := min(len(lines), ckWarnRows)
 		cp.warnScroll = min(cp.warnScroll, len(lines)-show)
 		for i := range show {
@@ -171,7 +156,6 @@ func (m *OS) drawCompare(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.T
 	}
 	cy += 2
 
-	// One column per attempt, the focused one always among those shown.
 	if len(rows) == 0 || y1-cy < 6 {
 		return
 	}
@@ -188,8 +172,6 @@ func (m *OS) drawCompare(c *ckCanvas, l ckLook, x, y, w, y1, top int, now time.T
 	}
 }
 
-// ckAttemptName is an attempt's name as the fleet says it: its agent pane's
-// name, else its session's.
 func (m *OS) ckAttemptName(session string) string {
 	for _, e := range m.Inbox.ck.agents {
 		if e.Host == "" && m.ckAgentSession(e) == session {
@@ -201,7 +183,6 @@ func (m *OS) ckAttemptName(session string) string {
 	return printableTitle(session)
 }
 
-// ckBullet is the mark of a list item.
 func ckBullet(l ckLook) string {
 	if l.ascii {
 		return "*"
@@ -209,7 +190,6 @@ func ckBullet(l ckLook) string {
 	return "•"
 }
 
-// ckJoin joins letters as a sentence does: "A", "A and C", "A, C and D".
 func ckJoin(s []string) string {
 	switch len(s) {
 	case 0:
@@ -220,8 +200,6 @@ func ckJoin(s []string) string {
 	return strings.Join(s[:len(s)-1], ", ") + " and " + s[len(s)-1]
 }
 
-// drawJudgeCard draws the judge's verdict, or the way to ask for one, and
-// returns the row under the card.
 func (m *OS) drawJudgeCard(c *ckCanvas, l ckLook, x, y, w, top int, now time.Time) int {
 	ck := &m.Inbox.ck
 	cp := ck.cmp
@@ -233,9 +211,8 @@ func (m *OS) drawJudgeCard(c *ckCanvas, l ckLook, x, y, w, top int, now time.Tim
 		x    int
 	}
 	var lines []line
-	var btns [][3]string // key, label, action
+	var btns [][3]string
 	if v := res.Verdict; v != nil {
-		// Who recorded it, as the daemon says: the judge's pane, or you.
 		meta := "recorded by you"
 		if v.By == "judge" {
 			meta = "the judge tuios started"
@@ -323,7 +300,6 @@ func (m *OS) drawJudgeCard(c *ckCanvas, l ckLook, x, y, w, top int, now time.Tim
 	return y + h
 }
 
-// ckFanJudge reports whether a judge runs for the compared fan.
 func (m *OS) ckFanJudge() bool {
 	cp := m.Inbox.ck.cmp
 	for _, w := range m.Inbox.ck.branches {
@@ -334,9 +310,6 @@ func (m *OS) ckFanJudge() bool {
 	return false
 }
 
-// ckIgnoredLost names, attempt by attempt, the files git ignores that a keep
-// of attempt keep deletes: "C: .env, build/". Every name the read gave is
-// there, and a count for any past the read's bound.
 func ckIgnoredLost(rows []ckFanAttempt, keep int) []string {
 	var out []string
 	for i, r := range rows {
@@ -356,10 +329,8 @@ func ckIgnoredLost(rows []ckFanAttempt, keep int) []string {
 	return out
 }
 
-// ckWarnRows bounds the rows of the keep warning, which scrolls.
 const ckWarnRows = 6
 
-// drawAttempt draws one attempt's column at x, y, cw wide, down to y1.
 func (m *OS) drawAttempt(c *ckCanvas, l ckLook, a ckFanAttempt, i, x, y, cw, y1, top int, recommended, focused bool) {
 	ck := &m.Inbox.ck
 	pal := l.pal
@@ -393,7 +364,6 @@ func (m *OS) drawAttempt(c *ckCanvas, l ckLook, a ckFanAttempt, i, x, y, cw, y1,
 	who := ckHarness(firstNonEmptyStr(a.Harness, a.Agent))
 	c.text(x+2, yy, right, ckSeg{t: who, fg: ink(pal.FgDim)}, ckSeg{t: sepWord() + l.g(ckGlyphHost) + " " + m.ckLocalLabel(), fg: ink(pal.FgMute)})
 	yy++
-	// How it went: done in how long, or still at work.
 	state := []ckSeg{{t: l.g(ckGlyphWorking) + " ", fg: pal.Busy}, {t: sidebarStateWords(a.State), fg: ink(pal.FgMute)}}
 	switch {
 	case a.Gone:
@@ -408,7 +378,6 @@ func (m *OS) drawAttempt(c *ckCanvas, l ckLook, a ckFanAttempt, i, x, y, cw, y1,
 	c.text(x+2, yy, right, state...)
 	yy += 2
 
-	// The figures.
 	row := func(label string, v ...ckSeg) {
 		if yy >= y1-2 {
 			return
@@ -451,7 +420,6 @@ func (m *OS) drawAttempt(c *ckCanvas, l ckLook, a ckFanAttempt, i, x, y, cw, y1,
 	}
 	yy++
 
-	// The first changed lines.
 	if len(a.Lines) > 0 && yy < y1-4 {
 		c.text(x+2, yy, right, ckSeg{t: "First lines", fg: ink(pal.FgDim), attrs: ckBold})
 		yy++
@@ -460,7 +428,6 @@ func (m *OS) drawAttempt(c *ckCanvas, l ckLook, a ckFanAttempt, i, x, y, cw, y1,
 			if yy >= y1-3 {
 				break
 			}
-			// Each file's lines under its name.
 			if dl.File != file && yy < y1-4 {
 				file = dl.File
 				c.text(x+2, yy, right, ckSeg{t: ckTruncMid(printableTitle(file), right-x-2), fg: ink(pal.FgMute)})
@@ -485,7 +452,6 @@ func (m *OS) drawAttempt(c *ckCanvas, l ckLook, a ckFanAttempt, i, x, y, cw, y1,
 		yy++
 	}
 
-	// The files.
 	if len(a.FileList) > 0 && yy < y1-4 {
 		c.text(x+2, yy, right, ckSeg{t: "Files", fg: ink(pal.FgDim), attrs: ckBold})
 		yy++
@@ -499,7 +465,6 @@ func (m *OS) drawAttempt(c *ckCanvas, l ckLook, a ckFanAttempt, i, x, y, cw, y1,
 		yy++
 	}
 
-	// The judge's notes.
 	if len(a.Notes) > 0 && yy < y1-4 {
 		c.text(x+2, yy, right, ckSeg{t: "Notes", fg: ink(pal.FgDim), attrs: ckBold})
 		yy++
@@ -518,7 +483,6 @@ func (m *OS) drawAttempt(c *ckCanvas, l ckLook, a ckFanAttempt, i, x, y, cw, y1,
 		}
 	}
 
-	// The keys of the column.
 	if i < 9 {
 		c.text(x+2, y1-2, right, ckSeg{t: strconv.Itoa(i + 1), fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " focus   ", fg: ink(pal.FgMute)},
 			ckSeg{t: overlay.EnterGlyph, fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " pane", fg: ink(pal.FgMute)})

@@ -10,22 +10,14 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The theme editor's sheet: a panel as tall as the pane region, on the side
-// the rail is not on. Each row is a label, a swatch, where the colour comes
-// from, its hex and, for a colour that carries text or a mark, its contrast on
-// the ground it is drawn on.
-
-// themeEditorWidth is the sheet's preferred inner width.
 const themeEditorWidth = 56
 
-// Column widths of a row, inside the two-cell cursor marker.
 const (
 	themeEditorLabelW  = 17
 	themeEditorSourceW = 19
 	themeEditorHexW    = 8
 )
 
-// themeEditorHints is the sheet's footer.
 var themeEditorHints = []overlay.Hint{
 	{Key: overlay.EnterGlyph, Label: "pick"},
 	{Key: "e", Label: "type"},
@@ -38,20 +30,17 @@ var themeEditorHints = []overlay.Hint{
 	{Key: "esc", Label: "close"},
 }
 
-// themeEditorTypingHints is the footer while a value is typed.
 var themeEditorTypingHints = []overlay.Hint{
 	{Key: overlay.EnterGlyph, Label: "use"},
 	{Key: "tab", Label: "complete"},
 	{Key: "esc", Label: "cancel"},
 }
 
-// themeEditorLine is one line of the sheet's list: a group heading, or a row.
 type themeEditorLine struct {
 	heading string
-	row     int // index into the tab's rows, -1 for a heading or a blank
+	row     int
 }
 
-// themeEditorLines lays the tab's rows out under their group headings.
 func themeEditorLines(rows []themeEditorRow) []themeEditorLine {
 	var out []themeEditorLine
 	group := ""
@@ -68,9 +57,6 @@ func themeEditorLines(rows []themeEditorRow) []themeEditorLine {
 	return out
 }
 
-// themeEditorPlace is where the sheet goes: its left column, its top row, its
-// total width and its height. It covers the side with no rail and the rows
-// between the dock's.
 func (m *OS) themeEditorPlace() (x, y, w, h int) {
 	rw, rh := m.GetRenderWidth(), m.GetRenderHeight()
 	inner := m.panelWidth(themeEditorWidth)
@@ -89,8 +75,6 @@ func (m *OS) themeEditorPlace() (x, y, w, h int) {
 	return x, y, w, h
 }
 
-// renderThemeEditor draws the sheet, or the one-line chip that stands for it
-// while it is hidden, as a layer.
 func (m *OS) renderThemeEditor() *lipgloss.Layer {
 	st := &m.themeEditor
 	pal := m.overlayUI()
@@ -106,9 +90,6 @@ func (m *OS) renderThemeEditor() *lipgloss.Layer {
 	if st.typingOn {
 		hints = themeEditorTypingHints
 	}
-	// The rows that are not the list: top pad, title, blank, tabs, rule,
-	// blank, the blank and rule above the footer, the footer and the bottom
-	// pad, then the list's own notes.
 	fixed := 9 + overlay.HintRowCount(hints, inner)
 	notes := m.themeEditorNotes(inner, pal)
 	listRows := max(h-fixed-len(notes), 1)
@@ -124,7 +105,6 @@ func (m *OS) renderThemeEditor() *lipgloss.Layer {
 	scroll := &st.lists[st.tab].Scroll
 	if cursorLine < *scroll {
 		*scroll = cursorLine
-		// Keep the group's heading in view with its first row.
 		if *scroll > 0 && lines[*scroll-1].heading != "" {
 			*scroll--
 		}
@@ -170,8 +150,6 @@ func (m *OS) renderThemeEditor() *lipgloss.Layer {
 		y0 := geo.BodyY + hits[i].Rect.Y0
 		hits[i].Rect = overlay.Rect{X0: geo.BodyX, Y0: y0, X1: geo.BodyX + inner, Y1: y0 + 1}
 	}
-	// The panel is as tall as its rows. The rest of the sheet's height is
-	// surface, so the sheet reaches the dock whatever the list's length.
 	if extra := h - geo.Height; extra > 0 {
 		blank := themeEditorInk(pal.Surface, nil, strings.Repeat(" ", geo.Width), false)
 		content += strings.Repeat("\n"+blank, extra)
@@ -181,8 +159,6 @@ func (m *OS) renderThemeEditor() *lipgloss.Layer {
 	return lipgloss.NewLayer(content).X(x).Y(y).Z(z).ID("themeeditor")
 }
 
-// themeEditorNotes are the lines under the list: why the draft does not
-// load, the value being typed, and on the pane tab what those colours are.
 func (m *OS) themeEditorNotes(width int, pal overlay.Palette) []string {
 	st := &m.themeEditor
 	var out []string
@@ -224,8 +200,6 @@ func (m *OS) themeEditorNotes(width int, pal overlay.Palette) []string {
 	return out
 }
 
-// themeEditorRowLine draws one row: the marker, the label, the swatch, the
-// source, the hex and the contrast badge.
 func (m *OS) themeEditorRowLine(row themeEditorRow, cursor bool, width int, pal overlay.Palette) string {
 	st := overlay.RowState{Cursor: cursor, Focused: true}
 	ground := pal.Ground(st, pal.Surface)
@@ -256,8 +230,6 @@ func (m *OS) themeEditorRowLine(row themeEditorRow, cursor bool, width int, pal 
 	b.WriteString(themeEditorInk(ground, pal.FgDim, fitLine(hex, themeEditorHexW), false))
 	if floor, on := m.themeEditorFloor(row); floor > 0 && on != nil && c != nil && !overlay.IsNoColor(c) {
 		ratio := themeEditorRatio(c, on)
-		// Five cells at most, so "! " and the badge fit the row's last
-		// seven: 10.9:1 ran one cell into the sheet's padding.
 		badge := fmt.Sprintf("%.1f:1", ratio)
 		if ratio >= 10 {
 			badge = fmt.Sprintf("%.0f:1", ratio)
@@ -271,10 +243,6 @@ func (m *OS) themeEditorRowLine(row themeEditorRow, cursor bool, width int, pal 
 	return pal.Row(b.String(), width, st, pal.Surface)
 }
 
-// themeEditorInk renders s in ink on ground, either of which may be nil.
-// One call in place of a lipgloss chain per cell keeps the Style copies out
-// of the row function.
-//
 //go:noinline
 func themeEditorInk(ground, ink color.Color, s string, bold bool) string {
 	st := overlay.Style(ground)
@@ -287,10 +255,6 @@ func themeEditorInk(ground, ink color.Color, s string, bold bool) string {
 	return st.Render(s)
 }
 
-// themeEditorSpecimen is a sample of the selected role for a piece that may
-// not be on the screen: a pill in the role's colour, as a notification, the
-// copy-mode pill or an attention mark draws it. Empty for a ground or a pane
-// colour.
 func (m *OS) themeEditorSpecimen(row themeEditorRow, width int, pal overlay.Palette) string {
 	if row.fixed || row.dark || row.pane >= 0 {
 		return ""
@@ -308,8 +272,6 @@ func (m *OS) themeEditorSpecimen(row themeEditorRow, width int, pal overlay.Pale
 	return themeEditorInk(pal.Surface, pal.FgMute, "Sample ", false) + chip
 }
 
-// themeEditorClash256 names two status colours that step down to the same
-// palette entry at 256 colours, where they would look the same, or "".
 func (m *OS) themeEditorClash256() string {
 	if theme.Depth() != overlay.Depth256 || m.themeEditor.resolved == nil {
 		return ""
@@ -330,8 +292,6 @@ func (m *OS) themeEditorClash256() string {
 			continue
 		}
 		rgb, key := toRGBA(c), toRGBA(overlay.To256(c))
-		// Two roles in one colour are the theme's choice. Two colours that
-		// fall on one entry are the depth's, and the theme cannot see it.
 		if other, ok := seen[key]; ok && other.rgb != rgb {
 			return other.label + " and " + r.label + " look the same at 256 colours."
 		}

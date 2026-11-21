@@ -22,9 +22,6 @@ func TestQuickLookFrameAllocationBudget(t *testing.T) {
 	m := keystrokeOS(t, 1, 200, 60)
 	m.KeybindRegistry = config.NewKeybindRegistry(config.DefaultConfig())
 
-	// The panel reads overlay globals a frame sets from the settings. Set
-	// them as a frame does, and put them back after. The frame glyphs have
-	// no getter: the shipped settings' frame is the rounded one.
 	shipped := m.Settings
 	ascii, nerd, panels := overlay.UseASCII(), overlay.UseNerdFonts(), overlay.FramePanels()
 	t.Cleanup(func() {
@@ -50,8 +47,6 @@ func TestQuickLookFrameAllocationBudget(t *testing.T) {
 		content, _, _ := m.renderQuickLook()
 		return content
 	}
-	// firstCodeRow is the body row under the line that says what the file
-	// is: the dialog's top frame, that line, then the code.
 	firstCodeRow := func(content string) string {
 		rows := strings.Split(ansi.Strip(content), "\n")
 		if len(rows) < 3 {
@@ -78,8 +73,6 @@ func TestQuickLookFrameAllocationBudget(t *testing.T) {
 	}
 
 	m.Settings.BorderStyle = "double"
-	// A frame sets the frame glyphs from the border style before it
-	// composes the overlays.
 	syncOverlaySettings(&m.Settings)
 	after = render()
 	if !strings.Contains(after, "╔") || strings.Contains(after, "╭") {

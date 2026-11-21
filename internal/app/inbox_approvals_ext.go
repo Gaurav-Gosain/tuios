@@ -19,71 +19,29 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// Safer approvals in the Inbox: a risky approval that needs a second press to
-// allow, a deny that carries a reason, and a plan shown whole with its own
-// group and keys. The daemon enforces the second press and the plan digest
-// (risk_ack and plan_sha, see session/approval_risk.go); this is the side the
-// person sees.
-//
-//   - A key in the list never answers alone. 1 2 3 and a A r ask first: the
-//     card says what will happen, enter does it, and any other key, esc
-//     among them, drops it and does nothing else. A sentence typed while the
-//     list has the keys, as by a person who thinks a reply box has them,
-//     cannot answer an approval however slowly it is typed.
-//   - An approval whose command matched a risk rule reads "risky:" on its row
-//     and names each rule, and why, in the detail. The peek allows it only
-//     on a second press of the same key within inboxRiskPressWindow; any
-//     other key resets it.
-//   - n on a held approval or plan whose harness takes a reason opens a
-//     "Reason:" line; enter denies with what was typed.
-//   - A plan is listed under Plans and shown whole in the detail, scrolled
-//     with J and K. 1 and 2 approve it only once its last line has been on
-//     screen; 3 and n keep it planning.
-
-// inboxRiskPressWindow is how long the first press of an allow on a risky
-// item waits for the second.
 const inboxRiskPressWindow = 3 * time.Second
 
-// inboxApprovalFetchTimeout bounds the get-approval call.
 const inboxApprovalFetchTimeout = 5 * time.Second
 
-// inboxApprovalState is the Inbox's state for the safer approvals.
 type inboxApprovalState struct {
-	// answer is where an answer stands: armed, asked, asked in the peek, or
-	// the reason line open (inbox_answer.go).
-	answer inboxAnswer
-	// lastKey is the key the Inbox or its peek received last, as the
-	// keyboard spells it.
-	lastKey string
-	// plan is the plan shown in the detail.
-	plan inboxPlanView
-	// question is the prompt read for a question its pane shows
-	// (inbox_question.go).
+	answer   inboxAnswer
+	lastKey  string
+	plan     inboxPlanView
 	question inboxQuestionView
-	// refusal is why the last answer key did nothing, for the card of the
-	// prompt it was pressed on.
-	refusal inboxRefusal
+	refusal  inboxRefusal
 }
 
-// inboxRefusal is why an answer key did not answer the held prompt under
-// requestID. The card draws it next to its buttons, where the person looks
-// after the key. A toast alone was missed: the card did not change, so the
-// key read as lost.
 type inboxRefusal struct {
 	requestID string
 	text      string
 }
 
-// refuseAnswer says why an answer key on it did nothing, on its card and as
-// a toast.
 func (m *OS) refuseAnswer(it session.AttentionItem, text, level string) {
 	m.Inbox.approvals.refusal = inboxRefusal{requestID: it.RequestID, text: text}
-	// The agents view reuses its last frame until something in it changes.
 	m.cockpitTouch()
 	m.ShowNotification(text, level, m.Settings.NotificationDuration)
 }
 
-// clearAnswerRefusal drops the note of the last refused answer key.
 func (m *OS) clearAnswerRefusal() {
 	if m.Inbox.approvals.refusal != (inboxRefusal{}) {
 		m.Inbox.approvals.refusal = inboxRefusal{}
@@ -91,8 +49,6 @@ func (m *OS) clearAnswerRefusal() {
 	}
 }
 
-// inboxRefusalLines are the card lines that say why the last answer key on
-// it did nothing, if it was the last one refused.
 func (m *OS) inboxRefusalLines(it session.AttentionItem, width int) []string {
 	r := m.Inbox.approvals.refusal
 	if r.text == "" || it.RequestID == "" || r.requestID != it.RequestID {
@@ -105,9 +61,6 @@ func (m *OS) inboxRefusalLines(it session.AttentionItem, width int) []string {
 	return lines
 }
 
-// answerPressName is the key the person pressed to answer, as the keyboard
-// spells it, for "press it again". A key the Inbox did not see falls back to
-// the letter of the decision.
 func (m *OS) answerPressName(decision string) string {
 	if k := m.Inbox.approvals.lastKey; k != "" {
 		return k
@@ -115,7 +68,6 @@ func (m *OS) answerPressName(decision string) string {
 	return inboxDecisionKey(decision)
 }
 
-// inboxPeekAsk is an answer a key in the peek asked for.
 type inboxPeekAsk struct {
 	action, value string
 }
@@ -162,8 +114,6 @@ func (m *OS) InboxPeekAskKey(key string) tea.Cmd {
 	return m.inboxAnswer(a.action, a.value, true)
 }
 
-// inboxConfirm is an answer a list key asked for. It answers the item as it
-// was drawn (inboxShownKey) or nothing.
 type inboxConfirm struct {
 	decision string
 	itemID   string
@@ -207,7 +157,6 @@ func (m *OS) InboxConfirmKey(key string) tea.Cmd {
 	return m.inboxReplyCmd(it, c.decision)
 }
 
-// inboxConfirmLine is what the open confirm says on it, if one is open.
 func (m *OS) inboxConfirmLine(it session.AttentionItem) (string, bool) {
 	c := m.Inbox.approvals.answer.confirm
 	if c == nil || c.itemID != it.ID {
@@ -228,7 +177,6 @@ func (m *OS) inboxConfirmLine(it session.AttentionItem) (string, bool) {
 	return "Reject " + target + "? Press enter to reject. Press esc to cancel.", true
 }
 
-// inboxConfirmHints are the hints while an answer waits for enter.
 func inboxConfirmHints(decision string) []overlay.Hint {
 	word := "reject"
 	switch decision {
@@ -240,57 +188,36 @@ func inboxConfirmHints(decision string) []overlay.Hint {
 	return []overlay.Hint{{Key: overlay.EnterKey(), Label: word}, {Key: "esc", Label: "cancel"}}
 }
 
-// inboxArmed is one press waiting for its second.
 type inboxArmed struct {
-	// key names the press: the decision for a list key, or the peek's action
-	// and value.
-	key string
-	// item is the item as it was drawn (inboxShownKey): a second press on an
-	// item that changed is a first press again.
-	item string
-	at   time.Time
-	// press is the key that armed it. Any other key resets it.
+	key   string
+	item  string
+	at    time.Time
 	press string
 }
 
-// inboxReasonLine is the reason typed for a deny.
 type inboxReasonLine struct {
 	itemID    string
 	requestID string
-	// ed is the line, a one-line composer. It records a key that did not
-	// come from the keyboard, and such a draft is never sent.
-	ed *composer.Model
-	// wires holds where the line was drawn, for its caret and the mouse.
-	wires draftWires
+	ed        *composer.Model
+	wires     draftWires
 }
 
-// newLineEditor is a one-line composer of at most maxBytes, for an answer
-// typed into a prompt: a deny reason, a peek answer, a selector.
 func newLineEditor(maxBytes int, placeholder string) *composer.Model {
 	return composer.New(composer.Options{SingleLine: true, MaxRows: 3, MaxBytes: maxBytes, Placeholder: placeholder})
 }
 
-// inboxPlanView is the plan get-approval served for the selected plan item.
 type inboxPlanView struct {
-	// requestID and sha name the plan the view holds or is fetching.
-	requestID string
-	sha       string
-	loading   bool
-	err       string
-	text      string
-	// scroll is the first line shown, window how many the card showed
-	// last and total how many lines the plan drew, 0 before it was drawn.
+	requestID             string
+	sha                   string
+	loading               bool
+	err                   string
+	text                  string
 	scroll, window, total int
-	// body is the plan drawn as Markdown, one styled line each, for the
-	// width, theme and look in bodyKey.
-	body    []string
-	bodyKey inboxPlanBodyKey
-	// seenEnd holds the plans, by request id and digest, whose last line has
-	// been on screen. 1 and 2 approve only such a plan.
-	seenEnd map[string]bool
+	body                  []string
+	bodyKey               inboxPlanBodyKey
+	seenEnd               map[string]bool
 }
 
-// inboxPlanBodyKey names what a drawn plan body depends on besides its text.
 type inboxPlanBodyKey struct {
 	width       int
 	theme, look uint64
@@ -303,12 +230,10 @@ type InboxApprovalDetailMsg struct {
 	Err       error
 }
 
-// inboxHeld reports whether an item is an approval or plan the Inbox holds.
 func inboxHeld(it session.AttentionItem) bool {
 	return (it.Kind == session.AttentionApproval || it.Kind == session.AttentionPlan) && it.RequestID != ""
 }
 
-// inboxRisky reports whether an item is an approval a risk rule matched.
 func inboxRisky(it session.AttentionItem) bool {
 	return len(it.Risk) > 0 && (it.Kind == session.AttentionApproval || it.Kind == session.AttentionPlan)
 }
@@ -323,9 +248,6 @@ func (m *OS) InboxKeyPressed(key string) {
 	}
 }
 
-// inboxArm records the first press of key on it, or reports the second. It
-// returns true when this press is the second one within the window, on the
-// same item as it was drawn.
 func (m *OS) inboxArm(key string, it session.AttentionItem, now time.Time) bool {
 	st := &m.Inbox.approvals
 	shown := inboxShownKey(it)
@@ -337,15 +259,10 @@ func (m *OS) inboxArm(key string, it session.AttentionItem, now time.Time) bool 
 	return false
 }
 
-// inboxArmedUntil says when the armed press lapses, as a clock time: nothing
-// redraws the line when it does, so it names the time rather than implying
-// the press is still waiting.
 func (m *OS) inboxArmedUntil() string {
 	return "by " + m.Inbox.approvals.answer.armed.at.Add(inboxRiskPressWindow).Format("15:04:05")
 }
 
-// inboxArmedFor reports whether a press on it is waiting for its second, and
-// which key it was.
 func (m *OS) inboxArmedFor(it session.AttentionItem, now time.Time) (string, bool) {
 	a := m.Inbox.approvals.answer.armed
 	if m.Inbox.approvals.answer.step != answerArmed || a.item != inboxShownKey(it) || now.Sub(a.at) > inboxRiskPressWindow {
@@ -354,11 +271,7 @@ func (m *OS) inboxArmedFor(it session.AttentionItem, now time.Time) (string, boo
 	return a.key, true
 }
 
-// inboxApprovalGate runs the safer-approval checks on an answer from the list
-// keys. It returns stop true when the answer must not be asked for now: an
-// allow of a plan whose end has not been on screen.
 func (m *OS) inboxApprovalGate(it session.AttentionItem, decision string) (stop bool) {
-	// A key send-keys typed neither answers nor arms a second press.
 	if m.refuseRemoteAnswer("An answer") {
 		return true
 	}
@@ -377,9 +290,6 @@ func (m *OS) inboxApprovalGate(it session.AttentionItem, decision string) (stop 
 	return false
 }
 
-// inboxReplyExtras are what an answer to it carries beyond the decision: the
-// rules the person saw for an allow of a risky call, and the digest of the plan
-// they read for an allow of a plan.
 func inboxReplyExtras(it session.AttentionItem, decision string) map[string]any {
 	extra := map[string]any{}
 	if decision == session.ApprovalOnce || decision == session.ApprovalAlways {
@@ -419,8 +329,6 @@ func (m *OS) InboxReasonOpen() bool {
 	if r == nil {
 		return false
 	}
-	// The line belongs to the item it was opened on. If that item is gone
-	// or no longer under the cursor, the line is gone with it.
 	it, ok := m.inboxSelected()
 	if !ok || it.ID != r.itemID || it.RequestID != r.requestID {
 		m.answerEnd(answerReason, "its item left the cursor")
@@ -456,7 +364,6 @@ func (m *OS) InboxReasonKey(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// inboxReasonMax bounds the reason, the bound the daemon applies too.
 const inboxReasonMax = 500
 
 // InboxReasonCancel closes the reason line and drops what was typed.
@@ -483,7 +390,6 @@ func (m *OS) InboxReasonSend() tea.Cmd {
 	}
 	text, ok := r.ed.Submit()
 	if !ok {
-		// Invisible characters were removed; the line says so.
 		return nil
 	}
 	m.answerEnd(answerReason, "sent")
@@ -507,13 +413,10 @@ func (m *OS) InboxDetailScroll(delta int) (tea.Cmd, bool) {
 	return nil, true
 }
 
-// inboxPlanPage is how far a page key scrolls a plan.
 func (m *OS) inboxPlanPage() int {
 	return max(m.inboxPlanWindow()-1, 1)
 }
 
-// inboxPlanScrollTo puts line at the top of the plan's window, kept in the
-// plan, and reports whether the window moved.
 func (m *OS) inboxPlanScrollTo(line int) bool {
 	pv := &m.Inbox.approvals.plan
 	limit := line
@@ -529,11 +432,6 @@ func (m *OS) inboxPlanScrollTo(line int) bool {
 	return true
 }
 
-// inboxPlanMove takes a move key while the selected item is a plan the card
-// shows: the page keys scroll it a page, g and G go to its first and last
-// lines, and with lines (the keys are in the focus) j and k scroll it a line.
-// It reports false when no plan is shown, or the plan is already where the
-// key would take it, so the key moves the list or the thread as before.
 func (m *OS) inboxPlanMove(action string, lines bool) bool {
 	it, ok := m.inboxSelected()
 	if !ok || it.Kind != session.AttentionPlan || it.RequestID == "" {
@@ -569,7 +467,6 @@ func (m *OS) inboxPlanMove(action string, lines bool) bool {
 	return m.inboxPlanScrollTo(to)
 }
 
-// inboxPlanSelected reports whether the selected item is a held plan.
 func (m *OS) inboxPlanSelected() bool {
 	it, ok := m.inboxSelected()
 	return ok && it.Kind == session.AttentionPlan && inboxHeld(it)
@@ -609,9 +506,6 @@ func (m *OS) InboxApprovalFetch() tea.Cmd {
 	}
 }
 
-// applyInboxApprovalDetail takes a get-approval reply for the plan view. A
-// plan whose digest is not the one on the item is not shown: the item will be
-// updated, and read again then.
 func (m *OS) applyInboxApprovalDetail(msg InboxApprovalDetailMsg) {
 	m.cockpitTouch()
 	pv := &m.Inbox.approvals.plan
@@ -629,18 +523,14 @@ func (m *OS) applyInboxApprovalDetail(msg InboxApprovalDetailMsg) {
 	}
 }
 
-// inboxPlanKey names one plan for seenEnd.
 func inboxPlanKey(it session.AttentionItem) string {
 	return it.RequestID + "\x00" + it.PlanSHA
 }
 
-// inboxPlanReadToEnd reports whether the plan's last line has been on screen.
 func (m *OS) inboxPlanReadToEnd(it session.AttentionItem) bool {
 	return m.Inbox.approvals.plan.seenEnd[inboxPlanKey(it)]
 }
 
-// inboxPlanWindow is how many plan lines the detail shows at once: a third of
-// the screen, 8 on a 24 row terminal.
 func (m *OS) inboxPlanWindow() int {
 	rh := m.GetRenderHeight()
 	if rh <= 0 {
@@ -648,20 +538,11 @@ func (m *OS) inboxPlanWindow() int {
 	}
 	n := min(max(rh/3, 3), 16)
 	if w := m.Inbox.approvals.plan.window; w > 0 {
-		// What the card showed: the scroll keys move by its window.
 		n = w
 	}
 	return n
 }
 
-// inboxPlanBody is the plan's text drawn as Markdown at width, the way the
-// thread draws an agent's words: headings, lists, code and emphasis styled,
-// and the lines of a paragraph the agent broke at its own width joined
-// before they are wrapped at this one. Each line is a styled string on the
-// card's ground, kept until the text, the width or the look changes.
-//
-// A line is the plan's bar, which marks it as the agent's text, then the
-// Markdown, width cells in all.
 func (m *OS) inboxPlanBody(width int) []string {
 	pv := &m.Inbox.approvals.plan
 	l := m.cockpitLook()
@@ -674,8 +555,6 @@ func (m *OS) inboxPlanBody(width int) []string {
 		bar = "| "
 	}
 	inner := max(width-4, 8)
-	// Each line loses what the terminal would read as a control, as the
-	// plain lines did, before the Markdown is read.
 	src := strings.Split(strings.ReplaceAll(pv.text, "\t", "    "), "\n")
 	for i, s := range src {
 		src[i] = printableRunes(s)
@@ -694,7 +573,6 @@ func (m *OS) inboxPlanBody(width int) []string {
 	return out
 }
 
-// inboxPlanMoreBelow is how many plan lines are below the window.
 func (m *OS) inboxPlanMoreBelow(it session.AttentionItem) int {
 	pv := &m.Inbox.approvals.plan
 	if pv.requestID != it.RequestID || pv.text == "" {
@@ -703,10 +581,6 @@ func (m *OS) inboxPlanMoreBelow(it session.AttentionItem) int {
 	return max(pv.total-(pv.scroll+m.inboxPlanWindow()), 0)
 }
 
-// inboxPlanDetail is the plan under the cursor: who asks, the plan's lines
-// behind a bar that marks them as the agent's text, what 2 also sets, and how
-// much is left to read. Drawing the window that holds the last line records
-// the plan as read to its end, when the panel fits the screen whole.
 func (m *OS) inboxPlanDetail(it session.AttentionItem, width int) []string {
 	width = max(width-2, 8)
 	pv := &m.Inbox.approvals.plan
@@ -720,8 +594,6 @@ func (m *OS) inboxPlanDetail(it session.AttentionItem, width int) []string {
 			lines = append(lines, indent+l)
 		}
 	}
-	// Until the plan is read, its title stands for it: the card's title
-	// only asks. Once read, the plan's own heading is its first line.
 	switch {
 	case pv.requestID != it.RequestID || pv.loading:
 		add("  ", inboxPlanTitle(it))
@@ -735,12 +607,9 @@ func (m *OS) inboxPlanDetail(it session.AttentionItem, width int) []string {
 	body := m.inboxPlanBody(width)
 	window := min(max(m.GetRenderHeight()/3, 3), 16)
 	if m.Inbox.ck.zoom {
-		// Zoomed, the card has the whole focus.
 		window = len(body)
 	}
 	if room := m.Inbox.ck.cardRoom; room > 0 {
-		// The card holds the title, the head, the window, what always
-		// sets and the line under it, which can wrap once.
 		fixed := len(lines) + 1 + 2
 		if slices.Contains(it.Options, session.ApprovalAlways) {
 			fixed += len(it.AlwaysScope)
@@ -750,8 +619,6 @@ func (m *OS) inboxPlanDetail(it session.AttentionItem, width int) []string {
 	pv.window, pv.total = window, len(body)
 	pv.scroll = clampInt(pv.scroll, 0, max(len(body)-window, 0))
 	end := min(pv.scroll+window, len(body))
-	// Where the window is, in lines as the card draws them. The card's
-	// title names who asks.
 	if len(body) <= window {
 		head = plural.Count(len(body), "line") + ", all shown"
 	} else {
@@ -768,9 +635,6 @@ func (m *OS) inboxPlanDetail(it session.AttentionItem, width int) []string {
 		add("  ", plural.Count(more, "more line")+". Read to the end to approve: "+m.inboxKeyOr(config.ActionInboxDetailDown, "J")+" "+m.inboxKeyOr(config.ActionInboxDetailUp, "K")+" page, "+m.inboxKeyOr(config.ActionInboxLast, "G")+" end, "+m.inboxKeyOr(config.ActionInboxZoom, "Z")+" zoom.")
 		return append(lines, m.inboxRefusalLines(it, width-2)...)
 	}
-	// The window holds the last line. It has been read only if the panel
-	// fits the screen: on one too short, the panel is squeezed past its
-	// minimum and the bottom of the detail is cut off.
 	if !m.inboxDetailFits(len(lines)) {
 		add("  ", "The screen is too short to show the whole plan. Enter answers it in the pane.")
 		return lines
@@ -782,21 +646,14 @@ func (m *OS) inboxPlanDetail(it session.AttentionItem, width int) []string {
 	return append(lines, m.inboxRefusalLines(it, width-2)...)
 }
 
-// inboxDetailFits reports whether the Inbox panel, with n detail lines under
-// the list, fits the screen whole: the panel's chrome, the scroll line, the
-// rule and lines of the detail, and the fewest rows the list is squeezed to.
-// The key hints are not counted, since the panel drops them before anything
-// else. An unknown screen size is read as not fitting.
 func (m *OS) inboxDetailFits(n int) bool {
 	if m.ShowInbox {
-		// The cockpit's card says how many detail lines it shows whole.
 		return n <= m.Inbox.ck.cardRoom
 	}
 	rh := m.GetRenderHeight()
 	return rh > 0 && panelChromeRows+1+n+1+minPanelRows <= rh
 }
 
-// inboxRiskLines names each rule a risky item matched and why.
 func inboxRiskLines(it session.AttentionItem, width int) []string {
 	var lines []string
 	for _, name := range it.Risk {
@@ -807,8 +664,6 @@ func inboxRiskLines(it session.AttentionItem, width int) []string {
 	return lines
 }
 
-// inboxRiskWhy is what a rule guards against, for a shipped rule, and where
-// it came from for one of the person's.
 func inboxRiskWhy(name string) string {
 	if why, ok := risk.Why(name); ok {
 		return why
@@ -816,7 +671,6 @@ func inboxRiskWhy(name string) string {
 	return "a rule in your config"
 }
 
-// inboxDecisionKey is the list key that sends decision.
 func inboxDecisionKey(decision string) string {
 	for _, a := range inboxAnswerOrder {
 		if a.decision == decision {
@@ -826,7 +680,6 @@ func inboxDecisionKey(decision string) string {
 	return decision
 }
 
-// inboxPlanTitle is a plan's title, without the Markdown of a heading.
 func inboxPlanTitle(it session.AttentionItem) string {
 	title := strings.TrimPrefix(printableTitle(it.Summary), "plan: ")
 	title = strings.TrimSpace(strings.TrimLeft(title, "#"))
@@ -836,7 +689,6 @@ func inboxPlanTitle(it session.AttentionItem) string {
 	return title
 }
 
-// inboxPlanRowText is a plan's row: its title and how long it is.
 func inboxPlanRowText(it session.AttentionItem) string {
 	title := inboxPlanTitle(it)
 	if it.PlanLines > 0 {
@@ -845,9 +697,6 @@ func inboxPlanRowText(it session.AttentionItem) string {
 	return title
 }
 
-// inboxDetailExtra is the card's detail for an item the safer approvals
-// draw: a plan, a risky approval, an approval that takes a reason, and the
-// reason line itself. ok is false for every other item.
 func (m *OS) inboxDetailExtra(it session.AttentionItem) (detail func(width int) []string, ok bool) {
 	if m.InboxReasonOpen() {
 		r := m.Inbox.approvals.answer.reason
@@ -896,8 +745,6 @@ func (m *OS) inboxDetailExtra(it session.AttentionItem) (detail func(width int) 
 			return lines
 		}, true
 	case it.Kind == session.AttentionApproval && inboxRisky(it):
-		// An approval nobody holds: the rules say what the peek's second
-		// press is about.
 		return func(width int) []string {
 			lines := wrapPlain("  "+printableTitle(it.Summary), max(width-2, 8))
 			return append(lines, inboxRiskLines(it, max(width-2, 8))...)
@@ -906,8 +753,6 @@ func (m *OS) inboxDetailExtra(it session.AttentionItem) (detail func(width int) 
 	return nil, false
 }
 
-// inboxRiskTarget is what an allow of a risky item allows, as its line says
-// it: the command after "approve Tool: ".
 func inboxRiskTarget(it session.AttentionItem) string {
 	if _, text := risk.ParseSummary(it.Summary); text != "" {
 		return text
@@ -915,9 +760,6 @@ func inboxRiskTarget(it session.AttentionItem) string {
 	return it.Summary
 }
 
-// inboxPeekApproves reports whether a peek answer allows the call: approve,
-// always, and a digit, which the peek cannot tell from an allow. d denies,
-// and typed text is a whole answer typed on purpose.
 func inboxPeekApproves(action string) bool {
 	switch action {
 	case harness.ActionApprove, harness.ActionApproveAlways, harness.ActionChoose:
@@ -926,8 +768,6 @@ func inboxPeekApproves(action string) bool {
 	return false
 }
 
-// inboxPeekRiskGate is the peek's second press on a risky prompt. It returns
-// the rules to acknowledge and whether the answer may be sent now.
 func (m *OS) inboxPeekRiskGate(p *inboxPeek, action, value string, confirmed bool) ([]string, bool) {
 	cur, ok := m.inboxItem(p.Item.ID)
 	if !ok {
@@ -943,7 +783,6 @@ func (m *OS) inboxPeekRiskGate(p *inboxPeek, action, value string, confirmed boo
 		return nil, true
 	}
 	if confirmed {
-		// Enter after the peek asked is the second step.
 		return slices.Clone(cur.Risk), true
 	}
 	key := "peek:" + action
@@ -961,9 +800,6 @@ func (m *OS) inboxPeekRiskGate(p *inboxPeek, action, value string, confirmed boo
 	return slices.Clone(cur.Risk), true
 }
 
-// paneApprovalWord is the need word for a pane blocked on an approval the
-// Inbox marked: plan for a plan, risky for a call a risk rule matched, and
-// kind otherwise.
 func (m *OS) paneApprovalWord(windowID, kind string) string {
 	if len(m.Inbox.Items) == 0 || windowID == "" {
 		return kind
@@ -982,7 +818,6 @@ func (m *OS) paneApprovalWord(windowID, kind string) string {
 	return kind
 }
 
-// The need words the safer approvals add to approval and question.
 const (
 	inboxWordPlan  = "plan"
 	inboxWordRisky = "risky"

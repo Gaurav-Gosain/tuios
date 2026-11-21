@@ -14,28 +14,13 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// Settings overlay layout constants. These are the preferred sizes; a narrower
-// or shorter screen gets a panel fitted to it (see overlay_fit.go).
 const (
-	// settingsMaxInnerWidth is as wide as the panel grows. A settings row is a
-	// label on the left and its control on the right, and past about eighty
-	// columns the eye stops carrying one to the other: the panel would be wider
-	// but every row in it harder to read. Eighty also clears the section strip's
-	// natural sixty-three columns with room for another section or a longer name
-	// before a desktop terminal has to scroll it, and leaves all but one of the
-	// descriptions a single line. Below 63 the strip wraps.
 	settingsMaxInnerWidth = 80
 	settingsVisibleRows   = 7
 
-	// settingsDescLines is how many lines the description box holds when the
-	// screen has the room. Two covers every description in the set at the
-	// panel's maximum width, and the box is a fixed height so the panel does
-	// not jump as the selection crosses from a short description to a long one.
 	settingsDescLines = 2
 )
 
-// settingsHints is the settings footer, shared by the renderer and the sizing
-// helper so both measure the same panel.
 var settingsHints = []overlay.Hint{
 	{Key: hintListMove, Label: "move"},
 	{Key: "←→", Label: "change"},
@@ -44,9 +29,6 @@ var settingsHints = []overlay.Hint{
 	{Key: "esc", Label: "close"},
 }
 
-// settingsSearchHints is the footer while the search line is open. Tab goes to
-// the row's own tab rather than the next one, and esc clears the search before
-// it closes anything.
 var settingsSearchHints = []overlay.Hint{
 	{Key: hintListMove, Label: "move"},
 	{Key: "←→", Label: "change"},
@@ -54,7 +36,6 @@ var settingsSearchHints = []overlay.Hint{
 	{Key: "esc", Label: "clear search"},
 }
 
-// currentSettingsHints is the footer for the panel as it is now.
 func (m *OS) currentSettingsHints() []overlay.Hint {
 	if m.settingsSearch.open {
 		return settingsSearchHints
@@ -68,19 +49,6 @@ func (m *OS) currentSettingsHints() []overlay.Hint {
 	return settingsHints
 }
 
-// settingsLayout returns the section names, the fitted inner width, the number
-// of setting rows that fit, the footer, and how many lines the description box
-// gets.
-//
-// The body is sized to the longest section, not the one showing, so the panel
-// keeps its height and its place on screen as tab moves from section to
-// section. Sized to the section, the centred panel jumped up and down with
-// every tab, and the section strip the eye follows went with it.
-//
-// On a screen too short to hold the minimum body, the footer goes first
-// (panelBody), then the description box loses a line at a time and finally goes
-// altogether: it restates the selected row, whereas a body below three rows
-// stops being a list.
 func (m *OS) settingsLayout(cats []settingsCategory) (tabs []string, width, rows int, hints []overlay.Hint, descLines int) {
 	tabs = make([]string, len(cats))
 	preferred := settingsVisibleRows
@@ -91,15 +59,12 @@ func (m *OS) settingsLayout(cats []settingsCategory) (tabs []string, width, rows
 	width = m.panelWidth(settingsMaxInnerWidth)
 	rh := m.GetRenderHeight()
 	footer := m.currentSettingsHints()
-	// The search line is a body line above the rows.
 	search := 0
 	if m.settingsSearch.open {
 		search = 1
 	}
 
 	for n := settingsDescLines; n > 0; n-- {
-		// Body lines that are not setting rows: the blank above the box, then
-		// the box itself.
 		extra := n + 1 + search
 		rows, hints = m.panelBody(preferred, extra, width, tabs, footer)
 		if rh <= 0 || rows+extra+panelChrome(0, width, tabs, hints) <= rh {
@@ -110,8 +75,6 @@ func (m *OS) settingsLayout(cats []settingsCategory) (tabs []string, width, rows
 	return tabs, width, rows, hints, 0
 }
 
-// renderSettings draws the settings overlay and returns the rendered panel, its
-// geometry, and the per-row hit rectangles for mouse routing.
 func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 	cats := m.settingsCategories()
 	if len(cats) == 0 {
@@ -133,30 +96,23 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 	pal := m.overlayUI()
 	bg := pal.Surface
 
-	// While searching, the strip lights the tab the selected result lives on,
-	// so the strip says where a row is as the cursor moves through them.
 	activeTab := m.SettingsCategory
 	if searching && len(hits) > 0 {
 		activeTab = hits[m.settingsList.Cursor].cat
 	}
 
 	tabs, width, visible, hints, descLines := m.settingsLayout(cats)
-	// A category with more settings than fit scrolls; the selection stays in
-	// view so the arrow keys can always reach every setting.
 	m.settingsList.Scroll = scrollWindow(m.settingsList.Scroll, m.settingsList.Cursor, len(items), visible)
 	start := m.settingsList.Scroll
 	end := min(start+visible, len(items))
 
 	var lines []string
-	// rowsAt is the body line the first setting row is drawn on.
 	rowsAt := 0
 	if searching {
 		lines = append(lines, m.settingsSearchLine(len(hits), width, pal))
 		rowsAt = 1
 	}
 
-	// Build each row and remember its control width so the hit rects can be
-	// derived from the panel geometry afterward.
 	type rowInfo struct {
 		control  string
 		stepless bool
@@ -192,17 +148,12 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 				desc = joinSentences(items[m.settingsList.Cursor].Desc, m.settingsDefaultNote(items[m.settingsList.Cursor]))
 			}
 			if len(items) > visible {
-				// Say where in the category the selection is, so a scrolled-off
-				// setting is discoverable rather than simply missing.
 				desc = lipgloss.Sprintf("(%d/%d) ", m.settingsList.Cursor+1, len(items)) + desc
 			}
 			lines = append(lines, settingsDescription(desc, width, descLines, pal)...)
 		}
 	}
 
-	// A session that cannot write the config file says so in the title rather
-	// than only in a notification, which is gone by the time the second setting
-	// is changed.
 	title := "Settings"
 	if m.ConfigReadOnly {
 		title = "Settings (this session only)"
@@ -218,8 +169,6 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 	}
 	content, geo := panel.Render(pal)
 
-	// Derive hit rects: each row spans the full panel width at BodyY+i; the
-	// control sits right-aligned in the inner area.
 	rows := make([]overlayRowHit, 0, len(infos))
 	for i, info := range infos {
 		rowY := geo.BodyY + rowsAt + i
@@ -239,23 +188,8 @@ func (m *OS) renderSettings() (string, overlay.Geometry, []overlayRowHit) {
 	return content, geo, rows
 }
 
-// settingsDescription lays the selected row's help text into a box n lines tall.
-//
-// It wraps rather than truncates. The panel has the room across two lines for
-// every description it carries, and a sentence cut off at the first line is a
-// sentence the user has to go and find in the config file. A description
-// longer than the box still has its last line truncated with the usual mark,
-// so nothing ever paints past the panel edge.
-//
-// The box is padded out to n lines whatever the text needs, so the panel keeps
-// its height as the selection moves and does not re-centre itself under the
-// pointer.
 func settingsDescription(desc string, width, n int, pal overlay.Palette) []string {
-	// FgDim, not FgMute: this is the only line that says what a setting does,
-	// and the quiet tier is furniture rather than text.
 	style := overlay.Style(pal.Surface).Foreground(pal.FgDim).Italic(true)
-	// The "  " indent counts against the inner width, same as the marker does on
-	// a setting row, so the wrap target leaves room for it.
 	avail := width - 2
 	wrapped := wrapPlain(desc, avail)
 	out := make([]string, 0, n)
@@ -263,8 +197,6 @@ func settingsDescription(desc string, width, n int, pal overlay.Palette) []strin
 		text := ""
 		switch {
 		case i == n-1 && len(wrapped) > n:
-			// More than the box holds: the last line carries what is left of the
-			// text up to the mark, so the cut is visible rather than silent.
 			text = overlay.Truncate(strings.Join(wrapped[i:], " "), avail)
 		case i < len(wrapped):
 			text = wrapped[i]
@@ -274,11 +206,6 @@ func settingsDescription(desc string, width, n int, pal overlay.Palette) []strin
 	return out
 }
 
-// settingsRow renders a single setting and returns the row string, its control
-// string (for hit-rect sizing), and whether the control is a boolean toggle.
-//
-// extra carries what a search result shows beyond the row itself: the label
-// characters the query matched, and the tab the row lives on.
 func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, width int, extra ...settingsRowExtra) (string, string, bool) {
 	var ex settingsRowExtra
 	if len(extra) > 0 {
@@ -290,8 +217,6 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 		marker = "› "
 	}
 
-	// Neither of these rows has stepper arrows to record: a toggle has one target
-	// and a colour has none, since there is no next colour to step to.
 	stepless := item.Control == controlBool || item.Control == controlColor || item.Control == controlStatus
 	var control string
 	switch item.Control {
@@ -310,16 +235,10 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 		control = m.settingsColorControl(item, selected, bg, pal, width)
 	default:
 		if selected && m.SettingsEditingNumber() {
-			// The row is open for editing, so it shows the slider and the field
-			// instead of the stepper it shows at rest.
 			control = m.settingsNumberEditor(item, bg, pal, width)
 			break
 		}
 		control = overlay.Cycler(overlay.Truncate(item.value(m), max(width/2, 6)), selected, bg, pal)
-		// A gauge in front of a bounded number, so the row reads as a magnitude
-		// rather than as an integer with no scale. It is worth the cells on
-		// exactly these rows: the change they make is on the screen behind the
-		// panel, and the number alone does not say how far there is left to go.
 		if item.meter != nil {
 			control = settingsMeter(item.meter(m), selected, bg, pal) + control
 		}
@@ -329,11 +248,7 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 	if !selected {
 		labelColor = pal.FgDim
 	}
-	// The label yields to the control: the control is the part the row is for.
-	// A search result's tab name yields to both, and goes first.
 	avail := max(width-lipgloss.Width(control)-3, 1)
-	// A row changed from its default carries a dot after its name, so a page
-	// of changes can be read at a glance and a stray one found.
 	changed := ""
 	if m.settingDiffers(item) {
 		changed = " •"
@@ -373,25 +288,13 @@ func (m *OS) settingsRow(item settingItem, selected bool, pal overlay.Palette, w
 	return left + overlay.Style(bg).Render(strings.Repeat(" ", gap)) + control, control, stepless
 }
 
-// settingsNumberEditorCells is how wide the slider in the number editor is. It
-// is wider than the gauge a numeric row shows at rest, because this one is
-// being aimed with rather than only read.
 const settingsNumberEditorCells = 14
 
-// settingsNumberEditor renders an open number editor: the slider the arrow keys
-// move, the field the digits go into, and the two ends it is bounded by.
-//
-// The ends are drawn because they are what the editor validates against, and a
-// field that refuses a number without ever having said what it would accept is
-// a field that looks broken. They are the same two numbers the stepper has
-// always clamped to; nothing had shown them before.
 func (m *OS) settingsNumberEditor(item settingItem, bg color.Color, pal overlay.Palette, width int) string {
 	lo, hi, ok := m.SettingsEditNumberRange()
 	if !ok {
 		return overlay.Cycler(m.settingsEdit.String(), true, bg, pal)
 	}
-	// The value the slider shows. An empty field is mid-edit rather than
-	// wrong, so the slider keeps showing where the setting still is.
 	value, typed := m.SettingsEditNumberValue()
 	if !typed {
 		value = clampInt(settingsNumberOf(item.value(m)), lo, hi)
@@ -405,9 +308,6 @@ func (m *OS) settingsNumberEditor(item settingItem, bg color.Color, pal overlay.
 		overlay.Style(bg).Foreground(pal.Fg).Render(field) +
 		bracket.Render(" ]")
 
-	// The slider is dropped before the field is, on a panel too narrow for
-	// both: the number is the thing being set and the slider is how it is
-	// aimed, so the one that has to survive is the number.
 	slider := settingsNumberSlider(value, lo, hi, bg, pal)
 	full := ends.Render(strconv.Itoa(lo)+" ") + slider + ends.Render(" "+strconv.Itoa(hi)+" ") + body
 	if lipgloss.Width(full) <= max(width-6, 8) {
@@ -419,8 +319,6 @@ func (m *OS) settingsNumberEditor(item settingItem, bg color.Color, pal overlay.
 	return body
 }
 
-// settingsNumberSlider draws where a value sits between two ends, with a handle
-// the arrow keys move.
 func settingsNumberSlider(value, lo, hi int, bg color.Color, pal overlay.Palette) string {
 	track, thumb := settingsMeterGlyphs()
 	handle := "\u25cf"
@@ -447,19 +345,10 @@ func settingsNumberSlider(value, lo, hi int, bg color.Color, pal overlay.Palette
 	return b.String()
 }
 
-// settingsColorControl renders a colour setting as its swatch and its value in
-// the same bracketed field the other rows wear.
-//
-// The swatch is the colour in force, not the value stored, so an unset row shows
-// the colour it is inheriting beside the word for where that comes from. That is
-// the whole difference from the text field this replaces: "(theme)" told the
-// user their border was the theme's and never which colour that was.
 func (m *OS) settingsColorControl(item settingItem, selected bool, bg color.Color, pal overlay.Palette, width int) string {
 	val := item.value(m)
 	unset := val == item.Unset
 
-	// An unset row is quiet whether or not it is the selected one: the word in it
-	// names a fallback rather than a value the user chose.
 	fg := pal.Fg
 	if !selected || unset {
 		fg = pal.FgDim
@@ -479,9 +368,6 @@ func (m *OS) settingsColorControl(item settingItem, selected bool, bg color.Colo
 	return out + overlay.Style(bg).Foreground(fg).Italic(unset).Render(text) + bracket.Render(" ]")
 }
 
-// settingsStringControl renders a free-text setting as a bracketed field. An
-// unset value shows the marker in italic muted text; while the row is being
-// edited it shows the live buffer with a trailing cursor.
 func (m *OS) settingsStringControl(item settingItem, selected bool, bg color.Color, pal overlay.Palette, width int) string {
 	editing := m.SettingsEditing && selected
 	val := item.value(m)
@@ -493,15 +379,10 @@ func (m *OS) settingsStringControl(item settingItem, selected bool, bg color.Col
 	if !selected {
 		fg = pal.FgDim
 	}
-	// An unset field says it is unset. A placeholder example drawn in the
-	// value's own style would read as the value in force, so the example lives
-	// on the description line.
 	text, italic := val, false
 	if val == "" && !editing {
 		text, italic, fg = item.Unset, true, pal.FgDim
 	}
-	// The field never takes more than half the row, so the label it sits beside
-	// keeps something to show even on a narrow panel.
 	if editing {
 		text = settingsCaretText(&m.settingsEdit, min(30, max(width/2, 6)))
 	} else {
@@ -518,26 +399,14 @@ func (m *OS) settingsStringControl(item settingItem, selected bool, bg color.Col
 		bracket.Render(" ]")
 }
 
-// settingsMeterCells is how wide the gauge on a bounded numeric row is. Short
-// enough to leave the value and its stepper room on a narrow panel, long enough
-// that one step of the smallest range still moves it.
 const settingsMeterCells = 6
 
-// settingsMeter draws where a value sits in its range, as filled and unfilled
-// cells followed by a space.
-//
-// A gauge rather than a percentage: the question it answers is "how much further
-// can this go", which a second number does not answer any faster than the first
-// one did.
 func settingsMeter(fraction float64, selected bool, bg color.Color, pal overlay.Palette) string {
 	if math.IsNaN(fraction) {
 		fraction = 0
 	}
 	fraction = min(max(fraction, 0), 1)
 	filled := min(max(int(fraction*float64(settingsMeterCells)+0.5), 0), settingsMeterCells)
-	// A value off the floor always shows at least one cell, so nudging a
-	// setting up from zero does something visible on the row as well as on the
-	// screen behind it.
 	if filled == 0 && fraction > 0 {
 		filled = 1
 	}
@@ -552,20 +421,6 @@ func settingsMeter(fraction float64, selected bool, bg color.Color, pal overlay.
 		overlay.Style(bg).Render(" ")
 }
 
-// settingsMeterGlyphs are the filled and unfilled cells of a settings gauge.
-//
-// Its own pair, not the pane scrollbar's.
-//
-// Reading appearance.scrollbar.thumb and .track would tie every numeric row on
-// the settings page to how a pane draws its scrollbar, which is a connection
-// nobody could guess at. Worse, the track style's track glyph is deliberately
-// the empty string, because that bar paints its groove with a background
-// rather than a character. Repeating an empty string gives no cells, so the
-// gauge would be as wide as its own value and every row's stepper would sit
-// at a different column.
-//
-// Horizontal characters, because the gauge is horizontal. The scrollbar's are
-// vertical bars, which is right for a scrollbar and wrong laid on its side.
 func settingsMeterGlyphs() (on, off string) {
 	if overlay.UseASCII() {
 		return "=", "-"
@@ -573,9 +428,6 @@ func settingsMeterGlyphs() (on, off string) {
 	return "\u2501", "\u2500"
 }
 
-// settingsCaretText is an edited setting's text with the settings page's thin
-// caret bar where the caret is, at most room cells: a value wider than that
-// gives way from its start, so the caret stays in view.
 func settingsCaretText(l *textedit.Line, room int) string {
 	bar := "▏"
 	if overlay.UseASCII() {

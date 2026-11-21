@@ -7,25 +7,8 @@ import (
 	"slices"
 )
 
-// The kitty half of the reply previews: put each picture on the host after
-// the frame that reserved its cells, and take down the ones no frame shows.
-// It follows flushLauncherIcons: a picture is uploaded once per image and
-// size, placed with the launcher's escapes, and moved only when its cell box
-// moved.
-//
-// What the host holds is written down here, and two things change it without a
-// word back. An ED 2 drops every picture, which keepPicturesFrame takes out of
-// the frame and hostErased hears about. A host
-// over its storage quota drops the oldest, kitty at 320 MB, which
-// replyPreviewHostMax keeps these from reaching. A placement of a picture the
-// host dropped fails, and with q=2 it fails in silence.
-
-// replyPreviewHostMax bounds the pictures left on the host. Eight full-size
-// pictures are under 50 MB there, and moving back over the last few files costs
-// a placement instead of an upload.
 const replyPreviewHostMax = 8
 
-// replyPixelsReady reports whether the previews can be kitty pictures.
 func (m *OS) replyPixelsReady() bool {
 	if m.PostRenderWriter == nil || !m.hostCaps().KittyGraphics {
 		return false
@@ -34,15 +17,10 @@ func (m *OS) replyPixelsReady() bool {
 	return w > 0 && h > 0
 }
 
-// flushReplyPreviewForFrame draws the open draft's pictures for the frame
-// just rendered, in the Inbox or the mailbox. With no draft open, or one with
-// no picture, nothing on the host and no picture waiting to be freed, it
-// returns at once.
 func (m *OS) flushReplyPreviewForFrame() {
 	p := m.replyPreview
 	var want []previewPlacement
 	if pl, ok := m.cockpitImagePlacement(); ok && m.replyPixelsReady() && m.overlayOnTop("inbox") && m.ContextMenu == nil {
-		// The image view covers the draft: its picture is the one shown.
 		want = append(want, pl)
 	} else if d, ok := m.openDraft(); ok && d.wires.at.ok && m.replyPixelsReady() {
 		if h, ok := m.overlayHitByKind(d.kind); ok && m.overlayOnTop(d.kind) {
@@ -118,7 +96,6 @@ func (m *OS) flushReplyPreviewForFrame() {
 		}
 	}
 	p.trimHost(want)
-	// An uppercase delete frees the image data; the unplace above keeps it.
 	for _, id := range p.gone {
 		buf = fmt.Appendf(buf, "\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", id)
 	}
@@ -136,10 +113,6 @@ func (m *OS) flushReplyPreviewForFrame() {
 	m.WriteHost(out)
 }
 
-// flushPlaceholders sends the host the placeholder pictures the frame drew:
-// each one's picture and virtual placement, once. A picture no frame draws
-// any more is freed, so the host holds only the ones on screen; scrolling
-// back to one uploads it again under the same id. Call it with p.mu held.
 func (p *replyPreview) flushPlaceholders(buf []byte, want []previewPlacement) []byte {
 	drawn := map[previewKey]bool{}
 	for _, pl := range want {
@@ -155,17 +128,12 @@ func (p *replyPreview) flushPlaceholders(buf []byte, want []previewPlacement) []
 		if drawn[k] || !ph.up {
 			continue
 		}
-		// The id stays: the thread's cached lines name it, and the picture
-		// goes up under it again when its card is drawn again.
 		buf = fmt.Appendf(buf, "\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", ph.id)
 		ph.up, ph.placed = false, false
 	}
 	return buf
 }
 
-// sendPlaceholder uploads a placeholder picture and makes its virtual
-// placement, each once. A picture still being prepared waits for the next
-// frame. Call it with p.mu held.
 func (p *replyPreview) sendPlaceholder(buf []byte, k previewKey, ph *placeholderPic) []byte {
 	pic := p.pics[k]
 	if pic == nil || len(pic.png) == 0 {
@@ -182,8 +150,6 @@ func (p *replyPreview) sendPlaceholder(buf []byte, k previewKey, ph *placeholder
 	return buf
 }
 
-// placeholdersHeld reports whether the host holds a placeholder picture.
-// Call it with p.mu held.
 func (p *replyPreview) placeholdersHeld() bool {
 	for _, ph := range p.ph {
 		if ph.up {
@@ -193,8 +159,6 @@ func (p *replyPreview) placeholdersHeld() bool {
 	return false
 }
 
-// trimHost sends the oldest uploads past replyPreviewHostMax to the gone list,
-// other than the ones on screen. Call it with p.mu held.
 func (p *replyPreview) trimHost(want []previewPlacement) {
 	over := len(p.hostOrder) - replyPreviewHostMax
 	if over <= 0 {
@@ -214,11 +178,6 @@ func (p *replyPreview) trimHost(want []previewPlacement) {
 	p.hostOrder = kept
 }
 
-// hostErased runs in the writer for a frame that erases the host's screen. What
-// the last frame placed goes out again behind the frame, so no later frame need
-// come to carry it. When kept is false the host dropped the pictures too, so
-// nothing counts as uploaded and those pictures are sent again. See
-// PostRenderWriter.AddEraseHook.
 func (p *replyPreview) hostErased(kept bool) []byte {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -228,11 +187,9 @@ func (p *replyPreview) hostErased(kept bool) []byte {
 		p.gone = p.gone[:0]
 	}
 	var buf []byte
-	// The placeholder pictures go up again too, under the ids their cells
-	// name, with their virtual placements.
 	for k, ph := range p.ph {
 		if !ph.up {
-			continue // its card is off screen: it goes up when drawn
+			continue
 		}
 		ph.placed = false
 		if !kept {

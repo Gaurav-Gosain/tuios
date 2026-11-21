@@ -7,12 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The Conflicts tab reported a problem and offered nothing to press, which
-// teaches the reader to distrust the panel. These are about the verb it offers
-// now.
-
-// conflictOS opens the overlay on the Conflicts tab with one real cross-section
-// collision in it: two actions in one scope on one key, in different tables.
 func conflictOS(t *testing.T) *OS {
 	t.Helper()
 	cfg := config.DefaultConfig()
@@ -51,7 +45,6 @@ func TestResolvingAConflictRemovesOnlyTheDeadBindings(t *testing.T) {
 	if got := m.UserConfig.Keybindings.WindowManagement["select_window_1"]; slices.Contains(got, "1") {
 		t.Errorf("the dead binding survived: select_window_1 = %v", got)
 	}
-	// The loser's other keys are untouched: only the contested one goes.
 	if got := m.UserConfig.Keybindings.WindowManagement["select_window_1"]; !slices.Contains(got, "ctrl+alt+1") {
 		t.Errorf("resolving took a key that was not contested: select_window_1 = %v", got)
 	}

@@ -8,8 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// accentFrame renders the picker and returns the frame with styling stripped
-// and the geometry it reports.
 func accentFrame(t *testing.T, m *OS) ([]string, overlay.Geometry) {
 	t.Helper()
 	content, geo, _ := m.renderAccentPicker()
@@ -58,7 +56,6 @@ func TestAccentWideColumnsStayOnTheirOwnSide(t *testing.T) {
 		m.OpenAccentPicker("aaaaaaaa1111")
 		lines, geo := accentFrame(t, m)
 
-		// The rule's column, found in the frame rather than computed.
 		ruleX := -1
 		for x, r := range []rune(lines[len(lines)/2]) {
 			if r == '┆' {
@@ -119,8 +116,6 @@ func TestAccentHitsMatchTheDrawnCellsAtEveryBreakpoint(t *testing.T) {
 		if hue != p.HueCells {
 			t.Errorf("w=%d: %d hue rects for a %d-cell strip", w, hue, p.HueCells)
 		}
-		// Every swatch is drawn in the cells its rect claims, and the row of them
-		// exactly fills the column between the sigil and the pad.
 		for _, h := range hits {
 			if h.Kind != accentHitGrid {
 				continue
@@ -176,7 +171,7 @@ func TestAccentHueNudgeReachesBetweenTheCells(t *testing.T) {
 		t.Fatalf("the wide strip is %d cells, want 36 (ten degrees each)", cells)
 	}
 
-	m.AccentPickerHueCell(21) // 210 degrees
+	m.AccentPickerHueCell(21)
 	m.AccentPicker.Focus = accentFocusHue
 	for range 3 {
 		m.AccentPickerMoveShift(1, 0)
@@ -188,7 +183,6 @@ func TestAccentHueNudgeReachesBetweenTheCells(t *testing.T) {
 		t.Errorf("hue 213 puts the strip cursor on cell %d, want 21", got)
 	}
 
-	// The colour is the exact hue, not the cell's, and the dialog prints it.
 	s := &m.AccentPicker
 	if want := hslToRGB(213, s.Sat, s.Light); s.Cur != want {
 		t.Errorf("hue 213 holds %s, want %s", overlay.Hex(s.Cur), overlay.Hex(want))
@@ -197,13 +191,11 @@ func TestAccentHueNudgeReachesBetweenTheCells(t *testing.T) {
 		t.Errorf("the dialog does not print the nudged colour %s", want)
 	}
 
-	// A plain arrow is still a whole cell.
 	m.AccentPickerMove(1, 0)
 	if got := m.AccentPicker.Hue; got != 220 {
 		t.Errorf("a plain arrow from 213 reached %v, want the next cell at 220", got)
 	}
 
-	// The circle wraps in both directions.
 	m.AccentPickerHueCell(0)
 	m.AccentPicker.Focus = accentFocusHue
 	m.AccentPickerMoveShift(-1, 0)

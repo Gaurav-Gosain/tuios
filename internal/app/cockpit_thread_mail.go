@@ -17,36 +17,16 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 )
 
-// Message cards: a tool call that talked to another agent or to the person
-// through tuios (transcriptview.AgentCall), drawn as what it said and to
-// whom, not as a command line.
-//
-// A card names the other agent by its name and harness, from the agents the
-// cockpit lists. An agent that closed keeps the name the fleet last listed
-// it by, marked closed. The message is Markdown, folded when long. What the
-// daemon's mail ring holds is the truth where it has it: a sent message
-// says whether it was read and carries its replies, an ask its answer, and
-// a read the whole of each message. The tool's result is the fallback.
-//
-// The name of the other agent is a stop for the pill cursor (inbox_child),
-// and enter or a click on it selects that agent in the cockpit. A jump
-// leaves the thread it came from on a small list, and inbox_jump_back
-// (ctrl+o) goes back to it at the place it was scrolled to.
-
-// ckMailShown is how many lines of a message a closed card shows.
 const ckMailShown = 6
 
-// ckJumpsMax bounds the jump list.
 const ckJumpsMax = 32
 
-// ckJump is one thread a jump left: the agent and how far up it was read.
 type ckJump struct {
 	key  string
 	up   int
 	pill string
 }
 
-// ckSeenAgent is an agent the fleet listed once, by its agent key.
 type ckSeenAgent struct {
 	name, harness string
 }
@@ -58,8 +38,6 @@ var (
 	ckGlyphStart = ckGlyph{"", "+", "+"}
 )
 
-// ckSeeAgents records the agents of a fleet list, so a card can name one
-// after it closes.
 func (m *OS) ckSeeAgents(list []sidebarAgentEntry) {
 	ck := &m.Inbox.ck
 	if ck.seen == nil {
@@ -73,25 +51,16 @@ func (m *OS) ckSeeAgents(list []sidebarAgentEntry) {
 	}
 }
 
-// ckPeer is the other side of a message as the card names it.
 type ckPeer struct {
-	// id is the peer's stop for the pill cursor, "" for none.
-	id string
-	// key is the agent's key while the fleet lists it.
-	key           string
-	name, harness string
-	state         string
-	// closed says the agent was listed once and is gone now; unknown that
-	// the cockpit never listed it.
+	id              string
+	key             string
+	name, harness   string
+	state           string
 	closed, unknown bool
 	human           bool
-	// many is a selector's terms, for a message to many panes.
-	many string
+	many            string
 }
 
-// ckResolvePeer finds the agent a call names, as seen from the pane e: to
-// is a window id, a prefix of one, or a name, in session (e's own when
-// empty).
 func (m *OS) ckResolvePeer(e sidebarAgentEntry, sess, to string) ckPeer {
 	if to == session.AgentInboxHuman {
 		return ckPeer{human: true, name: "you"}
@@ -124,7 +93,6 @@ func (m *OS) ckResolvePeer(e sidebarAgentEntry, sess, to string) ckPeer {
 	if found != nil {
 		return ckPeer{key: agentKey(*found), name: sidebarAgentName(*found), harness: found.Harness, state: sidebarKinState(*found)}
 	}
-	// Gone: the name the fleet or the mail ring last knew it by.
 	for key, s := range ck.seen {
 		parts := strings.SplitN(key, "\x00", 3)
 		if len(parts) == 3 && parts[0] == host && parts[1] == sess && (parts[2] == to || len(to) >= 4 && strings.HasPrefix(parts[2], to) || s.name == to) {
@@ -149,7 +117,6 @@ func (m *OS) ckResolvePeer(e sidebarAgentEntry, sess, to string) ckPeer {
 	return ckPeer{name: printableTitle(to), unknown: true}
 }
 
-// ckMailOf is the message of the ring with id, in session.
 func (m *OS) ckMailOf(sess string, id uint64) (session.AgentMessage, bool) {
 	if id == 0 {
 		return session.AgentMessage{}, false
@@ -162,8 +129,6 @@ func (m *OS) ckMailOf(sess string, id uint64) (session.AgentMessage, bool) {
 	return session.AgentMessage{}, false
 }
 
-// ckSentID is the id of the message a send's result names: "message 12
-// delivered to ..." as the command prints it, or message_id as JSON.
 func ckSentID(c transcriptview.AgentCall, out string) uint64 {
 	if c.JSON || strings.HasPrefix(strings.TrimSpace(out), "{") {
 		var res struct {
@@ -185,7 +150,6 @@ func ckSentID(c transcriptview.AgentCall, out string) uint64 {
 	return 0
 }
 
-// ckReadMail is one message a read returned.
 type ckReadMail struct {
 	id             uint64
 	kind           string
@@ -196,9 +160,6 @@ type ckReadMail struct {
 	verifiedHuman  bool
 }
 
-// ckReadResult is the messages a read's result holds, from its JSON or from
-// the lines the command prints. more says the result was cut, or it held
-// messages it could not read.
 func ckReadResult(out string) (msgs []ckReadMail, none bool) {
 	t := strings.TrimSpace(out)
 	if strings.HasPrefix(t, "{") {
@@ -242,7 +203,6 @@ func ckReadResult(out string) (msgs []ckReadMail, none bool) {
 		case inBody:
 			body = append(body, strings.TrimPrefix(strings.TrimPrefix(line, session.UntrustedGutter), strings.TrimSpace(session.UntrustedGutter)))
 		case strings.HasPrefix(line, "#"):
-			// #12  message  from review (c7be946f)  2m ago  new
 			f := strings.SplitN(line[1:], "  ", 4)
 			n, err := strconv.ParseUint(f[0], 10, 64)
 			if err != nil || len(f) < 3 {
@@ -264,8 +224,6 @@ func ckReadResult(out string) (msgs []ckReadMail, none bool) {
 	return msgs, false
 }
 
-// ckAnswerText is what an ask-agent's result says the other agent answered:
-// the fenced reply, without the fence and the gutter.
 func ckAnswerText(out string) string {
 	var body []string
 	in := false
@@ -285,8 +243,6 @@ func ckAnswerText(out string) string {
 	return strings.TrimSpace(strings.Join(body, "\n"))
 }
 
-// ckAskRecord is the ring's record of an ask the pane e made of the window
-// to, at or after the call: the answer as the daemon kept it.
 func (m *OS) ckAskRecord(e sidebarAgentEntry, en threadEntry, peer string, question string) (session.AgentMessage, bool) {
 	q := strings.TrimSpace(question)
 	for _, msg := range slices.Backward(m.AgentMail.Messages) {
@@ -306,21 +262,14 @@ func (m *OS) ckAskRecord(e sidebarAgentEntry, en threadEntry, peer string, quest
 	return session.AgentMessage{}, false
 }
 
-// ckPeerID is the pill cursor's stop for the k-th peer of entry id.
 func ckPeerID(id string, k int) string { return "p:" + id + "/" + strconv.Itoa(k) }
 
-// ckTalkCard is a tool call's agent calls as message cards. A single call
-// takes what its result and the ring say: the answer, the messages read,
-// whether a sent message was read and its replies.
-//
 //go:noinline
 func (m *OS) ckTalkCard(l ckLook, e sidebarAgentEntry, t *agentThread, en threadEntry, res threadEntry, width int, open bool) []ckLine {
 	ls, _ := m.ckTalkCardPeers(l, e, t, en, res, width, open)
 	return ls
 }
 
-// ckTalkCardPeers is ckTalkCard, and the peers the card names, in the order
-// it draws them.
 func (m *OS) ckTalkCardPeers(l ckLook, e sidebarAgentEntry, t *agentThread, en threadEntry, res threadEntry, width int, open bool) ([]ckLine, []ckPeer) {
 	var ls []ckLine
 	var peers []ckPeer
@@ -335,7 +284,6 @@ func (m *OS) ckTalkCardPeers(l ckLook, e sidebarAgentEntry, t *agentThread, en t
 		ls = append(ls, m.ckTalkCall(l, e, t, en, c, out, &peers, width, open)...)
 	}
 	if en.Status == "error" {
-		// The call failed: the end of what it printed.
 		lines := ckOutputLines(res.Text, max(width-8, 8), l.ascii)
 		if len(lines) > ckFailShown {
 			lines = lines[len(lines)-ckFailShown:]
@@ -347,8 +295,6 @@ func (m *OS) ckTalkCardPeers(l ckLook, e sidebarAgentEntry, t *agentThread, en t
 	return ls, peers
 }
 
-// ckTalkCall is one agent call's lines. peers collects the peers the
-// entry's card names, which gives each its stop id.
 func (m *OS) ckTalkCall(l ckLook, e sidebarAgentEntry, t *agentThread, en threadEntry, c transcriptview.AgentCall, out string, peers *[]ckPeer, width int, open bool) []ckLine {
 	pal := l.pal
 	status := m.ckToolLine(l, "", "", en.Status, width).right
@@ -468,8 +414,6 @@ func (m *OS) ckTalkCall(l ckLook, e sidebarAgentEntry, t *agentThread, en thread
 	return nil
 }
 
-// ckAddPeer gives a peer its stop id and adds it to peers. The person and
-// a selector take no stop.
 func ckAddPeer(peers *[]ckPeer, entryID string, p ckPeer) ckPeer {
 	if !p.human && p.many == "" && p.name != "" {
 		p.id = ckPeerID(entryID, len(*peers))
@@ -478,8 +422,6 @@ func ckAddPeer(peers *[]ckPeer, entryID string, p ckPeer) ckPeer {
 	return p
 }
 
-// ckPeerWindow is the window id of a peer the fleet lists, "" for any
-// other.
 func ckPeerWindow(m *OS, p ckPeer) string {
 	if p.key == "" {
 		return ""
@@ -491,11 +433,8 @@ func ckPeerWindow(m *OS, p ckPeer) string {
 	return ""
 }
 
-// ckRingClock is a ring time, in nanoseconds, as a card shows it.
 func ckRingClock(ns int64) string { return ckClock(ns / 1e6) }
 
-// ckReceipt is what the ring says of a sent message: read and when, seen,
-// or not read yet.
 func ckReceipt(l ckLook, msg session.AgentMessage) []ckSeg {
 	pal := l.pal
 	switch {
@@ -507,8 +446,6 @@ func ckReceipt(l ckLook, msg session.AgentMessage) []ckSeg {
 	return []ckSeg{{t: "not read yet  ", fg: pal.FgMute}}
 }
 
-// ckReplies are the replies the ring holds to a sent message, each a card
-// from its sender.
 func (m *OS) ckReplies(l ckLook, e sidebarAgentEntry, en threadEntry, sent session.AgentMessage, peers *[]ckPeer, sel, fold string, width int, open bool) []ckLine {
 	var ls []ckLine
 	for _, msg := range m.AgentMail.Messages {
@@ -529,8 +466,6 @@ func (m *OS) ckReplies(l ckLook, e sidebarAgentEntry, en threadEntry, sent sessi
 	return ls
 }
 
-// ckReadCard is a read of the mail: a line per message read, from its
-// sender, with the message under it.
 func (m *OS) ckReadCard(l ckLook, e sidebarAgentEntry, en threadEntry, c transcriptview.AgentCall, out string, peers *[]ckPeer, sel string, status []ckSeg, fold string, width int, open bool) []ckLine {
 	pal := l.pal
 	verb := "Read mail"
@@ -559,7 +494,6 @@ func (m *OS) ckReadCard(l ckLook, e sidebarAgentEntry, en threadEntry, c transcr
 		return append(ls, ckLine{indent: 4, segs: []ckSeg{{t: "No new mail.", fg: pal.FgMute, attrs: ckItalic}}})
 	}
 	for _, r := range msgs {
-		// The ring has the whole message; the result is cut.
 		if msg, ok := m.ckMailOf(e.SessionID, r.id); ok {
 			r.text, r.subject, r.from, r.at, r.verifiedHuman = msg.Text, msg.Subject, msg.From, msg.SentAt, msg.VerifiedHuman
 			if r.fromName == "" {
@@ -571,7 +505,6 @@ func (m *OS) ckReadCard(l ckLook, e sidebarAgentEntry, en threadEntry, c transcr
 		case r.from == session.AgentInboxHuman && r.verifiedHuman:
 			p = ckPeer{human: true, name: "you"}
 		case r.from == session.AgentInboxHuman:
-			// Only the daemon can say a message is the person's.
 			p = ckPeer{name: "human, not verified", unknown: true}
 		case r.from != "":
 			p = m.ckResolvePeer(e, c.Session, r.from)
@@ -599,9 +532,6 @@ func (m *OS) ckReadCard(l ckLook, e sidebarAgentEntry, en threadEntry, c transcr
 	return ls
 }
 
-// ckTalkHead is a message card's first line: the direction, the other
-// agent's name with its state mark and harness, and on the right what the
-// ring says and the call's status. The name lights under the pill cursor.
 func (m *OS) ckTalkHead(l ckLook, g ckGlyph, verb string, p ckPeer, sel string, note, status []ckSeg, width int) ckLine {
 	pal := l.pal
 	right := append(slices.Clone(note), status...)
@@ -661,9 +591,6 @@ func (m *OS) ckTalkHead(l ckLook, g ckGlyph, verb string, p ckPeer, sel string, 
 	return ln
 }
 
-// ckTalkBody is a message under its card's line: the subject in bold, then
-// the text as Markdown behind a bar in ink. A long message shows its first
-// lines until opened.
 func (m *OS) ckTalkBody(l ckLook, subject, text, fold string, ink color.Color, width int, open bool) []ckLine {
 	pal := l.pal
 	const indent = 4
@@ -703,8 +630,6 @@ func (m *OS) ckTalkBody(l ckLook, subject, text, fold string, ink color.Color, w
 	return out
 }
 
-// ckShiftBar moves a line's bar from the first cell to column at, by
-// putting it in front of the line's text.
 func ckShiftBar(ln *ckLine, at int) {
 	if ln.bar == "" || at <= 0 {
 		return
@@ -712,7 +637,6 @@ func ckShiftBar(ln *ckLine, at int) {
 	bar := ckSeg{t: ln.bar, fg: ln.barInk}
 	ln.bar = ""
 	if ln.raw != "" {
-		// A drawn line keeps its own start; the bar goes in the first cell.
 		ln.bar = bar.t
 		return
 	}
@@ -721,8 +645,6 @@ func ckShiftBar(ln *ckLine, at int) {
 	ln.segs = append([]ckSeg{bar, {t: strings.Repeat(" ", max(pad, 1))}}, ln.segs...)
 }
 
-// ckTalkSig is what an entry's message card depends on beyond the entry and
-// its result: the agents it names, the ring and the pill cursor on it.
 func (m *OS) ckTalkSig(e sidebarAgentEntry, t *agentThread, en threadEntry) uint64 {
 	h := fnv.New64a()
 	h.Write([]byte(strconv.FormatUint(m.AgentMail.Gen, 10)))
@@ -736,8 +658,6 @@ func (m *OS) ckTalkSig(e sidebarAgentEntry, t *agentThread, en threadEntry) uint
 	return h.Sum64()
 }
 
-// ckPeersSig hashes the agents a card can name: each listed agent's key,
-// name, harness and state, and how many the cockpit has seen.
 func (m *OS) ckPeersSig() uint64 {
 	h := fnv.New64a()
 	for _, k := range m.Inbox.ck.agents {
@@ -747,7 +667,6 @@ func (m *OS) ckPeersSig() uint64 {
 	return h.Sum64()
 }
 
-// ckThreadTalks reports whether a thread has a message card.
 func ckThreadTalks(t *agentThread) bool {
 	for _, en := range t.entries {
 		if len(en.Calls) > 0 {
@@ -757,8 +676,6 @@ func ckThreadTalks(t *agentThread) bool {
 	return false
 }
 
-// ckEntryPeers are the peers an entry's message card names, in the order
-// it draws them, each with its stop id.
 func (m *OS) ckEntryPeers(e sidebarAgentEntry, en, res threadEntry) []ckPeer {
 	if len(en.Calls) == 0 {
 		return nil
@@ -767,7 +684,6 @@ func (m *OS) ckEntryPeers(e sidebarAgentEntry, en, res threadEntry) []ckPeer {
 	return peers
 }
 
-// ckThreadPeers are the peer stops of the thread of e, by entry id.
 func (m *OS) ckThreadPeers(e sidebarAgentEntry, t *agentThread) map[string][]ckPeer {
 	var out map[string][]ckPeer
 	results := map[string]threadEntry{}
@@ -790,8 +706,6 @@ func (m *OS) ckThreadPeers(e sidebarAgentEntry, t *agentThread) map[string][]ckP
 	return out
 }
 
-// ckPeerTarget is the peer a stop on the thread of e names. ok is false for
-// a stop the thread no longer has.
 func (m *OS) ckPeerTarget(e sidebarAgentEntry, t *agentThread, id string) (ckPeer, bool) {
 	rest, _ := strings.CutPrefix(id, "p:")
 	entryID, _, _ := strings.Cut(rest, "/")
@@ -803,9 +717,6 @@ func (m *OS) ckPeerTarget(e sidebarAgentEntry, t *agentThread, id string) (ckPee
 	return ckPeer{}, false
 }
 
-// ckPeerGo selects the agent a peer stop names, and leaves the thread it
-// came from on the jump list. A closed agent, or one the fleet does not
-// show, is said so.
 func (m *OS) ckPeerGo(e sidebarAgentEntry, t *agentThread, id string) tea.Cmd {
 	p, ok := m.ckPeerTarget(e, t, id)
 	if !ok {
@@ -816,8 +727,6 @@ func (m *OS) ckPeerGo(e sidebarAgentEntry, t *agentThread, id string) tea.Cmd {
 	return m.ckGoPeer(e, t, p)
 }
 
-// ckGoPeer selects the agent p, and leaves the thread of e on the jump
-// list. A closed agent, or one the fleet does not show, is said so.
 func (m *OS) ckGoPeer(e sidebarAgentEntry, t *agentThread, p ckPeer) tea.Cmd {
 	if p.key == "" {
 		if p.closed {
@@ -853,7 +762,6 @@ func (m *OS) CockpitJumpBack() (tea.Cmd, bool) {
 		ck.jumps = ck.jumps[:len(ck.jumps)-1]
 		cmd, ok := m.cockpitOpenAgentOK(j.key)
 		if !ok {
-			// That agent closed or is filtered out: the one before it.
 			continue
 		}
 		if t := m.Inbox.threads.byKey[j.key]; t != nil {
@@ -867,8 +775,6 @@ func (m *OS) CockpitJumpBack() (tea.Cmd, bool) {
 	return nil, false
 }
 
-// cockpitOpenAgentOK is cockpitOpenAgent, and whether the fleet lists the
-// agent.
 func (m *OS) cockpitOpenAgentOK(key string) (tea.Cmd, bool) {
 	ck := &m.Inbox.ck
 	for _, r := range m.cockpitRows() {
@@ -879,8 +785,6 @@ func (m *OS) cockpitOpenAgentOK(key string) (tea.Cmd, bool) {
 	return nil, false
 }
 
-// cockpitPeerClick handles a click on the other agent's name on a message
-// card: it selects that agent.
 func (m *OS) cockpitPeerClick(id string) tea.Cmd {
 	e, ok := m.cockpitAgent()
 	t := m.cockpitThread()
@@ -891,8 +795,6 @@ func (m *OS) cockpitPeerClick(id string) tea.Cmd {
 	return m.ckPeerGo(e, t, id)
 }
 
-// ckJumpHints is the footer's hint for the back key while the jump list
-// holds a thread.
 func (m *OS) ckJumpHints() []overlay.Hint {
 	if len(m.Inbox.ck.jumps) == 0 {
 		return nil

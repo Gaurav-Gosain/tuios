@@ -25,34 +25,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sound"
 )
 
-// The Inbox on the client: a mirror of the daemon's attention queue (see
-// session/attention.go), the overlay that reads it, and the alerts it raises.
-//
-// The mirror is fed by one watcher goroutine per client. It lists the queue,
-// then subscribes to attention events from the position the listing was
-// current to, so nothing is missed between the two and nothing is counted
-// twice. A gap, a daemon restart or a dropped connection starts it over with a
-// fresh listing. An idle Inbox costs one blocked read.
-//
-// Alerts for the attached session still come from the state sync, as they
-// always have (agent_alert.go). The Inbox adds the rest: an agent in any other
-// session that blocks, errors, finishes or writes to the person raises the
-// same dock message, desktop notification and sound, naming the session. A
-// burst, which is what a fan of agents produces, is one alert.
-
-// inboxQueue bounds the channel from the watcher to Update.
 const inboxQueue = 16
 
-// inboxBatch is how long the watcher gathers events after the first one of a
-// burst before handing them to Update together, so sixteen agents finishing
-// in the same breath are one render and one alert.
 const inboxBatch = 150 * time.Millisecond
 
-// inboxRetryMax caps the wait between attempts to reach the daemon.
 const inboxRetryMax = 30 * time.Second
 
-// inboxCycleWindow is how long after a jump the next-attention key continues
-// from the item it jumped to rather than starting at the oldest again.
 const inboxCycleWindow = 5 * time.Second
 
 // InboxState is the mirror and the overlay's state.
@@ -70,10 +48,8 @@ type InboxState struct {
 	Filter string
 	// Select narrows the overlay to the items a selector matches, empty for
 	// every item. See inbox_select.go.
-	Select   string
-	selector *session.Selector
-	// selectEditing, selectDraft and selectErr are the selector line: open,
-	// what is typed on it, and why it did not parse.
+	Select        string
+	selector      *session.Selector
 	selectEditing bool
 	selectEd      *composer.Model
 	selectErr     string
@@ -86,73 +62,34 @@ type InboxState struct {
 	// its row since.
 	SelectedID string
 	// Scroll is the overlay's scroll offset.
-	Scroll int
-	// shown is the held approval the overlay last drew under the cursor, and
-	// when it was first drawn as it is. 1, 2 and 3 answer only that item as
-	// drawn, once it has been on screen for inboxAnswerSettle.
-	shown inboxShown
-	// poppedAt is when a question opened the Inbox by itself, zero when the
-	// person opened it. No key acts for inboxAnswerSettle after a pop.
-	poppedAt time.Time
-	// paneKeyAt is when the person last typed into a pane. A question does
-	// not pop within inboxPopQuiet of it.
+	Scroll    int
+	shown     inboxShown
+	poppedAt  time.Time
 	paneKeyAt time.Time
-	// released are the questions the daemon released from their parent
-	// agent while open here. They alert in the attached session too, since
-	// no agent state moved at the release. See inbox_children.go.
-	released map[string]bool
+	released  map[string]bool
 
-	// lastJumpID and lastJumpAt let the next-attention key cycle.
-	lastJumpID string
-	lastJumpAt time.Time
-	// pendingThread is a mail thread to open once the session it is in has
-	// been switched to and its mail has loaded, and pendingReply says to open
-	// its reply line too.
+	lastJumpID    string
+	lastJumpAt    time.Time
 	pendingThread uint64
 	pendingReply  bool
-	// pendingItem is an item to put the cursor on once a listing holds it:
-	// a notification's link opened tuios-web before the first listing
-	// arrived. It is cleared when the cursor lands on it, or when the
-	// person moves the cursor first. See OpenInboxOn.
-	pendingItem string
+	pendingItem   string
 
 	// Peek is the prompt read over the list, nil when the list shows. See
 	// inbox_peek.go.
-	Peek *inboxPeek
-	// peekGen numbers peeks, so a reply to one since closed is dropped.
-	peekGen uint64
-	// call and nonce replace the daemon and the attach nonce in tests.
-	call  inboxVerbCall
-	nonce func() string
-	// replied holds the approval requests this client answered, so the close
-	// event for one is not announced as answered elsewhere.
-	replied map[string]bool
-	// announcedResume holds the resume items this client has already told
-	// its user about, so a restore is announced once and not on every
-	// fresh listing.
+	Peek            *inboxPeek
+	peekGen         uint64
+	call            inboxVerbCall
+	nonce           func() string
+	replied         map[string]bool
 	announcedResume map[string]bool
-	// life is the snoozed items, the snooze picker, undo and the walk of
-	// finished turns. See inbox_lifecycle.go.
-	life inboxLifecycle
-	// approvals is the state of the safer approvals: a risky allow's first
-	// press, the reason line, and the plan shown. See inbox_approvals_ext.go.
-	approvals inboxApprovalState
-	// reply is the reply editor and the replies this client queued. See
-	// inbox_reply.go.
-	reply inboxReplyState
-	// recap is the away recap shown for the selected finished turn. See
-	// inbox_recap.go.
-	recap inboxRecapView
-	// agents is the agents view, which tab switches to. See
-	// inbox_agents.go.
-	agents inboxAgentsState
-	// threads are the agents' threads the view shows. See inbox_thread.go.
-	threads threadsState
-	// echoes are the replies sent that the threads show before their
-	// transcripts do (thread_echo.go).
-	echoes threadEchoes
-	// ck is the cockpit's own state. See cockpit.go.
-	ck cockpitState
+	life            inboxLifecycle
+	approvals       inboxApprovalState
+	reply           inboxReplyState
+	recap           inboxRecapView
+	agents          inboxAgentsState
+	threads         threadsState
+	echoes          threadEchoes
+	ck              cockpitState
 }
 
 // InboxSnapshotMsg is a fresh listing from the watcher.
@@ -218,27 +155,18 @@ type InboxResumedMsg struct {
 	ID string
 }
 
-// inboxWatchMsg wraps what the watcher delivers, so Update can re-arm the
-// listener for exactly these messages.
 type inboxWatchMsg struct {
 	msg tea.Msg
 }
 
-// errInboxGap ends one watch so the next one starts from a fresh listing.
 var errInboxGap = errors.New("the attention stream has a gap")
 
-// inboxDial opens a verb connection to the daemon that holds the queue.
 type inboxDial func() (*session.VerbClient, error)
 
-// watchesInbox reports whether this model follows the daemon's queue: a real
-// client of a daemon session. Tests build models with no kind and get none.
 func (m *OS) watchesInbox() bool {
 	return m.Client != ClientUnknown && !m.ScriptMode && m.IsDaemonSession && m.DaemonClient != nil
 }
 
-// startInboxWatch starts the watcher and returns the command that waits for
-// its first delivery. The queue is the daemon's that holds the Inbox
-// (inboxDialer): this machine's, or the host's the client is attached to.
 func (m *OS) startInboxWatch() tea.Cmd {
 	if !m.watchesInbox() || m.inboxEvents != nil || !m.agentsOn() {
 		return nil
@@ -250,7 +178,6 @@ func (m *OS) startInboxWatch() tea.Cmd {
 	return listenForInbox(ch)
 }
 
-// endInboxWatch stops the watcher.
 func (m *OS) endInboxWatch() {
 	if m.stopInbox != nil {
 		m.stopInbox()
@@ -258,7 +185,6 @@ func (m *OS) endInboxWatch() {
 	}
 }
 
-// listenForInbox waits for one delivery from the watcher.
 func listenForInbox(ch <-chan tea.Msg) tea.Cmd {
 	if ch == nil {
 		return nil
@@ -272,8 +198,6 @@ func listenForInbox(ch <-chan tea.Msg) tea.Cmd {
 	}
 }
 
-// runInboxWatch keeps a watch running until ctx ends, starting over after
-// every failure with a growing wait.
 func runInboxWatch(ctx context.Context, dial inboxDial, out chan<- tea.Msg) {
 	defer crashexit.Recover()
 	defer close(out)
@@ -303,7 +227,6 @@ func runInboxWatch(ctx context.Context, dial inboxDial, out chan<- tea.Msg) {
 	}
 }
 
-// inboxSend delivers one message unless ctx ends first.
 func inboxSend(ctx context.Context, out chan<- tea.Msg, msg tea.Msg) bool {
 	select {
 	case out <- msg:
@@ -313,9 +236,6 @@ func inboxSend(ctx context.Context, out chan<- tea.Msg, msg tea.Msg) bool {
 	}
 }
 
-// inboxWatchOnce lists the queue, subscribes from the listing's position and
-// delivers events until the connection fails or the stream has a gap. It
-// reports whether the listing was delivered.
 func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bool, error) {
 	client, err := dial()
 	if err != nil {
@@ -325,9 +245,6 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 	defer stop()
 	defer func() { _ = client.Close() }()
 
-	// The snoozed items are listed after the open ones, for the Inbox's
-	// Snoozed group. A daemon from before snoozing refuses the parameter,
-	// and has nothing snoozed, so it is asked without it.
 	raw, err := client.CallWithTimeout("list-attention", map[string]any{"include_snoozed": true}, 5*time.Second)
 	if session.VerbErrCode(err) == session.ErrVerbInvalidParams {
 		raw, err = client.CallWithTimeout("list-attention", map[string]any{}, 5*time.Second)
@@ -343,8 +260,6 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 	if err := jsonx.Unmarshal(raw, &listing); err != nil {
 		return false, err
 	}
-	// The cards are listed after the items: list-tasks has no seq, so every
-	// task event the subscription replays is no newer than this listing.
 	types := []string{session.EventAttention}
 	cards, noBoard, boardErr, err := inboxListCards(client)
 	if err != nil {
@@ -353,8 +268,6 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 	if !noBoard && boardErr == "" {
 		types = append(types, session.EventTaskClaimed, session.EventTaskFinished, session.EventTaskChanged,
 			session.EventSessionCreated, session.EventSessionClosed)
-		// A daemon from before dispatch refuses a subscription that names
-		// its event.
 		if ok, _ := probeVerb(func(verb string, params map[string]any) ([]byte, error) {
 			return client.CallWithTimeout(verb, params, 5*time.Second)
 		}, "get-task-dispatch"); ok {
@@ -372,8 +285,6 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 		return true, ctx.Err()
 	}
 
-	// One goroutine reads, this one batches: a read deadline cannot be used to
-	// end a batch, because a line cut by a deadline is lost.
 	type read struct {
 		ev     InboxEvent
 		gap    bool
@@ -381,8 +292,6 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 		err    error
 	}
 	lines := make(chan read, 64)
-	// quit ends the reader when this watch returns for any reason, so a reader
-	// holding a line nobody will take does not outlive it.
 	quit := make(chan struct{})
 	defer close(quit)
 	put := func(r read) bool {
@@ -469,9 +378,6 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 		if len(batch) > 0 && !inboxSend(ctx, out, InboxEventsMsg{Events: batch}) {
 			return true, ctx.Err()
 		}
-		// A session made, renamed or killed changes whose cards the listing
-		// holds, and no card event says so. This connection carries the
-		// stream, so the cards are listed again on a second one.
 		if relist {
 			if err := inboxRelistCards(ctx, dial, out); err != nil {
 				return true, err
@@ -483,11 +389,8 @@ func inboxWatchOnce(ctx context.Context, dial inboxDial, out chan<- tea.Msg) (bo
 	}
 }
 
-// inboxCardsMsg is a fresh listing of the cards alone.
 type inboxCardsMsg struct{ InboxSnapshotMsg }
 
-// inboxRelistCards lists the cards on a connection of its own and delivers
-// them.
 func inboxRelistCards(ctx context.Context, dial inboxDial, out chan<- tea.Msg) error {
 	client, err := dial()
 	if err != nil {
@@ -499,7 +402,6 @@ func inboxRelistCards(ctx context.Context, dial inboxDial, out chan<- tea.Msg) e
 		return err
 	}
 	if noBoard || boardErr != "" {
-		// The board's state changed under the watch: a fresh watch decides it as at attach.
 		return errInboxGap
 	}
 	if !inboxSend(ctx, out, inboxCardsMsg{InboxSnapshotMsg{Cards: cards}}) {
@@ -508,10 +410,6 @@ func inboxRelistCards(ctx context.Context, dial inboxDial, out chan<- tea.Msg) e
 	return nil
 }
 
-// inboxListCards lists every session's task cards. noBoard is true when the
-// daemon has no list-tasks, or answers without all_sessions, and boardErr says why it
-// refused otherwise. Neither is an error: the attention list must not go down
-// with the board.
 func inboxListCards(client *session.VerbClient) (cards []session.TaskRow, noBoard bool, boardErr string, err error) {
 	raw, err := client.CallWithTimeout("list-tasks", map[string]any{"all_sessions": true}, 5*time.Second)
 	if callErr, ok := errors.AsType[*session.VerbCallError](err); ok {
@@ -531,17 +429,13 @@ func inboxListCards(client *session.VerbClient) (cards []session.TaskRow, noBoar
 		return nil, false, "", err
 	}
 	if !res.AllSessions {
-		// A daemon with the task verbs and no all_sessions ignores the
-		// param and answers one session: params take unknown fields.
 		return nil, true, "", nil
 	}
 	sortCards(res.Tasks)
 	return res.Tasks, false, "", nil
 }
 
-// handleInboxWatch applies one delivery and re-arms the listener.
 func (m *OS) handleInboxWatch(msg inboxWatchMsg) tea.Cmd {
-	// A delivery that was on its way when the features went off.
 	if !m.agentsOn() {
 		return nil
 	}
@@ -554,8 +448,6 @@ func (m *OS) handleInboxWatch(msg inboxWatchMsg) tea.Cmd {
 	case InboxEventsMsg:
 		cmd = tea.Batch(m.applyInboxEvents(inner), m.foreignAgentRefreshCmd(inner.Events))
 		m.noteAgentsSeen()
-		// An approval that arrived while the person types is held, and is
-		// drawn released when the hold ends.
 		cmd = tea.Batch(cmd, m.armInboxTypingRelease())
 	case inboxCardsMsg:
 		m.applyBoardSnapshot(inner.InboxSnapshotMsg)
@@ -571,12 +463,6 @@ func (m *OS) handleInboxWatch(msg inboxWatchMsg) tea.Cmd {
 	return tea.Batch(cmd, m.InboxApprovalFetch(), m.InboxQuestionFetch(), m.InboxRecapFetch(), listenForInbox(m.inboxEvents))
 }
 
-// foreignAgentRefreshCmd refreshes the session listing when an attention event
-// is about another session on this machine and the rail is on screen. The rail
-// reads other sessions' agent state from that listing, which is otherwise
-// polled every few seconds, while the dock reads this event at once. Without
-// the refresh the dock said "2 agents need you in docs" for up to three
-// seconds while the rail's row for docs still showed a plain session.
 func (m *OS) foreignAgentRefreshCmd(events []InboxEvent) tea.Cmd {
 	if m.DaemonClient == nil || !m.SidebarActive() {
 		return nil
@@ -594,12 +480,8 @@ func (m *OS) foreignAgentRefreshCmd(events []InboxEvent) tea.Cmd {
 	return nil
 }
 
-// foreignListingRefreshedMsg says a listing refresh asked for by an attention
-// event has landed. Its only job is to reach Update, so the rail is drawn from
-// the new listing now rather than on whatever message comes next.
 type foreignListingRefreshedMsg struct{}
 
-// applyInboxSnapshot replaces the mirror with a fresh listing.
 func (m *OS) applyInboxSnapshot(msg InboxSnapshotMsg) {
 	st := &m.Inbox
 	open, snoozed := splitSnoozed(msg.Items)
@@ -624,11 +506,6 @@ func (m *OS) applyInboxSnapshot(msg InboxSnapshotMsg) {
 	m.pruneResuming(st.Items)
 }
 
-// announceResumes says once, in the dock, that a restart left conversations
-// to resume, and how to answer. A restore happens with nobody attached, so the
-// items are usually already in the first listing a client gets, where no event
-// would announce them. The alert policy does not govern it: it is not an agent
-// changing state but the one time the person can bring the agents back.
 func (m *OS) announceResumes(items []session.AttentionItem) {
 	st := &m.Inbox
 	var fresh []session.AttentionItem
@@ -651,7 +528,6 @@ func (m *OS) announceResumes(items []session.AttentionItem) {
 	}
 	text += agentAlertSep() + "open the agents view with " + m.pressFor("prefix_inbox", "the prefix key then i")
 	if len(fresh) > 1 {
-		// Several resume together: every row marked, then one key.
 		text += ", and press " + m.inboxKeyOr(config.ActionInboxMarkAll, "*") + " then " +
 			m.inboxKeyOr(config.ActionInboxResume, "y") + " to resume all"
 	} else {
@@ -661,8 +537,6 @@ func (m *OS) announceResumes(items []session.AttentionItem) {
 		NotifTarget{SessionID: fresh[0].Session, WindowID: fresh[0].Window})
 }
 
-// applyInboxDown marks the mirror stale. The items are kept for the overlay,
-// which says the list may be out of date, and the rail stops counting from it.
 func (m *OS) applyInboxDown(msg InboxDownMsg) {
 	st := &m.Inbox
 	st.Live = false
@@ -670,8 +544,6 @@ func (m *OS) applyInboxDown(msg InboxDownMsg) {
 	m.inboxChanged()
 }
 
-// applyInboxEvents folds a batch of events into the mirror and returns the
-// command that raises its alerts once they have settled.
 func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 	st := &m.Inbox
 	var alert []string
@@ -715,8 +587,6 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 			} else {
 				st.Items = append(st.Items, *it)
 			}
-			// A question with the parent agent is not the person's yet: it
-			// alerts when it is released.
 			if inboxWithParent(*it) {
 				continue
 			}
@@ -726,18 +596,12 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 				}
 				st.released[it.ID] = true
 			}
-			// An upgrade's confirm is its own dialog (syncUpgradeConfirm),
-			// which is alert enough.
 			if it.Upgrade != nil {
 				continue
 			}
-			// A question about the pane in front of the person opens the
-			// Inbox on it, which is the popup: it needs no alert.
 			if ev.Action == session.AttentionOpened && m.inboxPopAsk(*it) {
 				continue
 			}
-			// An item the person just woke, restored or marked unread here
-			// opens because they asked: it is not news to them.
 			if (ev.Action == session.AttentionOpened || more || released) && !m.inboxAskedFor(*it) {
 				alert = append(alert, it.ID)
 			}
@@ -751,7 +615,6 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 	return tea.Batch(append(cmds, m.scheduleInboxAlerts(alert))...)
 }
 
-// inboxIndex finds an item in the mirror by id, or -1.
 func (m *OS) inboxIndex(id string) int {
 	for i := range m.Inbox.Items {
 		if m.Inbox.Items[i].ID == id {
@@ -761,7 +624,6 @@ func (m *OS) inboxIndex(id string) int {
 	return -1
 }
 
-// inboxItem returns an item in the mirror by id.
 func (m *OS) inboxItem(id string) (session.AttentionItem, bool) {
 	if i := m.inboxIndex(id); i >= 0 {
 		return m.Inbox.Items[i], true
@@ -769,8 +631,6 @@ func (m *OS) inboxItem(id string) (session.AttentionItem, bool) {
 	return session.AttentionItem{}, false
 }
 
-// inboxChanged records that the mirror moved, so the rail and the overlay
-// redraw.
 func (m *OS) inboxChanged() {
 	m.Inbox.Gen++
 	m.clampInboxSelection()
@@ -778,24 +638,15 @@ func (m *OS) inboxChanged() {
 	m.syncUpgradeConfirm()
 }
 
-// inboxAttached reports whether an item is in the session this client is
-// attached to, whose transitions the state sync already alerts on.
 func (m *OS) inboxAttached(it session.AttentionItem) bool {
-	// Learn mode's pretend agents run in the one session the tour has, and
-	// the rail alerts on them as on any pane of it.
 	return it.Host == "" && m.AttachedHost == "" && (m.IsDaemonSession || m.LearnMode) && it.Session == m.sidebarCurrentSessionID()
 }
 
-// inboxSeenUnderEyes dismisses a finished item for the pane this client is
-// showing: a turn that finished under the person's eyes has been seen, which is
-// the rule the rail applies to its own unread mark.
 func (m *OS) inboxSeenUnderEyes(it session.AttentionItem) tea.Cmd {
 	if it.Kind != session.AttentionFinished || !m.inboxAttached(it) {
 		return nil
 	}
 	if m.LearnMode && m.ShowInbox {
-		// The agents view covers the pane: the New agent sheet leaves the
-		// focus on the last attempt it started, which no one has seen.
 		return nil
 	}
 	if w := m.GetFocusedWindow(); w != nil && w.ID == it.Window {
@@ -804,25 +655,8 @@ func (m *OS) inboxSeenUnderEyes(it session.AttentionItem) tea.Cmd {
 	return nil
 }
 
-// inboxPopQuiet is how long the person must not have typed into a pane before
-// a question may open the Inbox by itself. Someone typing to the agent that
-// just asked would otherwise have the rest of their keys read as Inbox keys.
 const inboxPopQuiet = 600 * time.Millisecond
 
-// inboxPopAsk opens the Inbox on a question ask-human put to the person, when
-// it is about the pane this client shows. That is the popup: the person is
-// looking at the agent that asked, so the question comes to them. It returns
-// false, and the question alerts and waits in the Inbox instead, whenever the
-// popup could take keys meant for something else:
-//
-//   - the question is about any other pane;
-//   - an overlay is open, the Inbox included: its cursor, a peek or a text
-//     line the person is typing in stays where it is;
-//   - the person typed into a pane within inboxPopQuiet.
-//
-// After a pop no key acts for inboxAnswerSettle (InboxPopSettling), so a key
-// already on its way to the pane does not dismiss, answer or close the
-// question.
 func (m *OS) inboxPopAsk(it session.AttentionItem) bool {
 	if it.Kind != session.AttentionAsk || it.Window == "" || !m.inboxAttached(it) {
 		return false
@@ -859,7 +693,6 @@ func (m *OS) InboxPopSettling() bool {
 	return true
 }
 
-// inboxAlertState is the agent state whose alert policy governs a kind.
 func inboxAlertState(kind string) string {
 	switch kind {
 	case session.AttentionApproval, session.AttentionPlan, session.AttentionQuestion, session.AttentionAsk:
@@ -872,15 +705,10 @@ func inboxAlertState(kind string) string {
 	return ""
 }
 
-// inboxAlertable reports whether an item earns an alert from the Inbox: it is
-// not in the attached session, whose alerts come from the state sync, and the
-// policy alerts on its kind.
 func (m *OS) inboxAlertable(it session.AttentionItem, policy config.AgentAlertPolicy) bool {
 	if it.Stale {
 		return false
 	}
-	// No agent state moves when a question is asked, so the state sync says
-	// nothing about it even in the attached session: the Inbox does.
 	if it.Kind == session.AttentionAsk || m.Inbox.released[it.ID] {
 		return policy.Alerts(inboxAlertState(it.Kind))
 	}
@@ -893,8 +721,6 @@ func (m *OS) inboxAlertable(it session.AttentionItem, policy config.AgentAlertPo
 	return policy.Alerts(inboxAlertState(it.Kind))
 }
 
-// scheduleInboxAlerts parks the alertable items for the settle window. An item
-// that closes inside it, a pane flickering through needs_input, raises nothing.
 func (m *OS) scheduleInboxAlerts(ids []string) tea.Cmd {
 	if len(ids) == 0 {
 		return nil
@@ -917,9 +743,6 @@ func (m *OS) scheduleInboxAlerts(ids []string) tea.Cmd {
 	return m.tickUntilStop(policy.Settle, func(time.Time) tea.Msg { return InboxAlertDueMsg{IDs: keep} })
 }
 
-// fireInboxAlerts raises one alert for the items still open, however many
-// there are: the dock message names the session and the summary for one item,
-// and counts for several.
 func (m *OS) fireInboxAlerts(ids []string) {
 	policy := m.agentAlertPolicy()
 	if !policy.Enabled || policy.Quiet(time.Now()) {
@@ -942,8 +765,6 @@ func (m *OS) fireInboxAlerts(ids []string) {
 	for _, it := range items {
 		switch {
 		case inboxDaemonNotice(it):
-			// A notice about the daemon, such as a config.toml change that
-			// waits, asks the person to act. It is not an error.
 			if sev != "error" {
 				sev = "warning"
 			}
@@ -981,16 +802,10 @@ func (m *OS) fireInboxAlerts(ids []string) {
 	}
 }
 
-// inboxDaemonNotice reports whether an item is a notice about the daemon
-// itself, such as a config.toml change that waits for the person, rather
-// than about a pane.
 func inboxDaemonNotice(it session.AttentionItem) bool {
 	return it.Kind == session.AttentionErrored && it.Session == "" && it.Window == ""
 }
 
-// clearClosedInboxAlerts takes off the dock every Inbox alert whose items have
-// all closed. An error alert is sticky, so without this a notice stayed after
-// the person had done what it asked, such as tuios config apply, until esc.
 func (m *OS) clearClosedInboxAlerts() {
 	kept := m.Notifications[:0]
 	for _, n := range m.Notifications {
@@ -1002,8 +817,6 @@ func (m *OS) clearClosedInboxAlerts() {
 	m.Notifications = kept
 }
 
-// inboxAlertOpen reports whether any of the space-separated item ids is still
-// open in the Inbox.
 func (m *OS) inboxAlertOpen(ids string) bool {
 	for id := range strings.FieldsSeq(ids) {
 		if m.inboxIndex(id) >= 0 {
@@ -1013,10 +826,6 @@ func (m *OS) inboxAlertOpen(ids string) bool {
 	return false
 }
 
-// inboxAlertMarkState is the agent state whose mark the dock draws for a
-// burst of Inbox alerts at severity sev: the state that severity stands for.
-// Mail is not an agent state, so a burst of mail alone keeps the severity
-// mark and reports no state.
 func inboxAlertMarkState(items []session.AttentionItem, sev string) string {
 	switch sev {
 	case "error":
@@ -1033,13 +842,10 @@ func inboxAlertMarkState(items []session.AttentionItem, sev string) string {
 	return ""
 }
 
-// applyInboxAlertDue raises the alerts whose settle window ran out, for the
-// items still open.
 func (m *OS) applyInboxAlertDue(msg InboxAlertDueMsg) {
 	m.fireInboxAlerts(msg.IDs)
 }
 
-// inboxKindWords is how an alert says what an item is.
 func inboxKindWords(it session.AttentionItem) string {
 	switch it.Kind {
 	case session.AttentionApproval:
@@ -1070,7 +876,6 @@ func inboxKindWords(it session.AttentionItem) string {
 	return it.Kind
 }
 
-// inboxWho is what an item is about: the pane's name, else a short id.
 func inboxWho(it session.AttentionItem) string {
 	if name := printableTitle(it.Name); name != "" {
 		return name
@@ -1081,9 +886,6 @@ func inboxWho(it session.AttentionItem) string {
 	return "an agent"
 }
 
-// inboxWhere is the session an item is in, with its machine when it is not
-// this one. A session of this machine is named as the rail names it
-// (sessionTitle); another machine's session keeps the name that machine sent.
 func (m *OS) inboxWhere(it session.AttentionItem) string {
 	if it.Kind == session.AttentionOutbox {
 		return "for " + printableTitle(it.ForHost)
@@ -1097,13 +899,10 @@ func (m *OS) inboxWhere(it session.AttentionItem) string {
 	return printableTitle(m.sessionTitle(it.Session))
 }
 
-// inboxAlertText is the dock line for a burst: one item in full, naming its
-// session, or a count and the sessions for several.
 func (m *OS) inboxAlertText(items []session.AttentionItem) string {
 	if len(items) == 1 {
 		it := items[0]
 		if inboxDaemonNotice(it) {
-			// The name says what waits, and the summary what to do.
 			text := printableTitle(it.Name)
 			if note := printableTitle(it.Summary); note != "" {
 				text += agentAlertSep() + note
@@ -1132,12 +931,6 @@ func (m *OS) inboxAlertText(items []session.AttentionItem) string {
 	return strconv.Itoa(len(items)) + " agents need you in " + names
 }
 
-// inboxCounts is the Inbox as the rail's agents header counts it: items that
-// block an agent or report an error are blocked, finished items are done, and
-// worst is the most urgent state among the blocked. session narrows it to one
-// session on this machine, empty for every session on every machine. An item
-// of a machine that cannot be reached is not counted: it is what that machine
-// said last, and a figure drawn from it would report a moment that has passed.
 func (m *OS) inboxCounts(sessionName string) sidebarAgentCountInfo {
 	var c sidebarAgentCountInfo
 	rank := 0
@@ -1159,11 +952,6 @@ func (m *OS) inboxCounts(sessionName string) sidebarAgentCountInfo {
 	return c
 }
 
-// sidebarHeaderCounts is the agents header's readout. With a live Inbox it
-// counts the Inbox, which sees every session on this machine whether or not the
-// rail lists it and every linked host the daemon streams, plus any agent rows
-// of other machines the rail holds. Without one it counts the rows, as it
-// always has.
 func (m *OS) sidebarHeaderCounts(agents []sidebarAgentEntry) sidebarAgentCountInfo {
 	if !m.Inbox.Live || m.AttachedHost != "" {
 		return sidebarAgentCounts(agents)
@@ -1190,23 +978,13 @@ func (m *OS) sidebarHeaderCounts(agents []sidebarAgentEntry) sidebarAgentCountIn
 	return c
 }
 
-// inboxRow is one line of the overlay: a group heading, or an item.
 type inboxRow struct {
 	heading string
 	count   int
 	item    *session.AttentionItem
-	// note is a line of words under the list, such as how many items are
-	// snoozed. It is never selected.
-	note string
+	note    string
 }
 
-// inboxGroupTitle is the heading a kind's rows sit under. It is words, so the
-// grouping reads without colour.
-//
-// A question an agent's prompt asks and one put with ask-human are the same
-// thing to the person, a question to answer with a digit, so both sit under
-// Questions. They were two groups, "Questions" and "Asked you". Finished
-// turns sit under Done, the word every other surface uses for the state.
 func inboxGroupTitle(kind string) string {
 	switch inboxGroupKey(kind) {
 	case session.AttentionApproval:
@@ -1231,8 +1009,6 @@ func inboxGroupTitle(kind string) string {
 	return kind
 }
 
-// inboxGroupKey is the group a kind's rows are listed under: its own, except
-// that an ask-human question is a question.
 func inboxGroupKey(kind string) string {
 	if kind == session.AttentionAsk {
 		return session.AttentionQuestion
@@ -1240,15 +1016,10 @@ func inboxGroupKey(kind string) string {
 	return kind
 }
 
-// inboxFilterAdmits reports whether the Inbox's kind filter shows a kind. The
-// Questions filter shows both kinds of question; a filter on ask alone, which
-// is what a question popping the Inbox opens with, shows only those.
 func inboxFilterAdmits(filter, kind string) bool {
 	return filter == "" || filter == kind || filter == inboxGroupKey(kind)
 }
 
-// inboxRows is the overlay's lines: each kind's heading and its items, oldest
-// first, narrowed to the filter.
 func (m *OS) inboxRows() []inboxRow {
 	st := &m.Inbox
 	var rows []inboxRow
@@ -1265,8 +1036,6 @@ func (m *OS) inboxRows() []inboxRow {
 			}
 		}
 		if len(items) > 0 {
-			// Two kinds can share a group, each sorted oldest first by the
-			// daemon; the group as a whole is kept oldest first too.
 			sortx.ShortStableFunc(items, func(a, b inboxRow) int { return cmp.Compare(a.item.Since, b.item.Since) })
 			rows = append(rows, inboxRow{heading: inboxGroupTitle(group), count: len(items)})
 			rows = append(rows, items...)
@@ -1276,8 +1045,6 @@ func (m *OS) inboxRows() []inboxRow {
 	return m.inboxSnoozedRows(rows)
 }
 
-// clampInboxSelection keeps the cursor on an item row: on the selected item's
-// row wherever the list moved it, else the nearest item row to where it was.
 func (m *OS) clampInboxSelection() {
 	rows := m.inboxRows()
 	st := &m.Inbox
@@ -1320,7 +1087,6 @@ func (m *OS) clampInboxSelection() {
 	}
 }
 
-// syncInboxSelectedID records the item under the cursor as the one to follow.
 func (m *OS) syncInboxSelectedID() {
 	if it, ok := m.inboxSelected(); ok {
 		m.Inbox.SelectedID = it.ID
@@ -1337,26 +1103,20 @@ func (m *OS) OpenInbox(filter string) {
 	st := &m.Inbox
 	m.ShowInbox = true
 	m.retrySketch()
-	// The cockpit is the agents view: the selector line searches the
-	// agents as well as narrowing the items.
 	st.agents.on = true
 	st.ck.needsOnly = false
 	st.Filter = filter
 	st.Selected, st.SelectedID = 0, ""
 	st.Scroll = 0
 	st.Peek = nil
-	// Nothing has been on screen yet, so nothing can be answered until it is.
 	st.shown = inboxShown{}
 	st.poppedAt = time.Time{}
 	m.clampInboxSelection()
-	// The cockpit opens on its first row, which is the oldest wait in
-	// Needs you, or back on the agent ctrl+] left from.
 	st.ck.key, st.ck.akey, st.ck.idx, st.ck.scroll, st.ck.follow = "", "", 0, 0, true
 	if b := st.ck.back; b != nil && filter == "" {
 		st.ck.key, st.ck.akey, st.ck.scroll, st.ck.follow = b.key, b.akey, b.scroll, false
 	}
 	st.ck.back = nil
-	// Rows open in their groups; a hold is for a flip seen while open.
 	st.ck.placed, st.ck.holdUntil = nil, time.Time{}
 	st.ck.layoutRefused = ""
 	st.threads.open = false
@@ -1364,7 +1124,6 @@ func (m *OS) OpenInbox(filter string) {
 	m.cockpitRows()
 	m.cockpitClamp()
 	m.cockpitSync()
-	// A TML popup an agent has floating now moves into the view.
 	if filter == "" {
 		m.cockpitAdoptFloating()
 	}
@@ -1381,8 +1140,6 @@ func (m *OS) OpenInboxOn(id string) {
 	m.inboxLandOn(id)
 }
 
-// inboxLandOn puts the cockpit's cursor on the item with this id, now if the
-// rows hold it, or as soon as a listing brings it.
 func (m *OS) inboxLandOn(id string) {
 	ck := &m.Inbox.ck
 	ck.pending = id
@@ -1394,10 +1151,8 @@ func (m *OS) inboxLandOn(id string) {
 
 // CloseInbox hides the Inbox, and the peek with it.
 func (m *OS) CloseInbox() {
-	// A surface the person was in floats again, with what they typed.
 	m.cockpitArtifactRelease()
 	m.ShowInbox = false
-	// The live pane goes back to being streamed as its workspace has it.
 	m.cockpitLiveFollow()
 	m.cockpitLiveRelease()
 	m.stopInboxAgentsTick()
@@ -1406,16 +1161,10 @@ func (m *OS) CloseInbox() {
 	m.Inbox.Peek = nil
 	m.Inbox.life.pickFor, m.Inbox.life.closeAfterPick = "", false
 	m.Inbox.reply.editor = nil
-	// The image view and its image bytes go with the editor.
 	m.Inbox.ck.img = nil
-	// The spawn sheet is kept as the draft the next n opens.
 	m.spawnClose()
 	m.Inbox.ck.spawnBg = nil
-	// A bulk allow's sheet is never there when the Inbox opens again: its
-	// settle time was spent on a screen the person may not have read.
 	m.Inbox.agents.sheet = nil
-	// Nor are marks: the next view may show other agents, and a bulk key
-	// must not act on a mark the person cannot see.
 	m.Inbox.agents.marks = nil
 	m.Inbox.agents.marksGen++
 }
@@ -1437,7 +1186,6 @@ func (m *OS) InboxSelect(idx int) {
 	}
 }
 
-// inboxSelected is the item under the cursor.
 func (m *OS) inboxSelected() (session.AttentionItem, bool) {
 	rows := m.inboxRows()
 	i := m.Inbox.Selected
@@ -1456,17 +1204,11 @@ func (m *OS) InboxActivate() tea.Cmd {
 		return nil
 	}
 	if it.Kind == session.AttentionOutbox {
-		// Mail waiting for another machine has no pane to go to. It goes on
-		// its own when the link is back. A link that waits for a sign-in is
-		// one key from coming back, so the key opens the sign-in.
 		if m.hostWaitsForSignIn(it.ForHost) {
 			m.CloseInbox()
 			return m.openHostSignIn(it.ForHost)
 		}
 		m.ShowNotification("This mail goes to "+printableTitle(it.ForHost)+" when its link is back. d discards it.", "info", m.Settings.NotificationDuration)
-		// The machines' states come with the rail. With the rail closed this
-		// client does not know whether the link waits for a sign-in, so it
-		// asks: the daemon answers retry-host with the page when it does.
 		if m.hostStatusByName(it.ForHost) == "" {
 			m.askHostSignIn(it.ForHost)
 			return retryHostCmd(it.ForHost)
@@ -1474,7 +1216,6 @@ func (m *OS) InboxActivate() tea.Cmd {
 		return nil
 	}
 	if it.Kind == session.AttentionHeldMail {
-		// The mail is on the other machine, and only its link can bring it.
 		m.ShowNotification(printableTitle(it.ForHost)+" sends this mail when its link to this machine is back. Nothing here can send it.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
@@ -1483,20 +1224,12 @@ func (m *OS) InboxActivate() tea.Cmd {
 		return m.inboxOpenMail(it, false)
 	}
 	if it.Kind == session.AttentionAsk {
-		// A question has no prompt in its pane to answer: going there leaves
-		// it waiting here. A question from outside every pane has no pane.
 		if it.Window != "" {
 			m.inboxJump(it)
 		}
 		return nil
 	}
 	if it.RequestID != "" {
-		// A held prompt shows nothing in its pane. Going there is choosing to
-		// answer it there, so the hold ends first and the harness shows it.
-		// The jump waits for the hand back: a jump to another session
-		// attaches it, the attach gets a new nonce, and the hand back signed
-		// with the old one was refused as not_human. The hold then ran on
-		// with nothing in the pane to answer.
 		if cmd := m.inboxReplyCmd(it, session.ApprovalAsk); cmd != nil {
 			return tea.Sequence(cmd, func() tea.Msg { return inboxJumpMsg{item: it} })
 		}
@@ -1505,7 +1238,6 @@ func (m *OS) InboxActivate() tea.Cmd {
 	return nil
 }
 
-// inboxJumpMsg lands on an item's pane once the call before it is done.
 type inboxJumpMsg struct {
 	item session.AttentionItem
 }
@@ -1598,8 +1330,6 @@ type InboxAskAnsweredMsg struct {
 	Err      error
 }
 
-// inboxAnswerAskCmd is the answer-ask call, with this client's attach nonce,
-// which is what lets the daemon take the answer as the person's.
 func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, upgradeDialog bool) tea.Cmd {
 	if !m.inboxCanAct("Answering") || m.inboxElsewhere(it, "The answer") {
 		return nil
@@ -1621,9 +1351,7 @@ func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, upgradeD
 			"request_id":  it.RequestID,
 			"answer":      answer,
 			"human_nonce": nonce,
-			// The question the person read. The daemon answers nothing when
-			// it is not the one asked.
-			"question": it.Summary,
+			"question":    it.Summary,
 		}
 		if upgradeDialog {
 			params["upgrade_dialog"] = true
@@ -1644,7 +1372,6 @@ func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, upgradeD
 	}
 }
 
-// applyInboxAskAnswered says what became of an answer.
 func (m *OS) applyInboxAskAnswered(msg InboxAskAnsweredMsg) {
 	switch {
 	case msg.Err != nil:
@@ -1678,7 +1405,6 @@ func (m *OS) InboxReplyApproval(decision string) tea.Cmd {
 		m.ShowNotification(inboxNotHeldWords, "warning", m.Settings.NotificationDuration)
 		return nil
 	}
-	// A new key drops what the last one was refused for.
 	m.clearAnswerRefusal()
 	if !slices.Contains(it.Options, decision) {
 		m.refuseAnswer(it, "Not answered: this prompt does not offer "+inboxDecisionWords(decision), "warning")
@@ -1692,30 +1418,18 @@ func (m *OS) InboxReplyApproval(decision string) tea.Cmd {
 		return nil
 	}
 	if !m.inboxAnswerSettled(it, time.Now()) {
-		// The key came before the card had been on screen long enough to
-		// be read. It answers nothing, and the card says so: the person
-		// presses it again once they have read it.
 		m.refuseAnswer(it, "Not answered: "+m.inboxUnsettledWhy(it)+". Read it, then press "+m.answerPressName(decision)+" again", "warning")
 		return nil
 	}
-	// A plan is approved only once it has been read to its end. See
-	// inbox_approvals_ext.go.
 	if m.inboxApprovalGate(it, decision) {
 		return nil
 	}
-	// The key only asks: enter answers (InboxConfirmKey).
 	m.answerAsk(&inboxConfirm{decision: decision, itemID: it.ID, shown: inboxShownKey(it)})
 	return nil
 }
 
-// inboxNotHeldWords is what an answer key says on an item that no hold
-// waits behind, such as an approval the harness asks about in its pane.
 const inboxNotHeldWords = "1, 2 and 3 answer a held approval. Enter goes to the pane."
 
-// refuseRemoteAnswer refuses a key that send-keys typed when that key would
-// act as the person: answer a held approval or a question, or pass on held
-// mail. send-keys with no window hands its keys to this client, and an agent
-// in a pane can call it. what names the act, as the start of a sentence.
 func (m *OS) refuseRemoteAnswer(what string) bool {
 	if !m.ProcessingRemoteKeys {
 		return false
@@ -1725,20 +1439,13 @@ func (m *OS) refuseRemoteAnswer(what string) bool {
 	return true
 }
 
-// inboxAnswerSettle is how long a held approval must have been on screen, as
-// it is, before a key answers it. An item that arrived, moved under the
-// cursor or changed its text just before the key was pressed was not what
-// the person read, so the key does nothing and they are told to look again.
 const inboxAnswerSettle = 400 * time.Millisecond
 
-// inboxShown is a held approval as the overlay drew it.
 type inboxShown struct {
 	key   string
 	since time.Time
 }
 
-// inboxShownKey is everything about a held approval an answer depends on: the
-// item, the hold, the line, the answers and what always adds.
 func inboxShownKey(it session.AttentionItem) string {
 	return strings.Join([]string{
 		it.ID, it.RequestID, it.Summary,
@@ -1747,8 +1454,6 @@ func inboxShownKey(it session.AttentionItem) string {
 	}, "\x00")
 }
 
-// noteInboxShown records the held approval under the cursor as drawn at now,
-// keeping the time it was first drawn while it stays the same.
 func (m *OS) noteInboxShown(it session.AttentionItem, held bool, now time.Time) {
 	st := &m.Inbox
 	if !held {
@@ -1760,16 +1465,10 @@ func (m *OS) noteInboxShown(it session.AttentionItem, held bool, now time.Time) 
 	}
 }
 
-// inboxCut reports whether the card showed it cut, too long for the screen.
 func (m *OS) inboxCut(it session.AttentionItem) bool {
 	return m.Inbox.ck.cutKey != "" && m.Inbox.ck.cutKey == inboxShownKey(it)
 }
 
-// inboxAnswerSettled reports whether it is the held approval last drawn under
-// the cursor, exactly as drawn, and has been on screen long enough to have
-// been read. An item the typing hold holds is not settled: it arrived while
-// the person typed a reply (inbox_typing_hold.go). The card does not count it
-// as shown while it is held, so the settle starts again when the hold ends.
 func (m *OS) inboxAnswerSettled(it session.AttentionItem, now time.Time) bool {
 	st := &m.Inbox
 	if held, _ := m.inboxTypingHeld(it, now); held {
@@ -1778,8 +1477,6 @@ func (m *OS) inboxAnswerSettled(it session.AttentionItem, now time.Time) bool {
 	return st.shown.key != "" && st.shown.key == inboxShownKey(it) && now.Sub(st.shown.since) >= inboxAnswerSettle
 }
 
-// inboxUnsettledWhy says why a held approval is not settled: it came on
-// screen just now, or it changed since it was drawn.
 func (m *OS) inboxUnsettledWhy(it session.AttentionItem) string {
 	if m.Inbox.shown.key == inboxShownKey(it) {
 		return "this prompt just came on screen"
@@ -1787,15 +1484,10 @@ func (m *OS) inboxUnsettledWhy(it session.AttentionItem) string {
 	return "this prompt just changed"
 }
 
-// inboxReplyCmd is the reply-approval call, with this client's attach nonce,
-// which is what lets the daemon take the answer as the person's.
 func (m *OS) inboxReplyCmd(it session.AttentionItem, decision string) tea.Cmd {
 	return m.inboxReplyCmdWith(it, decision, "")
 }
 
-// inboxReplyCmdWith is inboxReplyCmd with the reason for a deny. An allow of
-// a risky call carries the rules the person saw, and an allow of a plan the
-// digest of the plan they read (inboxReplyExtras).
 func (m *OS) inboxReplyCmdWith(it session.AttentionItem, decision, message string) tea.Cmd {
 	if !m.inboxCanAct("Answering") || m.inboxElsewhere(it, "The answer") {
 		return nil
@@ -1816,9 +1508,7 @@ func (m *OS) inboxReplyCmdWith(it session.AttentionItem, decision, message strin
 		"request_id":  it.RequestID,
 		"decision":    decision,
 		"human_nonce": nonce,
-		// The line the person read. The daemon answers nothing when the
-		// hold is on another one.
-		"summary": it.Summary,
+		"summary":     it.Summary,
 	}
 	maps.Copy(params, inboxReplyExtras(it, decision))
 	if message != "" && decision == session.ApprovalDeny {
@@ -1841,15 +1531,10 @@ func (m *OS) inboxReplyCmdWith(it session.AttentionItem, decision, message strin
 	}
 }
 
-// applyInboxApprovalReplied says what became of an answer. A hand back from
-// enter says nothing when it worked: the pane in front of the person is the
-// answer.
 func (m *OS) applyInboxApprovalReplied(msg InboxApprovalRepliedMsg) {
 	it := session.AttentionItem{RequestID: msg.RequestID}
 	switch {
 	case msg.Err != nil && msg.Decision == session.ApprovalAsk:
-		// The hold runs on, so the pane shows nothing to answer. Say so,
-		// or the person waits on an empty pane.
 		m.refuseAnswer(it, "The prompt did not go back to the pane: "+msg.Err.Error()+". Answer it in the agents view", "error")
 	case msg.Err != nil:
 		m.refuseAnswer(it, "Not answered: "+inboxActErr(msg.Err, m.AttachedHost), "error")
@@ -1863,8 +1548,6 @@ func (m *OS) applyInboxApprovalReplied(msg InboxApprovalRepliedMsg) {
 	}
 }
 
-// noteAnsweredElsewhere tells this client that an approval it was showing was
-// answered from another client, so two people at two screens know.
 func (m *OS) noteAnsweredElsewhere(was, closed session.AttentionItem) {
 	if closed.Closed != session.AttentionClosedAnswered || was.RequestID == "" || m.Inbox.replied[was.RequestID] {
 		return
@@ -1872,11 +1555,8 @@ func (m *OS) noteAnsweredElsewhere(was, closed session.AttentionItem) {
 	m.ShowNotification(inboxWho(was)+" was answered from another client: "+inboxDecisionWords(closed.Answer), "info", m.Settings.NotificationDuration)
 }
 
-// inboxReplyChanged is reply-approval's reason for an answer refused because
-// the held prompt is on another line than the one it was made from.
 const inboxReplyChanged = "changed"
 
-// inboxDecisionWords is a decision as the person reads it.
 func inboxDecisionWords(decision string) string {
 	switch decision {
 	case session.ApprovalOnce:
@@ -1891,7 +1571,6 @@ func inboxDecisionWords(decision string) string {
 	return decision
 }
 
-// inboxItemMachine is the machine an item is on, as attachedMachine names it.
 func inboxItemMachine(it session.AttentionItem) string {
 	if it.Host == "" {
 		return federation.LocalHostName
@@ -1899,10 +1578,6 @@ func inboxItemMachine(it session.AttentionItem) string {
 	return it.Host
 }
 
-// inboxReach attaches the machine and the session an item is on, when the
-// client is on another machine, and reports whether the client is now on the
-// item's machine. A machine that cannot be reached says so, with when it was
-// last heard from, and nothing is given up.
 func (m *OS) inboxReach(it session.AttentionItem) bool {
 	target := inboxItemMachine(it)
 	if target == m.attachedMachine() {
@@ -1919,8 +1594,6 @@ func (m *OS) inboxReach(it session.AttentionItem) bool {
 	return true
 }
 
-// inboxJump lands on an item's pane, attaching its machine first when it is on
-// another one.
 func (m *OS) inboxJump(it session.AttentionItem) {
 	if !m.inboxReach(it) {
 		return
@@ -1929,10 +1602,6 @@ func (m *OS) inboxJump(it session.AttentionItem) {
 		m.ShowNotification("That item has no pane to go to", "info", m.Settings.NotificationDuration)
 		return
 	}
-	// Not jumpToNotifTarget: that checks the session against the client's
-	// cached listing, which trails a session created since, and the Inbox has
-	// just been told by the daemon that the session exists. The switch itself
-	// says so when it does not.
 	idx := -1
 	if it.Session == m.sidebarCurrentSessionID() {
 		if idx = m.windowIndexByID(it.Window); idx < 0 {
@@ -1952,7 +1621,6 @@ func (m *OS) inboxJump(it session.AttentionItem) {
 		}
 		return
 	}
-	// Flash the pane, as a jump from the dock does, so the eye follows.
 	m.Windows[landed].MinimizeHighlightUntil = time.Now().Add(time.Second)
 }
 
@@ -1973,13 +1641,8 @@ func (m *OS) InboxReply() tea.Cmd {
 	return m.inboxOpenMail(it, true)
 }
 
-// inboxOpenMail opens a mail item's thread, in its session, with the reply
-// line when reply is set. A thread in another session waits for that
-// session's mail to load.
 func (m *OS) inboxOpenMail(it session.AttentionItem, reply bool) tea.Cmd {
 	if inboxItemMachine(it) != m.attachedMachine() {
-		// Attaching the machine lands on the session and loads its mail, so
-		// the thread opens once that has arrived.
 		if !m.inboxReach(it) {
 			return nil
 		}
@@ -1997,7 +1660,6 @@ func (m *OS) inboxOpenMail(it session.AttentionItem, reply bool) tea.Cmd {
 	return m.openMailThread(it.Thread, reply)
 }
 
-// openMailThread opens one thread and, when reply is set, its reply line.
 func (m *OS) openMailThread(thread uint64, reply bool) tea.Cmd {
 	cmd := m.OpenAgentMailThread(thread)
 	if len(m.agentMailThreadMessages(thread)) == 0 {
@@ -2010,8 +1672,6 @@ func (m *OS) openMailThread(thread uint64, reply bool) tea.Cmd {
 	return cmd
 }
 
-// takePendingInboxThread opens the thread an Inbox action was waiting to open,
-// once the session's mail has loaded.
 func (m *OS) takePendingInboxThread() tea.Cmd {
 	thread, reply := m.Inbox.pendingThread, m.Inbox.pendingReply
 	if thread == 0 {
@@ -2047,10 +1707,6 @@ func (m *OS) InboxDismiss() tea.Cmd {
 	}
 }
 
-// inboxDismissCmd is the dismiss-attention call, with this client's attach
-// nonce, which is what lets the daemon tell the person from an agent. silent
-// marks a dismiss the client sends on its own, which shows nothing when it
-// cannot be sent or fails.
 func (m *OS) inboxDismissCmd(id string, silent bool) tea.Cmd {
 	if m.DaemonClient == nil && m.Inbox.call == nil {
 		if !silent {
@@ -2115,7 +1771,6 @@ type InboxReleasedMsg struct {
 	Err error
 }
 
-// applyInboxReleased says where the mail went, or why it did not.
 func (m *OS) applyInboxReleased(msg InboxReleasedMsg) {
 	if msg.Err != nil {
 		m.ShowNotification("The mail was not passed on: "+inboxActErr(msg.Err, m.AttachedHost), "error", m.Settings.NotificationDuration*2)
@@ -2147,7 +1802,6 @@ func (m *OS) InboxResume() tea.Cmd {
 	return m.resumeOffers([]session.AttentionItem{it})
 }
 
-// applyInboxResumed says what was typed, or why nothing was.
 func (m *OS) applyInboxResumed(msg InboxResumedMsg) {
 	if msg.Err != nil {
 		m.unmarkResuming(msg.ID)
@@ -2157,17 +1811,12 @@ func (m *OS) applyInboxResumed(msg InboxResumedMsg) {
 	m.ShowNotification("Resumed: "+printableTitle(msg.Command), "success", m.Settings.NotificationDuration)
 }
 
-// inboxDismissGone reports whether a dismiss failed only because the item was
-// no longer open: another client dismissed it, or the daemon closed it on its
-// own. The item is gone either way, which is what the dismiss asked for.
 func inboxDismissGone(err error) bool {
 	var callErr *session.VerbCallError
 	return errors.As(err, &callErr) && callErr.Code == session.ErrVerbInvalidParams &&
 		callErr.Hint != nil && callErr.Hint.Param == "id"
 }
 
-// applyInboxDismissed says what went wrong, when something did. A dismiss the
-// client sent on its own, and an item that was already closed, say nothing.
 func (m *OS) applyInboxDismissed(msg InboxDismissedMsg) {
 	if msg.Err == nil && !msg.Silent && msg.ID != "" {
 		m.noteInboxDismissed(msg.ID, msg.Kind, msg.Who)
@@ -2179,9 +1828,6 @@ func (m *OS) applyInboxDismissed(msg InboxDismissedMsg) {
 	m.ShowNotification("The dismiss did not go through: "+inboxActErr(msg.Err, m.AttachedHost), "error", m.Settings.NotificationDuration*2)
 }
 
-// inboxNeedsYou reports whether an item is something a person has to act on,
-// which is what the next-attention key visits. A finished turn is news, not a
-// request, so it is left to the Inbox.
 func inboxNeedsYou(it session.AttentionItem) bool {
 	return it.Kind != session.AttentionFinished && it.Kind != session.AttentionOutbox && it.Kind != session.AttentionHeldMail && !it.Stale
 }
@@ -2224,7 +1870,6 @@ func (m *OS) JumpToNextAttention() tea.Cmd {
 		return m.inboxOpenMail(it, false)
 	}
 	if it.Kind == session.AttentionAsk {
-		// A question is answered in the Inbox, not in its pane.
 		m.OpenInbox(session.AttentionAsk)
 		m.Inbox.SelectedID = it.ID
 		m.clampInboxSelection()
@@ -2237,8 +1882,6 @@ func (m *OS) JumpToNextAttention() tea.Cmd {
 	return nil
 }
 
-// inboxSeen is when a machine that cannot be reached was last heard from, as
-// the Inbox and the rail say it: "seen 3m ago", or "offline" when it never was.
 func inboxSeen(seenAt int64, now time.Time) string {
 	if seenAt <= 0 {
 		return "offline"
@@ -2246,13 +1889,6 @@ func inboxSeen(seenAt int64, now time.Time) string {
 	return "seen " + units.Waited(seenAt, now) + " ago"
 }
 
-// inboxKindGlyph is the mark an item row wears for its kind. The group
-// heading already says the kind in words; the mark is for the eye.
-//
-// A kind that stands for an agent state wears that state's mark, in both
-// glyph modes, so an approval here is the same mark as the pane's row on the
-// rail. The ASCII forms of the other kinds are chosen not to collide with any
-// state's: finished is not "*", because that is working's.
 func inboxKindGlyph(kind string) string {
 	switch kind {
 	case session.AttentionOutbox:

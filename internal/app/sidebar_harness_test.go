@@ -11,14 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The rail could show eight agents running and not say which of them was
-// Claude. The harness was detected, merged and carried on the live window, and
-// stopped one layer short of the wire; these are the claims about what it says
-// now that it reaches the row.
-
-// railAgentRow returns the rendered lines of the agents-section row for a
-// window, joined, or "" when the rail drew none. A row is one line or two, and
-// which one a fact landed on is the layout's business rather than these tests'.
 func railAgentRow(m *OS, lines []string, windowID string) string {
 	for _, h := range m.SidebarHits {
 		if h.Kind == sidebarRowAgent && h.WindowID == windowID {
@@ -44,17 +36,17 @@ func TestSidebarAgentPrefixYieldsInOrder(t *testing.T) {
 		{Name: "session", Text: "api"},
 		{Name: "harness", Text: sidebarHarnessLabel("claude-code")},
 	}
-	const nameW = 6 // "deploy"
+	const nameW = 6
 	for _, tc := range []struct {
 		avail int
 		want  string
 	}{
-		{19, "api/claude/"}, // both fit beside the whole name, with room to spare
-		{17, "api/claude/"}, // both fit exactly: 11 cells and the 6 of the name
-		{16, "claude/"},     // the session yields first
-		{13, "claude/"},     // the agent fits exactly beside the whole name
-		{12, ""},            // and yields before a cell of the name goes
-		{10, ""},            // the session alone would fit, and still goes with the agent
+		{19, "api/claude/"},
+		{17, "api/claude/"},
+		{16, "claude/"},
+		{13, "claude/"},
+		{12, ""},
+		{10, ""},
 		{6, ""},
 		{1, ""},
 	} {

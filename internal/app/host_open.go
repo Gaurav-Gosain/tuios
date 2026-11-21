@@ -8,65 +8,31 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
-// Opening a session on another machine from the rail.
-//
-// A session row of a machine is always a target, whatever state its link is
-// in. A click on a machine that is up dials the session off the Update
-// goroutine, so a slow link does not freeze the screen. A click on a machine
-// that is not up asks the daemon to dial it now, says "Reconnecting to HOST"
-// in the dock, and opens the session when the link comes up.
-//
-// Every click also asks the daemon to retry the host. On a link that is up
-// that is a ping: after a laptop wakes, a link can look up and carry nothing,
-// and the ping finds that out in seconds instead of when ssh gives up.
-
-// hostOpenWait is how long a click waits for a machine to come up.
 const hostOpenWait = time.Minute
 
-// hostOpenPoll is how often the rail asks the daemon for the machine's state
-// while a click waits for it.
 const hostOpenPoll = time.Second
 
-// hostOpenRetryGap is the least time between a dial that failed and the next
-// one. The snapshot can still say up for a moment after the link went away.
 const hostOpenRetryGap = 2 * time.Second
 
-// hostOpenPending is the session a click asked for on another machine.
 type hostOpenPending struct {
 	host, name string
-	// gen tells this click's dial apart from the dial of an older click.
-	gen uint64
-	// until is when the click gives up.
-	until time.Time
-	// dialing says a dial is running.
-	dialing bool
-	// notBefore holds the next dial back after one that failed.
-	notBefore time.Time
-	// wasUp says the host's link was up at some time, so the dock says
-	// "Reconnecting" and not "Connecting".
-	wasUp bool
-	// signIn says the click already opened the host's Tailscale sign-in.
-	signIn bool
-	// workspace and paneID are what to focus once the session is open: a
-	// navigator row names a workspace or a pane. Zero and empty focus
-	// nothing.
-	workspace int
-	paneID    string
+	gen        uint64
+	until      time.Time
+	dialing    bool
+	notBefore  time.Time
+	wasUp      bool
+	signIn     bool
+	workspace  int
+	paneID     string
 }
 
-// openRemoteSession attaches a session that lives on another machine, in this
-// client. The connection goes through this machine's daemon over its link,
-// and the session is drawn here with this machine's theme and config.
 func (m *OS) openRemoteSession(host, sessionName string) {
 	m.openRemoteSessionAt(host, sessionName, 0, "")
 }
 
-// openRemoteSessionAt is openRemoteSession that also focuses workspace or
-// paneID once the session is open.
 func (m *OS) openRemoteSessionAt(host, sessionName string, workspace int, paneID string) {
-	m.clearSidebarReturn() // opening the session is where the user asked to end up
+	m.clearSidebarReturn()
 	if m.sessionSwitchHook != nil {
-		// A test records where the switch goes. See switchSession.
 		if err := m.sessionSwitchHook(host, sessionName); err != nil {
 			m.reportSwitchFailure(err)
 		}
@@ -75,9 +41,6 @@ func (m *OS) openRemoteSessionAt(host, sessionName string, workspace int, paneID
 	m.cancelHostOpen()
 	p := &hostOpenPending{host: host, name: sessionName, gen: m.hostOpenGen, until: time.Now().Add(hostOpenWait), workspace: workspace, paneID: paneID}
 	p.wasUp = m.hostWasUp(host)
-	// The newest request wins. A reconnect to the attached host would pull
-	// the person back when it lands, so it stops here, and starts again if
-	// this click fails.
 	if m.hostReconnect != nil {
 		m.hostReconnect = nil
 		m.hostReconnectGen++
@@ -94,10 +57,6 @@ func (m *OS) openRemoteSessionAt(host, sessionName string, workspace int, paneID
 	m.queueSidebarCmd(tea.Batch(cmds...))
 }
 
-// cancelHostOpen drops the click that waits for a machine, if any. A dial it
-// started may still answer, and the new gen makes finishHostOpen close it.
-// Every switch, create and detach calls it, so an old click never pulls the
-// person away from what they chose after it.
 func (m *OS) cancelHostOpen() {
 	m.hostOpenGen++
 	m.hostOpen = nil
@@ -115,8 +74,6 @@ func (m *OS) CancelHostOpen() tea.Cmd {
 	return m.resumeAfterHostOpen()
 }
 
-// hostWasUp reports whether the last snapshot says the host's link was up
-// at some time.
 func (m *OS) hostWasUp(name string) bool {
 	for _, h := range m.FederationHosts {
 		if h.Name == name {
@@ -126,8 +83,6 @@ func (m *OS) hostWasUp(name string) bool {
 	return false
 }
 
-// dialHostOpen dials the session p names, off the Update goroutine. The
-// answer is a SessionCreatedMsg with p's gen.
 func (m *OS) dialHostOpen(p *hostOpenPending) {
 	if m.DaemonClient == nil {
 		m.hostOpen = nil
@@ -144,10 +99,6 @@ func (m *OS) dialHostOpen(p *hostOpenPending) {
 	}()
 }
 
-// advanceHostOpen runs on each host snapshot while a click waits for its
-// machine. It dials when the link is up, opens the sign-in page when the host
-// waits for one, and gives up when the wait is over, the host left the
-// table, or the host is in a state that waiting cannot change.
 func (m *OS) advanceHostOpen() tea.Cmd {
 	p := m.hostOpen
 	if p == nil || p.dialing {
@@ -172,8 +123,6 @@ func (m *OS) advanceHostOpen() tea.Cmd {
 		m.dialHostOpen(p)
 		return nil
 	case federation.StatusApproval:
-		// The host waits for a Tailscale sign-in. The click opens it, as the
-		// sign-in control on the rail does, and keeps waiting for the link.
 		if p.signIn {
 			if now.After(p.until) {
 				return m.endHostOpen(p, printableTitle(p.host)+" still waits for a Tailscale sign-in. Sign in, then select the session again.")
@@ -194,19 +143,12 @@ func (m *OS) advanceHostOpen() tea.Cmd {
 	return nil
 }
 
-// endHostOpen stops the click p with a warning that says why.
 func (m *OS) endHostOpen(p *hostOpenPending, note string) tea.Cmd {
 	m.cancelHostOpen()
 	m.ShowNotification(note, "warning", m.Settings.NotificationWarningDuration*2)
 	return m.resumeAfterHostOpen()
 }
 
-// resumeAfterHostOpen starts the reconnect to the attached host that a click
-// put off, once no click waits. A click that lands adopts a new client and
-// clears the debt, so this runs only when the click failed, ran out or was
-// replaced by a switch that left the client on the dead connection. The host
-// snapshot calls it too, which covers a click cancelled by a path that has
-// no command to return.
 func (m *OS) resumeAfterHostOpen() tea.Cmd {
 	if !m.hostReconnectDeferred || m.hostOpen != nil || m.hostReconnect != nil {
 		return nil
@@ -215,8 +157,6 @@ func (m *OS) resumeAfterHostOpen() tea.Cmd {
 	return m.beginHostReconnect(nil)
 }
 
-// hostOpenExpiredNote says that the wait for a host ran out, why when the
-// daemon said, and what to do.
 func hostOpenExpiredNote(p *hostOpenPending, reason string) string {
 	what := "tuios could not connect to " + printableTitle(p.host) + " in one minute."
 	if p.wasUp {
@@ -228,7 +168,6 @@ func hostOpenExpiredNote(p *hostOpenPending, reason string) string {
 	return what + " Run 'tuios hosts' to see the host, then select the session again."
 }
 
-// hostReason is the sentence the last snapshot carries for a machine.
 func (m *OS) hostReason(name string) string {
 	for _, h := range m.FederationHosts {
 		if h.Name == name {
@@ -238,11 +177,9 @@ func (m *OS) hostReason(name string) string {
 	return ""
 }
 
-// finishHostOpen takes the answer to a dial dialHostOpen started.
 func (m *OS) finishHostOpen(msg SessionCreatedMsg) tea.Cmd {
 	p := m.hostOpen
 	if p == nil || p.gen != msg.OpenGen {
-		// The person asked for something else while this dial ran.
 		if msg.Client != nil {
 			_ = msg.Client.Close()
 		}
@@ -251,7 +188,6 @@ func (m *OS) finishHostOpen(msg SessionCreatedMsg) tea.Cmd {
 	p.dialing = false
 	if msg.Err != nil {
 		if !hostReconnectFinal(msg.Err) && time.Now().Before(p.until) {
-			// The link went away under the dial. Wait for it to come back.
 			p.notBefore = time.Now().Add(hostOpenRetryGap)
 			return tea.Batch(retryHostCmd(p.host), m.federationRefreshTick(hostOpenPoll))
 		}
@@ -264,28 +200,20 @@ func (m *OS) finishHostOpen(msg SessionCreatedMsg) tea.Cmd {
 	m.applyStartupToUnarranged()
 	if p.workspace > 0 || p.paneID != "" {
 		m.focusSwitchTarget(p.workspace, p.paneID)
-		// A key handler pushes what it changed to the daemon. This runs on
-		// a message, so it pushes the focus itself.
 		m.SyncStateToDaemon()
 	}
 	return nil
 }
 
-// focusSwitchTarget focuses the workspace or the pane a switch was asked to
-// end on. Zero and empty focus nothing.
 func (m *OS) focusSwitchTarget(workspace int, paneID string) {
 	if workspace > 0 && workspace != m.CurrentWorkspace {
 		m.SwitchToWorkspace(workspace)
 	}
 	if paneID != "" {
-		// FocusPane shows the pane: it restores a minimized one, and opens
-		// a stack's title row in the stack's tile.
 		_ = m.FocusPane(paneID)
 	}
 }
 
-// hostOpenWaitNote is what the dock and the notice say while a click waits
-// for a host that is not up.
 func hostOpenWaitNote(p *hostOpenPending) string {
 	if p.wasUp {
 		return "Reconnecting to " + printableTitle(p.host)
@@ -293,7 +221,6 @@ func hostOpenWaitNote(p *hostOpenPending) string {
 	return "Connecting to " + printableTitle(p.host)
 }
 
-// hostOpenNote is the dock's line while a click waits for its machine.
 func (m *OS) hostOpenNote() string {
 	p := m.hostOpen
 	if p == nil {

@@ -27,7 +27,6 @@ func TestSetProgramFPS(t *testing.T) {
 	if got := fps.Int(); got != 120 {
 		t.Fatalf("NewProgram left fps at %d for WithFPS(240); the clamp moved, so re-check MaxFPSCap and setProgramFPS", got)
 	}
-	// The ticker is what a change while running resets.
 	if tick := reflect.ValueOf(p).Elem().FieldByName("ticker"); !tick.IsValid() || tick.Type() != reflect.TypeFor[*time.Ticker]() {
 		t.Fatal("tea.Program has no *time.Ticker field ticker; a max_fps change would wait for the next start")
 	}
@@ -39,7 +38,6 @@ func TestSetProgramFPS(t *testing.T) {
 	}
 }
 
-// kickModel shows the text its last message carried.
 type kickModel struct{ text string }
 
 func (k kickModel) Init() tea.Cmd { return nil }
@@ -53,7 +51,6 @@ func (k kickModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (k kickModel) View() tea.View { return tea.NewView(k.text) }
 
-// syncBuffer is a bytes.Buffer two goroutines can share.
 type syncBuffer struct {
 	mu sync.Mutex
 	b  bytes.Buffer
@@ -96,10 +93,6 @@ func TestKickFlushWritesTheFrame(t *testing.T) {
 		<-done
 	}()
 
-	// Wait for the first frame to go out. Only the ticker writes frames, so
-	// Run has started it by then, and the output buffer's lock orders that
-	// start before the read of the ticker field below. Polling the field
-	// itself raced Run's write of it.
 	deadline := time.Now().Add(3 * time.Second)
 	for out.String() == "" {
 		if time.Now().After(deadline) {
@@ -111,7 +104,6 @@ func TestKickFlushWritesTheFrame(t *testing.T) {
 	if ticker == nil {
 		t.Fatal("tea.Program has no ticker after its first frame")
 	}
-	// At one frame a second, the next tick is up to a second away.
 	time.Sleep(50 * time.Millisecond)
 	p.Send("kicked-frame")
 	time.Sleep(20 * time.Millisecond)
@@ -125,15 +117,10 @@ func TestKickFlushWritesTheFrame(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	// A stopped ticker, which is how an idle client leaves it (see
-	// idleFrameTicker). At 100 frames a second, 200 ms with no write shows
-	// the ticker is stopped; one value on its channel must still write.
 	if !setProgramFPS(p, 100) {
 		t.Fatal("setProgramFPS did not reach the fps field")
 	}
 	ticker.Stop()
-	// A tick the renderer took just before the Stop may still be flushing.
-	// Let it finish, or it could write the frame sent next.
 	time.Sleep(50 * time.Millisecond)
 	p.Send("stopped-frame")
 	time.Sleep(200 * time.Millisecond)

@@ -14,14 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The dock engine's half of the Bubble Tea loop: build the plan, start the
-// scheduler, listen on its channel, and fold each update into the model.
-//
-// The listener is the same shape every other off-goroutine source in this
-// package uses (listenPTYDataUntil and friends): a command that blocks on a
-// channel and is re-armed by whoever handles its message. A blocked receive is
-// not a timer, which is why a dock with nothing to poll still costs nothing.
-
 // InitDockComponents builds the component plan from the loaded config and
 // starts the engine. Returns the command that listens for updates, or nil when
 // there is nothing to listen to.
@@ -30,9 +22,6 @@ func (m *OS) InitDockComponents() tea.Cmd {
 	m.dockEngine.Stop()
 
 	comps := dockRefreshableComponents(m.UserConfig, m.dockPlan, m.Settings.ShowClock, &m.Settings)
-	// The rail's custom section is one more component on the same scheduler.
-	// It draws on the rail and not the bar, which is why it is built here and
-	// not in the plan: the plan is the bar's membership.
 	m.railCustom.runnable = m.railCustomRunnable()
 	rail := m.railCustomComponent()
 	m.railCustom.on = rail != nil
@@ -46,14 +35,10 @@ func (m *OS) InitDockComponents() tea.Cmd {
 	}
 	m.dockEngine = dockengine.New(comps, railFolder)
 	m.dockEngine.SetContext(m.SessionName, dockSocketPath())
-	// Before Start, so the first run is told the focus and the size rather
-	// than running with none.
 	m.railCustom.ctx = m.railContextNow()
 	m.dockEngine.SetRailContext(m.railCustom.ctx)
 	m.railCustomSecond.ctx = m.secondaryRailContextNow()
 	m.dockEngine.SetSecondaryRailContext(m.railCustomSecond.ctx)
-	// The built-ins are filled here rather than by the engine, because their
-	// values come from model state this goroutine owns.
 	for _, c := range comps {
 		if c.Builtin {
 			m.refreshBuiltinDockComponent(c.Name)
@@ -115,10 +100,6 @@ func (m *OS) DockMetersSyncCmd() tea.Cmd {
 	return nil
 }
 
-// dockSocketPath is the socket a component's command talks back through, so a
-// component can call tuios verbs without working out where the session lives.
-// Empty when there is no daemon, which is the honest answer for a standalone
-// session: there is no socket to call.
 func dockSocketPath() string {
 	socket, err := session.GetSocketPath()
 	if err != nil {
@@ -151,12 +132,6 @@ func ListenForDockComponents(e *dockengine.Engine) tea.Cmd {
 	}
 }
 
-// handleDockComponent folds one update into the model and reports whether the
-// frame has to be redrawn.
-//
-// This is the render gate the design turns on: a poll whose value has not moved
-// draws nothing. A one-second component watching a number that changes every
-// five minutes costs sixty executions an hour and no frames.
 func (m *OS) handleDockComponent(msg dockComponentMsg) bool {
 	if msg.Builtin {
 		return m.refreshBuiltinDockComponent(msg.Name)
@@ -176,8 +151,6 @@ func (m *OS) handleDockComponent(msg dockComponentMsg) bool {
 	}
 	if msg.Name == railCustomComponent {
 		if changed {
-			// The render cache keys on this, so new rows redraw the rail and
-			// an unchanged value draws nothing, as the bar does.
 			m.railCustom.gen++
 		}
 		if newFailure {
@@ -188,11 +161,6 @@ func (m *OS) handleDockComponent(msg dockComponentMsg) bool {
 		return changed
 	}
 	if newFailure {
-		// Quiet on the bar, loud exactly once. A cell that fails is hidden
-		// rather than left showing a value its command can no longer produce,
-		// but a component that silently shows nothing is the failure mode the
-		// hackability audit kept finding, so the first failure of a streak is
-		// put in front of the person who wrote it.
 		name := strings.TrimPrefix(msg.Name, config.DockCustomPrefix)
 		m.LogWarn("Dock component %s failed: %s", name, msg.Err)
 		m.ShowNotification("Dock component "+name+": "+dockFailureDetail(msg), "warning", m.Settings.NotificationDuration)
@@ -201,8 +169,6 @@ func (m *OS) handleDockComponent(msg dockComponentMsg) bool {
 	return changed
 }
 
-// dockFailureDetail is the one line a failure notice carries: the exit code
-// when there is one, the error otherwise.
 func dockFailureDetail(msg dockComponentMsg) string {
 	if msg.Exit > 0 {
 		return "exit " + strconv.Itoa(msg.Exit)
@@ -210,15 +176,6 @@ func dockFailureDetail(msg dockComponentMsg) string {
 	return msg.Err
 }
 
-// refreshBuiltinDockComponent re-measures one of the built-ins that move on
-// their own and reports whether its cell text changed.
-//
-// These live on the same scheduler as a user's own components on purpose. If
-// the clock and the meters could not be expressed as components then the
-// component model would be a bolt-on rather than the thing the dock is made of.
-// It also keeps them off the maintenance tick, which would otherwise run at
-// sixty frames a second for a clock that moves once a second and meters that
-// move once every two.
 func (m *OS) refreshBuiltinDockComponent(name string) bool {
 	switch name {
 	case config.DockComponentClock:
@@ -233,7 +190,6 @@ func (m *OS) refreshBuiltinDockComponent(name string) bool {
 	return false
 }
 
-// dockClockFormat is the layout the clock and the status badge both render.
 func (m *OS) dockClockFormat() string {
 	if m.UserConfig == nil {
 		return config.DefaultClockFormat
@@ -257,20 +213,13 @@ func (m *OS) DockClockText() string {
 // paid for by the thing that happened rather than by a clock, and costs nothing
 // at all when nothing is happening.
 func (m *OS) NotifyDockEvent(eventType string) {
-	// The rail section's run reads the focus when it starts, so the focus
-	// this event is about goes to the engine before the event wakes it.
 	m.syncRailContext()
 	m.dockEngine.NotifyEvent(eventType)
-	// Both spellings resolve. The hook table calls it after-focus-change and
-	// the daemon's event hub calls it window-focused, and a component author
-	// should not have to know which of the two they are talking to.
 	if alias := dockEventAlias(eventType); alias != "" {
 		m.dockEngine.NotifyEvent(alias)
 	}
 }
 
-// dockEventAliases maps a hook event to the name the daemon's event hub gives
-// the same thing. Refresh contracts accept either.
 var dockEventAliases = map[string]string{
 	string(hooks.AfterNewWindow):       "window-created",
 	string(hooks.AfterCloseWindow):     "window-closed",
@@ -281,9 +230,7 @@ var dockEventAliases = map[string]string{
 	string(hooks.AfterAttach):          "attached",
 	string(hooks.AfterDetach):          "detached",
 	string(hooks.AfterResize):          "resized",
-	// The daemon's hub has no theme event, since the theme is the client's.
-	// The client fires both spellings, so either name works in a contract.
-	string(hooks.AfterThemeChange): "theme-changed",
+	string(hooks.AfterThemeChange):     "theme-changed",
 }
 
 func dockEventAlias(eventType string) string { return dockEventAliases[eventType] }
@@ -296,8 +243,6 @@ func (m *OS) RefreshDockComponent(name string) error {
 		m.dockEngine.RefreshAll()
 		return nil
 	}
-	// A caller may name a component with or without the custom/ prefix; the
-	// short form is what they wrote in the config file.
 	if _, ok := m.dockEngine.Component(name); !ok {
 		if _, ok := m.dockEngine.Component(config.DockCustomPrefix + name); ok {
 			name = config.DockCustomPrefix + name
@@ -324,7 +269,6 @@ func (m *OS) RunDockComponentClick(name string, button int) bool {
 	command := c.OnClick
 	go func() {
 		// #nosec G204 - the user's own config, run as the user, exactly as a
-		// hook's command is.
 		cmd := exec.Command("sh", "-c", command)
 		cmd.Env = env
 		cmd.Stdout, cmd.Stderr = nil, nil
@@ -333,7 +277,4 @@ func (m *OS) RunDockComponentClick(name string, button int) bool {
 	return true
 }
 
-// dockComponentMsg carries an engine's update into Update. One message per
-// update keeps the render gate simple: the handler compares the new text
-// against the old and skips the frame when nothing moved.
 type dockComponentMsg dockengine.Update

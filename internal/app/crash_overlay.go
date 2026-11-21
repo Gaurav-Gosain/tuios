@@ -4,29 +4,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// The crash overlay: the screen tuios shows when it reaches a state it should
-// not have reached.
-//
-// It is not one of the pickers, and the difference is the point. Every other
-// overlay is drawn by renderOverlays, inside composeView, out of the model's
-// live state. This one is drawn by View before composeView is called at all,
-// from a snapshot that was taken before anything was drawn. That is what makes
-// it safe to show after the compositor itself has panicked: if it went through
-// the normal path it would re-enter the code that just failed, panic again, and
-// leave the user with the same blank frame it exists to replace.
-//
-// The same reasoning puts its keys at the top of handleMsg rather than in
-// internal/input. The input package walks the sidebar, the focused window, the
-// keybind registry and a dozen Show* flags to decide who owns a key. All of
-// that is model state, and the model is what is in question. Three keys, read
-// before any of it, cost nothing and cannot be taken away by whatever broke.
-
-// maxRecentActions is how many keybind actions the crash report remembers.
-//
-// Five is what fits on one line of the report and is about as far back as a
-// user can confirm from memory. It is a ring on the model, not a log: it holds
-// action names only, never keystrokes and never text, so it costs one string
-// store per action and carries nothing private. See crashRecentActions.
 const maxRecentActions = 5
 
 // NoteAction records that a keybind action ran. The action dispatcher calls it
@@ -36,8 +13,6 @@ func (m *OS) NoteAction(action string) {
 	if m == nil || action == "" {
 		return
 	}
-	// A held key repeats its action, and five rows of the same name says less
-	// than one does. Collapse a repeat rather than spending the ring on it.
 	if n := len(m.recentActions); n > 0 && m.recentActions[n-1] == action {
 		return
 	}
@@ -80,22 +55,15 @@ func (m *OS) NoteCrash(where string, panicValue any, stack []byte) {
 		return
 	}
 	defer func() {
-		// Nothing to do but stop. The panic that brought us here is already
-		// logged by the caller, and there is no third barrier under this one.
 		_ = recover()
 	}()
 
 	report := NewCrashReport(where, panicValue, stack, m.crashFacts(where))
 	WriteCrashLog(report)
 
-	// The first crash is the one worth reading. A panic in the render path
-	// repeats on every frame, so overwriting would leave the user reading the
-	// hundredth copy of the same trace with the original's context replaced by
-	// the state the overlay itself produced.
 	if m.crash == nil {
 		m.crash = report
 	}
-	// The overlay replaces the frame, so the cached one must not win.
 	m.renderSkipped = false
 }
 
@@ -127,9 +95,6 @@ func (m *OS) CopyCrashReport() tea.Cmd {
 	if m == nil || m.crash == nil {
 		return nil
 	}
-	// The confirmation goes out through ShowNotification like any other, and
-	// reaches the overlay because showNotification mirrors onto it while it is
-	// up. Nothing here has to know that the dock is not being drawn.
 	m.ShowNotification("Copied the report. Paste it into a new issue.",
 		"success", m.Settings.NotificationDuration)
 	return tea.SetClipboard(m.crash.Markdown(0))
@@ -146,11 +111,6 @@ func (m *OS) OpenCrashIssue() tea.Cmd {
 	if m == nil || m.crash == nil {
 		return nil
 	}
-	// OpenLink says what it did through ShowNotification, in words that differ
-	// per client kind, and that message reaches the overlay the same way every
-	// other one does. "Copied the link. A remote client can not open it for
-	// you." is exactly what an SSH user needs to read, and it is not repeated
-	// here so it cannot drift from the one link_open.go writes.
 	return m.OpenLink(m.crash.IssueURL())
 }
 
@@ -163,12 +123,6 @@ func (m *OS) CrashNotice() string {
 	return m.crashNotice
 }
 
-// handleCrashKey answers a key while the crash overlay is up, and reports
-// whether it consumed it.
-//
-// It consumes every key. The overlay covers the screen, so a key it let through
-// would land in a pane the user cannot see, where a stray q could end up
-// closing something. The three it acts on are the three the footer names.
 func (m *OS) handleCrashKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	if m == nil || m.crash == nil {
 		return nil, false
@@ -185,9 +139,6 @@ func (m *OS) handleCrashKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	return nil, true
 }
 
-// crashLogPath is the file the current report was written to, or "" when there
-// is none. It exists so the log line can name the file without the caller
-// reaching into the report.
 func (m *OS) crashLogPath() string {
 	if m == nil || m.crash == nil {
 		return ""
@@ -195,16 +146,6 @@ func (m *OS) crashLogPath() string {
 	return m.crash.LogPath
 }
 
-// hideGraphicsForCrash takes kitty and sixel images off the screen while the
-// crash overlay is up.
-//
-// An image is drawn by the host terminal in its own pass, not into tuios' frame
-// buffer, so a placement left standing paints straight over the overlay. Every
-// other full-screen overlay hides them for the same reason (see
-// flushGraphicsForView), but that function is on the render path this overlay
-// exists to replace, so the call is repeated here rather than reached through
-// it. Behind a recover, because it is the one model read the crash screen makes
-// and it is a subsystem that has its own ways to fail.
 func (m *OS) hideGraphicsForCrash() {
 	defer func() { _ = recover() }()
 	if m.KittyPassthrough != nil {

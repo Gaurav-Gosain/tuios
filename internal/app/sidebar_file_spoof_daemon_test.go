@@ -13,19 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The OSC 7 corroboration in sidebar_files.go reads one field off the window,
-// and until the daemon sent it that field was zero on every pane in the default
-// deployment. So the tests beside this one, which build a locally spawned pane,
-// proved a gate that no shipped pane ever reached: the client spawns a PTY only
-// when it is run without a daemon.
-//
-// These build the pane the way a daemon-backed one is really built, out of a
-// WindowState off the wire, and run it through the client's own sync path. That
-// is the only path that can answer whether the pid arrives.
-
-// standInShell starts a real process in dir, in its own process group, and
-// returns its pid. It stands in for a pane's shell because /proc is what
-// corroborates a pane, and only a real process has a /proc entry.
 func standInShell(t *testing.T, dir string) int {
 	t.Helper()
 	cmd := exec.Command("sleep", "120")
@@ -41,14 +28,8 @@ func standInShell(t *testing.T, dir string) int {
 	return cmd.Process.Pid
 }
 
-// daemonSpoofPane builds a client holding one daemon-backed pane, adopted from
-// the WindowState the daemon pushes, and makes that pane print an OSC 7 naming
-// sayDir. shellPID is what the daemon put on the wire: a real pid for a pane
-// with a live PTY, zero for one the daemon cannot see a process for.
 func daemonSpoofPane(t *testing.T, sayDir string, shellPID int) *OS {
 	t.Helper()
-	// Same gate as the local pane: with no way to read the shell's working
-	// directory, the guard this asserts never runs. See requireShellCWD.
 	requireShellCWD(t)
 	m := sidebarTestOS(t, 120, 40, "left")
 	m.Settings.SidebarFileActions = true
@@ -58,8 +39,6 @@ func daemonSpoofPane(t *testing.T, sayDir string, shellPID int) *OS {
 		m.Settings.SidebarFileDelete = config.SidebarFileDeleteTrash
 	})
 
-	// No PTY and no Cmd: this is the shape NewDaemonWindow leaves a window in,
-	// and the shape every pane has in the default deployment.
 	w := &terminal.Window{ID: "daemonpane1", Width: 40, Height: 20, Workspace: 1, PTYID: "pty-1"}
 	m.updateWindowFromState(w, &session.WindowState{
 		ID: "daemonpane1", PTYID: "pty-1", CustomName: "shell",
@@ -138,8 +117,6 @@ func TestADaemonPaneWithNoPidKeepsItsFileActions(t *testing.T) {
 // time; a daemon has no process for one and sends zero. Copying that zero over
 // would take the corroboration off the one pane that already had it.
 func TestASyncDoesNotClearALocalPanesShellPgid(t *testing.T) {
-	// Builds its pane inline rather than through daemonSpoofPane, so it
-	// needs the gate of its own. See requireShellCWD.
 	requireShellCWD(t)
 	real, victim, bait := spoofDirs(t)
 	pid := standInShell(t, real)
@@ -152,7 +129,6 @@ func TestASyncDoesNotClearALocalPanesShellPgid(t *testing.T) {
 		m.Settings.SidebarFileDelete = config.SidebarFileDeleteTrash
 	})
 
-	// A local pane: no PTYID, and a pgid it read itself.
 	w := &terminal.Window{ID: "localpane1", Width: 40, Height: 20, Workspace: 1, ShellPgid: pid}
 	m.updateWindowFromState(w, &session.WindowState{
 		ID: "localpane1", CustomName: "shell",
@@ -188,8 +164,6 @@ func TestASyncDoesNotClearALocalPanesShellPgid(t *testing.T) {
 // takes it through adoptWindowState. Both have to, or a pane is uncheckable
 // until the next thing about it changes.
 func TestAFreshDaemonPaneAdoptsItsShellPid(t *testing.T) {
-	// Builds its pane inline rather than through daemonSpoofPane, so it
-	// needs the gate of its own. See requireShellCWD.
 	requireShellCWD(t)
 	real, victim, bait := spoofDirs(t)
 	pid := standInShell(t, real)

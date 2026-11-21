@@ -10,9 +10,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// waitDrained waits until the reader has taken every byte written to the pipe,
-// so the next write is a reply that arrives after a read, not one that a single
-// read takes whole.
 func waitDrained(t *testing.T, r *os.File) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)

@@ -8,14 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// linkTestOS builds one pane at the origin, writes body into it, and returns the
-// model.
-//
-// NewDaemonWindow takes the outer rectangle and gives the emulator two cells
-// less in each direction, so a 60x10 window is a 58x8 grid behind a one-cell
-// border. Nothing here overrides those, because a window whose Width and
-// emulator disagree is a pane that cannot exist, and the screen coordinates
-// below are derived from the border rather than from a guess.
 func linkTestOS(t *testing.T, body string) (*OS, *terminal.Window) {
 	t.Helper()
 	prev := config.Global.Links
@@ -32,8 +24,6 @@ func linkTestOS(t *testing.T, body string) (*OS, *terminal.Window) {
 	return m, win
 }
 
-// screenOf maps a content cell to the absolute screen cell the pane draws it
-// on, through the pane's own border allowance rather than through a constant.
 func screenOf(win *terminal.Window, col, row int) (int, int) {
 	off := win.BorderOffset()
 	return win.X + off + col, win.Y + off + row
@@ -69,7 +59,6 @@ func TestLinkHoverFindsAMarkedRun(t *testing.T) {
 			link.Y0, link.Y1, link.X0, link.X1)
 	}
 
-	// The cells on either side of the label were never marked.
 	for _, col := range []int{3, 8} {
 		if _, ok := resolvePaneLink(win, col, 0, &config.Global); ok {
 			t.Errorf("column %d resolved to a link; the run is 4..7", col)
@@ -96,8 +85,6 @@ func TestLinkHoverYieldsToAMouseTrackingGuest(t *testing.T) {
 		t.Fatal("no link under the pointer before the guest asked for the mouse")
 	}
 
-	// The guest turns on mouse reporting (DECSET 1000) and tuios is in terminal
-	// mode with that pane focused: all three parts of the test hold.
 	win.WriteOutput([]byte("\x1b[?1000h"))
 	m.Mode = TerminalMode
 	if !win.Terminal.HasMouseMode() {
@@ -107,15 +94,11 @@ func TestLinkHoverYieldsToAMouseTrackingGuest(t *testing.T) {
 		t.Error("the pointer picked up a link over a pane whose program is tracking the mouse")
 	}
 
-	// Window management mode is tuios's own, so the pane does not own the
-	// pointer there even with reporting on.
 	m.Mode = WindowManagementMode
 	if !m.LinkHoverAt(sx, sy) {
 		t.Error("window management mode handed the pointer to the guest")
 	}
 
-	// link_hover = "always" hands the call to the user: the same setup that
-	// just suppressed the highlight now keeps it, tracking guest and all.
 	m.Mode = TerminalMode
 	m.Settings.LinkHover = config.LinkHoverAlways
 	if !m.LinkHoverAt(sx, sy) {
@@ -153,7 +136,6 @@ func TestUnfocusedPaneLeavesTheFastPathToUnderline(t *testing.T) {
 // all, which is what `cat README.md` looks like on any URL longer than the pane.
 func TestLinkHoverFollowsASoftWrap(t *testing.T) {
 	const url = "https://img.shields.io/github/commit-activity/w/Gaurav-Gosain/tuios"
-	// Fill the row up to the URL so the break lands inside it.
 	const lead = "src="
 	_, win := linkTestOS(t, lead+url)
 
@@ -163,7 +145,6 @@ func TestLinkHoverFollowsASoftWrap(t *testing.T) {
 			len(lead)+len(url), grid)
 	}
 
-	// A cell in the first half, and one in the second.
 	for _, probe := range []struct {
 		name string
 		x, y int
@@ -228,7 +209,7 @@ func TestLinkHoverDoesNotJoinTwoLines(t *testing.T) {
 // Negative control: joining on a full last column, as this did before the
 // emulator recorded wraps, resolves the URL with "tail/more" glued on.
 func TestLinkHoverDoesNotJoinAFullLineToTheNext(t *testing.T) {
-	const grid = 58 // the test window's content width
+	const grid = 58
 	head := "go https://example.com/"
 	first := head + strings.Repeat("a", grid-len(head))
 	_, win := linkTestOS(t, first+"\r\ntail/more\r\n")

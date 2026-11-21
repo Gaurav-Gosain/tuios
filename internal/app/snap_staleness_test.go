@@ -6,19 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// A snap animation owns its window's geometry until it finishes, and it
-// deliberately leaves the emulator at the size the pane had when it started,
-// catching up in one resize at the end. That is the whole reason anything else
-// that writes geometry has to retire it first: left running, the next tick
-// stamps the destination of a transition the user has already moved past, and
-// the emulator is not resized with it. The pane then draws at one size while its
-// guest writes at another, which is a shell wrapping its prompt at the wrong
-// column for the rest of the session.
-//
-// The scrolling layout is where this bites, because it animates its slide even
-// when animations are off (the viewport shift is disorienting without it), so
-// there is always a snap in flight for the next action to trample.
-
 func TestNoStaleSnapSurvivesALayoutChange(t *testing.T) {
 	prevAnim := config.Global.Motion
 	config.Global.Motion = config.MotionNone
@@ -47,10 +34,6 @@ func TestNoStaleSnapSurvivesALayoutChange(t *testing.T) {
 			m, _ := newSwitchOS(t, 200, 50, map[int]int{1: 3, 2: 1})
 			m.TileAllWindows()
 			m.EnableScrollingLayout()
-			// Entering the strip changes every pane's size, and with
-			// animations off a pass that resizes is placed in one step. A
-			// step along the strip only moves panes, and that slide runs
-			// with animations off too.
 			m.ScrollingFocusLeft()
 			if len(m.Animations) == 0 {
 				m.ScrollingFocusRight()
@@ -60,7 +43,6 @@ func TestNoStaleSnapSurvivesALayoutChange(t *testing.T) {
 			}
 
 			c.apply(m)
-			// The tick that used to stamp the old destination back.
 			m.UpdateAnimations()
 
 			for _, w := range m.Windows {

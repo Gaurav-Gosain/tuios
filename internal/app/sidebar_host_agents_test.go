@@ -9,14 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The sessions section answers "who needs me". It answered it for this machine
-// only: a session row on another machine wore the resting bullet whatever its
-// panes were doing, and a machine's header said how many sessions it held and
-// never how many wanted a person. An agent waiting for someone waits just as
-// long on the build box.
-
-// hostAgentOS is a client with one machine besides this one, whose sessions
-// are in the states the argument is about.
 func hostAgentOS(t *testing.T, status federation.Status, states ...string) *OS {
 	t.Helper()
 	m := sidebarTestOS(t, 120, 40, "left")
@@ -44,7 +36,6 @@ func hostAgentOS(t *testing.T, status federation.Status, states ...string) *OS {
 	return m
 }
 
-// remoteNode is the tree node for one of build's session rows.
 func remoteNode(t *testing.T, m *OS, name string) sessiontree.Node {
 	t.Helper()
 	for _, n := range m.hostGroupNodes() {
@@ -102,7 +93,6 @@ func TestAMachineHeaderCountsTheSessionsThatWantAPerson(t *testing.T) {
 	if blocked != 2 {
 		t.Errorf("%d of build's sessions want a person, want 2", blocked)
 	}
-	// errored outranks needs_input, so it is the one the figure is marked in.
 	if worst != "errored" {
 		t.Errorf("the header's worst state is %q, want errored", worst)
 	}

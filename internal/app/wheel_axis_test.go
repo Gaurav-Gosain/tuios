@@ -26,16 +26,11 @@ func TestWheelAxisFollowsTheMajorityAxis(t *testing.T) {
 			want:   []bool{true, true, false, true, false, true},
 		},
 		{
-			// A mouse wheel with shift held on macOS: the window server swaps
-			// the axes, so the whole gesture arrives horizontal.
 			name:   "drift through a horizontal gesture is dropped",
 			events: []bool{horiz, horiz, vert, horiz, vert, horiz},
 			want:   []bool{true, true, false, true, false, true},
 		},
 		{
-			// Not drift: the hand turned. The new axis takes over as soon as it
-			// has more events than the old one, rather than being locked out for
-			// the rest of the gesture.
 			name:   "a gesture that turns follows the hand",
 			events: []bool{vert, horiz, horiz, horiz},
 			want:   []bool{true, false, true, true},
@@ -70,8 +65,6 @@ func TestWheelAxisStartsOverAfterAPause(t *testing.T) {
 	if m.WheelAxisAccepts(true, now) {
 		t.Fatal("drift inside the gesture was accepted")
 	}
-	// Measured from the drift event, because a dropped event is still the
-	// gesture happening: it keeps the window open like any other.
 	if !m.WheelAxisAccepts(true, now.Add(WheelGestureGap+time.Millisecond)) {
 		t.Fatal("a horizontal gesture after the pause was still treated as drift")
 	}

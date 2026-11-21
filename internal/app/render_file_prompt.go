@@ -7,31 +7,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// The file action dialogs.
-//
-// They are centred overlays and not rows in the rail, and that is the whole of
-// the layout decision. The rail is twenty-six columns on a default config and
-// about twenty-two of them are left after the gutter and the glyph column. A
-// delete confirmation has to carry a question, the path it is about, whether
-// the file comes back, and two answers. Four of those five things do not fit on
-// one twenty-two column row, and a confirmation whose answers are off the
-// bottom of the visible listing is not a confirmation.
-//
-// The rest of this codebase already answers focused questions this way: the
-// rename editor is a centred overlay.Dialog and so is the close-session
-// confirmation. These are the same object, so a user who has renamed a pane has
-// already used the create prompt.
-//
-// The rail keeps drawing underneath, with the row the dialog is about still in
-// it. That is the old-and-new comparison in place: the name on the row, the new
-// one in the field.
-
-// fileDialogWidth is the preferred inner width. Wide enough for a path and a
-// sentence about whether the file comes back, which is the longest line either
-// dialog draws.
 const fileDialogWidth = 54
 
-// filePromptTitle is the word in the dialog's top border.
 func (m *OS) filePromptTitle() string {
 	switch m.filePrompt.Kind {
 	case filePromptCreate:
@@ -47,9 +24,6 @@ func (m *OS) filePromptTitle() string {
 	return ""
 }
 
-// renderFileDialog draws whichever file dialog is open, with its geometry and
-// its clickable rows. The rows are recorded here, as the dialog draws them, so
-// no handler ever works out where a row landed.
 func (m *OS) renderFileDialog() (string, overlay.Geometry, []overlayRowHit) {
 	if m.filePrompt.Kind == filePromptConfirm {
 		return m.renderFileConfirm()
@@ -57,9 +31,6 @@ func (m *OS) renderFileDialog() (string, overlay.Geometry, []overlayRowHit) {
 	return m.renderFileNamePrompt()
 }
 
-// renderFileNamePrompt draws the create and rename prompts. One dialog for
-// both: they ask the same question about a different starting point, and the
-// rule for what the answer may say is the same rule.
 func (m *OS) renderFileNamePrompt() (string, overlay.Geometry, []overlayRowHit) {
 	pal := m.overlayUI()
 	bg := pal.Canvas
@@ -67,23 +38,12 @@ func (m *OS) renderFileNamePrompt() (string, overlay.Geometry, []overlayRowHit) 
 
 	var body []string
 	body = append(body, dialogBodyLine(m.filePromptContext(width), width, pal.FgDim, bg))
-	// A rename is the second thing here that changes a file that already
-	// exists, and the folder it acts in comes from the pane rather than from
-	// the user. So it names the whole path, the way the delete confirmation
-	// does and for the same reason: "Rename notes.txt" is true of a file in
-	// every folder on the disk. A create says its folder on the line above
-	// already, because that is the whole of what it has to say.
 	if m.filePrompt.Kind == filePromptRename {
 		body = append(body, dialogBodyLine(m.filePromptTargetPath(width), width, pal.FgMute, bg))
 	}
 
-	// The field windows to its tail, so a name longer than the dialog scrolls
-	// left and what you are typing stays under the cursor.
 	body = append(body, overlay.Fill(fieldRow(&m.filePrompt.Input, width, bg, pal), width, bg))
 
-	// One line under the field, and it is the refusal when there is one. A
-	// prompt that both refused a name and went on explaining the trailing slash
-	// would bury the answer to the question the user just asked.
 	note, ink := m.filePromptNote(), pal.FgMute
 	if m.filePrompt.Err != "" {
 		note, ink = m.filePrompt.Err, pal.Warn
@@ -102,9 +62,6 @@ func (m *OS) renderFileNamePrompt() (string, overlay.Geometry, []overlayRowHit) 
 	return content, geo, nil
 }
 
-// filePromptContext is the line above the field: where a create lands, and
-// which entry a rename is about. Without it the field is a name with no folder,
-// and the rail behind the dialog is the only thing saying where "here" is.
 func (m *OS) filePromptContext(width int) string {
 	if m.filePrompt.Kind == filePromptRename {
 		return "Rename " + printableTitle(m.filePrompt.Target)
@@ -112,14 +69,11 @@ func (m *OS) filePromptContext(width int) string {
 	return "In " + truncPathLeft(shortenHome(m.filePrompt.Dir), max(width-4, 1))
 }
 
-// filePromptTargetPath is the full path of the entry a rename acts on, cut from
-// the front like every other path in these dialogs so the tail survives.
 func (m *OS) filePromptTargetPath(width int) string {
 	full := filepath.Join(m.filePrompt.Dir, m.filePrompt.Target)
 	return truncPathLeft(shortenHome(full), max(width-4, 1))
 }
 
-// filePromptNote is the standing hint under the field.
 func (m *OS) filePromptNote() string {
 	if m.filePrompt.Kind == filePromptCreate {
 		return "Put / at the end to make a folder."
@@ -127,21 +81,12 @@ func (m *OS) filePromptNote() string {
 	return "The new name goes in this folder."
 }
 
-// renderFileConfirm draws the delete confirmation.
-//
-// Four things, in the order a person needs them: what goes, where it is, what
-// happens to it, and the two answers. Cancel is drawn first and is where the
-// dialog opens, so enter on a dialog nobody has touched removes nothing.
 func (m *OS) renderFileConfirm() (string, overlay.Geometry, []overlayRowHit) {
 	pal := m.overlayUI()
 	bg := pal.Canvas
 	width := overlay.DialogFitWidth(fileDialogWidth, m.modalRoomWidth())
 	m.filePrompt.List.Cursor = clampInt(m.filePrompt.List.Cursor, 0, fileConfirmRowCount-1)
 
-	// The path is cut from the front, like the rail's own header: the tail is
-	// the file being deleted and the head is the disk it is on. A confirmation
-	// that truncated to "/home/gaurav/dev/tui…" would have cut off the only
-	// part that says which file.
 	path := ""
 	if len(m.filePrompt.Paths) > 0 {
 		path = truncPathLeft(shortenHome(filepath.Dir(m.filePrompt.Paths[0])), max(width-4, 1))
@@ -150,9 +95,6 @@ func (m *OS) renderFileConfirm() (string, overlay.Geometry, []overlayRowHit) {
 		}
 	}
 
-	// The outcome line is the one loud thing in the dialog, and a permanent
-	// delete is the case worth the warning colour. A trash delete says where the
-	// file goes in the quiet ink, because it is the recoverable one.
 	outcomeInk := pal.Warn
 	if m.filePrompt.Trash {
 		outcomeInk = pal.FgDim
@@ -179,7 +121,6 @@ func (m *OS) renderFileConfirm() (string, overlay.Geometry, []overlayRowHit) {
 		},
 	}.Render(pal)
 
-	// One rectangle per drawn answer, in drawn order, recorded as it is drawn.
 	hits := make([]overlayRowHit, 0, fileConfirmRowCount)
 	for i := range fileConfirmRowCount {
 		y := geo.BodyY + 4 + i
@@ -191,9 +132,6 @@ func (m *OS) renderFileConfirm() (string, overlay.Geometry, []overlayRowHit) {
 	return content, geo, hits
 }
 
-// fileConfirmRow draws one answer. The destructive one takes the warn colour
-// under the cursor and stays muted off it, which is the weight split the
-// close-session dialog already uses.
 func (m *OS) fileConfirmRow(idx, width int, pal overlay.Palette) string {
 	bg := pal.Canvas
 	cursor := m.filePrompt.List.Cursor == idx

@@ -25,7 +25,7 @@ func TestCrossWorkspaceFocusFiresFocusHookOnce(t *testing.T) {
 	m.FocusedWindow = 0
 	r := record(t, m)
 
-	m.FocusWindow(2) // ws2-target, on another workspace
+	m.FocusWindow(2)
 
 	if m.CurrentWorkspace != 2 {
 		t.Fatalf("CurrentWorkspace = %d, want 2", m.CurrentWorkspace)

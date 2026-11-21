@@ -6,24 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The dock's two session controls, at the bar's right-hand end.
-//
-// They exist because a multiplexer asks people to hold two ideas apart that
-// look the same from the outside: quitting the client while the session keeps
-// running, and ending the session and everything in it. Only one of those is
-// recoverable.
-//
-// So they are deliberately not a matched pair. Leaving is the prominent
-// control, drawn in the dock's normal text colour and bold. Closing is
-// recessed, muted until the pointer is on it, and it always goes through a
-// confirmation that names what would die. Two equally weighted buttons an inch
-// apart is the layout that produces the misclick, and this misclick cannot be
-// taken back.
-//
-// They sit apart from the workspace strip on purpose: the strip is
-// workspace-scoped and these are session-scoped, and the two ended up next to
-// each other in an early sketch where "close" read as "close this workspace".
-
 // DockSessionAction names one of the dock's session controls.
 type DockSessionAction int
 
@@ -56,36 +38,17 @@ const (
 	DockSessionAgents
 )
 
-// dockSessionHit is where a session control was drawn on the last frame.
-// Recorded by the renderer for the same reason the minimized entries are: the
-// strip's columns depend on the bar's total width and on whether the leave
-// control is there at all, and a handler that works that out again is a second
-// implementation that can disagree with the frame on screen.
 type dockSessionHit struct {
 	X0, X1, Y int
 	Action    DockSessionAction
 }
 
-// dockSessionIconMinWidth is the narrowest dock that carries the controls at
-// all. Below it the bar has nothing left to give and they go.
 const dockSessionIconMinWidth = 34
 
-// dockSessionControlsFit reports whether the dock is wide enough to carry the
-// controls. Taken from the width alone, so the layout pass and the render pass
-// cannot land on different answers.
 func dockSessionControlsFit(renderWidth int) bool {
 	return renderWidth >= dockSessionIconMinWidth
 }
 
-// The words the controls mean. Plain on purpose: "logout" and "shutdown" are
-// what the two actions are, not what they do, and the desktop metaphor is
-// already carried by the glyphs.
-//
-// They are the hover label now rather than print beside the glyphs. Twenty-eight
-// columns of the bar were being spent restating two icons that never move, on
-// the one row where every other element carries a number or a state you cannot
-// read anywhere else. The words are still reachable without a pointer: the help
-// menu and the which-key sheet name both actions.
 const (
 	dockSessionLeaveLabel = "Leave running"
 	dockSessionCloseLabel = "Close session"
@@ -93,11 +56,6 @@ const (
 	dockSessionAgentLabel = "Agents view"
 )
 
-// dockSessionIcon is a control's glyph, following the configured glyph set.
-//
-// The new-session control wears the same "+" the rail's own add controls do,
-// rather than a glyph of its own. Two marks for one verb is two things to
-// learn, and the rail's is the one people meet first.
 func dockSessionIcon(a DockSessionAction, s *config.Settings) string {
 	switch a {
 	case DockSessionNew:
@@ -111,7 +69,6 @@ func dockSessionIcon(a DockSessionAction, s *config.Settings) string {
 	}
 }
 
-// dockSessionLabel is a control's word, which is what its tooltip says.
 func dockSessionLabel(a DockSessionAction) string {
 	switch a {
 	case DockSessionNew:
@@ -125,14 +82,6 @@ func dockSessionLabel(a DockSessionAction) string {
 	}
 }
 
-// dockAgents reports whether the session holds an agent pane, which is when
-// the agents control is drawn, and how many of its agents wait on the person.
-// A pane counts as an agent the way agentsPresent counts one: it has an agent
-// state or a named harness. Waiting is the rail's own predicate, read through
-// windowMarkState, so the dock, the title bars and the rail agree.
-//
-// It reads only the panes the client holds, which is a short loop per dock
-// frame and nothing on an idle screen.
 func (m *OS) dockAgents() (present bool, waiting int) {
 	if !m.agentsOn() {
 		return false, 0
@@ -149,9 +98,6 @@ func (m *OS) dockAgents() (present bool, waiting int) {
 	return present, waiting
 }
 
-// dockSessionTooltipText is what a control's tooltip says. The agents control
-// also names its key, so a person who finds the view with the pointer learns
-// the way to it without one, and says how many agents wait.
 func (m *OS) dockSessionTooltipText(a DockSessionAction) string {
 	if a != DockSessionAgents {
 		return dockSessionLabel(a)

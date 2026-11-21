@@ -9,38 +9,15 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// Links in the agents view open on a click, as a link in a pane does.
-//
-// The cockpit draws its links as OSC 8 on the cells of its canvas, so the
-// outer terminal can open them. A click inside the cockpit is tuios's own
-// mouse event, so the outer terminal never sees it. This file reads the link
-// back from the cell the click landed on, in the canvas the last frame drew,
-// and hands it to OpenLink, which decides which machine opens it.
-//
-// A cell with no OSC 8 address may still hold a bare URL: a tool line or a
-// command prints one as plain text. With links = "all" the row's text is
-// scanned for one, with the same detector and link rules a pane uses.
-//
-// Nothing here runs on a frame that the pointer did not move over a link: the
-// hover is resolved on motion, and the frame only restyles the cells of a run
-// it already holds.
-
-// ckLinkRun is a link on one row of the cockpit, in screen cells. x1 is the
-// column after its last cell.
 type ckLinkRun struct {
 	url       string
 	y, x0, x1 int
 }
 
-// cockpitLinkAt returns the link under screen cell x, y in the frame last
-// drawn, if there is one.
 func (m *OS) cockpitLinkAt(x, y int) (ckLinkRun, bool) {
 	return m.cockpitLinkFound(x, y, pathAsk)
 }
 
-// cockpitLinkFound is cockpitLinkAt with a path found as how says
-// (pathThere's): a press and its release ask the disk at once, as a press may
-// come with no motion before it.
 func (m *OS) cockpitLinkFound(x, y, how int) (ckLinkRun, bool) {
 	ck := &m.Inbox.ck
 	if !linksEnabled(&m.Settings) || ck.canvas == nil {
@@ -54,9 +31,6 @@ func (m *OS) cockpitLinkFound(x, y, how int) (ckLinkRun, bool) {
 	return ckLinkRun{url: url, y: y, x0: x0, x1: x1}, ok
 }
 
-// cockpitLineLinkAt is the link covering column x of a line of the agents
-// view: a link or a URL (canvasLinkAt), or else a file path that is there,
-// relative ones taken from the agent's folder. how is pathThere's.
 func (m *OS) cockpitLineLinkAt(line uv.Line, x int, how int) (string, int, int, bool) {
 	if !linksEnabled(&m.Settings) || x < 0 || x >= len(line) {
 		return "", 0, 0, false
@@ -67,9 +41,6 @@ func (m *OS) cockpitLineLinkAt(line uv.Line, x int, how int) (string, int, int, 
 	return m.canvasPathAt(line, x, m.cockpitPathDir(), how)
 }
 
-// canvasLinkAt finds the link covering column x of a canvas line: an OSC 8
-// run first, then, with links = "all", a bare URL in the line's text. It
-// returns the link and the columns it covers, x1 the column after the last.
 func canvasLinkAt(line uv.Line, x int, s *config.Settings) (url string, x0, x1 int, ok bool) {
 	if x < 0 || x >= len(line) {
 		return "", 0, 0, false
@@ -111,8 +82,6 @@ func canvasLinkAt(line uv.Line, x int, s *config.Settings) (url string, x0, x1 i
 	return found.Target, x0, min(x1, len(line)), true
 }
 
-// cellLinkAt is the OSC 8 address of the cell that draws column x: the cell
-// itself, or the wide cell whose second half x is.
 func cellLinkAt(line uv.Line, x int) string {
 	for x > 0 && line[x].Width == 0 && line[x].Content == "" {
 		x--
@@ -120,8 +89,6 @@ func cellLinkAt(line uv.Line, x int) string {
 	return line[x].Link.URL
 }
 
-// canvasRowText is one canvas row as plain text, and per column the byte
-// offset of the cell that drew it, -1 for the second half of a wide cell.
 func canvasRowText(line uv.Line) (string, []int) {
 	byteAt := make([]int, len(line))
 	b := make([]byte, 0, len(line))
@@ -141,9 +108,6 @@ func canvasRowText(line uv.Line) (string, []int) {
 	return string(b), byteAt
 }
 
-// cockpitLinkHover records the link under the pointer, and reports whether
-// there is one. A change of run draws the frame again; a move along the same
-// run does not.
 func (m *OS) cockpitLinkHover(x, y int) bool {
 	ck := &m.Inbox.ck
 	run, ok := m.cockpitLinkAt(x, y)
@@ -160,8 +124,6 @@ func (m *OS) cockpitLinkHover(x, y int) bool {
 	return ok
 }
 
-// cockpitClearLinkHover drops the hover, as when a menu or a sheet covers the
-// link.
 func (m *OS) cockpitClearLinkHover() {
 	ck := &m.Inbox.ck
 	if ck.linkHover.url == "" {
@@ -172,9 +134,6 @@ func (m *OS) cockpitClearLinkHover() {
 	m.cockpitTouch()
 }
 
-// drawCockpitLinkHover restyles the hovered run on the canvas just drawn, top
-// being the canvas's first screen row. The run is found again on this canvas,
-// so a thread that moved under a still pointer underlines what is there now.
 func (m *OS) drawCockpitLinkHover(c *ckCanvas, top int) {
 	ck := &m.Inbox.ck
 	if ck.linkHover.url == "" {
@@ -195,9 +154,6 @@ func (m *OS) drawCockpitLinkHover(c *ckCanvas, top int) {
 	})
 }
 
-// cockpitLinkPress takes a press on a link, if there is one under it. The
-// link opens on the release (cockpitLinkRelease), so a drag that starts on a
-// link selects text instead.
 func (m *OS) cockpitLinkPress(x, y int) bool {
 	run, ok := m.cockpitLinkFound(x, y, pathNow)
 	m.Inbox.ck.linkPress = run.url
@@ -209,9 +165,6 @@ func (m *OS) cockpitLinkPress(x, y int) bool {
 // mode, or a drag) leaves no link to open on its release.
 func (m *OS) CockpitLinkCancel() { m.Inbox.ck.linkPress = "" }
 
-// cockpitLinkRelease opens the link a press was taken on, when the button
-// goes up on the same link. A release elsewhere opens nothing. A drag's
-// release does not reach it: the selection takes it first.
 func (m *OS) cockpitLinkRelease(x, y int) (tea.Cmd, bool) {
 	url := m.Inbox.ck.linkPress
 	if url == "" {

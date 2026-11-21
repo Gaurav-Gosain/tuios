@@ -9,21 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// Two send-keys commands can overlap on one client: the remote command
-// handler returns at once, so a second chain of RemoteKeyMsg starts while the
-// first still runs, and the two goroutines that feed the loop interleave.
-// The client used to keep one bool for "a chain runs", and the first chain's
-// RemoteKeysDoneMsg cleared it while the second still delivered keys. Those
-// keys then passed every "did the person press this" gate. These tests drive
-// the real Update with the two chains interleaved one message at a time, in
-// the order that broke: A1, B1, A done, B2 and on.
-//
-// Negative control: with RemoteKeysDoneMsg clearing ProcessingRemoteKeys
-// for every chain, and RemoteKeyMsg not marking its own call, both fail. See
-// e2e/tui/NEGATIVE_CONTROLS.md, "Overlapping send-keys".
-
-// runInterleaved starts each key string as one send-keys chain and feeds
-// the chains' messages to Update in turn, the head of each chain first.
 func runInterleaved(t *testing.T, m *OS, chains ...string) {
 	t.Helper()
 	var queue []tea.Msg
@@ -44,7 +29,6 @@ func runInterleaved(t *testing.T, m *OS, chains ...string) {
 	}
 }
 
-// chainNext runs cmd and returns the chain's next message in it, or nil.
 func chainNext(cmd tea.Cmd) tea.Msg {
 	if cmd == nil {
 		return nil
@@ -89,7 +73,6 @@ func TestOverlappingSendKeysDoNotAllowAPlugin(t *testing.T) {
 	if m.ProcessingRemoteKeys {
 		t.Fatal("the mark stayed set after both chains ended")
 	}
-	// Both chains are done: the person's own keys allow it.
 	for _, k := range []tea.KeyPressMsg{{Code: 'a', Text: "a"}, {Code: 'l', Text: "l"}, {Code: 'l', Text: "l"}, {Code: 'o', Text: "o"}, {Code: 'w', Text: "w"}, {Code: tea.KeyEnter}} {
 		m.Update(k)
 	}
@@ -120,7 +103,6 @@ func TestOverlappingSendKeysDoNotAnswerAHeldApproval(t *testing.T) {
 	})
 	t.Cleanup(func() { SetInputHandler(prev) })
 
-	// Three chains, so the count must survive two ends before the last.
 	runInterleaved(t, m, "x", "x", "x x 1 enter")
 	if sent != nil {
 		sent()
@@ -129,8 +111,6 @@ func TestOverlappingSendKeysDoNotAnswerAHeldApproval(t *testing.T) {
 	if m.ProcessingRemoteKeys || m.remoteKeyChains != 0 {
 		t.Fatalf("after every chain ended: mark %v, chains %d", m.ProcessingRemoteKeys, m.remoteKeyChains)
 	}
-	// A stray end does not take the count below zero, so the next chain is
-	// still marked from its first key to its last.
 	m.Update(RemoteKeysDoneMsg{})
 	runInterleaved(t, m, "1 enter")
 	if sent != nil {

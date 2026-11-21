@@ -34,8 +34,6 @@ func TestForwardPlaceKeyedByHostID(t *testing.T) {
 
 	const guestID uint32 = 5
 
-	// Standard flow: a plain a=t direct transmit is passed through raw; the
-	// subsequent a=p is where forwardPlace registers the tracked placement.
 	place := &vt.KittyCommand{Action: vt.KittyActionPlace, ImageID: guestID, Columns: 10, Rows: 5}
 	kp.ForwardCommand(place, nil, winID, 0, 0, 80, 24, 0, 0, 0, 0, 0, false, nil)
 
@@ -58,8 +56,6 @@ func TestForwardPlaceKeyedByHostID(t *testing.T) {
 		t.Fatalf("placement must be keyed by host id %d, got keys %v", hostID, placementKeys(placements))
 	}
 
-	// Guest deletes the image by its guest id (a=d,d=i,i=5). forwardDelete
-	// resolves guestID->hostID and deletes placements[win][hostID].
 	del := &vt.KittyCommand{Action: vt.KittyActionDelete, Delete: vt.KittyDeleteByID, ImageID: guestID}
 	kp.ForwardCommand(del, nil, winID, 0, 0, 80, 24, 0, 0, 0, 0, 0, false, nil)
 

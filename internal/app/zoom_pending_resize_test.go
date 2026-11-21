@@ -45,7 +45,6 @@ func TestZoomKeepsItsRegionWhenAPendingResizeDrains(t *testing.T) {
 	width, height := zoomed.Width, zoomed.Height
 	told := *f.told[zoomed.ID]
 
-	// The tick that drains what the resize deferred.
 	if err := f.Apply(fuzz.Action{Kind: fuzz.Tick}); err != nil {
 		t.Fatal(err)
 	}
@@ -58,8 +57,6 @@ func TestZoomKeepsItsRegionWhenAPendingResizeDrains(t *testing.T) {
 		t.Errorf("the guest was told %dx%d again after the zoom had settled", got.w, got.h)
 	}
 
-	// The frame is where the user sees it: a zoomed pane hides the others, so
-	// every row of the content region belongs to it and none may be blank.
 	rows := strings.Split(stripANSIForTrace(lipgloss.Sprint(f.m.GetCanvas(true).Render())), "\n")
 	top := f.m.GetTopMargin()
 	for y := top; y < top+f.m.GetUsableHeight() && y < len(rows); y++ {

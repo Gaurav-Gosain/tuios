@@ -29,10 +29,6 @@ func TestSnapZonesFollowTheContentRegion(t *testing.T) {
 				t.Errorf("released on the content's left edge (x=%d): got %v, want SnapLeft", left, got)
 			}
 
-			// Releasing over the rail still snaps toward it. The zone is open-ended
-			// past the content edge on purpose: a pointer dragged that way is heading
-			// right, and the rail is not a drop target of its own, so refusing here
-			// would make an obvious gesture do nothing.
 			var overRail int
 			want := SnapRight
 			if side == "right" {
@@ -45,7 +41,6 @@ func TestSnapZonesFollowTheContentRegion(t *testing.T) {
 				t.Errorf("released over the %s rail (x=%d): got %v, want %v", side, overRail, got, want)
 			}
 
-			// The middle of the pane region is not a zone at either edge.
 			if got := m.SnapZoneAt(left+(right-left)/2, midY); got != NoSnap {
 				t.Errorf("mid-content: got %v, want NoSnap", got)
 			}

@@ -11,11 +11,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// superfileSequence is what superfile (v1.6.0, src/pkg/file_preview/kitty.go)
-// writes for an image preview: one a=T command that both transmits the image
-// and declares a virtual placement of c by r cells, sent in chunks, with no
-// C=1. Then the cursor goes to the preview panel and the placeholder grid is
-// printed there, one CUP per row.
 func superfileSequence(guestID uint32, cols, rows, atRow, atCol int) string {
 	const w, h = 4, 2
 	pixels := make([]byte, w*h*4)
@@ -66,7 +61,6 @@ func TestATransmitThatDeclaresAVirtualPlacement(t *testing.T) {
 	term.SetKittyImageIDTranslator(func(g uint32) (uint32, bool) {
 		return kp.HostImageID(winID, g)
 	})
-	// Wired the way setupKittyPassthrough wires a pane, reservation included.
 	reserved := 0
 	term.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, raw []byte) {
 		pos := term.CursorPosition()
@@ -77,8 +71,6 @@ func TestATransmitThatDeclaresAVirtualPlacement(t *testing.T) {
 		}
 	})
 
-	// Park the cursor on the last row, where a full-screen application often
-	// leaves it: a reservation there scrolls the whole screen.
 	if _, err := term.Write([]byte("\x1b[?1049h\x1b[1;1HTOP\x1b[12;1H")); err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +101,6 @@ func TestATransmitThatDeclaresAVirtualPlacement(t *testing.T) {
 		t.Errorf("a real placement was recorded for a virtual one; it would be drawn at the cursor")
 	}
 
-	// The cells are where the application put them and name the host image.
 	for y := 4; y < 4+rows; y++ {
 		for x := 10; x < 10+cols; x++ {
 			cell := term.CellAt(x, y)

@@ -10,7 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// hostRecorder stands in for the host terminal and keeps every byte.
 type hostRecorder struct {
 	mu  sync.Mutex
 	buf strings.Builder
@@ -28,8 +27,6 @@ func (h *hostRecorder) String() string {
 	return h.buf.String()
 }
 
-// notifyHarness builds a pane whose notifications are wired the way a real
-// client wires them, with the host terminal recorded.
 func notifyHarness(t *testing.T) (*OS, *terminal.Window, *hostRecorder) {
 	t.Helper()
 	host := &hostRecorder{}
@@ -41,8 +38,6 @@ func notifyHarness(t *testing.T) (*OS, *terminal.Window, *hostRecorder) {
 	return m, win, host
 }
 
-// hostPayloads strips the synchronized-update wrapper WriteToHost adds and
-// returns what is left.
 func hostPayloads(s string) string {
 	s = strings.ReplaceAll(s, "\x1b[?2026h", "")
 	return strings.ReplaceAll(s, "\x1b[?2026l", "")
@@ -58,9 +53,7 @@ func hostPayloads(s string) string {
 // both emulators keep C1 bytes inside the OSC text, raw or UTF-8 encoded.
 func TestPaneNotificationCannotWriteEscapesToHost(t *testing.T) {
 	const (
-		evil = "done\x1b]52;c;cm0gLXJmIH4K\x07\x1b[2J\x9b31m"
-		// U+009B CSI, U+009D OSC and U+009C ST, first as raw bytes and then
-		// UTF-8 encoded.
+		evil   = "done\x1b]52;c;cm0gLXJmIH4K\x07\x1b[2J\x9b31m"
 		evilC1 = "done\x9b31m\x9d52;c;cm0=\x9c\u009b2J\u009d52;c;cm0=\u009c"
 	)
 	b64 := func(p string) string { return base64.StdEncoding.EncodeToString([]byte(p)) }
@@ -104,8 +97,6 @@ func TestPaneNotificationCannotWriteEscapesToHost(t *testing.T) {
 	}
 }
 
-// hasC1 reports whether s holds a C1 CSI, OSC or ST byte. A byte search
-// catches both the raw byte and the second byte of its UTF-8 encoding.
 func hasC1(s string) bool {
 	return strings.IndexByte(s, 0x9b) >= 0 || strings.IndexByte(s, 0x9c) >= 0 || strings.IndexByte(s, 0x9d) >= 0
 }

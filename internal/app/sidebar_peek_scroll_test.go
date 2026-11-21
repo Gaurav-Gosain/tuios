@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
-// peekTree builds a machine whose rail list overflows: one attached session
-// and thirty foreign ones, whose pane counts alternate so a pointer sweeping
-// the list crosses sessions whose peeks take different heights.
 func peekTree() sessiontree.Tree {
 	windows := func(n int, prefix string) []sessiontree.WindowInput {
 		out := make([]sessiontree.WindowInput, 0, n)
@@ -52,9 +49,6 @@ func TestRailPeekKeepsTheSessionsViewport(t *testing.T) {
 		t.Fatalf("the sessions section has no band: %v", sessionsY)
 	}
 
-	// The pointer rests on a two-pane session row while the wheel runs, so
-	// every render between wheel events budgets the terminals section for a
-	// two-pane peek. filler-04 has two panes; filler-03 five.
 	m.SidebarPeek = "filler-04"
 	railPlain(t, m, tree)
 	x := m.GetSidebarWidth() / 2
@@ -67,8 +61,6 @@ func TestRailPeekKeepsTheSessionsViewport(t *testing.T) {
 		t.Fatalf("the wheel moved no offset; the test cannot reach the folded rows")
 	}
 
-	// One pointer move onto a neighbouring session row: the peek switches to
-	// a session whose peek takes more lines, and the viewport must hold.
 	m.SidebarPeek = "filler-03"
 	railPlain(t, m, tree)
 	if m.SidebarScroll[sidebarSectionSessions] != scrolled {

@@ -15,25 +15,16 @@ import (
 )
 
 const (
-	// pathPickerMinWidth and pathPickerMaxWidth bound the box's inner width.
-	// It is a dropdown at a prompt: wide enough for a name and its icon, not
-	// so wide it covers the pane.
-	pathPickerMinWidth = 30
-	pathPickerMaxWidth = 56
-	// pathPickerChrome is the rows that are not list rows: the top border,
-	// the rule, the filter line and the bottom border.
-	pathPickerChrome = 4
-	// pathPickerSearchGlyph is the Nerd Font magnifier on the filter line.
+	pathPickerMinWidth    = 30
+	pathPickerMaxWidth    = 56
+	pathPickerChrome      = 4
 	pathPickerSearchGlyph = ""
 )
 
-// overlayRect is r as an overlay.Rect, for overlay.Place.
 func overlayRect(r image.Rectangle) overlay.Rect {
 	return overlay.Rect{X0: r.Min.X, Y0: r.Min.Y, X1: r.Max.X, Y1: r.Max.Y}
 }
 
-// pathPickerAnchor is the focused pane's cursor on screen, or the first cell
-// of its last row when the cursor is not on screen.
 func (m *OS) pathPickerAnchor(w *terminal.Window) (int, int) {
 	border := 1
 	if w.Tiled {
@@ -52,18 +43,11 @@ func (m *OS) pathPickerAnchor(w *terminal.Window) (int, int) {
 	return x, y
 }
 
-// pathPickerFloor is the smallest box the picker keeps inside the pane: this
-// inner width and this many list rows. A pane smaller than that gets the box
-// fitted to the screen instead, which is better than a box too small to read.
 const (
 	pathPickerFloorWidth = 16
 	pathPickerFloorRows  = 3
 )
 
-// pathPickerRoom is the part of the screen the box must stay in: the focused
-// pane's content area, as the screen shows it. A box fitted only to the screen
-// ran over the rail and over the next pane's status line. ok is false when the
-// pane is too small to hold the smallest box.
 func (m *OS) pathPickerRoom(w *terminal.Window) (image.Rectangle, bool) {
 	border := 1
 	if w.Tiled {
@@ -80,8 +64,6 @@ func (m *OS) pathPickerRoom(w *terminal.Window) (image.Rectangle, bool) {
 	return r, ok
 }
 
-// placePathPicker draws the picker as a layer at the pane's cursor and records
-// where it landed, so the mouse handlers can map a cell to a row.
 func (m *OS) placePathPicker(layers []*lipgloss.Layer) []*lipgloss.Layer {
 	p := m.pathPicker
 	if p == nil {
@@ -110,11 +92,6 @@ func (m *OS) placePathPicker(layers []*lipgloss.Layer) []*lipgloss.Layer {
 	width := max(p.nameWidth+6, lipgloss.Width(line)+6, pathPickerMinWidth)
 	width = min(width, pathPickerMaxWidth, max(room.Dx()-2, overlay.MinDialogWidth))
 
-	// Above the cursor when the box fits there, as a shell's own completion
-	// menu sits next to the line being typed; below it when it does not; and
-	// on the roomier side, with fewer rows, when it fits on neither.
-	// overlay.Place picks the side; the rows are cut here first, to the
-	// roomier side, when the box fits on neither.
 	rows := max(min(len(p.matches), pathPickerRows), 1)
 	above, below := ay-room.Min.Y, room.Max.Y-ay-1
 	if need := rows + pathPickerChrome; above < need && below < need {
@@ -122,8 +99,6 @@ func (m *OS) placePathPicker(layers []*lipgloss.Layer) []*lipgloss.Layer {
 	}
 
 	content, geo := m.renderPathPicker(p, width, rows)
-	// The filter text starts over the cursor's column: the border, the
-	// magnifier and its space come first.
 	x, y, _ := overlay.Place(overlay.PointRect(ax-3, ay), geo.Width, geo.Height, overlayRect(room), overlay.Placement{Side: overlay.SideAbove})
 
 	p.visible = true
@@ -133,9 +108,6 @@ func (m *OS) placePathPicker(layers []*lipgloss.Layer) []*lipgloss.Layer {
 		X(x).Y(y).Z(config.ZIndexPathPicker).ID("path-picker"))
 }
 
-// renderPathPicker draws the box: the folder in the top border, the matches
-// with the best one at the bottom next to the filter line, a rule, the filter
-// line, and the keys in the bottom border.
 func (m *OS) renderPathPicker(p *pathPicker, width, rows int) (string, overlay.Geometry) {
 	pal := m.overlayUI()
 	bg := pal.Canvas
@@ -192,9 +164,6 @@ func (m *OS) renderPathPicker(p *pathPicker, width, rows int) (string, overlay.G
 	return dialog.Render(pal)
 }
 
-// pathPickerTitle is the folder being listed, under the home folder of the
-// pane's machine as ~/..., cut from the left so the end of the path, the part
-// that tells folders apart, stays.
 func (m *OS) pathPickerTitle(p *pathPicker, room int) string {
 	dir := printableTitle(pathroot.ContractHome(p.dir, p.home))
 	if p.loading {
@@ -203,7 +172,6 @@ func (m *OS) pathPickerTitle(p *pathPicker, room int) string {
 	return truncateLeft(dir, room)
 }
 
-// truncateLeft cuts s to width cells from the left, with an ellipsis in front.
 func truncateLeft(s string, width int) string {
 	if width <= 0 {
 		return ""
@@ -223,8 +191,6 @@ func truncateLeft(s string, width int) string {
 	return ell + string(r)
 }
 
-// pathPickerRow draws match i: the mark, the file type's icon, and the name,
-// with a slash after a folder.
 func (m *OS) pathPickerRow(p *pathPicker, i, width int, pal overlay.Palette) string {
 	base := pal.Canvas
 	e := p.entries[p.matches[i]]
@@ -266,8 +232,6 @@ func (m *OS) pathPickerRow(p *pathPicker, i, width int, pal overlay.Palette) str
 	return pal.Row(out, width, st, base)
 }
 
-// pathPickerFilterLine is the magnifier, the path walked so far, the filter
-// text and the caret. A line longer than the box keeps its end.
 func (m *OS) pathPickerFilterLine(p *pathPicker, width int, pal overlay.Palette) string {
 	base := pal.Canvas
 	glyph := overlay.SigilMark()
@@ -276,9 +240,6 @@ func (m *OS) pathPickerFilterLine(p *pathPicker, width int, pal overlay.Palette)
 	}
 	lead := overlay.Style(base).Foreground(pal.AccentBright).Render(glyph) + overlay.Style(base).Render(" ")
 	room := max(width-lipgloss.Width(lead)-1, 1)
-	// The path walked so far gives way from its start before the filter does;
-	// the filter keeps its caret, and scrolls itself when it is wider than
-	// the line (overlay.FieldLine).
 	prefix := printableTitle(p.prefix())
 	before, at, after := p.query.Parts()
 	before, at, after = printableTitle(before), printableTitle(at), printableTitle(after)

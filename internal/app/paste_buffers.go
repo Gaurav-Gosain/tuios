@@ -22,22 +22,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// Paste buffers: the yanks tuios keeps to paste again, after tmux's.
-//
-// Each yank in copy mode, and each mouse selection copied to the clipboard,
-// is also kept as a paste buffer. The clipboard write is unchanged. The
-// paste_buffer action (prefix ]) pastes the newest buffer into the focused
-// pane, and choose_buffer (prefix #) lists them to pick one.
-//
-// A client with a daemon keeps the buffers there (session/verb_buffers.go),
-// so every client and session shares them and `tuios list-buffers` sees
-// them. The calls run off the update loop. A client with no daemon keeps its
-// own store, which ends with the client.
-
-// overlayKindBuffers is the buffer chooser's overlay kind.
 const overlayKindBuffers = "buffers"
 
-// pasteBufferTimeout bounds one buffer call to the daemon.
 const pasteBufferTimeout = 5 * time.Second
 
 // PasteBufferItem is one row of the buffer chooser.
@@ -54,18 +40,14 @@ type PasteBufferItem struct {
 	Session string `json:"session"`
 }
 
-// bufferChooser is the state of the buffer chooser overlay.
 type bufferChooser struct {
-	open  bool
-	items []PasteBufferItem
-	// list is the chooser's cursor and window.
+	open    bool
+	items   []PasteBufferItem
 	list    listnav.State
 	loading bool
 	err     string
 	gen     uint64
-	// target is the pane focused when the chooser opened, which its paste
-	// goes to.
-	target string
+	target  string
 }
 
 // PasteBuffersLoadedMsg carries the buffer list for the chooser.
@@ -78,17 +60,13 @@ type PasteBuffersLoadedMsg struct {
 // PasteBufferFetchedMsg carries one buffer's text, to paste into the pane
 // Window names: the pane that was focused when the key was pressed.
 type PasteBufferFetchedMsg struct {
-	Name   string
-	Data   string
-	Window string
-	Err    error
-	// asked and version are what the paste asked for, so a fallback to the
-	// local store asks the same.
+	Name    string
+	Data    string
+	Window  string
+	Err     error
 	asked   string
 	version uint64
-	// held says the read held the keys typed after the paste key. See
-	// pasteHold.
-	held bool
+	held    bool
 }
 
 // PasteBufferDeletedMsg reports a delete from the chooser.
@@ -103,15 +81,11 @@ type PasteBufferSaveFailedMsg struct {
 	Err  error
 }
 
-// bufferChooserRows is the requested row count of the chooser.
 const (
 	bufferChooserWidth = 64
 	bufferChooserRows  = 10
 )
 
-// localBuffers is the store of a client with no daemon, or with a daemon
-// from before the buffer verbs, with the limits of the config as it stands
-// now.
 func (m *OS) localBuffers() *pastebuf.Store {
 	limit, maxBytes := pastebuf.DefaultLimit, pastebuf.DefaultMaxBytes
 	if m.UserConfig != nil {
@@ -125,13 +99,10 @@ func (m *OS) localBuffers() *pastebuf.Store {
 	return m.pasteBufs
 }
 
-// buffersInDaemon reports whether this client keeps its buffers in the
-// daemon: it has one.
 func (m *OS) buffersInDaemon() bool {
 	return m.IsDaemonSession
 }
 
-// bufferCall makes one buffer verb call to this machine's daemon.
 func (m *OS) bufferCall() func(verb string, params map[string]any) (json.RawMessage, error) {
 	call := m.inboxCaller()
 	return func(verb string, params map[string]any) (json.RawMessage, error) {
@@ -164,13 +135,8 @@ func (m *OS) SaveToPasteBuffers(text string) tea.Cmd {
 	}
 }
 
-// yankPart is the most of a yank one set-buffer call carries. A request line
-// is capped, so a larger yank goes as an upload in parts of this size, on
-// one connection.
 const yankPart = 768 << 10
 
-// uploadYank sends a large yank as an upload: every part on one connection,
-// and the daemon sets the buffer once, when the last arrives.
 func (m *OS) uploadYank(text string) tea.Cmd {
 	build := ""
 	if m.DaemonClient != nil {
@@ -198,14 +164,12 @@ func (m *OS) uploadYank(text string) tea.Cmd {
 	}
 }
 
-// saveLocalBuffer keeps text in this client's own store.
 func (m *OS) saveLocalBuffer(text string) {
 	if _, err := m.localBuffers().Add(text, pastebuf.Owner{}); err != nil && !errors.Is(err, pastebuf.ErrOff) {
 		m.LogInfo("Paste buffer not kept: %v", err)
 	}
 }
 
-// handlePasteBufferSaveFailed logs a yank the daemon did not keep.
 func (m *OS) handlePasteBufferSaveFailed(msg PasteBufferSaveFailedMsg) {
 	m.LogInfo("Paste buffer not kept: %v", msg.Err)
 }
@@ -222,11 +186,6 @@ func (m *OS) PasteNewestBuffer() tea.Cmd {
 	return m.pasteBufferNamed("", w.ID, 0)
 }
 
-// pasteBufferNamed pastes the buffer called name, or the newest for "", into
-// the pane with the id window. The id is taken when the key is pressed, so a
-// pane that takes focus while the text is read does not get the paste. A
-// nonzero version pastes the buffer only while it holds the content the
-// chooser listed.
 func (m *OS) pasteBufferNamed(name, window string, version uint64) tea.Cmd {
 	if !m.buffersInDaemon() {
 		b, err := m.localBuffers().Get(name, version, nil)
@@ -256,7 +215,6 @@ func (m *OS) pasteBufferNamed(name, window string, version uint64) tea.Cmd {
 		}
 		data := res.Data
 		if res.DataB64 != "" {
-			// Every byte, where an older daemon gives text alone.
 			if b, err := base64.StdEncoding.DecodeString(res.DataB64); err == nil {
 				data = string(b)
 			}
@@ -265,25 +223,11 @@ func (m *OS) pasteBufferNamed(name, window string, version uint64) tea.Cmd {
 	}
 }
 
-// pasteHold keeps the keys typed while a paste reads its buffer from the
-// daemon (#1016). The read runs off the update loop, so without the hold a
-// key typed right after the paste key reaches the pane first, and an Enter
-// runs the line without the paste. tmux pastes at once, so a key typed after
-// the paste key always comes after the paste. The hold gives the same order:
-// the keys wait, and go to the input handler in order once the paste is in.
-//
-// The read has a timeout (pasteBufferTimeout), and its answer always comes
-// back as a PasteBufferFetchedMsg, so the hold always ends.
 type pasteHold struct {
-	// pending is how many reads have not answered yet.
 	pending int
-	// keys are the held messages, in the order they came.
-	keys []tea.Msg
+	keys    []tea.Msg
 }
 
-// holdKeyForPaste keeps msg for later and reports true while a paste reads
-// its buffer. Only keyboard input is held: the pointer acts on what is on the
-// screen now.
 func (m *OS) holdKeyForPaste(msg tea.Msg) bool {
 	if m.pasteHold.pending == 0 {
 		return false
@@ -296,9 +240,6 @@ func (m *OS) holdKeyForPaste(msg tea.Msg) bool {
 	return false
 }
 
-// releasePasteHold ends one read. When none is left, it gives the held keys
-// to the input handler in the order they came. A held key can start another
-// paste: the keys after it are held again, behind that paste.
 func (m *OS) releasePasteHold() tea.Cmd {
 	if m.pasteHold.pending > 0 {
 		m.pasteHold.pending--
@@ -320,8 +261,6 @@ func (m *OS) releasePasteHold() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// handlePasteBufferFetched pastes a fetched buffer into the pane it was asked
-// for.
 func (m *OS) handlePasteBufferFetched(msg PasteBufferFetchedMsg) tea.Cmd {
 	d := m.Settings.NotificationDuration
 	if msg.Err != nil {
@@ -345,7 +284,6 @@ func (m *OS) handlePasteBufferFetched(msg PasteBufferFetchedMsg) tea.Cmd {
 		m.ShowNotification("Cannot paste in copy mode. Exit copy mode first.", "warning", d)
 		return nil
 	}
-	// A line feed becomes a carriage return, as tmux's paste-buffer does.
 	if !m.PasteIntoWindow(w, pastebuf.PasteText(msg.Data, false)) {
 		m.ShowNotification("Paste failed", "error", d)
 		return nil
@@ -354,14 +292,10 @@ func (m *OS) handlePasteBufferFetched(msg PasteBufferFetchedMsg) tea.Cmd {
 	return nil
 }
 
-// isChangedErr reports whether err says the buffer was set again after the
-// list showed it, from the daemon or the local store.
 func isChangedErr(err error) bool {
 	return errors.Is(err, pastebuf.ErrChanged) || strings.Contains(err.Error(), "set again")
 }
 
-// isNoBufferErr reports whether err says there is no such buffer, from the
-// daemon or the local store.
 func isNoBufferErr(err error) bool {
 	if errors.Is(err, pastebuf.ErrNone) || errors.Is(err, pastebuf.ErrNotFound) {
 		return true
@@ -396,9 +330,6 @@ func (m *OS) PasteIntoFocused(text string) bool {
 // characters, so text holding ESC[201~ cannot end the bracketed paste early
 // and have the rest run as typed input.
 func (m *OS) PasteIntoWindow(w *terminal.Window, text string) bool {
-	// A TML surface takes a paste into its focused text field. Its PTY only
-	// holds the place, so a paste with no field to take it goes nowhere:
-	// say so rather than lose it unseen.
 	if m.DrawsTML(w) {
 		if !m.TMLPaste(w, text) {
 			m.ShowNotification("Select a text field in the surface first.", "warning", m.Settings.NotificationDuration)
@@ -449,7 +380,6 @@ func (m *OS) OpenBufferChooser() tea.Cmd {
 	}
 }
 
-// bufferItems is the chooser's rows for a local store's buffers.
 func bufferItems(list []pastebuf.Buffer) []PasteBufferItem {
 	out := make([]PasteBufferItem, 0, len(list))
 	for _, b := range list {
@@ -458,7 +388,6 @@ func bufferItems(list []pastebuf.Buffer) []PasteBufferItem {
 	return out
 }
 
-// handlePasteBuffersLoaded fills the chooser.
 func (m *OS) handlePasteBuffersLoaded(msg PasteBuffersLoadedMsg) {
 	if !m.buffers.open || msg.Gen != m.buffers.gen {
 		return
@@ -516,8 +445,6 @@ func (m *OS) BufferChooserDelete() tea.Cmd {
 	if idx < 0 || idx >= len(m.buffers.items) {
 		return nil
 	}
-	// Only the content the row shows goes: a buffer set again since the
-	// list loaded stays.
 	name, version := m.buffers.items[idx].Name, m.buffers.items[idx].Version
 	m.buffers.items = append(m.buffers.items[:idx:idx], m.buffers.items[idx+1:]...)
 	m.buffers.list.Cursor = clampInt(idx, 0, max(len(m.buffers.items)-1, 0))
@@ -533,7 +460,6 @@ func (m *OS) BufferChooserDelete() tea.Cmd {
 	}
 }
 
-// handlePasteBufferDeleted says how a delete ended.
 func (m *OS) handlePasteBufferDeleted(msg PasteBufferDeletedMsg) {
 	d := m.Settings.NotificationDuration
 	if msg.Err != nil && isChangedErr(msg.Err) {
@@ -547,7 +473,6 @@ func (m *OS) handlePasteBufferDeleted(msg PasteBufferDeletedMsg) {
 	m.ShowNotification("Deleted "+msg.Name, "info", d)
 }
 
-// renderBufferChooser draws the chooser on the shared list overlay.
 func (m *OS) renderBufferChooser() (string, overlay.Geometry, []overlayRowHit) {
 	items := m.buffers.items
 	if len(items) > 0 {
@@ -577,12 +502,6 @@ func (m *OS) renderBufferChooser() (string, overlay.Geometry, []overlayRowHit) {
 	})
 }
 
-// bufferChooserRow draws one buffer: its name, the start of its text, and its
-// size come first, and they keep their room. A buffer a process in a pane set
-// says so after them, since the person did not copy that text: "from pane"
-// and the pane's title, cleaned of control characters and runs of space, and
-// cut to bufferPaneTagCells. A pane's title is the pane's to choose, so it
-// can never push the buffer's own fields off the row.
 func bufferChooserRow(b PasteBufferItem, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
 	size := units.Bytes(int64(b.Bytes))
 	nameColor, sampleColor := pal.FgMute, pal.FgDim
@@ -590,13 +509,11 @@ func bufferChooserRow(b PasteBufferItem, selected bool, rowBg color.Color, pal o
 		nameColor, sampleColor = pal.Accent, pal.Fg
 	}
 	name := overlay.Truncate(printableTitle(b.Name), 16)
-	// The marker, the gaps, the name and the size.
 	fixed := 8 + ansi.StringWidth(name) + ansi.StringWidth(size)
 	tag := ""
 	if b.Pane != "" {
 		tag = overlay.Truncate("from pane "+paneTagTitle(b.Pane), bufferPaneTagCells)
 		if width-fixed-ansi.StringWidth(tag)-2 < bufferSampleMinCells {
-			// Not room for both: the tag shrinks to a mark, never the text.
 			tag = "pane"
 		}
 	}
@@ -612,15 +529,11 @@ func bufferChooserRow(b PasteBufferItem, selected bool, rowBg color.Color, pal o
 	return listRowSpans(width, listRowMarker(selected), left, right, rowBg, pal)
 }
 
-// bufferPaneTagCells caps the "from pane" tag of a chooser row, and
-// bufferSampleMinCells is the least of the text the row keeps for it.
 const (
 	bufferPaneTagCells   = 20
 	bufferSampleMinCells = 12
 )
 
-// paneTagTitle is a pane's title for the chooser: printable, with each run of
-// space or control characters made one space.
 func paneTagTitle(title string) string {
 	return strings.Join(strings.Fields(printableTitle(title)), " ")
 }

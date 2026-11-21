@@ -8,22 +8,8 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// The frame check finds what the direct pane and a kept canvas (compose.go)
-// miss. With TUIOS_FRAME_CHECK naming a file, every frame that draws a direct
-// pane and runs no pass over its layers, kept or not, is also drawn afresh
-// into a scratch canvas: cleared to the desktop's ground, every layer drawn in
-// depth order, and the pane's cells written right after its own layer. The
-// two are compared over the whole screen, the pane's rectangle included, so a
-// layer drawn under the pane's cells shows as a miss as well as a cell a kept
-// canvas left from an older frame. A difference is written to the file, and
-// the e2e harness fails the test that drew it.
-//
-// It costs a full compose on every such frame, so it is for tests only.
-
-// frameCheckPath is the file the frame check writes to, or "" when it is off.
 var frameCheckPath = os.Getenv("TUIOS_FRAME_CHECK")
 
-// frameCheckMax bounds the reports one process writes.
 const frameCheckMax = 20
 
 var frameCheckState struct {
@@ -32,9 +18,6 @@ var frameCheckState struct {
 	scratch *frameCanvas
 }
 
-// checkFrame draws the frame's layers afresh and reports the first cell where
-// the canvas differs. ordered is the frame's layers in depth order, the first
-// one the compositor's root.
 func (m *OS) checkFrame(canvas *frameCanvas, ordered []composedLayer, painted bool, grounds *frameGrounds, desktop ground, pane *directPane, kept bool) {
 	if frameCheckPath == "" || pane == nil {
 		return
@@ -49,8 +32,6 @@ func (m *OS) checkFrame(canvas *frameCanvas, ordered []composedLayer, painted bo
 		s.scratch = &frameCanvas{Buffer: *uv.NewBuffer(canvas.Width(), canvas.Height())}
 	}
 	fresh := s.scratch
-	// A held pane draws the cells its rectangle had (heldSource), which the
-	// canvas still has when it was kept.
 	held := m.heldSource(canvas, kept)
 	fresh.ClearTo(desktop)
 	area := fresh.Bounds()
@@ -81,7 +62,6 @@ func (m *OS) checkFrame(canvas *frameCanvas, ordered []composedLayer, painted bo
 	}
 }
 
-// reportFrameMiss appends one miss to the check's file.
 func reportFrameMiss(line string) {
 	f, err := os.OpenFile(frameCheckPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {

@@ -8,15 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
-// The agents section is priority-sorted by default, so its order is a function
-// of live agent state: a pane going blocked thirty rows down moves to the top
-// and pushes every row under the reader down one. These are the claims about
-// what the reader keeps when that happens.
-
-// agentsScrollTree is one attached session of n panes all running an agent,
-// with the states of the ones named in loud overridden. Every other pane is
-// working, so the priority sort leaves them in tree order and the only thing
-// that moves a row is a state the test set.
 func agentsScrollTree(n int, loud map[int]string) sessiontree.Tree {
 	windows := make([]sessiontree.WindowInput, 0, n)
 	for i := range n {
@@ -37,9 +28,6 @@ func agentsScrollTree(n int, loud map[int]string) sessiontree.Tree {
 	})
 }
 
-// railAgentRowIDs is the windows the agents section actually drew, in the order
-// it drew them. Read off the hit rectangles the renderer recorded, which is the
-// only account of what reached the screen.
 func railAgentRowIDs(m *OS) []string {
 	var out []string
 	for _, h := range m.SidebarHits {
@@ -71,8 +59,6 @@ func TestRailAgentsViewportHoldsItsRowWhenTheSortReorders(t *testing.T) {
 		t.Fatalf("the agents section drew %d rows, too few to scroll under a reader", len(before))
 	}
 
-	// The cursor rests one row into the visible block, which is where a reader
-	// steering with j/k leaves it.
 	held := before[1]
 	for i, r := range m.SidebarNav {
 		if r.Kind == sidebarRowAgent && r.WindowID == held {
@@ -80,8 +66,6 @@ func TestRailAgentsViewportHoldsItsRowWhenTheSortReorders(t *testing.T) {
 		}
 	}
 
-	// A pane the reader cannot see asks for a human. Priority puts it first, and
-	// every row the reader was looking at moves down one.
 	loudIdx := panes - 1
 	if strings.Contains(strings.Join(before, " "), fmt.Sprintf("pane-%02d", loudIdx)) {
 		t.Fatalf("the pane meant to be below the fold was on screen: %v", before)
@@ -110,7 +94,6 @@ func TestRailAgentsAnchorSurvivesItsRowVanishing(t *testing.T) {
 	m.SidebarScroll[sidebarSectionAgents] = 3
 	m.sidebarPanelLinesForTree(agentsScrollTree(12, nil))
 
-	// Every pane the anchor could name goes at once.
 	m.sidebarPanelLinesForTree(agentsScrollTree(2, nil))
 	if m.SidebarScroll[sidebarSectionAgents] != 0 {
 		t.Errorf("the agents scroll clamped to %d over a 2-row section, want 0", m.SidebarScroll[sidebarSectionAgents])

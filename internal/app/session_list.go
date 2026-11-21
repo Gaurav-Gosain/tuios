@@ -14,12 +14,10 @@ func (m *OS) RefreshSessionList() []sessiontree.Node {
 		return nil
 	}
 
-	// Query daemon for fresh session list (not cached)
 	sessions, err := m.DaemonClient.RefreshSessionList()
 	currentSession := m.DaemonClient.SessionName()
 
 	if err != nil {
-		// Fall back to cached names on error
 		m.LogWarn("Failed to refresh session list from daemon: %v", err)
 		names := m.DaemonClient.AvailableSessionNames()
 		items := make([]sessiontree.Node, 0, len(names))

@@ -16,103 +16,54 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The local echo of a sent reply.
-//
-// A reply goes to the daemon's queue and is typed when the agent comes to
-// rest, and the thread shows it only once the agent's transcript has it. So
-// a reply shows at the thread's end, as the person's message, from the moment
-// it is sent, with a state line under it:
-//
-//	Sending                       on its way to the daemon, or being typed
-//	Queued, typed when it rests   in the queue; a click on cancel drops it
-//	Not sent: <why>               refused; a click on retry sends it again
-//
-// It goes when the transcript entry for it arrives: a prompt of the person's
-// with the same text, that the thread did not hold when the reply was sent,
-// so an earlier prompt with the same words never takes it. A reply typed into
-// a pane whose transcript never shows it goes after echoTypedFor.
-//
-// The queue is the daemon's, so a queued reply shows again when the view
-// opens again, or in a new client: the thread asks list-queued for the pane
-// and makes an echo for each message the person queued that it does not show,
-// from the daemon's preview of it. While a reply waits in the queue, the
-// thread asks again every echoPoll, to see it leave.
-
-// echoState is where a reply is.
 type echoState uint8
 
 const (
-	// echoSending is a reply on its way to the daemon, or being typed.
 	echoSending echoState = iota
-	// echoQueued waits in the pane's queue for the agent's rest.
 	echoQueued
-	// echoTyped has left the queue, typed, and waits for the transcript.
 	echoTyped
-	// echoFailed was refused.
 	echoFailed
 )
 
-// echoTypedFor is how long a typed reply shows without its transcript entry:
-// a harness that writes no transcript, or one that writes it late.
 const echoTypedFor = 2 * time.Minute
 
-// echoPoll is how often the thread asks the daemon about a queued reply.
 const echoPoll = 2 * time.Second
 
-// echoMax bounds the echoes the client keeps.
 const echoMax = 64
 
-// replyEcho is one sent reply the thread shows before the transcript does.
 type replyEcho struct {
-	// n numbers the echo, for the hits of its cancel and retry.
-	n uint64
-	// key is the thread's: host, session and window, as agentKey.
+	n                          uint64
 	key                        string
 	host, session, window, who string
-	// id is the queue entry's, once the daemon queued it.
-	id string
-	// text is the reply. preview says it is the daemon's one-line preview of
-	// it, for an echo made from list-queued, and matches the start of the
-	// transcript entry.
-	text    string
-	preview bool
-	parts   []composer.Part
-	at      time.Time
-	state   echoState
-	why     string
-	// send is the send whose answer sets the state, 0 once it came.
-	send uint64
-	// seen is the ids of the person's prompts the thread held when the reply
-	// was sent: none of them is its entry.
-	seen map[string]bool
-	// typedAt is when it left the queue.
-	typedAt time.Time
+	id                         string
+	text                       string
+	preview                    bool
+	parts                      []composer.Part
+	at                         time.Time
+	state                      echoState
+	why                        string
+	send                       uint64
+	seen                       map[string]bool
+	typedAt                    time.Time
 }
 
-// threadEchoes is the client's echoes and the generation of what they show.
 type threadEchoes struct {
-	list []*replyEcho
-	seq  uint64
-	gen  uint64
-	// polling says an echoPoll tick is out.
+	list    []*replyEcho
+	seq     uint64
+	gen     uint64
 	polling bool
 }
 
-// echoTickMsg asks the daemon about the queued replies again.
 type echoTickMsg struct{}
 
-// echoQueueMsg is a pane's queue, as list-queued gave it.
 type echoQueueMsg struct {
 	key                        string
 	host, session, window, who string
 	entries                    []echoQueueEntry
 	err                        error
-	// restore makes echoes of the person's messages the client does not
-	// know: the thread was opened.
-	restore bool
+	restore                    bool
 }
 
-// echoQueueEntry is one message in a pane's queue.
 type echoQueueEntry struct {
 	ID      string `json:"id"`
 	By      string `json:"by"`
@@ -122,13 +73,11 @@ type echoQueueEntry struct {
 	At      int64  `json:"at"`
 }
 
-// echoCancelledMsg is the answer to a click on cancel.
 type echoCancelledMsg struct {
 	n   uint64
 	err error
 }
 
-// addEcho shows a reply just sent at the end of its thread.
 func (m *OS) addEcho(host, sessionID, windowID, who, text string, parts []composer.Part, send uint64) {
 	ec := &m.Inbox.echoes
 	ec.seq++
@@ -149,7 +98,6 @@ func (m *OS) addEcho(host, sessionID, windowID, who, text string, parts []compos
 	m.echoChanged(key)
 }
 
-// echoChanged redraws the thread an echo is in.
 func (m *OS) echoChanged(key string) {
 	m.Inbox.echoes.gen++
 	if t := m.Inbox.threads.byKey[key]; t != nil {
@@ -158,7 +106,6 @@ func (m *OS) echoChanged(key string) {
 	m.cockpitTouch()
 }
 
-// echoReplied takes the daemon's answer to a reply's queue-prompt.
 func (m *OS) echoReplied(msg InboxRepliedMsg) tea.Cmd {
 	if msg.Send == 0 {
 		return nil
@@ -172,7 +119,6 @@ func (m *OS) echoReplied(msg InboxRepliedMsg) tea.Cmd {
 		case msg.Err != nil:
 			e.state, e.why = echoFailed, echoRefusal(msg.Err)
 		case msg.Now:
-			// Typed at once: it waits for the transcript only.
 			e.state, e.typedAt = echoTyped, time.Now()
 		case msg.Delivering:
 			e.id, e.state = msg.ID, echoSending
@@ -185,7 +131,6 @@ func (m *OS) echoReplied(msg InboxRepliedMsg) tea.Cmd {
 	return nil
 }
 
-// echoRefusal is why the daemon refused a reply, in the state line's words.
 func echoRefusal(err error) string {
 	callErr, ok := errors.AsType[*session.VerbCallError](err)
 	if !ok {
@@ -207,7 +152,6 @@ func echoRefusal(err error) string {
 	return echoWhy(callErr.Message)
 }
 
-// echoWhy is a refusal as the state line says it: its first sentence, short.
 func echoWhy(s string) string {
 	s = strings.TrimSpace(s)
 	if i := strings.Index(s, ". "); i > 0 {
@@ -220,7 +164,6 @@ func echoWhy(s string) string {
 	return s
 }
 
-// echoDropped forgets the echo of a queued message that was dropped.
 func (m *OS) echoDropped(sessionID, windowID, id string) {
 	if id == "" {
 		return
@@ -235,9 +178,6 @@ func (m *OS) echoDropped(sessionID, windowID, id string) {
 	}
 }
 
-// echoTake drops the echoes of a thread whose transcript entry has arrived:
-// a prompt of the person's the thread did not hold at the send, at or after
-// it, with the reply's text. Each entry takes one echo, the oldest.
 func (m *OS) echoTake(t *agentThread) {
 	ec := &m.Inbox.echoes
 	if t == nil || len(ec.list) == 0 {
@@ -259,15 +199,12 @@ func (m *OS) echoTake(t *agentThread) {
 	}
 }
 
-// echoFound reports whether t holds the transcript entry of e, and marks the
-// entry taken.
 func (m *OS) echoFound(t *agentThread, e *replyEcho, taken map[string]bool) bool {
 	want := echoNorm(e.text)
 	for _, en := range t.entries {
 		if !ckPrompt(en) || e.seen[en.ID] || taken[en.ID] {
 			continue
 		}
-		// A transcript's clock and this one can differ a little.
 		if en.At > 0 && time.UnixMilli(en.At).Before(e.at.Add(-5*time.Second)) && !e.preview {
 			continue
 		}
@@ -280,11 +217,8 @@ func (m *OS) echoFound(t *agentThread, e *replyEcho, taken map[string]bool) bool
 	return false
 }
 
-// echoNorm is text as a match reads it: its words, one space apart.
 func echoNorm(s string) string { return strings.Join(strings.Fields(s), " ") }
 
-// echoPollCmd asks the daemon, after echoPoll, about the panes with a reply
-// in their queue. It is nil while one is out or none waits.
 func (m *OS) echoPollCmd() tea.Cmd {
 	ec := &m.Inbox.echoes
 	if ec.polling || !m.echoWaiting() {
@@ -294,8 +228,6 @@ func (m *OS) echoPollCmd() tea.Cmd {
 	return tea.Tick(echoPoll, func(time.Time) tea.Msg { return echoTickMsg{} })
 }
 
-// echoWaiting reports whether an echo waits on the daemon's queue or on its
-// transcript entry.
 func (m *OS) echoWaiting() bool {
 	for _, e := range m.Inbox.echoes.list {
 		if e.state == echoQueued || e.state == echoTyped || e.state == echoSending && e.id != "" {
@@ -305,8 +237,6 @@ func (m *OS) echoWaiting() bool {
 	return false
 }
 
-// applyEchoTick asks list-queued for each pane with a queued reply, and lets
-// a typed reply go once echoTypedFor has passed.
 func (m *OS) applyEchoTick() tea.Cmd {
 	ec := &m.Inbox.echoes
 	ec.polling = false
@@ -330,8 +260,6 @@ func (m *OS) applyEchoTick() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// echoQueueCmd reads a pane's queue. restore makes echoes of the person's
-// queued messages the client does not show.
 func (m *OS) echoQueueCmd(host, sessionID, windowID, who string, restore bool) tea.Cmd {
 	call := m.queueCaller(host)
 	if call == nil {
@@ -340,7 +268,6 @@ func (m *OS) echoQueueCmd(host, sessionID, windowID, who string, restore bool) t
 	key := host + "\x00" + sessionID + "\x00" + windowID
 	params := map[string]any{"session": sessionID, "window": windowID}
 	if host != "" {
-		// This machine's daemon asks that machine's over the link.
 		params["host"] = host
 	}
 	return func() tea.Msg {
@@ -362,8 +289,6 @@ func (m *OS) echoQueueCmd(host, sessionID, windowID, who string, restore bool) t
 	}
 }
 
-// applyEchoQueue moves each echo of the pane to where the daemon has it: still
-// queued, being typed, or gone from the queue, which is typed.
 func (m *OS) applyEchoQueue(msg echoQueueMsg) tea.Cmd {
 	if msg.err != nil {
 		return nil
@@ -388,8 +313,6 @@ func (m *OS) applyEchoQueue(msg echoQueueMsg) tea.Cmd {
 		case ok && q.State == "delivering":
 			next = echoSending
 		case ok && q.State == "stalled":
-			// Typed, and not taken by the agent yet: the daemon watches it,
-			// and the transcript shows it once the agent takes it.
 			next = echoTyped
 			if e.typedAt.IsZero() {
 				e.typedAt = time.Now()
@@ -430,9 +353,6 @@ func (m *OS) applyEchoQueue(msg echoQueueMsg) tea.Cmd {
 	return m.echoPollCmd()
 }
 
-// echoMine reports whether a queued message is one the person sent: queued
-// as the person on this machine, or, on a linked machine, by this machine's
-// link for the person here.
 func echoMine(host string, q echoQueueEntry) bool {
 	if host == "" {
 		return q.By == "human"
@@ -440,7 +360,6 @@ func echoMine(host string, q echoQueueEntry) bool {
 	return strings.HasPrefix(q.By, "link:") && strings.HasPrefix(q.From, "the person on ")
 }
 
-// echoAction runs a click on an echo's cancel or retry.
 func (m *OS) echoAction(action string) (tea.Cmd, bool) {
 	what, rest, ok := strings.Cut(strings.TrimPrefix(action, "echo:"), ":")
 	if !ok || !strings.HasPrefix(action, "echo:") {
@@ -459,8 +378,6 @@ func (m *OS) echoAction(action string) (tea.Cmd, bool) {
 	if e == nil {
 		return nil, true
 	}
-	// Both act as the person, with the attach nonce: only a click or a key
-	// from this terminal does that.
 	if m.ProcessingRemoteKeys {
 		m.ShowNotification(inboxRemoteQueueRefusal, "error", m.Settings.NotificationDuration)
 		return nil, true
@@ -509,7 +426,6 @@ func (m *OS) echoAction(action string) (tea.Cmd, bool) {
 	return nil, true
 }
 
-// applyEchoCancelled forgets a cancelled echo, or says why the cancel failed.
 func (m *OS) applyEchoCancelled(msg echoCancelledMsg) {
 	ec := &m.Inbox.echoes
 	for i, e := range ec.list {
@@ -527,10 +443,6 @@ func (m *OS) applyEchoCancelled(msg echoCancelledMsg) {
 	}
 }
 
-// threadEchoLines draws the echoes of thread key at its end: each as the
-// person's message, with its state line under it. It returns the lines and their hits.
-// stateAt is the agent's last state change, which says whether it took a
-// typed reply.
 func (m *OS) threadEchoLines(key string, width int, stateAt int64) ([]string, []string) {
 	var mine []*replyEcho
 	for _, e := range m.Inbox.echoes.list {
@@ -558,17 +470,11 @@ func (m *OS) threadEchoLines(key string, width int, stateAt int64) ([]string, []
 			add(ckLine{bg: l.panel, bar: "▎", barInk: pal.FgMute, indent: 3, segs: []ckSeg{{t: s, fg: pal.FgDim}}})
 		}
 		add(ckLine{bg: l.panel, bar: "▎", barInk: pal.FgMute})
-		// The state takes the row the prompt's card leaves blank, so the
-		// echo is as tall as the card that replaces it, and the lines
-		// above stay put when the transcript logs the prompt.
 		add(m.echoStateLine(l, e, stateAt))
 	}
 	return out, hits
 }
 
-// echoStateLine is an echo's state, under it, with its cancel or retry. A
-// typed reply the agent has moved on from since (its state changed after
-// the reply was typed) is no longer waited for: it says it was sent.
 func (m *OS) echoStateLine(l ckLook, e *replyEcho, stateAt int64) ckLine {
 	pal := l.pal
 	mark, what, ink := "◌", "Sending", pal.Info
@@ -600,15 +506,10 @@ func (m *OS) echoStateLine(l ckLook, e *replyEcho, stateAt int64) ckLine {
 	return ckLine{indent: 3, segs: segs, hit: act}
 }
 
-// echoTakenBy reports whether the agent changed state after e was typed, so
-// it has taken the reply. stateAt is the agent's last state change.
 func echoTakenBy(e *replyEcho, stateAt int64) bool {
 	return e.state == echoTyped && !e.typedAt.IsZero() && stateAt > e.typedAt.UnixNano()
 }
 
-// echoesBefore reports whether the agent's last state change came after
-// every echo of thread key was sent, so its message answers them and is
-// drawn under them.
 func (m *OS) echoesBefore(key string, stateAt int64) bool {
 	found := false
 	for _, e := range m.Inbox.echoes.list {

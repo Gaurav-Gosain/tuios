@@ -8,10 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// accentCursorFloor is the ratio the cursor glyph has to clear against the
-// swatch it is drawn on. It is the WCAG graphics floor rather than the text one:
-// the mark is a solid 3.0-class shape, and no pair of a fixed light and a fixed
-// dark ink clears 4.5 across the whole colour space.
 const accentCursorFloor = 3.0
 
 // TestAccentCursorReadsOnEverySwatch sweeps the whole space the picker can put
@@ -35,10 +31,8 @@ func TestAccentCursorReadsOnEverySwatch(t *testing.T) {
 				measure(accentCellColor(h, col, row, cols, rows))
 			}
 		}
-		// The hue strip and the harmony chips carry the cursor too.
 		measure(hslToRGB(h, 1, 0.5))
 	}
-	// Every slot swatch wears the cursor when the quick-pick row has it.
 	for i := range accentSwatchCount {
 		measure(SlotAccent(i).RGB())
 	}
@@ -63,8 +57,6 @@ func TestContrastTextPicksTheBetterInk(t *testing.T) {
 		}
 	}
 
-	// The inks it chooses between, learned from what it returns rather than
-	// named here: this test is about the choice, not the palette.
 	inks := map[color.Color]bool{}
 	for _, bg := range grounds {
 		inks[theme.ContrastText(bg)] = true

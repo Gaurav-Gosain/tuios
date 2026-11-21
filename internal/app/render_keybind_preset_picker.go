@@ -17,16 +17,12 @@ var presetPickerHints = []overlay.Hint{
 	{Key: "esc", Label: "cancel"},
 }
 
-// presetPickerLayout is the fitted width and row count. The body has the list
-// and three footer lines: what the shell loses, where the tuios keys are, and
-// a blank.
 func (m *OS) presetPickerLayout() (width, rows int, hints []overlay.Hint) {
 	width = m.panelWidth(presetPickerWidth)
 	rows, hints = m.panelBody(len(config.Presets()), 4, width, nil, presetPickerHints)
 	return width, rows, hints
 }
 
-// renderPresetPicker draws the picker.
 func (m *OS) renderPresetPicker() (string, overlay.Geometry, []overlayRowHit) {
 	p := &m.presetPicker
 	width, visible, hints := m.presetPickerLayout()

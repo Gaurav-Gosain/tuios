@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// dockMinimizedOS is an OS with two minimized panes, which is what puts entries
-// on the dock at all.
 func dockMinimizedOS(t testing.TB) *OS {
 	t.Helper()
 	a := newTestWindow(t, "alpha", 60, 20)
@@ -19,8 +17,6 @@ func dockMinimizedOS(t testing.TB) *OS {
 	m := newTestOS(a)
 	m.Windows = []*terminal.Window{a, b}
 	m.Width, m.Height = 160, 40
-	// Flat pills: dockEntryColumns finds an entry by its label, and a cap
-	// would put the entry's edge one column out from it.
 	m.Settings.DockPillCaps = false
 	m.CurrentWorkspace = 1
 	for i, w := range m.Windows {
@@ -32,8 +28,6 @@ func dockMinimizedOS(t testing.TB) *OS {
 	return m
 }
 
-// dockEntryColumns finds where a minimized entry's label was actually drawn on
-// the dock row, which is the geometry a click has to agree with.
 func dockEntryColumns(t *testing.T, m *OS, label string) (x0, x1 int) {
 	t.Helper()
 	dock, top := m.renderDockString()
@@ -47,8 +41,6 @@ func dockEntryColumns(t *testing.T, m *OS, label string) (x0, x1 int) {
 	if i < 0 {
 		t.Fatalf("the dock never drew %q:\n%s", label, row)
 	}
-	// Columns, not bytes: the dock's mode glyph is multi-byte, so a byte offset
-	// lands a couple of columns left of the label and hides a real misalignment.
 	x0 = lipgloss.Width(row[:i])
 	return x0, x0 + lipgloss.Width(label)
 }
@@ -79,20 +71,17 @@ func TestDockMinimizedEntriesAreClickableWhereTheyAreDrawn(t *testing.T) {
 				x0, x1 := dockEntryColumns(t, m, "1:alpha")
 				y := m.GetDockbarContentYPosition()
 
-				// Every column the entry occupies restores that entry.
 				for x := x0; x < x1; x++ {
 					if got := m.DockItemAt(x, y); got != 0 {
 						t.Errorf("column %d of the alpha entry routed to window %d, want 0", x, got)
 					}
 				}
-				// Its neighbours are not it.
 				if got := m.DockItemAt(x0-2, y); got == 0 {
 					t.Errorf("the column left of the alpha entry still routed to it")
 				}
 				if got := m.DockItemAt(x1+1, y); got == 0 {
 					t.Errorf("the column right of the alpha entry still routed to it")
 				}
-				// The dock is one row.
 				above := y - 1
 				if config.Global.DockbarPosition == "top" {
 					above = y + 1
@@ -101,7 +90,6 @@ func TestDockMinimizedEntriesAreClickableWhereTheyAreDrawn(t *testing.T) {
 					t.Errorf("the row off the dock routed to window %d", got)
 				}
 
-				// The second entry is reachable and is a different window.
 				bx0, bx1 := dockEntryColumns(t, m, "2:bravo")
 				for x := bx0; x < bx1; x++ {
 					if got := m.DockItemAt(x, y); got != 1 {
@@ -109,10 +97,6 @@ func TestDockMinimizedEntriesAreClickableWhereTheyAreDrawn(t *testing.T) {
 					}
 				}
 
-				// The entries are centred against the left and right regions, both
-				// of which change width on their own (the mode pill, the stats
-				// readout). The click has to answer for the frame on screen, so
-				// state moving on without a repaint must not move the target.
 				m.Mode = TerminalMode
 				for x := x0; x < x1; x++ {
 					if got := m.DockItemAt(x, y); got != 0 {

@@ -17,22 +17,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// An agent row is drawn from tokens: the facts the row has about its pane, each
-// with a name a person can write in config. Which tokens the row shows and in
-// what order is [appearance.sidebar.agent_row].tokens; how each is inked is the
-// token's own table and its value rules. See config/sidebar_agent_row.go for
-// the surface and its reasons.
-//
-// The row keeps its shape whatever the order says. Tokens before name are the
-// prefix, joined with "/" as the session and harness always were; tokens after
-// it follow the name with the rail's separator; elapsed sits at the right
-// edge; message takes the second line when the rail has room for one, and
-// harness moves down to that line with it, which is where the two were before
-// any of this was configurable. So the shipped order draws the shipped row,
-// and a person who reorders the list moves things within those homes.
-
-// sidebarAgentToken is one token of one row: its drawn text, and its number
-// when the token is one, which is what the gt and lt rules read.
 type sidebarAgentToken struct {
 	Name      string
 	Text      string
@@ -40,8 +24,6 @@ type sidebarAgentToken struct {
 	HasNumber bool
 }
 
-// sidebarAgentTokenValue resolves one token for an entry. variant says whether
-// the rail is wide enough for the elapsed figure, which the narrow rail drops.
 func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant int, now time.Time) sidebarAgentToken {
 	tk := sidebarAgentToken{Name: name}
 	switch name {
@@ -50,14 +32,8 @@ func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant in
 			tk.Text = printableTitle(e.SessionLabel)
 		}
 	case "harness":
-		// A pane running an agent is usually already named after it, and a
-		// row reading "claude/claude" spends half its width saying one thing
-		// twice. The token earns its cells only when it adds a name.
 		h := sidebarHarnessLabel(e.Harness)
 		if h == "" {
-			// A program that reports over OSC 7501 names itself with app.
-			// It is the program's word, drawn as text and never looked up as
-			// a harness.
 			if sum, ok := programSummary(e.Program); ok {
 				h = printableTitle(sum.App)
 			}
@@ -70,8 +46,6 @@ func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant in
 	case "state":
 		tk.Text = sidebarStateWords(displayState(e.State, e.DoneSeen, e.Subagents))
 	case "progress":
-		// "40%": the progress of the pane's OSC 7501 summary record, while
-		// it works or waits. Its number is the percent, for gt and lt.
 		if sum, ok := programSummary(e.Program); ok {
 			if tk.Text = programProgressText(sum); tk.Text != "" {
 				tk.Number, tk.HasNumber = float64(sum.Progress), true
@@ -92,9 +66,6 @@ func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant in
 	case "host":
 		tk.Text = printableTitle(e.Host)
 	case "now":
-		// What a working agent is doing. The daemon clears it at rest, and a
-		// pane blocked on a prompt says what it asks in its need and message,
-		// so it draws only while the agent works.
 		if e.State == "working" {
 			tk.Text = printableTitle(toolLineLabel(sidebarAgentMetaValue(e.Meta, "now")))
 		}
@@ -106,10 +77,6 @@ func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant in
 			tk.Number, tk.HasNumber = pct, true
 		}
 	case "subagents":
-		// "2 subagents" on any row, since a pane at rest with subagents at
-		// work is the case it is for. Its number is the count, for gt and lt.
-		// With rows of their own under this one, "3 of 4 run" says how
-		// many of them still work.
 		if e.ChildRows > 0 {
 			tk.Text = subagentsRunText(runningSubagents(e.Children), len(e.Children))
 		} else {
@@ -119,8 +86,6 @@ func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant in
 			tk.Number, tk.HasNumber = float64(e.Subagents), true
 		}
 	case "pr":
-		// "PR #12 open pass": the pull request of the session's branch, as
-		// the daemon last read it from gh.
 		tk.Text = printableTitle(e.PR)
 	default:
 		if key, ok := config.SidebarMetaTokenKey(name); ok {
@@ -135,22 +100,14 @@ func (m *OS) sidebarAgentTokenValue(name string, e sidebarAgentEntry, variant in
 	return tk
 }
 
-// sidebarAgentTokenPlan is where each configured token lands on a row.
 type sidebarAgentTokenPlan struct {
-	// Prefix is the run before the name, joined with "/".
 	Prefix []sidebarAgentToken
-	// Name is the name token, or empty text when the list leaves it out.
-	Name sidebarAgentToken
-	// After is the run following the name, joined with the rail's separator.
-	After []sidebarAgentToken
-	// Right is the figure at the right edge: elapsed, when it is listed.
-	Right sidebarAgentToken
-	// Note is the second line, in list order.
-	Note []sidebarAgentToken
+	Name   sidebarAgentToken
+	After  []sidebarAgentToken
+	Right  sidebarAgentToken
+	Note   []sidebarAgentToken
 }
 
-// sidebarAgentTokensFor places an entry's tokens. tall says the row has a
-// second line, which is where message goes and harness goes with it.
 func (m *OS) sidebarAgentTokensFor(e sidebarAgentEntry, variant int, tall bool, now time.Time) sidebarAgentTokenPlan {
 	var plan sidebarAgentTokenPlan
 	spec := &m.Settings.SidebarAgentRow
@@ -158,8 +115,6 @@ func (m *OS) sidebarAgentTokensFor(e sidebarAgentEntry, variant int, tall bool, 
 	needAt, messageAt := -1, -1
 	for _, name := range spec.Tokens {
 		if name == "meta" {
-			// Every key the pane reported that no $key token places itself,
-			// in the pane's own order.
 			if tall {
 				for _, t := range e.Meta {
 					if spec.Has("$"+t.Key) || slices.Contains(config.SidebarFeedMetaKeys, t.Key) {
@@ -198,7 +153,6 @@ func (m *OS) sidebarAgentTokensFor(e sidebarAgentEntry, variant int, tall bool, 
 			}
 			continue
 		}
-		// A missing value and its separator vanish.
 		if tk.Text == "" {
 			continue
 		}
@@ -208,8 +162,6 @@ func (m *OS) sidebarAgentTokensFor(e sidebarAgentEntry, variant int, tall bool, 
 			plan.After = append(plan.After, tk)
 		}
 	}
-	// A screen rule's message is "approval: <the prompt>", and the need token
-	// already said approval, so the message keeps only the prompt.
 	if needAt >= 0 && messageAt >= 0 {
 		if _, kind := sidebarAgentNeed(e.State, e.DoneSeen, e.AgentKind, e.Message); kind {
 			rest := sidebarAgentMessageRest(plan.Note[messageAt].Text)
@@ -224,12 +176,6 @@ func (m *OS) sidebarAgentTokensFor(e sidebarAgentEntry, variant int, tall bool, 
 	return plan
 }
 
-// sidebarAgentQuietMessage drops the message from a note line where it says
-// less than the row's own rule: on a working row that shows what the agent is
-// doing now, which is the same fact fresher, and on a row at rest, which
-// needs nothing from anyone and whose last note is old news. A finished turn
-// not yet seen keeps its message, which is the first line of what the agent
-// said, and a row that needs you keeps what it asks.
 func sidebarAgentQuietMessage(note []sidebarAgentToken, e sidebarAgentEntry) []sidebarAgentToken {
 	drop := false
 	switch sidebarAgentGroup(e.State, e.DoneSeen) {
@@ -244,9 +190,6 @@ func sidebarAgentQuietMessage(note []sidebarAgentToken, e sidebarAgentEntry) []s
 	return slices.DeleteFunc(note, func(tk sidebarAgentToken) bool { return tk.Name == "message" })
 }
 
-// sidebarContextPercent reads a context value as a percent: "42%", "42.5%" or
-// "42". ok is false for anything else, such as a token count a harness sent
-// on its own, which says nothing about how full the window is.
 func sidebarContextPercent(v string) (float64, bool) {
 	v = strings.TrimSpace(v)
 	if v == "" {
@@ -261,11 +204,6 @@ func sidebarContextPercent(v string) (float64, bool) {
 	return f, true
 }
 
-// sidebarTokenDefaultLook is the look a token has before its table says
-// anything: the context warning is in the warning ink, a pull request's
-// failing checks in the error ink, pending ones in the warning ink, passing
-// ones and a merge in the success ink, and every other token starts from the
-// rail's own style.
 func sidebarTokenDefaultLook(tk sidebarAgentToken) config.SidebarTokenLook {
 	switch tk.Name {
 	case "context":
@@ -283,9 +221,6 @@ func sidebarTokenDefaultLook(tk sidebarAgentToken) config.SidebarTokenLook {
 	return config.SidebarTokenLook{}
 }
 
-// sidebarQuietMark is what a quiet pane's row says after its name: the word while
-// avail leaves the name its keep, a single letter when it does not, and nothing on
-// a row with no cell to spare. avail is the cells for the name and the mark.
 func sidebarQuietMark(avail, nameW int, sep string) string {
 	word := sep + "quiet"
 	if avail-lipgloss.Width(word) >= railNameKeep(nameW) {
@@ -297,10 +232,6 @@ func sidebarQuietMark(avail, nameW int, sep string) string {
 	return ""
 }
 
-// sidebarAgentNeedText is the need token as drawn: the word, and the wait when
-// the identity line is not showing it, which is the narrow rail and a row with
-// no elapsed token. How long a pane has been waiting on you is the one figure
-// a row that needs you must not lose.
 func (m *OS) sidebarAgentNeedText(e sidebarAgentEntry, variant int, now time.Time) string {
 	if e.Reason == session.AgentReasonSilent {
 		return silentNote(e.StateAt, now)
@@ -323,16 +254,12 @@ func (m *OS) sidebarAgentNeedText(e sidebarAgentEntry, variant int, now time.Tim
 	}
 }
 
-// silentNote is the need of a silent row: how long the agent has sent no
-// report, from its last one. A rail row redraws when its age crosses a
-// minute (agentElapsedBucket), so it counts in whole minutes.
 func silentNote(lastReport int64, now time.Time) string {
 	d := now.Sub(time.Unix(0, lastReport))
 	switch {
 	case lastReport <= 0:
 		return "No report"
 	case d < time.Minute:
-		// The rail writes a fresh age as "<1m" too.
 		return "No report for <1 min"
 	case d < 2*time.Hour:
 		return "No report for " + strconv.Itoa(int(d.Minutes())) + " min"
@@ -340,10 +267,6 @@ func silentNote(lastReport int64, now time.Time) string {
 	return "No report for " + strconv.Itoa(int(d.Hours())) + " h"
 }
 
-// sidebarNoteToken reports the tokens that only ever draw on a row's second
-// line: the note the pane reported, what the row needs from you, and the
-// pane's metadata. None of them has room on the identity line, which is the
-// name's.
 func sidebarNoteToken(name string) bool {
 	switch name {
 	case "message", "need", "now", "prompt", "context", "subagents", "pr":
@@ -353,21 +276,6 @@ func sidebarNoteToken(name string) bool {
 	return ok
 }
 
-// sidebarAgentNeed is what a row wants from the person, in a word, and whether
-// the word came from the kind a screen rule put in front of the message. It is
-// the text half of the state: the glyph and its colour say the same thing, and
-// the word is what still says it on a rail drawn without colour or glyphs.
-// Working and resting rows need nothing and get no word.
-//
-// kind is the block the daemon recorded for a needs_input pane (approval or
-// question), empty when the source did not say.
-//
-// The word is said once. "approval" or "question" in front of a screen rule's
-// message is lifted off it, so it costs nothing. A hook's message ("approve
-// Bash: make") does not say its kind, so the recorded kind is the word and the
-// message stays whole. A message that already names its kind ("awaiting
-// approval") gets no word, and neither does one of no known kind: the message
-// is the one that says what to do.
 func sidebarAgentNeed(state string, doneSeen bool, kind, message string) (string, bool) {
 	switch state {
 	case "needs_input":
@@ -385,8 +293,6 @@ func sidebarAgentNeed(state string, doneSeen bool, kind, message string) (string
 			return "errored", false
 		}
 	case "limit_reached":
-		// Always said: the message is the harness's own line, and without
-		// the word a row on a rail drawn without colour reads as at rest.
 		return sidebarStateWords(state), false
 	case "done":
 		if !doneSeen && message == "" {
@@ -396,22 +302,16 @@ func sidebarAgentNeed(state string, doneSeen bool, kind, message string) (string
 	return "", false
 }
 
-// sidebarPromptKind reports whether kind is one of the prompt kinds a need
-// word can name.
 func sidebarPromptKind(kind string) bool {
 	return kind == harness.PromptKindApproval || kind == harness.PromptKindQuestion || kind == harness.PromptKindAuth ||
 		kind == inboxWordPlan || kind == inboxWordRisky
 }
 
-// sidebarAgentMessageRest is a message with the prompt kind in front of it
-// taken off: "approval: run tests?" is "run tests?".
 func sidebarAgentMessageRest(message string) string {
 	_, rest, _ := strings.Cut(message, ": ")
 	return strings.TrimSpace(rest)
 }
 
-// sidebarAgentMetaValue is the value of one metadata key, empty when the pane
-// did not report it.
 func sidebarAgentMetaValue(meta []sessiontree.MetaToken, key string) string {
 	for _, t := range meta {
 		if t.Key == key {
@@ -421,15 +321,9 @@ func sidebarAgentMetaValue(meta []sessiontree.MetaToken, key string) string {
 	return ""
 }
 
-// sidebarAgentsHaveNotes reports whether any of these agents has something to
-// put on a second line. A section where none of them does would pay two lines a
-// row for a column of blanks.
 func (m *OS) sidebarAgentsHaveNotes(agents []sidebarAgentEntry, variant int) bool {
 	now := time.Now()
 	for _, e := range agents {
-		// A subagent's row has a second line, its tool or how it ended,
-		// unless appearance.sidebar.subagent_fields leaves the note out.
-		// The heading over the rows has none.
 		if (!e.Head && e.sidebarSubRow() && m.Settings.SidebarSubagents.Fields.Note) || len(m.sidebarAgentTokensFor(e, variant, true, now).Note) > 0 {
 			return true
 		}
@@ -437,16 +331,10 @@ func (m *OS) sidebarAgentsHaveNotes(agents []sidebarAgentEntry, variant int) boo
 	return false
 }
 
-// sidebarTokenColor is the colour a configured value means, on this palette:
-// a role such as text or accent is the rail's own ink. A value that is not a
-// colour is nil, which the caller reads as "leave the rail's own colour".
 func sidebarTokenColor(name string, pal overlay.Palette) color.Color {
 	return theme.ConfigColorOn(name, &pal)
 }
 
-// sidebarTokenStyle is the rail's own style for a token with the configured
-// look written over it: fg replaces the colour, bold and dim replace the
-// rail's choice when they are set at all.
 func (m *OS) sidebarTokenStyle(base lipgloss.Style, tk sidebarAgentToken, pal overlay.Palette) lipgloss.Style {
 	look := sidebarTokenDefaultLook(tk).Overlay(m.Settings.SidebarAgentRow.Style(tk.Name).Resolve(tk.Text, tk.Number, tk.HasNumber))
 	if c := sidebarTokenColor(look.Fg, pal); c != nil {
@@ -461,8 +349,6 @@ func (m *OS) sidebarTokenStyle(base lipgloss.Style, tk sidebarAgentToken, pal ov
 	return base
 }
 
-// sidebarAgentSep is the separator between tokens that follow the name and
-// between the parts of the note line.
 func sidebarAgentSep() string {
 	if overlay.UseASCII() {
 		return " . "
@@ -470,14 +356,6 @@ func sidebarAgentSep() string {
 	return " · "
 }
 
-// sidebarAgentBudget is what each token of an agent row's identity line
-// costs, in the order the row gives them way, for railRowFit: the prefix, the
-// tokens after the name, then the figure at the right edge and the mail count
-// beside it. A prefix token costs its text and the "/" after it, and is kept
-// only while the whole name fits beside it. A token after the name costs its
-// text and the separator in front of it.
-//
-// It appends to dst, which may be nil, and returns the list.
 func sidebarAgentBudget(dst []railToken, prefix, after []sidebarAgentToken, label, mail, sep string) []railToken {
 	tokens := dst[:0]
 	for _, tk := range prefix {
@@ -491,20 +369,6 @@ func sidebarAgentBudget(dst []railToken, prefix, after []sidebarAgentToken, labe
 		railToken{Cost: sidebarFigureCost(mail), Right: true})
 }
 
-// sidebarAgentFit lays out an agent row's identity line: the name, the tokens
-// around it, the figure at the right edge and the mail count, in avail cells.
-// label is the elapsed time, and queued the forms of the queued-message figure
-// that takes its place when messages wait, longest first.
-//
-// The queued figure is picked inside the budget. The longest form that keeps
-// every token the row would draw without it wins, so a row reads
-// "deploy-the-api-… 2q · working" rather than dropping the state to spell out
-// "2 queued". When every form costs a token, the longest form the budget
-// keeps at all wins, and when none is kept the elapsed time stays.
-//
-// It reports the figure it drew, which tokens the row keeps in
-// sidebarAgentBudget's order, and the cells the name may take. The answer is
-// written into s, so it holds until the next row is fitted.
 func sidebarAgentFit(s *railScratch, prefix, after []sidebarAgentToken, nameW int, label string, queued []string, mail, sep string, avail int) (figure string, keep []bool, nameRoom int) {
 	fit := func(figure string) ([]bool, int) {
 		s.tokens = sidebarAgentBudget(s.tokens, prefix, after, figure, mail, sep)
@@ -541,10 +405,6 @@ func sidebarAgentFit(s *railScratch, prefix, after []sidebarAgentToken, nameW in
 	return figure, keep, nameRoom
 }
 
-// sidebarAgentRun draws the tokens the row's budget kept after the name, each
-// led by sep. See railRowFit. Each token is styled on its own, so a rule on
-// one of them cannot ink its neighbour, and each is drawn whole, so a rule
-// always inks the value the person reads.
 func (m *OS) sidebarAgentRun(tokens []sidebarAgentToken, keep []bool, sep string, baseFor func(sidebarAgentToken) lipgloss.Style, sepStyle lipgloss.Style, pal overlay.Palette) string {
 	var b strings.Builder
 	for i, tk := range tokens {
@@ -557,10 +417,6 @@ func (m *OS) sidebarAgentRun(tokens []sidebarAgentToken, keep []bool, sep string
 	return b.String()
 }
 
-// sidebarAgentPrefixRun draws the prefix in front of the name: the tokens the
-// row's budget kept, each with the "/" that joins it to what follows. The
-// budget keeps a prefix token only while the whole name fits beside it, so on
-// a narrow rail the row reads "deploy" rather than "claude/depl…".
 func (m *OS) sidebarAgentPrefixRun(tokens []sidebarAgentToken, keep []bool, base lipgloss.Style, pal overlay.Palette) string {
 	var b strings.Builder
 	for i, tk := range tokens {
@@ -573,5 +429,4 @@ func (m *OS) sidebarAgentPrefixRun(tokens []sidebarAgentToken, keep []bool, base
 	return b.String()
 }
 
-// sidebarAgentRowSpec is the spec in force, for callers outside the render.
 func (m *OS) sidebarAgentRowSpec() *config.SidebarAgentRowSpec { return &m.Settings.SidebarAgentRow }

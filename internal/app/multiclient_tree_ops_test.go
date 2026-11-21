@@ -32,8 +32,6 @@ import (
 // tree from before the resize, and when its op landed last the split went back
 // to 0.500. With the stale placement refused it passed 60 in 60.
 
-// rootRatio is the ratio of the split at the top of the client's tree for the
-// workspace on screen, or -1 when there is no split.
 func rootRatio(m *OS) float64 {
 	tree := m.WorkspaceTrees[m.CurrentWorkspace]
 	if tree == nil || tree.Root == nil || tree.Root.IsLeaf() {
@@ -42,8 +40,6 @@ func rootRatio(m *OS) float64 {
 	return tree.Root.SplitRatio
 }
 
-// leafCount is how many panes the client's tree for the workspace on screen
-// holds.
 func leafCount(m *OS) int {
 	tree := m.WorkspaceTrees[m.CurrentWorkspace]
 	if tree == nil {
@@ -52,9 +48,6 @@ func leafCount(m *OS) int {
 	return len(tree.GetAllWindowIDs())
 }
 
-// settleTrees delivers broadcasts until both clients hold the same tree for
-// the workspace on screen and nothing is queued, then checks the pair stays
-// quiet. It reports the shape they settled on.
 func settleTrees(t *testing.T, r *rig, p *peer, ex *exchange, what string) string {
 	t.Helper()
 	deadline := time.Now().Add(rigWait)
@@ -69,9 +62,6 @@ func settleTrees(t *testing.T, r *rig, p *peer, ex *exchange, what string) strin
 		time.Sleep(10 * time.Millisecond)
 	}
 	shape := treeShape(r.m)
-	// Settled means settled: a pair that agrees for a moment and then sends
-	// each other another tree is the loop this whole design exists to rule
-	// out.
 	before := ex.n
 	ex.settle(before+40, 300*time.Millisecond)
 	if got := treeShape(r.m); got != shape || treeShape(p.m) != shape {
@@ -81,9 +71,6 @@ func settleTrees(t *testing.T, r *rig, p *peer, ex *exchange, what string) strin
 	if n := ex.n - before; n > 2 {
 		t.Fatalf("%s: %d more deliveries after the pair agreed on %s", what, n, shape)
 	}
-	// Each client shows the tree it holds. A pane off its tree is a client
-	// drawing one layout while holding another, and it would also retile on
-	// every state it is sent.
 	if r.m.bspRectsOffTree() || p.m.bspRectsOffTree() {
 		t.Fatalf("%s: a client's panes are not where its tree puts them:\n local %s %s\n peer  %s %s",
 			what, shape, rects(r.m), treeShape(p.m), rects(p.m))
@@ -91,8 +78,6 @@ func settleTrees(t *testing.T, r *rig, p *peer, ex *exchange, what string) strin
 	return shape
 }
 
-// attachedShape is the tree a client attaching now is handed, which is the
-// session's own.
 func attachedShape(t *testing.T, r *rig) string {
 	t.Helper()
 	m, _ := attachClientOS(t, r.session, holderCols, holderRows, false)
@@ -106,8 +91,6 @@ func TestTwoClientsReshapeOneTreeAtOnce(t *testing.T) {
 	r, p, ex := geometryRig(t, clientGlobals{}, clientGlobals{})
 
 	for round := range 30 {
-		// Neither client has heard of the other's change when it makes its
-		// own: both ops are built on the same tree.
 		switch round % 3 {
 		case 0:
 			r.m.RotateFocusedSplit()
@@ -151,8 +134,6 @@ func TestResizeWhilePeerAddsPaneKeepsTheResize(t *testing.T) {
 		return false
 	})
 
-	// The pane is on the daemon and its broadcast is queued for both clients,
-	// unread. This client resizes and says so first.
 	r.m.ResizeFocusedWindowWidth(10)
 	resized := rootRatio(r.m)
 	if resized == before {

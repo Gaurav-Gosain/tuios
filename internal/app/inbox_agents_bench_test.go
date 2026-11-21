@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// benchAgents200OS is a client watching two hundred agents in the attached
-// session, in every state, with the cockpit open on them.
 func benchAgents200OS(b testing.TB) *OS {
 	b.Helper()
 	config.Global.SidebarEnabled = true
@@ -34,8 +32,6 @@ func benchAgents200OS(b testing.TB) *OS {
 	return m
 }
 
-// benchCards are sixty cards across the stages, every third agent holding
-// one and every seventh blocked.
 func benchCards(now int64) []session.TaskRow {
 	cards := make([]session.TaskRow, 0, 60)
 	for i := range 60 {
@@ -55,8 +51,6 @@ func benchCards(now int64) []session.TaskRow {
 	return cards
 }
 
-// benchThread gives the selected agent a read transcript of two hundred
-// entries, the most a thread keeps, so a frame draws a full conversation.
 func benchThread(m *OS) {
 	m.renderInbox()
 	e, ok := m.cockpitAgent()
@@ -150,14 +144,10 @@ func BenchmarkInboxAgents200Move(b *testing.B) {
 	}
 }
 
-// benchDiffThread gives the selected agent a transcript of edits, each with
-// a diff of four hundred lines, the most the daemon sends, and one more
-// entry per loop: the thread an agent streams into while the view is open.
 func benchDiffThread(b *testing.B) (*OS, *agentThread) { return benchDiffThreadT(b) }
 
 func benchDiffThreadT(b testing.TB) (*OS, *agentThread) {
 	m := benchAgents200OS(b)
-	// The cursor on an agent with no item, so the focus is its thread.
 	for _, r := range m.cockpitRows() {
 		if r.kind == ckRowAgent && !r.hasItem {
 			m.cockpitSelectKey(r.key)

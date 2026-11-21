@@ -10,9 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The parts of multi copy mode that live on the OS: the copy sweep over every
-// pane, the dock's pill and help, and the prefix menu naming the mode.
-
 func selectedWindowID(id string) *terminal.Window {
 	w := selectedWindow()
 	w.ID = id
@@ -20,7 +17,6 @@ func selectedWindowID(id string) *terminal.Window {
 	return w
 }
 
-// liveWindow is a pane with a real emulator, on workspace 1.
 func liveWindow(t *testing.T, id string) *terminal.Window {
 	t.Helper()
 	ch := make(chan struct{}, 64)
@@ -99,7 +95,6 @@ func TestMultiCopyDockSaysWhatTheModeIs(t *testing.T) {
 			t.Errorf("multi copy help %q does not have %q", help, want)
 		}
 	}
-	// Plain copy mode's help is unchanged.
 	m.MultiCopy = nil
 	if help := hintsText(m.copyModeHelp(a)); strings.Contains(help, "yank all") {
 		t.Errorf("plain copy mode shows the multi copy help: %q", help)

@@ -11,9 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// newDetectOS builds an OS in the given autorun mode with a trust store backed
-// by a temp file (so the test never touches the real XDG location) and a single
-// focused window whose ID is "focused".
 func newDetectOS(t *testing.T, mode string) (*OS, *trust.Store) {
 	t.Helper()
 	cfg := config.DefaultConfig()
@@ -34,7 +31,6 @@ func newDetectOS(t *testing.T, mode string) (*OS, *trust.Store) {
 	return m, store
 }
 
-// tapeDir creates a temp directory containing a .tuios.tape and returns the dir.
 func tapeDir(t *testing.T, content string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -44,8 +40,6 @@ func tapeDir(t *testing.T, content string) string {
 	return dir
 }
 
-// drive simulates the focused window entering dir and the debounce elapsing,
-// exercising the real onCwdChange filter and evaluation path.
 func drive(t *testing.T, m *OS, windowID, dir string) {
 	t.Helper()
 	m.onCwdChange(CwdChangedMsg{WindowID: windowID, Cwd: dir})

@@ -14,30 +14,13 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// The reply editor's history and its external editor.
-//
-// What the person sends to an agent is kept by the daemon, in memory, under a
-// target: the agent's harness and folder when both are known, so a pane that
-// closes and opens again on the same folder keeps its history, and the pane
-// otherwise. See session/reply_history.go. The editor reads the target's
-// history once when it opens, and up on its first row and ctrl+r bring a
-// message back (composer/history.go). A reply the daemon queued is added, and
-// so is a draft ctrl+c cleared, so a draft cleared by mistake is not lost.
-//
-// ctrl+g opens the draft in $EDITOR, on the machine the person is at, with
-// every block's text in its place. The file is 0600 in a private folder made
-// for it, and both go when the editor closes, and when the client ends.
-
-// replyHistoryTimeout bounds one history call.
 const replyHistoryTimeout = 3 * time.Second
 
-// replyHistoryMsg is a target's history read for a draft.
 type replyHistoryMsg struct {
 	comp    *composer.Model
 	entries []composer.HistoryEntry
 }
 
-// replyEditorDoneMsg is the external editor closing.
 type replyEditorDoneMsg struct {
 	comp *composer.Model
 	dir  string
@@ -45,7 +28,6 @@ type replyEditorDoneMsg struct {
 	err  error
 }
 
-// replyHistoryTarget is the key a pane's history is kept under.
 func (m *OS) replyHistoryTarget(sessionID, windowID string) string {
 	if sessionID == "" || sessionID == m.sidebarCurrentSessionID() {
 		for _, w := range m.Windows {
@@ -60,9 +42,6 @@ func (m *OS) replyHistoryTarget(sessionID, windowID string) string {
 	return "pane:" + sessionID + "/" + windowID
 }
 
-// replyHistoryFetch reads the history of the open draft's target, once per
-// editor. It is called after every input while the Inbox or the mailbox is
-// up, and costs a comparison when there is nothing to read.
 func (m *OS) replyHistoryFetch() tea.Cmd {
 	d, ok := m.openDraft()
 	if !ok || d.wires.historyAsked || d.wires.histWindow == "" || (m.DaemonClient == nil && m.Inbox.call == nil) {
@@ -97,7 +76,6 @@ func (m *OS) replyHistoryFetch() tea.Cmd {
 	}
 }
 
-// partsFromWire is the composer's form of parts the daemon sent back.
 func partsFromWire(in []replyPart) []composer.Part {
 	out := make([]composer.Part, 0, len(in))
 	for _, p := range in {
@@ -117,14 +95,12 @@ func partsFromWire(in []replyPart) []composer.Part {
 	return out
 }
 
-// applyReplyHistory gives a draft its history, when the draft is still open.
 func (m *OS) applyReplyHistory(msg replyHistoryMsg) {
 	if m.composerLive(msg.comp) {
 		msg.comp.SetHistory(msg.entries)
 	}
 }
 
-// replyHistoryAdd keeps a message in a pane's history, as the person.
 func (m *OS) replyHistoryAdd(sessionID, windowID string, parts []composer.Part) tea.Cmd {
 	if len(parts) == 0 || (m.DaemonClient == nil && m.Inbox.call == nil) {
 		return nil
@@ -141,7 +117,6 @@ func (m *OS) replyHistoryAdd(sessionID, windowID string, parts []composer.Part) 
 	}
 }
 
-// replyEditorCmd opens the draft in $EDITOR, on the machine the person is at.
 func (m *OS) replyEditorCmd(comp *composer.Model) tea.Cmd {
 	if m.imagePasteReason() != "" {
 		comp.SetNotice("The editor runs only on the machine tuios runs on, and you are elsewhere.")
@@ -172,8 +147,6 @@ func (m *OS) replyEditorCmd(comp *composer.Model) tea.Cmd {
 	}))
 }
 
-// applyReplyEditorDone puts what the editor wrote in the draft, and removes
-// the file and its folder.
 func (m *OS) applyReplyEditorDone(msg replyEditorDoneMsg) tea.Cmd {
 	data, readErr := readBounded(msg.path, composer.DefaultMaxBytes+1)
 	_ = os.RemoveAll(msg.dir)
@@ -195,9 +168,6 @@ func (m *OS) applyReplyEditorDone(msg replyEditorDoneMsg) tea.Cmd {
 	return back
 }
 
-// readBounded reads at most limit bytes of the file at path. An editor that
-// wrote a huge file gives the draft no more than it can hold, and the draft
-// refuses that.
 func readBounded(path string, limit int64) ([]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -207,8 +177,6 @@ func readBounded(path string, limit int64) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(f, limit))
 }
 
-// removeReplyEditorFile removes the editor's file, if the client ends while
-// it is open.
 func (m *OS) removeReplyEditorFile() {
 	if m.replyEditorDir != "" {
 		_ = os.RemoveAll(m.replyEditorDir)
@@ -219,7 +187,6 @@ func (m *OS) removeReplyEditorFile() {
 // ReplyHistoryFetch is replyHistoryFetch, for the input path.
 func (m *OS) ReplyHistoryFetch() tea.Cmd { return m.replyHistoryFetch() }
 
-// replyHistoryOnSent keeps a reply the daemon queued in its pane's history.
 func (m *OS) replyHistoryOnSent(msg InboxRepliedMsg) tea.Cmd {
 	if msg.Err != nil || msg.Requeue {
 		return nil

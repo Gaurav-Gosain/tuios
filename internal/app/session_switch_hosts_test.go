@@ -8,19 +8,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
-// #196: every surface that switches sessions has to send the switch to the
-// machine that holds the session. A row under another machine's group carries
-// a rail identity for an ID ("\x00host/local:home"), and the switcher handed
-// that identity to the daemon the client was connected to, which refused it as
-// a session name with a path separator in it.
-//
-// These tests record where each surface sends a switch through the switch hook,
-// so they need no daemon on either end. The attach across the link itself is
-// proved end to end in e2e/tui.
-
 type switchCall struct{ host, name string }
 
-// recordSwitches installs the switch hook and returns the calls it saw.
 func recordSwitches(m *OS) *[]switchCall {
 	var calls []switchCall
 	m.SetSessionSwitchHookForTest(func(host, name string) error {
@@ -30,9 +19,6 @@ func recordSwitches(m *OS) *[]switchCall {
 	return &calls
 }
 
-// hostsOS is a client with this machine holding "home" and "build" holding
-// "api". With away set, the client is attached to build's "api", so this
-// machine's "home" is a row under a group named local.
 func hostsOS(t *testing.T, away bool) *OS {
 	t.Helper()
 	m := paletteHostOS(t)
@@ -43,8 +29,6 @@ func hostsOS(t *testing.T, away bool) *OS {
 	return m
 }
 
-// goToSession opens go-to on the sessions and goes to the row titled want,
-// as enter or a click on it does, or fails.
 func goToSession(t *testing.T, m *OS, want string) {
 	t.Helper()
 	m.OpenSessionSwitcher()
@@ -82,9 +66,6 @@ func TestSwitcherNeverListsAMachineHeader(t *testing.T) {
 		}
 	}
 }
-
-// TestSwitcherClickReachesThisMachineFromARemoteSession is the report: on a
-// remote session, a click on this machine's session in the switcher.
 
 func TestSwitcherClickReachesThisMachineFromARemoteSession(t *testing.T) {
 	m := hostsOS(t, true)

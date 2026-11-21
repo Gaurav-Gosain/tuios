@@ -11,57 +11,21 @@ import (
 	"tuios.dev/shot"
 )
 
-// The post-capture preview panel.
-//
-// The body is the captured cells drawn straight back with the terminal's own
-// text rendering, in their exact colours. For the content this is not a
-// degraded preview, it is the most faithful one there is: the same renderer
-// the content came from is drawing it again. What it cannot show is the pixel
-// dressing, and one quiet line says so rather than the panel pretending.
-//
-// A kitty host gets the same panel with the rendered PNG drawn over the capture
-// rows, which are blanked for it so the picture is not laid on top of the same
-// capture in text (see screenshot_graphics.go). Sixel gets the text tier and
-// nothing else, because sixel cannot delete a placement, which is why the
-// launcher icons already skip it.
-
-// overlayKindShot is the preview panel's overlay kind.
 const overlayKindShot = "screenshot"
 
-// shotPreviewWidth is the panel's preferred inner width. A capture is usually
-// 80 columns, so the panel is sized to show most of one without scrolling and
-// still fit an 80-column terminal.
 const shotPreviewWidth = 76
 
-// shotPreviewRows is the preferred number of capture rows on screen.
 const shotPreviewRows = 18
 
-// screenshotPreviewBody is the body viewport in cells: how much of the capture
-// the panel can show at once. Both handlers and the renderer ask this, so the
-// scroll clamp and the drawn rows cannot disagree.
 func (m *OS) screenshotPreviewBody() (cols, rows int) {
 	width := m.panelWidth(shotPreviewWidth)
-	// Two cells of body gutter, and the metadata and note lines the body
-	// spends on things that are not capture rows.
 	cols = max(1, width-2)
 	rows = m.panelBodyRows(shotPreviewRows, shotPreviewExtraRows, width, nil, m.shotPreviewHints())
 	return cols, max(1, rows)
 }
 
-// shotPreviewExtraRows is how many body lines can go to things that are not
-// capture rows: the header, the path, the note, the status line, the blank
-// after them and the scroll indicator. It is the largest that set gets, not
-// the usual one, so a small terminal budgets for the worst case rather than
-// having the panel outgrow it.
 const shotPreviewExtraRows = 6
 
-// shotPreviewHints is the footer. Every key on it works here or is not drawn:
-// c is omitted when nothing would copy, o when this client is not on the
-// user's machine, and the reason lands on the status line instead.
-//
-// A pending panel offers neither. There is no file yet, so copying it and
-// opening it are both keys that would do nothing, and a key that does nothing
-// is worse than a key that is not there.
 func (m *OS) shotPreviewHints() []overlay.Hint {
 	p := &m.ShotPreview
 	hints := []overlay.Hint{{Key: overlay.EnterGlyph, Label: "done"}}
@@ -80,19 +44,12 @@ func (m *OS) shotPreviewHints() []overlay.Hint {
 	return hints
 }
 
-// shotPreviewMetaLines is the block above the capture rows: what this is, where
-// it went, and what the panel cannot show. Both the renderer and the pixel
-// tier's row arithmetic read it, so the picture cannot land a row off the cells
-// it replaces.
 func (m *OS) shotPreviewMetaLines() []string {
 	p := &m.ShotPreview
 	out := []string{m.shotPreviewHeader()}
 	if p.Pending {
-		// One line, and it is the only claim the panel makes while it waits.
 		return append(out, p.Status)
 	}
-	// The path is trimmed from the front, because the end of it is the part
-	// that says which file this is.
 	out = append(out, truncateLeft(shortenPath(p.Path), m.panelWidth(shotPreviewWidth)-4))
 	if p.Note != "" {
 		out = append(out, p.Note)
@@ -103,7 +60,6 @@ func (m *OS) shotPreviewMetaLines() []string {
 	return out
 }
 
-// renderScreenshotPreview draws the panel and records the rows it drew.
 func (m *OS) renderScreenshotPreview() (string, overlay.Geometry, []overlayRowHit) {
 	p := &m.ShotPreview
 	pal := m.overlayUI()
@@ -124,34 +80,15 @@ func (m *OS) renderScreenshotPreview() (string, overlay.Geometry, []overlayRowHi
 	}
 	lines = append(lines, overlay.Fill("", width, pal.Surface))
 
-	// The cells are the body, except that the picture replaces them.
-	//
-	// The picture keeps the capture's shape, so it does not fill the body. Where
-	// it is narrower than the body the spare columns are split either side of it
-	// (see screenshotPreviewPictureBox) and left empty; drawing cells there too
-	// put half a picture and half a wall of text in one panel. Where it is
-	// shorter than the body the body simply ends with it, and that is what
-	// pictureBodyRows does: the rows under a wide, short capture were the other
-	// half of the same fault, either a strip of the capture's own text under its
-	// own picture or, once the capture was short enough to run out, a hole the
-	// height of a dozen rows between the picture and the footer.
 	_, _, picRows, hasPicture := m.screenshotPreviewPictureBox()
 	rows := m.shotPreviewCells(bodyCols, bodyRows)
 	if hasPicture {
 		rows = pictureBodyRows(picRows)
 	}
-	// The two-cell gutter is styled, not two raw spaces. overlay.Fill only
-	// paints the padding it adds, so an unstyled prefix keeps whatever the host
-	// last had, which is the terminal's own background: a black notch two cells
-	// wide running down the left of every capture row. Under a picture that
-	// started at the body's left edge nobody could see it, and centring the
-	// picture put it on show.
 	gutter := mute.Render("  ")
 	for _, row := range rows {
 		lines = append(lines, overlay.Fill(gutter+row, width, pal.Surface))
 	}
-	// The scroll line is about the cells. Where the picture is drawn the whole
-	// capture is on screen at once, so saying it is not would be a lie.
 	if !hasPicture && p.Grid != nil && (p.Grid.Rows > bodyRows || p.Grid.Cols > bodyCols) {
 		lines = append(lines, overlay.Fill(mute.Render(
 			fmt.Sprintf("  Showing %d of %d rows. Scroll with the wheel or the arrows.",
@@ -168,26 +105,10 @@ func (m *OS) renderScreenshotPreview() (string, overlay.Geometry, []overlayRowHi
 	return content, geo, nil
 }
 
-// pictureBodyRows is the body of a panel that is showing a picture: exactly the
-// rows the picture covers, all of them empty.
-//
-// Whole rows go, not the part of each the picture covers. The rows are lipgloss
-// output, escape sequences interleaved with text, so cutting one at a column
-// means taking its styling apart and risking a broken escape for the columns a
-// letterboxed picture leaves at the side. An empty margin beside the picture
-// reads as a margin; a strip of the capture's own text there reads as the panel
-// showing the capture twice.
-//
-// There are no rows past the picture at all, which is the point. The body was
-// as tall as the panel could afford and the picture is only ever as tall as its
-// own proportions allow, so every row between the two was either a second copy
-// of the capture in text or nothing whatsoever.
 func pictureBodyRows(picRows int) []string {
 	return make([]string, max(0, picRows))
 }
 
-// shotPreviewHeader is the one metadata line: what was written, how big, and
-// whether it reached a clipboard.
 func (m *OS) shotPreviewHeader() string {
 	p := &m.ShotPreview
 	cols, rows := 0, 0
@@ -195,17 +116,12 @@ func (m *OS) shotPreviewHeader() string {
 		cols, rows = p.Grid.Cols, p.Grid.Rows
 	}
 	line := fmt.Sprintf("%s  %dx%d cells", strings.ToUpper(string(p.Format)), cols, rows)
-	// The size is a fact about a file, so it waits until there is one rather
-	// than showing a zero the panel would have to correct a moment later.
 	if p.Bytes > 0 {
 		line += "  " + units.Bytes(int64(p.Bytes))
 	}
 	return line
 }
 
-// shotPreviewCells redraws the captured grid as styled terminal text. This is
-// the text tier: it runs on a plain xterm and is exact, because the cells are
-// the ones the content was drawn from.
 func (m *OS) shotPreviewCells(cols, rows int) []string {
 	p := &m.ShotPreview
 	if p.Grid == nil {
@@ -216,17 +132,12 @@ func (m *OS) shotPreviewCells(cols, rows int) []string {
 	for y := p.Scroll; y < min(p.Scroll+rows, g.Rows); y++ {
 		out = append(out, shotRowToLine(g, y, p.ScrollX, cols))
 	}
-	// Pad so the panel does not change height as the capture scrolls, which
-	// would move the footer out from under the pointer.
 	for len(out) < rows {
 		out = append(out, "")
 	}
 	return out
 }
 
-// shotRowToLine styles one grid row into a lipgloss string, merging runs the
-// way the ANSI backend does so a wide row is a handful of spans and not one
-// span per cell.
 func shotRowToLine(g *shot.Grid, y, fromCol, cols int) string {
 	var b strings.Builder
 	var run strings.Builder
@@ -266,8 +177,6 @@ func shotRowToLine(g *shot.Grid, y, fromCol, cols int) string {
 	return b.String()
 }
 
-// shotCellStyle turns a resolved cell's style into a lipgloss style. The
-// colours are already concrete RGB, so nothing is guessed a second time here.
 func shotCellStyle(g *shot.Grid, c shot.Cell) lipgloss.Style {
 	s := lipgloss.NewStyle().Foreground(lipgloss.Color(shot.Hex(c.FG)))
 	if !c.BGDefault {
@@ -293,13 +202,6 @@ func shotCellStyle(g *shot.Grid, c shot.Cell) lipgloss.Style {
 	return s
 }
 
-// shotPreviewImageRow is the body row the capture starts on, which the pixel
-// tier places its picture at so the image lands exactly where the cells would.
-//
-// It counts the same lines the renderer drew rather than counting them again
-// from the fields. Counting twice is how a picture lands a row off the cells it
-// is meant to replace.
 func (m *OS) shotPreviewImageRow() int {
-	// The metadata block, plus the blank line between it and the capture.
 	return len(m.shotPreviewMetaLines()) + 1
 }

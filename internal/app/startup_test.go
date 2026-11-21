@@ -7,20 +7,14 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// closeWindows tears down the real PTYs spawned by AddWindow so a test does not
-// leak shell processes.
 func closeWindows(m *OS) {
 	for _, w := range m.Windows {
 		w.Close()
 	}
 }
 
-// newStartupOS builds a local (non-daemon) OS with the given [startup] options
-// and a known screen size.
 func newStartupOS(t *testing.T, openWindow, tiled bool) *OS {
 	t.Helper()
-	// Disable animations so the tiling layout is applied to the window geometry
-	// instantly instead of easing into place over ticks the test never runs.
 	prev := config.Global.Motion
 	config.Global.Motion = config.MotionNone
 	t.Cleanup(func() { config.Global.Motion = prev })
@@ -58,7 +52,6 @@ func TestStartupPreferences_SkipsNonEmptySession(t *testing.T) {
 	m := newStartupOS(t, true, true)
 	defer closeWindows(m)
 
-	// Simulate a restored, floating session with one existing window.
 	m.AddWindow("")
 	if len(m.Windows) != 1 {
 		t.Fatalf("setup: expected 1 window, got %d", len(m.Windows))

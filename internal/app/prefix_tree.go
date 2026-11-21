@@ -11,10 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The work behind the actions that give tuios a tmux-shaped keymap to bind:
-// marking and joining panes, reordering workspaces, the mouse and the config
-// reload.
-
 // MarkPane marks the focused pane for JoinMarkedPane, or clears the mark when
 // the focused pane is the marked one: tmux's select-pane -m.
 func (m *OS) MarkPane() {
@@ -31,14 +27,8 @@ func (m *OS) MarkPane() {
 	m.ShowNotification("Pane marked: "+w.Title(), "info", m.Settings.NotificationDuration)
 }
 
-// markedPaneBadge is what the title bar of the marked pane carries after its
-// name, so the mark can be seen. It is text, not a colour: it reads on every
-// theme and at 16 colours, and a test can find it on the screen.
 const markedPaneBadge = "[marked]"
 
-// setMarkedPane marks the pane with the given ID, or clears the mark for "".
-// The title bar is part of the cached pane layer, so the pane that loses the
-// mark and the pane that gets it are both redrawn.
 func (m *OS) setMarkedPane(id string) {
 	for _, w := range m.Windows {
 		if w.ID == m.MarkedPaneID || w.ID == id {
@@ -87,9 +77,6 @@ func (m *OS) JoinMarkedPane(dir layout.PreselectionDir) {
 
 	markedInt, focusedInt := m.GetWindowIntID(marked.ID), m.GetWindowIntID(focused.ID)
 	if oldWorkspace := marked.Workspace; oldWorkspace != m.CurrentWorkspace {
-		// MoveWindowToWorkspace changes the pane's workspace and retiles this
-		// one, but leaves the trees alone: the pane has to leave the old
-		// workspace's tree here, or it would be in two of them.
 		if old := m.WorkspaceTrees[oldWorkspace]; old != nil {
 			old.RemoveWindow(markedInt)
 			if old.IsEmpty() {
@@ -101,13 +88,9 @@ func (m *OS) JoinMarkedPane(dir layout.PreselectionDir) {
 	m.setMarkedPane("")
 	tree := m.WorkspaceTrees[m.CurrentWorkspace]
 	if tree != nil && tree.HasWindow(focusedInt) {
-		// The retile above may already have put the pane in the tree, in
-		// whatever place it chose. It goes where the user asked instead.
 		tree.RemoveWindow(markedInt)
 		tree.InsertWindowWithPreselection(markedInt, focusedInt, dir, m.GetBSPBounds(), m.separatorGap())
 	}
-	// With no tree yet, the retile builds one with every pane, the joined one
-	// included.
 	m.TileAllWindows()
 	m.reconcilePaneStreams()
 	m.SyncStateToDaemon()
@@ -123,12 +106,9 @@ func (m *OS) MoveWorkspaceBy(delta int) tea.Cmd {
 	if session.IsScratchWorkspace(from) || to < 1 || to > m.NumWorkspaces {
 		return nil
 	}
-	// Past the last workspace there is nothing to swap with: a daemon session
-	// numbers its workspaces 1 to their count.
 	if m.IsDaemonSession && !slices.Contains(m.occupiedWorkspaceNumbers(), to) {
 		return nil
 	}
-	// The order is the two workspaces as they will stand, lower number first.
 	order := []int{to, from}
 	if delta < 0 {
 		order = []int{from, to}
@@ -165,8 +145,6 @@ func (m *OS) RenumberWorkspaces(order []int) tea.Cmd {
 	return nil
 }
 
-// workspaceSlots is where each workspace in order goes: the workspaces named
-// take the numbers they hold between them, smallest first, in that order.
 func workspaceSlots(order []int) map[int]int {
 	slots := slices.Sorted(slices.Values(order))
 	newOf := make(map[int]int, len(order))
@@ -178,12 +156,6 @@ func workspaceSlots(order []int) map[int]int {
 	return newOf
 }
 
-// adoptWorkspaceRenumbering applies, to what this client keeps by workspace
-// number, a renumber the daemon made: it reads where each workspace went from
-// the herdr tab keys, which follow a workspace through a move, so a state that
-// arrives after several renumbers still says where each one ended up. It runs
-// before the rest of the state is applied, which then finds every window
-// already on its new workspace.
 func (m *OS) adoptWorkspaceRenumbering(state *session.SessionState) {
 	if !m.workspaceTabKeysKnown {
 		return
@@ -197,10 +169,6 @@ func (m *OS) adoptWorkspaceRenumbering(state *session.SessionState) {
 	m.workspaceMoveInFlight = false
 }
 
-// renumberLocalWorkspaces moves everything the client keeps per workspace
-// number to the workspace's new number. A new map or field keyed by workspace
-// must be added to this list, or a move would leave it describing the wrong
-// workspace.
 func (m *OS) renumberLocalWorkspaces(newOf map[int]int) {
 	if len(newOf) == 0 {
 		return
@@ -217,8 +185,6 @@ func (m *OS) renumberLocalWorkspaces(newOf map[int]int) {
 			w.MarkPositionDirty()
 		}
 	}
-	// The panes on screen are the same ones, so this is not a switch: no
-	// stream moves and nothing is retiled.
 	m.CurrentWorkspace = to(m.CurrentWorkspace)
 	m.lastWorkspace = to(m.lastWorkspace)
 	m.scratchBase = to(m.scratchBase)
@@ -276,7 +242,6 @@ func (m *OS) ReloadConfigFromDisk() tea.Cmd {
 	return m.reloadConfigFromDisk(false)
 }
 
-// reloadConfigFromDisk is ReloadConfigFromDisk. byPerson lets a new hook run.
 func (m *OS) reloadConfigFromDisk(byPerson bool) tea.Cmd {
 	configPath, err := config.GetConfigPath()
 	if err != nil {
@@ -285,14 +250,11 @@ func (m *OS) reloadConfigFromDisk(byPerson bool) tea.Cmd {
 	}
 	newCfg, err := config.ReloadConfig(configPath)
 	if err != nil {
-		// The running config stands. Saying so is the point: a reload that
-		// quietly did nothing reads as a reload that worked.
 		m.ShowNotification("Config not reloaded: "+err.Error(), "error", 0)
 		return nil
 	}
 	cmd := m.applyReloadedConfig(newCfg, byPerson)
 	if !byPerson && m.hooksWaitTold {
-		// The notice that a hook waits stays on screen: it says what to do.
 		return cmd
 	}
 	m.ShowNotification("Config reloaded", "success", 0)

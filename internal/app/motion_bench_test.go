@@ -13,11 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// Perf budgets for the modal scrim and the working-row shimmer. Both are
-// passes over the composed canvas, so what they add is read off a whole frame
-// with and without them, in one invocation, the way BenchmarkSpotlightFrame
-// reads the spotlight's cost.
-
 // BenchmarkModalScrimFrame is a nine-pane frame with the command palette open
 // and one pane dirty, at modal_dim 0 (no scrim) and at the shipped 30.
 func BenchmarkModalScrimFrame(b *testing.B) {
@@ -64,9 +59,6 @@ func BenchmarkShimmerApply(b *testing.B) {
 	for y, line := range lines {
 		uv.NewStyledString(line).Draw(canvas, image.Rect(0, y, m.Width, y+1))
 	}
-	// A real frame is composed fresh, so each pass starts from the rail's own
-	// cells. Putting back the few cells the pass edits is what reproduces
-	// that without timing a whole compose.
 	var saved [][]uv.Cell
 	for _, sp := range m.motion.rail {
 		saved = append(saved, append([]uv.Cell(nil), canvas.Lines[sp.y][sp.x0:sp.x1]...))
@@ -77,7 +69,7 @@ func BenchmarkShimmerApply(b *testing.B) {
 		}
 	}
 	now := time.Now()
-	for range 2 * int(shimmerSweep/config.ShimmerFrame) { // warm the blend cache
+	for range 2 * int(shimmerSweep/config.ShimmerFrame) {
 		now = now.Add(config.ShimmerFrame)
 		restore()
 		m.applyShimmer(canvas, now)
@@ -157,7 +149,6 @@ func BenchmarkWorkspaceSlideFrame(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		for b.Loop() {
-			// Half way, every frame, so each one draws both workspaces.
 			m.wsSlide.start = time.Now().Add(-time.Hour / 5)
 			flood(b, m)
 			_ = string(m.composeView())

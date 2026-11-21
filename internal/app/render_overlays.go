@@ -15,33 +15,21 @@ import (
 func (m *OS) renderOverlays() []*lipgloss.Layer {
 	var layers []*lipgloss.Layer
 
-	// The screen saver covers everything and nothing else is worth drawing
-	// under it, so it returns alone. Hit geometry is cleared first: the panels
-	// below are not drawn this frame, so last frame's rectangles would make
-	// dead regions clickable behind an animation.
 	if m.screensaver.active && m.screensaver.frame != "" {
 		m.OverlayHits = m.OverlayHits[:0]
 		return append(layers, lipgloss.NewLayer(m.screensaver.frame).
 			X(0).Y(0).Z(config.ZIndexScreensaver).ID("screensaver"))
 	}
 
-	// A capture for the effect preview draws no panels. See
-	// captureEffectPreview: the animation is of the screen under them.
 	if m.effectPreview.capturing {
 		m.OverlayHits = m.OverlayHits[:0]
 		return layers
 	}
 
-	// Clear last frame's hit geometry; each panel that renders below re-records
-	// itself. The ASCII glyph set is synced at the top of GetCanvas, ahead of
-	// every layer that reads it.
 	m.OverlayHits = m.OverlayHits[:0]
 	m.reconcileOverlayZOrder()
 
 	if statusText, kind := m.statusBadge(); kind != badgeNone {
-		// The badge rests on the same Panel step the rest of the chrome does and
-		// only lights up for a state the user is holding: the prefix is a mode
-		// waiting for a key, and recording is the one that writes to disk.
 		pal := theme.UI()
 		timeStyle := lipgloss.NewStyle().
 			Foreground(pal.FgDim).
@@ -79,27 +67,14 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
    ██║   ╚██████╔╝██║╚██████╔╝███████║
    ╚═╝    ╚═════╝ ╚═╝ ╚═════╝ ╚══════╝`
 
-		// The splash is the first thing anyone sees, at whatever width. Its
-		// three parts have fixed widths (38 columns of block letters, a 28
-		// column subtitle and a 44 column hint line), and the box adds a border
-		// and two columns of padding on each side. All of it needs 74 columns,
-		// so on anything narrower it would run off the right edge with the
-		// border cut away. Drop to what fits instead.
 		const (
 			artCols      = 38
 			subtitleCols = 28
-			boxCols      = 6 // both borders, both paddings
-			boxRows      = 4 // border and padding, top and bottom
+			boxCols      = 6
+			boxRows      = 4
 		)
-		// The splash belongs to the content region: the sidebar's reserved
-		// columns and the dock's rows are drawn by someone else, and centering
-		// on the whole screen both overdrew the rail and put the box off-centre
-		// in the part of the screen the user can actually see.
 		contentW, contentH := m.ViewContentWidth(), m.ViewUsableHeight()
 		avail := contentW - boxCols
-		// The same argument applies to the height: the block letters are six
-		// rows of a box that also carries a border, padding, a subtitle and up
-		// to three stacked hints, which is more than a short terminal has.
 		availRows := max(contentH-boxRows, 1)
 
 		ui := theme.UI()
@@ -120,33 +95,17 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 				Render("Terminal UI Operating System"))
 		}
 
-		// The hints are packed into as many rows as the width needs, so no
-		// width loses a hint entirely. They are key chips and lowercase
-		// labels, the same shape every overlay footer uses: the quoted
-		// Title-case prose was the only surface speaking that way.
-		//
-		// Packed rather than all-or-nothing. It used to be one line if they
-		// all fitted and one line each if they did not, so adding a fourth
-		// chip took the splash from three rows of hints to four on a narrow
-		// terminal, and the box then squeezed out the subtitle to fit.
 		hints := make([]string, 0, 4)
 		hintList := []overlay.Hint{
 			{Key: "n", Label: "new window"},
-			// The splash is what somebody with no session is looking at, so
-			// the way to make one belongs on it. It was on neither the splash
-			// nor any key: a person who had just arrived could make a pane and
-			// had no way to find out that sessions existed.
 			{Key: "N", Label: "new session"},
 			{Key: "?", Label: "help"},
 			{Key: ",", Label: "settings"},
 			m.welcomePresetChip(),
 		}
-		// The first start asks its question in the place of the hints. See
-		// welcome_choice.go.
 		if m.WelcomeQuestionShown() {
 			hintList = nil
 		} else if m.Settings.Simple {
-			// The Simple profile's words: a terminal, and no key picker.
 			hintList = []overlay.Hint{{Key: "n", Label: "new terminal"}, {Key: "?", Label: "help"}, {Key: ",", Label: "settings"}}
 		}
 		for _, h := range hintList {
@@ -174,10 +133,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 		box := boxStyle.Render(content)
 		if lipgloss.Width(box) > contentW || lipgloss.Height(box) > contentH {
-			// A wide enough rail, or a short enough screen, leaves no room for
-			// the box even after squeezing. One clipped hint line still says
-			// what to press, which beats drawing a border over the rail or the
-			// dock.
 			box = lipgloss.NewStyle().
 				Foreground(ui.FgDim).
 				MaxWidth(contentW).
@@ -214,8 +169,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, "agentmail", content, geo, rows)
 	}
 
-	// The Inbox is the cockpit: the whole screen between the dock's rows,
-	// with its own click targets. See render_cockpit.go.
 	if m.ShowInbox {
 		if content, y, w, h := m.renderCockpit(); content != "" {
 			z := m.overlayZ("inbox")
@@ -293,11 +246,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, "glyphpicker", content, geo, rows)
 	}
 
-	// The effect preview is a full-screen animation of the screen the picker
-	// opened over, so it goes under every draggable panel and over everything
-	// else. One below the overlay base rather than a constant of its own: the
-	// only thing it has to be is above the dock and below the panels, and both
-	// of those are already spelled here.
 	if m.ShowEffectPicker && m.effectPreview.frame != "" {
 		layers = append(layers, lipgloss.NewLayer(m.effectPreview.frame).
 			X(0).Y(0).Z(config.ZIndexOverlayBase-1).ID("effectpreview"))
@@ -313,8 +261,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, "accent", content, geo, rows)
 	}
 
-	// The rename dialog is modal and not draggable, so it is placed directly
-	// rather than through the overlay panel stack. It is centred like the rest.
 	if content, geo, x, y, ok := m.renderRenameDialog(); ok {
 		m.renameHit = overlay.Rect{X0: x, Y0: y, X1: x + geo.Width, Y1: y + geo.Height}
 		m.renameClearHit = overlay.Rect{}
@@ -335,8 +281,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		}
 	}
 
-	// The review covers the whole screen, over the Inbox and the rail it may
-	// have been opened from, which are still there when it closes.
 	if content := m.renderReview(); content != "" {
 		layers = append(layers, lipgloss.NewLayer(content).
 			X(0).Y(0).Z(config.ZIndexReview).ID("review"))
@@ -347,12 +291,8 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, overlayKindShot, content, geo, rows)
 	}
 
-	// Capture mode draws above every panel: it is a gesture over the whole
-	// screen, and its marquee has to be visible on top of whatever is open.
 	layers = append(layers, m.renderCaptureMode()...)
 
-	// The wait for a new daemon is said in the dock. With the dock hidden it
-	// is said in the middle of the screen. See daemon_reconnect.go.
 	if m.daemonReconnect != nil && m.Settings.DockbarPosition == "hidden" {
 		pal := theme.UI()
 		box := overlay.Style(pal.Surface).Foreground(pal.Fg).Render("  " + daemonWaitNote + "  ")
@@ -374,11 +314,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, "sessionclose", content, geo, rows)
 	}
 
-	// Quick look sits under every dialog: it follows the rail's cursor and
-	// takes no key, so a dialog opened from the rail has to draw over it.
-	// Opened on a path from a pane or the agents view, it has no rail under
-	// it and takes every key, so it is drawn above every panel, the agents
-	// view among them.
 	if m.quickLook.open {
 		content, x, y := m.renderQuickLook()
 		z := config.ZIndexLogs
@@ -462,8 +397,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		statsLines = append(statsLines, labelStyle("Fill Rate:     ")+valueStyle(fmt.Sprintf("%.1f%%", float64(stats.Size)/float64(stats.Capacity)*100.0)))
 		statsLines = append(statsLines, "")
 
-		// The verdict is a status word, so it takes a status token: the same
-		// three the logs and the message block are read by.
 		perfText, perfColor := "Poor", pal.Warn
 		switch {
 		case stats.HitRate >= 95.0:
@@ -495,7 +428,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = m.placeOverlayPanel(layers, overlayKindLogs, content, geo, rows)
 	}
 
-	// The message view is drawn after the log viewer, which opens it.
 	layers = m.renderMessageView(layers)
 
 	showScriptIndicator := m.tapeStatusShown()
@@ -509,8 +441,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	if m.ScriptMode && showScriptIndicator {
 		var scriptStatus string
 
-		// tuios tape play, tuios tape exec and the tape manager all play
-		// through the one player.
 		var currentCmd, totalCmds, progress int
 		var isFinished bool
 
@@ -523,7 +453,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 		if totalCmds > 0 {
 			if isFinished && m.ScriptFailure != "" {
-				// Where it stopped. The notification carries why.
 				where, _, _ := strings.Cut(m.ScriptFailure, ": ")
 				scriptStatus = "FAILED • " + where
 			} else if isFinished {
@@ -544,7 +473,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 					}
 				}
 
-				// Display 1-based index for human readability (command 1 of N, not 0 of N)
 				displayCmd := min(currentCmd+1, totalCmds)
 
 				if m.ScriptPaused {
@@ -579,19 +507,10 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 
 		renderWidth := m.GetRenderWidth()
 		renderHeight := m.GetRenderHeight()
-		// The corners are the panes' corners when the overlay fits beside the
-		// rail, so it does not sit over the rail with two of the rail's
-		// columns showing past its edge. When it does not fit, it is placed on
-		// the screen and then covers the rail whole.
 		regionX, regionW := 0, renderWidth
 		if room := m.ViewContentWidth(); overlayWidth+4 <= room {
 			regionX, regionW = m.viewReserve().Left, room
 		}
-		// Each corner is a point two cells in from the region's corner (one
-		// row down at the top), and the panel opens from it toward the
-		// middle, through overlay.Place. A binding list taller than the
-		// screen starts below the top dock rather than off the top, hiding
-		// the first entries with no way to reach them.
 		screen := overlay.Rect{X0: 0, Y0: m.viewReserve().Top, X1: renderWidth, Y1: renderHeight}
 		left, right := regionX+2, regionX+regionW-2
 		top, bottom := 1, renderHeight-2
@@ -608,7 +527,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			corner, place = overlay.Rect{X0: right, Y0: bottom, X1: right, Y1: bottom}, overlay.Placement{Side: overlay.SideAbove, Align: overlay.AlignEnd}
 		}
 		if m.Settings.WhichKeyPosition == "center" {
-			// The screen centre, where the panels are centred: no anchor.
 			overlayX, overlayY = overlay.Clamp((renderWidth-overlayWidth)/2, (renderHeight-overlayHeight)/2, overlayWidth, overlayHeight, screen)
 		} else {
 			overlayX, overlayY, _ = overlay.Place(corner, overlayWidth, overlayHeight, screen, place)
@@ -617,10 +535,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 			overlayX = m.railCoverX(overlayX, overlayWidth, renderWidth)
 		}
 
-		// A menu opened over an overlay (the Inbox, the rail's preview, the
-		// review) is drawn above that overlay, and above every other, as its
-		// keys are taken ahead of them (issue #1590). Under them it ran
-		// unseen.
 		z := config.ZIndexWhichKey
 		if m.menuOrigin.Set {
 			z = config.ZIndexReview + 2
@@ -634,14 +548,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		layers = append(layers, whichKeyLayer)
 	}
 
-	// Notifications are no longer drawn here. They live in the dock's right-hand
-	// block (see renderNotificationBlock), which is the placement decision: a
-	// message never covers a pane, and it is never retired by a frame being
-	// composed. Retiring one used to happen right here, inside render
-	// composition, which is why a toast could sit on screen for seventeen seconds
-	// after it expired whenever the session went quiet enough that no further
-	// frame was drawn. Expiry belongs to the tick now.
-
 	focusedWindow := m.GetFocusedWindow()
 	if focusedWindow != nil && focusedWindow.CopyMode != nil &&
 		focusedWindow.CopyMode.Active &&
@@ -651,20 +557,12 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		matchCount := len(focusedWindow.CopyMode.SearchMatches)
 		currentMatch := focusedWindow.CopyMode.CurrentMatch
 
-		// The rename dialog's canon: text on Surface, a reverse-video cell for
-		// the cursor rather than a block glyph drawn in the foreground colour,
-		// and the match count in the accent because it is the answer the search
-		// is for.
 		pal := m.overlayUI()
 		bg := pal.Surface
-		// The prompt names the direction the way vim and tmux do: / searches
-		// down, ? searches up.
 		prompt := "/"
 		if focusedWindow.CopyMode.SearchBackward {
 			prompt = "?"
 		}
-		// The query with its caret where it is, as wide as it is, up to what
-		// the pane has room for.
 		before, at, after := focusedWindow.CopyMode.Search.Parts()
 		room := min(lipgloss.Width(before+at+after)+1, max(focusedWindow.Width-24, 8))
 		body := overlay.Style(bg).Foreground(pal.Fg).Render(prompt) +
@@ -702,9 +600,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		m.CleanupExpiredKeys(3 * time.Second)
 		if len(m.RecentKeys) > 0 {
 			rightMargin := 2
-			// The strip grows to the left from the right edge, so on a narrow
-			// screen it would start off the left edge; drop the oldest keys
-			// until what is left fits instead.
 			showkeysContent := m.renderShowkeysFitted(max(m.GetRenderWidth()-rightMargin, 1))
 			contentWidth := lipgloss.Width(showkeysContent)
 			contentHeight := lipgloss.Height(showkeysContent)
@@ -732,9 +627,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		}
 	}
 
-	// The context menu is placed last so it sits above everything else it may
-	// have been opened on top of, and so its recorded bounds are from the frame
-	// the user is actually looking at.
 	layers = m.placePathPicker(layers)
 	layers = m.placePastePreview(layers)
 	layers = m.placeContextMenu(layers)
@@ -743,11 +635,6 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	return layers
 }
 
-// packHints lays key hints out in as few rows as the width allows.
-//
-// The splash is squeezed to fit its box, and what a squeeze drops is the
-// middle: the subtitle goes before the hints do. So the hints have to be as
-// short as they can be rather than as tall as the narrowest chip demands.
 func packHints(hints []string, avail int) string {
 	if len(hints) == 0 {
 		return ""
@@ -766,43 +653,23 @@ func packHints(hints []string, avail int) string {
 	return strings.Join(append(rows, cur), "\n")
 }
 
-// badgeX is the column the floating badge starts at, on GetTimeYPosition's row.
 const badgeX = 1
 
-// badgeKind is the state the floating badge shows.
 type badgeKind uint8
 
 const (
 	badgeNone badgeKind = iota
 	badgeRecording
-	// badgeLeader is an armed leader with no mode pill to show it on. It lasts
-	// only while the leader waits for its key, and is drawn over the panes like
-	// the which-key menu of the same state. See checkGuestCellsAreNotPaintedOver.
 	badgeLeader
 	badgeNest
-	// badgeKeyMode is a key mode that is on, with no dock to draw its chip.
 	badgeKeyMode
 )
 
-// statusBadge is the floating badge's text and the state it shows.
-//
-// The badge is the recording light and the prefix light. It used to carry
-// the clock as well, which is why show_clock appeared to do nothing to the
-// dock: the option drew this instead. The clock is a dock component now,
-// placed beside the meters it behaves like, so the two cannot double up.
-// An armed leader shows on the dock's mode pill when the dock has one.
-// The badge stays the way to see it with the dock hidden.
-// In lock mode the badge also says unlocked, for every menu the leader
-// opens and for a menu held after a repeatable action.
 func (m *OS) statusBadge() (string, badgeKind) {
 	kind, unlock := m.statusBadgeKind()
 	if kind == badgeNone {
 		return "", badgeNone
 	}
-	// The reading comes from the clock component, so the badge and a clock
-	// cell on the dock can never disagree, and so the format is the one
-	// [dock.clock] asked for rather than the one that used to be spelled
-	// here in a string literal.
 	currentTime := m.DockClockText()
 	switch {
 	case kind == badgeRecording:
@@ -818,9 +685,6 @@ func (m *OS) statusBadge() (string, badgeKind) {
 	}
 }
 
-// statusBadgeKind is the state the floating badge shows, without its text, and
-// whether an armed leader shows as unlocked. OwnLayoutReserve asks it after
-// every message, so it formats nothing.
 func (m *OS) statusBadgeKind() (badgeKind, bool) {
 	unlockBadge := m.lockPillShown() && m.prefixArmed() && !m.prefixPillShown()
 	switch {
@@ -828,27 +692,14 @@ func (m *OS) statusBadgeKind() (badgeKind, bool) {
 		return badgeRecording, false
 	case (m.PrefixActive || unlockBadge) && !m.prefixPillShown():
 		return badgeLeader, unlockBadge
-	// Nest mode goes on the badge when no mode pill can carry it.
 	case m.Nested() && !m.modePillShown():
 		return badgeNest, false
-	// A key mode goes on the badge when there is no dock to draw its chip.
 	case m.Settings.DockbarPosition == "hidden" && m.KeyModeOn():
 		return badgeKeyMode, false
 	}
 	return badgeNone, false
 }
 
-// badgeRowReserved reports whether the layout keeps the badge's row free of
-// panes. It is the one place that decides where a lasting badge may sit.
-//
-// The badge floats on the panes' outer edge row (GetTimeYPosition). A pane
-// that draws its own border has its border there, which is chrome, so the
-// badge covers nothing a guest wrote. Borderless panes (shared borders under
-// tiling) have their first or last line of output there. The recording badge
-// and the nest badge last as long as their state does, so on borderless panes
-// that row is taken from the panes while one shows. The leader badge lasts
-// only until the next key and is drawn over the panes like the which-key menu
-// of the same state, so it moves no pane.
 func (m *OS) badgeRowReserved() bool {
 	if !m.panesBorderless() {
 		return false

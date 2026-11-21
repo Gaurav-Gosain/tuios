@@ -18,19 +18,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// inboxWidth is the Inbox overlay's preferred inner width: a row carries a
-// name, a summary, the session and the wait.
 const inboxWidth = 72
 
-// defaultInboxKeys is the shipped bindings, for a client built without a
-// registry.
 var defaultInboxKeys = sync.OnceValue(func() *config.KeybindRegistry {
 	return config.NewKeybindRegistry(config.DefaultConfig())
 })
 
-// inboxKey is the key a hint names for an action of the Inbox, its peek or
-// the mailbox: the first key the config binds it to, as the hint strips spell
-// keys. Empty for an action bound to nothing, whose hint is left out.
 func (m *OS) inboxKey(action string) string {
 	reg := m.KeybindRegistry
 	if reg == nil {
@@ -49,8 +42,6 @@ func (m *OS) inboxKey(action string) string {
 	return ""
 }
 
-// inboxKeyOr is inboxKey with a word for an action bound to nothing, for a
-// message that has to name some key.
 func (m *OS) inboxKeyOr(action, fallback string) string {
 	if k := m.inboxKey(action); k != "" {
 		return k
@@ -58,9 +49,6 @@ func (m *OS) inboxKeyOr(action, fallback string) string {
 	return fallback
 }
 
-// pressFor is what to press for a prefix or mode action, chord included, as a
-// message spells it ("ctrl+b i"), or fallback when the config binds it to
-// nothing. For the rare message that names a key; it scans every binding.
 func (m *OS) pressFor(action, fallback string) string {
 	reg := m.KeybindRegistry
 	if reg == nil {
@@ -72,16 +60,12 @@ func (m *OS) pressFor(action, fallback string) string {
 	return fallback
 }
 
-// keyHints builds a footer from action and label pairs, leaving out an action
-// the config binds to nothing: a hint for a key that does nothing is worse than
-// no hint.
 func (m *OS) keyHints(pairs ...string) []overlay.Hint {
 	var hints []overlay.Hint
 	for i := 0; i+1 < len(pairs); i += 2 {
 		if key := m.inboxKey(pairs[i]); key != "" {
 			h := overlay.Hint{Key: key, Label: pairs[i+1]}
 			if pairs[i] == config.ActionInboxClose || pairs[i] == config.ActionInboxEscape {
-				// The way out keeps its label on any key it is bound to.
 				h.Priority = overlay.HintEssential
 			}
 			hints = append(hints, h)
@@ -90,15 +74,8 @@ func (m *OS) keyHints(pairs ...string) []overlay.Hint {
 	return hints
 }
 
-// inboxPeekMaxLines is how many prompt lines the peek shows at most. A prompt
-// longer than the screen allows keeps its bottom, where the question and the
-// options are.
 const inboxPeekMaxLines = 14
 
-// renderInboxPeek draws the peek: who waits and for how long, the prompt as
-// the pane shows it behind a bar that marks it as the pane's text, its
-// options, and the keys that answer it. What the peek says is in words; the
-// colours only repeat it.
 func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geometry, []overlayRowHit) {
 	pal := m.overlayUI()
 	bg := pal.Surface
@@ -163,10 +140,6 @@ func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geome
 			body = append(body, overlay.Style(bg).Foreground(pal.FgMute).Render("  "+bar)+
 				overlay.Style(bg).Foreground(pal.FgDim).Render(overlay.Truncate(peekBodyLine(l), max(textW-2, 1))))
 		}
-		// The options are read from the screen's shape alone, so they are
-		// listed only when the matched rule takes a number, the same test the
-		// hint row makes. A dialog that moved into a text field still shows a
-		// numbered list, and those numbers would do nothing.
 		if pk.Offers(harness.ActionChoose) && len(pk.Options) > 0 {
 			body = append(body, "")
 			for _, o := range pk.Options {
@@ -224,11 +197,6 @@ func (m *OS) renderInboxPeek(p *inboxPeek, now time.Time) (string, overlay.Geome
 	return content, geo, nil
 }
 
-// peekBodyLine is one dialog line of a peek, cleaned for the panel. It drops
-// what the title filter drops, except that it keeps a menu's cursor glyph and
-// puts spaces of the same width in place of any other dropped rune that
-// takes a cell. The title filter took the glyph and left the space after it,
-// so the active row of a menu sat a column left of the others.
 func peekBodyLine(l string) string {
 	ascii := overlay.UseASCII()
 	var b strings.Builder
@@ -252,7 +220,6 @@ func peekBodyLine(l string) string {
 	return b.String()
 }
 
-// inboxKindForPrompt is the Inbox kind a prompt kind reads as.
 func inboxKindForPrompt(kind string) string {
 	if kind == harness.PromptKindQuestion || kind == harness.PromptKindAuth {
 		return session.AttentionQuestion
@@ -260,7 +227,6 @@ func inboxKindForPrompt(kind string) string {
 	return session.AttentionApproval
 }
 
-// sepWord is the separator between two clauses of a peek's first line.
 func sepWord() string {
 	if overlay.UseASCII() {
 		return ", "
@@ -268,12 +234,6 @@ func sepWord() string {
 	return " · "
 }
 
-// inboxPeekHints are the keys that answer a peeked prompt: only the answers
-// the prompt takes now are offered, and one way to give each. A prompt with
-// numbered options is answered by its digits, the numbers it shows; the
-// approve, always and deny keys are offered only for a prompt with no
-// options. It offered both, "1-3 choose" beside "a approve A always d deny",
-// two ways to say one thing. Every key still works.
 func (m *OS) inboxPeekHints(pk *session.PromptPeek) []overlay.Hint {
 	var hints []overlay.Hint
 	if pk.Offers(harness.ActionChoose) && len(pk.Options) > 0 {
@@ -299,16 +259,12 @@ func (m *OS) inboxPeekHints(pk *session.PromptPeek) []overlay.Hint {
 	return hints
 }
 
-// inboxAnswerOrder is each decision's key, in the order of the harness's own
-// menu: yes, yes and do not ask again, no.
 var inboxAnswerOrder = []struct{ key, decision, label string }{
 	{"1", session.ApprovalOnce, "allow"},
 	{"2", session.ApprovalAlways, "always"},
 	{"3", session.ApprovalDeny, "reject"},
 }
 
-// inboxAnswerKeys is the keys that answer a held approval, such as "1/2/3",
-// or empty for an item the Inbox is not holding.
 func inboxAnswerKeys(it session.AttentionItem) string {
 	if it.RequestID == "" {
 		return ""
@@ -325,10 +281,6 @@ func inboxAnswerKeys(it session.AttentionItem) string {
 	return strings.Join(keys, "/")
 }
 
-// inboxApprovalDetail is the held approval under the cursor in full: its whole
-// line, wrapped, and for always the rules it adds from now on. The daemon only
-// holds a prompt whose line is the whole request, so this is everything the
-// answer approves.
 func inboxApprovalDetail(it session.AttentionItem, width int) []string {
 	width = max(width-2, 8)
 	if !inboxShowsWhole(it) {
@@ -351,10 +303,6 @@ func inboxApprovalDetail(it session.AttentionItem, width int) []string {
 	return lines
 }
 
-// inboxShowsWhole reports whether this client draws a held approval's line
-// and rules exactly as they are. A character it would leave out, such as one
-// an ASCII-only terminal cannot draw, would make the line read as something
-// it does not say, so such a prompt is answered in the pane.
 func inboxShowsWhole(it session.AttentionItem) bool {
 	lines := append([]string{it.Summary}, it.AlwaysScope...)
 	if it.Kind == session.AttentionAsk {
@@ -368,7 +316,6 @@ func inboxShowsWhole(it session.AttentionItem) bool {
 	return true
 }
 
-// inboxAskKeys is the digit keys that answer a question, such as "1-3".
 func inboxAskKeys(it session.AttentionItem) string {
 	switch n := min(len(it.Options), 9); n {
 	case 0:
@@ -380,8 +327,6 @@ func inboxAskKeys(it session.AttentionItem) string {
 	}
 }
 
-// inboxAskDetail is the question under the cursor in full, wrapped, then each
-// answer after the key that picks it.
 func inboxAskDetail(it session.AttentionItem, width int) []string {
 	width = max(width-2, 8)
 	if !inboxShowsWhole(it) {

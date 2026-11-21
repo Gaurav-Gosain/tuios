@@ -14,53 +14,22 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The rail's custom section: the rows a command of the user's printed.
-//
-// The command is a dock component in everything but where it draws. It is
-// scheduled by the dock engine, with the dock's refresh grammar, debounce,
-// sanitiser, timeout and failure rule, because a second scheduler for the
-// same kind of subprocess would be a second set of ways for it to go wrong.
-// Three things differ. Two are flags on the component: every line is a row
-// (MultiLine), and an event that lands mid-run keeps one re-run (Coalesce).
-// The third is the run's environment, which carries the focused pane and
-// the section's size. The model hands those to the engine under its lock,
-// because runs start on the engine's goroutines and may not read the model.
-
-// railCustomComponent is the engine name of the section's command. It is not
-// under the dock's custom/ prefix, so it is never drawn as a bar cell, and
-// tuios refresh-dock rail/custom reaches it.
 const (
 	railCustomComponent    = dockengine.RailComponent
 	railSecondaryComponent = dockengine.RailSecondaryComponent
 )
 
-// railCustomState is the model's side of the section.
 type railCustomState struct {
-	// on records whether the engine was built with the section's command,
-	// so the per-message sync can tell a layout change from a frame.
-	on bool
-	// runnable records whether the config gives the section a command and a
-	// refresh the rail honours. Both change only on a config reload, which
-	// rebuilds the engine, so it is worked out there and not per message.
+	on       bool
 	runnable bool
-	// gen counts the updates that changed the rows. The render cache folds
-	// it, so new output redraws the rail and an unchanged value does not.
-	gen uint64
-	// ctx is what the engine was last told. Compared before the engine's
-	// lock is taken, so a message that moved nothing takes no lock.
-	ctx dockengine.RailContext
+	gen      uint64
+	ctx      dockengine.RailContext
 }
 
-// railCustomEnabled reports whether the layout names the section. The
-// section draws its title from this alone. Naming it with no command set
-// draws the title over an empty section, so a person who placed it sees
-// where it went.
 func (m *OS) railCustomEnabled() bool {
 	return sidebarLayoutHas(sidebarSectionCustom, &m.Settings)
 }
 
-// railCustomConfig is the section's table, or the zero table for a model
-// with no config loaded.
 func (m *OS) railCustomConfig() config.SidebarCustomConfig {
 	if m.UserConfig == nil {
 		return config.SidebarCustomConfig{}
@@ -73,14 +42,11 @@ func (m *OS) railCustomConfig() config.SidebarCustomConfig {
 		return *sb.Right.Custom
 	}
 	if sb.Position == "hidden" {
-		// An explicitly enabled edge under a hidden legacy rail starts from
-		// the resolver's empty custom section, not the hidden legacy command.
 		return config.SidebarCustomConfig{}
 	}
 	return sb.Custom
 }
 
-// railCustomTitle is the section's heading.
 func (m *OS) railCustomTitle() string {
 	if m.sidebarDrawing {
 		return m.secondaryRailCustomConfig().ResolvedTitle()
@@ -102,10 +68,6 @@ func (m *OS) secondaryRailCustomConfig() config.SidebarCustomConfig {
 	return config.SidebarCustomConfig{}
 }
 
-// railCustomRows is what the section draws, one row per line the command
-// printed. Empty after a failure, a timeout or a silent run: the engine
-// blanks a failed component's text, so the rows can never be an earlier
-// run's.
 func (m *OS) railCustomRows() []string {
 	component := railCustomComponent
 	if m.sidebarDrawing {
@@ -118,13 +80,6 @@ func (m *OS) railCustomRows() []string {
 	return strings.Split(text, "\n")
 }
 
-// sidebarCustomRow draws one row: the command's own text, colour included,
-// cut to the rail's columns and closed with a reset so a colour the command
-// left open cannot run into the padding or the row below.
-//
-// A row with a link is cut by ansi.Truncate, which keeps every sequence past
-// the cut, so the link's end that the engine wrote at the line's end
-// (dockengine.Lines) still closes it.
 func (m *OS) sidebarCustomRow(text string, cw int, pal overlay.Palette, st sidebarRowState) string {
 	rowBg := sidebarRowBg(st, pal)
 	text = strings.TrimRight(text, " ")
@@ -138,17 +93,11 @@ func (m *OS) sidebarCustomRow(text string, cw int, pal overlay.Palette, st sideb
 	return sidebarFit(sidebarStyle(rowBg, nil).Render(" ")+body, cw, rowBg)
 }
 
-// railRowLink is an OSC 8 link in a row of the custom section: its address,
-// and the columns of the row's text it covers, x1 the column after the last.
 type railRowLink struct {
 	url    string
 	x0, x1 int
 }
 
-// railRowLinks reads the links out of a row the section draws, in the order
-// the row shows them. The engine kept each one in a single form
-// (dockengine.Lines), so a link starts at an OSC 8 with an address and ends
-// at the next OSC 8. Only a row that holds one is parsed.
 func railRowLinks(text string) []railRowLink {
 	if !strings.Contains(text, "\x1b]8;") {
 		return nil
@@ -177,10 +126,6 @@ func railRowLinks(text string) []railRowLink {
 	return links
 }
 
-// railCustomRunnable reports whether the config gives the section something
-// to run: a command, and a refresh the rail honours. It parses the refresh,
-// so it is asked when the engine is built and its answer kept in
-// railCustom.runnable.
 func (m *OS) railCustomRunnable() bool {
 	custom := m.railCustomConfig()
 	if !custom.HasCommand() {
@@ -190,17 +135,10 @@ func (m *OS) railCustomRunnable() bool {
 	return err == nil
 }
 
-// railCustomWanted reports whether the engine should hold the section's
-// command: the config gives it one and the layout names the section. The
-// flag first, because it is asked once per message and most clients set no
-// command, so they never take the layout's mutex here.
 func (m *OS) railCustomWanted() bool {
 	return m.railCustom.runnable && m.railCustomEnabled() && !m.sidebarSessionVisible(m.legacySidebarEdge())
 }
 
-// railCustomComponent is the engine component for the section, or nil when
-// the section runs nothing. Built beside the dock's components in
-// InitDockComponents, so a config reload rebuilds it with them.
 func (m *OS) secondaryRailCustomComponent() *dockengine.Component {
 	custom := m.secondaryRailCustomConfig()
 	if !custom.HasCommand() || m.secondarySidebarWidth() == 0 || m.UserConfig == nil {
@@ -211,7 +149,7 @@ func (m *OS) secondaryRailCustomComponent() *dockengine.Component {
 		other = sidebarRight
 	}
 	if m.sidebarSessionVisible(other) {
-		return nil // the assigned daemon pane replaces this edge's sections
+		return nil
 	}
 	cfg := m.UserConfig.Appearance.Sidebar.Left
 	if m.legacySidebarEdge() == sidebarLeft {
@@ -246,16 +184,6 @@ func (m *OS) railCustomComponent() *dockengine.Component {
 	}
 }
 
-// railContextNow is what a run started now would be told. Width is the
-// columns a row may use: the rail's width less the edge rule and the one
-// column inset every row has. Height is the most rows the section's share
-// can give it, before the rail's chrome and the other sections' claims: a
-// ceiling, as shares are, and the docs say so. A rail collapsed to the glyph
-// strip, hidden or turned off draws no rows, so both are zero there, and the
-// engine runs nothing while the width is zero (runOnce).
-//
-// It runs once per message, so it only copies what the model holds. The
-// folder is left for the run to resolve (dockengine.RailContext.folder).
 func (m *OS) railContextNow() dockengine.RailContext {
 	ctx := dockengine.RailContext{}
 	if w := m.GetFocusedWindow(); w != nil {
@@ -267,8 +195,6 @@ func (m *OS) railContextNow() dockengine.RailContext {
 		case w.Host == "":
 			ctx.PanePgid = w.ShellPgid
 		default:
-			// A pane on another machine in a session on this one: nothing
-			// here can say where it is, so the run is told the home folder.
 		}
 	}
 	w := m.GetSidebarWidth()
@@ -286,11 +212,6 @@ func (m *OS) railContextNow() dockengine.RailContext {
 	return ctx
 }
 
-// railFolder is TUIOS_ACTIVE_PANE_CWD, for the engine (dockengine.New): the folder the command keys would start a
-// command for the focused pane in, so a script written for one works for the
-// other. Empty with no pane focused. It reads the shell's working directory
-// and stats the folder, so it is called when a run starts, on the run's
-// goroutine, and never on the update goroutine.
 func railFolder(ctx dockengine.RailContext) string {
 	switch {
 	case ctx.PaneID == "":
@@ -305,15 +226,6 @@ func railFolder(ctx dockengine.RailContext) string {
 	return localFolder(raw)
 }
 
-// RailCustomSyncCmd keeps the engine in step with the model. It runs once
-// per message from Update, after the handler, the way GitSyncCmd does, so
-// every path that moves the focus, resizes the rail or edits the layout is
-// covered by one comparison here rather than by a hook in each.
-//
-// Two things can have moved. Whether the section should run at all changes
-// when an edit to the layout gains or loses the section; then the engine is
-// rebuilt, which is what a dock component gets on a config reload too. The
-// per-run context is the other, and syncRailContext hands it over.
 func (m *OS) secondaryRailContextNow() dockengine.RailContext {
 	ctx := m.railContextNow()
 	w := m.secondarySidebarWidth()
@@ -345,8 +257,6 @@ func (m *OS) secondaryRailContextNow() dockengine.RailContext {
 
 func (m *OS) RailCustomSyncCmd() tea.Cmd {
 	if m.dockEngine == nil {
-		// No engine means no dock either: the client is shutting down or was
-		// built without one, and rebuilding here would start one by accident.
 		return nil
 	}
 	var cmd tea.Cmd
@@ -357,19 +267,6 @@ func (m *OS) RailCustomSyncCmd() tea.Cmd {
 	return cmd
 }
 
-// syncRailContext pushes the per-run context to the engine, under its lock,
-// when it differs from the last push, which on an idle client is never.
-//
-// The per-message sync calls it, and so does NotifyDockEvent before it wakes
-// the engine. A run reads the context when it starts, so the event that moved
-// the focus must not wake a run before the new pane is handed over. The sync
-// after the handler would usually win that race, but only because the
-// debounce outlasts the handler.
-//
-// A rail that opens asks for one run. The engine skips every run while the
-// width is zero, so the rows are the last ones from before the rail shut, or
-// none when it was shut from the start, and a once or event section would
-// keep them until its next trigger.
 func (m *OS) syncRailContext() {
 	if m.railCustom.on {
 		if ctx := m.railContextNow(); ctx != m.railCustom.ctx {
@@ -393,10 +290,6 @@ func (m *OS) syncRailContext() {
 	}
 }
 
-// railCustomInfo is the section's row in list-dock-components. From the
-// engine when the command is loaded; from the config otherwise, so a refused
-// refresh or a missing command is reported with its reason rather than by
-// the row's absence.
 func (m *OS) railCustomInfo() DockComponentInfo {
 	custom := m.railCustomConfig()
 	info := DockComponentInfo{

@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// selectKeybindRow puts the cursor on the first row matching want, and reports
-// the row. It filters rather than scanning so the case exercises the path the
-// user does: type into the filter, then act on what is under the cursor.
 func selectKeybindRow(t *testing.T, m *OS, query string, match func(config.Binding) bool) config.Binding {
 	t.Helper()
 	m.KeybindSetQuery(query)
@@ -76,7 +73,6 @@ func TestUnbindingTheLastKeyLeavesTheActionRebindable(t *testing.T) {
 		t.Fatalf("close_window row is not marked unbound: %+v", row)
 	}
 
-	// And it can be given a key again, from that row.
 	m.KeybindArmFor(row.Section, row.Action)
 	m.KeybindCapture("ctrl+alt+w")
 	m.KeybindCommitBinding()
@@ -130,8 +126,6 @@ func TestFreeingAKeyReportsWhatStillHoldsIt(t *testing.T) {
 	}
 }
 
-// lastNotificationText is the newest notification's message, so a case can
-// assert on what the user was told rather than only on what changed.
 func lastNotificationText(t *testing.T, m *OS) string {
 	t.Helper()
 	if len(m.Notifications) == 0 {

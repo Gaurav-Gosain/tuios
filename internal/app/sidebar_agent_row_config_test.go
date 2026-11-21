@@ -8,7 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// agentRowSpec sets the rail's agent row table for a test and restores it.
 func agentRowSpec(t *testing.T, m *OS, body string) {
 	t.Helper()
 	cfg, err := config.ParseUserConfig([]byte(body))
@@ -46,7 +45,6 @@ fg = "#00ff00"
 	}
 }
 
-// nowMinusMinutes is a state stamp n minutes ago.
 func nowMinusMinutes(n int) int64 {
 	return time.Now().Add(-time.Duration(n) * time.Minute).UnixNano()
 }

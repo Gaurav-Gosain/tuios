@@ -7,8 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// tooltipOS renders a collapsed strip once so the strip rows exist, then hands
-// back the y of the row of the given kind.
 func tooltipOS(t *testing.T, pos string, kind sidebarStripRowKind) (*OS, int) {
 	t.Helper()
 	m, tree := stripOS(t, 120, 20)
@@ -45,7 +43,6 @@ func TestTooltipPendsOnlyDuringALiveHover(t *testing.T) {
 		t.Error("a pending tooltip does not hold the maintenance tick, so nothing will draw it")
 	}
 
-	// The delay elapses and the frame that draws it closes the gate.
 	m.Tooltip.At = time.Now().Add(-2 * m.Settings.TooltipDelay())
 	if !m.tooltipVisible(tooltipRailStrip) {
 		t.Fatal("the tooltip never became visible")
@@ -57,7 +54,6 @@ func TestTooltipPendsOnlyDuringALiveHover(t *testing.T) {
 		t.Error("a shown tooltip is still pending; the tick would never idle")
 	}
 
-	// And leaving the band takes it down entirely.
 	m.SidebarMotion(m.GetRenderWidth()-2, y)
 	if m.TooltipPending() || m.tooltipVisible(tooltipRailStrip) {
 		t.Error("leaving the band left the tooltip behind")
@@ -70,7 +66,6 @@ func TestTooltipPendsOnlyDuringALiveHover(t *testing.T) {
 func TestTooltipPendingClosesOnASilentRow(t *testing.T) {
 	m, y := tooltipOS(t, "left", sidebarStripBadge)
 	m.SidebarMotion(1, y)
-	// A row the renderer had nothing to say about.
 	for i := range m.sidebarStripRows {
 		m.sidebarStripRows[i].Label = ""
 	}

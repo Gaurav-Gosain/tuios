@@ -7,13 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The palette listed window entries for the attached session only, so finding a
-// pane in one of the other five meant switching first and looking again. These
-// are the claims about what it reaches now, and about being honest that reaching
-// some of it costs a session switch.
-
-// paletteItemNamed returns the palette entry whose name contains want, or the
-// zero item.
 func paletteItemNamed(items []CommandPaletteItem, want string) CommandPaletteItem {
 	for _, it := range items {
 		if strings.Contains(it.Name, want) {
@@ -23,8 +16,6 @@ func paletteItemNamed(items []CommandPaletteItem, want string) CommandPaletteIte
 	return CommandPaletteItem{}
 }
 
-// paletteReachOS is a client attached to "main" beside a session it is not
-// attached to whose panes the daemon has already listed.
 func paletteReachOS(t *testing.T) *OS {
 	t.Helper()
 	m, _ := sectionsTestOS(t, 120, 30)
@@ -51,8 +42,6 @@ func TestPaletteReachesEverySessionsWindows(t *testing.T) {
 	if foreign.Shortcut == "" {
 		t.Errorf("the entry %q does not say that selecting it switches session", foreign.Name)
 	}
-	// A pane of the attached session is unqualified and costs nothing to reach,
-	// so it says nothing.
 	own := paletteItemNamed(items, "Window: nvim")
 	if own.Name == "" {
 		t.Fatalf("the attached session's panes stopped being listed:\n%s", paletteNames(items))
@@ -84,7 +73,6 @@ func TestPaletteWindowJumpLeavesTheRail(t *testing.T) {
 	}
 }
 
-// paletteNames is the entry names, one per line, for a failure message.
 func paletteNames(items []CommandPaletteItem) string {
 	var b strings.Builder
 	for _, it := range items {
@@ -117,12 +105,8 @@ func TestPaletteStateFilterFindsWhoNeedsYou(t *testing.T) {
 		{"@d", []string{"refactor"}},
 		{"@e", []string{"broken"}},
 		{"@n", []string{"server"}},
-		// A bare "@" is the halfway house while typing: anything running an agent,
-		// and no static commands.
 		{"@", []string{"server", "build", "refactor", "broken"}},
-		// The scored matcher still runs over what is left.
 		{"@a serv", []string{"server"}},
-		// A token naming nothing narrows to nothing rather than quietly not applying.
 		{"@zzz", nil},
 	} {
 		got := FilterCommandPalette(items, tc.query)

@@ -7,10 +7,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// The preview-first contract: the panel is up on the frame the gesture ended
-// on, and the artifacts catch up under a serial that says which capture they
-// belong to.
-
 // TestEscapeBeforeTheFileLandsLeavesNothing is the pending half of discard. A
 // panel closed with esc before its file exists cannot remove that file, so the
 // serial is written down and the result removes its own.
@@ -23,7 +19,6 @@ func TestEscapeBeforeTheFileLandsLeavesNothing(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("no capture was started")
 	}
-	// esc, while the render is still running.
 	m.CloseScreenshotPreview(true)
 	if m.ShotPreview.Open {
 		t.Fatal("esc left the panel open")
@@ -64,7 +59,6 @@ func TestAStaleResultLeavesThePanelAlone(t *testing.T) {
 		t.Fatalf("two captures share serial %d", secondSerial)
 	}
 
-	// The second finishes first, then the first arrives late.
 	secondMsg := second().(screenshotResultMsg)
 	m.HandleScreenshotResult(secondMsg)
 	firstMsg := first().(screenshotResultMsg)
@@ -77,7 +71,6 @@ func TestAStaleResultLeavesThePanelAlone(t *testing.T) {
 		t.Errorf("the panel shows %q, want the capture it is open on, %q",
 			m.ShotPreview.Path, secondMsg.path)
 	}
-	// The late one was still asked for, so its file stays.
 	if _, err := os.Stat(firstMsg.path); err != nil {
 		t.Errorf("the earlier capture's file went missing: %v", err)
 	}
@@ -163,8 +156,6 @@ func TestThePreviewPayloadIsShrunkToThePanel(t *testing.T) {
 		t.Errorf("the preview picture is %dx%d, larger than the panel's %dx%d budget",
 			msg.pixelW, msg.pixelH, maxW, maxH)
 	}
-	// The file itself is megabytes; the payload is a fraction of it, and the
-	// bound is what stops it riding inside the frame's sync bracket.
 	const payloadBudget = 512 << 10
 	if len(msg.png) > payloadBudget {
 		t.Errorf("the preview payload is %d KB, want under %d KB",

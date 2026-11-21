@@ -11,8 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// scrollbarViewOffset returns how far back into scrollback the pane is looking,
-// 0 at the live tail.
 func scrollbarViewOffset(window *terminal.Window) int {
 	if !window.InCopyMode() {
 		return 0
@@ -20,25 +18,12 @@ func scrollbarViewOffset(window *terminal.Window) int {
 	return max(window.CopyMode.ScrollOffset, 0)
 }
 
-// scrollbarThumbHeight sizes the thumb to the viewport's share of the whole
-// buffer, leaving at least one cell of travel so the bar always reads as a
-// position rather than a filled track.
 func scrollbarThumbHeight(contentH, scrollbackLen int) int {
 	total := scrollbackLen + contentH
 	h := (contentH*contentH + total - 1) / total
 	return max(min(h, contentH-1), 1)
 }
 
-// windowNeedsScrollbar reports whether window should show a scrollbar thumb.
-// It is the single source of truth shared by every render path (compositor
-// cached, sync-hold, redraw, and the fullscreen fast path) so they never
-// disagree about whether the thumb is present. It mirrors the eligibility in
-// renderScrollbarLayer minus the transient IsBeingManipulated check.
-//
-// The thumb is a position readout, so it exists only while there is a position
-// to read: a bar pinned to the bottom at the live tail is chrome answering a
-// question nobody asked, and it would drop a lone scrolled-to-tail pane off
-// the fullscreen fast path.
 func windowNeedsScrollbar(window *terminal.Window, s *config.Settings) bool {
 	if s.HideScrollbar {
 		return false
@@ -55,12 +40,6 @@ func windowNeedsScrollbar(window *terminal.Window, s *config.Settings) bool {
 	return window.ContentHeight() > 2
 }
 
-// scrollbarColumn returns the screen column the thumb occupies: the pane's last
-// content column, one in from its right border when it has one. A borderless
-// pane under shared borders has BorderOffset 0, so the column is its own
-// rightmost cell, one in from the separator overlay that lives in the gap
-// between rectangles. The bar was never the border's business, which is why one
-// formula covers bordered, borderless, hidden-border and zoomed panes alike.
 func scrollbarColumn(window *terminal.Window) int {
 	return window.X + window.Width - 1 - window.BorderOffset()
 }
@@ -97,21 +76,10 @@ func (m *OS) ScrollbarHit(window *terminal.Window) (ScrollbarRect, bool) {
 	return rect, ok
 }
 
-// resetScrollbarRects drops the previous frame's bars. Called by every frame
-// builder before it draws, so a bar that has scrolled back to the tail, been
-// clipped by the rail or lost its pane stops being grabbable with it.
 func (m *OS) resetScrollbarRects() {
 	clear(m.scrollbarRects)
 }
 
-// scrollbarTravel returns the thumb's size and its travel in the units the
-// active style measures in, plus how many of those units make a row. The track
-// style works at opentui's two units per cell (sst/opentui,
-// packages/core/src/renderables/Slider.ts), so a thumb end can land mid-cell as
-// ▀ or ▄ and the bar carries twice the resolution a one-column bar would
-// otherwise have. The thin style works at one: its glyphs style the cross axis,
-// and Unicode has no right-half-plus-partial-height block to smooth the scroll
-// axis with, so the two styles do not blend.
 func scrollbarTravel(contentH, scrollbackLen int, s *config.Settings) (unitsPerRow, thumb, travel int) {
 	if s.ScrollbarStyle != config.ScrollbarStyleTrack {
 		thumb = scrollbarThumbHeight(contentH, scrollbackLen)
@@ -124,7 +92,6 @@ func scrollbarTravel(contentH, scrollbackLen int, s *config.Settings) (unitsPerR
 	return halves, thumb, trackH - thumb
 }
 
-// roundDiv divides two non-negative counts, rounding halves up.
 func roundDiv(a, b int) int {
 	if b <= 0 {
 		return 0
@@ -132,11 +99,6 @@ func roundDiv(a, b int) int {
 	return (2*a + b) / (2 * b)
 }
 
-// scrollbarThumbStart returns the thumb's leading edge in travel units, 0 at the
-// oldest line. The division is rounded rather than truncated, after opentui's
-// Slider: truncation biases every position toward the live tail, so a pane a
-// hair off its oldest line drew the thumb a whole row shy of the top of its
-// track.
 func scrollbarThumbStart(contentH, scrollbackLen, offset int, s *config.Settings) int {
 	_, _, travel := scrollbarTravel(contentH, scrollbackLen, s)
 	if travel <= 0 || scrollbackLen <= 0 {
@@ -145,9 +107,6 @@ func scrollbarThumbStart(contentH, scrollbackLen, offset int, s *config.Settings
 	return max(min(travel-roundDiv(offset*travel, scrollbackLen), travel), 0)
 }
 
-// scrollbarOffsetForStart inverts scrollbarThumbStart: the scroll offset that
-// puts the thumb's leading edge on a given travel unit. A drag reads it, so the
-// thumb lands where the pointer left it.
 func scrollbarOffsetForStart(contentH, scrollbackLen, start int, s *config.Settings) int {
 	_, _, travel := scrollbarTravel(contentH, scrollbackLen, s)
 	if travel <= 0 {
@@ -157,22 +116,13 @@ func scrollbarOffsetForStart(contentH, scrollbackLen, start int, s *config.Setti
 	return max(min(roundDiv((travel-start)*scrollbackLen, travel), scrollbackLen), 0)
 }
 
-// scrollbarHasTrack reports whether the bar paints its whole column. The track
-// style always does; the thin style does once it has a glyph to draw one with,
-// which ASCII has not and `track = "none"` asks it not to.
 func scrollbarHasTrack(s *config.Settings) bool {
 	return s.GetScrollbarTrackChar() != "" ||
 		s.ScrollbarStyle == config.ScrollbarStyleTrack
 }
 
-// scrollbarBlockThumb is the only thumb glyph with half-height siblings, so it
-// is the only one the track style can resolve a half cell with. Any other
-// glyph, configured or ASCII, rounds a covered half up to a whole cell.
 const scrollbarBlockThumb = "█"
 
-// scrollbarRows draws the bar's whole column, one glyph per viewport row, and
-// reports the rows the thumb landed on: a press is measured against those, not
-// against the arithmetic that produced them.
 func scrollbarRows(contentH, scrollbackLen, offset int, s *config.Settings) (rows []string, thumbTop, thumbRows int) {
 	perRow, thumbUnits, _ := scrollbarTravel(contentH, scrollbackLen, s)
 	start := scrollbarThumbStart(contentH, scrollbackLen, offset, s)
@@ -185,7 +135,7 @@ func scrollbarRows(contentH, scrollbackLen, offset int, s *config.Settings) (row
 	}
 	blank := s.GetScrollbarTrackChar()
 	if blank == "" && s.ScrollbarStyle == config.ScrollbarStyleTrack {
-		blank = " " // the surface fill is this style's track
+		blank = " "
 	}
 
 	rows = make([]string, contentH)
@@ -214,37 +164,15 @@ func scrollbarRows(contentH, scrollbackLen, offset int, s *config.Settings) (row
 	return rows, thumbTop, thumbRows
 }
 
-// scrollbarMinContrast is the floor a derived tint has to clear against the
-// ground it is drawn on. Below it the bar is present but unreadable, which is
-// worse than a bar that does not match its pane: dark blue measures 1.74:1 on
-// the canvas and 1.21:1 on the track's surface.
-//
-// It sits below theme.ContrastFloor on purpose. A scrollbar is a shape, not a
-// label: it has to be seen, not read.
 const scrollbarMinContrast = 2.5
 
-// The ratios the quiet tint aims its two inks at, against whatever the bar is
-// drawn on. The thumb is the readout and clears theme.ContrastFloor; the track
-// is a guide rail for it and sits barely above the ground, which is what lets
-// the pair recede until it is looked for.
 const (
 	scrollbarQuietThumbContrast = 4.5
 	scrollbarQuietTrackContrast = 2.0
 )
 
-// blendColors mixes a toward b by t in 0..1, in OKLab. It is the one blend
-// the app's passes use (the dim, the spotlight, the scrollbar), and it is
-// overlay.MixColors so the chrome and the content blend the same way.
 func blendColors(a, b color.Color, t float64) color.Color { return overlay.MixColors(a, b, t) }
 
-// scrollbarQuietInk returns the ground's own high-contrast ink carried back
-// toward the ground until it measures about want:1 against it.
-//
-// It aims at a measured ratio rather than at a fixed blend because sRGB is not
-// linear: the same blend fraction lands near 4.3:1 on a black pane and near
-// 2.5:1 on a white one, so a fixed fraction would give a light theme a visibly
-// fainter bar than a dark one for the same setting. The scan is over the frames
-// a scrolled-back pane produces only, and there is at most one bar per pane.
 func scrollbarQuietInk(ground color.Color, want float64) color.Color {
 	ink := theme.ContrastText(ground)
 	if theme.ContrastRatio(ink, ground) <= want {
@@ -260,30 +188,6 @@ func scrollbarQuietInk(ground color.Color, want float64) color.Color {
 	return ink
 }
 
-// scrollbarInk resolves the colours the thumb and the track are drawn in.
-//
-// The default rule is restraint: the quiet tint draws both in the pane's own
-// ground dimmed back to a measured ratio, so the bar is one stroke at two
-// weights and carries no hue of its own. The bar is a position readout on a
-// pane the user is already looking at, and only one pane can be scrolled back
-// at a time, so colouring it by focus was telling the user something they could
-// already see, in the loudest ink on screen: the focus cyan measures 18.6:1 on
-// a black pane.
-//
-// The tint that did that is still here under `tint = "border"`: the focused
-// pane's bar is drawn in its accent, or failing that in the very colour its
-// border is drawn in, and every other pane keeps the unfocused border colour.
-// It stays a thumb-only rule, because tinting the track as well doubles the ink
-// the bar spends to say one thing.
-//
-// This is a tint rule only. A pane with scrollback still draws its bar whether
-// or not it holds focus, because the bar reports a scroll position and hiding
-// it would hide that position.
-//
-// A derived accent has to clear scrollbarMinContrast against the ground it
-// lands on or it falls back to the mode's focus colour, which turns an
-// invisible bar into one that still matches the border family. A configured hex
-// skips the floor: measurement was overridden on purpose.
 func (m *OS) scrollbarInk(window *terminal.Window, focused bool, ground color.Color) (thumb, track color.Color) {
 	track = theme.UI().FgMute
 	switch m.Settings.ScrollbarTintResolved() {
@@ -319,10 +223,6 @@ func (m *OS) scrollbarInk(window *terminal.Window, focused bool, ground color.Co
 	return accent, track
 }
 
-// renderScrollbarLayer creates a 1-column layer floating the bar over the
-// pane's last content column, and records where it drew it. rightClip is the
-// first column of the sidebar band; a pane mid-drag may straddle it, and the
-// bar is composed above the band's own layer.
 func (m *OS) renderScrollbarLayer(window *terminal.Window, rightClip, zIndex int, focused bool) *lipgloss.Layer {
 	if window.IsBeingManipulated || !windowNeedsScrollbar(window, &m.Settings) {
 		return nil
@@ -338,10 +238,6 @@ func (m *OS) renderScrollbarLayer(window *terminal.Window, rightClip, zIndex int
 	top := window.Y + window.BorderOffset()
 	rows, thumbTop, thumbRows := scrollbarRows(contentH, scrollbackLen, scrollbarViewOffset(window), &m.Settings)
 
-	// The ground is what the bar's cells actually land on, which is what every
-	// ratio below is measured against. The thin style floats over the pane's own
-	// content, so that is the terminal's background and not the chrome's canvas;
-	// the track style paints its column, so it is the fill it paints.
 	pal := theme.UI()
 	ground := m.terminalBg()
 	base := lipgloss.NewStyle()
@@ -349,11 +245,6 @@ func (m *OS) renderScrollbarLayer(window *terminal.Window, rightClip, zIndex int
 		ground = pal.Surface
 		base = base.Background(pal.Surface)
 	} else if g := m.paneGround(); g.on() {
-		// The thin bar floats over the pane, and its layer replaces the cells
-		// under it, so on a painted pane it carries the paint itself: a cell
-		// with no background here would cut a column of the terminal's own
-		// background through the pane. The ink is measured against the same
-		// ground for the same reason.
 		ground = g.bg
 		base = base.Background(g.bg)
 	}
@@ -361,8 +252,6 @@ func (m *OS) renderScrollbarLayer(window *terminal.Window, rightClip, zIndex int
 	trackInk := base.Foreground(trackColor)
 	thumbInk := base.Foreground(thumbColor)
 
-	// Without a track the untouched rows stay the guest's: a blank there would
-	// paint over a column of content to say nothing.
 	trackTop, trackRows := top, contentH
 	if !scrollbarHasTrack(&m.Settings) {
 		rows = rows[thumbTop : thumbTop+thumbRows]
@@ -371,9 +260,6 @@ func (m *OS) renderScrollbarLayer(window *terminal.Window, rightClip, zIndex int
 		thumbTop = 0
 	}
 
-	// Three renders rather than one per row: the column is a run of track, a run
-	// of thumb and a run of track, and this draws on every frame a scrolled-back
-	// pane produces.
 	thumbEnd := thumbTop + thumbRows
 	parts := make([]string, 0, 3)
 	if thumbTop > 0 {

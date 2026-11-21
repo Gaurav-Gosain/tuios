@@ -6,13 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/composer"
 )
 
-// The mouse in a draft: the editor openDraft names, the one that takes the
-// keys, wherever it is drawn. Each host records where the editor's first
-// line is (draftWires.at) for its pictures and caret, and the same place maps
-// a click to the editor's frame.
-
-// draftPress is a mouse press in a draft: the press count that makes a double
-// or a triple click, and whether the button is still down.
 type draftPress struct {
 	comp  *composer.Model
 	down  bool
@@ -31,16 +24,11 @@ func (m *OS) NoteClickShift(shift bool) { m.draftMouse.shift = shift }
 // click on a row of the files section: it copies the path then.
 func (m *OS) NoteSidebarPressCopy(copyPath bool) { m.sidebarPressCopy = copyPath }
 
-// draftAt maps screen x, y onto the open draft drawn in the panel of kind: the
-// line of its last frame and the column in it. inside says the point is on a
-// line the panel shows. ok is false when no draft of that panel is on screen.
 func (m *OS) draftAt(kind string, x, y int) (d openDraft, line, col int, inside, ok bool) {
 	d, ok = m.openDraft()
 	if !ok || d.kind != kind || !d.wires.at.drawn {
 		return d, 0, 0, false, false
 	}
-	// The New agent sheet is drawn over the reply area: only its own task
-	// takes a click there.
 	if sp := m.Inbox.ck.spawn; sp != nil && kind == "inbox" && d.comp != sp.task {
 		return d, 0, 0, false, false
 	}
@@ -55,10 +43,6 @@ func (m *OS) draftAt(kind string, x, y int) (d openDraft, line, col int, inside,
 	return d, line, col, inside, true
 }
 
-// draftClick handles a press at screen x, y on the open draft of the panel
-// of kind, and reports whether it was on the draft. A press close to the
-// last one, soon after it, counts up: two select a word, three a line. An
-// entry of the @ list is left to its host, which picks it.
 func (m *OS) draftClick(kind string, x, y int) bool {
 	d, line, col, inside, ok := m.draftAt(kind, x, y)
 	if !ok || !inside {
@@ -93,8 +77,6 @@ func (m *OS) DraftDrag(x, y int) bool {
 		p.down = false
 		return false
 	}
-	// Motion that stays on the pressed cell is no drag: it would undo the
-	// word a double click just selected.
 	if !p.moved && x == p.x && y == p.y {
 		return true
 	}

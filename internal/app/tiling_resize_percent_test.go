@@ -4,19 +4,11 @@ import (
 	"testing"
 )
 
-// Percentage resizing of the focused pane (issue #29).
-//
-// The width percentage is measured against the content region and the height
-// percentage against the usable height, driving the same edge logic the plain
-// width/height keys use, so the boundary-pane fallback (move the far edge)
-// applies to the rightmost pane and the bottommost pane too.
-
 // TestWidthPercentOnBoundaryPane sizes the rightmost pane to 80% of the
 // content region: its right edge is the screen boundary, so the left divider
 // moves and the left pane yields the difference.
 func TestWidthPercentOnBoundaryPane(t *testing.T) {
-	m, left, right := twoPaneSideBySide(t) // both 60 wide, content 120
-	// Focus is already the right (boundary) pane.
+	m, left, right := twoPaneSideBySide(t)
 
 	m.SetFocusedWindowWidthPercent(80)
 
@@ -40,7 +32,6 @@ func TestPercentGuardrails(t *testing.T) {
 	m.FocusedWindow = 1
 	beforeRight := right.Width
 
-	// Out of the 10..90 range: ignored (100 included, since there is no resize_width_100).
 	m.SetFocusedWindowWidthPercent(5)
 	m.SetFocusedWindowWidthPercent(95)
 	m.SetFocusedWindowWidthPercent(100)
@@ -48,13 +39,11 @@ func TestPercentGuardrails(t *testing.T) {
 		t.Errorf("out-of-range percent moved the window: %d -> %d", beforeRight, right.Width)
 	}
 
-	// Already at 50%: no movement.
 	m.SetFocusedWindowWidthPercent(50)
 	if right.Width != 60 {
 		t.Errorf("50%% on a 50%% pane moved it: %d", right.Width)
 	}
 
-	// Tiling off: ignored.
 	m.AutoTiling = false
 	m.SetFocusedWindowWidthPercent(80)
 	if right.Width != 60 {

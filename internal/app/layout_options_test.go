@@ -7,11 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The three layout settings this file covers are the ones that decide how many
-// cells a pane gets, so each of them is either seeded from the config and then
-// settled by the session, or it is a bug waiting for a second client. A PTY has
-// exactly one size; see the note at the top of pane_geometry.go.
-
 // TestScrollColumnWidthIsSettledAcrossTheSession is the multi-client rule for
 // the newest geometry input. Two clients whose config files disagree about a
 // column's width would resolve every column to a different number of cells and
@@ -36,7 +31,6 @@ func TestScrollColumnWidthIsSettledAcrossTheSession(t *testing.T) {
 		t.Fatalf("the session state must carry the column width; got %+v", state.PaneGeometry)
 	}
 
-	// A second client whose own process was configured for a wider column.
 	config.Global.ScrollColumnWidth = 70
 	joiner := modeOS(t, LayoutModeScrolling, false, 0, 3, 160, 48)
 	host.Settings = config.Global
@@ -119,8 +113,6 @@ func TestAFreshWorkspaceStartsAtTheConfiguredMasterRatio(t *testing.T) {
 		t.Errorf("the first visit to workspace 2 put the master ratio at %d%%, want the configured 70%%", got)
 	}
 
-	// A workspace that was left at its own ratio keeps it, which is the half of
-	// the behaviour the fallback must not trample.
 	m.MasterRatio = 0.5
 	m.TileAllWindows()
 	m.SwitchToWorkspace(1)

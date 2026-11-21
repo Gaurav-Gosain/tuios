@@ -51,14 +51,11 @@ func TestRailCheckIgnoresPaneOutputTheFrameHasNotTakenIn(t *testing.T) {
 	m.railPaneView.key = rail.Rail
 	m.railPaneView.windowID = rail.ID
 
-	// out writes to the pane as the daemon's stream does, and waits until the
-	// writer has applied it.
 	out := func(s string) {
 		t.Helper()
 		rail.WriteOutputAsync([]byte(s))
 		rail.DrainPendingOutput()
 	}
-	// pass is the UI goroutine taking the pane's output in, as a frame does.
 	pass := func() {
 		t.Helper()
 		m.MarkTerminalsWithNewContent()
@@ -75,7 +72,7 @@ func TestRailCheckIgnoresPaneOutputTheFrameHasNotTakenIn(t *testing.T) {
 		return -1
 	}
 
-	railLines(t, m) // lays the pane out
+	railLines(t, m)
 	pass()
 	out("SZ 4 27\r\nTICK-0")
 	pass()
@@ -85,7 +82,6 @@ func TestRailCheckIgnoresPaneOutputTheFrameHasNotTakenIn(t *testing.T) {
 		t.Fatalf("setup: the pane's first line is %q, want the program's output", lines[row])
 	}
 
-	// The program clears its screen and a frame draws the blank.
 	out("\x1b[H\x1b[2J")
 	pass()
 	railLines(t, m)
@@ -94,7 +90,6 @@ func TestRailCheckIgnoresPaneOutputTheFrameHasNotTakenIn(t *testing.T) {
 	}
 	sig := m.sidebarSignature()
 
-	// The echo of a typed "l" lands before the next pass.
 	out("l")
 	if m.sidebarSignature() != sig {
 		t.Fatal("setup: the key moved on a write no pass has taken in, so the cache would not be served")
@@ -104,15 +99,12 @@ func TestRailCheckIgnoresPaneOutputTheFrameHasNotTakenIn(t *testing.T) {
 		t.Fatalf("the check reported output no pass has taken in as a key miss:\n%s", diff)
 	}
 
-	// A pass that takes the output in without moving gen is a key that misses
-	// an input, and the check still reports it.
 	_, m.railPaneView.noted = rail.EmulatorWrites()
 	rail.HasNewOutput.Store(false)
 	if diff := m.railCacheMiss(ext); diff == "" {
 		t.Fatal("the check found no difference after the output was taken in without moving the key")
 	}
 
-	// And the pass the write asks for draws it.
 	rail.HasNewOutput.Store(true)
 	pass()
 	lines = railLines(t, m)

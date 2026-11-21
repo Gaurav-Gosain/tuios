@@ -7,9 +7,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// cursorTransitionTerminal models a guest showing its cursor between the
-// ownership query and the locked cell walk. The first visibility sample is
-// hidden; later samples see the visible emulator, without scheduler timing.
 type cursorTransitionTerminal struct {
 	vt.Terminal
 	hideNext bool
@@ -58,9 +55,6 @@ func TestNativeCursorVisibilityTransition(t *testing.T) {
 				t.Fatal("fixture did not cache the rendered text")
 			}
 
-			// Cursor-only output can reach the emulator before the UI consumes
-			// its dirty notification. Keep the content cache and sample the
-			// native cursor independently, just as View does.
 			win.LockIO()
 			_, err := win.Terminal.Write([]byte("\x1b[1;11H"))
 			win.UnlockIO()
@@ -79,7 +73,6 @@ func TestNativeCursorVisibilityTransition(t *testing.T) {
 				t.Error("cached text retained a software cursor after the native cursor moved")
 			}
 
-			// Without native ownership, the same guest still needs a software cursor.
 			win.WriteOutput([]byte("\x1b[?25h"))
 			m.ShowScrollbackBrowser = true
 			win.ContentDirty = true
@@ -92,13 +85,6 @@ func TestNativeCursorVisibilityTransition(t *testing.T) {
 	}
 }
 
-// countFakeCursors counts the cells the cell loop painted as a cursor.
-//
-// It looks for a foreground and a background set in one sequence, which is what
-// the cursor cell emits and what an unstyled prompt does not. The obvious probe
-// is reverse video, and the resize test next door used it, but the cursor cell
-// has never been drawn that way: it swaps the two colours explicitly, so
-// counting ESC[7m could not fail and never did.
 func countFakeCursors(render string) int {
 	return len(regexp.MustCompile(`\x1b\[38;2;[0-9;]*;48;2;[0-9;]*m`).FindAllString(render, -1))
 }

@@ -9,22 +9,6 @@ import "time"
 // are further apart than this in any hand.
 const WheelGestureGap = 250 * time.Millisecond
 
-// wheelAxis remembers which way the scroll gesture in progress is actually
-// going, so the drift on the other axis can be dropped.
-//
-// A trackpad puts a little sideways drift into almost every vertical scroll, and
-// the terminal forwards that as a left or right wheel button interleaved with
-// the up and down ones. Anywhere both axes mean something, the drift fights the
-// scroll: in the scrolling layout it walks the strip back against the direction
-// the user is pushing it, which is the stutter this exists to stop.
-//
-// The rule is the majority axis of the gesture so far, because drift is by
-// definition the minority: a gesture that is mostly up and down stays vertical
-// however much the hand wanders. It is not "vertical wins", because a mouse
-// wheel with shift held arrives as nothing but left and right on macOS, where
-// the window server swaps the axes before the terminal ever sees the event. A
-// gesture that genuinely changes axis mid-flight switches once the new axis has
-// more events than the old, and a pause of WheelGestureGap starts it over.
 type wheelAxis struct {
 	last       time.Time
 	vertical   int
@@ -63,9 +47,6 @@ func (m *OS) WheelAxisAccepts(horizontal bool, now time.Time) bool {
 
 	switch {
 	case w.axis == wheelAxisNone:
-		// The first event of a gesture is the only evidence there is, so it
-		// decides. Requiring a majority here would swallow the first notch of
-		// every wheel gesture, which is often the only notch there is.
 		w.axis = this
 	case w.axis == wheelAxisVertical && w.horizontal > w.vertical:
 		w.axis = wheelAxisHorizontal

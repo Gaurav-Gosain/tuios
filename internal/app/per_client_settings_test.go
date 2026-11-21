@@ -9,9 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// boxTopLeft is the first cell of the box a session draws around a pane, with
-// the styling stripped. It is read off the rendered string rather than off the
-// setting, because the setting is only interesting where it reaches the screen.
 func boxTopLeft(t *testing.T, m *OS, win *terminal.Window) string {
 	t.Helper()
 	box := m.renderWindowBox(win, 0, true, lipgloss.Color("62"))
@@ -52,9 +49,6 @@ func TestOneClientsSettingsStopAtThatClient(t *testing.T) {
 
 	before := boxTopLeft(t, alice, aliceWin)
 
-	// Bob opens the settings panel and picks another border, another zen mode
-	// and another rail. SetConfig is the funnel: the panel, the command
-	// palette and set-option all arrive here.
 	for _, kv := range [][2]string{
 		{"appearance.border_style", "double"},
 		{"appearance.zen_mode", config.ZenModeAlways},
@@ -66,12 +60,10 @@ func TestOneClientsSettingsStopAtThatClient(t *testing.T) {
 		}
 	}
 
-	// Bob got what Bob asked for.
 	if got := bob.Settings.BorderStyle; got != "double" {
 		t.Fatalf("the client that made the change reads border style %q, want double", got)
 	}
 
-	// Alice did not, in any of the four.
 	if got := alice.Settings.BorderStyle; got != "rounded" {
 		t.Errorf("border style crossed sessions: Alice reads %q, want rounded", got)
 	}
@@ -85,8 +77,6 @@ func TestOneClientsSettingsStopAtThatClient(t *testing.T) {
 		t.Errorf("scrollback crossed sessions: Alice reads %d, want %d", got, config.DefaultScrollbackLines)
 	}
 
-	// And on the frame, which is where a user would see it. Alice's pane draws
-	// the corner it drew before Bob touched anything, and Bob's draws his.
 	if got := boxTopLeft(t, alice, aliceWin); got != before {
 		t.Errorf("the other session's pane is drawing Bob's border: corner %q, was %q", got, before)
 	}
@@ -108,8 +98,6 @@ func TestTheProcessSeedIsNotWrittenByASession(t *testing.T) {
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig(), ConfigReadOnly: true})
 	t.Cleanup(m.Cleanup)
 
-	// zen_mode has no hand-written setter, so it takes the registry funnel:
-	// the one call every row of the settings panel arrives through.
 	if err := m.SetConfig("appearance.zen_mode", config.ZenModeAlways); err != nil {
 		t.Fatalf("SetConfig = %v", err)
 	}

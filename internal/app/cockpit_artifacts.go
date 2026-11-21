@@ -19,32 +19,6 @@ import (
 	"tuios.dev/tml"
 )
 
-// The Artifacts tab of the agents view: what the selected agent has shown
-// the person, the TML surfaces its pane opened and the screenshots it took.
-// The daemon keeps the list per pane (artifact-list); this client adds the
-// surfaces it holds that the last list did not have yet.
-//
-// A surface has one state and two places. Outside the agents view it is the
-// window the agent asked for, a popup or a pane. While the view is open the
-// window is under it, and the surface is drawn in the view's focus area
-// instead, from the same tmlView: the same loom surface, the same state, the
-// same text typed into a form. Nothing is copied, so nothing is lost when
-// the person goes from one place to the other, and the surface never shows
-// in two places at once.
-//
-// While the view is open:
-//   - a surface from the selected agent shows in its focus area, selected;
-//   - a surface from another agent puts a "new artifact" chip on that
-//     agent's row, and a popup moves the row to Needs you, so a form that
-//     waits for the person is never out of sight;
-//   - opening the view while an agent's popup floats selects that agent and
-//     the surface; closing it while the person was in a surface that still
-//     waits focuses its window, so it floats again with what was typed.
-//
-// Cost: nothing runs on a timer. The list is read once per pane and again
-// when a surface opens or closes, or the agent's state moves.
-
-// ckArtifact is one artifact as the view lists it.
 type ckArtifact struct {
 	ID      string          `json:"id"`
 	Kind    string          `json:"kind"`
@@ -61,7 +35,6 @@ type ckArtifact struct {
 	Format  string          `json:"format"`
 }
 
-// ckArtList is one pane's list as last read.
 type ckArtList struct {
 	items   []ckArtifact
 	key     string
@@ -69,47 +42,35 @@ type ckArtList struct {
 	err     string
 }
 
-// ckArtBox is where the selected artifact was last drawn, on the screen.
 type ckArtBox struct {
 	x, y, w, h int
 	id         string
 }
 
-// ckArtState is the Artifacts tab's own state.
 type ckArtState struct {
 	lists map[string]*ckArtList
-	// sel is the selected artifact's id, and focus says the keys go to it.
 	sel   string
 	focus bool
-	// seen holds the surfaces the person has had in front of them in the
-	// view; an open surface not in it is new.
-	seen map[string]bool
-	// snaps are the surfaces drawn from a record: a closed surface, or one
-	// in a session this client does not hold.
+	seen  map[string]bool
 	snaps map[string]*ckArtSnap
 	box   ckArtBox
 	gen   uint64
 }
 
-// ckArtSnap is a record drawn read-only.
 type ckArtSnap struct {
 	key string
 	s   *loom.Surface
 	pal string
 }
 
-// ckArtifactsMsg is an artifact-list reply.
 type ckArtifactsMsg struct {
 	window, key string
 	items       []ckArtifact
 	err         error
 }
 
-// ckArtTab is the focus tab's name.
 const ckArtTab = "Artifacts"
 
-// ckArtKey is what a pane's list was read for: the client's surfaces and the
-// agent's state, either of which moving can change it.
 func (m *OS) ckArtKey(e sidebarAgentEntry) string {
 	return ckItoa(int64(m.tml.setGen)) + ":" + ckItoa(e.StateAt) + e.State
 }
@@ -159,7 +120,6 @@ func (m *OS) CockpitArtifactsWanted() tea.Cmd {
 	}
 }
 
-// applyCockpitArtifacts takes an artifact-list reply.
 func (m *OS) applyCockpitArtifacts(msg ckArtifactsMsg) {
 	l := m.Inbox.ck.art.lists[msg.window]
 	if l == nil || l.key != msg.key {
@@ -180,8 +140,6 @@ func (m *OS) applyCockpitArtifacts(msg ckArtifactsMsg) {
 	m.cockpitTouch()
 }
 
-// ckArtifacts is what the agent has shown, newest first: the daemon's list,
-// with the surfaces this client holds that the list does not have yet.
 func (m *OS) ckArtifacts(e sidebarAgentEntry) []ckArtifact {
 	if e.Host != "" || e.WindowID == "" {
 		return nil
@@ -200,11 +158,9 @@ func (m *OS) ckArtifacts(e sidebarAgentEntry) []ckArtifact {
 		}
 		fresh = append(fresh, ckArtifact{ID: v.id, Kind: session.ArtifactTML, Title: v.title, At: v.at.UnixNano(), Surface: v.id, Open: true})
 	}
-	// sort.Slice, not slices.SortFunc: see docs/perf.md, "Where the bytes go".
 	sort.Slice(fresh, func(i, j int) bool { return fresh[i].At > fresh[j].At })
 	out := append(fresh, listed...)
 	for i := range out {
-		// A surface this client holds is open, whatever the list read.
 		if out[i].Kind == session.ArtifactTML && m.tml.views[out[i].ID] != nil {
 			out[i].Open = true
 		}
@@ -212,7 +168,6 @@ func (m *OS) ckArtifacts(e sidebarAgentEntry) []ckArtifact {
 	return out
 }
 
-// ckArtWindow is the window that draws a surface on this client, or nil.
 func (m *OS) ckArtWindow(id string) *terminal.Window {
 	for _, w := range m.Windows {
 		if w != nil && w.Kind == session.WindowKindTML && session.TMLSurfaceID(w.URI) == id {
@@ -222,9 +177,6 @@ func (m *OS) ckArtWindow(id string) *terminal.Window {
 	return nil
 }
 
-// ckArtifactNew reports whether the agent has an open surface the person
-// has not had in front of them in the view. waiting narrows it to a popup,
-// which is a question more often than a dashboard is.
 func (m *OS) ckArtifactNew(e sidebarAgentEntry, waiting bool) bool {
 	if e.Host != "" || e.WindowID == "" {
 		return false
@@ -243,11 +195,6 @@ func (m *OS) ckArtifactNew(e sidebarAgentEntry, waiting bool) bool {
 	return false
 }
 
-// ckArtFormRow is the title of the popup that put the row in Needs you,
-// "" for any other row: an agent row with no item, in Needs you, whose agent
-// does not need input itself and has a TML popup open. The row's mark, its
-// second line and the focus's badge say so, so the row never reads as
-// working in a group that says it needs you.
 func (m *OS) ckArtFormRow(r ckRow, e sidebarAgentEntry) string {
 	if r.agent < 0 || r.hasItem || r.group != ckNeeds || e.State == "needs_input" || e.Host != "" || e.WindowID == "" {
 		return ""
@@ -263,9 +210,6 @@ func (m *OS) ckArtFormRow(r ckRow, e sidebarAgentEntry) string {
 	return ""
 }
 
-// ckArtSelected is the place of the selected artifact in items: the one
-// selected before, else the first surface that is new, else the first open
-// one, else the newest.
 func (m *OS) ckArtSelected(items []ckArtifact) int {
 	art := &m.Inbox.ck.art
 	if i := slices.IndexFunc(items, func(a ckArtifact) bool { return a.ID == art.sel }); i >= 0 {
@@ -283,8 +227,6 @@ func (m *OS) ckArtSelected(items []ckArtifact) int {
 	return 0
 }
 
-// ckArtLive is the selected artifact's view when it is a surface this client
-// holds, and its window.
 func (m *OS) ckArtLive() (*tmlView, *terminal.Window) {
 	e, ok := m.cockpitAgent()
 	if !ok {
@@ -302,8 +244,6 @@ func (m *OS) ckArtLive() (*tmlView, *terminal.Window) {
 	return v, m.ckArtWindow(v.id)
 }
 
-// ckArtShow selects the artifact id on the Artifacts tab of the selected
-// agent, and gives it the keys when focus is set and it is live.
 func (m *OS) ckArtShow(id string, focus bool) {
 	art := &m.Inbox.ck.art
 	art.sel = id
@@ -357,7 +297,6 @@ func (m *OS) CockpitArtifactOpen() tea.Cmd {
 	return nil
 }
 
-// ckArtMove moves the selection in the Artifacts tab by delta.
 func (m *OS) ckArtMove(delta int) bool {
 	e, ok := m.cockpitAgent()
 	if !ok || m.cockpitTab() != ckArtTab {
@@ -436,8 +375,6 @@ func (m *OS) CockpitArtifactPaste(text string) tea.Cmd {
 	return cmd
 }
 
-// cockpitArtifactMouse gives a press or a wheel move in the drawn surface to
-// it. handled is false outside the surface.
 func (m *OS) cockpitArtifactMouse(x, y int, button loom.MouseButton) (tea.Cmd, bool) {
 	art := &m.Inbox.ck.art
 	b := art.box
@@ -447,7 +384,6 @@ func (m *OS) cockpitArtifactMouse(x, y int, button loom.MouseButton) (tea.Cmd, b
 	lm := loom.Mouse{X: x - b.x, Y: y - b.y, Button: button}
 	v, _ := m.ckArtLive()
 	if v == nil || v.id != b.id {
-		// A record: the wheel scrolls it, and nothing goes back.
 		if sn := art.snaps[b.id]; sn != nil && sn.s != nil {
 			_, _ = sn.s.Mouse(lm)
 			m.cockpitTouch()
@@ -476,9 +412,6 @@ func (m *OS) cockpitArtifactMouse(x, y int, button loom.MouseButton) (tea.Cmd, b
 	return cmd, true
 }
 
-// cockpitArtifactArrived shows a surface that just reached this client in
-// the view, when the view is open on the agent that opened it. Any other
-// agent's row gets the chip, as the rows are built again.
 func (m *OS) cockpitArtifactArrived(v *tmlView) {
 	if !m.ShowInbox || v == nil || v.caller == "" || v.surface == nil {
 		return
@@ -488,14 +421,9 @@ func (m *OS) cockpitArtifactArrived(v *tmlView) {
 	if !ok || e.Host != "" || e.WindowID != v.caller {
 		return
 	}
-	// The reply editor keeps the keys: what the person types there is not
-	// meant for the surface.
 	m.ckArtShow(v.id, m.Inbox.reply.editor == nil && !m.CockpitArtifactFocused())
 }
 
-// cockpitAdoptFloating moves a TML popup that floats now into the view as it
-// opens: its agent is selected and the surface shown, with the keys. The
-// focused popup goes first, then the one on top.
 func (m *OS) cockpitAdoptFloating() {
 	var pick *tmlView
 	consider := func(w *terminal.Window) {
@@ -525,9 +453,6 @@ func (m *OS) cockpitAdoptFloating() {
 	}
 }
 
-// cockpitArtifactRelease runs as the view closes: the surface the person had
-// on screen in the Artifacts tab gets its window's focus and comes to the
-// front, so it floats again with what they did in it.
 func (m *OS) cockpitArtifactRelease() {
 	art := &m.Inbox.ck.art
 	inside := art.focus
@@ -554,14 +479,11 @@ func (m *OS) cockpitArtifactRelease() {
 		}
 	}
 	if inside {
-		// The person was typing into the surface: the keys stay with it.
 		m.EnterTerminalMode()
 	}
 	m.markTMLDirty(v.id)
 }
 
-// drawArtifacts draws the Artifacts tab: the list, then the selected
-// artifact, from row y to y1.
 func (m *OS) drawArtifacts(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y, w, y1, top int, now time.Time) {
 	pal := l.pal
 	art := &m.Inbox.ck.art
@@ -581,7 +503,6 @@ func (m *OS) drawArtifacts(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y, w, 
 		return
 	}
 	sel := m.ckArtSelected(items)
-	// The list takes at most a third of the room, and at least one row.
 	shown := min(len(items), max((y1-y)/3, 1), 6)
 	first := 0
 	if sel >= shown {
@@ -635,7 +556,6 @@ func (m *OS) drawArtifacts(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y, w, 
 	}
 	a := items[sel]
 	y++
-	// The line above the artifact says what it is and what the keys do.
 	var head []ckSeg
 	v := m.tml.views[a.ID]
 	live := v != nil && v.surface != nil && v.caller == e.WindowID
@@ -696,7 +616,6 @@ func (m *OS) drawArtifacts(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y, w, 
 	}
 }
 
-// cmpTitle is an artifact's title, or its kind when it has none.
 func cmpTitle(a ckArtifact) string {
 	if a.Title != "" {
 		return a.Title
@@ -704,7 +623,6 @@ func cmpTitle(a ckArtifact) string {
 	return a.Kind
 }
 
-// boolAttr is bold when on.
 func boolAttr(on bool) uint8 {
 	if on {
 		return ckBold
@@ -712,10 +630,6 @@ func boolAttr(on bool) uint8 {
 	return 0
 }
 
-// ckArtRenderLive draws a live surface at w by h for the view, with the
-// question under it when the surface waits for a yes. It is renderTML's
-// body without the window: the window draws the same surface at its own
-// size when it shows again.
 func (m *OS) ckArtRenderLive(v *tmlView, w, h int) string {
 	if key := m.tmlPaletteKey(); key != v.palKey {
 		v.surface.SetPalette(m.tmlPalette())
@@ -734,7 +648,6 @@ func (m *OS) ckArtRenderLive(v *tmlView, w, h int) string {
 	m.tmlMotion(v)
 	out := m.renderSurface(v.surface, w, sh).Render()
 	m.tmlArmFrame(v)
-	// The window's last frame was at its own size: it draws again.
 	v.content = ""
 	if confirm != "" {
 		out += "\n" + confirm
@@ -742,8 +655,6 @@ func (m *OS) ckArtRenderLive(v *tmlView, w, h int) string {
 	return out
 }
 
-// ckArtSnap is the read-only surface of a record, built again only when the
-// record or the palette changed.
 func (m *OS) ckArtSnap(a ckArtifact) *loom.Surface {
 	if len(a.Doc) == 0 {
 		return nil
@@ -777,8 +688,6 @@ func (m *OS) ckArtSnap(a ckArtifact) *loom.Surface {
 	return s
 }
 
-// ckArtTabLabel is the tab's label for the agent, "" when it has shown
-// nothing.
 func (m *OS) ckArtTabLabel(e sidebarAgentEntry) string {
 	n := len(m.ckArtifacts(e))
 	if n == 0 {
@@ -787,5 +696,4 @@ func (m *OS) ckArtTabLabel(e sidebarAgentEntry) string {
 	return ckArtTab + " " + ckItoa(int64(n))
 }
 
-// ckArtChip is the words of the chip on an agent row with a new surface.
 const ckArtChip = "new artifact"

@@ -86,16 +86,11 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 			Bindings: generateAgentBindings(registry, s),
 		},
 		{
-			// Hints mode's keys ride along here rather than in a tab of their
-			// own, for the reason the list keys ride in Modes below.
 			Name:     HelpCategoryCopyMode,
 			Bindings: append(generateCopyModeBindings(registry, s), generateHintsBindings(registry, s)...),
 		},
 		{
 			Name: "Modes",
-			// The list keys ride along here rather than in a tab of their own:
-			// the strip is one row wide at a desktop width, and there is no
-			// room for another tab on it.
 			Bindings: append(append(generateCategoryBindings(registry, "Modes", []string{
 				"enter_terminal_mode", "enter_window_mode",
 				"terminal_exit_mode",
@@ -116,7 +111,6 @@ func GetHelpCategories(registry *config.KeybindRegistry, s *config.Settings) []H
 		},
 	}
 
-	// Filter out empty categories
 	filteredCategories := []HelpCategory{}
 	for _, cat := range categories {
 		if len(cat.Bindings) > 0 {
@@ -142,8 +136,6 @@ func (m *OS) HelpCategories() []HelpCategory {
 	if !m.agentsSeen() {
 		return slices.DeleteFunc(cats, func(c HelpCategory) bool { return c.Name == HelpCategoryAgents })
 	}
-	// The Agents settings key is left out where the tab is. See
-	// agentsPageAvailable.
 	if !m.agentsPageAvailable() {
 		for i := range cats {
 			if cats[i].Name == HelpCategoryAgents {
@@ -156,8 +148,6 @@ func (m *OS) HelpCategories() []HelpCategory {
 	return cats
 }
 
-// The help lines of the review's keys outside the overlay. The overlay's own
-// keys are the lines starting helpReviewPrefix.
 const (
 	helpRailReview   = "Rail agent row: review the pane's changes"
 	helpInboxReview  = "Agents view: review the changes in the agent's pane"
@@ -171,10 +161,6 @@ const (
 // means different things, and the Inbox's own keys were in no section.
 const HelpCategoryAgents = "Agents"
 
-// appendHelpBinding adds a row for keys, without the blank ones, when any are
-// left. It is out of line because the generators below call it at dozens of
-// places.
-//
 //go:noinline
 func appendHelpBinding(bindings *[]HelpBinding, keys []string, desc, cat string) {
 	var live []string
@@ -188,8 +174,6 @@ func appendHelpBinding(bindings *[]HelpBinding, keys []string, desc, cat string)
 	}
 }
 
-// generateAgentBindings lists the Agents section. Every key is read from the
-// config, chord included, so a rebound key shows as it is bound.
 func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
 	const cat = HelpCategoryAgents
 	presses := config.PressesByAction(registry)
@@ -254,8 +238,6 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 	inbox(config.ActionMailReply, "Mailbox: reply in the open thread")
 	inbox(config.ActionMailFocusPane, "Mailbox: go to the pane that last wrote")
 	inbox(config.ActionMailNew, "Mailbox: write a new message to an agent")
-	// The review overlay's hunk and file motions, read from
-	// [keybindings.review], so a rebound key shows as it is bound.
 	review := func(action, desc string) { add(registry.Keys(config.TableReview, action), desc) }
 	review(config.ActionReviewNextHunk, "Review: next hunk")
 	review(config.ActionReviewPrevHunk, "Review: previous hunk")
@@ -265,8 +247,6 @@ func generateAgentBindings(registry *config.KeybindRegistry, s *config.Settings)
 		config.ActionReviewStageFile, config.ActionReviewUnstageFile, config.ActionReviewUndoStage} {
 		review(action, config.ActionDescriptions[action])
 	}
-	// The overlay's other keys are its own and not bindings, like the
-	// scrollback browser's. See review_input.go.
 	add([]string{"c", "C"}, "Review: a note on the line, or on the whole hunk")
 	add([]string{"e", "x"}, "Review: edit or resolve the note under the cursor")
 	add([]string{"S"}, "Review: send the unsent notes to the agent, typed when it is at rest")
@@ -306,17 +286,13 @@ func (m *OS) HelpStepCategory(delta int) {
 	m.HelpCategory = m.listStep(max(m.HelpCategory, 0), delta, n)
 }
 
-// generateCategoryBindings generates bindings for a specific category
 func generateCategoryBindings(registry *config.KeybindRegistry, categoryName string, actions []string) []HelpBinding {
 	presses := config.PressesByAction(registry)
 	bindings := []HelpBinding{}
 	for _, action := range actions {
-		// The whole chord, not the bare key: corner snapping is reached with
-		// the layout prefix, and listing its key as "1" would tell the reader
-		// that 1 snaps a window when 1 selects one.
 		keys := presses[action]
 		if len(keys) == 0 {
-			continue // Skip unbound actions
+			continue
 		}
 
 		desc := config.ActionDescriptions[action]
@@ -334,15 +310,10 @@ func generateCategoryBindings(registry *config.KeybindRegistry, categoryName str
 	return bindings
 }
 
-// generateWorkspaceBindings generates all workspace-related bindings
 func generateWorkspaceBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
 	bindings := []HelpBinding{}
-	// Every live key from every section. GetKeys stops at the first section
-	// that names the action, and the workspaces section always does from the
-	// defaults, so a key bound in [keybindings.global] never showed (#1085).
 	presses := config.PressesByAction(registry)
 
-	// Add all 9 workspace switches
 	for i := 1; i <= 9; i++ {
 		action := fmt.Sprintf("switch_workspace_%d", i)
 		keys := presses[action]
@@ -356,7 +327,6 @@ func generateWorkspaceBindings(registry *config.KeybindRegistry, s *config.Setti
 		}
 	}
 
-	// Add all 9 move and follow actions
 	for i := 1; i <= 9; i++ {
 		action := fmt.Sprintf("move_and_follow_%d", i)
 		keys := presses[action]
@@ -383,8 +353,6 @@ func generateWorkspaceBindings(registry *config.KeybindRegistry, s *config.Setti
 		}
 	}
 
-	// Renaming a workspace is a chord rather than a plain key, so its row is
-	// built from the same whole-chord hint the pill menu shows.
 	if chord := contextMenuHint(registry, "workspace_prefix_rename", s, WindowManagementMode); chord != "" {
 		bindings = append(bindings, HelpBinding{
 			Action:      "workspace_prefix_rename",
@@ -397,12 +365,6 @@ func generateWorkspaceBindings(registry *config.KeybindRegistry, s *config.Setti
 	return bindings
 }
 
-// generateMouseBindings lists the fixed pointer gestures. They are written out
-// rather than derived because there is no registry for them: the gestures are
-// decided by internal/input's press/motion/release handlers, and this list is
-// the only place a user can read what those handlers do. The configurable
-// middle-button binding comes from the terminal-mode registry instead. Rail
-// gestures live in the Sidebar section, next to the rail's keys.
 func generateMouseBindings() []HelpBinding {
 	const cat = "Mouse"
 	return []HelpBinding{
@@ -416,9 +378,6 @@ func generateMouseBindings() []HelpBinding {
 		{Keys: []string{"drag pane border"}, Description: "Resize one edge: divider or floating side", Category: cat},
 		{Keys: []string{"right-drag"}, Description: "Resize a pane from the nearest corner", Category: cat},
 		{Keys: []string{"right-click"}, Description: "Pane menu, if the program ignores the mouse", Category: cat},
-		// One badge rather than two: the key column drops the second when a row
-		// carries more than it can hold, and losing the shift half would read as
-		// if ctrl were the only way in.
 		{Keys: []string{"ctrl/shift + right-click"}, Description: "Pane menu, even if the program uses the mouse", Category: cat},
 		{Keys: []string{"ctrl+click a link"}, Description: "Open the link. See appearance.link_click", Category: cat},
 		{Keys: []string{"hover a link"}, Description: "Show where the link goes", Category: cat},
@@ -432,14 +391,8 @@ func generateMouseBindings() []HelpBinding {
 	}
 }
 
-// generateSidebarBindings lists the rail: how to reach its keyboard scope, the
-// keys inside it, and the gestures that do the same jobs with the pointer. The
-// keys come from the [keybindings.sidebar] section, which the global keymap
-// deliberately does not carry, so they are read through Keys(TableSidebar).
 func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
 	const cat = "Sidebar"
-	// The descriptions are read from config.ScopedDescription, which `tuios
-	// keybinds list` reads too, so the two say the same thing.
 	row := func(action string) HelpBinding {
 		return HelpBinding{
 			Action:      action,
@@ -503,10 +456,6 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 		row("help"),
 	)
 
-	// The files section's own keys, which act only on a row of the listing.
-	// They are read from their own section for the reason that section exists:
-	// three of them share a key with a rail binding above, so the map the rail
-	// uses cannot hold them. See getDefaultSidebarFilesKeybinds.
 	fileRow := func(action, desc string) HelpBinding {
 		return HelpBinding{
 			Action:      action,
@@ -539,8 +488,6 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 		quickLookRow("full_size", "Preview: fill the area of the panes"),
 	)
 
-	// The Copies panel's keys, live while it is open. They are read from
-	// their own section, so a key bound there again shows here.
 	copyRow := func(action, desc string) HelpBinding {
 		return HelpBinding{
 			Action:      action,
@@ -557,7 +504,6 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 		copyRow(config.ActionTransfersAnswer, "Copies: answer a copy that waits for an answer"),
 	)
 
-	// Drop rows whose action is unbound, exactly as generateCategoryBindings does.
 	bound := bindings[:0]
 	for _, b := range bindings {
 		if len(b.Keys) > 0 {
@@ -569,7 +515,6 @@ func generateSidebarBindings(registry *config.KeybindRegistry, s *config.Setting
 	return append(bindings, sidebarGestures()...)
 }
 
-// sidebarGestures are the rail's pointer gestures. They are not bindings.
 func sidebarGestures() []HelpBinding {
 	const cat = "Sidebar"
 	return []HelpBinding{
@@ -585,12 +530,6 @@ func sidebarGestures() []HelpBinding {
 	}
 }
 
-// generateListBindings is the keys of the lists and panels that cannot be
-// rebound, and the settings page's own. The keys that move the cursor are the
-// [keybindings.lists] section (see internal/listnav), so they are listed with
-// the other scopes and not here. They are fixed keys of the panels rather than
-// registry actions, so they are written out here. They are listed in the Modes
-// section; see GetHelpCategories.
 func generateListBindings() []HelpBinding {
 	const cat = "Modes"
 	return []HelpBinding{
@@ -605,21 +544,15 @@ func generateListBindings() []HelpBinding {
 	}
 }
 
-// generateCopyModeBindings lists copy mode's keys: the motions and the
-// [keybindings.copy_mode] actions with the keys the config binds now, then
-// the keys copy mode reads itself.
 func generateCopyModeBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
 	if registry == nil {
 		registry = config.NewKeybindRegistry(config.DefaultConfig())
 	}
-	// The row that enters copy mode shows the keys prefix_selection is bound
-	// to now, not the default "[", and goes when nothing binds it.
 	var enter []string
 	for _, key := range registry.GetConfig().Keybindings.PrefixMode["prefix_selection"] {
 		enter = append(enter, s.LeaderKey+", "+key)
 	}
 	out := copyModeKeys(enter...)
-	// The motions go after the row that enters copy mode.
 	at := min(len(enter), 1)
 	out = slices.Insert(out, at, copyModeMotionBindings(registry)...)
 	for _, row := range []struct{ action, desc string }{
@@ -634,12 +567,6 @@ func generateCopyModeBindings(registry *config.KeybindRegistry, s *config.Settin
 	return out
 }
 
-// copyModeMotionRows are the help rows of copy mode's motions. A row lists
-// one key for each of its actions, in order, as in "h, j, k, l". When its
-// actions have more keys, a second row lists the next key of each, as in
-// "left, down, up, right", under desc2 (desc when empty). fixed are the keys
-// copy mode reads itself that do the same as an action of the row; they come
-// first. lead is a fixed key the row starts with.
 var copyModeMotionRows = []struct {
 	actions     []string
 	fixed       map[string]string
@@ -659,8 +586,6 @@ var copyModeMotionRows = []struct {
 	{actions: []string{config.ActionCopyModeRepeatCharSearch, config.ActionCopyModeRepeatCharSearchBack}, desc: "Repeat the last f/F/t/T forward/back"},
 }
 
-// copyModeMotionBindings are the motion rows with the keys registry binds. A
-// row none of whose actions has a key, and no fixed key, is left out.
 func copyModeMotionBindings(registry *config.KeybindRegistry) []HelpBinding {
 	var out []HelpBinding
 	for _, row := range copyModeMotionRows {
@@ -691,9 +616,6 @@ func copyModeMotionBindings(registry *config.KeybindRegistry) []HelpBinding {
 	return out
 }
 
-// copyModeKeys are the keys copy mode reads itself. When enter names the keys
-// that open copy mode, a row for them comes first. The motions are bindings,
-// listed by copyModeMotionBindings.
 func copyModeKeys(enter ...string) []HelpBinding {
 	var out []HelpBinding
 	if len(enter) > 0 {
@@ -718,13 +640,8 @@ func copyModeKeys(enter ...string) []HelpBinding {
 // legend has room for only some of hints mode's keys on a narrow screen.
 const HelpCategoryCopyMode = "Copy Mode"
 
-// helpHintsPrefix starts every hints mode line of the Copy Mode section, so
-// HintsShowKeys can find the first of them.
 const helpHintsPrefix = "Hints: "
 
-// generateHintsBindings lists hints mode's keys. The keys that open it are
-// read from the config. The keys inside it are not bindings (see
-// handleHintsKey in internal/input).
 func generateHintsBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
 	const cat = HelpCategoryCopyMode
 	var bindings []HelpBinding
@@ -740,8 +657,6 @@ func generateHintsBindings(registry *config.KeybindRegistry, s *config.Settings)
 	return append(bindings, hintsModeKeys(s.LeaderKey)...)
 }
 
-// hintsModeKeys are the keys inside hints mode. They are not bindings (see
-// handleHintsKey in internal/input).
 func hintsModeKeys(leader string) []HelpBinding {
 	const cat = HelpCategoryCopyMode
 	return []HelpBinding{
@@ -754,7 +669,6 @@ func hintsModeKeys(leader string) []HelpBinding {
 	}
 }
 
-// generateDebugBindings generates debug keybindings
 func generateDebugBindings(s *config.Settings) []HelpBinding {
 	return []HelpBinding{
 		{Keys: []string{s.LeaderKey + ", D, l"}, Description: "Toggle log viewer", Category: "Debug"},
@@ -764,11 +678,9 @@ func generateDebugBindings(s *config.Settings) []HelpBinding {
 	}
 }
 
-// generateTapeBindings generates tape scripting bindings
 func generateTapeBindings(s *config.Settings) []HelpBinding {
 	bindings := []HelpBinding{}
 
-	// Add tape commands with prefix notation
 	bindings = append(bindings, HelpBinding{
 		Action:      "tape_manager",
 		Keys:        []string{s.LeaderKey + ", T, m"},
@@ -791,9 +703,6 @@ func generateTapeBindings(s *config.Settings) []HelpBinding {
 	return bindings
 }
 
-// generateSpotlightOffBindings lists the ways out of the spotlight: esc in
-// window mode, the leader chord in either mode, and a click on the dock's
-// chip. See spotlight_exit.go.
 func generateSpotlightOffBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
 	fixed := spotlightOffKeys()
 	out := []HelpBinding{fixed[0]}
@@ -808,7 +717,6 @@ func generateSpotlightOffBindings(registry *config.KeybindRegistry, s *config.Se
 	return append(out, fixed[1:]...)
 }
 
-// spotlightOffKeys are the ways out of the spotlight that are not bindings.
 func spotlightOffKeys() []HelpBinding {
 	return []HelpBinding{
 		{Action: "spotlight_off", Keys: []string{"esc"}, Description: "Turn off spotlight, in window mode", Category: "Modes"},
@@ -816,8 +724,6 @@ func spotlightOffKeys() []HelpBinding {
 	}
 }
 
-// messageViewKeys are the message view's keys (ctrl+b N, or a click on a long
-// message). They are not bindings: see handleMessageViewKey in internal/input.
 func messageViewKeys() []HelpBinding {
 	const cat = "Modes"
 	return []HelpBinding{
@@ -858,11 +764,9 @@ func FixedKeyGroups(leader string) []FixedKeyGroup {
 	}
 }
 
-// generatePrefixBindings generates prefix command bindings
 func generatePrefixBindings(registry *config.KeybindRegistry, s *config.Settings) []HelpBinding {
 	bindings := []HelpBinding{}
 
-	// Get all prefix actions from the config
 	prefixActions := []string{
 		"new_window", "close_window", "prefix_rename_window",
 		"prefix_next_window", "prefix_prev_window",
@@ -881,14 +785,7 @@ func generatePrefixBindings(registry *config.KeybindRegistry, s *config.Settings
 		"toggle_scratch", "toggle_calm", "paste_image", "paste_buffer", "choose_buffer", "prefix_transfers",
 		config.ActionEditScrollback, config.ActionClearScrollback,
 		"hints", "hints_all_panes", "display_panes", "pick_path", config.ActionCopyModeSearchForward, config.ActionCopyModeSearchBackward,
-		// prefix_review and prefix_next_finished are listed only in the
-		// Agents section, which waits for an agent to have been seen.
 	}
-
-	// Debug commands are deliberately not listed here. They used to be, built
-	// from action names by slicing off a prefix, which rendered them as the
-	// action name rather than the key ("ctrl+b, d, cache_stats" for what is
-	// actually ctrl+b, D, c). The Debug category above lists the real keys.
 
 	for _, action := range prefixActions {
 		keys := registry.GetKeys(action)
@@ -901,7 +798,6 @@ func generatePrefixBindings(registry *config.KeybindRegistry, s *config.Settings
 			desc = formatActionName(action)
 		}
 
-		// Prefix all keys with the leader key for display
 		prefixedKeys := []string{}
 		for _, key := range keys {
 			prefixedKeys = append(prefixedKeys, s.LeaderKey+", "+key)
@@ -918,11 +814,8 @@ func generatePrefixBindings(registry *config.KeybindRegistry, s *config.Settings
 	return bindings
 }
 
-// formatActionName formats an action name for display
 func formatActionName(action string) string {
-	// Remove prefix_ if present
 	action = strings.TrimPrefix(action, "prefix_")
-	// Replace underscores with spaces and title case
 	parts := strings.Split(action, "_")
 	for i, part := range parts {
 		if len(part) > 0 {
@@ -961,25 +854,14 @@ func SearchBindings(query string, categories []HelpCategory) []HelpBinding {
 	return results
 }
 
-// Help overlay layout constants. These are the preferred sizes; a screen
-// narrower or shorter than the panel prefers gets a panel fitted to it (see
-// overlay_fit.go).
 const (
 	helpPanelInnerWidth = 74
 	helpVisibleRows     = 14
 	helpKeyColMax       = 30
 
-	// helpCategoryTagWidth is the narrowest inner width that still has room for
-	// the right-aligned category tag next to a search result. Below it the tag
-	// is dropped so the description keeps the space.
 	helpCategoryTagWidth = 48
 )
 
-// helpTabNames maps full category names to short tab labels.
-// The strip is one row at the panel's preferred width and has to stay that way,
-// so a label is only as long as it needs to be to pick its section out from the
-// neighbours: "Snap" says which of the three layout sections it is, and "Rail"
-// is what the sidebar is called everywhere else.
 var helpTabNames = map[string]string{
 	"Window Management": "Windows",
 	"Workspaces":        "Spaces",
@@ -1013,7 +895,6 @@ func (m *OS) RenderHelpMenu() (string, overlay.Geometry) {
 		return "", overlay.Geometry{}
 	}
 
-	// Auto-select an appropriate category based on mode when first opened.
 	if m.HelpCategory < 0 {
 		m.HelpCategory = 0
 		if m.Mode == TerminalMode {
@@ -1051,8 +932,6 @@ func (m *OS) RenderHelpMenu() (string, overlay.Geometry) {
 
 	width := m.panelWidth(helpPanelInnerWidth)
 	hints := helpHints(inSearch)
-	// Body lines that are not binding rows: the scroll indicator, plus the
-	// search prompt and its rule when searching.
 	extra := 1
 	if inSearch {
 		extra += 2
@@ -1078,9 +957,6 @@ func (m *OS) RenderHelpMenu() (string, overlay.Geometry) {
 	return panel.Render(pal)
 }
 
-// renderHelpBody builds the multi-line body: an optional search box, the
-// scrolling list of binding rows, and a scroll indicator, padded to a fixed
-// height so the panel never jumps.
 func (m *OS) renderHelpBody(bindings []HelpBinding, inSearch, showCategoryTag bool, pal overlay.Palette, width, visibleRows int) string {
 	bg := pal.Surface
 	var lines []string
@@ -1092,13 +968,9 @@ func (m *OS) renderHelpBody(bindings []HelpBinding, inSearch, showCategoryTag bo
 		lines = append(lines, prompt, overlay.Rule(width, bg, pal))
 	}
 
-	// Clamp scroll to the row count.
 	maxScroll := max(len(bindings)-visibleRows, 0)
 	m.HelpScrollOffset = max(0, min(m.HelpScrollOffset, maxScroll))
 
-	// Compute a stable key column width from the visible window. On a narrow
-	// panel the badges may not leave a usable description column, so the key
-	// column never takes more than half the width.
 	keyColW := 0
 	end := min(m.HelpScrollOffset+visibleRows, len(bindings))
 	for i := m.HelpScrollOffset; i < end; i++ {
@@ -1120,13 +992,11 @@ func (m *OS) renderHelpBody(bindings []HelpBinding, inSearch, showCategoryTag bo
 		lines = append(lines, helpBindingRow(bindings[i], keyColW, showCategoryTag, pal, width))
 		rowCount++
 	}
-	// Pad to a fixed number of rows so the panel height is stable.
 	for rowCount < visibleRows {
 		lines = append(lines, overlay.Style(bg).Render(" "))
 		rowCount++
 	}
 
-	// Scroll indicator.
 	if len(bindings) > visibleRows {
 		info := fmt.Sprintf("%d-%d of %d", m.HelpScrollOffset+1, end, len(bindings))
 		lines = append(lines, overlay.Style(bg).Foreground(pal.FgDim).Italic(true).Render("  "+info))
@@ -1137,13 +1007,8 @@ func (m *OS) renderHelpBody(bindings []HelpBinding, inSearch, showCategoryTag bo
 	return strings.Join(lines, "\n")
 }
 
-// helpBindingRow renders one keybinding row: key badges in a fixed-width gutter,
-// the description, and an optional right-aligned category tag (in search view).
 func helpBindingRow(b HelpBinding, keyColW int, showCategoryTag bool, pal overlay.Palette, width int) string {
 	bg := pal.Surface
-	// A binding with more key combos than the column can hold drops the extra
-	// combos, then shortens the last one, rather than pushing the description
-	// off the panel.
 	keys := b.Keys
 	badges := overlay.KeyBadges(keys, bg, pal)
 	for len(keys) > 1 && lipgloss.Width(badges) > keyColW {
@@ -1158,7 +1023,6 @@ func helpBindingRow(b HelpBinding, keyColW int, showCategoryTag bool, pal overla
 		badges += overlay.Style(bg).Render(strings.Repeat(" ", keyColW-bw))
 	}
 
-	// Reserve space for a right-aligned category tag when searching.
 	tag := ""
 	tagW := 0
 	if showCategoryTag && b.Category != "" {
@@ -1181,7 +1045,6 @@ func helpBindingRow(b HelpBinding, keyColW int, showCategoryTag bool, pal overla
 	return line
 }
 
-// helpHints returns the footer key hints for the current help mode.
 func helpHints(inSearch bool) []overlay.Hint {
 	if inSearch {
 		return []overlay.Hint{
@@ -1199,16 +1062,11 @@ func helpHints(inSearch bool) []overlay.Hint {
 	}
 }
 
-// agentHelpActions are the keys outside the Agents tab that act only on an
-// agent feature: the rail's agent controls and mailbox, and the prefix keys
-// of the Inbox and the mail.
 var agentHelpActions = map[string]bool{
 	"agents_filter": true, "agents_sort": true, "mail": true,
 	"prefix_mail": true, "prefix_inbox": true, "prefix_next_attention": true,
 }
 
-// withoutAgentHelp leaves the agent keys out of every tab, for the agent
-// features turned off. See agents_off.go.
 func withoutAgentHelp(cats []HelpCategory) []HelpCategory {
 	out := make([]HelpCategory, 0, len(cats))
 	for _, c := range cats {

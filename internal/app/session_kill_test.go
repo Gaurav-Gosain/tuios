@@ -6,18 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// Killing a session is the rail's one irreversible action, and it used to be
-// offered on every session row while only ever acting on the attached one: the
-// row carried its session all the way to the menu, and the actions the menu
-// dispatched addressed the client's own session whatever row they came from.
-// The rows were dimmed everywhere else to cover for it. These pin the fix, which
-// is that the row decides and the confirmation says which session it means.
-
-// killSessionOS is a client attached to session-1 (three panes) with another
-// session, "docs", renamed to "Payments API" on screen and holding two panes,
-// one of them mid-task. The listing is seeded rather than fetched: what is being
-// tested is what the menu and the dialog do with a session this client is not
-// in, not the wire underneath.
 func killSessionOS(t *testing.T) *OS {
 	t.Helper()
 	m := sessionCloseOS(t)
@@ -31,8 +19,6 @@ func killSessionOS(t *testing.T) *OS {
 	return m
 }
 
-// menuActions is the runnable rows of a menu, dimmed ones marked, which is what
-// the user can actually take.
 func menuActions(items []ContextMenuItem) map[string]bool {
 	out := map[string]bool{}
 	for _, it := range items {
@@ -51,17 +37,12 @@ func TestARowOnlyOffersWhatItCanMean(t *testing.T) {
 
 	_, items := m.sessionMenu("docs")
 	runnable := menuActions(items)
-	// The workspace switcher steers the session this client is in, and there is
-	// only one of those, so on another session's row it would open the attached
-	// session's workspaces under a title naming this one.
 	if runnable["prefix_workspace_switcher"] {
 		t.Error("another session's menu offers to switch its workspaces, which it cannot do")
 	}
 	if runnable["prefix_detach"] {
 		t.Error("another session's menu offers to detach from a session this client is not in")
 	}
-	// The two that do mean something on any row: the accent belongs to the row's
-	// own session, and the switcher is a chooser rather than an action on the row.
 	if !runnable["set_session_accent"] || !runnable["prefix_session_switcher"] {
 		t.Errorf("another session's menu lost the rows that work on any session: %v", runnable)
 	}
@@ -82,8 +63,6 @@ func TestAMenuIsAboutThePaneTheFocusReached(t *testing.T) {
 	m.IsDaemonSession = true
 	before := m.FocusedWindow
 
-	// A pane of a session this client is not attached to and cannot switch to:
-	// the fixture's listing has no socket behind it.
 	m.DaemonClient = nil
 	m.openSidebarContextMenu(sidebarRowHit{
 		Kind: sidebarRowWindow, SessionID: "docs", WindowID: "d1", WindowIndex: -1,
@@ -96,7 +75,6 @@ func TestAMenuIsAboutThePaneTheFocusReached(t *testing.T) {
 		t.Errorf("focus moved to %d without reaching the row", m.FocusedWindow)
 	}
 
-	// And the rail's own key does not then try to land a selection on it.
 	m.SidebarFocused = true
 	m.SidebarNav = []sidebarNavRow{{Kind: sidebarRowWindow, SessionID: "docs", WindowID: "d1", WindowIndex: -1}}
 	m.SidebarCursor = 0

@@ -7,12 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The directory a pane is in can come from two places, and they are not equal.
-// The shell announces one over OSC 7, which the client parses out of the stream
-// as it arrives. The daemon reports one in the window state, which it fills from
-// the process it owns and which reaches the client on the next sync. These pin
-// which wins, because getting it backwards broke a security check.
-
 // TestAnAnnouncedDirectoryIsNotOverwrittenByTheDaemons.
 //
 // The client sees OSC 7 the moment it arrives; the daemon's copy lands on the
@@ -100,7 +94,7 @@ func TestAnEmptyDirectoryDoesNotWipeOne(t *testing.T) {
 	if w.Cwd != "/src/tuios" {
 		t.Errorf("a sync with no directory wiped one: got %q", w.Cwd)
 	}
-	adoptWindowCwd(nil, "/anything") // must not panic
+	adoptWindowCwd(nil, "/anything")
 }
 
 // TestAFailedListingIsTriedAgain.

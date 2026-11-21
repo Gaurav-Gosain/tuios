@@ -6,9 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// lastPaneTestOS is three panes on one workspace, focus on the first.
-// Focus moves in tests through FocusWindow plus reconcilePrevFocus, the pair
-// Update runs for every real message.
 func lastPaneTestOS(t *testing.T) *OS {
 	t.Helper()
 	m := newNarrowOS(t, 120, 40)
@@ -24,8 +21,6 @@ func lastPaneTestOS(t *testing.T) *OS {
 	return m
 }
 
-// focusTo moves focus the way a message does: the jump, then the reconcile
-// Update runs once a message.
 func focusTo(m *OS, i int) {
 	m.FocusWindow(i)
 	m.reconcilePrevFocus()
@@ -71,8 +66,8 @@ func TestLastPaneAcrossWorkspaces(t *testing.T) {
 func TestLastPaneDeadTarget(t *testing.T) {
 	m := lastPaneTestOS(t)
 	focusTo(m, 1)
-	focusTo(m, 2)                                // previous is now pane two
-	m.Windows = []*terminal.Window{m.Windows[0]} // two and three closed
+	focusTo(m, 2)
+	m.Windows = []*terminal.Window{m.Windows[0]}
 	m.FocusedWindow = 0
 
 	if m.LastPane() {
@@ -82,5 +77,3 @@ func TestLastPaneDeadTarget(t *testing.T) {
 		t.Fatalf("focus moved to %d on a dead target", m.FocusedWindow)
 	}
 }
-
-// TestTuiosLinkTarget checks the two URI shapes the wait bar links with, and

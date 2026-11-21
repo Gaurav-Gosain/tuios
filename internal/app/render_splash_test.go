@@ -7,8 +7,6 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// splashLayer renders the overlays on an empty desktop and returns the welcome
-// layer, which is the only one drawn when no window exists.
 func splashLayer(t *testing.T, m *OS) *lipgloss.Layer {
 	t.Helper()
 	for _, layer := range m.renderOverlays() {

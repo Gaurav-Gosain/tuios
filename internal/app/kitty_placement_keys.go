@@ -6,57 +6,25 @@ import (
 	"slices"
 )
 
-// One image can be placed many times. kitty keeps a placement per a=p: an a=p
-// with p= replaces that placement, and an a=p without p= adds a new one each
-// time. cbirds draws one sprite at several points of every frame, and tuios
-// used to keep one placement per image, so all but the last of them vanished.
-//
-// placements is keyed by image and slot. Slot 0 is the placement an upload
-// makes itself (a=T, a file or a video frame); those paths treat it as the
-// image's own placement, as before. Every a=p gets a slot of its own from a
-// counter. The guest's p= is never a slot or a host id: a table per image
-// maps it to the slot it was placed in, so the next a=p with that p= finds
-// and replaces it, and no p= the guest picks can collide with tuios's own.
-//
-// On the host each record has its own run of placementStride placement ids,
-// one per slice, from an allocator per image. One record can be moved,
-// cropped or taken down without touching another.
-//
-// placementIndex keeps the lookups that every a=p makes constant time, and
-// bounds the records: a guest that places without p= and never deletes adds
-// one per a=p, as in kitty. Past maxPlacementsPerImage of one image, or
-// maxPlacementsPerPane in a pane, the oldest goes.
 type placementKey struct {
 	host, slot uint32
 }
 
 const (
-	// placementStride is the most host placement ids one record uses: one per
-	// slice of the image left clear by what is over it.
 	placementStride uint32 = 64
-	// maxPlacementsPerImage and maxPlacementsPerPane bound the a=p records
-	// kept. cbirds places one sprite at most a few times a frame, and every
-	// frame starts with d=a.
+
 	maxPlacementsPerImage = 256
 	maxPlacementsPerPane  = 4096
 )
 
-// placementIndex is the lookups for one window's placements.
 type placementIndex struct {
-	// byHost holds the slots in use for each host image.
-	byHost map[uint32]map[uint32]struct{}
-	// guestP maps an image's guest placement id to its slot.
-	guestP map[[2]uint32]uint32
-	// nextSlot hands out slots for a=p records.
+	byHost   map[uint32]map[uint32]struct{}
+	guestP   map[[2]uint32]uint32
 	nextSlot uint32
-	// bases hands out runs of host placement ids for each host image.
-	bases map[uint32]*placementBases
-	// order holds the a=p records oldest first. A key whose record is gone,
-	// or was replaced, is skipped when it is reached.
-	order []orderedKey
-	// placed counts the a=p records.
-	placed int
-	seq    uint64
+	bases    map[uint32]*placementBases
+	order    []orderedKey
+	placed   int
+	seq      uint64
 }
 
 type orderedKey struct {
@@ -69,7 +37,6 @@ type placementBases struct {
 	free []uint32
 }
 
-// imageKey is the key of the placement an upload makes itself.
 func imageKey(hostID uint32) placementKey {
 	return placementKey{host: hostID}
 }
@@ -90,8 +57,6 @@ func (kp *KittyPassthrough) index(windowID string) *placementIndex {
 	return ix
 }
 
-// putPlacement records a placement under key, replacing what was there. A
-// new a=p record past the caps takes the oldest down.
 func (kp *KittyPassthrough) putPlacement(windowID string, key placementKey, p *PassthroughPlacement) {
 	if kp.placements[windowID] == nil {
 		kp.placements[windowID] = make(map[placementKey]*PassthroughPlacement)
@@ -129,7 +94,6 @@ func (kp *KittyPassthrough) putPlacement(windowID string, key placementKey, p *P
 	kp.pruneOrder(windowID, ix)
 }
 
-// dropPlacement forgets one placement. It sends the host nothing.
 func (kp *KittyPassthrough) dropPlacement(windowID string, key placementKey) {
 	p := kp.placements[windowID][key]
 	if p == nil {
@@ -160,10 +124,6 @@ func (kp *KittyPassthrough) dropPlacement(windowID string, key placementKey) {
 	kp.pruneOrder(windowID, ix)
 }
 
-// pruneOrder drops the stale keys from the order list once they outnumber
-// the live ones. A replaced record leaves a stale key behind, so a guest
-// that moves one placement by its p= every frame, and never deletes, grew
-// the list by one key a frame without this.
 func (kp *KittyPassthrough) pruneOrder(windowID string, ix *placementIndex) {
 	if len(ix.order) <= 2*ix.placed+64 {
 		return
@@ -177,17 +137,12 @@ func (kp *KittyPassthrough) pruneOrder(windowID string, ix *placementIndex) {
 	ix.order = slices.Clip(live)
 }
 
-// dropWindowPlacements forgets every placement of a window. It sends the
-// host nothing.
 func (kp *KittyPassthrough) dropWindowPlacements(windowID string) {
 	delete(kp.placements, windowID)
 	delete(kp.placeIdx, windowID)
 	kp.forgetUnnamedWindowKept(windowID)
 }
 
-// enforcePlacementCaps takes the oldest a=p record down while the image or
-// the pane holds more than its cap. key is the record just added, which
-// stays.
 func (kp *KittyPassthrough) enforcePlacementCaps(windowID string, key placementKey) {
 	ix := kp.placeIdx[windowID]
 	placements := kp.placements[windowID]
@@ -213,7 +168,6 @@ func (kp *KittyPassthrough) enforcePlacementCaps(windowID string, key placementK
 	}
 }
 
-// evictPlacement takes one placement down on the host and forgets it.
 func (kp *KittyPassthrough) evictPlacement(windowID string, key placementKey) {
 	if p := kp.placements[windowID][key]; p != nil {
 		if !p.Hidden {
@@ -223,14 +177,11 @@ func (kp *KittyPassthrough) evictPlacement(windowID string, key placementKey) {
 	}
 }
 
-// hostHasPlacement reports whether any placement of a host image is tracked
-// in a window.
 func (kp *KittyPassthrough) hostHasPlacement(windowID string, hostID uint32) bool {
 	ix := kp.placeIdx[windowID]
 	return ix != nil && len(ix.byHost[hostID]) > 0
 }
 
-// guestSlot is the slot an image's guest placement id was placed in.
 func (kp *KittyPassthrough) guestSlot(windowID string, hostID, guestP uint32) (uint32, bool) {
 	ix := kp.placeIdx[windowID]
 	if ix == nil {
@@ -240,8 +191,6 @@ func (kp *KittyPassthrough) guestSlot(windowID string, hostID, guestP uint32) (u
 	return slot, ok
 }
 
-// freshSlot picks a slot for an a=p, one no placement of the image in this
-// window has.
 func (kp *KittyPassthrough) freshSlot(windowID string, hostID uint32) uint32 {
 	ix := kp.index(windowID)
 	for {
@@ -255,8 +204,6 @@ func (kp *KittyPassthrough) freshSlot(windowID string, hostID uint32) uint32 {
 	}
 }
 
-// allocBase hands out the first of a run of placementStride host placement
-// ids for one record of an image.
 func (kp *KittyPassthrough) allocBase(windowID string, hostID uint32) uint32 {
 	ix := kp.index(windowID)
 	b := ix.bases[hostID]
@@ -282,9 +229,6 @@ func (kp *KittyPassthrough) freeBase(windowID string, hostID, base uint32) {
 	}
 }
 
-// deleteImagePlacements takes down the placements of one host image in a
-// window: all of them when guestP is 0, or the one the guest placed with
-// p=guestP. It reports whether any placement of the image is left.
 func (kp *KittyPassthrough) deleteImagePlacements(windowID string, hostID, guestP uint32) bool {
 	ix := kp.placeIdx[windowID]
 	if guestP == 0 {
@@ -306,9 +250,6 @@ func (kp *KittyPassthrough) deleteImagePlacements(windowID string, hostID, guest
 	return kp.hostHasPlacement(windowID, hostID)
 }
 
-// deleteWindowImages takes down every placement in a window, one delete per
-// image rather than one per placement. With visibleOnly, an image whose
-// placements are all hidden already is left alone.
 func (kp *KittyPassthrough) deleteWindowImages(windowID string, visibleOnly bool) {
 	done := map[uint32]bool{}
 	for _, p := range kp.placements[windowID] {
@@ -320,11 +261,8 @@ func (kp *KittyPassthrough) deleteWindowImages(windowID string, visibleOnly bool
 	}
 }
 
-// deletePlacementIDs takes down the host placements one record put up, and
-// leaves the image's other placements alone.
 func (kp *KittyPassthrough) deletePlacementIDs(p *PassthroughPlacement) {
 	if p.PlacementID == 0 {
-		// Never placed.
 		return
 	}
 	n := max(p.placedSlices, 1)
@@ -338,8 +276,6 @@ func (kp *KittyPassthrough) deletePlacementIDs(p *PassthroughPlacement) {
 	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
 }
 
-// sharesImage reports whether a record has other placements of its image
-// beside it in its window.
 func (kp *KittyPassthrough) sharesImage(p *PassthroughPlacement) bool {
 	if p.WindowID == "" {
 		return false
@@ -348,8 +284,6 @@ func (kp *KittyPassthrough) sharesImage(p *PassthroughPlacement) bool {
 	return ix != nil && len(ix.byHost[p.HostImageID]) > 1
 }
 
-// placementBaseFor gives a record its run of host placement ids the first
-// time it is placed.
 func (kp *KittyPassthrough) placementBaseFor(p *PassthroughPlacement) uint32 {
 	if p.PlacementID == 0 {
 		if p.WindowID == "" {

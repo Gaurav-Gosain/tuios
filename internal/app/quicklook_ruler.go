@@ -1,19 +1,5 @@
 package app
 
-// The ruler on the right edge of quick look's text and Markdown: the thread's
-// ruler (ckRuler in cockpit_follow.go) with its track drawn, so the mouse can
-// take it. A click on the track takes the thumb there, and a press on the
-// thumb drags it. A Markdown file's headings are marks on it, the way the
-// agents thread marks its prompts.
-//
-// A text read in windows has no line count. Its ruler counts lines of the
-// average length of the lines held, so the thumb says where the held text is
-// in the file, and a move past the held text reads the window at that byte.
-
-// quickLookRuler is the ruler in the last frame: what it showed, and where it
-// was in the body. perLine is the bytes a line counts for in a text read in
-// windows, 0 when the ruler counts real lines, and base the line the held
-// text starts at then.
 type quickLookRuler struct {
 	ok           bool
 	r            ckRuler
@@ -22,7 +8,6 @@ type quickLookRuler struct {
 	base         int
 }
 
-// quickLookTextRuler is the ruler of a text shown from held line from.
 func quickLookTextRuler(r *quickLookResult, from int) quickLookRuler {
 	n := len(r.lines)
 	if n == 0 || r.size <= 0 {
@@ -37,18 +22,12 @@ func quickLookTextRuler(r *quickLookResult, from int) quickLookRuler {
 	return quickLookRuler{r: ckRuler{lines: lines, start: base + from, track: true}, perLine: per, base: base}
 }
 
-// drawQuickLookRuler draws g in column x of the body, rows top to top+rows,
-// and keeps it for the mouse.
 func (m *OS) drawQuickLookRuler(c *ckCanvas, l ckLook, g quickLookRuler, x, top, rows int) {
 	g.x, g.top, g.rows = x, top, rows
 	g.ok = g.r.draw(c, l, x, top, rows)
 	m.quickLook.ruler = g
 }
 
-// quickLookRulerClick takes a press on the ruler. x and y are on the screen.
-// A press on the track takes the thumb there, by its middle, and a press on
-// the thumb takes it where it is. A drag goes on from either. It reports
-// whether the press was on the ruler.
 func (m *OS) quickLookRulerClick(x, y int) bool {
 	ql := &m.quickLook
 	g := ql.ruler
@@ -67,8 +46,6 @@ func (m *OS) quickLookRulerClick(x, y int) bool {
 	return true
 }
 
-// quickLookRulerTo moves the view so the thumb's first row is at row top of
-// the ruler.
 func (m *OS) quickLookRulerTo(top int) {
 	ql := &m.quickLook
 	g := ql.ruler
@@ -86,13 +63,10 @@ func (m *OS) quickLookRulerTo(top int) {
 	case start >= g.r.lines-g.rows:
 		m.QuickLookEdge(true)
 	default:
-		// Past the held text: the window at that byte replaces it.
 		ql.atOff, ql.jump = int64(start)*g.perLine, quickLookAt
 	}
 }
 
-// quickLookRulerDrag follows the pointer at screen row y while a press on
-// the ruler is held. It reports whether one is.
 func (m *OS) quickLookRulerDrag(y int) bool {
 	ql := &m.quickLook
 	if !ql.open || !ql.rulerDrag || !ql.ruler.ok {

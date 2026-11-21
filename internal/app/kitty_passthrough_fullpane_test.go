@@ -9,14 +9,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// feedTBFrame runs a captured/synthesised kitty graphics stream through the real
-// VT emulator + passthrough for a window that fills the whole host screen, then
-// runs a render cycle and returns everything tuios forwarded to the host.
-//
-// The window is border=1 and exactly as tall as the screen, mirroring a
-// maximized tuios pane. A full-window graphics app (terminal-browser, awrit)
-// draws an image that fills the pane, so its placement reaches the bottom screen
-// edge. That is the geometry the regression hid outright.
 func feedTBFrame(t *testing.T, stream []byte, screenW, screenH int) []byte {
 	return feedTBFrameBorder(t, stream, screenW, screenH, 1)
 }
@@ -111,35 +103,23 @@ func TestTerminalBrowserFullPaneIsPlaced(t *testing.T) {
 // row free so the host terminal does not scroll.
 func TestBorderlessFullPaneImageClamped(t *testing.T) {
 	frame := buildDirectFrame(1, 1200, 800)
-	// border=0: content fills all 40 rows, so the image bottom would land on the
-	// last screen row and the clamp must kick in.
 	forwarded := feedTBFrameBorder(t, frame, 120, 40, 0)
 
 	if !bytes.Contains(forwarded, []byte("a=p,")) {
 		t.Fatal("borderless full-pane image hidden instead of clamped (no a=p)")
 	}
-	// Clamped to 39 rows (one short of the 40-row screen) so the last row stays
-	// free. Placement must therefore carry r=39, not r=40.
 	if !bytes.Contains(forwarded, []byte("r=39")) {
 		t.Fatalf("expected clamped placement r=39, forwarded=%q", forwarded)
 	}
-	// Columns are not clamped at all here. A borderless pane owns every column
-	// of its rectangle, and the guest drew 1200px for all 120 of them, so
-	// anything narrower is a frame kitty has to scale down to fit.
 	if !bytes.Contains(forwarded, []byte("c=120")) {
 		t.Fatalf("expected the full pane width c=120, forwarded=%q", forwarded)
 	}
 }
 
-// buildDirectFrame builds an a=T direct (t=d) RGBA transmit+place APC for a
-// width x height image, on the alt screen, as a full-window app would emit it.
 func buildDirectFrame(id, width, height int) []byte {
 	var b bytes.Buffer
-	b.WriteString("\x1b[?1049h\x1b[H") // alt screen + cursor home
+	b.WriteString("\x1b[?1049h\x1b[H")
 	b.WriteString("\x1b[?2026h")
-	// tiny 1x1 RGBA payload is fine; s/v declare the display size and cells are
-	// derived from them. The passthrough does not decode the payload for direct
-	// transmits, it re-chunks it verbatim.
 	b.WriteString("\x1b_Ga=T,f=32,s=")
 	b.WriteString(strconv.Itoa(width))
 	b.WriteString(",v=")
@@ -147,7 +127,7 @@ func buildDirectFrame(id, width, height int) []byte {
 	b.WriteString(",t=d,i=")
 	b.WriteString(strconv.Itoa(id))
 	b.WriteString(",p=1,C=1,q=2;")
-	b.WriteString("AAAA") // 3 bytes base64
+	b.WriteString("AAAA")
 	b.WriteString("\x1b\\")
 	b.WriteString("\x1b[?2026l")
 	return b.Bytes()

@@ -69,7 +69,6 @@ func TestLayerOverTheDirectPaneIsDrawn(t *testing.T) {
 	}
 }
 
-// canvasHasText reports whether a row of the canvas holds text.
 func canvasHasText(c *frameCanvas, text string) bool {
 	for y := range c.Lines {
 		var b strings.Builder

@@ -14,31 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// A celebration is a short confetti burst drawn in terminal cells over the
-// composed frame. It is for a guided tour that wants to mark a finished step,
-// and nothing in tuios starts one on its own.
-//
-// Where it draws. composeView runs draw over the canvas after the spotlight
-// pass and before Render, the same place and for the same reason as the beam:
-// the canvas is rebuilt from the pane caches on every frame, so writing glyphs
-// into it touches no cache, the panes keep updating underneath, and the first
-// frame composed after the last particle dies is the screen exactly as it would
-// have been without the burst.
-//
-// Why not tuiffects. Its particle pool lives inside an Engine that owns a
-// captured canvas and renders its own frame string, which is the screen saver's
-// model: a picture of the screen replaces the screen. A burst over live panes
-// wants a handful of positions and nothing else, so it is written out here.
-//
-// What it costs. Nothing while idle: no tick, no term in tickNeedsWork, and a
-// length check in composeView and in the fast path test. While a burst is on
-// screen it drives its own frames at celebrateFPS and stops asking for them
-// once every particle is gone.
-//
-// Motion. Each particle's position is a closed form in its age (gravity with
-// linear drag, plus a small sideways wobble), so a dropped or late frame never
-// changes the path, and a test can ask for any instant directly.
-
 // CelebrateOptions says what kind of burst to draw.
 type CelebrateOptions struct {
 	// Big is a larger finale: more particles, a wider spray, and two follow-up
@@ -51,28 +26,14 @@ type CelebrateOptions struct {
 }
 
 const (
-	// celebrateFPS caps the frame rate. Confetti in cells moves a cell or two
-	// per frame at most, and a browser client pays for every frame it composes,
-	// so the session's NormalFPS (which can be 240) would be work nobody sees.
-	celebrateFPS = 30
-	// celebrateGravity is in rows per second squared, and celebrateDrag is the
-	// linear drag coefficient per second. Together they give a terminal fall
-	// speed of gravity/drag rows a second, which is what makes the confetti
-	// float down rather than drop.
-	celebrateGravity = 30.0
-	celebrateDrag    = 1.9
-	// celebrateAspect is how many columns make the same distance on screen as
-	// one row.
-	celebrateAspect = 2.0
-	// celebrateStillLife is how long the static sparkle stays up.
-	celebrateStillLife = 700 * time.Millisecond
-	// celebrateMaxParticles bounds the state however often a caller fires.
+	celebrateFPS          = 30
+	celebrateGravity      = 30.0
+	celebrateDrag         = 1.9
+	celebrateAspect       = 2.0
+	celebrateStillLife    = 700 * time.Millisecond
 	celebrateMaxParticles = 400
 )
 
-// celebrateGlyphs are the particle shapes. Each kind has a fresh glyph and the
-// smaller one it becomes as it fades. The first two kinds are stars, which
-// twinkle and are drawn bold.
 var celebrateGlyphs = [][2]string{
 	{"✦", "✧"},
 	{"✦", "✧"},
@@ -82,39 +43,26 @@ var celebrateGlyphs = [][2]string{
 	{"+", "·"},
 }
 
-// celebrateTumble is a scrap of paper turning over: a half block that goes
-// round the four sides of its cell, then a small quadrant as it fades.
 var (
 	celebrateTumble      = [4]string{"▀", "▐", "▄", "▌"}
 	celebrateTumbleFaded = [4]string{"▘", "▝", "▗", "▖"}
 )
 
-// celebrateParticle is one piece of confetti.
 type celebrateParticle struct {
-	// born is when the particle appears, and life how long it lasts.
-	born time.Time
-	life time.Duration
-	// x0, y0 is the cell it starts from; vx, vy its launch velocity in cells
-	// per second.
-	x0, y0, vx, vy float64
-	// wobble is the amplitude of the sideways drift in columns, and freq and
-	// phase shape it.
+	born                time.Time
+	life                time.Duration
+	x0, y0, vx, vy      float64
 	wobble, freq, phase float64
-	// kind indexes celebrateGlyphs, or is -1 for a tumbling scrap.
-	kind int
-	ink  color.Color
-	// still pins the particle to its start cell.
-	still bool
+	kind                int
+	ink                 color.Color
+	still               bool
 }
 
-// celebrationState is the running burst. The zero value is off.
 type celebrationState struct {
 	particles []celebrateParticle
-	// at is the instant the next draw renders.
-	at time.Time
+	at        time.Time
 }
 
-// active reports whether anything is left to draw.
 func (c *celebrationState) active() bool { return len(c.particles) > 0 }
 
 // Celebrate bursts confetti from the centre of the focused pane, or from the
@@ -142,7 +90,6 @@ func (m *OS) CelebrateAt(x, y int, opts CelebrateOptions) tea.Cmd {
 	if width <= 0 || height <= 0 {
 		return nil
 	}
-	// Confetti is decoration, so it flies only at the full level.
 	if !m.Settings.MotionOn(config.AspectConfetti) {
 		opts.Still = true
 	}
@@ -157,8 +104,6 @@ func (m *OS) CelebrateAt(x, y int, opts CelebrateOptions) tea.Cmd {
 	if opts.Still {
 		c.particles = appendStillSparkle(c.particles, now, float64(x), float64(y), opts.Big, pal)
 	} else {
-		// A spray sized to the screen: a small client gets a small burst rather
-		// than confetti that leaves it on the first frame.
 		scale := math.Max(0.55, math.Min(1.25, float64(height)/32))
 		if opts.Big {
 			c.particles = appendBurst(c.particles, now, float64(x), float64(y), 70, scale*1.15, pal)
@@ -173,25 +118,16 @@ func (m *OS) CelebrateAt(x, y int, opts CelebrateOptions) tea.Cmd {
 		c.particles = c.particles[n-celebrateMaxParticles:]
 	}
 	m.renderSkipped = false
-	// The motion clock draws it; the command arms the clock for a caller
-	// whose Update is not this model's (learn's page commands).
 	return m.motionCmd()
 }
 
-// celebrateOrigin is the middle of a window's box, or of the screen.
 func (m *OS) celebrateOrigin(w *terminal.Window) (int, int) {
 	if w != nil && !w.Minimized && w.Width > 0 && w.Height > 0 {
-		// The burst is drawn on the screen, where a view of a larger
-		// session puts the pane. See pane_view.go.
 		return m.sessionView.toScreen(w.X+w.Width/2, w.Y+w.Height/2)
 	}
 	return m.GetRenderWidth() / 2, m.GetRenderHeight() / 2
 }
 
-// celebrateEvery is how long the burst waits for its next frame: the
-// confetti's rate, or the session's when that is lower. A burst of still
-// particles needs one frame to show and one to clear, so it waits for its
-// last particle rather than ticking at a frame rate.
 func (m *OS) celebrateEvery() time.Duration {
 	c := &m.celebration
 	if !c.moving() {
@@ -204,9 +140,6 @@ func (m *OS) celebrateEvery() time.Duration {
 	return interval
 }
 
-// stepCelebration advances the burst to now. The frame after the last
-// particle dies draws the screen without confetti, and the effect is then no
-// longer live.
 func (m *OS) stepCelebration(now time.Time) (bool, tea.Cmd) {
 	c := &m.celebration
 	c.at = now
@@ -224,7 +157,6 @@ func (m *OS) stepCelebration(now time.Time) (bool, tea.Cmd) {
 	return true, nil
 }
 
-// moving reports whether any particle needs frames to move.
 func (c *celebrationState) moving() bool {
 	for i := range c.particles {
 		if !c.particles[i].still {
@@ -234,7 +166,6 @@ func (c *celebrationState) moving() bool {
 	return false
 }
 
-// lastDeath is when the longest lived particle goes.
 func (c *celebrationState) lastDeath() time.Time {
 	var last time.Time
 	for i := range c.particles {
@@ -245,9 +176,6 @@ func (c *celebrationState) lastDeath() time.Time {
 	return last
 }
 
-// celebratePalette is the theme's accent, weighted to come up most, and the
-// bright ANSI colours around it. With no theme the ANSI entries are the host's
-// own palette indices, so the confetti is in the user's terminal colours.
 func celebratePalette() []color.Color {
 	ui := theme.UI()
 	ansi := theme.GetANSIPalette()
@@ -257,26 +185,19 @@ func celebratePalette() []color.Color {
 	}
 }
 
-// appendBurst adds one spray of n particles from (x, y). scale stretches the
-// launch speed.
 func appendBurst(ps []celebrateParticle, born time.Time, x, y float64, n int, scale float64, pal []color.Color) []celebrateParticle {
 	for i := range n {
-		// Mostly upwards, in a cone 75 degrees either side of vertical, with a
-		// few thrown lower so the burst has a round edge at the sides.
 		spread := 75.0
 		if i%6 == 0 {
 			spread = 110
 		}
 		theta := (rand.Float64()*2 - 1) * spread * math.Pi / 180
 		speed := (0.35 + 0.65*math.Sqrt(rand.Float64())) * 28 * scale
-		// About one in eight is a tumbling scrap. A half block is the heaviest
-		// shape here, and more of them makes the burst look blocky.
 		kind := rand.IntN(len(celebrateGlyphs))
 		if rand.IntN(8) == 0 {
 			kind = -1
 		}
 		ps = append(ps, celebrateParticle{
-			// A small stagger so the burst pops rather than appearing whole.
 			born:   born.Add(time.Duration(rand.IntN(70)) * time.Millisecond),
 			life:   time.Duration(1000+rand.IntN(500)) * time.Millisecond,
 			x0:     x,
@@ -293,7 +214,6 @@ func appendBurst(ps []celebrateParticle, born time.Time, x, y float64, n int, sc
 	return ps
 }
 
-// appendStillSparkle adds a ring of stars around (x, y) that does not move.
 func appendStillSparkle(ps []celebrateParticle, born time.Time, x, y float64, big bool, pal []color.Color) []celebrateParticle {
 	n, radius := 10, 3.0
 	if big {
@@ -310,7 +230,7 @@ func appendStillSparkle(ps []celebrateParticle, born time.Time, x, y float64, bi
 			life:  celebrateStillLife,
 			x0:    x + math.Cos(angle)*r*celebrateAspect,
 			y0:    y + math.Sin(angle)*r,
-			kind:  i % 2 * 2, // stars and dots
+			kind:  i % 2 * 2,
 			ink:   pal[i%len(pal)],
 			still: true,
 		})
@@ -318,11 +238,6 @@ func appendStillSparkle(ps []celebrateParticle, born time.Time, x, y float64, bi
 	return append(ps, celebrateParticle{born: born, life: celebrateStillLife, x0: x, y0: y, ink: pal[0], still: true})
 }
 
-// position is where a particle is at age t seconds.
-//
-// Vertical motion is gravity against linear drag: v' = g - k v, whose solution
-// is y = y0 + (g/k) t + (vy - g/k)(1 - e^(-kt))/k. Horizontal motion is the
-// same drag with no gravity, plus the wobble.
 func (p *celebrateParticle) position(t float64) (float64, float64) {
 	if p.still {
 		return p.x0, p.y0
@@ -334,12 +249,9 @@ func (p *celebrateParticle) position(t float64) (float64, float64) {
 	return x, y
 }
 
-// glyph is what the particle looks like at age t, and whether it is fading.
 func (p *celebrateParticle) glyph(t, frac float64) (string, bool) {
 	fading := frac > 0.8
 	if p.kind < 0 {
-		// A quarter turn every tenth of a second or so, from a starting side
-		// of its own.
 		i := int(t*9+p.phase*2) & 3
 		if frac > 0.68 {
 			return celebrateTumbleFaded[i], fading
@@ -351,7 +263,6 @@ func (p *celebrateParticle) glyph(t, frac float64) (string, bool) {
 		return g[1], fading
 	}
 	if p.kind <= 1 && !p.still {
-		// Stars twinkle while they are fresh.
 		if int(t*8+p.phase)%3 == 0 {
 			return g[1], false
 		}
@@ -359,12 +270,6 @@ func (p *celebrateParticle) glyph(t, frac float64) (string, bool) {
 	return g[0], false
 }
 
-// draw writes every live particle into the canvas at the instant c.at.
-//
-// A particle takes the glyph and ink and keeps the background of the cell it
-// lands on, so it reads as floating over the pane rather than punching a hole
-// in it. Cells that are part of a wide glyph are left alone: overwriting half
-// of one would shift the rest of its row.
 func (c *celebrationState) draw(canvas cellCanvas) {
 	width, height := canvas.Width(), canvas.Height()
 	for i := range c.particles {
@@ -379,8 +284,6 @@ func (c *celebrationState) draw(canvas cellCanvas) {
 		if x < 0 || y < 0 || x >= width || y >= height {
 			continue
 		}
-		// A wide glyph's first cell has width 2 and the cell after it is a
-		// zero width placeholder, so this one check skips both halves.
 		cell := canvas.CellAt(x, y)
 		if cell == nil || cell.Width != 1 {
 			continue

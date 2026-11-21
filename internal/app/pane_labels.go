@@ -11,58 +11,19 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// Pane labels, after tmux's display-panes.
-//
-// The display_panes action puts a large label on every pane of the workspace
-// on screen. Typing a label focuses that pane. With more panes than label
-// keys the labels take two keys, as hints mode's do. Esc closes.
-//
-// The labels are handed out in the order select_window_1 to select_window_9
-// count the panes, minimised panes included when tiling is off, so with the
-// default digit keys label 3 is the pane select_window_3 gives. A minimised
-// pane gets no label: it is not on the screen to point at.
-//
-// A pane whose label would not be seen gets its label in a list instead: a
-// pane behind a zoom, a pane mostly off the screen (a scrolling column at the
-// edge, or a view of a larger session), and a pane too small for its label.
-// The list is drawn under the label of the zoomed pane, else the focused
-// pane, else the first pane shown. Focusing a pane behind a zoom moves the
-// zoom to it (see ZoomFollowsFocus).
-//
-// The labels name the layout they were drawn for. When it changes under them
-// (a pane opens, closes, moves, resizes or zooms, the session changes) they
-// close, rather than point at panes that are no longer where they were.
-//
-// Nothing is copied. The labels are a pass over the canvas after each pane is
-// drawn (pane_labels_render.go), so closing them is the next frame not
-// running it.
-
-// paneLabel is one labelled pane.
 type paneLabel struct {
 	windowID string
 	label    string
-	// name is what the pane is called on the rail: its own name, or the
-	// title its program set.
-	name string
-	// shown says the frame draws the pane. A pane behind a zoom is not
-	// drawn, and its label is listed on the zoomed pane's instead.
-	shown bool
+	name     string
+	shown    bool
 }
 
-// paneLabelsState is the labels while they are up.
 type paneLabelsState struct {
-	// workspace is the workspace the labels were made for. A switch to
-	// another one closes them.
 	workspace int
 	panes     []paneLabel
-	// listOn is the pane whose label also lists the panes the frame does
-	// not draw: the zoomed pane, else the focused pane, else the first one
-	// drawn. Empty when every pane is drawn.
-	listOn string
-	// typed is the start of a label typed so far.
-	typed string
-	// layout is paneLabelsLayout when the labels were made.
-	layout string
+	listOn    string
+	typed     string
+	layout    string
 }
 
 // PaneLabelsOpen reports whether the pane labels are up. Labels made for a
@@ -75,9 +36,6 @@ func (m *OS) PaneLabelsOpen() bool {
 	return m.paneLabels != nil
 }
 
-// paneLabelsLayout describes what the labels depend on: the session, the
-// workspace, the region panes are drawn in, and each pane of the workspace
-// with its box and its minimised and zoomed state.
 func (m *OS) paneLabelsLayout() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s|%d|%v|%v", m.SessionName, m.CurrentWorkspace, m.hintsRegion(), m.sessionView.on)
@@ -93,7 +51,6 @@ func (m *OS) paneLabelsLayout() string {
 	return b.String()
 }
 
-// paneLabelKeys is the label keys in force.
 func (m *OS) paneLabelKeys() string {
 	if m.UserConfig == nil {
 		return config.PanesDefaultLabelKeys
@@ -130,8 +87,6 @@ func (m *OS) OpenPaneLabels() {
 	m.MarkAllDirty()
 }
 
-// paneLabelListOn picks the pane that lists the hidden panes. See
-// paneLabelsState.listOn.
 func (m *OS) paneLabelListOn(s *paneLabelsState) string {
 	if len(s.hiddenPanes()) == 0 {
 		return ""
@@ -154,11 +109,6 @@ func (m *OS) paneLabelListOn(s *paneLabelsState) string {
 	return ""
 }
 
-// paneLabelWindows is every pane select_window_N counts, in its order: the
-// panes of the workspace on screen, without the minimised ones while tiling
-// is on. The caller labels the list and then leaves the minimised panes out,
-// so the labels keep select_window_N's numbers. A pane behind a zoom is in
-// the list: a label can move the zoom to it.
 func (m *OS) paneLabelWindows() []*terminal.Window {
 	var out []*terminal.Window
 	for _, w := range m.Windows {
@@ -173,14 +123,10 @@ func (m *OS) paneLabelWindows() []*terminal.Window {
 	return out
 }
 
-// paneLabelVisible is the part of a pane's label area that is on the
-// screen, in layout coordinates.
 func (m *OS) paneLabelVisible(w *terminal.Window) image.Rectangle {
 	return paneLabelRect(w).Intersect(m.hintsRegion())
 }
 
-// paneLabelFits reports whether the smallest form of a label, its keys with
-// a cell either side, fits in the visible part of a pane.
 func paneLabelFits(r image.Rectangle, label string) bool {
 	return r.Dx() >= len(label)+2 && r.Dy() >= 1
 }
@@ -245,7 +191,6 @@ func (m *OS) PaneLabelsPress(r rune) bool {
 	return false
 }
 
-// paneLabelFor is the label of the pane whose layer id is id, or nil.
 func (s *paneLabelsState) paneLabelFor(id string) *paneLabel {
 	for i := range s.panes {
 		if s.panes[i].windowID == id {
@@ -255,7 +200,6 @@ func (s *paneLabelsState) paneLabelFor(id string) *paneLabel {
 	return nil
 }
 
-// hiddenPanes is every labelled pane the frame does not draw.
 func (s *paneLabelsState) hiddenPanes() []paneLabel {
 	var out []paneLabel
 	for _, p := range s.panes {
@@ -266,8 +210,6 @@ func (s *paneLabelsState) hiddenPanes() []paneLabel {
 	return out
 }
 
-// paneLabelRect is where the labels of the pane w go: its content box, or
-// its whole box when it has no content area.
 func paneLabelRect(w *terminal.Window) image.Rectangle {
 	r := paneContentRect(w)
 	if r.Empty() {

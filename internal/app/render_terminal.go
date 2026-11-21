@@ -16,18 +16,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// The marks a pane paints over its own output: the selection, the search
-// matches, the match under the cursor, and the copy mode cursor block.
-//
-// These were four fixed hex literals. They are the one part of a pane's
-// colours tuios chooses rather than the program running in it, so they were
-// also the one part a person could not fix by changing their theme, and the
-// selection in particular was a violet nothing else on screen used. They are
-// settings now; see config.SelectionConfig.
-//
-// They are still built once rather than per matching cell per frame. The cache
-// holds the values they were built from, so an edit in the settings page shows
-// on the next frame and nothing else costs a rebuild.
 type markStyles struct {
 	markInputs
 	selection lipgloss.Style
@@ -36,7 +24,6 @@ type markStyles struct {
 	cursor    lipgloss.Style
 }
 
-// markInputs is what the mark styles were built from.
 type markInputs struct {
 	gen, hostGen                uint64
 	depth                       overlay.Depth
@@ -46,9 +33,6 @@ type markInputs struct {
 	matchFg, cursorBg, cursorFg string
 }
 
-// markStyle builds one mark. An empty foreground leaves the text the colour
-// the program wrote it in and tints only the background behind it, which is
-// how an editor or a browser marks a selection.
 func markStyle(bg, fg string, bold bool) lipgloss.Style {
 	st := lipgloss.NewStyle()
 	if bg != "" {
@@ -60,9 +44,6 @@ func markStyle(bg, fg string, bold bool) lipgloss.Style {
 	return st.Bold(bold)
 }
 
-// marks are this client's mark styles, rebuilt when the settings behind them
-// change, or when the theme or the colour depth does, since a colour written
-// as a role or a slot name resolves on the theme.
 func (m *OS) marks() *markStyles {
 	s := &m.Settings
 	in := markInputs{
@@ -78,21 +59,12 @@ func (m *OS) marks() *markStyles {
 		markInputs: in,
 		selection:  m.selectionStyle(s),
 		search:     markStyle(s.SearchBg, s.SearchFg, false),
-		// The match under the cursor is bold as well as brighter. It is the
-		// one of many that the next keypress acts on, and two marks that
-		// differ only in shade are hard to tell apart at a glance.
-		match:  markStyle(s.MatchBg, s.MatchFg, true),
-		cursor: markStyle(s.CopyCursorBg, s.CopyCursorFg, true),
+		match:      markStyle(s.MatchBg, s.MatchFg, true),
+		cursor:     markStyle(s.CopyCursorBg, s.CopyCursorFg, true),
 	}
 	return m.markStyleCache
 }
 
-// selectionStyle is the selection's mark. A selected cell is drawn in the
-// selection style alone, so with no selection text colour set its text is
-// the pane's default colour. On a light theme that is dark, and so is the
-// default selection ground: the text could not be read. When the two miss
-// the contrast floor, the text takes the colour overlay.Readable picks
-// against the ground. Where they meet it, nothing changes.
 func (m *OS) selectionStyle(s *config.Settings) lipgloss.Style {
 	st := markStyle(s.SelectionBg, s.SelectionFg, s.SelectionBold)
 	if s.SelectionFg != "" {
@@ -112,31 +84,20 @@ func (m *OS) selectionStyle(s *config.Settings) lipgloss.Style {
 	return st.Foreground(overlay.Readable(ink, bg))
 }
 
-// linkHoverStyle is the link under the pointer. An underline and a colour
-// rather than a filled background, because the run is text the program wrote
-// and the highlight is saying what it is, not selecting it: a block of colour
-// would read as the drag-selection the same gesture used to start, which is
-// the one thing this must not be confused with.
 func linkHoverStyle() lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(theme.LinkHover()).Underline(true)
 }
 
-// isBlankRender reports whether a rendered frame carries no visible text, so
-// styling and cursor positioning alone do not count as content. It walks bytes
-// and returns on the first visible one, so the ordinary non-blank frame costs a
-// few comparisons and no allocation.
 func isBlankRender(s string) bool {
 	for i := 0; i < len(s); i++ {
 		c := s[i]
 		switch {
 		case c == 0x1b:
-			// Skip an escape sequence up to its final byte.
 			i++
 			for i < len(s) && !((s[i] >= 'A' && s[i] <= 'Z') || (s[i] >= 'a' && s[i] <= 'z')) {
 				i++
 			}
 		case c == ' ', c == '\n', c == '\r', c == '\t':
-			// Whitespace is not content.
 		default:
 			return false
 		}
@@ -144,20 +105,6 @@ func isBlankRender(s string) bool {
 	return true
 }
 
-// cacheRender stores a freshly rendered frame as the window's cached content and
-// clears the repaint request, but refuses to do either for a frame with no
-// visible text.
-//
-// A full-screen application clears the alternate screen when it enters it and
-// paints a moment later. A render landing in that gap produces a genuinely
-// blank frame, which is correct to display right then but must not become the
-// window's cached truth: caching it also clears ContentDirty, and if focus
-// moves away before the application paints, nothing re-reads the emulator. The
-// pane then serves the blank cache from the branch above for as long as the
-// application stays idle, which is exactly what a full-screen editor does once
-// it has drawn. Leaving the frame uncached and the window dirty costs one cheap
-// re-render per frame while a pane is genuinely blank, and guarantees the next
-// frame reads the emulator again rather than freezing the gap.
 func cacheRender(window *terminal.Window, content string, cols, rows, dim int) {
 	if isBlankRender(content) {
 		return
@@ -165,36 +112,16 @@ func cacheRender(window *terminal.Window, content string, cols, rows, dim int) {
 	window.CachedContent = content
 	window.CachedContentCols, window.CachedContentRows = cols, rows
 	window.SetCachedContentDim(dim)
-	// Only a frame read outside a synchronized update is a complete one, so
-	// only that may become what the hold falls back on. Caching a frame taken
-	// mid-update would make the hold present the very thing it exists to hide.
 	if window.Terminal == nil || !window.Terminal.IsSyncActive() {
 		window.SyncHoldContent = content
 	}
 	window.ContentDirty = false
 }
 
-// cellGrid is the part of the emulator gridFillsEveryRow reads. Taking an
-// interface keeps the emulator package out of this file's imports.
 type cellGrid interface {
 	CellAt(x, y int) *uv.Cell
 }
 
-// gridFillsEveryRow reports whether every row of the grid accounts for exactly
-// w columns, so a buffer render of it carries w columns on every one of its h
-// lines and the border box may take it as already shaped.
-//
-// It exists because that is a property of somebody else's renderer. A buffer
-// render walks the grid and emits each cell's glyph, so it is w columns wide
-// only while the grid's own widths add up to w, and an earlier version of that
-// renderer right-trimmed every line instead. Reading the widths costs a pass
-// over the cells with no allocation and no text handling at all, and it is the
-// same bookkeeping the cell loop below steps by, so the two paths agree on
-// what they are claiming.
-//
-// Nothing here looks at a cell's text. A wide rune, a combining mark and a
-// joined emoji are each just a width to this, which is why none of them can
-// fool it: the cell grid is where their column counts were decided.
 func gridFillsEveryRow(grid cellGrid, w, h int) bool {
 	if w <= 0 || h <= 0 {
 		return false
@@ -217,8 +144,6 @@ func gridFillsEveryRow(grid cellGrid, w, h int) bool {
 
 func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalMode bool) string {
 	entryDirty := window.ContentDirty
-	// Every branch below that does not lay the whole grid out leaves this
-	// zeroed, so the border box re-flows exactly as it always did.
 	window.RenderedCols, window.RenderedRows = 0, 0
 
 	if window.IsBeingManipulated && m.Resizing {
@@ -229,22 +154,13 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		return out
 	}
 
-	// The dim this frame wants, which is also what the cached frame has to have
-	// been drawn at for the cache to be usable.
 	dim := paneDim(isFocused || m.MultifocusUndimmed(window.ID), &m.Settings)
-	// A pane the last multi copy mode search found nothing in is dimmed, so
-	// the panes that will take part in the selection stand out.
 	if m.MultiCopyParked(window.ID) {
 		dim = max(dim, m.Settings.MultiCopyDim)
 	}
 
 	cacheUsable := window.CachedContent != "" && window.CachedContentDim() == dim
 
-	// A copy sweep is the one thing that changes what a pane looks like
-	// without changing anything in the pane. The cache is keyed on the
-	// content, so the frame it holds is still perfectly valid and still
-	// perfectly wrong: it was drawn before the light arrived. While the sweep
-	// runs this pane draws every frame, and the frames it draws are not kept.
 	flashing := m.copyFlashFor(window.ID) != nil && m.CopyFlashActive()
 
 	if !flashing && (window.IsBeingManipulated || !window.ContentDirty) && cacheUsable {
@@ -255,7 +171,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		return window.CachedContent
 	}
 
-	// A TML window draws its surface, not its PTY. See tml.go.
 	if m.DrawsTML(window) {
 		return m.renderTML(window, dim)
 	}
@@ -263,29 +178,12 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		return m.renderTMLHostTooOld(window, dim)
 	}
 
-	// The guest has an open synchronized update (DEC 2026): it has begun a frame
-	// and does not want it seen half-drawn. The compositor holds the window's
-	// cached layer for this, but a retile, scroll, rename or palette change
-	// drops that layer and the content behind it, and the frame composed next
-	// read the emulator mid-update and presented half of it. Holding here
-	// instead of at the layer covers every path that composes a window, and
-	// costs nothing when there is a layer to hold. ContentDirty is left set, so
-	// the frame that arrives when the guest closes the update re-reads.
 	if window.SyncHoldContent != "" && window.Terminal != nil && window.Terminal.IsSyncActive() {
 		if renderTraceEnabled {
 			traceRender(window, isFocused, inTerminalMode, entryDirty, "sync-hold", window.SyncHoldContent)
 		}
 		return window.SyncHoldContent
 	}
-
-	// An unfocused window used to return its cache here unconditionally, even
-	// with ContentDirty set. That silently discarded a repaint request: the
-	// paths that mark content dirty without dropping the cache (WriteToPTY and
-	// the drag and resize release handler) left the window able to serve stale
-	// bytes indefinitely, because nothing else re-reads the emulator while a
-	// window is unfocused. Once the flag is honoured the branch is subsumed by
-	// the one above, which already serves the cache whenever the content is
-	// clean, focused or not, so there is nothing left for it to do.
 
 	m.terminalMu.Lock()
 	defer m.terminalMu.Unlock()
@@ -311,42 +209,12 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		return window.CachedContent
 	}
 
-	// A native cursor retains rendering ownership even while hidden, so a guest
-	// visibility change before the cell walk cannot enable the software fallback.
-	// paneCursor takes the focused window's read side of ioMu itself, and when
-	// this window is the focused one that is the very same lock acquired just
-	// below. w.ioMu is a sync.RWMutex, which is not reentrant for readers: once
-	// the PTY writer queues a Lock, every later RLock parks behind it, so a second
-	// RLock taken while the first is still held deadlocks against a writer that
-	// is waiting on that first one. Query it here, before the lock is taken, so
-	// the two acquisitions never nest.
 	nativeCursor, _ := m.paneCursor()
 	useRealCursor := nativeCursor != nil
 
-	// Hoisted deliberately. AnyOverlayOpen walks every overlay gate, and the
-	// cursor test below runs once per cell. When it built a map, asking per
-	// cell cost about a thousand allocations per composed frame and tripped
-	// the compositor's damage guard.
 	overlayOpen := m.AnyOverlayOpen()
 
-	// The emulator cell buffer is written by the PTY reader and daemon paths
-	// under w.ioMu and reallocated by Resize under the same lock, so every VT
-	// read below (Render, CursorPosition, CellAt, scrollback) must hold the
-	// read side. terminalMu still guards the m.Windows slice and dirty flags.
-	//
-	// Try rather than wait. A pane emitting thousands of lines a second holds
-	// the exclusive side almost continuously, and blocking here stalls the
-	// whole composited frame on that one pane, so the user's keystroke echo in
-	// a completely different pane waits behind output nobody can read. Serving
-	// the previous frame for the busy pane and leaving it dirty sheds that
-	// intermediate frame instead: the pane repaints on the next frame that
-	// acquires, so it still converges on its true final state once the burst
-	// ends, and no input is affected.
 	if !window.TryRLockIO() {
-		// Served at whatever dim it was drawn at, unlike the keyed check above.
-		// The alternative is to fall through and block on the lock this branch
-		// exists to avoid, and the staleness cannot last: ContentDirty is still
-		// set, so the next frame that acquires re-reads and re-keys.
 		if window.CachedContent != "" {
 			window.RenderedCols, window.RenderedRows = window.CachedContentCols, window.CachedContentRows
 			if renderTraceEnabled {
@@ -354,15 +222,9 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			}
 			return window.CachedContent
 		}
-		// No cache to fall back on yet, so this pane has never rendered. Wait,
-		// because showing nothing at all is worse than one blocked frame, and
-		// it can only happen in the first frames of a pane's life.
 		window.RLockIO()
 	}
 	defer window.RUnlockIO()
-	// The guest may have opened an update after the check above and before
-	// the lock was taken: its output is read under this lock. Read now, the
-	// pane would show the update half done.
 	if window.SyncHoldContent != "" && screen.IsSyncActive() {
 		if renderTraceEnabled {
 			traceRender(window, isFocused, inTerminalMode, entryDirty, "sync-hold-locked", window.SyncHoldContent)
@@ -370,29 +232,8 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		return window.SyncHoldContent
 	}
 
-	// Fast path for unfocused windows: use the emulator's built-in Render()
-	// which is faster than cell-by-cell iteration. The focused window uses
-	// the slow path for cursor overlay and selection highlighting.
-	//
-	// A dim takes an unfocused pane off it, because the emulator's own renderer
-	// emits the cells as the guest wrote them and there is nowhere in it to put
-	// a blend. That is the whole cost of the feature and it falls exactly on
-	// the panes it applies to: an unfocused pane with dim on renders cell by
-	// cell like a focused one. It is charged only on a frame that was going to
-	// re-read the emulator anyway, since a clean pane serves its cache above.
-	//
-	// The run of cells the pointer is on, if it is on one in this pane. Read
-	// once here rather than per cell: it is a pane-wide fact, and the test
-	// inside the loop is then two integer comparisons.
-	//
-	// It also takes the pane off the fast path below, for the same reason a dim
-	// does: the emulator's own renderer emits the cells as the guest wrote them
-	// and there is nowhere in it to put an underline. The cost falls only on the
-	// one pane the pointer is over, and only while it is over a link.
 	linkRun, hasLinkRun := m.linkHoverFor(window)
 
-	// A pane a copy sweep is crossing stays off it too: the emulator's renderer
-	// has no light in it.
 	if !isFocused && !flashing && dim == 0 && !hasLinkRun && window.CopyMode == nil && window.ScrollbackOffset == 0 {
 		rendered := screen.Render()
 		cols, rows := 0, 0
@@ -411,9 +252,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	cursorX := cursor.X
 	cursorY := cursor.Y
 
-	// A paneTextBuf rather than a strings.Builder because a logical line
-	// that turns out to hold a URL is drawn again, and the buffer is cut back
-	// to where the line began. See the end of the row loop.
 	var builder paneTextBuf
 
 	contentW := window.ContentWidth()
@@ -426,65 +264,33 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 	maxX := min(contentW, screen.Width())
 
 	scrollbackLen := window.ScrollbackLen()
-	// The offset follows the anchor against the history this frame draws,
-	// not the one the last Update read. See HoldScrollAnchorAt.
 	window.HoldScrollAnchorAt(scrollbackLen)
 	inScrollbackMode := window.ScrollbackOffset > 0
 
 	marks := m.marks()
 
-	// Links in this frame. See link_emit.go.
-	//
-	// A detected URL is found without a second pass over the cells: the row
-	// loop watches for "://" as it reads them. A logical line (the rows one
-	// soft wrap joins) that holds one is then read as text, its URLs found,
-	// and the line drawn again with them. Most lines hold none and are drawn
-	// once, which is the whole cost of the feature on them.
 	findBare := m.Settings.Links == config.LinksAll
-	// linkRules are the [[links.rules]] in force. A rule can match text with
-	// no "://" in it, so with rules every logical line is scanned. Nil when
-	// there are none, which keeps the cost above for everybody else.
 	var linkRules *hints.LinkRules
 	if findBare && !m.Settings.LinkRules.Empty() {
 		linkRules = m.Settings.LinkRules
 	}
 	var bareRows [][]paneBareSpan
-	// linkScratch is reused for every line this frame scans.
 	var linkScratch linkScan
-	// lineTop is the first row of the logical line the loop is in, or -1 when
-	// it is not known. It is looked up only for a line that has to be scanned:
-	// asking the emulator whether a row wraps costs allocations on the ghostty
-	// backend, so a line with nothing to find is never asked about.
 	lineTop := 0
-	lineScanned := false // the line's URLs are in bareRows
-	scannedEnd := -1     // the last row of the line lineScanned is about
-	// rowStart is where each row begins in builder, so a line can be drawn
-	// again from a first row found after it was drawn.
+	lineScanned := false
+	scannedEnd := -1
 	var rowStart []int
 	if findBare {
 		rowStart = make([]int, maxY)
 	}
-	schemeState := 0 // characters of "://" seen in a row
+	schemeState := 0
 	lineHasScheme := false
-	// A logical line the viewport cuts may hold a URL whose "://" is off
-	// screen. The first line is cut when the row above the viewport wraps
-	// onto it, the last when the last row wraps onto the row below. Such a
-	// line is scanned whatever its visible rows hold, and appendBareSpans
-	// reads past the edge for the rest of the address.
 	cutAbove := findBare && paneRowWraps(window, -1)
 	cutBelow := findBare && paneRowWraps(window, maxY-1)
 	var openLink uv.Link
-	// A marked link with an id= is one link wherever its runs are, so the
-	// hover lights every run with the same address and id, not only the
-	// one under the pointer.
 	hoverByID := hasLinkRun && linkRun.Marked && linkParamID(linkRun.Params) != ""
 
 	inCopyMode := window.InCopyMode()
-	// The block cursor is copy mode showing itself. A pane that is merely
-	// scrolled back under the wheel draws none: a cursor parked mid-pane over
-	// output the user is only reading is the clearest tell that they have been
-	// put in a mode. Selection highlights and search matches still render,
-	// because a drag-selection runs in an implicit session.
 	showCopyCursor := window.CopyModeVisible()
 	copyModeCursorX, copyModeCursorY := -1, -1
 	if showCopyCursor {
@@ -492,19 +298,8 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		copyModeCursorY = window.CopyMode.CursorY
 	}
 
-	// Only render fake cursor when real terminal cursor is not being
-	// used. Suppressing the real one during a resize must not hand the
-	// job to this path instead: the gesture draws no cursor either way.
-	// An open overlay is the same case. The panel covers the pane and
-	// draws its own caret, so a cursor here would be a second one in the
-	// pane behind it, and hiding only the real cursor would have moved
-	// the mark rather than removed it.
-	//
-	// Every term is fixed for the frame, the emulator's included since the
-	// IO lock is held, so it is decided once here rather than per cell.
 	drawFakeCursor := !useRealCursor && !m.Resizing && !overlayOpen && isFocused && inTerminalMode && !inCopyMode && !screen.IsCursorHidden()
 
-	// Use pooled highlight grids to reduce allocations
 	var searchHighlights, currentMatchHighlight, visualSelection *pool.HighlightGrid
 
 	if inCopyMode && len(window.CopyMode.SearchMatches) > 0 {
@@ -605,17 +400,11 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		}
 	}
 
-	// The band of light crossing text that was just copied, if there is one.
-	// See copyFlashGrid.
 	flashGrid, flashBand := m.copyFlashGrid(window, screen, scrollbackLen, maxY, maxX)
 	if flashGrid != nil {
 		defer pool.PutHighlightGrid(flashGrid)
 	}
 
-	// The dim and the ground it carries toward, resolved once for the pane
-	// rather than per cell. dimT is zero for a focused pane and for an unset
-	// option, and a zero dimT makes the cell loop below identical to what it
-	// was. A pane whose colours are not known still dims: see dimCell.
 	var (
 		dimScratch   uv.Cell
 		dimMemo      blendMemo
@@ -630,29 +419,16 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		dimText = m.Settings.DimForeground
 	}
 
-	// The pane background, for the two things drawn here against it rather
-	// than on it: the fake cursor and the copy sweep. The ground itself is
-	// painted by the compositor; see background.go.
 	ground := m.paneGround()
 	var groundScratch uv.Cell
 
-	// Set false by any row the cell loop could not fill to exactly maxX columns.
 	gridExact := true
 
 	var batchBuilder strings.Builder
 	var currentStyle lipgloss.Style
 	var batchHasStyle bool
-	// When the batch style came straight from the style cache (not a
-	// selection-modified or highlight style), the derived ANSI escape is cached
-	// alongside it, so flushBatch can emit the cached prefix/suffix directly
-	// instead of rebuilding them via styleToANSI. currentStyleCached gates that.
 	var currentStyleCached bool
 	var currentPrefix, currentSuffix string
-	// The previous cell's style, held as a value rather than as the pointer
-	// CellAt handed back. A pointer kept across the next CellAt call pins the
-	// emulator to handing out stable addresses, which is what stands between
-	// the VT layer and a packed grid; a style is what the batching compares,
-	// so a style is what is kept.
 	var prevStyle uv.Style
 	var prevValid bool
 	var prevIsCursor bool
@@ -680,8 +456,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		}
 	}
 
-	// safeColorEquals is defined at package scope (color_nil.go) so it can guard
-	// against wrapped-nil colors and be exercised directly by tests.
 	styleMatches := func(cell *uv.Cell, isCursorPos bool) bool {
 		if !prevValid && cell == nil {
 			return prevIsCursor == isCursorPos
@@ -689,10 +463,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		if !prevValid || cell == nil {
 			return false
 		}
-		// This runs once per cell. The integer fields go first, and each
-		// colour is tried for identity inline before the call, which is what
-		// settles it for neighbouring cells written with one pen. The identity
-		// test is the same one safeColorEquals starts with.
 		return prevIsCursor == isCursorPos &&
 			prevStyle.Attrs == cell.Style.Attrs &&
 			prevStyle.Underline == cell.Style.Underline &&
@@ -701,7 +471,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			(prevStyle.UnderlineColor == cell.Style.UnderlineColor ||
 				safeColorEquals(prevStyle.UnderlineColor, cell.Style.UnderlineColor))
 	}
-	// notePrev records the cell just emitted for the next comparison.
 	notePrev := func(cell *uv.Cell) {
 		if prevValid = cell != nil; prevValid {
 			prevStyle = cell.Style
@@ -721,24 +490,15 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		batchHasStyle = false
 		prevValid = false
 
-		// The scrollback line this row shows, when it shows one, read once for
-		// the row. Every cell of the row reads from it, and each ScrollbackLine
-		// call takes the scrollback cache's lock and does a map lookup.
 		var sbLine uv.Line
 		sbRow := inScrollbackMode && y < window.ScrollbackOffset
 		if sbRow {
 			scrollbackIndex := scrollbackLen - window.ScrollbackOffset + y
 			if scrollbackIndex >= 0 && scrollbackIndex < scrollbackLen {
-				// Clipped to the pane: a wide rune whose lead sits in the
-				// last column would make the row one column too wide, and the
-				// frame's width cut then drops the whole cell with its style,
-				// the copy cursor and any selection on it.
 				sbLine = vt.ClipHistoryRow(window.ScrollbackLine(scrollbackIndex), maxX)
 			}
 		}
 
-		// A stream selection stops at each row's text. A block does not: it is a
-		// rectangle on the screen, past the end of a short row too.
 		lineEndX := maxX - 1
 		if inVisualMode && window.CopyMode.State != terminal.CopyModeVisualBlock &&
 			visualSelection != nil && visualSelection.HasRow(y) {
@@ -773,7 +533,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			}
 		}
 
-		// The detected URLs on this row, if any. See link_emit.go.
 		var bareRow []paneBareSpan
 		if bareRows != nil {
 			bareRow = bareRows[y]
@@ -797,9 +556,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				cell = screen.CellAt(x, y)
 			}
 
-			// "://" in this row means the logical line may hold a URL.
-			// Read as one byte: a string compare per cell was a measurable
-			// share of the loop.
 			if findBare && !lineScanned && cell != nil {
 				var b byte
 				if len(cell.Content) == 1 {
@@ -818,11 +574,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				}
 			}
 
-			// The link this cell belongs to, carried to the outer terminal as
-			// OSC 8. A marked link wins over a detected one. The test in front
-			// is three field reads, which is what a cell outside any link
-			// pays; a change flushes the run and writes the sequence between
-			// runs, never inside one.
 			if openLink.URL != "" || bareRow != nil || (cell != nil && cell.Link.URL != "" && frameLink(cell.Link.URL)) {
 				var cellLink uv.Link
 				if cell != nil && cell.Link.URL != "" && frameLink(cell.Link.URL) {
@@ -869,27 +620,8 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				char = string(cell.Content)
 			}
 
-			// The copy sweep, ahead of the ordinary cell path and behind
-			// every mark: a selection or a search match still shows as what
-			// it is while the light crosses it.
-			// The grid already stops where the text ends on each row (see
-			// paneRowTextEnd), so a selection of one short line is not
-			// painted as a full-width block.
 			if flashGrid != nil && flashGrid.Get(y, x) {
-				// A cell holding a character has its text lit as well as its
-				// ground, so the sweep passes over the words rather than
-				// behind them.
 				hasGlyph := char != "" && char != " "
-				// The cell's own background is what the light is mixed into,
-				// so the sweep brightens whatever was there rather than
-				// replacing it with a colour of its own.
-				//
-				// A cell with no background of its own takes the pane's, not
-				// the overlay palette's canvas. The canvas is the colour the
-				// panels are built on and is darker than most panes, so using
-				// it painted a black band under the sweep and made the light
-				// on it read as gold on black rather than as the pane getting
-				// brighter.
 				cellBg := m.terminalBg()
 				if ground.on() {
 					cellBg = ground.bg
@@ -955,10 +687,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				}
 			}
 
-			// The link under the pointer, drawn after the selection and search
-			// branches above so a run the user is selecting or searching keeps
-			// the highlight that says so. A pane the pointer is not over has
-			// hasLinkRun false and pays one boolean per cell.
 			if hasLinkRun && (linkRun.Contains(x, y) ||
 				(hoverByID && cell != nil && cell.Link.URL == linkRun.URL && cell.Link.Params == linkRun.Params)) {
 				flushBatch()
@@ -980,25 +708,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 				flushBatch()
 			}
 
-			// A dimmed pane styles every cell it has, not only the ones the
-			// guest coloured. shouldApplyStyle asks whether a cell carries
-			// anything of its own, and a shell prompt mostly does not: gating
-			// the dim on it left the setting doing nothing to most of a pane
-			// even with a theme set, which reads as a broken option rather
-			// than as a subtle one.
-			//
-			// Asked only where a batch starts, since a cell that continues a
-			// batch takes the style the batch already has.
 			if batchBuilder.Len() == 0 && (shouldApplyStyle(cell) || isCursorPos || (dimT > 0 && cell != nil)) {
-				// Pure cached style: reuse the cached ANSI escape so flushBatch
-				// skips styleToANSI.
-				//
-				// The dim is applied here rather than per cell because this is
-				// where a style run begins: the batching above compares the
-				// emulator's own cells, so the blend is paid once for a run
-				// rather than once for each of its cells. The style cache keys
-				// on the colours it is handed, so a dimmed run caches as its
-				// own entry and the focused pane's entries are untouched.
 				styleCell := cell
 				if dimT > 0 {
 					styleCell = dimCell(&dimScratch, cell, dimFg, dimBg, dimPal, dimT, dimText, &dimMemo)
@@ -1022,19 +732,11 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			x += cellWidth
 		}
 
-		// The loop writes one glyph per cell and steps by the cell's own width,
-		// so the row it just emitted is maxX columns wide unless a wide cell
-		// straddled the last column and pushed it one further. Checking the
-		// counter the loop already keeps costs one comparison per row and makes
-		// the claim below something this function has measured rather than
-		// something it assumes about the grid.
 		if x != maxX {
 			gridExact = false
 		}
 
 		flushBatch()
-		// A link never runs past the end of its row in the frame: the
-		// compositor places rows independently.
 		if openLink.URL != "" {
 			builder.WriteString(resetHyperlink)
 			openLink = uv.Link{}
@@ -1043,15 +745,11 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		switch {
 		case !findBare:
 		case lineScanned:
-			// The line was drawn again with its URLs. Past its last row the
-			// next line starts.
 			if y == scannedEnd {
 				lineTop = y + 1
 				lineScanned, lineHasScheme = false, false
 			}
 		case lineHasScheme || linkRules != nil || (lineTop == 0 && cutAbove) || (y == maxY-1 && cutBelow):
-			// The line holds "://", a link rule may match anywhere in it,
-			// or the viewport cuts it: it has to be scanned once it ends.
 			if lineTop < 0 {
 				lineTop = y
 				for lineTop > 0 && paneRowWraps(window, lineTop-1) {
@@ -1061,17 +759,12 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			if y+1 < maxY && paneRowWraps(window, y) {
 				break
 			}
-			// The line ends on this row: find its URLs and draw it again
-			// from its first row.
 			if bareRows == nil {
 				bareRows = make([][]paneBareSpan, maxY)
 			}
 			spansBefore := bareSpanCount(bareRows, lineTop, y)
 			bareRows = appendBareSpans(bareRows, window, lineTop, y, maxX, maxY, linkRules, &linkScratch)
 			if bareSpanCount(bareRows, lineTop, y) == spansBefore {
-				// Nothing to link on the line: it is drawn already, as it is.
-				// Link rules scan every line, so this keeps a screen of
-				// ordinary output from being drawn twice.
 				lineTop = y + 1
 				lineHasScheme = false
 				break
@@ -1080,15 +773,11 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 			lineStart := rowStart[lineTop]
 			builder.Truncate(lineStart)
 			y = lineTop - 1
-			// The newline in front of the first row is before lineStart,
-			// so the redrawn row must not write another.
 			if lineTop > 0 {
 				builder.Truncate(lineStart - 1)
 			}
 			continue
 		default:
-			// Nothing to find on the line so far. Where it began is looked up
-			// if a later row of it turns out to hold "://".
 			lineTop = -1
 		}
 	}
@@ -1100,9 +789,6 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		cols, rows = maxX, maxY
 	}
 	window.RenderedCols, window.RenderedRows = cols, rows
-	// A frame with the sweep in it is not kept. The light is where it is for
-	// one frame only, and a cache holding it would show that one position
-	// until the pane's own content changed.
 	if !flashing {
 		cacheRender(window, content, cols, rows, dim)
 	}

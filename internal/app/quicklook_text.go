@@ -19,54 +19,29 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The text half of quick look: the windows it reads, the position in them, and
-// the keys that move through them.
-//
-// A text is read in windows, on demand, by byte offset (quickLookText), so a
-// log of any size opens as fast as a small file. At most quickLookTextHeld bytes
-// are held. No line is counted: a line number is exact only when the held text
-// reaches back to the start of the file, and after a jump to the end the panel
-// gives an estimate and says so.
-//
-// A search looks through the held text first, and then asks the machine with the
-// file to look on from there. It reads one chunk at a time for at most 5 s and
-// says how far it got, so n goes on from there. A count to a line number works the
-// same way. Neither keeps anything.
-
 const (
-	// quickLookTextHeld bounds the bytes of a text the preview holds, as whole
-	// windows of quickLookTextWindow bytes.
 	quickLookTextHeld   = 768 << 10
 	quickLookTextWindow = 256 << 10
-	// quickLookLineMax cuts a longer line for the highlighter and the panel.
-	quickLookLineMax = 64 << 10
+	quickLookLineMax    = 64 << 10
 )
 
-// quickLookPart is one window of a text in a result.
 type quickLookPart struct {
 	lines int
 	bytes int64
 }
 
-// quickLookMove says which window of a text a read is for.
 type quickLookMove uint8
 
 const (
 	quickLookNoMove quickLookMove = iota
-	// quickLookNext and quickLookPrev join the windows after and before the
-	// held text. quickLookStart and quickLookEnd replace it, and quickLookSeek
-	// looks for ql.seek first and replaces it with what it found.
 	quickLookNext
 	quickLookPrev
 	quickLookStart
 	quickLookEnd
 	quickLookSeek
-	// quickLookAt replaces the held text with the window at ql.atOff, where
-	// the ruler was moved to.
 	quickLookAt
 )
 
-// quickLookPromptKind is what the row at the bottom of a text is asking for.
 type quickLookPromptKind uint8
 
 const (
@@ -75,22 +50,18 @@ const (
 	quickLookLinePrompt
 )
 
-// quickLookWindowMsg carries a finished window of a text back to the loop.
 type quickLookWindowMsg struct {
-	target quickLookTarget
-	move   quickLookMove
-	reply  quickLookWindowReply
-	// failed says the read failed, and older that the machine has no windows.
+	target        quickLookTarget
+	move          quickLookMove
+	reply         quickLookWindowReply
 	failed, older bool
 	lines         []string
 	spans         [][]diffview.Span
 	cutLong       bool
-	// seek is what a quickLookSeek read looked for, and sought what it found.
-	seek   session.PreviewSeek
-	sought quickLookSought
+	seek          session.PreviewSeek
+	sought        quickLookSought
 }
 
-// quickLookSought is the part of a find or line answer the preview reads.
 type quickLookSought struct {
 	Offset  int64 `json:"offset"`
 	Reached int64 `json:"reached"`
@@ -98,7 +69,6 @@ type quickLookSought struct {
 	Size    int64 `json:"size"`
 }
 
-// quickLookWindowReply is the part of a window's answer the preview reads.
 type quickLookWindowReply struct {
 	Size       int64  `json:"size"`
 	Text       string `json:"text"`
@@ -106,7 +76,6 @@ type quickLookWindowReply struct {
 	NextOffset int64  `json:"next_offset"`
 }
 
-// quickLookLines splits a text into lines for the panel, and highlights them.
 func quickLookLines(path, text string, ascii bool) (lines []string, spans [][]diffview.Span, cutLong bool) {
 	lines = strings.Split(strings.TrimSuffix(text, "\n"), "\n")
 	for i, l := range lines {
@@ -118,12 +87,8 @@ func quickLookLines(path, text string, ascii bool) (lines []string, spans [][]di
 	return lines, diffview.Highlight(path, lines), cutLong
 }
 
-// quickLookText reports whether r is a text the keys move through in windows.
 func quickLookText(r *quickLookResult) bool { return r != nil && r.kind == "text" }
 
-// quickLookPosition says where the top of the panel is in a text: the line, and
-// how far through the file when the panel does not hold all of it. It is ""
-// when there is nothing to say.
 func quickLookPosition(r *quickLookResult, scroll, rows int) string {
 	if !quickLookText(r) || len(r.lines) == 0 {
 		return ""
@@ -137,7 +102,6 @@ func quickLookPosition(r *quickLookResult, scroll, rows int) string {
 	if r.firstLine > 0 {
 		line = "Line " + strconv.Itoa(r.firstLine+scroll)
 	} else {
-		// Bytes held over lines held, for the lines above the held text.
 		avg := max((r.endOff-r.startOff)/int64(len(r.lines)), 1)
 		line = "Line about " + strconv.FormatInt(r.startOff/avg+int64(scroll)+1, 10)
 	}
@@ -147,7 +111,6 @@ func quickLookPosition(r *quickLookResult, scroll, rows int) string {
 	return line + " · " + strconv.FormatInt(quickLookPercent(r, scroll), 10) + "%"
 }
 
-// quickLookPercent is how far through the file the line at scroll is.
 func quickLookPercent(r *quickLookResult, scroll int) int64 {
 	if r.size <= 0 || len(r.lines) == 0 {
 		return 0
@@ -156,7 +119,6 @@ func quickLookPercent(r *quickLookResult, scroll int) int64 {
 	return off * 100 / r.size
 }
 
-// quickLookPage is how many lines half a page is.
 func (m *OS) quickLookPage() int {
 	_, bodyH := m.quickLookSize()
 	rows := bodyH - 1
@@ -262,10 +224,6 @@ func (m *OS) QuickLookEdge(end bool) bool {
 	return true
 }
 
-// quickLookWindow reads the next window of a text when the position calls for
-// one. Update asks after every message. It is nil unless a read is due, and only
-// one read runs at a time, so a held key moves the position and the next read goes
-// to where it ended.
 func (m *OS) quickLookWindow() tea.Cmd {
 	ql := &m.quickLook
 	r := ql.res
@@ -323,7 +281,6 @@ func (m *OS) quickLookWindow() tea.Cmd {
 		var raw json.RawMessage
 		var err error
 		if move == quickLookSeek {
-			// A search or a count first. The window read follows from what it found.
 			if t.host == "" {
 				var out map[string]any
 				if out, err = session.PreviewLocalSeek(context.Background(), t.path, seek); err == nil {
@@ -371,8 +328,6 @@ func (m *OS) quickLookWindow() tea.Cmd {
 	}
 }
 
-// quickLookJoinSpans joins the highlighting of two runs of lines, one entry per
-// line. A file the lexer does not know has none, and stays with none.
 func quickLookJoinSpans(a [][]diffview.Span, aLines int, b [][]diffview.Span, bLines int) [][]diffview.Span {
 	if a == nil && b == nil {
 		return nil
@@ -383,10 +338,6 @@ func quickLookJoinSpans(a [][]diffview.Span, aLines int, b [][]diffview.Span, bL
 	return out
 }
 
-// quickLookHostHasParam asks a machine whether its file-preview verb takes a
-// param. A daemon that does not know a param ignores it, so without asking, an
-// older one would answer every window with the start of the file. A failed call
-// counts as having it: the read that follows says what is wrong.
 func quickLookHostHasParam(call func(host, verb string, params map[string]any) (json.RawMessage, error), host, param string) bool {
 	raw, err := call(host, "list-verbs", map[string]any{"verb": "file-preview"})
 	if err != nil {
@@ -417,7 +368,6 @@ func quickLookHostHasParam(call func(host, verb string, params map[string]any) (
 	return true
 }
 
-// quickLookSeekMissed says why a search or a count found nothing.
 func quickLookSeekMissed(seek session.PreviewSeek, s quickLookSought) string {
 	pct := func() string {
 		if s.Size <= 0 {
@@ -437,8 +387,6 @@ func quickLookSeekMissed(seek session.PreviewSeek, s quickLookSought) string {
 	return "No more matches."
 }
 
-// applyQuickLookWindow joins a finished window to the held text. It makes a new
-// result, so the kept panel sees the change.
 func (m *OS) applyQuickLookWindow(msg quickLookWindowMsg) tea.Cmd {
 	ql := &m.quickLook
 	ql.fetching = false
@@ -478,7 +426,6 @@ func (m *OS) applyQuickLookWindow(msg quickLookWindowMsg) tea.Cmd {
 		}
 		return nil
 	case msg.failed:
-		// The text held stays, and the panel says the rest could not be read.
 		n.stopped = true
 		ql.res = &n
 		return nil
@@ -533,7 +480,6 @@ func (m *OS) applyQuickLookWindow(msg quickLookWindowMsg) tea.Cmd {
 		}
 	}
 	n.more = n.endOff < n.size
-	// Let whole windows go from the far side of the position.
 	for n.endOff-n.startOff > quickLookTextHeld && len(n.parts) > 1 {
 		if msg.move == quickLookNext {
 			p := n.parts[0]
@@ -562,14 +508,11 @@ func (m *OS) applyQuickLookWindow(msg quickLookWindowMsg) tea.Cmd {
 	return nil
 }
 
-// quickLookSearchRow says the bottom row of a text is taken by a prompt, a search
-// or what the last search said.
 func (m *OS) quickLookSearchRow() bool {
 	ql := &m.quickLook
 	return ql.prompt != quickLookNoPrompt || ql.query != "" || ql.status != ""
 }
 
-// quickLookDrawSearchRow draws that row.
 func quickLookDrawSearchRow(c *ckCanvas, pal overlay.Palette, ql *quickLookState, y, w int) {
 	key := func(t string) ckSeg { return ckSeg{t: t, fg: pal.AccentBright, attrs: ckBold} }
 	dim := func(t string) ckSeg { return ckSeg{t: t, fg: pal.FgDim} }
@@ -593,8 +536,6 @@ func quickLookDrawSearchRow(c *ckCanvas, pal overlay.Palette, ql *quickLookState
 	}
 }
 
-// quickLookWrapsByDefault says a file reads as prose, so long lines wrap until the
-// person says otherwise. Code and logs line up by column, and stay cut.
 func quickLookWrapsByDefault(name string) bool {
 	switch strings.ToLower(filepath.Ext(name)) {
 	case ".txt", ".text", ".rst", ".adoc", "":
@@ -603,7 +544,6 @@ func quickLookWrapsByDefault(name string) bool {
 	return false
 }
 
-// quickLookWrapRows is how many rows a line takes when it wraps.
 func quickLookWrapRows(line string, width int) int {
 	width = max(width, 1)
 	plain := true
@@ -623,9 +563,6 @@ func quickLookWrapRows(line string, width int) int {
 	return max(rows, 1)
 }
 
-// quickLookLastWrapped is the last top line that still fills the rows, walking up
-// from the end of the held text, so the end of a file comes wholly into view. A
-// last line taller than the rows cannot fit: it stays the top line, never past it.
 func quickLookLastWrapped(lines []string, rows, width int) int {
 	used := 0
 	for i := len(lines) - 1; i >= 0; i-- {
@@ -637,10 +574,8 @@ func quickLookLastWrapped(lines []string, rows, width int) int {
 	return 0
 }
 
-// quickLookFold says a search ignores case: it holds no capital.
 func quickLookFold(q string) bool { return strings.ToLower(q) == q }
 
-// quickLookMatch reports whether a held line holds the search.
 func quickLookMatch(line, q string) bool {
 	if quickLookFold(q) {
 		line = strings.ToLower(line)
@@ -648,8 +583,6 @@ func quickLookMatch(line, q string) bool {
 	return strings.Contains(line, q)
 }
 
-// quickLookLightMatches lights the matches in one drawn row. xOff is the column
-// of the line the row starts at.
 func quickLookLightMatches(c *ckCanvas, pal overlay.Palette, q, line string, x, y, width, xOff int) {
 	if q == "" {
 		return
@@ -658,16 +591,10 @@ func quickLookLightMatches(c *ckCanvas, pal overlay.Palette, q, line string, x, 
 	if quickLookFold(q) {
 		hay = strings.ToLower(line)
 	}
-	// ToLower can change a line's length on a rare rune. The search then lights
-	// the wrong cells on that line, and finds the right lines still.
 	light := func(cell *uv.Cell) {
 		cell.Style.Bg = pal.Accent
 		cell.Style.Fg = pal.PillFg
 	}
-	// p is the start of a grapheme cluster at or before the match and w the
-	// width of line[:p]. Matches come in order, so the walk resumes where the
-	// last one stopped, as ansi.StringWidth steps a string, and a long line is
-	// measured once instead of once per match.
 	p, w := 0, 0
 	for at := 0; ; {
 		i := strings.Index(hay[at:], q)
@@ -691,10 +618,6 @@ func quickLookLightMatches(c *ckCanvas, pal overlay.Palette, q, line string, x, 
 			}
 			col = w + ansi.StringWidth(line[p:i]) - xOff
 		} else {
-			// The match starts inside a rune. That happens only on a line
-			// whose lower-cased copy has another length than the line, so
-			// the offset found in the copy is not a boundary of the line;
-			// measure the text before it as a whole.
 			col = ansi.StringWidth(line[:i]) - xOff
 		}
 		cols := ansi.StringWidth(line[i:end])
@@ -747,9 +670,6 @@ func (m *OS) QuickLookPromptKey(key, text string) {
 	lineKey(&ql.input, key, text, ql.promptClean)
 }
 
-// promptClean keeps what the prompt may take of typed text: a line number
-// takes digits only, and the prompt holds no more than quickLookPromptMax
-// bytes.
 func (ql *quickLookState) promptClean(text string) string {
 	text = cleanControl(text)
 	if ql.prompt == quickLookLinePrompt && strings.Trim(text, "0123456789") != "" {
@@ -761,7 +681,6 @@ func (ql *quickLookState) promptClean(text string) string {
 	return text
 }
 
-// inputAt is the prompt's caret, in bytes from the start, for the frame key.
 func (ql *quickLookState) inputAt() int {
 	before, _, _ := ql.input.Parts()
 	return len(before)
@@ -782,7 +701,6 @@ func (m *OS) QuickLookPromptEnter() {
 			return
 		}
 		ql.query, ql.resume = text, 0
-		// The search is counted from the line at the top, which it may be on.
 		ql.scroll--
 		m.QuickLookFindMove(true)
 	case quickLookLinePrompt:
@@ -838,7 +756,6 @@ func (m *OS) QuickLookFindMove(forward bool) {
 	ql.jump = quickLookSeek
 }
 
-// quickLookNoMoreMatches is the search coming to the end of what it can read.
 func quickLookNoMoreMatches(r *quickLookResult) string {
 	if r.older {
 		return "No more matches in what this machine sent."
@@ -846,7 +763,6 @@ func quickLookNoMoreMatches(r *quickLookResult) string {
 	return "No more matches."
 }
 
-// quickLookGoToLine goes to a line number, in the held text when it is there.
 func (m *OS) quickLookGoToLine(n int64) {
 	ql := &m.quickLook
 	r := ql.res
@@ -875,7 +791,6 @@ func (m *OS) quickLookGoToLine(n int64) {
 	ql.jump = quickLookSeek
 }
 
-// quickLookPromptSegs is the prompt's text with its caret drawn where it is.
 func quickLookPromptSegs(ql *quickLookState, pal overlay.Palette) []ckSeg {
 	before, at, after := ql.input.Parts()
 	if at == "" {

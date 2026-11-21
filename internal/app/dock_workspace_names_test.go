@@ -11,7 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// chipOS is a dock with three occupied workspaces, the middle one named.
 func chipOS(t *testing.T) *OS {
 	t.Helper()
 	m := newNarrowOS(t, 140, 30)
@@ -44,8 +43,6 @@ func TestWorkspaceChipWidthFollowsItsLabel(t *testing.T) {
 			t.Errorf("workspace %d's recorded width %d is not its label's %d",
 				tab.Workspace, tab.Width, workspacePillWidth(tab.Label, &config.Global))
 		}
-		// Active and inactive must measure the same, or the strip reflows as the
-		// current workspace moves along it and every rect past it shifts.
 		if a, b := lipgloss.Width(workspacePill(tab.Label, true, false, &config.DockTabsConfig{}, theme.UI(), dockCapsOf(&config.Global), nil)),
 			lipgloss.Width(workspacePill(tab.Label, false, false, &config.DockTabsConfig{}, theme.UI(), dockCapsOf(&config.Global), nil)); a != b {
 			t.Errorf("workspace %d measures %d active and %d inactive", tab.Workspace, a, b)
@@ -66,8 +63,6 @@ func TestWorkspaceChipLabelIsCapped(t *testing.T) {
 		t.Errorf("a long name renders %d cells on the chip, want at most %d", lipgloss.Width(label), m.Settings.DockWorkspaceLabelMax)
 	}
 
-	// An unnamed workspace is still its number, which is both its identity and
-	// what the chip has always shown.
 	if got := m.workspacePillLabel(3); got != "3" {
 		t.Errorf("an unnamed workspace's chip reads %q, want its number", got)
 	}

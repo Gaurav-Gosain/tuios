@@ -12,33 +12,14 @@ import (
 	"tuios.dev/vt"
 )
 
-// The navigator's preview shows a pane's screen in its own colours.
-//
-// A pane this client draws is read from the client's own emulator, live,
-// the way the picture-in-picture view reads it (pipCells). A pane in another
-// session or on another machine is read with a styled capture-pane, and the
-// capture is never written to the host terminal as it came. It is parsed
-// into cells by an emulator of its own, and each row is drawn again from
-// those cells: the colours and the attributes survive, and nothing else
-// does. An OSC sequence (a clipboard write, a hyperlink, a title) is
-// consumed by the parse, a cursor movement or an erase moves nothing outside
-// the parse's own grid, and a control character in a cell is dropped. What
-// the preview writes is SGR and printable text.
-
-// navStyledMaxCols bounds the columns a parsed capture keeps. A pane wider
-// than this is cut: the preview is narrower still.
 const navStyledMaxCols = 400
 
-// navInk is the theme the capture is parsed under, read on the UI goroutine
-// before the load starts, so the sixteen ANSI colours of another session's
-// pane are this client's, as they are on the panes it draws.
 type navInk struct {
 	on          bool
 	fg, bg, cur color.Color
 	ansiPalette [16]color.Color
 }
 
-// navThemeInk is the theme in force now.
 func navThemeInk() navInk {
 	fg, bg, cur, pal, ok := theme.EmulatorColors()
 	if !ok {
@@ -47,21 +28,10 @@ func navThemeInk() navInk {
 	return navInk{on: true, fg: fg, bg: bg, cur: cur, ansiPalette: pal}
 }
 
-// navParser parses styled captures, one after another, with one emulator. A
-// load makes one for each machine it reads, rather than one for each pane:
-// an emulator costs about a megabyte and two milliseconds to make, which at
-// the cap of 150 panes was most of what opening the navigator cost.
-//
-// The emulator is one row of navStyledMaxCols cells. Each line starts from a
-// full reset (the pen, the modes, the margins, the main screen) with wrapping
-// off, so whatever one line holds, it cannot reach another line, or the next
-// capture. The theme's sixteen survive the reset.
 type navParser struct {
 	emu *vt.Emulator
 }
 
-// newNavParser makes a parser that resolves the sixteen ANSI colours with
-// ink.
 func newNavParser(ink navInk) *navParser {
 	emu := vt.NewEmulator(navStyledMaxCols, 1)
 	if ink.on {
@@ -70,12 +40,8 @@ func newNavParser(ink navInk) *navParser {
 	return &navParser{emu: emu}
 }
 
-// Close lets the emulator go.
 func (p *navParser) Close() { _ = p.emu.Close() }
 
-// parse parses a styled capture into its last keep rows: each row as plain
-// text, for the search, and as SGR-styled text, for the preview. The blank
-// rows at the end are dropped first.
 func (p *navParser) parse(content string, keep int) (plain, styled []string) {
 	lines := strings.Split(content, "\n")
 	for i, l := range lines {
@@ -109,9 +75,6 @@ func (p *navParser) parse(content string, keep int) (plain, styled []string) {
 	return plain, styled
 }
 
-// navCellRow is row y of a parsed capture as cells: links dropped, image
-// placeholders and control characters blanked, and cut after the last cell
-// that shows anything.
 func navCellRow(emu *vt.Emulator, y, cols int) uv.Line {
 	line := make(uv.Line, cols)
 	end := 0
@@ -125,7 +88,6 @@ func navCellRow(emu *vt.Emulator, y, cols int) uv.Line {
 		cell.Link = uv.Link{}
 		switch {
 		case cell.Width == 0 && cell.Content == "":
-			// The tail of a wide glyph.
 		case vt.IsKittyPlaceholder(cell.Content):
 			cell = uv.EmptyCell
 		default:
@@ -144,10 +106,6 @@ func navCellRow(emu *vt.Emulator, y, cols int) uv.Line {
 	return line[:min(end, cols)]
 }
 
-// navPrintable drops the C0 and C1 control characters from a cell's text,
-// and the characters that draw nothing but change how text reads (see
-// invisible.Rune): a bidi override in another machine's capture would
-// reorder the preview, and the rest hide text from the person reading it.
 func navPrintable(s string) string {
 	clean := true
 	for _, r := range s {
@@ -168,9 +126,6 @@ func navPrintable(s string) string {
 	return invisible.Strip(s)
 }
 
-// navScreenLine fits one styled preview row to cols cells: cut where it is
-// wider, a wide glyph that would cross the edge dropped whole, the pen reset
-// after it, and padded on the pane's own ground.
 func navScreenLine(s string, cols int) string {
 	if cols <= 0 {
 		return ""

@@ -53,7 +53,6 @@ func TestInboxRiskySecondPressFromSendKeysAnswersNothing(t *testing.T) {
 		cmd()
 		t.Fatalf("an enter from send-keys allowed a risky call: %v", r.replies())
 	}
-	// Nor may send-keys ask for the person's next enter.
 	press(m, "1")
 	m.InboxNumber(1)
 	m.ProcessingRemoteKeys = false

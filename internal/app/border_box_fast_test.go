@@ -11,8 +11,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// withoutFastBox runs fn with the fused box path off, which is what
-// TUIOS_NO_FASTBOX does for a running client.
 func withoutFastBox(t *testing.T, fn func()) {
 	t.Helper()
 	fastBoxDisabled = true

@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-// recWriter captures host output, safe for the async frame-writer goroutine to
-// write while the test reads.
 type recWriter struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
@@ -64,8 +62,8 @@ func TestRemoteVideoSelfPlacesWithAT(t *testing.T) {
 		kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, false, func([]byte) {})
 	}
 
-	send() // frame 1: establishes the id (non-reused, goes to pendingOutput)
-	send() // frame 2: reused -> self-placed a=T on the async writer
+	send()
+	send()
 
 	if !waitUntil(func() bool { return host.has("a=T,i=") }, 2*time.Second) {
 		t.Fatal("remote video: no self-placed a=T reached the host; a real terminal would not repaint")
@@ -77,8 +75,6 @@ func TestRemoteVideoSelfPlacesWithAT(t *testing.T) {
 		t.Fatal("remote video emitted a transmit-only a=t; the host will not repaint it")
 	}
 
-	// The reused image must be handed off to the self-placing path, i.e. removed
-	// from placements so RefreshAllPlacements cannot delete-and-replace it.
 	kp.mu.Lock()
 	_, stillTracked := kp.placements[winID][imageKey(hostIDForGuest(kp, winID, 1))]
 	inRemoteVideo := len(kp.remoteVideo[winID]) > 0
@@ -111,14 +107,12 @@ func TestInlineOverlayVideoStaysTransmitOnly(t *testing.T) {
 		resendShm(t, shmName)
 		kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, false, func([]byte) {})
 	}
-	// Let any async frame land.
 	time.Sleep(200 * time.Millisecond)
 	if host.has("a=T,i=") {
 		t.Fatal("inline overlay self-placed with a=T; it must stay transmit-only")
 	}
 }
 
-// hostIDForGuest resolves the host image id a guest id maps to, for assertions.
 func hostIDForGuest(kp *KittyPassthrough, winID string, guestID uint32) uint32 {
 	return kp.imageIDMap[winID][guestID]
 }
@@ -184,7 +178,6 @@ func TestRemoteVideoClearedOnLeavingAltScreen(t *testing.T) {
 	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
 
 	const winID = "window-0000-0000-0000-000000000000"
-	// Two frames on the alt screen (isAltScreen=true): the second self-places.
 	resendShm(t, shmName)
 	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
 	resendShm(t, shmName)
@@ -193,7 +186,6 @@ func TestRemoteVideoClearedOnLeavingAltScreen(t *testing.T) {
 		t.Fatal("video was never placed")
 	}
 
-	// The window is now back on the main screen (browser quit).
 	onMain := func() map[string]*WindowPositionInfo {
 		return map[string]*WindowPositionInfo{
 			winID: {WindowX: 0, WindowY: 0, Width: 183, Height: 42, Visible: true,
@@ -234,13 +226,6 @@ func rewriteShm(t *testing.T, name string, w, h int, seed byte) {
 	shmFrames.Store(name, data)
 }
 
-// sendUntil keeps handing frames to the passthrough until cond holds.
-//
-// A stream is paced against what the host's last frame cost, so an individual
-// frame may be dropped by design, and these harnesses produce frames far
-// faster than any guest (and slower hosts, under the race detector, drop
-// more). A real stream keeps arriving until one lands, which is what this
-// stands in for. It never retries an assertion that nothing was sent.
 func sendUntil(t *testing.T, send func(), cond func() bool, timeout time.Duration) bool {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -270,20 +255,18 @@ func TestRemoteVideoSkipsUnchangedFrames(t *testing.T) {
 		kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, false, func([]byte) {})
 	}
 
-	send() // frame 1: establishes the id
-	// frame 2 onward: the first reused frame self-places and records the hash
+	send()
 	if !sendUntil(t, send, func() bool { return host.count("a=T,i=") >= 1 }, 2*time.Second) {
 		t.Fatal("first self-placed frame never sent")
 	}
 
-	send() // frame 3: identical content -> must be skipped
+	send()
 	time.Sleep(200 * time.Millisecond)
 	if n := host.count("a=T,i="); n != 1 {
 		t.Fatalf("identical frame not skipped: a=T count = %d, want 1", n)
 	}
 
-	rewriteShm(t, shmName, 400, 300, 99) // change the pixels
-	// frame 4 onward: changed content must reach the host
+	rewriteShm(t, shmName, 400, 300, 99)
 	if !sendUntil(t, send, func() bool { return host.count("a=T,i=") >= 2 }, 2*time.Second) {
 		t.Fatal("changed frame was not sent (skip is too aggressive)")
 	}
@@ -331,25 +314,23 @@ func TestOverlayHidesAndRestoresRemoteVideo(t *testing.T) {
 		kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
 	}
 
-	send() // establish
+	send()
 	if !sendUntil(t, send, func() bool { return host.count("a=T,i=") >= 1 }, 2*time.Second) {
 		t.Fatal("video never placed")
 	}
 
-	// Overlay opens: the image is deleted and further frames are dropped.
 	kp.SetOverlayActive(true)
 	if !host.has("a=d,d=i,i=") {
 		t.Fatal("opening an overlay did not delete the video image; the overlay draws behind it")
 	}
 	placed := host.count("a=T,i=")
 	rewriteShm(t, shmName, 400, 300, 55)
-	send() // must be dropped while the overlay is up
+	send()
 	time.Sleep(150 * time.Millisecond)
 	if host.count("a=T,i=") != placed {
 		t.Fatal("a frame drew over the overlay while it was open")
 	}
 
-	// Overlay closes: the next frame re-places the image.
 	kp.SetOverlayActive(false)
 	rewriteShm(t, shmName, 400, 300, 200)
 	if !sendUntil(t, send, func() bool { return host.count("a=T,i=") > placed }, 2*time.Second) {
@@ -378,9 +359,9 @@ func TestOverlayCloseReshowsWithoutNewFrame(t *testing.T) {
 		t.Fatal("video never placed")
 	}
 
-	kp.SetOverlayActive(true) // hide
+	kp.SetOverlayActive(true)
 	base := host.count("a=p,i=")
-	kp.SetOverlayActive(false) // must re-show via a=p, no frame sent
+	kp.SetOverlayActive(false)
 	if host.count("a=p,i=") <= base {
 		t.Fatal("overlay close did not re-show the image with a=p; it would stay gone until the browser sends a frame")
 	}
@@ -401,7 +382,6 @@ func TestRemoteVideoCropsRatherThanSqueezes(t *testing.T) {
 		KittyGraphics: true, TerminalName: "kitty", CellWidth: 10, CellHeight: 20,
 	})
 
-	// 40x15 cells of image at a 10x20 cell, in a pane with room for 30x12.
 	const imgW, imgH = 400, 300
 	shmName := makeShmFrame(t, imgW, imgH)
 	cmd, raw := synthShmTransmitPlace(shmName, imgW, imgH)
@@ -410,7 +390,7 @@ func TestRemoteVideoCropsRatherThanSqueezes(t *testing.T) {
 	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
 
 	const winID = "window-0000-0000-0000-000000000000"
-	for range 2 { // the second frame reuses the id and self-places
+	for range 2 {
 		resendShm(t, shmName)
 		kp.ForwardCommand(cmd, raw, winID, 0, 0, 30, 12, 0, 0, 0, 0, 0, false, func([]byte) {})
 	}
@@ -427,8 +407,6 @@ func TestRemoteVideoCropsRatherThanSqueezes(t *testing.T) {
 	if srcH == 0 {
 		srcH = imgH
 	}
-	// What the host is given must be exactly what it is told to fill. Anything
-	// else is a scale factor applied to the bitmap.
 	if srcW != cols*10 || srcH != rows*20 {
 		t.Fatalf("a %dx%d px source drawn in a %dx%d px cell box (c=%d r=%d): kitty "+
 			"rescales the frame by %.3fx horizontally and %.3fx vertically, and a "+
@@ -438,14 +416,12 @@ func TestRemoteVideoCropsRatherThanSqueezes(t *testing.T) {
 	}
 }
 
-// hostText returns everything written to the host so far.
 func hostText(w *recWriter) string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.buf.String()
 }
 
-// lastATParams parses the parameters of the last a=T the host was sent.
 func lastATParams(t *testing.T, s string) map[string]int {
 	t.Helper()
 	i := strings.LastIndex(s, "a=T,")

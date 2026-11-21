@@ -8,56 +8,24 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The rail's layout is an ordered list with a number on each entry, which is
-// the one shape a settings row cannot hold. As a text field it would be
-// "sessions:25,terminals,files:25,agents:34", typed by hand, with a colon that
-// means one thing and a comma that means another, and no way to see what you
-// had done until you closed the panel.
-//
-// So it is an editor, built the way the dock's is, because a person who has
-// moved a clock onto the left of the dock should not have to learn a second set
-// of habits to move the files list up the rail. Same keys, same two lists, same
-// applied-as-you-go saving.
-//
-// # Membership lives here and nowhere else
-//
-// The layout, not a boolean per section, says whether a section is on the rail,
-// and the spacer is why. A layout may carry two spacers, in two different
-// places, and a boolean per section has nowhere to put the second one and no
-// way to say which gap it means. So the list owns order, share and membership
-// together, the booleans fold into it on load, and this editor is where a
-// section is turned off.
-
-// railRowKind is what one line of the editor is.
 type railRowKind int
 
 const (
-	railRowHeader    railRowKind = iota // one of the two lists' names
-	railRowPlaced                       // a section or a spacer on the rail
-	railRowEmpty                        // a list with nothing in it
-	railRowAvailable                    // a section that is not on the rail
+	railRowHeader railRowKind = iota
+	railRowPlaced
+	railRowEmpty
+	railRowAvailable
 )
 
-// railEditorRow is one line: enough to draw it and to act on it.
 type railEditorRow struct {
-	Kind railRowKind
-	// Name is the section, or "spacer".
-	Name string
-	// Index is the entry's place in the layout for a placed row, and -1 for
-	// every other kind.
-	Index int
-	// Share is the percent the entry may claim, or zero for the flexible one
-	// that takes what the others leave.
-	Share int
-	// Spacer marks the empty block, which is the one entry that may appear more
-	// than once and so is always offered.
+	Kind   railRowKind
+	Name   string
+	Index  int
+	Share  int
 	Spacer bool
-	// Last marks the bottom entry of the rail. A spacer there is a gap at the
-	// end, which is a different sentence from a gap in the middle.
-	Last bool
+	Last   bool
 }
 
-// railEditorLists are the two headings, in the words the panel uses.
 const (
 	railListOn  = "On the rail"
 	railListOff = "Not on the rail"
@@ -74,8 +42,6 @@ func (m *OS) OpenSectionEditor() {
 	m.sectionList.Scroll = 0
 	m.SectionEditorOriginal = m.sectionLayoutRaw()
 
-	// Land on the first entry rather than on the heading, so the first keystroke
-	// does something.
 	m.sectionList.Cursor = 0
 	for i, row := range m.sectionEditorRows() {
 		if row.Kind != railRowHeader {
@@ -95,8 +61,6 @@ func (m *OS) CloseSectionEditor() {
 	m.ShowSectionEditor = false
 }
 
-// sectionLayout is the live layout string, resolved: the config's own value, or
-// the shipped one where the config names none.
 func (m *OS) sectionLayout() string {
 	if raw := m.sectionLayoutRaw(); raw != "" {
 		return raw
@@ -104,13 +68,6 @@ func (m *OS) sectionLayout() string {
 	return m.Settings.SidebarSections
 }
 
-// sectionLayoutRaw is the layout as the config file holds it, empty included.
-//
-// Undo works on this rather than on the resolved layout, so an editor opened on
-// a config that named no layout leaves it naming none. The difference is what a
-// config file records: empty is "[appearance.sidebar] says nothing", and an
-// undo that wrote the four sections back out would leave the file naming a
-// layout the user never chose, pinned to today's defaults.
 func (m *OS) sectionLayoutRaw() string {
 	if m.UserConfig == nil {
 		return ""
@@ -118,18 +75,10 @@ func (m *OS) sectionLayoutRaw() string {
 	return m.UserConfig.Appearance.Sidebar.Sections
 }
 
-// sectionEntries is the live layout, parsed.
 func (m *OS) sectionEntries() []config.SidebarSectionShare {
 	return config.ParseSidebarSections(m.sectionLayout())
 }
 
-// sectionEditorRows is the flattened list the editor draws and navigates: what
-// is on the rail, then what is not.
-//
-// The spacer sits at the bottom of the second list and never leaves it. It is
-// not a section that is off the rail, it is a thing you may add as many of as
-// you like, so "add it and it disappears from here" would be wrong twice: once
-// for the first spacer and again for the second.
 func (m *OS) sectionEditorRows() []railEditorRow {
 	entries := m.sectionEntries()
 	rows := make([]railEditorRow, 0, len(entries)+len(config.SidebarSectionNames)+3)
@@ -138,8 +87,6 @@ func (m *OS) sectionEditorRows() []railEditorRow {
 	if len(entries) == 0 {
 		rows = append(rows, railEditorRow{Kind: railRowEmpty, Name: railListOn, Index: -1})
 	}
-	// With the agent features off the agents section is not offered, and
-	// one already in the layout is not listed: the rail does not draw it.
 	hidden := func(name string) bool { return !m.agentsOn() && name == "agents" }
 	placed := map[string]bool{}
 	last := len(entries) - 1
@@ -227,9 +174,6 @@ func (m *OS) SectionEditorToggle() tea.Cmd {
 			return nil
 		}
 		if !row.Spacer && sectionCount(entries, m.agentsOn()) <= 1 {
-			// The rail has to draw something. An empty layout falls back to the
-			// shipped one on the next parse, so the edit would appear to undo
-			// itself, which is worse than being told no.
 			m.ShowNotification("The rail keeps one section. Add another first.",
 				"info", m.Settings.NotificationDuration)
 			return nil
@@ -273,7 +217,6 @@ func (m *OS) SectionEditorShare(delta int) tea.Cmd {
 	return m.commitSectionLayout(entries)
 }
 
-// sectionShareStep is how far one keystroke moves a share.
 const sectionShareStep = 5
 
 // SectionEditorReset puts the layout back to the one the rail ships with.
@@ -296,8 +239,6 @@ func (m *OS) SectionEditorRevert() tea.Cmd {
 	return m.commitSectionString(m.SectionEditorOriginal)
 }
 
-// sectionCount is how many real sections a layout has. Spacers do not count:
-// a rail of nothing but empty blocks draws nothing at all.
 func sectionCount(entries []config.SidebarSectionShare, agentsOn bool) int {
 	n := 0
 	for _, e := range entries {
@@ -308,11 +249,6 @@ func sectionCount(entries []config.SidebarSectionShare, agentsOn bool) int {
 	return n
 }
 
-// selectSectionRow puts the selection back on a row after the list moved under
-// it, so the entry a person is working on stays under the cursor.
-//
-// added says the row was just put on the rail, so the selection follows it into
-// the first list rather than staying on the second one's now-missing line.
 func (m *OS) selectSectionRow(name string, added bool) {
 	want := railRowAvailable
 	if added {
@@ -330,22 +266,12 @@ func (m *OS) selectSectionRow(name string, added bool) {
 	m.sectionList.Fit(len(rows), visible)
 }
 
-// commitSectionLayout writes the layout, applies it and hands back the save.
-//
-// The rail's render cache is keyed on the layout string, so applying it is what
-// makes the next frame the new one. MarkAllDirty is here for the panes: a rail
-// that changed width or a section that appeared moves the ground under them.
 func (m *OS) commitSectionLayout(entries []config.SidebarSectionShare) tea.Cmd {
 	return m.commitSectionString(config.SidebarSectionsString(entries))
 }
 
-// commitSectionString writes one layout string, applies it and hands back the
-// save. An empty string is a layout the config does not name, which applies as
-// the shipped one.
 func (m *OS) commitSectionString(layout string) tea.Cmd {
 	m.setOption("appearance.sidebar.sections", layout)
-	// The person chose the layout, so a show that a link or a file search
-	// started ends when the layout leaves files out.
 	if !sidebarLayoutHas(sidebarSectionFiles, &m.Settings) {
 		m.filesView.Show = 0
 	}
@@ -353,7 +279,6 @@ func (m *OS) commitSectionString(layout string) tea.Cmd {
 	return m.persistSettings()
 }
 
-// sectionShareLabel is a share as the editor says it.
 func sectionShareLabel(share int) string {
 	if share <= 0 {
 		return "auto"

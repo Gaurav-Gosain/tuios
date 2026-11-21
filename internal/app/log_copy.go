@@ -6,18 +6,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// The log viewer's two copy controls.
-//
-// Its hints advertise "E copy errors" and "A copy all". A hint the key handler
-// ignores is worse than no hint, because a person who presses one has no way
-// to tell whether the copy failed or the clipboard did.
-//
-// Copying out of the viewer matters more than copying out of a pane, because
-// the thing worth copying is usually an error somebody is about to paste into a
-// report, and the viewer is exactly where that error is legible.
-
-// logLine is one entry as a person would paste it: the time, the level, and the
-// message, which is what the viewer draws.
 func logLine(m LogMessage) string {
 	return m.Time.Format("15:04:05") + " [" + m.Level + "] " + m.Message
 }
@@ -41,9 +29,6 @@ func (m *OS) CopyLogErrors() tea.Cmd {
 	return m.copyLogLines(errs, "Copied the errors.", "The log holds no errors.")
 }
 
-// copyLogLines is the shared half: it says what happened either way, because a
-// copy that quietly puts nothing on the clipboard is indistinguishable from one
-// that did not run.
 func (m *OS) copyLogLines(entries []LogMessage, done, empty string) tea.Cmd {
 	if len(entries) == 0 {
 		m.ShowNotification(empty, "info", m.Settings.NotificationDuration)

@@ -22,21 +22,18 @@ func TestQueueKeepsTheNewestSnapshotTaken(t *testing.T) {
 		t.Fatalf("the queue holds snapshot %d, want the newest taken, 7", got)
 	}
 
-	// Read in order, the later one wins as before.
 	m.QueueStateSync(StateSyncMsg{State: &session.SessionState{SnapshotSeq: 8}})
 	m.QueueStateSync(StateSyncMsg{State: &session.SessionState{SnapshotSeq: 9}})
 	if got := (<-m.StateSyncChan).State.SnapshotSeq; got != 9 {
 		t.Fatalf("the queue holds snapshot %d, want 9", got)
 	}
 
-	// Across attaches the numbers start over, so the later arrival wins.
 	m.QueueStateSync(StateSyncMsg{State: &session.SessionState{SnapshotSeq: 900}, Attach: 1})
 	m.QueueStateSync(StateSyncMsg{State: &session.SessionState{SnapshotSeq: 2}, Attach: 2})
 	if got := (<-m.StateSyncChan).State.SnapshotSeq; got != 2 {
 		t.Fatalf("a snapshot from before a new attach outranked one after it: got %d", got)
 	}
 
-	// A daemon that does not number its snapshots is read by arrival.
 	m.QueueStateSync(StateSyncMsg{State: &session.SessionState{SnapshotSeq: 3}})
 	m.QueueStateSync(StateSyncMsg{State: &session.SessionState{}})
 	if got := (<-m.StateSyncChan).State.SnapshotSeq; got != 0 {

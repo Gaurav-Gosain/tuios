@@ -8,7 +8,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// pollReadable uses poll to wait for the file descriptor to be readable with a timeout
 func pollReadable(fd uintptr, timeout time.Duration) (bool, error) {
 	fds := []unix.PollFd{
 		{Fd: int32(fd), Events: unix.POLLIN},

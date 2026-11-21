@@ -9,17 +9,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// sliderRow is what one slider drew: the rect its track was recorded at, the
-// thumb's column in the frame, and the number printed beside it.
 type sliderRow struct {
 	hit   accentHit
 	thumb int
 	value int
 }
 
-// readSliders renders the picker and reads every slider back off the frame, so
-// the assertions below are against what the user is looking at rather than
-// against the state that produced it.
 func readSliders(t *testing.T, m *OS) map[int]sliderRow {
 	t.Helper()
 	lines := pickerLines(t, m)
@@ -99,8 +94,6 @@ func TestAccentSLStepsOffACellAndBackOntoIt(t *testing.T) {
 				want := m.AccentPicker.Cur
 				for _, ch := range []accentChannel{accentChanS, accentChanL} {
 					m.AccentPicker.Focus = ch.focus()
-					// Step away from whichever end the cell sits at: a step into the
-					// end of a range clamps, and clamping is the point of a range.
 					dir := 1
 					if m.AccentPicker.sliderValue(ch) >= ch.max() {
 						dir = -1
@@ -111,7 +104,6 @@ func TestAccentSLStepsOffACellAndBackOntoIt(t *testing.T) {
 						t.Fatalf("cell (%d,%d): %s out and back gave %s, want %s",
 							col, row, ch.label(), overlay.Hex(got), overlay.Hex(want))
 					}
-					// And the grid cursor is back on the cell it started on.
 					if m.AccentPicker.Col != col || m.AccentPicker.Row != row {
 						t.Fatalf("cell (%d,%d): %s out and back left the cursor on (%d,%d)",
 							col, row, ch.label(), m.AccentPicker.Col, m.AccentPicker.Row)
@@ -162,10 +154,6 @@ func TestAccentSLAndGridAreOneModel(t *testing.T) {
 	m.OpenAccentPicker("aaaaaaaa1111")
 	cols, rows := m.accentGridSize()
 
-	// The distance from a saturation and lightness to a cell, and the least of
-	// them over the whole grid, found by looking at every cell rather than by
-	// asking the function under test. A value exactly between two cells is
-	// equally near both, so the claim is about the distance, not the cell.
 	dist := func(sat, light float64, col, row int) float64 {
 		cs, cl := accentCellSL(col, row, cols, rows)
 		return math.Abs(cs-sat) + math.Abs(cl-light)
@@ -189,7 +177,6 @@ func TestAccentSLAndGridAreOneModel(t *testing.T) {
 			t.Errorf("S=%d%% L=%d%%: the cursor sits on (%d,%d), %.4f away, when a cell %.4f away exists",
 				v, 100-v, m.AccentPicker.Col, m.AccentPicker.Row, got, want)
 		}
-		// The colour is built from the model, not from the cell under the cursor.
 		if want := hslToRGB(m.AccentPicker.Hue, m.AccentPicker.Sat, m.AccentPicker.Light); m.AccentPicker.Cur != want {
 			t.Errorf("S=%d%%: the colour is %s, want %s from the model it holds",
 				v, overlay.Hex(m.AccentPicker.Cur), overlay.Hex(want))
@@ -231,7 +218,6 @@ func TestAccentSliderColumnRoundTrips(t *testing.T) {
 						barW, maxV, col, v, got)
 				}
 			}
-			// The ends are the ends, exactly.
 			if got := accentSliderValueAt(0, barW, maxV); got != 0 {
 				t.Errorf("barW=%d max=%d: the first column means %d", barW, maxV, got)
 			}
@@ -282,7 +268,6 @@ func TestAccentSliderDragRidesThePointer(t *testing.T) {
 	rows := readSliders(t, m)
 	red, green := rows[int(accentChanR)].hit.Rect, rows[int(accentChanG)].hit.Rect
 
-	// Button-free motion over a track changes nothing.
 	before := m.AccentPicker.Cur
 	m.accentPickerDragTo(red.X0+5, red.Y0)
 	if m.AccentPicker.Cur != before {
@@ -299,7 +284,6 @@ func TestAccentSliderDragRidesThePointer(t *testing.T) {
 		t.Errorf("the press set R to %d, want %d", m.AccentPicker.sliderValue(accentChanR), want)
 	}
 
-	// Well past the right-hand end of the track, and off its row entirely.
 	g := m.AccentPicker.sliderValue(accentChanG)
 	m.accentPickerDragTo(red.X1+40, green.Y0)
 	if got := m.AccentPicker.sliderValue(accentChanR); got != 255 {
@@ -309,7 +293,6 @@ func TestAccentSliderDragRidesThePointer(t *testing.T) {
 		t.Errorf("the drag wandered onto green: %d -> %d", g, got)
 	}
 
-	// And back inside it.
 	m.accentPickerDragTo(red.X0, red.Y0)
 	if got := m.AccentPicker.sliderValue(accentChanR); got != 0 {
 		t.Errorf("dragging back to the left edge left R at %d, want 0", got)
@@ -356,12 +339,10 @@ func TestAccentSliderKeysStepAndJump(t *testing.T) {
 		if got := m.AccentPicker.sliderValue(ch); got != 0 {
 			t.Errorf("%s: home left it at %d", ch.label(), got)
 		}
-		// Clamped, not wrapped: a channel has no other side to come out on.
 		m.AccentPickerMove(-1, 0)
 		if got := m.AccentPicker.sliderValue(ch); got != 0 {
 			t.Errorf("%s: stepping below zero reached %d", ch.label(), got)
 		}
-		// The keyboard stays where it was put.
 		if m.AccentPicker.Focus != ch.focus() {
 			t.Errorf("%s: driving the slider moved the focus to %d", ch.label(), m.AccentPicker.Focus)
 		}
@@ -392,16 +373,12 @@ func TestAccentSliderReturningToTheSeedWritesNothing(t *testing.T) {
 			overlay.Hex(m.AccentPicker.Cur), seed.Hex())
 	}
 
-	// Take the stored accent away behind the picker's back. An apply that writes
-	// puts it back, and an apply that holds the guard does not.
 	m.ClearWindowAccent(id)
 	m.AccentPickerApply()
 	if got, ok := m.WindowAccent(id); ok {
 		t.Errorf("applying a colour walked away from and back to the seed wrote %v", got)
 	}
 
-	// Moving somewhere and staying there does write, so the guard is not simply
-	// swallowing every apply.
 	m.SetWindowAccent(id, seed)
 	m.OpenAccentPicker(id)
 	m.AccentPicker.Focus = accentFocusG

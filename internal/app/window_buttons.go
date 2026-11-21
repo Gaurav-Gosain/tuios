@@ -27,19 +27,8 @@ const (
 	WindowButtonFloat
 )
 
-// windowButtonsHaveZoom reports whether a window's bar carries the third
-// control.
-//
-// A tiled window used to have none: there was nothing for a maximize to mean
-// when the tiler owns the rectangle. There is now, because zoom means it, and a
-// tiled pane is exactly where a zoom is worth reaching for. The green disc is
-// the control everybody already knows, so it is the one that should do it.
-//
-// appearance.window_button_zoom turns it off for anyone who would rather a
-// tiled bar carried two.
 func windowButtonsHaveZoom(isTiling bool, s *config.Settings) bool {
 	if !isTiling {
-		// A floating window's maximize has always been there.
 		return true
 	}
 	return s.WindowButtonZoom
@@ -67,10 +56,6 @@ func (r WindowButtonRect) Contains(x, y int) bool {
 	return y == r.Y && x >= r.X && x < r.X+r.W
 }
 
-// recordWindowButtons stores the controls drawn for one window, replacing
-// whatever the previous frame drew for it. A window whose bar drew none (hidden
-// buttons, no room, no border) records an empty set, which is what stops a
-// press landing on cells the frame gave back to the guest.
 func (m *OS) recordWindowButtons(windowID string, rects []WindowButtonRect) {
 	if m.windowButtonRects == nil {
 		m.windowButtonRects = make(map[string][]WindowButtonRect, len(m.Windows))
@@ -82,12 +67,6 @@ func (m *OS) recordWindowButtons(windowID string, rects []WindowButtonRect) {
 	m.windowButtonRects[windowID] = rects
 }
 
-// pruneWindowButtonRects drops the controls of windows that no longer exist.
-//
-// The set is not cleared per frame the way the scrollbar's is: a window whose
-// layer was cached is composed without being redrawn, so its controls are still
-// on screen and still have to be pressable. It is replaced whenever the window
-// is redrawn, which is what a move or a resize forces.
 func (m *OS) pruneWindowButtonRects() {
 	if len(m.windowButtonRects) == 0 {
 		return
@@ -175,19 +154,11 @@ func (m *OS) WindowButtonContains(x, y int) bool {
 	return ok
 }
 
-// windowButtonPiece is one already-styled run of cells in the control pill. A
-// piece with no action is decoration: a pill cap, or the gap that separates the
-// dots from the border.
 type windowButtonPiece struct {
 	action WindowButtonAction
 	text   string
 }
 
-// buildWindowButtons renders the window's control pill and reports, for each
-// control, where in the pill it starts and how wide it came out. Nothing here
-// counts cells by hand: the offsets fall out of the widths of the pieces that
-// were actually rendered, so a style with different glyphs moves its own
-// hitboxes with it.
 func (m *OS) buildWindowButtons(col color.Color, window *terminal.Window, isTiling bool) (string, []WindowButtonRect) {
 	if m.Settings.HideWindowButtons {
 		return "", nil
@@ -201,8 +172,6 @@ func (m *OS) buildWindowButtons(col color.Color, window *terminal.Window, isTili
 	}
 
 	if m.DrawsTML(window) && !window.IsPopup {
-		// A TML pane can float as a popup again: its control comes first,
-		// in the border's colour, beside the pill.
 		pieces = append([]windowButtonPiece{{WindowButtonNone, " "}, {WindowButtonFloat, lipgloss.NewStyle().Foreground(col).Bold(true).Render("float")},
 			{WindowButtonNone, " "}}, pieces...)
 	}
@@ -220,26 +189,8 @@ func (m *OS) buildWindowButtons(col color.Color, window *terminal.Window, isTili
 	return pill.String(), hits
 }
 
-// windowPillPieces is the filled pill: dark glyphs on the border colour, capped
-// with powerline half circles.
-//
-// The layout matches the dots: one cell of padding after the opening cap, then
-// each control as its mark plus the one cell after it. Every cell between the
-// caps belongs to a control except that lead-in, so the pill is as narrow as
-// three one-cell marks allow and a press between two marks still lands on one.
-// It used to pad each mark into a " x " button and give minimize an extra
-// lead-in cell, which left two blank cells between neighbours and three
-// between the opening cap and the first mark.
-//
-// The order is mirrored by the end the pill sits on, so close is always the
-// control at the outer corner: close, zoom, minimize on the left, where macOS
-// puts close first, and minimize, zoom, close on the right, where Windows and
-// most Linux desktops put it last.
 func windowPillPieces(col color.Color, isTiling bool, s *config.Settings) []windowButtonPiece {
 	pillCap := lipgloss.NewStyle().Foreground(col).Render
-	// badgeStyle rather than a fixed black: the pill is filled with the border
-	// colour, which follows the theme, and black on a theme's dark red measured
-	// 1.40:1 on the worst of them.
 	glyph := badgeStyle(col).Render
 
 	type control struct {
@@ -265,19 +216,6 @@ func windowPillPieces(col color.Color, isTiling bool, s *config.Settings) []wind
 	return append(pieces, windowButtonPiece{WindowButtonNone, pillCap(s.GetWindowPillRight())})
 }
 
-// windowDotPieces is the macOS traffic light: three unlabelled discs in red,
-// yellow and green, close first, sitting straight on the border rather than in
-// a pill of their own.
-//
-// Each control is the disc plus the gap after it, so the pill has no cell that
-// belongs to nothing and a press between two dots resolves to the one on its
-// left instead of falling through to the border. Two cells is also about as
-// small as a pointer target should get.
-//
-// Hovering any of them turns all three into their symbols, which is what macOS
-// does and what makes three unlabelled dots learnable. The symbol is drawn dark
-// on the disc's own colour, so the cell keeps the shape and weight it had while
-// idle and the pill cannot change width under the pointer.
 func (m *OS) windowDotPieces(col color.Color, window *terminal.Window, isTiling bool) []windowButtonPiece {
 	ground := m.terminalBg()
 	gap := lipgloss.NewStyle().Foreground(col).Render(" ")
@@ -295,23 +233,12 @@ func (m *OS) windowDotPieces(col color.Color, window *terminal.Window, isTiling 
 		if hovered {
 			glyph = windowDotSymbol(a, &m.Settings)
 		}
-		// The symbol is drawn in the disc's own colour rather than on it. A cell
-		// background is a rectangle, so filling it trades the round silhouette
-		// for a block at exactly the moment the pointer is on it, which is when
-		// the control is most worth recognising. Circled glyphs keep the shape
-		// and the colour, and only the marking changes.
 		cell := lipgloss.NewStyle().Foreground(dot).Render(glyph)
 		pieces = append(pieces, windowButtonPiece{a, cell + gap})
 	}
 	return pieces
 }
 
-// placeWindowButtons turns pill-relative spans into screen rectangles.
-//
-// pillStart is the column the row's layout put the pill on, reported by the
-// same call that drew it, so left and right placement need no arithmetic here
-// and cannot drift apart from what is on screen. A row that could not fit the
-// pill reports -1 and records nothing at all.
 func placeWindowButtons(hits []WindowButtonRect, window *terminal.Window, pillStart int) []WindowButtonRect {
 	if len(hits) == 0 || pillStart < 0 {
 		return nil
@@ -324,21 +251,8 @@ func placeWindowButtons(hits []WindowButtonRect, window *terminal.Window, pillSt
 	return out
 }
 
-// windowDotMinContrast is the floor a dot has to clear against the ground it is
-// drawn on: WCAG 2.1 SC 1.4.11, which asks 3:1 of a control that carries its
-// meaning as a shape rather than as text. It is below theme.ContrastFloor for
-// the same reason the scrollbar's is (nothing here has to be read), and above
-// the scrollbar's, because these are targets to hit and not a readout.
 const windowDotMinContrast = 3.0
 
-// readableDot carries c toward the ground's own text colour until it clears
-// windowDotMinContrast, and leaves it alone when it already does.
-//
-// The traffic-light colours are tuned for macOS's light-grey title bar, and
-// they hold on a dark pane: measured on charmtone Pepper they are 5.5:1, 9.7:1
-// and 7.3:1. On a near-white pane the yellow is the one that falls through,
-// so buying luminance while keeping the hue is what keeps three dots reading as
-// red, yellow and green on both.
 func readableDot(c, ground color.Color) color.Color {
 	if theme.ContrastRatio(c, ground) >= windowDotMinContrast {
 		return c
@@ -353,11 +267,6 @@ func readableDot(c, ground color.Color) color.Color {
 	return target
 }
 
-// windowDotColor returns the traffic-light colour for one action.
-//
-// They are the macOS traffic-light colours, as the maintainer asked for them
-// (see theme.WindowDots). They are only a starting point: readableDot carries
-// whichever of them misses the floor against the ground it lands on.
 func windowDotColor(action WindowButtonAction) color.Color {
 	closeDot, minimise, zoom := theme.WindowDots()
 	switch action {
@@ -370,10 +279,6 @@ func windowDotColor(action WindowButtonAction) color.Color {
 	}
 }
 
-// windowDotSymbol returns the glyph a hovered dot shows, the way macOS reveals
-// its symbols when the pointer reaches the group. Each is one cell and each is
-// already drawn elsewhere in the window chrome, so no new rune enters the
-// frame and the ASCII forms come along for free.
 func windowDotSymbol(action WindowButtonAction, s *config.Settings) string {
 	if s.UseASCIIOnly {
 		switch action {
@@ -385,19 +290,12 @@ func windowDotSymbol(action WindowButtonAction, s *config.Settings) string {
 			return "+"
 		}
 	}
-	// Circled forms, so a hovered control is the same disc carrying a mark
-	// rather than a different shape. They are one cell wide like the disc, so
-	// nothing moves under the pointer and no recorded rectangle shifts.
-	//
-	// Left out of the glyph set on purpose. These are the pill's three marks
-	// again in a circled form, and a set that could name them separately could
-	// have a hovered dot showing a different control than the pill does.
 	switch action {
 	case WindowButtonClose:
-		return "\u2297" // circled times
+		return "\u2297"
 	case WindowButtonMinimize:
-		return "\u2296" // circled minus
+		return "\u2296"
 	default:
-		return "\u2295" // circled plus
+		return "\u2295"
 	}
 }

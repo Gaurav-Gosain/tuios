@@ -7,14 +7,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// Dock editor layout constants.
 const (
 	dockEditorInnerWidth  = 46
 	dockEditorVisibleRows = 14
 )
 
-// dockEditorHints is the footer, shared by the renderer and the sizing helper
-// so both measure the same panel.
 var dockEditorHints = []overlay.Hint{
 	{Key: hintListMoveLetters, Label: "select"},
 	{Key: "⇧↑↓", Label: "move"},
@@ -24,15 +21,12 @@ var dockEditorHints = []overlay.Hint{
 	{Key: "esc", Label: "close"},
 }
 
-// dockEditorLayout returns the fitted inner width and visible row count.
 func (m *OS) dockEditorLayout() (width, rows int, hints []overlay.Hint) {
 	width = m.panelWidth(dockEditorInnerWidth)
-	// One body line that is not a row: the line describing the selection.
 	rows, hints = m.panelBody(dockEditorVisibleRows, 1, width, nil, dockEditorHints)
 	return width, rows, hints
 }
 
-// dockSideLabels are the region headings, in the words the config file uses.
 var dockSideLabels = map[string]string{
 	"left":            "Left",
 	"center":          "Center",
@@ -40,8 +34,6 @@ var dockSideLabels = map[string]string{
 	dockAvailableSide: "Not on the bar",
 }
 
-// renderDockEditor draws the dock layout editor: the three regions and their
-// components in draw order, with what is not placed underneath.
 func (m *OS) renderDockEditor() (string, overlay.Geometry, []overlayRowHit) {
 	rows := m.dockEditorRows()
 	pal := m.overlayUI()
@@ -61,8 +53,6 @@ func (m *OS) renderDockEditor() (string, overlay.Geometry, []overlayRowHit) {
 	}
 	lines = append(lines, m.dockEditorDetail(rows, pal, width))
 
-	// A read-only session says so here as well as on the settings panel: the
-	// editor can be opened on its own and the lists it writes go nowhere.
 	title := "Dock layout"
 	if m.ConfigReadOnly {
 		title = "Dock layout (this session only)"
@@ -90,15 +80,12 @@ func (m *OS) renderDockEditor() (string, overlay.Geometry, []overlayRowHit) {
 	return content, geo, hits
 }
 
-// dockEditorLine renders one line of the editor.
 func (m *OS) dockEditorLine(row dockEditorRow, selected bool, pal overlay.Palette, width int) string {
 	bg := pal.Surface
 
 	if row.Kind == dockRowHeader {
 		label := dockSideLabels[row.Side]
 		head := overlay.Style(bg).Foreground(pal.FgMute).Bold(true).Render("  " + label)
-		// A rule out to the panel edge, so the regions read as bands rather
-		// than as one list with words in it.
 		rule := max(width-lipgloss.Width(head)-1, 0)
 		return head + overlay.Style(bg).Foreground(pal.FgMute).
 			Render(" "+strings.Repeat(m.Settings.GetWindowSeparatorChar(), rule))
@@ -117,8 +104,6 @@ func (m *OS) dockEditorLine(row dockEditorRow, selected bool, pal overlay.Palett
 			overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("nothing here")
 	}
 
-	// An available component is drawn quieter than a placed one, because the
-	// list it is in is "what you could add" rather than "what is on the bar".
 	if row.Kind == dockRowAvailable && !selected {
 		nameColor = pal.FgMute
 	}
@@ -145,8 +130,6 @@ func (m *OS) dockEditorLine(row dockEditorRow, selected bool, pal overlay.Palett
 		overlay.Style(bg).Render(" ")
 }
 
-// dockEditorDetail is the line under the list, saying what the selected row is
-// and what can be done to it.
 func (m *OS) dockEditorDetail(rows []dockEditorRow, pal overlay.Palette, width int) string {
 	bg := pal.Surface
 	if m.dockList.Cursor < 0 || m.dockList.Cursor >= len(rows) {

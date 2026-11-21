@@ -13,8 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// clipboardWrites runs cmd and every command it batches, and returns the text
-// of each host clipboard write among them.
 func clipboardWrites(cmd tea.Cmd) []string {
 	if cmd == nil {
 		return nil
@@ -34,8 +32,6 @@ func clipboardWrites(cmd tea.Cmd) []string {
 	return out
 }
 
-// osc52Harness builds two panes, the first focused, with OSC 52 wired the way a
-// client wires it.
 func osc52Harness(t *testing.T, mode string) (*OS, []*terminal.Window) {
 	t.Helper()
 	s := config.DefaultSettings()
@@ -61,8 +57,6 @@ func osc52Harness(t *testing.T, mode string) (*OS, []*terminal.Window) {
 	return m, wins
 }
 
-// paneSetsClipboard has w print an OSC 52 write of text and delivers the
-// resulting message to Update, returning the host clipboard writes it made.
 func paneSetsClipboard(t *testing.T, m *OS, w *terminal.Window, text string) []string {
 	t.Helper()
 	w.WriteOutput([]byte("\x1b]52;c;" + base64.StdEncoding.EncodeToString([]byte(text)) + "\x07"))
@@ -70,7 +64,6 @@ func paneSetsClipboard(t *testing.T, m *OS, w *terminal.Window, text string) []s
 	if msg == nil {
 		t.Fatal("the OSC 52 write raised no message")
 	}
-	// The listener Update re-arms must not block the test.
 	ch := m.PendingClipboardSet
 	m.PendingClipboardSet = nil
 	defer func() { m.PendingClipboardSet = ch }()
@@ -94,16 +87,12 @@ func TestOSC52FromABackgroundPaneDoesNotReachTheHostClipboard(t *testing.T) {
 	}
 }
 
-// settleClipboardAsks puts every open ask past its settle, as the time a
-// person takes to read it would.
 func settleClipboardAsks(m *OS) {
 	for _, a := range m.clipboardAsks {
 		a.shown = time.Now().Add(-2 * clipboardAskSettle)
 	}
 }
 
-// clickAsk activates the dock message that asks for windowID's write, the way
-// a click on it does, and returns the write it allowed.
 func clickAsk(t *testing.T, m *OS, windowID string) []string {
 	t.Helper()
 	ask := m.clipboardAsks[windowID]
@@ -300,8 +289,6 @@ func TestClipboardAskClickApprovesOnlyTheDrawnText(t *testing.T) {
 		t.Fatalf("the ask does not show the new text: %q", lastMessage(m))
 	}
 
-	// The next frame draws the new text, and a click on it, after the
-	// settle, allows that text.
 	m.notifHit.Drawn = m.drawnCopy(m.Notifications[len(m.Notifications)-1])
 	settleClipboardAsks(m)
 	m.clickVisibleNotification()

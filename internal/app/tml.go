@@ -27,60 +27,25 @@ import (
 	"tuios.dev/tml"
 )
 
-// TML surfaces, the client's half. See session/tml_surface.go for the
-// daemon's.
-//
-// The daemon pushes each surface (the tree, the state and a version) to this
-// client, and this client draws it with loom in the content box of its
-// window, which is a window of kind tml. Keys in terminal mode and the mouse
-// go to the surface instead of the window's PTY. The surface's local actions
-// (tabs, sorting, the cursor row, scrolling, set and toggle) run here at once;
-// what changes document state goes back to the daemon with tml-input, so every
-// client and a reattach see it. View state stays on this client.
-//
-// Nothing here runs on a timer. A surface is drawn again only when a push, a
-// key or a click changed it, or the pane changed size; otherwise the pane
-// serves its cached content as every pane does.
-
-// tmlClient holds the surfaces this client draws.
 type tmlClient struct {
-	// mu guards pending, cmds and inflight, which the daemon's read loop and
-	// the tml-input goroutines write.
 	mu      sync.Mutex
 	pending []*session.TMLSurfacePayload
 	cmds    []tea.Cmd
 	wake    chan struct{}
 
-	// views is read and written on the UI goroutine only.
-	views map[string]*tmlView
-	// clockArmed says a minute tick is on its way for the views whose
-	// bindings call ago(). UI goroutine only.
-	clockArmed bool
-	// setGen counts the views made and dropped, and gen every repaint of
-	// one, for the keys of the agents view, which lists and draws them too.
-	// UI goroutine only.
+	views       map[string]*tmlView
+	clockArmed  bool
 	setGen, gen uint64
-	// shownDirty says a surface on the screen changed since the wake
-	// began. UI goroutine only.
-	shownDirty bool
-	// frameDue is when the frame timer armed last fires, zero when none is.
-	// UI goroutine only. frameFired says it fired; guarded by mu.
-	frameDue   time.Time
-	frameFired bool
-	// local answers the TML verbs in a session with no daemon: Learn mode,
-	// whose host keeps the surfaces in the tab. See learn_tml.go. Set once,
-	// before the program runs.
-	local inboxVerbCall
-	// far carries the TML verbs of a session on another machine. See
-	// tml_host.go.
-	far tmlFar
+	shownDirty  bool
+	frameDue    time.Time
+	frameFired  bool
+	local       inboxVerbCall
+	far         tmlFar
 }
 
 // TMLClockMsg is the minute tick of the surfaces that call ago().
 type TMLClockMsg struct{}
 
-// tmlClockCmd arms the minute tick when a view needs it and none is armed.
-// A surface without ago() never arms one.
 func (m *OS) tmlClockCmd() tea.Cmd {
 	if m.tml.clockArmed {
 		return nil
@@ -94,8 +59,6 @@ func (m *OS) tmlClockCmd() tea.Cmd {
 	return nil
 }
 
-// handleTMLClock moves the ago() bindings on, and arms the next tick while
-// a surface still needs it.
 func (m *OS) handleTMLClock() tea.Cmd {
 	m.tml.clockArmed = false
 	for id, v := range m.tml.views {
@@ -107,17 +70,10 @@ func (m *OS) handleTMLClock() tea.Cmd {
 	return m.tmlClockCmd()
 }
 
-// tmlMotion gives a surface the motion level before it draws: its enter and
-// exit effects and a skeleton's shimmer play only while appearance.motion
-// allows motion and calm mode is off.
 func (m *OS) tmlMotion(v *tmlView) {
 	v.surface.SetMotion(m.Settings.MotionAllows(config.MotionBasic))
 }
 
-// tmlArmFrame arms one timer for the next frame a surface wants after it
-// drew: the next frame of an effect, or the end of a toast. A surface that
-// is still asks for none, so an idle client has no timer. The timer wakes
-// the TML listener, and handleTMLWake marks the surfaces that want a frame.
 func (m *OS) tmlArmFrame(v *tmlView) {
 	wait, ok := v.surface.NextFrame()
 	if !ok {
@@ -136,13 +92,10 @@ func (m *OS) tmlArmFrame(v *tmlView) {
 	})
 }
 
-// tmlView is one surface as this client draws it.
 type tmlView struct {
-	id    string
-	title string
-	owner string
-	// caller is the window id of the pane that opened the surface, "" for
-	// the person's own. at is when this client first got it.
+	id         string
+	title      string
+	owner      string
 	caller     string
 	at         time.Time
 	version    uint64
@@ -150,66 +103,32 @@ type tmlView struct {
 	doc        *tml.Node
 	surface    *loom.Surface
 	palKey     string
-	// inflight counts the tml-input calls not yet answered. A push that only
-	// echoes state waits until they are, so a value the person just set does
-	// not flicker back to the one before it. deferred holds that push.
-	inflight int
-	deferred *session.TMLSurfacePayload
-	// acked is the surface version the daemon gave in its answer to the
-	// last tml-input this view made, which holds every input this client
-	// sent. State of the same tree older than it is older than what this
-	// client shows: a tml-get that was read before those inputs landed, or a
-	// push held back until they were answered. Applying it would take the
-	// person's typing back, and their next input would then send the older
-	// text over the daemon's. Guarded by tmlClient.mu, and set in the same
-	// step that takes the answered input off inflight.
-	acked uint64
-	// sent closes when the last tml-input this view made has its answer.
-	// The next one waits for it, so the daemon applies the inputs in the
-	// order the person made them. Each call dials its own connection, and
-	// without the wait a later keystroke could reach the daemon first and
-	// an earlier value would win. Guarded by tmlClient.mu.
-	sent chan struct{}
-	// content is the last frame, for the size in w and h.
-	content string
-	w, h    int
-	// refreshing says a tml-get is on its way, after a missed version.
+	inflight   int
+	deferred   *session.TMLSurfacePayload
+	acked      uint64
+	sent       chan struct{}
+	content    string
+	w, h       int
 	refreshing bool
-	// confirm is a send-text the person has not said yes to yet, and
-	// confirmed the targets they said yes to, per surface.
-	confirm   *tmlPaneAction
-	confirmed map[string]bool
-	// sentView is this client's view state as last sent to the daemon,
-	// which draws it for capture-pane, and viewAt when. viewDue says a
-	// change waits for the flush tmlViewGap schedules.
-	sentView []byte
-	viewAt   time.Time
-	viewDue  bool
+	confirm    *tmlPaneAction
+	confirmed  map[string]bool
+	sentView   []byte
+	viewAt     time.Time
+	viewDue    bool
 }
 
-// tmlParam is a string parameter of a pane() action.
 func tmlParam(a tmlPaneAction, name string) string {
 	t, _ := a.Params[name].(string)
 	return t
 }
 
-// tmlActionSession is the session a pane() action acts in: the one it
-// names, else this client's, which is the surface's.
 func (m *OS) tmlActionSession(a tmlPaneAction) string {
 	return cmp.Or(tmlParam(a, "session"), m.SessionName)
 }
 
-// tmlResolve fixes what a pane() action acts on before the person is asked:
-// a send-text names one window of this session, by id, name or id prefix,
-// and is sent with that id, so the yes and the typing are about one pane. A
-// number, which the daemon would read as a place in the window list, and a
-// window of another session are refused. It returns the action to run, or
-// why it cannot.
 func (m *OS) tmlResolve(a tmlPaneAction) (tmlPaneAction, string) {
 	params := map[string]any{}
 	maps.Copy(params, a.Params)
-	// The session is sent by name, never empty, so the daemon does not
-	// pick one: the yes is for the session the question named.
 	params["session"] = m.tmlActionSession(a)
 	a = tmlPaneAction{Verb: a.Verb, Params: params}
 	if a.Verb != "send-text" {
@@ -244,9 +163,6 @@ func (m *OS) tmlResolve(a tmlPaneAction) (tmlPaneAction, string) {
 	return a, ""
 }
 
-// tmlConfirmKey names what the person said yes to. A send-text yes covers
-// one pane, by its id, in one session. A new-window yes covers one exact
-// command in one folder in one session, and nothing else.
 func (m *OS) tmlConfirmKey(a tmlPaneAction) string {
 	if a.Verb == "new-window" {
 		raw, _ := jsonx.Marshal(map[string]any{"command": a.Params["command"], "cwd": a.Params["cwd"], "name": a.Params["name"], "session": m.tmlActionSession(a)})
@@ -255,15 +171,10 @@ func (m *OS) tmlConfirmKey(a tmlPaneAction) string {
 	return a.Verb + "\x00" + m.tmlActionSession(a) + "\x00" + tmlParam(a, "window")
 }
 
-// tmlAsks reports whether a pane() action waits for the person's yes: one
-// that types into a pane or starts a program.
 func tmlAsks(a tmlPaneAction) bool {
 	return a.Verb == "send-text" || a.Verb == "new-window"
 }
 
-// tmlCommandText is a new-window action's whole command as the question
-// shows it: each word, quoted when it holds a space or a quote, or "" for
-// the shell.
 func tmlCommandText(a tmlPaneAction) string {
 	var words []string
 	switch c := a.Params["command"].(type) {
@@ -278,10 +189,6 @@ func tmlCommandText(a tmlPaneAction) string {
 	return strings.Join(words, " ")
 }
 
-// tmlQuote shows a word as the question shows it: as is when it is plain,
-// else in double quotes with every control or invisible character escaped
-// (a tab as \t, a soft hyphen as \u00ad), so the person reads each character
-// that will be used.
 func tmlQuote(s string) string {
 	if s != "" && !strings.ContainsAny(s, " '\"\\$`;&|<>()*?#~=[]{}") && strconv.Quote(s) == "\""+s+"\"" {
 		return s
@@ -289,8 +196,6 @@ func tmlQuote(s string) string {
 	return strconv.Quote(s)
 }
 
-// tmlWrap cuts text into lines of at most w cells, by cells, so nothing of
-// it is left out.
 func tmlWrap(text string, w int) []string {
 	w = max(w, 8)
 	var lines []string
@@ -305,8 +210,6 @@ func tmlWrap(text string, w int) []string {
 	return lines
 }
 
-// tmlQuestion is the question under a surface, as plain lines, the keys
-// last. A new-window question shows the whole command and the folder.
 func (m *OS) tmlQuestion(a tmlPaneAction, w int) []string {
 	sess := tmlQuote(m.tmlActionSession(a))
 	if a.Verb == "new-window" {
@@ -332,7 +235,6 @@ func (m *OS) tmlQuestion(a tmlPaneAction, w int) []string {
 	return append(tmlWrap("Type into "+where+"?", w), "y yes  n no")
 }
 
-// tmlWrapWords wraps plain text at spaces to lines of at most w cells.
 func tmlWrapWords(text string, w int) []string {
 	var lines []string
 	line := ""
@@ -349,17 +251,12 @@ func tmlWrapWords(text string, w int) []string {
 	return append(lines, line)
 }
 
-// tmlQuestionFits reports whether a question of n lines fits a window h
-// rows tall, with a row of the surface left above it.
 func tmlQuestionFits(n, h int) bool {
 	return n <= min(12, h-1)
 }
 
-// tmlTooSmall stands in for a question that does not fit the window now.
 const tmlTooSmall = "Make this pane bigger to see the whole question."
 
-// tmlWindowLabel names a window id for the question: its name and its short
-// id.
 func tmlWindowLabel(m *OS, id string) string {
 	for _, w := range m.Windows {
 		if w != nil && w.ID == id {
@@ -379,20 +276,17 @@ func tmlWindowLabel(m *OS, id string) string {
 // TMLWakeMsg says a push, an answer or a side effect for a surface is waiting.
 type TMLWakeMsg struct{}
 
-// initTML makes the wake channel. It runs before the listener is armed.
 func (m *OS) initTML() {
 	if m.tml.wake == nil {
 		m.tml.wake = make(chan struct{}, 1)
 	}
 }
 
-// listenForTML arms the listener for the next wake.
 func (m *OS) listenForTML() tea.Cmd {
 	m.initTML()
 	return listenOnce(m.stopSignal(), m.tml.wake, func(struct{}) tea.Msg { return TMLWakeMsg{} })
 }
 
-// signalTML wakes the UI goroutine. It never blocks.
 func (m *OS) signalTML() {
 	select {
 	case m.tml.wake <- struct{}{}:
@@ -400,18 +294,13 @@ func (m *OS) signalTML() {
 	}
 }
 
-// queueTMLSurface takes a push from the daemon's read loop.
 func (m *OS) queueTMLSurface(p *session.TMLSurfacePayload) {
 	m.tml.mu.Lock()
-	// Kept in order: a push that carries a patch applies on the version
-	// before it. The daemon folds pushes for a slow client, so few wait.
 	m.tml.pending = append(m.tml.pending, p)
 	m.tml.mu.Unlock()
 	m.signalTML()
 }
 
-// queueTMLCmd hands a side effect to the UI goroutine, from a path that has
-// no tea.Cmd to return, such as a click.
 func (m *OS) queueTMLCmd(cmd tea.Cmd) {
 	if cmd == nil {
 		return
@@ -422,7 +311,6 @@ func (m *OS) queueTMLCmd(cmd tea.Cmd) {
 	m.signalTML()
 }
 
-// handleTMLWake applies what is waiting and arms the listener again.
 func (m *OS) handleTMLWake() tea.Cmd {
 	m.tml.mu.Lock()
 	pending := m.tml.pending
@@ -436,7 +324,6 @@ func (m *OS) handleTMLWake() tea.Cmd {
 	setGen := m.tml.setGen
 	m.tml.shownDirty = false
 	if fired {
-		// A frame of an effect, or a toast whose time ran out.
 		m.tml.frameDue = time.Time{}
 		for id, v := range m.tml.views {
 			if v.surface == nil {
@@ -453,7 +340,6 @@ func (m *OS) handleTMLWake() tea.Cmd {
 			changed = true
 		}
 	}
-	// A view whose answers are all in applies the push it held back.
 	for _, v := range m.tml.views {
 		m.tml.mu.Lock()
 		ready := v.inflight == 0 && v.deferred != nil
@@ -466,9 +352,6 @@ func (m *OS) handleTMLWake() tea.Cmd {
 			changed = true
 		}
 	}
-	// Nothing on the screen changed: a hidden surface took a patch, or
-	// nothing changed at all. The frame stays. A surface that opened or
-	// closed changes the agents view's list and the dock.
 	if !changed || !m.tml.shownDirty && setGen == m.tml.setGen {
 		m.renderSkipped = len(cmds) == 0
 	}
@@ -476,8 +359,6 @@ func (m *OS) handleTMLWake() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// applyTMLSurface brings one view up to a push. It reports whether a window
-// has to be drawn again.
 func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 	if m.tml.views == nil {
 		m.tml.views = map[string]*tmlView{}
@@ -510,17 +391,12 @@ func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 			return false
 		}
 		if stale {
-			// A read this drops is done with: a later gap reads again, and
-			// that read holds the inputs.
 			if len(p.State) > 0 {
 				v.refreshing = false
 			}
 			return false
 		}
 	}
-	// A push that carries a patch: one version behind on the same tree,
-	// the patch repaints only what reads the paths it changed. Otherwise
-	// this client missed a version, and reads the surface again.
 	if len(p.Ops) > 0 && len(p.State) == 0 {
 		if v != nil && v.surface != nil && p.DocVersion == v.docVersion && p.Version == v.version+1 {
 			lim := tml.PersonLimits()
@@ -530,8 +406,6 @@ func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 				return true
 			}
 		}
-		// One read at a time: the pushes that follow it are older than
-		// what it brings.
 		if v == nil || !v.refreshing {
 			if v != nil {
 				v.refreshing = true
@@ -542,12 +416,8 @@ func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 	}
 	if v == nil || p.DocVersion != v.docVersion || v.doc == nil {
 		if len(p.Doc) == 0 {
-			// A tree this client never got; the next push that carries
-			// one draws it. Every push after an attach or a replace does.
 			return false
 		}
-		// The daemon checked the document against the limits of its owner,
-		// which are at most the person's, before it ever pushed it.
 		lim := tml.PersonLimits()
 		doc, err := tml.Parse(p.Doc, &tml.ParseOptions{Limits: &lim})
 		if err != nil {
@@ -578,8 +448,6 @@ func (m *OS) applyTMLSurface(p *session.TMLSurfacePayload) bool {
 		return false
 	}
 	v.title, v.owner = p.Title, p.Owner
-	// The opening pane never changes. A refresh read with tml-get carries
-	// no caller, so it keeps the one the first push gave.
 	if p.Caller != "" {
 		v.caller = p.Caller
 	}
@@ -599,9 +467,6 @@ func (m *OS) DrawsTML(w *terminal.Window) bool {
 	return w != nil && w.Kind == session.WindowKindTML && (m.tml.local != nil || m.DaemonClient != nil && m.DaemonClient.DrawsTML())
 }
 
-// tmlCaller is how the client half reaches the half that holds the
-// surfaces: Learn mode's host when there is one, the far daemon over the
-// link for a session on another machine, else this machine's daemon.
 func (m *OS) tmlCaller() inboxVerbCall {
 	if m.tml.local != nil {
 		return m.tml.local
@@ -612,9 +477,6 @@ func (m *OS) tmlCaller() inboxVerbCall {
 	return m.inboxCaller()
 }
 
-// pruneTMLViews forgets the views of surfaces no window of state shows: the
-// surfaces that closed while this client was away, or that belong to the
-// session it left. An attach pushes every open surface again.
 func (m *OS) pruneTMLViews(state *session.SessionState) {
 	if len(m.tml.views) == 0 || state == nil {
 		return
@@ -633,15 +495,11 @@ func (m *OS) pruneTMLViews(state *session.SessionState) {
 	}
 }
 
-// tmlRefresh reads a surface whole with tml-get and applies it as a push, for
-// a client that missed a version. Its answer comes back through the wake.
 func (m *OS) tmlRefresh(id string) tea.Cmd {
 	call := m.tmlCaller()
 	return func() tea.Msg {
 		raw, err := call("tml-get", map[string]any{"surface": id}, tmlInputTimeout)
 		if err != nil {
-			// Once more, then give up: the next full push draws the
-			// surface, and a later gap reads again.
 			raw, err = call("tml-get", map[string]any{"surface": id}, tmlInputTimeout)
 		}
 		if err != nil {
@@ -667,11 +525,8 @@ func (m *OS) tmlRefresh(id string) tea.Cmd {
 	}
 }
 
-// tmlRefreshFailedMsg says a refresh read failed twice, so the next gap may
-// read again.
 type tmlRefreshFailedMsg struct{ id string }
 
-// tmlViewOf is the view a window draws, or nil.
 func (m *OS) tmlViewOf(w *terminal.Window) *tmlView {
 	if w == nil || w.Kind != session.WindowKindTML {
 		return nil
@@ -679,14 +534,9 @@ func (m *OS) tmlViewOf(w *terminal.Window) *tmlView {
 	return m.tml.views[session.TMLSurfaceID(w.URI)]
 }
 
-// markTMLDirty marks the windows that draw a surface for a repaint. A
-// window that is not on the screen, minimized or on another workspace, keeps
-// the frame on the screen: it draws the surface again when it shows. So a
-// patch to a hidden surface costs the patch and no frame.
 func (m *OS) markTMLDirty(id string) {
 	m.tml.gen++
 	if m.ShowInbox {
-		// The agents view may draw the surface.
 		m.tml.shownDirty = true
 	}
 	for _, w := range m.Windows {
@@ -700,14 +550,10 @@ func (m *OS) markTMLDirty(id string) {
 	}
 }
 
-// renderTML draws a TML window's content box. It is renderTerminal for a
-// window of kind tml, and serves the last frame when nothing changed.
 func (m *OS) renderTML(window *terminal.Window, dim int) string {
 	cw, ch := max(window.ContentWidth(), 1), max(window.ContentHeight(), 1)
 	v := m.tmlViewOf(window)
 	if v == nil || v.surface == nil {
-		// The window arrived before its surface, or the surface ended. The
-		// push that follows draws it.
 		out := tmlWaitingFrame(cw, ch)
 		cacheRender(window, out, 0, 0, dim)
 		return out
@@ -716,22 +562,17 @@ func (m *OS) renderTML(window *terminal.Window, dim int) string {
 		v.surface.SetPalette(m.tmlPalette())
 		v.palKey = key
 	}
-	// The document reads where it is as view.placement: esc closes a popup
-	// and not a pane, so a hint can say so only where it is true.
 	placement := "pane"
 	if m.isTMLPopup(window) {
 		placement = "popup"
 	}
 	v.surface.SetPlacement(placement)
-	// The surface sits inside a margin; see tmlInset.
 	dx, dy, iw, ih := m.tmlInset(window)
 	fullW, fullH := cw, ch
 	cw, ch = max(iw, 1), max(ih, 1)
 	sh := ch
 	confirmText := ""
 	if v.confirm != nil {
-		// The question is drawn whole or not at all: a window made smaller
-		// after the press shows a line that asks for room, and y waits.
 		if tmlQuestionFits(len(m.tmlQuestion(*v.confirm, cw)), ch) {
 			confirmText = m.tmlConfirmLine(v, cw)
 		} else {
@@ -759,9 +600,6 @@ func (m *OS) renderTML(window *terminal.Window, dim int) string {
 	return out
 }
 
-// tmlConfirmLine asks the person whether the surface may type into a pane
-// or start a program. tuios draws it under the surface, so a document cannot
-// draw it or hide it.
 func (m *OS) tmlConfirmLine(v *tmlView, w int) string {
 	pal := theme.UI()
 	ask := lipgloss.NewStyle().Foreground(pal.Warning).Bold(true)
@@ -786,7 +624,6 @@ func (m *OS) tmlConfirmLine(v *tmlView, w int) string {
 	return strings.Join(out, "\n")
 }
 
-// tmlWaitingFrame is the content of a TML window with no surface yet.
 func tmlWaitingFrame(w, h int) string {
 	line := "Waiting for the surface."
 	if len(line) > w {
@@ -800,8 +637,6 @@ func tmlWaitingFrame(w, h int) string {
 	return b.String()
 }
 
-// tmlPaletteKey names the palette the client draws with now: the depth, the
-// glyph set and the theme's colours. It changes when any of them does.
 func (m *OS) tmlPaletteKey() string {
 	pal := theme.UI()
 	var b strings.Builder
@@ -825,8 +660,6 @@ func colorKey(c color.Color) string {
 	return strconv.FormatUint(uint64(r)<<48|uint64(g)<<32|uint64(b)<<16|uint64(a), 36)
 }
 
-// tmlPalette is the loom palette of this client's depth and theme. See
-// tmldraw.Palette.
 func (m *OS) tmlPalette() *loom.Palette {
 	return tmldraw.Palette(theme.UI(), m.Settings.UseASCIIOnly)
 }
@@ -841,7 +674,6 @@ func (m *OS) TMLKey(w *terminal.Window, key string) tea.Cmd {
 	if v.confirm != nil {
 		a := *v.confirm
 		if (key == "y" || key == "n") && !tmlQuestionFits(len(m.tmlQuestion(a, w.ContentWidth())), w.ContentHeight()) {
-			// The person cannot see the whole question, so no answer counts.
 			return nil
 		}
 		switch key {
@@ -920,7 +752,6 @@ func (m *OS) TMLMouse(w *terminal.Window, ev uv.MouseEvent) {
 		lm.Action = loom.Motion
 	}
 	if v.confirm != nil {
-		// The question under the surface waits for y or n.
 		return
 	}
 	res, err := v.surface.Mouse(lm)
@@ -930,8 +761,6 @@ func (m *OS) TMLMouse(w *terminal.Window, ev uv.MouseEvent) {
 	m.queueTMLCmd(m.tmlResult(w, v, res))
 }
 
-// tmlResult carries out what an input did: a repaint, the state for the
-// daemon, and the effects.
 func (m *OS) tmlResult(w *terminal.Window, v *tmlView, res loom.Result) tea.Cmd {
 	if len(res.Changed) > 0 || res.View || len(res.Effects) > 0 {
 		m.tmlRepaint(w, v)
@@ -954,15 +783,10 @@ func (m *OS) tmlResult(w *terminal.Window, v *tmlView, res loom.Result) tea.Cmd 
 				continue
 			}
 			if tmlAsks(a) && !tmlQuestionFits(len(m.tmlQuestion(a, roomW)), roomH) {
-				// The whole question must fit, or the person would say
-				// yes to a part of it.
 				m.ShowNotification("The surface's command is too long to show here, so tuios does not run it.", "warning", m.Settings.NotificationDuration)
 				continue
 			}
 			if tmlAsks(a) && !v.confirmed[m.tmlConfirmKey(a)] {
-				// The first time a surface types into a pane, or starts a
-				// program, the person says yes to it. The action waits for
-				// the answer.
 				v.confirm = &a
 				m.tmlRepaint(w, v)
 				continue
@@ -977,8 +801,6 @@ func (m *OS) tmlResult(w *terminal.Window, v *tmlView, res loom.Result) tea.Cmd 
 		case "copy":
 			cmds = append(cmds, m.CopyToClipboard(tml.Stringify(e.Value)))
 		default:
-			// open and link reach files and pages, which a later version
-			// asks the person about. They do nothing yet.
 			clientLog("TML surface %s: %s is not carried out yet", v.id, e.Action)
 		}
 	}
@@ -986,8 +808,6 @@ func (m *OS) tmlResult(w *terminal.Window, v *tmlView, res loom.Result) tea.Cmd 
 		m.ShowNotification(fmt.Sprintf("One press can run at most %d pane actions. Nothing ran.", tmlActionsPerPress), "warning", m.Settings.NotificationDuration)
 		actions = nil
 	}
-	// The view travels when it changed, so capture-pane draws what the
-	// person looks at. See tmlViewChange.
 	view, flush := m.tmlViewChange(v, res.View)
 	if flush != nil {
 		cmds = append(cmds, flush)
@@ -998,18 +818,11 @@ func (m *OS) tmlResult(w *terminal.Window, v *tmlView, res loom.Result) tea.Cmd 
 	return tea.Batch(cmds...)
 }
 
-// tmlViewGap is the least time between two reports of a view that only
-// changed. A wheel scroll changes the view on every step. Its last place
-// goes in one report after the gap.
 const tmlViewGap = 250 * time.Millisecond
 
 // TMLViewFlushMsg sends a view change that waited for tmlViewGap.
 type TMLViewFlushMsg struct{ id string }
 
-// tmlViewChange returns v's view as JSON when an input changed it and it
-// differs from the last one sent, for the tml-input of that input. A change
-// within tmlViewGap of the last report waits: the command it returns sends
-// it after the gap. Typed text that binds no state path stays here.
 func (m *OS) tmlViewChange(v *tmlView, changed bool) (json.RawMessage, tea.Cmd) {
 	if (!changed && !v.viewDue) || v.surface == nil {
 		return nil, nil
@@ -1033,7 +846,6 @@ func (m *OS) tmlViewChange(v *tmlView, changed bool) (json.RawMessage, tea.Cmd) 
 	return raw, nil
 }
 
-// handleTMLViewFlush sends the view change of a surface that waited.
 func (m *OS) handleTMLViewFlush(id string) tea.Cmd {
 	v := m.tml.views[id]
 	if v == nil || !v.viewDue {
@@ -1047,8 +859,6 @@ func (m *OS) handleTMLViewFlush(id string) tea.Cmd {
 	return m.tmlInput(v, tmlInputReq{view: raw})
 }
 
-// tmlRepaint marks a surface for a repaint: its window when it has one here,
-// and the agents view, which may draw it instead.
 func (m *OS) tmlRepaint(w *terminal.Window, v *tmlView) {
 	if w != nil {
 		w.MarkContentDirty()
@@ -1056,14 +866,10 @@ func (m *OS) tmlRepaint(w *terminal.Window, v *tmlView) {
 	m.cachedViewContent = ""
 	m.tml.gen++
 	if v != nil {
-		// The window and the agents view draw the surface at their own
-		// sizes, so neither keeps the other's last frame.
 		v.content = ""
 	}
 }
 
-// tmlRoom is the room a surface is drawn in: its window's content box, or
-// the box the agents view last drew it in.
 func (m *OS) tmlRoom(w *terminal.Window, v *tmlView) (int, int) {
 	if w != nil {
 		return w.ContentWidth(), w.ContentHeight()
@@ -1071,9 +877,6 @@ func (m *OS) tmlRoom(w *terminal.Window, v *tmlView) (int, int) {
 	return m.Inbox.ck.art.box.w, m.Inbox.ck.art.box.h
 }
 
-// tmlStateOps turns the state paths a local action changed into a JSON Patch
-// that writes the same values on the daemon. A path whose ancestor is in the
-// list already rides with it.
 func tmlStateOps(state map[string]any, changed []string) []tml.Op {
 	var ops []tml.Op
 	var done []string
@@ -1107,8 +910,6 @@ func tmlStateOps(state map[string]any, changed []string) []tml.Op {
 	return ops
 }
 
-// tmlLookup finds a JSON Pointer in state. It returns the container that
-// holds the value, the value, and whether it is there.
 func tmlLookup(state map[string]any, pointer string) (any, any, bool) {
 	toks := strings.Split(strings.TrimPrefix(pointer, "/"), "/")
 	var parent any
@@ -1140,20 +941,15 @@ func tmlLookup(state map[string]any, pointer string) (any, any, bool) {
 // surface.
 type TMLInputFailedMsg struct{ Text string }
 
-// tmlInputTimeout bounds one tml-input call.
 const tmlInputTimeout = 5 * time.Second
 
-// tmlEmit is one emit action, for the owner.
 type tmlEmit struct {
 	Name  string `json:"name"`
 	Value any    `json:"value,omitempty"`
 }
 
-// tmlActionsPerPress is the most pane actions one key or click runs, as the
-// daemon holds a tml-input to.
 const tmlActionsPerPress = 4
 
-// tmlInputReq is what one tml-input carries.
 type tmlInputReq struct {
 	ops      []tml.Op
 	events   []tmlEmit
@@ -1164,8 +960,6 @@ type tmlInputReq struct {
 	view     json.RawMessage
 }
 
-// tmlPaneAction is one pane() action, run by the daemon with the grants of
-// the surface's owner.
 type tmlPaneAction struct {
 	Verb   string         `json:"verb"`
 	Params map[string]any `json:"params"`
@@ -1174,8 +968,6 @@ type tmlPaneAction struct {
 // TMLActionFailedMsg says the daemon refused a pane() action of a surface.
 type TMLActionFailedMsg struct{ Text string }
 
-// tmlInput sends what the person did to the daemon, off the UI goroutine:
-// the state, the emits for the owner, the pane() actions, and a close.
 func (m *OS) tmlInput(v *tmlView, r tmlInputReq) tea.Cmd {
 	nonce, ok := m.tmlNonce()
 	if !ok {
@@ -1227,8 +1019,6 @@ func (m *OS) tmlInput(v *tmlView, r tmlInputReq) tea.Cmd {
 		parsed := err == nil && jsonx.Unmarshal(raw, &res) == nil
 		close(done)
 		m.tml.mu.Lock()
-		// Before the input leaves inflight, so the wake that applies a
-		// held push already knows which versions are older than it.
 		if parsed && res.Version > v.acked {
 			v.acked = res.Version
 		}
@@ -1237,8 +1027,6 @@ func (m *OS) tmlInput(v *tmlView, r tmlInputReq) tea.Cmd {
 		m.signalTML()
 		if err != nil {
 			clientLog("TML surface %s: tml-input: %v", v.id, err)
-			// The person sees what did not go through, such as an emit
-			// value over the limit.
 			return TMLInputFailedMsg{Text: "The surface could not send what you did: " + err.Error()}
 		}
 		if parsed {
