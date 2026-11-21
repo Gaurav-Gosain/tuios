@@ -207,18 +207,15 @@ func TestAskpassEscCancels(t *testing.T) {
 	alive(t, term, "after a cancelled prompt")
 }
 
-// TestAskpassWarnsAboutAFakeSSH is the prompt a program that fishes for a
-// passphrase would show. A copy of a binary named ssh, in a folder the pane
-// can write, asks for the passphrase of the person's key, with a token in a
-// URL on its command line. The dialog warns that tuios does not know the
-// program, though its name is ssh. The token is masked in the dialog, and it
-// is in no event of the session's stream, in no list-attention answer and in
-// no file.
+// TestAskpassShowsTheMaskedCommandLine is the prompt a program that fishes
+// for a passphrase would show: a copy of a binary named ssh, in a folder the
+// pane can write, with a token in a URL on its command line. The dialog says
+// which program in which pane asks and shows its command line, with the
+// token masked. It never vouches for the prompt. The token is in no event of
+// the session's stream, in no list-attention answer and in no file.
 //
-// Negative control: with KnownProgram back to a check of the base name, the
-// warning is gone and the test fails. With MaskCommandLine cut, the token
-// shows in the dialog.
-func TestAskpassWarnsAboutAFakeSSH(t *testing.T) {
+// Negative control: with MaskCommandLine cut, the token shows in the dialog.
+func TestAskpassShowsTheMaskedCommandLine(t *testing.T) {
 	const token = "TOKEN-77xqZ"
 	term, base := attachClientBase(t)
 	events := askpassEvents(t, base, "e2e-ctrlp")
@@ -243,9 +240,9 @@ func TestAskpassWarnsAboutAFakeSSH(t *testing.T) {
 		t.Fatalf("send-text: %v\n%s", err, b)
 	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return screenHas(s, "Unlock a key", "tuios cannot check that this program asks", "bob:***@example.com")
+		return screenHas(s, "Unlock a key", "ssh in pane", "Command:", "bob:***@example.com", "Check the command before you answer")
 	}, uiTimeout); err != nil {
-		t.Fatalf("the dialog did not warn about a copy named ssh, or did not mask its token: %v\n%s", err, term.Snapshot())
+		t.Fatalf("the dialog did not name the program and its masked command line: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "askpass-fake-ssh")
 	if strings.Contains(term.Snapshot(), token) {

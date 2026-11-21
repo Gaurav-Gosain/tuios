@@ -2,14 +2,12 @@ package session
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"time"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/askpass"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
-	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
 // Secrets a program in a pane asks the person for.
@@ -65,10 +63,6 @@ type SecretAsk struct {
 	// records it, with the passwords and tokens in it masked
 	// (askpass.MaskCommandLine).
 	Program string `json:"program,omitempty"`
-	// Known is true when the program is one that asks through an askpass
-	// program in the normal course of its work, such as ssh or git. The
-	// dialog warns about any other.
-	Known bool `json:"known,omitempty"`
 }
 
 // askpassPromptShown reports whether a prompt can be shown as written: valid
@@ -83,35 +77,6 @@ func askpassPromptShown(s string) bool {
 		}
 	}
 	return true
-}
-
-// AskpassLinkName is the name tuios's askpass program runs by: a link to the
-// tuios binary, which main runs as the askpass program when it is called by
-// this name.
-const AskpassLinkName = "tuios-askpass"
-
-// askpassChainKnown reports whether a prompt comes from a program the person
-// can trust to ask: the caller, pid, is tuios's own askpass program, run by
-// the program asker at exe, which is a real ssh, git or gpg
-// (askpass.KnownProgram), and that program's SSH_ASKPASS names tuios's
-// askpass program. A process in a pane can make a real ssh its parent, as a
-// ProxyCommand or an SSH_ASKPASS of its own, and call askpass itself, so a
-// known parent alone proves nothing.
-func (d *Daemon) askpassChainKnown(pid, asker int, exe string) bool {
-	self, err := d.agentProtoExecutable()
-	if err != nil || exe == "" || !askpass.KnownProgram(exe) {
-		return false
-	}
-	callerExe, callerArgs := askingProgram(pid)
-	if callerExe != self || len(callerArgs) == 0 || filepath.Base(callerArgs[0]) != AskpassLinkName {
-		return false
-	}
-	named, ok := procinfo.EnvVar(asker, "SSH_ASKPASS")
-	if !ok || filepath.Base(named) != AskpassLinkName {
-		return false
-	}
-	resolved, err := filepath.EvalSymlinks(named)
-	return err == nil && resolved == self
 }
 
 // askpassRefused is askpass's refusal, with nothing asked.
@@ -146,11 +111,11 @@ func (d *Daemon) verbAskpass(cs *connState, params json.RawMessage) (any, *verbE
 		return nil, askpassRefused("askpass is for a program inside a pane of this daemon")
 	}
 	// The caller is the askpass program. The program that asks is the one
-	// that started it.
+	// that started it. The dialog shows its command line, and never says
+	// the prompt can be trusted: a process in the pane can run under a real
+	// ssh, as a ProxyCommand, and ask anything.
 	if ppid, ok := askpassParent(cs.peerPID); ok {
-		exe, args := askingProgram(ppid)
-		item.Secret.Program = attentionText(askpass.MaskCommandLine(args), askpassMaxProgram)
-		item.Secret.Known = d.askpassChainKnown(cs.peerPID, ppid, exe)
+		item.Secret.Program = attentionText(askpass.MaskCommandLine(askingProgram(ppid)), askpassMaxProgram)
 	}
 	hold, err := d.attention.openAsk(item, true)
 	if err != nil {
@@ -203,34 +168,24 @@ func (r askpassReply) MarshalJSON() ([]byte, error) {
 
 // answerSecret ends an open secret prompt with the person's answer, or with
 // a cancel. The item closes with no answer on it. It reports whether this
-// call ended the prompt, and how the prompt ended.
-func (a *attentionStore) answerSecret(requestID string, secret []byte, cancel bool, by string) (bool, string, error) {
+// call ended the prompt and how the prompt ended, and ok false when request
+// is no secret prompt, open or ended.
+func (a *attentionStore) answerSecret(requestID string, secret []byte, cancel bool, by string) (applied bool, reason string, ok bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	hold, ok := a.asks[requestID]
-	if !ok || hold.secret == nil {
-		if prev, ok := a.askSettled[requestID]; ok {
-			return false, prev.Reason, nil
-		}
-		return false, "", errNoHold
+	hold, open := a.asks[requestID]
+	if !open || hold.secret == nil {
+		prev, settled := a.askSettled[requestID]
+		return false, prev.Reason, settled && !open
 	}
 	if cancel {
 		a.closeLocked(hold.itemID, AskpassCancelled)
-		return true, AskpassCancelled, nil
+		return true, AskpassCancelled, true
 	}
 	// The waiting call takes it from here. hold.secret holds one buffer, and
 	// a hold is answered once, since the answer deletes it.
 	hold.secret <- append([]byte(nil), secret...)
 	a.endAskLocked(requestID, askOutcome{Reason: AskAnswered, By: by})
 	a.closeLocked(hold.itemID, AttentionClosedAnswered)
-	return true, AskAnswered, nil
-}
-
-// askIsSecret reports whether the open question under requestID is a secret
-// prompt.
-func (a *attentionStore) askIsSecret(requestID string) bool {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	h, ok := a.asks[requestID]
-	return ok && h.secret != nil
+	return true, AskAnswered, true
 }
