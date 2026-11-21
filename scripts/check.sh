@@ -152,7 +152,23 @@ pkgs() {
 		# exclude all Go files". check_vet runs it with the tag.
 		[ "$mod" = . ] && [ "$dir" = e2e ] && continue
 		echo "./${dir:-.}"
-	done | sort -u
+	done | sort -u | with_files "$mod"
+}
+
+# with_files MODULE keeps the package patterns on stdin that hold a Go file
+# the build reads for this GOOS. A folder of go run files (//go:build ignore),
+# or of files for other systems only, is no package here: go vet,
+# golangci-lint and go build fail on it with "build constraints exclude all Go
+# files".
+with_files() {
+	local mod=$1 abs p
+	mapfile -t p
+	[ ${#p[@]} -eq 0 ] && return 0
+	abs=$(cd "$mod" && pwd)
+	(cd "$mod" && go list -e -f '{{if or .GoFiles .CgoFiles .TestGoFiles .XTestGoFiles}}{{.Dir}}{{end}}' "${p[@]}" 2>/dev/null) |
+		while read -r dir; do
+			[ -n "$dir" ] && echo ".${dir#"$abs"}"
+		done | sort -u
 }
 
 # e2e_root_changed reports whether the scope reaches the root e2e folder.
