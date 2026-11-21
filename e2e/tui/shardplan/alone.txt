@@ -27,3 +27,8 @@ TestIdleCostStaysLow
 # Counts the frames of the workspace slide with motion.zoom off. With other
 # runs on the same cores it saw one slide frame where it wants a slide.
 TestMotionZoomOffKeepsWorkspaceSlide
+
+# Compares the rate the transfer list shows with the rate the far side
+# wrote over the last five seconds, each read by its own process. On a
+# loaded machine it read 10.3 MiB/s shown against 5.4 MiB/s written.
+TestACopysRateIsWhatTheFarSideTook
