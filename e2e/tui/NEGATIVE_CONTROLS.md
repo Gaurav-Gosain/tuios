@@ -18733,3 +18733,20 @@ Run on 2026-11-21 on Linux.
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestLocalKeysDoNotWaitOnABadLink$' .
 ```
+
+## Keys a dropped link took are dropped, and the person is told (#2364 review)
+
+`TestKeysLostWithALinkAreDroppedAndThePersonIsTold` in `link_bad_keys_test.go` stops the link to build. Then the `resize` verb puts a size for a pane on build in the queue, and send-text queues `echo LOST""KEYS-7` behind it. Then the test kills the link. The dock must say "Some keys did not reach far-pane on build. The link dropped." `list-windows` must count the loss, and the resize verb must fail with host_unreachable. When the link is back, LOSTKEYS-7 must not run on build.
+
+Run on 2026-11-21 on Linux. Each control is one change to the branch, run alone and then restored.
+
+| Control | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| Waiting input is sent again on the new connection after the reattach, with the notice kept | `TestKeysLostWithALinkAreDroppedAndThePersonIsTold` | "the lost command is not sent on the new link" | **caught** |
+| `inputLost` does not count the loss | `TestKeysLostWithALinkAreDroppedAndThePersonIsTold` | "the person was not told that keys did not reach far-pane" | **caught** |
+| The `resize` verb answers without waiting for the far size | `TestKeysLostWithALinkAreDroppedAndThePersonIsTold` | "the resize verb said the size was taken while the link was down: <nil>" | **caught** |
+| Main, no fix | `TestKeysLostWithALinkAreDroppedAndThePersonIsTold` | the resize verb answers resized, and no notice shows | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestKeysLostWithALinkAreDroppedAndThePersonIsTold$' .
+```

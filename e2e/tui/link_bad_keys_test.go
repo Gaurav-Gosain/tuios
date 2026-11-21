@@ -243,6 +243,7 @@ func TestKeysLostWithALinkAreDroppedAndThePersonIsTold(t *testing.T) {
 		t.Errorf("ASSERTION: the resize verb never answered")
 	}
 	if err := term.WaitForText("Some keys did not reach far-pane on build. The link dropped.", uiTimeout*2); err != nil {
+		saveFrame(t, term, "keys-lost-notice")
 		t.Fatalf("ASSERTION: the person was not told that keys did not reach far-pane: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "keys-lost-notice")
