@@ -2466,6 +2466,13 @@ stay when you close the view and when you start a new client. To fold
 Working by default, set `fold_working = true` in `[agents]` (see
 [CONFIGURATION.md](CONFIGURATION.md#fold-the-working-group)).
 
+`P` pins the agent under the cursor to the top of its group. A pinned row
+shows a pin mark after its name, and it stays first while it is in that
+group. When the agent changes group, its row is first in the new group.
+`P` again unpins it. tuios keeps the pins in `sidebar.json` by pane id, with
+the folds. They stay when you close the view and when you start a new
+client. When a pane on this machine closes, tuios drops its pin.
+
 Each row is two lines on a wide screen. The first has the state mark, the
 name, the harness, the session (or the machine, for an agent on another one),
 the size of the diff when the agent reports it as the `diff` meta key,
