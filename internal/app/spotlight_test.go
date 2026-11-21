@@ -105,30 +105,39 @@ func TestSpotlightAllocatesNothing(t *testing.T) {
 			s := newSpotlightTestState()
 
 			// The restore is inside the measured function, so it has to be
-			// free or the number below is not the pass's.
-			if base := testing.AllocsPerRun(20, func() { tc.restore(canvas) }); base != 0 {
+			// free or the number below is not the pass's. It is measured the
+			// same way as the pass, for the same reason: one run of a full
+			// package in CI charged 3 allocations a frame to a restore that
+			// makes none.
+			if base := leastAllocsPerRun(func() { tc.restore(canvas) }); base != 0 {
 				t.Fatalf("restoring the canvas allocates %.0f times; the measurement below would not be the pass's", base)
 			}
 
-			// AllocsPerRun counts every allocation in the process, so a
-			// goroutine an earlier test left winding down is charged to the
-			// pass: a full package run in a loaded container measured 2 per
-			// frame this way. The least of three measurements is taken. An
-			// allocation the pass makes itself is in every one of them, so
-			// this still fails for any pass that allocates.
 			frame := func() {
 				s.apply(canvas, realCols/2, realRows/2, 10, 60, true, [2]spotlightSpan{})
 				tc.restore(canvas)
 			}
-			allocs := testing.AllocsPerRun(20, frame)
-			for range 2 {
-				allocs = min(allocs, testing.AllocsPerRun(20, frame))
-			}
-			if allocs != 0 {
+			if allocs := leastAllocsPerRun(frame); allocs != 0 {
 				t.Errorf("the pass allocated %.0f times per frame; it must allocate none", allocs)
 			}
 		})
 	}
+}
+
+// leastAllocsPerRun is the least of three testing.AllocsPerRun measurements of
+// f, 20 runs each.
+//
+// AllocsPerRun counts every allocation in the process, so a goroutine an
+// earlier test left winding down is charged to f: a full package run in a
+// loaded container measured 2 per frame this way. An allocation f makes itself
+// is in every one of the three measurements, so the least of them still counts
+// it.
+func leastAllocsPerRun(f func()) float64 {
+	allocs := testing.AllocsPerRun(20, f)
+	for range 2 {
+		allocs = min(allocs, testing.AllocsPerRun(20, f))
+	}
+	return allocs
 }
 
 // spotlightMixedCanvas is what a themeless screen looks like to the pass: some
