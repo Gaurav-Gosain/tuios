@@ -14,14 +14,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
-// The roots the folder is chosen from. They are variables so a test can move
-// them; see SetRootsForTest and e2eRoots.
 var (
-	// runUserRoot holds the per-user runtime folders systemd makes:
-	// /run/user/<uid>, created by pam_systemd for every login, ssh included.
 	runUserRoot = "/run/user"
-	// tmpRoot holds the folder used when there is no runtime folder.
-	tmpRoot = "/tmp"
+	tmpRoot     = "/tmp"
 )
 
 // Dir is the folder the daemon's socket lives in: BaseDir for the default
@@ -107,7 +102,6 @@ func PrivateDir(dir string, uid int) bool {
 	return st.Mode().Perm() == 0o700
 }
 
-// systemRuntimeDir is /run/user/<uid>, or "" on macOS.
 func systemRuntimeDir() string {
 	if runtime.GOOS == "darwin" {
 		return ""
@@ -116,10 +110,6 @@ func systemRuntimeDir() string {
 	return filepath.Join(run, strconv.Itoa(os.Getuid()))
 }
 
-// roots returns the two roots. The end-to-end suite moves them with the
-// run_user and tmp knobs, so it can
-// test a missing XDG_RUNTIME_DIR without reaching the real daemons of the
-// person who runs it.
 func roots() (run, tmp string) {
 	run, tmp = runUserRoot, tmpRoot
 	if v := testknob.String("run_user"); v != "" {

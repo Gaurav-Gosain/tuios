@@ -14,36 +14,23 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// A fake git with one repository, the Go project in ProjectDir, and the
-// worktrees made of it. Each checkout keeps the files of its last commit and
-// a staging set, and compares them with the shared filesystem, so a file
-// changed at the prompt shows up in git status and git diff like it would for
-// real.
-
 type gitCommit struct {
 	hash    string
 	message string
 	when    time.Time
 }
 
-// checkout is one work tree of the repository: the main checkout, or a
-// linked worktree on a branch of its own.
 type checkout struct {
-	root   string
-	branch string
-	// base is the branch a linked worktree was made from, "" for the main
-	// checkout. Review diffs a worktree from where it left base.
-	base string
-	// fork is base's files, and forkHash its last commit, when the worktree
-	// was made. Nil for the main checkout.
+	root     string
+	branch   string
+	base     string
 	fork     map[string]string
 	forkHash string
-	head     map[string]string // path relative to root -> content at HEAD
+	head     map[string]string
 	staged   map[string]bool
-	commits  []gitCommit // oldest first
+	commits  []gitCommit
 }
 
-// headHash is the checkout's last commit.
 func (c *checkout) headHash() string {
 	if len(c.commits) == 0 {
 		return "0000000"
@@ -74,19 +61,14 @@ func initRepo() {
 	}
 }
 
-// linked are the worktrees made since the tab opened, oldest first. Guarded
-// by fsMu, like the files.
 var linked []*checkout
 
 // WorktreeDir is where tuios makes a worktree, as worktree.DefaultDir is on
 // a real machine with no TUIOS_WORKTREE_DIR set.
 const WorktreeDir = Home + "/.local/share/tuios/worktrees"
 
-// checkouts is the main checkout, then every linked worktree. The caller
-// holds fsMu.
 func checkouts() []*checkout { return append([]*checkout{repo}, linked...) }
 
-// checkoutAt is the checkout dir is in, or nil. The caller holds fsMu.
 func checkoutAt(dir string) *checkout {
 	var best *checkout
 	for _, c := range checkouts() {
@@ -99,14 +81,12 @@ func checkoutAt(dir string) *checkout {
 	return best
 }
 
-// lockedCheckoutAt is checkoutAt for a caller that does not hold fsMu.
 func lockedCheckoutAt(dir string) *checkout {
 	fsMu.RLock()
 	defer fsMu.RUnlock()
 	return checkoutAt(dir)
 }
 
-// branchAt is the branch checked out where dir is, "" outside the repository.
 func branchAt(dir string) string {
 	fsMu.RLock()
 	defer fsMu.RUnlock()
@@ -116,15 +96,12 @@ func branchAt(dir string) string {
 	return ""
 }
 
-// gitChange is one path that differs from HEAD.
 type gitChange struct {
 	path   string
-	status string // "modified", "new file", "deleted"
+	status string
 	staged bool
 }
 
-// files lists the files under the checkout with their content. The
-// caller holds fsMu.
 func (c *checkout) files() map[string]string {
 	out := map[string]string{}
 	prefix := c.root + "/"
@@ -136,8 +113,6 @@ func (c *checkout) files() map[string]string {
 	return out
 }
 
-// inLinkedBelow reports whether p is in another checkout inside c, which c
-// does not track. The caller holds fsMu.
 func inLinkedBelow(c *checkout, p string) bool {
 	for _, o := range linked {
 		if o != c && len(o.root) > len(c.root) && strings.HasPrefix(p, o.root+"/") {
@@ -147,14 +122,12 @@ func inLinkedBelow(c *checkout, p string) bool {
 	return false
 }
 
-// changes compares the checkout's working tree with its HEAD.
 func (c *checkout) changes() []gitChange {
 	fsMu.RLock()
 	defer fsMu.RUnlock()
 	return c.changesLocked()
 }
 
-// changesLocked is changes for a caller that holds fsMu.
 func (c *checkout) changesLocked() []gitChange {
 	work := c.files()
 	var out []gitChange
@@ -321,8 +294,6 @@ func gitLog(t *TTY, co *checkout, args []string) int {
 			ref = " (" + cyan + bold + "HEAD -> " + green + branch + reset + yellow + ")"
 		}
 		if oneline {
-			// One commit to a line, cut at the pane edge the way git's
-			// pager shows it.
 			line := yellow + c.hash + ref + reset + " " + c.message
 			t.Lay(func(cols int) []string { return []string{fit(line, cols)} })
 		} else {
@@ -415,9 +386,6 @@ func gitCommitCmd(s *shell, co *checkout, args []string) int {
 	return 0
 }
 
-// commit records every change take accepts as a new commit with msg, and
-// returns its hash and how many files it took. It takes nothing and makes
-// no commit when take accepts no change.
 func (co *checkout) commit(msg string, take func(gitChange) bool) (string, int) {
 	fsMu.Lock()
 	defer fsMu.Unlock()
@@ -443,8 +411,6 @@ func (co *checkout) commit(msg string, take func(gitChange) bool) (string, int) 
 	return hash, n
 }
 
-// commitHash is a short hash for a new commit, the same for the same branch,
-// message and place in the history.
 func commitHash(branch, msg string, n int) string {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(branch + msg + strconv.Itoa(n)))
@@ -486,8 +452,6 @@ func gitShow(t *TTY, co *checkout) int {
 	return 0
 }
 
-// gitBranch lists the branches, the way git branch does: * on the one
-// checked out here, + on one checked out in another worktree.
 func gitBranch(t *TTY, here *checkout) int {
 	fsMu.RLock()
 	all := checkouts()
@@ -504,8 +468,6 @@ func gitBranch(t *TTY, here *checkout) int {
 	return 0
 }
 
-// gitWorktree is git worktree list. A worktree is made with ctrl+b U here,
-// the way tuios makes one on a real machine.
 func gitWorktree(s *shell, args []string) int {
 	t := s.t
 	switch argOr(args, 0, "list") {
@@ -609,8 +571,6 @@ func NewWorktree(repoRoot, branch string) (path, session string, err error) {
 	return path, session, nil
 }
 
-// validBranch refuses the branch names git refuses, in the ways a person is
-// likely to type one.
 func validBranch(name string) error {
 	switch {
 	case name == "":

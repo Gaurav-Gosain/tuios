@@ -66,7 +66,6 @@ func Neighbour(from Rect, cands []Rect, side Side, fallback bool) int {
 		if !facing && !fallback {
 			continue
 		}
-		// Twice the centres' offset, to stay in whole cells.
 		offset := abs((2*c.Y + c.H) - (2*f.Y + f.H))
 		thin := 0
 		if overlap == 1 {
@@ -121,7 +120,6 @@ func Wrap(from Rect, cands []Rect, side Side) int {
 		if overlap == 1 {
 			thin = 1
 		}
-		// The far edge first: the larger it is, the farther the candidate.
 		key := [5]int{-(c.X + c.W), thin, offset, -overlap, i}
 		if best < 0 || slices.Compare(key[:], bestKey[:]) < 0 {
 			best, bestKey = i, key
@@ -142,8 +140,6 @@ func opposite(side Side) Side {
 	return SideUp
 }
 
-// towardRight turns a rectangle so that stepping toward side becomes stepping
-// right: X is the axis of travel and grows in that direction, Y is across it.
 func towardRight(r Rect, side Side) Rect {
 	switch side {
 	case SideLeft:

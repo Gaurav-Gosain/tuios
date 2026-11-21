@@ -108,15 +108,10 @@ type Status struct {
 	Binary string `json:"binary,omitempty"`
 }
 
-// socketMarker starts the comment line that names the socket.
 const socketMarker = "# Socket: "
 
-// binaryMarker starts the comment line that names the binary.
 const binaryMarker = "# Binary: "
 
-// carriedKeys are the variables that choose the daemon's socket and folders.
-// The unit sets each one that differs from the service manager's, so a daemon
-// the service starts serves the socket a client of the installer reaches.
 var carriedKeys = []string{
 	"TUIOS_SERVER", "HOME", "XDG_RUNTIME_DIR", "XDG_CONFIG_HOME",
 	"XDG_STATE_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME",
@@ -136,7 +131,6 @@ func CarriedEnv(getenv func(string) string, manager map[string]string) []string 
 	return out
 }
 
-// loginShells are the shells whose -l -c runs a command the same way.
 var loginShells = map[string]bool{"sh": true, "bash": true, "zsh": true, "fish": true, "dash": true, "ksh": true, "mksh": true}
 
 // LoginCommand is the command line that runs the daemon through the login
@@ -152,14 +146,11 @@ func LoginCommand(shell, binary string) []string {
 	return []string{shell, "-l", "-c", "exec " + shquote.Quote(binary) + " daemon --service"}
 }
 
-// readMarkers reads the socket and binary comment lines of a service file.
 func readMarkers(path string) (socket, binary string) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", ""
 	}
-	// A unit has the marker at the start of a line, a property list inside
-	// an XML comment with the path escaped.
 	value := func(line, marker string) (string, bool) {
 		_, after, ok := strings.Cut(line, marker)
 		if !ok {
@@ -179,7 +170,6 @@ func readMarkers(path string) (socket, binary string) {
 	return socket, binary
 }
 
-// sameSocket reports whether two socket paths name one file.
 func sameSocket(a, b string) bool {
 	if a == "" || b == "" {
 		return false
@@ -187,7 +177,6 @@ func sameSocket(a, b string) bool {
 	return filepath.Clean(a) == filepath.Clean(b)
 }
 
-// check refuses a spec that cannot make a working service.
 func (s Spec) check() error {
 	if !filepath.IsAbs(s.Binary) || strings.ContainsAny(s.Binary+s.Socket+s.Dir+strings.Join(s.Env, ""), "\n\r") {
 		return errors.New("the binary must be an absolute path, and no path or variable may hold a line break")

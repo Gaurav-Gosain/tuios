@@ -158,11 +158,6 @@ func (r Result) Repro() string {
 // newTarget is called once per replay rather than once per run, because
 // shrinking needs to re-run a candidate sequence from a clean start.
 func Run(newTarget func() (Target, error), cfg Config) (Result, error) {
-	// watch is whether anything is attached. The first replay reports per
-	// action only when it is, so a run with no observer pays for none of the
-	// reporting: no rule registry fetch, no dispatch per action, no dispatch
-	// per rule per action. The nop stands in only for the once-per-run and
-	// once-per-candidate calls, which keeps nil checks off the call sites.
 	obs, watch := cfg.Observer, cfg.Observer != nil
 	if !watch {
 		obs = NopObserver{}
@@ -188,8 +183,6 @@ func Run(newTarget func() (Target, error), cfg Config) (Result, error) {
 		if err := t.Reset(); err != nil {
 			return -1, nil, err
 		}
-		// Hoisted: the registry is fixed for the life of a target, and asking for
-		// it per action allocated a slice per action on the hot path.
 		var rules []RuleInfo
 		if watch {
 			if lister, ok := t.(RuleLister); ok {
@@ -203,10 +196,6 @@ func Run(newTarget func() (Target, error), cfg Config) (Result, error) {
 			vs := t.Check()
 			if watch {
 				obs.Step(i, a, vs)
-				// Per-rule results, so a display can show the whole oracle
-				// rather than only the rule that broke. Check stops at the
-				// first failure, so every rule after it is reported as unrun by
-				// omission rather than as passing.
 				broke := ""
 				if len(vs) > 0 {
 					broke = vs[0].Rule
@@ -246,9 +235,6 @@ func Run(newTarget func() (Target, error), cfg Config) (Result, error) {
 			budget = 40 * len(res.Actions)
 		}
 		rule := vs[0].Rule
-		// still reports whether a candidate breaks the same rule. A candidate
-		// that breaks a different one is rejected, so the minimal sequence
-		// always explains the finding it is attached to.
 		still := func(as []Action) bool {
 			if budget <= 0 {
 				return false
@@ -266,11 +252,6 @@ func Run(newTarget func() (Target, error), cfg Config) (Result, error) {
 			return false
 		}
 		res.Actions = shrink(res.Actions, still, obs, cfg.MinWidth, cfg.MinHeight)
-		// Every candidate the shrinker kept broke the rule when it was tried,
-		// so a minimal script that does not break it now is a target whose
-		// replays differ: timing, a goroutine, state kept across Reset. That
-		// was reported under the original violation with a script that passed
-		// when anyone ran it. It is said so instead.
 		if s, svs, serr := replay(res.Actions, false); serr == nil && s >= 0 {
 			res.Step, res.Violations = s, svs
 		} else {

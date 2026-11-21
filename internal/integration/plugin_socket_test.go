@@ -14,34 +14,15 @@ import (
 	"testing"
 )
 
-// The plugins send each hook event to the daemon's agent-hook-event verb
-// over its socket, and start tuios agent-hook only for a daemon without the
-// verb. This is the wire between a plugin and a daemon of either age.
-//
-// How these could pass wrongly, written down first:
-//   - The plugin could send over the socket and start tuios as well. The
-//     stand-in tuios records every run, and with a daemon that answers it
-//     records none.
-//   - The fallback could be untested because the socket path always works.
-//     A daemon that answers unknown_verb must get the first event once, and
-//     tuios must run for it and for every event after it, with no second
-//     connection.
-//   - A permission reply could be read from the process path only. The
-//     daemon's stdout carries the reply, and the plugin must hand it to
-//     opencode's client.
-
-// fakeHookDaemon is a unix socket that answers agent-hook-event lines.
 type fakeHookDaemon struct {
-	mu    sync.Mutex
-	conns int
-	calls []map[string]any
-	// answer returns the response line for a call.
+	mu     sync.Mutex
+	conns  int
+	calls  []map[string]any
 	answer func(call map[string]any) string
 }
 
 func startFakeHookDaemon(t *testing.T, answer func(map[string]any) string) (*fakeHookDaemon, string) {
 	t.Helper()
-	// Unix socket paths are short on macOS: a test temp folder is too long.
 	dir, err := os.MkdirTemp("", "tsk")
 	if err != nil {
 		t.Fatal(err)
@@ -89,10 +70,6 @@ func (d *fakeHookDaemon) snapshot() (int, []map[string]any) {
 	return d.conns, append([]map[string]any(nil), d.calls...)
 }
 
-// runOpenCodePlugin renders the opencode plugin with a recording stand-in
-// tuios, runs events through it under node with socket as TUIOS_SOCKET, and
-// returns the recording folder and the file the client's permission reply
-// is written to.
 func runOpenCodePlugin(t *testing.T, socket string, events []map[string]any) (calls, replied string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -170,8 +147,6 @@ func TestOpenCodePluginReportsOverTheSocket(t *testing.T) {
 	for _, call := range got {
 		params, _ := call["params"].(map[string]any)
 		if call["verb"] == "agent-statusline-event" {
-			// The model and cost the plugin feeds, once at the message
-			// and once at the turn's end.
 			if payload, _ := params["payload"].(string); params["harness"] != "opencode" || !strings.Contains(payload, `"modelID":"claude-sonnet-4-6"`) {
 				t.Errorf("status line call %v, want opencode's model and cost", call)
 			}
@@ -191,8 +166,6 @@ func TestOpenCodePluginReportsOverTheSocket(t *testing.T) {
 		}
 		events = append(events, p["hook_event_name"].(string))
 	}
-	// The ask goes after the report before it; the report after it waits
-	// only for the ask's start, so those two may land in either order.
 	sorted := slices.Clone(events)
 	slices.Sort(sorted)
 	if len(events) != 3 || events[0] != "session.status" || strings.Join(sorted, ",") != "permission.asked,session.status,session.status" {

@@ -11,7 +11,6 @@ import (
 	"time"
 )
 
-// fakeStream is an event stream a test pushes events into.
 type fakeStream struct {
 	ch     chan []byte
 	params map[string]any
@@ -27,8 +26,6 @@ func (f *fakeStream) Next() ([]byte, error) {
 
 func (f *fakeStream) Close() error { return nil }
 
-// controlClient is a shim running in control mode, with its standard input
-// and output wired to the test.
 type controlClient struct {
 	t       *testing.T
 	stdin   *io.PipeWriter
@@ -37,8 +34,6 @@ type controlClient struct {
 	streams chan *fakeStream
 }
 
-// startControl runs the shim with args in control mode.
-// With events false the daemon gives no event stream.
 func startControl(t *testing.T, h *harness, events bool, args ...string) *controlClient {
 	t.Helper()
 	oldPoll, oldSettle, oldOut := controlPoll, controlSettle, controlOutputEvery
@@ -62,7 +57,6 @@ func startControl(t *testing.T, h *harness, events bool, args ...string) *contro
 		for sc.Scan() {
 			c.lines <- sc.Text()
 		}
-		// A read error ends the lines as EOF does, and next reports it.
 		_ = sc.Err()
 		close(c.lines)
 	}()
@@ -74,7 +68,6 @@ func startControl(t *testing.T, h *harness, events bool, args ...string) *contro
 	return c
 }
 
-// next returns the next line of output, failing after a second.
 func (c *controlClient) next() string {
 	c.t.Helper()
 	select {
@@ -89,7 +82,6 @@ func (c *controlClient) next() string {
 	return ""
 }
 
-// until reads lines until one matches re, and returns it.
 func (c *controlClient) until(re string) string {
 	c.t.Helper()
 	rx := regexp.MustCompile(re)
@@ -100,7 +92,6 @@ func (c *controlClient) until(re string) string {
 	}
 }
 
-// block reads one %begin block and returns its body and closing word.
 func (c *controlClient) block(flags string) ([]string, string) {
 	c.t.Helper()
 	begin := c.until(`^%begin `)
@@ -128,7 +119,6 @@ func (c *controlClient) send(line string) {
 	}
 }
 
-// stream returns the n-th event stream the client opened.
 func (c *controlClient) stream() *fakeStream {
 	c.t.Helper()
 	select {
@@ -159,12 +149,10 @@ func TestControlModeTheWayCollieWatches(t *testing.T) {
 		t.Errorf("subscriptions = %v and %v", life.params, out.params)
 	}
 
-	// A command on stdin is framed with flags 1.
 	c.send("list-windows -F '#{window_id} #{window_name}'")
 	if body, end := c.block("1"); end != "%end" || !reflect.DeepEqual(body, []string{"@1 claude"}) {
 		t.Errorf("list-windows block = %q %s", body, end)
 	}
-	// The client is read-only, so a command that changes something fails.
 	c.send("kill-pane -t " + PaneID("leader-0001"))
 	if body, end := c.block("1"); end != "%error" || !reflect.DeepEqual(body, []string{"client is read-only"}) {
 		t.Errorf("kill-pane block = %q %s", body, end)
@@ -173,13 +161,11 @@ func TestControlModeTheWayCollieWatches(t *testing.T) {
 		t.Error("a read-only client closed a pane")
 	}
 
-	// Output in a pane of the session.
 	out.ch <- []byte(`{"type":"output","session":"work","window":"leader-0001","bytes":12}`)
 	if l := c.until(`^%output `); l != "%output "+PaneID("leader-0001")+" " {
 		t.Errorf("output: %q", l)
 	}
 
-	// A pane opens on workspace 2: a new tmux window.
 	h.fake.with(func() {
 		h.fake.windows = append(h.fake.windows, &fakeWindow{id: "side-0002", name: "logs", ws: 2, w: 80, h: 24})
 	})
@@ -187,7 +173,6 @@ func TestControlModeTheWayCollieWatches(t *testing.T) {
 	if l := c.until(`^%window-add`); l != "%window-add @2" {
 		t.Errorf("window-add: %q", l)
 	}
-	// A second pane on workspace 1: its layout changes.
 	h.fake.with(func() {
 		h.fake.windows = append(h.fake.windows, &fakeWindow{id: "mate-0003", name: "mate", ws: 1, x: 60, w: 60, h: 40})
 	})
@@ -196,7 +181,6 @@ func TestControlModeTheWayCollieWatches(t *testing.T) {
 	if !regexp.MustCompile(`^%layout-change @1 [0-9a-f]{4},120x40,0,0\{120x40,0,0,\d+,60x40,60,0,\d+\} \S+ \*$`).MatchString(l) {
 		t.Errorf("layout-change: %q", l)
 	}
-	// Focus moves to the new pane, and the session shows workspace 2.
 	h.fake.with(func() { h.fake.focused = "mate-0003" })
 	life.ch <- []byte(`{"type":"window-focused","session":"work","window":"mate-0003"}`)
 	if l := c.until(`^%window-pane-changed`); l != "%window-pane-changed @1 "+PaneID("mate-0003") {
@@ -207,12 +191,10 @@ func TestControlModeTheWayCollieWatches(t *testing.T) {
 	if l := c.until(`^%session-window-changed`); l != "%session-window-changed $0 @2" {
 		t.Errorf("session-window-changed: %q", l)
 	}
-	// A workspace rename raises no event. The poll finds it.
 	h.fake.with(func() { h.fake.wsNames[2] = "server" })
 	if l := c.until(`^%window-renamed`); l != "%window-renamed @2 server" {
 		t.Errorf("window-renamed: %q", l)
 	}
-	// The workspace empties: the tmux window closes.
 	h.fake.with(func() {
 		h.fake.windows = h.fake.windows[:1]
 		h.fake.windows = append(h.fake.windows, &fakeWindow{id: "mate-0003", ws: 1, x: 60, w: 60, h: 40})
@@ -222,7 +204,6 @@ func TestControlModeTheWayCollieWatches(t *testing.T) {
 		t.Errorf("window-close: %q", l)
 	}
 
-	// Standard input closes: the client exits.
 	_ = c.stdin.Close()
 	c.until(`^%exit$`)
 	if code := <-c.done; code != 0 {
@@ -295,14 +276,12 @@ func TestControlModeSessionEnds(t *testing.T) {
 		t.Errorf("serving every session, the lifecycle stream is filtered: %v", life.params)
 	}
 	c.stream()
-	// A window opens in the other session: unlinked, in tmux's words.
 	work := m.session("work")
 	work.with(func() {
 		work.windows = append(work.windows, &fakeWindow{id: "w2-0001", ws: 3, w: 10, h: 10})
 	})
 	life.ch <- []byte(`{"type":"window-created","session":"work","window":"w2-0001"}`)
 	c.until(`^%unlinked-window-add @\d+$`)
-	// The api session ends.
 	m.mu.Lock()
 	m.sessions = m.sessions[:1]
 	m.mu.Unlock()

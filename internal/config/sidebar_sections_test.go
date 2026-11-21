@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// names is the layout's entries, in order, for a test that cares what the
-// parser made of a string.
 func names(source string) []string {
 	var out []string
 	for _, e := range ParseSidebarSections(source) {
@@ -68,9 +66,6 @@ func TestSectionProblemsSaySpacerIsFine(t *testing.T) {
 	if len(got) != 1 || !strings.Contains(got[0], "sessions is listed twice") {
 		t.Errorf("problems = %v, want one complaint about sessions", got)
 	}
-	// A name that is neither a section nor the spacer is still a typo, and the
-	// list a person is offered names the spacer, or the message would send them
-	// back to a set that does not hold what they typed.
 	got = SidebarSectionProblems("sessions,spacers")
 	if len(got) != 1 || !strings.Contains(got[0], "spacer") {
 		t.Errorf("problems = %v, want one complaint naming the spacer", got)
@@ -103,7 +98,6 @@ func TestSidebarSectionsWithoutKeepsTheRest(t *testing.T) {
 	if got != "sessions:25,files:25,agents:34" {
 		t.Errorf("layout without terminals = %q", got)
 	}
-	// And a layout that never named the section is left exactly as it was.
 	if got := SidebarSectionsWithout("sessions,files", "agents"); got != "sessions,files" {
 		t.Errorf("layout = %q, want it untouched", got)
 	}

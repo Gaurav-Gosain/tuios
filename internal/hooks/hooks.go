@@ -141,30 +141,15 @@ type Context struct {
 
 // Manager manages hook registrations and execution.
 type Manager struct {
-	// daemonEnv makes each hook start from guestenv.DaemonChild, not the raw
-	// environment. See SetDaemonEnv.
 	daemonEnv atomic.Bool
 	mu        sync.RWMutex
-	hooks     map[Event][]string // event -> list of shell commands
-	// run executes one hook command and reports what it did. timeout bounds
-	// it, and zero leaves it unbounded. It is a field so tests can observe
-	// which hooks fired, with what context, without spawning a shell per event.
-	run func(command string, ctx Context, timeout time.Duration) hookResult
-	// status is what each registered command last did, keyed by its event and
-	// its position in that event's list. See status.go.
-	status map[statusKey]*Status
-	// inFlight tracks running hooks so a test (or a caller that needs the
-	// side effects to have landed) can join them instead of sleeping.
-	inFlight sync.WaitGroup
-	// hold, when set, is held while a hook runs: the daemon will not hand
-	// off while a pipe it reads is open. See SetHold.
-	hold func(what string) (release func())
-	// pids holds the shell of each hook running now, by pid, with the start
-	// time it had when it started, so a process that later gets the same pid
-	// is never taken for that hook. See HookStart. pidsMu guards it alone, so a
-	// lookup never waits on the table's lock.
-	pidsMu sync.Mutex
-	pids   map[int]uint64
+	hooks     map[Event][]string
+	run       func(command string, ctx Context, timeout time.Duration) hookResult
+	status    map[statusKey]*Status
+	inFlight  sync.WaitGroup
+	hold      func(what string) (release func())
+	pidsMu    sync.Mutex
+	pids      map[int]uint64
 }
 
 // NewManager creates a new hooks manager.
@@ -197,12 +182,7 @@ func (m *Manager) HookStart(pid int) (uint64, bool) {
 	return st, ok
 }
 
-// start starts a hook's shell and records it, and returns what removes the
-// record again after the shell is reaped. A shell whose start time cannot be
-// read is not recorded, so it is never taken for a hook.
 func (m *Manager) start(cmd *exec.Cmd) (forget func(), err error) {
-	// Held across Start so the hook's own CLI, which can connect before Start
-	// returns, waits in HookStart until its shell is recorded.
 	m.pidsMu.Lock()
 	defer m.pidsMu.Unlock()
 	if err = cmd.Start(); err != nil {
@@ -393,13 +373,8 @@ func (m *Manager) Run(event Event, ctx Context, timeout time.Duration) error {
 	return nil
 }
 
-// runErrorLines is how many stderr lines a Run error carries. The error ends
-// up in a notification and a CLI warning, where the last few lines say why
-// and a full log would push everything else away.
 const runErrorLines = 3
 
-// lastLines returns the last n non-empty lines of s, joined by " / " so the
-// result stays on one line.
 func lastLines(s string, n int) string {
 	var lines []string
 	for line := range strings.SplitSeq(s, "\n") {
@@ -451,10 +426,6 @@ func (m *Manager) ReplaceFrom(src *Manager) {
 	m.clearStatus()
 }
 
-// executeHook runs a shell command with context as environment variables. It
-// reports the exit code, how long the command took, and the tail of its stderr,
-// which is what makes a failing hook visible instead of silent. While the shell
-// runs, its pid is recorded for HookStart.
 func (m *Manager) executeHook(cmdStr string, ctx Context, timeout time.Duration) hookResult {
 	cctx := context.Background()
 	if timeout > 0 {
@@ -462,19 +433,13 @@ func (m *Manager) executeHook(cmdStr string, ctx Context, timeout time.Duration)
 		cctx, cancel = context.WithTimeout(cctx, timeout)
 		defer cancel()
 	}
-	// Use sh -c for shell interpretation
 	cmd := childproc.CommandContext(cctx, "sh", "-c", cmdStr)
 	cmd.Dir = ctx.Dir
 	if timeout > 0 {
-		// The timeout ends whatever the command started, not just sh. And a
-		// child it left running in the background, holding stderr open, does
-		// not keep the caller waiting past the command's own exit.
 		childproc.OwnGroup(cmd)
 		cmd.WaitDelay = time.Second
 	}
 
-	// Set environment variables. A hook the daemon runs starts from the
-	// filtered environment a pane gets (see SetDaemonEnv).
 	base := os.Environ()
 	if m.daemonEnv.Load() {
 		base = guestenv.DaemonChild()
@@ -506,18 +471,11 @@ func (m *Manager) executeHook(cmdStr string, ctx Context, timeout time.Duration)
 		fmt.Sprintf("TUIOS_SETTLE_REASON=%s", ctx.SettleReason),
 	)
 
-	// Stdout stays discarded: a hook is run for its side effects and nothing
-	// reads what it prints. Stderr is kept, but only its tail, because that is
-	// the one thing that explains a failure and a user command may write
-	// without limit.
 	cmd.Stdout = nil
 	tail := &tailBuffer{limit: stderrTailLimit}
 	cmd.Stderr = tail
 
 	start := time.Now()
-	// Start and Wait are what Run does, split so the shell is recorded while it
-	// runs. It is the daemon's unreaped child until Wait returns, so its pid is
-	// not reused before the record is made.
 	forget, err := m.start(cmd)
 	if err == nil {
 		defer forget()
@@ -533,9 +491,6 @@ func (m *Manager) executeHook(cmdStr string, ctx Context, timeout time.Duration)
 		res.err = err
 		if exit, ok := errors.AsType[*exec.ExitError](err); ok {
 			res.exitCode = exit.ExitCode()
-			// The error text for an exit status says only "exit status 3",
-			// which the exit code already says. Drop it so the message is the
-			// stderr the user actually needs.
 			res.err = nil
 			if res.stderr == "" {
 				res.stderr = "the hook wrote nothing to stderr"

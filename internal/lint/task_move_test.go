@@ -11,10 +11,8 @@ import (
 	"testing"
 )
 
-// cardWriter is the one file that may write a task card's lifecycle fields.
 const cardWriter = "task_move.go"
 
-// cardFields are the lifecycle fields of a TaskState.
 var cardFields = map[string]bool{
 	"Stage": true, "StageAt": true, "Holder": true, "HeldAt": true, "HolderName": true, "HolderHarness": true,
 	"Dispatched": true, "Blocked": true, "Attempts": true, "Note": true, "Work": true, "Verify": true,
@@ -86,8 +84,6 @@ func i(tk *TaskState)                { tk.Fan = "x" }
 	}
 }
 
-// cardWrites returns file:line for every write of a card's lifecycle field
-// in src.
 func cardWrites(t *testing.T, name string, src []byte) []string {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -98,7 +94,6 @@ func cardWrites(t *testing.T, name string, src []byte) []string {
 	var out []string
 	for _, decl := range f.Decls {
 		cards := map[string]bool{}
-		// Names typed TaskState, in the signature and in any func literal.
 		ast.Inspect(decl, func(n ast.Node) bool {
 			var fields []*ast.FieldList
 			switch n := n.(type) {
@@ -107,7 +102,6 @@ func cardWrites(t *testing.T, name string, src []byte) []string {
 			case *ast.FuncLit:
 				fields = []*ast.FieldList{n.Type.Params}
 			case *ast.AssignStmt:
-				// tk := &st.Tasks[i] and tk := st.Tasks[i].
 				for i, rhs := range n.Rhs {
 					if i < len(n.Lhs) && isTasksElem(rhs) {
 						if id, ok := n.Lhs[i].(*ast.Ident); ok {
@@ -165,7 +159,6 @@ func cardWrites(t *testing.T, name string, src []byte) []string {
 	return out
 }
 
-// isTaskStateType reports whether e is TaskState or *TaskState.
 func isTaskStateType(e ast.Expr) bool {
 	if star, ok := e.(*ast.StarExpr); ok {
 		e = star.X
@@ -174,7 +167,6 @@ func isTaskStateType(e ast.Expr) bool {
 	return ok && id.Name == "TaskState"
 }
 
-// isTasksElem reports whether e is X.Tasks[i] or &X.Tasks[i].
 func isTasksElem(e ast.Expr) bool {
 	if u, ok := e.(*ast.UnaryExpr); ok && u.Op == token.AND {
 		e = u.X

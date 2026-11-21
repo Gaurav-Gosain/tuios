@@ -6,14 +6,6 @@ import (
 	"strings"
 )
 
-// The rail's layout string, appearance.sidebar.sections.
-//
-// The syntax lives here rather than in the renderer because two callers need
-// it and they must agree: the rail, which lays itself out from it on every
-// frame, and the config validator, which tells a person what they typed wrong.
-// A second parser in the validator would be a second opinion about what the
-// string means.
-
 // SidebarSectionShare is one entry of the layout: a section, and the share of
 // the rail it may claim.
 type SidebarSectionShare struct {

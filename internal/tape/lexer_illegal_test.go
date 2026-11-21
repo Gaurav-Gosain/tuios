@@ -17,7 +17,7 @@ func TestLexer_IllegalTokenKeepsTheSourceByte(t *testing.T) {
 		}
 		tok := toks[0]
 		if tok.Type != TokenIllegal {
-			continue // a byte the lexer legitimately understands
+			continue
 		}
 		if tok.Literal != src {
 			t.Errorf("byte %#x: literal = %q (%d bytes), want %q (1 byte)",

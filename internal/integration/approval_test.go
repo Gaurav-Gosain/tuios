@@ -131,24 +131,18 @@ func TestOpenCodePermissionCanBeAnswered(t *testing.T) {
 				t.Errorf("%s %s answered %q, want %q", harness, decision, got, want)
 			}
 		}
-		// A request the plugin cannot reply to, an older plugin's, is not
-		// held.
 		old := translatePayload(t, harness, map[string]any{"hook_event_name": "permission.asked", "title": "bash"})
 		if old.Report == nil || old.Approval != nil {
 			t.Errorf("%s: a permission with no id: %+v", harness, old)
 		}
-		// Nor is one that does not name its tool call: opencode's own
-		// request says only "bash", which is not what the person approves.
 		bare := translatePayload(t, harness, map[string]any{"hook_event_name": "permission.asked", "title": "bash", "permission_id": "per_2", "permission": "bash"})
 		if bare.Report == nil || bare.Approval != nil {
 			t.Errorf("%s: a permission with no tool call: %+v", harness, bare)
 		}
-		// An edit, whose body the line cannot show.
 		edit := translatePayload(t, harness, map[string]any{"hook_event_name": "permission.asked", "permission_id": "per_3", "permission": "edit", "tool": "edit", "tool_input": map[string]any{"filePath": "a.go", "oldString": "x", "newString": "y"}})
 		if edit.Approval != nil {
 			t.Errorf("%s: an edit is held: %+v", harness, edit.Approval)
 		}
-		// With no always list, always is not offered.
 		noAlways := translatePayload(t, harness, map[string]any{"hook_event_name": "permission.asked", "permission_id": "per_4", "permission": "read", "tool": "read", "tool_input": map[string]any{"filePath": "go.mod"}})
 		if noAlways.Approval == nil || noAlways.Approval.Offers(DecisionAlways) {
 			t.Errorf("%s: read with no always list: %+v", harness, noAlways.Approval)

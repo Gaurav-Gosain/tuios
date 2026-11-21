@@ -46,8 +46,6 @@ func (b Box) Render(bg color.Color, pal Palette) []string {
 	pad := Style(bg).Render(" ")
 	note := Style(bg).Foreground(pal.FgMute)
 
-	// border sets a left label and a right label into one horizontal edge.
-	// The right label gives way first: the title is what names the region.
 	border := func(left, right string, lc, rc string) string {
 		lw, rw := lipgloss.Width(left), lipgloss.Width(right)
 		if lw > 0 && lw+4 > w {

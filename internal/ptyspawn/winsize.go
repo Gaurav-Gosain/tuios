@@ -33,8 +33,6 @@ func SetWinsize(p interface{ Resize(cols, rows int) error }, cols, rows, xpixel,
 	return p.Resize(cols, rows)
 }
 
-// pixelsOr returns the pixel size, or the size of cols x rows fallback cells
-// when either part of it is not positive.
 func pixelsOr(cols, rows, xpixel, ypixel int) (int, int) {
 	if xpixel > 0 && ypixel > 0 {
 		return xpixel, ypixel

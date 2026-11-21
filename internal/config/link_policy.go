@@ -13,29 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// What another machine may do here when it links in.
-//
-// A [hosts.NAME] table names a machine this one dials. The same table, read on
-// the machine a link arrives at, also says what the machine of that name may
-// do there:
-//
-//	[hosts.laptop]
-//	addr = "laptop"                       # optional: without it nothing is dialled
-//	allow = ["list", "mail", "open", "write", "files"]
-//	hold_mail = true
-//	hosted_grace = "10m"
-//	files_roots = ["~/Downloads/tuios", "~/dev"]
-//
-//	[hosts."*"]                           # every machine with no table of its own
-//	allow = ["list", "mail"]
-//
-// The name a link arrives under is the one the other machine gives for itself,
-// its host name, unless the ssh key it logs in with pins one with a forced
-// command (`command="tuios stdio-proxy --as laptop"`). Only the pinned name is
-// a boundary: a key that can run any command can also run a shell. The daemon
-// that receives the link enforces the policy on every verb and every binary
-// message, whatever name it arrived under.
-
 // Link capabilities, the values of allow.
 const (
 	// LinkAllowList reads: listings, captures, screenshots, agent state, the
@@ -259,8 +236,6 @@ func LinkPolicyFor(hosts map[string]HostConfig, peer string) LinkPolicy {
 		apply(`"*"`, h)
 	}
 	if peer != "" && peer != LinkPolicyDefaultName {
-		// A host name is not case sensitive, and the name a machine gives for
-		// itself is sent lowered, so the key is matched the same way.
 		if h, ok := hosts[peer]; ok {
 			apply(peer, h)
 		} else {
@@ -275,7 +250,6 @@ func LinkPolicyFor(hosts map[string]HostConfig, peer string) LinkPolicy {
 	return p
 }
 
-// cleanLinkAllow keeps the known capabilities, once each, in documented order.
 func cleanLinkAllow(in []string) []string {
 	out := make([]string, 0, len(in))
 	for _, c := range LinkCapabilities {
@@ -286,8 +260,6 @@ func cleanLinkAllow(in []string) []string {
 	return out
 }
 
-// cleanFilesRoots keeps the roots that are absolute or start with ~, once
-// each, cleaned. ValidateConfig reports the others.
 func cleanFilesRoots(in []string) []string {
 	out := make([]string, 0, len(in))
 	for _, r := range in {
@@ -329,7 +301,6 @@ func DefaultFilesRoot() string {
 	return filepath.Join(dl, "tuios")
 }
 
-// xdgDownloadDir is the XDG download folder, or empty when none is set.
 func xdgDownloadDir(home string) string {
 	expand := func(v string) string {
 		v = strings.Trim(strings.TrimSpace(v), `"`)
@@ -377,9 +348,6 @@ func ParseHostedGrace(s string) (time.Duration, error) {
 	return min(d, MaxHostedGrace), nil
 }
 
-// validateLinkPolicies warns about a capability that does not exist and a
-// hosted_grace that cannot be read. Either is ignored at run time, so a typo
-// would otherwise quietly leave the default in place.
 func validateLinkPolicies(cfg *UserConfig, result *ValidationResult) {
 	for name, h := range cfg.Hosts {
 		for _, c := range h.Allow {

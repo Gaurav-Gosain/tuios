@@ -8,14 +8,8 @@ import (
 	"testing"
 )
 
-// Tests for the commands tools that drive tmux from outside it use: the
-// ones Collie's tmux adapter (bridge/mux/tmux in github.com/AltanS/collie)
-// sends, argv for argv.
-
-// collieSep is the field separator Collie's formats use, U+001F.
 const collieSep = "\x1f"
 
-// collieListing is Collie's snapshot call (LISTING_ARGS in protocol.ts).
 func collieListing() []string {
 	j := func(f ...string) string { return strings.Join(f, collieSep) }
 	return []string{
@@ -26,7 +20,6 @@ func collieListing() []string {
 	}
 }
 
-// records splits listing output into its tagged records.
 func records(out string) map[string][][]string {
 	got := map[string][][]string{}
 	for line := range strings.SplitSeq(strings.TrimSuffix(out, "\n"), "\n") {
@@ -70,8 +63,6 @@ func TestCollieListingFillsEveryField(t *testing.T) {
 		}
 	}
 
-	// At a shell prompt the daemon names no command: the shell is the
-	// pane's command, as in tmux.
 	h.fake.windows[0].cmd = ""
 	h.shim.Shell = "/usr/bin/zsh"
 	_, out = h.run("display-message", "-p", "#{pane_current_command}")
@@ -112,8 +103,6 @@ func TestCollieListingEverySession(t *testing.T) {
 	if rec["W"][0][0] == rec["W"][1][0] {
 		t.Errorf("both workspaces 1 have the id %s", rec["W"][0][0])
 	}
-	// A window id reaches its own session: new-window -t $N lands there,
-	// and select-window -t @N shows that session's workspace.
 	apiID := rec["S"][1][0]
 	if rec["S"][1][4] != "api" {
 		apiID = rec["S"][0][0]
@@ -143,7 +132,6 @@ func TestCollieListingEverySession(t *testing.T) {
 func TestNewSessionEverySession(t *testing.T) {
 	h := newHarness(t)
 	if code, _ := h.run("new-session", "-d", "-s", "x"); code != 0 || !strings.Contains(h.err.String(), "in a pane does not start sessions") {
-		// The error names the refusal; the exit status is tmux's 1.
 		if code == 0 {
 			t.Fatal("new-session from a pane succeeded")
 		}
@@ -225,8 +213,6 @@ func TestPasteBufferAcrossCalls(t *testing.T) {
 	if code, _ := h.run("set-buffer", "-a", "-b", "b2", " there"); code != 0 {
 		t.Fatal(h.err)
 	}
-	// With no -b, tmux takes the newest buffer it named: buffer0, not the
-	// newer b2, which someone named.
 	if code, _ := h.run("paste-buffer", "-d"); code != 0 {
 		t.Fatal(h.err)
 	}

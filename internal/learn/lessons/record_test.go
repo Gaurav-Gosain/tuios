@@ -10,17 +10,6 @@ import (
 	"time"
 )
 
-// recordFrom is the log.json a run of cmd/tuios-wasm/smoke-lessons.mjs wrote
-// for a track. Naming it records that run as testdata/replay/TRACK.json, which
-// TestReplayMatchesThePageEngine and TestNoStepFinishesBeforeItsLastKey then
-// replay:
-//
-//	node cmd/tuios-wasm/smoke-lessons.mjs BUILD OUT cockpit
-//	go test ./internal/learn/lessons -run TestRecordReplay -record OUT/cockpit/log.json
-//
-// The step completions and the keys lit after each press are what this engine
-// made of the events, so the log is the run as it was, and the replay checks
-// the engine still makes the same of it.
 var recordFrom = flag.String("record", "", "record this smoke-lessons log.json as testdata/replay/TRACK.json")
 
 func TestRecordReplay(t *testing.T) {

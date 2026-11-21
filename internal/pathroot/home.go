@@ -7,9 +7,6 @@ import (
 	"strings"
 )
 
-// isHomeForm reports whether p starts with a ~ that means the home folder: "~"
-// alone, or "~" and a separator. "~user" and "~x" are names, not the home.
-// The back slash counts only where it is the separator.
 func isHomeForm(p string) bool {
 	if p == "~" || strings.HasPrefix(p, "~/") {
 		return true

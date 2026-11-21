@@ -13,26 +13,14 @@ import (
 	"time"
 )
 
-// The fixtures here stand in for the two things a real link needs and a test
-// must not use: an ssh server, and the maintainer's own machines. A stub daemon
-// is a unix socket speaking the same line-delimited JSON the real daemon
-// speaks, and the transports below are in-process pipes or this test binary
-// re-executed as the proxy. Nothing here reads ssh_config, known_hosts, or the
-// agent.
-
-// stubDaemon is a unix socket that answers verb lines from a handler.
 type stubDaemon struct {
 	path string
 	ln   net.Listener
 	wg   sync.WaitGroup
 }
 
-// startStubDaemon listens on a socket in the test's temp dir. handle returns the
-// result object for a verb, or an error envelope.
 func startStubDaemon(t *testing.T, handle func(verb string, params json.RawMessage) (any, *RemoteError)) *stubDaemon {
 	t.Helper()
-	// A unix socket path has a hard length limit, so the socket goes in a short
-	// directory rather than in t.TempDir(), whose name carries the test name.
 	dir, err := os.MkdirTemp("", "fed")
 	if err != nil {
 		t.Fatalf("temp dir: %v", err)
@@ -87,14 +75,11 @@ func serveStub(conn net.Conn, handle func(string, json.RawMessage) (any, *Remote
 			return
 		}
 	}
-	// The stub serves until the connection ends, for any reason.
 	_ = sc.Err()
 }
 
-// dial opens a connection to the stub.
 func (d *stubDaemon) dial() (net.Conn, error) { return net.Dial("unix", d.path) }
 
-// helloOK is the handler half every stub needs: a handshake this build accepts.
 func helloOK(version string, sessions int) func(string, json.RawMessage) (any, *RemoteError) {
 	return func(verb string, _ json.RawMessage) (any, *RemoteError) {
 		if verb == "hello" {
@@ -104,7 +89,6 @@ func helloOK(version string, sessions int) func(string, json.RawMessage) (any, *
 	}
 }
 
-// pipeEnd is one side of an in-process duplex pipe.
 type pipeEnd struct {
 	r    *os.File
 	w    *os.File
@@ -122,9 +106,6 @@ func (p *pipeEnd) Close() error {
 }
 func (p *pipeEnd) Diagnostic() string { return "" }
 
-// duplexPipe returns the two ends of a real OS pipe pair. Real pipes rather
-// than net.Pipe because the production transport is a subprocess's stdio, and
-// the buffering behaviour is what the mux runs against.
 func duplexPipe(t *testing.T) (*pipeEnd, *pipeEnd) {
 	t.Helper()
 	ar, bw, err := os.Pipe()
@@ -141,7 +122,6 @@ func duplexPipe(t *testing.T) (*pipeEnd, *pipeEnd) {
 	return a, b
 }
 
-// proxyDialer wires every dial to a fresh in-process proxy serving the stub.
 func proxyDialer(t *testing.T, d *stubDaemon) Dialer {
 	t.Helper()
 	return func(_ context.Context, _ Host) (Transport, error) {
@@ -153,8 +133,6 @@ func proxyDialer(t *testing.T, d *stubDaemon) Dialer {
 	}
 }
 
-// silentTransport accepts the dial and then says nothing at all. It is the
-// "host that accepts the connection then hangs" case.
 type silentTransport struct {
 	closed chan struct{}
 	once   sync.Once
@@ -175,8 +153,6 @@ func (s *silentTransport) Close() error {
 }
 func (s *silentTransport) Diagnostic() string { return "" }
 
-// testOptions are the manager options every test starts from: fast timeouts, a
-// fixed clock-free default, and no real ssh.
 func testOptions(dial Dialer) Options {
 	return Options{
 		Dial:            dial,
@@ -190,7 +166,6 @@ func testOptions(dial Dialer) Options {
 	}
 }
 
-// managerFor builds and starts a manager over the given hosts.
 func managerFor(t *testing.T, opts Options, hosts ...Host) *Manager {
 	t.Helper()
 	table, problems := NewTable(hosts)

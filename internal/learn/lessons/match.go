@@ -87,9 +87,7 @@ type Rule struct {
 
 	re    *regexp.Regexp
 	where []whereCheck
-	// slot is where this rule keeps its count or place in Ctx.Mem. A rule
-	// inside another that counts gets its own, so two never share one.
-	slot string
+	slot  string
 }
 
 // ActionRef is one entry of a via list: an action name, or every action
@@ -132,7 +130,7 @@ func (a ActionRef) Matches(action string) bool {
 
 type whereCheck struct {
 	path string
-	want any // a literal, or nil when ops is set
+	want any
 	ops  *valueOps
 }
 
@@ -382,7 +380,6 @@ func (r *Rule) whereHolds(e Event) bool {
 	return true
 }
 
-// windowPath splits "window(data.to).agent" into "data.to" and "agent".
 func windowPath(path string) (inner, field string, ok bool) {
 	rest, found := strings.CutPrefix(path, "window(")
 	if !found {
@@ -433,7 +430,6 @@ func str(v any) string {
 	return fmt.Sprint(v)
 }
 
-// truthy is JavaScript's Boolean(v) for the values an event carries.
 func truthy(v any) bool {
 	switch x := v.(type) {
 	case nil:
@@ -449,8 +445,6 @@ func truthy(v any) bool {
 	return true
 }
 
-// same compares a value from the app with one from a lesson file, where
-// every number is a float64.
 func same(a, b any) bool {
 	if fa, ok := number(a); ok {
 		fb, ok := number(b)

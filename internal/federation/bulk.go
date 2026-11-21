@@ -6,78 +6,23 @@ import (
 	"time"
 )
 
-// Bulk streams: file bytes that share a link with people's typing.
-//
-// A link is one ssh pipe, and every pane on the machine rides it. Before bulk
-// streams, a stream wrote frames of up to a megabyte under one write lock, in
-// arrival order. A copy of a large file filled the pipe with megabyte frames,
-// and every keystroke and every echo on that machine waited behind them: at
-// 10 Mbit/s one frame is 0.8 s, and ssh's own channel window keeps two more
-// megabytes in flight behind it.
-//
-// Three things together keep a transfer out of the way:
-//
-//   - A bulk stream writes frames of at most bulkFramePayload, so a frame
-//     from another stream waits for at most one of them on this side.
-//   - The write lock has two lanes. A writer from an ordinary stream goes
-//     ahead of every bulk writer that is waiting, so the order on the pipe is
-//     "interactive first", and bulk writers take turns among themselves.
-//   - A bulk stream has a window: the sender has at most window bytes that
-//     the far reader has not yet read. The reader says how far it has read in
-//     credit frames. Without a window the bytes a scheduler holds back on this
-//     side still sit in ssh's buffers and the kernel's, which the scheduler
-//     cannot reorder, and the latency comes back. The window follows the link:
-//     twice the bytes the link carries in its shortest round trip, so the
-//     queue the transfer builds is about one round trip long, whatever the
-//     link's speed.
-//
-// Compatibility. Only a stream opened with StreamOpen.Bulk is a bulk stream,
-// and only a peer that understands credit frames opens one. The side that
-// accepts a bulk stream answers with a credit of zero before anything else,
-// which tells the opener the accepter takes part. An opener that never hears
-// it, from a proxy that predates bulk streams, sends no credit frame (a peer
-// that predates them would read one as a protocol error and drop the link) and
-// writes without a window.
-
 const (
-	// bulkFramePayload bounds one data frame of a bulk stream. It is how long
-	// a keystroke can wait behind a transfer on this side of the pipe: 64 KiB
-	// is 50 ms at 10 Mbit/s and nothing on a local network.
 	bulkFramePayload = 64 << 10
 
-	// bulkWindowMin and bulkWindowMax bound a bulk stream's window. The
-	// floor keeps a fast link from being starved by a timer's resolution;
-	// the ceiling is the receive buffer, so a reader that falls behind costs
-	// its own stream and never the link's shared read loop.
 	bulkWindowMin = 256 << 10
 	bulkWindowMax = 16 << 20
 
-	// bulkBufferFrames is a bulk stream's receive buffer in frames. A peer
-	// that keeps to the window never fills it: the buffer holds the whole
-	// window in frames, so a reader that falls behind costs its own stream
-	// and never the link's shared read loop. The assertion below keeps the
-	// two in step if either constant changes.
 	bulkBufferFrames = bulkWindowMax / bulkFramePayload
 
-	// bulkCreditEvery is how many bytes a reader takes before it says so.
 	bulkCreditEvery = 64 << 10
 
-	// bulkMarkEvery is the least distance between two marks in a window.
 	bulkMarkEvery = 16 << 10
 
-	// bulkFilterSpan is how long a round trip or a delivery rate stays the
-	// best one the window is sized from. A link that slows down is followed
-	// within this span.
 	bulkFilterSpan = 10 * time.Second
 )
 
-// The receive buffer must hold at least the whole window, or a writer that
-// keeps to the window could still block the shared read loop.
 const _ = uint(bulkBufferFrames*bulkFramePayload - bulkWindowMax)
 
-// prioLock is the mux's write lock with two lanes. An urgent writer goes ahead
-// of every bulk writer that is waiting; bulk writers queue behind any urgent
-// one. Writers in one lane are not ordered.
 type prioLock struct {
 	mu     sync.Mutex
 	cond   *sync.Cond
@@ -115,21 +60,15 @@ func (l *prioLock) unlock() {
 	l.cond.Broadcast()
 }
 
-// window is the sending half of a bulk stream's flow control.
 type window struct {
-	mu   sync.Mutex
-	cond *sync.Cond
-	// on is set once the far side said it takes part. Until then the
-	// stream writes without a window.
+	mu       sync.Mutex
+	cond     *sync.Cond
 	on       bool
 	closed   bool
 	sent     uint64
 	credited uint64
 	size     uint64
 
-	// marks are the ends of the chunks in flight: where each ended, when it
-	// was written and how much had been credited then. A credit past a mark
-	// gives one round trip and one delivery rate.
 	marks []mark
 
 	minRTT  time.Duration
@@ -151,7 +90,6 @@ func newWindow() *window {
 	return w
 }
 
-// enable turns the window on: the far side takes part.
 func (w *window) enable() {
 	w.mu.Lock()
 	w.on = true
@@ -159,7 +97,6 @@ func (w *window) enable() {
 	w.cond.Broadcast()
 }
 
-// close wakes any writer waiting for room, for good.
 func (w *window) close() {
 	w.mu.Lock()
 	w.closed = true
@@ -167,8 +104,6 @@ func (w *window) close() {
 	w.cond.Broadcast()
 }
 
-// reserve waits until n more bytes fit in the window, then counts them as
-// sent. It returns false when the stream ended while it waited.
 func (w *window) reserve(n int) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -179,23 +114,16 @@ func (w *window) reserve(n int) bool {
 		return false
 	}
 	w.sent += uint64(n)
-	// A mark per write would be one per keystroke on a windowed stream, and
-	// a reader credits only every bulkCreditEvery bytes. Spacing them bounds
-	// the marks by the window and drops no sample a credit could give.
 	if w.on && (len(w.marks) == 0 || w.sent-w.marks[len(w.marks)-1].end >= bulkMarkEvery) {
 		w.marks = append(w.marks, mark{end: w.sent, at: time.Now(), credited: w.credited})
 	}
 	return true
 }
 
-// credit takes the far reader's word that it has read upTo bytes, and sizes
-// the window from what that says about the link.
 func (w *window) credit(upTo uint64) {
 	now := time.Now()
 	w.mu.Lock()
 	if upTo > w.sent {
-		// The far side cannot have read what was never sent. A peer that
-		// says so is wrong, and believing it would open the window wide.
 		upTo = w.sent
 	}
 	if upTo > w.credited {
@@ -227,23 +155,18 @@ func (w *window) credit(upTo uint64) {
 	w.cond.Broadcast()
 }
 
-// Size is the window now, for tests and the transfer's own report.
 func (w *window) Size() uint64 {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.size
 }
 
-// encodeCredit is a credit frame's payload: how many bytes the reader has
-// read, in all.
 func encodeCredit(n uint64) []byte {
 	var b [8]byte
 	binary.BigEndian.PutUint64(b[:], n)
 	return b[:]
 }
 
-// decodeCredit reads a credit payload. Anything that is not eight bytes is no
-// credit at all.
 func decodeCredit(p []byte) (uint64, bool) {
 	if len(p) != 8 {
 		return 0, false

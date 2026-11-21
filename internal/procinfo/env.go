@@ -40,8 +40,6 @@ func ProcargsEnvVar(buf []byte, name string) (string, bool) {
 		}
 		rest = rest[end+1:]
 	}
-	// The environment ends at the first empty string. What follows is the
-	// kernel's own apple strings and padding, which are not the environment.
 	if stop := bytes.Index(rest, []byte{0, 0}); stop >= 0 {
 		rest = rest[:stop]
 	}

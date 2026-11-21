@@ -5,12 +5,6 @@ import (
 	"strings"
 )
 
-// herdr's tab, workspace, agent, worktree, notification, api and server
-// commands, from src/cli at v0.9.5.
-
-// valueFlags reads flags that each take one value into p under the flag's
-// name less "--" with "-" made "_", and --focus and --no-focus into focus.
-// --env KEY=VALUE goes into env when env is not nil.
 func valueFlags(args []string, allowed []string, p map[string]any, env map[string]string) *UsageError {
 	return walk(args, func(arg string, value valueFn) *UsageError {
 		switch {
@@ -34,7 +28,6 @@ func valueFlags(args []string, allowed []string, p map[string]any, env map[strin
 	})
 }
 
-// renameKey maps a flag's name to the param herdr sends for it.
 func renameKey(p map[string]any, from, to string) {
 	if v, ok := p[from]; ok {
 		delete(p, from)
@@ -263,8 +256,6 @@ func agentRead(args []string) (*Call, *UsageError) {
 	return &Call{ID: "cli:agent:read", Method: "agent.read", Params: p, Output: OutRead}, nil
 }
 
-// untilTimeout reads [--until STATUS]... [--timeout MS] into p, and --wait
-// when wait is not nil.
 func untilTimeout(args []string, p map[string]any, wait *bool) *UsageError {
 	var until []string
 	err := walk(args, func(arg string, value valueFn) *UsageError {
@@ -582,8 +573,6 @@ func parseServer(sub string, args []string, _ Env, _ string) (*Call, *UsageError
 	return nil, &UsageError{Msg: groupHelp["server"], Code: 2}
 }
 
-// herdrAgentKinds are the agent names herdr 0.9.5 starts (lookup_agent in
-// src/detect/mod.rs). herdr refuses any other kind before it sends anything.
 var herdrAgentKinds = []string{
 	"pi", "claude", "claude-code", "codex", "gemini", "cursor", "cursor-agent",
 	"devin", "devin-cli", "devin cli", "agy", "antigravity", "antigravity-cli",
@@ -596,8 +585,6 @@ var herdrAgentKinds = []string{
 	"maki", "muse", "muse-code", "muse-cli",
 }
 
-// herdrAgentKind reports whether herdr starts an agent of this kind: a name
-// above, in any case, with any directory before it.
 func herdrAgentKind(kind string) bool {
 	name := strings.ToLower(strings.TrimSpace(kind))
 	if i := strings.LastIndexAny(name, "/\\"); i >= 0 {
@@ -609,12 +596,8 @@ func herdrAgentKind(kind string) bool {
 	return slices.Contains(herdrAgentKinds, name)
 }
 
-// terminalTitleUsage is herdr's usage of terminal title.
 const terminalTitleUsage = "usage: herdr terminal title set <title>\n       herdr terminal title clear"
 
-// parseTerminal is herdr's terminal command. title sets the title of the
-// terminal the tuios client runs in. attach and session use herdr's client
-// protocol, which tuios does not serve.
 func parseTerminal(sub string, args []string, _ Env, _ string) (*Call, *UsageError) {
 	switch sub {
 	case "title":
@@ -633,17 +616,12 @@ func parseTerminal(sub string, args []string, _ Env, _ string) (*Call, *UsageErr
 	return nil, &UsageError{Msg: groupHelp["terminal"], Code: 2}
 }
 
-// statusUsage is herdr's help for status.
 const statusUsage = "herdr status commands:\n  herdr status [--json]         show local client and running server status\n  herdr status server [--json]  show running server status\n  herdr status client [--json]  show local client binary status"
 
-// parseStatus is herdr's status command. Tools run `herdr status server` to
-// learn whether a server answers, so the front pings tuios's herdr socket
-// and reports what it finds in herdr's words.
 func parseStatus(sub string, args []string, _ Env, _ string) (*Call, *UsageError) {
 	return statusCall(append([]string{sub}, args...))
 }
 
-// statusCall reads status's arguments, after the command name.
 func statusCall(all []string) (*Call, *UsageError) {
 	scope, json := "", false
 	switch {
@@ -667,10 +645,6 @@ func statusCall(all []string) (*Call, *UsageError) {
 	return &Call{ID: "cli:status", Method: "ping", Params: map[string]any{"json": json}, Output: OutStatus, Text: scope}, nil
 }
 
-// parseSession is herdr's session command. Tools run `herdr session list
-// --json` to find the socket of each herdr server. tuios has one daemon, so
-// the list holds one session, default, at the socket the front talks to.
-// The other subcommands start, stop or delete herdr's own servers.
 func parseSession(sub string, args []string, _ Env, _ string) (*Call, *UsageError) {
 	switch sub {
 	case "list":

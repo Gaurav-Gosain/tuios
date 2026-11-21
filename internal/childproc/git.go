@@ -13,36 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// tuios runs git in folders a pane controls, and a repository can name
-// programs that git runs: hooks, filter and diff drivers, signing and ssh
-// programs, credential helpers. A program git starts for the daemon or the
-// client runs as their child. Git builds every git tuios runs, so this file
-// is the one place that decides which of those programs run.
-//
-// Each git gets three kinds of setting:
-//
-//   - Fixed settings that turn the repository's own programs off: no hooks
-//     (core.hooksPath is the null device), no fsmonitor, no external diff,
-//     no ext:: transport, and no look inside a submodule's work tree, where
-//     a nested repository's own config would apply.
-//   - For each config key that names a program and is set in the
-//     repository's own config (local or worktree scope, includes counted),
-//     the value the person's system, global or command-line config gives
-//     it, or a value that runs nothing. A filter git-lfs installed in
-//     ~/.gitconfig keeps working. A filter set only in .git/config does not
-//     run, so its files are read as they are on disk.
-//   - On diff, log and show, --no-ext-diff and --no-textconv.
-//
-// The settings go in as GIT_CONFIG_COUNT entries, which git reads as
-// command-line config. A key there needs no quoting, so a driver name that
-// holds "=" cannot split it, and the git a submodule check starts inherits
-// them.
-//
-// The person's own act is different. Ship called by the person makes their
-// commit the way their git makes one, hooks included. AsPerson marks a
-// context for that, and Git then adds only core.fsmonitor=false.
-
-// personKey marks a context whose git is the person's own act.
 type personKey struct{}
 
 // AsPerson returns ctx marked so that Git runs with the repository's own
@@ -52,7 +22,6 @@ func AsPerson(ctx context.Context) context.Context {
 	return context.WithValue(ctx, personKey{}, true)
 }
 
-// gitWaitDelay is how long git's output is still read after its context ends.
 const gitWaitDelay = 2 * time.Second
 
 func isPerson(ctx context.Context) bool {
@@ -77,10 +46,6 @@ func Git(ctx context.Context, dir string, args ...string) *exec.Cmd {
 		cmd = exec.Command("git", args...) //tuios:allow-exec the one place that builds git
 	} else {
 		cmd = exec.CommandContext(ctx, "git", args...) //tuios:allow-exec the one place that builds git
-		// A child of git, such as git-remote-https on a remote that stopped
-		// answering, keeps the output pipes open after the context ends git.
-		// Ending git's whole process group, and bounding the wait for the
-		// pipes, makes the context's deadline hold for every caller.
 		ownGroup(cmd)
 		cmd.WaitDelay = gitWaitDelay
 	}
@@ -117,12 +82,6 @@ func GitEnv(ctx context.Context, dir string, env []string) ([]string, error) {
 		}
 		out = append(out, kv)
 	}
-	// GIT_OPTIONAL_LOCKS=0: git status, and a diff against the work tree,
-	// write the refreshed index back under .git/index.lock when they may.
-	// tuios runs them in the background on the person's worktrees, and one
-	// that holds the lock makes the person's own commit, checkout or add
-	// there fail with "Unable to create '.git/index.lock': File exists". A
-	// lock git needs, for a commit or an add, is taken as before.
 	out = append(out, "GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true", "GIT_SEQUENCE_EDITOR=true", "GIT_OPTIONAL_LOCKS=0")
 	if isPerson(ctx) {
 		return appendConfig(out, n, [][2]string{{"core.fsmonitor", "false"}}), nil
@@ -134,27 +93,16 @@ func GitEnv(ctx context.Context, dir string, env []string) ([]string, error) {
 	return appendConfig(out, n, append(over, fixedSettings()...)), nil
 }
 
-// fixedSettings are the settings every git gets.
 func fixedSettings() [][2]string {
 	return [][2]string{
-		// A repository's fsmonitor names a program git runs on status and diff.
 		{"core.fsmonitor", "false"},
-		// No hook runs: .git/hooks and a hooks path the repository sets are
-		// both replaced. On Windows os.DevNull is NUL, which holds no file.
 		{"core.hooksPath", os.DevNull},
 		{"diff.external", ""},
-		// The ext:: transport runs a command named in the URL.
 		{"protocol.ext.allow", "never"},
-		// Status and diff look inside a submodule's work tree with a git of
-		// its own, which reads that repository's config, where these
-		// settings cannot see its drivers. A submodule's moved commit is
-		// still reported.
 		{"diff.ignoreSubmodules", "dirty"},
 	}
 }
 
-// appendConfig adds kvs to env as GIT_CONFIG_COUNT entries after the n env
-// already has.
 func appendConfig(env []string, n int, kvs [][2]string) []string {
 	env = slices.DeleteFunc(env, func(kv string) bool { return strings.HasPrefix(kv, "GIT_CONFIG_COUNT=") })
 	for i, kv := range kvs {
@@ -164,9 +112,6 @@ func appendConfig(env []string, n int, kvs [][2]string) []string {
 	return append(env, "GIT_CONFIG_COUNT="+strconv.Itoa(n+len(kvs)))
 }
 
-// repoOverrides reads every config git would use in dir and returns, for each
-// key that names a program and has a value from the repository's own config,
-// the value that replaces it: the person's own, or one that runs nothing.
 func repoOverrides(ctx context.Context, dir string, env []string) ([][2]string, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -189,9 +134,6 @@ func repoOverrides(ctx context.Context, dir string, env []string) ([][2]string, 
 	return overridesFrom(stdout.Bytes()), nil
 }
 
-// overridesFrom turns the output of git config --show-scope -z --list into
-// the overrides. Each entry is the scope, NUL, the key, a newline and the
-// value, NUL; a key with no value has no newline.
 func overridesFrom(out []byte) [][2]string {
 	type entry struct {
 		key, value string
@@ -222,7 +164,6 @@ func overridesFrom(out []byte) [][2]string {
 		}
 		switch {
 		case multi:
-			// An empty value clears the list. The person's own come back after it.
 			over = append(over, [2]string{e.key, ""})
 			for _, v := range trusted {
 				over = append(over, [2]string{e.key, v})
@@ -236,9 +177,6 @@ func overridesFrom(out []byte) [][2]string {
 	return over
 }
 
-// trustedScope reports whether config of this scope is the person's: the
-// system and global files and the command line. The repository's own config,
-// its worktree config and anything they include are not.
 func trustedScope(scope string) bool {
 	switch scope {
 	case "system", "global", "command":
@@ -247,9 +185,6 @@ func trustedScope(scope string) bool {
 	return false
 }
 
-// programKey reports whether key names a program git may run, with the value
-// that runs nothing and whether the key holds a list. git prints the section
-// and the last part of a key in lower case, and the subsection as written.
 func programKey(key string) (neutral string, multi, ok bool) {
 	section, rest, found := strings.Cut(key, ".")
 	if !found {
@@ -309,8 +244,6 @@ func programKey(key string) (neutral string, multi, ok bool) {
 	case "credential":
 		return "", true, name == "helper"
 	case "lfs":
-		// git-lfs runs from the person's own filter and reads the
-		// repository's config for programs of its own.
 		switch {
 		case strings.HasPrefix(sub, "customtransfer.") && name == "path":
 			return "", false, true
@@ -321,8 +254,6 @@ func programKey(key string) (neutral string, multi, ok bool) {
 	return "", false, false
 }
 
-// diffFlags adds --no-ext-diff and --no-textconv after a diff, log or show
-// subcommand, so no diff driver the repository names runs.
 func diffFlags(args []string) []string {
 	for i := 0; i < len(args); i++ {
 		a := args[i]

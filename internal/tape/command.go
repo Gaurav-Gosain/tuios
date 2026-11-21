@@ -230,9 +230,6 @@ func (c *Command) String() string {
 	}
 }
 
-// commandTypes is every command a tape or a remote caller can run. IsCommand
-// and ResolveCommandName both read it, so a command added here is known to
-// both at once.
 var commandTypes = []CommandType{
 	CommandTypeType,
 	CommandTypeSleep,
@@ -310,17 +307,11 @@ var commandTypes = []CommandType{
 	CommandTypeRun,
 }
 
-// commandAliases are other names a command answers to. Notify is the name the
-// rest of tuios uses for a notification (tuios notify), and Focus is what a
-// project tape writes for FocusWindow.
 var commandAliases = map[string]CommandType{
 	"notify": CommandTypeShowNotification,
 	"focus":  CommandTypeFocusWindow,
 }
 
-// commandTypeSet is commandTypes as a set, and commandTypesByKey is the same
-// commands keyed by their normalized name (see commandKey), which is what lets
-// a caller outside a tape name one the way the keymap does.
 var (
 	commandTypeSet    = make(map[CommandType]bool, len(commandTypes))
 	commandTypesByKey = make(map[string]CommandType, len(commandTypes))
@@ -333,9 +324,6 @@ func init() {
 	}
 }
 
-// commandKey folds a command name for lookup: case and the separators a
-// keymap name uses are dropped, so "ToggleTiling", "toggletiling" and
-// "toggle_tiling" are one key.
 func commandKey(name string) string {
 	var b strings.Builder
 	for _, r := range name {
@@ -391,10 +379,8 @@ func ParseKeyCombo(s string) (*KeyCombo, error) {
 		return nil, errfmt.Errorf("empty key combo")
 	}
 
-	// Last part is always the key
 	kc.Key = parts[len(parts)-1]
 
-	// All parts before the last are modifiers (case-insensitive)
 	for i := range len(parts) - 1 {
 		name, ok := config.ParseModifier(parts[i])
 		switch {

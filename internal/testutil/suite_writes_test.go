@@ -9,8 +9,6 @@ import (
 	"testing"
 )
 
-// childMarker stops the recursion. The child runs this package too, and
-// without the marker it would launch a suite of its own, and so on.
 const childMarker = "TUIOS_ISOLATION_CHILD"
 
 // TestTheSuiteWritesNothingOutsideItsOwnTree is the guard this change exists to
@@ -52,8 +50,6 @@ func TestTheSuiteWritesNothingOutsideItsOwnTree(t *testing.T) {
 
 	out, err := runSuite(t, home)
 	if err != nil {
-		// A failing suite is somebody else's test to fix, and its writes are
-		// still worth reporting, so this is not fatal on its own.
 		t.Logf("the child suite did not pass, which this guard does not judge: %v", err)
 	}
 
@@ -66,9 +62,6 @@ func TestTheSuiteWritesNothingOutsideItsOwnTree(t *testing.T) {
 	}
 }
 
-// checksum digests the watched tree, minus the go command's own counters. The
-// toolchain writes those into XDG_CONFIG_HOME on every invocation, and they say
-// nothing about what the test binaries did.
 func checksum(dirs []string) (map[string]string, error) {
 	sums, err := hashDirs(dirs)
 	if err != nil {
@@ -82,10 +75,6 @@ func checksum(dirs []string) (map[string]string, error) {
 	return sums, nil
 }
 
-// seedUsedHome fills the tree with the files a developer who has run tuios
-// would have, so a write shows up as a changed checksum and not only as a new
-// path. An empty tree would miss a test that overwrites a real file with the
-// same shape, which is exactly what the sidebar state leak did.
 func seedUsedHome(t *testing.T, home string) {
 	t.Helper()
 	files := map[string]string{
@@ -108,19 +97,12 @@ func seedUsedHome(t *testing.T, home string) {
 	}
 }
 
-// runSuite runs every package in the module against home as the whole of the
-// developer's environment.
-// packagesEnv names the packages the child suite tests, apart by spaces,
-// instead of ./internal/... ./cmd/... ./pkg/....
 const packagesEnv = "TUIOS_ISOLATION_PACKAGES"
 
 func runSuite(t *testing.T, home string) (string, error) {
 	t.Helper()
 	root := moduleRootFrom(t)
 
-	// The build and module caches stay where they are. They are derived from
-	// XDG_CACHE_HOME otherwise, which would fill the seeded tree with the
-	// toolchain's own files and rebuild the world to do it.
 	env := append(os.Environ(),
 		"HOME="+home,
 		"XDG_CONFIG_HOME="+filepath.Join(home, "config"),
@@ -134,8 +116,6 @@ func runSuite(t *testing.T, home string) (string, error) {
 	)
 
 	pkgs := []string{"./internal/...", "./cmd/...", "./pkg/..."}
-	// CI names the packages a pull request can affect, so the guard runs
-	// the tests that could have changed what they write.
 	if list := strings.Fields(os.Getenv(packagesEnv)); len(list) > 0 {
 		pkgs = list
 	}
@@ -148,11 +128,6 @@ func runSuite(t *testing.T, home string) (string, error) {
 		}
 	}
 	cmd := exec.Command("go", append([]string{"test", "-count=1"}, pkgs...)...)
-	// internal/app and internal/session run their tests one after another
-	// for over three minutes each, so the child suite took as long as the
-	// rest of the unit tests together. scripts/go-test-lanes.sh splits them
-	// across four processes. It needs bash 4 for its arrays, which macOS
-	// does not ship, so plain go test stays the fallback.
 	lanes := filepath.Join(root, "scripts", "go-test-lanes.sh")
 	if _, err := os.Stat(lanes); err == nil && len(split) > 0 && exec.Command("bash", "-c", `[ "${BASH_VERSINFO[0]}" -ge 4 ]`).Run() == nil {
 		cmd = exec.Command("bash", append([]string{lanes, "-count=1", "--"}, pkgs...)...)
@@ -176,7 +151,6 @@ func goEnv(t *testing.T, name string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// moduleRootFrom walks up from the package directory to the module's go.mod.
 func moduleRootFrom(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()
@@ -195,7 +169,6 @@ func moduleRootFrom(t *testing.T) string {
 	}
 }
 
-// tail keeps a failure report readable when the child suite printed a lot.
 func tail(out string) string {
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	if len(lines) > 40 {

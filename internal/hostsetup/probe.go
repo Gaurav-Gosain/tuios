@@ -64,14 +64,8 @@ func (p *Probe) Short(path string) string {
 // Platform is OS/Arch, as tuios names a release.
 func (p *Probe) Platform() string { return p.OS + "/" + p.Arch }
 
-// probeTools are the programs the probe looks for: the package managers it
-// reports, then curl, wget, systemctl and tailscale.
 const probeTools = "brew pacman yay paru nix go apt-get dnf curl wget systemctl tailscale"
 
-// probeScript is the sync probe, which finds tuios the way the link does,
-// with what the setup needs on top. It follows the same quoting rules: one
-// line of sh, with no single quote, backslash or exclamation mark, so any
-// login shell passes it to sh unchanged. $1 is "-".
 func probeScript() string {
 	known := strings.Join([]string{
 		"/opt/homebrew/bin/brew", "/usr/local/bin/brew", "/home/linuxbrew/.linuxbrew/bin/brew",
@@ -80,14 +74,8 @@ func probeScript() string {
 	}, " ")
 	return strings.Join([]string{
 		hostsync.ProbeScript(),
-		// os-release is shell assignments by its own spec. It is read in a
-		// subshell so nothing it sets leaks into the rest.
 		`if [ -r /etc/os-release ]; then ( . /etc/os-release; echo "pretty=$PRETTY_NAME" ); fi`,
 		`if command -v sw_vers >/dev/null 2>&1; then echo "macos=macOS $(sw_vers -productVersion 2>/dev/null)"; fi`,
-		// A login shell's PATH has what the person's profile adds: brew
-		// under /opt/homebrew, a nix profile, a go in /usr/local/go. fish
-		// takes several names after command -v too. Plain sh is the fallback
-		// for a login shell that says nothing.
 		`q=; for s in "$SHELL" sh; do q=$("$s" -l -c "command -v ` + probeTools + `" </dev/null 2>/dev/null); if [ -n "$q" ]; then break; fi; done`,
 		`echo "$q" | while IFS= read -r l; do case $l in /*) if [ -x "$l" ]; then echo "have=$l"; fi;; esac; done`,
 		`for c in ` + known + `; do if [ -x "$c" ]; then echo "have=$c"; fi; done`,
@@ -95,7 +83,6 @@ func probeScript() string {
 	}, "; ")
 }
 
-// probe runs the probe over r and reads the answer.
 func probe(ctx context.Context, r hostsync.Runner) (*Probe, error) {
 	out, stderr, err := r.Run(ctx, probeScript(), []string{"-"}, nil)
 	if err != nil {
@@ -104,7 +91,6 @@ func probe(ctx context.Context, r hostsync.Runner) (*Probe, error) {
 	return parseProbe(hostsync.ParseFacts(out)), nil
 }
 
-// parseProbe reads the facts the probe printed.
 func parseProbe(f hostsync.Facts) *Probe {
 	for _, v := range f {
 		for i := range v {
@@ -146,8 +132,6 @@ func parseProbe(f hostsync.Facts) *Probe {
 	return p
 }
 
-// clean holds a string from the far machine to one short line of printable
-// text.
 func clean(s string) string {
 	s = strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {

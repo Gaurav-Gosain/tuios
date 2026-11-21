@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-// claudeApproval is Claude Code's permission menu as its screen tail reads.
 var claudeApproval = []string{
 	"────────────────────────────────────────",
 	" Bash command",
@@ -118,8 +117,6 @@ func TestCodexApprovalPressesItsPrintedShortcuts(t *testing.T) {
 		"Press enter to confirm or esc to cancel",
 	}
 	p := screenPrompt(t, reg, "codex", tail)
-	// The rule reads the footer alone. The prompt a person reads is the whole
-	// menu and the question over it.
 	if got := strings.Join(p.Lines, "\n"); !strings.Contains(got, "$ go test ./...") || !strings.HasSuffix(got, "esc to cancel") {
 		t.Errorf("the prompt's lines are %q", got)
 	}
@@ -130,7 +127,6 @@ func TestCodexApprovalPressesItsPrintedShortcuts(t *testing.T) {
 			t.Errorf("%s sends %s, want %s", c.action, got, c.want)
 		}
 	}
-	// The same footer under a question form offers deny only.
 	q := screenPrompt(t, reg, "codex", []string{
 		"Which database should the service use?",
 		"› 1. Postgres",
@@ -238,12 +234,10 @@ func TestScreenAnswersFromSource(t *testing.T) {
 	reg := bundledRegistry(t)
 	for _, c := range []struct {
 		harness string
-		// tail is the panel as the source draws it.
-		tail []string
-		want map[string]string
+		tail    []string
+		want    map[string]string
 	}{
 		{
-			// kimi-cli 1.52.0, _approval_panel.py.
 			harness: "kimi",
 			tail: []string{
 				"agent is requesting approval to run command:",
@@ -259,8 +253,6 @@ func TestScreenAnswersFromSource(t *testing.T) {
 			want: map[string]string{ActionApprove: `"1"`, ActionApproveAlways: `"2"`, ActionDeny: `"\x1b"`},
 		},
 		{
-			// The same panel with the session option left out: approve_always
-			// must not be offered, and approve is still option 1.
 			harness: "kimi",
 			tail: []string{
 				"agent is requesting approval to run command:",
@@ -274,7 +266,6 @@ func TestScreenAnswersFromSource(t *testing.T) {
 			want: map[string]string{ActionApprove: `"1"`, ActionDeny: `"\x1b"`},
 		},
 		{
-			// Reordered: each approve presses the digit its label has.
 			harness: "kimi",
 			tail: []string{
 				"agent is requesting approval to run command:",
@@ -289,7 +280,6 @@ func TestScreenAnswersFromSource(t *testing.T) {
 			want: map[string]string{ActionApprove: `"3"`, ActionApproveAlways: `"2"`, ActionDeny: `"\x1b"`},
 		},
 		{
-			// @google/gemini-cli 0.64.0, ToolConfirmationMessage.tsx.
 			harness: "gemini-cli",
 			tail: []string{
 				"╭──────────────────────────────────────╮",

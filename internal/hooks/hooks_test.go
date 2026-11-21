@@ -23,8 +23,6 @@ func TestContextEnvVars(t *testing.T) {
 		SessionID:  "sess-xyz",
 	})
 
-	// Fire runs the hook in its own goroutine. Wait joins it, so the file
-	// is complete when it is read.
 	m.Wait()
 
 	data, err := os.ReadFile(envFile)

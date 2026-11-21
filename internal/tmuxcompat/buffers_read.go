@@ -12,14 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
-// show-buffer, save-buffer and list-buffers: the paste buffers read back.
-//
-// save-buffer writes a file as the caller, from the caller's own process, so
-// it reaches only what the caller could already write. It refuses a path in
-// the shim's runtime directory, where the buffers and the pane holders'
-// sockets are, so a buffer cannot be written over the shim's own state.
-
-// bufferOrError reads the buffer -b names, or the newest, with tmux's errors.
 func (s *Shim) bufferOrError(p Parsed) (string, error) {
 	buf, named := p.Value('b')
 	if !named {
@@ -42,7 +34,6 @@ func (s *Shim) bufferOrError(p Parsed) (string, error) {
 	return data, nil
 }
 
-// showBuffer prints a buffer as it is, with no line feed added, as tmux does.
 func (s *Shim) showBuffer(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -56,8 +47,6 @@ func (s *Shim) showBuffer(name string, args []string) (string, []string, error) 
 	return OutcomeOK, nil, nil
 }
 
-// saveBuffer writes a buffer to a file, or to standard output for "-". -a
-// appends.
 func (s *Shim) saveBuffer(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -99,8 +88,6 @@ func (s *Shim) saveBuffer(name string, args []string) (string, []string, error) 
 	return OutcomeOK, nil, nil
 }
 
-// listBuffers prints the buffers, newest first. -f keeps those whose filter
-// format expands true.
 func (s *Shim) listBuffers(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -147,9 +134,6 @@ func (s *Shim) listBuffers(name string, args []string) (string, []string, error)
 	return outcomeFor(detail), detail, nil
 }
 
-// bufferSample is tmux's paste_make_sample: the start of the buffer with
-// backslashes, tabs, line feeds and other unprintable bytes written as C
-// escapes, cut at 200 bytes with "...".
 func bufferSample(data string) string {
 	const width = 200
 	cut := len(data) > width

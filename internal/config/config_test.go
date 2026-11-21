@@ -28,8 +28,6 @@ func TestKeyNormalizerAcceptsBothSpellingsOfAShiftedKey(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
-			// A shifted digit's other spelling holds on a US layout only, so
-			// it is a US alias rather than a spelling of the key itself.
 			got := append(normalizer.NormalizeKey(tc.input), normalizer.USAliasKeys(tc.input)...)
 			for _, want := range tc.want {
 				if !slices.Contains(got, want) {
@@ -39,7 +37,6 @@ func TestKeyNormalizerAcceptsBothSpellingsOfAShiftedKey(t *testing.T) {
 		})
 	}
 
-	// Keys that are not shifted spellings must not grow spurious aliases.
 	for _, key := range []string{"shift+tab", "ctrl+a", "esc", "m"} {
 		got := normalizer.NormalizeKey(key)
 		if len(got) != 1 {
@@ -172,8 +169,6 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 		}
 	}
 
-	// Turning a toggle back off has to survive too: these are plain bools with
-	// no unset state, so a conditional assignment would make "off" unsaveable.
 	cfg.Appearance.HideWindowButtons = false
 	cfg.Appearance.ShowClock = false
 	config.ApplyAppearanceConfig(cfg, &config.Global)
@@ -187,14 +182,9 @@ func TestApplyAppearanceConfig_CoversTheWholeFile(t *testing.T) {
 // empty rail keymap, so every rail key resolved to nothing. Because the scope
 // swallows unbound keys, the keyboard was stuck in the rail with no way out.
 func TestSidebarKeybindsFilledForOlderConfig(t *testing.T) {
-	// A pre-rail config: it has a keybindings table, but no [keybindings.sidebar].
 	cfg := writeConfig(t, "[keybindings]\nleader_key = \"ctrl+b\"\n\n[keybindings.window_management]\nclose_window = [\"x\"]\n")
 
 	r := config.NewKeybindRegistry(cfg)
-	// The file bound close_window to "x" alone, where the default binds both "w"
-	// and "x". Checking "w" came loose is what proves the fixture was read at
-	// all: every rail assertion below is also true of the defaults, so without
-	// this the test passes just as well on a config it never loaded.
 	if got := r.GetAction("w"); got == "close_window" {
 		t.Fatal("close_window still answers to w, so the fixture was never loaded")
 	}
@@ -220,15 +210,12 @@ func TestSidebarKeybindsDoNotLeakToPanes(t *testing.T) {
 	if got := r.Action(config.TableSidebar, "J"); got != "reorder_down" {
 		t.Fatalf("Action(TableSidebar, J) = %q, want reorder_down (case matters)", got)
 	}
-	// The rail's cursor keys must not resolve to a rail action through the global
-	// keymap; if they did, pressing j on a pane would run a rail action.
 	probes := map[string]string{"j": "cursor_down", "k": "cursor_up", "h": "collapse", "l": "expand", "enter": "activate"}
 	for key, railAction := range probes {
 		if a := r.GetAction(key); a == railAction {
 			t.Fatalf("global keymap leaked rail action %q via key %q", railAction, key)
 		}
 	}
-	// focus_sidebar, by contrast, IS a global window-mode action (the entry key).
 	if got := r.GetAction("s"); got != "focus_sidebar" {
 		t.Fatalf("GetAction(s) = %q, want focus_sidebar", got)
 	}
@@ -239,28 +226,19 @@ func TestSidebarKeybindsDoNotLeakToPanes(t *testing.T) {
 // before the agents section grew its two controls, must still resolve them.
 // fillMapDefaults fills per key, not per section, and this pins that.
 func TestAgentsKeybindsFilledForAPreExistingSidebarSection(t *testing.T) {
-	// A rail-era config: it names the section, and the rail keys it knew about,
-	// but nothing about the agents section's filter or sort.
 	cfg := writeConfig(t, "[keybindings]\nleader_key = \"ctrl+b\"\n\n[keybindings.sidebar]\ncursor_down = [\"j\"]\nexit = [\"esc\"]\n")
 
 	r := config.NewKeybindRegistry(cfg)
-	// The file narrowed both keys it named: cursor_down loses "down" and exit
-	// loses "s", where the defaults carry the second binding for each. That is
-	// the half of the fixture the defaults cannot imitate, so it is what says
-	// the file was loaded rather than skipped over.
 	for key, gone := range map[string]string{"down": "cursor_down", "s": "exit"} {
 		if got := r.Action(config.TableSidebar, key); got == gone {
 			t.Fatalf("Action(TableSidebar, %q) still answers %q, so the fixture was never loaded", key, gone)
 		}
 	}
-	// Filling is per key, not per section: a section the file already names
-	// still gains the keys it predates.
 	for key, want := range map[string]string{"f": "agents_filter", "o": "agents_sort"} {
 		if got := r.Action(config.TableSidebar, key); got != want {
 			t.Fatalf("Action(TableSidebar, %q) = %q, want %q: the new keys never reached an existing section", key, got, want)
 		}
 	}
-	// The keys the file did set are still its own.
 	if got := r.Action(config.TableSidebar, "j"); got != "cursor_down" {
 		t.Fatalf("Action(TableSidebar, j) = %q, want cursor_down", got)
 	}
@@ -274,9 +252,6 @@ func TestSidebarFileKeybindsFilledForOlderConfig(t *testing.T) {
 	cfg := writeConfig(t, "[keybindings]\nleader_key = \"ctrl+b\"\n\n[keybindings.window_management]\nclose_window = [\"x\"]\n")
 
 	r := config.NewKeybindRegistry(cfg)
-	// The fixture check, so the assertions below cannot pass on a config that was
-	// never read: the file binds close_window to "x" alone, where the default
-	// binds both "w" and "x".
 	if got := r.GetAction("w"); got == "close_window" {
 		t.Fatal("close_window still answers to w, so the fixture was never loaded")
 	}
@@ -294,15 +269,12 @@ func TestSidebarFileKeybindsFilledForOlderConfig(t *testing.T) {
 		}
 	}
 
-	// And the rail's own keys still mean what they meant. The two sections share
-	// r and x, and the rail's meaning is what a row outside the listing gets.
 	if got := r.Action(config.TableSidebar, "r"); got != "rename" {
 		t.Errorf("Action(TableSidebar, r) = %q, want rename", got)
 	}
 	if got := r.Action(config.TableSidebar, "x"); got != "kill" {
 		t.Errorf("Action(TableSidebar, x) = %q, want kill", got)
 	}
-	// The file keys must not leak onto a pane either.
 	if got := r.GetAction("d"); got == "file_delete" {
 		t.Error("file_delete resolves through the global keymap; it would fire on a pane")
 	}

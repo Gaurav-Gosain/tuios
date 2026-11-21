@@ -13,10 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// listClients prints one client for each session a tuios client is attached
-// to. tuios does not name its clients' terminals, so client_tty is empty,
-// and a tool that switches a client by its tty (switch-client -c) finds
-// nothing to switch. The shim's own control-mode clients are not listed.
 func (s *Shim) listClients(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -63,18 +59,6 @@ func (s *Shim) listClients(name string, args []string) (string, []string, error)
 	return outcomeFor(detail), detail, nil
 }
 
-// detachClient detaches tuios clients through the detach-client verb, with
-// tmux 3.7c's precedence. -s names a session, and every client of it is
-// detached: -a and -t are ignored, as tmux ignores them with -s. Otherwise the
-// shim lists one client per session, named tuios-SESSION, so -t names the
-// clients of that session, and with neither the target is the caller's
-// session. Without -a, -t detaches every client of its session, since the
-// shim's one client stands for all of them, and with no target the client
-// used last in the caller's session is detached, as tmux detaches the current
-// client. With -a the client used last is kept and the others of the session
-// go. In tmux, -a acts on every client of the server. Here it acts
-// on one session. A session out of the shim's reach is not found, as for
-// every other command.
 func (s *Shim) detachClient(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -127,20 +111,14 @@ func (s *Shim) detachClient(name string, args []string) (string, []string, error
 	return OutcomeOK, nil, nil
 }
 
-// option is one tmux option show-options answers, with the value that says
-// how tuios behaves.
 type option struct {
 	name  string
-	scope byte // 's' server, 'g' session, 'w' window
+	scope byte
 	value func(s *Shim) string
 }
 
 func fixed(v string) func(*Shim) string { return func(*Shim) string { return v } }
 
-// options are the options show-options answers. Every other option is
-// "invalid option", as for a name tmux does not know. The values describe
-// tuios: workspaces count from 1, a pane's size follows the tuios client,
-// and tuios owns the status line, so tmux's is off.
 var options = []option{
 	{"default-terminal", 's', fixed("xterm-256color")},
 	{"escape-time", 's', fixed("0")},
@@ -163,10 +141,6 @@ var options = []option{
 	{"window-size", 'w', (*Shim).windowSize},
 }
 
-// windowSize is the session's daemon.window_size: smallest, largest or
-// latest, the names tmux uses. A daemon that does not report the option
-// predates it, and the shim then says latest, as it always did, since the
-// pane's size followed the tuios client.
 func (s *Shim) windowSize() string {
 	var v string
 	if !s.daemonOption(map[string]any{"session": s.Session, "key": "daemon.window_size"}, &v) || v == "" {
@@ -175,8 +149,6 @@ func (s *Shim) windowSize() string {
 	return v
 }
 
-// daemonOption reads a daemon option, named by params as get-option takes
-// them, into v. It reports false when the daemon does not say.
 func (s *Shim) daemonOption(params map[string]any, v any) bool {
 	raw, err := s.Caller.Call("get-option", params)
 	if err != nil {
@@ -188,8 +160,6 @@ func (s *Shim) daemonOption(params map[string]any, v any) bool {
 	return jsonx.Unmarshal(raw, &res) == nil && jsonx.Unmarshal(res.Value, v) == nil
 }
 
-// setWindowSize is set-option window-size: it sets the session's
-// daemon.window_size. tmux's manual has no tuios equivalent and is refused.
 func (s *Shim) setWindowSize(value string) (string, error) {
 	if !slices.Contains(config.WindowSizeModes, value) {
 		return OutcomeError, errfmt.Errorf("window-size: %s is not supported, use smallest, largest or latest", value)
@@ -200,9 +170,6 @@ func (s *Shim) setWindowSize(value string) (string, error) {
 	return OutcomeOK, nil
 }
 
-// optionAssignment finds the option name and value in the arguments of cmd,
-// set-option or set-window-option. It reports false when -u (unset) is
-// given, a flag is not tmux's, or no name and value are found.
 func optionAssignment(cmd string, args []string) (name, value string, ok bool) {
 	p, err := parseFlags(cmd, specs[cmd], args)
 	if err != nil || p.Has('u') || len(p.Args) < 2 {
@@ -211,11 +178,6 @@ func optionAssignment(cmd string, args []string) (name, value string, ok bool) {
 	return p.Args[0], p.Args[1], true
 }
 
-// historyLimit is the scrollback length tuios keeps, read from the daemon's
-// appearance.scrollback_lines. get-option gives a value set on the session
-// as a number and the registry's default as a string, so both are read. A
-// daemon that does not say is taken to use the shipped default, as tmux
-// prints its default rather than nothing.
 func (s *Shim) historyLimit() string {
 	var v any
 	if s.daemonOption(map[string]any{"session": s.Session, "key": "appearance.scrollback_lines"}, &v) {
@@ -233,7 +195,6 @@ func (s *Shim) historyLimit() string {
 	return strconv.Itoa(config.DefaultScrollbackLines)
 }
 
-// showOptions prints options: one by name, or every one of a scope.
 func (s *Shim) showOptions(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -281,7 +242,6 @@ func (s *Shim) showOptions(name string, args []string) (string, []string, error)
 	return OutcomeOK, nil, nil
 }
 
-// quoteOption quotes a value the way show-options prints one with spaces.
 func quoteOption(v string) string {
 	if v == "" || strings.ContainsAny(v, " \t\"'") {
 		return strconv.Quote(v)
@@ -289,10 +249,6 @@ func quoteOption(v string) string {
 	return v
 }
 
-// newSession starts a tuios session. The shim does so only when it serves
-// every session: a caller in a pane is held to its own. The session starts
-// detached, since the shim attaches no terminal. Control mode is the one
-// exception, where the control client attaches to it.
 func (s *Shim) newSession(name string, args []string) (string, []string, error) {
 	if !s.AllSessions {
 		return OutcomeUnsupported, nil, errors.New("new-session: refused, the tuios tmux shim in a pane does not start sessions")
@@ -362,7 +318,6 @@ func (s *Shim) newSession(name string, args []string) (string, []string, error) 
 	return outcomeFor(detail), detail, nil
 }
 
-// valueOr is p's value for flag c, "" when it was not given.
 func valueOr(p Parsed, c byte) string {
 	v, _ := p.Value(c)
 	return v

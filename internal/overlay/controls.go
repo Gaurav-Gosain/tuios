@@ -9,11 +9,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// ascii, when true, makes the controls avoid non-ASCII glyphs (arrows,
-// ellipsis) for terminals without a capable font. It is a package-level toggle
-// because it is a rendering-environment property, not a per-call concern.
-// Atomic because every session's render loop mirrors the config value into it
-// (see the app package) while other sessions' renders read it.
 var ascii atomic.Bool
 
 // SetASCII records whether rendering must avoid non-ASCII glyphs.
@@ -26,10 +21,6 @@ func UseASCII() bool {
 	return ascii.Load()
 }
 
-// nerdFonts, when true, says the terminal's font draws Nerd Font icons, the
-// private use area glyphs. It is mirrored from the config every frame, as
-// ascii is. It starts false, so a caller that runs before the first frame
-// keeps the old, safe answer.
 var nerdFonts atomic.Bool
 
 // SetNerdFonts records whether the font draws Nerd Font icons.
@@ -192,22 +183,10 @@ func Truncate(s string, maxWidth int) string {
 		return s
 	}
 	ell := Ellipsis()
-	// A glyph set names the ellipsis and the role takes any width, so the
-	// marker can be wider than the budget it is meant to fit inside. Dropped
-	// rather than appended in that case: a caller asking for four cells has
-	// four cells, and returning five to say "this was cut" pushes every label
-	// after it out of the layout that measured it.
 	if lipgloss.Width(ell) >= maxWidth {
 		ell = ""
 	}
 	target := max(maxWidth-lipgloss.Width(ell), 0)
-	// The result is the longest run of leading runes that fits target. A
-	// longer prefix is never narrower, so it is found by bisection: dropping
-	// one rune at a time and measuring the rest again cost 0.4 ms for a
-	// 200-rune line cut to 40, on every frame that drew it. fits is the
-	// longest prefix known to fit, over the shortest known not to. The whole
-	// run is tried too: decoding s to runes turns an invalid byte into
-	// U+FFFD, which can measure narrower than s did.
 	runes := []rune(s)
 	fits, over := 0, len(runes)+1
 	for over-fits > 1 {

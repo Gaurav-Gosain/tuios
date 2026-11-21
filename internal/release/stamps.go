@@ -13,9 +13,6 @@ type Stamps struct {
 	Version, Commit, Date, BuiltBy string
 }
 
-// pseudoVersion matches the tail of a Go pseudo-version, which names the
-// commit a `go install ...@<commit>` or `@main` build came from: the UTC commit
-// time and the first 12 hex digits of the revision.
 var pseudoVersion = regexp.MustCompile(`[-.](\d{14})-([0-9a-f]{12})$`)
 
 // WithModuleVersion fills the placeholder stamps from the module version the
@@ -32,14 +29,10 @@ func (s Stamps) WithModuleVersion() Stamps {
 	return s.fromModule(info.Main.Version)
 }
 
-// fromModule is WithModuleVersion without the build info: it maps a module
-// version onto the stamps. Stamps an ldflag already set win.
 func (s Stamps) fromModule(mv string) Stamps {
 	if s.Version != "dev" || mv == "" || mv == "(devel)" {
 		return s
 	}
-	// The release ldflags pass the tag without its "v", so a go install build
-	// of the same tag reports the same string.
 	s.Version = strings.TrimPrefix(mv, "v")
 	if m := pseudoVersion.FindStringSubmatch(mv); m != nil {
 		if s.Commit == "none" {

@@ -9,24 +9,14 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 )
 
-// detach gives the command a session of its own: no controlling terminal,
-// so nothing it runs can draw on the tuios screen, and a process group the
-// runner can kill whole.
 func detach(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 }
 
-// procGroup is the process group the command leads.
 type procGroup struct{ cmd *exec.Cmd }
 
-// track records the started command's group. It cannot fail here.
 func track(cmd *exec.Cmd) (*procGroup, error) { return &procGroup{cmd: cmd}, nil }
 
-// kill kills the process group the command leads, and every other process
-// in its session: a child that moved to a group of its own with setpgid is
-// still in the session, and still the plugin's (plugin_grants.go in
-// session). The group and the session id are the process id, which Setsid
-// made so.
 func (g *procGroup) kill() {
 	if g.cmd.Process == nil {
 		return
@@ -38,6 +28,4 @@ func (g *procGroup) kill() {
 	}
 }
 
-// release does nothing. After Wait the group id may name another group, so
-// the runner does not kill it later, and what the command left runs on.
 func (g *procGroup) release() {}

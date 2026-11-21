@@ -11,7 +11,6 @@ import (
 	"testing"
 )
 
-// transferDir is the package that holds the file transfer jobs.
 const transferDir = "internal/session"
 
 // TestOnlyToWritesATransferState is the transfer state lint. A job's state
@@ -74,8 +73,6 @@ func c(e *entry)                        { e.state = queueWaiting }
 	}
 }
 
-// transferStateWrites returns file:line for every write of a transfer job's
-// state in src outside to and reopen.
 func transferStateWrites(t *testing.T, name string, src []byte) []string {
 	t.Helper()
 	fset := token.NewFileSet()

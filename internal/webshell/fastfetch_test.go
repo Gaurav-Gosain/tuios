@@ -21,8 +21,8 @@ func TestFastfetchFitsThePane(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		cols int
-		want string // a line that only this layout draws
-		info string // an info line drawn in full
+		want string
+		info string
 	}{
 		{120, logo[0] + "  guest@tuios", "OS      your browser"},
 		{80, logo[0] + "  guest@tuios", "OS      your browser"},

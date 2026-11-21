@@ -9,11 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/learn/lessons"
 )
 
-// The coach (Tilly, on the page) says one short line when a step is done.
-// The lines are the lessons' own, so the terminal and the page cheer alike.
-// The page's figure, moods and sounds stay on the page.
-
-// overlayReaction is the reaction to a step that ends on an overlay.
 func overlayReaction(name string) string {
 	switch name {
 	case "help":
@@ -44,9 +39,6 @@ func overlayReaction(name string) string {
 	return "generic"
 }
 
-// reactionFor names what the coach reacts to, from the event that finished
-// a step and the action the last key ran. It follows reactionFor in the
-// page's tilly.ts.
 func reactionFor(typ string, data map[string]any, action string) string {
 	str := func(k string) string {
 		s, _ := data[k].(string)
@@ -126,16 +118,11 @@ var (
 	slotRe   *regexp.Regexp
 )
 
-// slotPattern finds the {name} slots in a coach line. It is compiled on
-// first use, so a tuios that never runs the tutor pays nothing for it.
 func slotPattern() *regexp.Regexp {
 	slotOnce.Do(func() { slotRe = regexp.MustCompile(`\{(\w+)\}`) })
 	return slotRe
 }
 
-// coachLine is what the coach says for a done step: a line for its reaction
-// that needs no slot the event cannot fill, with the hinted lead before it
-// when the step needed the hint.
 func coachLine(c lessons.Coach, result, typ string, data map[string]any, action string) string {
 	reaction := reactionFor(typ, data, action)
 	if result == string(lessons.Skipped) {
@@ -176,7 +163,6 @@ func coachLine(c lessons.Coach, result, typ string, data map[string]any, action 
 	return line
 }
 
-// finishLine is the coach's cheer for a finished track.
 func finishLine(c lessons.Coach, t *lessons.Track) string {
 	var pool []string
 	if t.Coach != nil {

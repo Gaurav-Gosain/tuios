@@ -167,8 +167,6 @@ func (d *Daemon) sink(s *Session, ev SessionEvent) {
 	}
 }
 
-// taskEventFaults returns file:line and the rule for every task event in src
-// published outside the change that made it.
 func taskEventFaults(t *testing.T, name string, src []byte) []string {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -230,7 +228,6 @@ func taskEventFaults(t *testing.T, name string, src []byte) []string {
 	return out
 }
 
-// taskEventLiteral reports whether lit is a streamEvent with a Task key.
 func taskEventLiteral(lit *ast.CompositeLit) bool {
 	if id, ok := lit.Type.(*ast.Ident); !ok || id.Name != "streamEvent" {
 		return false
@@ -245,7 +242,6 @@ func taskEventLiteral(lit *ast.CompositeLit) bool {
 	return false
 }
 
-// taskEventCallName is the name a call calls: f in f(...) and x.f(...).
 func taskEventCallName(call *ast.CallExpr) string {
 	switch fun := call.Fun.(type) {
 	case *ast.Ident:
@@ -256,9 +252,6 @@ func taskEventCallName(call *ast.CallExpr) string {
 	return ""
 }
 
-// taskEventInItsChange reports whether the call on top of stack has as its
-// innermost enclosing function literal an argument of a call of mutateState
-// or mutateStateLocked, with no defer or go statement between the two.
 func taskEventInItsChange(stack []ast.Node) bool {
 	for j := len(stack) - 2; j > 0; j-- {
 		lit, ok := stack[j].(*ast.FuncLit)

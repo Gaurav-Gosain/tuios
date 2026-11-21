@@ -10,16 +10,6 @@ import (
 	"time"
 )
 
-// The ways the stop event can fail, which these tests hold it to:
-//
-//   - kill-server sets an event the daemon does not wait on;
-//   - a request for one daemon stops another;
-//   - the socket path in another case names another event;
-//   - a set event left from the last daemon stops the next one at once;
-//   - a request with no daemon waiting reports success, so kill-server
-//     waits for a socket that never goes away, or reports an error other
-//     than ErrNotWaiting, so kill-server cannot tell it from a failure.
-
 func TestRequestReachesTheDaemon(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "tuios.sock")
 	other := filepath.Join(t.TempDir(), "tuios.sock")
@@ -60,8 +50,6 @@ func TestASetEventDoesNotStopTheNextDaemon(t *testing.T) {
 	if _, err := Watch(sock, lastDone); err != nil {
 		t.Fatal(err)
 	}
-	// The last daemon is told to stop and still holds its event when the
-	// next one starts.
 	if err := Request(sock); err != nil {
 		t.Fatal(err)
 	}

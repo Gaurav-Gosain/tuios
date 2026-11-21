@@ -32,7 +32,6 @@ func TestStreamReadsEverythingDeliveredBeforeTheLinkCloses(t *testing.T) {
 		}
 		_ = m.Close()
 
-		// A small buffer, so a chunk is also left partly read across the end.
 		got, err := readAllSmall(s, 5)
 		if err != nil {
 			t.Fatalf("round %d: the stream ended with %v, want io.EOF", round, err)
@@ -43,8 +42,6 @@ func TestStreamReadsEverythingDeliveredBeforeTheLinkCloses(t *testing.T) {
 	}
 }
 
-// readAllSmall reads r to its end through a buffer of size n, and returns
-// nil for an io.EOF end.
 func readAllSmall(r io.Reader, n int) ([]byte, error) {
 	var out []byte
 	buf := make([]byte, n)

@@ -6,10 +6,6 @@ import (
 	"sync"
 )
 
-// keyInput is what Bubble Tea reads: the person's keys from the terminal, and
-// the keys "show me" types for them. Fd is the terminal's, so Bubble Tea
-// puts it in raw mode and restores it on the way out, as it does when it
-// reads the terminal itself.
 type keyInput struct {
 	tty  *os.File
 	once sync.Once
@@ -26,9 +22,6 @@ func newInput(tty *os.File) *keyInput {
 	return in
 }
 
-// pump copies the terminal's bytes in. It ends with the terminal. It starts
-// on the first Read, which Bubble Tea makes once the terminal is raw, so no
-// read is left waiting for a whole cooked line.
 func (in *keyInput) pump() {
 	buf := make([]byte, 4096)
 	for {
@@ -43,11 +36,8 @@ func (in *keyInput) pump() {
 	}
 }
 
-// maxPending bounds the bytes waiting to be read. Only a stuck program
-// reaches it, and then a key more or less does not matter.
 const maxPending = 64 << 10
 
-// inject queues bytes as if the person typed them.
 func (in *keyInput) inject(b []byte) {
 	in.mu.Lock()
 	if len(in.buf)+len(b) <= maxPending {
@@ -72,11 +62,8 @@ func (in *keyInput) Read(b []byte) (int, error) {
 	return n, nil
 }
 
-// Write goes to the terminal. Bubble Tea writes nothing to its input.
 func (in *keyInput) Write(b []byte) (int, error) { return in.tty.Write(b) }
 
-// Close ends reads once the queue is empty. The terminal stays open: it is
-// the person's.
 func (in *keyInput) Close() error {
 	in.mu.Lock()
 	in.closed = true
@@ -85,5 +72,4 @@ func (in *keyInput) Close() error {
 	return nil
 }
 
-// Fd is the terminal's, for raw mode.
 func (in *keyInput) Fd() uintptr { return in.tty.Fd() }

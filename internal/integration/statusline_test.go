@@ -105,7 +105,6 @@ func TestParseStatusLine(t *testing.T) {
 	}
 }
 
-// settingsDoc parses a settings file for comparison.
 func settingsDoc(t *testing.T, data string) map[string]any {
 	t.Helper()
 	var m map[string]any
@@ -142,7 +141,6 @@ func TestStatusLineChainRoundTrip(t *testing.T) {
 	if !st.Installed || st.Then != "~/.claude/statusline.sh" {
 		t.Errorf("state = %+v", st)
 	}
-	// Installing again without --then keeps the chain: it is the person's.
 	if res, err := tg.InstallStatusLine(env, "tuios", ""); err != nil || res.Changed {
 		t.Errorf("reinstall: %+v %v", res, err)
 	}
@@ -166,7 +164,6 @@ func TestStatusLineRefusesUserSlot(t *testing.T) {
 	if !errors.As(err, &owned) || owned.Command != "~/.claude/statusline.sh" {
 		t.Fatalf("err = %v, want the user's command named", err)
 	}
-	// A different command to chain to is refused too: it would drop theirs.
 	if _, err := tg.InstallStatusLine(env, "tuios", "echo other"); !errors.As(err, &owned) {
 		t.Fatalf("chaining another command: err = %v", err)
 	}
@@ -177,12 +174,10 @@ func TestStatusLineRefusesUserSlot(t *testing.T) {
 	if !st.Foreign || st.Installed || st.Command != "~/.claude/statusline.sh" {
 		t.Errorf("state = %+v", st)
 	}
-	// Uninstall leaves it alone.
 	if res, err := tg.UninstallStatusLine(env); err != nil || res.Changed {
 		t.Errorf("uninstall: %+v %v", res, err)
 	}
 
-	// A status line that is not a command is left alone and named as such.
 	writeFile(t, path, `{"statusLine": "fancy"}`)
 	if _, err := tg.InstallStatusLine(env, "tuios", ""); !errors.As(err, &owned) || owned.Command != "" {
 		t.Errorf("non-command slot: err = %v", err)

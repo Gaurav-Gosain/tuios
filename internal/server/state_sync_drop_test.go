@@ -30,8 +30,6 @@ func TestStateSyncFloodLeavesTheClientOnTheNewestSnapshot(t *testing.T) {
 
 	const name = "syncflood"
 
-	// The client under test. Its Update loop never runs, which is what a client
-	// busy with a repaint or a round trip looks like from the read loop.
 	viewer := session.NewTUIClient()
 	if err := viewer.Connect("test", 80, 24); err != nil {
 		t.Fatalf("viewer connect: %v", err)
@@ -49,22 +47,6 @@ func TestStateSyncFloodLeavesTheClientOnTheNewestSnapshot(t *testing.T) {
 		Height:          24,
 	})
 	m.WireDaemonClient(viewer)
-	// The state-sync hook, the same as WireDaemonClient installs, and one more
-	// thing: it notes when the newest snapshot has reached this client. That is
-	// the barrier the drain below waits on.
-	//
-	// It used to be a round trip on this client's own connection, on the
-	// grounds that the reply comes back only after every sync sent before it.
-	// That holds for syncs already on this connection, and the daemon writes
-	// each client's broadcasts from a goroutine of its own, so the last
-	// broadcast can still be on its way when the reply overtakes it. Under the
-	// race detector it did, and the test reported a dropped snapshot that was
-	// only late.
-	//
-	// Noting the arrival here rather than draining early is what keeps the test
-	// able to fail: the channel is left full while the snapshots land, so a
-	// queue that threw the newest away instead of the oldest would still be
-	// caught.
 	newest := 0.30 + float64(19)*0.01
 	var sawNewest atomic.Bool
 	viewer.OnStateSync(func(state *session.SessionState, triggerType, sourceID string) {
@@ -75,7 +57,6 @@ func TestStateSyncFloodLeavesTheClientOnTheNewestSnapshot(t *testing.T) {
 	})
 	viewer.StartReadLoop()
 
-	// The other client, making the changes this one has to hear about.
 	author := session.NewTUIClient()
 	if err := author.Connect("test", 80, 24); err != nil {
 		t.Fatalf("author connect: %v", err)
@@ -90,8 +71,6 @@ func TestStateSyncFloodLeavesTheClientOnTheNewestSnapshot(t *testing.T) {
 		t.Fatalf("author attach returned no state")
 	}
 
-	// More updates than the channel holds, each one distinguishable, spaced so
-	// the daemon's per-client broadcast goroutines cannot reorder them.
 	const pushes = 20
 	want := make([]float64, 0, pushes)
 	for i := range pushes {
@@ -110,7 +89,6 @@ func TestStateSyncFloodLeavesTheClientOnTheNewestSnapshot(t *testing.T) {
 	if want[len(want)-1] != newest {
 		t.Fatalf("setup: the barrier waits for %.2f but the last push is %.2f", newest, want[len(want)-1])
 	}
-	// Wait for the newest snapshot to reach this client. See the hook above.
 	deadline := time.Now().Add(15 * time.Second)
 	for !sawNewest.Load() {
 		if time.Now().After(deadline) {
@@ -132,8 +110,6 @@ drain:
 	if len(got) == 0 {
 		t.Fatalf("the viewer was told nothing")
 	}
-	// Precondition: this test means nothing if the daemon delivered the updates
-	// out of order, because then "the newest" was never the last to arrive.
 	for i := 1; i < len(got); i++ {
 		if got[i] <= got[i-1] {
 			t.Fatalf("vacuous: syncs arrived out of order (%v)", got)

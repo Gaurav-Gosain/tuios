@@ -8,16 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
-// macOSHost is the answer detectMacOS and isMacOS give.
-//
-// A variable rather than a call so a test can put the other platform's
-// defaults in front of code that has to behave the same on both, the way
-// internal/input already does with darwinHost. Without it, a test asserting
-// non-macOS behaviour can only run on a non-macOS machine: the defaults, the
-// key normalizer and the validator all read this, and every one of them
-// answers for the machine the test is running on.
-//
-// Production never writes it.
 var macOSHost = platformIsMacOS()
 
 // E2EPlatformDarwin reports whether the end-to-end suite asked for the macOS
@@ -25,9 +15,7 @@ var macOSHost = platformIsMacOS()
 // the knob platform=darwin. It is for the suite only.
 func E2EPlatformDarwin() bool { return testknob.String("platform") == "darwin" }
 
-// platformIsMacOS is the real answer, read once at init.
 func platformIsMacOS() bool {
-	// Check GOOS first (most reliable)
 	if runtime.GOOS == "darwin" || E2EPlatformDarwin() {
 		return true
 	}

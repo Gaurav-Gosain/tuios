@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// classes holds one sample of every kind of character Rune must report.
 var classes = []struct {
 	name string
 	r    rune
@@ -43,7 +42,6 @@ var classes = []struct {
 	{"variation selector 256", 0xe01ef},
 }
 
-// legit is text that must come through Strip unchanged.
 var legit = []struct {
 	name, s string
 }{
@@ -81,8 +79,6 @@ func TestRuneKeepsVisibleText(t *testing.T) {
 			}
 		}
 	}
-	// Mongolian free variation selectors are part of how Mongolian is
-	// written, and they are not in either variation selector block.
 	if Rune(0x180b) {
 		t.Errorf("Rune(U+180B) = true, want false")
 	}

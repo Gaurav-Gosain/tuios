@@ -14,16 +14,12 @@ import (
 // both call it, so a pane is told the same thing whichever side spawns it.
 // It is not cached here; the standalone path caches it per process.
 func DetectTerm() (termType, colorTerm string) {
-	// TERM and COLORTERM set explicitly are trusted as they are. This is the
-	// case tuios-web depends on, because its stdout is not a TTY.
 	envTerm := os.Getenv("TERM")
 	envColorTerm := os.Getenv("COLORTERM")
 	if envColorTerm == "truecolor" && envTerm != "" && envTerm != "dumb" {
 		return envTerm, envColorTerm
 	}
 
-	// colorprofile handles TERM, COLORTERM, NO_COLOR, CLICOLOR, terminfo and
-	// tmux. For SSH sessions, os.Environ() includes the client's forwarded vars.
 	return ProfileToEnv(colorprofile.Detect(os.Stdout, os.Environ()), envTerm)
 }
 
@@ -32,16 +28,12 @@ func DetectTerm() (termType, colorTerm string) {
 func ProfileToEnv(profile colorprofile.Profile, parentTerm string) (termType, colorTerm string) {
 	switch profile {
 	case colorprofile.TrueColor:
-		// Prefer parent TERM, fallback to xterm-256color
-		// Note: We support XTWINOPS but xterm-256color terminfo doesn't advertise it
-		// Applications must query the terminal directly (which works via our CSI 't' handler)
 		if parentTerm != "" {
 			return parentTerm, "truecolor"
 		}
 		return "xterm-256color", "truecolor"
 
 	case colorprofile.ANSI256:
-		// COLORTERM is not set for 256 colors.
 		switch {
 		case parentTerm != "" && strings.Contains(parentTerm, "256color"):
 			return parentTerm, ""
@@ -54,14 +46,12 @@ func ProfileToEnv(profile colorprofile.Profile, parentTerm string) (termType, co
 		}
 
 	case colorprofile.ANSI:
-		// Basic 16 color support
 		if parentTerm != "" && parentTerm != "dumb" {
 			return parentTerm, ""
 		}
 		return "xterm", ""
 
 	case colorprofile.Ascii, colorprofile.NoTTY:
-		// No color support or not a TTY
 		return "dumb", ""
 
 	default:

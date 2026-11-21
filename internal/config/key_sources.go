@@ -6,12 +6,6 @@ import (
 	"strings"
 )
 
-// Where a key binding is set: the config file and the line, so a warning
-// about two bindings can say where to change each one. The file comes from
-// the layers (LayeredConfig.Holders), the line from a scan of that file's
-// text: the table header, then the line that sets the action, or for an
-// [[actions]] or [[keybindings.command]] entry the line of its key.
-
 // KeySource is where a binding is set. File is empty for a default binding.
 type KeySource struct {
 	File string `json:"file,omitempty"`
@@ -49,8 +43,6 @@ func (c *UserConfig) BindingSource(section, action string) KeySource {
 	case strings.HasPrefix(action, CommandActionPrefix):
 		header, entry, path = "[[keybindings.command]]", strings.TrimPrefix(action, CommandActionPrefix), []string{"keybindings", "command"}
 	}
-	// The last holder is the file in force; a lower one only when the scan
-	// cannot find the line in it.
 	holders := lc.Holders(path)
 	for i := len(holders) - 1; i >= 0; i-- {
 		if line := findKeyLine(holders[i].Data, header, entry, field); line > 0 {
@@ -63,9 +55,6 @@ func (c *UserConfig) BindingSource(section, action string) KeySource {
 	return KeySource{}
 }
 
-// findKeyLine is the line, from 1, that sets field under header in data, or
-// 0. For an array of tables (entry not empty) it is the key line of the entry
-// whose name is entry, else its header line.
 func findKeyLine(data []byte, header, entry, field string) int {
 	in, entryAt, keyAt, named := false, 0, 0, false
 	done := func() int {

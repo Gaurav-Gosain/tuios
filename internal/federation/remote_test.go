@@ -41,7 +41,6 @@ func TestProbeScriptIsOneSafeLine(t *testing.T) {
 	}
 }
 
-// waitReport polls the one host's report until want accepts it.
 func waitReport(t *testing.T, m *Manager, want func(HostReport) bool, why string) HostReport {
 	t.Helper()
 	deadline := time.Now().Add(15 * time.Second)
@@ -59,7 +58,6 @@ func waitReport(t *testing.T, m *Manager, want func(HostReport) bool, why string
 	return r
 }
 
-// waitStatus polls the one host's report until it has the wanted status.
 func waitStatus(t *testing.T, m *Manager, want Status) HostReport {
 	t.Helper()
 	return waitReport(t, m, func(r HostReport) bool { return r.Status == want },
@@ -73,8 +71,6 @@ func waitStatus(t *testing.T, m *Manager, want Status) HostReport {
 func TestLinkFindsTuiosAtAKnownPathAndRedialsWithIt(t *testing.T) {
 	far := newFarMachine(t)
 
-	// A stub that answers hello and then hangs a listing, so a call times out
-	// and the supervisor redials. That second dial is the one under test.
 	hang := make(chan struct{})
 	far.stub = startStubDaemon(t, func(verb string, _ json.RawMessage) (any, *RemoteError) {
 		if verb == "hello" {
@@ -98,15 +94,11 @@ func TestLinkFindsTuiosAtAKnownPathAndRedialsWithIt(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	// One slow listing no longer ends a link: it must not, or an attached
-	// session would die every time a listing was slow. A run of them does.
 	for range maxControlFailures {
 		if _, err := m.Call(ctx, "build", "list-sessions", nil); err == nil {
 			t.Fatal("the call against the hanging stub succeeded; the redial cannot be forced")
 		}
 	}
-	// The link was torn down. Wait for the redial to bring it back, then read
-	// what that dial ran.
 	deadline := time.Now().Add(15 * time.Second)
 	for len(commands()) < 2 && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
@@ -182,8 +174,6 @@ func TestLinkFindsTuiosThroughTheLoginShell(t *testing.T) {
 // as configured.
 func TestConfiguredCommandSkipsTheProbe(t *testing.T) {
 	far := newFarMachine(t)
-	// Installed where no probe would look, and with a tuios in ~/.local/bin
-	// that a probe would have preferred.
 	configured := far.install("elsewhere/my-tuios")
 	far.install(".local/bin/tuios")
 
@@ -211,7 +201,6 @@ func TestStalePathIsProbedAgain(t *testing.T) {
 		t.Fatalf("the link reports %q, want %s", r.Command, old)
 	}
 
-	// Move the binary, then drop the link so the supervisor redials.
 	moved := far.install("go/bin/tuios")
 	if err := os.Remove(old); err != nil {
 		t.Fatalf("remove: %v", err)
@@ -223,7 +212,6 @@ func TestStalePathIsProbedAgain(t *testing.T) {
 		t.Fatalf("ASSERTION: the link did not come back up after the binary moved: %s / %s", r.Status, r.Reason)
 	}
 	got := commands()
-	// Probe, cached redial that failed, probe again.
 	if len(got) < 3 || got[1] != old || got[2] != "" {
 		t.Errorf("ASSERTION: the dials after the binary moved were %q, want the stale %s and then a fresh probe", got, old)
 	}
@@ -244,8 +232,6 @@ func TestKnownPathSurvivesAnUnreachableMachine(t *testing.T) {
 		t.Fatalf("mark the machine down: %v", err)
 	}
 	tearDownLink(t, m, "build")
-	// The report to wait for is the failed dial's, not the teardown's: both
-	// read as unreachable, and only the dial carries ssh's words.
 	waitReport(t, m, func(r HostReport) bool {
 		return r.Status == StatusUnreachable && strings.Contains(r.Detail, "No route to host")
 	}, "the dial against the down machine never reported ssh's refusal")
@@ -265,9 +251,6 @@ func TestKnownPathSurvivesAnUnreachableMachine(t *testing.T) {
 	}
 }
 
-// newFarMachine builds the far side. The stand-in exports a PATH holding only
-// sh, so nothing else on this machine can be found by name, and HOME under
-// the test's temp dir, so nothing in the developer's home can be found either.
 func newFarMachine(t *testing.T) *farMachine {
 	t.Helper()
 	base := t.TempDir()
@@ -290,10 +273,8 @@ func newFarMachine(t *testing.T) *farMachine {
 	}
 	script := "#!/bin/sh\n" +
 		"while [ $# -gt 0 ]; do case \"$1\" in -o) shift 2 ;; -T|-t) shift ;; --) shift; break ;; *) break ;; esac; done\n" +
-		"shift\n" + // the address
+		"shift\n" +
 		"if [ -e " + f.down + " ]; then echo 'ssh: connect to host buildbox port 22: No route to host' >&2; exit 255; fi\n" +
-		// The extra entry is read before the PATH narrows, while cat can
-		// still be found.
 		"extra=; if [ -f " + f.extraPath + " ]; then extra=$(cat " + f.extraPath + "):; fi\n" +
 		"export HOME=" + f.home + " PATH=$extra" + empty + " SHELL=/bin/sh\n" +
 		"exec /bin/sh -c \"$*\"\n"
@@ -303,22 +284,15 @@ func newFarMachine(t *testing.T) *farMachine {
 	return f
 }
 
-// farMachine is the far side a probe test dials: a HOME and PATH of the test's
-// own, an ssh stand-in that switches to them, and a tuios that is the proxy.
 type farMachine struct {
-	t    *testing.T
-	home string
-	// down, when it exists, makes the stand-in fail the way ssh does when the
-	// machine cannot be reached.
-	down string
-	// extraPath, when it exists, names one more directory on the far PATH.
+	t         *testing.T
+	home      string
+	down      string
 	extraPath string
 	ssh       string
 	stub      *stubDaemon
 }
 
-// install puts a tuios at rel under the far HOME. It is a script that runs
-// this test binary as the proxy against the stub, whatever arguments it gets.
 func (f *farMachine) install(rel string) string {
 	f.t.Helper()
 	self, err := os.Executable()
@@ -336,7 +310,6 @@ func (f *farMachine) install(rel string) string {
 	return path
 }
 
-// addToPath puts dir on the far side's PATH.
 func (f *farMachine) addToPath(dir string) {
 	f.t.Helper()
 	if err := os.WriteFile(f.extraPath, []byte(dir), 0o600); err != nil {
@@ -344,8 +317,6 @@ func (f *farMachine) addToPath(dir string) {
 	}
 }
 
-// recordingDialer wraps a dialer and keeps the command each dial was asked to
-// run, which is how a test sees whether a redial probed or used what it knew.
 func recordingDialer(inner Dialer) (Dialer, func() []string) {
 	var mu sync.Mutex
 	var commands []string
@@ -362,10 +333,6 @@ func recordingDialer(inner Dialer) (Dialer, func() []string) {
 	}
 }
 
-// skipIfTuiosIsInstalledSystemWide guards the tests that need the probe to
-// find nothing. The far side's HOME and PATH are the test's own, but the fixed
-// list also names system directories, and a developer with tuios in one of
-// them would have the probe find it, correctly.
 func skipIfTuiosIsInstalledSystemWide(t *testing.T) {
 	t.Helper()
 	for _, c := range remoteBinaryCandidates {
@@ -378,7 +345,6 @@ func skipIfTuiosIsInstalledSystemWide(t *testing.T) {
 	}
 }
 
-// tearDownLink closes one host's live link, so its supervisor redials.
 func tearDownLink(t *testing.T, m *Manager, name string) {
 	t.Helper()
 	l := m.link(name)
@@ -394,7 +360,6 @@ func tearDownLink(t *testing.T, m *Manager, name string) {
 	down()
 }
 
-// waitCommand polls until the one host is up and reports running want.
 func waitCommand(t *testing.T, m *Manager, want string) HostReport {
 	t.Helper()
 	return waitReport(t, m, func(r HostReport) bool { return r.Status == StatusUp && r.Command == want },

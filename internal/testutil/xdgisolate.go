@@ -19,56 +19,27 @@ import (
 	"github.com/adrg/xdg"
 )
 
-// Test binaries must not touch the developer's own XDG directories. The xdg
-// package resolves its base paths once at package init, so t.Setenv inside a
-// test comes far too late to redirect anything: by then xdg.StateHome already
-// holds the real ~/.local/state. Redirecting has to happen before the first
-// test runs and it has to cover the whole binary, which is what TestMain is
-// for. A per-test helper is the wrong shape for this, because the next test
-// written is the one that forgets to call it.
-
-// xdgVars are every base directory the app resolves paths from. All of them
-// point at the same throwaway tree; the app namespaces itself under "tuios"
-// inside each, so sharing a root loses nothing and keeps cleanup to one call.
 var xdgVars = []string{
 	"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME",
 	"XDG_CACHE_HOME", "XDG_RUNTIME_DIR",
 }
 
-// windowsDirVars are the folders Windows names instead of the XDG ones.
 var windowsDirVars = []string{"USERPROFILE", "LOCALAPPDATA", "APPDATA"}
 
-// isolateXDG points every XDG directory at a throwaway tree and returns that
-// tree's path along with a function that removes it and reports whether the
-// redirect was still in force when the run ended.
 func isolateXDG() (dir string, check func() error) {
 	tmp, err := os.MkdirTemp("", "tuios-test-xdg")
 	if err != nil {
 		panic(fmt.Sprintf("testutil: create XDG tree: %v", err))
 	}
-	// Pin the Go toolchain's own directories before HOME moves. A test that runs
-	// the go command would otherwise derive GOPATH, the module cache and the
-	// build cache from the throwaway HOME, download every module into the tree
-	// (about 155 MB), and leave it behind: the module cache is read-only, so
-	// the cleanup below cannot remove it.
 	pinGoDirs()
 	for _, name := range xdgVars {
 		if err := os.Setenv(name, tmp); err != nil {
 			panic(fmt.Sprintf("testutil: set %s: %v", name, err))
 		}
 	}
-	// HOME moves too, so a path built from os.UserHomeDir rather than from xdg
-	// lands in the tree as well. internal/server derives an SSH host key that
-	// way.
 	if err := os.Setenv("HOME", tmp); err != nil {
 		panic(fmt.Sprintf("testutil: set HOME: %v", err))
 	}
-	// On Windows os.UserHomeDir reads USERPROFILE, so it moves as well. The
-	// daemon's socket is under LOCALAPPDATA, the herdr and integration lookups
-	// read APPDATA, and XDG_RUNTIME_DIR moves neither. A test that left them in
-	// place reached the developer's running daemon and stopped it (#1450).
-	// pinGoDirs has already read the real cache folder, so the go command keeps
-	// its own.
 	if runtime.GOOS == "windows" {
 		for _, name := range windowsDirVars {
 			if err := os.Setenv(name, tmp); err != nil {
@@ -76,22 +47,12 @@ func isolateXDG() (dir string, check func() error) {
 			}
 		}
 	}
-	// A test binary that a test's daemon runs as a pane's program, as the
-	// helper processes in internal/session are, has the pane variables of
-	// that daemon, and reads them. Only the outer run clears them: it marks
-	// the environment, and every process it starts inherits the mark.
 	if os.Getenv(isolatedEnv) == "" {
 		ClearPaneEnv()
 	}
 	if err := os.Setenv(isolatedEnv, "1"); err != nil {
 		panic(fmt.Sprintf("testutil: set %s: %v", isolatedEnv, err))
 	}
-	// tuios follows the Omarchy theme it finds when no theme is configured,
-	// and Omarchy keeps that theme under $HOME/.local/state and its themes
-	// under /usr/share as well, which no XDG variable moves. An empty
-	// SWATCH_OMARCHY_DIR is the one current directory swatch reads, and with
-	// it set the installed themes are not listed either. Without this a
-	// developer on Omarchy ran the tests in their own theme (#1492).
 	noOmarchy := filepath.Join(tmp, "omarchy-current")
 	if err := os.MkdirAll(noOmarchy, 0o755); err != nil {
 		panic(fmt.Sprintf("testutil: create %s: %v", noOmarchy, err))
@@ -110,20 +71,6 @@ func isolateXDG() (dir string, check func() error) {
 	}
 }
 
-// paneEnvVars are the variables a tuios daemon gives every pane. A run
-// started from a tuios pane inherits them, and they name the person's daemon,
-// session and pane, not the ones a test starts:
-//   - TUIOS_SOCKET names the person's daemon. Nothing selects a daemon by it,
-//     but the check against it dials the socket it names.
-//   - TUIOS_SERVER puts every tuios a test runs on the pane's named server.
-//   - TUIOS_PANE_ID and TUIOS_PANE_TOKEN are the pane's identity. A command a
-//     test runs sends them as its own, so the test's daemon finds no such pane
-//     (send-agent-message) or refuses the token (tuios mcp).
-//   - TUIOS_SESSION and TUIOS_WINDOW_ID fill a command's default session and
-//     window with the pane's.
-//
-// CI runs outside any pane and has none of them, so a test passed there and
-// failed here.
 var paneEnvVars = []string{
 	"TUIOS_SOCKET", "TUIOS_SERVER", "TUIOS_SESSION", "TUIOS_SESSION_REMOTE",
 	"TUIOS_PANE_ID", "TUIOS_WINDOW_ID", "TUIOS_WINDOW_NAME", "TUIOS_PANE_TOKEN",
@@ -131,8 +78,6 @@ var paneEnvVars = []string{
 	"TUIOS_HOST", "TUIOS_ENV",
 }
 
-// isolatedEnv marks a process that a test run started, directly or through
-// a daemon the test started.
 const isolatedEnv = "TUIOS_TEST_ISOLATED"
 
 // ClearPaneEnv unsets every variable a tuios pane gives the programs in it,
@@ -146,11 +91,6 @@ func ClearPaneEnv() {
 	}
 }
 
-// pinGoDirs sets GOPATH, GOMODCACHE and GOCACHE to the values the go command
-// would use for the real HOME, unless they are already set. It must run before
-// HOME is redirected. Go derives GOPATH from HOME and GOCACHE from the user
-// cache dir, which on Linux follows XDG_CACHE_HOME, so both would move with
-// the redirect.
 func pinGoDirs() {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -172,15 +112,6 @@ func pinGoDirs() {
 	}
 }
 
-// stillRedirected reports any XDG base that no longer resolves inside the tree.
-//
-// The way back out is a test that redirects xdg for itself and reloads without
-// restoring, which leaves the globals wherever the environment pointed at that
-// moment for every test that follows. Three helpers had a version of this: they
-// registered the restoring reload after t.Setenv, and cleanups run last in
-// first out, so the reload went first and re-resolved onto the very temp
-// directory it was meant to be leaving, moments before that directory was
-// deleted.
 func stillRedirected(tmp string) error {
 	var escaped []string
 	for name, path := range map[string]string{
@@ -191,11 +122,6 @@ func stillRedirected(tmp string) error {
 		"XDG_RUNTIME_DIR": xdg.RuntimeDir,
 		"HOME":            xdg.Home,
 	} {
-		// On Windows xdg takes the home folder from the Known Folder API,
-		// which no environment variable moves, so xdg.Home always names
-		// the real profile there. Nothing in tuios reads xdg.Home; the
-		// paths that matter are the XDG ones above and os.UserHomeDir,
-		// which USERPROFILE moves.
 		if name == "HOME" && runtime.GOOS == "windows" {
 			continue
 		}
@@ -219,14 +145,8 @@ func stillRedirected(tmp string) error {
 		tmp, strings.Join(escaped, "\n"))
 }
 
-// watcherSettle is how long the end-of-run count waits for a watcher that is
-// still being closed. A package with no leak does not wait: the first count
-// already matches.
 const watcherSettle = 3 * time.Second
 
-// settledWatchers returns how many more watchers count reports than start,
-// polling until that is none or wait has passed. It waits on the condition: a
-// count that is already at the start returns at once.
 func settledWatchers(count func() int, start int, wait time.Duration) int {
 	deadline := time.Now().Add(wait)
 	for {
@@ -246,10 +166,6 @@ func settledWatchers(count func() int, start int, wait time.Duration) int {
 // tests expect to find, so they read the fixture rather than whatever the
 // developer happens to have.
 func RunIsolated(m *testing.M, setup ...func(dir string)) int {
-	// A test run must not reach the developer's speakers any more than it may
-	// reach their config. The alert path plays a cue through a system audio
-	// player, and a package that exercises it would otherwise make noise on
-	// every `go test`, and spawn processes on a CI box that has no device.
 	os.Setenv(sound.DisableEnv, "1") //nolint:errcheck,gosec // a failure here only means the tests are audible
 
 	dir, check := isolateXDG()
@@ -259,13 +175,6 @@ func RunIsolated(m *testing.M, setup ...func(dir string)) int {
 	startPoller()
 	watchers := watcherInstances()
 	code := m.Run()
-	// A watcher a test opens and never closes is an inotify instance on
-	// Linux, and the kernel allows 128 per user by default, across every
-	// test binary running at once. A package that leaks them makes another
-	// package's watcher fail to open, far from the cause. A watcher its owner
-	// is closing on another goroutine, such as a web session that ends after
-	// the last test, is open for a moment more and is not a leak, so the count
-	// waits for the instances to come back to the start.
 	if left := settledWatchers(watcherInstances, watchers, watcherSettle); left > 0 {
 		fmt.Fprintf(os.Stderr, "\nthe tests left %d %s open (%d at the start, %d at the end): "+
 			"a watcher was opened and never closed\n", left, watcherKind, watchers, watchers+left)
@@ -282,9 +191,6 @@ func RunIsolated(m *testing.M, setup ...func(dir string)) int {
 	return code
 }
 
-// hashDirs maps every file under the given directories to a digest of its
-// contents. A directory that does not exist contributes nothing, so a run that
-// creates one from scratch shows up as new entries.
 func hashDirs(dirs []string) (map[string]string, error) {
 	out := map[string]string{}
 	for _, dir := range dirs {
@@ -300,8 +206,6 @@ func hashDirs(dirs []string) (map[string]string, error) {
 			}
 			sum, err := hashFile(path)
 			if err != nil {
-				// A socket, or a file removed mid-walk, is not evidence of a
-				// write, and reporting it would make the check flaky.
 				return nil //nolint:nilerr // unreadable entries are not evidence
 			}
 			out[path] = sum
@@ -327,7 +231,6 @@ func hashFile(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// diffDirs reports the files the run added, changed or removed.
 func diffDirs(before, after map[string]string) error {
 	var lines []string
 	for path, sum := range after {

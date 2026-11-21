@@ -44,7 +44,6 @@ func (m *Model) View() tea.View {
 		lines := []string{
 			m.styles().title.Render("tuios tutor"),
 			"",
-			// One paragraph, so it wraps at the window's width.
 			"Learn tuios by doing it. The shell, the files and the agents here are a practice copy. Nothing on your computer changes.",
 		}
 		if m.saveErr != "" {
@@ -63,21 +62,14 @@ func (m *Model) View() tea.View {
 	return m.lessonView()
 }
 
-// styles are the tutor's inks and grounds, from the theme's dialog palette,
-// as all chrome is.
 type styles struct {
 	pal                               overlay.Palette
 	ground                            color.Color
 	title, text, dim, mute, warn, key lipgloss.Style
 }
 
-// styles are the inks on the screens of the tutor's own, which sit on the
-// terminal's own background.
 func (m *Model) styles() styles { return stylesOn(theme.UI(), overlay.NoColor) }
 
-// cardStyles are the inks on the card. The card sits on the dialog surface,
-// so it reads as apart from tuios above it. At 16 colours the surface is the
-// terminal's own background, and the bar's glyphs set the card apart.
 func (m *Model) cardStyles() styles {
 	pal := theme.UI()
 	g := pal.Surface
@@ -103,7 +95,6 @@ func stylesOn(pal overlay.Palette, g color.Color) styles {
 	}
 }
 
-// lessonView is tuios with the card under it.
 func (m *Model) lessonView() tea.View {
 	v := m.tour.View()
 	th := m.tourHeight()
@@ -122,7 +113,6 @@ func (m *Model) lessonView() tea.View {
 	return v
 }
 
-// lessonState is what the card draws, read from the lesson engine.
 type lessonState struct {
 	phase                 string
 	shown, total, pressed int
@@ -165,20 +155,17 @@ func (m *Model) lessonState() lessonState {
 	return ls
 }
 
-// card is the 4-row card at y.
 func (m *Model) card(y int) []string {
 	s := m.cardStyles()
 	ls := m.lessonState()
 	w := m.w
 
-	// Row 1: the track, where the lesson is, and the bar.
 	head := " " + m.track.Title + "  "
 	if ls.hasLesson {
 		head += itoa(ls.shown+1) + " of " + itoa(ls.total) + "  "
 	}
 	row1 := s.title.Render(head) + m.bar(ls, w-ansi.StringWidth(head)-1) + s.text.Render(" ")
 
-	// Row 2: the step's title, and its keys.
 	title, caps := "Getting the screen ready", ""
 	if ls.hasLesson {
 		title = ls.step.Title
@@ -186,10 +173,8 @@ func (m *Model) card(y int) []string {
 	}
 	row2 := m.spread(s.text.Bold(true).Render(" "+title), caps+s.text.Render("  "), w)
 
-	// Row 3: the note, or the hint once the ladder reaches it.
 	row3 := s.dim.Render(" " + m.noteLine(ls))
 
-	// Row 4: the tutor's own keys, and the coach.
 	buttons, x := m.buttons(ls, y+3)
 	row4 := m.spread(buttons, m.coachText(s, w-x-4)+s.text.Render(" "), w)
 
@@ -201,7 +186,6 @@ func (m *Model) card(y int) []string {
 	}
 }
 
-// strip is the 2-row card for a window under 80x24.
 func (m *Model) strip(y int) []string {
 	s := m.cardStyles()
 	ls := m.lessonState()
@@ -233,7 +217,6 @@ func (m *Model) strip(y int) []string {
 	}
 }
 
-// spread puts left at the start of a w-cell row and right at its end.
 func (m *Model) spread(left, right string, w int) string {
 	gap := w - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
@@ -242,9 +225,6 @@ func (m *Model) spread(left, right string, w int) string {
 	return left + overlay.Style(m.cardStyles().ground).Render(strings.Repeat(" ", gap)) + right
 }
 
-// bar draws one segment per step: thick for a step done, on this run or an
-// earlier one, thin for a step to go. The glyphs carry it, so it reads with
-// no colour at all.
 func (m *Model) bar(ls lessonState, width int) string {
 	s := m.cardStyles()
 	n := len(m.track.Steps)
@@ -273,7 +253,6 @@ func (m *Model) bar(ls lessonState, width int) string {
 	return b.String()
 }
 
-// keycaps draws the step's keys, the ones pressed so far lit.
 func (m *Model) keycaps(ls lessonState) string {
 	s := m.cardStyles()
 	if ls.explainer {
@@ -294,8 +273,6 @@ func (m *Model) keycaps(ls lessonState) string {
 	return strings.Join(parts, s.text.Render(" "))
 }
 
-// keycap is one key. At 16 colours and with no colour it keeps its brackets
-// and a lit key turns to reverse video, so the state never rests on colour.
 func (m *Model) keycap(label string, lit bool) string {
 	s := m.cardStyles()
 	if s.pal.Depth == overlay.Depth16 {
@@ -312,7 +289,6 @@ func (m *Model) keycap(label string, lit bool) string {
 	return overlay.KeyBadge(label, s.pal)
 }
 
-// noteLine is the card's third row: what the person needs right now.
 func (m *Model) noteLine(ls lessonState) string {
 	switch {
 	case !ls.hasLesson:
@@ -342,8 +318,6 @@ func (m *Model) noteLine(ls lessonState) string {
 	return ls.step.Note
 }
 
-// buttons draws the tutor's keys on row y, each one a click target. It
-// returns the row and the cell after it.
 func (m *Model) buttons(ls lessonState, y int) (string, int) {
 	s := m.cardStyles()
 	type button struct {
@@ -382,7 +356,6 @@ func (m *Model) buttons(ls lessonState, y int) (string, int) {
 	return b.String(), x
 }
 
-// coachText is the coach's line, while it is fresh, cut to room cells.
 func (m *Model) coachText(s styles, room int) string {
 	text := m.coach
 	if text == "" || time.Now().After(m.coachUntil) {
@@ -392,14 +365,12 @@ func (m *Model) coachText(s styles, room int) string {
 		}
 		return s.warn.Render(ansi.Truncate(text, max(room, 0), "…"))
 	}
-	// The name goes first when there is room for the whole line with it.
 	if ansi.StringWidth("Tilly: "+text) <= room {
 		text = "Tilly: " + text
 	}
 	return s.title.Render(ansi.Truncate(text, max(room, 0), "…"))
 }
 
-// finishView is the screen after the last step.
 func (m *Model) finishView() tea.View {
 	s := m.styles()
 	f := m.finished
@@ -433,11 +404,8 @@ func (m *Model) finishView() tea.View {
 	return m.full(lines, m.rows(), "enter choose    q leave")
 }
 
-// full centres lines on the screen, with rows as a menu under them and a key
-// line at the foot.
 func (m *Model) full(text []string, rows []row, keys string) tea.View {
 	s := m.styles()
-	// A line too wide for the window wraps by words, each part centred.
 	var lines []string
 	for _, l := range text {
 		lines = append(lines, strings.Split(ansi.Wordwrap(l, min(max(m.w-2, 10), 72), ""), "\n")...)
@@ -513,7 +481,6 @@ func (m *Model) full(text []string, rows []row, keys string) tea.View {
 
 func itoa(n int) string { return strconv.Itoa(n) }
 
-// clock is a time in seconds as m:ss.
 func clock(seconds int) string {
 	return itoa(seconds/60) + ":" + strconv.FormatInt(int64(seconds%60+100), 10)[1:]
 }

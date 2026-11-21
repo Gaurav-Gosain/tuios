@@ -41,8 +41,6 @@ func Theme(pal overlay.Palette, ansi [16]color.Color, bg, fg color.Color) *sketc
 	}
 	red, green, yellow := pick(1, pal.Warn), pick(2, pal.Success), pick(3, pal.Warning)
 	blue, magenta, cyan := pick(4, pal.Info), pick(5, pal.Accent), pick(6, pal.Info)
-	// Node fills a step toward the text colour, tinted a little with the accent,
-	// and the border two steps further, like pele's Flexoki and Nord.
 	accent := pal.Accent
 	if accent == nil {
 		accent = blue
@@ -72,18 +70,10 @@ func Theme(pal overlay.Palette, ansi [16]color.Color, bg, fg color.Color) *sketc
 	return t
 }
 
-// fillFlip is the grey where pele switches from dark to light text on a fill
-// the diagram sets itself: #1f1f1f and white have the same contrast with it.
 var fillFlip = color.NRGBA{0x7e, 0x7e, 0x7e, 0xff}
 
-// fillFloor is the contrast #1f1f1f and white have with fillFlip, the least
-// that pele's own text colours give on any fill.
 const fillFloor = 4.0
 
-// onFills is the text on fills a diagram sets itself, in the palette's own
-// colours: the darker of bg and fg on a light fill, the lighter on a dark one.
-// Each moves toward black or white until it reaches fillFloor against
-// fillFlip, so it reads on every fill that pele gives it.
 func onFills(bg, fg color.Color) (onLight, onDark color.Color) {
 	dark, light := bg, fg
 	if overlay.ContrastRatio(bg, color.Black) > overlay.ContrastRatio(fg, color.Black) {
@@ -92,8 +82,6 @@ func onFills(bg, fg color.Color) (onLight, onDark color.Color) {
 	return toward(dark, color.Black), toward(light, color.White)
 }
 
-// toward moves c toward end, black for text on light fills and white for
-// text on dark ones, until it reaches fillFloor against fillFlip.
 func toward(c, end color.Color) color.Color {
 	for t := 0.0; t < 1; t += 0.05 {
 		if k := overlay.MixColors(c, end, t); overlay.ContrastRatio(k, fillFlip) >= fillFloor {
@@ -103,8 +91,6 @@ func toward(c, end color.Color) color.Color {
 	return end
 }
 
-// readableOn moves c toward white or black, whichever reads better on the
-// grounds, until it reaches floor on all of them.
 func readableOn(c color.Color, floor float64, grounds ...color.Color) color.Color {
 	least := func(c color.Color) float64 {
 		m := 100.0
@@ -116,7 +102,6 @@ func readableOn(c color.Color, floor float64, grounds ...color.Color) color.Colo
 	if least(c) >= floor {
 		return c
 	}
-	// The least change that reaches the floor, toward white or toward black.
 	best, bestT := color.Color(nil), 2.0
 	for _, end := range []color.Color{color.White, color.Black} {
 		for t := 0.05; t < bestT && t <= 1.0001; t += 0.05 {

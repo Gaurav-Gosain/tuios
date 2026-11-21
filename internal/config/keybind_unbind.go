@@ -6,30 +6,6 @@ import (
 	"strings"
 )
 
-// Unbinding a key is written to config.toml as an empty list on the action:
-//
-//	[keybindings.terminal_mode]
-//	terminal_focus_left = []
-//
-// An action the file does not mention at all is filled in from the defaults at
-// load (fillMapDefaults keys off whether the action is present, not off how
-// many keys it has). An action present with an empty list is left alone, so the
-// default does not come back on the next load or the next restart. That is the
-// whole encoding: absent means "I have no opinion", present-and-empty means "I
-// took this away".
-//
-// The two things a user means by unbinding are both reached from here:
-//
-//   - Take one key away from tuios so the program in the pane gets it. That is
-//     FreeKey, which strips the key from every action in every scope, because a
-//     key half-freed still never reaches the pane.
-//   - Leave an action with no key at all. That is UnbindAction, or UnbindKey on
-//     the action's last key.
-//
-// Neither can free the leader key or a key the input path takes without asking
-// the config. StillHeldBy says which of those apply, so a caller can report a
-// key it did not manage to hand back rather than claiming it did.
-
 // Removal is one key taken off one action.
 type Removal struct {
 	Section string `json:"section"`
@@ -62,8 +38,6 @@ func (k *KeybindingsConfig) UnbindKey(section, action, key string) (Removal, boo
 	if len(kept) == len(keys) {
 		return Removal{}, false
 	}
-	// A non-nil empty slice, so the TOML writer emits "action = []" rather than
-	// leaving the action out of the file.
 	if kept == nil {
 		kept = []string{}
 	}
@@ -170,8 +144,6 @@ func (k *KeybindingsConfig) UnboundActions(section string) []string {
 	return out
 }
 
-// liveKeyCount is how many of a list's entries are real keys. A whitespace-only
-// entry is one Bindings already skips, so it must not make an action look bound.
 func liveKeyCount(keys []string) int {
 	n := 0
 	for _, key := range keys {

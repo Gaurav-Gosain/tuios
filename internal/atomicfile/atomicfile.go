@@ -88,8 +88,6 @@ func SweepStale(dir string, olderThan time.Duration) {
 	}
 }
 
-// isTempName reports whether name has the shape Write gives a temporary file:
-// a dot, the base name, a dot, the random part, and ".tmp".
 func isTempName(name string) bool {
 	rest, ok := strings.CutPrefix(name, ".")
 	if !ok {

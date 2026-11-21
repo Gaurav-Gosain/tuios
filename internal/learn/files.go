@@ -14,12 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/webshell"
 )
 
-// The files, the review and the worktrees of the tour. The rail reads the
-// fake shell's files, ctrl+b U makes a worktree of its repository, and the
-// review overlay reads that repository's diff through the same verbs it asks
-// a daemon for on a real machine.
-
-// backend is the fake shell's files and repository, as app.LearnBackend.
 type backend struct{}
 
 func (backend) ReadDir(dir string, limit int) ([]os.DirEntry, bool, error) {
@@ -30,12 +24,8 @@ func (backend) NewWorktree(repoRoot, branch string) (string, string, error) {
 	return webshell.NewWorktree(repoRoot, branch)
 }
 
-// verbFunc answers one verb, as the daemon would.
 type verbFunc func(params map[string]any) (any, error)
 
-// callVerb is the tour's daemon: the review verbs in m.verbs, and the fleet
-// for the rest, which answers the agents view's verbs and refuses any other.
-// The app calls it off its loop, in a command.
 func (m *Model) callVerb(verb string, params map[string]any, timeout time.Duration) (json.RawMessage, error) {
 	fn, ok := m.verbs[verb]
 	if !ok {
@@ -48,17 +38,12 @@ func (m *Model) callVerb(verb string, params map[string]any, timeout time.Durati
 	return jsonx.Marshal(res)
 }
 
-// notes are the review notes left in the tab, by the session the checkout's
-// panes are in on a real machine.
 type notes struct {
 	mu   sync.Mutex
 	by   map[string][]review.Note
 	next int
 }
 
-// registerReviewVerbs fakes review-diff, review-note and send-review over the
-// fake repository. compare-fan is the fleet's: a pane that is no attempt of
-// a fan gets its refusal, which the review reads as no fan.
 func (m *Model) registerReviewVerbs() {
 	n := &notes{by: map[string][]review.Note{}}
 	str := func(p map[string]any, k string) string {

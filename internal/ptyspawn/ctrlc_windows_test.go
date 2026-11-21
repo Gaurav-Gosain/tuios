@@ -75,8 +75,6 @@ func TestPaneCtrlCChild(t *testing.T) {
 		_ = pty.Close()
 	})
 
-	// Read the pane for as long as it runs: ping blocks on a full pane, and
-	// it prints its totals when Ctrl+C stops it.
 	var (
 		mu  sync.Mutex
 		out []byte
@@ -102,8 +100,6 @@ func TestPaneCtrlCChild(t *testing.T) {
 		return bytes.Clone(out)
 	}
 
-	// Two lines that name the address: ping's header and its first reply, so
-	// ping is in its loop before Ctrl+C is typed.
 	deadline := time.Now().Add(15 * time.Second)
 	for bytes.Count(printed(), []byte("127.0.0.1")) < 2 {
 		if time.Now().After(deadline) {

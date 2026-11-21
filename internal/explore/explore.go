@@ -94,19 +94,18 @@ const (
 type model struct {
 	cfg    Config
 	w, h   int
-	group  int // 0 is All
+	group  int
 	query  textedit.Line
 	focus  focus
-	shown  []int // indexes into cfg.Items that pass the filter
-	cursor int   // index into shown
-	top    int   // first shown row on screen
-	hover  int   // shown index under the pointer, -1 for none
-	detail int   // first detail line on screen
+	shown  []int
+	cursor int
+	top    int
+	hover  int
+	detail int
 	input  textedit.Line
 	status string
 	failed bool
 
-	// Where the last frame drew things, for the mouse.
 	geo      overlay.Geometry
 	listY    int
 	listRows int
@@ -123,7 +122,6 @@ func newModel(cfg Config) *model {
 
 func (m *model) Init() tea.Cmd { return nil }
 
-// tabs is the tab strip: All, then the groups.
 func (m *model) tabs() []string {
 	if len(m.cfg.Groups) == 0 {
 		return nil
@@ -131,7 +129,6 @@ func (m *model) tabs() []string {
 	return append([]string{"All"}, m.cfg.Groups...)
 }
 
-// refilter recomputes the rows that pass the group and the search.
 func (m *model) refilter() {
 	var keep string
 	if m.cursor < len(m.shown) {
@@ -159,8 +156,6 @@ func (m *model) refilter() {
 		m.shown = append(m.shown, i)
 	}
 	if len(terms) > 0 {
-		// The best matches first: a name that is the search, then one that
-		// starts with it, then one that has it, then the rest.
 		q := strings.ToLower(strings.TrimSpace(m.query.String()))
 		rank := func(i int) int {
 			it := m.cfg.Items[i]
@@ -229,7 +224,6 @@ func (m *model) setGroup(g int) {
 	m.refilter()
 }
 
-// current is the row under the cursor.
 func (m *model) current() (Item, bool) {
 	if m.cursor < 0 || m.cursor >= len(m.shown) {
 		return Item{}, false
@@ -338,8 +332,6 @@ func (m *model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		default:
-			// The search is a field like every other: caret, word keys,
-			// ctrl+u.
 			if changed, _ := m.query.Edit(s, k.Key().Text, textedit.LineOpts{AllowClear: true}); changed {
 				m.refilter()
 			}
@@ -359,9 +351,6 @@ func (m *model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	// The list keys of [keybindings.lists] move the list, letters included:
-	// this list has no filter on its keys, its search line takes the focus
-	// with /.
 	page := max(m.listRows-1, 1)
 	if motion := m.cfg.Lists.Keys(s, true); motion != listnav.None {
 		m.move(listnav.Delta(motion, page))
@@ -372,7 +361,6 @@ func (m *model) key(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "/":
 		m.focus = focusSearch
-	// The pager keys of less, besides the list keys.
 	case "ctrl+b":
 		m.move(-page)
 	case "ctrl+f", "space":
@@ -433,9 +421,6 @@ func (m *model) click(mo tea.Mouse) {
 	}
 }
 
-// Fixed rows of the panel around its body: top pad, title, blank, the tab
-// strip and its rule and blank, then blank, rule and the hint rows, and the
-// bottom pad.
 func (m *model) chromeRows() int {
 	n := 1 + 1 + 1 + 1
 	if len(m.tabs()) > 0 {
@@ -449,8 +434,6 @@ func (m *model) innerWidth() int {
 	return max(m.w-2*overlay.DefaultPanelPadding, 10)
 }
 
-// layout splits the body: the search row, a blank, the list, a rule and the
-// detail pane.
 func (m *model) layout() {
 	body := max(m.h-m.chromeRows(), 4)
 	detail := min(max(body/3, 3), 12)
@@ -489,7 +472,6 @@ func (m *model) View() tea.View {
 
 	var b []string
 
-	// The search row, with the count at its right end.
 	count := st().Foreground(pal.FgMute).Render(itoa(len(m.shown)) + " of " + itoa(len(m.cfg.Items)))
 	var search string
 	switch {
@@ -508,7 +490,6 @@ func (m *model) View() tea.View {
 	b = append(b, search+st().Render(strings.Repeat(" ", gap))+count)
 	b = append(b, "")
 
-	// The list.
 	nameW := m.cfg.NameWidth
 	if nameW == 0 || nameW > iw/2 {
 		nameW = max(iw/3, 8)
@@ -547,7 +528,6 @@ func (m *model) View() tea.View {
 
 	b = append(b, overlay.Rule(iw, bg, pal))
 
-	// The detail pane, or the input and the status line.
 	var lines []string
 	it, ok := m.current()
 	if m.focus == focusEdit {
@@ -610,7 +590,6 @@ func (m *model) View() tea.View {
 	return v
 }
 
-// wrap breaks s into lines of at most width cells, at spaces where it can.
 func wrap(s string, width int) []string {
 	if width < 4 {
 		return []string{s}
@@ -637,8 +616,6 @@ func itoa(n int) string {
 	return string(buf[i:])
 }
 
-// fieldText draws a field's text in fg on bg with its caret, a reverse-video
-// cell in accent, where the caret is.
 func fieldText(l *textedit.Line, bg, fg, accent color.Color) string {
 	before, at, after := l.Parts()
 	if at == "" {

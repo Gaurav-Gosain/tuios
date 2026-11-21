@@ -20,19 +20,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/webshell"
 )
 
-// TML surfaces in the tour. On a real machine the daemon holds a surface
-// (session/tml_surface.go): the tree, the state store and the versions,
-// and it answers the client's tml-input, tml-get and tml-place. The tab has
-// no daemon, so surfaceHost does that part here, by the same rules: a
-// surface a pane opens does not take the keys, its window is named after
-// that pane, a person's close answers a waiting tuios tml show with the
-// value, and esc or a closed window answers it with null. The client half
-// is the app's own (app/tml.go), unchanged.
-//
-// The fake shell's tuios tml show asks for a surface through
-// webshell.SetSurfaceHost. A surface opening, changing and closing is
-// reported to the page as tml.open, tml.input, tml.place and tml.close.
-
 // The tml events. See cmd/tuios-wasm/README.md.
 const (
 	EventTMLOpen  = "tml.open"
@@ -41,17 +28,13 @@ const (
 	EventTMLClose = "tml.close"
 )
 
-// The reasons a surface closed, as session names them.
 const (
 	tmlClosed    = session.TMLClosedByPerson
 	tmlDismissed = session.TMLDismissed
 )
 
-// surfaceAnswer is how long tuios tml show waits for the tab to open a
-// surface.
 const surfaceAnswer = 5 * time.Second
 
-// tmlSurface is one open surface.
 type tmlSurface struct {
 	id, windowID, title, owner, caller string
 	target                             string
@@ -62,14 +45,12 @@ type tmlSurface struct {
 	done                               chan webshell.SurfaceResult
 }
 
-// surfaceHost holds the tab's surfaces.
 type surfaceHost struct {
 	m        *Model
 	mu       sync.Mutex
 	surfaces map[string]*tmlSurface
 }
 
-// openSurfaceMsg asks the program's goroutine to open a surface.
 type openSurfaceMsg struct {
 	req   webshell.SurfaceRequest
 	reply chan openSurfaceReply
@@ -80,11 +61,8 @@ type openSurfaceReply struct {
 	err    error
 }
 
-// closeSurfaceWindowMsg closes the window of a surface that closed.
 type closeSurfaceWindowMsg struct{ id string }
 
-// request runs on the shell's goroutine: it hands the request to the
-// program and waits for the window.
 func (h *surfaceHost) request(req webshell.SurfaceRequest) (webshell.SurfaceOpened, error) {
 	reply := make(chan openSurfaceReply, 1)
 	h.m.send(openSurfaceMsg{req: req, reply: reply})
@@ -96,11 +74,8 @@ func (h *surfaceHost) request(req webshell.SurfaceRequest) (webshell.SurfaceOpen
 	}
 }
 
-// open opens a surface and its window. It runs on the program's goroutine.
 func (h *surfaceHost) open(req webshell.SurfaceRequest) (webshell.SurfaceOpened, error) {
 	o := h.m.OS
-	// A pane holds the limits of a program, as the daemon gives a caller in
-	// a pane.
 	lim := tml.DefaultLimits()
 	doc, _, err := tml.Check(req.Doc, &tml.ValidateOptions{Limits: &lim})
 	if err != nil {
@@ -128,8 +103,6 @@ func (h *surfaceHost) open(req webshell.SurfaceRequest) (webshell.SurfaceOpened,
 	if h.surfaces == nil {
 		h.surfaces = map[string]*tmlSurface{}
 	}
-	// Registered before the window opens, as the daemon does, so the
-	// window never draws a surface the host does not know.
 	h.surfaces[s.id] = s
 	h.mu.Unlock()
 	wid := o.OpenLearnTMLWindow(app.LearnTMLWindow{
@@ -137,8 +110,6 @@ func (h *surfaceHost) open(req webshell.SurfaceRequest) (webshell.SurfaceOpened,
 		Name:    "from " + s.owner + " · " + labelText(s.title, 48),
 		Popup:   !req.Pane,
 		Width:   req.Width, Height: req.Height,
-		// The person's own surface takes the keys. In the tab every
-		// surface comes from a pane, which leaves them where they are.
 		Focus: req.Window == "",
 	})
 	if wid == "" {
@@ -158,8 +129,6 @@ func (h *surfaceHost) open(req webshell.SurfaceRequest) (webshell.SurfaceOpened,
 	return webshell.SurfaceOpened{Surface: s.id, WindowID: wid, Target: s.target, Workspace: o.CurrentWorkspace, Done: s.done}, nil
 }
 
-// ownerLabel names the pane that opened a surface, as the daemon does for
-// a pane: its name when no other window has it, else its id.
 func (h *surfaceHost) ownerLabel(window string) string {
 	if window == "" {
 		return "tuios tml show"
@@ -191,9 +160,6 @@ func shortID(id string) string {
 	return id
 }
 
-// labelText makes text safe for a window name, as session.tmlLabelText
-// does: no control characters, no separator dot or brackets, at most max
-// runes.
 func labelText(text string, max int) string {
 	text = strings.Join(strings.Fields(tml.Sanitize(text)), " ")
 	text = strings.NewReplacer("·", "-", "(", "[", ")", "]").Replace(text)
@@ -209,8 +175,6 @@ func newSurfaceID() string {
 	return "tml-" + hex.EncodeToString(b[:])
 }
 
-// payload is the push for s, as the daemon builds it. The caller holds the
-// host's lock.
 func (s *tmlSurface) payload(withDoc bool, ops []byte) *session.TMLSurfacePayload {
 	p := &session.TMLSurfacePayload{Surface: s.id, WindowID: s.windowID, Title: s.title, Owner: s.owner, Caller: s.caller,
 		Version: s.version, DocVersion: s.docVersion}
@@ -225,8 +189,6 @@ func (s *tmlSurface) payload(withDoc bool, ops []byte) *session.TMLSurfacePayloa
 	return p
 }
 
-// call answers the client half's TML verbs in place of the daemon. It runs
-// off the program's goroutine.
 func (h *surfaceHost) call(verb string, params map[string]any, _ time.Duration) (json.RawMessage, error) {
 	raw, err := jsonx.Marshal(params)
 	if err != nil {
@@ -253,8 +215,6 @@ func (h *surfaceHost) surface(id string) (*tmlSurface, error) {
 	return s, nil
 }
 
-// input is tml-input: the state the person's actions changed, and a close.
-// A pane() action is refused: the tab has no panes to run it in.
 func (h *surfaceHost) input(raw []byte) (json.RawMessage, error) {
 	var p struct {
 		Surface string          `json:"surface"`
@@ -318,7 +278,6 @@ func (h *surfaceHost) input(raw []byte) (json.RawMessage, error) {
 	return jsonx.Marshal(res)
 }
 
-// get is tml-get: the surface whole, for a client that missed a version.
 func (h *surfaceHost) get(raw []byte) (json.RawMessage, error) {
 	var p struct {
 		Surface string `json:"surface"`
@@ -340,8 +299,6 @@ func (h *surfaceHost) get(raw []byte) (json.RawMessage, error) {
 	})
 }
 
-// place is tml-place: the person moved a surface between a popup and a
-// pane. The client lays the window out itself.
 func (h *surfaceHost) place(raw []byte) (json.RawMessage, error) {
 	var p struct {
 		Surface string `json:"surface"`
@@ -366,9 +323,6 @@ func (h *surfaceHost) place(raw []byte) (json.RawMessage, error) {
 	return jsonx.Marshal(map[string]any{"type": "tml_placed", "surface": s.id, "target": p.Target})
 }
 
-// close ends a surface: it tells the client to forget it, answers a waiting
-// tuios tml show, tells the page, and closes the window. A surface that
-// closed already is left alone.
 func (h *surfaceHost) close(id, reason string, value json.RawMessage) {
 	h.mu.Lock()
 	s := h.surfaces[id]
@@ -389,16 +343,11 @@ func (h *surfaceHost) close(id, reason string, value json.RawMessage) {
 	}
 }
 
-// windowOpen reports whether a window is still open, from the last
-// snapshot, which is safe to read from any goroutine.
 func (h *surfaceHost) windowOpen(id string) bool {
 	_, ok := h.m.State().window(id)
 	return ok
 }
 
-// sweep dismisses the surfaces whose window closed some other way: a close
-// key, the close button, or a reset. It runs on the program's goroutine,
-// after each update.
 func (h *surfaceHost) sweep() {
 	h.mu.Lock()
 	var gone []string
@@ -423,8 +372,6 @@ func (h *surfaceHost) sweep() {
 	}
 }
 
-// update handles the host's messages on the program's goroutine. ok is
-// false for a message that is not the host's.
 func (h *surfaceHost) update(msg tea.Msg) (tea.Cmd, bool) {
 	switch msg := msg.(type) {
 	case openSurfaceMsg:

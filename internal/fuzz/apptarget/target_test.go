@@ -70,9 +70,6 @@ func TestRegistryMatchesTheOracle(t *testing.T) {
 	}
 }
 
-// emittedRules collects the first argument of every vio(...) call in the oracle.
-// vio is the single constructor for a Violation in this package, which is what
-// makes the scan complete.
 func emittedRules(t *testing.T) map[string]string {
 	t.Helper()
 	fset := token.NewFileSet()

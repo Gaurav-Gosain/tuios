@@ -12,7 +12,6 @@ import (
 	"testing"
 )
 
-// fakeWindow is one window of the fake daemon's session.
 type fakeWindow struct {
 	id, name, cwd string
 	ws            int
@@ -24,19 +23,13 @@ type fakeWindow struct {
 	scratch       bool
 }
 
-// call is one verb call the fake received.
 type call struct {
 	verb   string
 	params map[string]any
 }
 
-// fakeDaemon answers the verbs the shim calls against one session, "work",
-// and records every call. A call naming any other session fails, which is
-// what lets a test see that nothing left the caller's session.
 type fakeDaemon struct {
-	mu sync.Mutex
-	// name is the session the fake holds, "work" unless a test names
-	// another; prefix starts the ids of the windows it makes.
+	mu           sync.Mutex
 	name, prefix string
 	t            *testing.T
 	windows      []*fakeWindow
@@ -45,21 +38,14 @@ type fakeDaemon struct {
 	wsNames      map[int]string
 	calls        []call
 	nextID       int
-	foreign      []string // sessions named in calls other than "work"
+	foreign      []string
 	failVerb     string
-	// refuseText, when set, is the error code send-text fails with, as the
-	// daemon refuses a pane whose grants do not cover the target.
-	refuseText string
-	// noAdmin makes list-sessions forbidden, as for a pane without admin.
-	noAdmin bool
-	// grants is the pane-grants answer, nil for a caller in no pane.
-	grants map[string]any
-	// grantsErr, when set, is what pane-grants fails with.
-	grantsErr error
+	refuseText   string
+	noAdmin      bool
+	grants       map[string]any
+	grantsErr    error
 }
 
-// codedErr is an error carrying a daemon error code, as
-// session.VerbCallError does.
 type codedErr struct{ code string }
 
 func (e codedErr) Error() string     { return "verb failed (" + e.code + ")" }
@@ -76,8 +62,6 @@ func newFake(t *testing.T) *fakeDaemon {
 	}
 }
 
-// with runs fn holding the fake's lock, for a test that changes the fake
-// while a control-mode client reads it.
 func (f *fakeDaemon) with(fn func()) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -92,7 +76,6 @@ func (f *fakeDaemon) Call(verb string, params any) (json.RawMessage, error) {
 	_ = json.Unmarshal(raw, &p)
 	f.calls = append(f.calls, call{verb: verb, params: p})
 	if verb == "pane-grants" {
-		// The one verb that names no session: it reads the caller's own pane.
 		if f.grantsErr != nil {
 			return nil, f.grantsErr
 		}
@@ -103,8 +86,6 @@ func (f *fakeDaemon) Call(verb string, params any) (json.RawMessage, error) {
 	}
 	switch verb {
 	case "list-buffers", "show-buffer", "set-buffer", "delete-buffer":
-		// The fake is a daemon from before the buffer verbs, so the shim
-		// keeps its own buffers. The e2e suite covers the daemon's.
 		return nil, codedErr{code: "unknown_verb"}
 	}
 	if verb == "list-sessions" {
@@ -231,7 +212,6 @@ func (f *fakeDaemon) Call(verb string, params any) (json.RawMessage, error) {
 	return json.Marshal(out)
 }
 
-// listing is the fake's session as list-sessions lists it.
 func (f *fakeDaemon) listing() map[string]any {
 	return map[string]any{
 		"name": f.name, "id": "sess-" + f.name, "created": 1700000000, "last_active": 1700000500,
@@ -239,9 +219,6 @@ func (f *fakeDaemon) listing() map[string]any {
 	}
 }
 
-// multiFake is a daemon of several sessions, each a fakeDaemon, for the shim
-// that serves every session. It routes a call by its session and answers
-// list-sessions and new-session itself.
 type multiFake struct {
 	mu       sync.Mutex
 	t        *testing.T
@@ -316,7 +293,6 @@ func (m *multiFake) Call(verb string, params any) (json.RawMessage, error) {
 	return f.Call(verb, params)
 }
 
-// verbs lists the verbs called, in order.
 func (f *fakeDaemon) verbs() []string {
 	var out []string
 	for _, c := range f.calls {
@@ -325,7 +301,6 @@ func (f *fakeDaemon) verbs() []string {
 	return out
 }
 
-// last returns the last call of verb, failing the test when there is none.
 func (f *fakeDaemon) last(verb string) map[string]any {
 	f.t.Helper()
 	for _, v := range slices.Backward(f.calls) {
@@ -346,7 +321,6 @@ func (f *fakeDaemon) called(verb string) bool {
 	return false
 }
 
-// harness is a shim wired to a fake daemon, with its output captured.
 type harness struct {
 	shim     *Shim
 	fake     *fakeDaemon
@@ -385,8 +359,6 @@ func newHarness(t *testing.T) *harness {
 	return h
 }
 
-// run runs one tmux argv and returns its status and stdout, clearing both
-// buffers.
 func (h *harness) run(args ...string) (int, string) {
 	h.out.Reset()
 	h.err.Reset()
@@ -394,7 +366,6 @@ func (h *harness) run(args ...string) (int, string) {
 	return code, h.out.String()
 }
 
-// logEntries reads the log.
 func (h *harness) logEntries(t *testing.T) []LogEntry {
 	t.Helper()
 	data, err := os.ReadFile(h.logPath)

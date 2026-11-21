@@ -35,11 +35,6 @@ func InsetCells(n, cell, before, after int) int {
 	return max(((n+1)*cell-before-after)/cell, 1)
 }
 
-// contentSize is the drawable box inside an outer rectangle of the given
-// dimensions. Every consumer of a pane's inner size derives it from here: the
-// renderer's clip (ContentWidth/ContentHeight), the emulator grid and the PTY
-// announcement (Resize, ResizeVisual). One formula, so what the guest is told
-// and what it gets to draw in cannot drift apart.
 func (w *Window) contentSize(width, height int) (int, int) {
 	return ContentSize(width, height, w.Tiled)
 }
@@ -111,7 +106,6 @@ type GeometrySnapshot struct {
 func (w *Window) PublishGeometry() {
 	cw, ch := w.AnnouncedSize()
 	if cw <= 0 || ch <= 0 {
-		// Nothing announced yet, so the rectangle is the best answer available.
 		cw, ch = w.contentSize(w.Width, w.Height)
 	}
 	cur := w.geomSnap.Load()
@@ -206,33 +200,22 @@ func (w *Window) ReleaseAnnouncements() {
 // in a normal run, where tellGuest pays one nil check per real resize.
 var AnnounceTrace func(w *Window, cols, rows int)
 
-// tellGuest sends one size downstream. Both the local PTY and the daemon turn
-// it into a SIGWINCH, so it is only ever called for a size the guest does not
-// already have. Re-sending an unchanged size makes the shell repaint its
-// prompt for nothing, which is what stacked prompts on a same-size session
-// switch were.
 func (w *Window) tellGuest(termWidth, termHeight int) {
 	w.toldW, w.toldH = termWidth, termHeight
 	if AnnounceTrace != nil {
 		AnnounceTrace(w, termWidth, termHeight)
 	}
 	if w.Pty != nil {
-		// Cells and pixels in one winsize write, so the kernel signals the
-		// guest once for it. See ptyspawn.SetWinsize.
 		var xpixel, ypixel int
 		if w.CellPixelWidth > 0 && w.CellPixelHeight > 0 {
 			xpixel = termWidth * w.CellPixelWidth
 			ypixel = termHeight * w.CellPixelHeight
 		}
 		_ = ptyspawn.SetWinsize(w.Pty, termWidth, termHeight, xpixel, ypixel)
-		// The kernel signals the tty's foreground process group. This also
-		// signals the shell itself, which the kernel does not while a job
-		// holds the foreground.
 		w.TriggerRedraw()
 	} else if w.DaemonMode && w.DaemonResizeFunc != nil {
-		// In daemon mode, use the resize callback to notify the daemon
 		if err := w.DaemonResizeFunc(termWidth, termHeight); err != nil {
-			_ = err // Acknowledge error but don't break functionality
+			_ = err
 		}
 	}
 }
@@ -244,26 +227,11 @@ func (w *Window) Resize(width, height int) {
 
 	termWidth, termHeight := w.contentSize(width, height)
 
-	// Did anything downstream actually change? Measured against what was last
-	// announced, not against Width and Height: a deferred resize has already
-	// applied those visually, and comparing with them makes the announcement
-	// look redundant exactly when it is not.
 	sizeChanged := termWidth != w.announcedW || termHeight != w.announcedH
 	w.announcedW, w.announcedH = termWidth, termHeight
 
-	// A pane fed by a daemon subscription is sized by that stream, so the grid
-	// changes width at the byte the daemon's own emulator changed width at.
-	// Resizing it here instead laid out everything the guest produced between
-	// this client asking and the daemon hearing at a width the daemon never
-	// used, and a line that wrapped differently stays in the scrollback.
-	// See docs/REHYDRATION.md.
 	if !w.streamOwnsSize.Load() {
-		// ioMu serializes the emulator buffer reallocation against the render
-		// reader (RLockIO) and the PTY writers; Terminal has no lock of its own.
-		// TriggerRedraw below takes ioMu.RLock, so the lock is scoped to the resize.
 		w.ioMu.Lock()
-		// Re-check under the lock: the guard at the top of Resize runs unlocked
-		// and Close() nils Terminal while holding this lock.
 		if w.Terminal != nil {
 			w.Terminal.Resize(termWidth, termHeight)
 		}
@@ -297,10 +265,7 @@ func (w *Window) ResizeVisual(width, height int) {
 
 	if w.Terminal != nil && !w.streamOwnsSize.Load() {
 		termWidth, termHeight := w.contentSize(width, height)
-		// ioMu serializes the buffer reallocation with the render reader and
-		// PTY writers; Terminal has no lock of its own.
 		w.ioMu.Lock()
-		// Re-check under the lock; Close() nils Terminal while holding it.
 		if w.Terminal != nil {
 			w.Terminal.Resize(termWidth, termHeight)
 		}
@@ -308,8 +273,6 @@ func (w *Window) ResizeVisual(width, height int) {
 	}
 
 	w.MarkPositionDirty()
-	// Note: NOT marking ContentDirty to preserve cached content during drag
-	// This improves responsiveness during resize operations
 }
 
 // SetCellPixelDimensions sets the cell pixel dimensions for the window.
@@ -321,8 +284,6 @@ func (w *Window) SetCellPixelDimensions(cellWidth, cellHeight int) {
 
 	w.Terminal.SetCellSize(cellWidth, cellHeight)
 
-	// Only a pty that can carry pixels is written. Anything else would only be
-	// resized to the size it already has.
 	if ws, ok := w.Pty.(ptyspawn.WinsizeSetter); ok && cellWidth > 0 && cellHeight > 0 {
 		termWidth := w.ContentWidth()
 		termHeight := w.ContentHeight()
@@ -334,10 +295,7 @@ func (w *Window) SetCellPixelDimensions(cellWidth, cellHeight int) {
 func (w *Window) MarkPositionDirty() {
 	w.Dirty = true
 	w.PositionDirty = true
-	// Position changes invalidate the cached layer but NOT the content cache
-	// This allows us to keep the expensive terminal content rendering
 	w.CachedLayer = nil
-	// Don't clear w.CachedContent here. Keep it for performance.
 }
 
 // SetCachedContentDim records the dim percentage CachedContent was rendered
@@ -356,12 +314,6 @@ func (w *Window) CachedContentDim() int { return w.cachedContentDim }
 func (w *Window) MarkContentDirty() {
 	w.Dirty = true
 	w.ContentDirty = true
-	// Invalidate the content cache so the next render re-reads the emulator.
-	// ContentDirty already forces that re-render, so CachedLayer is deliberately
-	// kept: retaining the last complete layer lets the renderer hold it while the
-	// guest is mid-frame in a synchronized update (DEC 2026), instead of showing
-	// a half-drawn buffer. It is replaced on the next render and invalidated by
-	// MarkPositionDirty, retiling, and close.
 	w.CachedContent = ""
 	w.CachedContentCols, w.CachedContentRows = 0, 0
 }

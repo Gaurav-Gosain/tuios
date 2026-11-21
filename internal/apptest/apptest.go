@@ -110,27 +110,20 @@ func New(t testing.TB, opts ...Option) *Fixture {
 	}
 	settings := config.DefaultSettings()
 	config.ApplyAppearanceConfig(cfg, &settings)
-	// Motion off: a test reads the frame a change ends in, not one in the
-	// middle of a slide. There is no clock to step the animations with.
 	settings.Motion = config.MotionNone
 	for _, fn := range s.settings {
 		fn(&settings)
 	}
 
-	// A key that opens a pane with no daemon to ask spawns it here. It runs
-	// true rather than a shell, so it starts nothing that lingers.
 	if shell, err := exec.LookPath("true"); err == nil {
 		t.Setenv("SHELL", shell)
 	}
 
-	// The colour profile is a process global the draw code reads, so it
-	// carries the fixture's, and goes back afterwards.
 	prevProfile := theme.ColorProfile()
 	theme.SetColorProfile(s.profile)
 	app.SetInputHandler(input.HandleInput)
 
 	m := app.NewOS(app.OSOptions{
-		// A person at a terminal on this machine, as tuios itself starts.
 		Client:          app.ClientLocal,
 		UserConfig:      cfg,
 		KeybindRegistry: config.NewKeybindRegistry(cfg),
@@ -154,10 +147,6 @@ func New(t testing.TB, opts ...Option) *Fixture {
 	return f
 }
 
-// attach hands the model the session's state the way attaching does. The
-// session tiles in BSP, whatever the config's startup layout says, so a test
-// starts from the same layout everywhere; a test that wants another switches
-// to it as a person does.
 func (f *Fixture) attach(s *setup) {
 	f.t.Helper()
 	f.M.ApplyLayoutModeName(app.LayoutModeBSP)
@@ -192,12 +181,9 @@ func (f *Fixture) attach(s *setup) {
 	}
 	f.pushes = 1
 	f.M.RestoreAttachedSession(state)
-	// The program reports the host's size once it starts, after the attach.
 	f.Send(tea.WindowSizeMsg{Width: s.w, Height: s.h})
 }
 
-// push sends one daemon push. Each carries a newer version than the last, as
-// the daemon's do.
 func (f *Fixture) push(state *session.SessionState) {
 	f.t.Helper()
 	f.pushes++
@@ -226,41 +212,24 @@ func (f *Fixture) Send(msg tea.Msg) {
 	}
 }
 
-// parked matches the commands the fixture does not run. A listener waits on
-// one of the model's channels for as long as the model lives, and a timer
-// sleeps in real time; the program loop parks both in a goroutine. There is
-// no clock to step, so a test that needs a timer to fire says so and drives
-// the effect another way.
 var parked = regexp.MustCompile(strings.Join([]string{
-	`internal/app\.(\(\*OS\)\.)?[Ll]isten`,     // channel listeners
-	`internal/app\.\(\*OS\)\.tickUntilStop`,    // the maintenance ticker
-	`charm\.land/bubbletea/v2\.(Tick|Every)\.`, // timers
+	`internal/app\.(\(\*OS\)\.)?[Ll]isten`,
+	`internal/app\.\(\*OS\)\.tickUntilStop`,
+	`charm\.land/bubbletea/v2\.(Tick|Every)\.`,
 }, "|"))
 
-// cmdLimit is how long a command may run before the fixture calls it stuck.
-// A command that is neither a listener nor a timer answers at once; one that
-// blocks belongs on the parked list, and the failure names it.
 const cmdLimit = 5 * time.Second
 
-// maxCmdDepth bounds a chain of commands answering with more commands.
 const maxCmdDepth = 16
 
-// goroutineDump is the stacks of every goroutine, as the runtime prints them.
 func goroutineDump() string {
 	var buf bytes.Buffer
 	_ = pprof.Lookup("goroutine").WriteTo(&buf, 2)
 	return buf.String()
 }
 
-// stuckMessage is the failure for a command that did not answer in time. It
-// carries the stacks of the goroutines that are in the command's own code, so a
-// slow machine's failure says what the command was waiting in (a lock, a file
-// read, a process) and not only that it was slow. dump is the goroutine dump.
 func stuckMessage(name string, limit time.Duration, dump string) string {
 	msg := fmt.Sprintf("apptest: command %s has not answered after %v; if it waits by design, add it to parked", name, limit)
-	// A goroutine's stack is a block of lines between blank lines. The command's
-	// is the one that names its function; the base name drops the closure
-	// suffix, so a command and the helper it calls both show.
 	base := name
 	for {
 		i := strings.LastIndex(base, ".func")
@@ -288,8 +257,6 @@ func cmdName(cmd tea.Cmd) string {
 	return "unknown"
 }
 
-// run runs a command the way the program loop would, and hands what it
-// answers back to Update.
 func (f *Fixture) run(cmd tea.Cmd, depth int) {
 	f.t.Helper()
 	if cmd == nil {
@@ -317,7 +284,6 @@ func (f *Fixture) run(cmd tea.Cmd, depth int) {
 			f.run(c, depth+1)
 		}
 	default:
-		// tea.Sequence answers with an unexported slice of commands.
 		if v := reflect.ValueOf(msg); v.Kind() == reflect.Slice && v.Type().Elem() == reflect.TypeFor[tea.Cmd]() {
 			for i := range v.Len() {
 				f.run(v.Index(i).Interface().(tea.Cmd), depth+1)
@@ -409,14 +375,11 @@ func (f *Fixture) Cell(x, y int) Cell {
 	return Cell{Content: c.Content, FG: c.Style.Fg, BG: c.Style.Bg, Attrs: c.Style.Attrs}
 }
 
-// frame is the frame the model hands Bubble Tea, styled.
 func (f *Fixture) frame() string {
 	f.t.Helper()
 	return f.M.View().Content
 }
 
-// draw writes the current frame into a terminal the host's size and returns
-// it, so a test reads cells the way a terminal would show them.
 func (f *Fixture) draw() *vt.Emulator {
 	f.t.Helper()
 	if f.screen == nil || f.screen.Width() != f.w || f.screen.Height() != f.h {
@@ -448,7 +411,7 @@ func (f *Fixture) Screen() []string {
 			switch {
 			case c == nil || c.Content == "":
 				if c != nil && c.Width == 0 {
-					continue // the second half of a wide glyph
+					continue
 				}
 				b.WriteByte(' ')
 			default:
@@ -514,7 +477,6 @@ func (f *Fixture) Highlighted() []string {
 	return out
 }
 
-// keyPress builds the key press Bubble Tea delivers for a key name.
 func keyPress(name string) tea.KeyPressMsg {
 	msg := tea.KeyPressMsg{}
 	for {
@@ -559,7 +521,6 @@ func finishKey(msg tea.KeyPressMsg, name string) tea.KeyPressMsg {
 	}
 	msg.Code = r[0]
 	if r[0] >= 'A' && r[0] <= 'Z' && msg.Mod == 0 {
-		// A capital is a shifted letter: Bubble Tea names it by its text.
 		msg.Code, msg.ShiftedCode, msg.Mod = r[0]+('a'-'A'), r[0], tea.ModShift
 	}
 	if msg.Mod&^tea.ModShift == 0 {
@@ -615,8 +576,6 @@ type Box struct {
 	Title string
 }
 
-// frameKind is one family of frame glyphs: rounded, square or heavy. The
-// double family is left out: tuios draws its logo in it.
 type frameKind struct{ tl, tr, bl, br, h, v string }
 
 var frameKinds = []frameKind{
@@ -659,8 +618,6 @@ func (f *Fixture) frames(panes bool) (whole []Box, cut []string) {
 				if at(x0, y0) != fk.tl {
 					continue
 				}
-				// A pane's top edge opens with its window buttons, a
-				// panel's with a line.
 				buttons := at(x0+1, y0) == " " && (at(x0+2, y0) == "●" || at(x0+2, y0) == "○")
 				if (panes && buttons) || (!panes && at(x0+1, y0) == fk.h) {
 					k, found = fk, true
@@ -696,11 +653,8 @@ func (f *Fixture) frames(panes bool) (whole []Box, cut []string) {
 				continue
 			}
 			if at(x0, y1) != k.bl {
-				continue // covered on its left
+				continue
 			}
-			// The right edge: another frame's glyph there means this one is
-			// partly covered; anything else means the row does not end where
-			// the frame does.
 			bad, hidden := "", false
 			for r := y0 + 1; r <= y1 && bad == "" && !hidden; r++ {
 				want := k.v
@@ -723,7 +677,6 @@ func (f *Fixture) frames(panes bool) (whole []Box, cut []string) {
 				continue
 			}
 			title := strings.TrimFunc(strings.Join(grid[y0][x0+1:x1], ""), func(r rune) bool {
-				// The pill title style caps the text with private-use glyphs.
 				return unicode.IsSpace(r) || unicode.Is(unicode.Co, r) || string(r) == k.h || r == '●' || r == '○'
 			})
 			whole = append(whole, Box{X0: x0, Y0: y0, X1: x1, Y1: y1, Pane: panes, Title: title})
@@ -732,7 +685,6 @@ func (f *Fixture) frames(panes bool) (whole []Box, cut []string) {
 	return whole, cut
 }
 
-// isFrameGlyph reports whether c is part of any frame: an edge or a corner.
 func isFrameGlyph(c string) bool {
 	for _, k := range frameKinds {
 		if c == k.tl || c == k.tr || c == k.bl || c == k.br || c == k.h || c == k.v {
@@ -742,7 +694,6 @@ func isFrameGlyph(c string) bool {
 	return c == "┼" || c == "┴" || c == "┬" || c == "├" || c == "┤"
 }
 
-// grid is the screen as one string per cell.
 func (f *Fixture) grid() [][]string {
 	scr := f.draw()
 	out := make([][]string, f.h)

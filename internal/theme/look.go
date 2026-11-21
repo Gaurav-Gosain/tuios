@@ -13,15 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// A look (see config.ParseLook) may carry a theme and a glyph set. A stranger
-// writes them, so they are checked here as data before anything reaches the
-// themes or glyphs directory: the id must be a plain file name, every string
-// must be free of control characters (a glyph is printed straight into the
-// frame, and lipgloss.Width does not count an escape sequence, so the width
-// check alone would let one through), and only the fields the file format
-// knows are written back out. The bytes the look held are never written as
-// they came.
-
 // MaxLookAssetBytes caps the theme or glyph set a look carries.
 const MaxLookAssetBytes = 32 << 10
 
@@ -42,7 +33,6 @@ func CheckLookTheme(id string, data []byte) ([]byte, error) {
 	if hasControl(f.DisplayName) || hasControl(f.Base) {
 		return nil, errfmt.Errorf("the theme has a control character in its name")
 	}
-	// A role is a colour, or a group of colours such as border.unfocused.
 	for k, v := range f.Chrome {
 		group, isGroup := v.(map[string]any)
 		if !isGroup {
@@ -67,8 +57,6 @@ func CheckLookTheme(id string, data []byte) ([]byte, error) {
 	if _, err := buildChrome(r.chrome, r.tint); err != nil {
 		return nil, err
 	}
-	// Written the way a theme file is: the fields the file set, in the
-	// order a person reads a theme.
 	d := themeDoc{ID: id, DisplayName: f.DisplayName, Base: f.Base, Dark: f.Dark, Chrome: chromeOf(f.Chrome)}
 	for i, c := range themeColours(&f.Tint) {
 		if *c != nil {
@@ -168,8 +156,6 @@ func lookAssetDir(glyphs bool) (string, error) {
 	return GetThemesDir()
 }
 
-// hasControl reports whether s holds a control character or a bidi control,
-// which reorders the text a terminal shows around it.
 func hasControl(s string) bool {
 	return strings.IndexFunc(s, IsUnsafeRune) >= 0
 }

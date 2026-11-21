@@ -91,7 +91,6 @@ func Summary(cfg *config.UserConfig) string {
 	return "My setup uses " + joinAnd(parts) + "."
 }
 
-// joinAnd joins items as a list in a sentence: "a, b and c".
 func joinAnd(items []string) string {
 	switch len(items) {
 	case 0:
@@ -118,8 +117,6 @@ func Comment(name, summary string, look []byte) string {
 	return b.String()
 }
 
-// codeFence is a run of backticks longer than any run in text, and at least
-// three, so a glyph or a title that holds backticks cannot close the block.
 func codeFence(text string) string {
 	longest, run := 0, 0
 	for _, r := range text {
@@ -158,7 +155,6 @@ func ShotPath(now time.Time) (string, error) {
 	return filepath.Join(dir, name), nil
 }
 
-// authorTimeout bounds the gh call that finds the login.
 const authorTimeout = 5 * time.Second
 
 // Author is the GitHub login gh is signed in with, or "" when gh is not

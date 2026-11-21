@@ -45,8 +45,6 @@ type Lesson struct {
 	AltSeen  bool
 	Results  []Result
 	Ctx      Ctx
-	// happened marks, per step, which of its After events came, counted
-	// from the start of the lesson.
 	happened [][]bool
 
 	Started, StepStarted time.Time
@@ -79,7 +77,6 @@ func (l *Lesson) Observe(e Event, now time.Time) bool {
 		}
 	}
 	if !before && l.Ready() {
-		// The hint ladder starts once there is something to do.
 		l.Active = now
 		return true
 	}
@@ -155,10 +152,8 @@ func (l *Lesson) Feed(e Event, now time.Time) bool {
 	case "key":
 		key := str(e.Data["key"])
 		if IsModifierKey(key) {
-			// A modifier on its own: the chord it starts comes next.
 			break
 		}
-		// The action event, if the key has one, comes right after it.
 		l.Ctx.LastAction = ""
 		l.trackKey(step, key, str(e.Data["mode"]), now)
 		l.KeysSeen++
@@ -178,15 +173,7 @@ func (l *Lesson) Feed(e Event, now time.Time) bool {
 	return false
 }
 
-// trackKey lights the step's keycaps as they are pressed in order, and
-// counts keys that do something else as wrong. Typed text is checked as a
-// whole when the shell reports the command, so it only lights the caps up
-// to it.
 func (l *Lesson) trackKey(step *Step, key, mode string, now time.Time) {
-	// A step key pressed in the other mode went to the wrong place: in
-	// typing mode, "n" is a letter for the shell. Needs is the mode the step
-	// starts in, so it holds the first key only: a step may leave the mode
-	// itself, as i does when it goes to typing.
 	isStepKey := false
 	for _, k := range step.Keys {
 		if k.Text == "" && SameChord(key, k.Chord) {
@@ -207,9 +194,6 @@ func (l *Lesson) trackKey(step *Step, key, mode string, now time.Time) {
 			return
 		}
 		if want.Text != "" {
-			// Typing: every key is fine while the person types the text,
-			// and the key after the text ends it, so the caps after it
-			// light in order too.
 			if l.Pressed+1 < len(step.Keys) {
 				after := step.Keys[l.Pressed+1]
 				if after.Text == "" && SameChord(key, after.Chord) {
@@ -221,7 +205,6 @@ func (l *Lesson) trackKey(step *Step, key, mode string, now time.Time) {
 		}
 	}
 	if n := RestartAt(step.Keys, l.Pressed, key); n > 0 {
-		// Starting over counts as progress.
 		l.Pressed = n
 		l.Active, l.WrongMode = now, false
 		return

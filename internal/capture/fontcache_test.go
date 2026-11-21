@@ -14,7 +14,6 @@ import (
 	"golang.org/x/image/font/gofont/goregular"
 )
 
-// cacheFixture is a font folder with one Go Mono and a cache file beside it.
 type cacheFixture struct {
 	t     *testing.T
 	dir   string
@@ -49,8 +48,6 @@ func (f *cacheFixture) has(idx *fontIndex, family string) bool {
 	return ok
 }
 
-// padded returns data grown with zero bytes to n bytes, which a font parser
-// reads as the same font.
 func padded(data []byte, n int) []byte {
 	return append(bytes.Clone(data), make([]byte, n-len(data))...)
 }
@@ -75,8 +72,8 @@ func TestFontCacheRebuildsWhenTheFontsChange(t *testing.T) {
 	cases := []struct {
 		name   string
 		change func(f *cacheFixture)
-		family string // what the index must now hold
-		gone   string // and what it must no longer hold
+		family string
+		gone   string
 	}{
 		{"a font added", func(f *cacheFixture) { f.write("reg.ttf", goregular.TTF, t0) }, "Go", ""},
 		{"a font removed", func(f *cacheFixture) {
@@ -87,7 +84,6 @@ func TestFontCacheRebuildsWhenTheFontsChange(t *testing.T) {
 		{"a font replaced by one of another size", func(f *cacheFixture) { f.write("mono.ttf", goregular.TTF, t0) }, "Go", "Go Mono"},
 		{"a font replaced by one of the same size at another time", func(f *cacheFixture) {
 			n := max(len(gomono.TTF), len(goregular.TTF))
-			// The first file was padded to this size too, so only the time differs.
 			f.write("mono.ttf", padded(goregular.TTF, n), t0.Add(time.Hour))
 		}, "Go", "Go Mono"},
 		{"a font in a new folder", func(f *cacheFixture) { f.write("sub/more/bold.ttf", gobold.TTF, t0) }, "Go", ""},
@@ -96,7 +92,6 @@ func TestFontCacheRebuildsWhenTheFontsChange(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newCacheFixture(t)
 			if tc.name == "a font replaced by one of the same size at another time" {
-				// Both files are the same size from the start.
 				n := max(len(gomono.TTF), len(goregular.TTF))
 				f.write("mono.ttf", padded(gomono.TTF, n), t0)
 			}
@@ -155,7 +150,6 @@ func TestFontCacheOpensNoFontOnAHit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The same size, the same time, other bytes: not a font.
 	if err := os.WriteFile(p, bytes.Repeat([]byte{0xAB}, int(info.Size())), 0o644); err != nil {
 		t.Fatal(err)
 	}

@@ -35,9 +35,7 @@ const (
 	// its process group is killed. A startup command has no timeout: it is
 	// often a service that runs for as long as the plugin is on.
 	DefaultTimeout = 10 * time.Minute
-	// waitDelay is how long the runner reads a command's output after the
-	// command exits, when a process it left behind holds the output open.
-	waitDelay = 2 * time.Second
+	waitDelay      = 2 * time.Second
 )
 
 // Log statuses.
@@ -89,15 +87,9 @@ type Runner struct {
 	procs    map[string]map[*exec.Cmd]*procGroup
 	stopped  bool
 	wg       sync.WaitGroup
-	// owners are the plugins whose commands lead each process session, by
-	// the session id, which is the leader's pid. With a reaper the leader
-	// is the reaper, which lives until nothing the command started is left,
-	// so what a command leaves behind is still its plugin's. native counts
-	// the native plugins among them.
-	owners map[int]*Plugin
-	native atomic.Int32
-	// stats counts each plugin's runs since the daemon started.
-	stats map[string]*RunStats
+	owners   map[int]*Plugin
+	native   atomic.Int32
+	stats    map[string]*RunStats
 	// Reaper, when set, is the argv that runs a command under a reaper:
 	// the tuios binary and ReaperArg (reaper.go). Without it the command
 	// leads its own session, and its entry goes when it exits.
@@ -212,12 +204,8 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 	var stdout, stderr capBuffer
 	stdout.cap, stderr.cap = OutputCap, OutputCap
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	// A process the command leaves behind can hold its output open. Wait
-	// then stops reading a moment after the command exits, so the run ends
-	// and frees its slot.
 	cmd.WaitDelay = waitDelay
 	detach(cmd)
-	// The reaper says on fd 3 when the command itself exits.
 	var status, statusW *os.File
 	if len(r.Reaper) > 0 {
 		var err error
@@ -252,8 +240,6 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 		r.procs[j.Plugin.PluginID] = map[*exec.Cmd]*procGroup{}
 	}
 	r.procs[j.Plugin.PluginID][cmd] = group
-	// Still under r.mu, which Owner takes: the command cannot be asked
-	// about before it is entered here.
 	r.setOwner(cmd.Process.Pid, j.Plugin)
 	r.pushLocked(e)
 	st := r.stats[j.Plugin.PluginID]
@@ -270,9 +256,6 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 		onPID(cmd.Process.Pid, true)
 	}
 
-	// The session's leader is reaped in a goroutine of its own. The owner
-	// entry goes before the pid is free again (waitExited), so it never
-	// names a process that got the pid later.
 	pid := cmd.Process.Pid
 	reaped := make(chan error, 1)
 	go func() {
@@ -298,9 +281,6 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 		code, text, done, failed := -1, "", false, false
 		var werr error
 		if status != nil {
-			// The command exits first. What it left keeps the reaper and
-			// the output open, as it did the command's: read the output a
-			// moment longer, then end the run and free its slot.
 			b, _ := io.ReadAll(status)
 			_ = status.Close()
 			if c, t, ok := strings.Cut(strings.TrimSpace(string(b)), "\t"); ok {
@@ -320,8 +300,6 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 				text, failed = werr.Error(), true
 			}
 		}
-		// Stop the timeout before anything else: once the leader is
-		// reaped, its process group id may name another group.
 		cancel()
 		end := time.Now().UnixMilli()
 		out, errOut := stdout.String(), stderr.String()
@@ -367,7 +345,6 @@ func (r *Runner) Start(j Job) (LogEntry, *Error) {
 	return e, nil
 }
 
-// setOwner enters the plugin of session sid. r.mu is held.
 func (r *Runner) setOwner(sid int, p *Plugin) {
 	r.dropOwner(sid)
 	r.owners[sid] = p
@@ -376,7 +353,6 @@ func (r *Runner) setOwner(sid int, p *Plugin) {
 	}
 }
 
-// dropOwner forgets session sid. r.mu is held.
 func (r *Runner) dropOwner(sid int) {
 	if p, ok := r.owners[sid]; ok {
 		delete(r.owners, sid)
@@ -473,13 +449,7 @@ func (r *Runner) Resume() {
 	r.mu.Unlock()
 }
 
-// cleanEnv drops the variables that would name a pane or a plugin the
-// command does not belong to. The daemon's own environment can carry them
-// when the daemon was started from a pane.
 func cleanEnv(env []string) []string {
-	// The filter a pane gets first: a daemon started from a pane or by an
-	// agent's tool call keeps that caller's variables, which name its pane,
-	// session and credential.
 	env = guestenv.WithoutHostMultiplexer(slices.Clone(env))
 	out := env[:0:0]
 	for _, kv := range env {
@@ -492,8 +462,6 @@ func cleanEnv(env []string) []string {
 	return out
 }
 
-// capBuffer keeps the first cap bytes written to it and marks the rest as
-// cut, as herdr's read_capped_plugin_output does.
 type capBuffer struct {
 	mu        sync.Mutex
 	buf       bytes.Buffer

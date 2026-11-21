@@ -127,9 +127,6 @@ func Scopes(leader string) []Scope {
 	}
 	return []Scope{
 		{
-			// Global is listed first because it is consulted in both of the
-			// modes below and wins nothing from them: a key bound here acts
-			// wherever the user is, which is exactly why it must be visible.
 			ID: ScopeGlobal, Name: "Global",
 			Sections: []string{SectionGlobal},
 			Reaches:  ReachSteals,
@@ -154,42 +151,26 @@ func Scopes(leader string) []Scope {
 			Reaches:  ReachModal,
 		},
 		{
-			// A scope of its own, and not a second section inside the rail's,
-			// because a scope is the unit a conflict is stated against. These
-			// keys are consulted only while the cursor is on a row of the files
-			// listing, so r meaning rename here and rename-a-pane there is a
-			// resolution rather than a collision, and reporting it as one would
-			// be reporting a fault that does not exist.
 			ID: ScopeSidebarFiles, Name: "Sidebar files",
 			Sections: []string{SectionSidebarFiles},
 			Reaches:  ReachModal,
 		},
 		{
-			// A scope of its own for the files section's reason: these keys
-			// are consulted only while the cursor is on an agent row, so r
-			// replying to the agent there and renaming a pane elsewhere is a
-			// resolution, not a collision.
 			ID: ScopeSidebarAgents, Name: "Sidebar agents",
 			Sections: []string{SectionSidebarAgents},
 			Reaches:  ReachModal,
 		},
 		{
-			// Consulted only while the file preview is open.
 			ID: ScopeQuickLook, Name: "File preview",
 			Sections: []string{SectionQuickLook},
 			Reaches:  ReachModal,
 		},
 		{
-			// Consulted only while the keyboard is inside the previewed file.
 			ID: ScopeQuickLookIn, Name: "File preview, inside the file",
 			Sections: []string{SectionQuickLookInside},
 			Reaches:  ReachModal,
 		},
 		{
-			// The Inbox, the prompt open over it and the mailbox each own the
-			// keyboard while they are up, so each is a scope of its own: d
-			// dismisses in the list and denies in the peek, which is a
-			// resolution by context and not a clash.
 			ID: ScopeInbox, Name: "Inbox",
 			Sections: []string{SectionInbox},
 			Reaches:  ReachModal,
@@ -205,23 +186,16 @@ func Scopes(leader string) []Scope {
 			Reaches:  ReachModal,
 		},
 		{
-			// The Copies panel owns the keyboard while it is up, so p, x and
-			// r mean the copy under the cursor there and nothing else.
 			ID: ScopeTransfers, Name: "Copies",
 			Sections: []string{SectionTransfers},
 			Reaches:  ReachModal,
 		},
 		{
-			// Live only while a pane is in copy mode, which owns the keyboard
-			// until it ends. home moving the copy cursor there and doing
-			// nothing in window mode is a resolution, not a clash.
 			ID: ScopeCopyMode, Name: "Copy mode",
 			Sections: []string{SectionCopyMode},
 			Reaches:  ReachModal,
 		},
 		{
-			// The review overlay owns the keyboard while it is open, so ] and
-			// [ move through its hunks and nothing else.
 			ID: ScopeReview, Name: "Review",
 			Sections: []string{SectionReview},
 			Reaches:  ReachModal,
@@ -267,24 +241,16 @@ func Scopes(leader string) []Scope {
 			Reaches:  ReachChorded,
 		},
 		{
-			// Read by every list overlay while it is open, so a key here moves
-			// the cursor in the palette, the pickers and the settings page.
 			ID: ScopeLists, Name: "Lists",
 			Sections: []string{SectionLists},
 			Reaches:  ReachModal,
 		},
 		{
-			// Only live while a .tape is playing back, so sharing ctrl+p with the
-			// palette is not a conflict: the two contexts are never both active.
 			ID: ScopeScript, Name: "Script playback",
 			Sections: []string{SectionScript},
 			Reaches:  ReachModal,
 		},
 		{
-			// Read only by the native GUI client, which looks these keys up
-			// before the leader and the pane. The terminal client never does,
-			// so they take nothing from it, and they are listed so the GUI's
-			// keys are rebound in the same file as every other key.
 			ID: ScopeGUI, Name: "GUI app",
 			Sections: []string{SectionGUI},
 			Reaches:  ReachSteals,
@@ -292,8 +258,6 @@ func Scopes(leader string) []Scope {
 	}
 }
 
-// subPrefixGates maps each sub-prefix scope to the prefix_mode action that
-// opens it.
 var subPrefixGates = map[string]string{
 	ScopePrefixWindow:   "prefix_window",
 	ScopePrefixMinimize: "prefix_minimize",
@@ -331,7 +295,6 @@ func ScopesFor(kb *KeybindingsConfig) []Scope {
 	return append(scopes, modeScopes(kb)...)
 }
 
-// section returns the config table with the given name, or nil.
 func (k *KeybindingsConfig) section(name string) map[string][]string {
 	for _, t := range keybindTables {
 		if t.name == name {
@@ -398,8 +361,6 @@ type Binding struct {
 	Unbound bool `json:"unbound,omitempty"`
 }
 
-// press joins a chord and a key the way the rest of the interface spells a
-// chord: space-separated, so "ctrl+b w 1" reads as three presses.
 func press(chord, key string) string {
 	if chord == "" {
 		return key
@@ -422,13 +383,7 @@ func (r *KeybindRegistry) Bindings() []Binding {
 	kb := &r.config.Keybindings
 	var out []Binding
 	for _, scope := range ScopesFor(kb) {
-		// The window-mode scope flattens seven sections into a single lookup, so
-		// a key is contested across all of them at once. winner holds the index
-		// into out of the binding that actually runs, per key.
 		winner := map[string]int{}
-		// claimedIn is the section index that currently owns the key, so a
-		// second claim from the same section can be told from one that
-		// overwrites from a later section.
 		claimedIn := map[string]int{}
 
 		for sectionIdx, name := range scope.Sections {
@@ -439,9 +394,6 @@ func (r *KeybindRegistry) Bindings() []Binding {
 			}
 			sort.Strings(actions)
 			for _, action := range actions {
-				// An action the config leaves with no keys gets one row saying
-				// so. See Binding.Unbound, and keybind_unbind.go for how the
-				// file spells it.
 				if liveKeyCount(section[action]) == 0 {
 					out = append(out, Binding{
 						Scope:   scope.ID,
@@ -474,28 +426,19 @@ func (r *KeybindRegistry) Bindings() []Binding {
 						winner[lookup] = idx
 						claimedIn[lookup] = sectionIdx
 					case out[prev].Action == action:
-						// The same action bound to the same key twice is a
-						// duplicate in the config, not a contest.
 						out[idx].Shadowed = true
 						out[idx].ShadowedBy = action
 					case claimedIn[lookup] < sectionIdx:
-						// A later section overwrites: the new claim wins and the
-						// old one goes dark.
 						out[prev].Shadowed = true
 						out[prev].ShadowedBy = action
 						winner[lookup] = idx
 						claimedIn[lookup] = sectionIdx
 					default:
-						// Same section, and the earlier action name already took
-						// it.
 						out[idx].Shadowed = true
 						out[idx].ShadowedBy = out[prev].Action
 					}
 				}
 			}
-			// The command entries and keyed user actions of this section
-			// come after its own actions and never win a key: see
-			// withCommands.
 			for _, e := range r.config.keyedEntries() {
 				if e.section != name {
 					continue
@@ -530,10 +473,6 @@ func (r *KeybindRegistry) Bindings() []Binding {
 	return out
 }
 
-// shadowInboxByGlobal marks the agents view's bindings that a global binding
-// takes first. The global keys act over the view (the palette opens over it),
-// all but a key that types a character, which stays the view's: see
-// handleInboxInput in internal/input.
 func shadowInboxByGlobal(out []Binding) {
 	global := map[string]int{}
 	for i, b := range out {
@@ -556,8 +495,6 @@ func shadowInboxByGlobal(out []Binding) {
 	}
 }
 
-// typesCharacter reports whether a key spelling is a key that types a
-// character: one character, space, or shift and one character.
 func typesCharacter(key string) bool {
 	k := strings.ToLower(strings.TrimSpace(key))
 	k = strings.TrimPrefix(k, "shift+")
@@ -572,15 +509,10 @@ const SectionCommand = "command"
 // the [[actions]] table.
 const SectionAction = "actions"
 
-// lookupForm is the shape two key spellings are compared in by the report,
-// explain, free and unbind: CanonicalKey, so opt+f12, option+f12 and alt+f12
-// are one key there as they are to a key press.
 func lookupForm(key string) string {
 	return CanonicalKey(key)
 }
 
-// describeAction is the human sentence for an action, falling back to the
-// action name with its underscores opened up.
 func describeAction(action string) string {
 	if name, ok := MenuNameOf(action); ok {
 		return "Open the " + name + " menu"

@@ -11,36 +11,6 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-// Approvals: the machine-local record of what the person said about each
-// native plugin.
-//
-// A native plugin runs only when this machine holds an approval of its trust
-// hash (TrustHash: its source, what it runs and the grants it asks for). The
-// person gives one with tuios plugins install, with tuios plugins approve, or
-// in the dialog an attached client shows (plugin_approval.go in session). A
-// changed manifest has another trust hash, so it asks again. A denial is
-// kept too, so the dialog does not ask again for the same trust hash.
-//
-// What it protects against: plugins.lock travels with the config folder, so
-// a lock file from another machine, a plugin linked or dropped into a
-// plugin folder, a hand edit, or an update that changes the plugin cannot
-// make it run by itself. An approval of admin also names the content hash of
-// the files its commands name (CodeHash), so a changed program needs a new
-// approval of admin.
-//
-// Who may write it: the daemon writes it for an answer that only the person
-// can give (mayActAsHuman). The CLI writes it after it asks the person, and
-// for admin it first asks every daemon of the user that runs whether the
-// caller is outside its panes and plugins (confirmPerson in cmd/tuios).
-//
-// What it does not protect against: a process that leaves its pane with
-// setsid, one that comes back in over ssh, one that points XDG_RUNTIME_DIR
-// at a folder with no daemon, and anything that writes this file directly.
-// Every program that runs as the user can do the last, as it can write
-// config.toml. The owner and mode checks below stop other users, not the
-// user's own programs: the file must be owned by the user and not writable
-// by others, in a folder of the user's that others cannot write.
-
 // ApprovalsName is the approvals file in tuios's plugins state folder. The
 // % keeps it apart from a plugin's state folder (PathComponent).
 const ApprovalsName = "%approvals.toml"
@@ -59,9 +29,8 @@ type approval struct {
 	ID     string   `toml:"id"`
 	Trust  string   `toml:"trust"`
 	Grants []string `toml:"grants,omitempty"`
-	// Code is CodeHash when Grants holds admin, else empty.
-	Code   string `toml:"code,omitempty"`
-	Denied bool   `toml:"denied,omitempty"`
+	Code   string   `toml:"code,omitempty"`
+	Denied bool     `toml:"denied,omitempty"`
 }
 
 type approvals struct {
@@ -73,8 +42,6 @@ func (d Dirs) ApprovalsPath() string {
 	return filepath.Join(d.TuiosState, "plugins", ApprovalsName)
 }
 
-// readApprovals reads the approvals file, and nothing when it or its folder
-// is not private to this user.
 func readApprovals(path string) approvals {
 	var a approvals
 	if !privateToMe(path) || !privateToMe(filepath.Dir(path)) {
@@ -86,7 +53,6 @@ func readApprovals(path string) approvals {
 	return a
 }
 
-// approvalOf is the answer path holds for p at trust hash trust, or nil.
 func approvalOf(path string, p *Plugin, trust string) *approval {
 	if trust == "" {
 		return nil
@@ -163,9 +129,6 @@ func TrustOf(p *Plugin, lock *LockEntry) string {
 	return TrustHash(LocalPrefix+canonical(p.PluginRoot), p, p.Grants)
 }
 
-// applyApproval sets what native plugin p holds from the answer on this
-// machine, and says why it does not run when it may not. grants are what
-// the person approved at install (plugins.lock), or the manifest's.
 func applyApproval(d Dirs, p *Plugin, lock *LockEntry) *Error {
 	grants := p.Grants
 	if lock != nil {
@@ -174,8 +137,6 @@ func applyApproval(d Dirs, p *Plugin, lock *LockEntry) *Error {
 	p.Held = []string{}
 	p.Trust = TrustOf(p, lock)
 	if p.RunsNothing() && len(grants) == 0 {
-		// Files only: nothing runs and nothing asks tuios for anything, so
-		// there is nothing to approve beyond the install.
 		p.Approval = ApprovalAllowed
 		return nil
 	}

@@ -16,34 +16,6 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-// Writing the config.
-//
-// A save never renders the whole config into config.toml. It is a three-way
-// merge: the change is the difference between the config the running model
-// was loaded from and the model now, and that difference is applied to the
-// files as they are now. A key the person did not change is not written, so a
-// value an included file holds is never copied into config.toml, and a file
-// that changed on disk since the load (a nix switch, an edit in another pane)
-// keeps its new values.
-//
-// Each change goes to one file:
-//
-//   - A key some file sets is written to the last file that sets it, the one
-//     whose value is in force.
-//   - A new entry in a table of entries, such as a new [hosts.NAME], goes to
-//     the last writable file that holds that table. Any other new key goes to
-//     config.toml.
-//   - A removed key is removed from every file that sets it.
-//   - A file tuios cannot write is never written. The change goes to the last
-//     writable file: config.toml, or, when config.toml is read-only too, the
-//     last writable file it includes. That file has to come after every file
-//     that sets the key, or the change could not take effect, and the save
-//     fails with a message that says which file holds it.
-//   - An array-of-tables entry that a read-only file holds is removed with a
-//     tombstone: an entry with disabled = true in the writable file.
-//
-// A file is changed line by line, so its comments stay (see toml_edit.go).
-
 // WriteNote says where a save put a change when that is not the file that
 // holds the key. The zero value has nothing to say.
 type WriteNote struct {
@@ -120,8 +92,6 @@ func ReadConfigFile(path string) ([]byte, error) {
 	return lc.Bytes()
 }
 
-// loadConfigFile is LoadLayered followed by the parse every reader wants. The
-// warnings of the load travel on the config, so the client can show them.
 func loadConfigFile(path string) (*UserConfig, *LayeredConfig, error) {
 	lc, err := LoadLayered(path)
 	if err != nil {
@@ -131,7 +101,6 @@ func loadConfigFile(path string) (*UserConfig, *LayeredConfig, error) {
 	return cfg, lc, err
 }
 
-// parseLayered parses the merged files of lc.
 func parseLayered(lc *LayeredConfig) (*UserConfig, error) {
 	data, err := lc.Bytes()
 	if err != nil {
@@ -148,8 +117,6 @@ func parseLayered(lc *LayeredConfig) (*UserConfig, error) {
 	return cfg, nil
 }
 
-// readConfigMerged is ReadConfigFile for a reader that takes a missing file
-// as an empty one.
 func readConfigMerged(path string) ([]byte, error) {
 	if path == "" {
 		return nil, errfmt.Errorf("no config file path is set")
@@ -164,8 +131,6 @@ func readConfigMerged(path string) ([]byte, error) {
 	return data, nil
 }
 
-// effectiveTable is the config the files make now, as the TOML table of a
-// parsed UserConfig: every default filled in.
 func effectiveTable(lc *LayeredConfig) (map[string]any, error) {
 	cfg, err := parseLayered(lc)
 	if err != nil {
@@ -178,20 +143,12 @@ func effectiveTable(lc *LayeredConfig) (map[string]any, error) {
 	return parseLayer(data)
 }
 
-// errSaveFailed prefixes every error that stops a save.
 const errSaveFailed = "the config files have an error, so tuios did not save"
 
-// saveKeys are the keys a save treats apart from the difference: held keys it
-// never writes, and released keys it writes even when the difference leaves
-// them out. See hold.go.
 type saveKeys struct {
 	held, forced [][]string
 }
 
-// saveConfigData writes the change from base to next, both the TOML of a
-// UserConfig. A nil base is the config the files make now. gen is the
-// number of the save: a key a newer save already wrote is skipped. The
-// caller holds saveMu.
 func saveConfigData(path string, base, next []byte, gen uint64, keys saveKeys) (WriteNote, error) {
 	lc, err := loadLayered(path, true)
 	if err != nil {
@@ -215,8 +172,6 @@ func saveConfigData(path string, base, next []byte, gen uint64, keys saveKeys) (
 	diffTables(from, want, nil, &changes)
 	changes = skipHeld(changes, keys.held)
 	changes = addForced(changes, want, keys.forced)
-	// A change the files already hold is not written again: writing it would
-	// copy a value an included file holds into config.toml.
 	kept := changes[:0]
 	for _, ch := range changes {
 		if keyGen[path+"\x01"+displayKey(ch.path)] > gen {
@@ -237,7 +192,6 @@ func saveConfigData(path string, base, next []byte, gen uint64, keys saveKeys) (
 	return note, err
 }
 
-// applyChanges writes changes to the files of lc.
 func applyChanges(lc *LayeredConfig, changes []configChange) (WriteNote, error) {
 	note := WriteNote{Main: lc.Main}
 	if len(changes) == 0 {
@@ -261,11 +215,8 @@ func applyChanges(lc *LayeredConfig, changes []configChange) (WriteNote, error) 
 	return note, w.flush(&note)
 }
 
-// errNoWritableFile is the save failure when no file of the config can be
-// written.
 var errNoWritableFile = errors.New("tuios cannot write config.toml or any file it includes. Make config.toml writable, or include a writable file")
 
-// layerWriter collects the changes for each file and writes each file once.
 type layerWriter struct {
 	lc       *LayeredConfig
 	canWrite map[int]bool
@@ -277,7 +228,6 @@ func newLayerWriter(lc *LayeredConfig) *layerWriter {
 	return &layerWriter{lc: lc, canWrite: map[int]bool{}, changes: map[int][]configChange{}}
 }
 
-// writable is Writable for layer i, asked once per save.
 func (w *layerWriter) writable(i int) bool {
 	ok, seen := w.canWrite[i]
 	if !seen {
@@ -287,7 +237,6 @@ func (w *layerWriter) writable(i int) bool {
 	return ok
 }
 
-// lastWritable is the last layer tuios can write, or -1.
 func (w *layerWriter) lastWritable() int {
 	for i := range slices.Backward(w.lc.Layers) {
 		if w.writable(i) {
@@ -297,12 +246,9 @@ func (w *layerWriter) lastWritable() int {
 	return -1
 }
 
-// holders are the layers that set path, in merge order.
 func (w *layerWriter) holders(path []string) []int {
 	var out []int
 	for i := range w.lc.Layers {
-		// A tombstone counts: the change has to come after it, or the
-		// tombstone removes it again.
 		if _, ok := lookupPathOf(w.lc.Layers[i].Values, path, true); ok {
 			out = append(out, i)
 		}
@@ -310,9 +256,6 @@ func (w *layerWriter) holders(path []string) []int {
 	return out
 }
 
-// needsShadow reports whether an entry written to layer t would merge with an
-// entry the layers before t hold and take keys back that it does not have.
-// The entry is then written after a tombstone (see configChange.shadow).
 func (w *layerWriter) needsShadow(t int, path []string, value any) bool {
 	if _, _, ok := elemOf(path[len(path)-1]); !ok {
 		return false
@@ -342,16 +285,11 @@ func (w *layerWriter) needsShadow(t int, path []string, value any) bool {
 	return false
 }
 
-// target is the layer a change to path is written to. The rules are at the
-// top of this file.
 func (w *layerWriter) target(path []string, note *WriteNote) (int, error) {
 	holders := w.holders(path)
 	owner := -1
 	if len(holders) > 0 {
 		owner = holders[len(holders)-1]
-		// The look file is never a write target. A change there would be
-		// undone by the next look apply or remove, so it goes to config.toml,
-		// which comes after it.
 		if w.lc.Layers[owner].isLook() {
 			if main := len(w.lc.Layers) - 1; w.writable(main) {
 				return main, nil
@@ -360,8 +298,6 @@ func (w *layerWriter) target(path []string, note *WriteNote) (int, error) {
 			return owner, nil
 		}
 	} else {
-		// A new entry goes beside the others: the last writable file that
-		// holds the table it goes into.
 		for n := len(path) - 1; n >= 1 && owner < 0; n-- {
 			for i, layer := range slices.Backward(w.lc.Layers) {
 				v, ok := lookupPath(layer.Values, path[:n])
@@ -387,9 +323,6 @@ func (w *layerWriter) target(path []string, note *WriteNote) (int, error) {
 	return t, nil
 }
 
-// planDelete removes path from every file that sets it. An array entry in a
-// read-only file is removed with a tombstone. A plain key in a read-only file
-// stays, and the note says so.
 func (w *layerWriter) planDelete(ch configChange, note *WriteNote) error {
 	holders := w.holders(ch.path)
 	tomb := false
@@ -423,14 +356,6 @@ func (w *layerWriter) add(i int, ch configChange) {
 	w.changes[i] = append(w.changes[i], ch)
 }
 
-// flush writes every file that has a change.
-//
-// Every file is edited line by line. An included file is never written again
-// from its values: it is the person's own, and a rewrite drops their comments.
-// When the lines of one cannot express a change, the change goes to
-// config.toml, which comes after every other file, and the note says so. A
-// removal cannot go elsewhere, so it fails the save. Only config.toml, the
-// file tuios writes, falls back to a full rewrite.
 func (w *layerWriter) flush(note *WriteNote) error {
 	main := len(w.lc.Layers) - 1
 	type planned struct {
@@ -480,8 +405,6 @@ func (w *layerWriter) flush(note *WriteNote) error {
 	return nil
 }
 
-// moveToMain sends the changes for layer i to config.toml, because the lines
-// of layer i cannot express them.
 func (w *layerWriter) moveToMain(i int, note *WriteNote) error {
 	main := len(w.lc.Layers) - 1
 	layer := w.lc.Layers[i]
@@ -504,10 +427,6 @@ func (w *layerWriter) moveToMain(i int, note *WriteNote) error {
 	return nil
 }
 
-// editMain makes changes to config.toml line by line. When the line edit
-// cannot say what the changes ask for, config.toml is written again from its
-// values, which is correct and drops its comments. tuios does that only to
-// config.toml, the file it writes.
 func editMain(data []byte, changes []configChange, path string) ([]byte, error) {
 	out, want, ok, err := editFile(data, changes)
 	if err != nil {
@@ -524,10 +443,6 @@ func editMain(data []byte, changes []configChange, path string) ([]byte, error) 
 	return append([]byte(configFileHeader(path)), full...), nil
 }
 
-// isEntryCollection reports whether v holds named entries: a table whose
-// every value is a table, such as [hosts], or an array of tables. A table
-// with plain values, such as [appearance], is a table of settings, and
-// holding one says nothing about where a new setting belongs.
 func isEntryCollection(v any) bool {
 	switch v := v.(type) {
 	case map[string]any:
@@ -569,9 +484,6 @@ func (lc *LayeredConfig) Holders(key []string) []ConfigLayer {
 	return out
 }
 
-// marshalTable writes a parsed table as TOML in the style of every file tuios
-// writes. The include key, when there is one, goes first, where a person
-// reading the file looks for it.
 func marshalTable(values map[string]any) ([]byte, error) {
 	var buf strings.Builder
 	if inc, ok := values[IncludeKey]; ok {
@@ -603,9 +515,6 @@ func IncludeLine(path string) string {
 	}
 	values, err := parseLayer(data)
 	if err != nil {
-		// A file with an error elsewhere can still hold a good include
-		// list. A reset is often how a person gets out of a broken file,
-		// so the list is found by its lines and kept when it parses alone.
 		return scanIncludeLine(data)
 	}
 	inc, ok := values[IncludeKey]
@@ -615,8 +524,6 @@ func IncludeLine(path string) string {
 	return IncludeKey + " = " + encodeValue(inc)
 }
 
-// scanIncludeLine finds the include key above the first table header by its
-// lines, and returns its text when that text parses on its own.
 func scanIncludeLine(data []byte) string {
 	e := newTOMLEdit(data)
 	for i := 0; i < len(e.lines); i++ {
@@ -718,10 +625,6 @@ func PruneConfig(path string, dryRun bool) (PruneResult, error) {
 		return res, err
 	}
 	main := lc.mainLayer()
-	// The check is on config.toml alone. A key that goes is meant to let an
-	// included file apply, so the other files are left out of it; what it
-	// catches is a key whose absence means something else, such as the
-	// [startup] keys.
 	with := func(values map[string]any) (map[string]any, error) {
 		probe := LayeredConfig{Main: lc.Main, Layered: true}
 		probe.Layers = []ConfigLayer{{Path: main.Path, Kind: LayerMain, Values: values}}
@@ -756,8 +659,6 @@ func PruneConfig(path string, dryRun bool) (PruneResult, error) {
 		after, err := with(values)
 		return err == nil && reflect.DeepEqual(after, before)
 	}
-	// Most candidates go together. Only when the whole set changes the
-	// config is each one tried alone.
 	var drop [][]string
 	if same(candidates) {
 		drop = candidates
@@ -807,8 +708,6 @@ func PruneConfig(path string, dryRun bool) (PruneResult, error) {
 	return res, writeConfigBytes(out, main.Path)
 }
 
-// pruneEmpty drops the empty tables of m, for comparing a file before and
-// after its empty tables were removed.
 func pruneEmpty(m map[string]any) map[string]any {
 	for k, v := range m {
 		if sub, ok := v.(map[string]any); ok {
@@ -825,7 +724,6 @@ func pruneEmpty(m map[string]any) map[string]any {
 // when it is inside it, with ~ for the home directory otherwise.
 func (lc *LayeredConfig) DisplayPath(p string) string { return displayPath(lc.Main, p) }
 
-// displayPath is DisplayPath for the config whose main file is main.
 func displayPath(main, p string) string {
 	if p == main {
 		return filepath.Base(main)

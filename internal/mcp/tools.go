@@ -31,67 +31,33 @@ type ParamDoc struct {
 	Default     string   `json:"default,omitempty"`
 }
 
-// toolSpec is one entry of the curated catalog: which verb a tool runs and
-// what of the verb's schema it leaves out.
 type toolSpec struct {
-	name string
-	verb string
-	// write marks a tool that types into a pane or starts one. It is listed
-	// only with --write.
-	write bool
-	// hide are parameters the tool never takes: a human nonce an agent can
-	// never hold, spellings kept for old scripts, and the like.
-	hide []string
-	// hideOwn are parameters that reach every session, left out under scope
-	// own, where the daemon refuses them.
-	hideOwn []string
-	// self names the parameters that are the caller's own pane: filled in by
-	// the daemon under scope own, and from TUIOS_PANE_ID here under scope all.
-	self []string
-	// hints are the MCP annotations of a tool that is not read-only. A nil
-	// hints is a read-only tool.
-	hints *toolHints
-	// note is appended to the verb's description.
-	note string
-	// untrusted results carry another program's text and get the note that
-	// says so. markUntrusted also adds untrusted: true to the result.
+	name          string
+	verb          string
+	write         bool
+	hide          []string
+	hideOwn       []string
+	self          []string
+	hints         *toolHints
+	note          string
 	untrusted     bool
 	markUntrusted bool
-	// waits are millisecond parameters the call can block for; the call's
-	// deadline is their sum, with the verb's defaults for the absent ones,
-	// plus a margin.
-	waits []string
-	// base is the deadline for a call that blocks on nothing named.
-	base time.Duration
+	waits         []string
+	base          time.Duration
 }
 
-// toolHints are the annotations of a tool that changes something, with the
-// meaning the MCP specification gives them. Clients auto-approve a read-only
-// tool, so a tool that changes anything must not be left without hints.
 type toolHints struct {
-	// destructive: the call may overwrite or discard what exists, or run
-	// arbitrary commands. Without it the call only adds.
 	destructive bool
-	// idempotent: calling again with the same arguments changes nothing more.
-	idempotent bool
-	// openWorld: the call reaches programs outside tuios, which can act on
-	// the rest of the machine and the network.
-	openWorld bool
+	idempotent  bool
+	openWorld   bool
 }
 
 var (
-	// hintsOwnRecord is for a tool that sets a field of the caller's own
-	// record. The next report replaces it, so it destroys nothing of value.
 	hintsOwnRecord = &toolHints{idempotent: true}
-	// hintsMail is for a tool that adds a message and changes nothing else.
-	hintsMail = &toolHints{}
-	// hintsPaneInput is for a tool that makes a program in a pane do
-	// something, with every power that program has.
+	hintsMail      = &toolHints{}
 	hintsPaneInput = &toolHints{destructive: true, openWorld: true}
 )
 
-// catalog is every tool the server can list. The short list is on purpose:
-// every tool costs context in every harness session that loads the server.
 var catalog = []toolSpec{
 	{name: "tuios_list_agents", verb: "list-agents", hideOwn: []string{"all_sessions"}},
 	{name: "tuios_list_windows", verb: "list-windows"},
@@ -104,7 +70,6 @@ var catalog = []toolSpec{
 	{name: "tuios_peek_prompt", verb: "peek-prompt", untrusted: true},
 	{name: "tuios_wait_for", verb: "wait-for", hideOwn: []string{"any_session"}, waits: []string{"timeout"}},
 	{name: "tuios_read_agent_messages", verb: "read-agent-messages", self: []string{"to"}, untrusted: true,
-		// Naming an inbox marks the messages it returns as read.
 		hints: &toolHints{idempotent: true}},
 	{name: "tuios_send_agent_message", verb: "send-agent-message", hide: []string{"human_nonce", "from_host"}, self: []string{"from"}, hints: hintsMail},
 	{name: "tuios_set_agent_state", verb: "set-agent-state", self: []string{"window"}, hints: hintsOwnRecord},
@@ -124,26 +89,21 @@ var catalog = []toolSpec{
 	},
 	{name: "tuios_fan", verb: "fan", write: true, hints: hintsPaneInput, base: 2 * time.Minute},
 	{
-		// parent is left out: the daemon takes the caller's own pane, so a
-		// pane delegates only as itself and the answer comes back to it.
 		name: "tuios_delegate", verb: "delegate", write: true, hints: hintsPaneInput,
 		hide: []string{"parent"}, untrusted: true, waits: []string{"wait", "ready_timeout"},
 	},
 }
 
-// tool is one listed tool.
 type tool struct {
-	name        string
-	verb        string
-	description string
-	schema      map[string]any
-	args        map[string]ParamDoc
-	spec        toolSpec
-	untrusted   bool
-	// markUntrusted adds untrusted: true to the verb's result.
+	name          string
+	verb          string
+	description   string
+	schema        map[string]any
+	args          map[string]ParamDoc
+	spec          toolSpec
+	untrusted     bool
 	markUntrusted bool
-	// run replaces the plain verb call, for a tool that is not one verb.
-	run func(s *Server, c Conn, in map[string]any) map[string]any
+	run           func(s *Server, c Conn, in map[string]any) map[string]any
 }
 
 func (t *tool) accepts(name string) bool {
@@ -160,8 +120,6 @@ func (t *tool) argNames() []string {
 	return out
 }
 
-// timeout is how long the call may take: the sum of the millisecond
-// parameters it blocks on, each at its default when absent, plus a margin.
 func (t *tool) timeout(in map[string]any) time.Duration {
 	if len(t.spec.waits) == 0 {
 		if t.spec.base > 0 {
@@ -182,7 +140,6 @@ func (t *tool) timeout(in map[string]any) time.Duration {
 	return total + 10*time.Second
 }
 
-// buildTools generates the tool list from the verb table and the options.
 func buildTools(opts Options) []*tool {
 	docs := make(map[string]VerbDoc, len(opts.Verbs))
 	for _, v := range opts.Verbs {
@@ -198,7 +155,6 @@ func buildTools(opts Options) []*tool {
 		}
 		doc, ok := docs[spec.verb]
 		if !ok {
-			// A verb this build does not have is not offered.
 			continue
 		}
 		out = append(out, generate(spec, doc, opts))
@@ -207,7 +163,6 @@ func buildTools(opts Options) []*tool {
 	return out
 }
 
-// generate builds one tool from its verb's documentation.
 func generate(spec toolSpec, doc VerbDoc, opts Options) *tool {
 	t := &tool{
 		name:          spec.name,
@@ -257,9 +212,6 @@ func generate(spec toolSpec, doc VerbDoc, opts Options) *tool {
 	return t
 }
 
-// paramSchema is the JSON Schema of one verb parameter. The accepted values go
-// in the description rather than an enum: some parameters take a
-// comma-separated list of them, which an enum would refuse.
 func paramSchema(p ParamDoc, desc string) map[string]any {
 	s := map[string]any{}
 	switch p.Type {
@@ -300,7 +252,6 @@ func (s *Server) ToolNames() []string {
 	return out
 }
 
-// toolList is the tools/list answer.
 func (s *Server) toolList() []any {
 	out := make([]any, 0, len(s.tools))
 	for _, t := range s.tools {
@@ -315,9 +266,6 @@ func (s *Server) toolList() []any {
 	return out
 }
 
-// annotations is the tool's MCP annotation object. The spec gives
-// destructiveHint and idempotentHint a meaning only when readOnlyHint is
-// false, so a read-only tool lists neither.
 func (t *tool) annotations() map[string]any {
 	h := t.spec.hints
 	if h == nil {
@@ -331,20 +279,11 @@ func (t *tool) annotations() map[string]any {
 	}
 }
 
-// caller is the pane the daemon placed this server in, from the
-// restrict-connection answer. Both are empty when it placed it in none.
 type caller struct {
 	Window  string `json:"window"`
 	Session string `json:"session"`
 }
 
-// fillSelf fills the caller's own pane into the parameters that name it and
-// were left out. Under scope own the daemon does the same for a pane record
-// and a sender, so this changes nothing there; under scope all it is what
-// makes a report land on the caller's pane rather than the focused one, and
-// for read_agent_messages it makes the caller's own inbox the default. A
-// sender is filled only for the caller's own session, the one its pane
-// resolves in.
 func fillSelf(t *tool, in map[string]any, me caller) {
 	if me.Window == "" {
 		return
@@ -360,15 +299,12 @@ func fillSelf(t *tool, in map[string]any, me caller) {
 	}
 }
 
-// Defaults and bounds of tuios_events.
 const (
 	eventsDefaultWait = 30 * time.Second
 	eventsMaxWait     = 120 * time.Second
 	eventsDefaultMax  = 100
 	eventsMaxMax      = 1000
-	// eventsQuiet is how long a call that has events waits for more before
-	// it answers, so a burst comes back in one answer.
-	eventsQuiet = 250 * time.Millisecond
+	eventsQuiet       = 250 * time.Millisecond
 )
 
 // EventTypes are the event types tuios_events accepts: every type the
@@ -382,26 +318,15 @@ var EventTypes = []string{
 	"session-created", "session-closed", "session-labelled", "client-session-changed", "gap", "attention",
 	"host-changed", "prompt", "command-started", "command-finished",
 	"agent-activity", "transcript", "daemon-upgraded",
-	// The daemon sends no transfer event to a restricted connection, which
-	// every connection of tuios mcp is, so these two never arrive here.
-	// They are listed so the list stays the daemon's.
 	"transfer", "transfer-progress", "transfer-file",
-	// What a person did on a TML surface, and its changes. Opt-in.
 	"tml-event",
 	"tml-surface",
-	// A session's task cards.
 	"task-claimed", "task-finished", "task-changed", "task-dispatch",
-	// The daemon took or dropped its hold that keeps the machine awake.
 	"keep-awake",
-	// git removed a worktree tuios made.
 	"worktree-removed",
-	// A client shows another theme, previews included. Opt-in.
 	"theme",
 }
 
-// defaultEventTypes are the types a call that names none gets: what an agent
-// waits for. output and agent-activity fire on every write to a pane and are
-// left out, as are the focus and layout events a person's every key makes.
 var defaultEventTypes = []string{
 	"agent-state", "agent-message", "notification", "attention", "bell",
 	"window-created", "window-closed", "window-exit", "window-retitled",
@@ -453,8 +378,6 @@ func isTimeout(err error) bool {
 	return errors.As(err, &ne) && ne.Timeout()
 }
 
-// runEvents subscribes, collects what arrives, and returns it with the point
-// to resume from.
 func runEvents(s *Server, c Conn, in map[string]any) map[string]any {
 	params := map[string]any{}
 	if v, ok := in["session"].(string); ok && v != "" {
@@ -483,23 +406,13 @@ func runEvents(s *Server, c Conn, in map[string]any) map[string]any {
 		return errorResult(err)
 	}
 	var ack struct {
-		Seq    uint64 `json:"seq"`
-		BootID string `json:"boot_id"`
-		// Replayed is how many events the daemon writes before the live
-		// stream on a resume, after its scope and type filters. Nil when the
-		// daemon did not say.
-		Replayed *int `json:"replayed"`
+		Seq      uint64 `json:"seq"`
+		BootID   string `json:"boot_id"`
+		Replayed *int   `json:"replayed"`
 	}
 	_ = jsonx.Unmarshal(raw, &ack)
 	boot := ack.BootID
 
-	// The stream is at the ack's baseline once the replay is drained. The
-	// replay is filtered by type and, on a restricted connection, by scope, so
-	// it can be empty even when the daemon moved far past after_seq: resuming
-	// from the highest seq delivered would then hand the same after_seq back on
-	// every call. seen is the highest seq delivered, which is where to resume
-	// only when max_events cut the replay short. An after_seq from another
-	// daemon start numbers nothing here, so it does not count as seen.
 	var seen uint64
 	if resuming && uint64(after) <= ack.Seq {
 		if b, _ := in["boot_id"].(string); b == "" || b == ack.BootID {
@@ -537,8 +450,6 @@ func runEvents(s *Server, c Conn, in map[string]any) map[string]any {
 		if ev.Seq > seen {
 			seen = ev.Seq
 		}
-		// A gap marker carries no seq, and every live event is above the
-		// baseline, so a seq at or below it is a replayed event.
 		if ev.Seq != 0 && ev.Seq <= ack.Seq {
 			replayedSeen++
 		}

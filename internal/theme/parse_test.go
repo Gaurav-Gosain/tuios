@@ -10,22 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The ways the colour parser can go wrong, and the test that holds each:
-//
-//   - A value a config already holds changes colour: every hex form must draw
-//     what lipgloss.Color drew for it. TestParseColorForms.
-//   - A name lands on the wrong slot: purple and magenta must both be 5, the
-//     bright_ forms 8 higher, and an index 0-15 the same slot as its name.
-//     TestParseColorForms.
-//   - A role reads the palette field of another meaning: error is Warn, not
-//     Warning. TestParseColorForms.
-//   - A role or slot keeps the old theme's colour after a theme change, or
-//     does not step down to the terminal's own slot at 16 colours.
-//     TestNamesFollowTheThemeAndTheDepth.
-//   - A role loop in a theme file recurses forever. TestAChromeLoopFailsTheFile.
-//   - A renderer pays for parsing on every frame: the memo and the slots
-//     are read without a parse; the dock and rail benchmarks hold allocs/op.
-
 // TestParseColorForms is the vocabulary, one row per form.
 func TestParseColorForms(t *testing.T) {
 	pal := overlay.Palette{
@@ -39,7 +23,7 @@ func TestParseColorForms(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		in   string
-		want color.Color // on pal, at 16 colours; nil for an error
+		want color.Color
 	}{
 		{"#7dcfff", lipgloss.Color("#7dcfff")},
 		{"#7DCFFF", lipgloss.Color("#7dcfff")},

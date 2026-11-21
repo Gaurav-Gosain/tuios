@@ -8,14 +8,8 @@ import (
 	"github.com/charmbracelet/x/term"
 )
 
-// writer owns the terminal write, on its own goroutine, so a slow terminal
-// never holds up Update. Frames queued while a write is in flight are joined
-// and go out in the next write. No byte is dropped: the diff assumes that
-// every byte it made reached the terminal. An empty frame still makes a
-// write, for a writer behind it that clears a debt on each frame write.
 type writer struct {
-	out io.Writer
-	// wmu is held for a whole drain, so two drains never reorder bytes.
+	out     io.Writer
 	wmu     sync.Mutex
 	mu      sync.Mutex
 	pending []byte
@@ -61,8 +55,6 @@ func (w *writer) loop() {
 	}
 }
 
-// drain writes what is queued, reusing buf, and returns buf for the next
-// call.
 func (w *writer) drain(buf []byte) []byte {
 	w.wmu.Lock()
 	defer w.wmu.Unlock()
@@ -78,10 +70,8 @@ func (w *writer) drain(buf []byte) []byte {
 	return buf
 }
 
-// flush writes what is queued now, on the caller's goroutine.
 func (w *writer) flush() { w.drain(nil) }
 
-// stop writes what is queued and ends the goroutine.
 func (w *writer) stop() {
 	w.mu.Lock()
 	if w.stopped {
@@ -94,7 +84,6 @@ func (w *writer) stop() {
 	<-w.done
 }
 
-// writeNow writes b in place, after anything queued.
 func (w *writer) writeNow(b []byte) {
 	if len(b) == 0 {
 		return
@@ -104,9 +93,6 @@ func (w *writer) writeNow(b []byte) {
 	_, _ = w.out.Write(b)
 }
 
-// makeRaw puts the terminal f in raw mode, as Bubble Tea does for its input
-// when it runs a renderer, and returns what puts it back. A nil file, or one
-// that is not a terminal, is left alone.
 func makeRaw(f *os.File) (restore func()) {
 	if f == nil || !term.IsTerminal(f.Fd()) {
 		return func() {}

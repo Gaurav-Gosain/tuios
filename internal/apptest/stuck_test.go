@@ -6,12 +6,10 @@ import (
 	"time"
 )
 
-// blockedCommand stands for a command stuck in its own code.
 func blockedCommand(release <-chan struct{}) {
 	<-release
 }
 
-// otherCommand is a goroutine in somebody else's code.
 func otherCommand(release <-chan struct{}) {
 	<-release
 }
@@ -37,7 +35,6 @@ func TestStuckMessageSaysWhereTheCommandIsBlocked(t *testing.T) {
 	go func() { started <- struct{}{}; otherCommand(release) }()
 	<-started
 	<-started
-	// Both goroutines are running; give them a moment to park in the receive.
 	var dump string
 	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(5 * time.Millisecond) {
 		dump = goroutineDump()
@@ -51,8 +48,6 @@ func TestStuckMessageSaysWhereTheCommandIsBlocked(t *testing.T) {
 		if !strings.Contains(msg, "has not answered after 5s; if it waits by design, add it to parked") {
 			t.Errorf("the old sentence is gone: %q", msg)
 		}
-		// The command's name is in the first sentence, so the proof of a stack is
-		// what only a stack has: the goroutine's state and its source line.
 		if !strings.Contains(msg, "[chan receive") || !strings.Contains(msg, "stuck_test.go:") {
 			t.Errorf("the message has no stack of the blocked command:\n%s", msg)
 		}

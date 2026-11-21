@@ -20,8 +20,6 @@ func LimitReset(text string) string {
 		return ""
 	}
 	at := strings.TrimSpace(strings.TrimRight(strings.TrimSpace(m[1]), ".,;"))
-	// A reset names a time or a date, so it holds a digit. "send a message
-	// after it resets to continue" names none.
 	if at == "" || len(at) > limitResetMax || !strings.ContainsAny(at, "0123456789") {
 		return ""
 	}
@@ -40,14 +38,8 @@ func LimitMessage(line, reset string) string {
 	return "Stopped on the usage limit · resets " + reset
 }
 
-// limitResetMax bounds the words kept, so a message that runs on after the
-// marker does not become the reset.
 const limitResetMax = 48
 
-// limitResetRe finds the reset in the texts testdata/limits holds: Claude
-// Code's "resets <when>" and "continuing automatically at <when>", and
-// Codex's "try again at <when>" and "Try again <date> at <when>". The words
-// end at a middle dot, a sentence end or the line's end.
 var limitResetRe = regexp.MustCompile(`(?i)(?:\bresets\s+(?:at\s+)?|\bwill reset at\s+|\bcontinuing automatically at\s+|\btry again (?:at\s+)?)([^·\n]+?)(?:\s*·|\.\s|\.$|$)`)
 
 // RuleLimitReset is the reset a limit_reached rule's screen names, read from

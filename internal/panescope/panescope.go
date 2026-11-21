@@ -26,7 +26,6 @@ package panescope
 
 import "sync/atomic"
 
-// off is set after the first failure.
 var off atomic.Bool
 
 // Place puts the process pid, a pane's first process, in a scope of its own

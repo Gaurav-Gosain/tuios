@@ -7,11 +7,6 @@ import (
 	"testing"
 )
 
-// Address discovery.
-//
-// Every test here feeds a fixture. Nothing in this package reads the developer's
-// own ~/.ssh/config, and the one function that would is given a path.
-
 const sshConfigFixture = `# A comment about the file
 Host buildbox
   HostName 10.0.0.4

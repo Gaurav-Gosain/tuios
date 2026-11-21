@@ -6,16 +6,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// tmuxCommand is one entry of tmux's command table.
 type tmuxCommand struct {
 	name, alias string
 }
 
-// tmuxCommands is tmux 3.4's command table, in tmux's order (the output of
-// `tmux list-commands`). The shim resolves a command word against all of it,
-// not only the commands it answers, so a prefix is ambiguous exactly when it
-// is ambiguous to tmux, and a command the shim does not answer is named in
-// the error and the log by its full name.
 var tmuxCommands = []tmuxCommand{
 	{"attach-session", "attach"},
 	{"bind-key", "bind"},
@@ -109,10 +103,6 @@ var tmuxCommands = []tmuxCommand{
 	{"wait-for", "wait"},
 }
 
-// lookupCommand resolves a command word the way tmux's cmd_find does: an
-// exact alias wins, then an exact name, then the one name the word is a
-// prefix of. A prefix of more than one name is ambiguous, and the error lists
-// them as tmux does.
 func lookupCommand(word string) (string, error) {
 	found := ""
 	ambiguous := false

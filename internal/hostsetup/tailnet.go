@@ -11,9 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/hostsync"
 )
 
-// A tailnet in bulk: every peer listed with what it has, the person ticks
-// the machines they want, and Run goes over each with one set of answers.
-
 // The states of a peer in the checklist.
 const (
 	PeerSame        = "same"        // tuios of this version runs there
@@ -46,7 +43,6 @@ type Peer struct {
 	Failure *Failure `json:"failure,omitempty"`
 }
 
-// peerProbeTimeout bounds the probe of one peer for the list.
 const peerProbeTimeout = 8 * time.Second
 
 // Parallel bounds how many machines are probed or set up at once.
@@ -99,7 +95,6 @@ func ListTailnet(ctx context.Context, opt federation.TailnetOptions, added map[s
 	return peers, nil
 }
 
-// read probes one peer the way a setup does, and says its state.
 func (p *Peer) read(ctx context.Context, version string) {
 	pctx, cancel := context.WithTimeout(ctx, peerProbeTimeout)
 	defer cancel()
@@ -210,17 +205,11 @@ func RunBulk(ctx context.Context, base Options, peers []Peer, c Choices, own map
 	return res
 }
 
-// signInGate lets one machine at a time wait on a person for a Tailscale
-// sign-in, so two sign-in pages never open at once. A machine whose turn
-// comes after another one's sign-in tests again first: one approval often
-// covers the whole tailnet.
 type signInGate struct {
 	mu   sync.Mutex
 	seen int
 }
 
-// fix is a.Fix for a machine of a bulk run. round is the gate's count
-// when the machine last had its turn.
 func (g *signInGate) fix(ctx context.Context, a Asker, f *Failure, round *int) (bool, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()

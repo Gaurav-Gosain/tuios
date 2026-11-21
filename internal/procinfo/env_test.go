@@ -28,7 +28,6 @@ func TestProcargsEnvVar(t *testing.T) {
 		ok   bool
 	}{
 		{"after argv", build(2, "/bin/sh\x00\x00\x00sh\x00TUIOS_AGENT=fake\x00TUIOS_AGENT=codex\x00\x00"), "codex", true},
-		// An argument that looks like the variable is not the environment.
 		{"argv is not env", build(2, "/bin/sh\x00\x00sh\x00TUIOS_AGENT=fake\x00HOME=/h\x00\x00"), "", false},
 		{"apple strings after env are not env", build(1, "/bin/sh\x00\x00sh\x00HOME=/h\x00\x00TUIOS_AGENT=apple\x00"), "", false},
 		{"truncated", []byte{1, 0}, "", false},

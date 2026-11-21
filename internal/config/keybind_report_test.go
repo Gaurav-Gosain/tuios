@@ -4,8 +4,6 @@ import (
 	"testing"
 )
 
-// registryFor builds a registry over a config with only the sections a case
-// needs, so a test states its own world rather than inheriting every default.
 func registryFor(t *testing.T, mutate func(*UserConfig)) *KeybindRegistry {
 	t.Helper()
 	cfg := DefaultConfig()
@@ -63,7 +61,6 @@ func TestCrossSectionDigitClashIsReported(t *testing.T) {
 // buildMappings' section order cannot pass quietly.
 func TestLaterSectionWinsAcrossSections(t *testing.T) {
 	r := registryFor(t, func(c *UserConfig) {
-		// window_management is visited before system.
 		c.Keybindings.WindowManagement["zzz_early_section"] = []string{"ctrl+alt+k"}
 		c.Keybindings.System["aaa_late_section"] = []string{"ctrl+alt+k"}
 	})
@@ -110,8 +107,6 @@ func TestCollisionNamesTheActionThatActuallyRuns(t *testing.T) {
 	if got.CrossSection {
 		t.Error("both actions were in window_management, so this is not a cross-section collision")
 	}
-	// The registry itself must agree, or the report is describing a different
-	// program than the one running.
 	if action := r.GetAction("ctrl+alt+q"); action != got.Winner {
 		t.Errorf("registry resolves the key to %q but the report names %q", action, got.Winner)
 	}

@@ -33,9 +33,6 @@ func PathFor(template, repoRoot, branch string) (string, error) {
 	return RenderPath(template, repoRoot, branch)
 }
 
-// pathTag is one {{ name }} or {{ name | filter }} in a path template. The
-// names follow worktrunk's worktree-path, so a layout made by one reads the
-// same in the other.
 var pathTag = lazyre.New(`\{\{\s*([A-Za-z_]+)\s*(?:\|\s*([A-Za-z_]+)\s*)?\}\}`)
 
 // RenderPath fills a path template, the [worktree] path setting:
@@ -50,9 +47,6 @@ var pathTag = lazyre.New(`\{\{\s*([A-Za-z_]+)\s*(?:\|\s*([A-Za-z_]+)\s*)?\}\}`)
 // repo_path. The template has to use branch, or every branch would land in one
 // directory.
 func RenderPath(template, repoRoot, branch string) (string, error) {
-	// The braces are checked in the template, before anything is filled in:
-	// a branch such as a}}b, or a folder with {{ in its name, is a value and
-	// not a mistake in the template.
 	if rest := pathTag().ReplaceAllString(template, ""); strings.Contains(rest, "{{") || strings.Contains(rest, "}}") {
 		return "", errfmt.Errorf("%q has a {{ or }} that is not part of a {{ name }} or {{ name | slug }}", template)
 	}
@@ -101,8 +95,6 @@ func RenderPath(template, repoRoot, branch string) (string, error) {
 	return filepath.Clean(out), nil
 }
 
-// branchMark stands in for the branch when HoldingDir renders a template.
-// Slug leaves it as it is.
 const branchMark = "tuios0branch0mark"
 
 // HoldingDir is the folder every branch's worktree goes under: the rendered
@@ -138,8 +130,6 @@ func UnignoredInRepo(repoRoot, path string) bool {
 	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return false
 	}
-	// check-ignore exits 0 for an ignored path and 1 for one that is not.
-	// Any other failure says nothing either way, and nothing is reported.
 	err = childproc.Git(context.Background(), repoRoot, "check-ignore", "-q", "--", rel).Run()
 	var exit interface{ ExitCode() int }
 	return errors.As(err, &exit) && exit.ExitCode() == 1

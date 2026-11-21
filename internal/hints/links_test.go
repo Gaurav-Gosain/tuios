@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// ticketRule is the rule the issue asked for: a ticket ID opens its page.
 var ticketRule = LinkRuleSpec{
 	Regex: `\b([A-Z][A-Z0-9_]+-[1-9][0-9]*)\b`,
 	URL:   "https://jira.example.com/browse/$1",
@@ -153,9 +152,9 @@ func TestMayHoldLinkSkipsOnlyLinesThatCannotMatch(t *testing.T) {
 		`(?i)proj-\d+`,
 		`(?:JIRA|GH)-\d+`,
 		`\d{3,}`,
-		`x*y`,   // can start with x or y
-		`a?b`,   // can start with a or b: unknown, must not skip
-		`ü-\d+`, // non-ASCII first rune: unknown, must not skip
+		`x*y`,
+		`a?b`,
+		`ü-\d+`,
 	}
 	lines := []string{
 		"", "nothing here", "see PROJ-12 now", "issue #42", "proj-7 lower", "JIRA-1 and GH-2",

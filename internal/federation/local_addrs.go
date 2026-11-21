@@ -66,8 +66,6 @@ func PublicIP(ip net.IP) bool {
 	return !cgnat.Contains(ip)
 }
 
-// skipLocalInterface leaves out the interfaces of containers, VMs and VPNs: a
-// phone cannot reach them, and each address makes a pairing code bigger.
 func skipLocalInterface(name string) bool {
 	for _, p := range []string{"docker", "br-", "veth", "virbr", "podman", "cni", "flannel", "tailscale", "utun", "zt", "vmnet", "vboxnet", "lxc", "lxd"} {
 		if strings.HasPrefix(name, p) {

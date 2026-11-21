@@ -5,16 +5,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The Inbox, alerts and the end of the attach, for the renderer (plan 2.13).
-//
-// The model keeps a mirror of the daemon's attention queue, the same one the
-// terminal client's Inbox reads (internal/app/inbox.go). The bridge sends the
-// whole list as an "attention" event each time the mirror changes. The model
-// also raises the alerts the terminal client shows in its dock: agent state
-// changes, Inbox bursts and the notifications programs send with OSC 9, 777,
-// 99 and BEL. The bridge sends each one once, as a "notify" event, and the
-// renderer draws it as a toast and decides on a desktop notification.
-
 // Attention is the "attention" event: every open Inbox item, in Inbox order.
 type Attention struct {
 	// Live is false until the mirror holds a listing, and again while the
@@ -51,7 +41,6 @@ type Detached struct {
 	Message string `json:"message"`
 }
 
-// exportAttention sends the Inbox when it changed since the last send.
 func (m *model) exportAttention() {
 	in := &m.os.Inbox
 	if m.attentionSent && in.Gen == m.attentionGen && in.Live == m.attentionLive {
@@ -65,7 +54,6 @@ func (m *model) exportAttention() {
 	m.out.JSON(Event{Type: "attention", Attention: &Attention{Live: in.Live, Items: items}})
 }
 
-// exportNotify sends each alert the model raised since the last message.
 func (m *model) exportNotify() {
 	live := make(map[string]bool, len(m.os.Notifications))
 	for _, n := range m.os.Notifications {
@@ -80,12 +68,9 @@ func (m *model) exportNotify() {
 		ev.Desktop = m.os.DesktopAlerts()
 		m.out.JSON(Event{Type: "notify", Notify: &ev})
 	}
-	// Forget the alerts the model dropped, so the set stays small.
 	m.notified = live
 }
 
-// detachedEvent says why the model quit, or nil for a quit the renderer asked
-// for.
 func detachedEvent(o *app.OS) *Detached {
 	switch o.ExitReason {
 	case app.ExitSessionKilled:

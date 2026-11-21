@@ -68,8 +68,6 @@ func DirExists(dir string) bool {
 	return err == nil && info.IsDir()
 }
 
-// newPty allocates the pty a pane runs on: a guest one when NewGuestPty is
-// set, the kernel's otherwise. logf is Spawn's.
 func newPty(width, height int, logf func(string, ...any)) (xpty.Pty, error) {
 	if NewGuestPty != nil {
 		return NewGuestPty(width, height)
@@ -106,13 +104,6 @@ func SpawnTTY(width, height, cellWidth, cellHeight int, build func(tty string) *
 		if err != nil {
 			return nil, nil, errfmt.Errorf("failed to create PTY: %w", err)
 		}
-		// The new pty has no pixel size, and the guest can read its size
-		// before the first resize gives it one. It starts with the cell the
-		// caller names, else the fallback cell's, which the emulator also
-		// answers XTWINOPS with. The pixels are set before the process starts:
-		// a later change to them alone is a SIGWINCH at the same rows and
-		// columns, and a shell takes it while it starts. A pty that takes no
-		// pixels is left at the size it was made with.
 		if ws, ok := pty.(WinsizeSetter); ok {
 			xpixel, ypixel := pixelsOr(width, height, width*cellWidth, height*cellHeight)
 			_ = ws.SetWinsize(width, height, xpixel, ypixel)
@@ -137,8 +128,6 @@ func SpawnTTY(width, height, cellWidth, cellHeight int, build func(tty string) *
 			time.Sleep(time.Duration(attempt) * time.Millisecond)
 			continue
 		}
-		// Name the process that failed: with a command this is the program the
-		// user picked, and "shell" would send them looking at the wrong config.
 		return nil, nil, errfmt.Errorf("failed to start %s: %w", cmd.Path, err)
 	}
 }

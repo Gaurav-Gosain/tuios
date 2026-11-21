@@ -1,29 +1,18 @@
 package composer
 
-// Undo bounds: the stack keeps this many steps, and no more than this many
-// bytes of text across them. The oldest step goes first.
 const (
 	undoSteps = 200
 	undoBytes = 1 << 20
 )
 
-// edit is one undo step: at pos, del was taken out and ins put in. The cells
-// keep their blocks, so undoing the delete of a block brings back the block
-// with its payload, and no kill ring is needed.
 type edit struct {
-	pos      int
-	del, ins []cell
-	// before and after are the cursor before and after the edit, and
-	// anchor the selection's anchor before it (-1 for none), so undo
-	// brings back the selection an edit replaced.
+	pos                   int
+	del, ins              []cell
 	before, after, anchor int
-	// typing says the step is a run of typed characters, which the next
-	// typed character may join.
-	typing bool
-	size   int
+	typing                bool
+	size                  int
 }
 
-// editSize is what an edit costs the undo bound.
 func editSize(del, ins []cell) int {
 	n := 0
 	for _, c := range del {
@@ -35,8 +24,6 @@ func editSize(del, ins []cell) int {
 	return n
 }
 
-// splice puts ins in place of the n cells at pos and returns the cells it
-// took out. The returned slice is a copy, safe to keep.
 func (m *Model) splice(pos, n int, ins []cell) []cell {
 	var del []cell
 	if n > 0 {
@@ -60,16 +47,12 @@ func (m *Model) splice(pos, n int, ins []cell) []cell {
 	}
 	copy(m.cells[pos:], ins)
 	m.ver++
-	// An edit that replaces the draft from outside (SetText, a history
-	// step) ends any selection it does not account for.
 	if m.anchor > len(m.cells) {
 		m.anchor = -1
 	}
 	return del
 }
 
-// change replaces the n cells at pos with ins as one undo step and puts the
-// cursor at after.
 func (m *Model) change(pos, n int, ins []cell, after int) {
 	before := m.cur
 	if m.anchor == before {
@@ -77,21 +60,15 @@ func (m *Model) change(pos, n int, ins []cell, after int) {
 	}
 	del := m.splice(pos, n, ins)
 	m.cur = after
-	// The list's position is an index into the draft, so a change re-derives it.
 	m.syncMention()
 	m.push(edit{pos: pos, del: del, ins: ins, before: before, after: after, anchor: m.anchor, size: editSize(del, ins)})
 }
 
-// typeCell inserts one typed cell at the cursor. A run of typed characters is
-// one undo step, up to the first space after a word, so undo takes back a
-// word at a time.
 func (m *Model) typeCell(c cell) {
 	pos := m.cur
 	if n := len(m.undo); n > 0 && m.joinTyping {
 		last := &m.undo[n-1]
 		boundary := c.isSpace() && len(last.ins) > 0 && !last.ins[len(last.ins)-1].isSpace()
-		// A typing step may start by replacing a selection, so del can
-		// hold the selected cells.
 		if last.typing && last.pos+len(last.ins) == pos && !boundary {
 			m.splice(pos, 0, []cell{c})
 			m.cur = pos + 1
@@ -111,7 +88,6 @@ func (m *Model) typeCell(c cell) {
 	m.joinTyping = true
 }
 
-// push records an edit and drops the redo steps, which no longer apply.
 func (m *Model) push(e edit) {
 	m.undo = append(m.undo, e)
 	m.undoSize += e.size
@@ -121,7 +97,6 @@ func (m *Model) push(e edit) {
 	m.trimUndo()
 }
 
-// trimUndo drops the oldest steps past the bounds.
 func (m *Model) trimUndo() {
 	drop := 0
 	for len(m.undo)-drop > undoSteps || (m.undoSize > undoBytes && len(m.undo)-drop > 1) {

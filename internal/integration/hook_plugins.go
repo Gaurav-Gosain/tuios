@@ -2,32 +2,6 @@ package integration
 
 import "github.com/Gaurav-Gosain/tuios/internal/oneline"
 
-// The maps for Amp, Kimi Code CLI and Pi, the three harnesses outside the
-// first four whose hooks cover the whole turn, so tuios takes the pane's state
-// from them.
-
-// The Amp event map. Amp loads TypeScript plugins from ~/.config/amp/plugins
-// (https://ampcode.com/manual/plugin-api, read for this change). The plugin
-// tuios installs (assets/amp/tuios-agent-state.ts) subscribes to
-// session.start, agent.start, agent.end and tool.result, and runs `tuios
-// agent-hook amp` with the event, the thread id and agent.end's status.
-//
-// A question Amp asks with its built-in ask_user_choice tool (built in since
-// September 2026, https://ampcode.com/news/neo) is seen at tool.call, whose
-// handler has to answer allow or reject. The plugin API does not say how the
-// answers of several plugins combine, so the plugin subscribes to tool.call
-// only when no Amp permission setting is in force, in which case Amp allows
-// every tool, and no other plugin is installed. Its answer is then always
-// allow, which changes nothing. Otherwise the question and every approval
-// prompt are left to the manifest's screen rules.
-//
-//	session.start               the thread id only (set-agent-session)
-//	agent.start                 working
-//	agent.end done              done
-//	agent.end error             errored
-//	agent.end cancelled         idle (the person stopped the turn)
-//	tool.call ask_user_choice   needs_input, kind question, with the question
-//	tool.result ask_user_choice working, only if the pane is in needs_input
 func translateAmp(in Input, p fields) Decision {
 	event := eventName(in, p)
 	sid := p.str("session_id")
@@ -71,26 +45,6 @@ func translateAmp(in Input, p fields) Decision {
 	}
 }
 
-// The Kimi Code CLI event map. Source: the hooks reference at
-// https://www.kimi.com/code/docs/en/kimi-code-cli/customization/hooks.html,
-// read for this change, and herdr's working Kimi asset
-// (src/integration/assets/kimi/herdr-agent-state.sh, which needs Kimi Code CLI
-// 0.14.0 or newer). Hooks are [[hooks]] tables in ~/.kimi-code/config.toml.
-// Every payload carries hook_event_name and session_id; the tool events carry
-// tool_name. Exit 0 with empty stdout allows and adds nothing.
-//
-//	SessionStart                    idle, and the session id
-//	UserPromptSubmit                working
-//	PreToolUse                      working, except AskUserQuestion, which is
-//	                                needs_input, kind question
-//	PermissionRequest               needs_input, kind approval
-//	PostToolUse, PostToolUseFailure,
-//	PermissionResult                working, only if the pane is in needs_input
-//	Stop                            done
-//	StopFailure                     errored, with the error type
-//	Interrupt                       idle (Kimi sends it instead of Stop)
-//	SessionEnd                      none
-//	subagent and background events: nothing
 func translateKimi(in Input, p fields) Decision {
 	event := eventName(in, p)
 	id := func(r Report) Report {
@@ -132,7 +86,6 @@ func translateKimi(in Input, p fields) Decision {
 	}
 }
 
-// piTurnStart maps the two events Pi and OMP share.
 func piTurnStart(id, event string, p fields) (Decision, bool) {
 	r := Report{SessionID: p.str("session_id")}
 	switch event {
@@ -150,35 +103,6 @@ func piTurnStart(id, event string, p fields) (Decision, bool) {
 	return send(id, event, r), true
 }
 
-// The Pi event map. Pi loads TypeScript extensions from
-// ~/.pi/agent/extensions (PI_CODING_AGENT_DIR overrides the agent directory).
-// The extension tuios installs (assets/pi/tuios-agent-state.ts) listens to
-// session_start, agent_start and agent_settled, the events herdr's working Pi
-// extension uses (src/integration/assets/pi/herdr-agent-state.ts), and to
-// ui_prompt_start and ui_prompt_end, which Pi emits around every blocking
-// prompt an extension shows (packages/coding-agent/src/core/extensions/
-// types.ts and runner.ts in the Pi repository, read for this change). It
-// reports only in the TUI mode, since the print and RPC modes run with no
-// terminal to show.
-//
-//	session_start           idle, or working when Pi is mid-turn (a reload
-//	                        replaces the extension without a new agent_start),
-//	                        with the session id and session file
-//	agent_start             working
-//	agent_settled           done
-//	subagent_start,         a subagent of the session starting, stopping
-//	subagent_stop,          or in flight, reported alone (report-agent-
-//	subagent_update         activity) with its id, type and text, the
-//	                        update's tool, target and outcome
-//	ui_prompt_start         needs_input: kind approval for a confirm, kind
-//	                        question for a select, input, editor or custom
-//	                        prompt, with the prompt's title
-//	ui_prompt_end           working when a turn is running, idle when not,
-//	                        only if the pane is in needs_input
-//
-// A prompt outside a turn (an extension command run at rest) also blocks Pi,
-// so it is reported the same way; its end goes back to idle, not working,
-// because the extension says whether Pi is idle.
 func translatePi(in Input, p fields) Decision {
 	event := eventName(in, p)
 	var leaf *string
@@ -220,9 +144,6 @@ func translatePi(in Input, p fields) Decision {
 		}
 		a := &Activity{Event: event, AgentID: id, AgentType: activityText(p.str("agent_type")), Text: activityText(p.str("text"))}
 		if event == "subagent_update" {
-			// The update's tool and target ride top-level payload keys, not
-			// tool_input, so the target is taken and clipped directly instead
-			// of through ToolTarget's tool_input lookup.
 			a.Tool, a.Target = p.str("tool"), oneline.Clip(p.str("target"))
 			switch p.str("outcome") {
 			case "stopping":
@@ -240,9 +161,6 @@ func translatePi(in Input, p fields) Decision {
 	return send(Pi, event, r)
 }
 
-// OMP shares Pi's session and start events, but not its completion or UI
-// prompt events. Its native approval dialog emits its own request and
-// resolution events; other extension UI dialogs have no hook event.
 func translateOMP(in Input, p fields) Decision {
 	event := eventName(in, p)
 	if d, ok := piTurnStart(OMP, event, p); ok {
@@ -271,20 +189,6 @@ func translateOMP(in Input, p fields) Decision {
 	return send(OMP, event, r)
 }
 
-// The Mistral Vibe event map. Vibe reads [[hooks]] tables from
-// ~/.vibe/hooks.toml (or $VIBE_HOME/hooks.toml). Each table has name, type,
-// command, and timeout (seconds). Payloads carry hook_event_name, session_id,
-// transcript_path, cwd, and parent_session_id when a subagent fires the hook.
-// Exit 0 with empty stdout allows and adds nothing.
-//
-//	session_start   idle, and the session id / transcript / cwd
-//	pre_agent       working, with the prompt as activity
-//	pre_tool        working, except ask_user_question (needs_input, kind question)
-//	post_tool       working, clearing needs_input
-//	notification    needs_input, kind approval on permission_prompt, else question
-//	post_agent      done
-//	session_end     none
-//	subagents       skipped when parent_session_id is non-empty
 func translateVibe(in Input, p fields) Decision {
 	event := eventName(in, p)
 	if p.str("parent_session_id") != "" {

@@ -1,32 +1,5 @@
 package terminal
 
-// A scrolled pane is parked at a place in its history, not at a distance from
-// the end of it.
-//
-// ScrollbackOffset counts lines back from the newest line, and the render path
-// reads a row as scrollbackLen-ScrollbackOffset+y. Both halves of that move:
-// scrollbackLen grows every time the guest prints a line, and it grows in jumps
-// when a workspace switch primes the pane from the daemon's copy of the
-// history. Held at a fixed offset, the pane therefore slides forward under a
-// user who has not touched it, one line per line printed and hundreds of lines
-// per workspace round trip. Nothing about the keys the user pressed decides
-// it, only whether output happened to arrive.
-//
-// So the anchor says the same viewport top the other way round, as an absolute
-// line in the history, and the offset is derived from it whenever the history
-// changes length. Two calls do it, both on the UI goroutine and both from
-// OS.Update:
-//
-//   - ApplyScrollAnchor, before the message is handled, turns the anchor back
-//     into an offset against however long the history is now.
-//   - RecordScrollAnchor, after it, turns a scroll the user just made into a
-//     new anchor.
-//
-// Saying it as an anchor rather than as a count of lines pushed is what makes
-// the rehydration path correct without being told about it: ApplyTerminalState
-// merges rows that never passed through the emulator's scroll path, and a
-// counter would miss every one of them.
-
 // ApplyScrollAnchor puts the viewport back on its anchored line, and reports
 // whether it had to move the offset to do it.
 //
@@ -45,12 +18,6 @@ func (w *Window) ApplyScrollAnchor() bool {
 		return false
 	}
 	sbLen := w.ScrollbackLenSync()
-	// Clamped at both ends, and only the lower end ever binds: a history that
-	// shrank below the anchored line, which is what ED 3 and the alternate
-	// screen do, leaves no line to hold and the pane goes back to live output.
-	// The upper end is defense. An anchor is recorded from an offset every
-	// caller already clamps to the length, so it is never negative and this can
-	// never ask for a row past the oldest the ring holds.
 	want := w.anchoredOffset(sbLen)
 	if want == w.ScrollbackOffset {
 		w.scrollOffsetSeen = want
@@ -62,11 +29,6 @@ func (w *Window) ApplyScrollAnchor() bool {
 	}
 	w.scrollOffsetSeen = want
 	if want == 0 {
-		// The end of the history caught up with the anchor, so there is nothing
-		// left to hold and the pane is on live output again. An implicit copy
-		// mode session exists only to render scrollback, so it ends here for
-		// the same reason the wheel ends it on reaching the bottom; an explicit
-		// one the user asked for stays up.
 		w.scrollAnchored = false
 		if w.InImplicitCopyMode() && w.CopyMode.State == CopyModeNormal {
 			w.ExitCopyMode()
@@ -78,8 +40,6 @@ func (w *Window) ApplyScrollAnchor() bool {
 	return true
 }
 
-// anchoredOffset is the offset that shows the anchored line at the top of
-// the viewport in a history of sbLen lines.
 func (w *Window) anchoredOffset(sbLen int) int {
 	return min(max(sbLen-w.scrollAnchorLine, 0), sbLen)
 }

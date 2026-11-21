@@ -13,7 +13,6 @@ func TestDefaultKeysMatchTheShippedBindings(t *testing.T) {
 		{"pgup", false, PageUp}, {"pgdown", false, PageDown},
 		{"home", false, Home}, {"g", true, Home},
 		{"end", false, End}, {"G", true, End}, {"shift+g", true, End},
-		// A list with a filter keeps its letters for the filter.
 		{"k", false, None}, {"j", false, None}, {"g", false, None}, {"G", false, None},
 		{"ctrl+j", false, None},
 	}
@@ -34,21 +33,17 @@ func TestConfiguredKeysReplaceTheDefaultsOfTheirMotionOnly(t *testing.T) {
 	})
 	for key, want := range map[string]Motion{
 		"ctrl+j": Down, "down": Down, "ctrl+k": Up, "up": Up,
-		// The rest of the keys stay where they were.
 		"pgup": PageUp, "pgdown": PageDown, "home": Home, "end": End,
 	} {
 		if got := k.Keys(key, false); got != want {
 			t.Errorf("Keys(%q) = %v, want %v", key, got, want)
 		}
 	}
-	// ctrl+n and ctrl+p were Down's and Up's defaults and are handed back.
 	for _, key := range []string{"ctrl+n", "ctrl+p"} {
 		if got := k.Keys(key, false); got != None {
 			t.Errorf("Keys(%q) = %v, want None once the action names other keys", key, got)
 		}
 	}
-	// j and k belong to Down and Up too, so they go with them. Home and End keep
-	// their letters.
 	if got := k.Keys("j", true); got != None {
 		t.Errorf(`Keys("j", true) = %v, want None`, got)
 	}

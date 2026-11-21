@@ -1,12 +1,5 @@
 package herdrcli
 
-// herdr's plugin commands, from src/cli/plugin.rs at v0.9.5. Each sends the
-// plugin.* method herdr's sends, which tuios's plugin host answers (see
-// internal/session/herdr_plugins.go). enable, disable, link and unlink are
-// sent too: the daemon refuses them from a pane, so a plugin or an agent
-// that runs one fails cleanly. install, update and uninstall clone from
-// the network, which tuios does not do.
-
 func parsePlugin(sub string, args []string, getenv Env, cwd string) (*Call, *UsageError) {
 	switch sub {
 	case "list":
@@ -231,8 +224,6 @@ func parsePluginPane(args []string, getenv Env, cwd string) (*Call, *UsageError)
 	return nil, &UsageError{Msg: pluginPaneHelp, Code: 2}
 }
 
-// popupSize reads --width and --height as herdr's PopupSize::parse_cli
-// does, and gives the value herdr sends: a number of cells, or "N%".
 func popupSize(v string) (any, error) {
 	if len(v) > 0 && v[len(v)-1] == '%' {
 		n, err := parseUint("", v[:len(v)-1], 8)

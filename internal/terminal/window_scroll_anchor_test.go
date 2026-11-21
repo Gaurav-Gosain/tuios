@@ -49,8 +49,6 @@ import (
 //     too. It pins a limit rather than the rule, so it is not the row to read
 //     for whether the anchor works.
 
-// anchorWindow is a daemon-backed pane with an emulator and no PTY, which is
-// all the anchor rule reads.
 func anchorWindow(t *testing.T, id string) *Window {
 	t.Helper()
 	w := NewDaemonWindow(id, "pane", 0, 0, 80, 24, 0, "pty-"+id, nil, config.DefaultScrollbackLines)
@@ -61,9 +59,6 @@ func anchorWindow(t *testing.T, id string) *Window {
 	return w
 }
 
-// printLines writes n newline-terminated lines straight into the emulator, the
-// way a guest printing output does, so they scroll off the top and land in the
-// scrollback ring.
 func printLines(t *testing.T, w *Window, prefix string, n int) {
 	t.Helper()
 	for i := 1; i <= n; i++ {
@@ -71,8 +66,6 @@ func printLines(t *testing.T, w *Window, prefix string, n int) {
 	}
 }
 
-// scrollBackTo puts the pane where a wheel gesture would leave it: a scroll
-// offset, mirrored to copy mode, and then recorded as an anchor.
 func scrollBackTo(w *Window, offset int) {
 	w.EnterCopyModeImplicit()
 	w.CopyMode.ScrollOffset = offset
@@ -166,8 +159,6 @@ func TestOutputBetweenTheTwoHalvesIsNotMistakenForAScroll(t *testing.T) {
 // pushes tore the restore in half and its hard reset threw the history away.
 // Production never interleaves the two, and neither does this now.
 func TestAnchorHoldsWhenHistoryIsMergedNotPrinted(t *testing.T) {
-	// The daemon's copy of the pane is further along than the client's, which
-	// is what one PTY stream read by two emulators gives you.
 	daemon := anchorWindow(t, "anchor-merge-daemon")
 	printLines(t, daemon, "OLD", 400)
 

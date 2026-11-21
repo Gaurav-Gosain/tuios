@@ -43,18 +43,11 @@ const (
 	tableCount
 )
 
-// keybindTable is one keybinding table of config.toml: its name there and the
-// KeybindingsConfig field that holds it.
 type keybindTable struct {
 	name  string
 	field func(*KeybindingsConfig) *map[string][]string
 }
 
-// keybindTables is every fixed keybinding table, once. The lookup by name, the
-// defaults fill, the nil-map setup, validation and the registry's per-table
-// lookups all walk it, so a new table is added here, in the Table list and in
-// the struct, and nowhere else. Declared menus are tables too, but they are
-// named by the user and kept in Menus.
 var keybindTables = [tableCount]keybindTable{
 	TableWindowManagement: {SectionWindowManagement, func(k *KeybindingsConfig) *map[string][]string { return &k.WindowManagement }},
 	TableWorkspaces:       {SectionWorkspaces, func(k *KeybindingsConfig) *map[string][]string { return &k.Workspaces }},

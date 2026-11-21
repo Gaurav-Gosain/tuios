@@ -65,27 +65,16 @@ const (
 	ResultLines = 20
 	// DiffLinesMax bounds the diff lines of one entry.
 	DiffLinesMax = 400
-	// diffLineMax bounds one diff line, in bytes. A minified file is one line.
-	diffLineMax = 1 << 10
-	// targetMax bounds a target, in bytes.
-	targetMax = 512
-	// toolMax bounds a tool name, in bytes.
-	toolMax = 64
-	// todosMax bounds the items of one todo list.
-	todosMax = 100
+	diffLineMax  = 1 << 10
+	targetMax    = 512
+	toolMax      = 64
+	todosMax     = 100
 	// DefaultMaxBytes is the bound on one page's entries as JSON.
 	DefaultMaxBytes = 2 << 20
-	// pageOverhead is held back from MaxBytes for the reply around the
-	// entries.
-	pageOverhead = 4 << 10
-	// scanMax bounds how much of the file one call reads. A newest-entries
-	// read grows its window from the end up to this, and a read after a
-	// cursor stops here and reports more.
-	scanMax = 32 << 20
-	// scanFirst is the first window of a newest-entries read.
-	scanFirst = 1 << 20
-	// lineMax bounds one record. A longer line is skipped.
-	lineMax = 16 << 20
+	pageOverhead    = 4 << 10
+	scanMax         = 32 << 20
+	scanFirst       = 1 << 20
+	lineMax         = 16 << 20
 	// LCSCellsPerCall bounds the longest common subsequence work of one call:
 	// the cells of every table the call's diffs fill, together. A cell is a
 	// uint16, so the largest table is 8 MiB, and it is freed when its diff
@@ -94,12 +83,8 @@ const (
 	// so with WholeReplace. The page's newest diffs are worked out first
 	// (oldest first for an after read), so they are the ones matched.
 	LCSCellsPerCall = 1 << 22
-	// rawTextMax bounds the text of one entry as decoded, before Clean. It
-	// is more than TextMax because Clean removes escapes and so shortens.
-	rawTextMax = 4 * TextMax
-	// headMax is how many bytes of the first record go into the file's
-	// identity.
-	headMax = 256
+	rawTextMax      = 4 * TextMax
+	headMax         = 256
 )
 
 // Entry roles.
@@ -164,27 +149,14 @@ type Entry struct {
 	// See agentcall.go.
 	Calls []AgentCall `json:"calls,omitempty"`
 
-	// line is the byte offset of the record the entry came from, and sub its
-	// place among that record's entries. They place a page's cursor and are
-	// never sent.
 	line int64
 	sub  int
-	// key is the message the record wrote, for a format that writes a
-	// message again when it changes (decoded.key). It is never sent.
-	key string
-	// rec is where the record that gave the entry is. It differs from line
-	// and sub for a message written again, which keeps its first place. A
-	// read after a cursor takes the entries whose record is after it.
-	rec cursorPos
+	key  string
+	rec  cursorPos
 
-	// raw is what the record said, before Clean and before any diff is
-	// worked out. finish turns it into the fields above, only for an entry
-	// that a page is about to carry.
 	raw *rawEntry
 }
 
-// rawEntry is an entry as decoded. Its strings are cut to a bound but not
-// cleaned.
 type rawEntry struct {
 	text    string
 	textCut bool
@@ -196,27 +168,20 @@ type rawEntry struct {
 	calls   []AgentCall
 }
 
-// diffSrc is what a diff is worked out from: an edit's old and new texts, or
-// a result's structuredPatch. built holds the diff once it is.
 type diffSrc struct {
-	file  string
-	pairs [][2]string
-	patch []ccPatch
-	// shared is the result's source, for a call that takes the diff of a
-	// result about another file name. The call shows it under its own name.
+	file   string
+	pairs  [][2]string
+	patch  []ccPatch
 	shared *diffSrc
 	built  *Diff
 }
 
-// before reports whether p comes before position at.
 func (p cursorPos) before(at cursorPos) bool {
 	return p.off < at.off || p.off == at.off && p.sub < at.sub
 }
 
-// pos is the place of an entry, as a cursor names it.
 func (e *Entry) pos() cursorPos { return cursorPos{off: e.line, sub: e.sub} }
 
-// before reports whether the entry comes before position at.
 func (e *Entry) before(at cursorPos) bool {
 	return e.line < at.off || e.line == at.off && e.sub < at.sub
 }
@@ -241,7 +206,6 @@ type Diff struct {
 	// of each side.
 	WholeReplace bool `json:"whole_replace,omitzero"`
 
-	// styled says style has added the spans and words.
 	styled bool
 }
 
@@ -370,8 +334,6 @@ func Read(path string, opts Options) (Page, error) {
 	r := &reader{src: f, size: size, opts: opts, fm: fm, lcsLeft: LCSCellsPerCall}
 	defer r.zero()
 	if fm.doc != nil && fm.isDoc(path) {
-		// The harness rewrites the file whole. It is read whole, turned
-		// into one record per line, and that is what the page is read from.
 		if size > scanMax {
 			return Page{}, ErrTooLarge
 		}
@@ -418,27 +380,16 @@ func Read(path string, opts Options) (Page, error) {
 	return r.newest(id)
 }
 
-// reader is one call's read. Its buffers are zeroed when the call ends.
 type reader struct {
-	// src is the file, or for a document format the records made from it.
 	src     io.ReaderAt
 	size    int64
 	opts    Options
 	fm      format
 	bufs    [][]byte
 	skipped int
-	// lexed counts the bytes of code the lexer read for this call, against
-	// spanBudget.
-	lexed int
-	// lcsLeft is what is left of LCSCellsPerCall.
+	lexed   int
 	lcsLeft int
-	// rewound says decode met a record that took the conversation back. A
-	// read after a cursor then returns the newest page with Reset, since
-	// the reader's copy holds messages that are gone.
 	rewound bool
-	// trimmed says decode dropped older entries for keepLast, so the page
-	// does not start at the file's first entry even when a record that
-	// replaces or takes back messages left fewer than keepLast.
 	trimmed bool
 }
 
@@ -448,7 +399,6 @@ func (r *reader) zero() {
 	}
 }
 
-// readAt reads [from, to) of the file into a buffer zeroed when the call ends.
 func (r *reader) readAt(from, to int64) ([]byte, error) {
 	buf := make([]byte, to-from)
 	r.bufs = append(r.bufs, buf)
@@ -459,7 +409,6 @@ func (r *reader) readAt(from, to int64) ([]byte, error) {
 	return buf[:n], nil
 }
 
-// atBoundary reports whether off is where a record starts.
 func (r *reader) atBoundary(off int64) bool {
 	if off == 0 {
 		return true
@@ -471,23 +420,13 @@ func (r *reader) atBoundary(off int64) bool {
 	return b[0] == '\n'
 }
 
-// newest reads the newest Limit entries.
 func (r *reader) newest(id string) (Page, error) {
 	return r.back(cursorPos{off: r.size}, id, true)
 }
 
-// back reads the newest Limit entries before position to, from a window that
-// ends there and grows back until it holds them or reaches scanMax. The
-// window is all one call reads, so a page far back in a large file costs
-// what a page at its end costs. When atEnd, to is the end of the file, which
-// may end inside a record that is not finished, and the page's cursor is
-// the end of the last whole record. Otherwise to is a cursor, and the
-// page's cursor is to itself.
 func (r *reader) back(to cursorPos, id string, atEnd bool) (Page, error) {
 	stop := to.off
 	if to.sub > 0 {
-		// The record at to gave some of its entries to a newer page, and the
-		// ones before them belong to this one.
 		if next := r.skipLongLine(to.off); next > 0 {
 			stop = next
 		} else {
@@ -505,7 +444,6 @@ func (r *reader) back(to cursorPos, id string, atEnd bool) (Page, error) {
 		lines := buf[:end]
 		base := start
 		if start > 0 {
-			// The window begins inside a record. Skip to the next one.
 			i := bytes.IndexByte(lines, '\n')
 			if i < 0 {
 				lines = nil
@@ -523,10 +461,6 @@ func (r *reader) back(to cursorPos, id string, atEnd bool) (Page, error) {
 		r.trimmed = false
 		entries := r.decode(lines, base, decodeBounds{before: before, keepLast: r.opts.Limit + 1})
 		if len(entries) >= r.opts.Limit || start == 0 || window >= scanMax {
-			// Only the newest Limit can be on the page. Their calls fold in
-			// their results, and then each is finished, newest first, until
-			// the page is full. An entry the page does not carry is never
-			// cleaned and its diff never worked out.
 			keep := len(entries) - min(len(entries), r.opts.Limit)
 			foldResults(entries[keep:])
 			total := 0
@@ -538,10 +472,6 @@ func (r *reader) back(to cursorPos, id string, atEnd bool) (Page, error) {
 				}
 				total += n
 			}
-			// A message written again keeps its first place, and the record
-			// that wrote it last may be past this window's older pages. So
-			// the page holds such a message whole, and the older page ends
-			// before its first record.
 			for keep > 0 && keep < len(entries) && entries[keep].key != "" && entries[keep-1].key == entries[keep].key {
 				keep--
 				r.finish(&entries[keep])
@@ -565,21 +495,15 @@ func (r *reader) back(to cursorPos, id string, atEnd bool) (Page, error) {
 					page.Older = makeCursor(id, older)
 				}
 			case base > 0:
-				// The window held no entry. The next page starts where it did.
 				page.Older = makeCursor(id, cursorPos{off: base})
 			}
 			return page, nil
 		}
-		// Not enough yet: drop this window's buffer and read a larger one.
 		clear(buf)
 		window = min(window*4, scanMax)
 	}
 }
 
-// forward reads the entries after a cursor, at most Limit and MaxBytes of
-// them. The cursor is a record's offset and how many of that record's entries
-// were already returned, so a page can end inside a record that gives several
-// entries and the next page goes on from there.
 func (r *reader) forward(at cursorPos, id string) (Page, error) {
 	to := min(r.size, at.off+scanMax)
 	buf, err := r.readAt(at.off, to)
@@ -588,14 +512,11 @@ func (r *reader) forward(at cursorPos, id string) (Page, error) {
 	}
 	end := bytes.LastIndexByte(buf, '\n') + 1
 	if end == 0 && to < r.size {
-		// One record longer than the scan bound. Step over it.
 		if next := r.skipLongLine(to); next > 0 {
 			return Page{Cursor: makeCursor(id, cursorPos{off: next}), More: true, Skipped: 1}, nil
 		}
 	}
 	more := to < r.size
-	// Decoding stops once it has one entry past the page, which is where
-	// the next page starts.
 	entries := r.decode(buf[:end], at.off, decodeBounds{from: &at, maxCount: r.opts.Limit + 1})
 	if r.rewound {
 		r.rewound = false
@@ -610,14 +531,11 @@ func (r *reader) forward(at cursorPos, id string) (Page, error) {
 		entries = entries[:r.opts.Limit]
 		more = true
 	}
-	// The calls fold in their results among the first Limit, and each entry
-	// is finished in order until the page is full.
 	foldResults(entries)
 	total := 0
 	for i := range entries {
 		n := r.entrySize(&entries[i])
 		if i > 0 && total+n > r.opts.MaxBytes-pageOverhead {
-			// The page ends before this entry, which the next one starts at.
 			e := entries[i]
 			next = cursorPos{off: e.line, sub: e.sub}
 			entries = entries[:i]
@@ -633,8 +551,6 @@ func (r *reader) forward(at cursorPos, id string) (Page, error) {
 		More:    more,
 		Skipped: r.skipped,
 	}
-	// The page starts at its first entry, or at the cursor when it has none.
-	// A read from the start of the file has nothing before it.
 	if at.off > 0 || at.sub > 0 {
 		first := at
 		if len(page.Entries) > 0 {
@@ -645,9 +561,6 @@ func (r *reader) forward(at cursorPos, id string) (Page, error) {
 	return page, nil
 }
 
-// skipLongLine finds the end of a record that starts before from and runs
-// past the scan bound, and returns the offset after it, or 0 when the file
-// ends first.
 func (r *reader) skipLongLine(from int64) int64 {
 	chunk := make([]byte, 64<<10)
 	defer clear(chunk)
@@ -664,24 +577,13 @@ func (r *reader) skipLongLine(from int64) int64 {
 	return 0
 }
 
-// decodeBounds limits what decode keeps, so one call holds no more entries
-// than its page can use.
 type decodeBounds struct {
-	// from drops the entries before it: those a page after a cursor has
-	// already returned.
-	from *cursorPos
-	// before drops the entries at it and after it.
-	before *cursorPos
-	// keepLast, when set, keeps only about the newest keepLast entries: the
-	// older ones are dropped whenever twice that many are held.
+	from     *cursorPos
+	before   *cursorPos
 	keepLast int
-	// maxCount, when set, stops decoding at the first record that brings
-	// the entries to it.
 	maxCount int
 }
 
-// decode turns complete lines starting at file offset base into entries, as
-// far as b allows.
 func (r *reader) decode(lines []byte, base int64, b decodeBounds) []Entry {
 	var out []Entry
 	off := base
@@ -706,10 +608,6 @@ func (r *reader) decode(lines []byte, base int64, b decodeBounds) []Entry {
 			r.skipped++
 			continue
 		}
-		// A record that replaces a message (dec.key) or takes the
-		// conversation back to one (dec.rewind) changes what the window
-		// holds of it. A record past the page's end changes nothing on the
-		// page.
 		at, place := len(out), cursorPos{off: -1}
 		if b.before == nil || start < b.before.off || start == b.before.off && b.before.sub > 0 {
 			if dec.rewind != "" {
@@ -723,8 +621,6 @@ func (r *reader) decode(lines []byte, base int64, b decodeBounds) []Entry {
 			e.line, e.sub, e.key = start, i, dec.key
 			e.rec = cursorPos{off: start, sub: i}
 			if place.off >= 0 {
-				// The message keeps the place it was first written at, so
-				// a tool call that finishes does not move its card.
 				e.line, e.sub = place.off, place.sub+i
 			}
 			if b.from != nil && e.rec.before(*b.from) {
@@ -735,8 +631,6 @@ func (r *reader) decode(lines []byte, base int64, b decodeBounds) []Entry {
 			}
 			add = append(add, e)
 		}
-		// add goes in at the message's first place: a plain copy, since
-		// slices.Insert is generic code of its own per element type.
 		n := len(out)
 		out = append(out, add...)
 		if at < n {
@@ -744,7 +638,6 @@ func (r *reader) decode(lines []byte, base int64, b decodeBounds) []Entry {
 			copy(out[at:], add)
 		}
 		if b.keepLast > 0 && len(out) >= 2*b.keepLast {
-			// A message written again is kept whole (see back).
 			cut := len(out) - b.keepLast
 			for cut > 0 && out[cut].key != "" && out[cut-1].key == out[cut].key {
 				cut--
@@ -761,8 +654,6 @@ func (r *reader) decode(lines []byte, base int64, b decodeBounds) []Entry {
 	return out
 }
 
-// entrySize finishes an entry and returns its size as JSON, with the
-// colours of its diff.
 func (r *reader) entrySize(e *Entry) int {
 	r.finish(e)
 	b, err := jsonx.Marshal(e)
@@ -772,8 +663,6 @@ func (r *reader) entrySize(e *Entry) int {
 	return len(b) + 1
 }
 
-// finish cleans an entry's strings and works out its diff, once. It runs
-// only for an entry a page is about to carry.
 func (r *reader) finish(e *Entry) {
 	raw := e.raw
 	if raw == nil {
@@ -804,8 +693,6 @@ func (r *reader) finish(e *Entry) {
 	if raw.target != "" {
 		target := raw.target
 		if ShellTool(raw.tool) {
-			// Clean drops an escape sequence whole, so printf '\e[31m'
-			// would read as printf ''. A command shows what it holds.
 			target = ControlPictures(target)
 		}
 		e.Target, _ = r.clean(target, targetMax)
@@ -823,8 +710,6 @@ func (r *reader) finish(e *Entry) {
 	}
 }
 
-// cleanCall is an agent call with each string cleaned and cut: the text to
-// TextMax, a line to targetMax.
 func (r *reader) cleanCall(c AgentCall) AgentCall {
 	line := func(s string) string {
 		s, _ = r.clean(oneLine(s), targetMax)
@@ -841,8 +726,6 @@ func (r *reader) cleanCall(c AgentCall) AgentCall {
 	return c
 }
 
-// buildDiff works out the diff of src once, with its colours, and returns
-// it.
 func (r *reader) buildDiff(src *diffSrc) *Diff {
 	if src.built != nil {
 		return src.built
@@ -863,10 +746,6 @@ func (r *reader) buildDiff(src *diffSrc) *Diff {
 	return d
 }
 
-// foldResults gives each tool call the status of its result on the page, or
-// running when the page has none. A result's file diff, which carries the
-// file's real line numbers, replaces the hunks worked out from the call. It
-// works on the entries as decoded, before finish.
 func foldResults(entries []Entry) {
 	results := map[string]int{}
 	for i, e := range entries {
@@ -890,7 +769,6 @@ func foldResults(entries []Entry) {
 			continue
 		}
 		if res.raw.diff.file == e.raw.diff.file {
-			// One diff for both, so it is worked out once.
 			e.raw.diff = res.raw.diff
 			continue
 		}
@@ -898,8 +776,6 @@ func foldResults(entries []Entry) {
 	}
 }
 
-// unfoldPast marks running each call on a page whose result was folded in
-// but did not fit on it. The call keeps the result's diff.
 func unfoldPast(entries []Entry) {
 	on := map[string]bool{}
 	for _, e := range entries {
@@ -915,12 +791,6 @@ func unfoldPast(entries []Entry) {
 	}
 }
 
-// --- Cursors.
-
-// fileID names the file as it is now: its path and the start of its first
-// record. A file replaced at the same path has another first record. A first
-// record not yet finished gives the empty head, and the cursor it makes is at
-// offset 0, so the change when it finishes costs nothing.
 func fileID(f io.ReaderAt, path string, size int64) (string, error) {
 	head := make([]byte, min(size, headMax))
 	defer clear(head)
@@ -933,11 +803,8 @@ func fileID(f io.ReaderAt, path string, size int64) (string, error) {
 	case i >= 0:
 		head = head[:i]
 	case size <= headMax:
-		// The first record is not finished, so it is not a record yet.
 		head = nil
 	}
-	// Otherwise the first record is longer than headMax, and its first
-	// headMax bytes name it.
 	h := sha256.New()
 	_, _ = h.Write([]byte(path))
 	_, _ = h.Write([]byte{0})
@@ -966,14 +833,11 @@ func CursorAt(path string, off int64) (string, error) {
 	return makeCursor(id, cursorPos{off: off}), nil
 }
 
-// cursorPos is where a page ends: the offset of a record, and how many of
-// its entries were returned already.
 type cursorPos struct {
 	off int64
 	sub int
 }
 
-// makeCursor encodes a position in the file id names.
 func makeCursor(id string, at cursorPos) string {
 	c := "t1." + id + "." + strconv.FormatInt(at.off, 36)
 	if at.sub > 0 {
@@ -982,7 +846,6 @@ func makeCursor(id string, at cursorPos) string {
 	return c
 }
 
-// parseCursor returns the position of a cursor made for the file id names.
 func parseCursor(c, id string) (cursorPos, bool) {
 	parts := strings.Split(c, ".")
 	if len(parts) < 3 || len(parts) > 4 || parts[0] != "t1" || parts[1] != id {
@@ -1003,10 +866,6 @@ func parseCursor(c, id string) (cursorPos, bool) {
 	return at, true
 }
 
-// --- Strings.
-
-// clean applies the caller's Clean and cuts to limit bytes, reporting whether
-// it cut.
 func (r *reader) clean(s string, limit int) (string, bool) {
 	if r.opts.Clean != nil {
 		s = r.opts.Clean(s)
@@ -1014,8 +873,6 @@ func (r *reader) clean(s string, limit int) (string, bool) {
 	return cutString(s, limit)
 }
 
-// cutString cuts s to limit bytes on a rune boundary.
-//
 //go:noinline
 func cutString(s string, limit int) (string, bool) {
 	if len(s) <= limit {
@@ -1028,8 +885,6 @@ func cutString(s string, limit int) (string, bool) {
 	return s[:i], true
 }
 
-// oneLine is the first non-empty line of s.
-//
 //go:noinline
 func oneLine(s string) string {
 	for line := range strings.SplitSeq(s, "\n") {
@@ -1040,8 +895,6 @@ func oneLine(s string) string {
 	return ""
 }
 
-// headLines keeps the first n lines of s, reporting whether it dropped any.
-//
 //go:noinline
 func headLines(s string, n int) (string, bool) {
 	s = strings.TrimRight(s, "\n")

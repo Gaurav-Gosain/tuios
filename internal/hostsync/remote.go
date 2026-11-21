@@ -20,12 +20,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
-// Every script here is sent the way the link sends its own probe: one line of
-// sh inside single quotes, with no single quote, backslash, newline or
-// exclamation mark in it, so any login shell on the far side passes it to sh
-// unchanged. See federation.ShellCommand. The arguments are checked words
-// (federation.SafeRemoteArg) and never text from the far side.
-
 // Runner runs one sh script on a machine.
 type Runner interface {
 	Run(ctx context.Context, script string, args []string, stdin io.Reader) (stdout, stderr string, err error)
@@ -60,9 +54,6 @@ func (LocalRunner) Run(ctx context.Context, script string, args []string, stdin 
 	return runSyncCmd(cmd, stdin)
 }
 
-// syncOutputLimit bounds what a script's output may grow to. The far side is
-// another machine, so its output gets a ceiling like everything else that
-// crosses.
 const syncOutputLimit = 256 << 10
 
 func runSyncCmd(cmd *exec.Cmd, stdin io.Reader) (string, string, error) {
@@ -72,14 +63,11 @@ func runSyncCmd(cmd *exec.Cmd, stdin io.Reader) (string, string, error) {
 	if stdin != nil {
 		cmd.Stdin = stdin
 	}
-	// A child that outlives a cancelled context is killed, and its pipes
-	// are not waited on for long after that.
 	cmd.WaitDelay = 5 * time.Second
 	err := cmd.Run()
 	return out.String(), strings.TrimSpace(errb.String()), err
 }
 
-// limitedBuffer keeps the first limit bytes written to it.
 type limitedBuffer struct {
 	buf   bytes.Buffer
 	limit int
@@ -124,24 +112,12 @@ func (f Facts) Get(k string) string {
 // Has reports whether k has a value that is not empty.
 func (f Facts) Has(k string) bool { return f.Get(k) != "" }
 
-// syncShaFunc defines sum, which prints a file's sha256 with whichever tool the
-// machine has, or nothing when it has none. Linux has sha256sum and macOS has
-// shasum.
 const syncShaFunc = `sum() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d " " -f 1; elif command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d " " -f 1; fi; }`
 
-// syncFirstFunc keeps the first executable absolute path of what a login
-// shell printed, so a greeting from a profile is skipped.
 const syncFirstFunc = `first() { while IFS= read -r l; do case $l in /*) if [ -x "$l" ]; then printf "%s" "$l"; return; fi;; esac; done; }`
 
-// syncTargetDir turns the first argument of the install and probe scripts
-// into a path: "-" is ~/.local/bin, "H:rel" is a path under the home, and
-// anything else is used as written.
 const syncResolveArg = `case $1 in -) a=$HOME/.local/bin/tuios;; H:*) a=$HOME/${1#H:};; *) a=$1;; esac`
 
-// syncServiceProbe says whether the machine has the daemon service of the
-// default server (tuios daemon install-service): svc=installed, svc=none, or
-// svc=unsupported where it has no service manager tuios knows. It reads the
-// files the service is written to, as service.Get does.
 const syncServiceProbe = `case $(uname -s) in Linux) if command -v systemctl >/dev/null 2>&1; then if [ -f "$HOME/.config/systemd/user/tuios-daemon.service" ] || [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/tuios-daemon.service" ]; then echo "svc=installed"; else echo "svc=none"; fi; else echo "svc=unsupported"; fi;; Darwin) if [ -f "$HOME/Library/LaunchAgents/dev.tuios.tuios-daemon.plist" ]; then echo "svc=installed"; else echo "svc=none"; fi;; *) echo "svc=unsupported";; esac`
 
 // ServiceScript installs the daemon service with the binary in $1, as
@@ -172,10 +148,6 @@ func ProbeScript() string {
 	}, "; ")
 }
 
-// syncStopFunc defines stopd BINARY, which stops the daemon with BINARY.
-// kill-server --restart tells the attached clients to wait for the new daemon
-// and attach to it again. A binary older than the flag refuses it with
-// "unknown flag" (or "Unknown flag" from fang before v0.8.0), and then stops the daemon without it, as runRestart does.
 const syncStopFunc = `stopd() { if so=$("$1" kill-server --restart </dev/null 2>&1); then return 0; fi; case $so in *[Uu]"nknown flag"*) "$1" kill-server </dev/null >/dev/null 2>&1 ;; *) return 1 ;; esac; }`
 
 // InstallScript receives a binary on stdin and puts it in place.
@@ -244,23 +216,10 @@ func RestartScript() string {
 	}, "; ")
 }
 
-// syncLiveProbe sets live=1 when the binary in the shell word bin has `daemon
-// upgrade --or-restart`. Its help is the one answer every build gives without
-// a daemon, and a build without the flag never prints its name.
 func syncLiveProbe(bin string) string {
 	return `case $("` + bin + `" daemon upgrade --help </dev/null 2>&1) in *or-restart*) live=1;; esac`
 }
 
-// syncUpgradeStep runs `daemon upgrade` with the installed binary $a, and
-// prints its JSON outcome as upgrade=. mode is the shell word that holds the
-// mode: 2 leaves the daemon when it cannot be upgraded live, and anything
-// else restarts it then. Both the upgrade and a restart run against the
-// default server of the machine, the one the link reaches, or on this machine
-// the server this sync runs with, which TUIOS_SERVER carries.
-//
-// The line goes out through printf %s: the JSON escapes a newline in a message
-// as a backslash and an n, and the echo of macOS's sh turns that back into a
-// newline, which cuts the line in two.
 func syncUpgradeStep(mode string) string {
 	return `if [ "` + mode + `" = 2 ]; then r=; else r=--or-restart; fi; "$a" daemon upgrade --binary "$a" $r --json </dev/null 2>/dev/null | while IFS= read -r l; do printf "upgrade=%s" "$l"; echo; done`
 }

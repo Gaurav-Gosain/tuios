@@ -7,12 +7,6 @@ import (
 	"testing"
 )
 
-// What `tuios hosts add` and `tuios hosts remove` do to the file.
-//
-// The rule under test throughout is that the command edits one table and
-// nothing else. A user who hand-wrote this file gets it back with their
-// comments, their spacing and their other sections exactly as they left them.
-
 func writeTemp(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.toml")
@@ -116,8 +110,6 @@ func TestAddingTheFirstHostToAFileThatDoesNotExist(t *testing.T) {
 	if !strings.Contains(got, "[hosts.build]") {
 		t.Errorf("ASSERTION: the first host was not written:\n%s", got)
 	}
-	// The file has to be a config the loader accepts, or the daemon that reads
-	// it next would refuse everything in it.
 	cfg, err := ParseUserConfig([]byte(got))
 	if err != nil {
 		t.Fatalf("ASSERTION: the file this wrote does not parse: %v\n%s", err, got)

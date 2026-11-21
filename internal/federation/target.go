@@ -2,22 +2,6 @@ package federation
 
 import "strings"
 
-// A target that names a machine.
-//
-// Every verb that takes a session takes it as `[host:]session`, and every verb
-// that takes a window takes it as `[host:session:]window`. The qualifier is
-// the name from the [hosts] table, or `local` for this machine. What follows
-// the qualifier is passed to that machine's daemon exactly as written, so a
-// session or window name with a colon in it is still reachable.
-//
-// The rule that decides whether a colon is a qualifier is fixed here and does
-// not depend on which hosts are configured. That is deliberate: if `foo:bar`
-// meant "session foo:bar here" until someone added a host called foo, adding a
-// host would silently move an address to another machine. Instead the word
-// before the first colon is a host whenever it could be one, an unknown host
-// is refused by name, and `local:` is the spelling for a session on this
-// machine whose name carries a colon.
-
 // Target is a parsed address.
 type Target struct {
 	// Host is the machine named, or LocalHostName. Qualified says whether a

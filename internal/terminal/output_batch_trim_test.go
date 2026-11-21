@@ -11,13 +11,8 @@ import (
 	"tuios.dev/vt"
 )
 
-// batchTrimLines is how many numbered lines one flood chunk holds. Numbered
-// from 100000, every line is eight bytes, so a chunk is 16 KiB.
 const batchTrimLines = 2048
 
-// batchTrimChunk is one 16 KiB chunk of a flood, the numbered lines from first
-// on. Every call makes a fresh slice, since WriteOutputAsync takes ownership of
-// it.
 func batchTrimChunk(first int) []byte {
 	b := make([]byte, 0, 16<<10)
 	for n := first; n < first+batchTrimLines; n++ {
@@ -26,13 +21,6 @@ func batchTrimChunk(first int) []byte {
 	return b
 }
 
-// settledLiveHeap is liveHeap once the heap has stopped moving. Tests that ran
-// before this one in the package leave garbage behind, and goroutines and
-// timers that still hold memory: a daemon one of them started stays reachable
-// from a timer for seconds after that test ends. A reading taken at once can
-// hold memory that come off during the measurement. It takes readings a
-// short while apart until they have stayed within a few KiB of each other for
-// longer than the measurement that follows, for a bounded number of readings.
 func settledLiveHeap(t *testing.T) int64 {
 	t.Helper()
 	const margin = 16 << 10
@@ -57,11 +45,6 @@ func settledLiveHeap(t *testing.T) int64 {
 	return liveHeap()
 }
 
-// floodPanesWithChunks floods every pane the way floodPanes does, with chunks
-// of 16 KiB instead of one line each: the writer takes the first and stops on
-// the lock, the rest queue behind it, and every pane is drained once all the
-// writers are let go. It reports when the first pane finished draining, which
-// is the earliest that any pane's writer can have gone idle.
 func floodPanesWithChunks(t *testing.T, windows []*Window, chunks int) (idle time.Time) {
 	t.Helper()
 	releases := make([]func(), len(windows))
@@ -78,8 +61,6 @@ func floodPanesWithChunks(t *testing.T, windows []*Window, chunks int) (idle tim
 	for _, release := range releases {
 		release()
 	}
-	// Each pane is waited for on its own, so the time held for a pane is when
-	// that pane drained, not when the panes before it did.
 	drainedAt := make([]time.Time, len(windows))
 	var drains sync.WaitGroup
 	for i, w := range windows {
@@ -110,35 +91,13 @@ func floodPanesWithChunks(t *testing.T, windows []*Window, chunks int) (idle tim
 // reaches the screen.
 func TestFloodedDaemonPanesGiveBackTheirBatchAfterASecond(t *testing.T) {
 	const panes = 6
-	// Fifteen, so the drain marker is the sixteenth slot and the queue never
-	// grows past the size it keeps.
 	const chunks = 15
 	const kept = 150_000
 	const budget = 150_000
-	// The early reading must come inside the second the batch is kept. That
-	// second starts when a pane has drained, so this clock starts there too.
-	// How long the drain itself takes says nothing about the batch: 240 KiB per
-	// pane took 0.7 to 1.3 s under the race detector on a busy runner.
-	//
-	// The margin to the second is for the time between the writer going idle
-	// and the test seeing that it drained.
 	const earlyBy = 800 * time.Millisecond
-	// It is taken late inside that guard, so a batch let go well before the
-	// second is up fails it, not only one let go at once.
 	const earlyAt = 475 * time.Millisecond
-	// A flood that ran too slowly to read in time proves nothing about the
-	// batch either way, so it is run again. Only a reading made in time decides.
 	const floods = 5
 
-	// The burst after the give-back must reach the pane whole, so the pane
-	// needs room for all of it then. The pure Go emulator takes a new depth at
-	// any time: its panes start with one line, which keeps the flood out of
-	// the heap measured here, and get room for the burst before it. libghostty
-	// takes its depth only when the pane is made, and keeps its rows outside
-	// the Go heap, so its panes start with the room. It prunes whole pages and
-	// keeps up to a page fewer rows than its limit, so the limit is twice the
-	// burst. With one line it kept from 7 to about 3700 rows, by where its page
-	// boundaries fell, and these are not the same on macOS and Linux.
 	burst := chunks * batchTrimLines
 	depth := 1
 	if vt.Backend == "ghostty" {
@@ -174,7 +133,6 @@ func TestFloodedDaemonPanesGiveBackTheirBatchAfterASecond(t *testing.T) {
 				took, floods, earlyBy)
 		}
 		t.Logf("flood %d: the first reading came %v after the first pane drained, so this flood decides nothing", flood, took)
-		// Every pane gives its batch back before the next flood.
 		time.Sleep(1500 * time.Millisecond)
 	}
 	time.Sleep(time.Until(drained.Add(1500 * time.Millisecond)))
@@ -196,8 +154,6 @@ func TestFloodedDaemonPanesGiveBackTheirBatchAfterASecond(t *testing.T) {
 	}
 
 	w := windows[0]
-	// One line of scrollback cannot show the burst, so ask for room for all of
-	// it. libghostty has had that room since the pane was made.
 	w.LockIO()
 	w.SetScrollbackMaxLines(burst + 16)
 	w.UnlockIO()
@@ -212,11 +168,6 @@ func TestFloodedDaemonPanesGiveBackTheirBatchAfterASecond(t *testing.T) {
 		t.Fatalf("after the burst that followed the give-back the pane ends %q, want its last line %q",
 			got[max(0, len(got)-7):], want)
 	}
-	// The pane holds all of the burst on both backends, as one unbroken run
-	// ending at its last line, so a chunk lost or reordered after the
-	// give-back fails as well as a tail that never came. The flood before it
-	// is numbered on from the same start, so lines older than the burst
-	// continue the run.
 	if len(got) < burst {
 		t.Fatalf("after the burst that followed the give-back the pane holds %d lines, want all %d of the burst",
 			len(got), burst)

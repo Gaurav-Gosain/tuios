@@ -36,9 +36,6 @@ func TestApplyReadsTheCurrentStateHome(t *testing.T) {
 		t.Fatalf("Apply(\"\") left xdg.StateHome = %q, want the restored /A", xdg.StateHome)
 	}
 
-	// Something outside this process's own scoping changed the state home
-	// while this process was on the default server, the way a test's XDG
-	// isolation helper does between cases.
 	xdg.StateHome = "/B"
 
 	if err := serverscope.Apply("bar"); err != nil {
@@ -51,7 +48,6 @@ func TestApplyReadsTheCurrentStateHome(t *testing.T) {
 		t.Fatalf("BaseStateHome() = %q, want %q", got, want)
 	}
 
-	// A second named server while one is already applied keeps the same base.
 	if err := serverscope.Apply("baz"); err != nil {
 		t.Fatalf("Apply(baz): %v", err)
 	}

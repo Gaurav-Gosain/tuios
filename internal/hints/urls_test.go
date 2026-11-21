@@ -82,7 +82,7 @@ func TestURLs(t *testing.T) {
 // between two matches.
 func TestURLAtCoversEveryByte(t *testing.T) {
 	const line = "ab https://a.example cd https://b.example"
-	spans := [][2]int{{3, 20}, {24, 41}} // counted off the literal above
+	spans := [][2]int{{3, 20}, {24, 41}}
 	for _, sp := range spans {
 		if !strings.HasPrefix(line[sp[0]:sp[1]], "https://") {
 			t.Fatalf("the test's own offsets are wrong: %q", line[sp[0]:sp[1]])

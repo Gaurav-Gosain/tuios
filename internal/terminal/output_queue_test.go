@@ -26,8 +26,6 @@ func TestOutputQueueAgreesWithASliceModel(t *testing.T) {
 
 	var model []uint64
 	next := uint64(1)
-	// drainWake takes a token left by an earlier push, so the next push that
-	// makes the queue non-empty is the only thing that can leave one.
 	drainWake := func() {
 		select {
 		case <-q.wake():
@@ -91,8 +89,6 @@ func TestOutputQueueAgreesWithASliceModel(t *testing.T) {
 	for ops < minOps {
 		switch r := rng.IntN(10); {
 		case r < 6:
-			// A push burst up to twice the backlog makes the queue grow,
-			// and near the bound it runs past it.
 			for range 1 + rng.IntN(max(outputQueueKeep, 2*len(model))) {
 				if len(model) == outputQueueSlots {
 					refused++
@@ -102,16 +98,12 @@ func TestOutputQueueAgreesWithASliceModel(t *testing.T) {
 				checkLen()
 			}
 		case r < 9:
-			// A pop burst that takes part of the backlog leaves the oldest
-			// chunk in the middle of the array for the next growth.
 			for range 1 + rng.IntN(len(model)+1) {
 				pop()
 				ops++
 				checkLen()
 			}
 		default:
-			// Empty it and trim, so the next bursts grow the ring again from
-			// its smallest size.
 			for len(model) > 0 {
 				pop()
 				ops++
@@ -134,8 +126,6 @@ func TestOutputQueueAgreesWithASliceModel(t *testing.T) {
 		t.Fatal("the run never trimmed, so the ring grew only once")
 	}
 
-	// Fill to the bound and empty again: a queue that grew must say so, and a
-	// trim must let the array go so the next push starts a small one.
 	for len(model) < outputQueueSlots {
 		push()
 	}
@@ -153,7 +143,6 @@ func TestOutputQueueAgreesWithASliceModel(t *testing.T) {
 	}
 	pop()
 
-	// A trim of a queue that still holds chunks does nothing.
 	for range 4 * outputQueueKeep {
 		push()
 	}
@@ -169,8 +158,6 @@ func TestOutputQueueAgreesWithASliceModel(t *testing.T) {
 		pop()
 	}
 
-	// A closed queue refuses chunks and still hands out what it holds, then
-	// says nothing more will come.
 	for range 3 {
 		push()
 	}

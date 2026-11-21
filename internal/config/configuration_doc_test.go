@@ -182,8 +182,6 @@ func TestConfigurationDefaultsMatch(t *testing.T) {
 	}
 }
 
-// tomlPath splits a TOML table name into its keys, without the quotes of a
-// quoted key such as hosts."*".
 func tomlPath(name string) []string {
 	parts := strings.Split(name, ".")
 	for i, p := range parts {
@@ -192,9 +190,6 @@ func tomlPath(name string) []string {
 	return parts
 }
 
-// configPathExists reports whether path names a table or a key of
-// UserConfig. A map takes any key, and a key under a value that is not a
-// table, such as an inline table, is not checked.
 func configPathExists(path []string) bool {
 	t := reflect.TypeFor[UserConfig]()
 	for _, p := range path {
@@ -218,8 +213,6 @@ func configPathExists(path []string) bool {
 	return true
 }
 
-// tomlField finds the field of struct t whose toml name is name, inside
-// embedded structs too.
 func tomlField(t reflect.Type, name string) (reflect.Type, bool) {
 	for f := range t.Fields() {
 		tag, _, _ := strings.Cut(f.Tag.Get("toml"), ",")
@@ -243,8 +236,6 @@ func tomlField(t reflect.Type, name string) (reflect.Type, bool) {
 	return nil, false
 }
 
-// renderConfigOptionsDoc writes the option reference from the registry, one
-// table per section in the order the registry declares them.
 func renderConfigOptionsDoc() string {
 	var b strings.Builder
 	w := func(parts ...string) {
@@ -293,7 +284,6 @@ func renderConfigOptionsDoc() string {
 	return b.String()
 }
 
-// optionDefaultCell is an option's default as the page shows it.
 func optionDefaultCell(o Option) string {
 	switch {
 	case o.Follows != "" && o.Default == "":
@@ -304,8 +294,6 @@ func optionDefaultCell(o Option) string {
 	return "`" + docCell(o.Default) + "`"
 }
 
-// optionText is an option's description with its values, its environment
-// variable, its flag and why it is deprecated.
 func optionText(o Option) string {
 	parts := []string{docCell(o.Description)}
 	if len(o.Accepted) > 0 && !o.Color {
@@ -333,10 +321,8 @@ func optionText(o Option) string {
 	return strings.Join(parts, " ")
 }
 
-// fileKeyWords are the defaults written in words, not as a value.
 var fileKeyWords = []string{"none", "required", "built in", "not set", "every stage", "the receive folder", "the systems that run tuios"}
 
-// fileKeyDefaultCell is a file key's default as the page shows it.
 func fileKeyDefaultCell(k FileKey) string {
 	switch {
 	case k.Default == "":
@@ -347,7 +333,6 @@ func fileKeyDefaultCell(k FileKey) string {
 	return "`" + docCell(k.Default) + "`"
 }
 
-// fileKeyText is a file key's description with its values.
 func fileKeyText(k FileKey) string {
 	text := docCell(k.Description)
 	if len(k.Accepted) > 0 {
@@ -360,7 +345,6 @@ func fileKeyText(k FileKey) string {
 	return text
 }
 
-// docCell makes s safe inside a table cell.
 func docCell(s string) string {
 	return strings.ReplaceAll(strings.Join(strings.Fields(s), " "), "|", "\\|")
 }

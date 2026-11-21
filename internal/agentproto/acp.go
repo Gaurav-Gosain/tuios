@@ -14,27 +14,6 @@ import (
 	"tuios.dev/acp"
 )
 
-// The ACP agent: tuios.dev/acp speaks the protocol, versions 1 and 2, and this
-// file turns what it delivers into the pane's events.
-//
-// Version 2 is a draft of the spec, which asks clients not to ask for it by
-// default until it is final, so a pane asks for DefaultACPVersion unless it
-// is told otherwise (agent-proto --acp-version, or agents.acp_version in the
-// config). Asking for 2 is safe with an agent that has only version 1: it
-// answers 1, or refuses, and the pane speaks 1 (see acp.Connect).
-//
-// Source for version 1: the protocol overview and schema at
-// agentclientprotocol.com, checked against two clients that ship it (emdash's
-// acp-agent-connection.ts and t3code's AcpSessionRuntime.ts) and one agent
-// (opencode's src/acp). For version 2: the v2 pages, the migration guide and
-// schema/v2/schema.json on agent-client-protocol main, read on 2026-11-13.
-//
-// The client advertises no file system, no terminal and no elicitation, so a
-// conforming agent never sends fs/*, terminal/* or elicitation/create; one
-// that does gets method not found. auth/login is never called: an agent that
-// needs a login refuses session/new, and the pane says to log in with the
-// agent's own command.
-
 // DefaultACPVersion is the ACP version a pane asks for when it is not told:
 // 1 while version 2 is a draft of the spec. When version 2 is final this
 // becomes acp.LatestVersion.
@@ -57,15 +36,12 @@ type ACP struct {
 	opts ACPOptions
 	emit func(Event)
 
-	mu      sync.Mutex
-	client  *acp.Client
-	session *acp.Session
-	tools   map[string]Tool
-	// msgs is the text shown of each message, by role and id.
-	msgs map[string]string
-	// unknown is the update kinds already said to be unknown.
-	unknown map[string]bool
-	// commands and mode are what was last shown of them.
+	mu       sync.Mutex
+	client   *acp.Client
+	session  *acp.Session
+	tools    map[string]Tool
+	msgs     map[string]string
+	unknown  map[string]bool
 	commands string
 	mode     string
 	done     chan struct{}
@@ -138,8 +114,6 @@ func (a *ACP) Start(ctx context.Context, cwd string) (Info, error) {
 	return info, nil
 }
 
-// acpModel is the current model a version 1 session/new answer names: its
-// name when the agent lists one, else its id, else "".
 func acpModel(raw json.RawMessage) string {
 	var m struct {
 		CurrentModelID  string `json:"currentModelId"`
@@ -159,8 +133,6 @@ func acpModel(raw json.RawMessage) string {
 	return m.CurrentModelID
 }
 
-// configModel is the model the config options name: the current value of
-// the model category, by name when listed.
 func configModel(opts []acp.ConfigOption) string {
 	for _, o := range opts {
 		if o.Category == "model" {
@@ -222,8 +194,6 @@ func (a *ACP) onUpdate(u acp.Update) {
 	case *acp.ToolContentChunk:
 		a.emit(a.appendTool(u))
 	case *acp.TerminalUpdate:
-		// The terminal's bytes are not shown: the call that names it says
-		// it has one, as a version 1 terminal does.
 	case *acp.PlanUpdate:
 		if u.Type != "items" {
 			a.unknownOnce("plan type " + u.Type)
@@ -278,7 +248,6 @@ func (a *ACP) onUpdate(u acp.Update) {
 	case *acp.CompactionUpdate:
 		switch u.Status {
 		case "":
-			// A chunk of the summary, which is for the model.
 		case "in_progress":
 			a.emit(Line{Text: "compacting the context"})
 		case "completed":
@@ -289,14 +258,11 @@ func (a *ACP) onUpdate(u acp.Update) {
 			a.emit(Line{Text: "compacting the context: " + u.Status})
 		}
 	case *acp.SessionInfoUpdate:
-		// The pane's title is the name start-agent gave it, on purpose.
 	case *acp.UnknownUpdate:
 		a.unknownOnce(u.UpdateKind())
 	}
 }
 
-// unknownOnce says once per kind that the agent sent something the pane
-// does not show.
 func (a *ACP) unknownOnce(kind string) {
 	a.mu.Lock()
 	seen := a.unknown[kind]
@@ -307,11 +273,8 @@ func (a *ACP) unknownOnce(kind string) {
 	}
 }
 
-// maxCommandsShown bounds the names one commands line lists.
 const maxCommandsShown = 20
 
-// commandsLine is the line naming the agent's slash commands, "" when it is
-// the same as the last one shown.
 func (a *ACP) commandsLine(cmds []acp.Command) string {
 	names := make([]string, 0, len(cmds))
 	for _, c := range cmds {
@@ -343,12 +306,8 @@ func (a *ACP) commandsLine(cmds []acp.Command) string {
 	return line
 }
 
-// onMessage shows a message update. The transcript is written once and not
-// rewritten, so a whole message that only adds to what was shown appends the
-// rest, and one that changes it is shown again, said to replace the earlier.
 func (a *ACP) onMessage(u *acp.MessageUpdate) {
 	if u.Role == acp.RoleUser {
-		// The pane shows the prompt as it was typed.
 		return
 	}
 	thought := u.Role == acp.RoleThought
@@ -388,9 +347,6 @@ func (a *ACP) onMessage(u *acp.MessageUpdate) {
 	}
 }
 
-// mergeTool folds a tool call update into what is known about the call. A
-// version 1 tool_call starts it afresh; in version 2 the first update for an
-// id creates it. A field set to null is cleared.
 func (a *ACP) mergeTool(u *acp.ToolCallUpdate) Tool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -440,7 +396,6 @@ func applyTool(t Tool, u *acp.ToolCallUpdate) Tool {
 	return t
 }
 
-// appendTool adds a streamed content item to a call.
 func (a *ACP) appendTool(u *acp.ToolContentChunk) Tool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -453,7 +408,6 @@ func (a *ACP) appendTool(u *acp.ToolContentChunk) Tool {
 	return t
 }
 
-// addToolItem adds one content item to a call.
 func addToolItem(t Tool, item acp.ToolContent) Tool {
 	switch item.Type {
 	case "diff":
@@ -477,8 +431,6 @@ func addToolItem(t Tool, item acp.ToolContent) Tool {
 	return t
 }
 
-// v2Diffs is a version 2 diff as the pane's diffs: the patch text when the
-// agent sent one, and each change it has no text for named by its operation.
 func v2Diffs(item acp.ToolContent) []Diff {
 	paths := make([]string, 0, len(item.Changes))
 	for _, c := range item.Changes {
@@ -502,9 +454,6 @@ func v2Diffs(item acp.ToolContent) []Diff {
 	return out
 }
 
-// gitPatchBody is a git patch without the lines that are not a unified
-// diff's: the diff --git header, index and mode lines. What is left starts
-// at the first --- line, which the diff renderer shows as it is.
 func gitPatchBody(text string) string {
 	var keep []string
 	for l := range strings.SplitSeq(text, "\n") {
@@ -520,7 +469,6 @@ func gitPatchBody(text string) string {
 	return strings.Join(keep, "\n")
 }
 
-// acpToolStatus maps ACP's tool call status to the Tool status.
 func acpToolStatus(s string) string {
 	switch s {
 	case "in_progress":
@@ -533,8 +481,6 @@ func acpToolStatus(s string) string {
 	return ToolPending
 }
 
-// flatInput reads a raw input object as its string fields. other is true when
-// it holds anything else, or is not an object.
 func flatInput(raw json.RawMessage) (map[string]string, bool) {
 	var obj map[string]json.RawMessage
 	if jsonx.Unmarshal(raw, &obj) != nil {
@@ -568,13 +514,9 @@ func (a *ACP) onPermission(p *acp.PermissionRequest) {
 		a.tools[p.ToolCall.ToolCallID] = tool
 		a.mu.Unlock()
 	case p.Command != nil:
-		// A command subject is the whole request: the command, and where
-		// it runs.
 		tool = Tool{ID: firstOf(p.Command.ToolCallID, "command"), Kind: "execute", Title: p.Command.Command,
 			Status: ToolPending, Input: map[string]string{"command": p.Command.Command}}
 	default:
-		// No subject, or one tuios does not know: the title is all there
-		// is, and the Inbox does not offer to answer it.
 		tool = Tool{ID: "permission", Title: p.Title, Status: ToolPending, OtherInput: true}
 	}
 	options := make([]Option, len(p.Options))
@@ -583,8 +525,6 @@ func (a *ACP) onPermission(p *acp.PermissionRequest) {
 		ids[i] = o.ID
 		options[i] = Option{Label: firstOf(o.Name, o.ID), Decision: acpDecision(o.Kind)}
 	}
-	// Two options of one kind would make a decision ambiguous: only the
-	// first keeps it, and the rest are for the pane.
 	seen := map[string]bool{}
 	for i := range options {
 		if d := options[i].Decision; d != "" {
@@ -606,8 +546,6 @@ func (a *ACP) onPermission(p *acp.PermissionRequest) {
 	go func() {
 		select {
 		case <-p.Withdrawn():
-			// The agent withdrew the question: it is answered cancelled,
-			// which the spec still wants, and the pane drops it.
 			perm.Cancel()
 			a.emit(Withdrawn{Permission: perm})
 		case <-perm.answered:
@@ -615,10 +553,6 @@ func (a *ACP) onPermission(p *acp.PermissionRequest) {
 	}()
 }
 
-// acpDecision is the Inbox decision an option kind is. allow_always is not
-// offered to the Inbox: what it allows from then on is the agent's to decide
-// and is not in the request, so the Inbox could not show it. reject_always
-// would deny more than the call, so it is not the Inbox's deny either.
 func acpDecision(kind string) string {
 	switch kind {
 	case "allow_once":

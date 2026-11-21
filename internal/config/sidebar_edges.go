@@ -54,7 +54,6 @@ func ResolveSidebarEdges(sidebar SidebarConfig) (left, right SidebarEdgeResolved
 	}
 	switch sidebar.Position {
 	case "hidden":
-		// A hidden legacy rail does not prevent explicit per-edge rails.
 	case "left":
 		left = primary
 	default:
@@ -88,8 +87,6 @@ func ResolveSidebarEdges(sidebar SidebarConfig) (left, right SidebarEdgeResolved
 	return left, right
 }
 
-// validateSidebarEdges checks explicitly configured edges. Their custom
-// commands have the same security and refresh contract as the legacy rail.
 func validateSidebarEdges(sidebar SidebarConfig, result *ValidationResult) {
 	left, right := ResolveSidebarEdges(sidebar)
 	for _, edge := range []struct {

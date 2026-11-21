@@ -5,23 +5,6 @@ import (
 	"strings"
 )
 
-// Permission modes: how much a harness lets its agent do without asking the
-// person, read from the command line it was started with.
-//
-// An agent in a pane can start another agent through tuios (start-agent, fan,
-// new-window with a command). The daemon holds the child to the parent's mode
-// (internal/session/child_clamp.go): a child that asks for a wider mode is
-// refused, and a child whose harness default is wider than the parent's mode
-// is started in a narrower one. Harnesses name their modes differently, so
-// every harness is ranked on one scale, PermissionLevel, and a Claude Code
-// parent compares with a Codex child.
-//
-// The scale reads the command line and, for Copilot, one environment
-// variable. It does not read settings files, profiles or config overrides a
-// harness loads at start, and it does not see a mode the person switches to
-// later inside the harness (shift+tab in Claude Code). Like pane grants it
-// scopes accidents and prompt-injected agents, not a determined attacker.
-
 // PermissionLevel ranks a permission mode. A higher level asks the person
 // less.
 type PermissionLevel int8
@@ -77,42 +60,25 @@ type Permission struct {
 	Mode string
 }
 
-// permissionRow is one way to set a mode: a flag alone ("--yolo") or an
-// option with one value ("--sandbox=read-only"). axis groups the rows that set
-// the same thing. When a command line sets one axis twice, the last one wins,
-// as it does in the harness.
 type permissionRow struct {
 	token string
 	axis  string
 	level PermissionLevel
 }
 
-// permissionHarness is one harness in permissionTable.
 type permissionHarness struct {
-	// def is the level with no mode named.
-	def PermissionLevel
-	// rows are the flags and option values the harness ranks.
-	rows []permissionRow
-	// env are variables that set a mode when they hold a true value.
-	env []permissionRow
-	// combine turns the level of each axis set into one level. nil takes
-	// the widest axis.
+	def     PermissionLevel
+	rows    []permissionRow
+	env     []permissionRow
 	combine func(axes map[string]PermissionLevel) PermissionLevel
-	// steps are the arguments that start the harness at a level below def,
-	// each with that level.
-	steps []permissionStep
+	steps   []permissionStep
 }
 
-// permissionStep is the arguments that start a harness at level.
 type permissionStep struct {
 	level PermissionLevel
 	args  []string
 }
 
-// permissionTable ranks the modes of each harness whose modes have a clear
-// order. A harness that is not here is not held to its parent's mode. Each
-// row is from the harness's own --help: Claude Code 2.1.312, Codex at b5c5d46
-// (codex-rs/utils/cli/src), GitHub Copilot CLI 1.0.98 and Gemini CLI.
 var permissionTable = map[string]permissionHarness{
 	"claude-code": {
 		def: PermissionAsk,
@@ -120,13 +86,11 @@ var permissionTable = map[string]permissionHarness{
 			{"--permission-mode=plan", "mode", PermissionReadOnly},
 			{"--permission-mode=default", "mode", PermissionAsk},
 			{"--permission-mode=manual", "mode", PermissionAsk},
-			// dontAsk denies what is not allowed already instead of asking.
 			{"--permission-mode=dontAsk", "mode", PermissionAsk},
 			{"--permission-mode=acceptEdits", "mode", PermissionEdits},
 			{"--permission-mode=auto", "mode", PermissionAuto},
 			{"--permission-mode=bypassPermissions", "mode", PermissionFull},
 			{"--dangerously-skip-permissions", "skip", PermissionFull},
-			// Lets the person switch to bypassPermissions at any time.
 			{"--allow-dangerously-skip-permissions", "skip", PermissionFull},
 		},
 		steps: []permissionStep{{PermissionReadOnly, []string{"--permission-mode", "plan"}}},
@@ -140,7 +104,6 @@ var permissionTable = map[string]permissionHarness{
 			codexOption("approval", []string{"--ask-for-approval", "-a"}, "", map[string]PermissionLevel{
 				"untrusted": PermissionAsk, "on-request": PermissionEdits, "on-failure": PermissionEdits, "never": PermissionAuto,
 			}),
-			// -c overrides a config key for this run.
 			codexOption("sandbox", []string{"--config", "-c"}, "sandbox_mode=", map[string]PermissionLevel{
 				"read-only": PermissionReadOnly, "workspace-write": PermissionEdits, "danger-full-access": PermissionFull,
 			}),
@@ -188,8 +151,6 @@ var permissionTable = map[string]permissionHarness{
 	},
 }
 
-// codexOption is the rows of one Codex option, under each of its names. A
-// value in a config override starts with prefix.
 func codexOption(axis string, names []string, prefix string, values map[string]PermissionLevel) []permissionRow {
 	var rows []permissionRow
 	for _, name := range names {
@@ -200,10 +161,6 @@ func codexOption(axis string, names []string, prefix string, values map[string]P
 	return rows
 }
 
-// codexLevel combines Codex's two settings. The sandbox bounds what a command
-// can touch whatever the approval policy says, so a read-only sandbox is read
-// only, and no sandbox is no checks. Inside the workspace sandbox the approval
-// policy decides.
 func codexLevel(axes map[string]PermissionLevel) PermissionLevel {
 	if _, ok := axes["bypass"]; ok {
 		return PermissionFull
@@ -227,7 +184,6 @@ func PermissionRanked(id string) bool {
 	return ok
 }
 
-// options is the names of the options in rows that take a value.
 func (h permissionHarness) options() []string {
 	var out []string
 	for _, r := range h.rows {
@@ -275,7 +231,6 @@ func PermissionOf(id string, argv []string, env func(string) (string, bool)) (p 
 			}
 			value = strings.Trim(value, `"'`)
 			if k := strings.IndexByte(value, '='); k > 0 {
-				// A config override: the key's own value may be quoted.
 				value = value[:k+1] + strings.Trim(value[k+1:], `"'`)
 			}
 			row, found := findPermissionRow(h.rows, name+"="+value)
@@ -283,10 +238,7 @@ func PermissionOf(id string, argv []string, env func(string) (string, bool)) (p 
 			case found:
 				note(row, name+" "+value)
 			case name == "--config" || name == "-c":
-				// An override of another key says nothing about the mode.
 			default:
-				// A mode this table does not know, such as one a later
-				// release added.
 				p.Known, p.Named = false, true
 				shown = append(shown, name+" "+value)
 			}
@@ -326,7 +278,6 @@ func findPermissionRow(rows []permissionRow, token string) (permissionRow, bool)
 	return permissionRow{}, false
 }
 
-// envTrue reports whether a variable's value turns a setting on.
 func envTrue(v string) bool {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "", "0", "false", "no", "off":

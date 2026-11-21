@@ -19,20 +19,9 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-// The lock file pins the plugins tuios plugins install put on this machine.
-// It lives beside config.toml, so a person who keeps the config folder in
-// dotfiles gets the same commits on the next machine. The checkouts live in
-// the data folder, one folder per plugin and commit, because a build fills
-// them with node_modules and target folders that do not belong in dotfiles.
-//
-// The lock file never enables a plugin. [plugins] enabled in config.toml
-// stays the only switch, and the daemon only reads the lock file and the
-// checkouts: it never fetches and never builds.
-
 // LockName is the file name of the lock file in the config folder.
 const LockName = "plugins.lock"
 
-// lockVersion is the version of the lock file format this build writes.
 const lockVersion = 1
 
 // LocalPrefix starts the source of a plugin installed from a local folder.
@@ -124,7 +113,6 @@ func (d Dirs) PluginRoot(e LockEntry, dir string) string {
 	return filepath.Join(d.BuildDir(dir), filepath.FromSlash(e.Subdir))
 }
 
-// dataDir is tuios's data folder, the parent of worktrees/ and repos/.
 func dataDir() string { return filepath.Join(xdg.DataHome, "tuios") }
 
 // Inside reports whether file is in dir once both have their links
@@ -134,10 +122,6 @@ func Inside(file, dir string) bool {
 	return err == nil && filepath.IsLocal(rel)
 }
 
-// checkManaged checks a loaded managed plugin against its lock entry: the
-// id, that the manifest is in the checkout, and that the manifest is the
-// one the person approved. A local folder is checked the same way, except
-// that it is no checkout: a changed manifest there needs a new install too.
 func checkManaged(d Dirs, le LockEntry, dir string, p *Plugin) *Error {
 	switch {
 	case p.PluginID != le.ID:
@@ -169,7 +153,6 @@ func ReadLock(p string) (*Lock, error) {
 	return &l, nil
 }
 
-// lockWait is how long HoldLock waits for another tuios plugins command.
 const lockWait = 10 * time.Second
 
 // UpdateLock reads the lock file at p, lets change edit it, and writes it
@@ -192,8 +175,6 @@ func UpdateLock(p string, change func(*Lock)) error {
 // CheckLockEntry checks the fields of e that name a path or reach git: a
 // lock file can come from a dotfiles repository the person did not write.
 func CheckLockEntry(e LockEntry) error {
-	// An id that starts with . or % could name a file tuios keeps beside
-	// the build folders, such as %install.lock.
 	if n, ok := NormalizeID(e.ID); !ok || n != e.ID || e.ID[0] == '.' || e.ID[0] == '%' {
 		return errfmt.Errorf("the plugin id %q is not valid here", e.ID)
 	}
@@ -230,9 +211,6 @@ func IsCommit(s string) bool {
 	return err == nil && strings.ToLower(s) == s
 }
 
-// hasControl reports whether s holds a character that can move the cursor
-// or change what a terminal shows: C0 except tab, DEL, C1, and the bidi
-// controls.
 func hasControl(s string) bool {
 	return strings.ContainsFunc(s, func(r rune) bool {
 		return r < 0x20 && r != '\t' || r >= 0x7f && r < 0xa0 || r == 0x200e || r == 0x200f || r >= 0x202a && r <= 0x202e || r >= 0x2066 && r <= 0x2069

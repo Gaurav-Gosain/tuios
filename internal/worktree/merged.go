@@ -11,35 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 )
 
-// Whether a worktree's branch has landed in its base.
-//
-// A branch is merged when it has changes of its own and the base already holds
-// them. Two shapes of history answer that differently.
-//
-// When the branch tip is not in the base, the branch has commits the base does
-// not. It is merged when it changes something against its merge base with the
-// base, and merging it into the base would change nothing. git merge-tree
-// --write-tree computes that merge without touching a checkout or a ref, and a
-// merge whose tree is the base's own tree adds nothing. That covers a squash
-// and a rebase. The first half keeps a commit and its revert, a branch whose
-// net change is empty, from reading as merged.
-//
-// When the branch tip is in the base, a merge commit or a fast-forward landed
-// it, or the branch has nothing of its own and only fast-forwarded to commits
-// the base made. The graph cannot tell those apart, so the branch's reflog
-// does: a branch has commits of its own when one of its entries made a commit
-// (commit, amend, revert, cherry-pick, or a rebase that left work past its
-// onto commit) and that commit is in the branch past the commit it started
-// at. With no reflog, the branch reads as not merged. So the check can miss a
-// merged branch, never claim one that is not.
-//
-// In a jj workspace the branch tip is the commit holding the work, and the
-// reflog's part is played by the session's bookmark: the branch made commits
-// when the bookmark is on one that changes something, past where it started.
-
-// mergedCacheCap bounds the cache. The listing is polled, and a key that no
-// longer matches any tip is dead weight; clearing the whole map when it fills
-// is cheaper than tracking which keys are live.
 const mergedCacheCap = 512
 
 var (
@@ -66,12 +37,9 @@ func Merged(path, repoRoot, branch, start, base string) (string, error) {
 	var key string
 	r := gitstate.Find(path)
 	if r.JJ {
-		// The main workspace is where trunk is, not a branch that lands in it.
 		if r.Root == r.Main {
 			return "", nil
 		}
-		// Every jj commit and bookmark moves with the operation log, so the
-		// log's heads stand in for the tips: a hit runs no jj at all.
 		ops, err := r.JJOps()
 		if err != nil {
 			return "", err
@@ -99,7 +67,6 @@ func Merged(path, repoRoot, branch, start, base string) (string, error) {
 				tips = tips[:2]
 			}
 		} else {
-			// No upstream, or base is not a branch. The plain pair is enough.
 			if tips, err = revParse(path, "HEAD", base+"^{commit}"); err != nil {
 				return "", err
 			}
@@ -135,22 +102,17 @@ func Merged(path, repoRoot, branch, start, base string) (string, error) {
 	return into, nil
 }
 
-// mergedInto reports whether head has changes of its own and target already
-// holds them. Any git failure, a conflict among them, reads as not merged.
 func mergedInto(path, branch, start, head, target string) bool {
 	mb, err := MergeBase(path, head, target)
 	if err != nil {
 		return false
 	}
 	if mb == head {
-		// The base holds the tip. Merged only when the branch made commits.
 		if r := gitstate.Find(path); r.JJ {
 			return jjMadeCommits(context.Background(), r.Root, branch, start)
 		}
 		return madeCommits(path, start, head)
 	}
-	// The branch has commits the base does not. Its net change against the
-	// merge base must not be empty, so a commit and its revert is not merged.
 	trees, err := revParse(path, head+"^{tree}", mb+"^{tree}", target+"^{tree}")
 	if err != nil || trees[0] == trees[1] {
 		return false
@@ -159,10 +121,6 @@ func mergedInto(path, branch, start, head, target string) bool {
 	return err == nil && merged == trees[2]
 }
 
-// mergeTree is the tree git merge-tree --write-tree gives for merging head
-// into target. merge-tree writes the merged tree's objects, so it runs with a
-// temporary object directory that borrows the repository's objects as an
-// alternate. The repository gains nothing, and the directory is removed.
 func mergeTree(path, target, head string) (string, error) {
 	objects, err := run(path, "rev-parse", "--path-format=absolute", "--git-path", "objects")
 	if err != nil {
@@ -178,8 +136,6 @@ func mergeTree(path, target, head string) (string, error) {
 		alternates += string(os.PathListSeparator) + prev
 	}
 	env := []string{"GIT_OBJECT_DIRECTORY=" + tmp.path, "GIT_ALTERNATE_OBJECT_DIRECTORIES=" + alternates}
-	// merge-tree prints the merged tree on its first line, and exits non-zero
-	// on a conflict, which runEnv reports as an error.
 	out, err := runGit(ctx, path, env, nil, "merge-tree", "--write-tree", target, head)
 	if err != nil {
 		return "", err
@@ -188,12 +144,8 @@ func mergeTree(path, target, head string) (string, error) {
 	return strings.TrimSpace(tree), nil
 }
 
-// reflogScan bounds how many reflog entries madeCommits reads.
 const reflogScan = 64
 
-// madeCommits reports whether the branch checked out at path made a commit
-// that head holds and start does not. It reads the branch's reflog, newest
-// first. A detached HEAD, or a branch with no reflog, made none.
 func madeCommits(path, start, head string) bool {
 	branch, err := CurrentBranch(path)
 	if err != nil || branch == "" || strings.HasPrefix(branch, "-") {
@@ -219,17 +171,12 @@ func madeCommits(path, start, head string) bool {
 	return false
 }
 
-// ownEntry reports whether a reflog entry with this subject, which set the
-// branch to sha, made a commit of the branch's own. A merge, a fast-forward,
-// a reset and the branch's creation make none. A rebase made some when it
-// left the branch past the commit it rebased onto.
 func ownEntry(subject, sha string) bool {
 	for _, p := range []string{"commit:", "commit (amend):", "commit (initial):", "revert:", "cherry-pick:"} {
 		if strings.HasPrefix(subject, p) {
 			return true
 		}
 	}
-	// "rebase (finish): refs/heads/b onto <sha>", also after "pull --rebase".
 	if _, onto, ok := strings.Cut(subject, "(finish): "); ok {
 		if _, onto, ok = strings.Cut(onto, " onto "); ok {
 			return strings.TrimSpace(onto) != sha
@@ -238,7 +185,6 @@ func ownEntry(subject, sha string) bool {
 	return false
 }
 
-// isAncestor reports whether commit a is b or an ancestor of b.
 func isAncestor(dir, a, b string) bool {
 	if strings.HasPrefix(a, "-") || strings.HasPrefix(b, "-") {
 		return false
@@ -247,7 +193,6 @@ func isAncestor(dir, a, b string) bool {
 	return err == nil
 }
 
-// revParse resolves each rev to a full hash, in order.
 func revParse(dir string, revs ...string) ([]string, error) {
 	for _, r := range revs {
 		if strings.HasPrefix(r, "-") {

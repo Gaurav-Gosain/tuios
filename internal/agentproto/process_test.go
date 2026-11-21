@@ -49,8 +49,6 @@ func TestProcessStopEndsWhatItStarted(t *testing.T) {
 		t.Fatalf("pid %q: %v", pid, err)
 	}
 	for {
-		// Signal 0 checks the process exists. A killed orphan is reaped
-		// by init, so it stops existing shortly after.
 		if syscall.Kill(n, 0) != nil {
 			return
 		}

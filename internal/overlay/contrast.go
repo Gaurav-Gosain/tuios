@@ -47,13 +47,6 @@ func Structure(bg color.Color) color.Color {
 	if ContrastRatio(ink, bg) <= StructureTarget {
 		return ink
 	}
-	// Bisected rather than scanned, because the ratio falls unevenly along the
-	// blend: near a very dark ground one step of it moves the ratio further than
-	// ten steps do near a pale one, so an even scan overshot the target by six
-	// percent on the darkest themes and by one on the rest. The ratio decreases
-	// with the blend, so halving the interval sixteen times pins the least blend
-	// that reaches the target to finer than the eight bits a colour has to say
-	// it in.
 	lo, hi := 0.0, 1.0
 	for range 16 {
 		mid := (lo + hi) / 2
@@ -66,11 +59,6 @@ func Structure(bg color.Color) color.Color {
 	if CurrentDepth() != Depth256 {
 		return MixColors(ink, bg, hi)
 	}
-	// At 256 colours the ink is a palette entry, and the one nearest the blend
-	// can sit well short of the target: on a pale yellow ground the terminal's
-	// own step down drew a scope column at 1.5:1. The entry is picked here, by
-	// the same rule as every other token, and walked toward the text end until
-	// it reaches the target as it will be shown.
 	for t := hi; t >= 0; t -= 1.0 / 64 {
 		if q := To256(MixColors(ink, bg, t)); ContrastRatio(q, bg) >= StructureTarget*0.95 {
 			return q
@@ -79,8 +67,6 @@ func Structure(bg color.Color) color.Color {
 	return To256(ink)
 }
 
-// linearize undoes the sRGB transfer curve for one channel, which is what makes
-// the luminance below additive.
 func linearize(c float64) float64 {
 	if c <= 0.03928 {
 		return c / 12.92
@@ -88,20 +74,11 @@ func linearize(c float64) float64 {
 	return math.Pow((c+0.055)/1.055, 2.4)
 }
 
-// relativeLuminance is the WCAG 2.1 quantity rather than a cheap weighted
-// average of the channels. The two disagree by enough to matter at the low end,
-// which is exactly where a dock on a dark ground lives.
 func relativeLuminance(c color.Color) float64 {
 	r, g, b, _ := c.RGBA()
 	return 0.2126*linearChannel(r) + 0.7152*linearChannel(g) + 0.0722*linearChannel(b)
 }
 
-// linearChannel is linearize for a 16-bit channel from color.Color.RGBA. A
-// channel widened from 8 bits, which is every colour the chrome is built from,
-// reads the table toLab reads: v/65535 is then exactly the table's i/255, so
-// the value is the same and only the math.Pow is saved. Contrast checks run
-// for every badge, row and label a panel draws, and the Pow was a quarter of
-// drawing the help panel.
 func linearChannel(v uint32) float64 {
 	if hi := v >> 8; v == hi*0x101 {
 		return transfer().toLinear[hi]
@@ -141,19 +118,12 @@ func ReadableAt(c, bg color.Color, floor float64) color.Color {
 	}
 	d := CurrentDepth()
 	if d == Depth16 {
-		// An RGB colour at 16 colours is stepped down by the frame writer to a
-		// slot whose RGB only the terminal knows, so there is nothing honest to
-		// measure. The 16-colour palette is built from slots for this reason.
 		return c
 	}
 	if ContrastRatio(Shown(c), Shown(bg)) >= floor {
 		return Shown(c)
 	}
 	target := ContrastText(Shown(bg))
-	// Sixteen steps puts the answer within ~6% of the least blending that
-	// works, which is finer than the terminal's own colour rounding. At 256
-	// colours each candidate is measured as the palette entry it becomes,
-	// which is the colour that has to clear the floor.
 	const steps = 16
 	for i := 1; i < steps; i++ {
 		if mixed := Shown(MixColors(c, target, float64(i)/steps)); ContrastRatio(mixed, Shown(bg)) >= floor {
@@ -163,11 +133,6 @@ func ReadableAt(c, bg color.Color, floor float64) color.Color {
 	return Shown(target)
 }
 
-// readableOwned is ReadableAt for a pair the terminal paints: a slot or the
-// default colour on either side. Only one failure can be seen without knowing
-// the user's palette, and it is the one that matters: an ink on a ground of the
-// same slot, which is invisible in every palette. That ink becomes the default
-// foreground, which the terminal picks to read on its own colours.
 func readableOwned(c, bg color.Color) color.Color {
 	if isNoColor(c) || isNoColor(bg) {
 		return c
@@ -204,7 +169,6 @@ func ContrastText(bg color.Color) color.Color {
 	return tone.Pepper
 }
 
-// xtermSlots are xterm's default colours for the sixteen slots.
 var xtermSlots = [16]color.RGBA{
 	{0x00, 0x00, 0x00, 0xff}, {0xcd, 0x00, 0x00, 0xff}, {0x00, 0xcd, 0x00, 0xff}, {0xcd, 0xcd, 0x00, 0xff},
 	{0x00, 0x00, 0xee, 0xff}, {0xcd, 0x00, 0xcd, 0xff}, {0x00, 0xcd, 0xcd, 0xff}, {0xe5, 0xe5, 0xe5, 0xff},
@@ -212,7 +176,6 @@ var xtermSlots = [16]color.RGBA{
 	{0x5c, 0x5c, 0xff, 0xff}, {0xff, 0x00, 0xff, 0xff}, {0x00, 0xff, 0xff, 0xff}, {0xff, 0xff, 0xff, 0xff},
 }
 
-// slotAsXTerm is c, or xterm's default colour for c when c is a slot.
 func slotAsXTerm(c color.Color) color.Color {
 	if b, ok := c.(ansi.BasicColor); ok && int(b) < len(xtermSlots) {
 		return xtermSlots[b]
@@ -220,8 +183,6 @@ func slotAsXTerm(c color.Color) color.Color {
 	return c
 }
 
-// delinearize is the inverse of linearize: it puts the sRGB transfer curve
-// back on one channel so a colour built in linear light can be spelled.
 func delinearize(c float64) float64 {
 	if c <= 0.0031308 {
 		return c * 12.92
@@ -229,13 +190,6 @@ func delinearize(c float64) float64 {
 	return 1.055*math.Pow(c, 1/2.4) - 0.055
 }
 
-// atLuminance returns c with its channels scaled in linear light until its
-// relative luminance is target. Luminance is linear in linear light, so scaling
-// every channel by the same factor moves the luminance by that factor and
-// leaves the chromaticity where it was: a warm brown stays a warm brown at
-// every step of a ramp built from it. A channel that runs past its end is
-// clamped, which is the one place the hue can drift, and it happens only when
-// the target lies past what the colour can say.
 func atLuminance(c color.Color, target float64) color.Color {
 	r, g, b, _ := c.RGBA()
 	lr, lg, lb := linearChannel(r), linearChannel(g), linearChannel(b)
@@ -243,7 +197,6 @@ func atLuminance(c color.Color, target float64) color.Color {
 		k := target / l
 		lr, lg, lb = lr*k, lg*k, lb*k
 	} else {
-		// Black has no chromaticity to keep, so the step from it is a grey.
 		lr, lg, lb = target, target, target
 	}
 	channel := func(v float64) uint8 {
@@ -280,9 +233,6 @@ func Tone(bg color.Color, ratio float64) color.Color {
 	if ContrastRatio(ink, bg) <= ratio {
 		return ink
 	}
-	// Bisected for the same reason Structure is, and toward the other side of
-	// the target: an ink is held to a floor, so the answer is the least blend
-	// that still clears it rather than the most that stays under it.
 	lo, hi := 0.0, 1.0
 	for range 16 {
 		mid := (lo + hi) / 2
@@ -326,7 +276,6 @@ func ParseHex(s string) (color.RGBA, bool) {
 	return color.RGBA{R: n[0]<<4 | n[1], G: n[2]<<4 | n[3], B: n[4]<<4 | n[5], A: 0xff}, true
 }
 
-// unhex decodes one hex digit.
 func unhex(c byte) (byte, bool) {
 	switch {
 	case c >= '0' && c <= '9':

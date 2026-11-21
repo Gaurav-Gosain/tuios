@@ -6,21 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/shquote"
 )
 
-// ssh fails in a handful of ways that need different fixes, and it says which
-// only in words on stderr. Before this file every one of them read "The host
-// did not answer.", so a key the machine refused, a name that does not
-// resolve and a machine that is switched off looked the same, and the person
-// had to run ssh by hand to learn which.
-//
-// The words come from OpenSSH on Linux and macOS (portable 8.x to 10.x). They
-// are matched in lower case, as substrings, so a prefix such as "ssh: " or the
-// address in the line does not matter. The order matters: a changed host key
-// also prints "Host key verification failed", which alone means an unknown
-// key, so the changed key is tested first.
-//
-// Everything here reads text from ssh about another machine. It decides a
-// class and nothing more: no part of the text is repeated in a fix.
-
 // SSHFailure is one class of ssh failure.
 type SSHFailure string
 
@@ -45,8 +30,6 @@ const (
 	FailTimeout SSHFailure = "timeout"
 )
 
-// sshFailureWords maps the words ssh writes to a class, in the order they are
-// tested.
 var sshFailureWords = []struct {
 	kind  SSHFailure
 	words []string
@@ -171,8 +154,6 @@ func (f SSHFailure) NeedsPerson() bool {
 	return f == FailHostKeyNew || f == FailAuth
 }
 
-// joinCommand joins words into one command line, each word quoted for sh when
-// it needs it.
 func joinCommand(words []string) string {
 	out := make([]string, len(words))
 	for i, w := range words {

@@ -2,17 +2,6 @@ package sessiontree
 
 import "slices"
 
-// A worktree session is a session whose directory is a linked git worktree.
-// The daemon records which repository and which branch, and the surfaces group
-// those sessions under a row for their repository instead of listing them flat.
-// The grouping is the information: five sessions named after five branches of
-// one repository say nothing about each other in a flat list, and everything
-// about each other under one parent.
-//
-// This package is deliberately ignorant of internal/session, so the record
-// arrives here as the three fields a row is drawn from rather than as the
-// daemon's own type.
-
 // WorktreeRef is what a session row needs to know about the worktree it sits
 // in. Nil on a session that is not one.
 type WorktreeRef struct {
@@ -81,8 +70,6 @@ func GroupByRepo(nodes []Node) []Node {
 	return groupByRepo(nodes, groupRepo)
 }
 
-// groupByRepo is GroupByRepo with the repository of each node read by repoOf,
-// "" for a node that is not grouped.
 func groupByRepo(nodes []Node, repoOf func(Node) string) []Node {
 	members := map[string][]Node{}
 	repos := make([]string, 0, len(nodes))
@@ -109,7 +96,7 @@ func groupByRepo(nodes []Node, repoOf func(Node) string) []Node {
 			continue
 		}
 		if drawn[repo] {
-			continue // pulled up under the parent already
+			continue
 		}
 		drawn[repo] = true
 		group := members[repo]
@@ -146,11 +133,6 @@ func GroupByRepoCompact(nodes []Node) []Node {
 			}
 		}
 	}
-	// The rail draws this list on every rebuild of a frame, and a Node is large,
-	// so the rows groupByRepo allocated are rewritten in place. A group only ever
-	// loses rows here, so the write position never passes the read position. With
-	// no group groupByRepo hands back the caller's slice, and nothing is written:
-	// a session left out of a group has a head, which is in one.
 	rows := groupByRepo(nodes, func(n Node) string {
 		repo := groupRepo(n)
 		if repo != "" && n.Worktree.Main && heads[repo] != n.ID {
@@ -165,7 +147,7 @@ func GroupByRepoCompact(nodes []Node) []Node {
 				rows[w] = rows[i]
 			}
 			if groupRepo(rows[w]) != "" {
-				rows[w].Worktree = nil // another session in a main checkout
+				rows[w].Worktree = nil
 			}
 			w++
 			i++
@@ -181,9 +163,6 @@ func GroupByRepoCompact(nodes []Node) []Node {
 	return rows[:w]
 }
 
-// compactGroup rewrites one repository's rows, rows[repo:end] with its KindRepo
-// row first, at rows[w:], and returns the position after them. The first main
-// checkout session is pulled up as the head.
 func compactGroup(rows []Node, w, repo, end int) int {
 	members := rows[repo+1 : end]
 	head := slices.IndexFunc(members, func(n Node) bool { return n.Worktree.Main })
@@ -204,8 +183,6 @@ func compactGroup(rows []Node, w, repo, end int) int {
 		lead.Title = rows[repo].Title
 	}
 	rest := w + 1
-	// The rows before the head move first, then the rows after it, so neither
-	// overwrites a row still to be read. The lead was copied out above.
 	rest += copy(rows[rest:], members[:head])
 	rest += copy(rows[rest:], members[head+1:])
 	rows[w] = lead
@@ -216,8 +193,6 @@ func compactGroup(rows []Node, w, repo, end int) int {
 	return rest
 }
 
-// groupRepo is the repository a node is grouped under, or "" for a node that is
-// not grouped at all.
 func groupRepo(n Node) string {
 	if n.Kind != KindSession || n.Host != "" || n.Worktree == nil {
 		return ""
@@ -225,12 +200,6 @@ func groupRepo(n Node) string {
 	return n.Worktree.Repo
 }
 
-// repoNode builds the parent row for one repository.
-//
-// It carries the roll-up of its members' states so a collapsed group can still
-// say that something inside it wants a human, and the member count so it can
-// say how many rows it is hiding. Both are read only when the group is shut;
-// an open group's children say it themselves.
 func repoNode(repo string, members []Node) Node {
 	node := Node{
 		Kind:        KindRepo,

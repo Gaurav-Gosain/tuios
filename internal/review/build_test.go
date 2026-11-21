@@ -107,8 +107,6 @@ func TestBuildLeavesTheIndexAndWorkingTreeAlone(t *testing.T) {
 	}
 }
 
-// indexHash is the hash of the repository's index file, so a test can tell
-// the index was not written.
 func indexHash(t *testing.T, repo string) string {
 	t.Helper()
 	path := testutil.Git(t, repo, "rev-parse", "--git-path", "index")

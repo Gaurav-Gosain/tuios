@@ -10,7 +10,6 @@ import (
 	"testing"
 )
 
-// jsonTagsOf lists the json field names of a struct, in declaration order.
 func jsonTagsOf(v any) []string {
 	t := reflect.TypeOf(v)
 	out := make([]string, 0, t.NumField())
@@ -21,19 +20,12 @@ func jsonTagsOf(v any) []string {
 	return out
 }
 
-// The fixtures below carry the record shape of a real Claude Code transcript
-// (verified against a live 101 MB file: the key sets, the assistant/user
-// alternation, and the stop_reason values) with entirely invented content. No
-// line here came off anyone's disk.
-
 const (
 	fixCWD     = "/home/dev/proj"
 	fixSession = "11111111-2222-3333-4444-555555555555"
 	fixVersion = "2.1.222"
 )
 
-// assistantLine is an assistant record with a stop reason, carrying a message
-// body full of the kind of thing that must never come back out.
 func assistantLine(stop string) string {
 	return line(map[string]any{
 		"type": "assistant", "sessionId": fixSession, "cwd": fixCWD,
@@ -51,8 +43,6 @@ func assistantLine(stop string) string {
 	})
 }
 
-// userToolResultLine is the record that lands after a tool runs. toolUseResult
-// is where command output and file contents live in a real transcript.
 func userToolResultLine() string {
 	return line(map[string]any{
 		"type": "user", "sessionId": fixSession, "cwd": fixCWD,
@@ -75,8 +65,6 @@ func userPromptLine() string {
 	})
 }
 
-// sidechainLine is a subagent's finished turn. It is written to the same file as
-// its parent's and must never be read as the pane's own turn ending.
 func sidechainLine(stop string) string {
 	return line(map[string]any{
 		"type": "assistant", "sessionId": fixSession, "cwd": fixCWD,
@@ -89,8 +77,6 @@ func sidechainLine(stop string) string {
 	})
 }
 
-// noiseLines are the record types that make up most of a real file and say
-// nothing about the turn. Every one of them carries content.
 func noiseLines() string {
 	return strings.Join([]string{
 		line(map[string]any{"type": "last-prompt", "sessionId": fixSession,
@@ -113,9 +99,6 @@ func noiseLines() string {
 	}, "") + localCommandLines()
 }
 
-// localCommandLines are a local command run at rest, as Claude Code 2.1.309
-// writes it: user records with no prompt marker, and no turn after them. The
-// first three are /effort and its output, the last two a line typed after !.
 func localCommandLines() string {
 	user := func(meta bool, content string) string {
 		return line(map[string]any{
@@ -132,8 +115,6 @@ func localCommandLines() string {
 		user(false, "<bash-stdout>SECRET-SHELL-OUTPUT</bash-stdout><bash-stderr></bash-stderr>")
 }
 
-// taskNotificationLine is a prompt Claude Code sends itself when a background
-// task ends. It carries turnOrigin and no promptSource, and starts a turn.
 func taskNotificationLine() string {
 	return line(map[string]any{
 		"type": "user", "sessionId": fixSession, "cwd": fixCWD,
@@ -241,7 +222,6 @@ func TestPartialFinalLineIsNotRead(t *testing.T) {
 		t.Fatalf("skipped = %d, want 0: the partial line must not even be parsed", r.Skipped())
 	}
 
-	// The rest of the record arrives, and only now does it count.
 	appendTo(t, path, partial[len(partial)/2:])
 	obs, ok, err = r.Read()
 	if err != nil {
@@ -259,7 +239,6 @@ func TestTruncationRestartsFromTheTop(t *testing.T) {
 	if _, ok, _ := r.Read(); !ok {
 		t.Fatal("want an answer from the first read")
 	}
-	// Replaced by a shorter file at the same path.
 	write(t, path, assistantLine("end_turn"))
 	obs, ok, err := r.Read()
 	if err != nil || !ok || obs.Turn != TurnDone {
@@ -291,7 +270,6 @@ func TestColdReadOnlyTouchesTheTail(t *testing.T) {
 	for b.Len() < 3*tailWindow {
 		b.WriteString(noiseLines())
 	}
-	// The only turn-bearing record in the file, and it is behind the window.
 	head := assistantLine("end_turn")
 	write(t, path, head+b.String()+assistantLine("tool_use"))
 
@@ -307,8 +285,6 @@ func TestColdReadOnlyTouchesTheTail(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Everything before the window was never consumed, which is only true if it
-	// was never read.
 	if r.off < info.Size()-tailWindow {
 		t.Fatalf("offset %d, want within the last %d bytes of %d", r.off, tailWindow, info.Size())
 	}
@@ -331,7 +307,6 @@ func TestNoContentEscapes(t *testing.T) {
 		t.Fatalf("read: %v ok=%v", err, ok)
 	}
 
-	// Everything the caller can see, rendered.
 	seen := obs.Turn.String() + "\x00" + obs.SessionID + "\x00" + obs.CWD +
 		"\x00" + obs.Version + "\x00" + obs.Timestamp
 	for _, secret := range secretsIn(body) {
@@ -340,8 +315,6 @@ func TestNoContentEscapes(t *testing.T) {
 		}
 	}
 
-	// And the buffer the bytes passed through is zeroed, so a dump taken now
-	// finds no page of it.
 	for _, secret := range secretsIn(body) {
 		if strings.Contains(string(r.buf[:cap(r.buf)]), secret) {
 			t.Fatalf("read buffer still holds %q after Read", secret)
@@ -363,8 +336,6 @@ func TestRecordTypeCannotGrowAField(t *testing.T) {
 			t.Fatalf("record field %d is %q, want %q", i, got[i], want[i])
 		}
 	}
-	// usage was added for the context size a lead reads (list-agents
-	// context): four token counts the API returned, no text.
 	inner := jsonTagsOf(record{}.Message)
 	if len(inner) != 2 || inner[0] != "stop_reason" || inner[1] != "usage" {
 		t.Fatalf("record.Message has fields %v, want exactly [stop_reason usage]", inner)
@@ -402,7 +373,6 @@ func TestIncrementalReadsOnlyConsumeWhatWasAppended(t *testing.T) {
 	if _, ok, err := r.Read(); err != nil || !ok {
 		t.Fatalf("first read: %v ok=%v", err, ok)
 	}
-	// Nothing appended: no answer, and no re-reading of what was already seen.
 	if _, ok, err := r.Read(); err != nil || ok {
 		t.Fatalf("second read: %v ok=%v, want no new answer", err, ok)
 	}
@@ -423,9 +393,6 @@ func TestConcurrentReadsShareOneReaderSafely(t *testing.T) {
 	write(t, path, noiseLines()+assistantLine("tool_use"))
 	r := NewReader(path)
 
-	// The writer appends a bounded amount and the readers run until it is done,
-	// so every read races a live append without the file growing for as long as
-	// the readers take.
 	writerDone := make(chan struct{})
 	go func() {
 		defer close(writerDone)

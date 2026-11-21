@@ -11,8 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/oneline"
 )
 
-// hookCase is one fixture: a payload a harness hands its hooks, and the
-// report it must come to, or a substring of the reason it reports nothing.
 type hookCase struct {
 	Name    string            `json:"name"`
 	Event   string            `json:"event"`
@@ -93,8 +91,6 @@ func TestEveryInstalledEventHasAFixture(t *testing.T) {
 			}
 		}
 		for _, ev := range target.Events {
-			// Copilot registers notification and its payload names it
-			// Notification, so the name is compared without case.
 			if !reported[ev.Name] && !reported[strings.ToUpper(ev.Name[:1])+ev.Name[1:]] {
 				t.Errorf("%s registers %s, and no fixture for it reports a state", target.ID, ev.Name)
 			}
@@ -127,7 +123,6 @@ func TestClipAndRedact(t *testing.T) {
 		{"git clone https://user:hunter2@example.com/r.git", "git clone https://***@example.com/r.git"},
 		{"mytool --token=abc123 --password s3cret", "mytool --token=*** --password ***"},
 		{"echo 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08", "echo ***"},
-		// A long path built of words is a path, not a key.
 		{"/home/user/dev/internal/session/agent_detect_cost_bench_test.go", "/home/user/dev/internal/session/agent_detect_cost_bench_test.go"},
 		{"line one\n  line two\ttabbed", "line one line two tabbed"},
 	}

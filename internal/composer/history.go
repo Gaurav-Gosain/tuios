@@ -9,21 +9,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// History: the messages sent to the same target before, which up brings back.
-//
-// up on the draft's first row loads the message before the one shown, and
-// down on the last row the one after; down past the newest puts back the draft
-// that was there before. Each load is one undo step. Any edit ends the walk,
-// and the loaded text is the draft from then on.
-//
-// ctrl+r searches: a line opens under the editor, what is typed narrows the
-// list to the messages that hold it, up and down choose, enter or tab loads
-// the chosen one, and esc closes the search.
-//
-// The host gives the history (SetHistory). The composer keeps no history of
-// its own and reads nothing: the host says where it is kept.
-
-// historyRows is how many messages the search shows.
 const historyRows = 6
 
 // HistoryEntry is one message sent before.
@@ -34,7 +19,6 @@ type HistoryEntry struct {
 	Dropped []string
 }
 
-// histSearch is the open ctrl+r search.
 type histSearch struct {
 	query string
 	sel   int
@@ -46,11 +30,8 @@ func (m *Model) SetHistory(entries []HistoryEntry) {
 	m.histAt = -1
 }
 
-// historyActive reports whether up and down walk the history now.
 func (m *Model) historyActive() bool { return len(m.hist) > 0 }
 
-// historyStep loads the message d steps from the one shown: -1 older, 1
-// newer. It reports whether it moved.
 func (m *Model) historyStep(d int) bool {
 	if len(m.hist) == 0 {
 		return false
@@ -79,8 +60,6 @@ func (m *Model) historyStep(d int) bool {
 	return true
 }
 
-// loadEntry puts an entry in the draft as one undo step, and says which of
-// its blocks the history could not keep.
 func (m *Model) loadEntry(e HistoryEntry) {
 	notice := ""
 	if len(e.Dropped) > 0 {
@@ -95,8 +74,6 @@ func (m *Model) loadEntry(e HistoryEntry) {
 	m.replaceCells(cellsOf(e.Parts), notice)
 }
 
-// replaceCells puts cells in place of the whole draft, as one undo step, with
-// the cursor at the end.
 func (m *Model) replaceCells(cells []cell, notice string) {
 	m.edited()
 	m.change(0, len(m.cells), append([]cell(nil), cells...), len(cells))
@@ -104,7 +81,6 @@ func (m *Model) replaceCells(cells []cell, notice string) {
 	m.top = 0
 }
 
-// cellsOf is the cells of a message's parts.
 func cellsOf(parts []Part) []cell {
 	var out []cell
 	for _, p := range parts {
@@ -163,7 +139,6 @@ func (m *Model) ReplaceText(text string) bool {
 	return true
 }
 
-// endHistoryWalk ends a walk: the loaded message is the draft now.
 func (m *Model) endHistoryWalk() {
 	m.histAt, m.histDraft = -1, nil
 }
@@ -179,7 +154,6 @@ func (m *Model) OpenHistorySearch() bool {
 	return true
 }
 
-// historyMatches are the entries the search shows, newest first.
 func (m *Model) historyMatches() []int {
 	q := strings.ToLower(m.hsearch.query)
 	var out []int
@@ -191,7 +165,6 @@ func (m *Model) historyMatches() []int {
 	return out
 }
 
-// historyKey handles a key while the search is open.
 func (m *Model) historyKey(msg tea.KeyPressMsg) {
 	key := msg.String()
 	s := m.hsearch
@@ -229,7 +202,6 @@ func (m *Model) historyKey(msg tea.KeyPressMsg) {
 	}
 }
 
-// renderHistorySearch draws the open search under the editor.
 func (m *Model) renderHistorySearch(width int, in inks) []string {
 	s := m.hsearch
 	st := &in.st
@@ -258,7 +230,6 @@ func (m *Model) renderHistorySearch(width int, in inks) []string {
 	return out
 }
 
-// historyHints are the editor's keys while the search is open.
 func historyHints(ascii bool) []Hint {
 	return []Hint{
 		{Key: enterKey(ascii), Label: "load"},

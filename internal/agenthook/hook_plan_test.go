@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// planDaemon is a holdDaemon whose request-approval lists the params named in
-// takes, the way list-verbs describes it.
 type planDaemon struct {
 	holdDaemon
 	takes []string
@@ -69,7 +67,6 @@ func TestAgentHookNamesToolAndTarget(t *testing.T) {
 		t.Errorf("an approval sent kind: %v", h[0])
 	}
 
-	// A daemon that takes only some of them gets only those.
 	d = &planDaemon{takes: []string{"tool"}}
 	d.answer = answerWith("once", "answered", "")
 	_, _ = runHold(t, &d.holdDaemon, func() (Caller, error) { return d, nil }, "claude-code", claudeBash, 0)

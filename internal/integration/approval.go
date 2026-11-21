@@ -11,37 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/oneline"
 )
 
-// Answering a permission prompt from the Inbox.
-//
-// Some harnesses let a hook decide a permission prompt: Claude Code and Qwen
-// Code read a decision from their PermissionRequest hook's stdout, and opencode
-// takes a reply
-// to a permission request through its SDK, which the tuios plugin sends with
-// what the hook prints. For those events Translate adds an Approval to the
-// report, and `tuios agent-hook` may hold the prompt with the daemon's
-// request-approval verb until the person answers it in the Inbox.
-//
-// The person answers from one line of text, so a prompt is only offered to the
-// Inbox when that line is the whole request (see shownWhole): a tool whose
-// effect is decided by one argument, with that argument shown in full, nothing
-// redacted, clipped or collapsed, and no other argument that changes what the
-// call does. A Write or Edit, whose body the line cannot show, an MCP tool, a
-// command too long for the line, or a call with an argument the line leaves
-// out is answered in the pane as before. "Always" is only offered with the
-// exact rules it adds, which the Inbox shows beside its key (Approval.Scope).
-//
-// Answer is the only place a decision becomes output, and it prints one only
-// for a decision the harness was offered. Everything else prints nothing,
-// which every harness here reads as "no opinion, ask the user". So an error, a
-// timeout, a daemon that is gone or an answer the hook does not recognise can
-// never approve anything.
-//
-// Codex is left out on purpose: its PermissionRequest hook runs before its own
-// reviewer has decided whether to ask at all, so a hook that waited would ask
-// the person about calls Codex would have allowed or refused by itself.
-// GitHub Copilot CLI's permissionRequest runs before its rules and auto-allow
-// in the same way, and is left out for the same reason (hook_copilot.go).
-
 // Decisions a held prompt can end with, the same words the daemon uses.
 const (
 	DecisionOnce   = "once"
@@ -112,12 +81,8 @@ type Approval struct {
 	// DenyMessage says the harness hands the model a reason with a deny, so
 	// the Inbox may offer to type one.
 	DenyMessage bool `json:"deny_message,omitempty"`
-	// suggestions are the rules "always" hands back to Claude Code, rebuilt
-	// from the fields Scope shows so nothing unshown rides along.
 	suggestions json.RawMessage
-	// input is a plan's tool_input as the harness sent it, which an allow
-	// hands back unchanged as updatedInput (see claudePlanAnswer).
-	input json.RawMessage
+	input       json.RawMessage
 }
 
 // IsPlan reports whether the prompt is a plan.
@@ -152,10 +117,6 @@ func (a *Approval) Answer(harness, decision, message string) (string, bool) {
 	return "", false
 }
 
-// claudeAnswer is Claude Code's PermissionRequest decision. The shape is the
-// hooks reference's "PermissionRequest decision control": hookSpecificOutput
-// with hookEventName and a decision whose behavior is allow or deny, with
-// updatedPermissions to add rules on an allow and message on a deny.
 func claudeAnswer(decision, message string, suggestions json.RawMessage) (string, bool) {
 	inner := map[string]any{}
 	switch decision {
@@ -179,8 +140,6 @@ func claudeAnswer(decision, message string, suggestions json.RawMessage) (string
 	return permissionRequestOutput(inner)
 }
 
-// permissionRequestOutput wraps a decision the way Claude Code reads a
-// PermissionRequest hook's stdout.
 func permissionRequestOutput(inner map[string]any) (string, bool) {
 	out, err := jsonx.Marshal(map[string]any{
 		"hookSpecificOutput": map[string]any{
@@ -194,17 +153,6 @@ func permissionRequestOutput(inner map[string]any) (string, bool) {
 	return string(out) + "\n", true
 }
 
-// claudePlanAnswer is Claude Code's decision for an ExitPlanMode prompt.
-//
-// ExitPlanMode is a tool Claude Code marks as needing the user's interaction,
-// and an allow for such a tool is only taken when it carries updatedInput. The
-// hooks reference says so for PreToolUse ("AskUserQuestion and ExitPlanMode
-// ... need updatedInput paired with it"), and the PermissionRequest path of
-// Claude Code 2.1.281 returns no decision for an allow without it on these
-// tools, so its own dialog shows. updatedInput replaces the tool's input
-// whole, so the hook hands back the input it was given, unchanged: the plan
-// the person read. always adds exactly one permission update, the session's
-// mode to acceptEdits, built here rather than copied from the request.
 func claudePlanAnswer(decision, message string, input json.RawMessage, acceptEdits bool) (string, bool) {
 	inner := map[string]any{}
 	switch decision {
@@ -232,8 +180,6 @@ func claudePlanAnswer(decision, message string, input json.RawMessage, acceptEdi
 	return permissionRequestOutput(inner)
 }
 
-// openCodeAnswer is what the tuios opencode plugin reads: the reply the
-// plugin posts to opencode's permission route, once, always or reject.
 func openCodeAnswer(decision, message string) (string, bool) {
 	reply := map[string]string{}
 	switch decision {
@@ -255,20 +201,11 @@ func openCodeAnswer(decision, message string) (string, bool) {
 	return string(out) + "\n", true
 }
 
-// toolShape is a tool whose call one line can show in full: the argument that
-// decides what it does, and the other arguments that change nothing a person
-// approves (a label, a timeout, a line range). An argument not named here
-// keeps the call out of the Inbox.
 type toolShape struct {
 	key    string
 	others []string
 }
 
-// claudeWholeTools are the Claude Code tools the Inbox may answer. Write, Edit,
-// MultiEdit and NotebookEdit are not here because their body is what matters
-// and the line shows only the path. Bash's dangerouslyDisableSandbox is not an
-// ignorable argument, so a call that sets it is answered in the pane. Glob and
-// Grep are only here without a path, since the line shows one argument.
 var claudeWholeTools = map[string]toolShape{
 	"Bash":      {key: "command", others: []string{"description", "timeout", "run_in_background"}},
 	"Read":      {key: "file_path", others: []string{"offset", "limit", "pages"}},
@@ -278,20 +215,12 @@ var claudeWholeTools = map[string]toolShape{
 	"WebSearch": {key: "query", others: []string{"allowed_domains", "blocked_domains"}},
 }
 
-// openCodeWholeTools are the opencode tools the Inbox may answer, by the tool
-// name and arguments the plugin sees in tool.execute.before. bash's workdir is
-// not ignorable: where a command runs is part of what it does.
 var openCodeWholeTools = map[string]toolShape{
 	"bash":     {key: "command", others: []string{"description", "timeout"}},
 	"read":     {key: "filePath", others: []string{"offset", "limit"}},
 	"webfetch": {key: "url", others: []string{"format", "timeout"}},
 }
 
-// shownWhole reports whether ToolSummary(tool, input) is the whole call: the
-// tool is one whose call one argument decides, that argument is the one the
-// summary shows, unchanged (not clipped, redacted or with its whitespace
-// collapsed) and printable, and every other argument is one that changes
-// nothing a person approves.
 func shownWhole(shapes map[string]toolShape, tool string, input fields) bool {
 	shape, ok := shapes[tool]
 	if !ok {
@@ -310,19 +239,10 @@ func shownWhole(shapes map[string]toolShape, tool string, input fields) bool {
 	return ToolSummary(tool, input) == full && invisible.Printable(full)
 }
 
-// claudeHeldTools are tools whose PermissionRequest is not a yes or no: an
-// answer to a question rides on the decision's updatedInput, which the Inbox
-// does not collect. They are left to Claude Code's own dialog. ExitPlanMode is
-// answered as a plan (claudePlanApproval).
 var claudeHeldTools = []string{"AskUserQuestion"}
 
-// claudePlanTool is the tool Claude Code asks permission for when a plan is
-// ready.
 const claudePlanTool = "ExitPlanMode"
 
-// claudeApproval is the Approval for a Claude Code PermissionRequest, or nil
-// for a call the Inbox does not answer: a question, or a call its line does
-// not show whole.
 func claudeApproval(p fields) *Approval {
 	tool := p.str("tool_name")
 	if tool == claudePlanTool {
@@ -350,22 +270,8 @@ func claudeApproval(p fields) *Approval {
 	return a
 }
 
-// claudePlanKeys are the tool_input fields an ExitPlanMode call may carry and
-// still be answered from the Inbox: the plan, and the file Claude Code wrote it
-// to. The hooks reference lists one more, allowedPrompts: before Claude Code
-// 2.1.205 it asked for command permissions along with the plan, which an allow
-// would grant without the person seeing them, so a call that carries any is
-// answered in the pane. Any field not listed here is treated the same way.
 var claudePlanKeys = []string{"plan", "planFilePath"}
 
-// claudePlanApproval is the Approval for Claude Code's ExitPlanMode, or nil for
-// one the Inbox does not answer: no plan text, a plan longer than MaxPlan, or
-// a field beside it the Inbox would not show.
-//
-// Its answers are approve (once), keep planning (deny), and, only when Claude
-// Code suggests exactly that and nothing else, approve and accept edits for
-// this session (always). Any other mode change, bypassPermissions and auto
-// among them, is never offered.
 func claudePlanApproval(p fields) *Approval {
 	input := p.obj("tool_input")
 	plan := input.str("plan")
@@ -403,8 +309,6 @@ func claudePlanApproval(p fields) *Approval {
 	return a
 }
 
-// claudeAcceptEdits reports whether permission_suggestions is exactly one
-// setMode to acceptEdits for this session, with no other field.
 func claudeAcceptEdits(raw any) bool {
 	list, ok := raw.([]any)
 	if !ok || len(list) != 1 {
@@ -427,8 +331,6 @@ func PlanTitle(plan string) string {
 	return "a plan"
 }
 
-// claudeDestinations are where an added rule is kept, as the person reads it.
-// A destination not listed here is not offered.
 var claudeDestinations = map[string]string{
 	"session":         "for this session",
 	"localSettings":   "in .claude/settings.local.json",
@@ -436,13 +338,6 @@ var claudeDestinations = map[string]string{
 	"userSettings":    "in ~/.claude/settings.json",
 }
 
-// claudeScope reads permission_suggestions into what "always" shows and what
-// it hands back. It offers always only when every suggestion is an addRules
-// that allows, with a destination it can name and rules with only a tool name
-// and a rule content. A setMode (such as acceptEdits), an addDirectories, a
-// deny or ask rule, or any field it does not know is not offered, since the
-// Inbox could not show what it does. The rules handed back are rebuilt from
-// the fields shown, so nothing the person did not see reaches Claude Code.
 func claudeScope(raw any) ([]string, json.RawMessage, bool) {
 	list, ok := raw.([]any)
 	if !ok || len(list) == 0 {
@@ -496,8 +391,6 @@ func claudeScope(raw any) ([]string, json.RawMessage, bool) {
 	return scope, data, true
 }
 
-// scopeShowable reports whether every line of a scope can be shown as it is:
-// at most MaxScopeLines lines, each one printable and no longer than a message.
 func scopeShowable(scope []string) bool {
 	if len(scope) == 0 || len(scope) > MaxScopeLines {
 		return false
@@ -510,7 +403,6 @@ func scopeShowable(scope []string) bool {
 	return true
 }
 
-// onlyKeys reports whether m has no key outside keys.
 func onlyKeys(m map[string]any, keys ...string) bool {
 	for k := range m {
 		if !slices.Contains(keys, k) {
@@ -520,10 +412,6 @@ func onlyKeys(m map[string]any, keys ...string) bool {
 	return true
 }
 
-// openCodeApproval is the Approval for an opencode permission.asked the plugin
-// can answer: one that carries the permission id the reply goes to, and the
-// tool call it is about, shown whole. "Always" is offered with the patterns
-// opencode stops asking about, from the request's always list.
 func openCodeApproval(p fields) *Approval {
 	if p.str("permission_id") == "" {
 		return nil

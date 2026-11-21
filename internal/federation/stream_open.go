@@ -41,12 +41,8 @@ type StreamOpen struct {
 	Window bool `json:"window,omitempty"`
 }
 
-// maxStreamOpenPayload bounds what the accepting side decodes. The frame cap
-// is a megabyte, and an open frame needs a few bytes.
 const maxStreamOpenPayload = 1024
 
-// encode returns the open frame's payload: nothing for the zero value, which
-// is what every older peer sends and expects.
 func (o StreamOpen) encode() []byte {
 	if o == (StreamOpen{}) {
 		return nil
@@ -58,9 +54,6 @@ func (o StreamOpen) encode() []byte {
 	return b
 }
 
-// decodeStreamOpen reads an open frame's payload. Anything it cannot read, or
-// anything past the bound, is the zero value: the safe reading of a statement
-// that did not arrive intact is that it was not made.
 func decodeStreamOpen(payload []byte) StreamOpen {
 	var o StreamOpen
 	if len(payload) == 0 || len(payload) > maxStreamOpenPayload {

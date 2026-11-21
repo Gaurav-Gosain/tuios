@@ -6,15 +6,6 @@ import (
 	"strings"
 )
 
-// The model a front end draws. The interactive command and the add sheet in
-// the app are two drawers on this one model: the steps so far, the question
-// that waits, and the words for both. Neither keeps a model or a text table
-// of its own, so the two cannot say different things.
-//
-// The engine runs in its own goroutine and asks through a Bridge. Each
-// question becomes a Prompt that the front end shows; a key goes to
-// Prompt.Key, which answers the engine when the question is done.
-
 // Line is one step as a front end draws it.
 type Line struct {
 	Step, State string
@@ -200,7 +191,6 @@ func (p *Prompt) Key(k string) bool {
 				p.Ticked[i] = peer.CanSetUp
 			}
 		case "o":
-			// The row gets its own answers, and is ticked.
 			if p.Cursor >= 0 {
 				p.Own, p.Ticked[p.Cursor] = p.Cursor, true
 			}
@@ -246,7 +236,6 @@ func (p *Prompt) Key(k string) bool {
 			return true
 		}
 	case AskPerson:
-		// The person ran the step elsewhere, or signed in: test again.
 		if k == "t" {
 			p.Finish(nil)
 			return true
@@ -255,7 +244,6 @@ func (p *Prompt) Key(k string) bool {
 	return false
 }
 
-// move steps the cursor over the rows that can be picked.
 func (p *Prompt) move(d int) {
 	n := max(len(p.Options), len(p.Peers))
 	for i := p.Cursor + d; i >= 0 && i < n; i += d {
@@ -294,7 +282,6 @@ func (b *Bridge) Event(e Event) { b.Send(BridgeEvent{b.Machine, e}) }
 // For is the Bridge of one machine of a bulk run: a BulkAsker.
 func (b *Bridge) For(name string) Asker { return &Bridge{Send: b.Send, Machine: name} }
 
-// ask sends p and waits for its answer, or for ctx to end.
 func (b *Bridge) ask(ctx context.Context, p *Prompt) error {
 	p.Machine = b.Machine
 	p.reply = make(chan error, 1)

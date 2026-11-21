@@ -5,23 +5,6 @@ import (
 	"strings"
 )
 
-// Copy-pipe keybindings: [[keybindings.copy_pipe]] entries that bind a key in
-// copy mode to a yank piped through a command, after tmux's copy-pipe and
-// copy-pipe-and-cancel.
-//
-//	[[keybindings.copy_pipe]]
-//	key = "p"
-//	command = "tr '\n' ' '"
-//	cancel = true
-//	description = "flatten"
-//
-// They are a table of their own and not a type of [[keybindings.command]]: a
-// command entry's key acts in window mode, terminal mode or after the leader
-// and shows in the palette, while a copy-pipe key acts only in copy mode, on
-// the selection, and is usually a bare letter. Sharing the table would have
-// meant a special case in the key scopes, the palette, the doctor and the
-// bare-letter warning for every copy-pipe entry.
-
 // CopyPipeBinding is one [[keybindings.copy_pipe]] entry.
 type CopyPipeBinding struct {
 	// Key is the copy-mode key, written as elsewhere in the config.
@@ -53,7 +36,6 @@ func CopyCommandLabel(command string) string {
 	return command
 }
 
-// copyPipeProblem says what is wrong with an entry, or "".
 func copyPipeProblem(c CopyPipeBinding, normalizer *KeyNormalizer) string {
 	if strings.TrimSpace(c.Key) == "" {
 		return "The entry has no key. Add a key, for example key = \"p\"."
@@ -98,7 +80,6 @@ func (k *KeybindingsConfig) CopyPipeFor(key string) (CopyPipeBinding, bool) {
 	return CopyPipeBinding{}, false
 }
 
-// validateCopyPipes warns about each entry tuios leaves out.
 func validateCopyPipes(cfg *UserConfig, result *ValidationResult) {
 	normalizer := NewKeyNormalizer()
 	seen := map[string]bool{}
@@ -126,9 +107,6 @@ func validateCopyPipes(cfg *UserConfig, result *ValidationResult) {
 	}
 }
 
-// copyModeOwnKey reports whether key is one that copy mode needs to leave,
-// select or search: q, esc, ctrl+c, v, V, / and ?, and the digits of a count.
-// y is not in the list: an entry on y replaces the plain yank on purpose.
 func copyModeOwnKey(key string) bool {
 	switch key {
 	case "q", "esc", "ctrl+c", "v", "V", "/", "?":

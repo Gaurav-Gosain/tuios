@@ -32,8 +32,6 @@ func (l LauncherConfig) GUIPrefix() []string {
 	return splitWords(l.GUICommand)
 }
 
-// splitWords splits s on spaces, keeping quoted runs together. It does no
-// expansion: the result is run directly, not by a shell.
 func splitWords(s string) []string {
 	var (
 		out   []string

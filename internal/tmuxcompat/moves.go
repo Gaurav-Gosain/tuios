@@ -8,22 +8,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// Commands that move the focus or a pane: the directions of select-pane,
-// last-pane, next-window and previous-window, break-pane, join-pane and
-// move-pane, and rename-session. Each maps onto a verb the CLI already has
-// (focus-window, select-workspace, move-window, rename-session), so the
-// daemon holds it to the caller's pane grants as it holds the CLI.
-
-// neighbour is the pane next to p in direction dir (L, R, U or D), found as
-// tmux's window_pane_find_left and the others find it: a pane whose far edge
-// meets p's near edge and that overlaps p on the other axis. Past the edge of
-// the window it wraps to the other side. Of several, the one focused most
-// recently wins. It returns nil when no pane is there.
 func neighbour(p *pane, dir byte) *pane {
 	on := p.sess.panesOn(p.Workspace)
 	minX, minY, maxX, maxY := bounds(on)
-	// near is p's edge on the side it moves to, and far(q) the edge of q
-	// that must meet it. over says whether q overlaps p on the other axis.
 	var near, wrap int
 	var far func(q *pane) int
 	var over func(q *pane) bool
@@ -53,7 +40,6 @@ func neighbour(p *pane, dir byte) *pane {
 	}
 	var found []*pane
 	for _, q := range on {
-		// Panes meet edge to edge, or share the border cell between them.
 		if q != p && abs(far(q)-near) <= 1 && over(q) {
 			found = append(found, q)
 		}
@@ -71,11 +57,6 @@ func neighbour(p *pane, dir byte) *pane {
 	return found[0]
 }
 
-// selectDirection focuses the pane next to target, as select-pane -L, -R, -U
-// and -D do. The neighbour is worked out here from the panes' positions, so
-// it is the target's neighbour, not the focused pane's, and a session with no
-// client attached answers too. With no pane there, nothing changes, as in
-// tmux.
 func (s *Shim) selectDirection(target *pane, dir byte) error {
 	next := neighbour(target, dir)
 	if next == nil {
@@ -85,8 +66,6 @@ func (s *Shim) selectDirection(target *pane, dir byte) error {
 	return err
 }
 
-// lastPane focuses the pane that was active in the window before the
-// current one, read from the workspace's focus history.
 func (s *Shim) lastPane(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -118,8 +97,6 @@ func (s *Shim) lastPane(name string, args []string) (string, []string, error) {
 	return OutcomeOK, nil, nil
 }
 
-// stepWindow shows the next (step 1) or previous (step -1) workspace that
-// holds panes, wrapping around as tmux does.
 func (s *Shim) stepWindow(name string, args []string, step int) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -179,8 +156,6 @@ func (s *Shim) previousWindow(name string, args []string) (string, []string, err
 	return s.stepWindow(name, args, -1)
 }
 
-// breakPane moves a pane to a window of its own: the lowest empty workspace,
-// or the empty one -t names.
 func (s *Shim) breakPane(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -197,7 +172,6 @@ func (s *Shim) breakPane(name string, args []string) (string, []string, error) {
 	}
 	sv := src.sess
 	if len(sv.panesOn(src.Workspace)) == 1 {
-		// tmux refuses to break the only pane of a window.
 		return OutcomeError, nil, errors.New("can't break with only one pane")
 	}
 	ws := 0
@@ -238,10 +212,6 @@ func (s *Shim) breakPane(name string, args []string) (string, []string, error) {
 	return outcomeFor(detail), detail, nil
 }
 
-// joinPane moves the -s pane into the window of the -t pane. Where it lands
-// in that window is the tuios layout's answer, as for split-window: -b, -f,
-// -h, -v and -l are accepted and do not change it. move-pane is the same
-// command.
 func (s *Shim) joinPane(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -255,8 +225,6 @@ func (s *Shim) joinPane(name string, args []string) (string, []string, error) {
 	srcRef, _ := p.Value('s')
 	dstRef, _ := p.Value('t')
 	var src, dst *pane
-	// tmux's defaults: the source is the marked pane, which tuios does
-	// not have, and the target is the current pane.
 	if srcRef == "" {
 		return OutcomeError, nil, errors.New("no source pane: give one with -s")
 	}
@@ -270,8 +238,6 @@ func (s *Shim) joinPane(name string, args []string) (string, []string, error) {
 		return OutcomeError, nil, errors.New("source and target panes must be different")
 	}
 	if src.sess != dst.sess {
-		// Another tmux session is another tuios session: the pane moves
-		// there with its process running, onto the target pane's workspace.
 		if _, err := s.Caller.Call("move-window", map[string]any{"session": src.sess.name, "window": src.ID, "to_session": dst.sess.name, "workspace": dst.Workspace, "follow": false}); err != nil {
 			return OutcomeError, nil, err
 		}
@@ -283,8 +249,6 @@ func (s *Shim) joinPane(name string, args []string) (string, []string, error) {
 		return OutcomeOK, nil, nil
 	}
 	if src.Workspace == dst.Workspace {
-		// Already in that window: tmux would move it beside the target,
-		// which is the layout's choice in tuios.
 		return OutcomeOK, nil, nil
 	}
 	if _, err := s.Caller.Call("move-window", map[string]any{"session": src.sess.name, "window": src.ID, "workspace": dst.Workspace, "follow": false}); err != nil {
@@ -298,9 +262,6 @@ func (s *Shim) joinPane(name string, args []string) (string, []string, error) {
 	return OutcomeOK, nil, nil
 }
 
-// swapPane is refused: tuios has no verb that exchanges two panes' places,
-// and one that swapped their workspaces only would put the panes where tmux
-// would not.
 func (s *Shim) swapPane(name string, args []string) (string, []string, error) {
 	if _, err := parseFlags(name, specs[name], args); err != nil {
 		return OutcomeUnsupported, nil, err
@@ -308,7 +269,6 @@ func (s *Shim) swapPane(name string, args []string) (string, []string, error) {
 	return OutcomeUnsupported, nil, errors.New("swap-pane: not supported, tuios places panes itself")
 }
 
-// renameSession renames the target session (rename-session verb).
 func (s *Shim) renameSession(name string, args []string) (string, []string, error) {
 	p, err := parseFlags(name, specs[name], args)
 	if err != nil {
@@ -335,8 +295,6 @@ func (s *Shim) renameSession(name string, args []string) (string, []string, erro
 		return OutcomeError, nil, err
 	}
 	if !s.AllSessions && sv.name == s.Session {
-		// The rest of this call names the session by its new name. The
-		// old name still reaches it, but a later list would show the new.
 		s.Session = newName
 	}
 	return OutcomeOK, nil, nil

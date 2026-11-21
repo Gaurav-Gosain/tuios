@@ -22,11 +22,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The plan and apply steps of an install on one machine: what tuios hosts
-// sync does for each host, and what tuios hosts setup does for the machine
-// it sets up. One path installs, restarts, starts and installs the service,
-// so the two commands cannot drift.
-
 // PlanOptions say what a plan may do besides the install.
 type PlanOptions struct {
 	Restart, Start, Service, DryRun bool
@@ -168,8 +163,6 @@ func Plan(t *Target, src *Source, opts PlanOptions) {
 		return
 	}
 	t.NewVersion = src.Version
-	// A binary that cannot run here tells its version only where it is
-	// installed: the same bytes on the host report it.
 	if t.NewVersion == "" && src.Kind == KindBinary && t.SHA != "" && t.SHA == src.BinaryFor(src.Platform).SHA {
 		t.NewVersion = t.Res.Before
 	}
@@ -178,19 +171,15 @@ func Plan(t *Target, src *Source, opts PlanOptions) {
 		(t.SHA != "" && src.Kind == KindBinary && t.SHA == src.BinaryFor(src.Platform).SHA))
 	t.Install = !current
 
-	// Where it goes.
 	t.TargetArg, t.Res.InstallPath = installTarget(t)
 	t.OldArg = "-"
 	if t.Res.Path != "" && federation.SafeRemoteArg(t.Res.Path) {
 		t.OldArg = t.Res.Path
 	}
 
-	// The daemon.
 	d := &t.Res.Daemon
 	mismatched := d.State == DaemonRunning && !SameVersion(d.Version, t.NewVersion)
 	if d.State == DaemonRunning && t.NewVersion == "" {
-		// Nothing to compare against: the version of the new binary is not
-		// known until it is installed.
 		mismatched = false
 		if opts.Restart {
 			t.Note("The version of the binary is not known here, so the daemon is not restarted. Install it first, then run the restart.")
@@ -202,8 +191,6 @@ func Plan(t *Target, src *Source, opts PlanOptions) {
 		if opts.Restart {
 			switch {
 			case t.Local && os.Getenv("TUIOS_PANE_ID") != "":
-				// A live upgrade keeps this command's pane and this command;
-				// a restart would end both halfway.
 				t.Restart, t.LiveOnly = true, true
 			case d.Unread && d.SessionCount != 0:
 				t.Note("The sessions of the daemon could not be read, so it is not restarted. Restart it by hand on the host.")
@@ -234,8 +221,6 @@ func SameVersion(a, b string) bool {
 	return strings.TrimPrefix(a, "v") == strings.TrimPrefix(b, "v")
 }
 
-// installTarget is where a host's new binary goes, as the install script
-// reads it and as a person reads it.
 func installTarget(t *Target) (arg, display string) {
 	home := strings.TrimSuffix(t.Home, "/")
 	fallback := func(why string) (string, string) {
@@ -244,7 +229,6 @@ func installTarget(t *Target) (arg, display string) {
 		}
 		return "-", home + "/.local/bin/tuios"
 	}
-	// A configured command is what the link runs, so a binary goes there.
 	if cmdArg, ok := CommandArg(t.Host.Command); ok && cmdArg != "-" {
 		p := t.Configured
 		if t.Res.Path != "" && !t.DirWritable {
@@ -268,8 +252,6 @@ func installTarget(t *Target) (arg, display string) {
 	return p, p
 }
 
-// restartCommand is the command that restarts one daemon later, with the
-// same source as this run.
 func restartCommand(t *Target, src *Source) string {
 	parts := []string{"tuios", "hosts", "sync", t.Name, "--restart"}
 	switch src.Kind {
@@ -356,9 +338,6 @@ func Apply(t *Target, src *Source) {
 	startDaemon(t)
 }
 
-// installService installs the daemon service on a host that has none,
-// with the binary the host has now. When the service starts the daemon, the
-// start that --start asked for is done.
 func installService(t *Target) {
 	if !t.Service || t.Failed {
 		return
@@ -398,8 +377,6 @@ func installService(t *Target) {
 	}
 }
 
-// startDaemon starts the daemon on a host where it does not run, with the
-// binary the host has now: the one just installed, or else the one it had.
 func startDaemon(t *Target) {
 	if !t.Start || t.Failed {
 		return
@@ -428,7 +405,6 @@ func startDaemon(t *Target) {
 	t.Res.RestartCommand = ""
 }
 
-// restartMode is the daemon mode of the install and restart scripts.
 func (t *Target) restartMode() string {
 	switch {
 	case !t.Restart:
@@ -439,8 +415,6 @@ func (t *Target) restartMode() string {
 	return "1"
 }
 
-// restartResult reads what the install or restart script said about the
-// daemon.
 func restartResult(t *Target, f Facts) {
 	if lines := f["upgrade"]; len(lines) > 0 {
 		upgradeResult(t, lines[len(lines)-1])
@@ -460,7 +434,6 @@ func restartResult(t *Target, f Facts) {
 	}
 }
 
-// The actions of `tuios daemon upgrade --json`, as the host's tuios writes them.
 const (
 	upgradeActionUpgraded  = "upgraded"
 	upgradeActionRestarted = "restarted"
@@ -469,18 +442,15 @@ const (
 	upgradeActionRefused   = "refused"
 )
 
-// upgradeResult reads the JSON outcome of `tuios daemon upgrade` on the host.
 func upgradeResult(t *Target, line string) {
 	var o struct {
-		Action string `json:"action"`
-		PID    int    `json:"pid"`
-		To     string `json:"to"`
-		Panes  int    `json:"panes"`
-		Reason string `json:"reason"`
-		Error  string `json:"error"`
-		// Unconfirmed is a refusal of the caller: the daemon asked the
-		// person in its dialog, and no Yes came.
-		Unconfirmed bool `json:"unconfirmed"`
+		Action      string `json:"action"`
+		PID         int    `json:"pid"`
+		To          string `json:"to"`
+		Panes       int    `json:"panes"`
+		Reason      string `json:"reason"`
+		Error       string `json:"error"`
+		Unconfirmed bool   `json:"unconfirmed"`
 	}
 	if err := jsonx.Unmarshal([]byte(line), &o); err != nil {
 		t.Fail(errfmt.Errorf("the daemon upgrade answered with something that is not its answer: %s", plainLine(line)))
@@ -523,7 +493,6 @@ func upgradeResult(t *Target, line string) {
 	}
 }
 
-// installError is one plain sentence for a failed install.
 func installError(f Facts, stderr string, err error) error {
 	switch f.Get("fail") {
 	case "mkdir", "mktemp":
@@ -653,7 +622,6 @@ func ProbeBinary(ctx context.Context, t *Target) error {
 	return nil
 }
 
-// countingReader tells tick the bytes read through it.
 type countingReader struct {
 	r           io.Reader
 	done, total int64

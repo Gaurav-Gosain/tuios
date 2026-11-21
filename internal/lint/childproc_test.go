@@ -20,17 +20,10 @@ const (
 	allowExec  = "//tuios:allow-exec"
 )
 
-// daemonRoot is the package the daemon runs from. Every package of this
-// module it imports, on any of daemonOSes, is daemon code.
 const daemonRoot = "internal/session"
 
-// daemonOSes are the platforms whose build constraints decide which files and
-// imports count. Windows is the one this lint is for; the others keep a file
-// that only they build from slipping past it.
 var daemonOSes = []string{"windows", "linux", "darwin"}
 
-// notDaemon are packages the walk reaches that are exempt: childproc is the
-// one place a process is started with exec directly.
 var notDaemon = map[string]bool{"internal/childproc": true}
 
 // TestDaemonChildrenGoThroughChildproc is the child process lint. The daemon
@@ -75,10 +68,6 @@ func TestDaemonChildrenGoThroughChildproc(t *testing.T) {
 	}
 }
 
-// daemonPackages walks the imports of daemonRoot inside this module and
-// returns each package's directory relative to root. go list would do the
-// same, but the test binary runs with HOME moved to a temporary folder, where
-// the go command has no module cache.
 func daemonPackages(t *testing.T, root string) []string {
 	t.Helper()
 	seen := map[string]bool{daemonRoot: true}
@@ -111,7 +100,6 @@ func daemonPackages(t *testing.T, root string) []string {
 	return out
 }
 
-// daemonFiles are the non-test files of dir that any of daemonOSes builds.
 func daemonFiles(t *testing.T, root, dir string) []string {
 	t.Helper()
 	var names []string
@@ -124,8 +112,6 @@ func daemonFiles(t *testing.T, root, dir string) []string {
 	return slices.Compact(names)
 }
 
-// importDir reads the package in dir as goos builds it, or returns nil when
-// goos builds no file of it.
 func importDir(t *testing.T, root, dir, goos string) *build.Package {
 	t.Helper()
 	ctx := build.Default
@@ -204,7 +190,6 @@ func f() { _ = Command("git") }
 	}
 }
 
-// bareExecs returns file:line: form for every rejected process start in src.
 func bareExecs(t *testing.T, name string, src []byte) []string {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -229,9 +214,6 @@ func bareExecs(t *testing.T, name string, src []byte) []string {
 		}
 	}
 
-	// The name each package is imported under in this file. A file with no
-	// import of it has no name for it, so an identifier that happens to be
-	// called exec is not mistaken for the package.
 	names := map[string]string{}
 	for _, imp := range f.Imports {
 		p, _ := strconv.Unquote(imp.Path.Value)

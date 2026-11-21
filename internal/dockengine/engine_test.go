@@ -8,11 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The dock engine's guards. The first one is the invariant the whole component
-// design was shaped around and is the reason the engine parks on a channel
-// receive instead of holding a ticker.
-
-// idleDock is a dock made only of once, push and event components.
 func idleDock() []*Component {
 	return []*Component{
 		{Name: "custom/static", Command: "echo static", Refresh: config.DockRefresh{Kind: config.DockRefreshOnce}},
@@ -24,8 +19,6 @@ func idleDock() []*Component {
 	}
 }
 
-// drainStartup waits for the n updates a started engine owes: one for each
-// component that runs at startup.
 func drainStartup(t *testing.T, e *Engine, n int) {
 	t.Helper()
 	deadline := time.After(10 * time.Second)
@@ -48,7 +41,6 @@ func TestDockEngineArmsNoTimerWhenNothingPolls(t *testing.T) {
 	t.Cleanup(engine.Stop)
 	engine.Start()
 
-	// The once and event components each run at startup, one wake apiece.
 	drainStartup(t, engine, 2)
 
 	if c, due := engine.earliest(); c != nil {
@@ -129,9 +121,6 @@ func TestDockComponentFailureHidesTheCellAndSaysSoOnce(t *testing.T) {
 		t.Fatal("a failing component reported itself twice; one report per failure streak")
 	}
 
-	// Enough consecutive failures and it stops being re-run on its own
-	// schedule. A script that cannot run is not made more likely to run by
-	// being run more often.
 	for range config.DockCustomFailureLimit {
 		engine.ApplyUpdate(Update{Name: "custom/flaky", Exit: 1, Err: "exit status 1"})
 	}
@@ -140,8 +129,6 @@ func TestDockComponentFailureHidesTheCellAndSaysSoOnce(t *testing.T) {
 		t.Fatal("a component that failed every time is still being polled")
 	}
 
-	// An explicit refresh clears the give-up, so a fixed script recovers
-	// without restarting the session.
 	if err := engine.Refresh("custom/flaky"); err != nil {
 		t.Fatalf("refresh: %v", err)
 	}
@@ -194,7 +181,6 @@ func TestDockEventComponentWakesOnItsEventOnly(t *testing.T) {
 	case <-time.After(400 * time.Millisecond):
 	}
 
-	// A burst is one refresh, not one per event.
 	for range 5 {
 		engine.NotifyEvent("agent-state")
 	}

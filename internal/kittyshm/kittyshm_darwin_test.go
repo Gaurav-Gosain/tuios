@@ -13,7 +13,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// makeObject makes a shared memory object of size bytes that starts with head.
 func makeObject(t *testing.T, name string, size int, head string) {
 	t.Helper()
 	p, err := syscall.BytePtrFromString(name)
@@ -90,7 +89,6 @@ func TestProbeSaysNoWhenTheCallsAreGone(t *testing.T) {
 	if probe(name) {
 		t.Fatal("the probe says yes with no shm_unlink")
 	}
-	// That run could not delete its object.
 	sysShmUnlink = unlink
 	_ = shmUnlink(name)
 }

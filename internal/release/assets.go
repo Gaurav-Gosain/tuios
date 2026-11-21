@@ -18,10 +18,6 @@ import (
 // release.
 const ChecksumFile = "checksums.txt"
 
-// maxBinarySize bounds what will be read out of an archive. A tuios binary is
-// around forty megabytes with the ghostty backend; anything an order of
-// magnitude past that is not the file this is looking for, and decompressing it
-// into memory to find that out is how a bad download becomes an OOM.
 const maxBinarySize = 512 << 20
 
 // ErrNotInArchive is returned when the archive did not contain the binary it
@@ -45,7 +41,6 @@ func AssetName(binary, version, goos, goarch string) (string, error) {
 	return fmt.Sprintf("%s_%s_%s_%s.tar.gz", binary, strings.TrimPrefix(version, "v"), osName(goos), arch), nil
 }
 
-// osName is goreleaser's `title .Os`: the Go name with its first letter raised.
 func osName(goos string) string {
 	if goos == "" {
 		return ""
@@ -53,12 +48,6 @@ func osName(goos string) string {
 	return strings.ToUpper(goos[:1]) + goos[1:]
 }
 
-// archName is goreleaser's architecture rewrite.
-//
-// arm is refused rather than guessed. The archive name carries the ARM version
-// (armv6, armv7) and a running binary cannot read the GOARM it was built with,
-// so any answer here would be a coin flip between two real asset names. Saying
-// so and pointing at the release page is the honest outcome.
 func archName(goarch string) (string, error) {
 	switch goarch {
 	case "amd64":
@@ -95,7 +84,6 @@ func ParseChecksums(r io.Reader) (Checksums, error) {
 		if len(fields) != 2 || len(fields[0]) != sha256.Size*2 {
 			continue
 		}
-		// A name may be written "*name" for a binary-mode digest.
 		out[strings.TrimPrefix(fields[1], "*")] = strings.ToLower(fields[0])
 	}
 	if len(out) == 0 {

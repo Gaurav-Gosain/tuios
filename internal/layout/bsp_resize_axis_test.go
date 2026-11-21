@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// edge identifies which side of a pane a resize drags.
 type edge int
 
 const (
@@ -30,7 +29,6 @@ func (e edge) String() string {
 	}
 }
 
-// leaf builds a leaf and registers it with the tree.
 func (t *BSPTree) leaf(id int) *TileNode {
 	n := NewLeafNode(id)
 	t.WindowToNode[id] = n
@@ -43,15 +41,12 @@ func treeOf(build func(t *BSPTree) *TileNode) *BSPTree {
 	return t
 }
 
-// twoPanes: 1 | 2
 func twoPanes() *BSPTree {
 	return treeOf(func(t *BSPTree) *TileNode {
 		return NewInternalNode(SplitVertical, 0.5, t.leaf(1), t.leaf(2))
 	})
 }
 
-// tallLeft is the maintainer's layout: one full-height column on the left, the
-// right column split into top and bottom.
 func tallLeft() *BSPTree {
 	return treeOf(func(t *BSPTree) *TileNode {
 		right := NewInternalNode(SplitHorizontal, 0.5, t.leaf(2), t.leaf(3))
@@ -59,7 +54,6 @@ func tallLeft() *BSPTree {
 	})
 }
 
-// tallRight is the mirror image: the stacked column is on the left.
 func tallRight() *BSPTree {
 	return treeOf(func(t *BSPTree) *TileNode {
 		left := NewInternalNode(SplitHorizontal, 0.5, t.leaf(1), t.leaf(2))
@@ -67,7 +61,6 @@ func tallRight() *BSPTree {
 	})
 }
 
-// grid is a 2x2 arrangement built from two horizontal splits under a vertical one.
 func grid() *BSPTree {
 	return treeOf(func(t *BSPTree) *TileNode {
 		left := NewInternalNode(SplitHorizontal, 0.5, t.leaf(1), t.leaf(2))
@@ -76,8 +69,6 @@ func grid() *BSPTree {
 	})
 }
 
-// deepNest puts a pane three splits down so a resize has to survive several
-// levels of bounds narrowing.
 func deepNest() *BSPTree {
 	return treeOf(func(t *BSPTree) *TileNode {
 		inner := NewInternalNode(SplitVertical, 0.5, t.leaf(3), t.leaf(4))
@@ -87,8 +78,6 @@ func deepNest() *BSPTree {
 	})
 }
 
-// sharedBorders stands for the shared_borders setting in these tests: the
-// gap between panes the drags expect.
 var sharedBorders bool
 
 func sharedGap() int {
@@ -98,10 +87,6 @@ func sharedGap() int {
 	return 0
 }
 
-// dragEdge moves one edge of the target pane and drags every pane that shares
-// that divider along with it, the way adjustTilingNeighborsGeneric does. It
-// returns false when the move would push any pane below the minimum size, so
-// callers can skip a case rather than assert against clamped geometry.
 func dragEdge(geo map[int]Rect, target int, e edge, delta int) (map[int]Rect, bool) {
 	gap := sharedGap()
 	r, ok := geo[target]
@@ -159,8 +144,6 @@ func dragEdge(geo map[int]Rect, target int, e edge, delta int) (map[int]Rect, bo
 	return out, true
 }
 
-// assertAxisIsolated checks the invariant: a horizontal resize may only change
-// X and W, a vertical resize may only change Y and H.
 func assertAxisIsolated(t *testing.T, label string, e edge, before, after map[int]Rect) {
 	t.Helper()
 	for id, b := range before {
@@ -180,7 +163,6 @@ func assertAxisIsolated(t *testing.T, label string, e edge, before, after map[in
 	}
 }
 
-// withSharedBorders runs fn with sharedBorders set, restoring it after.
 func withSharedBorders(t *testing.T, shared bool, fn func()) {
 	t.Helper()
 	prev := sharedBorders

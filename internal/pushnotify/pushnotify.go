@@ -21,7 +21,6 @@ import (
 // SendTimeout bounds one request to one provider.
 const SendTimeout = 10 * time.Second
 
-// maxRedirects bounds the redirects one request follows.
 const maxRedirects = 3
 
 // Item is what a notification is about: the facts of an Inbox item that the
@@ -51,7 +50,6 @@ type Message struct {
 	Test bool
 }
 
-// waits reports whether an item of this kind blocks until the person acts.
 func waits(kind string) bool {
 	switch kind {
 	case "approval", "plan", "question", "ask":
@@ -60,7 +58,6 @@ func waits(kind string) bool {
 	return false
 }
 
-// kindTitle is the start of the title for each kind.
 func kindTitle(kind string) string {
 	switch kind {
 	case "approval":
@@ -79,8 +76,6 @@ func kindTitle(kind string) string {
 	return "Inbox item"
 }
 
-// titleCap and bodyCap bound what a notification says. The Inbox summary is
-// already cut to 160 bytes and masked for secrets.
 const (
 	titleCap = 120
 	bodyCap  = 240

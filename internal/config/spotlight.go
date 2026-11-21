@@ -96,7 +96,6 @@ var (
 	SpotlightEdges       = []string{SpotlightEdgeHard, SpotlightEdgeSoft}
 )
 
-// defaultSpotlightConfig returns the section DefaultConfig carries.
 func defaultSpotlightConfig() SpotlightConfig {
 	return SpotlightConfig{
 		Follow: SpotlightFollowMouse,
@@ -106,9 +105,6 @@ func defaultSpotlightConfig() SpotlightConfig {
 	}
 }
 
-// fillMissingSpotlight fills empty strings and out-of-range numbers with the
-// defaults. The pointer field stays nil on purpose: IsEnabled reads nil as
-// "off", which is exactly what an absent key means.
 func fillMissingSpotlight(cfg, defaultCfg *UserConfig) {
 	s, d := &cfg.Spotlight, &defaultCfg.Spotlight
 	if s.Follow == "" {

@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-// peer is the agent's end of a connection in a test: it reads what the
-// client sends and writes what a scripted agent would.
 type peer struct {
 	t     *testing.T
 	msgs  chan map[string]any
@@ -19,7 +17,6 @@ type peer struct {
 	close func()
 }
 
-// newPeer returns the client's reader and writer and the agent's end.
 func newPeer(t *testing.T) (io.Reader, io.Writer, *peer) {
 	t.Helper()
 	fromAgentR, fromAgentW := io.Pipe()
@@ -45,14 +42,11 @@ func newPeer(t *testing.T) (io.Reader, io.Writer, *peer) {
 			p.raw <- line
 			p.msgs <- m
 		}
-		// The pipe closes when the test ends. next fails on its own timeout
-		// if the client stops writing for any other reason.
 		_ = sc.Err()
 	}()
 	return fromAgentR, toAgentW, p
 }
 
-// next is the next message the client sent.
 func (p *peer) next() map[string]any {
 	p.t.Helper()
 	select {
@@ -65,7 +59,6 @@ func (p *peer) next() map[string]any {
 	}
 }
 
-// nextRaw is the next message as it was written.
 func (p *peer) nextRaw() (string, map[string]any) {
 	p.t.Helper()
 	select {
@@ -77,7 +70,6 @@ func (p *peer) nextRaw() (string, map[string]any) {
 	}
 }
 
-// expect reads the next message and checks its method.
 func (p *peer) expect(method string) map[string]any {
 	p.t.Helper()
 	m := p.next()
@@ -87,7 +79,6 @@ func (p *peer) expect(method string) map[string]any {
 	return m
 }
 
-// quiet checks the client sends nothing for a moment.
 func (p *peer) quiet() {
 	p.t.Helper()
 	select {
@@ -98,7 +89,6 @@ func (p *peer) quiet() {
 	}
 }
 
-// send writes one message from the agent.
 func (p *peer) send(v any) {
 	p.t.Helper()
 	data, err := json.Marshal(v)
@@ -110,7 +100,6 @@ func (p *peer) send(v any) {
 	}
 }
 
-// line writes one raw line from the agent.
 func (p *peer) line(s string) {
 	p.t.Helper()
 	if _, err := io.WriteString(p.w, s+"\n"); err != nil {
@@ -118,13 +107,11 @@ func (p *peer) line(s string) {
 	}
 }
 
-// respond answers request m with result.
 func (p *peer) respond(m map[string]any, result any) {
 	p.t.Helper()
 	p.send(map[string]any{"jsonrpc": "2.0", "id": m["id"], "result": result})
 }
 
-// events collects what a client emits.
 type events struct {
 	ch chan Event
 }
@@ -133,7 +120,6 @@ func newEvents() *events { return &events{ch: make(chan Event, 256)} }
 
 func (e *events) emit(ev Event) { e.ch <- ev }
 
-// next is the next event.
 func (e *events) next(t *testing.T) Event {
 	t.Helper()
 	select {
@@ -145,7 +131,6 @@ func (e *events) next(t *testing.T) Event {
 	}
 }
 
-// permission waits for a permission event, skipping others.
 func (e *events) permission(t *testing.T) *Permission {
 	t.Helper()
 	for {

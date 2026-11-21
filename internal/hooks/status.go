@@ -8,20 +8,8 @@ import (
 	"time"
 )
 
-// This file answers "why does my hook not fire?".
-//
-// A hook whose output and error are discarded looks the same whether its
-// command was not found, exited non-zero, was never registered, or worked.
-// So hooks report the same three facts the dock's components do, under the
-// same field names: last_exit, last_run, last_error.
-
-// stderrTailLimit bounds how many bytes of a hook's stderr are kept. A hook is
-// a user command and may write without limit, so the capture is a tail with a
-// fixed ceiling rather than a buffer that grows to whatever it was handed.
 const stderrTailLimit = 1024
 
-// verbose gates the one line logged per firing. The failure warning is not
-// gated: a hook that fails is the thing the user is looking for.
 var verbose atomic.Bool
 
 // SetVerbose turns the per-firing log line on or off. The daemon and the client
@@ -55,7 +43,6 @@ type Status struct {
 	LastError string
 }
 
-// hookResult is what one command run reports back to the manager.
 type hookResult struct {
 	exitCode int
 	err      error
@@ -63,17 +50,11 @@ type hookResult struct {
 	duration time.Duration
 }
 
-// statusKey addresses one command in the table: its event and its position in
-// that event's list. Position rather than the command text, so a user who
-// registered the same command twice sees two rows rather than one shared one.
 type statusKey struct {
 	event Event
 	index int
 }
 
-// tailBuffer keeps only the last limit bytes written to it. It is bounded at
-// write time rather than at read time, so a hook that writes a gigabyte to
-// stderr costs the limit and not the gigabyte.
 type tailBuffer struct {
 	mu    sync.Mutex
 	buf   []byte
@@ -95,7 +76,6 @@ func (t *tailBuffer) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-// String returns the kept tail with surrounding whitespace removed.
 func (t *tailBuffer) String() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -125,8 +105,6 @@ func (m *Manager) Statuses() []Status {
 	return out
 }
 
-// record stores what one firing did and logs a failure. It is called from the
-// hook's own goroutine, never from a render or update loop.
 func (m *Manager) record(event Event, index int, command string, res hookResult) {
 	message := failureMessage(res)
 
@@ -154,10 +132,6 @@ func (m *Manager) record(event Event, index int, command string, res hookResult)
 	}
 }
 
-// failureMessage renders a run's failure, or empty when it succeeded. The
-// stderr tail is already bounded, and the whole message is bounded again so a
-// hook that writes one very long line without a newline cannot make a status
-// row unbounded either.
 func failureMessage(res hookResult) string {
 	if res.err == nil && res.exitCode == 0 {
 		return ""
@@ -176,9 +150,6 @@ func failureMessage(res hookResult) string {
 	return msg
 }
 
-// clearStatus drops every recorded run. The caller holds the write lock. It is
-// called wherever the table changes, so a row can never describe a command that
-// is no longer at that position.
 func (m *Manager) clearStatus() { m.status = nil }
 
 // Rows renders the table as the list-hooks verb serialises it. side is

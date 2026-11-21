@@ -2,17 +2,11 @@ package webshell
 
 import "strings"
 
-// sample is what a tuios subcommand that needs a real machine prints there,
-// shown in the demo so a lesson about it has something to look at. The text
-// follows the docs page it links to.
 type sample struct {
-	doc  string // the docs page, under tuios.dev/docs/
+	doc  string
 	text string
 }
 
-// samples maps a tuios subcommand to its sample. Aliases share an entry. A
-// key of two words is a subcommand of a group, such as "task add", and a
-// group with any such key has no sample of its own. See sampleFor.
 var samples map[string]sample
 
 func initSamples() {
@@ -104,17 +98,12 @@ func initSampleAliases() {
 	}
 }
 
-// groups are the subcommands whose samples are per subcommand of their own.
 var groups map[string]bool
 
 func initGroups() {
 	groups = map[string]bool{}
 }
 
-// sampleFor finds the sample for tuios args: the subcommand and the word
-// after it first, so tuios task add has its own, then the subcommand alone.
-// A group's other subcommands have none, so tuios task rm does not print
-// what tuios task add prints, and tuios hosts add does not print the table.
 func sampleFor(args []string) (sample, bool) {
 	sub, next := argOr(args, 1, ""), argOr(args, 2, "")
 	if next != "" {
@@ -129,15 +118,11 @@ func sampleFor(args []string) (sample, bool) {
 	return s, ok
 }
 
-// printSample shows the sample for tuios args, framed so it is plain that
-// it came from a real machine and not from this tab.
 func printSample(t *TTY, args []string) bool {
 	s, ok := sampleFor(args)
 	if !ok {
 		return false
 	}
-	// A table cut at the right edge still reads as a table. A wrapped one
-	// does not, so a line too wide for the pane is cut.
 	lines := strings.Split(s.text, "\n")
 	t.Lay(func(cols int) []string {
 		var out []string

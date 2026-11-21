@@ -4,8 +4,6 @@ import (
 	"testing"
 )
 
-// nopExecutor records nothing and does nothing; it exists so Execute's argument
-// checks can be exercised without an app.
 type nopExecutor struct{ Executor }
 
 func (nopExecutor) GetFocusedWindowID() string                      { return "w1" }

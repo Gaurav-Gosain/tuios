@@ -40,7 +40,7 @@ func TestPerfSSHPointerSweep(t *testing.T) {
 	go func() {
 		serveErr <- StartSSHServer(ctx, &SSHServerConfig{
 			Host: "127.0.0.1", Port: port, KeyPath: hostKey, Ephemeral: true, Version: "test",
-			NoAuth: true, // this test is about rendering, not who may connect
+			NoAuth: true,
 		})
 	}()
 	t.Cleanup(func() {
@@ -98,7 +98,6 @@ func TestPerfSSHPointerSweep(t *testing.T) {
 			}
 		}
 	}()
-	// Let the first frame and the capability probe settle.
 	time.Sleep(1500 * time.Millisecond)
 
 	const events = 3000
@@ -106,12 +105,9 @@ func TestPerfSSHPointerSweep(t *testing.T) {
 	bytesBefore := written.Load()
 	start := time.Now()
 	for i := range events {
-		// SGR any-motion report, button 35 = motion with no button held, on
-		// the dock row. One report per cell, the way a terminal sends them.
 		_, _ = io.WriteString(stdin, fmt.Sprintf("\x1b[<35;%d;40M", 1+i%120))
 		time.Sleep(200 * time.Microsecond)
 	}
-	// Drain: whatever the sweep queued has to be handled before the clock stops.
 	time.Sleep(1500 * time.Millisecond)
 	elapsed := time.Since(start)
 	cpu := cpuTime() - before
@@ -121,7 +117,6 @@ func TestPerfSSHPointerSweep(t *testing.T) {
 		events, elapsed.Round(time.Millisecond), cpu.Round(time.Millisecond), (cpu / events).Round(time.Microsecond), bytes)
 }
 
-// cpuTime is this process's user plus system time.
 func cpuTime() time.Duration {
 	var ru syscall.Rusage
 	_ = syscall.Getrusage(syscall.RUSAGE_SELF, &ru)

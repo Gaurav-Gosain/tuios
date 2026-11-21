@@ -16,9 +16,6 @@ const WriteAccess = windows.FILE_WRITE_DATA | windows.FILE_APPEND_DATA |
 	windows.WRITE_DAC | windows.WRITE_OWNER | windows.DELETE |
 	windows.GENERIC_WRITE | windows.GENERIC_ALL
 
-// ACE types beyond the two x/sys names. Only ACCESS_ALLOWED_ACE and its
-// callback form have the layout ACCESS_ALLOWED_ACE describes: a mask, then a
-// SID. The deny types only take access away.
 const (
 	accessAllowedCallbackACEType = 0x9
 	accessDeniedObjectACEType    = 0x6
@@ -102,9 +99,6 @@ func GrantsOther(sd *windows.SECURITY_DESCRIPTOR, mask uint32, trusted []*window
 			accessDeniedCallbackACEType, accessDeniedCallbackObjType:
 			continue
 		default:
-			// An allow entry of another layout (object, compound) or a type
-			// this check does not know. A file does not normally carry one.
-			// Refuse rather than guess what it grants.
 			return fmt.Sprintf("An access entry of type %#x", ace.Header.AceType), nil
 		}
 		if uint32(ace.Mask)&mask == 0 {

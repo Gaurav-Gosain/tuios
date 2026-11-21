@@ -34,10 +34,6 @@ func Unseen(state string, doneSeen bool, stateAt, viewedAt int64) bool {
 	return stateAt > viewedAt
 }
 
-// runClass is the class of states that notify once per run: the rest states
-// share one, since a turn that ends idle and then reports done is one finish.
-// It is "" for a state that is not keyed, such as needs_input, where each
-// question is news.
 func runClass(state string) string {
 	switch state {
 	case "done", "idle", "unknown":
@@ -48,8 +44,6 @@ func runClass(state string) string {
 	return ""
 }
 
-// ledgerEntry is what one agent has notified: the run each class last
-// notified for, or was baselined at.
 type ledgerEntry struct {
 	rest, errored       uint64
 	restSet, erroredSet bool

@@ -17,7 +17,6 @@ import (
 // GetThemesDir returns the path to the custom themes directory (~/.config/tuios/themes/).
 // Creates the directory if it doesn't exist.
 func GetThemesDir() (string, error) {
-	// Use xdg.ConfigFile to get the path and ensure parent dirs exist
 	keepFile, err := xdg.ConfigFile("tuios/themes/.keep")
 	if err != nil {
 		return "", errfmt.Errorf("failed to get themes directory: %w", err)
@@ -42,26 +41,14 @@ func LoadCustomThemes(themesDir string) ([]string, error) {
 	return loaded, err
 }
 
-// readCustomThemes is LoadCustomThemes with the bad files handed back instead
-// of logged.
-//
-// A log line is the right place for this at startup and the wrong place for a
-// caller that has to answer for the file: an agent writing a palette and
-// applying it needs to be told which file is malformed and how, and it cannot
-// read the daemon's log. Both callers share the scan so the two answers cannot
-// drift.
 func readCustomThemes(themesDir string) (loaded, problems []string, err error) {
 	entries, err := os.ReadDir(themesDir)
 	if err != nil {
 		return nil, nil, errfmt.Errorf("failed to read themes directory: %w", err)
 	}
 
-	// Every file is read before any is registered, so a file's base can be
-	// another file whatever order the directory lists them in.
 	files := make(map[string]*themeFile)
 	names := make(map[string]string)
-	// The themes of plugins first, so a file of the person's own with the
-	// same id wins.
 	if ExtraFiles != nil {
 		for _, path := range ExtraFiles() {
 			data, err := os.ReadFile(path) //nolint:gosec // a theme file of a plugin the person installed
@@ -138,10 +125,6 @@ func ReloadCustomThemes() (loaded, problems []string) {
 // that is about to fail anyway.
 func Exists(id string) bool {
 	if id == "" || id == NoneID || id == OmarchyID {
-		// Empty and none are the no-theme state, not names that have to
-		// resolve. omarchy is valid on a machine without Omarchy too: a
-		// config file goes from machine to machine, and Initialize says
-		// what is missing.
 		return true
 	}
 	EnsureRegistry()
@@ -179,7 +162,6 @@ func LoadCustomThemeFile(path string) (*tint.Tint, error) {
 	return r.tint, nil
 }
 
-// fillDefaults fills nil color pointers with xterm defaults.
 func fillDefaults(t *tint.Tint) {
 	if t.Fg == nil {
 		t.Fg = tint.FromHex("#e5e5e5")
@@ -243,7 +225,6 @@ func fillDefaults(t *tint.Tint) {
 	}
 }
 
-// copyColor creates a copy of a tint.Color.
 func copyColor(c *tint.Color) *tint.Color {
 	if c == nil {
 		return nil

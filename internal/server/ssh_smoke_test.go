@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// freePort asks the OS for an unused localhost TCP port and returns it. There is
-// a small window between closing the listener and the server rebinding, which is
-// acceptable for a test.
 func freePort(t *testing.T) string {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")

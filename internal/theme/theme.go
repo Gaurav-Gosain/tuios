@@ -15,34 +15,15 @@ import (
 
 var enabled bool
 
-// Border color overrides from user config. When non-nil they take precedence
-// over the theme-derived border colors. The focused border has one override per
-// mode and one for both: a mode's own wins, then the shared one, then the
-// theme.
-//
-// They are process-global and are written whenever a session applies its
-// appearance config, which is once per client. Under the ssh server that is
-// once per connection, on that connection's own goroutine, so two people
-// connecting at the same moment wrote these at the same moment. The race
-// detector caught it in CI; what a user would have seen is one session
-// briefly wearing another's border colour.
-//
-// The lock makes the writes and reads safe. It does not make them right: the
-// values are still shared, so two ssh sessions with different border colours
-// still overwrite each other rather than each keeping their own. Making them
-// per-session is a larger change than a data race deserves, and the lock is
-// the part that has to be true either way.
 var (
 	borderMu        sync.RWMutex
 	borderOverrides [borderKinds]ColorSpec
 )
 
-// borderKind names one border override.
 type borderKind int
 
 const (
 	borderUnfocused borderKind = iota
-	// borderFocused is appearance.border_focused_color, for both modes.
 	borderFocused
 	borderFocusedWindow
 	borderFocusedTerminal
@@ -74,9 +55,6 @@ func SetBorderOverrides(o BorderOverrides) {
 	}
 }
 
-// borderOverride reads one override under the lock and resolves it, nil when
-// it is unset. A role or a slot resolves on the theme in force, so an override
-// written as "accent" follows a theme change.
 func borderOverride(kind borderKind) color.Color {
 	borderMu.RLock()
 	c := borderOverrides[kind]
@@ -84,8 +62,6 @@ func borderOverride(kind borderKind) color.Color {
 	return c.Resolve()
 }
 
-// focusedOverride is the configured focused border for one mode: the mode's
-// own key, then the key for both modes, nil when neither is set.
 func focusedOverride(mode borderKind) color.Color {
 	if c := borderOverride(mode); c != nil {
 		return c
@@ -100,8 +76,6 @@ func focusedOverride(mode borderKind) color.Color {
 // disables theming elsewhere. "omarchy" follows Omarchy too, and returns
 // ErrOmarchyNotFound, with theming disabled, on a machine without it.
 func Initialize(themeName string) error {
-	// Generation moves only when the theme in force changes, so a config
-	// reload that names the same theme keeps every memo keyed on it.
 	wasEnabled, was := enabled, activeTint()
 	defer func() {
 		if enabled != wasEnabled || activeTint() != was {
@@ -124,17 +98,8 @@ func Initialize(themeName string) error {
 
 	enabled = true
 
-	// Build the tint registry (built-ins plus custom themes) exactly once for
-	// the process, via the same sync.Once EnsureRegistry uses. Calling
-	// tint.NewDefaultRegistry() directly here would let a later EnsureRegistry()
-	// (fired when the settings page or theme picker first opens) rebuild the
-	// global registry and reset the active tint to the library default,
-	// silently discarding the configured theme.
 	EnsureRegistry()
 
-	// Try to set the theme by ID. An unknown name leaves the registry on its
-	// current tint; warn so a typo is visible instead of silently applying the
-	// wrong palette. Behavior is otherwise unchanged (theming stays enabled).
 	if ok := tint.SetTintID(themeName); !ok {
 		log.Printf("Warning: theme %q not found; using default theme colors", themeName)
 	}
@@ -142,8 +107,6 @@ func Initialize(themeName string) error {
 	return nil
 }
 
-// activeTint is the tint in force, or nil with theming off. It does not
-// build the registry.
 func activeTint() *tint.Tint {
 	if !enabled {
 		return nil
@@ -224,7 +187,6 @@ func EmulatorColors() (fg, bg, cur color.Color, pal [16]color.Color, ok bool) {
 	return fg, bg, cur, pal, true
 }
 
-// to256 is overlay.To256 that leaves a nil colour nil.
 func to256(c color.Color) color.Color {
 	if c == nil {
 		return nil
@@ -248,22 +210,22 @@ func ANSIOrder(t *tint.Tint) [16]*tint.Color {
 		return [16]*tint.Color{}
 	}
 	return [16]*tint.Color{
-		t.Black,        // 0
-		t.Red,          // 1
-		t.Green,        // 2
-		t.Yellow,       // 3
-		t.Blue,         // 4
-		t.Purple,       // 5
-		t.Cyan,         // 6
-		t.White,        // 7
-		t.BrightBlack,  // 8
-		t.BrightRed,    // 9
-		t.BrightGreen,  // 10
-		t.BrightYellow, // 11
-		t.BrightBlue,   // 12
-		t.BrightPurple, // 13
-		t.BrightCyan,   // 14
-		t.BrightWhite,  // 15
+		t.Black,
+		t.Red,
+		t.Green,
+		t.Yellow,
+		t.Blue,
+		t.Purple,
+		t.Cyan,
+		t.White,
+		t.BrightBlack,
+		t.BrightRed,
+		t.BrightGreen,
+		t.BrightYellow,
+		t.BrightBlue,
+		t.BrightPurple,
+		t.BrightCyan,
+		t.BrightWhite,
 	}
 }
 
@@ -308,11 +270,6 @@ func AsColor(c *tint.Color) color.Color {
 	return c
 }
 
-// borderInk measures a theme-derived border against the pane it frames. A
-// border and the pane's background come from the same theme and nothing was
-// checking that they differ: 72 of the registry's tints put an unfocused border
-// under 3:1 on its own pane, the worst at 1.19:1, which is a window with no
-// visible edge. A border is a shape, so the mark floor is what it has to clear.
 func borderInk(c color.Color) color.Color {
 	return ReadableAt(c, TerminalBg(), MarkFloor)
 }
@@ -384,7 +341,6 @@ func SessionBorderModes(tint, hostBg color.Color) (window, terminal color.Color)
 	}
 	dist := func(c color.Color) float64 { return (overlay.Lightness(c) - lg) * out }
 	ok := func(c color.Color) bool { return ContrastRatio(c, b.ground) >= MarkFloor }
-	// at is c's hue at distance d from the ground, with at most chroma ch.
 	at := func(c color.Color, d, ch float64) color.Color {
 		return overlay.Vivid(c, lg+d*out, ch)
 	}
@@ -392,7 +348,6 @@ func SessionBorderModes(tint, hostBg color.Color) (window, terminal color.Color)
 	terminal = at(b.terminal, dist(b.terminal), max(overlay.Chroma(tint), overlay.Chroma(b.terminal)))
 	window = tint
 	if want := dist(terminal) - modeLightnessGap; dist(tint) > want {
-		// The session colour toward the ground, down to the mark floor.
 		window = nil
 		for d := want; d < dist(tint); d += 0.01 {
 			if c := at(tint, d, overlay.Chroma(terminal)); ok(c) {
@@ -405,7 +360,6 @@ func SessionBorderModes(tint, hostBg color.Color) (window, terminal color.Color)
 		}
 	}
 	if need := dist(window) + modeLightnessGap; dist(terminal) < need {
-		// The floor held the session colour, so terminal mode moves out.
 		terminal = at(b.terminal, need, max(overlay.Chroma(tint), overlay.Chroma(b.terminal)))
 	}
 	if overlay.Chroma(window) > overlay.Chroma(terminal) {
@@ -417,8 +371,6 @@ func SessionBorderModes(tint, hostBg color.Color) (window, terminal color.Color)
 	return window, terminal
 }
 
-// sessionModesMemo keeps the last few answers of SessionBorderModes, which is
-// asked on every frame and searches in OKLab.
 var sessionModesMemo struct {
 	sync.Mutex
 	keys [4][3][4]uint32
@@ -426,14 +378,10 @@ var sessionModesMemo struct {
 	next int
 }
 
-// borderSet is the three pane borders and the ground they are measured on.
 type borderSet struct {
 	window, terminal, unfocused, ground color.Color
 }
 
-// bordersOn resolves the three borders together, because each default is
-// placed against the other two. Configured colours are returned as chosen and
-// only the defaults move.
 func bordersOn(hostBg color.Color) borderSet {
 	t := Current()
 	var b borderSet
@@ -449,8 +397,6 @@ func bordersOn(hostBg color.Color) borderSet {
 	case c != nil:
 		b.terminal, tFixed = c, true
 	case Depth() == overlay.Depth16:
-		// Bright green against the window mode's bright cyan: two slots, so
-		// the terminal's palette keeps them apart.
 		b.terminal = overlay.Slot(10)
 	case t == nil:
 		b.terminal = hostBorderInk(lipgloss.Color("#AAFFAA"), hostBg)
@@ -459,23 +405,13 @@ func bordersOn(hostBg color.Color) borderSet {
 	}
 	switch c := borderOverride(borderUnfocused); {
 	case c != nil:
-		// A configured colour is returned as chosen: measurement was
-		// overridden on purpose, the same way the scrollbar treats a
-		// configured tint.
 		b.unfocused, uFixed = c, true
 	case t == nil:
-		// A neutral just past the mark floor on the host's ground. It is not
-		// red, because red says alert. Bright black is the neutral of the sixteen.
 		b.unfocused = slotAt16(8, neutralBorderOn(hostBg))
 	default:
 		if c := chromeFurniture(RoleBorderUnfocused); c != nil {
-			// A theme that names its unfocused border chose it, so it is
-			// kept as named, like a configured colour. The focused borders
-			// still move out from it.
 			b.unfocused, uFixed = borderInk(c), true
 		} else {
-			// Light pinkish red: the theme's regular red, which gives a softer,
-			// more muted tone for unfocused windows than bright red.
 			b.unfocused = slotAt16(1, borderInk(t.Red))
 		}
 	}
@@ -485,8 +421,6 @@ func bordersOn(hostBg color.Color) borderSet {
 		b.ground = TerminalBg()
 	}
 	if b.ground == nil {
-		// A nil ground is taken as dark, the way the no-theme colours are
-		// picked.
 		b.ground = color.Black
 	}
 	if Depth() == overlay.Depth16 {
@@ -495,29 +429,12 @@ func bordersOn(hostBg color.Color) borderSet {
 	return spaceBorders(b, wFixed, tFixed, uFixed, t == nil)
 }
 
-// modeLightnessGap is the least OKLab lightness between the two default
-// focused borders. On 231 of the 344 bundled themes the accent and the success
-// colour sit within 0.08 of each other, catppuccin mocha at 0.000 and nord at
-// 0.005. Hue alone then tells the modes apart, which fails a person who cannot
-// tell cyan from green and anyone who sees the border from the corner of an
-// eye.
 const modeLightnessGap = 0.1
 
-// focusLightnessGap is how much further from the ground, in OKLab lightness,
-// each default focused border stands than the unfocused one. Unspaced, the
-// terminal mode border sat within 0.06 of the unfocused border on no theme
-// over a Nord terminal, on nord and on catppuccin mocha, so focus was told by
-// hue alone, the failure modeLightnessGap describes.
 const focusLightnessGap = 0.12
 
-// focusContrastFactor is how many times the unfocused border's contrast on
-// the ground each default focused border has. On a dark ground the lightness
-// step gives far more than this; on a light one it gave 1.7 times, and the
-// focused border read as a slightly darker unfocused one.
 const focusContrastFactor = 2.0
 
-// spaceBordersMemo keeps the last few answers of spaceBorders, which is asked
-// on every frame and converts to OKLab and measures contrast many times.
 var spaceBordersMemo struct {
 	sync.Mutex
 	keys [4][5][4]uint32
@@ -525,18 +442,6 @@ var spaceBordersMemo struct {
 	next int
 }
 
-// spaceBorders moves the default borders apart in lightness, hue and chroma
-// kept. The unfocused border goes toward the ground until each focused border
-// stands focusLightnessGap further out, but never under the mark floor. When
-// the floor stops it, the window mode border goes further out instead. The
-// terminal mode border is then placed modeLightnessGap from the window mode
-// one, on the side that keeps it clear of the unfocused border.
-//
-// vivid is set for the no-theme colours, which are tuios's own rather than a
-// theme's. Their focused borders then take as much of their hue as sRGB holds
-// at their lightness, up to noThemeChroma. Moved dark onto a light ground,
-// the pale cyan and green kept a chroma of 0.04 and 0.06, which is a grey
-// beside the grey unfocused border.
 func spaceBorders(b borderSet, wFixed, tFixed, uFixed, vivid bool) borderSet {
 	fixed := uint32(0)
 	for i, f := range []bool{wFixed, tFixed, uFixed, vivid} {
@@ -555,7 +460,6 @@ func spaceBorders(b borderSet, wFixed, tFixed, uFixed, vivid bool) borderSet {
 	}
 
 	lg := overlay.Lightness(b.ground)
-	// out is +1 when standing out from the ground means lighter.
 	out := 1.0
 	if lg > 0.5 {
 		out = -1
@@ -564,11 +468,8 @@ func spaceBorders(b borderSet, wFixed, tFixed, uFixed, vivid bool) borderSet {
 	at := func(c color.Color, d float64) (color.Color, bool) {
 		l := lg + d*out
 		moved := overlay.WithLightness(c, l)
-		// A colour out of gamut at l comes back clamped, at another lightness.
 		return moved, math.Abs(overlay.Lightness(moved)-l) <= 0.02 && ContrastRatio(moved, b.ground) >= MarkFloor
 	}
-	// pull moves the unfocused border toward the ground until it is at most
-	// limit from it, or as near the limit as the mark floor allows.
 	pull := func(limit float64) {
 		if uFixed || dist(b.unfocused) <= limit {
 			return
@@ -581,9 +482,6 @@ func spaceBorders(b borderSet, wFixed, tFixed, uFixed, vivid bool) borderSet {
 		}
 	}
 
-	// Room is kept for the terminal mode border on the ground's side of the
-	// window mode one when it will have to move, since that is where a
-	// saturated colour keeps its chroma.
 	reserve := 0.0
 	if !tFixed && math.Abs(overlay.Lightness(b.window)-overlay.Lightness(b.terminal)) < modeLightnessGap {
 		reserve = modeLightnessGap
@@ -594,11 +492,6 @@ func spaceBorders(b borderSet, wFixed, tFixed, uFixed, vivid bool) borderSet {
 			b.window = c
 		}
 	}
-	// The same lightness step is a smaller step in contrast on a light
-	// ground, where every border sits in the darker half and the unfocused
-	// one is held dark by the mark floor. A one-cell line is read by its
-	// contrast, so each focused border also gets focusContrastFactor times
-	// the unfocused border's.
 	least := dist(b.unfocused) + focusLightnessGap
 	if wantCR := ContrastRatio(b.unfocused, b.ground) * focusContrastFactor; !wFixed {
 		for d := max(dist(b.window), least); d <= 1; d += 0.01 {
@@ -633,34 +526,18 @@ func spaceBorders(b borderSet, wFixed, tFixed, uFixed, vivid bool) borderSet {
 	return b
 }
 
-// noThemeChroma is the chroma the no-theme focused borders reach for. It is
-// the green's own on a dark ground, saturated enough to read as a colour and
-// short of a neon.
 const noThemeChroma = 0.15
 
-// vividAt is c at its own lightness with as much chroma as sRGB holds there,
-// up to the larger of limit and what c already has.
 func vividAt(c color.Color, limit float64) color.Color {
 	return overlay.Vivid(c, overlay.Lightness(c), max(limit, overlay.Chroma(c)))
 }
 
-// modesApart is the terminal mode border moved in lightness, hue and chroma
-// kept, until it sits modeLightnessGap from the window mode border. It tries
-// the ground's side first: on a dark ground that is where a saturated green
-// keeps its chroma, and on a light ground it is the side with more contrast.
-// It tries the far side when the near side would crowd the unfocused border. A side is taken only when the colour stays in
-// gamut, clears the mark floor on ground, and stands at least least from the
-// ground; a negative least asks for no distance. When no side does all of
-// that, the first side that keeps the gamut and the floor is taken, and when
-// none keeps those either, terminal stays as it is.
 func modesApart(window, terminal, ground color.Color, least float64) color.Color {
 	lw, lg := overlay.Lightness(window), overlay.Lightness(ground)
 	out := 1.0
 	if lg > 0.5 {
 		out = -1
 	}
-	// The epsilon keeps a colour placed exactly at least, by the same
-	// arithmetic, from failing on rounding.
 	far := func(c color.Color) bool { return least < 0 || (overlay.Lightness(c)-lg)*out >= least-0.01 }
 	if math.Abs(lw-overlay.Lightness(terminal)) >= modeLightnessGap && far(terminal) {
 		return terminal
@@ -684,7 +561,6 @@ func modesApart(window, terminal, ground color.Color, least float64) color.Color
 	return terminal
 }
 
-// rgbaKey is c's channels as a memo key, all zero for nil.
 func rgbaKey(c color.Color) [4]uint32 {
 	if c == nil {
 		return [4]uint32{}
@@ -719,22 +595,14 @@ func BorderFocusedAttention() color.Color {
 	return nil
 }
 
-// neutralBorderFloor is the contrast neutralBorderOn aims for.
 const neutralBorderFloor = MarkFloor + 0.3
 
-// neutralBorderMemo keeps the last answer of neutralBorderOn, which is asked
-// on every frame and measures contrast up to fifty times.
 var neutralBorderMemo struct {
 	sync.Mutex
 	key [4]uint32
 	ink color.Color
 }
 
-// neutralBorderOn is the ground carried toward its own high-contrast ink just
-// far enough to clear the mark floor: a grey in the ground's own hue, the
-// quietest colour a border can be and still be seen. It aims a little above
-// the floor, so the step down to 256 colours does not take it under. A nil
-// ground is taken as black.
 func neutralBorderOn(ground color.Color) color.Color {
 	if ground == nil {
 		ground = color.Black
@@ -760,9 +628,6 @@ func neutralBorderOn(ground color.Color) color.Color {
 	return out
 }
 
-// hostBorderInkMemo keeps the last few answers of hostBorderInk. The border
-// colours are asked for on every pane of every frame, and a lift is a walk of
-// up to sixteen contrast measurements.
 var hostBorderInkMemo struct {
 	sync.Mutex
 	keys [6][2][4]uint32
@@ -770,8 +635,6 @@ var hostBorderInkMemo struct {
 	next int
 }
 
-// hostBorderInk lifts a no-theme border colour until it clears the mark floor
-// on the host's ground, and leaves it alone when the ground is not known.
 func hostBorderInk(c, hostBg color.Color) color.Color {
 	if hostBg == nil {
 		return c
@@ -806,7 +669,7 @@ func DockColorWindow() color.Color {
 func DockColorTerminal() color.Color {
 	t := Current()
 	if t == nil {
-		return slotAt16(10, lipgloss.Color("#7aa2f7")) // Soft blue
+		return slotAt16(10, lipgloss.Color("#7aa2f7"))
 	}
 	return slotAt16(10, chromeOr(func(c *Chrome) color.Color { return c.Success }, t.BrightGreen))
 }
@@ -816,7 +679,7 @@ func DockColorTerminal() color.Color {
 func DockColorCopy() color.Color {
 	t := Current()
 	if t == nil {
-		return slotAt16(3, lipgloss.Color("#e0af68")) // Soft amber
+		return slotAt16(3, lipgloss.Color("#e0af68"))
 	}
 	if c := chromeFurniture(RoleBorderCopy); c != nil {
 		return c
@@ -833,9 +696,6 @@ func DockColorMultifocus() color.Color {
 	return DockColorCopy()
 }
 
-// furnitureRole is the colour a config value naming one of the roles after
-// RoleCard draws: what that piece of chrome draws now, theme or not. A ground
-// is the theme's only, nil when it names none.
 func furnitureRole(r Role) color.Color {
 	switch r {
 	case RoleBorderUnfocused:
@@ -939,6 +799,5 @@ func ColorToString(c color.Color) string {
 		return "#000000"
 	}
 	r, g, b, _ := c.RGBA()
-	// RGBA returns values in range 0-65535, convert to 0-255
 	return overlay.Hex(color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: 0xff})
 }

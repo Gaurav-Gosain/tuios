@@ -2,12 +2,6 @@ package webshell
 
 import "strings"
 
-// The shell was written for the browser tour, and a few of its lines say so.
-// tuios tutor runs the same shell in a real terminal, where those lines are
-// wrong. SetFlavorTerminal swaps them for the terminal's words.
-
-// terminalText is filled by SetFlavorTerminal, so a process that never
-// runs the tutor builds no table.
 var terminalText map[string]string
 
 func terminalWords() map[string]string {
@@ -27,8 +21,6 @@ func terminalWords() map[string]string {
 	}
 }
 
-// flavorTerminal is set once, before the first pane starts, and only read
-// after that.
 var flavorTerminal bool
 
 // SetFlavorTerminal makes the shell describe itself as tuios tutor. Call it
@@ -50,7 +42,6 @@ func SetFlavorTerminal() {
 	}
 }
 
-// text is s, or its terminal wording when the shell runs as the tutor.
 func text(s string) string {
 	if flavorTerminal {
 		if r, ok := terminalText[s]; ok {

@@ -7,8 +7,8 @@ import "testing"
 func TestValidateKeyModifiersOnEachPlatform(t *testing.T) {
 	cases := []struct {
 		key    string
-		mac    string // "" when valid on macOS, else the reason
-		others string // "" when valid elsewhere, else the reason
+		mac    string
+		others string
 	}{
 		{"ctrl+a", "", ""},
 		{"alt+a", "", ""},
@@ -18,7 +18,6 @@ func TestValidateKeyModifiersOnEachPlatform(t *testing.T) {
 		{"ctrl+alt+shift+super+x", "", ""},
 		{"opt+a", "", ""},
 		{"option+a", "", ""},
-		// meta is Alt in every key reader, so a binding may spell it.
 		{"meta+a", "", ""},
 		{"alt+meta+a", "duplicate modifier: meta", "duplicate modifier: meta"},
 		{"ctl+a", "", ""},

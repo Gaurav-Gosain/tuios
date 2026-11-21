@@ -52,25 +52,14 @@ type Match struct {
 	Target string
 }
 
-// pattern is one compiled rule.
 type pattern struct {
-	kind string
-	re   *regexp.Regexp
-	// find, when set, is used instead of re and returns whole-match ranges.
-	// The url pattern uses it, so hints and the pointer share one detector.
-	find func(line string) [][2]int
-	// group is the index of the submatch to copy, or 0 for the whole match.
+	kind  string
+	re    *regexp.Regexp
+	find  func(line string) [][2]int
 	group int
-	// line, when set, must match the whole line for this pattern to be tried.
-	// The diff patterns use it, so "a/b" in ordinary prose is not read as the
-	// "a/" side of a diff.
-	line *regexp.Regexp
-	// valid, when set, is asked about each candidate. It sees the whole line
-	// and the candidate's range, so it can look at what is on either side.
+	line  *regexp.Regexp
 	valid func(line string, start, end int) bool
-	// trim, when set, may shorten a candidate from the right. A URL at the
-	// end of a sentence gives its full stop back here.
-	trim func(s string) string
+	trim  func(s string) string
 }
 
 // Matcher finds matches on lines of text. A nil Matcher finds nothing.
@@ -153,13 +142,12 @@ func New(builtins []string, custom []string) (*Matcher, []error) {
 	return m, errs
 }
 
-// candidate is a match before overlaps are settled.
 type candidate struct {
-	claimStart, claimEnd int // the range the pattern claimed on the line
-	start, end           int // the range to copy
+	claimStart, claimEnd int
+	start, end           int
 	kind                 string
-	rank                 int    // position of the pattern in its list
-	target               string // what a link rule match opens
+	rank                 int
+	target               string
 }
 
 // Find returns the matches on one line, sorted by position, none overlapping.
@@ -188,7 +176,6 @@ func (m *Matcher) Find(line string) []Match {
 	return out
 }
 
-// collect runs every pattern over the line.
 func collect(patterns []pattern, line string) []candidate {
 	var out []candidate
 	for rank, p := range patterns {
@@ -231,8 +218,6 @@ func collect(patterns []pattern, line string) []candidate {
 	return out
 }
 
-// settle adds the candidates that do not overlap anything already taken,
-// longest claim first.
 func settle(taken, cands []candidate) []candidate {
 	sortx.SortStableFunc(cands, func(a, b candidate) int {
 		if la, lb := a.claimEnd-a.claimStart, b.claimEnd-b.claimStart; la != lb {
@@ -258,14 +243,10 @@ func settle(taken, cands []candidate) []candidate {
 	return taken
 }
 
-// wordByte reports whether c continues a word, for the patterns that must
-// not start or end in the middle of one.
 func wordByte(c byte) bool {
 	return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }
 
-// isolated reports whether nothing that continues a token sits right before
-// start or right after end. extra lists more bytes that count as continuing.
 func isolated(line string, start, end int, extra string) bool {
 	if start > 0 {
 		if c := line[start-1]; wordByte(c) || strings.IndexByte(extra, c) >= 0 {
@@ -280,7 +261,6 @@ func isolated(line string, start, end int, extra string) bool {
 	return true
 }
 
-// trimPath drops the punctuation that ends a sentence rather than a path.
 func trimPath(s string) string {
 	for len(s) > 1 && strings.IndexByte(".,;:", s[len(s)-1]) >= 0 {
 		if strings.HasSuffix(s, "/..") || strings.HasSuffix(s, "/.") || s == ".." {
@@ -291,9 +271,6 @@ func trimPath(s string) string {
 	return s
 }
 
-// hasDigitAndLetter reports whether s has at least one decimal digit and at
-// least one letter. A hash of seven or more characters almost always has
-// both, and an English word never has a digit.
 func hasDigitAndLetter(s string) bool {
 	digit, letter := false, false
 	for i := range len(s) {
@@ -307,52 +284,33 @@ func hasDigitAndLetter(s string) bool {
 	return digit && letter
 }
 
-// kubeKinds are the resource names kubectl prints in front of a slash.
 const kubeKinds = `pods?|po|deployments?|deploy|services?|svc|nodes?|no|jobs?|cronjobs?|cj|` +
 	`statefulsets?|sts|daemonsets?|ds|replicasets?|rs|configmaps?|cm|secrets?|` +
 	`ingress(?:es)?|ing|namespaces?|ns|persistentvolumeclaims?|pvc|persistentvolumes?|pv|` +
 	`serviceaccounts?|sa|endpoints|ep|events?|ev|horizontalpodautoscalers?|hpa|` +
 	`roles?|rolebindings?|clusterroles?|clusterrolebindings?|networkpolicies|netpol`
 
-// pathSeg is one component of a path: no spaces, no colon, no quote.
-//
-// \w in Go is ASCII only, so a letter class stands in for it: a path or an
-// address with an accented or non-Latin name, or a letter written with a
-// combining mark, keeps the whole name rather than stopping at the first
-// such letter.
 const pathSeg = `[\p{L}\p{M}\p{N}_.@+~%=-]+`
 
-// wordChars is \w with every script's letters, marks and digits.
 const wordChars = `\p{L}\p{M}\p{N}_`
 
-// builtinPatterns is every built-in rule. The order is the tie-break when two
-// claims are the same length, so the more specific kind comes first.
-//
-// The rules compile on first use. Compiled at package init they cost every
-// tuios process about 0.8 ms and 1,600 allocations, a third of all package
-// init, and only a process that opens hints mode reads them.
 var builtinPatterns = sync.OnceValue(func() []pattern {
 	return []pattern{
 		{
-			// Scheme URLs come from the detector the pointer uses too. See
-			// urls.go.
 			kind: URL,
 			find: URLs,
 		},
 		{
-			// A remote in scp form, which has no scheme for URLs to find.
 			kind: URL,
 			re:   regexp.MustCompile(`\bgit@[\w.-]+:[\w./~-]+`),
 		},
 		{
-			// The two sides of a diff header, copied without their a/ and b/.
 			kind:  Diff,
 			re:    regexp.MustCompile(`(?:^|\s)[ab]/(\S+)`),
 			line:  regexp.MustCompile(`^(?:diff --git |--- |\+\+\+ )`),
 			group: 1,
 		},
 		{
-			// A path git status prints after "modified:" and the like.
 			kind:  Diff,
 			re:    regexp.MustCompile(`:\s+(?:\S+ -> )?(\S+)\s*$`),
 			line:  regexp.MustCompile(`^\s*(?:modified|deleted|new file|renamed|copied|typechange|both modified|both added|both deleted|added by us|added by them|deleted by us|deleted by them):\s`),
@@ -367,19 +325,13 @@ var builtinPatterns = sync.OnceValue(func() []pattern {
 			re:   regexp.MustCompile(`[` + wordChars + `.+-]+@[` + wordChars + `-]+(?:\.[` + wordChars + `-]+)+`),
 		},
 		{
-			// A Kubernetes resource as kubectl names it: kind/name, with an
-			// optional API group on the kind (deployment.apps/web).
 			kind: ID,
 			re:   regexp.MustCompile(`\b(?:` + kubeKinds + `)(?:\.[a-z0-9.-]+)?/[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\b`),
 		},
 		{
-			// A pod name: the deployment, the replica set's hash and the pod's
-			// own five characters.
 			kind: ID,
 			re:   regexp.MustCompile(`\b[a-z0-9]+(?:-[a-z0-9]+)*-[a-z0-9]{8,10}-[a-z0-9]{5}\b`),
 			valid: func(line string, s, e int) bool {
-				// The two hashes almost always hold a digit. Words joined with
-				// hyphens never do, and that is what keeps prose out.
 				tail := line[s:e]
 				i := strings.LastIndexByte(tail, '-')
 				j := strings.LastIndexByte(tail[:i], '-')
@@ -387,7 +339,6 @@ var builtinPatterns = sync.OnceValue(func() []pattern {
 			},
 		},
 		{
-			// An image or layer digest, as docker and podman print it.
 			kind: ID,
 			re:   regexp.MustCompile(`\bsha256:[0-9a-f]{12,64}\b`),
 		},
@@ -422,18 +373,12 @@ var builtinPatterns = sync.OnceValue(func() []pattern {
 			trim: trimPath,
 			valid: func(line string, s, e int) bool {
 				text := line[s:e]
-				// A lone slash, or slashes and dots only, is not a path worth a label.
 				if strings.Trim(text, "/.~") == "" {
 					return false
 				}
-				// "//" is a URL's, a comment's, or nothing.
 				if strings.HasPrefix(text, "//") {
 					return false
 				}
-				// A rooted path glued to the byte before it is markup or the
-				// tail of a word: the "/p" in "</p>", the "/x" in "a</x>".
-				// A path a person would open starts after a space, a quote,
-				// a bracket or the start of the line.
 				if text[0] == '/' && s > 0 && (line[s-1] == '<' || wordByte(line[s-1])) {
 					return false
 				}
@@ -455,8 +400,6 @@ var builtinPatterns = sync.OnceValue(func() []pattern {
 				if s > 0 && wordByte(line[s-1]) {
 					return false
 				}
-				// "#123" is an issue far more often than a colour, so the short
-				// form needs a letter to count.
 				return e-s != 4 || strings.ContainsAny(line[s+1:e], "abcdefABCDEF")
 			},
 		},

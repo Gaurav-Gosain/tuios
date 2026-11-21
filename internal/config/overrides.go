@@ -99,8 +99,6 @@ func IntValue(cfg *UserConfig, path string) int {
 	return opt.resolveInt(text)
 }
 
-// themeFlag is the last --theme name ApplyOverrides applied, or "".
-// ApplyAppearanceConfig uses it for a config file that sets no theme.
 var themeFlag atomic.Pointer[string]
 
 // FlagTheme is the theme the --theme flag named, or "". An explicit flag wins

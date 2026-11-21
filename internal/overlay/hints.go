@@ -7,29 +7,6 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// A key-hint strip keeps to one row. When the hints do not fit across it they
-// shorten in tiers rather than wrap, because every row a footer wraps onto is a
-// row taken from the body it describes:
-//
-//  1. every hint as written;
-//  2. modifier names shortened: ctrl+ becomes ^, alt+ becomes M-, shift+
-//     becomes S-;
-//  3. whole hints dropped, lowest priority first and, within a priority, the
-//     last listed first, until the strip fits. An essential hint (see
-//     HintEssential, and every hint on the esc key) is never dropped here.
-//     Once the strip fits, a dropped hint that fits in the room left is put
-//     back, so a long label dropped early does not take a short one with it;
-//  4. only when the essential hints alone do not fit: their labels dropped
-//     from the end, so a key shows without its label only when nothing else
-//     can;
-//  5. hints dropped from the end, and an ellipsis where they were.
-//
-// A key never shows without its label while dropping a whole hint could make
-// room instead: a footer of bare keys says nothing a person can act on. The
-// hints that survive keep the order they were given in, and Geometry.Hints
-// keeps one entry per hint asked for, so a host that makes the hints pressable
-// reads it by the index it gave.
-
 // HintPriority orders the hints of a strip for dropping. The zero value is
 // HintNormal, so a hint that says nothing is dropped after the optional ones
 // and before the essential ones.
@@ -55,7 +32,6 @@ func Optional(hints []Hint) []Hint {
 	return hints
 }
 
-// rank is the priority fitHints drops by.
 func (h Hint) rank() HintPriority {
 	if h.Key == "esc" || h.Priority >= HintEssential {
 		return HintEssential
@@ -63,17 +39,12 @@ func (h Hint) rank() HintPriority {
 	return h.Priority
 }
 
-// fittedHints is a strip as it will be drawn: the hints in the form that fits,
-// where each came from in the strip asked for, and whether any were dropped
-// off the end.
 type fittedHints struct {
 	Hints     []Hint
 	Index     []int
 	Truncated bool
 }
 
-// hintsWidth is the width of hints laid out with sep cells between pairs, plus
-// the ellipsis cell and its separator when truncated is set.
 func hintsWidth(hints []Hint, sep int, truncated bool) int {
 	w := 0
 	for i, h := range hints {
@@ -91,7 +62,6 @@ func hintsWidth(hints []Hint, sep int, truncated bool) int {
 	return w
 }
 
-// identity is 0..n-1.
 func identity(n int) []int {
 	idx := make([]int, n)
 	for i := range idx {
@@ -100,8 +70,6 @@ func identity(n int) []int {
 	return idx
 }
 
-// fitHints applies the tiers until the strip fits in width cells with sep
-// cells between pairs.
 func fitHints(hints []Hint, width, sep int) fittedHints {
 	if len(hints) == 0 || hintsWidth(hints, sep, false) <= width {
 		return fittedHints{Hints: hints, Index: identity(len(hints))}
@@ -115,7 +83,6 @@ func fitHints(hints []Hint, width, sep int) fittedHints {
 		return fittedHints{Hints: out, Index: identity(len(out))}
 	}
 
-	// Tier 3: drop whole hints by priority, the last listed first.
 	kept := make([]bool, len(out))
 	for i := range kept {
 		kept[i] = true
@@ -146,8 +113,6 @@ func fitHints(hints []Hint, width, sep int) fittedHints {
 		}
 	}
 	if fits {
-		// Put back what fits in the room left, the last dropped first: it is
-		// the one of highest priority, or the earliest listed of its priority.
 		for _, i := range slices.Backward(dropped) {
 			kept[i] = true
 			if hintsWidth(pick().Hints, sep, false) > width {
@@ -157,7 +122,6 @@ func fitHints(hints []Hint, width, sep int) fittedHints {
 		return pick()
 	}
 
-	// Tier 4: only essential hints are left and they do not fit whole.
 	f := pick()
 	for i := len(f.Hints) - 1; i >= 0; i-- {
 		if f.Hints[i].Label == "" {
@@ -168,7 +132,6 @@ func fitHints(hints []Hint, width, sep int) fittedHints {
 			return f
 		}
 	}
-	// Tier 5.
 	for n := range slices.Backward(f.Hints) {
 		if hintsWidth(f.Hints[:n], sep, true) <= width {
 			return fittedHints{Hints: f.Hints[:n], Index: f.Index[:n], Truncated: true}
@@ -177,9 +140,6 @@ func fitHints(hints []Hint, width, sep int) fittedHints {
 	return fittedHints{Truncated: true}
 }
 
-// shortModifiers maps a modifier as a hint spells it to its short form. The
-// short forms are the ones tmux and Emacs print, which a person reading a
-// multiplexer's footer has most likely met.
 var shortModifiers = []struct{ long, short string }{
 	{"ctrl+", "^"},
 	{"alt+", "M-"},
@@ -213,8 +173,6 @@ func ShortKey(key string) string {
 	return b.String()
 }
 
-// footerSep is the gap between two hints in a panel footer.
 const footerSep = 3
 
-// dialogSep is the gap between two hints in a dialog's border.
 const dialogSep = 2

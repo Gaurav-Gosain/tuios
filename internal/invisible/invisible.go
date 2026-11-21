@@ -13,7 +13,6 @@ import (
 	"unicode/utf8"
 )
 
-// zwj is the zero-width joiner, U+200D.
 const zwj = 0x200d
 
 // Rune reports whether r draws nothing and is removed from untrusted text:
@@ -86,10 +85,6 @@ func Strip(s string) string {
 	return b.String()
 }
 
-// pictographic reports whether r is an emoji that a zero-width joiner may
-// join to another. It is a close cover of the Extended_Pictographic property
-// plus the skin tone modifiers and regional indicators, which sit in the
-// U+1F000 to U+1FAFF span.
 func pictographic(r rune) bool {
 	switch {
 	case r == 0xa9, r == 0xae, r == 0x203c, r == 0x2049, r == 0x2122, r == 0x2139:

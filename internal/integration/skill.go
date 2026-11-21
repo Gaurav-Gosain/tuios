@@ -18,35 +18,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/skills"
 )
 
-// The skill stub: a SKILL.md that makes a harness load the tuios skill.
-//
-// The stub holds the name and description of the real skill and one line that
-// tells the agent to run tuios --skill. The text the agent reads comes from
-// the installed binary, so it always matches the build. A copy of the whole
-// skill, made with tuios --skill > SKILL.md, describes the build it was made
-// with and goes stale on the next upgrade.
-//
-// Install writes it with the hooks. A harness reads skills from one of two
-// places:
-//
-//   - Claude Code: skills/tuios/SKILL.md under ~/.claude, or under
-//     $CLAUDE_CONFIG_DIR.
-//   - Codex, opencode and Pi: ~/.agents/skills/tuios/SKILL.md, a place all
-//     three read. Uninstall removes it only when no other of the three still
-//     has its integration installed.
-//
-// The stub carries TUIOS_INTEGRATION_ID=skill, a version, and a checksum of
-// the rest of the file. That is how a later install, uninstall or status
-// tells it from a tuios skill the person wrote, copied or edited. These are
-// never overwritten or removed: a SKILL.md without the marker, one whose text
-// no longer matches its checksum, one a newer tuios wrote (install only), and
-// a SKILL.md that is a symlink.
-
 // SkillVersion is the version of the skill stub this build writes.
 const SkillVersion = 1
 
-// skillDirs is where each harness reads the stub from: the directory that
-// holds the tuios skill directory.
 var skillDirs = map[string]func(t *Target, env Env) string{
 	ClaudeCode: func(t *Target, env Env) string { return filepath.Join(t.ConfigDir(env), "skills") },
 	Codex:      agentsSkillDir,
@@ -81,26 +55,21 @@ func SkillStub() []byte {
 		strconv.Itoa(SkillVersion) + " TUIOS_SKILL_SUM=" + skillSum(front+body) + " -->\n\n" + body)
 }
 
-// skillSum is the checksum the marker carries: of the file without its
-// marker line, so a change anywhere else in the file shows.
 func skillSum(rest string) string {
 	sum := sha256.Sum256([]byte(rest))
 	return hex.EncodeToString(sum[:])
 }
 
-// skillMarkerRe finds the stub's marker line with the blank lines around it.
 var skillMarkerRe = lazyre.New(`\n<!-- tuios integration install wrote this file\. TUIOS_INTEGRATION_ID=skill TUIOS_INTEGRATION_VERSION=(\d+) TUIOS_SKILL_SUM=([0-9a-f]{64}) -->\n\n`)
 
-// skillOwnership is what install and uninstall may do with a SKILL.md.
 type skillOwnership int
 
 const (
-	skillForeign skillOwnership = iota // no stub marker: the person's own skill
-	skillEdited                        // the stub, changed since tuios wrote it
-	skillOurs                          // the stub as tuios wrote it
+	skillForeign skillOwnership = iota
+	skillEdited
+	skillOurs
 )
 
-// classifySkill says whose a SKILL.md is, with the stub version it carries.
 func classifySkill(data []byte) (skillOwnership, int) {
 	m := skillMarkerRe().FindSubmatchIndex(data)
 	if m == nil {
@@ -114,8 +83,6 @@ func classifySkill(data []byte) (skillOwnership, int) {
 	return skillOurs, version
 }
 
-// readSkill reads the SKILL.md at path. A symlink is reported and not read:
-// the person manages that file, so tuios neither replaces nor removes it.
 func readSkill(path string) (data []byte, link bool, err error) {
 	if fi, lerr := os.Lstat(path); lerr == nil && fi.Mode()&fs.ModeSymlink != 0 {
 		return nil, true, nil
@@ -124,7 +91,6 @@ func readSkill(path string) (data []byte, link bool, err error) {
 	return data, false, err
 }
 
-// skillFrontmatter is the frontmatter of a skill file, with its fences.
 func skillFrontmatter(core string) string {
 	rest, ok := strings.CutPrefix(core, "---\n")
 	if !ok {
@@ -246,16 +212,12 @@ func (t *Target) UninstallSkill(env Env) (Result, error) {
 	if err := os.Remove(res.Path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return res, errfmt.Errorf("failed to remove %s: %w", res.Path, err)
 	}
-	// Only removes an empty directory; one holding anything else stays.
 	_ = os.Remove(filepath.Dir(res.Path))
 	res.Changed = true
 	res.Paths = []string{res.Path}
 	return res, nil
 }
 
-// writeOwned replaces a file tuios owns whole. It keeps no backup: the file
-// it replaces is tuios's own, and a copy beside a SKILL.md stays in the
-// skill's directory.
 func writeOwned(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // a skills directory, made the way the harness makes it

@@ -21,8 +21,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// drop is true when ED 3 is honoured. The zero value keeps the history, which
-// is the default.
 var drop atomic.Bool
 
 // SetKeep sets whether ED 3 keeps the history.

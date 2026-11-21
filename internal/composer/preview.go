@@ -8,36 +8,11 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// Image previews.
-//
-// While the draft holds an image, a strip of thumbnails sits above the
-// editor, outside the text: each image ThumbRows rows high, as wide as its
-// shape asks, at most maxThumbs of them and then "+N more". ctrl+o on an image
-// opens a larger view of it in place of the editor.
-//
-// The composer decides where the pictures go. It does not draw them: the host
-// does, through a Previewer, since only the host knows what the terminal can
-// show and has the pixels. Three modes:
-//
-//   - PreviewPixels: the composer leaves the cells blank and reports each
-//     picture's box (Placements). The host draws the picture there after the
-//     frame, as kitty graphics.
-//   - PreviewCells: the host draws the picture as text, block glyphs in two
-//     colours a cell, and the composer puts those lines in the box.
-//   - PreviewText: no picture. Each image is one line that says what it is.
-//
-// The composer asks for nothing on its own and runs no timer. The host reads
-// PreviewBoxes when the draft changes, prepares what is not ready, and bumps
-// its Version when a picture arrives, which is what makes the next frame draw
-// again.
-
 // ThumbRows is how many rows a thumbnail is high.
 const ThumbRows = 3
 
-// maxThumbs is how many thumbnails the strip shows.
 const maxThumbs = 4
 
-// thumbCols bounds a thumbnail's width in cells.
 const (
 	thumbMinCols = 3
 	thumbMaxCols = 24
@@ -93,7 +68,6 @@ func (m *Model) SetPreviewer(p Previewer) { m.preview = p }
 // Placements is where the last frame put pictures, for PreviewPixels.
 func (m *Model) Placements() []Placement { return m.places }
 
-// previewMode is the mode now, PreviewText with no previewer.
 func (m *Model) previewMode() PreviewMode {
 	if m.preview == nil {
 		return PreviewText
@@ -101,7 +75,6 @@ func (m *Model) previewMode() PreviewMode {
 	return m.preview.Mode()
 }
 
-// cellAspect is the previewer's cell aspect, 2 when it gives none.
 func (m *Model) cellAspect() float64 {
 	if m.preview != nil {
 		if a := m.preview.CellAspect(); a > 0 {
@@ -117,14 +90,11 @@ func ThumbBox(img *Image, aspect float64) (cols, rows int) {
 	return fitBox(img, aspect, thumbMaxCols, ThumbRows, true)
 }
 
-// fitBox is the largest box of at most maxCols by maxRows cells that holds
-// img's shape. With fixedRows the rows are kept and only the width follows
-// the shape.
 func fitBox(img *Image, aspect float64, maxCols, maxRows int, fixedRows bool) (cols, rows int) {
 	if img.Width <= 0 || img.Height <= 0 || aspect <= 0 {
 		return min(maxRows*2, maxCols), maxRows
 	}
-	ratio := float64(img.Width) / float64(img.Height) * aspect // cols per row
+	ratio := float64(img.Width) / float64(img.Height) * aspect
 	rows = maxRows
 	cols = int(math.Round(float64(rows) * ratio))
 	if !fixedRows && cols > maxCols {
@@ -159,8 +129,6 @@ func (m *Model) PreviewBoxes() []Box {
 	return out
 }
 
-// renderStrip draws the strip above the editor and records where its
-// pictures go. It returns no lines when the draft holds no image.
 func (m *Model) renderStrip(width int, in inks) []string {
 	var imgs []*block
 	for _, c := range m.cells {
@@ -235,9 +203,6 @@ func (m *Model) renderStrip(width int, in inks) []string {
 	return out
 }
 
-// renderImageView draws the open image: a heading that says what it is, and
-// the picture as large as the view holds, or a line that says it cannot be
-// shown.
 func (m *Model) renderImageView(width int, in inks) []string {
 	p := m.pager
 	img := p.block.img
@@ -288,10 +253,6 @@ func (m *Model) OpenedImage() *Image {
 	return nil
 }
 
-// byteSize writes a size the way tuios's internal/units.Bytes does: binary
-// units, three significant digits at most, no trailing zeros (512 B, 1.5 KiB,
-// 12.3 MiB). The composer keeps its own copy because it imports no tuios
-// package, so it can move out as a library by a rename.
 func byteSize(n int64) string {
 	const unit = 1024
 	if n < unit {

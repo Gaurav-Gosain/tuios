@@ -10,28 +10,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// A Settings field that holds one option's value as it is, a bool or a
-// string, names the option in an opt tag, such as opt:"appearance.show_clock".
-// applyOptionFields fills every such field from the config, so the field and
-// its option cannot drift, and a field needs no copy line of its own in
-// ApplyAppearanceConfig. Fields the config does not hold as they are (a
-// clamped number, a parsed format, a value two options decide) stay
-// hand-written there.
-
-// settingsOption is one tagged Settings field and its option. keep, from
-// opt:"path,keep", leaves the field as it is when the file does not set the
-// option (a nil pointer, an empty string), so a value the session holds, the
-// built-in default or one a run set, stands, as it did when each field was
-// copied by hand.
 type settingsOption struct {
 	index int
 	opt   Option
 	keep  bool
 }
 
-// settingsOptions are the tagged fields of Settings, read once. A tag that
-// names no option, or an option whose type the field cannot hold, panics:
-// every test that resolves Settings runs this.
 var settingsOptions = sync.OnceValue(func() []settingsOption {
 	t := reflect.TypeFor[Settings]()
 	var out []settingsOption
@@ -54,11 +38,6 @@ var settingsOptions = sync.OnceValue(func() []settingsOption {
 	return out
 })
 
-// applyOptionFields sets every tagged Settings field from cfg. An option the
-// file does not set takes its default, or, for a keep field, leaves the field
-// as it is. A closed-set option holding a value outside its set takes its
-// default: ValidateConfig warns about it. A colour option's keywords are not a
-// closed set, since it takes a literal as well.
 func applyOptionFields(cfg *UserConfig, s *Settings) {
 	v := reflect.ValueOf(s).Elem()
 	for _, f := range settingsOptions() {
@@ -89,10 +68,6 @@ func applyOptionFields(cfg *UserConfig, s *Settings) {
 	}
 }
 
-// resolveInt is an int option's value as the session uses it: 0 under
-// ZeroIsDefault, and anything that is not a number, reads as the default, and
-// a value outside Min to Max is moved to the nearer end. ValidateConfig warns
-// about both.
 func (o Option) resolveInt(text string) int {
 	n, err := strconv.Atoi(text)
 	if err != nil || (n == 0 && o.Zero == ZeroIsDefault) {
@@ -104,8 +79,6 @@ func (o Option) resolveInt(text string) int {
 	return n
 }
 
-// optionUnset reports whether cfg leaves o unset: a nil pointer, an empty
-// string, or 0 for an int option whose 0 means unset.
 func optionUnset(cfg *UserConfig, o Option) bool {
 	field, ok := resolveOptionField(cfg, o.Path)
 	if !ok {

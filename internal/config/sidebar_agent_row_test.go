@@ -8,8 +8,6 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-// parseAgentRowTOML runs a config file through the real decoder and the
-// reader, the way a person's config.toml reaches the rail.
 func parseAgentRowTOML(t *testing.T, body string) SidebarAgentRowSpec {
 	t.Helper()
 	cfg, err := ParseUserConfig([]byte(body))
@@ -85,7 +83,6 @@ fg = "info"
 		}
 	}
 
-	// The validator prints them under the table's name.
 	cfg, _ := ParseUserConfig([]byte("[appearance.sidebar.agent_row]\ntokens = [\"planet\"]\n"))
 	result := ValidateConfig(cfg)
 	found := false

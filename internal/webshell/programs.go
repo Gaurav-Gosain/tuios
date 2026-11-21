@@ -9,8 +9,6 @@ import (
 	"unicode/utf8"
 )
 
-// logo is the full fastfetch logo. smallLogo stands in for it in a pane too
-// narrow for the full one beside the info.
 var (
 	logo = []string{
 		`████████╗██╗   ██╗██╗ ██████╗ ███████╗`,
@@ -39,11 +37,6 @@ func cmdFastfetch(t *TTY, _ []string) int {
 	return 0
 }
 
-// fastfetch lays the output out for a pane cols cells wide. It tries, in
-// order, the full logo beside the info, the small logo beside the info, a
-// logo above the info, and the info alone. No line is wider than cols: a
-// value too long for its column ends in an ellipsis instead of wrapping,
-// because a wrapped line breaks mid-word and pushes everything below it.
 func fastfetch(cols int, uptime string) []string {
 	cols = max(cols, 1)
 	info := [][2]string{
@@ -58,7 +51,6 @@ func fastfetch(cols int, uptime string) []string {
 	for _, kv := range info {
 		infoW = max(infoW, label+utf8.RuneCountInString(kv[1]))
 	}
-	// infoLines renders the info column w cells wide.
 	infoLines := func(w int) []string {
 		lines := []string{
 			bold + "guest" + reset + "@" + bold + "tuios" + reset,
@@ -111,7 +103,6 @@ func fastfetch(cols int, uptime string) []string {
 		out = infoLines(cols)
 	}
 
-	// Eight swatches, three cells each when they fit.
 	sw := max(min(cols/8, 3), 1)
 	var b strings.Builder
 	for c := range min(8, cols/sw) {
@@ -122,7 +113,6 @@ func fastfetch(cols int, uptime string) []string {
 
 func logoWidth(art []string) int { return utf8.RuneCountInString(art[0]) }
 
-// ellipsize cuts s to at most w cells, ending in "…" when it cuts.
 func ellipsize(s string, w int) string {
 	r := []rune(s)
 	if len(r) <= w {
@@ -139,7 +129,6 @@ func cmdColors(t *TTY, _ []string) int {
 	return 0
 }
 
-// colors lays the palette out for a pane cols cells wide.
 func colors(cols int) []string {
 	var lines []string
 	var b strings.Builder
@@ -147,8 +136,6 @@ func colors(cols int) []string {
 		lines = append(lines, b.String()+reset)
 		b.Reset()
 	}
-	// Each of the 16 swatches is four cells, eight to a row when they fit,
-	// else four or two, so the rows come out even.
 	perRow := 1
 	for _, n := range []int{8, 4, 2} {
 		if n*4 <= cols {
@@ -169,7 +156,6 @@ func colors(cols int) []string {
 		}
 		endLine()
 	}
-	// The cube strip is 36 swatches of two cells, as many to a row as fit.
 	perRow = max(cols/2, 1)
 	for i := range 36 {
 		if i > 0 && i%perRow == 0 {
@@ -181,8 +167,6 @@ func colors(cols int) []string {
 	return lines
 }
 
-// fullscreen runs a program on the alternate screen with the cursor hidden
-// and restores both however it exits.
 func fullscreen(t *TTY, frame func(cols, rows int, tick int) string, every time.Duration, quitOnAnyKey bool) int {
 	t.Print("\x1b[?1049h\x1b[?25l\x1b[H\x1b[2J")
 	defer t.Print("\x1b[?25h\x1b[?1049l")
@@ -242,8 +226,6 @@ func cmdTop(t *TTY, _ []string) int {
 		b.WriteString(", 1 user, load average: 0.42 0.37 0.31")
 		b.WriteString(reset)
 		b.WriteString("\x1b[K\r\n")
-		// Each bar is its width plus 13 cells of label, brackets and percent,
-		// and two sit on a row with a two-cell gap.
 		barW := max((cols-28)/2, 4)
 		for i := range cpus {
 			target := 15 + 60*math.Abs(math.Sin(float64(tick+i*3)/7)) + rand.Float64()*10
@@ -279,8 +261,6 @@ func cmdTop(t *TTY, _ []string) int {
 		}
 		b.WriteString("\x1b[J")
 		fmt.Fprintf(&b, "\x1b[%d;1H%s q to quit %s", rows, "\x1b[7m", reset)
-		// A line wider than the screen wraps and pushes every row below it
-		// down, so cut each one to the width.
 		frame := strings.Split(b.String(), "\r\n")
 		for i, l := range frame {
 			frame[i] = fit(l, cols)
@@ -378,10 +358,7 @@ func cmdCowsay(t *TTY, args []string) int {
 	return 0
 }
 
-// cowsay draws the cow for a pane cols cells wide.
 func cowsay(text string, cols int) []string {
-	// Like cowsay, wrap the text at 40 columns, or narrower when the pane
-	// is: the bubble adds four cells.
 	lines := wrapWords(text, min(40, max(cols-4, 1)))
 	n := 0
 	for _, l := range lines {
@@ -401,8 +378,6 @@ func cowsay(text string, cols int) []string {
 		out = append(out, fit(left+" "+l+strings.Repeat(" ", n-utf8.RuneCountInString(l))+" "+right, cols))
 	}
 	out = append(out, fit(" "+strings.Repeat("-", n+2), cols))
-	// The cow is 28 cells wide, eight of them indent. In a narrower pane it
-	// moves left before it is cut.
 	shift := min(max(28-cols, 0), 8)
 	for _, l := range []string{
 		`        \   ^__^`,
@@ -455,8 +430,6 @@ func cmdTree(s *shell, args []string, _ string) int {
 	return 0
 }
 
-// cmdGo runs the tiny Go project the only ways worth faking: run, test,
-// build and version. It reads greet.go, so a change there shows up here.
 func cmdGo(s *shell, args []string, _ string) int {
 	sub := argOr(args, 1, "")
 	if sub == "version" {

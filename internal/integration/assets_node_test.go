@@ -12,9 +12,6 @@ import (
 	"testing"
 )
 
-// recorderScript is the stand-in for the `tuios` binary the extension spawns.
-// The hook payload arrives on stdin; the recorder appends it with its argv to
-// the log file TUIOS_TEST_LOG names, one JSON object per line.
 const recorderScript = `#!/usr/bin/env node
 import { appendFileSync } from "node:fs";
 const argv = process.argv.slice(2).join(" ");
@@ -27,12 +24,6 @@ process.stdin.on("end", () => {
 });
 `
 
-// driverScript is a fake pi harness for the extension. It captures pi.on
-// handlers into a map and pi.events.on subscriptions into one the sequences
-// fire, backs the ctx stub with a session file that really exists (the
-// extension watches its folder), and advances the leaf the stub returns. The
-// sequences below are the pi-subagents 0.84.0 shapes the extension reports;
-// the Go test asserts on the recorder log after the driver exits.
 const driverScript = `import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
@@ -179,8 +170,6 @@ func TestPiExtensionSubagentEventsInANodeHarness(t *testing.T) {
 	var flags []string
 	switch {
 	case major > 22 || (major == 22 && minor >= 6):
-	// Node 22.6 strips types behind --experimental-strip-types; 23 and up
-	// strip them with no flag. The template is plain modern JS in .ts.
 	case major == 22:
 		flags = []string{"--experimental-strip-types"}
 	default:
@@ -218,8 +207,6 @@ func TestPiExtensionSubagentEventsInANodeHarness(t *testing.T) {
 	cmd := exec.Command(node, append(flags, driver, ext, sessionFile, log)...)
 	cmd.Env = append(os.Environ(),
 		"TUIOS_ENV=1",
-		// The template's ladder reads pi-subagents' own config; keep the
-		// test's default away from whatever the machine really runs.
 		"PI_CODING_AGENT_DIR="+filepath.Join(dir, "no-pi-agent"),
 		"TUIOS_TEST_LOG="+log,
 	)
@@ -272,7 +259,6 @@ func TestPiExtensionSubagentEventsInANodeHarness(t *testing.T) {
 		return nil
 	}
 
-	// The first report names the session and the file the watcher watches.
 	if len(payloads) == 0 {
 		t.Fatal("the extension reported nothing at all")
 	}
@@ -282,10 +268,6 @@ func TestPiExtensionSubagentEventsInANodeHarness(t *testing.T) {
 			event(first), field(first, "session_id"), field(first, "transcript_path"))
 	}
 
-	// 1. The management call 'status' is not a run: no start and no failure
-	// may name it. (The fixed extension still sends the tool result's own
-	// lone stop for fg:c1, which the daemon drops — it changes nothing for
-	// an id it never saw start.)
 	if n := count("subagent_start", "fg:c1"); n != 0 {
 		t.Errorf("a subagent management call drew %d start reports, want none", n)
 	}
@@ -293,17 +275,12 @@ func TestPiExtensionSubagentEventsInANodeHarness(t *testing.T) {
 		t.Errorf("a subagent management call drew %d update reports, want none", n)
 	}
 
-	// No sequence fails a run: a phantom failed row is the bug that hides a
-	// healthy one.
 	for i, p := range payloads {
 		if field(p, "outcome") == "failed" {
 			t.Errorf("report %d is a %s with outcome failed: no sequence fails a run", i+1, event(p))
 		}
 	}
 
-	// 2. The good background single run starts and stops one row, named by
-	// the run id the async events carry, with the task text the tool call
-	// stashed for it.
 	if n := count("subagent_start", "r1"); n != 1 {
 		t.Errorf("the background run drew %d start reports, want 1", n)
 	} else if start := only("subagent_start", "r1"); field(start, "agent_type") != "scout" || field(start, "text") != "T" {
@@ -318,10 +295,6 @@ func TestPiExtensionSubagentEventsInANodeHarness(t *testing.T) {
 		t.Errorf("the background run's tool result drew %d start reports for its own call id, want none", n)
 	}
 
-	// 3. The workflow's tool call draws no row of its own — its async-started
-	// names no tool call, so the successful tool result must report nothing
-	// for it — and the child ends with the parent's result, matched by agent
-	// where no step index was given.
 	for _, p := range payloads {
 		if id := agent(p); id == "fg:c3" || id == "c3" {
 			t.Errorf("the workflow's tool call drew a %s report for %q, want none", event(p), id)
@@ -338,16 +311,12 @@ func TestPiExtensionSubagentEventsInANodeHarness(t *testing.T) {
 	if n := count("subagent_stop", "ch1"); n != 1 {
 		t.Errorf("the workflow drew %d stop reports for its child, want 1", n)
 	} else if stop := only("subagent_stop", "ch1"); field(stop, "text") != "done" {
-		// The result names no agent, so none maps to the child and it ends
-		// with a plain done.
 		t.Errorf("the workflow's child stopped with text %q, want done", field(stop, "text"))
 	}
 	if n := count("subagent_stop", "wf1"); n != 1 {
 		t.Errorf("the workflow drew %d stop reports for the parent run, want 1", n)
 	}
 
-	// 4. The foreground id sanitised: the '| ' in the OpenAI Responses call
-	// id must not reach the daemon, and the result must end the same row.
 	id := "fg:call_abc_item_def"
 	if n := count("subagent_start", id); n != 1 {
 		t.Errorf("the foreground run drew %d start reports for %q, want 1", n, id)
@@ -367,8 +336,6 @@ func TestPiExtensionSubagentEventsInANodeHarness(t *testing.T) {
 		t.Errorf("the sanitised foreground id %q is not one the daemon keeps", id)
 	}
 
-	// 5. The transcript_update the watcher owed after the leaf advance is in,
-	// after the subagent reports wedged in ahead of its callback.
 	stop := -1
 	for i, p := range payloads {
 		if event(p) == "subagent_stop" && agent(p) == "sx" {
@@ -386,8 +353,6 @@ func TestPiExtensionSubagentEventsInANodeHarness(t *testing.T) {
 	t.Errorf("no transcript_update for leaf1 followed the wedged subagent reports: the watcher's report was suppressed")
 }
 
-// pPiTarget returns the Pi target, for the version the template is rendered
-// with and the report spawn names.
 func piTargetOf() *Target {
 	for _, x := range targets {
 		if x.ID == Pi {

@@ -9,22 +9,6 @@ import (
 	"testing"
 )
 
-// The ways detection can go wrong, which this table is written against:
-//
-//   - It runs over SSH and reports the rate of a desk nobody is sitting at.
-//   - It runs with no display at all and waits on a tool that cannot answer.
-//   - It takes a rate from a display that is turned off.
-//   - It takes a mode the display offers instead of the one it is in.
-//   - It reports the first display rather than the fastest.
-//   - A missing tool, or output it cannot read, stops it trying the next one.
-//   - A fractional rate (59.94, 143.98) comes back as 59 or 143.
-//   - It runs a tool on a compositor that tool does not speak for.
-//
-// The e2e suite drives the real binary through a stand-in hyprctl; this covers
-// the other tools, which no machine running the suite has all of.
-
-// fakeRunner answers from a table keyed by the command line, and records what
-// it was asked to run.
 type fakeRunner struct {
 	out map[string]string
 	ran []string
@@ -91,8 +75,7 @@ func TestDetect(t *testing.T) {
 		env  map[string]string
 		out  map[string]string
 		want int
-		// ran, when set, is exactly the commands that must have run.
-		ran []string
+		ran  []string
 	}{
 		{
 			name: "over ssh nothing runs",

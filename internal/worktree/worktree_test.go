@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// Every test here works on a repository testutil.GitRepo made under the test's
-// temporary directory. Nothing touches any other repository.
-
 // TestDetectReadsTheGitFilesByHand lays out the files git writes for a linked
 // worktree without running git, so each part Detect depends on can be taken
 // away on its own: a relative gitdir, a gitdir under modules/ as a submodule
@@ -25,8 +22,6 @@ func TestDetectReadsTheGitFilesByHand(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// layout makes <tmp>/main/.git/<kind>/wt as the gitdir and <tmp>/wt as the
-	// tree, with the tree's .git file naming the gitdir by a relative path.
 	layout := func(t *testing.T, kind string, commondir bool, head string) (tree, main string) {
 		root := t.TempDir()
 		main = filepath.Join(root, "main")

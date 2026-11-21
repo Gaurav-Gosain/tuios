@@ -7,10 +7,6 @@ import (
 	"unicode"
 )
 
-// The words the install question, tuios plugins approve and the approval
-// dialog use for what a plugin may do. One place, so the three say the same
-// thing.
-
 // GrantMeaning says in plain words what a grant lets a plugin do. A plugin
 // is in no session, so read and write reach every session.
 func GrantMeaning(grant string) string {

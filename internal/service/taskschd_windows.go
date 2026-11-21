@@ -14,15 +14,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// On Windows the daemon runs as a task of the user in Task Scheduler,
-// \TUIOS\NAME. It needs no administrator. It starts when the user logs on,
-// in their session, and runs while they are logged on. conhost --headless
-// runs it without a window, which tuios.exe, a console program, would have.
-
 func task(name string) string { return `\TUIOS\` + name }
 
-// file is the task as Install registered it. Its presence says the task is
-// installed without asking Task Scheduler.
 func file(name string) string {
 	dir, err := os.UserConfigDir()
 	if err != nil {
@@ -39,8 +32,6 @@ func conhost() string {
 	return filepath.Join(root, "System32", "conhost.exe")
 }
 
-// definition is the task that runs the spec's daemon. Task Scheduler starts
-// it again when it fails, and never runs two.
 func definition(s Spec, account string) string {
 	var args strings.Builder
 	args.WriteString(`--headless "` + s.Binary + `" daemon --service`)
@@ -97,7 +88,6 @@ func definition(s Spec, account string) string {
 		socketMarker, html.EscapeString(s.Socket), binaryMarker, html.EscapeString(s.Binary))
 }
 
-// utf16File is s as schtasks reads a task: UTF-16 with its byte order mark.
 func utf16File(s string) []byte {
 	u := utf16.Encode([]rune("\ufeff" + strings.ReplaceAll(s, "\n", "\r\n")))
 	b := make([]byte, 2*len(u))
@@ -195,5 +185,4 @@ func Get(name string) Status {
 // UsesLinger reports whether this system has the linger setting.
 func UsesLinger() bool { return false }
 
-// unescapeMarker reads a marker from the XML comment it is in.
 func unescapeMarker(s string) string { return html.UnescapeString(s) }

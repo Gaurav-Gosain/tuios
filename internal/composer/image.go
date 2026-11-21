@@ -7,8 +7,6 @@ import (
 	"image"
 	"strconv"
 
-	// The decoders read only an image's header here, for its size. They are
-	// in the binary already, for the launcher's icons and file previews.
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
@@ -82,8 +80,6 @@ func SniffImage(data []byte) string {
 	return ""
 }
 
-// measureWords is the image's measure as its label says it: its size and
-// type, or the type alone when the size is not known.
 func (img *Image) measureWords() string {
 	if img.Width > 0 && img.Height > 0 {
 		return strconv.Itoa(img.Width) + "×" + strconv.Itoa(img.Height) + " " + img.Format
@@ -91,14 +87,12 @@ func (img *Image) measureWords() string {
 	return img.Format
 }
 
-// newImageBlock makes block n of img.
 func newImageBlock(n int, img *Image) *block {
 	b := &block{n: n, img: img}
 	b.label = "[Image #" + strconv.Itoa(n) + " · " + img.measureWords() + "]"
 	return b
 }
 
-// renumbered is a copy of b numbered n.
 func renumbered(b *block, n int) *block {
 	if b.img != nil {
 		return newImageBlock(n, b.img)

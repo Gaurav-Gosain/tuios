@@ -14,22 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// Staging: the diffs of a worktree's index, and moving changes between the
-// working state and the index by file, by hunk and by line.
-//
-// Two index diffs exist. The unstaged diff runs from the index (written as a
-// tree with git write-tree) to the working state (worktree.SnapshotTree, so
-// untracked files are in it). The staged diff runs from HEAD (the empty tree
-// before the first commit) to the index. Both are read by Build, so a hunk's
-// header and its lines are the same here as review-diff shows them for the
-// same mode and context.
-//
-// A selection of lines becomes a patch against the index, applied with
-// git apply --cached. Nothing here writes the working tree: every write is to
-// the index, through git add, git reset, git apply --cached or
-// git update-index. Each of them runs with the worktree's own index, never
-// the caller's GIT_INDEX_FILE (gitEnv drops it).
-
 // Index diff modes, as review-diff's index parameter names them.
 const (
 	IndexUnstaged = "unstaged"
@@ -52,7 +36,6 @@ func HasHead(ctx context.Context, dir string) bool {
 	return err == nil
 }
 
-// headTree is HEAD's tree, or the empty tree before the first commit.
 func headTree(ctx context.Context, dir string) (string, error) {
 	if sha, err := revParse(ctx, dir, "HEAD^{tree}"); err == nil {
 		return sha, nil
@@ -64,7 +47,6 @@ func headTree(ctx context.Context, dir string) (string, error) {
 // unstaged diff (index to working state) or the staged diff (HEAD to index).
 // Base.Name is "index" or "HEAD", and Base.SHA is a tree.
 func IndexOptions(ctx context.Context, dir, mode string) (Options, error) {
-	// git's index in a jj workspace is jj's export, not what anyone staged.
 	if gitstate.Find(dir).JJ {
 		return Options{}, errors.New("a jj workspace has no staging area: review it without index, or with uncommitted for the working-copy commit alone")
 	}
@@ -154,9 +136,6 @@ func (h *Hunk) Changes() []int {
 	return out
 }
 
-// indexLacks reports whether a patch of f creates the file in the index:
-// the index side of the diff has no file. For the unstaged
-// diff that is a new file (A or U), for the staged diff a deleted one.
 func (f *File) indexLacks(unstage bool) bool {
 	if unstage {
 		return f.Status == StatusDeleted
@@ -192,9 +171,6 @@ func SelectionPatch(f *File, h *Hunk, sel []int, unstage bool) (string, error) {
 	}
 	var body strings.Builder
 	oldCount, newCount := 0, 0
-	// ended is the side a line without its newline closed: ' ' for both.
-	// After it a side that ended takes no more lines, or git apply would
-	// join two lines into one.
 	var ended byte
 	badEnd := false
 	emit := func(prefix byte, l Line) {
@@ -225,19 +201,19 @@ func SelectionPatch(f *File, h *Hunk, sel []int, unstage bool) (string, error) {
 			if picked[i] {
 				emit('+', l)
 			}
-		case !unstage: // a delete
+		case !unstage:
 			if picked[i] {
 				emit('-', l)
 			} else {
 				emit(' ', l)
 			}
-		case l.Op == OpAdd: // unstage
+		case l.Op == OpAdd:
 			if picked[i] {
 				emit('-', l)
 			} else {
 				emit(' ', l)
 			}
-		default: // unstage a delete
+		default:
 			if picked[i] {
 				emit('+', l)
 			}
@@ -278,9 +254,6 @@ func SelectionPatch(f *File, h *Hunk, sel []int, unstage bool) (string, error) {
 	return p.String(), nil
 }
 
-// quotePatchPath writes a path the way git apply reads one: in double quotes
-// with C escapes when it holds a quote, a backslash, a space or a control
-// byte, else as it is.
 func quotePatchPath(p string) string {
 	if !strings.ContainsFunc(p, func(r rune) bool { return r < 0x20 || r == 0x7f || r == '"' || r == '\\' || r == ' ' }) {
 		return p
@@ -410,7 +383,6 @@ func ValidEntry(ctx context.Context, dir string, e IndexEntry) error {
 		return errfmt.Errorf("%s has sha %q, which is not an object name here", e.Path, e.SHA)
 	}
 	if e.Mode == "160000" {
-		// A submodule's commit lives in the submodule, not here.
 		return nil
 	}
 	if _, err := git(ctx, dir, nil, "cat-file", "-e", e.SHA+"^{blob}"); err != nil {
@@ -439,7 +411,6 @@ func SetIndexEntries(ctx context.Context, dir string, entries []IndexEntry) erro
 	return err
 }
 
-// gitInput is git with stdin.
 func gitInput(ctx context.Context, dir, stdin string, args ...string) (string, error) {
 	cmd := childproc.Git(ctx, dir, args...)
 	cmd.Env = gitEnv(dir, cmd.Env, nil)

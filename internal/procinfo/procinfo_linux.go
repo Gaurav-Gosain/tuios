@@ -102,10 +102,6 @@ func StatField(stat string, field int) (int, bool) {
 	return v, err == nil
 }
 
-// statToken returns field number field of a /proc/<pid>/stat line. The comm
-// field (2) is wrapped in parentheses and may itself contain spaces or
-// parentheses, so fields are counted from after the final ')': state(3)
-// ppid(4) pgrp(5) session(6) tty_nr(7) tpgid(8), field n at index n-3.
 func statToken(stat string, field int) (string, bool) {
 	rparen := strings.LastIndexByte(stat, ')')
 	if rparen < 0 || rparen+2 >= len(stat) || field < 3 {

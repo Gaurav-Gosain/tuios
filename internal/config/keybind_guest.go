@@ -35,16 +35,6 @@ const (
 	EvidenceReference Evidence = "reference"
 )
 
-// hardcodedTerminalKeys are the keys terminal mode takes out of the stream
-// without going through the registry, listed by hand because a report that only
-// covered the configurable ones would tell the user their ctrl+p reaches fish.
-//
-// It is empty now, and staying empty is the point: the palette, the launcher,
-// the scrollback scroll and the host-paste chords all resolve through the
-// registry, so the report derives them. Anything added here is a key nobody can
-// rebind, and should be a binding instead.
-//
-// Keep in step with HandleTerminalModeKey and handleTerminalModeBinds.
 var hardcodedTerminalKeys = map[string]string{}
 
 // Swallow is one key terminal mode takes before the pane's program can see it.
@@ -84,8 +74,6 @@ func (r *KeybindRegistry) TerminalModeSwallowed() []Swallow {
 	}
 	add(leader, "leader", "Start a prefix chord", "built-in")
 
-	// The global scope acts in terminal mode too, so everything bound in it is
-	// withheld from the pane exactly like a terminal_mode bind.
 	for _, name := range []string{SectionGlobal, SectionTerminalMode} {
 		section := kb.section(name)
 		actions := make([]string, 0, len(section))
@@ -100,10 +88,6 @@ func (r *KeybindRegistry) TerminalModeSwallowed() []Swallow {
 		}
 	}
 
-	// The main sections reach terminal mode only through TerminalSafeAction,
-	// and only on a chord the shell would never want as literal input. Applying
-	// both filters here is what keeps the report from claiming tuios eats the
-	// plain letters window mode binds.
 	for _, name := range []string{
 		SectionWindowManagement, SectionWorkspaces, SectionLayout,
 		SectionModeControl, SectionSystem, SectionNavigation,
@@ -132,9 +116,6 @@ func (r *KeybindRegistry) TerminalModeSwallowed() []Swallow {
 		add(key, "", hardcodedTerminalKeys[key], "built-in")
 	}
 
-	// The hold trigger is only inert when no terminal reports releases, and the
-	// report cannot know that from here, so it is listed: a held modifier that
-	// does reach the input path is one the guest does not get.
 	for _, key := range kb.section(SectionModeControl)["hold_window_mode"] {
 		add(key, "hold_window_mode", describeAction("hold_window_mode"), SectionModeControl)
 	}
@@ -158,9 +139,6 @@ func TerminalSafeAction(action string) bool {
 		action == "next_agent" || action == "prev_agent"
 }
 
-// reservedTerminalChord mirrors input.isReservedTerminalChord for a key written
-// in config.toml rather than for a decoded key event: a real Alt or Ctrl
-// modifier, or a bare macOS Option glyph.
 func reservedTerminalChord(key string) bool {
 	lower := strings.ToLower(strings.TrimSpace(key))
 	for _, mod := range []string{"alt+", "opt+", "option+", "ctrl+", "control+"} {
@@ -424,8 +402,6 @@ func (r *KeybindRegistry) GuestClashes(running string) []GuestClash {
 			})
 		}
 	}
-	// The running program's clashes first: they are the ones the user can see
-	// being wrong without leaving the pane.
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].Running != out[j].Running {
 			return out[i].Running
@@ -435,7 +411,6 @@ func (r *KeybindRegistry) GuestClashes(running string) []GuestClash {
 	return out
 }
 
-// sortedKeys returns a map's keys in order, so output is stable.
 func sortedKeys(m map[string]string) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

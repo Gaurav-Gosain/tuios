@@ -9,15 +9,6 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// The composer is a state machine whose faults are quiet: a block cut in
-// half sends half a stack trace, an undo that loses a block's payload sends
-// its label, and a wrap that misjudges a wide character puts the cursor in
-// the wrong place. These tests hold the four things that would go wrong
-// without a sound: block atomicity, undo and redo, wrap with wide characters,
-// and the expansion at send.
-
-// testStyles is a truecolor look for the tests and the benchmarks. A host
-// fills Styles from its own theme.
 func testStyles() Styles {
 	return Styles{
 		Field:    lipgloss.Color("#1e1e2e"),
@@ -32,7 +23,6 @@ func testStyles() Styles {
 	}
 }
 
-// testSurface is the ground around the editor in the tests.
 var testSurface = lipgloss.Color("#181825")
 
 func key(s string) tea.KeyPressMsg {
@@ -105,12 +95,10 @@ func TestPasteBlockIsOneUnit(t *testing.T) {
 		t.Fatalf("label = %q", m.cells[4].block.label)
 	}
 
-	// Step left from after " ok": three moves to the block, one over it.
 	press(m, "left", "left", "left", "left")
 	if m.cur != 4 {
 		t.Fatalf("one left over the block left the cursor at %d, want 4", m.cur)
 	}
-	// Delete forward from before the block takes all of it, not a byte.
 	press(m, "delete")
 	if m.Text() != "see  ok" {
 		t.Fatalf("delete before the block left %q", m.Text())
@@ -120,7 +108,6 @@ func TestPasteBlockIsOneUnit(t *testing.T) {
 		t.Fatalf("undo did not bring the block back whole: %q", m.Text())
 	}
 
-	// A word delete right after the block takes the block and nothing else.
 	press(m, "right")
 	press(m, "ctrl+w")
 	if m.Text() != "see  ok" {
@@ -128,7 +115,6 @@ func TestPasteBlockIsOneUnit(t *testing.T) {
 	}
 	press(m, "ctrl+z")
 
-	// Backspace after the block removes it whole.
 	press(m, "backspace")
 	if m.Text() != "see  ok" || m.Blocks() != 0 {
 		t.Fatalf("backspace after the block left %q", m.Text())
@@ -157,8 +143,6 @@ func TestBlockNumbers(t *testing.T) {
 	m.Paste(lines(5), false)
 	m.Paste(lines(6), false)
 	m.Paste(lines(7), false)
-	// Remove #3, the last; a new paste is #3 again. Remove #1; the next
-	// is #4, past the highest still there.
 	press(m, "backspace")
 	m.Paste(lines(8), false)
 	if n := m.cells[2].block.n; n != 3 {
@@ -176,7 +160,6 @@ func TestBlockNumbers(t *testing.T) {
 func TestUndoRedo(t *testing.T) {
 	m := New(Options{})
 	typeText(m, "hello world")
-	// Typing is undone a word at a time.
 	press(m, "ctrl+z")
 	if got := m.Text(); got != "hello" {
 		t.Fatalf("one undo = %q, want the last word gone", got)
@@ -202,13 +185,11 @@ func TestUndoRedo(t *testing.T) {
 	if m.Text() != "hello world" || m.Blocks() != 0 {
 		t.Fatalf("two redos = %q blocks %d", m.Text(), m.Blocks())
 	}
-	// A new edit drops the redo steps.
 	press(m, "ctrl+z")
 	typeText(m, "x")
 	if m.Redo() {
 		t.Fatal("redo after a new edit did something")
 	}
-	// The stack is bounded.
 	for range undoSteps + 50 {
 		press(m, "ctrl+j")
 	}
@@ -238,24 +219,19 @@ func TestNewLineKeys(t *testing.T) {
 
 func TestWrapWithWideCharacters(t *testing.T) {
 	m := New(Options{})
-	// 8 cells of text: four wide characters. A row of 7 holds three.
 	typeText(m, "日本語版")
 	rows := m.rows(7)
 	if len(rows) != 2 || rows[0].end != 3 {
 		t.Fatalf("rows at width 7 = %+v, want 3 wide characters then 1", rows)
 	}
-	// The cursor at the end is on the second row, two cells in.
 	if r := rowOf(rows, m.cur); r != 1 || m.colOf(rows[r], m.cur, 7) != 2 {
 		t.Fatalf("cursor row %d", r)
 	}
-	// Up keeps the column: two cells is the end of the first wide
-	// character.
 	m.width = 7
 	press(m, "up")
 	if m.cur != 1 {
 		t.Fatalf("up from column 2 put the cursor at %d, want 1", m.cur)
 	}
-	// Words wrap at spaces, and an emoji with a joiner is one cell.
 	m.Clear()
 	typeText(m, "ab cd ")
 	m.Update(tea.KeyPressMsg{Code: '👩', Text: "👩"}, false)
@@ -281,7 +257,6 @@ func TestSubmitExpandsBlocksInPlace(t *testing.T) {
 	paste := lines(42)
 	typeText(m, "before ")
 	m.Paste(paste, false)
-	// Literal text that looks like a label stays literal.
 	typeText(m, " [Pasted text #1 · 42 lines]")
 	text, ok := m.Submit()
 	if !ok {
@@ -310,7 +285,6 @@ func TestSubmitStopsOnInvisibleCharacters(t *testing.T) {
 	if !ok || text != "run itxy"+strings.Repeat("\n", 5) {
 		t.Fatalf("second submit = %q %v", text, ok)
 	}
-	// The joiner in an emoji is kept.
 	m.Clear()
 	typeText(m, "👩\u200d💻")
 	if text, ok := m.Submit(); !ok || text != "👩\u200d💻" {

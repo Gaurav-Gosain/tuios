@@ -13,27 +13,10 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The oracle, over the exported surface only. Every rule here is one the suite
-// already pins for a particular arrangement, generalised to hold after any
-// action.
-//
-// Rules are ordered cheapest first, and Check returns at the first rule that
-// breaks. That keeps the common path (nothing is wrong) off the expensive
-// render, and it makes the shrinker's job well defined: one failing run names
-// one rule.
-
 func vio(rule, format string, args ...any) []fuzz.Violation {
 	return []fuzz.Violation{{Rule: rule, Detail: fmt.Sprintf(format, args...)}}
 }
 
-// oracle is the sweep, in the order Check runs it.
-//
-// rules lists every Violation a check can raise, in the order it raises them.
-// One function often decides several distinct properties, and it is the
-// property, not the function, that a report names and a shrinker holds fixed, so
-// the registry enumerates properties. An attached display matches a Violation's
-// Rule against these names, so a name no violation ever carries is a rule that
-// reads as passing while it fails.
 var oracle = []struct {
 	rules []fuzz.RuleInfo
 	check func(*Target) []fuzz.Violation
@@ -61,10 +44,6 @@ var oracle = []struct {
 	}, checkFrameFitsTheHost},
 }
 
-// checkRules belong to Check itself rather than to any one check function. A
-// panic escaping a rule can surface at any point in the sweep, so it sits at the
-// end of the registry where it cannot claim that the rules before it were
-// skipped.
 var checkRules = []fuzz.RuleInfo{
 	{Name: "render-panic", Family: "process", Doc: "a rule panicked composing a frame, which in the real render loop kills the process"},
 }
@@ -89,7 +68,7 @@ func (t *Target) Rules() []fuzz.RuleInfo {
 // it instead of the run dying with the binary.
 func (t *Target) Check() (found []fuzz.Violation) {
 	if t.m.QuitRequested {
-		return nil // see Apply
+		return nil
 	}
 	defer func() {
 		if r := recover(); r != nil {
@@ -110,9 +89,6 @@ func (t *Target) Check() (found []fuzz.Violation) {
 	return nil
 }
 
-// Update recovers a panic rather than letting it out, so a panic is not a crash;
-// it is a log line and a frame that did nothing. That makes it invisible to a
-// fuzzer that only watches for a crash, which is why it is checked first.
 func checkNoRecoveredPanic(t *Target) []fuzz.Violation {
 	for _, msg := range t.m.LogMessages {
 		if strings.Contains(msg.Message, "recovered panic") {
@@ -123,16 +99,11 @@ func checkNoRecoveredPanic(t *Target) []fuzz.Violation {
 	return nil
 }
 
-// The indexes the rest of the model dereferences. A focus index past the end of
-// the slice is a crash the next time anything reaches for the focused pane, and
-// a workspace outside the range is a lookup that silently returns nothing.
 func checkModelIndexes(t *Target) []fuzz.Violation {
 	m := t.m
 	if m.FocusedWindow < -1 || m.FocusedWindow >= len(m.Windows) {
 		return vio("focus-index", "FocusedWindow %d with %d panes", m.FocusedWindow, len(m.Windows))
 	}
-	// A scratch group's workspace is outside the range on purpose: see
-	// session/scratch_workspace.go.
 	if (m.CurrentWorkspace < 1 || m.CurrentWorkspace > m.NumWorkspaces) && !session.IsScratchWorkspace(m.CurrentWorkspace) {
 		return vio("workspace-range", "CurrentWorkspace %d outside 1..%d", m.CurrentWorkspace, m.NumWorkspaces)
 	}
@@ -147,23 +118,13 @@ func checkModelIndexes(t *Target) []fuzz.Violation {
 	return nil
 }
 
-// The size agreement, generalised off the matrix in pane_size_announce_test.go:
-// whatever the arrangement, a guest is told the size it can draw in and the
-// emulator holds that grid. A guest drawing into a grid nobody told it about
-// wraps every line it writes.
 func checkPaneSizeAgreement(t *Target) []fuzz.Violation {
 	if t.deferring() {
-		// A live deferral means the announcement is stale on purpose: the size is
-		// still moving and the expensive half is being held back. Asserting
-		// agreement here would assert the opposite of the documented design. The
-		// next Tick settles it, and the rule applies again from there.
 		return nil
 	}
 	for _, w := range visiblePanes(t.m) {
 		cw, ch := w.ContentWidth(), w.ContentHeight()
 		if cw <= 0 || ch <= 0 {
-			// A pane with no room to draw is a legitimate state on a viewport too
-			// small to hold one, and the sizes below are meaningless there.
 			continue
 		}
 		if ew, eh := w.Terminal.Width(), w.Terminal.Height(); ew != cw || eh != ch {
@@ -180,34 +141,19 @@ func checkPaneSizeAgreement(t *Target) []fuzz.Violation {
 	return nil
 }
 
-// Generalised from assertNoOverlap and TestApplyLayoutNeverOverlaps: tiled panes
-// partition their region, so no two of them may claim a cell. Two panes over one
-// cell means whichever draws second wins and the other's guest is invisible.
 func checkLayoutIsDisjoint(t *Target) []fuzz.Violation {
 	m := t.m
-	// Only when something claims to be partitioning. With auto-tiling off the
-	// panes are free-floating windows a user may deliberately stack, and the
-	// scrolling layout is a strip wider than the viewport that is scrolled along
-	// rather than a partition of it.
 	if !m.AutoTiling || m.LayoutModeName() == app.LayoutModeScrolling || !t.hasRoomToDraw() {
 		return nil
 	}
-	// A pane being moved or resized follows the pointer until the button
-	// comes up, over whatever it passes.
 	if m.Dragging || m.Resizing {
 		return nil
 	}
 	wins := tiledRects(m)
 	for _, w := range wins {
-		// A zoomed pane covers the others by design and they are not drawn, so
-		// there is no rectangle to partition while one is up.
 		if w.Zoomed {
 			return nil
 		}
-		// A pane clamped to the floor is the layout saying the region cannot hold
-		// this many panes. Overlap is the documented consequence of the clamp, so
-		// there is no partition to assert until the region grows. The floor is the
-		// size both tilers actually clamp to, in internal/layout.
 		if w.Width <= config.DefaultWindowWidth || w.Height <= config.DefaultWindowHeight {
 			return nil
 		}
@@ -226,10 +172,6 @@ func checkLayoutIsDisjoint(t *Target) []fuzz.Violation {
 	return nil
 }
 
-// The frame is what the host terminal is handed. One row too many scrolls the
-// screen and pushes the top line into the host's scrollback; one column too many
-// wraps and corrupts every row below. Neither is recoverable without a full
-// redraw, and both have shipped.
 func checkFrameFitsTheHost(t *Target) []fuzz.Violation {
 	m := t.m
 	rows := t.frameRows()
@@ -247,26 +189,17 @@ func checkFrameFitsTheHost(t *Target) []fuzz.Violation {
 	return nil
 }
 
-// deferring reports whether an announcement is being held back on purpose,
-// which is the one state where a stale announcement is correct. A resize still
-// in flight is one; a pointer gesture holding every pane's announcement until
-// the button comes up is the other.
 func (t *Target) deferring() bool {
 	_, viewport := t.m.PendingViewportResize()
 	return viewport || t.m.Resizing || len(t.m.PendingResizes) > 0 ||
 		t.m.AnnounceGestureHeld()
 }
 
-// hasRoomToDraw reports whether there is a content region at all. On a viewport
-// too small to hold one, panes clamp to a one-cell minimum and stack on top of
-// each other; nothing is drawn, so the geometry rules have nothing to say.
 func (t *Target) hasRoomToDraw() bool {
 	b := t.m.GetBSPBounds()
 	return b.W > 0 && b.H > 0 && t.m.GetRenderWidth() > 0 && t.m.GetRenderHeight() > 0
 }
 
-// visiblePanes is the set the size rule is stated over: the panes on the current
-// workspace that the frame actually draws.
 func visiblePanes(m *app.OS) []*terminal.Window {
 	var out []*terminal.Window
 	for _, w := range m.Windows {
@@ -277,7 +210,6 @@ func visiblePanes(m *app.OS) []*terminal.Window {
 	return out
 }
 
-// tiledRects is the panes that should be partitioning the screen right now.
 func tiledRects(m *app.OS) []*terminal.Window {
 	var out []*terminal.Window
 	for _, w := range m.Windows {
@@ -304,9 +236,6 @@ func (t *Target) Screen() string {
 	return strings.Join(t.frameRows(), "\n")
 }
 
-// frameRows composes the frame the host would receive. The rows are left styled,
-// because ansi.StringWidth counts cells rather than bytes and a stripping pass
-// of its own would be one more thing that can be wrong.
 func (t *Target) frameRows() []string {
 	if t.m.GetRenderWidth() <= 0 || t.m.GetRenderHeight() <= 0 {
 		return nil

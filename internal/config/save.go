@@ -16,16 +16,10 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-// configFileHeader is the comment block written at the top of a generated
-// config file. Kept as a constant so createDefaultConfig and SaveUserConfig
-// produce identical, well-documented files.
 func configFileHeader(configPath string) string {
 	return configHeaderTop + "# Configuration location: " + configPath + "\n" + configHeaderRest
 }
 
-// configHeaderTop and configHeaderRest are the header above and below its
-// path line. They are constants because a WriteString per line compiled to
-// about 200 bytes of code each, 21 KB in all.
 const configHeaderTop = "# TUIOS Configuration File\n" +
 	"# This file allows you to customize appearance and keybindings\n" +
 	"#\n"
@@ -145,9 +139,6 @@ const configHeaderRest = "# Documentation: https://github.com/Gaurav-Gosain/tuio
 	"# `tuios list-dock-components` says which and why.\n" +
 	"# ============================================================================\n\n"
 
-// renderConfigFile is cfg as the bytes of a config file, header and all. It
-// touches memory only, which is what lets a caller that must not block do this
-// half of a save itself.
 func renderConfigFile(cfg *UserConfig, configPath string) ([]byte, error) {
 	data, err := MarshalUserConfig(cfg)
 	if err != nil {
@@ -176,22 +167,6 @@ func MarshalUserConfig(cfg *UserConfig) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// writeConfigBytes puts already-rendered bytes at configPath, creating the
-// parent directory as needed.
-//
-// The bytes go to a temporary file beside the config and are renamed over
-// it, so a reader sees the old file or the new one and never part of one.
-// The config watcher reads the file 200 ms after the last change it saw. A
-// plain write truncates the file and then fills it, and a writer descheduled
-// between the two for longer than that (a loaded CI runner was enough) had
-// the watcher read an empty or cut file. That parsed, the defaults filled the
-// rest, and the dock or the rail of the running client moved back to its
-// default. The completed write that followed was then dropped as tuios's own
-// save, so the wrong settings stood.
-//
-// The content is noted as a self write before the rename, so the watcher that
-// sees the rename already knows it. A symlinked config is written through to
-// its target, so the link survives, and the file keeps its mode.
 func writeConfigBytes(data []byte, configPath string) error {
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o750); err != nil {
 		return errfmt.Errorf("failed to create config directory: %w", err)
@@ -211,40 +186,17 @@ func writeConfigBytes(data []byte, configPath string) error {
 	return nil
 }
 
-// selfWrites remembers the content tuios itself last put in the config file, so
-// the watcher can tell its own saves from somebody's edit.
-//
-// Every row on the settings page saves. Without this, one arrow key would come
-// back through the watcher 200 ms later as an edit, and each repeat would cost a
-// retile of a config that was already in force. Worse, a save still in flight
-// when the watcher read the file would put the value one keypress back into the
-// model, and the screen would step backwards for a frame.
-//
-// A short ring rather than one hash: two saves can be in flight at once, so the
-// file the watcher reads may be either of them.
-//
-// Each entry carries a number that only goes up, and a watcher keeps the number
-// it has got to. The file passing through a save means every earlier save is
-// over, and an edit delivered means the same for every save so far. An entry
-// behind that number is history: the same bytes showing up again are somebody's
-// edit, however long ago tuios wrote them. Nothing expires by the clock, so an
-// echo read late, behind a loaded machine, still counts as one. The number lives
-// in the watcher and not here because the daemon's watcher and a client's can
-// share this ring in one process, and neither may use up the other's echo.
 var selfWrites struct {
 	sync.Mutex
 	entries [8]selfWrite
 	seq     uint64
 }
 
-// selfWrite is one save: its content and its place in the order. A seq of zero
-// is an entry not written yet.
 type selfWrite struct {
 	sum [sha256.Size]byte
 	seq uint64
 }
 
-// noteSelfWrite records what tuios just wrote.
 func noteSelfWrite(data []byte) {
 	sum := sha256.Sum256(data)
 	selfWrites.Lock()
@@ -253,15 +205,12 @@ func noteSelfWrite(data []byte) {
 	selfWrites.Unlock()
 }
 
-// lastSelfWrite is the number of the newest save.
 func lastSelfWrite() uint64 {
 	selfWrites.Lock()
 	defer selfWrites.Unlock()
 	return selfWrites.seq
 }
 
-// selfWriteAfter is the number of the newest save with this content that came
-// after the number given, or zero when there is none.
 func selfWriteAfter(sum [sha256.Size]byte, after uint64) uint64 {
 	selfWrites.Lock()
 	defer selfWrites.Unlock()
@@ -284,9 +233,6 @@ func WriteConfigFile(cfg *UserConfig, configPath string) error {
 	return writeConfigBytes(data, configPath)
 }
 
-// saveSeq numbers renders, and keyGen holds the number of the newest save
-// that wrote each key, so a write held up behind another cannot put an older
-// value of a key back. saveMu guards keyGen and serialises the writes.
 var (
 	saveMu  sync.Mutex
 	saveSeq atomic.Uint64
@@ -313,11 +259,6 @@ var (
 // older one gives way rather than overwriting the newer. Its WriteNote says
 // when a read-only file sent a change to another file.
 func RenderUserConfig(cfg *UserConfig) (func() (WriteNote, error), error) {
-	// The file the config was loaded from, which is the first config.toml on
-	// the search path. The config home is only where a missing one is made.
-	// On macOS the search ends in ~/.config while the config home is
-	// ~/Library/Application Support, so a save to the config home made a second
-	// file that hid the first from the next start.
 	configPath, err := GetConfigPath()
 	if err != nil {
 		return nil, errfmt.Errorf("failed to resolve config path: %w", err)
@@ -328,16 +269,11 @@ func RenderUserConfig(cfg *UserConfig) (func() (WriteNote, error), error) {
 	}
 	base := cfg.baseline
 	cfg.baseline = data
-	// The keys held without saving are left alone, and the keys released
-	// since the last save are written. See hold.go.
 	keys := saveKeys{held: cfg.heldPaths(), forced: cfg.takeForced()}
 	gen := saveSeq.Add(1)
 	return func() (WriteNote, error) {
 		saveMu.Lock()
 		defer saveMu.Unlock()
-		// An older save that lost the race is not dropped: it carries a change
-		// of its own, which the newer one does not repeat. It skips only the
-		// keys a newer save already wrote.
 		note, err := saveConfigData(configPath, base, data, gen, keys)
 		if err != nil {
 			return note, &SaveError{Err: err, cfg: cfg, base: base, forced: keys.forced}

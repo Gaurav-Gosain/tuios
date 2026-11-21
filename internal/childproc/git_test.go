@@ -40,8 +40,6 @@ func TestGitRunsNoProgramTheRepositoryNames(t *testing.T) {
 	}
 	t.Setenv("GIT_CONFIG_GLOBAL", global)
 	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
-	// The signing program that replaces the repository's is the real gpg,
-	// which must find no key of the person's.
 	t.Setenv("GNUPGHOME", filepath.Join(dir, "gnupg"))
 	repo := filepath.Join(dir, "repo")
 	plain := func(stdin string, args ...string) {

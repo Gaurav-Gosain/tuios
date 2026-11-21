@@ -7,40 +7,15 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// agentMarkDefaults is each agent state's mark, and the ASCII form it takes on
-// a terminal that cannot draw more, for a glyph set that names none. The marks
-// are deliberately distinct shapes rather than the same shape in different
-// colours, so the state reads at a glance and survives a monochrome capture: a
-// filled circle working, a triangle needs-input, a hollow circle idle, a filled
-// square done, and a cross errored. The ASCII set keeps the same states apart
-// in one cell.
 var agentMarkDefaults = map[string]struct{ glyph, ascii string }{
-	"working":     {"●", "*"},
-	"needs_input": {"▲", "!"},
-	"idle":        {"○", "o"},
-	"done":        {"■", "#"},
-	"errored":     {"×", "x"},
-	// An agent is there and the daemon cannot say what it is doing. It is the
-	// common case rather than an edge: the stall timer writes this state for
-	// any agent with no screen rules to read, which is every agent matched by
-	// name alone.
-	//
-	// A hollow square rather than a question mark: the row already names the
-	// agent, so the question is about the state and not about whether
-	// anything is there. It reads as the same family as idle's hollow circle,
-	// which is the nearest thing to what it means.
-	"unknown": {"□", "?"},
-	// Stopped on the harness's usage or rate limit. A down triangle: the
-	// family of needs-input's triangle, pointed the other way, because the
-	// agent is stopped and the person is not the one it waits for. Go Mono
-	// has it.
+	"working":       {"●", "*"},
+	"needs_input":   {"▲", "!"},
+	"idle":          {"○", "o"},
+	"done":          {"■", "#"},
+	"errored":       {"×", "x"},
+	"unknown":       {"□", "?"},
 	"limit_reached": {"▼", "="},
-	// Display only, never a pane's state: the agent is at rest and subagents
-	// it started still run. A lozenge in the working ink: a shape none of the
-	// states uses, and one Go Mono, which tuios shot draws with when no font
-	// is given, has. The half-filled circle the design named draws as a
-	// missing glyph there.
-	"waiting": {"◊", "%"},
+	"waiting":       {"◊", "%"},
 }
 
 // SetAgentStateMark is the active glyph set's mark for an agent state, or the
@@ -72,8 +47,6 @@ func AgentStateMark(state string, ascii bool) string {
 	return m.glyph
 }
 
-// agentMarkInfo is what the active set's marks come to, worked out once per
-// set and mode rather than once per drawn row.
 type agentMarkInfo struct {
 	set   *theme.GlyphSet
 	ascii bool
@@ -90,8 +63,6 @@ func agentMarks(ascii bool) *agentMarkInfo {
 	}
 	info := &agentMarkInfo{set: set, ascii: ascii, width: 1, runes: map[rune]bool{}}
 	for state, def := range agentMarkDefaults {
-		// The built-in marks are kept as chrome in both forms, so a mark a
-		// surface drew a moment before the set changed is not stripped.
 		for _, r := range def.glyph + def.ascii {
 			info.runes[r] = true
 		}

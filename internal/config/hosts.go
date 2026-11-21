@@ -1,32 +1,5 @@
 package config
 
-// The [hosts] table names the other machines whose daemons this one links to:
-// for listings, and for the connections a client opens to attach a session or
-// run a verb there.
-//
-//	[hosts.build]
-//	addr = "gaurav@buildbox"
-//
-//	[hosts.work]
-//	addr = "workstation.local"
-//	connect_timeout = 5
-//
-// It sits outside the option registry for the reason [hooks], [keybindings] and
-// [dock.custom] do: it is a map of named tables, not a scalar with a settable
-// value, so there is no single path the set-option verb could write.
-//
-// It is not edited by hand any more, though it still can be. `tuios hosts add`,
-// `tuios hosts remove` and the Hosts section of the settings page write it, and
-// the daemon follows the file, so a change takes effect with no restart. See
-// hosts_edit.go for the write and internal/session's daemon_hosts.go for the
-// reload.
-//
-// Discovery of machines is refused on purpose (design document, section 3): a
-// host exists because the user named it, and a name resolves exactly or not at
-// all. What is offered instead is discovery of what to type: the ssh_config
-// Host aliases, as candidates for an addr. See internal/federation's
-// sshalias.go.
-
 // HostConfig is one [hosts.NAME] table.
 type HostConfig struct {
 	// Addr is anything ssh understands, ssh_config aliases included. A host
@@ -58,11 +31,6 @@ type HostConfig struct {
 	// and on this one, because the banner that carries the link can be
 	// printed by anything on the host.
 	TailscaleLogin string `toml:"tailscale_login,omitempty"`
-
-	// The fields below are the other direction: what the machine of
-	// this name may do here when it links in. They are read on the machine
-	// the link arrives at, and an entry that sets only them, with no addr, is
-	// a policy and nothing is dialled for it. See link_policy.go.
 
 	// Allow is the capabilities the machine gets, from LinkCapabilities. Nil
 	// inherits [hosts."*"] and then DefaultLinkAllow; an empty list allows

@@ -110,21 +110,10 @@ func Palette(pal overlay.Palette, ascii bool) *loom.Palette {
 	return loom.NewPalette(depth, roles)
 }
 
-// chartRoles gives the roles plot draws with that the chrome palette has no
-// name for: track, the empty part of a gauge and the land of a map, and the
-// heat ramp of a heatmap and a map's shades. Left to loom's fallbacks, heat2
-// and heat3 are both info, and at 16 colours the land, heat1 and three of
-// the shades share a slot, so a map's six tones read as three. Here all six
-// differ at every depth: at 16 colours by hue, above it as a ramp from the
-// panel through info to the bright accent.
 func chartRoles(pal overlay.Palette) map[string]color.Color {
 	if pal.Depth == overlay.Depth16 {
 		return map[string]color.Color{
 			loom.RoleTrack: overlay.Slot(8),
-			// Five hues, so no two shades can be the same colour in any
-			// palette: blue, cyan, green, yellow and bright magenta. Slot
-			// 12 is the accent and info, and 4 and 12 look alike in many
-			// palettes.
 			loom.RoleHeat1: overlay.Slot(4), loom.RoleHeat2: overlay.Slot(6),
 			loom.RoleHeat3: overlay.Slot(2), loom.RoleHeat4: overlay.Slot(3),
 			loom.RoleHeat5: overlay.Slot(13),
@@ -232,9 +221,6 @@ func Draw(doc *tml.Node, o Options) (string, error) {
 	return out, nil
 }
 
-// openTab opens the tab with the given id: through the state when its tabs
-// bind a state path, as a click does, else in a copy of view, which it
-// returns.
 func openTab(s *loom.Surface, doc *tml.Node, view *loom.View, id string) (*loom.View, error) {
 	var ids []string
 	var tabs *tml.Node
@@ -268,7 +254,6 @@ func openTab(s *loom.Surface, doc *tml.Node, view *loom.View, id string) (*loom.
 		return view, nil
 	}
 	if view != nil {
-		// SetView copies it, so the caller's view stays as it was.
 		s.SetView(view)
 	}
 	view = s.View()

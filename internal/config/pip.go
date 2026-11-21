@@ -47,14 +47,9 @@ func (s PiPSize) MarshalTOML() ([]byte, error) {
 	if n, percent, err := ParseBoxSize(string(s)); err == nil && !percent {
 		return []byte(strconv.Itoa(n)), nil
 	}
-	// A JSON string is a TOML basic string: the same quotes and escapes, and
-	// encoding/json never writes the one escape TOML lacks (\/).
 	return jsonx.Marshal(string(s))
 }
 
-// cells is the size in cells for an area total cells long: a number of
-// cells within lo and hi, or a percent of total, at least lo. A value that
-// does not read is def.
 func (s PiPSize) cells(total, def, lo, hi int) int {
 	n, percent, err := ParseBoxSize(string(s))
 	if err != nil {
@@ -96,7 +91,6 @@ const (
 	PiPMaxHeight     = 100
 )
 
-// defaultPiPConfig returns the section DefaultConfig carries.
 func defaultPiPConfig() PiPConfig {
 	return PiPConfig{
 		Width:  PiPSize(strconv.Itoa(PiPDefaultWidth)),
@@ -105,9 +99,6 @@ func defaultPiPConfig() PiPConfig {
 	}
 }
 
-// fillMissingPiP fills absent values with the defaults. A value that is
-// there but wrong stays, so validatePiP can name it. The view reads it as the
-// default.
 func fillMissingPiP(cfg, defaultCfg *UserConfig) {
 	p, d := &cfg.PiP, &defaultCfg.PiP
 	if strings.TrimSpace(string(p.Width)) == "" {
@@ -121,9 +112,6 @@ func fillMissingPiP(cfg, defaultCfg *UserConfig) {
 	}
 }
 
-// validatePiP warns about a size that does not read, and about a number of
-// cells outside its range. Without a warning, a typo would look like the key
-// doing nothing.
 func validatePiP(cfg *UserConfig, result *ValidationResult) {
 	for _, f := range []struct {
 		key    string

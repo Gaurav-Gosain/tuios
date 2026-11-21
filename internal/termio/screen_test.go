@@ -14,8 +14,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// lockedBuffer is the terminal end of a Screen: the writer goroutine writes
-// into it.
 type lockedBuffer struct {
 	mu sync.Mutex
 	b  bytes.Buffer
@@ -55,8 +53,6 @@ func TestScreenDrawsStringFramesAsTheirCells(t *testing.T) {
 				s.out.flush()
 				written := term.take()
 				if !out.Raw {
-					// The channel a non-raw screen writes to turns each
-					// newline into CR LF on its way to the terminal.
 					written = bytes.ReplaceAll(written, []byte("\n"), []byte("\r\n"))
 				}
 				_, _ = screen.Write(written)
@@ -109,24 +105,24 @@ func TestRowDiffWritesWhatTheFullDiffWrites(t *testing.T) {
 			wide := seed%3 == 2
 			for frame := range 300 {
 				switch op := rng.Intn(10); {
-				case op < 4: // a typed key: one cell of one row
+				case op < 4:
 					y := rng.Intn(h)
 					lines[y] += string(rune('a' + rng.Intn(26)))
 					if len(lines[y]) > w {
 						lines[y] = lines[y][:2]
 					}
-				case op < 6: // a few rows
+				case op < 6:
 					for range 1 + rng.Intn(3) {
 						lines[rng.Intn(h)] = words[rng.Intn(len(words))]
 					}
-				case op < 8: // output scrolls the screen up
+				case op < 8:
 					k := 1 + rng.Intn(3)
 					lines = append(lines[k:], make([]string, k)...)
 					for i := h - k; i < h; i++ {
 						lines[i] = words[rng.Intn(len(words))]
 					}
-				case op < 9: // nothing changed
-				default: // a resize
+				case op < 9:
+				default:
 					if frame%2 == 0 {
 						w, h = 40, 12
 					} else {
@@ -174,8 +170,6 @@ func TestRowDiffWritesWhatTheFullDiffWrites(t *testing.T) {
 	}
 }
 
-// fullDiff is the diff before rows were compared: every row touched on every
-// frame, with the scroll check.
 func fullDiff(s *Screen, buf *uv.Buffer) {
 	w, h := buf.Width(), buf.Height()
 	if w != s.w || h != s.h {

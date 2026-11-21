@@ -8,14 +8,6 @@ import (
 	"time"
 )
 
-// Hot reload of the host table, proved at the layer that owns the links.
-//
-// The three things the daemon promises when the [hosts] table is edited are
-// tested here: a new host gets a link, a removed host loses one, and a changed
-// address is dialed again. The fourth, that repeated edits leak nothing, is the
-// one a green test could hide, so it is measured rather than asserted about.
-
-// waitForStatus waits until a host reports the wanted status.
 func waitForStatus(t *testing.T, m *Manager, host string, want Status) HostReport {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
@@ -82,8 +74,6 @@ func TestRepeatedTableEditsLeakNothing(t *testing.T) {
 	waitForStatus(t, m, "build", StatusUp)
 
 	const rounds = 100
-	// A warm-up round first, so the baseline is taken with every one-off
-	// goroutine the machinery starts already running.
 	for i := range 3 {
 		grow, _ := NewTable([]Host{{Name: "build", Addr: "unused"}, {Name: "lab" + strconv.Itoa(i), Addr: "unused"}})
 		m.SetTable(grow)
@@ -102,23 +92,15 @@ func TestRepeatedTableEditsLeakNothing(t *testing.T) {
 	settle()
 	after := runtime.NumGoroutine()
 
-	// One goroutine of slack per ten rounds would still catch a leak of one per
-	// edit by a factor of ten, and it does not fail on a runtime goroutine that
-	// happened to be between states when the count was taken.
 	if after > before+rounds/10 {
 		t.Errorf("ASSERTION: %d add-and-remove rounds left goroutines behind: %d before, %d after", rounds, before, after)
 	}
 
-	// The manager is still usable after all that, which is the other half of
-	// not leaking: nothing was torn down that should have stayed.
 	if r := waitForStatus(t, m, "build", StatusUp); r.Status != StatusUp {
 		t.Errorf("ASSERTION: the untouched host lost its link after %d edits, got %s", rounds, r.Status)
 	}
 }
 
-// settle gives cancelled supervisors a moment to be reaped before goroutines
-// are counted. SetTable waits for each one it ends, so this covers the
-// transport's own reaper rather than the supervisor.
 func settle() {
 	for range 20 {
 		runtime.Gosched()

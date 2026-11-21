@@ -38,8 +38,6 @@ func Registry() *chroma.LexerRegistry {
 	registryOnce.Do(func() {
 		reg := chroma.NewLexerRegistry()
 		src := &deflateFS{FS: lexerFiles}
-		// Building reads every definition's header, so it keeps the
-		// dictionary for the whole pass and lets it go after.
 		src.dict, _ = inflate(lexerFiles, "dict.z", nil)
 		names, _ := fs.Glob(lexerFiles, "*.xml.z")
 		for _, name := range names {
@@ -56,12 +54,6 @@ func Registry() *chroma.LexerRegistry {
 	return registry
 }
 
-// deflateFS serves each name.xml as the decompressed name.xml.z beside it.
-// chroma opens a definition twice, once for its header and again for its
-// rules on the first tokenise, so it reads through here both times. Every
-// definition is deflated against the dictionary in dict.z. dict holds that
-// dictionary while Registry builds; a later open inflates it again, which
-// keeps 24 KB off the heap of a process that highlighted once.
 type deflateFS struct {
 	fs.FS
 	dict []byte
@@ -82,19 +74,17 @@ func (g *deflateFS) Open(name string) (fs.File, error) {
 	return &memFile{name: path.Base(name), Reader: bytes.NewReader(data)}, nil
 }
 
-// inflate reads the raw deflate file name in fsys, against dict.
 func inflate(fsys fs.FS, name string, dict []byte) ([]byte, error) {
 	f, err := fsys.Open(name)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = f.Close() }() // opened read-only: nothing to flush
+	defer func() { _ = f.Close() }()
 	zr := flate.NewReaderDict(f, dict)
 	defer func() { _ = zr.Close() }()
 	return io.ReadAll(zr)
 }
 
-// memFile is a decompressed definition.
 type memFile struct {
 	name string
 	*bytes.Reader

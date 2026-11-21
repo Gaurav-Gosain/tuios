@@ -85,12 +85,6 @@ func DetectEither(dir string) (info Info, main, ok bool) {
 		return Info{}, false, false
 	}
 	main = gitdir == commonDir
-	// The entry under root tells the two apart. A submodule also answers
-	// gitdir == commonDir: its .git file names a gitdir under modules/ that
-	// carries no commondir pointer, and that gitdir is not a working tree, so
-	// only a .git directory says main checkout. Only a gitdir under
-	// <common>/worktrees/<name> is a linked worktree; a gitdir under modules/
-	// is the submodule again.
 	if main {
 		if st, err := os.Stat(filepath.Join(root, ".git")); err != nil || !st.IsDir() {
 			return Info{}, false, false
@@ -114,8 +108,6 @@ func DetectEither(dir string) (info Info, main, ok bool) {
 	}, main, true
 }
 
-// readHead names the branch a gitdir's HEAD points at, or "detached@<hash>".
-// root is the worktree, where git is asked when the refs are in reftable.
 func readHead(gitdir, commonDir, root string) string {
 	data, err := os.ReadFile(filepath.Join(gitdir, "HEAD"))
 	if err != nil {
@@ -219,8 +211,6 @@ func Add(repoRoot, path, branch, base string) (created bool, err error) {
 	if r := gitstate.Find(repoRoot); r.JJ {
 		return jjAdd(r.Root, path, branch, base)
 	}
-	// "--" ends the options, so a base or a path that starts with "-",
-	// such as --force, is never read as one.
 	if BranchExists(repoRoot, branch) {
 		if _, err := run(repoRoot, "worktree", "add", "--", path, branch); err != nil {
 			return false, err
@@ -259,22 +249,11 @@ func Changes(path string) (int, error) {
 	return n, nil
 }
 
-// statusEntries reads `git status --porcelain -z --untracked-files=all
-// --ignored=matching` in the worktree at path and returns the ignored and the
-// untracked paths it lists, the status markers stripped. -z ends every record
-// at NUL and keeps git from quoting, so a path with a space or a non-ASCII
-// character survives the round trip. Splitting on a newline would cut such a
-// path in half, and a quoted name would lstat as its quoted form and fail the
-// walk a clean worktree never fails.
 func statusEntries(path string) (ignored, untracked []string, err error) {
 	ignored, untracked, _, err = statusRecords(path)
 	return ignored, untracked, err
 }
 
-// statusRecords is statusEntries, and the count of every record git listed.
-// A record is one path: the modified, the untracked and the ignored. The
-// count of all of them minus the ignored is the count a plain status, which
-// knows nothing of ignored trees, would have printed.
 func statusRecords(path string) (ignored, untracked []string, records int, err error) {
 	var env []string
 	if gitstate.Find(path).JJ {
@@ -313,7 +292,6 @@ func ChangeCounts(path string) (changes, ignored int, err error) {
 		return 0, 0, err
 	}
 	changes = records - len(entries)
-	// jj's working copy is a commit: what differs from it is jj's to say.
 	if gitstate.Find(path).JJ {
 		if changes, err = jjChanges(context.Background(), path); err != nil {
 			return 0, 0, err
@@ -360,12 +338,6 @@ func NestedRepo(path string) (string, error) {
 	return "", nil
 }
 
-// countFiles counts the files under dir, descending into nothing named .git:
-// a nested repository's internals are not the worktree's files, and the
-// removal deletes them either way.
-//
-// ponytail: walks every ignored and untracked directory in full; the removal
-// reads and deletes them all anyway, so a lazy walk is the same order of cost.
 func countFiles(dir string) (int, error) {
 	n := 0
 	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
@@ -384,9 +356,6 @@ func countFiles(dir string) (int, error) {
 	return n, err
 }
 
-// findNestedRepo reports whether dir holds a .git anywhere below it, stopping
-// at the first one. A .git directory is a repository; a .git file (a linked
-// worktree's) points at one just as well.
 func findNestedRepo(dir string) (bool, error) {
 	found := false
 	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
@@ -407,7 +376,6 @@ func findNestedRepo(dir string) (bool, error) {
 // keeping the branch keeps them; on a detached HEAD nothing holds them once
 // the worktree is gone.
 func OwnCommits(path string) (int, error) {
-	// jj keeps every commit, a forgotten workspace's included.
 	if gitstate.Find(path).JJ {
 		return 0, nil
 	}
@@ -460,7 +428,6 @@ func Remove(repoRoot, path string, force bool) error {
 // Diff is the worktree's uncommitted change against HEAD, followed by the
 // untracked files git diff does not show. With stat it is the summary form.
 func Diff(path string, stat bool) (string, error) {
-	// jj tracks every file, and its uncommitted change is @ against @-.
 	if gitstate.Find(path).JJ {
 		ctx := context.Background()
 		tree, _, err := SnapshotTree(ctx, path, 0)
@@ -514,26 +481,16 @@ func Log(path, base string) (string, error) {
 	return run(path, "log", "--oneline", from+".."+head)
 }
 
-// run executes git in dir and returns its stdout. A failure carries git's own
-// stderr, which is the message a person needs.
-//
 //go:noinline
 func run(dir string, args ...string) (string, error) {
 	return runEnv(dir, nil, args...)
 }
 
-// runEnv is run with extra environment entries.
-//
 //go:noinline
 func runEnv(dir string, env []string, args ...string) (string, error) {
 	return runGit(context.Background(), dir, env, nil, args...)
 }
 
-// runGit runs git in dir with the repository's environment, env and stdin
-// added, bounded by ctx, and returns its stdout. Git sets nothing
-// interactive: a git that waits on a terminal for a credential or an editor
-// would hang the daemon. A failure carries git's own stderr, which is the
-// message a person needs, or the context's error when ctx ended the run.
 func runGit(ctx context.Context, dir string, env []string, stdin io.Reader, args ...string) (string, error) {
 	cmd := childproc.Git(ctx, dir, args...)
 	cmd.Env = append(cmd.Env, gitstate.Find(dir).GitEnv()...)
@@ -579,8 +536,6 @@ func List(dir string) ([]Entry, error) {
 	return parseWorktreeList(out), nil
 }
 
-// parseWorktreeList reads git worktree list --porcelain: one block per
-// checkout, blocks split by a blank line, the first block the main checkout.
 func parseWorktreeList(out string) []Entry {
 	var entries []Entry
 	var cur *Entry

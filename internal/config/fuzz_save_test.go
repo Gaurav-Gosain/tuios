@@ -9,23 +9,6 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 )
 
-// Fuzzing the save half of the config: tuios writes the config file itself
-// (set-option with persist, the settings panel), so what it writes has to load
-// back as the config it wrote.
-//
-// The ways this could fail, written down before the target:
-//
-//  1. A config that loads cannot be rendered: a value the TOML encoder
-//     refuses.
-//  2. The rendered file does not parse, so the next start falls back to
-//     defaults and every setting the user had is gone.
-//  3. It parses to a different config: a field the encoder drops or spells
-//     differently, a value the fill stage rewrites on the second load, a key
-//     binding whose spelling changes. Saving one setting then quietly changes
-//     another.
-//  4. Rendering depends on map order, so saving an unchanged config rewrites
-//     the file.
-
 var configCmp = []cmp.Option{
 	cmpopts.EquateEmpty(),
 	cmpopts.EquateNaNs(),
@@ -42,7 +25,6 @@ func FuzzConfigSaveRoundTrip(f *testing.F) {
 		"[daemon]\nlog_level = \"debug\"\n",
 		"[appearance]\ntitle_format = \"\\u0000\\\"'''\"\n",
 		"[hooks]\n",
-		// max_fps takes a number or a string, and writes its own TOML.
 		"[appearance]\nmax_fps = 0\n",
 		"[appearance]\nmax_fps = \"AUTO\"\n",
 		"[appearance]\nmax_fps = \"0144\"\n",

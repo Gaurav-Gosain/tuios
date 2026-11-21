@@ -8,19 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// send-keys: tmux key names, read into the daemon's send-keys calls.
-//
-// Without -l, tmux looks each argument up as a key name first and sends it as
-// literal text only when it is not one. The shim does the same lookup, then
-// hands each key to the daemon's send-keys verb as a token in its own syntax
-// ("ctrl+c", "alt+Up"), and each run of text to send-text. send-keys encodes
-// a key for the pane's modes, as real tmux does: Up is ESC O A once the program
-// has turned on application cursor keys, and a modified character follows the
-// pane's kitty keyboard or modifyOtherKeys mode. The shim knows only which
-// words tmux reads as keys; the bytes are send-keys' alone.
-
-// tmuxKeyNames are the words tmux reads as key names, lower-cased, each with
-// the send-keys name it is.
 var tmuxKeyNames = map[string]string{
 	"enter":    "Enter",
 	"tab":      "Tab",
@@ -58,9 +45,6 @@ var tmuxKeyNames = map[string]string{
 	"f12":      "F12",
 }
 
-// keyToken reads one send-keys argument as a tmux key and returns it as a
-// send-keys token, and false when it is not a key (it is then sent as text).
-// A key is a name, or a name or one character after C- (or ^x), M- and S-.
 func keyToken(arg string) (string, bool) {
 	if arg == "" {
 		return "", false
@@ -100,7 +84,6 @@ func keyToken(arg string) (string, bool) {
 	if len(rest) != 1 {
 		return "", false
 	}
-	// send-keys splits its keys on spaces and commas, so those two go by name.
 	switch rest {
 	case " ":
 		rest = "Space"
@@ -110,16 +93,11 @@ func keyToken(arg string) (string, bool) {
 	return mods.String() + rest, true
 }
 
-// keyRun is one call the shim makes for send-keys: keys for the daemon's
-// send-keys verb, or text for send-text.
 type keyRun struct {
 	keys []string
 	text string
 }
 
-// sendKeysRuns reads send-keys arguments into the calls that send them, in
-// order. literal is -l; hex is -H, where every argument is a hex byte. Both
-// send text only.
 func sendKeysRuns(args []string, literal, hex bool) ([]keyRun, error) {
 	var runs []keyRun
 	addText := func(t string) {
@@ -152,12 +130,9 @@ func sendKeysRuns(args []string, literal, hex bool) ([]keyRun, error) {
 			runs = append(runs, keyRun{keys: []string{tok}})
 		}
 	}
-	// An empty argument adds no text.
 	return slices.DeleteFunc(runs, func(r keyRun) bool { return r.keys == nil && r.text == "" }), nil
 }
 
-// repeatRuns is runs sent count times, with the runs of one kind that meet
-// joined into one call.
 func repeatRuns(runs []keyRun, count int) []keyRun {
 	if count <= 1 || len(runs) == 0 {
 		return runs

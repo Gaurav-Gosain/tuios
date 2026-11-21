@@ -59,7 +59,6 @@ func NewestInstalled() (path, version string, err error) {
 	return path, version, nil
 }
 
-// sameFile reports whether two paths name one file, through links.
 func sameFile(a, b string) bool {
 	fa, errA := os.Stat(a)
 	fb, errB := os.Stat(b)

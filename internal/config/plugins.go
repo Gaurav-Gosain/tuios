@@ -25,7 +25,6 @@ type PluginsConfig struct {
 	Dirs []string `toml:"dirs,omitempty"`
 }
 
-// pluginsTable is the path of the [plugins] table.
 var pluginsTable = []string{"plugins"}
 
 // PluginsInFile reads the [plugins] table of the file at path. A missing
@@ -91,12 +90,7 @@ func RemovePluginDirInFile(path, dir string) (bool, error) {
 	return true, setPluginsKey(path, "dirs", slices.DeleteFunc(slices.Clone(cur.Dirs), func(s string) bool { return s == dir }))
 }
 
-// setPluginsKey writes key = [values] in the [plugins] table, replacing the
-// lines the key had, adding the key after the header, or adding the table at
-// the end of the file.
 func setPluginsKey(path, key string, values []string) error {
-	// A config split over several files is written where the key is. A
-	// read-only file sends it to the last file tuios can write.
 	target, note, err := writeTargetFor(path, []string{"plugins", key})
 	if err != nil {
 		return err
@@ -139,10 +133,6 @@ func setPluginsKey(path, key string, values []string) error {
 	return writePluginsEdit(out, path, key, values)
 }
 
-// writePluginsEdit writes an edited file only when it reads back with the
-// key at the values asked for. A file that sets plugins in another form,
-// such as plugins.enabled = [...] at the top or an inline table, is not
-// one the line edit knows, and writing it could break the file.
 func writePluginsEdit(lines []string, path, key string, values []string) error {
 	data := []byte(joinLines(lines))
 	var doc struct {
@@ -161,8 +151,6 @@ func writePluginsEdit(lines []string, path, key string, values []string) error {
 	return writeConfigBytes(data, path)
 }
 
-// keySpan finds the lines key = [...] takes in a table body, an array that
-// may run over several lines. from is -1 when the key is not there.
 func keySpan(body []string, key string) (from, to int) {
 	for i, l := range body {
 		k, rest, ok := strings.Cut(strings.TrimSpace(l), "=")
@@ -185,7 +173,6 @@ func keySpan(body []string, key string) (from, to int) {
 	return -1, -1
 }
 
-// bracketDepth counts [ minus ] outside strings and comments in one line.
 func bracketDepth(s string) int {
 	depth := 0
 	var quote byte

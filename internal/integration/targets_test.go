@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// testEnv is a home directory of its own, with no environment overrides and
-// every binary reported on PATH.
 func testEnv(t *testing.T) Env {
 	t.Helper()
 	return Env{
@@ -46,9 +44,6 @@ func readFile(t *testing.T, path string) string {
 	return string(data)
 }
 
-// userClaudeSettings is a settings file with the user's own configuration:
-// keys tuios knows nothing about, a hook of their own on an event tuios also
-// uses, a group mixing their hook with nothing of tuios's, and the older shim.
 const userClaudeSettings = `{
   "theme": "dark",
   "permissions": {"allow": ["Bash(go test:*)"], "deny": []},
@@ -176,7 +171,6 @@ func TestInstallReplacesAnOlderVersion(t *testing.T) {
 	if st := tg.Status(env, "tuios"); !st.Current {
 		t.Fatalf("status after upgrade: %+v", st)
 	}
-	// Pointing at another binary reads as not current.
 	if st := tg.Status(env, "/opt/tuios/bin/tuios"); st.Current {
 		t.Fatalf("an install for another binary read as current: %+v", st)
 	}
@@ -225,8 +219,6 @@ func TestSkillLeavesAFileItDidNotWrite(t *testing.T) {
 		t.Fatalf("status of a skill tuios did not write = %+v, want foreign", st)
 	}
 
-	// The stub with a line the person added, a stub a newer tuios wrote, and
-	// a link to a stub: each stays as it is.
 	edited := string(SkillStub()) + "Always pass --json.\n"
 	newer := strings.Replace(string(SkillStub()), "TUIOS_INTEGRATION_VERSION=1 ", "TUIOS_INTEGRATION_VERSION=9 ", 1)
 	for name, text := range map[string]string{"edited": edited, "newer": newer} {

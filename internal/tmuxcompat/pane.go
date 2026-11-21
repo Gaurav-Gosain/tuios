@@ -11,23 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// The pane holder.
-//
-// tmux's respawn-pane replaces a pane's process and keeps the pane: its id,
-// its place in the layout. Claude Code relies on it: it opens each teammate's
-// pane running `cat` as a placeholder and then respawns it with the teammate's
-// command. A tuios window's process cannot be swapped from outside, so every
-// pane the shim opens runs `tuios tmux-pane`, a small holder that runs the
-// pane's command as its child and, on a respawn request, ends that child and
-// starts the new command in its place. The command runs in a process group of
-// its own that holds the terminal's foreground, as a shell's job does, so
-// agent detection reads the command and not the holder.
-//
-// The request arrives on a unix socket in the shim's runtime directory, which
-// is private to the user (0700). The holder takes a request only from there,
-// so only the user's own processes can respawn a pane: the same processes that
-// could type into it with the tuios CLI.
-
 // RespawnRequest is what respawn-pane sends a pane's holder.
 type RespawnRequest struct {
 	// Window is the tuios window the request is for. The holder refuses a
@@ -100,8 +83,6 @@ type PaneOptions struct {
 	Authorize func(peerPID int, peerStart uint64) error
 }
 
-// paneEnv is the environment of a holder's processes: the holder's own, with
-// what makes the shim the pane's tmux, then extra on top.
 func paneEnv(base []string, dir, window string, extra []string) []string {
 	set := map[string]string{
 		"TMUX":      TmuxValue(dir, os.Getpid()),
@@ -132,9 +113,6 @@ func paneEnv(base []string, dir, window string, extra []string) []string {
 	return mergeEnv(out, extra)
 }
 
-// mergeEnv returns base with every KEY=VALUE of extra set, replacing any
-// entry of base for the same key. An entry -KEY, with no "=", removes KEY:
-// it is how set-environment -r reaches a new pane.
 func mergeEnv(base, extra []string) []string {
 	if len(extra) == 0 {
 		return base

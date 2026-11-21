@@ -52,7 +52,6 @@ var (
 	ScreenshotControlSet = []string{"auto", "macos", "glyphs", "none"}
 )
 
-// defaultScreenshotConfig returns the section DefaultConfig carries.
 func defaultScreenshotConfig() ScreenshotConfig {
 	return ScreenshotConfig{
 		Format:      ScreenshotDefaultFormat,
@@ -65,9 +64,6 @@ func defaultScreenshotConfig() ScreenshotConfig {
 	}
 }
 
-// fillMissingScreenshot fills empty strings with defaults. Pointer fields
-// stay nil deliberately: the accessors below and the option registry both
-// treat nil as "the default", so an absent key needs no repair.
 func fillMissingScreenshot(cfg, defaultCfg *UserConfig) {
 	s, d := &cfg.Screenshot, &defaultCfg.Screenshot
 	if s.Format == "" {
@@ -92,9 +88,6 @@ func fillMissingScreenshot(cfg, defaultCfg *UserConfig) {
 		s.FontFamily = d.FontFamily
 	}
 }
-
-// Effective-value accessors: nil means the default, and every reader goes
-// through these so nothing re-derives the fallback.
 
 // CopyEnabled reports whether a capture should attempt a clipboard copy.
 func (s ScreenshotConfig) CopyEnabled() bool { return s.Copy == nil || *s.Copy }

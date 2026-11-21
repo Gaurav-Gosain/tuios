@@ -37,7 +37,6 @@ type ProjectHeader struct {
 	HasHeader bool
 }
 
-// headerKeywords is the set of leading directive names, matched case-insensitively.
 var headerKeywords = map[string]bool{
 	"session":   true,
 	"scope":     true,
@@ -61,17 +60,12 @@ func ParseProjectHeader(content string) (ProjectHeader, string) {
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			// Blank lines and comments are allowed inside the header block and do
-			// not end it. If no directive ever follows, they fall into the body
-			// below (bodyStart stays at the first such line only when it precedes
-			// no directive), so a bare comment tape still runs.
 			bodyStart = i + 1
 			continue
 		}
 
 		keyword, rest := splitFirstField(trimmed)
 		if !headerKeywords[strings.ToLower(keyword)] {
-			// First real command: the header ends here.
 			bodyStart = i
 			break
 		}
@@ -85,9 +79,6 @@ func ParseProjectHeader(content string) (ProjectHeader, string) {
 	return h, body
 }
 
-// applyHeaderDirective folds one directive into the header. Unknown values fall
-// back to a sane default rather than erroring, so a typo never makes a tape
-// unreviewable.
 func applyHeaderDirective(h *ProjectHeader, keyword, rest string) {
 	switch strings.ToLower(keyword) {
 	case "session":
@@ -110,8 +101,6 @@ func applyHeaderDirective(h *ProjectHeader, keyword, rest string) {
 	}
 }
 
-// splitFirstField splits a line into its first whitespace-delimited token and
-// the untrimmed remainder.
 func splitFirstField(s string) (string, string) {
 	i := strings.IndexFunc(s, func(r rune) bool { return r == ' ' || r == '\t' })
 	if i < 0 {
@@ -120,7 +109,6 @@ func splitFirstField(s string) (string, string) {
 	return s[:i], s[i+1:]
 }
 
-// unquote strips a single pair of surrounding double or single quotes.
 func unquote(s string) string {
 	s = strings.TrimSpace(s)
 	if len(s) >= 2 {

@@ -6,30 +6,10 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// @ completion.
-//
-// Typing @ at the start of the draft or after a space opens a list under the
-// editor: panes, agents and files whose names match what follows the @, up to
-// the cursor. tab or enter puts the selected one in place of the @ and the
-// query, as a click on it does. up and down (ctrl+p and ctrl+n) choose, and
-// esc, a space, or deleting the @ closes the list. While the list is open it
-// takes these keys before the editor does, so enter does not send.
-//
-// What is put in is text the agent reads: a pane's or an agent's address,
-// such as work/api, or a file's path relative to the pane's folder. Nothing is
-// copied. A folder puts in its path with a slash and keeps the list open, so
-// the person walks into it.
-//
-// The composer does not know the panes, the agents or the files: the host's
-// Completer does, and may read files on its own time. The composer asks it
-// for the list on each frame the list is open, which costs nothing when the
-// answer is the same as before, since the frame is kept.
-
 // MentionOpen reports whether the @ list is open. A host that takes ctrl+p
 // for itself leaves it to the list while it is open.
 func (m *Model) MentionOpen() bool { return m.mention != nil }
 
-// mentionRows is how many entries the list shows.
 const mentionRows = 6
 
 // MentionKind is what an entry names.
@@ -42,7 +22,6 @@ const (
 	MentionFolder
 )
 
-// mentionBadges are the words in front of each kind.
 var mentionBadges = [...]string{"pane", "agent", "file", "dir"}
 
 // Mention is one entry of the list.
@@ -65,16 +44,10 @@ type Completer interface {
 	Version() uint64
 }
 
-// mention is the open list.
 type mention struct {
-	// at is the index of the @ cell.
-	at  int
-	sel int
-	// query is the text the selection was made in. A new query starts the
-	// selection at the best entry again.
-	query string
-	// row is the frame line the list's first entry was drawn on, -1 when
-	// the frame drew no entry, and top the index of that entry.
+	at       int
+	sel      int
+	query    string
 	row, top int
 }
 
@@ -91,7 +64,6 @@ func (m *Model) MentionQuery() (string, bool) {
 	return m.mentionQuery(), true
 }
 
-// mentionQuery is the text from after the @ to the cursor.
 func (m *Model) mentionQuery() string {
 	var b strings.Builder
 	for _, c := range m.cells[m.mention.at+1 : m.cur] {
@@ -100,9 +72,6 @@ func (m *Model) mentionQuery() string {
 	return b.String()
 }
 
-// syncMention opens, keeps or closes the list after an edit or a move: it is
-// open while the cursor is in a word that starts with an @ at the start of the
-// draft or after a space.
 func (m *Model) syncMention() {
 	if m.completer == nil || m.hsearch != nil {
 		m.mention = nil
@@ -135,7 +104,6 @@ func (m *Model) syncMention() {
 	}
 }
 
-// mentions is the list's entries now.
 func (m *Model) mentions() []Mention {
 	if m.mention == nil || m.completer == nil {
 		return nil
@@ -143,8 +111,6 @@ func (m *Model) mentions() []Mention {
 	return m.completer.Mentions(m.mentionQuery())
 }
 
-// mentionKey handles a key while the list is open. It reports whether the key
-// was the list's.
 func (m *Model) mentionKey(key string) bool {
 	items := m.mentions()
 	switch key {
@@ -171,8 +137,6 @@ func (m *Model) mentionKey(key string) bool {
 	return false
 }
 
-// insertMention puts it in place of the @ and the query, and closes the list,
-// or keeps it open in a folder.
 func (m *Model) insertMention(it Mention) {
 	text := it.Insert
 	if it.Kind == MentionFolder {
@@ -215,7 +179,6 @@ func (m *Model) PickMention(i int) bool {
 	return true
 }
 
-// renderMentions draws the open list, under the editor, from frame line row.
 func (m *Model) renderMentions(width, row int, in inks) []string {
 	items := m.mentions()
 	if m.mention == nil {
@@ -230,8 +193,6 @@ func (m *Model) renderMentions(width, row int, in inks) []string {
 		return []string{fill(pad+dim.Render("No pane, agent or file matches."), width, bg)}
 	}
 	sel := min(m.mention.sel, len(items)-1)
-	// The selected entry is marked in the gutter as well as by its ground,
-	// so it reads at 16 colours, where there are no grounds.
 	marker := on(bg).Foreground(st.readable(st.Accent, bg)).Bold(true).Render(st.arrow("›", ">")) + on(bg).Render(" ")
 	top := max(0, min(sel-mentionRows+1, len(items)-mentionRows))
 	m.mention.row, m.mention.top = row, top
@@ -257,7 +218,6 @@ func (m *Model) renderMentions(width, row int, in inks) []string {
 	return out
 }
 
-// mentionHints are the editor's keys while the list is open.
 func mentionHints(ascii bool) []Hint {
 	return []Hint{
 		{Key: "tab", Label: "insert"},

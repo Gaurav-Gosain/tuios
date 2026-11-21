@@ -1,20 +1,5 @@
 package config
 
-// The [keybindings.gui] section: the desktop chords of a native GUI client
-// (tuios-gpui). They need no leader, for people who come from a desktop
-// terminal. The GUI looks them up before the leader and the pane, and the
-// terminal client never looks them up at all.
-//
-// A row names a tuios action where tuios has one that does the same thing
-// (new_window, toggle_zoom, swap_left), so the palette, the help and the
-// config use one name for it. The GUI sends those to the bridge's action
-// command. A row whose job only a GUI can do (a pane picker drawn over the
-// panes, the font size, a native find bar) names a gui_ action from
-// GUIActionDescriptions, and the GUI runs it itself.
-//
-// On macOS the GUI reads ctrl+shift as cmd. The file spells the keys the same
-// way on every platform.
-
 // GUIActionDescriptions describes the actions only a GUI client runs. They are
 // kept apart from ActionDescriptions because no key handler in internal/input
 // runs them, and every name there must be one that a terminal key can run.
@@ -43,8 +28,6 @@ var GUIActionDescriptions = map[string]string{
 	"gui_font_reset":       "Reset the text size",
 }
 
-// getDefaultGUIKeybinds returns the GUI's default chords, the table in the
-// tuios-gpui v2 plan (2.15).
 func getDefaultGUIKeybinds() map[string][]string {
 	kb := map[string][]string{
 		"command_palette":          {"ctrl+shift+p"},

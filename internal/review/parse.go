@@ -22,8 +22,6 @@ func ParseRawNumstat(out string) ([]File, error) {
 			continue
 		}
 		if strings.HasPrefix(tok, ":") {
-			// :oldmode newmode oldsha newsha STATUS, then the path, or for a
-			// rename or copy the old path and the new.
 			fields := strings.Fields(tok)
 			if len(fields) < 5 || i+1 >= len(tokens) {
 				return nil, errfmt.Errorf("unexpected raw diff line %q", tok)
@@ -38,7 +36,6 @@ func ParseRawNumstat(out string) ([]File, error) {
 				f.OldPath, f.Path = tokens[i+1], tokens[i+2]
 				i += 2
 				if letter == "C" {
-					// A copy is a new file whose content came from another.
 					f.Status, f.OldPath = StatusAdded, ""
 				} else {
 					f.Status = StatusRenamed
@@ -52,8 +49,6 @@ func ParseRawNumstat(out string) ([]File, error) {
 				case "D":
 					f.Status = StatusDeleted
 				default:
-					// M, T (a type change) and anything newer read as a
-					// modification.
 					f.Status = StatusModified
 				}
 			}
@@ -61,8 +56,6 @@ func ParseRawNumstat(out string) ([]File, error) {
 			files = append(files, f)
 			continue
 		}
-		// added TAB removed TAB path, or for a rename added TAB removed TAB
-		// with the two paths in the next tokens.
 		parts := strings.SplitN(tok, "\t", 3)
 		if len(parts) < 3 {
 			return nil, errfmt.Errorf("unexpected numstat line %q", tok)
@@ -77,7 +70,6 @@ func ParseRawNumstat(out string) ([]File, error) {
 		}
 		idx, ok := byPath[path]
 		if !ok {
-			// numstat without a raw line: take it in order.
 			if counted < len(files) {
 				idx = counted
 			} else {

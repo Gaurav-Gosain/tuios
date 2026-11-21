@@ -20,16 +20,11 @@ func TestNewer(t *testing.T) {
 		{"v0.10.0", "v0.9.0", false, true},
 		{"v1.0.0", "v0.99.99", false, true},
 		{"0.7.0", "v0.7.1", true, true},
-		// A prerelease is below the release it leads to, so a user on the final
-		// v0.8.0 is not offered v0.8.0-rc1 as an upgrade.
 		{"v0.8.0", "v0.8.0-rc1", false, true},
 		{"v0.8.0-rc1", "v0.8.0", true, true},
 		{"v0.8.0-rc1", "v0.8.0-rc2", true, true},
 		{"v0.7.0", "v0.8.0-rc1", true, true},
-		// Build metadata is not a version difference.
 		{"v0.7.0", "v0.7.0+build9", false, true},
-		// A source build has no version to compare, and saying so is what stops
-		// it being told it is out of date.
 		{"dev", "v0.7.0", false, false},
 		{"dev+abc123def456", "v0.7.0", false, false},
 		{"v0.7.0", "nightly", false, false},

@@ -14,20 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// Native image clipboard.
-//
-// OSC 52 is text only, so an image can never ride the escape stream. Putting a
-// PNG on a clipboard therefore means running a helper on the machine that owns
-// the clipboard, and the rule learned from the PR #133 review is that only a
-// process actually sitting on the user's machine may do it. The CLI qualifies:
-// it reaches the daemon over a unix socket, so the two are the same machine.
-// An SSH client attached to a tuios ssh server does not, and never calls this.
-//
-// Detection is gated on the display environment and cached, the helper is
-// given a bounded deadline, and a failure degrades to the file path plus a
-// notice. It is never an error state: the file is already written and the
-// capture already succeeded.
-
 // ClipboardRoute is what a copy would do on this machine.
 type ClipboardRoute struct {
 	// Available reports whether an image copy can be attempted at all.
@@ -51,9 +37,6 @@ func ImageRoute() ClipboardRoute {
 	return route
 }
 
-// clipboardTimeout bounds a helper. wl-copy and xclip fork a server process
-// that holds the selection and does not exit, so the wait is on the write
-// finishing, not on the tool.
 const clipboardTimeout = 5 * time.Second
 
 func detectImageRoute() ClipboardRoute {
@@ -69,9 +52,6 @@ func detectImageRoute() ClipboardRoute {
 		}
 		return ClipboardRoute{Reason: "This machine has no PowerShell to copy an image with."}
 	default:
-		// Gate on the display environment: without one there is no clipboard
-		// to write to, and running the tool would fail slowly instead of the
-		// answer being known now.
 		if os.Getenv("WAYLAND_DISPLAY") != "" {
 			if _, err := exec.LookPath("wl-copy"); err == nil {
 				return ClipboardRoute{Available: true, Tool: "wl-copy"}
@@ -104,9 +84,6 @@ func CopyImage(path string, data []byte, mediaType string) (string, error) {
 		cmd = childproc.CommandContext(ctx, "wl-copy", "-t", mediaType)
 		cmd.Stdin = strings.NewReader(string(data))
 	case "xclip":
-		// xclip forks a process that keeps serving the selection after the
-		// write returns. Without this it would be killed with its parent and
-		// the clipboard would be empty by the time anyone pasted.
 		cmd = childproc.CommandContext(ctx, "xclip", "-selection", "clipboard", "-t", mediaType, "-i")
 		cmd.Stdin = strings.NewReader(string(data))
 		detach(cmd)
@@ -128,19 +105,6 @@ func CopyImage(path string, data []byte, mediaType string) (string, error) {
 		return "", errfmt.Errorf("no clipboard helper")
 	}
 
-	// Run, not CombinedOutput, and no pipes on stdout or stderr.
-	//
-	// wl-copy forks a child that goes on serving the selection after the
-	// parent exits, and that child inherits whatever pipes were attached.
-	// CombinedOutput waits for those pipes to close, so it waited for the
-	// server to die, which happens when something else takes the clipboard.
-	// A capture therefore blocked until the next capture replaced it: measured
-	// still waiting at 30 seconds, while the context deadline hit only the
-	// parent, which had already exited. The same call with no pipes returns in
-	// 1.5ms and the clipboard still holds the picture.
-	//
-	// The parent's exit code still reports whether the write was accepted, so
-	// nothing is lost by not reading its output.
 	if err := cmd.Run(); err != nil {
 		return "", errfmt.Errorf("%s could not copy: %s", r.Tool, err.Error())
 	}

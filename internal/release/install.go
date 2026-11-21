@@ -9,26 +9,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// Replacing a binary that is running.
-//
-// A daemon is very likely executing the exact file being replaced, and on Linux
-// writing to a running executable fails outright with ETXTBSY. Renaming over it
-// does not: the running process keeps the inode it already opened and the name
-// points at the new file, which is what every installer in this repository
-// already does. The rename has to happen inside the target's own directory,
-// because a rename across filesystems is not a rename at all and os.Rename
-// fails with EXDEV.
-//
-// Staged is the pair of steps that arrangement needs: write the bytes next to
-// the target, then move them onto it.
-
 // Staged is a new binary written beside the file it will replace, not yet in
 // place.
 type Staged struct {
 	// Target is where it is going.
 	Target string
-	// temp is the staged file, in Target's own directory.
-	temp string
+	temp   string
 }
 
 // Stage writes data next to target, ready to be moved onto it.
@@ -50,9 +36,6 @@ func Stage(target string, data []byte, mode os.FileMode) (*Staged, error) {
 		cleanup()
 		return nil, errfmt.Errorf("failed to write %s: %w", name, err)
 	}
-	// Flushed before the rename, so a machine that loses power between the two
-	// is left with either the old binary or a complete new one, never a
-	// truncated file under the real name.
 	if err := f.Sync(); err != nil {
 		cleanup()
 		return nil, errfmt.Errorf("failed to flush %s: %w", name, err)
@@ -61,8 +44,6 @@ func Stage(target string, data []byte, mode os.FileMode) (*Staged, error) {
 		_ = os.Remove(name)
 		return nil, errfmt.Errorf("failed to close %s: %w", name, err)
 	}
-	// CreateTemp makes the file 0600. The mode is set explicitly rather than
-	// left to it, or the replacement would be a binary only its owner can run.
 	if err := os.Chmod(name, mode); err != nil {
 		_ = os.Remove(name)
 		return nil, errfmt.Errorf("failed to set the mode on %s: %w", name, err)

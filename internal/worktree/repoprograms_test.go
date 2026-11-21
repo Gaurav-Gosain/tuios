@@ -16,17 +16,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// programRepo is a repository whose own config names programs that git
-// runs, each of which appends its name to a marker file, and a global config
-// with a filter of the person's own, as git-lfs installs one.
 type programRepo struct {
 	dir, repo, marker string
 }
 
-// newProgramRepo makes the repository. Its own config sets a clean, smudge
-// and process filter, a textconv and diff.external, and .git/hooks holds the
-// hooks git runs on add, ref updates, checkout and commit. A submodule holds
-// a filter in its own config. The global config holds the "trusted" filter.
 func newProgramRepo(t *testing.T) programRepo {
 	t.Helper()
 	if runtime.GOOS == "windows" {
@@ -66,7 +59,6 @@ func newProgramRepo(t *testing.T) programRepo {
 		"filter.probe.required": "true",
 		"diff.probe.textconv":   "sh -c 'echo textconv >> " + r.marker + "; cat \"$0\"'",
 		"diff.external":         "sh -c 'echo external >> " + r.marker + "'",
-		// The repository's own value for the person's filter.
 		"filter.trusted.smudge": probe("local-smudge"),
 	} {
 		r.git(t, r.repo, "config", key, value)
@@ -82,7 +74,6 @@ func newProgramRepo(t *testing.T) programRepo {
 	r.git(t, filepath.Join(r.repo, "sub"), "config", "filter.subprobe.clean", probe("submodule"))
 	write(t, filepath.Join(subGit, "info", "attributes"), "*.txt filter=subprobe\n")
 
-	// A change of the same size in each file, so git compares contents.
 	write(t, filepath.Join(r.repo, "a.txt"), "A\n")
 	write(t, filepath.Join(r.repo, "b.lfs"), "B\n")
 	write(t, filepath.Join(r.repo, "sub", "s.txt"), "S\n")
@@ -101,7 +92,6 @@ func write(t *testing.T, path, data string) {
 	}
 }
 
-// git runs git plainly, with the repository's own config, in dir.
 func (r programRepo) git(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)
@@ -120,7 +110,6 @@ func (r programRepo) reset(t *testing.T) {
 	}
 }
 
-// ran is the probes that ran since the last reset, the trusted filter left out.
 func (r programRepo) ran() []string {
 	data, _ := os.ReadFile(r.marker)
 	var out []string

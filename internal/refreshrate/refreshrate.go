@@ -48,7 +48,6 @@ func System() Probe {
 	return Probe{GOOS: runtime.GOOS, Getenv: os.Getenv, Run: runCommand}
 }
 
-// runCommand is the Runner System uses.
 func runCommand(ctx context.Context, name string, args ...string) ([]byte, error) {
 	// #nosec G204 - name is one of the fixed display tools named in Detect.
 	return exec.CommandContext(ctx, name, args...).Output()
@@ -78,7 +77,6 @@ func (p Probe) Local() bool {
 	case "darwin":
 		return true
 	case "windows":
-		// Left out: there is no tool to ask that ships with every Windows.
 		return false
 	default:
 		return p.Getenv("WAYLAND_DISPLAY") != "" || p.Getenv("DISPLAY") != ""
@@ -110,17 +108,12 @@ func (p Probe) Detect(ctx context.Context) int {
 			return hz
 		}
 	}
-	// X11, or a Wayland compositor none of the above speaks for. Under
-	// XWayland xrandr reports the modes the compositor gave it, which is close
-	// enough to be better than the fallback.
 	if p.Getenv("DISPLAY") != "" {
 		return p.ask(ctx, parseXrandr, "xrandr", "--current")
 	}
 	return 0
 }
 
-// ask runs one tool and parses its output, treating any failure (the tool is
-// not installed, it timed out, its output did not parse) as no answer.
 func (p Probe) ask(ctx context.Context, parse func([]byte) float64, name string, args ...string) int {
 	if ctx.Err() != nil {
 		return 0
@@ -132,8 +125,6 @@ func (p Probe) ask(ctx context.Context, parse func([]byte) float64, name string,
 	return roundHz(parse(out))
 }
 
-// roundHz turns a measured rate such as 143.98 or 59.94 into the number the
-// display is sold as.
 func roundHz(hz float64) int {
 	if hz <= 0 || math.IsNaN(hz) || math.IsInf(hz, 0) {
 		return 0
@@ -141,8 +132,6 @@ func roundHz(hz float64) int {
 	return int(math.Round(hz))
 }
 
-// parseHyprctl reads `hyprctl monitors -j`: a list of monitors, each with the
-// refresh rate of its current mode in hertz.
 func parseHyprctl(out []byte) float64 {
 	var monitors []struct {
 		RefreshRate float64 `json:"refreshRate"`
@@ -160,9 +149,6 @@ func parseHyprctl(out []byte) float64 {
 	return best
 }
 
-// parseNiri reads `niri msg --json outputs`: outputs by name, each with its
-// modes (refresh in millihertz, as wl_output reports it) and the index of the
-// current one, which is null for an output that is off.
 func parseNiri(out []byte) float64 {
 	var outputs map[string]struct {
 		Modes []struct {
@@ -183,13 +169,6 @@ func parseNiri(out []byte) float64 {
 	return best
 }
 
-// parseWlrRandr reads the plain output of wlr-randr, which every version
-// prints (--json is newer):
-//
-//	DP-2 "LG Electronics 27GN7 (DP-2)"
-//	  Enabled: yes
-//	  Modes:
-//	    1920x1080 px, 240.001007 Hz (preferred, current)
 func parseWlrRandr(out []byte) float64 {
 	best := 0.0
 	enabled := true
@@ -197,7 +176,6 @@ func parseWlrRandr(out []byte) float64 {
 	for sc.Scan() {
 		line := sc.Text()
 		if line != "" && line[0] != ' ' && line[0] != '\t' {
-			// A new output starts at the left margin.
 			enabled = true
 			continue
 		}
@@ -224,8 +202,6 @@ func parseWlrRandr(out []byte) float64 {
 	return best
 }
 
-// parseXrandr reads `xrandr --current`, where the current mode of each
-// connected output carries a star: "   1920x1080    239.88*+  143.98".
 func parseXrandr(out []byte) float64 {
 	best := 0.0
 	sc := bufio.NewScanner(bytes.NewReader(out))
@@ -242,12 +218,8 @@ func parseXrandr(out []byte) float64 {
 	return best
 }
 
-// systemProfilerRate matches the rate macOS prints for a display, as in
-// "UI Looks like: 2560 x 1440 @ 144.00Hz" or "Resolution: 1920 x 1080 @ 60Hz".
 var systemProfilerRate = lazyre.New(`@\s*([0-9]+(?:\.[0-9]+)?)\s*Hz`)
 
-// parseSystemProfiler reads `system_profiler SPDisplaysDataType`. A display
-// that prints no rate, which some built-in panels do, adds nothing.
 func parseSystemProfiler(out []byte) float64 {
 	best := 0.0
 	for _, m := range systemProfilerRate().FindAllSubmatch(out, -1) {

@@ -8,9 +8,6 @@ import (
 	"strings"
 )
 
-// procComm returns the command name of a process, or "" when it cannot be read.
-// It reads /proc, so it answers on Linux and on the BSDs that mount a Linux
-// compatible procfs, and is empty elsewhere.
 func procComm(pid int) string {
 	if pid <= 0 {
 		return ""

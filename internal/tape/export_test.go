@@ -1,8 +1,5 @@
 package tape
 
-// Seams the tests reach for. Production code calls the functions these wrap.
-
-// Tokenize returns all tokens from the input (useful for testing)
 func Tokenize(input string) []Token {
 	l := New(input)
 	var tokens []Token

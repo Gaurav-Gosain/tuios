@@ -58,8 +58,6 @@ func KeyLabels(n int, alphabet string) []string {
 		leaves = append(leaves, string(r))
 	}
 	for len(leaves) < n {
-		// leaves is ordered by length, so the shortest ones are at the front
-		// and the last of them sits right before the first longer one.
 		short := len(leaves[0])
 		idx := 0
 		for idx+1 < len(leaves) && len(leaves[idx+1]) == short {

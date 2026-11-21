@@ -38,7 +38,6 @@ func TestJKDefaultsYieldToAUserBinding(t *testing.T) {
 		})
 	}
 
-	// A config that binds neither key gets both defaults.
 	cfg, err := ParseUserConfig([]byte("[keybindings.layout]\nsnap_left = [\"h\"]\n"))
 	if err != nil {
 		t.Fatal(err)

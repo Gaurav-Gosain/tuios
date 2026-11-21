@@ -24,15 +24,9 @@ import (
 
 //go:generate go run ../tarpack/gen.go assets.tar.gz assets
 
-// assetArchive is the files under assets. Only an install or a check of an
-// integration reads them, so they stay packed until then.
-// TestAssetArchiveMatchesFiles fails when it and the files differ.
-//
 //go:embed assets.tar.gz
 var assetArchive []byte
 
-// assets unpacks assetArchive. The archive is built into the binary and checked
-// by a test, so a read error is a broken build and panics.
 var assets = sync.OnceValue(func() map[string][]byte {
 	files, err := tarpack.Unpack(assetArchive)
 	if err != nil {
@@ -41,7 +35,6 @@ var assets = sync.OnceValue(func() map[string][]byte {
 	return files
 })
 
-// The plugin templates, by their name in assetArchive.
 const (
 	openCodePluginTemplate  = "assets/opencode/tuios-agent-state.js"
 	openCodeV2IndexTemplate = "assets/opencode/index.js"
@@ -50,11 +43,8 @@ const (
 	piExtensionTemplate     = "assets/pi/tuios-agent-state.ts"
 	ompExtensionTemplate    = "assets/omp/tuios-omp-agent-state.ts"
 	hermesPluginTemplate    = "assets/hermes/__init__.py"
-	// hookSocketSnippet is the JavaScript a plugin template takes in place
-	// of __TUIOS_HOOK_SOCKET__: hookViaSocket, which sends a hook event to
-	// the daemon's agent-hook-event verb instead of starting tuios.
-	hookSocketSnippet      = "assets/common/hook_socket.js"
-	hermesManifestTemplate = "assets/hermes/plugin.yaml"
+	hookSocketSnippet       = "assets/common/hook_socket.js"
+	hermesManifestTemplate  = "assets/hermes/plugin.yaml"
 )
 
 // Env is what the installers read from the machine, so a test can point them
@@ -69,7 +59,6 @@ type Env struct {
 	HookSocket func() string
 }
 
-// systemHookSocket is DetectHookSocket on this machine, run once.
 var systemHookSocket = sync.OnceValue(func() string { return DetectHookSocket(exec.LookPath) })
 
 // SystemEnv is the running process's own environment.
@@ -85,8 +74,6 @@ func (e Env) env(name string) string {
 	return e.Getenv(name)
 }
 
-// dirFromEnv is the directory an override variable names, else home joined
-// with rest.
 func (e Env) dirFromEnv(name string, rest ...string) string {
 	if v := strings.TrimSpace(e.env(name)); v != "" {
 		if v == "~" || strings.HasPrefix(v, "~/") {
@@ -97,7 +84,6 @@ func (e Env) dirFromEnv(name string, rest ...string) string {
 	return filepath.Join(append([]string{e.Home}, rest...)...)
 }
 
-// xdgConfig is app's directory under XDG_CONFIG_HOME, else ~/.config.
 func (e Env) xdgConfig(app string) string {
 	if x := strings.TrimSpace(e.env("XDG_CONFIG_HOME")); x != "" {
 		return filepath.Join(x, app)
@@ -141,18 +127,11 @@ type Target struct {
 	// none here.
 	Events []HookEvent
 
-	// format is how File is written.
-	format fileFormat
-	// extra are more files the integration needs, written after File and
-	// removed before it.
-	extra []extraFile
-	// ownedDir, when set, is a directory relative to ConfigDir that holds
-	// only tuios's files. Uninstall removes it once it is empty.
+	format   fileFormat
+	extra    []extraFile
 	ownedDir string
 }
 
-// extraFile is a second file an integration writes, such as a plugin's
-// manifest or the setting that turns a plugin on.
 type extraFile struct {
 	file   string
 	format fileFormat
@@ -174,17 +153,12 @@ func (t *Target) files(env Env) []extraFile {
 	return append([]extraFile{{file: t.File, format: t.format}}, t.extra...)
 }
 
-// renderTemplate fills a plugin template: the program to run, the version,
-// and for the opencode template, which Kilo shares, the harness.
 func renderTemplate(name string) func(t *Target, run Runner) []byte {
 	return func(t *Target, run Runner) []byte {
 		return renderSource(assets()[name], t, run.Program)
 	}
 }
 
-// renderSource fills a plugin template's placeholders: the tuios command,
-// JSON-quoted, the integration version, the harness id and name, and the
-// socket client (__TUIOS_HOOK_SOCKET__) with the variables it forwards.
 func renderSource(src []byte, t *Target, tuios string) []byte {
 	cmd, _ := jsonx.Marshal(tuios)
 	out := strings.ReplaceAll(string(src), "__TUIOS_COMMAND__", string(cmd))
@@ -199,9 +173,6 @@ func renderSource(src []byte, t *Target, tuios string) []byte {
 	return []byte(out)
 }
 
-// renderOpenCodePlugin keeps the legacy entrypoint at its installed path. V1
-// calls server; V2 accepts the definition but reports only from the CLI plugin,
-// since a shared server's environment does not identify the caller's pane.
 func renderOpenCodePlugin(t *Target, run Runner) []byte {
 	out := renderTemplate(openCodePluginTemplate)(t, run)
 	return append(out, []byte(`
@@ -213,8 +184,6 @@ export default {
 `)...)
 }
 
-// renderJSON renders a hook file tuios owns whole, from its events. build
-// makes the object for one event.
 func renderJSON(top map[string]any, build func(command string, ev HookEvent) any) func(t *Target, run Runner) []byte {
 	return func(t *Target, run Runner) []byte {
 		cmd := run.command(t.ID, t.Version)
@@ -239,8 +208,6 @@ func renderJSON(top map[string]any, build func(command string, ev HookEvent) any
 	}
 }
 
-// powershellCommand makes a command line PowerShell runs: a quoted program
-// path is a string there unless called with &.
 func powershellCommand(cmd string) string {
 	if strings.HasPrefix(cmd, `"`) || strings.HasPrefix(cmd, "'") {
 		return "& " + cmd
@@ -250,12 +217,6 @@ func powershellCommand(cmd string) string {
 
 var targets = []*Target{
 	{
-		// Version 2 gives PermissionRequest room to hold its prompt for the
-		// Inbox ([agents.approvals]): 310 seconds, past the daemon's longest
-		// hold of 300. With approvals off the hook still returns in well under
-		// a second, so the longer limit costs nothing. Version 3 adds
-		// SubagentStart and SubagentStop, so the rail can say a pane's agent
-		// still has subagents at work after its own turn ended.
 		ID: ClaudeCode, Name: "Claude Code", Binary: "claude", Version: 3, Reports: ReportsState,
 		Source:    "https://code.claude.com/docs/en/hooks (settings.json hooks: event, matcher group, command hook, timeout in seconds)",
 		ConfigDir: func(e Env) string { return e.dirFromEnv("CLAUDE_CONFIG_DIR", ".claude") },
@@ -294,15 +255,6 @@ var targets = []*Target{
 		},
 	},
 	{
-		// Version 2 offers permission requests to the Inbox and sends the
-		// person's reply back to opencode. Version 3 feeds the model and the
-		// session's cost to the pane's agent metadata. Version 4 ends a turn
-		// on session.status idle, which replaces the deprecated session.idle,
-		// and says why a retry is waiting. Version 5 supports OpenCode V2 with
-		// a client plugin, where the environment identifies the correct pane.
-		// Version 6 sends each event to the daemon's agent-hook-event verb over its
-		// socket and starts tuios agent-hook only for a daemon without it.
-		// Version 7 sends the model and cost the same way (agent-statusline-event).
 		ID: OpenCode, Name: "opencode", Binary: "opencode", Version: 7, Reports: ReportsState,
 		Source:    "https://opencode.ai/v2/docs/cli/plugins (V2 CLI plugin; V1 server entrypoint requires 1.18.29+)",
 		ConfigDir: func(e Env) string { return e.xdgConfig("opencode") },
@@ -315,11 +267,6 @@ var targets = []*Target{
 		ownedDir: filepath.Join("plugins", "tuios-agent-state"),
 	},
 	{
-		// Version 2 reports a question asked with ask_user_choice as
-		// needs_input, when its tool.call answer cannot change what Amp
-		// permits.
-		// Version 3 sends each event to the daemon's agent-hook-event verb over its
-		// socket and starts tuios agent-hook only for a daemon without it.
 		ID: Amp, Name: "Amp", Binary: "amp", Version: 3, Reports: ReportsState,
 		Source:    "https://ampcode.com/manual/plugin-api (TypeScript plugins run by Bun from ~/.config/amp/plugins; session.start, agent.start, agent.end, tool.call, tool.result)",
 		ConfigDir: func(e Env) string { return e.xdgConfig("amp") },
@@ -335,8 +282,6 @@ var targets = []*Target{
 		Events:    []HookEvent{{"PreInvocation", 5}},
 	},
 	{
-		// Version 2 reports the pane's state from the whole turn, where
-		// version 1 named the conversation only (hook_copilot.go).
 		ID: Copilot, Name: "GitHub Copilot CLI", Binary: "copilot", Version: 2, Reports: ReportsState,
 		Source:    "https://docs.github.com/en/copilot/reference/hooks-reference (every ~/.copilot/hooks/*.json is loaded; version 1, command hooks with bash, powershell and timeoutSec; PascalCase event names get snake_case payloads)",
 		ConfigDir: func(e Env) string { return e.dirFromEnv("COPILOT_HOME", ".copilot") },
@@ -361,8 +306,6 @@ var targets = []*Target{
 		Events: []HookEvent{{"PreToolUse", 5}},
 	},
 	{
-		// Version 2 reports the pane's state from the turn, where version 1
-		// named the conversation only (hook_cursor.go).
 		ID: CursorAgent, Name: "Cursor Agent", Binary: "cursor-agent", Version: 2, Reports: ReportsState,
 		Source:    "https://cursor.com/docs/hooks (~/.cursor/hooks.json, version 1, each event a list of {command}; permission hooks block on an empty answer, so none is registered)",
 		ConfigDir: func(e Env) string { return e.dirFromEnv("CURSOR_CONFIG_DIR", ".cursor") },
@@ -431,13 +374,6 @@ var targets = []*Target{
 		ownedDir: filepath.Join("plugins", "tuios-agent-state"),
 	},
 	{
-		// Version 2: the opencode plugin it shares offers permission requests
-		// to the Inbox. Version 3: it feeds the model and cost. Version 4: it
-		// ends a turn on session.status idle. Version 5 updates the shared
-		// template with optional cancellation for the OpenCode V2 client.
-		// Version 6 sends each event to the daemon's agent-hook-event verb over its
-		// socket and starts tuios agent-hook only for a daemon without it.
-		// Version 7 sends the model and cost the same way (agent-statusline-event).
 		ID: Kilo, Name: "Kilo", Binary: "kilo", Version: 7, Reports: ReportsState,
 		Source:    "herdr src/integration/assets/kilo (Kilo Code CLI is an opencode fork; plugins load from ~/.config/kilo/plugin)",
 		ConfigDir: func(e Env) string { return e.xdgConfig("kilo") },
@@ -458,16 +394,6 @@ var targets = []*Target{
 		},
 	},
 	{
-		// Version 3 reported the selected transcript leaf, including tree
-		// navigation with no file append, and serialized report delivery.
-		// Version 4 adds Pi's subagent events, so the cockpit and rail can
-		// name the runs a pi pane handed work to. A management call of the
-		// subagent tool reports nothing, a background workflow's tool result
-		// reports nothing (its rows ride the async and child-status events),
-		// a foreground run's id keeps to the daemon's id alphabet, and a
-		// subagent report does not suppress the parent transcript_update
-		// behind it. Version 5 sends each event to the daemon's agent-hook-event verb over its
-		// socket and starts tuios agent-hook only for a daemon without it.
 		ID: Pi, Name: "Pi", Binary: "pi", Version: 5, Reports: ReportsState,
 		Source:    "herdr src/integration/assets/pi (TypeScript extensions load from ~/.pi/agent/extensions, or PI_CODING_AGENT_DIR/extensions)",
 		ConfigDir: func(e Env) string { return e.dirFromEnv("PI_CODING_AGENT_DIR", ".pi", "agent") },
@@ -475,10 +401,6 @@ var targets = []*Target{
 		format:    ownedFile{render: renderTemplate(piExtensionTemplate)},
 	},
 	{
-		// OMP uses Pi's extension shape but its own directory and lifecycle
-		// events. A Pi install must not be overwritten by an OMP install.
-		// Version 2 sends each event to the daemon's agent-hook-event verb over its
-		// socket and starts tuios agent-hook only for a daemon without it.
 		ID: OMP, Name: "oh-my-pi", Binary: "omp", Version: 2, Reports: ReportsState,
 		Source:    "https://github.com/can1357/oh-my-pi/blob/main/docs/extension-loading.md (TypeScript extensions load from ~/.omp/agent/extensions, or PI_CODING_AGENT_DIR/extensions)",
 		ConfigDir: func(e Env) string { return e.dirFromEnv("PI_CODING_AGENT_DIR", ".omp", "agent") },
@@ -494,14 +416,6 @@ var targets = []*Target{
 		Events:    []HookEvent{{"SessionStart", 5}},
 	},
 	{
-		// Version 2 reports the pane's state from the whole turn, where
-		// version 1 named the conversation only, and lets the Inbox answer a
-		// permission prompt (hook_qwen.go). Qwen Code reads a command hook's
-		// timeout of 1000 or more as milliseconds and a smaller one as
-		// seconds, where older releases read every value as milliseconds, so
-		// every timeout here is written as 1000 or more to mean the same to
-		// both. PermissionRequest gets 310 seconds, past the daemon's longest
-		// hold of 300, like Claude Code's.
 		ID: Qwen, Name: "Qwen Code", Binary: "qwen", Version: 2, Reports: ReportsState,
 		Source:    "https://github.com/QwenLM/qwen-code/blob/main/docs/users/features/hooks.md (~/.qwen/settings.json hooks in Claude Code's nested shape, matcher *, a timeout of 1000 or more read as milliseconds)",
 		ConfigDir: func(e Env) string { return e.dirFromEnv("QWEN_HOME", ".qwen") },
@@ -570,8 +484,6 @@ func HookCommand(tuios, harnessID string, version int) string {
 	return shellWord(tuios) + " agent-hook " + harnessID + " " + managedMarker + " " + strconv.Itoa(version)
 }
 
-// shellWord quotes a program path for the shell a harness runs its hook
-// commands through, and leaves a plain word alone.
 func shellWord(s string) string {
 	if runtime.GOOS == "windows" {
 		if s != "" && !strings.ContainsAny(s, " \t'\"\\$`&|;<>()*?[]{}!#~") {
@@ -593,18 +505,14 @@ type Result struct {
 	Paths []string `json:"paths,omitempty"`
 	// Backup is the copy of the file as it was before, empty when nothing
 	// was rewritten or there was no file.
-	Backup string   `json:"backup,omitempty"`
-	Notes  []string `json:"notes,omitempty"`
-	// notWritten lists the files a failed install or uninstall did not get
-	// to, for the error that says what it did change.
+	Backup     string   `json:"backup,omitempty"`
+	Notes      []string `json:"notes,omitempty"`
 	notWritten []string
 }
 
 // ErrNoConfigDir is returned by Install when the harness has never run here.
 var ErrNoConfigDir = errors.New("configuration directory not found")
 
-// filePlan is one file's part of an install or uninstall, worked out before
-// anything is written so a failure on any file writes none.
 type filePlan struct {
 	path    string
 	have    []byte
@@ -614,7 +522,6 @@ type filePlan struct {
 	owned   bool
 }
 
-// plan works out every file's new content.
 func (t *Target) plan(env Env, tuios string, install bool) ([]filePlan, error) {
 	dir := t.ConfigDir(env)
 	var plans []filePlan
@@ -636,8 +543,6 @@ func (t *Target) plan(env Env, tuios string, install bool) ([]filePlan, error) {
 	return plans, nil
 }
 
-// carryOut writes or removes each changed file, in order. removing says this is
-// an uninstall, which also removes the owned directory once it is empty.
 func (t *Target) carryOut(env Env, res *Result, plans []filePlan, removing bool) error {
 	for i, p := range plans {
 		if !p.changed {
@@ -664,7 +569,6 @@ func (t *Target) carryOut(env Env, res *Result, plans []filePlan, removing bool)
 		}
 	}
 	if removing && t.ownedDir != "" {
-		// Only removes an empty directory; one holding anything else stays.
 		_ = os.Remove(filepath.Join(t.ConfigDir(env), t.ownedDir))
 	}
 	return nil
@@ -683,10 +587,6 @@ func (t *Target) install(env Env, tuios string) (Result, error) {
 	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
 		return res, errfmt.Errorf("%w: %s. Install %s and run it once, then try again", ErrNoConfigDir, dir, t.Name)
 	}
-	// Both Pi and OMP honour this variable. Inside an OMP profile it names
-	// OMP's directory even when someone asks to install Pi. A second
-	// extension there would load in the wrong harness and could pin the
-	// pane at working, so refuse evidence of the other owner before writing.
 	if strings.TrimSpace(env.env("PI_CODING_AGENT_DIR")) != "" && (t.ID == Pi || t.ID == OMP) {
 		other := Pi
 		foreignDir := filepath.Join(env.Home, ".pi") + string(os.PathSeparator)
@@ -726,7 +626,6 @@ func (t *Target) uninstall(env Env) (Result, error) {
 	if err != nil {
 		return res, err
 	}
-	// The setting that turns a plugin on goes before the plugin itself.
 	slices.Reverse(plans)
 	if err := t.carryOut(env, &res, plans, true); err != nil {
 		return res, err
@@ -836,9 +735,6 @@ func (t *Target) Status(env Env, tuios string) Status {
 	if st.Current {
 		st.Program = tuios
 	} else if st.Installed {
-		// An install that is not exactly this build's may still be this
-		// build's version, made with --command: then it is the program that
-		// differs, and the install is as current as it can be.
 		for _, prog := range installedPrograms(t, files) {
 			if st.Program == "" {
 				st.Program = prog
@@ -856,9 +752,6 @@ func (t *Target) Status(env Env, tuios string) Status {
 	return st
 }
 
-// stateOf reads the integration's files, as read in files order, against the
-// program tuios: whether any of it is installed, whether all of it is what
-// tuios would install, and the main file's version.
 func (t *Target) stateOf(env Env, files [][]byte, tuios string) (installed, current bool, version int, err error) {
 	allCurrent := true
 	for i, f := range t.files(env) {
@@ -875,8 +768,6 @@ func (t *Target) stateOf(env Env, files [][]byte, tuios string) (installed, curr
 	return installed, installed && allCurrent, version, nil
 }
 
-// differences asks each hook file how it differs from what tuios would
-// write. A file whose format cannot say is named whole.
 func (t *Target) differences(env Env, files [][]byte, tuios string) []string {
 	run := t.runner(env, tuios)
 	var out []string
@@ -900,10 +791,6 @@ func (t *Target) differences(env Env, files [][]byte, tuios string) []string {
 	return out
 }
 
-// installedPrograms lists the programs the integration's files name for its
-// hooks, in the order found: the program word before "agent-hook <id>
-// --integration" in a hook command (in a forwarder line, its last fallback),
-// and the TUIOS constant a plugin sets.
 func installedPrograms(t *Target, files [][]byte) []string {
 	hook := regexp.MustCompile(`"((?:[^"\\]|\\.)*? agent-hook ` + regexp.QuoteMeta(t.ID) + ` ` + managedMarker + ` \d+'?)"`)
 	var out []string
@@ -930,9 +817,6 @@ func installedPrograms(t *Target, files [][]byte) []string {
 	return out
 }
 
-// hookProgram is the program a managed hook command runs tuios as, still
-// quoted for the shell: the word before "agent-hook <id>", or, in a forwarder
-// line (sh -c '<script>'), that word in the script's last fallback.
 func hookProgram(cmd, id string) string {
 	if strings.HasPrefix(cmd, "sh -c ") {
 		words, err := splitWords(cmd)
@@ -950,10 +834,8 @@ func hookProgram(cmd, id string) string {
 	return ""
 }
 
-// pluginProgramRe finds the program a plugin template was rendered with.
 var pluginProgramRe = regexp.MustCompile(`(?:const TUIOS|_TUIOS) = ("(?:[^"\\]|\\.)*")`)
 
-// unshellWord undoes shellWord: a word quoted for the shell back to the path.
 func unshellWord(s string) string {
 	switch {
 	case len(s) >= 2 && s[0] == '\'' && s[len(s)-1] == '\'':
@@ -964,8 +846,6 @@ func unshellWord(s string) string {
 	return s
 }
 
-// managedCurrent reports whether the managed entries are exactly one command
-// per wanted event and that command is the current one.
 func managedCurrent(entries []managedEntry, events []HookEvent, command string) bool {
 	if len(entries) != len(events) {
 		return false
@@ -985,8 +865,6 @@ func managedCurrent(entries []managedEntry, events []HookEvent, command string) 
 	return true
 }
 
-// notes are things about a harness's own configuration that stop the
-// integration from working, or make it report twice.
 func (t *Target) notes(env Env) []string {
 	var out []string
 	switch t.ID {
@@ -1003,9 +881,6 @@ func (t *Target) notes(env Env) []string {
 	return out
 }
 
-// codexHooksDisabled reports whether a Codex config.toml turns hooks off. It
-// reads the one key it needs line by line rather than parsing TOML, which is
-// all a check that never writes the file needs.
 func codexHooksDisabled(toml string) bool {
 	inFeatures := false
 	for line := range strings.SplitSeq(toml, "\n") {
@@ -1029,7 +904,6 @@ func codexHooksDisabled(toml string) bool {
 	return false
 }
 
-// runner is how t's hooks run tuios on env's machine.
 func (t *Target) runner(env Env, tuios string) Runner {
 	run := Runner{Program: tuios}
 	if env.HookSocket != nil {

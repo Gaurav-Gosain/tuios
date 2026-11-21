@@ -32,9 +32,6 @@ border_style = "rounded"
 			cfg.Startup.OpenDefaultWindow, cfg.Startup.Tiled, cfg.Startup.StartInTerminalMode, cfg.Startup.Daemon)
 	}
 
-	// The appearance half is the opposite, and deliberately so. Those are
-	// strings, so an absent key is told apart from a set one, and the new
-	// window buttons do reach a config file that never named them.
 	if got := cfg.Appearance.WindowButtonStyle; got != config.WindowButtonStyleDots {
 		t.Errorf("window_button_style = %q, want %q from the defaults", got, config.WindowButtonStyleDots)
 	}

@@ -61,8 +61,6 @@ func ReviewDiff(dir, base string, uncommitted bool) (Review, error) {
 		if other == nil {
 			return Review{}, errfmt.Errorf("%q is not a commit here", base)
 		}
-		// The merge base of two branches of this repository: where the
-		// worktree left the main branch.
 		switch {
 		case other.base == c.branch:
 			from, r.BaseHash = other.fork, other.forkHash
@@ -108,8 +106,6 @@ func ReviewDiff(dir, base string, uncommitted bool) (Review, error) {
 	return r, nil
 }
 
-// reviewHunks turns a line diff into review hunks with three lines of
-// context, and counts the lines added and removed.
 func reviewHunks(ops []diffOp) (hunks []review.Hunk, added, removed int) {
 	for _, h := range linediff.Hunks(ops, 3) {
 		rh := review.Hunk{Header: h.Header(), OldStart: h.AStart, OldLines: h.ACount, NewStart: h.BStart, NewLines: h.BCount}

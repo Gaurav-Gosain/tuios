@@ -26,7 +26,6 @@ func TestOpenCodeServiceRules(t *testing.T) {
 	read := func(path string) (Page, error) {
 		return Read(path, Options{Format: FormatOpenCode, Session: ocSession})
 	}
-	// countingExport is an opencode whose export counts its runs in a file.
 	countingExport := func(t *testing.T, extra string) string {
 		t.Helper()
 		dir := t.TempDir()
@@ -86,8 +85,6 @@ func TestOpenCodeServiceRules(t *testing.T) {
 	t.Run("an export that runs too long", func(t *testing.T) {
 		dir := t.TempDir()
 		pids := filepath.Join(dir, "pids")
-		// The export starts a child, as opencode starts its private server,
-		// and both write their pids.
 		fakeExport(t, dir, "echo $$ >> "+pids+"; sleep 30 & echo $! >> "+pids+"; wait")
 		start := time.Now()
 		if _, err := read(filepath.Join(t.TempDir(), "service.json")); err != ErrService {
@@ -138,8 +135,6 @@ func TestOpenCodeServiceRules(t *testing.T) {
 		_ = os.WriteFile(db, []byte("db"), 0o600)
 		runs := countingExport(t, "")
 		path := filepath.Join(t.TempDir(), "service.json")
-		// Each read past the shared fetch, as a read more than openCodeShare
-		// after the last one.
 		readAfterShare := func() {
 			t.Helper()
 			openCodeFlights.Lock()
@@ -154,19 +149,16 @@ func TestOpenCodeServiceRules(t *testing.T) {
 		if n := runCount(runs); n != 1 {
 			t.Fatalf("two reads of a quiet session ran the export %d times, want once", n)
 		}
-		// opencode writes to its write-ahead log.
 		_ = os.WriteFile(db+"-wal", []byte("frame"), 0o600)
 		readAfterShare()
 		if n := runCount(runs); n != 2 {
 			t.Fatalf("a read after a write ran the export %d times in all, want twice", n)
 		}
-		// A database of another channel counts too.
 		_ = os.WriteFile(filepath.Join(data, "opencode", "opencode-beta.db"), []byte("db"), 0o600)
 		readAfterShare()
 		if n := runCount(runs); n != 3 {
 			t.Fatalf("a read after a write to another channel's database ran the export %d times in all, want 3", n)
 		}
-		// With no database to watch, every read exports.
 		t.Setenv("XDG_DATA_HOME", t.TempDir())
 		readAfterShare()
 		readAfterShare()

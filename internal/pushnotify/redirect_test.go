@@ -47,8 +47,6 @@ func TestRedirectStaysOnTheHost(t *testing.T) {
 		n := &config.NotifyConfig{Pushover: &config.PushoverConfig{
 			URL: origin.URL + path, User: "user-key", Token: "app-token-secret",
 		}}
-		// allowHTTP: the test servers are plain http. The host check must
-		// hold on its own.
 		return Providers(n)[0].Send(context.Background(), NewClient(true), Message{Title: "t"})
 	}
 

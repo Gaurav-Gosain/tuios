@@ -97,7 +97,6 @@ func TestNoSilentFallbackToSSHAuthorizedKeys(t *testing.T) {
 		}
 	}
 
-	// Naming the file is the opt in.
 	keys, err = LoadAuthorizedKeys(sshPath)
 	if err != nil || !keys.Enabled() {
 		t.Fatalf("--authorized-keys %s did not turn authentication on: %v", sshPath, err)

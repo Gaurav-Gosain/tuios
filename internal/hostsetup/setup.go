@@ -60,23 +60,18 @@ type Options struct {
 
 // Setup is one run.
 type Setup struct {
-	opts   Options
-	name   string
-	host   federation.Host
-	share  *hostsync.Share
-	runner hostsync.Runner
-	probe  *Probe
-	// existing is the address the [hosts] table already holds for name.
-	existing string
-	// daemonFact is the daemon state the start step found, in the words
-	// of hostsync.
+	opts       Options
+	name       string
+	host       federation.Host
+	share      *hostsync.Share
+	runner     hostsync.Runner
+	probe      *Probe
+	existing   string
 	daemonFact string
-	// gate and round take turns at Tailscale sign-ins in a bulk run.
-	gate  *signInGate
-	round int
-	// res and asker are the run's result and front end.
-	res   *Result
-	asker Asker
+	gate       *signInGate
+	round      int
+	res        *Result
+	asker      Asker
 }
 
 // New checks the destination and the name. It opens nothing.
@@ -124,7 +119,6 @@ func (s *Setup) Close() {
 	}
 }
 
-// open starts sharing one ssh connection for the run.
 func (s *Setup) open() {
 	if s.share != nil {
 		return
@@ -134,9 +128,6 @@ func (s *Setup) open() {
 	s.runner = hostsync.SSHRunner{Host: s.host, Desk: s.opts.Desk}
 }
 
-// pickName is a name for dest: the ssh config alias as written, or the host
-// part of user@host, cut to the first label of a domain name and to the name
-// rules. A name in use gets a number.
 func pickName(dest string, hosts map[string]federation.Host) string {
 	h := dest
 	if i := strings.LastIndexByte(h, '@'); i >= 0 {

@@ -198,8 +198,6 @@ func Build(ctx context.Context, opt Options) (*Diff, error) {
 	}
 	spec := pathspec(opt.Paths)
 
-	// Settings a repository or the person's config may carry that would
-	// change what git prints are pinned here.
 	common := []string{"-c", "core.quotePath=false", "diff", "--no-color", "--no-ext-diff", "--no-textconv", "--no-relative", "-M"}
 
 	listArgs := append(append([]string{}, common...), "--raw", "--numstat", "-z", from, tree)
@@ -211,7 +209,6 @@ func Build(ctx context.Context, opt Options) (*Diff, error) {
 	if err != nil {
 		return nil, err
 	}
-	// jj has no untracked files: everything new is in the working-copy commit.
 	if opt.AgainstDir == "" && opt.Tree == "" && !gitstate.Find(opt.Dir).JJ {
 		markUntracked(ctx, opt.Dir, files, spec)
 	}
@@ -241,8 +238,6 @@ func Build(ctx context.Context, opt Options) (*Diff, error) {
 	return d, nil
 }
 
-// underPaths reports whether path is one of paths or inside one of them, the
-// way a literal pathspec matches. No paths matches every path.
 func underPaths(path string, paths []string) bool {
 	if len(paths) == 0 {
 		return true
@@ -256,7 +251,6 @@ func underPaths(path string, paths []string) bool {
 	return false
 }
 
-// pathspec is the "--" and the paths, each literal.
 func pathspec(paths []string) []string {
 	out := []string{"--"}
 	for _, p := range paths {
@@ -265,8 +259,6 @@ func pathspec(paths []string) []string {
 	return out
 }
 
-// markUntracked marks the added files that git does not track yet as U.
-// Ignored files are never in the tree, so they are not in the diff either.
 func markUntracked(ctx context.Context, dir string, files []File, spec []string) {
 	hasAdded := false
 	for _, f := range files {
@@ -296,8 +288,6 @@ func markUntracked(ctx context.Context, dir string, files []File, spec []string)
 	}
 }
 
-// streamUnified runs git diff and reads its output as it comes, stopping git
-// once a limit is reached, so a huge diff costs no more than the limits.
 func streamUnified(ctx context.Context, dir string, args []string, files []File, lim Limits) (bool, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -336,7 +326,6 @@ func streamUnified(ctx context.Context, dir string, args []string, files []File,
 	return truncated, nil
 }
 
-// maxAnchorFile bounds the file a note's line is looked for in.
 const maxAnchorFile = 8 << 20
 
 // FileLines reads a file of the worktree at root as lines, for finding a
@@ -433,7 +422,6 @@ func InsideRoot(root, path string) (string, error) {
 	return real, nil
 }
 
-// revParse resolves a revision to its full hash.
 func revParse(ctx context.Context, dir, rev string) (string, error) {
 	out, err := git(ctx, dir, nil, "rev-parse", "--verify", "--quiet", "--end-of-options", rev)
 	if err != nil {
@@ -446,7 +434,6 @@ func revParse(ctx context.Context, dir, rev string) (string, error) {
 	return sha, nil
 }
 
-// emptyTree is the hash of the empty tree in the repository's hash format.
 func emptyTree(ctx context.Context, dir string) (string, error) {
 	cmd := childproc.Git(ctx, dir, "hash-object", "-t", "tree", "--stdin")
 	cmd.Env = gitEnv(dir, cmd.Env, nil)
@@ -458,28 +445,18 @@ func emptyTree(ctx context.Context, dir string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// gitEnv is base, the environment childproc.Git set, with no optional locks
-// and extra. childproc.Git already left out the caller's index and
-// repository and set nothing interactive. A jj workspace with no ".git" gets
-// jj's git directory.
 func gitEnv(dir string, base, extra []string) []string {
 	env := append(base, "GIT_OPTIONAL_LOCKS=0")
 	env = append(env, gitstate.Find(dir).GitEnv()...)
 	return append(env, extra...)
 }
 
-// git runs one git command in dir, bounded by ctx, and returns its stdout. A
-// failure carries git's own message.
 func git(ctx context.Context, dir string, extra []string, args ...string) (string, error) {
 	return gitHead(ctx, dir, extra, 0, args...)
 }
 
-// errHeadFull is what headWriter returns on the first byte past its limit, so
-// the copy of git's output stops.
 var errHeadFull = errors.New("output limit reached")
 
-// headWriter keeps the first limit bytes written to it. The first byte past
-// the limit marks it full, runs stop and fails the write so the copy ends.
 type headWriter struct {
 	buf   []byte
 	limit int
@@ -499,10 +476,6 @@ func (w *headWriter) Write(p []byte) (int, error) {
 	return room, errHeadFull
 }
 
-// gitHead is git that returns at most the first limit bytes of stdout. When
-// limit > 0 and git writes more, git and its descendants are killed at the
-// first byte past the limit and the kept bytes are the result with no error.
-// With limit <= 0 the whole output is returned.
 func gitHead(ctx context.Context, dir string, extra []string, limit int, args ...string) (string, error) {
 	runCtx, stop := context.WithCancel(ctx)
 	defer stop()
@@ -533,7 +506,6 @@ func gitHead(ctx context.Context, dir string, extra []string, limit int, args ..
 	return stdout.String(), nil
 }
 
-// firstArg is the git subcommand of args, past any -c settings.
 func firstArg(args []string) string {
 	for i := 0; i < len(args); i++ {
 		if args[i] == "-c" {

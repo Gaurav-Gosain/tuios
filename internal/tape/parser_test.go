@@ -118,7 +118,6 @@ func TestParserWaitAliasesSleep(t *testing.T) {
 		t.Errorf("Expected delay 750ms, got %v", cmd.Delay)
 	}
 
-	// Wait without a duration is an error.
 	_, errors = ParseFile("Wait")
 	if len(errors) == 0 {
 		t.Error("Expected an error for Wait without a duration")
@@ -141,7 +140,6 @@ func TestParserWaitUntilRegex(t *testing.T) {
 		t.Errorf("Unexpected args: %v", cmd.Args)
 	}
 
-	// Default timeout: no numeric arg.
 	commands, errors = ParseFile(`WaitUntilRegex "done"`)
 	if len(errors) != 0 {
 		t.Fatalf("Unexpected parse errors: %v", errors)
@@ -291,8 +289,6 @@ Backspace@200ms 3`
 }
 
 func TestParserKeyComboNoPanic(t *testing.T) {
-	// A modifier with no trailing key must error rather than panic on the
-	// raw-byte index of an empty final token.
 	inputs := []string{"Ctrl", "Ctrl+", "Alt+", "Ctrl+Alt+"}
 
 	for _, in := range inputs {

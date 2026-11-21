@@ -1,9 +1,5 @@
 package learn
 
-// The names the page contract (cmd/tuios-wasm/README.md) promises, as lists.
-// The lint in internal/lint checks every lesson against them, so a lesson
-// cannot wait on an event, an overlay or a setting that never comes.
-
 // EventTypes are the event types a page receives, lesson events aside.
 var EventTypes = []string{
 	EventReady, EventKey, EventAction, EventMode, EventPrefix,

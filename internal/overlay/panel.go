@@ -46,16 +46,6 @@ const (
 	MaxPanelPadding     = 6
 )
 
-// panelPadding is the padding in effect. It is the one spacing knob the overlay
-// family has, and it is horizontal only.
-//
-// The vertical rhythm is left alone deliberately. A panel's blank rows are
-// counted by its hosts, which budget a body's row count against the screen
-// height before they build one, so a variable count would need every overlay to
-// re-budget and would trade a rice for a family of off-by-one clipping bugs.
-// The horizontal padding has no such reader: FitWidth subtracts it, Render
-// lays out from it, and the geometry a host hit-tests against reports it, so
-// all three agree by construction whatever it is.
 var panelPadding atomic.Int64
 
 // SetPanelPadding sets the cells of surface padding each side of a panel's
@@ -68,7 +58,6 @@ func SetPanelPadding(cells int) {
 	panelPadding.Store(int64(cells))
 }
 
-// sidePad is the padding in effect.
 func sidePad() int {
 	if v := panelPadding.Load(); v > 0 {
 		return int(v)
@@ -89,7 +78,7 @@ const MinPanelWidth = 12
 // width they want and get the width they can have.
 func FitWidth(preferred, screenW int) int {
 	if screenW <= 0 {
-		return preferred // size not known yet; the caller's preference stands
+		return preferred
 	}
 	avail := screenW - 2*sidePad()
 	if avail < preferred {
@@ -120,8 +109,6 @@ func HintRowCount(hints []Hint, _ int) int {
 	return 1
 }
 
-// hintWidth is the rendered width of one hint: the key, and a space and the
-// label when it has one.
 func hintWidth(h Hint) int {
 	w := lipgloss.Width(hintKey(h.Key))
 	if h.Label != "" {
@@ -130,44 +117,28 @@ func hintWidth(h Hint) int {
 	return w
 }
 
-// tabGap is the single bg-colored column between two tabs.
 const tabGap = 1
 
-// tabArrowWidth is the span one overflow gutter holds: the arrow glyph and the
-// column after it. Both gutters are held open for as long as the strip scrolls,
-// whether or not there is anything that way, so an arrow appearing does not
-// shift the tab under the pointer.
 const tabArrowWidth = 2
 
-// tabRun is the strip as this frame will draw it: the run of tabs that fits on
-// one row, and whether there are more either side of it.
-//
-// The strip scrolls rather than wraps. A second row of tabs reads as a broken
-// panel, and it breaks the row-indexed addressing the body underneath relies on:
-// every body rect is derived from the row the tabs left free.
 type tabRun struct {
 	First, Count        int
 	MoreLeft, MoreRight bool
-	// Scrolls is set once the tabs stopped fitting: both gutters are then held
-	// open and Inner is the fixed span the tabs are drawn into.
-	Scrolls bool
-	Inner   int
+	Scrolls             bool
+	Inner               int
 }
 
-// tabWidths measures each tab as it will be drawn. Only the active tab is a
-// padded pill, so the widths depend on which tab is active.
 func tabWidths(tabs []string, active int) []int {
 	w := make([]int, len(tabs))
 	for i, name := range tabs {
 		w[i] = lipgloss.Width(name)
 		if i == active {
-			w[i] += 2 // Padding(0, 1)
+			w[i] += 2
 		}
 	}
 	return w
 }
 
-// tabsSpan is the width of widths[from:to) laid out with their gaps.
 func tabsSpan(widths []int, from, to int) int {
 	w := 0
 	for i := from; i < to; i++ {
@@ -179,9 +150,6 @@ func tabsSpan(widths []int, from, to int) int {
 	return w
 }
 
-// tabsFitting is how many whole tabs from first fit in width cells. A tab drawn
-// past the viewport it was measured into leaves a recorded rectangle over cells
-// the panel then truncates away.
 func tabsFitting(widths []int, first, width int) int {
 	n := 0
 	for i := first; i < len(widths); i++ {
@@ -193,11 +161,6 @@ func tabsFitting(widths []int, first, width int) int {
 	return n
 }
 
-// planTabRun decides which tabs one row shows. The offset is derived from the
-// active tab rather than remembered, which is what keeps the active tab in view
-// however it was changed: the smallest offset that shows it is the answer to
-// both a click and a keyboard switch, and there is no stale scroll state to go
-// wrong between frames.
 func planTabRun(tabs []string, active, width int) tabRun {
 	widths := tabWidths(tabs, active)
 	if tabsSpan(widths, 0, len(widths)) <= width {
@@ -206,22 +169,14 @@ func planTabRun(tabs []string, active, width int) tabRun {
 
 	inner := width - 2*tabArrowWidth
 	if inner < 1 {
-		// No room for the gutters and anything between them. The strip keeps the
-		// active tab, shortened by the renderer to the width there is, because a
-		// strip that says nothing is worse than one that says only where you are.
 		return tabRun{First: active, Count: 1}
 	}
 	first := 0
-	// Walk forward only while the active tab is off the right of the run, so a
-	// tab that already fits from the left end does not scroll at all.
 	for first < active && first+tabsFitting(widths, first, inner) <= active {
 		first++
 	}
 	count := tabsFitting(widths, first, inner)
 	if count == 0 {
-		// Not even the active tab fits whole between the gutters. It is drawn
-		// anyway, shortened to the viewport: the arrows are the only sign the
-		// other sections exist at this width, so they stay.
 		first, count = active, 1
 	}
 	return tabRun{
@@ -231,20 +186,9 @@ func planTabRun(tabs []string, active, width int) tabRun {
 	}
 }
 
-// tabArrows returns the overflow glyphs, honoring ASCII mode.
 func tabArrows() (string, string) { return ArrowLeft(), ArrowRight() }
 
-// tabsRow renders the section tab strip on exactly one row: a left gutter, the
-// run of tabs that fits, a right gutter. The active tab is an accent pill, the
-// rest muted. It also returns the panel-relative rect of each drawn tab and of
-// each live arrow, given the strip's top-left origin (originX, originY). A tab
-// scrolled out of the run gets the zero rect, which hit-tests as nothing.
 func tabsRow(tabs []string, active int, bg color.Color, pal Palette, originX, originY, width int) (string, []Rect, Rect, Rect) {
-	// Only the active pill is padded. It carries a background, so the padding is
-	// the gap between its colour and its label; on the others it is invisible
-	// spacing, and paying two columns per tab for it is what pushed the strip
-	// wider than the rule beneath it. The inactive tabs are separated by a single
-	// space instead, which costs one column per gap rather than two.
 	pill := func(name string, isActive bool) string {
 		if isActive {
 			return Chip(name, pal.Accent, pal.PillFg)
@@ -253,8 +197,6 @@ func tabsRow(tabs []string, active int, bg color.Color, pal Palette, originX, or
 	}
 
 	run := planTabRun(tabs, active, width)
-	// FgDim, the colour the inactive labels already carry on this surface: the
-	// arrow is furniture beside them, not quieter than them.
 	arrowStyle := Style(bg).Foreground(pal.FgDim)
 	left, right := tabArrows()
 
@@ -283,16 +225,11 @@ func tabsRow(tabs []string, active int, bg color.Color, pal Palette, originX, or
 
 	drawn := 0
 	for i := run.First; i < run.First+run.Count && i < len(tabs); i++ {
-		// The separator belongs to the tab that follows it, so the run never ends
-		// on a trailing space and the hit area has no dead column between tabs: a
-		// click that lands in the gap picks the tab it precedes.
 		hitX := x
 		if i > run.First {
 			b.WriteString(Style(bg).Render(strings.Repeat(" ", tabGap)))
 			x, drawn = x+tabGap, drawn+tabGap
 		}
-		// A tab wider than the span it is drawn into is shortened rather than let
-		// to hang off the edge, which on a scrolling strip means over the arrow.
 		span := width
 		if run.Scrolls {
 			span = run.Inner
@@ -307,8 +244,6 @@ func tabsRow(tabs []string, active int, bg color.Color, pal Palette, originX, or
 		rects[i] = Rect{X0: hitX, Y0: originY, X1: x + w, Y1: originY + 1}
 		x, drawn = x+w, drawn+w
 	}
-	// A scrolling strip holds its viewport open, so the right-hand arrow stays
-	// put as the tabs move under it.
 	if run.Scrolls && drawn < run.Inner {
 		b.WriteString(Style(bg).Render(strings.Repeat(" ", run.Inner-drawn)))
 		x += run.Inner - drawn
@@ -318,8 +253,6 @@ func tabsRow(tabs []string, active int, bg color.Color, pal Palette, originX, or
 	return b.String(), rects, prev, next
 }
 
-// footerRows renders the muted key-hint strip on one row, shortened in tiers
-// when the hints do not fit across it (see fitHints).
 func footerRows(hints []Hint, bg color.Color, pal Palette, width int) []string {
 	key := footerKey(hints, bg, pal, width)
 	footerMemo.Lock()
@@ -337,22 +270,13 @@ func footerRows(hints []Hint, bg color.Color, pal Palette, width int) []string {
 	return []string{strip}
 }
 
-// footerMemo keeps the footer strips drawn lately. A panel is drawn again
-// whenever anything on it changes, and its footer, the same keys at the same
-// width, was most of the allocations of such a frame. A process that serves
-// several clients draws for each, so the memo is shared and locked.
 var footerMemo struct {
 	sync.Mutex
 	m map[string]string
 }
 
-// footerMemoMax bounds the memo. Past it the memo starts again.
 const footerMemoMax = 64
 
-// footerKey is everything a footer strip depends on: the keys and labels,
-// the width, the inks and the ground with their types (an ANSI colour and an
-// RGB one can print alike), the depth the inks are measured at, and the
-// glyphs a strip draws.
 func footerKey(hints []Hint, bg color.Color, pal Palette, width int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%d|%d|%t|%s|%s|%T%v|%T%v|%T%v|", width, CurrentDepth(), UseASCII(), Ellipsis(), EnterKey(),
@@ -366,14 +290,7 @@ func footerKey(hints []Hint, bg color.Color, pal Palette, width int) string {
 	return b.String()
 }
 
-// renderHints draws a fitted strip: keys bright and bold, labels in FgDim, sep
-// cells between pairs, and the ellipsis last when hints were dropped. It
-// returns the strip and its width.
 func renderHints(f fittedHints, sep int, bg color.Color, pal Palette) (string, int) {
-	// Both measured against the ground they land on: the accent follows the
-	// terminal theme. FgDim, not FgMute, for the labels: the footer is the only
-	// place a panel says what its keys do, and FgMute is a furniture token
-	// picked to disappear against the canvas.
 	keyStyle := Style(bg).Foreground(Readable(pal.AccentBright, bg)).Bold(true)
 	labelStyle := Style(bg).Foreground(pal.FgDim)
 	gap := labelStyle.Render(strings.Repeat(" ", sep))
@@ -404,11 +321,6 @@ func (p Panel) Render(pal Palette) (string, Geometry) {
 	pad := Style(bg).Render(strings.Repeat(" ", sidePad()))
 	blank := Style(bg).Render(strings.Repeat(" ", totalW))
 
-	// Every row is padded out to the panel width and, as a backstop, cut down to
-	// it. A row that measures wider than the panel is a row drawn outside the
-	// panel's own box, which on a narrow screen means outside the screen.
-	// The padding a row needs on its right is the same few strings on
-	// every row, so each length is rendered once per panel.
 	pads := map[int]string{}
 	fill := func(s string, width int) string {
 		w := lipgloss.Width(s)
@@ -431,9 +343,6 @@ func (p Panel) Render(pal Palette) (string, Geometry) {
 	}
 	top, bottom := blank, blank
 
-	// A framed panel draws its hairline in the outermost padding cells, so the
-	// frame costs no geometry: the body, the tabs and every hit rectangle a
-	// host recorded are where they are on an unframed panel.
 	if pal.Framed && sidePad() >= 1 {
 		tl, tr, bl, br, h, v := panelFrame(pal)
 		edge := Style(bg).Foreground(pal.frameInk(pal.Edge))
@@ -451,13 +360,12 @@ func (p Panel) Render(pal Palette) (string, Geometry) {
 	var lines []string
 	geo := Geometry{Width: totalW, InnerWidth: p.Width, BodyX: sidePad()}
 
-	lines = append(lines, top) // 0: top pad
+	lines = append(lines, top)
 
-	// 1: title chip. The whole row is a drag handle.
 	chip := Chip(Truncate(p.Title, max(p.Width-2, 1)), pal.Accent, pal.PillFg)
 	lines = append(lines, line(chip))
 	geo.TitleBar = Rect{X0: 0, Y0: len(lines) - 1, X1: totalW, Y1: len(lines)}
-	lines = append(lines, blank) // 2: blank
+	lines = append(lines, blank)
 
 	if len(p.Tabs) > 0 {
 		row, rects, prev, next := tabsRow(p.Tabs, p.ActiveTab, bg, pal, sidePad(), len(lines), p.Width)
@@ -479,7 +387,7 @@ func (p Panel) Render(pal Palette) (string, Geometry) {
 			lines = append(lines, line(r))
 		}
 	}
-	lines = append(lines, bottom) // bottom pad
+	lines = append(lines, bottom)
 
 	geo.Height = len(lines)
 	return strings.Join(lines, "\n"), geo

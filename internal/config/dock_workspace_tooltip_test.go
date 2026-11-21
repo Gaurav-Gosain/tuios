@@ -2,7 +2,6 @@ package config
 
 import "testing"
 
-// withDockWorkspaceTooltip restores the global an apply pass writes.
 func withDockWorkspaceTooltip(t *testing.T) {
 	t.Helper()
 	prev := Global.DockWorkspaceTooltip

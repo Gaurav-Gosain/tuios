@@ -8,10 +8,6 @@ import (
 	"time"
 )
 
-// replayLog is one file under testdata/replay: the events a lesson engine
-// was fed in a real run of a track, and what the page's TypeScript engine
-// (tuios-docs lib/learn/engine.ts with its tracks/*.ts, before the lessons
-// moved here) made of the same events.
 type replayLog struct {
 	Track       string `json:"track"`
 	Completions []struct {
@@ -75,7 +71,6 @@ func TestReplayMatchesThePageEngine(t *testing.T) {
 					l.MarkHinted()
 					continue
 				case "lesson.next", "lesson.skip":
-					// The person read an explainer, or skipped the step.
 					r := Clean
 					if e.Type == "lesson.skip" {
 						r = Skipped
@@ -127,13 +122,7 @@ func verdict(step, press int, r Result) string {
 	return string(b)
 }
 
-// earlyFinish lists the steps that may finish with keys of their list still
-// to press, with the reason. Every other step lists as many presses as its
-// rule needs, so the card never marks a key done that the person was never
-// asked to press (the ratio and column-width steps listed > twice and
-// finished on the first).
 var earlyFinish = map[string]string{
-	// esc closes the menu after the move and is not part of it.
 	"from-zellij/focus": "esc only closes the menu",
 }
 

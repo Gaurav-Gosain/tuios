@@ -30,8 +30,6 @@ func TestTableRefusesReservedAndMalformedNames(t *testing.T) {
 			t.Errorf("problems do not mention %q: %s", want, joined)
 		}
 	}
-	// The one good host survived the four bad ones, which is the point: a
-	// typo in one entry must not cost the user the rest of the table.
 	h, err := table.Lookup("build")
 	if err != nil {
 		t.Fatalf("lookup build: %v", err)

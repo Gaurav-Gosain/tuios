@@ -11,8 +11,6 @@ import (
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
-// useTheme registers a loaded theme and makes it current, restoring the
-// previous state when the test ends.
 func useTheme(t *testing.T, id string) func() {
 	t.Helper()
 	EnsureRegistry()
@@ -33,7 +31,6 @@ func useTheme(t *testing.T, id string) func() {
 	}
 }
 
-// writeThemeFile writes a theme JSON and loads it, returning its id.
 func writeThemeFile(t *testing.T, body map[string]any) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -109,7 +106,6 @@ func TestParseChromeColorSpellings(t *testing.T) {
 		{"not a colour", false},
 		{"#ggg", false},
 		{"#ffb4544", false},
-		// An ink tier is measured from the surface, never set.
 		{"text", false},
 	} {
 		got := !parseChromeSpec(tc.in).IsZero()

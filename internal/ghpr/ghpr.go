@@ -121,7 +121,6 @@ func Path() (string, error) {
 	return p, nil
 }
 
-// run executes gh in dir and returns its stdout.
 func run(ctx context.Context, dir string, args ...string) (string, error) {
 	path, err := Path()
 	if err != nil {
@@ -129,7 +128,6 @@ func run(ctx context.Context, dir string, args ...string) (string, error) {
 	}
 	cmd := childproc.CommandContext(ctx, path, args...)
 	cmd.Dir = dir
-	// gh runs git in dir, which a pane controls (childproc.GitEnv).
 	env, err := childproc.GitEnv(ctx, dir, append(os.Environ(),
 		"GH_PROMPT_DISABLED=1", "GH_NO_UPDATE_NOTIFIER=1", "GH_PAGER=", "PAGER=cat",
 		"NO_COLOR=1", "CLICOLOR=0"))
@@ -168,7 +166,6 @@ func CheckAuth(ctx context.Context, dir string) error {
 	return err
 }
 
-// viewFields are the fields View asks gh for.
 const viewFields = "state,statusCheckRollup,url,number"
 
 // View reads the pull request of branch in the repository at dir.
@@ -192,7 +189,6 @@ func View(ctx context.Context, dir, branch string) (PR, error) {
 	return pr, nil
 }
 
-// prURLRE is a GitHub pull request's address, as ViewURL takes it.
 var prURLRE = regexp.MustCompile(`^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/[0-9]+/?$`)
 
 // IsURL reports whether s is a GitHub pull request's address.
@@ -254,8 +250,6 @@ func Parse(data []byte) (PR, error) {
 	return pr, nil
 }
 
-// checkOutcome classifies one entry of statusCheckRollup: a check run, which
-// has a status and a conclusion, or a commit status, which has a state.
 func checkOutcome(typename, status, conclusion, state string) string {
 	if typename == "StatusContext" || (status == "" && state != "") {
 		switch strings.ToUpper(state) {
@@ -326,8 +320,6 @@ func Create(ctx context.Context, dir string, o CreateOptions) (string, error) {
 	return url, nil
 }
 
-// githubLogin is the shape of a GitHub login: letters, digits and single
-// hyphens, at most 39 characters.
 var githubLogin = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9]|-[A-Za-z0-9]){0,38}$`)
 
 // Login is the GitHub login gh is signed in with. It asks gh for the login

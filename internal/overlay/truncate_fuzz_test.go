@@ -6,8 +6,6 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// truncateLinear is Truncate as it was before the bisection: drop one rune at
-// a time from the end until the rest fits.
 func truncateLinear(s string, maxWidth int) string {
 	if maxWidth <= 0 {
 		return ""

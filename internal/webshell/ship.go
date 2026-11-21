@@ -9,15 +9,8 @@ import (
 	"time"
 )
 
-// tuios ship in the demo: commit and merge work on the fake repository the
-// way they do on a real machine, and push and pr show what they would send.
-// Nothing leaves the tab, and the output says so.
-
-// demoRemote is the remote the demo repository pretends to push to.
 const demoRemote = "https://github.com/you/hello"
 
-// shipPRs are the pull requests tuios ship pr pretended to open, by branch.
-// Guarded by fsMu.
 var shipPRs map[string]int
 
 func initShipPRs() {
@@ -48,8 +41,6 @@ func tuiosShip(s *shell, args []string) int {
 	return s.fail("tuios ship " + sub + " is not a command. Try " + bold + "tuios ship" + reset)
 }
 
-// shipOverview is what tuios ship prints with no command: the steps from
-// this pane's worktree to a merged change.
 func shipOverview(s *shell, co *checkout) int {
 	t := s.t
 	rows := [][2]string{
@@ -92,8 +83,6 @@ func shipOverview(s *shell, co *checkout) int {
 	return 0
 }
 
-// shipCommit commits every change in the checkout, untracked files too, as
-// tuios ship commit does.
 func shipCommit(s *shell, co *checkout, args []string) int {
 	msg := ""
 	for i := 0; i < len(args); i++ {
@@ -114,8 +103,6 @@ func shipCommit(s *shell, co *checkout, args []string) int {
 	return 0
 }
 
-// shipMerge merges a worktree's branch into its base in the main checkout,
-// with the refusals tuios ship merge makes.
 func shipMerge(s *shell, co *checkout) int {
 	if co.base == "" {
 		return s.fail("This pane is in the main checkout. Run tuios ship merge in a pane of a worktree.")
@@ -144,7 +131,6 @@ func shipMerge(s *shell, co *checkout) int {
 		s.t.Printf("%s already has every commit of %s. Nothing was merged.\r\n", main.branch, co.branch)
 		return shipUncommittedNote(s, co)
 	}
-	// What the branch changed since it left the base, file by file.
 	changed := map[string]bool{}
 	for p, content := range co.head {
 		if co.fork[p] != content {
@@ -203,7 +189,6 @@ func shipMerge(s *shell, co *checkout) int {
 	return shipUncommittedNote(s, co)
 }
 
-// shipUncommittedNote says what a merge left behind in the worktree.
 func shipUncommittedNote(s *shell, co *checkout) int {
 	n := len(co.changes())
 	if n == 0 {
@@ -219,8 +204,6 @@ func shipUncommittedNote(s *shell, co *checkout) int {
 	return 0
 }
 
-// shipOutbound is tuios ship push, and with pr also tuios ship pr: what the
-// command would send, and what it prints on a real machine once you say yes.
 func shipOutbound(s *shell, co *checkout, pr bool) int {
 	fsMu.Lock()
 	branch, base, head := co.branch, co.base, co.headHash()
@@ -258,8 +241,6 @@ func shipOutbound(s *shell, co *checkout, pr bool) int {
 	return 0
 }
 
-// shipStatus is tuios ship status: the pull request ship pr pretended to
-// open, if any.
 func shipStatus(s *shell, co *checkout) int {
 	fsMu.RLock()
 	branch := co.branch

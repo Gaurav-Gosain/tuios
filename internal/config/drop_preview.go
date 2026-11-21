@@ -44,8 +44,6 @@ func ParseDropPreviewDelay(v string) (d time.Duration, ok bool) {
 	return d, true
 }
 
-// checkDropPreviewDelay is the error for a drop_preview_delay value that is
-// not a duration.
 func checkDropPreviewDelay(v string) error {
 	if _, ok := ParseDropPreviewDelay(v); !ok {
 		return errfmt.Errorf("%q is not a duration such as 120ms, or 0", v)

@@ -8,22 +8,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The focus and hover rule every list in tuios follows: the rail, the Inbox,
-// the review overlay, settings, the command palette and every picker.
-//
-//  1. Reserve the cell. Whatever a row shows when it is the cursor (a mark, a
-//     bold name) has a cell kept for it on every other row, so nothing moves
-//     when the cursor does.
-//  2. Change only colour. The cursor, the pointer and focus are grounds and
-//     inks, never extra or fewer cells.
-//  3. Always show the cursor. A list that does not have the keyboard still
-//     shows where its cursor is, on the quieter RowSelQuiet, so the user knows
-//     where they will land and which list is listening.
-//
-// At 16 colours the grounds are the terminal's own, so the states are
-// attributes instead: the focused cursor is reverse video, and an unfocused
-// cursor and the pointer underline the row's text.
-
 // RowState is what a list row is at this moment.
 type RowState struct {
 	Cursor  bool // the row is the list's cursor
@@ -108,7 +92,7 @@ func (p Palette) CursorText(span string, st RowState, skip int) string {
 	}
 	width := ansi.StringWidth(span)
 	scr := uv.NewScreenBuffer(width, 1)
-	scr.Method = ansi.GraphemeWidth // cut by cluster, as the frame does
+	scr.Method = ansi.GraphemeWidth
 	uv.NewStyledString(span).Draw(scr, scr.Bounds())
 	line := scr.Line(0)
 	for x := skip; x < len(line); x++ {
@@ -125,18 +109,12 @@ func (p Palette) CursorText(span string, st RowState, skip int) string {
 	return line.Render()
 }
 
-// reverseCell makes a cell part of a reverse-video bar. Its colours are
-// dropped so the bar is one solid run in the terminal's own two colours,
-// rather than a patchwork of every ink the row was drawn in; weight and
-// underline survive, so a match highlight is still bold on the bar.
 func reverseCell(c *uv.Cell) {
 	c.Style.Fg, c.Style.Bg = nil, nil
 	c.Style.Attrs |= uv.AttrReverse
 	c.Style.Attrs &^= uv.AttrFaint
 }
 
-// underlineCell underlines a cell that carries text, leaving the padding
-// alone so the line runs under the words rather than across the panel.
 func underlineCell(c *uv.Cell) {
 	if strings.TrimSpace(c.Content) == "" {
 		return
@@ -144,15 +122,12 @@ func underlineCell(c *uv.Cell) {
 	c.Style.Underline = uv.UnderlineSingle
 }
 
-// restyleRow reads a styled single-line string into cells, applies fn to each
-// and writes it back. It runs only at 16 colours and only for the one or two
-// rows a list has lit, so its cost is a row's worth of cells a frame.
 func restyleRow(s string, width int, fn func(*uv.Cell)) string {
 	if width <= 0 {
 		return s
 	}
 	scr := uv.NewScreenBuffer(width, 1)
-	scr.Method = ansi.GraphemeWidth // cut by cluster, as the frame does
+	scr.Method = ansi.GraphemeWidth
 	uv.NewStyledString(s).Draw(scr, scr.Bounds())
 	line := scr.Line(0)
 	for x := range line {

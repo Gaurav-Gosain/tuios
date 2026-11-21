@@ -9,22 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// Arguments and ask steps of a user action.
-//
-//	[[actions]]
-//	name = "deploy"
-//	run = ["./deploy.sh", "{env}", "--replicas", "{replicas}"]
-//	args = [{ name = "replicas", type = "number", default = 2 }]
-//	ask = [{ name = "env", kind = "pick", title = "Deploy to?", items = ["staging", "prod=Production"] }]
-//
-// An argument has a name, a type (string, number or bool) and an optional
-// default. An ask step asks the person for a value in the palette (tuios
-// prompt) when nobody gave it: kind input shows a text field, and kind pick
-// shows the items, each "id" or "id=title". Each name is a placeholder of
-// run. A value comes from the caller (tuios actions run NAME key=value),
-// else from the ask step, else from the default. An argument with none of
-// the three stops the action before it runs.
-
 // The types an argument can have.
 const (
 	ArgString = "string"
@@ -49,7 +33,6 @@ type ActionAsk struct {
 	AllowOther  bool     `toml:"allow_other,omitempty"`
 }
 
-// argNameRE is a name an argument or an ask step may have.
 var argNameRE = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
 
 // ArgType is the type of the value name: its argument's type, else string.
@@ -114,7 +97,6 @@ func SplitAskItem(item string) (id, title string) {
 	return id, title
 }
 
-// argsProblem is what is wrong with the arguments and ask steps of a, or "".
 func argsProblem(a UserAction) string {
 	if (len(a.Args) > 0 || len(a.Ask) > 0) && len(a.Run) == 0 {
 		return "The values args and ask are only for run. Remove them."
@@ -142,8 +124,6 @@ func argsProblem(a UserAction) string {
 	return ""
 }
 
-// argNameOK reports whether name is a valid argument or step name that seen
-// does not hold yet.
 func argNameOK(name string, seen []string) bool {
 	return argNameRE.MatchString(name) && !slices.Contains(UserActionPlaceholders, name) && !slices.Contains(seen, name)
 }

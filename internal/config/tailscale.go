@@ -2,27 +2,6 @@ package config
 
 import "github.com/Gaurav-Gosain/tuios/internal/federation"
 
-// The [tailscale] table: which machines on your tailnet are offered as
-// addresses when you add a host.
-//
-//	[tailscale]
-//	user = "ubuntu"
-//	exclude = ["*-pad-*"]
-//
-// It changes what tuios suggests and nothing else. No machine is ever added on
-// its own, no tailnet address is dialled by tuios itself, and a machine with no
-// tailscale on it is not affected by this table. A host
-// added from this list is reached over ssh like every other host, which already
-// works across a tailnet because a MagicDNS name resolves like any other name.
-//
-// It sits outside the option registry for the same reason [hosts] does: the
-// per-machine logins are a map of named values rather than a scalar with a
-// single settable path.
-//
-// See internal/federation's tailnet.go for what each field does to the list,
-// and `tuios hosts tailnet` to see the answer for your own tailnet, including
-// every machine that was left out and the reason it was.
-
 // TailscaleConfig is the [tailscale] table.
 type TailscaleConfig struct {
 	// Enabled offers tailnet machines as addresses. Default true: the list is
@@ -89,8 +68,6 @@ func (t TailscaleConfig) TailnetOptions() federation.TailnetOptions {
 	opt.User = t.User
 	opt.Users = t.Users
 	if t.OS != nil {
-		// A set but empty list is a decision: it means every machine. Only an
-		// absent list keeps the default.
 		opt.OS = t.OS
 	}
 	opt.Offline = t.Offline

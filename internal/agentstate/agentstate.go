@@ -53,20 +53,6 @@ type Info struct {
 	Activity string
 }
 
-// The ranks are spaced so a state can be added between two others without
-// renumbering. Only the order is meaningful: errored > needs_input >
-// limit_reached unseen > done unseen > working > limit_reached seen >
-// done seen > idle > unknown > none.
-//
-// limit_reached ranks below needs_input, which a person can answer now, and
-// above done, since the agent did not finish. Once seen it drops below
-// working, as done does, and stays above done seen: the agent still has work
-// it could not do.
-//
-// unknown ranks above none: there is something in that pane, which is more
-// than none says. It ranked zero once, so a session whose only agent was in
-// that state rolled up to nothing, and that is the state the stall timer
-// writes for any agent with no screen rules.
 func info(s State) (Info, bool) {
 	switch s {
 	case None:
@@ -89,8 +75,6 @@ func info(s State) (Info, bool) {
 	return Info{Name: string(s), Activity: "none"}, false
 }
 
-// names is the accepted wire values in a stable order. It is part of the
-// public protocol surface; keep the values stable.
 var names = []string{"none", "working", "needs_input", "idle", "done", "errored", "unknown", "limit_reached"}
 
 // Info returns the row for s.
@@ -162,8 +146,6 @@ const (
 	Stall Source = "stall"
 )
 
-// sourceNames are the sources a caller may name, in rank order. Detect,
-// Transcript and Program are absent: only the daemon sets them.
 var sourceNames = []string{"report", "osc", "screen", "stall"}
 
 // SourceNames lists the source values a caller may name, in rank order.
@@ -206,7 +188,7 @@ func (s Source) Rank() int {
 		return 10
 	case Stall:
 		return 0
-	default: // Report and unset
+	default:
 		return 40
 	}
 }

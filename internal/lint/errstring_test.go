@@ -111,9 +111,6 @@ func good() {
 	}
 }
 
-// errStringFindings checks the errfmt.Errorf strings in the files of one
-// package. It returns a file:line for each finding and the number of strings
-// it checked.
 func errStringFindings(t *testing.T, files map[string][]byte) ([]string, int) {
 	t.Helper()
 	fset := token.NewFileSet()
@@ -180,7 +177,6 @@ func errStringFindings(t *testing.T, files map[string][]byte) ([]string, int) {
 	return out, checked
 }
 
-// literalString returns the value of a string literal, or of a sum of them.
 func literalString(e ast.Expr) (string, bool) {
 	switch e := e.(type) {
 	case *ast.BasicLit:
@@ -205,8 +201,6 @@ func literalString(e ast.Expr) (string, bool) {
 	return "", false
 }
 
-// st1005 is staticcheck's ST1005 on one error string. names are the types and
-// functions of the package, which a string may start with.
 func st1005(s string, names map[string]bool) string {
 	if s == "" {
 		return ""

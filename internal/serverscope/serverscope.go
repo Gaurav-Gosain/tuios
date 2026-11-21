@@ -50,10 +50,7 @@ const MaxNameLen = 14
 const SocketPathGrowth = len(SocketDirName) + 1 + MaxNameLen + 1
 
 var (
-	name string
-	// baseStateHome is the state home the default server uses. It is only
-	// meaningful while a named server is applied, since xdg.StateHome is the
-	// base itself whenever the process is on the default server.
+	name          string
 	baseStateHome string
 )
 

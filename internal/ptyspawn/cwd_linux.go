@@ -7,8 +7,6 @@ import (
 	"os"
 )
 
-// processCwd reads the directory out of procfs, where the kernel publishes it
-// as a symlink the owner can read.
 func processCwd(pid int) (string, bool) {
 	if pid <= 0 {
 		return "", false

@@ -27,8 +27,6 @@ import (
 // failure this guards against is a fourth entrypoint written later that does
 // not. There is no ssh.Session to hand a constructor in a unit test.
 func TestSSHSessionsDoNotWriteTheHostConfig(t *testing.T) {
-	// Every non-test file, whatever its build tags, so an entrypoint that
-	// only builds on one platform is checked too.
 	names, err := filepath.Glob("*.go")
 	if err != nil {
 		t.Fatalf("listing the package: %v", err)
@@ -80,8 +78,6 @@ func TestSSHSessionsDoNotWriteTheHostConfig(t *testing.T) {
 	}
 }
 
-// setsSelector reports whether the literal assigns the named field the value
-// pkg.name.
 func setsSelector(lit *ast.CompositeLit, field, pkg, name string) bool {
 	for _, elt := range lit.Elts {
 		kv, ok := elt.(*ast.KeyValueExpr)
@@ -102,13 +98,9 @@ func setsSelector(lit *ast.CompositeLit, field, pkg, name string) bool {
 	return false
 }
 
-// themeFileWriters are the functions in internal/app that write or remove a
-// file in the themes directory, or open the way to one. Each must read
-// ConfigReadOnly: an SSH or web client must not change the host's theme
-// files any more than its config.toml. A new writer is added here.
 var themeFileWriters = []string{
-	"ThemeEditorSave",      // the theme editor's ctrl+s
-	"ThemePickerAskDelete", // the theme picker's ctrl+d, which the delete waits on
+	"ThemeEditorSave",
+	"ThemePickerAskDelete",
 }
 
 // TestThemeFileWritersHonourConfigReadOnly holds each named writer to a read
@@ -156,10 +148,6 @@ func TestThemeFileWritersHonourConfigReadOnly(t *testing.T) {
 	}
 }
 
-// themeFileWriteSites are the functions in internal/app that call a theme
-// file writer, each with the gate in themeFileWriters that stands in front of
-// it. ThemePickerConfirmDelete deletes only what ThemePickerAskDelete asked
-// about, so the ask is its gate.
 var themeFileWriteSites = map[string]string{
 	"ThemeEditorSave":          "ThemeEditorSave",
 	"ThemePickerConfirmDelete": "ThemePickerAskDelete",
@@ -217,8 +205,6 @@ func TestEveryThemeFileWriteIsGated(t *testing.T) {
 	}
 }
 
-// writesThemeFile reports whether sel reaches for a theme file writer:
-// theme.DeleteThemeFile, or Save or SaveOver on a draft.
 func writesThemeFile(sel *ast.SelectorExpr) bool {
 	switch sel.Sel.Name {
 	case "DeleteThemeFile":

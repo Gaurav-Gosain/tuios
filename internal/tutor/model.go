@@ -16,35 +16,25 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
-// screen is what the tutor shows. The lesson screen is tuios with the card
-// under it. The others are the tutor's own, with tuios out of sight.
 type screen int
 
 const (
-	scrNested screen = iota // inside a tuios pane: how to give the tutor every key
-	scrMenu                 // start, resume, leave
-	scrPause                // the menu F2 and the quit keys open during a lesson
+	scrNested screen = iota
+	scrMenu
+	scrPause
 	scrLesson
 	scrFinish
 )
 
-// Messages the tutor sends itself.
 type (
-	// drainMsg says events wait in the queue.
-	drainMsg struct{}
-	// openMenuMsg is a quit from inside tuios: it opens the menu.
+	drainMsg    struct{}
 	openMenuMsg struct{}
-	// leaveMsg ends the tutor, from a signal.
-	leaveMsg struct{}
-	// finishMsg shows the finish screen, a moment after the last step.
-	finishMsg struct{ gen int }
+	leaveMsg    struct{}
+	finishMsg   struct{ gen int }
 )
 
-// finishDelay is how long the last step's card stays up before the finish
-// screen.
 const finishDelay = 1200 * time.Millisecond
 
-// coachFor is how long the coach's line stays on the card.
 const coachFor = 4 * time.Second
 
 // Model is the tutor's Bubble Tea model. It owns the screen, routes keys and
@@ -64,12 +54,10 @@ type Model struct {
 	sel  int
 	hits []hit
 
-	// leaving lets the quit through the program's filter.
 	leaving atomic.Bool
 
-	// The lesson on screen.
 	track      *lessons.Track
-	doneBefore map[string]bool // steps done on an earlier run, ticked on the bar
+	doneBefore map[string]bool
 	coach      string
 	coachUntil time.Time
 	finishGen  int
@@ -77,7 +65,6 @@ type Model struct {
 	saveErr    string
 }
 
-// finishInfo is what the finish screen shows.
 type finishInfo struct {
 	track   *lessons.Track
 	results []string
@@ -85,15 +72,11 @@ type finishInfo struct {
 	line    string
 }
 
-// hit is a place on screen a click runs.
 type hit struct {
 	y, x0, x1 int
 	do        func() tea.Cmd
 }
 
-// eventQueue holds the lesson's events until the next Update. They come from
-// inside Update and from the lesson's goroutines, and the model reads them
-// on the program's goroutine only.
 type eventQueue struct {
 	mu      sync.Mutex
 	ev      []learn.Event
@@ -101,7 +84,6 @@ type eventQueue struct {
 	nudge   func()
 }
 
-// maxQueued bounds the queue. Only a stuck program reaches it.
 const maxQueued = 4096
 
 func (q *eventQueue) push(e learn.Event) {
@@ -129,18 +111,13 @@ func (q *eventQueue) take() []learn.Event {
 // Init starts tuios.
 func (m *Model) Init() tea.Cmd { return m.tour.Init() }
 
-// Card sizes. At 80x24 and up the card has 4 rows, from 60x16 a 2-row
-// strip, and below that the tutor asks for a bigger window.
 const (
 	fullCols, fullRows   = 80, 24
 	stripCols, stripRows = 60, 16
 )
 
-// tooSmall reports whether the window is below the smallest size the tutor
-// draws.
 func (m *Model) tooSmall() bool { return m.w < stripCols || m.h < stripRows }
 
-// cardRows is the height of the card at the current size.
 func (m *Model) cardRows() int {
 	if m.w >= fullCols && m.h >= fullRows {
 		return 4
@@ -148,7 +125,6 @@ func (m *Model) cardRows() int {
 	return 2
 }
 
-// tourHeight is the rows tuios gets.
 func (m *Model) tourHeight() int { return max(m.h-m.cardRows(), 1) }
 
 // Update routes a message to the tutor or to tuios.
@@ -159,8 +135,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.w, m.h = msg.Width, msg.Height
 		if !m.tooSmall() {
-			// tuios keeps the size it had while the window is too small, so
-			// nothing in the lesson reflows.
 			cmds = append(cmds, m.forward(tea.WindowSizeMsg{Width: m.w, Height: m.tourHeight()}))
 		}
 	case leaveMsg:
@@ -196,21 +170,16 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	cmds = append(cmds, m.drain())
 	if own {
-		// The card or a screen of the tutor's own changed, and tuios writes
-		// no frame of its own for that.
 		cmds = append(cmds, m.tour.OS.RequestFlush())
 	}
 	return m, tea.Batch(cmds...)
 }
 
-// forward runs msg through tuios.
 func (m *Model) forward(msg tea.Msg) tea.Cmd {
 	_, cmd := m.tour.Update(msg)
 	return cmd
 }
 
-// onKey handles the keys of the tutor itself. It reports false for a key
-// that belongs to tuios.
 func (m *Model) onKey(k tea.KeyPressMsg) (bool, tea.Cmd) {
 	key := k.String()
 	if m.tooSmall() {
@@ -231,7 +200,6 @@ func (m *Model) onKey(k tea.KeyPressMsg) (bool, tea.Cmd) {
 	case scrMenu, scrPause, scrFinish:
 		return true, m.onMenuKey(key)
 	}
-	// The lesson.
 	switch key {
 	case "f2":
 		m.openPause()
@@ -251,7 +219,6 @@ func (m *Model) onKey(k tea.KeyPressMsg) (bool, tea.Cmd) {
 	return false, nil
 }
 
-// onMenuKey moves and picks on the tutor's own screens.
 func (m *Model) onMenuKey(key string) tea.Cmd {
 	rows := m.rows()
 	switch key {
@@ -277,7 +244,6 @@ func (m *Model) onMenuKey(key string) tea.Cmd {
 	return nil
 }
 
-// onClick runs the button under the pointer.
 func (m *Model) onClick(x, y int) tea.Cmd {
 	for _, h := range m.hits {
 		if y == h.y && x >= h.x0 && x < h.x1 {
@@ -287,15 +253,12 @@ func (m *Model) onClick(x, y int) tea.Cmd {
 	return nil
 }
 
-// row is one choice on a tutor screen.
 type row struct {
-	label string
-	// detail is drawn after the label, quieter.
+	label  string
 	detail string
 	do     func() tea.Cmd
 }
 
-// rows are the choices of the screen on show.
 func (m *Model) rows() []row {
 	switch m.scr {
 	case scrPause:
@@ -339,8 +302,6 @@ func (m *Model) rows() []row {
 		}
 		label := t.Title
 		if m.inProgress(t) {
-			// The row above continues the track, so this one says it
-			// starts it again.
 			label = "Start " + midSentence(t.Title) + " over"
 		}
 		out = append(out, row{label: label, detail: detail, do: func() tea.Cmd { return m.start(t) }})
@@ -348,15 +309,11 @@ func (m *Model) rows() []row {
 	return append(out, row{label: "Leave", do: m.leave})
 }
 
-// inProgress reports whether t has steps done on an earlier run and is not
-// finished: the menu offers to continue it.
 func (m *Model) inProgress(t *lessons.Track) bool {
 	done := m.store.doneCount(t.ID)
 	return done > 0 && done < len(t.Steps) && !m.trackFinished(t)
 }
 
-// midSentence is a track's title after a verb: sentence case, so "The
-// basics" reads "the basics".
 func midSentence(title string) string {
 	r, n := utf8.DecodeRuneInString(title)
 	if r == utf8.RuneError {
@@ -379,17 +336,12 @@ func (m *Model) find(id string) *lessons.Track {
 	return nil
 }
 
-// openPause opens the lesson's menu. Outside a lesson it does nothing: the
-// tutor's own screens are menus already.
 func (m *Model) openPause() {
 	if m.scr == scrLesson {
 		m.scr, m.sel = scrPause, 0
 	}
 }
 
-// start runs track t from its first step. Steps done on an earlier run are
-// ticked on the bar: v1 resumes at the start of a track, since the scene
-// the later steps expect is built by the earlier ones.
 func (m *Model) start(t *lessons.Track) tea.Cmd {
 	m.track = t
 	m.doneBefore = map[string]bool{}
@@ -407,14 +359,12 @@ func (m *Model) start(t *lessons.Track) tea.Cmd {
 	return nil
 }
 
-// leave ends the tutor.
 func (m *Model) leave() tea.Cmd {
 	m.leaving.Store(true)
 	_, _ = m.lessons.Command("stop")
 	return tea.Quit
 }
 
-// drain takes the lesson's events.
 func (m *Model) drain() tea.Cmd {
 	var cmds []tea.Cmd
 	for _, e := range m.queue.take() {
@@ -455,7 +405,6 @@ func (m *Model) onStepDone(d map[string]any) tea.Cmd {
 	}
 	if line := coachLine(m.file.Coach, result, typ, data, action); line != "" {
 		m.coach, m.coachUntil = line, time.Now().Add(coachFor)
-		// A frame once the line is due to go.
 		return tea.Tick(coachFor+50*time.Millisecond, func(time.Time) tea.Msg { return drainMsg{} })
 	}
 	return nil
@@ -487,7 +436,6 @@ func (m *Model) onFinish(d map[string]any) tea.Cmd {
 	return tea.Tick(finishDelay, func(time.Time) tea.Msg { return finishMsg{gen: gen} })
 }
 
-// lessonStep is the step whose card is up, in the terminal's words, or nil.
 func (m *Model) lessonStep() *lessons.Step {
 	st := m.lessons.State()
 	shown, ok := st["shown"].(int)
@@ -498,9 +446,6 @@ func (m *Model) lessonStep() *lessons.Step {
 	return &s
 }
 
-// filter is the program's event filter. A quit from inside tuios opens the
-// menu, a clipboard write or read never reaches the terminal, and the rest
-// goes through tuios's own filters.
 func filter(model tea.Model, msg tea.Msg) tea.Msg {
 	m, ok := model.(*Model)
 	if !ok || m.leaving.Load() {
@@ -511,17 +456,12 @@ func filter(model tea.Model, msg tea.Msg) tea.Msg {
 		return openMenuMsg{}
 	}
 	if isClipboardMsg(msg) {
-		// A yank stays in tuios's own buffer. The copy.yank event the lesson
-		// waits on comes from the command before it gets here.
 		return nil
 	}
 	msg = app.FilterLearnMode(m.tour.OS, msg)
 	return app.FilterMouseMotion(m.tour.OS, msg)
 }
 
-// isClipboardMsg reports whether msg asks Bubble Tea to write or read the
-// terminal's clipboard. Bubble Tea keeps those message types to itself, so
-// they are known by name.
 func isClipboardMsg(msg tea.Msg) bool {
 	t := reflect.TypeOf(msg)
 	if t == nil || t.PkgPath() != reflect.TypeFor[tea.BatchMsg]().PkgPath() {

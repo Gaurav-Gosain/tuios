@@ -43,9 +43,6 @@ func (id Identity) In(cwd string) bool {
 	return false
 }
 
-// identityScanMax bounds what Identify reads. A Codex session_meta carries
-// the whole instructions and AGENTS.md, so its first record can be hundreds
-// of kilobytes, but the fields Identify wants come before them.
 const identityScanMax = 4 << 20
 
 // Identify reads the identity of the transcript at path in the named format,
@@ -65,11 +62,6 @@ func Identify(name, path string) (Identity, bool) {
 	return id, id.Start != (time.Time{}) && (id.CWD != "" || id.ProjectHash != "")
 }
 
-// scanFields reads the first JSON value of r token by token and returns the
-// string values at the dotted paths given ("payload.cwd"). It stops as soon
-// as it has them all, so a long field after them is never read, and a long
-// field before them costs only its own string. Values inside arrays are not
-// reached.
 func scanFields(r io.Reader, paths ...string) map[string]string {
 	want := make(map[string]bool, len(paths))
 	for _, p := range paths {
@@ -93,7 +85,6 @@ func scanFields(r io.Reader, paths ...string) map[string]string {
 		}
 		return strings.Join(keys, "."), true
 	}
-	// valueDone marks the value of the open object's key as read.
 	valueDone := func() {
 		if n := len(stack); n > 0 && stack[n-1].obj {
 			stack[n-1].wantKey = true
@@ -136,8 +127,6 @@ func scanFields(r io.Reader, paths ...string) map[string]string {
 	return out
 }
 
-// parseTime is an RFC 3339 time, zero when it is not one.
-//
 //go:noinline
 func parseTime(s string) time.Time {
 	t, err := time.Parse(time.RFC3339Nano, s)
@@ -147,9 +136,6 @@ func parseTime(s string) time.Time {
 	return t
 }
 
-// codexIdentity reads a rollout's session_meta: payload.cwd, and the
-// session's start from payload.timestamp, the line's timestamp, or the time
-// in the file name.
 func codexIdentity(r io.Reader, name string) Identity {
 	f := scanFields(r, "type", "timestamp", "payload.cwd", "payload.timestamp")
 	if f["type"] != "session_meta" {
@@ -160,7 +146,6 @@ func codexIdentity(r io.Reader, name string) Identity {
 		id.Start = parseTime(f["timestamp"])
 	}
 	if id.Start.IsZero() {
-		// rollout-2026-10-18T09-00-00-<thread id>.jsonl
 		if rest, ok := strings.CutPrefix(name, "rollout-"); ok && len(rest) >= 19 {
 			if t, err := time.ParseInLocation("2006-01-02T15-04-05", rest[:19], time.Local); err == nil {
 				id.Start = t
@@ -170,14 +155,11 @@ func codexIdentity(r io.Reader, name string) Identity {
 	return id
 }
 
-// geminiIdentity reads a chat's projectHash and startTime, from the first
-// line of the JSONL or the top of the older document.
 func geminiIdentity(r io.Reader, _ string) Identity {
 	f := scanFields(r, "projectHash", "startTime")
 	return Identity{ProjectHash: f["projectHash"], Start: parseTime(f["startTime"])}
 }
 
-// qwenIdentity reads the first record's cwd and timestamp.
 func qwenIdentity(r io.Reader, _ string) Identity {
 	f := scanFields(r, "cwd", "timestamp")
 	return Identity{CWD: f["cwd"], Start: parseTime(f["timestamp"])}

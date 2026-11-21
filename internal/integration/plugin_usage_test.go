@@ -44,19 +44,14 @@ func TestOpenCodePluginFeedsUsage(t *testing.T) {
 	}
 	driver := filepath.Join(dir, "drive.mjs")
 	events := []map[string]any{
-		// A user message is not a cost.
 		{"type": "message.updated", "properties": map[string]any{"info": map[string]any{"id": "m0", "sessionID": "ses_1", "role": "user"}}},
 		{"type": "message.updated", "properties": map[string]any{"info": map[string]any{"id": "m1", "sessionID": "ses_1", "role": "assistant", "parentID": "m0", "modelID": "claude-sonnet-4-6", "providerID": "anthropic", "cost": 0.1}}},
-		// The same message streaming, its cost unchanged to the cent: no run.
 		{"type": "message.updated", "properties": map[string]any{"info": map[string]any{"id": "m1", "sessionID": "ses_1", "role": "assistant", "parentID": "m0", "modelID": "claude-sonnet-4-6", "cost": 0.101}}},
 		{"type": "message.updated", "properties": map[string]any{"info": map[string]any{"id": "m2", "sessionID": "ses_1", "role": "assistant", "parentID": "m0", "modelID": "claude-sonnet-4-6", "cost": 0.25}}},
-		// A subagent's session is dropped.
 		{"type": "session.created", "properties": map[string]any{"info": map[string]any{"id": "ses_child", "parentID": "ses_1"}}},
 		{"type": "message.updated", "properties": map[string]any{"info": map[string]any{"id": "c1", "sessionID": "ses_child", "role": "assistant", "modelID": "haiku", "cost": 5}}},
-		// A cost of the wrong type is left out.
 		{"type": "message.updated", "properties": map[string]any{"info": map[string]any{"id": "m3", "sessionID": "ses_1", "role": "assistant", "modelID": "claude-sonnet-4-6", "cost": "lots"}}},
 		{"type": "session.idle", "properties": map[string]any{"sessionID": "ses_1"}},
-		// opencode ends a turn with both events; the second sends nothing.
 		{"type": "session.status", "properties": map[string]any{"sessionID": "ses_1", "status": map[string]any{"type": "idle"}}},
 	}
 	evJSON, _ := json.Marshal(events)
@@ -75,7 +70,6 @@ for (const event of ` + string(evJSON) + `) {
 		t.Fatalf("node: %v\n%s", err, out)
 	}
 
-	// The runs are not waited for: collect them as they land.
 	var got []string
 	deadline := time.Now().Add(10 * time.Second)
 	for {
@@ -105,7 +99,6 @@ for (const event of ` + string(evJSON) + `) {
 	}
 }
 
-// readCalls reads the recorded runs whose arguments start with prefix.
 func readCalls(t *testing.T, dir, prefix string) []string {
 	t.Helper()
 	entries, err := os.ReadDir(dir)

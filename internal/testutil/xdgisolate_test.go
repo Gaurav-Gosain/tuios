@@ -8,21 +8,10 @@ import (
 	"time"
 )
 
-// subprocessHarness lists the packages that isolate by a different mechanism
-// and so are held to it rather than to RunIsolated. They drive tuios as a real
-// child process with the environment already set, which works where t.Setenv
-// does not because the child resolves its paths at its own init, long after.
-// They are named rather than detected, so adding one is a decision somebody
-// makes rather than one a naming convention makes for them.
 var subprocessHarness = map[string]bool{
 	"e2e": true,
 }
 
-// libraryInWaiting lists the packages that are to become modules of their
-// own, so they import no tuios package, testutil included, and cannot call
-// RunIsolated. TestComposerImportsNoTuiosPackage in cmd/tuios holds the
-// imports. They read no XDG directory: the host gives them every file they
-// show. Adding one is a decision, as for subprocessHarness.
 var libraryInWaiting = map[string]bool{
 	"internal/composer": true,
 }
@@ -54,8 +43,6 @@ func TestEveryTestPackageIsolatesTheXDGTree(t *testing.T) {
 		case name == "testdata" || strings.HasPrefix(name, "."):
 			return filepath.SkipDir
 		}
-		// A directory carrying its own go.mod is a separate module with its own
-		// arrangements, and its tests do not run in this binary's suite.
 		if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
 			return filepath.SkipDir
 		}
@@ -73,8 +60,6 @@ func TestEveryTestPackageIsolatesTheXDGTree(t *testing.T) {
 	}
 }
 
-// isolatedOrTestFree reports whether dir either has no tests or opts into
-// isolation.
 func isolatedOrTestFree(t *testing.T, dir string) bool {
 	t.Helper()
 	entries, err := os.ReadDir(dir)
@@ -178,7 +163,6 @@ func TestRedirectCheckCatchesAnEscapedGlobal(t *testing.T) {
 	if err := stillRedirected(tmp); err == nil {
 		t.Fatal("globals pointing at the real home were reported as redirected")
 	}
-	// The binary's own isolation is in force, so the tree it was given passes.
 	if err := stillRedirected(os.Getenv("XDG_STATE_HOME")); err != nil {
 		t.Fatalf("this binary's own tree was reported as escaped: %v", err)
 	}

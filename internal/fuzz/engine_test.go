@@ -5,15 +5,6 @@ import (
 	"testing"
 )
 
-// The engine's own guarantees, tested against a fake target. A shrinker that
-// drops the action that actually caused the failure reports a repro that does
-// not reproduce, which is worse than reporting nothing, so the minimisation is
-// checked for both directions: it reaches the minimum, and everything it
-// reports still fails.
-
-// needleTarget fails once it has seen a given action, optionally only after a
-// prefix action has been seen first. That is the shape of a real finding: some
-// setup, then a trigger.
 type needleTarget struct {
 	setup, trigger Action
 	sawSetup       bool
@@ -104,8 +95,6 @@ func TestShrinkHoldsTheRuleFixed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	// The zoom breaks rule-b first, so that is the finding, and the resize that
-	// breaks rule-a must not be what the minimal sequence ends on.
 	if res.Violations[0].Rule != "rule-b" {
 		t.Fatalf("reported %q, want the first rule broken", res.Violations[0].Rule)
 	}

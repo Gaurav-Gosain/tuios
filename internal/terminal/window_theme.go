@@ -7,11 +7,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// applyTheme sets the active theme's colors on an emulator, or clears them to
-// the terminal defaults when theming is disabled or the depth is 16 colours.
-//
-// The colours are the theme's at the depth the frame is drawn at (see
-// theme.EmulatorColors), so a change of depth has to apply them again.
 func applyTheme(t vt.Terminal) {
 	if fg, bg, cur, pal, ok := theme.EmulatorColors(); ok {
 		t.SetThemeColors(fg, bg, cur, pal)
@@ -55,8 +50,6 @@ func (w *Window) UpdateThemeColors() {
 	}
 	w.ioMu.Unlock()
 
-	// Mark dirty and drop the cached render: the palette changed, so both the
-	// cached content string and the cached styled layer are stale.
 	w.Dirty = true
 	w.ContentDirty = true
 	w.InvalidateCache()

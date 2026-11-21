@@ -12,21 +12,6 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-// The native manifest, tuios-plugin.toml.
-//
-// A native plugin is a herdr plugin with a schema of tuios's own: the same
-// build, startup, action and pane entries, plus the pane grants its
-// processes hold when they call tuios. It is read into herdr's shape and
-// checked by the same code, so the runner, the palette and the install
-// prompt treat both formats alike. Only the grants differ: a herdr plugin's
-// processes hold the default grants, and a native plugin's hold the grants
-// the person approved at install (Plugin.Held), or none.
-//
-// Unknown keys are refused, so a typo is not a silent no-op, and an older
-// tuios never ignores a key or a grant a newer one added. Entries a later
-// tuios runs, [[wasm]] and event processes, are refused with a message that
-// says so. docs/PLUGINS.md is the contract.
-
 // NativeManifestName is the file name of a native plugin manifest. In a
 // folder with both files, it wins.
 const NativeManifestName = "tuios-plugin.toml"
@@ -34,13 +19,8 @@ const NativeManifestName = "tuios-plugin.toml"
 // FormatTuios marks a plugin read from a native manifest.
 const FormatTuios = "tuios"
 
-// kernelPlacesCallers is true where the daemon reads a caller's pid from
-// the kernel (procinfo.PeerPID), so it can hold a native plugin's processes
-// to their grants. Elsewhere the runner does not start them.
 const kernelPlacesCallers = runtime.GOOS == "linux" || runtime.GOOS == "darwin"
 
-// nativeAPI is the plugin API version this build reads, the api key of a
-// manifest.
 const nativeAPI = 1
 
 // RunningVersion is the version of this tuios, which the binary sets. A
@@ -48,7 +28,6 @@ const nativeAPI = 1
 // version, such as "dev", checks nothing.
 var RunningVersion string
 
-// orUpdate ends a refusal that a newer tuios may not make.
 const orUpdate = "Check the spelling. If the plugin needs a newer tuios, run tuios update"
 
 // PluginGrants are the grants a native manifest may ask for. respond is not
@@ -58,7 +37,7 @@ var PluginGrants = []string{"read", "write", "fan", "ui", "admin"}
 
 type rawNative struct {
 	API         *int      `toml:"api"`
-	Schema      *int      `toml:"schema"` // the old name of api, shipped in v0.12
+	Schema      *int      `toml:"schema"`
 	ID          *string   `toml:"id"`
 	Name        *string   `toml:"name"`
 	Version     *string   `toml:"version"`
@@ -79,13 +58,11 @@ type rawNative struct {
 	} `toml:"herdr"`
 }
 
-// rawSaver is one [[saver]]: a screen saver as a frames file.
 type rawSaver struct {
 	ID   *string `toml:"id"`
 	File *string `toml:"file"`
 }
 
-// parseSavers checks the [[saver]] entries.
 func parseSavers(raw []rawSaver, root string) ([]Saver, *Error) {
 	var out []Saver
 	for _, s := range raw {
@@ -111,11 +88,6 @@ func parseSavers(raw []rawSaver, root string) ([]Saver, *Error) {
 	return out, nil
 }
 
-// confined reports whether path, a file a manifest names in root, stays in
-// root once its links are resolved. IsLocal alone passes a link that git
-// checked out, such as theme.json -> /dev/zero or -> ~/.ssh/id_ed25519.
-// A file that is not there is confined: reading it fails, and tuios plugins
-// check says it is missing. A link that does not resolve is not.
 func confined(path, root string) bool {
 	if _, err := os.Lstat(path); err != nil {
 		return true
@@ -126,13 +98,10 @@ func confined(path, root string) bool {
 	return Inside(path, root)
 }
 
-// rawTheme is one [[theme]]: a theme file the plugin brings.
 type rawTheme struct {
 	File *string `toml:"file"`
 }
 
-// parseThemes checks the [[theme]] entries: each a .json file in the plugin
-// folder.
 func parseThemes(raw []rawTheme, root string) ([]string, *Error) {
 	var out []string
 	for _, t := range raw {
@@ -149,19 +118,15 @@ func parseThemes(raw []rawTheme, root string) ([]string, *Error) {
 	return out, nil
 }
 
-// rawCell is one [[cell]]: a dock cell the plugin may set.
 type rawCell struct {
 	ID   *string `toml:"id"`
 	Side *string `toml:"side"`
 }
 
-// maxCells bounds the cells of one plugin.
 const maxCells = 8
 
-// Sides of a cell.
 var cellSides = []string{"left", "center", "right"}
 
-// parseCells checks the [[cell]] entries.
 func parseCells(raw []rawCell, grants []string) ([]Cell, []string, *Error) {
 	if len(raw) > maxCells {
 		return nil, nil, errf("plugin_manifest_parse_failed", "the manifest has %d [[cell]] entries. A plugin can have %d", len(raw), maxCells)
@@ -194,8 +159,6 @@ func parseCells(raw []rawCell, grants []string) ([]Cell, []string, *Error) {
 	return out, warn, nil
 }
 
-// rawProcess is one [[process]]: an action, a pane or a startup command, by
-// its run key.
 type rawProcess struct {
 	ID          *string   `toml:"id"`
 	Run         *string   `toml:"run"`
@@ -210,8 +173,6 @@ type rawProcess struct {
 	Command     *[]string `toml:"command"`
 }
 
-// parseNative validates a tuios-plugin.toml. root is its folder, where a
-// [herdr] manifest is read from.
 func parseNative(data []byte, root string) (*Plugin, *Error) {
 	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
 	var n rawNative
@@ -294,8 +255,6 @@ func parseNative(data []byte, root string) (*Plugin, *Error) {
 	return p, nil
 }
 
-// herdrPart reads the herdr manifest a [herdr] table names. The native file
-// then adds only identity and grants: it may not also list commands.
 func herdrPart(n rawNative, root string) (*Plugin, *Error) {
 	if len(n.Build) > 0 || len(n.Process) > 0 {
 		return nil, errf("plugin_manifest_parse_failed", "with [herdr] manifest, the commands come from the herdr manifest. Remove [[build]] and [[process]] from %s", NativeManifestName)
@@ -318,7 +277,6 @@ func herdrPart(n rawNative, root string) (*Plugin, *Error) {
 	return p, nil
 }
 
-// addProcess turns one [[process]] into the herdr entry its run key names.
 func addProcess(raw *rawManifest, x rawProcess) *Error {
 	if x.Run == nil {
 		return missingField("run")
@@ -344,9 +302,6 @@ func addProcess(raw *rawManifest, x rawProcess) *Error {
 	return nil
 }
 
-// eventNames reads the on key of an event process: one name or a list, each
-// in HookEvents. An unknown name is refused, so a typo is not a hook that
-// never runs.
 func eventNames(on any) ([]string, *Error) {
 	var names []string
 	switch v := on.(type) {
@@ -372,7 +327,6 @@ func eventNames(on any) ([]string, *Error) {
 	return names, nil
 }
 
-// nativeGrants checks and sorts the grants a manifest asks for.
 func nativeGrants(names []string) ([]string, *Error) {
 	out := []string{}
 	for _, g := range names {

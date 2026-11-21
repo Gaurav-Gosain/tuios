@@ -21,14 +21,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 )
 
-// Where `tuios hosts sync` gets its binaries: the release that matches this
-// build, a build of a checkout, or a file the person names.
-
-// syncBuildTimeout bounds one cross-compile.
 const syncBuildTimeout = 10 * time.Minute
 
-// networkTimeout bounds one release lookup or download. It is the bound of
-// tuios update (networkTimeout in cmd/tuios/update.go).
 const networkTimeout = 3 * time.Minute
 
 // NewBinary is data as a Binary that reports the version ver.
@@ -53,14 +47,10 @@ func (s *Source) LoadBinary(p string) error {
 	if err != nil {
 		return errfmt.Errorf("%s: %w", p, err)
 	}
-	// The module path is in every Go binary built from the tuios main
-	// package, stripped or not.
 	if !bytes.Contains(data, []byte("github.com/"+release.Repo+"/cmd/tuios")) {
 		return errfmt.Errorf("%s is not a tuios binary", p)
 	}
 	s.Platform = goos + "/" + goarch
-	// The version is read by running it, which only works for this
-	// machine's own system.
 	if goos == runtime.GOOS && goarch == runtime.GOARCH {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
@@ -138,7 +128,6 @@ func (s *Source) BuildDev(platform string) (*Binary, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), syncBuildTimeout)
 	defer cancel()
-	// go env, so a GOFLAGS set with go env -w is kept beside the list.
 	env := exec.CommandContext(ctx, "go", "env", "GOFLAGS")
 	env.Dir = s.SrcDir
 	base, err := env.Output()
@@ -231,7 +220,7 @@ func BinaryPlatform(data []byte) (goos, goarch string, err error) {
 			return "", "", errors.New("the binary is a big-endian ELF file, which sync does not install")
 		}
 		goos = "linux"
-		if data[7] == 9 { // ELFOSABI_FREEBSD
+		if data[7] == 9 {
 			goos = "freebsd"
 		}
 		switch binary.LittleEndian.Uint16(data[18:20]) {

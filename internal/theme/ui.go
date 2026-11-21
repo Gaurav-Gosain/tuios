@@ -33,21 +33,8 @@ func ReadableAt(c, bg color.Color, floor float64) color.Color {
 	return overlay.ReadableAt(c, bg, floor)
 }
 
-// uiCanvas is the chrome ramp's darkest base. It is named rather than only
-// spelled inside UI() because RailGround reads it once per drawn row, and
-// building the whole palette to reach one constant field means measuring a pill
-// foreground's contrast every time.
 var uiCanvas = tone.Pepper
 
-// railRuleMemo holds the grounds a structure ink has been measured for and the
-// answers. The measurement bisects over contrast ratios, and the grounds a
-// frame draws rules on are a handful of constants that move only when the theme
-// does; without it the dock's separator paid for the whole bisection on every
-// frame it composed.
-//
-// Four entries rather than one because a frame uses more than one ground at a
-// time: the strip's resting bands and the one under the pointer are different
-// fills, and a single slot would miss on every band between them.
 var railRuleMemo struct {
 	sync.Mutex
 	bg   [4][4]uint32
@@ -82,21 +69,9 @@ func RailRuleOn(bg color.Color) color.Color {
 // background: near-white on a dark or mid accent, near-black on a light one.
 func ContrastText(bg color.Color) color.Color { return overlay.ContrastText(bg) }
 
-// chromeRamp is the constant ramp stated as the ratios between its steps,
-// which is what a theme that names its own Surface is held to. The four
-// neutrals are not independent: they are one ramp at fixed spacing, and that
-// spacing is what makes a panel read as raised and a card as inset. The three
-// inks are the same kind of thing, a hierarchy stated as ratios on the surface
-// they are written on. Measured from the constants rather than typed, so the
-// two ways of building a palette cannot drift apart.
-//
-// Contrast ratios rather than luminance ratios, because contrast is what every
-// ink in the chrome is measured by, and because the flare term in it is what
-// keeps the steps of a ramp built on a near-black ground apart: in bare
-// luminance a third of almost nothing is nothing.
 var chromeRamp = struct {
-	canvas, panel, card float64 // steps below, below and above Surface
-	fg, fgDim, fgMute   float64 // ink tiers on Surface
+	canvas, panel, card float64
+	fg, fgDim, fgMute   float64
 }{
 	canvas: overlay.ContrastRatio(tone.Char, tone.Pepper),
 	panel:  overlay.ContrastRatio(tone.Char, tone.BBQ),
@@ -141,17 +116,13 @@ func UI() overlay.Palette {
 	return p
 }
 
-// uiKey is everything UI reads: the depth, the theme and its chrome. The
-// theme's colours are keyed by pointer, and a theme file that is read again
-// makes new ones, so an edited theme is a new key.
 type uiKey struct {
 	depth   overlay.Depth
 	tint    *tint.Tint
 	colours [6]*tint.Color
 	chrome  *Chrome
 	host    *hostGround
-	// framed is overlay.FramePanels, which Derive reads into the palette.
-	framed bool
+	framed  bool
 }
 
 func currentUIKey() uiKey {
@@ -203,40 +174,26 @@ func PaneUI(ground color.Color) overlay.Palette {
 	return p
 }
 
-// paneUIKey is what PaneUI builds a palette from: what UI is built from, and
-// the ground.
 type paneUIKey struct {
 	ui     uiKey
 	ground [4]uint32
 }
 
-// paneUIMemo keeps PaneUI's palettes, one per ground and look. It is emptied
-// when full rather than evicted entry by entry: a full map means the theme or
-// the grounds are changing, and the next frames build what they need again.
 var paneUIMemo struct {
 	sync.Mutex
 	m map[paneUIKey]overlay.Palette
 }
 
-// paneUIMemoMax bounds paneUIMemo. A client has one pane ground at a time, so
-// this is room for that many clients' grounds, or for a live edit of
-// pane_background to walk through as many before the map is emptied.
 const paneUIMemoMax = 16
 
-// buildUI builds the palette for depth d.
 func buildUI(d overlay.Depth) overlay.Palette {
 	return buildUIOn(d, Current(), CurrentChrome(), nil)
 }
 
-// buildUIWith builds the palette for depth d from the theme t and its chrome
-// ch, either of which may be nil. The theme editor builds one for a draft that
-// is not in force.
 func buildUIWith(d overlay.Depth, cur *tint.Tint, ch *Chrome) overlay.Palette {
 	return buildUIOn(d, cur, ch, nil)
 }
 
-// buildUIOn is buildUIWith with the ramp built on pane, when it is not nil:
-// the ground of an overlay drawn like a pane window (see PaneUI).
 func buildUIOn(d overlay.Depth, cur *tint.Tint, ch *Chrome, pane color.Color) overlay.Palette {
 	p := overlay.Palette{
 		Canvas:   uiCanvas,
@@ -246,12 +203,8 @@ func buildUIOn(d overlay.Depth, cur *tint.Tint, ch *Chrome, pane color.Color) ov
 		Card:     tone.Iron,
 		Selected: tone.Charple,
 
-		Fg:    tone.Butter,
-		FgDim: tone.Smoke,
-		// One step up the ramp from Oyster, which measures 2.60:1 on the
-		// canvas, 1.81:1 on the surface a settings hint is written on, 1.35:1
-		// on a card. Quiet is a tier of the hierarchy, not permission to be
-		// unreadable.
+		Fg:     tone.Butter,
+		FgDim:  tone.Smoke,
 		FgMute: tone.Squid,
 
 		Accent:       tone.Charple,
@@ -274,9 +227,6 @@ func buildUIOn(d overlay.Depth, cur *tint.Tint, ch *Chrome, pane color.Color) ov
 		p.Info = t.BrightBlue
 		p.Warning = t.Yellow
 
-		// A theme that names its own chrome colours overrides the slots above,
-		// one role at a time. See Chrome: the point is a palette whose accent
-		// is not its bright blue.
 		if c := ch; c != nil {
 			if c.Accent != nil {
 				p.Accent, p.Selected, p.Info = c.Accent, c.Accent, c.Accent
@@ -313,17 +263,6 @@ func buildUIOn(d overlay.Depth, cur *tint.Tint, ch *Chrome, pane color.Color) ov
 		}
 	}
 
-	// A light theme's chrome is light. The constant ramp is a dark one, and on
-	// a light theme every dialog, the palette, which-key, settings, the Inbox
-	// and help stood as a dark slab on a light screen. The dialogs take a
-	// ramp built from the theme's background the way the rail and the dock's
-	// is (see GroundUI), with the ink tiers measured on it. A theme that names
-	// its own ramp has chosen already, and at 16 colours the ground is the
-	// terminal's.
-	//
-	// With theme = "none", the ground is the local terminal's own when it
-	// said (see SetHostGround). A dark one moves the ramp the way a theme's
-	// surface does.
 	light := false
 	var ground color.Color
 	groundLight := false
@@ -333,9 +272,6 @@ func buildUIOn(d overlay.Depth, cur *tint.Tint, ch *Chrome, pane color.Color) ov
 		ground, groundLight = h.bg, h.light
 	}
 	if pane != nil && d != overlay.Depth16 {
-		// The pane's ground is the surface itself, and the steps a row, a card
-		// and the inks take are measured from it, whatever ramp the theme
-		// would otherwise give its chrome.
 		c := paneChrome(pane)
 		light, customRamp = GroundIsLight(pane), true
 		p.Canvas, p.Panel, p.RowSel, p.Surface, p.Card = c.Canvas, c.Panel, c.Panel, c.Surface, c.Card
@@ -357,24 +293,13 @@ func buildUIOn(d overlay.Depth, cur *tint.Tint, ch *Chrome, pane color.Color) ov
 
 	switch d {
 	case overlay.Depth16:
-		// The theme's own sixteen, by slot, so the terminal paints them from
-		// the user's palette. With no theme the slots are the same ones a
-		// theme's chrome derives from, and the user's terminal is the theme.
 		p.Accent, p.Selected, p.Info = overlay.Slot(12), overlay.Slot(12), overlay.Slot(12)
 		p.AccentBright = overlay.Slot(14)
 		p.Warn, p.Success, p.Warning = overlay.Slot(9), overlay.Slot(10), overlay.Slot(3)
-		// The primary and secondary inks are the terminal's own foreground,
-		// which is picked to read on its own background; the quiet ink is
-		// bright black, the one slot every palette makes a quiet grey.
 		p.Fg, p.FgDim, p.FgMute = overlay.NoColor, overlay.NoColor, overlay.Slot(8)
-		// Derive takes them from the warning and info slots.
 		p.Attention, p.Busy = nil, nil
 	case overlay.Depth256:
 		if !customRamp && !light {
-			// Set by hand on the grey ramp. Stepping the charmtone neutrals
-			// down one at a time put the panel band and the cursor row on
-			// index 17, navy, because BBQ's slight blue cast wins the colour
-			// cube by perceptual distance.
 			p.Canvas, p.Panel, p.Surface = overlay.Grey(2), overlay.Grey(3), overlay.Grey(5)
 			p.RowSel, p.RowSelQuiet, p.Hover, p.Card = overlay.Grey(3), overlay.Grey(4), overlay.Grey(6), overlay.Grey(7)
 			p.Fg, p.FgDim, p.FgMute = overlay.Grey(23), overlay.Grey(18), overlay.Grey(13)
@@ -396,29 +321,14 @@ func buildUIOn(d overlay.Depth, cur *tint.Tint, ch *Chrome, pane color.Color) ov
 	return overlay.Derive(p)
 }
 
-// lightDialogStep is how far a dialog's surface sits below a light ground, as
-// a contrast ratio. The rail's band steps by the dark ramp's canvas spacing,
-// 1.44:1, which on a near-white ground is a mid grey: right for a thin band,
-// and a grey slab when it fills a panel the size of the palette. A dialog
-// is raised off the screen by its edge and by the scrim, so it takes a
-// smaller step and stays a light surface.
 const lightDialogStep = 1.2
 
-// lightDialogChrome is the ramp and ink tiers of a dialog on a light ground:
-// the ground as the canvas, the surface one small step below it, the cursor
-// row one ramp step below that, and the inset card above the surface.
 func lightDialogChrome(ground color.Color) Chrome {
 	c := Chrome{Canvas: ground, Surface: overlay.Darker(ground, lightDialogStep)}
 	c.deriveRamp()
 	return c
 }
 
-// paneChrome is the ramp of an overlay drawn on a pane's ground: the ground as
-// both the surface a panel fills with and the canvas a dialog fills with, the
-// cursor row a ramp step below it and the inset card a step above, as on the
-// constant ramp. A step with no room on its side, below a
-// black ground or above a white one, goes the other way, so the cursor row and
-// the card are never the ground itself.
 func paneChrome(ground color.Color) Chrome {
 	c := Chrome{
 		Canvas:  ground,
@@ -430,8 +340,6 @@ func paneChrome(ground color.Color) Chrome {
 	return c
 }
 
-// stepOff is the colour ratio:1 from ground the way step goes, or the way
-// other goes when step clamps short of most of the ratio.
 func stepOff(ground color.Color, ratio float64, step, other func(color.Color, float64) color.Color) color.Color {
 	if c := step(ground, ratio); overlay.ContrastRatio(c, ground) >= 1+(ratio-1)/2 {
 		return c
@@ -439,31 +347,12 @@ func stepOff(ground color.Color, ratio float64, step, other func(color.Color, fl
 	return other(ground, ratio)
 }
 
-// liftOnLight holds the palette's coloured inks to their floors on a light
-// surface. A theme's bright slots are picked to read on its own background in
-// a terminal, where they are mostly marks and highlights; on the chrome they
-// are key names, headers, the title chip and status words, and a light
-// theme's bright cyan or yellow measures under 2:1 on a pale grey.
-//
-// Each ink is taken down in luminance at its own chromaticity, one small step
-// at a time, until it clears its floor on the grounds it is written on as the
-// depth shows them. Blending toward black instead drained the chroma with the
-// light. At 256 colours the ink is the palette entry nearest it in hue that
-// reads, since a stepped-down blend of a dark enough blue lands on the grey
-// ramp.
 func liftOnLight(p *overlay.Palette, d overlay.Depth) {
 	surface := []color.Color{overlay.Shown(p.Surface)}
 	rows := []color.Color{overlay.Shown(p.Surface), overlay.Shown(p.Panel)}
 	if d == overlay.Depth256 {
-		// The cursor row as Derive will place it, beside the surface.
 		rows[1] = overlay.Apart256(p.Panel, p.Surface)
 	}
-	// The key ink is written on the surface: footers, which-key, the search
-	// sigil. Everything else also marks a row the cursor can be on. The
-	// accent is text, a header or a title, and holds the text floor; the
-	// status colours are marks and pill grounds, and hold the mark floor, so a
-	// warning keeps its own hue at 256 colours rather than turning an
-	// error's red.
 	inks := []struct {
 		ink     *color.Color
 		grounds []color.Color
@@ -528,8 +417,6 @@ func GroundUIOn(ground color.Color, light bool) overlay.Palette {
 		return p
 	}
 	if c := CurrentChrome(); c != nil && c.Surface != nil {
-		// A theme that names its own chrome surface has already chosen the
-		// ramp its chrome is drawn in.
 		return p
 	}
 	key := currentUIKey()
@@ -552,10 +439,6 @@ func GroundIsLight(ground color.Color) bool {
 	return overlay.ContrastRatio(ground, color.Black) > overlay.ContrastRatio(ground, color.White)
 }
 
-// groundChromeMemo keeps the last ramp built for a ground: GroundUI is asked
-// on every rail and dock rebuild, and the ramp only changes with the theme.
-// The palette derived from it is kept beside it, since deriving measures every
-// ink on every ground.
 var groundChromeMemo struct {
 	sync.Mutex
 	key   [4]uint32
@@ -564,8 +447,6 @@ var groundChromeMemo struct {
 	c     groundRamp
 }
 
-// groundRamp is a light ground's ramp, and the palette derived from it once
-// GroundUI has asked for one.
 type groundRamp struct {
 	Chrome
 	pal        overlay.Palette
@@ -573,7 +454,6 @@ type groundRamp struct {
 	derivedFor uiKey
 }
 
-// groundChrome is the neutral ramp and ink tiers for chrome on a light ground.
 func groundChrome(ground color.Color, d overlay.Depth) groundRamp {
 	r, g, b, a := ground.RGBA()
 	key := [4]uint32{r, g, b, a}

@@ -29,14 +29,8 @@ const (
 	MinAnimatedHeight = 3
 )
 
-// springStiffness is the spring's angular frequency times the duration. A
-// critically damped spring released from rest has (1+k)e^-k of its distance
-// left at the end of the duration: at 7 that is 0.7%, under half a cell for a
-// move across a 60-column pane, so landing exactly on the target when the
-// clock runs out is not a visible step.
 const springStiffness = 7.0
 
-// The four edges a rectangle is animated as: left, top, right, bottom.
 const (
 	edgeLeft = iota
 	edgeTop
@@ -70,9 +64,6 @@ type Animation struct {
 	Progress    float64
 	Complete    bool
 
-	// The spring's state at StartTime: each edge's offset from its target and
-	// its velocity in cells per second. A fresh animation starts at rest at
-	// the Start rectangle; Retarget carries the velocity across.
 	offset [edgeCount]float64
 	vel    [edgeCount]float64
 }
@@ -117,15 +108,12 @@ func NewRestoreAnimation(w *terminal.Window, dockX, dockY int, duration time.Dur
 func NewSnapAnimation(w *terminal.Window, targetX, targetY, targetWidth, targetHeight int, duration time.Duration) *Animation {
 	if w.X == targetX && w.Y == targetY &&
 		w.Width == targetWidth && w.Height == targetHeight {
-		// Even if position matches, ensure PTY dimensions are synced
-		// This handles the case where daemon PTY has stale dimensions after reattach
 		if w.DaemonMode {
 			w.Resize(targetWidth, targetHeight)
 		}
 		return nil
 	}
 
-	// If duration is 0, instantly apply the position without animation
 	if duration == 0 {
 		w.X = targetX
 		w.Y = targetY
@@ -153,7 +141,6 @@ func NewSnapAnimation(w *terminal.Window, targetX, targetY, targetWidth, targetH
 	return a
 }
 
-// restFromStart sets the spring at rest on the Start rectangle.
 func (a *Animation) restFromStart() {
 	start := edgesOf(a.StartX, a.StartY, a.StartWidth, a.StartHeight)
 	end := a.endEdges()
@@ -210,9 +197,6 @@ func (a *Animation) UpdateAt(now time.Time) bool {
 		return true
 	}
 
-	// Don't resize the VT emulator during animation. Wait until it completes.
-	// This prevents content overflow and size mismatch issues
-
 	elapsed := now.Sub(a.StartTime)
 	if a.Duration <= 0 || elapsed >= a.Duration {
 		a.Complete = true
@@ -224,20 +208,11 @@ func (a *Animation) UpdateAt(now time.Time) bool {
 		newX, newY, newWidth, newHeight = a.EndX, a.EndY, a.EndWidth, a.EndHeight
 	} else {
 		pos, _ := a.springAt(now)
-		// The edges are rounded rather than the sizes. Two panes that share an
-		// edge (a column and its neighbour on the scrolling strip, two tiles in
-		// a split) then round that edge to the same cell on every frame.
-		// Rounding the width on its own let the edge of one and the start of
-		// the next land a cell apart, which drew a one-column gap or overlap
-		// that flickered along the seam.
 		left := roundEdge(pos[edgeLeft])
 		top := roundEdge(pos[edgeTop])
 		newX, newY = left, top
 		newWidth = max(roundEdge(pos[edgeRight])-left, 1)
 		newHeight = max(roundEdge(pos[edgeBottom])-top, 1)
-		// A spring that has come within half a cell of the target draws the
-		// target, and there is nothing left to show: land it now rather than
-		// spend frames redrawing the same cells until the clock runs out.
 		if newX == a.EndX && newY == a.EndY && newWidth == a.EndWidth && newHeight == a.EndHeight {
 			a.Complete = true
 		}
@@ -259,12 +234,6 @@ func (a *Animation) UpdateAt(now time.Time) bool {
 	return a.Complete
 }
 
-// springAt returns each edge's position, in cells, and velocity, in cells per
-// second, at now.
-//
-// A critically damped spring with offset e and velocity v at time zero is at
-// target + (e + (v + w e) t) e^(-w t) at time t: it closes on the target as
-// fast as a spring can without passing it when released from rest.
 func (a *Animation) springAt(now time.Time) (pos, vel [edgeCount]float64) {
 	end := a.endEdges()
 	t := max(now.Sub(a.StartTime).Seconds(), 0)
@@ -274,8 +243,6 @@ func (a *Animation) springAt(now time.Time) (pos, vel [edgeCount]float64) {
 		e, v := a.offset[i], a.vel[i]
 		b := v + omega*e
 		off := (e + b*t) * decay
-		// A spring handed a velocity toward the target can carry past it.
-		// A pane edge never overshoots its slot: it stops there.
 		if e != 0 && math.Signbit(off) != math.Signbit(e) {
 			off = 0
 			v = 0
@@ -296,8 +263,6 @@ func edgesOf(x, y, width, height int) [edgeCount]float64 {
 	return [edgeCount]float64{float64(x), float64(y), float64(x + width), float64(y + height)}
 }
 
-// roundEdge rounds half away from zero, so an edge shared by two panes lands
-// on one cell for both.
 func roundEdge(v float64) int {
 	return int(math.Round(v))
 }
@@ -325,16 +290,10 @@ func (a *Animation) Finish() {
 	a.settle()
 }
 
-// settle is the last step of an animation: the state its type leaves behind,
-// and the one resize the guest is told about. Called from Update when the clock
-// runs out and from Finish when a caller lands it early, so the two cannot come
-// to mean different things.
 func (a *Animation) settle() {
 	switch a.Type {
 	case AnimationRestore, AnimationSnap:
-		// Resize at completion for clean, one-time resize
 		a.Window.Resize(a.EndWidth, a.EndHeight)
-		// Ensure final position is exact
 		a.Window.X = a.EndX
 		a.Window.Y = a.EndY
 		if a.Type == AnimationRestore {

@@ -16,15 +16,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// Look export.
-//
-// An export is the reverse of an apply: it reads the value in force of every
-// look key and writes the ones that differ from the defaults as a look file.
-// A theme or glyph set from the person's own directory travels inside the
-// file, since the machine that applies it does not have that file. A built-in
-// one is named, since every tuios has it. The result goes through ParseLook
-// before it is returned, so `tuios look apply` takes it unchanged.
-
 // MaxLookName is the longest look name, in characters. The tuios.dev gallery
 // shows a name as the title of a card and keeps no longer one.
 const MaxLookName = 60
@@ -91,8 +82,6 @@ func ExportLook(cfg *UserConfig, opts LookExportOptions) (*LookExport, error) {
 			ex.Notes = append(ex.Notes, fmt.Sprintf("%s is left out: %v", path, err))
 			continue
 		}
-		// An item a look cannot carry, such as a custom dock cell, is left
-		// out here, so the file holds nothing that apply would drop.
 		kept, dropped, err := lookItems(path, v)
 		if err != nil {
 			ex.Notes = append(ex.Notes, fmt.Sprintf("%s is left out: %v", path, err))
@@ -102,8 +91,6 @@ func ExportLook(cfg *UserConfig, opts LookExportOptions) (*LookExport, error) {
 			ex.Notes = append(ex.Notes, fmt.Sprintf("%s: %s is left out. A look cannot carry it", path, item))
 		}
 		if list, ok := kept.([]string); kept == nil || ok && len(list) == 0 && len(dropped) > 0 {
-			// Nothing a look can carry is left. An empty list would draw
-			// nothing where the person has something.
 			continue
 		}
 		values[path] = kept
@@ -122,9 +109,6 @@ func ExportLook(cfg *UserConfig, opts LookExportOptions) (*LookExport, error) {
 		return nil, err
 	}
 	if _, perr := ParseLook(text); perr != nil {
-		// A value that passes in config.toml can still fail the look's own
-		// check, which is stricter. Each key is tried alone, and the ones
-		// that fail are left out and named.
 		for _, path := range lookSortedKeys(values) {
 			one, err := renderLookExport(LookExportOptions{}, map[string]any{path: values[path]}, assets)
 			if err != nil {
@@ -147,9 +131,6 @@ func ExportLook(cfg *UserConfig, opts LookExportOptions) (*LookExport, error) {
 	return ex, nil
 }
 
-// embedTheme puts a theme of the person's own into the export as [theme].
-// A theme_light of their own cannot travel too, since a look carries one
-// theme, so it is left out.
 func (ex *LookExport) embedTheme(values, assets map[string]any) error {
 	id, _ := values["appearance.theme"].(string)
 	if light, ok := values["appearance.theme_light"].(string); ok && light != "" && theme.IsThemeFile(light) {
@@ -178,8 +159,6 @@ func (ex *LookExport) embedTheme(values, assets map[string]any) error {
 	return nil
 }
 
-// embedGlyphs puts a glyph set of the person's own into the export as
-// [glyphs].
 func (ex *LookExport) embedGlyphs(values, assets map[string]any) error {
 	id, _ := values["appearance.glyphs"].(string)
 	if id == "" {
@@ -198,7 +177,6 @@ func (ex *LookExport) embedGlyphs(values, assets map[string]any) error {
 	if err != nil {
 		return errfmt.Errorf("glyph set %s: %w", id, err)
 	}
-	// Computed on load, never read from a file.
 	delete(table, "ascii")
 	own := strings.TrimPrefix(id, LookAssetPrefix)
 	table["id"] = own
@@ -209,16 +187,12 @@ func (ex *LookExport) embedGlyphs(values, assets map[string]any) error {
 	return nil
 }
 
-// dropOwnName removes a display name that only repeats the id. An installed
-// asset is named look-<id> and keeps <id> as its display name, so without
-// this an export of an applied look would gain a line the original lacked.
 func dropOwnName(table map[string]any, own string) {
 	if name, _ := table["display_name"].(string); name == own || name == LookAssetPrefix+own {
 		delete(table, "display_name")
 	}
 }
 
-// lookAssetTable reads a theme or glyph set file into the table a look holds.
 func lookAssetTable(data []byte) (map[string]any, error) {
 	table := map[string]any{}
 	dec := json.NewDecoder(bytes.NewReader(data))
@@ -228,8 +202,6 @@ func lookAssetTable(data []byte) (map[string]any, error) {
 	return table, nil
 }
 
-// renderLookExport writes the look file: the format line, the name and the
-// author, then the settings in their tables, then the theme and glyph set.
 func renderLookExport(opts LookExportOptions, values, assets map[string]any) ([]byte, error) {
 	var b bytes.Buffer
 	fmt.Fprintf(&b, "look = %d\n", LookVersion)
@@ -273,7 +245,6 @@ func renderLookExport(opts LookExportOptions, values, assets map[string]any) ([]
 	return b.Bytes(), nil
 }
 
-// lookKeyText is the value in force of a look key, as set-config takes it.
 func lookKeyText(cfg *UserConfig, path string) string {
 	if _, file := lookFileKeys[path]; file {
 		return lookFileValueText(cfg, path)
@@ -282,8 +253,6 @@ func lookKeyText(cfg *UserConfig, path string) string {
 	return v
 }
 
-// lookKeyValue is the value in force of a look key, typed as a look file
-// holds it: bool, int64, string or []string.
 func lookKeyValue(cfg *UserConfig, path string) (any, error) {
 	if spec, file := lookFileKeys[path]; file {
 		return lookFileValue(cfg, path, spec)
@@ -306,7 +275,6 @@ func lookKeyValue(cfg *UserConfig, path string) (any, error) {
 	return text, nil
 }
 
-// lookFileValue reads a look key the registry does not carry.
 func lookFileValue(cfg *UserConfig, path string, spec lookFileKey) (any, error) {
 	field, ok := resolveOptionField(cfg, path)
 	if !ok {
@@ -314,8 +282,6 @@ func lookFileValue(cfg *UserConfig, path string, spec lookFileKey) (any, error) 
 	}
 	if field.Kind() == reflect.Pointer {
 		if field.IsNil() {
-			// A key with no fixed default, such as active_underline,
-			// follows another key while unset: there is nothing to write.
 			if spec.Default == "" && spec.Type == OptionBool {
 				return nil, nil
 			}
@@ -338,7 +304,6 @@ func lookFileValue(cfg *UserConfig, path string, spec lookFileKey) (any, error) 
 	return nil, errfmt.Errorf("a value of kind %s", field.Kind())
 }
 
-// lookDefaultValue is the default of a look key the registry does not carry.
 func lookDefaultValue(spec lookFileKey) (any, error) {
 	switch spec.Type {
 	case OptionBool:

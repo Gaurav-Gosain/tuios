@@ -21,12 +21,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// Every request goes through one dedicated http.Client, never
-// http.DefaultClient. It reads HTTP_PROXY, HTTPS_PROXY and NO_PROXY, and uses
-// the system certificate store. The token travels in a header and is never
-// logged. This package logs nothing, and an error names no address beyond the
-// host.
-
 // Provider is one place a notification goes.
 type Provider struct {
 	// Name is ntfy, pushover or webhook.
@@ -79,7 +73,6 @@ func Providers(n *config.NotifyConfig) []Provider {
 	return out
 }
 
-// hostOf is the host of an address, or "" when it has none.
 func hostOf(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -91,21 +84,15 @@ func hostOf(raw string) string {
 // Client is how every provider sends.
 type Client struct {
 	http *http.Client
-	// push sends Web Push: it follows no redirect, and its dialer checks
-	// the address it connects to (webpush.go).
 	push *http.Client
 }
 
-// errRedirectHTTP and errRedirectLimit are what CheckRedirect gives, so post
-// can tell them from a transport failure.
 var (
 	errRedirectHTTP  = errors.New("redirect to plain http")
 	errRedirectLimit = errors.New("too many redirects")
 	errRedirectHost  = errors.New("redirect to another host")
 )
 
-// maxResponseBody bounds how much of an answer is read. The body is not shown,
-// since a provider may echo what it was sent.
 const maxResponseBody = 4 << 10
 
 // NewClient is the client every provider sends with. It follows at most
@@ -132,8 +119,6 @@ func NewClient(allowHTTP bool) *Client {
 	}, push: newPushHTTPClient()}
 }
 
-// post sends one request and turns any failure into an error that says what
-// happened and what to do, with no address beyond the host.
 func (c *Client) post(ctx context.Context, rawURL, contentType string, body []byte, headers []string) error {
 	if u, err := url.Parse(rawURL); err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
 		return errors.New("the url is not an http or https address. Check it in config.toml")
@@ -163,8 +148,6 @@ func (c *Client) post(ctx context.Context, rawURL, contentType string, body []by
 	return describeStatus(resp.StatusCode)
 }
 
-// describeTransport says what a failed request means. The error from net/http
-// is not shown, since it names the full address.
 func describeTransport(ctx context.Context, err error) error {
 	var dnsErr *net.DNSError
 	var netErr net.Error
@@ -194,7 +177,6 @@ func describeTransport(ctx context.Context, err error) error {
 	return errors.New("the request failed. Check the url and that this machine can reach the server")
 }
 
-// statusText names the status codes a provider is likely to answer.
 func statusText(code int) string {
 	switch code {
 	case 0:
@@ -221,7 +203,6 @@ func statusText(code int) string {
 	return strconv.Itoa(code)
 }
 
-// describeStatus says what a status code means for the person.
 func describeStatus(code int) error {
 	text := statusText(code)
 	switch {
@@ -239,8 +220,6 @@ func describeStatus(code int) error {
 	return errfmt.Errorf("the server answered %s. Check the provider settings", text)
 }
 
-// headerText makes a header value safe: a line break would end the header,
-// and a non-ASCII title goes as an RFC 2047 encoded word, which ntfy decodes.
 func headerText(s string) string {
 	s = strings.Map(func(r rune) rune {
 		if r == '\r' || r == '\n' {
@@ -277,7 +256,6 @@ func sendNtfy(ctx context.Context, c *Client, p config.NtfyConfig, m Message) er
 	}
 	body := m.Body
 	if body == "" {
-		// ntfy shows "triggered" for an empty body.
 		body = m.Title
 	}
 	return c.post(ctx, p.URL, "text/plain; charset=utf-8", []byte(body), h)

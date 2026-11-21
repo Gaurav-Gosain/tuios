@@ -14,17 +14,10 @@ import (
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
-// A theme leaves the machine as the file a person would write: the id, the
-// base it starts from, and only what differs from that base. A sparse file
-// follows later fixes to its base, and it is short enough to paste into a
-// chat message as a share string.
-
 // SharePrefix starts every share string. The version is in the prefix so a
 // later format can be told apart without guessing.
 const SharePrefix = "tuios-theme:v1:"
 
-// colourKeys are the JSON keys of a theme's colours, in the order
-// themeColours lists them and a file is written in.
 var colourKeys = [...]string{
 	"fg", "bg", "selection_bg", "cursor",
 	"black", "red", "green", "yellow", "blue", "purple", "cyan", "white",
@@ -32,8 +25,6 @@ var colourKeys = [...]string{
 	"bright_blue", "bright_purple", "bright_cyan", "bright_white",
 }
 
-// themeDoc is a theme as a file writes it. An empty colour or chrome field is
-// left out of the file.
 type themeDoc struct {
 	ID, DisplayName, Base string
 	Dark                  *bool
@@ -41,8 +32,6 @@ type themeDoc struct {
 	Chrome                chromeRaw
 }
 
-// encode writes the doc as JSON in a fixed key order, indented for a file or
-// compact for a share string.
 func (d themeDoc) encode(indent bool) []byte {
 	type field struct {
 		key   string
@@ -94,12 +83,9 @@ func (d themeDoc) encode(indent bool) []byte {
 	return out.Bytes()
 }
 
-// encodeChrome writes the chrome fields as one JSON object on one line, in
-// role order. A role named group.field goes in the nested object group, which
-// sits where the group's first role would. Nil when no field is set.
 func encodeChrome(raw chromeRaw, quote func(any) []byte) []byte {
 	var b bytes.Buffer
-	open := "" // the nested object being written, or "" at the top
+	open := ""
 	top, inGroup := 0, 0
 	for r := RoleAccent; r <= roleLastSettable; r++ {
 		if raw[r] == "" {
@@ -148,7 +134,6 @@ func encodeChrome(raw chromeRaw, quote func(any) []byte) []byte {
 	return []byte("{" + b.String() + "}")
 }
 
-// tintHex is a theme colour as #rrggbb, or "" for an unset one.
 func tintHex(c *tint.Color) string {
 	if c == nil {
 		return ""
@@ -156,7 +141,6 @@ func tintHex(c *tint.Color) string {
 	return c.Hex()
 }
 
-// fullDoc is every colour of t and the chrome fields raw, with no base.
 func fullDoc(t *tint.Tint, chrome chromeRaw) themeDoc {
 	dark := t.Dark
 	d := themeDoc{ID: t.ID, DisplayName: t.DisplayName, Dark: &dark, Chrome: chrome}
@@ -166,11 +150,6 @@ func fullDoc(t *tint.Tint, chrome chromeRaw) themeDoc {
 	return d
 }
 
-// exportDoc builds the doc for a theme id. A theme from your themes directory
-// is written against the nearest built-in it starts from, with only what
-// differs, so a file based on another file of yours still loads on a machine
-// that does not have that file. A built-in theme, or any theme with full set,
-// is written with every colour and no base.
 func exportDoc(id string, full bool) (themeDoc, error) {
 	EnsureRegistry()
 	ReloadCustomThemes()
@@ -210,9 +189,6 @@ func exportDoc(id string, full bool) (themeDoc, error) {
 	return d, nil
 }
 
-// builtinAnchor walks the bases of the theme file id to the first built-in
-// theme. It reports false for a file with no base, or a base that is not
-// there: such a file is written in full.
 func builtinAnchor(id string) (resolvedTheme, string, bool) {
 	themeBases.RLock()
 	defer themeBases.RUnlock()
@@ -224,8 +200,6 @@ func builtinAnchor(id string) (resolvedTheme, string, bool) {
 			b = c.base
 			continue
 		}
-		// A file that takes a built-in's id and names it as its base starts
-		// from the built-in as shipped.
 		if r, ok := themeBases.builtins[b]; ok {
 			return r, b, true
 		}
@@ -278,8 +252,6 @@ func ExportBase16(id string) ([]byte, error) {
 		}
 		return AsColor(fallback)
 	}
-	// A ground the theme names only when it names a surface: without one the
-	// ramp is CharmTone's, which says nothing about this theme.
 	bg, fg := AsColor(t.Bg), AsColor(t.Fg)
 	ground := func(pick func(*Chrome) color.Color, step float64) color.Color {
 		if c != nil && c.Surface != nil {
@@ -315,7 +287,6 @@ func ExportBase16(id string) ([]byte, error) {
 	return []byte(b.String()), nil
 }
 
-// variantOf is base16's word for a dark or light scheme.
 func variantOf(dark bool) string {
 	if dark {
 		return "dark"

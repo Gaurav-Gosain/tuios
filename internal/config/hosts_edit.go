@@ -14,21 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
-// Editing the [hosts] table in the file, one table at a time.
-//
-// The rest of the config is saved by marshalling the whole UserConfig back out
-// (see save.go), which is right for the settings page: every value it can write
-// is a value it already holds. It is wrong for `tuios hosts add`, because a
-// command that adds one machine must not rewrite the file the user hand-wrote
-// around it. So this works on the bytes: it finds the [hosts.NAME] table, and
-// replaces, appends or deletes exactly those lines. Every comment, every blank
-// line and every other table is left where it was.
-//
-// The scan is a table-header scan, not a TOML parse. That is enough because the
-// only question asked of the file is where one table starts and where the next
-// one starts, and it is what lets an unparseable line elsewhere in the file
-// survive the edit rather than being rewritten into something else.
-
 // SetHostInFile writes the [hosts.NAME] table of the config whose main file is
 // at path. A config split over several files is written where the host is: the
 // file that sets [hosts.NAME], or for a new host the file that holds the other
@@ -51,9 +36,6 @@ func SetHostInFile(path, name string, h HostConfig) (WriteNote, error) {
 	return note, setHostInOneFile(target, name, h)
 }
 
-// writeTargetFor is the file a change to key goes to, for the config whose main
-// file is at path. A config that is one file, or is not there yet, is written
-// at path.
 func writeTargetFor(path string, key []string) (string, WriteNote, error) {
 	lc, err := loadLayered(path, true)
 	if err != nil {
@@ -62,8 +44,6 @@ func writeTargetFor(path string, key []string) (string, WriteNote, error) {
 	return lc.WriteTarget(key)
 }
 
-// setHostInOneFile replaces the [hosts.NAME] table in one file, or appends one
-// at the end.
 func setHostInOneFile(path, name string, h HostConfig) error {
 	data, err := readConfigForEdit(path)
 	if err != nil {
@@ -122,7 +102,6 @@ func RemoveHostFromFile(path, name string) (bool, error) {
 	return removed, nil
 }
 
-// removeHostFromOneFile deletes the [hosts.NAME] table in one file.
 func removeHostFromOneFile(path, name string) (bool, error) {
 	data, err := readConfigForEdit(path)
 	if err != nil {
@@ -176,9 +155,6 @@ func TailscaleInFile(path string) (TailscaleConfig, error) {
 	return cfg.Tailscale, nil
 }
 
-// readConfigForEdit reads the config file. A file that is not there yet is an
-// empty one: adding the first host to a machine that has never saved a setting
-// must work.
 func readConfigForEdit(path string) ([]byte, error) {
 	if path == "" {
 		return nil, errfmt.Errorf("no config file path is set")
@@ -193,15 +169,6 @@ func readConfigForEdit(path string) ([]byte, error) {
 	return data, nil
 }
 
-// findTableBlock locates the lines of one TOML table. The block starts at its
-// header line and ends at the next header, so the values under it and any
-// comment written between them move with it.
-//
-// A comment sitting directly above the header belongs to it as far as a reader
-// is concerned, but it is left out on purpose: taking it would mean guessing
-// which of the comment lines above a table are about that table, and a delete
-// that removes a line the user did not expect is worse than one that leaves a
-// stale comment they can see.
 func findTableBlock(lines []string, want []string) (start, end int, found bool) {
 	for i, line := range lines {
 		path, ok := tableHeader(line)
@@ -209,7 +176,6 @@ func findTableBlock(lines []string, want []string) (start, end int, found bool) 
 			continue
 		}
 		if found {
-			// The next header of any kind ends the block.
 			return start, i, true
 		}
 		if slices.Equal(path, want) {
@@ -222,9 +188,6 @@ func findTableBlock(lines []string, want []string) (start, end int, found bool) 
 	return 0, 0, false
 }
 
-// tableHeader parses a line that is a TOML table header, returning its dotted
-// path. An array-of-tables header ("[[x]]") is reported as a header too, so a
-// block scan stops at one, but its path never matches a host.
 func tableHeader(line string) ([]string, bool) {
 	s := strings.TrimSpace(line)
 	if !strings.HasPrefix(s, "[") {
@@ -250,13 +213,11 @@ func tableHeader(line string) ([]string, bool) {
 		return nil, false
 	}
 	if array {
-		// A real header, but never one of ours: [hosts.NAME] is a table.
 		return []string{"\x00array"}, true
 	}
 	return splitDotted(inside), true
 }
 
-// cutOutsideQuotes splits s at the first sep that is not inside a quoted key.
 func cutOutsideQuotes(s string, sep byte) (before, after string, ok bool) {
 	var quote byte
 	for i := 0; i < len(s); i++ {
@@ -279,8 +240,6 @@ func cutOutsideQuotes(s string, sep byte) (before, after string, ok bool) {
 	return s, "", false
 }
 
-// splitDotted breaks a table path into its key segments, respecting quotes, and
-// unquotes each one.
 func splitDotted(s string) []string {
 	var out []string
 	for {
@@ -293,9 +252,6 @@ func splitDotted(s string) []string {
 	}
 }
 
-// unquoteKey strips the quotes from a TOML key. Only the escapes a host name
-// could carry are undone; a key this does not fully understand simply fails to
-// match, which leaves the table alone.
 func unquoteKey(s string) string {
 	s = strings.TrimSpace(s)
 	switch {
@@ -310,9 +266,6 @@ func unquoteKey(s string) string {
 	return s
 }
 
-// renderHostBlock is one [hosts.NAME] table as text. Only the fields that were
-// set are written, so a host added with nothing but an address gets a two-line
-// table rather than a table full of zeroes.
 func renderHostBlock(name string, h HostConfig) string {
 	var b strings.Builder
 	b.WriteString("[hosts.")
@@ -350,8 +303,6 @@ func renderHostBlock(name string, h HostConfig) string {
 		b.WriteString(tomlString(h.TailscaleLogin))
 		b.WriteString("\n")
 	}
-	// The policy for the machine linking in is carried through a rewrite of
-	// the address, so `tuios hosts add` on a known name does not drop it.
 	if h.Allow != nil {
 		parts := make([]string, 0, len(h.Allow))
 		for _, c := range h.Allow {
@@ -374,8 +325,6 @@ func renderHostBlock(name string, h HostConfig) string {
 	return b.String()
 }
 
-// tomlKey writes a table key, quoting it when it is not a bare key. A host name
-// may hold a dot, and an unquoted dot would make two tables out of one name.
 func tomlKey(name string) string {
 	bare := name != ""
 	for _, r := range name {
@@ -390,9 +339,6 @@ func tomlKey(name string) string {
 	return tomlString(name)
 }
 
-// tomlString writes a TOML basic string. The escapes are TOML's own, which are
-// not Go's: a byte outside the printable range is written as \uXXXX, the only
-// short escape TOML has for one.
 func tomlString(s string) string {
 	var b strings.Builder
 	b.WriteByte('"')
@@ -420,8 +366,6 @@ func tomlString(s string) string {
 	return b.String()
 }
 
-// splitLines breaks text into lines, dropping the final empty piece a trailing
-// newline leaves behind so joinLines can put exactly one back.
 func splitLines(s string) []string {
 	if s == "" {
 		return nil
@@ -430,7 +374,6 @@ func splitLines(s string) []string {
 	return strings.Split(s, "\n")
 }
 
-// joinLines is splitLines undone: every line, then one trailing newline.
 func joinLines(lines []string) string {
 	if len(lines) == 0 {
 		return ""
@@ -438,8 +381,6 @@ func joinLines(lines []string) string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
-// trimTrailingBlank drops blank lines from the end, so repeated adds do not
-// grow a run of empty lines at the bottom of the file.
 func trimTrailingBlank(lines []string) []string {
 	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
 		lines = lines[:len(lines)-1]

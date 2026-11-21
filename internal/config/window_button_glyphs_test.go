@@ -6,16 +6,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The window control pill is drawn into a fixed grid of cells, and every
-// single-width grapheme in it gets exactly one cell. A glyph the font does not
-// cover falls back to some proportional system font whose advance overruns that
-// cell, and the overrun is then clipped or overpainted by whatever comes next,
-// which is how the close button lost the right half of its X. The test here
-// pins the half of that contract the source can show: the chrome runes must
-// measure one cell.
-
-// windowChromeRunes lists every rune tuios paints into window decorations
-// through the Nerd Font path.
 func windowChromeRunes(t *testing.T) map[rune]string {
 	t.Helper()
 	out := map[rune]string{}
@@ -49,8 +39,6 @@ func TestWindowChromeRunesAreSingleWidth(t *testing.T) {
 		}
 	}
 
-	// The pill contents are what the mouse hit-test offsets are measured
-	// against, so their total width is load-bearing, not cosmetic.
 	if w := ansi.StringWidth(WindowButtonClose); w != 3 {
 		t.Errorf("WindowButtonClose measures %d cells, want 3", w)
 	}
@@ -58,8 +46,6 @@ func TestWindowChromeRunesAreSingleWidth(t *testing.T) {
 		t.Errorf("WindowButtonCloseASCII measures %d cells, want 3", w)
 	}
 
-	// The dots style lays three discs and their gaps out cell by cell, so a
-	// disc that measured two would slide the other two under the corner.
 	for name, glyph := range map[string]string{
 		"WindowButtonDot":      WindowButtonDot,
 		"WindowButtonDotASCII": WindowButtonDotASCII,

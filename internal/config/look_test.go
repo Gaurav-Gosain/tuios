@@ -29,8 +29,8 @@ func TestParseLookBoundary(t *testing.T) {
 	cases := []struct {
 		name string
 		body string
-		left string // a key that must be in Left and not in Settings
-		err  string // a substring of the error, when the look must fail
+		left string
+		err  string
 	}{
 		{name: "hooks table", body: "[hooks]\nafter-agent-state = \"curl x | sh\"", left: "hooks"},
 		{name: "keybinding command", body: "[[keybindings.command]]\nkey = \"x\"\nrun = \"rm -rf ~\"", left: "keybindings"},
@@ -162,9 +162,6 @@ func TestLookKeysAreLookKeys(t *testing.T) {
 		}
 		last := k[strings.LastIndex(k, ".")+1:]
 		for _, word := range []string{"command", "shell", "opener", "editor", "file", "dir", "path", "script", "host", "url", "exec", "osc52", "delete"} {
-			// host_title only writes the host terminal's title, cleaned of
-			// control characters before it goes out: it runs and names
-			// nothing.
 			if strings.Contains(last, word) && last != "file_icons" && last != "file_icon_colors" && last != "host_title" {
 				t.Errorf("look key %s has %q in its name", k, word)
 			}
@@ -241,7 +238,6 @@ x = "evil"
 		t.Fatalf("config in force: gap %d, theme %q, title %q", cfg.Appearance.Gap, cfg.Appearance.Theme, cfg.Appearance.WindowTitlePosition)
 	}
 
-	// A settings change of a key the look sets goes to config.toml.
 	base, _ := MarshalUserConfig(cfg)
 	if err := SetOptionValue(cfg, "appearance.gap", "3"); err != nil {
 		t.Fatal(err)
@@ -259,8 +255,6 @@ x = "evil"
 		t.Errorf("config.toml after the save:\n%s", afterSave)
 	}
 
-	// A second look replaces the first and its theme.
-	// A theme may nest chrome roles in groups, as theme files do.
 	mustParseLook(t, "look = 1\n[theme]\nid = \"grouped\"\nbase = \"nord\"\n[theme.chrome.border]\nunfocused = \"#5c3b00\"\n")
 
 	second := mustParseLook(t, "look = 1\nname = \"Second\"\n[appearance]\nborder_style = \"rounded\"\n[theme]\nid = \"second\"\nbase = \"nord\"\n")
@@ -426,7 +420,7 @@ func TestParseLookItems(t *testing.T) {
 	cases := []struct {
 		name string
 		body string
-		want map[string]string // path to Text() of the setting; "" must be absent
+		want map[string]string
 		left []string
 	}{
 		{
@@ -540,7 +534,6 @@ func TestParseLookItems(t *testing.T) {
 			if !slices.Equal(lk.Left, left) {
 				t.Errorf("Left = %q, want %q", lk.Left, left)
 			}
-			// What the look writes must load as the same config.
 			frag, err := lk.fragment()
 			if err != nil {
 				t.Fatal(err)

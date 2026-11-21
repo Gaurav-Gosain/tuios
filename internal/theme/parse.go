@@ -13,49 +13,15 @@ import (
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
-// One colour vocabulary for every colour tuios reads from a file.
-//
-// The backgrounds, the border overrides, the scrollbar tint, the selection
-// marks, the dock's cell and tab colours, the rail's agent row and a theme's
-// chrome object each grew their own: hex here, hex or a keyword there, a few
-// palette names somewhere else. A value now means the same thing in all of
-// them, and it is one of
-//
-//   - a hex literal, #rgb or #rrggbb;
-//   - an ANSI index, 0 to 255, where 0 to 15 are the sixteen slots below;
-//   - a slot name: black, red, green, yellow, blue, magenta (or purple, which
-//     is what bubbletint and the theme files call slot 5), cyan, white, each
-//     with a bright_ form, and fg and bg for the theme's foreground and
-//     background;
-//   - a chrome role: accent, accent_bright, success, warning, error, info,
-//     surface, canvas, panel, card, and the three ink tiers text, dim and
-//     muted, which can be read but never set;
-//   - a CharmTone name, such as charple or guac.
-//
-// Names are looked up in that order, role then slot then CharmTone, so no
-// CharmTone colour can hide a slot or a role. A keyword a key already had
-// (off, theme, quiet, border, muted) is that key's to check before it asks
-// here, and keeps its meaning.
-//
-// A role or a slot is a reference, not a colour: it is resolved against the
-// theme in force, so a value written as "accent" or "bright_magenta" follows a
-// theme change, and at 16 colours it is the slot itself, painted from the
-// user's own palette. A hex literal is the same colour on every theme.
-
-// colorKind is what a ColorSpec holds.
 type colorKind uint8
 
 const (
 	kindNone colorKind = iota
-	// kindRGB is a fixed colour: hex, CharmTone, or an index past the sixteen.
 	kindRGB
-	// kindSlot is one of the theme's sixteen, or its fg or bg.
 	kindSlot
-	// kindRole is a chrome role, read off a palette.
 	kindRole
 )
 
-// The two slots past the sixteen.
 const (
 	slotFg = 16
 	slotBg = 17
@@ -98,11 +64,8 @@ const (
 	RoleMuted
 )
 
-// roleLastSettable is the last role a theme's chrome object may set. The ink
-// tiers after it are measured, never named.
 const roleLastSettable = RoleRailGround
 
-// roleNames maps each role to the name a file writes.
 var roleNames = [...]string{
 	RoleAccent:       "accent",
 	RoleAccentBright: "accent_bright",
@@ -144,12 +107,8 @@ func (r Role) String() string {
 // are measured from the surface, never named: see Chrome.
 func (r Role) Settable() bool { return r >= RoleAccent && r <= roleLastSettable }
 
-// slotNames are the eight base slot names, by index. Each has a bright_ form
-// eight higher, and slot 5 has two names, because the theme files say purple
-// and every ANSI table says magenta.
 var slotNames = [8]string{"black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"}
 
-// slotIndex is the slot a name means, or false.
 func slotIndex(name string) (int, bool) {
 	switch name {
 	case "fg":
@@ -172,9 +131,6 @@ func slotIndex(name string) (int, bool) {
 	return 0, false
 }
 
-// toneColor is the CharmTone colour with lower-case name, or false. It also
-// takes the two old names CharmTone keeps as aliases. A plain search: a value
-// is parsed once (see SpecOf), and a map would be built at every start.
 func toneColor(name string) (color.Color, bool) {
 	switch name {
 	case "ash":
@@ -184,8 +140,6 @@ func toneColor(name string) (color.Color, bool) {
 	}
 	for _, k := range tone.Keys() {
 		if strings.EqualFold(k.String(), name) {
-			// Copied out of the Key, whose RGBA is a map lookup, so a frame
-			// that draws it reads a plain value.
 			r, g, b, _ := k.RGBA()
 			return color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: 0xff}, true
 		}
@@ -227,8 +181,6 @@ func ParseColor(s string) (ColorSpec, error) {
 	case s == "":
 		return ColorSpec{}, nil
 	case s[0] == '#':
-		// overlay.ParseHex makes the color.RGBA lipgloss.Color makes, so a
-		// value that was hex before this parser draws the same colour.
 		if c, ok := overlay.ParseHex(s); ok {
 			return ColorSpec{kind: kindRGB, rgb: c}, nil
 		}
@@ -258,7 +210,6 @@ func ParseColor(s string) (ColorSpec, error) {
 	return ColorSpec{}, errfmt.Errorf("%q is not a colour. %s", s, ColorHelp)
 }
 
-// colorName is s in lower case with a dash or a space as the underscore.
 func colorName(s string) string {
 	b := []byte(s)
 	for i, c := range b {
@@ -299,9 +250,6 @@ func (c ColorSpec) On(pal *overlay.Palette) color.Color {
 // Resolve is On with no palette of its own. See On.
 func (c ColorSpec) Resolve() color.Color { return c.On(nil) }
 
-// roleOn reads role r off pal. Each role is the palette field a chrome role
-// fills (see buildUI): error is Warn, which is the destructive red, and there
-// is no role for a palette field a theme cannot set.
 func roleOn(r Role, pal *overlay.Palette) color.Color {
 	switch r {
 	case RoleAccent:
@@ -338,11 +286,6 @@ func roleOn(r Role, pal *overlay.Palette) color.Color {
 	return furnitureRole(r)
 }
 
-// slotColor is slot i at depth d. At 16 colours, or with no theme, a slot is
-// the terminal's own, so the user's palette paints it, and fg and bg are the
-// terminal's default colours. With a theme it is the theme's colour. Reading it
-// is a field read off the theme in force, as a role is off a palette, so a
-// theme change shows on the next frame with nothing to invalidate.
 func slotColor(i int, d overlay.Depth) color.Color {
 	var c *tint.Color
 	if t := Current(); t != nil && d != overlay.Depth16 {
@@ -364,17 +307,11 @@ func slotColor(i int, d overlay.Depth) color.Color {
 	return overlay.NoColor
 }
 
-// specMemo keeps every colour value parsed so far. Parsing does not depend on
-// the theme, so an entry never goes stale; the memo exists so a renderer that
-// holds a value as the string the config wrote reads a parsed one instead of
-// parsing on every frame.
 var specMemo struct {
 	sync.RWMutex
 	m map[string]ColorSpec
 }
 
-// specMemoMax bounds the memo. A config names a handful of colours; the bound
-// is for a caller that feeds it what a person types.
 const specMemoMax = 256
 
 // SpecOf is ParseColor through the memo, with an invalid value as the zero

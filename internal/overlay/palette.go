@@ -140,10 +140,6 @@ func Derive(p Palette) Palette {
 	p.WarningTint = MixColors(p.Warning, p.Surface, statusTint)
 	p.WarnTint = MixColors(p.Warn, p.Surface, statusTint)
 	if d == Depth256 {
-		// Each step is kept at least one grey away from the surface it sits
-		// on, in the direction it had before it was placed: two neighbours in
-		// truecolor can land on the same grey, and a cursor row the colour of
-		// the surface is no cursor at all.
 		s := To256(p.Surface)
 		p.Canvas, p.Panel = apart256(p.Canvas, s), apart256(p.Panel, s)
 		p.RowSel, p.Card = apart256(p.RowSel, s), apart256(p.Card, s)
@@ -160,17 +156,10 @@ func Derive(p Palette) Palette {
 	return p
 }
 
-// hoverWash is how far Hover carries Surface toward its text end: the 6% wash
-// the pointer leaves in every reference app surveyed for this.
 const hoverWash = 0.06
 
-// statusTint is how far a status tint is carried into Surface.
 const statusTint = 0.7
 
-// checkContrast lifts each ink that misses its floor on a ground it is
-// promised on. The primary and secondary inks are text and hold ContrastFloor
-// on every ground a row can take; the quiet ink is held to MarkFloor on the
-// surface, since it marks and labels furniture rather than content.
 func (p *Palette) checkContrast() {
 	grounds := [...]color.Color{p.Surface, p.RowSel, p.RowSelQuiet, p.Hover}
 	for _, g := range grounds {
@@ -178,46 +167,24 @@ func (p *Palette) checkContrast() {
 		p.FgDim = ReadableAt(p.FgDim, g, ContrastFloor)
 	}
 	p.Fg = ReadableAt(p.Fg, p.Card, ContrastFloor)
-	// The secondary ink is text on the grounds an editor sits in too: the
-	// panel around a composer and the card of its field, where the hints
-	// say what a key does and the placeholder says what to type.
 	for _, g := range [...]color.Color{p.Panel, p.Card} {
 		p.FgDim = ReadableAt(p.FgDim, g, ContrastFloor)
 	}
-	// The quiet ink labels rows too, a row's age or its session, and those
-	// labels ride the cursor row with it. On the constant ramp it clears the
-	// floor there already; on a light ramp the cursor row is the darker step
-	// and it did not.
-	// It marks the panel and the canvas too (a caret, a count, a rule's
-	// label). At truecolor every shipped theme clears 3:1 there; the grey
-	// ramp at 256 colours can land a step short. The card is not on the
-	// list: lifting the quiet ink to 3:1 on the lightest neutral brings it
-	// next to the secondary ink on the surface, and no text in it goes on
-	// a card.
 	for _, g := range [...]color.Color{p.Surface, p.RowSel, p.RowSelQuiet, p.Panel, p.Canvas} {
 		p.FgMute = ReadableAt(p.FgMute, g, MarkFloor)
 	}
 }
 
-// derive16 is Derive at 16 colours. Every ground is the terminal's own
-// background, so a panel frames itself and a row says what it is with reverse
-// video or an underline rather than a fill (see RowState).
 func derive16(p Palette) Palette {
 	p.Canvas, p.Panel, p.Surface, p.RowSel, p.Card = NoColor, NoColor, NoColor, NoColor, NoColor
 	p.RowSelQuiet, p.Hover = NoColor, NoColor
 	p.AccentTint, p.SuccessTint, p.WarningTint, p.WarnTint = NoColor, NoColor, NoColor, NoColor
 	p.Edge, p.ScrollTrack, p.ScrollThumb = Slot(8), Slot(8), Slot(8)
-	// A chip is drawn in reverse video at this depth (see Chip), so its text
-	// is the terminal's own background and needs no colour of its own.
 	p.PillFg = NoColor
 	p.Framed = true
 	return p
 }
 
-// apart256 is To256(c), moved one step along the grey ramp when it lands on the
-// same entry as surface, or to the nearest other cube entry when the surface
-// is one. The step goes the way c lies from surface in
-// truecolor, or away from the surface's own end when the two were equal.
 func apart256(c, surface color.Color) color.Color {
 	q := To256(c)
 	if q != surface {
@@ -228,9 +195,6 @@ func apart256(c, surface color.Color) color.Color {
 		return q
 	}
 	if g < 232 {
-		// A tinted surface, such as a warm light theme's, is a cube entry,
-		// and the grey ramp is no step from it. The step is the nearest
-		// other entry on c's side of the surface.
 		return nearestApart(c, surface)
 	}
 	dir := 1
@@ -243,12 +207,6 @@ func apart256(c, surface color.Color) color.Color {
 	return Grey(int(g) - 232 + dir)
 }
 
-// nearestApart is the entry from 16 to 255 nearest c in OKLab that is not
-// surface and lies on the same side of it in luminance as c. A tinted c keeps
-// off the neutral entries and is matched hue first, with its chroma held near
-// c's, so a warm panel's cursor row stays warm: the cube's steps are coarse,
-// and the nearest entry by distance alone can be a neutral or a neighbouring
-// hue at the right lightness.
 func nearestApart(c, surface color.Color) color.Color {
 	v := toLab(c)
 	darker := relativeLuminance(c) <= relativeLuminance(surface)
@@ -285,8 +243,6 @@ func nearestApart(c, surface color.Color) color.Color {
 // surface's own entry when the two land on it.
 func Apart256(c, surface color.Color) color.Color { return apart256(c, To256(surface)) }
 
-// frameInk is the colour a frame line is drawn in: the host's Frame, or
-// fallback when it set none.
 func (p Palette) frameInk(fallback color.Color) color.Color {
 	if p.Frame != nil {
 		return p.Frame

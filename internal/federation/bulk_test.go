@@ -10,17 +10,12 @@ import (
 	"time"
 )
 
-// slowPipe is one direction of a slow link with a deep buffer in the middle,
-// which is what ssh's channel window and the kernel's socket buffers are to a
-// link: bytes written go into the buffer at once while it has room, and leave
-// it at the link's rate. A scheduler on the writing side cannot reorder what
-// already sits in that buffer, which is why a bulk stream needs a window.
 type slowPipe struct {
 	mu     sync.Mutex
 	cond   *sync.Cond
 	buf    []byte
 	cap    int
-	rate   int // bytes per second
+	rate   int
 	closed bool
 	out    *io.PipeWriter
 	in     *io.PipeReader
@@ -88,8 +83,6 @@ func (p *slowPipe) Close() error {
 	return nil
 }
 
-// slowLink joins two muxes over two slow pipes. The answering side runs
-// accept for every stream the hub opens.
 func slowLink(t *testing.T, capacity, rate int, accept func(*Stream)) *mux {
 	t.Helper()
 	up := newSlowPipe(capacity, rate)
@@ -132,7 +125,6 @@ func TestABulkCopyLeavesTypingFast(t *testing.T) {
 			_ = s.Close()
 			return
 		}
-		// A shell that echoes what it is sent.
 		buf := make([]byte, 64)
 		for {
 			n, err := s.Read(buf)
@@ -163,7 +155,6 @@ func TestABulkCopyLeavesTypingFast(t *testing.T) {
 		got <- sum
 	}()
 
-	// Let the copy fill the link first: an echo before then proves nothing.
 	time.Sleep(300 * time.Millisecond)
 
 	var waits []time.Duration
@@ -211,8 +202,6 @@ func TestABulkStreamToAnOlderPeerWritesWithoutAWindow(t *testing.T) {
 	go func() { _ = hub.run() }()
 	t.Cleanup(func() { _ = hub.Close(); _ = farOut.Close(); _ = hubOut.Close() })
 
-	// The older peer: it reads frames and never answers with a credit, and it
-	// sends some data on the stream, which the hub reads.
 	sawCredit := make(chan bool, 1)
 	received := make(chan int, 1)
 	go func() {
@@ -247,7 +236,6 @@ func TestABulkStreamToAnOlderPeerWritesWithoutAWindow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	// The hub reads what the older peer sent: a credit would go out here.
 	if _, err := io.ReadFull(s, make([]byte, 512<<10)); err != nil {
 		t.Fatalf("read: %v", err)
 	}

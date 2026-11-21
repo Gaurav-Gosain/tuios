@@ -25,16 +25,8 @@ var ErrPiTree = errors.New("transcriptview: Pi branch is unavailable or invalid"
 
 var errPiPending = errors.New("transcriptview: selected Pi entry is not complete yet")
 
-// piNodesMax bounds the metadata index as well as the snapshot's byte bound.
 const piNodesMax = 100000
 
-// piRead reads the conversation on the branch that ends at the selected entry
-// of a Pi session file, or at its last complete entry when none is selected.
-// The projection of that branch is kept for a short time like a document's
-// records (docCache), so paging through a long session, or a burst of events,
-// does not read and parse the whole file again. The key is the file's size and
-// modification time and the selected entry, so an appended file, or another
-// branch of it, is read again.
 func piRead(path string, opts Options) (Page, error) {
 	f, err := transcript.OpenRegular(path)
 	if err != nil {
@@ -75,8 +67,6 @@ func piRead(path string, opts Options) (Page, error) {
 			clear(lines)
 			return Page{}, err
 		}
-		// An entry the hook named before its line is written is a moment, so the
-		// empty view it gives is not kept.
 		if pending {
 			defer clear(lines)
 		} else if e := docs.put(key, lines); e != nil {
@@ -93,8 +83,6 @@ func piRead(path string, opts Options) (Page, error) {
 	defer r.zero()
 	var page Page
 	read := func(c string, before bool) (Page, error) {
-		// Hash the selected prefix, not just the file header: switching to a
-		// sibling can leave a syntactically valid byte offset in the same file.
 		parts := strings.SplitN(c, ":", 2)
 		if len(parts) == 2 {
 			if at, ok := parseCursor(parts[1], id); ok && at.off <= r.size && r.atBoundary(at.off) && parts[0] == piPrefix(lines, at) {
@@ -127,9 +115,6 @@ func piRead(path string, opts Options) (Page, error) {
 	return page, err
 }
 
-// piPrefix identifies the ancestry already returned by a cursor. A descendant
-// append keeps it; a sibling or rewind does not. A partial-record cursor also
-// names that record, since its earlier parts may already have been displayed.
 func piPrefix(lines []byte, at cursorPos) string {
 	end := min(at.off, int64(len(lines)))
 	if at.sub > 0 {
@@ -141,11 +126,6 @@ func piPrefix(lines []byte, at cursorPos) string {
 	return hex.EncodeToString(sum[:8])
 }
 
-// piProject returns the header and the records of the branch that ends at the
-// last complete entry. Sibling entries are different conversations, so only
-// that ancestry is kept. A record longer than lineMax keeps its place in the
-// ancestry but is left out of the view, as the other readers skip such a line,
-// so one huge tool result does not hide the whole conversation.
 func piProject(data []byte, leaf *string) ([]byte, error) {
 	type node struct {
 		parent     string
@@ -158,7 +138,7 @@ func piProject(data []byte, leaf *string) ([]byte, error) {
 	for start := 0; start < len(data); {
 		n := bytes.IndexByte(data[start:], '\n')
 		if n < 0 {
-			break // Pi may be in the middle of appending this record.
+			break
 		}
 		end := start + n + 1
 		line := data[start : end-1]
@@ -198,8 +178,6 @@ func piProject(data []byte, leaf *string) ([]byte, error) {
 		last = *leaf
 		if last != "" {
 			if _, ok := nodes[last]; !ok {
-				// The hook may name an entry before its append completes. Clear
-				// the old branch, never substitute a sibling's history.
 				return append([]byte(nil), header...), errPiPending
 			}
 		}
@@ -245,9 +223,6 @@ func piLine(r *reader, line []byte, off int64) (decoded, bool) {
 					out = append(out, e)
 				}
 			}
-			// Adjacent blocks of one text kind are one entry. Secret masking runs
-			// per entry, so a multi-line secret split across blocks would
-			// otherwise lose its boundaries and reach the client unmasked.
 			var run []string
 			var runKind string
 			flush := func() {
@@ -307,8 +282,6 @@ func piLine(r *reader, line []byte, off int64) (decoded, bool) {
 			failed, _ := m["isError"].(bool)
 			out = append(out, resultEntry(m.str("toolCallId"), blockText(m["content"]), failed))
 		case "bashExecution":
-			// Direct !/!! shell commands are history too, not model tool calls.
-			// excludeFromContext affects inference, not what the person sees.
 			id := rec.str("id") + "-bash"
 			calls := callEntry("bash", id, classOther, jobj{"command": m.str("command")})
 			code, hasCode := m["exitCode"].(float64)

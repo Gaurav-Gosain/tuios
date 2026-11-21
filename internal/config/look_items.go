@@ -11,40 +11,19 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// Look keys outside the settings registry, and the keys checked item by item.
-//
-// The dock's three lists and its [dock.tabs] table live in the config file
-// only, so the registry does not carry them. A look may still set them: the
-// lists say which built-in cells the bar draws and on which side, and the tabs
-// table colours the workspace strip. That is how the bar looks, and nothing
-// else.
-//
-// Two kinds of list can name something that runs a command. "custom/NAME" in a
-// dock list draws the [dock.custom.NAME] cell, whose command runs through
-// sh -c, and "custom" in appearance.sidebar.sections draws the rail section
-// whose command appearance.sidebar.custom sets. A look cannot set either
-// command. The person's own config may hold one that no list names yet,
-// though, and a look that named it would start it. So each item is checked on
-// its own: an item that names a built-in stays, any other item is left out and
-// named, and the rest of the list applies.
-
 // LookList is the type of a look key whose value is a list of text.
 const LookList = "list"
 
-// lookMarkBytes caps a separator, a marker and one workspace glyph.
 const lookMarkBytes = 32
 
-// lookFileKey is a look key the registry does not carry.
 type lookFileKey struct {
-	Type        string // OptionBool, OptionString or LookList
+	Type        string
 	Description string
 	Default     string
-	// Accepted is a string's accepted set, or the names a list item may be.
-	Accepted []string
-	Color    bool
-	// MaxBytes caps a text value, or one list item.
-	MaxBytes int
-	MaxItems int
+	Accepted    []string
+	Color       bool
+	MaxBytes    int
+	MaxItems    int
 }
 
 func dockListKey(side string, def []string) lookFileKey {
@@ -66,7 +45,6 @@ func tabMarkKey(desc string) lookFileKey {
 	return lookFileKey{Type: OptionString, Description: desc, MaxBytes: lookMarkBytes}
 }
 
-// lookFileKeys are the look keys the registry does not carry.
 var lookFileKeys = map[string]lookFileKey{
 	"dock.left":   dockListKey("on the left end", defaultDockLeft),
 	"dock.center": dockListKey("in the middle", defaultDockCenter),
@@ -109,15 +87,10 @@ func IsLookFileKey(path string) bool {
 	return ok
 }
 
-// lookSectionItems are the rail sections a look may list: every built-in
-// section but custom and pane, and the spacer. Both run a command, and a look
-// carries no commands.
 func lookSectionItems() []string {
 	return slices.DeleteFunc(SidebarLayoutNames(), func(s string) bool { return s == SidebarSectionCustom || s == SidebarSectionPane })
 }
 
-// lookItemKeys are the look keys checked item by item, with the items each
-// accepts. dock.tabs.number_glyphs is a list too, but every item is only text.
 func lookItemKeys(path string) ([]string, bool) {
 	if path == "appearance.sidebar.sections" {
 		return lookSectionItems(), true
@@ -128,13 +101,8 @@ func lookItemKeys(path string) ([]string, bool) {
 	return nil, false
 }
 
-// lookItemShown is how a left-out item is named: the key, then the item.
 func lookItemShown(path, item string) string { return lookKeyShown(path + ": " + item) }
 
-// lookItems checks a value item by item. It returns the value to keep and the
-// items it leaves out. A nil kept value means no item is left, so the key is
-// left out. A value of the wrong type, or an item that is not one line of
-// short text, is an error.
 func lookItems(path string, v any) (kept any, dropped []string, err error) {
 	if path == "appearance.sidebar.sections" {
 		s, ok := v.(string)
@@ -165,7 +133,6 @@ func lookItems(path string, v any) (kept any, dropped []string, err error) {
 	return out, dropped, nil
 }
 
-// lookTextList reads a TOML array of one-line strings.
 func lookTextList(path string, v any, spec lookFileKey) ([]string, error) {
 	var raw []any
 	switch v := v.(type) {
@@ -195,9 +162,6 @@ func lookTextList(path string, v any, spec lookFileKey) ([]string, error) {
 	return out, nil
 }
 
-// lookSections keeps the entries of a rail layout that name a built-in
-// section or the spacer, each with its share. A layout with no section left
-// is left out whole, since the rail would fall back to its default.
 func lookSections(s string) (any, []string, error) {
 	if len(s) > maxLookString || hasControlChar(s) {
 		return nil, nil, errfmt.Errorf("appearance.sidebar.sections must be one line of at most %d bytes", maxLookString)
@@ -227,8 +191,6 @@ func lookSections(s string) (any, []string, error) {
 	return strings.Join(keep, ","), dropped, nil
 }
 
-// checkLookFileValue checks the value of a key the registry does not carry,
-// as set-config checks a registry option.
 func checkLookFileValue(path string, v any) error {
 	spec := lookFileKeys[path]
 	switch spec.Type {
@@ -259,8 +221,6 @@ func checkLookFileValue(path string, v any) error {
 	return nil
 }
 
-// lookFileValueText reads a key the registry does not carry from cfg, as the
-// plan prints it.
 func lookFileValueText(cfg *UserConfig, path string) string {
 	field, ok := resolveOptionField(cfg, path)
 	if !ok {

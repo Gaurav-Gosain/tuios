@@ -8,10 +8,6 @@ import (
 	"testing"
 )
 
-// loadFromTOML parses text the way LoadUserConfig does, without the XDG lookup:
-// unmarshal, then fill the defaults in. That order is the whole point of the
-// encoding, so a test that skipped the fill would prove nothing, and it is the
-// one parse function's order rather than a copy of it.
 func loadFromTOML(t *testing.T, text string) *UserConfig {
 	t.Helper()
 	cfg, err := ParseUserConfig([]byte(text))
@@ -77,8 +73,6 @@ func TestUnbindSurvivesASaveAndReload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	// The bytes matter, not just the struct: an encoding that only exists in
-	// memory is one a restart loses.
 	if !strings.Contains(string(data), "close_window = []") {
 		t.Errorf("the file does not spell the unbind as an empty list:\n%s", keybindSectionOf(string(data), "window_management"))
 	}
@@ -143,8 +137,6 @@ func TestUnbindActionEmptiesEveryKey(t *testing.T) {
 // SectionTerminalMode) and this fails on the prefix_mode claim.
 func TestFreeKeyTakesTheKeyOutOfEveryScope(t *testing.T) {
 	cfg := DefaultConfig()
-	// Bound in two tables that are consulted in different scopes, which is the
-	// arrangement a single-section implementation gets wrong.
 	cfg.Keybindings.TerminalMode["terminal_next_window"] = []string{"ctrl+alt+j"}
 	cfg.Keybindings.PrefixMode["prefix_next_window"] =
 		append(cfg.Keybindings.PrefixMode["prefix_next_window"], "ctrl+alt+j")
@@ -160,8 +152,6 @@ func TestFreeKeyTakesTheKeyOutOfEveryScope(t *testing.T) {
 			}
 		}
 	}
-	// The action that had no other key is left present and empty, so the
-	// default does not return.
 	if keys, present := cfg.Keybindings.TerminalMode["terminal_next_window"]; !present || len(keys) != 0 {
 		t.Errorf("terminal_next_window = %v, present=%v; want present and empty", keys, present)
 	}
@@ -304,8 +294,6 @@ func TestUnboundActionsDoNotCollide(t *testing.T) {
 // config.
 func TestUnbindClearsTheCollisionItWasFor(t *testing.T) {
 	cfg := DefaultConfig()
-	// Two actions in one scope on one key. window_management and navigation are
-	// both flattened into window mode, so this is a real contest.
 	cfg.Keybindings.WindowManagement["new_window"] = []string{"ctrl+alt+k"}
 	cfg.Keybindings.Navigation["next_window"] = []string{"ctrl+alt+k"}
 	r := NewKeybindRegistry(cfg)
@@ -367,8 +355,6 @@ func TestUnboundActionsListsWhatWasRemoved(t *testing.T) {
 	}
 }
 
-// keybindSectionOf is the named table out of a rendered config, for a failure
-// message that shows the relevant lines rather than the whole file.
 func keybindSectionOf(file, section string) string {
 	head := "[keybindings." + section + "]"
 	i := strings.Index(file, head)

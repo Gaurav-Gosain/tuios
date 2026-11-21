@@ -8,12 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
-// yamlListItem is one item tuios adds to a list two keys deep in a YAML file:
-// Hermes Agent's plugins.enabled in config.yaml, which is how Hermes is told
-// to load a plugin. It edits lines rather than parsing the document, so the
-// user's comments, order and quoting are kept. It handles the block layouts
-// the list is written in, and an empty flow list; any other layout it refuses,
-// with the line to add by hand, rather than rewrite what it does not follow.
 type yamlListItem struct {
 	key, sub, item string
 }
@@ -23,7 +17,6 @@ var (
 	yamlItemRe   = lazyre.New(`^([ \t]*)-[ \t]+(.*)$`)
 )
 
-// yamlValue strips a trailing comment and quotes from a scalar.
 func yamlValue(s string) string {
 	if i := strings.Index(s, " #"); i >= 0 {
 		s = s[:i]
@@ -47,16 +40,12 @@ func yamlBlank(line string) bool {
 	return t == "" || strings.HasPrefix(t, "#")
 }
 
-// yamlListPlace is where a list sits in a file's lines. See locate.
 type yamlListPlace struct {
 	key, end, sub, childIndent int
 	items                      []int
 	flowEmpty                  bool
 }
 
-// locate finds the list: the index of the top-level key's line (-1 when
-// absent), the end of its block, the index of the sub key's line (-1 when
-// absent), the indent its children use, and the item lines of the list.
 func (f yamlListItem) locate(lines []string) (yamlListPlace, error) {
 	p := yamlListPlace{key: -1, sub: -1, childIndent: 2}
 	for i, line := range lines {

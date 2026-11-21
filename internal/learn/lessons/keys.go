@@ -12,8 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// The key tables are built on first use, not at package init, so a tuios
-// process that never runs a lesson pays nothing for them.
 var keysOnce sync.Once
 
 func keyTables() {
@@ -66,7 +64,6 @@ func KeyBytes(k Key) string {
 	if mods["shift"] && base == "tab" {
 		return "\x1b[Z"
 	}
-	// Arrows with a modifier, the way xterm sends them: alt+left is CSI 1;3D.
 	if final, ok := arrowFinal[base]; ok && len(mods) > 0 {
 		code := 1
 		if mods["shift"] {
@@ -87,9 +84,6 @@ func KeyBytes(k Key) string {
 	if mods["ctrl"] && len(base) == 1 {
 		c := strings.ToLower(base)[0]
 		if c < 'a' || c > 'z' {
-			// ctrl and a digit or a symbol has no control byte of its
-			// own: ctrl+2 is not ctrl+r. The kitty keyboard protocol
-			// spells it out, and tuios reads that.
 			code := 5
 			if mods["alt"] {
 				code += 2
@@ -107,8 +101,6 @@ func KeyBytes(k Key) string {
 	return out
 }
 
-// fromMacOption reads "alt+∆" and a bare "∆", the Mac spellings of alt+j,
-// as the chord. The glyphs are config's, the one table tuios keeps.
 func fromMacOption(key string) string {
 	keyTables()
 	glyph := strings.TrimPrefix(key, "alt+")

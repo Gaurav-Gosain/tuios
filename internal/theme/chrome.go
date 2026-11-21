@@ -59,19 +59,10 @@ type Chrome struct {
 	Panel  color.Color
 	Card   color.Color
 
-	// The ink tiers, measured against Surface when one is named. Never named
-	// in the file: a text colour a theme could set is a text colour that can
-	// be set unreadable, and the tiers are their ratios rather than their hex.
 	fg, fgDim, fgMute color.Color
 
-	// derived marks the ramp steps deriveRamp filled, so a file that names
-	// this theme as its base inherits only the steps the theme named, and
-	// derives the rest from its own surface.
 	derived [RoleCard + 1]bool
 
-	// furniture holds the roles after RoleCard by role: the borders by
-	// state, the rule, the status inks, the window dots and the dock and rail
-	// grounds. Nil is unset, and the piece draws what it drew before.
 	furniture [roleLastSettable + 1]color.Color
 }
 
@@ -87,9 +78,6 @@ func (c *Chrome) Furniture(r Role) color.Color {
 // ChromeNames reports whether the theme in force names role r in its chrome.
 func ChromeNames(r Role) bool { return chromeFurniture(r) != nil }
 
-// chromeFurniture is the theme in force's colour for role r, or nil. At 16
-// colours it is nil too: a piece of chrome there is drawn in a slot the
-// terminal paints, and a named colour would be a guess at the user's palette.
 func chromeFurniture(r Role) color.Color {
 	c := CurrentChrome()
 	if c == nil || Depth() == overlay.Depth16 {
@@ -103,8 +91,6 @@ var chromeRegistry struct {
 	byID map[string]*Chrome
 }
 
-// registerChrome files a theme's chrome under its id, replacing any earlier
-// entry so a re-read of an edited file wins.
 func registerChrome(id string, c *Chrome) {
 	if id == "" {
 		return
@@ -134,18 +120,8 @@ func CurrentChrome() *Chrome {
 	return chromeRegistry.byID[t.ID]
 }
 
-// chromeRaw is a chrome object's fields as the file wrote them, by role.
 type chromeRaw [roleLastSettable + 1]string
 
-// buildChrome resolves a chrome object's fields on the theme t. A field that
-// is absent or unparseable is left nil and derives from the ANSI slots as
-// before: a typo in one colour costs that colour, not the theme.
-//
-// A field may name a colour any way ParseColor reads one. A slot is the theme's
-// own, from t. A role is another field of the same object, resolved after
-// every field is read, so the order the file lists them in does not matter. A
-// loop of roles that name each other has no colour to end on, and is the one
-// mistake that fails the file: the error names the roles in the loop.
 func buildChrome(raw chromeRaw, t *tint.Tint) (*Chrome, error) {
 	var specs [roleLastSettable + 1]ColorSpec
 	for r := RoleAccent; r <= roleLastSettable; r++ {
@@ -170,17 +146,12 @@ func buildChrome(raw chromeRaw, t *tint.Tint) (*Chrome, error) {
 		named = named || g != nil
 	}
 	if !named {
-		// An empty or entirely unparseable object is the same as none, and
-		// saying so keeps CurrentChrome's nil meaning "derive everything".
 		return nil, nil
 	}
 	c.deriveRamp()
 	return c, nil
 }
 
-// parseChromeSpec reads one chrome field. A theme file wrote hex with or
-// without its #, so a bare one still reads as hex. An ink tier is not a
-// chrome field's to take: the tiers are measured from the surface.
 func parseChromeSpec(s string) ColorSpec {
 	s = strings.TrimSpace(s)
 	if c, ok := overlay.ParseHex(s); ok {
@@ -193,10 +164,6 @@ func parseChromeSpec(s string) ColorSpec {
 	return c
 }
 
-// chromeFallbackSlot is the slot a chrome role derives from when the file does
-// not set it, for a field that names that role: accent is bright_blue, and so
-// on. The neutrals derive from no slot (-1): a field that names an unset one is
-// left unset too.
 var chromeFallbackSlot = [roleLastSettable + 1]int8{
 	RoleAccent: 12, RoleAccentBright: 14, RoleSuccess: 10, RoleWarning: 3,
 	RoleError: 1, RoleInfo: 4,
@@ -206,8 +173,6 @@ var chromeFallbackSlot = [roleLastSettable + 1]int8{
 	RoleDockGround: -1, RoleRailGround: -1,
 }
 
-// chromeRole is role r's colour in the object, following role references.
-// path is the chain of roles that led here, for the loop error.
 func chromeRole(r Role, specs *[roleLastSettable + 1]ColorSpec, t *tint.Tint, path []Role) (color.Color, error) {
 	for i, p := range path {
 		if p == r {
@@ -229,7 +194,6 @@ func chromeRole(r Role, specs *[roleLastSettable + 1]ColorSpec, t *tint.Tint, pa
 	return chromeSlot(int(chromeFallbackSlot[r]), t), nil
 }
 
-// chromeSlot is slot i of the theme being read.
 func chromeSlot(i int, t *tint.Tint) color.Color {
 	if t == nil {
 		return nil
@@ -243,8 +207,6 @@ func chromeSlot(i int, t *tint.Tint) color.Color {
 	return AsColor(ANSIOrder(t)[i])
 }
 
-// chromeLoopError names a loop by two of its roles: the first, and the one
-// that names it back.
 func chromeLoopError(loop []Role) error {
 	if len(loop) == 1 {
 		return errfmt.Errorf("chrome.%s names itself. Set it to a colour", loop[0])
@@ -253,10 +215,6 @@ func chromeLoopError(loop []Role) error {
 		loop[0], loop[len(loop)-1])
 }
 
-// deriveRamp fills the neutral steps and ink tiers a theme left to its named
-// Surface. It runs once, when the file is read, because UI() is asked for on
-// every overlay of every frame and each derivation bisects over contrast
-// ratios; the palette a frame copies out has the answers already.
 func (c *Chrome) deriveRamp() {
 	if c.Surface == nil {
 		return
@@ -273,16 +231,6 @@ func (c *Chrome) deriveRamp() {
 		c.derived[RoleCard] = true
 		c.Card = overlay.Lighter(c.Surface, chromeRamp.card)
 	}
-	// Each tier is measured on Surface at its target, then held to its floor
-	// on the other steps it is written on. On a dark ramp the floors never
-	// bind: the grounds below Surface only add contrast to a light ink, and
-	// the card is where quiet ink already fails and is lifted at the one call
-	// site that writes on it. On a light ramp the sides swap. The dark inks
-	// measure worst on the canvas, and a quiet tier held to 3.07:1 on the
-	// surface measures about 2.1:1 there, which is below the floor the constant
-	// palette clears. Lifting only where a floor binds keeps the hierarchy on
-	// every ground a theme can ask for, at the cost of compressing its quiet end
-	// on a light one.
 	text := []color.Color{c.Canvas, c.Panel, c.Surface, c.Card}
 	c.fg = overlay.Tone(c.Surface, chromeRamp.fg)
 	c.fgDim = overlay.Tone(c.Surface, chromeRamp.fgDim)
@@ -296,8 +244,6 @@ func (c *Chrome) deriveRamp() {
 	}
 }
 
-// chromeOr returns the theme's colour for a role, or fallback when the theme
-// names none.
 func chromeOr(pick func(*Chrome) color.Color, fallback color.Color) color.Color {
 	if c := CurrentChrome(); c != nil {
 		if got := pick(c); got != nil {

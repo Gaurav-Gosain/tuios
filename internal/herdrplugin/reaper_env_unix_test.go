@@ -62,8 +62,6 @@ func TestReaperKeepsTheCommandsGodebug(t *testing.T) {
 				}
 				time.Sleep(20 * time.Millisecond)
 			}
-			// The reaper itself runs with disablethp=1. It has run the
-			// command, so it is past its own exec.
 			if runtime.GOOS == "linux" {
 				r.mu.Lock()
 				var sid int

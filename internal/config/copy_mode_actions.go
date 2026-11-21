@@ -83,10 +83,6 @@ const ActionCopyMode = "copy_mode"
 // in any section, global for a key that works while typing.
 const ActionClearScrollback = "clear_scrollback"
 
-// copyModeFixedKeys are the keys copy mode reads itself, in
-// internal/input/copymode_handlers.go and copymode_multi.go, besides the
-// digits of a count. A [keybindings.copy_mode] binding on one of them takes
-// the key from copy mode.
 var copyModeFixedKeys = map[string]bool{
 	"0": true, "^": true, "$": true, "w": true, "b": true,
 	"g": true, "ctrl+b": true,
@@ -140,9 +136,6 @@ func (k *KeybindingsConfig) CopyModeProblems() []CopyModeProblem {
 	return out
 }
 
-// validateCopyModeKeys warns about each copy_mode key a copy pipe entry also
-// uses, so the binding never runs. A key taken from copy mode's own keys is a
-// choice that works, and only `tuios keybinds doctor` lists it.
 func validateCopyModeKeys(cfg *UserConfig, result *ValidationResult) {
 	for _, p := range cfg.Keybindings.CopyModeProblems() {
 		if p.Override {
@@ -152,17 +145,6 @@ func validateCopyModeKeys(cfg *UserConfig, result *ValidationResult) {
 	}
 }
 
-// getDefaultCopyModeKeybinds returns copy mode's bindable keys. ctrl+a and
-// ctrl+e are not defaults: ctrl+a is a common leader key, and ctrl+e scrolls
-// one line in tmux's vi copy mode. Bind them here if you want them.
-//
-// The editor is on ctrl+g. zellij puts it on e, which is the vim word-end
-// motion here, and E (WORD end) and ctrl+e (scroll a line in tmux and vim)
-// are taken the same way. ctrl+g is the key that opens a reply draft in the
-// editor, so one key means "this text in my editor" in both places.
-//
-// Hints are on s, which copy mode does not read. F opens them after the
-// leader, but F is the backward character search here.
 func getDefaultCopyModeKeybinds() map[string][]string {
 	return map[string][]string{
 		ActionCopyModeLeft:                 {"h", "left"},

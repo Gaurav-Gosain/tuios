@@ -17,33 +17,14 @@ import (
 	"github.com/adrg/xdg"
 )
 
-// Finding a repository on this machine by the remote it was cloned from.
-//
-// A path means nothing between two machines, and the one name a repository
-// has on both is its origin URL. So a caller on another machine that wants a
-// worktree of "the repository I am in" sends that URL, and this file finds the
-// checkout here whose origin is the same repository, or clones one when asked
-// to.
-//
-// Matching is exact after normalising the spellings git accepts for one
-// remote: https://github.com/o/r, git@github.com:o/r.git and
-// ssh://git@github.com/o/r all name github.com/o/r. Nothing is guessed past
-// that. Two checkouts of one repository are both returned, and the caller
-// says which, because picking one quietly is how an agent ends up working in
-// the wrong copy.
-
 // SearchRoot is one directory FindByOrigin looks under, and how deep.
 type SearchRoot struct {
 	Dir   string
 	Depth int
 }
 
-// searchVisitCap bounds how many directories one search reads. A search runs
-// inside a verb, and a root pointed at a large tree must cost a bounded time.
 const searchVisitCap = 20000
 
-// cloneTimeout bounds one clone. It is under the CLI's own read timeout for
-// the verbs that can clone.
 const cloneTimeout = 4 * time.Minute
 
 // NormalizeRemote turns a remote URL into the form two spellings of one
@@ -76,8 +57,6 @@ func NormalizeRemote(raw string) string {
 	return "file:" + filepath.Clean(trim(s))
 }
 
-// scpLike splits git's scp form, [user@]host:path, which git reads as ssh
-// when the part before the first colon holds no slash.
 func scpLike(s string) (host, path string, ok bool) {
 	colon := strings.Index(s, ":")
 	if colon <= 0 {
@@ -87,8 +66,6 @@ func scpLike(s string) (host, path string, ok bool) {
 		return "", "", false
 	}
 	host = s[:colon]
-	// C:\src\api is a drive letter on Windows, which git reads as a local
-	// path, not a host named c.
 	if len(host) == 1 {
 		return "", "", false
 	}
@@ -107,8 +84,6 @@ func scpLike(s string) (host, path string, ok bool) {
 func OriginURL(dir string) (string, error) {
 	out, err := run(dir, "config", "--get", "remote.origin.url")
 	if err != nil {
-		// git config exits 1 for a key that is not set, which is not a
-		// failure of the repository.
 		if _, rerr := Root(dir); rerr != nil {
 			return "", rerr
 		}
@@ -117,9 +92,6 @@ func OriginURL(dir string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-// originFromConfig reads remote.origin.url from a .git/config file without
-// running git. The search reads one per candidate directory, and a
-// subprocess for each would make a search of a large tree slow.
 func originFromConfig(path string) string {
 	f, err := os.Open(path)
 	if err != nil {
@@ -146,7 +118,6 @@ func originFromConfig(path string) string {
 		value = strings.Trim(value, `"`)
 		return value
 	}
-	// A read error leaves the origin unknown, as a config without one does.
 	_ = sc.Err()
 	return ""
 }
@@ -270,9 +241,6 @@ func RepoName(remote string) string {
 	return Slug(base)
 }
 
-// cloneProtocols is what GIT_ALLOW_PROTOCOL is set to for a clone: the
-// network transports and nothing else, so a submodule or redirect cannot
-// reach a local path or a transport helper even if the URL checks passed.
 const cloneProtocols = "https:ssh:git"
 
 // Clone clones remote into parent/<name> and returns the new checkout. The

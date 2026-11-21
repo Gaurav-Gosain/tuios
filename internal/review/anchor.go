@@ -64,12 +64,6 @@ func AnchorHunk(hunks []Hunk, side, header string, line int) (Hunk, bool) {
 	return Hunk{}, false
 }
 
-// quoteKey is a line or a quote as Anchor compares them: cleaned the way a
-// quote is kept (CleanQuote), then normalized. A quote is stored cleaned and
-// cut to TextMax bytes, so a file line is cut the same way before it is
-// compared, and a line longer than TextMax, or one holding a control
-// character, still finds its note. CleanQuote gives its own output back
-// unchanged, so a stored quote keys the same as the line it came from.
 func quoteKey(s string) string {
 	if len(s) > TextMax || hasControl(s) {
 		s = CleanQuote(s)
@@ -77,9 +71,6 @@ func quoteKey(s string) string {
 	return normalizeLine(s)
 }
 
-// hasControl reports whether s holds a byte CleanQuote would change other
-// than white space: a control character, or anything that is not ASCII, since
-// C1 controls and invalid UTF-8 are left out too.
 func hasControl(s string) bool {
 	for i := 0; i < len(s); i++ {
 		c := s[i]
@@ -90,10 +81,6 @@ func hasControl(s string) bool {
 	return false
 }
 
-// normalizeLine is a line as quotes are compared: white space at either end
-// does not count and a run of it inside counts as one space, so a quote kept
-// as one clean line matches its indented line, and a line that was only
-// re-indented is still found.
 func normalizeLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }

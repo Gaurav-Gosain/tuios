@@ -17,8 +17,6 @@ import (
 	"sync/atomic"
 )
 
-// pipe is an unbounded byte queue. Writes never block, reads block until there
-// is data or the pipe is closed.
 type pipe struct {
 	mu     sync.Mutex
 	cond   *sync.Cond
@@ -70,7 +68,7 @@ func (p *pipe) Close() error {
 
 // Pty is an in-memory pseudo-terminal. It satisfies xpty.Pty.
 type Pty struct {
-	in, out *pipe // in: window to guest, out: guest to window
+	in, out *pipe
 	cols    atomic.Int32
 	rows    atomic.Int32
 	resized chan struct{}

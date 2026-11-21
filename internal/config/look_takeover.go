@@ -18,59 +18,27 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
-// Take-over.
-//
-// config.toml wins over config.d/look.toml, so a key the person already set
-// hides the look's value. A take-over lets the look win: it removes those keys
-// from config.toml, and from any config.d file that comes after look.toml,
-// line by line, so comments and order stay. The removed values are saved in
-// config.d/look.saved.json, which is not a .toml file and so is never read as
-// config. `tuios look remove` puts them back.
-//
-// The save keeps each file as it was before the first take-over and as tuios
-// last wrote it. While the file is still what tuios wrote, every difference
-// from the first copy is tuios's own, so the remove puts that copy back byte
-// for byte. When the person changed the file since, the copy would undo their
-// change, so it is dropped, and the remove puts back each saved key the file
-// does not set. A key the person set again keeps the newer value.
-//
-// A look applied over another puts back the saved keys the new look does not
-// set: the old look took them, and the new one has no value for them.
-//
-// Every file is read again just before tuios renames the new file over it
-// (see commitFiles). A file that changed since the plan read it stops the
-// command, so an edit made while tuios asked its questions is not lost.
-
 // LookSavedName is the file in config.d that holds the values a take-over
 // removed.
 const LookSavedName = "look.saved.json"
 
-// lookSavedVersion is the format of the saved file.
 const lookSavedVersion = 1
 
-// lookSavedError is a saved file tuios cannot read.
 type lookSavedError struct{ msg string }
 
 func (e *lookSavedError) Error() string { return e.msg }
 
-// lookSaved is config.d/look.saved.json.
 type lookSaved struct {
 	Version int             `json:"version"`
 	Files   []lookSavedFile `json:"files"`
 }
 
-// lookSavedFile is one file a take-over changed.
 type lookSavedFile struct {
-	// Path is the file, absolute.
-	Path string `json:"path"`
-	// Before is the file before the first take-over, when HasBefore.
+	Path      string `json:"path"`
 	Before    string `json:"before,omitempty"`
 	HasBefore bool   `json:"has_before"`
-	// After is the file as tuios last wrote it. An empty file is a file too,
-	// so it is compared as it is, with no test for empty.
-	After string `json:"after"`
-	// Keys are the removed keys with their values, as TOML.
-	Keys string `json:"keys"`
+	After     string `json:"after"`
+	Keys      string `json:"keys"`
 }
 
 // LookSavedPath is the saved file for the config at mainPath.
@@ -78,8 +46,6 @@ func LookSavedPath(mainPath string) string {
 	return filepath.Join(filepath.Dir(absPath(mainPath)), DropInDirName, LookSavedName)
 }
 
-// lookSavedBrokenPath is a free name to move a saved file tuios cannot read
-// to. It is not a .toml file, so the config never reads it.
 func lookSavedBrokenPath(mainPath string) string {
 	base := LookSavedPath(mainPath) + ".broken"
 	p := base
@@ -91,8 +57,6 @@ func lookSavedBrokenPath(mainPath string) string {
 	}
 }
 
-// readLookSaved reads the saved file. It returns nil and no error when there
-// is none.
 func readLookSaved(mainPath string) (*lookSaved, error) {
 	path := LookSavedPath(mainPath)
 	data, err := os.ReadFile(path) //nolint:gosec // the user's own config.d
@@ -146,7 +110,7 @@ type LookTakeOverFile struct {
 
 	abs  string
 	out  []byte
-	disk []byte // the file as the plan read it
+	disk []byte
 }
 
 // PlanTakeOver works out how to let the look set every key a later file
@@ -170,9 +134,6 @@ func (p *LookPlan) PlanTakeOver() (*LookTakeOver, error) {
 	}
 	to := &LookTakeOver{}
 	w := newLayerWriter(next)
-	// The layers after the look win over it, in the order the config merges
-	// them: config.d files after look.toml, the files they include, and
-	// config.toml.
 	for i := look + 1; i < len(next.Layers); i++ {
 		l := next.Layers[i]
 		var keys [][]string
@@ -191,8 +152,6 @@ func (p *LookPlan) PlanTakeOver() (*LookTakeOver, error) {
 				to.Kept = append(to.Kept, LookShadow{Path: displayKey(k), File: shown, Include: l.Kind == LayerInclude})
 			}
 		}
-		// An included file is the person's own work, shared or generated,
-		// and tuios does not take keys out of it.
 		if l.Kind == LayerInclude || !w.writable(i) {
 			keep()
 			continue
@@ -228,10 +187,6 @@ func (p *LookPlan) PlanTakeOver() (*LookTakeOver, error) {
 	return to, nil
 }
 
-// takeOverEdit removes keys from the lines of layer l. It returns the new
-// file, the removed values as a table, and whether the line edit could say
-// it. A file whose lines tuios cannot edit is never written again from its
-// values: that would lose the comments.
 func takeOverEdit(l ConfigLayer, keys [][]string) ([]byte, map[string]any, bool, error) {
 	changes := make([]configChange, 0, len(keys))
 	removed := map[string]any{}
@@ -244,8 +199,6 @@ func takeOverEdit(l ConfigLayer, keys [][]string) ([]byte, map[string]any, bool,
 	if err != nil || !ok {
 		return nil, nil, false, err
 	}
-	// A table left with no key goes too, as a prune does, when the file
-	// still says the same without it.
 	e := newTOMLEdit(out)
 	e.dropEmptyTables()
 	if got, perr := parseLayer(e.bytes()); perr == nil && reflect.DeepEqual(pruneEmpty(got), pruneEmpty(want)) {
@@ -254,7 +207,6 @@ func takeOverEdit(l ConfigLayer, keys [][]string) ([]byte, map[string]any, bool,
 	return out, removed, true, nil
 }
 
-// clone is a copy of s that add can change.
 func (s *lookSaved) clone() *lookSaved {
 	if s == nil {
 		return &lookSaved{Version: lookSavedVersion}
@@ -262,8 +214,6 @@ func (s *lookSaved) clone() *lookSaved {
 	return &lookSaved{Version: s.Version, Files: slices.Clone(s.Files)}
 }
 
-// add records that a take-over changed the file at path from current to
-// after, removing the values in removed. current is the file as it is now.
 func (s *lookSaved) add(path string, current, after []byte, removed map[string]any) error {
 	i := slices.IndexFunc(s.Files, func(f lookSavedFile) bool { return f.Path == path })
 	if i < 0 {
@@ -271,9 +221,6 @@ func (s *lookSaved) add(path string, current, after []byte, removed map[string]a
 		i = len(s.Files) - 1
 	}
 	f := &s.Files[i]
-	// An earlier take-over saved this file. Its first copy still holds when
-	// the file is as tuios left it. When the person changed it since, the
-	// copy would undo that change, so it goes.
 	if f.After != string(current) {
 		f.HasBefore, f.Before = false, ""
 	}
@@ -285,9 +232,6 @@ func (s *lookSaved) add(path string, current, after []byte, removed map[string]a
 		}
 		keys = old
 	}
-	// The file sets each key in removed now, so that value is the person's
-	// latest. An older saved value stays only for a key the file no longer
-	// sets.
 	mergeTables(keys, removed)
 	data, err := marshalTable(keys)
 	if err != nil {
@@ -312,13 +256,9 @@ type LookRestore struct {
 	// make the file again.
 	Gone []LookShadow
 
-	// saved is the saved file after the restore.
 	saved *lookSaved
 }
 
-// planRestore works out what to put back from the saved values. skip, when
-// set, names keys that stay saved: the keys a new look sets. It returns nil
-// when no take-over saved anything.
 func planRestore(mainPath string, skip func(string) bool) (*LookRestore, error) {
 	saved, err := readLookSaved(mainPath)
 	if err != nil || saved == nil {
@@ -343,7 +283,6 @@ func planRestore(mainPath string, skip func(string) bool) (*LookRestore, error) 
 		}
 		cur, err := os.ReadFile(f.Path) //nolint:gosec // a file of the user's config
 		if errors.Is(err, fs.ErrNotExist) {
-			// The person deleted the file. Making it again would undo that.
 			for _, k := range back {
 				r.Gone = append(r.Gone, LookShadow{Path: displayKey(k), File: shown})
 			}
@@ -404,7 +343,6 @@ func planRestore(mainPath string, skip func(string) bool) (*LookRestore, error) 
 	return r, nil
 }
 
-// savedKeys is the TOML of the keys at paths in table.
 func savedKeys(table map[string]any, paths [][]string) string {
 	out := map[string]any{}
 	for _, k := range paths {
@@ -418,7 +356,6 @@ func savedKeys(table map[string]any, paths [][]string) string {
 	return string(data)
 }
 
-// dottedKeys are the dotted names of paths.
 func dottedKeys(paths [][]string) []string {
 	out := make([]string, 0, len(paths))
 	for _, k := range paths {
@@ -427,8 +364,6 @@ func dottedKeys(paths [][]string) []string {
 	return out
 }
 
-// restoreLayers puts the new text of each file into the layers of next, so a
-// change list shows the values the files will hold.
 func (r *LookRestore) restoreLayers(next *LayeredConfig) error {
 	if r == nil {
 		return nil
@@ -449,16 +384,12 @@ func (r *LookRestore) restoreLayers(next *LayeredConfig) error {
 	return nil
 }
 
-// fileWrite is one config file Apply writes.
 type fileWrite struct {
 	abs, shown string
 	out        []byte
 	disk       diskFile
 }
 
-// configWrites lists the config files the plan writes, and the saved file
-// after it. A take-over writes over the restore of the same file: it was
-// planned on top of it.
 func (p *LookPlan) configWrites() ([]fileWrite, *lookSaved) {
 	var out []fileWrite
 	add := func(f LookTakeOverFile) {
@@ -481,8 +412,6 @@ func (p *LookPlan) configWrites() ([]fileWrite, *lookSaved) {
 		}
 		saved = p.TakeOver.saved
 	}
-	// config.toml goes last: it wins over every other file, so the config
-	// the watcher reloads in between never holds it without the rest.
 	main := absPath(p.Main)
 	sortx.SortStableFunc(out, func(a, b fileWrite) int {
 		switch {
@@ -496,17 +425,12 @@ func (p *LookPlan) configWrites() ([]fileWrite, *lookSaved) {
 	return out, saved
 }
 
-// stagedWrite is one file written in full to a temporary file beside its
-// target and synced, waiting for its rename.
 type stagedWrite struct {
 	target, tmp string
 	data        []byte
 	config      bool
 }
 
-// stageFile writes data to a temporary file beside path and syncs it. A config
-// file is written through a symlink to its target and keeps its mode, as
-// writeConfigBytes does.
 func stageFile(path string, data []byte, config bool) (stagedWrite, error) {
 	target, mode := path, os.FileMode(0o600)
 	if config {
@@ -542,20 +466,6 @@ func stageFile(path string, data []byte, config bool) (stagedWrite, error) {
 	return stagedWrite{target: target, tmp: f.Name(), data: data, config: config}, nil
 }
 
-// commitFiles writes the files of a plan: look.toml when look is not nil, the
-// saved values, and the config files, config.toml last.
-//
-// It works in three steps, so that a file the person changed while tuios
-// asked is never written over. First every file goes to a temporary file
-// beside its target, synced. Then each config file is read again and
-// compared with what the plan read; a change stops the command, the
-// temporary files go, and nothing on disk has changed. Then the temporary
-// files are renamed over their targets, config.toml last, and the folders
-// synced. before runs between the check and the renames.
-//
-// tuios has no lock that other writers of the config take, so an edit by
-// hand that lands in the few microseconds between the check and the rename
-// of its file can still be lost.
 func (p *LookPlan) commitFiles(look []byte, before func() error) error {
 	writes, saved := p.configWrites()
 	var staged []stagedWrite
@@ -625,7 +535,6 @@ func (p *LookPlan) commitFiles(look []byte, before func() error) error {
 		}
 		dirs[filepath.Dir(s.target)] = true
 	}
-	// The saved values go only once every file they came from is back.
 	if deleteSaved {
 		if err := os.Remove(LookSavedPath(p.Main)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return err

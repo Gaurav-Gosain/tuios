@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// windowShows reports whether the window's emulator holds want anywhere on
-// its screen.
 func windowShows(w *Window, want string) bool {
 	w.RLockIO()
 	defer w.RUnlockIO()
@@ -47,8 +45,6 @@ func windowShows(w *Window, want string) bool {
 func TestLocalPaneFloodSignalsAtTheCoalescerRate(t *testing.T) {
 	signals := make(chan struct{}, 1)
 	exitChan := make(chan string, 1)
-	// The shell stays alive after the flood, so the reader's own exit signal
-	// cannot stand in for the trailing edge.
 	w, err := NewWindow("test-local-coal", "Test", 0, 0, 80, 24, 0, exitChan, signals,
 		config.DefaultScrollbackLines,
 		"/bin/sh", "-c", "sleep 0.2; yes 0123456789abcdefghij | head -c 2000000; printf 'FLOOD''DONE'; sleep 30")
@@ -71,8 +67,6 @@ func TestLocalPaneFloodSignalsAtTheCoalescerRate(t *testing.T) {
 				continue
 			}
 			elapsed := time.Since(first)
-			// One signal per interval, plus the leading edge, plus one for
-			// scheduling slack at either end.
 			limit := int(elapsed/minCoalesceInterval) + 3
 			t.Logf("%d signals over %v, limit %d", count, elapsed, limit)
 			if count > limit {

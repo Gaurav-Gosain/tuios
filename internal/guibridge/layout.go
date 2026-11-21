@@ -9,13 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
 
-// The split trees in the state, and the layout commands that edit them.
-//
-// The model is the authority for the tree. The renderer mirrors it from the
-// state, works out pixel rectangles itself, and names each gesture's result as
-// one command: put this pane beside that one, set this split's ratio. The
-// model runs it, the tree changes, and the next state carries the new tree.
-
 // Rect is a box in cells.
 type Rect struct {
 	X int `json:"x"`
@@ -56,18 +49,12 @@ type Node struct {
 	B    *Node `json:"b,omitempty"`
 }
 
-// exportTrees returns every workspace's tree, keyed by workspace number as a
-// string (JSON object keys are strings). Nil while tiling is off or the
-// layout on screen is not the split tree.
 func exportTrees(o *app.OS) map[string]*Tree {
 	if o.LayoutName() != app.LayoutModeBSP {
 		return nil
 	}
 	bounds := o.GetBSPBounds()
 	gap := o.SeparatorGap()
-	// Leaf numbers to window IDs, from the forward map: a session restore
-	// rebuilds WindowToBSPID and not always the reverse map, so a client that
-	// attached to a tiled session would name no leaf.
 	names := make(map[int]string, len(o.WindowToBSPID))
 	for id, n := range o.WindowToBSPID {
 		names[n] = id
@@ -107,7 +94,6 @@ func exportNode(names map[int]string, n *layout.TileNode, box layout.Rect, gap i
 	return node
 }
 
-// parseSide reads the side of a move: left, right, top or bottom.
 func parseSide(s string) (layout.Side, error) {
 	switch s {
 	case "left":
@@ -122,8 +108,6 @@ func parseSide(s string) (layout.Side, error) {
 	return 0, errfmt.Errorf("side %q is not left, right, top or bottom", s)
 }
 
-// runLayout runs one layout command. The result says what changed, for the
-// renderer to check its own prediction against.
 func runLayout(o *app.OS, c Command) (*Result, error) {
 	switch c.Op {
 	case "set-ratio":

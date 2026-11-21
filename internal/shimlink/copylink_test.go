@@ -10,32 +10,13 @@ import (
 	"time"
 )
 
-// The ways InstallFile can fail, which these tests hold it to:
-//
-//   - tuios update replaced the binary, and a hardlink to the old one is
-//     taken as current, so herdr runs the old tuios;
-//   - the link is on another volume, the hardlink fails, and nothing is made;
-//   - a copy of an older tuios is taken as current;
-//   - a current copy is written again on every start;
-//   - a symbolic link is made although a copy would have worked;
-//   - Windows refuses to replace the running link, and the start fails;
-//   - a failed attempt leaves its half-made file, or the moved-aside file,
-//     behind for good;
-//   - a start removes the half-made file of another process that is still
-//     making it.
-
-// faultFS is the real filesystem with operations that can be made to fail,
-// as a link across volumes or a running program on Windows fails.
 type faultFS struct {
 	OSFS
 	link, copy, symlink error
-	// renameOnto fails a rename onto this path, once per entry in the
-	// count, as Windows fails one onto a running program.
-	renameOnto string
-	renameErrs int
-	calls      []string
-	// alive are the process ids that run.
-	alive map[int]bool
+	renameOnto          string
+	renameErrs          int
+	calls               []string
+	alive               map[int]bool
 }
 
 func (f *faultFS) Alive(pid int) bool { return f.alive[pid] }
@@ -84,8 +65,6 @@ func setup(t *testing.T) (exe, link string) {
 
 func writeExe(t *testing.T, path, body string) {
 	t.Helper()
-	// Written beside and renamed, as tuios update does, so the path gets a
-	// new file and not new bytes in the old one.
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, []byte(body), 0o700); err != nil {
 		t.Fatal(err)
@@ -169,13 +148,11 @@ func TestInstallFileCopiesAcrossVolumes(t *testing.T) {
 		t.Fatalf("the copy is not a separate file with the binary's time: same %v, times %v %v", os.SameFile(a, b), a.ModTime(), b.ModTime())
 	}
 
-	// A current copy is kept as it is.
 	f.calls = nil
 	if m := install(t, f, link, exe); m != MethodCopy || len(f.calls) != 0 {
 		t.Fatalf("a current copy was made again: method %s, calls %v", m, f.calls)
 	}
 
-	// A new binary of the same size is still a new binary.
 	time.Sleep(10 * time.Millisecond)
 	writeExe(t, exe, "tuios v2")
 	if err := os.Chtimes(exe, time.Now().Add(time.Hour), time.Now().Add(time.Hour)); err != nil {
@@ -189,8 +166,6 @@ func TestInstallFileCopiesAcrossVolumes(t *testing.T) {
 
 func TestInstallFileReplacesAStaleCopy(t *testing.T) {
 	exe, link := setup(t)
-	// A copy left by an older tuios, or made by hand: other bytes, other
-	// time.
 	if err := os.WriteFile(link, []byte("tuios v0, older"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -260,9 +235,6 @@ func TestInstallFileMovesARunningLinkAside(t *testing.T) {
 func TestInstallFileSweepsLeftovers(t *testing.T) {
 	exe, link := setup(t)
 	install(t, &faultFS{}, link, exe)
-	// What processes that died part way left: a half-made file and one
-	// moved aside while it ran. Process 78 still runs, and its half-made
-	// file is its work in progress.
 	for _, n := range []string{link + ".new-77", link + ".old-77", link + ".new-78"} {
 		if err := os.WriteFile(n, []byte("x"), 0o700); err != nil {
 			t.Fatal(err)
@@ -277,8 +249,6 @@ func TestInstallFileSweepsLeftovers(t *testing.T) {
 func TestInstallFileComparesBytesWhenTimesMatch(t *testing.T) {
 	exe, link := setup(t)
 	install(t, &faultFS{link: errXDev}, link, exe)
-	// Two builds of one size, stamped with one time, as a coarse clock or
-	// an archive that keeps times can make them.
 	st, err := os.Stat(link)
 	if err != nil {
 		t.Fatal(err)

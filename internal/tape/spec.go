@@ -10,26 +10,18 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// argSpec is what one command takes: how many arguments, and a check of their
-// values. The parser holds every command to its spec, so a tape that passes
-// validate runs every argument it was given.
 type argSpec struct {
-	min, max int // max < 0 is no limit
+	min, max int
 	usage    string
 	check    func(args []string) (badArg int, err error)
 }
 
-// unlimited marks an argSpec with no upper bound.
 const unlimited = -1
 
-// keyRepeat is the optional count a key command takes: Down 5.
 var keyRepeat = argSpec{0, 1, "an optional count, as in Down 5", checkEach(checkPositiveInt)}
 
-// noArgs is a command that takes nothing.
 var noArgs = argSpec{0, 0, "no arguments", nil}
 
-// argSpecs is every command the generic parser handles. Type, Sleep, Wait,
-// WaitUntilRegex and key combos have parsers of their own.
 var argSpecs = map[CommandType]argSpec{
 	CommandTypeEnter: keyRepeat, CommandTypeSpace: keyRepeat, CommandTypeBackspace: keyRepeat,
 	CommandTypeDelete: keyRepeat, CommandTypeTab: keyRepeat, CommandTypeEscape: keyRepeat,
@@ -88,7 +80,6 @@ var argSpecs = map[CommandType]argSpec{
 	CommandTypeExpect:  {1, unlimited, `a condition, as in Expect text "ready"`, checkCondition(CommandTypeExpect)},
 }
 
-// checkEach applies one check to every argument.
 func checkEach(check func(string) error) func([]string) (int, error) {
 	return func(args []string) (int, error) {
 		for i, a := range args {
@@ -119,8 +110,6 @@ func checkOneOf(values ...string) func(string) error {
 	}
 }
 
-// checkActionArgs checks Action: an action name, then key=value arguments,
-// which only a user action takes.
 func checkActionArgs(args []string) (int, error) {
 	if err := checkAction(args[0]); err != nil {
 		return 0, err
@@ -136,9 +125,6 @@ func checkActionArgs(args []string) (int, error) {
 	return 0, nil
 }
 
-// checkAction accepts the name of a keybinding action, or of a
-// [[keybindings.command]] entry, whose names come from the config the tape
-// runs under and so cannot be checked here.
 func checkAction(name string) error {
 	if IsActionName(name) {
 		return nil
@@ -167,8 +153,6 @@ func checkCondition(ct CommandType) func([]string) (int, error) {
 	}
 }
 
-// checkArgs holds cmd to its spec. It returns the index of the argument at
-// fault, or -1 when the fault is the command as a whole.
 func checkArgs(cmd *Command) (int, error) {
 	spec, ok := argSpecs[cmd.Type]
 	if !ok {
@@ -220,8 +204,6 @@ type Condition struct {
 // DefaultWaitTimeout is how long WaitFor waits when the tape gives no timeout.
 const DefaultWaitTimeout = 10 * time.Second
 
-// conditionKinds are the kinds a Condition can have, and whether each reads a
-// pane "in" may name.
 var conditionKinds = map[string]bool{
 	"text": true, "agent": true,
 	"pane": false, "gone": false, "focus": false, "panes": false, "workspace": false, "mode": false,
@@ -301,8 +283,6 @@ func (c Condition) String() string {
 	return s
 }
 
-// isDuration reports whether s is a duration with a unit, such as 500ms or
-// 10s. A bare number is not one: in "panes 3" the 3 is the value.
 func isDuration(s string) bool {
 	if s == "" || !isDigit(s[0]) {
 		return false

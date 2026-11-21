@@ -20,10 +20,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
-// serviceSlice is the slice the daemon's unit is in, and whether the daemon
-// is a service of a user manager at all. It is read once. strings.Split and
-// a plain sync.Once here, not the iterator and generic forms: they add bytes
-// to the binary for code that runs once.
 func serviceSlice() (string, bool) {
 	sliceOnce.Do(func() {
 		raw, err := os.ReadFile("/proc/self/cgroup")
@@ -40,11 +36,6 @@ var (
 	isService bool
 )
 
-// sliceOf reads the unified line of /proc/self/cgroup. The daemon counts as
-// a service when its cgroup is a .service under user@, or anywhere when
-// force is set (the e2e suite's knob). The slice is the folder above the
-// unit when that is a .slice, else empty, which the manager reads as its
-// default.
 func sliceOf(cgroup string, force bool) (string, bool) {
 	for _, line := range strings.Split(cgroup, "\n") {
 		path, ok := strings.CutPrefix(line, "0::")
@@ -64,11 +55,8 @@ func sliceOf(cgroup string, force bool) (string, bool) {
 	return "", false
 }
 
-// mu keeps one call at a time, so a restore of many panes does not open many
-// connections at once.
 var mu sync.Mutex
 
-// told is set once a scope was made, so the success is logged once.
 var told atomic.Bool
 
 func place(pid int, slice string, logf func(string, ...any)) {
@@ -90,10 +78,8 @@ func place(pid int, slice string, logf func(string, ...any)) {
 	}
 }
 
-// callTimeout bounds the whole call: connect, auth and reply.
 const callTimeout = 2 * time.Second
 
-// startScope asks the user manager for the scope.
 func startScope(name string, pid int, slice string) error {
 	conn, bus, err := dialManager()
 	if err != nil {
@@ -107,8 +93,6 @@ func startScope(name string, pid int, slice string) error {
 	}
 	serial := uint32(1)
 	if bus {
-		// A bus wants Hello first. The private socket talks to the
-		// manager alone and takes none.
 		if _, err := conn.Write(methodCall(serial, "/org/freedesktop/DBus", "org.freedesktop.DBus", "Hello", "org.freedesktop.DBus", "", nil)); err != nil {
 			return err
 		}
@@ -124,8 +108,6 @@ func startScope(name string, pid int, slice string) error {
 	return awaitReply(r, serial)
 }
 
-// dialManager connects to the user manager's private socket, else to the
-// user bus. bus says which.
 func dialManager() (net.Conn, bool, error) {
 	if dir := os.Getenv("XDG_RUNTIME_DIR"); dir != "" {
 		if c, err := net.DialTimeout("unix", filepath.Join(dir, "systemd", "private"), callTimeout); err == nil {
@@ -161,7 +143,6 @@ func dialManager() (net.Conn, bool, error) {
 	return c, true, nil
 }
 
-// auth runs the SASL EXTERNAL exchange with this process's uid.
 func auth(conn net.Conn, r *bufio.Reader) error {
 	uid := hex.EncodeToString([]byte(strconv.Itoa(os.Getuid())))
 	if _, err := conn.Write([]byte("\x00AUTH EXTERNAL " + uid + "\r\n")); err != nil {
@@ -178,9 +159,6 @@ func auth(conn net.Conn, r *bufio.Reader) error {
 	return err
 }
 
-// enc writes D-Bus values, little endian, aligned from the start of the
-// buffer. The header ends on an 8-byte boundary, so the body is encoded on
-// its own and keeps the same alignment.
 type enc struct{ b []byte }
 
 func (e *enc) align(n int) {
@@ -196,7 +174,6 @@ func (e *enc) u32(v uint32) {
 	e.b = binary.LittleEndian.AppendUint32(e.b, v)
 }
 
-// str writes a string or an object path.
 func (e *enc) str(s string) {
 	e.u32(uint32(len(s)))
 	e.b = append(e.b, s...)
@@ -209,8 +186,6 @@ func (e *enc) sig(s string) {
 	e.b = append(e.b, 0)
 }
 
-// field writes one header field whose value is a string, an object path
-// or a signature.
 func (e *enc) field(code byte, typ, v string) {
 	e.align(8)
 	e.byte(code)
@@ -222,17 +197,12 @@ func (e *enc) field(code byte, typ, v string) {
 	}
 }
 
-// prop starts one property of StartTransientUnit: its name and the
-// signature of its value. The caller writes the value.
 func (e *enc) prop(key, typ string) {
 	e.align(8)
 	e.str(key)
 	e.sig(typ)
 }
 
-// beginArray writes an array's length as zero and pads to the elements'
-// alignment. It returns where the length is and where the elements start,
-// for endArray.
 func (e *enc) beginArray(elemAlign int) (int, int) {
 	e.align(4)
 	at := len(e.b)
@@ -241,18 +211,16 @@ func (e *enc) beginArray(elemAlign int) (int, int) {
 	return at, len(e.b)
 }
 
-// endArray writes the length of the array beginArray started.
 func (e *enc) endArray(at, start int) {
 	binary.LittleEndian.PutUint32(e.b[at:], uint32(len(e.b)-start))
 }
 
-// methodCall is a whole METHOD_CALL message.
 func methodCall(serial uint32, path, iface, member, dest, signature string, body []byte) []byte {
 	h := &enc{}
 	h.byte('l')
-	h.byte(1) // METHOD_CALL
+	h.byte(1)
 	h.byte(0)
-	h.byte(1) // protocol version
+	h.byte(1)
 	h.u32(uint32(len(body)))
 	h.u32(serial)
 	at, start := h.beginArray(8)
@@ -268,7 +236,6 @@ func methodCall(serial uint32, path, iface, member, dest, signature string, body
 	return append(h.b, body...)
 }
 
-// transientScopeBody is the body of StartTransientUnit for the pane's scope.
 func transientScopeBody(name string, pid int, slice string) []byte {
 	e := &enc{}
 	e.str(name)
@@ -289,14 +256,11 @@ func transientScopeBody(name string, pid int, slice string) []byte {
 	e.prop("OOMPolicy", "s")
 	e.str("continue")
 	e.endArray(at, start)
-	// No auxiliary units: an empty array, padded all the same.
 	at, start = e.beginArray(8)
 	e.endArray(at, start)
 	return e.b
 }
 
-// awaitReply reads messages until the reply to serial, and returns the
-// error the manager sent, if any. Signals on the way are skipped.
 func awaitReply(r *bufio.Reader, serial uint32) error {
 	for {
 		typ, reply, errName, body, order, err := readMessage(r)
@@ -319,11 +283,8 @@ func awaitReply(r *bufio.Reader, serial uint32) error {
 	}
 }
 
-// maxMessage bounds what is read for one message: a reply here is small.
 const maxMessage = 1 << 20
 
-// readMessage reads one message and returns its type, its reply serial, its
-// error name and its body.
 func readMessage(r *bufio.Reader) (byte, uint32, string, []byte, binary.ByteOrder, error) {
 	fixed := make([]byte, 16)
 	if _, err := io.ReadFull(r, fixed); err != nil {
@@ -346,7 +307,6 @@ func readMessage(r *bufio.Reader) (byte, uint32, string, []byte, binary.ByteOrde
 	fields := rest[:fieldsLen]
 	var reply uint32
 	var errName string
-	// Offsets in fields are 16 bytes into the message, which is 8-aligned.
 	i := 0
 	alignTo := func(n int) { i = (i + n - 1) / n * n }
 	for i < len(fields) {

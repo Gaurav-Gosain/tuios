@@ -10,19 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// Sessions and settings for the renderer (plan 2.11 and 2.14).
-//
-// switch-session moves this bridge to another session in place, the way the
-// terminal client's go-to does: one attach, no new process, and
-// the panes of the new session arrive as snapshots. It can make the session,
-// or restore it from its saved state first.
-//
-// option and theme with persist write the user's config file. The bridge's
-// model never writes the file on its own (its config is read only, so a
-// renderer's view never decides the file for the other clients), so these
-// commands do it on purpose: the person changed a setting.
-
-// switchSession runs a switch-session command.
 func (m *model) switchSession(c Command) error {
 	name := strings.TrimSpace(c.Name)
 	if name == "" {
@@ -38,8 +25,6 @@ func (m *model) switchSession(c Command) error {
 	if name == m.os.SessionName {
 		return nil
 	}
-	// The renderer may hold the new session's emulators from the last time
-	// it showed it. The snapshots of the switch then catch them up.
 	m.tap.setResume(c.Resume)
 	if err := m.os.SwitchToSession(name); err != nil {
 		m.tap.setResume(nil)
@@ -53,8 +38,6 @@ func (m *model) switchSession(c Command) error {
 	return nil
 }
 
-// sessionExists says whether the daemon holds a session of that name. It
-// asks the daemon, since the client's list of sessions can be old.
 func (m *model) sessionExists(name string) bool {
 	c, err := m.dialVerb()
 	if err != nil {
@@ -81,8 +64,6 @@ func (m *model) sessionExists(name string) bool {
 	return false
 }
 
-// resurrect asks the daemon to restore a saved session. It is a no-op for a
-// session the daemon holds already.
 func resurrect(version, name string) error {
 	c := session.NewClient(&session.ClientConfig{Version: version})
 	if err := c.Connect(); err != nil {
@@ -104,7 +85,6 @@ type SavedSession struct {
 	SavedAt int64 `json:"saved_at"`
 }
 
-// savedSessions lists the sessions saved on disk.
 func savedSessions() []SavedSession {
 	infos, err := session.ListResurrectableInfos()
 	if err != nil {
@@ -121,8 +101,6 @@ func savedSessions() []SavedSession {
 	return out
 }
 
-// writeOption sets one option in the user's config file. The file watcher
-// then applies it to this model and to every other client.
 func writeOption(key, value string) error {
 	if key == "" {
 		return errors.New("option needs key, an option path from list-options")
@@ -161,8 +139,6 @@ type OptionList struct {
 	Path string `json:"path,omitempty"`
 }
 
-// sendOptions reads the options and the user's config file off the model's
-// goroutine and sends the options event.
 func sendOptions(out *frameWriter, req int64) {
 	go func() {
 		ev := &OptionList{}
@@ -192,7 +168,6 @@ func sendOptions(out *frameWriter, req int64) {
 	}()
 }
 
-// windowKind is a window's kind as the state names it: empty is a terminal.
 func windowKind(k string) string {
 	if k == "" {
 		return "terminal"

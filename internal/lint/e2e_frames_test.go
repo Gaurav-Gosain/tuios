@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// testDirPart matches a directory named after a test, the shape artifactDir
-// gives each test's frames under TUIOS_E2E_FRAMES.
 var testDirPart = regexp.MustCompile(`(^|/)Test[A-Z][^/]*/`)
 
 // TestNoE2EFramesInGit keeps the frames of an e2e run out of the tree. A run

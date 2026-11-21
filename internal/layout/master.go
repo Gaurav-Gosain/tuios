@@ -86,8 +86,6 @@ func (s MasterSplits) Clone() MasterSplits {
 	}
 }
 
-// masterShape is what the tiler resolved the parameters to for one pane count
-// and one region, after the fallbacks below.
 type masterShape struct {
 	grid     bool
 	position string
@@ -95,16 +93,6 @@ type masterShape struct {
 	stack    int
 }
 
-// resolveMasterShape applies the fallbacks:
-//
-//   - The grid, under the conditions MasterParams.Grid names.
-//   - Center with fewer than two stack panes is left. A centred master with one
-//     pane beside it leaves an empty column on the other side, so the master
-//     takes the left and the space goes to the stack, as Hyprland's center
-//     orientation does by default.
-//   - Two panes on a region that is taller than it is wide, as drawn, stack
-//     one above the other: left becomes top and right becomes bottom. That is
-//     what two panes always did on a tall screen.
 func resolveMasterShape(n, w, h int, p MasterParams) masterShape {
 	pos := ValidMasterPosition(p.Position)
 	k := min(max(p.Count, 1), max(n, 1))
@@ -127,8 +115,6 @@ func resolveMasterShape(n, w, h int, p MasterParams) masterShape {
 	return s
 }
 
-// along reports whether a position separates the masters from the stack along
-// the X axis.
 func alongX(pos string) bool {
 	return pos != MasterPositionTop && pos != MasterPositionBottom
 }
@@ -158,8 +144,6 @@ func CalculateMasterLayout(n, w, h, top int, p MasterParams) []TileLayout {
 		return gridLayout(n, w, h, top, p.Gap, p.Splits)
 	}
 
-	// Work in a frame where "along" is the axis between the masters and the
-	// stack and "across" is the other one, then turn the result back.
 	alongLen, acrossLen, alongOrigin, acrossOrigin := w, h, 0, top
 	if !alongX(shape.position) {
 		alongLen, acrossLen, alongOrigin, acrossOrigin = h, w, top, 0
@@ -173,8 +157,6 @@ func CalculateMasterLayout(n, w, h, top int, p MasterParams) []TileLayout {
 
 	out := make([]TileLayout, 0, n)
 	if shape.stack == 0 {
-		// Every pane is a master: they share the region across the axis, the
-		// way the master column holds more than one master.
 		for _, c := range weightedSpans(acrossOrigin, acrossLen, n, p.Splits.Masters, p.Gap) {
 			out = append(out, place(span{Pos: alongOrigin, Size: alongLen}, c))
 		}
@@ -195,9 +177,6 @@ func CalculateMasterLayout(n, w, h, top int, p MasterParams) []TileLayout {
 		for _, c := range masterCells {
 			out = append(out, place(master, c))
 		}
-		// The stack is dealt right, left, right, left, so the two sides never
-		// differ by more than one pane and a new pane lands on the side with
-		// fewer.
 		rightCount := (shape.stack + 1) / 2
 		leftCount := shape.stack / 2
 		var rightWeights, leftWeights []float64
@@ -225,8 +204,6 @@ func CalculateMasterLayout(n, w, h, top int, p MasterParams) []TileLayout {
 	near, far := splitByRatio(alongOrigin, alongLen, ratio, p.Gap)
 	master, stack := near, far
 	if shape.position == MasterPositionRight || shape.position == MasterPositionBottom {
-		// The masters keep the size the ratio gives them and move to the far
-		// end, so the ratio means the same share on either side.
 		stack = span{Pos: alongOrigin, Size: far.Size}
 		master = span{Pos: alongOrigin + far.Size + (far.Pos - near.Pos - near.Size), Size: near.Size}
 	}
@@ -239,12 +216,6 @@ func CalculateMasterLayout(n, w, h, top int, p MasterParams) []TileLayout {
 	return out
 }
 
-// splitThree divides an extent into a left side, a middle that takes ratio of
-// what is left once the two gaps are reserved, and a right side. The sides
-// share the rest, the right one taking the odd cell, because the stack deals
-// its first pane there and so it never holds fewer panes than the left. Every
-// part keeps at least one cell. A gap too wide for that gives up ground first,
-// as in spans.
 func splitThree(origin, total int, ratio float64, gap int) (left, middle, right span) {
 	if total-2*gap < 3 {
 		gap = max((total-3)/2, 0)
@@ -259,8 +230,6 @@ func splitThree(origin, total int, ratio float64, gap int) (left, middle, right 
 	return left, middle, right
 }
 
-// gridLayout is the equal-share grid four or more panes take with the defaults.
-// Four panes is the 2x2 case of it.
 func gridLayout(n, w, h, top, gap int, splits MasterSplits) []TileLayout {
 	cols := gridColumns(n)
 	rowCount := (n + cols - 1) / cols
@@ -271,9 +240,6 @@ func gridLayout(n, w, h, top, gap int, splits MasterSplits) []TileLayout {
 	}
 	out := make([]TileLayout, 0, n)
 	for row := range rowCount {
-		// The last row carries whatever is left over, which can be fewer panes
-		// than a full row. They share the width between them rather than
-		// leaving a hole where the missing ones would have been.
 		inRow := min(cols, n-row*cols)
 		var rowWeights []float64
 		if cellWeights != nil {
@@ -304,7 +270,6 @@ func MasterRatiosFrom(rects []Rect, region Rect, p MasterParams) (ratio, stackRa
 	}
 	gap := p.Gap
 
-	// The same frame CalculateMasterLayout works in.
 	type seg struct{ pos, size, crossPos, crossSize int }
 	frame := func(r Rect) seg {
 		if alongX(shape.position) {
@@ -356,8 +321,6 @@ func MasterRatiosFrom(rects []Rect, region Rect, p MasterParams) (ratio, stackRa
 				return 0, 0, false
 			}
 		}
-		// splitThree reserves two gaps; SplitRatioFor reserves one of
-		// whatever total it is handed.
 		g := gap
 		if alongLen-2*g < 3 {
 			g = max((alongLen-3)/2, 0)
@@ -421,14 +384,12 @@ func MasterSplitsFrom(rects []Rect, region Rect, p MasterParams) (MasterSplits, 
 		return out, true
 	}
 
-	// The across axis of the frame CalculateMasterLayout works in.
 	across := func(r Rect) (pos, size int) {
 		if alongX(shape.position) {
 			return r.Y, r.H
 		}
 		return r.X, r.W
 	}
-	// weightsOf reads one column or row of panes, which must be in order.
 	weightsOf := func(group []Rect) ([]float64, bool) {
 		w := make([]float64, 0, len(group))
 		end := -1 << 31
@@ -450,7 +411,6 @@ func MasterSplitsFrom(rects []Rect, region Rect, p MasterParams) (MasterSplits, 
 	out.Masters = masters
 	stack := rects[shape.masters:]
 	if shape.position == MasterPositionCenter && len(stack) >= 2 {
-		// Each side is a column of its own, dealt right, left, right, left.
 		var right, left []Rect
 		for i, r := range stack {
 			if i%2 == 0 {
@@ -464,8 +424,6 @@ func MasterSplitsFrom(rects []Rect, region Rect, p MasterParams) (MasterSplits, 
 		if !okR || !okL {
 			return MasterSplits{}, false
 		}
-		// Back in deal order. Each side's shares are its own, so a side of
-		// one pane, which has nothing to share, still holds its place.
 		out.Stack = make([]float64, len(stack))
 		for i := range stack {
 			switch {
@@ -485,8 +443,6 @@ func MasterSplitsFrom(rects []Rect, region Rect, p MasterParams) (MasterSplits, 
 	return out, true
 }
 
-// shares turns sizes into the fraction of their sum each one is, and a list
-// of fewer than two into none.
 func shares(sizes []float64) []float64 {
 	if len(sizes) < 2 {
 		return nil

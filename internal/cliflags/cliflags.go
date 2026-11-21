@@ -31,7 +31,6 @@ type Interface struct {
 	ShowKeys     bool
 	NoAnimations bool
 
-	// sets are the option flags given, in the order they were parsed.
 	sets []config.OptionSet
 }
 
@@ -59,10 +58,6 @@ func (i *Interface) Overrides() config.Overrides {
 	}
 }
 
-// optionFlagUsage is an option flag's help line: the option's description,
-// the values it takes, what it sets, and its default. It is built only when
-// help is shown (see optionFlag.HelpUsage): the default comes from the
-// registry's derived defaults, which a normal run of tuios never needs.
 func optionFlagUsage(opt config.Option) string {
 	values := ""
 	switch {
@@ -79,11 +74,8 @@ func optionFlagUsage(opt config.Option) string {
 	return usage + ")"
 }
 
-// optionFlags are the options with a flag, read once: tuios registers the
-// flags on several commands at every start.
 var optionFlags = sync.OnceValue(config.OptionFlags)
 
-// optionFlag is a flag that sets one config option for this run.
 type optionFlag struct {
 	opt   config.Option
 	sets  *[]config.OptionSet
@@ -94,16 +86,11 @@ func (f *optionFlag) String() string { return f.value }
 
 func (f *optionFlag) Type() string { return f.opt.Type }
 
-// HelpUsage is the flag's help line, built when help is shown. See
-// fang.FlagUsage.
 func (f *optionFlag) HelpUsage() string {
 	opt, _ := config.LookupOption(f.opt.Path)
 	return optionFlagUsage(opt)
 }
 
-// Set checks value as set-config does, on a scratch config, and records it.
-// A value the option does not take fails here, so the command line reports
-// it before anything runs.
 func (f *optionFlag) Set(value string) error {
 	if err := config.SetOptionValue(config.DefaultConfig(), f.opt.Path, value); err != nil {
 		return err

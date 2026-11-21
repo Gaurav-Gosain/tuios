@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// layeredFrom loads a config from text, with its files known, the way the
-// app and tuios keybinds doctor load it.
 func layeredFrom(t *testing.T, text string) *UserConfig {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.toml")
@@ -65,8 +63,8 @@ command = "make"
 	}
 	all := strings.Join(got, "\n")
 	for _, want := range []string{
-		"config.toml:5", "config.toml:6", // n, twice in one table
-		"config.toml:14", "config.toml:18", // the action's key and the command's key
+		"config.toml:5", "config.toml:6",
+		"config.toml:14", "config.toml:18",
 		"toggle_zoom in terminal mode (config.toml:9), and it is also the leader key (config.toml:2)",
 	} {
 		if !strings.Contains(all, want) {

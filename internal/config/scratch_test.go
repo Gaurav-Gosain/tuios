@@ -39,7 +39,6 @@ func TestScratchOldSessionKeyLoadsAndWarns(t *testing.T) {
 	if !found {
 		t.Fatalf("no warning about the old session key: %+v", res.Warnings)
 	}
-	// The key is gone from the options, so set-config refuses it.
 	if err := SetOptionValue(cfg, "scratch.session", "notes"); err == nil {
 		t.Fatal("set-config accepted scratch.session")
 	}
@@ -70,7 +69,7 @@ func TestScratchValidation(t *testing.T) {
 	cases := []struct {
 		name string
 		s    ScratchConfig
-		want string // "" means no warning
+		want string
 	}{
 		{"defaults", defaultScratchConfig(), ""},
 		{"cells", ScratchConfig{Width: "100", Height: "30"}, ""},

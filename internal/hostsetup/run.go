@@ -78,9 +78,6 @@ type Choices struct {
 	DryRun bool
 	// Keep adds the machine even when its link does not come up.
 	Keep bool
-	// bulk says the run is one machine of a tailnet run. Then InstallCopy
-	// means "the version of this machine", and a machine of another
-	// platform gets the release of that version.
 	bulk bool
 }
 
@@ -167,16 +164,12 @@ type Result struct {
 	Error   string   `json:"error,omitempty"`
 }
 
-// keep records e as the state of its step: the last event of a step wins,
-// in the order the steps first ran. Progress ticks are not kept.
 func (r *Result) keep(e Event) {
 	if e.State == StateRun && e.Total > 0 {
 		return
 	}
 	for i := range r.Steps {
 		if r.Steps[i].Step == e.Step {
-			// A plan or a run keeps its commands when the next event of
-			// the step has none.
 			if len(e.Commands) == 0 {
 				e.Commands = r.Steps[i].Commands
 			}
@@ -187,13 +180,10 @@ func (r *Result) keep(e Event) {
 	r.Steps = append(r.Steps, e)
 }
 
-// budget bounds the steps that talk to the far machine. An install and a
-// package manager get much longer.
 const (
 	stepBudget    = 90 * time.Second
 	installBudget = 20 * time.Minute
-	// probeTries bounds the tests again after a fix.
-	probeTries = 4
+	probeTries    = 4
 )
 
 // Run sets up the machine, asking a for each choice c does not make. It
@@ -220,7 +210,6 @@ func (s *Setup) Run(ctx context.Context, c Choices, a Asker) (res *Result, err e
 	}()
 	s.open()
 
-	// 2. Probe, and fix what ssh says until it passes.
 	for try := 0; ; try++ {
 		s.say(StepProbe, StateRun, "Read "+s.name+" over ssh.")
 		pctx, cancel := context.WithTimeout(ctx, stepBudget)
@@ -260,8 +249,6 @@ func (s *Setup) Run(ctx context.Context, c Choices, a Asker) (res *Result, err e
 			return res, f
 		}
 		s.say(StepFix, StateOK, "Test again.")
-		// The fix may have changed what ssh does (a new key, a known host),
-		// so the next test opens a connection of its own.
 		s.Close()
 		s.open()
 	}
@@ -269,7 +256,6 @@ func (s *Setup) Run(ctx context.Context, c Choices, a Asker) (res *Result, err e
 		return res, errors.New(s.name + " runs " + s.probe.Uname + ", which tuios does not run on")
 	}
 
-	// 3. tuios and its daemon.
 	state := s.daemonState(ctx)
 	p := s.probe
 	said := "tuios is not installed on " + s.name + "."
@@ -283,7 +269,6 @@ func (s *Setup) Run(ctx context.Context, c Choices, a Asker) (res *Result, err e
 	}
 	s.emit(Event{Step: StepProbe, State: StateOK, Text: p.System + ", " + p.Arch + ". " + probeFound(p) + said, Probe: p})
 
-	// 4. Install, when it is missing or too old.
 	installed := false
 	if s.probe.Tuios == "" || state.Status == federation.StatusIncompatible {
 		installed = true
@@ -295,17 +280,14 @@ func (s *Setup) Run(ctx context.Context, c Choices, a Asker) (res *Result, err e
 		}
 	}
 
-	// 5. Start the daemon, at boot when asked.
 	if err := s.start(ctx, c, a, state.Status == federation.StatusUp, installed); err != nil {
 		return res, err
 	}
 
-	// 6. Add it here and test the link.
 	if err := s.addAndTest(ctx, c, res); err != nil {
 		return res, err
 	}
 
-	// 7. Both ways.
 	both := c.BothWays
 	if both == nil {
 		q := Question{ID: "both_ways", Default: true,
@@ -329,8 +311,6 @@ func (s *Setup) Run(ctx context.Context, c Choices, a Asker) (res *Result, err e
 	return res, nil
 }
 
-// daemonState dials the machine once, the way the link does, and says
-// whether a daemon answers.
 func (s *Setup) daemonState(ctx context.Context) federation.HostReport {
 	if s.probe.Tuios == "" {
 		return federation.HostReport{Status: federation.StatusNoBinary}
@@ -346,7 +326,6 @@ func (s *Setup) daemonState(ctx context.Context) federation.HostReport {
 	return r
 }
 
-// testLink dials h with the front end's dialer, or one of this process.
 func (s *Setup) testLink(ctx context.Context, h federation.Host) (federation.HostReport, error) {
 	if s.opts.TestLink != nil {
 		return s.opts.TestLink(ctx, h)
@@ -354,10 +333,6 @@ func (s *Setup) testLink(ctx context.Context, h federation.Host) (federation.Hos
 	return DialOnce(ctx, h, s.opts.Version)
 }
 
-// probeFound is the sentence of what the probe found to install and start
-// tuios with: the package managers and the service manager, such as "apt,
-// systemd. ". A machine with none of them, or with no service manager, gets
-// no empty item.
 func probeFound(p *Probe) string {
 	tools := slices.Clone(p.Managers)
 	if p.Service != "" {
@@ -369,9 +344,6 @@ func probeFound(p *Probe) string {
 	return strings.Join(tools, ", ") + ". "
 }
 
-// planDefaultInstall is the install step of a dry run with no --install:
-// the plan of the first install choice that can run, and a note that names
-// it and the other choices by the flags that pick them.
 func (s *Setup) planDefaultInstall(opts []InstallOption, res *Result) error {
 	var pick InstallOption
 	var others []string
@@ -405,16 +377,12 @@ func InstallFlag(o InstallOption) string {
 	return "--install " + o.ID
 }
 
-// install picks a source, gets consent, and installs tuios.
 func (s *Setup) install(ctx context.Context, c Choices, a Asker, res *Result) error {
 	opts := s.installOptions()
 	res.Options = opts
 	var pick InstallOption
 	if c.Install == "" {
 		if c.DryRun {
-			// A dry run changes nothing, so it does not stop for the choice:
-			// it plans the first one, as the install list puts its cursor
-			// there, and names the flags of the others.
 			return s.planDefaultInstall(opts, res)
 		}
 		var err error
@@ -428,8 +396,6 @@ func (s *Setup) install(ctx context.Context, c Choices, a Asker, res *Result) er
 				break
 			}
 		}
-		// In a bulk run a copy means this version: a machine of another
-		// platform gets the release of it.
 		if pick.ID == InstallCopy && !pick.Available && c.bulk && len(opts) > 1 && opts[1].ID == InstallRelease && opts[1].Available {
 			pick = opts[1]
 			res.Note = s.name + " is " + s.probe.Platform() + ". tuios sent the v" + strings.TrimPrefix(s.opts.Version, "v") + " release, checked with its sha256."
@@ -462,8 +428,6 @@ func (s *Setup) install(ctx context.Context, c Choices, a Asker, res *Result) er
 	default:
 		_, err = s.runRemote(ictx, pick.remote)
 	}
-	// The probe again: the version shown is the one that answers, not the
-	// one that was asked for.
 	if err == nil {
 		s.probe, err = probe(ictx, s.runner)
 		res.Probe = s.probe
@@ -480,12 +444,8 @@ func (s *Setup) install(ctx context.Context, c Choices, a Asker, res *Result) er
 	return nil
 }
 
-// errStopped is a setup the person stopped at a question.
 var errStopped = errors.New("stopped. Nothing was added")
 
-// bringUp runs the sync path of hostsync on the machine: an install from
-// source ("copy" or "release", none for ""), then the service and the
-// daemon start that opts ask for. hosts sync runs the same path.
 func (s *Setup) bringUp(ctx context.Context, source string, opts hostsync.PlanOptions) error {
 	t := &hostsync.Target{Name: s.name, Host: s.host, Runner: s.runner, Res: hostsync.Result{Host: s.name, Addr: s.host.Addr}}
 	if err := hostsync.ProbeBinary(ctx, t); err != nil {
@@ -523,8 +483,6 @@ func (s *Setup) bringUp(ctx context.Context, source string, opts hostsync.PlanOp
 	if !t.Failed {
 		hostsync.Apply(t, src)
 	}
-	// A note of the sync path (a login shell that does not find tuios, a
-	// service manager that said something) is kept, and told once.
 	s.res.Notes = append(s.res.Notes, t.Res.Notes...)
 	for _, n := range t.Res.Notes {
 		s.asker.Event(Event{Step: "note", State: StateSkip, Text: n})
@@ -538,9 +496,6 @@ func (s *Setup) bringUp(ctx context.Context, source string, opts hostsync.PlanOp
 	return nil
 }
 
-// start starts the daemon there, under the service when the person wants
-// it at boot. An install the person picked is consent to start what it
-// installed. A daemon that is installed and stopped is asked about first.
 func (s *Setup) start(ctx context.Context, c Choices, a Asker, running, installed bool) error {
 	bin := cmp.Or(s.probe.Tuios, "~/.local/bin/tuios")
 	svc := Command{s.name, bin + " daemon install-service"}
@@ -589,9 +544,6 @@ func (s *Setup) start(ctx context.Context, c Choices, a Asker, running, installe
 	return nil
 }
 
-// addAndTest writes [hosts.NAME] here, asks the daemon to read it, and tests
-// the link. A link that does not come up is removed again, unless the person
-// keeps it.
 func (s *Setup) addAndTest(ctx context.Context, c Choices, res *Result) error {
 	path := s.opts.ConfigPath
 	add := Command{"here", "write [hosts." + s.name + "] addr = \"" + s.host.Addr + "\" to " + path}
@@ -634,7 +586,6 @@ func (s *Setup) addAndTest(ctx context.Context, c Choices, res *Result) error {
 	return err
 }
 
-// apply asks the daemon here to read the entry, when one runs.
 func (s *Setup) apply() {
 	if s.opts.Apply != nil {
 		_ = s.opts.Apply(s.name)
@@ -654,18 +605,15 @@ func ConfiguredHosts(path string) (map[string]federation.Host, error) {
 	return out, nil
 }
 
-// emit records e in the result and reports it to the front end.
 func (s *Setup) emit(e Event) {
 	s.res.keep(e)
 	s.asker.Event(e)
 }
 
-// say reports a step's state, with the commands it runs.
 func (s *Setup) say(step, state, text string, cmds ...Command) {
 	s.emit(Event{Step: step, State: state, Text: text, Commands: cmds})
 }
 
-// sayd reports a step's state with what the far side said.
 func (s *Setup) sayd(step, state, text, detail string) {
 	s.emit(Event{Step: step, State: state, Text: text, Detail: detail})
 }

@@ -177,18 +177,7 @@ const (
 	DefaultWindowTitleAlign    = "auto"
 )
 
-// optionSpecs is the registry, hand-written so each entry can say what the
-// setting is for in the words the struct already uses.
-//
-// Default is what DefaultConfig writes, which for several keys is the zero
-// value meaning "use the built-in default"; where the two differ the
-// description names the effective one. A nil pointer field reads back as
-// Default, since nil is exactly the unset state.
-//
-// [keybindings] and [hooks] are absent: both are maps of name to value rather
-// than fixed scalar paths, so a set-by-path verb is the wrong shape for them.
 var optionSpecs = []Option{
-	// [appearance]
 	{
 		Path: "appearance.border_style", Type: OptionString, Section: "appearance",
 		Description: "Border style drawn around every pane",
@@ -747,9 +736,6 @@ var optionSpecs = []Option{
 		Path: "appearance.dim_multifocus", Type: OptionBool, Section: "appearance",
 		Description: "Dim the panes in the multifocus set like other panes you are not in",
 	},
-	// The backgrounds. appearance.background is the default for every surface;
-	// each surface's own option overrides it, and empty follows it. See
-	// ResolveBackground.
 	{
 		Path: "appearance.background", Type: OptionString, Section: "appearance",
 		Description: "Background painted on every surface not set on its own (panes, desktop, window chrome, dock, rail): off (your terminal shows through), theme, or a colour (#rrggbb, 0-255, a slot name or a role name)",
@@ -780,9 +766,6 @@ var optionSpecs = []Option{
 		Description: "Go time layout the clock is drawn with, e.g. 15:04 or Mon 3:04PM",
 	},
 
-	// The flat sidebar keys a config written before [appearance.sidebar] used.
-	// Still read, and folded into the table on load, so they are listed for a
-	// caller inspecting an old file rather than for setting anything new.
 	{
 		Path: "appearance.sidebar_enabled", Type: OptionBool, Section: "appearance",
 		Description: "Show the session rail",
@@ -821,7 +804,6 @@ var optionSpecs = []Option{
 		Deprecated:  "folded into [appearance.sidebar] on load; set appearance.sidebar.show_counts",
 	},
 
-	// The dock and the readouts on it.
 	{
 		Path: "appearance.dockbar_position", Type: OptionString, Section: "dock",
 		Description: "Edge the dock sits on, or hidden",
@@ -909,8 +891,6 @@ var optionSpecs = []Option{
 		Flag:        "show-ram",
 	},
 
-	// [appearance.scrollbar]. The glyphs and the tint take values no closed set
-	// covers, so they carry no Accepted and validation reports a bad one.
 	{
 		Path: "appearance.scrollbar.style", Type: OptionString, Section: "scrollbar",
 		Description: "Hairline thumb over the content column, or a full-height track",
@@ -930,10 +910,6 @@ var optionSpecs = []Option{
 		Accepted:    ScrollbarTints, Color: true,
 	},
 
-	// [appearance.selection]. Every background is a colour literal; a
-	// foreground may also be empty, which keeps the text the colour the
-	// program wrote it in. No closed set covers a colour, so none carries
-	// Accepted and validation reports a bad one.
 	{
 		Path: "appearance.selection.bg", Type: OptionString, Section: "selection",
 		Description: "Background behind selected text",
@@ -1019,7 +995,6 @@ var optionSpecs = []Option{
 		Description: "A command that gets each copy mode yank on stdin. Its output goes to the clipboard. If this is empty, tuios copies the selection as it is.",
 	},
 
-	// [appearance.sidebar]
 	{
 		Path: "appearance.sidebar.enabled", Type: OptionBool, Section: "sidebar",
 		Description: "Show the session rail",
@@ -1216,7 +1191,6 @@ var optionSpecs = []Option{
 		Deprecated:  "no longer used: panes name their own workspace, and switching lives on the dock and alt+1..9",
 	},
 
-	// [startup]
 	{
 		Path: "startup.open_default_window", Type: OptionBool, Section: "startup",
 		Description: "Open one terminal automatically when a session starts empty",
@@ -1247,8 +1221,6 @@ var optionSpecs = []Option{
 		Description: "Pane, by name or id, that a bare \"tuios\" focuses in startup.session before it attaches. It needs startup.session. When no pane has that name, the focus does not change.",
 	},
 
-	// [agents]. Only enabled is a scalar; the rest of the table is lists and
-	// tables, which stay in the file.
 	{
 		Path: "agents.enabled", Type: OptionBool, Section: "agents",
 		Description: "Agents, the Inbox, mail and approvals. Turn off to keep only the multiplexer.",
@@ -1323,7 +1295,6 @@ var optionSpecs = []Option{
 		Min:         0, Max: ReplyRowsMax,
 	},
 
-	// [tasks]. The daemon reads it when it starts and when the file changes.
 	{
 		Path: "tasks.auto_stage", Type: OptionBool, Section: "agents",
 		Description: "Move task cards on their own when tuios sees their work move: a plan held and then approved, a fan check, a pull request. Off leaves every stage to you.",
@@ -1350,10 +1321,6 @@ var optionSpecs = []Option{
 		Min:         0, Max: AttachmentSessionMiBMax, Zero: ZeroIsDefault, Unit: "MiB",
 	},
 
-	// [daemon]. agent_binaries is absent: it is a list, and a value that arrives
-	// as one string has no unambiguous spelling for a list. respond_from_shell
-	// is absent too: it grants acting as the person, and set-option is a verb
-	// any pane can call, so it is set in the file and nowhere else.
 	{
 		Path: "daemon.log_level", Type: OptionString, Section: "daemon",
 		Description: "How much the daemon logs",
@@ -1476,7 +1443,6 @@ var optionSpecs = []Option{
 		Min:         0, Max: 1048576,
 	},
 
-	// [notifications]
 	{
 		Path: "notifications.rate_limit_ms", Type: OptionInt, Section: "notifications",
 		Description: "Milliseconds in which a second desktop notification from a pane is dropped. 0 keeps every one.",
@@ -1539,8 +1505,6 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 
-	// [notifications.agent]. The sounds table is absent: its two keys are paths
-	// to files, which no accepted set or range can check.
 	{
 		Path: "notifications.agent.enabled", Type: OptionBool, Section: "notifications",
 		Description: "Turn every agent alert on or off",
@@ -1591,7 +1555,6 @@ var optionSpecs = []Option{
 		Description: "Hours when nothing alerts. Write it as HH:MM-HH:MM.",
 	},
 
-	// [notifications.agent.states]
 	{
 		Path: "notifications.agent.states.needs_input", Type: OptionBool, Section: "notifications",
 		Description: "Alert when an agent waits for you",
@@ -1618,8 +1581,6 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 
-	// [notifications.mail]. Default is empty for the four keys that follow
-	// [notifications.agent] when unset: the value in force is that table's.
 	{
 		Path: "notifications.mail.enabled", Type: OptionBool, Section: "notifications",
 		Description: "Turn mail alerts on or off. Unset follows notifications.agent.enabled.",
@@ -1691,7 +1652,6 @@ var optionSpecs = []Option{
 		Min:         ChordTimeoutMSMin, Max: ChordTimeoutMSMax,
 		Zero: ZeroIsDefault,
 	},
-	// [mouse]
 	{
 		Path: "mouse.double_click_ms", Type: OptionInt, Section: "mouse",
 		Description: "Milliseconds after a click in which a second one counts as a double click: in a pane, on the rail divider, in the Agents list and in the draft editor",
@@ -1704,7 +1664,6 @@ var optionSpecs = []Option{
 		Min:         MouseDragThresholdMin, Max: MouseDragThresholdMax,
 		Zero: ZeroIsDefault,
 	},
-	// [tape]
 	{
 		Path: "tape.banner_ms", Type: OptionInt, Section: "tape",
 		Description: "Milliseconds the \"project tape found\" banner stays on screen",
@@ -1732,11 +1691,6 @@ var optionSpecs = []Option{
 		Default:     "true",
 	},
 
-	// [dock]
-	// The three component lists and the [dock.custom] tables are absent for the
-	// reason [keybindings] and [hooks] are: they are ordered lists and free-form
-	// tables, which a set-by-path verb cannot spell. The clock's format is a
-	// plain scalar, so it belongs here.
 	{
 		Path: "dock.meter_interval_ms", Type: OptionInt, Section: "dock",
 		Description: "Milliseconds between measurements of the dock's CPU and RAM readouts",
@@ -1749,16 +1703,12 @@ var optionSpecs = []Option{
 			"); a layout without seconds refreshes once a minute",
 	},
 
-	// [keybindings]. The rest of the table is maps of action to keys and is
-	// set in the file only. window_mode is one switch, so the settings page
-	// can turn it off.
 	{
 		Path: "keybindings.window_mode", Type: OptionBool, Section: "keybindings",
 		Description: "Off: you always type into a pane, and the leader runs every action",
 		Default:     "true",
 	},
 
-	// [debug]
 	{
 		Path: "debug.show_key_count", Type: OptionInt, Section: "debug",
 		Description: "How many recent keypresses the showkeys overlay keeps, for a screencast",
@@ -1770,13 +1720,6 @@ var optionSpecs = []Option{
 		Description: "Show the on-screen keycast of recent keypresses",
 	},
 
-	// [screenshot]
-	// The two path options (directory, font_file) are registered as plain
-	// strings: no accepted set can check a path, but a registry entry keeps
-	// them settable through set-option, which agents need. They are excluded
-	// from the settings panel instead (see settingsUIExcluded), for the
-	// reason notifications.agent.command is: an SSH client authenticates
-	// nobody and should not redirect server-side writes.
 	{
 		Path: "screenshot.format", Type: OptionString, Section: "screenshot",
 		Description: "Default output format for captures",
@@ -1833,10 +1776,6 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "screenshot.font_family", Type: OptionString, Section: "screenshot",
-		// A capture on kitty is already drawn in the terminal's own font,
-		// because kitty answers when asked which font that is. This is the
-		// answer for every other terminal, and it names a font rather than a
-		// file so it also names the SVG and HTML output.
 		Description: "Font to draw the capture in when your terminal does not say which it uses",
 	},
 	{
@@ -1854,9 +1793,6 @@ var optionSpecs = []Option{
 		Description: "Draw the cursor cell in the capture",
 	},
 
-	// [screensaver]. Off by default: a screen that starts animating on its own
-	// is a surprise, and the setting to stop it is the one nobody can find
-	// while it is running.
 	{
 		Path: "screensaver.enabled", Type: OptionBool, Section: "screensaver",
 		Description: "Animate the screen after a spell with no input",
@@ -1878,9 +1814,6 @@ var optionSpecs = []Option{
 		Default:     "false",
 	},
 
-	// [spotlight]. Off by default, and client-local while it runs: the beam is
-	// what this client's screen looks like, not what the session holds, so a
-	// peer attached to the same panes sees nothing.
 	{
 		Path: "spotlight.enabled", Type: OptionBool, Section: "spotlight",
 		Description: "Light one part of the screen and dim the rest",
@@ -1913,8 +1846,6 @@ var optionSpecs = []Option{
 		Description: "Move the mouse left and right fast to turn the beam on and off. A shake does not move the beam. The follow setting decides where it goes",
 	},
 
-	// [pip]. Read each time the picture-in-picture view is drawn, and
-	// client-local like the spotlight.
 	{
 		Path: "pip.width", Type: OptionString, Section: "pip",
 		Description: fmt.Sprintf("Width of the picture-in-picture view, border included: cells (%d to %d) or percent of the pane area (30%%)", PiPMinWidth, PiPMaxWidth),
@@ -1933,7 +1864,6 @@ var optionSpecs = []Option{
 		Accepted:    PiPCorners,
 	},
 
-	// [mermaid]. Read each time tuios mermaid runs.
 	{
 		Path: "mermaid.theme", Type: OptionString, Section: "mermaid",
 		Description: "Colours of tuios mermaid: tuios for the colours of your theme, or a named theme such as flexoki, nord or rose-pine",
@@ -1944,8 +1874,6 @@ var optionSpecs = []Option{
 		Accepted:    []string{"theme", "none"},
 	},
 
-	// [hints]. Read each time hints mode opens. hints.patterns is a list and
-	// is set in the file only, like [keybindings].
 	{
 		Path: "hints.builtins", Type: OptionString, Section: "hints",
 		Description: "Built-in patterns hints mode looks for: all, none, or names such as url,path,sha",
@@ -1970,13 +1898,11 @@ var optionSpecs = []Option{
 		Description: "The hints key labels every pane on the workspace, not only the focused pane",
 	},
 
-	// [path_picker]. Read each time the picker opens.
 	{
 		Path: "path_picker.show_hidden", Type: OptionBool, Section: "panes",
 		Description: "The path picker lists hidden files. Alt+h in the picker shows or hides them",
 	},
 
-	// [panes]. Read each time display_panes opens.
 	{
 		Path: "panes.label_keys", Type: OptionString, Section: "panes",
 		Description: "Keys the pane labels are made of, first pane first. Letters a to z and digits",
@@ -2000,8 +1926,6 @@ var optionSpecs = []Option{
 		Description: "Bridge drags to and from the desktop through a terminal that speaks the protocol (kitty)",
 	},
 
-	// [scratch]. Read each time toggle_scratch creates or shows the scratch
-	// terminal. A show resizes the popup to the size in force.
 	{
 		Path: "scratch.width", Type: OptionString, Section: "scratch",
 		Description: "Width of the scratch terminal, in cells (60) or percent (80%)",
@@ -2012,7 +1936,6 @@ var optionSpecs = []Option{
 		Description: "Height of the scratch terminal, in cells (20) or percent (80%)",
 		BoxSize:     true,
 	},
-	// [launcher]. Read each time the launcher starts an entry.
 	{
 		Path: "launcher.gui_command", Type: OptionString, Section: "launcher",
 		Description: "Command that starts a graphical desktop entry instead of a pane. The entry's argv is added to it. Use a command that takes an argv, such as \"tuios-wayland launch --\" or \"niri msg action spawn --\". Do not use one that joins its arguments into a shell line, such as \"swaymsg exec --\" or \"hyprctl dispatch exec\".",
@@ -2021,14 +1944,11 @@ var optionSpecs = []Option{
 		Path: "launcher.keep_open", Type: OptionBool, Section: "launcher",
 		Description: "Keep the pane of a program the launcher started after the program exits. A line under the output shows the exit status. Needs a daemon session.",
 	},
-	// [workspaces]. The daemon reads it when it starts and when the file
-	// changes.
 	{
 		Path: "workspaces.return_when_empty", Type: OptionBool, Section: "workspaces",
 		Description: "When the last pane on the workspace on screen closes, show the workspace you came from. Off shows the splash screen",
 		Default:     "true",
 	},
-	// [shell]. The daemon reads it each time it starts a pane.
 	{
 		Path: "shell.integration", Type: OptionString, Section: "appearance",
 		Description: "Turn on prompt marks in the bash and zsh shells that new panes start. Your files do not change. off starts each shell as it is",
@@ -2039,8 +1959,6 @@ var optionSpecs = []Option{
 		Path: "shell.login", Type: OptionBool, Section: "appearance",
 		Description: "Start the shell of each new pane as a login shell, so it reads .zprofile, .bash_profile or .profile, as a terminal on macOS does",
 	},
-	// [paste_buffers]. The daemon reads it when it starts and when the file
-	// changes, and so does a client with no daemon.
 	{
 		Path: "paste_buffers.limit", Type: OptionInt, Section: "selection",
 		Description: "How many yanks to keep to paste again. When it is full, the oldest goes. 0 keeps none.",
@@ -2051,16 +1969,11 @@ var optionSpecs = []Option{
 		Description: "Most KiB all paste buffers hold together, at most 262144 (256 MiB). When it is full, the oldest go. 0 uses 16384.",
 		Min:         0, Max: 262144,
 	},
-	// [worktree]. The daemon reads it when it starts and when the file
-	// changes.
 	{
 		Path: "worktree.path", Type: OptionString, Section: "worktree",
 		Description: "Where new worktrees go, as a template of {{ repo_path }}, {{ repo }} and {{ branch }}, with | slug to make one folder name. A relative path starts at repo_path. Empty puts them under $XDG_DATA_HOME/tuios/worktrees",
 		Check:       worktree.ValidatePathTemplate,
 	},
-	// The setup runs a command, so a file change applies only when it
-	// clears the setup or leaves it as it is. A new command waits for tuios
-	// config apply from outside tuios, or a daemon restart.
 	{
 		Path: "worktree.setup", Type: OptionString, Section: "worktree",
 		Description: "A shell command to run in every new worktree before the agent starts, such as pnpm i. It runs with sh -c in the worktree, in a window named setup, with no grants. Empty runs nothing",
@@ -2069,7 +1982,6 @@ var optionSpecs = []Option{
 		Path: "worktree.setup_async", Type: OptionBool, Section: "worktree",
 		Description: "Start the agent at once while the setup runs. A failed setup then keeps the worktree and the branch",
 	},
-	// [review]. Read each time a review opens.
 	{
 		Path: "review.focus", Type: OptionString, Section: "review",
 		Description: "Which side of the review overlay has the keys when a review opens: the diff or the file list",
@@ -2082,8 +1994,6 @@ var optionSpecs = []Option{
 		Accepted:    ReviewScopes,
 		Fallback:    ReviewScopeBase, Normalize: trimLower,
 	},
-	// [files]: o on a file of another machine. Read each time o is pressed;
-	// the daemon reads the keep at its start.
 	{
 		Path: "files.open_copy_ask_mb", Type: OptionInt, Section: "files",
 		Description: "Above this size in MiB, o on a file of another machine shows the size and asks again before it copies the file here. 0 uses 200",
@@ -2109,18 +2019,12 @@ var optionSpecs = []Option{
 		Description: "Days a copy of a far file stays when nobody opens it again. 0 uses 7, and -1 keeps every copy",
 		Min:         -1, Max: 3650,
 	},
-	// Read by the client on each switch, so a change applies at once.
 	{
 		Path: "workspaces.new_window_when_empty", Type: OptionBool, Section: "workspaces",
 		Description: "When you switch to a workspace with no panes, open a new pane there. It starts in the folder of the pane you came from",
 	},
 }
 
-// optionIndex indexes the registry for lookup, and fills each option's
-// derived Default first (see deriveOptionDefaults). It is built on first use,
-// not at init: deriving reads DefaultConfig and walks every path by
-// reflection, about 1 ms and 680 allocations, and most runs of tuios are short
-// commands that never read an option.
 var optionIndex = sync.OnceValue(func() map[string]Option {
 	deriveOptionDefaults(optionSpecs, DefaultConfig())
 	byPath := make(map[string]Option, len(optionSpecs))
@@ -2130,11 +2034,6 @@ var optionIndex = sync.OnceValue(func() map[string]Option {
 	return byPath
 })
 
-// deriveOptionDefaults fills each option's Default from the field DefaultConfig
-// sets, so the default is written once, in DefaultConfig. A field DefaultConfig
-// leaves unset (a nil pointer, an empty auto-or-int field) keeps the Default
-// the entry spells, because that entry is then the only place the default is
-// written.
 func deriveOptionDefaults(specs []Option, defaults *UserConfig) {
 	for i := range specs {
 		if specs[i].Unit == "" {
@@ -2150,14 +2049,12 @@ func deriveOptionDefaults(specs []Option, defaults *UserConfig) {
 	}
 }
 
-// pathUnits are the path endings that name an int option's unit.
 var pathUnits = []struct{ suffix, unit string }{
 	{"_ms", "ms"}, {"_seconds", "s"}, {"_minutes", "min"}, {"_hours", "h"},
 	{"_days", "days"}, {"_mb", "MiB"}, {"_kb", "KiB"}, {"_lines", "lines"},
 	{"_cells", "cells"},
 }
 
-// unitFromPath is the unit an int option's path or Percent flag names, or "".
 func unitFromPath(o Option) string {
 	if o.Type != OptionInt {
 		return ""
@@ -2189,7 +2086,6 @@ func (o Option) WithUnit(text string) string {
 	case unit == "%":
 		return text + "%"
 	case (n == 1 || n == -1) && len(unit) > 2 && strings.HasSuffix(unit, "s"):
-		// A word unit reads in the singular for one: "1 cell", "1 day".
 		unit = strings.TrimSuffix(unit, "s")
 	}
 	return text + " " + unit
@@ -2237,34 +2133,18 @@ func OptionPaths() []string {
 	return paths
 }
 
-// checkValue rejects a value the option cannot hold, before any of it reaches
-// the config struct.
-//
-// A colour option is why this is more than the Accepted membership test. The
-// two border colours take any literal and so carry no Accepted set: unchecked,
-// set-option appearance.border_focused_color notacolour would be accepted,
-// written, and turn up later as a border drawn in nothing. The tint has a keyword set and a literal form at once, which a closed
-// set on its own cannot say.
 func (o Option) checkValue(value string) error {
 	if o.Color {
-		// Empty is how a colour option says unset: the border falls back to the
-		// theme's, the tint to its own default. Clearing has to stay reachable.
 		if value == "" || slices.Contains(o.Accepted, value) || theme.IsColor(value) {
 			return nil
 		}
 		return errfmt.Errorf("%s: %s. Use an empty value to unset it", o.Path, ColourProblem(value, o.Accepted...))
 	}
 	if o.Theme && !theme.Exists(value) {
-		// Exists re-reads the custom themes directory before it says no, so a
-		// theme file written a moment ago resolves here rather than on the next
-		// restart.
 		return errfmt.Errorf("%s: no theme named %q; call list-themes for the ones there are, "+
 			"or write %s.json in the themes directory first", o.Path, value, value)
 	}
 	if o.GlyphSet && !theme.GlyphSetExists(value) {
-		// GlyphSetExists re-reads the glyphs directory before it says no, for
-		// the reason Exists does: a set written a moment ago has to resolve on
-		// this call rather than on the next restart.
 		return errfmt.Errorf("%s: no glyph set named %q; call list-glyphs for the ones there are, "+
 			"or write %s.json in the glyphs directory first", o.Path, value, value)
 	}
@@ -2305,14 +2185,11 @@ func SetOptionValue(cfg *UserConfig, path, value string) error {
 	if !ok {
 		return errfmt.Errorf("unknown config option %q", path)
 	}
-	// An option that follows another clears on the empty string, back to
-	// following it.
 	if opt.Follows != "" && strings.TrimSpace(value) == "" && field.Kind() == reflect.Pointer {
 		field.SetZero()
 		return nil
 	}
 
-	// An option whose default is a word clears on that word, back to unset.
 	if opt.DefaultClears && strings.TrimSpace(value) == opt.Default && field.Kind() == reflect.Pointer {
 		field.SetZero()
 		return nil
@@ -2347,7 +2224,6 @@ func SetOptionValue(cfg *UserConfig, path, value string) error {
 			return errfmt.Errorf("%s: %d is outside %d..%d", path, parsed, opt.Min, opt.Max)
 		}
 		if opt.Auto && optionKind(field) == reflect.String {
-			// 0 is stored as the empty value, the one spelling a reload gives.
 			stored := ""
 			if parsed != 0 {
 				stored = strconv.Itoa(parsed)
@@ -2393,9 +2269,6 @@ func GetOptionValue(cfg *UserConfig, path string) (string, bool) {
 	return text, true
 }
 
-// optionFieldText renders field as the option's string form. set is false when
-// the field holds no value of its own: a nil pointer, or an auto-or-int field
-// left empty. ok is false for a field kind the registry cannot carry.
 func optionFieldText(field reflect.Value, opt Option) (text string, set, ok bool) {
 	if field.Kind() == reflect.Pointer {
 		if field.IsNil() {
@@ -2410,8 +2283,6 @@ func optionFieldText(field reflect.Value, opt Option) (text string, set, ok bool
 		return strconv.FormatInt(field.Int(), 10), true, true
 	case reflect.String:
 		if opt.Auto {
-			// An auto-or-int option reads back as the int or "auto", never
-			// as the empty string an unset field holds.
 			v := strings.TrimSpace(field.String())
 			if v == "" {
 				return "", false, true
@@ -2427,9 +2298,6 @@ func optionFieldText(field reflect.Value, opt Option) (text string, set, ok bool
 	}
 }
 
-// resolveOptionField walks cfg one path segment at a time, matching each
-// segment against a field's toml tag, and returns the settable field the last
-// segment names.
 func resolveOptionField(cfg *UserConfig, path string) (reflect.Value, bool) {
 	if cfg == nil || path == "" {
 		return reflect.Value{}, false
@@ -2448,7 +2316,6 @@ func resolveOptionField(cfg *UserConfig, path string) (reflect.Value, bool) {
 	return value, true
 }
 
-// fieldByTOMLName finds the field of a struct whose toml tag is name.
 func fieldByTOMLName(value reflect.Value, name string) (reflect.Value, bool) {
 	i, ok := tomlFieldIndex(value.Type())[name]
 	if !ok {
@@ -2457,12 +2324,8 @@ func fieldByTOMLName(value reflect.Value, name string) (reflect.Value, bool) {
 	return value.Field(i), true
 }
 
-// tomlFieldIndexes caches, per struct type, each toml key's field index.
-// Reading the tags of a section on every path segment cost about 3 us a
-// lookup, and 1 ms for the whole registry when its defaults are derived.
-var tomlFieldIndexes sync.Map // reflect.Type -> map[string]int
+var tomlFieldIndexes sync.Map
 
-// tomlFieldIndex is the toml key to field index map of structType.
 func tomlFieldIndex(structType reflect.Type) map[string]int {
 	if m, ok := tomlFieldIndexes.Load(structType); ok {
 		return m.(map[string]int)
@@ -2479,14 +2342,11 @@ func tomlFieldIndex(structType reflect.Type) map[string]int {
 	return m
 }
 
-// tomlFieldName is a field's toml key with any option such as omitempty
-// stripped. A field with no tag returns empty, which matches no path segment.
 func tomlFieldName(field reflect.StructField) string {
 	name, _, _ := strings.Cut(field.Tag.Get("toml"), ",")
 	return name
 }
 
-// optionKind is the kind a field holds, seeing through a pointer.
 func optionKind(field reflect.Value) reflect.Kind {
 	fieldType := field.Type()
 	if fieldType.Kind() == reflect.Pointer {
@@ -2495,11 +2355,6 @@ func optionKind(field reflect.Value) reflect.Kind {
 	return fieldType.Kind()
 }
 
-// optionTarget is the value to write into. A pointer field gets a new value
-// of its own: the pointer is what tells an explicitly set value from an unset
-// one across a reload, and writing through the old pointer would also change
-// every config that shares it, such as a copy of this one (see
-// Overrides.Config).
 func optionTarget(field reflect.Value) reflect.Value {
 	if field.Kind() != reflect.Pointer {
 		return field
@@ -2509,9 +2364,6 @@ func optionTarget(field reflect.Value) reflect.Value {
 	return fresh.Elem()
 }
 
-// optionBoolWords are the spellings of true and false a caller may send. A
-// control surface is typed by hand as often as by a program, so "on" and
-// "enabled" have to mean what they look like.
 var optionBoolWords = map[string]bool{
 	"true": true, "on": true, "1": true, "yes": true, "enabled": true,
 	"false": false, "off": false, "0": false, "no": false, "disabled": false,
@@ -2536,6 +2388,4 @@ const (
 	ZeroIsDefault
 )
 
-// trimLower is the Normalize of an option whose reader trims spaces and
-// ignores case.
 func trimLower(s string) string { return strings.ToLower(strings.TrimSpace(s)) }

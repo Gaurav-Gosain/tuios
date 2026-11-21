@@ -6,18 +6,6 @@ import (
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
-// An agent ricing a session cannot see the screen. It can set a palette and
-// read the option back, and without Describe that is the whole of the
-// feedback: the value it has just sent, echoed. Whether the green it chose is
-// legible on the background it chose is not answerable from outside the
-// process, and a theme whose colours sit on top of each other looks exactly
-// like a theme that failed to apply.
-//
-// Describe answers both halves. The colours are what the theme actually holds,
-// so a palette that did not apply reads back as the old one; the ratios are
-// measured against the theme's own background, so an unreadable choice is
-// reported as unreadable before anyone has to look at it.
-
 // Swatch is one named colour of a theme, measured against the ground it will be
 // drawn on.
 type Swatch struct {
@@ -49,8 +37,6 @@ type Palette struct {
 	Illegible []string `json:"illegible,omitempty"`
 }
 
-// ansiNames are the sixteen in index order, under the names every terminal
-// theme format already uses for them.
 var ansiNames = [16]string{
 	"black", "red", "green", "yellow",
 	"blue", "purple", "cyan", "white",
@@ -83,19 +69,12 @@ func Describe(id string) (Palette, bool) {
 		Bg:          ColorToString(bg),
 		Fg:          ColorToString(t.Fg),
 	}
-	// A theme may leave the cursor unset. The field stays empty then, so it
-	// does not claim a colour the theme never named.
 	if t.Cursor != nil {
 		p.Cursor = ColorToString(t.Cursor)
 	}
 
-	// The foreground is prose and the cursor is a block, so they are held to
-	// different floors. Both are listed alongside the sixteen rather than
-	// measured separately, because a caller fixing a palette wants one list.
 	add := func(name string, c color.Color, floor float64) {
 		if c == nil {
-			// The theme does not name this colour, so there is nothing to
-			// measure.
 			return
 		}
 		s := Swatch{Name: name, Hex: ColorToString(c), Floor: floor}
@@ -129,8 +108,6 @@ func Colors(id string) (palette [16]color.Color, fg, bg, cursor color.Color, ok 
 		return palette, nil, nil, nil, false
 	}
 	if id == OmarchyID {
-		// The daemon follows nothing, so it reads the applied theme when
-		// asked. An unchanged one costs a file read and registers nothing.
 		_, _ = refreshOmarchy()
 	}
 	t, found := tint.GetTint(id)
@@ -140,7 +117,6 @@ func Colors(id string) (palette [16]color.Color, fg, bg, cursor color.Color, ok 
 	return paletteOf(t), AsColor(t.Fg), AsColor(t.Bg), AsColor(t.Cursor), true
 }
 
-// paletteOf is GetANSIPalette for a theme that is not the active one.
 func paletteOf(t *tint.Tint) [16]color.Color {
 	var pal [16]color.Color
 	for i, c := range ANSIOrder(t) {
@@ -149,9 +125,6 @@ func paletteOf(t *tint.Tint) [16]color.Color {
 	return pal
 }
 
-// roundRatio trims a contrast ratio to two decimals. The third digit is noise
-// against a floor quoted to one, and a stable number is one a caller can diff
-// between two calls.
 func roundRatio(r float64) float64 {
 	return float64(int(r*100+0.5)) / 100
 }

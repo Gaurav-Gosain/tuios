@@ -2,21 +2,12 @@
 
 package lexers
 
-// The lexers chroma defines in Go rather than XML, which its lexers package
-// holds and tuios no longer imports. The rules are copied from chroma
-// v2.27.0 (lexers/go.go and lexers/markdown.go), MIT licensed; the licence
-// is in COPYING. They differ from chroma's only in taking the
-// registry they are registered in, where chroma's use its global one.
-
 import (
 	"strings"
 
 	. "github.com/alecthomas/chroma/v2" //nolint:revive,staticcheck // the rules read as chroma's do, so they stay diffable against it
 )
 
-// registerCodedLexers adds Go, Go text templates and Markdown to reg, reading
-// the template definition from src. The XML lexers must be registered first:
-// Go reads its raw strings as templates.
 func registerCodedLexers(reg *LexerRegistry, src *deflateFS) {
 	goTextTemplate := reg.Register(MustNewXMLLexer(
 		src,
@@ -57,8 +48,6 @@ func registerCodedLexers(reg *LexerRegistry, src *deflateFS) {
 	)})
 }
 
-// rule is a rule that leaves the state as it is, which is all of the rules
-// below. chroma writes these as unkeyed literals, which go vet flags.
 func rule(pattern string, emit Emitter) Rule {
 	return Rule{Pattern: pattern, Type: emit}
 }
@@ -98,8 +87,6 @@ func goRules(goTextTemplate Lexer) Rules {
 	}
 }
 
-// markdownLexer highlights a leading YAML front matter block, then the rest
-// as Markdown.
 type markdownLexer struct {
 	Lexer
 	reg *LexerRegistry
@@ -125,7 +112,6 @@ func (m *markdownLexer) Tokenise(options *TokeniseOptions, text string) (Iterato
 	return Concaterator(yamlTokens, markdownTokens), nil
 }
 
-// splitFrontmatter cuts a leading YAML front matter block off text.
 func splitFrontmatter(text string) (frontmatter string, rest string, ok bool) {
 	if !strings.HasPrefix(text, "---\n") && !strings.HasPrefix(text, "---\r\n") {
 		return "", text, false

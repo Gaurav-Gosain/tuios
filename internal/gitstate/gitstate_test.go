@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// withTracking swaps in a counting wrapper around the one subprocess this
-// package runs, and answers how many times it ran.
 func withTracking(t *testing.T) *atomic.Int64 {
 	t.Helper()
 	Forget()
@@ -25,7 +23,6 @@ func withTracking(t *testing.T) *atomic.Int64 {
 	return &n
 }
 
-// tracked repo, with an origin it is set to follow.
 func repoWithUpstream(t *testing.T) string {
 	t.Helper()
 	repo := testutil.GitRepo(t)
@@ -54,8 +51,6 @@ func TestALinkedWorktreeReportsItsOwnBranch(t *testing.T) {
 	if st.Branch != "feature" {
 		t.Errorf("the worktree reports branch %q, want feature", st.Branch)
 	}
-	// It is the same repository, so it carries the same name. That is what lets
-	// the rail group a repository's worktrees under one heading.
 	if st.Repo != filepath.Base(repo) {
 		t.Errorf("the worktree reports repo %q, want %q", st.Repo, filepath.Base(repo))
 	}
@@ -174,8 +169,6 @@ func TestTheCountsAreNotRecomputedWhileNothingMoves(t *testing.T) {
 		t.Errorf("counting ran %d times across three reads with nothing moving, want 1", got)
 	}
 
-	// And it does run again once HEAD moves, or the cache would be a bug that
-	// happens to make the test above pass.
 	testutil.Git(t, repo, "commit", "--allow-empty", "-m", "more")
 	if _, ok := Read(repo); !ok {
 		t.Fatal("not a repository")

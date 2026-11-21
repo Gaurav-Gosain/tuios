@@ -65,30 +65,24 @@ type FrameStat struct {
 // Live shows one diagram and moves it smoothly to each new version of it.
 // Between motions it holds no timer and does no work.
 type Live struct {
-	opt   LiveOptions
-	id    uint32
-	mu    sync.Mutex
-	area  Area
-	scene *raster.Scene
-	diag  *sketch.Diagram
-	// tickets numbers the calls of Show, and shown is the newest one that
-	// reached the screen.
-	tickets atomic.Uint64
-	shown   uint64
-	// lastSVG is the drawing on screen, so an unchanged one is not sent again.
-	lastSVG string
-	mo      *raster.Motion
-	start   time.Time
-	// running says the frame loop runs.
-	running bool
-	density float64
-	err     error
-	// out serialises writes to the terminal, between the encoder and the caller.
-	out     sync.Mutex
-	encode  chan frame
-	free    chan *image.RGBA
-	stopped chan struct{}
-	// done is closed by Close. Nothing waits on the encoder after that.
+	opt       LiveOptions
+	id        uint32
+	mu        sync.Mutex
+	area      Area
+	scene     *raster.Scene
+	diag      *sketch.Diagram
+	tickets   atomic.Uint64
+	shown     uint64
+	lastSVG   string
+	mo        *raster.Motion
+	start     time.Time
+	running   bool
+	density   float64
+	err       error
+	out       sync.Mutex
+	encode    chan frame
+	free      chan *image.RGBA
+	stopped   chan struct{}
 	done      chan struct{}
 	closeOnce sync.Once
 }
@@ -126,10 +120,6 @@ func (l *Live) Err() error {
 // Show draws src. A source that does not parse keeps the last diagram on
 // screen and is reported by Err.
 func (l *Live) Show(src string) {
-	// Two calls can overlap: a slow parse and a newer save, or a demo that
-	// restarts. Each takes a ticket first, and one that finishes after a newer
-	// one has been shown is dropped, so the screen never ends on an older
-	// source.
 	ticket := l.tickets.Add(1)
 	d, err := sketch.Parse(src, sketch.ParseOptions{})
 	var out sketch.SVG
@@ -152,7 +142,6 @@ func (l *Live) Show(src string) {
 		return
 	}
 	if out.Data == l.lastSVG {
-		// The same drawing: nothing to move or send.
 		l.mu.Unlock()
 		return
 	}
@@ -182,7 +171,6 @@ func (l *Live) Show(src string) {
 	l.mu.Unlock()
 	if start {
 		if still {
-			// Nothing moves: one frame, and no loop.
 			go func() {
 				defer l.guard()
 				l.sendFinal()
@@ -256,7 +244,6 @@ func (l *Live) WriteWithin(p []byte, wait time.Duration) bool {
 	return err == nil
 }
 
-// guard hands a panic in one of the view's goroutines to OnPanic.
 func (l *Live) guard() {
 	if v := recover(); v != nil {
 		if l.opt.OnPanic == nil {
@@ -266,8 +253,6 @@ func (l *Live) guard() {
 	}
 }
 
-// loop draws frames at up to 60 a second while a motion runs, then the last
-// frame at full density, and ends.
 func (l *Live) loop() {
 	defer l.guard()
 	tick := time.NewTicker(time.Second / 60)
@@ -280,7 +265,6 @@ func (l *Live) loop() {
 		if p >= 1 {
 			l.sendFinal()
 			l.mu.Lock()
-			// A Show that came while the last frame was drawn starts a new motion.
 			again := float64(time.Since(l.start))/float64(l.opt.Motion) < 1
 			if !again {
 				l.running = false
@@ -295,7 +279,6 @@ func (l *Live) loop() {
 		case img := <-l.free:
 			l.drawFrame(mo, img, area, p, density, false)
 		default:
-			// The encoder still holds both buffers: this frame is dropped.
 		}
 		select {
 		case <-tick.C:
@@ -326,7 +309,6 @@ func (l *Live) sendFinal() {
 // for gigabytes a frame. A larger canvas is scaled down to fit, aspect kept.
 const MaxFramePixels = 16_000_000
 
-// canvas is the pixel size of the picture for an area at a density.
 func canvas(a Area, density float64) (int, int) {
 	w := float64(a.Cols) * float64(a.CellW) * density
 	h := float64(a.Rows) * float64(a.CellH) * density
@@ -334,8 +316,6 @@ func canvas(a Area, density float64) (int, int) {
 		k := math.Sqrt(MaxFramePixels / (w * h))
 		w, h = w*k, h*k
 	}
-	// A side under a pixel rounds up to one, so the other side is held to
-	// the bound on its own too.
 	w, h = math.Max(1, w), math.Max(1, h)
 	w = math.Min(w, MaxFramePixels/h)
 	h = math.Min(h, MaxFramePixels/w)
@@ -356,9 +336,6 @@ func (l *Live) drawFrame(mo *raster.Motion, img *image.RGBA, area Area, p, densi
 	}
 }
 
-// encoder turns frames into kitty graphics and writes them. Each frame
-// replaces the last: the same image id and placement id, so the terminal
-// swaps the picture in place.
 func (l *Live) encoder() {
 	defer close(l.stopped)
 	defer l.guard()
@@ -401,7 +378,6 @@ func (l *Live) encoder() {
 		f.stat.Bytes = len(seq)
 		l.out.Lock()
 		var w bytes.Buffer
-		// Synchronized output keeps the terminal from showing half a frame.
 		w.WriteString("\x1b[?2026h\x1b7")
 		fmt.Fprintf(&w, "\x1b[%d;%dH", f.area.Top, f.area.Left)
 		w.Write(seq)
@@ -420,9 +396,6 @@ func (l *Live) encoder() {
 	}
 }
 
-// adapt lowers the density of motion frames when a frame costs more than the
-// 16.7 ms a 60 Hz frame has, and raises it again when there is room. The
-// final frame of a motion is always at full density.
 func (l *Live) adapt(s FrameStat) {
 	if s.Final {
 		return
@@ -465,8 +438,6 @@ func directFrame(head string, data []byte) []byte {
 	return b.Bytes()
 }
 
-// fileFrame writes the pixels to a temporary file the terminal reads and
-// deletes (t=t). The name holds tty-graphics-protocol, as kitty requires.
 func (l *Live) fileFrame(head string, rgb []byte) []byte {
 	f, err := os.CreateTemp("", "tty-graphics-protocol-sketch-*.rgb")
 	if err != nil {
@@ -482,7 +453,6 @@ func (l *Live) fileFrame(head string, rgb []byte) []byte {
 	return []byte("\x1b_G" + head + ",t=t;" + name + "\x1b\\")
 }
 
-// drawText draws the diagram with box-drawing characters in the area.
 func (l *Live) drawText() {
 	l.mu.Lock()
 	d, a, err := l.diag, l.area, l.err

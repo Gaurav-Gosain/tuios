@@ -17,23 +17,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
-// Checkpoints: the state of a work tree at the end of an agent's turn, kept
-// so a turn can be read again and undone.
-//
-// A checkpoint is a commit object under refs/tuios/checkpoints/<pane>/<n>.
-// Its tree is the working state as SnapshotTree writes it: tracked files as
-// they are on disk, untracked files that are not ignored, and nothing that is
-// ignored. Its parent is HEAD at the time, when there is one. Nothing the
-// person works with changes: the index is a temporary one, HEAD and the
-// branch do not move, and the stash is not used. The refs live in the
-// repository's common directory, so every worktree of a repository sees the
-// checkpoints of every pane, and they are not pushed, since no refspec git
-// sets up names refs/tuios.
-//
-// The message carries what the daemon knew when it took the checkpoint, one
-// "Key: value" line each after the subject, so a listing is one for-each-ref
-// and needs no state of its own.
-
 // CheckpointRefPrefix is where every checkpoint ref is kept.
 const CheckpointRefPrefix = "refs/tuios/checkpoints/"
 
@@ -95,17 +78,11 @@ type CheckpointMeta struct {
 	// MaxUntracked is the size in bytes past which an untracked file is left
 	// out of the checkpoint. Zero is no limit.
 	MaxUntracked int64
-	// skipped is what SaveCheckpoint left out, for the message.
-	skipped []string
+	skipped      []string
 }
 
-// checkpointSkippedShown bounds the skipped paths a checkpoint's message
-// names.
 const checkpointSkippedShown = 20
 
-// largeUntracked lists the untracked files of the work tree at root that are
-// not ignored and are larger than limit bytes, sorted. Untracked is against
-// the work tree's own index.
 func largeUntracked(ctx context.Context, root string, limit int64) ([]string, error) {
 	if limit <= 0 {
 		return nil, nil
@@ -128,7 +105,6 @@ func largeUntracked(ctx context.Context, root string, limit int64) ([]string, er
 	return large, nil
 }
 
-// checkpointLabelMax bounds the label kept in a checkpoint's message.
 const checkpointLabelMax = 120
 
 // ValidPaneKey refuses a pane id that cannot be one component of a ref name.
@@ -144,9 +120,6 @@ func ValidPaneKey(pane string) error {
 	return nil
 }
 
-// checkpointEnv is the environment of the git calls that write a checkpoint:
-// a fixed identity, so a repository with no user.name configured still takes
-// one, and the commit says who made it.
 var checkpointEnv = []string{
 	"GIT_AUTHOR_NAME=tuios", "GIT_AUTHOR_EMAIL=",
 	"GIT_COMMITTER_NAME=tuios", "GIT_COMMITTER_EMAIL=",
@@ -162,8 +135,6 @@ func ListCheckpoints(ctx context.Context, dir, pane string) ([]Checkpoint, error
 		}
 		prefix += pane + "/"
 	}
-	// A NUL between the fields and a record separator after each record:
-	// the message runs over several lines.
 	out, err := runCtx(ctx, dir, nil, "for-each-ref", "--format=%(refname)%00%(objectname)%00%(tree)%00%(parent)%00%(contents)%1e", prefix)
 	if err != nil {
 		return nil, err
@@ -192,8 +163,6 @@ func ListCheckpoints(ctx context.Context, dir, pane string) ([]Checkpoint, error
 	return list, nil
 }
 
-// parseCheckpoint reads one ref of ListCheckpoints. A ref under the prefix
-// that is not <pane>/<n> is not a checkpoint and is skipped.
 func parseCheckpoint(ref, commit, tree, parents, msg string) (Checkpoint, bool) {
 	rest, ok := strings.CutPrefix(ref, CheckpointRefPrefix)
 	if !ok {
@@ -242,8 +211,6 @@ func parseCheckpoint(ref, commit, tree, parents, msg string) (Checkpoint, bool) 
 	return cp, true
 }
 
-// oneLine makes s fit one line of a commit message: control characters
-// become spaces and it is cut to max bytes on a rune boundary.
 func oneLine(s string, limit int) string {
 	s = strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f {
@@ -262,10 +229,8 @@ func oneLine(s string, limit int) string {
 	return s[:cut] + "..."
 }
 
-// utf8RuneStart reports whether b starts a UTF-8 sequence.
 func utf8RuneStart(b byte) bool { return b&0xC0 != 0x80 }
 
-// checkpointMessage is the commit message of a checkpoint.
 func checkpointMessage(n int, root string, m CheckpointMeta) string {
 	label := oneLine(m.Label, checkpointLabelMax)
 	subject := fmt.Sprintf("tuios checkpoint %d", n)
@@ -343,8 +308,6 @@ func SaveCheckpoint(ctx context.Context, root string, m CheckpointMeta, keep int
 	}
 	commit := strings.TrimSpace(out)
 	ref := CheckpointRefPrefix + m.Pane + "/" + strconv.Itoa(n)
-	// The empty old value makes git refuse a ref that exists already, so two
-	// writers racing for one number cannot overwrite each other.
 	if _, err := runCtx(ctx, root, nil, "update-ref", "--no-deref", "-m", "tuios checkpoint", ref, commit, ""); err != nil {
 		return Checkpoint{}, false, err
 	}
@@ -430,7 +393,6 @@ func CheckpointBase(ctx context.Context, dir string, list []Checkpoint, cp Check
 	return strings.TrimSpace(out), "an empty tree", nil
 }
 
-// short is the first seven characters of a hash.
 func short(sha string) string {
 	if len(sha) > 7 {
 		return sha[:7]
@@ -464,10 +426,6 @@ func (e *OverwriteError) Error() string {
 	return fmt.Sprintf("the restore would write over %d %s that no checkpoint holds: %s", len(e.Paths), plural.Word(len(e.Paths), "file", "files"), strings.Join(shown, ", "))
 }
 
-// blockingPath is the path that keeps the checkpoint's file at path from
-// being written without losing what is on disk, or "": path itself when
-// something is there, or a leading component that is not a directory and
-// is not one of the paths the restore removes first.
 func blockingPath(root, path string, removed map[string]bool) string {
 	parts := strings.Split(path, "/")
 	for i := range parts {
@@ -478,8 +436,6 @@ func blockingPath(root, path string, removed map[string]bool) string {
 		}
 		last := i == len(parts)-1
 		if last && info.IsDir() {
-			// A directory where the checkpoint has a file: it is in the way
-			// only when it holds something the restore does not remove.
 			if dirHoldsOnly(root, prefix, removed) {
 				return ""
 			}
@@ -504,9 +460,6 @@ func blockingPath(root, path string, removed map[string]bool) string {
 // changed against what the index holds.
 func RestoreTree(ctx context.Context, root, current, tree string) (RestoreResult, error) {
 	var res RestoreResult
-	// The raw format, for the modes: a submodule (mode 160000) is another
-	// repository, which a checkpoint holds only the commit of, so it is
-	// neither removed nor written.
 	out, err := runCtx(ctx, root, nil, "diff-tree", "-r", "-z", "--no-renames", current, tree)
 	if err != nil {
 		return res, err
@@ -535,10 +488,6 @@ func RestoreTree(ctx context.Context, root, current, tree string) (RestoreResult
 			write = append(write, path)
 		}
 	}
-	// A path the current tree does not have, but the disk does, is a file no
-	// checkpoint holds: an ignored one, or one made since the safety
-	// checkpoint was taken. Writing the checkpoint's file there would lose
-	// it for good, so the restore is refused before anything changes.
 	var blocked []string
 	for _, path := range added {
 		if p := blockingPath(root, path, removed); p != "" {
@@ -548,8 +497,6 @@ func RestoreTree(ctx context.Context, root, current, tree string) (RestoreResult
 	if len(blocked) > 0 {
 		return RestoreResult{}, &OverwriteError{Paths: blocked}
 	}
-	// Removals first: a path that was a file and is now a directory, or the
-	// other way, needs the old entry gone before the new one is written.
 	for _, path := range res.Removed {
 		if err := removeInside(root, path); err != nil {
 			return res, err
@@ -568,8 +515,6 @@ func RestoreTree(ctx context.Context, root, current, tree string) (RestoreResult
 	if _, err := runCtx(ctx, root, env, "read-tree", tree); err != nil {
 		return res, err
 	}
-	// checkout-index takes paths relative to where it runs, which is the
-	// root. --force writes over the file that is there.
 	stdin := strings.Join(write, "\x00") + "\x00"
 	if _, err := runStdin(ctx, root, env, stdin, "checkout-index", "--force", "-z", "--stdin"); err != nil {
 		return res, err
@@ -578,9 +523,6 @@ func RestoreTree(ctx context.Context, root, current, tree string) (RestoreResult
 	return res, nil
 }
 
-// removeInside removes the file at path under root, and then each parent
-// directory it leaves empty, up to root. A path whose parent leads out of
-// root through a symbolic link is refused.
 func removeInside(root, path string) error {
 	full := filepath.Join(root, filepath.FromSlash(path))
 	parent := filepath.Dir(full)
@@ -610,8 +552,6 @@ func removeInside(root, path string) error {
 	return nil
 }
 
-// dirHoldsOnly reports whether every file under the directory dir (relative to
-// root) is one of removed. It stops at the first that is not.
 func dirHoldsOnly(root, dir string, removed map[string]bool) bool {
 	errOther := errors.New("holds another file")
 	err := filepath.WalkDir(filepath.Join(root, filepath.FromSlash(dir)), func(p string, e os.DirEntry, err error) error {
@@ -630,8 +570,6 @@ func dirHoldsOnly(root, dir string, removed map[string]bool) bool {
 	return err == nil
 }
 
-// runStdin is runCtx with stdin.
-//
 //go:noinline
 func runStdin(ctx context.Context, dir string, env []string, stdin string, args ...string) (string, error) {
 	return runGit(ctx, dir, env, strings.NewReader(stdin), args...)

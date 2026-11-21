@@ -16,8 +16,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// The kernel's numbers for shm_open and shm_unlink. They are variables so a test
-// can see what a missing call does.
 var sysShmOpen, sysShmUnlink uintptr = syscall.SYS_SHM_OPEN, syscall.SYS_SHM_UNLINK
 
 // Available reports whether the calls below work on this machine, and answers
@@ -26,12 +24,6 @@ var sysShmOpen, sysShmUnlink uintptr = syscall.SYS_SHM_OPEN, syscall.SYS_SHM_UNL
 // probe. It costs nothing until a program names shared memory.
 var Available = sync.OnceValue(func() bool { return probe(fmt.Sprintf("/tuios-p-%d", os.Getpid())) })
 
-// probe makes an object, reads it back through a mapping, and deletes it. A
-// program told no falls back to a file or to sending the bytes.
-//
-// A system call number the kernel has no call for raises SIGSYS, and the Go
-// runtime dies of that unless the signal goes to a channel. Then the call returns
-// ENOSYS like any other failure.
 func probe(name string) bool {
 	sigsys := make(chan os.Signal, 1)
 	signal.Notify(sigsys, syscall.SIGSYS)
@@ -108,8 +100,6 @@ type Object struct {
 // Stat describes the object.
 func (o *Object) Stat() os.FileInfo { return o.info }
 
-// open returns a descriptor for name. A shared memory object is no path, so no
-// symlink or named pipe can stand in for it, and it needs no other flags.
 func open(name string) (*os.File, error) {
 	fd, err := shmOpen(name, os.O_RDONLY, 0)
 	if err != nil {

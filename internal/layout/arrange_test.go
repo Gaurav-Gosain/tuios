@@ -4,7 +4,6 @@ import (
 	"testing"
 )
 
-// arranged lays out windows 1..n as kind and returns their rectangles.
 func arranged(t *testing.T, kind string, n int, bounds Rect) map[int]Rect {
 	t.Helper()
 	tree := NewBSPTree()

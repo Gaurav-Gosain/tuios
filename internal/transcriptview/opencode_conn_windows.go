@@ -12,24 +12,13 @@ import (
 var procGetExtendedTCPTable = windows.NewLazySystemDLL("iphlpapi.dll").NewProc("GetExtendedTcpTable")
 
 const (
-	// tcpTableOwnerPIDAll is TCP_TABLE_OWNER_PID_ALL.
 	tcpTableOwnerPIDAll = 5
-	// stillActive is STILL_ACTIVE, the exit code of a running process.
-	stillActive = 259
-	// tcpTableMax bounds the table this reader allocates.
-	tcpTableMax = 16 << 20
+	stillActive         = 259
+	tcpTableMax         = 16 << 20
 )
 
-// currentUser gives the SID of this user, which the service's process must
-// run as, and the SID that owns the files this process makes: the same SID,
-// or the Administrators group for an elevated process. A test changes it to
-// see the checks refuse.
 var currentUser = winacl.CurrentUser
 
-// serverOwner reports the server side of c as this user's when the process
-// service.json names owns it in the TCP table and runs as this user. The
-// process stays open while the table is read, so its pid cannot pass to
-// another process in between.
 func serverOwner(c serverSide, svcPID int) owner {
 	if svcPID <= 0 || svcPID > 1<<31-1 {
 		return ownerOther
@@ -67,7 +56,6 @@ func serverOwner(c serverSide, svcPID int) owner {
 	return own
 }
 
-// extendedTCPTable is the IPv4 TCP table with the owning pid of each row.
 func extendedTCPTable() ([]byte, bool) {
 	if procGetExtendedTCPTable.Find() != nil {
 		return nil, false
@@ -85,7 +73,6 @@ func extendedTCPTable() ([]byte, bool) {
 			if size > tcpTableMax {
 				return nil, false
 			}
-			// Room for rows that open before the next call.
 			size += 4 << 10
 		default:
 			return nil, false
@@ -94,11 +81,6 @@ func extendedTCPTable() ([]byte, bool) {
 	return nil, false
 }
 
-// serviceFileSafe reports whether service.json is owned by this user, or
-// by the owner this user's processes give their files, and whether no one
-// else can change it: whoever can write it chooses where the password goes.
-// Windows keeps no Unix mode, so the owner and the DACL in the file's
-// security descriptor are what is checked, the Windows form of mode&022.
 func serviceFileSafe(f *os.File, _ os.FileInfo) bool {
 	sd, err := winacl.FileSecurity(windows.Handle(f.Fd()))
 	if err != nil {

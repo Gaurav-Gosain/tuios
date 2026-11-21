@@ -23,25 +23,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// The dock's refresh engine.
-//
-// The property this file exists to hold is one line long: a dock with no
-// interval component arms no timer. Not a cheap timer, none. The scheduler
-// below parks on a channel receive when nothing is due, so a default session
-// pays nothing for the dock, and BenchmarkIdleTick stays where it is.
-//
-// A clock that shows seconds needs one frame per second and the meters need
-// one per two seconds, not one per frame. Each of them is a component with a
-// deadline, the engine wakes for the earliest one, and a value that has not
-// moved draws nothing at all.
-//
-// Custom components are subprocesses, which is the whole of the extension
-// contract: environment in, one line of text out. Everything about them that is
-// careful is in this file, because a dock cell that hangs the render loop would
-// be a catastrophe. They run off the Bubble Tea goroutine, under a timeout,
-// reading a bounded amount of output, and a failure hides the cell rather than
-// breaking the bar.
-
 // Update is one component's new state, travelling from an engine
 // goroutine to the model.
 type Update struct {
@@ -83,7 +64,6 @@ type Component struct {
 	// an event keeps its re-run without this (see fire).
 	Coalesce bool
 
-	// Everything below is guarded by Engine.mu.
 	text     string
 	lastRun  time.Time
 	lastExit int
@@ -91,15 +71,10 @@ type Component struct {
 	failures int
 	nextDue  time.Time
 	running  bool
-	stopped  bool // gave up after DockCustomFailureLimit consecutive failures
-	reported bool // the failure has already been put in front of the user once
-	pending  bool // an event landed mid-run; run once more when this one ends
+	stopped  bool
+	reported bool
+	pending  bool
 
-	// revive wakes a push reader that has given up. It is a channel rather than
-	// a retry interval because a reader waiting on a timer is a timer, and the
-	// whole point of this engine is that nothing holds one without being asked
-	// to. A push component that cannot start is revived by refresh-dock and by
-	// nothing else.
 	revive chan struct{}
 }
 
@@ -108,49 +83,30 @@ type Component struct {
 type Engine struct {
 	mu    sync.Mutex
 	comps map[string]*Component
-	order []string // definition order, so listings are stable
+	order []string
 
 	updates chan Update
 
-	// wake re-plans the scheduler after the component set or a deadline
-	// changes. It is a channel rather than a timer because parking on a receive
-	// is what "no timer at idle" means.
 	wake chan struct{}
 
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	// session and socket are handed to every command, the way hooks are given
-	// their context. Guarded by mu because a client may attach elsewhere.
 	session string
 	socket  string
 
-	// rail is the environment the rail section's command runs with: the
-	// focused pane and the section's size, read fresh by the model for each
-	// run and handed over here, under mu, because runs start on engine
-	// goroutines that may not touch the model.
 	rail          RailContext
 	secondaryRail RailContext
 
-	// folder resolves the rail context's folder, set once by New.
 	folder func(RailContext) string
 
-	// wakes counts scheduler firings and pushed lines. The idle guard reads it;
-	// nothing else should.
 	wakes atomic.Int64
 
-	// eventDue debounces event-driven refreshes: a burst of daemon events
-	// re-runs a component once, not once per event.
 	eventDue map[string]time.Time
 }
 
-// dockEngineUpdateBuffer is how many updates may queue before an engine
-// goroutine blocks. A component that pushes faster than the model drains is
-// slowed to the model's pace rather than being allowed to grow a backlog.
 const dockEngineUpdateBuffer = 64
 
-// dockEventDebounce is how long a component waits after an event before it
-// re-runs, so a burst of daemon events costs one execution.
 const dockEventDebounce = 200 * time.Millisecond
 
 // RailContext is what the rail section's command is told about where it
@@ -350,9 +306,6 @@ func (e *Engine) Start() {
 		go e.readPushed(c)
 	}
 	for _, c := range initial {
-		// The first value is fetched off-goroutine like every later one, so a
-		// slow component delays its own cell and nothing else. The bar draws
-		// without it and gains it when it arrives.
 		if !c.Builtin {
 			go e.runOnce(c)
 		}
@@ -360,9 +313,6 @@ func (e *Engine) Start() {
 	e.Replan()
 }
 
-// alignedDeadline is when a component next comes due. An interval that divides
-// a second or a minute is aligned to it, so a clock showing 15:04 changes at the
-// top of the minute rather than at some offset from when the session started.
 func (e *Engine) alignedDeadline(c *Component, now time.Time) time.Time {
 	d := c.Refresh.Interval
 	if d <= 0 {
@@ -386,21 +336,8 @@ func (e *Engine) Replan() {
 	}
 }
 
-// dockWallCheck is the longest the scheduler sleeps before it reads the wall
-// clock again.
-//
-// A Go timer counts time the machine is awake. A clock that shows minutes is
-// due at the top of the next minute by the wall clock, and its timer is armed
-// for up to 59 s. Suspend the machine during that wait and the timer still
-// has the rest of it to run after the wake, so the clock showed the time of
-// the suspend for up to 59 s. Waking every dockWallCheck to compare with the
-// wall clock bounds that to 15 s, for 4 wakeups a minute where the clock needs
-// 1. The wake reads the time and sleeps again: no message, no frame.
 const dockWallCheck = 15 * time.Second
 
-// schedule is the single-timer loop. When no component has a deadline it parks
-// on a receive and no timer exists at all, which is the invariant this whole
-// design is built to hold.
 func (e *Engine) schedule() {
 	defer crashexit.Recover()
 	for {
@@ -417,8 +354,6 @@ func (e *Engine) schedule() {
 		timer := time.NewTimer(min(time.Until(due), dockWallCheck))
 		select {
 		case <-timer.C:
-			// A wake for dockWallCheck only: read the wall clock again and
-			// sleep on if the component is not due yet.
 			if time.Until(due) > 0 {
 				continue
 			}
@@ -432,9 +367,6 @@ func (e *Engine) schedule() {
 	}
 }
 
-// earliest is the component due soonest and when, or nil when nothing polls.
-// Event components appear here only while their debounce is pending, which is
-// what makes an event refresh cost one wake rather than a standing timer.
 func (e *Engine) earliest() (*Component, time.Time) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -461,9 +393,6 @@ func (e *Engine) earliest() (*Component, time.Time) {
 	return best, bestAt
 }
 
-// fire runs whatever came due. A built-in is reported to the model, which owns
-// the state its refresh reads; a custom one is executed here, off the render
-// goroutine, and never alongside a run that has not finished.
 func (e *Engine) fire(c *Component) {
 	e.mu.Lock()
 	delete(e.eventDue, c.Name)
@@ -472,11 +401,6 @@ func (e *Engine) fire(c *Component) {
 	}
 	builtin, running := c.Builtin, c.running
 	if running && !builtin && (c.Coalesce || c.Refresh.Kind == config.DockRefreshEvent) {
-		// Not dropped: the run that is going reads the state from before this
-		// event, so one more run after it is the only way the value catches up.
-		// One, whatever the burst, because the re-run reads the state as it is
-		// then. Set under the same lock hold that saw the run in flight, so the
-		// run cannot end between the check and the flag and lose the re-run.
 		c.pending = true
 	}
 	e.mu.Unlock()
@@ -486,9 +410,6 @@ func (e *Engine) fire(c *Component) {
 		return
 	}
 	if running {
-		// No second process. A component slower than its own interval polls at
-		// the rate it can manage instead of stacking them, and an event waits
-		// for the end of the run in the flag set above.
 		return
 	}
 	go e.runOnce(c)
@@ -514,7 +435,7 @@ func (e *Engine) NotifyEvent(eventType string) {
 			continue
 		}
 		if _, pending := e.eventDue[name]; pending {
-			continue // already coming; that is the debounce
+			continue
 		}
 		e.eventDue[name] = at
 		changed = true
@@ -547,9 +468,6 @@ func (e *Engine) Refresh(name string) error {
 	case builtin:
 		e.emit(Update{Name: name, Builtin: true})
 	case push:
-		// A push component's value is whatever its process last wrote; there is
-		// nothing to re-run without killing the process the user asked to keep
-		// running. Waking its reader is what revives one that gave up.
 		select {
 		case c.revive <- struct{}{}:
 		default:
@@ -591,8 +509,6 @@ func (e *Engine) RefreshAll() {
 	}
 }
 
-// emit sends an update, counting the wake. It never blocks forever: a model
-// that has stopped draining is a model that is shutting down.
 func (e *Engine) emit(u Update) {
 	e.wakes.Add(1)
 	select {
@@ -610,8 +526,6 @@ func (e *Engine) CommandEnv(name string, extra ...string) []string {
 	return append(env, extra...)
 }
 
-// baseEnv is the client's own environment with the session and the socket,
-// which every command the engine runs is given.
 func (e *Engine) baseEnv() []string {
 	e.mu.Lock()
 	session, socket := e.session, e.socket
@@ -619,40 +533,14 @@ func (e *Engine) baseEnv() []string {
 	return append(os.Environ(), "TUIOS_SESSION="+session, "TUIOS_SOCKET="+socket)
 }
 
-// dockKillGrace bounds how long a wait may go on after the kill.
-//
-// Killing the group is what normally ends a timed out component, and it ends it
-// in microseconds. This is the backstop for the child that got out of the group
-// anyway, by calling setsid or by being handed to a helper that does. When the
-// grace passes, os/exec closes the pipes itself and the wait returns, so an
-// escaped grandchild costs one stale process and not a stuck cell.
 const dockKillGrace = 250 * time.Millisecond
 
-// dockSupervise ties a component's command to its deadline.
-//
-// Three parts, and each covers what the others cannot. Setpgid gives the command
-// a group. Cancel kills that group when the deadline passes, so the shell's
-// children die with it and release the stdout pipe. WaitDelay bounds the wait
-// for anything that escaped the group.
-//
-// The plain os/exec default does none of this: it kills the direct child and
-// then waits for EOF on a pipe that child's children still hold. See
-// dock_process_unix.go for why that is the normal case and not a rare one.
 func dockSupervise(cmd *exec.Cmd) {
 	dockGroupCommand(cmd)
 	cmd.Cancel = func() error { return dockKillGroup(cmd) }
 	cmd.WaitDelay = dockKillGrace
 }
 
-// railCommandEnv is the environment the rail section's command runs in: the
-// client's own, the session and socket every component gets, and the five
-// variables that say where the rows go and what has the focus. The names of
-// the last two are the command keys' names (command_keys.go), so a script
-// written for one works for the other.
-//
-// rail is the context runOnce read when it started the run. It runs on the
-// run's goroutine, and the folder is resolved after the lock is let go: the
-// stat that checks it can block, and only this run waits.
 func (e *Engine) railCommandEnv(rail RailContext) []string {
 	env := e.baseEnv()
 	folder := ""
@@ -668,18 +556,6 @@ func (e *Engine) railCommandEnv(rail RailContext) []string {
 	)
 }
 
-// runOnce executes a component's command and reports its first line of stdout.
-//
-// The four ways a subprocess misbehaves are all handled here and all end the
-// same way, with an empty cell and a recorded reason: it can be slow (the
-// context timeout kills it), it can fail (a nonzero exit is not a value), it can
-// never exit (the timeout again, which kills the whole process group), and it
-// can write without stopping (the read is bounded, and only the first line is
-// used anyway).
-//
-// Output a component wrote before it hung is dropped, not shown. A cell that
-// timed out is a failed cell, and a half written value is the confidently wrong
-// reading ApplyUpdate blanks a failure to avoid.
 func (e *Engine) runOnce(c *Component) {
 	defer crashexit.Recover()
 	e.mu.Lock()
@@ -694,12 +570,6 @@ func (e *Engine) runOnce(c *Component) {
 			rail = e.secondaryRail
 		}
 		if rail.Width <= 0 {
-			// The rail is folded or hidden and draws no rows. A command run
-			// here is told a width of zero, and a script that wraps to the
-			// width fails on it, so five triggers while the rail is shut
-			// would stop the section for good. Skipped instead, with no
-			// update: the rows and the failure count stay as they were, and
-			// the rail runs it again when it opens (syncRailContext).
 			e.mu.Unlock()
 			return
 		}
@@ -712,7 +582,6 @@ func (e *Engine) runOnce(c *Component) {
 	defer cancel()
 
 	// #nosec G204 - the command is the user's own config, run as the user, on
-	// the same footing as [hooks]. There is no new trust boundary here.
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 	if c.Name == RailComponent || c.Name == RailSecondaryComponent {
 		cmd.Env = e.railCommandEnv(rail)
@@ -723,19 +592,10 @@ func (e *Engine) runOnce(c *Component) {
 	cmd.Stderr = nil
 	dockSupervise(cmd)
 
-	// The output goes through a capped writer, not cmd.Output. Output reads
-	// everything the command writes and cuts it afterwards, so `yes` filled
-	// gigabytes of heap in the three seconds before the timeout. The writer
-	// keeps one byte past the cap, which is how it knows the cap was passed,
-	// and kills the group the moment it is. A writer rather than a reader on
-	// StdoutPipe, because os/exec then does the copying and WaitDelay still
-	// bounds the wait when a grandchild that escaped the group holds the pipe.
 	out := &dockCappedWriter{limit: config.DockCustomMaxOutput + 1, kill: func() { _ = dockKillGroup(cmd) }}
 	cmd.Stdout = out
 	err := cmd.Run()
 
-	// A MultiLine component keeps every line of the bounded read and the rest
-	// keep the first.
 	text := FirstLine
 	if c.MultiLine {
 		text = Lines
@@ -743,9 +603,6 @@ func (e *Engine) runOnce(c *Component) {
 	update := Update{Name: c.Name}
 	switch {
 	case out.overflowed:
-		// What is used is in the buffer: the first line, or for a MultiLine
-		// component the lines the cap kept. The kill is ours, so its error is
-		// not the component's failure.
 		update.Text = text(out.buf[:min(len(out.buf), config.DockCustomMaxOutput)])
 	case ctx.Err() == context.DeadlineExceeded:
 		update.Exit = -1
@@ -775,9 +632,6 @@ func (e *Engine) runOnce(c *Component) {
 	}
 }
 
-// dockCappedWriter keeps at most limit bytes of a command's output. The first
-// write that would pass the limit marks it overflowed, kills the command and
-// fails, which ends the copy os/exec runs and closes the pipe behind it.
 type dockCappedWriter struct {
 	limit      int
 	buf        []byte
@@ -802,14 +656,6 @@ func (w *dockCappedWriter) Write(p []byte) (int, error) {
 	return room, errDockOutputCap
 }
 
-// readPushed keeps a persistent command running and turns each line it writes
-// into an update. This is the native answer to "wake me when X changes": the
-// component author brings their own inotifywait or upower --monitor, and the
-// dock just reads a pipe. Wakes are driven by the fd, never by a clock.
-//
-// A command that exits is restarted with exponential backoff, and after enough
-// consecutive immediate failures it is left alone: a script that cannot start is
-// not made more likely to start by being started faster.
 func (e *Engine) readPushed(c *Component) {
 	defer crashexit.Recover()
 	backoff := 500 * time.Millisecond
@@ -820,8 +666,6 @@ func (e *Engine) readPushed(c *Component) {
 		command, stopped := c.Command, c.stopped
 		e.mu.Unlock()
 		if stopped {
-			// Park until somebody asks for it again. No timer: a reader that
-			// gave up costs one blocked goroutine and nothing else.
 			select {
 			case <-c.revive:
 				continue
@@ -834,9 +678,6 @@ func (e *Engine) readPushed(c *Component) {
 		cmd := exec.CommandContext(e.ctx, "sh", "-c", command)
 		cmd.Env = e.CommandEnv(c.Name)
 		cmd.Stderr = nil
-		// Same tree, same rule. Stop promises that every command the engine
-		// started dies with it; without the group a push script that forks
-		// leaves the fork holding the pipe, and the reader parks on it forever.
 		dockSupervise(cmd)
 		pipe, err := cmd.StdoutPipe()
 		lines := 0
@@ -848,9 +689,6 @@ func (e *Engine) readPushed(c *Component) {
 		}
 
 		if lines > 0 {
-			// It ran and said something, so the next restart starts patient
-			// again. A component that emits once and exits is a "once" that
-			// was written as a push; it should keep working.
 			backoff, failures = 500*time.Millisecond, 0
 		} else {
 			failures++
@@ -875,9 +713,6 @@ func (e *Engine) readPushed(c *Component) {
 	}
 }
 
-// drainPushed reads lines from a running component, one update each, and
-// reports how many it saw. The reader is bounded per line: a process that writes
-// forever without a newline fills a cell's worth and no more.
 func (e *Engine) drainPushed(c *Component, pipe io.Reader) int {
 	buf := make([]byte, 4096)
 	acc := make([]byte, 0, 4096)
@@ -897,8 +732,6 @@ func (e *Engine) drainPushed(c *Component, pipe io.Reader) int {
 				e.emit(Update{Name: c.Name, Text: Sanitize(line)})
 			}
 			if len(acc) > config.DockCustomMaxOutput {
-				// No newline in a very long run of bytes. Keep the tail so a
-				// line arriving later is still parsed, and drop the rest.
 				acc = acc[len(acc)-config.DockCustomMaxOutput:]
 			}
 		}
@@ -944,9 +777,6 @@ func (e *Engine) ApplyUpdate(u Update) (changed, newFailure bool) {
 
 	text := u.Text
 	if u.Err != "" {
-		// A component that failed shows nothing rather than showing stale
-		// truth. A cell that keeps displaying a value its command can no longer
-		// produce is worse than an absent one: it is confidently wrong.
 		text = ""
 		c.failures++
 		if c.failures == 1 && !c.reported {
@@ -958,8 +788,6 @@ func (e *Engine) ApplyUpdate(u Update) (changed, newFailure bool) {
 	} else {
 		c.failures, c.reported = 0, false
 	}
-	// The rail's rows are cut to width by the renderer, which knows the rail's
-	// columns on the frame it draws; the engine has no width to cut to.
 	trimmed := text
 	if !c.MultiLine {
 		trimmed = TruncateCell(text, c.MaxWidth)
@@ -1036,19 +864,11 @@ func Sanitize(s string) string {
 	return sanitize(s, false)
 }
 
-// osc8Open and osc8Close are the one form a kept link is written in: no
-// parameters, ST as the terminator.
 const (
 	osc8Open  = "\x1b]8;;"
 	osc8Close = "\x1b]8;;\x1b\\"
 )
 
-// sanitize is Sanitize, and with links it also keeps OSC 8 hyperlinks. A link
-// is rewritten in one form, without its parameters, and only when its address
-// is clean: no control character and no space, the rule OpenLink applies too.
-// An unterminated one goes with the rest of the line, as any string sequence
-// does. A link left open at the end of the line is closed there, so it cannot
-// run into the padding, the next row or a cut the renderer makes.
 func sanitize(s string, links bool) string {
 	s = invisible.Strip(s)
 	open := false
@@ -1067,7 +887,6 @@ func sanitize(s string, links bool) string {
 					i = j + 1
 					continue
 				}
-				// Some other CSI: skip it and its final byte.
 				for j < len(s) && (s[j] < 0x40 || s[j] > 0x7e) {
 					j++
 				}
@@ -1077,20 +896,16 @@ func sanitize(s string, links bool) string {
 				i = j
 				continue
 			}
-			// A string sequence: OSC, DCS, APC, PM, SOS. These carry a payload
-			// that runs to a terminator, and dropping only the introducer would
-			// leave the payload on the bar as text. A component setting the
-			// window title is the case that found this.
 			if i+1 < len(s) && strings.IndexByte("]P_^X", s[i+1]) >= 0 {
 				j := i + 2
-				end := -1 // where the payload ends, -1 while unterminated
+				end := -1
 				for j < len(s) {
-					if s[j] == 0x07 { // BEL
+					if s[j] == 0x07 {
 						end = j
 						j++
 						break
 					}
-					if s[j] == 0x1b && j+1 < len(s) && s[j+1] == '\\' { // ST
+					if s[j] == 0x1b && j+1 < len(s) && s[j+1] == '\\' {
 						end = j
 						j += 2
 						break
@@ -1114,7 +929,6 @@ func sanitize(s string, links bool) string {
 				i = j
 				continue
 			}
-			// Any other two-byte escape (a charset selection, a save/restore).
 			i += 2
 			continue
 		}
@@ -1141,9 +955,6 @@ func sanitize(s string, links bool) string {
 	return b.String()
 }
 
-// osc8Address reads the address of an OSC 8 payload ("8;params;uri"). ok is
-// false for any other OSC, and for an address with a control character, a
-// space or a byte that is not UTF-8. An empty address is a link's end.
 func osc8Address(payload string) (string, bool) {
 	rest, found := strings.CutPrefix(payload, "8;")
 	if !found {

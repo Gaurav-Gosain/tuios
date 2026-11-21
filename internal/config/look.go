@@ -20,55 +20,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// Looks.
-//
-// A look is a small TOML file that sets how tuios looks: theme, glyph set,
-// borders, gaps, dock and rail style. People share them, the tuios.dev gallery
-// publishes them, and `tuios look apply` installs one. Strangers write them, so
-// a look is data only. It may set the options in lookKeys and nothing else:
-// no hooks, commands, shells, keybindings, paths, hosts or daemon settings.
-// Every other key is left out and named, and every value goes through the
-// same check set-config uses.
-//
-// # Format, version 1
-//
-//	look = 1                       # required: the format version
-//	name = "Tokyo Night, powerline" # optional, shown in the preview
-//	author = "someone"              # optional
-//	requires = "0.14.0"             # optional: the lowest tuios the look works on
-//
-//	[appearance]                    # any option in lookKeys, in its own table
-//	theme = "tokyo"
-//	border_style = "rounded"
-//	gap = 1
-//
-//	[appearance.sidebar]
-//	row_style = "pill"
-//
-//	[theme]                         # optional: a theme, the keys of a theme JSON file
-//	id = "tokyo"
-//	base = "tokyonight"
-//	accent = "#7aa2f7"
-//
-//	[glyphs]                        # optional: a glyph set, the keys of a glyph set JSON file
-//	id = "tokyo"
-//	close = "x"
-//
-// A theme or glyph set the look carries is installed under the id with
-// LookAssetPrefix in front (look-tokyo), so it never replaces a file of the
-// person's own. appearance.theme and appearance.glyphs follow the rename.
-//
-// # Where it goes
-//
-// The look is written to config.d/look.toml, its own layer (see include.go).
-// `tuios look remove` deletes that one file and the installed assets, and the
-// config is what it was. config.toml still wins over config.d, so a key
-// config.toml sets hides the same key in the look. The plan names those keys,
-// and a take-over (look_takeover.go) removes them and saves their values for
-// the remove to put back. A settings change of a key the look sets goes to
-// config.toml, never to look.toml (see layerWriter.target), so a later look
-// apply or remove does not undo it.
-
 // LookVersion is the look format version this build reads.
 const LookVersion = 1
 
@@ -81,15 +32,9 @@ const LookAssetPrefix = "look-"
 // MaxLookBytes caps a look file.
 const MaxLookBytes = 64 << 10
 
-// maxLookString caps one string value or name in a look.
 const maxLookString = 512
 
-// lookKeys are the options a look may set: how tuios looks, and nothing that
-// runs a program, names a file, reaches the network or changes what a key
-// does. The list is closed on purpose. An option added to the registry later
-// is not a look key until it is listed here.
 var lookKeys = []string{
-	// Theme, glyphs and colour.
 	"appearance.theme",
 	"appearance.theme_light",
 	"appearance.glyphs",
@@ -105,7 +50,6 @@ var lookKeys = []string{
 	"appearance.modal_dim",
 	"appearance.popup_dim",
 	"appearance.session_colors",
-	// Borders and the window frame.
 	"appearance.border_style",
 	"appearance.frame_panels",
 	"appearance.pane_overlays",
@@ -131,8 +75,6 @@ var lookKeys = []string{
 	"appearance.window_title_style",
 	"appearance.hide_scrollbar",
 	"appearance.drop_preview",
-	// Layout: where the panes go and how big they are. These place panes and
-	// size them, and do nothing else.
 	"startup.tiled",
 	"startup.layout",
 	"appearance.master_position",
@@ -140,11 +82,9 @@ var lookKeys = []string{
 	"appearance.scroll_column_width",
 	"appearance.zoom_size",
 	"appearance.zoom_max_width",
-	// Motion.
 	"appearance.motion",
 	"appearance.animation_speed",
 	"motion.zoom",
-	// The dock.
 	"appearance.dockbar_position",
 	"appearance.dock_background",
 	"appearance.dock_compact",
@@ -163,7 +103,6 @@ var lookKeys = []string{
 	"appearance.show_ram",
 	"appearance.clock_format",
 	"dock.clock.format",
-	// The rail.
 	"appearance.sidebar.enabled",
 	"appearance.sidebar.position",
 	"appearance.sidebar.width",
@@ -179,14 +118,11 @@ var lookKeys = []string{
 	"appearance.sidebar.file_icons",
 	"appearance.sidebar.file_icon_colors",
 	"appearance.sidebar.marquee",
-	// Each item is checked on its own: see lookItemRules.
 	"appearance.sidebar.sections",
-	// The scrollbar.
 	"appearance.scrollbar.style",
 	"appearance.scrollbar.thumb",
 	"appearance.scrollbar.track",
 	"appearance.scrollbar.tint",
-	// Selection and search colours.
 	"appearance.selection.bg",
 	"appearance.selection.fg",
 	"appearance.selection.bold",
@@ -200,7 +136,6 @@ var lookKeys = []string{
 	"appearance.selection.flash_color",
 	"appearance.selection.flash_ms",
 	"appearance.selection.flash_style",
-	// The focus spotlight.
 	"spotlight.enabled",
 	"spotlight.dim",
 	"spotlight.edge",
@@ -236,10 +171,6 @@ func IsLookKey(path string) bool {
 	return ok
 }
 
-// hostReaching are the options inside the look and appearance sections that
-// run a program, name a file, or write the host clipboard. Neither a look nor
-// a browser page (internal/learn) may set one. The look list above is closed
-// already, so for a look this is a second lock on the same door.
 var hostReaching = map[string]bool{
 	"appearance.link_opener":            true,
 	"appearance.preferred_shell":        true,
@@ -247,9 +178,8 @@ var hostReaching = map[string]bool{
 	"appearance.selection.osc52_write":  true,
 	"appearance.sidebar.editor":         true,
 	"appearance.sidebar.file_delete":    true,
-	// It decides which files a new shell reads when it starts.
-	"shell.integration": true,
-	"shell.login":       true,
+	"shell.integration":                 true,
+	"shell.login":                       true,
 }
 
 // ReachesHost reports whether the option at path runs a program, names a file
@@ -356,7 +286,6 @@ type LookAsset struct {
 	Data []byte // the checked file
 }
 
-// lookMeta are the top-level keys a look file has besides its options.
 var lookMeta = map[string]bool{"look": true, "name": true, "author": true, "description": true, "requires": true, "theme": true, "glyphs": true}
 
 // ParseLook reads and checks a look file. A key a look may not set is left out
@@ -367,7 +296,6 @@ func ParseLook(data []byte) (*Look, error) {
 	}
 	raw := map[string]any{}
 	if err := toml.Unmarshal(data, &raw); err != nil {
-		// The error can quote a key, and a stranger names the keys.
 		return nil, errfmt.Errorf("the look is not valid TOML: %s", lookOneLine(err.Error()))
 	}
 	switch v := raw["look"].(type) {
@@ -445,8 +373,6 @@ func ParseLook(data []byte) (*Look, error) {
 		lk.Settings = append(lk.Settings, s)
 	}
 
-	// The fragment as a whole goes through the validator a config load uses,
-	// for the checks that look at more than one key.
 	frag, err := lk.fragment()
 	if err != nil {
 		return nil, err
@@ -462,9 +388,6 @@ func ParseLook(data []byte) (*Look, error) {
 	return lk, nil
 }
 
-// lookVersionText reports whether s is a version a look may require:
-// 0.14.0, v0.14 or 0.14.0-rc1. It keeps the value to plain characters, since
-// the gallery card and the error print it.
 func lookVersionText(s string) bool {
 	s = strings.TrimPrefix(s, "v")
 	core, pre, hasPre := strings.Cut(s, "-")
@@ -485,8 +408,6 @@ func lookVersionText(s string) bool {
 	return true
 }
 
-// lookRequires reads the optional requires key: the lowest tuios version the
-// look works on.
 func lookRequires(raw map[string]any) (string, error) {
 	v, ok := raw["requires"]
 	if !ok {
@@ -508,12 +429,11 @@ func LookRequires(data []byte) (string, error) {
 	}
 	raw := map[string]any{}
 	if toml.Unmarshal(data, &raw) != nil {
-		return "", nil // ParseLook names the TOML error
+		return "", nil
 	}
 	return lookRequires(raw)
 }
 
-// lookText reads an optional one-line string at key.
 func lookText(raw map[string]any, key string) (string, error) {
 	v, ok := raw[key]
 	if !ok {
@@ -529,8 +449,6 @@ func lookText(raw map[string]any, key string) (string, error) {
 	return s, nil
 }
 
-// readAsset checks the [theme] or [glyphs] table and returns the id the look
-// gave it.
 func (lk *Look) readAsset(raw map[string]any, key string, glyphs bool) (string, error) {
 	v, ok := raw[key]
 	if !ok {
@@ -573,9 +491,6 @@ func (lk *Look) readAsset(raw map[string]any, key string, glyphs bool) (string, 
 	return own, nil
 }
 
-// bindAsset points the option at the installed asset: a look that carries a
-// theme and leaves appearance.theme unset uses it, and one that names it by
-// its own id names the installed id.
 func (lk *Look) bindAsset(values map[string]any, path, own string, asset *LookAsset) error {
 	if asset == nil {
 		return nil
@@ -592,9 +507,6 @@ func (lk *Look) bindAsset(values map[string]any, path, own string, asset *LookAs
 	return nil
 }
 
-// walk sorts the look's keys into values, the ones a look may set, and
-// lk.Left. A list checked item by item keeps its allowed items, and each
-// other item goes to lk.Left.
 func (lk *Look) walk(m map[string]any, prefix []string, values map[string]any) error {
 	for _, k := range lookSortedKeys(m) {
 		path := append(slices.Clone(prefix), k)
@@ -630,10 +542,6 @@ func (lk *Look) walk(m map[string]any, prefix []string, values map[string]any) e
 	return nil
 }
 
-// lookKeyShown is a key name as the plan prints it. A stranger names the keys,
-// and a quoted TOML key may hold an escape sequence, which would reach the
-// terminal (an OSC 52 clipboard write, say) when the plan lists the keys it
-// leaves out. A name with anything but graphic characters is printed quoted.
 func lookKeyShown(key string) string {
 	if strings.IndexFunc(key, func(r rune) bool { return !unicode.IsGraphic(r) }) < 0 {
 		return key
@@ -641,7 +549,6 @@ func lookKeyShown(key string) string {
 	return strconv.QuoteToGraphic(key)
 }
 
-// lookTableHasKey reports whether some look key is inside the table at path.
 func lookTableHasKey(path string) bool {
 	for _, k := range LookKeys() {
 		if strings.HasPrefix(k, path+".") {
@@ -651,8 +558,6 @@ func lookTableHasKey(path string) bool {
 	return false
 }
 
-// lookValueText is a TOML value as set-config takes it. A value of a type no
-// look key has is returned in a form no check accepts.
 func lookValueText(v any) string {
 	switch v := v.(type) {
 	case string:
@@ -682,8 +587,6 @@ func lookValueText(v any) string {
 	}
 }
 
-// fragment is the look's settings as the TOML of config.d/look.toml, without
-// the header.
 func (lk *Look) fragment() ([]byte, error) {
 	root := map[string]any{}
 	for _, s := range lk.Settings {
@@ -717,8 +620,6 @@ func (lk *Look) fragment() ([]byte, error) {
 	return toml.Marshal(root)
 }
 
-// lookOneLine replaces each control character and bidi control in s with a
-// space.
 func lookOneLine(s string) string {
 	return strings.Map(func(r rune) rune {
 		if theme.IsUnsafeRune(r) {
@@ -750,9 +651,6 @@ type InstalledLook struct {
 	Settings []LookSetting
 }
 
-// Header lines of config.d/look.toml. tuios reads them back to know what to
-// remove. lookHeadMark starts the first line, and a file without it is the
-// person's own: tuios never replaces or deletes it.
 const (
 	lookHeadMark   = "# A tuios look. "
 	lookHeadName   = "# look: "
@@ -814,13 +712,10 @@ func ReadInstalledLook(mainPath string) (*InstalledLook, error) {
 	return il, nil
 }
 
-// isLookAssetID reports whether id names an asset a look installed. Only such
-// an id is ever removed.
 func isLookAssetID(id string) bool {
 	return strings.HasPrefix(id, LookAssetPrefix) && theme.ValidThemeID(id)
 }
 
-// render is config.d/look.toml for lk, installed from source.
 func (lk *Look) render(source string) ([]byte, error) {
 	frag, err := lk.fragment()
 	if err != nil {
@@ -892,13 +787,10 @@ type LookPlan struct {
 	BrokenPath string
 
 	lc   *LayeredConfig
-	next *LayeredConfig // the files as the plan leaves them
-	// disk is each config file as the plan read it. Apply checks it again
-	// before it writes, so a change made while tuios asked is never lost.
+	next *LayeredConfig
 	disk map[string]diskFile
 }
 
-// diskFile is a file as a plan read it.
 type diskFile struct {
 	data    []byte
 	existed bool
@@ -930,8 +822,6 @@ func planLook(mainPath string, lk *Look, source string) (*LookPlan, error) {
 	for _, l := range lc.Layers {
 		p.disk[l.Path] = diskFile{data: l.Data, existed: !(l.Kind == LayerMain && lc.MainMissing)}
 	}
-	// The saved values of a take-over come back on a remove, and on an apply
-	// for each key the new look does not set.
 	var skip func(string) bool
 	if lk != nil {
 		sets := map[string]bool{}
@@ -963,8 +853,6 @@ func planLook(mainPath string, lk *Look, source string) (*LookPlan, error) {
 		return nil, errfmt.Errorf("tuios cannot write %s. The config is read-only, so tuios cannot change the look", displayPath(lc.Main, filepath.Dir(LookPath(lc.Main))))
 	}
 
-	// A theme or glyph set of the person's own may already have the id the
-	// look installs. Only an asset the installed look recorded is replaced.
 	if lk != nil {
 		for _, a := range []struct {
 			asset  *LookAsset
@@ -1026,10 +914,6 @@ func planLook(mainPath string, lk *Look, source string) (*LookPlan, error) {
 	return p, nil
 }
 
-// dropInOf is the config.d file whose include list brought l in, through
-// any number of includes, or l itself. A file config.toml includes has no
-// such file, and the zero layer comes back. The files a config.d file
-// includes merge just before it, so they sit where it sits in the order.
 func (lc *LayeredConfig) dropInOf(l ConfigLayer) ConfigLayer {
 	for range len(lc.Layers) {
 		if l.Kind == LayerDropIn {
@@ -1047,8 +931,6 @@ func (lc *LayeredConfig) dropInOf(l ConfigLayer) ConfigLayer {
 	return ConfigLayer{}
 }
 
-// lookChanges lists the options whose value in force differs between two
-// sets of files.
 func lookChanges(from, to *LayeredConfig) ([]LookChange, error) {
 	before, err := parseLayered(from)
 	if err != nil {
@@ -1075,7 +957,6 @@ func lookChanges(from, to *LayeredConfig) ([]LookChange, error) {
 	return out, nil
 }
 
-// isLook reports whether the layer is the look file.
 func (l ConfigLayer) isLook() bool {
 	return l.Kind == LayerDropIn && filepath.Base(l.Path) == LookFileName
 }
@@ -1092,9 +973,6 @@ func (p *LookPlan) Apply() error {
 	if err != nil {
 		return err
 	}
-	// The theme and glyph set go in after the check and before the renames,
-	// so a stopped command leaves nothing, and the config the watcher
-	// reloads names files that are there.
 	assets := func() error {
 		if lk.Theme != nil {
 			if _, err := theme.WriteLookAsset(false, lk.Theme.ID, lk.Theme.Data); err != nil {
@@ -1122,13 +1000,6 @@ func (p *LookPlan) Apply() error {
 	return nil
 }
 
-// remove puts back the values a take-over saved, then deletes the look file,
-// so the config the watcher reloads no longer names the assets, then the
-// assets.
-//
-// A saved key that tuios cannot put back keeps the look in place, so the
-// person can fix the file and remove the look again. A backup tuios cannot
-// read is moved aside, never deleted.
 func (p *LookPlan) remove() error {
 	var moveBroken func() error
 	if p.SavedErr != nil {

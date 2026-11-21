@@ -33,10 +33,6 @@ import (
 
 //go:generate go run ../../tarpack/gen.go lessons.tar.gz tracks.json tracks
 
-// archive is tracks.json and tracks/*.json. Only Learn mode and the tutor read
-// it, so it stays packed until then. TestArchiveMatchesFiles fails when it and
-// the files differ.
-//
 //go:embed lessons.tar.gz
 var archive []byte
 
@@ -223,7 +219,6 @@ func (s Step) For(surface string) Step {
 	return s
 }
 
-// index is tracks.json.
 type index struct {
 	Version int      `json:"version"`
 	Groups  []Group  `json:"groups"`
@@ -328,7 +323,6 @@ func Assemble(indexJSON []byte, trackJSON []json.RawMessage) (*File, []byte, err
 		if err := json.Compact(&compact, raw); err != nil {
 			return nil, nil, err
 		}
-		// The $schema line is for editors, not for readers of the lessons.
 		out.Write(dropSchema(compact.Bytes()))
 	}
 	out.WriteString("]}")
@@ -349,9 +343,6 @@ func dropSchema(b []byte) []byte {
 	return append([]byte("{"), rest...)
 }
 
-// check is what every track must hold for the engine to run it. The lint in
-// internal/lint checks the rest against the app: action and overlay names,
-// event types, setup commands and key chords.
 func (t *Track) check() error {
 	if t.ID == "" || t.Title == "" {
 		return errfmt.Errorf("a track needs an id and a title")

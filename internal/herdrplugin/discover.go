@@ -154,7 +154,6 @@ type Entry struct {
 // Runnable reports whether the entry loaded and is enabled.
 func (e Entry) Runnable() bool { return e.Plugin != nil && e.Enabled && e.Err == nil }
 
-// registryEntry is the part of herdr's plugins.json Discover reads.
 type registryEntry struct {
 	PluginID     string `json:"plugin_id"`
 	ManifestPath string `json:"manifest_path"`
@@ -175,8 +174,6 @@ func Discover(d Dirs, enabled []string) []Entry {
 	var out []Entry
 	seen := map[string]bool{}
 	byID := map[string]bool{}
-	// add lists one plugin. pre is an error found before the manifest is
-	// read. lock is the lock file entry of a managed plugin.
 	add := func(origin, path string, src *Source, lock *LockEntry, dir string, pre *Error) {
 		e := Entry{Origin: origin, Path: path, Lock: lock, Err: pre}
 		var p *Plugin
@@ -206,8 +203,6 @@ func Discover(d Dirs, enabled []string) []Entry {
 			}
 			e.ID, e.Plugin = p.PluginID, p
 			if p.Format == FormatTuios {
-				// A native plugin runs only with an approval on this
-				// machine, and holds what it approved (approval.go).
 				e.Err = applyApproval(d, p, lock)
 			}
 			if byID[p.PluginID] {
@@ -315,7 +310,6 @@ func Find(entries []Entry, id string) *Entry {
 	return nil
 }
 
-// guessID names an entry whose manifest did not load: its folder's name.
 func guessID(path string) string {
 	if strings.HasSuffix(path, ManifestName) || strings.HasSuffix(path, NativeManifestName) {
 		path = filepath.Dir(path)
@@ -349,9 +343,6 @@ func SamePath(a, b string) bool {
 	return canonical(a) == canonical(b)
 }
 
-// canonical drops a Windows \\?\ prefix before and after the links are
-// resolved, so an entry written with it and the plain path of the same file
-// compare equal (issue #654). EvalSymlinks can add the prefix back.
 func canonical(p string) string {
 	p = winpath.StripExtended(pathroot.ExpandHome(p))
 	if abs, err := filepath.Abs(p); err == nil {

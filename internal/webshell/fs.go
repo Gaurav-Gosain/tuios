@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// fsMu guards files, fsDirs and the fake git repository. Every pane shares
-// the one filesystem.
 var fsMu sync.RWMutex
 
 // Home is the fake user's home directory.
@@ -20,9 +18,6 @@ const Home = "/home/guest"
 // ProjectDir is the tiny Go project, which is also the fake git repository.
 const ProjectDir = Home + "/projects/hello"
 
-// The files of the Go project as the last commit left them. The working tree
-// starts with a change on top, so git status and git diff have something to
-// show straight away.
 const (
 	helloGoMod = `module example.com/hello
 
@@ -90,8 +85,6 @@ Things to try here:
 `
 )
 
-// files is the whole fake filesystem. Directories are implied by the paths.
-// Every pane shares it, so a file one pane creates is visible in the others.
 var files map[string]string
 
 func initFiles() {
@@ -304,7 +297,6 @@ func readFile(p string) (string, bool) {
 	return s, ok
 }
 
-// writeFile creates or replaces a file. The parent has to exist.
 func writeFile(p, content string, appendTo bool) bool {
 	fsMu.Lock()
 	if !fsDirs[path.Dir(p)] || fsDirs[p] {
@@ -331,9 +323,6 @@ type ConfigLine struct {
 	Value string
 }
 
-// configText is the config file for these looks. An empty theme is tuios's
-// own colours, and "default" glyphs are the shipped set, so neither is
-// written. Each extra line goes under the table its path names.
 func configText(theme, border, glyphs string, extra []ConfigLine) string {
 	var b strings.Builder
 	b.WriteString("[appearance]\n")
@@ -350,8 +339,6 @@ func configText(theme, border, glyphs string, extra []ConfigLine) string {
 		b.WriteString(glyphs)
 		b.WriteString("\"\n")
 	}
-	// The [appearance] keys first: a TOML table's keys end where the next
-	// table starts.
 	var tables []string
 	byTable := map[string][]string{}
 	for _, l := range extra {
@@ -420,9 +407,6 @@ func remove(p string) bool {
 	return ok
 }
 
-// filesChanged tells tuios that a file was written, made or removed, so the
-// rail's files section reads its folder again. On a real machine a watch on
-// the folder does that.
 func filesChanged() { emit(Event{Type: EventFilesChanged}) }
 
 // IsDir reports whether p is a directory of the fake filesystem.
@@ -464,7 +448,6 @@ func ReadDir(dir string, limit int) (entries []fs.DirEntry, capped bool, err err
 	return entries, false, nil
 }
 
-// dirEntry is one name of a ReadDir listing.
 type dirEntry struct {
 	name string
 	dir  bool
@@ -489,7 +472,6 @@ func (e dirEntry) mode() fs.FileMode {
 
 var _ os.DirEntry = dirEntry{}
 
-// resolve turns a path typed at the prompt into an absolute path.
 func resolve(cwd, p string) string {
 	if p == "" || p == "~" {
 		return Home
@@ -503,7 +485,6 @@ func resolve(cwd, p string) string {
 	return path.Clean(p)
 }
 
-// entry is one name in a directory listing.
 type entry struct {
 	name string
 	dir  bool

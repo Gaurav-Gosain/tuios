@@ -8,12 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/linediff"
 )
 
-// Diffs in the transcript. Codex sends a unified diff, which is shown as it is;
-// ACP sends the old and new text, which is diffed here by lines, with three
-// lines of context. Either way a line keeps its +, - or space, so the diff
-// reads without colour, and at most maxDiffLines lines of one call are shown.
-
-// diffKey identifies a set of diffs, so the same diff is not shown twice.
 func diffKey(diffs []Diff) string {
 	if len(diffs) == 0 {
 		return ""
@@ -34,7 +28,6 @@ func diffKey(diffs []Diff) string {
 	return fmt.Sprintf("%x", h.Sum64())
 }
 
-// renderDiffs is the diffs as transcript lines, with a final line break.
 func renderDiffs(diffs []Diff) string {
 	var lines []string
 	for _, d := range diffs {
@@ -58,7 +51,6 @@ func renderDiffs(diffs []Diff) string {
 	return b.String()
 }
 
-// diffLines is one file's diff as plain lines, headers first.
 func diffLines(d Diff) []string {
 	path := oneLine(d.Path)
 	if d.Unified != "" {
@@ -79,7 +71,6 @@ func diffLines(d Diff) []string {
 	return append(out, unifiedHunks(linediff.Split(oldText), linediff.Split(clean(d.New)), 3)...)
 }
 
-// colourDiffLine colours a diff line by its first character, which it keeps.
 func colourDiffLine(l string) string {
 	switch {
 	case strings.HasPrefix(l, "+++"), strings.HasPrefix(l, "---"):
@@ -94,9 +85,6 @@ func colourDiffLine(l string) string {
 	return l
 }
 
-// unifiedHunks is the diff of a and b as unified hunks with ctx lines of
-// context. Two texts too large to compare in bounded time are shown as all
-// removed and all added, which is still a correct diff.
 func unifiedHunks(a, b []string, ctx int) []string {
 	var out []string
 	for _, h := range linediff.Hunks(linediff.Bounded(a, b, maxLineDiffOps), ctx) {

@@ -23,9 +23,6 @@ type PasteBuffersConfig struct {
 // memory, and a value past this reads as it.
 const MaxPasteBufferKB = 256 << 10
 
-// defaultPasteBuffersConfig is [paste_buffers] as DefaultConfig holds it: the
-// values a file that leaves the table out resolves to, written out, so a
-// config.toml that repeats them is pruned.
 func defaultPasteBuffersConfig() PasteBuffersConfig {
 	limit := pastebuf.DefaultLimit
 	return PasteBuffersConfig{Limit: &limit, MaxKB: pastebuf.DefaultMaxBytes >> 10}

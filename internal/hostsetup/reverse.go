@@ -18,11 +18,6 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// Both ways: this machine added on the far machine, so a client there sees
-// the sessions here. The far side tests its way back before anything is
-// written there, because a NAT or a firewall often blocks that direction,
-// and a far entry that cannot connect is worse than none.
-
 // Here is this machine, as the far side needs it.
 type Here struct {
 	// User is the login here, and Name the name this machine gets there.
@@ -75,8 +70,6 @@ type Reverse struct {
 	WhyNot string `json:"why_not,omitempty"`
 }
 
-// candidates are this machine's addresses for the far side, in the order
-// they are tried, each with the login here.
 func (s *Setup) candidates(c Choices, here *Here) []Candidate {
 	var out []Candidate
 	add := func(addr, source string) {
@@ -109,23 +102,13 @@ func (s *Setup) candidates(c Choices, here *Here) []Candidate {
 	return out
 }
 
-// The far-side scripts, under the sync quoting rules. $1 is the far tuios
-// for the hosts ones.
 const (
-	// reachBackScript runs ssh on the far side to $1 with BatchMode, and
-	// prints its exit code and the last lines it wrote.
 	reachBackScript = `o=$("${TUIOS_SSH:-ssh}" -o BatchMode=yes -o ConnectTimeout=5 -T "$1" true </dev/null 2>&1); echo "rc=$?"; echo "$o" | tail -n 3 | while IFS= read -r l; do echo "said=$l"; done`
-	// readKeyScript prints the far side's first public key.
-	readKeyScript = `for k in id_ed25519 id_ecdsa id_rsa; do if [ -f "$HOME/.ssh/$k.pub" ]; then head -n 1 "$HOME/.ssh/$k.pub"; exit 0; fi; done`
-	// farAddScript adds host $2 at $3 there and prints its test, unless
-	// host $2 is already there at another address ($4 is "check" then).
-	farAddScript = `if [ "$4" = check ]; then "$1" hosts test "$2" --json </dev/null 2>/dev/null; exit 0; fi; "$1" hosts add "$2" "$3" --connect-timeout 5 </dev/null >/dev/null 2>&1; "$1" hosts test "$2" --json </dev/null 2>/dev/null`
-	// farRemoveScript removes host $2 there.
+	readKeyScript   = `for k in id_ed25519 id_ecdsa id_rsa; do if [ -f "$HOME/.ssh/$k.pub" ]; then head -n 1 "$HOME/.ssh/$k.pub"; exit 0; fi; done`
+	farAddScript    = `if [ "$4" = check ]; then "$1" hosts test "$2" --json </dev/null 2>/dev/null; exit 0; fi; "$1" hosts add "$2" "$3" --connect-timeout 5 </dev/null >/dev/null 2>&1; "$1" hosts test "$2" --json </dev/null 2>/dev/null`
 	farRemoveScript = `"$1" hosts remove "$2" </dev/null >/dev/null 2>&1`
 )
 
-// reverse runs the both-ways step. A way back that does not work is
-// reported in the result, not as an error: the link from here works.
 func (s *Setup) reverse(ctx context.Context, c Choices, a Asker) (*Reverse, error) {
 	here := s.opts.Here
 	if here == nil {
@@ -195,14 +178,10 @@ func (s *Setup) reverse(ctx context.Context, c Choices, a Asker) (*Reverse, erro
 		s.say(StepReverse, StateOK, rev.Name+" is added on "+s.name+". Its link is up.")
 		return rev, nil
 	}
-	// Never leave a broken entry there.
 	_, _, _ = s.runner.Run(actx, farRemoveScript, []string{bin, rev.Name}, nil)
 	return fail("The link from " + s.name + " to this machine did not come up. Nothing was added on " + s.name + ". " + clean(r.Reason))
 }
 
-// reachBack tests one address from the far side. A key the far side does
-// not know, or a key this machine refuses, gets its fix, with the person's
-// consent, and one test again.
 func (s *Setup) reachBack(ctx context.Context, a Asker, cd *Candidate) (bool, error) {
 	for try := 0; try < 2; try++ {
 		tctx, cancel := context.WithTimeout(ctx, 20*time.Second)
@@ -229,15 +208,12 @@ func (s *Setup) reachBack(ctx context.Context, a Asker, cd *Candidate) (bool, er
 		var ok bool
 		switch class {
 		case federation.FailHostKeyNew:
-			// The person checks the key on the far side, where ssh asks.
 			err = a.Person(ctx, s.personSSH(s.name+" does not know the host key of this machine. Connect one time from there and check the key.", "ssh "+cd.Addr+" true"))
 			ok = err == nil
 		case federation.FailAuth:
 			ok, err = s.allowFarKey(ctx, a)
 		}
 		if _, np := errors.AsType[*NeedPerson](err); np || !ok {
-			// With no terminal, the fix is the person's. The way back
-			// stays closed, and the setup goes on.
 			return false, nil
 		}
 		if err != nil {
@@ -247,9 +223,6 @@ func (s *Setup) reachBack(ctx context.Context, a Asker, cd *Candidate) (bool, er
 	return false, nil
 }
 
-// allowFarKey adds the far side's public key to authorized_keys here, with
-// the person's consent, tagged so removing the machine removes the key. A
-// far side with no key makes one first, where the person sees it.
 func (s *Setup) allowFarKey(ctx context.Context, a Asker) (bool, error) {
 	tctx, cancel := context.WithTimeout(ctx, stepBudget)
 	defer cancel()
@@ -370,8 +343,6 @@ func RemoveAuthorizedKeys(path, name string) (int, error) {
 	return n, nil
 }
 
-// lineHasTag reports whether the last field of an authorized_keys line is one
-// of tags. A comment line never matches.
 func lineHasTag(line string, tags []string) bool {
 	f := strings.Fields(line)
 	if len(f) < 2 || strings.HasPrefix(f[0], "#") {
@@ -386,7 +357,6 @@ func lineHasTag(line string, tags []string) bool {
 	return false
 }
 
-// decodeFirst decodes the first JSON value in out.
 func decodeFirst(out string, v any) error {
 	i := strings.IndexByte(out, '{')
 	if i < 0 {

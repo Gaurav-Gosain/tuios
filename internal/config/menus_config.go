@@ -9,49 +9,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 )
 
-// Menus: one table for every menu a person declares, [menus.NAME].
-//
-//	[menus.tools]
-//	title = "Tools"
-//	items = [
-//	  { action = "user:deploy", key = "d" },
-//	  { action = "split_vertical", key = "v", label = "Side by side" },
-//	  "---",
-//	  { menu = "git", key = "g" },
-//	]
-//
-//	[menus.pane]
-//	add = ["user:open-in-editor", { menu = "tools" }]
-//	after = "toggle_zoom"
-//	remove = ["screenshot_window"]
-//
-// A menu is a named list of rows. A row is an action name, "---" for a
-// separator, or a table with action or menu (a submenu), and optional key,
-// label and when. open_menu:NAME opens a menu: from a key it is the which-key
-// panel of the rows that have a key, and as a row of a right-click menu it is
-// that menu in the right-click menu's place. sticky keeps the which-key panel
-// open after a key runs.
-//
-// The names in MenuTargets are reserved: they are the right-click menus tuios
-// ships (internal/app/contextmenu_rows.go). Their table changes the shipped
-// rows: items replaces them, or add puts rows after the row after names (at
-// the end when empty) and remove takes rows out. A key on such a row is not
-// read: a target's menu needs its target, so no key opens it.
-//
-// [keybindings.menus.NAME] with title, sticky and a keys table is the older
-// spelling of a menu with keyed rows, read as it always was. The loader adds
-// each [menus.NAME] with keyed rows to KeybindingsConfig.Menus, so the
-// which-key code reads one map; a save leaves those out (withoutFoldedMenus).
-
 // MenuTargets are the reserved menu names, the right-click menus tuios ships.
 var MenuTargets = []string{"pane", "selection", "desktop", "dock", "dock_item", "workspace", "session", "repo", "machine", "file"}
 
-// shippedMenus are the menus tuios ships under a name a person may use too.
-// A [menus.NAME] or [keybindings.menus.NAME] of the person's own takes the
-// place of one.
-//
-// start is the short menu in plain words: the few things a person new to
-// terminals does, in the order they do them, and the full list one row away.
 var shippedMenus = map[string]MenuSpec{
 	"start": {Title: "Menu", Items: []any{
 		map[string]any{"action": "new_window", "key": "n", "label": "New terminal"},
@@ -109,8 +69,6 @@ func (e MenuEntry) RowAction() string {
 	return e.Action
 }
 
-// menuEntries reads a list of rows. A row it cannot read is reported and
-// left out.
 func menuEntries(list []any) ([]MenuEntry, []string) {
 	var out []MenuEntry
 	var bad []string
@@ -125,7 +83,6 @@ func menuEntries(list []any) ([]MenuEntry, []string) {
 	return out, bad
 }
 
-// menuEntry reads one row, or says why it cannot.
 func menuEntry(v any) (MenuEntry, string) {
 	switch v := v.(type) {
 	case string:
@@ -213,9 +170,6 @@ func (c *UserConfig) MenuRows(name string) ([]MenuEntry, string, bool) {
 	return nil, "", false
 }
 
-// keyedRows is a keys table as rows: submenus first, then by key, as the
-// which-key panel orders them. It sorts the action names, not the rows, so
-// it reuses the string sort the binary has.
 func keyedRows(keys map[string][]string) []MenuEntry {
 	first := map[string]string{}
 	var actions []string
@@ -247,8 +201,6 @@ func keyedRows(keys map[string][]string) []MenuEntry {
 	return rows
 }
 
-// foldMenus adds each [menus.NAME] with keyed rows to the which-key menus,
-// in the place of a [keybindings.menus.NAME] of the same name.
 func (c *UserConfig) foldMenus() {
 	kb := &c.Keybindings
 	specs := maps.Clone(c.Menus)
@@ -270,8 +222,6 @@ func (c *UserConfig) foldMenus() {
 		rows, _ := spec.MenuItems()
 		keys := map[string][]string{}
 		labels := map[string]string{}
-		// The rows keep the order they were written in, and a separator
-		// starts a new group, so the panel reads as the menu does.
 		groups := [][]string{nil}
 		for _, e := range rows {
 			if e.Sep {
@@ -314,8 +264,6 @@ func (c *UserConfig) foldMenus() {
 	}
 }
 
-// withoutFoldedMenus is c as it was written: the which-key menus without
-// the ones foldMenus made, and with the ones they took the place of.
 func (c *UserConfig) withoutFoldedMenus() *UserConfig {
 	if len(c.foldedMenus) == 0 {
 		return c
@@ -335,12 +283,6 @@ func (c *UserConfig) withoutFoldedMenus() *UserConfig {
 	return &out
 }
 
-// validateMenusConfig warns about a [menus.NAME] table tuios reads only in
-// part: a row it cannot read, an action it does not know, a submenu that is
-// not declared, items and add together, add, after or remove on a menu that
-// is not a target's, a key on a target's row, and a name both spellings
-// declare. A submenu that opens itself again needs no warning: it stops
-// eight deep.
 func validateMenusConfig(cfg *UserConfig, result *ValidationResult) {
 	known := func(action string) bool {
 		if IsBuiltinAction(action) {

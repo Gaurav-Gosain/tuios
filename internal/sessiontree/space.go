@@ -2,12 +2,6 @@ package sessiontree
 
 import "slices"
 
-// A space is a name a person files related sessions under (tuios new --space,
-// set-session-space). Unlike a repository group, which the daemon infers from
-// where a session sits, a space is chosen, and it can hold sessions from
-// several repositories. So it is the outer group: repository grouping runs
-// inside each space, and inside the sessions in no space.
-
 // GroupBySpace returns the session list with the sessions filed under a space
 // gathered under a KindSpace heading for it, and the sessions in no space after
 // every space, with no heading. It is the grouping tuios ls prints: the spaces
@@ -36,8 +30,6 @@ func GroupBySpace(nodes []Node, within func([]Node) []Node) []Node {
 	if within == nil {
 		within = func(n []Node) []Node { return n }
 	}
-	// The common case is no space at all. The rail rebuilds on every frame of
-	// a marquee or a drag, so that case hands the list on without a copy.
 	if !slices.ContainsFunc(nodes, func(n Node) bool { return n.Space != "" }) {
 		return within(nodes)
 	}
@@ -73,8 +65,6 @@ func GroupBySpace(nodes []Node, within func([]Node) []Node) []Node {
 	return append(out, within(rest)...)
 }
 
-// groupSpace is the space a node is grouped under, or "" for a node that is
-// not grouped by space at all.
 func groupSpace(n Node) string {
 	if n.Kind != KindSession || n.Host != "" || n.Global {
 		return ""

@@ -38,11 +38,8 @@ import (
 	"github.com/adrg/xdg"
 )
 
-// recordExt is the suffix of a copy's record.
 const recordExt = ".json"
 
-// nameMax bounds a name in bytes. Most file systems take 255, and the cut
-// leaves room for the part file the copy writes first (.NAME.tuios-part-ID).
 const nameMax = 180
 
 // Root is the folder every copy is under: tuios/opened in the cache home,
@@ -76,9 +73,6 @@ func PlaceFor(root, host, farPath, name string) (Place, error) {
 		Record: filepath.Join(hostDir, hash+recordExt),
 	}
 	p.Path = filepath.Join(p.Dir, SafeName(name))
-	// SafeName leaves no separator and no dot name, so this holds by
-	// construction. It is checked anyway: the path is handed to the copy and
-	// then to a program, and a slip here would write outside the cache.
 	if !Inside(root, p.Path) || filepath.Dir(p.Path) != p.Dir {
 		return Place{}, errfmt.Errorf("the copy of %q would land outside %s", name, root)
 	}
@@ -91,8 +85,6 @@ func Inside(root, p string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
 }
 
-// windowsReserved are the device names Windows will not make as a file, with
-// or without an extension.
 var windowsReserved = []string{
 	"CON", "PRN", "AUX", "NUL",
 	"COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
@@ -284,7 +276,6 @@ func Sweep(root string, keep time.Duration, now time.Time) (int, error) {
 				continue
 			}
 			if !isRecord {
-				// A folder with a record is judged by its record.
 				if _, err := os.Lstat(filepath.Join(hostDir, hash+recordExt)); err == nil {
 					continue
 				}
@@ -297,7 +288,6 @@ func Sweep(root string, keep time.Duration, now time.Time) (int, error) {
 				removed++
 			}
 		}
-		// Gone only when empty.
 		_ = os.Remove(hostDir)
 	}
 	return removed, nil

@@ -16,9 +16,6 @@ import (
 	gossh "golang.org/x/crypto/ssh"
 )
 
-// newTestKey returns a throwaway signer and the authorized_keys line for it.
-// Nothing here touches the developer's own keys: TestMain redirects HOME, and
-// every key below is generated for the one test that uses it.
 func newTestKey(t *testing.T) (gossh.Signer, string) {
 	t.Helper()
 	_, priv, err := ed25519.GenerateKey(rand.Reader)
@@ -32,7 +29,6 @@ func newTestKey(t *testing.T) (gossh.Signer, string) {
 	return signer, string(gossh.MarshalAuthorizedKey(signer.PublicKey()))
 }
 
-// writeFile writes one file and returns its path.
 func writeFile(t *testing.T, path, content string, mode os.FileMode) string {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -156,7 +152,6 @@ func TestAuthorizedKeysSearchOrder(t *testing.T) {
 	sshPath := filepath.Join(home, ".ssh", "authorized_keys")
 	configPath := filepath.Join(xdg.ConfigHome, ConfigAuthorizedKeys)
 
-	// ~/.ssh/authorized_keys alone turns nothing on.
 	writeFile(t, sshPath, sshLine, 0o600)
 	keys, err := LoadAuthorizedKeys("")
 	if err != nil {
@@ -166,7 +161,6 @@ func TestAuthorizedKeysSearchOrder(t *testing.T) {
 		t.Fatalf("read %q without being asked to", keys.Path)
 	}
 
-	// The TUIOS file is read.
 	writeFile(t, configPath, configLine, 0o600)
 	keys, err = LoadAuthorizedKeys("")
 	if err != nil {
@@ -266,7 +260,6 @@ func TestStartSSHServerRefusesABindWithNoKeys(t *testing.T) {
 				t.Fatalf("the server did not refuse a bind on %s with no keys", host)
 			}
 
-			// And nothing is listening on the port it was asked for.
 			conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", port), time.Second)
 			if err == nil {
 				_ = conn.Close()
@@ -276,9 +269,6 @@ func TestStartSSHServerRefusesABindWithNoKeys(t *testing.T) {
 	}
 }
 
-// startAuthenticatedServer starts the SSH server on loopback with keysFile as
-// its authorized keys, and returns the address once the port answers. An empty
-// keysFile starts it with --no-auth, the only way to run with no keys.
 func startAuthenticatedServer(t *testing.T, keysFile string) string {
 	t.Helper()
 	port := freePort(t)
@@ -291,7 +281,7 @@ func startAuthenticatedServer(t *testing.T, keysFile string) string {
 			KeyPath:            filepath.Join(t.TempDir(), "host_key"),
 			AuthorizedKeysPath: keysFile,
 			NoAuth:             keysFile == "",
-			Ephemeral:          true, // no daemon: keep the test self-contained
+			Ephemeral:          true,
 			Version:            "test",
 		})
 	}()
@@ -319,7 +309,6 @@ func startAuthenticatedServer(t *testing.T, keysFile string) string {
 	}
 }
 
-// dialSSH connects a real SSH client with the given auth methods.
 func dialSSH(addr string, auth []gossh.AuthMethod) (*gossh.Client, error) {
 	return gossh.Dial("tcp", addr, &gossh.ClientConfig{
 		User:            "tester",
@@ -406,9 +395,6 @@ func TestSSHServerWithNoAuthTakesAKeylessClient(t *testing.T) {
 	assertPaintsAFrame(t, client)
 }
 
-// assertPaintsAFrame proves the connection is a working TUIOS session rather
-// than an open socket: it asks for a PTY, starts the shell, and waits for the
-// first frame.
 func assertPaintsAFrame(t *testing.T, client *gossh.Client) {
 	t.Helper()
 	sess, err := client.NewSession()

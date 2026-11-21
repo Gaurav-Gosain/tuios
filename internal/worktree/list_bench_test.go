@@ -10,9 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// benchWorktrees builds a repository with n worktrees, each carrying a
-// modified file, an untracked file and an ignored tree the size of a small
-// node_modules, which is the shape that makes a listing slow.
 func benchWorktrees(b *testing.B, n int) []string {
 	var t testing.T
 	repo := testutil.GitRepo(&t)

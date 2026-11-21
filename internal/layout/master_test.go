@@ -5,24 +5,6 @@ import (
 	"testing"
 )
 
-// The ways the master layout can fail, written down before the code:
-//
-//  1. The defaults (master on the left, one master, the grid on) move a pane
-//     that the layout before master positions existed put somewhere else. Every
-//     existing user would see a different screen after an upgrade.
-//  2. A rectangle leaves the region or has no cells.
-//  3. Two rectangles overlap.
-//  4. The count of rectangles is not the count of panes.
-//  5. The master is not on the side that was asked for.
-//  6. The ratio read back from a layout does not lay the same layout out
-//     again, so a resize that SyncMasterStackFromGeometry records moves the
-//     panes on the next retile.
-//
-// FuzzMasterLayout checks all six for every position, master count, ratio,
-// size and gap the fuzzer reaches. The seeds run in the ordinary suite.
-
-// legacyMasterStack is CalculateMasterStackLayout as it was before master
-// positions existed, kept verbatim as the oracle for failure 1.
 func legacyMasterStack(n, screenWidth, usableHeight, topMargin int, masterRatio, stackRatio float64, gap int) []TileLayout {
 	if n == 0 {
 		return nil
@@ -81,11 +63,9 @@ func checkMasterLayout(t *testing.T, n, w, h, top int, p MasterParams) {
 	what := fmt.Sprintf("n=%d %dx%d top=%d %+v", n, w, h, top, p)
 	got := CalculateMasterLayout(n, w, h, top, p)
 
-	// 4
 	if len(got) != n {
 		t.Fatalf("%s: %d rectangles", what, len(got))
 	}
-	// 2 and 3
 	for _, r := range outside(got, w, h, top) {
 		t.Errorf("%s: %+v is outside the region", what, r)
 	}
@@ -96,7 +76,6 @@ func checkMasterLayout(t *testing.T, n, w, h, top int, p MasterParams) {
 		t.FailNow()
 	}
 
-	// 1
 	if (p.Position == "" || p.Position == MasterPositionLeft) && p.Count <= 1 && p.Grid {
 		want := legacyMasterStack(n, w, h, top, p.Ratio, p.StackRatio, p.Gap)
 		for i := range want {
@@ -111,7 +90,6 @@ func checkMasterLayout(t *testing.T, n, w, h, top int, p MasterParams) {
 		return
 	}
 
-	// 5. Every master sits on the asked side of every stack pane.
 	masters, stack := got[:shape.masters], got[shape.masters:]
 	for _, mr := range masters {
 		for i, sr := range stack {
@@ -126,7 +104,6 @@ func checkMasterLayout(t *testing.T, n, w, h, top int, p MasterParams) {
 			case MasterPositionBottom:
 				ok = sr.Y+sr.Height <= mr.Y
 			case MasterPositionCenter:
-				// Alternating: the first stack pane right, the next left.
 				if i%2 == 0 {
 					ok = mr.X+mr.Width <= sr.X
 				} else {
@@ -139,7 +116,6 @@ func checkMasterLayout(t *testing.T, n, w, h, top int, p MasterParams) {
 		}
 	}
 
-	// 6. The ratios read back lay the same panes out again.
 	rects := make([]Rect, n)
 	for i, l := range got {
 		rects[i] = Rect{X: l.X, Y: l.Y, W: l.Width, H: l.Height}
@@ -179,8 +155,6 @@ func FuzzMasterLayout(f *testing.F) {
 		if n < 0 {
 			n = -n
 		}
-		// The region has to be able to hold every pane at a cell each, along
-		// either axis, which is the tiler's precondition (see spans).
 		w, h, top = 12+abs(w%300), 12+abs(h%120), abs(top%3)
 		p := MasterParams{
 			Position:   pos,

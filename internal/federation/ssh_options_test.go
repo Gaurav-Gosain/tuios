@@ -7,9 +7,6 @@ import (
 	"testing"
 )
 
-// refusedSSHOptions make ssh run a command, or are spelled in a way ssh reads
-// differently from plain text. Every spelling ssh reads as ProxyCommand is
-// here: a quoted keyword, and keywords split from the value by CR or LF.
 var refusedSSHOptions = [][]string{
 	{"-o", "ProxyCommand=touch /tmp/x"},
 	{"-o", "proxycommand touch /tmp/x"},
@@ -37,8 +34,6 @@ var refusedSSHOptions = [][]string{
 	{"host", "touch /tmp/x"},
 	{"-o"},
 	{"-W", "host:22"},
-	// Options that write a chosen line into a chosen file: known_hosts at
-	// ~/.bashrc, with a host key alias that is a shell line.
 	{"-o", "UserKnownHostsFile=~/.bashrc", "-o", "StrictHostKeyChecking=accept-new", "-o", "HashKnownHosts=no", "-o", "HostKeyAlias=x;{sh,/tmp/p};#"},
 	{"-o", "UserKnownHostsFile /dev/null"},
 	{"-o", "GlobalKnownHostsFile=/tmp/x"},
@@ -62,7 +57,6 @@ var refusedSSHOptions = [][]string{
 	{"-J", "x,,y"},
 }
 
-// acceptedSSHOptions are what a host entry needs ssh_options for.
 var acceptedSSHOptions = [][]string{
 	nil,
 	{"-J", "bastion"},
@@ -101,7 +95,6 @@ func TestSSHOptionsThatRunCommandsAreRefused(t *testing.T) {
 	}
 }
 
-// sshG runs ssh -G with opts and returns what ssh resolves, lower case.
 func sshG(t *testing.T, opts []string) (string, bool) {
 	t.Helper()
 	args := append(append([]string{"-G", "-F", "/dev/null"}, opts...), "example.invalid")
@@ -129,7 +122,6 @@ func TestSSHReadsTheRefusedSpellingsAsCommands(t *testing.T) {
 			t.Errorf("ssh does not read %q as ProxyCommand, so the test spelling is wrong:\n%s", opts, out)
 		}
 	}
-	// The command-running keys as ssh sets them with no options at all.
 	commandKeys := func(out string) map[string]string {
 		keys := map[string]string{}
 		for line := range strings.SplitSeq(out, "\n") {

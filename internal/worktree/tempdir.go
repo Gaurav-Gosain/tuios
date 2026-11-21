@@ -10,28 +10,8 @@ import (
 	"time"
 )
 
-// Temporary folders: a snapshot, a patch, a restore and a jj status read the
-// work tree through an index of their own, and a merge test writes its objects
-// to a folder of its own. Each is a folder in the temp dir, named
-// tuios-<kind>-<pid>-<random>, that git writes into.
-//
-// A deferred RemoveAll is not enough to remove one. A process that ends while
-// git works in the folder runs no deferred call: a live upgrade execs the new
-// image, a stuck call outlives the daemon's shutdown wait, a crash or SIGKILL
-// ends everything at once. So every folder is also in a list of this
-// process's live folders:
-//
-//   - RemoveTemp ends the git commands of every live folder and removes the
-//     folders. The daemon calls it before a live upgrade execs and before its
-//     process exits.
-//   - SweepTemp removes the folders that a process left: one whose pid is not
-//     running, or this process's own that is not live. A daemon calls it once
-//     it serves, which covers a crash and the image a live upgrade starts.
-
-// tempKinds are the kinds of temporary folder, in the name after "tuios-".
 var tempKinds = []string{"index", "merge-tree"}
 
-// tempDir is one live temporary folder.
 type tempDir struct {
 	path   string
 	cancel context.CancelFunc
@@ -39,22 +19,15 @@ type tempDir struct {
 	once   sync.Once
 }
 
-// temps is this process's live temporary folders. mu also holds a folder's
-// creation and its entry together, so a sweep never sees a folder of this
-// process that is not yet in live.
 var temps struct {
 	mu   sync.Mutex
 	live map[string]*tempDir
 }
 
-// tempPattern is the os.MkdirTemp pattern of a folder of kind for pid.
 func tempPattern(kind string, pid int) string {
 	return "tuios-" + kind + "-" + strconv.Itoa(pid) + "-*"
 }
 
-// newTemp makes a temporary folder of kind and a context, from ctx, for the
-// git commands that work in it. RemoveTemp ends that context. The caller
-// defers remove.
 func newTemp(ctx context.Context, kind string) (*tempDir, context.Context, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -74,9 +47,6 @@ func newTemp(ctx context.Context, kind string) (*tempDir, context.Context, error
 	return t, ctx, nil
 }
 
-// remove ends the folder's git commands and removes the folder. git writes
-// index.lock beside the index, and leaves it when it is stopped mid-write, so
-// the whole folder goes.
 func (t *tempDir) remove() {
 	t.once.Do(func() {
 		t.cancel()
@@ -115,8 +85,6 @@ waiting:
 			break waiting
 		}
 	}
-	// A caller that did not finish in time has its folder removed under it.
-	// Its git commands are ended, so none of them writes there again.
 	for _, t := range live {
 		t.remove()
 	}
@@ -159,9 +127,6 @@ func SweepTemp() int {
 	return removed
 }
 
-// tempOwnerPID reads the pid from a temporary folder's name. ok is false for a
-// name that is not one, which includes the names of older builds, which held
-// no pid.
 func tempOwnerPID(name string) (pid int, ok bool) {
 	for _, kind := range tempKinds {
 		rest, found := strings.CutPrefix(name, "tuios-"+kind+"-")

@@ -14,9 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// clockFormatSample renders a layout against a fixed time, so a warning can say
-// what the user's layout actually produces rather than name the rule it broke.
-// The reference instant is Go's own, which is what makes a layout a layout.
 func clockFormatSample(format string) string {
 	return time.Date(2006, 1, 2, 15, 4, 5, 0, time.UTC).Format(format)
 }
@@ -50,12 +47,6 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 
 	validateSection := func(sectionName string, section map[string][]string) {
 		for _, keys := range section {
-			// An action with an empty list is not a mistake to report: it is the
-			// only way the file has of saying "I took this key away", and
-			// fillMissingKeybinds reads it as one. Warning about it meant the
-			// documented way to unbind something cost a startup warning for as
-			// long as the config lived, which taught users the unbind had not
-			// worked.
 			if len(keys) == 0 {
 				continue
 			}
@@ -89,9 +80,6 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 		}
 	}
 
-	// The key that ends nest mode is read as the leader is: a key that cannot
-	// be pressed would leave nest mode with no way out, and one that programs
-	// type would end it in the middle of typing.
 	if k := cfg.Keybindings.NestExitKey; k != "" {
 		if valid, errMsg := normalizer.ValidateKey(k); !valid {
 			result.Errors = append(result.Errors, ValidationError{
@@ -132,7 +120,6 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	}
 	validateMenus(cfg, result)
 
-	// Every option's closed set and range, from its entry in the registry.
 	validateOptions(cfg, result)
 	validateAppearance(cfg, result)
 	validateMotion(cfg, result)
@@ -148,17 +135,11 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	validateMenusConfig(cfg, result)
 	validateProfile(cfg, result)
 
-	// Validate the notifications section (warn on a duration tuios cannot use)
 	validateNotificationsConfig(cfg, result)
 	validateNotify(cfg, result)
 
-	// Keys two actions contest. The first action in each list is the one that
-	// runs; the rest never fire.
 	registry := NewKeybindRegistry(cfg)
 	for _, c := range registry.Collisions() {
-		// The whole chord, not the bare key: "1" means one thing in window
-		// mode and another after the layout chord, and a warning that said
-		// only "1" could not be acted on.
 		key := c.Press
 		actions := []string{c.Winner}
 		where := []string{c.Winner + " in " + c.WinnerSource.String()}
@@ -166,10 +147,6 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 			actions = append(actions, l.Action)
 			where = append(where, l.Action+" in "+l.Source.String())
 		}
-		// The message names the winner, where each binding is set, and how
-		// to act on it. A warning that only listed the actions left the
-		// reader with a fact and no verb, and the verb is the whole point of
-		// reporting it.
 		how := fmt.Sprintf("Run `tuios keybinds unbind <action> %s` to take the key off one of them.", key)
 		if slices.ContainsFunc(actions, func(a string) bool { return strings.HasPrefix(a, CommandActionPrefix) }) {
 			how = "To move a command entry, edit its key in the [[keybindings.command]] table of config.toml. For an action, run `tuios keybinds unbind <action> " + key + "`."
@@ -189,11 +166,6 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 		})
 	}
 
-	// Check for essential actions that should have keybindings. An action
-	// counts as bound when any key reaches it or another action that does the
-	// same thing: window mode is entered as well from terminal mode's exit key
-	// and the leader's exit key, and a config that clears enter_window_mode for
-	// one of those has lost nothing.
 	essentialActions := []struct {
 		section, action string
 		alternatives    [][2]string
@@ -222,22 +194,12 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 		}
 	}
 
-	// On macOS, warn about using alt+ instead of opt+ for better UX.
-	//
-	// Only about a binding the user wrote. The macOS defaults deliberately pair
-	// an Option chord with an alt+ spelling for terminals that cannot send one
-	// (terminal_next_window is opt+tab and alt+n), and next_session ships as
-	// alt+shift+n outright, so judging every alt+ binding made the shipped
-	// default config warn about itself: two warnings on every macOS machine
-	// whose config nobody had touched, advising the user to edit keys they had
-	// never chosen. An advisory is about a choice, and those are not choices.
 	if normalizer.IsMacOS() {
 		shipped := defaultKeybindingPairs()
 		checkMacOSAltUsage := func(sectionName string, section map[string][]string) {
 			for action, keys := range section {
 				for _, key := range keys {
 					keyLower := strings.ToLower(strings.TrimSpace(key))
-					// Warn if using alt+ (suggest opt+ instead for macOS consistency)
 					if strings.HasPrefix(keyLower, "alt+") && !shipped[action+"\x00"+keyLower] {
 						result.Warnings = append(result.Warnings, ValidationError{
 							Field:   sectionName,
@@ -249,7 +211,6 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 			}
 		}
 
-		// Check all sections for alt+ usage on macOS
 		checkMacOSAltUsage("window_management", cfg.Keybindings.WindowManagement)
 		checkMacOSAltUsage("workspaces", cfg.Keybindings.Workspaces)
 		checkMacOSAltUsage("layout", cfg.Keybindings.Layout)
@@ -275,10 +236,6 @@ func ValidateConfig(cfg *UserConfig) *ValidationResult {
 	return result
 }
 
-// validatePrefixRepeat warns about a keybindings.repeat entry that no key
-// runs after the leader. Repeat looks the action up from the key pressed under
-// the leader, so such an entry never repeats. That covers a misspelt action
-// too, which would otherwise do nothing with no word anywhere.
 func validatePrefixRepeat(cfg *UserConfig, result *ValidationResult) {
 	for _, action := range cfg.Keybindings.Repeat {
 		if len(cfg.Keybindings.PrefixMode[action]) > 0 {
@@ -292,13 +249,6 @@ func validatePrefixRepeat(cfg *UserConfig, result *ValidationResult) {
 	}
 }
 
-// validateOptions checks each registry option's value against its entry: a
-// string option against its closed set (Accepted), an int option against its
-// range (Min to Max). Such values are not used as written, so a typo would
-// otherwise go unnoticed. An empty string is left to the default, and so is 0
-// for an int option whose range starts above 0. A colour option takes a
-// keyword or a literal, so its keywords are not a closed set here; the colour
-// checks below read it.
 func validateOptions(cfg *UserConfig, result *ValidationResult) {
 	for _, o := range Options() {
 		if o.Color || o.Deprecated != "" {
@@ -329,10 +279,6 @@ func validateOptions(cfg *UserConfig, result *ValidationResult) {
 	}
 }
 
-// optionWarningPlace is where a warning about o is filed: the table a person
-// writes it in, and its key there. The closed sets of [appearance] were
-// always filed under appearance with the rest of the path as the key, so
-// they stay there.
 func optionWarningPlace(o Option) (field, key string) {
 	if rest, ok := strings.CutPrefix(o.Path, "appearance."); ok && o.Type == OptionString && len(o.Accepted) > 0 {
 		return "appearance", rest
@@ -341,8 +287,6 @@ func optionWarningPlace(o Option) (field, key string) {
 	return o.Path[:i], o.Path[i+1:]
 }
 
-// warnEnum warns when field.key holds a value outside allowed, and names the
-// value it falls back to. An empty value is left to the default.
 func warnEnum(result *ValidationResult, field, key, value string, allowed []string, fallback string) {
 	if value == "" || slices.Contains(allowed, value) {
 		return
@@ -354,22 +298,14 @@ func warnEnum(result *ValidationResult, field, key, value string, allowed []stri
 	})
 }
 
-// validateSSHAgent warns when daemon.ssh_agent holds a value outside its
-// allowed set. An unknown value is off.
 func validateSSHAgent(cfg *UserConfig, result *ValidationResult) {
 	warnEnum(result, "daemon", "ssh_agent", cfg.Daemon.SSHAgent, SSHAgentModes, SSHAgentOff)
 }
 
-// validateDisplay warns when daemon.display holds a value outside its allowed
-// set. An unknown value is off.
 func validateDisplay(cfg *UserConfig, result *ValidationResult) {
 	warnEnum(result, "daemon", "display", cfg.Daemon.Display, DisplayModes, DisplayOff)
 }
 
-// validateNotificationsConfig warns about the notification values one option's
-// set or range does not cover: the quiet hours and the mail switches. The
-// lifetimes, bell, style, level and the agent sound keys are checked from
-// their registry entries (validateOptions).
 func validateNotificationsConfig(cfg *UserConfig, result *ValidationResult) {
 	agent := &cfg.Notifications.Agent
 	if _, _, err := ParseQuietHours(agent.QuietHours); err != nil {
@@ -380,8 +316,6 @@ func validateNotificationsConfig(cfg *UserConfig, result *ValidationResult) {
 		})
 	}
 
-	// A mail key left out follows [notifications.agent], so the only
-	// contradiction is inside the mail table once its switch is resolved.
 	mail := ResolveMailAlerts(&cfg.Notifications.Mail, ResolveAgentAlerts(agent))
 	if !mail.Enabled && mail.BetweenAgents {
 		result.Warnings = append(result.Warnings, ValidationError{
@@ -392,9 +326,6 @@ func validateNotificationsConfig(cfg *UserConfig, result *ValidationResult) {
 	}
 }
 
-// validateAppearance warns about the [appearance] values one option's set or
-// range does not cover. The closed sets and ranges are checked from the
-// registry (validateOptions).
 func validateAppearance(cfg *UserConfig, result *ValidationResult) {
 	if !cfg.Appearance.MaxFPS.Valid() {
 		result.Warnings = append(result.Warnings, ValidationError{
@@ -452,10 +383,6 @@ func validateAppearance(cfg *UserConfig, result *ValidationResult) {
 		"sidebar.cursor_background", cfg.Appearance.Sidebar.CursorBackground)
 }
 
-// validateBackgrounds warns about a background option that is neither a
-// keyword nor a colour, and about theme asked for with no theme to take it
-// from. Either way that surface is left transparent, which is the default, so
-// the frame stays drawable and the warning says why nothing was painted.
 func validateBackgrounds(cfg *UserConfig, result *ValidationResult) {
 	a := &cfg.Appearance
 	for _, bg := range []struct {
@@ -472,7 +399,6 @@ func validateBackgrounds(cfg *UserConfig, result *ValidationResult) {
 	}
 }
 
-// validateBackground is validateBackgrounds for one option.
 func validateBackground(key, v, surface string, themed bool, result *ValidationResult) {
 	switch {
 	case v == "" || v == BackgroundOff || theme.IsColor(v):
@@ -495,9 +421,6 @@ func validateBackground(key, v, surface string, themed bool, result *ValidationR
 	}
 }
 
-// validateOmarchyTheme warns when the theme is omarchy on a machine without
-// Omarchy. A config file goes from machine to machine, so this is not an
-// error: tuios uses the terminal's colours there.
 func validateOmarchyTheme(cfg *UserConfig, result *ValidationResult) {
 	if cfg.Appearance.Theme != theme.OmarchyID || theme.OmarchyInstalled() {
 		return
@@ -509,13 +432,6 @@ func validateOmarchyTheme(cfg *UserConfig, result *ValidationResult) {
 	})
 }
 
-// validateGlyphSet warns about a set that does not resolve, and repeats the
-// lines the directory read produced.
-//
-// The set's own problems are surfaced here rather than only logged because they
-// are the answer to "why is my set half applied": a role dropped for being the
-// wrong width is silent on screen, and it is exactly the mistake a hand-written
-// set makes.
 func validateGlyphSet(cfg *UserConfig, result *ValidationResult) {
 	id := cfg.Appearance.Glyphs
 	if id != "" && !theme.GlyphSetExists(id) {
@@ -532,13 +448,6 @@ func validateGlyphSet(cfg *UserConfig, result *ValidationResult) {
 	}
 }
 
-// validateClockFormat warns about a layout that formats to nothing.
-//
-// Go's time layouts have no syntax to be wrong at: any string is a layout, and
-// one with no reference-time component in it formats to itself. That is a
-// legitimate thing to want ("REC" as a clock is a fixed label), so this warns
-// only about the case a user cannot have meant, which is a layout whose output
-// carries no digit at all after a real time is put through it.
 func validateClockFormat(format string, result *ValidationResult) {
 	if format == "" {
 		return
@@ -555,7 +464,6 @@ func validateClockFormat(format string, result *ValidationResult) {
 	})
 }
 
-// hexColorPattern matches the one colour literal the config accepts.
 var hexColorPattern = lazyre.New(`^#[0-9a-fA-F]{6}$`)
 
 // IsHexColor reports whether s is #rrggbb, the one spelling the colour picker
@@ -574,7 +482,6 @@ func ColourProblem(v string, keywords ...string) string {
 	return msg
 }
 
-// sentence makes a lower-case clause a sentence.
 func sentence(s string) string {
 	if s == "" {
 		return s
@@ -582,12 +489,6 @@ func sentence(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-// validateBorderColors warns about a border override that is not a colour.
-//
-// The override is handed to lipgloss as-is and an unparseable one resolves to
-// no colour at all, so the pane it was meant to mark loses its border ink
-// instead. The value is left in place: the warning says which key is wrong, and
-// the border falls back to the theme's own colour meanwhile.
 func validateBorderColors(cfg *UserConfig, result *ValidationResult) {
 	a := &cfg.Appearance
 	warnColours(result, "appearance", "The border uses the theme colour",
@@ -624,9 +525,6 @@ func GradientStops(v string) []string {
 	return strings.FieldsFunc(v, func(r rune) bool { return r == ' ' || r == ',' || r == '\t' })
 }
 
-// validateSelectionColors warns about a selection colour that is not a colour.
-// The mark is drawn without it: a background left out tints nothing, and a
-// foreground left out keeps the program's own colour.
 func validateSelectionColors(cfg *UserConfig, result *ValidationResult) {
 	sel := &cfg.Appearance.Selection
 	warnColours(result, "appearance", "The mark is drawn without this colour",
@@ -637,8 +535,6 @@ func validateSelectionColors(cfg *UserConfig, result *ValidationResult) {
 		"selection.flash_color", sel.FlashColor)
 }
 
-// warnColours warns about each set value in kv, key then value, that is not a
-// colour. then says what tuios does instead.
 func warnColours(result *ValidationResult, field, then string, kv ...string) {
 	for i := 0; i+1 < len(kv); i += 2 {
 		if v := kv[i+1]; v != "" && !theme.IsColor(v) {
@@ -649,9 +545,6 @@ func warnColours(result *ValidationResult, field, then string, kv ...string) {
 	}
 }
 
-// validateDockModeIcons warns about a mode pill icon the dock cannot lay out:
-// one with a control character, or one wider than DockModeIconMaxWidth cells.
-// The pill draws the built-in icon instead, so the dock row keeps its shape.
 func validateDockModeIcons(cfg *UserConfig, result *ValidationResult) {
 	a := cfg.Appearance
 	for _, icon := range [...]struct {
@@ -674,9 +567,6 @@ func validateDockModeIcons(cfg *UserConfig, result *ValidationResult) {
 	}
 }
 
-// validateScrollColumnPresets warns about a column width preset outside 1 to
-// 100 percent. ScrollColumnPresetFractions drops it, and the cycle steps
-// through the rest.
 func validateScrollColumnPresets(cfg *UserConfig, result *ValidationResult) {
 	for _, p := range cfg.Appearance.ScrollColumnPresets {
 		if p > 0 && p <= ScrollColumnWidthCeiling {
@@ -690,10 +580,6 @@ func validateScrollColumnPresets(cfg *UserConfig, result *ValidationResult) {
 	}
 }
 
-// validateScrollbar warns about the scrollbar's free-form keys, which no enum
-// covers: the two glyphs have to measure exactly one cell or they would shift
-// the content column they float over, and the tint is either a keyword or a hex
-// literal. Each falls back to the style's default, so the frame stays drawable.
 func validateScrollbar(cfg *UserConfig, result *ValidationResult) {
 	sb := cfg.Appearance.Scrollbar
 
@@ -722,14 +608,10 @@ func validateScrollbar(cfg *UserConfig, result *ValidationResult) {
 	})
 }
 
-// knownTitlePlaceholders are the placeholders FormatWindowTitle expands.
 var knownTitlePlaceholders = []string{"{title}", "{index}", "{cwd}"}
 
-// knownHostTitlePlaceholders are the placeholders FormatHostTitle expands.
 var knownHostTitlePlaceholders = append(slices.Clone(knownTitlePlaceholders), "{session}", "{workspace}")
 
-// titlePlaceholderPattern matches anything written as a placeholder, so a typo
-// like {name} can be reported instead of being rendered literally in the title.
 var titlePlaceholderPattern = lazyre.New(`\{[^{}]*\}`)
 
 func validateTitleFormat(field, key, format string, allowed []string, result *ValidationResult) {
@@ -746,13 +628,11 @@ func validateTitleFormat(field, key, format string, allowed []string, result *Va
 	}
 }
 
-// keySection is one keybinding table of config.toml, by its name there.
 type keySection struct {
 	name string
 	keys map[string][]string
 }
 
-// keySections are the keybinding tables ValidateConfig checks key by key.
 func keySections(kb *KeybindingsConfig) []keySection {
 	sections := make([]keySection, 0, len(keybindTables)+len(kb.Menus)+len(kb.Modes))
 	for _, t := range keybindTables {
@@ -872,8 +752,6 @@ func DropUnreadableKeys(cfg *UserConfig, lc *LayeredConfig) []DroppedKey {
 			kb.LeaderKey = defaults.LeaderKey
 		}
 	}
-	// A nest exit key that cannot be read goes back to F12, for the same
-	// reason: nest mode must always have a way out.
 	if kb.NestExitKey != "" {
 		if ok, msg := normalizer.ValidateKey(kb.NestExitKey); !ok {
 			dropped = append(dropped, DroppedKey{
@@ -891,7 +769,7 @@ func DropUnreadableKeys(cfg *UserConfig, lc *LayeredConfig) []DroppedKey {
 	type emptied struct {
 		section keySection
 		action  string
-		first   int // index of the action's first entry in dropped
+		first   int
 	}
 	var refill []emptied
 	for _, section := range keySections(kb) {
@@ -927,8 +805,6 @@ func DropUnreadableKeys(cfg *UserConfig, lc *LayeredConfig) []DroppedKey {
 			refill = append(refill, emptied{section, action, first})
 		}
 	}
-	// The defaults go back once every bad key is out, so a default is only
-	// held back by a binding that works.
 	for _, e := range refill {
 		var back []string
 		takenBy := ""
@@ -954,9 +830,6 @@ func DropUnreadableKeys(cfg *UserConfig, lc *LayeredConfig) []DroppedKey {
 	return dropped
 }
 
-// keyHolder is the action other than action that holds key in the scope of
-// section, or "". The window-mode tables are one keymap, so a key in any of
-// them counts, as it does for yieldTakenDefaults.
 func keyHolder(cfg *UserConfig, section keySection, action, key string) string {
 	tables := map[string][]string(section.keys)
 	if windowModeSection[section.name] {
@@ -978,14 +851,12 @@ func keyHolder(cfg *UserConfig, section keySection, action, key string) string {
 	return holders[0]
 }
 
-// windowModeSection are the tables windowModeTables joins.
 var windowModeSection = map[string]bool{
 	"window_management": true, "workspaces": true, "layout": true,
 	"mode_control": true, "system": true, "navigation": true,
 	"restore_minimized": true,
 }
 
-// hasKeybinding checks if an action has at least one keybinding in a specific section
 func hasKeybinding(cfg *UserConfig, sectionName, action string) bool {
 	var section map[string][]string
 
@@ -1021,9 +892,6 @@ func hasKeybinding(cfg *UserConfig, sectionName, action string) bool {
 	return false
 }
 
-// defaultKeybindingPairs is every action-and-key pair the shipped defaults
-// bind, keyed "<action>\x00<key>" with the key lowercased. It is what tells an
-// advisory that a binding is tuios's own rather than the user's.
 func defaultKeybindingPairs() map[string]bool {
 	kb := DefaultConfig().Keybindings
 	out := map[string]bool{}
@@ -1041,10 +909,6 @@ func defaultKeybindingPairs() map[string]bool {
 	return out
 }
 
-// validateMotion warns about the old appearance.workspace_transition, which a
-// file may still carry. Its entry is deprecated and has no closed set of its
-// own, so validateOptions does not check it. The [motion] keys are checked
-// from their entries.
 func validateMotion(cfg *UserConfig, result *ValidationResult) {
 	warnEnum(result, "appearance", "workspace_transition", cfg.Appearance.WorkspaceTransition, WorkspaceTransitions, "default")
 }

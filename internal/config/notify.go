@@ -183,7 +183,6 @@ var NotifyContentNames = []string{NotifyContentSummary, NotifyContentTitle}
 // way to read it.
 type Secret string
 
-// redactedText is what a set secret prints as.
 const redactedText = "[redacted]"
 
 // String hides the value.
@@ -205,12 +204,6 @@ func (s Secret) MarshalJSON() ([]byte, error) { return []byte(`"` + s.String() +
 
 // Reveal is the value. Call it only to send it to the provider it is for.
 func (s Secret) Reveal() string { return string(s) }
-
-// A provider table prints as its name and host only. Secret already hides
-// itself, but fmt prints a pointer field with a verb other than %v or %p
-// through its error path, which skips every String and Format method, so the
-// tables hide themselves as a whole. The url is left out too: an ntfy topic
-// name is a secret of its own.
 
 // Format prints the table as its name and host.
 func (p NtfyConfig) Format(f fmt.State, _ rune) { formatProvider(f, "ntfy", p.URL) }
@@ -310,17 +303,12 @@ func (n *NotifyConfig) Destinations() []string {
 	if n.WebURL != "" {
 		out = append(out, "web\x00"+n.WebURL)
 	}
-	// Plain http lets the Inbox's text go to a push service in clear.
 	if n.WebPushInsecure() {
 		out = append(out, "webpush\x00insecure")
 	}
 	return out
 }
 
-// secretOrigin says where a secret comes from without saying what it is.
-// Two inline values are not told apart, since a digest of one would leak a
-// little of it. A changed inline value can only go to the address already
-// approved.
 func secretOrigin(inline Secret, env, file string) string {
 	switch {
 	case inline != "":
@@ -369,7 +357,6 @@ func ResolveSecret(inline Secret, env, file string) (string, error) {
 	return "", nil
 }
 
-// checkNotifyURL says what is wrong with a provider address, or "".
 func checkNotifyURL(raw string) string {
 	if strings.TrimSpace(raw) == "" {
 		return "the url is empty. Set it to the address that takes the notification"
@@ -384,8 +371,6 @@ func checkNotifyURL(raw string) string {
 	return ""
 }
 
-// validateNotify reports the [notify] mistakes that would make a notification
-// fail or go nowhere. No message holds a secret, an address or a topic.
 func validateNotify(cfg *UserConfig, result *ValidationResult) {
 	n := &cfg.Notify
 	warn := func(key, msg string) {

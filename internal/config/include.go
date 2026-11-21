@@ -19,48 +19,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
-// A config split over several files.
-//
-// config.toml may name other files in a top-level include list, and every
-// *.toml file in a config.d directory beside config.toml is read too. The
-// files are merged into one document before anything else sees it, so the rest
-// of the package parses, fills and validates one config the way it always did.
-//
-// # Merge order
-//
-// Lowest precedence first:
-//
-//  1. the files config.toml includes, in the order the list gives them (a file
-//     that includes others has those merged before itself)
-//  2. the config.d files, in lexical order of their names
-//  3. config.toml itself
-//
-// config.toml is last because it is the file tuios writes. It holds only what
-// the person changed: tuios writes a first-start config.toml with no settings,
-// and every save adds the keys that changed and nothing else. So an included
-// file is hidden only where the person chose a value of their own.
-//
-// # Merge rules
-//
-//   - Tables merge key by key, at every depth. [hosts.NAME] tables are tables,
-//     so hosts merge by name.
-//   - A scalar from a later file replaces the earlier one.
-//   - An array of plain values replaces the earlier array whole.
-//   - An array of tables, such as [[keybindings.command]], merges entry by
-//     entry and is never replaced whole. A later entry matches an earlier one
-//     by name when both have a name, else by key. A matched entry merges key by
-//     key. An entry that matches nothing is added at the end. An entry with
-//     disabled = true removes the entry it matches and is not itself kept.
-//
-// # What is not an error
-//
-// An include that names a file that is not there is a warning, so one machine
-// can include a file only it has. A name that starts with ? is optional, and
-// its absence is not even a warning. A cycle is a warning, and the file that
-// closes it is skipped. A file reached twice is merged once. A file that is
-// there and does not parse is an error, as config.toml is, and so is an
-// include that names a directory.
-
 // IncludeKey is the top-level key that lists the files a config file includes.
 const IncludeKey = "include"
 
@@ -68,12 +26,8 @@ const IncludeKey = "include"
 // merged in.
 const DropInDirName = "config.d"
 
-// tombstoneKey marks an array-of-tables entry that removes the entry it
-// matches.
 const tombstoneKey = "disabled"
 
-// maxIncludeDepth bounds a chain of includes. A cycle is caught by the stack
-// check before this; the bound is for a chain that is merely absurd.
 const maxIncludeDepth = 16
 
 // LayerKind says how a file came into the config.
@@ -158,8 +112,6 @@ func LoadLayered(mainPath string) (*LayeredConfig, error) {
 	return loadLayered(mainPath, false)
 }
 
-// loadLayered is LoadLayered. With allowMissing, a config.toml that is not
-// there is an empty one, so a first write can make it.
 func loadLayered(mainPath string, allowMissing bool) (*LayeredConfig, error) {
 	mainPath = absPath(mainPath)
 	lc := &LayeredConfig{Main: mainPath, DropInDir: filepath.Join(filepath.Dir(mainPath), DropInDirName)}
@@ -203,13 +155,11 @@ func loadLayered(mainPath string, allowMissing bool) (*LayeredConfig, error) {
 	return lc, nil
 }
 
-// layerLoader walks the include graph.
 type layerLoader struct {
 	lc   *LayeredConfig
 	seen map[string]bool
 }
 
-// includes visits the files one file's include list names.
 func (l *layerLoader) includes(from string, values map[string]any, stack []string, depth int) error {
 	list, err := includeList(values[IncludeKey])
 	if err != nil {
@@ -227,7 +177,6 @@ func (l *layerLoader) includes(from string, values map[string]any, stack []strin
 	return nil
 }
 
-// visit reads one file, merges its own includes first, and then adds it.
 func (l *layerLoader) visit(path string, optional bool, kind LayerKind, from string, stack []string, depth int) error {
 	real := realPath(path)
 	if from != "" && real == realPath(from) {
@@ -257,9 +206,6 @@ func (l *layerLoader) visit(path string, optional bool, kind LayerKind, from str
 			}
 			return nil
 		}
-		// A file that cannot be read, such as a link that points at itself,
-		// stops the load only when the config needs it. An optional include
-		// and a config.d file are skipped.
 		if optional || kind == LayerDropIn {
 			l.lc.Warnings = append(l.lc.Warnings, fmt.Sprintf("tuios cannot read %s, so it skips it: %v", l.show(path), err))
 			return nil
@@ -281,13 +227,8 @@ func (l *layerLoader) visit(path string, optional bool, kind LayerKind, from str
 	return nil
 }
 
-// nestedIncludeAllowed are the tables where a key named include is a setting
-// of its own, not a list of files.
 var nestedIncludeAllowed = map[string]bool{"tailscale": true}
 
-// warnNested warns about an include key inside a table. TOML puts every key
-// after a [table] header into that table, so an include written below the
-// first header is a setting of that table and includes nothing.
 func (l *layerLoader) warnNested(path string, values map[string]any) {
 	var walk func(m map[string]any, prefix []string)
 	walk = func(m map[string]any, prefix []string) {
@@ -306,7 +247,6 @@ func (l *layerLoader) warnNested(path string, values map[string]any) {
 	walk(values, nil)
 }
 
-// show names a file in a warning, the way DisplayPath does.
 func (l *layerLoader) show(p string) string {
 	if p == "" {
 		return DropInDirName
@@ -314,9 +254,6 @@ func (l *layerLoader) show(p string) string {
 	return displayPath(l.lc.Main, p)
 }
 
-// pathKeys are the settings whose value is a file or directory. A relative
-// value in an included file is relative to that file, the way a relative
-// include is. A * matches any one key.
 var pathKeys = [][]string{
 	{"plugins", "dirs"},
 	{"screenshot", "font_file"},
@@ -326,8 +263,6 @@ var pathKeys = [][]string{
 	{"notifications", "*", "sounds", "*"},
 }
 
-// resolveRelativePaths makes the relative paths under pathKeys absolute
-// against dir. A path that starts with ~ is left alone: the reader expands it.
 func resolveRelativePaths(values map[string]any, dir string) {
 	abs := func(s string) string {
 		if s == "" || filepath.IsAbs(s) || strings.HasPrefix(s, "~") {
@@ -366,7 +301,6 @@ func resolveRelativePaths(values map[string]any, dir string) {
 	}
 }
 
-// parseLayer parses one file into a map.
 func parseLayer(data []byte) (map[string]any, error) {
 	values := map[string]any{}
 	if err := toml.Unmarshal(data, &values); err != nil {
@@ -375,7 +309,6 @@ func parseLayer(data []byte) (map[string]any, error) {
 	return values, nil
 }
 
-// includeList reads an include value: a list of strings, or one string.
 func includeList(v any) ([]string, error) {
 	switch v := v.(type) {
 	case nil:
@@ -397,8 +330,6 @@ func includeList(v any) ([]string, error) {
 	}
 }
 
-// resolveInclude makes an include path absolute: ~ is the home directory, and
-// a relative path is relative to the directory of the file that names it.
 func resolveInclude(from, name string) string {
 	name = pathroot.ExpandHome(name)
 	if !filepath.IsAbs(name) {
@@ -407,8 +338,6 @@ func resolveInclude(from, name string) string {
 	return filepath.Clean(name)
 }
 
-// absPath is p made absolute and clean. A path that cannot be made absolute
-// is kept as given.
 func absPath(p string) string {
 	if a, err := filepath.Abs(p); err == nil {
 		return a
@@ -416,8 +345,6 @@ func absPath(p string) string {
 	return filepath.Clean(p)
 }
 
-// realPath is p with its symlinks resolved, for telling two names of one file
-// apart from two files. A path that does not resolve is used as it is.
 func realPath(p string) string {
 	if r, err := filepath.EvalSymlinks(p); err == nil {
 		return r
@@ -425,8 +352,6 @@ func realPath(p string) string {
 	return p
 }
 
-// dropInFiles lists the *.toml files in dir in lexical order, and reports
-// whether dir exists.
 func dropInFiles(dir string) ([]string, bool) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -449,17 +374,12 @@ func dropInFiles(dir string) ([]string, bool) {
 	return out, true
 }
 
-// fileWritable reports whether a write to path can land. It is the same write
-// writeConfigBytes makes: a temporary file beside the real one, renamed over
-// it.
 func fileWritable(path string) bool {
 	target := realPath(path)
 	info, err := os.Stat(target)
 	if err == nil && info.Mode().Perm()&0o200 == 0 {
 		return false
 	}
-	// A directory that is not there yet is made by the write, so the
-	// question goes to the nearest one that is.
 	dir := filepath.Dir(target)
 	for {
 		if _, err := os.Stat(dir); err == nil || filepath.Dir(dir) == dir {
@@ -560,9 +480,6 @@ func (lc *LayeredConfig) Origins() []KeyOrigin {
 	return out
 }
 
-// collectLeaves walks a table to the values that are not tables. An entry of
-// an array of tables counts as one value when every entry has a name or a
-// key. Otherwise the whole array is one value.
 func collectLeaves(m map[string]any, prefix []string, out *[][]string) {
 	for k, v := range m {
 		p := append(slices.Clone(prefix), k)
@@ -587,7 +504,6 @@ func collectLeaves(m map[string]any, prefix []string, out *[][]string) {
 	}
 }
 
-// displayKey writes a path the way a person would type it.
 func displayKey(p []string) string {
 	var b strings.Builder
 	for i, seg := range p {
@@ -613,12 +529,8 @@ func displayKey(p []string) string {
 // dot in it can be asked about.
 func ParseKeyPath(key string) []string { return splitDotted(key) }
 
-// elemSeg is the path segment for an entry of an array of tables, named by its
-// name and its key, either of which may be empty. The NUL bytes cannot appear
-// in a TOML key that came from a file a person wrote.
 func elemSeg(name, key string) string { return "\x00" + name + "\x00" + key }
 
-// elemOf reads an elemSeg back.
 func elemOf(seg string) (name, key string, ok bool) {
 	rest, ok := strings.CutPrefix(seg, "\x00")
 	if !ok {
@@ -628,15 +540,12 @@ func elemOf(seg string) (name, key string, ok bool) {
 	return name, key, true
 }
 
-// entryID is an entry's name and key, empty when it has none.
 func entryID(e map[string]any) (name, key string) {
 	name, _ = e["name"].(string)
 	key, _ = e["key"].(string)
 	return name, key
 }
 
-// entryMatches applies the matching rule: by name when both have a name,
-// else by key.
 func entryMatches(e map[string]any, name, key string) bool {
 	en, ek := entryID(e)
 	if name != "" && en != "" {
@@ -645,8 +554,6 @@ func entryMatches(e map[string]any, name, key string) bool {
 	return key != "" && ek == key
 }
 
-// isTableArray reports whether a is a non-empty array whose every element is
-// a table.
 func isTableArray(a []any) bool {
 	if len(a) == 0 {
 		return false
@@ -659,8 +566,6 @@ func isTableArray(a []any) bool {
 	return true
 }
 
-// entrySegs are the segments of every entry of an array of tables. ok is
-// false when a is not one, or when an entry has neither a name nor a key.
 func entrySegs(a []any) ([]string, bool) {
 	if !isTableArray(a) {
 		return nil, false
@@ -676,12 +581,8 @@ func entrySegs(a []any) ([]string, bool) {
 	return out, true
 }
 
-// entryIndex finds the entry of arr the segment names, or -1.
 func entryIndex(arr []any, seg string) int { return entryIndexOf(arr, seg, false) }
 
-// entryIndexOf is entryIndex. With tombs, a tombstone that matches counts as
-// the entry too: a file that holds one still has a say in where the entry
-// goes.
 func entryIndexOf(arr []any, seg string, tombs bool) int {
 	name, key, ok := elemOf(seg)
 	if !ok {
@@ -700,14 +601,11 @@ func entryIndexOf(arr []any, seg string, tombs bool) int {
 	return -1
 }
 
-// isTombstone reports whether e is an entry that removes the one it matches.
 func isTombstone(e map[string]any) bool {
 	v, _ := e[tombstoneKey].(bool)
 	return v
 }
 
-// mergeTables merges src into dst by the rules at the top of this file. dst is
-// changed. Nothing in src is shared with dst afterwards.
 func mergeTables(dst, src map[string]any) {
 	for k, sv := range src {
 		dv, ok := dst[k]
@@ -731,7 +629,6 @@ func mergeTables(dst, src map[string]any) {
 	}
 }
 
-// mergeEntries merges the entries of src into dst by the matching rule.
 func mergeEntries(dst, src []any) []any {
 	out := deepCopy(dst).([]any)
 	for _, e := range src {
@@ -758,9 +655,6 @@ func mergeEntries(dst, src []any) []any {
 	return out
 }
 
-// stripTombstones drops every entry left with disabled = true, at every
-// depth: a tombstone that matched nothing removes nothing and is not a
-// setting.
 func stripTombstones(m map[string]any) {
 	for k, v := range m {
 		switch v := v.(type) {
@@ -775,8 +669,6 @@ func stripTombstones(m map[string]any) {
 	}
 }
 
-// hasTombstone reports whether any array of tables in m has an entry with
-// disabled = true.
 func hasTombstone(m map[string]any) bool {
 	for _, v := range m {
 		switch v := v.(type) {
@@ -795,7 +687,6 @@ func hasTombstone(m map[string]any) bool {
 	return false
 }
 
-// deepCopy copies the tables and arrays of a parsed TOML value.
 func deepCopy(v any) any {
 	switch v := v.(type) {
 	case map[string]any:
@@ -815,13 +706,10 @@ func deepCopy(v any) any {
 	}
 }
 
-// lookupPath finds the value at path in a parsed table.
 func lookupPath(m map[string]any, path []string) (any, bool) {
 	return lookupPathOf(m, path, false)
 }
 
-// lookupPathOf is lookupPath. With tombs, an entry segment also finds a
-// tombstone.
 func lookupPathOf(m map[string]any, path []string, tombs bool) (any, bool) {
 	var cur any = m
 	for _, seg := range path {
@@ -848,9 +736,6 @@ func lookupPathOf(m map[string]any, path []string, tombs bool) (any, bool) {
 	return cur, true
 }
 
-// setPath sets the value at path, making the tables on the way. An entry
-// segment is always the last one: it replaces the matching entry of the
-// array, or adds one at the end.
 func setPath(m map[string]any, path []string, v any) {
 	if len(path) == 0 {
 		return
@@ -877,9 +762,6 @@ func setPath(m map[string]any, path []string, v any) {
 	setPath(t, path[1:], v)
 }
 
-// deletePath removes the value at path. It reports whether it was there. A
-// table left empty by the delete is kept: an empty table is still a table the
-// file sets.
 func deletePath(m map[string]any, path []string) bool {
 	if len(path) == 0 {
 		return false
@@ -900,7 +782,6 @@ func deletePath(m map[string]any, path []string) bool {
 		}
 		rest := slices.Delete(slices.Clone(arr), j, j+1)
 		if len(rest) == 0 {
-			// A file with no [[entry]] left has no key at all.
 			deletePath(m, parentPath)
 			return true
 		}
@@ -925,19 +806,13 @@ func deletePath(m map[string]any, path []string) bool {
 	return true
 }
 
-// configChange is one difference between two configs.
 type configChange struct {
 	path    []string
 	value   any
 	deleted bool
-	// shadow is set on an array entry that an earlier file also holds with
-	// keys the new entry does not have. The entry is written after a
-	// tombstone, so it does not take those keys back in the merge.
-	shadow bool
+	shadow  bool
 }
 
-// diffTables lists what changed from cur to next, at the deepest level a
-// change can be named: a key of a table, or an entry of an array of tables.
 func diffTables(cur, next map[string]any, prefix []string, out *[]configChange) {
 	keys := slices.Sorted(maps.Keys(cur))
 	for _, k := range slices.Sorted(maps.Keys(next)) {
@@ -951,9 +826,6 @@ func diffTables(cur, next map[string]any, prefix []string, out *[]configChange) 
 		n, nok := next[k]
 		switch {
 		case !nok:
-			// An array of tables the model no longer has is every entry
-			// removed. The TOML of a config leaves out an empty array, so
-			// the key is gone rather than empty.
 			if ca, ok := c.([]any); ok && diffEntries(ca, nil, p, out) {
 				continue
 			}
@@ -983,9 +855,6 @@ func diffTables(cur, next map[string]any, prefix []string, out *[]configChange) 
 	}
 }
 
-// diffEntries diffs two arrays of tables entry by entry. It reports false
-// when either is not one whose every entry has a name or a key, and the
-// caller compares them whole.
 func diffEntries(cur, next []any, prefix []string, out *[]configChange) bool {
 	cs, cok := entrySegs(cur)
 	ns, nok := entrySegs(next)

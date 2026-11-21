@@ -49,20 +49,12 @@ const (
 	MaxFramePayload = 1 << 20 // 1 MiB
 )
 
-// frameType names what a frame does.
 type frameType uint8
 
 const (
-	// frameOpen asks the peer to open the named stream. The payload is empty,
-	// or a StreamOpen as JSON; a peer that predates StreamOpen ignores it.
-	frameOpen frameType = 1
-	// frameData carries stream bytes.
-	frameData frameType = 2
-	// frameClose says the sender is done with the stream. Payload is empty.
-	frameClose frameType = 3
-	// frameCredit says how many bytes of a bulk stream the reader has read,
-	// in all: eight bytes, big endian. Only a bulk stream carries it, and only
-	// between peers that both opened or accepted one. See bulk.go.
+	frameOpen   frameType = 1
+	frameData   frameType = 2
+	frameClose  frameType = 3
 	frameCredit frameType = 4
 )
 
@@ -81,7 +73,6 @@ func (t frameType) String() string {
 	}
 }
 
-// frame is one decoded frame.
 type frame struct {
 	Type    frameType
 	Stream  uint32
@@ -99,9 +90,6 @@ var ErrFrameTooLarge = errors.New("federation: frame payload is larger than the 
 // still has to be skipped exactly.
 var ErrBadFrameType = errors.New("federation: unknown frame type")
 
-// writeFrame encodes one frame onto w. The caller serialises calls; a mux holds
-// a write mutex for exactly this reason, since two interleaved frames would be
-// unparseable.
 func writeFrame(w io.Writer, t frameType, stream uint32, payload []byte) error {
 	if len(payload) > MaxFramePayload {
 		return ErrFrameTooLarge
@@ -120,8 +108,6 @@ func writeFrame(w io.Writer, t frameType, stream uint32, payload []byte) error {
 	return err
 }
 
-// readFrame decodes one frame from r. The returned payload is a fresh slice, so
-// the caller may hand it to another goroutine.
 func readFrame(r io.Reader) (frame, error) {
 	var hdr [frameHeaderSize]byte
 	if _, err := io.ReadFull(r, hdr[:]); err != nil {

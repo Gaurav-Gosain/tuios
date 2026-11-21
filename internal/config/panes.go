@@ -73,12 +73,10 @@ func (p PanesConfig) NavigatorLayoutInUse() string {
 // select_window_1 to select_window_9 already give the same panes.
 const PanesDefaultLabelKeys = "1234567890"
 
-// defaultPanesConfig returns the section DefaultConfig carries.
 func defaultPanesConfig() PanesConfig {
 	return PanesConfig{LabelKeys: PanesDefaultLabelKeys, NavigatorLayout: NavigatorLayoutTree}
 }
 
-// fillMissingPanes fills an absent value with its default.
 func fillMissingPanes(cfg, defaultCfg *UserConfig) {
 	if strings.TrimSpace(cfg.Panes.LabelKeys) == "" {
 		cfg.Panes.LabelKeys = defaultCfg.Panes.LabelKeys
@@ -106,7 +104,6 @@ func NormalizePaneLabelKeys(keys string) string {
 	return b.String()
 }
 
-// paneLabelKey reports whether r can be a key of a pane label.
 func paneLabelKey(r rune) bool {
 	return r <= unicode.MaxASCII && (r >= 'a' && r <= 'z' || r >= '0' && r <= '9')
 }
@@ -114,16 +111,11 @@ func paneLabelKey(r rune) bool {
 // LabelKeysInUse is the effective label keys.
 func (p PanesConfig) LabelKeysInUse() string { return NormalizePaneLabelKeys(p.LabelKeys) }
 
-// validatePanes warns about label keys that fall back to the default or
-// lose characters. Without a warning the labels would look as if they
-// ignored the config.
 func validatePanes(cfg *UserConfig, result *ValidationResult) {
 	keys := strings.TrimSpace(cfg.Panes.LabelKeys)
 	if keys == "" {
 		return
 	}
-	// Count the keys a label can use here rather than compare with the
-	// default: "1234567890!" keeps the default's keys and drops one.
 	var kept strings.Builder
 	for _, r := range strings.ToLower(keys) {
 		if paneLabelKey(r) && !strings.ContainsRune(kept.String(), r) {

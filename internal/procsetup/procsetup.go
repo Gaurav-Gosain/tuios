@@ -43,8 +43,6 @@ func Setup(o Options) {
 	session.PluginReaper = o.Reaper
 	theme.ExtraFiles = ThemeFiles
 	app.PluginSavers = SaverFiles
-	// The add sheet installs the release of this version with the helpers
-	// tuios update and hosts sync use.
 	if o.Releases != nil {
 		app.MachineReleases = o.Releases
 	}
@@ -53,9 +51,6 @@ func Setup(o Options) {
 	app.SetInputHandler(input.HandleInput)
 }
 
-// drawMermaidPicture draws a Mermaid block of the agents view as a picture,
-// in the colours of the view, clear where the diagram draws nothing.
-// A type this build does not draw comes from the sketch plugin as SVG.
 func drawMermaidPicture(src string, cols, rows, cellW, cellH int, pal overlay.Palette, ansi [16]color.Color, bg color.Color) ([]byte, int, int, error) {
 	th := mermaid.Theme(pal, ansi, bg, pal.Fg)
 	pic, err := mermaid.Draw(src, th, mermaid.PictureOptions{Cols: cols, Rows: rows, CellW: cellW, CellH: cellH,
@@ -69,7 +64,6 @@ func drawMermaidPicture(src string, cols, rows, cellW, cellH int, pal overlay.Pa
 	return pic.PNG, pic.Cols, pic.Rows, err
 }
 
-// sketchProgram is the program of the sketch plugin, for app.SketchProgram.
 func sketchProgram() (string, error) {
 	prog, e, err := FindSketch()
 	switch {

@@ -10,28 +10,8 @@ type TileLayout struct {
 	X, Y, Width, Height int
 }
 
-// span is one neighbour's place along an axis: where it starts and how far it
-// runs.
 type span struct{ Pos, Size int }
 
-// spans divides an extent between n neighbours, keeping gap cells free between
-// each adjacent pair.
-//
-// The gap comes out of the extent before it is divided, so the shares are even.
-// Taking it out of one side afterwards would make the far pane narrower than
-// the near one by the whole gap, on every split and at every pane count.
-//
-// The remainder is spread a cell at a time from the first share rather than
-// handed to the last, so no two neighbours differ by more than one cell. A
-// last pane carrying the whole remainder is visibly the odd one out on a wide
-// screen, and it is the pane a rounding bug hides in.
-//
-// Shares are floored at one cell and never at a fixed minimum. A minimum wider
-// than the share pushes a pane past its own rectangle and into its neighbour's,
-// so a workspace holding more panes than fit at a comfortable size would draw
-// them overlapping instead of simply smaller. This is the rule the BSP
-// tiler already follows (bsp.go applyLayoutRecursive): tiling never overlaps;
-// when space runs short the panes shrink.
 func spans(origin, total, n, gap int) []span {
 	if n <= 0 {
 		return nil
@@ -39,12 +19,6 @@ func spans(origin, total, n, gap int) []span {
 	if n == 1 {
 		return []span{{Pos: origin, Size: max(total, 1)}}
 	}
-	// A region too tight to hold the asked-for gaps gives up ground first. A
-	// gap is only ever spacing; a share pushed past the end of the extent is a
-	// pane drawn outside the region, which is the same class of fault as the
-	// overlap above. One cell per neighbour is the floor. Below that, with fewer
-	// cells in the extent than neighbours to divide it between, there is no
-	// arrangement at all.
 	if total-gap*(n-1) < n {
 		gap = max((total-n)/(n-1), 0)
 	}
@@ -66,15 +40,6 @@ func spans(origin, total, n, gap int) []span {
 	return out
 }
 
-// weightedSpans is spans with the shares in proportion to weights, one weight
-// per neighbour. Weights of the wrong length, or holding a value that is not a
-// positive number, are no answer, and the shares are equal as in spans.
-//
-// The edges are placed at the rounded running total of the weights rather
-// than each share rounded on its own, so the shares always add up to the
-// extent and a layout read back off its own rectangles (see MasterSplitsFrom)
-// comes out cell for cell the same. Every share keeps at least one cell, and
-// the gap gives up ground first, both as in spans.
 func weightedSpans(origin, total, n int, weights []float64, gap int) []span {
 	if n <= 1 || len(weights) != n {
 		return spans(origin, total, n, gap)
@@ -101,7 +66,6 @@ func weightedSpans(origin, total, n int, weights []float64, gap int) []span {
 		if i == n-1 {
 			edge = avail
 		}
-		// One cell for this share, and one for each share after it.
 		edge = min(max(edge, prev+1), avail-(n-1-i))
 		size := edge - prev
 		out = append(out, span{Pos: pos, Size: size})
@@ -111,10 +75,6 @@ func weightedSpans(origin, total, n int, weights []float64, gap int) []span {
 	return out
 }
 
-// splitByRatio is spans for two neighbours whose shares are not equal: the
-// first takes ratio of what is left once the gap is reserved. Both sides keep
-// at least one cell, so a ratio at either end of its range cannot produce a
-// pane with nothing in it.
 func splitByRatio(origin, total int, ratio float64, gap int) (span, span) {
 	avail := max(total-gap, 2)
 	near := min(max(int(float64(avail)*ratio), 1), avail-1)
@@ -129,7 +89,6 @@ var (
 	MaxSplitRatio = float64(MasterRatioMax) / 100
 )
 
-// clampSplitRatio keeps a ratio inside MinSplitRatio..MaxSplitRatio.
 func clampSplitRatio(ratio float64) float64 {
 	return min(max(ratio, MinSplitRatio), MaxSplitRatio)
 }
@@ -145,9 +104,6 @@ func SplitRatioFor(near, total, gap int) float64 {
 	return clampSplitRatio((float64(near) + 0.5) / float64(avail))
 }
 
-// gridColumns is how many columns the grid uses for n panes. Two up to six,
-// three beyond, which keeps a pane roughly as wide as it is tall at the sizes a
-// terminal actually is.
 func gridColumns(n int) int {
 	if n <= 6 {
 		return 2
@@ -214,8 +170,6 @@ func SplitsBetween(rects []Rect, gap int) []SplitLine {
 		}
 		return true
 	}
-	// Reach into the cells past each end while they are gap as well, so lines
-	// meet at a T junction instead of leaving a hole where three panes touch.
 	grow := func(pos, from, to int, vertical bool) (int, int) {
 		at := func(along int) bool {
 			if vertical {
@@ -241,11 +195,6 @@ func SplitsBetween(rects []Rect, gap int) []SplitLine {
 	var splits []SplitLine
 	for _, a := range rects {
 		for _, b := range rects {
-			// One line per boundary, on the gap's leading column, whatever the
-			// gap is. A line on every column of the gap is what this did, which
-			// is correct at a gap of one and turns a wider gap into a thick
-			// rule: appearance.gap asks for ground between the panes, not for a
-			// wider divider, and the BSP tiler already answers it that way.
 			if b.X == a.X+a.W+gap {
 				if from, to := max(a.Y, b.Y), min(a.Y+a.H, b.Y+b.H)-1; from <= to {
 					x := a.X + a.W

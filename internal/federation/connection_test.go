@@ -11,13 +11,6 @@ import (
 	"time"
 )
 
-// A connection to a remote daemon is the primitive under every verb that is
-// not a listing. What is proved here is the primitive itself: a stream opened
-// on a live link reaches the far side's daemon socket, a stream against a dead
-// link fails at once, a stream whose reader stops does not take the link down
-// with it, and a far side with nothing to connect to ends the stream cleanly.
-
-// openTo opens a connection to the named host and fails the test if it cannot.
 func openTo(t *testing.T, m *Manager, host string) io.ReadWriteCloser {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -58,8 +51,6 @@ func TestAStalledConnectionDoesNotStallTheLink(t *testing.T) {
 		return map[string]any{"sessions": []any{}}, nil
 	})
 	opts := testOptions(proxyDialer(t, stub))
-	// Short limits, so a read loop that still waits on the stream would drop
-	// it within the test.
 	opts.stallLimit = 200 * time.Millisecond
 	opts.connStallLimit = 200 * time.Millisecond
 	opts.CallTimeout = 5 * time.Second
@@ -87,8 +78,6 @@ func TestAStalledConnectionDoesNotStallTheLink(t *testing.T) {
 		}
 	}()
 
-	// Wait for the far writer to fill the window and stop. Asserting before
-	// that would pass with no window at all.
 	var held int
 	deadline := time.Now().Add(15 * time.Second)
 	for stable := 0; stable < 5 && time.Now().Before(deadline); {
@@ -116,7 +105,6 @@ func TestAStalledConnectionDoesNotStallTheLink(t *testing.T) {
 	if held > windowRecvLimit {
 		t.Fatalf("ASSERTION: the stream holds %d bytes, past the %d a window allows", held, windowRecvLimit)
 	}
-	// Ten stall limits have passed with nobody reading.
 	time.Sleep(10 * opts.connStallLimit)
 	select {
 	case <-s.closed:
@@ -124,8 +112,6 @@ func TestAStalledConnectionDoesNotStallTheLink(t *testing.T) {
 	default:
 	}
 
-	// The link answers at once, though the read loop is parked on the full
-	// stream: the control stream's reply must not sit behind it.
 	t0 := time.Now()
 	if _, err := m.Call(ctx, "build", "list-sessions", nil); err != nil {
 		t.Fatalf("ASSERTION: the link stopped answering behind a stalled connection: %v", err)
@@ -134,7 +120,6 @@ func TestAStalledConnectionDoesNotStallTheLink(t *testing.T) {
 		t.Fatalf("ASSERTION: a listing took %v behind a stalled connection", took)
 	}
 
-	// The reader comes back and gets every answer: the window lost nothing.
 	dec := json.NewDecoder(conn)
 	for i := range smalls + floods {
 		var ans map[string]any
@@ -169,7 +154,6 @@ func TestAStalledConnectionWithoutAWindowIsDropped(t *testing.T) {
 	if r := m.Reports(ctx)[0]; r.Status != StatusUp {
 		t.Fatalf("status is %q (%s), want up", r.Status, r.Reason)
 	}
-	// Open the stream the way a hub did before windows.
 	l := m.link("build")
 	l.mu.Lock()
 	mx := l.mux
@@ -183,8 +167,6 @@ func TestAStalledConnectionWithoutAWindowIsDropped(t *testing.T) {
 		t.Fatal("a stream opened without a window has one")
 	}
 
-	// Ask for far more than the stream can buffer and read none of it. Every
-	// answer is at least one frame, and the buffer holds streamBufferFrames.
 	for i := range streamBufferFrames * 3 {
 		if _, err := io.WriteString(conn, `{"id":`+string(rune('0'+i%10))+`,"verb":"flood"}`+"\n"); err != nil {
 			t.Fatalf("write request %d: %v", i, err)
@@ -202,8 +184,6 @@ func TestAStalledConnectionWithoutAWindowIsDropped(t *testing.T) {
 		t.Fatalf("ASSERTION: the link is %q after one connection stalled, want up", r.Status)
 	}
 
-	// The stalled connection, and only it, was ended, and its reader is told
-	// why once it drains what was buffered.
 	buf := make([]byte, 1<<20)
 	var readErr error
 	deadline := time.Now().Add(10 * time.Second)
@@ -219,8 +199,6 @@ func TestAStalledConnectionWithoutAWindowIsDropped(t *testing.T) {
 
 func TestAConnectionEndsWhenTheFarSideHasNoDaemon(t *testing.T) {
 	stub := startStubDaemon(t, helloOK("far-1", 0))
-	// Every dial after the first reaches nothing: the far side's daemon has
-	// gone away since the link came up.
 	dials := 0
 	dialer := func(_ context.Context, _ Host) (Transport, error) {
 		hub, remote := duplexPipe(t)
@@ -249,7 +227,6 @@ func TestAConnectionEndsWhenTheFarSideHasNoDaemon(t *testing.T) {
 	if n != 0 || !errors.Is(err, io.EOF) {
 		t.Fatalf("ASSERTION: a connection the far side could not serve read %d byte(s) and %v, want a clean end", n, err)
 	}
-	// The link itself is fine: the proxy is there, the daemon behind it is not.
 	if r := m.Reports(ctx)[0]; r.Status != StatusUp {
 		t.Errorf("the link is %q after one connection was refused, want up", r.Status)
 	}

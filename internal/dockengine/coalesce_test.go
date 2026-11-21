@@ -41,8 +41,6 @@ func testDockEngineCoalesces(t *testing.T, comp *Component) {
 	comp.Refresh = config.DockRefresh{Kind: config.DockRefreshEvent, Events: []string{"window-focused"}}
 	engine := New([]*Component{comp}, nil)
 	t.Cleanup(engine.Stop)
-	// An open rail, as InitDockComponents tells it before Start: the engine
-	// runs nothing for the rail while the width is zero.
 	engine.SetRailContext(RailContext{Width: 26, Height: 10})
 	engine.Start()
 
@@ -51,7 +49,7 @@ func testDockEngineCoalesces(t *testing.T, comp *Component) {
 		t.Fatalf("the first run read %q, want first", first.Text)
 	}
 	engine.NotifyEvent("window-focused")
-	time.Sleep(500 * time.Millisecond) // past the debounce, inside the sleep
+	time.Sleep(500 * time.Millisecond)
 	if err := os.WriteFile(mark, []byte("second\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +86,6 @@ func TestDockEngineDropsAnIntervalMidRun(t *testing.T) {
 	t.Cleanup(engine.Stop)
 	engine.Start()
 
-	// The run at start holds the flag from before the command starts.
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		engine.mu.Lock()

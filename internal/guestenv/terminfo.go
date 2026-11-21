@@ -38,8 +38,6 @@ func PaneTerm(term string) string {
 	case term == "":
 		return FallbackTerm
 	case term == FallbackTerm, term == "dumb":
-		// dumb is what a terminal that asked for no capabilities gets on
-		// purpose, and every terminfo database has it.
 		return term
 	case runtime.GOOS == "windows":
 		return term
@@ -50,18 +48,6 @@ func PaneTerm(term string) string {
 	return FallbackTerm
 }
 
-// hasTerminfo reports whether a compiled terminfo entry named term is in one
-// of the directories ncurses searches, read from getenv and home.
-//
-// The search follows ncurses: $TERMINFO, ~/.terminfo, each directory in
-// $TERMINFO_DIRS (an empty element there means the system directory), and then
-// the system directories distributions compile in. Each directory is tried in
-// both layouts ncurses writes: a first-letter directory (x/xterm-kitty) and
-// the hexadecimal one case-insensitive filesystems need (78/xterm-kitty).
-//
-// The hashed database some BSDs use (terminfo.db) is not read. A host that has
-// only that answers false, and the pane gets FallbackTerm, which those systems
-// carry. That errs toward a TERM that works.
 func hasTerminfo(term string, getenv func(string) string, home func() (string, error)) bool {
 	if !ValidTermName(term) {
 		return false
@@ -74,10 +60,6 @@ func hasTerminfo(term string, getenv func(string) string, home func() (string, e
 	return false
 }
 
-// systemTerminfoDirs are the directories distributions compile ncurses to
-// search: Debian and its derivatives /etc, /lib and /usr/share, Fedora, Arch
-// and macOS /usr/share, some older systems /usr/lib, Solaris /usr/share/lib,
-// and the FreeBSD ports ncurses /usr/local/share.
 var systemTerminfoDirs = []string{
 	"/etc/terminfo",
 	"/lib/terminfo",
@@ -87,7 +69,6 @@ var systemTerminfoDirs = []string{
 	"/usr/local/share/terminfo",
 }
 
-// terminfoDirs lists the directories hasTerminfo searches, in ncurses order.
 func terminfoDirs(getenv func(string) string, home func() (string, error)) []string {
 	var dirs []string
 	if d := getenv("TERMINFO"); d != "" {
@@ -107,8 +88,6 @@ func terminfoDirs(getenv func(string) string, home func() (string, error)) []str
 	return append(dirs, systemTerminfoDirs...)
 }
 
-// terminfoEntryIn reports whether dir holds a compiled entry for term in either
-// layout.
 func terminfoEntryIn(dir, term string) bool {
 	first := term[0]
 	for _, sub := range []string{string(first), strconv.FormatUint(uint64(first), 16)} {

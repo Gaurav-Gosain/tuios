@@ -14,36 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// The Codex app-server client, v2 threads and turns.
-//
-// Source: codex-rs/app-server-protocol in the openai/codex repository (commit
-// d93909a9, 2026-09-22): src/protocol/common.rs for the method names and
-// schema/typescript/v2 for the shapes. The protocol is large and moves fast at
-// its edges (accounts, plugins, realtime, attachments); this client uses only
-// its core, which has kept its shape:
-//
-//	initialize, then the initialized notification
-//	thread/start {cwd}                     opens the conversation
-//	turn/start {threadId, input}           one turn; answers at once with the turn
-//	turn/interrupt {threadId, turnId}      cancels it
-//	turn/completed                         notification: the turn ended, with its status
-//	item/started, item/completed           notifications: commands, file changes, messages
-//	item/agentMessage/delta                notification: the reply as it streams
-//	item/reasoning/summaryTextDelta        notification: the reasoning summary
-//	error                                  notification: a turn error, maybe retried
-//	thread/tokenUsage/updated              notification: tokens used, of the model's window
-//	turn/plan/updated                      notification: the turn's plan
-//	model/rerouted                         notification: another model answers now
-//	item/commandExecution/requestApproval  request: run this command?
-//	item/fileChange/requestApproval        request: apply this change?
-//
-// The client does not opt into the experimental API, so the experimental
-// requests (item/tool/requestUserInput among them) are not sent. Every other
-// request, an MCP elicitation, a permissions request, a dynamic tool call, is
-// answered with method not found, which Codex treats as not approved.
-//
-// Messages carry no "jsonrpc" member either way (codex-rs rpc.rs).
-
 // Codex is a Codex app-server.
 type Codex struct {
 	conn    *acp.Conn
@@ -135,8 +105,6 @@ func (c *Codex) Prompt(ctx context.Context, text string) (TurnResult, error) {
 	}
 	id := res.Turn.ID
 	c.mu.Lock()
-	// The turn can end before this goroutine reads the answer to turn/start:
-	// the notification is then already waiting in ended.
 	if r, ok := c.ended[id]; ok {
 		delete(c.ended, id)
 		c.mu.Unlock()
@@ -177,7 +145,6 @@ func (c *Codex) Cancel() {
 	}()
 }
 
-// codexItem is a ThreadItem, the fields the client shows.
 type codexItem struct {
 	Type             string `json:"type"`
 	ID               string `json:"id"`
@@ -248,9 +215,6 @@ func (c *Codex) onNotify(method string, params json.RawMessage) {
 		}
 		c.mu.Unlock()
 	case "thread/tokenUsage/updated":
-		// The context is the last request's tokens of the model's window.
-		// The window is null when Codex does not know it, and then there is
-		// no context to state.
 		var p struct {
 			TokenUsage struct {
 				Last struct {
@@ -311,12 +275,9 @@ func (c *Codex) onNotify(method string, params json.RawMessage) {
 	}
 }
 
-// onItem shows a thread item as it starts and as it completes.
 func (c *Codex) onItem(it codexItem, completed bool) {
 	switch it.Type {
 	case "agentMessage", "reasoning":
-		// A message that streamed was shown as it came. One that did not is
-		// shown whole when it completes.
 		c.mu.Lock()
 		streamed := c.streams[it.ID]
 		delete(c.streams, it.ID)
@@ -354,7 +315,6 @@ func (c *Codex) storeItem(t Tool) {
 	c.mu.Unlock()
 }
 
-// codexStatus maps an item status to the Tool status.
 func codexStatus(s string, completed bool) string {
 	switch s {
 	case "completed":
@@ -406,8 +366,6 @@ func (c *Codex) onRequest(r *acp.Request) {
 		if p.Cwd != nil && *p.Cwd != "" {
 			perm.Detail = "in " + *p.Cwd
 		}
-		// Input to a running command, or a command that needs the network,
-		// is more than the command line says: the pane asks it.
 		if (p.Kind != "" && p.Kind != "command") || (len(p.NetworkApprovalContext) > 0 && string(p.NetworkApprovalContext) != "null") || t.Title == "" {
 			perm.Tool.OtherInput = true
 			if p.Kind == "writeStdin" {
@@ -432,9 +390,6 @@ func (c *Codex) onRequest(r *acp.Request) {
 			t = Tool{ID: p.ItemID, Kind: "edit", Title: "edit files"}
 		}
 		t.Status = ToolPending
-		// An edit whose files and content are not known, or one that also
-		// asks for a write root for the rest of the session, is more than one
-		// line can show: the pane asks it and the Inbox does not.
 		if len(t.Diffs) == 0 {
 			t.OtherInput = true
 		}
@@ -462,8 +417,6 @@ func (c *Codex) onRequest(r *acp.Request) {
 	}
 }
 
-// codexOption is one answer to a Codex approval: its label, its Inbox
-// decision, and the decision Codex is sent.
 type codexOption struct {
 	label, decision, wire string
 }

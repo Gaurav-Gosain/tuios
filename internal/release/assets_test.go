@@ -81,9 +81,6 @@ func TestParseChecksums(t *testing.T) {
 		t.Errorf("wrong digest for the tuios archive: %q", sums["tuios_0.7.0_Linux_x86_64.tar.gz"])
 	}
 
-	// A file with nothing readable in it must not parse as "no digests, so
-	// nothing to check". Negative control: return the empty map with no error
-	// and the installer treats every archive as unverifiable-but-fine.
 	if _, err := ParseChecksums(strings.NewReader("not a checksum file\n")); err == nil {
 		t.Error("a file with no digests parsed as a checksum list")
 	}
@@ -115,7 +112,6 @@ func TestVerify(t *testing.T) {
 	}
 }
 
-// tarGz builds an archive in memory from name to contents.
 func tarGz(t *testing.T, entries map[string]string) []byte {
 	t.Helper()
 	var buf bytes.Buffer

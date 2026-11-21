@@ -10,9 +10,6 @@ import (
 	"tuios.dev/acp"
 )
 
-// startCodex runs the app-server handshake against the peer. It checks that
-// no message carries a jsonrpc member, and that initialized follows
-// initialize before anything else.
 func startCodex(t *testing.T) (*Codex, *peer, *events) {
 	t.Helper()
 	r, w, p := newPeer(t)
@@ -80,8 +77,6 @@ func TestCodexTurn(t *testing.T) {
 	for range 3 {
 		texts = append(texts, ev.next(t).(Text).Text)
 	}
-	// A streamed message is shown as it streams and not again whole; one
-	// that did not stream is shown when it completes.
 	if strings.Join(texts, "|") != "Hel|lo|Unstreamed" {
 		t.Errorf("texts = %q", texts)
 	}
@@ -109,8 +104,6 @@ func TestCodexTurnEndsBeforeItsAnswerIsRead(t *testing.T) {
 		done <- res
 	}()
 	ts := p.expect("turn/start")
-	// Both lines in one write, so the read goroutine dispatches both before
-	// Prompt runs again.
 	a, _ := json.Marshal(map[string]any{"id": ts["id"], "result": map[string]any{"turn": map[string]any{"id": "tu-9"}}})
 	b, _ := json.Marshal(map[string]any{"method": "turn/completed", "params": map[string]any{"turn": map[string]any{"id": "tu-9", "status": "failed", "error": map[string]any{"message": "quota"}}}})
 	p.line(string(a) + "\n" + string(b))
@@ -128,7 +121,6 @@ func TestCodexInterrupt(t *testing.T) {
 	}()
 	ts := p.expect("turn/start")
 	p.send(map[string]any{"id": ts["id"], "result": map[string]any{"turn": map[string]any{"id": "tu-2"}}})
-	// Cancel is sent once the turn is known.
 	for {
 		c.mu.Lock()
 		known := c.turn == "tu-2"
@@ -239,8 +231,6 @@ func TestCodexFileChangeApprovalTheInboxCannotShow(t *testing.T) {
 	perm.Cancel()
 	p.next()
 
-	// A known item with its diff and a grantRoot is still the pane's, and the
-	// pane still says the root.
 	notify(p, "item/started", map[string]any{"item": map[string]any{"type": "fileChange", "id": "f2", "status": "inProgress", "changes": []any{
 		map[string]any{"path": "b.go", "diff": "@@ -1 +1 @@\n-a\n+b\n"},
 	}}})

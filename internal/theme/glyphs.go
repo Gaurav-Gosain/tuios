@@ -20,19 +20,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// A glyph set is the other half of a rice. A theme says what colour the chrome
-// is; a set says what shape it is: which corner the border turns, what the
-// close button is a picture of, what a rule is drawn with, which mark says
-// "you are here" on the rail. Every one of those was a literal in the render
-// path, so the only rice tuios could be asked for was a recolour.
-//
-// It is one option rather than twenty-two because twenty-two narrow options is
-// how a config file becomes unreadable, and because the glyphs are not
-// independent of each other: a border, its junctions and the rule that meets
-// them have to be drawn in one weight or the joins do not line up. A set is the
-// unit that holds them together, and inheritance is how a user who wants one
-// glyph different from a built-in says exactly that.
-
 // BorderGlyphs is a border's thirteen runes, in the shape lipgloss draws from.
 // An empty field takes the style appearance.border_style names, so a set that
 // only wants different corners says only corners.
@@ -157,23 +144,11 @@ type GlyphSet struct {
 // has something to name and set-config has something to accept.
 const GlyphSetNone = "default"
 
-// builtinGlyphSets are the sets that need no file. Each says only what it
-// changes, so the built-in glyphs stay in one place (the config package, where
-// the renderer reads them) rather than being copied here to drift.
-//
-// Four rather than a gallery. These are the shapes a set has to be able to
-// take, and they are here to be inherited from and to prove the mechanism on a
-// terminal with no config file, not to be a theme store. A gallery belongs in
-// the glyphs directory, where it costs nothing to carry.
 var builtinGlyphSets = map[string]*GlyphSet{
 	GlyphSetNone: {
 		ID:          GlyphSetNone,
 		DisplayName: "Default",
 	},
-	// Box-drawing only: nothing from the Nerd Font private use area, so the
-	// chrome draws whole on a plain Unicode font. It is the set to reach for
-	// when the terminal has a good font that is not a patched one, which ASCII
-	// mode serves far more bluntly than it needs to.
 	"unicode": {
 		ID: "unicode", DisplayName: "Unicode only",
 		Close: "×", Maximize: "□", Minimize: "−", Dot: "●",
@@ -188,9 +163,6 @@ var builtinGlyphSets = map[string]*GlyphSet{
 		Folder: "▸", Parent: "▴", File: "·",
 		Ellipsis: "…", Sigil: "›", DashRule: "╌",
 	},
-	// One weight heavier throughout, border included, for a frame that reads
-	// from across a room. The junctions are given explicitly because a heavy
-	// stroke meeting a light crossing is the join that looks wrong.
 	"heavy": {
 		ID: "heavy", DisplayName: "Heavy",
 		Border: &BorderGlyphs{
@@ -203,10 +175,6 @@ var builtinGlyphSets = map[string]*GlyphSet{
 		Rule: "━", Focus: "█", Attention: "█",
 		Bullet: "•", ScrollbarThumb: "█", ScrollbarTrack: "│",
 	},
-	// Nothing outside 7-bit ASCII, for a terminal or a font that cannot be
-	// trusted with more. It is what --ascii-only draws, said as a set so that a
-	// user can inherit from it and put back the two glyphs they know their
-	// terminal can manage.
 	"ascii": {
 		ID: "ascii", DisplayName: "ASCII", ASCII: true,
 		Border: &BorderGlyphs{
@@ -244,19 +212,12 @@ func GetGlyphsDir() (string, error) {
 }
 
 var (
-	glyphMu       sync.RWMutex
-	userGlyphSets = map[string]*GlyphSet{}
-	glyphProblems []string
-	// glyphProblemsBySet is the same lines keyed by the set that produced them,
-	// for a caller reporting on one set rather than on the directory.
+	glyphMu            sync.RWMutex
+	userGlyphSets      = map[string]*GlyphSet{}
+	glyphProblems      []string
 	glyphProblemsBySet = map[string][]string{}
 	activeGlyphID      = GlyphSetNone
-	// activeGlyphs is read once per glyph the renderer draws, so it is an
-	// atomic pointer to a set nothing mutates after it is published rather than
-	// a value behind the mutex above: a copy of thirty strings per accessor
-	// call, on a path that resolves a border's corners one at a time, is not
-	// what this should cost.
-	activeGlyphs atomic.Pointer[GlyphSet]
+	activeGlyphs       atomic.Pointer[GlyphSet]
 )
 
 // ReloadGlyphSets re-reads the glyphs directory and returns the ids it found
@@ -272,10 +233,6 @@ func ReloadGlyphSets() (loaded, problems []string) {
 		return nil, []string{err.Error()}
 	}
 	sets := map[string]*GlyphSet{}
-	// Kept by id as well as in one list, so a caller showing one set can say
-	// what that set asked for and did not get. The flat list answers "what is
-	// wrong in my glyphs directory"; this answers "why is this set not drawing
-	// what I wrote", which is the question in front of someone choosing one.
 	bySet := map[string][]string{}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -301,14 +258,10 @@ func ReloadGlyphSets() (loaded, problems []string) {
 	glyphMu.Lock()
 	userGlyphSets, glyphProblems, glyphProblemsBySet = sets, problems, bySet
 	glyphMu.Unlock()
-	// A set that has just been rewritten on disk is the one most likely to be
-	// the active one, so re-resolve rather than wait for the next set-config.
 	refreshActiveGlyphs()
 	return loaded, problems
 }
 
-// loadGlyphSetFile reads one file, drops the roles it cannot draw, and reports
-// each drop as a problem.
 func loadGlyphSetFile(path string) (*GlyphSet, []string, error) {
 	// #nosec G304 - path comes from the user's own config directory
 	data, err := os.ReadFile(path)
@@ -333,34 +286,17 @@ func loadGlyphSetFile(path string) (*GlyphSet, []string, error) {
 	return &set, problems, nil
 }
 
-// glyphRole is one settable role and the width the layout budgets for it.
 type glyphRole struct {
 	name  string
 	field func(*GlyphSet) *string
-	// width is the cells the glyph must measure, 0 where any width goes, or
-	// markWidth for an agent-state mark.
 	width int
 }
 
-// markWidth is the width of an agent-state mark's role: one cell or two. A
-// row that leads with a mark gives it the set's widest mark and one blank, so
-// the name after it stays in line with the next row's whichever mark it wears.
 const markWidth = -1
 
 // MarkMaxWidth is the widest an agent-state mark may measure.
 const MarkMaxWidth = 2
 
-// glyphRoles is every role a set can name, with the width each one has to
-// measure.
-//
-// The widths are the invariant this whole feature has to keep. A window
-// control's press rectangle is a fixed offset from the border's trailing corner
-// (see config's button position constants), the rail budgets exactly one column
-// for its gutter mark, and a scrollbar draws one cell per row. A two-cell
-// emoji in any of those does not look bold, it moves every cell after it and
-// puts the close button under a different column than the one the pointer is
-// tested against. So a role with a width is checked and a glyph that misses is
-// dropped back to the default with a line saying so, rather than drawn.
 var glyphRoles = []glyphRole{
 	{"close", func(g *GlyphSet) *string { return &g.Close }, 1},
 	{"maximize", func(g *GlyphSet) *string { return &g.Maximize }, 1},
@@ -382,9 +318,6 @@ var glyphRoles = []glyphRole{
 	{"attention", func(g *GlyphSet) *string { return &g.Attention }, 1},
 	{"bullet", func(g *GlyphSet) *string { return &g.Bullet }, 1},
 	{"add", func(g *GlyphSet) *string { return &g.Add }, 1},
-	// The tree marks run in front of a name rather than in the gutter, so they
-	// are budgeted three cells: the mark, its arm, and the space before the
-	// name. A wider one would step every grouped name out of the rail's spine.
 	{"tree_branch", func(g *GlyphSet) *string { return &g.TreeBranch }, 3},
 	{"tree_last", func(g *GlyphSet) *string { return &g.TreeLast }, 3},
 	{"fold_open", func(g *GlyphSet) *string { return &g.FoldOpen }, 1},
@@ -392,8 +325,6 @@ var glyphRoles = []glyphRole{
 	{"folder", func(g *GlyphSet) *string { return &g.Folder }, 1},
 	{"parent", func(g *GlyphSet) *string { return &g.Parent }, 1},
 	{"file", func(g *GlyphSet) *string { return &g.File }, 1},
-	// The rail measures its own footer rather than budgeting a column for it,
-	// so its stepper takes any width; the ASCII default is two cells.
 	{"collapse", func(g *GlyphSet) *string { return &g.Collapse }, 0},
 	{"expand", func(g *GlyphSet) *string { return &g.Expand }, 0},
 	{"state_working", func(g *GlyphSet) *string { return &g.StateWorking }, markWidth},
@@ -410,7 +341,6 @@ var glyphRoles = []glyphRole{
 	{"dash_rule", func(g *GlyphSet) *string { return &g.DashRule }, 1},
 }
 
-// borderFields is the border's runes, for the width check and for the merge.
 func borderFields(b *BorderGlyphs) []*string {
 	return []*string{
 		&b.Top, &b.Bottom, &b.Left, &b.Right,
@@ -419,8 +349,6 @@ func borderFields(b *BorderGlyphs) []*string {
 	}
 }
 
-// sanitizeGlyphSet drops every role whose glyph cannot be drawn where the
-// layout puts it, and records whether what is left is 7-bit throughout.
 func sanitizeGlyphSet(set *GlyphSet) []string {
 	var problems []string
 	for _, role := range glyphRoles {
@@ -467,10 +395,6 @@ func sanitizeGlyphSet(set *GlyphSet) []string {
 	return problems
 }
 
-// glyphPrintable reports whether a glyph is valid UTF-8 with no control
-// character in it. A glyph is written into the frame as it is, so an escape in
-// a set file would be a sequence sent to the client's terminal, and it
-// measures as no cells, so the width checks alone would let it through.
 func glyphPrintable(s string) bool {
 	if !utf8.ValidString(s) {
 		return false
@@ -520,13 +444,6 @@ func (g *GlyphSet) StateMark(state string) string {
 	return ""
 }
 
-// glyphSetIsASCII reports whether every glyph the set names is 7-bit.
-//
-// A claim about the set's own fields, not about what would be drawn: a role the
-// set leaves alone reads as the empty string here, which is trivially 7-bit
-// while the built-in it falls back to may not be. Whether a set can be drawn on
-// a terminal that manages nothing else is a question about the resolved glyphs
-// and is answered where those are resolved, by the describe verb.
 func glyphSetIsASCII(set *GlyphSet) bool {
 	for _, role := range glyphRoles {
 		if !overlay.IsASCII(*role.field(set)) {
@@ -613,9 +530,6 @@ func GlyphSetProblemsFor(id string) []string {
 func GlyphSetDroppedRoles(id string) []string {
 	var roles []string
 	for _, line := range GlyphSetProblemsFor(id) {
-		// "glyph set <id>: <role> is N cells wide and ...": the role is the
-		// word after the colon. A border rune's line names no role, so it is
-		// reported under the border it belongs to.
 		_, rest, ok := strings.Cut(line, ": ")
 		if !ok {
 			continue
@@ -633,9 +547,6 @@ func GlyphSetDroppedRoles(id string) []string {
 	return slices.Compact(roles)
 }
 
-// maxGlyphInherit caps the inheritance walk. A set inheriting from a set is
-// how a user says "the heavy one but with my own close button"; a chain deeper
-// than this is a mistake, and a chain that loops is one this has to survive.
 const maxGlyphInherit = 8
 
 // ResolveGlyphSet returns the set named, with everything it inherits already
@@ -653,8 +564,6 @@ func ResolveGlyphSet(id string) *GlyphSet {
 		if set == nil {
 			break
 		}
-		// Walking from the most specific outwards and only filling what is
-		// still empty means the near set wins without a second pass.
 		mergeGlyphSet(out, set)
 		id = set.Inherits
 	}
@@ -662,8 +571,6 @@ func ResolveGlyphSet(id string) *GlyphSet {
 	return out
 }
 
-// lookupGlyphSet finds a set by id, preferring the user's file over a built-in
-// of the same name so a shipped set can be replaced rather than only extended.
 func lookupGlyphSet(id string) *GlyphSet {
 	glyphMu.RLock()
 	set := userGlyphSets[id]
@@ -674,13 +581,10 @@ func lookupGlyphSet(id string) *GlyphSet {
 	return builtinGlyphSets[id]
 }
 
-// mergeGlyphSet fills dst's empty roles from src, leaving what dst already has.
 func mergeGlyphSet(dst, src *GlyphSet) {
 	if dst.DisplayName == "" {
 		dst.DisplayName = src.DisplayName
 	}
-	// The nearest set's own Inherits, so a resolved set still says where it
-	// started. Without it the chain was walked correctly and reported as empty.
 	if dst.Inherits == "" {
 		dst.Inherits = src.Inherits
 	}
@@ -713,17 +617,7 @@ func SetActiveGlyphs(id string) {
 	glyphMu.Lock()
 	activeGlyphID = id
 	glyphMu.Unlock()
-	// A set that does not resolve yet is the ordinary case at startup, not an
-	// error: the glyphs directory is read lazily, so the first thing that names
-	// a set from it is usually the config file being applied.
-	//
-	// ReloadGlyphSets ends by refreshing the active set, so this is not a
-	// second resolve.
 	if id != GlyphSetNone && lookupGlyphSet(id) == nil {
-		// ReloadGlyphSets refreshes on its way out, but returns early on a
-		// directory it cannot read at all. Refreshing here unconditionally
-		// costs one resolve and means the drawn glyphs can never disagree with
-		// the id get-config reports.
 		ReloadGlyphSets()
 	}
 	refreshActiveGlyphs()
@@ -736,9 +630,6 @@ func ActiveGlyphSetID() string {
 	return activeGlyphID
 }
 
-// refreshActiveGlyphs re-resolves the selected set and pushes the overlay
-// family's share of it, which is the one consumer that cannot read this
-// package (it depends on nothing inside tuios so that it can be lifted out).
 func refreshActiveGlyphs() {
 	glyphMu.RLock()
 	id := activeGlyphID
@@ -755,8 +646,6 @@ func refreshActiveGlyphs() {
 	})
 }
 
-// emptyGlyphs is what Glyphs answers before anything has selected a set: no
-// role named, so every caller draws its own default.
 var emptyGlyphs = &GlyphSet{ID: GlyphSetNone}
 
 // Glyphs returns the resolved active set. Every field may be empty, and an
@@ -772,12 +661,6 @@ func Glyphs() *GlyphSet {
 	return emptyGlyphs
 }
 
-// The reflection-free introspection the describe verb needs. It is here rather
-// than in the verb because the role table is here, and a second table written
-// beside the verb would be the copy that goes stale the moment a role is added.
-
-// borderRoleNames names the border's runes, in the order borderFields returns
-// them, so the two are read together or not at all.
 var borderRoleNames = []string{
 	"top", "bottom", "left", "right",
 	"top_left", "top_right", "bottom_left", "bottom_right",

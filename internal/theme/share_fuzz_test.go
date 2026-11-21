@@ -40,8 +40,6 @@ func FuzzThemeFileExport(f *testing.F) {
 		if err != nil {
 			return
 		}
-		// A string that is not UTF-8 is replaced on the way through JSON,
-		// which is the decoder's doing, not the writer's.
 		if !utf8.ValidString(r.tint.ID) || !utf8.ValidString(r.tint.DisplayName) {
 			return
 		}
@@ -79,8 +77,6 @@ func FuzzThemeFileExport(f *testing.F) {
 			}
 		}
 
-		// The share string carries the compact file, and nothing in it may
-		// need quoting in a chat message: one line, no spaces or controls.
 		share := SharePrefix + base64.RawURLEncoding.EncodeToString(bytes.TrimSpace(doc.encode(false)))
 		if strings.ContainsFunc(share, func(r rune) bool { return r <= ' ' || r > '~' }) {
 			t.Fatalf("share string has a space, a control or a non-ASCII rune: %q", share)

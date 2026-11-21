@@ -59,7 +59,6 @@ type Options struct {
 
 // ProgressPath is where the tutor keeps the person's progress.
 func ProgressPath() string {
-	// Progress belongs to the person, not to a named server.
 	_ = serverscope.Apply("")
 	return filepath.Join(xdg.StateHome, "tuios", "tutor.json")
 }
@@ -113,7 +112,6 @@ func Run(opts Options) error {
 		}
 	}
 
-	// Read before the sandbox moves them.
 	progressPath := ProgressPath()
 	nested := os.Getenv("TUIOS_PANE_ID") != "" || os.Getenv("TUIOS_WINDOW_ID") != "" || os.Getenv("TUIOS_SESSION") != ""
 	box, err := enterSandbox()
@@ -123,8 +121,6 @@ func Run(opts Options) error {
 	defer box.remove()
 	store := loadProgress(progressPath)
 
-	// Every pane gets an in-memory pty running the fake shell. No process
-	// starts.
 	ptyspawn.NewGuestPty = func(width, height int) (xpty.Pty, error) {
 		return webshell.NewPty(width, height), nil
 	}
@@ -137,7 +133,6 @@ func Run(opts Options) error {
 	}
 	profile := colorprofile.Detect(os.Stdout, os.Environ())
 
-	// The shipped defaults, the screen a person sees after installing tuios.
 	cfg := learn.Config()
 	app.SetInputHandler(input.HandleInput)
 	seed := config.Resolve(cfg, config.Overrides{ASCIIOnly: opts.ASCII})
@@ -163,9 +158,7 @@ func Run(opts Options) error {
 	queue := &eventQueue{}
 	m := &Model{file: file, tracks: tracks, store: store, queue: queue, ascii: opts.ASCII || seed.UseASCIIOnly, w: w, h: h}
 	m.lessons, err = learn.NewLessons(lessons.SurfaceTerminal, learn.LessonHooks{
-		Emit: queue.push,
-		// The lesson's own goroutines call this, never Update, so it may
-		// block, and two calls reach the program in order.
+		Emit:  queue.push,
 		Send:  func(msg tea.Msg) { prog.Send(msg) },
 		Input: func(s string) { in.inject([]byte(s)) },
 		State: func() map[string]any { return m.tour.State().ToMap() },
@@ -188,13 +181,9 @@ func Run(opts Options) error {
 		m.scr = scrMenu
 	}
 
-	// No WithWindowSize: stdout is the terminal, and Bubble Tea reads the
-	// size off it at start and on every resize.
 	prog = tea.NewProgram(m, append(app.ProgramOptions(),
 		tea.WithInput(in),
 		tea.WithOutput(os.Stdout),
-		// Last, so it replaces the filter ProgramOptions set: that one only
-		// knows *app.OS.
 		tea.WithFilter(filter),
 	)...)
 	queue.nudge = func() { go prog.Send(drainMsg{}) }
@@ -203,8 +192,6 @@ func Run(opts Options) error {
 		m.start(first)
 	}
 
-	// A signal ends the tutor the way Leave does. If the program cannot
-	// end, the temp dir still goes, and so does the process.
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	defer signal.Stop(sigs)
@@ -231,8 +218,6 @@ func Run(opts Options) error {
 	return nil
 }
 
-// terminalNotes rewrites Learn mode's notes, which talk about a browser tab.
-// The quit note shows nothing: a quit opens the tutor's menu instead.
 func terminalNotes() map[string]string {
 	out := map[string]string{}
 	for _, note := range app.LearnUnavailableActions() {

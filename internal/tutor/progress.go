@@ -12,7 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
 
-// progressVersion is the format of tutor.json.
 const progressVersion = 1
 
 // Progress is what the person has done, by track. It is the shape the page
@@ -30,15 +29,11 @@ type TrackProgress struct {
 	Best     int      `json:"best,omitempty"`
 }
 
-// progressStore reads and writes tutor.json. It is the only file the tutor
-// writes outside its sandbox.
 type progressStore struct {
 	path string
 	p    Progress
 }
 
-// loadProgress reads path. A missing or unreadable file is no progress, so a
-// broken file never stops the tutor.
 func loadProgress(path string) *progressStore {
 	s := &progressStore{path: path, p: Progress{Version: progressVersion, Tracks: map[string]*TrackProgress{}}}
 	raw, err := os.ReadFile(path)
@@ -57,10 +52,8 @@ func loadProgress(path string) *progressStore {
 	return s
 }
 
-// track is the progress on id, nil when there is none.
 func (s *progressStore) track(id string) *TrackProgress { return s.p.Tracks[id] }
 
-// doneCount is how many steps of id are done.
 func (s *progressStore) doneCount(id string) int {
 	if t := s.track(id); t != nil {
 		return len(t.Done)
@@ -68,7 +61,6 @@ func (s *progressStore) doneCount(id string) int {
 	return 0
 }
 
-// markStep records a done step and writes the file.
 func (s *progressStore) markStep(track, step string) error {
 	t := s.p.Tracks[track]
 	if t == nil {
@@ -82,7 +74,6 @@ func (s *progressStore) markStep(track, step string) error {
 	return s.save()
 }
 
-// markFinished records a finished run and its time, and writes the file.
 func (s *progressStore) markFinished(track string, seconds int) error {
 	t := s.p.Tracks[track]
 	if t == nil {
@@ -96,8 +87,6 @@ func (s *progressStore) markFinished(track string, seconds int) error {
 	return s.save()
 }
 
-// save writes the file whole: a temp file beside it, then a rename, so a
-// crash leaves the old file or the new one and never half of one.
 func (s *progressStore) save() error {
 	raw, err := json.MarshalIndent(s.p, "", "  ")
 	if err != nil {
@@ -110,7 +99,6 @@ func (s *progressStore) save() error {
 	return atomicfile.Write(s.path, append(raw, '\n'), 0o600, false)
 }
 
-// resetProgress removes the file. A file that is not there is no error.
 func resetProgress(path string) error {
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err

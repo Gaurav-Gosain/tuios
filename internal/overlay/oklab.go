@@ -6,27 +6,9 @@ import (
 	"sync"
 )
 
-// Blending is done in OKLab, a perceptual space: equal steps of a blend look
-// like equal steps, and a red tint and a green tint mixed into the same ground
-// at the same fraction come out at the same perceived lightness. Blending the
-// gamma-encoded sRGB values, which is what this package did before, darkens
-// the middle of every blend and makes a saturated tint muddy.
-//
-// The conversions run per style run in the dim and spotlight passes, so both
-// transfer curves are tables: decoding is exact for the 256 channel values,
-// and encoding interpolates a 4096-entry table, which is within a quarter of
-// one 8-bit step everywhere. Nothing here allocates.
-//
-// The tables are built on first use. Built at package init they cost every
-// tuios process about 0.2 ms, the largest single item of init, and a one-shot
-// CLI command never blends a colour.
-
-// oklabTables holds both transfer curves.
 type oklabTables struct {
-	// toLinear decodes one 8-bit channel.
 	toLinear [256]float64
-	// toSRGB encodes linear light at linearSteps even steps from 0 to 1.
-	toSRGB [linearSteps + 1]float64
+	toSRGB   [linearSteps + 1]float64
 }
 
 const linearSteps = 4096
@@ -42,7 +24,6 @@ var transfer = sync.OnceValue(func() *oklabTables {
 	return t
 })
 
-// encodeChannel turns linear light into an 8-bit channel, rounded.
 func encodeChannel(v float64) uint8 {
 	if v <= 0 {
 		return 0
@@ -58,10 +39,8 @@ func encodeChannel(v float64) uint8 {
 	return uint8(math.Round(s * 255))
 }
 
-// lab is a colour in OKLab.
 type lab struct{ l, a, b float64 }
 
-// toLab converts c to OKLab.
 func toLab(c color.Color) lab {
 	r16, g16, b16, _ := c.RGBA()
 	t := &transfer().toLinear
@@ -76,8 +55,6 @@ func toLab(c color.Color) lab {
 	}
 }
 
-// rgba converts back to 8-bit sRGB, clamping a channel that falls outside the
-// gamut rather than wrapping it.
 func (c lab) rgba() color.RGBA {
 	l := c.l + 0.3963377774*c.a + 0.2158037573*c.b
 	m := c.l - 0.1055613458*c.a - 0.0638541728*c.b
@@ -98,8 +75,6 @@ func Distance(a, b color.Color) float64 {
 	return math.Sqrt((x.l-y.l)*(x.l-y.l) + (x.a-y.a)*(x.a-y.a) + (x.b-y.b)*(x.b-y.b))
 }
 
-// okChroma is c's chroma in OKLab: 0 for a grey, about 0.3 for the most
-// saturated sRGB colours.
 func okChroma(c color.Color) float64 {
 	v := toLab(c)
 	return math.Hypot(v.a, v.b)
@@ -115,8 +90,6 @@ func MixColors(a, b color.Color, t float64) color.Color {
 	return mixLab(a, b, t)
 }
 
-// mixLab is MixColors with its concrete type, for callers that keep the
-// result in a table.
 func mixLab(a, b color.Color, t float64) color.RGBA {
 	if t <= 0 {
 		return toRGBA8(a)
@@ -132,7 +105,6 @@ func mixLab(a, b color.Color, t float64) color.RGBA {
 	}.rgba()
 }
 
-// toRGBA8 flattens c to opaque 8-bit channels.
 func toRGBA8(c color.Color) color.RGBA {
 	r, g, b, _ := c.RGBA()
 	return color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: 0xFF}
@@ -188,7 +160,6 @@ func FixLightness(c, bg color.Color, floor float64) color.Color {
 	return best
 }
 
-// inGamut reports whether c converts to sRGB without clamping a channel.
 func (c lab) inGamut() bool {
 	l := c.l + 0.3963377774*c.a + 0.2158037573*c.b
 	m := c.l - 0.1055613458*c.a - 0.0638541728*c.b

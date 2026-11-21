@@ -8,15 +8,6 @@ import (
 	"github.com/shirou/gopsutil/v4/process"
 )
 
-// processCwd asks the kernel through proc_pidinfo(PROC_PIDVNODEPATHINFO),
-// which is darwin's answer to procfs for this question.
-//
-// gopsutil reaches it with purego rather than cgo, so this keeps the
-// CGO_ENABLED=0 build the release uses. It costs a couple of microseconds.
-//
-// It answers only for a process the effective uid may inspect, which is the
-// right boundary: every pane tuios owns is a child of this process, and a pid
-// belonging to somebody else is one this build has no business reading.
 func processCwd(pid int) (string, bool) {
 	if pid <= 0 {
 		return "", false

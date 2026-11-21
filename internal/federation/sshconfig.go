@@ -41,13 +41,8 @@ func (t SSHTarget) Complete() bool {
 	return t.HostName != "" && t.User != "" && t.Port != ""
 }
 
-// sshConfigTimeout bounds one ssh -G. It reaches no network, but a Match
-// exec line in the config runs a command, and that command can hang.
 const sshConfigTimeout = 3 * time.Second
 
-// sshConfigWaitDelay is how long ssh -G's output pipe may stay open after
-// ssh has exited or been killed. A Match exec child inherits the pipe, so
-// without it the read waits for that child, past the timeout.
 const sshConfigWaitDelay = 500 * time.Millisecond
 
 var sshConfigCache struct {
@@ -55,8 +50,6 @@ var sshConfigCache struct {
 	m  map[string]SSHConfig
 }
 
-// sshConfigKey names an answer: ssh -G's answer depends on the program, the
-// address and the host's options.
 func sshConfigKey(h Host) string {
 	return SSHBinary() + "\x00" + h.Addr + "\x00" + strings.Join(h.SSHOptions, "\x00")
 }
@@ -109,8 +102,6 @@ func ResolveSSH(args []string) (SSHConfig, bool) {
 	cmd.Stderr = io.Discard
 	cmd.WaitDelay = sshConfigWaitDelay
 	out, err := cmd.Output()
-	// ErrWaitDelay with a clean exit: ssh answered in full, and a child it
-	// left behind held the pipe open.
 	if err != nil && !errors.Is(err, exec.ErrWaitDelay) {
 		return SSHConfig{}, false
 	}

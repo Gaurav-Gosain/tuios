@@ -59,15 +59,11 @@ func Draw(src string, th *sketch.Theme, o PictureOptions) (Picture, error) {
 func DrawSVG(out sketch.SVG, th *sketch.Theme, o PictureOptions) (Picture, error) {
 	cellW, cellH := max(o.CellW, 1), max(o.CellH, 1)
 	scale := Scale(out.Width, out.Height, o.Cols, o.Rows, cellW, cellH)
-	// The theme sets the --pele-* tokens, so an SVG drawn in another theme,
-	// such as the sketch plugin's, takes th's colours.
 	img, err := raster.Draw(out.Data, raster.Options{Scale: scale, Theme: th, Background: o.Background, Readable: true})
 	if err != nil {
 		return Picture{}, err
 	}
 	if !o.Background {
-		// Clear around the diagram is the margin sketch leaves: the box
-		// would take rows that show nothing.
 		img = trimClear(img, 2)
 	}
 	box, c, r := CellBox(img, cellW, cellH, o.Cols, o.Rows, o.Background, th)
@@ -78,8 +74,6 @@ func DrawSVG(out sketch.SVG, th *sketch.Theme, o PictureOptions) (Picture, error
 	return Picture{PNG: b.Bytes(), Cols: c, Rows: r}, nil
 }
 
-// trimClear cuts the clear rows and columns off the sides of img, and keeps
-// pad pixels of them. An image with nothing drawn is kept whole.
 func trimClear(img *image.RGBA, pad int) *image.RGBA {
 	b := img.Bounds()
 	x0, y0, x1, y1 := b.Max.X, b.Max.Y, b.Min.X, b.Min.Y
@@ -97,8 +91,6 @@ func trimClear(img *image.RGBA, pad int) *image.RGBA {
 	return img.SubImage(image.Rect(x0-pad, y0-pad, x1+pad, y1+pad).Intersect(b)).(*image.RGBA)
 }
 
-// diagramFontSize is the size in SVG units of a diagram's body text. sketch
-// draws labels at 16px, as pele does.
 const diagramFontSize = 16
 
 // Scale is the pixels a diagram unit takes in a picture of the terminal.
@@ -113,7 +105,6 @@ func Scale(width, height float64, cols, rows, cellW, cellH int) float64 {
 	if rows > 0 {
 		scale = math.Min(scale, float64(rows*cellH)/height)
 	}
-	// raster.Draw refuses a side past 32768 pixels or 40 million pixels in all.
 	return math.Min(scale, math.Min(32000/math.Max(width, height), math.Sqrt(39e6/(width*height))))
 }
 

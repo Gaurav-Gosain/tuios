@@ -25,8 +25,6 @@ func ProcessCwd(pid int) (string, bool) {
 	return homeSpelled(cwd), ok
 }
 
-// homes is the home folder as $HOME spells it and with its symbolic links
-// resolved, read once. Either is "" when it cannot be read.
 var homes = sync.OnceValues(func() (string, string) {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
@@ -40,15 +38,6 @@ var homes = sync.OnceValues(func() (string, string) {
 	return home, filepath.Clean(real)
 })
 
-// homeSpelled writes a folder the kernel gave under the home folder the way
-// $HOME spells it. The kernel resolves the symbolic links in a process's
-// folder, so with a home reached through one (FreeBSD's /home, a home under
-// /var on macOS, an automounted one) a shell in ~/proj is in
-// /usr/home/me/proj, and nothing that writes a folder under home as ~ (the
-// path picker, the rail) sees that it is under home. Only a folder that is
-// the resolved home or lies under it, a whole path component at a time, is
-// spelled again: one outside home, or one whose name only starts with the
-// same letters, is left as the kernel gave it.
 func homeSpelled(path string) string {
 	home, real := homes()
 	if path == "" || home == "" || real == "" || real == home || real == string(filepath.Separator) {
@@ -63,10 +52,6 @@ func homeSpelled(path string) string {
 	return path
 }
 
-// processCwdOffForTest makes every process read fail, as it does on native
-// Windows, so the end-to-end tests can prove on Linux that a pane's folder
-// still comes from OSC 7 there. It holds only with the knob
-// no_process_cwd=1, which ordinary runs never set.
 var processCwdOffForTest = sync.OnceValue(func() bool {
 	return testknob.String("no_process_cwd") == "1"
 })

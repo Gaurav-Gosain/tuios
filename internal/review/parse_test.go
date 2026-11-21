@@ -72,9 +72,6 @@ func TestParseHunkHeader(t *testing.T) {
 	}
 }
 
-// unifiedFixture is git's unified diff of three files: a modification with a
-// blank context line that lost its space, CRLF lines and no newline at the
-// end on either side; a binary file; and a new file.
 const unifiedFixture = "diff --git a/a.go b/a.go\n" +
 	"index 1..2 100644\n" +
 	"--- a/a.go\n" +
@@ -112,8 +109,6 @@ func TestReadUnified(t *testing.T) {
 		t.Errorf("hunk = %+v", h)
 	}
 	want := []Line{
-		// raw keeps the carriage return, which a patch built from the
-		// line must carry to apply.
 		{Op: OpContext, Old: 1, New: 1, Text: "one", raw: "one\r"},
 		{Op: OpContext, Old: 2, New: 2, Text: ""},
 		{Op: OpDelete, Old: 3, Text: "two", NoNewline: true, raw: "two"},

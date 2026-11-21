@@ -16,16 +16,6 @@ import (
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
-// A Draft is a theme file being edited: the fields the file itself sets, over
-// its base. A field left empty comes from the base, so a draft saves as the
-// sparse file a person would write, and resetting a field is emptying it.
-//
-// The editor previews a draft by registering it under a scratch id and
-// selecting that, which is the same pointer swap a theme switch is: the UI
-// memo is keyed on the theme's pointers, so the next frame repaints. A client
-// that must not change the process-wide theme (a served one) measures the
-// draft with PaletteOf instead, which registers nothing.
-
 // Draft is a theme file being edited.
 type Draft struct {
 	// ID is the id the file is saved under. Base is the theme it starts from:
@@ -42,13 +32,9 @@ type Draft struct {
 	// Chrome holds the file's own chrome fields by role, as the file writes
 	// them: hex, a slot or another role. Empty takes the base's.
 	Chrome [roleLastSettable + 1]string
-	// src is the file the draft was read from and the bytes it held. Clones
-	// share it, so a save seen by one draft is seen by the undo stack too.
-	src *draftSource
+	src    *draftSource
 }
 
-// draftSource is where a draft saves and what that file held when it was
-// last read or written. A new theme has no path yet.
 type draftSource struct {
 	path string
 	disk []byte
@@ -145,7 +131,6 @@ func (d *Draft) Clone() *Draft {
 	return &c
 }
 
-// file is the draft as a theme file, for the merge.
 func (d *Draft) file() (*themeFile, error) {
 	f := &themeFile{Base: d.Base, Dark: d.Dark, Chrome: map[string]any{}}
 	f.ID, f.DisplayName = d.ID, d.ID
@@ -303,9 +288,6 @@ func RoleColour(r Role, t *tint.Tint, c *Chrome, pal overlay.Palette) color.Colo
 	return roleOn(r, &pal)
 }
 
-// furnitureFallback is what a role after RoleCard draws when the theme names
-// none, for the theme t: the same answers BorderUnfocused, DockColorCopy and
-// the others give with no chrome.
 func furnitureFallback(r Role, t *tint.Tint, pal overlay.Palette) color.Color {
 	var bg color.Color = uiCanvas
 	if t != nil {
@@ -379,7 +361,6 @@ func ColourNames() []string {
 	return out
 }
 
-// toneKeys are the CharmTone colour names.
 func toneKeys() []string {
 	keys := tone.Keys()
 	out := make([]string, 0, len(keys))

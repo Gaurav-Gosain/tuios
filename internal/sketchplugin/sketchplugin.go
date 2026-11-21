@@ -29,8 +29,6 @@ const MaxOutput = 16 << 20
 // ErrTooLarge is an answer past MaxOutput.
 var ErrTooLarge = errors.New("the drawing is too large")
 
-// run runs prog with args and src on its standard input, and reads at most
-// MaxOutput bytes of its answer.
 func run(prog, src string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
@@ -50,7 +48,6 @@ func run(prog, src string, args ...string) ([]byte, error) {
 	return out.b.Bytes(), nil
 }
 
-// capped keeps at most MaxOutput bytes and notes that more came.
 type capped struct {
 	b    bytes.Buffer
 	over bool
@@ -92,7 +89,6 @@ func Cells(prog, src string, cols int) ([][]sketchtext.Cell, bool, error) {
 	return rows, got.Cut, nil
 }
 
-// reViewBox reads the size of the root element of sketch's SVG.
 var reViewBox = regexp.MustCompile(`^\s*<svg\b[^>]*?\sviewBox="0 0 ([0-9.eE+-]+) ([0-9.eE+-]+)"`)
 
 // SVG draws src as SVG in the plugin's own theme, and gives its size in SVG

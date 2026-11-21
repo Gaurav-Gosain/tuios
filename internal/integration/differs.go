@@ -5,10 +5,6 @@ import (
 	"strings"
 )
 
-// hookDiffer is a format that can say, in words, how the hooks it holds
-// differ from the ones this tuios writes. Status asks it only when the
-// install carries this build's version and is still not current, so the
-// version alone does not explain it.
 type hookDiffer interface {
 	differs(t *Target, have []byte, run Runner) ([]string, error)
 }
@@ -33,16 +29,10 @@ func (flatHooks) differs(t *Target, have []byte, run Runner) ([]string, error) {
 	return hookDifferences(entries, t.Events, run, t.ID, t.Version), nil
 }
 
-// isForwarderCommand reports whether a hook command is the forwarder line,
-// which sends the event to the daemon over its socket.
 func isForwarderCommand(cmd string) bool {
 	return strings.HasPrefix(cmd, "sh -c ") && strings.Contains(cmd, "agent-hook-event")
 }
 
-// hookDifferences lists how the managed entries differ from one hook per
-// event running the command run writes: events with no hook, hooks for
-// events this tuios does not install, events with more than one, and how the
-// command itself differs.
 func hookDifferences(entries []managedEntry, events []HookEvent, run Runner, harnessID string, version int) []string {
 	want := run.command(harnessID, version)
 	count := map[string]int{}
@@ -90,8 +80,6 @@ func hookDifferences(entries []managedEntry, events []HookEvent, run Runner, har
 	return out
 }
 
-// commandDifference says how one installed hook command differs from the
-// one this tuios writes.
 func commandDifference(have, want string, run Runner, harnessID string) string {
 	haveFwd, wantFwd := isForwarderCommand(have), isForwarderCommand(want)
 	switch {

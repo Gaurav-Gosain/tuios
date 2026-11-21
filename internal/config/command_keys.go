@@ -10,27 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 )
 
-// Command keybindings: [[keybindings.command]] entries that bind a key to a
-// command the user writes, after herdr's custom command keybindings.
-//
-//	[[keybindings.command]]
-//	key = "prefix+alt+g"
-//	type = "scratch"
-//	command = "lazygit"
-//	description = "lazygit"
-//
-// The key is written as elsewhere in the config, with one addition: a key
-// that starts with "prefix+" acts after the leader (the [keybindings.prefix_mode]
-// scope), and any other key acts in window mode and terminal mode alike (the
-// [keybindings.global] scope). The entries are not written into those
-// sections. The registry reads them beside the sections, so the config file
-// keeps them in one table and a save never copies them elsewhere.
-//
-// An entry is the action "command:<name>". The name is the entry's own name
-// field, or else a slug of its description, or else of its command. A
-// scratch entry keeps its pane under that name, so the name has to stay the
-// same from one run to the next, and the user can pin it.
-
 // Command types.
 const (
 	CommandTypeScratch = "scratch"
@@ -101,8 +80,6 @@ func (c CommandBinding) ResolvedName() string {
 	return fmt.Sprintf("cmd-%08x", h.Sum32())
 }
 
-// nameSource is the field ResolvedName made the name from, and its text:
-// "name", "description", "command" or "key", or "" for a hash or no name.
 func (c CommandBinding) nameSource() (field, text string) {
 	for _, f := range []struct{ field, text string }{
 		{"name", c.Name}, {"description", c.Description}, {"command", c.Command}, {"key", c.Key},
@@ -164,14 +141,10 @@ func cutPrefixKey(key string) (string, bool) {
 	return "", false
 }
 
-// commandSlugMax is the longest name tuios makes from a description or a
-// command. Two texts that agree up to here get the same name.
 const commandSlugMax = 40
 
-// commandSlug lowercases s and keeps letters, digits and single dashes.
 func commandSlug(s string) string { return commandSlugN(s, commandSlugMax) }
 
-// commandSlugN is commandSlug cut at max bytes, or not cut when max is 0.
 func commandSlugN(s string, max int) string {
 	var b strings.Builder
 	dash := false
@@ -191,7 +164,6 @@ func commandSlugN(s string, max int) string {
 	return strings.Trim(b.String(), "-")
 }
 
-// commandProblem says what is wrong with an entry, or "".
 func commandProblem(c CommandBinding, normalizer *KeyNormalizer) string {
 	switch t := c.ResolvedType(); {
 	case strings.TrimSpace(c.Key) == "":
@@ -208,8 +180,6 @@ func commandProblem(c CommandBinding, normalizer *KeyNormalizer) string {
 	return keyAndBoxProblem(normalizer, c.BareKey(), c.Width, c.Height)
 }
 
-// keyAndBoxProblem checks the key and the box size a command entry or a
-// user action has. An empty key is not checked: a user action may have none.
 func keyAndBoxProblem(normalizer *KeyNormalizer, bareKey, width, height string) string {
 	if bareKey != "" {
 		if ok, msg := normalizer.ValidateKey(bareKey); !ok {
@@ -260,8 +230,6 @@ func (k *KeybindingsConfig) CommandFor(action string) (CommandBinding, bool) {
 	return CommandBinding{}, false
 }
 
-// isLeader reports whether key is the leader key. The leader is read before
-// any section, so an entry on it never runs.
 func (k *KeybindingsConfig) isLeader(key string) bool {
 	leader := k.LeaderKey
 	if leader == "" {
@@ -314,11 +282,6 @@ func (k *KeybindingsConfig) CommandProblems() []CommandProblem {
 	return out
 }
 
-// nameClash says why an entry lost its name to entry prev. An entry with no
-// name of its own gets one made from its text, and two different texts can
-// make the same name: tuios keeps only the first 40 characters, and drops
-// case and punctuation. That case says which text the name came from, since
-// nothing in the file shows the name.
 func nameClash(c CommandBinding, prev int, name string) string {
 	field, text := c.nameSource()
 	if field == "name" || field == "" {
@@ -328,15 +291,11 @@ func nameClash(c CommandBinding, prev int, name string) string {
 	if len(commandSlugN(text, 0)) > commandSlugMax {
 		cut = fmt.Sprintf(" tuios uses only the first %d characters.", commandSlugMax)
 	}
-	// The suggestion is itself a name, so it has to fit in the same 40
-	// characters or it would be cut back to the clash.
 	suggest := strings.TrimRight(name[:min(len(name), commandSlugMax-2)], "-") + "-2"
 	return fmt.Sprintf("This entry has no name, so tuios makes the name %q from its %s.%s Entry %d has the same name. Add a name to this entry, for example name = %q. tuios ignores this entry.",
 		name, field, cut, prev, suggest)
 }
 
-// validateCommands warns about each entry tuios leaves out. An entry is a
-// warning and not an error, so a mistake in one entry never stops tuios.
 func validateCommands(cfg *UserConfig, result *ValidationResult) {
 	for _, p := range cfg.Keybindings.CommandProblems() {
 		result.Warnings = append(result.Warnings, ValidationError{
@@ -346,9 +305,6 @@ func validateCommands(cfg *UserConfig, result *ValidationResult) {
 	validatePluginActionKeys(cfg, result)
 }
 
-// validatePluginActionKeys warns about a plugin_action entry whose action no
-// plugin on this machine has. It is a warning, since the plugin can be
-// installed later. The manifests are read only when such an entry exists.
 func validatePluginActionKeys(cfg *UserConfig, result *ValidationResult) {
 	var entries []herdrplugin.Entry
 	loaded := false
@@ -374,8 +330,6 @@ func validatePluginActionKeys(cfg *UserConfig, result *ValidationResult) {
 	}
 }
 
-// bareLetterKey reports whether key is one printable character with no
-// modifier: a key a person types into a pane.
 func bareLetterKey(key string) bool {
 	key = strings.TrimSpace(key)
 	if key == "space" {

@@ -64,7 +64,6 @@ const BashLoginEnv = "TUIOS_BASH_LOGIN"
 // Its absence means the user had none.
 const ZDOTDIREnv = "TUIOS_ZSH_ZDOTDIR"
 
-// file is one script and where it goes under the folder.
 type file struct {
 	rel  string
 	data []byte
@@ -125,8 +124,6 @@ func Setup(shell string, env []string) (args, out []string, ok bool) {
 			case "ZDOTDIR":
 				out = append(out, ZDOTDIREnv+"="+v)
 			case ZDOTDIREnv:
-				// One from outside would put a ZDOTDIR back that the user
-				// never had.
 			default:
 				out = append(out, kv)
 			}
@@ -138,12 +135,9 @@ func Setup(shell string, env []string) (args, out []string, ok bool) {
 
 var (
 	installMu sync.Mutex
-	// installed is the folder the files were checked in by this process,
-	// "" before the first check.
 	installed string
 )
 
-// version is the hash of every script, which names the folder they go in.
 var version = func() string {
 	h := sha256.New()
 	for _, f := range files {
@@ -179,9 +173,6 @@ func Dir() (string, error) {
 	return dir, nil
 }
 
-// install writes every file that is not there with the right content. A file
-// is written to a temporary name and renamed, so a shell never reads half of
-// one.
 func install(dir string) error {
 	for _, f := range files {
 		path := filepath.Join(dir, f.rel)

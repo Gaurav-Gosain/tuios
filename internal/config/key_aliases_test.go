@@ -9,14 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// Issue #201: a key spelled with a modifier alias in config.toml has to match
-// the key event a terminal sends, wherever the spelling enters. The leader was
-// compared with its literal spelling, so leader_key = "opt+f12" never fired on
-// the alt+f12 the terminal sends, and `keybinds explain alt+f12` said the key
-// was free.
-
-// forEachPlatform runs fn once as macOS and once as Linux, since the defaults,
-// the normalizer and the validator all read the platform.
 func forEachPlatform(t *testing.T, fn func(t *testing.T, mac bool)) {
 	t.Helper()
 	for _, mac := range []bool{true, false} {
@@ -50,9 +42,8 @@ func TestCanonicalKey(t *testing.T) {
 		"m":                 "m",
 		"é":                 "é",
 		"Enter":             "enter",
-		// Not a chord tuios can read: left alone for the validator to name.
-		"foo+x": "foo+x",
-		"ctrl+": "ctrl+",
+		"foo+x":             "foo+x",
+		"ctrl+":             "ctrl+",
 	}
 	for in, want := range cases {
 		if got := config.CanonicalKey(in); got != want {
@@ -194,9 +185,6 @@ func TestDoctorNamesTheLeaderSpellingAndBadKeys(t *testing.T) {
 		}
 	})
 	t.Run("linux reads opt as alt", func(t *testing.T) {
-		// Issue #556: a config.toml shared with a Mac works on Linux. opt+
-		// can only mean Alt there, so the doctor and explain say so, and the
-		// key is not a problem.
 		restore := config.ForceMacOSHost(false)
 		defer restore()
 		cfg := config.DefaultConfig()

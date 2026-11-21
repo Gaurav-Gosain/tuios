@@ -13,8 +13,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// fakeAgent is an Agent a test drives: Prompt waits for the test to end the
-// turn, and the test emits events through the session.
 type fakeAgent struct {
 	startErr error
 	prompts  chan string
@@ -44,10 +42,8 @@ func (a *fakeAgent) Prompt(ctx context.Context, text string) (TurnResult, error)
 func (a *fakeAgent) Cancel()               { a.cancels <- struct{}{} }
 func (a *fakeAgent) Done() <-chan struct{} { return a.done }
 
-// report is one Report call.
 type report struct{ state, kind, message, ifState string }
 
-// fakeReporter records reports, and answers holds with what the test sends.
 type fakeReporter struct {
 	reports chan report
 	holds   chan string
@@ -87,7 +83,6 @@ func (r *fakeReporter) next(t *testing.T) report {
 	}
 }
 
-// screen collects what the session writes.
 type screen struct {
 	mu  sync.Mutex
 	buf strings.Builder
@@ -122,7 +117,6 @@ func (s *screen) waitFor(t *testing.T, text string) {
 	}
 }
 
-// harness is a running session with its fakes.
 type harness struct {
 	s        *Session
 	agent    *fakeAgent
@@ -175,7 +169,6 @@ func startSession(t *testing.T, agent *fakeAgent) *harness {
 	return h
 }
 
-// ready starts a session and waits for its idle report.
 func ready(t *testing.T) *harness {
 	t.Helper()
 	h := startSession(t, newFakeAgent())
@@ -213,7 +206,6 @@ func TestSessionPermissionPaneOnly(t *testing.T) {
 		t.Fatalf("a diff was held for the Inbox: %q", held)
 	case <-time.After(100 * time.Millisecond):
 	}
-	// Ctrl+C answers cancelled and cancels the turn.
 	h.type_(t, "\x03")
 	if i := <-chosen; i != -1 {
 		t.Errorf("Ctrl+C chose %d, want cancel", i)
@@ -315,8 +307,6 @@ func TestSessionPermissionInThePane(t *testing.T) {
 	h.reporter.next(t)
 	<-h.reporter.holds
 
-	// The early keys must be handled before the clock moves, or a "1" still
-	// waiting in Run's queue would count as typed past the settle.
 	h.typeHandled(t, "1")
 	h.typeHandled(t, pasteStart+"1"+pasteEnd+"\r")
 	h.advance(time.Second)
@@ -356,7 +346,7 @@ func TestSessionPermissionsQueue(t *testing.T) {
 	if i := <-c1; i != 0 {
 		t.Errorf("first chose %d", i)
 	}
-	h.reporter.next(t) // working
+	h.reporter.next(t)
 	if rep := h.reporter.next(t); rep.state != "needs_input" {
 		t.Errorf("the second permission reported %+v", rep)
 	}
@@ -447,8 +437,6 @@ func commandPermission() (*Permission, chan int) {
 	return p, chosen
 }
 
-// typeHandled types s and waits until Run has handled its keys, not only read
-// them. s must be keys that do not quit, written in one read.
 func (h *harness) typeHandled(t *testing.T, s string) {
 	t.Helper()
 	for len(h.handled) > 0 {

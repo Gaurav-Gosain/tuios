@@ -8,31 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 )
 
-// Tailscale SSH can stand between ssh and the machine. Two of the things it
-// does there reach tuios only as text on ssh's stderr, and both used to be
-// reported as a generic failure.
-//
-// In "check" mode Tailscale holds the connection open until the person
-// approves the login in a browser. Before it waits, it prints two lines as the
-// ssh banner, and ssh writes them to stderr even with BatchMode on:
-//
-//	# Tailscale SSH requires an additional check.
-//	# To authenticate, visit: https://login.tailscale.com/a/l1d9c7e392d3020
-//
-// Then nothing more arrives. ssh's ConnectTimeout does not end the wait, since
-// the TCP connection and the key exchange are done, so a link waits until its
-// own deadline and reports "did not answer in time". When the person approves,
-// Tailscale prints "# Authentication checked with Tailscale SSH." and the
-// session goes on. Every new connection gets a new link, so a command that
-// gives up and tries again asks for a new approval.
-//
-// A policy that refuses the login ends the connection at once with a line
-// that names the user: "tailnet policy does not permit you to SSH as user
-// "root"". That is a wrong user in the address more often than not.
-//
-// All of this text comes from the far side, so it is read as data: the URL
-// must look like one, and nothing else of it is repeated.
-
 // The kinds of Tailscale gate. They are also the error kinds `hosts sync`
 // reports.
 const (
@@ -60,18 +35,13 @@ type SSHGate struct {
 }
 
 var (
-	tailscaleCheckLine    = "Tailscale SSH requires an additional check"
-	tailscaleApprovedLine = "Authentication checked with Tailscale SSH"
-	// The URL is on the same line as the words. \s would cross a line break
-	// and take the first word of whatever the far side printed next.
-	tailscaleVisitPattern = lazyre.New(`To authenticate, visit:[ \t]*(\S+)`)
-	// The URL is repeated to the person, so it is held to the characters a
-	// URL has. A far side that prints anything else gets no URL shown.
+	tailscaleCheckLine     = "Tailscale SSH requires an additional check"
+	tailscaleApprovedLine  = "Authentication checked with Tailscale SSH"
+	tailscaleVisitPattern  = lazyre.New(`To authenticate, visit:[ \t]*(\S+)`)
 	tailscaleURLPattern    = lazyre.New(`^https?://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~%/?=&+-]*)?$`)
 	tailscalePolicyPattern = lazyre.New(`tailnet policy does not permit you to SSH (?:as user "?([A-Za-z0-9._@+-]{1,64})"?|to this node)`)
 )
 
-// maxGateURL bounds the URL. Tailscale's are about fifty characters.
 const maxGateURL = 512
 
 // DefaultLoginOrigins are the origins Tailscale's own coordination server
@@ -130,7 +100,6 @@ func ParseSSHGate(stderr string, origins ...string) *SSHGate {
 	return g
 }
 
-// openWords is "Open URL" or, with no URL to show, the place to find one.
 func (g SSHGate) openWords() string {
 	if g.URL != "" {
 		return "Open " + g.URL

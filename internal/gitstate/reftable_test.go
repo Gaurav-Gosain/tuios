@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// withGitTracking swaps in a counting wrapper around the git a reftable read
-// runs, and answers how many times it ran.
 func withGitTracking(t *testing.T) *atomic.Int64 {
 	t.Helper()
 	Forget()
@@ -51,7 +49,6 @@ func TestReftableReadsAskGitOnlyWhenARefMoves(t *testing.T) {
 		t.Fatal("the clone keeps its refs in files, so this would test nothing new")
 	}
 
-	// HEAD, then origin/main, which is main's upstream.
 	const perRead = 2
 	for range 3 {
 		st, ok := Read(repo)
@@ -66,7 +63,6 @@ func TestReftableReadsAskGitOnlyWhenARefMoves(t *testing.T) {
 		t.Errorf("git ran %d times across three reads with no ref moving, want %d", got, perRead)
 	}
 
-	// The positive half: a ref update is seen at once.
 	if err := os.WriteFile(filepath.Join(repo, "later.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}

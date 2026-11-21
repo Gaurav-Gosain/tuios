@@ -51,19 +51,8 @@ func TestSSHKittyShmDoesNotKillSession(t *testing.T) {
 		t.Skip("no /dev/shm on this platform")
 	}
 
-	// Marker line the text flood prints; see the drain goroutine below.
 	const textMarker = "TUIOS-TEXT-FLOOD"
 
-	// Two real shm objects: one sized like the captured browser pane
-	// (1810x800 px RGBA, ~7.7MB of inline data per re-encoded frame) and one
-	// a quarter of that (905x400, ~1.9MB inline). The sessions are split
-	// between them because the two sizes stress different regimes: big frames
-	// hold the passthrough mutex so long that the renderer starves and its
-	// writes cluster in the gaps, while small frames cycle fast enough to
-	// keep both the graphics goroutine and the renderer writing back to back.
-	// Whichever regime a given run's scheduling lands in, half the sessions
-	// are exercising it, which is what makes the unserialized-writes
-	// corruption strike on every run.
 	type floodShape struct {
 		pxW, pxH int
 		frames   int
@@ -75,11 +64,6 @@ func TestSSHKittyShmDoesNotKillSession(t *testing.T) {
 	tempDir := t.TempDir()
 	floodScripts := make([]string, len(shapes))
 	for si, shape := range shapes {
-		// Several shm objects with distinct content, cycled one per frame. A real
-		// browser rotates a handful of frame buffers (terminal-browser cycles
-		// *-0-0-0.rgba .. *-0-0-7.rgba), so consecutive frames differ. The client
-		// skips a re-sent IDENTICAL bitmap (an idle optimisation), so the flood
-		// has to vary to stay a flood, which is exactly what a live stream does.
 		const buffers = 4
 		var script strings.Builder
 		fmt.Fprintf(&script, "(for i in $(seq 0 %d); do case $((i %% %d)) in\n", shape.frames-1, buffers)
@@ -88,12 +72,8 @@ func TestSSHKittyShmDoesNotKillSession(t *testing.T) {
 			shmPath := "/dev/shm/" + shmName
 			shmData := make([]byte, shape.pxW*shape.pxH*4)
 			for i := range shmData {
-				shmData[i] = byte(i + b*37) // distinct content per buffer
+				shmData[i] = byte(i + b*37)
 			}
-			// The kitty spec makes the terminal delete a t=s object once it
-			// has read it, and tuios does. So, as a guest does, the flood
-			// writes the object again before each frame that names it. The
-			// source copy sits outside /dev/shm, where nothing deletes it.
 			srcPath := filepath.Join(tempDir, fmt.Sprintf("buf-%d-%d.rgba", si, b))
 			if err := os.WriteFile(srcPath, shmData, 0o600); err != nil {
 				t.Fatalf("write frame source: %v", err)
@@ -103,9 +83,6 @@ func TestSSHKittyShmDoesNotKillSession(t *testing.T) {
 			}
 			t.Cleanup(func() { _ = os.Remove(shmPath) })
 
-			// One raw kitty a=T shm frame (transmit+place, shared-memory
-			// medium, image id 1). Cycling the buffers makes adjacent frames
-			// differ.
 			nameB64 := base64.StdEncoding.EncodeToString([]byte(shmName))
 			framePath := filepath.Join(tempDir, fmt.Sprintf("frame-%d-%d.bin", si, b))
 			frame := fmt.Sprintf("\x1b_Ga=T,t=s,i=1,f=32,s=%d,v=%d;%s\x1b\\", shape.pxW, shape.pxH, nameB64)
@@ -117,17 +94,12 @@ func TestSSHKittyShmDoesNotKillSession(t *testing.T) {
 		script.WriteString("esac; done) &\n")
 		script.WriteString("exec yes " + textMarker + "\n")
 
-		// The command typed into the pane lives in a script so the typed line
-		// needs no quoting: a partially delivered line then cannot leave the
-		// shell's line editor stuck inside an open quote, which would wedge
-		// every following attempt.
 		floodScripts[si] = filepath.Join(tempDir, fmt.Sprintf("flood-%d.sh", si))
 		if err := os.WriteFile(floodScripts[si], []byte(script.String()), 0o700); err != nil {
 			t.Fatalf("write flood script: %v", err)
 		}
 	}
 
-	// Ephemeral SSH server: self-contained, touches no daemon state.
 	port := freePort(t)
 	hostKey := filepath.Join(t.TempDir(), "test_host_key")
 	ctx, cancel := context.WithCancel(context.Background())
@@ -139,7 +111,7 @@ func TestSSHKittyShmDoesNotKillSession(t *testing.T) {
 			KeyPath:   hostKey,
 			Ephemeral: true,
 			Version:   "test",
-			NoAuth:    true, // this test is about the kitty path, not who may connect
+			NoAuth:    true,
 		})
 	}()
 	t.Cleanup(func() {
@@ -170,10 +142,6 @@ func TestSSHKittyShmDoesNotKillSession(t *testing.T) {
 	}
 }
 
-// runKittyFloodSession connects one SSH session, drives its startup pane to
-// run the graphics and text floods, and watches it for 6 seconds. It returns
-// nil if the session survived a proven flood, or an error describing either
-// the teardown or a drive failure.
 func runKittyFloodSession(addr, floodScript, textMarker string) error {
 	clientCfg := &gossh.ClientConfig{
 		User:            "tester",
@@ -195,8 +163,6 @@ func runKittyFloodSession(addr, floodScript, textMarker string) error {
 	}
 	defer func() { _ = client.Close() }()
 
-	// Surfaces the transport-level teardown reason ("ssh: wrong packet
-	// length" on the unserialized code) in the failure message.
 	connClosed := make(chan error, 1)
 	go func() { connClosed <- client.Wait() }()
 
@@ -223,19 +189,13 @@ func runKittyFloodSession(addr, floodScript, textMarker string) error {
 		return fmt.Errorf("start shell: %w", err)
 	}
 
-	// Drain stdout so the SSH channel never blocks on our side; note if it
-	// EOFs, count bytes so the drive can wait for the first rendered frame
-	// instead of sleeping a fixed interval, and count occurrences of the text
-	// flood's marker so the drive can tell when `yes` is really running (the
-	// echo of the typed command alone contains it only once or twice; the
-	// running flood repaints it endlessly).
 	var totalRead atomic.Int64
 	var markerCount atomic.Int64
 	var graphicsAPC atomic.Bool
 	streamClosed := make(chan struct{})
 	go func() {
 		marker := []byte(textMarker)
-		gmark := []byte("\x1b_G") // kitty graphics APC introducer
+		gmark := []byte("\x1b_G")
 		matched := 0
 		buf := make([]byte, 64*1024)
 		for {
@@ -273,11 +233,6 @@ func runKittyFloodSession(addr, floodScript, textMarker string) error {
 		}
 	}
 
-	// Readiness: wait until render output has been flushed (the terminal-setup
-	// preamble alone is ~120 bytes; the first frame is KBs). The pinned test
-	// config (see TestMain) opens one pane and starts in terminal mode on the
-	// program's initial WindowSizeMsg, which is enqueued at program start and
-	// therefore processed before any input the drive sends afterwards.
 	readyBy := time.Now().Add(15 * time.Second)
 	for totalRead.Load() < 1024 {
 		if time.Now().After(readyBy) {
@@ -290,33 +245,8 @@ func runKittyFloodSession(addr, floodScript, textMarker string) error {
 		}
 	}
 
-	// Start both floods by running the flood script in the pane: cat replays
-	// the kitty shm frames (each re-encoded server-side to ~7.7MB of inline
-	// data written by the graphics goroutine), while yes floods the pane with
-	// text so the bubbletea renderer keeps flushing text frames to the
-	// session for the whole watch window. Running both is what makes the old
-	// bug bite: the renderer's text writes must interleave safely with the
-	// concurrent multi-MB graphics writes on the SSH channel. Invoking the
-	// script with `sh` keeps the line portable across whatever interactive
-	// shell the pane spawned.
-	//
-	// A shell discards queued PTY input while it initializes its line editor
-	// (tcsetattr with TCSAFLUSH), so a single type-ahead write can be
-	// silently dropped, in whole or in part, depending on shell startup
-	// timing. Each attempt starts with ctrl+u to clear any partially
-	// delivered previous line, then retypes the command, until both floods
-	// are provably running: a 2MB jump within an attempt window can only be
-	// the graphics flood, and a marker count past 20 can only be the text
-	// flood. Retyping while they already run is harmless echoed text.
-	// The two signals are latched independently: the renderer can starve
-	// while the graphics goroutine floods, so the marker count may cross its
-	// threshold in a later attempt window than the byte jump.
 	command := fmt.Sprintf("\x15sh %s\r", floodScript)
 	graphicsSeen, textSeen := false, false
-	// Under the race detector every session's writes are instrumented, so eight
-	// concurrent sessions need more attempts to all get their floods running.
-	// The budget scales rather than being widened for every build, so a plain
-	// run still fails fast on a session that never starts.
 	attempts := 20
 	if raceEnabled {
 		attempts = 60
@@ -327,9 +257,6 @@ func runKittyFloodSession(addr, floodScript, textMarker string) error {
 		}
 		waitUntil := time.Now().Add(1 * time.Second)
 		for time.Now().Before(waitUntil) {
-			// Detect graphics by the kitty APC introducer, not byte volume:
-			// compressed frames (o=z) are a fraction of the raw RGBA, so a volume
-			// threshold calibrated for uncompressed frames never trips.
 			if graphicsAPC.Load() {
 				graphicsSeen = true
 			}
@@ -347,21 +274,10 @@ func runKittyFloodSession(addr, floodScript, textMarker string) error {
 			}
 		}
 	}
-	// The hard gate is the graphics flood: seeing it proves the script ran,
-	// and the script's exec makes the text flood run with it. The marker is
-	// only confirmation that text frames are rendering; under the race
-	// detector with several concurrent sessions the renderer can lag too far
-	// behind the graphics goroutine to repaint within the attempt budget, so
-	// its absence is not failure.
 	if !graphicsSeen {
 		return fmt.Errorf("could not start the floods in the pane (graphics=%v text=%v)", graphicsSeen, textSeen)
 	}
 
-	// Keep typing into the pane for the whole watch window. Each keystroke is
-	// processed by the event loop and echoed by the pane's PTY, which keeps
-	// renderer text frames flowing to the session even while the graphics
-	// pipeline is saturating the event loop; the echo bursts are what
-	// reliably interleave text writes with the multi-MB graphics writes.
 	pepperDone := make(chan struct{})
 	defer close(pepperDone)
 	go func() {
@@ -375,9 +291,6 @@ func runKittyFloodSession(addr, floodScript, textMarker string) error {
 		}
 	}()
 
-	// The session must survive the flood. On a build where session writes are
-	// not serialized, the corrupted stream kills the connection within a
-	// couple of seconds; watch for 6s.
 	sessionEnded := make(chan error, 1)
 	go func() { sessionEnded <- sess.Wait() }()
 
@@ -389,10 +302,6 @@ func runKittyFloodSession(addr, floodScript, textMarker string) error {
 		return fmt.Errorf("SSH stdout closed while processing kitty shm frames (%s, read %d bytes)",
 			teardownReason(), totalRead.Load())
 	case <-time.After(6 * time.Second):
-		// Survived the watch window. Require that the graphics flood really
-		// traversed the session, so the test cannot pass vacuously if the pane
-		// never ran cat. Gate on the kitty APC actually reaching the client, not
-		// on byte volume: compressed frames make a raw-byte floor meaningless.
 		if !graphicsAPC.Load() {
 			return fmt.Errorf("no kitty graphics reached the client (read %d bytes); flood did not run", totalRead.Load())
 		}

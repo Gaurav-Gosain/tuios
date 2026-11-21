@@ -15,21 +15,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/transcript"
 )
 
-// An image the person pasted into a prompt is in the transcript as base64
-// data. A page names it with an Image on its "[image]" entry, and a client
-// that draws it asks for the data by the entry's ID. The ID holds the byte
-// offset of the record and the place of the block in it, so the read is one
-// record, not the file. An image in a tool result, such as a Read of a PNG,
-// has the place of the result and its place in the result's content,
-// "off-i.j".
-
 // ImageMax bounds the data of one image, decoded.
 const ImageMax = 10 << 20
 
 // ErrNoImage reports that the ID names no image this package can read.
 var ErrNoImage = errors.New("transcriptview: no image with that id")
 
-// imageType reports whether a media type is one a client may draw.
 func imageType(t string) bool {
 	switch t {
 	case "image/png", "image/jpeg", "image/gif", "image/webp":
@@ -71,7 +62,6 @@ func ReadImage(path, format, id string) (string, []byte, error) {
 		return "", nil, err
 	}
 	defer func() { _ = f.Close() }()
-	// The offset must start a record: the byte before it ends a line.
 	if off > 0 {
 		var nl [1]byte
 		if _, err := f.ReadAt(nl[:], off-1); err != nil || nl[0] != '\n' {
@@ -100,7 +90,6 @@ func ReadImage(path, format, id string) (string, []byte, error) {
 	}
 	var blocks []struct {
 		imageBlock
-		// Content is a tool result's content, read for an image in it.
 		Content json.RawMessage `json:"content"`
 	}
 	if jsonx.Unmarshal(rec.Message.Content, &blocks) != nil || idx >= len(blocks) {
@@ -129,7 +118,6 @@ func ReadImage(path, format, id string) (string, []byte, error) {
 	return b.Source.MediaType, data, nil
 }
 
-// imageBlock is a content block as far as an image in it is read.
 type imageBlock struct {
 	Type   string `json:"type"`
 	Source struct {

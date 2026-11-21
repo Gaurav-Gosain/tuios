@@ -11,19 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/oneline"
 )
 
-// The transcript: what the pane shows of the conversation.
-//
-// Everything the agent sends is text the model or the agent chose, and the pane
-// is a terminal, so every string is cleaned before it is written: no escape
-// sequence and no control character other than a line break and a tab reaches
-// the pane. Without that an agent could print an OSC sequence the daemon reads
-// as the pane's agent state, a notification, a title or a clipboard write, all
-// of it unseen, in its reply.
-//
-// Colour is never the only signal: a tool call's state is a word, a diff line
-// keeps its + or -, and a plan step its [x], [>] or [ ].
-
-// SGR sequences the transcript uses.
 const (
 	sgrReset  = "\x1b[0m"
 	sgrBold   = "\x1b[1m"
@@ -34,17 +21,12 @@ const (
 	sgrCyan   = "\x1b[36m"
 )
 
-// Bounds on what one event may put on screen.
 const (
 	maxDiffLines   = 200
 	maxToolText    = 5
 	maxLineDiffOps = 4_000_000
 )
 
-// clean removes every escape sequence and control character from s except the
-// line break and the tab, and replaces invalid UTF-8. A carriage return is
-// dropped, so a CRLF is a line break and a bare CR cannot move the cursor back
-// over what was written. Invisible characters go too (invisible.Strip).
 func clean(s string) string {
 	if !strings.ContainsFunc(s, isUnsafe) && utf8.ValidString(s) {
 		return s
@@ -53,8 +35,6 @@ func clean(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
 	for _, r := range strings.ToValidUTF8(s, string(utf8.RuneError)) {
-		// invisible.Strip has removed every invisible character it does
-		// not keep on purpose (a zero-width joiner between two emoji).
 		if isControl(r) {
 			continue
 		}
@@ -63,14 +43,10 @@ func clean(s string) string {
 	return b.String()
 }
 
-// isUnsafe is a rune clean drops: C0 controls but tab and line feed, DEL, the
-// C1 controls, and the invisible characters (invisible.Rune) that make a line
-// read as something other than what it holds.
 func isUnsafe(r rune) bool {
 	return isControl(r) || invisible.Rune(r)
 }
 
-// isControl is a C0 control but tab and line feed, DEL, or a C1 control.
 func isControl(r rune) bool {
 	switch {
 	case r == '\n' || r == '\t':
@@ -83,26 +59,17 @@ func isControl(r rune) bool {
 	return false
 }
 
-// oneLine is clean, with line breaks and tabs turned into spaces and runs of
-// space collapsed.
 func oneLine(s string) string {
 	return strings.Join(strings.Fields(clean(s)), " ")
 }
 
-// renderer turns events into transcript text. It holds what it has already
-// shown, so a tool call is shown when it starts and when it ends, not on every
-// update, and a plan only when it changes.
 type renderer struct {
-	// midLine is true when the last text written did not end a line.
 	midLine bool
-	// thought is true while reasoning is streaming, so the switch to the reply
-	// starts a new line.
 	thought bool
 	tools   map[string]toolShown
 	plan    string
 }
 
-// toolShown is what was last shown of a tool call.
 type toolShown struct {
 	status string
 	diffs  string
@@ -112,7 +79,6 @@ func newRenderer() *renderer {
 	return &renderer{tools: make(map[string]toolShown)}
 }
 
-// lineStart ends a line left open, so what follows starts on its own.
 func (r *renderer) lineStart(b *strings.Builder) {
 	if r.midLine {
 		b.WriteString("\n")
@@ -120,7 +86,6 @@ func (r *renderer) lineStart(b *strings.Builder) {
 	}
 }
 
-// block writes whole lines.
 func (r *renderer) block(b *strings.Builder, s string) {
 	r.lineStart(b)
 	r.thought = false
@@ -130,7 +95,6 @@ func (r *renderer) block(b *strings.Builder, s string) {
 	}
 }
 
-// text renders one event. It returns the text to write, with \n line breaks.
 func (r *renderer) event(ev Event) string {
 	var b strings.Builder
 	switch e := ev.(type) {
@@ -144,8 +108,6 @@ func (r *renderer) event(ev Event) string {
 			r.thought = e.Thought
 		}
 		if e.Thought {
-			// Dim each piece on its own, so a line break inside it does
-			// not leave the style open across a redraw.
 			for i, part := range strings.Split(s, "\n") {
 				if i > 0 {
 					b.WriteString("\n")
@@ -178,7 +140,6 @@ func (r *renderer) event(ev Event) string {
 	return b.String()
 }
 
-// statusWord is how a tool status reads in the transcript.
 func statusWord(s string) (string, string) {
 	switch s {
 	case ToolRunning:
@@ -191,7 +152,6 @@ func statusWord(s string) (string, string) {
 	return "pending", sgrYellow
 }
 
-// toolLabel is a tool call as one line: its kind and its title.
 func toolLabel(t Tool) string {
 	title := oneLine(t.Title)
 	if title == "" {
@@ -209,8 +169,6 @@ func (r *renderer) tool(b *strings.Builder, t Tool) {
 	if prev.status == t.Status && prev.diffs == diffs {
 		return
 	}
-	// Pending and running read the same to a person watching: the call is
-	// under way. Only the change to an end is worth a second line.
 	started := prev.status != ""
 	ending := t.Status == ToolDone || t.Status == ToolFailed
 	if !started || (ending && prev.status != t.Status) {
@@ -254,7 +212,6 @@ func (r *renderer) planBlock(b *strings.Builder, p Plan) {
 	r.block(b, r.plan)
 }
 
-// prompt is the person's prompt as the transcript shows it.
 func (r *renderer) prompt(text string) string {
 	var b strings.Builder
 	r.lineStart(&b)
@@ -276,8 +233,6 @@ func (r *renderer) prompt(text string) string {
 	return b.String()
 }
 
-// permission is a permission request as the pane shows it: what is asked,
-// its context and diffs, and the keys that answer it.
 func (r *renderer) permission(p *Permission) string {
 	var b strings.Builder
 	r.lineStart(&b)
@@ -305,8 +260,6 @@ func (r *renderer) permission(p *Permission) string {
 		b.WriteString(reason)
 		b.WriteString("\n")
 	}
-	// Input the title does not show is shown under it, so the pane shows the
-	// whole call even when the Inbox cannot.
 	for _, k := range slices.Sorted(maps.Keys(p.Tool.Input)) {
 		if v := p.Tool.Input[k]; v != "" && !strings.Contains(p.Tool.Title, v) {
 			b.WriteString("  ")
@@ -332,7 +285,6 @@ func (r *renderer) permission(p *Permission) string {
 	return b.String()
 }
 
-// optionKeys is the line that says which key picks which answer.
 func optionKeys(p *Permission) string {
 	parts := make([]string, 0, len(p.Options)+1)
 	for i, o := range p.Options {
@@ -345,7 +297,6 @@ func optionKeys(p *Permission) string {
 	return strings.Join(parts, "   ")
 }
 
-// answered is the line under a permission once it is answered.
 func (r *renderer) answered(p *Permission, i int, how string) string {
 	var b strings.Builder
 	label := "cancelled"
@@ -356,7 +307,6 @@ func (r *renderer) answered(p *Permission, i int, how string) string {
 	return b.String()
 }
 
-// turnEnd is the line a turn ends with.
 func (r *renderer) turnEnd(res TurnResult) string {
 	var b strings.Builder
 	switch res.Stop {
@@ -376,7 +326,6 @@ func (r *renderer) turnEnd(res TurnResult) string {
 	return b.String()
 }
 
-// line is a line of the client's own, dimmed.
 func (r *renderer) line(s string) string {
 	var b strings.Builder
 	r.block(&b, sgrDim+s+sgrReset)

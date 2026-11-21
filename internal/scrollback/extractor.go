@@ -40,7 +40,6 @@ func ExtractJSON(output string) []JSONBlock {
 			continue
 		}
 
-		// Bracket-matching scan
 		depth := 0
 		inStr := false
 		escaped := false
@@ -97,25 +96,20 @@ func ExtractJSON(output string) []JSONBlock {
 			Raw:    raw,
 		})
 
-		i = end - 1 // skip past matched block
+		i = end - 1
 	}
 
 	return blocks
 }
 
-// pathRegex matches filesystem paths and URLs.
 var pathRegex = lazyre.New(
 	`(?:` +
-		// URLs
 		`https?://[^\s"'<>]+|` +
-		// Absolute paths with optional :line:col
 		`/[^\s"'<>:]+(?::\d+(?::\d+)?)?|` +
-		// Relative paths with optional :line:col
 		`\.{1,2}/[^\s"'<>:]+(?::\d+(?::\d+)?)?` +
 		`)`,
 )
 
-// lineColRegex extracts :line and optional :col from a path suffix.
 var lineColRegex = lazyre.New(`:(\d+)(?::(\d+))?$`)
 
 // ExtractPaths finds file paths and URLs in the output text.

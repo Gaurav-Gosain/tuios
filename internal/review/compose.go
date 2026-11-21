@@ -121,7 +121,6 @@ func Compose(m Message) string {
 	return b.String()
 }
 
-// authorName is how the message names the author by.
 func (m Message) authorName(by string) string {
 	if m.Author != nil {
 		if name := oneLine(m.Author(by), 80); name != "" {
@@ -131,7 +130,6 @@ func (m Message) authorName(by string) string {
 	return AuthorName(by)
 }
 
-// location is where a note is, as its entry's first line says it.
 func location(n Note, clean func(string) string) string {
 	var b strings.Builder
 	b.WriteString(oneLine(n.Path, 200))
@@ -169,8 +167,6 @@ func location(n Note, clean func(string) string) string {
 	return b.String()
 }
 
-// hunkRange is the "@@ -a,b +c,d @@" part of a hunk header, without the
-// function context git adds after it.
 func hunkRange(header string) string {
 	if i := strings.Index(header[min(2, len(header)):], "@@"); i >= 0 {
 		return header[:i+2+2]
@@ -178,8 +174,6 @@ func hunkRange(header string) string {
 	return oneLine(header, 80)
 }
 
-// oneLine is s with its control characters left out and its runs of white
-// space made one space, cut to limit characters with "..." after a cut.
 func oneLine(s string, limit int) string {
 	var b strings.Builder
 	space := false

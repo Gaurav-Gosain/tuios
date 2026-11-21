@@ -7,11 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The render coalescer has two jobs, and they pull in opposite directions:
-// show a quiet pane's output at once, and do not ask the compositor to draw a
-// flooding pane more than 120 times a second. The latency work made the first
-// one true, so these pin the second one so it cannot be lost later.
-
 // TestCoalescerEmitsQuietPaneImmediately is the property the leading edge
 // exists for. A pane that has been silent has nothing to coalesce with, so its
 // first output has no reason to wait for anything.
@@ -27,13 +22,8 @@ func TestCoalescerEmitsQuietPaneImmediately(t *testing.T) {
 	}
 	t.Cleanup(w.Close)
 
-	// A shared CI runner can stall any single try for several milliseconds, so
-	// keep the best of a few tries. A lost leading edge costs a tick period on
-	// every try, so the best try still catches it.
 	best := time.Duration(1<<63 - 1)
 	for range 5 {
-		// Long enough that any interval the coalescer runs at has elapsed, so
-		// this is the quiet-pane case rather than the tail of a burst.
 		time.Sleep(30 * time.Millisecond)
 		select {
 		case <-ptyData:
@@ -95,10 +85,6 @@ func TestCoalescerCapsAFloodingPane(t *testing.T) {
 	}
 	<-done
 
-	// The writer above offers roughly 1000 writes. A cap at one signal per
-	// period allows about 25 over this window; the allowance is generous
-	// because a slow scheduler can stretch the window, and the failure being
-	// guarded against is hundreds, not twenty-six.
 	if maxSignals := int(flood/period) + 10; signals > maxSignals {
 		t.Errorf("flooding pane raised %d render signals in %v, cap allows %d: "+
 			"the rate limit is gone and the compositor is drawing partial frames",

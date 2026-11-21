@@ -17,14 +17,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// termioRaw is the output of a terminal in raw mode, as a pty gives one.
 var termioRaw = termio.Output{Raw: true}
 
 // TestMain isolates the whole test binary from the developer's own XDG
 // directories. See testutil.RunIsolated.
 func TestMain(m *testing.M) { os.Exit(testutil.RunIsolated(m)) }
 
-// frames is a terminal output that says when a write arrives.
 type frames struct {
 	mu    sync.Mutex
 	buf   bytes.Buffer
@@ -42,7 +40,6 @@ func (f *frames) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// waitFor waits until the output holds want.
 func (f *frames) waitFor(t *testing.T, want string) {
 	t.Helper()
 	deadline := time.After(10 * time.Second)
@@ -101,11 +98,8 @@ func TestClientRunsOnAPipe(t *testing.T) {
 		ran <- result{m, err}
 	}()
 
-	// The first frame, in the synchronized update the writer puts round it.
 	out.waitFor(t, "\x1b[?2026h")
 
-	// Sent twice: the client reads the second only after the event loop has
-	// taken the first, so the quit below lands after the new size.
 	for range 2 {
 		select {
 		case resize <- Size{Width: 100, Height: 30}:

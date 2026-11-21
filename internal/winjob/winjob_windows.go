@@ -61,14 +61,11 @@ func RunTree(cmd *exec.Cmd) error {
 	if err != nil {
 		return errfmt.Errorf("could not make a job: %w", err)
 	}
-	// Closing the last handle kills what is still in the job.
 	defer func() { _ = windows.CloseHandle(job) }()
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
 	cmd.SysProcAttr.CreationFlags |= windows.CREATE_SUSPENDED
-	// The command itself is killed too: the context can end after Start and
-	// before the command is in the job.
 	cmd.Cancel = func() error {
 		_ = windows.TerminateJobObject(job, 1)
 		return cmd.Process.Kill()
@@ -84,7 +81,6 @@ func RunTree(cmd *exec.Cmd) error {
 	return cmd.Wait()
 }
 
-// enter puts the suspended process pid in job and lets it run.
 func enter(job windows.Handle, pid int) error {
 	h, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE|windows.PROCESS_SUSPEND_RESUME,
 		false, uint32(pid)) //nolint:gosec // a process id fits

@@ -97,29 +97,16 @@ type Model struct {
 	emit func(Event)
 	send func(tea.Msg)
 
-	mu   sync.Mutex
-	last Snapshot
-	// rest is the last snapshot taken with no animation running, which
-	// window.move events are measured from.
-	rest     Snapshot
-	theme    string // the theme the tour started with, for reset
-	tapeName string
-	// fleet answers the agents view in place of a daemon. See fleet.go.
-	fleet *fleet
-	// verbs are the daemon verbs the tour fakes. See callVerb.
-	verbs map[string]verbFunc
-	// looksDue says the Update that just ran could have changed a look, so
-	// report reads lookPaths again. A look changes only by a key, the mouse,
-	// a command from the page or a tape. Reading them walks the config by
-	// reflection, about 10 µs a path natively, which is too much for every
-	// Update: the fake shell's output and each animation frame are Updates.
-	looksDue bool
-	// startLooks is the looks the tour started with. config.toml shows a look
-	// once it differs.
+	mu         sync.Mutex
+	last       Snapshot
+	rest       Snapshot
+	theme      string
+	tapeName   string
+	fleet      *fleet
+	verbs      map[string]verbFunc
+	looksDue   bool
 	startLooks looks
-	// surfaces holds the TML surfaces tuios tml show opens. See
-	// surfaces.go.
-	surfaces *surfaceHost
+	surfaces   *surfaceHost
 }
 
 // New wraps o for the tour. emit receives every event; it may be called from
@@ -146,8 +133,6 @@ func New(o *app.OS, emit func(Event), send func(tea.Msg)) *Model {
 	m.fleet = newFleet(send)
 	m.fleet.spawn = func(msg spawnAgentsMsg) { send(msg) }
 	m.fleet.close = func(windows []string) { send(closeWindowsMsg{windows: windows}) }
-	// One caller answers every verb: the review's from m.verbs, the agents
-	// view's from the fleet.
 	o.SetInboxVerbCaller(m.callVerb, func() string { return learnNonce })
 	o.SetLearnSpawnInfo(spawnInfo)
 	webshell.SetEventSink(m.fromGuest)
@@ -163,10 +148,6 @@ func New(o *app.OS, emit func(Event), send func(tea.Msg)) *Model {
 	return m
 }
 
-// fromGuest routes what the fake shell reports. Agent reports and tape
-// requests are for tuios, and go to the program as messages, which is the
-// same in-process path set-agent-state takes for a local pane. Everything
-// else is for the page.
 func (m *Model) fromGuest(e webshell.Event) {
 	str := func(k string) string {
 		s, _ := e.Data[k].(string)
@@ -199,8 +180,6 @@ func (m *Model) State() Snapshot {
 	return m.last
 }
 
-// playTapeMsg asks for a tape from inside the tour, so the tape.start event
-// can carry its name.
 type playTapeMsg struct{ name, script string }
 
 // CommandMsg is a command from the page, run on the program's goroutine so it
@@ -210,10 +189,6 @@ type CommandMsg struct {
 	Args []string
 }
 
-// commandDoneMsg follows a command through the app's Update. The command
-// changed the model outside Update, and Update is where a change gets its
-// frame: it drops the cached view, arms any animation, and asks the renderer
-// to write the frame now. The app ignores the message itself.
 type commandDoneMsg struct{}
 
 // Init starts the app and tells the page the tour is ready.
@@ -257,8 +232,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		_, cmd = m.OS.Update(commandDoneMsg{})
 	case openSurfaceMsg, closeSurfaceWindowMsg:
 		cmd, _ = m.surfaces.update(msg)
-		// The window opened or closed outside the app's Update, which is
-		// where a change gets its frame.
 		_, after := m.OS.Update(commandDoneMsg{})
 		cmd = tea.Batch(cmd, after)
 	default:
@@ -277,10 +250,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// watchClipboard reports a clipboard write in cmd as a copy.yank event. A
-// yank in copy mode or the scrollback browser writes the clipboard through
-// tea.SetClipboard, whose message type Bubble Tea keeps to itself, so the
-// write is known by that type's name once the command has run.
 func (m *Model) watchClipboard(cmd tea.Cmd) tea.Cmd {
 	if cmd == nil {
 		return nil
@@ -304,10 +273,8 @@ func (m *Model) watchClipboard(cmd tea.Cmd) tea.Cmd {
 	}
 }
 
-// clipboardPkg is Bubble Tea's import path, where setClipboardMsg lives.
 var clipboardPkg = reflect.TypeFor[tea.BatchMsg]().PkgPath()
 
-// report emits one event per change since the last Update.
 func (m *Model) report() {
 	now := take(m.OS)
 	m.mu.Lock()
@@ -324,7 +291,6 @@ func (m *Model) report() {
 		m.writeConfig(now)
 	}
 	events := diff(prev, now)
-	// A move is reported once it has settled, not once per animation frame.
 	if !now.Moving {
 		events = append(events, moves(m.rest, now)...)
 		m.rest = now
@@ -342,10 +308,6 @@ func (m *Model) report() {
 	}
 }
 
-// writeConfig keeps the fake shell's config.toml in step with the looks on
-// screen. The real app writes nothing in Learn mode, so without this the file
-// would show the defaults after the reader changed them. A look in lookPaths
-// is written once it differs from the one the tour started with.
 func (m *Model) writeConfig(s Snapshot) {
 	var lines []webshell.ConfigLine
 	for i, path := range lookPaths {
@@ -357,8 +319,6 @@ func (m *Model) writeConfig(s Snapshot) {
 	webshell.WriteConfig(s.Theme, s.Border, s.Glyphs, lines...)
 }
 
-// tomlValue is v as config.toml spells the option at path: a bool or an int
-// bare, anything else quoted.
 func tomlValue(path, v string) string {
 	if opt, ok := config.LookupOption(path); ok && (opt.Type == config.OptionBool || opt.Type == config.OptionInt) && v != "" {
 		return v

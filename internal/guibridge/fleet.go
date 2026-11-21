@@ -23,7 +23,6 @@ type Fleet struct {
 	Saved []SavedSession `json:"saved"`
 }
 
-// fleetEvents are the daemon events that can change what a fleet shows.
 var fleetEvents = []string{
 	session.EventAgentState, session.EventAgentMessage,
 	session.EventWindowCreated, session.EventWindowClosed, session.EventWindowRetitled, session.EventWindowMoved,
@@ -31,20 +30,11 @@ var fleetEvents = []string{
 }
 
 const (
-	// fleetSettle lets a burst of events land before the fleet is read.
-	fleetSettle = 120 * time.Millisecond
-	// fleetGap is the least time between two reads, so an agent that
-	// retitles its window many times a second costs a few reads at most.
-	fleetGap = 400 * time.Millisecond
-	// fleetRefresh reads the fleet even with no event, for the states that
-	// go stale with time and send none.
+	fleetSettle  = 120 * time.Millisecond
+	fleetGap     = 400 * time.Millisecond
 	fleetRefresh = 30 * time.Second
 )
 
-// watchFleet keeps the renderer's fleet current until stop closes. It reads
-// the fleet over its own daemon connection when the daemon's event stream
-// says something changed, so the renderer never has to start tuios to poll.
-// A lost connection is dialled again after a pause.
 func watchFleet(stop <-chan struct{}, out *frameWriter, version string) {
 	var last []byte
 	for {
@@ -104,7 +94,6 @@ func fleetOnce(stop <-chan struct{}, out *frameWriter, version string, last *[]b
 			}
 		}
 	}()
-	// Closing the event connection ends the reader when the bridge stops.
 	done := make(chan struct{})
 	defer close(done)
 	go func() {
@@ -146,8 +135,6 @@ func fleetOnce(stop <-chan struct{}, out *frameWriter, version string, last *[]b
 	}
 }
 
-// readFleet reads the sessions and agents and encodes them as a fleet
-// event.
 func readFleet(c *session.VerbClient) ([]byte, error) {
 	rawSessions, err := c.Call("list-sessions", nil)
 	if err != nil {
@@ -172,7 +159,6 @@ func readFleet(c *session.VerbClient) ([]byte, error) {
 	return jsonx.Marshal(Event{Type: "fleet", Fleet: &Fleet{Sessions: orEmpty(s.Sessions), Agents: orEmpty(a.Agents), Saved: savedSessions()}})
 }
 
-// orEmpty turns a missing or null list into an empty one.
 func orEmpty(b json.RawMessage) json.RawMessage {
 	if len(b) == 0 || string(b) == "null" {
 		return json.RawMessage("[]")

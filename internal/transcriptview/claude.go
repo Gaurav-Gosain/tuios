@@ -12,11 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/linediff"
 )
 
-// The Claude Code record, as far as a conversation needs it. A user record's
-// content is a string (a prompt) or an array of blocks (text, images and tool
-// results), and an assistant record's is an array of text, thinking and
-// tool_use blocks. A tool result's record also carries toolUseResult, whose
-// structuredPatch has the real line numbers of an edit.
 type ccRecord struct {
 	Type        string `json:"type"`
 	Timestamp   string `json:"timestamp"`
@@ -28,28 +23,22 @@ type ccRecord struct {
 	ToolUseResult ccToolUseResult `json:"toolUseResult"`
 }
 
-// ccBlock is one content block.
 type ccBlock struct {
-	Type     string `json:"type"`
-	Text     string `json:"text"`
-	Thinking string `json:"thinking"`
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	// Input is decoded per tool, by toolInput, so a tool whose input has a
-	// field of an unexpected type does not cost the whole record.
+	Type      string          `json:"type"`
+	Text      string          `json:"text"`
+	Thinking  string          `json:"thinking"`
+	ID        string          `json:"id"`
+	Name      string          `json:"name"`
 	Input     json.RawMessage `json:"input"`
 	ToolUseID string          `json:"tool_use_id"`
 	Content   ccResultContent `json:"content"`
 	IsError   bool            `json:"is_error"`
-	// Source is an image block's source. Its data is not decoded here:
-	// a page carries only the media type, and ReadImage reads the data.
-	Source struct {
+	Source    struct {
 		Type      string `json:"type"`
 		MediaType string `json:"media_type"`
 	} `json:"source"`
 }
 
-// ccContent is a message's content: a plain string, or blocks.
 type ccContent []ccBlock
 
 func (c *ccContent) UnmarshalJSON(b []byte) error {
@@ -72,20 +61,15 @@ func (c *ccContent) UnmarshalJSON(b []byte) error {
 	return err
 }
 
-// ccResultContent is a tool result's content: a string, or text and image
-// blocks. The text blocks are joined, with "[image]" where an image was, and
-// the images are kept apart, by their source alone: ReadImage reads the data.
 type ccResultContent struct {
 	text   string
 	images []ccImageSource
 }
 
-// ccImageSource is an image block's source, without its data.
 type ccImageSource struct {
 	Type      string `json:"type"`
 	MediaType string `json:"media_type"`
-	// at is the block's place in the content.
-	at int
+	at        int
 }
 
 func (c *ccResultContent) UnmarshalJSON(b []byte) error {
@@ -122,15 +106,11 @@ func (c *ccResultContent) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// ccToolUseResult is the part of toolUseResult a diff needs. It is a string
-// for some tools and an object for others, so anything but an object leaves
-// it empty.
 type ccToolUseResult struct {
 	FilePath        string    `json:"filePath"`
 	Type            string    `json:"type"`
 	StructuredPatch []ccPatch `json:"structuredPatch"`
-	// File is what a Read of an image says of it: its size in pixels.
-	File struct {
+	File            struct {
 		Dimensions struct {
 			OriginalWidth  int `json:"originalWidth"`
 			OriginalHeight int `json:"originalHeight"`
@@ -156,7 +136,6 @@ func (t *ccToolUseResult) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// ccInput is every tool input field a conversation shows.
 type ccInput struct {
 	Command      string `json:"command"`
 	Description  string `json:"description"`
@@ -181,8 +160,6 @@ type ccInput struct {
 	} `json:"todos"`
 }
 
-// toolInput decodes what it can of a tool's input. A field of another type
-// is left empty and the rest is kept.
 func toolInput(raw json.RawMessage) ccInput {
 	var in ccInput
 	if len(raw) > 0 && raw[0] == '{' {
@@ -191,8 +168,6 @@ func toolInput(raw json.RawMessage) ccInput {
 	return in
 }
 
-// unmarshalRecord decodes a line. A field of an unexpected type leaves that
-// field empty rather than dropping the record.
 func unmarshalRecord(line []byte, rec *ccRecord) error {
 	err := jsonx.Unmarshal(line, rec)
 	if _, ok := errors.AsType[*json.UnmarshalTypeError](err); ok {
@@ -201,7 +176,6 @@ func unmarshalRecord(line []byte, rec *ccRecord) error {
 	return err
 }
 
-// claudeLine decodes one Claude Code record.
 func claudeLine(r *reader, line []byte, off int64) (decoded, bool) {
 	var rec ccRecord
 	if err := unmarshalRecord(line, &rec); err != nil {
@@ -210,10 +184,7 @@ func claudeLine(r *reader, line []byte, off int64) (decoded, bool) {
 	return decoded{entries: r.recordEntries(&rec, off)}, true
 }
 
-// recordEntries turns one record at offset off into entries.
 func (r *reader) recordEntries(rec *ccRecord, off int64) []Entry {
-	// A subagent's records share the file with its parent's. They are the
-	// subagent's own conversation, which the parent's Task call stands for.
 	if rec.IsSidechain || rec.IsMeta {
 		return nil
 	}
@@ -241,13 +212,8 @@ func (r *reader) recordEntries(rec *ccRecord, off int64) []Entry {
 	return out
 }
 
-// resultImagesMax bounds the images one result gives entries for. A read of
-// a long PDF gives an image a page.
 const resultImagesMax = 8
 
-// resultImages appends an entry for each image a tool result holds, after
-// the result. The ID is the result's and the image's place in its content,
-// "off-i.j", which ReadImage reads.
 func resultImages(out []Entry, rec *ccRecord, b *ccBlock, id string, at int64) []Entry {
 	imgs := b.Content.images
 	for _, src := range imgs[:min(len(imgs), resultImagesMax)] {
@@ -263,7 +229,6 @@ func resultImages(out []Entry, rec *ccRecord, b *ccBlock, id string, at int64) [
 	return out
 }
 
-// blockEntry turns one block into an entry.
 func (r *reader) blockEntry(rec *ccRecord, b *ccBlock) (Entry, bool) {
 	role := RoleUser
 	if rec.Type == "assistant" {
@@ -285,9 +250,6 @@ func (r *reader) blockEntry(rec *ccRecord, b *ccBlock) (Entry, bool) {
 		}
 		return e, true
 	case "thinking", "redacted_thinking":
-		// Most thinking blocks carry only a signature and no text. They
-		// are kept, so the thread can say the agent thought, and for how
-		// long.
 		return Entry{Role: RoleAssistant, Kind: KindThinking, raw: rawText(b.Thinking)}, true
 	case "tool_use":
 		return r.toolCall(b), true
@@ -297,17 +259,12 @@ func (r *reader) blockEntry(rec *ccRecord, b *ccBlock) (Entry, bool) {
 	return Entry{}, false
 }
 
-// rawText is the raw of a text entry, cut to rawTextMax.
-//
 //go:noinline
 func rawText(s string) *rawEntry {
 	text, cut := cutString(s, rawTextMax)
 	return &rawEntry{text: text, textCut: cut}
 }
 
-// toolResult is a result: its status and the head of its text. The head is
-// taken before Clean, so only the lines the page can show are cleaned, and a
-// secret that starts in them is masked to their end.
 func (r *reader) toolResult(rec *ccRecord, b *ccBlock) Entry {
 	e := Entry{Role: RoleTool, Kind: KindToolResult, ToolID: b.ToolUseID, Status: StatusOK}
 	content := b.Content.text
@@ -336,15 +293,11 @@ func InterruptText(s string) bool {
 	return false
 }
 
-// declineText starts the result Claude Code writes for a call the person
-// declined, and declineSaid comes before what they said with it.
 const (
 	declineText = "The user doesn't want to proceed with this tool use."
 	declineSaid = "the user said:\n"
 )
 
-// declined reports whether an error result is a decline, and returns what
-// the person said with it, "" when they said nothing.
 func declined(s string) (string, bool) {
 	if !strings.HasPrefix(s, declineText) {
 		return "", false
@@ -356,8 +309,6 @@ func declined(s string) (string, bool) {
 	return strings.TrimSpace(said), true
 }
 
-// toolCall is a tool call, a plan or a todo list, as decoded. finish cleans
-// it and works out its diff.
 func (r *reader) toolCall(b *ccBlock) Entry {
 	in := toolInput(b.Input)
 	raw := &rawEntry{}
@@ -366,7 +317,6 @@ func (r *reader) toolCall(b *ccBlock) Entry {
 	e := Entry{Role: RoleAssistant, Kind: KindToolCall, ToolID: b.ID, raw: raw}
 	var args jobj
 	if strings.Contains(b.Name, "tuios_") {
-		// A tuios MCP tool: its input is the verb's arguments.
 		args, _ = parseObj(b.Input)
 	}
 	raw.calls = AgentCallsOf(b.Name, in.Command, args)
@@ -395,7 +345,6 @@ func (r *reader) toolCall(b *ccBlock) Entry {
 	return e
 }
 
-// target is the one line that says what a call acts on.
 func target(tool string, in ccInput) string {
 	switch tool {
 	case "Bash":
@@ -419,12 +368,6 @@ func target(tool string, in ccInput) string {
 	return ""
 }
 
-// --- Diffs.
-
-// editDiff is the diff of one or more old and new texts of one file. Its
-// line numbers count from the edited text, since the call does not say where
-// in the file it is. A result's structuredPatch, folded in by foldResults,
-// gives the file's own.
 func (r *reader) editDiff(file string, pairs [][2]string) *Diff {
 	name, _ := r.clean(oneLine(file), targetMax)
 	d := &Diff{File: name}
@@ -442,7 +385,6 @@ func (r *reader) editDiff(file string, pairs [][2]string) *Diff {
 	return d
 }
 
-// patchDiff is a structuredPatch as a diff.
 func (r *reader) patchDiff(file string, patch []ccPatch) *Diff {
 	name, _ := r.clean(oneLine(file), targetMax)
 	d := &Diff{File: name}
@@ -462,7 +404,6 @@ func (r *reader) patchDiff(file string, patch []ccPatch) *Diff {
 				d.Removed++
 			case " ":
 			default:
-				// "\ No newline at end of file" and the like.
 				continue
 			}
 			h.Lines = append(h.Lines, DiffLine{Op: op, Text: l[1:]})
@@ -472,8 +413,6 @@ func (r *reader) patchDiff(file string, patch []ccPatch) *Diff {
 	return d
 }
 
-// addHunk adds h to d within DiffLinesMax lines, cleaning each line, and
-// returns how many lines d shows now.
 func (r *reader) addHunk(d *Diff, h Hunk, shown int) int {
 	if shown >= DiffLinesMax {
 		d.Truncated = true
@@ -487,8 +426,6 @@ func (r *reader) addHunk(d *Diff, h Hunk, shown int) int {
 		h.Lines[i].Text, _ = r.clean(h.Lines[i].Text, diffLineMax)
 	}
 	if r.opts.CleanLines != nil && len(h.Lines) > 0 {
-		// A key or an .env block spans lines, so it is masked over the
-		// hunk's lines together, in the order the hunk shows them.
 		texts := make([]string, len(h.Lines))
 		for i := range h.Lines {
 			texts[i] = h.Lines[i].Text
@@ -503,28 +440,16 @@ func (r *reader) addHunk(d *Diff, h Hunk, shown int) int {
 	return shown + len(h.Lines)
 }
 
-// diffOp is one line of an edit script.
 type diffOp = linediff.Op
 
-// lineDiffResult is an edit script and what it counts.
 type lineDiffResult struct {
 	ops            []diffOp
 	added, removed int
-	// whole says the changed lines were not matched: they are all removed
-	// and then all added.
-	whole bool
-	// cut says some changed lines of a whole replace were left out of ops.
-	cut bool
-	// skip is how many equal lines at the start were left out of ops, so
-	// the line numbers of the hunks start after them.
-	skip int
+	whole          bool
+	cut            bool
+	skip           int
 }
 
-// lineDiff is the edit script from a to b by longest common subsequence.
-// budget is what is left of the call's LCSCellsPerCall, and the table's
-// cells are taken from it. When the table would not fit, the changed lines
-// are all removed and all added, which is still a correct diff, and at most
-// DiffLinesMax/2 of each side are kept, since no more could be shown.
 func lineDiff(a, b []string, budget *int) lineDiffResult {
 	pre := 0
 	for pre < len(a) && pre < len(b) && a[pre] == b[pre] {
@@ -536,7 +461,6 @@ func lineDiff(a, b []string, budget *int) lineDiffResult {
 	}
 	ma, mb := a[pre:len(a)-suf], b[pre:len(b)-suf]
 	res := lineDiffResult{added: len(mb), removed: len(ma), skip: max(0, pre-3)}
-	// Context beyond what a hunk shows is never read, so it is not kept.
 	ctxA := a[max(0, pre-3):pre]
 	ctxB := a[len(a)-suf : len(a)-suf+min(suf, 3)]
 	ops := make([]diffOp, 0, len(ctxA)+len(ctxB)+min(len(ma)+len(mb), DiffLinesMax+2))
@@ -546,7 +470,6 @@ func lineDiff(a, b []string, budget *int) lineDiffResult {
 	cells := (len(ma) + 1) * (len(mb) + 1)
 	switch {
 	case len(ma) == 0 || len(mb) == 0:
-		// Only added or only removed: the script needs no table.
 		ops = appendSide(ops, '-', ma, DiffLinesMax, &res.cut)
 		ops = appendSide(ops, '+', mb, DiffLinesMax, &res.cut)
 	case cells > *budget:
@@ -574,8 +497,6 @@ func lineDiff(a, b []string, budget *int) lineDiffResult {
 	return res
 }
 
-// appendSide appends up to keep lines of one side, setting cut when it
-// leaves some out.
 func appendSide(ops []diffOp, op byte, lines []string, keep int, cut *bool) []diffOp {
 	if len(lines) > keep {
 		lines = lines[:keep]
@@ -587,8 +508,6 @@ func appendSide(ops []diffOp, op byte, lines []string, keep int, cut *bool) []di
 	return ops
 }
 
-// hunks groups an edit script into hunks with ctx lines of context. skip is
-// how many equal lines came before the script's first.
 func hunks(ops []diffOp, ctx, skip int) []Hunk {
 	var out []Hunk
 	for start := 0; start < len(ops); {
@@ -631,8 +550,6 @@ func hunks(ops []diffOp, ctx, skip int) []Hunk {
 			}
 			h.Lines = append(h.Lines, DiffLine{Op: string(o.Op), Text: o.Line})
 		}
-		// A side with no lines starts at the line before, as unified diffs
-		// write it: a new file is old_start 0.
 		if oldCount == 0 {
 			h.OldStart--
 		}

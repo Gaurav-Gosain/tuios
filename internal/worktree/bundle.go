@@ -11,16 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
 )
 
-// Moving a worktree's work to another machine: the commits as a git bundle,
-// and what is not committed as a binary patch. The machine that has the work
-// makes both. The machine that wants it fetches the bundle into a branch of
-// its own checkout and applies the patch in a worktree on that branch.
-//
-// Neither side touches the other's refs, index or working tree. The sender
-// reads its worktree through a temporary index, so its own index is as it
-// was, and the receiver writes only a branch that did not exist and a
-// worktree it just made.
-
 // ErrEmptyBundle reports a bundle with nothing in it: the branch has no
 // commits past the ones the receiver is assumed to have.
 var ErrEmptyBundle = errors.New("no commits to bundle")
@@ -41,8 +31,6 @@ func CurrentBranch(path string) (string, error) {
 	}
 	out, err := run(path, "symbolic-ref", "-q", "HEAD")
 	if err != nil {
-		// symbolic-ref -q exits 1 with no output on a detached HEAD. Any
-		// other failure is a real one, so HEAD is read to tell them apart.
 		if _, herr := run(path, "rev-parse", "--verify", "-q", "HEAD"); herr == nil {
 			return "", nil
 		}
@@ -128,7 +116,6 @@ func WorkingPatch(path, dest string) (int, error) {
 		return 0, err
 	}
 	defer tmp.remove()
-	// The index does not exist yet: git refuses an empty file as an index.
 	index := filepath.Join(tmp.path, "index")
 	env := []string{"GIT_INDEX_FILE=" + index}
 	if _, err := runGit(ctx, path, env, nil, "read-tree", "HEAD"); err != nil {

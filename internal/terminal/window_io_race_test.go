@@ -24,8 +24,6 @@ import (
 func TestDaemonWindowCloseUnderOutputFlood(t *testing.T) {
 	ptyDataChan := make(chan struct{}, 1)
 
-	// Drain the render signal channel so renderCoalescer's non-blocking sends
-	// never matter, mirroring the UI goroutine on the real path.
 	drainDone := make(chan struct{})
 	go func() {
 		for {
@@ -42,7 +40,6 @@ func TestDaemonWindowCloseUnderOutputFlood(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	// Flood output from several goroutines, as the daemon readLoop does.
 	const floodGoroutines = 8
 	payload := []byte("hello world \x1b[31mcolored\x1b[0m output line\r\n")
 	for range floodGoroutines {
@@ -53,8 +50,6 @@ func TestDaemonWindowCloseUnderOutputFlood(t *testing.T) {
 		})
 	}
 
-	// Close concurrently with the flood, from two goroutines to also exercise
-	// the idempotent double-close guard.
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
@@ -67,7 +62,6 @@ func TestDaemonWindowCloseUnderOutputFlood(t *testing.T) {
 
 	wg.Wait()
 
-	// A post-teardown write must be a no-op, not a panic.
 	w.WriteOutputAsync(payload)
 	w.WriteOutput(payload)
 }
@@ -116,7 +110,6 @@ func TestTerminalRefAfterClose(t *testing.T) {
 		t.Fatalf("terminalRef returned %p after Close, want nil", got)
 	}
 
-	// Starting the reader against a closed window must be a no-op, not a panic.
 	w.StartDaemonResponseReader()
 }
 
@@ -138,7 +131,7 @@ func TestWaitForCmdRacesClose(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			w.waitForCmd() // what the process monitor goroutine does
+			w.waitForCmd()
 		}()
 		go func() {
 			defer wg.Done()

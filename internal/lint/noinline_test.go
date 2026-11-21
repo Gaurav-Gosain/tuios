@@ -12,10 +12,7 @@ import (
 )
 
 var (
-	// A go build or go install of the tuios command itself, not of
-	// cmd/tuios-web or cmd/tuios-wasm.
-	buildsTuios = regexp.MustCompile(`\bgo (build|install)\b.*\./cmd/tuios(\s|$|["')])`)
-	// The same in Go source: the command's arguments as string literals.
+	buildsTuios   = regexp.MustCompile(`\bgo (build|install)\b.*\./cmd/tuios(\s|$|["')])`)
 	goBuildsTuios = regexp.MustCompile(`"build".*"\./cmd/tuios"`)
 )
 
@@ -47,8 +44,6 @@ func TestEveryTuiosBuildReadsTheNoinlineList(t *testing.T) {
 		rel, _ := filepath.Rel(root, p)
 		rel = filepath.ToSlash(rel)
 		if d.IsDir() {
-			// Dot folders other than .github are tool state and other
-			// checkouts, not this repository's build paths.
 			n := d.Name()
 			if rel == "docs" || n == "node_modules" || n == "testdata" || n == "vendor" ||
 				rel != "." && strings.HasPrefix(n, ".") && n != ".github" {
@@ -59,7 +54,7 @@ func TestEveryTuiosBuildReadsTheNoinlineList(t *testing.T) {
 		name := d.Name()
 		switch {
 		case name == ".goreleaser.yml" || name == "tuios.nix":
-			return nil // below
+			return nil
 		case strings.HasSuffix(name, ".go"):
 			if !strings.HasPrefix(rel, "internal/lint/") {
 				checkGoBuilds(t, rel, read(rel))
@@ -74,8 +69,6 @@ func TestEveryTuiosBuildReadsTheNoinlineList(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// GoReleaser: every build of ./cmd/tuios takes GOFLAGS from
-	// TUIOS_GOFLAGS, and the release workflow sets it from the script.
 	builds := 0
 	for block := range strings.SplitSeq(read(".goreleaser.yml"), "\n  - id: ") {
 		if !strings.Contains(block, "main: ./cmd/tuios\n") {
@@ -97,8 +90,6 @@ func TestEveryTuiosBuildReadsTheNoinlineList(t *testing.T) {
 		t.Error("tuios.nix does not build its GOFLAGS from ./scripts/noinline-packages.txt, and has no tuios:allow-build with the reason")
 	}
 
-	// A pattern that matches nothing turns inlining off nowhere. A package
-	// renamed or moved would drop out of the list without a word.
 	list := exec.Command("go", "list", "-deps", "./cmd/tuios")
 	list.Dir = root
 	deps, err := list.Output()
@@ -118,8 +109,6 @@ func TestEveryTuiosBuildReadsTheNoinlineList(t *testing.T) {
 	}
 }
 
-// matchesAny reports whether a go build package pattern, either an import
-// path or one that ends in /..., names one of pkgs.
 func matchesAny(pattern string, pkgs []string) bool {
 	prefix, tree := strings.CutSuffix(pattern, "/...")
 	for _, p := range pkgs {
@@ -130,10 +119,6 @@ func matchesAny(pattern string, pkgs []string) bool {
 	return false
 }
 
-// checkShellBuilds holds a shell, YAML, justfile or Dockerfile to the rule:
-// a command that builds ./cmd/tuios runs with GOFLAGS from
-// scripts/goflags.sh. A command continued with a trailing backslash counts
-// as one line.
 func checkShellBuilds(t *testing.T, rel, text string) {
 	t.Helper()
 	lines := strings.Split(text, "\n")
@@ -155,9 +140,6 @@ func checkShellBuilds(t *testing.T, rel, text string) {
 	}
 }
 
-// checkGoBuilds holds Go source to the rule: an exec of go build
-// ./cmd/tuios is in a function that reads the list with
-// hostsync.NoinlineGoFlags, or goes through the e2e suite's goBuild.
 func checkGoBuilds(t *testing.T, rel, text string) {
 	t.Helper()
 	lines := strings.Split(text, "\n")

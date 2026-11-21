@@ -86,7 +86,6 @@ func TestLexerStrings(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tokens := Tokenize(tt.input)
 
-			// Find the string token
 			var stringToken Token
 			for _, tok := range tokens {
 				if tok.Type == TokenString {
@@ -129,7 +128,6 @@ func TestLexerDurations(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tokens := Tokenize(tt.input)
 
-			// Find the duration token
 			var durationToken Token
 			for _, tok := range tokens {
 				if tok.Type == TokenDuration {
@@ -185,7 +183,6 @@ Enter`
 
 	tokens := Tokenize(input)
 
-	// Should skip comments but include newlines
 	var types []TokenType
 	for _, tok := range tokens {
 		types = append(types, tok.Type)
@@ -243,7 +240,6 @@ Type "line3"`
 
 	tokens := Tokenize(input)
 
-	// Filter out newlines to check line numbers
 	var typeTokens []Token
 	for _, tok := range tokens {
 		if tok.Type == TokenTypeCmd {
@@ -270,7 +266,6 @@ Sleep@2s 500ms`
 
 	tokens := Tokenize(input)
 
-	// Check for @ tokens
 	atCount := 0
 	for _, tok := range tokens {
 		if tok.Type == TokenAt {

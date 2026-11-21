@@ -7,19 +7,11 @@ import (
 	"time"
 )
 
-// The watcher's job is one sentence: a save in another pane reaches the running
-// client, and a save that cannot be used does not. Both halves are here,
-// because a watcher that delivers everything and a watcher that delivers
-// nothing both pass a test that only checks one of them.
-
-// watcherReport is what the callback saw, drained by the test.
 type watcherReport struct {
 	cfg *UserConfig
 	err error
 }
 
-// startWatcher writes body to a config file in a fresh directory and starts a
-// watcher on it, returning the path and the channel the callback feeds.
 func startWatcher(t *testing.T, body string) (string, chan watcherReport) {
 	t.Helper()
 	dir := t.TempDir()
@@ -38,7 +30,6 @@ func startWatcher(t *testing.T, body string) (string, chan watcherReport) {
 	return path, reports
 }
 
-// nextReport waits for one delivery, or fails.
 func nextReport(t *testing.T, reports chan watcherReport, why string) watcherReport {
 	t.Helper()
 	select {
@@ -50,7 +41,6 @@ func nextReport(t *testing.T, reports chan watcherReport, why string) watcherRep
 	return watcherReport{}
 }
 
-// noReport requires that nothing is delivered for long enough to be sure.
 func noReport(t *testing.T, reports chan watcherReport, why string) {
 	t.Helper()
 	select {
@@ -60,8 +50,6 @@ func noReport(t *testing.T, reports chan watcherReport, why string) {
 	}
 }
 
-// saveLikeVim replaces the file the way an editor does: a new file beside it,
-// renamed into place. The original inode is never written to again.
 func saveLikeVim(t *testing.T, path, body string) {
 	t.Helper()
 	tmp := path + ".swp~"
@@ -122,8 +110,6 @@ func TestWatcherDropsAFileThatSaysWhatIsAlreadyInForce(t *testing.T) {
 	}
 	noReport(t, reports, "a rewrite with the same content")
 
-	// The positive half: a real change is still delivered, so the drop above is
-	// about the content and not about the watcher being dead.
 	if err := os.WriteFile(path, []byte(watcherBase+"\n[debug]\nshow_key_events = true\n"), 0o600); err != nil {
 		t.Fatalf("change config: %v", err)
 	}
@@ -158,15 +144,12 @@ func TestWatcherDropsTuiosOwnSave(t *testing.T) {
 	}
 	t.Cleanup(w.Stop)
 
-	// The settings page's own save: a different config, written by tuios.
 	cfg.Spotlight.Dim = 41
 	if err := WriteConfigFile(cfg, path); err != nil {
 		t.Fatalf("save from the settings page: %v", err)
 	}
 	noReport(t, reports, "tuios saving the file itself")
 
-	// The positive half: a hand edit of the same file is still delivered, so
-	// the drop above is about who wrote it and not about the watcher being dead.
 	saveLikeVim(t, path, "[appearance]\ntheme = \"nord\"\n")
 	got := nextReport(t, reports, "a hand edit after tuios saved")
 	if got.err != nil {
@@ -176,10 +159,6 @@ func TestWatcherDropsTuiosOwnSave(t *testing.T) {
 		t.Errorf("the hand edit carries theme %q, want nord", got.cfg.Appearance.Theme)
 	}
 
-	// An edit back to the bytes of a save changes what is in force, so it is not
-	// an echo, however recently tuios wrote those bytes (issue 1411). Negative
-	// control: with onlySelfWrites ignoring the number it has got to, every
-	// delivery below is dropped.
 	save := func(dim int) string {
 		t.Helper()
 		cfg.Spotlight.Dim = dim
@@ -201,8 +180,6 @@ func TestWatcherDropsTuiosOwnSave(t *testing.T) {
 		}
 	}
 
-	// Several quick saves come back as one read of the last. Each is still an
-	// echo, and so is one the machine was slow to show.
 	first := save(50)
 	second := save(51)
 	last := save(52)
@@ -211,8 +188,6 @@ func TestWatcherDropsTuiosOwnSave(t *testing.T) {
 	waitForDim(last, 52, "an edit back to the last of the quick saves")
 	waitForDim(second, 51, "an edit back to the middle of the quick saves")
 
-	// A save that says what the file already says has no change to come back
-	// through, and it must not stay open for the next edit to match.
 	same := save(51)
 	noReport(t, reports, "a save with the content of the file")
 	saveLikeVim(t, path, "[spotlight]\ndim = 60\n")
@@ -221,7 +196,6 @@ func TestWatcherDropsTuiosOwnSave(t *testing.T) {
 	}
 	waitForDim(same, 51, "an edit back to a save that changed nothing")
 
-	// And the echo still works after all of that.
 	save(53)
 	noReport(t, reports, "a save after the edits")
 }
@@ -298,8 +272,6 @@ func TestWatcherCollapsesOneSaveIntoOneReload(t *testing.T) {
 		if got.err != nil {
 			t.Fatalf("the burst was reported as an error: %v", got.err)
 		}
-		// The last write says true (i = 4) then false (i = 5): the one reload
-		// has to be of the finished file, not of some write along the way.
 		if got.cfg.Debug.ShowKeyEvents {
 			t.Error("the reload read the file before the burst was over")
 		}
@@ -407,8 +379,6 @@ func TestWatcherFollowsThemeFiles(t *testing.T) {
 	saveLikeVim(t, filepath.Join(themes, "mine.json"), `{"red": "#ff0000"}`)
 	waitAssets("a theme file was saved")
 
-	// settle drains the calls a directory change makes, so the next wait
-	// counts only the save after it.
 	settle := func() {
 		for {
 			select {
@@ -419,7 +389,6 @@ func TestWatcherFollowsThemeFiles(t *testing.T) {
 		}
 	}
 
-	// Removed and made again: the old watch died with the old directory.
 	if err := os.RemoveAll(themes); err != nil {
 		t.Fatal(err)
 	}
@@ -431,8 +400,6 @@ func TestWatcherFollowsThemeFiles(t *testing.T) {
 	saveLikeVim(t, filepath.Join(themes, "mine.json"), `{"red": "#00ff00"}`)
 	waitAssets("a theme file was saved in a directory made again")
 
-	// A symlink pointed at another directory, the way home-manager switches
-	// a generation: a new link renamed over the old one.
 	gen1, gen2 := filepath.Join(dir, "gen1"), filepath.Join(dir, "gen2")
 	for _, g := range []string{gen1, gen2} {
 		if err := os.Mkdir(g, 0o700); err != nil {
@@ -453,15 +420,12 @@ func TestWatcherFollowsThemeFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	if relinkUnseen {
-		// The relink is seen by reading the link, so the read is waited for
-		// and drained with the rest, and only the save can satisfy the wait.
 		time.Sleep(relinkPoll)
 	}
 	settle()
 	saveLikeVim(t, filepath.Join(gen2, "mine.json"), `{"red": "#0000ff"}`)
 	waitAssets("a theme file was saved behind a symlink pointed at a new directory")
 
-	// The stamp as tuios theme reload writes it, made and then written again.
 	settle()
 	stamp := filepath.Join(dir, ThemeReloadStamp)
 	for _, why := range []string{"tuios theme reload made its stamp", "tuios theme reload wrote its stamp again"} {

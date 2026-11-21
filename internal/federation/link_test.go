@@ -65,9 +65,6 @@ func TestHostThatAcceptsThenHangsDoesNotBlock(t *testing.T) {
 // link down for it threw away every attached session on it. Only a run of
 // failed calls ends the link.
 func TestHostThatAnswersThenStopsFailsTheCall(t *testing.T) {
-	// A stub that answers hello and then never answers anything else. The hang
-	// is released at cleanup so the fixture's own goroutines can finish; a real
-	// wedged daemon would simply never answer.
 	hang := make(chan struct{})
 	stub := startStubDaemon(t, func(verb string, _ json.RawMessage) (any, *RemoteError) {
 		if verb == "hello" {
@@ -76,13 +73,9 @@ func TestHostThatAnswersThenStopsFailsTheCall(t *testing.T) {
 		<-hang
 		return nil, &RemoteError{Code: "internal", Message: "test over"}
 	})
-	// Registered after the stub, so cleanup (which runs last in, first out)
-	// releases the hang before the stub waits for its own goroutines.
 	t.Cleanup(func() { close(hang) })
 	opts := testOptions(proxyDialer(t, stub))
 	opts.CallTimeout = 400 * time.Millisecond
-	// A long backoff so the supervisor's redial does not race the assertion
-	// below about the link having been torn down.
 	opts.InitialBackoff = 30 * time.Second
 	opts.MaxBackoff = 30 * time.Second
 	m := managerFor(t, opts, Host{Name: "build", Addr: "unused"})
@@ -106,16 +99,10 @@ func TestHostThatAnswersThenStopsFailsTheCall(t *testing.T) {
 		t.Errorf("call returned %v, want a deadline", err)
 	}
 
-	// The control stream is unusable once a request on it went unanswered: the
-	// reply, if it ever comes, would be read as the answer to the next call. It
-	// is replaced. The link is not: the pipe under it is fine, and an attached
-	// session riding on it must not be thrown away because a listing was slow.
 	if r := m.Reports(ctx)[0]; r.Status != StatusUp {
 		t.Errorf("ASSERTION: the link is %q after one slow listing, want up. A slow listing is not a dead host", r.Status)
 	}
 
-	// A remote that keeps not answering does end the link, so a genuinely
-	// wedged daemon is redialed rather than reported up forever.
 	for range maxControlFailures {
 		_, _ = m.Call(ctx, "build", "list-sessions", nil)
 	}
@@ -148,8 +135,6 @@ func TestIncompatibleDaemonIsReportedNotUsed(t *testing.T) {
 	if !strings.Contains(r.Reason, "9") || !strings.Contains(r.Reason, "1") {
 		t.Errorf("reason does not name both protocol versions: %q", r.Reason)
 	}
-	// The specific error matters. Any failure at all satisfied this once, which
-	// would have been satisfied by the link being dead for an unrelated reason.
 	_, err := m.Call(ctx, "build", "list-sessions", nil)
 	if err == nil {
 		t.Fatal("a call was made against an incompatible daemon")
@@ -181,20 +166,12 @@ func TestIncompatibleDaemonIsReportedNotUsed(t *testing.T) {
 func TestHubRefusesAStreamOpenedByTheRemote(t *testing.T) {
 	hub, remote := duplexPipe(t)
 
-	// refusedIn bounds how long a refusal may take. The hub answers an inbound
-	// open from its frame-reading loop, so the real number is microseconds;
-	// this is loose enough for a loaded machine and far tighter than anything
-	// teardown could produce, since teardown only happens after the assertions
-	// below have run.
 	const refusedIn = 2 * time.Second
 
 	type refusal struct {
-		err error
-		// gotBytes is what the hub sent back on the refused stream. A refusal
-		// carries no payload; a hub that served the stream would.
+		err      error
 		gotBytes int
-		// elapsed is how long the stream took to end.
-		elapsed time.Duration
+		elapsed  time.Duration
 	}
 	answered := make(chan refusal, 1)
 	failed := make(chan error, 1)
@@ -204,11 +181,7 @@ func TestHubRefusesAStreamOpenedByTheRemote(t *testing.T) {
 			failed <- err
 			return
 		}
-		// The remote is the answering end, so it allocates even stream ids and
-		// cannot collide with the hub's control stream.
 		m := newMux(remote, func(s *Stream) {
-			// The hub's control stream. Answer every request line with the
-			// handshake or a listing, so the link stays usable.
 			br := bufio.NewReader(s)
 			for {
 				line, err := br.ReadBytes('\n')
@@ -234,16 +207,12 @@ func TestHubRefusesAStreamOpenedByTheRemote(t *testing.T) {
 		}, answererFirstID)
 		go func() { _ = m.run() }()
 
-		// Wait for the hub's control stream to exist, then push back.
 		time.Sleep(200 * time.Millisecond)
 		s, err := m.Open()
 		if err != nil {
 			failed <- err
 			return
 		}
-		// A stream a peer opened is worthless unless something reads it, so the
-		// remote writes a request into it. A hub that served the stream would
-		// have a handler on the other end of this write.
 		_, _ = s.Write([]byte(`{"id":99,"verb":"list-sessions"}` + "\n"))
 
 		started := time.Now()
@@ -280,8 +249,6 @@ func TestHubRefusesAStreamOpenedByTheRemote(t *testing.T) {
 		t.Errorf("the refusal took %v, which is not a refusal but a timeout", got.elapsed)
 	}
 
-	// The link survived the refusal. Without this check the fixture being
-	// torn down would satisfy the whole test.
 	if r := mgr.Reports(ctx)[0]; r.Status != StatusUp {
 		t.Fatalf("the link is %q after refusing one stream; refusing a stream must not cost the link", r.Status)
 	}
@@ -316,9 +283,6 @@ func TestOversizedRemoteResponseIsRefused(t *testing.T) {
 	}
 }
 
-// proxySocket is set only on the child process this file re-executes as the
-// remote proxy. A flag rather than an environment variable, because setting one
-// in the parent would leak into the parent's own run of the helper.
 var proxySocket = flag.String("fed.proxysock", "", "helper process: serve the link proxy against this daemon socket")
 
 // TestHelperStdioProxy is not a test. It is this binary re-executed as the
@@ -370,8 +334,6 @@ func TestALinkKeepsAnAttachWhileAListingTimesOut(t *testing.T) {
 		t.Fatalf("status is %q (%s), want up", r.Status, r.Reason)
 	}
 
-	// The attached session: a connection open on the link, with a live
-	// exchange on it, exactly as a pane has.
 	conn := openTo(t, m, "build")
 	br := bufio.NewReader(conn)
 	ask := func(id string) string {
@@ -389,12 +351,10 @@ func TestALinkKeepsAnAttachWhileAListingTimesOut(t *testing.T) {
 		t.Fatalf("the attach did not answer before the listing: %q", line)
 	}
 
-	// A listing that times out must not end the link.
 	if _, err := m.Call(ctx, "build", "list-sessions", nil); err == nil {
 		t.Fatal("the listing against the hanging stub answered; the timeout cannot be forced")
 	}
 
-	// The session is still there and still works.
 	if line := ask("2"); !strings.Contains(line, `"ok":true`) {
 		t.Fatalf("ASSERTION: the attached connection stopped answering after a listing timed out: %q", line)
 	}

@@ -29,7 +29,6 @@ const (
 	ScratchDefaultHeight = "80%"
 )
 
-// defaultScratchConfig returns the section DefaultConfig carries.
 func defaultScratchConfig() ScratchConfig {
 	return ScratchConfig{
 		Width:  ScratchDefaultWidth,
@@ -37,7 +36,6 @@ func defaultScratchConfig() ScratchConfig {
 	}
 }
 
-// fillMissingScratch fills an absent value with its default.
 func fillMissingScratch(cfg, defaultCfg *UserConfig) {
 	s, d := &cfg.Scratch, &defaultCfg.Scratch
 	if strings.TrimSpace(s.Width) == "" {
@@ -90,9 +88,6 @@ func ParseBoxSize(spec string) (value int, percent bool, err error) {
 	return value, percent, nil
 }
 
-// validateScratch warns about a size that does not parse and about the old
-// session key. A bad size falls back at run time, so without a warning a typo
-// would look like the key ignoring the config.
 func validateScratch(cfg *UserConfig, result *ValidationResult) {
 	s := cfg.Scratch
 	for _, f := range []struct {

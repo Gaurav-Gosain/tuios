@@ -6,12 +6,6 @@ import (
 	"testing"
 )
 
-// A hook's stderr is kept so a failure can be read, and these pin the bound
-// that keeps a noisy hook from costing whatever it decides to write.
-
-// wantStderrCap is the bound, written out rather than read from
-// stderrTailLimit. A test that asserts against the constant it is guarding
-// passes whatever the constant is changed to, which is not a guard.
 const wantStderrCap = 1024
 
 // TestStderrTailIsBounded is the bound. A hook is a user command and may write
@@ -46,7 +40,6 @@ func TestStderrTailIsBounded(t *testing.T) {
 // the limit is proved where it is wired and not only where it is implemented.
 func TestALoudHookIsBoundedEndToEnd(t *testing.T) {
 	m := NewManager()
-	// Roughly 400 KiB of stderr, then a failure, so the row is recorded.
 	m.Register(AfterNewWindow, `awk 'BEGIN{for(i=0;i<10000;i++) printf "line %d of noise\n", i > "/dev/stderr"}'; exit 9`)
 
 	m.Fire(AfterNewWindow, Context{})
@@ -62,8 +55,6 @@ func TestALoudHookIsBoundedEndToEnd(t *testing.T) {
 	if !strings.Contains(st.LastError, "of noise") {
 		t.Errorf("last error kept none of the output: %q", st.LastError)
 	}
-	// The tail, not the head: the last thing a failing command says is the part
-	// that explains it.
 	if !strings.Contains(st.LastError, "line 9999 of noise") {
 		t.Errorf("last error kept the head of the output rather than the tail: %q", st.LastError)
 	}

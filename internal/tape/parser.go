@@ -24,7 +24,6 @@ func NewParser(l *Lexer) *Parser {
 	return p
 }
 
-// nextToken advances to the next token
 func (p *Parser) nextToken() {
 	p.curTok = p.peekTok
 	p.peekTok = p.lexer.NextToken()
@@ -35,7 +34,6 @@ func (p *Parser) Parse() []Command {
 	var commands []Command
 
 	for p.curTok.Type != TokenEOF {
-		// Skip newlines
 		if p.curTok.Type == TokenNewline {
 			p.nextToken()
 			continue
@@ -53,13 +51,11 @@ func (p *Parser) Parse() []Command {
 	return commands
 }
 
-// parseCommand parses a single command
 func (p *Parser) parseCommand() (Command, bool) {
 	var cmd Command
 	cmd.Line = p.curTok.Line
 	cmd.Column = p.curTok.Column
 
-	// Skip any leading newlines
 	for p.curTok.Type == TokenNewline {
 		p.nextToken()
 	}
@@ -88,10 +84,6 @@ func (p *Parser) parseCommand() (Command, bool) {
 	return cmd, false
 }
 
-// commandForToken says which command a line's first token starts. A keyword
-// token names its command. A plain word names one through
-// ResolveCommandName, which is how the commands with no keyword token of their
-// own (Action, Press, ArrangePanes and the rest) are reached.
 func commandForToken(tok Token) (CommandType, bool) {
 	if tok.Type.IsCommand() {
 		return CommandType(tok.Type), true
@@ -106,10 +98,6 @@ func commandForToken(tok Token) (CommandType, bool) {
 	return ct, true
 }
 
-// parseGenericCommand reads a command and every argument on its line, then
-// holds the arguments to the command's argSpec. An argument is any token: a
-// quoted string, a word, a number or a duration. A word joined to the next by
-// "+" is one argument, so Press ctrl+b reads as the key it names.
 func (p *Parser) parseGenericCommand(ct CommandType) (Command, bool) {
 	cmd := Command{Type: ct, Line: p.curTok.Line, Column: p.curTok.Column}
 	name := p.curTok.Literal
@@ -167,8 +155,6 @@ func (p *Parser) parseGenericCommand(ct CommandType) (Command, bool) {
 	return cmd, true
 }
 
-// parseDelay reads the "@<duration>" after a command name into cmd.Delay. The
-// current token is the "@".
 func (p *Parser) parseDelay(cmd *Command) bool {
 	p.nextToken()
 	if p.curTok.Type != TokenDuration {
@@ -187,8 +173,6 @@ func (p *Parser) parseDelay(cmd *Command) bool {
 	return true
 }
 
-// takesDelay reports whether a command honours an @ delay: the pause between
-// the keys it sends.
 func takesDelay(ct CommandType) bool {
 	if ct == CommandTypeType {
 		return true
@@ -197,7 +181,6 @@ func takesDelay(ct CommandType) bool {
 	return ok && spec.usage == keyRepeat.usage
 }
 
-// parseTypeCommand parses Type "text" commands
 func (p *Parser) parseTypeCommand() (Command, bool) {
 	cmd := Command{
 		Type:   CommandTypeType,
@@ -205,14 +188,12 @@ func (p *Parser) parseTypeCommand() (Command, bool) {
 		Column: p.curTok.Column,
 	}
 
-	p.nextToken() // consume Type
+	p.nextToken()
 
-	// The optional typing speed (@<duration>), the pause between characters.
 	if p.curTok.Type == TokenAt && !p.parseDelay(&cmd) {
 		return cmd, false
 	}
 
-	// Expect a string argument
 	if p.curTok.Type == TokenString {
 		cmd.Args = []string{p.curTok.Literal}
 		cmd.Raw = fmt.Sprintf("Type %q", p.curTok.Literal)
@@ -226,7 +207,6 @@ func (p *Parser) parseTypeCommand() (Command, bool) {
 	return cmd, p.endOfLine(cmd.Type)
 }
 
-// parseSleepCommand parses Sleep <duration> commands
 func (p *Parser) parseSleepCommand() (Command, bool) {
 	cmd := Command{
 		Type:   CommandTypeSleep,
@@ -234,7 +214,7 @@ func (p *Parser) parseSleepCommand() (Command, bool) {
 		Column: p.curTok.Column,
 	}
 
-	p.nextToken() // consume Sleep
+	p.nextToken()
 
 	if p.curTok.Type == TokenDuration {
 		duration, err := ParseDuration(p.curTok.Literal)
@@ -254,7 +234,6 @@ func (p *Parser) parseSleepCommand() (Command, bool) {
 	return cmd, p.endOfLine(cmd.Type)
 }
 
-// parseKeyComboCommand parses Ctrl+X, Alt+X, etc.
 func (p *Parser) parseKeyComboCommand() (Command, bool) {
 	cmd := Command{
 		Type:   CommandTypeKeyCombo,
@@ -264,19 +243,15 @@ func (p *Parser) parseKeyComboCommand() (Command, bool) {
 
 	var comboParts []string
 
-	// Parse Ctrl, Alt, Shift modifiers and their keys
 	for p.curTok.Type == TokenCtrl || p.curTok.Type == TokenAlt || p.curTok.Type == TokenShift {
 		comboParts = append(comboParts, p.curTok.Literal)
 		p.nextToken()
 
-		// Expect + after each modifier
 		if p.curTok.Type == TokenPlus {
 			p.nextToken()
 		}
 	}
 
-	// Get the final key. Guard the raw-byte index: an empty final token
-	// (TokenEOF has an empty literal) must not panic on Literal[0].
 	if p.curTok.Type == TokenIdentifier || p.curTok.Type.IsNavigationKey() ||
 		p.curTok.Type == TokenEnter || p.curTok.Type == TokenSpace ||
 		p.curTok.Type == TokenTab || p.curTok.Type == TokenEscape ||
@@ -291,7 +266,6 @@ func (p *Parser) parseKeyComboCommand() (Command, bool) {
 		return cmd, false
 	}
 
-	// Reconstruct the combo string
 	comboStr := strings.Join(comboParts, "+")
 	cmd.Args = []string{comboStr}
 	cmd.Raw = comboStr
@@ -299,8 +273,6 @@ func (p *Parser) parseKeyComboCommand() (Command, bool) {
 	return cmd, p.endOfLine(cmd.Type)
 }
 
-// parseWaitCommand parses Wait <duration> commands. Wait is an alias for Sleep:
-// it delays playback for the given duration.
 func (p *Parser) parseWaitCommand() (Command, bool) {
 	cmd := Command{
 		Type:   CommandTypeWait,
@@ -308,7 +280,7 @@ func (p *Parser) parseWaitCommand() (Command, bool) {
 		Column: p.curTok.Column,
 	}
 
-	p.nextToken() // consume Wait
+	p.nextToken()
 
 	if p.curTok.Type == TokenDuration {
 		duration, err := ParseDuration(p.curTok.Literal)
@@ -328,9 +300,6 @@ func (p *Parser) parseWaitCommand() (Command, bool) {
 	return cmd, p.endOfLine(cmd.Type)
 }
 
-// parseWaitUntilRegexCommand parses WaitUntilRegex <regex> [timeout] commands
-// WaitUntilRegex will wait until the PTY output matches the given regex pattern
-// Optional timeout in milliseconds (default: 5000ms)
 func (p *Parser) parseWaitUntilRegexCommand() (Command, bool) {
 	cmd := Command{
 		Type:   CommandTypeWaitUntilRegex,
@@ -338,15 +307,13 @@ func (p *Parser) parseWaitUntilRegexCommand() (Command, bool) {
 		Column: p.curTok.Column,
 	}
 
-	p.nextToken() // consume WaitUntilRegex
+	p.nextToken()
 
-	// Get regex pattern (must be a string)
 	if p.curTok.Type == TokenString {
 		regexPattern := p.curTok.Literal
 		cmd.Args = []string{regexPattern}
 		p.nextToken()
 
-		// Optional timeout parameter
 		if p.curTok.Type == TokenNumber {
 			cmd.Args = append(cmd.Args, p.curTok.Literal)
 			cmd.Raw = fmt.Sprintf("WaitUntilRegex %q %s", regexPattern, p.curTok.Literal)
@@ -363,16 +330,12 @@ func (p *Parser) parseWaitUntilRegexCommand() (Command, bool) {
 	return cmd, p.endOfLine(cmd.Type)
 }
 
-// skipToNextLine skips tokens until the next newline
 func (p *Parser) skipToNextLine() {
 	for p.curTok.Type != TokenNewline && p.curTok.Type != TokenEOF {
 		p.nextToken()
 	}
 }
 
-// endOfLine reports whether the command just read ends its line. Anything
-// left over is an error: skipped without a word, it would let a tape that
-// validates carry arguments that do nothing.
 func (p *Parser) endOfLine(ct CommandType) bool {
 	if p.curTok.Type == TokenNewline || p.curTok.Type == TokenEOF {
 		return true
@@ -382,13 +345,10 @@ func (p *Parser) endOfLine(ct CommandType) bool {
 	return false
 }
 
-// addError adds an error at the current token.
 func (p *Parser) addError(msg string) {
 	p.addErrorAt(p.curTok, msg)
 }
 
-// addErrorAt adds an error at tok, with its line and column, so an editor or
-// a person can go straight to it.
 func (p *Parser) addErrorAt(tok Token, msg string) {
 	p.errors = append(p.errors, fmt.Sprintf("line %d, column %d: %s", tok.Line, tok.Column, msg))
 }
@@ -407,11 +367,6 @@ func ParseFile(content string) ([]Command, []string) {
 	return expandDelays(commands), p.Errors()
 }
 
-// expandDelays turns each command with an @ delay into the keys it sends,
-// one at a time, with a Sleep of the delay between them: Type@50ms "ab" is
-// Type "a", Sleep 50ms, Type "b", and Down@100ms 3 is three Downs 100ms
-// apart. The delay was parsed and then ignored before, so Down@100ms 3 sent
-// all three at once.
 func expandDelays(commands []Command) []Command {
 	var out []Command
 	for _, c := range commands {

@@ -2,15 +2,9 @@
 
 package terminal
 
-// Windows and the browser build have no process group holding the terminal
-// the way a Unix PTY has one. On Windows ConPTY tells the program of a
-// resize itself. In the browser a pane runs an in-memory guest (see
-// ptyspawn.NewGuestPty), and resizing the guest's pty tells it the new size.
-
 // TriggerRedraw is a no-op: the pty's Resize already reaches the program.
 func (w *Window) TriggerRedraw() {}
 
-// getPgid has no process group to read.
 func getPgid(_ int) (int, error) { return 0, nil }
 
 // HasForegroundProcess reports false, so quitting falls back to asking

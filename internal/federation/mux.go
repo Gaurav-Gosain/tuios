@@ -17,41 +17,12 @@ import (
 // link" instead of as a framing failure.
 const LinkPreamble = "TUIOS-LINK 1"
 
-// preambleScanLimit bounds how much junk the hub reads while looking for the
-// preamble. A remote that never sends it is a misconfiguration, not something
-// to keep reading.
-const preambleScanLimit = 8 << 10 // 8 KiB
+const preambleScanLimit = 8 << 10
 
-// streamBufferFrames is how many data frames a stream may hold before its
-// reader is considered behind. The read loop is shared by every stream on the
-// link, so a consumer that stops reading would otherwise stall the control
-// stream and every other attach with it. See deliver for what happens instead.
 const streamBufferFrames = 64
 
-// defaultStallLimit is how long a full stream may leave the read loop waiting
-// before the stream is dropped. A relay whose local client has not drained a
-// megabyte-scale backlog in this long is not slow, it is gone.
-//
-// It is the limit for the control stream, and the control stream alone is what
-// the number was chosen for: one call on it is bounded at DefaultCallTimeout,
-// so a control stream still full ten seconds later has nobody reading it.
 const defaultStallLimit = 10 * time.Second
 
-// connectionStallLimit is the same bound for a relayed connection, which is an
-// attached session rather than a listing.
-//
-// Ten seconds is the wrong number there.
-// The reader at the end of a relayed connection is a person's terminal, and a
-// terminal legitimately stops reading for a while: a large paint, a client
-// swapped out under memory pressure, a laptop lid closed and opened. Ten
-// seconds of that is not a dead consumer, and dropping the stream for it throws
-// away a session the far daemon is still running perfectly.
-//
-// Thirty seconds is the trade in the other direction. The read loop is shared,
-// so a stream this side is waiting on freezes every other stream on the link
-// for as long as the wait lasts, and that is what stops the limit being raised
-// further. A reader gone for thirty seconds has lost nothing but time, and a
-// stream dropped after thirty seconds is one the client reconnects.
 const connectionStallLimit = 30 * time.Second
 
 var (
@@ -68,68 +39,26 @@ var (
 	ErrStreamStalled = errors.New("federation: the stream's reader stopped reading")
 )
 
-// maxStreams caps concurrent streams on one link.
-//
-// It is sized for panes, which are what hold streams for a long time. A pane
-// on another machine holds two (its terminal and its report channel), and the
-// link also carries the control stream, the fleet stream and every attach. At
-// 32 the sixteenth pane on one machine was refused, across every session this
-// daemon holds, and in a global session that read as a machine that had
-// stopped making terminals. 256 leaves room for over a hundred panes per
-// machine. An idle stream costs a map entry and a channel, so the bound still
-// does its job of stopping a peer from opening streams without end.
 const maxStreams = 256
 
-// Stream ids are split between the two ends of a link: the side that dials
-// allocates odd ids, the side that answers allocates even ones. This is the
-// usual scheme (ssh and HTTP/2 both do it) and it is load bearing here for one
-// specific reason.
-//
-// If both ends started at 1, the hub's control stream (id 1) and the first
-// stream a peer opened would share an id, so handleOpen's duplicate check would
-// answer it with a close before the inbound-open refusal above was consulted.
-// The peer would see a closed stream either way, which makes the refusal
-// untestable: deleting it changes nothing a test could see. The split means an
-// inbound open can only ever name an id this side does not own, so the refusal
-// is the only thing that can answer it.
 const (
 	dialerFirstID   = 1
 	answererFirstID = 2
 	idStride        = 2
 )
 
-// mux interleaves logical streams over one byte pipe.
-//
-// Both ends run the same type. The hub side opens streams and passes a nil
-// accept function, so an open arriving from the remote is refused: section 1's
-// first invariant is that a remote daemon never gets a channel into the hub,
-// and this is where that is enforced rather than assumed. The proxy side passes
-// an accept function that dials the local daemon socket.
 type mux struct {
-	w io.Writer
-	r io.Reader
-	c io.Closer
-	// wl serialises frames onto the pipe, ordinary streams first. See
-	// bulk.go.
+	w  io.Writer
+	r  io.Reader
+	c  io.Closer
 	wl *prioLock
 
-	// accept handles an open frame from the peer. Nil means opens are refused.
 	accept func(*Stream)
 
-	// stallLimit is how long deliver waits on a full stream before dropping
-	// it, for a stream that does not set its own. Tests shorten it.
 	stallLimit time.Duration
 
-	// onStall is told which stream was dropped for a reader that stopped
-	// reading. It is the only way anyone finds out that this happened, and
-	// telling a stalled attach apart from a dead sshd is the whole point of
-	// having it. Nil means nobody is listening.
 	onStall func(id uint32)
 
-	// lastRead is when the read loop last took a frame off the pipe, in Unix
-	// nanoseconds, and blocked counts the read loop's own waits inside
-	// deliver. Together they answer one question: is this pipe alive? A
-	// control call that timed out does not answer it.
 	lastRead atomic.Int64
 	blocked  atomic.Int32
 
@@ -139,29 +68,18 @@ type mux struct {
 	closed  bool
 	err     error
 
-	// self is put in the From of every stream this side opens that does not
-	// name one, so the far machine knows which machine's policy applies.
-	// Set before the mux is used and never changed.
 	self string
 
 	done chan struct{}
 	once sync.Once
 
-	// wg tracks the accept handlers this side started, so a proxy can wait for
-	// its socket pumps to finish before the process exits.
 	wg sync.WaitGroup
 }
 
-// newMux wraps a pipe. accept may be nil, which refuses peer-initiated streams.
-// firstID is dialerFirstID or answererFirstID, whichever end this is.
 func newMux(rwc io.ReadWriteCloser, accept func(*Stream), firstID uint32) *mux {
 	return newMuxRW(rwc, rwc, rwc, accept, firstID)
 }
 
-// newMuxRW is newMux with the three halves given separately. The hub needs it
-// because it reads the preamble through a bufio.Reader, which may already hold
-// the first frame's bytes: handing the mux the raw pipe instead would lose
-// them.
 func newMuxRW(r io.Reader, w io.Writer, c io.Closer, accept func(*Stream), firstID uint32) *mux {
 	return &mux{
 		w:          w,
@@ -176,16 +94,6 @@ func newMuxRW(r io.Reader, w io.Writer, c io.Closer, accept func(*Stream), first
 	}
 }
 
-// alive reports whether the pipe under this mux is still carrying traffic.
-//
-// It exists because a control call that did not answer in time proves nothing
-// about the link. The link is the pipe, and the pipe is alive when a frame came
-// off it recently, or when the read loop is parked handing a frame to a stream
-// whose reader is behind. Treating a slow answer as a dead machine is what tore
-// a working link down and took the person's attached session with it.
-//
-// A mux that has read nothing at all is reported alive: no frame yet is the
-// state of a link that has just come up, not evidence of a dead one.
 func (m *mux) alive(quiet time.Duration) bool {
 	select {
 	case <-m.done:
@@ -202,23 +110,16 @@ func (m *mux) alive(quiet time.Duration) bool {
 	return time.Since(time.Unix(0, last)) < quiet
 }
 
-// Done is closed when the mux stops, whatever stopped it.
 func (m *mux) Done() <-chan struct{} { return m.done }
 
-// Err reports why the mux stopped, or nil while it runs.
 func (m *mux) Err() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.err
 }
 
-// Open starts a new stream and tells the peer to open its end.
 func (m *mux) Open() (*Stream, error) { return m.open(0, StreamOpen{}) }
 
-// OpenWithStall is Open for a stream that needs its own limit for a reader
-// that falls behind. The limit is set before the stream can receive anything,
-// which is why it is a parameter rather than a field written afterwards: the
-// read loop may deliver a frame on it the instant the peer answers.
 func (m *mux) OpenWithStall(stall time.Duration) (*Stream, error) {
 	return m.open(stall, StreamOpen{})
 }
@@ -260,14 +161,10 @@ func (m *mux) open(stall time.Duration, info StreamOpen) (*Stream, error) {
 	return s, nil
 }
 
-// writeFrame serialises one frame onto the pipe, ahead of any bulk frame
-// that waits.
 func (m *mux) writeFrame(t frameType, id uint32, payload []byte) error {
 	return m.writeFrameLane(t, id, payload, true)
 }
 
-// writeFrameLane is writeFrame in the given lane: urgent for every ordinary
-// frame, not urgent for a bulk stream's data.
 func (m *mux) writeFrameLane(t frameType, id uint32, payload []byte, urgent bool) error {
 	m.wl.lock(urgent)
 	defer m.wl.unlock()
@@ -279,8 +176,6 @@ func (m *mux) writeFrameLane(t frameType, id uint32, payload []byte, urgent bool
 	return writeFrame(m.w, t, id, payload)
 }
 
-// dropStalled ends one stream whose reader fell behind, and tells the peer. The
-// stream's own Read reports ErrStreamStalled so the relay above it can say why.
 func (m *mux) dropStalled(s *Stream) {
 	m.mu.Lock()
 	delete(m.streams, s.id)
@@ -308,8 +203,6 @@ func (m *mux) dropStream(id uint32) {
 // link dropped reports false, though its reader sees the same end of file.
 func (s *Stream) ClosedByPeer() bool { return s.closedByPeer.Load() }
 
-// run reads frames until the pipe ends or a protocol error occurs. It returns
-// the reason it stopped.
 func (m *mux) run() error {
 	for {
 		f, err := readFrame(m.r)
@@ -333,10 +226,6 @@ func (m *mux) run() error {
 
 func (m *mux) handleOpen(id uint32, payload []byte) {
 	if m.accept == nil {
-		// The hub refuses every inbound open. Answering with a close rather
-		// than killing the link keeps a confused peer from taking the listing
-		// down with it, and the refusal is the security property, not a
-		// convenience.
 		_ = m.writeFrame(frameClose, id, nil)
 		return
 	}
@@ -363,9 +252,6 @@ func (m *mux) handleOpen(id uint32, payload []byte) {
 	m.streams[id] = s
 	m.mu.Unlock()
 	if s.win != nil {
-		// The answer that says this side takes part in the window. It goes
-		// before the accept handler can write a byte, so the opener hears it
-		// ahead of any data.
 		_ = m.writeFrame(frameCredit, id, encodeCredit(0))
 	}
 	m.wg.Go(func() {
@@ -373,7 +259,6 @@ func (m *mux) handleOpen(id uint32, payload []byte) {
 	})
 }
 
-// handleCredit takes a reader's credit for a bulk stream this side writes.
 func (m *mux) handleCredit(id uint32, payload []byte) {
 	n, ok := decodeCredit(payload)
 	if !ok {
@@ -386,7 +271,6 @@ func (m *mux) handleCredit(id uint32, payload []byte) {
 		return
 	}
 	if !s.creditsOK.Load() {
-		// The first credit is the far side saying it takes part.
 		s.creditsOK.Store(true)
 		s.win.enable()
 	}
@@ -398,14 +282,11 @@ func (m *mux) handleData(id uint32, payload []byte) {
 	s := m.streams[id]
 	m.mu.Unlock()
 	if s == nil {
-		// Data for a stream this side already closed. Dropping it is correct:
-		// the close raced the data, and the peer will see the close.
 		return
 	}
 	s.deliver(payload)
 }
 
-// stop tears the mux down once, recording why.
 func (m *mux) stop(cause error) {
 	m.once.Do(func() {
 		m.mu.Lock()
@@ -430,7 +311,6 @@ func (m *mux) stop(cause error) {
 	})
 }
 
-// Close shuts the mux and its pipe down.
 func (m *mux) Close() error {
 	m.stop(ErrLinkClosed)
 	return nil
@@ -443,43 +323,22 @@ type Stream struct {
 	m  *mux
 	id uint32
 
-	// stall is this stream's own limit, zero meaning the mux's. It is set
-	// once, before the stream is registered, so the read loop can read it
-	// without a lock. A relayed connection sets it: see connectionStallLimit.
 	stall time.Duration
 
-	// open is what the side that opened the stream said about it, on the
-	// side that accepted it. It is set before the accept handler runs and not
-	// written again.
 	open StreamOpen
 
-	// bulk says the stream writes small frames behind every other stream.
 	bulk bool
 
-	// Bulk and windowed streams only. win holds this side's writes to the far
-	// reader's window; creditsOK says the far side takes part, so this side
-	// may send credit frames and must keep to the window, and the far side
-	// keeps to the window this side grants. read counts the bytes the reader
-	// here has taken and credited the last count sent.
 	win       *window
 	creditsOK atomic.Bool
 	read      atomic.Uint64
 	credited  atomic.Uint64
 
-	// closedByPeer says the far side ended the stream with a close frame,
-	// while the link stayed up. A stream the link took down with it, or one
-	// this side dropped, leaves it false. See ClosedByPeer.
 	closedByPeer atomic.Bool
 
 	mu       sync.Mutex
 	buf      []byte
 	incoming chan []byte
-	// over holds the chunks of a windowed stream that arrived while incoming
-	// was full, oldest first, and queued counts the bytes in incoming and
-	// over together. The far writer keeps to the window, so queued stays
-	// under windowRecvLimit and the read loop never waits on this stream.
-	// space is told when the reader takes a chunk, for a peer that broke the
-	// window. All three are guarded by mu.
 	over     [][]byte
 	queued   int
 	space    chan struct{}
@@ -492,8 +351,6 @@ func newStream(m *mux, id uint32) *Stream {
 	return newStreamSized(m, id, false)
 }
 
-// newStreamSized makes a stream whose receive buffer fits a bulk stream's
-// whole window when bulk is set.
 func newStreamSized(m *mux, id uint32, bulk bool) *Stream {
 	frames := streamBufferFrames
 	if bulk {
@@ -507,9 +364,6 @@ func newStreamSized(m *mux, id uint32, bulk bool) *Stream {
 	}
 }
 
-// makeBulk turns a stream into a bulk stream. The opener waits for the far
-// side's first credit before it keeps to a window or sends credits; the
-// accepter knows at once, because only a peer that speaks credits opens one.
 func (s *Stream) makeBulk(opener bool) {
 	s.bulk = true
 	if len(s.incoming) == 0 && cap(s.incoming) < bulkBufferFrames {
@@ -518,9 +372,6 @@ func (s *Stream) makeBulk(opener bool) {
 	s.makeWindowed(opener)
 }
 
-// makeWindowed gives a stream a window in both directions. It is a bulk
-// stream's flow control without the bulk lane: the stream's frames still go
-// ahead of every bulk frame.
 func (s *Stream) makeWindowed(opener bool) {
 	if s.win == nil {
 		s.win = newWindow()
@@ -540,8 +391,6 @@ func (s *Stream) WindowSize() uint64 {
 	return s.win.Size()
 }
 
-// noteRead counts bytes the reader took off a bulk stream and grants the far
-// writer room for more once enough were read.
 func (s *Stream) noteRead(n int) {
 	if s.win == nil || n <= 0 {
 		return
@@ -557,14 +406,6 @@ func (s *Stream) noteRead(n int) {
 	_ = s.m.writeFrame(frameCredit, s.id, encodeCredit(total))
 }
 
-// deliver hands a data frame to the stream's reader.
-//
-// It runs on the mux's read loop, which every stream on the link shares. A
-// reader that is behind makes it wait, which is the only backpressure there is
-// on the pipe, and that wait is bounded: a stream still full after stallLimit
-// is dropped, alone, and the loop goes on serving the others. Without the bound
-// one client that stopped draining its attach would freeze the control stream,
-// the listings would time out, and the whole link would be torn down for it.
 func (s *Stream) deliver(payload []byte) {
 	if s.creditsOK.Load() && s.deliverWindowed(payload) {
 		return
@@ -582,9 +423,6 @@ func (s *Stream) deliver(payload []byte) {
 	if limit <= 0 {
 		limit = s.m.stallLimit
 	}
-	// The read loop is about to wait, and a link whose read loop is waiting is
-	// not a link that has gone quiet. Saying so is what stops a control call
-	// timing out behind this wait from being read as a dead machine.
 	s.m.blocked.Add(1)
 	defer s.m.blocked.Add(-1)
 	t := time.NewTimer(limit)
@@ -598,24 +436,8 @@ func (s *Stream) deliver(payload []byte) {
 	}
 }
 
-// windowRecvLimit bounds the bytes a windowed stream holds for its reader. A
-// far writer that keeps to the window has at most bulkWindowMax bytes this
-// side has not credited, and credits trail the reader, so it never reaches the
-// limit. The extra frame is slack, not a figure anything depends on.
 const windowRecvLimit = bulkWindowMax + bulkFramePayload
 
-// deliverWindowed queues a chunk for the reader of a stream whose far writer
-// keeps to the window, without waiting. The read loop is shared by every
-// stream on the link, so this is what keeps one pane that writes faster than
-// its reader reads from stopping every other pane on the machine.
-//
-// The queue is counted in bytes: a writer inside the window can still send
-// more small frames than incoming holds, and incoming alone would make the
-// read loop wait again. A writer past the window is a peer that broke it, or
-// an opener that wrote before it heard this side take part. It gets the wait
-// every stream had before windows, bounded by the stall limit. deliverWindowed
-// reports false when the stream has no window here and the caller delivers it
-// the old way.
 func (s *Stream) deliverWindowed(payload []byte) bool {
 	if s.space == nil {
 		return false
@@ -648,9 +470,6 @@ func (s *Stream) deliverWindowed(payload []byte) bool {
 	}
 }
 
-// enqueue adds a chunk behind every chunk queued before it, if it fits under
-// windowRecvLimit. A queue that holds nothing takes any one chunk, so a chunk
-// is never refused for its size alone.
 func (s *Stream) enqueue(payload []byte) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -669,9 +488,6 @@ func (s *Stream) enqueue(payload []byte) bool {
 	return true
 }
 
-// next takes the oldest queued chunk without waiting. The caller holds s.mu.
-// incoming is older than over: a chunk goes to over only while incoming is
-// full or over already holds one.
 func (s *Stream) next() ([]byte, bool) {
 	var chunk []byte
 	select {
@@ -691,7 +507,6 @@ func (s *Stream) next() ([]byte, bool) {
 	return chunk, true
 }
 
-// peerClosed ends the stream because the far side closed it or the link died.
 func (s *Stream) peerClosed(cause error) {
 	s.closeOne.Do(func() {
 		s.mu.Lock()
@@ -720,8 +535,6 @@ func (s *Stream) Read(p []byte) (int, error) {
 	}
 	s.mu.Unlock()
 
-	// Nothing is queued, and a chunk that arrives now goes to incoming,
-	// because over is only used while incoming holds something.
 	select {
 	case chunk := <-s.incoming:
 		s.mu.Lock()
@@ -730,11 +543,6 @@ func (s *Stream) Read(p []byte) (int, error) {
 	case <-s.closed:
 	case <-s.m.done:
 	}
-	// The stream or the whole link has ended. Drain anything already
-	// delivered before reporting the end, so a peer that answered and then
-	// hung up does not lose its answer. Both arms drain: select picks among
-	// ready arms at random, so with one draining arm a link that closed with
-	// chunks still queued would drop them about half the time.
 	s.mu.Lock()
 	if chunk, ok := s.next(); ok {
 		return s.take(p, chunk), nil
@@ -743,8 +551,6 @@ func (s *Stream) Read(p []byte) (int, error) {
 	return 0, s.readErr()
 }
 
-// unqueue counts a chunk the reader took out of a windowed stream's queue,
-// and tells a delivery waiting for room. The caller holds s.mu.
 func (s *Stream) unqueue(chunk []byte) {
 	if s.space == nil {
 		return
@@ -756,8 +562,6 @@ func (s *Stream) unqueue(chunk []byte) {
 	}
 }
 
-// take copies a chunk off the stream into p and keeps what does not fit for
-// the next Read. The caller holds s.mu, and take releases it.
 func (s *Stream) take(p, chunk []byte) int {
 	n := copy(p, chunk)
 	if n < len(chunk) {
@@ -768,8 +572,6 @@ func (s *Stream) take(p, chunk []byte) int {
 	return n
 }
 
-// readErr reports the end of a stream. A clean close reads as io.EOF, which is
-// what every bufio reader above this expects.
 func (s *Stream) readErr() error {
 	s.mu.Lock()
 	err := s.err
@@ -803,11 +605,6 @@ func (s *Stream) Write(p []byte) (int, error) {
 	return written, nil
 }
 
-// writeWindowed writes a bulk or windowed stream's bytes in small frames,
-// inside the window the far reader grants. A bulk stream's frames wait behind
-// every other stream. The frames are small for a second reason: the reader
-// credits in steps of bulkCreditEvery, so a frame larger than the window less
-// one step could wait for a credit that never comes.
 func (s *Stream) writeWindowed(p []byte) (int, error) {
 	written := 0
 	for len(p) > 0 {

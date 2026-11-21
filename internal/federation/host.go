@@ -59,9 +59,6 @@ type Host struct {
 	// The caller owns the path and stops the master with StopSharingArgs.
 	ControlPath string
 
-	// fresh makes the next dial open a connection of its own instead of
-	// riding a shared ssh master. The link sets it for the one dial after it
-	// found a connection dead. See freshOptions.
 	fresh bool
 }
 
@@ -79,10 +76,6 @@ func (h Host) command() string {
 	return DefaultRemoteCommand
 }
 
-// hostNamePattern is what a host name may be. It is deliberately narrow: the
-// name becomes a qualifier in `host:target` addresses, so a name carrying a
-// colon or a space would make an address ambiguous, and an address that can be
-// read two ways is how a caller reaches the wrong machine.
 var hostNamePattern = lazyre.New(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
 
 // ErrUnknownHost reports a name that is not in the configured table. It is
@@ -118,14 +111,9 @@ func NewTable(hosts []Host) (*Table, []error) {
 			problems = append(problems, errfmt.Errorf("host %q was ignored, because it has no addr", name))
 			continue
 		case strings.HasPrefix(strings.TrimSpace(h.Addr), "-"):
-			// The addr is an ssh argument, and one that starts with a dash
-			// is read as an option, which can run a command locally.
 			problems = append(problems, errfmt.Errorf("host %q was ignored, because its addr starts with a dash", name))
 			continue
 		case strings.HasPrefix(strings.TrimSpace(h.Command), "-"):
-			// The command follows the addr on ssh's command line, and ssh
-			// reads options there too. The argv ends ssh's options with --,
-			// and a command that is an option is refused as well.
 			problems = append(problems, errfmt.Errorf("host %q was ignored, because its command starts with a dash", name))
 			continue
 		}

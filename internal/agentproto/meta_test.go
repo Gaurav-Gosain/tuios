@@ -21,7 +21,6 @@ func TestCodexUsageAndPlan(t *testing.T) {
 		"last":               map[string]any{"totalTokens": 51_000, "inputTokens": 50_000},
 		"modelContextWindow": 272_000,
 	}})
-	// No window: nothing to state.
 	notify(p, "thread/tokenUsage/updated", map[string]any{"tokenUsage": map[string]any{"last": map[string]any{"totalTokens": 1}, "modelContextWindow": nil}})
 	notify(p, "turn/plan/updated", map[string]any{"threadId": "th-1", "turnId": "tu-1", "explanation": nil, "plan": []any{
 		map[string]any{"step": "read", "status": "completed"},
@@ -56,7 +55,6 @@ func TestACPUsageUpdate(t *testing.T) {
 	update(map[string]any{"used": "many", "size": 200_000, "cost": map[string]any{"amount": 1.5, "currency": "EUR"}})
 	update(map[string]any{"used": 1, "size": 0, "cost": nil})
 	update(map[string]any{"used": 70_000, "size": 200_000, "cost": 3})
-	// A plan still arrives in order behind them.
 	notify(p, "session/update", map[string]any{"sessionId": "s-1", "update": map[string]any{"sessionUpdate": "plan", "entries": []any{}}})
 
 	want := []Usage{
@@ -152,8 +150,6 @@ func TestSessionActivityOffTheLoop(t *testing.T) {
 		s.Emit(Tool{ID: id, Kind: "execute", Status: ToolDone, Input: map[string]string{"command": "true"}})
 	}
 	s.Emit(Usage{ContextUsed: 1, ContextSize: 2})
-	// Events are handled in order: once this is on screen, so is every tool
-	// call, and the turn can end.
 	s.Emit(Text{Text: "all handled\n"})
 	deadline := time.Now().Add(5 * time.Second)
 	for !strings.Contains(scr.text(), "all handled") {
@@ -214,8 +210,6 @@ func TestTurnEndSeesTheWholeReply(t *testing.T) {
 	}
 }
 
-// slowReporter is a feedReporter whose activity and metadata calls wait
-// until the test lets them go, like a daemon that has stopped answering.
 type slowReporter struct {
 	*feedReporter
 	gate chan struct{}
@@ -231,7 +225,6 @@ func (r *slowReporter) ReportActivity(ctx context.Context, a Activity) error {
 	return r.feedReporter.ReportActivity(ctx, a)
 }
 
-// feedReporter is a fakeReporter that also takes metadata and activity.
 type feedReporter struct {
 	*fakeReporter
 	metas      chan map[string]string
@@ -270,7 +263,6 @@ func (r *feedReporter) nextActivity(t *testing.T) Activity {
 	}
 }
 
-// startFeedSession starts a feed session and waits for its idle report.
 func startFeedSession(t *testing.T, model string) feedSession {
 	t.Helper()
 	agent := newFakeAgent()
@@ -296,8 +288,6 @@ func startFeedSession(t *testing.T, model string) feedSession {
 	return feedSession{s: s, agent: agent, rep: rep, keys: keys}
 }
 
-// feedSession is a running session whose reporter takes metadata and
-// activity.
 type feedSession struct {
 	s     *Session
 	agent *fakeAgent
@@ -305,7 +295,6 @@ type feedSession struct {
 	keys  *io.PipeWriter
 }
 
-// modelAgent is a fakeAgent that names its model when it starts.
 type modelAgent struct {
 	*fakeAgent
 	model string

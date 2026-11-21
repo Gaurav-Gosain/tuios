@@ -47,8 +47,6 @@ func Watch(dir string, notify func()) (*Watcher, error) {
 	changes := make([]unix.Kevent_t, 2)
 	unix.SetKevent(&changes[0], dfd, unix.EVFILT_VNODE, unix.EV_ADD|unix.EV_ENABLE|unix.EV_CLEAR)
 	changes[0].Fflags = unix.NOTE_WRITE | unix.NOTE_DELETE | unix.NOTE_RENAME
-	// The pipe is how Close wakes a goroutine parked in kevent, which closing
-	// the kqueue does not reliably do.
 	unix.SetKevent(&changes[1], wake[0], unix.EVFILT_READ, unix.EV_ADD|unix.EV_ENABLE)
 	if _, err := unix.Kevent(kq, changes, nil, nil); err != nil {
 		for _, fd := range []int{wake[0], wake[1], kq, dfd} {

@@ -9,8 +9,6 @@ import (
 // still resolve it, or the key works on a fresh install and is dead for
 // everyone who already has a config.toml.
 func TestOlderConfigStillResolvesTheWorkspaceRenameKey(t *testing.T) {
-	// A config from before the action shipped: the workspace prefix section is
-	// there with the user's own bindings, and has never heard of renaming.
 	cfg := &UserConfig{}
 	cfg.Keybindings.WorkspacePrefix = map[string][]string{
 		"workspace_prefix_switch_1": {"1"},
@@ -25,12 +23,10 @@ func TestOlderConfigStillResolvesTheWorkspaceRenameKey(t *testing.T) {
 		t.Fatal("an older config did not get the workspace-rename default filled in")
 	}
 
-	// The user's own bindings survive the fill.
 	if got := cfg.Keybindings.WorkspacePrefix["workspace_prefix_switch_1"]; len(got) == 0 || got[0] != "1" {
 		t.Errorf("workspace_prefix_switch_1 = %v, want the config's own 1 kept", got)
 	}
 
-	// And the registry the workspace prefix handler asks resolves the key.
 	r := NewKeybindRegistry(cfg)
 	for _, k := range keys {
 		if got := r.Action(TableWorkspacePrefix, k); got != "workspace_prefix_rename" {
@@ -38,7 +34,6 @@ func TestOlderConfigStillResolvesTheWorkspaceRenameKey(t *testing.T) {
 		}
 	}
 
-	// The chord must not have taken a key the numbers need.
 	for _, digit := range []string{"1", "2", "3", "9"} {
 		if r.Action(TableWorkspacePrefix, digit) == "workspace_prefix_rename" {
 			t.Errorf("rename swallowed the workspace key %q", digit)

@@ -26,10 +26,6 @@ func TestDetect(t *testing.T) {
 			replaceable: true,
 		},
 		{
-			// The AUR package installs the goreleaser binary into /usr/bin, so
-			// its build stamp is identical to the curl script's and only the
-			// path says a package manager owns it. This is the row that fails
-			// if the build stamp is consulted before the path.
 			name:  "AUR package in /usr/bin",
 			facts: Facts{Path: "/usr/bin/tuios", BuiltBy: "goreleaser", Version: "v0.7.0"},
 			want:  OriginSystemPackage,
@@ -50,9 +46,6 @@ func TestDetect(t *testing.T) {
 			want:  OriginHomebrew,
 		},
 		{
-			// Intel macOS puts the Homebrew prefix at /usr/local, which is also
-			// the curl script's first choice. Only the environment separates
-			// them, and only for <prefix>/bin.
 			name: "homebrew prefix on intel",
 			facts: Facts{
 				Path: "/usr/local/bin/tuios", BuiltBy: "goreleaser",
@@ -79,8 +72,6 @@ func TestDetect(t *testing.T) {
 			want: OriginGoInstall,
 		},
 		{
-			// A local `go build` stamps the module version "(devel)", which is
-			// not a `go install` and not a release either.
 			name: "local go build",
 			facts: Facts{
 				Path: "/home/x/tuios/tuios", BuiltBy: "unknown",

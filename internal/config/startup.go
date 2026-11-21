@@ -28,8 +28,6 @@ func EffectiveDefault(opt Option) string {
 	return effectiveStartupDefault(opt, data)
 }
 
-// effectiveStartupDefault resolves a [startup] boolean against the bytes of a
-// config file that exists.
 func effectiveStartupDefault(opt Option, data []byte) string {
 	cfg, err := ParseUserConfig(data)
 	if err != nil {

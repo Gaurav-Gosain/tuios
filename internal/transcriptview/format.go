@@ -35,46 +35,20 @@ const (
 	FormatAmp = "amp-thread"
 )
 
-// decoded is what one record gave.
 type decoded struct {
 	entries []Entry
-	// key names the message the record wrote, for a format that writes a
-	// message again, whole, each time it changes (Gemini). The window drops
-	// what it holds of the same key, so a message shows once, as it is now.
-	key string
-	// rewind names a message the conversation was taken back to. The window
-	// drops it and everything after it.
-	rewind string
+	key     string
+	rewind  string
 }
 
-// format is one transcript format.
 type format struct {
-	// line decodes one record. It reports false for a record that does not
-	// decode at all, which the page counts in Skipped. A record that decodes
-	// and holds nothing to show returns true and no entries.
-	line func(r *reader, line []byte, off int64) (decoded, bool)
-	// doc, when set, turns a whole file into records, one per line, for a
-	// harness that rewrites one JSON document. It returns nil for a file it
-	// cannot read.
-	doc func(data []byte) []byte
-	// docExt limits doc to a file name with this ending, for a format whose
-	// harness wrote a document once and writes lines now. Empty applies doc
-	// to every file.
-	docExt string
-	// tree says the file is a tree of entries (Pi), where sibling entries are
-	// different conversations and the reader follows one branch. Like a
-	// document it is read whole, so its growth is told by its size and time
-	// and an offset into it is not a position in the conversation.
-	tree bool
-	// identity reads the session's identity from the start of a file
-	// (identity.go): the folder the agent ran in and when the session
-	// started. It is how a file found by search is given to a pane. Nil means
-	// the format writes no identity near its start, and only a path the
-	// harness reports is joined.
+	line     func(r *reader, line []byte, off int64) (decoded, bool)
+	doc      func(data []byte) []byte
+	docExt   string
+	tree     bool
 	identity func(r io.Reader, name string) Identity
 }
 
-// isDoc reports whether the file at path is read as a document.
 func (f format) isDoc(path string) bool {
 	return f.doc != nil && (f.docExt == "" || strings.HasSuffix(path, f.docExt))
 }
@@ -90,7 +64,6 @@ var formats = map[string]format{
 	FormatPi:      {line: piLine, tree: true},
 }
 
-// lookupFormat returns the format a name names, FormatClaude for "".
 func lookupFormat(name string) (format, bool) {
 	if name == "" {
 		name = FormatClaude
@@ -121,8 +94,6 @@ func IsDocument(name, path string) bool {
 	return ok && f.isDoc(path)
 }
 
-// dropRewound removes the entries of message rewind and every entry after
-// the first of them.
 func dropRewound(out []Entry, rewind string) []Entry {
 	for i := range out {
 		if out[i].key == rewind {
@@ -133,9 +104,6 @@ func dropRewound(out []Entry, rewind string) []Entry {
 	return out
 }
 
-// dropKey removes the entries of message key. It returns where the first of
-// them was, in out and as a place, or len(out) and an offset of -1 when out
-// held none.
 func dropKey(out []Entry, key string) ([]Entry, int, cursorPos) {
 	at, place := len(out), cursorPos{off: -1}
 	if key == "" {
@@ -156,17 +124,11 @@ func dropKey(out []Entry, key string) ([]Entry, int, cursorPos) {
 	return out[:n], at, place
 }
 
-// offID is the id of the i-th entry of the record at offset off.
-//
 //go:noinline
 func offID(off int64, i int) string {
 	return strconv.FormatInt(off, 36) + "-" + strconv.Itoa(i)
 }
 
-// keyID is the id of one part of a keyed message. A message written again
-// gives its parts the same ids, so the thread replaces them. The key and
-// the part come from the file, so they are hashed rather than sent.
-//
 //go:noinline
 func keyID(key, part string) string {
 	h := fnv.New64a()
@@ -176,13 +138,8 @@ func keyID(key, part string) string {
 	return "k" + strconv.FormatUint(h.Sum64(), 36)
 }
 
-// toolIDMax bounds a tool call id sent as it is.
 const toolIDMax = 96
 
-// cleanToolID is a tool call's id as the page carries it: as written when it
-// is short and plain, otherwise a hash of it. It only pairs a call with its
-// result, so its spelling does not matter.
-//
 //go:noinline
 func cleanToolID(s string) string {
 	if s == "" {
@@ -196,8 +153,6 @@ func cleanToolID(s string) string {
 	return keyID("tool", s)
 }
 
-// parseAt is an RFC 3339 time in milliseconds, 0 when it is not one.
-//
 //go:noinline
 func parseAt(s string) int64 {
 	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
@@ -206,10 +161,6 @@ func parseAt(s string) int64 {
 	return 0
 }
 
-// --- Entries every format makes.
-
-// textEntry is a text, thinking or error entry. Empty text gives none.
-//
 //go:noinline
 func textEntry(role, kind, s string) (Entry, bool) {
 	if strings.TrimSpace(s) == "" {
@@ -218,9 +169,6 @@ func textEntry(role, kind, s string) (Entry, bool) {
 	return Entry{Role: role, Kind: kind, raw: rawText(s)}, true
 }
 
-// resultEntry is a tool result: its status and the head of its text, cut
-// before Clean as Claude's are.
-//
 //go:noinline
 func resultEntry(toolID, text string, failed bool) Entry {
 	e := Entry{Role: RoleTool, Kind: KindToolResult, ToolID: cleanToolID(toolID), Status: StatusOK}
@@ -233,39 +181,19 @@ func resultEntry(toolID, text string, failed bool) Entry {
 	return e
 }
 
-// --- Tool calls.
-
-// toolClass is what a call does, which says how it is drawn.
 type toolClass int
 
 const (
 	classOther toolClass = iota
-	// classEdit replaces old text with new text in a file.
 	classEdit
-	// classWrite writes a whole file.
 	classWrite
-	// classTodos sets the todo list.
 	classTodos
-	// classPlan proposes a plan.
 	classPlan
-	// classPatch applies a patch in the apply_patch format (Codex).
 	classPatch
 )
 
-// --- Records.
-//
-// The formats other than Claude Code's are read through jobj, one decoded
-// JSON object, rather than a struct type per record. A struct type costs the
-// binary its descriptor, its field names and tags, and its share of the
-// decoder's reflection code. These formats change often and each has many
-// record shapes, so one walker keeps them cheap.
-
-// jobj is a decoded JSON object.
 type jobj map[string]any
 
-// parseObj decodes a record. ok is false for a record that is not JSON at
-// all. A JSON value other than an object decodes to nil and ok.
-//
 //go:noinline
 func parseObj(b []byte) (jobj, bool) {
 	var v any
@@ -275,16 +203,12 @@ func parseObj(b []byte) (jobj, bool) {
 	return asObj(v), true
 }
 
-// asObj is v as an object, nil when it is not one.
-//
 //go:noinline
 func asObj(v any) jobj {
 	m, _ := v.(map[string]any)
 	return m
 }
 
-// str is the first of keys that holds a string that is not empty.
-//
 //go:noinline
 func (o jobj) str(keys ...string) string {
 	for _, k := range keys {
@@ -295,22 +219,15 @@ func (o jobj) str(keys ...string) string {
 	return ""
 }
 
-// obj is the object at key, nil when there is none.
-//
 //go:noinline
 func (o jobj) obj(key string) jobj { return asObj(o[key]) }
 
-// list is the array at key, nil when there is none.
-//
 //go:noinline
 func (o jobj) list(key string) []any {
 	l, _ := o[key].([]any)
 	return l
 }
 
-// args is a call's arguments: an object, or a string holding one, as Codex
-// writes them.
-//
 //go:noinline
 func args(v any) jobj {
 	if s, ok := v.(string); ok {
@@ -320,9 +237,6 @@ func args(v any) jobj {
 	return asObj(v)
 }
 
-// command is the command a shell call runs: a string, or an argv joined.
-// Codex runs ["bash", "-lc", "script"], which shows as the script.
-//
 //go:noinline
 func command(a jobj) string {
 	for _, k := range []string{"command", "cmd"} {
@@ -349,11 +263,6 @@ func command(a jobj) string {
 	return ""
 }
 
-// commandLine is the command a shell call runs as one line a shell would
-// read: an argv has each word that needs it quoted, so sudo bash -lc 'cd x
-// && ls' keeps its script one word and CommandLabel can find it. Codex's
-// ["bash", "-lc", "script"] is the script, as command gives it.
-//
 //go:noinline
 func commandLine(a jobj) string {
 	for _, k := range []string{"command", "cmd"} {
@@ -378,15 +287,11 @@ func commandLine(a jobj) string {
 	return command(a)
 }
 
-// fileOf is the file a call acts on.
-//
 //go:noinline
 func fileOf(a jobj) string {
 	return a.str("file_path", "absolute_path", "filePath", "path", "dir_path", "target_file", "relative_workspace_path")
 }
 
-// targetOf is the one line that says what a call acts on.
-//
 //go:noinline
 func targetOf(a jobj) string {
 	if s := fileOf(a); s != "" {
@@ -398,8 +303,6 @@ func targetOf(a jobj) string {
 	return a.str("pattern", "url", "query", "search_term", "skill", "description", "objective", "prompt")
 }
 
-// callEntry is a tool call as decoded: a tool call with its target and, for
-// an edit, its diff; a todo list; or a plan.
 func callEntry(name, id string, class toolClass, a jobj) []Entry {
 	raw := &rawEntry{}
 	raw.tool, _ = cutString(oneLine(name), 4*toolMax)
@@ -439,8 +342,6 @@ func callEntry(name, id string, class toolClass, a jobj) []Entry {
 	return []Entry{e}
 }
 
-// patchEntries is one tool call per file an apply_patch patch changes, each
-// with its diff. They share the call's id, so each takes the result's status.
 func patchEntries(name, id, patch string) []Entry {
 	files := parseApplyPatch(patch)
 	out := make([]Entry, 0, len(files))
@@ -456,7 +357,6 @@ func patchEntries(name, id, patch string) []Entry {
 	return out
 }
 
-// planText is a plan as text: a string, or Codex's list of steps.
 func planText(v any) string {
 	if s, ok := v.(string); ok {
 		return s
@@ -470,8 +370,6 @@ func planText(v any) string {
 	return b.String()
 }
 
-// todoItems decodes a todo list: objects with a text under any of the names
-// the harnesses use and a status, or a Markdown checklist in one string.
 func todoItems(v any) []Todo {
 	if s, ok := v.(string); ok {
 		return markdownTodos(s)
@@ -487,7 +385,6 @@ func todoItems(v any) []Todo {
 	return out
 }
 
-// markdownTodos reads "- [ ] item", "- [x] item" and "- [~] item" lines.
 func markdownTodos(s string) []Todo {
 	var out []Todo
 	for rest := s; rest != ""; {
@@ -514,23 +411,14 @@ func markdownTodos(s string) []Todo {
 	return out
 }
 
-// --- Patches.
-
-// filePatch is the change a patch makes to one file: hunks with line
-// numbers (a unified diff), or old and new texts (an apply_patch patch).
 type filePatch struct {
 	file  string
 	hunks []ccPatch
 	pairs [][2]string
 }
 
-// patchFilesMax bounds the files one patch shows.
 const patchFilesMax = 32
 
-// parseUnified reads a unified diff, with or without a Markdown fence around
-// it, into the changes of each file it names. A hunk is as long as its header
-// says, so a removed line that starts with "--" is not read as a file name. A
-// diff with no file name is given the name fallback.
 func parseUnified(s, fallback string) []filePatch {
 	var out []filePatch
 	var hunk *ccPatch
@@ -553,8 +441,6 @@ func parseUnified(s, fallback string) []filePatch {
 				oldLeft--
 				newLeft--
 			default:
-				// "\ No newline at end of file", or a hunk shorter than
-				// its header.
 				if line == "" || line[0] != '\\' {
 					hunk, oldLeft, newLeft = nil, 0, 0
 				}
@@ -592,7 +478,6 @@ func parseUnified(s, fallback string) []filePatch {
 	return compactPatches(out)
 }
 
-// compactPatches drops the files with no hunk: they changed nothing to show.
 func compactPatches(out []filePatch) []filePatch {
 	n := 0
 	for _, f := range out {
@@ -604,8 +489,6 @@ func compactPatches(out []filePatch) []filePatch {
 	return out[:n]
 }
 
-// diffName is a file name from a "+++ " or "--- " line: without the a/ or b/
-// prefix and the tab and time after it.
 func diffName(s string) string {
 	if i := strings.IndexByte(s, '\t'); i >= 0 {
 		s = s[:i]
@@ -617,8 +500,6 @@ func diffName(s string) string {
 	return s
 }
 
-// hunkHeader reads "@@ -a,b +c,d @@": the start line and the line count of
-// each side. A count left out is 1.
 func hunkHeader(line string) (old, nw, oldN, newN int, ok bool) {
 	f := strings.Fields(line)
 	if len(f) < 3 || len(f[1]) < 2 || len(f[2]) < 2 || f[1][0] != '-' || f[2][0] != '+' {
@@ -634,7 +515,6 @@ func hunkHeader(line string) (old, nw, oldN, newN int, ok bool) {
 			return a, 1, true
 		}
 		n, err := strconv.Atoi(count)
-		// A count past what any hunk holds is not believed.
 		return a, n, err == nil && n >= 0 && n <= 1<<20
 	}
 	old, oldN, ok1 := side(f[1])
@@ -642,21 +522,6 @@ func hunkHeader(line string) (old, nw, oldN, newN int, ok bool) {
 	return old, nw, oldN, newN, ok1 && ok2
 }
 
-// parseApplyPatch reads Codex's apply_patch format:
-//
-//	*** Begin Patch
-//	*** Update File: path
-//	@@ context
-//	 kept
-//	-removed
-//	+added
-//	*** Add File: path
-//	+line
-//	*** Delete File: path
-//	*** End Patch
-//
-// Each "@@" chunk of an update becomes an old and a new text, which the diff
-// is worked out from, since the format gives no line numbers.
 func parseApplyPatch(s string) []filePatch {
 	var out []filePatch
 	var cur *filePatch
@@ -696,7 +561,6 @@ func parseApplyPatch(s string) []filePatch {
 				cur.file = strings.TrimSpace(line[len("*** Move to: "):])
 			}
 		case strings.HasPrefix(line, "***"):
-			// Begin Patch, End Patch, End of File.
 		case cur == nil:
 		case strings.HasPrefix(line, "@@"):
 			if !adding {
@@ -725,5 +589,4 @@ func parseApplyPatch(s string) []filePatch {
 	return out
 }
 
-// itoa is strconv.Itoa, short for the part names of keyed ids.
 func itoa(i int) string { return strconv.Itoa(i) }
