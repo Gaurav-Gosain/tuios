@@ -106,7 +106,7 @@ func TestMacConfigWorksOnLinux(t *testing.T) {
 
 	// opt+2 then opt+1, as Alt+2 and Alt+1. The session starts on
 	// workspace 1, so the first press is what makes the second one count.
-	openPaneOnTheSplash(t, term)
+	openPaneOnTheSplash(t, term, base)
 	if err := term.SendKeys(tuitest.Alt("2")); err != nil {
 		t.Fatalf("send Alt+2: %v", err)
 	}
@@ -146,10 +146,10 @@ func TestMacConfigWorksOnLinux(t *testing.T) {
 // workspace key pressed from the splash stays on 1, which is the empty
 // workspace on screen, so a test that proves a key is bound by where it goes
 // opens a pane first: the key then lands on 2.
-func openPaneOnTheSplash(t *testing.T, term *tuitest.Terminal) {
+func openPaneOnTheSplash(t *testing.T, term *tuitest.Terminal, base string) {
 	t.Helper()
 	newWindow(t, term)
-	toWindowMode(t, term)
+	toWindowMode(t, term, base)
 }
 
 // TestUnreadableKeyKeepsTheRestOfTheFile is the fallback of issue #556. One
@@ -194,7 +194,7 @@ terminal_exit_mode = ['hyper+esc']
 	}
 
 	// switch_workspace_2 had only the bad key, so it is back on its default.
-	openPaneOnTheSplash(t, term)
+	openPaneOnTheSplash(t, term, base)
 	if err := term.SendKeys(tuitest.Alt("2")); err != nil {
 		t.Fatalf("send Alt+2: %v", err)
 	}
@@ -303,7 +303,7 @@ switch_workspace_1 = ['hyper+1']
 		t.Fatalf("the first frame never settled: %v\n%s", err, term.Snapshot())
 	}
 
-	openPaneOnTheSplash(t, term)
+	openPaneOnTheSplash(t, term, base)
 	if err := term.SendKeys(tuitest.Alt("1")); err != nil {
 		t.Fatalf("send Alt+1: %v", err)
 	}
@@ -362,7 +362,7 @@ func TestReloadWithABadKeyAppliesTheRest(t *testing.T) {
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("the first frame never settled: %v\n%s", err, term.Snapshot())
 	}
-	openPaneOnTheSplash(t, term)
+	openPaneOnTheSplash(t, term, base)
 
 	saveConfigLikeAnEditor(t, base, `[keybindings]
 leader_key = 'ctrl+s'

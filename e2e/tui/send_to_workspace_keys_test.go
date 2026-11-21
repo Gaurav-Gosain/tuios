@@ -122,7 +122,7 @@ func TestSendToWorkspaceKeyStaysHere(t *testing.T) {
 
 	// 2. In window mode, ctrl+alt+3 sends the pane focus went to on to
 	// workspace 3.
-	toWindowMode(t, term)
+	toWindowMode(t, term, base)
 	second := focusedPaneIn(t, base, sess)
 	sendKeys(t, term, ctrlAltDigit('3'))
 	waitPaneWorkspace(t, term, base, sess, second, 3, "ctrl+alt+3 in window mode")
