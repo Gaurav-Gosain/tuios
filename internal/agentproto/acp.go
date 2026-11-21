@@ -8,9 +8,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 	"tuios.dev/acp"
 )
 
@@ -606,10 +608,17 @@ func (a *ACP) onPermission(p *acp.PermissionRequest) {
 	go func() {
 		select {
 		case <-p.Withdrawn():
-			// The agent withdrew the question: it is answered cancelled,
-			// which the spec still wants, and the pane drops it.
-			perm.Cancel()
+			// The agent withdrew the question: the pane drops it, and it is
+			// answered cancelled, which the spec still wants. The pane hears
+			// first: the agent can end its turn as soon as it has the
+			// answer, and a turn that ended before the pane heard made it
+			// say "the turn ended" for a question the agent took back. The
+			// pane shows what was emitted before it ends a turn.
 			a.emit(Withdrawn{Permission: perm})
+			if hold := testknob.Millis("acp_withdraw_hold_ms"); hold > 0 {
+				time.Sleep(hold)
+			}
+			perm.Cancel()
 		case <-perm.answered:
 		}
 	}()
