@@ -40,8 +40,6 @@ func TestExecTokenizing(t *testing.T) {
 		})
 	}
 
-	// Refused: an unterminated quote, and an Exec with no program to run,
-	// whether it is blank or only a removed field code.
 	for _, in := range []string{`app "unclosed`, `%f`, ``} {
 		if got, err := parseExec(in, "/p/x.desktop", "n", ""); err == nil {
 			t.Errorf("parseExec(%q) = %q, want an error", in, got)
@@ -50,7 +48,6 @@ func TestExecTokenizing(t *testing.T) {
 }
 
 func TestExecFieldCodes(t *testing.T) {
-	// %i expands to two arguments, or to none when there is no Icon.
 	got, err := parseExec(`app %i --x`, "/p/x.desktop", "The Name", "myicon")
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +64,6 @@ func TestExecFieldCodes(t *testing.T) {
 		t.Fatalf("%%i without icon = %q, want %q", got, want)
 	}
 
-	// %c is the translated name, %k the file location.
 	got, err = parseExec(`app %c %k`, "/p/x.desktop", "The Name", "")
 	if err != nil {
 		t.Fatal(err)
@@ -90,8 +86,6 @@ func TestExecIsNotAShell(t *testing.T) {
 	if argv[0] != "app;" {
 		t.Fatalf("expected the semicolon to stay glued to the literal token, got %q", argv)
 	}
-	// The metacharacters survive as literal argv elements, which is the point:
-	// nothing downstream will ever interpret them.
 	if !slices.Contains(argv, "|") || !slices.Contains(argv, "&") {
 		t.Fatalf("expected the reserved characters to survive as plain arguments, got %q", argv)
 	}

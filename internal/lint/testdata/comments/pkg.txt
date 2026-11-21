@@ -1,3 +1,0 @@
-pkg/applist 460
-pkg/fuzzy 69
-pkg/tuios 13

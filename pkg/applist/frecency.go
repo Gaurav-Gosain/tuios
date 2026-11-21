@@ -19,18 +19,13 @@ import (
 // barely matches above one it matches exactly.
 const MaxBoost = 32
 
-// frecencyVersion is stamped on the file so a later format can recognise this
-// one rather than guess at it.
 const frecencyVersion = 1
 
-// maxRecords bounds the file. A launch history is a convenience, and every
-// record past the few hundred a person actually uses is dead weight that still
-// has to be parsed on open.
 const maxRecords = 512
 
 type record struct {
 	Count int   `json:"n"`
-	Last  int64 `json:"t"` // unix seconds
+	Last  int64 `json:"t"`
 }
 
 type frecencyFile struct {
@@ -47,8 +42,7 @@ type Frecency struct {
 	mu   sync.Mutex
 	path string
 	recs map[string]record
-	// now is the clock, indirected so tests can age a record without sleeping.
-	now func() time.Time
+	now  func() time.Time
 }
 
 // DefaultPath is where tuios keeps the launch history. It is read at call time
@@ -142,7 +136,6 @@ func (f *Frecency) Save() error {
 	return writeAtomic(f.path, data)
 }
 
-// encodeLocked marshals the history, pruning to the records worth keeping.
 func (f *Frecency) encodeLocked() ([]byte, error) {
 	apps := f.recs
 	if len(apps) > maxRecords {
@@ -152,8 +145,6 @@ func (f *Frecency) encodeLocked() ([]byte, error) {
 	return jsonx.Marshal(frecencyFile{Version: frecencyVersion, Apps: apps})
 }
 
-// pruneLocked keeps the strongest maxRecords entries, which is the set a person
-// would notice losing.
 func (f *Frecency) pruneLocked() map[string]record {
 	now := f.now().Unix()
 	type ranked struct {
@@ -180,9 +171,6 @@ func (f *Frecency) pruneLocked() map[string]record {
 	return kept
 }
 
-// writeAtomic replaces path in one step, following the pattern the session
-// resurrection state uses. Two processes can share a launch history, and half a
-// JSON file is a history that never loads again.
 func writeAtomic(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
@@ -193,13 +181,13 @@ func writeAtomic(path string, data []byte) error {
 		return err
 	}
 	name := tmp.Name()
-	defer func() { _ = os.Remove(name) }() // no-op once the rename succeeded
+	defer func() { _ = os.Remove(name) }()
 	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close() // the write already failed; that error is the one to return
+		_ = tmp.Close()
 		return err
 	}
 	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close() // the write already failed; that error is the one to return
+		_ = tmp.Close()
 		return err
 	}
 	if err := tmp.Close(); err != nil {

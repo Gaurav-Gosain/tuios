@@ -2,37 +2,6 @@
 
 package applist
 
-// The freedesktop Desktop Entry Specification, the parts a launcher must get
-// right. This file follows the spec section by section and says where it stops.
-// References are to version 1.5.
-//
-//   - Basic format: groups in [brackets], key=value lines, # comments, and
-//     "space before and after the equals sign should be ignored".
-//   - Value types: `string` and `localestring` carry their own escapes
-//     (\s \n \t \r \\), which are resolved before any further parsing. Exec is
-//     a `string`, so its value is unescaped once here and then tokenized again
-//     by the Exec rules in execparse.go. Two layers, in that order; conflating
-//     them is how a launcher ends up mangling backslashes.
-//   - Localized keys: Name[lang_COUNTRY@MODIFIER] and its three shorter forms,
-//     matched against LC_ALL / LC_MESSAGES / LANG in the spec's precedence
-//     order.
-//   - Hidden=true means "the file is deleted"; NoDisplay=true means "do not put
-//     me in a menu". They are different keys with different meanings and both
-//     are honoured, separately.
-//   - OnlyShowIn / NotShowIn are matched against $XDG_CURRENT_DESKTOP, which is
-//     a colon-separated list, not a single name.
-//   - TryExec names a binary that must resolve in $PATH; if it does not, the
-//     entry is not installed and must not be offered.
-//   - Desktop file IDs: the path relative to an applications directory with '/'
-//     replaced by '-'. The first directory in the search order to define an ID
-//     wins, which is the whole mechanism by which a user overrides a system
-//     entry.
-//   - Actions: each name in Actions= must have a matching
-//     [Desktop Action <name>] group. They are surfaced as entries of their own.
-//
-// Desktop entries are a Linux and BSD concept, and tuios also builds for
-// Windows, which is why this file is unix-only.
-
 import (
 	"bufio"
 	"cmp"
@@ -91,10 +60,8 @@ type DesktopEntry struct {
 	Keywords []string
 }
 
-// ---- raw file model ----
-
 type entryGroup struct {
-	keys map[string]string // key, with any [locale] suffix intact, to raw value
+	keys map[string]string
 }
 
 type entryFile struct {
@@ -103,7 +70,6 @@ type entryFile struct {
 
 func (f *entryFile) group(name string) *entryGroup { return f.groups[name] }
 
-// raw returns a key's value with the string escapes already resolved.
 func (g *entryGroup) raw(key string) (string, bool) {
 	if g == nil {
 		return "", false
@@ -118,17 +84,10 @@ func (g *entryGroup) raw(key string) (string, bool) {
 func (g *entryGroup) str(key string) string { v, _ := g.raw(key); return v }
 
 func (g *entryGroup) boolean(key string) bool {
-	// The spec's `boolean` type is exactly "true" or "false". Anything else is
-	// invalid, and treating invalid as false beats guessing.
 	v, _ := g.raw(key)
 	return v == "true"
 }
 
-// list splits a `string(s)` value on unescaped semicolons.
-//
-// The spec escapes a literal semicolon as "\;", and that escape survives
-// unescapeValue, which handles only \s \n \t \r \\, so the split happens first
-// and the remaining "\;" is resolved per element.
 func (g *entryGroup) list(key string) []string {
 	if g == nil {
 		return nil
@@ -158,8 +117,6 @@ func (g *entryGroup) list(key string) []string {
 	return out
 }
 
-// localizedList is list with the spec's locale precedence applied first, for
-// the `localestring(s)` keys. Keywords is one.
 func (g *entryGroup) localizedList(key string, loc locale) []string {
 	if g == nil {
 		return nil
@@ -172,8 +129,6 @@ func (g *entryGroup) localizedList(key string, loc locale) []string {
 	return g.list(key)
 }
 
-// localized resolves key[locale] per the spec's matching order:
-// lang_COUNTRY@MODIFIER, lang_COUNTRY, lang@MODIFIER, lang, then unlocalized.
 func (g *entryGroup) localized(key string, loc locale) string {
 	if g == nil {
 		return ""
@@ -186,12 +141,6 @@ func (g *entryGroup) localized(key string, loc locale) string {
 	return g.str(key)
 }
 
-// unescapeValue resolves the escapes the spec defines for `string` and
-// `localestring` values.
-//
-// "\;" is deliberately left alone: it is a list separator escape and belongs to
-// list. An Exec value's own backslashes are left alone for the same reason,
-// since the Exec tokenizer has its own rules for them.
 func unescapeValue(v string) string {
 	if !strings.ContainsRune(v, '\\') {
 		return v
@@ -216,8 +165,6 @@ func unescapeValue(v string) string {
 		case '\\':
 			b.WriteByte('\\')
 		default:
-			// Not a defined escape: keep both bytes, so "\;" survives for list
-			// and an Exec value's backslashes reach the Exec tokenizer.
 			b.WriteByte('\\')
 			b.WriteByte(v[i])
 		}
@@ -225,11 +172,6 @@ func unescapeValue(v string) string {
 	return b.String()
 }
 
-// parseEntryFile reads one .desktop file into groups.
-//
-// A duplicate key inside a group keeps the first, which honours the spec's
-// "should not occur" without rejecting the files that do it anyway. Re-entering
-// a group name reuses the group already built for it.
 func parseEntryFile(path string) (*entryFile, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -243,7 +185,6 @@ func parseEntryFile(path string) (*entryFile, error) {
 	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
 	for sc.Scan() {
 		line := sc.Text()
-		// A UTF-8 BOM at the head of the file is not part of the group name.
 		line = strings.TrimPrefix(line, "\ufeff")
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
@@ -260,7 +201,7 @@ func parseEntryFile(path string) (*entryFile, error) {
 			continue
 		}
 		if cur == nil {
-			continue // keys before any group header are not valid
+			continue
 		}
 		eq := strings.IndexByte(line, '=')
 		if eq < 0 {
@@ -279,8 +220,6 @@ func parseEntryFile(path string) (*entryFile, error) {
 	return ef, sc.Err()
 }
 
-// ---- locale ----
-
 type locale struct{ lang, country, modifier string }
 
 func currentLocale() locale {
@@ -291,7 +230,6 @@ func currentLocale() locale {
 			break
 		}
 	}
-	// C and POSIX are the unlocalized locale, so no [suffix] key may match.
 	if v == "" || v == "C" || v == "POSIX" {
 		return locale{}
 	}
@@ -300,7 +238,6 @@ func currentLocale() locale {
 		l.modifier = v[i+1:]
 		v = v[:i]
 	}
-	// The encoding (".UTF-8") is stripped and never used for matching.
 	if i := strings.IndexByte(v, '.'); i >= 0 {
 		v = v[:i]
 	}
@@ -312,8 +249,6 @@ func currentLocale() locale {
 	return l
 }
 
-// candidates lists the [suffix] forms to try, most specific first. An empty
-// result means the unlocalized key is the only one that may be used.
 func (l locale) candidates() []string {
 	if l.lang == "" {
 		return nil
@@ -330,8 +265,6 @@ func (l locale) candidates() []string {
 	}
 	return append(out, l.lang)
 }
-
-// ---- scanning ----
 
 // DesktopDirs returns the XDG application directories, highest precedence
 // first: $XDG_DATA_HOME/applications, then applications/ under each entry of
@@ -363,13 +296,6 @@ func DesktopDirs() []string {
 	return out
 }
 
-// currentDesktops is $XDG_CURRENT_DESKTOP as the colon-separated list it
-// actually is.
-//
-// tuios deliberately does not substitute its own name here. The point of
-// reading desktop entries is to offer the applications the user's normal
-// launcher offers, and claiming to be a desktop nobody has heard of would hide
-// every entry carrying OnlyShowIn=GNOME and friends.
 func currentDesktops() []string {
 	v := os.Getenv("XDG_CURRENT_DESKTOP")
 	if v == "" {
@@ -406,12 +332,6 @@ func ScanDesktop(dirs []string) []DesktopEntry {
 	return out
 }
 
-// walkDesktopFiles calls fn for each .desktop file that wins its desktop-file
-// ID, in directory precedence order.
-//
-// An ID is marked taken even when the file behind it turns out to be unusable.
-// A user's Hidden=true override is still an override, and falling through to
-// the system copy would defeat the mechanism it exists for.
 func walkDesktopFiles(dirs []string, fn func(path, id string)) {
 	seen := make(map[string]struct{}, 512)
 	for _, dir := range dirs {
@@ -420,8 +340,6 @@ func walkDesktopFiles(dirs []string, fn func(path, id string)) {
 			continue
 		}
 		_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
-			// An unreadable subtree is not fatal to the scan; skip it and keep
-			// walking the directories that do work.
 			if err != nil || d.IsDir() || !strings.HasSuffix(p, ".desktop") {
 				return nil
 			}
@@ -429,7 +347,6 @@ func walkDesktopFiles(dirs []string, fn func(path, id string)) {
 			if rerr != nil {
 				return nil
 			}
-			// Desktop file ID: the relative path with separators as dashes.
 			id := strings.ReplaceAll(filepath.ToSlash(rel), "/", "-")
 			if _, dup := seen[id]; dup {
 				return nil
@@ -441,8 +358,6 @@ func walkDesktopFiles(dirs []string, fn func(path, id string)) {
 	}
 }
 
-// sortDesktopEntries orders entries the way a menu reads them, case-folded by
-// Name with the ID breaking ties so the order does not depend on walk order.
 func sortDesktopEntries(entries []DesktopEntry) {
 	sortx.SortFunc(entries, func(a, b DesktopEntry) int {
 		if c := cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)); c != 0 {
@@ -452,9 +367,6 @@ func sortDesktopEntries(entries []DesktopEntry) {
 	})
 }
 
-// entriesFromFile returns the offerable entries in one .desktop file: the
-// application, then one per valid action. It returns nothing when the file
-// fails any of the spec's filters.
 func entriesFromFile(path, id string, loc locale, desktops []string) []DesktopEntry {
 	ef, err := parseEntryFile(path)
 	if err != nil {
@@ -467,8 +379,6 @@ func entriesFromFile(path, id string, loc locale, desktops []string) []DesktopEn
 	if g.str("Type") != "Application" {
 		return nil
 	}
-	// Hidden means the file is to be treated as if it did not exist at all. It
-	// is not the same key as NoDisplay and not the same meaning.
 	if g.boolean("Hidden") {
 		return nil
 	}
@@ -478,17 +388,12 @@ func entriesFromFile(path, id string, loc locale, desktops []string) []DesktopEn
 	if try := g.str("TryExec"); try != "" && !resolvesInPath(try) {
 		return nil
 	}
-	// NoDisplay: installed and launchable, but not to be offered in a menu. A
-	// launcher is a menu.
 	if g.boolean("NoDisplay") {
 		return nil
 	}
 
 	name := g.localized("Name", loc)
 	if name == "" {
-		// Fall back to the base name, not the path relative to the applications
-		// root: an entry in a subdirectory would otherwise be shown as
-		// "kde/kate", which is a location and not a name.
 		name = strings.TrimSuffix(filepath.Base(path), ".desktop")
 	}
 
@@ -505,8 +410,6 @@ func entriesFromFile(path, id string, loc locale, desktops []string) []DesktopEn
 		Keywords: g.localizedList("Keywords", loc),
 	}
 
-	// An application whose Exec leaves no program to run is not offerable, and
-	// neither are its actions: there is no application behind them.
 	argv, ok := entryArgv(g.str("Exec"), path, name, base.Icon)
 	if !ok {
 		return nil
@@ -514,8 +417,6 @@ func entriesFromFile(path, id string, loc locale, desktops []string) []DesktopEn
 	base.Argv = argv
 	out := []DesktopEntry{base}
 
-	// Actions. Only the names listed in Actions= are valid, and each needs its
-	// own [Desktop Action <name>] group.
 	for _, an := range g.list("Actions") {
 		ag := ef.group("Desktop Action " + an)
 		if ag == nil {
@@ -524,14 +425,10 @@ func entriesFromFile(path, id string, loc locale, desktops []string) []DesktopEn
 		if ag.boolean("Hidden") || ag.boolean("NoDisplay") {
 			continue
 		}
-		// The action's own Name is the verb. Without one, the action identifier
-		// is all there is to show.
 		verb := ag.localized("Name", loc)
 		if verb == "" {
 			verb = an
 		}
-		// %c is "the translated name of the application", so the parent's Name
-		// feeds it rather than the combined label.
 		aicon := ag.str("Icon")
 		aargv, aok := entryArgv(ag.str("Exec"), path, name, aicon)
 		if !aok {
@@ -548,10 +445,6 @@ func entriesFromFile(path, id string, loc locale, desktops []string) []DesktopEn
 	return out
 }
 
-// entryArgv resolves one Exec value to an argv, reporting whether the entry can
-// be offered at all. A blank Exec, an unterminated quote, or a value that is
-// nothing but removed field codes all leave no program to run, and a row that
-// fails on activation is worse than a row that is not there.
 func entryArgv(execVal, path, nameVal, iconVal string) ([]string, bool) {
 	if strings.TrimSpace(execVal) == "" {
 		return nil, false
@@ -563,8 +456,6 @@ func entryArgv(execVal, path, nameVal, iconVal string) ([]string, bool) {
 	return argv, true
 }
 
-// showIn implements OnlyShowIn / NotShowIn against the colon-separated
-// $XDG_CURRENT_DESKTOP list. Per the spec, comparison is by exact string.
 func showIn(g *entryGroup, desktops []string) bool {
 	if only := g.list("OnlyShowIn"); len(only) > 0 {
 		for _, d := range desktops {
@@ -582,8 +473,6 @@ func showIn(g *entryGroup, desktops []string) bool {
 	return true
 }
 
-// resolvesInPath implements TryExec: "if the name is not an absolute path, the
-// $PATH environment variable is consulted".
 func resolvesInPath(name string) bool {
 	if strings.ContainsRune(name, '/') {
 		st, err := os.Stat(name)
@@ -592,8 +481,6 @@ func resolvesInPath(name string) bool {
 	_, err := exec.LookPath(name)
 	return err == nil
 }
-
-// ---- cache ----
 
 // DesktopCache holds a scan and reparses only the files that changed.
 //
@@ -617,7 +504,7 @@ type DesktopCache struct {
 
 type cachedDesktopFile struct {
 	mtime   time.Time
-	entries []DesktopEntry // the application and its actions, nil when filtered out
+	entries []DesktopEntry
 }
 
 // NewDesktopCache returns an empty cache. Its first Refresh is a full scan.
@@ -663,8 +550,6 @@ func (c *DesktopCache) refresh(dirs []string) ([]DesktopEntry, bool) {
 			mtime = info.ModTime()
 		}
 		prev, had := c.files[path]
-		// A zero mtime means the file could not be stat'd, so it gets reparsed
-		// rather than served from a listing that may no longer be true.
 		if had && !mtime.IsZero() && prev.mtime.Equal(mtime) {
 			fresh[path] = prev
 			out = append(out, prev.entries...)
@@ -676,8 +561,6 @@ func (c *DesktopCache) refresh(dirs []string) ([]DesktopEntry, bool) {
 		out = append(out, parsed...)
 	})
 
-	// A file that disappeared is still a change, and the count is the only
-	// evidence left of it once the walk no longer reaches it.
 	if len(fresh) != len(c.files) {
 		changed = true
 	}

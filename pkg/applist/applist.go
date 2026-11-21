@@ -67,9 +67,6 @@ type Entry struct {
 	// means SourcePath.
 	Source string
 
-	// The fields below come from a .desktop file and are empty on a $PATH
-	// entry, which has nothing but a name and a path to offer.
-
 	// Display is the human name, such as "Firefox Web Browser". It is the name
 	// the user knows the program by, which the basename often is not.
 	Display string
@@ -157,8 +154,6 @@ func splitPath(path string) []string {
 		}
 		d = filepath.Clean(d)
 		if _, dup := seen[d]; dup {
-			// A duplicated $PATH entry can only ever be shadowed by its first
-			// appearance, so scanning it twice is pure cost.
 			continue
 		}
 		seen[d] = struct{}{}
@@ -193,8 +188,6 @@ func merge(out []Entry, seen map[string]struct{}, entries []Entry) []Entry {
 	return out
 }
 
-// readDir returns the executables directly in dir, in name order, before
-// deduplication against earlier directories.
 func readDir(dir string) []Entry {
 	items, err := os.ReadDir(dir)
 	if err != nil {
@@ -211,8 +204,6 @@ func readDir(dir string) []Entry {
 			continue
 		}
 		if info.Mode()&fs.ModeSymlink != 0 {
-			// A symlink's own mode says nothing, and a dangling one must not be
-			// offered, so the target is what gets asked.
 			if info, err = os.Stat(path); err != nil {
 				continue
 			}
@@ -278,9 +269,6 @@ func (c *Cache) refresh(dirs []string) ([]Entry, bool) {
 			mtime = info.ModTime()
 		}
 		prev, had := c.dirs[dir]
-		// A zero mtime means the directory could not be stat'd, and reusing a
-		// cached listing for a directory that has gone away would keep offering
-		// programs that are no longer there.
 		if had && !mtime.IsZero() && prev.mtime.Equal(mtime) {
 			fresh[dir] = prev
 			out = merge(out, seen, prev.entries)

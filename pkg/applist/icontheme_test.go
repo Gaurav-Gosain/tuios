@@ -8,15 +8,6 @@ import (
 	"testing"
 )
 
-// iconTree builds a throwaway icon hierarchy and points the environment at it,
-// so every lookup in these tests sees exactly the themes written here and none
-// of the ones installed on the machine running them.
-//
-// The layout is three themes in the system base directory. Test declares one
-// directory per size plus a scalable one and inherits Parent; Parent holds a
-// single 24 pixel directory and inherits nothing, which is what forces the walk
-// on to hicolor; hicolor holds one 48 pixel directory, so an icon that only
-// exists there proves the last themed step was taken.
 func iconTree(t *testing.T) (user, sys string) {
 	t.Helper()
 	root := t.TempDir()
@@ -80,8 +71,6 @@ func writeIconIndex(t *testing.T, base, theme, index string) {
 	}
 }
 
-// writeIcon creates an icon file and returns its path. The contents do not
-// matter: nothing here decodes an image, only finds one.
 func writeIcon(t *testing.T, parts ...string) string {
 	t.Helper()
 	path := filepath.Join(parts...)
@@ -112,9 +101,6 @@ func TestIconFinderStripsImageExtension(t *testing.T) {
 	_, sys := iconTree(t)
 	want := writeIcon(t, sys, "icons", "Test", "22x22", "apps", "tuios-suffixed.png")
 
-	// A relative name with an extension names an icon, not a file, since there
-	// is no directory to resolve it against. The extension is dropped and the
-	// theme answers.
 	if got := NewIconFinder("Test").Find("tuios-suffixed.png", 22); got != want {
 		t.Errorf("Find = %q, want %q", got, want)
 	}
@@ -129,8 +115,6 @@ Directories=
 `)
 	writeIcon(t, sys, "icons", "Test", "22x22", "apps", "tuios-ring.png")
 
-	// A theme that inherits itself must be walked once and then left, or the
-	// lookup never returns at all.
 	if got := NewIconFinder("Ring").Find("tuios-ring", 22); got == "" {
 		t.Error("Find = \"\", want the copy reached through the cycle")
 	}

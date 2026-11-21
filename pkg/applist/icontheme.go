@@ -15,9 +15,6 @@ import (
 // lookup looks before giving up on themes entirely.
 const HicolorTheme = "hicolor"
 
-// iconExts and rasterIconExts are the extensions the spec defines, in the order
-// it prefers them. Two lists rather than one filtered at each use, because the
-// choice is made once per lookup and the order matters more than the saving.
 var (
 	iconExts       = []string{".png", ".svg", ".xpm"}
 	rasterIconExts = []string{".png", ".xpm"}
@@ -46,24 +43,12 @@ type IconFinder struct {
 
 	theme string
 
-	mu sync.Mutex
-	// bases are the icon base directories in search order, resolved once from
-	// the environment.
-	bases []string
-	// order is the theme names to search, in order, and is nil until the first
-	// lookup forces the Inherits chain to be walked.
-	order []string
-	// themes holds one parsed index.theme per theme name. A nil value records a
-	// theme with no readable index, so it is not opened a second time.
-	themes map[string]*iconTheme
-	// dirSeen answers whether a directory exists, because a lookup asks about
-	// the same few hundred subdirectories once per icon name and most of them
-	// are not there.
+	mu      sync.Mutex
+	bases   []string
+	order   []string
+	themes  map[string]*iconTheme
 	dirSeen map[string]bool
-	// found caches lookups, misses included. A missing icon is the common case
-	// and the expensive one, since it is the only case that walks every
-	// directory of every theme before it can answer.
-	found map[iconKey]string
+	found   map[iconKey]string
 }
 
 type iconKey struct {
@@ -115,11 +100,6 @@ func (f *IconFinder) Find(name string, size int) string {
 	if direct, isPath := f.direct(name, raster); isPath {
 		return direct
 	}
-	// A relative name that carries an extension is not a path: resolving it
-	// would mean resolving it against a working directory a launcher does not
-	// have, and running off whatever sits in the current directory is how a
-	// launcher becomes an attack. The extension is dropped and the bare name
-	// searched, which is what such a value meant.
 	name = trimImageExt(name)
 
 	key := iconKey{name: name, size: size, raster: raster}
@@ -133,18 +113,10 @@ func (f *IconFinder) Find(name string, size int) string {
 	return path
 }
 
-// imageExts is what counts as an extension on an icon name. The list is
-// deliberately short: most icon names on a modern system are reverse domain
-// names, so anything trailing a dot is an extension by the usual reading and
-// stripping it turns com.visualstudio.code.oss into com.visualstudio.code,
-// which is nothing. Only a name that ends in a format someone could actually
-// have meant as a file is treated as one.
 var imageExts = map[string]struct{}{
 	".png": {}, ".svg": {}, ".xpm": {}, ".jpg": {}, ".jpeg": {}, ".gif": {}, ".bmp": {},
 }
 
-// trimImageExt drops an image extension from an icon name, leaving every other
-// kind of dotted name alone.
 func trimImageExt(name string) string {
 	ext := filepath.Ext(name)
 	if _, ok := imageExts[strings.ToLower(ext)]; !ok {
@@ -153,10 +125,6 @@ func trimImageExt(name string) string {
 	return name[:len(name)-len(ext)]
 }
 
-// direct answers a name that already identifies a file, and reports whether it
-// was such a name at all. The second result separates "this was a path and it
-// is not there" from "this was an icon name", because only the first is
-// finished and only the second is worth a theme walk.
 func (f *IconFinder) direct(name string, raster bool) (string, bool) {
 	if !filepath.IsAbs(name) {
 		return "", false
@@ -170,8 +138,6 @@ func (f *IconFinder) direct(name string, raster bool) (string, bool) {
 	return "", true
 }
 
-// lookup walks the themes in order and then the unthemed directories. The
-// caller holds f.mu.
 func (f *IconFinder) lookup(name string, size int, raster bool) string {
 	exts := iconExts
 	if raster {
@@ -182,10 +148,6 @@ func (f *IconFinder) lookup(name string, size int, raster bool) string {
 			return path
 		}
 	}
-	// The unthemed fallback, for icons dropped straight into a base directory.
-	// /usr/share/pixmaps is the one that earns its place: it is where packages
-	// that predate icon themes still install, and where a real share of the
-	// Icon= values on a real system are the only copy there is.
 	for _, base := range f.bases {
 		for _, ext := range exts {
 			path := filepath.Join(base, name+ext)
@@ -197,14 +159,6 @@ func (f *IconFinder) lookup(name string, size int, raster bool) string {
 	return ""
 }
 
-// lookupIn implements the spec's LookupIcon for one theme: the first
-// size-matching directory that holds the icon wins outright, and failing that
-// the directory with the smallest size distance does.
-//
-// The spec makes two passes over the directory list to say that. One is enough,
-// because a directory that matches the size is returned the moment its file is
-// found, and a directory that does not match can only ever improve the closest
-// candidate, never beat a match found further down the list.
 func (f *IconFinder) lookupIn(theme, name string, size int, exts []string) string {
 	t := f.themeIndex(theme)
 	if t == nil {
@@ -217,8 +171,6 @@ func (f *IconFinder) lookupIn(theme, name string, size int, exts []string) strin
 		matches := d.matches(size)
 		dist := d.distance(size)
 		if !matches && best != "" && dist >= bestDist {
-			// Strictly worse than what is already held, so the stats could only
-			// turn up a file that would then be discarded.
 			continue
 		}
 		for _, base := range f.bases {
@@ -237,8 +189,6 @@ func (f *IconFinder) lookupIn(theme, name string, size int, exts []string) strin
 				if best == "" || dist < bestDist {
 					best, bestDist = path, dist
 				}
-				// The extensions are in preference order, so the rest of them
-				// in this directory can only be worse.
 				break
 			}
 		}
@@ -246,13 +196,6 @@ func (f *IconFinder) lookupIn(theme, name string, size int, exts []string) strin
 	return best
 }
 
-// themeOrder returns the theme names to search: the requested theme, then its
-// Inherits chain breadth first, then hicolor.
-//
-// Breadth first is what the spec's recursion amounts to once a theme is
-// forbidden from being visited twice, and forbidding that is what stops a theme
-// which inherits itself, directly or around a ring of others, from looping
-// forever. The caller holds f.mu.
 func (f *IconFinder) themeOrder() []string {
 	if f.order != nil {
 		return f.order
@@ -279,9 +222,6 @@ func (f *IconFinder) themeOrder() []string {
 	return order
 }
 
-// themeIndex returns the parsed index.theme for a theme name, parsing it at
-// most once and returning nil for a theme with no readable index. The caller
-// holds f.mu.
 func (f *IconFinder) themeIndex(name string) *iconTheme {
 	if t, ok := f.themes[name]; ok {
 		return t
@@ -289,9 +229,6 @@ func (f *IconFinder) themeIndex(name string) *iconTheme {
 	var t *iconTheme
 	for _, base := range f.bases {
 		if parsed := parseIconIndex(filepath.Join(base, name, "index.theme")); parsed != nil {
-			// The first base directory holding an index defines the theme. A
-			// later one may add files to it, but it does not get to redefine
-			// the shape of a theme the user's own directory already described.
 			t = parsed
 			break
 		}
@@ -300,9 +237,6 @@ func (f *IconFinder) themeIndex(name string) *iconTheme {
 	return t
 }
 
-// hasDir reports whether a directory exists, remembering the answer. Most of a
-// theme's declared subdirectories are absent from most base directories, and
-// without this every icon name pays a stat per extension for each of them.
 func (f *IconFinder) hasDir(dir string) bool {
 	if ok, seen := f.dirSeen[dir]; seen {
 		return ok
@@ -313,24 +247,13 @@ func (f *IconFinder) hasDir(dir string) bool {
 	return ok
 }
 
-// iconTheme is one theme's index.theme, reduced to the parts a lookup uses.
 type iconTheme struct {
 	dirs     []iconDir
 	inherits []string
 }
 
-// iconDir is one subdirectory of a theme and the sizes it claims to hold.
 type iconDir struct {
-	path string
-	// size, minSize, maxSize and threshold are in real pixels, with the
-	// directory's Scale already multiplied in.
-	//
-	// The spec instead requires Scale to match exactly and treats size as
-	// logical, which is right for a display server that knows its own scale
-	// factor. A terminal draws one pixel per pixel and has no such factor, so a
-	// directory marked Size=16 Scale=2 is simply where this theme's 32 pixel
-	// art lives. Saying so is what lets those directories be used at all rather
-	// than skipped, and hicolor declares one for every size it has.
+	path      string
 	size      int
 	minSize   int
 	maxSize   int
@@ -339,7 +262,6 @@ type iconDir struct {
 	scalable  bool
 }
 
-// matches implements the spec's DirectoryMatchesSize.
 func (d *iconDir) matches(size int) bool {
 	switch {
 	case d.fixed:
@@ -351,9 +273,6 @@ func (d *iconDir) matches(size int) bool {
 	}
 }
 
-// distance implements the spec's DirectorySizeDistance: how far the requested
-// size falls outside what the directory holds, and zero when it does not fall
-// outside at all.
 func (d *iconDir) distance(size int) int {
 	switch {
 	case d.fixed:
@@ -384,15 +303,6 @@ func iconAbs(n int) int {
 	return n
 }
 
-// parseIconIndex reads an index.theme and returns nil when it is missing or has
-// no [Icon Theme] group.
-//
-// index.theme is the same key/value format as a .desktop file, but this reads
-// it directly rather than through a desktop entry parser. The two want
-// different things from a bad line: a desktop entry that will not parse must
-// not be launched, while a theme index that will not parse fully is still worth
-// the directories it did declare. A group this does not recognise, and a key it
-// does not want, are skipped in silence.
 func parseIconIndex(path string) *iconTheme {
 	data, err := os.ReadFile(path) //nolint:gosec // the path is built from the icon base directories
 	if err != nil {
@@ -428,18 +338,12 @@ func parseIconIndex(path string) *iconTheme {
 		key = strings.TrimSpace(key)
 		value = strings.TrimSpace(value)
 		if strings.Contains(key, "[") {
-			// A translated key. Nothing read here is ever shown to anyone, so
-			// the translation is noise.
 			continue
 		}
 		switch {
 		case group == "Icon Theme":
 			switch key {
 			case "Directories", "ScaledDirectories":
-				// ScaledDirectories is where a theme puts its Scale>1
-				// subdirectories when it wants them out of the way of a client
-				// that only draws at 1x. This one measures a directory by the
-				// pixels in it, so those are ordinary directories here.
 				listed = append(listed, splitIconList(value)...)
 			case "Inherits":
 				t.inherits = append(t.inherits, splitIconList(value)...)
@@ -453,11 +357,6 @@ func parseIconIndex(path string) *iconTheme {
 	if !hasMain {
 		return nil
 	}
-	// Directories names the subdirectories in the theme's own preferred order,
-	// which is the order the spec searches in. A theme that omits the key, or
-	// names a subdirectory it never goes on to describe, still gets whatever
-	// groups it did describe: a theme that half declares itself is more useful
-	// than no theme at all.
 	if len(listed) == 0 {
 		listed = order
 	}
@@ -474,9 +373,6 @@ func parseIconIndex(path string) *iconTheme {
 	return &t
 }
 
-// iconDirFrom turns one subdirectory group into an iconDir, applying the
-// defaults the spec gives for every key but Size, which it requires and without
-// which the directory cannot be measured against anything.
 func iconDirFrom(path string, g map[string]string) (iconDir, bool) {
 	size := iconInt(g["Size"], 0)
 	if size <= 0 {
@@ -516,9 +412,6 @@ func iconInt(s string, fallback int) int {
 	return n
 }
 
-// splitIconList splits a comma separated key. Themes in the wild end the list
-// with a trailing comma, so empty items are dropped rather than turned into a
-// directory named "".
 func splitIconList(value string) []string {
 	raw := strings.Split(value, ",")
 	out := make([]string, 0, len(raw))
@@ -530,10 +423,6 @@ func splitIconList(value string) []string {
 	return out
 }
 
-// iconBaseDirs returns the icon base directories in the order the spec searches
-// them: the user's own first, so a theme they installed wins over the system
-// copy, then the system data directories, then pixmaps for the unthemed icons
-// that predate all of this.
 func iconBaseDirs() []string {
 	var dirs []string
 	seen := map[string]bool{}
@@ -567,10 +456,6 @@ func iconBaseDirs() []string {
 	for _, dir := range systems {
 		add(filepath.Join(dir, "icons"))
 	}
-	// Pixmaps last, and derived from the same data directories, so a test or a
-	// sandbox that moves XDG_DATA_DIRS moves this with it. The literal path is
-	// added as well, because packages install there whatever the environment
-	// happens to say.
 	for _, dir := range systems {
 		add(filepath.Join(dir, "pixmaps"))
 	}
@@ -609,10 +494,6 @@ func CurrentIconTheme() string {
 	return HicolorTheme
 }
 
-// iconIniValue reads one key from one group of a key/value file, where an empty
-// group means the keys that appear before any group at all, as in .gtkrc-2.0.
-// The value is unquoted, because GTK 2 quotes its strings and the others do
-// not.
 func iconIniValue(path, group, key string) string {
 	data, err := os.ReadFile(path) //nolint:gosec // the path is built from the user's config directory
 	if err != nil {
@@ -640,9 +521,6 @@ func iconIniValue(path, group, key string) string {
 	return ""
 }
 
-// iconFile reports whether path is a regular file, following symlinks, because a
-// theme directory full of links into another theme is how distributions ship
-// them and a dangling one must not be offered.
 func iconFile(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.Mode().IsRegular()

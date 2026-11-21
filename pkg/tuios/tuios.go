@@ -279,12 +279,9 @@ func NewForPTY(pty PTY, opts ...Option) *Model {
 	return newModel(options)
 }
 
-// newModel creates the internal model with applied options.
 func newModel(options Options) *Model {
-	// Set up input handler
 	app.SetInputHandler(input.HandleInput)
 
-	// Load or create user config
 	var userConfig *config.UserConfig
 	if options.UserConfig != nil {
 		userConfig = options.UserConfig
@@ -296,10 +293,6 @@ func newModel(options Options) *Model {
 		}
 	}
 
-	// The embed options are the outer layer over the user's config file,
-	// exactly as CLI flags are in cmd/tuios: the option values are laid over
-	// a copy of the file, and the rest are applied after it. A zero value
-	// leaves the config's value standing.
 	embed := config.Overrides{
 		ASCIIOnly:    options.ASCIIOnly,
 		NoAnimations: !options.Animations,
@@ -328,11 +321,8 @@ func newModel(options Options) *Model {
 	}
 	settings := config.Resolve(userConfig, embed)
 
-	// Create keybind registry
 	keybindRegistry := config.NewKeybindRegistry(userConfig)
 
-	// Create the model using the factory function. ClientSSH implies
-	// IsSSHMode, so the kind is all SSHMode has to set.
 	kind := app.ClientLocal
 	if options.SSHMode {
 		kind = app.ClientSSH
@@ -374,12 +364,9 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 // Config re-exports the config package for customization.
 // This allows users to access configuration types without importing internal packages.
 var Config = struct {
-	// LoadUserConfig loads the user's configuration file.
 	LoadUserConfig func() (*config.UserConfig, error)
-	// DefaultConfig returns the default configuration.
-	DefaultConfig func() *config.UserConfig
-	// GetConfigPath returns the path to the configuration file.
-	GetConfigPath func() (string, error)
+	DefaultConfig  func() *config.UserConfig
+	GetConfigPath  func() (string, error)
 }{
 	LoadUserConfig: config.LoadUserConfig,
 	DefaultConfig:  config.DefaultConfig,
