@@ -30,10 +30,10 @@ replace tuios.dev/loom v0.2.3-0.20261120122552-107c1a5ef7e3 => ./loom
 
 replace tuios.dev/acp v0.0.0-20261120180431-437c5b45ae51 => ./acp
 
-replace tuios.dev/harness v0.0.0-20261120215113-0f1cffa25ec1 => ./harness
-
 replace tuios.dev/shot v0.2.2-0.20261120215113-0f1cffa25ec1 => ./shot
 
 replace tuios.dev/swatch v0.1.2-0.20261120215113-0f1cffa25ec1 => ./swatch
 
 replace tuios.dev/vt v0.3.4-0.20261120215113-0f1cffa25ec1 => ./vt
+
+replace tuios.dev/harness v0.0.0-20261121232438-fdc5ef1d558c => ./harness
