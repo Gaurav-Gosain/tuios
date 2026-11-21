@@ -113,7 +113,7 @@ func upgrade(t *testing.T, port, host, origin, auth string) int {
 // server. Origin and Host both say evil.example, so the same-origin rule
 // passes. The Host check must stop it.
 func TestLoopbackRefusesAForeignHost(t *testing.T) {
-	access, err := planWebAccess(&bytes.Buffer{}, webAccessFlags{host: "localhost", port: "7681"})
+	access, err := planWebAccess(&bytes.Buffer{}, webAccessFlags{host: "localhost", port: "7681", noAuth: true})
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
@@ -185,15 +185,39 @@ func TestAllowHostRules(t *testing.T) {
 	}
 }
 
-// TestLoopbackWithNoPasswordSaysOthersCanConnect: the one start line.
-func TestLoopbackWithNoPasswordSaysOthersCanConnect(t *testing.T) {
+// TestLoopbackNeedsAPasswordOrNoAuth: every user on this machine can open a
+// loopback port, so a loopback bind with no password is refused unless
+// --no-auth says so, as the SSH server refuses it without keys. The menu
+// offers a password and --no-auth, and no SSH tunnel to a machine it is on.
+//
+// Negative control: with the loopback case in planWebAccess back to a note
+// and a plan, the first plan is accepted.
+func TestLoopbackNeedsAPasswordOrNoAuth(t *testing.T) {
 	t.Setenv(webPasswordEnv, "")
-	var out bytes.Buffer
-	if _, err := planWebAccess(&out, webAccessFlags{host: "localhost"}); err != nil {
-		t.Fatalf("plan: %v", err)
+	for _, host := range []string{"localhost", "127.0.0.1", "::1"} {
+		var out bytes.Buffer
+		_, err := planWebAccess(&out, webAccessFlags{host: host, port: "7681"})
+		if !errors.Is(err, errNoWebAuth) {
+			t.Errorf("--host %s with no password: got %v, want the no password refusal", host, err)
+			continue
+		}
+		menu := out.String()
+		for _, want := range []string{"--random-password", "--password-file", "--no-auth", "Every user on this machine"} {
+			if !strings.Contains(menu, want) {
+				t.Errorf("--host %s: the menu does not name %q:\n%s", host, want, menu)
+			}
+		}
+		if strings.Contains(menu, "is not this machine") || strings.Contains(menu, "ssh -L") {
+			t.Errorf("--host %s: the menu reads as for a network bind:\n%s", host, menu)
+		}
 	}
-	if !strings.Contains(out.String(), "other users on this machine can connect") || !strings.Contains(out.String(), "--random-password") {
-		t.Fatalf("start line is %q", out.String())
+
+	var out bytes.Buffer
+	if _, err := planWebAccess(&out, webAccessFlags{host: "localhost", port: "7681", noAuth: true}); err != nil {
+		t.Fatalf("--host localhost --no-auth: refused: %v", err)
+	}
+	if !strings.Contains(out.String(), "Anyone on this machine") {
+		t.Errorf("--host localhost --no-auth: the warning is %q, want who can connect", out.String())
 	}
 }
 

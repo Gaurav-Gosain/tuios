@@ -217,7 +217,8 @@ sandbox-stop:
         ( isolate "${dir%/}" && "$tuios" kill-server && echo "stopped ${dir%/}" )
     done
 
-# Serve tuios-web on 127.0.0.1 against a scratch daemon
+# Serve tuios-web on 127.0.0.1 against a scratch daemon. With no password
+# flag it makes a password and prints it.
 [group('daemon')]
 web port="7681" *args: build
     #!/usr/bin/env bash
@@ -226,6 +227,10 @@ web port="7681" *args: build
     CONFIG={{ quote(CONFIG) }} isolate {{ quote(scratch / "web") }}
     port=$1
     shift
+    case " $* " in
+    *" --no-auth "* | *" --random-password "* | *" --password-file"*) ;;
+    *) [ -n "${TUIOS_WEB_PASSWORD:-}" ] || set -- --random-password "$@" ;;
+    esac
     exec {{ quote(bin / "tuios-web") }} --host 127.0.0.1 --port "$port" "$@"
 
 # Build Learn tuios (wasm) and serve it on 127.0.0.1
