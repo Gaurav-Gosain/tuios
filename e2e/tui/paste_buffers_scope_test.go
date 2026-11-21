@@ -151,9 +151,15 @@ func TestThePersonsNewestIsNeverAPanes(t *testing.T) {
 	if out := mustCLI(t, base, "show-buffer"); out != "persons-text" {
 		t.Fatalf("the person's bare show-buffer printed %q, want persons-text, not the agent's buffer", out)
 	}
-	// The person's bare paste-buffer, into the home pane.
+	// The person's bare paste-buffer, into the home pane. The keys go through
+	// the client and the paste goes straight to the daemon, and nothing orders
+	// the two, so the typed half is on the pane before the paste is sent. A CI
+	// run pasted between "GO" and "T-".
 	if err := term.SendKeys("echo GOT-"); err != nil {
 		t.Fatal(err)
+	}
+	if err := term.WaitForText("echo GOT-", uiTimeout); err != nil {
+		t.Fatalf("the typed half never reached the pane: %v\n%s", err, term.Snapshot())
 	}
 	mustCLI(t, base, "paste-buffer", "-s", "home")
 	if err := term.SendKeys(tuitest.Enter); err != nil {
