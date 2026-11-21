@@ -236,6 +236,8 @@ main (7aaaed819) fails the first two. Each control was built into its own binary
 | `Update` does not ask `quickLookPicture` after a message | `TestRailQuickLookKittyPicture` ("no kitty placement of the picture at its own size was sent") | **caught** |
 | `previewResizing` always false | `TestRailQuickLookKittyPicture` ("30 resizes in a burst placed the picture 56 times") | **caught** |
 | `trimHost` not called, so only the 64 of the previewer are freed | `TestRailQuickLookKittyPicture` ("after the walk the host holds 10 pictures, the bound is 8") | **caught** |
+| `quickLookZoomWheel` answers false | `TestRailQuickLookKittyPicture` ("the wheel over tall.png did not show the zoom in the footer") | **caught** |
+| `quickLookSharpRead` reads nothing | `TestRailQuickLookKittyPicture` ("a zoom past the page's pixels did not place a sharper read: ... a 1120x560 picture") | **caught** |
 
 The frames are `quick-look-kitty-taller`, `quick-look-kitty-pdf-resized` and, on a
 failure, `quick-look-picture-missing` under `TUIOS_E2E_FRAMES`.

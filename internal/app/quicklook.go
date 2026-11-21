@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"image"
 	"image/color"
 	"io/fs"
 	"path/filepath"
@@ -152,8 +153,10 @@ type quickLookResult struct {
 	// height are the file's own size, when the machine said it.
 	img           *composer.Image
 	width, height int
-	pages         int
-	durationMs    int64
+	// baseW and baseH are the picture's size at 100% zoom.
+	baseW, baseH int
+	pages        int
+	durationMs   int64
 	// page is the PDF page in img, and atMs the film's position of the frame in img.
 	page int
 	atMs int64
@@ -257,8 +260,10 @@ type quickLookState struct {
 	wantLine int
 	// box is the panel on the screen in the last frame, for the mouse.
 	box overlay.Rect
-	// pic is where the picture went in the last frame.
-	pic quickLookPic
+	// pic is where the picture went in the last frame, and zoom the picture's
+	// zoom. See quicklook_zoom.go.
+	pic  quickLookPic
+	zoom quickLookZoom
 	// pageWant is the PDF page the keys asked for, pageHeld the pages kept, pageOut
 	// and pageCancel the read that is out, pageSlow that the link's last read was
 	// slow, and pageBar the bar in the last frame. See quicklook_pages.go.
@@ -338,6 +343,9 @@ type quickLookPic struct {
 	key        previewKey
 	x, y       int
 	cols, rows int
+	// crop is the part of the picture shown, in quickLookCropUnit of each
+	// side, empty for the whole picture. See quicklook_zoom.go.
+	crop image.Rectangle
 }
 
 // quickLookMDKey is what a Markdown layout was made for.
@@ -460,6 +468,7 @@ func (m *OS) dropQuickLook() {
 	ql.wrapSet = false
 	ql.box = overlay.Rect{}
 	ql.pic = quickLookPic{}
+	ql.quickLookZoomReset()
 	ql.mdLines = nil
 	ql.framed = quickLookFrame{}
 	m.quickLookDropPages()
@@ -531,6 +540,7 @@ func (m *OS) quickLookShow(t quickLookTarget) tea.Cmd {
 	ql := &m.quickLook
 	if ql.target != t {
 		m.quickLookDropPages()
+		ql.quickLookZoomReset()
 		ql.view, ql.viewScroll, ql.details, ql.column, ql.mdOpen = "", 0, nil, 0, false
 		// The hints and keys ask what the file is, and this is not that file.
 		ql.res = nil
@@ -715,6 +725,7 @@ func quickLookDecode(t quickLookTarget, raw json.RawMessage, err error, ascii bo
 		if res.img == nil && res.note == "" && res.lines == nil {
 			res.note = "tuios cannot draw this picture."
 		}
+		quickLookSetBase(res)
 	case "dir":
 		res.kind, res.note = "binary", "This is a folder."
 	case "archive":
@@ -818,18 +829,8 @@ func (m *OS) quickLookSize() (innerW, bodyH int) {
 // quickLookPicBox is the picture's box in the body: the largest that holds
 // its shape below the line that names it, centred.
 func (m *OS) quickLookPicBox(img *composer.Image, innerW, bodyH int) (x, y, cols, rows int) {
-	cw, ch := m.hostCellSize()
-	if cw <= 0 || ch <= 0 {
-		cw, ch = 8, 16
-	}
-	availW, availH := max(innerW-2, 1), max(bodyH-1, 1)
-	if quickLookHasBar(m.quickLook.res) {
-		availH = max(availH-1, 1)
-	}
-	if m.quickLookStripShows(bodyH) {
-		_, rows := m.quickLookStripBox(innerW)
-		availH = max(availH-rows-2, 1)
-	}
+	cw, ch := m.quickLookCell()
+	availW, availH := m.quickLookPicArea(innerW, bodyH)
 	cols, rows = ckFitBox(img, availW, availH, float64(ch)/float64(cw), 1)
 	// The host draws pixels at their own size at most: a small picture
 	// stretched over the panel is a blur. Block glyphs are coarse anyway, so
@@ -839,6 +840,20 @@ func (m *OS) quickLookPicBox(img *composer.Image, innerW, bodyH int) (x, y, cols
 		cols, rows = max(int(float64(cols)*f+0.5), 1), max(int(float64(rows)*f+0.5), 1)
 	}
 	return 1 + (availW-cols)/2, 1 + (availH-rows)/2, cols, rows
+}
+
+// quickLookPicArea is the room for the picture in the body, in cells: below
+// the line that names it, above the bar and the filmstrip.
+func (m *OS) quickLookPicArea(innerW, bodyH int) (availW, availH int) {
+	availW, availH = max(innerW-2, 1), max(bodyH-1, 1)
+	if quickLookHasBar(m.quickLook.res) {
+		availH = max(availH-1, 1)
+	}
+	if m.quickLookStripShows(bodyH) {
+		_, rows := m.quickLookStripBox(innerW)
+		availH = max(availH-rows-2, 1)
+	}
+	return availW, availH
 }
 
 // previewResizing says a resize of the terminal is still in flight. A preview's
@@ -873,6 +888,9 @@ func (m *OS) quickLookPicture() tea.Cmd {
 	innerW, bodyH := m.quickLookSize()
 	_, _, cols, rows := m.quickLookPicBox(r.img, innerW, bodyH)
 	cmd := m.quickLookPrepare(r.img, cols, rows)
+	if p := m.replyPreviewer(); p.Mode() == composer.PreviewPixels {
+		cmd = tea.Batch(cmd, m.quickLookZoomPrepare(innerW, bodyH))
+	}
 	if m.quickLookStripShows(bodyH) {
 		cols, rows = m.quickLookStripBox(innerW)
 		for _, img := range ql.strip {
@@ -891,6 +909,12 @@ func (m *OS) quickLookPrepare(img *composer.Image, cols, rows int) tea.Cmd {
 	if p.Mode() == composer.PreviewCells {
 		k = quickLookCellsKey(p, img, cols, rows)
 	}
+	return m.quickLookPrepareKey(img, k)
+}
+
+// quickLookPrepareKey prepares the picture of k, when it is not ready.
+func (m *OS) quickLookPrepareKey(img *composer.Image, k previewKey) tea.Cmd {
+	p := m.replyPreviewer()
 	p.mu.Lock()
 	if p.asked[k] {
 		p.mu.Unlock()
@@ -898,10 +922,7 @@ func (m *OS) quickLookPrepare(img *composer.Image, cols, rows int) tea.Cmd {
 	}
 	p.asked[k] = true
 	p.mu.Unlock()
-	cw, ch := m.hostCellSize()
-	if cw <= 0 || ch <= 0 {
-		cw, ch = 8, 16
-	}
+	cw, ch := m.quickLookCell()
 	ground := m.overlayUI().Canvas
 	return func() tea.Msg {
 		return replyPreviewMsg{pics: map[previewKey]*previewPicture{k: preparePicture(img, k, cw, ch, ground)}}
@@ -918,6 +939,10 @@ func (m *OS) QuickLookMouseClick(x, y int) bool {
 	}
 	if ql.box.Contains(x, y) {
 		ql.held = true
+		// A press on the zoomed picture pans it.
+		if m.quickLookPanPress(x, y) {
+			return true
+		}
 		// A press on the panel off the text ends a selection the mouse made.
 		if q := ql.copy; q != nil && q.cm.Implicit && !m.QuickLookCopyOnText(x, y) {
 			m.QuickLookCopyEnd()
@@ -942,6 +967,10 @@ func (m *OS) QuickLookWheel(x, y int, up bool) bool {
 	if m.quickLookCopyWheel(quickLookWheelStep * wheelDelta(up)) {
 		return true
 	}
+	// Over the picture the wheel zooms, around the pointer.
+	if m.quickLookZoomWheel(x, y, up) {
+		return true
+	}
 	if up {
 		m.QuickLookScroll(-quickLookWheelStep)
 	} else {
@@ -958,7 +987,7 @@ func (m *OS) quickLookPlacement() (previewPlacement, bool) {
 		m.AnyOverlayOpen() || m.ContextMenu != nil {
 		return previewPlacement{}, false
 	}
-	return previewPlacement{key: pic.key, x: pic.x, y: pic.y, cols: pic.cols, rows: pic.rows}, true
+	return previewPlacement{key: pic.key, x: pic.x, y: pic.y, cols: pic.cols, rows: pic.rows, crop: pic.crop}, true
 }
 
 // quickLookMDPlacements adds the pictures of the Markdown on the panel to the
@@ -1340,6 +1369,13 @@ func (m *OS) drawQuickLookPicture(c *ckCanvas, l ckLook, r *quickLookResult, w, 
 		}
 		return quickLookPic{ok: true, key: k, x: x, y: y, cols: cols, rows: rows}
 	}
+	if m.quickLook.zoom.scale > 0 {
+		if g, ok := m.quickLookZoomGeomAt(w, h); ok {
+			z := &m.quickLook.zoom
+			v, _, _ := g.view(z.scale, z.ox, z.oy)
+			return m.quickLookZoomPic(g, r.img, cols, rows, v)
+		}
+	}
 	return quickLookPic{ok: true, key: pixelsKey(r.img, cols, rows), x: x, y: y, cols: cols, rows: rows}
 }
 
@@ -1501,6 +1537,7 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 		h := add(nil, "esc", "close")
 		return add(h, first(reg.Keys(config.TableQuickLook, "full_size")), "full size")
 	}
+	zoom := m.quickLookZoomable()
 	if ql.inside {
 		in := func(action string) []string { return reg.Keys(config.TableQuickLookInside, action) }
 		h := add(nil, first(in("go_back")), "back to files")
@@ -1508,6 +1545,18 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 			// No list is behind the preview: back closes it, so the close
 			// key at the end would say the same thing twice.
 			h, closeKey = add(nil, first(in("go_back")), "close"), ""
+		}
+		if zoom {
+			h = add(h, pair(in, "zoom_in", "zoom_out"), m.quickLookZoomLabel())
+		}
+		if ql.zoom.scale > 0 {
+			h = add(h, first(in("zoom_fit")), "fit")
+			if keys := [4][]string{in("column_left"), in("line_down"), in("line_up"), in("column_right")}; len(keys[0]) > 0 && len(keys[1]) > 0 && len(keys[2]) > 0 && len(keys[3]) > 0 {
+				h = add(h, keys[0][0]+" "+keys[1][0]+" "+keys[2][0]+" "+keys[3][0], "move")
+			}
+			h = add(h, first(in("zoom_actual")), "100%")
+			h = add(h, first(in("full_size")), "full size")
+			return add(h, closeKey, "close")
 		}
 		if ql.quickLookOffMain() {
 			h = add(h, first(in("next_view")), "next view")
@@ -1561,6 +1610,9 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 	}
 	out := func(action string) []string { return reg.Keys(config.TableQuickLook, action) }
 	h := add(nil, closeKey, "close")
+	if zoom {
+		h = add(h, pair(out, "zoom_in", "zoom_out"), m.quickLookZoomLabel())
+	}
 	if quickLookMoves(ql.res) {
 		label := "half page"
 		if quickLookPaged(ql.res) {
@@ -1590,7 +1642,7 @@ func (m *OS) QuickLookInside() bool { return m.quickLook.open && m.quickLook.ins
 // file with nothing to move through.
 func (m *OS) QuickLookGoInside() bool {
 	ql := &m.quickLook
-	if !ql.open || !quickLookMoves(ql.res) {
+	if !ql.open || !quickLookMoves(ql.res) && ql.zoom.scale <= 0 {
 		return false
 	}
 	ql.inside = true

@@ -1368,6 +1368,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.renderSkipped = false
 		return m, cmd
 
+	case quickLookSharpMsg:
+		m.applyQuickLookSharp(msg)
+		m.renderSkipped = false
+		return m, nil
+
 	case ckCheckpointsMsg:
 		m.applyCheckpoints(msg)
 		return m, nil

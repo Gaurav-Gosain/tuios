@@ -216,6 +216,9 @@ Run `tuios keybinds list` to see the keys that your config sets.
 | `v` | `next_view` | Preview: show the next view of the file |
 | `J`, `shift+down` | `seek_down` | Preview: move forward in the file |
 | `K`, `shift+up` | `seek_up` | Preview: move back in the file |
+| `0` | `zoom_fit` | Preview: fit the picture in the panel |
+| `+`, `=` | `zoom_in` | Preview: zoom in on the picture |
+| `-` | `zoom_out` | Preview: zoom out of the picture |
 
 ## File preview, inside the file
 
@@ -241,6 +244,10 @@ Run `tuios keybinds list` to see the keys that your config sets.
 | `e` | `open_editor` | Preview: open the file in your editor, in a new pane |
 | `g`, `home` | `start` | Preview: go to the start of the file |
 | `w` | `wrap` | Preview: wrap long lines, or cut them |
+| `1` | `zoom_actual` | Preview: show the picture at 100% |
+| `0` | `zoom_fit` | Preview: fit the picture in the panel |
+| `+`, `=` | `zoom_in` | Preview: zoom in on the picture |
+| `-` | `zoom_out` | Preview: zoom out of the picture |
 
 ## Inbox
 
