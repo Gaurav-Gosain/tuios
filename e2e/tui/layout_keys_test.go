@@ -7,10 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Issue #202: with a non-Latin layout a key produces a character no binding
-// names. The Ukrainian layout puts "ш" (U+0448, 1096) on the US I key, so the
-// host reports it with alternate keys as CSI 1096::105 u: the produced code,
-// an empty shifted key, and the US-layout key 'i' (105).
 const kittyUkrSha = "\x1b[1096::105u"
 
 // TestLeaderAsksForLayoutKeys is the half of #202 a real terminal needs. The
@@ -46,8 +42,6 @@ func TestBaseLayoutKeyOpensInbox(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), tuitest.Key(kittyUkrSha)); err != nil {
 		t.Fatalf("send leader then ш: %v", err)
 	}
-	// A standalone client has no daemon, so the Inbox opens on its own title and
-	// says it is not connected.
 	if err := term.WaitForText("The agents view needs the daemon.", uiTimeout); err != nil {
 		t.Fatalf("leader then ш on the I key did not open the Inbox: %v\n%s", err, term.Snapshot())
 	}
@@ -67,9 +61,6 @@ func TestNonLatinKeyTypesIntoPane(t *testing.T) {
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo ready-$((3+4))", "ready-7", shellTimeout)
 
-	// x, ш as an escape code, ш as text, y. ш is d1 88 in UTF-8. The bytes
-	// are squeezed to single spaces: BSD od on macOS puts two between them,
-	// GNU od one.
 	if err := term.SendKeys("printf %s x", tuitest.Key(kittyUkrSha), "шy | od -An -tx1 | tr -s ' '", tuitest.Enter); err != nil {
 		t.Fatalf("type the command: %v", err)
 	}

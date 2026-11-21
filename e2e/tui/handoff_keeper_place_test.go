@@ -40,9 +40,6 @@ func TestAPaneProcessStaysInItsPaneAfterTheKeeperTakesOver(t *testing.T) {
 	waitHandoffPane(t, base, sess, target, regexp.MustCompile(`^pid-\d+`), 10*time.Second)
 
 	outDir := t.TempDir()
-	// Each line read runs one probe: a new session with no terminal, an
-	// environment with the XDG folders and nothing of tuios, and the call.
-	// setsid -w waits for the probe, so the probe stays a child of the pane.
 	script := `echo pid-$$; while read l; do ` +
 		`setsid -w env -i PATH="$PATH" HOME="$HOME" $(env | grep '^XDG_') ` +
 		posixQuote(tuiosBin) + ` send-agent-message -s ` + sess + ` -w ` + target + ` --from human "probe-$l" ` +

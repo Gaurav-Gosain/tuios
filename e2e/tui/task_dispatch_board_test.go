@@ -77,8 +77,6 @@ func TestTheBoardTurnsDispatchOnAndPausesIt(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('x')); err != nil {
 		t.Fatal(err)
 	}
-	// "Dispatch Pull" is on the paused header too, so the wait is for the
-	// header the daemon's push of the resume draws: Pull without Paused.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		txt := s.Text()
 		return strings.Contains(txt, "Dispatch Pull") && !strings.Contains(txt, "Paused")

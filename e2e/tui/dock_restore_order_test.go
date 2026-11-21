@@ -9,8 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// dockOrder is the order the names appear in on the dock's row, the last
-// line of the screen.
 func dockOrder(s tuitest.Screen, names ...string) []string {
 	_, rows := s.Size()
 	line := s.Line(rows - 1)
@@ -77,7 +75,6 @@ func TestDockPillsAndRestoreNAgree(t *testing.T) {
 	}
 	windowManagementMode(t, a)
 
-	// Last pane first: gamma, then alpha.
 	for _, n := range []string{"gamma", "alpha"} {
 		if out, err := tuiosCLI(t, base, "focus-window", "-s", "dk", n); err != nil {
 			t.Fatalf("focus %s: %v\n%s", n, err, out)
@@ -103,7 +100,6 @@ func TestDockPillsAndRestoreNAgree(t *testing.T) {
 		t.Fatalf("ASSERTION: the pills are not in the order they were minimized (gamma, then alpha): %v", first)
 	}
 
-	// prefix m 2 restores the second pill.
 	sendKeys(t, a, tuitest.Ctrl('b'), "m", "2")
 	want := first[1]
 	deadline := time.Now().Add(uiTimeout)

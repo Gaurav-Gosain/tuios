@@ -6,8 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// railNarrowDefaultConfig is the shipped rail: the default layout, 24 columns
-// wide.
 const railNarrowDefaultConfig = "[appearance.sidebar]\nenabled = true\nposition = \"left\"\nwidth = 24\n"
 
 // TestRailTerminalsListsEveryPane: the terminals section is the list of panes,

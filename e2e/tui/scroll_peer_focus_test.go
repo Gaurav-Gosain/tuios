@@ -38,8 +38,6 @@ func TestScrollingPeerFollowsFocusIntoView(t *testing.T) {
 	waitWindowCount(t, a, 3, "three panes on the first client")
 	enableTiling(t, a)
 
-	// The scrolling layout is chosen from the command palette, and the choice is
-	// session state: it reaches the second client through the daemon.
 	if err := a.SendKeys(tuitest.Ctrl('p')); err != nil {
 		t.Fatalf("open the palette: %v", err)
 	}
@@ -48,10 +46,6 @@ func TestScrollingPeerFollowsFocusIntoView(t *testing.T) {
 		t.Fatalf("pick the scrolling layout: %v", err)
 	}
 	waitPaletteClosed(t, a, "after picking the scrolling layout")
-	// The strip ends on the focused column, CHARLIE, with BRAVO beside it, so
-	// the far column, ALPHA, is off screen. Waiting for BRAVO to go matched
-	// only a frame of the slide into the strip, and a client that places the
-	// strip in one step never draws that frame.
 	if err := a.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(s.Text(), "ALPHA") && strings.Contains(s.Text(), "CHARLIE")
 	}, uiTimeout); err != nil {
@@ -60,9 +54,6 @@ func TestScrollingPeerFollowsFocusIntoView(t *testing.T) {
 	t.Logf("the first client in the scrolling layout:\n%s", a.Snapshot())
 
 	b := attachIn(t, base, "strip", startOpts{cols: 100, rows: 30})
-	// The columns are 55% of the screen each, so at most two are ever on screen
-	// and the far one never is. Wait until the second client is showing the
-	// same end of the strip as the first.
 	if err := b.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "CHARLIE")
 	}, uiTimeout); err != nil {
@@ -76,8 +67,6 @@ func TestScrollingPeerFollowsFocusIntoView(t *testing.T) {
 		t.Fatalf("the second client is not showing the focused column to start with:\n%s", before)
 	}
 
-	// The gesture in the report: alt+p steps the focus one column left, twice,
-	// which lands on the column at the far left of the strip.
 	for range 2 {
 		if err := a.SendKeys(tuitest.Alt("p")); err != nil {
 			t.Fatalf("step the focus left: %v", err)
@@ -97,17 +86,11 @@ func TestScrollingPeerFollowsFocusIntoView(t *testing.T) {
 	if !strings.Contains(after, "ALPHA") {
 		t.Errorf("the second client never brought the focused column on screen:\n%s", after)
 	}
-	// The whole strip moved, not just enough of it to show a sliver: the column
-	// at the far end is off screen on both clients now.
 	if strings.Contains(after, "CHARLIE") {
 		t.Errorf("the second client is still showing the far end of the strip:\n%s", after)
 	}
 }
 
-// stripOrder is the session's panes from the left end of the strip to the
-// right, read from where each pane is placed. Columns off the left edge have a
-// negative x, so the order holds for the whole strip and not only the part on
-// screen.
 func stripOrder(rects []winRect) []string {
 	sorted := slices.Clone(rects)
 	slices.SortStableFunc(sorted, func(a, b winRect) int { return a.X - b.X })
@@ -118,7 +101,6 @@ func stripOrder(rects []winRect) []string {
 	return ids
 }
 
-// newPaneIn is the one pane in after that before does not name.
 func newPaneIn(t *testing.T, before []string, after []winRect) string {
 	t.Helper()
 	for _, r := range after {
@@ -130,7 +112,6 @@ func newPaneIn(t *testing.T, before []string, after []winRect) string {
 	return ""
 }
 
-// waitStripFocus waits until the session's focus is on want.
 func waitStripFocus(t *testing.T, base, want, when string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -154,12 +135,9 @@ func waitStripFocus(t *testing.T, base, want, when string) {
 func TestScrollingNewColumnOpensBesideFocus(t *testing.T) {
 	term, base := scrollingStrip(t, 3)
 	start := stripOrder(waitForSettledGeometry(t, base, 3))
-	// Names make the frames readable.
 	for i, id := range start {
 		focusAndName(t, base, id, []string{"ONE", "TWO", "THREE"}[i])
 	}
-	// The report's step: move the focus to the first column. alt+p steps one
-	// column left and scrolls the strip with it.
 	for range 2 {
 		if err := term.SendKeys(tuitest.Alt("p")); err != nil {
 			t.Fatalf("step the focus left: %v", err)
@@ -169,7 +147,6 @@ func TestScrollingNewColumnOpensBesideFocus(t *testing.T) {
 	waitStripFocus(t, base, start[0], "after stepping to the first column")
 	waitText(t, term, "the first column on screen", "ONE")
 
-	// The command the report's daemon log shows.
 	if out, err := tuiosCLI(t, base, "run-command", "NewWindow"); err != nil {
 		t.Fatalf("NewWindow: %v\n%s", err, out)
 	}
@@ -187,7 +164,6 @@ func TestScrollingNewColumnOpensBesideFocus(t *testing.T) {
 		t.Fatalf("the new pane is not in the column after the focused one:\n got  %v\n want %v\n%s", got, want, term.Snapshot())
 	}
 
-	// A split of the focused pane opens beside it as well.
 	if out, err := tuiosCLI(t, base, "run-command", "Split", "vertical"); err != nil {
 		t.Fatalf("Split vertical: %v\n%s", err, out)
 	}
@@ -199,7 +175,6 @@ func TestScrollingNewColumnOpensBesideFocus(t *testing.T) {
 	}
 	waitStripFocus(t, base, splitPane, "after the split")
 
-	// Closing the focused column focuses the column on its left.
 	if out, err := tuiosCLI(t, base, "run-command", "CloseWindow"); err != nil {
 		t.Fatalf("CloseWindow: %v\n%s", err, out)
 	}
@@ -210,11 +185,6 @@ func TestScrollingNewColumnOpensBesideFocus(t *testing.T) {
 	waitStripFocus(t, base, added, "after the focused column closed")
 	railShot(t, term, "after-close")
 
-	// The split above went through the path a BSP split takes, which records
-	// the split's pane and side for the sync that brings the new pane. The
-	// strip has no use for them, and left recorded they split NEW on the next
-	// pane after a switch to BSP, whatever had the focus then. Focus ONE,
-	// switch to BSP and open a pane: it has to split ONE and leave NEW alone.
 	if out, err := tuiosCLI(t, base, "focus-window", "-s", "strip", start[0]); err != nil {
 		t.Fatalf("focus ONE: %v\n%s", err, out)
 	}
@@ -244,7 +214,6 @@ func TestScrollingNewColumnOpensBesideFocus(t *testing.T) {
 	railShot(t, term, "bsp-new-pane")
 }
 
-// focusAndName focuses a pane by id and gives it a name.
 func focusAndName(t *testing.T, base, id, name string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "focus-window", "-s", "strip", id); err != nil {
@@ -256,7 +225,6 @@ func focusAndName(t *testing.T, base, id, name string) {
 	}
 }
 
-// rectByID is the placed rectangle of one pane.
 func rectByID(t *testing.T, rects []winRect, id string) winRect {
 	t.Helper()
 	for _, r := range rects {
@@ -295,8 +263,6 @@ func TestScrollingRevealsANewPane(t *testing.T) {
 		focusAndName(t, base, id, []string{"ONE", "TWO", "THREE"}[i])
 	}
 
-	// stepToTwo walks one column left onto TWO with the keyboard, which
-	// shows TWO whole with a peek of the next column at the right edge.
 	stepToTwo := func(when string) {
 		t.Helper()
 		if err := term.SendKeys(tuitest.Alt("p")); err != nil {
@@ -307,7 +273,6 @@ func TestScrollingRevealsANewPane(t *testing.T) {
 			t.Fatalf("the screen never settled: %v", err)
 		}
 	}
-	// wholeOnScreen fails unless pane id is focused and wholly on screen.
 	wholeOnScreen := func(id string, n int, route string) {
 		t.Helper()
 		waitStripFocus(t, base, id, "after "+route)
@@ -320,8 +285,6 @@ func TestScrollingRevealsANewPane(t *testing.T) {
 		}
 	}
 
-	// The report: step to the middle column and open a pane with the leader
-	// chord. It goes in the column after TWO, where the peek is.
 	stepToTwo("after stepping to the middle column")
 	railShot(t, term, "before-new-pane")
 	if err := term.SendKeys(tuitest.Ctrl('b'), "c"); err != nil {
@@ -335,14 +298,12 @@ func TestScrollingRevealsANewPane(t *testing.T) {
 		t.Fatalf("name the new pane: %v\n%s", err, out)
 	}
 
-	// The focus-window verb, which is what `tuios focus-window` sends.
 	stepToTwo("before focus-window")
 	if out, err := tuiosCLI(t, base, "focus-window", "-s", "strip", added); err != nil {
 		t.Fatalf("focus-window: %v\n%s", err, out)
 	}
 	wholeOnScreen(added, 4, "focus-window")
 
-	// The navigator: search for the pane by name and press Enter.
 	stepToTwo("before the navigator")
 	openNavigator(t, term)
 	sendKeys(t, term, "/")

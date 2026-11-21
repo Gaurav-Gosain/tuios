@@ -12,11 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The cards that move on their own (internal/session/task_auto.go), through
-// the binary a person runs. Each test leaves the history of the cards it
-// moved as its artifact.
-
-// taskFanRow is one card of tuios task ls --json, with its fan.
 type taskFanRow struct {
 	ID     string `json:"id"`
 	Stage  string `json:"stage"`
@@ -45,11 +40,8 @@ func taskFanRows(t *testing.T, base, session string) map[string]taskFanRow {
 	return rows
 }
 
-// stageLine is how tuios task get prints a stage.
 func stageLine(stage string) string { return "stage   " + stage + "\n" }
 
-// stillIn reads the card right after a move that settled it, and fails when
-// it is not in stage.
 func stillIn(t *testing.T, base, session, id, stage, why string) string {
 	t.Helper()
 	got := mustCLI(t, base, "task", "get", "-s", session, id)
@@ -59,20 +51,14 @@ func stillIn(t *testing.T, base, session, id, stage, why string) string {
 	return got
 }
 
-// planHookPayload is a Claude Code plan held for the person.
 const planHookPayload = `{"hook_event_name":"PermissionRequest","session_id":"e2e-plan","permission_mode":"plan","tool_name":"ExitPlanMode","tool_input":{"plan":"# Retry\n1. Add backoff.","planFilePath":"/tmp/plan.md"}}`
 
-// answerPlan waits for the held plan in the open Inbox, with the hold known
-// so the footer offers the answers, presses key once the Inbox takes an
-// answer, and waits for the hook to return with it.
 func answerPlan(t *testing.T, base string, term *tuitest.Terminal, hook *heldHook, key, want string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return screenHas(s, "Approve the plan?", "a approve", "X keep planning") }, uiTimeout); err != nil {
 		t.Fatalf("the Inbox never showed the plan: %v\n%s", err, term.Snapshot())
 	}
-	// The Inbox takes no answer until the item has been shown a moment.
 	time.Sleep(answerSettle)
-	// The key asks, and enter answers.
 	if err := term.SendKeys(key, tuitest.Enter); err != nil {
 		t.Fatalf("answer the plan: %v", err)
 	}
@@ -259,7 +245,6 @@ func TestTaskFollowsItsPullRequest(t *testing.T) {
 	fmt.Fprintf(&report, "t1 with the pull request open:\n%s\n\n", waitForTaskText(t, base, f.session, "t1", stageLine("review"), "by tuios: pull request #7 opened"))
 	others(&report, "with the pull request open")
 
-	// The poll runs while a client is attached.
 	term := startIn(t, base, startOpts{args: []string{"attach", f.session}})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())

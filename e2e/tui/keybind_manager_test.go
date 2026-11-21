@@ -9,12 +9,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// keybindTitle is the keybind manager's panel title. Asserting on it proves the
-// overlay painted rather than that a state flag flipped.
 const keybindTitle = "Keybinds"
 
-// openKeybindManager opens the overlay through the leader chord and waits for
-// it to paint.
 func openKeybindManager(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Ctrl('b'), "k"); err != nil {
@@ -42,15 +38,6 @@ func TestKeybindManagerShowsARealConflictOnScreen(t *testing.T) {
 	if err := os.MkdirAll(cfgDir, 0o700); err != nil {
 		t.Fatalf("mkdir config: %v", err)
 	}
-	// Two actions in one scope on one key, in two different tables: the
-	// cross-section case, which is the one config.toml gives no hint of.
-	//
-	// snap_left rather than snap_corner_1, which would be the historical pair.
-	// migrateCornerSnapDigits takes a corner off a bare digit at load, so that
-	// fixture is repaired before the overlay ever sees it, which is the
-	// migration doing its job and is checked in
-	// TestCornerSnapMigrationMovesTheStaleDigits. snap_left on "1" is a choice
-	// the user made and nothing rewrites it.
 	if err := os.WriteFile(filepath.Join(cfgDir, "config.toml"), []byte(
 		"[keybindings.window_management]\nselect_window_1 = [\"1\"]\n"+
 			"[keybindings.layout]\nsnap_left = [\"1\"]\n"), 0o644); err != nil {
@@ -61,7 +48,6 @@ func TestKeybindManagerShowsARealConflictOnScreen(t *testing.T) {
 	waitBoot(t, term)
 	openKeybindManager(t, term)
 
-	// Tab twice: Bindings -> Conflicts.
 	if err := term.SendKeys(tuitest.Tab); err != nil {
 		t.Fatalf("send tab: %v", err)
 	}
@@ -72,23 +58,15 @@ func TestKeybindManagerShowsARealConflictOnScreen(t *testing.T) {
 	screen := term.Screen().Text()
 	t.Logf("keybind manager, Conflicts tab:\n%s", term.Snapshot())
 
-	// The winner has to be named, or the panel is a list of keys rather than an
-	// answer to "what does this key do".
 	if !strings.Contains(screen, "runs snap_left") {
 		t.Errorf("the conflict row must name the action that actually runs\n%s", term.Snapshot())
 	}
-	// And the loser has to be named in the detail box, or there is no way to
-	// tell which of the two bindings is the dead one.
 	if !strings.Contains(screen, "select_window_1") {
 		t.Errorf("the detail box must name the binding that never fires\n%s", term.Snapshot())
 	}
-	// The conflict must be legible without colour: "dead" is the word that
-	// carries it.
 	if !strings.Contains(screen, "dead") {
 		t.Errorf("a conflict must say so in words, not only in colour\n%s", term.Snapshot())
 	}
-	// And the row has to be actionable. A panel that reports a problem and
-	// offers nothing to press teaches the reader to distrust it.
 	if !strings.Contains(screen, "ctrl+d") {
 		t.Errorf("the conflicts panel offers no way to resolve the row\n%s", term.Snapshot())
 	}
@@ -135,13 +113,6 @@ func TestKeybindManagerShowsTheGuestClash(t *testing.T) {
 		t.Fatalf("guests tab never named tmux: %v\n%s", err, term.Snapshot())
 	}
 
-	// The evidence tier has to be on screen. A curated list presented as
-	// detection is the one failure mode this surface must not have.
-	//
-	// Waited for rather than read once: the rows naming tmux are drawn above
-	// the detail block that carries this sentence, and a read taken the moment
-	// tmux appears can land before the rest of the frame. On macOS it did, half
-	// the time, on a panel that was correct a moment later.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(strings.ToLower(s.Text()), "program list")
 	}, uiTimeout); err != nil {
@@ -168,8 +139,6 @@ func TestKeybindRecorderCapturesRatherThanRuns(t *testing.T) {
 		}
 	}
 
-	// A key that does not appear in the overlay's own chrome, so matching it
-	// cannot be a false positive on the footer.
 	arm()
 	if err := term.SendKeys(tuitest.Ctrl('g')); err != nil {
 		t.Fatalf("send ctrl+g: %v", err)
@@ -179,9 +148,6 @@ func TestKeybindRecorderCapturesRatherThanRuns(t *testing.T) {
 	}
 	t.Logf("keybind manager, Record tab after capturing ctrl+g:\n%s", term.Snapshot())
 
-	// Esc while armed is recorded rather than obeyed. Asserted on a verdict
-	// appearing and on the panel still being up: the footer contains the word
-	// "esc", so text matching alone would pass either way.
 	arm()
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("send esc: %v", err)
@@ -196,10 +162,6 @@ func TestKeybindRecorderCapturesRatherThanRuns(t *testing.T) {
 	}
 	t.Logf("keybind manager, Record tab after capturing esc:\n%s", term.Snapshot())
 
-	// And the press after a capture is a command again, so there is always a way
-	// out. q rather than a second Esc: two escapes in quick succession are
-	// parsed on the wire as one alt+esc, which is a property of the terminal and
-	// not of the recorder.
 	if err := term.SendKeys("q"); err != nil {
 		t.Fatalf("send q: %v", err)
 	}
@@ -223,7 +185,6 @@ func TestKeybindManagerReadsTheLivePane(t *testing.T) {
 	newWindow(t, term)
 	openKeybindManager(t, term)
 
-	// The recorder's panel is where the observed block is drawn.
 	for range 3 {
 		if err := term.SendKeys(tuitest.Tab); err != nil {
 			t.Fatalf("send tab: %v", err)
@@ -296,8 +257,6 @@ func TestKeybindManagerTabsKeepTheirPlace(t *testing.T) {
 	alive(t, term, "after switching keybind manager tabs")
 }
 
-// waitNeverRuns waits for the keybind manager's detail box to name a dead
-// binding other than not, and returns it.
 func waitNeverRuns(t *testing.T, term *tuitest.Terminal, not, where string) string {
 	t.Helper()
 	var got string
@@ -310,7 +269,6 @@ func waitNeverRuns(t *testing.T, term *tuitest.Terminal, not, where string) stri
 	return got
 }
 
-// neverRuns is the first binding the detail box says never runs.
 func neverRuns(text string) string {
 	_, after, ok := strings.Cut(text, "Never runs: ")
 	if !ok {

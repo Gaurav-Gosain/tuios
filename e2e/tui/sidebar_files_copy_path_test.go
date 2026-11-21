@@ -52,7 +52,6 @@ func TestSidebarFolderCopyPath(t *testing.T) {
 			waitForAll(t, term, uiTimeout, "the listing", "alpha/", "zulu/", "brief.txt")
 			art := artifactDir(t)
 
-			// The menu.
 			col, row, ok := findOnGrid(term.Screen(), "zulu/")
 			if !ok {
 				t.Fatalf("no zulu row:\n%s", term.Snapshot())
@@ -71,8 +70,6 @@ func TestSidebarFolderCopyPath(t *testing.T) {
 				t.Fatalf("the menu stayed up, or the click opened the folder: %v\n%s", err, term.Snapshot())
 			}
 
-			// The key. Focus the rail and walk the cursor down, pressing Y on
-			// each row, until a row copies. Y does nothing off the listing.
 			sendKeys(t, term, "s")
 			from = len(clipboardWrites(out))
 			copied := false
@@ -94,17 +91,8 @@ func TestSidebarFolderCopyPath(t *testing.T) {
 	}
 }
 
-// systemOpener is the program tuios starts to open a file on this platform: open
-// on macOS, xdg-open elsewhere. The stub takes its name, so a test never starts
-// the real one: on macOS that opened TextEdit and Finder windows on the screen
-// of whoever ran the suite.
 var systemOpener = map[bool]string{true: "open", false: "xdg-open"}[runtime.GOOS == "darwin"]
 
-// openStubs writes two programs that record how they were started, one line
-// each, to record: the system opener (systemOpener), and rule,
-// which a [[files.open]] rule names. It returns the folder they are in and the
-// path of rule. The test puts the folder first on PATH and sets DISPLAY, so the
-// opener tuios picks is the real default path, on the real lookup.
 func openStubs(t *testing.T, base, record string) (dir, rule string) {
 	t.Helper()
 	dir = filepath.Join(base, "stubs")
@@ -120,8 +108,6 @@ func openStubs(t *testing.T, base, record string) (dir, rule string) {
 	return dir, filepath.Join(dir, "rule")
 }
 
-// openStubEnv is the environment that makes xdg-open the system opener: a
-// display, no ssh, no WSL, and the stubs first on PATH.
 func openStubEnv(stubs string) []string {
 	return []string{
 		"PATH=" + stubs + ":" + os.Getenv("PATH"), "DISPLAY=:99", "WAYLAND_DISPLAY=",
@@ -129,7 +115,6 @@ func openStubEnv(stubs string) []string {
 	}
 }
 
-// openRecord reads the stubs' record, one start per line.
 func openRecord(record string) []string {
 	data, err := os.ReadFile(record)
 	if err != nil {
@@ -138,7 +123,6 @@ func openRecord(record string) []string {
 	return strings.Split(strings.TrimSpace(string(data)), "\n")
 }
 
-// waitOpenRecord waits until the record holds want, in order, and nothing else.
 func waitOpenRecord(t *testing.T, term *tuitest.Terminal, record string, want []string, what string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -191,17 +175,10 @@ func TestSidebarFileOpenSystem(t *testing.T) {
 	waitForAll(t, term, uiTimeout, "the listing", "alpha/", "zulu/", "brief.txt", "paper.pdf")
 	art := artifactDir(t)
 
-	// The folder. Walk the cursor down and press o on each row until one
-	// starts the opener. o off the listing sorts the agents and starts
-	// nothing. The first row of the listing is alpha, a folder.
 	sendKeys(t, term, "s")
 	opened := false
 	for range 30 {
 		sendKeys(t, term, "j", "o")
-		// Wait for this o to show whether it opened something before the
-		// next j: the opener starts at once and says so, but its record can
-		// land later (on macOS a process start often takes longer than a
-		// short sleep), and a j sent meanwhile walks on to open the next row.
 		deadline := time.Now().Add(time.Second)
 		for time.Now().Before(deadline) && !opened {
 			opened = len(openRecord(record)) > 0 && openRecord(record)[0] != "" ||
@@ -221,7 +198,6 @@ func TestSidebarFileOpenSystem(t *testing.T) {
 	copiesFrame(t, term, "open-system-folder")
 	saveArtifact(t, term, art, "open-system-folder")
 
-	// A file with no rule goes to the system opener.
 	col, row, ok := findOnGrid(term.Screen(), "brief.txt")
 	if !ok {
 		t.Fatalf("no brief.txt row:\n%s", term.Snapshot())
@@ -235,8 +211,6 @@ func TestSidebarFileOpenSystem(t *testing.T) {
 	}, "o on a file")
 	waitForAll(t, term, uiTimeout, "the success note", "Opened brief.txt with "+systemOpener+".")
 
-	// A file a rule matches goes to the rule's program, in its argv. The rule
-	// is written in capitals, so the match also ignores case.
 	col, row, ok = findOnGrid(term.Screen(), "paper.pdf")
 	if !ok {
 		t.Fatalf("no paper.pdf row:\n%s", term.Snapshot())
@@ -252,7 +226,6 @@ func TestSidebarFileOpenSystem(t *testing.T) {
 	waitForAll(t, term, uiTimeout, "the success note", "Opened paper.pdf with rule.")
 	saveArtifact(t, term, art, "open-system-rule")
 
-	// The menu row shows the key and does the same.
 	col, row, _ = findOnGrid(term.Screen(), "paper.pdf")
 	mouseClick(t, term, col, row, tuitest.MouseRight, 0)
 	waitForAll(t, term, uiTimeout, "the file menu", "Open with system")

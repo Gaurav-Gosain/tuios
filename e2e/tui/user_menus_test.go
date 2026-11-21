@@ -110,8 +110,6 @@ toggle_zoom = ["z"]
 	_, zoomY, _ := dockCellFind(s, "Zoom")
 	_, keepY, _ := dockCellFind(s, "Keep this folder")
 	toolsX, toolsY, _ := dockCellFind(s, "My tools")
-	// The submenu row's label lines up with the others, and its mark is the
-	// cursor's chevron in the right column, where the key hints are.
 	if line := s.Line(toolsY); strings.Contains(line, "My tools >") || !strings.Contains(line[strings.Index(line, "My tools"):], "\u203a") {
 		t.Errorf("ASSERTION: the submenu row is not marked with the chevron in the right column: %q", line)
 	}
@@ -120,7 +118,6 @@ toggle_zoom = ["z"]
 		t.Errorf("ASSERTION: the added rows are not between Zoom and Minimize: zoom %d, keep %d, tools %d, minimize %d", zoomY, keepY, toolsY, minY)
 	}
 
-	// The submenu row opens the submenu in the menu's place.
 	leftClick(t, term, toolsX+2, toolsY)
 	waitMenu(t, term, "submenu", "My tools", "Save the pane name", "New window")
 	s = term.Screen()
@@ -129,7 +126,6 @@ toggle_zoom = ["z"]
 		t.Errorf("ASSERTION: the pane menu is still up under the submenu:\n%s", s.Text())
 	}
 
-	// Its row runs on the pane the first menu was opened on.
 	saveX, saveY, _ := dockCellFind(s, "Save the pane name")
 	leftClick(t, term, saveX+2, saveY)
 	got := waitForFileText(t, out, func(s string) bool { return s != "" }, "the submenu row never ran its action")
@@ -138,8 +134,6 @@ toggle_zoom = ["z"]
 		t.Errorf("ASSERTION: the submenu row wrote %q, want the pane name %q whole", got, name)
 	}
 
-	// The same menu from a key: leader t u is its which-key panel, which
-	// shows the keyed row under the action's label, and s runs it.
 	if err := os.Remove(out); err != nil {
 		t.Fatalf("remove %s: %v", out, err)
 	}
@@ -155,8 +149,6 @@ toggle_zoom = ["z"]
 		t.Errorf("ASSERTION: the which-key row wrote %q, want the pane name %q whole", got, name)
 	}
 
-	// A menu in the older [keybindings.menus.NAME] spelling is a submenu of a
-	// right-click menu too, under its title, with its rows.
 	shiftRightClick(t, term, 20, 10)
 	waitMenu(t, term, "pane again", "Old spelling")
 	s = term.Screen()

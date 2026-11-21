@@ -80,8 +80,6 @@ func TestAgentsViewLayoutKeysSayWhyWhenNarrow(t *testing.T) {
 		return "size " + strconv.FormatInt(f.size, 10) + ", modified " + f.mod.Format(time.RFC3339Nano) + ": " + string(f.data)
 	}
 	keyBar := func() string { return ckKeyBar(term.Screen()) }
-	// listAlone is the frame at 70 columns: the list fills the width with
-	// the cursor on bench-idle, and the focus is not drawn.
 	listAlone := func(s tuitest.Screen) bool {
 		cols, _ := s.Size()
 		text := s.Text()
@@ -89,8 +87,6 @@ func TestAgentsViewLayoutKeysSayWhyWhenNarrow(t *testing.T) {
 			strings.Contains(text, "Needs you") && !strings.Contains(text, "Says:") &&
 			!strings.Contains(text, "Reply to bench-idle") && !strings.Contains(text, "Thread    Checkpoints")
 	}
-	// listAndFocus is the frame at 120 columns with no zoom: the list with
-	// the cursor on bench-idle, and the focus beside it on that agent.
 	listAndFocus := func(s tuitest.Screen) bool {
 		cols, _ := s.Size()
 		text := s.Text()
@@ -99,7 +95,6 @@ func TestAgentsViewLayoutKeysSayWhyWhenNarrow(t *testing.T) {
 			strings.Contains(text, "Thread    Checkpoints")
 	}
 
-	// N1: w at 120 columns, where the side column cannot show.
 	cursorTo(t, term, func(line string) bool { return strings.Contains(line, "bench-idle") })
 	waitUntil(t, "sidebar.json holds the client's claim of the file (its socket) before w is pressed", uiTimeout, func() (bool, string) {
 		return strings.Contains(string(readState().data), "\"socket\""), "sidebar.json: " + describe(readState())
@@ -116,8 +111,6 @@ func TestAgentsViewLayoutKeysSayWhyWhenNarrow(t *testing.T) {
 	})
 	saveFrame(t, term, "layout-narrow-w")
 
-	// O1: a double-click goes to the pane and closes the view with no key, and
-	// the view opened again at 120 columns draws no side note.
 	s := term.Screen()
 	row := fleetRowWith(s, "bench-idle")
 	if row < 0 {
@@ -136,15 +129,12 @@ func TestAgentsViewLayoutKeysSayWhyWhenNarrow(t *testing.T) {
 	stayTrue(t, "the agents view opened again holds no side note in the key bar", time.Second, func() (bool, string) {
 		return !strings.Contains(keyBar(), "the side column needs"), term.Snapshot()
 	})
-	// w again leaves the view as N1 did, so the presses at 200 still have a
-	// note to clear.
 	cursorTo(t, term, func(line string) bool { return strings.Contains(line, "bench-idle") })
 	ckPress(t, term, "w")
 	waitUntil(t, "w at 120 columns in the view opened again says that the side column needs 170 columns", uiTimeout, func() (bool, string) {
 		return strings.Contains(keyBar(), "the side column needs 170 columns"), term.Snapshot()
 	})
 
-	// N2: at 200 columns the side column is drawn, so the press hid nothing.
 	if err := term.Resize(200, 50); err != nil {
 		t.Fatalf("resize to 200x50: %v", err)
 	}
@@ -162,8 +152,6 @@ func TestAgentsViewLayoutKeysSayWhyWhenNarrow(t *testing.T) {
 		return strings.Contains(term.Screen().Text(), "Last turn"), term.Snapshot()
 	})
 
-	// Z1: Z at 70 columns, where nothing zooms. bench-idle is an agent, not
-	// a plan.
 	cursorTo(t, term, func(line string) bool { return strings.Contains(line, "bench-idle") })
 	if err := term.Resize(70, 40); err != nil {
 		t.Fatalf("resize to 70x40: %v", err)

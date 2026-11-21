@@ -23,8 +23,6 @@ import (
 // sheet shows "wip" as the base.
 func TestCockpitSpawnJJBookmarks(t *testing.T) {
 	base, _ := fanFixture(t)
-	// Only the fake claude: an agent installed on this machine must never
-	// start from a test.
 	jjBin := t.TempDir()
 	if err := os.Symlink(needTool(t, "jj"), filepath.Join(jjBin, "jj")); err != nil {
 		t.Fatal(err)
@@ -42,8 +40,6 @@ func TestCockpitSpawnJJBookmarks(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, "w"), []byte("w\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// describe also snapshots the file, so @ is not the empty commit the
-	// label skips.
 	testutil.JJ(t, repo, "describe", "-m", "wip")
 	if out, err := tuiosCLI(t, base, "new", "home", "--detach", "--cwd", repo); err != nil {
 		t.Fatalf("create session: %v\n%s", err, out)
@@ -66,8 +62,6 @@ func TestCockpitSpawnJJBookmarks(t *testing.T) {
 		t.Fatalf("ASSERTION: the sheet offers the description \"wip\" as the base:\n%s", text)
 	}
 
-	// Task, Agent, Model, Effort, Permission, Where, Branch, Base: down on
-	// Base opens its list.
 	for range 7 {
 		if err := term.SendKeys(tuitest.Tab); err != nil {
 			t.Fatal(err)

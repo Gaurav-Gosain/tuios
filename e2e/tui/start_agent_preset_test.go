@@ -31,7 +31,6 @@ import (
 func TestStartAgentFromAPreset(t *testing.T) {
 	base, _ := fanFixture(t)
 	t.Cleanup(func() { dumpDaemonLogOnFail(t, base) })
-	// A claude that writes its argv down, then is the fixture's claude.
 	fake, err := exec.LookPath("claude")
 	if err != nil {
 		t.Fatalf("the fixture's claude is not on PATH: %v", err)
@@ -109,7 +108,6 @@ grants = ["admin"]
 		t.Errorf("ASSERTION: the agent did not get the preset's keys after it was ready, in order:\n%s", screen)
 	}
 
-	// The plain success line carries the full id.
 	out, err = tuiosCLI(t, base, "start-agent", "--preset", "worker", "-s", "crew", "--name", "w2")
 	if err != nil {
 		t.Fatalf("start-agent --preset worker: %v\n%s", err, out)
@@ -118,14 +116,11 @@ grants = ["admin"]
 		t.Errorf("ASSERTION: the plain success line has no full id:\n%s", out)
 	}
 
-	// An unknown preset: refused, with the ones that exist, and nothing starts.
 	out, err = tuiosCLI(t, base, "start-agent", "--preset", "nosuch", "-s", "crew", "--name", "w3")
 	if err == nil || !strings.Contains(out, "worker") || !strings.Contains(out, "boss") {
 		t.Errorf("ASSERTION: an unknown preset was not refused with the names that exist: %v\n%s", err, out)
 	}
 
-	// From a pane that may start agents (fan) but not give admin, a preset
-	// that grants admin is refused, as --grants admin is.
 	ran := filepath.Join(base, "boss.out")
 	pane := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", "crew", "plain", "--no-focus", "--print-id"))
 	mustCLI(t, base, "call", "set-pane-grants", `{"session":"crew","window":"`+pane+`","grants":["read","write","fan"]}`)

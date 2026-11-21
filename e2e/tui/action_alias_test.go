@@ -58,11 +58,7 @@ func TestAnOlderActionNameStillBindsTheAction(t *testing.T) {
 	if found != 1 {
 		t.Errorf("ASSERTION: %d rows give open_settings the key Y from the file, want 1", found)
 	}
-	// An empty list under the older name unbinds the action: the default
-	// alt+up must not come back under the action's own name.
 	for _, r := range rows {
-		// The GUI app's own table binds alt+up too; only terminal mode is the
-		// file's.
 		if r.Scope == "terminal" && r.Action == "focus_up" && slices.ContainsFunc(r.Keys, func(k string) bool { return strings.HasSuffix(k, "alt+up") }) {
 			t.Errorf("ASSERTION: terminal_focus_up = [] in the file left focus_up on alt+up: %+v", r)
 		}

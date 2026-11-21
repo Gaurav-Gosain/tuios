@@ -7,18 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The rail takes the keyboard and no mode. Its lease (mode.go) saves the
-// mode chosen when it opened and hands it back on esc, while a rail action
-// that relocates the person cancels the lease and its choice stands.
-//
-// TestRailEscHandsBackWindowMode is a guard, not a regression test: no
-// keyboard browse in the rail makes a choice of mode, so removing the
-// hand-back changes nothing it can see (NEGATIVE_CONTROLS.md, "The rail as a
-// mode lease"). A choice from outside the client while the rail is open is
-// TestRailEscKeepsAChoiceMadeWhileItWasOpen.
-
-// railPanes is two panes in window management, with the rail open on the
-// keyboard.
 func railPanes(t *testing.T) *tuitest.Terminal {
 	t.Helper()
 	base := t.TempDir()
@@ -90,8 +78,6 @@ func TestRailEscKeepsAChoiceMadeWhileItWasOpen(t *testing.T) {
 			t.Fatalf("run-command TerminalMode: %v\n%s", err, out)
 		}
 	}
-	// The run-command chooses terminal mode: with no rail, a line reaches
-	// the shell.
 	choose()
 	if err := term.SendKeys("echo plain-$((1+2))", tuitest.Enter); err != nil {
 		t.Fatal(err)

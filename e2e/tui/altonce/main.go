@@ -23,8 +23,6 @@ func main() {
 	for i := range pix {
 		pix[i] = byte(i * 11)
 	}
-	// A delay first, so the pane exists and has settled before the app takes
-	// the alternate screen, as it does for an app that starts slowly.
 	if len(os.Args) > 1 {
 		if d, err := time.ParseDuration(os.Args[1]); err == nil {
 			time.Sleep(d)

@@ -34,8 +34,6 @@ func TestHoverFocusReachesTheDaemon(t *testing.T) {
 		}
 		return wl.FocusedWindowID
 	}
-	// waitFocusMoves waits until the daemon names a focused window other than
-	// from, and returns it.
 	waitFocusMoves := func(from, what string) string {
 		t.Helper()
 		deadline := time.Now().Add(uiTimeout)
@@ -49,7 +47,6 @@ func TestHoverFocusReachesTheDaemon(t *testing.T) {
 		return ""
 	}
 
-	// Whichever pane has the focus now, one of the two halves moves it.
 	start := focused()
 	mouseHover(t, term, 40, 15)
 	time.Sleep(time.Second)
@@ -64,7 +61,6 @@ func TestHoverFocusReachesTheDaemon(t *testing.T) {
 	mouseHover(t, term, 120, 15)
 	right := waitFocusMoves(left, "after a hover from the left pane to the right one")
 
-	// A rename of the left pane makes the daemon push its state to the client.
 	if out, err := tuiosCLI(t, base, "set-window", "-s", session, "-w", left, "--name", "hovered-away"); err != nil {
 		t.Fatalf("rename-window: %v\n%s", err, out)
 	}

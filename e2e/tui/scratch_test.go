@@ -11,21 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The scratch terminal (toggle_scratch, leader g), driven through a real PTY.
-//
-// How these could pass wrongly, written down first:
-//   - The text could be on screen because the pane never hid. Each hide waits
-//     for the marker to leave the screen and for the dock to count one window
-//     again, before the next show.
-//   - The text could come back because the show ran the command again. The
-//     marker is computed by the shell (6*7) once, and the show types nothing.
-//   - The show could make a new pane each time. The test reads the pane's id
-//     on the first show and requires the same id after every show.
-//   - The popup could hold a nested tuios again. The daemon must list no
-//     session but "work", and the pane itself must hold the shell's output and
-//     no dock.
-
-// scratchRow is the scratch terminal's row in `tuios list-windows --json`.
 type scratchRow struct {
 	ID        string `json:"window_id"`
 	Minimized bool   `json:"minimized"`
@@ -33,8 +18,6 @@ type scratchRow struct {
 	Workspace int    `json:"workspace"`
 }
 
-// scratchRowOf returns the scratch terminal's row in session work, and
-// whether there is one.
 func scratchRowOf(t *testing.T, base string) (scratchRow, bool) {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "--json", "--session", "work")
@@ -55,10 +38,6 @@ func scratchRowOf(t *testing.T, base string) (scratchRow, bool) {
 	return scratchRow{}, false
 }
 
-// waitScratch waits until the scratch terminal is listed, or is gone when
-// gone is set, and returns its row. Whether the group is on the screen is the
-// client's view, not session state, so hidden is read off the screen by the
-// callers; the argument stays so the calls read as what they check.
 func waitScratch(t *testing.T, term *tuitest.Terminal, base string, hidden, gone bool, what string) scratchRow {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -78,7 +57,6 @@ func waitScratch(t *testing.T, term *tuitest.Terminal, base string, hidden, gone
 	return scratchRow{}
 }
 
-// toggleScratch presses the leader and g.
 func toggleScratch(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Ctrl('b'), "g"); err != nil {
@@ -86,8 +64,6 @@ func toggleScratch(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// typeUntil types cmd and enter until want is on the screen, as a person
-// retypes a command that went nowhere. It returns how many tries it took.
 func typeUntil(t *testing.T, term *tuitest.Terminal, cmd, want string) int {
 	t.Helper()
 	deadline := time.Now().Add(bootTimeout)
@@ -104,7 +80,6 @@ func typeUntil(t *testing.T, term *tuitest.Terminal, cmd, want string) int {
 	}
 }
 
-// waitCount waits until the dock counts n windows on the workspace.
 func waitCount(t *testing.T, term *tuitest.Terminal, n int, what string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == n }, uiTimeout); err != nil {
@@ -112,7 +87,6 @@ func waitCount(t *testing.T, term *tuitest.Terminal, n int, what string) {
 	}
 }
 
-// dockRows is the text of the bottom rows, where the dock is drawn.
 func dockRows(s tuitest.Screen) string {
 	_, rows := s.Size()
 	var b strings.Builder
@@ -123,8 +97,6 @@ func dockRows(s tuitest.Screen) string {
 	return b.String()
 }
 
-// assertHiddenEverywhere checks the places a user reads windows from: the
-// dock, and the list-windows table. The JSON keeps the row, marked.
 func assertHiddenEverywhere(t *testing.T, term *tuitest.Terminal, base, id string) {
 	t.Helper()
 	waitCount(t, term, 1, "with the scratch terminal hidden")
@@ -143,8 +115,6 @@ func assertHiddenEverywhere(t *testing.T, term *tuitest.Terminal, base, id strin
 	}
 }
 
-// startScratchOuter starts a client on session work with one pane, on the
-// shipped [startup] settings: no default window, window mode.
 func startScratchOuter(t *testing.T, base string) *tuitest.Terminal {
 	t.Helper()
 	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", "work"}})
@@ -160,15 +130,12 @@ func TestScratchTerminalShowsOneShell(t *testing.T) {
 	base := t.TempDir()
 	term := startScratchOuter(t, base)
 
-	// Show. One bordered terminal named scratch, with the keyboard in it.
 	toggleScratch(t, term)
 	first := waitScratch(t, term, base, false, false, "the first show")
 	waitCount(t, term, 1, "with the scratch terminal shown, which the count leaves out")
 	tries := typeUntil(t, term, "echo SCRATCH-$((6*7))", "SCRATCH-42")
 	t.Logf("the scratch terminal with text typed into it (%d tries):\n%s", tries, term.Snapshot())
 
-	// A shell, not a nested tuios: no session but work, and the pane holds
-	// the shell's output and no dock of its own.
 	out, err := tuiosCLI(t, base, "ls", "--json")
 	if err != nil {
 		t.Fatalf("ls: %v\n%s", err, out)
@@ -191,13 +158,11 @@ func TestScratchTerminalShowsOneShell(t *testing.T) {
 		t.Errorf("the screen names scratch %d times, want once, on the popup border\n%s", n, term.Snapshot())
 	}
 
-	// Hide, from inside the popup: the keyboard is still in it.
 	toggleScratch(t, term)
 	waitGone(t, term, "after the hide", "SCRATCH-42")
 	assertHiddenEverywhere(t, term, base, first.ID)
 	t.Logf("the layout with the scratch terminal hidden:\n%s", term.Snapshot())
 
-	// Show again. The marker is what the shell kept.
 	toggleScratch(t, term)
 	if err := term.WaitForText("SCRATCH-42", uiTimeout); err != nil {
 		t.Fatalf("the scratch terminal lost its text across a hide: %v\n%s", err, term.Snapshot())
@@ -208,11 +173,6 @@ func TestScratchTerminalShowsOneShell(t *testing.T) {
 	typeUntil(t, term, "echo AGAIN-$((7*8))", "AGAIN-56")
 	t.Logf("the scratch terminal shown again and typed into:\n%s", term.Snapshot())
 
-	// Detach with the popup on the screen, and attach again with a bare
-	// tuios attach. It picks the most recently active session. The first
-	// design made a session called scratch, which then won this pick, so a
-	// bare attach landed in scratch instead of work. The scratch terminal is
-	// a pane of work, so work is the only session to pick.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "d"); err != nil {
 		t.Fatalf("send leader d: %v", err)
 	}
@@ -236,18 +196,12 @@ func TestScratchTerminalShowsOneShell(t *testing.T) {
 		t.Fatalf("the show after the reattach lost the text: %v\n%s", err, term.Snapshot())
 	}
 
-	// The shell exits. The pane goes, and the next press starts a new one,
-	// in the folder the pane under it is in now. The pane moves there with
-	// a cd, which tells the daemon nothing: the folder must be read from the
-	// pane's process when the scratch starts, not from a client's copy.
 	typeUntilGone(t, term, "exit", base)
 	waitGone(t, term, "after exit", "SCRATCH-42")
 	here := filepath.Join(base, "scratch-here")
 	if err := os.MkdirAll(here, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// The keyboard is not in the pane after the scratch's exit, so the cd
-	// goes in as a script's would. The pane is window 0.
 	if out, err := tuiosCLI(t, base, "send-text", "-s", "work", "-w", "0", "cd "+here+" && echo MOVED-$((3*3))\n"); err != nil {
 		t.Fatalf("send the cd: %v\n%s", err, out)
 	}
@@ -261,9 +215,6 @@ func TestScratchTerminalShowsOneShell(t *testing.T) {
 	}
 	typeUntil(t, term, "echo FRESH-$((5*5))", "FRESH-25")
 	typeUntil(t, term, `echo "AT-$(pwd)-END"`, "-END")
-	// The pane's process is read for its folder, and the kernel names it by
-	// its real path: on macOS here is under /var, a link to /private/var.
-	// The path is long enough to wrap in the pane, so the capture joins rows.
 	want := resolvedPath(t, here)
 	if pane, err := tuiosCLI(t, base, "capture-pane", "-s", "work", "-w", fresh.ID, "--unwrap"); err != nil || !strings.Contains(pane, "AT-"+want+"-END") {
 		t.Fatalf("the new scratch shell did not start in %s, the pane's folder after its cd: %v\n%s", want, err, pane)
@@ -275,7 +226,6 @@ func TestScratchTerminalShowsOneShell(t *testing.T) {
 	alive(t, term, "after the scratch terminal round trip")
 }
 
-// typeUntilGone types exit into the scratch shell until the pane is gone.
 func typeUntilGone(t *testing.T, term *tuitest.Terminal, cmd, base string) {
 	t.Helper()
 	if err := term.SendKeys(cmd, tuitest.Enter); err != nil {
@@ -326,7 +276,6 @@ func TestScratchTerminalSurvivesCloseAndFocus(t *testing.T) {
 	first := waitScratch(t, term, base, false, false, "the first show")
 	typeUntil(t, term, "echo KEEP-$((6*7))", "KEEP-42")
 
-	// Esc to window mode, then esc on the scratch pane: nothing closes.
 	windowManagementMode(t, term)
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("send esc: %v", err)
@@ -342,7 +291,6 @@ func TestScratchTerminalSurvivesCloseAndFocus(t *testing.T) {
 	toggleScratch(t, term)
 	waitGone(t, term, "the scratch key", "KEEP-42")
 
-	// A relative focus walks the visible panes only.
 	for range 3 {
 		if out, err := tuiosCLI(t, base, "focus-window", "-s", "work", "--relative", "next"); err != nil {
 			t.Logf("focus-window --relative next: %v %s", err, out)
@@ -356,7 +304,6 @@ func TestScratchTerminalSurvivesCloseAndFocus(t *testing.T) {
 		t.Fatalf("a relative focus showed the hidden scratch terminal\n%s", term.Snapshot())
 	}
 
-	// A focus by id shows it, with the text it kept, and takes the keys.
 	if out, err := tuiosCLI(t, base, "focus-window", "-s", "work", first.ID); err != nil {
 		t.Fatalf("focus-window: %v %s", err, out)
 	}

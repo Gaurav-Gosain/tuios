@@ -90,7 +90,6 @@ func TestDaemonRunsAsAService(t *testing.T) {
 		return out
 	}
 	t.Cleanup(func() {
-		// The daemon first, with its saved state, then the unit and its file.
 		_, _ = tuiosCLI(t, base, "--server", server, "kill-server")
 		_, _ = systemctl("stop", unit)
 		_, _ = systemctl("disable", unit)
@@ -137,7 +136,6 @@ func TestDaemonRunsAsAService(t *testing.T) {
 		}
 	}
 
-	// The unit as it will be written.
 	dry := cli("daemon", "install-service", "--dry-run")
 	for _, want := range []string{
 		"KillMode=process", "Restart=on-failure", "UnsetEnvironment=DISPLAY WAYLAND_DISPLAY XAUTHORITY",
@@ -150,8 +148,6 @@ func TestDaemonRunsAsAService(t *testing.T) {
 	if _, err := os.Stat(unitPath); err == nil {
 		t.Fatalf("--dry-run wrote %s", unitPath)
 	}
-	// systemd's own parser reads the unit, so a setting it refuses fails here
-	// with its message, not later as "bad unit file setting".
 	if analyze, err := exec.LookPath("systemd-analyze"); err == nil {
 		_, text, _ := strings.Cut(dry, "\n")
 		copyPath := filepath.Join(t.TempDir(), unit)
@@ -165,7 +161,6 @@ func TestDaemonRunsAsAService(t *testing.T) {
 		}
 	}
 
-	// Install: no daemon runs, so the unit starts one.
 	if out := cli("daemon", "install-service"); !strings.Contains(out, "The service started the daemon.") {
 		t.Fatalf("install-service did not start the daemon:\n%s", out)
 	}
@@ -175,7 +170,6 @@ func TestDaemonRunsAsAService(t *testing.T) {
 		t.Fatalf("the unit is at %s, want %s", first.File, unitPath)
 	}
 
-	// A pane starts a program that leaves the pane's session on purpose.
 	pidFile := filepath.Join(base, "survivor.pid")
 	cli("new", "-d", "svc")
 	cli("new-window", "-s", "svc", "survivor", "--no-focus", "--", "sh", "-c",
@@ -193,9 +187,6 @@ func TestDaemonRunsAsAService(t *testing.T) {
 		}
 	}
 	t.Cleanup(func() { _ = syscall.Kill(survivor, syscall.SIGKILL) })
-	// $! is written right after the fork, before the child has run setsid.
-	// Until it has, it is still in the pane's session, and the hangup when the
-	// daemon stops the pane kills it. Wait for it to lead a session of its own.
 	for deadline := time.Now().Add(10 * time.Second); sessionOf(survivor) != survivor; {
 		if time.Now().After(deadline) {
 			t.Fatalf("the pane program %d did not leave the pane's session (session %d)", survivor, sessionOf(survivor))
@@ -207,10 +198,8 @@ func TestDaemonRunsAsAService(t *testing.T) {
 	}
 	logf("pane program %d runs in %s", survivor, unit)
 
-	// kill-server: status 0, so the unit stays stopped, and KillMode=process
-	// leaves the program that left its pane.
 	cli("kill-server")
-	time.Sleep(4 * time.Second) // twice RestartSec
+	time.Sleep(4 * time.Second)
 	if state, _ := systemctl("is-active", unit); state != "inactive" {
 		t.Fatalf("after kill-server the unit is %q, want inactive (a clean stop must not restart it)", state)
 	}
@@ -219,12 +208,10 @@ func TestDaemonRunsAsAService(t *testing.T) {
 	}
 	logf("after kill-server: unit inactive, pane program %d alive", survivor)
 
-	// A client start goes through the unit.
 	cli("start-server")
 	second := waitFor("after start-server", func(st status) bool { return st.Running && st.UnderService })
 	logf("start-server: main pid %d", second.PID)
 
-	// A crash: systemd starts the daemon again.
 	if err := syscall.Kill(second.DaemonPID, syscall.SIGKILL); err != nil {
 		t.Fatal(err)
 	}
@@ -233,7 +220,6 @@ func TestDaemonRunsAsAService(t *testing.T) {
 	})
 	logf("SIGKILL %d: systemd started %d", second.DaemonPID, third.PID)
 
-	// A live upgrade keeps the pid, and the unit sees no change.
 	cli("daemon", "upgrade", "--binary", tuiosBin)
 	fourth := waitFor("after the upgrade", func(st status) bool { return st.Running && st.UnderService })
 	if fourth.PID != third.PID {
@@ -241,7 +227,6 @@ func TestDaemonRunsAsAService(t *testing.T) {
 	}
 	logf("live upgrade: main pid %d kept, unit %s", fourth.PID, fourth.Detail)
 
-	// Uninstall removes the file and leaves the daemon.
 	cli("daemon", "uninstall-service")
 	if _, err := os.Stat(unitPath); err == nil {
 		t.Fatalf("uninstall-service left %s", unitPath)
@@ -252,9 +237,6 @@ func TestDaemonRunsAsAService(t *testing.T) {
 	logf("uninstall: file gone, daemon %d runs on", fourth.DaemonPID)
 }
 
-// sessionOf returns the session id of pid from /proc, or 0 when it cannot be
-// read. The command name in the stat line can hold spaces and parentheses, so
-// the fields are counted from the last ')'.
 func sessionOf(pid int) int {
 	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
 	if err != nil {
@@ -264,7 +246,6 @@ func sessionOf(pid int) int {
 	if i < 0 {
 		return 0
 	}
-	// After the name: state, ppid, pgrp, session.
 	fields := strings.Fields(string(data[i+1:]))
 	if len(fields) < 4 {
 		return 0

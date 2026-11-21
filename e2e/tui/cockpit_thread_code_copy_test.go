@@ -33,7 +33,6 @@ func TestCockpitThreadCodeBlockCopy(t *testing.T) {
 		return got
 	}
 
-	// 1. A click on copy in the Go block's header copies the code.
 	s := term.Screen()
 	head := rowWith(s, "package words") - 1
 	col := strings.Index(s.Line(head), "copy  go")
@@ -56,8 +55,6 @@ func TestCockpitThreadCodeBlockCopy(t *testing.T) {
 	waitText(t, term, "the copy count", "Copied 3 lines.")
 	saveCockpitFrames(t, term, "code-copy-click")
 
-	// 2. C copies the lowest block, the 2000-line one, as far as the thread
-	// holds it, and says that the rest is not in the thread.
 	before = mustCLIOr(t, base, "show-buffer")
 	if err := term.SendKeys("C"); err != nil {
 		t.Fatal(err)

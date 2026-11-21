@@ -24,7 +24,6 @@ func main() {
 		os.Exit(255)
 	}
 	if len(os.Args) > 1 && os.Args[1] == "-G" {
-		// ssh -G: the host name from -o HostName, or the destination.
 		host := os.Args[len(os.Args)-1]
 		for i := 1; i+1 < len(os.Args); i++ {
 			if v, ok := strings.CutPrefix(os.Args[i+1], "HostName="); ok && os.Args[i] == "-o" {
@@ -56,6 +55,5 @@ func main() {
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, os.Stdout, os.Stderr
 		_ = cmd.Run()
 	}
-	// The session ends with stdin, whether it closed or failed.
 	_ = sc.Err()
 }

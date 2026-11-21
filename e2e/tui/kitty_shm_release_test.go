@@ -29,8 +29,6 @@ import (
 func TestKittySharedMemoryFramesAreReleased(t *testing.T) {
 	requireDevShm(t)
 
-	// Frames that repeat the picture on screen: tuios forwards the first and
-	// drops the rest as identical, unread by anyone.
 	t.Run("repeats", func(t *testing.T) {
 		host := newKittyHost()
 		term, _ := start(t, startOpts{
@@ -50,8 +48,6 @@ func TestKittySharedMemoryFramesAreReleased(t *testing.T) {
 		forwarded := forwardedShmNames(host.bytes())
 		left := leftInDevShm(names)
 		t.Logf("%d frames: %d forwarded to the host, %d still in /dev/shm", len(names), len(forwarded), len(left))
-		// The positive half: the stream did reach the host, and most frames
-		// were dropped, so the drop path is the one under test.
 		if len(forwarded) == 0 {
 			t.Fatalf("no frame was forwarded to the host, so nothing here exercised the passthrough")
 		}
@@ -61,10 +57,6 @@ func TestKittySharedMemoryFramesAreReleased(t *testing.T) {
 		assertReleased(t, left, forwarded)
 	})
 
-	// Frames in synchronized updates, faster than the render loop sends them,
-	// as terminal-browser sends them. The host reads every frame it is handed,
-	// so a frame the next one has replaced is dropped, with nobody left to
-	// read it. What is sent needs no placement after it.
 	for _, daemon := range []bool{false, true} {
 		name := "superseded"
 		if daemon {
@@ -104,14 +96,9 @@ func TestKittySharedMemoryFramesAreReleased(t *testing.T) {
 			if len(forwarded) == 0 {
 				t.Fatalf("no frame was forwarded to the host, so nothing here exercised the passthrough")
 			}
-			// 400 frames at 200 a second, and a render loop at 60: most of
-			// them have a newer one behind them before the loop runs.
 			if len(forwarded) > len(names)*3/4 {
 				t.Fatalf("the host was handed %d of %d frames, and it reads each one whole", len(forwarded), len(names))
 			}
-			// The first frames are placed by the refresh pass, the way every
-			// new image is, and more of them on a loaded machine. The rest
-			// carry their own placement.
 			if counts["a=t"] > counts["a=T"]/2 {
 				t.Fatalf("%d frames went out as a transmit to be placed later: %v", counts["a=t"], counts)
 			}
@@ -119,24 +106,17 @@ func TestKittySharedMemoryFramesAreReleased(t *testing.T) {
 		})
 	}
 
-	// A guest that closes one update and opens the next in the same write has an
-	// update open whenever tuios looks. A frame the next one replaces has to be
-	// one the render loop has not passed yet, or the picture never changes.
 	t.Run("joined-updates", func(t *testing.T) {
 		term, host := startShmPane(t)
 		names := runShmStream(t, term, 150, 30, 0, "syncjoined")
 		forwarded := forwardedShmNames(host.bytes())
 		t.Logf("%d frames: %d forwarded to the host", len(names), len(forwarded))
-		// At 30 frames a second the render loop passes between any two of them.
 		if len(forwarded) < len(names)/2 {
 			t.Fatalf("the host was handed %d of %d frames: the stream froze", len(forwarded), len(names))
 		}
 		assertReleased(t, leftInDevShm(names), forwarded)
 	})
 
-	// A guest may send one object again and again, rewriting it in place. The
-	// name in the frame that replaces a held one is that name, so the object
-	// must stay for the host to read.
 	t.Run("reused-name", func(t *testing.T) {
 		term, host := startShmPane(t)
 		names := runShmStream(t, term, 400, 200, 0, "syncreuse")
@@ -147,7 +127,6 @@ func TestKittySharedMemoryFramesAreReleased(t *testing.T) {
 		if !forwardedShmNames(stream)[names[0]] {
 			t.Fatalf("the host was never handed the object")
 		}
-		// The positive half: frames were replaced, or this tests nothing.
 		sent := 0
 		for _, c := range wireCmds(stream) {
 			if c.action == "T" {
@@ -162,19 +141,12 @@ func TestKittySharedMemoryFramesAreReleased(t *testing.T) {
 		}
 	})
 
-	// A daemon pane on a workspace that is not shown has no client reading
-	// it, so the daemon is the last reader of every frame.
 	t.Run("daemon-unwatched", func(t *testing.T) {
 		names, forwarded, left := streamUnwatched(t, "vary")
 		t.Logf("%d frames: %d forwarded to the host, %d still in /dev/shm", len(names), len(forwarded), len(left))
 		assertReleased(t, left, forwarded)
 	})
 
-	// The same stream with each object one byte longer than the frame its
-	// command describes. The name is text the pane printed, and an object of
-	// another size may be another program's, so the daemon keeps every one.
-	// "daemon-unwatched" above is the positive half: the same path deletes
-	// objects of the right size.
 	t.Run("daemon-unwatched-wrong-size", func(t *testing.T) {
 		names, forwarded, left := streamUnwatched(t, "big")
 		t.Logf("%d frames: %d forwarded to the host, %d still in /dev/shm", len(names), len(forwarded), len(left))
@@ -184,8 +156,6 @@ func TestKittySharedMemoryFramesAreReleased(t *testing.T) {
 	})
 }
 
-// startShmPane starts a standalone tuios with one shell pane under a host that
-// records.
 func startShmPane(t *testing.T) (*tuitest.Terminal, *kittyHost) {
 	t.Helper()
 	host := newKittyHost()
@@ -204,9 +174,6 @@ func startShmPane(t *testing.T) (*tuitest.Terminal, *kittyHost) {
 	return term, host
 }
 
-// streamUnwatched runs the stand-in in a daemon pane on a workspace that is
-// not shown, and returns the names it advertised, the names the host was
-// handed, and the names still in /dev/shm.
 func streamUnwatched(t *testing.T, paint string) ([]string, map[string]bool, []string) {
 	t.Helper()
 	host := newKittyHost()
@@ -240,8 +207,6 @@ func streamUnwatched(t *testing.T, paint string) ([]string, map[string]bool, []s
 	return names, forwardedShmNames(host.bytes()), leftInDevShm(names)
 }
 
-// assertReleased fails for every object still in /dev/shm whose name never
-// reached the host.
 func assertReleased(t *testing.T, left []string, forwarded map[string]bool) {
 	t.Helper()
 	var leaked []string
@@ -256,20 +221,15 @@ func assertReleased(t *testing.T, left []string, forwarded map[string]bool) {
 	}
 }
 
-// runShmStream runs the stand-in in the focused pane and waits for it to finish.
 func runShmStream(t *testing.T, term *tuitest.Terminal, count, fps, delayMS int, paint string) []string {
 	t.Helper()
 	logPath := filepath.Join(t.TempDir(), "names")
 	typeLine(t, term, fmt.Sprintf("%s=%s %s %s %d %d %d %s", shmPrefixEnv, standInShmPrefix(t), buildShmStream(t), logPath, count, fps, delayMS, paint))
 	names := waitShmStream(t, term, logPath)
-	// The last frames are still on their way through the render loop.
 	time.Sleep(time.Second)
 	return names
 }
 
-// waitShmStream waits for the stand-in to log DONE and returns the names it
-// advertised. Every one of them is removed when the test ends, whatever the
-// test found, so a failing run does not leave memory behind.
 func waitShmStream(t *testing.T, term *tuitest.Terminal, logPath string) []string {
 	t.Helper()
 	deadline := time.Now().Add(shellTimeout + 10*time.Second)
@@ -295,7 +255,6 @@ func waitShmStream(t *testing.T, term *tuitest.Terminal, logPath string) []strin
 	return nil
 }
 
-// leftInDevShm is the names that are still objects in /dev/shm.
 func leftInDevShm(names []string) []string {
 	var out []string
 	for _, n := range names {
@@ -306,11 +265,8 @@ func leftInDevShm(names []string) []string {
 	return out
 }
 
-// shmPayloadRE matches a kitty command that names a shared memory object, and
-// its base64 payload.
 var shmPayloadRE = regexp.MustCompile(`\x1b_G([^;\x1b]*t=s[^;\x1b]*);([A-Za-z0-9+/=]*)\x1b\\`)
 
-// forwardedShmNames is every shared memory name the host was handed.
 func forwardedShmNames(stream []byte) map[string]bool {
 	out := map[string]bool{}
 	for _, m := range shmPayloadRE.FindAllSubmatch(stream, -1) {
@@ -321,7 +277,6 @@ func forwardedShmNames(stream []byte) map[string]bool {
 	return out
 }
 
-// buildShmStream compiles the shared memory stand-in once per test binary.
 func buildShmStream(t *testing.T) string {
 	t.Helper()
 	shmStreamOnce.Do(func() {

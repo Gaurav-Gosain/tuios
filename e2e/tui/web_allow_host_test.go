@@ -11,9 +11,6 @@ import (
 	"time"
 )
 
-// webHandshake sends a WebSocket handshake to the tuios-web server at addr,
-// with host in the Host header and in the Origin, as a browser on that name
-// would. It returns the status code of the answer: 101 means a session.
 func webHandshake(t *testing.T, addr, host string) int {
 	t.Helper()
 	conn, err := net.DialTimeout("tcp", addr, 5*time.Second)

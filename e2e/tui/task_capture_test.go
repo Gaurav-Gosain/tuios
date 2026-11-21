@@ -62,7 +62,6 @@ func TestTaskCaptureFromAnywhere(t *testing.T) {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}
 	dir := artifactDir(t)
-	// The pane works in a clone of acme/api.
 	repo := filepath.Join(t.TempDir(), "api")
 	for _, args := range [][]string{{"init", "-q", repo}, {"-C", repo, "remote", "add", "origin", "git@example.com:acme/api.git"}} {
 		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
@@ -105,14 +104,12 @@ func TestTaskCaptureFromAnywhere(t *testing.T) {
 		return res.Prompt
 	}
 
-	// Terminal mode: the leader works from the pane.
 	open("terminal mode", tuitest.Ctrl('b'), "+")
 	sendKeys(t, term, "Fix the flaky retry test")
 	waitText(t, term, "the typed title", "Fix the flaky retry test")
 	sendKeys(t, term, tuitest.Esc)
 	closed()
 
-	// Window management mode: the draft is kept.
 	windowManagementMode(t, term)
 	open("window management mode", tuitest.Ctrl('b'), "+")
 	waitText(t, term, "the kept draft", "Fix the flaky retry test")
@@ -126,7 +123,6 @@ func TestTaskCaptureFromAnywhere(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitText(t, term, "the image in the task", "[Image #1")
-	// The project pill: the pane's repository.
 	sendKeys(t, term, tuitest.Tab)
 	waitText(t, term, "the pane's repository", "‹ acme/api ›")
 	_ = term.WaitStable(uiTimeout)
@@ -150,7 +146,6 @@ func TestTaskCaptureFromAnywhere(t *testing.T) {
 		t.Errorf("ASSERTION: the attached image does not hold the pasted image (err %v)", err)
 	}
 
-	// The palette, then a Plan card started at once with ctrl+enter.
 	sendKeys(t, term, tuitest.Ctrl('p'))
 	waitText(t, term, "the palette", paletteTitle)
 	sendKeys(t, term, "New task")
@@ -166,17 +161,12 @@ func TestTaskCaptureFromAnywhere(t *testing.T) {
 	savePNG(t, term.Screen(), hostPalette(t, ""), dir, "capture-plan")
 	sendKeys(t, term, tuitest.Key("\x1b[13;5u"))
 	closed()
-	// start-agent answers once the agent took its first prompt, so the
-	// toast comes after the prompt file.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "Added t2 to home.") && strings.Contains(s.Text(), "claude works on it.")
 	}, 60*time.Second); err != nil {
 		t.Errorf("ASSERTION: no toast says the card was added and claude works on it: %v\n%s", err, term.Snapshot())
 	}
 	got = tasks("home")
-	// The new pane claims the card. The fake claude then execs sleep, so
-	// its agent leaves and the hold ends: the claim is read from the
-	// card's history. Claude starts in its plan mode.
 	out, _ := tuiosCLI(t, base, "call", "get-task", `{"session":"home","id":"t2"}`)
 	var t2 struct {
 		History []struct{ Action, Holder string }

@@ -54,8 +54,6 @@ func TestCardPreviewKeepsItsTopWhenAnAttachmentOpens(t *testing.T) {
 	}
 	mustCLI(t, base, "task", "attach", "-s", "S", "t1", pic, fix)
 
-	// A host that answers kitty graphics, as the docs worker's is: the
-	// picture opens as rows of its own.
 	host := &lockedBuffer{}
 	term := startIn(t, base, startOpts{args: []string{"attach", "S"}, cols: 108, rows: 30, shippedLooks: true, out: host,
 		env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}})
@@ -71,15 +69,12 @@ func TestCardPreviewKeepsItsTopWhenAnAttachmentOpens(t *testing.T) {
 		t.Fatalf("press b: %v", err)
 	}
 	waitText(t, term, "the board's columns", "Doing  1")
-	// The cursor starts on the held card's column head; j reaches the card.
 	if err := term.SendKeys("l", "l", " "); err != nil {
 		t.Fatalf("open the preview: %v", err)
 	}
 	waitText(t, term, "the preview with the picture open", "Card t1", "latency.png", "480x320")
 	saveCockpitFrames(t, term, "card-preview-picture-108x30", hostPictures(t, []byte(host.String()))...)
 	_ = term.WaitStable(uiTimeout)
-	// The diff is read once, then the picture again, then the diff: now
-	// read, it opens at once, in the frame after the picture's rows.
 	if err := term.SendKeys("]"); err != nil {
 		t.Fatalf("press ]: %v", err)
 	}
@@ -96,14 +91,11 @@ func TestCardPreviewKeepsItsTopWhenAnAttachmentOpens(t *testing.T) {
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "card-preview-step-108x30", hostPictures(t, []byte(host.String()))...)
 	s := term.Screen()
-	// The stage line and the holder are the preview's own: the board's card
-	// shows the title too.
 	for _, want := range []string{"· S t1", "Held by"} {
 		if rowWith(s, want) < 0 {
 			t.Errorf("ASSERTION: after ] the preview scrolled past %q, though the diff's row was in view:\n%s", want, term.Snapshot())
 		}
 	}
-	// Scrolled, the head says so.
 	if err := term.SendKeys("J"); err != nil {
 		t.Fatalf("press J: %v", err)
 	}

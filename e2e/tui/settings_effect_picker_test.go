@@ -8,46 +8,17 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The saver submenu, proved where it was reported: on the screen, with real
-// mouse reports, against a real tuios.
-//
-// The picker opens over the settings panel and overlaps it. Both panels sat on
-// the same z-index, so the hit test broke the tie on whichever was recorded
-// first and every click inside the picker reached the settings row behind it.
-
 const (
-	// saverSectionMark is a row only the Saver section carries.
 	saverSectionMark = "While busy"
-	// effectRowMark is the Effect row's help text. The settings panel prints
-	// the help of the selected row only, so this on screen means that row is
-	// the selected one, both on the way in and after the picker closes.
-	effectRowMark = "The animation the screen saver runs"
+	effectRowMark    = "The animation the screen saver runs"
 )
 
-// effectBands are the words the picker prints in each row's right-hand column.
-// A body line ending in one of them is an effect row, which is how the list is
-// found on screen without counting offsets from the panel border.
 var effectBands = []string{"none", "short", "medium", "long"}
 
-// trimRowEdge drops the trailing spaces and the pane's right border from a
-// row. A tiled pane reaches the last column, so its border sits after the
-// picker's own text and would otherwise read as the row's last field.
 func trimRowEdge(line string) string {
 	return strings.TrimRight(line, " \u2502\u2503|")
 }
 
-// pickerSpan finds the columns the picker panel occupies.
-//
-// The picker previews the effect it is highlighting, and the preview animates
-// over the whole screen, not only behind the panel. Particles therefore land in
-// a row's text on both sides of the panel, and the row's last field stops being
-// the duration band. Reading a whole screen line is only safe while the preview
-// has not drawn yet, which is why this test passed locally and failed under
-// load in CI.
-//
-// The panel's own divider is the anchor: it is the longest unbroken run of the
-// horizontal box glyph on screen, and the settings panel behind it draws a
-// shorter one. Its span is the panel's content columns.
 func pickerSpan(s tuitest.Screen) (start, end int, ok bool) {
 	_, height := s.Size()
 	lines := make([]string, height)
@@ -57,8 +28,6 @@ func pickerSpan(s tuitest.Screen) (start, end int, ok bool) {
 	return pickerSpanLines(lines)
 }
 
-// pickerSpanLines is pickerSpan over plain lines, so the rule can be tested
-// against a screen captured from a real run.
 func pickerSpanLines(lines []string) (start, end int, ok bool) {
 	for _, raw := range lines {
 		line := []rune(raw)
@@ -80,10 +49,6 @@ func pickerSpanLines(lines []string) (start, end int, ok bool) {
 	return start, end, ok
 }
 
-// maskToPicker blanks everything outside the picker's columns, so the preview's
-// particles cannot be read as a row's fields. It blanks rather than cuts,
-// because the caller turns the row's text back into a screen column with
-// strings.Index and a cut line would shift every one of those.
 func maskToPicker(line string, start, end int) string {
 	r := []rune(line)
 	for i := range r {
@@ -94,13 +59,6 @@ func maskToPicker(line string, start, end int) string {
 	return trimRowEdge(string(r))
 }
 
-// effectNameIn returns the effect a picker row names.
-//
-// The picker is drawn over the settings panel, so one screen row can carry a
-// settings label on the left and an effect on the right: "> Effect
-// binarypath long". The name is always the field before the duration band,
-// never the first field, which is what made this test click the wrong column
-// when the fifth match happened to be one of those rows.
 func effectNameIn(line string) string {
 	fields := strings.Fields(trimRowEdge(line))
 	if len(fields) < 2 {
@@ -109,8 +67,6 @@ func effectNameIn(line string) string {
 	return fields[len(fields)-2]
 }
 
-// effectRowsOnScreen returns the screen rows of the picker's effect list, in
-// order, paired with their text.
 func effectRowsOnScreen(s tuitest.Screen) (rows []int, text []string) {
 	start, end, ok := pickerSpan(s)
 	_, height := s.Size()
@@ -131,8 +87,6 @@ func effectRowsOnScreen(s tuitest.Screen) (rows []int, text []string) {
 	return rows, text
 }
 
-// selectSaverEffectRow walks the settings panel to the Saver section and leaves
-// the Effect row selected, the way the report describes reaching it.
 func selectSaverEffectRow(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	openSettings(t, term)
@@ -187,8 +141,6 @@ func TestEffectPickerTakesTheClicksOverTheSettingsPanel(t *testing.T) {
 		t.Fatalf("the picker drew no effect list: %v\n%s", err, term.Snapshot())
 	}
 
-	// The fifth row of the list, well inside the part of the picker that covers
-	// the settings panel.
 	rows, text := effectRowsOnScreen(term.Screen())
 	target, line := rows[4], text[4]
 	name := effectNameIn(line)
@@ -205,8 +157,6 @@ func TestEffectPickerTakesTheClicksOverTheSettingsPanel(t *testing.T) {
 
 	mouseClick(t, term, col, target, tuitest.MouseLeft, 0)
 
-	// A click on a picker row applies it and closes the picker, so the proof is
-	// on the settings row behind: it now holds the clicked effect.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(s.Text(), "Screen saver effect") &&
 			strings.Contains(s.Text(), effectRowMark)
@@ -217,16 +167,12 @@ func TestEffectPickerTakesTheClicksOverTheSettingsPanel(t *testing.T) {
 		t.Errorf("the Effect row reads %q after a click on the %q row; the click went to the settings panel behind the picker\n%s",
 			got, name, term.Snapshot())
 	}
-	// The settings panel prints the help of its selected row, so this says the
-	// selection did not move to the row under Effect.
 	if !strings.Contains(term.Screen().Text(), effectRowMark) {
 		t.Errorf("the click moved the settings selection off the Effect row, so it landed on the panel behind the picker\n%s",
 			term.Snapshot())
 	}
 }
 
-// effectRowValue reads the value the settings Effect row shows, out of the
-// cycler brackets at the right-hand end of the row.
 func effectRowValue(t *testing.T, term *tuitest.Terminal) string {
 	t.Helper()
 	s := term.Screen()
@@ -271,7 +217,6 @@ func TestEffectRowDetectorReadsABorderedRow(t *testing.T) {
 // handled, the list read as empty while it was plainly on screen, and the test
 // waited ten seconds for rows it could already see.
 func TestEffectRowSurvivesTheLivePreview(t *testing.T) {
-	// Captured from run 34313515028, trimmed to the rows that matter.
 	lines := []string{
 		"                       ¤   •                                                                                                                ¤                    °•",
 		"                                                 Appearance Sideba   󰤄 Screen saver effect                                           ¤",

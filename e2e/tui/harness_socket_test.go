@@ -21,7 +21,6 @@ func TestRuntimeDirHoldsEverySocketTuiosBinds(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(root) })
 
-	// Pad the root so the daemon socket lands exactly on the limit.
 	daemonSock := filepath.Join("XDG_RUNTIME_DIR", "tuios", "tuios.sock")
 	pad := unixSocketPathMax - len(filepath.Join(root, "b", daemonSock))
 	if pad < 0 {

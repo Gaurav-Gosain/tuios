@@ -15,33 +15,11 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Snapping a floating pane to the left edge while a pane on screen tracks the
-// mouse in SGR-pixel mode broke the whole screen, reported with disktree (a
-// kitty graphics app) in one pane.
-//
-// tuios turns SGR-pixel reports (1016) on in its own terminal while such a pane
-// is on screen. In 1016 ghostty does not clamp the pointer to the grid: a
-// pointer left of the first column, in the window padding or past the window,
-// is reported at a negative x, and one above the first row at a negative y.
-// The input decoder reads a CSI parameter as digits only, so it stopped at the
-// minus sign and handed the rest of the report on as typed keys. A drag to the
-// left edge then typed "5;328M" into window management mode on every motion:
-// digits picked windows, M restored every minimized one, and the release ended
-// in "m", which minimized the pane being dragged. The drag itself never ended.
-//
-// The test drags the pane in host pixels, holds the pointer past the left edge
-// as a real drag does, and lets go there. The pane must land on the left half,
-// and once it has landed the client must stop drawing and stop sending image
-// commands.
-
-// The host cell is the one kittyHost reports in its answer to the startup
-// probe, which is the cell size the client divides pixel reports by.
 const (
 	snapPixelCellW = cellW
 	snapPixelCellH = cellH
 )
 
-// snapPixelReport is a motion report the pixel reporter printed.
 var snapPixelReport = regexp.MustCompile(`PX35;(\d+);(\d+)\.`)
 
 func TestFloatingSnapLeftWithPixelMousePastTheEdge(t *testing.T) {
@@ -71,23 +49,14 @@ func TestFloatingSnapLeftWithPixelMousePastTheEdge(t *testing.T) {
 			newWindow(t, term)
 			newWindow(t, term)
 			waitWindowCount(t, term, 2, "snap setup")
-			// Tiling puts the two panes side by side. Turning it off leaves
-			// them there as floating panes, with the second one on the right
-			// half and focused.
 			disableTiling(t, term)
 
-			// The right pane shows an image and then tracks the mouse in
-			// pixels, as disktree does.
 			enterTerminalMode(t, term)
 			_, img := writeIcatPNG(t, t.TempDir())
 			enc := base64.StdEncoding.EncodeToString(img)
 			runToExit(t, term, fmt.Sprintf(`printf '\033_Ga=T,q=2,f=100,s=%d,v=%d;%s\033\\'`, icatImageW, icatImageH, enc))
 			runInShell(t, term, pixelReporter, "PIXON", shellTimeout)
 
-			// tuios asks its terminal for 1016 after a mouse event. A report
-			// read as cells reaches the pane at the centre of its cell, 8
-			// pixels down an 8x16 pane cell and 9 on the wire. A report read
-			// as pixels keeps its offset, here 3 host pixels into the cell.
 			col, row := 120, 20
 			mouseHover(t, term, col, row)
 			if err := waitHost(host, "\x1b[?1016h", uiTimeout); err != nil {
@@ -108,9 +77,6 @@ func TestFloatingSnapLeftWithPixelMousePastTheEdge(t *testing.T) {
 				t.Fatalf("the client never read a host report as pixels\n%s", term.Snapshot())
 			}
 			leaveTerminalMode(t, term)
-			// The mode change shows a notice in the dock, and the client draws
-			// while a notice counts down. It has to be gone before the drag,
-			// so the frames counted after the snap are the snap's own.
 			if err := term.WaitFor(func(s tuitest.Screen) bool {
 				return !strings.Contains(s.Text(), "Window management mode")
 			}, 20*time.Second); err != nil {
@@ -120,8 +86,6 @@ func TestFloatingSnapLeftWithPixelMousePastTheEdge(t *testing.T) {
 				t.Fatalf("the reporter pane is not on screen\n%s", term.Snapshot())
 			}
 
-			// Grab the right pane's title bar and drag it to the left edge,
-			// all in host pixels.
 			const grabRow, dropRow = 0, 20
 			px := func(c int) int { return c*snapPixelCellW + snapPixelCellW/2 }
 			py := func(r int) int { return r*snapPixelCellH + snapPixelCellH/2 }
@@ -130,17 +94,13 @@ func TestFloatingSnapLeftWithPixelMousePastTheEdge(t *testing.T) {
 				sendPixel(t, term, 32, px(c), py(dropRow), 'M')
 			}
 
-			// Hold the pointer past the left edge, trembling inside one cell as
-			// a hand does. Each of these reports came in as typed keys.
 			snapFrame(t, term, "snap-left-"+tc.name+"-1-held")
 			for i := range 20 {
 				sendPixel(t, term, 32, -6, []int{dropRow*snapPixelCellH + 1, dropRow*snapPixelCellH + 12}[i%2], 'M')
 			}
 
-			// Let go past the edge, as a drag that snaps left ends.
 			sendPixel(t, term, 0, -6, py(dropRow), 'm')
 
-			// The pane lands on the left half at full height, on top.
 			var final string
 			if err := term.WaitFor(func(s tuitest.Screen) bool {
 				final = s.Text()
@@ -150,8 +110,6 @@ func TestFloatingSnapLeftWithPixelMousePastTheEdge(t *testing.T) {
 				t.Fatalf("the pane never landed on the left half at full height\n%s", term.Snapshot())
 			}
 
-			// And then everything holds still: no frames and no image
-			// commands once the snap has landed.
 			time.Sleep(time.Second)
 			pid := term.Pid()
 			settled := sampleIdle(t, pid, statsPath)
@@ -176,8 +134,6 @@ func TestFloatingSnapLeftWithPixelMousePastTheEdge(t *testing.T) {
 	}
 }
 
-// snapFrame saves the screen as text, styled text and a PNG under
-// TUIOS_E2E_ARTIFACTS, when that is set.
 func snapFrame(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	dir := os.Getenv("TUIOS_E2E_ARTIFACTS")
@@ -188,9 +144,6 @@ func snapFrame(t *testing.T, term *tuitest.Terminal, name string) {
 	savePNG(t, term.Screen(), hostPalette(t, ""), dir, name)
 }
 
-// sendPixel writes one SGR mouse report with the coordinates as given, which
-// may be negative: a terminal in 1016 reports the pointer outside the grid
-// that way, and tuitest only encodes positions on the grid.
 func sendPixel(t *testing.T, term *tuitest.Terminal, button, x, y int, final byte) {
 	t.Helper()
 	if err := term.Type(fmt.Sprintf("\x1b[<%d;%d;%d%c", button, x, y, final)); err != nil {
@@ -199,9 +152,6 @@ func sendPixel(t *testing.T, term *tuitest.Terminal, button, x, y int, final byt
 	time.Sleep(mouseGap)
 }
 
-// snappedLeft reports whether the reporter pane fills the left half: a pane
-// border opens the top row at the first column and closes at the middle, the
-// pane shows the reporter's marker, and the pane runs down to the dock.
 func snappedLeft(screen string) bool {
 	lines := strings.Split(screen, "\n")
 	if len(lines) < 44 {
@@ -223,7 +173,6 @@ func snappedLeft(screen string) bool {
 	return false
 }
 
-// waitHost waits until tuios has written s to the kitty host.
 func waitHost(host *kittyHost, s string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {

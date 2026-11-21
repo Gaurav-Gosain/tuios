@@ -57,8 +57,6 @@ func TestTaskCaptureStopsOnInvisibleCharacters(t *testing.T) {
 	work := t.TempDir()
 	mustCLI(t, base, "new", "S", "--detach", "--cwd", work)
 	waitForSessionInfo(t, base, "S")
-	// The suite's own tuios comes first, so the PATH holds no agent and no
-	// other tuios.
 	path := ownTuiosDir + string(os.PathListSeparator) + agentFreePath("/usr/bin", "/bin")
 	term := attachIn(t, base, "S", startOpts{cols: 160, rows: 45, shippedLooks: true,
 		env: []string{"PATH=" + path, "TERM=xterm-256color", "COLORTERM=truecolor", "TUIOS_KITTY_GRAPHICS=0"}})
@@ -70,8 +68,6 @@ func TestTaskCaptureStopsOnInvisibleCharacters(t *testing.T) {
 		sendKeys(t, term, tuitest.Ctrl('b'), "+")
 		waitText(t, term, "the sheet of row "+row, "New task", sheet, "None, this session", "none installed")
 	}
-	// paste pastes text into the task and waits for the screen to show the
-	// visible words of it.
 	paste := func(text string, visible ...string) {
 		t.Helper()
 		if err := term.Paste(text); err != nil {
@@ -85,7 +81,6 @@ func TestTaskCaptureStopsOnInvisibleCharacters(t *testing.T) {
 			t.Fatalf("ASSERTION: %s did not close the sheet: %v\n%s", what, err, term.Snapshot())
 		}
 	}
-	// cards is the cards of S, as list-tasks has them.
 	cards := func() []string {
 		t.Helper()
 		out, err := tuiosCLI(t, base, "call", "list-tasks", `{"session":"S"}`)
@@ -102,7 +97,6 @@ func TestTaskCaptureStopsOnInvisibleCharacters(t *testing.T) {
 		}
 		return ids
 	}
-	// card is the title and the prompt of card id, as get-task has them.
 	card := func(id string) (string, string) {
 		t.Helper()
 		out, err := tuiosCLI(t, base, "call", "get-task", `{"session":"S","id":"`+id+`"}`)
@@ -115,7 +109,6 @@ func TestTaskCaptureStopsOnInvisibleCharacters(t *testing.T) {
 		}
 		return res.Title, res.Prompt
 	}
-	// held holds the count of S's cards at n for a second.
 	held := func(what string, n int) {
 		t.Helper()
 		stayTrue(t, what+": S holds "+strconv.Itoa(n)+" cards", time.Second, func() (bool, string) {
@@ -123,9 +116,6 @@ func TestTaskCaptureStopsOnInvisibleCharacters(t *testing.T) {
 			return len(got) == n, strings.Join(got, ", ")
 		})
 	}
-	// removedOnce waits for the stop's notice and counts it on the screen.
-	// The sheet's own line is empty at a stop: it does not also say to write
-	// the task first.
 	removedOnce := func(n int) string {
 		t.Helper()
 		notice := "Removed " + strconv.Itoa(n) + " invisible character"
@@ -152,7 +142,6 @@ func TestTaskCaptureStopsOnInvisibleCharacters(t *testing.T) {
 		}
 	}
 
-	// P: a plain draft is added on the first enter.
 	open("P")
 	paste("Write the release notes.\nList the user-facing changes.", "Write the release notes.", "List the user-facing changes.")
 	copiesFrame(t, term, "task-invisible-sheet")
@@ -161,7 +150,6 @@ func TestTaskCaptureStopsOnInvisibleCharacters(t *testing.T) {
 	waitText(t, term, "the toast of t1", "Added t1 to S.")
 	filed("t1", "Write the release notes.", "List the user-facing changes.")
 
-	// T: the tags in the title, enter in the task.
 	open("T")
 	paste("Fix the docs typo today."+invisibleTail+"\nCheck the page.", "Fix the docs typo today.", "Check the page.")
 	sendKeys(t, term, tuitest.Enter)
@@ -176,8 +164,6 @@ func TestTaskCaptureStopsOnInvisibleCharacters(t *testing.T) {
 	waitText(t, term, "the toast of t2", "Added t2 to S.")
 	filed("t2", "Fix the docs typo today.", "Check the page.")
 
-	// R: the zero-width space and the tags in the prompt, enter on the
-	// Project pill.
 	open("R")
 	paste("Update the changelog.\nName the fix.\u200b"+invisibleTail, "Update the changelog.", "Name the fix.")
 	sendKeys(t, term, tuitest.Tab)
@@ -190,8 +176,6 @@ func TestTaskCaptureStopsOnInvisibleCharacters(t *testing.T) {
 	waitText(t, term, "the toast of t3", "Added t3 to S.")
 	filed("t3", "Update the changelog.", "Name the fix.")
 
-	// S: the tags in a title under the limit, ctrl+enter on the Project pill
-	// with no agent installed.
 	open("S")
 	paste("Fix the docs typo."+invisibleTail, "Fix the docs typo.")
 	sendKeys(t, term, tuitest.Tab)
@@ -212,7 +196,6 @@ func TestTaskCaptureStopsOnInvisibleCharacters(t *testing.T) {
 	waitText(t, term, "the toast of t4", "Added t4 to S.")
 	filed("t4", "Fix the docs typo.", "")
 
-	// C: no title, and a zero-width space at the end of the prompt.
 	open("C")
 	paste("\nName the fix.\u200b", "Name the fix.")
 	sendKeys(t, term, tuitest.Enter)

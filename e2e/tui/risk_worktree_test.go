@@ -13,7 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// riskItem is one Inbox item as list-attention --json prints it.
 type riskItem struct {
 	Session string   `json:"session"`
 	Window  string   `json:"window"`
@@ -22,15 +21,11 @@ type riskItem struct {
 	Risk    []string `json:"risk"`
 }
 
-// fireEditHook runs Claude Code's PermissionRequest hook for an Edit of path
-// in window 0 of session. An Edit is never held (its body does not fit the
-// line), so the hook reports needs_input and returns.
 func fireEditHook(t *testing.T, base, session, path string) {
 	t.Helper()
 	fireEditHookIn(t, base, session, "0", path)
 }
 
-// fireEditHookIn is fireEditHook for the window of session that window names.
 func fireEditHookIn(t *testing.T, base, session, window, path string) {
 	t.Helper()
 	payload, err := json.Marshal(map[string]any{
@@ -54,14 +49,11 @@ func fireEditHookIn(t *testing.T, base, session, window, path string) {
 	}
 }
 
-// waitRiskItem polls list-attention until session has an approval item.
 func waitRiskItem(t *testing.T, base, session string) riskItem {
 	t.Helper()
 	return waitRiskItemIn(t, base, session, "")
 }
 
-// waitRiskItemIn is waitRiskItem for one window, by id, or any window of
-// session when window is "".
 func waitRiskItemIn(t *testing.T, base, session, window string) riskItem {
 	t.Helper()
 	var out string
@@ -84,9 +76,6 @@ func waitRiskItemIn(t *testing.T, base, session, window string) riskItem {
 	return riskItem{}
 }
 
-// shownPrefix is the part of an Inbox line's path that the line shows whole:
-// up to the "***" the redaction puts in place of a key-like run, or up to the
-// "..." the clip adds.
 func shownPrefix(summary string) string {
 	p := strings.TrimPrefix(summary, "approve Edit: ")
 	if i := strings.Index(p, "***"); i >= 0 {
@@ -123,11 +112,8 @@ func TestRiskInWorktree(t *testing.T) {
 		}
 	}
 	fireEditHook(t, base, "out-short", "/etc/hosts")
-	// Outside, and long enough to be cut after it has left the worktree.
 	fireEditHook(t, base, "out-long", "/etc/"+strings.Repeat("x", 120)+".conf")
 
-	// Short, and with a name the line redacts: the line shows no clip, and
-	// the stars still hide part of the call.
 	fireEditHook(t, base, "out-key", "/etc/"+strings.Repeat("a1", 20)+".conf")
 
 	checkInsideMarks(t, base, root, panes, false)
@@ -197,16 +183,8 @@ func TestRiskLinkedRoot(t *testing.T) {
 	saveRiskItems(t, base, "risk-root-through-a-link-items.json")
 }
 
-// riskWorktree starts a daemon with approvals on for claude-code, makes a
-// worktree on feat/kinder-greeting where tuios puts it by default (under
-// XDG_DATA_HOME), opens a session in it, and reports an Edit of
-// demo/greet.py there from two panes. It returns the isolation root, the
-// worktree and the panes' sessions.
 func riskWorktree(t *testing.T) (base, root string, panes []string) {
 	t.Helper()
-	// Reached through a link, as the temp folder is on macOS (/var is a link
-	// to /private/var): tuios records the worktree through it, and the
-	// worktree must still be the risk root (#1316).
 	tmp := filepath.Join(t.TempDir(), "link")
 	if err := os.Symlink(t.TempDir(), tmp); err != nil {
 		t.Fatalf("link the isolation root: %v", err)
@@ -253,17 +231,8 @@ func riskWorktree(t *testing.T) (base, root string, panes []string) {
 	return base, root, panes
 }
 
-// riskBaseLen is the length riskWorktree pads its isolation root to. An Inbox
-// line shows the first 91 runes of an Edit's path, and the worktree is 56
-// runes under the root, so a root of 45 puts the cut 10 runes before the end
-// of the worktree's path.
 const riskBaseLen = 45
 
-// riskBase pads tmp to riskBaseLen runes with a directory of its own. The
-// random part of a t.TempDir() name has 1 to 10 digits. With 7, the cut fell
-// just after the worktree's path, and the line no longer stopped inside it.
-// A tmp already as long or longer is used as it is: the worktree's path is
-// then longer than the line shows, and the cut still falls inside it.
 func riskBase(t *testing.T, tmp string) string {
 	t.Helper()
 	n := riskBaseLen - len(tmp) - 1
@@ -277,10 +246,6 @@ func riskBase(t *testing.T, tmp string) string {
 	return base
 }
 
-// checkInsideMarks asserts that no pane's Edit inside root is marked outside
-// the worktree, and that each is marked cut short, since its line does not
-// show the whole path. redacted says the line must hide part of the path
-// behind "***".
 func checkInsideMarks(t *testing.T, base, root string, panes []string, redacted bool) {
 	t.Helper()
 	for _, session := range panes {
@@ -288,12 +253,9 @@ func checkInsideMarks(t *testing.T, base, root string, panes []string, redacted 
 	}
 }
 
-// checkInsideMark is checkInsideMarks for one item.
 func checkInsideMark(t *testing.T, root, session string, it riskItem, redacted bool) {
 	t.Helper()
 	t.Logf("%s: %q risk %v", session, it.Summary, it.Risk)
-	// The precondition: the line does not show the whole path, and what it
-	// shows stops inside the worktree's own path.
 	shown := shownPrefix(it.Summary)
 	if shown == strings.TrimPrefix(it.Summary, "approve Edit: ") || !strings.HasPrefix(root, shown) {
 		t.Fatalf("precondition: %s's line %q does not stop inside %s", session, it.Summary, root)
@@ -309,8 +271,6 @@ func checkInsideMark(t *testing.T, root, session string, it riskItem, redacted b
 	}
 }
 
-// saveRiskItems keeps every Inbox item as the daemon marked it, the test's
-// artifact, when TUIOS_E2E_FRAMES names a directory.
 func saveRiskItems(t *testing.T, base, name string) {
 	t.Helper()
 	dir := os.Getenv("TUIOS_E2E_FRAMES")
@@ -333,10 +293,6 @@ func saveRiskItems(t *testing.T, base, name string) {
 func TestRiskLineClipOnlyAtEnd(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
-	// The root is a linked worktree, so that the pane's root is known from
-	// its first state, and at a short path, so that a line can hold it whole
-	// and still be clipped after it: t.TempDir() is long, and so is the temp
-	// folder on macOS.
 	repo := testutil.GitRepo(t)
 	dir, err := os.MkdirTemp("", "p")
 	if err != nil {
@@ -348,18 +304,13 @@ func TestRiskLineClipOnlyAtEnd(t *testing.T) {
 	}
 	root := filepath.Join(dir, "worktree")
 	testutil.Git(t, repo, "worktree", "add", "-q", "-b", "edges", root)
-	// near is a path beside root that starts the way root's last name
-	// does: written out, it is outside, and cut where it is, it could still
-	// be the way into root.
 	near := root[:len(root)-2]
-	// clip makes a line as Clip cuts one: 97 runes, then "...".
 	clip := func(head string) string {
 		if len(head) > 97 {
 			t.Fatalf("precondition: %q is too long to clip at its end", head)
 		}
 		return head + strings.Repeat("x", 97-len(head)) + "..."
 	}
-	// clipIn makes a clipped line whose last word is root cut 2 runes short.
 	clipIn := func() string {
 		tail := " && rm " + near + "..."
 		pad := 100 - len("approve Bash: echo ") - len(tail)
@@ -372,17 +323,11 @@ func TestRiskLineClipOnlyAtEnd(t *testing.T) {
 		session, line   string
 		outside, cutOff bool
 	}{
-		// The review case: a literal "..." at the end of a line that was
-		// not clipped.
 		{"lit-write", "approve Write: " + near + "...", true, false},
 		{"lit-mid", "approve Bash: rm " + near + "... && echo done", true, false},
-		// A clipped line: the "..." in the middle is still literal.
 		{"lit-mid-clip", clip("approve Bash: rm " + near + "... && echo "), true, true},
-		// A clipped line whose last word is not a path.
 		{"clip-word", clip("approve Bash: rm " + root + "/notes.txt && echo "), false, true},
-		// A clipped line whose last word is the path, cut inside root.
 		{"clip-path", clipIn(), false, true},
-		// "***" in a word before the last one.
 		{"mask-in", "approve Bash: rm " + near + "*** " + root + "/notes.txt", false, true},
 		{"mask-out", "approve Bash: rm /etc/x*** " + root + "/notes.txt", true, true},
 		{"plain-out", "approve Bash: rm /etc/hosts.bak", true, false},

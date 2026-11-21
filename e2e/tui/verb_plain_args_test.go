@@ -63,7 +63,6 @@ func TestCapturePaneTakesTheWindowAsAnArgument(t *testing.T) {
 				t.Fatalf("ASSERTION: capture-pane -s %s %s did not capture worker-a, it printed:\n%s", sess, target, out)
 			}
 		}
-		// Two different windows is a mistake to refuse, not a pick.
 		if out, err := tuiosCLI(t, base, "capture-pane", "-s", sess, "-w", "worker-b", "worker-a"); err == nil {
 			t.Fatalf("ASSERTION: capture-pane with -w worker-b and worker-a exited 0:\n%s", out)
 		}
@@ -88,7 +87,6 @@ func TestCapturePaneTakesTheWindowAsAnArgument(t *testing.T) {
 			}
 		})
 	}
-	// kill-server refused its argument, so the daemon is still up.
 	if out, err := tuiosCLI(t, base, "capture-pane", "-s", sess, "-w", "worker-b"); err != nil || !strings.Contains(out, "MARK-worker-b") {
 		t.Fatalf("the daemon is not answering after the refused kill-server: %v\n%s", err, out)
 	}

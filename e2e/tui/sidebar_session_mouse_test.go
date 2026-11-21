@@ -32,9 +32,6 @@ session = "mouse-side"
 	}, bootTimeout); err != nil {
 		t.Fatalf("rail session did not attach: %v\n%s", err, term.Snapshot())
 	}
-	// The guest explicitly requests SGR tracking and waits for three mouse
-	// bytes. Splitting READY in the typed command avoids mistaking echo for
-	// output. A left click starts ESC [ < in SGR mode.
 	command := `stty -echo -icanon min 1; printf '\033[?1000h\033[?1006h'; printf '%s\n' MOUSE""READY; od -An -tx1 -N3; printf '\033[?1000l\033[?1006l'; printf '%s\n' MOUSE""DELIVERED; stty sane`
 	if out, err := tuiosCLI(t, base, "send-keys", "-s", "mouse-side", "--literal", command); err != nil {
 		t.Fatalf("start mouse tracker: %v\n%s", err, out)

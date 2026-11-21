@@ -10,16 +10,10 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// textSizingProbeCmd prints the text sizing probe opencode sends on start-up:
-// it homes the cursor and writes OSC 66 with one space. A marker on a later
-// row says the shell got that far.
 const textSizingProbeCmd = `printf '\033[H\033]66;w=1; \007\033[5;3HPROBEDONE'; exec sleep 120`
 
-// textSizingBlock is one OSC 66 passthrough write as tuios sends it to the
-// host: save the cursor, place the sequence, blank around it, restore.
 var textSizingBlock = regexp.MustCompile(`\x1b7((?:[^\x1b]|\x1b[^8])*?\x1b\]66;(?:[^\x1b]|\x1b[^8])*)\x1b8`)
 
-// hostCUP matches a cursor position and captures its 1-based row.
 var hostCUP = regexp.MustCompile(`\x1b\[(\d+);\d+H`)
 
 // TestTextSizingProbeKeepsTitleBar is the regression test for opencode
@@ -64,8 +58,6 @@ func TestTextSizingProbeKeepsTitleBar(t *testing.T) {
 			}
 			waitForAll(t, term, shellTimeout, "the probe never ran", "PROBEDONE")
 
-			// The passthrough is flushed after the frame that follows the
-			// probe, so wait for it rather than for the marker alone.
 			var blocks [][]string
 			deadline := time.Now().Add(uiTimeout)
 			for time.Now().Before(deadline) {
@@ -80,8 +72,6 @@ func TestTextSizingProbeKeepsTitleBar(t *testing.T) {
 
 			for _, b := range blocks {
 				cups := hostCUP.FindAllStringSubmatch(b[1], -1)
-				// The first position is where the probe lands: the pane's
-				// first content row, because the probe homes the cursor.
 				top, _ := strconv.Atoi(cups[0][1])
 				for _, c := range cups[1:] {
 					if row, _ := strconv.Atoi(c[1]); row < top {

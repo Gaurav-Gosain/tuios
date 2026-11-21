@@ -8,8 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// paneShownRow is one row of list-windows --json, for the tests of a focus that
-// has to show a minimized pane.
 type paneShownRow struct {
 	Name      string `json:"display_name"`
 	Minimized bool   `json:"minimized"`
@@ -18,8 +16,6 @@ type paneShownRow struct {
 	Height    int    `json:"height"`
 }
 
-// paneShown reports whether the window named name in session is restored,
-// focused and has a size.
 func paneShown(t *testing.T, base, session, name string) (bool, string) {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "--json", "--session", session)
@@ -38,7 +34,6 @@ func paneShown(t *testing.T, base, session, name string) (bool, string) {
 	return false, out
 }
 
-// waitPaneShown waits until shownPane holds.
 func waitPaneShown(t *testing.T, term *tuitest.Terminal, base, session, name, what string) {
 	t.Helper()
 	var last string
@@ -58,8 +53,6 @@ func waitPaneShown(t *testing.T, term *tuitest.Terminal, base, session, name, wh
 	t.Fatalf("ASSERTION: %s: %s is not restored, focused and sized\n%s\n%s", what, name, last, snap)
 }
 
-// minimizeByKey focuses the pane name and minimizes it with m in window mode,
-// the way a person does, so the client saves its box.
 func minimizeByKey(t *testing.T, term *tuitest.Terminal, base, session, name string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "focus-window", "-s", session, name); err != nil {
@@ -76,7 +69,7 @@ func minimizeByKey(t *testing.T, term *tuitest.Terminal, base, session, name str
 		_ = json.Unmarshal([]byte(out), &res)
 		for _, r := range res.Windows {
 			if r.Name == name && r.Minimized {
-				time.Sleep(500 * time.Millisecond) // the minimize animation
+				time.Sleep(500 * time.Millisecond)
 				return
 			}
 		}

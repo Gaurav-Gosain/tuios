@@ -7,17 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The task board keys a card by its session's name. These tests watch another
-// session's cards from an open board while that session is renamed, and
-// while it is killed and made again under the same name. Either leaves rows
-// the daemon no longer holds, or hides rows it does hold, unless the board
-// lists the cards again.
-//
-// How they could pass wrongly: a stale row and a fresh one carry the same
-// title, so the titles alone hold even when the board shows a card twice or
-// under the wrong stage. Each step waits for the count in each column head as
-// well.
-
 // TestTaskBoardFollowsARenamedSession renames S while the board is open in V,
 // then moves one of its cards from the command line under the new name. The
 // board must show both cards, one in Todo and one in Verify.
@@ -40,10 +29,6 @@ func TestTaskBoardDropsAKilledSessionsCards(t *testing.T) {
 	boardShows(t, term, "board-kill-after", []string{"Todo  1", "fresh card"}, []string{"first card", "second card"})
 }
 
-// openSessionBoard starts a daemon with sessions V and S, adds two cards to
-// S, attaches to V and opens the board in the agents view. No pane runs an
-// agent, so the view waits on its empty state. The board's frame is saved as
-// prefix-open.
 func openSessionBoard(t *testing.T, prefix string) (string, *tuitest.Terminal) {
 	t.Helper()
 	base := t.TempDir()
@@ -66,8 +51,6 @@ func openSessionBoard(t *testing.T, prefix string) (string, *tuitest.Terminal) {
 	return base, term
 }
 
-// boardShows waits for the board to show every string in want and none in
-// gone, and saves the screen as frame whether or not it does.
 func boardShows(t *testing.T, term *tuitest.Terminal, frame string, want, gone []string) {
 	t.Helper()
 	err := term.WaitFor(func(s tuitest.Screen) bool {

@@ -14,28 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// "Any machine": tuios picks the machine a new agent starts on, this one or a
-// linked one, and says why in one line. home is this machine and build the
-// second daemon, reached over the real subprocess transport through the ssh
-// stand-in, so every question placement asks build crosses the link.
-//
-// The two machines run on one box, so they have the same cores. Their load
-// is set with TUIOS_LOAD1: home is loaded ten times over and build is idle,
-// so build has the room. The agent is a stand-in for Claude Code that stays
-// working once it has a prompt, so build's count of working agents holds
-// still while the test reads it.
-//
-// What would pass a weaker test and fail these: a pick by link order or by
-// name rather than by load; a machine without the agent that is still
-// picked; a pick that did not count against the next one, so two quick
-// placements both land on one full machine; a cap read from the wrong
-// machine; a dead link that still wins; a card started on a machine that has
-// no way to claim it; and a card placed on build that is never held there.
-
-// poolAgentBin writes a Claude Code stand-in that reports working on its
-// first prompt and stays working, and a codex stand-in. It returns the
-// directory of each: claude's goes on every PATH, codex's only where a test
-// puts it.
 func poolAgentBin(t *testing.T) (claudeDir, codexDir string) {
 	t.Helper()
 	claudeDir, codexDir = filepath.Join(t.TempDir(), "bin"), filepath.Join(t.TempDir(), "codexbin")
@@ -61,19 +39,12 @@ func poolAgentBin(t *testing.T) (claudeDir, codexDir string) {
 	return claudeDir, codexDir
 }
 
-// poolPair is the two machines of a placement test.
 type poolPair struct {
-	base, remote string
-	// here is home's checkout and farCheckout build's, of one repository
-	// cloned under two spellings of its URL.
+	base, remote      string
 	here, farCheckout string
-	// env is what every CLI call on home needs.
-	env []string
+	env               []string
 }
 
-// startPool starts build and home. build has [tasks] machine_cap = buildCap
-// and no load; home is loaded ten times over. With back, build links to
-// home too.
 func startPool(t *testing.T, buildCap int, back bool) poolPair {
 	t.Helper()
 	base, origin := fanFixture(t)
@@ -118,8 +89,6 @@ func startPool(t *testing.T, buildCap int, back bool) poolPair {
 	if out, err := tuiosCLIEnv(t, remote, buildEnv, "new", "far", "--detach"); err != nil {
 		t.Fatalf("start build's daemon: %v\n%s", err, out)
 	}
-	// "up" alone also matches a host with no daemon yet: wait until build
-	// answers a placement question.
 	deadline := time.Now().Add(45 * time.Second)
 	for {
 		out, _ := tuiosCLIEnv(t, base, p.env, "call", "place-agent", `{"agent":"claude","reserve":false}`)
@@ -143,7 +112,6 @@ func startPool(t *testing.T, buildCap int, back bool) poolPair {
 	return p
 }
 
-// placeJSON is place-agent's answer as the tests read it.
 type placeJSON struct {
 	Host     string `json:"host"`
 	Name     string `json:"name"`
@@ -156,7 +124,6 @@ type placeJSON struct {
 	} `json:"machines"`
 }
 
-// why is the line placement gave machine host.
 func (p placeJSON) why(host string) string {
 	for _, m := range p.Machines {
 		if m.Host == host {
@@ -166,9 +133,6 @@ func (p placeJSON) why(host string) string {
 	return ""
 }
 
-// place calls place-agent on home through tuios call, from home's
-// checkout, as start-agent -s any: asks it. params are added to the agent,
-// the repository and the checkout here.
 func (pp poolPair) place(t *testing.T, params map[string]any) placeJSON {
 	t.Helper()
 	all := map[string]any{"repo_url": "git@example.com:acme/api", "local_origin": "git@example.com:acme/api"}
@@ -201,7 +165,6 @@ func TestAnyMachinePlacesTheAgentWhereThereIsRoom(t *testing.T) {
 	var text string
 	var err error
 
-	// 1. build is idle and has the checkout; home is loaded.
 	p := pp.place(t, map[string]any{"agent": "claude", "reserve": false})
 	note("place-agent claude: %s / %s / home: %s", p.Name, p.Why, p.why(""))
 	if want := "build: " + cores + " cores, 0 working, the repo is there."; p.Host != "build" || p.Why != want {
@@ -211,7 +174,6 @@ func TestAnyMachinePlacesTheAgentWhereThereIsRoom(t *testing.T) {
 		t.Errorf("ASSERTION: home's line does not give its load: %q", p.why(""))
 	}
 
-	// 2. codex is only on this machine: build is left out, and says why.
 	p = pp.place(t, map[string]any{"agent": "codex", "reserve": false, "env": map[string]string{"PATH": codexDir + string(os.PathListSeparator) + os.Getenv("PATH")}})
 	note("place-agent codex: %+v", p)
 	if p.Host != "" {
@@ -221,7 +183,6 @@ func TestAnyMachinePlacesTheAgentWhereThereIsRoom(t *testing.T) {
 		t.Errorf("ASSERTION: build's reason for codex = %q", w)
 	}
 
-	// 3. An agent with machine any starts on build, in its checkout.
 	text, err = tuiosCLIInDir(t, pp.base, pp.here, pp.env, "start-agent", "-s", "any:work", "claude", "--prompt", "Add a retry.")
 	note("$ tuios start-agent -s any:work claude --prompt 'Add a retry.'\n%s", text)
 	if err != nil {
@@ -236,7 +197,6 @@ func TestAnyMachinePlacesTheAgentWhereThereIsRoom(t *testing.T) {
 	if ls, _ := tuiosCLI(t, pp.base, "ls"); strings.Contains(ls, "work") {
 		t.Errorf("ASSERTION: the agent started on this machine:\n%s", ls)
 	}
-	// build counts the agent as working.
 	deadline := time.Now().Add(30 * time.Second)
 	for {
 		p = pp.place(t, map[string]any{"agent": "claude", "reserve": false})
@@ -250,8 +210,6 @@ func TestAnyMachinePlacesTheAgentWhereThereIsRoom(t *testing.T) {
 	}
 	note("after the start: %s", p.why("build"))
 
-	// 4. A card on this machine: build has no link back here, so it cannot
-	// claim it, and the card's agent stays here.
 	mustCLI(t, pp.base, "task", "add", "-s", "home", "--project", "https://example.com/acme/api.git", "--machine", "any", "Fix the retry")
 	p = pp.place(t, map[string]any{"agent": "claude", "task": "t1", "task_session": "home", "reserve": false})
 	note("place-agent --task t1: %s / build: %s", p.Name, p.why("build"))
@@ -259,8 +217,6 @@ func TestAnyMachinePlacesTheAgentWhereThereIsRoom(t *testing.T) {
 		t.Errorf("ASSERTION: a card was placed on a machine that cannot claim it: host %q, build %q", p.Host, p.why("build"))
 	}
 
-	// 5. Two placements in a row: the first takes build's last place under
-	// its cap of 2, and the second sees it taken.
 	first := pp.place(t, map[string]any{"agent": "claude"})
 	second := pp.place(t, map[string]any{"agent": "claude"})
 	note("first: %s / %s\nsecond: %s / %s", first.Name, first.Why, second.Name, second.why("build"))
@@ -271,7 +227,6 @@ func TestAnyMachinePlacesTheAgentWhereThereIsRoom(t *testing.T) {
 		t.Errorf("ASSERTION: the second placement did not see the first one's pick: host %q, build %q", second.Host, second.why("build"))
 	}
 
-	// 6. build's daemon stops: its link goes down, and this machine wins.
 	killDaemonNow(t, pp.remote)
 	deadline = time.Now().Add(45 * time.Second)
 	for {
@@ -303,7 +258,6 @@ func TestAnyMachineTakesACardAcrossTheLink(t *testing.T) {
 	if !strings.Contains(text, "Placed on build.") || !strings.Contains(text, "holds task t1") {
 		t.Errorf("ASSERTION: the card's agent was not placed on build holding the card:\n%s", text)
 	}
-	// The card is held here by a pane on build.
 	out := mustCLI(t, pp.base, "task", "get", "t1", "-s", "home", "--json")
 	note("home task get t1:\n%s", out)
 	var row struct {
@@ -316,12 +270,9 @@ func TestAnyMachineTakesACardAcrossTheLink(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &row); err != nil {
 		t.Fatalf("task get --json: %v\n%s", err, out)
 	}
-	// The holder's host is the name build gives itself on the link, its
-	// host name, which is this box's in the test.
 	if row.Holder == nil || row.Holder.Host == "" || row.Stage != "doing" {
 		t.Fatalf("ASSERTION: the card is not held by a pane on build: %s", out)
 	}
-	// That pane is build's, in its session home.
 	agents := mustCLI(t, pp.remote, "list-agents", "-s", "home", "--json")
 	note("build list-agents -s home:\n%s", agents)
 	if !strings.Contains(agents, row.Holder.Window) {
@@ -347,7 +298,6 @@ func TestAnyMachineInTheSheets(t *testing.T) {
 	}
 	windowManagementMode(t, term)
 
-	// The New agent sheet.
 	sendKeys(t, term, tuitest.Ctrl('b'), "i")
 	waitText(t, term, "the agents view", "Agents", "New agent")
 	sendKeys(t, term, "n")
@@ -355,8 +305,6 @@ func TestAnyMachineInTheSheets(t *testing.T) {
 	sendKeys(t, term, "Add a retry to the client.")
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "sheet-default-this-machine-160x45")
-	// shift+tab from the task: Start, Cancel, Attempts, then Machine. The
-	// rows are Any machine, build, then this machine, which is picked.
 	sendKeys(t, term, tuitest.Key("\x1b[Z"), tuitest.Key("\x1b[Z"), tuitest.Key("\x1b[Z"), tuitest.Key("\x1b[Z"), tuitest.Up, tuitest.Up)
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "sheet-any-machine-160x45")
@@ -373,7 +321,6 @@ func TestAnyMachineInTheSheets(t *testing.T) {
 	}
 	sendKeys(t, term, tuitest.Esc)
 
-	// The capture sheet.
 	sendKeys(t, term, tuitest.Ctrl('b'), "+")
 	waitText(t, term, "the capture sheet on This machine", "New task", "Machine", "‹ This machine ›")
 	sendKeys(t, term, "Fix the flaky retry test", tuitest.Tab, tuitest.Tab, tuitest.Tab, tuitest.Tab, tuitest.Right)

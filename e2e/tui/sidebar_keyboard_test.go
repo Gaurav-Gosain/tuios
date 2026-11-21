@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// railPill is the dock mode pill's text while the sidebar rail owns the
-// keyboard. Asserting on it proves the keyboard scope actually took, not just
-// that a key was sent.
 const railPill = "SIDEBAR"
 
 // TestSidebarKeyboardSwitchAndExit drives the rail entirely by keyboard against
@@ -44,8 +41,6 @@ func TestSidebarKeyboardSwitchAndExit(t *testing.T) {
 	toggleSidebarViaPalette(t, term)
 	waitForAll(t, term, uiTimeout, "sidebar with both session rows", sidebarHeader, "bravo")
 
-	// s enters the rail: the dock pill switches to SIDEBAR, the authoritative
-	// "who owns the keyboard" indicator.
 	if err := term.SendKeys("s"); err != nil {
 		t.Fatalf("enter rail: %v", err)
 	}
@@ -53,15 +48,10 @@ func TestSidebarKeyboardSwitchAndExit(t *testing.T) {
 		t.Fatalf("s did not give the keyboard to the rail: %v\n%s", err, term.Snapshot())
 	}
 
-	// Entering the rail lands the cursor on the attached session, so one j is
-	// the row below it: bravo, the next session row. The sessions header's add
-	// control takes the nav slot above the first session row, not between two of
-	// them, so it does not stand in this step's way.
 	if err := term.SendKeys("j"); err != nil {
 		t.Fatalf("move cursor: %v", err)
 	}
 
-	// enter activates the cursor row and switches to bravo.
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("activate cursor row: %v", err)
 	}
@@ -69,7 +59,6 @@ func TestSidebarKeyboardSwitchAndExit(t *testing.T) {
 		t.Fatalf("enter on the bravo row did not switch sessions: %v\n%s", err, term.Snapshot())
 	}
 
-	// esc leaves the rail: focus returns to the panes and the SIDEBAR pill goes.
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("leave rail: %v", err)
 	}
@@ -82,10 +71,6 @@ func TestSidebarKeyboardSwitchAndExit(t *testing.T) {
 	alive(t, term, "after driving the sidebar by keyboard")
 }
 
-// railBandRow is the rail row the keyboard cursor stands on: the one row
-// whose content cells carry a ground or reverse video while the rail paints
-// no ground of its own. It returns -1 when no row does, as while the cursor
-// is on a header's add control.
 func railBandRow(s tuitest.Screen) int {
 	_, rows := s.Size()
 	for r := range rows {
@@ -99,8 +84,6 @@ func railBandRow(s tuitest.Screen) int {
 	return -1
 }
 
-// railRowMarkedOffGround reports whether rail row r carries a mark that is
-// not a ground: a text cell past the gutter in underline or reverse video.
 func railRowMarkedOffGround(s tuitest.Screen, r int) bool {
 	for x := 1; x < railWidth-1; x++ {
 		c := s.Cell(x, r)
@@ -111,8 +94,6 @@ func railRowMarkedOffGround(s tuitest.Screen, r int) bool {
 	return false
 }
 
-// railRowGroundIs reports whether rail row r stands on want: every cell
-// between the gutter and the edge rule carries it as its background.
 func railRowGroundIs(s tuitest.Screen, r int, want tuitest.Color) bool {
 	for x := 1; x < railWidth-1; x++ {
 		if s.Cell(x, r).Bg != want {
@@ -122,8 +103,6 @@ func railRowGroundIs(s tuitest.Screen, r int, want tuitest.Color) bool {
 	return true
 }
 
-// railHasGround reports whether any cell of the rail carries want as its
-// background.
 func railHasGround(s tuitest.Screen, want tuitest.Color) bool {
 	_, rows := s.Size()
 	for r := range rows {
@@ -171,7 +150,7 @@ func TestRailCursorShowsWithoutItsGround(t *testing.T) {
 	cases := []struct {
 		name, theme string
 		depth       chromeDepth
-		cursorBg    bool // set cursor_background to magenta
+		cursorBg    bool
 	}{
 		{"dark-truecolor", "", chromeDepths[2], false},
 		{"dark-16", "", chromeDepths[0], false},
@@ -201,8 +180,6 @@ func TestRailCursorShowsWithoutItsGround(t *testing.T) {
 			}
 			dir := artifactDir(t)
 			host := hostPalette(t, tc.theme)
-			// on reports whether the cursor stands on the row of name and that
-			// row alone carries the mark.
 			on := func(name string) func(tuitest.Screen) bool {
 				return func(s tuitest.Screen) bool {
 					r := railRowOf(s, name)
@@ -211,9 +188,6 @@ func TestRailCursorShowsWithoutItsGround(t *testing.T) {
 					}
 					_, rows := s.Size()
 					for y := range rows {
-						// Only the rail's own lines, which end in its edge
-						// rule. The dock below has underlined cells of its
-						// own in the same columns.
 						if edge := s.Cell(railWidth-1, y).Content; edge == " " || edge == "" || edge == "─" {
 							continue
 						}
@@ -224,9 +198,6 @@ func TestRailCursorShowsWithoutItsGround(t *testing.T) {
 					return true
 				}
 			}
-			// Walk down to P1's row. The headers' add controls sit between
-			// the rows, so the number of steps is read off the screen, once
-			// the rail shows the renamed rows.
 			if err := term.WaitFor(func(s tuitest.Screen) bool { return railRowOf(s, "P1") >= 0 && railRowOf(s, "P2") >= 0 }, uiTimeout); err != nil {
 				t.Fatalf("the rail never showed the renamed rows P1 and P2: %v\n%s", err, term.Snapshot())
 			}
@@ -238,8 +209,6 @@ func TestRailCursorShowsWithoutItsGround(t *testing.T) {
 				if err := term.SendKeys("j"); err != nil {
 					t.Fatalf("move the cursor: %v", err)
 				}
-				// The loop reads the screen to know when to stop, so it reads
-				// it only once the band has moved.
 				if err := term.WaitFor(func(s tuitest.Screen) bool { b := railBandRow(s); return b >= 0 && b != band }, uiTimeout); err != nil {
 					t.Fatalf("j did not move the cursor off row %d: %v\n%s", band, err, term.Snapshot())
 				}
@@ -261,9 +230,6 @@ func TestRailCursorShowsWithoutItsGround(t *testing.T) {
 					t.Fatalf("cursor_background painted the rail at 16 colours:\n%s", term.SnapshotStyled())
 				}
 				if truecolor {
-					// Hot reload: a new colour in the file reaches the row
-					// with no restart. The file is read back rather than
-					// rebuilt from cfg, since the harness pins its looks in it.
 					body := readFileString(t, configPathIn(base))
 					saveConfigLikeAnEditor(t, base, strings.Replace(body, "#ff00ff", "#00c0c0", 1))
 					err := term.WaitFor(func(s tuitest.Screen) bool {

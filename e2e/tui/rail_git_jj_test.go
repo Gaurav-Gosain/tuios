@@ -38,8 +38,6 @@ func TestRailGitJJ(t *testing.T) {
 			testutil.JJ(t, repo, "bookmark", "create", "feat", "-r", "@-")
 		}
 	}
-	// Pushed, then rewritten: feat is ahead of feat@origin, which jj marks
-	// "feat*" in its own log. The rail shows the name only.
 	testutil.JJ(t, repo, "git", "push", "-b", "feat")
 	testutil.JJ(t, repo, "describe", "-r", "feat", "-m", "one, reworded")
 	term, _ := railClient(t, "gitjj", railGitReftableConfig, startOpts{cols: 120, rows: 40})
@@ -102,8 +100,6 @@ func TestRailGitJJProblems(t *testing.T) {
 		}
 		return ""
 	}
-	// feat is on both sides of the divergence, so jj calls it conflicted. The
-	// branch row still names it feat, with no "??" in the name.
 	branchRow := func(s tuitest.Screen) string {
 		if header := railHeaderRow(s, "git"); header >= 0 {
 			return railRowText(s, header+2)
@@ -117,7 +113,6 @@ func TestRailGitJJProblems(t *testing.T) {
 	}
 	saveArtifact(t, term, artifactDir(t), "rail-git-jj-divergent")
 
-	// Two edits of README from main, the second rebased onto the first.
 	testutil.JJ(t, repo, "new", "main", "-m", "x")
 	if err := os.WriteFile(filepath.Join(repo, "README"), []byte("x\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -131,7 +126,6 @@ func TestRailGitJJProblems(t *testing.T) {
 	if out := testutil.JJ(t, repo, "log", "--no-graph", "-r", "trunk()..@ & conflicts()", "-T", "change_id"); out == "" {
 		t.Fatal("precondition: the stack holds no conflicted commit")
 	}
-	// The section reads again on its refresh, after the pane prints.
 	enterTerminalMode(t, term)
 	runInShell(t, term, `sleep 3 && echo mo""ved`, "moved", uiTimeout)
 	leaveTerminalMode(t, term)

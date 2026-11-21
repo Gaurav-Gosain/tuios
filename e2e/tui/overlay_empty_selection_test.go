@@ -7,23 +7,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// An overlay's activation key pressed while its list is empty used to dismiss
-// the panel, throw away the query that emptied it, and do nothing, with nothing
-// said. That is indistinguishable from the key not being bound, and it is the
-// shape the launcher was reported for. These are the same check on the other
-// overlays that carried it.
-
-// The notifications asserted here are worded so they cannot be confused with
-// the panel's own empty line ("No matching commands", "No workspace matches").
-// Waiting for text the panel already draws passes against a build that never
-// raised the notification at all, which is how the workspace case first looked
-// covered when it was not.
-
-// noMatchQuery matches nothing in any of these lists.
 const noMatchQuery = "zzznomatch"
 
-// requireStillOpen fails when an overlay was dismissed by a key that had
-// nothing to act on.
 func requireStillOpen(t *testing.T, term *tuitest.Terminal, title, what string) {
 	t.Helper()
 	if txt := term.Screen().Text(); !strings.Contains(txt, title) {
@@ -80,9 +65,6 @@ func TestThemePickerEnterOnNoMatch(t *testing.T) {
 		t.Fatalf("the theme picker did not open: %v\n%s", err, term.Snapshot())
 	}
 
-	// A query that matches rows previews the top one, then one that matches
-	// none. Enter there must not commit, must not close, and must leave the
-	// escape route that reverts the preview.
 	if err := term.SendKeys("catppuccin"); err != nil {
 		t.Fatalf("type a matching query: %v", err)
 	}
@@ -99,7 +81,6 @@ func TestThemePickerEnterOnNoMatch(t *testing.T) {
 		t.Fatalf("nothing said why the key did nothing: %v\n%s", err, term.Snapshot())
 	}
 	requireStillOpen(t, term, "No matching themes", "enter on a query matching no theme")
-	// Esc is still there, which is the whole point of not having closed.
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("esc: %v", err)
 	}
@@ -120,7 +101,6 @@ func TestWorkspaceSwitcherEnterOnNoMatch(t *testing.T) {
 	if err := term.SendKeys(tuitest.Ctrl('b'), "W"); err != nil {
 		t.Fatalf("open the workspace switcher: %v", err)
 	}
-	// The workspaces are the go-to picker's "!" filter.
 	if err := term.WaitForText("Go to", uiTimeout); err != nil {
 		t.Fatalf("the workspace list did not open: %v\n%s", err, term.Snapshot())
 	}

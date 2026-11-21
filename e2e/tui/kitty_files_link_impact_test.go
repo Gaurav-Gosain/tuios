@@ -58,8 +58,6 @@ func TestKittyFilesLinkImpact(t *testing.T) {
 	if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {
 		t.Fatalf("start the far daemon: %v\n%s", err, out)
 	}
-	// A host terminal that draws kitty graphics and keeps nothing: the
-	// images add up to gigabytes over a run.
 	sink := &kittySink{probe: make(chan struct{}, 1)}
 	term := startIn(t, base, startOpts{cols: 160, rows: 50, args: []string{"new", "home"}, env: env, out: sink})
 	answerKittyProbe(t, term, sink.probe, 160, 50)
@@ -135,8 +133,6 @@ func TestKittyFilesLinkImpact(t *testing.T) {
 		}
 	}
 
-	// The median of each figure over the rounds, and the change against
-	// idle.
 	pick := func(m map[string]any, part, key string) float64 {
 		sub, _ := m[part].(map[string]any)
 		v, _ := sub[key].(float64)
@@ -173,8 +169,6 @@ func TestKittyFilesLinkImpact(t *testing.T) {
 	t.Logf("link rate %q, %d rounds, medians:\n%s", rate, rounds, strings.Join(lines, "\n"))
 }
 
-// kittySink is a host terminal that answers the kitty probe and drops
-// everything else.
 type kittySink struct{ probe chan struct{} }
 
 func (k *kittySink) Write(p []byte) (int, error) {
@@ -187,7 +181,6 @@ func (k *kittySink) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// pct is the change from base to v in percent.
 func pct(v, base float64) float64 {
 	if base == 0 {
 		return 0
@@ -195,7 +188,6 @@ func pct(v, base float64) float64 {
 	return (v - base) / base * 100
 }
 
-// waitResult waits for linkload's JSON line at path.
 func waitResult(path string, wait time.Duration) (map[string]any, bool) {
 	deadline := time.Now().Add(wait)
 	for time.Now().Before(deadline) {
@@ -210,8 +202,6 @@ func waitResult(path string, wait time.Duration) (map[string]any, bool) {
 	return nil, false
 }
 
-// writeNoisePNG writes a w by h PNG of random pixels, stored without
-// compression so it is as large as its pixels and cannot shrink on the link.
 func writeNoisePNG(t *testing.T, path string, w, h int) {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, w, h))

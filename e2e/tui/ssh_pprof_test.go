@@ -15,21 +15,14 @@ import (
 	"time"
 )
 
-// sshPprofModes are the two ways tuios ssh serves: with the daemon in its own
-// process, and standalone with --ephemeral.
 var sshPprofModes = []string{"daemon", "ephemeral"}
 
-// sshPprofServer is a tuios ssh process started by startSSHPprofServer.
 type sshPprofServer struct {
 	pid  int
 	port int
 	log  string
 }
 
-// startSSHPprofServer starts tuios ssh for a fresh isolation root on a free
-// loopback port, with no authentication, in the given mode, and with --pprof
-// on pprofAddr when that is not empty. It returns once the SSH port accepts.
-// The server's output is kept in the test's temp dir.
 func startSSHPprofServer(t *testing.T, mode, pprofAddr string) sshPprofServer {
 	t.Helper()
 	args := []string{"--no-auth"}
@@ -39,10 +32,6 @@ func startSSHPprofServer(t *testing.T, mode, pprofAddr string) sshPprofServer {
 	return startSSHServerIn(t, t.TempDir(), mode, args...)
 }
 
-// startSSHServerIn starts tuios ssh for the isolation root base on a free
-// loopback port, in the given mode, with extra after the address flags. The
-// caller puts any config file in base first. It returns once the SSH port
-// accepts.
 func startSSHServerIn(t *testing.T, base, mode string, extra ...string) sshPprofServer {
 	t.Helper()
 	killDaemon(t, base)
@@ -89,8 +78,6 @@ func startSSHServerIn(t *testing.T, base, mode string, extra ...string) sshPprof
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	// The server falls back to ephemeral when it cannot start the daemon, and
-	// a daemon-mode run that fell back would test the other mode twice.
 	data, _ := os.ReadFile(logf.Name())
 	if !strings.Contains(string(data), "(mode: "+mode+")") {
 		t.Fatalf("tuios ssh did not start in %s mode:\n%s", mode, data)
@@ -98,9 +85,6 @@ func startSSHServerIn(t *testing.T, base, mode string, extra ...string) sshPprof
 	return sshPprofServer{pid: srv.Process.Pid, port: port, log: logf.Name()}
 }
 
-// tcpListenPorts is the set of TCP ports, sorted, that the process pid holds
-// a listening socket on. It matches the socket inodes under /proc/pid/fd to
-// the LISTEN rows of /proc/pid/net/tcp and tcp6.
 func tcpListenPorts(t *testing.T, pid int) []int {
 	t.Helper()
 	fdDir := fmt.Sprintf("/proc/%d/fd", pid)
@@ -126,9 +110,8 @@ func tcpListenPorts(t *testing.T, pid int) []int {
 			t.Fatalf("read %s: %v", path, err)
 		}
 		sc := bufio.NewScanner(f)
-		sc.Scan() // the header
+		sc.Scan()
 		for sc.Scan() {
-			// sl local_address rem_address st tx:rx tr:when retrnsmt uid timeout inode
 			fields := strings.Fields(sc.Text())
 			if len(fields) < 10 || fields[3] != "0A" || !inodes[fields[9]] {
 				continue

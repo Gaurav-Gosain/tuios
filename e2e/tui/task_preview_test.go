@@ -51,7 +51,6 @@ func TestTaskBoardPreviewsTheFocusedCard(t *testing.T) {
 	mustCLI(t, base, "task", "attach", "-s", "S", "t1", "--link", "https://github.com/o/r/pull/12")
 
 	term := attachIn(t, base, "S", startOpts{cols: 200, rows: 55, shippedLooks: true})
-	// openBoard waits for an agent's group, and this board has no agents.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the agents view: %v", err)
 	}
@@ -69,8 +68,6 @@ func TestTaskBoardPreviewsTheFocusedCard(t *testing.T) {
 	if rowWith(s, "# Retry plan") >= 0 || rowWith(s, "**jitter**") >= 0 {
 		t.Errorf("ASSERTION: the prompt shows as raw Markdown:\n%s", term.Snapshot())
 	}
-	// The columns keep the room left: the cursor's column and its
-	// neighbours, and a count of the ones behind the edge.
 	for _, head := range []string{"Todo  2", "Doing  1", "1›"} {
 		if rowWith(s, head) < 0 {
 			t.Errorf("ASSERTION: %q is gone with the panel open:\n%s", head, term.Snapshot())
@@ -81,16 +78,13 @@ func TestTaskBoardPreviewsTheFocusedCard(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "card-preview-side-200x55")
 
-	// The cursor moves, and the panel follows.
 	if err := term.SendKeys("j"); err != nil {
 		t.Fatalf("press j: %v", err)
 	}
 	waitText(t, term, "the preview of t2", "Card t2", "Write the notes.")
-	// A click on a card of another column shows it.
 	row, col := findText(t, term, "port the cache to lru")
 	clickAt(t, term, col+1, row, 1)
 	waitText(t, term, "the preview of t3", "Card t3", "Port it.")
-	// Space closes it.
 	if err := term.SendKeys(" "); err != nil {
 		t.Fatalf("press space: %v", err)
 	}
@@ -98,7 +92,6 @@ func TestTaskBoardPreviewsTheFocusedCard(t *testing.T) {
 		t.Fatalf("ASSERTION: space did not close the preview: %v\n%s", err, term.Snapshot())
 	}
 
-	// At 110 cells the preview is a sheet over the columns.
 	if err := term.Resize(110, 40); err != nil {
 		t.Fatalf("resize: %v", err)
 	}
@@ -112,12 +105,10 @@ func TestTaskBoardPreviewsTheFocusedCard(t *testing.T) {
 		t.Errorf("ASSERTION: at 110 cells the preview is not a sheet over the columns:\n%s", term.Snapshot())
 	}
 	saveCockpitFrames(t, term, "card-preview-sheet-110x40")
-	// A click outside the sheet, on the board's header row, closes it.
 	clickAt(t, term, 2, 0, 1)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return rowWith(s, "Card t1") < 0 }, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: a click outside the sheet did not close it: %v\n%s", err, term.Snapshot())
 	}
-	// Esc closes it too.
 	if err := term.SendKeys(" "); err != nil {
 		t.Fatalf("press space: %v", err)
 	}

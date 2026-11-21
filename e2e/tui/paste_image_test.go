@@ -17,31 +17,15 @@ import (
 	"tuios.dev/shot"
 )
 
-// Pasting an image from the clipboard puts it in a file on the machine where
-// the pane's process runs, and pastes that file's path.
-//
-// The clipboard here is a fake. A wl-paste stand-in on PATH answers the type
-// probe with image/png and the read with a fixed PNG, and WAYLAND_DISPLAY
-// names no real compositor, so the developer's clipboard is never read. The
-// proof is the pane's own shell running wc -c on the pasted path: the shell
-// can only print the image's size if the file is on its machine.
-
-// fakeImage is a PNG header and a body long enough that its size is not a
-// number that shows up on screen by chance.
 func fakeImage() []byte {
 	return append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte("tuios"), 821)...)
 }
 
-// fakeClipboardEnv writes the wl-paste stand-in and returns the environment
-// that puts it in front of the client.
 func fakeClipboardEnv(t *testing.T, img []byte) []string {
 	t.Helper()
 	return slowClipboardEnv(t, img, "")
 }
 
-// slowClipboardEnv is fakeClipboardEnv with a stand-in that waits delay
-// seconds before it lists the types, like a clipboard tool slow to start. An
-// empty delay answers at once.
 func slowClipboardEnv(t *testing.T, img []byte, delay string) []string {
 	t.Helper()
 	dir := t.TempDir()
@@ -63,9 +47,6 @@ func slowClipboardEnv(t *testing.T, img []byte, delay string) []string {
 	}
 }
 
-// paneBorderRows is the screen without the rows that hold no pane border. The
-// toast row is one of them: a remote paste shows the file's name there, in
-// "Copied tuios-paste-...", before the path is pasted into the pane.
 func paneBorderRows(screen string) string {
 	var rows []string
 	for line := range strings.Lines(screen) {
@@ -76,28 +57,16 @@ func paneBorderRows(screen string) string {
 	return strings.Join(rows, "")
 }
 
-// unwrapped is the screen with its lines joined, and the panes' side borders
-// and the padding taken out, so a path the pane wrapped reads whole. Where a
-// path breaks depends on the length of the runtime folder, which the suite
-// shortens when the isolation root is too long to hold a socket.
 func unwrapped(screen string) string {
 	return strings.NewReplacer("\n", "", "│", "", " ", "").Replace(screen)
 }
 
-// showsPastedPath reports whether a pasted image's path is in a pane, to the
-// end of its name. A wait that also read the toast row sent the Enter before
-// the path was pasted, and the shell ran wc on its input.
 func showsPastedPath(screen string) bool {
 	flat := unwrapped(paneBorderRows(screen))
 	i := strings.Index(flat, "tuios-paste-")
 	return i >= 0 && strings.Contains(flat[i:], ".png")
 }
 
-// showsPastedFile reports whether the path of the one image pasted on base's
-// machine is on the screen. A shell that redraws its line where it wraps can
-// lose cells in the middle of the path, as sh does when the line was typed
-// before its prompt; the end of the path, the file's own name, still shows
-// that this file's path arrived.
 func showsPastedFile(t *testing.T, screen, base string) bool {
 	t.Helper()
 	if showsPastedPath(screen) {
@@ -110,7 +79,6 @@ func showsPastedFile(t *testing.T, screen, base string) bool {
 	return contains(unwrapped(paneBorderRows(screen)), strings.TrimPrefix(filepath.Base(files[0]), "tuios-paste-"))
 }
 
-// pastedFiles lists the pasted images under a machine's runtime directory.
 func pastedFiles(t *testing.T, base string) []string {
 	t.Helper()
 	files, err := filepath.Glob(filepath.Join(xdgDir(base, "XDG_RUNTIME_DIR"), "tuios", "paste", "tuios-paste-*.png"))
@@ -120,9 +88,6 @@ func pastedFiles(t *testing.T, base string) []string {
 	return files
 }
 
-// checkPasted waits for the pane's shell to print the image's size for the
-// pasted path, then checks the file is on want's machine alone, with the
-// image's bytes and the owner's permissions.
 func checkPasted(t *testing.T, term *tuitest.Terminal, img []byte, want, other string) {
 	t.Helper()
 	size := strconv.Itoa(len(img)) + " "
@@ -175,7 +140,6 @@ func TestAnImagePastedIntoALocalPaneIsAFileHere(t *testing.T) {
 	if err := term.SendKeys("wc -c "); err != nil {
 		t.Fatal(err)
 	}
-	// The paste_image action, on its default key.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "V"); err != nil {
 		t.Fatal(err)
 	}
@@ -213,14 +177,6 @@ func TestAnEmptyPasteWaitsForASlowClipboardTool(t *testing.T) {
 	checkPasted(t, term, img, base, "")
 }
 
-// wslClipboardEnv is the clipboard a client under WSL2 with WSLg sees. The
-// image is on the Windows clipboard, which a powershell.exe stand-in on PATH
-// answers for: the type ask with image/png and the read with the image as
-// base64, each line ending in CRLF as Windows writes it. A delay makes the
-// stand-in wait that many seconds before it lists the types, as powershell.exe
-// does while it starts; an empty delay answers at once. WSLg's Wayland display
-// is there too, and its wl-paste stand-in lists text only, as WSLg's bridge
-// does when Windows holds an image.
 func wslClipboardEnv(t *testing.T, img []byte, delay string) []string {
 	t.Helper()
 	dir := t.TempDir()
@@ -306,7 +262,6 @@ func TestAPasteKeyTimeoutUnderWSLLeavesTheEmptyPasteOn(t *testing.T) {
 		t.Fatalf("the window never appeared: %v\n%s", err, term.Snapshot())
 	}
 	enterTerminalMode(t, term)
-	// The paste key, ctrl+shift+v. Its type ask times out after 0.3 s.
 	if err := term.SendKeys(tuitest.Key("\x1b[118;6u")); err != nil {
 		t.Fatal(err)
 	}
@@ -347,8 +302,6 @@ func TestAnImagePastedIntoAFarPaneIsAFileOnThatMachine(t *testing.T) {
 	if err := term.SendKeys("wc -c "); err != nil {
 		t.Fatal(err)
 	}
-	// An empty bracketed paste, which is what a terminal sends when the
-	// clipboard holds an image and no text.
 	if err := term.SendKeys("\x1b[200~\x1b[201~"); err != nil {
 		t.Fatal(err)
 	}
@@ -371,7 +324,6 @@ func TestAnImagePastedIntoASessionOnAHostIsAFileOnThatMachine(t *testing.T) {
 	if err := term.SendKeys("wc -c "); err != nil {
 		t.Fatal(err)
 	}
-	// The paste_image action, on its default key.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "V"); err != nil {
 		t.Fatal(err)
 	}
@@ -379,19 +331,13 @@ func TestAnImagePastedIntoASessionOnAHostIsAFileOnThatMachine(t *testing.T) {
 	alive(t, term, "after pasting an image into a session on a host")
 }
 
-// farRoute is a way a pane lives on another machine.
 type farRoute int
 
 const (
-	// farSessionRoute is a session on the host, attached with attach --host.
 	farSessionRoute farRoute = iota
-	// farWindowRoute is a window on the host in a session of this machine.
 	farWindowRoute
 )
 
-// startFarPane starts a client whose focused pane runs on remote, reached as
-// host build, with img on the fake clipboard. Keys typed next reach the
-// pane's shell.
 func startFarPane(t *testing.T, base, remote string, img []byte, route farRoute) (*tuitest.Terminal, []string) {
 	t.Helper()
 	ssh := writeFakeSSHTo(t, base, remote)
@@ -408,7 +354,6 @@ func startFarPane(t *testing.T, base, remote string, img []byte, route farRoute)
 		}, bootTimeout); err != nil {
 			t.Fatalf("the client never drew the far session: %v\n%s", err, term.Snapshot())
 		}
-		// A client attached on a host starts in terminal mode.
 		return term, env
 	default:
 		term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env})
@@ -476,8 +421,6 @@ func TestAnImagePasteNeedsFilesOnTheFarMachine(t *testing.T) {
 	}
 }
 
-// refusedPaste pastes into a far pane whose machine refuses files, and checks
-// the toast, that nothing was typed, and that no file was written anywhere.
 func refusedPaste(t *testing.T, term *tuitest.Terminal, base, remote string) {
 	t.Helper()
 	if err := term.SendKeys("echo pasted:"); err != nil {
@@ -491,8 +434,6 @@ func refusedPaste(t *testing.T, term *tuitest.Terminal, base, remote string) {
 		t.Fatalf("ASSERTION: no toast said the far machine refused the image: %v\n%s", err, term.Snapshot())
 	}
 
-	// The shell prints pasted:2 only when nothing was typed after "pasted:".
-	// A path typed there would print pasted:/...png2.
 	if err := term.SendKeys("$((1+1))", tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}
@@ -505,7 +446,6 @@ func refusedPaste(t *testing.T, term *tuitest.Terminal, base, remote string) {
 		t.Fatalf("ASSERTION: a pasted path reached the pane:\n%s", term.Snapshot())
 	}
 
-	// The dock cuts the message. A click on it shows all of it.
 	row, col := findText(t, term, toast)
 	mouseClick(t, term, col+2, row, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -546,13 +486,9 @@ func TestAnImagePastedIntoAnSSHShellGoesToThatMachine(t *testing.T) {
 	cases := []struct {
 		name  string
 		hosts []hostEntry
-		// line is what the pane runs. SSH is the stand-in's path.
-		line string
-		// allow is the far machine's allow for this one, "" for the default.
+		line  string
 		allow string
-		// want is "far" for the far drop folder, "here" for this machine's
-		// paste folder, or the phrases of the refusal.
-		want []string
+		want  []string
 	}{
 		{"login to the host", []hostEntry{build}, "SSH someone@buildbox", "", []string{"far"}},
 		{"login to the host without files", []hostEntry{build}, "SSH someone@buildbox", `"list", "mail", "open", "write"`,
@@ -582,7 +518,6 @@ func TestAnImagePastedIntoAnSSHShellGoesToThatMachine(t *testing.T) {
 			writeHosts(t, base, tuiosBin, tc.hosts)
 			img := fakeImage()
 			env := append(fakeClipboardEnv(t, img), "TUIOS_SSH="+ssh)
-			// The far machine's daemon, which writes the dropped file.
 			if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {
 				t.Fatalf("start the far daemon: %v\n%s", err, out)
 			}
@@ -621,14 +556,11 @@ func TestAnImagePastedIntoAnSSHShellGoesToThatMachine(t *testing.T) {
 	}
 }
 
-// hostEntry is one [hosts] table of the client's config.
 type hostEntry struct {
 	name, addr string
 	opts       []string
 }
 
-// writeHosts writes the client's [hosts] tables. Every one reaches the remote
-// stand-in, whatever its address.
 func writeHosts(t *testing.T, base, tuiosPath string, hosts []hostEntry) {
 	t.Helper()
 	dir := filepath.Join(base, "XDG_CONFIG_HOME", "tuios")
@@ -647,9 +579,6 @@ func writeHosts(t *testing.T, base, tuiosPath string, hosts []hostEntry) {
 	}
 }
 
-// resolvingSSH wraps the remote stand-in: ssh -G goes to the real ssh, which
-// reads config and reaches no network, and a -J an entry carries is dropped
-// before the stand-in, which knows no -J.
 func resolvingSSH(t *testing.T, fake string) string {
 	t.Helper()
 	real, err := exec.LookPath("ssh")
@@ -673,9 +602,6 @@ func resolvingSSH(t *testing.T, fake string) string {
 	return path
 }
 
-// fakeSSHLogin writes a script named ssh that stands in for an ssh login. It
-// prints an OSC 7 report for $FAKE_OSC7 when that is set, then runs each line
-// typed at it, in its own process, so the pane's foreground stays the script.
 func fakeSSHLogin(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "ssh")
@@ -689,7 +615,6 @@ func fakeSSHLogin(t *testing.T) string {
 	return path
 }
 
-// droppedFiles lists the pasted images in a machine's drop folders.
 func droppedFiles(t *testing.T, base string) []string {
 	t.Helper()
 	files, err := filepath.Glob(filepath.Join(xdgDir(base, "XDG_RUNTIME_DIR"), "tuios", "drop", "*", "tuios-paste-*.png"))
@@ -699,10 +624,6 @@ func droppedFiles(t *testing.T, base string) []string {
 	return files
 }
 
-// checkDropped waits for the shell to print the image's size for the pasted
-// path, then checks the file is in the far machine's drop folder alone, with
-// the image's bytes and the owner's permissions, and that this machine kept
-// no copy.
 func checkDropped(t *testing.T, term *tuitest.Terminal, img []byte, remote, base string) {
 	t.Helper()
 	size := strconv.Itoa(len(img)) + " "
@@ -723,8 +644,6 @@ func checkDropped(t *testing.T, term *tuitest.Terminal, img []byte, remote, base
 	if len(files) != 1 {
 		t.Fatalf("ASSERTION: the far machine holds %d dropped images, want 1: %v\n%s", len(files), files, term.Snapshot())
 	}
-	// The pane is narrow, so the path wraps. Read it with the frame and the
-	// line breaks taken out.
 	flat := strings.NewReplacer("│", "", " ", "", "\n", "").Replace(term.Screen().Text())
 	if !strings.Contains(flat, filepath.Base(filepath.Dir(files[0]))+"/"+filepath.Base(files[0])) {
 		t.Fatalf("ASSERTION: the pasted path is not the far file %s:\n%s", files[0], term.Snapshot())
@@ -743,9 +662,6 @@ func checkDropped(t *testing.T, term *tuitest.Terminal, img []byte, remote, base
 	alive(t, term, "after pasting an image into an ssh shell")
 }
 
-// refusedPasteSays pastes into a pane that tuios cannot place, and checks
-// that the message holds every phrase, that nothing was typed, and that no
-// file was written.
 func refusedPasteSays(t *testing.T, term *tuitest.Terminal, base, remote string, phrases []string) {
 	t.Helper()
 	if err := term.SendKeys("echo pasted:"); err != nil {
@@ -754,8 +670,6 @@ func refusedPasteSays(t *testing.T, term *tuitest.Terminal, base, remote string,
 	if err := term.SendKeys(tuitest.Ctrl('b'), "V"); err != nil {
 		t.Fatal(err)
 	}
-	// The dock cuts a long message, so the wait is for its start. The full
-	// view below holds the rest.
 	toast := "Cannot paste the image."
 	if err := term.WaitForText(toast, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: no toast refused the paste: %v\n%s", err, term.Snapshot())
@@ -770,8 +684,6 @@ func refusedPasteSays(t *testing.T, term *tuitest.Terminal, base, remote string,
 	}
 	row, col := findText(t, term, toast)
 	mouseClick(t, term, col+2, row, tuitest.MouseLeft, 0)
-	// The view wraps the message, so it is read with the frame, the spaces
-	// and the line breaks taken out.
 	flat := strings.NewReplacer("│", "", " ", "", "\n", "")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := flat.Replace(s.Text())

@@ -8,8 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// menusConfig declares what a tmux which-key tree would: a split menu under
-// the window prefix, and inside it a sticky resize menu. Nothing here ships.
 const menusConfig = `
 [keybindings.window_prefix]
 "open_menu:split" = ["s"]
@@ -104,8 +102,6 @@ func TestDeclaredStickyMenuStaysOpenUntilAnUnboundKey(t *testing.T) {
 	if err := term.SendKeys("h"); err != nil {
 		t.Fatalf("send second h: %v", err)
 	}
-	// A menu that stays open stays shown: the panel does not wait the
-	// which-key delay (500 ms) again after a key the menu ran.
 	time.Sleep(150 * time.Millisecond)
 	if !strings.Contains(term.Screen().Text(), "Narrow the focused pane by 5") {
 		t.Errorf("ASSERTION: the held menu's panel went away after h, as if the menu had opened again\n%s", term.Snapshot())

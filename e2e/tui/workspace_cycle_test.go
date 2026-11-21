@@ -10,27 +10,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// next_workspace and prev_workspace (#612) go to the next or the previous
-// workspace that has panes, and wrap.
-//
-// How these could pass wrongly, written down first:
-//   - A cycle that visits every workspace would also reach 3 from 2 on a
-//     second press. The test presses once from 1 with panes on 1 and 3 only,
-//     so a cycle that does not skip lands on 2.
-//   - A wrap could look right because the key did nothing. The test goes
-//     forward to 3 first, then forward again to 1, then back to 3.
-//   - With workspaces.new_window_when_empty on, a cycle that lands on empty
-//     workspaces opens a pane on each. The second test presses the key three
-//     times with one pane in the session, waits for every pane request to
-//     finish, and counts the panes.
-//
-// The workspace after each press, and the final list-windows output, are
-// saved under artifactDir.
-
 const cycleKeys = "[keybindings.workspaces]\nnext_workspace = [\"alt+y\"]\nprev_workspace = [\"alt+u\"]\n"
 
-// waitClientWorkspace waits for the client that took the last input to show
-// workspace want, and returns what it shows.
 func waitClientWorkspace(t *testing.T, base string, want int) int {
 	t.Helper()
 	got := 0
@@ -52,9 +33,6 @@ func TestWorkspaceCycleSkipsEmptyWorkspaces(t *testing.T) {
 	waitBoot(t, term)
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "setup")
-	// The pane goes on workspace 3 straight from the command line: opt+3
-	// would open workspace 2, the next one, and leave no empty workspace
-	// between them to skip.
 	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "--workspace", "3", "--no-focus"); err != nil {
 		t.Fatalf("new-window on 3: %v\n%s", err, out)
 	}

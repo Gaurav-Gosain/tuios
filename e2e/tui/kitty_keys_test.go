@@ -10,30 +10,15 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The Kitty keyboard protocol encodings this file drives. tuitest writes them
-// verbatim to the PTY, so these are byte-for-byte what a terminal that has
-// negotiated the protocol sends, and bubbletea decodes them whether or not the
-// host under the test agreed to anything.
 const (
-	// kittyAltTilde is Option+n as Ghostty and kitty report it on macOS when
-	// Option is left to compose: the Alt bit is set, but the key code is the
-	// tilde the OS composed (U+02DC, 732), with the PC-101 base code 110 ('n')
-	// alongside it. CSI 732::110 ; 3 u.
 	kittyAltTilde = "\x1b[732::110;3u"
 
-	// kittyLeftAltPress and kittyLeftAltRelease are the Option key itself, which
-	// a terminal only reports as a key of its own in report-all-keys mode.
-	// 57443 is the protocol's code for the left alt key; :3 in the second
-	// parameter is the release event type.
 	kittyLeftAltPress   = "\x1b[57443;3u"
 	kittyLeftAltRelease = "\x1b[57443;3:3u"
 
-	// kittyAltQuestion is '?' struck while Option is held: what a held trigger
-	// puts on every other key.
 	kittyAltQuestion = "\x1b[63;3u"
 )
 
-// holdModeConfig binds the momentary window mode to the left Option/Alt key.
 const holdModeConfig = "[keybindings.mode_control]\nhold_window_mode = [\"leftalt\"]\n"
 
 // TestKittyAltChordSwitchesPaneFromTerminalMode drives the reported bug's own
@@ -51,16 +36,12 @@ func TestKittyAltChordSwitchesPaneFromTerminalMode(t *testing.T) {
 	waitWindowCount(t, term, 2, "two panes to switch between")
 	enterTerminalMode(t, term)
 
-	// A marker the second pane's shell computes, so the assertion cannot pass on
-	// an echo of the keystrokes.
 	runInShell(t, term, "echo pane-$((20+2))", "pane-22", shellTimeout)
 
 	if err := term.SendKeys(tuitest.Key(kittyAltTilde)); err != nil {
 		t.Fatalf("send the composed alt+n: %v", err)
 	}
 
-	// The focus moved if the other pane's shell answers the next command, and
-	// the composed tilde was not typed into either shell.
 	runInShell(t, term, "echo moved-$((20+3))", "moved-23", shellTimeout)
 	if text := term.Screen().Text(); strings.Contains(text, "˜") {
 		t.Fatalf("the composed character was typed into a pane:\n%s", term.Snapshot())
@@ -80,8 +61,6 @@ func TestHoldKeyBorrowsWindowMode(t *testing.T) {
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo ready-$((1+1))", "ready-2", shellTimeout)
 
-	// Holding the trigger borrows window mode, and says so: a momentary mode
-	// that looked like the permanent one would leave the user guessing.
 	if err := term.SendKeys(tuitest.Key(kittyLeftAltPress)); err != nil {
 		t.Fatalf("send the held key: %v", err)
 	}
@@ -89,20 +68,16 @@ func TestHoldKeyBorrowsWindowMode(t *testing.T) {
 		t.Fatalf("holding the key did not show the momentary mode: %v\n%s", err, term.Snapshot())
 	}
 
-	// A chord struck while it is held carries the trigger's own modifier and has
-	// to run the window-mode action bound to the key that was tapped.
 	if err := term.SendKeys(tuitest.Key(kittyAltQuestion)); err != nil {
 		t.Fatalf("send the held chord: %v", err)
 	}
 	if err := term.WaitForText(helpTitle, uiTimeout); err != nil {
 		t.Fatalf("the held chord did not run the window-mode action: %v\n%s", err, term.Snapshot())
 	}
-	// Nothing leaked into the pane: the shell never saw a '?' to answer for.
 	if text := term.Screen().Text(); strings.Contains(text, "?: command not found") {
 		t.Fatalf("the held chord was typed into the pane:\n%s", term.Snapshot())
 	}
 
-	// Close the overlay with the same held chord, then let go.
 	if err := term.SendKeys(tuitest.Key(kittyAltQuestion)); err != nil {
 		t.Fatalf("close help with the held chord: %v", err)
 	}
@@ -121,8 +96,6 @@ func TestHoldKeyBorrowsWindowMode(t *testing.T) {
 		t.Fatalf("releasing the key did not leave the momentary mode: %v\n%s", err, term.Snapshot())
 	}
 
-	// Back in the mode the hold interrupted, with the same pane focused: the
-	// shell answers again with no mode switch of any kind in between.
 	runInShell(t, term, "echo back-$((3+4))", "back-7", shellTimeout)
 }
 
@@ -144,7 +117,6 @@ func TestHoldKeyIsInertWhenUnbound(t *testing.T) {
 	if text := term.Screen().Text(); strings.Contains(text, "HOLD") {
 		t.Fatalf("an unbound hold key still borrowed window mode:\n%s", term.Snapshot())
 	}
-	// Still in terminal mode, still the same pane.
 	runInShell(t, term, "echo still-$((4+5))", "still-9", shellTimeout)
 }
 
@@ -163,28 +135,20 @@ func TestKeyboardEnhancementsAreRequested(t *testing.T) {
 	term := startIn(t, base, startOpts{cols: 120, rows: 40, out: out})
 	waitBoot(t, term)
 
-	// Disambiguate (1), alternate keys (4), all keys (8), associated text (16).
-	// The first request pushes the flags, so the host gets its own back on exit.
 	waitForRequest(t, term, out, 0, kittyWindowModePush)
 
 	newWindow(t, term)
 	mark := len(out.String())
 	enterTerminalMode(t, term)
-	// Disambiguate (1) plus alternate keys (4), set exactly.
 	waitForRequest(t, term, out, mark, kittyPaneFlags)
 }
 
 const (
-	// kittyWindowModePush is the first host request, made at start.
-	kittyWindowModePush = "\x1b[>29u"
-	// kittyWindowModeFlags is the host request while tuios reads keys itself.
+	kittyWindowModePush  = "\x1b[>29u"
 	kittyWindowModeFlags = "\x1b[=29;1u"
-	// kittyPaneFlags is the host request while a pane has the keyboard.
-	kittyPaneFlags = "\x1b[=5;1u"
+	kittyPaneFlags       = "\x1b[=5;1u"
 )
 
-// waitForRequest waits until tuios has written want to its terminal at or after
-// byte offset from.
 func waitForRequest(t *testing.T, term *tuitest.Terminal, out *syncBuffer, from int, want string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -197,8 +161,6 @@ func waitForRequest(t *testing.T, term *tuitest.Terminal, out *syncBuffer, from 
 	t.Fatalf("tuios never asked the terminal for %q\n%s", want, term.Snapshot())
 }
 
-// syncBuffer collects the raw bytes tuios writes to its terminal. The harness
-// mirrors the PTY into it from its own goroutine, so it needs a lock.
 type syncBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
@@ -238,9 +200,6 @@ func TestHoldKeyIsIgnoredInWindowMode(t *testing.T) {
 	if err := term.SendKeys(tuitest.Key(kittyAltN)); err != nil {
 		t.Fatalf("send alt+n: %v", err)
 	}
-	// alt+n (kittyAltN) is next-window in window mode, and n alone is
-	// new-window. alt+n moves the focus and opens nothing. A hold armed in window mode
-	// stripped Alt, and n opened a third pane.
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
 		s := term.Screen()

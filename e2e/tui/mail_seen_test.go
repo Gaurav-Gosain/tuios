@@ -12,7 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// mailSeenRow is the part of a read-agent-messages message these tests read.
 type mailSeenRow struct {
 	ID        uint64 `json:"id"`
 	ReadAt    int64  `json:"read_at"`
@@ -21,8 +20,6 @@ type mailSeenRow struct {
 	WasSeen   bool   `json:"was_seen"`
 }
 
-// mailSeenRing reads a session's ring as JSON. args are the flags after
-// read-agent-messages -s e2e-ctrlp.
 func mailSeenRing(t *testing.T, base string, args ...string) []mailSeenRow {
 	t.Helper()
 	argv := append([]string{"read-agent-messages", "-s", "e2e-ctrlp", "--json"}, args...)
@@ -43,8 +40,6 @@ func mailSeenRing(t *testing.T, base string, args ...string) []mailSeenRow {
 	return res.Messages
 }
 
-// mailSeenLog collects the CLI output a run shows, and writes it to
-// $TUIOS_E2E_FRAMES/<name>.txt at the end, so a run leaves the proof behind.
 type mailSeenLog struct {
 	t    *testing.T
 	base string
@@ -72,8 +67,6 @@ func (l *mailSeenLog) save() {
 	}
 }
 
-// mailSeenInPane runs the tuios CLI inside a pane's shell, so the daemon
-// places the caller in that pane, and returns what it printed.
 func mailSeenInPane(t *testing.T, base string, log *mailSeenLog, window string, args ...string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -130,12 +123,10 @@ func TestMailSeenStateBetweenUnreadAndRead(t *testing.T) {
 	log := &mailSeenLog{t: t, base: base, name: "mail-seen-states"}
 	defer log.save()
 
-	// The first window is the recipient and a second one is the sender.
 	log.run("set-window", "-s", "e2e-ctrlp", "--name", "WORKER")
 	log.run("new-window", "-s", "e2e-ctrlp", "SENDER", "--no-focus")
 	log.run("send-agent-message", "-s", "e2e-ctrlp", "-w", "WORKER", "--from", "SENDER", "--subject", "retest", "please retest")
 
-	// Sent: unread, and a read of the session shows no seen mark.
 	out := log.run("read-agent-messages", "-s", "e2e-ctrlp")
 	mailSeenWant(t, out, "1 message, 1 unread.", "the sender's view of a new message")
 	if strings.Contains(out, "  seen") {
@@ -145,9 +136,6 @@ func TestMailSeenStateBetweenUnreadAndRead(t *testing.T) {
 		t.Fatalf("a new message has seen_at or read_at set: %+v", rows)
 	}
 
-	// A peek that is not the recipient's marks nothing: one with no inbox
-	// named, one from outside every pane, and one from the sender's own pane,
-	// which is the sender checking on its message.
 	log.run("read-agent-messages", "-s", "e2e-ctrlp", "--peek")
 	log.run("read-agent-messages", "-s", "e2e-ctrlp", "-w", "WORKER", "--peek")
 	out = mailSeenInPane(t, base, log, "SENDER", "read-agent-messages", "-s", "e2e-ctrlp", "-w", "WORKER", "--peek")
@@ -156,7 +144,6 @@ func TestMailSeenStateBetweenUnreadAndRead(t *testing.T) {
 		t.Fatalf("a peek by someone who is not the recipient marked the message seen: %+v", rows)
 	}
 
-	// The recipient peeks from its own pane: seen, not read.
 	out = mailSeenInPane(t, base, log, "WORKER", "read-agent-messages", "-s", "e2e-ctrlp", "-w", "WORKER", "--peek")
 	mailSeenWant(t, out, "1 message, marked seen.", "the recipient's peek")
 	rows := mailSeenRing(t, base)
@@ -165,7 +152,6 @@ func TestMailSeenStateBetweenUnreadAndRead(t *testing.T) {
 	}
 	firstSeen := rows[0].SeenAt
 
-	// The sender's view.
 	out = log.run("read-agent-messages", "-s", "e2e-ctrlp")
 	mailSeenWant(t, out, "  seen", "the sender's view after a peek")
 	mailSeenWant(t, out, "1 message, 1 seen.", "the sender's view after a peek")
@@ -175,13 +161,11 @@ func TestMailSeenStateBetweenUnreadAndRead(t *testing.T) {
 		t.Errorf("--unread should still return a seen message, got %d", len(rows))
 	}
 
-	// A second peek keeps the first look.
 	mailSeenInPane(t, base, log, "WORKER", "read-agent-messages", "-s", "e2e-ctrlp", "-w", "WORKER", "--peek")
 	if rows := mailSeenRing(t, base); rows[0].SeenAt != firstSeen {
 		t.Errorf("a second peek moved seen_at from %d to %d", firstSeen, rows[0].SeenAt)
 	}
 
-	// The marking read: the summary states the state after the call.
 	out = log.run("read-agent-messages", "-s", "e2e-ctrlp", "-w", "WORKER")
 	mailSeenWant(t, out, "1 message, marked read.", "the marking read")
 	if strings.Contains(out, "1 unread") {
@@ -192,7 +176,6 @@ func TestMailSeenStateBetweenUnreadAndRead(t *testing.T) {
 		t.Fatalf("after a read the message should be read and keep seen_at: %+v", rows)
 	}
 
-	// The sender's view of a read message.
 	out = log.run("read-agent-messages", "-s", "e2e-ctrlp")
 	mailSeenWant(t, out, "1 message, all read.", "the sender's view after a read")
 	if strings.Contains(out, "  seen") || strings.Contains(out, "  new") {
@@ -204,8 +187,6 @@ func TestMailSeenStateBetweenUnreadAndRead(t *testing.T) {
 	}
 }
 
-// mailSeenToPerson sends a message to the person from a pane named REVIEWER
-// and waits for the dock to announce it.
 func mailSeenToPerson(t *testing.T, term *tuitest.Terminal, log *mailSeenLog) {
 	t.Helper()
 	renameWindow(t, term, "REVIEWER")
@@ -215,8 +196,6 @@ func mailSeenToPerson(t *testing.T, term *tuitest.Terminal, log *mailSeenLog) {
 	}
 }
 
-// mailSeenPersonPeek peeks the person's mail from the CLI, which runs outside
-// any pane here and so may act as the person.
 func mailSeenPersonPeek(t *testing.T, log *mailSeenLog) {
 	t.Helper()
 	mailSeenWant(t, log.run("read-agent-messages", "-s", "e2e-ctrlp", "-w", "human", "--peek"), "marked seen.", "the person's peek")
@@ -241,7 +220,6 @@ func TestMailSeenInboxRow(t *testing.T) {
 		t.Fatalf("the Inbox never listed the thread: %v\n%s", err, term.Snapshot())
 	}
 	mailSeenPersonPeek(t, log)
-	// The seen mark is on the thread's own row in the list.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		r := fleetRowWith(s, "REVIEWER")
 		return r >= 0 && strings.Contains(s.Line(r), "seen")
@@ -284,7 +262,6 @@ func TestMailSeenMailbox(t *testing.T) {
 		t.Fatalf("the thread never opened: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "mail-seen-thread")
-	// Opening the thread is the person reading it: nothing is left to list.
 	if err := term.WaitFor(func(tuitest.Screen) bool {
 		out, err := tuiosCLI(t, base, "list-attention", "-s", "e2e-ctrlp")
 		return err == nil && !strings.Contains(out, "retry policy")

@@ -13,28 +13,17 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The rail's custom section, driven on a real daemon and a real client. The
-// section is a command's output drawn as rows, so every test here writes a
-// shell command into the config, attaches, and reads the rows off the rail's
-// columns.
-
-// railCustomConfig is a rail on the left, 28 columns wide, with the custom
-// section placed by sections and configured by custom, the body of the
-// [appearance.sidebar.custom] table.
 func railCustomConfig(sections, custom string) string {
 	return "[appearance.sidebar]\nenabled = true\nposition = \"left\"\nwidth = 28\nsections = \"" +
 		sections + "\"\n\n[appearance.sidebar.custom]\n" + custom + "\n" +
 		"\n[notifications.agent]\nsuppress_focused = false\nsettle_seconds = 0\n"
 }
 
-// railCustomClient attaches a client to a session named e2e with the custom
-// section configured.
 func railCustomClient(t *testing.T, sections, custom string) (*tuitest.Terminal, string) {
 	t.Helper()
 	return railClient(t, "e2e", railCustomConfig(sections, custom), startOpts{cols: 120, rows: 40})
 }
 
-// waitRailShows waits until the rail's columns carry needle.
 func waitRailShows(t *testing.T, term *tuitest.Terminal, needle, why string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -44,7 +33,6 @@ func waitRailShows(t *testing.T, term *tuitest.Terminal, needle, why string) {
 	}
 }
 
-// waitRailLacks waits until the rail's columns no longer carry needle.
 func waitRailLacks(t *testing.T, term *tuitest.Terminal, needle, why string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -54,8 +42,6 @@ func waitRailLacks(t *testing.T, term *tuitest.Terminal, needle, why string) {
 	}
 }
 
-// railStillShows fails unless the rail shows needle now and still does after
-// hold. It is the positive half of a "did not re-run" assertion.
 func railStillShows(t *testing.T, term *tuitest.Terminal, needle string, hold time.Duration, why string) {
 	t.Helper()
 	waitRailShows(t, term, needle, why)
@@ -65,19 +51,15 @@ func railStillShows(t *testing.T, term *tuitest.Terminal, needle string, hold ti
 	}
 }
 
-// countFile is a file the command appends one line to per run, so a test can
-// count runs without trusting the screen alone.
 func countFile(t *testing.T) string {
 	t.Helper()
 	return filepath.Join(t.TempDir(), "runs")
 }
 
-// countingCommand appends to runs and prints RUN-N, where N is the run count.
 func countingCommand(runs string) string {
 	return "echo x >> " + runs + "; echo RUN-$(wc -l < " + runs + " | tr -d ' ')"
 }
 
-// runCount is how many lines runs holds.
 func runCount(t *testing.T, runs string) int {
 	t.Helper()
 	data, err := os.ReadFile(runs)
@@ -87,9 +69,6 @@ func runCount(t *testing.T, runs string) int {
 	return strings.Count(string(data), "\n")
 }
 
-// railRunNumber is the N of the RUN-N row on the rail, or 0 when there is
-// none. Tests that count runs read the number the rail shows rather than
-// assuming how many runs the attach and the pane setup cost.
 func railRunNumber(s tuitest.Screen) int {
 	row := railRowOf(s, "RUN-")
 	if row < 0 {
@@ -105,25 +84,19 @@ func railRunNumber(s tuitest.Screen) int {
 
 var runNumberRe = regexp.MustCompile(`RUN-(\d+)`)
 
-// railHeightRe reads the H=N row the environment test prints.
 var railHeightRe = regexp.MustCompile(`H=(\d+)`)
 
-// plusCountRe matches the "+N" of an overflow row.
 var plusCountRe = regexp.MustCompile(`\+\d+`)
 
-// waitRailRun waits until the rail shows RUN-n exactly.
 func waitRailRun(t *testing.T, term *tuitest.Terminal, n int, why string) {
 	t.Helper()
 	waitRailShows(t, term, "RUN-"+strconv.Itoa(n), why)
 }
 
-// shortID is the first twelve characters of a window id, which is what a
-// 26 column row can show after "ID=".
 func shortID(id string) string {
 	return id[:min(len(id), 12)]
 }
 
-// railComponent is the rail's row in list-dock-components --json.
 type railComponent struct {
 	Name     string `json:"name"`
 	Side     string `json:"side"`
@@ -136,7 +109,6 @@ type railComponent struct {
 	Stopped  bool   `json:"stopped"`
 }
 
-// listRailComponent reads the rail's row from list-dock-components.
 func listRailComponent(t *testing.T, base string) railComponent {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-dock-components", "--json", "-s", "e2e")
@@ -158,7 +130,6 @@ func listRailComponent(t *testing.T, base string) railComponent {
 	return railComponent{}
 }
 
-// waitRailComponent polls the listing until want is satisfied.
 func waitRailComponent(t *testing.T, base, why string, want func(railComponent) bool) railComponent {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -174,7 +145,6 @@ func waitRailComponent(t *testing.T, base, why string, want func(railComponent) 
 	return last
 }
 
-// refreshRail re-runs the section through refresh-dock.
 func refreshRail(t *testing.T, base string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "refresh-dock", "rail/custom", "-s", "e2e"); err != nil {
@@ -182,8 +152,6 @@ func refreshRail(t *testing.T, base string) {
 	}
 }
 
-// focusPane focuses the window named name through the CLI, which fires
-// window-focused in the attached client.
 func focusPane(t *testing.T, base, name string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "focus-window", "-s", "e2e", windowID(t, base, "e2e", name)); err != nil {
@@ -191,7 +159,6 @@ func focusPane(t *testing.T, base, name string) {
 	}
 }
 
-// configFile is the attached client's config file.
 func configFile(base string) string {
 	return filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios", "config.toml")
 }
@@ -230,14 +197,11 @@ func TestRailCustomSectionPlacementAndEditorRoundTrip(t *testing.T) {
 	if err := term.WaitForText("Rail sections", uiTimeout); err != nil {
 		t.Fatalf("the rail editor never opened: %v\n%s", err, term.Snapshot())
 	}
-	// The editor opens on the first placed row, sessions. Two down is custom.
 	if err := term.SendKeys(tuitest.Down, tuitest.Down, tuitest.Enter); err != nil {
 		t.Fatalf("take custom off: %v", err)
 	}
 	waitRailLacks(t, term, "ALPHA", "after taking the section off")
 	waitRailLacks(t, term, "Brief", "after taking the section off")
-	// The selection followed the row into the "Not on the rail" list, so
-	// Enter again puts it back, at the end of the layout.
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("put custom back: %v", err)
 	}
@@ -247,14 +211,10 @@ func TestRailCustomSectionPlacementAndEditorRoundTrip(t *testing.T) {
 		t.Fatalf("close: %v", err)
 	}
 
-	// The settings save runs in the background, so the file can lag the
-	// screen. Wait for the layout instead of reading the file once.
 	waitForFileText(t, configFile(base), editedLayoutRe.MatchString,
 		"the editor did not write custom back into the layout")
 }
 
-// editedLayoutRe is the layout line the editor round trip leaves in the file.
-// The writer picks the TOML quote style, so either one is the same value.
 var editedLayoutRe = regexp.MustCompile(`(?m)^\s*sections = ['"]sessions,terminals,custom['"]\s*$`)
 
 // TestRailCustomSectionRefreshModes pins each refresh mode on the real
@@ -291,9 +251,6 @@ func TestRailCustomSectionRefreshModes(t *testing.T) {
 			t.Fatalf("new-window: %v\n%s", err, out)
 		}
 		waitWindowCount(t, term, 2, "opening the second pane")
-		// Whatever the attach and the pane setup cost, the count settles.
-		// Read it, hold it for two seconds, and then one focus change is one
-		// more run and nothing else is.
 		waitRailShows(t, term, "RUN-", "the run at attach")
 		time.Sleep(2 * time.Second)
 		n := railRunNumber(term.Screen())
@@ -321,8 +278,6 @@ func TestRailCustomSectionCutsRowsToSize(t *testing.T) {
 		if railRowOf(s, "ROW40") >= 0 {
 			t.Fatalf("the section drew all forty rows on a rail with 40%% of the lines\n%s", term.Snapshot())
 		}
-		// The overflow row is "+N" below the custom title. The sessions and
-		// terminals headers draw a "+" too, so look only under the title.
 		title := railRowOf(s, "Custom")
 		_, rows := s.Size()
 		found := false
@@ -335,8 +290,6 @@ func TestRailCustomSectionCutsRowsToSize(t *testing.T) {
 		if !found {
 			t.Fatalf("the section hides rows and does not own up to them with +N below its title\n%s", term.Snapshot())
 		}
-		// Each row is ROWnn- and seventy digits, so anything past the rail's
-		// width that is a long run of digits is a row that was not cut.
 		for r := range rows {
 			line := []rune(s.Line(r))
 			if len(line) > railWidth && strings.Contains(string(line[railWidth:]), "0123456789") {
@@ -418,8 +371,6 @@ func TestRailCustomSectionEmptyOnFailure(t *testing.T) {
 		term, base := railCustomClient(t, "sessions,terminals,custom:40",
 			"command = \"echo x >> "+runs+"\"")
 		waitRailShows(t, term, "Custom", "a command that prints nothing")
-		// The zero values of the listing look like a silent run, so wait
-		// for proof that the command ran at all.
 		deadline := time.Now().Add(uiTimeout)
 		for runCount(t, runs) < 1 && time.Now().Before(deadline) {
 			time.Sleep(100 * time.Millisecond)
@@ -478,8 +429,6 @@ func TestRailCustomSectionEnvFollowsFocus(t *testing.T) {
 	if hRow < 0 {
 		t.Fatalf("the run did not see TUIOS_RAIL_HEIGHT\n%s", term.Snapshot())
 	}
-	// The rail's line ends in its edge rule, so the number is read by pattern
-	// rather than by trimming.
 	h := 0
 	if m := railHeightRe.FindStringSubmatch(railLine(s, hRow)); m != nil {
 		h, _ = strconv.Atoi(m[1])
@@ -540,9 +489,6 @@ func TestRailCustomSectionKeepsOnePendingRerun(t *testing.T) {
 	}
 	waitWindowCount(t, term, 2, "opening the second pane")
 	waitRailShows(t, term, "ONE", "the run at attach")
-	// Let whatever the setup started finish, then count from here: the two
-	// focus events below must cost exactly two runs, the event's own and
-	// the one pending re-run.
 	time.Sleep(3 * time.Second)
 	before := runCount(t, runs)
 
@@ -550,8 +496,6 @@ func TestRailCustomSectionKeepsOnePendingRerun(t *testing.T) {
 		t.Fatalf("write mark: %v", err)
 	}
 	focusPane(t, base, "SECOND")
-	// The debounce is 200 ms and the run sleeps two seconds, so at 700 ms the
-	// second run is in flight. Two events land on it; one re-run must follow.
 	time.Sleep(700 * time.Millisecond)
 	if err := os.WriteFile(mark, []byte("THREE\n"), 0o600); err != nil {
 		t.Fatalf("write mark: %v", err)
@@ -565,26 +509,21 @@ func TestRailCustomSectionKeepsOnePendingRerun(t *testing.T) {
 	}
 }
 
-// foldRail folds the rail to its glyph strip with the rail's own narrow key,
-// and hands the keyboard back to the panes.
 func foldRail(t *testing.T, term *tuitest.Terminal, _ string) {
 	t.Helper()
 	railKeys(t, term, "<", "fold the rail")
 }
 
-// unfoldRail opens a folded rail with the rail's widen key.
 func unfoldRail(t *testing.T, term *tuitest.Terminal, _ string) {
 	t.Helper()
 	railKeys(t, term, ">", "unfold the rail")
 }
 
-// toggleRailFromPalette turns the rail off or back on from the palette.
 func toggleRailFromPalette(t *testing.T, term *tuitest.Terminal, _ string) {
 	t.Helper()
 	toggleSidebarViaPalette(t, term)
 }
 
-// placeRail is a step that moves the rail to position through set-config.
 func placeRail(position string) func(*testing.T, *tuitest.Terminal, string) {
 	return func(t *testing.T, _ *tuitest.Terminal, base string) {
 		t.Helper()
@@ -594,9 +533,6 @@ func placeRail(position string) func(*testing.T, *tuitest.Terminal, string) {
 	}
 }
 
-// railKeys gives the rail the keyboard, sends key, and takes the keyboard
-// back, so the focus changes that follow go through the CLI with the panes
-// in charge, as they would for a person who folded the rail and went on.
 func railKeys(t *testing.T, term *tuitest.Terminal, key, why string) {
 	t.Helper()
 	if err := term.SendKeys("s"); err != nil {
@@ -615,8 +551,6 @@ func railKeys(t *testing.T, term *tuitest.Terminal, key, why string) {
 	}
 }
 
-// railWidths is the TUIOS_RAIL_WIDTH of every run so far, one per line of
-// the file the command appends to.
 func railWidths(t *testing.T, path string) []string {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -670,8 +604,6 @@ func TestRailCustomSectionWaitsWhileTheRailIsShut(t *testing.T) {
 			}
 			waitWindowCount(t, term, 2, "opening the second pane")
 			waitRailShows(t, term, "BEFORE", "the run at attach")
-			// Whatever the attach and the pane setup cost, let it finish and
-			// count from here.
 			time.Sleep(2 * time.Second)
 			settled := len(railWidths(t, widths))
 
@@ -753,17 +685,11 @@ func TestRailCustomRowLinkOpensOnClickAndEnter(t *testing.T) {
 		}
 		waitOpened(t, record, want, what)
 	}
-	// The row with no link first: had it opened anything, every later wait
-	// would see one address too many.
 	click("plain row", 2, "", "ASSERTION: a click on a row with no link")
 	click("PR-THREE", 3, "https://example.com/pr/3", "ASSERTION: a click on the second link of a row")
 	click("two PR-TWO", 0, "https://example.com/pr/2", "ASSERTION: a click on a row beside its links")
 	click("PR-TWO", 2, "https://example.com/pr/2", "ASSERTION: a click on the first link of a row")
 
-	// Keyboard: esc hands the keyboard back, and s gives it to the rail on
-	// the row it was left on, the one clicked last. The plain row holds no
-	// link, so it is no stop for the cursor: one k lands on the PR-ONE row,
-	// which the cursor marks, and enter opens its link.
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
 	}

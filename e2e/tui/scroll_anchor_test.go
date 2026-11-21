@@ -42,14 +42,6 @@ import (
 // scroll_strip_workspace_test.go. This file is only about a pane's own
 // scrollback.
 
-// anchorProducer starts a background job in the focused pane's shell that
-// prints one tagged line every 50ms, and returns once the shell confirms the
-// job is running.
-//
-// It is started before the scroll rather than after, because typing into a
-// scrolled pane is itself a documented way back to live output
-// (TestTypingWhileScrolledSnapsBackToLiveOutput). The delay in front of the
-// loop gives the wheel gesture time to land first.
 func anchorProducer(t *testing.T, term *tuitest.Terminal, prefix string, n int, delay string) {
 	t.Helper()
 	cmd := fmt.Sprintf(
@@ -73,7 +65,6 @@ func TestScrolledPaneHoldsItsPlaceUnderNewOutput(t *testing.T) {
 	const filled = 400
 	fillScrollback(t, term, "ANCHOR", filled)
 
-	// Start the producer, then scroll back before its first line lands.
 	anchorProducer(t, term, "LATE", 120, "2")
 
 	col, row := paneCell(t, term)
@@ -84,11 +75,7 @@ func TestScrolledPaneHoldsItsPlaceUnderNewOutput(t *testing.T) {
 	before := settledScroll(t, term, "ANCHOR")
 	t.Logf("the newest ANCHOR line after scrolling back is %d", before)
 
-	// Let the producer run. Every one of its lines pushes the pane's history
-	// forward by one.
 	if err := term.WaitForText("LATE-1-END", uiTimeout); err != nil {
-		// The producer may print entirely off screen, which is the point. Fall
-		// back to waiting out its delay rather than failing on an absence.
 		time.Sleep(3 * time.Second)
 	}
 	time.Sleep(4 * time.Second)
@@ -132,8 +119,6 @@ func TestAPeersWorkspaceSwitchLeavesAScrolledPaneWhereItIs(t *testing.T) {
 	const filled = 400
 	fillScrollback(t, a, "WSANCHOR", filled)
 
-	// A producer that keeps printing while the workspace is away, so the daemon
-	// holds rows this client has never seen when it comes back.
 	anchorProducer(t, a, "WSLATE", 200, "1")
 
 	col, row := paneCell(t, a)
@@ -144,9 +129,6 @@ func TestAPeersWorkspaceSwitchLeavesAScrolledPaneWhereItIs(t *testing.T) {
 	before := settledScroll(t, a, "WSANCHOR")
 	t.Logf("the newest WSANCHOR line on the scrolled client is %d", before)
 
-	// The second client makes the round trip. Nothing is typed on the first
-	// one, which is the point: any key of its own would end the scrolled view
-	// on purpose (keyboard_terminal.go, keyboard_wm.go).
 	b := attachIn(t, base, "anchorws", startOpts{cols: 120, rows: 40})
 	switchWorkspace(t, b, "2", 0)
 	if err := a.WaitFor(func(s tuitest.Screen) bool {
@@ -155,8 +137,6 @@ func TestAPeersWorkspaceSwitchLeavesAScrolledPaneWhereItIs(t *testing.T) {
 		t.Fatalf("the peer's workspace switch never reached the scrolled client: %v\n%s",
 			err, a.Snapshot())
 	}
-	// Long enough for the producer to finish printing into a pane nobody is
-	// watching, so the daemon holds rows the scrolled client has never seen.
 	time.Sleep(12 * time.Second)
 	switchWorkspace(t, b, "1", 1)
 	if err := a.WaitFor(func(s tuitest.Screen) bool {

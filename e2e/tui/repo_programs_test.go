@@ -13,11 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// programRepo gives the repository at repo programs of its own, each of which
-// appends its name to marker when git runs it: a clean and a smudge filter
-// and a textconv on *.txt, diff.external, and the hooks git runs on add, on a
-// ref update and on checkout. It then changes a.txt, so git has a file to
-// filter.
 func programRepo(t *testing.T, repo, marker string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(repo, ".gitattributes"), []byte("*.txt filter=probe diff=probe\n"), 0o644); err != nil {
@@ -49,7 +44,6 @@ func programRepo(t *testing.T, repo, marker string) {
 	}
 }
 
-// programsRan reads and clears marker.
 func programsRan(marker string) []string {
 	data, _ := os.ReadFile(marker)
 	_ = os.Remove(marker)

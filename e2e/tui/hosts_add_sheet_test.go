@@ -10,13 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The add-a-machine sheet, in the real app, over the same two machines as
-// TestSetUpAMachineBothWays: buildbox has no tuios, and laptopbox is this
-// machine as buildbox reaches it back. The sheet drives the setup engine in
-// the client. The person picks each step, and a frame of each step is saved
-// as text and PNG under the test's artifact folder.
-
-// sheetStep waits for every marker of one step and saves its frame.
 func sheetStep(t *testing.T, term *tuitest.Terminal, name string, markers ...string) {
 	t.Helper()
 	for _, want := range markers {
@@ -27,7 +20,6 @@ func sheetStep(t *testing.T, term *tuitest.Terminal, name string, markers ...str
 	railShot(t, term, name)
 }
 
-// waitAny waits until one of the markers is on screen and returns the screen.
 func waitAny(t *testing.T, term *tuitest.Terminal, markers ...string) string {
 	t.Helper()
 	var text string
@@ -45,7 +37,6 @@ func waitAny(t *testing.T, term *tuitest.Terminal, markers ...string) string {
 	return text
 }
 
-// openAddSheet runs "Add a machine" from the palette.
 func openAddSheet(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	sendKeys(t, term, tuitest.Ctrl('p'))
@@ -78,7 +69,6 @@ func TestAddMachineSheet(t *testing.T) {
 	if err := term.SendKeys("someone@buildbox"); err != nil {
 		t.Fatal(err)
 	}
-	// Tab twice is the field of this machine's address for the far side.
 	sendKeys(t, term, tuitest.Tab, tuitest.Tab)
 	if err := term.SendKeys("someone@laptopbox"); err != nil {
 		t.Fatal(err)
@@ -93,7 +83,6 @@ func TestAddMachineSheet(t *testing.T) {
 	sendKeys(t, term, tuitest.Enter)
 
 	if strings.Contains(waitAny(t, term, "when it boots?", "Add this machine on buildbox too?"), "when it boots?") {
-		// No service on the stand-in machine: its systemd is this one's.
 		sheetStep(t, term, "sheet-3-boot", "when it boots?")
 		sendKeys(t, term, "n")
 	}
@@ -140,11 +129,8 @@ func TestAddMachineSheetTailnet(t *testing.T) {
 	if err := term.WaitForText("user@host", uiTimeout); err != nil {
 		t.Fatalf("the sheet did not open: %v\n%s", err, term.Snapshot())
 	}
-	// Tab goes through the three fields, then to the Tailnet tab.
 	sendKeys(t, term, tuitest.Tab, tuitest.Tab, tuitest.Tab)
 	sheetStep(t, term, "sheet-tailnet-list", "Each ticked machine gets this version", "buildbox", "no tuios", "sleepy", "offline")
-	// a ticks every machine that can be set up. Then the answers: no start
-	// at boot, one way.
 	sendKeys(t, term, "a", "b", "w")
 	sheetStep(t, term, "sheet-tailnet-ticked", "[x]", "Set up 1 machine")
 	sendKeys(t, term, tuitest.Enter)

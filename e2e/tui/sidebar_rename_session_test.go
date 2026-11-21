@@ -43,7 +43,6 @@ func TestRailRightClickRenamesTheSessionUnderThePointer(t *testing.T) {
 	toggleSidebarViaPalette(t, term)
 	waitForAll(t, term, uiTimeout, "sidebar with both session rows", sidebarHeader, "bravo")
 
-	// Right-click the row of the session this client is NOT in.
 	col, row := findOnScreen(t, term, "bravo")
 	mouseClick(t, term, col, row, tuitest.MouseRight, 0)
 	if err := term.WaitForText("Rename", uiTimeout); err != nil {
@@ -52,13 +51,10 @@ func TestRailRightClickRenamesTheSessionUnderThePointer(t *testing.T) {
 
 	col, row = findOnScreen(t, term, "Rename")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
-	// The editor names the session it is about, which is the assertion that
-	// fails first if the row handed the handler the attached session.
 	if err := term.WaitForText("rename session bravo", uiTimeout); err != nil {
 		t.Fatalf("the editor did not name the row's session: %v\n%s", err, term.Snapshot())
 	}
 
-	// The editor opens on the session's name. Clear it and type the new one.
 	if err := term.SendKeys(strings.Repeat("\x7f", 8)); err != nil {
 		t.Fatalf("clear the editor: %v", err)
 	}
@@ -72,8 +68,6 @@ func TestRailRightClickRenamesTheSessionUnderThePointer(t *testing.T) {
 		t.Fatalf("commit the rename: %v", err)
 	}
 
-	// The rail is the screen the user is looking at, so it is where the rename
-	// has to land: bravo's row now reads by its new name and alpha's does not.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
 		return strings.Contains(text, "payments") && strings.Contains(text, "alpha")
@@ -81,10 +75,6 @@ func TestRailRightClickRenamesTheSessionUnderThePointer(t *testing.T) {
 		t.Fatalf("the rail did not show the renamed session beside the attached one: %v\n%s", err, term.Snapshot())
 	}
 
-	// The daemon is the authority on which session was renamed, and ls is
-	// what a person checks (issue #266). These fail if the rename reached the
-	// attached session or only set a label. The rail can show the new name a
-	// moment before the daemon lists it, so ls is read until it does.
 	names := sessionNames(t, base)
 	for deadline := time.Now().Add(uiTimeout); !hasName(names, "payments") && time.Now().Before(deadline); {
 		time.Sleep(100 * time.Millisecond)
@@ -97,11 +87,6 @@ func TestRailRightClickRenamesTheSessionUnderThePointer(t *testing.T) {
 		t.Errorf("the rename landed on the attached session: ls lists %v", names)
 	}
 
-	// Nerd Font icons in a name (discussion 1094). They are private use
-	// area code points, and the rail and the dock used to drop them. A
-	// name set from the CLI has to reach the screen with its icon, in one
-	// cell, so the text after it does not move. U+E795 is the terminal
-	// icon from the BMP block, U+F0219 a Material Design icon from plane 15.
 	const sessIcon, wsIcon = "\ue795", "\U000f0219"
 	if out, err := tuiosCLI(t, base, "rename-session", "payments", sessIcon+" payments"); err != nil {
 		t.Fatalf("rename-session to a name with an icon: %v\n%s", err, out)
@@ -109,8 +94,6 @@ func TestRailRightClickRenamesTheSessionUnderThePointer(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "set-workspace-name", "-s", "alpha", "1", wsIcon+" home"); err != nil {
 		t.Fatalf("set-workspace-name with an icon: %v\n%s", err, out)
 	}
-	// iconBefore reports whether icon is drawn in the cell right before
-	// " "+word on some row, which is what one cell wide means on screen.
 	iconBefore := func(s tuitest.Screen, icon, word string) bool {
 		cols, rows := s.Size()
 		for r := range rows {
@@ -143,9 +126,6 @@ func TestRailRightClickRenamesTheSessionUnderThePointer(t *testing.T) {
 
 	alive(t, term, "after renaming another session from the rail")
 
-	// With Nerd Fonts off the icon would be a tofu box, so it is still
-	// dropped. TERM=linux is the Linux console, which tuios knows has no
-	// Nerd Font glyphs. The dock there still names the workspace.
 	plain := startIn(t, base, startOpts{args: []string{"attach", "alpha"}, env: []string{"TERM=linux"}})
 	err = plain.WaitFor(func(s tuitest.Screen) bool {
 		if !strings.Contains(s.Text(), "home") {

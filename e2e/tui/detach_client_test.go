@@ -10,16 +10,11 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Discussion #549 asked for tmux's attach -d and detach-client: one client
-// per session, the newest attach wins, and the client that loses exits with a
-// plain message instead of an error.
-
 const (
 	detachedByAttach  = "Another client attached to this session."
 	detachedByCommand = "The tuios detach-client command detached this client."
 )
 
-// clientRows is tuios list-clients --json, the attached rows only.
 func clientRows(t *testing.T, base string) []struct {
 	ClientID string `json:"client_id"`
 	PID      int    `json:"pid"`
@@ -47,8 +42,6 @@ func clientRows(t *testing.T, base string) []struct {
 	return attached
 }
 
-// clientIDOf is the id list-clients gives the client process pid, waiting for
-// it to show.
 func clientIDOf(t *testing.T, base string, pid int, session string) string {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -64,8 +57,6 @@ func clientIDOf(t *testing.T, base string, pid int, session string) string {
 	return ""
 }
 
-// attachedClient starts a client on session with the PTY log kept, and waits
-// for it to show the session's one window.
 func attachedClient(t *testing.T, base, session string, extra ...string) (*tuitest.Terminal, string) {
 	t.Helper()
 	args := append([]string{"attach"}, extra...)
@@ -77,8 +68,6 @@ func attachedClient(t *testing.T, base, session string, extra ...string) (*tuite
 	return term, logPath
 }
 
-// exitedDetached waits for a client to exit and checks it said why, in the
-// words of reason, with status 0 and no error report.
 func exitedDetached(t *testing.T, term *tuitest.Terminal, logPath, session, reason, what string) {
 	t.Helper()
 	code := waitExit(t, term, what)
@@ -118,7 +107,6 @@ func TestAttachDetachOthersEndsTheOtherClients(t *testing.T) {
 
 	first, firstLog := attachedClient(t, base, sess)
 	second, secondLog := attachedClient(t, base, sess)
-	// The positive half: a plain attach detaches nobody.
 	time.Sleep(500 * time.Millisecond)
 	if _, exited := first.ExitCode(); exited {
 		t.Fatalf("a plain attach ended the first client\n%s", first.Snapshot())
@@ -204,7 +192,6 @@ func TestDetachClientByIDAndSession(t *testing.T) {
 	}
 	alive(t, second, "after the other client was detached by id")
 
-	// A pane without admin may not detach the client that shows it.
 	out, err = tuiosCLI(t, base, "list-windows", "-s", sess, "--json")
 	if err != nil {
 		t.Fatalf("list-windows: %v\n%s", err, out)
@@ -233,8 +220,6 @@ func TestDetachClientByIDAndSession(t *testing.T) {
 	alive(t, second, "after a pane without admin asked to detach it")
 	saveArtifact(t, second, artifactDir(t), "detach-client-refused")
 
-	// The tmux shim, run outside every pane, where every session is a tmux
-	// session.
 	if out, err := tuiosCLI(t, base, "tmux", "detach-client", "-s", sess); err != nil {
 		t.Fatalf("tuios tmux detach-client -s: %v\n%s", err, out)
 	}
@@ -247,8 +232,6 @@ func TestDetachClientByIDAndSession(t *testing.T) {
 	}
 }
 
-// startDetaching starts a client that attaches session with -d and does not
-// wait for it, so two of them race.
 func startDetaching(t *testing.T, base, session string) (*tuitest.Terminal, string) {
 	t.Helper()
 	return startInLogged(t, base, startOpts{args: []string{"attach", "-d", session}})
@@ -278,8 +261,6 @@ func TestConcurrentAttachDetachLeavesOneClient(t *testing.T) {
 		terms := []*tuitest.Terminal{first, second, third}
 		logs := []string{firstLog, secondLog, thirdLog}
 
-		// Settled: two have exited. A client left attached beside the
-		// winner never exits, so the wait ends at the deadline with fewer.
 		deadline := time.Now().Add(uiTimeout)
 		exited := 0
 		for time.Now().Before(deadline) {
@@ -383,8 +364,6 @@ func TestDetachClientAllOther(t *testing.T) {
 	}
 	alive(t, b, "the client --all-other keeps")
 
-	// The shim's -a with -t keeps the client used last. d attaches after b
-	// and nobody types in either, so d is the newer and b goes.
 	d, dLog := attachedClient(t, base, sess)
 	dID := clientIDOf(t, base, d.Pid(), sess)
 	if out, err := tuiosCLI(t, base, "tmux", "detach-client", "-a", "-t", "tuios-"+sess); err != nil {
@@ -396,7 +375,6 @@ func TestDetachClientAllOther(t *testing.T) {
 	}
 	alive(t, d, "the client the shim's -a keeps")
 
-	// -s wins over -a, as in tmux 3.7c: every client of the session goes.
 	e, eLog := attachedClient(t, base, sess)
 	if out, err := tuiosCLI(t, base, "tmux", "detach-client", "-a", "-s", sess); err != nil {
 		t.Fatalf("tuios tmux detach-client -a -s: %v\n%s", err, out)

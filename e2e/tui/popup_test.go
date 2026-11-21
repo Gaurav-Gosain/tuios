@@ -13,7 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// popupResult is what `tuios popup --json` prints.
 type popupResult struct {
 	WindowID string `json:"window_id"`
 	Name     string `json:"name"`
@@ -21,8 +20,6 @@ type popupResult struct {
 	Height   string `json:"height"`
 }
 
-// openPopup runs `tuios popup` against the daemon under base and returns what it
-// reported. The command is an argv, exactly as a user types it after --.
 func openPopup(t *testing.T, base string, args ...string) popupResult {
 	t.Helper()
 	out, err := tuiosCLI(t, base, append([]string{"popup", "--json"}, args...)...)
@@ -39,7 +36,6 @@ func openPopup(t *testing.T, base string, args ...string) popupResult {
 	return res
 }
 
-// rectFor finds one window's geometry in a settled list.
 func rectFor(t *testing.T, rects []winRect, id string) winRect {
 	t.Helper()
 	for _, r := range rects {
@@ -70,15 +66,11 @@ func TestPopupOverEveryLayout(t *testing.T) {
 
 			term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", "pop"}})
 			waitWindowCount(t, term, 1, "after starting a new session")
-			// Through the daemon rather than by keystroke, so the test does not
-			// depend on which mode the client booted into.
 			if out, err := tuiosCLI(t, base, "run-command", "NewWindow"); err != nil {
 				t.Fatalf("open a second pane: %v\n%s", err, out)
 			}
 			waitWindowCount(t, term, 2, "second pane")
 
-			// The scrolling layout is only itself once the strip is longer than
-			// the view, which is what the extra columns are for.
 			panes := 2
 			if mode == "scrolling" {
 				for panes < 5 {
@@ -90,8 +82,6 @@ func TestPopupOverEveryLayout(t *testing.T) {
 				}
 			}
 
-			// The layout as it stands before the popup, so the check afterwards
-			// is that nothing moved rather than that something looks plausible.
 			before := waitForSettledGeometryIn(t, base, "pop", panes)
 
 			res := openPopup(t, base, "--width", "50%", "--height", "40%",
@@ -104,9 +94,6 @@ func TestPopupOverEveryLayout(t *testing.T) {
 			rects := waitForSettledGeometryIn(t, base, "pop", panes+1)
 			popup := rectFor(t, rects, res.WindowID)
 
-			// 120 columns and 40 rows, less one dock row and its separator: the
-			// pane region is 120x38. Half its width and two fifths of its height,
-			// centred.
 			wantW, wantH := 60, 15
 			if popup.Width != wantW || popup.Height != wantH {
 				t.Errorf("popup in %s mode is %dx%d, want %dx%d",
@@ -121,8 +108,6 @@ func TestPopupOverEveryLayout(t *testing.T) {
 					mode, popup.X, popup.Y, popup.Width, popup.Height)
 			}
 
-			// The panes under it are where they were. A popup that joined the
-			// tiling would have taken a third of the box off both of them.
 			for _, was := range before {
 				now := rectFor(t, rects, was.ID)
 				if now != was {
@@ -132,9 +117,6 @@ func TestPopupOverEveryLayout(t *testing.T) {
 				}
 			}
 			if mode == "scrolling" {
-				// The strip is longer than the view, and moving along it slides
-				// every column under the screen. A popup is placed on the screen
-				// and not on the strip, so it must not move with it.
 				if out, err := tuiosCLI(t, base, "focus-window", before[0].ID); err != nil {
 					t.Fatalf("step along the strip: %v\n%s", err, out)
 				}
@@ -212,7 +194,6 @@ func TestPopupRunsAPickerAndTheSelectionLands(t *testing.T) {
 		t.Fatalf("accept the fzf selection: %v\n%s", err, out)
 	}
 
-	// fzf exits on the selection, so the popup closes itself.
 	waitWindowCount(t, term, 1, "after fzf accepted a selection")
 
 	deadline := time.Now().Add(uiTimeout)
@@ -264,7 +245,6 @@ func TestPopupIsSharedBetweenClients(t *testing.T) {
 		t.Logf("the %s client with the shared popup:\n%s", name, term.Snapshot())
 	}
 
-	// Both clients drew it, and the daemon holds one popup, not two.
 	out, err := tuiosCLI(t, base, "list-windows", "--json", "--session", "shared")
 	if err != nil {
 		t.Fatalf("list-windows: %v\n%s", err, out)
@@ -314,9 +294,6 @@ func TestEscClosesAPopupThatWillNotExit(t *testing.T) {
 	}
 	waitWindowCount(t, term, 2, "with the stubborn popup open")
 
-	// The user's own way out, in the order they press the keys: esc leaves the
-	// pane, esc closes the box. Entering terminal mode first is what makes the
-	// first half real rather than assumed.
 	enterTerminalMode(t, term)
 	leaveTerminalMode(t, term)
 	if err := term.SendKeys(tuitest.Esc); err != nil {
@@ -409,14 +386,12 @@ func TestPopupThatSwitchesSessionCloses(t *testing.T) {
 	clientShows(t, base, "home")
 	waitWindowCount(t, term, 1, "home's first pane")
 
-	// The positive half: a popup that exits in place closes.
 	stay := openPopup(t, base, "-s", "home", "--", "sh", "-c", "printf 'STAY-POPUP\\n'; sleep 1")
 	if err := term.WaitForText("STAY-POPUP", uiTimeout); err != nil {
 		t.Fatalf("the popup never opened: %v\n%s", err, term.Snapshot())
 	}
 	popupGone(t, base, "home", stay.WindowID)
 
-	// The sessionizer: the popup's command switches the client away and exits.
 	away := openPopup(t, base, "-s", "home", "--", tuiosBin, "switch-session", "--create", "away")
 	if err := term.WaitForText("Session: away", uiTimeout); err != nil {
 		t.Fatalf("the popup's switch-session did not move the client: %v\n%s", err, term.Snapshot())
@@ -424,7 +399,6 @@ func TestPopupThatSwitchesSessionCloses(t *testing.T) {
 	clientShows(t, base, "away")
 	popupGone(t, base, "home", away.WindowID)
 
-	// Back in home there is the one pane and no empty popup box.
 	if out, err := tuiosCLI(t, base, "switch-session", "-s", "away", "home"); err != nil {
 		t.Fatalf("switch back to home: %v\n%s", err, out)
 	}
@@ -436,7 +410,6 @@ func TestPopupThatSwitchesSessionCloses(t *testing.T) {
 	alive(t, term, "after a popup switched sessions")
 }
 
-// popupGone waits until the window list of session no longer has the popup.
 func popupGone(t *testing.T, base, session, id string) {
 	t.Helper()
 	var out string

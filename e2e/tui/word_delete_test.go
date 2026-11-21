@@ -10,16 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The text prompts took backspace and ctrl+u and nothing else, so alt+backspace
-// and ctrl+w, which every shell and editor reads as "delete the word before the
-// cursor", did nothing at all. On macOS with the Option key sent as Alt the
-// terminal writes ESC DEL for Option+Backspace, which is tuitest's
-// Alt(Backspace), so that is the chord these tests press.
-//
-// The rename editor and the filtering overlays are two code paths that each had
-// their own copy of the edit rule, so each gets its own test: a fix to one would
-// not show the other still broken.
-
 // TestOptionBackspaceDeletesAWordInTheRenameEditor types a two-word name, takes
 // the last word off with Option+Backspace, types another and commits. The
 // committed name is the assertion, not the field: a key the editor ignores
@@ -37,7 +27,6 @@ func TestOptionBackspaceDeletesAWordInTheRenameEditor(t *testing.T) {
 		t.Fatalf("the rename dialog never opened: %v\n%s", err, term.Snapshot())
 	}
 
-	// The editor may open on the window's current name, so start from nothing.
 	if err := term.SendKeys(tuitest.Ctrl('u'), "one two"); err != nil {
 		t.Fatalf("type the name: %v", err)
 	}
@@ -48,8 +37,6 @@ func TestOptionBackspaceDeletesAWordInTheRenameEditor(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Backspace)); err != nil {
 		t.Fatalf("press Option+Backspace: %v", err)
 	}
-	// The word is gone and the space before it is not: a rule that took the
-	// space too would run the next word into the first.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(s.Text(), "one two")
 	}, uiTimeout); err != nil {
@@ -128,7 +115,6 @@ func TestOptionBackspaceDeletesAWordInTheCommandPalette(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("Option+Backspace did not take the last word off the query: %v\n%s", err, term.Snapshot())
 	}
-	// It is an edit, not a way out: the palette is still the thing on screen.
 	if !strings.Contains(term.Screen().Text(), paletteTitle) {
 		t.Fatalf("the palette closed on Option+Backspace\n%s", term.Snapshot())
 	}
@@ -160,14 +146,11 @@ func TestWordKeysDeleteAWordInTheOtherBoxes(t *testing.T) {
 		name         string
 		open         []any
 		typed        string
-		first, again string // on screen after one word key, and after two
+		first, again string
 		config       string
 	}{
 		{"go-to picker", []any{tuitest.Ctrl('b'), "G"}, "src/dir1/dir2", "src/dir1/", "src/", ""},
-		// "/" turns the help's search off, so its query has dots in it.
 		{"help search", []any{tuitest.Ctrl('b'), "?", "/"}, "src.dir1.dir2", "src.dir1.", "src.", ""},
-		// "/" walks the path picker into a folder and never reaches its query, so
-		// the query there has dots in it.
 		{"path picker", []any{tuitest.Alt(";")}, "src.dir1.dir2", "src.dir1.", "src.", ""},
 		{"copy-mode search", []any{tuitest.Ctrl('b'), "[", "/"}, "src.dir1.dir2", "/src.dir1.", "/src.", "[startup]\ntiled = false\n"},
 	} {
@@ -186,7 +169,7 @@ func TestWordKeysDeleteAWordInTheOtherBoxes(t *testing.T) {
 				term := startIn(t, base, startOpts{})
 				waitBoot(t, term)
 				newWindow(t, term)
-				enterTerminalMode(t, term) // the path picker types into the focused pane
+				enterTerminalMode(t, term)
 				send := func(keys ...any) {
 					t.Helper()
 					for _, x := range keys {
@@ -258,7 +241,6 @@ func TestWordKeysDeleteAWordInTheFileDialog(t *testing.T) {
 				t.Fatalf("the menu row did not open the file dialog: %v\n%s", err, term.Snapshot())
 			}
 
-			// "my notes.txt" -> "my notes." -> "my ".
 			for range 2 {
 				if err := term.SendKeys(tc.key); err != nil {
 					t.Fatalf("press the word key: %v", err)

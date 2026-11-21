@@ -31,18 +31,6 @@ import (
 	"unicode/utf8"
 )
 
-// file-preview: what Quick Look in the GUI shows, made on the machine the
-// file is on. It reads a file's bytes, so it keeps the rules file-read keeps:
-// the files capability, the read deny list, a file with one name, and one
-// open that every later read and every tool works from.
-//
-// What would pass a weaker test and fail these: a preview that opens the path
-// it was given without the link checks (the dummy key comes back as text), a
-// preview that needs only list, a preview that hands a tool the path instead
-// of the open file (the PDF and the film get no picture), and one with no cap
-// on the decoded picture (the daemon's memory).
-
-// filePreview is the part of a file-preview answer the tests read.
 type filePreview struct {
 	Kind        string `json:"kind"`
 	Width       int    `json:"width"`
@@ -60,7 +48,6 @@ type filePreview struct {
 	VideoCodec  string `json:"video_codec"`
 }
 
-// minimalPDF is a one page PDF with a correct cross reference table.
 func minimalPDF() []byte {
 	objs := []string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
@@ -85,8 +72,6 @@ func minimalPDF() []byte {
 	return b.Bytes()
 }
 
-// pagedPDF is a PDF of n pages. Each page has its own colour and its own words, so
-// a test can tell which page it was sent.
 func pagedPDF(n int) []byte {
 	kids := make([]string, n)
 	for i := range n {
@@ -180,7 +165,6 @@ func TestFilePreviewOnAHost(t *testing.T) {
 		t.Fatalf("ASSERTION: the table preview is %+v", text)
 	}
 
-	// A window starts at the next line and holds whole lines.
 	var window struct {
 		Kind       string `json:"kind"`
 		Text       string `json:"text"`
@@ -206,7 +190,6 @@ func TestFilePreviewOnAHost(t *testing.T) {
 		if _, err := exec.LookPath("pdfinfo"); err == nil && pdf.Pages != 1 {
 			t.Errorf("ASSERTION: pdfinfo did not count the page of the open file: %d", pdf.Pages)
 		}
-		// A later page with the count known: no pdfinfo, and the page asked for.
 		var page filePreview
 		far.must("file-preview", map[string]any{"path": "~/work/book.pdf", "max_px": 400, "page": 2, "pages_known": true}, &page)
 		if page.Page != 2 || page.Pages != 0 || page.Image == "" {
@@ -223,8 +206,6 @@ func TestFilePreviewOnAHost(t *testing.T) {
 	if film == "" {
 		t.Logf("no ffmpeg here: the film half is skipped")
 	} else {
-		// A clip with one key frame has none past its start, so the frame must come
-		// from a decode. This was "No frame could be read" before.
 		one := filepath.Join(dir, "one-key.mp4")
 		if b, err := exec.Command("ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=duration=2:size=160x120:rate=10", "-g", "1000", "-pix_fmt", "yuv420p", one).CombinedOutput(); err != nil {
 			t.Fatalf("make a film with one key frame: %v\n%s", err, b)
@@ -234,13 +215,11 @@ func TestFilePreviewOnAHost(t *testing.T) {
 		if key.Image == "" {
 			t.Errorf("ASSERTION: a clip with one key frame gave no frame: note %q", key.Note)
 		}
-		// A place in the film, with the facts known: no ffprobe, and it says where.
 		var seek filePreview
 		far.must("file-preview", map[string]any{"path": "~/work/clip.mp4", "max_px": 160, "at_ms": 1500, "duration_known": true}, &seek)
 		if seek.AtMs != 1500 || seek.DurationMs != 0 || seek.Image == "" {
 			t.Errorf("ASSERTION: a seek with the facts known: at %d, duration %d, image %d bytes, note %q", seek.AtMs, seek.DurationMs, len(seek.Image), seek.Note)
 		}
-		// Past the last frame, which starts before the film's end.
 		var last filePreview
 		far.must("file-preview", map[string]any{"path": "~/work/clip.mp4", "max_px": 160, "at_ms": 1995, "duration_known": true}, &last)
 		if last.Image == "" {
@@ -330,7 +309,6 @@ func TestFilePreviewNeedsTheFilesCapability(t *testing.T) {
 	}
 }
 
-// daemonPeakKB is the most memory the daemon of base has held, from /proc.
 func daemonPeakKB(t *testing.T, base string) int64 {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(daemonPID(t, base)), "status"))
@@ -347,8 +325,6 @@ func daemonPeakKB(t *testing.T, base string) int64 {
 	return 0
 }
 
-// writePNGBomb writes a PNG of w x h transparent pixels. The rows are all
-// zero, so the file is small and the picture is not.
 func writePNGBomb(t *testing.T, path string, w, h int) {
 	t.Helper()
 	var idat bytes.Buffer
@@ -459,7 +435,6 @@ func TestFilePreviewHoldsItsDecodeCap(t *testing.T) {
 	record := map[string]any{}
 	c := dialFileVerbs(t, base)
 
-	// A baseline JPEG that fits: decoded and scaled here.
 	small := filepath.Join(base, "photo.jpg")
 	var buf bytes.Buffer
 	_ = jpeg.Encode(&buf, image.NewRGBA(image.Rect(0, 0, 3000, 2000)), &jpeg.Options{Quality: 80})
@@ -500,9 +475,6 @@ func TestFilePreviewHoldsItsDecodeCap(t *testing.T) {
 		t.Errorf("ASSERTION: the progressive JPEG was not sent as it is for the client: %s %s width %d, %d of %d bytes", big.Kind, big.Mime, big.Width, len(sent), len(file))
 	}
 
-	// A grey baseline JPEG of the same size fits the cap: one byte a pixel.
-	// It is decoded and scaled here, and the scale must not build a buffer
-	// of the scaled width by the source's height (CatmullRom's, 358 MB).
 	grey := filepath.Join(base, "grey.jpg")
 	if out, err := exec.Command(magick, "-size", "9000x7000", "xc:gray50", "-colorspace", "Gray", "-interlace", "none", grey).CombinedOutput(); err != nil {
 		t.Fatalf("make the grey JPEG: %v\n%s", err, out)
@@ -530,8 +502,6 @@ func TestFilePreviewHoldsItsDecodeCap(t *testing.T) {
 	saveTransferArtifact(t, "file-preview-decode-cap", record)
 }
 
-// craftedPreview is the part of a file-preview answer the crafted files are
-// read by: a listing, a JSON layout and a GIF's frames.
 type craftedPreview struct {
 	Kind    string `json:"kind"`
 	Entries []struct {
@@ -546,7 +516,6 @@ type craftedPreview struct {
 	Page      int    `json:"page"`
 }
 
-// summary is what the artifact keeps of an answer.
 func (p craftedPreview) summary() map[string]any {
 	s := map[string]any{"kind": p.Kind, "entries": len(p.Entries), "capped": p.Capped, "formatted": p.Formatted, "text_bytes": len(p.Text), "pages": p.Pages, "page": p.Page}
 	if n := len(p.Entries); n > 0 {
@@ -555,7 +524,6 @@ func (p craftedPreview) summary() map[string]any {
 	return s
 }
 
-// names is the names of a listing, in its order.
 func (p craftedPreview) names() []string {
 	out := make([]string, len(p.Entries))
 	for i, e := range p.Entries {
@@ -564,13 +532,8 @@ func (p craftedPreview) names() []string {
 	return out
 }
 
-// manyEntryName is the name of entry i of writeManyEntryZip's zip.
 func manyEntryName(i int) string { return fmt.Sprintf("e%07d.txt", i) }
 
-// writeManyEntryZip writes a zip64 of n empty stored files, by hand: a local
-// header for each, the central directory, the zip64 end record and its
-// locator, and an end record whose count says to read them. zip.Writer
-// would hold every header in the test's memory.
 func writeManyEntryZip(t *testing.T, path string, n int) {
 	t.Helper()
 	f, err := os.Create(path)
@@ -636,9 +599,6 @@ func writeManyEntryZip(t *testing.T, path string, n int) {
 	}
 }
 
-// smallZip is a zip of empty files with these names, behind prefix. With at,
-// the zip's offsets count the prefix, as zip.Writer.SetOffset makes them;
-// without, they start at the zip, as a self-extracting archive has them.
 func smallZip(t *testing.T, prefix []byte, at bool, names ...string) []byte {
 	t.Helper()
 	var b bytes.Buffer
@@ -692,8 +652,6 @@ func TestFilePreviewHoldsCraftedFilesToItsBounds(t *testing.T) {
 		writeManyEntryZip(t, many, 1_000_000)
 		answers := make([]craftedPreview, 4)
 		errs := make([]error, 4)
-		// The connections are made here: a failed dial stops the test, which
-		// only the test's own goroutine may do.
 		conns := make([]*fileVerbConn, len(answers))
 		for i := range conns {
 			conns[i] = dialFileVerbs(t, base)
@@ -730,7 +688,6 @@ func TestFilePreviewHoldsCraftedFilesToItsBounds(t *testing.T) {
 			t.Errorf("ASSERTION: four previews of a zip of a million files took the daemon to %d MB", peak>>10)
 		}
 
-		// The order is the central directory's, not the names'.
 		names := []string{"notes.txt", "app/", "app/main.go"}
 		stub := bytes.Repeat([]byte{'#'}, 100)
 		for _, c := range []struct {
@@ -751,7 +708,6 @@ func TestFilePreviewHoldsCraftedFilesToItsBounds(t *testing.T) {
 				t.Errorf("ASSERTION: %s is %s %q, capped %v, want archive %q, not capped", c.name, p.Kind, got, p.Capped, names)
 				continue
 			}
-			// app/ is a folder; the files are empty.
 			for i, e := range p.Entries {
 				if dir := strings.HasSuffix(names[i], "/"); e.Dir != dir || e.Size != 0 {
 					t.Errorf("ASSERTION: %s lists %s as folder %v, %d bytes, want folder %v, 0 bytes", c.name, e.Name, e.Dir, e.Size, dir)
@@ -759,9 +715,6 @@ func TestFilePreviewHoldsCraftedFilesToItsBounds(t *testing.T) {
 			}
 		}
 
-		// A directory that ends before the count its end record gives is not
-		// a zip, and shows as a binary file: the small zip above, whose end
-		// record says 5 for its 3 headers.
 		short := smallZip(t, nil, false, names...)
 		le := binary.LittleEndian
 		le.PutUint16(short[len(short)-22+8:], 5)
@@ -776,8 +729,6 @@ func TestFilePreviewHoldsCraftedFilesToItsBounds(t *testing.T) {
 			t.Errorf("ASSERTION: a zip of 3 headers whose end record says 5 is %s with %d entries, capped %v, want binary", p.Kind, len(p.Entries), p.Capped)
 		}
 
-		// The end record keeps its count modulo 65536 when there is no zip64
-		// record: a zip of 65537 files says 1, and is still capped.
 		wide := filepath.Join(base, "wide.zip")
 		files := 65537
 		writeManyEntryZip(t, wide, files)
@@ -789,8 +740,6 @@ func TestFilePreviewHoldsCraftedFilesToItsBounds(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		// Swap the zip64 end record, its locator and the end record for one
-		// plain end record.
 		tail := make([]byte, 56+20+22)
 		at := fi.Size() - int64(len(tail))
 		if _, err := f.ReadAt(tail, at); err != nil {
@@ -819,7 +768,6 @@ func TestFilePreviewHoldsCraftedFilesToItsBounds(t *testing.T) {
 			t.Errorf("ASSERTION: a zip of 65537 files lists %q 2000th, want %q", p.Entries[1999].Name, manyEntryName(1999))
 		}
 
-		// The cut is at 2000 entries: 2000 are all of them, 2001 are capped.
 		for _, n := range []int{2000, 2001} {
 			list := make([]string, n)
 			for i := range list {
@@ -930,7 +878,6 @@ func TestFilePreviewHoldsCraftedFilesToItsBounds(t *testing.T) {
 	t.Run("names", func(t *testing.T) {
 		base := daemon(t)
 		record := map[string]any{}
-		// byte 4093 of the last short name falls inside a three-byte rune.
 		short := []string{
 			"src/a/b/c.txt",
 			strings.Repeat("x", 4096),
@@ -962,10 +909,6 @@ func TestFilePreviewHoldsCraftedFilesToItsBounds(t *testing.T) {
 		}
 		record["tar_gz_bytes"] = tgz.Len()
 
-		// cut checks one listed name against the name in the archive: a name of
-		// at most 4096 bytes is listed whole, a longer one as its start, whole
-		// characters only, and "...", 4096 bytes at most. It reports whether
-		// the name was listed so.
 		cut := func(where, got, name string) bool {
 			t.Helper()
 			if len(name) <= 4096 {
@@ -988,7 +931,6 @@ func TestFilePreviewHoldsCraftedFilesToItsBounds(t *testing.T) {
 		if p.Kind != "archive" || len(p.Entries) != len(all) {
 			t.Fatalf("ASSERTION: the tar.gz of long names is %s with %d entries, want archive with %d", p.Kind, len(p.Entries), len(all))
 		}
-		// One of the hundred long names is enough to report.
 		for i, e := range p.Entries {
 			if !cut("the tar.gz", e.Name, all[i]) && i >= len(short) {
 				break

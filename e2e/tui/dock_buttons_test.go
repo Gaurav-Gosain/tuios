@@ -8,8 +8,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// dockButtonsConfig puts the button row on the right of the dock, beside the
-// clock and the session controls, as the Simple profile does.
 const dockButtonsConfig = `
 [startup]
 tiled = true
@@ -18,8 +16,6 @@ tiled = true
 right = ["buttons", "clock", "session-controls"]
 `
 
-// dockRow is the screen row that holds want, searched from the bottom, where
-// the suite's dock sits. It fails the test when no row holds it.
 func dockRowWith(t *testing.T, term *tuitest.Terminal, want string) (row int, line string) {
 	t.Helper()
 	s := term.Screen()
@@ -33,7 +29,6 @@ func dockRowWith(t *testing.T, term *tuitest.Terminal, want string) (row int, li
 	return 0, ""
 }
 
-// clickDockWord clicks the middle of a word on the dock row.
 func clickDockWord(t *testing.T, term *tuitest.Terminal, word string) {
 	t.Helper()
 	row, line := dockRowWith(t, term, word)
@@ -75,7 +70,6 @@ func TestDockButtonsLeaveASignWhenNarrow(t *testing.T) {
 	base := t.TempDir()
 	writeConfig(t, base, dockButtonsConfig)
 
-	// At 80 columns every button is on the bar, as a word or as an icon.
 	wide := startIn(t, base, startOpts{cols: 80, rows: 24, args: []string{"--ascii-only"}})
 	waitBoot(t, wide)
 	newWindow(t, wide)
@@ -91,7 +85,6 @@ func TestDockButtonsLeaveASignWhenNarrow(t *testing.T) {
 	}
 	dockButtonsShot(t, wide, "dock-buttons-80")
 
-	// At 44 columns some buttons fold into the more button.
 	narrow := startIn(t, base, startOpts{cols: 44, rows: 24, args: []string{"--ascii-only"}})
 	waitBoot(t, narrow)
 	newWindow(t, narrow)
@@ -110,7 +103,6 @@ func TestDockButtonsLeaveASignWhenNarrow(t *testing.T) {
 	dockButtonsShot(t, narrow, "dock-buttons-44-more")
 }
 
-// dockButtonsShot saves the frame as text and as a PNG drawn by tuios.dev/shot.
 func dockButtonsShot(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	saveFrame(t, term, name)

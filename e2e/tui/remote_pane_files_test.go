@@ -14,23 +14,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// The rail's files section for a pane on another machine follows the pane
-// (issue #313, the follow-up report).
-//
-// A pane on another machine changed folder, its title and its terminals row
-// moved with it, and the files list stayed on the folder the pane started in.
-// The client took the pane's folder from the daemon once, the first time it
-// heard of the window, and never again. Its own reading of the shell's OSC 7
-// cannot stand in, because it judges the host in the report against the
-// client's machine, and the pane is not on the client's machine.
-//
-// Both ways a pane can be on another machine are driven here: a session
-// attached on a host, and a window on a host inside a session of this
-// machine. In both the far machine also watches the listed folder, so a file
-// removed over there leaves the list without the pane doing anything.
-
-// farFolders makes the folders the far shells walk through: the start folder
-// with one file of its own, and a folder inside it with two.
 func farFolders(t *testing.T, remote string) (top, inner string) {
 	t.Helper()
 	top = workDirIn(t, remote)
@@ -38,7 +21,6 @@ func farFolders(t *testing.T, remote string) (top, inner string) {
 	if err := os.MkdirAll(inner, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// Short names: the rail is about twenty-four cells wide.
 	for path, body := range map[string]string{
 		filepath.Join(top, "top-only.txt"):     "x",
 		filepath.Join(inner, "inner-keep.txt"): "x",
@@ -51,7 +33,6 @@ func farFolders(t *testing.T, remote string) (top, inner string) {
 	return top, inner
 }
 
-// railLists waits until the screen holds every name in want and none in not.
 func railLists(t *testing.T, term *tuitest.Terminal, why string, want, not []string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -72,10 +53,6 @@ func railLists(t *testing.T, term *tuitest.Terminal, why string, want, not []str
 	}
 }
 
-// followCdAndDelete is the part both tests share: the list follows a cd in
-// the far shell, and then drops a file removed on the far machine.
-// typing says whether keys already reach the shell: a client attached on a
-// host starts in terminal mode.
 func followCdAndDelete(t *testing.T, term *tuitest.Terminal, inner string, typing bool) {
 	t.Helper()
 	railLists(t, term, "the files list never showed the far start folder",
@@ -94,8 +71,6 @@ func followCdAndDelete(t *testing.T, term *tuitest.Terminal, inner string, typin
 		[]string{"inner-keep.txt", "inner-gone.txt"}, []string{"top-only.txt"})
 	saveArtifact(t, term, artifactDir(t), "after-cd")
 
-	// Removed on the far machine by something other than the pane, so the
-	// only way the list can learn of it is the far machine's own watch.
 	if err := os.Remove(filepath.Join(inner, "inner-gone.txt")); err != nil {
 		t.Fatal(err)
 	}
@@ -103,8 +78,6 @@ func followCdAndDelete(t *testing.T, term *tuitest.Terminal, inner string, typin
 		[]string{"inner-keep.txt"}, []string{"inner-gone.txt"})
 	saveArtifact(t, term, artifactDir(t), "after-delete")
 
-	// A second change, so the watch is shown to go on after its first
-	// report.
 	if err := os.WriteFile(filepath.Join(inner, "inner-new.txt"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -184,8 +157,6 @@ func TestFilesFollowAWindowOnAHost(t *testing.T) {
 	}
 	enterTerminalMode(t, term)
 	runInShell(t, term, `cd "$HOME"/far""proj && echo in-far-$((40+2))`, "in-far-42", uiTimeout)
-	// The rail lists the folder once the far daemon has said the pane moved,
-	// and the picker opens on the same answer.
 	railLists(t, term, "the files list did not follow the cd to the far home",
 		[]string{"far-a.txt"}, []string{"inner-keep.txt"})
 	sendKeys(t, term, tuitest.Alt(";"))
@@ -202,9 +173,6 @@ func TestFilesFollowAWindowOnAHost(t *testing.T) {
 	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), "path-picker-far-home")
 	sendKeys(t, term, tuitest.Esc)
 
-	// A change between two waits is the answer to the next wait. The names from
-	// the first answer are older than the new file, so the second answers at once
-	// with changed true. A wait that missed the change sits out its timeout.
 	waitDir := func(params map[string]any) map[string]any {
 		t.Helper()
 		params["dir"] = inner
@@ -272,8 +240,6 @@ func filesForAnSSHShell(t *testing.T, term *tuitest.Terminal) {
 	railLists(t, term, "the files list never showed the local folder",
 		[]string{"alpha/", "brief.txt"}, nil)
 
-	// The same path as the local folder, which is the case that must not list
-	// local files.
 	enterTerminalMode(t, term)
 	runInShell(t, term,
 		`sh -c 'printf "\033]7;file://farbox%s\033\\\\%s\n" "$PWD" ann""ounced; exec cat'`,
@@ -283,7 +249,6 @@ func filesForAnSSHShell(t *testing.T, term *tuitest.Terminal) {
 		[]string{"on farbox"}, []string{"brief.txt"})
 	saveArtifact(t, term, artifactDir(t), "ssh-shell")
 
-	// The program ends and the shell has the terminal again.
 	enterTerminalMode(t, term)
 	if err := term.SendKeys(tuitest.Ctrl('d')); err != nil {
 		t.Fatal(err)
@@ -314,8 +279,6 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 	writeRemoteConfig(t, remote, relayFilesPolicy)
 	ssh := writeFakeSSHTo(t, base, remote)
 	writeOneHostConfig(t, base, tuiosBin)
-	// The system opener is a stub that records any start, so the refusal of
-	// o on a far row is checked against a real opener that would have run.
 	record := filepath.Join(base, "opened.txt")
 	stubs, _ := openStubs(t, base, record)
 	env := append([]string{"TUIOS_SSH=" + ssh}, openStubEnv(stubs)...)
@@ -366,10 +329,6 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 	mouseClick(t, term, col, row, tuitest.MouseLeft, tuitest.ModCtrl)
 	clickNoteGone(t, term)
 
-	// o on a far row: the path is on build, so the opener here must not run
-	// on it. The dock offers a copy instead, and nothing starts before the
-	// offer is taken. The two machines share a disk in this harness, so an
-	// opener that ran on the far path would find the file.
 	sendKeys(t, term, "o")
 	railLists(t, term, "o on a far file did not offer a copy",
 		[]string{"far.go is on build. Click to open a copy here."}, nil)
@@ -385,13 +344,11 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 		[]string{"far.go ", "package far", "const Answer = 42", "on build"}, []string{"Copied the path."})
 	copiesFrame(t, term, "quick-look-far-go")
 
-	// j: linked.txt, which build reads for this machine only under its rules.
 	sendKeys(t, term, "j")
 	railLists(t, term, "the far machine did not judge the file with two names",
 		[]string{"linked.txt ", "links),"}, []string{"two names", "package far"})
 	copiesFrame(t, term, "quick-look-far-refused")
 
-	// A log longer than a window: build sends the part asked for, over the link.
 	col, row, ok = findOnGrid(term.Screen(), "zlong.log")
 	if !ok {
 		t.Fatalf("no zlong.log row:\n%s", term.Snapshot())
@@ -405,7 +362,6 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 	sendKeys(t, term, tuitest.Tab, "G")
 	railLists(t, term, "G did not read the end of the far log", []string{fmt.Sprintf("row %d x", quickLookLogLines), "on build"}, []string{"older tuios"})
 	copiesFrame(t, term, "quick-look-far-log-end")
-	// Build looks through the file, and only the part found comes over the link.
 	sendKeys(t, term, "/", "row 3000 x", tuitest.Enter)
 	railLists(t, term, "the far search did not find the row", []string{"row 3000 x", "on build"}, []string{"older tuios"})
 	sendKeys(t, term, ":", "1234", tuitest.Enter)
@@ -413,7 +369,6 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 	sendKeys(t, term, " ")
 	railLists(t, term, "space did not close the far preview", nil, []string{"on build"})
 
-	// A PDF on build turns its pages over the link.
 	if _, err := exec.LookPath("pdftoppm"); err == nil {
 		col, row, ok = findOnGrid(term.Screen(), "zbook.pdf")
 		if !ok {
@@ -430,7 +385,6 @@ func TestQuickLookOnAFarFile(t *testing.T) {
 		sendKeys(t, term, " ")
 		railLists(t, term, "space did not close the far preview", nil, []string{"on build"})
 	}
-	// A film on build moves over the link, and the filmstrip comes over it too.
 	if _, err := exec.LookPath("ffmpeg"); err == nil {
 		col, row, ok = findOnGrid(term.Screen(), "zfilm.mp4")
 		if !ok {

@@ -10,15 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The ACP version 2 tests: the real daemon, the real pane program and the
-// stand-in agent in testdata/fakeacp, which speaks version 1, version 2,
-// both or neither. Version 2 is a draft of the spec, so a pane asks for it
-// only when [agents] acp_version = 2 says so; these tests set it in the
-// config file the daemon reads. Each saves its frames (TUIOS_E2E_FRAMES) and
-// a log of what it checked.
-
-// writeACPVersion writes [agents] acp_version into the config the daemon of
-// base reads.
 func writeACPVersion(t *testing.T, base string, v int) {
 	t.Helper()
 	dir := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios")
@@ -29,7 +20,6 @@ func writeACPVersion(t *testing.T, base string, v int) {
 	}
 }
 
-// protoState is the state list-agents reports for the one agent in session.
 func protoState(t *testing.T, base, session string) string {
 	t.Helper()
 	raw, err := tuiosCLI(t, base, "list-agents", "-s", session, "--json")
@@ -47,15 +37,12 @@ func protoState(t *testing.T, base, session string) string {
 	return listing.Agents[0].State
 }
 
-// waitProtoState waits until the agent in session reads state.
 func waitProtoState(t *testing.T, base, session, state string) {
 	t.Helper()
 	waitTextOf(t, "the agent never read "+state, uiTimeout, func() string { return protoState(t, base, session) },
 		func(got string) bool { return got == state })
 }
 
-// waitProtoPane is waitCapture on the pane's lines unwrapped, so a long line
-// the pane wrapped still holds its words in order.
 func waitProtoPane(t *testing.T, base, session, window string, markers ...string) string {
 	t.Helper()
 	return waitTextOf(t, "the pane never showed "+strings.Join(markers, " | "), uiTimeout, func() string {
@@ -64,8 +51,6 @@ func waitProtoPane(t *testing.T, base, session, window string, markers ...string
 	}, func(out string) bool { return containsAll(out, markers...) })
 }
 
-// attachAgentSession attaches a client to session, so the frames show the
-// protocol pane.
 func attachAgentSession(t *testing.T, base, session string) *tuitest.Terminal {
 	t.Helper()
 	term := startIn(t, base, startOpts{args: []string{"attach", session}})
@@ -106,8 +91,6 @@ func TestProtocolPaneACPv2TurnAndPermission(t *testing.T) {
 	if strings.Contains(pane, "TTYLEAK") {
 		t.Errorf("the agent wrote to the pane past the transcript:\n%s", pane)
 	}
-	// The reply comes before the end of the turn: the turn ended on the
-	// idle state, not on the prompt's answer, which came first.
 	if strings.Index(pane, "ECHO: hello there") > strings.Index(pane, "turn finished") {
 		t.Errorf("the turn ended before its reply:\n%s", pane)
 	}
@@ -120,9 +103,6 @@ func TestProtocolPaneACPv2TurnAndPermission(t *testing.T) {
 	waitProtoPane(t, base, "e2e-agent", "helper", "permission execute: go test ./...", "Run the tests?", "in /fake/work", "reason: The agent wants to run the test suite.", "1 Allow")
 	waitProtoState(t, base, "e2e-agent", "needs_input")
 	saveFrame(t, term, "acp-v2-permission")
-	// The pane is in front of the person, so it is answered there: the
-	// Inbox holds a question only for a pane the person is not looking at,
-	// the same for both versions (TestProtocolPaneTurnAndInboxApproval).
 	pause(t, "a held approval takes an answer key only after it has been on screen for a moment", answerSettle)
 	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-agent", "-w", "helper", "1"); err != nil {
 		t.Fatalf("answer: %v\n%s", err, out)

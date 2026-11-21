@@ -8,13 +8,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// sidebarBand is how far right the sidebar column reaches. Session names that
-// start within it are rail rows; the same name in a dock notification starts
-// well past it, so the two cannot be confused.
 const sidebarBand = 28
 
-// sidebarHasRow reports whether the rail lists name as a row of its own, which
-// is the only place the sidebar can be said to "show" a session.
 func sidebarHasRow(s tuitest.Screen, name string) bool {
 	head := screenRowOf(s, sidebarHeader)
 	if head < 0 {
@@ -44,8 +39,6 @@ func TestSidebarKeepsSessionCreatedFromInside(t *testing.T) {
 	}
 
 	term := startIn(t, base, startOpts{args: []string{"attach", "origin"}})
-	// A restored pane's bottom border is the first proof the client is attached
-	// and drawing the session it was given.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "╰──")
 	}, bootTimeout); err != nil {
@@ -65,8 +58,6 @@ func TestSidebarKeepsSessionCreatedFromInside(t *testing.T) {
 		t.Fatalf("rail never listed the attached session: %v\n%s", err, term.Snapshot())
 	}
 
-	// Create a session from inside this one: the switcher creates whatever name
-	// does not match an existing session.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "S"); err != nil {
 		t.Fatalf("open session switcher: %v", err)
 	}
@@ -84,21 +75,18 @@ func TestSidebarKeepsSessionCreatedFromInside(t *testing.T) {
 		t.Fatalf("never switched to the created session: %v\n%s", err, term.Snapshot())
 	}
 
-	// It is on the rail while attached, next to the one it was created from.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return sidebarHasRow(s, "spawned") && sidebarHasRow(s, "origin")
 	}, uiTimeout); err != nil {
 		t.Fatalf("rail did not list both sessions after the create: %v\n%s", err, term.Snapshot())
 	}
 
-	// Switch back to the original by clicking its rail row.
 	col, row := findOnScreen(t, term, "origin")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	if err := term.WaitForText("Session: origin", uiTimeout); err != nil {
 		t.Fatalf("clicking the origin row did not switch back: %v\n%s", err, term.Snapshot())
 	}
 
-	// The regression: the created session must still be on the rail.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return sidebarHasRow(s, "spawned")
 	}, uiTimeout); err != nil {

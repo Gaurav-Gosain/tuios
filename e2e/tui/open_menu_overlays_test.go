@@ -12,9 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// openMenuOverlaysConfig binds open_menu in the Inbox and in the rail, the
-// way issue #1590 asks: a key of the overlay opens a menu, and the menu's
-// keys run the overlay's own actions.
 const openMenuOverlaysConfig = `[keybindings.inbox]
 "open_menu:inbox_x" = ["x"]
 
@@ -87,7 +84,6 @@ func TestOpenMenuInTheInboxAndTheRail(t *testing.T) {
 		_ = term.WaitStable(uiTimeout)
 	}
 
-	// The Inbox: x opens the menu over it.
 	openInbox()
 	press("x")
 	if err := term.WaitForText("Inbox x", uiTimeout); err != nil {
@@ -97,7 +93,6 @@ func TestOpenMenuInTheInboxAndTheRail(t *testing.T) {
 		t.Fatalf("ASSERTION: opening the menu closed the Inbox\n%s", term.Snapshot())
 	}
 	saveFrame(t, term, "inbox-menu")
-	// Esc closes the menu, and the Inbox stays.
 	press(tuitest.Esc)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Inbox x") }, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: esc did not close the menu: %v\n%s", err, term.Snapshot())
@@ -105,7 +100,6 @@ func TestOpenMenuInTheInboxAndTheRail(t *testing.T) {
 	if !inboxOpen() {
 		t.Fatalf("ASSERTION: esc out of the menu closed the Inbox\n%s", term.Snapshot())
 	}
-	// c now is the Inbox's own key (compare), not the menu's inbox_close.
 	press("c")
 	_ = term.WaitStable(uiTimeout)
 	if !inboxOpen() {
@@ -116,7 +110,6 @@ func TestOpenMenuInTheInboxAndTheRail(t *testing.T) {
 	if !inboxOpen() {
 		openInbox()
 	}
-	// x then c: the menu's inbox_close.
 	press("x")
 	if err := term.WaitForText("Inbox x", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: x did not open the menu a second time: %v\n%s", err, term.Snapshot())
@@ -126,8 +119,6 @@ func TestOpenMenuInTheInboxAndTheRail(t *testing.T) {
 		t.Fatalf("ASSERTION: x c did not close the Inbox: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "inbox-closed-by-menu")
-	// The hand-back was used by that one key: c in the Inbox opened again is
-	// compare once more, and leaves the Inbox open.
 	openInbox()
 	press("c")
 	_ = term.WaitStable(uiTimeout)
@@ -141,7 +132,6 @@ func TestOpenMenuInTheInboxAndTheRail(t *testing.T) {
 		_ = term.WaitStable(uiTimeout)
 	}
 
-	// The rail: z opens its menu, w opens a window.
 	windows := func() int {
 		out := mustCLI(t, base, "list-windows", "-s", session, "--json")
 		var res struct {
@@ -167,7 +157,6 @@ func TestOpenMenuInTheInboxAndTheRail(t *testing.T) {
 	if n := windows(); n != before {
 		t.Fatalf("ASSERTION: w after esc out of the rail's menu opened a window (%d, was %d): a menu action was left waiting", n, before)
 	}
-	// The esc may have left the rail; focus it again if so.
 	press("z")
 	if err := term.WaitForText("Rail g", uiTimeout); err != nil {
 		press(tuitest.Ctrl('b'), "e")
@@ -188,8 +177,6 @@ func TestOpenMenuInTheInboxAndTheRail(t *testing.T) {
 	saveFrame(t, term, "rail-window-by-menu")
 }
 
-// openMenuReviewConfig binds open_menu in the review, which reads keys
-// ahead of the menus that every other overlay leaves to them.
 const openMenuReviewConfig = `[keybindings.review]
 "open_menu:stage" = ["m"]
 

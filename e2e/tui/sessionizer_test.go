@@ -11,13 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The sessionizer flow (#452): start a session in a directory, and switch the
-// attached client to a session, here or on another machine, from a pane or
-// from outside tuios.
-
-// projectDir makes a directory under base for a session to start in, with
-// symlinks resolved, since the daemon reports the shell's directory as the
-// kernel has it.
 func projectDir(t *testing.T, base, name string) string {
 	t.Helper()
 	dir := filepath.Join(base, name)
@@ -31,8 +24,6 @@ func projectDir(t *testing.T, base, name string) string {
 	return real
 }
 
-// firstWindowCwd waits for the first window of session to report want as its
-// directory, and fails with what it reported instead.
 func firstWindowCwd(t *testing.T, base, session, want string) {
 	t.Helper()
 	var got, out string
@@ -58,7 +49,6 @@ func firstWindowCwd(t *testing.T, base, session, want string) {
 	t.Fatalf("ASSERTION: the first window of %s is in %q, want %q\n%s", session, got, want, out)
 }
 
-// clientShows waits until list-clients has a client on session.
 func clientShows(t *testing.T, base, session string) {
 	t.Helper()
 	var out string
@@ -90,7 +80,6 @@ func TestNewStartsInTheCallersDirectory(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
 	writeConfig(t, base, "[startup]\nopen_default_window = true\n")
-	// The daemon starts here, so its own directory is base/cwd.
 	if out, err := tuiosCLI(t, base, "new", "first", "--detach"); err != nil {
 		t.Fatalf("create first: %v\n%s", err, out)
 	}
@@ -113,8 +102,6 @@ func TestNewStartsInTheCallersDirectory(t *testing.T) {
 		t.Fatalf("ASSERTION: the refusal does not say the directory is missing\n%s", out)
 	}
 
-	// The attached form: the client opens the first window, and the
-	// session's start directory is where it starts.
 	attached := projectDir(t, base, "attached")
 	term := startIn(t, base, startOpts{args: []string{"new", "live", "--cwd", attached}})
 	waitWindowCount(t, term, 1, "the attached session's first window")
@@ -137,7 +124,6 @@ func TestSwitchSessionMovesTheClient(t *testing.T) {
 	term := attachIn(t, base, "home", startOpts{})
 	clientShows(t, base, "home")
 
-	// A missing session is refused, and the refusal says how to make it.
 	out, err := tuiosCLI(t, base, "switch-session", "-s", "home", "nowhere")
 	if err == nil {
 		t.Fatalf("ASSERTION: switch-session to a missing session succeeded\n%s", out)
@@ -161,8 +147,6 @@ func TestSwitchSessionMovesTheClient(t *testing.T) {
 	firstWindowCwd(t, base, "proj", proj)
 	saveFrame(t, term, "switch-session-outside")
 
-	// From a pane: the shell in proj's pane runs switch-session, and the
-	// client that shows proj moves.
 	if out, err := tuiosCLI(t, base, "send-text", "-s", "proj", tuiosBin+" switch-session --create from-pane\n"); err != nil {
 		t.Fatalf("send-text: %v\n%s", err, out)
 	}
@@ -172,8 +156,6 @@ func TestSwitchSessionMovesTheClient(t *testing.T) {
 	clientShows(t, base, "from-pane")
 	saveFrame(t, term, "switch-session-pane")
 
-	// From a popup, which is what the sessionizer command key runs in. The
-	// popup is a pane of the session the client shows.
 	if out, err := tuiosCLI(t, base, "popup", "-s", "from-pane", "--", tuiosBin, "switch-session", "--create", "from-popup"); err != nil {
 		t.Fatalf("popup: %v\n%s", err, out)
 	}
@@ -202,7 +184,6 @@ func TestSwitchSessionReachesAHost(t *testing.T) {
 	}
 	term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env})
 	waitBoot(t, term)
-	// The rail lists build's sessions once the link is up.
 	toggleSidebarViaPalette(t, term)
 	railShows(t, term, "far-shell")
 	waitRailCurrent(t, term, "home")
@@ -294,7 +275,6 @@ func TestRemoteCreateAppliesStartup(t *testing.T) {
 	railShows(t, term, "far-shell")
 	waitRailCurrent(t, term, "home")
 
-	// switch-session --create HOST:NAME, from a session that is tiled.
 	out, err := tuiosCLIEnv(t, base, env, "switch-session", "--create", "build:far-new")
 	if err != nil {
 		t.Fatalf("switch-session build:far-new: %v\n%s", err, out)
@@ -305,7 +285,6 @@ func TestRemoteCreateAppliesStartup(t *testing.T) {
 	saveFrame(t, term, "remote-create-tiled-switch")
 	alive(t, term, "after switch-session made a session on build")
 
-	// tuios new --host, from a new client.
 	fresh := startIn(t, base, startOpts{args: []string{"new", "--host", "build", "far-fresh"}, env: env})
 	waitWindowCount(t, fresh, 1, "far-fresh's first pane")
 	farTiled(t, remote, "far-fresh")
@@ -338,14 +317,12 @@ func TestSwitchToAnEmptySessionTakesItsLayout(t *testing.T) {
 	runPaletteEntry(t, term, "Layout: master-stack")
 	waitLayoutMode(t, base, "blank", "master-stack")
 
-	// Empty blank. It keeps tiling on and the master-stack mode.
 	pane := waitForSettledGeometryIn(t, base, "blank", 1)[0]
 	if out, err := tuiosCLI(t, base, "close-window", "-s", "blank", pane.ID); err != nil {
 		t.Fatalf("close blank's window: %v\n%s", err, out)
 	}
 	waitForSettledGeometryIn(t, base, "blank", 0)
 
-	// home is unarranged, so [startup] tiles it with BSP.
 	if out, err := tuiosCLI(t, base, "switch-session", "-s", "blank", "home"); err != nil {
 		t.Fatalf("switch-session home: %v\n%s", err, out)
 	}
@@ -360,17 +337,9 @@ func TestSwitchToAnEmptySessionTakesItsLayout(t *testing.T) {
 	if err := term.WaitForText("Session: blank", uiTimeout); err != nil {
 		t.Fatalf("the client never showed blank: %v\n%s", err, term.Snapshot())
 	}
-	// A workspace switch in the client sends its layout to the daemon before
-	// the daemon sends blank's state again. Workspace 1 is empty, so alt+2
-	// stays on it (see newWorkspaceSlot) and the screen does not change.
 	if err := term.SendKeys(tuitest.Alt('2')); err != nil {
 		t.Fatalf("press alt+2: %v", err)
 	}
-	// The client reads keys in order, so the palette on screen says alt+2 was
-	// handled. The new window below must not reach the client first: then
-	// workspace 1 holds a pane, alt+2 opens a new workspace 2, and workspace
-	// 2 takes [startup] layout, bsp. That was the CI failure, when tuitest
-	// sent alt+2 as ESC 2 and the client read it late.
 	if err := term.SendKeys(tuitest.Ctrl('p')); err != nil {
 		t.Fatalf("open palette: %v", err)
 	}
@@ -393,7 +362,6 @@ func TestSwitchToAnEmptySessionTakesItsLayout(t *testing.T) {
 	alive(t, term, "after switching to an empty session")
 }
 
-// runPaletteEntry opens the command palette, filters it to name and runs it.
 func runPaletteEntry(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Ctrl('p')); err != nil {
@@ -412,7 +380,6 @@ func runPaletteEntry(t *testing.T, term *tuitest.Terminal, name string) {
 	waitPaletteClosed(t, term, "after "+name)
 }
 
-// waitWorkspace waits for session-info to report want as the current workspace.
 func waitWorkspace(t *testing.T, base, session string, want int) {
 	t.Helper()
 	var info daemonSessionInfo
@@ -427,7 +394,6 @@ func waitWorkspace(t *testing.T, base, session string, want int) {
 	t.Fatalf("%s is on workspace %d, want %d", session, info.CurrentWorkspace, want)
 }
 
-// waitLayoutMode waits for session-info to report want as the layout mode.
 func waitLayoutMode(t *testing.T, base, session, want string) {
 	t.Helper()
 	var info daemonSessionInfo
@@ -442,7 +408,6 @@ func waitLayoutMode(t *testing.T, base, session, want string) {
 	t.Fatalf("ASSERTION: %s has layout mode %q, want %q", session, info.LayoutMode, want)
 }
 
-// appendConfig adds body to the end of the config file under base.
 func appendConfig(t *testing.T, base, body string) {
 	t.Helper()
 	path := filepath.Join(base, "XDG_CONFIG_HOME", "tuios", "config.toml")
@@ -456,7 +421,6 @@ func appendConfig(t *testing.T, base, body string) {
 	}
 }
 
-// sessionInfoOf reads session-info for session from the daemon under base.
 func sessionInfoOf(t *testing.T, base, session string) daemonSessionInfo {
 	t.Helper()
 	info, err := daemonJSON[daemonSessionInfo](base, "session-info", "-s", session)
@@ -466,9 +430,6 @@ func sessionInfoOf(t *testing.T, base, session string) daemonSessionInfo {
 	return info
 }
 
-// farTiled waits for session on the far machine to hold one window, and fails
-// unless the session is tiled and its window fills most of the session. A
-// floating window is a small box in the middle.
 func farTiled(t *testing.T, remote, session string) {
 	t.Helper()
 	pane := waitForSettledGeometryIn(t, remote, session, 1)[0]

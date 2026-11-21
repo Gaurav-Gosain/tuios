@@ -96,8 +96,6 @@ func TestComposerLookAtEveryDepth(t *testing.T) {
 			if got, want := s.Cell(after, drow).Bg, s.Cell(after, hrow).Bg; got != want {
 				t.Errorf("ASSERTION: the draft's row has its own ground %+v, the reply area's is %+v\n%s", got, want, term.Snapshot())
 			}
-			// The bar is the first cell of the area, two left of the
-			// sigil, which is two left of the text.
 			for _, r := range []int{hrow, drow, mrow} {
 				if c := s.Cell(dcol-4, r).Content; !strings.ContainsAny(c, "▌▎|") {
 					t.Errorf("ASSERTION: no focus edge on row %d: %q\n%s", r, c, term.Snapshot())
@@ -109,8 +107,6 @@ func TestComposerLookAtEveryDepth(t *testing.T) {
 						t.Errorf("ASSERTION: selected cell %d of gamma is not reversed at 16 colours\n%s", i, term.Snapshot())
 					}
 				}
-				// The cursor right after the selection is not reversed
-				// too, or the two read as one bar.
 				if c := s.Cell(dcol+16, drow); c.Reverse || !c.Underline {
 					t.Errorf("ASSERTION: the cursor beside the selection at 16 colours is not underlined (reverse %v, underline %v)\n%s", c.Reverse, c.Underline, term.Snapshot())
 				}

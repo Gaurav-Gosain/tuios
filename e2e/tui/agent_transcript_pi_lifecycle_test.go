@@ -37,7 +37,6 @@ func piState(t *testing.T, r *atRig) map[string]any {
 		}
 		state[key] = res[key]
 	}
-	// Completion accounting is exposed by list-agents, not get-agent-state.
 	agents, err := r.ctl.call(t, "list-agents", map[string]any{"session": transcriptSession})
 	if err != nil {
 		t.Fatal(err)
@@ -117,8 +116,6 @@ func TestPiTranscriptFollowsSelectedBranch(t *testing.T) {
 	if !reflect.DeepEqual(before, piState(t, r)) {
 		t.Fatal("metadata-only selection changed agent state, source, prompt or completion count")
 	}
-	// Rewinding before every root must clear the old cards, not select the
-	// most recently appended branch by treating the empty string as absent.
 	piUpdate(t, r, path, "pi-fixture", "")
 	if got := r.read(r.wins[0], map[string]any{"after": res["cursor"]}); got["reset"] != true || len(atEntries(t, got)) != 0 {
 		t.Fatalf("empty selected branch retained messages: %v", got)
@@ -160,13 +157,9 @@ func TestPiTranscriptExtension(t *testing.T) {
 		piWaitText(t, r, "b is three.", "ABANDONED-BRANCH")
 		emit("session_tree", path, "pi-fixture", "old", "tui")
 		piWaitText(t, r, "ABANDONED-BRANCH", "b is three.")
-		// Pi dispatches message_end before persistence. The driver changes the
-		// leaf after the handler returns, as AgentSession does after appending.
 		record := map[string]any{"type": "message", "id": "late", "parentId": "old", "timestamp": "2026-10-22T11:00:01Z", "message": map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "text", "text": "PERSISTED-MESSAGE"}}, "stopReason": "stop"}}
 		d.emit(t, map[string]any{"type": "message_end", "sessionFile": path, "sessionId": "pi-fixture", "leaf": "old", "persistLeaf": "late", "persistRecord": record, "mode": "tui"})
 		piWaitText(t, r, "PERSISTED-MESSAGE", "b is three.")
-		// A resume changes file and session together; late old-session metadata
-		// may never take it back, including when the new session is at rest.
 		other := filepath.Join(filepath.Dir(path), "2026-10-22_second.jsonl")
 		text := `{"type":"session","version":3,"id":"second","timestamp":"2026-10-22T12:00:00Z","cwd":"/work/project"}` + "\n" +
 			`{"type":"message","id":"second1","parentId":null,"timestamp":"2026-10-22T12:00:01Z","message":{"role":"user","content":"RESUMED-SESSION"}}` + "\n"
@@ -181,9 +174,6 @@ func TestPiTranscriptExtension(t *testing.T) {
 			emit("session_start", path, "headless", "old", mode)
 			emit("session_tree", path, "headless", "old", mode)
 		}
-		// session_shutdown waits for pending child reports. Its acknowledgement
-		// fences the ignored events before we inspect, rather than masking a
-		// headless takeover with another successful TUI session_start.
 		d.emit(t, map[string]any{"type": "session_shutdown", "ack": "headless-drained"})
 		d.waitAck(t, "headless-drained")
 		res := r.read(r.wins[0], nil)
@@ -200,8 +190,6 @@ func TestPiTranscriptExtension(t *testing.T) {
 		d := startPlugin(t, r.base, "pi", transcriptSession, r.wins[0])
 		d.emit(t, map[string]any{"type": "session_start", "sessionFile": path, "sessionId": "pi-fixture", "leaf": "a3", "mode": "tui"})
 		piWaitText(t, r, "b is three.", "ABANDONED-BRANCH")
-		// A subsequent extension can await asynchronous work before Pi persists
-		// this message. One setImmediate is NOT a post-persistence boundary.
 		d.emit(t, map[string]any{"type": "message_end", "leaf": "a3", "persistLeaf": "afterasync", "persistenceDelay": 80,
 			"persistRecord": map[string]any{"type": "message", "id": "afterasync", "parentId": "a3", "timestamp": "2026-10-22T13:00:00Z", "message": map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "text", "text": "AFTER-ASYNC-PERSISTENCE"}}, "stopReason": "stop"}}})
 		piWaitText(t, r, "AFTER-ASYNC-PERSISTENCE", "ABANDONED-BRANCH")
@@ -212,8 +200,6 @@ func TestPiTranscriptExtension(t *testing.T) {
 		d := startPlugin(t, r.base, "pi", transcriptSession, r.wins[0])
 		d.emit(t, map[string]any{"type": "session_start", "sessionFile": path, "sessionId": "pi-fixture", "leaf": "a3", "mode": "tui"})
 		piWaitText(t, r, "b is three.", "ABANDONED-BRANCH")
-		// _appendCustomMessage emits public events, not extension message_end.
-		// Persisting this visible message must work without any lifecycle handler.
 		d.emit(t, map[string]any{"type": "persist_only", "persistLeaf": "idlecustom", "persistRecord": map[string]any{"type": "custom_message", "id": "idlecustom", "parentId": "a3", "display": true, "content": "VISIBLE-IDLE-CUSTOM"}})
 		piWaitText(t, r, "VISIBLE-IDLE-CUSTOM", "ABANDONED-BRANCH")
 	})
@@ -232,13 +218,9 @@ func TestPiTranscriptExtension(t *testing.T) {
 			t.Fatalf("ephemeral Pi session reused another conversation's history: %v %v", res, err)
 		}
 	})
-	// slowReporter stands in for the report command with one that takes a while
-	// and keeps every report it receives, so a test can count what was sent.
 	slowReporter := func(t *testing.T, delay string) (command string, count func() int) {
 		capture := filepath.Join(t.TempDir(), "reports.jsonl")
 		command = filepath.Join(t.TempDir(), "slow-report")
-		// The driver runs in the pane, which does not inherit this process's
-		// environment, so the script carries the capture path itself.
 		if err := os.WriteFile(command, []byte("#!/bin/sh\ncat >> '"+capture+"'\nprintf '\\n' >> '"+capture+"'\nsleep "+delay+"\n"), 0o700); err != nil {
 			t.Fatal(err)
 		}
@@ -250,10 +232,6 @@ func TestPiTranscriptExtension(t *testing.T) {
 			return len(strings.FieldsFunc(string(b), func(r rune) bool { return r == '\n' }))
 		}
 	}
-	// Each bound holds on both ways a report leaves: a report process (the
-	// socket off, as for a daemon older than agent-hook-event) and the
-	// daemon's socket. reporter gives the driver's variables and the report
-	// command for one way, and counts the reports that left.
 	type reporter func(t *testing.T, delay time.Duration) (env []string, command string, count func() int)
 	ways := []struct {
 		name string
@@ -275,8 +253,6 @@ func TestPiTranscriptExtension(t *testing.T) {
 			env, command, count := way.make(t, 300*time.Millisecond)
 			d := startPluginWith(t, r.base, "pi", transcriptSession, r.wins[0], env, command)
 			d.emit(t, map[string]any{"type": "session_start", "sessionFile": path, "sessionId": "pi-fixture", "leaf": "a3", "mode": "tui"})
-			// State reports are never merged, so ten of them are a backlog of ten
-			// slow reports: three seconds of work for a drain that gives a second.
 			for range 10 {
 				d.emit(t, map[string]any{"type": "agent_start", "idle": false})
 			}
@@ -287,7 +263,6 @@ func TestPiTranscriptExtension(t *testing.T) {
 				t.Fatalf("report backlog made Pi shutdown take %v, past the total drain budget", took)
 			}
 			r.art.add("shutdown drain", time.Since(start).String())
-			// The bound is only worth something if reports were being sent.
 			if n := count(); n < 2 {
 				t.Fatalf("the slow daemon was sent %d reports, so the backlog was never built", n)
 			}
@@ -298,7 +273,6 @@ func TestPiTranscriptExtension(t *testing.T) {
 			env, command, count := way.make(t, 200*time.Millisecond)
 			d := startPluginWith(t, r.base, "pi", transcriptSession, r.wins[0], env, command)
 			d.emit(t, map[string]any{"type": "session_start", "sessionFile": path, "sessionId": "pi-fixture", "leaf": "a3", "mode": "tui"})
-			// Only the newest of ten selections made while a report is out matters.
 			for i := range 10 {
 				d.emit(t, map[string]any{"type": "session_tree", "leaf": fmt.Sprintf("branch%d", i)})
 			}
@@ -307,14 +281,11 @@ func TestPiTranscriptExtension(t *testing.T) {
 				t.Fatalf("want the start and one merged selection, got %d reports", n)
 			}
 		})
-		// The extension tells the daemon only what it does not have: the end
-		// of a turn, or a repeated selection, sends nothing.
 		t.Run("a selection already reported sends nothing/"+way.name, func(t *testing.T) {
 			r := newATRig(t, "pi-ext-sends-"+way.name+".txt", 1)
 			path := piFixture(t, r)
 			env, command, sent := way.make(t, 0)
 			d := startPluginWith(t, r.base, "pi", transcriptSession, r.wins[0], env, command)
-			// settle waits until the extension has sent everything it is going to.
 			settle := func() int {
 				last := -1
 				for {
@@ -347,13 +318,8 @@ func TestPiTranscriptExtension(t *testing.T) {
 	}
 }
 
-// fakeReportSocket stands in for the daemon's socket with one that answers
-// each call after delay and keeps a count of them, so a test can count what an
-// extension sent over the socket. The extension runs in a pane, which does not
-// share this process's environment, so the path goes to it as a variable.
 func fakeReportSocket(t *testing.T, delay time.Duration) (path string, count func() int) {
 	t.Helper()
-	// Unix socket paths are short on macOS; a test's temp folder is too long.
 	dir, err := os.MkdirTemp("", "tsk")
 	if err != nil {
 		t.Fatal(err)

@@ -16,22 +16,10 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// ptyLogLimit is the most a client's raw PTY log holds. The log mirrors both
-// directions of the PTY, and a client attached to a pane that streams kitty
-// graphics wrote 473 MB of it in 19 s.
 const ptyLogLimit = 4 << 20
 
-// ptyLogTailOnFailure is how much of the log a failed test prints.
 const ptyLogTailOnFailure = 2 << 10
 
-// boundedLog is an append-only log file that keeps only its newest bytes.
-//
-// When the file grows past limit, it is rewritten to its last limit/2 bytes
-// under a one-line header that counts what was dropped. The rewrite goes to a
-// temporary file that is renamed over the log, so a test reading the log by
-// path while the client writes sees the old file or the new one, never a
-// half-written one. Rewriting half the limit each time keeps the extra I/O to
-// about one and a half times what is written.
 type boundedLog struct {
 	mu      sync.Mutex
 	path    string
@@ -68,7 +56,6 @@ func (l *boundedLog) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-// compact rewrites the log to its newest limit/2 bytes. l.mu is held.
 func (l *boundedLog) compact() error {
 	keep := l.limit / 2
 	tail := make([]byte, keep)
@@ -100,7 +87,6 @@ func (l *boundedLog) compact() error {
 	return nil
 }
 
-// Tail is the last n bytes of the log.
 func (l *boundedLog) Tail(n int64) []byte {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -122,24 +108,13 @@ func (l *boundedLog) Close() error {
 	return err
 }
 
-// shmPrefixEnv names the variable that gives the kitty stand-ins (./frameloop,
-// ./placeholders, ./placeonce and ./shmstream) the prefix for the shared
-// memory objects they create.
 const shmPrefixEnv = "TUIOS_E2E_SHM_PREFIX"
 
 var (
-	shmPrefixes sync.Map // *testing.T to its prefix
+	shmPrefixes sync.Map
 	shmSeq      atomic.Int64
 )
 
-// standInShmPrefix is the prefix for the /dev/shm objects a stand-in creates
-// in this test. The first call registers a cleanup that removes every object
-// with the prefix.
-//
-// A stand-in removes its objects in a deferred call, which does not run when
-// the process dies by a signal, and a signal is how the client's teardown ends
-// it. Without this every run of a shared memory test left an object of a few
-// megabytes in /dev/shm, which is RAM.
 func standInShmPrefix(t *testing.T) string {
 	if p, ok := shmPrefixes.Load(t); ok {
 		return p.(string)
@@ -153,10 +128,6 @@ func standInShmPrefix(t *testing.T) string {
 	return p
 }
 
-// removeStandInShm kills the stand-ins that own objects with prefix and then
-// removes the objects. The cleanup can run before the client's teardown, while
-// a stand-in still streams, so the owner dies first and cannot create another.
-// The owner's pid is the number after the prefix in each object's name.
 func removeStandInShm(prefix string) {
 	matches, _ := filepath.Glob(filepath.Join("/dev/shm", prefix+"*"))
 	for _, path := range matches {
@@ -166,7 +137,6 @@ func removeStandInShm(prefix string) {
 		if err != nil || pid <= 1 {
 			continue
 		}
-		// Only a stand-in: a pid can be reused after its owner exits.
 		cmdline, _ := os.ReadFile(filepath.Join("/proc", head, "cmdline"))
 		for _, standIn := range []string{"frameloop", "placeholders", "placeonce", "shmstream", "framepace"} {
 			if bytes.Contains(cmdline, []byte(standIn)) {
@@ -181,9 +151,6 @@ func removeStandInShm(prefix string) {
 	}
 }
 
-// startStream boots tuios against a kitty host and starts the frameloop
-// stand-in at 60 frames a second in one tiled pane, still in terminal mode. It
-// returns the path of the stand-in's geometry file, which is in its argv.
 func startStream(t *testing.T, o startOpts, transport string) (*tuitest.Terminal, *kittyHost, string) {
 	t.Helper()
 	host := newKittyHost()
@@ -202,7 +169,6 @@ func startStream(t *testing.T, o startOpts, transport string) (*tuitest.Terminal
 	return term, host, geom
 }
 
-// killByArg sends SIGKILL to every process whose argv contains arg.
 func killByArg(t *testing.T, arg string) {
 	t.Helper()
 	entries, _ := os.ReadDir("/proc")
@@ -238,9 +204,6 @@ func TestPtyLogStaysBounded(t *testing.T) {
 	_, host, geom := startStream(t, startOpts{logPath: &logPath, logLimit: limit}, "b64")
 	time.Sleep(3 * time.Second)
 
-	// End the stand-in and wait for the client to go quiet. With no input
-	// sent after that, the newest bytes of the log are the newest bytes the
-	// host was sent.
 	killByArg(t, geom)
 	var stream []byte
 	deadline := time.Now().Add(shellTimeout)
@@ -287,8 +250,6 @@ func TestKittyStandInShmRemovedAfterTest(t *testing.T) {
 	t.Run("stream", func(t *testing.T) {
 		startStream(t, startOpts{}, "shm")
 		prefix = standInShmPrefix(t)
-		// The stand-in reports its geometry, which is what startStream waits
-		// for, and only then creates its object. Wait for the object itself.
 		var matches []string
 		deadline := time.Now().Add(shellTimeout)
 		for {
@@ -314,8 +275,6 @@ func TestKittyStandInShmRemovedAfterTest(t *testing.T) {
 		for syscall.Kill(pid, 0) == nil && time.Now().Before(deadline) {
 			time.Sleep(50 * time.Millisecond)
 		}
-		// The stand-in is gone and its object is not: the harness must
-		// remove it.
 		if _, err := os.Stat(matches[0]); err != nil {
 			t.Fatalf("the object went away with the stand-in, so this test shows nothing: %v", err)
 		}

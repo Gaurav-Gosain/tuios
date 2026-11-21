@@ -12,8 +12,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// quickLookShowDoc is a document with two headings, a table too wide for the
-// panel and two images: one beside it and one that is not there.
 const quickLookShowDoc = `# Big title
 
 ## Second title
@@ -32,8 +30,6 @@ The table:
 The end of the notes.
 `
 
-// quickLookShowOpen opens zshow.md in quick look at full size, in a client
-// started with env.
 func quickLookShowOpen(t *testing.T, env []string, out *lockedBuffer) *tuitest.Terminal {
 	t.Helper()
 	term, dir := quickLookListed(t, append([]string{"TUIOS_KITTY_GRAPHICS=0"}, env...), out)
@@ -44,7 +40,6 @@ func quickLookShowOpen(t *testing.T, env []string, out *lockedBuffer) *tuitest.T
 	quickLookFocusRail(t, term, "zshow.md")
 	sendKeys(t, term, " ")
 	railLists(t, term, "space did not show zshow.md", []string{"The table:"}, nil)
-	// f gives the panel the whole screen, so the picture and the table fit.
 	sendKeys(t, term, tuitest.Tab, "f")
 	return term
 }
@@ -71,8 +66,6 @@ func TestQuickLookDrawsPicturesTablesAndHeadings(t *testing.T) {
 	alive(t, term, "after the rich Markdown")
 }
 
-// quickLookBannerDoc has a picture far wider than tall, so its box grows
-// with the panel's width, and a small one that keeps its own size.
 const quickLookBannerDoc = `# Banner
 
 ![the banner](banner.png)
@@ -82,12 +75,6 @@ const quickLookBannerDoc = `# Banner
 The end of the notes.
 `
 
-// quickLookOnScreen are the pictures the host shows: each kitty placement at
-// its cells, and each picture drawn as placeholder cells at the box of those
-// cells, when the host holds a virtual placement of that size for it. A run
-// of placeholder cells with no such placement is a blank box on a real host,
-// and is left out.
-// s is the screen, for its size.
 func quickLookOnScreen(t *testing.T, host *lockedBuffer, s tuitest.Screen) []shot.Image {
 	t.Helper()
 	cols, rows := s.Size()
@@ -103,15 +90,9 @@ func quickLookOnScreen(t *testing.T, host *lockedBuffer, s tuitest.Screen) []sho
 	if len(virtual) == 0 {
 		return placed
 	}
-	// The cells come from a replay of the stream through tuios's own
-	// emulator, which keeps placeholder cells. The graphics commands are
-	// taken out first: they draw no cell, and the uploads are most of the
-	// stream.
 	em := vt.NewEmulator(cols, rows)
 	em.SetKittyPlaceholderMode(vt.KittyPlaceholdersKeep)
 	_, _ = em.Write(kittyAPC.ReplaceAll([]byte(stream), nil))
-	// A picture's cells are runs of the same columns on rows one under the
-	// other.
 	type box struct{ x0, y0, x1, y1 int }
 	var boxes []box
 	for y := range rows {
@@ -151,12 +132,8 @@ func quickLookOnScreen(t *testing.T, host *lockedBuffer, s tuitest.Screen) []sho
 	return placed
 }
 
-// kittyAPC is one kitty graphics command.
 var kittyAPC = regexp.MustCompile("\x1b_G[^\x1b]*\x1b\\\\")
 
-// quickLookBanner waits for the host to show the banner at a width that ok
-// accepts, saves frame, and returns the banner. The banner is the
-// one picture over 20 cells wide.
 func quickLookBanner(t *testing.T, term *tuitest.Terminal, host *lockedBuffer, why, frame string, ok func(cols int) bool) shot.Image {
 	t.Helper()
 	var pics []shot.Image

@@ -37,10 +37,8 @@ import (
 //   - with the interrupt and decline cases cut from the Finished rule in
 //     Turns, the view never shows the second turn's "Worked for 1m 42s".
 
-// stopsFixture is the transcript both tests read.
 var stopsFixture = filepath.Join("testdata", "transcript", "claude-stops.jsonl")
 
-// stopsEntry is an entry with the fields these tests read.
 type stopsEntry struct {
 	ID     string `json:"id"`
 	Role   string `json:"role"`
@@ -56,7 +54,6 @@ type stopsEntry struct {
 	} `json:"image"`
 }
 
-// stopsImage is the PNG the fixture's Read result holds.
 func stopsImage(t *testing.T) []byte {
 	t.Helper()
 	raw, err := os.ReadFile(stopsFixture)
@@ -147,8 +144,6 @@ func TestTranscriptStopsOnTheWire(t *testing.T) {
 	if img["media_type"] != "image/png" || !bytes.Equal(data, stopsImage(t)) {
 		t.Fatalf("ASSERTION: the image data: want the fixture's PNG, got %v and %d bytes", img["media_type"], len(data))
 	}
-	// An id that names a place inside a block that holds no image is no
-	// image.
 	p := map[string]any{"session": transcriptSession, "window": win, "human_nonce": r.nonce, "image": entries[0].ID + ".0"}
 	if _, verr := r.ctl.call(t, "agent-transcript", p); verr == nil || verr.Code != "invalid_params" {
 		t.Fatalf("ASSERTION: an image id inside a prompt: want invalid_params, got %v", verr)

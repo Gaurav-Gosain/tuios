@@ -7,7 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// isVertLine reports the full-height vertical rules (sidebar edge, pane divider).
 func isVertLine(r rune) bool {
 	switch r {
 	case '│', '┃', '║', '|', '┆', '┇', '┊', '┋':
@@ -16,9 +15,6 @@ func isVertLine(r rune) bool {
 	return false
 }
 
-// isCorner reports box-drawing corner glyphs. A corner in the content column
-// next to the sidebar edge is the N8 doubled-border artifact: the focused pane
-// caps its outer edge one cell from the sidebar's own edge rule.
 func isCorner(r rune) bool {
 	switch r {
 	case '╭', '╮', '╰', '╯', '┌', '┐', '└', '┘', '├', '┤', '┬', '┴', '┼':
@@ -27,8 +23,6 @@ func isCorner(r rune) bool {
 	return false
 }
 
-// tallVertCols returns the columns carrying a vertical rule for most of the
-// usable height, with their run length.
 func tallVertCols(s tuitest.Screen) map[int]int {
 	cols, rows := s.Size()
 	out := map[int]int{}
@@ -47,7 +41,6 @@ func tallVertCols(s tuitest.Screen) map[int]int {
 	return out
 }
 
-// cornersInColumn counts corner glyphs in one column across the usable rows.
 func cornersInColumn(s tuitest.Screen, col int) int {
 	_, rows := s.Size()
 	n := 0
@@ -60,11 +53,6 @@ func cornersInColumn(s tuitest.Screen, col int) int {
 	return n
 }
 
-// buildTiledSessionSwitch attaches to alpha with the sidebar on the given side
-// and shared borders on, tiles three panes, switches to bravo and back, and
-// returns the terminal at rest on alpha. The three-pane spiral guarantees a
-// horizontal divider that reaches the content boundary, which is what surfaces a
-// cap drawn against the sidebar edge.
 func buildTiledSessionSwitch(t *testing.T, side string) *tuitest.Terminal {
 	t.Helper()
 	base := t.TempDir()
@@ -98,7 +86,6 @@ func buildTiledSessionSwitch(t *testing.T, side string) *tuitest.Terminal {
 	waitWindowCount(t, term, 3, "three panes on alpha")
 	time.Sleep(300 * time.Millisecond)
 
-	// Switch away and back through the sidebar rows.
 	col, row := findOnScreen(t, term, "bravo")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	if err := term.WaitForText("Session: bravo", uiTimeout); err != nil {
@@ -125,19 +112,16 @@ func TestSidebarRightSharedBordersNoDoubleAfterSwitch(t *testing.T) {
 	if len(cols) == 0 {
 		t.Fatalf("no vertical rules on screen\n%s", term.Snapshot())
 	}
-	// The sidebar edge is the rightmost full-height rule.
 	edge := -1
 	for c := range cols {
 		if c > edge {
 			edge = c
 		}
 	}
-	// No corner cap may sit in the content column immediately left of it.
 	if n := cornersInColumn(s, edge-1); n != 0 {
 		t.Errorf("doubled border: %d corner caps in content column %d against the sidebar edge at %d\n%s",
 			n, edge-1, edge, term.Snapshot())
 	}
-	// No two adjacent full-height rules (a full doubled divider).
 	for c := range cols {
 		if _, ok := cols[c-1]; ok {
 			t.Errorf("adjacent doubled vertical rules at columns %d and %d\n%s", c-1, c, term.Snapshot())
@@ -156,8 +140,6 @@ func TestSidebarLeftSharedBordersSurvivesSwitch(t *testing.T) {
 	if len(cols) < 2 {
 		t.Fatalf("expected the sidebar edge and at least one pane divider, got %v\n%s", cols, term.Snapshot())
 	}
-	// The sidebar edge is the leftmost full-height rule; no corner cap may sit in
-	// the first content column against it.
 	edge := 1 << 30
 	for c := range cols {
 		if c < edge {

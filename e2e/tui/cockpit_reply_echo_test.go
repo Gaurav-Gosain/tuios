@@ -36,7 +36,6 @@ func TestCockpitReplyEchoes(t *testing.T) {
 	term := startEchoClient(t, base)
 	saveCockpitFrames(t, term, "echo-0-before")
 
-	// 1. A reply to a working agent is queued, and shows at once.
 	sendReply(t, term, "Use the grid gap instead.")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return containsAll(s.Text(), "Use the grid gap instead.", "Queued, typed when it rests", "cancel")
@@ -46,8 +45,6 @@ func TestCockpitReplyEchoes(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "echo-1-queued")
 
-	// 2. A second reply is refused: the queue holds one. It shows as not
-	// sent, with retry.
 	sendReply(t, term, "And check the padding.")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return containsAll(s.Text(), "And check the padding.", "Not sent:", "retry")
@@ -57,8 +54,6 @@ func TestCockpitReplyEchoes(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "echo-2-refused")
 
-	// 3. cancel drops the first reply from the thread and from the daemon's
-	// queue.
 	row, col := findText(t, term, "cancel")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "Use the grid gap instead.") }, uiTimeout); err != nil {
@@ -69,7 +64,6 @@ func TestCockpitReplyEchoes(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "echo-3-cancelled")
 
-	// 4. retry on the refused reply queues it, now that there is room.
 	row, col = findText(t, term, "retry")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -83,8 +77,6 @@ func TestCockpitReplyEchoes(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "echo-4-retried")
 
-	// 5. A client opened later shows the queued reply again, from the
-	// daemon's queue.
 	_ = term.Close()
 	term = startEchoClient(t, base)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -95,9 +87,6 @@ func TestCockpitReplyEchoes(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "echo-5-reopened")
 
-	// 6. The agent comes to rest: the daemon types the reply, and the echo
-	// says it was sent. The transcript then logs it, and the echo goes: the
-	// reply shows once, as the transcript's.
 	if out, err := tuiosCLI(t, base, "set-agent-state", "idle", "-s", "api", "-w", "header-fix", "--harness", "claude-code"); err != nil {
 		t.Fatalf("set-agent-state idle: %v\n%s", err, out)
 	}
@@ -122,9 +111,6 @@ func TestCockpitReplyEchoes(t *testing.T) {
 	alive(t, term, "after the reply echoes")
 }
 
-// echoThreadBase is an isolation root with a home and an api session, and a
-// working Claude Code agent in api, header-fix, whose transcript holds one
-// prompt and its answer. It returns the root and the transcript's path.
 func echoThreadBase(t *testing.T, extra string) (string, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -167,8 +153,6 @@ func echoThreadBase(t *testing.T, extra string) (string, string) {
 	return base, path
 }
 
-// startEchoClient attaches a client to home and opens the agents view on
-// header-fix's thread.
 func startEchoClient(t *testing.T, base string) *tuitest.Terminal {
 	t.Helper()
 	term := startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: 140, rows: 44, shippedLooks: true,
@@ -185,8 +169,6 @@ func startEchoClient(t *testing.T, base string) *tuitest.Terminal {
 	return term
 }
 
-// sendReply opens the reply area with r, types text and presses enter, as
-// the person does.
 func sendReply(t *testing.T, term *tuitest.Terminal, text string) {
 	t.Helper()
 	if err := term.SendKeys("r"); err != nil {
@@ -203,7 +185,6 @@ func sendReply(t *testing.T, term *tuitest.Terminal, text string) {
 	_ = term.WaitStable(uiTimeout)
 }
 
-// appendTranscript adds one record to a Claude Code transcript.
 func appendTranscript(t *testing.T, path string, rec map[string]any) {
 	t.Helper()
 	b, err := json.Marshal(rec)

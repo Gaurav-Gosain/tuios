@@ -27,11 +27,6 @@ import (
 //
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Live handoff").
 
-// keeperProcesses is every keeper process of the daemon under base, as
-// "pid ppid stat command". A keeper's command line names the previous binary,
-// which is kept under base, except on Linux, where its environment does (see
-// keeperEnvHas). ps reads untruncated command lines with -ww, on macOS and
-// Linux alike.
 func keeperProcesses(t *testing.T, base string) []string {
 	t.Helper()
 	raw, err := exec.Command("ps", "-A", "-ww", "-o", "pid=,ppid=,stat=,command=").Output()
@@ -47,9 +42,6 @@ func keeperProcesses(t *testing.T, base string) []string {
 	return out
 }
 
-// keeperEnvHas reports whether the process of a ps line has base in its
-// environment. On Linux a keeper runs the kept binary as /proc/self/fd/N, so
-// its command line names no file under base; its XDG folders do.
 func keeperEnvHas(line, base string) bool {
 	if runtime.GOOS != "linux" {
 		return false
@@ -62,8 +54,6 @@ func keeperEnvHas(line, base string) bool {
 	return err == nil && strings.Contains(string(env), base)
 }
 
-// awaitNoKeeper waits until no keeper of the daemon under base is left, and
-// returns how long that took, or the keepers still there at the timeout.
 func awaitNoKeeper(t *testing.T, base string, timeout time.Duration) (time.Duration, []string) {
 	t.Helper()
 	start := time.Now()
@@ -79,8 +69,6 @@ func awaitNoKeeper(t *testing.T, base string, timeout time.Duration) (time.Durat
 	}
 }
 
-// jsonLineOf is the first line of out that is a JSON object, decoded: the
-// --json outcome of a command that then failed, whose last line is its error.
 func jsonLineOf(out string) map[string]any {
 	for _, line := range strings.Split(out, "\n") {
 		var v map[string]any
@@ -91,16 +79,12 @@ func jsonLineOf(out string) map[string]any {
 	return nil
 }
 
-// processRunning says whether pid is a process that has not ended. A zombie has
-// ended.
 func processRunning(pid int) bool {
 	out, err := exec.Command("ps", "-o", "stat=", "-p", strconv.Itoa(pid)).Output()
 	stat := strings.TrimSpace(string(out))
 	return err == nil && stat != "" && !strings.HasPrefix(stat, "Z")
 }
 
-// stderrOf is the file pid has as its descriptor 2, with symlinks resolved:
-// from /proc on Linux, from lsof elsewhere.
 func stderrOf(t *testing.T, pid int) string {
 	t.Helper()
 	var name string
@@ -127,7 +111,6 @@ func stderrOf(t *testing.T, pid int) string {
 	return name
 }
 
-// daemonLogOf is the daemon log under base, with symlinks resolved.
 func daemonLogOf(t *testing.T, base string) string {
 	t.Helper()
 	path := filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "daemon.log")
@@ -257,8 +240,6 @@ func TestDaemonUpgradeSurvivesACrashOfTheNewImage(t *testing.T) {
 			afterPIDs := panePIDs(t, base, sess)
 			stats := handoffStats(t, base)
 			oldAlive := processRunning(img.PID)
-			// The counter has to be seen moving under the image that came
-			// back, past where it stood before the upgrade.
 			waitHandoffPane(t, base, sess, counter, regexp.MustCompile(`^k-`+strconv.Itoa(lastOf(ticksBefore)+60)+`$`), 20*time.Second)
 			ticks := counterLines(mustScrollback(t, base, sess, counter), "k-")
 			_ = mustCall(t, base, "send-text", map[string]any{"session": sess, "window": exiter, "text": "ping\n"})
@@ -281,16 +262,12 @@ func TestDaemonUpgradeSurvivesACrashOfTheNewImage(t *testing.T) {
 				t.Fatalf("ASSERTION: the daemon is pid %d after the crash (was %d, still alive %v): the image that crashed is the one answering", after.PID, img.PID, oldAlive)
 			}
 			if runtime.GOOS == "linux" {
-				// The keeper execs the descriptor of the binary the daemon
-				// ran, which it holds, so the image runs that file.
 				if want := resolvedTuios(t); exe != want {
 					t.Errorf("ASSERTION: the daemon runs %s after the crash, want the binary it ran before, %s", exe, want)
 				}
 			} else if !strings.HasSuffix(exe, string(filepath.Separator)+filepath.Join("handoff", "tuios.prev")) {
 				t.Errorf("ASSERTION: the daemon runs %s after the crash, want the kept tuios.prev", exe)
 			}
-			// The positive half is the first daemon's: a search that found
-			// no file at all would otherwise pass for the restored one too.
 			if stderrBefore != logPath {
 				t.Errorf("ASSERTION: the daemon's stderr before the upgrade is %q, want the daemon log %s", stderrBefore, logPath)
 			}

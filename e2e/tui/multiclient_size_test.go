@@ -8,20 +8,11 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Two clients of different sizes against one session, asserted on the frame
-// each one draws. Nothing else in this suite runs two clients at once, and
-// every multi-client bug reported so far has been one where the model and the
-// screen disagreed, so these read the grid and nothing else.
-
 const (
 	bigCols, bigRows     = 120, 40
 	smallCols, smallRows = 60, 20
 )
 
-// paneSpanRight returns the rightmost column any window border reaches. It is
-// how wide the panes are actually drawn, as distinct from how wide the frame
-// is: the dock and the separator span the whole screen whatever the panes do,
-// which is exactly how the bug this guards looked.
 func paneSpanRight(s tuitest.Screen) int {
 	cols, rows := s.Size()
 	widest := 0
@@ -47,7 +38,6 @@ func isWindowBorder(r rune) bool {
 	return false
 }
 
-// paneSpanBottom is the vertical analogue.
 func paneSpanBottom(s tuitest.Screen) int {
 	_, rows := s.Size()
 	last := 0
@@ -62,11 +52,6 @@ func paneSpanBottom(s tuitest.Screen) int {
 	return last
 }
 
-// attachSmall attaches a client without waiting for the "Window management
-// mode" banner. attachIn's wait is unusable below about 80 columns: the dock
-// truncates the banner to "Window management..." and the wait can never be
-// satisfied. Nothing here presses a bare window-manager key on the small
-// client, so which mode it lands in does not matter.
 func attachSmall(t *testing.T, base, session string, o startOpts) *tuitest.Terminal {
 	t.Helper()
 	o.args = append(append([]string{}, o.args...), "attach", session)
@@ -79,9 +64,6 @@ func attachSmall(t *testing.T, base, session string, o startOpts) *tuitest.Termi
 	return term
 }
 
-// twoClientSession creates a detached session and attaches a big client to it.
-// The session is smallest, set on purpose: the tests on it are about a
-// session that every client shows whole.
 func twoClientSession(t *testing.T, name string, cols, rows int) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -93,7 +75,6 @@ func twoClientSession(t *testing.T, name string, cols, rows int) (*tuitest.Termi
 	return attachIn(t, base, name, startOpts{cols: cols, rows: rows}), base
 }
 
-// waitSpanRight waits for the panes to be drawn out to want columns.
 func waitSpanRight(t *testing.T, term *tuitest.Terminal, want int, what string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -130,13 +111,10 @@ func TestSessionHoldsOneSizeForTwoClients(t *testing.T) {
 			got, bigRows, big.Snapshot())
 	}
 
-	// The narrow client attaches: the session shrinks around the wide one.
 	small := attachSmall(t, base, "shared", startOpts{cols: smallCols, rows: smallRows})
 	waitSpanRight(t, big, smallCols, "after the narrow client attached")
 	waitSpanRight(t, small, smallCols, "the narrow client's own frame")
 
-	// Interaction must not move the size. Focus cycling is a plain
-	// window-management key and pushes a state sync on every press.
 	for range 6 {
 		if err := big.SendKeys("\t"); err != nil {
 			t.Fatalf("focus cycle: %v", err)
@@ -153,7 +131,6 @@ func TestSessionHoldsOneSizeForTwoClients(t *testing.T) {
 			"interacted, want %d\n%s", got, smallCols, small.Snapshot())
 	}
 
-	// The narrow client leaves and the columns come back, panes included.
 	if err := small.Close(); err != nil {
 		t.Fatalf("close the narrow client: %v", err)
 	}
@@ -166,7 +143,4 @@ func TestSessionHoldsOneSizeForTwoClients(t *testing.T) {
 	}
 }
 
-// config_dockRows is how many rows the dock and its separator take off the
-// bottom. Named here rather than imported: this module cannot see the config
-// package, and the only use is a sanity bound.
 const config_dockRows = 4

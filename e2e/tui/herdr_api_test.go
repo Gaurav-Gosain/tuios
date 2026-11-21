@@ -12,13 +12,10 @@ import (
 	"time"
 )
 
-// herdrSocket is the herdr socket of the daemon under base.
 func herdrSocket(base string) string {
 	return filepath.Join(xdgDir(base, "XDG_RUNTIME_DIR"), "tuios", "tuios.sock.herdr")
 }
 
-// herdrCall sends one request to the herdr socket from the test process,
-// which runs in no pane: the person.
 func herdrCall(t *testing.T, base, method string, params any) map[string]any {
 	t.Helper()
 	conn, err := net.Dial("unix", herdrSocket(base))
@@ -45,7 +42,6 @@ func herdrCall(t *testing.T, base, method string, params any) map[string]any {
 	return out["result"].(map[string]any)
 }
 
-// herdrPaneByLabel finds a pane in session.snapshot by its label.
 func herdrPaneByLabel(t *testing.T, base, label string) map[string]any {
 	t.Helper()
 	snap := herdrCall(t, base, "session.snapshot", map[string]any{})["snapshot"].(map[string]any)
@@ -97,14 +93,12 @@ func TestHerdrSocketAPI(t *testing.T) {
 		t.Fatalf("target pane record %v", target)
 	}
 
-	// A rename through herdr is the window's name on screen.
 	renamed := herdrCall(t, base, "pane.rename", map[string]any{"pane_id": targetID, "label": "herdr-named"})
 	if renamed["pane"].(map[string]any)["label"] != "herdr-named" {
 		t.Fatalf("pane.rename %v", renamed)
 	}
 	waitForAll(t, term, uiTimeout, "the renamed pane", "herdr-named")
 
-	// The person types into the pane through herdr.
 	herdrCall(t, base, "pane.send_text", map[string]any{"pane_id": targetID, "text": "echo typed-by-herdr"})
 	herdrCall(t, base, "pane.send_keys", map[string]any{"pane_id": targetID, "keys": []string{"Enter"}})
 	waitJoined(t, base, "herdr-named", "typed-by-herdr")
@@ -113,7 +107,6 @@ func TestHerdrSocketAPI(t *testing.T) {
 		t.Fatalf("pane.read did not see the typed text: %q", read["text"])
 	}
 
-	// An agent waiting on a prompt reads as herdr's blocked.
 	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", crushSession, "-w", targetWin, "--harness", "claude-code", "needs_input"); err != nil {
 		t.Fatalf("set-agent-state: %v\n%s", err, out)
 	}
@@ -122,8 +115,6 @@ func TestHerdrSocketAPI(t *testing.T) {
 		t.Fatalf("an agent on needs_input reads %v / %v", target["agent"], target["agent_status"])
 	}
 
-	// The person, outside every pane, reports for a pane, as a herdr plugin's
-	// command does. herdr lets any client report.
 	callerID := herdrPaneByLabel(t, base, "caller")["pane_id"].(string)
 	herdrCall(t, base, "pane.report_agent", map[string]any{"pane_id": callerID, "source": "e2e-mirror", "agent": "claude", "state": "working"})
 	if got := herdrPaneByLabel(t, base, "caller"); got["agent"] != "claude" || got["agent_status"] != "working" {
@@ -131,8 +122,6 @@ func TestHerdrSocketAPI(t *testing.T) {
 	}
 	herdrCall(t, base, "pane.release_agent", map[string]any{"pane_id": callerID, "source": "e2e-mirror", "agent": "claude"})
 
-	// A pane holds its grants: it finds itself, and may not type into a
-	// prompt without respond.
 	typeIn(t, base, "caller", client+` pane.current '{}'`)
 	out := waitJoined(t, base, "caller", "REPLY ")
 	self := ""
@@ -149,7 +138,6 @@ func TestHerdrSocketAPI(t *testing.T) {
 		t.Fatalf("the refusal does not name the respond grant:\n%s", out)
 	}
 
-	// Events: a pane made now arrives on the stream.
 	conn, err := net.Dial("unix", herdrSocket(base))
 	if err != nil {
 		t.Fatal(err)
@@ -177,8 +165,6 @@ func TestHerdrSocketAPI(t *testing.T) {
 		t.Errorf("tab_created does not carry the label:\n%s", seen)
 	}
 
-	// env on workspace.create, tab.create and pane.split reaches the new
-	// pane's shell.
 	wsEnv := herdrCall(t, base, "workspace.create", map[string]any{"label": "herdr-env-ws", "env": map[string]string{"HERDR_E2E_ENV": "from-workspace"}})
 	herdrEcho(t, base, wsEnv["root_pane"].(map[string]any)["pane_id"].(string), "env-from-workspace")
 	tabEnv := herdrCall(t, base, "tab.create", map[string]any{"workspace_id": target["workspace_id"], "focus": false, "env": map[string]string{"HERDR_E2E_ENV": "from-tab"}})
@@ -189,8 +175,6 @@ func TestHerdrSocketAPI(t *testing.T) {
 	alive(t, term, "after the herdr socket API")
 }
 
-// herdrEcho types echo env-$HERDR_E2E_ENV into pane and waits until
-// pane.read shows want.
 func herdrEcho(t *testing.T, base, pane, want string) {
 	t.Helper()
 	herdrCall(t, base, "pane.send_text", map[string]any{"pane_id": pane, "text": "echo env-$HERDR_E2E_ENV"})

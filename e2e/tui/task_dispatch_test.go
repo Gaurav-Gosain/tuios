@@ -11,7 +11,6 @@ import (
 	"time"
 )
 
-// dispatchListing is tuios task ls --json with the fields this test reads.
 type dispatchListing struct {
 	Tasks []struct {
 		ID         string `json:"id"`
@@ -23,8 +22,6 @@ type dispatchListing struct {
 	} `json:"tasks"`
 }
 
-// cardsOf is the session's cards by id: the holder's window, "" for none,
-// and the stage.
 func cardsOf(t *testing.T, base, session string) (holder, stage map[string]string, raw string) {
 	t.Helper()
 	raw = mustCLI(t, base, "task", "ls", "-s", session, "--json")
@@ -42,8 +39,6 @@ func cardsOf(t *testing.T, base, session string) (holder, stage map[string]strin
 	return holder, stage, raw
 }
 
-// waitForCards polls the cards until ok says they are right, and returns the
-// last listing.
 func waitForCards(t *testing.T, base, session, why string, ok func(holder, stage map[string]string) bool) (map[string]string, map[string]string, string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -93,20 +88,19 @@ func TestPullDispatchGivesTheNextCard(t *testing.T) {
 	add := func(args ...string) {
 		mustCLI(t, base, append([]string{"task", "add", "-s", sess}, args...)...)
 	}
-	add("-p", "first prompt for a", "first a")                 // t1
-	add("-p", "first prompt for b", "first b")                 // t2
-	add("--ask-first", "-p", "needs a person", "ask me first") // t3
-	add("--harness", "codex", "-p", "codex work", "for codex") // t4
-	add("-p", "the fifth prompt", "next one")                  // t5
-	add("-p", "the sixth prompt", "next two")                  // t6
-	add("-p", "the seventh prompt", "later")                   // t7
+	add("-p", "first prompt for a", "first a")
+	add("-p", "first prompt for b", "first b")
+	add("--ask-first", "-p", "needs a person", "ask me first")
+	add("--harness", "codex", "-p", "codex work", "for codex")
+	add("-p", "the fifth prompt", "next one")
+	add("-p", "the sixth prompt", "next two")
+	add("-p", "the seventh prompt", "later")
 
 	var report strings.Builder
 	fmt.Fprintln(&report, mustCLI(t, base, "task", "dispatch", "mode", "pull", "-s", sess))
 	mustCLI(t, base, "task", "claim", "t1", "-s", sess, "-w", a)
 	mustCLI(t, base, "task", "claim", "t2", "-s", sess, "-w", b)
 
-	// Both agents finish at the same moment, each from its own pane.
 	gate := filepath.Join(base, "go")
 	outs := map[string]string{}
 	for w, card := range map[string]string{a: "t1", b: "t2"} {
@@ -134,8 +128,6 @@ func TestPullDispatchGivesTheNextCard(t *testing.T) {
 	if holder["t3"] != "" || holder["t4"] != "" || holder["t7"] != "" {
 		t.Fatalf("ASSERTION: dispatch took t3 (ask first), t4 (codex) or t7: %v", holder)
 	}
-	// An agent done with its card hands it on to review (the board has no
-	// verify command); the person closes it.
 	if stage["t1"] != "review" || stage["t2"] != "review" {
 		t.Fatalf("ASSERTION: t1 and t2 are %s and %s, want review", stage["t1"], stage["t2"])
 	}
@@ -148,16 +140,12 @@ func TestPullDispatchGivesTheNextCard(t *testing.T) {
 		t.Errorf("ASSERTION: no card says dispatch claimed it:\n%s", raw)
 	}
 
-	// The offer reached the agent as mail from tuios, with the command that
-	// finishes the card.
 	mail := mustCLI(t, base, "read-agent-messages", "-s", sess, "-w", a, "--peek", "--json")
 	fmt.Fprintf(&report, "agent a's mail:\n%s\n", mail)
 	if !strings.Contains(mail, "tuios task done "+aCard) || !strings.Contains(mail, `"from": "tuios"`) && !strings.Contains(mail, `"from":"tuios"`) {
 		t.Fatalf("ASSERTION: agent a has no mail from tuios naming %s:\n%s", aCard, mail)
 	}
 
-	// An agent whose turn ends keeps its card (TestATurnEndKeepsTheCard);
-	// its own task done hands the card on and gives it the next.
 	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", a, "done", "--harness", "claude-code", "-m", "finished")
 	if out := inPane(t, base, sess, a, "task done "+aCard); !strings.Contains(out, "EXIT=0") {
 		t.Fatalf("ASSERTION: tuios task done %s in agent a's pane failed:\n%s", aCard, out)
@@ -166,9 +154,8 @@ func TestPullDispatchGivesTheNextCard(t *testing.T) {
 		func(h, s map[string]string) bool { return s[aCard] == "review" && h["t7"] == a })
 	fmt.Fprintf(&report, "after agent a ran task done:\n%s\n", raw)
 
-	// Pause: a finish gives no card.
 	fmt.Fprintln(&report, mustCLI(t, base, "task", "dispatch", "pause"))
-	add("-p", "added after the pause", "after pause") // t8
+	add("-p", "added after the pause", "after pause")
 	mustCLI(t, base, "task", "done", bCard, "-s", sess)
 	logPath := daemonLogOf(t, base)
 	held := "Task dispatch held for window " + b[:min(8, len(b))] + ": dispatch is paused"
@@ -179,8 +166,6 @@ func TestPullDispatchGivesTheNextCard(t *testing.T) {
 		t.Fatalf("ASSERTION: t8 was given to %s while dispatch was paused", holder["t8"])
 	}
 
-	// A usage limit stops all dispatch. The agent keeps its card, blocked,
-	// until it lets it go.
 	fmt.Fprintln(&report, mustCLI(t, base, "task", "dispatch", "resume"))
 	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", a, "errored", "--kind", "usage_limit", "--harness", "claude-code", "-m", "usage limit reached")
 	waitForFileText(t, logPath, func(s string) bool {
@@ -224,7 +209,7 @@ func TestPullDispatchStopsAfterThreeFailures(t *testing.T) {
 	a := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", sess, "agent-a", "--no-focus", "--print-id"))
 	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", a, "working", "--harness", "claude-code", "-m", "on it")
 	mustCLI(t, base, "task", "dispatch", "mode", "pull", "-s", sess)
-	mustCLI(t, base, "task", "add", "-s", sess, "flaky work") // t1, given and let go each round
+	mustCLI(t, base, "task", "add", "-s", sess, "flaky work")
 	var report strings.Builder
 	for round := 1; round <= 3; round++ {
 		own := fmt.Sprintf("own %d", round)
@@ -241,7 +226,7 @@ func TestPullDispatchStopsAfterThreeFailures(t *testing.T) {
 	if !strings.Contains(status, "stopped: 3 failures in a row") {
 		t.Fatalf("ASSERTION: the board did not stop after three failures:\n%s", status)
 	}
-	mustCLI(t, base, "task", "add", "-s", sess, "own 4") // t5
+	mustCLI(t, base, "task", "add", "-s", sess, "own 4")
 	mustCLI(t, base, "task", "claim", "t5", "-s", sess, "-w", a)
 	mustCLI(t, base, "task", "done", "t5", "-s", sess)
 	held := "Task dispatch held for window " + a[:min(8, len(a))] + ": the board stopped: 3 failures in a row"
@@ -303,7 +288,6 @@ func TestATurnEndKeepsTheCard(t *testing.T) {
 	}
 	held := func(sess, card, w string) {
 		t.Helper()
-		// Dispatch reads the state off the sink: give it time to act.
 		deadline := time.Now().Add(3 * time.Second)
 		for time.Now().Before(deadline) {
 			holder, stage, raw := cardsOf(t, base, sess)
@@ -316,14 +300,13 @@ func TestATurnEndKeepsTheCard(t *testing.T) {
 		note("cards of %s after the turn end:\n%s", sess, raw)
 	}
 
-	// Pull: t1 dispatched by a finish, t2 waits as the next card.
 	mustCLI(t, base, "new", pull, "--detach")
 	waitForSessionInfo(t, base, pull)
 	a := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", pull, "agent-a", "--no-focus", "--print-id"))
 	mustCLI(t, base, "set-agent-state", "-s", pull, "-w", a, "working", "--harness", "claude-code", "-m", "on it")
-	mustCLI(t, base, "task", "add", "-s", pull, "-p", "warm up", "warm up")     // t1
-	mustCLI(t, base, "task", "add", "-s", pull, "-p", "step one", "first card") // t2
-	mustCLI(t, base, "task", "add", "-s", pull, "-p", "step two", "next card")  // t3
+	mustCLI(t, base, "task", "add", "-s", pull, "-p", "warm up", "warm up")
+	mustCLI(t, base, "task", "add", "-s", pull, "-p", "step one", "first card")
+	mustCLI(t, base, "task", "add", "-s", pull, "-p", "step two", "next card")
 	note("%s", mustCLI(t, base, "task", "dispatch", "mode", "pull", "-s", pull))
 	mustCLI(t, base, "task", "claim", "t1", "-s", pull, "-w", a)
 	if out := inPane(t, base, pull, a, "task done t1"); !strings.Contains(out, "EXIT=0") {
@@ -338,19 +321,16 @@ func TestATurnEndKeepsTheCard(t *testing.T) {
 		t.Fatalf("ASSERTION: a turn end gave agent a the next card t3:\n%s", raw)
 	}
 
-	// Auto: a card the person gave the agent by hand. Ask first keeps auto
-	// from starting an agent for it while it is open.
 	mustCLI(t, base, "new", auto, "--detach")
 	waitForSessionInfo(t, base, auto)
 	b := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", auto, "agent-b", "--no-focus", "--print-id"))
 	mustCLI(t, base, "set-agent-state", "-s", auto, "-w", b, "working", "--harness", "claude-code", "-m", "on it")
-	mustCLI(t, base, "task", "add", "-s", auto, "--ask-first", "-p", "by hand", "given by hand") // t1
+	mustCLI(t, base, "task", "add", "-s", auto, "--ask-first", "-p", "by hand", "given by hand")
 	mustCLI(t, base, "task", "claim", "t1", "-s", auto, "-w", b)
 	note("%s", mustCLI(t, base, "task", "dispatch", "mode", "auto", "--agent", "claude", "-s", auto))
 	stop(auto, b)
 	held(auto, "t1", b)
 
-	// The agent's own task done hands the card in and pulls the next.
 	if out := inPane(t, base, pull, a, "task done t2"); !strings.Contains(out, "EXIT=0") {
 		t.Fatalf("ASSERTION: tuios task done t2 in the agent's pane failed:\n%s", out)
 	}
@@ -411,13 +391,11 @@ func TestPullDispatchOffersAgainWhenTheSwitchesLift(t *testing.T) {
 		}
 	}
 
-	// An agent at rest with no card, when the board is set to pull.
 	note("%s", mustCLI(t, base, "task", "dispatch", "mode", "pull", "-s", sess))
 	_, _, raw := waitForCards(t, base, sess, "agent b, at rest with no card, was not offered t2 when the board was set to pull",
 		func(h, _ map[string]string) bool { return h["t2"] == b })
 	note("after the board was set to pull:\n%s", raw)
 
-	// A finish while paused, then resume.
 	note("%s", mustCLI(t, base, "task", "dispatch", "pause"))
 	finish(a, "t1", "dispatch is paused")
 	note("%s", mustCLI(t, base, "task", "dispatch", "resume"))
@@ -425,8 +403,6 @@ func TestPullDispatchOffersAgainWhenTheSwitchesLift(t *testing.T) {
 		func(h, _ map[string]string) bool { return h["t3"] == a })
 	note("after resume:\n%s", raw)
 
-	// A finish in quiet hours, then the quiet hours end. The span ends at
-	// the next minute.
 	if time.Now().Second() > 50 {
 		time.Sleep(time.Duration(61-time.Now().Second()) * time.Second)
 	}
@@ -447,8 +423,6 @@ func TestPullDispatchOffersAgainWhenTheSwitchesLift(t *testing.T) {
 		time.Sleep(500 * time.Millisecond)
 	}
 
-	// A card that comes free is offered to an agent at rest. a takes t5 on
-	// its finish; b finishes with no free card left and rests.
 	note("%s", mustCLI(t, base, "task", "dispatch", "quiet", "off"))
 	inPane(t, base, sess, a, "task done t3")
 	rest(a)
@@ -456,11 +430,10 @@ func TestPullDispatchOffersAgainWhenTheSwitchesLift(t *testing.T) {
 		func(h, _ map[string]string) bool { return h["t5"] == a })
 	inPane(t, base, sess, b, "task done t4")
 	rest(b)
-	mustCLI(t, base, "task", "add", "-s", sess, "-p", "step 6", "card 6") // t6
+	mustCLI(t, base, "task", "add", "-s", sess, "-p", "step 6", "card 6")
 	_, _, raw = waitForCards(t, base, sess, "agent b, at rest with no card, was not offered t6 when it was added",
 		func(h, _ map[string]string) bool { return h["t6"] == b })
 	note("after t6 was added:\n%s", raw)
-	// Each lets its card go: each is offered the other's, never its own.
 	inPane(t, base, sess, a, "task release t5")
 	inPane(t, base, sess, b, "task release t6")
 	holder, _, raw := waitForCards(t, base, sess, "the two released cards were not offered to the agents at rest",

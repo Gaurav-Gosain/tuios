@@ -20,37 +20,11 @@ import (
 	"tuios.dev/vt"
 )
 
-// These tests cover a pane's image on a host terminal that draws no graphics,
-// such as the Linux console under kmscon. tuios draws the picture there as
-// block glyphs, one glyph with two colours per image cell
-// (appearance.image_symbols).
-//
-// The check reads the picture back off the host's screen. Each image cell's
-// glyph is turned back into its shape, by geometry for the blocks of
-// U+2580..U+259F and by the Unicode numbering for sextants and octants, and
-// the shape's two colours are compared with the source picture averaged over
-// the same sub-cells. So the test fails if a glyph is the wrong shape, a
-// colour is wrong, or the picture is in the wrong place.
-//
-// How this could pass wrongly, written down first:
-//   - A flat colour per cell would match a smooth picture well. The picture
-//     has hard edges and a checker, and the glyphs must beat a flat cell by a
-//     margin on the cells that have an edge in them.
-//   - The cells read could be a different part of the picture. The origin is
-//     found from the line printed above the picture, not searched for.
-//   - The pane could be told no sixel, and the program print nothing. The
-//     pane's DA1 must list sixel, and image glyphs must be on screen.
-//   - Graphics could still be sent to the host. The host stream must hold no
-//     sixel, no kitty graphics and no marker text.
-
 const (
 	symPicCols = 40
 	symPicRows = 12
 )
 
-// symbolPicture is the test picture: sky, sun, hills, a red band and a
-// black and white checker, at cellW by cellH pixels a cell, quantised to a
-// fixed 252-colour cube so it fits in a sixel's registers.
 func symbolPicture() *vt.SixelImage {
 	w, h := symPicCols*cellW, symPicRows*cellH
 	img := &vt.SixelImage{Width: w, Height: h, Pix: make([]uint16, w*h), Palette: make([]color.RGBA, vt.SixelMaxRegisters)}
@@ -66,7 +40,6 @@ func symbolPicture() *vt.SixelImage {
 	for py := range h {
 		for px := range w {
 			x, y := float64(px)/float64(w), float64(py)/float64(h)
-			// Sky.
 			r, g, b := 40+140*y, 90+120*y, 200+55*y
 			switch {
 			case math.Hypot((x-0.75)*float64(w)/float64(h), y-0.3) < 0.16:
@@ -91,7 +64,6 @@ func symbolPicture() *vt.SixelImage {
 	return img
 }
 
-// writeSymbolPicture writes the picture as a sixel file.
 func writeSymbolPicture(t *testing.T, dir string) (*vt.SixelImage, string) {
 	t.Helper()
 	img := symbolPicture()
@@ -103,7 +75,6 @@ func writeSymbolPicture(t *testing.T, dir string) (*vt.SixelImage, string) {
 	return img, path
 }
 
-// glyphGrid is the sub-cell grid of each glyph set.
 func glyphGrid(kind string) (gx, gy int) {
 	switch kind {
 	case "half":
@@ -116,8 +87,6 @@ func glyphGrid(kind string) (gx, gy int) {
 	return 2, 4
 }
 
-// glyphLit reports whether the glyph r covers the point (fx, fy) of its
-// cell, both in [0,1). ok is false for a rune that is not a block glyph.
 func glyphLit(r rune, fx, fy float64) (lit, ok bool) {
 	left, top := fx < 0.5, fy < 0.5
 	switch r {
@@ -166,18 +135,11 @@ func glyphLit(r rune, fx, fy float64) (lit, ok bool) {
 	return mask&(1<<i) != 0, true
 }
 
-// symbolScore compares the host's cells with the picture, its top-left cell
-// at origin. Only rows from minY down are read: the pane's own rows. It
-// returns the mean error per channel over all sub-cells, the same for a flat
-// cell of the sub-cells' mean colour on the cells that have an edge, the
-// glyphs' error on those cells, and how many image cells were read.
 type symbolScore struct {
 	err, edgeErr, flatEdgeErr float64
-	// meanErr is the error of each cell's mean colour, which is what the
-	// eye sees from a distance and what dithering is for.
-	meanErr      float64
-	cells, edges int
-	bad          []string
+	meanErr                   float64
+	cells, edges              int
+	bad                       []string
 }
 
 func scoreSymbols(s tuitest.Screen, img *vt.SixelImage, origin image.Point, minY int, kind string) symbolScore {
@@ -199,8 +161,6 @@ func scoreSymbols(s tuitest.Screen, img *vt.SixelImage, origin image.Point, minY
 			}
 			fg, fgOK := rgbOf(cell.Fg)
 			bg, bgOK := rgbOf(cell.Bg)
-			// Expected sub-cell colours, a plain sRGB average of the
-			// picture's pixels under each.
 			want := make([][3]float64, 0, gx*gy)
 			var lits []bool
 			for sy := range gy {
@@ -248,7 +208,6 @@ func scoreSymbols(s tuitest.Screen, img *vt.SixelImage, origin image.Point, minY
 					got, ok = fg, fgOK
 				}
 				if !ok {
-					// A default colour where the picture is opaque.
 					got = [3]float64{-255, -255, -255}
 				}
 				for ch := range 3 {
@@ -291,9 +250,6 @@ func rgbOf(c tuitest.Color) ([3]float64, bool) {
 	return [3]float64{}, false
 }
 
-// imageGlyphCells counts the cells in rows [y0, y1) that hold a glyph only
-// the image draws with: a sextant, an octant, or a quadrant other than the
-// halves the chrome uses.
 func imageGlyphCells(s tuitest.Screen, y0, y1 int) int {
 	cols, _ := s.Size()
 	n := 0
@@ -311,20 +267,14 @@ func imageGlyphCells(s tuitest.Screen, y0, y1 int) int {
 	return n
 }
 
-// startSymbolPane boots tuios on a host without graphics, with
-// appearance.image_symbols set to kind ("" leaves the default) and COLORTERM
-// set to colorterm, and opens a pane at a shell prompt.
 func startSymbolPane(t *testing.T, host *sixelHost, kind, colorterm string, daemon bool, extra ...string) (*tuitest.Terminal, string) {
 	t.Helper()
 	return startSymbolPaneWith(t, host, symbolConfig{kind: kind, daemon: daemon}, colorterm, extra...)
 }
 
-// symbolConfig is the config a symbol pane boots with.
 type symbolConfig struct {
-	kind   string
-	daemon bool
-	// appearance is more lines for the [appearance] section, and tiled
-	// turns startup.tiled on.
+	kind       string
+	daemon     bool
 	appearance string
 	tiled      bool
 }
@@ -341,8 +291,6 @@ func startSymbolPaneWith(t *testing.T, host *sixelHost, cfg symbolConfig, colort
 		body += cfg.appearance
 		startup := ""
 		if cfg.daemon {
-			// A config of its own has no startup.daemon, which the
-			// first-run file turns on.
 			startup += "daemon = true\n"
 		}
 		if cfg.tiled {
@@ -374,8 +322,6 @@ func startSymbolPaneWith(t *testing.T, host *sixelHost, cfg symbolConfig, colort
 // The PNGs under artifactDir are the host's frames drawn through
 // tuios.dev/shot, which draws every glyph set itself.
 func TestImageSymbolsOnAHostWithoutGraphics(t *testing.T) {
-	// The ceilings are mean error per channel, out of 255. Measured: see
-	// the log line each run prints.
 	for _, tc := range []struct {
 		kind      string
 		daemon    bool
@@ -388,11 +334,7 @@ func TestImageSymbolsOnAHostWithoutGraphics(t *testing.T) {
 		{"quadrant", false, "truecolor", 10, nil},
 		{"half", false, "truecolor", 10, nil},
 		{"octant", true, "truecolor", 10, nil},
-		// A host with 256 colours. The palette's own gaps dominate the
-		// error (the cube has no level between 0 and 95), so the ceiling
-		// is higher and the shapes are not compared with a flat cell.
 		{"octant", false, "", 35, nil},
-		// What kmscon 10 sets: TERM=kmscon, COLORTERM=truecolor.
 		{"octant", false, "truecolor", 10, []string{"TERM=kmscon"}},
 	} {
 		name := tc.kind + map[bool]string{false: "-standalone", true: "-daemon"}[tc.daemon]
@@ -442,9 +384,6 @@ func TestImageSymbolsOnAHostWithoutGraphics(t *testing.T) {
 				t.Errorf("an image marker reached the host as text")
 			}
 
-			// Scroll the picture up by printing lines under it, until its
-			// top rows have left the pane. Where it went is read from the
-			// SHOWN line, which sits a fixed distance under it.
 			_, rows := term.Screen().Size()
 			shownAt := func(s tuitest.Screen) int {
 				at := -1
@@ -459,7 +398,6 @@ func TestImageSymbolsOnAHostWithoutGraphics(t *testing.T) {
 			if gap != symPicRows+1 {
 				t.Fatalf("SHOWN is %d rows under the picture's top, want %d\n%s", gap, symPicRows+1, term.Screen().Text())
 			}
-			// The pane's last row is the one above its bottom border.
 			paneBottom := rows - 1
 			for y := origin.Y; y < rows; y++ {
 				if c := term.Screen().Cell(origin.X-1, y).Content; c == "╰" || c == "└" {
@@ -467,7 +405,6 @@ func TestImageSymbolsOnAHostWithoutGraphics(t *testing.T) {
 					break
 				}
 			}
-			// Enough lines to fill the pane under the prompt, and five more.
 			typeLine(t, term, fmt.Sprintf("for i in $(seq 1 %d); do echo L$i; done; echo SC''ROLLED", paneBottom-(origin.Y+gap+1)+5))
 			if err := term.WaitForText("SCROLLED", shellTimeout); err != nil {
 				t.Fatalf("the lines did not print: %v", err)
@@ -493,7 +430,6 @@ func TestImageSymbolsOnAHostWithoutGraphics(t *testing.T) {
 			}
 			savePNG(t, s, shot.XTermPalette(), artifactDir(t), "scrolled")
 
-			// Positive half of the clear check: show it again, then clear.
 			typeLine(t, term, "clear; cat "+path+"; echo; echo AG''AIN")
 			if err := term.WaitForText("AGAIN", shellTimeout); err != nil {
 				t.Fatalf("the picture did not print again: %v", err)
@@ -510,7 +446,6 @@ func TestImageSymbolsOnAHostWithoutGraphics(t *testing.T) {
 				t.Errorf("%d image cells left after clear\n%s", n, term.Screen().Text())
 			}
 			if tc.kind == "half" {
-				// Half blocks are also chrome glyphs; check the colours.
 				if sc := scoreSymbols(term.Screen(), img, origin, paneTop, tc.kind); sc.err < 2*tc.ceiling {
 					t.Errorf("the picture is still on screen after clear (error %.1f)", sc.err)
 				}
@@ -585,8 +520,6 @@ func TestImageSymbolsWithChafa(t *testing.T) {
 					t.Errorf("chafa did not draw through tuios's octants (%d glyph cells)\n%s", n, s.Text())
 				}
 			case "off":
-				// The frame is chafa's own text, kept to set beside
-				// tuios's: it may use octants too, so it is not checked.
 				if len(registered) > 0 {
 					t.Errorf("the pane got a sixel image with image_symbols off: %q", registered)
 				}
@@ -595,8 +528,6 @@ func TestImageSymbolsWithChafa(t *testing.T) {
 	}
 }
 
-// tuiosDebugLog is the log TUIOS_DEBUG_INTERNAL=1 writes (debuglog.Path). Its
-// name is fixed, so a test reads only what was added after it started.
 const tuiosDebugLog = "/tmp/tuios-debug.log"
 
 func debugLogSize() int64 {
@@ -619,7 +550,6 @@ func debugLogSince(t *testing.T, from int64) string {
 	return string(raw[from:])
 }
 
-// registerLines are the passthrough's records of the sixel images panes drew.
 func registerLines(log string) []string {
 	var out []string
 	for l := range strings.SplitSeq(log, "\n") {
@@ -652,8 +582,6 @@ func TestImageSymbolsAreShaded(t *testing.T) {
 		name string
 		cfg  symbolConfig
 	}{
-		// Tiled, so the pane fills the screen and the picture sits left of
-		// the palette, which is drawn in the middle.
 		{"modal", symbolConfig{kind: "octant", tiled: true, appearance: "modal_dim = 30\n"}},
 		{"unfocused", symbolConfig{kind: "octant", tiled: true, appearance: "theme = \"catppuccin_mocha\"\ndim_unfocused = 40\n"}},
 	} {
@@ -682,9 +610,6 @@ func TestImageSymbolsAreShaded(t *testing.T) {
 				}
 				waitPaletteOpen(t, term, "over the picture")
 			case "unfocused":
-				// A second pane takes the focus. With tiling on, the
-				// first pane narrows and the picture moves, so the
-				// picture's cells are compared where it is in each read.
 				newWindow(t, term)
 			}
 			if err := term.WaitStable(uiTimeout); err != nil {
@@ -697,8 +622,6 @@ func TestImageSymbolsAreShaded(t *testing.T) {
 				skip = image.Rect(p.left, p.titleRow-1, p.right, paletteBottom(after, p)+1)
 			}
 
-			// The palette may cover the line above the picture; the
-			// picture does not move under it.
 			from := symbolOriginIn(t, before)
 			to := from
 			if tc.name == "unfocused" {
@@ -727,8 +650,6 @@ func TestImageSymbolsAreShaded(t *testing.T) {
 					}
 				}
 			}
-			// The shade's positive half: the pane's border, which is
-			// chrome and not picture, is darker too, so the shade was on.
 			if was, ok1 := rgbOf(before.Cell(0, from.Y).Fg); ok1 {
 				now, ok2 := rgbOf(after.Cell(0, from.Y).Fg)
 				if tc.name == "modal" && (!ok2 || rgbLuma(now) >= 0.9*rgbLuma(was)) {
@@ -749,8 +670,6 @@ func TestImageSymbolsAreShaded(t *testing.T) {
 	}
 }
 
-// symbolOriginIn finds the picture's top-left cell on s: the start of the
-// row under the line that reads IMGTOP.
 func symbolOriginIn(t *testing.T, s tuitest.Screen) image.Point {
 	t.Helper()
 	_, rows := s.Size()
@@ -767,22 +686,13 @@ func symbolOriginIn(t *testing.T, s tuitest.Screen) image.Point {
 	return image.Point{}
 }
 
-// rgbLuma is a colour's luma on the 0 to 255 scale.
 func rgbLuma(c [3]float64) float64 { return 0.299*c[0] + 0.587*c[1] + 0.114*c[2] }
 
-// vgaPalette is the Linux console's default palette, which the sixteen-colour
-// cells are chosen against.
 var vgaPalette = [16][3]float64{
 	{0, 0, 0}, {170, 0, 0}, {0, 170, 0}, {170, 85, 0}, {0, 0, 170}, {170, 0, 170}, {0, 170, 170}, {170, 170, 170},
 	{85, 85, 85}, {255, 85, 85}, {85, 255, 85}, {255, 255, 85}, {85, 85, 255}, {255, 85, 255}, {85, 255, 255}, {255, 255, 255},
 }
 
-// scoreANSI16 checks the picture drawn at sixteen colours with half blocks:
-// every image cell holds a half-block glyph, every colour is an ANSI index,
-// and no background is bright (the Linux console gives bright backgrounds to
-// blink). It returns the correlation between the picture's lightness and the
-// cells' lightness over 2x2-cell blocks, with the cells read in the VGA
-// palette, and the problems found.
 func scoreANSI16(s tuitest.Screen, img *vt.SixelImage, origin image.Point) (float64, []string) {
 	var bad []string
 	luma := func(c [3]float64) float64 { return (0.299*c[0] + 0.587*c[1] + 0.114*c[2]) / 255 }
@@ -861,8 +771,6 @@ func scoreANSI16(s tuitest.Screen, img *vt.SixelImage, origin image.Point) (floa
 	return ab / math.Sqrt(aa*bb), bad
 }
 
-// planeOneGlyphs counts the image cells that hold a sextant or octant, the
-// glyphs only those two sets use.
 func planeOneGlyphs(s tuitest.Screen, origin image.Point) (sextants, octants int) {
 	for r := range symPicRows {
 		for c := range symPicCols {
@@ -894,8 +802,6 @@ func TestImageSymbolsAutoPicksByTerminal(t *testing.T) {
 	}{
 		{"kmscon", "kmscon", "truecolor", false},
 		{"linux", "linux", "", false},
-		// The kernel console with COLORTERM set: still half blocks, the
-		// font has nothing finer, but in 24-bit colour.
 		{"linux-truecolor", "linux", "truecolor", false},
 		{"other", "xterm-256color", "truecolor", false},
 		{"kmscon-with-sixel", "kmscon", "truecolor", true},
@@ -904,8 +810,6 @@ func TestImageSymbolsAutoPicksByTerminal(t *testing.T) {
 			host := newSixelHost(tc.sixel, false)
 			env := []string{"TERM=" + tc.term}
 			if tc.sixel {
-				// startSymbolPane pins the host to no graphics; this
-				// row says sixel instead.
 				env = append(env, "TUIOS_SIXEL_GRAPHICS=1")
 			}
 			term, _ := startSymbolPane(t, host, "", tc.colorterm, false, env...)
@@ -1023,8 +927,6 @@ func TestImageSymbolsFlood(t *testing.T) {
 	}
 }
 
-// floodPicture is a picture of cols by rows cells with an edge in most
-// cells, so most of them draw as octants.
 func floodPicture(cols, rows int) *vt.SixelImage {
 	w, h := cols*cellW, rows*cellH
 	img := &vt.SixelImage{Width: w, Height: h, Pix: make([]uint16, w*h), Palette: []color.RGBA{{230, 60, 40, 255}, {30, 80, 200, 255}}}
@@ -1127,7 +1029,6 @@ func TestImageSymbolsKeepAPictureOnScreen(t *testing.T) {
 	}
 }
 
-// waitHostQuiet waits until tuios has sent the host nothing for quiet.
 func waitHostQuiet(t *testing.T, host *sixelHost, quiet, timeout time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)

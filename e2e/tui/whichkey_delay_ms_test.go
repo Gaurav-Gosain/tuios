@@ -19,8 +19,8 @@ import (
 func TestWhichKeyDelayIsAnOption(t *testing.T) {
 	for _, tc := range []struct {
 		name, config string
-		upBy         time.Duration // the panel is up by then
-		notBefore    time.Duration // and is not up at this point; 0 for no check
+		upBy         time.Duration
+		notBefore    time.Duration
 	}{
 		{"default", "", 1500 * time.Millisecond, 0},
 		{"2500 ms", "[appearance]\nwhichkey_delay_ms = 2500\n", 6 * time.Second, 1500 * time.Millisecond},

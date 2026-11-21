@@ -7,9 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// dockPillRow finds the dock row carrying the workspace strip and returns the
-// row plus its text, by looking for the named pills rather than by computing
-// where the dock is: the strip's own geometry is the thing under test.
 func dockPillRow(t *testing.T, term *tuitest.Terminal, names ...string) (row int, line string) {
 	t.Helper()
 	s := term.Screen()
@@ -31,14 +28,6 @@ func dockPillRow(t *testing.T, term *tuitest.Terminal, names ...string) (row int
 	return 0, ""
 }
 
-// pillColumn is the screen column a pill's label starts at.
-//
-// It counts runes rather than bytes. The dock strip is drawn out of powerline
-// caps and Nerd Font glyphs, every one of them three bytes and one cell, so a
-// byte offset used as a column lands most of a pill to the left of where it
-// meant to and a drag aimed with one picks up a different pill than the one
-// being read on screen. That mistake made this test report a working reorder as
-// a broken one.
 func pillColumn(line, needle string) int {
 	b := strings.Index(line, needle)
 	if b < 0 {
@@ -47,7 +36,6 @@ func pillColumn(line, needle string) int {
 	return len([]rune(line[:b]))
 }
 
-// pillOrder is the left-to-right sequence the named pills appear in on one row.
 func pillOrder(line string, names ...string) []string {
 	type at struct {
 		name string
@@ -100,13 +88,6 @@ func TestDockWorkspacePillsDragIntoANewOrder(t *testing.T) {
 		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
 	}
 
-	// Three occupied workspaces, named so the pills can be told apart on screen.
-	//
-	// switchWorkspace rather than the keys on their own: it waits for the dock
-	// to report the workspace it landed on. newWindow takes its baseline count
-	// off that same dock, so reading it while the previous workspace's count was
-	// still on screen left it waiting for a number the new workspace never
-	// reaches.
 	for _, ws := range []string{"2", "3"} {
 		switchWorkspace(t, term, ws, 0)
 		newWindow(t, term)
@@ -127,8 +108,6 @@ func TestDockWorkspacePillsDragIntoANewOrder(t *testing.T) {
 		t.Fatalf("the strip started in order %v, want EDIT REVW DPLY\n%s", got, term.Snapshot())
 	}
 
-	// Drag the first pill onto the third. Every cell between is reported, which
-	// is what turns the press into a drag rather than a click.
 	from := pillColumn(line, "EDIT") + 1
 	to := pillColumn(line, "DPLY") + 1
 	mouseDrag(t, term, from, row, to, row, tuitest.MouseLeft, 0)
@@ -150,9 +129,6 @@ func TestDockWorkspacePillsDragIntoANewOrder(t *testing.T) {
 			pillOrder(after, "EDIT", "REVW", "DPLY"), err, term.Snapshot())
 	}
 
-	// A workspace's number is its position, so the drag renumbered all three:
-	// EDIT, dragged to the end, is workspace 3, and the two it passed moved up
-	// one. No display order is left beside the numbering.
 	out, err := tuiosCLI(t, base, "session-info", "--session", "work")
 	if err != nil {
 		t.Fatalf("session-info: %v: %s", err, out)

@@ -62,13 +62,7 @@ func TestNvimNavigationOSCNeedsForwardedKey(t *testing.T) {
 		t.Fatalf("active pane moved focus from %s to %s without a forwarded key", before, after)
 	}
 
-	// With the key forwarded, the pane's reply moves focus. A shell plays the
-	// plugin: it reads the forwarded key and answers with the focus request.
-	// The key it read is kept, because tuios moving focus on the key itself
-	// would also pass the focus check below.
 	keyFile := filepath.Join(base, "nav-key")
-	// The marker is printed once the terminal is raw, so the key cannot
-	// arrive while the line discipline would still hold it.
 	if err := term.SendKeys(`stty raw -echo; printf 'NAV-%s-READY\r\n' $((3*7)); dd bs=64 count=1 of=`+keyFile+` 2>/dev/null; printf '\033]7777;tuios-nvim-navigator;focus;left\007'; stty sane`, tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}
@@ -137,8 +131,6 @@ func TestNvimNavigationUpDownUnderOlderNames(t *testing.T) {
 
 	keyFile := filepath.Join(base, "nav-key")
 	osc := func(body string) string { return `printf '\033]7777;tuios-nvim-navigator;` + body + `\007'` }
-	// The marker is printed once the terminal is raw, so the key cannot
-	// arrive while the line discipline would still hold it.
 	line := osc("state;active") + `; stty raw -echo; printf 'NAV-%s-READY\r\n' $((3*7)); dd bs=64 count=1 of=` + keyFile +
 		` 2>/dev/null; ` + osc("focus;"+dir) + `; stty sane`
 	if err := term.SendKeys(line, tuitest.Enter); err != nil {

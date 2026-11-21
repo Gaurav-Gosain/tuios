@@ -7,17 +7,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// hoverLagConfig draws at 240 frames a second. A frame of the settings panel
-// on a 400x100 screen takes longer to compose than that period on any machine
-// this suite runs on, which is the state the reporter of issue #1058 was in:
-// a wide screen, a panel up, and a frame that costs more than the frame rate
-// allows.
 const hoverLagConfig = "[appearance]\nmax_fps = 240\n"
 
-// hoverLagBudget is how long after the last motion report the row under the
-// pointer has to be the highlighted one. A build that draws one frame per
-// queued report trailed the pointer by six to twelve seconds here, and a build
-// that drains the queue between frames by tens of milliseconds.
 const hoverLagBudget = 1500 * time.Millisecond
 
 // TestSettingsHoverKeepsUpWithThePointer sweeps the pointer up and down the
@@ -62,7 +53,6 @@ func TestSettingsHoverKeepsUpWithThePointer(t *testing.T) {
 		}
 	}
 
-	// The sweep: rows top to bottom-1 and back, never bottom itself.
 	span := bottom - 1 - top
 	start := time.Now()
 	for i := 0; time.Since(start) < 3*time.Second; i++ {

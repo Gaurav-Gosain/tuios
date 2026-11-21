@@ -12,24 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The workspace on screen loses its last pane, and the session goes back to
-// the workspace the person came from (discussion #273). The report: run
-// tuios xpanes, press Enter in every pane, and land on the splash screen.
-//
-// How these could pass wrongly, written down first:
-//   - The daemon could switch and the client not follow. Each test reads the
-//     client's own screen for a line that only the workspace gone back to
-//     holds, as well as the daemon's current workspace.
-//   - The line could be on screen before anything closed. Each test checks
-//     that it is gone while the xpanes workspace shows.
-//   - The panes could not be gone yet. Each test waits for the workspace to
-//     hold no pane before it reads where the session is.
-//   - A second client could stay behind. The -s test attaches one, and both
-//     must show the line.
-//   - The switch could happen with the setting off. The test with
-//     return_when_empty = false must stay on the empty workspace.
-
-// currentWorkspace is the workspace the daemon says session sess shows.
 func currentWorkspace(t *testing.T, base, sess string) int {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-workspaces", "--json", "--session", sess)
@@ -45,7 +27,6 @@ func currentWorkspace(t *testing.T, base, sess string) int {
 	return res.Current
 }
 
-// panesOn counts the panes of session sess on workspace ws.
 func panesOn(t *testing.T, base, sess string, ws int) int {
 	t.Helper()
 	n := 0
@@ -57,7 +38,6 @@ func panesOn(t *testing.T, base, sess string, ws int) int {
 	return n
 }
 
-// waitPanesOn waits for workspace ws of session sess to hold n panes.
 func waitPanesOn(t *testing.T, term *tuitest.Terminal, base, sess string, ws, n int, what string) {
 	t.Helper()
 	deadline := time.Now().Add(shellTimeout)
@@ -69,8 +49,6 @@ func waitPanesOn(t *testing.T, term *tuitest.Terminal, base, sess string, ws, n 
 	}
 }
 
-// waitShowing waits for the daemon to say session sess shows ws, and for
-// every client to draw text.
 func waitShowing(t *testing.T, base, sess string, ws int, text string, clients ...*tuitest.Terminal) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -87,10 +65,6 @@ func waitShowing(t *testing.T, base, sess string, ws int, text string, clients .
 	}
 }
 
-// waitXpanesDone waits for the file a test's xpanes line touches once
-// tuios xpanes has returned. xpanes returns after the attached client has
-// answered each command it routed, the last focus-window included, so no
-// routed command from it can reach the client after this.
 func waitXpanesDone(t *testing.T, term *tuitest.Terminal, done string) {
 	t.Helper()
 	deadline := time.Now().Add(shellTimeout)
@@ -105,8 +79,6 @@ func waitXpanesDone(t *testing.T, term *tuitest.Terminal, done string) {
 	}
 }
 
-// startHome starts a client on a new session with one shell on workspace 1,
-// which prints HOME-42.
 func startHome(t *testing.T, base, sess string) *tuitest.Terminal {
 	t.Helper()
 	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", sess}})
@@ -154,20 +126,12 @@ func TestEmptyWorkspaceReturnsAfterXpanesSpeedy(t *testing.T) {
 			t.Fatalf("client %d does not show the three held panes: %v\n%s", i+1, err, c.Snapshot())
 		}
 	}
-	// In speedy mode a pane can be held before xpanes turns multifocus on, and
-	// the Enter below reaches all three panes only once it is on. The two
-	// panes without the focus then wear the multifocus border.
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return multifocusCorners(s) >= 2 }, uiTimeout); err != nil {
 		t.Fatalf("multifocus never showed on the held panes: %v\n%s", err, term.Snapshot())
 	}
 
-	// xpanes focuses the first pane last, through the client. Its
-	// "Remote: FocusWindow" notice is the newest in the dock when it lands, so
-	// one that lands after Alt+Esc covers "Window management mode" before
-	// leaveTerminalMode reads it. Wait for xpanes to return first.
 	waitXpanesDone(t, term, done)
 
-	// The client is still in terminal mode from typing the xpanes line.
 	leaveTerminalMode(t, term)
 	enterTerminalMode(t, term)
 	if err := term.SendKeys(tuitest.Enter); err != nil {
@@ -192,7 +156,6 @@ func TestEmptyWorkspaceStaysWhenTheSettingIsOff(t *testing.T) {
 	}
 	waitPanesOn(t, term, base, "ew", 2, 3, "the -ss panes open")
 	waitPanesOn(t, term, base, "ew", 2, 0, "the -ss panes close")
-	// Give a switch the time it would take, then check that none came.
 	time.Sleep(time.Second)
 	if ws := currentWorkspace(t, base, "ew"); ws != 2 {
 		t.Fatalf("the session went to workspace %d with return_when_empty off, want 2\n%s", ws, term.Snapshot())
@@ -228,14 +191,12 @@ func TestEmptyWorkspaceWalksBackAChain(t *testing.T) {
 		t.Fatalf("the session shows workspace %d, want 3", ws)
 	}
 
-	// The shell on workspace 3 exits.
 	if err := term.SendKeys("exit", tuitest.Enter); err != nil {
 		t.Fatalf("type exit: %v", err)
 	}
 	waitPanesOn(t, term, base, "ew", 3, 0, "the shell on workspace 3 exits")
 	waitShowing(t, base, "ew", 2, "TWO-42", term)
 
-	// close-workspace empties workspace 2.
 	if out, err := tuiosCLI(t, base, "close-workspace", "--session", "ew", "2"); err != nil {
 		t.Fatalf("close-workspace 2: %v\n%s", err, out)
 	}
@@ -272,17 +233,12 @@ func TestEmptyWorkspaceReturnsWhereXpanesRan(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "close-workspace", "--session", "ew", "2"); err != nil {
 		t.Fatalf("close-workspace 2: %v\n%s", err, out)
 	}
-	// Workspace 2 goes, and the pane on 3 moves down to it: a workspace's
-	// number is its position.
 	waitPanesOn(t, term, base, "ew", 3, 0, "close-workspace 2")
 	waitPanesOn(t, term, base, "ew", 2, 1, "the pane from workspace 3 after close-workspace 2")
 	waitShowing(t, base, "ew", 1, "HOME-42", term)
 	alive(t, term, "after the return")
 }
 
-// multifocusCorners counts the panes whose top left corner wears the
-// multifocus border: ANSI colour 3, which theme.BorderMultifocus gives with no
-// theme set. The focused pane keeps its focus colour, multifocus or not.
 func multifocusCorners(s tuitest.Screen) int {
 	w, h := s.Size()
 	n := 0

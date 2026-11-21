@@ -10,7 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// railHeaderRow is the row of the rail whose first word is label, or -1.
 func railHeaderRow(s tuitest.Screen, label string) int {
 	_, rows := s.Size()
 	for r := range rows {
@@ -21,18 +20,11 @@ func railHeaderRow(s tuitest.Screen, label string) int {
 	return -1
 }
 
-// railRowText is a rail row's text without the focus mark, the edge rule or
-// the padding.
 func railRowText(s tuitest.Screen, row int) string {
 	line := strings.TrimSuffix(strings.TrimRight(railLine(s, row), " "), "│")
 	return strings.TrimSpace(strings.TrimPrefix(line, "▎"))
 }
 
-// railGitOneLineConfig squeezes the git section to one line for its two rows.
-// The custom section's share takes all but one of the lines the rail has, git
-// keeps its floor of two, the sessions section takes its one row back from
-// the shares, and the rail gives back the line it is then short from the last
-// share first, which is git's.
 const railGitOneLineConfig = `[appearance.sidebar]
 enabled = true
 position = "left"
@@ -42,8 +34,6 @@ sections = "sessions,custom:99,git:1"
 command = "i=1; while [ $i -le 70 ]; do printf 'FEED-%02d\\n' \"$i\"; i=$((i+1)); done"
 `
 
-// railGitOneLine attaches a client with the git section on one line and the
-// focused pane in a repository on a branch the test names.
 func railGitOneLine(t *testing.T, branch string) *tuitest.Terminal {
 	t.Helper()
 	term, base := railClient(t, "gitline", railGitOneLineConfig, startOpts{cols: 120, rows: 40})

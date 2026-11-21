@@ -7,16 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Some built-in themes name no cursor colour. The theme package handed that
-// nil *tint.Color out as a color.Color, which is an interface that is not nil,
-// so a nil check passed and the RGBA call on it panicked. Found in the sweep
-// for issue #374, which was the same typed nil around the verb client.
-//
-// horizon is one of those themes. The cursor stays unset: the browser and the
-// emulator each have their own default for it. dracula names a cursor colour,
-// and is the positive half: the same steps pass with it on a build with the
-// bug.
-
 // TestOSC12QueryUnderAThemeWithNoCursorColour asks for the cursor colour from
 // a pane. The emulator answered from the theme's nil cursor and the client
 // died with SIGSEGV.
@@ -28,8 +18,6 @@ func TestOSC12QueryUnderAThemeWithNoCursorColour(t *testing.T) {
 			waitBoot(t, term)
 			newWindow(t, term)
 			enterTerminalMode(t, term)
-			// The marker is printed by the shell after the query, so it is on
-			// screen only when the emulator survived the answer.
 			cmd := `printf '\033]12;?\007'; sleep 0.3; echo OSC12-$((40+2))-DONE`
 			if err := term.SendKeys(cmd, tuitest.Enter); err != nil {
 				t.Fatal(err)
@@ -56,7 +44,6 @@ func TestListThemesDescribesAThemeWithNoCursorColour(t *testing.T) {
 		if err != nil {
 			t.Fatalf("list-themes %s failed: %v\n%s", th, err, out)
 		}
-		// horizon leaves the cursor unset, so only the fg row is certain.
 		if !strings.Contains(out, "fg ") {
 			t.Fatalf("list-themes %s printed no fg row:\n%s", th, out)
 		}

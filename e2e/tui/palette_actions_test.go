@@ -64,8 +64,6 @@ func TestAPaletteRowIsAnActionAKeyCanRun(t *testing.T) {
 	alive(t, term, "after the theme picker from a key and from the palette")
 }
 
-// pickerShown reports whether the theme picker is on screen, by the list
-// heading it draws.
 func pickerShown(s tuitest.Screen) bool {
 	return strings.Contains(s.Text(), "themes")
 }

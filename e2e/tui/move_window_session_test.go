@@ -93,9 +93,6 @@ func TestMoveWindowToSession(t *testing.T) {
 		return res
 	}
 
-	// The program prints a marker once, then answers every line it reads.
-	// It is one process for its whole life, so its pid says whether it was
-	// started again.
 	created := must("new-window", map[string]any{
 		"session": "alpha",
 		"name":    "mover",
@@ -141,8 +138,6 @@ func TestMoveWindowToSession(t *testing.T) {
 	must("set-agent-state", map[string]any{"session": "alpha", "window": win, "state": "needs_input", "message": "approve the move"})
 	must("set-agent-meta", map[string]any{"session": "alpha", "window": win, "tokens": map[string]any{"model": "move-model"}})
 
-	// A real client on each session. The source's draws the marker now, so
-	// its absence after the move means the move took it away.
 	alpha := attachIn(t, base, "alpha", startOpts{})
 	waitForAll(t, alpha, 20*time.Second, "the source client to draw the pane", "MOVED-PANE-MARK")
 	beta := attachIn(t, base, "beta", startOpts{})
@@ -150,7 +145,6 @@ func TestMoveWindowToSession(t *testing.T) {
 		t.Fatalf("ASSERTION: the destination client draws the pane before the move:\n%s", beta.Snapshot())
 	}
 
-	// Refusals first, on the window as it is.
 	if res, err := call("move-window", map[string]any{"session": "alpha", "window": win, "to_session": "alpha"}); err == nil || errCode(res) != "same_session" {
 		t.Fatalf("ASSERTION: a move to the window's own session = %v (err %v), want same_session", res, err)
 	}
@@ -161,8 +155,6 @@ func TestMoveWindowToSession(t *testing.T) {
 		t.Fatal("ASSERTION: a refused move took the window out of alpha")
 	}
 
-	// The move, by the verb. Both clients are watched from before the call,
-	// because the notice they show lasts two seconds.
 	alphaNote := watchMoveNotice(alpha, "alpha-notice-move", "Moved mover to the session beta.", "Window closed")
 	betaNote := watchMoveNotice(beta, "beta-notice-move", "Moved mover here from the session alpha.", "Window created")
 	moved := must("move-window", map[string]any{"session": "alpha", "window": win, "to_session": "beta", "follow": true})
@@ -192,15 +184,12 @@ func TestMoveWindowToSession(t *testing.T) {
 		t.Fatalf("ASSERTION: the agent metadata did not move with the pane: %s", meta)
 	}
 
-	// The output from before the move, and the same process answering a
-	// line typed into the destination.
 	waitMoveCapture(t, call, "beta", win, "MOVED-PANE-MARK")
 	if _, err := call("send-text", map[string]any{"session": "beta", "window": win, "text": "ping\n"}); err != nil {
 		t.Fatalf("ASSERTION: the destination cannot type into the moved pane: %v", err)
 	}
 	waitMoveCapture(t, call, "beta", win, "got-ping "+pid)
 
-	// Both clients follow.
 	waitForAll(t, beta, 20*time.Second, "the destination client to draw the moved pane", "MOVED-PANE-MARK", "got-ping")
 	if err := alpha.WaitFor(func(s tuitest.Screen) bool { return !screenHas(s, "MOVED-PANE-MARK") }, 20*time.Second); err != nil {
 		t.Fatalf("ASSERTION: the source client still draws the moved pane:\n%s", alpha.Snapshot())
@@ -208,7 +197,6 @@ func TestMoveWindowToSession(t *testing.T) {
 	art.frame(t, beta, "beta-after-move")
 	art.frame(t, alpha, "alpha-after-move")
 
-	// A hook in the pane still says alpha in TUIOS_SESSION.
 	if _, err := call("set-agent-state", map[string]any{"session": "alpha", "window": win, "state": "working"}); err != nil {
 		t.Fatalf("ASSERTION: a report naming the old session did not reach the moved pane: %v", err)
 	}
@@ -216,7 +204,6 @@ func TestMoveWindowToSession(t *testing.T) {
 		t.Fatalf("ASSERTION: the report naming the old session did not land in beta: %v", r)
 	}
 
-	// The CLI moves it back.
 	alphaNote = watchMoveNotice(alpha, "alpha-notice-cli-move", "Moved mover here from the session beta.", "Window created")
 	betaNote = watchMoveNotice(beta, "beta-notice-cli-move", "Moved mover to the session alpha.", "Window closed")
 	out, err := tuiosCLI(t, base, "move-window", "-s", "beta", "-w", win, "--to-session", "alpha", "--follow")
@@ -236,18 +223,11 @@ func TestMoveWindowToSession(t *testing.T) {
 	if _, err := call("send-text", map[string]any{"session": "alpha", "window": win, "text": "back\n"}); err != nil {
 		t.Fatalf("send-text after the CLI move: %v", err)
 	}
-	// The same pid: the CLI move did not start the program again.
 	waitMoveCapture(t, call, "alpha", win, "got-back "+pid)
 	waitForAll(t, alpha, 20*time.Second, "the source client to draw the pane again", "MOVED-PANE-MARK", "got-back")
 	art.frame(t, alpha, "alpha-after-cli-move")
 }
 
-// watchMoveNotice watches term until it shows want, and reports on the
-// channel what went wrong: "" when want showed and no deny text showed
-// before it. It runs in its own goroutine, so a watch on each client starts
-// before the move and neither misses a notice while the other is read. The
-// screen that showed want is saved as TestMoveWindowToSession-<frame>.txt
-// under $TUIOS_E2E_FRAMES.
 func watchMoveNotice(term *tuitest.Terminal, frame, want string, deny ...string) <-chan string {
 	ch := make(chan string, 1)
 	go func() {
@@ -281,7 +261,6 @@ func watchMoveNotice(term *tuitest.Terminal, frame, want string, deny ...string)
 	return ch
 }
 
-// waitMoveCapture waits until the pane's capture holds want, and returns it.
 func waitMoveCapture(t *testing.T, call func(string, map[string]any) (map[string]any, error), session, window, want string) string {
 	t.Helper()
 	var content string
@@ -298,14 +277,12 @@ func waitMoveCapture(t *testing.T, call func(string, map[string]any) (map[string
 	return content
 }
 
-// errCode is the error code of a verb reply printed by tuios call.
 func errCode(res map[string]any) string {
 	e, _ := res["error"].(map[string]any)
 	s, _ := e["code"].(string)
 	return s
 }
 
-// moveArtifact is the record TestMoveWindowToSession leaves behind.
 type moveArtifact struct {
 	Calls []moveCall `json:"calls"`
 }
@@ -344,9 +321,6 @@ func (a *moveArtifact) save(t *testing.T) {
 	t.Logf("artifact: %s", path)
 }
 
-// moveSetup makes the sessions alpha and beta in a fresh daemon, and a shell
-// window named name in alpha. It returns the base dir, a verb caller and the
-// window's id.
 func moveSetup(t *testing.T, art *moveArtifact, name string) (string, func(string, map[string]any) map[string]any, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -376,7 +350,6 @@ func moveSetup(t *testing.T, art *moveArtifact, name string) (string, func(strin
 	return base, must, win
 }
 
-// paneDims reads "rows cols" as two numbers.
 func paneDims(t *testing.T, size string) (int, int) {
 	t.Helper()
 	var rows, cols int
@@ -417,10 +390,6 @@ func TestMoveWindowSessionViewerSize(t *testing.T) {
 	}
 	waitPaneSize(t, base, "alpha", win, "45 150", "the viewer sizes the pane in a session no client shows")
 
-	// The viewer renews its lease 10 seconds after it opened its stream, and
-	// every 10 seconds after that. A renewal sizes the pane again, so the
-	// move is made just after the first one and the size is read before the
-	// second: the move alone must size the pane.
 	time.Sleep(time.Until(viewerStart.Add(11500 * time.Millisecond)))
 	must("move-window", map[string]any{"session": "alpha", "window": win, "to_session": "beta", "follow": true})
 	movedAt := time.Now()
@@ -446,7 +415,6 @@ func TestMoveWindowSessionViewerSize(t *testing.T) {
 	}
 	art.add("pane-size", map[string]any{"when": "after the move"}, map[string]any{"size": afterMove}, "")
 
-	// Past the viewer's next renewal.
 	time.Sleep(time.Until(movedAt.Add(12 * time.Second)))
 	afterRenew := fits("after the viewer renewed its lease", 0)
 	art.add("pane-size", map[string]any{"when": "after a lease renewal"}, map[string]any{"size": afterRenew}, "")
@@ -533,7 +501,6 @@ func TestMoveWindowSessionHookAfterSourceKilled(t *testing.T) {
 	waitMoveCapture(t, call, "beta", win, "HOOK-DONE-42")
 	waitState("working", "the hook did not reach the pane after alpha was killed")
 
-	// A new session takes the name alpha.
 	if out, err := tuiosCLI(t, base, "new", "alpha", "--detach"); err != nil {
 		t.Fatalf("create the new alpha: %v\n%s", err, out)
 	}

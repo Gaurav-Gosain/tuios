@@ -32,8 +32,6 @@ const (
 	keyTab             = "\t"
 )
 
-// confirmRig is a daemon with a session of two shell panes: agent, which
-// asks for the upgrade, and other, a second pane that tries to answer.
 type confirmRig struct {
 	base, sess   string
 	agent, other string
@@ -54,7 +52,6 @@ func newConfirmRig(t *testing.T, sess string, env ...string) *confirmRig {
 	return r
 }
 
-// attach starts a client on the session and waits until it shows the panes.
 func (r *confirmRig) attach(t *testing.T) *tuitest.Terminal {
 	t.Helper()
 	term := startIn(t, r.base, startOpts{args: []string{"attach", r.sess}})
@@ -64,8 +61,6 @@ func (r *confirmRig) attach(t *testing.T) *tuitest.Terminal {
 	return term
 }
 
-// paneUpgrade has the agent pane run tuios daemon upgrade, and returns a
-// function that waits for its exit status and the time it took.
 func (r *confirmRig) paneUpgrade(t *testing.T) func() (string, time.Duration) {
 	t.Helper()
 	r.runs++
@@ -79,8 +74,6 @@ func (r *confirmRig) paneUpgrade(t *testing.T) func() (string, time.Duration) {
 	}
 }
 
-// waitDialog waits for the upgrade dialog on term, saves it, and waits past
-// the moment it ignores keys for.
 func (r *confirmRig) waitDialog(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	if err := term.WaitForText(upgradeDialogTitle, 60*time.Second); err != nil {
@@ -90,7 +83,6 @@ func (r *confirmRig) waitDialog(t *testing.T, term *tuitest.Terminal, name strin
 	time.Sleep(700 * time.Millisecond)
 }
 
-// waitNoDialog waits until the dialog is gone from term.
 func waitNoDialog(t *testing.T, term *tuitest.Terminal, what string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), upgradeDialogTitle) }, 15*time.Second); err != nil {
@@ -108,10 +100,6 @@ func pressKeys(t *testing.T, term *tuitest.Terminal, keys ...string) {
 	}
 }
 
-// dialogShows reports whether the dialog on screen holds s, read across its
-// wrapped lines with the borders and every space taken out. Only the text
-// from the dialog's title to its note counts, since the pane behind it shows
-// the command line, path and all.
 func dialogShows(screen, s string) bool {
 	squash := func(v string) string {
 		return strings.Map(func(c rune) rune {
@@ -133,7 +121,6 @@ func dialogShows(screen, s string) bool {
 	return strings.Contains(all[start:start+end], squash(s))
 }
 
-// unchanged fails the test when the daemon is not the image it was.
 func (r *confirmRig) unchanged(t *testing.T, what string) daemonImage {
 	t.Helper()
 	now := helloImage(t, r.base)
@@ -143,8 +130,6 @@ func (r *confirmRig) unchanged(t *testing.T, what string) daemonImage {
 	return now
 }
 
-// refused fails the test when the pane's upgrade did not end with the
-// refusal for the person.
 func (r *confirmRig) refused(t *testing.T, code, what string) []string {
 	t.Helper()
 	lines := mustScrollback(t, r.base, r.sess, r.agent)
@@ -444,10 +429,8 @@ func TestPaneUpgradeRunsNoFileWithoutADialog(t *testing.T) {
 	for _, tc := range []struct {
 		name, refusal string
 		agentsOff     bool
-		// client is the environment of the client attached, nil for none.
-		client []string
-		// bridge attaches gui-bridge, and old a client of TUIOS_E2E_OLD_BIN.
-		bridge, old bool
+		client        []string
+		bridge, old   bool
 	}{
 		{name: "no-client", refusal: noClient},
 		{name: "view-only", refusal: noClient, client: []string{"TUIOS_VIEW_ONLY=1"}},

@@ -62,7 +62,6 @@ func TestCycleAgentsWalksTheRailOrder(t *testing.T) {
 
 	term := startIn(t, base, startOpts{cols: 160, rows: 45, args: []string{"attach", "alpha"}})
 	waitWindowCount(t, term, 3, "alpha's three panes")
-	// The rail lists all three, in the order the walk has to follow.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return railOrderIs(s, b1.name, a1.name, a2.name)
 	}, uiTimeout); err != nil {
@@ -111,7 +110,6 @@ func TestCycleAgentsWalksTheRailOrder(t *testing.T) {
 	press("leader K steps back across sessions", []any{tuitest.Ctrl('b'), "K"}, rail[0])
 	press("leader J", []any{tuitest.Ctrl('b'), "J"}, rail[1])
 
-	// Still in terminal mode: a typed line runs in the focused pane.
 	if err := term.SendKeys("echo cycle-$((40+2))\r"); err != nil {
 		t.Fatalf("type into the pane: %v", err)
 	}
@@ -128,8 +126,6 @@ func TestCycleAgentsWalksTheRailOrder(t *testing.T) {
 	}
 	fmt.Fprintf(&log, "typed line ran in %s/%s: terminal mode held\n", a1.sess, a1.name)
 
-	// With the rail holding the keyboard, the chord and the leader keys walk
-	// the same order.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
 		t.Fatalf("focus the rail: %v", err)
 	}
@@ -140,10 +136,6 @@ func TestCycleAgentsWalksTheRailOrder(t *testing.T) {
 	}
 }
 
-// railOrderIs reports whether the rail's agents section lists each name, each
-// on a row below the one before. Only the rail's column is read, left of its
-// edge rule, and only below the section's header, so a pane's title cannot
-// stand in for a row.
 func railOrderIs(s tuitest.Screen, names ...string) bool {
 	_, rows := s.Size()
 	railText := func(y int) string {

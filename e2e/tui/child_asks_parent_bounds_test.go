@@ -10,9 +10,6 @@ import (
 	"time"
 )
 
-// childAsksAndTriesItself asks the same question as childAsksQuestion, and
-// while it waits, tries to answer its own question with respond, as a child
-// that is not its own parent; SELF names the file the attempt writes.
 const childAsksAndTriesItself = `sleep 3
 printf '%s\n' \
  '─────────────────────────────────────────' \
@@ -32,7 +29,6 @@ echo "GOT-$c"
 exec sleep 600
 `
 
-// childAsksTrust stops on Claude Code's folder trust question.
 const childAsksTrust = `sleep 3
 printf '%s\n' \
  '╭───────────────────────────────────────────╮' \
@@ -43,14 +39,11 @@ printf '%s\n' \
 exec sleep 600
 `
 
-// childAsksSignIn reports that it waits for a sign-in.
 const childAsksSignIn = `sleep 3
 tuios set-agent-state needs_input --kind auth -m 'Sign in to continue'
 exec sleep 600
 `
 
-// childBoundsFixture is a daemon with a lead pane that reads as an agent, a
-// fake claude first on PATH, and the scripts written under base.
 type childBoundsFixture struct {
 	t          *testing.T
 	base, sess string
@@ -85,17 +78,12 @@ func newChildBoundsFixture(t *testing.T, config string, scripts map[string]strin
 	return f
 }
 
-// agentShell opens a shell pane that reads as an agent, as a lead or a
-// worker that starts agents of its own does, with parent as its parent link
-// ("" for none), and returns its id.
 func (f *childBoundsFixture) agentShell(name, parent string) string {
 	f.t.Helper()
 	var id string
 	if parent == "" {
 		id = strings.TrimSpace(mustCLI(f.t, f.base, "new-window", "-s", f.sess, name, "--no-focus", "--print-id"))
 	} else {
-		// A shell never reports a state of its own, so start-agent comes back
-		// not ready, non-zero, with the id on its first line.
 		out, _ := tuiosCLI(f.t, f.base, "start-agent", "sh", "-s", f.sess, "--name", name, "--parent", parent, "--ready-timeout", "2000", "--print-id")
 		id, _, _ = strings.Cut(strings.TrimSpace(out), "\n")
 		if len(id) < 8 {
@@ -110,7 +98,6 @@ func (f *childBoundsFixture) agentShell(name, parent string) string {
 	return id
 }
 
-// child starts the script under base as a fake claude whose parent is parent.
 func (f *childBoundsFixture) child(name, script, parent string) {
 	f.t.Helper()
 	_, _ = tuiosCLI(f.t, f.base, "start-agent", "claude "+filepath.Join(f.base, script), "-s", f.sess, "--name", name, "--parent", parent, "--ready-timeout", "20000")
@@ -121,8 +108,6 @@ func (f *childBoundsFixture) typeIn(pane, line string) {
 	mustCLI(f.t, f.base, "send-text", "-s", f.sess, "-w", pane, line+"\n")
 }
 
-// respondFrom runs respond from pane against target and returns what it
-// printed and whether it succeeded.
 func (f *childBoundsFixture) respondFrom(pane, target, choice string) (string, bool) {
 	f.t.Helper()
 	out := filepath.Join(f.base, "respond-"+pane[:8]+"-"+target+".out")
@@ -145,8 +130,6 @@ func (f *childBoundsFixture) mailOf(pane string) string {
 	return out
 }
 
-// inboxItemOf is the Inbox item of window name, with whether it is held for
-// the parent, and false when there is none.
 func (f *childBoundsFixture) inboxItemOf(name string) (held, found bool, raw string) {
 	f.t.Helper()
 	raw, _ = tuiosCLI(f.t, f.base, "call", "list-attention", `{"session":"`+f.sess+`"}`)

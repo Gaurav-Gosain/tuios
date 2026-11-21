@@ -9,35 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Liveness.
-//
-// The fuzzer proves tuios does not violate its invariants. It does not prove
-// tuios does anything. Every rule in both oracles is a prohibition, and a client
-// that rendered an empty screen forever and accepted every keystroke into a void
-// would satisfy nearly all of them: nothing would be spliced, no pane would
-// disagree with the daemon, no grid would be the wrong size, nothing would
-// panic. The one existing rule with any positive content is the size check, and
-// a blank screen is the right size.
-//
-// That is a structural gap rather than a gap in the rule set, so it cannot be
-// closed by adding more prohibitions. What closes it is a small number of
-// properties of the form "this eventually happens", each naming one thing tuios
-// is for.
-//
-// They are written as ordinary tests rather than as fuzz rules on purpose. A
-// liveness property needs a known starting state to be worth anything: "typing
-// shows the character" is only a claim if something is focused, in a mode that
-// takes typing, and not covered by an overlay, and a fuzz run is in none of
-// those states in particular. Asserted mid-run they would either be gated into
-// vacuity or report the fuzzer's own wandering as a failure. Asserted here, each
-// one fails exactly when the thing it names has stopped working.
-//
-// Each is also checked on both sides where both sides have an answer, because
-// "eventually shows" has two halves: the daemon has to receive it and the client
-// has to draw it, and a property that only checks one of those is half a claim.
-
-// livenessSession is a client attached to a real daemon-backed session with one
-// pane, settled in window-management mode.
 func livenessSession(t *testing.T, name string) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -48,7 +19,6 @@ func livenessSession(t *testing.T, name string) (*tuitest.Terminal, string) {
 	return attachIn(t, base, name, startOpts{cols: 120, rows: 40}), base
 }
 
-// firstWindow returns the session's only window, or fails.
 func firstWindow(t *testing.T, base, session string) daemonWindow {
 	t.Helper()
 	wl, err := daemonWindows(base, session)
@@ -80,8 +50,6 @@ func TestLivenessTypingReachesTheShellAndTheScreen(t *testing.T) {
 		t.Fatalf("typing never reached the screen: %v\n%s", err, term.Snapshot())
 	}
 
-	// The daemon has to have it too. A client that painted it from its own echo
-	// and never sent it would pass the check above and nothing else.
 	w := firstWindow(t, base, "live-type")
 	deadline := time.Now().Add(uiTimeout)
 	for {
@@ -153,7 +121,6 @@ func TestLivenessWorkspaceSwitchChangesTheScreen(t *testing.T) {
 		t.Fatalf("the pane never showed its own output: %v\n%s", err, term.Snapshot())
 	}
 
-	// Workspace 2, the next one: a switch past it opens it all the same.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "w", "2"); err != nil {
 		t.Fatalf("switch to workspace 2: %v", err)
 	}
@@ -205,8 +172,6 @@ func TestLivenessReattachRestoresWhatWasThere(t *testing.T) {
 		t.Fatalf("the reattached client never showed the pane's last line %q: %v\n%s",
 			last, err, again.Snapshot())
 	}
-	// And what it did show has to be a stream rather than a splice, which is the
-	// prohibition and the liveness property meeting on the same screen.
 	if a, b, found := spliceIn(screenLines(again.Screen())); found {
 		t.Fatalf("the reattached pane shows line %d directly above line %d\n%s",
 			a.seq, b.seq, again.Snapshot())

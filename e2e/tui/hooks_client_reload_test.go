@@ -35,7 +35,6 @@ func TestReloadConfigTurnsOnANewHook(t *testing.T) {
 	waitScreen(t, term, "the client did not say the new hook waits", "new or changed hook")
 	saveArtifact(t, term, artifacts, "hook-waits")
 
-	// The saved hook waits: a theme change does not run it.
 	pickTheme(t, term, "dracula")
 	stayTrue(t, "a hook from a file save ran with no Reload config", 2*time.Second, func() (bool, string) {
 		got, state := logText()

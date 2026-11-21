@@ -9,16 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Creating a session on another machine from the command line, and the ssh
-// fallback for opening one.
-//
-// The link is the same loopback the other federation tests use. The ssh
-// stand-in drops ssh's options and the address and runs the command locally, so
-// the host named "build" is this test's own daemon reached over the real
-// subprocess transport. Nothing reads the developer's ssh config, and no
-// network connection is made. The rail's own path, against a second daemon,
-// is in host_attach_test.go.
-
 // TestNewOnAHostCreatesASessionAcrossTheLink is the CLI reachability proof for
 // 'tuios new --host'. The far side creates the session, and it comes back in
 // both the local listing and the host's own listing.
@@ -31,24 +21,18 @@ func TestNewOnAHostCreatesASessionAcrossTheLink(t *testing.T) {
 	term := startIn(t, base, startOpts{args: []string{"new", "fed-open"}, env: env})
 	waitBoot(t, term)
 
-	// The command a person types. --detach is what lets this run without a
-	// terminal: the far side creates the session and returns.
 	out, err := tuiosCLIEnv(t, base, env, "new", "--host", "build", "extra", "--detach")
 	if err != nil {
 		t.Fatalf("ASSERTION: 'tuios new --host build extra --detach' failed: %v\n%s", err, out)
 	}
 	t.Logf("tuios new --host build extra --detach:\n%s", out)
 
-	// The session the far side created is in this daemon now, because the link
-	// loops back to it. Poll the session listing until it lands.
 	if err := waitForLS(t, base, func(out string) bool {
 		return strings.Contains(out, "extra")
 	}); err != nil {
 		t.Fatalf("ASSERTION: the session created with 'new --host' never appeared: %v", err)
 	}
 
-	// And it is in the host's own listing, which is the listing that crosses the
-	// link.
 	out, err = tuiosCLIEnv(t, base, env, "ls", "--host", "build")
 	if err != nil {
 		t.Fatalf("tuios ls --host build: %v\n%s", err, out)
@@ -59,7 +43,6 @@ func TestNewOnAHostCreatesASessionAcrossTheLink(t *testing.T) {
 	t.Logf("tuios ls --host build:\n%s", out)
 }
 
-// waitForLS polls 'tuios ls' until the output satisfies want.
 func waitForLS(t *testing.T, base string, want func(string) bool) error {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
@@ -74,7 +57,6 @@ func waitForLS(t *testing.T, base string, want func(string) bool) error {
 	return fmt.Errorf("the last 'tuios ls' was:\n%s", out)
 }
 
-// railShows blocks until the rail shows text.
 func railShows(t *testing.T, term *tuitest.Terminal, want string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -106,8 +88,6 @@ func TestAttachOnAHostWithSSHRunsTheFarTuios(t *testing.T) {
 		t.Fatalf("the far tuios never drew the session: %v\n%s", err, term.Snapshot())
 	}
 
-	// The proof that ssh ran the far tuios: a plain 'tuios attach' process
-	// for the session, which the link path never starts.
 	lines := commandLinesContaining(t, tuiosBin)
 	nested := false
 	for _, line := range lines {

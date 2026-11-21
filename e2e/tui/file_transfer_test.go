@@ -22,41 +22,16 @@ import (
 	"time"
 )
 
-// Files, transfers, drops and previews between two machines.
-//
-// The far machine is the second daemon of host_attach_test.go, reached only
-// through the hub daemon's link: the ssh stand-in switches the XDG
-// directories, so every byte crosses the real subprocess transport, framing,
-// proxy and mux. For the tests about speed the stand-in also puts a slow link
-// in the way: this test binary, run as a throttle, passes the far side's
-// output on at a fixed rate through a buffer as deep as ssh's channel window.
-//
-// What would pass a weaker test and fail these: a transfer that starts over
-// after a drop (resumed_from stays empty, or the bytes copied twice), a copy
-// that is not checked (a changed byte is put in place), a link that sends a
-// copy's bytes ahead of a pane's (the round trips during the copy grow to the
-// depth of the buffer), and a drop that lands on this machine instead of the
-// pane's.
-
 const (
 	throttleMarker = "tuios-e2e-throttle"
 	throttleEnv    = "TUIOS_E2E_THROTTLE"
 )
 
-// runThrottleIfAsked turns this test binary into the far end of a slow link.
-// It runs the far command given after "--" with this process's stdin, and
-// passes the command's output on at rate bytes a second through a buffer of
-// the given depth. The command is its child, so killing this process closes
-// the link's pipe the way a dropped connection does. TestMain calls it first.
 func runThrottleIfAsked() {
 	spec := os.Getenv(throttleEnv)
 	if spec == "" {
 		return
 	}
-	// rate:depth, or rate:depth:delay with a delay in ms that every byte
-	// from the far side waits before it is passed on: a link with that round
-	// trip. rate:depth:delay:up holds the bytes to the far side to the same
-	// rate and depth too, as an upload over a slow link with deep buffers.
 	var rate, depth, delayMs int
 	parts := strings.Split(spec, ":")
 	if len(parts) < 2 || len(parts) > 4 {
@@ -108,8 +83,6 @@ func runThrottleIfAsked() {
 		data []byte
 		err  error
 	}
-	// The delay line holds what the link carries in one delay, and no more,
-	// so the far side still waits on the buffer behind it.
 	line := make(chan timed, int(int64(rate)*int64(delay)/int64(time.Second)/(64<<10))+1)
 	go func() {
 		for {
@@ -174,10 +147,6 @@ func runThrottleIfAsked() {
 	}
 }
 
-// throttleUp passes what this side sends on to the far command at rate bytes
-// a second. It reads ahead into a buffer of depth bytes, so the sender's
-// writes return long before the far side has the bytes, the way the buffers
-// of ssh and the network take an upload.
 func throttleUp(src io.Reader, dst io.WriteCloser, rate, depth int) {
 	var mu sync.Mutex
 	cond := sync.NewCond(&mu)
@@ -223,8 +192,6 @@ func throttleUp(src io.Reader, dst io.WriteCloser, rate, depth int) {
 		if _, err := dst.Write(out); err != nil {
 			return
 		}
-		// This paces the stand-in link to its rate. It waits on no
-		// condition, so the timer is the link's clock, not a test wait.
 		next = next.Add(tick)
 		if d := time.Until(next); d > 0 {
 			<-time.After(d)
@@ -244,23 +211,16 @@ func slicesWithout(env []string, key string) []string {
 	return out
 }
 
-// writeSlowFakeSSH is writeFakeSSHTo with the far side's output passed on at
-// rate bytes a second through depth bytes of buffer. The throttle's command
-// line names base, so a test can cut this link and no other.
 func writeSlowFakeSSH(t *testing.T, dir, remoteBase string, rate, depth int) string {
 	t.Helper()
 	return writeDelayedFakeSSH(t, dir, remoteBase, rate, depth, 0)
 }
 
-// writeDelayedFakeSSH is writeSlowFakeSSH with every byte from the far side
-// held delayMs first, which gives the link that round trip.
 func writeDelayedFakeSSH(t *testing.T, dir, remoteBase string, rate, depth, delayMs int) string {
 	t.Helper()
 	return writeThrottledFakeSSH(t, dir, remoteBase, rate, depth, delayMs, false)
 }
 
-// writeThrottledFakeSSH is writeDelayedFakeSSH, with up holding the bytes to
-// the far side to the same rate and depth.
 func writeThrottledFakeSSH(t *testing.T, dir, remoteBase string, rate, depth, delayMs int, up bool) string {
 	t.Helper()
 	spec := fmt.Sprintf("%d:%d:%d", rate, depth, delayMs)
@@ -290,8 +250,6 @@ func writeThrottledFakeSSH(t *testing.T, dir, remoteBase string, rate, depth, de
 	return path
 }
 
-// cutSlowLink kills the throttles of the links whose stand-in lives in dir:
-// the far side's output stops dead, as when a cable is pulled.
 func cutSlowLink(t *testing.T, dir string) int {
 	t.Helper()
 	out, err := exec.Command("ps", "-A", "-ww", "-o", "pid=,args=").Output()
@@ -315,20 +273,8 @@ func cutSlowLink(t *testing.T, dir string) int {
 	return killed
 }
 
-// hubWithHost starts the hub daemon with one host, build, reached with ssh,
-// and waits for the link to be up.
 func hubWithFileHost(t *testing.T, base, remote, ssh string) []string {
 	t.Helper()
-	// The far daemon runs, as on a machine where someone uses tuios. The
-	// proxy never starts one. Unless the test already wrote a policy, build
-	// lets a linked machine write anywhere in its home folder, which is what
-	// these tests about other properties assume; the roots themselves are
-	// tested on their own. The policy also turns the free-space reserve off:
-	// the default keeps 1 GiB free where the copy lands, and the test's
-	// folder is on whatever disk holds the temp dir, so a box with less than
-	// that (arch's tmpfs /tmp at 96%) refused every copy and the tests said
-	// nothing about the property they check. files_min_free has its own tests,
-	// which write their own policy first.
 	cfg := filepath.Join(xdgDir(remote, "XDG_CONFIG_HOME"), "tuios", "config.toml")
 	if _, err := os.Stat(cfg); errors.Is(err, os.ErrNotExist) {
 		writeRemoteConfig(t, remote, "[hosts.\"*\"]\nfiles_roots = [\"~\"]\nfiles_min_free = \"0\"\n")
@@ -348,7 +294,6 @@ func hubWithFileHost(t *testing.T, base, remote, ssh string) []string {
 	return env
 }
 
-// fileVerbConn is one JSON verb connection to a daemon.
 type fileVerbConn struct {
 	t    *testing.T
 	conn net.Conn
@@ -370,7 +315,6 @@ func dialFileVerbs(t *testing.T, base string) *fileVerbConn {
 	return &fileVerbConn{t: t, conn: conn, br: bufio.NewReaderSize(conn, 1<<20)}
 }
 
-// dialHostVerbs is a verb connection to build's daemon, through the hub.
 func dialHostVerbs(t *testing.T, base string) *fileVerbConn {
 	t.Helper()
 	c := dialFileVerbs(t, base)
@@ -408,7 +352,6 @@ func (c *fileVerbConn) call(verb string, params any) (json.RawMessage, error) {
 	return resp.Result, nil
 }
 
-// mustRaw is must that returns the result as it came.
 func (c *fileVerbConn) mustRaw(verb string, params any) json.RawMessage {
 	c.t.Helper()
 	raw, err := c.call(verb, params)
@@ -461,7 +404,6 @@ func transferNow(t *testing.T, base, id string) transferRow {
 	return out.Transfers[0]
 }
 
-// randomFile writes size random bytes to path and returns their sha256.
 func randomFile(t *testing.T, path string, size int) string {
 	t.Helper()
 	f, err := os.Create(path)
@@ -492,7 +434,6 @@ func fileSHA(t *testing.T, path string) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-// saveArtifact writes a test's record where TUIOS_E2E_FRAMES points.
 func saveTransferArtifact(t *testing.T, name string, v any) {
 	t.Helper()
 	dir := os.Getenv("TUIOS_E2E_FRAMES")
@@ -516,8 +457,6 @@ func TestATransferFromAHostResumesAfterTheLinkDrops(t *testing.T) {
 	const size = 96 << 20
 	src := filepath.Join(remote, "big.bin")
 	want := randomFile(t, src, size)
-	// A time in the past, so a copy that does not keep it shows the time of
-	// the copy instead.
 	mtime := time.Date(2024, 3, 9, 12, 30, 0, 0, time.UTC)
 	if err := os.Chtimes(src, mtime, mtime); err != nil {
 		t.Fatal(err)
@@ -544,7 +483,6 @@ func TestATransferFromAHostResumesAfterTheLinkDrops(t *testing.T) {
 		timeline = append(timeline, point{time.Since(start).Milliseconds(), r.State, r.Done})
 	}
 
-	// Cut a third of the way in.
 	deadline := time.Now().Add(60 * time.Second)
 	for {
 		row = transferNow(t, base, row.ID)
@@ -562,9 +500,6 @@ func TestATransferFromAHostResumesAfterTheLinkDrops(t *testing.T) {
 		t.Fatalf("no link to cut")
 	}
 	t.Logf("cut the link at %d of %d bytes", atCut, size)
-	// A byte of the part changes while the link is down, far from the end the
-	// resume compares. Only the whole-file check can catch it, and it must:
-	// the copy may not put that file in place.
 	part := filepath.Join(base, ".copy of big.bin.tuios-part-"+row.ID)
 	if f, err := os.OpenFile(part, os.O_WRONLY, 0); err != nil {
 		t.Fatalf("open the part: %v", err)
@@ -634,8 +569,6 @@ func TestATransferLeavesTypingOnItsMachineFast(t *testing.T) {
 	ssh := writeSlowFakeSSH(t, base, remote, 8<<20, 2<<20)
 	hubWithFileHost(t, base, remote, ssh)
 
-	// The pane: a connection to build's daemon that answers one small call
-	// at a time, which is the shape of a key and its echo.
 	pane := dialHostVerbs(t, base)
 	roundTrip := func() time.Duration {
 		start := time.Now()

@@ -10,15 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// History across resizes, through the daemon. Each test puts content where a
-// resize can reach it, resizes the client's terminal (which is how a pane is
-// resized for real: the client retiles and the daemon resizes the PTY), and
-// then reads the daemon's own history with capture-pane. The daemon is the
-// authority every attach rehydrates from, so content it loses no client can
-// get back.
-
-// scrollbackResizeSession creates a detached session and attaches one client
-// to it at cols x rows.
 func scrollbackResizeSession(t *testing.T, name string, cols, rows int) (*tuitest.Terminal, string, daemonWindow) {
 	t.Helper()
 	base := t.TempDir()
@@ -27,14 +18,10 @@ func scrollbackResizeSession(t *testing.T, name string, cols, rows int) (*tuites
 		t.Fatalf("create session %s: %v: %s", name, err, out)
 	}
 	term := attachIn(t, base, name, startOpts{cols: cols, rows: rows})
-	// Tiled, so the pane follows the client's terminal size. A floating
-	// window keeps its size when the terminal changes.
 	enableTiling(t, term)
 	return term, base, firstWindow(t, base, name)
 }
 
-// sbGridSize is the daemon emulator's grid size, read through a text
-// screenshot, which reports it without printing anything into the pane.
 func sbGridSize(t *testing.T, base, session, window string) (cols, rows int) {
 	t.Helper()
 	out := filepath.Join(t.TempDir(), "size.txt")
@@ -49,8 +36,6 @@ func sbGridSize(t *testing.T, base, session, window string) (cols, rows int) {
 	return got.Cols, got.Rows
 }
 
-// waitPaneWidth waits until the daemon's emulator is a size for which pred
-// holds.
 func waitPaneWidth(t *testing.T, base, session string, pred func(w, h int) bool, what string) {
 	t.Helper()
 	win := firstWindow(t, base, session).ID
@@ -67,7 +52,6 @@ func waitPaneWidth(t *testing.T, base, session string, pred func(w, h int) bool,
 	}
 }
 
-// waitDaemonText waits for want in the daemon's history plus screen.
 func waitDaemonText(t *testing.T, base, session, window, want string) {
 	t.Helper()
 	waitUntil(t, fmt.Sprintf("the pane never printed %q", want), shellTimeout, func() (bool, string) {
@@ -85,8 +69,6 @@ const longBody = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ
 // push rows off the top into history instead.
 func TestScrollbackResizeShorterKeepsRowsBelowCursor(t *testing.T) {
 	term, base, w := scrollbackResizeSession(t, "sb-short", 120, 40)
-	// Clear, draw a marker on row 30, and leave the cursor on row 3 by
-	// sleeping there: the shell prompt would otherwise move the cursor down.
 	emit := "\x1b[2J\x1b[HTOPROW\x1b[30;1HBELOWCURSOR\x1b[3;1H"
 	cmd := strings.TrimSuffix(paneEmitCmd(emit), "\n") + "; sleep 30\n"
 	if err := paneSend(base, "sb-short", w.ID, cmd); err != nil {
@@ -128,7 +110,6 @@ func TestScrollbackResizeUnderAltScreenKeepsMainRows(t *testing.T) {
 	waitDaemonText(t, base, "sb-alt", w.ID, "MK"+tag+"-30")
 	_, tall := sbGridSize(t, base, "sb-alt", w.ID)
 
-	// Enter the alternate screen and stay there while the pane is resized.
 	enter := strings.TrimSuffix(paneAltCmd(tag, true), "\n") + "; sleep 3; " + paneAltCmd(tag, false)
 	if err := paneSend(base, "sb-alt", w.ID, enter); err != nil {
 		t.Fatal(err)
@@ -138,7 +119,6 @@ func TestScrollbackResizeUnderAltScreenKeepsMainRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitPaneWidth(t, base, "sb-alt", func(_, h int) bool { return h < 15 }, "shorten under alt")
-	// The program leaves the alternate screen by itself.
 	time.Sleep(4 * time.Second)
 	if err := term.Resize(120, 40); err != nil {
 		t.Fatal(err)
@@ -195,16 +175,12 @@ func TestScrollbackResizeRestartKeepsWideHistory(t *testing.T) {
 	first := attachIn(t, base, session, startOpts{cols: 140, rows: 30})
 	enableTiling(t, first)
 	w := firstWindow(t, base, session)
-	// 80 lines of 75 columns: the first ones scroll into history at the wide
-	// width and keep it.
 	const n = 80
 	if err := paneSend(base, session, w.ID,
 		"clear; for i in $(seq 1 "+itoa(n)+"); do printf 'W%03d-%s-END\\n' $i "+longBody[:60]+"; done\n"); err != nil {
 		t.Fatal(err)
 	}
 	waitDaemonText(t, base, session, w.ID, "W080-"+longBody[:60]+"-END")
-	// Erase the screen (no scrollback erase), so the screen holds only the
-	// prompt and the restore has to put saved history rows back on it.
 	if err := paneSend(base, session, w.ID, paneEmitCmd("\x1b[2J\x1b[H")); err != nil {
 		t.Fatal(err)
 	}
@@ -230,8 +206,6 @@ func TestScrollbackResizeRestartKeepsWideHistory(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 	before := whole()
 	if len(before) == 0 {
-		// A reflowing backend (ghostty) rewraps history to the pane, so no
-		// row is wider than the pane and there is nothing to cut.
 		t.Skip("no history row is wider than the narrow pane: the backend reflowed it")
 	}
 
@@ -312,8 +286,6 @@ func TestScrollbackResizeCaptureCountsMatch(t *testing.T) {
 		if a, b, found := spliceIn(lines); found {
 			t.Errorf("%s: history goes %d straight to %d", stage, a.seq, b.seq)
 		}
-		// The capture drops blank rows at the bottom of the screen, so it
-		// can be shorter than history plus screen, never longer.
 		if len(lines) > got.HistoryRows+rows {
 			t.Errorf("%s: history_rows %d plus %d screen rows is less than the %d rows the capture returned",
 				stage, got.HistoryRows, rows, len(lines))

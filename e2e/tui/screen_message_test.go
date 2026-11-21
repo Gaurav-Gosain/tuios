@@ -6,9 +6,6 @@ import (
 	"testing"
 )
 
-// approverManifest is a user manifest whose one rule reads a prompt line that
-// starts with "approve ", the way a dialog rule's message does. It is not a
-// dialog rule.
 const approverManifest = `schema_version = 1
 id             = "tuiosapprover"
 display_name   = "Approver"
@@ -28,8 +25,6 @@ kind     = "approval"
 all      = ["approve deploy: prod"]
 `
 
-// approverScript draws the prompt line, draws it again once the detector has
-// had time to name the pane's harness, and waits.
 const approverScript = `#!/bin/sh
 printf 'approve deploy: prod now? [y/n]\n'
 sleep 3

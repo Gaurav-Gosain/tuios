@@ -11,27 +11,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// The opt-in explorers: tuios help -i, tuios config browse and tuios keybinds
-// browse, each run in a real terminal and driven by keys and the mouse.
-//
-// How these could pass wrongly, written down first:
-//   - An explorer that draws its first frame and ignores input passes "it
-//     opens". So each test searches and checks that rows go away, and moves
-//     the cursor and checks the detail pane follows it.
-//   - A search that filters nothing passes "the row is there". So the test
-//     also checks that a row the search excludes is gone.
-//   - An explorer that ignores q passes when the harness kills it. So each
-//     test waits for the process to exit by itself with status 0.
-//   - "Not reachable without the flag" passes if the plain command fails.
-//     So the plain command runs on a terminal, must exit 0 by itself, never
-//     switch to the alternate screen, and print what it prints with no
-//     terminal at all.
-//   - A set from the explorer that only changes the explorer's own row passes
-//     a check of the screen. So get-config reads the value back from the
-//     daemon.
-
-// explorerShot saves the frame as text and PNG in the test's artifact
-// directory.
 func explorerShot(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	dir := artifactDir(t)
@@ -40,19 +19,13 @@ func explorerShot(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Logf("frame %s saved under %s", name, dir)
 }
 
-// ansiCodes matches a CSI sequence.
 var ansiCodes = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]`)
 
-// startExplorer runs tuios with args in a terminal of its own, against the
-// isolation root base.
 func startExplorer(t *testing.T, base string, args ...string) *tuitest.Terminal {
 	t.Helper()
-	// animations true keeps the harness from adding --no-animations, a flag
-	// of the root command that a subcommand does not take.
 	return startIn(t, base, startOpts{cols: 110, rows: 34, animations: true, args: args})
 }
 
-// explorerExits waits for the explorer to leave by itself with status 0.
 func explorerExits(t *testing.T, term *tuitest.Terminal, what string) {
 	t.Helper()
 	code, err := term.WaitExit(10 * time.Second)
@@ -64,7 +37,6 @@ func explorerExits(t *testing.T, term *tuitest.Terminal, what string) {
 	}
 }
 
-// explorerShows reports whether the screen shows every one of want.
 func explorerShows(want ...string) func(tuitest.Screen) bool {
 	return func(s tuitest.Screen) bool {
 		text := s.Text()
@@ -77,9 +49,6 @@ func explorerShows(want ...string) func(tuitest.Screen) bool {
 	}
 }
 
-// assertPlainOnTTY runs a command in a terminal and checks that it is the
-// plain command: it exits 0 by itself, never shows the alternate screen,
-// and ends with the lines it prints with no terminal at all.
 func assertPlainOnTTY(t *testing.T, base string, args ...string) {
 	t.Helper()
 	plain, err := tuiosCLI(t, base, args...)
@@ -102,13 +71,10 @@ func assertPlainOnTTY(t *testing.T, base string, args ...string) {
 	if alt {
 		t.Errorf("ASSERTION: tuios %s switched to the alternate screen on a terminal", strings.Join(args, " "))
 	}
-	// The screen keeps the end of what the command printed, so the end is
-	// what is compared.
 	screen := term.Snapshot()
 	lines := strings.Split(strings.TrimSpace(plain), "\n")
 	lines = lines[max(len(lines)-8, 0):]
 	for _, line := range lines {
-		// The colour codes a listing writes are not text on the screen.
 		line = strings.TrimSpace(ansiCodes.ReplaceAllString(line, ""))
 		if line == "" || len(line) > 150 {
 			continue
@@ -152,8 +118,6 @@ func TestHelpExplorer(t *testing.T) {
 	}
 	explorerShot(t, term, "help-search-ship")
 
-	// A click on the second row moves the cursor there, and the detail
-	// follows it.
 	if err := term.Type("/"); err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +151,6 @@ func TestHelpExplorer(t *testing.T) {
 	}
 	explorerExits(t, term, "help -i after q")
 
-	// The JSON the explorer reads is there for a script.
 	out, err := tuiosCLI(t, base, "help", "--json")
 	if err != nil {
 		t.Fatalf("help --json: %v\n%s", err, out)
@@ -278,7 +241,6 @@ func TestConfigExplorer(t *testing.T) {
 	}
 	explorerShot(t, term, "config-search")
 
-	// A value the option refuses.
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}
@@ -302,8 +264,6 @@ func TestConfigExplorer(t *testing.T) {
 	if cliErr == nil {
 		t.Fatalf("set-config accepted sideways:\n%s", cliOut)
 	}
-	// The explorer shows set-config's own error: its first sentence is on
-	// the screen.
 	first := strings.TrimSpace(strings.SplitN(strings.TrimSpace(cliOut), "\n", 2)[0])
 	first = strings.TrimPrefix(first, "Error: ")
 	if cut := strings.Index(first, ". "); cut > 0 {
@@ -313,7 +273,6 @@ func TestConfigExplorer(t *testing.T) {
 		t.Errorf("ASSERTION: the explorer's refusal differs from set-config's:\nset-config: %s\nexplorer:\n%s", cliOut, term.Snapshot())
 	}
 
-	// A value it accepts.
 	if err := term.SendKeys(tuitest.Enter, tuitest.Ctrl('u')); err != nil {
 		t.Fatal(err)
 	}
@@ -332,10 +291,6 @@ func TestConfigExplorer(t *testing.T) {
 		t.Errorf("ASSERTION: get-config does not read the value the explorer set: %v\n%s", err, out)
 	}
 
-	// A click on a section tab filters the list to it.
-	// Open the search and clear it, which leaves the explorer open.
-	// A bare esc right before the next key reads as alt and that key, so
-	// the search is cleared with ctrl+u and closed with enter.
 	if err := term.Type("/"); err != nil {
 		t.Fatal(err)
 	}
@@ -421,9 +376,6 @@ func TestKeybindsExplorer(t *testing.T) {
 	}
 	explorerShot(t, term, "keybinds-search")
 
-	// Clear the search, then step through the tabs to Copy mode.
-	// A bare esc right before the next key reads as alt and that key, so
-	// the search is cleared with ctrl+u and closed with enter.
 	if err := term.Type("/"); err != nil {
 		t.Fatal(err)
 	}

@@ -53,7 +53,7 @@ command = "true"
 		t.Fatalf("keybinds doctor: %v\n%s", err, out)
 	}
 	for _, want := range []string{
-		"config.d/keys.toml:3", "config.toml:10", // the two claims on ctrl+a alt+d
+		"config.d/keys.toml:3", "config.toml:10",
 		"KEYS THAT ARE ALSO THE LEADER",
 		"runs toggle_zoom (config.toml:5). The leader is set in config.toml:2.",
 	} {
@@ -62,8 +62,6 @@ command = "true"
 		}
 	}
 
-	// At load: the warnings go to the log viewer, and a notification counts
-	// them.
 	term := startIn(t, base, startOpts{cols: 220, rows: 40})
 	if err := term.WaitForText("config problem", bootTimeout); err != nil {
 		t.Fatalf("ASSERTION: no config problem was reported at load: %v\n%s", err, term.Snapshot())
@@ -73,8 +71,6 @@ command = "true"
 	if err := term.WaitForText("config problems", uiTimeout); err != nil {
 		t.Fatalf("the log viewer did not open: %v\n%s", err, term.Snapshot())
 	}
-	// The viewer cuts each line. The line under the cursor shows whole under
-	// the list: up twice is the leader warning, once more the claimed key.
 	for i, want := range []string{"(config.toml:2)", "config.toml:10"} {
 		sendKeys(t, term, keyUp)
 		if i == 0 {

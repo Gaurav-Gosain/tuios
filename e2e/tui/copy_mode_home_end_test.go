@@ -9,34 +9,10 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Home and End in copy mode (#515): Home goes to the start of the line as 0
-// does, End to its end as $ does, in normal mode and in a v selection. The
-// keys are the [keybindings.copy_mode] section's defaults, so a config can
-// move them.
-//
-// How these could pass wrongly, written down first:
-//   - The cursor could already be at the column the key should reach. Every
-//     press starts from the middle of the line, at the search match.
-//   - The column could be right for the wrong reason. The columns Home and End
-//     reach are compared with the ones 0 and $ reach on the same line.
-//   - A selection could look right on screen and copy something else. The v
-//     cases read the clipboard write off the wire.
-//   - The binding could be ignored and the keys fixed. The rebound case moves
-//     End to ctrl+e and requires End to stop moving the cursor (the negative
-//     half) and ctrl+e to move it (the positive half).
-//
-// $ and ^ stop on the line's text (#980): $ on the last nonblank character,
-// not the blank padding out to the pane edge, and ^ on the first nonblank
-// character of an indented line, not column zero as 0 does. The expected
-// columns come from where the text sits in the screen line, so a $ that went
-// to the pane edge, or a ^ that did what 0 does, lands elsewhere.
-
 const homeEndLine = "HOME-start middle END-tail"
 
 const homeEndCmd = `clear; printf 'HOME%sstart middle END%stail\n' - -`
 
-// copyCursorMoved waits until the copy cursor is on row and its column is not
-// from, and returns the column.
 func copyCursorMoved(t *testing.T, term *tuitest.Terminal, row, from int, what string) int {
 	t.Helper()
 	var col int
@@ -50,8 +26,6 @@ func copyCursorMoved(t *testing.T, term *tuitest.Terminal, row, from int, what s
 	return col
 }
 
-// toMiddle searches for "middle", waits for the copy cursor to land on it,
-// and returns its column.
 func toMiddle(t *testing.T, term *tuitest.Terminal, row int) int {
 	t.Helper()
 	line := term.Screen().Line(row)
@@ -72,10 +46,8 @@ func toMiddle(t *testing.T, term *tuitest.Terminal, row int) int {
 	return col
 }
 
-// indentLine is an indented line for ^, printed above homeEndLine.
 const indentLine = "    INDENT-text rest"
 
-// screenCol returns the column of the first cell of needle on row, plus off.
 func screenCol(t *testing.T, term *tuitest.Terminal, row int, needle string, off int) int {
 	t.Helper()
 	line := term.Screen().Line(row)
@@ -99,7 +71,6 @@ func TestCopyModeHomeAndEnd(t *testing.T) {
 	}
 	waitCopyCursor(t, term, "prefix+[")
 
-	// The columns 0 and $ reach, each from the middle of the line.
 	mid := toMiddle(t, term, row)
 	sendEach(t, term, "0")
 	zero := copyCursorMoved(t, term, row, mid, "0")
@@ -110,7 +81,6 @@ func TestCopyModeHomeAndEnd(t *testing.T) {
 		t.Fatalf("$ put the copy cursor on column %d, want column %d, the last l of END-tail", dollar, want)
 	}
 
-	// Home and End reach the same columns.
 	mid = toMiddle(t, term, row)
 	sendEach(t, term, tuitest.Home)
 	if got := copyCursorMoved(t, term, row, mid, "Home"); got != zero {
@@ -122,7 +92,6 @@ func TestCopyModeHomeAndEnd(t *testing.T) {
 		t.Fatalf("End put the copy cursor on column %d, want column %d where $ puts it", got, dollar)
 	}
 
-	// In a v selection, Home and End move its end.
 	toMiddle(t, term, row)
 	from := len(clipboardWrites(out))
 	sendEach(t, term, "v", tuitest.Home, "y")
@@ -136,8 +105,6 @@ func TestCopyModeHomeAndEnd(t *testing.T) {
 		t.Fatalf("v End y copied %q, want %q", got, want)
 	}
 
-	// ^ on the indented line goes to its first nonblank character, from the
-	// last word of the line.
 	irow := lastRowWith(term.Screen(), indentLine)
 	if irow < 0 {
 		t.Fatalf("the indented line is not on the screen\n%s", term.Snapshot())
@@ -179,14 +146,12 @@ func TestCopyModeEndRebinds(t *testing.T) {
 	sendEach(t, term, "$")
 	dollar := copyCursorMoved(t, term, row, mid, "$")
 
-	// End is no longer bound: the cursor stays on the match.
 	mid = toMiddle(t, term, row)
 	sendEach(t, term, tuitest.End)
 	time.Sleep(500 * time.Millisecond)
 	if r, c, ok := copyCursorCell(term.Screen()); !ok || r != row || c != mid {
 		t.Fatalf("End moved the copy cursor to row %d column %d after it was unbound, want it on column %d\n%s", r, c, mid, term.Snapshot())
 	}
-	// ctrl+e is.
 	sendEach(t, term, tuitest.Ctrl('e'))
 	if got := copyCursorMoved(t, term, row, mid, "ctrl+e"); got != dollar {
 		t.Fatalf("ctrl+e put the copy cursor on column %d, want column %d where $ puts it", got, dollar)
@@ -216,7 +181,6 @@ func TestCopyModeVisualOtherEnd(t *testing.T) {
 		t.Fatalf("the line is not on the screen\n%s", term.Snapshot())
 	}
 
-	// v: each case starts at the a of abcdef.
 	toA := func() int {
 		t.Helper()
 		copySearch(t, term, "abcdef", row)
@@ -245,7 +209,6 @@ func TestCopyModeVisualOtherEnd(t *testing.T) {
 		}
 	}
 
-	// o puts the cursor on the start, at the a.
 	a := toA()
 	sendEach(t, term, "v", "l", "l", "o")
 	if r, c, ok := copyCursorCell(term.Screen()); !ok || r != row || c != a {
@@ -254,7 +217,6 @@ func TestCopyModeVisualOtherEnd(t *testing.T) {
 	copiesFrame(t, term, "other-end-v")
 	sendEach(t, term, "q")
 
-	// V: the start is off screen when o is pressed, and comes back.
 	if err := term.SendKeys("?ROW05", tuitest.Enter); err != nil {
 		t.Fatalf("search: %v", err)
 	}

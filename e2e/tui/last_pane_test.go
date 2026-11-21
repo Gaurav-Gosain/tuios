@@ -41,7 +41,6 @@ func TestLastPane(t *testing.T) {
 		return waitFocusChange(t, base, "lastpane", cur)
 	}
 
-	// Walk the focus 1, 2, 3 and flip back and forth: the plain case.
 	for _, id := range others {
 		cur = focusPane(id)
 	}
@@ -57,8 +56,6 @@ func TestLastPane(t *testing.T) {
 		t.Fatalf("second flip landed on %s, want %s\n%s", got[:8], others[2][:8], term.Snapshot())
 	}
 
-	// A new pane takes focus without a jump, and the flip must still come
-	// back to the pane focus just left.
 	send(t, term, "n")
 	waitWindowCount(t, term, 4, "the new pane")
 	fresh := waitFocusChange(t, base, "lastpane", others[2])
@@ -71,13 +68,9 @@ func TestLastPane(t *testing.T) {
 			got[:8], others[2][:8], term.Snapshot())
 	}
 
-	// A switch to an empty workspace lands on no pane at all, so the pane
-	// focus left is the one the first pane there must flip back to.
 	sendKeys(t, term, tuitest.Alt("2"))
 	time.Sleep(500 * time.Millisecond)
 	send(t, term, "n")
-	// The dock counts the current workspace's panes, and workspace two has
-	// exactly the one.
 	waitWindowCount(t, term, 1, "the pane on workspace two")
 	fresh = waitFocusChange(t, base, "lastpane", fresh)
 	send(t, term, ";")

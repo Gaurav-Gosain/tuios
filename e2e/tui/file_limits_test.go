@@ -12,18 +12,8 @@ import (
 	"time"
 )
 
-// The third review of link file access: what a linked machine can reach
-// through the transfer verbs, how much it may write, and what it may see.
-//
-// build lets the hub relay and use files unless a test says otherwise, so the
-// hub may call transfer-start and drop-files on build. Every call goes over
-// the real link: the hub dials build through the ssh stand-in.
-
-// relayFilesPolicy lets a linked machine relay and use the file verbs: the
-// capabilities transfer-start and drop-files need.
 const relayFilesPolicy = "[hosts.\"*\"]\nallow = [\"list\", \"mail\", \"open\", \"write\", \"respond\", \"files\"]\n"
 
-// farTransfer waits for a copy on build, asked through c, to end.
 func farTransfer(t *testing.T, c *fileVerbConn, id string, within time.Duration) transferRow {
 	t.Helper()
 	deadline := time.Now().Add(within)
@@ -96,7 +86,6 @@ func TestALinkTransferStartKeepsToTheLinkPolicy(t *testing.T) {
 			continue
 		}
 		t.Errorf("ASSERTION: transfer-start of %s over the link was not refused before a job started: %v", what, err)
-		// A job that started must still end refused, with nothing written.
 		var row transferRow
 		_ = json.Unmarshal(raw, &row)
 		if row.ID != "" {
@@ -121,7 +110,6 @@ func TestALinkTransferStartKeepsToTheLinkPolicy(t *testing.T) {
 		t.Errorf("ASSERTION: the move removed a file outside the write roots: %v", err)
 	}
 
-	// The positive half: a copy into the receive folder works.
 	var ok transferRow
 	far.must("transfer-start", map[string]any{
 		"src": map[string]any{"path": "~/notes.txt"}, "dst": map[string]any{"path": "~/Downloads/tuios/notes.txt"}, "conflict": "replace",
@@ -191,8 +179,6 @@ func TestALinkJobKeepsItsPolicyAcrossARestart(t *testing.T) {
 	}
 }
 
-// writeStream opens a write stream on build through c and sends body. It
-// returns the refusal, or the reply line after the bytes.
 func writeStream(c *fileVerbConn, path, partID string, length int64, body []byte) (map[string]any, error) {
 	params := map[string]any{"path": path, "mode": "write", "length": length}
 	if partID != "" {
@@ -201,11 +187,6 @@ func writeStream(c *fileVerbConn, path, partID string, length int64, body []byte
 	if _, err := c.call("open-file-stream", params); err != nil {
 		return nil, err
 	}
-	// An empty body is not written at all. A zero-length Write is still a
-	// write(2) on the socket, and with length 0 the far daemon sends its
-	// closing line and closes as soon as the stream opens. The hub's relay
-	// then closes this end, so the empty write raced the close and failed
-	// with a broken pipe on a slow runner. The reply is in the buffer anyway.
 	if len(body) > 0 {
 		if _, err := c.conn.Write(body); err != nil {
 			return nil, err
@@ -274,7 +255,6 @@ func TestTheDropFolderTakesOnlyDropsWithinItsBudget(t *testing.T) {
 		}
 	}
 
-	// The positive half: a small file goes into the drop.
 	reply, err := writeStream(dialHostVerbs(t, base), filepath.Join(drop.Dir, "small.txt"), "", 5, []byte("hello"))
 	record["5 bytes into a drop"] = reply
 	if err != nil || reply["error"] != nil {
@@ -300,8 +280,6 @@ func TestALinkWriteLeavesFreeSpaceAndKeepsToItsCaps(t *testing.T) {
 	if code(fullErr) != "disk_full" || !strings.Contains(errString(fullErr), "files_min_free") {
 		t.Errorf("ASSERTION: a write that leaves less than files_min_free was not refused as disk_full naming the setting: %v", fullErr)
 	}
-	// The refusal travels to the hub, where "this machine" would be read as
-	// the hub, so it names the machine whose disk it is about.
 	if host, err := os.Hostname(); err != nil || !strings.Contains(errString(fullErr), "the disk on "+host+" would have less than") {
 		t.Errorf("ASSERTION: the refusal does not name the machine whose disk is short (%q): %v", host, fullErr)
 	}
@@ -309,7 +287,6 @@ func TestALinkWriteLeavesFreeSpaceAndKeepsToItsCaps(t *testing.T) {
 		t.Errorf("ASSERTION: the refused write left a part: %v", parts)
 	}
 
-	// A reserve of 0 turns the check off, so the caps can be reached.
 	writeRemoteConfig(t, remote, "[hosts.\"*\"]\nallow = [\"list\", \"files\"]\nfiles_roots = [\"~\"]\nfiles_min_free = \"0\"\n")
 	if out, err := tuiosCLI(t, remote, "config", "apply"); err != nil {
 		t.Fatalf("apply build's config: %v\n%s", err, out)
@@ -332,8 +309,6 @@ func TestALinkWriteLeavesFreeSpaceAndKeepsToItsCaps(t *testing.T) {
 	if opened != 8 || code(streamErr) != "busy" {
 		t.Errorf("ASSERTION: opened %d write streams, want 8 and then busy: %v", opened, streamErr)
 	}
-	// The refusals travel to the hub, where "this machine" would be read as
-	// the hub, so they name the machine they are about.
 	host, _ := os.Hostname()
 	if !strings.Contains(errString(streamErr), host+" already takes 8 copies at once") {
 		t.Errorf("ASSERTION: the stream refusal does not name the machine that takes the copies (%q): %v", host, streamErr)
@@ -343,8 +318,6 @@ func TestALinkWriteLeavesFreeSpaceAndKeepsToItsCaps(t *testing.T) {
 	}
 	time.Sleep(200 * time.Millisecond)
 
-	// Each closed stream left an empty part. Empty writes add parts until
-	// the cap.
 	parts := len(partsIn(t, farHome))
 	var partErr error
 	for i := range 80 {
@@ -463,7 +436,6 @@ func TestALinkCannotLookInsideDeniedFolders(t *testing.T) {
 			t.Errorf("ASSERTION: %s %v over the link was not refused: %v", r.verb, r.params, err)
 		}
 	}
-	// The positive half.
 	for verb, params := range map[string]map[string]any{
 		"file-stat": {"path": "~/notes.txt"},
 		"file-list": {"dir": "~"},
@@ -504,7 +476,6 @@ func TestALinkMakesABoundedNumberOfNewFiles(t *testing.T) {
 	recv := filepath.Join(farHome, "Downloads", "tuios")
 	record := map[string]any{}
 
-	// One empty file: a write of length 0, then its commit.
 	far := dialHostVerbs(t, base)
 	emptyFile := func(name string) error {
 		path := "~/Downloads/tuios/" + name
@@ -526,8 +497,6 @@ func TestALinkMakesABoundedNumberOfNewFiles(t *testing.T) {
 		made++
 	}
 	elapsed := time.Since(start)
-	// The count goes down by the bound in ten minutes, so a slow loop makes
-	// a few more.
 	most := bound + int(elapsed.Seconds()*bound/600) + 1
 	record["empty files made"] = made
 	record["seconds"] = elapsed.Seconds()
@@ -553,8 +522,6 @@ func TestALinkMakesABoundedNumberOfNewFiles(t *testing.T) {
 		t.Errorf("ASSERTION: the refused folder was made")
 	}
 
-	// The positive half: the default bound takes a folder copy of 3000
-	// files whole.
 	writeRemoteConfig(t, remote, policy)
 	if out, err := tuiosCLI(t, remote, "config", "apply"); err != nil {
 		t.Fatalf("apply build's config: %v\n%s", err, out)
@@ -589,8 +556,6 @@ func TestALinkMakesABoundedNumberOfNewFiles(t *testing.T) {
 		t.Errorf("ASSERTION: a folder copy of 3000 files ended %s (%s: %s) with %d files on build, want done with 3000", row.State, row.Code, row.Error, landed)
 	}
 
-	// The copy's files and folders were counted: with the bound back at
-	// 1000, nothing new fits.
 	writeRemoteConfig(t, remote, policy+"files_max_entries = "+itoa(bound)+"\n")
 	if out, err := tuiosCLI(t, remote, "config", "apply"); err != nil {
 		t.Fatalf("apply build's config: %v\n%s", err, out)

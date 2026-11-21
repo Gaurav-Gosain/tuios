@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-// runSplit runs tuios with the isolation of base and extra env, and returns
-// its stdout and stderr apart, and its exit status.
 func runSplit(t *testing.T, base string, env []string, args ...string) (stdout, stderr string, code int) {
 	t.Helper()
 	pinPreV080Looks(t, base)
@@ -29,7 +27,6 @@ func runSplit(t *testing.T, base string, env []string, args ...string) (stdout, 
 	return out.String(), errs.String(), exitCodeOf(err)
 }
 
-// pidAlive reports whether the process whose id is in path still runs.
 func pidAlive(t *testing.T, path string) bool {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -43,7 +40,6 @@ func pidAlive(t *testing.T, path string) bool {
 	return syscall.Kill(pid, 0) == nil
 }
 
-// waitForPidFile waits until path exists.
 func waitForPidFile(t *testing.T, path string) {
 	t.Helper()
 	waitFileExists(t, path, "the pid file never appeared", 15*time.Second)

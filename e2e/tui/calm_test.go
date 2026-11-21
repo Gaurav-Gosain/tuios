@@ -52,10 +52,8 @@ func TestCalmModeQuietsAWorkingSession(t *testing.T) {
 		calmWindow, off.wrote, off.motion, off.ctxsw, on.wrote, on.motion, on.ctxsw)
 }
 
-// calmWindow is how long each run watches the working agent.
 const calmWindow = 3 * time.Second
 
-// calmResult is what one run measured while the agent worked.
 type calmResult struct {
 	looks  int
 	wrote  int64
@@ -63,8 +61,6 @@ type calmResult struct {
 	ctxsw  int64
 }
 
-// calmDockLines is the dock's text: the first and the last row, since the dock
-// sits at one of the two.
 func calmDockLines(s tuitest.Screen) string {
 	_, rows := s.Size()
 	return s.Line(0) + "\n" + s.Line(rows-1)
@@ -111,8 +107,6 @@ settle_seconds = 0
 		t.Fatalf("the calm screen never settled: %v", err)
 	}
 
-	// The working window: looks of the name, bytes on the wire, and the
-	// client's own frame counters.
 	before := sampleIdle(t, term.Pid(), statsPath)
 	wroteFrom := wire.n.Load()
 	looks, frames := sampleName(term, row, col, len(name), calmWindow)
@@ -154,8 +148,6 @@ settle_seconds = 0
 		}
 	}
 
-	// A pane's own message. Held with calm on, shown with it off.
-	// Typed by the daemon, so the client's mode does not matter.
 	if out, err := tuiosCLI(t, base, "send-keys", "-s", "calm", "--raw", `printf '\033]9;CALMPING build finished\007'; clear`); err != nil {
 		t.Fatalf("type the notification: %v\n%s", err, out)
 	}
@@ -180,7 +172,6 @@ settle_seconds = 0
 	saveArtifact(t, term, dir, "held")
 	savePNG(t, term.Screen(), host, dir, "held")
 
-	// An agent that needs the person still gets through.
 	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", "calm", "needs_input", "--message", "CALMASK pick a database"); err != nil {
 		t.Fatalf("set-agent-state needs_input: %v\n%s", err, out)
 	}
@@ -190,7 +181,6 @@ settle_seconds = 0
 	saveArtifact(t, term, dir, "needs-you")
 	savePNG(t, term.Screen(), host, dir, "needs-you")
 
-	// Leader Z turns it off and says what came in.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "Z"); err != nil {
 		t.Fatalf("send leader Z: %v", err)
 	}

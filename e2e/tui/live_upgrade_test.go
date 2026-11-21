@@ -27,8 +27,6 @@ import (
 //
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Live handoff").
 
-// copyTuios copies the binary under test to a path of its own, so an upgrade
-// execs a different file than the one the daemon runs.
 func copyTuios(t *testing.T) string {
 	t.Helper()
 	dst := filepath.Join(t.TempDir(), "second", "tuios")
@@ -56,7 +54,6 @@ func copyTuios(t *testing.T) string {
 	return dst
 }
 
-// executableOf is the file process pid runs.
 func executableOf(t *testing.T, pid int) string {
 	t.Helper()
 	if runtime.GOOS == "linux" {
@@ -73,7 +70,6 @@ func executableOf(t *testing.T, pid int) string {
 	return strings.TrimSpace(string(out))
 }
 
-// handoffStats is what the handoff that made the daemon's image measured.
 func handoffStats(t *testing.T, base string) map[string]any {
 	t.Helper()
 	res := mustCall(t, base, "test-handoff-stats", map[string]any{})
@@ -81,8 +77,6 @@ func handoffStats(t *testing.T, base string) map[string]any {
 	return st
 }
 
-// saveUpgradeArtifact writes the artifact, and a copy where
-// TUIOS_E2E_HANDOFF_ARTIFACT names one.
 func saveUpgradeArtifact(t *testing.T, v any) {
 	t.Helper()
 	path := writeHandoffArtifact(t, v)
@@ -129,15 +123,11 @@ func TestDaemonUpgradeKeepsPaneProcesses(t *testing.T) {
 		`stty -icanon -echo 2>/dev/null`,
 		`exec cat -v`,
 	}, "; "))
-	// A fourth pane writes as fast as it can, so the kernel holds a full
-	// buffer of its output when the panes stop: the artifact's pending_max.
 	newCommandWindow(t, base, sess, "flood", false, "sh", "-c", `exec yes 0123456789abcdef`)
 	for _, w := range []string{a, b} {
 		waitHandoffPane(t, base, sess, w, regexp.MustCompile(`^pid-\d+`), 10*time.Second)
 	}
 	waitHandoffPane(t, base, sess, c, regexp.MustCompile(`ALT-SCREEN-C`), 10*time.Second)
-	// The counter runs a while first, so its output on either side of the
-	// upgrade is long enough to read a gap in.
 	waitHandoffPane(t, base, sess, a, regexp.MustCompile(`^tick-150$`), 20*time.Second)
 	before := panePIDs(t, base, sess)
 	ticksBefore := counterLines(mustScrollback(t, base, sess, a), "tick-")
@@ -291,9 +281,6 @@ func TestDaemonUpgradeKeepsOpenPrompts(t *testing.T) {
 			t.Errorf("ASSERTION: the item for %s across the handoff: before %+v, after %+v", want, before[want], after[want])
 		}
 	}
-	// A live upgrade drops each client, which says so and exits. One attached
-	// after it reads the open prompts from the Inbox, and raises no alert for
-	// them, and neither did the dropped one.
 	if got := alerts(); got != seen {
 		t.Errorf("ASSERTION: the handoff raised %d more alerts for prompts already open", got-seen)
 	}
@@ -307,7 +294,6 @@ func TestDaemonUpgradeKeepsOpenPrompts(t *testing.T) {
 		t.Errorf("ASSERTION: a client attached after the handoff raised %d alerts for prompts already open", got)
 	}
 
-	// The pane moves on, and its item closes as it always did.
 	_ = mustCall(t, base, "set-agent-state", map[string]any{"session": sess, "window": asker, "state": "working"})
 	if got := items(); got["OPEN-QUESTION"].ID != "" {
 		t.Errorf("ASSERTION: the restored item did not close when the pane moved on: %+v", got)
@@ -364,14 +350,11 @@ func TestDaemonUpgradeRefusesAndChangesNothing(t *testing.T) {
 		img := helloImage(t, base)
 		pids := panePIDs(t, base, sess)
 		_, err := callVerb(t, base, "test-handoff", map[string]any{"binary": bin})
-		// A build without handoff-accepts fails to run it; one that reads
-		// another handoff version says so.
 		if err == nil || !strings.Contains(err.Error(), "does not run as a tuios") && !strings.Contains(err.Error(), "cannot read this daemon's state") {
 			t.Errorf("ASSERTION: an upgrade to %s (%s) was not refused by the preflight: %v", bin, name, err)
 		}
 		after := helloImage(t, base)
 		afterPIDs := panePIDs(t, base, sess)
-		// The stream must still carry output after the refusal.
 		drain := time.After(200 * time.Millisecond)
 	drained:
 		for {
@@ -448,8 +431,6 @@ func TestDaemonUpgradeFallsBackToPreviousBinary(t *testing.T) {
 				t.Fatalf("ASSERTION: the daemon's pid changed from %d to %d", img.PID, after.PID)
 			}
 			if runtime.GOOS == "linux" {
-				// The fallback execs the descriptor of /proc/self/exe the
-				// daemon kept, so the image runs the file it ran before.
 				if want := resolvedTuios(t); exe != want {
 					t.Errorf("ASSERTION: the daemon runs %s after the fallback, want the binary it ran before, %s", exe, want)
 				}
@@ -721,8 +702,6 @@ func TestDaemonUpgradeRefusesWhileHookOrPluginRuns(t *testing.T) {
 			},
 			refuse: "a command of plugin e2e.slow is running",
 			putBack: func(t *testing.T, base string) map[string]any {
-				// The commit's preflight refuses a binary replaced during the
-				// hold, after the plugins were stopped, and the run is put back.
 				bin := copyTuios(t)
 				_ = mustCall(t, base, "test-handoff", map[string]any{"binary": bin, "hold_ms": 1500})
 				if err := os.WriteFile(bin+".new", []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
@@ -756,7 +735,6 @@ func TestDaemonUpgradeRefusesWhileHookOrPluginRuns(t *testing.T) {
 			startHandoffDaemon(t, base)
 			second := copyTuios(t)
 			newCommandWindow(t, base, "e2e-pipes", "anchor", false, "sh", "-c", "exec sleep 600")
-			// The anchor's own hook, if any, finishes before the one under test.
 			time.Sleep(4500 * time.Millisecond)
 			img := helloImage(t, base)
 			tc.start(t, base)
@@ -892,9 +870,6 @@ func TestDaemonUpgradePreflightRefusals(t *testing.T) {
 		{"another system", func(t *testing.T) string {
 			return script(t, `echo '{"handoff":[1,1],"os":"`+other+`"}'`)
 		}, "is built for " + other + ", and this daemon runs on " + runtime.GOOS + ". Upgrade to a tuios built for " + runtime.GOOS},
-		// Version 1 is what v0.11.1 wrote, with a gob daemon record, and what
-		// main wrote with a JSON one under the same number. A build that
-		// reads only 1 must not be handed this daemon's records.
 		{"reads only handoff v1", func(t *testing.T) string {
 			return script(t, `echo '{"handoff":[1,1],"version":"0.11.1","os":"`+runtime.GOOS+`"}'`)
 		}, "cannot read this daemon's state. This daemon writes handoff v" + strconv.Itoa(session.HandoffVersion) + ", and that binary reads v1 to v1"},
@@ -937,7 +912,6 @@ func TestDaemonUpgradePreflightRefusals(t *testing.T) {
 	}
 }
 
-// writeTuiosCopy copies the binary under test to dst with mode.
 func writeTuiosCopy(t *testing.T, dst string, mode os.FileMode) {
 	t.Helper()
 	data, err := os.ReadFile(tuiosBin)
@@ -947,8 +921,6 @@ func writeTuiosCopy(t *testing.T, dst string, mode os.FileMode) {
 	writeWithMode(t, dst, data, mode)
 }
 
-// writeWithMode writes data to path and then sets mode, which the umask
-// cannot narrow.
 func writeWithMode(t *testing.T, path string, data []byte, mode os.FileMode) {
 	t.Helper()
 	if err := os.WriteFile(path, data, 0o600); err != nil {
@@ -959,8 +931,6 @@ func writeWithMode(t *testing.T, path string, data []byte, mode os.FileMode) {
 	}
 }
 
-// ownerOnlyDir makes a folder only its owner can enter, with its links
-// resolved, as the daemon names its binary.
 func ownerOnlyDir(t *testing.T, parts ...string) string {
 	t.Helper()
 	dir := filepath.Join(parts...)
@@ -976,11 +946,6 @@ func ownerOnlyDir(t *testing.T, parts ...string) string {
 	return dir
 }
 
-// raceFixture is a folder race/ with a tuios copy at race/next/tuios and a
-// script at race/alt/tuios that anyone can write. The script appends a line to
-// a marker outside race/ and runs another tuios copy, so it behaves as tuios
-// and only the marker tells that it ran. A swap of race/next and race/alt puts
-// the script where the daemon checked the copy.
 type raceFixture struct {
 	next, alt, binary, marker string
 	script                    []byte
@@ -1008,8 +973,6 @@ func newRaceFixture(t *testing.T) raceFixture {
 	return f
 }
 
-// swapped says why race/next and race/alt were not swapped, or "" when they
-// were: race/next/tuios is the script and race/alt/tuios the copy.
 func (f raceFixture) swapped() string {
 	data, err := os.ReadFile(f.binary)
 	if err != nil || string(data) != string(f.script) {
@@ -1022,15 +985,11 @@ func (f raceFixture) swapped() string {
 	return ""
 }
 
-// markerText is what the script wrote to the marker, and whether the marker
-// exists.
 func (f raceFixture) markerText() (string, bool) {
 	data, err := os.ReadFile(f.marker)
 	return string(data), err == nil
 }
 
-// openFile is one entry of /proc/<pid>/fd: where it points, its file, and the
-// flags of its fdinfo.
 type openFile struct {
 	FD    string `json:"fd"`
 	Link  string `json:"link"`
@@ -1038,7 +997,6 @@ type openFile struct {
 	info  os.FileInfo
 }
 
-// oPath is O_PATH in the flags of /proc/<pid>/fdinfo on Linux.
 const oPath = 0o10000000
 
 func openFiles(t *testing.T, pid int) []openFile {
@@ -1064,7 +1022,6 @@ func openFiles(t *testing.T, pid int) []openFile {
 	return out
 }
 
-// filesOf is the entries of files that are file.
 func filesOf(files []openFile, file os.FileInfo) []openFile {
 	var out []openFile
 	for _, f := range files {
@@ -1075,8 +1032,6 @@ func filesOf(files []openFile, file os.FileInfo) []openFile {
 	return out
 }
 
-// awaitSettled waits until the daemon's image and the files it holds have
-// not changed for a second, at most 10 s: a commit runs after the reply.
 func awaitSettled(t *testing.T, base string, pid int) bool {
 	t.Helper()
 	var last string
@@ -1088,7 +1043,6 @@ func awaitSettled(t *testing.T, base string, pid int) bool {
 		}
 		if runtime.GOOS == "linux" {
 			for _, f := range openFiles(t, pid) {
-				// A socket comes and goes with each caller, the hello above too.
 				if strings.HasPrefix(f.Link, "/") {
 					key += " " + f.Link
 				}
@@ -1235,14 +1189,10 @@ func TestDaemonUpgradeRunsAPrivateCopy(t *testing.T) {
 		first := copies(base)
 		firstIno := inoOf(filepath.Join(append(first, "")[0], "tuios"))
 
-		// A second upgrade, from the copy to a new one: the image it starts
-		// removes the copy the first one ran from.
 		img2 := helloImage(t, base)
 		_ = mustCall(t, base, "test-handoff", map[string]any{"binary": copyTuios(t), "copy": true})
 		after2 := awaitNewImage(t, base, img2, 40*time.Second)
 		exe2, ino2 := executableOf(t, after2.PID), imageIno(t, after2.PID)
-		// The new image removes the old copy once it serves, so it may
-		// answer before the copy is gone.
 		second := copies(base)
 		for deadline := time.Now().Add(10 * time.Second); len(second) > 1 && time.Now().Before(deadline); second = copies(base) {
 			time.Sleep(50 * time.Millisecond)
@@ -1350,10 +1300,6 @@ func TestDaemonUpgradeRunsExecuteOnlyAndWrapperBinaries(t *testing.T) {
 	writeHandoffArtifact(t, steps)
 }
 
-// imageIno is the inode of the file process pid runs. A name is not enough
-// on darwin: ps prints argv[0], which a live upgrade keeps, and lsof prints
-// any one of the file's hard links, and the daemon links its own binary as
-// tuios.prev.
 func imageIno(t *testing.T, pid int) uint64 {
 	t.Helper()
 	if runtime.GOOS == "linux" {
@@ -1380,7 +1326,6 @@ func imageIno(t *testing.T, pid int) uint64 {
 	return 0
 }
 
-// inoOf is the inode of the file at path, 0 when there is none.
 func inoOf(path string) uint64 {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -1389,8 +1334,6 @@ func inoOf(path string) uint64 {
 	return info.Sys().(*syscall.Stat_t).Ino
 }
 
-// resolvedTuios is the binary under test with its links resolved, as
-// /proc/<pid>/exe names it.
 func resolvedTuios(t *testing.T) string {
 	t.Helper()
 	exe, err := filepath.EvalSymlinks(tuiosBin)
@@ -1440,7 +1383,6 @@ func TestDaemonUpgradeFallsBackAfterInstallerReplacesBinary(t *testing.T) {
 		t.Fatalf("the daemon runs %s, want the installed copy %s", exe, installed)
 	}
 
-	// The installer: a new file renamed over the path the daemon runs.
 	fresh := copyTuios(t)
 	if err := os.Rename(fresh, installed); err != nil {
 		t.Fatalf("rename the new binary over %s: %v", installed, err)

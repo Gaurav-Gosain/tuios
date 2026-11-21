@@ -8,13 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// A workspace whose panes a user resized keeps them where the user put them.
-// It does not keep them in a box the session has left: the session's size
-// moves while the workspace is off screen, when a client resizes, attaches
-// or leaves. On the way back the panes have to fill the session's box again,
-// with the user's splits.
-
-// workspaceRects is the daemon's rectangles of one workspace's panes.
 func workspaceRects(t *testing.T, base, name string, ws int) []winRect {
 	t.Helper()
 	wl, err := daemonWindows(base, name)
@@ -50,7 +43,6 @@ func TestCustomWorkspaceFollowsTheSessionSize(t *testing.T) {
 		t.Run(lay, func(t *testing.T) {
 			base := t.TempDir()
 			const name = "wsbox"
-			// Smallest, so the smaller client shrinks the session.
 			writeConfig(t, base, fmt.Sprintf("[daemon]\nwindow_size = \"smallest\"\n[startup]\nopen_default_window = true\ntiled = true\nlayout = %q\n", lay))
 			if out, err := tuiosCLI(t, base, "new", "-d", name); err != nil {
 				t.Fatalf("create the session: %v\n%s", err, out)

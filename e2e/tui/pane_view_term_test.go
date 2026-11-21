@@ -19,10 +19,6 @@ import (
 	"github.com/charmbracelet/x/xpty"
 )
 
-// fakeTerm is a terminal for pane-view that answers what pane-view asks it
-// at start (colours, DA1, XTVERSION, kitty graphics) the way a real one does,
-// and records every byte pane-view writes. tuitest answers some of those
-// requests with fixed values, and the theme test needs to choose them.
 type fakeTerm struct {
 	t    *testing.T
 	pty  xpty.Pty
@@ -33,30 +29,22 @@ type fakeTerm struct {
 	opts fakeTermOpts
 	done chan struct{}
 	err  error
-	// hold stops the reads while it is set, as a terminal that has stopped
-	// reading: the program's writes then block once the pty buffer is full.
 	hold atomic.Bool
 }
 
 type fakeTermOpts struct {
-	fg, bg string // X11 rgb:rrrr/gggg/bbbb
-	sixel  bool
-	kitty  bool
-	// programStatus answers the OSC 7501 query, as Rex does.
+	fg, bg        string
+	sixel         bool
+	kitty         bool
 	programStatus bool
-	// silent answers nothing, as a terminal with no reports does.
-	silent bool
-	// env is added to the program's environment.
-	env []string
-	// onPty, when set, sees the pty before the program starts.
-	onPty func(xpty.Pty)
-	// bin, when set, runs this binary instead of the one under test.
-	bin string
+	silent        bool
+	env           []string
+	onPty         func(xpty.Pty)
+	bin           string
 }
 
 var fakeTermQuery = regexp.MustCompile(`\x1b\](10|11|12|4;\d+);\?(?:\x07|\x1b\\)|\x1b\]7501;\?\x1b\\|\x1b\[c|\x1b\[>q|\x1b_Gi=31,[^\x1b]*a=q[^\x1b]*\x1b\\`)
 
-// startFakeTerm runs tuios with args on a pty of cols by rows.
 func startFakeTerm(t *testing.T, base string, cols, rows int, opts fakeTermOpts, args ...string) *fakeTerm {
 	t.Helper()
 	p, err := xpty.NewPty(cols, rows)
@@ -108,15 +96,12 @@ func (ft *fakeTerm) read() {
 		if n > 0 {
 			ft.mu.Lock()
 			ft.out.Write(buf[:n])
-			// Answer the requests in what arrived. A request split across
-			// reads is found on the next one: the scan restarts a little
-			// before where the last one ended.
 			start := max(0, ft.scan-64)
 			data := ft.out.Bytes()
 			var replies []byte
 			for _, loc := range fakeTermQuery.FindAllIndex(data[start:], -1) {
 				if start+loc[1] <= ft.scan {
-					continue // answered on an earlier read
+					continue
 				}
 				replies = append(replies, ft.answer(data[start+loc[0]:start+loc[1]])...)
 			}
@@ -164,14 +149,12 @@ func (ft *fakeTerm) answer(q []byte) []byte {
 	return nil
 }
 
-// output is everything pane-view wrote so far.
 func (ft *fakeTerm) output() string {
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	return ft.out.String()
 }
 
-// waitFor waits until the output matches re, and returns the match.
 func (ft *fakeTerm) waitFor(re *regexp.Regexp, timeout time.Duration) (string, bool) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -183,8 +166,6 @@ func (ft *fakeTerm) waitFor(re *regexp.Regexp, timeout time.Duration) (string, b
 	return "", false
 }
 
-// exitCode waits for pane-view to exit and returns its status: 128 plus the
-// signal when a signal ended it.
 func (ft *fakeTerm) exitCode(timeout time.Duration) (int, bool) {
 	select {
 	case <-ft.done:
@@ -210,8 +191,6 @@ func signalOf(ee *exec.ExitError) int {
 	return 0
 }
 
-// ttyCooked reports whether the pty's line discipline has ICANON and ECHO
-// on, as stty reads them from the slave.
 func (ft *fakeTerm) ttyCooked(t *testing.T) bool {
 	t.Helper()
 	name := ft.pty.Name()
@@ -236,8 +215,6 @@ func (ft *fakeTerm) ttyCooked(t *testing.T) bool {
 	return has("icanon") && has("echo")
 }
 
-// paneSize reads the pane's own size, as its shell sees it, by having the
-// shell write `stty size` to a file.
 func pvPaneSize(t *testing.T, base, session, window string) string {
 	t.Helper()
 	file := fmt.Sprintf("%s/size-%d.txt", base, time.Now().UnixNano())
@@ -255,7 +232,6 @@ func pvPaneSize(t *testing.T, base, session, window string) string {
 	return ""
 }
 
-// waitPaneSize waits until the pane's size is want ("rows cols").
 func waitPaneSize(t *testing.T, base, session, window, want, why string) {
 	t.Helper()
 	got := ""

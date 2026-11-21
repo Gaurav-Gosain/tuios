@@ -44,7 +44,6 @@ func TestWorktreeJJSession(t *testing.T) {
 	repo := testutil.JJRepo(t, false)
 	origin := filepath.Join(filepath.Dir(repo), "origin.git")
 	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
-	// A jj in front of the real one logs every call, the daemon's included.
 	realJJ := needTool(t, "jj")
 	bin, jjLog := t.TempDir(), filepath.Join(t.TempDir(), "jj.log")
 	wrapper := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '" + jjLog + "'\nexec '" + realJJ + "' \"$@\"\n"
@@ -72,7 +71,6 @@ func TestWorktreeJJSession(t *testing.T) {
 	if list := jj("workspace", "list"); !strings.Contains(list, "feat-jj") {
 		t.Fatalf("ASSERTION: jj workspace list lacks feat-jj:\n%s", list)
 	}
-	// The main workspace is not a branch that landed in trunk().
 	var rows []struct {
 		Session string `json:"session"`
 		Branch  string `json:"branch"`
@@ -91,8 +89,6 @@ func TestWorktreeJJSession(t *testing.T) {
 		}
 	}
 
-	// A listing polled while nothing moves answers merged from its cache,
-	// which jj's operation log keys: the merged check runs no jj.
 	if err := os.Truncate(jjLog, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +102,6 @@ func TestWorktreeJJSession(t *testing.T) {
 		t.Errorf("ASSERTION: a repeated listing ran the merged check's jj again:\n%s", calls)
 	}
 
-	// Two agent turns, each leaving a checkpoint.
 	checkpoints := func() int {
 		out, err := tuiosCLIIn(t, base, repo, "checkpoint", "list", "-s", session, "--json")
 		var res struct {
@@ -156,8 +151,6 @@ func TestWorktreeJJSession(t *testing.T) {
 		t.Errorf("ASSERTION: origin's feat/jj is %s, want %s", got, tip)
 	}
 
-	// jj leaves a new file over 1 MiB out of the snapshot, so forgetting the
-	// workspace would lose it: rm without force refuses and keeps it.
 	big := filepath.Join(ws, "big.bin")
 	if err := os.WriteFile(big, make([]byte, 2<<20), 0o644); err != nil {
 		t.Fatal(err)

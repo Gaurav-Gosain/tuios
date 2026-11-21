@@ -17,35 +17,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// A daemon that a host link started over ssh has no WAYLAND_DISPLAY or
-// DISPLAY. When the person attaches from the desktop of that machine, the
-// panes get the display of that local client, so wl-paste, xclip and a
-// coding agent's image paste work there. [daemon] display = "follow" is the
-// default.
-//
-// What can go wrong, written down before the code:
-//
-//   - The panes never get the display: no link, no variable, or a link that
-//     points at nothing. A probe in a new pane connects to the fake Wayland
-//     socket through WAYLAND_DISPLAY and reads the server's token.
-//   - A pane started under one client loses the display when that client
-//     leaves and another attaches. The probe runs again in the old pane after
-//     the link moved and reads the new server's token.
-//   - The follow takes a value it should not: a path that is not a socket, a
-//     socket in a folder anyone can write to, a forwarded X display
-//     (localhost:10.0), a client inside a pane (an agent), or a client that
-//     arrives over a host link (its values name another machine). Each
-//     leaves the link and display-env as they were.
-//   - A detach leaves a stale display: the link must fall back to the client
-//     before, and be removed with the last one.
-//   - A daemon that has a display of its own has it changed under it. Its
-//     panes must see exactly its own value.
-//   - XDG_RUNTIME_DIR is not needed when WAYLAND_DISPLAY is an absolute
-//     path: the person's client may run without it.
-
-// fakeWayland listens on a Unix socket at dir/name and answers each
-// connection with token, then closes it. It returns the socket's resolved
-// path.
 func fakeWayland(t *testing.T, dir, name, token string) string {
 	t.Helper()
 	sock := filepath.Join(dir, name)
@@ -71,7 +42,6 @@ func fakeWayland(t *testing.T, dir, name, token string) string {
 	return resolved
 }
 
-// privateDir is a new folder with the given mode.
 func privateDir(t *testing.T, prefix string, mode os.FileMode) string {
 	t.Helper()
 	dir, err := os.MkdirTemp("", prefix)
@@ -85,9 +55,6 @@ func privateDir(t *testing.T, prefix string, mode os.FileMode) string {
 	return dir
 }
 
-// fakeX11 listens on /tmp/.X11-unix/XN for a free N and answers each
-// connection with token. It returns the display name, :N. It skips the test
-// when the folder cannot be used.
 func fakeX11(t *testing.T, token string) string {
 	t.Helper()
 	const dir = "/tmp/.X11-unix"
@@ -124,9 +91,6 @@ func fakeX11(t *testing.T, token string) string {
 	return ""
 }
 
-// displayProbe writes a script that records the pane's display variables and
-// what the Wayland and X11 sockets answer, into the file named by its first
-// argument, and prints a short summary for the screen.
 func displayProbe(t *testing.T, base string) string {
 	t.Helper()
 	if _, err := exec.LookPath("python3"); err != nil {
@@ -165,11 +129,8 @@ echo "PROBE WL=${WAYLAND_DISPLAY##*/}"
 	return path
 }
 
-// probeRuns numbers the probe runs so each one has its own output file.
 var probeRuns int
 
-// runProbe runs the probe in the pane win of session and returns what it
-// recorded, as a map of the KEY=value lines.
 func runProbe(t *testing.T, base, session, win, probe string) map[string]string {
 	t.Helper()
 	probeRuns++
@@ -200,7 +161,6 @@ func runProbe(t *testing.T, base, session, win, probe string) map[string]string 
 	}
 }
 
-// displayEnvReport is tuios display-env --json.
 type displayEnvReport struct {
 	Follow bool              `json:"follow"`
 	Own    bool              `json:"own"`
@@ -222,8 +182,6 @@ func readDisplayEnv(t *testing.T, base, session string) displayEnvReport {
 	return r
 }
 
-// displayClient attaches a client to session with the given display
-// variables, and waits until the daemon lists it.
 func displayClient(t *testing.T, base, session string, env ...string) *tuitest.Terminal {
 	t.Helper()
 	term := startIn(t, base, startOpts{args: []string{"attach", session}, env: env})
@@ -249,9 +207,6 @@ func displayClient(t *testing.T, base, session string, env ...string) *tuitest.T
 	}
 }
 
-// linuxOnly skips on other systems. The display follow is for a Linux
-// desktop: Wayland, and X11 sockets under /tmp/.X11-unix, which on macOS is
-// under a symlinked /tmp the follow refuses.
 func linuxOnly(t *testing.T) {
 	t.Helper()
 	if runtime.GOOS != "linux" {
@@ -259,8 +214,6 @@ func linuxOnly(t *testing.T) {
 	}
 }
 
-// noDisplay starts the test as a daemon started over ssh would be: no
-// display in the environment the daemon inherits.
 func noDisplay(t *testing.T) {
 	linuxOnly(t)
 	t.Setenv("WAYLAND_DISPLAY", "")
@@ -294,8 +247,6 @@ func TestDisplayFollowsTheLocalClient(t *testing.T) {
 	}
 	link := r.Link
 
-	// Client A: a plain socket name in its XDG_RUNTIME_DIR, as a desktop
-	// session has it.
 	runtime := xdgDir(base, "XDG_RUNTIME_DIR")
 	sockA := fakeWayland(t, runtime, "wayland-e2e", "TOKEN-A")
 	x11 := fakeX11(t, "TOKEN-X")
@@ -322,7 +273,6 @@ func TestDisplayFollowsTheLocalClient(t *testing.T) {
 	}
 	saveArtifact(t, a, artifactDir(t), "display-new-pane")
 
-	// display-env prints the same thing, for a shell that started earlier.
 	out, err := tuiosCLI(t, base, "display-env", "-s", sess)
 	if err != nil {
 		t.Fatalf("display-env: %v\n%s", err, out)
@@ -332,8 +282,6 @@ func TestDisplayFollowsTheLocalClient(t *testing.T) {
 		t.Fatalf("display-env printed\n%s\nwant\n%s", out, want)
 	}
 
-	// Client B: an absolute WAYLAND_DISPLAY in a folder that is no runtime
-	// dir. The pane started under A reaches B's socket through the link.
 	sockB := fakeWayland(t, privateDir(t, "wl", 0o700), "wayland-b", "TOKEN-B")
 	b := displayClient(t, base, sess, "WAYLAND_DISPLAY="+sockB)
 	waitLinkTo(t, link, sockB, "after a client with an absolute WAYLAND_DISPLAY attached")
@@ -341,7 +289,6 @@ func TestDisplayFollowsTheLocalClient(t *testing.T) {
 		t.Fatalf("the pane started under A did not reach B's socket through the link: %v", got)
 	}
 
-	// Refused values: the link stays on B, and so does display-env.
 	notSock := filepath.Join(privateDir(t, "nf", 0o700), "wayland-0")
 	if err := os.WriteFile(notSock, nil, 0o600); err != nil {
 		t.Fatal(err)
@@ -372,9 +319,6 @@ func TestDisplayFollowsTheLocalClient(t *testing.T) {
 		}
 	}
 
-	// A client inside a pane is not the person. It attaches a second
-	// session from the probe pane and gives it no display. The same socket
-	// from a client outside every pane does: that is the positive half.
 	const other = "e2e-display-other"
 	if out, err := tuiosCLI(t, base, "new", other, "--detach"); err != nil {
 		t.Fatalf("create session: %v: %s", err, out)
@@ -405,7 +349,6 @@ func TestDisplayFollowsTheLocalClient(t *testing.T) {
 	}
 	waitLinkTo(t, otherLink, "", "after the only client with a display left "+other)
 
-	// B detaches: the link and the display go back to A.
 	if err := b.Close(); err != nil {
 		t.Logf("close B: %v", err)
 	}
@@ -414,7 +357,6 @@ func TestDisplayFollowsTheLocalClient(t *testing.T) {
 		t.Fatalf("after B left the display is %v, want A's %s", env, x11)
 	}
 
-	// A leaves: nothing is left to follow.
 	if err := a.SendKeys(tuitest.Ctrl('b'), "d"); err != nil {
 		t.Fatalf("detach A: %v", err)
 	}
@@ -444,7 +386,6 @@ func TestDisplayFollowIgnoresAHostLinkClient(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "╰──") }, bootTimeout); err != nil {
 		t.Fatalf("the client never drew the far session: %v\n%s", err, term.Snapshot())
 	}
-	// Typing counts as use, which is the other way a client is followed.
 	if err := term.SendKeys("echo TYPED-$((6*7))\r"); err != nil {
 		t.Fatalf("type: %v", err)
 	}
@@ -538,9 +479,6 @@ func TestDisplayFollowReachesTheDesktopFromANewPane(t *testing.T) {
 	}
 	sock := fakeWayland(t, privateDir(t, "wl", 0o700), "wayland-p", "TOKEN-P")
 	term := displayClient(t, base, sess, "WAYLAND_DISPLAY="+sock)
-	// The attach and the first new pane can cross, so a pane that started
-	// before the daemon took the display is not a failure. A new one is
-	// tried until the deadline.
 	deadline := time.Now().Add(uiTimeout)
 	var got map[string]string
 	for i := 0; ; i++ {

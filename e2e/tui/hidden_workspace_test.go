@@ -10,12 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// A pane on a workspace the client does not show is not streamed to it: the
-// client subscribes to the panes of the shown workspace only. The two tests
-// here cover what the client still has to learn about such a pane.
-
-// newHiddenPane opens a pane named name on workspace 2 of session, without
-// focusing it, and returns its window id once the daemon lists it.
 func newHiddenPane(t *testing.T, base, session, name string, argv ...string) string {
 	t.Helper()
 	args := append([]string{"new-window", name, "-s", session, "--workspace", "2", "--no-focus", "--"}, argv...)
@@ -98,10 +92,6 @@ func TestAPaneShownByFocusWindowStreamsItsOutput(t *testing.T) {
 	_, img := writeIcatPNG(t, t.TempDir())
 	frame := fmt.Sprintf(`\033_Ga=T,q=2,f=100,s=%d,v=%d;%s\033\\`, icatImageW, icatImageH,
 		base64.StdEncoding.EncodeToString(img))
-	// EARLY is printed while the pane is hidden, so it reaches the client in
-	// the snapshot. The loop starts after the switch, so LIVE and the frames
-	// reach it in the stream. Markers are split so the command line cannot
-	// match them.
 	script := `echo EARLY""MARK; sleep 3; while :; do printf '` + frame + `'; echo; echo LIVE""MARK; sleep 1; done`
 	id := newHiddenPane(t, base, "home", "shown-later", "/bin/sh", "-c", script)
 

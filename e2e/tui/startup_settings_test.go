@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// writeConfig drops a config.toml into the isolation root's XDG_CONFIG_HOME so
-// the tuios process started against that root loads it at boot.
 func writeConfig(t *testing.T, base, body string) {
 	t.Helper()
 	dir := filepath.Join(base, "XDG_CONFIG_HOME", "tuios")
@@ -41,16 +39,12 @@ func TestStartupAllThreeSettings(t *testing.T) {
 	term := startIn(t, base, startOpts{cols: 120, rows: 40, args: []string{"new", "e2e"}})
 	killDaemon(t, base)
 
-	// Setting 1: a window is already open, so the empty-session welcome hint is
-	// gone and the dock reports one window without any keystroke.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return countWindows(s) == 1 && !strings.Contains(s.Text(), welcomeHint)
 	}, bootTimeout); err != nil {
 		t.Fatalf("startup did not open a default window: %v\n%s", err, term.Snapshot())
 	}
 
-	// Setting 2: with one window and tiling on, that window fills the screen
-	// (a tiled single pane), rather than sitting at the half-size floating box.
 	boot := waitForSettledGeometry(t, base, 1)
 	if w := boot[0]; w.Width < 100 {
 		t.Fatalf("the startup window is not tiled to full width: (%d,%d) %dx%d",
@@ -58,10 +52,6 @@ func TestStartupAllThreeSettings(t *testing.T) {
 	}
 	t.Logf("rendered screen at boot (one terminal open, tiled full-screen):\n%s", term.Snapshot())
 
-	// Setting 3: we are already in terminal mode, so a command typed WITHOUT any
-	// manual mode switch reaches the shell. In window-management mode the same
-	// keys would be swallowed as window-manager bindings and never run, so the
-	// command's computed output appearing proves input landed in the terminal.
 	if err := term.SendKeys("echo STARTUP_TERMINAL_OK"); err != nil {
 		t.Fatalf("type shell command at boot: %v", err)
 	}
@@ -74,9 +64,6 @@ func TestStartupAllThreeSettings(t *testing.T) {
 	}
 	t.Logf("rendered screen after typing at boot (terminal mode, no manual switch):\n%s", term.Snapshot())
 
-	// Open two more windows WITHOUT ever toggling tiling. If the session started
-	// tiled, they join the layout and partition the screen; if it had started
-	// floating they would stack at the same half-size box.
 	for i := 2; i <= 3; i++ {
 		out, err := tuiosCLI(t, base, "run-command", "NewWindow")
 		if err != nil {
@@ -104,7 +91,6 @@ func TestStartupAllThreeSettings(t *testing.T) {
 		t.Logf("tiled window %s: (%d,%d) %dx%d", r.ID, r.X, r.Y, r.Width, r.Height)
 	}
 
-	// Rendered capture of the three tiled panes for the record.
 	t.Logf("rendered screen with three panes tiled on start (tiling never toggled by hand):\n%s", term.Snapshot())
 	alive(t, term, "after verifying startup tiling")
 }
@@ -122,7 +108,6 @@ func TestStartupDefaultsPreserved(t *testing.T) {
 	if n := countWindows(term.Screen()); n > 0 {
 		t.Fatalf("default boot opened %d windows, expected an empty session", n)
 	}
-	// Give it a moment and re-check nothing auto-opened late.
 	time.Sleep(500 * time.Millisecond)
 	if !strings.Contains(term.Screen().Text(), welcomeHint) {
 		t.Fatalf("welcome screen vanished without a window being opened\n%s", term.Snapshot())
@@ -167,8 +152,6 @@ func TestStartupSessionAndWindow(t *testing.T) {
 	}
 	saveFrame(t, term, "startup-session-window")
 
-	// The session is gone: a bare tuios makes it. The pane name matches
-	// nothing there, so the attach goes ahead and no pane is made.
 	writeConfig(t, base, "[startup]\nsession = \"fresh\"\nwindow = \"nope\"\n")
 	second := startIn(t, base, startOpts{daemonDefault: true})
 	waitBoot(t, second)
@@ -179,7 +162,6 @@ func TestStartupSessionAndWindow(t *testing.T) {
 	saveFrame(t, second, "startup-session-made")
 }
 
-// waitAttached waits until tuios ls says session name has a client.
 func waitAttached(t *testing.T, base, name string) {
 	t.Helper()
 	rows := waitForRows(t, base, func(rows []lsRow) bool {

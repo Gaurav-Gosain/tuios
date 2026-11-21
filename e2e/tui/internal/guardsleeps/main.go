@@ -39,14 +39,10 @@ import (
 	"strings"
 )
 
-// keep are helpers whose insertGuard sleep is no guard wait. sendKeys sends
-// each key as its own write a moment apart, as a person types: without the gap
-// two keys arrive in one read, and esc, esc decodes as alt+esc.
 var keep = map[string]bool{
 	"sendKeys": true,
 }
 
-// helpers are the mode-switch helpers whose fixed sleeps all go.
 var helpers = map[string]bool{
 	"enterTerminalMode": true,
 	"leaveTerminalMode": true,
@@ -98,7 +94,6 @@ func main() {
 
 type span struct{ start, end int }
 
-// rewrite returns src with the guard sleeps deleted, and one line per site.
 func rewrite(name string, src []byte) ([]byte, []string, error) {
 	if formatted, err := format.Source(src); err != nil {
 		return nil, nil, fmt.Errorf("%s: %w", name, err)
@@ -164,7 +159,6 @@ func rewrite(name string, src []byte) ([]byte, []string, error) {
 	return out, sites, nil
 }
 
-// importName is the name a file uses for an import path, or "".
 func importName(f *ast.File, path string) string {
 	for _, imp := range f.Imports {
 		if p, _ := strconv.Unquote(imp.Path.Value); p != path {
@@ -181,7 +175,6 @@ func importName(f *ast.File, path string) string {
 	return ""
 }
 
-// sleepArg returns the argument of a time.Sleep call.
 func sleepArg(e ast.Expr, timeName string) (ast.Expr, bool) {
 	call, ok := e.(*ast.CallExpr)
 	if !ok || len(call.Args) != 1 {
@@ -198,8 +191,6 @@ func sleepArg(e ast.Expr, timeName string) (ast.Expr, bool) {
 	return call.Args[0], true
 }
 
-// startsWithGuard reports whether e is insertGuard, or a sum whose first term
-// is insertGuard.
 func startsWithGuard(e ast.Expr) bool {
 	switch v := e.(type) {
 	case *ast.ParenExpr:
@@ -212,7 +203,6 @@ func startsWithGuard(e ast.Expr) bool {
 	return false
 }
 
-// lineSpan is the whole line of a statement that has its line to itself.
 func lineSpan(fset *token.FileSet, src []byte, n ast.Node) (span, error) {
 	start := fset.Position(n.Pos()).Offset
 	end := fset.Position(n.End()).Offset
@@ -242,7 +232,6 @@ func cut(src []byte, dels []span) []byte {
 	return append(out, src[at:]...)
 }
 
-// dropUnusedImport removes the import of path when nothing in src uses it.
 func dropUnusedImport(name string, src []byte, path string) ([]byte, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, name, src, parser.ParseComments)

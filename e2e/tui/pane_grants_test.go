@@ -273,12 +273,10 @@ func TestAChildAgentNeverRunsWiderThanItsParent(t *testing.T) {
 		t.Errorf("the refused child has a window:\n%s", windows)
 	}
 
-	// The person is never held.
 	out, err := tuiosCLI(t, base, "start-agent", "-s", "plain", "claude --dangerously-skip-permissions", "--name", "byperson", "--ready-timeout", "500", "--json")
 	if !strings.Contains(out, "--dangerously-skip-permissions") || strings.Contains(out, "forbidden") {
 		t.Errorf("the person's start-agent was held: %v\n%s", err, out)
 	}
-	// The calls and their answers, for a person to read back.
 	if dir := os.Getenv("TUIOS_E2E_FRAMES"); dir != "" {
 		record := "parent: claude --permission-mode plan\n\nwide child:\n" + string(wide) + "\nchild with no mode:\n" + string(step) + "\nthe person:\n" + out
 		if err := os.WriteFile(filepath.Join(dir, "child-mode-clamp.txt"), []byte(record), 0o644); err != nil {

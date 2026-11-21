@@ -13,9 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// pageKey sends the xterm form of PageUp or PageDown with one modifier. The
-// terminal really sends these bytes, so this drives Bubble Tea's decoder as
-// well as tuios's binding lookup. modifier is 2 for Shift and 5 for Ctrl.
 func pageKey(t *testing.T, term *tuitest.Terminal, key, modifier int) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Key(fmt.Sprintf("\x1b[%d;%d~", key, modifier))); err != nil {
@@ -23,10 +20,6 @@ func pageKey(t *testing.T, term *tuitest.Terminal, key, modifier int) {
 	}
 }
 
-// exercisePageScroll proves that one configured page-up press moves by a
-// screen-sized step, and that its matching page-down press returns to live
-// output. It returns the rendered frame at the bottom as the repeatable
-// artifact for a failure report or a verbose test run.
 func exercisePageScroll(t *testing.T, term *tuitest.Terminal, modifier int) string {
 	t.Helper()
 	const total = 300
@@ -50,10 +43,6 @@ func exercisePageScroll(t *testing.T, term *tuitest.Terminal, modifier int) stri
 	return term.Snapshot()
 }
 
-// pasteWithMiddleClick drives a physical middle-button press and release over
-// the pane. The OSC 52 responder is the host clipboard, so seeing clip at the
-// shell prompt proves the click reached tuios's paste path rather than the
-// pane's ordinary mouse handling.
 func pasteWithMiddleClick(t *testing.T, term *tuitest.Terminal, resp *osc52Responder, mods tuitest.KeyMods, clip string) {
 	t.Helper()
 	resp.arm(term)
@@ -73,7 +62,7 @@ func TestDefaultPageAndMiddleBindings(t *testing.T) {
 		newWindow(t, term)
 		enterTerminalMode(t, term)
 
-		frame := exercisePageScroll(t, term, 2) // Shift
+		frame := exercisePageScroll(t, term, 2)
 		t.Logf("page-scroll frame after the round trip:\n%s", frame)
 		alive(t, term, "after the default page-scroll bindings")
 	})
@@ -109,7 +98,7 @@ terminal_paste_host = ["ctrl+middle"]
 		newWindow(t, term)
 		enterTerminalMode(t, term)
 
-		frame := exercisePageScroll(t, term, 5) // Ctrl
+		frame := exercisePageScroll(t, term, 5)
 		t.Logf("rebound page-scroll frame after the round trip:\n%s", frame)
 		alive(t, term, "after the rebound page-scroll bindings")
 	})
@@ -130,8 +119,6 @@ terminal_paste_host = ["ctrl+middle"]
 	})
 }
 
-// sgrMiddleClick matches a middle press and its release as a pane receives
-// them in SGR encoding, at the same cell.
 var sgrMiddleClick = regexp.MustCompile(`^\x1b\[<1;(\d+);(\d+)M\x1b\[<1;(\d+);(\d+)m$`)
 
 // TestMousePaneKeepsPageKeysAndMiddleButton checks a pane whose program turned
@@ -156,7 +143,6 @@ terminal_paste_host = ["middle", "ctrl+middle"]
 	sendRaw(t, term, shiftPageUp)
 	waitPaneBytes(t, term, log, shiftPageUp)
 
-	// The binding takes the press, so the release is tuios's too.
 	col, row := paneCell(t, term)
 	mouseClick(t, term, col, row, tuitest.MouseMiddle, tuitest.ModCtrl)
 
@@ -171,7 +157,6 @@ terminal_paste_host = ["middle", "ctrl+middle"]
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	// Anything that was still on its way.
 	time.Sleep(300 * time.Millisecond)
 	b, _ := os.ReadFile(log)
 	got = strings.TrimPrefix(string(b), shiftPageUp)

@@ -11,11 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// bareBells returns the offsets of every BEL in stream that is a bell of its
-// own: one in the ground state, outside any escape sequence. A BEL that ends an
-// OSC (the title, a notification, a hyperlink) is a terminator, not a bell, and
-// a terminal does not ring for it. ESC P, ESC _, ESC ^ and ESC X strings end only
-// at ST, so a BEL inside one is data.
 func bareBells(stream []byte) []int {
 	const (
 		ground = iota
@@ -45,7 +40,6 @@ func bareBells(stream []byte) []int {
 			case 'P', '_', '^', 'X':
 				state = str
 			default:
-				// A two-byte escape, or an intermediate the next byte ends.
 				if b < 0x20 || b > 0x2f {
 					state = ground
 				}
@@ -71,7 +65,6 @@ func bareBells(stream []byte) []int {
 	return out
 }
 
-// bellsSince counts the bare bells in stream at or past offset from.
 func bellsSince(stream []byte, from int) int {
 	n := 0
 	for _, at := range bareBells(stream) {
@@ -147,9 +140,6 @@ bell = %q
 			}
 
 			hasToast := func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "bell") }
-			// A mode that does something is waited for. A mode that does not
-			// is given the same time to do it anyway, so its absence means
-			// something.
 			deadline := time.Now().Add(uiTimeout)
 			if !tc.forward && !tc.toast {
 				deadline = time.Now().Add(3 * time.Second)
@@ -165,7 +155,6 @@ bell = %q
 				time.Sleep(100 * time.Millisecond)
 			}
 			if !tc.forward || !tc.toast {
-				// Give the absent half its chance to show up.
 				time.Sleep(time.Second)
 				bells = bellsSince(stream.bytes(), from)
 				toast = hasToast(term.Screen())

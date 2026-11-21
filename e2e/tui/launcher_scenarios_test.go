@@ -11,17 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// holdScan plants the file that makes the tuios under test hold its $PATH scan
-// open (knob hold_scan in internal/app/run_anything.go). It returns the
-// environment entry to start tuios with and the release that lets the scan
-// land.
-//
-// The seam exists because these tests drive a separate process: a Go-level
-// fake cannot reach its scan, and racing the scan with keystrokes loses
-// somewhere. This machine's scan is slower than its key delivery; CI's is
-// faster, and there the verb arrived after the rows and the "before the scan"
-// test was silently testing the ordinary path. Holding the scan makes the
-// ordering a fact the test states rather than a race it hopes to win.
 func holdScan(t *testing.T) (env string, release func()) {
 	t.Helper()
 	hold := filepath.Join(t.TempDir(), "hold-scan")
@@ -31,21 +20,12 @@ func holdScan(t *testing.T) (env string, release func()) {
 	return knob("hold_scan=" + hold), func() { _ = os.Remove(hold) }
 }
 
-// The launcher's icons are kitty placements, and a placement outlives the
-// panel that drew it, so every way the panel can go away is its own way to
-// leave a picture on screen. These walk all of them and assert on the host
-// stream rather than the grid: an image is not in the grid, and a test that
-// checks a delete was written proves only that bytes were composed.
-
-// launcherFixture is one launcher run: a tuios in a hermetic root with planted
-// desktop entries, and the host stream it wrote.
 type launcherFixture struct {
 	term   *tuitest.Terminal
 	stream *hostStream
 	base   string
 }
 
-// newLauncherFixture boots tuios with n planted apps.
 func newLauncherFixture(t *testing.T, n int, extraEnv ...string) *launcherFixture {
 	t.Helper()
 	stream := &hostStream{}
@@ -60,10 +40,8 @@ func newLauncherFixture(t *testing.T, n int, extraEnv ...string) *launcherFixtur
 	return &launcherFixture{term: term, stream: stream, base: base}
 }
 
-// live is the launcher placements the host still holds.
 func (f *launcherFixture) live() []string { return liveLauncherPlacements(f.stream.bytes()) }
 
-// openWithQuery opens the launcher and filters it to the planted apps.
 func (f *launcherFixture) openWithQuery(t *testing.T, query string, wantRows int) {
 	t.Helper()
 	openLauncher(t, f.term)
@@ -82,22 +60,6 @@ func (f *launcherFixture) openWithQuery(t *testing.T, query string, wantRows int
 	}
 }
 
-// nudgeSelection moves the selection down and back, so the icon placements an
-// action queued go out behind a frame whose text actually changed.
-//
-// Icon placements are queued to go out behind the next frame bubbletea writes,
-// and a frame whose text is byte for byte the frame before it is not written at
-// all: the icon cells are blanks, so the frame that first carries a decoded icon
-// is exactly such a frame. Moving the selection changes a row's colours, which
-// is a text change, so it is what gets the queued graphics onto the wire. See
-// the launcher-icon findings.
-//
-// The wait between the two keys is for the first key's frame to have been
-// written, because the second one undoes the first and a pair that never
-// reaches a frame changes no text at all. It waits on the screen changing
-// rather than on a constant, so a loaded machine takes the time it needs. A
-// list with no rows has no selection to move and nothing queued behind it, so
-// the budget running out there is not a failure and is not treated as one.
 func (f *launcherFixture) nudgeSelection() {
 	before := f.term.Screen().Text()
 	_ = f.term.SendKeys(tuitest.Down)
@@ -105,25 +67,10 @@ func (f *launcherFixture) nudgeSelection() {
 	_ = f.term.SendKeys(tuitest.Up)
 }
 
-// nudgeBudget bounds the wait inside nudgeSelection. It is an upper bound on a
-// wait and not a sleep: the ordinary path returns on the first frame after the
-// keystroke.
 const nudgeBudget = 3 * time.Second
 
-// placementGuard is how long requireNoPlacements keeps watching after the host
-// has gone clean. It is a guard window rather than a wait, because what it is
-// checking for is the absence of an event and there is nothing to wait on.
 const placementGuard = 400 * time.Millisecond
 
-// waitPlacements waits until the launcher placements the host still holds
-// satisfy want, and returns the last set it saw.
-//
-// Every one of these escapes is queued to ride out behind the next frame
-// bubbletea writes, so it reaches the host after the action that caused it
-// rather than with it, and how long after is the machine's business. Waiting on
-// the condition states that; a constant only guesses at it, and the guess is
-// what a loaded machine loses. Nothing is weakened by waiting: an icon that
-// really was left behind never goes away, however long the wait.
 func (f *launcherFixture) waitPlacements(want func([]string) bool, timeout time.Duration) []string {
 	deadline := time.Now().Add(timeout)
 	for {
@@ -135,24 +82,6 @@ func (f *launcherFixture) waitPlacements(want func([]string) bool, timeout time.
 	}
 }
 
-// requirePlaced fails when the run never drew an icon, which would make every
-// leak assertion after it vacuous.
-//
-// Two things have to happen before an icon is on the host, in this order, and
-// the test can only wait on the first. The icon has to be decoded, which is
-// filesystem and CPU work in a command with no bound on it. Then a frame whose
-// text differs from the frame before it has to be written, because that is what
-// carries the queued placement out; see nudgeSelection. A decode that lands
-// after the last text change leaves its placement queued behind a frame that
-// never comes, so the selection is moved again while waiting rather than once
-// before it.
-//
-// That is driving the panel, not retrying the assertion. The assertion is
-// unchanged: an icon has to reach the host, and this still fails when none
-// ever does. It is also a workaround for tuios, not a property of it: a decode
-// that lands on an otherwise still panel leaves the icons invisible until the
-// user moves the selection, which is a real defect and is written up with these
-// findings rather than hidden by this loop.
 func (f *launcherFixture) requirePlaced(t *testing.T) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -168,19 +97,11 @@ func (f *launcherFixture) requirePlaced(t *testing.T) {
 	}
 }
 
-// requireClean fails when any launcher placement outlived the panel.
 func (f *launcherFixture) requireClean(t *testing.T, what string) {
 	t.Helper()
 	f.requireNoPlacements(t, what+" left")
 }
 
-// requireNoPlacements waits for the host to hold no launcher placement, and
-// then checks that none comes back.
-//
-// Both halves are the bug. A placement the panel never took down is the one the
-// reports are about, and it is what the wait catches. A placement made after
-// the panel had gone is the other way to leave a picture on screen, and it
-// would land after the wait returned, which is what the guard window is for.
 func (f *launcherFixture) requireNoPlacements(t *testing.T, what string) {
 	t.Helper()
 	if got := f.waitPlacements(func(p []string) bool { return len(p) == 0 }, uiTimeout); len(got) != 0 {
@@ -194,7 +115,6 @@ func (f *launcherFixture) requireNoPlacements(t *testing.T, what string) {
 	}
 }
 
-// waitClosed waits for the launcher panel to leave the screen.
 func (f *launcherFixture) waitClosed(t *testing.T, what string) {
 	t.Helper()
 	if err := f.term.WaitFor(func(s tuitest.Screen) bool {
@@ -203,8 +123,6 @@ func (f *launcherFixture) waitClosed(t *testing.T, what string) {
 		t.Fatalf("the launcher never closed after %s: %v\n%s", what, err, f.term.Snapshot())
 	}
 }
-
-// --- close paths -----------------------------------------------------------
 
 func TestLauncherIconsCloseByEscape(t *testing.T) {
 	requireReal(t, "real kitty under Xvfb")
@@ -258,7 +176,6 @@ func TestLauncherIconsCloseByClickAway(t *testing.T) {
 	f.nudgeSelection()
 	f.requirePlaced(t)
 
-	// Top left, far outside the centred panel.
 	mouseClick(t, f.term, 2, 1, tuitest.MouseLeft, 0)
 	f.waitClosed(t, "a click away")
 	f.requireClean(t, "closing by clicking away")
@@ -276,7 +193,6 @@ func TestLauncherIconsCloseByShortLivedProgram(t *testing.T) {
 	f.nudgeSelection()
 	f.requirePlaced(t)
 
-	// Narrow onto the program that exits the moment it starts, and run it.
 	if err := f.term.SendKeys(tuitest.Ctrl('u')); err != nil {
 		t.Fatalf("ctrl+u: %v", err)
 	}
@@ -301,10 +217,6 @@ func TestLauncherIconsEmptyQuery(t *testing.T) {
 	requireReal(t, "real kitty under Xvfb")
 	f := newLauncherFixture(t, 20)
 	f.openWithQuery(t, "", 0)
-	// With no query there is no row to wait for by name, so the scan landing
-	// is waited on directly: its placeholder line leaves the panel when the
-	// rows arrive. Without this, a scan slower than the nudge below closes an
-	// empty panel and the clean check passes over a launcher that never drew.
 	if err := f.term.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(s.Text(), "Scanning for programs")
 	}, uiTimeout); err != nil {
@@ -334,12 +246,6 @@ func TestLauncherIconsNoMatchQuery(t *testing.T) {
 	if err := f.term.WaitForText("No program matches", uiTimeout); err != nil {
 		t.Fatalf("the no-match line never appeared: %v\n%s", err, f.term.Snapshot())
 	}
-	// The rows are gone while the panel is still up, so nothing may still be
-	// placed: this is the leak that shows as icons floating over prose.
-	//
-	// No nudge here. The frame that replaced the rows with the prose is a text
-	// change in its own right, so it is what carries the deletes out; there is
-	// no selection left to move either.
 	f.requireNoPlacements(t, "a query that matches nothing left")
 
 	if err := f.term.SendKeys(tuitest.Esc); err != nil {
@@ -348,8 +254,6 @@ func TestLauncherIconsNoMatchQuery(t *testing.T) {
 	f.waitClosed(t, "esc")
 	f.requireClean(t, "closing on a query that matched nothing")
 }
-
-// --- scan in flight --------------------------------------------------------
 
 // TestLauncherIconsClosedDuringScan closes the launcher in the window where the
 // $PATH scan it asked for has not come back yet, so the rows it would have
@@ -382,10 +286,6 @@ func TestLauncherIconsClosedDuringScan(t *testing.T) {
 			t.Fatalf("esc: %v", err)
 		}
 		f.waitClosed(t, "esc during scan")
-		// Only now may the scan land, on a panel that is already gone. The
-		// pause is release propagation, not a gate: a scan that misses it
-		// stays held until the next release and lands on a closed panel all
-		// the same.
 		if err := os.Remove(hold); err != nil {
 			t.Fatalf("release hold-scan: %v", err)
 		}
@@ -393,8 +293,6 @@ func TestLauncherIconsClosedDuringScan(t *testing.T) {
 	}
 	f.requireClean(t, "closing while a scan was in flight")
 }
-
-// --- query changes and scrolling -------------------------------------------
 
 // TestLauncherIconsSurviveQueryChanges narrows and widens the query so rows
 // scroll in and out repeatedly, then closes. Every row that leaves has to take
@@ -406,7 +304,6 @@ func TestLauncherIconsSurviveQueryChanges(t *testing.T) {
 	f.nudgeSelection()
 	f.requirePlaced(t)
 
-	// Narrow to a few rows, then to none, then back to many.
 	for _, q := range []string{"0", "1", "zzz", ""} {
 		switch q {
 		case "":
@@ -431,14 +328,7 @@ func TestLauncherIconsSurviveQueryChanges(t *testing.T) {
 				t.Fatalf("narrow with %q: %v", q, err)
 			}
 		}
-		// Each step is waited out on the host rather than slept off, so the
-		// churn this test is named for is a fact of the run: the rows that
-		// arrived really did get their pictures, and the step that matches
-		// nothing really did take every picture down before the next step put
-		// more up.
 		if q == "zzz" {
-			// The prose that replaced the rows is a text change of its own, and
-			// there is no selection left to move, so no nudge here.
 			f.requireNoPlacements(t, "narrowing to a query that matches nothing left")
 			continue
 		}
@@ -478,8 +368,6 @@ func TestLauncherIconsSurviveScrolling(t *testing.T) {
 	f.requireClean(t, "closing after scrolling the list")
 }
 
-// --- repeated opens --------------------------------------------------------
-
 // TestLauncherIconsDoNotAccumulate opens and closes several times. Nothing may
 // be left standing between runs, and the image ids may not climb without bound:
 // an upload is meant to be reused, not repeated per open.
@@ -489,8 +377,6 @@ func TestLauncherIconsDoNotAccumulate(t *testing.T) {
 	for i := range 5 {
 		f.openWithQuery(t, "zzapp", 3)
 		f.nudgeSelection()
-		// Every open, not only the first: a close that leaves nothing behind
-		// proves nothing about the open that drew nothing.
 		f.requirePlaced(t)
 		if err := f.term.SendKeys(tuitest.Esc); err != nil {
 			t.Fatalf("esc: %v", err)
@@ -503,8 +389,6 @@ func TestLauncherIconsDoNotAccumulate(t *testing.T) {
 			"an icon is meant to be uploaded once and re-placed", n)
 	}
 }
-
-// --- graphics off ----------------------------------------------------------
 
 // TestLauncherDrawsNoIconsWithoutGraphics is the other half of the capability
 // check: with kitty graphics off there is no icon column and no escape at all,
@@ -529,15 +413,6 @@ func TestLauncherDrawsNoIconsWithoutGraphics(t *testing.T) {
 	}
 }
 
-// --- type it out -----------------------------------------------------------
-
-// requireTypedThenRuns is the only honest assertion for the type-it-out path.
-//
-// Seeing the command's name on screen proves nothing: the pane's border carries
-// it as a title, and the tty's own line discipline echoes bytes written before
-// the shell has turned echo off, so text can be on screen that no line editor
-// ever received. Pressing Enter and requiring the program to run is what tells
-// a command line waiting to be edited from a picture of one.
 func requireTypedThenRuns(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	if strings.Contains(term.Screen().Text(), runAnythingMarker) {
@@ -551,19 +426,8 @@ func requireTypedThenRuns(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// typeOutPrompt is the prompt the pane's shell prints under these tests. It
-// replaces the harness default because it is waited on, and a bare "$" is
-// something other parts of the screen can carry.
 const typeOutPrompt = "zzsh$"
 
-// waitForPaneShell waits until the pane's shell has printed its prompt.
-//
-// The prompt is what tells the shell being up from the tty having echoed the
-// launcher's bytes before it started: the line discipline puts the typed line
-// on screen either way, but only a shell that is running and reading prints a
-// prompt. It has to be a prompt from /bin/sh rather than a greeting from a
-// shell that has to be installed; this once waited on fish, which left the
-// pane unopenable wherever fish is absent.
 func waitForPaneShell(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	if err := term.WaitForText(typeOutPrompt, shellTimeout); err != nil {
@@ -571,14 +435,6 @@ func waitForPaneShell(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// heldShell writes a shell whose start the test controls: it waits for the
-// hold file to disappear, then becomes /bin/sh. The pane spawns it through
-// $SHELL, so the window between "the pane's PTY exists" and "a shell is
-// reading it" is held open for as long as the test needs it to be.
-//
-// The prompt is re-set through env at the exec because the wrapper itself is a
-// non-interactive shell, and where /bin/sh is bash a non-interactive shell
-// drops PS1 from the environment on its way through.
 func heldShell(t *testing.T, hold string) string {
 	t.Helper()
 	sh := filepath.Join(t.TempDir(), "heldsh")
@@ -607,8 +463,6 @@ func TestLauncherTypesOutIntoASpawningPane(t *testing.T) {
 	}
 	term, _ := start(t, startOpts{
 		args: []string{"--standalone"},
-		// The wrapper execs the harness's own /bin/sh, which every machine
-		// this runs on has.
 		env: []string{"PATH=" + dir + string(os.PathListSeparator) + agentFreePath("/usr/bin", "/bin"), "PS1=" + typeOutPrompt + " ",
 			"SHELL=" + heldShell(t, hold)},
 	})
@@ -618,9 +472,6 @@ func TestLauncherTypesOutIntoASpawningPane(t *testing.T) {
 	if err := term.SendKeys(tuitest.Tab); err != nil {
 		t.Fatalf("tab: %v", err)
 	}
-	// The launcher closes and the pane stands in the same update that wrote
-	// the line, so once both are on screen the line is in the PTY, and the
-	// shell is still held: written-before-started is now a fact.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(s.Text(), launcherTitle) && countWindows(s) == 1
 	}, uiTimeout); err != nil {
@@ -647,11 +498,6 @@ func TestLauncherTypesOutIntoASpawningPane(t *testing.T) {
 func TestLauncherTypesOutIntoADaemonPane(t *testing.T) {
 	requireReal(t, "real kitty under Xvfb")
 	dir := writeProbe(t)
-	// The daemon spawns the pane's shell from its own environment, and this
-	// path types a bare name for that shell to resolve, so the probe has to be
-	// on the daemon's $PATH and not only on the client's. The daemon inherits
-	// this process's, which is what makes setting it here enough. The prompt
-	// rides the same way, so waitForPaneShell below has something to wait on.
 	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
 	t.Setenv("PS1", typeOutPrompt+" ")
 
@@ -686,8 +532,6 @@ func TestLauncherTypesOutIntoADaemonPane(t *testing.T) {
 	}, shellTimeout); err != nil {
 		t.Fatalf("the daemon never created the pane: %v\n%s", err, term.Snapshot())
 	}
-	// The pane exists before its shell is reading; Enter waits for the prompt
-	// so it cannot be eaten by the shell's startup termios handover.
 	waitForPaneShell(t, term)
 	requireTypedThenRuns(t, term)
 }
@@ -714,7 +558,6 @@ func TestLauncherIconsWithABusyNeighbour(t *testing.T) {
 	enableTiling(t, term)
 	waitWindowCount(t, term, 2, "two tiled panes")
 
-	// One pane prints without stopping for the rest of the test.
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo NEIG\"\"HBOUR", "NEIGHBOUR", shellTimeout)
 	typeLine(t, term, "while :; do seq 1 40; sleep 0.05; done")
@@ -727,8 +570,6 @@ func TestLauncherIconsWithABusyNeighbour(t *testing.T) {
 		if i == 0 {
 			f.requirePlaced(t)
 		}
-		// Scroll the window so rows change picture, which is what makes the
-		// placements churn rather than merely exist.
 		for range 20 {
 			_ = term.SendKeys(tuitest.Down)
 		}
@@ -763,8 +604,6 @@ func TestLauncherLeavesTheRightModeBehind(t *testing.T) {
 	})
 	waitBoot(t, term)
 
-	// Tab, then keep typing: the argument has to reach the shell's line editor
-	// and end up on the command that runs. This is the reason the key exists.
 	queryProbe(t, term)
 	if err := term.SendKeys(tuitest.Tab); err != nil {
 		t.Fatalf("tab: %v", err)
@@ -781,9 +620,6 @@ func TestLauncherLeavesTheRightModeBehind(t *testing.T) {
 			err, term.Snapshot())
 	}
 
-	// Enter is the other verb. It starts a program rather than a command line,
-	// so the client stays where the window manager can hear it: 'n' has to open
-	// a window rather than be typed at a shell.
 	leaveTerminalMode(t, term)
 	before := settledWindowCount(t, term)
 	queryProbe(t, term)
@@ -806,11 +642,6 @@ func TestLauncherLeavesTheRightModeBehind(t *testing.T) {
 	}
 }
 
-// --- acting before the list exists -----------------------------------------
-
-// openAndRace opens the launcher, types the query, and presses key with no wait
-// in between, which is how a person uses it. Whether the scan has landed by the
-// keypress is not left to timing: the caller holds the scan with holdScan.
 func openAndRace(t *testing.T, term *tuitest.Terminal, query string, key tuitest.Key) {
 	t.Helper()
 	if err := term.SendKeys(altSpace); err != nil {
@@ -861,9 +692,6 @@ func TestVerbBeforeTheScanLands(t *testing.T) {
 			waitBoot(t, term)
 			openAndRace(t, term, probeName, verb.key)
 
-			// The scan cannot have landed, so the verb found nothing: the
-			// panel says why the key did nothing, and it is still up with the
-			// query intact after the verb was handled.
 			if err := term.WaitForText("Still finding the programs", uiTimeout); err != nil {
 				t.Fatalf("nothing said why the key did nothing: %v\n%s", err, term.Snapshot())
 			}
@@ -876,8 +704,6 @@ func TestVerbBeforeTheScanLands(t *testing.T) {
 					verb.name, term.Snapshot())
 			}
 
-			// Let the scan land. The rows arrive behind the query, so the same
-			// key now works.
 			release()
 			if err := term.WaitFor(func(s tuitest.Screen) bool {
 				return strings.Count(s.Text(), probeName) >= 2
@@ -893,10 +719,6 @@ func TestVerbBeforeTheScanLands(t *testing.T) {
 				t.Fatalf("the second %s did nothing either: %v\n%s", verb.name, err, term.Snapshot())
 			}
 			if verb.name == "tab" {
-				// Tab leaves it waiting to be run, so Enter is what runs it,
-				// and only once the prompt shows a shell is reading: an Enter
-				// racing the shell's startup can be eaten by the termios
-				// handover.
 				waitForPaneShell(t, term)
 				if err := term.SendKeys(tuitest.Enter); err != nil {
 					t.Fatalf("enter: %v", err)
@@ -921,7 +743,7 @@ func TestVerbOnAQueryThatMatchesNothing(t *testing.T) {
 		env:  []string{"PATH=" + dir + string(os.PathListSeparator) + agentFreePath("/usr/bin", "/bin")},
 	})
 	waitBoot(t, term)
-	queryProbe(t, term) // lands the scan, so the list is full
+	queryProbe(t, term)
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("esc: %v", err)
 	}
@@ -957,8 +779,6 @@ func TestLauncherIconsSurviveAResize(t *testing.T) {
 	f.openWithQuery(t, "zzapp", 4)
 	f.nudgeSelection()
 	f.requirePlaced(t)
-	// One row or column can leave the panel where it was, and then only the
-	// erase says the icons have to go out again.
 	for _, size := range [][2]int{{140, 40}, {120, 40}, {120, 41}, {120, 40}, {121, 40}, {120, 40}, {120, 50}, {120, 40}} {
 		mark := len(f.stream.bytes())
 		if err := f.term.Resize(size[0], size[1]); err != nil {

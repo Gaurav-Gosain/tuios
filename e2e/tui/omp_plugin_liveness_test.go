@@ -92,8 +92,6 @@ func TestOmpPluginPaneFollowsItsProcess(t *testing.T) {
 			t.Errorf("save the events: %v", err)
 		}
 	}()
-	// released reports whether an event let go of t1, and noneAt the events
-	// that put the pane at none.
 	released := func(evs []string) bool {
 		for _, line := range evs {
 			var ev struct {
@@ -148,7 +146,6 @@ func TestOmpPluginPaneFollowsItsProcess(t *testing.T) {
 		t.Fatalf("ASSERTION: the pane does not hold t1 while omp runs: %s", raw)
 	}
 
-	// omp crashes mid-turn: no agent_end, and the shell has the prompt.
 	driverDir := filepath.Join(base, "plugin-driver-omp")
 	if out, err := exec.Command("pkill", "-KILL", "-f", filepath.Join(driverDir, "omp")).CombinedOutput(); err != nil {
 		t.Fatalf("kill omp: %v\n%s", err, out)

@@ -9,9 +9,6 @@ import (
 	"time"
 )
 
-// claudeFormScript paints the screen it is given, the way Claude Code draws a
-// form, and waits. The screen is a file so that no shell quoting gets between
-// the test and what the pane shows.
 const claudeFormScript = `#!/bin/sh
 stty raw -echo
 printf '\033[2J\033[H'
@@ -19,12 +16,8 @@ sed 's/$/\r/' "$1"
 sleep 600
 `
 
-// titledRule is the rule Claude Code 2.1.311 draws under a form, with the
-// session's name in it.
 const titledRule = "───────────────────────────────── Color test ─"
 
-// formScreen is an AskUserQuestion form as Claude Code 2.1.311 draws it,
-// with footer as its footer line or lines.
 func formScreen(footer ...string) []string {
 	screen := []string{
 		"❯ Ask me which color to use.",
@@ -52,9 +45,6 @@ type peekReply struct {
 	} `json:"options"`
 }
 
-// peekClaude starts an agent in a session of its own that shows screen,
-// reports it as Claude Code on needs_input, and returns what peek-prompt
-// reads off the pane once it has had time to look.
 func peekClaude(t *testing.T, base, session string, screen []string) (peekReply, string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "new", session, "--detach"); err != nil {
@@ -117,8 +107,6 @@ func TestClaudeFormUnderATitledRuleIsAPrompt(t *testing.T) {
 		footer  []string
 	}{
 		{"e2e-form-wide", []string{"Enter to select · ↑/↓ to navigate · Esc to cancel"}},
-		// What a pane 39 columns wide shows: Claude Code wraps the footer
-		// itself, at a space.
 		{"e2e-form-narrow", []string{"Enter to select · ↑/↓ to navigate · Esc", "to cancel"}},
 	} {
 		t.Run(tc.session, func(t *testing.T) {

@@ -16,14 +16,6 @@ import (
 	"time"
 )
 
-// The daemon's memory against frames it is sent and does not get the rest of
-// (internal/session/frame_budget.go). A frame header announces up to 16 MiB,
-// and any process that can reach the socket can send one.
-//
-// daemonRSS is in perf_test.go.
-//
-// The wire numbers below are from internal/session's iota block, which is the
-// wire format and cannot move. wireMsgError is in window_size_view_test.go.
 const (
 	wireMsgHello       = 1
 	wireMsgList        = 5
@@ -32,12 +24,10 @@ const (
 	wireMaxFrame       = 16 << 20
 )
 
-// frameSocket is the daemon socket of the isolation root base.
 func frameSocket(base string) string {
 	return filepath.Join(xdgDir(base, "XDG_RUNTIME_DIR"), "tuios", "tuios.sock")
 }
 
-// rawFrame is a frame header of type typ announcing a payload of n bytes.
 func rawFrame(typ byte, n int) []byte {
 	h := make([]byte, 6)
 	binary.BigEndian.PutUint32(h, uint32(2+n))
@@ -45,7 +35,6 @@ func rawFrame(typ byte, n int) []byte {
 	return h
 }
 
-// readReply reads one frame and returns its type and payload.
 func readReply(conn net.Conn) (byte, []byte, error) {
 	_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 	head := make([]byte, 6)
@@ -87,7 +76,6 @@ func TestDaemonBoundsStalledFrames(t *testing.T) {
 		t.Logf("report: %s\n%s", path, report.String())
 	}()
 
-	// Stalled frames.
 	const conns, sent = 32, 15 << 20
 	before := int64(daemonRSS(t, base)) << 10
 	fmt.Fprintf(&report, "rss before: %d MB\n", before>>20)
@@ -124,8 +112,6 @@ func TestDaemonBoundsStalledFrames(t *testing.T) {
 	}
 	wg.Wait()
 	fmt.Fprintf(&report, "the writes took %v\n", time.Since(start).Round(time.Millisecond))
-	// The writes are done when the daemon has read the bytes, less what the
-	// socket buffers hold. Sample over the budget wait and past it.
 	var peak int64
 	for range 16 {
 		peak = max(peak, int64(daemonRSS(t, base))<<10)
@@ -142,7 +128,6 @@ func TestDaemonBoundsStalledFrames(t *testing.T) {
 	}
 	held = nil
 
-	// A hello over the short limit is refused, and the frame after it read.
 	c, err := net.Dial("unix", sock)
 	if err != nil {
 		t.Fatal(err)
@@ -164,8 +149,6 @@ func TestDaemonBoundsStalledFrames(t *testing.T) {
 	}
 	fmt.Fprintf(&report, "a 1 MiB hello: refused, and the next frame answered\n")
 
-	// The link sockets have slots of their own. Filling them leaves the
-	// person's socket free.
 	linkConns, linkRefused := dialAndCountRefused(t, sock+".link", 300)
 	defer closeAll(linkConns)
 	fmt.Fprintf(&report, "300 idle link connections: %d refused\n", linkRefused)
@@ -177,7 +160,6 @@ func TestDaemonBoundsStalledFrames(t *testing.T) {
 	}
 	closeAll(linkConns)
 
-	// Connections past the main socket's cap are told why and closed.
 	capStart := time.Now()
 	const many = 1100
 	open, refused := dialAndCountRefused(t, sock, many)
@@ -186,8 +168,6 @@ func TestDaemonBoundsStalledFrames(t *testing.T) {
 	if refused < many-1024 {
 		t.Errorf("the daemon refused %d of %d connections, want at least %d", refused, many, many-1024)
 	}
-	// The log is written behind the connections' own lines, so it is waited
-	// for.
 	logged := false
 	for wait := time.Now().Add(10 * time.Second); !logged && time.Now().Before(wait); time.Sleep(100 * time.Millisecond) {
 		log, _ := os.ReadFile(filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "daemon.log"))
@@ -196,7 +176,6 @@ func TestDaemonBoundsStalledFrames(t *testing.T) {
 	if !logged {
 		t.Errorf("the daemon log says nothing of the refused connections\n%s", daemonLogTail(base, 20))
 	}
-	// A command run now is told why it cannot connect.
 	out, err := tuiosCLI(t, base, "ls")
 	fmt.Fprintf(&report, "tuios ls with the socket full: %v: %s\n", err, strings.TrimSpace(out))
 	if !strings.Contains(out, "too many connections") {
@@ -219,9 +198,6 @@ func TestDaemonBoundsStalledFrames(t *testing.T) {
 	fmt.Fprintf(&report, "after: tuios ls answers in %v\n", time.Since(lsStart).Round(time.Millisecond))
 }
 
-// dialAndCountRefused opens n connections to sock and counts the ones the
-// daemon refused: a refused connection is told why or closed within a few
-// seconds, and an admitted one hears nothing.
 func dialAndCountRefused(t *testing.T, sock string, n int) ([]net.Conn, int) {
 	t.Helper()
 	var conns []net.Conn

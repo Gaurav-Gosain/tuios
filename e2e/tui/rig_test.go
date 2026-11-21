@@ -34,14 +34,10 @@ func TestRigLetsATapeActForThePerson(t *testing.T) {
 	const refused = "A key that send-keys or a tape typed does not act"
 	for _, c := range []struct {
 		name, rig, picked string
-		// clientRig is the client's TUIOS_RIG, when it differs from the
-		// daemon's.
-		clientRig *string
+		clientRig         *string
 	}{
 		{"rig", "1", "TestAttachReplay", nil},
 		{"no rig", "", "none", nil},
-		// The person's own client has no TUIOS_RIG. Attached to a rig, its
-		// tape keys stay refused: both ends must say rig.
 		{"rig daemon, plain client", "1", "none", new(string)},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -68,8 +64,6 @@ func TestRigLetsATapeActForThePerson(t *testing.T) {
 			}, uiTimeout); err != nil {
 				t.Fatalf("the pane never drew the surface: %v\n%s", err, term.Snapshot())
 			}
-			// picked is the daemon's live state of the surface, not the
-			// document's first state, which tml get prints too.
 			picked := func() string {
 				var got struct {
 					State struct {
@@ -79,8 +73,6 @@ func TestRigLetsATapeActForThePerson(t *testing.T) {
 				_ = json.Unmarshal([]byte(mustCLI(t, base, "tml", "get", opened.Surface)), &got)
 				return got.State.Picked
 			}
-			// waitPicked waits for the daemon's state to hold want, or, for
-			// a refusal, for the notice and then checks the state kept want.
 			waitPicked := func(want, what string) {
 				t.Helper()
 				deadline := time.Now().Add(uiTimeout)
@@ -109,7 +101,6 @@ func TestRigLetsATapeActForThePerson(t *testing.T) {
 				t.Fatalf("ASSERTION: a tape was refused in a rig\n%s", term.Snapshot())
 			}
 			saveArtifact(t, term, artifactDir(t), "rig-on")
-			// send-keys never acts for the person, in a rig too.
 			mustCLI(t, base, "send-keys", "-s", sess, "Up,Enter")
 			if err := term.WaitForText(refused, uiTimeout); err != nil {
 				t.Fatalf("ASSERTION: send-keys was not refused in a rig: %v\n%s", err, term.Snapshot())
@@ -144,9 +135,7 @@ func TestRigTapeOpensTheAgentThread(t *testing.T) {
 	for _, c := range []struct {
 		name, rig, clientRig string
 		shows                bool
-		// ownHome puts the daemon's config and state at the defaults of
-		// the test's HOME, as a docs rig with a home of its own does.
-		ownHome bool
+		ownHome              bool
 	}{
 		{"rig", "1", "1", true, false},
 		{"rig with its own home", "1", "1", true, true},
@@ -162,8 +151,6 @@ func TestRigTapeOpensTheAgentThread(t *testing.T) {
 			if c.ownHome {
 				home := xdgDir(base, "HOME")
 				homeEnv = []string{"XDG_CONFIG_HOME=" + filepath.Join(home, ".config"), "XDG_STATE_HOME=" + filepath.Join(home, ".local", "state")}
-				// The daemon starts with these folders. tuiosCLI would give
-				// it the suite's own.
 				start := exec.Command(tuiosBin, "new", sess, "--detach")
 				start.Dir = workDirIn(t, base)
 				start.Env = append(os.Environ(), "SHELL=/bin/sh")

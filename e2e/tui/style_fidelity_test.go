@@ -1,32 +1,5 @@
 package tuie2e
 
-// Style fidelity, asserted differentially against a bare pseudo-terminal.
-//
-// TestLsStyleStreamHasNoBackgroundBleed pins one property of one screen: a
-// foreground-only listing must not arrive with a background. That caught the
-// pink filename blocks, and it is blind to the other half of the failure the
-// same cache produces, which is a cell served *another cell's* foreground.
-//
-// This test states the general property instead. The same bytes are replayed
-// into a bare shell and into a tuios pane of the same size, and every cell must
-// agree on content, foreground and background. tuios is then held to what a
-// terminal that does nothing but apply the stream shows, so any colour it
-// invents, drops or borrows is a failure regardless of which cache produced it.
-//
-// The rotation is the load-bearing part. A style cache keyed by identity rather
-// than by value only misbehaves when styles are retired faster than the cache
-// notices, and one command's output never retires the previous command's
-// styles. Alternating streams with disjoint style sets does: each clear frees
-// the previous screen's styles and lets new ones be allocated over them. A
-// background-painted prompt runs before each listing because a prompt is where
-// the backgrounds that get recycled come from.
-//
-// The streams are generated here rather than captured, so the test carries its
-// own inputs and does not depend on eza, lla, or the contents of any directory.
-// Their shape follows a real `lla --include-dirs --sizemap` capture: 10,980 SGR
-// sequences on one screen, roughly half of them resets, and not one of them
-// setting a background.
-
 import (
 	"fmt"
 	"os"
@@ -60,9 +33,6 @@ func TestListingStyleFidelityAgainstBarePTY(t *testing.T) {
 		t.Fatalf("pane too small to test: %dx%d", inW, inH)
 	}
 
-	// The streams live where both the test process and the pane's shell can
-	// read them. The pane's shell is a child of tuios, not of the test, so a
-	// path is all they can share.
 	dir := t.TempDir()
 	if err := os.Chmod(dir, 0o755); err != nil {
 		t.Fatalf("chmod stream dir: %v", err)
@@ -76,16 +46,10 @@ func TestListingStyleFidelityAgainstBarePTY(t *testing.T) {
 	)
 	time.Sleep(500 * time.Millisecond)
 
-	// Heavy background segments: the styles whose identity gets recycled.
 	const prompt = `printf '\033[48;2;255;105;180m\033[38;5;231m SEG-A \033[48;5;61m SEG-B \033[0m\n'`
 
 	for round := range 3 {
 		for _, name := range names {
-			// The marker is split so the command echo does not contain it.
-			// Waiting on a marker the echo also carries returns before the
-			// output is on screen, and the comparison then runs against the
-			// previous screen, where the only cells that still line up are the
-			// few whose character happens to match.
 			marker := fmt.Sprintf("DONE%d%s", round, name)
 			echoed := fmt.Sprintf(`DO""NE%d%s`, round, name)
 			cmd := fmt.Sprintf("clear; %s; cat %s; echo %s",
@@ -103,8 +67,6 @@ func TestListingStyleFidelityAgainstBarePTY(t *testing.T) {
 				}
 			}
 
-			// Content first: a colour is only a claim once both sides agree on
-			// what is written where.
 			var unsettled, wrong int
 			deadline := time.Now().Add(10 * time.Second)
 			for {
@@ -127,7 +89,6 @@ func TestListingStyleFidelityAgainstBarePTY(t *testing.T) {
 	}
 }
 
-// writeStreams generates the listing streams, none of which sets a background.
 func writeStreams(t *testing.T, dir string, width int) []string {
 	t.Helper()
 
@@ -142,9 +103,6 @@ func writeStreams(t *testing.T, dir string, width int) []string {
 
 	var sizemap, long, short, indexed strings.Builder
 
-	// A size map: a name, a size, a proportion bar of dotted cells each wrapped
-	// in its own SGR pair, and a percentage. This is the shape that puts ~11k
-	// SGR sequences on one screen.
 	bar := max(width-46, 10)
 	for i, f := range files {
 		c := palette[i%len(palette)]
@@ -160,9 +118,6 @@ func writeStreams(t *testing.T, dir string, width int) []string {
 		fmt.Fprintf(&sizemap, " %4.1f%%\r\n", float64(i+1)*100/float64(len(files)+1))
 	}
 
-	// A long listing: a permission field where the attribute parameter follows
-	// the colour in the same SGR and resets land mid-field. This is the shape
-	// that produces neighbouring cells with different styles and no background.
 	for i, f := range files {
 		c := palette[i%len(palette)]
 		fmt.Fprintf(&long, "\x1b[1;38;2;%d;%d;%dmdr\x1b[38;2;%d;%d;%dmw\x1b[38;2;%d;%d;%dmx\x1b[0m",
@@ -182,14 +137,11 @@ func writeStreams(t *testing.T, dir string, width int) []string {
 			c[0], c[1], c[2], f)
 	}
 
-	// One name per line, truecolor only.
 	for i, f := range files {
 		c := palette[i%len(palette)]
 		fmt.Fprintf(&short, "\x1b[38;2;%d;%d;%dm%s\x1b[0m\r\n", c[0], c[1], c[2], f)
 	}
 
-	// The same listing in the 256-colour palette, so the rotation alternates
-	// between two disjoint style sets rather than re-using one.
 	for i, f := range files {
 		fmt.Fprintf(&indexed, "\x1b[38;5;%dm%s\x1b[0m\r\n", 60+3*i, f)
 	}
@@ -213,9 +165,6 @@ func writeStreams(t *testing.T, dir string, width int) []string {
 	return order
 }
 
-// setsBackground reports the first background-setting SGR parameter in a
-// stream, so a generator that grows one is caught rather than silently
-// weakening every assertion below.
 func setsBackground(s string) (int, bool) {
 	for i := 0; i+1 < len(s); i++ {
 		if s[i] != 0x1b || s[i+1] != '[' {
@@ -236,8 +185,6 @@ func setsBackground(s string) (int, bool) {
 			}
 			switch {
 			case n == 38:
-				// Skip the colour operands so their values are never read as
-				// SGR codes of their own.
 				if k+1 < len(parts) && parts[k+1] == "2" {
 					k += 4
 				} else if k+1 < len(parts) && parts[k+1] == "5" {
@@ -251,7 +198,6 @@ func setsBackground(s string) (int, bool) {
 	return 0, false
 }
 
-// paneInterior returns the bounds of the single pane's box.
 func paneInterior(t *testing.T, term *tuitest.Terminal) (left, top, right, bottom int) {
 	t.Helper()
 	screen := term.Screen()
@@ -273,8 +219,6 @@ func paneInterior(t *testing.T, term *tuitest.Terminal) (left, top, right, botto
 	return left, top, right, bottom
 }
 
-// styleDiff counts cells that disagree on content, and cells that agree on
-// content but disagree on colour. A non-nil t reports the colour ones.
 func styleDiff(t *testing.T, ref, got tuitest.Screen, x0, y0, w, h int) (unsettled, wrong int) {
 	refW, refH := ref.Size()
 	w, h = min(w, refW), min(h, refH)
@@ -286,8 +230,6 @@ func styleDiff(t *testing.T, ref, got tuitest.Screen, x0, y0, w, h int) (unsettl
 				unsettled++
 				continue
 			}
-			// A blank cell's foreground paints nothing, and the emulators
-			// disagree harmlessly about whether to keep one.
 			fgMatters := r.Content != " " && r.Content != ""
 			if styleKey(r.Bg) != styleKey(g.Bg) || (fgMatters && styleKey(r.Fg) != styleKey(g.Fg)) {
 				if t != nil && wrong < 12 {

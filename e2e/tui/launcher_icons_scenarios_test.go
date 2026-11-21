@@ -14,23 +14,14 @@ import (
 	"testing"
 )
 
-// The launcher draws its app icons as kitty graphics under image ids from
-// launcherIconIDBase up, which is where these assertions look. A placement is
-// the thing that is visible, so the state machine below tracks placements and
-// not transmissions: an image left resident with nothing placed from it is
-// invisible and costs only memory, while a placement left behind is the stray
-// picture the reports are about.
 const launcherIconIDBase = 0xF000_0000
 
-// apcRE matches one kitty graphics escape and captures its parameter list.
 var apcRE = regexp.MustCompile(`\x1b_G([^;\x1b]*)(?:;([^\x1b]*))?\x1b\\`)
 
-// gfxKey identifies one placement: the image it draws and the placement id.
 type gfxKey struct{ img, placement uint32 }
 
 func (k gfxKey) String() string { return fmt.Sprintf("i=%d,p=%d", k.img, k.placement) }
 
-// kittyParams splits a parameter list into its key/value pairs.
 func kittyParams(s string) map[string]string {
 	out := map[string]string{}
 	for part := range strings.SplitSeq(s, ",") {
@@ -47,15 +38,6 @@ func atoiU32(s string) uint32 {
 	return uint32(n)
 }
 
-// liveLauncherPlacements replays every kitty graphics command in stream and
-// returns the launcher placements still standing at the end.
-//
-// This is the only assertion that means anything about a stray image: a test
-// that checks a delete was written proves the bytes were composed, not that the
-// picture is gone. Replaying the whole conversation the way the host does is
-// what tells the two apart, and it catches a delete that names the wrong id, a
-// delete undone by a later re-place, and a placement made after the panel that
-// owns it has closed.
 func liveLauncherPlacements(stream []byte) []string {
 	live := map[gfxKey]bool{}
 	for _, m := range apcRE.FindAllSubmatch(stream, -1) {
@@ -78,13 +60,9 @@ func liveLauncherPlacements(stream []byte) []string {
 	return out
 }
 
-// del applies one a=d command. Only the forms tuios can emit or provoke are
-// modelled; an unknown d value is treated as deleting nothing, which is the
-// conservative answer for a leak check.
 func del(live map[gfxKey]bool, p map[string]string, id uint32) {
 	switch strings.ToLower(p["d"]) {
 	case "a":
-		// Every visible placement, whoever owns it.
 		clear(live)
 	case "i":
 		hasP := p["p"] != ""
@@ -97,9 +75,6 @@ func del(live map[gfxKey]bool, p map[string]string, id uint32) {
 	}
 }
 
-// plantApps writes n desktop entries with icons into an isolation root, and
-// points the icon search at the same root, so the launcher has real pictures to
-// draw and draws only these.
 func plantApps(t *testing.T, base string, n int) {
 	t.Helper()
 	data := filepath.Join(base, "XDG_DATA_HOME")
@@ -125,8 +100,6 @@ func plantApps(t *testing.T, base string, n int) {
 	}
 }
 
-// writeIconPNG writes a small solid PNG, distinct per app so a wrong picture is
-// distinguishable from a missing one when a capture is inspected by hand.
 func writeIconPNG(t *testing.T, path string, shade uint8) {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 32, 32))
@@ -145,9 +118,6 @@ func writeIconPNG(t *testing.T, path string, shade uint8) {
 	}
 }
 
-// iconEnv is the environment a launcher-icon test runs in: kitty graphics
-// forced on, and the desktop search confined to the planted entries so the
-// developer's own applications never reach the list.
 func iconEnv(base string, extra ...string) []string {
 	return append([]string{
 		"TUIOS_KITTY_GRAPHICS=1",
@@ -157,9 +127,6 @@ func iconEnv(base string, extra ...string) []string {
 	}, extra...)
 }
 
-// distinctLauncherImages counts the launcher image ids ever transmitted, which
-// is how a run that re-uploads the same icon per open is told from one that
-// uploads it once.
 func distinctLauncherImages(stream []byte) int {
 	seen := map[uint32]bool{}
 	for _, m := range apcRE.FindAllSubmatch(stream, -1) {
@@ -173,8 +140,6 @@ func distinctLauncherImages(stream []byte) int {
 	return len(seen)
 }
 
-// plantExitingApp adds a desktop entry whose program exits the moment it runs,
-// so the pane a launch creates goes away in the same breath as the panel.
 func plantExitingApp(t *testing.T, base string) {
 	t.Helper()
 	data := filepath.Join(base, "XDG_DATA_HOME")
@@ -185,9 +150,6 @@ func plantExitingApp(t *testing.T, base string) {
 	writeIconPNG(t, filepath.Join(data, "icons", "hicolor", "apps", "zzquit.png"), 200)
 }
 
-// writeArgProbe puts an executable on $PATH that reports its first argument, so
-// a test can prove that what was typed after the launcher closed reached the
-// command rather than merely appearing on screen.
 func writeArgProbe(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()

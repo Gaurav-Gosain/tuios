@@ -46,7 +46,6 @@ func TestAgentsViewSnoozedNoteWithNoAgentListed(t *testing.T) {
 	}
 	waitText(t, term, "both items under Needs you", "2 needs you", "build failed on main", "lint failed on main")
 
-	// The older item, e2e-note-a's, is the first row and holds the cursor.
 	if err := term.SendKeys("z"); err != nil {
 		t.Fatal(err)
 	}
@@ -55,8 +54,6 @@ func TestAgentsViewSnoozedNoteWithNoAgentListed(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// noteBesideItem is the look both waits take: the client still runs,
-	// the note and the other item are drawn, and no crash overlay is.
 	noteBesideItem := func() (bool, string) {
 		if code, exited := term.ExitCode(); exited {
 			t.Fatalf("tuios exited with code %d after the snooze\n%s", code, term.Snapshot())

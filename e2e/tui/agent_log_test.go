@@ -77,8 +77,6 @@ func TestAgentLogFromRealHooks(t *testing.T) {
 		t.Errorf("set-agent-meta wrote the reserved key now:\n%s", out)
 	}
 
-	// A turn interrupted with Esc ends on an idle_prompt, which carries no
-	// activity. The pane at rest must not keep showing the tool it ran.
 	hook(`{"hook_event_name":"UserPromptSubmit","session_id":"e2e-log","prompt":"lint it"}`)
 	hook(`{"hook_event_name":"PreToolUse","session_id":"e2e-log","tool_name":"Bash","tool_input":{"command":"make lint"}}`)
 	if out, _ := tuiosCLI(t, base, "get-agent-state", "-s", "e2e-agent", "-w", "0", "--json"); !strings.Contains(out, `"now": "Bash: make lint"`) {

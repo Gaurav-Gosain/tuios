@@ -16,16 +16,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The daemon paces a pane that streams kitty graphics to its fastest client. A
-// client that is behind skips frames: a frame still waiting for it when the
-// next frame of the same image arrives is dropped from its queue, whole. The
-// pane is held only while every client is behind, and one hold ends after
-// 250 ms. These tests run a real guest that streams frames, two real clients
-// attached to one daemon, and stop a client with SIGSTOP to make it slow or
-// stuck.
-
-// frameHost plays a kitty terminal like kittyHost, but counts frames as they
-// arrive instead of keeping every byte, so a long stream does not fill memory.
 type frameHost struct {
 	mu      sync.Mutex
 	tail    []byte
@@ -89,7 +79,6 @@ func (h *frameHost) counts() (frames, deletes int) {
 	return h.frames, h.deletes
 }
 
-// pacingClient is one tuios client attached to the session under test.
 type pacingClient struct {
 	term *tuitest.Terminal
 	host *frameHost
@@ -113,8 +102,6 @@ func attachPacingClient(t *testing.T, base, session string) *pacingClient {
 	return &pacingClient{term: term, host: host}
 }
 
-// stop and resume make a client stop reading, the way a client on a stalled
-// link or a suspended laptop does.
 func (c *pacingClient) stop(t *testing.T) {
 	t.Helper()
 	if err := syscall.Kill(c.term.Pid(), syscall.SIGSTOP); err != nil {
@@ -124,9 +111,6 @@ func (c *pacingClient) stop(t *testing.T) {
 
 func (c *pacingClient) resume() { _ = syscall.Kill(c.term.Pid(), syscall.SIGCONT) }
 
-// startPacedGuest starts a session with one pane, attaches a client, and runs
-// the frameloop guest in the pane with the given transport. It returns the
-// client and the file the guest counts its frames in.
 func startPacedGuest(t *testing.T, transport string) (base string, first *pacingClient, count string) {
 	t.Helper()
 	base = t.TempDir()
@@ -155,10 +139,6 @@ func startPacedGuest(t *testing.T, transport string) (base string, first *pacing
 	return base, first, count
 }
 
-// guestFrames is how many frames the guest has written. The guest rewrites
-// the file for every frame through a rename, so a read never finds it empty.
-// A file that cannot be parsed is tried again, and a count of 0 means only that
-// no frame was written yet.
 func guestFrames(count string) int {
 	for range 100 {
 		b, err := os.ReadFile(count)
@@ -173,8 +153,6 @@ func guestFrames(count string) int {
 	return 0
 }
 
-// rate counts, over d, the frames the guest wrote and the frames each client's
-// host received.
 func rate(count string, d time.Duration, clients ...*pacingClient) (guest int, got []int) {
 	g0 := guestFrames(count)
 	before := make([]int, len(clients))
@@ -190,9 +168,6 @@ func rate(count string, d time.Duration, clients ...*pacingClient) (guest int, g
 	return guestFrames(count) - g0, got
 }
 
-// pacingTotals adds up the daemon's pacing lines: how many times it held the
-// guest and for how long, how many frames it skipped for a client, and how
-// many client streams it cut because their queue filled.
 type pacingTotals struct {
 	held, skipped, cut int
 	heldFor            time.Duration
@@ -215,7 +190,6 @@ func sumPacing(lines []string) pacingTotals {
 	return p
 }
 
-// pacingLog returns the daemon's output pacing lines.
 func pacingLog(t *testing.T, base string) []string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "logs", "--all")
@@ -326,8 +300,6 @@ func TestKittySlowClientHoldsTheGuest(t *testing.T) {
 	guestSlow, gotSlow := rate(count, window, client)
 	close(done)
 	t.Logf("in bursts:     guest wrote %d frames, the client got %d in %s", guestSlow, gotSlow[0], window)
-	// The daemon writes its pacing line at most every 2 s: wait for the one
-	// that covers the end of the bursts.
 	time.Sleep(pacingReportWait)
 	log := pacingLog(t, base)
 	t.Logf("daemon: %s", strings.Join(log, "\n  "))
@@ -347,8 +319,6 @@ func TestKittySlowClientHoldsTheGuest(t *testing.T) {
 	}
 }
 
-// pacingReportWait is how long a test waits for the daemon to write the pacing
-// line for what it just did: one report interval and a margin.
 const pacingReportWait = 2500 * time.Millisecond
 
 // TestTextFloodPaneIsNeverHeld: the same client in bursts, on a pane that
@@ -376,8 +346,6 @@ func TestTextFloodPaneIsNeverHeld(t *testing.T) {
 	}
 }
 
-// dutyCycle stops and resumes a client until done closes, and leaves it
-// running.
 func dutyCycle(c *pacingClient, stopped, running time.Duration, done <-chan struct{}) {
 	defer c.resume()
 	for {
@@ -424,12 +392,8 @@ func TestKittyAttachDuringAStreamPrintsNoImageData(t *testing.T) {
 	}
 }
 
-// base64Run matches a long run of base64 letters, which a pane that draws only
-// an image never shows.
 var base64Run = regexp.MustCompile(`[A-Za-z0-9+/]{48,}`)
 
-// base64Rows returns the screen rows that carry image data as text, at most
-// five of them.
 func base64Rows(screen string) []string {
 	var out []string
 	for line := range strings.SplitSeq(screen, "\n") {

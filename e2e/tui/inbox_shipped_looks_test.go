@@ -66,8 +66,6 @@ func TestInboxOnTheShippedLooks(t *testing.T) {
 	}
 	saveFrame(t, term, "inbox-shipped-looks")
 
-	// A double-click on the agent's row in the list goes to the item's
-	// session.
 	tab := rowWith(s, "Needs you  1") + 1
 	mouseClick(t, term, 4, tab, tuitest.MouseLeft, 0)
 	mouseClick(t, term, 4, tab, tuitest.MouseLeft, 0)
@@ -89,9 +87,6 @@ func TestInboxOnTheShippedLooks(t *testing.T) {
 		t.Fatalf("the agents view did not open again: %v\n%s", err, term.Snapshot())
 	}
 
-	// A cell of the New agent button inside the rail's band: the click
-	// reaches the agents view, which covers the rail, and opens the New
-	// agent sheet.
 	row := rowWith(term.Screen(), "New agent")
 	col := cols - narrowRailWidth + 4
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
@@ -100,9 +95,6 @@ func TestInboxOnTheShippedLooks(t *testing.T) {
 	}
 	alive(t, term, "after a click in the Inbox over the rail")
 
-	// The sheet's signed-in check ran claude's stub, never the developer's
-	// own Claude Code (agent_stubs_test.go). Only where claude is installed:
-	// with none there is no check and no stub.
 	if _, err := os.Stat(filepath.Join(agentStubDir, "claude")); err == nil {
 		deadline := time.Now().Add(5 * time.Second)
 		for !slices.Contains(agentStubCalls(base), "claude auth status --json") {

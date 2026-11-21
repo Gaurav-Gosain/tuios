@@ -8,27 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Clicking a pane to focus it must not resize the shell inside it.
-//
-// With shared borders on, a tiled pane is borderless and the whole rectangle
-// belongs to the guest. The drag setup took that allowance away on the press,
-// which is two rows and two columns of real estate, and the retile on release
-// gave it back. Each of those is a SIGWINCH, and a shell repaints its prompt on
-// a SIGWINCH, so picking a pane with the mouse left a new line in it. The end
-// state is identical either way, which is why this counts what the pane
-// received rather than comparing sizes afterwards.
-//
-// The pane counts the signals itself: its shell prints one marker line per
-// SIGWINCH, so the assertion is on rows in the grid, which is exactly the
-// symptom. The marker is spelled with a runtime substitution so the echoed
-// command line does not contain the string being counted.
-//
-// appearance.click_to_type is "double" because that is the policy that leaves a
-// single click in window-management mode, which is where the drag setup runs.
-// It is the maintainer's own setting and the one the report came from.
-
-// clickFocusPanes builds two tiled borderless panes on a daemon session and
-// arms a SIGWINCH counter in the second one, which tiling puts on the right.
 func clickFocusPanes(t *testing.T) *tuitest.Terminal {
 	t.Helper()
 	base := t.TempDir()
@@ -49,16 +28,12 @@ func clickFocusPanes(t *testing.T) *tuitest.Terminal {
 	runInShell(t, term,
 		`trap 'printf "WI%sCH\n" N' WINCH; clear; printf "AR%sED\n" M`,
 		"ARMED", shellTimeout)
-	// The trap is armed once the marker is on screen, and the clear has left
-	// the command echo behind it, so every WINCH row after this came from a
-	// signal.
 	time.Sleep(2 * time.Second)
 	leaveTerminalMode(t, term)
 	time.Sleep(time.Second)
 	return term
 }
 
-// countRows is how many rows of the screen contain marker.
 func countRows(s tuitest.Screen, marker string) int {
 	n := 0
 	_, rows := s.Size()
@@ -74,7 +49,6 @@ func countRows(s tuitest.Screen, marker string) int {
 func TestClickToFocusAddsNoLineToThePane(t *testing.T) {
 	term := clickFocusPanes(t)
 
-	// Three round trips: away to the left tile, back to the armed one.
 	for range 3 {
 		mouseClick(t, term, 20, 20, tuitest.MouseLeft, 0)
 		time.Sleep(700 * time.Millisecond)
@@ -103,7 +77,6 @@ func TestClickToFocusAddsNoLineToThePane(t *testing.T) {
 func TestDraggingTheDividerResizesOnce(t *testing.T) {
 	term := clickFocusPanes(t)
 
-	// The divider between the two tiles, dragged twelve columns to the left.
 	mouseDrag(t, term, 80, 20, 68, 20, tuitest.MouseLeft, 0)
 	time.Sleep(3 * time.Second)
 

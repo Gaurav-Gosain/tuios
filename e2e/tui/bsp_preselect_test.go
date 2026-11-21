@@ -34,14 +34,10 @@ import (
 
 type preselectCase struct {
 	name   string
-	scheme string // palette row that sets the tree's scheme, or empty for spiral
-	key    any    // the preselect chord, or nil for none
-	side   string // left, right, up, down, or "" for any side
-	// cli asks for the window with tuios new-window from outside the client,
-	// and sets the preselection with tuios run-command, the way a script
-	// does (issue #1228). The window then arrives through a state sync that
-	// no request of this client's prepared.
-	cli bool
+	scheme string
+	key    any
+	side   string
+	cli    bool
 }
 
 func TestBSPNewWindowSplitsTheFocusedPane(t *testing.T) {
@@ -74,8 +70,6 @@ func runPreselectCase(t *testing.T, tc preselectCase) {
 	}
 	before := waitForSettledGeometryIn(t, base, session, 3)
 
-	// Focus the leftmost pane. Under every scheme here that is a pane other
-	// than the last one in the tree, which is the one the bug always split.
 	target := before[0]
 	for _, r := range before {
 		if r.X < target.X || (r.X == target.X && r.Y < target.Y) {
@@ -95,9 +89,6 @@ func runPreselectCase(t *testing.T, tc preselectCase) {
 	dir := artifactDir(t)
 	if tc.key != nil {
 		if tc.cli {
-			// run-command returns once the client has run the command. The
-			// client shows its own "Remote:" message over the preselection
-			// one, so there is no message to wait for here.
 			if out, err := tuiosCLI(t, base, "run-command", "-s", session, "Preselect", tc.side); err != nil {
 				t.Fatalf("run-command Preselect %s: %v\n%s", tc.side, err, out)
 			}
@@ -155,7 +146,6 @@ func runPreselectCase(t *testing.T, tc preselectCase) {
 		return s + term.Snapshot()
 	}
 
-	// Two cells of slack cover a shared border or a separator column.
 	inside := func(r, box winRect) bool {
 		return r.X >= box.X-2 && r.Y >= box.Y-2 &&
 			r.X+r.Width <= box.X+box.Width+2 && r.Y+r.Height <= box.Y+box.Height+2
@@ -186,7 +176,6 @@ var sidePhrase = map[string]string{
 	"left": "left of", "right": "right of", "up": "above", "down": "below",
 }
 
-// onSide reports whether added sits on side of old, sharing its row or column.
 func onSide(added, old winRect, side string) bool {
 	switch side {
 	case "left":
@@ -210,9 +199,9 @@ func TestBSPNewWindowSplitsTheFocusedPaneStandalone(t *testing.T) {
 	cases := []struct {
 		name     string
 		key      any
-		sideways bool // the focused pane splits side by side, else stacked
+		sideways bool
 	}{
-		{"no_preselection", nil, false}, // spiral at depth one on a wide screen
+		{"no_preselection", nil, false},
 		{"preselect_left", tuitest.Alt('h'), true},
 		{"preselect_down", tuitest.Alt('j'), false},
 	}
@@ -232,7 +221,6 @@ func TestBSPNewWindowSplitsTheFocusedPaneStandalone(t *testing.T) {
 					target = r
 				}
 			}
-			// From any of the three panes, two presses of h reach the leftmost.
 			send(t, term, "h")
 			send(t, term, "h")
 			dir := artifactDir(t)
@@ -277,8 +265,6 @@ func TestBSPNewWindowSplitsTheFocusedPaneStandalone(t *testing.T) {
 	}
 }
 
-// settledScreenBoxes reads the pane boxes off the screen until n of them stay
-// the same for three reads in a row.
 func settledScreenBoxes(t *testing.T, term *tuitest.Terminal, n int) []winRect {
 	t.Helper()
 	var prev []winRect
@@ -301,8 +287,6 @@ func settledScreenBoxes(t *testing.T, term *tuitest.Terminal, n int) []winRect {
 	return nil
 }
 
-// screenBoxes finds every pane border: a top-left corner, the top-right corner
-// on its row, and the bottom-left corner in its column.
 func screenBoxes(s tuitest.Screen) []winRect {
 	_, rows := s.Size()
 	lines := make([][]rune, rows)

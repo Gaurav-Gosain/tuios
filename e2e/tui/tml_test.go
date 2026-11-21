@@ -14,9 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// tmlRunDoc is the document the TML tests show: tabs, a table whose enter
-// writes the picked row into the state, a button that sets a number, and one
-// that closes with a value.
 const tmlRunDoc = `<tml version="1" title="Test run">
   <state>{"tab": "sum", "picked": "none", "passed": 412, "failed": 4, "failures": [
     {"pkg": "internal/session", "test": "TestAttachRace", "ms": 2210},
@@ -58,7 +55,6 @@ FAIL internal/session    LOGLINE-TestAttachRace</code></tab>
 </tml>
 `
 
-// writeTMLDoc writes a document under base and returns its path.
 func writeTMLDoc(t *testing.T, base, name, doc string) string {
 	t.Helper()
 	path := filepath.Join(base, name)
@@ -68,8 +64,6 @@ func writeTMLDoc(t *testing.T, base, name, doc string) string {
 	return path
 }
 
-// saveTMLFrame keeps a frame of the screen, as text and as PNG, in the test's
-// artifact folder.
 func saveTMLFrame(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	dir := artifactDir(t)
@@ -77,7 +71,6 @@ func saveTMLFrame(t *testing.T, term *tuitest.Terminal, name string) {
 	savePNG(t, term.Screen(), hostPalette(t, ""), dir, name)
 }
 
-// tmlLocate finds text on the screen and returns its column and row.
 func tmlLocate(t *testing.T, term *tuitest.Terminal, text string) (int, int) {
 	t.Helper()
 	s := term.Screen()
@@ -124,9 +117,6 @@ func TestTMLShowPopup(t *testing.T) {
 		t.Fatalf("the popup does not show its esc close hint:\n%s", term.Snapshot())
 	}
 
-	// The keys reach the surface: the table has the focus, down moves its
-	// cursor to the second row by time, and enter runs its on-select, a
-	// set() of the picked row.
 	for _, key := range []tuitest.Key{tuitest.Down, tuitest.Enter} {
 		if err := term.SendKeys(key); err != nil {
 			t.Fatalf("send %q: %v", key, err)
@@ -136,7 +126,6 @@ func TestTMLShowPopup(t *testing.T) {
 	if err := term.WaitForText("Picked: TestAttachReplay", uiTimeout); err != nil {
 		t.Fatalf("the keys never picked the second row: %v\n%s", err, term.Snapshot())
 	}
-	// A button's key works from anywhere on the surface.
 	if err := term.SendKeys("f"); err != nil {
 		t.Fatalf("send f: %v", err)
 	}
@@ -145,9 +134,6 @@ func TestTMLShowPopup(t *testing.T) {
 	}
 	saveTMLFrame(t, term, "2-picked")
 
-	// The popup minimizes to the dock and comes back as a popup, with its
-	// cursor row. A command popup does not minimize; a surface waits for an
-	// answer, so it does.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "m", "m"); err != nil {
 		t.Fatalf("send leader m m: %v", err)
 	}
@@ -167,7 +153,6 @@ func TestTMLShowPopup(t *testing.T) {
 	}
 	saveTMLFrame(t, term, "2c-restored")
 
-	// A click on a tab title switches the tab.
 	col, row := tmlLocate(t, term, "Log")
 	mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
 	if err := term.WaitForText("LOGLINE-TestAttachRace", uiTimeout); err != nil {
@@ -180,7 +165,6 @@ func TestTMLShowPopup(t *testing.T) {
 		t.Fatalf("a click on the Summary tab never came back: %v\n%s", err, term.Snapshot())
 	}
 
-	// A popup does not zoom, and a notice says so.
 	leaveTerminalMode(t, term)
 	if err := term.SendKeys("z"); err != nil {
 		t.Fatalf("send z: %v", err)
@@ -189,7 +173,6 @@ func TestTMLShowPopup(t *testing.T) {
 		t.Fatalf("z on the popup said nothing: %v\n%s", err, term.Snapshot())
 	}
 
-	// Detach. The daemon keeps the surface, with the state the person set.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "d"); err != nil {
 		t.Fatalf("send leader d: %v", err)
 	}
@@ -203,8 +186,6 @@ func TestTMLShowPopup(t *testing.T) {
 	}
 	saveTMLFrame(t, again, "4-reattached")
 
-	// The primary button closes the surface with its value, which the
-	// waiting command prints.
 	if err := again.SendKeys("q"); err != nil {
 		t.Fatalf("send q: %v", err)
 	}
@@ -255,9 +236,6 @@ func TestTMLShowPaneAndClose(t *testing.T) {
 	}
 	waitWindowCount(t, term, 2, "with the pane open")
 	saveTMLFrame(t, term, "1-pane")
-	// The document shows "esc close" only in a popup, by view.placement:
-	// esc does not close a pane. A program opened the surface, so no
-	// "Window created" notice says the person made a window.
 	if txt := term.Screen().Text(); strings.Contains(txt, "esc close") || strings.Contains(txt, "Window created") {
 		t.Fatalf("the pane shows a hint that does not hold, or a window notice:\n%s", term.Snapshot())
 	}
@@ -270,8 +248,6 @@ func TestTMLShowPaneAndClose(t *testing.T) {
 		t.Fatalf("list-windows does not report the pane as kind tml:\n%s", listed)
 	}
 
-	// The keys reach the pane's surface, and an esc that follows them does
-	// not close it.
 	for _, key := range []tuitest.Key{tuitest.Down, tuitest.Enter} {
 		if err := term.SendKeys(key); err != nil {
 			t.Fatalf("send %q: %v", key, err)
@@ -281,8 +257,6 @@ func TestTMLShowPaneAndClose(t *testing.T) {
 	if err := term.WaitForText("Picked: TestAttachReplay", uiTimeout); err != nil {
 		t.Fatalf("the keys never reached the pane's surface: %v\n%s", err, term.Snapshot())
 	}
-	// capture-pane reads the surface as drawn, with the state the keys set,
-	// not the placeholder line the pane's PTY runs.
 	tmlCaptureMatches(t, term, base, "e2e-tmlpane", opened.WindowID, "capture-run",
 		[]string{"Summary", "Picked: TestAttachReplay", "TestAttachRace"}, nil)
 	if err := term.SendKeys(tuitest.Esc); err != nil {
@@ -310,8 +284,6 @@ func TestTMLShowPaneAndClose(t *testing.T) {
 	alive(t, term, "after the pane closed")
 }
 
-// tmlChartDoc has tabs that bind no state path, so the open tab is the
-// client's view state, and a line chart on the first tab.
 const tmlChartDoc = `<tml version="1" title="Build times">
   <state>{"days": [{"d": "Mon", "s": 41}, {"d": "Tue", "s": 38}, {"d": "Wed", "s": 52}, {"d": "Thu", "s": 35}, {"d": "Fri", "s": 30}]}</state>
   <col pad="1" gap="1">
@@ -323,10 +295,6 @@ const tmlChartDoc = `<tml version="1" title="Build times">
 </tml>
 `
 
-// tmlCaptureMatches runs capture-pane on a TML window until the capture holds
-// every want, holds no notWant, and each of its lines is on the screen, which
-// is what makes it the surface as drawn. It saves the capture as name.txt in
-// the test's artifact folder and returns it.
 func tmlCaptureMatches(t *testing.T, term *tuitest.Terminal, base, sess, win, name string, want, notWant []string) string {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -374,10 +342,6 @@ func tmlCaptureMatches(t *testing.T, term *tuitest.Terminal, base, sess, win, na
 	return out
 }
 
-// tmlCaptureFollowsTheTab opens tmlChartDoc as a pane, captures its chart,
-// clicks the second tab and captures again. The tabs bind no state path, so
-// the capture follows the tab only through the open tabs the client
-// reports with tml-input.
 func tmlCaptureFollowsTheTab(t *testing.T, term *tuitest.Terminal, base, sess string) {
 	t.Helper()
 	doc := writeTMLDoc(t, base, "chart.tml", tmlChartDoc)
@@ -431,8 +395,6 @@ func TestTMLShowRefusesABadDocument(t *testing.T) {
 	}
 }
 
-// tmlSurfaceOf waits for list-windows to name a surface in session, or in
-// the default session when session is "", and returns it with its window.
 func tmlSurfaceOf(t *testing.T, base, sess string) (string, string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -536,8 +498,6 @@ func TestTMLSurfaceThroughAHostShowsThePlaceholder(t *testing.T) {
 		t.Fatalf("a client attached through a host drew a surface it cannot answer for\n%s", term.Snapshot())
 	}
 	saveTMLFrame(t, term, "1-through-a-host")
-	// q on the placeholder closes the window, which dismisses the surface
-	// on the far machine.
 	if err := term.SendKeys("q"); err != nil {
 		t.Fatalf("send q: %v", err)
 	}
@@ -551,8 +511,6 @@ func TestTMLSurfaceThroughAHostShowsThePlaceholder(t *testing.T) {
 		t.Fatalf("q on the placeholder did not close the far surface\n%s", term.Snapshot())
 	}
 
-	// esc does the same, and a click does not: the mouse report that starts
-	// with an esc is told apart.
 	again := startCLIBackground(t, remote, "tml", "show", doc, "--wait", "-s", "far", "--width", "90", "--height", "24")
 	if err := term.WaitForText("Press q to close the surface.", uiTimeout); err != nil {
 		t.Fatalf("the second far surface did not show its message: %v\n%s", err, term.Snapshot())
@@ -579,8 +537,6 @@ func TestTMLSurfaceThroughAHostShowsThePlaceholder(t *testing.T) {
 	}
 }
 
-// tmlLongDoc is a report taller than any pane: a heading, 40 numbered lines
-// that read the state, and a mark at the end.
 func tmlLongDoc() string {
 	var b strings.Builder
 	b.WriteString(`<tml version="1" title="Long report"><state>{"n": 1}</state><col pad="1" gap="1"><heading level="1">TOP-MARK report</heading>`)
@@ -591,12 +547,6 @@ func tmlLongDoc() string {
 	return b.String()
 }
 
-// tmlLongPaneScrolls opens tmlLongDoc as a pane in sess and scrolls it: the
-// pane shows a scroll bar, the keys and the wheel move the page, and the
-// position stays across a patch, a minimize and a restore.
-//
-// Negative control: without the page in loom, the document is cut after
-// the lines that fit, and nothing brings BOTTOM-MARK into view.
 func tmlLongPaneScrolls(t *testing.T, term *tuitest.Terminal, base, sess string) {
 	t.Helper()
 	doc := writeTMLDoc(t, base, "long.tml", tmlLongDoc())
@@ -618,8 +568,6 @@ func tmlLongPaneScrolls(t *testing.T, term *tuitest.Terminal, base, sess string)
 		t.Fatalf("the long pane shows no scroll bar:\n%s", term.Snapshot())
 	}
 	saveTMLFrame(t, term, "5-long-top")
-	// A click gives the pane the focus. The document has no focusable box,
-	// so G takes the page to its end.
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	time.Sleep(200 * time.Millisecond)
 	if err := term.SendKeys("G"); err != nil {
@@ -631,7 +579,6 @@ func tmlLongPaneScrolls(t *testing.T, term *tuitest.Terminal, base, sess string)
 		t.Fatalf("G did not scroll the pane to its end: %v\n%s", err, term.Snapshot())
 	}
 	saveTMLFrame(t, term, "6-long-end")
-	// k and the wheel scroll back up.
 	if err := term.SendKeys("k", "k", "k", "k", "k", "k"); err != nil {
 		t.Fatalf("send k: %v", err)
 	}
@@ -642,7 +589,6 @@ func tmlLongPaneScrolls(t *testing.T, term *tuitest.Terminal, base, sess string)
 	wheelAt(t, term, col, lineRow, tuitest.MouseWheelUp, 2)
 	time.Sleep(300 * time.Millisecond)
 	first := tmlFirstLine(t, term)
-	// A patch, a minimize and a restore keep the place.
 	if out, err := tuiosCLI(t, base, "tml", "patch", opened.Surface, `[{"op":"replace","path":"/n","value":42}]`); err != nil {
 		t.Fatalf("tuios tml patch: %v\n%s", err, out)
 	}
@@ -673,7 +619,6 @@ func tmlLongPaneScrolls(t *testing.T, term *tuitest.Terminal, base, sess string)
 	saveTMLFrame(t, term, "7-long-restored")
 }
 
-// tmlFirstLine is the first LINE-NN on the screen.
 func tmlFirstLine(t *testing.T, term *tuitest.Terminal) string {
 	t.Helper()
 	text := term.Screen().Text()

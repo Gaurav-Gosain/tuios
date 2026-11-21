@@ -12,22 +12,11 @@ import (
 	"tuios.dev/shot"
 )
 
-// dim_foreground is a colour transform, so it is read where a host terminal
-// would see it: the fg and bg of a marker the shell printed, in a pane that is
-// not focused, against the same marker in the pane that is.
-//
-// Both markers carry a colour of their own in both layers. A cell that names
-// none is dimmed toward the theme's ground whether or not the option is set,
-// and would not tell its two values apart.
-
-// dimUnfocusedConfig is a tiled catppuccin_mocha session with dim_unfocused
-// on and extra appended to [appearance].
 func dimUnfocusedConfig(extra string) string {
 	return "[appearance]\ntheme = \"catppuccin_mocha\"\ndim_unfocused = 60\n" + extra +
 		"\n[startup]\ntiled = true\n"
 }
 
-// markerCell is the first cell of marker on screen.
 func markerCell(s tuitest.Screen, marker string) (tuitest.Cell, bool) {
 	_, rows := s.Size()
 	for r := range rows {
@@ -39,21 +28,12 @@ func markerCell(s tuitest.Screen, marker string) (tuitest.Cell, bool) {
 	return tuitest.Cell{}, false
 }
 
-// dimPair boots tuios with body, prints a marker in each of two panes, and
-// returns the marker's cell in the unfocused pane (A) and in the focused one
-// (B) once A has been dimmed enough to differ from B. A frame in which A is
-// still drawn like B has not been dimmed yet, and reading it would read the
-// state before the option applied.
 func dimPair(t *testing.T, body string) (unfocused, focused tuitest.Cell) {
 	t.Helper()
 	base := spotlightConfigFile(t, body)
-	// True colour is asked for: the default host here is a 256-colour one, which
-	// snaps colours to palette entries and could blur a small dim into none.
 	term := startIn(t, base, startOpts{cols: 140, rows: 40, env: []string{"COLORTERM=truecolor"}})
 	waitBoot(t, term)
 
-	// The marker is assembled by the shell so the command line does not hold
-	// it, in a colour on a ground of its own.
 	for _, name := range []string{"A", "B"} {
 		newWindow(t, term)
 		enterTerminalMode(t, term)
@@ -103,27 +83,17 @@ func TestDimForeground(t *testing.T) {
 	})
 }
 
-// hostScheme is a host terminal's own colours: its default pair and its
-// sixteen. hostterm answers OSC 10, 11 and 4 with them, and the frames are
-// drawn with them, since they are what the host paints an index and the
-// default colours in.
 type hostScheme struct {
 	name   string
 	bg, fg string
 	ansi   [16]string
 }
 
-// nordScheme is the host of discussion #850: ghostty on its Nord theme, with
-// no tuios theme.
 var nordScheme = hostScheme{"nord", "#2e3440", "#d8dee9", [16]string{
 	"#3b4252", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#88c0d0", "#e5e9f0",
 	"#4c566a", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#8fbcbb", "#eceff4",
 }}
 
-// The light schemes the reporter of #850 also uses, close to how ghostty
-// ships them, and the dark pairs of the two that are not Nord. With no tuios
-// theme the borders depend on the background alone; the sixteen are there so
-// the frames look like the real thing.
 var (
 	nordLightScheme = hostScheme{"nord-light", "#e5e9f0", "#414858", [16]string{
 		"#3b4252", "#bf616a", "#96b17f", "#c5a565", "#81a1c1", "#b48ead", "#7bb3c3", "#a5abb6",
@@ -147,7 +117,6 @@ var (
 	}}
 )
 
-// palette is the scheme as a renderer palette.
 func (h hostScheme) palette() *shot.Palette {
 	p := &shot.Palette{FG: hexColor(h.fg), BG: hexColor(h.bg)}
 	for i, hex := range h.ansi {
@@ -156,14 +125,11 @@ func (h hostScheme) palette() *shot.Palette {
 	return p
 }
 
-// ground is the scheme's background as a colour.
 func (h hostScheme) ground() color.Color {
 	c := hexColor(h.bg)
 	return color.RGBA{R: c.R, G: c.G, B: c.B, A: 0xff}
 }
 
-// hostArgs is the hostterm command line that plays the scheme, or one that
-// answers no colour question when mute is set.
 func (h hostScheme) hostArgs(host string, mute bool) []string {
 	if mute {
 		return []string{host, "run", "-mute", "--"}
@@ -175,22 +141,15 @@ func (h hostScheme) hostArgs(host string, mute bool) []string {
 	return []string{host, "run", "-bg", h.bg, "-fg", h.fg, "-ansi", strings.Join(parts, ","), "--"}
 }
 
-// nordANSI, nordBg and nordFg are the Nord scheme's colours, for the dim test.
 var nordANSI = nordScheme.ansi
 
 const nordBg, nordFg = "#2e3440", "#d8dee9"
 
-// startNordPanes is startHostPanes on the Nord host.
 func startNordPanes(t *testing.T, body string, mute bool, name string) *tuitest.Terminal {
 	t.Helper()
 	return startHostPanes(t, nordScheme, body, mute, name)
 }
 
-// startHostPanes attaches to a daemon session from the host scheme with
-// appearance set to body, opens a second pane, and prints two markers in each: one in the
-// terminal's default colour, as a shell prompt is, and one in SGR 31, which the
-// host resolves through its own palette. Pane A is left unfocused. The frame is
-// saved under artifactDir as name, drawn with the host's palette.
 func startHostPanes(t *testing.T, scheme hostScheme, body string, mute bool, name string) *tuitest.Terminal {
 	t.Helper()
 	base := t.TempDir()
@@ -211,9 +170,6 @@ func startHostPanes(t *testing.T, scheme hostScheme, body string, mute bool, nam
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("the client never attached: %v\n%s", err, term.Snapshot())
 	}
-	// The markers go in through the daemon, so the client's mode does not
-	// matter. The printf format holds %s where the pane letter goes, so the
-	// echoed command line never shows a marker.
 	marker := func(pane string) string {
 		return `clear; printf 'PLAIN%sX\n\033[31mRED%sX\033[0m\n' ` + pane + ` ` + pane + "\n"
 	}
@@ -229,8 +185,6 @@ func startHostPanes(t *testing.T, scheme hostScheme, body string, mute bool, nam
 	}, uiTimeout); err != nil {
 		t.Fatalf("the two panes and their markers never showed: %v\n%s", err, term.Snapshot())
 	}
-	// The unfocused pane's dim frame is drawn on the focus change; this gives
-	// the settle of the host's colour answers time to land too.
 	time.Sleep(time.Second)
 	dir := artifactDir(t)
 	saveArtifact(t, term, dir, name)
@@ -238,11 +192,8 @@ func startHostPanes(t *testing.T, scheme hostScheme, body string, mute bool, nam
 	return term
 }
 
-// cellRGB is a cell colour as the Nord host paints it, and whether the cell
-// named one at all.
 func cellRGB(c tuitest.Color) (color.Color, bool) { return cellRGBOn(c, nordScheme) }
 
-// cellRGBOn is cellRGB on another host scheme.
 func cellRGBOn(c tuitest.Color, h hostScheme) (color.Color, bool) {
 	if c.Kind == tuitest.ColorDefault {
 		return nil, false
@@ -252,8 +203,6 @@ func cellRGBOn(c tuitest.Color, h hostScheme) (color.Color, bool) {
 	return color.RGBA{R: s.R, G: s.G, B: s.B, A: 0xff}, true
 }
 
-// nearRGB reports whether two colours are within a few steps on every channel,
-// which is what the 8-bit rounding of a blend can move it by.
 func nearRGB(a, b color.Color) bool {
 	ar, ag, ab, _ := a.RGBA()
 	br, bg, bb, _ := b.RGBA()

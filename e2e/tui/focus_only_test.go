@@ -8,15 +8,12 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// focusOnlyRow is one row of list-windows --json.
 type focusOnlyRow struct {
 	Name      string `json:"display_name"`
 	Minimized bool   `json:"minimized"`
 	Focused   bool   `json:"focused"`
 }
 
-// waitFocusOnly waits until every pane of session matches want, by name:
-// true is minimized.
 func waitFocusOnly(t *testing.T, term *tuitest.Terminal, base, session, focused string, want map[string]bool, what string) {
 	t.Helper()
 	var last string
@@ -75,9 +72,6 @@ func TestFocusOnlyHidesTheOtherPanes(t *testing.T) {
 			t.Fatalf("name %s: %v\n%s", name, err, out)
 		}
 	}
-	// FOUR is minimized before ctrl+b m f, and must stay minimized at the
-	// end. It is minimized from the command line: a key here raced the new
-	// windows, so on a slow run nothing was minimized and the setup failed.
 	if out, err := tuiosCLI(t, base, "set-window", "-s", "fo", "-w", "FOUR", "--minimize"); err != nil {
 		t.Fatalf("minimize FOUR: %v\n%s", err, out)
 	}

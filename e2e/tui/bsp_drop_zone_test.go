@@ -8,59 +8,23 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Dropping a dragged pane on an edge of another one in BSP splits that pane,
-// and the dragged pane takes the half toward the edge. The middle of a pane
-// still swaps the two. While the button is down the rectangle the pane would
-// land in is highlighted, and the release has to put the pane exactly there.
-//
-// The board is three panes: A on the left at full height, B over C on the
-// right. C is the one dragged, by its title bar near the left end, so the
-// held pane hangs to the right of and below the pointer and the highlight has
-// cells left to see.
-//
-// How these could pass wrongly, written down first:
-//   - A split could come out as a swap. Every edge case checks the pane that
-//     was not involved too: B has to take the full height C left, which no
-//     swap gives.
-//   - The highlight could be read off the held pane rather than the canvas
-//     under it. The held pane's rectangle is worked out from the press and
-//     the pointer, checked against the corner drawn there, and every cell it
-//     covers is left out.
-//   - The highlight could be somewhere other than where the pane lands and
-//     still change some cell. The outline is checked cell by cell against the
-//     rectangle the daemon reports after the drop: every visible cell of it
-//     carries the outline, and no other visible cell does.
-//   - A drag that never passes the drag threshold snaps back whatever the
-//     zones do. Every drop here is at least twenty cells from its press.
-
-// dropPanes is the board as the daemon has it.
 type dropPanes struct {
 	a, b, c winRect
-	// box is the region the panes tile.
-	box winRect
+	box     winRect
 }
 
-// dropBoard starts a daemon session tiled in bsp, with the three panes, and
-// returns them. env picks the colour depth.
 func dropBoard(t *testing.T, session string, env []string) (*tuitest.Terminal, string, dropPanes) {
 	t.Helper()
 	return dropBoardWith(t, session, env, fillPreview)
 }
 
-// fillPreview is the [appearance] line of a board whose checks read the tint.
-// The default preview is the outline, which TestDropPreviewDefaultDrawsOnlyTheFrame
-// holds.
 const fillPreview = "drop_preview = 'fill'"
 
-// dropBoardWith is dropBoard with appearance holding the lines of an
-// [appearance] table, for the drop preview's options.
 func dropBoardWith(t *testing.T, session string, env []string, appearance string) (*tuitest.Terminal, string, dropPanes) {
 	t.Helper()
 	return dropBoardPrep(t, session, env, func(string) string { return appearance })
 }
 
-// dropBoardPrep is dropBoardWith with the [appearance] lines worked out from
-// the isolation root, for a board whose panes run a shell set up in it.
 func dropBoardPrep(t *testing.T, session string, env []string, prep func(base string) string) (*tuitest.Terminal, string, dropPanes) {
 	t.Helper()
 	base := t.TempDir()
@@ -79,8 +43,6 @@ func dropBoardPrep(t *testing.T, session string, env []string, prep func(base st
 	return term, base, boardShape(t, term, waitForSettledGeometry(t, base, 3))
 }
 
-// boardShape names the three panes of a board, and fails unless they are A
-// on the left at full height and B over C on the right.
 func boardShape(t *testing.T, term *tuitest.Terminal, rects []winRect) dropPanes {
 	t.Helper()
 	if len(rects) != 3 {
@@ -110,11 +72,10 @@ func boardShape(t *testing.T, term *tuitest.Terminal, rects []winRect) dropPanes
 	return p
 }
 
-// drag is one gesture on C: pressed on its title bar, carried to a point.
 type drag struct {
 	pane       winRect
-	col        int // the column of the title bar pressed
-	x, y       int // where the pointer is carried
+	col        int
+	x, y       int
 	held       winRect
 	pre, mid   groundCells
 	board      dropPanes
@@ -122,13 +83,8 @@ type drag struct {
 	artifactAt string
 }
 
-// carry presses C's title bar near its left end and carries the pointer to
-// (x, y) a cell at a time, leaving the button down. It keeps the frame from
-// before the press and the one mid-drag, and checks the held pane is drawn
-// where the arithmetic says.
 func carry(t *testing.T, term *tuitest.Terminal, p dropPanes, x, y int) *drag {
 	t.Helper()
-	// Past the buttons at the left end of the title bar.
 	d := &drag{pane: p.c, col: p.c.X + 10, x: x, y: y, board: p, term: term, artifactAt: artifactDir(t)}
 	time.Sleep(500 * time.Millisecond)
 	d.pre = readCells(term.Screen())
@@ -147,10 +103,6 @@ func carry(t *testing.T, term *tuitest.Terminal, p dropPanes, x, y int) *drag {
 	return d
 }
 
-// checkHeld works out where the held pane is drawn with the pointer at (d.x,
-// d.y), and checks the pane's corner is there. The pane follows the pointer
-// with the offset of the press, held inside the content region the way the
-// motion path clamps it.
 func (d *drag) checkHeld(t *testing.T) {
 	t.Helper()
 	p := d.board
@@ -163,8 +115,6 @@ func (d *drag) checkHeld(t *testing.T) {
 	}
 }
 
-// drop releases the button where the pointer is and returns the settled
-// geometry by pane.
 func (d *drag) drop(t *testing.T, base string) map[string]winRect {
 	t.Helper()
 	mouseRelease(t, d.term, d.x, d.y, tuitest.MouseLeft, 0)
@@ -189,26 +139,15 @@ func (d *drag) drop(t *testing.T, base string) map[string]winRect {
 	return byID
 }
 
-// visible reports whether the cell is in the tiled region and not under the
-// held pane.
 func (d *drag) visible(x, y int) bool {
 	return covers(d.board.box, x, y) && !covers(d.held, x, y)
 }
 
-// checkHighlight holds the mid-drag frame to a highlight on want and nowhere
-// else, reading only cells the held pane does not cover. With want nil there
-// must be no highlight at all.
-//
-// In colour the outline is the pane border's glyphs in one ink, and the inside
-// is washed: one tinted ground, and no cell with text keeps its colour. At 16
-// colours the outline is reverse video.
 func (d *drag) checkHighlight(t *testing.T, want *winRect, depth16 bool) {
 	t.Helper()
 	d.checkPreview(t, want, depth16, true)
 }
 
-// ringGlyph is the rounded border's glyph the outline of want draws at (x,
-// y), or "" for a cell inside it. The board keeps the shipped rounded border.
 func ringGlyph(want winRect, x, y int) string {
 	left, right := x == want.X, x == want.X+want.Width-1
 	top, bottom := y == want.Y, y == want.Y+want.Height-1
@@ -233,9 +172,6 @@ func ringGlyph(want winRect, x, y int) string {
 	return "│"
 }
 
-// checkPreview is checkHighlight for either preview style: with fill false
-// (appearance.drop_preview = "outline") the outline is the same and the inside
-// has to keep the ground and the text colour it had before the drag.
 func (d *drag) checkPreview(t *testing.T, want *winRect, depth16, fill bool) {
 	t.Helper()
 	ring := func(x, y int) bool {
@@ -244,7 +180,6 @@ func (d *drag) checkPreview(t *testing.T, want *winRect, depth16, fill bool) {
 	inside := func(x, y int) bool {
 		return want != nil && covers(*want, x, y) && !ring(x, y)
 	}
-	// The outline's ink and the tint, from the first visible cell of each.
 	var ringFg, tint tuitest.Color
 	ringSeen, insideSeen := false, false
 	if want != nil && !depth16 {
@@ -302,16 +237,11 @@ func (d *drag) checkPreview(t *testing.T, want *winRect, depth16, fill bool) {
 					t.Fatalf("cell (%d,%d) inside the landing rectangle %+v has ground %+v (reverse %v) mid-drag, want the tint %+v\n%s",
 						x, y, *want, mid.Bg, mid.Reverse, tint, d.term.SnapshotStyled())
 				}
-				// A blank shows no text colour, and the frame writer erases a
-				// run of them rather than naming one, so only a cell with
-				// something in it is held to the wash.
 				if blank := mid.Content == "" || mid.Content == " "; !blank && mid.Fg == pre.Fg {
 					t.Fatalf("cell (%d,%d) %q inside the landing rectangle %+v kept its text colour %+v mid-drag: the wash missed it\n%s",
 						x, y, mid.Content, *want, mid.Fg, d.term.SnapshotStyled())
 				}
 			case covers(d.pane, x, y):
-				// The slot C left is drawn empty while C is away, so it is
-				// held to the bare ground rather than to the frame before.
 				if mid.Bg.Kind != tuitest.ColorDefault || mid.Reverse {
 					t.Fatalf("cell (%d,%d), in the slot C left and outside the landing rectangle, is painted mid-drag: %+v\n%s",
 						x, y, mid, d.term.SnapshotStyled())
@@ -324,17 +254,12 @@ func (d *drag) checkPreview(t *testing.T, want *winRect, depth16, fill bool) {
 	}
 }
 
-// edgeCase is one edge drop and what it has to leave behind.
 type edgeCase struct {
-	name string
-	// at is where C is carried to.
-	at func(p dropPanes) (int, int)
-	// check holds the settled geometry to the split.
+	name  string
+	at    func(p dropPanes) (int, int)
 	check func(t *testing.T, p dropPanes, a, b, c winRect)
 }
 
-// near reports whether two lengths of a split are as close as an even split
-// of an odd length and a divider allow.
 func near(x, y int) bool { return abs(x-y) <= 2 }
 
 var edgeCases = []edgeCase{
@@ -379,8 +304,6 @@ var edgeCases = []edgeCase{
 		},
 	},
 	{
-		// B is C's own neighbour, so taking C out first grows B to the whole
-		// right-hand column, and the split is of that.
 		name: "sibling-left",
 		at:   func(p dropPanes) (int, int) { return p.b.X + 1, p.b.Y + p.b.Height/2 },
 		check: func(t *testing.T, p dropPanes, a, b, c winRect) {
@@ -485,7 +408,6 @@ func TestAShortDragShowsNoDropZone(t *testing.T) {
 // sitting on C's own slot.
 func TestAnEdgeDropThatRebuildsTheSameTreeChangesNothing(t *testing.T) {
 	term, base, p := dropBoard(t, "drop-same", chromeDepths[2].env)
-	// B's bottom border is the division; dragged up six rows.
 	divider := p.b.Y + p.b.Height - 1
 	mouseDrag(t, term, p.b.X+p.b.Width/2, divider, p.b.X+p.b.Width/2, divider-6, tuitest.MouseLeft, 0)
 	time.Sleep(time.Second)
@@ -566,8 +488,6 @@ func TestEdgeZonesAreBSPOnly(t *testing.T) {
 			term, base, board := dropBoard(t, "drop-only-"+l.query, chromeDepths[2].env)
 			runPaletteRow(t, term, l.query, l.row, l.announces)
 			waitPaletteClosed(t, term, "after switching layout")
-			// The switch's notice is drawn over the panes until it fades, and
-			// it would read as a change between the two frames.
 			if err := term.WaitFor(func(s tuitest.Screen) bool {
 				return !strings.Contains(s.Text(), l.announces)
 			}, 3*uiTimeout); err != nil {
@@ -587,10 +507,6 @@ func TestEdgeZonesAreBSPOnly(t *testing.T) {
 				return
 			}
 
-			// The strip is columns, one pane each, every one the full height
-			// and wider than a BSP edge zone needs. C, the focused pane, is
-			// carried onto another pane one cell in from where that pane
-			// starts on screen, which in BSP would be its left edge.
 			var held, target winRect
 			for _, r := range rects {
 				switch {

@@ -13,28 +13,20 @@ import (
 	"strings"
 )
 
-// testMap is what the coverage run learned: for each function, the tests that
-// ran it, outside the code every process runs at start-up.
 type testMap struct {
-	files []string            // repository-relative paths
-	tests []string            // test names; the func lines refer to them by index
-	index map[string]int      // test name to index
-	every map[string]bool     // tests to run on every change that reaches the binary
-	init  map[string][]string // file to the functions every process runs in it
-	funcs map[funcRef][]int   // function to the tests that ran it
-	// harness is true when the map holds the suite's test process too, not
-	// only the tuios processes it starts.
+	files   []string
+	tests   []string
+	index   map[string]int
+	every   map[string]bool
+	init    map[string][]string
+	funcs   map[funcRef][]int
 	harness bool
 }
 
-// funcRef names a function the way go tool cover -func does: its file and
-// its name, without the receiver. Two methods of the same name in one file
-// share a ref, which only selects more.
 type funcRef struct {
 	file, name string
 }
 
-// testsOf returns the tests that ran a function.
 func (m *testMap) testsOf(f funcRef) []int {
 	return m.funcs[f]
 }
@@ -155,9 +147,6 @@ func encodeTests(tests []int) string {
 	return list
 }
 
-// buildMap turns the output of collect.sh into the map file. The profiles
-// name files by import path, which is turned into a path in this repository
-// with the module directories go list reports for the workspace.
 func buildMap(dir, out, root string) error {
 	modules, err := moduleDirs(root)
 	if err != nil {
@@ -176,7 +165,6 @@ func buildMap(dir, out, root string) error {
 		return path.Join(modules[best], strings.TrimPrefix(strings.TrimPrefix(importPath, best), "/")), true
 	}
 
-	// collect.sh writes failed.txt. The workflow renames it per shard.
 	failed := map[string]bool{}
 	failedLists, _ := filepath.Glob(filepath.Join(dir, "failed*.txt"))
 	for _, list := range failedLists {
@@ -227,8 +215,6 @@ func buildMap(dir, out, root string) error {
 			fileSet[p] = true
 			count++
 		}
-		// A test that ran no tuios code at all most likely drove the binary
-		// some way the coverage run could not see. It runs on every change.
 		if count == 0 {
 			failed[name] = true
 		}
@@ -247,7 +233,6 @@ func buildMap(dir, out, root string) error {
 
 	var b strings.Builder
 	b.WriteString(mapHeader)
-	// collect.sh leaves harness.cover when it measured the test process.
 	if _, err := os.Stat(filepath.Join(dir, "harness.cover")); err == nil {
 		b.WriteString("cover harness\n")
 	}
@@ -282,7 +267,6 @@ func buildMap(dir, out, root string) error {
 		}
 		return strings.Compare(a.name, b.name)
 	})
-	// Many functions ran in the same tests, so each set is written once.
 	setIndex := map[string]int{}
 	var funcLines strings.Builder
 	for _, ref := range refs {
@@ -299,14 +283,11 @@ func buildMap(dir, out, root string) error {
 	return os.WriteFile(out, []byte(b.String()), 0o644)
 }
 
-// funcName drops type parameters, which go tool cover may print.
 func funcName(s string) string {
 	name, _, _ := strings.Cut(s, "[")
 	return name
 }
 
-// moduleDirs maps each workspace module path to its directory relative to the
-// repository root.
 func moduleDirs(root string) (map[string]string, error) {
 	cmd := exec.Command("go", "list", "-m", "-f", "{{.Path}} {{.Dir}}")
 	cmd.Dir = root

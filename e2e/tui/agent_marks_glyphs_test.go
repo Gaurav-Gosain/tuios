@@ -10,15 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The agent-state marks come from the glyph set, one role per state, and a
-// mark may be two cells. These tests write a set file the way a person does,
-// report states over the CLI the way a pane's shim does, and read the cells
-// the host terminal shows.
-
-// marksClient starts a daemon with one attached session holding three named
-// agent panes, one needing the person, one working and one at rest, with the
-// glyph set file and the config given. set is written as glyphs/hands.json
-// when it is not empty.
 func marksClient(t *testing.T, cfg, set string, args ...string) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -56,9 +47,6 @@ func marksClient(t *testing.T, cfg, set string, args ...string) (*tuitest.Termin
 	return term, base
 }
 
-// markRowCells is one screen row as the text its cells hold, and the cell column
-// each byte of that text sits in, so a wide mark in front of a name does not
-// move the column the name is reported at.
 func markRowCells(s tuitest.Screen, row int) (string, []int) {
 	cols, _ := s.Size()
 	var line strings.Builder
@@ -76,7 +64,6 @@ func markRowCells(s tuitest.Screen, row int) (string, []int) {
 	return line.String(), at
 }
 
-// markedAt is every place text is drawn on screen, as row and cell column.
 func markedAt(s tuitest.Screen, text string) [][2]int {
 	_, rows := s.Size()
 	var out [][2]int
@@ -95,13 +82,8 @@ func markedAt(s tuitest.Screen, text string) [][2]int {
 	return out
 }
 
-// marksSet is the set the custom tests select: a two-cell mark for an agent
-// that needs the person, a narrow one of its own for a working agent, and
-// every other state left to the default.
 const marksSet = `{"inherits": "default", "state_needs_input": "✋", "state_working": "◆"}`
 
-// railNames finds the rows of the rail that draw each name, right of the
-// rail's own header column, and returns the cell column each name starts on.
 func railNames(s tuitest.Screen, railX int, names ...string) map[string][2]int {
 	out := map[string][2]int{}
 	for _, name := range names {
@@ -115,8 +97,6 @@ func railNames(s tuitest.Screen, railX int, names ...string) map[string][2]int {
 	return out
 }
 
-// railColumn is the cell column of the rail's "sessions" header, the left
-// edge every rail row's text is right of.
 func railColumn(s tuitest.Screen) int {
 	for _, at := range markedAt(s, "sessions") {
 		return at[1] - 1
@@ -124,14 +104,10 @@ func railColumn(s tuitest.Screen) int {
 	return -1
 }
 
-// markLayout is where one run draws hand-pane's agent mark and name, as cell
-// columns: on its rail row, and on its row in the cockpit's fleet column.
 type markLayout struct {
 	railMark, railName, ckMark, ckName int
 }
 
-// cellLeftOf is the column of the nearest cell left of col on row that holds
-// content, or -1.
 func cellLeftOf(s tuitest.Screen, row, col int, content string) int {
 	for c := col - 1; c >= 0; c-- {
 		if s.Cell(c, row).Content == content {
@@ -141,8 +117,6 @@ func cellLeftOf(s tuitest.Screen, row, col int, content string) int {
 	return -1
 }
 
-// cockpitRows opens the cockpit and returns the row and the cell column of
-// each name in its fleet column.
 func cockpitRows(t *testing.T, term *tuitest.Terminal, names ...string) (tuitest.Screen, map[string][2]int) {
 	t.Helper()
 	windowManagementMode(t, term)
@@ -169,9 +143,6 @@ func cockpitRows(t *testing.T, term *tuitest.Terminal, names ...string) (tuitest
 	return s, out
 }
 
-// defaultMarkLayout is where the shipped marks put hand-pane's mark and name:
-// the rail's ▲ and the cockpit's own ●, both one cell. A glyph set's marks
-// are held to these columns.
 func defaultMarkLayout(t *testing.T) markLayout {
 	t.Helper()
 	term, _ := marksClient(t, "", "")
@@ -266,8 +237,6 @@ func TestAgentMarksFollowTheGlyphSet(t *testing.T) {
 			}
 		}
 	}
-	// The sessions row's pane count is the right-hand figure, and it sits in
-	// the column of the header's add control when the row fits the rail.
 	var plus, count int
 	for _, at := range markedAt(s, "sessions") {
 		line, idx := markRowCells(s, at[0])
@@ -285,8 +254,6 @@ func TestAgentMarksFollowTheGlyphSet(t *testing.T) {
 			count, plus, term.Snapshot())
 	}
 
-	// The title bar of the front window, hand-pane's. A title is not a column,
-	// so its mark keeps its space.
 	var title [2]int
 	for _, at := range markedAt(s, "✋ hand-pane") {
 		if at[1] < railX {
@@ -311,8 +278,6 @@ func TestAgentMarksFollowTheGlyphSet(t *testing.T) {
 			corner, bottom, term.Snapshot())
 	}
 
-	// The cockpit lists the same three agents in its fleet column, each name
-	// where the shipped marks put it, each mark in the shipped mark's column.
 	s, cockpit := cockpitRows(t, term, "hand-pane", "work-pane", "rest-pane")
 	railShot(t, term, "agent-marks-cockpit")
 	for name, at := range cockpit {
@@ -334,16 +299,12 @@ func TestAgentMarksFollowTheGlyphSet(t *testing.T) {
 			}
 		}
 	}
-	// The counts over the fleet wear the same marks as its rows.
 	if head := markedAt(s, "✋ 1"); len(head) == 0 || len(markedAt(s, "◆ 1")) == 0 {
 		t.Errorf("ASSERTION: the cockpit's counts do not wear the set's marks\n%s", term.Snapshot())
 	}
 	alive(t, term, "after the cockpit drew the set's marks")
 }
 
-// namesInBox is the first place each name is drawn inside a box of the screen,
-// rows top to bottom and columns left to right, both exclusive, as row and
-// cell column.
 func namesInBox(s tuitest.Screen, top, bottom, left, right int, names ...string) map[string][2]int {
 	out := map[string][2]int{}
 	for _, name := range names {
@@ -357,13 +318,8 @@ func namesInBox(s tuitest.Screen, top, bottom, left, right int, names ...string)
 	return out
 }
 
-// markCells is how many cells each mark the lists draw takes.
 var markCells = map[string]int{"✋": 2, "◆": 1, "○": 1}
 
-// markLeads holds the rows of one list to the rail's rule: every name in one
-// column, every mark the lead's width in front of it, ✋ in two cells and a
-// narrow mark in one, and the cell before each name blank. marks names the
-// mark each row wears, "" for none.
 func markLeads(t *testing.T, term *tuitest.Terminal, s tuitest.Screen, list string, at map[string][2]int, marks map[string]string) {
 	t.Helper()
 	if len(at) != len(marks) {
@@ -435,8 +391,6 @@ func TestAgentMarksLineUpInEveryList(t *testing.T) {
 	}
 	markLeads(t, term, s, "navigator", namesInBox(s, panes[0][0], rows, -1, preview[0][1], names...), marks)
 
-	// The preview's header is the selected pane's mark and name, and the line
-	// under it is where the pane is, in the column of the name.
 	head := preview[0][0] + 1
 	line, at := markRowCells(s, head)
 	first := func(line string, at []int, from int) int {

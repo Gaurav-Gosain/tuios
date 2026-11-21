@@ -8,10 +8,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// replyRowRe is a line the test types into the reply editor.
 var replyRowRe = regexp.MustCompile(`row-\d\d`)
 
-// shownReplyRows counts the typed lines on screen.
 func shownReplyRows(s tuitest.Screen) int {
 	return len(replyRowRe.FindAllString(s.Text(), -1))
 }

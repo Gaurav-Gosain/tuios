@@ -34,8 +34,6 @@ import (
 //
 // The final screen and the raw stream are saved under artifactDir.
 func TestExitKeepsTheHostScreen(t *testing.T) {
-	// The shell prints the lines, runs tuios ("$@"), then marks the exit and
-	// stays up so the screen can be read.
 	wrap := []string{"/bin/sh", "-c",
 		`i=1; while [ $i -le 60 ]; do echo HOSTLINE-$i; i=$((i+1)); done; "$@"; echo AFTER-EXIT; exec sleep 120`,
 		"sh"}
@@ -50,8 +48,6 @@ func TestExitKeepsTheHostScreen(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// The host direction only, bounded: the pty log also holds the
-			// keys and the replies this test's terminal sends.
 			streamPath := filepath.Join(t.TempDir(), "host.log")
 			stream, err := newBoundedLog(streamPath, ptyLogLimit)
 			if err != nil {
@@ -86,8 +82,6 @@ func TestExitKeepsTheHostScreen(t *testing.T) {
 			}
 			_ = os.WriteFile(filepath.Join(dir, "host-stream.bin"), raw, 0o644)
 
-			// The 30-row screen showed lines 32 to 60 before tuios started.
-			// Leaving the alternate screen puts them back.
 			for _, want := range []string{"HOSTLINE-40", "HOSTLINE-60"} {
 				if !strings.Contains(final, want) {
 					t.Errorf("the screen from before tuios is gone: %q is missing\n%s", want, final)
@@ -165,8 +159,6 @@ func TestExitTurnsOffWhatItTurnedOn(t *testing.T) {
 				t.Fatalf("the pane's bar cursor never reached the host, so this run tests nothing")
 			}
 
-			// The last value of each DEC private mode. Show cursor (25) and
-			// autowrap (7) are on by default, so they must end on.
 			last := map[string]string{}
 			for _, m := range decModeRE.FindAllSubmatch(raw, -1) {
 				for _, n := range strings.Split(string(m[1]), ";") {
@@ -190,9 +182,6 @@ func TestExitTurnsOffWhatItTurnedOn(t *testing.T) {
 				}
 			}
 			checkLast("cursor style", regexp.MustCompile(`\x1b\[[0-9]? q`), "\x1b[0 q")
-			// Bubble Tea pushes the kitty keyboard flags and pops them at
-			// exit, so the host gets back the flags it had. The pop must come
-			// after the last change, and every push needs its pop.
 			checkLast("kitty keyboard flags", regexp.MustCompile(`\x1b\[[=><][0-9;]*u`), "\x1b[<1u")
 			pushes := len(regexp.MustCompile(`\x1b\[>[0-9]*u`).FindAll(raw, -1))
 			pops := 0
@@ -206,8 +195,6 @@ func TestExitTurnsOffWhatItTurnedOn(t *testing.T) {
 			if pushes == 0 || pops != pushes {
 				t.Errorf("tuios pushed the kitty keyboard flags %d times and popped them %d times", pushes, pops)
 			}
-			// Each screen has its own stack, so the last pop must come before
-			// tuios leaves the alternate screen, where its push went.
 			if all := regexp.MustCompile(`\x1b\[<[0-9]*u`).FindAllIndex(raw, -1); len(all) > 0 && all[len(all)-1][0] > leave {
 				t.Errorf("tuios popped the kitty keyboard flags after it left the alternate screen")
 			}
@@ -217,5 +204,4 @@ func TestExitTurnsOffWhatItTurnedOn(t *testing.T) {
 	}
 }
 
-// decModeRE matches a DEC private mode set or reset: CSI ? Pm h or l.
 var decModeRE = regexp.MustCompile(`\x1b\[\?([0-9;]+)([hl])`)

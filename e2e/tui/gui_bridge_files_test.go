@@ -9,16 +9,6 @@ import (
 	"time"
 )
 
-// The explorer's half of the bridge (wave 5): a verb the renderer sends with
-// a host runs on that machine's daemon, through this machine's daemon and its
-// link, so the GUI lists, previews and copies another machine's files with
-// the same verbs it uses here. A verb that answers for the person never goes
-// to another machine with this client's nonce.
-//
-// What would pass a weaker test and fail this one: a bridge that ignores host
-// (the listing is this machine's folder, or "does not exist"), and a bridge
-// that sends the nonce along (respond on build would get one).
-
 // TestGUIBridgeVerbOnAHost lists a folder that exists only on build, through
 // the bridge, then copies a file from build with a transfer this machine's
 // daemon runs, sees a pane held for build named as build's, and refuses a
@@ -63,9 +53,6 @@ func TestGUIBridgeVerbOnAHost(t *testing.T) {
 	if len(list.Entries) != 1 || list.Entries[0].Name != "report.txt" || list.Entries[0].Size != 11 {
 		t.Fatalf("ASSERTION: the listing is not build's folder: %s", res.Result)
 	}
-	// The two machines share this disk, so the folder alone does not say
-	// which daemon listed it. The home folder does: each daemon answers with
-	// its own, and the ssh stand-in gives build's daemon build's.
 	if !strings.HasPrefix(list.Home, remote) {
 		t.Fatalf("ASSERTION: the listing came from this machine's daemon (home %s), not build's (under %s)", list.Home, remote)
 	}
@@ -78,7 +65,6 @@ func TestGUIBridgeVerbOnAHost(t *testing.T) {
 		t.Fatalf("a verb with no host did not run here: home %s", hereList.Home)
 	}
 
-	// Quick Look on build's file: build's daemon reads it and sends the text.
 	prev := b.verbOn("build", "file-preview", map[string]any{"path": filepath.Join(farDir, "report.txt")})
 	var pv struct {
 		Kind string `json:"kind"`
@@ -89,7 +75,6 @@ func TestGUIBridgeVerbOnAHost(t *testing.T) {
 		t.Fatalf("ASSERTION: file-preview on build through the bridge: %s %s %s", prev.Code, prev.Error, prev.Result)
 	}
 
-	// A copy from build, which this machine's daemon runs.
 	dst := filepath.Join(base, "report.txt")
 	start := b.verb("transfer-start", map[string]any{
 		"src": map[string]any{"host": "build", "path": filepath.Join(farDir, "report.txt")},
@@ -109,8 +94,6 @@ func TestGUIBridgeVerbOnAHost(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	// A pane this session holds for build says so, so the explorer and a
-	// drop on it use build's files.
 	if res := b.verb("new-window", map[string]any{"session": "here", "host": "build"}); !res.OK {
 		t.Fatalf("make a pane on build: %s %s", res.Code, res.Error)
 	}
@@ -123,7 +106,6 @@ func TestGUIBridgeVerbOnAHost(t *testing.T) {
 		return false
 	}, "a window whose host is build")
 
-	// The nonce is for this machine's daemon only.
 	refused := b.verbOn("build", "respond", map[string]any{"session": "far", "action": "choose", "value": "1"})
 	if refused.OK || refused.Code != "not_human" || !strings.Contains(refused.Error, "on this machine only") {
 		t.Fatalf("ASSERTION: a person verb went to build: %+v", refused)

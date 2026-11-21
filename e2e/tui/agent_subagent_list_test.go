@@ -11,25 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// fakeClaudeScript stands in for Claude Code in a pane: it replays a scenario
-// of hook payloads through the real `tuios agent-hook claude-code`, the way
-// Claude Code runs its hooks, one process per event with the payload on
-// stdin. A line is one of:
-//
-//	{...}          a payload, run and waited for
-//	& {...}        a payload run at once with the ones after it, as Claude
-//	               Code runs the hooks of parallel tool calls
-//	join           wait for the payloads started with &
-//	wait LABEL     print "FAKE-AT LABEL" and wait for a line on the terminal
-//	late {...}     a payload run once the stand-in has exited, by a process
-//	               it leaves behind in the pane, as a harness's hook that
-//	               reaches the daemon after the harness quit. What it prints
-//	               goes to the log: it would land in the pane after the shell
-//	               is back, and a SessionStart hint taller than the pane
-//	               scrolls off what the test waits to see there
-//
-// Every hook runs with --explain, and what it decided goes to the log, which
-// the test keeps as its artifact.
 const fakeClaudeScript = `#!/bin/sh
 scenario=$1
 log=$2
@@ -48,21 +29,15 @@ wait
 printf 'FAKE-DONE\n'
 `
 
-// The conversation the scenario reports, and its first prompt, taken from a
-// capture of Claude Code 2.1.296.
 const (
 	ccSession = "522be9ad-cf5e-4caa-8823-41b6963fc352"
 	ccPrompt  = "823af7ab-616d-442b-890d-dc573d00e4ee"
 )
 
-// cc is a Claude Code hook payload of the main conversation: the common
-// fields every captured payload carried, then the event's own. agent is the
-// subagent the event fires in, "" for the main thread.
 func cc(agent, fields string) string {
 	return ccIn(ccSession, agent, fields)
 }
 
-// ccIn is cc for conversation session.
 func ccIn(session, agent, fields string) string {
 	common := `"session_id":"` + session + `","transcript_path":"/home/u/.claude/projects/-src/` + session + `.jsonl","cwd":"/src","prompt_id":"` + ccPrompt + `","permission_mode":"bypassPermissions"`
 	if agent != "" {
@@ -71,8 +46,6 @@ func ccIn(session, agent, fields string) string {
 	return "{" + common + `,"effort":{"level":"medium"},` + fields + "}"
 }
 
-// The subagents of the scenario, by the ids Claude Code gives them, and the
-// tool calls that launched them.
 const (
 	saTmux  = "ab34da07d2d63ee3c"
 	saRail  = "aa84fb4f695c1ee02"
@@ -85,7 +58,6 @@ const (
 	toolTmx = "toolu_01VUbFKSFoMYZATRvdAzAZLC"
 )
 
-// agentLaunch is the PreToolUse of the Agent tool, as captured.
 func agentLaunch(call, desc, typ string, background bool) string {
 	bg := "false"
 	if background {
@@ -94,24 +66,18 @@ func agentLaunch(call, desc, typ string, background bool) string {
 	return cc("", `"hook_event_name":"PreToolUse","tool_name":"Agent","tool_input":{"description":"`+desc+`","prompt":"Do it, then reply done.","subagent_type":"`+typ+`","run_in_background":`+bg+`},"tool_use_id":"`+call+`"`)
 }
 
-// subagentStartOf is SubagentStart, which names the id and the type alone.
 func subagentStartOf(id, typ string) string {
 	return ccIn(ccSession, "", `"agent_id":"`+id+`","agent_type":"`+typ+`","hook_event_name":"SubagentStart"`)
 }
 
-// subagentStopOf is SubagentStop with what the subagent said last and the
-// background tasks still running.
 func subagentStopOf(id, typ, last, tasks string) string {
 	return ccIn(ccSession, "", `"agent_id":"`+id+`","agent_type":"`+typ+`","hook_event_name":"SubagentStop","stop_hook_active":false,"agent_transcript_path":"/home/u/.claude/projects/-src/`+ccSession+`/subagents/agent-`+id+`.jsonl","last_assistant_message":"`+last+`","background_tasks":[`+tasks+`],"session_crons":[]`)
 }
 
-// task is one entry of background_tasks.
 func task(id, desc, typ string) string {
 	return `{"id":"` + id + `","type":"subagent","status":"running","description":"` + desc + `","agent_type":"` + typ + `"}`
 }
 
-// subagentTool is a tool call inside subagent id: PreToolUse, or PostToolUse
-// with done.
 func subagentTool(id, call, tool, input string, done bool) string {
 	if done {
 		return cc(id, `"hook_event_name":"PostToolUse","tool_name":"`+tool+`","tool_input":`+input+`,"tool_response":{"stdout":"ok","stderr":"","interrupted":false},"tool_use_id":"`+call+`","duration_ms":10`)
@@ -119,11 +85,6 @@ func subagentTool(id, call, tool, input string, done bool) string {
 	return cc(id, `"hook_event_name":"PreToolUse","tool_name":"`+tool+`","tool_input":`+input+`,"tool_use_id":"`+call+`"`)
 }
 
-// subagentScenario is what the fake claude replays: one background and three
-// foreground launches, the two foreground ones of one type started in the
-// other order (so the daemon's first guess at their descriptions is wrong
-// until a Stop's background_tasks names them), a tool call in each, another
-// conversation's tool call under a known id, then each way a subagent ends.
 func subagentScenario() string {
 	running := task(saTmux, "Research tmux", "general-purpose") + "," + task(saRail, "Audit the rail", "general-purpose") + "," + task(saDocs, "Write the docs", "general-purpose")
 	lines := []string{
@@ -145,11 +106,7 @@ func subagentScenario() string {
 		"& " + subagentTool(saCI, "toolu_01c1", "Bash", `{"command":"gh run list","description":"List the runs"}`, false),
 		"join",
 		"wait tools",
-		// A conversation the pane is not running, a nested claude -p,
-		// reports a tool under an id the pane knows.
 		ccIn("nested-0001", saTmux, `"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{"command":"FOREIGN-TOOL"},"tool_use_id":"toolu_01zz"`),
-		// The person moved the two foreground agents to the background, and
-		// the main thread ended its turn.
 		cc("", `"hook_event_name":"Stop","stop_hook_active":false,"last_assistant_message":"Handed the work to four agents.","background_tasks":[`+running+`],"session_crons":[]`),
 		"wait launched",
 		"# finish",
@@ -171,7 +128,6 @@ func subagentScenario() string {
 	return strings.Join(lines, "\n") + "\n"
 }
 
-// subagentRow is one entry of get-agent-state's subagent_list.
 type subagentRow struct {
 	ID          string `json:"id"`
 	Type        string `json:"type"`
@@ -185,8 +141,6 @@ type subagentRow struct {
 	Result      string `json:"result"`
 }
 
-// subagentsOf is a pane's state, its count and its list, from
-// get-agent-state, and the JSON it read them from.
 type subagentsOf struct {
 	State     string        `json:"state"`
 	Message   string        `json:"message"`
@@ -209,7 +163,6 @@ func readSubagents(t *testing.T, base, session string) subagentsOf {
 	return st
 }
 
-// byID is the row of the list with id.
 func (s subagentsOf) byID(id string) subagentRow {
 	for _, r := range s.List {
 		if r.ID == id {
@@ -219,8 +172,6 @@ func (s subagentsOf) byID(id string) subagentRow {
 	return subagentRow{}
 }
 
-// waitSubagents polls the pane until ok holds, logs the list it saw and
-// keeps it as an artifact under step's name.
 func waitSubagents(t *testing.T, base, session string, log *stateLog, step string, ok func(subagentsOf) bool) subagentsOf {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -274,9 +225,6 @@ func TestSubagentListFromHooks(t *testing.T) {
 	log := &stateLog{name: "subagent-list"}
 	defer log.save(t)
 	base := t.TempDir()
-	// The count alone on the row, as an older client draws it beside this one.
-	// The fade is two seconds through the config file, which is the path a
-	// person uses; the other timing tests set theirs through the environment.
 	writeConfig(t, base, "[appearance.sidebar]\nenabled = true\nsubagent_rows = \"count\"\n\n"+
 		"[daemon]\nsubagent_fade_seconds = 2\n")
 	killDaemon(t, base)
@@ -311,10 +259,6 @@ func TestSubagentListFromHooks(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-sub", "-w", "0", claude+" "+scenario+" "+hookLog+"\n"); err != nil {
 		t.Fatalf("start the fake claude: %v\n%s", err, out)
 	}
-	// The four tool calls come at once, within subagentPublishGap of the
-	// starts, so the daemon holds them back and pushes them together. The
-	// two subagents of one type still have each other's descriptions: no
-	// Stop has named them yet.
 	waitCapture(t, base, "e2e-sub", "0", "FAKE-AT tools")
 	waitSubagents(t, base, "e2e-sub", log, "tools", func(s subagentsOf) bool {
 		return s.Subagents == 4 && s.byID(saTmux).Now == "Bash: go test ./..." &&
@@ -355,7 +299,6 @@ func TestSubagentListFromHooks(t *testing.T) {
 	waitText(t, term, "the count on the rail", "4 subagents")
 	saveFrame(t, term, "subagent-list-launched")
 
-	// A client push keeps the list: making a window makes the client push.
 	if out, err := tuiosCLI(t, base, "new-window", "second", "-s", "e2e-sub"); err != nil {
 		t.Fatalf("make a second window: %v\n%s", err, out)
 	}
@@ -421,13 +364,10 @@ func TestSubagentListFromHooks(t *testing.T) {
 			t.Fatalf("agent-log does not say %q:\n%s", want, out)
 		}
 	}
-	// The ring keeps each start and each end, and none of the subagents'
-	// own tool calls.
 	if strings.Contains(out, "go vet") || strings.Count(out, "subagent  ") != 8 {
 		t.Fatalf("agent-log holds the subagents' tool calls, or misses a start or an end:\n%s", out)
 	}
 
-	// The fade: done and stopped go after 2 s, the failed one after 10.
 	waitSubagents(t, base, "e2e-sub", log, "faded", func(s subagentsOf) bool {
 		return len(s.List) == 1 && s.List[0].ID == saCI && s.List[0].State == "failed"
 	})

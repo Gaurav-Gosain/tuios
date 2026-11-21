@@ -11,7 +11,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// startHeldHookIn is startHeldHook for the pane of another session.
 func startHeldHookIn(t *testing.T, base, sessionName, payload string) *heldHook {
 	t.Helper()
 	cmd := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", sessionName, "--window", "0")
@@ -38,7 +37,6 @@ func startHeldHookIn(t *testing.T, base, sessionName, payload string) *heldHook 
 	return h
 }
 
-// waitHookAllow waits for h to print Claude Code's allow.
 func waitHookAllow(t *testing.T, term *tuitest.Terminal, h *heldHook, what string) {
 	t.Helper()
 	select {

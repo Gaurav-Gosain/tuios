@@ -23,20 +23,12 @@ import (
 	"time"
 )
 
-// tuios-web passes sip a window limit: 1200x500 and 250000 cells. Each cell
-// costs tuios-web about 1.3 KB, so one resize message with no limit can ask for
-// gigabytes. sip clamps a resize past the limit, and the session goes on at the
-// clamped size.
-
 var (
 	webBinOnce sync.Once
 	webBinPath string
 	webBinErr  error
 )
 
-// tuiosWebBin is the tuios-web binary under test: TUIOS_E2E_WEB_BIN, or one
-// built from this checkout once per run, next to the short runtime roots that
-// runE2E removes at the end.
 func tuiosWebBin(t *testing.T) string {
 	t.Helper()
 	webBinOnce.Do(func() {
@@ -61,14 +53,11 @@ func tuiosWebBin(t *testing.T) string {
 	return webBinPath
 }
 
-// startTuiosWeb runs tuios-web on a loopback port with the isolation root's
-// XDG directories, and stops it by its process group when the test ends.
 func startTuiosWeb(t *testing.T, base string, args ...string) (addr string, pid int) {
 	t.Helper()
 	return startTuiosWebEnv(t, base, nil, args...)
 }
 
-// startTuiosWebEnv is startTuiosWeb with env added to its environment.
 func startTuiosWebEnv(t *testing.T, base string, env []string, args ...string) (addr string, pid int) {
 	t.Helper()
 	bin := tuiosWebBin(t)
@@ -121,8 +110,6 @@ func tailString(s string, n int) string {
 	return s[len(s)-n:]
 }
 
-// webClient is the smallest WebSocket client sip's protocol needs: binary
-// messages whose first byte is the message type. It keeps every output byte.
 type webClient struct {
 	conn net.Conn
 	br   *bufio.Reader
@@ -156,7 +143,6 @@ func dialWeb(t *testing.T, addr string) *webClient {
 	return c
 }
 
-// send writes one masked binary frame, as a client must.
 func (c *webClient) send(t *testing.T, kind byte, payload string) {
 	t.Helper()
 	data := append([]byte{kind}, payload...)
@@ -236,12 +222,8 @@ func (c *webClient) fail(err error) {
 	c.mu.Unlock()
 }
 
-// paneSizeRe reads the size the shell in the pane reports, tagged with the
-// number of the question so an older answer cannot match.
 var paneSizeRe = regexp.MustCompile(`SZ(\d+)_(\d+)x(\d+)`)
 
-// paneSize asks the shell for its window size and waits for the answer. The
-// tag is computed by the shell, so the echo of the typed command cannot match.
 func (c *webClient) paneSize(t *testing.T, tag int, timeout time.Duration) (cols, rows int) {
 	t.Helper()
 	cols, rows, err := c.tryPaneSize(t, tag, timeout)
@@ -251,14 +233,6 @@ func (c *webClient) paneSize(t *testing.T, tag int, timeout time.Duration) (cols
 	return cols, rows
 }
 
-// tryPaneSize is paneSize that reports a missing answer instead of failing.
-//
-// The question goes in as one bracketed paste and one Enter: two input
-// events, so two frames. Typed key by key it was one frame per character,
-// and a frame at the 1200x208 limit (250,000 cells) costs about 110 ms on
-// arch-btw: the 45-character question took 3.2 to 4.8 s to come back, and a
-// loaded runner went past the 10 s budget (t117). Two frames leave that budget
-// a wide margin.
 func (c *webClient) tryPaneSize(t *testing.T, tag int, timeout time.Duration) (cols, rows int, err error) {
 	t.Helper()
 	c.send(t, '0', fmt.Sprintf("\x1b[200~echo SZ$((%d+0))_$(tput cols)x$(tput lines)\x1b[201~", tag))
@@ -286,7 +260,6 @@ func (c *webClient) tryPaneSize(t *testing.T, tag int, timeout time.Duration) (c
 	}
 }
 
-// rssMB is the resident set of a process in MB, from /proc.
 func rssMB(t *testing.T, pid int) int {
 	t.Helper()
 	data, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
@@ -320,7 +293,6 @@ func TestWebClampsAWindowPastTheLimit(t *testing.T) {
 	client := dialWeb(t, addr)
 	client.send(t, '2', `{"cols":120,"rows":40}`)
 
-	// The first answer also says the shell is up.
 	cols, rows := client.paneSize(t, 1, shellTimeout)
 	t.Logf("at 120x40 the pane is %dx%d", cols, rows)
 
@@ -343,8 +315,6 @@ func TestWebClampsAWindowPastTheLimit(t *testing.T) {
 	}
 
 	client.send(t, '2', `{"cols":1500,"rows":900}`)
-	// The pane is smaller than the window by what the border and the chrome
-	// take, measured at 300x60.
 	chromeCols, chromeRows := 300-cols, 60-rows
 	wantCols, wantRows := maxCols-chromeCols, maxRows-chromeRows
 	var gotCols, gotRows int
@@ -372,8 +342,6 @@ func TestWebClampsAWindowPastTheLimit(t *testing.T) {
 	if runtime.GOOS == "linux" {
 		after := rssMB(t, pid)
 		t.Logf("tuios-web resident set: %d MB before the oversized resize, %d MB after", before, after)
-		// 250000 cells at about 1.3 KB is about 325 MB. 1500x900 with no
-		// limit is about 1.7 GB.
 		if after-before > 600 {
 			t.Errorf("a resize past the limit grew tuios-web from %d MB to %d MB", before, after)
 		}

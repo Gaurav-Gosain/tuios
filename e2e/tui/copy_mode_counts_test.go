@@ -47,7 +47,6 @@ func TestCopyModeCounts(t *testing.T) {
 	}
 	waitCopyCursor(t, term, "prefix+[")
 
-	// at waits for the copy cursor on row and col.
 	at := func(r, c int, what string) {
 		t.Helper()
 		if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -59,7 +58,6 @@ func TestCopyModeCounts(t *testing.T) {
 				what, gr, gc, r, c, term.Snapshot())
 		}
 	}
-	// stays checks the cursor is still on row and col after a moment.
 	stays := func(r, c int, what string) {
 		t.Helper()
 		time.Sleep(500 * time.Millisecond)
@@ -68,8 +66,6 @@ func TestCopyModeCounts(t *testing.T) {
 				what, gr, gc, r, c, term.Snapshot())
 		}
 	}
-	// home goes back to column 0 of the counts line, from the bottom, so
-	// the view is the live screen again.
 	home := func() {
 		t.Helper()
 		sendEach(t, term, "G")
@@ -82,8 +78,6 @@ func TestCopyModeCounts(t *testing.T) {
 	}
 	col := func(needle string, off int) int { return screenCol(t, term, row, needle, off) }
 
-	// A huge count is capped, and the motion stops at the end of the buffer:
-	// the client takes the next key at once.
 	home()
 	sendEach(t, term, "9", "9", "9", "9", "9", "9", "9", "9", "9", "9", "9", "9", "w")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -95,17 +89,13 @@ func TestCopyModeCounts(t *testing.T) {
 	home()
 	alive(t, term, "after a count of twelve digits")
 
-	// 3fx goes to the third x.
 	sendEach(t, term, "3", "f", "x")
 	at(row, col("cx", 1), "3fx")
 
-	// 2tx stops before the second x.
 	home()
 	sendEach(t, term, "2", "t", "x")
 	at(row, col("bx", 0), "2tx")
 
-	// 9fx, with five x on the line and none after it, does not move; 2fx
-	// then does.
 	home()
 	start := col(line, 0)
 	sendEach(t, term, "9", "f", "x")
@@ -113,7 +103,6 @@ func TestCopyModeCounts(t *testing.T) {
 	sendEach(t, term, "2", "f", "x")
 	at(row, col("bx", 1), "2fx after 9fx")
 
-	// g j g is j, not gg. gg then goes to the top.
 	home()
 	sendEach(t, term, "g", "j", "g")
 	at(row+1, start, "g j g")
@@ -126,8 +115,6 @@ func TestCopyModeCounts(t *testing.T) {
 		t.Fatalf("gg did not go up to the counts line or above it\n%s", term.Snapshot())
 	}
 
-	// A count typed at once moves three lines; one left for longer than the
-	// timeout is dropped, and the key moves one line.
 	home()
 	sendEach(t, term, "3", "j")
 	at(row+3, start, "3j")

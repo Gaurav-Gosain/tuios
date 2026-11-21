@@ -49,8 +49,6 @@ func TestRichRowReplyAndRecap(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "new", "e2e-rows", "--detach"); err != nil {
 		t.Fatalf("create the agent's session: %v\n%s", err, out)
 	}
-	// The pane runs a recorder in place of the shell: bracketed paste on,
-	// the terminal raw, and every byte it reads kept in a file.
 	recorded := startRecorder(t, base, "e2e-rows")
 	term := startIn(t, base, startOpts{args: []string{"attach", "e2e-rows"}})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
@@ -79,8 +77,6 @@ func TestRichRowReplyAndRecap(t *testing.T) {
 	waitText(t, term, "the working row saying what it does", "Bash: go test")
 	saveFrame(t, term, "rail-row-now")
 
-	// The rail takes the keyboard; the agent row is two up from the last
-	// row, as in the rail unread test. r opens the reply editor.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
 		t.Fatal(err)
 	}
@@ -93,9 +89,6 @@ func TestRichRowReplyAndRecap(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitText(t, term, "the typed reply", "echo r9c1e")
-	// The editor draws its own caret, so the host cursor is hidden. It is
-	// parked on that caret, the cell after the typed space, because an input
-	// method opens its candidate window at the host cursor (#649).
 	if col, row, ok := textCell(term.Screen(), "echo r9c1e"); !ok {
 		t.Fatalf("the typed reply is not on the screen\n%s", term.Snapshot())
 	} else {
@@ -119,8 +112,6 @@ func TestRichRowReplyAndRecap(t *testing.T) {
 		t.Fatalf("tuios queue ls = %q (%v), want the person's reply waiting", out, err)
 	}
 
-	// x on the same row drops the reply, and u a moment later queues it
-	// again, as the person.
 	if err := term.SendKeys("x"); err != nil {
 		t.Fatal(err)
 	}
@@ -142,13 +133,8 @@ func TestRichRowReplyAndRecap(t *testing.T) {
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatal(err)
 	}
-	// Esc gives the keyboard back from the rail. The leader goes once the
-	// pill says so: a key sent at once after a lone esc reads as alt and that
-	// key.
 	waitGone(t, term, "the rail's keyboard after esc", railPill)
 
-	// A second window takes the focus, so the person is away from the
-	// agent's pane from here.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "c"); err != nil {
 		t.Fatal(err)
 	}
@@ -156,8 +142,6 @@ func TestRichRowReplyAndRecap(t *testing.T) {
 		t.Fatalf("no second window: %v\n%s", err, term.Snapshot())
 	}
 
-	// The turn ends: the reply is typed at the rest, and the agent taking
-	// it (its next prompt) clears the queue and the figure.
 	hook(`{"hook_event_name":"PostToolUse","session_id":"e2e-rows","tool_name":"Bash","tool_input":{"command":"go test ./..."},"tool_response":{"stdout":"ok"}}`)
 	hook(`{"hook_event_name":"Stop","session_id":"e2e-rows","last_assistant_message":"Added retry with backoff."}`)
 	deadline := time.Now().Add(uiTimeout)
@@ -185,8 +169,6 @@ func TestRichRowReplyAndRecap(t *testing.T) {
 		t.Fatalf("the queued figure stayed after the reply was taken: %v\n%s", err, term.Snapshot())
 	}
 
-	// Away for more than a second with turns finished: going back to the
-	// pane says what it did.
 	time.Sleep(1200 * time.Millisecond)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "p"); err != nil {
 		t.Fatal(err)
@@ -196,7 +178,6 @@ func TestRichRowReplyAndRecap(t *testing.T) {
 	alive(t, term, "after the row, the reply and the recap")
 }
 
-// replyPaste is 42 lines, as a stack trace or a diff would be pasted.
 var replyPaste = func() string {
 	var b strings.Builder
 	for i := 1; i <= 42; i++ {
@@ -205,9 +186,6 @@ var replyPaste = func() string {
 	return b.String()
 }()
 
-// recorderScript turns bracketed paste on, makes the terminal raw so no byte
-// is changed or echoed, says it is ready, and keeps every byte it reads in
-// the file it is given.
 const recorderScript = `#!/bin/sh
 stty raw -echo
 printf '\033[?2004h'
@@ -215,8 +193,6 @@ printf 'recorder ready\r\n'
 exec cat > "$1"
 `
 
-// startRecorder runs the recorder in the first pane of a session and returns
-// the file it writes.
 func startRecorder(t *testing.T, base, sessionName string) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -244,7 +220,6 @@ func startRecorder(t *testing.T, base, sessionName string) string {
 	}
 }
 
-// waitRecorded waits until the recorder's file holds end and returns it.
 func waitRecorded(t *testing.T, file, end string) string {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -327,7 +302,6 @@ func TestReplyWithALargePasteGoesAsAFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The turn ends and the reply is typed at the rest.
 	hook(`{"hook_event_name":"Stop","session_id":"e2e-big","last_assistant_message":"Found it."}`)
 	got := waitRecorded(t, recorded, "lines]\x1b[201~\r")
 	start := strings.LastIndex(got, "\x1b[200~")
@@ -352,7 +326,6 @@ func TestReplyWithALargePasteGoesAsAFile(t *testing.T) {
 	alive(t, term, "after the large reply")
 }
 
-// largeReplyPaste is 2,048 lines, about 100 KiB, as a long log is pasted.
 func largeReplyPaste() string {
 	var b strings.Builder
 	for i := 1; i <= 2048; i++ {
@@ -420,7 +393,6 @@ func TestReplyWithAnImageGoesAsAFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitText(t, term, "the typed reply", "echo i9m6")
-	// A dropped file arrives as its path, with the space escaped.
 	if err := term.Paste(strings.ReplaceAll(shot, " ", `\ `)); err != nil {
 		t.Fatal(err)
 	}
@@ -456,7 +428,6 @@ func TestReplyWithAnImageGoesAsAFile(t *testing.T) {
 	alive(t, term, "after the reply with an image")
 }
 
-// tinyPNG is a w by h PNG.
 func tinyPNG(t *testing.T, w, h int) []byte {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
@@ -523,10 +494,6 @@ func TestReplyToAnAgentOnAHost(t *testing.T) {
 		t.Fatalf("the far file holds %d bytes (%v), want the %d of the paste", len(data), err, len(big))
 	}
 
-	// alpha takes files away from the link. A reply with a small paste goes
-	// as text, the paste typed in its place, since no file can be written
-	// there. Negative control: without the retry as text in
-	// queuePromptToHost, the call fails as forbidden.
 	writeRemoteConfig(t, f.alpha, relayNoFilesPolicy)
 	if out, err := cliWithin(t, f.alpha, f.env, "config", "apply"); err != nil {
 		t.Fatalf("apply alpha's config: %v\n%s", err, out)
@@ -556,7 +523,6 @@ func TestReplyToAnAgentOnAHost(t *testing.T) {
 	}
 }
 
-// startRecorderWithin is startRecorder for the daemon at base with env.
 func startRecorderWithin(t *testing.T, base string, env []string, sessionName string) string {
 	t.Helper()
 	dir := t.TempDir()

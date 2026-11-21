@@ -73,14 +73,10 @@ func arrivalRun(t *testing.T, extra string) {
 		first, full = id, r
 	}
 
-	// On screen, the same kind of open slides: the first pane narrows to
-	// make room for the second.
 	mark := fileSize(t, trace)
 	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "--workspace", "1", "--no-focus", "two"); err != nil {
 		t.Fatalf("open two on workspace 1: %v\n%s", err, out)
 	}
-	// The screen can hold still for a moment before the slide starts, so
-	// wait for the trace to show the open landed, not for the screen.
 	if err := term.WaitFor(func(tuitest.Screen) bool {
 		f := readTraceFrames(t, trace, mark, "")
 		return len(f) > 0 && len(f[len(f)-1].panes) == 2 && f[len(f)-1].anims == 0
@@ -109,7 +105,6 @@ func arrivalRun(t *testing.T, extra string) {
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("screen never settled on workspace 2: %v", err)
 	}
-	// The helpers open on workspace 1 while the client shows 2.
 	for _, name := range []string{"three", "four"} {
 		if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "--workspace", "1", "--no-focus", name); err != nil {
 			t.Fatalf("open %s on workspace 1: %v\n%s", name, err, out)

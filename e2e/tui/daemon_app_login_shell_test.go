@@ -60,8 +60,6 @@ func TestDaemonAppReadsTheLoginShellsPath(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			// The bundle as daemon-app install lays it out, with a stand-in
-			// for the tuios it execs that writes down what it was given.
 			app := filepath.Join(base, "TUIOS Daemon.app")
 			exe := filepath.Join(app, "Contents", "MacOS", "tuios-daemon-app")
 			out := filepath.Join(base, "seen")

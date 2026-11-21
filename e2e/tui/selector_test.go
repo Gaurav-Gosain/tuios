@@ -53,13 +53,11 @@ func TestSelectorNarrowsTheInboxAndGuardsABroadcast(t *testing.T) {
 		t.Fatalf("close the Inbox: %v", err)
 	}
 
-	// The same selector on the command line.
 	out, err := tuiosCLI(t, base, "list-agents", "--select", "harness:codex")
 	if err != nil || !strings.Contains(out, "e2e-sel-codex") || strings.Contains(out, "e2e-sel-claude") || !strings.Contains(out, "--confirm") {
 		t.Fatalf("list-agents --select did not list only the codex agent with a token: %v\n%s", err, out)
 	}
 
-	// Not at a terminal and not confirmed: nothing is sent, and the set is named.
 	out, err = tuiosCLI(t, base, "send-agent-message", "--select", "harness:codex,claude-code", "rebase onto main")
 	if err == nil || !strings.Contains(out, "Nothing was sent") || !strings.Contains(out, "e2e-sel-codex") || !strings.Contains(out, "e2e-sel-claude") {
 		t.Fatalf("an unconfirmed send by selector did not refuse and list the set: %v\n%s", err, out)

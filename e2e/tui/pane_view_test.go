@@ -53,9 +53,6 @@ func TestPaneView(t *testing.T) {
 		t.Fatalf("ASSERTION: typing in pane-view never reached the pane and back: %v\n%s", err, view.Snapshot())
 	}
 
-	// The pane asks DA1 once and counts the answers that reach it. Each
-	// answer ends in "c"; the shell reads them with echo off, so none is
-	// drawn or run.
 	countDA := `bash -c 'stty -echo; printf "\033[c"; sleep 1; IFS= read -rs -t 1 -d X x; stty echo; n=$(printf %s "$x" | tr -cd c | wc -c); echo DA-COUNT-$((n+0))-$((100+1))'`
 	if err := view.SendKeys(countDA, tuitest.Enter); err != nil {
 		t.Fatalf("type: %v", err)
@@ -92,7 +89,6 @@ func TestPaneView(t *testing.T) {
 		t.Fatalf("ASSERTION: the pane did not follow the terminal to 160x50, larger than the session: %v\n%s", err, view.Snapshot())
 	}
 
-	// The viewer goes; the session and its pane stay.
 	_ = view.Close()
 	if got := firstWindow(t, base, "pv").ID; got != win {
 		t.Fatalf("ASSERTION: the pane changed after the viewer left: %s, was %s", got, win)

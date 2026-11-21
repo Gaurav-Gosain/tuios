@@ -11,12 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// More of #518: the cases a Nix or home-manager setup meets. A store file is a
-// read-only file in a read-only directory, linked into the config directory.
-
-// storeFile writes a read-only file into a read-only directory under base,
-// the way the Nix store holds it, and returns its path. The directory is made
-// writable again when the test ends, so the temporary directory can go.
 func storeFile(t *testing.T, base, name, body string) string {
 	t.Helper()
 	store := filepath.Join(base, "nix-store")
@@ -34,7 +28,6 @@ func storeFile(t *testing.T, base, name, body string) string {
 	return path
 }
 
-// linkConfigPart links rel in the config directory to target.
 func linkConfigPart(t *testing.T, base, rel, target string) string {
 	t.Helper()
 	path := filepath.Join(configDirIn(base), rel)
@@ -47,8 +40,6 @@ func linkConfigPart(t *testing.T, base, rel, target string) string {
 	return path
 }
 
-// addedLines is the lines of after that are not in before, and the lines of
-// before that are not in after.
 func addedLines(before, after string) (added, removed []string) {
 	b := strings.Split(strings.TrimRight(before, "\n"), "\n")
 	a := strings.SplitSeq(strings.TrimRight(after, "\n"), "\n")
@@ -155,8 +146,6 @@ func TestReadOnlyConfigTomlLink(t *testing.T) {
 	}
 	lockedLocal := readFileString(t, local)
 	setLive(t, base, "hide_window_buttons", "false")
-	// The message before this one starts with the same words, so the test
-	// waits for the words that are this one's own.
 	if err := term.WaitForText("Could not save settings: tuios cannot write", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: with no writable file the save did not fail out loud: %v\n%s", err, term.Snapshot())
 	}
@@ -201,8 +190,6 @@ func TestSymlinkedIncludeEditedInPlace(t *testing.T) {
 	if _, err := os.Stat(added); err == nil {
 		t.Fatalf("prefix+alt+h fired before the edit, so the test proves nothing\n%s", term.Snapshot())
 	}
-	// In place: open the target, truncate it and write it. No rename, and the
-	// link in the config directory does not change.
 	f, err := os.OpenFile(target, os.O_WRONLY|os.O_TRUNC, 0)
 	if err != nil {
 		t.Fatal(err)
@@ -332,8 +319,6 @@ daemon = true
 		t.Fatalf("ASSERTION: prune --dry-run changed config.toml")
 	}
 
-	// The prune lets inc.toml set border_style, which changes the config. A
-	// run with no terminal must not do that without --yes.
 	before := readFileString(t, configPathIn(base))
 	refused, err := tuiosCLI(t, base, "config", "prune")
 	if err == nil || !strings.Contains(refused, "--yes") {
@@ -410,8 +395,6 @@ func TestIncludeMistakesAreNamed(t *testing.T) {
 [appearance]
 include = ["lost.toml"]
 `)
-	// Two links that point at themselves: one an optional include, one in
-	// config.d. Neither may stop the load.
 	linkConfigPart(t, base, "loop.toml", "loop.toml")
 	linkConfigPart(t, base, filepath.Join("config.d", "50-loop.toml"), "50-loop.toml")
 	out, err := tuiosCLI(t, base, "config", "files")

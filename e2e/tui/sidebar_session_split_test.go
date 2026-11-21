@@ -101,8 +101,6 @@ session = "side-right"
 	}, uiTimeout); err != nil {
 		t.Fatalf("both rail panes did not remain visible, stacked top to bottom: %v\n%s", err, term.Snapshot())
 	}
-	// Both daemon PTYs remain larger than the rail halves: stacking crops
-	// each viewer without sending a resize to either shared guest.
 	for _, target := range []struct{ id, marker string }{
 		{first.Windows[0].ID, "TOPSIZE"}, {secondID, "BOTSZ"},
 	} {
@@ -134,7 +132,6 @@ session = "side-right"
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
-	// Clicking either half must send keyboard input to that pane alone.
 	for _, target := range []struct {
 		y                 int
 		id, other, marker string

@@ -12,7 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// attentionItems is list-attention --json under base, as kind and summary.
 func attentionItems(t *testing.T, base string, env []string) []struct{ Kind, Summary, Name string } {
 	t.Helper()
 	out, err := tuiosCLIEnv(t, base, env, "list-attention", "--json")
@@ -36,8 +35,6 @@ func attentionItems(t *testing.T, base string, env []string) []struct{ Kind, Sum
 	return items
 }
 
-// selfLinkName is the name a daemon on this machine gives itself on a link:
-// the first label of the hostname, lowercased.
 func selfLinkName(t *testing.T) string {
 	t.Helper()
 	h, err := os.Hostname()
@@ -79,7 +76,6 @@ func TestMailHeldForASignInIsToldOnBothMachines(t *testing.T) {
 	base := t.TempDir()
 	remote := remoteMachine(t)
 
-	// This machine to build, through the Tailscale check stand-in.
 	inner := writeFakeSSHTo(t, base, remote)
 	wrapper, g := writeTailscaleSSH(t, base, inner)
 	record := filepath.Join(base, "opened.txt")
@@ -90,7 +86,6 @@ func TestMailHeldForASignInIsToldOnBothMachines(t *testing.T) {
 	writeConfig(t, base, "[appearance]\nlink_opener = \""+opener+"\"\n\n"+gatedHostTOML(name, "someone@gatedbox"))
 	envHere := []string{"TUIOS_SSH=" + wrapper, "SSH_CONNECTION=", "SSH_CLIENT=", "SSH_TTY="}
 
-	// build back to this machine, a plain link.
 	back := writeFakeSSHTo(t, remote, base)
 	writeRemoteConfig(t, remote, "[hosts."+name+"]\naddr = \"someone@hubbox\"\ncommand = \""+tuiosBin+"\"\nconnect_timeout = 5\n")
 	envFar := []string{"TUIOS_SSH=" + back}
@@ -129,7 +124,6 @@ func TestMailHeldForASignInIsToldOnBothMachines(t *testing.T) {
 		t.Fatalf("the send did not wait here for the link: %v\n%s", err, out)
 	}
 
-	// This machine: the outbox item says the link waits for a sign-in.
 	var hereText string
 	deadline = time.Now().Add(30 * time.Second)
 	for {
@@ -149,7 +143,6 @@ func TestMailHeldForASignInIsToldOnBothMachines(t *testing.T) {
 	}
 	saveSyncArtifact(t, "outbox-item-here.txt", hereText)
 
-	// The item's key opens the sign-in the link waits on.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatal(err)
 	}
@@ -171,8 +164,6 @@ func TestMailHeldForASignInIsToldOnBothMachines(t *testing.T) {
 		t.Fatalf("ASSERTION: Enter on the outbox item opened %q, not the sign-in page", got)
 	}
 
-	// build: an item says this machine holds mail for it, and why, and
-	// nothing of the mail itself.
 	var farText string
 	deadline = time.Now().Add(45 * time.Second)
 	for {
@@ -201,7 +192,6 @@ func TestMailHeldForASignInIsToldOnBothMachines(t *testing.T) {
 		}
 	}
 
-	// The person signs in. The mail goes, and both items close.
 	g.signIn(t)
 	deadline = time.Now().Add(60 * time.Second)
 	for {

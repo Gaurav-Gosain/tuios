@@ -11,26 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// A pane reports agent state only for its own window, on a real daemon in the
-// default open mode, where every pane holds admin.
-//
-// How these could pass wrongly, written down first:
-//   - The attacker's send-keys could fail for a reason that is not the
-//     prompt rule, and the victim would stay unanswered either way. So the
-//     respond half sends the same keys from the same pane and watches them
-//     answer the prompt.
-//   - The victim's own report could fail too, and needs_input would never be
-//     set. The test waits for needs_input before the attacker runs, so the
-//     report from inside the victim's own pane is proved to work.
-//   - A refusal could come from the CLI alone. The pane prints the daemon's
-//     message, which names the respond grant.
-//   - "No ANSWERED line" could be read before the keys land. The pane is
-//     read again a second after the attacker's line finishes.
-
-// victimPrompt reports needs_input for its own pane with no --window, the way
-// a harness hook does, then asks and waits for an answer. It draws the
-// question again on SIGWINCH, as Ink and ratatui prompts do, and says REDRAWN
-// when it does.
 const victimPrompt = `#!/usr/bin/env bash
 "$TUIOS_E2E_CLI" set-agent-state needs_input --kind approval --message 'approve Bash: rm -rf build'
 ask() { printf 'Allow the edit? [y/n] '; }
@@ -101,7 +81,6 @@ func TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt(t *testing.T) {
 		out, _ := tuiosCLI(t, base, "capture-pane", "-s", sess, "-w", victim)
 		return out
 	}
-	// fromAttacker types line into B and waits for marker=<code> on B's screen.
 	fromAttacker := func(line, marker string) string {
 		t.Helper()
 		if out, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", attacker, "clear; "+line+"\n"); err != nil {
@@ -117,7 +96,6 @@ func TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt(t *testing.T) {
 		return text
 	}
 
-	// The victim reports for itself, with no --window, and waits on a prompt.
 	if out, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", victim, "TUIOS_E2E_CLI="+tuiosBin+" bash "+script+"\n"); err != nil {
 		t.Fatalf("start the victim: %v\n%s", err, out)
 	}
@@ -130,7 +108,6 @@ func TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt(t *testing.T) {
 	}
 	waitState("needs_input")
 
-	// The reported steps, from pane B.
 	text := fromAttacker(tuiosBin+" set-agent-state -s "+sess+" -w "+victim+" working; echo SET_\"EXIT\"=$?; "+
 		tuiosBin+" send-keys -s "+sess+" -w "+victim+" 'y Enter'; echo SK_\"EXIT\"=$?", "SK_EXIT")
 	time.Sleep(time.Second)
@@ -148,15 +125,11 @@ func TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt(t *testing.T) {
 		t.Errorf("ASSERTION: A's state moved to %q after B was refused", got)
 	}
 
-	// The person, outside every pane, may mark A. The prompt is still on A's
-	// screen, so B still may not type into it.
 	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", sess, "-w", victim, "working"); err != nil {
 		t.Fatalf("ASSERTION: the person's set-agent-state was refused: %v\n%s", err, out)
 	}
 	waitState("working")
 
-	// B makes A draw its prompt again by resizing it. Output after the
-	// prompt does not show the prompt is gone.
 	if text := fromAttacker(tuiosBin+" call resize '{\"session\":\""+sess+"\",\"window\":\""+victim+"\",\"width\":50,\"height\":16}'; echo RS_\"EXIT\"=$?", "RS_EXIT"); !strings.Contains(text, "RS_EXIT=0") {
 		t.Fatalf("B's resize of A failed:\n%s", text)
 	}
@@ -177,8 +150,6 @@ func TestAPaneCannotMarkAnotherPaneToAnswerItsPrompt(t *testing.T) {
 		t.Errorf("ASSERTION: B's keys into the prompt still shown were not refused:\n%s", text)
 	}
 
-	// With respond, B may mark A. Its keys into A's prompt still need
-	// --allow-blocked, which says B read the prompt and means to answer it.
 	if out, err := tuiosCLI(t, base, "set-pane-grants", "-s", sess, "-w", attacker, "--grants", "admin,respond"); err != nil {
 		t.Fatalf("give B respond: %v\n%s", err, out)
 	}

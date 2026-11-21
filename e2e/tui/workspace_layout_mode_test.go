@@ -33,13 +33,9 @@ func TestPerWorkspaceLayoutModesSurviveSwitchAndReattach(t *testing.T) {
 	waitForSettledGeometryIn(t, base, "e2e-perws", 1)
 	waitLayoutMode(t, base, "e2e-perws", "bsp")
 
-	// Workspace 1 chooses scrolling.
 	runPaletteEntry(t, term, "Layout: scrolling (niri)")
 	waitLayoutMode(t, base, "e2e-perws", "scrolling")
 
-	// Workspace 2 chooses BSP, which is also the [startup] default: the map
-	// entry is the only thing that says the choice was made, so a push that
-	// drops the map is invisible here unless the fingerprint carries it.
 	if err := term.SendKeys(tuitest.Alt('2')); err != nil {
 		t.Fatalf("press alt+2: %v", err)
 	}
@@ -47,8 +43,6 @@ func TestPerWorkspaceLayoutModesSurviveSwitchAndReattach(t *testing.T) {
 	runPaletteEntry(t, term, "Layout: BSP tiling")
 	waitLayoutMode(t, base, "e2e-perws", "bsp")
 
-	// Back and forth: each workspace takes its own mode, not the one the last
-	// switch left on screen.
 	if err := term.SendKeys(tuitest.Alt('1')); err != nil {
 		t.Fatalf("press alt+1: %v", err)
 	}
@@ -61,9 +55,6 @@ func TestPerWorkspaceLayoutModesSurviveSwitchAndReattach(t *testing.T) {
 	waitWorkspace(t, base, "e2e-perws", 2)
 	waitLayoutMode(t, base, "e2e-perws", "bsp")
 
-	// Detach from workspace 1, where the pane is, and reattach: the session
-	// keeps the map while no client is attached, and the reattached client must
-	// adopt it rather than the startup default.
 	if err := term.SendKeys(tuitest.Alt('1')); err != nil {
 		t.Fatalf("press alt+1: %v", err)
 	}
@@ -150,7 +141,6 @@ func TestNewWorkspaceTakesTheModeItWasOpenedFrom(t *testing.T) {
 	waitWorkspace(t, base, "e2e-newws", 2)
 	waitLayoutMode(t, base, "e2e-newws", "master-stack")
 
-	// Workspace 1 changes its mode. Workspace 2 keeps the mode it took.
 	if err := term.SendKeys(tuitest.Alt('1')); err != nil {
 		t.Fatalf("press alt+1: %v", err)
 	}

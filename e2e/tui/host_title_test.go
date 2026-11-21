@@ -9,11 +9,8 @@ import (
 	"time"
 )
 
-// hostTitlePattern matches an OSC 2 the client writes to the host terminal,
-// ended by BEL or by ST.
 var hostTitlePattern = regexp.MustCompile(`\x1b\]2;([^\x07\x1b]*)(?:\x07|\x1b\\)`)
 
-// hostTitles returns every OSC 2 payload in what the client wrote, in order.
 func hostTitles(wire string) []string {
 	var titles []string
 	for _, m := range hostTitlePattern.FindAllStringSubmatch(wire, -1) {
@@ -22,7 +19,6 @@ func hostTitles(wire string) []string {
 	return titles
 }
 
-// lastHostTitle is the title the client wrote last, and every title it wrote.
 func lastHostTitle(wire *syncBuffer) (string, []string) {
 	titles := hostTitles(wire.String())
 	if len(titles) == 0 {
@@ -31,18 +27,11 @@ func lastHostTitle(wire *syncBuffer) (string, []string) {
 	return titles[len(titles)-1], titles
 }
 
-// saveHostTitles keeps every title the client wrote, one per line, as
-// osc2.txt in the test's artifact directory.
 func saveHostTitles(t *testing.T, wire *syncBuffer) {
 	t.Helper()
 	saveText(t, "osc2", strings.Join(hostTitles(wire.String()), "\n")+"\n")
 }
 
-// waitHostTitle waits until ok holds for the last title the client wrote. On a
-// timeout it fails with "the host title never <verb> <want>". It fails at once
-// if the OSC 2 a test planted in a pane name or a directory reached the host
-// as one. An ESC let through would also end the title's own OSC 2 early, so
-// the title read back would come out cut rather than whole.
 func waitHostTitle(t *testing.T, wire *syncBuffer, when, verb, want string, ok func(string) bool) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -61,21 +50,16 @@ func waitHostTitle(t *testing.T, wire *syncBuffer, when, verb, want string, ok f
 	}
 }
 
-// waitForHostTitle waits until the last title the client wrote is want.
 func waitForHostTitle(t *testing.T, wire *syncBuffer, want, when string) {
 	t.Helper()
 	waitHostTitle(t, wire, when, "became", want, func(last string) bool { return last == want })
 }
 
-// waitForHostTitleEnding waits until the last title the client wrote ends
-// with want, for a title that starts with a path the test cannot predict.
 func waitForHostTitleEnding(t *testing.T, wire *syncBuffer, want, when string) {
 	t.Helper()
 	waitHostTitle(t, wire, when, "ended with", want, func(last string) bool { return strings.HasSuffix(last, want) })
 }
 
-// holdHostTitle fails if, at any point over d, the last title the client
-// wrote is not want.
 func holdHostTitle(t *testing.T, wire *syncBuffer, want string, d time.Duration, when string) {
 	t.Helper()
 	for end := time.Now().Add(d); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
@@ -104,7 +88,6 @@ func TestHostTitleFollowsFocusedPane(t *testing.T) {
 		mustCLI(t, base, args...)
 	}
 	cli("new", "home", "--detach")
-	// The pane tuios new opened, before the second one is there.
 	first := firstWindow(t, base, "home").ID
 	cli("new-window", "second", "-s", "home", "--no-focus")
 
@@ -115,9 +98,6 @@ func TestHostTitleFollowsFocusedPane(t *testing.T) {
 		saveHostTitles(t, &wire)
 	})
 
-	// Set while attached: with no client, the daemon only records the value.
-	// The first pane is a shell with no title of its own, so the title falls
-	// back to the session's name.
 	cli("set-config", "appearance.host_title", "{title} · {session}")
 	waitForHostTitle(t, &wire, "home", "after attach")
 
@@ -128,12 +108,9 @@ func TestHostTitleFollowsFocusedPane(t *testing.T) {
 	cli("focus-window", first, "-s", "home")
 	waitForHostTitle(t, &wire, "build · home", "focus on the pane that titled itself")
 
-	// The focused pane retitles itself while the focus stays put.
 	cli("send-text", "-s", "home", "-w", first, "printf '\\033]2;deploy\\007'\n")
 	waitForHostTitle(t, &wire, "deploy · home", "the focused pane retitled")
 
-	// A title a tool sets through herdr's terminal title set wins while it is
-	// set, and clearing it gives the title back to the focused pane.
 	cli("send-text", "-s", "home", "-w", first, "\"$HERDR_BIN_PATH\" terminal title set 'from a tool'\n")
 	waitForHostTitle(t, &wire, "from a tool", "a tool set the title")
 	cli("send-text", "-s", "home", "-w", first, "printf '\\033]2;ignored\\007'\n")
@@ -141,19 +118,11 @@ func TestHostTitleFollowsFocusedPane(t *testing.T) {
 	cli("send-text", "-s", "home", "-w", first, "\"$HERDR_BIN_PATH\" terminal title clear\n")
 	waitForHostTitle(t, &wire, "ignored · home", "the tool's title cleared")
 
-	// A pane name is anyone's text. The escape sequence in it must not reach
-	// the host, where it would be read as a command.
 	cli("set-window", "-s", "home", "-w", first, "--name", "a\x1b]2;PWN\x07b")
 	waitForHostTitle(t, &wire, "a]2;PWNb · home", "a pane name holding an OSC 2")
 
-	// So is a directory name, and {cwd} comes from the shell, not from
-	// anything tuios cleans first: a cloned repository can hold this. The
-	// template is set before the cd, as a person sets it, so the title has to
-	// follow the cd itself rather than a render the set-config caused.
 	cli("set-config", "appearance.host_title", "{cwd}")
 	waitForHostTitleEnding(t, &wire, "/cwd", "the working directory before the cd")
-	// A plain cd into a folder that is already there. cd is a builtin, so the
-	// prompt the shell draws right after it is the only redraw.
 	if err := os.Mkdir(filepath.Join(workDirIn(t, base), "plain"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -165,13 +134,10 @@ func TestHostTitleFollowsFocusedPane(t *testing.T) {
 	cli("set-config", "appearance.host_title", "{index}")
 	waitForHostTitle(t, &wire, "1", "the template changed live")
 
-	// {session} is the name the rail shows, which a display name replaces.
 	cli("set-session-name", "demo", "-s", "home")
 	cli("set-config", "appearance.host_title", "{session}:{workspace}")
 	waitForHostTitle(t, &wire, "demo:1", "a session with a display name")
 
-	// A scratch group is drawn over the workspace in view, and the title
-	// names that workspace, as the dock does, not the group's own number.
 	toggleScratch(t, term)
 	if err := term.WaitForText("scratch", uiTimeout); err != nil {
 		t.Fatalf("the scratch group never showed: %v\n%s", err, term.Snapshot())

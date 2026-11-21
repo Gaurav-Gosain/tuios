@@ -12,12 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// These tests cover what a pane's output may do outside the pane: reach the
-// host terminal, the clipboard, or a shell through a paste or a saved layout.
-// Each one prints the output a hostile file would hold, the way `cat` of that
-// file would.
-
-// paneHostCopy keeps a copy of everything tuios writes to the host terminal.
 type paneHostCopy struct {
 	mu  sync.Mutex
 	buf strings.Builder
@@ -45,8 +39,6 @@ func TestPaneNotifyPayloadWritesNoEscapesToHost(t *testing.T) {
 	newWindow(t, term)
 	enterTerminalMode(t, term)
 
-	// The decoded body: visible text, then an OSC 52 clipboard write and a
-	// window title change that must never reach the host.
 	body := "NOTEOK\x1b]52;c;UFdORUQ=\x07\x1b]2;PWNTITLE\x07tail"
 	cmd := `printf '\033]99;e=1;` + base64.StdEncoding.EncodeToString([]byte(body)) + `\033\\'`
 	if err := term.SendKeys(cmd, tuitest.Enter); err != nil {
@@ -57,7 +49,6 @@ func TestPaneNotifyPayloadWritesNoEscapesToHost(t *testing.T) {
 	}, shellTimeout); err != nil {
 		t.Fatalf("the notification never reached the dock: %v\n%s", err, term.Snapshot())
 	}
-	// A beat for any host write that trails the frame.
 	time.Sleep(300 * time.Millisecond)
 
 	out := host.String()
@@ -69,8 +60,6 @@ func TestPaneNotifyPayloadWritesNoEscapesToHost(t *testing.T) {
 	alive(t, term, "after an OSC 99 notification with control bytes")
 }
 
-// startCatV runs cat -v in the focused pane with bracketed paste turned on,
-// so the screen shows every byte a paste delivers.
 func startCatV(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	if err := term.SendKeys(`printf '\033[?2004h'; echo CATREADY; cat -v`, tuitest.Enter); err != nil {
@@ -122,7 +111,6 @@ func TestUnrequestedClipboardReplyIsNotPasted(t *testing.T) {
 	if err := term.Type("\x1b]52;c;" + reply + "\x07"); err != nil {
 		t.Fatalf("send clipboard reply: %v", err)
 	}
-	// A positive control after the reply, so the wait has something to find.
 	if err := term.SendKeys("AFTERREPLY", tuitest.Enter); err != nil {
 		t.Fatalf("type control line: %v", err)
 	}
@@ -154,9 +142,6 @@ func TestFocusedPaneOSC52WriteReachesHostWithMessage(t *testing.T) {
 	}, shellTimeout); err != nil {
 		t.Fatalf("the dock did not say the pane copied: %v\n%s", err, term.Snapshot())
 	}
-	// The message can reach the screen before the clipboard write reaches
-	// the host: the frame that carries it is written as soon as it is
-	// composed. Wait for the write itself.
 	deadline := time.Now().Add(shellTimeout)
 	for !strings.Contains(host.String(), "]52;c;"+payload) {
 		if time.Now().After(deadline) {
@@ -176,7 +161,6 @@ func TestLayoutWithSpoofedCwdRunsNothing(t *testing.T) {
 	enterTerminalMode(t, term)
 
 	marker := filepath.Join(base, "layout-pwned")
-	// %%20 is a space once printf has read it, and OSC 7 carries a URL.
 	osc := `printf '\033]7;file://localhost/tmp/x$(touch%%20` + marker + `)\033\\'; echo OSCSENT`
 	if err := term.SendKeys(osc, tuitest.Enter); err != nil {
 		t.Fatalf("send OSC 7: %v", err)
@@ -199,7 +183,6 @@ func TestLayoutWithSpoofedCwdRunsNothing(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "run-command", "-s", "e2e-layout-cwd", "LoadLayout", "spoof"); err != nil {
 		t.Fatalf("LoadLayout: %v\n%s", err, out)
 	}
-	// The shell gets the cd, if any, within a moment. Give it time to run.
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		if _, err := os.Stat(marker); err == nil {
@@ -210,9 +193,6 @@ func TestLayoutWithSpoofedCwdRunsNothing(t *testing.T) {
 	alive(t, term, "after loading a layout")
 }
 
-// whereIs runs a check in the focused pane's shell and waits for its answer:
-// IN<NAME> when the shell is in a folder called name, NOT<NAME> when it is not.
-// The quotes keep the answer from appearing in the typed line itself.
 func whereIs(t *testing.T, term *tuitest.Terminal, name string) string {
 	t.Helper()
 	up := strings.ToUpper(name)
@@ -265,7 +245,6 @@ func TestDaemonFolderClickCdOnlyAtAPrompt(t *testing.T) {
 		mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	}
 
-	// At the prompt: the cd reaches the shell.
 	click("alpha")
 	time.Sleep(500 * time.Millisecond)
 	enterTerminalMode(t, term)
@@ -274,9 +253,6 @@ func TestDaemonFolderClickCdOnlyAtAPrompt(t *testing.T) {
 	}
 	runInShell(t, term, "cd "+dir+" && clear && echo back''home", "backhome", uiTimeout)
 
-	// A program in the foreground: no cd, and the dock says why. The client
-	// may already know from the daemon's report that sleep runs there, or the
-	// daemon refuses when asked. Either way, nothing is typed.
 	if err := term.SendKeys("sleep 30", tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}

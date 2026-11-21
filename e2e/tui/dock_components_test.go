@@ -11,8 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// dockRowText is the dock's content row, found by the workspace readout the bar
-// has always carried rather than by computing where the dock is.
 func dockRowText(t *testing.T, term *tuitest.Terminal) string {
 	t.Helper()
 	s := term.Screen()
@@ -40,10 +38,6 @@ func TestDockDefaultListsDrawTheSameBar(t *testing.T) {
 	}
 	bareRow := dockRowText(t, bare)
 
-	// The two configs must differ in the dock lists and in nothing else. The
-	// [startup] booleans are the one thing a hand-written file does not inherit
-	// from the defaults, and tiled changes the dock's own mode chip, so it is
-	// spelled out here to match what the bare run loads.
 	base := t.TempDir()
 	writeConfig(t, base, `
 [startup]
@@ -183,10 +177,6 @@ refresh = "push"
 	_ = os.Remove(statsPath)
 }
 
-// dockFloodRSSBudget is the most the client may hold, in KiB, while a dock
-// component floods its stdout. An idle client sits well under 100 MiB. The
-// engine used to read the whole flood before it cut it to 64 KiB, so `yes`
-// put gigabytes on the heap inside the three second timeout.
 const dockFloodRSSBudget = 300 << 10
 
 // TestDockFloodingComponentStaysBounded runs `yes` as a dock component, again
@@ -232,7 +222,6 @@ refresh = "1s"
 		t.Fatalf("the flooding component never drew its first line, so its output was never read\n%s", term.Snapshot())
 	}
 
-	// The component still runs every second, so this is typed into a flood.
 	enterTerminalMode(t, term)
 	runInShell(t, term, "echo ALIVE$((40+2))", "ALIVE42", shellTimeout)
 }
@@ -243,8 +232,6 @@ refresh = "1s"
 // character and an emoji must still draw, which is the positive half.
 func TestDockComponentCannotSendUnsafeCharacters(t *testing.T) {
 	base := t.TempDir()
-	// printf octal escapes: \342\200\256 is U+202E, \302\233 is U+009B,
-	// \342\200\213 is U+200B. The tail is U+6F22 and U+1F600.
 	writeConfig(t, base, `
 [dock]
 left = ["mode", "workspaces", "trail", "custom/unsafe"]
@@ -275,8 +262,6 @@ refresh = "once"
 	}
 }
 
-// dockCellFind returns the dock row and the column where text starts, scanning
-// the grid's cells rather than Line so a cap glyph beside it is its own cell.
 func dockCellFind(s tuitest.Screen, text string) (x, y int, ok bool) {
 	cols, rows := s.Size()
 	runes := []rune(text)
@@ -345,8 +330,6 @@ fg      = "accent"
 	waitBoot(t, term)
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "opening a shell")
-	// The workspace number is the current workspace and the pane number is the
-	// focused pane's place in it, so an empty second workspace tells them apart.
 	if err := term.SendKeys(tuitest.Alt('2')); err != nil {
 		t.Fatalf("send alt+2: %v", err)
 	}
@@ -395,9 +378,6 @@ fg      = "accent"
 		t.Errorf("styled custom cell's cap is %q in %+v, want \")\" in %+v", c.Content, c.Fg, light)
 	}
 
-	// A slot name and a role name. With no theme, bright_magenta is the
-	// terminal's own slot 13, so the host's palette paints it, and accent is
-	// the dock's own accent, the CharmTone Charple the mode pill uses.
 	nx, ny, _ := dockCellFind(s, "NAMEDCELL")
 	nc := s.Cell(nx, ny)
 	if nc.Bg.Kind != tuitest.ColorIndexed || nc.Bg.Index != 13 {

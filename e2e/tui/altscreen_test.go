@@ -8,12 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// setupAltScreenLeftTile boots tuios with shared borders, puts an idle
-// alt-screen application whose first row is blank into the first window, adds a
-// second window, and tiles them. The alt-screen pane ends up as the leftmost
-// tile at x=0 and unfocused, which is every precondition the clip bug needed.
-//
-// It returns the markers the fixture painted.
 func setupAltScreenLeftTile(t *testing.T, term *tuitest.Terminal) []string {
 	t.Helper()
 	markers := []string{"ALTMARK-ALPHA", "ALTMARK-BETA"}
@@ -28,13 +22,9 @@ func setupAltScreenLeftTile(t *testing.T, term *tuitest.Terminal) []string {
 	waitForAll(t, term, shellTimeout, "alt-screen fixture never painted", markers...)
 	leaveTerminalMode(t, term)
 
-	// A second window steals focus, so the alt-screen pane renders through the
-	// unfocused fast path that trims trailing spaces off every line.
 	newWindow(t, term)
 	waitWindowCount(t, term, 2, "after second window")
 
-	// Tile them side by side. The first window becomes the leftmost tile at
-	// x=0, and with shared borders its content is composited raw.
 	enableTiling(t, term, markers...)
 	return markers
 }
@@ -64,14 +54,10 @@ func TestAltScreenPaneSurvivesFocusSwitch(t *testing.T) {
 	term, _ := start(t, startOpts{args: []string{"--shared-borders"}})
 	markers := setupAltScreenLeftTile(t, term)
 
-	// Cycle focus back and forth. Every other Tab leaves the alt-screen pane
-	// unfocused, which is the state the bug blanked.
 	for i := range 6 {
 		if err := term.SendKeys(tuitest.Tab); err != nil {
 			t.Fatalf("tab %d: %v", i, err)
 		}
-		// Wait for the markers rather than sleeping a fixed amount, so a slow
-		// machine cannot turn a real blank into a passing sample or vice versa.
 		if err := term.WaitFor(func(s tuitest.Screen) bool {
 			return screenHas(s, markers...)
 		}, uiTimeout); err != nil {
@@ -82,8 +68,6 @@ func TestAltScreenPaneSurvivesFocusSwitch(t *testing.T) {
 		alive(t, term, "during focus cycling")
 	}
 
-	// The fixture emits nothing at all, so surviving this long proves the
-	// cached layer stayed correct rather than being repaired by fresh output.
 	time.Sleep(2 * time.Second)
 	if !screenHas(term.Screen(), markers...) {
 		t.Fatalf("alt-screen pane blanked while idle after focus cycling\n%s", term.Snapshot())
@@ -106,8 +90,6 @@ func TestLeftmostTileWithBlankFirstLineIsNotDiscarded(t *testing.T) {
 	term, _ := start(t, startOpts{args: []string{"--shared-borders"}})
 	markers := setupAltScreenLeftTile(t, term)
 
-	// Move focus to the other tile and keep it there: unfocused is the state
-	// the leftmost tile was discarded in.
 	if err := term.SendKeys(tuitest.Tab); err != nil {
 		t.Fatalf("tab: %v", err)
 	}
@@ -125,9 +107,6 @@ func TestLeftmostTileWithBlankFirstLineIsNotDiscarded(t *testing.T) {
 			markers, cols/2, term.Snapshot())
 	}
 
-	// The fixture's first row really is blank; if it were not, the test would
-	// not be exercising the bug at all. Assert it, so a future change to
-	// altScreenCmd cannot silently defang this test.
 	if row, ok := markerRow(s, markers[0]); !ok {
 		t.Fatal("could not locate the first marker row")
 	} else if row == 0 {
@@ -139,8 +118,6 @@ func TestLeftmostTileWithBlankFirstLineIsNotDiscarded(t *testing.T) {
 	}
 }
 
-// leftHalfHas reports whether every marker appears within the left half of the
-// screen, which under a two-tile layout is the leftmost tile.
 func leftHalfHas(s tuitest.Screen, markers ...string) bool {
 	cols, rows := s.Size()
 	half := cols / 2
@@ -162,7 +139,6 @@ func leftHalfHas(s tuitest.Screen, markers ...string) bool {
 	return true
 }
 
-// markerRow returns the first screen row containing marker.
 func markerRow(s tuitest.Screen, marker string) (int, bool) {
 	_, rows := s.Size()
 	for r := range rows {

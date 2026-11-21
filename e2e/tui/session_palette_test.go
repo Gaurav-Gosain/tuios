@@ -12,7 +12,7 @@ import (
 // proving the palette's session/window rows are wired into the same filter as
 // its static commands.
 func TestPaletteFiltersToCurrentSessionDaemon(t *testing.T) {
-	term := attachClient(t) // session named "e2e-ctrlp", window-management mode
+	term := attachClient(t)
 
 	if err := term.SendKeys(legacyCtrlP); err != nil {
 		t.Fatalf("open palette: %v", err)
@@ -49,10 +49,6 @@ func TestPaletteShowsWindowEntryStandalone(t *testing.T) {
 	}
 	waitPaletteOpen(t, term, "in standalone mode")
 
-	// The palette lists 50-plus static commands before the dynamic session and
-	// window entries, so the synthetic standalone session sits past the
-	// visible rows until a query narrows the list down to it. "local" matches
-	// only "Session: local": no static command name or category contains it.
 	if err := term.SendKeys("local"); err != nil {
 		t.Fatalf("type session name to filter: %v", err)
 	}

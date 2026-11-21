@@ -7,25 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The copy sweep after a copy-mode yank: y on a visual selection, y on a line
-// selection, a copy-pipe key, and y in multi copy mode. A mouse copy has
-// always swept; a copy-mode yank ended the selection before the sweep read its
-// region from it, so the yank drew no light at all.
-//
-// How these could pass wrongly, written down first:
-//   - The selection itself could count as light. The selection ground is
-//     configured near black and the light white, and a cell counts as lit only
-//     when its ground is brighter than every ground of the settled frame,
-//     which holds the magenta copy cursor.
-//   - The light could be drawn somewhere other than the yanked text. The
-//     single-pane cases hold the light to the text's columns on its row, and
-//     the multi copy case requires it inside each selected pane's line and
-//     never on the pane without a selection.
-//   - The frame sampler could start after the sweep ended. Sampling starts
-//     before the yank key is sent.
-
-// yankFlashConfig keeps the copy cursor findable and the selection dark, so
-// neither reads as light.
 const yankFlashConfig = "cursor_bg = \"#ff00ff\"\nbg = \"#101018\"\n" + `
 [[keybindings.copy_pipe]]
 key = "p"
@@ -57,8 +38,6 @@ func TestCopyFlashSweepsACopyModeYank(t *testing.T) {
 				t.Fatalf("send prefix+[: %v", err)
 			}
 			waitCopyCursor(t, term, "prefix+[")
-			// The command line spells the marker with a gap, so the search
-			// lands on the output.
 			if err := term.SendKeys("?YANK-alpha", tuitest.Enter); err != nil {
 				t.Fatalf("search: %v", err)
 			}
@@ -74,7 +53,6 @@ func TestCopyFlashSweepsACopyModeYank(t *testing.T) {
 				}
 				time.Sleep(150 * time.Millisecond)
 			}
-			// Wait for the selection to be drawn, clear of the cursor cell.
 			if err := term.WaitFor(func(s tuitest.Screen) bool {
 				return s.Cell(col+5, row).Bg.Kind != tuitest.ColorDefault
 			}, uiTimeout); err != nil {
@@ -107,8 +85,6 @@ func TestCopyFlashSweepsAMultiCopyYank(t *testing.T) {
 	if err := term.WaitForText("MULTI 3", uiTimeout); err != nil {
 		t.Fatalf("no multi copy mode: %v\n%s", err, term.Snapshot())
 	}
-	// Where each pane's line is, read before the search puts the copy cursor
-	// on two of them.
 	s := term.Screen()
 	type span struct{ row, lo, hi int }
 	var spans []span

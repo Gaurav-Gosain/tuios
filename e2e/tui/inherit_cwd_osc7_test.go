@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-// computerName is the NetBIOS name the test gives the daemon. It is not the
-// host name, as on a Windows machine whose name is longer than 15 characters.
 const computerName = "TUIOS-E2E-PC"
 
 // TestNewWindowInheritsTheOSC7Folder is issue #491. On native Windows the
@@ -99,8 +97,6 @@ func TestNewWindowInheritsTheOSC7Folder(t *testing.T) {
 		t.Fatalf("ASSERTION: a new window started in %q after the focused pane reported a missing folder, want the session's start folder %q", got, start)
 	}
 
-	// OSC 9;9, the report Windows Terminal asks PowerShell to send. Its path
-	// has no host and is quoted.
 	cd(fourth, nine)
 	if err := paneSend(base, "osc", fourth, `printf '\033]9;9;"%s"\033\\' '`+nine+"'\n"); err != nil {
 		t.Fatalf("send the OSC 9;9 report: %v", err)
@@ -154,7 +150,6 @@ func TestNewWindowPrefersTheShellsProcessFolder(t *testing.T) {
 	}
 }
 
-// newWindowIn opens a window in session and returns its id.
 func newWindowIn(t *testing.T, base, session string) string {
 	t.Helper()
 	out, err := tuiosOut(base, "new-window", "-s", session, "--print-id")
@@ -164,8 +159,6 @@ func newWindowIn(t *testing.T, base, session string) string {
 	return strings.TrimSpace(out)
 }
 
-// paneFolder asks the shell in window where it is and returns its answer. The
-// answer goes to a file, since a long path wraps in a narrow pane.
 func paneFolder(t *testing.T, base, session, window string) string {
 	t.Helper()
 	file := filepath.Join(base, "pwd-"+window)
@@ -184,9 +177,6 @@ func paneFolder(t *testing.T, base, session, window string) string {
 	return ""
 }
 
-// waitAnnounced waits until list-windows reports window in dir. With process
-// reads off, only the pane's OSC 7 report can put it there, and list-windows
-// shows a reported folder whether or not it exists.
 func waitAnnounced(t *testing.T, base, session, window, dir string) {
 	t.Helper()
 	var got string

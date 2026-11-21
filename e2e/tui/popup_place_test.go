@@ -7,12 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// panelBox is the screen rectangle of the borderless panel whose text
-// includes marker: the run of cells on the marker's row that share the
-// ground of the cell left of the marker (the panel's padding), and the run of
-// rows down the panel's first column that share it. x1 and y1 are one past
-// the last cell. The marker must be on a row with the panel's own ground,
-// not the cursor's row, whose ground reaches the panel's edge.
 func panelBox(s tuitest.Screen, marker string) (x0, y0, x1, y1 int, ok bool) {
 	mx, my, found := dockCellFind(s, marker)
 	if !found || mx == 0 {

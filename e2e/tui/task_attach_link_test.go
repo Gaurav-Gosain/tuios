@@ -77,7 +77,6 @@ func TestAttachToACardOnAnotherMachine(t *testing.T) {
 		t.Fatalf("ASSERTION: the screenshot attach from home failed: exit %d\n%s", code, out)
 	}
 
-	// build holds both, by the holder.
 	raw := mustCLI(t, remote, "task", "get", "-s", "far", "t1", "--json")
 	note("build get-task:\n%s", raw)
 	var card struct {
@@ -113,13 +112,11 @@ func TestAttachToACardOnAnotherMachine(t *testing.T) {
 		t.Errorf("ASSERTION: the screenshot build holds is not a PNG (%d bytes)", len(got))
 	}
 
-	// A pane that does not hold the card is refused by build.
 	out, code = cliInPane(t, base, "home", other, "steal", "task", "attach", "t1", notes, "--name", "other.md", "-s", "build:far")
 	note("other pane attaches: exit %d\n%s", code, out)
 	if code == 0 {
 		t.Errorf("ASSERTION: a pane that does not hold the card attached to it on build: %s", out)
 	}
-	// A file over what a link carries is refused before it crosses.
 	big := filepath.Join(files, "big.log")
 	if err := os.WriteFile(big, bytes.Repeat([]byte("x"), 4<<20), 0o644); err != nil {
 		t.Fatal(err)

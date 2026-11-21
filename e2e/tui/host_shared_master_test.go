@@ -8,29 +8,6 @@ import (
 	"time"
 )
 
-// A link that rides the ssh master a person opened.
-//
-// The daemon's links run ssh with BatchMode, so they can never answer a
-// passphrase, password or code prompt. A client that can ask the person
-// (tuios-gpui) opens the first connection itself, as an ssh master in
-// $XDG_RUNTIME_DIR/tuios/cm, and the daemon's ssh must use that master.
-// ssh names the master's socket by %C, so the daemon only has to pass the
-// same ControlPath, with ControlMaster=no so that it never opens a master of
-// its own and never fails for want of one.
-//
-// The ssh stand-in records every argv it is run with, then reaches the far
-// daemon as the other host tests do. What would pass a weaker test and fail
-// this one: options added to the CLI's ssh and not the daemon's link (the
-// link's argv has no ControlPath), a ControlMaster=auto that opens a master
-// in the daemon (the argv says auto), or a folder others can write that is
-// trusted (the third case's argv has a ControlPath), or a ControlPath of the
-// person's own ssh config that the link no longer uses (the fourth case's
-// argv names the folder), or a host that forwards the agent and loses it
-// through a master that does not (the fifth case's argv names the folder).
-
-// writeArgvSSH is writeFakeSSHTo that first appends its argv, one line per
-// run, to log. Asked for its options (-G), it prints config: the lines a
-// person's ~/.ssh/config would give, such as a ControlPath of their own.
 func writeArgvSSH(t *testing.T, dir, remoteBase, log, config string) string {
 	t.Helper()
 	inner := writeFakeSSHTo(t, dir, remoteBase)
@@ -43,8 +20,6 @@ func writeArgvSSH(t *testing.T, dir, remoteBase, log, config string) string {
 	return path
 }
 
-// linkArgv waits until the daemon's link has run ssh for the proxy, and
-// returns that argv line.
 func linkArgv(t *testing.T, log string) string {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
@@ -64,11 +39,9 @@ func linkArgv(t *testing.T, log string) string {
 
 func TestLinkRidesTheSharedSSHMaster(t *testing.T) {
 	cases := []struct {
-		name string
-		// mode is the master folder's mode, 0 for no folder.
-		mode  os.FileMode
-		rides bool
-		// config is what ssh -G adds, as quoted shell words.
+		name   string
+		mode   os.FileMode
+		rides  bool
 		config string
 	}{
 		{"a master folder of the user's own", 0o700, true, ""},
@@ -90,19 +63,15 @@ func TestLinkRidesTheSharedSSHMaster(t *testing.T) {
 				if err := os.MkdirAll(cm, 0o700); err != nil {
 					t.Fatalf("make the master folder: %v", err)
 				}
-				// MkdirAll applies the umask; the mode under test is set
-				// exactly.
 				if err := os.Chmod(cm, c.mode); err != nil {
 					t.Fatalf("chmod the master folder: %v", err)
 				}
 			}
 			want := "ControlPath=" + filepath.Join(cm, "%C")
 
-			// The far machine runs its daemon, so the link can come up.
 			if out, err := tuiosCLI(t, remote, "start-server"); err != nil {
 				t.Fatalf("start the far daemon: %v\n%s", err, out)
 			}
-			// The daemon's link: the daemon dials it at start.
 			killDaemon(t, base)
 			if out, err := tuiosCLIEnv(t, base, env, "start-server"); err != nil {
 				t.Fatalf("start-server: %v\n%s", err, out)
@@ -119,12 +88,9 @@ func TestLinkRidesTheSharedSSHMaster(t *testing.T) {
 				t.Fatalf("ASSERTION: the link's ssh can prompt:\n%s", argv)
 			}
 
-			// The link still comes up: with no live master at the path, ssh
-			// connects as it always did.
 			listing := waitForHostListing(t, base, func(s string) bool { return strings.Contains(s, "│ up ") }, "the link to build comes up")
 			t.Logf("hosts:\n%s", listing)
 
-			// tuios hosts test dials in the CLI with the same options.
 			_ = os.Remove(log)
 			if out, err := tuiosCLIEnv(t, base, env, "hosts", "test", "build"); err != nil {
 				t.Fatalf("hosts test: %v\n%s", err, out)

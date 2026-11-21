@@ -12,30 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The pane labels (display_panes, prefix Q), driven through a real client on
-// a daemon session: open the labels, find each label's block glyphs on the
-// screen with the pane's name under them, type a label, and read the focused
-// pane back from list-windows.
-//
-// How these could pass wrongly, written down first:
-//   - The focus could already be on the pane the label names. Each test
-//     focuses another pane first, and checks that it holds the focus before
-//     the label is typed.
-//   - A glyph could be found where the pane's own text happens to draw block
-//     characters. The shells print nothing of the kind, and a glyph counts
-//     only with the pane's name two rows under it.
-//   - The labels could stay up after the jump and still pass a focus check.
-//     Every jump waits for the glyphs to go.
-//   - A typed label key or a paste could reach a shell as well as the
-//     labels. The multifocus test gives every pane one known prompt, shows
-//     with the labels closed that the key and the paste do reach the shells
-//     and leave the line it looks for, then checks no pane shows that line
-//     with the labels up.
-//
-// Negative controls, all confirmed red (see NEGATIVE_CONTROLS.md).
-
-// paneLabelGlyphRows is the block font the labels draw, for the keys these
-// tests use, as internal/app/pane_labels_render.go has it.
 var paneLabelGlyphRows = map[rune][5]string{
 	'1': {" # ", "## ", " # ", " # ", "###"},
 	'2': {"###", "  #", "###", "#  ", "###"},
@@ -44,7 +20,6 @@ var paneLabelGlyphRows = map[rune][5]string{
 	's': {"###", "#  ", "###", "  #", "###"},
 }
 
-// paneLabelGlyph is a label as the screen shows it at double width.
 func paneLabelGlyph(label string) [5]string {
 	var rows [5]string
 	for i, r := range label {
@@ -65,10 +40,6 @@ func paneLabelGlyph(label string) [5]string {
 	return rows
 }
 
-// glyphMask is the screen with every filled cell of the block font as '#'
-// and every other cell as '.', one byte a cell. A filled cell is a full
-// block, or at 16 colours a hole in a box drawn in reverse video: a blank
-// cell not in reverse with reverse cells close on both sides of it.
 func glyphMask(s tuitest.Screen) []string {
 	cols, rows := s.Size()
 	out := make([]string, rows)
@@ -102,15 +73,11 @@ func glyphMask(s tuitest.Screen) []string {
 	return out
 }
 
-// findPaneLabel finds the label's glyphs with name two rows under them, and
-// returns the glyphs' top row, or -1.
 func findPaneLabel(s tuitest.Screen, label, name string) int {
 	_, col := findPaneLabelAt(s, label, name)
 	return col
 }
 
-// findPaneLabelAt is findPaneLabel that also returns the glyphs' first
-// column.
 func findPaneLabelAt(s tuitest.Screen, label, name string) (int, int) {
 	mask := glyphMask(s)
 	lines := strings.Split(s.Text(), "\n")
@@ -138,7 +105,6 @@ func findPaneLabelAt(s tuitest.Screen, label, name string) (int, int) {
 	return -1, -1
 }
 
-// anyPaneLabel reports whether any block glyph is on the screen.
 func anyPaneLabel(s tuitest.Screen) bool {
 	for _, row := range glyphMask(s) {
 		if strings.Contains(row, "##") {
@@ -148,9 +114,6 @@ func anyPaneLabel(s tuitest.Screen) bool {
 	return false
 }
 
-// paneLabelsSession makes a session of three panes named alpha, beta and
-// gamma, attaches a client to it with config, and turns tiling on. It
-// returns the client, the isolation root and the pane ids in order.
 func paneLabelsSession(t *testing.T, config string, opts startOpts) (*tuitest.Terminal, string, []string) {
 	t.Helper()
 	base := t.TempDir()
@@ -183,7 +146,6 @@ func paneLabelsSession(t *testing.T, config string, opts startOpts) (*tuitest.Te
 	return term, base, ids
 }
 
-// paneIDs is the session's pane ids in list order.
 func paneIDs(t *testing.T, base, session string) []string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "--json", "--session", session)
@@ -205,7 +167,6 @@ func paneIDs(t *testing.T, base, session string) []string {
 	return ids
 }
 
-// focusedPaneID is the pane the session has focused.
 func focusedPaneID(t *testing.T, base, session string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "--json", "--session", session)
@@ -221,7 +182,6 @@ func focusedPaneID(t *testing.T, base, session string) string {
 	return payload.Focused
 }
 
-// waitFocusedPane waits for the session to focus id.
 func waitFocusedPane(t *testing.T, base, id, what string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -235,8 +195,6 @@ func waitFocusedPane(t *testing.T, base, id, what string) {
 	t.Fatalf("%s: the focused pane is %s, want %s", what, got, id)
 }
 
-// focusPaneByCLI focuses a pane from the CLI and waits for the client to
-// agree.
 func focusPaneByCLI(t *testing.T, base, id string) {
 	t.Helper()
 	if o, err := tuiosCLI(t, base, "focus-window", id, "-s", "e2e-labels"); err != nil {
@@ -246,7 +204,6 @@ func focusPaneByCLI(t *testing.T, base, id string) {
 	time.Sleep(300 * time.Millisecond)
 }
 
-// openPaneLabels presses the leader and Q and waits for the label.
 func openPaneLabels(t *testing.T, term *tuitest.Terminal, label, name string) {
 	t.Helper()
 	sendKeys(t, term, tuitest.Ctrl('b'), "Q")
@@ -255,7 +212,6 @@ func openPaneLabels(t *testing.T, term *tuitest.Terminal, label, name string) {
 	}
 }
 
-// waitPaneLabelsGone waits for every glyph to leave the screen.
 func waitPaneLabelsGone(t *testing.T, term *tuitest.Terminal, what string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !anyPaneLabel(s) }, uiTimeout); err != nil {
@@ -289,8 +245,6 @@ func TestPaneLabelsFocusAPane(t *testing.T) {
 		t.Fatalf("esc moved the focus to %s", got)
 	}
 
-	// A pane that opens under the labels changes the layout they name, and
-	// they close rather than point at panes that moved.
 	openPaneLabels(t, term, "2", "beta")
 	if o, err := tuiosCLI(t, base, "new-window", "delta", "-s", "e2e-labels", "--no-focus"); err != nil {
 		t.Fatalf("new-window: %v\n%s", err, o)
@@ -343,11 +297,8 @@ func TestPaneLabelsZoom(t *testing.T) {
 	waitOnlyPane(t, term, "beta", "the zoom did not move to beta")
 }
 
-// labelPrompt is the prompt the multifocus test gives every pane, so a line
-// a key or a paste reached reads the same whatever the shell's own prompt.
 const labelPrompt = "LBL>"
 
-// lastPaneLine is the last line of a pane's screen that is not blank.
 func lastPaneLine(t *testing.T, base, id string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "capture-pane", "-w", id, "-s", "e2e-labels")
@@ -363,7 +314,6 @@ func lastPaneLine(t *testing.T, base, id string) string {
 	return last
 }
 
-// waitEveryPaneLine waits for every pane's last line to be want.
 func waitEveryPaneLine(t *testing.T, base string, ids []string, want, what string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -386,7 +336,6 @@ func waitEveryPaneLine(t *testing.T, base string, ids []string, want, what strin
 	}
 }
 
-// noPaneLine fails when any pane's last line is the prompt and text.
 func noPaneLine(t *testing.T, base string, ids []string, text, what string) {
 	t.Helper()
 	for _, id := range ids {
@@ -427,8 +376,6 @@ func TestPaneLabelsKeepKeysAndPastesFromPanes(t *testing.T) {
 	}
 	enterTerminalMode(t, term)
 
-	// The positive half: with the labels closed, a key reaches every pane
-	// and so does a paste.
 	sendKeys(t, term, "3")
 	waitEveryPaneLine(t, base, ids, labelPrompt+" 3", "a key with the labels closed")
 	sendKeys(t, term, tuitest.Ctrl('u'))
@@ -440,7 +387,6 @@ func TestPaneLabelsKeepKeysAndPastesFromPanes(t *testing.T) {
 	sendKeys(t, term, tuitest.Ctrl('u'))
 	waitEveryPaneLine(t, base, ids, labelPrompt, "ctrl+u after the paste")
 
-	// The labels up: a paste goes nowhere, and the labels stay.
 	openPaneLabels(t, term, "3", "gamma")
 	if err := term.Paste("pz9"); err != nil {
 		t.Fatalf("paste: %v", err)
@@ -451,9 +397,6 @@ func TestPaneLabelsKeepKeysAndPastesFromPanes(t *testing.T) {
 		t.Fatalf("a paste closed the labels:\n%s", term.Snapshot())
 	}
 
-	// And the label key focuses its pane and reaches no shell. The shells
-	// are read before the labels are checked, so a key that both reached
-	// the shells and left the labels up fails here, on the leak.
 	sendKeys(t, term, "3")
 	time.Sleep(700 * time.Millisecond)
 	noPaneLine(t, base, ids, "3", "the label key")
@@ -461,7 +404,6 @@ func TestPaneLabelsKeepKeysAndPastesFromPanes(t *testing.T) {
 	waitFocusedPane(t, base, ids[2], "label 3 in multifocus")
 }
 
-// panesDrawn is the names on the bottom borders of the panes drawn.
 func panesDrawn(s tuitest.Screen) []string {
 	var out []string
 	for _, name := range []string{"alpha", "beta", "gamma"} {
@@ -475,7 +417,6 @@ func panesDrawn(s tuitest.Screen) []string {
 	return out
 }
 
-// waitOnlyPane waits for name to be the one pane drawn, as a zoom draws it.
 func waitOnlyPane(t *testing.T, term *tuitest.Terminal, name, what string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -511,14 +452,10 @@ func TestPaneLabelsLooks(t *testing.T) {
 				savePNG(t, s, hostPalette(t, look.theme), dir, "labels")
 				_ = os.WriteFile(filepath.Join(dir, "README"), []byte("display_panes over three tiled panes, then over a zoom\n"), 0o644)
 				x, top := findPaneLabelAt(s, "1", "alpha")
-				// The 1's first filled cell is two cells in from the glyph's
-				// left edge, and the box's ground is two cells left of that.
 				col := x + 2
 				glyph := s.Cell(col, top)
 				ground := s.Cell(col-2, top)
 				if depth.name == "16" {
-					// The box is the accent in reverse video, and the glyph
-					// is a hole in it.
 					if !ground.Reverse || glyph.Reverse {
 						t.Fatalf("at 16 colours the box is not in reverse with the glyph a hole: box %+v glyph %+v", ground, glyph)
 					}
@@ -531,7 +468,6 @@ func TestPaneLabelsLooks(t *testing.T) {
 					}
 				}
 
-				// The zoomed form: the hidden panes listed under the label.
 				sendKeys(t, term, tuitest.Esc)
 				waitPaneLabelsGone(t, term, "after esc")
 				sendKeys(t, term, tuitest.Ctrl('b'), "z")

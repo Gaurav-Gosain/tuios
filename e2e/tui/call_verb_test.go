@@ -60,7 +60,6 @@ func TestCallVerb(t *testing.T) {
 		t.Fatalf("ASSERTION: list-sessions through call is not the daemon's result: %s", out)
 	}
 
-	// list-routes answers with this machine's addresses, never loopback.
 	if out, err := tuiosCLI(t, base, "call", "list-routes"); err != nil {
 		t.Fatalf("ASSERTION: list-routes failed: %v: %s", err, out)
 	} else if !strings.Contains(out, `"route_list"`) || strings.Contains(out, "127.0.0.1") {
@@ -93,7 +92,6 @@ func TestCallVerb(t *testing.T) {
 
 	checkStreamVerbsRefused(t, base)
 
-	// Bad input is 2, a verb error 1, and a daemon that is not there 3.
 	if _, err := tuiosCLI(t, base, "call", "list-windows", `not json`); exitCodeOf(err) != 2 {
 		t.Fatalf("ASSERTION: bad params exited %d, want 2", exitCodeOf(err))
 	}
@@ -102,7 +100,6 @@ func TestCallVerb(t *testing.T) {
 	}
 }
 
-// streamVerbDoc is a verb as list-verbs describes it, with what this test reads.
 type streamVerbDoc struct {
 	Verb        string `json:"verb"`
 	Description string `json:"description"`
@@ -112,10 +109,6 @@ type streamVerbDoc struct {
 	} `json:"stream"`
 }
 
-// checkStreamVerbsRefused calls every verb list-verbs marks as keeping the
-// connection, with the params that make it keep it, and wants each refused
-// with status 2. The marks are checked against the descriptions: a verb that
-// says it turns this connection into something must be marked.
 func checkStreamVerbsRefused(t *testing.T, base string) {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "call", "list-verbs")
@@ -154,26 +147,20 @@ func checkStreamVerbsRefused(t *testing.T, base string) {
 		if code := exitCodeOf(err); code != 2 || !strings.Contains(out, "holds the connection open") {
 			t.Errorf("ASSERTION: call %s %s was not refused as a stream verb with status 2: status %d: %s", v.Verb, params, code, out)
 		}
-		// Only commands that exist are named.
 		if strings.Contains(out, "tuios transfers") || strings.Contains(out, "tuios pane-view") {
 			t.Errorf("ASSERTION: the refusal of %s names a command that does not exist: %s", v.Verb, out)
 		}
 	}
-	// open-tree-stream and pane-kitty-medium were missing from the list call
-	// kept by hand.
 	for _, want := range []string{"subscribe", "open-tree-stream", "pane-kitty-medium"} {
 		if !slices.Contains(marked, want) {
 			t.Errorf("ASSERTION: list-verbs does not mark %s as keeping the connection; marked: %v", want, marked)
 		}
 	}
-	// The positive half: a verb that streams only with a param is called when
-	// the param says not to. speed-test answers a ping once.
 	if out, err := tuiosCLI(t, base, "call", "speed-test", `{"mode":"ping"}`); err != nil || !strings.Contains(out, `"ping"`) {
 		t.Errorf("ASSERTION: call speed-test with mode ping was not sent: %v: %s", err, out)
 	}
 }
 
-// exitCodeOf is the status a tuiosCLI error carries, 0 for none.
 func exitCodeOf(err error) int {
 	if ee, ok := errors.AsType[*exec.ExitError](err); ok {
 		return ee.ExitCode()
@@ -248,9 +235,6 @@ func TestCallVerbFromAPane(t *testing.T) {
 	}
 }
 
-// wantCatalogued fails the test unless list-verbs' error_codes holds code,
-// which a test saw the daemon send: a client learns every code it can get from
-// that list.
 func wantCatalogued(t *testing.T, base, code, what string) {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "call", "list-verbs")

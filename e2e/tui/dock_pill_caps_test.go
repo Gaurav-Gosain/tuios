@@ -7,12 +7,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// dockCapGlyphs are the rounded ends a dock pill can carry: the Nerd Font half
-// circles, their Unicode stand-ins, and the ASCII brackets the mode chip falls
-// back to.
 var dockCapGlyphs = []string{"", "", "◖", "◗", "[", "]"}
 
-// dockCapsIn returns the cap glyphs the dock row carries, in order.
 func dockCapsIn(row string) []string {
 	var found []string
 	for _, r := range row {
@@ -49,8 +45,6 @@ func TestDockPillCapsFollowTheSetting(t *testing.T) {
 			base := t.TempDir()
 			writeConfig(t, base, "[appearance]\n"+tc.config)
 			term := startIn(t, base, startOpts{cols: 120, rows: 30})
-			// The dock is whole once it shows the window count at the end of
-			// the workspace strip.
 			if err := term.WaitFor(func(s tuitest.Screen) bool {
 				return strings.Contains(dockRow(s), "1:0")
 			}, bootTimeout); err != nil {
@@ -61,7 +55,6 @@ func TestDockPillCapsFollowTheSetting(t *testing.T) {
 			if !tc.capped && len(caps) > 0 {
 				t.Fatalf("%s: the dock row draws caps %q, want flat pills\n%s", tc.name, caps, row)
 			}
-			// The mode chip has two caps, and every workspace pill has two.
 			if tc.capped && len(caps) < 4 {
 				t.Fatalf("%s: the dock row draws only caps %q, want caps on the mode chip and the workspace pills\n%s", tc.name, caps, row)
 			}

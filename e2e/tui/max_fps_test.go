@@ -14,32 +14,21 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// appearance.max_fps takes a number up to 240, or "auto" for the refresh rate
-// of the display. These drive the real binary: a config file on disk, the
-// option list the daemon reports, and the settings row a person reads.
-
-// maxFPSConfig is a config whose only setting is max_fps.
 func maxFPSConfig(value string) string {
 	return "[appearance]\nmax_fps = " + value + "\n"
 }
 
-// maxFPSRow opens the settings page, finds the Max FPS row by search, and
-// waits for it to show want.
 func maxFPSRow(t *testing.T, term *tuitest.Terminal, want string) {
 	t.Helper()
 	maxFPSRowWithin(t, term, want, uiTimeout)
 }
 
-// maxFPSRowWithin is maxFPSRow with a longer wait, for a value a config reload
-// or a detection is still on its way to.
 func maxFPSRowWithin(t *testing.T, term *tuitest.Terminal, want string, timeout time.Duration) {
 	t.Helper()
 	openMaxFPSRow(t, term, want, timeout)
 	closeSettingsSearch(t, term)
 }
 
-// openMaxFPSRow opens the settings page with the Max FPS row under the cursor
-// and waits for it to show want.
 func openMaxFPSRow(t *testing.T, term *tuitest.Terminal, want string, timeout time.Duration) {
 	t.Helper()
 	if err := term.SendKeys(",", "/", "max fps"); err != nil {
@@ -48,7 +37,6 @@ func openMaxFPSRow(t *testing.T, term *tuitest.Terminal, want string, timeout ti
 	waitMaxFPSRow(t, term, want, timeout)
 }
 
-// waitMaxFPSRow waits for the Max FPS row under the cursor to show want.
 func waitMaxFPSRow(t *testing.T, term *tuitest.Terminal, want string, timeout time.Duration) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -58,8 +46,6 @@ func waitMaxFPSRow(t *testing.T, term *tuitest.Terminal, want string, timeout ti
 	}
 }
 
-// closeSettingsSearch leaves the search, then the page. Two keys a moment
-// apart, as a person presses them: sent together they read as one alt+esc.
 func closeSettingsSearch(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Esc); err != nil {
@@ -80,8 +66,6 @@ func closeSettingsSearch(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// waitConfigHas waits for the config file to contain want, which a change on
-// the settings page writes after the screen shows it.
 func waitConfigHas(t *testing.T, base, want string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -138,13 +122,9 @@ func TestMaxFPSLoadsAndShows(t *testing.T) {
 	term := attachIn(t, base, "e2e-fps", startOpts{})
 	maxFPSRow(t, term, "240")
 
-	// auto, written the way a person would, through a reload. A file that
-	// did not load would leave the row at 240.
 	saveConfigLikeAnEditor(t, base, maxFPSConfig(`"auto"`))
 	openMaxFPSRow(t, term, "Auto (60)", configWatchTimeout)
 
-	// The row steps from Auto back round to 240 and on to Auto again, and each
-	// step is saved to the file: a number bare, auto quoted.
 	if err := term.SendKeys(tuitest.Left); err != nil {
 		t.Fatalf("left: %v", err)
 	}
@@ -180,9 +160,6 @@ func TestMaxFPSAutoReadsTheDisplay(t *testing.T) {
 	alive(t, local, "after auto read the display")
 }
 
-// fakeHyprland puts a stand-in hyprctl under base that reports one monitor
-// at each rate, and returns the environment of a Hyprland desktop that finds
-// it first on the PATH.
 func fakeHyprland(t *testing.T, base string, rates ...string) []string {
 	t.Helper()
 	bin := filepath.Join(base, "fakebin")
@@ -206,8 +183,6 @@ func fakeHyprland(t *testing.T, base string, rates ...string) []string {
 	}
 }
 
-// frameCounter counts the frames tuios writes to its terminal. Each frame is
-// one synchronized update, so it opens with one DECSET 2026.
 type frameCounter struct {
 	mu     sync.Mutex
 	frames int
@@ -217,8 +192,6 @@ type frameCounter struct {
 func (c *frameCounter) Write(p []byte) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// Keep the end of the last write, so a marker split across two writes is
-	// counted once.
 	joined := append(c.tail, p...)
 	c.frames += bytes.Count(joined, syncBegin) - bytes.Count(c.tail, syncBegin)
 	keep := min(len(joined), len(syncBegin)-1)
@@ -232,9 +205,6 @@ func (c *frameCounter) count() int {
 	return c.frames
 }
 
-// measureFrameRate starts tuios with max_fps set to value, keeps a pane
-// printing as fast as the shell can, and returns the frames a second tuios
-// draws once it has settled.
 func measureFrameRate(t *testing.T, value string, displayHz ...string) float64 {
 	t.Helper()
 	base := spotlightConfigFile(t, maxFPSConfig(value))

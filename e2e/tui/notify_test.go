@@ -17,10 +17,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The [notify] push notifications, against a real daemon and a local HTTP
-// server that stands in for ntfy, Pushover and a webhook.
-
-// pushRequest is one request the fake provider received.
 type pushRequest struct {
 	Provider string            `json:"provider"`
 	Path     string            `json:"path"`
@@ -28,7 +24,6 @@ type pushRequest struct {
 	Body     string            `json:"body"`
 }
 
-// fakePush records every request it gets, by provider.
 type fakePush struct {
 	srv  *httptest.Server
 	mu   sync.Mutex
@@ -57,7 +52,6 @@ func newFakePush(t *testing.T) *fakePush {
 	return f
 }
 
-// of returns the requests one provider got.
 func (f *fakePush) of(provider string) []pushRequest {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -70,14 +64,12 @@ func (f *fakePush) of(provider string) []pushRequest {
 	return out
 }
 
-// total is how many requests arrived.
 func (f *fakePush) total() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.reqs)
 }
 
-// waitCounts waits until each provider has got want requests.
 func (f *fakePush) waitCounts(t *testing.T, want int, what string) {
 	t.Helper()
 	deadline := time.Now().Add(shellTimeout)
@@ -93,7 +85,6 @@ func (f *fakePush) waitCounts(t *testing.T, want int, what string) {
 	}
 }
 
-// save writes what the fake provider received as the test's artifact.
 func (f *fakePush) save(t *testing.T, name string) {
 	t.Helper()
 	f.mu.Lock()
@@ -104,18 +95,15 @@ func (f *fakePush) save(t *testing.T, name string) {
 	}
 }
 
-// The secrets the config hands the daemon, one per way a secret is read.
 const (
-	pushFileToken = "tk-file-6f1d2c"         // ntfy token_file
-	pushEnvToken  = "pushover-env-8a7b3e"    // Pushover token_env
-	pushUserKey   = "pushover-user-key-41c9" // Pushover user, inline
-	pushHookToken = "hook-inline-0d5e77"     // webhook token, inline
-	pushTopic     = "tuios-topic-secret-c3"  // the ntfy topic name
+	pushFileToken = "tk-file-6f1d2c"
+	pushEnvToken  = "pushover-env-8a7b3e"
+	pushUserKey   = "pushover-user-key-41c9"
+	pushHookToken = "hook-inline-0d5e77"
+	pushTopic     = "tuios-topic-secret-c3"
 	pushEnvName   = "TUIOS_E2E_PUSH_TOKEN"
 )
 
-// writeNotifyConfig writes a config.toml whose [notify] table sends to f with
-// quiet_active_seconds set to quiet and cooldown_seconds to cooldown.
 func writeNotifyConfig(t *testing.T, base string, f *fakePush, quiet, cooldown int) {
 	t.Helper()
 	dir := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios")
@@ -165,8 +153,6 @@ func TestNotifyPushesAnApprovalNobodyIsLookingAt(t *testing.T) {
 	fake := newFakePush(t)
 	base := t.TempDir()
 	killDaemon(t, base)
-	// No cooldown, so the per-item de-dupe is the only thing that can hold
-	// back a second send for the same pane.
 	writeNotifyConfig(t, base, fake, 120, 0)
 
 	if out, err := tuiosCLI(t, base, "new", "e2e-agent", "--detach"); err != nil {
@@ -235,8 +221,6 @@ func TestNotifyPushesAnApprovalNobodyIsLookingAt(t *testing.T) {
 		t.Errorf("the webhook did not get the inline token")
 	}
 
-	// The same state again, three times, and then the line changing: the
-	// item is the same one, so nothing more is sent.
 	for range 3 {
 		if out, err := tuiosCLI(t, base, "set-agent-state", "-s", "e2e-agent", "needs_input",
 			"--kind", "approval", "--harness", "claude-code", "-m", "approve Bash: make test"); err != nil {
@@ -247,7 +231,6 @@ func TestNotifyPushesAnApprovalNobodyIsLookingAt(t *testing.T) {
 		"--kind", "approval", "--harness", "claude-code", "-m", "approve Bash: make lint"); err != nil {
 		t.Fatalf("change the line: %v\n%s", err, out)
 	}
-	// The positive half: the item did change, so an update event went out.
 	deadline := time.Now().Add(uiTimeout)
 	for {
 		out, _ := tuiosCLI(t, base, "list-attention")
@@ -259,14 +242,11 @@ func TestNotifyPushesAnApprovalNobodyIsLookingAt(t *testing.T) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	// Absence cannot be waited for. A second send would be queued at once,
-	// so a second is plenty for it to land.
 	time.Sleep(time.Second)
 	if n := fake.total(); n != 3 {
 		t.Fatalf("after repeated reports and a changed line the providers got %d requests, want the first 3 only", n)
 	}
 
-	// tuios notify test reaches each provider, and says so per provider.
 	out, err := tuiosCLI(t, base, "notify", "test")
 	if err != nil {
 		t.Fatalf("notify test: %v\n%s", err, out)
@@ -285,7 +265,6 @@ func TestNotifyPushesAnApprovalNobodyIsLookingAt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the daemon log: %v", err)
 	}
-	// The positive half: the log is the right one, and it says what was sent.
 	if !strings.Contains(string(logData), "[NOTIFY] ntfy ("+host+") sent item "+item) {
 		t.Errorf("the daemon log does not record the ntfy send")
 	}
@@ -323,7 +302,6 @@ func TestNotifyHoldsWhileAPersonTypesAtAClient(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}
-	// An attached client starts in terminal mode, so this goes to the shell.
 	if err := term.SendKeys("echo typed-at-the-desk", tuitest.Enter); err != nil {
 		t.Fatalf("type: %v", err)
 	}
@@ -354,7 +332,6 @@ func TestNotifyHoldsWhileAPersonTypesAtAClient(t *testing.T) {
 	}
 	saveArtifact(t, term, artifactDir(t), "notify-quiet-client")
 
-	// The person leaves. The client goes, and the daemon forgets it.
 	_ = term.Close()
 	deadline = time.Now().Add(uiTimeout)
 	for {
@@ -416,8 +393,6 @@ func TestNotifySendsAHeldItemWhenThePersonStaysAway(t *testing.T) {
 	}, shellTimeout); err != nil {
 		t.Fatalf("the shell never ran the line: %v\n%s", err, term.Snapshot())
 	}
-	// The last key went before the shell echoed it, so this is a little
-	// after the daemon's own record of it.
 	typed := time.Now()
 	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", "e2e-agent", "needs_input",
 		"--kind", "approval", "--harness", "claude-code", "-m", "approve Bash: wait for me"); err != nil {
@@ -438,8 +413,6 @@ func TestNotifySendsAHeldItemWhenThePersonStaysAway(t *testing.T) {
 	alive(t, term, "after the held notification")
 }
 
-// pathWithout makes a directory that links every program on PATH except the
-// named ones, and returns it as the whole PATH.
 func pathWithout(t *testing.T, skip ...string) string {
 	t.Helper()
 	dir := t.TempDir()

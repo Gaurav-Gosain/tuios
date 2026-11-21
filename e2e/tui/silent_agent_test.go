@@ -75,7 +75,6 @@ func TestASilentWorkerStillSelectsAsWorking(t *testing.T) {
 		return out
 	}
 
-	// Wait for the silence.
 	var builder row
 	deadline := time.Now().Add(30 * time.Second)
 	for {
@@ -133,7 +132,6 @@ func TestASilentWorkerStillSelectsAsWorking(t *testing.T) {
 		}
 	}
 
-	// The worker speaks again: the silence goes.
 	if out, err := tuiosCLI(t, base, "set-agent-state", "working", "-s", sess, "-w", "builder", "--harness", "claude-code", "-m", "Reading the failures"); err != nil {
 		t.Fatalf("report working again: %v\n%s", err, out)
 	}

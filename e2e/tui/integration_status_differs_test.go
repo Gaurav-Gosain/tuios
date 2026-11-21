@@ -97,7 +97,6 @@ func TestIntegrationStatusNamesWhatDiffers(t *testing.T) {
 		return cfg.Hooks["PreToolUse"][0].Hooks[0].Command
 	}
 
-	// Forwarder hooks, read by a tuios that finds no socket tool.
 	fwd := newHome("home-forwarder")
 	run(fwd, withSocket, "integration", "install", "claude-code", "--command", tuiosBin)
 	if !strings.Contains(installedCommand(fwd), "agent-hook-event") {
@@ -110,7 +109,6 @@ func TestIntegrationStatusNamesWhatDiffers(t *testing.T) {
 		run(fwd, noSocket, "integration", "status", "claude-code", "--command", tuiosBin),
 		"the hooks send events to the daemon", "no nc or socat")
 
-	// Plain hooks, read by a tuios that finds one.
 	plain := newHome("home-plain")
 	run(plain, noSocket, "integration", "install", "claude-code", "--command", tuiosBin)
 	if strings.Contains(installedCommand(plain), "agent-hook-event") {
@@ -120,7 +118,6 @@ func TestIntegrationStatusNamesWhatDiffers(t *testing.T) {
 		run(plain, withSocket, "integration", "status", "claude-code", "--command", tuiosBin),
 		"the hooks start tuios for each event")
 
-	// A hook removed by hand.
 	settings := filepath.Join(fwd, ".claude", "settings.json")
 	data, err := os.ReadFile(settings)
 	if err != nil {

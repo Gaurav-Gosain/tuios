@@ -93,8 +93,6 @@ func TestHookFromPaneWhoseSessionNameIsGone(t *testing.T) {
 			}
 			otherContent := waitMoveCapture(t, call, "omega", otherWin, "OTHER-DONE-42")
 			art.add("set-agent-state from a second pane", map[string]any{"session": "alpha", "window": win, "from": otherWin}, map[string]any{"content": otherContent}, "")
-			// Refusal can precede session/window lookup, so accept its lookup error
-			// or the own-pane permission refusal.
 			if !strings.Contains(otherContent, wantError) && !strings.Contains(otherContent, "forbidden") {
 				t.Errorf("ASSERTION: a call from a second pane naming the stale session and the first pane was not refused:\n%s", otherContent)
 			}

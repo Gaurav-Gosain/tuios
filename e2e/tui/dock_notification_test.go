@@ -10,10 +10,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// dockRow returns the last non-empty row, which is where the dock lives, so an
-// assertion can say "the message is in the dock" rather than "the message is
-// somewhere on screen". That distinction is the whole point of this design: the
-// old toasts were on screen too, drawn on top of a pane.
 func dockRow(s tuitest.Screen) string {
 	_, rows := s.Size()
 	for y := rows - 1; y >= 0; y-- {
@@ -24,8 +20,6 @@ func dockRow(s tuitest.Screen) string {
 	return ""
 }
 
-// paneRows returns everything above the dock, so a test can assert a message is
-// absent from the region the old renderer used to cover.
 func paneRows(s tuitest.Screen) string {
 	_, rows := s.Size()
 	var b strings.Builder
@@ -56,10 +50,6 @@ func TestNotificationLandsInTheDockNotOverAPane(t *testing.T) {
 			waitBoot(t, term)
 			newWindow(t, term)
 
-			// Toggling tiling pushes a message the app itself generates, so
-			// this does not depend on a test-only injection path. Tiling
-			// starts off, because startup.tiled ships on and the message this
-			// waits for is the one the key pushes going the other way.
 			disableTiling(t, term)
 			if err := term.SendKeys("t"); err != nil {
 				t.Fatalf("send 't': %v", err)
@@ -67,8 +57,6 @@ func TestNotificationLandsInTheDockNotOverAPane(t *testing.T) {
 			if err := term.WaitForText("Tiling on", uiTimeout); err != nil {
 				t.Fatalf("no message after toggling tiling: %v\n%s", err, term.Snapshot())
 			}
-			// The cap and the rule are drawn with the block; one more frame
-			// lets a late compose land before they are read.
 			time.Sleep(300 * time.Millisecond)
 
 			s := term.Screen()
@@ -83,7 +71,6 @@ func TestNotificationLandsInTheDockNotOverAPane(t *testing.T) {
 			saveArtifact(t, term, dir, "dock-message-"+style)
 			savePNG(t, s, shot.XTermPalette(), dir, "dock-message-"+style)
 
-			// The block is cap, space, mark, two spaces, text.
 			row, _ := findText(t, term, "Tiling on")
 			col := cellColumn(s, row, "Tiling on")
 			if row < 1 || col < 5 {
@@ -93,7 +80,6 @@ func TestNotificationLandsInTheDockNotOverAPane(t *testing.T) {
 			if mark := s.Cell(col-3, row).Content; strings.TrimSpace(mark) == "" {
 				t.Errorf("%s: no severity mark left of the text\n%s", style, term.Snapshot())
 			}
-			// The rule above the block: its cells over the block's span.
 			colours := map[tuitest.Color]bool{}
 			for x := col - 5; x < col+len("Tiling on"); x++ {
 				colours[s.Cell(x, row-1).Fg] = true
@@ -118,8 +104,6 @@ func TestNotificationLandsInTheDockNotOverAPane(t *testing.T) {
 	}
 }
 
-// cellColumn is the cell column where text starts on row, or -1. It counts
-// cells, not runes: a Nerd Font mark can take two cells and one rune.
 func cellColumn(s tuitest.Screen, row int, text string) int {
 	cols, _ := s.Size()
 	for x := range cols {
@@ -134,9 +118,6 @@ func cellColumn(s tuitest.Screen, row int, text string) int {
 	return -1
 }
 
-// ruleHasTwoInks reports whether the rule row is drawn in more than one
-// colour: span holds the colours of its cells over the message, and the rest
-// of the row is the dock's own hairline.
 func ruleHasTwoInks(s tuitest.Screen, row int, span map[tuitest.Color]bool) bool {
 	all := map[tuitest.Color]bool{}
 	cols, _ := s.Size()

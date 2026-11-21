@@ -52,8 +52,6 @@ func TestLoginShellReadsTheLoginFiles(t *testing.T) {
 			".bashrc":       "BRC=$((BRC+1))\nPS1=\"B-${TK_LOGIN:-none}-$BRC> \"\n",
 		}, nil)
 		win := firstWindow(t, base, sess).ID
-		// .bash_profile ran, and it read .bashrc: tuios's rc file did not
-		// read it a second time.
 		siWaitScreen(t, base, sess, win, "B-bash_profile-1>")
 		if bashMarks(t, bash) {
 			if out := siRunOK(t, base, sess, win, "echo RUN-''WORKS"); !strings.Contains(out, "RUN-WORKS") {
@@ -77,8 +75,6 @@ func TestLoginShellReadsTheLoginFiles(t *testing.T) {
 		fish := siShellPath(t, "fish")
 		const sess = "lsfish"
 		base := siSession(t, sess, fish, loginOn, map[string]string{
-			// fish reads its config from XDG_CONFIG_HOME, the harness's,
-			// next to the test's home.
 			"../XDG_CONFIG_HOME/fish/config.fish": "if status is-login\n    set -gx TK_LOGIN fish\nend\nfunction fish_greeting; end\nfunction fish_prompt; echo -n \"F-$TK_LOGIN> \"; end\n",
 		}, nil)
 		win := firstWindow(t, base, sess).ID
@@ -98,8 +94,6 @@ func TestLoginShellReadsTheLoginFiles(t *testing.T) {
 	})
 }
 
-// bashMarks reports whether bash is new enough for tuios's prompt marks
-// (4.4): macOS ships bash 3.2.
 func bashMarks(t *testing.T, bash string) bool {
 	t.Helper()
 	out, err := exec.Command(bash, "-c", `echo "${BASH_VERSINFO[0]} ${BASH_VERSINFO[1]}"`).Output()

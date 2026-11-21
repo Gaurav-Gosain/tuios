@@ -80,18 +80,14 @@ func TestCockpitThreadFoldsAndImages(t *testing.T) {
 			t.Fatalf("ASSERTION: the thread does not show %q\n%s", w, term.Snapshot())
 		}
 	}
-	// The todo list is pinned above the thread, whole, and its items are
-	// drawn there only.
 	plan := strings.Index(text, "Fix the header padding")
 	if plan < 0 || plan > strings.Index(text, "Show me where the header overlaps.") || strings.Count(text, "Fix the header padding") != 1 {
 		t.Fatalf("ASSERTION: the todo list is not pinned above the thread, once\n%s", term.Snapshot())
 	}
-	// The pasted image sits under its prompt, above the turn's line.
 	headRow, headCol := findText(t, term, "PNG image  320×180")
 	if turnRow, _ := findText(t, term, "Worked for 1m 0s"); turnRow < headRow {
 		t.Fatalf("ASSERTION: the image card is under the turn's line (row %d), not under its prompt (row %d)\n%s", turnRow, headRow, term.Snapshot())
 	}
-	// The picture sits on the card's rows, under its head line.
 	if err := term.WaitFor(func(tuitest.Screen) bool {
 		return strings.Contains(host.String(), fmt.Sprintf("\x1b[%d;%dH\x1b_Ga=p,i=", headRow+2, headCol+1))
 	}, 5*time.Second); err != nil {
@@ -100,8 +96,6 @@ func TestCockpitThreadFoldsAndImages(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "thread-cards-closed", hostPictures(t, []byte(host.String()))...)
 
-	// The results table keeps every cell: the long cell wraps in its column,
-	// so its last word shows, and no cell ends in an ellipsis.
 	scrollUntil(t, term, "J", "ui tests")
 	saveCockpitFrames(t, term, "thread-cards-table")
 	var tableRows []string
@@ -114,12 +108,9 @@ func TestCockpitThreadFoldsAndImages(t *testing.T) {
 		t.Fatalf("ASSERTION: the thread cut a table cell\n%s", term.Snapshot())
 	}
 
-	// The finished turn opens on a click on its line.
 	row, col := findText(t, term, "Worked for 1m 0s")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	waitText(t, term, "the opened turn", "Thought for 10s  Compare the header with the list grid.")
-	// The code block, 22 lines with its func line and brace: 12 lines and
-	// the rest folded.
 	scrollUntil(t, term, "K", "10 more lines")
 	if s := term.Screen().Text(); !strings.Contains(s, "line11 := 11") || strings.Contains(s, "line12 := 12") {
 		t.Fatalf("ASSERTION: the code block is not folded at 12 lines\n%s", term.Snapshot())
@@ -135,7 +126,6 @@ func TestCockpitThreadFoldsAndImages(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "thread-cards-open", hostPictures(t, []byte(host.String()))...)
 
-	// A click on the image card opens the image view.
 	scrollUntil(t, term, "K", "click to view")
 	row, col = findText(t, term, "click to view")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
@@ -149,18 +139,11 @@ func TestCockpitThreadFoldsAndImages(t *testing.T) {
 	alive(t, term, "after the thread cards")
 }
 
-// startCardsThread starts a client of cols by rows on the thread of
-// cardsTranscript: an agent in the api session whose transcript holds the
-// pasted image card. extra is more config. It returns the client and the
-// stream it wrote to its host.
 func startCardsThread(t *testing.T, cols, rows int, extra string) (*tuitest.Terminal, *lockedBuffer) {
 	t.Helper()
 	return startCardsThreadWith(t, cols, rows, extra, false)
 }
 
-// startCardsThreadWith is startCardsThread, and with table the thread also
-// has the results table with a cell wider than the thread. The table is tall
-// when it wraps, so the tests on a short screen leave it out.
 func startCardsThreadWith(t *testing.T, cols, rows int, extra string, table bool) (*tuitest.Terminal, *lockedBuffer) {
 	t.Helper()
 	base := t.TempDir()
@@ -201,7 +184,6 @@ func startCardsThreadWith(t *testing.T, cols, rows int, extra string, table bool
 	return term, host
 }
 
-// scrollUntil presses key until want shows, at most 15 times.
 func scrollUntil(t *testing.T, term *tuitest.Terminal, key, want string) {
 	t.Helper()
 	for range 15 {
@@ -218,8 +200,6 @@ func scrollUntil(t *testing.T, term *tuitest.Terminal, key, want string) {
 	}
 }
 
-// cardsTranscript is the transcript of TestCockpitThreadFoldsAndImages, with
-// times before now. withTable adds the results table to turn 2.
 func cardsTranscript(t *testing.T, now time.Time, withTable bool) []byte {
 	t.Helper()
 	at := func(ago time.Duration) string { return now.Add(-ago).UTC().Format("2006-01-02T15:04:05.000Z") }
@@ -229,7 +209,6 @@ func cardsTranscript(t *testing.T, now time.Time, withTable bool) []byte {
 		code = append(code, fmt.Sprintf("\tline%d := %d", i, i))
 	}
 	answer := "The header overlaps the list by two rows:\n\n```go\nfunc layout() {\n" + strings.Join(code, "\n") + "\n}\n```\n\nThe grid starts too high."
-	// A results table whose long cell is wider than the thread.
 	table := "| Check | Result | Note |\n|-------|--------|------|\n" +
 		"| padding | " + strings.Repeat("the header keeps two rows of padding above the list grid ", 4) + "TABLEEND | ui tests |\n" +
 		"| overlap | fixed | none |"
@@ -266,7 +245,6 @@ func cardsTranscript(t *testing.T, now time.Time, withTable bool) []byte {
 		}}},
 	}
 	if withTable {
-		// The table goes before the Bash call, the last record.
 		rec := map[string]any{"type": "assistant", "timestamp": at(3*time.Minute + 2*time.Second), "message": map[string]any{"role": "assistant", "content": []any{
 			map[string]any{"type": "text", "text": table},
 		}}}

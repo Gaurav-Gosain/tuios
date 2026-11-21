@@ -33,9 +33,6 @@ import (
 // --cpuprofile".
 func TestCPUProfileWrittenByLongRunningCommands(t *testing.T) {
 	requireReal(t, "OS process or perf topic")
-	// launch starts tuios with args in workDirIn(base), stdin an open pipe,
-	// and returns the process, its stdin, its stdout lines and a channel
-	// closed once it has exited.
 	launch := func(t *testing.T, base string, args ...string) (*exec.Cmd, *os.File, <-chan string, <-chan struct{}) {
 		t.Helper()
 		cmd := exec.Command(tuiosBin, args...)
@@ -66,7 +63,6 @@ func TestCPUProfileWrittenByLongRunningCommands(t *testing.T) {
 			for sc.Scan() {
 				lines <- sc.Text()
 			}
-			// A read error ends the lines as EOF does.
 			_ = sc.Err()
 			close(lines)
 			_ = cmd.Wait()
@@ -112,8 +108,6 @@ func TestCPUProfileWrittenByLongRunningCommands(t *testing.T) {
 		}
 	}
 
-	// framedThenSignal starts tuios with args on a fake terminal, waits for
-	// the first frame, which frame matches, sends sig and waits for the exit.
 	framedThenSignal := func(t *testing.T, base string, cols, rows int, frame *regexp.Regexp, sig os.Signal, args ...string) {
 		t.Helper()
 		ft := startFakeTerm(t, base, cols, rows, fakeTermOpts{bg: "rgb:0000/0000/0000", fg: "rgb:ffff/ffff/ffff"}, args...)
@@ -125,13 +119,8 @@ func TestCPUProfileWrittenByLongRunningCommands(t *testing.T) {
 	}
 
 	cases := []struct {
-		name string
-		// clean also runs the command without the flag and checks its
-		// directory.
+		name  string
 		clean bool
-		// setup prepares what the runs share and returns the run, which
-		// starts the command with the extra flags under base, waits until it
-		// is ready, stops it and waits for it to exit.
 		setup func(t *testing.T) func(t *testing.T, base string, extra ...string)
 	}{
 		{"daemon", true, func(*testing.T) func(*testing.T, string, ...string) {
@@ -259,8 +248,6 @@ func TestCPUProfileWrittenByLongRunningCommands(t *testing.T) {
 			if err := os.WriteFile(tapeFile, []byte("Sleep 10m\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			// The fake terminal does not report synchronized output, so the
-			// frame is the alternate screen entered, cleared and drawn on.
 			frame := regexp.MustCompile(`\x1b\[\?1049h[\s\S]*\x1b\[2J[^\x1b]*\x1b\[[0-9;]*m[^\x1b]+`)
 			return func(t *testing.T, base string, extra ...string) {
 				framedThenSignal(t, base, 120, 36, frame, syscall.SIGTERM, append([]string{"tape", "play", tapeFile}, extra...)...)
@@ -278,7 +265,6 @@ func TestCPUProfileWrittenByLongRunningCommands(t *testing.T) {
 		}},
 	}
 
-	// files lists every path under dir, relative to it, sorted.
 	files := func(t *testing.T, dir string) []string {
 		t.Helper()
 		var out []string
@@ -303,9 +289,6 @@ func TestCPUProfileWrittenByLongRunningCommands(t *testing.T) {
 			run := tc.setup(t)
 
 			prof := filepath.Join(t.TempDir(), "cpu.prof")
-			// Read once every process the run started has been waited for,
-			// gui-bridge's among them, which its fixture waits for in its
-			// cleanup.
 			t.Cleanup(func() {
 				f, err := os.Open(prof)
 				if err != nil {

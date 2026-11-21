@@ -14,9 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// codeWrapLine is a Go line of about 300 columns. Its words fall on the edge
-// of a wrapped row in more than one place, so a join that eats or adds a
-// space shows.
 var codeWrapLine = func() string {
 	var b strings.Builder
 	b.WriteString(`var table = []string{`)
@@ -101,8 +98,6 @@ func TestCockpitThreadCodeBlockWrap(t *testing.T) {
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "code-open")
 
-	// 1. Cut: the line ends in the cut mark, in the mute ink of the
-	// block's language label, and its end is not on screen.
 	s := term.Screen()
 	row := rowWith(s, "var table")
 	line := []rune(strings.TrimRight(s.Line(row), " "))
@@ -127,8 +122,6 @@ func TestCockpitThreadCodeBlockWrap(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "code-cut")
 
-	// 2. W wraps: the whole line shows, and each row after its first has the
-	// continuation mark.
 	ckPress(t, term, tuitest.Tab)
 	if err := term.SendKeys("W"); err != nil {
 		t.Fatal(err)
@@ -153,7 +146,6 @@ func TestCockpitThreadCodeBlockWrap(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "code-wrapped")
 
-	// 3. Copy mode yanks the wrapped rows as the one line they are.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +185,6 @@ func TestCockpitThreadCodeBlockWrap(t *testing.T) {
 	}
 	_ = term.WaitStable(uiTimeout)
 
-	// 4. W again cuts the line.
 	if err := term.SendKeys("W"); err != nil {
 		t.Fatal(err)
 	}

@@ -9,15 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Issue #486: the help says a bare `tuios attach` attaches to the most recent
-// session. The daemon took the first session a range over its session map
-// gave, and Go randomises map order, so with several sessions the client
-// landed on any of them.
-//
-// "Most recent" is the session the person used last: the one they typed in.
-// A window an agent opens, or a command a script routes to a client, is not
-// the person using a session, so neither may pull the attach away.
-
 // TestBareAttachLandsOnTheSessionTypedInLast makes four sessions. Each round
 // attaches a client to one of them by name, uses it as the person would, and
 // detaches. Odd rounds type a command into its pane, which reaches the daemon
@@ -45,8 +36,6 @@ func TestBareAttachLandsOnTheSessionTypedInLast(t *testing.T) {
 		if i%2 == 0 {
 			typeInSession(t, base, target, i)
 		} else {
-			// Workspace 2: a switch past the next workspace opens the next
-			// one, so a higher number would land there all the same.
 			switchWorkspaceIn(t, base, target, 2)
 		}
 		got := bareAttachLandsOn(t, base)
@@ -73,12 +62,9 @@ func TestBareAttachIgnoresAgentWindowsAndRoutedCommands(t *testing.T) {
 			t.Fatalf("create %s: %v: %s", name, err, out)
 		}
 	}
-	// A client that sits on watched and is never typed in. attachIn would
-	// press Alt+Esc in it, which is the person using watched.
 	startIn(t, base, startOpts{args: []string{"attach", "watched"}})
 	clientShows(t, base, "watched")
 
-	// The agent: windows opened from outside every client.
 	agentWindows := func() {
 		t.Helper()
 		for range 3 {
@@ -89,8 +75,6 @@ func TestBareAttachIgnoresAgentWindowsAndRoutedCommands(t *testing.T) {
 		}
 	}
 
-	// Nobody has typed yet, so the activity decides, and the agent's
-	// windows are the latest.
 	agentWindows()
 	if got := bareAttachLandsOn(t, base); got != "agent" {
 		t.Fatalf("before any typing a bare attach landed on %q, want \"agent\", the latest activity: the fixture does not hold", got)
@@ -99,8 +83,6 @@ func TestBareAttachIgnoresAgentWindowsAndRoutedCommands(t *testing.T) {
 
 	typeInSession(t, base, "person", 0)
 	agentWindows()
-	// The script: a command routed to the client on watched, which pushes
-	// the state it changes.
 	if out, err := tuiosCLI(t, base, "select-workspace", "-s", "watched", "2"); err != nil {
 		t.Fatalf("select-workspace in watched: %v: %s", err, out)
 	}
@@ -127,8 +109,6 @@ func TestBareAttachIgnoresKeysSentToATerminalModeClient(t *testing.T) {
 			t.Fatalf("create %s: %v: %s", name, err, out)
 		}
 	}
-	// A client boots in terminal mode. No key is pressed in it: attachIn
-	// would press Alt+Esc, which is the person using watched.
 	watcher := startIn(t, base, startOpts{args: []string{"attach", "watched"}})
 	clientShows(t, base, "watched")
 
@@ -191,7 +171,6 @@ func TestBareAttachFollowsASwitchFromTheSessionBrowser(t *testing.T) {
 		t.Fatalf("the browser did not switch to second: %v\n%s", err, term.Snapshot())
 	}
 	clientShows(t, base, "second")
-	// Reading: the screen redraws, and no key is pressed.
 	time.Sleep(500 * time.Millisecond)
 	if err := term.Close(); err != nil {
 		t.Logf("close the client: %v", err)
@@ -217,8 +196,6 @@ func TestBareAttachAfterARestartLandsOnTheSessionTypedInLast(t *testing.T) {
 	}
 	typeInSession(t, base, "alpha", 0)
 	waitNoClient(t, base, 3)
-	// kill-server saves every session on the way out, and the bare attach
-	// starts the daemon again, which restores them.
 	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
 		t.Fatalf("kill-server: %v: %s", err, out)
 	}
@@ -227,8 +204,6 @@ func TestBareAttachAfterARestartLandsOnTheSessionTypedInLast(t *testing.T) {
 	}
 }
 
-// typeInSession attaches a client to session by name, types a command into its pane
-// as the person would, waits for the shell to run it, and detaches.
 func typeInSession(t *testing.T, base, session string, round int) {
 	t.Helper()
 	term := attachIn(t, base, session, startOpts{})
@@ -251,14 +226,9 @@ func typeInSession(t *testing.T, base, session string, round int) {
 		t.Logf("close the client on %s: %v", session, err)
 	}
 	waitNoClientOn(t, base, session)
-	// Two uses in the same instant would tie.
 	time.Sleep(20 * time.Millisecond)
 }
 
-// switchWorkspaceIn attaches a client to session by name, presses Alt and ws
-// in window mode as the person would, waits for the session to show that
-// workspace, and detaches. Nothing reaches a pane: the use is the client's
-// state push alone.
 func switchWorkspaceIn(t *testing.T, base, session string, ws int) {
 	t.Helper()
 	term := attachIn(t, base, session, startOpts{})
@@ -274,9 +244,6 @@ func switchWorkspaceIn(t *testing.T, base, session string, ws int) {
 	time.Sleep(20 * time.Millisecond)
 }
 
-// bareAttachLandsOn runs a bare attach, returns the session it landed on, and
-// detaches it. It counts clients per session, so it also works while another
-// session already has a client.
 func bareAttachLandsOn(t *testing.T, base string) string {
 	t.Helper()
 	before := clientCounts(base)
@@ -297,7 +264,6 @@ func bareAttachLandsOn(t *testing.T, base string) string {
 	if err := client.Close(); err != nil {
 		t.Logf("close the bare client: %v", err)
 	}
-	// Wait for the client to go, so the next count starts from where it was.
 	for time.Now().Before(deadline.Add(uiTimeout)) {
 		if clientCounts(base)[got] == before[got] {
 			break
@@ -307,7 +273,6 @@ func bareAttachLandsOn(t *testing.T, base string) string {
 	return got
 }
 
-// clientCounts is the number of attached clients on each session.
 func clientCounts(base string) map[string]int {
 	counts := map[string]int{}
 	out, err := tuiosOut(base, "list-clients", "--json")
@@ -328,8 +293,6 @@ func clientCounts(base string) map[string]int {
 	return counts
 }
 
-// newClientSession is the one session that has one more client in now than
-// in before, or "" when none or more than one does.
 func newClientSession(before, now map[string]int) string {
 	name := ""
 	for session, n := range now {
@@ -344,7 +307,6 @@ func newClientSession(before, now map[string]int) string {
 	return name
 }
 
-// waitNoClient waits until all n sessions are listed and none has a client.
 func waitNoClient(t *testing.T, base string, n int) {
 	t.Helper()
 	rows := waitForRows(t, base, func(rows []lsRow) bool {
@@ -362,7 +324,6 @@ func waitNoClient(t *testing.T, base string, n int) {
 	}
 }
 
-// waitNoClientOn waits until session has no client.
 func waitNoClientOn(t *testing.T, base, session string) {
 	t.Helper()
 	waitForRows(t, base, func(rows []lsRow) bool {

@@ -12,8 +12,6 @@ import (
 	"strings"
 )
 
-// selection is the outcome: every test, or the named ones, and one line per
-// changed file that says what it selected.
 type selection struct {
 	all     bool
 	tests   map[string]bool
@@ -40,27 +38,20 @@ func (s *selection) report(chosen, total int) string {
 	return b.String()
 }
 
-// pkgInfo is one workspace package of the binary or of the suite.
 type pkgInfo struct {
-	dir     string // relative to the repository root
+	dir     string
 	imports []string
-	embeds  map[string]bool // embedded files, relative to the repository root
+	embeds  map[string]bool
 }
 
 type graph struct {
-	// bin is every workspace package of the binary or of the suite's test
-	// process, by directory. The coverage run measures both processes.
 	bin       map[string]*pkgInfo
-	harness   map[string]bool     // directories of packages the suite itself builds
-	importers map[string][]string // directory to the directories that import it; the suite is suiteDir
+	harness   map[string]bool
+	importers map[string][]string
 }
 
-// suiteDir is the suite's own package. It is an importer in the graph, so a
-// changed name reaches the suite's code that names it (see reach).
 const suiteDir = "e2e/tui"
 
-// The paths that can change neither the binary nor the suite. Anything not
-// named here and not in a Go package runs the whole suite.
 var inert = []*regexp.Regexp{
 	regexp.MustCompile(`\.md$`),
 	regexp.MustCompile(`^docs/`),
@@ -72,22 +63,15 @@ var inert = []*regexp.Regexp{
 	regexp.MustCompile(`^(LICENSE|CITATION\.cff|FUNDING\.yml|Dockerfile|\.dockerignore|justfile|flake\.nix|flake\.lock|tuios\.nix|install\.sh|install-web\.sh|\.envrc|\.gitignore|\.gitattributes|\.golangci\.yml|\.goreleaser\.yml|\.markdownlint\.json|demo\.gif|demo\.avif)$`),
 }
 
-// The files that set the build flags of the binary under test (see
-// scripts/goflags.sh). A change to one changes the binary as a whole, as a
-// change no name carries does.
 var buildFlags = regexp.MustCompile(`^scripts/(goflags\.sh|noinline-packages\.txt)$`)
 
-// The paths that always run the whole suite, checked before anything else.
 var global = []*regexp.Regexp{
 	regexp.MustCompile(`^\.github/`),
 	regexp.MustCompile(`^scripts/e2e-tested\.sh$`),
 }
 
-// committedMap is the map in the repository. scripts/e2e-select.sh may pass
-// a newer one from the map workflow instead.
 const committedMap = "e2e/tui/testselect/testmap.txt"
 
-// buildInputs are the non-Go files the go command compiles into a package.
 var buildInputs = regexp.MustCompile(`\.(s|S|c|cc|cpp|cxx|h|hh|hpp|hxx|m|f|F|for|f90|swig|swigcxx|syso)$`)
 
 func choose(root, base, head, mapFile string, m *testMap, testNames []string) *selection {
@@ -115,11 +99,11 @@ func choose(root, base, head, mapFile string, m *testMap, testNames []string) *s
 		}
 		return sg, nil
 	}
-	bodyFuncs := map[funcRef]bool{} // functions whose body alone changed
-	declPkgs := map[string]bool{}   // packages changed in a way only their importers bound
-	var names []name                // declarations that changed
-	reaches := false                // the change reaches the binary or the suite
-	var srcs map[string][]byte      // the suite's test files, read on first use
+	bodyFuncs := map[funcRef]bool{}
+	declPkgs := map[string]bool{}
+	var names []name
+	reaches := false
+	var srcs map[string][]byte
 	for _, c := range changes {
 		p := c.path
 		switch {
@@ -130,10 +114,6 @@ func choose(root, base, head, mapFile string, m *testMap, testNames []string) *s
 		}
 		switch path.Base(p) {
 		case "go.mod", "go.sum", "go.work", "go.work.sum":
-			// Under go.work the binary builds every tuios.dev library from its
-			// folder, and the libraries workflow holds each pin to the
-			// folder's files, so a line that only moves a pin changes nothing
-			// the folder diff does not already show.
 			pins, err := pinOnly(root, base, head, p)
 			if err != nil || !pins {
 				return everything(p + " changes more than tuios.dev pins")
@@ -142,7 +122,6 @@ func choose(root, base, head, mapFile string, m *testMap, testNames []string) *s
 			continue
 		}
 		if path.Dir(p) == "e2e/tui" && strings.HasSuffix(p, ".md") {
-			// The notes beside the suite. A fixture lives under testdata.
 			sel.reasons = append(sel.reasons, p+": documentation or tooling")
 			continue
 		}
@@ -167,8 +146,6 @@ func choose(root, base, head, mapFile string, m *testMap, testNames []string) *s
 		}
 		dir := nearestPackage(p, g)
 		if dir != "" && g.harness[dir] && !m.harness {
-			// A map without the suite's own coverage cannot say which
-			// tests the harness code reaches.
 			return everything(p + " is in " + dir + ", which the e2e harness imports, and the test map has no coverage of the harness")
 		}
 		if info := g.bin[dir]; info != nil {
@@ -241,9 +218,6 @@ func choose(root, base, head, mapFile string, m *testMap, testNames []string) *s
 			reaches = true
 			sel.reasons = append(sel.reasons, p+": sets the build flags of the binary")
 		}
-		// A test can run or read a file that no package of the binary
-		// builds, by its path: TestInstallScriptUpgradesTheDaemonLive runs
-		// scripts/install.sh.
 		if srcs == nil {
 			if srcs, err = suiteSources(root); err != nil {
 				return everything(fmt.Sprintf("the suite's test files cannot be read: %v", err))
@@ -269,20 +243,12 @@ func choose(root, base, head, mapFile string, m *testMap, testNames []string) *s
 	if !reaches {
 		return sel
 	}
-	// Code of a package the harness builds runs in every test process when
-	// it changes in a way no name carries: an init function, a build
-	// constraint, cgo, or an embedded file with no variable.
 	for dir := range declPkgs {
 		if g.harness[dir] {
 			return everything(dir + " changed in a way no name carries, and the e2e harness imports it")
 		}
 	}
 
-	// A changed declaration reaches the code that names it (see reach). When
-	// that walk cannot finish, or the change has effects no name carries, the
-	// package and every package that imports it count.
-	// A method whose name some interface uses changes its type. Any other
-	// method is reached through its name like a function.
 	if slices.ContainsFunc(names, func(n name) bool { return n.recv != "" }) {
 		methods, err := interfaceMethods(root)
 		if err != nil {
@@ -314,8 +280,6 @@ func choose(root, base, head, mapFile string, m *testMap, testNames []string) *s
 		sel.reasons = append(sel.reasons, "the changed declarations are named in "+strings.Join(list, ", "))
 	}
 
-	// The tests that ran a changed function, or one that names a changed
-	// declaration, or any code of a package that counts whole.
 	near := map[string]bool{}
 	for dir := range declPkgs {
 		near[dir] = true
@@ -323,8 +287,6 @@ func choose(root, base, head, mapFile string, m *testMap, testNames []string) *s
 			near[imp] = true
 		}
 	}
-	// The suite's code is not in the map. A function of the suite that names
-	// a changed declaration selects the tests whose code reaches it.
 	var suiteDecls []string
 	for f := range refFuncs {
 		if path.Dir(f.file) == suiteDir {
@@ -388,8 +350,6 @@ func matchAny(res []*regexp.Regexp, p string) bool {
 	return slices.ContainsFunc(res, func(re *regexp.Regexp) bool { return re.MatchString(p) })
 }
 
-// nearestPackage returns the directory of the binary or harness package that
-// holds p, the closest one above it, or "".
 func nearestPackage(p string, g *graph) string {
 	for dir := path.Dir(p); ; dir = path.Dir(dir) {
 		if g.bin[dir] != nil || g.harness[dir] {
@@ -401,8 +361,6 @@ func nearestPackage(p string, g *graph) string {
 	}
 }
 
-// inGoPackage reports whether p is in a directory, or under one, that holds
-// Go files at the head.
 func inGoPackage(root, p string) bool {
 	for dir := path.Dir(p); dir != "." && dir != "/"; dir = path.Dir(dir) {
 		matches, _ := filepath.Glob(filepath.Join(root, dir, "*.go"))
@@ -414,7 +372,7 @@ func inGoPackage(root, p string) bool {
 }
 
 type change struct {
-	status byte // A, M or D
+	status byte
 	path   string
 }
 
@@ -446,16 +404,12 @@ func changedFiles(root, base, head string) ([]change, error) {
 		case 'A', 'M', 'D':
 			changes = append(changes, change{status: status[0], path: p})
 		default:
-			// A type change or anything else git may report: judge it as a
-			// file that was removed and added again.
 			changes = append(changes, change{status: 'A', path: p})
 		}
 	}
 	return changes, nil
 }
 
-// pinOnly reports whether every changed line of a go.mod, go.sum or go.work
-// names a tuios.dev module.
 func pinOnly(root, base, head, p string) (bool, error) {
 	out, err := git(root, "diff", "-U0", base, head, "--", p)
 	if err != nil {
@@ -466,8 +420,6 @@ func pinOnly(root, base, head, p string) (bool, error) {
 			continue
 		}
 		if strings.HasPrefix(line, "+") || strings.HasPrefix(line, "-") {
-			// A blank line moves with a replace block when the pin
-			// changes, and means nothing to the go command.
 			if strings.TrimSpace(line[1:]) == "" {
 				continue
 			}
@@ -479,9 +431,6 @@ func pinOnly(root, base, head, p string) (bool, error) {
 	return true, nil
 }
 
-// loadGraph lists the workspace packages of the binary, with their imports and
-// embedded files, and the packages the suite builds: its test package, the
-// helper programs under e2e/tui, and what they import.
 func loadGraph(root string) (*graph, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
@@ -549,10 +498,6 @@ func loadGraph(root string) (*graph, error) {
 		}
 	}
 
-	// The suite's test process: its own package, the helper programs under
-	// e2e/tui, and what they import. Its workspace packages join the graph,
-	// since the coverage run measures the test process too, and the suite's
-	// package is an importer of what it imports directly.
 	patterns := []string{"./e2e/tui/..."}
 	helpers, _ := filepath.Glob(filepath.Join(root, "e2e/tui/testdata/*/*.go"))
 	seen := map[string]bool{}
@@ -624,9 +569,6 @@ func mustRel(root, p string) string {
 	return r
 }
 
-// testsThatBuildTheBinary names the tests in files that build ./cmd/tuios
-// themselves. That build is not the binary the coverage run measured, so the
-// map cannot say what those tests reach.
 func testsThatBuildTheBinary(root string) map[string]bool {
 	out := map[string]bool{}
 	files, _ := filepath.Glob(filepath.Join(root, "e2e/tui/*_test.go"))
@@ -644,9 +586,6 @@ func testsThatBuildTheBinary(root string) map[string]bool {
 
 var testFunc = regexp.MustCompile(`(?m)^func (Test\w+)\(t \*testing\.T\)`)
 
-// hunk is one changed range of a diff: lines oldStart to oldStart+oldLen-1
-// became newStart to newStart+newLen-1. A length of 0 is an insertion or a
-// deletion after the start line.
 type hunk struct {
 	oldStart, oldLen, newStart, newLen int
 }

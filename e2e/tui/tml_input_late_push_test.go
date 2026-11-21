@@ -54,7 +54,6 @@ func TestTMLInputKeepsTypingOverALatePush(t *testing.T) {
 		t.Fatalf("send the show line: %v\n%s", err, out)
 	}
 	waitText(t, term, "the form", "Write the release note.", "Say why")
-	// The pushes for the form itself are late too.
 	time.Sleep(2500 * time.Millisecond)
 	cockpitClick(t, term, "Say why")
 	cockpitClick(t, term, "Say why")

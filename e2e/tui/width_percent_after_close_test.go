@@ -7,10 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// widthPercentSession opens three tiled panes, and when closeFirst is set
-// closes the first one. It focuses the pane named game and presses the width
-// key for 80%, with send-keys or, when keyboard is set, on the client's own
-// keyboard. It returns the client and the isolation root.
 func widthPercentSession(t *testing.T, closeFirst, keyboard bool) (*tuitest.Terminal, string) {
 	t.Helper()
 	term, base := start(t, startOpts{cols: 160, rows: 48, args: []string{"new", "home"}})
@@ -52,8 +48,6 @@ func widthPercentSession(t *testing.T, closeFirst, keyboard bool) (*tuitest.Term
 	return term, base
 }
 
-// assertGameAt80 waits for the pane on the screen and the pane the daemon
-// lists to both take about 80% of the width.
 func assertGameAt80(t *testing.T, term *tuitest.Terminal, base string, panes int) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -96,15 +90,6 @@ func parseWindowsOut(t *testing.T, base string) ([]winRect, bool) {
 	}
 	return parseWindows(out)
 }
-
-// The layout width keys, sent with send-keys to the attached client, have to
-// move the tiles on the screen and not only the PTYs.
-//
-// After the last key of a send-keys, the client dropped the workspace's tree
-// and tiled it again from nothing. That put every tile back to equal shares,
-// while the daemon kept the sizes the keys had set: in the report the daemon
-// listed 87 and 22 columns and the screen drew two halves. The report saw it
-// after a close. The close is not needed, so both shapes are tested.
 
 // TestWidthPercentAfterAClose is the shape in the report.
 func TestWidthPercentAfterAClose(t *testing.T) {

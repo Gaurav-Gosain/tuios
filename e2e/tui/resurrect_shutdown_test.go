@@ -54,12 +54,8 @@ func layoutSurvivesShutdown(t *testing.T, name string, attached bool) {
 	}
 
 	daemon := daemonPID(t, base)
-	// A person's layout has been on disk for a while when the machine goes
-	// down. Wait for the checkpoint, so the test asks what the shutdown does
-	// to it.
 	waitSavedWindows(t, base, session, len(shells))
 
-	// The shutdown: every shell hangs up, then the daemon is told to stop.
 	for _, pid := range shells {
 		if err := syscall.Kill(pid, syscall.SIGHUP); err != nil {
 			t.Fatalf("SIGHUP shell %d: %v", pid, err)
@@ -80,7 +76,6 @@ func layoutSurvivesShutdown(t *testing.T, name string, attached bool) {
 		waitExit(t, client, "after the daemon stopped")
 	}
 
-	// The next login: starting any session starts a daemon, which restores.
 	if out, err := tuiosCLI(t, base, "new", "after-login", "--detach"); err != nil {
 		t.Fatalf("start a new daemon: %v: %s", err, out)
 	}
@@ -100,7 +95,6 @@ func layoutSurvivesShutdown(t *testing.T, name string, attached bool) {
 	}
 }
 
-// shellPIDsIn is the pid of the shell in each pane of a session.
 func shellPIDsIn(t *testing.T, base, session string) []int {
 	t.Helper()
 	list, err := daemonJSON[struct {
@@ -121,7 +115,6 @@ func shellPIDsIn(t *testing.T, base, session string) []int {
 	return pids
 }
 
-// waitSavedWindows waits until the saved state of a session holds n windows.
 func waitSavedWindows(t *testing.T, base, session string, n int) {
 	t.Helper()
 	path := filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "sessions", session+".json")

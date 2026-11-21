@@ -89,7 +89,6 @@ func TestCockpitTalkedWith(t *testing.T) {
 	term := open(160)
 	err := term.WaitForText("Talked with", uiTimeout)
 	_ = term.WaitStable(uiTimeout)
-	// Saved first, so a build without the line leaves its frame too.
 	saveCockpitFrames(t, term, "talked-with-wide")
 	if err != nil {
 		t.Fatalf("ASSERTION: no Talked with line in alpha's header: %v\n%s", err, term.Snapshot())
@@ -103,7 +102,6 @@ func TestCockpitTalkedWith(t *testing.T) {
 	if !(at("beta") < at("eps") && at("eps") < at("delta") && at("delta") < at("gamma")) {
 		t.Fatalf("ASSERTION: the chips are not newest first: %q\n%s", line, term.Snapshot())
 	}
-	// A click on beta's chip selects beta; ctrl+o goes back.
 	mouseClick(t, term, len([]rune(line[:at("beta 3")])), row, tuitest.MouseLeft, 0)
 	waitTextFor(t, term, "beta's header", uiTimeout, "alpha 3")
 	if err := term.SendKeys(tuitest.Ctrl('o')); err != nil {
@@ -113,8 +111,6 @@ func TestCockpitTalkedWith(t *testing.T) {
 	term.Close()
 
 	term = open(80)
-	// At 80 columns the list and the focus share the screen; l opens the
-	// focus when the screen is narrow.
 	if !strings.Contains(term.Screen().Text(), "Talked with") {
 		if err := term.SendKeys("l"); err != nil {
 			t.Fatal(err)
@@ -140,7 +136,6 @@ func TestCockpitTalkedWith(t *testing.T) {
 	}
 	term.Close()
 
-	// zeta has no mail: no line.
 	term = open(160)
 	if err := term.SendKeys("/"); err != nil {
 		t.Fatal(err)

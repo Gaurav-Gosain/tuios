@@ -15,9 +15,6 @@ import (
 	"time"
 )
 
-// heapAllocRe pulls the live heap bytes out of the debug=1 heap profile
-// trailer, and goroutineTotalRe the total off the goroutine profile's first
-// line.
 var (
 	heapAllocRe      = regexp.MustCompile(`# HeapAlloc = (\d+)`)
 	goroutineTotalRe = regexp.MustCompile(`^goroutine profile: total (\d+)`)
@@ -54,8 +51,6 @@ func TestKilledSessionsReleaseTheirTranscriptJoins(t *testing.T) {
 	art := &atArtifact{t: t, name: "transcript-release.txt"}
 	t.Cleanup(art.save)
 
-	// The daemon, started as startDaemonWithPprof starts it, keeping the
-	// process for its pid.
 	env := os.Environ()
 	for _, key := range xdgKeys {
 		env = append(env, key+"="+xdgDir(base, key))
@@ -84,8 +79,6 @@ func TestKilledSessionsReleaseTheirTranscriptJoins(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	// heap is the post-collection HeapAlloc: the profile asked for twice in
-	// a row with the second kept, and the least of three such readings.
 	heap := func() int64 {
 		t.Helper()
 		least := int64(-1)
@@ -128,8 +121,6 @@ func TestKilledSessionsReleaseTheirTranscriptJoins(t *testing.T) {
 		}
 		return n
 	}
-	// watches is the number of inotify watches the daemon holds, summed over
-	// every inotify descriptor it has open. It reports false off Linux.
 	watches := func() (int, bool) {
 		t.Helper()
 		if runtime.GOOS != "linux" {
@@ -170,7 +161,6 @@ func TestKilledSessionsReleaseTheirTranscriptJoins(t *testing.T) {
 		return w, ok, h
 	}
 
-	// session makes a session of one window and returns that window.
 	session := func(name string) string {
 		t.Helper()
 		if out, err := tuiosCLI(t, base, "new", name, "--detach"); err != nil {
@@ -182,7 +172,6 @@ func TestKilledSessionsReleaseTheirTranscriptJoins(t *testing.T) {
 		}
 		return ids[0]
 	}
-	// transcript writes a transcript of one record at dir/id.jsonl.
 	transcript := func(dir, id string) string {
 		t.Helper()
 		if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -194,7 +183,6 @@ func TestKilledSessionsReleaseTheirTranscriptJoins(t *testing.T) {
 		}
 		return path
 	}
-	// join runs the real SessionStart hook from outside every pane.
 	join := func(name, win, path, id string) {
 		t.Helper()
 		hook := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", name, "--window", win)
@@ -216,7 +204,6 @@ func TestKilledSessionsReleaseTheirTranscriptJoins(t *testing.T) {
 	}
 	projects := atProjects(base)
 
-	// Warm-up: the first join's one-time costs land before the baseline.
 	warmWin := session("warm")
 	join("warm", warmWin, transcript(filepath.Join(projects, "warm"), "warm"), "warm")
 	kill("warm")
@@ -243,7 +230,6 @@ func TestKilledSessionsReleaseTheirTranscriptJoins(t *testing.T) {
 		return res
 	}
 
-	// The survivor, joined in D before the baseline, with its event stream.
 	_, _, hBefore := record("before the survivor")
 	shared := filepath.Join(projects, "shared")
 	survivorPath := transcript(shared, "survivor")
@@ -254,7 +240,6 @@ func TestKilledSessionsReleaseTheirTranscriptJoins(t *testing.T) {
 		t.Fatalf("subscribe: %v %s", ack, lerr)
 	}
 
-	// Baseline.
 	w0, linux, h0 := record("baseline (W0, H0)")
 	g0 := goroutines()
 	art.add("baseline goroutines", strconv.Itoa(g0))
@@ -272,7 +257,6 @@ func TestKilledSessionsReleaseTheirTranscriptJoins(t *testing.T) {
 		join(names[i], wins[i], transcript(dir, names[i]), names[i])
 	}
 
-	// R1: every join is watched, and reads its first record.
 	wPeak, _, hPeak := record("joined, before the kills")
 	if linux && wPeak != w0+k-1 {
 		t.Fatalf("the joins are not watched: want %d watches, got %d", w0+k-1, wPeak)
@@ -290,8 +274,6 @@ func TestKilledSessionsReleaseTheirTranscriptJoins(t *testing.T) {
 		kill(name)
 	}
 
-	// Settle: the killed sessions' panes wind down after kill-session
-	// returns.
 	settled := time.Now().Add(30 * time.Second)
 	g := goroutines()
 	for g > g0+2 {
@@ -311,8 +293,6 @@ func TestKilledSessionsReleaseTheirTranscriptJoins(t *testing.T) {
 	art.add("after the kills, settled", "watches "+count)
 	t.Logf("after the kills, settled: watches %s", count)
 
-	// The heap after the kills, for the artifact only: a reading every
-	// 500 ms for 10 s, each with its offset. The least is what stays.
 	var readings strings.Builder
 	start := time.Now()
 	least := int64(-1)
@@ -330,12 +310,10 @@ func TestKilledSessionsReleaseTheirTranscriptJoins(t *testing.T) {
 		hPeak-h0, least-h0, (least-h0)/k))
 	t.Logf("heap after the kills: least HeapAlloc %d, %+d over H0, %+d per killed session", least, least-h0, (least-h0)/k)
 
-	// R2: the watches are given back.
 	if linux && wEnd != w0 {
 		t.Fatalf("the killed sessions kept their watches: want %d (W0), got %d (%d before the kills)", w0, wEnd, wPeak)
 	}
 
-	// R4: the survivor's watch is live.
 	cursor, _ := read("survivor", survivorWin)["cursor"].(string)
 	appendLines(t, survivorPath, atRecord("survivor-2", "SECOND-survivor"))
 	ev := func() string {

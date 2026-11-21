@@ -11,32 +11,16 @@ import (
 	"time"
 )
 
-// These tests hold --server and TUIOS_SERVER to what they promise: a named
-// server is a daemon of its own, with its own socket and its own saved state,
-// and a tuios run without a name reaches the default daemon exactly as it
-// always has.
-//
-// Negative controls (NEGATIVE_CONTROLS.md, "tuios --server"):
-//   - the Apply call cut from the root command's PersistentPreRunE: --server
-//     reaches the default daemon, and every isolation assertion fails.
-//   - the TUIOS_SERVER Apply cut from main: the env-named server lands on the
-//     default daemon, and a pane's tuios lists the default daemon's sessions.
-//   - sockpath.Dir returning BaseDir: every server shares one socket.
-
-// serverCLI runs tuios under base on the named server, by flag.
 func serverCLI(t *testing.T, base, server string, args ...string) (string, error) {
 	t.Helper()
 	return tuiosCLIInDir(t, base, workDirIn(t, base), nil, append([]string{"--server", server}, args...)...)
 }
 
-// envServerCLI runs tuios under base on the named server, by TUIOS_SERVER.
 func envServerCLI(t *testing.T, base, server string, args ...string) (string, error) {
 	t.Helper()
 	return tuiosCLIInDir(t, base, workDirIn(t, base), []string{"TUIOS_SERVER=" + server}, args...)
 }
 
-// stopServerAtEnd stops a named server's daemon when the test ends, as
-// killDaemon does for the default one.
 func stopServerAtEnd(t *testing.T, base, server string) {
 	t.Helper()
 	t.Cleanup(func() {
@@ -46,15 +30,12 @@ func stopServerAtEnd(t *testing.T, base, server string) {
 	})
 }
 
-// serverRow is a row of 'tuios ls --json' with the server it names.
 type serverRow struct {
 	Name   string `json:"name"`
 	Saved  bool   `json:"saved"`
 	Server string `json:"server"`
 }
 
-// listOn runs 'ls --json' on a server ("" for the default one, run with no
-// name at all) and returns the raw output, the rows and the exit status.
 func listOn(t *testing.T, base, server string) (string, []serverRow, int) {
 	t.Helper()
 	var out string
@@ -80,8 +61,6 @@ func rowNames(rows []serverRow) []string {
 	return names
 }
 
-// waitForFileWith polls until path exists and holds want, and returns what it
-// last read.
 func waitForFileWith(t *testing.T, path, want string) string {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -94,7 +73,6 @@ func waitForFileWith(t *testing.T, path, want string) string {
 	}
 }
 
-// envOf parses `env` output into a map.
 func envOf(dump string) map[string]string {
 	vars := map[string]string{}
 	for line := range strings.SplitSeq(dump, "\n") {
@@ -128,7 +106,6 @@ func TestNamedServersAreIsolated(t *testing.T) {
 	out, err = envServerCLI(t, base, "bar", "new", "s-bar", "--detach")
 	mustNew(t, "bar's session", out, err)
 
-	// Each server lists its own session and only that one.
 	for _, c := range []struct{ server, session string }{{"", "s-def"}, {"foo", "s-foo"}, {"bar", "s-bar"}} {
 		raw, rows, code := listOn(t, base, c.server)
 		if code != 0 {
@@ -142,13 +119,10 @@ func TestNamedServersAreIsolated(t *testing.T) {
 				t.Errorf("ASSERTION: ls on server %q gave a row with server %q", c.server, r.Server)
 			}
 		}
-		// The default listing carries no server field at all, so a script
-		// reading it sees the shape it always did.
 		if c.server == "" && strings.Contains(raw, `"server"`) {
 			t.Errorf("ASSERTION: the default server's ls --json has a server field:\n%s", raw)
 		}
 	}
-	// TUIOS_SERVER reaches the same daemon the flag does.
 	out, _ = envServerCLI(t, base, "foo", "ls", "--json")
 	var envRows []serverRow
 	_ = json.Unmarshal([]byte(out), &envRows)
@@ -156,8 +130,6 @@ func TestNamedServersAreIsolated(t *testing.T) {
 		t.Errorf("ASSERTION: TUIOS_SERVER=foo ls listed %v, want s-foo:\n%s", rowNames(envRows), out)
 	}
 
-	// The tmux front takes no flags of its own, so cobra hands it the root's:
-	// --server, in either form, must still choose the daemon.
 	for _, args := range [][]string{{"--server", "foo"}, {"--server=foo"}} {
 		out, err = tuiosCLIInDir(t, base, workDirIn(t, base), nil, append(args, "tmux", "list-sessions")...)
 		if err != nil || !strings.Contains(out, "s-foo") || strings.Contains(out, "s-def") {
@@ -165,7 +137,6 @@ func TestNamedServersAreIsolated(t *testing.T) {
 		}
 	}
 
-	// The plain listing names a named server and says nothing for the default.
 	out, err = serverCLI(t, base, "foo", "ls")
 	if err != nil || !strings.Contains(out, "Server: foo (") {
 		t.Errorf("ASSERTION: ls --server foo did not name the server (err %v):\n%s", err, out)
@@ -176,7 +147,6 @@ func TestNamedServersAreIsolated(t *testing.T) {
 		t.Errorf("ASSERTION: the default server's ls changed (err %v):\n%s", err, out)
 	}
 
-	// Three sockets, one per daemon.
 	runtimeDir := xdgDir(base, "XDG_RUNTIME_DIR")
 	for _, sock := range []string{
 		filepath.Join(runtimeDir, "tuios", "tuios.sock"),
@@ -188,9 +158,6 @@ func TestNamedServersAreIsolated(t *testing.T) {
 		}
 	}
 
-	// A pane of a named server carries the name, so a tuios run in it reaches
-	// its own server, and its XDG folders are the ones the daemon was started
-	// with: the scope never moves the directories other programs read.
 	dump := filepath.Join(base, "foo-pane.env")
 	listed := filepath.Join(base, "foo-pane.ls")
 	if out, err := serverCLI(t, base, "foo", "send-text", "-s", "s-foo",
@@ -214,7 +181,6 @@ func TestNamedServersAreIsolated(t *testing.T) {
 		t.Errorf("ASSERTION: tuios ls in foo's pane listed %v, want foo's s-foo", got)
 	}
 
-	// The positive half: the default server's pane has no name at all.
 	defDump := filepath.Join(base, "def-pane.env")
 	if out, err := tuiosCLI(t, base, "send-text", "-s", "s-def", "env > "+defDump+".tmp && mv "+defDump+".tmp "+defDump+"\n"); err != nil {
 		t.Fatalf("send-text to s-def: %v: %s", err, out)
@@ -227,8 +193,6 @@ func TestNamedServersAreIsolated(t *testing.T) {
 		t.Errorf("ASSERTION: the default server's pane never wrote its environment")
 	}
 
-	// Each server keeps its state apart: its own daemon log, and its own saved
-	// session once kill-server has written it.
 	for _, server := range []string{"foo", "bar"} {
 		if out, err := serverCLI(t, base, server, "kill-server"); err != nil {
 			t.Fatalf("kill-server --server %s: %v: %s", server, err, out)
@@ -294,8 +258,6 @@ func TestKillServerStopsOnlyTheNamedDaemon(t *testing.T) {
 		}
 	}
 
-	// The default kill-server says nothing about servers and stops only the
-	// default daemon.
 	out, err = tuiosCLI(t, base, "kill-server")
 	if err != nil {
 		t.Fatalf("kill-server: %v: %s", err, out)
@@ -329,15 +291,12 @@ func TestServerNamesAreChecked(t *testing.T) {
 		t.Errorf("ASSERTION: a refused name left %s behind: %v", servers, err)
 	}
 
-	// The positive half: a plain name gets its folder.
 	if _, _, code := listOn(t, base, "ok_name-1"); code != noDaemonExit {
 		t.Errorf("ASSERTION: ls --server ok_name-1 exited %d, want %d with no daemon", code, noDaemonExit)
 	}
 	if _, err := os.Stat(filepath.Join(servers, "ok_name-1")); err != nil {
 		t.Errorf("ASSERTION: a plain name did not get its socket folder: %v", err)
 	}
-	// With no daemon, the hint names a command that reaches this server, not
-	// the default one.
 	out, _ := serverCLI(t, base, "ok_name-1", "ls")
 	if !strings.Contains(out, "'tuios --server ok_name-1 new'") || strings.Contains(out, "'tuios new'") {
 		t.Errorf("ASSERTION: the no-daemon hint on server ok_name-1 does not carry --server:\n%s", out)
@@ -370,7 +329,6 @@ func TestTuiosWebServesTheNamedServer(t *testing.T) {
 	}
 }
 
-// waitForPath waits for path to exist.
 func waitForPath(path string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {
@@ -421,14 +379,11 @@ func TestANamedServerOverSSHReachesTheSameDaemon(t *testing.T) {
 		t.Errorf("ASSERTION: a second foo daemon started in /tmp")
 	}
 
-	// A default daemon in /tmp, as an older tuios left one, is not foo's.
 	m.mustCLI(t, m.oldLinkEnv(), "new", "old", "--detach")
 	if out, _ := m.cli(t, m.sshEnv(), "--server", "foo", "ls"); strings.Contains(out, "old") {
 		t.Errorf("ASSERTION: ls --server foo over ssh listed the default /tmp daemon's session:\n%s", out)
 	}
 
-	// A named daemon in /tmp is not joined either: ssh starts bar in the
-	// runtime folder.
 	m.mustCLI(t, m.oldLinkEnv(), "--server", "bar", "new", "oldbar", "--detach")
 	m.mustCLI(t, m.sshEnv(), "--server", "bar", "new", "sshbar", "--detach")
 	if out, _ := m.cli(t, m.sshEnv(), "--server", "bar", "ls"); strings.Contains(out, "oldbar") || !strings.Contains(out, "sshbar") {

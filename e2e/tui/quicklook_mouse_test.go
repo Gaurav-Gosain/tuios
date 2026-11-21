@@ -41,8 +41,6 @@ func TestQuickLookTakesTheMouse(t *testing.T) {
 	const session = "qlmouse"
 	base := t.TempDir()
 	pathsProject(t, base)
-	// Six parts under the title: longer than the panel, so the ruler shows,
-	// with a heading for each part to mark.
 	var md strings.Builder
 	md.WriteString("# Notes heading\n\nThe first paragraph of the notes.\n\n- one item\n- two item\n")
 	for part := 1; part <= quickLookRulerParts; part++ {
@@ -55,7 +53,6 @@ func TestQuickLookTakesTheMouse(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(xdgDir(base, "HOME"), "proj", "notes.md"), []byte(md.String()), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// A log far longer than the window quick look reads at a time.
 	var log strings.Builder
 	for i := range quickLookRulerLogRows {
 		fmt.Fprintf(&log, "big row %06d %s\n", i, strings.Repeat(".", 48))
@@ -81,9 +78,7 @@ func TestQuickLookTakesTheMouse(t *testing.T) {
 		}
 		return wl.FocusedWindowID
 	}
-	// Put the pointer on the right pane, so the focus is there.
 	mouseHover(t, term, 120, 20)
-	// The focus has settled once two reads in a row name the same pane.
 	right := ""
 	waitUntil(t, "the focus settles on the right pane", uiTimeout, func() (bool, string) {
 		cur := focused()
@@ -104,7 +99,6 @@ func TestQuickLookTakesTheMouse(t *testing.T) {
 		t.Fatalf("the focus is on %s after the click, want the right pane %s", got, right)
 	}
 
-	// The panel's text starts left of the middle, over the left pane.
 	tc, tr := mustFind(t, term, "line 121 of os.go")
 	if tc+2 >= 70 {
 		t.Fatalf("the panel does not reach over the left pane: its text starts at column %d\n%s", tc, term.Snapshot())
@@ -115,7 +109,6 @@ func TestQuickLookTakesTheMouse(t *testing.T) {
 	})
 	saveCockpitFrames(t, term, "quick-look-hover")
 
-	// A drag over the text selects it, and the release copies.
 	from := len(clipboardWrites(out))
 	mouseDrag(t, term, tc, tr, tc+len("line 121")-1, tr, tuitest.MouseLeft, 0)
 	_ = term.WaitStable(uiTimeout)
@@ -127,8 +120,6 @@ func TestQuickLookTakesTheMouse(t *testing.T) {
 		t.Fatalf("ASSERTION: the drag over quick look moved the focus to %s, want %s", got, right)
 	}
 
-	// The Markdown file: the same drag over its paragraph. The first esc
-	// ends the selection, and the second closes quick look.
 	sendEach(t, term, tuitest.Esc)
 	if !strings.Contains(term.Screen().Text(), "line 121 of os.go") {
 		t.Fatalf("ASSERTION: the esc that ends the selection closed quick look\n%s", term.Snapshot())
@@ -150,7 +141,6 @@ func TestQuickLookTakesTheMouse(t *testing.T) {
 		t.Fatalf("ASSERTION: quick look closed after the drag\n%s", term.Snapshot())
 	}
 
-	// The ruler. esc ends the selection, which leaves the ruler to the mouse.
 	sendEach(t, term, tuitest.Esc)
 	var g quickLookRulerCells
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -164,7 +154,6 @@ func TestQuickLookTakesTheMouse(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "quick-look-ruler-marks")
 
-	// A drag of the thumb to the ruler's last row shows the end of the file.
 	thumb := strings.Index(g.cells, "┃")
 	if thumb < 0 {
 		t.Fatalf("no thumb on the ruler: %q", g.cells)
@@ -173,8 +162,6 @@ func TestQuickLookTakesTheMouse(t *testing.T) {
 	railLists(t, term, "a drag of the ruler's thumb did not show the end", []string{"The end of the notes."}, []string{"Notes heading"})
 	saveCockpitFrames(t, term, "quick-look-ruler-drag")
 
-	// A click on the track's first row shows the start again, and a click in
-	// its middle takes the thumb there: neither end is on screen.
 	mouseClick(t, term, g.x, g.top, tuitest.MouseLeft, 0)
 	railLists(t, term, "a click on the top of the ruler did not show the start", []string{"Notes heading"}, []string{"The end of the notes."})
 	mid := g.top + g.rows*2/3
@@ -190,7 +177,6 @@ func TestQuickLookTakesTheMouse(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "quick-look-ruler-click")
 
-	// The log: a click on the middle of its ruler reads the window there.
 	sendKeys(t, term, tuitest.Esc)
 	waitQuickLookClosed(t, term)
 	lc, lr := mustFind(t, term, "log ./big.log")
@@ -220,25 +206,17 @@ func TestQuickLookTakesTheMouse(t *testing.T) {
 }
 
 const (
-	// quickLookRulerParts is the parts of the notes, each under a heading.
-	quickLookRulerParts = 6
-	// quickLookRulerLogRows is the rows of big.log, about 2.5 MB.
+	quickLookRulerParts   = 6
 	quickLookRulerLogRows = 40000
 )
 
-// quickLookBigRow is the number of the first row of big.log on screen.
 var quickLookBigRow = regexp.MustCompile(`big row (\d{6})`)
 
-// quickLookRulerCells is quick look's ruler on screen: its column, its first
-// row and its rows, and its cells top to bottom.
 type quickLookRulerCells struct {
 	x, top, rows int
 	cells        string
 }
 
-// quickLookRulerRight finds the ruler right of col on row: the first cell
-// past the text there that is a track, thumb or mark glyph, and the run of
-// them above and below it.
 func quickLookRulerRight(s tuitest.Screen, col, row int) quickLookRulerCells {
 	ruler := func(x, y int) bool {
 		switch s.Cell(x, y).Content {

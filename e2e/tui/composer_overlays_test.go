@@ -57,7 +57,6 @@ func TestReplyEditorShowsOneOverlayAtATime(t *testing.T) {
 			t.Fatalf("%v: %v\n%s", args, err, out)
 		}
 	}
-	// The external editor writes "hi" over the draft's file and exits.
 	editor := filepath.Join(t.TempDir(), "editor")
 	if err := os.WriteFile(editor, []byte("#!/bin/sh\nprintf '%s' hi > \"$1\"\n"), 0o755); err != nil {
 		t.Fatal(err)
@@ -71,17 +70,12 @@ func TestReplyEditorShowsOneOverlayAtATime(t *testing.T) {
 	windowManagementMode(t, term)
 
 	screen := func() string { return term.Screen().Text() }
-	// The @ list's rows start with their badge; the pane row's prefix is
-	// stable, the window id after it is not. "tab insert" is the list's
-	// hint, drawn only while the list has the keys.
 	listOpen := func() bool {
 		s := screen()
 		return strings.Contains(s, "pane  home/") && strings.Contains(s, "tab insert")
 	}
 	listRow := func() bool { return strings.Contains(screen(), "pane  home/") }
 	crashed := func() bool { return strings.Contains(screen(), "tuios hit a bug") }
-	// alive wraps the probe of every wait: a crash screen drawn after a key
-	// fails the test at that look, with the frame, not later as a timeout.
 	alive := func(what string, probe func() (bool, string)) func() (bool, string) {
 		return func() (bool, string) {
 			t.Helper()
@@ -128,8 +122,6 @@ func TestReplyEditorShowsOneOverlayAtATime(t *testing.T) {
 			return listOpen(), term.Snapshot()
 		}))
 	}
-	// A key sent right after esc would arrive as an alt chord, so each esc
-	// is followed by a wait on what it closes.
 	waitListGone := func(what string) {
 		t.Helper()
 		waitUntil(t, "the @ list closes "+what, uiTimeout, alive("the @ list to close "+what, func() (bool, string) {
@@ -158,7 +150,6 @@ func TestReplyEditorShowsOneOverlayAtATime(t *testing.T) {
 	waitScreen("the closed reply area", "Reply to docs-cli", "Write a reply.")
 	openEditor()
 
-	// ctrl+r with nothing sent yet says so and opens no search.
 	send("ctrl+r with no history", tuitest.Ctrl('r'))
 	waitScreen("the empty history's line", "Nothing was sent to this agent yet.")
 	if strings.Contains(screen(), "history:") {
@@ -168,9 +159,6 @@ func TestReplyEditorShowsOneOverlayAtATime(t *testing.T) {
 	waitDraft("hi")
 	send("send hi", tuitest.Enter)
 	waitScreen("the closed box after the send", "Write a reply.")
-	// The editor reads the target's history once, when it opens, and the
-	// sent reply joins it after the daemon's ack: a new editor is opened
-	// until its search holds the reply.
 	waitUntil(t, "an editor whose history holds the sent reply", uiTimeout, alive("the sent reply in the history", func() (bool, string) {
 		openEditor()
 		send("ctrl+r", tuitest.Ctrl('r'))
@@ -191,8 +179,6 @@ func TestReplyEditorShowsOneOverlayAtATime(t *testing.T) {
 	}))
 	waitScreen("the empty editor", "Type your reply.")
 
-	// The @ list open, then ctrl+r: the search alone, and enter loads the
-	// shorter entry with no list left over it.
 	send("type hello @", "hello @")
 	waitList("on hello @")
 	send("ctrl+r with the list open", tuitest.Ctrl('r'))
@@ -216,8 +202,6 @@ func TestReplyEditorShowsOneOverlayAtATime(t *testing.T) {
 	}
 	saveFrame(t, term, "overlay-loaded")
 
-	// esc in the search: the list follows the draft again, since the
-	// cursor is still in the @ word.
 	send("ctrl+c to clear the loaded draft", tuitest.Ctrl('c'))
 	waitScreen("the cleared draft", "Type your reply.")
 	send("type hello @", "hello @")
@@ -233,8 +217,6 @@ func TestReplyEditorShowsOneOverlayAtATime(t *testing.T) {
 	send("ctrl+c to clear the draft", tuitest.Ctrl('c'))
 	waitScreen("the cleared draft", "Type your reply.")
 
-	// A list closed with esc stays closed after the search opens and
-	// closes.
 	send("type hello @", "hello @")
 	waitList("on a third hello @")
 	send("esc on the list", tuitest.Esc)
@@ -249,8 +231,6 @@ func TestReplyEditorShowsOneOverlayAtATime(t *testing.T) {
 	send("ctrl+c to clear the draft", tuitest.Ctrl('c'))
 	waitScreen("the cleared draft", "Type your reply.")
 
-	// ctrl+g with the list open: the editor's shorter text takes the
-	// draft with no list left over it.
 	send("type hello @", "hello @")
 	waitList("before the external editor")
 	send("ctrl+g with the list open", tuitest.Ctrl('g'))

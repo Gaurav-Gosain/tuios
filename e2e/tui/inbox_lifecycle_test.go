@@ -30,7 +30,6 @@ func TestInboxSnoozeUndoAndWake(t *testing.T) {
 	}
 	waitText(t, term, "the errored item in the Inbox", "1 needs you", "Error", "build failed on main", "z snooze")
 
-	// z opens the picker; its footer says the four lengths.
 	if err := term.SendKeys("z"); err != nil {
 		t.Fatal(err)
 	}
@@ -51,14 +50,9 @@ func TestInboxSnoozeUndoAndWake(t *testing.T) {
 		t.Fatalf("list-attention --snoozed does not list it: %v\n%s", err, out)
 	}
 
-	// S shows it, muted, with when it wakes; z on it wakes it.
 	if err := term.SendKeys("S"); err != nil {
 		t.Fatal(err)
 	}
-	// The snoozed row ends with when it wakes. An hour's snooze taken
-	// after 23:00 wakes tomorrow, so that reads "until Fri 00:29" instead
-	// of "until 00:29", and the longer label cuts the message short. Match
-	// the part of the message that shows at either width.
 	waitText(t, term, "the snoozed group", "snoozed until", "build failed on", "z wake")
 	saveFrame(t, term, "inbox-snoozed-shown")
 	if err := term.SendKeys("z"); err != nil {
@@ -69,7 +63,6 @@ func TestInboxSnoozeUndoAndWake(t *testing.T) {
 		t.Fatalf("the woken item is still under Snoozed: %v\n%s", err, term.Snapshot())
 	}
 
-	// d dismisses, and the dock offers u, which brings it back.
 	if err := term.SendKeys("d"); err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +91,6 @@ func TestNextFinishedWalksUnseenTurns(t *testing.T) {
 				t.Fatalf("set-agent-state %s in %s: %v\n%s", state, name, err, out)
 			}
 		}
-		// The two turns finish in order, a moment apart.
 		time.Sleep(200 * time.Millisecond)
 	}
 	waitText(t, term, "both finished turns announced", "e2e-newer")
@@ -118,7 +110,6 @@ func TestNextFinishedWalksUnseenTurns(t *testing.T) {
 		t.Fatal(err)
 	}
 	attached("e2e-newer")
-	// Again within five seconds: the next older one.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "O"); err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +117,6 @@ func TestNextFinishedWalksUnseenTurns(t *testing.T) {
 	alive(t, term, "after walking the finished turns")
 }
 
-// waitText waits until the screen holds every one of want.
 func waitText(t *testing.T, term *tuitest.Terminal, what string, want ...string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -171,10 +161,6 @@ func TestRailMarksAFinishedTurnUnread(t *testing.T) {
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "New agent") }, uiTimeout); err != nil {
 		t.Fatalf("esc did not close the Inbox: %v\n%s", err, term.Snapshot())
 	}
-	// The rail: ctrl+b e takes the keyboard, G goes to its last row, the
-	// footer's collapse control, and two rows up over the footer's files
-	// control is the agent's row, since the agents section is pinned to the
-	// bottom. u marks it unread.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "e"); err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +205,6 @@ func TestAClickedFoldFoldsAgainOnPaneFocus(t *testing.T) {
 			t.Fatalf("set-agent-state idle in %s: %v\n%s", name, err, out)
 		}
 	}
-	// Past the one second threshold before the client draws its first rail.
 	time.Sleep(1500 * time.Millisecond)
 
 	term := startIn(t, base, startOpts{args: []string{"attach", "e2e-fold"}})
@@ -236,7 +221,6 @@ func TestAClickedFoldFoldsAgainOnPaneFocus(t *testing.T) {
 	}
 	saveFrame(t, term, "rail-fold-open")
 
-	// A click in the pane, outside the rail, and the rows fold again.
 	cols, rows := term.Screen().Size()
 	mouseClick(t, term, cols-20, rows/2, tuitest.MouseLeft, 0)
 	waitText(t, term, "the fold after a pane was focused", "+3 at rest")

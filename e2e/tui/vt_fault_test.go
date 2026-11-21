@@ -41,7 +41,6 @@ func TestEmulatorPanicKeepsTheDaemonAndOtherPanes(t *testing.T) {
 	}
 	pid := helloImage(t, base).PID
 
-	// One fault: the pane's screen is reset with a notice, everywhere.
 	send(a, vtPanicMarker)
 	waitNoticeOrDeath(t, base, sess, a)
 	if now := helloImage(t, base).PID; now != pid {
@@ -55,9 +54,6 @@ func TestEmulatorPanicKeepsTheDaemonAndOtherPanes(t *testing.T) {
 	send(a, "after")
 	waitHandoffPane(t, base, sess, a, regexp.MustCompile(`^got-after`), 10*time.Second)
 
-	// A client attaching now gets the daemon's rebuilt screen, and it holds
-	// what the first client shows: the notice and the output after it, and
-	// nothing from before the reset.
 	late := attachIn(t, base, sess, startOpts{cols: bigCols, rows: bigRows})
 	if err := late.WaitForText("got-after", bootTimeout); err != nil {
 		t.Fatalf("ASSERTION: a client attaching after the fault does not show the pane's new output: %v\n%s", err, late.Snapshot())
@@ -66,8 +62,6 @@ func TestEmulatorPanicKeepsTheDaemonAndOtherPanes(t *testing.T) {
 		t.Errorf("ASSERTION: the late client shows output from before the reset, which the first client no longer shows\n%s", late.Snapshot())
 	}
 
-	// Two more faults within the window: the daemon stops feeding the
-	// pane's emulator, and the program and the stream go on.
 	send(a, vtPanicMarker)
 	waitHandoffPane(t, base, sess, a, vtFaultNoticeRE, 10*time.Second)
 	send(a, vtPanicMarker)
@@ -76,8 +70,6 @@ func TestEmulatorPanicKeepsTheDaemonAndOtherPanes(t *testing.T) {
 	if err := client.WaitForText("got-frozen", uiTimeout); err != nil {
 		t.Errorf("ASSERTION: the client stopped drawing the pane's stream after the emulator froze: %v\n%s", err, client.Snapshot())
 	}
-	// The client drew the line; the daemon's copy of the screen must not
-	// get it, now or a moment later.
 	stayTrue(t, "the daemon does not feed a pane whose emulator failed three times in a minute", 300*time.Millisecond, func() (bool, string) {
 		lines, _ := daemonPane(base, sess, a)
 		text := strings.Join(lines, "\n")
@@ -89,8 +81,6 @@ func TestEmulatorPanicKeepsTheDaemonAndOtherPanes(t *testing.T) {
 		t.Fatalf("ASSERTION: the daemon's pid changed from %d to %d after three faults", pid, now)
 	}
 
-	// The stopped screen says so where a person and a script look: the
-	// listing and the pane's row on the rail.
 	out, err := tuiosCLI(t, base, "list-windows", "-s", sess, "--json")
 	if err != nil {
 		t.Fatalf("list-windows: %v: %s", err, out)
@@ -114,7 +104,6 @@ func TestEmulatorPanicKeepsTheDaemonAndOtherPanes(t *testing.T) {
 		t.Errorf("ASSERTION: the rail does not say the pane's screen stopped: %v\n%s", err, client.Snapshot())
 	}
 
-	// The pane can still be closed, and the daemon and the other pane live on.
 	if out, err := tuiosCLI(t, base, "close-window", "-s", sess, a); err != nil {
 		t.Fatalf("ASSERTION: close-window on the stopped pane: %v\n%s", err, out)
 	}
@@ -126,12 +115,8 @@ func TestEmulatorPanicKeepsTheDaemonAndOtherPanes(t *testing.T) {
 	waitHandoffPane(t, base, sess, b, regexp.MustCompile(`^got-last`), 10*time.Second)
 }
 
-// sidebarScreenStoppedTag is what the rail row of a stopped screen says
-// (internal/app/render_sidebar.go, sidebarScreenStopped).
 const sidebarScreenStoppedTag = "screen stopped"
 
-// waitNoticeOrDeath waits for the fault notice in the pane, and fails at once
-// when the daemon stops answering instead.
 func waitNoticeOrDeath(t *testing.T, base, sess, window string) {
 	t.Helper()
 	waitUntil(t, "the pane shows the fault notice", 10*time.Second, func() (bool, string) {

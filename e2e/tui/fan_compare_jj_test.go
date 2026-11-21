@@ -49,8 +49,6 @@ func TestFanCompareJJ(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(path, "b.txt"), []byte("b\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// The person commits on main meanwhile: the attempt is still counted
-	// from where it left main, not from main's new tip.
 	if err := os.WriteFile(filepath.Join(repo, "person.txt"), []byte("p\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +89,6 @@ func TestFanCompareJJ(t *testing.T) {
 			}
 		case "repo-try-jj-2":
 			seen++
-			// a.txt in a, b.txt in @: two commits ahead, both files changed.
 			if r.Note != "" || files != 2 || ahead != 2 || r.Dirty == nil || !*r.Dirty {
 				t.Errorf("ASSERTION: the working attempt: note %q, %d files, %d ahead, dirty %v; want no note, 2 files, 2 ahead, dirty", r.Note, files, ahead, r.Dirty)
 			}

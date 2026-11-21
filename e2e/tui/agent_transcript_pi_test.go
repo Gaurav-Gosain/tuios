@@ -11,9 +11,6 @@ import (
 	"testing"
 )
 
-// Pi's file is a tree. Reading it as a linear log would show the abandoned
-// branch, and a reader that is not registered leaves the person's Inbox empty.
-// piFixture writes the shared session where the harness manifest allows it.
 func piFixture(t *testing.T, r *atRig) string {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join("..", "..", "internal", "transcriptview", "testdata", "pi-session.jsonl"))
@@ -30,7 +27,6 @@ func piFixture(t *testing.T, r *atRig) string {
 	return path
 }
 
-// piHook sends one event through the real hook command, as Pi's extension does.
 func piHook(t *testing.T, r *atRig, payload map[string]any) map[string]any {
 	t.Helper()
 	b, err := json.Marshal(payload)
@@ -56,8 +52,6 @@ func piHook(t *testing.T, r *atRig, payload map[string]any) map[string]any {
 	return explanation
 }
 
-// piTranscriptEvent waits for the window's next transcript event. A client is
-// told only that the conversation changed, never which file or which entry.
 func piTranscriptEvent(t *testing.T, r *atRig, sub *linkStream) map[string]any {
 	t.Helper()
 	sub.timeout = uiTimeout
@@ -123,10 +117,6 @@ func TestPersonReadsPiTranscript(t *testing.T) {
 		t.Fatalf("Pi tool cards: edit=%v write=%v failed=%v\n%s", edited, written, failed, encoded)
 	}
 
-	// The session grows. The daemon tells it by the file's size and time, since
-	// an offset into a tree is no position in the conversation, so the event
-	// carries no cursor. The reader keeps what it parsed for a short time, keyed
-	// by the same size and time, so the entry appended must still appear.
 	sub := r.link.open(t, true)
 	if _, err := sub.call(t, "subscribe", map[string]any{"session": transcriptSession, "types": []string{"transcript"}}); err != nil {
 		t.Fatal(err)
@@ -139,8 +129,6 @@ func TestPersonReadsPiTranscript(t *testing.T) {
 		t.Fatalf("an entry appended to the session is not shown: %s", later)
 	}
 
-	// Commands the person ran themselves (! and !!) are history too, not model
-	// tool calls: each shows as a command with its outcome, a cancelled one too.
 	parent := "later"
 	for _, tc := range []struct {
 		id, command, output  string
@@ -172,8 +160,6 @@ func TestPersonReadsPiTranscript(t *testing.T) {
 		}
 	}
 
-	// An incomplete record is not an entry until its line is whole, and paging
-	// back through the branch returns every entry once, in order.
 	appendRaw(t, path, `{"type":"message","id":"partial","parentId":"shellcancel","message":`)
 	whole := r.read(r.wins[0], nil)
 	var want, got []string

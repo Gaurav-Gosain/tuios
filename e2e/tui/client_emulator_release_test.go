@@ -38,21 +38,10 @@ func TestClientReleasesEmulatorScratch(t *testing.T) {
 		cols    = 240
 		narrow  = 220
 		rows    = 72
-		cellLen = 112 // bytes in a uv.Cell
+		cellLen = 112
 	)
-	// The line wraps over every row of a pane and hundreds of rows of
-	// history, so each width change reflows the screen and the history rows
-	// the line started in. Commas, not spaces: a row that ended on a blank
-	// would be trimmed and not join back.
 	const fill = `awk 'BEGIN{for(i=1;i<=20000;i++) printf "%d,", i; print ""}'; echo FILL$((1+1))DONE` + "\n"
-	// seq writes every row of the alternate screen, as a full-screen
-	// program's first frame does.
 	const fullScreen = `printf '\033[?1049h'; seq 1 3000; printf '\033[?1049l'; echo ALT$((1+1))DONE` + "\n"
-	// Draws CORNER at the bottom right of whatever size the pane has, and
-	// two seconds later AGAIN at the top left, then waits on the alternate
-	// screen. The client draws a pane again only when it changes, so it is
-	// the second write that shows what a release in between left of the
-	// first.
 	const corner = `printf '\033[?1049h\033[999;999H\033[6D%sR' CORNE; sleep 2; printf '\033[H%sN' AGAI; read x; printf '\033[?1049l'; echo BACK$((1+1))HOME` + "\n"
 
 	type client struct {
@@ -60,8 +49,6 @@ func TestClientReleasesEmulatorScratch(t *testing.T) {
 		term             *tuitest.Terminal
 		ids              []string
 	}
-	// Both daemons keep their own buffers within the test, so the only
-	// difference between the two setups is the client's release.
 	t.Setenv("TUIOS_CLEANUP_SECONDS", "3600")
 	start := func(name, releaseSeconds string) *client {
 		t.Helper()
@@ -86,8 +73,6 @@ func TestClientReleasesEmulatorScratch(t *testing.T) {
 		}
 		return &client{name: name, base: base, addr: addr, term: term, ids: windowIDs(t, base, "mem")}
 	}
-	// run types text into every pane and waits until the client shows the
-	// marker in each of them.
 	run := func(c *client, text, marker string) {
 		t.Helper()
 		for _, id := range c.ids {
@@ -118,15 +103,9 @@ func TestClientReleasesEmulatorScratch(t *testing.T) {
 		}
 		return int64(n)
 	}
-	// Half the cells of one tiled pane, which is below what either buffer
-	// holds on its own.
 	want := int64(panes * (cols / 2) * (rows / 2) * cellLen / 2)
 	same := func(what string, a, b *client) {
 		t.Helper()
-		// A notice (a new window, the session's new size) drains a bar on its
-		// own clock, and the two clients did not post theirs at the same
-		// moment. The pane contents are what is compared, so both wait for
-		// their notices to go.
 		for _, c := range []*client{a, b} {
 			if err := c.term.WaitFor(func(s tuitest.Screen) bool {
 				return !strings.Contains(s.Text(), "▎")
@@ -154,15 +133,12 @@ func TestClientReleasesEmulatorScratch(t *testing.T) {
 	released, kept := start("releasing", "1"), start("keeping", "3600")
 	both := []*client{released, kept}
 
-	// The reflow scratch: two width changes leave a spare block, the third
-	// reuses it.
 	for _, c := range both {
 		run(c, fill, "FILL2DONE")
 		resize(c, narrow)
 		resize(c, cols)
 		resize(c, narrow)
 	}
-	// The releasing client runs its release at least twice in this time.
 	time.Sleep(3 * time.Second)
 	scratch := heap(kept) - heap(released)
 	t.Logf("client heap after %d panes resized three times: %d KiB more on the client that kept its buffers (%d KiB/pane)",
@@ -172,7 +148,6 @@ func TestClientReleasesEmulatorScratch(t *testing.T) {
 			scratch/1024, panes, want/1024, cols/2, rows/2)
 	}
 
-	// The alternate screen, on top of that.
 	for _, c := range both {
 		run(c, fullScreen, "ALT2DONE")
 	}
@@ -180,24 +155,16 @@ func TestClientReleasesEmulatorScratch(t *testing.T) {
 	alt := heap(kept) - heap(released) - scratch
 	t.Logf("client heap after %d panes left a full-screen program: %d KiB more on the client that kept its buffers (%d KiB/pane)",
 		panes, alt/1024, alt/1024/panes)
-	// This gap is the difference of two heap readings less the first one, so
-	// it carries the noise of both: 1288 to 1704 KiB over four runs on one
-	// machine, against 16 KiB with the release cut. Half the reflow bar still
-	// tells the two apart without failing on a noisy runner.
 	if altWant := want / 2; alt < altWant {
 		t.Fatalf("ASSERTION: the client released %d KiB of alternate screen across %d panes, want at least %d KiB (a quarter of a %dx%d pane of cells per pane)",
 			alt/1024, panes, altWant/1024, cols/2, rows/2)
 	}
 
-	// The next reflow allocates what the release dropped and lays the text
-	// out as the client that kept its buffers does.
 	for _, c := range both {
 		resize(c, cols)
 	}
 	same("after a resize", released, kept)
 
-	// A full-screen program after the release, with a release while it is on
-	// the alternate screen, which must leave the screen being shown alone.
 	for _, c := range both {
 		run(c, corner, "AGAIN")
 	}

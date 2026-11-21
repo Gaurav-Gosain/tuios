@@ -75,7 +75,6 @@ func TestNewWindowFromAPaneOpensOnThatPanesWorkspace(t *testing.T) {
 		t.Fatalf("the session shows workspace %d after a --no-focus call, want 1", ws)
 	}
 
-	// Outside every pane the default is still the shown workspace.
 	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "outside", "--no-focus"); err != nil {
 		t.Fatalf("new-window outside: %v\n%s", err, out)
 	}
@@ -130,8 +129,6 @@ func TestStartAgentFromAPaneOpensOnThatPanesWorkspace(t *testing.T) {
 		t.Fatalf("the session shows workspace %d before the call, want 1", ws)
 	}
 
-	// The agent is a program no harness knows, so --no-wait: the call returns
-	// once the pane exists.
 	if out, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", caller.ID, tuiosBin+" start-agent 'sleep 600' -s "+sess+" --name probe --no-wait\n"); err != nil {
 		t.Fatalf("send-text into caller: %v\n%s", err, out)
 	}
@@ -147,7 +144,6 @@ func TestStartAgentFromAPaneOpensOnThatPanesWorkspace(t *testing.T) {
 		t.Fatalf("the session shows workspace %d after the call, want 1", ws)
 	}
 
-	// Outside every pane the default is still the shown workspace.
 	if out, err := tuiosCLI(t, base, "start-agent", "sleep 600", "-s", sess, "--name", "outside", "--no-wait"); err != nil {
 		t.Fatalf("start-agent outside: %v\n%s", err, out)
 	}
@@ -183,7 +179,6 @@ func TestNewWindowFromAPaneStartsInThatPanesFolder(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// The person's pane takes the focus. The agent's pane does not.
 	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "person", "--cwd", theirs); err != nil {
 		t.Fatalf("new-window person: %v\n%s", err, out)
 	}
@@ -245,7 +240,6 @@ func TestNewWindowFromAPaneStartsInThatPanesFolder(t *testing.T) {
 		t.Fatalf("ASSERTION: the window a pane in %s opened starts in %s, want %s", mine, probe.Cwd, mine)
 	}
 
-	// Outside every pane the default is still the focused pane's folder.
 	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "outside", "--no-focus"); err != nil {
 		t.Fatalf("new-window outside: %v\n%s", err, out)
 	}

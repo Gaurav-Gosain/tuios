@@ -16,51 +16,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Every overlay owns the ground of its rectangle, read off the terminal the
-// real binary draws on.
-//
-// A cell inside an overlay that the terminal shows in its own ground, or the
-// desktop's, is a hole in the panel: two dark cells left of the Inbox title
-// was one. The frame tuios composes can be right and the terminal still show
-// the hole, because what reaches the terminal is a stream of cursor moves and
-// writes and not the frame: that hole was tmux dropping the background under
-// a hard tab the renderer moved with. So this reads cells the way a person
-// sees them, after the whole stream, and also checks the stream itself never
-// moves with HT.
-//
-// Each overlay is opened on a client with two panes and the rail behind it,
-// at 80x24 and 120x40, in a dark and a light theme, with the backgrounds off
-// and on the theme's ground. The overlay's cells are the ones that changed
-// when it opened, and a hole is a cell of the ground colour with the panel's
-// own colour on both sides of it, across or down. The title row of a titled
-// panel has no ground cell at all.
-//
-// Every frame is saved, plain and styled, under artifactDir, so a failure
-// has the screen it failed on and a pass has the screens it passed on.
-//
-// How this could pass while a hole is on screen, written down first:
-//   - the overlay did not open, so nothing changed: each step waits for text
-//     only the open overlay draws, and a component smaller than a panel fails;
-//   - the hole sits on a panel's outermost column or row, with no panel
-//     colour beyond it: the check across needs panel colour both sides, so a
-//     whole missing edge column is not caught, which is not the failure seen;
-//   - the terminal emulator tuitest runs is not tmux: the HT check is what
-//     covers that, since a stream without HT cannot hit the tmux tab cell.
-//
-// The Inbox is also held to two placement rules on the way: its top row stays
-// put while its height changes with the item under the cursor, and at 120
-// columns it is drawn beside the rail rather than over its edge.
-//
-// Negative controls, run: with the Panel's title row built with bare spaces
-// for its padding, every titled step fails on its title row; with the
-// clients leaving hard tabs on, the stream check fails.
-
-// artifactDir is where a test's frames are kept: $TUIOS_E2E_FRAMES when that
-// is set, in a directory named for the test. Without it the frames go to a
-// folder of the test's own that is removed when the test ends, so an ordinary
-// run leaves nothing in the temp dir. A test that fails first copies its folder
-// to failedArtifactRoot, outside the run's folder, so the frames of a failure
-// survive the run and a person can open them.
 func artifactDir(t *testing.T) string {
 	t.Helper()
 	name := regexp.MustCompile(`[^A-Za-z0-9_.-]+`).ReplaceAllString(t.Name(), "_")
@@ -80,7 +35,6 @@ var (
 	scratchArtifactDirs = map[string]string{}
 )
 
-// scratchArtifactDir is the same folder for every call of one test, made once.
 func scratchArtifactDir(t *testing.T, name string) string {
 	scratchArtifactMu.Lock()
 	defer scratchArtifactMu.Unlock()
@@ -89,7 +43,6 @@ func scratchArtifactDir(t *testing.T, name string) string {
 	}
 	dir := t.TempDir()
 	scratchArtifactDirs[name] = dir
-	// Cleanups run last in, first out: this one runs before t.TempDir removes dir.
 	t.Cleanup(func() {
 		scratchArtifactMu.Lock()
 		delete(scratchArtifactDirs, name)
@@ -101,12 +54,8 @@ func scratchArtifactDir(t *testing.T, name string) string {
 	return dir
 }
 
-// failedArtifactRoot is where the frames of a failed test are kept when
-// TUIOS_E2E_FRAMES is not set. It is not under the run's folder, which the run
-// removes, and a later run replaces the folder of a test with the same name.
 const failedArtifactRoot = "/tmp/tuios-e2e-artifacts"
 
-// keepFailedArtifacts copies dir to failedArtifactRoot/name and says where.
 func keepFailedArtifacts(t *testing.T, dir, name string) {
 	if entries, err := os.ReadDir(dir); err != nil || len(entries) == 0 {
 		return
@@ -123,7 +72,6 @@ func keepFailedArtifacts(t *testing.T, dir, name string) {
 	t.Logf("frames of the failed test kept in %s", dst)
 }
 
-// saveArtifact writes the screen, plain and styled, into dir.
 func saveArtifact(t *testing.T, term *tuitest.Terminal, dir, name string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name+".txt"), []byte(term.Snapshot()), 0o644); err != nil {
@@ -134,7 +82,6 @@ func saveArtifact(t *testing.T, term *tuitest.Terminal, dir, name string) {
 	}
 }
 
-// groundCells is a screen's cells, row by row.
 type groundCells [][]tuitest.Cell
 
 func readCells(s tuitest.Screen) groundCells {
@@ -149,7 +96,6 @@ func readCells(s tuitest.Screen) groundCells {
 	return out
 }
 
-// modeBg is the most common background among the cells.
 func modeBg(cells [][]tuitest.Cell) tuitest.Color {
 	count := map[tuitest.Color]int{}
 	var best tuitest.Color
@@ -164,9 +110,6 @@ func modeBg(cells [][]tuitest.Cell) tuitest.Color {
 	return best
 }
 
-// overlayRect is the overlay the step opened: the largest 4-connected run of
-// cells that changed from before to after and are not on the ground, its
-// bounding box, and the panel's own colour, the commonest in it.
 type overlayRect struct {
 	x0, y0, x1, y1 int
 	cells          int
@@ -229,8 +172,6 @@ func findOverlay(before, after groundCells, ground tuitest.Color) overlayRect {
 	return best
 }
 
-// holes lists the ground cells inside the overlay with its panel colour on
-// both sides of them, across or down, and every ground cell on its title row.
 func holes(after groundCells, r overlayRect, ground tuitest.Color, titleRow int) []string {
 	var out []string
 	panelAt := func(x, y int) bool { return after[y][x].Bg == r.panel }
@@ -261,33 +202,19 @@ func holes(after groundCells, r overlayRect, ground tuitest.Color, titleRow int)
 	return out
 }
 
-// groundStep is one overlay state: the keys that reach it from the step
-// before, the text that says it is drawn, and whether it is a panel with a
-// title row under its top pad.
 type groundStep struct {
 	name   string
 	keys   []any
 	want   []string
 	titled bool
-	// fresh means the step opens the overlay from a closed screen; the others
-	// move within the one open before them and are measured against the same
-	// closed screen.
-	fresh bool
-	// close are the keys that close it after the last step that uses it.
-	close []any
-	// check is anything further to assert on the step's screen.
-	check func(t *testing.T, s tuitest.Screen)
-	// do opens it when keys cannot, such as with the mouse.
-	do func(t *testing.T, term *tuitest.Terminal)
+	fresh  bool
+	close  []any
+	check  func(t *testing.T, s tuitest.Screen)
+	do     func(t *testing.T, term *tuitest.Terminal)
 }
 
-// startHookIn is startHeldHook for a window of a session.
 func startHookIn(t *testing.T, base, session, window, payload string) {
 	t.Helper()
-	// The hook reports the prompt under a deadline of its own, and a hook that
-	// misses it exits having held nothing, which is right for a harness and
-	// leaves the Inbox empty here. So the hook is not taken as started until
-	// the daemon holds its prompt, and a hook that exits first is run again.
 	want := heldApprovals(t, base, session) + 1
 	for attempt := 1; ; attempt++ {
 		cmd := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", session, "--window", window, "--explain")
@@ -328,8 +255,6 @@ func startHookIn(t *testing.T, base, session, window, payload string) {
 	}
 }
 
-// heldApprovals counts the Inbox items of session whose prompt a hook holds
-// for an answer.
 func heldApprovals(t *testing.T, base, session string) int {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-attention", "--session", session, "--json")
@@ -353,9 +278,6 @@ func heldApprovals(t *testing.T, base, session string) int {
 	return n
 }
 
-// groundClient is a client on the shipped looks, with the theme and the
-// background given, attached to a session of two panes, and an Inbox holding
-// a risky approval, a plan, an error and a finished job.
 func groundClient(t *testing.T, cols, rows int, theme, background string, out *syncBuffer) *tuitest.Terminal {
 	t.Helper()
 	base := t.TempDir()
@@ -365,9 +287,6 @@ func groundClient(t *testing.T, cols, rows int, theme, background string, out *s
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// No dim behind the panel: the overlay is found by the cells that change
-	// when it opens, and the dim changes every cell on screen, the rail too.
-	// modal_dim_test.go holds the dim.
 	cfg := "[appearance]\ntheme = \"" + theme + "\"\nmodal_dim = 0\n"
 	if background != "" {
 		cfg += "background = \"" + background + "\"\n"
@@ -398,13 +317,10 @@ func groundClient(t *testing.T, cols, rows int, theme, background string, out *s
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 2 }, bootTimeout); err != nil {
 		t.Fatalf("the two panes never showed: %v\n%s", err, term.Snapshot())
 	}
-	// Tiled, so the panes fill the screen behind every overlay and the
-	// context menu's click lands on one.
 	enableTiling(t, term)
 	return term
 }
 
-// groundSteps are the overlays, in the order one client opens them.
 func groundSteps() []groundStep {
 	noKeysRow := func(t *testing.T, s tuitest.Screen) {
 		t.Helper()
@@ -515,7 +431,6 @@ func TestEveryOverlayOwnsItsGround(t *testing.T) {
 	}
 }
 
-// waitGone waits for text to leave the screen.
 func waitGone(t *testing.T, term *tuitest.Terminal, what, text string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), text) }, uiTimeout); err != nil {
@@ -523,13 +438,6 @@ func waitGone(t *testing.T, term *tuitest.Terminal, what, text string) {
 	}
 }
 
-// descriptionsAligned fails unless which-key's descriptions start on one
-// column within a column of the menu. "Create window" and "Focus pane" are in
-// the Windows and Panes sections, which share the first column. The arrows
-// key is three bytes a cell, and a width counted in bytes put its
-// description left of every other one. At 80 columns, with the agent section
-// shown, the menu cuts its descriptions to fit, so only "Create" is looked
-// for.
 func descriptionsAligned(t *testing.T, s tuitest.Screen) {
 	t.Helper()
 	col := func(text string) int {

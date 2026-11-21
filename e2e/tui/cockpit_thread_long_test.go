@@ -78,8 +78,6 @@ func TestCockpitThreadLongScroll(t *testing.T) {
 		t.Fatalf("open the agents view: %v", err)
 	}
 	waitText(t, term, "the newest answer", "Answer 40 ends here.")
-	// Only the newest turns are drawn now: the turn numbers still count
-	// the ones above them.
 	if rowWith(term.Screen(), "Question 40:") < 0 {
 		t.Fatalf("question 40 is not on screen\n%s", term.Snapshot())
 	}
@@ -87,7 +85,6 @@ func TestCockpitThreadLongScroll(t *testing.T) {
 	ckPress(t, term, tuitest.Tab)
 	waitRegion(t, term, "Focus", 0, 120, "tab from the list")
 
-	// Pages up: each shows older prompts, never more than four turns older.
 	top, ok := longTopQuestion(term.Screen())
 	if !ok {
 		t.Fatalf("no question on screen at the bottom\n%s", term.Snapshot())
@@ -116,7 +113,6 @@ func TestCockpitThreadLongScroll(t *testing.T) {
 	}
 	longTurnLabel(t, term, 2)
 
-	// G back to the newest answer, then g to the first prompt at once.
 	ckPress(t, term, "G")
 	waitText(t, term, "G after the pages", "Answer 40 ends here.")
 	ckPress(t, term, "g")
@@ -134,7 +130,6 @@ func TestCockpitThreadLongScroll(t *testing.T) {
 
 var longQuestionRe = regexp.MustCompile(`Question (\d+):`)
 
-// longTopQuestion is the number of the first question on screen.
 func longTopQuestion(s tuitest.Screen) (int, bool) {
 	m := longQuestionRe.FindStringSubmatch(s.Text())
 	if m == nil {
@@ -144,8 +139,6 @@ func longTopQuestion(s tuitest.Screen) (int, bool) {
 	return n, true
 }
 
-// longTurnLabel checks that the prompt of question n, when on screen, is
-// labelled turn n.
 func longTurnLabel(t *testing.T, term *tuitest.Terminal, n int) {
 	t.Helper()
 	s := term.Screen()
@@ -163,8 +156,6 @@ func longTurnLabel(t *testing.T, term *tuitest.Terminal, n int) {
 	}
 }
 
-// longTranscript is a conversation of n turns: a numbered question and an
-// answer of a few paragraphs, about fourteen rows at 120 columns.
 func longTranscript(t *testing.T, n int) []byte {
 	t.Helper()
 	var buf bytes.Buffer

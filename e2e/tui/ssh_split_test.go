@@ -16,28 +16,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// ssh-aware splits (discussion #468), pressed on a real client of a daemon
-// session. A fake ssh on PATH records its arguments and then acts as a shell,
-// so the pane that runs it looks to tuios exactly like a pane in ssh.
-//
-// How these could pass wrongly, written down first:
-//   - The new pane could run ssh because the test typed it there. Every check
-//     reads the argument file the new pane's fake ssh wrote, numbered by run,
-//     and the test types ssh only in the first pane.
-//   - The new pane could be a shell that merely shows the old pane's text. The
-//     fake ssh prints its own run number, which only a new run can print.
-//   - The fallback could pass because nothing happened. It waits for the
-//     window count to rise and for the new pane's shell to compute a marker.
-//   - The remote folder could be passed for a report that names another
-//     machine. The ordinary case passes a report from the destination host,
-//     and the parser tests in internal/session cover the mismatch.
-//   - A script stand-in runs under an interpreter, which is not what a real
-//     ssh looks like. One test uses a compiled stand-in (./fakessh).
-//   - The refusals could pass because the split never happened at all. Each
-//     one waits for the new pane and for its shell to compute a marker.
-
-// fakeSSH writes an ssh stand-in into dir/bin and returns the bin directory
-// and the directory its runs record their arguments in.
 func fakeSSH(t *testing.T, dir string) (bin, runs string) {
 	t.Helper()
 	bin = filepath.Join(dir, "bin")
@@ -47,10 +25,6 @@ func fakeSSH(t *testing.T, dir string) (bin, runs string) {
 			t.Fatal(err)
 		}
 	}
-	// Each run takes the next number, writes one argument per line, says it
-	// connected, and then runs what is typed into it as a shell would.
-	// ssh -G, which tuios runs to resolve an alias, prints the host name
-	// from -o HostName, or the destination, and records nothing.
 	script := fmt.Sprintf(`#!/bin/sh
 runs=%q
 if [ "$1" = "-G" ]; then
@@ -74,14 +48,10 @@ while IFS= read -r line; do eval "$line"; done
 	if err := os.WriteFile(filepath.Join(bin, "ssh"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// An scp stand-in that runs ssh for its transfer, as scp does, and stays
-	// its parent while the transfer runs.
 	scp := "#!/bin/sh\nssh \"$1\" scp -t /tmp\necho SCP-DONE\n"
 	if err := os.WriteFile(filepath.Join(bin, "scp"), []byte(scp), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// A person's own helper (discussion #468: `tt ssh time_10`), which runs
-	// ssh as its child and stays its parent.
 	tt := "#!/bin/sh\n\"$@\"\necho TT-DONE\n"
 	if err := os.WriteFile(filepath.Join(bin, "tt"), []byte(tt), 0o755); err != nil {
 		t.Fatal(err)
@@ -95,7 +65,6 @@ var (
 	fakeSSHBinErr  error
 )
 
-// compiledFakeSSH builds ./fakessh once and copies it to path.
 func compiledFakeSSH(t *testing.T, path string) {
 	t.Helper()
 	fakeSSHBinOnce.Do(func() {
@@ -121,7 +90,6 @@ func compiledFakeSSH(t *testing.T, path string) {
 	}
 }
 
-// sshRunArgv0 is what run n of the compiled stand-in was started as.
 func sshRunArgv0(t *testing.T, runs string, n int) string {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(runs, fmt.Sprintf("%d.argv0", n)))
@@ -131,7 +99,6 @@ func sshRunArgv0(t *testing.T, runs string, n int) string {
 	return strings.TrimSpace(string(data))
 }
 
-// sshRunArgs waits for run n of the fake ssh and returns its arguments.
 func sshRunArgs(t *testing.T, term *tuitest.Terminal, runs string, n int) []string {
 	t.Helper()
 	path := filepath.Join(runs, fmt.Sprintf("%d.argv", n))
@@ -146,22 +113,16 @@ func sshRunArgs(t *testing.T, term *tuitest.Terminal, runs string, n int) []stri
 	return nil
 }
 
-// sshRunCount is how many times the fake ssh has run.
 func sshRunCount(runs string) int {
 	m, _ := filepath.Glob(filepath.Join(runs, "*.argv"))
 	return len(m)
 }
 
-// startSSHSplit starts a tiled daemon session with the fake ssh on PATH, the
-// ssh actions bound, and extra config added, and returns at one pane in
-// window-management mode.
 func startSSHSplit(t *testing.T, extra string) (*tuitest.Terminal, string, string) {
 	t.Helper()
 	return startSSHSplitWith(t, extra, nil)
 }
 
-// startSSHSplitWith is startSSHSplit with a step that runs once the fake ssh
-// is in place and before tuios starts.
 func startSSHSplitWith(t *testing.T, extra string, prepare func(base, bin string)) (*tuitest.Terminal, string, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -187,18 +148,13 @@ new_window_ssh = ["alt+w"]
 	return term, base, runs
 }
 
-// sshIn types an ssh command into the focused pane and waits until the fake
-// ssh says run n connected.
 func sshIn(t *testing.T, term *tuitest.Terminal, cmd string, n int) {
 	t.Helper()
 	enterTerminalMode(t, term)
-	// Typed once: typed again, the line would run in the fake ssh's shell
-	// and start a second run.
 	runInShell(t, term, cmd, fmt.Sprintf("FAKESSH-RUN-%d-UP", n), uiTimeout)
 	leaveTerminalMode(t, term)
 }
 
-// pressAndCount presses keys and waits for the window count to reach n.
 func pressAndCount(t *testing.T, term *tuitest.Terminal, n int, what string, keys ...any) {
 	t.Helper()
 	if err := term.SendKeys(keys...); err != nil {
@@ -232,8 +188,6 @@ func TestSSHSplitRunsTheSameSSH(t *testing.T) {
 	wantArgs(t, term, "split_ssh_vertical", sshRunArgs(t, term, runs, 1), want)
 	t.Logf("after split_ssh_vertical:\n%s", term.Snapshot())
 
-	// The new pane has the focus and runs ssh too, so a second split from
-	// it follows the same destination.
 	pressAndCount(t, term, 3, "split_ssh_horizontal", tuitest.Alt('s'))
 	wantArgs(t, term, "split_ssh_horizontal", sshRunArgs(t, term, runs, 2), want)
 
@@ -249,7 +203,6 @@ func TestSSHSplitFollowOption(t *testing.T) {
 	requireReal(t, "OS process or perf topic")
 	term, _, runs := startSSHSplit(t, "\n[appearance]\nnew_window_follow_ssh = true\n")
 
-	// No ssh yet: the ordinary split is a shell.
 	pressAndCount(t, term, 2, "split_vertical with no ssh", "|")
 	enterTerminalMode(t, term)
 	typeUntil(t, term, "echo LOCAL-$((6*7))", "LOCAL-42")
@@ -272,7 +225,6 @@ func TestSSHSplitKeepsTheRemoteFolder(t *testing.T) {
 	term, _, runs := startSSHSplit(t, "")
 	sshIn(t, term, "ssh pollen@fakehost", 0)
 
-	// The fake ssh evals what is typed, so this is the remote shell's report.
 	enterTerminalMode(t, term)
 	typeUntil(t, term, `printf '\033]7;file://fakehost/srv/my app\033\\'; echo REPORT""ED`, "REPORTED")
 	leaveTerminalMode(t, term)
@@ -339,7 +291,7 @@ func TestSSHSplitFindsSSHUnderANestedShell(t *testing.T) {
 	requireReal(t, "OS process or perf topic")
 	for _, tc := range []struct {
 		name, cmd string
-		want      []string // nil: not followed
+		want      []string
 		notice    string
 	}{
 		{"shell", "sh -c 'ssh -J jump nested@fakehost; true'",
@@ -476,8 +428,6 @@ func TestSSHSplitPassesTheAgentSocket(t *testing.T) {
 			}
 		}
 	})
-	// The isolated home is too deep for a socket path, so the agent gets a
-	// short one.
 	sockDir, err := os.MkdirTemp("", "ag")
 	if err != nil {
 		t.Fatal(err)

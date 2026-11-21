@@ -11,16 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// What a person meets on the way to a first plugin, and what docs/PLUGINS.md
-// promises a plugin author: each refusal says what to do, a manifest for a
-// newer tuios never loads silently, the TUIOS_* variables hold what the page
-// says, and an unlinked plugin's pane goes with it.
-//
-// The negative controls are in NEGATIVE_CONTROLS.md, "The plugin flow".
-
-// flowManifest is a tuios plugin with an action and a pane. Each writes its
-// environment to a file in its state folder, and the action also calls tuios
-// through TUIOS_BIN with its PATH cut.
 const flowManifest = `api = 1
 id = "e2e.flow"
 name = "Flow probe"
@@ -60,7 +50,6 @@ func writeFiles(t *testing.T, dir string, files map[string]string) {
 	}
 }
 
-// probeEnv reads the file of KEY=VALUE lines a probe wrote.
 func probeEnv(data string) map[string]string {
 	out := map[string]string{}
 	for line := range strings.Lines(data) {
@@ -77,8 +66,6 @@ func TestPluginsFlowSaysWhatToDo(t *testing.T) {
 	killDaemon(t, base)
 	art := artifactDir(t)
 
-	// With no daemon, approve names the command that starts one, and it does
-	// not start one itself.
 	linkedFirst := t.TempDir()
 	writeFiles(t, linkedFirst, map[string]string{"tuios-plugin.toml": "api = 1\nid = \"e2e.first\"\nname = \"First\"\nversion = \"1.0.0\"\n\n[[process]]\nid = \"a\"\nrun = \"action\"\ntitle = \"A\"\ncommand = [\"true\"]\n"})
 	if out, err := tuiosCLI(t, base, "plugins", "link", linkedFirst, "--enable"); err != nil {
@@ -92,7 +79,6 @@ func TestPluginsFlowSaysWhatToDo(t *testing.T) {
 		t.Fatalf("create session: %v\n%s", err, out)
 	}
 
-	// A waiting plugin keeps its name, and the reason has a column of its own.
 	out, err := tuiosCLI(t, base, "plugins", "list")
 	if err != nil {
 		t.Fatalf("plugins list: %v\n%s", err, out)
@@ -114,13 +100,10 @@ func TestPluginsFlowSaysWhatToDo(t *testing.T) {
 		t.Fatalf("plugins unlink: %v\n%s", err, out)
 	}
 
-	// A bare name, which no catalog can find yet.
 	if out, err := tuiosCLI(t, base, "plugins", "install", "pomodoro", "--yes"); err == nil || !strings.Contains(out, "no plugin catalog") || !strings.Contains(out, "owner/repo") {
 		t.Errorf("install of a bare name: %v, want what to give instead\n%s", err, out)
 	}
 
-	// A repository whose plugin is in a folder: the error names the folder
-	// and the flag, never the fetch folder, and that flag then works.
 	work := testutil.GitRepo(t)
 	if err := os.MkdirAll(filepath.Join(work, "plugin"), 0o755); err != nil {
 		t.Fatal(err)
@@ -147,7 +130,6 @@ func TestPluginsFlowSaysWhatToDo(t *testing.T) {
 		t.Errorf("the install plan does not say that grants are not a sandbox:\n%s", out)
 	}
 
-	// The variables docs/PLUGINS.md promises, in an action and in a pane.
 	const id = "e2e.flow"
 	state := filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "plugins", id)
 	if out, err := tuiosCLI(t, base, "plugins", "run", id, "dump", "--wait"); err != nil {
@@ -187,7 +169,6 @@ func TestPluginsFlowSaysWhatToDo(t *testing.T) {
 			t.Errorf("%s is %q, want %q", k, env[k], want)
 		}
 	}
-	// A plugin's process is in no pane: the names that say so stay unset.
 	for _, k := range []string{"TUIOS_PANE_ID", "TUIOS_WINDOW_ID", "TUIOS_SESSION"} {
 		if v, ok := env[k]; ok {
 			t.Errorf("%s is set to %q in a plugin's process, which runs in no pane", k, v)
@@ -213,13 +194,10 @@ func TestPluginsFlowSaysWhatToDo(t *testing.T) {
 		t.Error("a plugin's pane got the plugin's token")
 	}
 
-	// uninstall takes --yes, as install does.
 	if out, err := tuiosCLI(t, base, "plugins", "uninstall", id, "--yes"); err != nil {
 		t.Fatalf("plugins uninstall --yes: %v\n%s", err, out)
 	}
 
-	// The compatibility promise: a manifest this tuios does not fully know
-	// is refused with what to do. It is never loaded with a part ignored.
 	head := "id = \"e2e.compat\"\nname = \"Compat\"\nversion = \"1.0.0\"\n"
 	for _, c := range []struct {
 		why, manifest string
@@ -248,7 +226,6 @@ func TestPluginsFlowSaysWhatToDo(t *testing.T) {
 			t.Errorf("%s: the refusal shows a code:\n%s", c.why, out)
 		}
 	}
-	// The old name still loads, and info warns.
 	oldName := t.TempDir()
 	writeFiles(t, oldName, map[string]string{"tuios-plugin.toml": "schema = 1\n" + head})
 	if out, err := tuiosCLI(t, base, "plugins", "link", oldName); err != nil {
@@ -261,8 +238,6 @@ func TestPluginsFlowSaysWhatToDo(t *testing.T) {
 		t.Fatalf("unlink: %v\n%s", err, out)
 	}
 
-	// unlink closes the plugin's panes, so they do not come back with the
-	// saved session after a restart. A herdr plugin needs no approval.
 	linked := t.TempDir()
 	writeFiles(t, linked, map[string]string{
 		"herdr-plugin.toml": "id = \"e2e.unlinked\"\nname = \"Unlinked\"\nversion = \"1.0.0\"\nmin_herdr_version = \"0.9.3\"\n\n[[panes]]\nid = \"hold\"\ntitle = \"HoldPane\"\nplacement = \"tab\"\ncommand = [\"sh\", \"-c\", \"exec sleep 600\"]\n",
@@ -291,7 +266,6 @@ func TestPluginsFlowSaysWhatToDo(t *testing.T) {
 	}
 }
 
-// fenced is the first fenced block of language lang in text.
 func fenced(t *testing.T, text, lang string) string {
 	t.Helper()
 	_, rest, ok := strings.Cut(text, "```"+lang+"\n")

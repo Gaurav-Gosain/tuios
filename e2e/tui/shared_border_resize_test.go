@@ -11,37 +11,13 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Resizing panes under shared borders. With shared borders on, the tilers keep
-// one cell between two neighbours and draw the divider in it. Every resize has
-// to keep that cell: a resize that puts two panes edge to edge leaves the
-// divider nowhere to go, and it disappears from the screen.
-//
-// The report was that resizing in the master-stack layout with shared borders
-// was broken, and that shared borders did not work in the scrolling layout.
-// In master-stack every key resize closed the cell, so the divider vanished;
-// with appearance.gap at 2 the panes overlapped. A mouse drag closed it too,
-// for as long as the button was held. A press on the cell where the divider
-// meets the stack's own divider grabbed nothing when the master was on the
-// right or at the bottom. The scrolling layout drew a box round every column
-// whatever the setting said.
-//
-// Each test reads the rectangles from list-windows and the divider cells from
-// the frame, and saves its frames under artifactDir.
-
-// isBoxRune reports whether r is a box-drawing character, which is what every
-// divider glyph is.
 func isBoxRune(r rune) bool { return r >= 0x2500 && r <= 0x257f }
 
-// dividerCell is one cell a divider has to be drawn in.
 type dividerCell struct {
 	x, y     int
 	vertical bool
 }
 
-// neighbourFaults checks the space between every two panes that face each
-// other: it has to be gap cells, and no two panes may overlap. It returns the
-// cell in the middle of each division, for the frame check, and fails when
-// there is no division at all, so a layout with one pane cannot pass.
 func neighbourFaults(rects []winRect, gap int) ([]dividerCell, error) {
 	var cells []dividerCell
 	for i, a := range rects {
@@ -76,8 +52,6 @@ func neighbourFaults(rects []winRect, gap int) ([]dividerCell, error) {
 	return cells, nil
 }
 
-// dividersDrawn reports the first division cell on screen that holds no
-// divider.
 func dividersDrawn(s tuitest.Screen, cells []dividerCell) error {
 	cols, rows := s.Size()
 	for _, c := range cells {
@@ -95,9 +69,6 @@ func dividersDrawn(s tuitest.Screen, cells []dividerCell) error {
 	return nil
 }
 
-// waitForDividers waits for the session's panes to keep gap cells between
-// every two neighbours, and for the frame to draw a divider in each of those
-// gaps. It returns the rectangles.
 func waitForDividers(t *testing.T, term *tuitest.Terminal, base, session string, n, gap int, what string) []winRect {
 	t.Helper()
 	var cells []dividerCell
@@ -147,9 +118,6 @@ func TestSharedBorderKeyResizeKeepsTheDivider(t *testing.T) {
 			before := waitForDividers(t, term, base, name, tc.panes, tc.gap, "the opening layout")
 			saveArtifact(t, term, dir, "before")
 
-			// The focus is on the last pane. Its width keys move a vertical
-			// division and its height keys a horizontal one, in every
-			// arrangement here.
 			sendKeys(t, term, ">", ">")
 			after := waitForDividers(t, term, base, name, tc.panes, tc.gap, "after the width keys")
 			if sameGeometry(before, after) {
@@ -165,7 +133,6 @@ func TestSharedBorderKeyResizeKeepsTheDivider(t *testing.T) {
 			saveArtifact(t, term, dir, "after-height-keys")
 
 			if tc.percent {
-				// The layout prefix, then 7: the focused pane to 70% of the width.
 				sendKeys(t, term, tuitest.Ctrl('b'), "L", "7")
 				rects := waitForDividers(t, term, base, name, tc.panes, tc.gap, "after the width percentage")
 				if w := rects[len(rects)-1].Width; w != 84 {
@@ -200,8 +167,6 @@ func TestSharedBorderDragKeepsTheDivider(t *testing.T) {
 	for col := from - 1; col >= to; col-- {
 		mouseMotion(t, term, col, row, tuitest.MouseLeft, 0)
 	}
-	// Every row of the master's height on the new divider column holds a
-	// divider glyph, the junction with the stack's own division included.
 	var last string
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		for y := master.Y; y < master.Y+master.Height; y++ {
@@ -274,13 +239,11 @@ func TestSharedBorderDragFromAJunction(t *testing.T) {
 	}
 }
 
-// scrollingSession is masterSession for the scrolling layout.
 func scrollingSession(t *testing.T, base, name, appearance string, n int) *tuitest.Terminal {
 	t.Helper()
 	return layoutSession(t, base, name, "scrolling", appearance, n)
 }
 
-// layoutSession is masterSession for any layout.
 func layoutSession(t *testing.T, base, name, layout, appearance string, n int) *tuitest.Terminal {
 	t.Helper()
 	writeConfig(t, base, "[startup]\nopen_default_window = true\ntiled = true\nlayout = \""+layout+"\"\n"+
@@ -314,7 +277,6 @@ func TestScrollingSharedBorders(t *testing.T) {
 	dir := artifactDir(t)
 	rects := waitForDividers(t, term, base, name, 3, 1, "the opening layout")
 	saveArtifact(t, term, dir, "columns")
-	// A pane that draws its own border opens its top row with a corner.
 	if line := term.Screen().Line(rects[0].Y); strings.ContainsAny(line, "╭╮") {
 		t.Fatalf("the columns still draw their own borders:\n%s", term.Snapshot())
 	}
@@ -329,7 +291,6 @@ func TestScrollingSharedBorders(t *testing.T) {
 	}
 	saveArtifact(t, term, dir, "after-drag")
 
-	// The width is the column's own now, kept through a retile.
 	if err := term.Resize(130, 42); err != nil {
 		t.Fatalf("resize the client: %v", err)
 	}
@@ -340,9 +301,6 @@ func TestScrollingSharedBorders(t *testing.T) {
 	saveArtifact(t, term, dir, "after-resize")
 }
 
-// shellSize asks the shell in one window for the size of its terminal, and
-// returns what stty reports. It is the size the program in the pane draws
-// into, which is what a missed resize leaves wrong.
 func shellSize(t *testing.T, base, session, window string) (rows, cols int) {
 	t.Helper()
 	file := filepath.Join(base, "stty-"+strings.ReplaceAll(window, "/", "_"))
@@ -376,7 +334,6 @@ func TestScrollingDividerDragResizesEveryStackedWindow(t *testing.T) {
 	term := scrollingSession(t, base, name, "shared_borders = true\nscroll_column_width = 40\n"+
 		"[keybindings.window_management]\nscroll_consume = [\"Y\"]\n", 3)
 	dir := artifactDir(t)
-	// Focus the first column and pull the second column's window into it.
 	sendKeys(t, term, "h", "h")
 	time.Sleep(500 * time.Millisecond)
 	sendKeys(t, term, "Y")
@@ -443,8 +400,6 @@ func TestScrollingDividerDragAtTheStripEnd(t *testing.T) {
 	dir := artifactDir(t)
 	rects := waitForDividers(t, term, base, name, 3, 1, "the opening layout")
 	saveArtifact(t, term, dir, "before")
-	// The last column is focused, so the strip is at its right end and the
-	// column before it ends at the divider on screen.
 	var col winRect
 	for _, r := range rects {
 		if r.X+r.Width > 0 && r.X+r.Width < 119 && (col.ID == "" || r.X > col.X) {
@@ -590,8 +545,6 @@ func TestScrollingCycleWidthPresets(t *testing.T) {
 	}
 	saveArtifact(t, term, dir, "opening")
 
-	// widest waits for the widest column to reach percent of the screen,
-	// measured against the 40 percent the columns open at.
 	widest := func(percent int, what string) {
 		t.Helper()
 		want := w40 * percent / 40
@@ -623,8 +576,6 @@ func TestScrollingCycleWidthPresets(t *testing.T) {
 
 	saveConfigLikeAnEditor(t, base, "[startup]\nopen_default_window = true\ntiled = true\nlayout = \"scrolling\"\n"+
 		"[appearance]\nscroll_column_width = 40\nscroll_column_presets = [60]\n"+keys)
-	// The reload has no frame of its own to wait for, so press until the
-	// column moves, within the watch timeout.
 	deadline := time.Now().Add(configWatchTimeout)
 	for {
 		press()

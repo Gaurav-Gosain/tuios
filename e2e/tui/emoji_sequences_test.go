@@ -11,15 +11,12 @@ import (
 	"tuios.dev/shot"
 )
 
-// emojiSequences are the clusters a colour emoji font draws as one glyph made
-// of several code points, one of each kind: a flag (two regional indicators),
-// a ZWJ sequence, a keycap and a skin tone.
 var emojiSequences = []struct{ name, cluster string }{
-	{"flag", "\U0001F1EF\U0001F1F5"},                             // JP
-	{"zwj family", "\U0001F468\u200D\U0001F469\u200D\U0001F467"}, // man, woman, girl
-	{"zwj technologist", "\U0001F9D1\u200D\U0001F4BB"},           // person, laptop
+	{"flag", "\U0001F1EF\U0001F1F5"},
+	{"zwj family", "\U0001F468\u200D\U0001F469\u200D\U0001F467"},
+	{"zwj technologist", "\U0001F9D1\u200D\U0001F4BB"},
 	{"keycap", "1\uFE0F\u20E3"},
-	{"skin tone", "\U0001F44D\U0001F3FD"}, // thumbs up, medium
+	{"skin tone", "\U0001F44D\U0001F3FD"},
 }
 
 // TestScreenshotDrawsEmojiSequences draws each sequence in the fonts tuios
@@ -52,7 +49,6 @@ func TestScreenshotDrawsEmojiSequences(t *testing.T) {
 	frame := func() *shot.Frame {
 		return &shot.Frame{Mode: shot.FrameNone, Font: shot.Font{Data: reg}, BoldFont: shot.Font{Data: bol}}
 	}
-	// One grid of every sequence, for the artifact and for the fallbacks.
 	all := shot.NewGrid(3*len(emojiSequences), 1, p.FG, p.BG)
 	for i, s := range emojiSequences {
 		all.Cells[0][3*i] = shot.Cell{Cluster: s.cluster, Width: 2, FG: p.FG, BG: p.BG}

@@ -9,7 +9,6 @@ import (
 	"testing"
 )
 
-// whoamiOut is what tuios whoami --json prints.
 type whoamiOut struct {
 	Success          bool     `json:"success"`
 	InPane           bool     `json:"in_pane"`
@@ -72,8 +71,6 @@ func TestWhoamiReportsTheIDsThatExistNow(t *testing.T) {
 	focused, worker := ids[0], ids[1]
 
 	current := sess
-	// inPane runs whoami in the worker pane, with prefix before the command,
-	// and returns what it printed.
 	run := 0
 	inPane := func(prefix, name string) whoamiOut {
 		t.Helper()
@@ -97,7 +94,6 @@ func TestWhoamiReportsTheIDsThatExistNow(t *testing.T) {
 		return parseWhoami(t, dir, name, raw)
 	}
 
-	// 1. In the worker pane, as it started.
 	first := inPane("", "in-pane")
 	if !first.Success || !first.InPane {
 		t.Fatalf("ASSERTION: whoami in a pane says it runs in no pane: %+v", first)
@@ -119,7 +115,6 @@ func TestWhoamiReportsTheIDsThatExistNow(t *testing.T) {
 		t.Fatalf("ASSERTION: whoami does not name the daemon: %+v", first.Daemon)
 	}
 
-	// 2. After a rename, TUIOS_SESSION in the pane is out of date.
 	if out, err := tuiosCLI(t, base, "rename-session", sess, renamed); err != nil {
 		t.Fatalf("rename-session: %v\n%s", err, out)
 	}
@@ -133,7 +128,6 @@ func TestWhoamiReportsTheIDsThatExistNow(t *testing.T) {
 	}
 	wantClient(t, after, renamed)
 
-	// 3. A false TUIOS_PANE_ID does not move the caller.
 	lying := inPane("TUIOS_PANE_ID=deadbeef00000000 ", "false-pane-id")
 	if lying.WindowID != worker {
 		t.Fatalf("ASSERTION: with a false TUIOS_PANE_ID whoami says pane %q, want %q", lying.WindowID, worker)
@@ -142,7 +136,6 @@ func TestWhoamiReportsTheIDsThatExistNow(t *testing.T) {
 		t.Fatalf("ASSERTION: the false TUIOS_PANE_ID is not under stale_env: %v", lying.StaleEnv)
 	}
 
-	// 4. Outside every pane.
 	out, err := tuiosCLI(t, base, "whoami", "--json")
 	if err != nil {
 		t.Fatalf("whoami outside a pane: %v\n%s", err, out)
@@ -156,7 +149,6 @@ func TestWhoamiReportsTheIDsThatExistNow(t *testing.T) {
 	saveArtifact(t, term, dir, "screen")
 }
 
-// parseWhoami decodes one whoami document and keeps it as an artifact.
 func parseWhoami(t *testing.T, dir, name string, raw []byte) whoamiOut {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name+".json"), raw, 0o644); err != nil {
@@ -169,8 +161,6 @@ func parseWhoami(t *testing.T, dir, name string, raw []byte) whoamiOut {
 	return w
 }
 
-// wantClient fails unless the attached client is listed, showing sess, and no
-// connection without a session is.
 func wantClient(t *testing.T, w whoamiOut, sess string) {
 	t.Helper()
 	found := false

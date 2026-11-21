@@ -17,20 +17,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Which machine a new pane in a global session runs on.
-//
-// A global session holds panes from several machines, and every new pane in
-// it asks which one. The report was that the answer did not always hold: a
-// pick of this machine ran a shell on some other machine, and a pick of
-// another machine made nothing the user could see.
-//
-// These tests set up three real daemons (this machine, alpha and beta), open
-// panes through every way into the picker many times, and ask each pane's own
-// shell which daemon started it. The daemon's window list is not enough: it
-// says what was asked for, and the bug was a pane that went somewhere else.
-
-// writeFakeSSHMulti is writeFakeSSHTo for several machines: the address picks
-// which daemon the command reaches. See takeOffline for the down switch.
 func writeFakeSSHMulti(t *testing.T, dir string, bases map[string]string) string {
 	t.Helper()
 	path := filepath.Join(dir, "fake-ssh-multi")
@@ -38,8 +24,6 @@ func writeFakeSSHMulti(t *testing.T, dir string, bases map[string]string) string
 	b.WriteString("#!/bin/sh\n")
 	b.WriteString("while [ $# -gt 0 ]; do\n  case \"$1\" in\n    -o) shift 2 ;;\n    -T) shift ;;\n    -t) shift ;;\n    --) shift; break ;;\n    *) break ;;\n  esac\ndone\n")
 	b.WriteString("addr=\"$1\"\nshift\n")
-	// A file down-ADDR in dir takes the machine off the network: every new
-	// connection to it is refused, the way ssh refuses a powered-off box.
 	b.WriteString("if [ -e \"")
 	b.WriteString(dir)
 	b.WriteString("/down-$addr\" ]; then\n  echo \"ssh: connect to host $addr port 22: Connection refused\" >&2\n  exit 255\nfi\n")
@@ -55,7 +39,6 @@ func writeFakeSSHMulti(t *testing.T, dir string, bases map[string]string) string
 			b.WriteString(xdgDir(base, key))
 			b.WriteString("\n")
 		}
-		// farProxies finds this machine's link proxy under the pid.
 		b.WriteString("    ")
 		b.WriteString(recordFakeSSHPid(base))
 		b.WriteString("    ;;\n")
@@ -68,8 +51,6 @@ func writeFakeSSHMulti(t *testing.T, dir string, bases map[string]string) string
 	return path
 }
 
-// writeMachinesConfig names every host in hosts at an address the stand-in
-// routes by: host h is at someone@hbox.
 func writeMachinesConfig(t *testing.T, base string, hosts []string) {
 	t.Helper()
 	dir := filepath.Join(base, "XDG_CONFIG_HOME", "tuios")
@@ -94,7 +75,6 @@ func writeMachinesConfig(t *testing.T, base string, hosts []string) {
 	}
 }
 
-// writeHostAddrs writes a [hosts] table of name to address.
 func writeHostAddrs(t *testing.T, base string, hosts map[string]string) {
 	t.Helper()
 	dir := filepath.Join(base, "XDG_CONFIG_HOME", "tuios")
@@ -119,27 +99,17 @@ func writeHostAddrs(t *testing.T, base string, hosts map[string]string) {
 	}
 }
 
-// globalFleet is this machine and two others, each with its own daemon.
 type globalFleet struct {
 	here, alpha, beta string
 	env               []string
-	// machine names the daemon each isolation root is, by the root's last
-	// path element, which is what a pane's shell reports.
-	machine map[string]string
+	machine           map[string]string
 }
 
-// startGlobalFleet starts alpha and beta, then this machine's daemon with
-// both configured, and waits for both links. alpha also knows beta, so a
-// session on alpha can hold a pane on beta.
 func startGlobalFleet(t *testing.T) *globalFleet {
 	t.Helper()
 	return startGlobalFleetWith(t, map[string]string{"beta": "someone@betabox"})
 }
 
-// startGlobalFleetWith is startGlobalFleet with alpha's own [hosts] table
-// given, name to address. someone@herebox is this machine, so alpha can name
-// this machine whatever a test needs. alphaConfig is more TOML for alpha's
-// config file, such as a link policy, read when alpha's daemon starts.
 func startGlobalFleetWith(t *testing.T, alphaHosts map[string]string, alphaConfig ...string) *globalFleet {
 	t.Helper()
 	f := &globalFleet{here: t.TempDir(), alpha: remoteMachine(t), beta: remoteMachine(t)}
@@ -181,7 +151,6 @@ func startGlobalFleetWith(t *testing.T, alphaHosts map[string]string, alphaConfi
 	return f
 }
 
-// hostLineUp reports whether the `tuios hosts` line for name says up.
 func hostLineUp(listing, name string) bool {
 	for line := range strings.SplitSeq(listing, "\n") {
 		fields := strings.Fields(strings.ReplaceAll(line, "│", " "))
@@ -192,8 +161,6 @@ func hostLineUp(listing, name string) bool {
 	return false
 }
 
-// sessionWindowHosts is the window ids in a session on the daemon at base, each with
-// the host the daemon recorded for it.
 func sessionWindowHosts(t *testing.T, base string, env []string, sess string) map[string]string {
 	t.Helper()
 	out, err := cliWithin(t, base, env, "list-windows", "-s", sess, "--json")
@@ -218,10 +185,6 @@ func sessionWindowHosts(t *testing.T, base string, env []string, sess string) ma
 
 var paneMachineMark = regexp.MustCompile(`M=([^\s=]+)=M`)
 
-// paneMachine asks the shell in window id which daemon started it, by the
-// isolation root in its environment. Every daemon's panes inherit its own
-// XDG_CONFIG_HOME, a pane on another machine included, because the far daemon
-// is the one that starts it.
 func (f *globalFleet) paneMachine(t *testing.T, base, sess, id string) string {
 	t.Helper()
 	cmd := "echo M=$(basename $(dirname $XDG_CONFIG_HOME))=M\n"
@@ -246,14 +209,11 @@ func (f *globalFleet) paneMachine(t *testing.T, base, sess, id string) string {
 	return "no answer from the pane: " + strings.TrimSpace(out)
 }
 
-// openPath is one way into the machine picker.
 type openPath struct {
 	name string
 	open func(t *testing.T, term *tuitest.Terminal)
 }
 
-// newWindowPaths is every way into the window picker that a key or the
-// palette reaches. The rail's "+" and the dock call the same NewWindowHere.
 var newWindowPaths = []openPath{
 	{"prefix c", func(t *testing.T, term *tuitest.Terminal) {
 		if err := term.SendKeys(tuitest.Ctrl('b'), "c"); err != nil {
@@ -268,8 +228,6 @@ var newWindowPaths = []openPath{
 	}},
 }
 
-// openPaletteRow opens the palette with the prefix key, which works in both
-// modes, filters it to row and runs the first match.
 func openPaletteRow(t *testing.T, term *tuitest.Terminal, query, row string) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Ctrl('b'), "P"); err != nil {
@@ -292,8 +250,6 @@ const (
 	pickerSessionTitle = "New session on"
 )
 
-// choosePickerRow picks the row labelled label in the open picker, by the
-// keyboard (index i) or by a click on the row.
 func choosePickerRow(t *testing.T, term *tuitest.Terminal, title, label string, i int, click bool) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -312,9 +268,6 @@ func choosePickerRow(t *testing.T, term *tuitest.Terminal, title, label string, 
 		clickAt(t, term, c, r, 1)
 		return
 	}
-	// The cursor goes down to the row by its label, the way a person finds
-	// it, rather than by its place: the rows differ between builds and
-	// between the machines the client is attached to. The start is the top.
 	_ = i
 	if err := term.SendKeys(tuitest.Home); err != nil {
 		t.Fatal(err)
@@ -336,9 +289,6 @@ func choosePickerRow(t *testing.T, term *tuitest.Terminal, title, label string, 
 	}
 }
 
-// pickerRowAt is the screen cell of the picker row labelled label. The row is
-// searched for below the picker's title, so a pane that prints the same word
-// is not clicked.
 func pickerRowAt(t *testing.T, term *tuitest.Terminal, title, label string) (row, col int) {
 	t.Helper()
 	if r, c, ok := findPickerRow(term.Screen(), title, label); ok {
@@ -348,7 +298,6 @@ func pickerRowAt(t *testing.T, term *tuitest.Terminal, title, label string) (row
 	return 0, 0
 }
 
-// findPickerRow is pickerRowAt that reports a missing row instead of failing.
 func findPickerRow(s tuitest.Screen, title, label string) (row, col int, ok bool) {
 	_, rows := s.Size()
 	titleRow, titleCol := -1, 0
@@ -362,11 +311,8 @@ func findPickerRow(s tuitest.Screen, title, label string) (row, col int, ok bool
 			continue
 		}
 		if r <= titleRow+2 || r > titleRow+14 {
-			continue // the search line and its rule, or past the list
+			continue
 		}
-		// A row's label starts in the title's column, give or take the
-		// cursor mark. The same word elsewhere on the line (a row's detail,
-		// a pane's frame) is in another column.
 		for from := 0; ; {
 			b := strings.Index(line[from:], label)
 			if b < 0 {
@@ -382,8 +328,6 @@ func findPickerRow(s tuitest.Screen, title, label string) (row, col int, ok bool
 	return 0, 0, false
 }
 
-// pickerOpen reports whether the picker titled title is on screen. The
-// palette's "New window on another machine" row does not count.
 func pickerOpen(s tuitest.Screen, title string) bool {
 	for line := range strings.SplitSeq(s.Text(), "\n") {
 		if isPickerTitle(line, title) {
@@ -398,7 +342,6 @@ func isPickerTitle(line, title string) bool {
 	return i >= 0 && !strings.HasPrefix(line[i+len(title):], " another")
 }
 
-// waitPickerClosed waits for the picker to leave the screen.
 func waitPickerClosed(t *testing.T, term *tuitest.Terminal, title string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -408,8 +351,6 @@ func waitPickerClosed(t *testing.T, term *tuitest.Terminal, title string) {
 	}
 }
 
-// waitNewWindow waits for a window id in the session that was not in before,
-// and returns it with the host the daemon recorded.
 func waitNewWindow(t *testing.T, base string, env []string, sess string, before map[string]string, within time.Duration) (string, string, bool) {
 	t.Helper()
 	deadline := time.Now().Add(within)
@@ -424,8 +365,6 @@ func waitNewWindow(t *testing.T, base string, env []string, sess string, before 
 	return "", "", false
 }
 
-// pickLoops is how many picks each test makes. TUIOS_E2E_PICK_LOOPS raises it
-// for a soak.
 func pickLoops(def int) int {
 	if n, err := strconv.Atoi(os.Getenv("TUIOS_E2E_PICK_LOOPS")); err == nil && n > 0 {
 		return n
@@ -456,8 +395,6 @@ func TestAPaneInAGlobalSessionRunsOnThePickedMachine(t *testing.T) {
 
 	rows := []string{thisMachineRow(), "alpha", "beta"}
 	wants := []string{"here", "alpha", "beta"}
-	// 54 is every path, row and way of choosing three times over, and it puts
-	// eighteen panes on each machine, which is past what a link used to carry.
 	loops := pickLoops(54)
 	var wrong []string
 	for i := range loops {
@@ -487,8 +424,6 @@ func TestAPaneInAGlobalSessionRunsOnThePickedMachine(t *testing.T) {
 	t.Logf("%d of %d picks landed on the picked machine", loops, loops)
 }
 
-// sessionIsGlobal reads whether ls --json marks the named session global, and
-// whether it is listed as restored. It fails when the session is not listed.
 func sessionIsGlobal(t *testing.T, base string, env []string, name string) (global, restored bool) {
 	t.Helper()
 	var found bool
@@ -515,8 +450,6 @@ func sessionIsGlobal(t *testing.T, base string, env []string, name string) (glob
 	return global, restored
 }
 
-// newWindowAsksForAMachine attaches to sess, presses prefix c and reports
-// whether the machine picker opened. It saves the frame as name.
 func newWindowAsksForAMachine(t *testing.T, base string, env []string, sess string, windows int, name string) bool {
 	t.Helper()
 	term := startIn(t, base, startOpts{args: []string{"attach", sess}, env: env})
@@ -585,18 +518,14 @@ func TestAGlobalSessionStaysGlobalAcrossARestart(t *testing.T) {
 		t.Fatalf("ASSERTION: prefix c in the global session did not ask for a machine before any restart")
 	}
 
-	// restart stops this machine's daemon, runs edit on the saved state while
-	// no daemon holds it, and starts a daemon, which restores the session.
 	restart := func(round int, edit func()) {
 		t.Helper()
-		// kill-server is synchronous and saves every session on the way out.
 		if out, err := tuiosCLIEnv(t, f.here, f.env, "kill-server"); err != nil {
 			t.Fatalf("restart %d: kill-server: %v: %s", round, err, out)
 		}
 		if edit != nil {
 			edit()
 		}
-		// Starting any session starts a daemon, and a daemon restores on start.
 		if out, err := tuiosCLIEnv(t, f.here, f.env, "new", fmt.Sprintf("trigger-%d", round), "--detach"); err != nil {
 			t.Fatalf("restart %d: start a fresh daemon: %v: %s", round, err, out)
 		}
@@ -613,23 +542,17 @@ func TestAGlobalSessionStaysGlobalAcrossARestart(t *testing.T) {
 		if !global {
 			t.Fatalf("ASSERTION: restart %d: the global session came back as a plain local one (ls --json has no global mark)", round)
 		}
-		// The pane on alpha comes back as a shell here, so the session has
-		// the same two windows.
 		if !newWindowAsksForAMachine(t, f.here, f.env, "work", 2, fmt.Sprintf("global-restore-after-%d", round)) {
 			t.Fatalf("ASSERTION: restart %d: prefix c in the restored global session opened a pane without asking for a machine", round)
 		}
 	}
 
-	// A session that lost the mark, as one restored by an older daemon did:
-	// its saved file has no global key. set-session-space --global marks it
-	// again, and a client attached at the time asks for a machine at once.
 	saved := filepath.Join(xdgDir(f.here, "XDG_STATE_HOME"), "tuios", "sessions", "work.json")
 	restart(3, func() {
 		data, err := os.ReadFile(saved)
 		if err != nil {
 			t.Fatalf("read the saved state: %v", err)
 		}
-		// UseNumber keeps the nanosecond times exact through the rewrite.
 		var st map[string]any
 		dec := json.NewDecoder(bytes.NewReader(data))
 		dec.UseNumber()
@@ -676,8 +599,6 @@ func TestAGlobalSessionStaysGlobalAcrossARestart(t *testing.T) {
 	}
 	waitPickerClosed(t, term, pickerWindowTitle)
 
-	// --global=false takes the mark off and files the session in one call,
-	// and --global takes it back out of the space.
 	if out, err := tuiosCLIEnv(t, f.here, f.env, "set-session-space", "-s", "work", "--global=false", "payments"); err != nil || !strings.Contains(out, "is in space payments") {
 		t.Fatalf("ASSERTION: set-session-space --global=false payments: %v: %s", err, out)
 	}
@@ -732,8 +653,6 @@ func TestAHostHoldsManyPanes(t *testing.T) {
 	}
 }
 
-// takeOffline makes the machine at addr refuse new connections, then kills
-// every open link's far side, so each link redials and only addr's fails.
 func takeOffline(t *testing.T, dir, addr string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, "down-"+addr), nil, 0o600); err != nil {
@@ -742,9 +661,6 @@ func takeOffline(t *testing.T, dir, addr string) {
 	breakTheLink(t)
 }
 
-// cliWithin is tuiosCLIEnv with a deadline, for the reads a wait loop polls.
-// A daemon that stops answering then shows as a failed read, and the loop's
-// own deadline still holds.
 func cliWithin(t *testing.T, base string, env []string, args ...string) (string, error) {
 	t.Helper()
 	pinPreV080Looks(t, base)
@@ -760,8 +676,6 @@ func cliWithin(t *testing.T, base string, env []string, args ...string) (string,
 	return string(out), err
 }
 
-// thisMachineRow is the label the pickers give this machine: its host name
-// up to the first dot, then "(this machine)" (#1281).
 func thisMachineRow() string {
 	h, err := os.Hostname()
 	if err != nil || h == "" {

@@ -26,8 +26,6 @@ const (
 	promptKeyTab   = "\t"
 )
 
-// waitPrompt waits for the palette to show the prompt and every marker, and
-// saves the frame.
 func waitPrompt(t *testing.T, term *tuitest.Terminal, frame string, markers ...string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return screenHas(s, markers...) }, uiTimeout); err != nil {
@@ -36,15 +34,12 @@ func waitPrompt(t *testing.T, term *tuitest.Terminal, frame string, markers ...s
 	saveFrame(t, term, frame)
 }
 
-// pressAfterSettle waits out the moment a new prompt ignores Enter, then
-// presses keys.
 func pressAfterSettle(t *testing.T, term *tuitest.Terminal, keys ...string) {
 	t.Helper()
 	pause(t, "a new prompt ignores Enter for its first moment", answerSettle)
 	pressKeys(t, term, keys...)
 }
 
-// promptRun waits for a background tuios prompt to end.
 func promptRun(t *testing.T, term *tuitest.Terminal, run <-chan askRun) askRun {
 	t.Helper()
 	select {

@@ -19,24 +19,17 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The limits TestSSHServerLimits configures. The handshake timeout is short so
-// the test can wait it out.
 const (
 	sshLimitHandshake     = 3 * time.Second
 	sshLimitMaxHandshakes = 4
 )
 
-// idleSSHConn is a client that sends its version line and nothing more. closed
-// receives the time the server closed the connection.
 type idleSSHConn struct {
 	conn   net.Conn
 	opened time.Time
 	closed chan time.Time
 }
 
-// openIdleSSHConn connects to addr and sends only the version line. With
-// wantBanner it waits for the server's version line, which the server sends
-// only to a connection it admitted. Without, it returns at once.
 func openIdleSSHConn(t *testing.T, addr string, wantBanner bool) (*idleSSHConn, string) {
 	t.Helper()
 	c, err := net.DialTimeout("tcp", addr, 5*time.Second)
@@ -65,8 +58,6 @@ func openIdleSSHConn(t *testing.T, addr string, wantBanner bool) (*idleSSHConn, 
 	return ic, banner
 }
 
-// procStats is the number of open file descriptors, the number of PTY
-// masters among them, and the resident set size in KiB, of process pid.
 type procStats struct {
 	fds, ptys int
 	rssKiB    int
@@ -99,8 +90,6 @@ func readProcStats(t *testing.T, pid int) procStats {
 	return st
 }
 
-// sshKeyArgs are the ssh client flags for a login with key and nothing from
-// the machine's own ssh config or known hosts.
 func sshKeyArgs(key string, port int, user string) []string {
 	return []string{"-tt", "-p", strconv.Itoa(port), "-i", key,
 		"-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null",
@@ -160,13 +149,10 @@ max_sessions = 1
 	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(srv.port))
 	serverLog := func() string { data, _ := os.ReadFile(srv.log); return string(data) }
 
-	// The probe connections of startSSHServerIn close at once; give their
-	// slots time to come back before the count starts.
 	time.Sleep(500 * time.Millisecond)
 	baseline := readProcStats(t, srv.pid)
 	t.Logf("baseline: %d fds, %d PTYs, %d KiB RSS", baseline.fds, baseline.ptys, baseline.rssKiB)
 
-	// 1. Fill every handshake slot with a client that only says hello.
 	idle := make([]*idleSSHConn, 0, sshLimitMaxHandshakes)
 	for range sshLimitMaxHandshakes {
 		ic, banner := openIdleSSHConn(t, addr, true)
@@ -178,7 +164,6 @@ max_sessions = 1
 	held := readProcStats(t, srv.pid)
 	t.Logf("with %d idle connections: %d fds, %d KiB RSS", len(idle), held.fds, held.rssKiB)
 
-	// 2. One more is closed at once, before the server says anything.
 	extra, _ := openIdleSSHConn(t, addr, false)
 	select {
 	case <-extra.closed:
@@ -194,7 +179,6 @@ max_sessions = 1
 		}
 	}
 
-	// 3. The admitted ones are closed after the handshake timeout, not before.
 	for i, ic := range idle {
 		select {
 		case at := <-ic.closed:
@@ -215,7 +199,6 @@ max_sessions = 1
 		t.Fatalf("ASSERTION: the server holds %d fds after the idle connections closed, %d before they opened", after.fds, baseline.fds)
 	}
 
-	// 4. A key login works, and outlives the handshake timeout.
 	home := xdgDir(base, "HOME")
 	first := tuitest.StartT(t, append([]string{"ssh"}, sshKeyArgs(key, srv.port, "first")...),
 		tuitest.WithSize(120, 40),
@@ -241,7 +224,6 @@ max_sessions = 1
 			baseline.ptys, withFirst.ptys)
 	}
 
-	// 5. A second session is refused with a message, before it has a PTY.
 	ctx, cancel := context.WithTimeout(context.Background(), bootTimeout)
 	defer cancel()
 	second := exec.CommandContext(ctx, "ssh", sshKeyArgs(key, srv.port, "second")...)
@@ -278,7 +260,6 @@ max_sessions = 1
 		}
 	}
 
-	// The first session is still open past the handshake timeout.
 	time.Sleep(time.Until(loggedIn.Add(sshLimitHandshake + time.Second)))
 	if st, exited := first.ExitStatus(); exited {
 		t.Fatalf("ASSERTION: the first session ended (%v) after the handshake timeout\n%s", st, first.Snapshot())

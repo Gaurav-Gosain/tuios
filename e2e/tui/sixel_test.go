@@ -19,29 +19,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// These tests put tuios in front of a stand-in sixel terminal and check what
-// that terminal would show.
-//
-// The stand-in is tuios's own emulator, fed the bytes tuios wrote to its host
-// from the first byte on. Its sixel handling is the useful part: it does what a
-// sixel terminal does to the cells a picture lands on. Each cell an image covers
-// is marked with the image and the cell's place in it, text written into a cell
-// replaces the mark, and an erase clears it. So after the replay, the marks
-// left in its grid are exactly the pixels a real sixel terminal would still be
-// showing, and each can be traced to the pixels tuios sent for it.
-//
-// That turns "the image lands at the right place, clipped to the pane, and is
-// gone when cleared" into checks on a grid:
-//
-//   - every cell the host shows image pixels in is one tuios drew as a blank
-//     (an image cell), so no picture is left behind under text or chrome;
-//   - the pixels in each such cell are the pixels of the pane's own image cell
-//     at that position, so the crop and the placement are right;
-//   - the host shows image pixels in every image cell of the frame except the
-//     screen's last row, so nothing visible is missing.
-
-// sixelHost records what tuios writes to its terminal and answers the startup
-// probe as a terminal with the given DA1 attributes and graphics answers.
 type sixelHost struct {
 	mu    sync.Mutex
 	buf   bytes.Buffer
@@ -91,16 +68,11 @@ func (h *sixelHost) answer(term *tuitest.Terminal) {
 	}()
 }
 
-// sixelFixture is a test picture: cols by rows cells at the host's cell size,
-// each cell one flat colour of its own, so a cell of pixels names the cell it
-// came from.
 type sixelFixture struct {
 	cols, rows int
 	path       string
 }
 
-// period is how many columns go by before a colour repeats: the fixture
-// needs one register per distinct cell, and there are 256.
 func (f sixelFixture) period() int { return min(f.cols, vt.SixelMaxRegisters/f.rows) }
 
 func (f sixelFixture) register(col, row int) int { return row*f.period() + col%f.period() }
@@ -134,7 +106,6 @@ func writeSixelFixture(t *testing.T, dir string, cols, rows int) sixelFixture {
 	return f
 }
 
-// hostView is the stand-in terminal after a replay.
 type hostView struct {
 	emu    *vt.Emulator
 	images map[uint32]*vt.SixelImage
@@ -152,7 +123,6 @@ func replayHost(t *testing.T, stream []byte, cols, rows int) *hostView {
 		hv.sixels++
 		return next
 	})
-	// Replies the stand-in makes to tuios's queries go nowhere.
 	go func() {
 		buf := make([]byte, 4096)
 		for {
@@ -168,9 +138,6 @@ func replayHost(t *testing.T, stream []byte, cols, rows int) *hostView {
 	return hv
 }
 
-// shownColor is the colour of the first image pixel the host shows in cell
-// (x, y), and false where it shows no image. A cell on an image's last row may
-// hold only its top few pixel rows, so the whole cell is searched.
 func (hv *hostView) shownColor(x, y int) (color.RGBA, bool) {
 	c := hv.emu.CellAt(x, y)
 	if c == nil {
@@ -191,9 +158,6 @@ func (hv *hostView) shownColor(x, y int) (color.RGBA, bool) {
 	return color.RGBA{}, false
 }
 
-// checkHostImage compares the host with tuios's own frame. origin is the
-// screen cell of the pane image's top-left cell, and fixture the image.
-// It returns how many cells show the image.
 func checkHostImage(t *testing.T, what string, term *tuitest.Terminal, hv *hostView, f sixelFixture, origin image.Point) int {
 	t.Helper()
 	s := term.Screen()
@@ -216,8 +180,6 @@ func checkHostImage(t *testing.T, what string, term *tuitest.Terminal, hv *hostV
 					bad = append(bad, fmt.Sprintf("%d,%d shows image pixels outside the image", x, y))
 					continue
 				}
-				// Sixel states colours in percent, so a channel may come
-				// back a step or two off.
 				if want := f.colorAt(c, r); !closeColor(got, want) {
 					bad = append(bad, fmt.Sprintf("%d,%d shows %v, the pane's cell %d,%d is %v", x, y, got, c, r, want))
 				}
@@ -230,8 +192,6 @@ func checkHostImage(t *testing.T, what string, term *tuitest.Terminal, hv *hostV
 	return shown
 }
 
-// imageOrigin finds the image's top-left cell: the start of the row under
-// the line the fixture command printed first.
 func imageOrigin(t *testing.T, term *tuitest.Terminal, marker string) image.Point {
 	t.Helper()
 	s := term.Screen()
@@ -251,8 +211,6 @@ func imageOrigin(t *testing.T, term *tuitest.Terminal, marker string) image.Poin
 
 var sixelDCS = regexp.MustCompile(`\x1bP[0-9;]*q`)
 
-// startSixelPane boots tuios against the given host, opens one pane and
-// leaves it in terminal mode at a shell prompt.
 func startSixelPane(t *testing.T, host *sixelHost, daemon bool) (*tuitest.Terminal, string) {
 	t.Helper()
 	term, base := start(t, startOpts{cols: 120, rows: 40, out: host, daemonDefault: daemon, env: []string{"TUIOS_CELL_SIZE=10x20", "TUIOS_KITTY_GRAPHICS=0"}})
@@ -267,8 +225,6 @@ func startSixelPane(t *testing.T, host *sixelHost, daemon bool) (*tuitest.Termin
 	return term, base
 }
 
-// showFixture prints the marker line and then the picture, and waits for
-// both to reach the screen.
 func showFixture(t *testing.T, term *tuitest.Terminal, f sixelFixture, marker string) image.Point {
 	t.Helper()
 	typeLine(t, term, "clear; printf '%s\\n' '"+marker[:2]+"''"+marker[2:]+"'; cat "+f.path+"; echo; echo SHOWN")
@@ -290,8 +246,6 @@ func TestSixelShowsClippedAndClears(t *testing.T) {
 			host := newSixelHost(true, false)
 			term, _ := startSixelPane(t, host, daemon)
 
-			// Wider than the pane, so the host must be sent a crop.
-			// Tall enough to run under the palette, which opens mid-screen.
 			f := writeSixelFixture(t, t.TempDir(), 140, 16)
 			origin := showFixture(t, term, f, "IMGTOP")
 
@@ -300,13 +254,10 @@ func TestSixelShowsClippedAndClears(t *testing.T) {
 				t.Fatalf("the host was sent no sixel image")
 			}
 			shown := checkHostImage(t, "drawn", term, hv, f, origin)
-			// The pane is the full width less its border: the crop is the
-			// pane's content columns, every row.
 			if want := f.rows * (119 - origin.X); shown != want {
 				t.Errorf("host shows %d image cells, want %d (%d rows of the pane's %d columns)", shown, want, f.rows, 119-origin.X)
 			}
 
-			// A popup over the picture: the host must show nothing under it.
 			leaveTerminalMode(t, term)
 			if err := term.SendKeys(legacyCtrlP); err != nil {
 				t.Fatal(err)
@@ -329,7 +280,6 @@ func TestSixelShowsClippedAndClears(t *testing.T) {
 				t.Errorf("after the palette closed the host shows %d image cells, want %d", back, shown)
 			}
 
-			// Clearing the pane takes the picture off the host.
 			enterTerminalMode(t, term)
 			runInShell(t, term, "clear; echo CLEA''RED", "CLEARED", shellTimeout)
 			time.Sleep(time.Second)
@@ -338,7 +288,6 @@ func TestSixelShowsClippedAndClears(t *testing.T) {
 				t.Errorf("after clear the host still shows %d image cells", left)
 			}
 
-			// No raw marker ever reaches the host as text.
 			if bytes.Contains(host.bytes(), []byte(vt.SixelMarkerLead)) {
 				t.Errorf("an image marker reached the host as text")
 			}
@@ -346,7 +295,6 @@ func TestSixelShowsClippedAndClears(t *testing.T) {
 	}
 }
 
-// sixelRowOf returns the screen row a line containing want is on, or -1.
 func sixelRowOf(s tuitest.Screen, want string) int {
 	_, rows := s.Size()
 	for y := range rows {
@@ -370,7 +318,6 @@ func TestSixelScrollsWithThePane(t *testing.T) {
 		t.Fatalf("host shows %d image cells, want %d", n, 6*20)
 	}
 
-	// The pane's last content row is the one above its bottom border.
 	s := term.Screen()
 	_, rows := s.Size()
 	last := -1
@@ -384,8 +331,6 @@ func TestSixelScrollsWithThePane(t *testing.T) {
 	if last < 0 || shown0 < 0 {
 		t.Fatalf("cannot find the pane's bottom (%d) or SHOWN (%d)\n%s", last, shown0, s.Text())
 	}
-	// Enough blank lines that the screen scrolls by four: the marker line
-	// and the picture's top three rows leave the pane.
 	n := last - shown0 + 1
 	runInShell(t, term, fmt.Sprintf("for i in $(seq %d); do echo; done; echo SCROLL''ED", n), "SCROLLED", shellTimeout)
 	time.Sleep(time.Second)
@@ -406,10 +351,6 @@ func closeColor(a, b color.RGBA) bool {
 	return d(a.R, b.R) && d(a.G, b.G) && d(a.B, b.B)
 }
 
-// checkHostMatchesFrame is the check for a picture whose pixels the test does
-// not know, one a real program drew: the host shows image pixels in exactly
-// the cells tuios drew as image cells (concealed blanks), except the screen's
-// last row, which a sixel is never sent to. It returns the number of cells.
 func checkHostMatchesFrame(t *testing.T, what string, term *tuitest.Terminal, hv *hostView) int {
 	t.Helper()
 	s := term.Screen()
@@ -487,8 +428,6 @@ func TestSixelRealPrograms(t *testing.T) {
 				t.Skipf("%s is not installed", tc.bin)
 			}
 			if tc.bin == "img2sixel" {
-				// The libsixel build on some machines writes nothing at all
-				// for any input; that is not tuios's to test.
 				if out, _ := exec.Command("img2sixel", pic).Output(); len(out) == 0 {
 					t.Skipf("img2sixel writes no output on this machine")
 				}
@@ -512,8 +451,6 @@ func TestSixelRealPrograms(t *testing.T) {
 		})
 	}
 
-	// yazi previews the picture it is opened on, in its right-hand column,
-	// and picks its image protocol from TERM_PROGRAM and the DA1 answer.
 	t.Run("yazi", func(t *testing.T) {
 		if _, err := exec.LookPath("yazi"); err != nil {
 			t.Skip("yazi is not installed")
@@ -548,8 +485,6 @@ func TestSixelRealPrograms(t *testing.T) {
 	})
 }
 
-// paneDA1 asks the pane's terminal for DA1 from inside the pane, the way an
-// image tool does, and returns the attribute list it got.
 func paneDA1(t *testing.T, term *tuitest.Terminal, dir string) string {
 	t.Helper()
 	script := filepath.Join(dir, "da1.py")
@@ -597,9 +532,6 @@ func TestSixelFallbacks(t *testing.T) {
 		env          string
 		symbols      string
 	}{
-		// The harness's own terminal answers DA1 and the kitty query before
-		// the stand-in does, so the hosts without sixel are pinned by the
-		// override the probe itself honours.
 		{"sixel", true, false, "TUIOS_KITTY_GRAPHICS=0", ""},
 		{"kitty", false, true, "TUIOS_SIXEL_GRAPHICS=0", ""},
 		{"plain", false, false, "TUIOS_SIXEL_GRAPHICS=0 TUIOS_KITTY_GRAPHICS=0", ""},
@@ -632,9 +564,6 @@ func TestSixelFallbacks(t *testing.T) {
 			before := len(host.bytes())
 			origin := showFixture(t, term, f, "IMGTOP")
 			out := host.bytes()[before:]
-			// A host with an image protocol gets the picture in it, and
-			// never glyphs: its image cells stay blanks on the pane's
-			// ground.
 			if tc.sixel || tc.kitty {
 				for r := range f.rows {
 					for c := range 8 {
@@ -666,8 +595,6 @@ func TestSixelFallbacks(t *testing.T) {
 				}
 				text := term.Screen().Text()
 				box := strings.Contains(text, "┌─") && strings.Contains(text, "└─")
-				// The picture's cells are painted: their colours are
-				// checked by TestImageSymbolsOnAHostWithoutGraphics.
 				painted := 0
 				for r := range f.rows {
 					for c := range 8 {
@@ -710,15 +637,12 @@ func TestSixelAtTheBottomKeepsItsLastRow(t *testing.T) {
 	}
 }
 
-// sixelPaintedExtent is how far a sixel sequence paints, in pixels, whatever
-// size its raster attributes declare.
 func sixelPaintedExtent(body []byte) (w, h int) {
 	cmd := vt.ParseSixelCommand(body)
 	if cmd == nil {
 		return 0, 0
 	}
 	cmd.Width, cmd.Height = 2048, 2048
-	// Count painted pixels only, whatever the background mode says.
 	cmd.BackgroundMode = 1
 	img := vt.DecodeSixel(cmd)
 	for y := range img.Height {

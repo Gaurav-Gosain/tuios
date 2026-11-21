@@ -10,23 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// How TestCockpitReplyEditorStdout could pass wrongly, written down first:
-//   - The editor could be handed a pipe for stdout, as the scrollback editor
-//     was: bubbletea gives a command the program's output, and the client's is
-//     a wrapper, not a file. The fake editor records whether its stdout is a
-//     terminal, and the test requires it.
-//   - The fake editor could report a terminal wrongly. It tests [ -t 1 ] into
-//     a variable before any redirect, since `if [ -t 1 ] ... fi > file` would
-//     test the file.
-//   - Ctrl+G could do something other than open the editor, and the record
-//     would then never appear. The test waits for the record and fails on its
-//     absence, not on a guess about the screen.
-//   - replyEditorCmd has two callers, in inbox_reply.go and agent_mail.go.
-//     This test reaches the one the agents view's reply box uses, and the
-//     fix is in replyEditorCmd's command, which both share.
-
-// fakeReplyEditor records whether its stdout is a terminal, then holds the
-// terminal for a moment.
 const fakeReplyEditor = `#!/bin/sh
 if [ -t 1 ]; then out=terminal; else out=not-a-terminal; fi
 printf '%s' "$out" > %DIR%/stdout
@@ -96,27 +79,6 @@ func TestCockpitReplyEditorStdout(t *testing.T) {
 	replySendNowOrQueue(t, term, base)
 }
 
-// replySendNowOrQueue is the send-now half of TestCockpitReplyEditorStdout.
-// The reply box is open on docs-cli, which rests. The button reads Send and
-// no send-now hint shows. The agent then reports working: the button reads
-// Queue and the hints offer alt+enter (⌥↩ or ⌃↩ on a Mac) to send now. enter queues a reply,
-// which waits and is not typed. alt+enter on a second reply types it into the
-// pane at once, while the agent still reports working, and the queue still
-// holds only the first reply: send now leaves the queue as it is. Frames of
-// the box at rest, at work, and after the send are saved under artifactDir.
-//
-// How it could pass wrongly, written down first:
-//   - alt+enter could queue the reply, and the queue type it at a rest. The
-//     agent never rests in this test, so the pane never shows it.
-//   - The pane could show the text because the box echoed it, not because
-//     it was typed. capture-pane reads the docs pane, which the client does
-//     not show, and the shell there runs the line, so its output is there.
-//   - The send-now reply could also join the queue and be typed twice. The
-//     test reads the queue after the send.
-//
-// Negative control, recorded in NEGATIVE_CONTROLS.md: with EventSendNow
-// routed to InboxReplySend, the reply is queued, never reaches the pane, and
-// the wait for it fails.
 func replySendNowOrQueue(t *testing.T, term *tuitest.Terminal, base string) {
 	const queued, now = "queued-reply-7d2e", "sent-now-4b9c"
 	cli := func(what string, args ...string) string {
@@ -139,7 +101,6 @@ func replySendNowOrQueue(t *testing.T, term *tuitest.Terminal, base string) {
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "reply-send-working-200x55")
 
-	// enter queues while the agent works.
 	if err := term.SendKeys("echo "+queued, tuitest.Enter); err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +109,6 @@ func replySendNowOrQueue(t *testing.T, term *tuitest.Terminal, base string) {
 		t.Fatalf("ASSERTION: enter did not queue the reply to a working agent: %q", out)
 	}
 
-	// alt+enter sends now.
 	row, col := findText(t, term, "Write a reply.")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	waitText(t, term, "the open reply editor", "Type your reply.")
@@ -163,7 +123,6 @@ func replySendNowOrQueue(t *testing.T, term *tuitest.Terminal, base string) {
 	deadline := time.Now().Add(uiTimeout)
 	for {
 		pane = cli("capture-pane", "capture-pane", "-s", "docs", "-w", "docs-cli")
-		// The command line and its output: the shell ran it.
 		if strings.Count(pane, now) >= 2 {
 			break
 		}

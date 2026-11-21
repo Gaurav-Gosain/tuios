@@ -13,20 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// tuios xpanes against the real binary (discussion #273), run from inside a
-// pane of the session as a person does: three items on stdin, one pane each,
-// on a new workspace, tiled, with multifocus on.
-//
-// How this could pass wrongly, written down first:
-//   - ITEM-a-42 could be the typed command line. The line holds $((6*7)),
-//     and only the shell makes 42.
-//   - The panes could be on the old workspace. list-windows must put all three
-//     on workspace 2, and the pane that ran xpanes alone on workspace 1.
-//   - Multifocus could be a message and nothing more. One typed line must run
-//     in all three panes, so its output shows three times.
-//   - The layout could be BSP's own spiral. Tiled puts a and b side by side
-//     on the top row and c under them, as wide as both.
-
 type xpanesRow struct {
 	ID        string `json:"window_id"`
 	Name      string `json:"display_name"`
@@ -75,7 +61,6 @@ func TestXpanesOpensTiledPanesWithMultifocus(t *testing.T) {
 		t.Fatalf("the three panes never showed their items: %v\n%s", err, term.Snapshot())
 	}
 
-	// Three panes on workspace 2, and the arranged geometry reaches the daemon.
 	var panes map[string]xpanesRow
 	deadline := time.Now().Add(uiTimeout)
 	for {
@@ -100,9 +85,6 @@ func TestXpanesOpensTiledPanesWithMultifocus(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	// One typed line runs in every pane. The client may still be in terminal
-	// mode from typing the xpanes line, so it goes to window management first,
-	// and an "i" typed into three shells cannot spoil the line.
 	leaveTerminalMode(t, term)
 	enterTerminalMode(t, term)
 	if err := term.SendKeys("echo SYNC-$((6*7))", tuitest.Enter); err != nil {
@@ -116,8 +98,6 @@ func TestXpanesOpensTiledPanesWithMultifocus(t *testing.T) {
 	}
 	t.Logf("after xpanes and one typed line:\n%s", term.Snapshot())
 
-	// Back on workspace 1, a typed line stays there. The set's panes on
-	// workspace 2 are off screen, so the line must not run in them.
 	showWorkspace := func(ws string, want string) {
 		t.Helper()
 		if out, err := tuiosCLI(t, base, "select-workspace", "-s", "xp", ws); err != nil {
@@ -177,7 +157,6 @@ func TestXpanesSpeedyIntervalAndCloseWorkspace(t *testing.T) {
 		}
 	}
 
-	// -ss: each pane runs its command and closes with it.
 	ss := base + "/ss-"
 	if err := term.SendKeys(tuiosBin+" xpanes --no-sync -ss -c 'touch "+ss+"{}; sleep 1' a b", tuitest.Enter); err != nil {
 		t.Fatalf("type xpanes -ss: %v", err)
@@ -190,8 +169,6 @@ func TestXpanesSpeedyIntervalAndCloseWorkspace(t *testing.T) {
 		}
 	}
 
-	// -s with --interval: the commands start 0.5 s apart, stop, and the panes
-	// stay with the message.
 	stamp := base + "/start-"
 	if out, err := tuiosCLI(t, base, "select-workspace", "-s", "xp", "1"); err != nil {
 		t.Fatalf("back to workspace 1: %v\n%s", err, out)
@@ -232,7 +209,6 @@ func TestXpanesSpeedyIntervalAndCloseWorkspace(t *testing.T) {
 	}
 	t.Logf("the held -s panes:\n%s", term.Snapshot())
 
-	// close-workspace closes the three and leaves workspace 1.
 	if out, err := tuiosCLI(t, base, "close-workspace", "-s", "xp", "2"); err != nil || !strings.Contains(out, "Closed 3 panes on workspace 2.") {
 		t.Fatalf("close-workspace: %v\n%s", err, out)
 	}
@@ -243,9 +219,6 @@ func TestXpanesSpeedyIntervalAndCloseWorkspace(t *testing.T) {
 	alive(t, term, "after close-workspace")
 }
 
-// xpanesHello runs the default-mode repro of the v0.8.3 bug against session
-// sess and checks each pane's own capture: its output line "hello world from
-// <item>", which only the shell prints, and no line meant for another pane.
 func xpanesHello(t *testing.T, base, sess string) {
 	t.Helper()
 	items := []string{"alpha", "beta", "gamma"}
@@ -275,8 +248,6 @@ func xpanesHello(t *testing.T, base, sess string) {
 	}
 }
 
-// hasLine reports whether out has a line that is exactly line, after trailing
-// space. The typed command holds the words too, but after echo and a quote.
 func hasLine(out, line string) bool {
 	for l := range strings.Lines(out) {
 		if strings.TrimRight(l, " \r\n") == line {
@@ -297,13 +268,6 @@ func TestXpanesDefaultModeWithoutAClient(t *testing.T) {
 	}
 	xpanesHello(t, base, "demo")
 
-	// Each pane writes when its process was forked. The daemon forks a -ss
-	// pane before new-window answers, and xpanes sleeps the interval after
-	// that answer, so the forks are at least the interval apart. The time the
-	// pane's own date ran is not: it adds however long the scheduler took to
-	// run the exec, and on a loaded runner that cut a 0.3 s gap to 0.21 s.
-	// Linux has the fork time in /proc, in clock ticks since boot. Elsewhere
-	// the date is the best there is.
 	mark := base + "/ss-"
 	stamp, unit := "date +%s%N", time.Nanosecond
 	if runtime.GOOS == "linux" {
@@ -350,8 +314,6 @@ func TestXpanesDefaultModeWithoutAClient(t *testing.T) {
 	}
 }
 
-// clockTick is the length of one clock tick, the unit of the start time in
-// /proc/PID/stat.
 func clockTick(t *testing.T) time.Duration {
 	t.Helper()
 	out, err := exec.Command("getconf", "CLK_TCK").Output()

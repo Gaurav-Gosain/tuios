@@ -10,26 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// A panel opened over one pane that fills the screen. That pane is drawn by
-// the fullscreen fast path, which skips the compositor and every overlay with
-// it unless the panel turns the path off. A panel that did not stayed open
-// and took every key while nothing of it was drawn.
-//
-// How these could pass wrongly, written down first:
-//   - The fixture might not be on the fast path at all: a second pane, the
-//     rail or a floating pane takes the path away and draws every panel. Each
-//     test checks the pane's border spans the whole width before it opens
-//     anything.
-//   - The panel could be drawn by a panel under it. The editors open over
-//     Settings, which turns the path off on its own, so Settings is sent away
-//     first and the test waits for its footer to go.
-//   - Waiting for text the pane or the dock already shows passes on a blank
-//     panel. Each marker is text only that panel draws.
-//   - Esc could close the panel and leave the keyboard with something else.
-//     A command the shell has to compute is run after it.
-
-// fullscreenFastPathOverlays lists the panels: how to leave each one up and
-// alone over the pane, and text only it draws.
 var fullscreenFastPathOverlays = []struct {
 	name  string
 	open  func(t *testing.T, term *tuitest.Terminal)
@@ -45,10 +25,6 @@ var fullscreenFastPathOverlays = []struct {
 	{"section editor", openOverSettings("sections"), "Rail sections"},
 }
 
-// openOverSettings opens a picker the way a person reaches it: the palette
-// finds its Settings row, Enter opens it over Settings. A click on Settings
-// raises it and a click on the pane outside both dismisses it, the front
-// panel, which leaves the picker alone.
 func openOverSettings(query string) func(t *testing.T, term *tuitest.Terminal) {
 	return func(t *testing.T, term *tuitest.Terminal) {
 		t.Helper()
@@ -78,8 +54,6 @@ func openOverSettings(query string) func(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// waitFillsScreen waits for the lone pane's top border to run the screen's
-// whole width, which is the shape the fast path draws.
 func waitFillsScreen(t *testing.T, term *tuitest.Terminal, when string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -91,8 +65,6 @@ func waitFillsScreen(t *testing.T, term *tuitest.Terminal, when string) {
 	}
 }
 
-// shellHasKeys runs a command the shell has to compute, so it passes only
-// when the keys reach the pane.
 func shellHasKeys(t *testing.T, term *tuitest.Terminal, marker string) {
 	t.Helper()
 	runInShell(t, term, "echo "+marker+"-$((6*7))", marker+"-42", shellTimeout)
@@ -145,8 +117,6 @@ func TestDropDialogDrawsOverALoneFullscreenPane(t *testing.T) {
 	if err := term.WaitForText("build:faraway", uiTimeout); err != nil {
 		t.Fatalf("the far window never appeared: %v\n%s", err, term.Snapshot())
 	}
-	// The dock here shows no mode, so the tiling below is what tells that
-	// alt+esc left terminal mode.
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatal(err)
 	}
@@ -175,8 +145,6 @@ func TestDropDialogDrawsOverALoneFullscreenPane(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("esc did not close the drop question: %v\n%s", err, term.Snapshot())
 	}
-	// Whatever esc did with the held paste, the line is cleared before the
-	// shell is asked to compute something.
 	if err := term.SendKeys(tuitest.Ctrl('c')); err != nil {
 		t.Fatal(err)
 	}

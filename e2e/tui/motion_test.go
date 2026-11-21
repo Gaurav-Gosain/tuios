@@ -19,19 +19,11 @@ import (
 	"tuios.dev/vt"
 )
 
-// The decorative motion, appearance.motion = full: an overlay fades in when it
-// opens, and a working agent's row on the rail shimmers. Both are read off the
-// cells the real binary sends, sampled while they move.
-
-// fadeSample is the palette's title chip as one frame drew it.
 type fadeSample struct {
 	at time.Duration
 	bg tuitest.Color
 }
 
-// sampleFade opens the palette and records the ground of its title chip on
-// every screen that differs from the last, until the screen has held still for
-// a while. The last sample is the chip as it settled.
 func sampleFade(t *testing.T, term *tuitest.Terminal) []fadeSample {
 	t.Helper()
 	if err := term.SendKeys(legacyCtrlP); err != nil {
@@ -93,7 +85,6 @@ func TestOverlayFadesIn(t *testing.T) {
 	}
 	for _, r := range runs {
 		t.Run(r.name, func(t *testing.T) {
-			// The settled chip, from a client that never animates.
 			still := startMotionClient(t, r.env, "none")
 			settled := sampleFade(t, still)
 			want := settled[len(settled)-1].bg
@@ -132,8 +123,6 @@ func TestOverlayFadesIn(t *testing.T) {
 	}
 }
 
-// startMotionClient starts a client at the given motion level with the
-// shipped looks and one pane, in window management mode.
 func startMotionClient(t *testing.T, env []string, level string) *tuitest.Terminal {
 	t.Helper()
 	base := t.TempDir()
@@ -154,8 +143,6 @@ func startMotionClient(t *testing.T, env []string, level string) *tuitest.Termin
 	return term
 }
 
-// closeAndHold closes the palette and requires the screen to stay as the
-// first closed frame drew it: a closing overlay is not animated.
 func closeAndHold(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	closePalette(t, term, "after sampling the fade")
@@ -170,8 +157,6 @@ func closeAndHold(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// agentNameCells is where the working agent's name sits in the rail's agents
-// section: the row under the section's header that carries the name.
 func agentNameCells(s tuitest.Screen, name string) (row, col int, ok bool) {
 	railX := railHeaderColumn(s)
 	if railX < 0 {
@@ -197,8 +182,6 @@ func agentNameCells(s tuitest.Screen, name string) (row, col int, ok bool) {
 	return 0, 0, false
 }
 
-// nameLook is how one frame drew the agent's name: every cell's ink and
-// weight, as one comparable string.
 func nameLook(s tuitest.Screen, row, col, n int) string {
 	var b strings.Builder
 	for x := col; x < col+n; x++ {
@@ -208,8 +191,6 @@ func nameLook(s tuitest.Screen, row, col, n int) string {
 	return b.String()
 }
 
-// sampleName records every distinct look of the name over d, and the screens
-// of the first few, which are the frames worth looking at.
 func sampleName(term *tuitest.Terminal, row, col, n int, d time.Duration) (map[string]bool, []tuitest.Screen) {
 	looks := map[string]bool{}
 	var frames []tuitest.Screen
@@ -310,7 +291,6 @@ func shimmerRun(t *testing.T, d chromeDepth, level string) {
 		}
 	}
 
-	// The agent stops: the name settles and the client goes quiet.
 	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", "shim", "idle"); err != nil {
 		t.Fatalf("set-agent-state idle: %v\n%s", err, out)
 	}
@@ -377,14 +357,6 @@ func TestFullMotionWithoutAgentsStaysIdle(t *testing.T) {
 	}
 }
 
-// Layout motion: a tiled pane slides from where it is drawn to where the
-// layout puts it, and goes one way only. The client's render trace records
-// every pane's rectangle in every frame it composes, and the host stream is
-// replayed one presented frame at a time, so a pane that jumps ahead for a
-// frame and then comes back is seen in both.
-
-// hostTape records everything the client sends the host, from the start, so
-// the stream can be replayed into an emulator one presented frame at a time.
 type hostTape struct {
 	mu   sync.Mutex
 	b    bytes.Buffer
@@ -416,9 +388,6 @@ func (h *hostTape) bytes() ([]byte, bool) {
 	return append([]byte(nil), h.b.Bytes()...), h.full
 }
 
-// presentedRows replays the tape and returns one row of the screen at the
-// close of every synchronized update that ends after from: the row as each
-// frame a conforming host presents shows it, and as no other.
 func presentedRows(tape []byte, cols, rows, row, from int) []string {
 	emu := vt.NewEmulator(cols, rows)
 	var out []string
@@ -446,17 +415,11 @@ func presentedRows(tape []byte, cols, rows, row, from int) []string {
 	}
 }
 
-// drawnRect is a pane's rectangle as one frame drew it.
 type drawnRect struct{ X, Y, W, H int }
 
-// traceFrames reads the frame lines the render trace wrote after offset:
-// each frame's pane rectangles by short window id. syncs counts, for each
-// frame, the state syncs that touched the given pane before it.
 type traceFrame struct {
 	anims int
 	panes map[string]drawnRect
-	// syncs is how many state syncs for watched were applied since the
-	// previous frame.
 	syncs int
 }
 
@@ -508,10 +471,6 @@ func fileSize(t *testing.T, path string) int64 {
 	return st.Size()
 }
 
-// oneWay checks a sequence of values a transition drew: it starts at from,
-// ends at to, never moves back toward from, and passes through at least
-// three values in between, so the change was a slide and not a cut. It
-// returns what is wrong, or "".
 func oneWay(seq []int, from, to int) string {
 	if len(seq) == 0 {
 		return "no frames"
@@ -530,8 +489,6 @@ func oneWay(seq []int, from, to int) string {
 		if (seq[i]-seq[i-1])*dir < 0 {
 			return fmt.Sprintf("frame %d went back from %d to %d", i, seq[i-1], seq[i])
 		}
-		// Reaching the target and then leaving it is the same fault seen
-		// from the other end: an early jump to the final size.
 		if seq[i-1] == to && seq[i] != to {
 			return fmt.Sprintf("frame %d reached the target %d early and left it again for %d", i-1, to, seq[i])
 		}
@@ -548,7 +505,6 @@ func oneWay(seq []int, from, to int) string {
 	return ""
 }
 
-// compactSeq drops repeats, so a sequence reads as the moves it made.
 func compactSeq(seq []int) []int {
 	var out []int
 	for _, v := range seq {
@@ -588,8 +544,6 @@ func TestTiledPanesMoveOneWay(t *testing.T) {
 	tape := &hostTape{}
 	trace := filepath.Join(t.TempDir(), "render-trace.log")
 	initFile := filepath.Join(t.TempDir(), "shrc")
-	// Six directory reports over about a quarter of a second, each to a new
-	// directory, so the daemon has a change to broadcast throughout a slide.
 	shrc := `i=0; while [ $i -lt 6 ]; do printf '\033]7;file://localhost/tmp/%s\033\\' $i; i=$((i+1)); sleep 0.04; done` + "\n"
 	if err := os.WriteFile(initFile, []byte(shrc), 0o644); err != nil {
 		t.Fatalf("write the shell rc: %v", err)
@@ -605,7 +559,6 @@ func TestTiledPanesMoveOneWay(t *testing.T) {
 	}
 	dir := artifactDir(t)
 
-	// The first pane, alone on the screen.
 	settled := readTraceFrames(t, trace, 0, "")
 	if len(settled) == 0 {
 		t.Fatalf("the render trace holds no frames")
@@ -620,7 +573,6 @@ func TestTiledPanesMoveOneWay(t *testing.T) {
 		first, full = id, r
 	}
 
-	// step runs one transition and returns the frames it composed.
 	step := func(name string, act func()) []traceFrame {
 		t.Helper()
 		mark := fileSize(t, trace)
@@ -649,7 +601,6 @@ func TestTiledPanesMoveOneWay(t *testing.T) {
 	width := func(r drawnRect) int { return r.W }
 	left := func(r drawnRect) int { return r.X }
 
-	// Open: the first pane narrows from the full box to its half.
 	tapeMark := tape.len()
 	opened := step("open", func() { newWindow(t, term) })
 	half := opened[len(opened)-1].panes[first]
@@ -658,8 +609,6 @@ func TestTiledPanesMoveOneWay(t *testing.T) {
 	if msg := oneWay(widths, full.W, half.W); msg != "" {
 		t.Errorf("open: the first pane's width %s: %v", msg, compactSeq(widths))
 	}
-	// The broadcast has to have landed while the pane was sliding, or the
-	// open never asked the client to adopt anything.
 	slideSyncs := 0
 	for i, f := range opened {
 		if i > 0 && opened[i-1].anims > 0 && f.anims > 0 {
@@ -670,16 +619,10 @@ func TestTiledPanesMoveOneWay(t *testing.T) {
 		t.Errorf("open: no state sync for the first pane landed during its slide, so this run proves nothing")
 	}
 
-	// The same open as the host presented it: the first pane's right edge is
-	// the first border cell right of its left border on its top row. Where
-	// the new pane is drawn over it, that is the new pane's left edge, which
-	// moves the same way.
 	raw, full2 := tape.bytes()
 	if full2 {
 		t.Fatalf("the host tape filled up")
 	}
-	// The stream and the offset the open starts at, so the frames can be
-	// replayed and drawn again outside the test.
 	_ = os.WriteFile(filepath.Join(dir, "host-stream.bin"), raw, 0o644)
 	_ = os.WriteFile(filepath.Join(dir, "open-offset.txt"), []byte(strconv.Itoa(tapeMark)+"\n"), 0o644)
 	var edges []int
@@ -696,8 +639,6 @@ func TestTiledPanesMoveOneWay(t *testing.T) {
 		t.Errorf("open: on the host, the first pane's right edge %s: %v", msg, compactSeq(edges))
 	}
 
-	// Swap: the focus is on the new pane, on the right. H trades it with the
-	// first pane, which slides right into its slot.
 	swapped := step("swap", func() {
 		if err := term.SendKeys("H"); err != nil {
 			t.Fatalf("send H: %v", err)
@@ -713,7 +654,6 @@ func TestTiledPanesMoveOneWay(t *testing.T) {
 		t.Errorf("swap: the first pane's left edge %s: %v", msg, compactSeq(lefts))
 	}
 
-	// Close: the focused new pane closes and the first pane takes the box.
 	closed := step("close", func() { closeFocusedWindow(t, term, 1) })
 	widths = firstPane(closed, width)
 	lefts = firstPane(closed, left)
@@ -726,39 +666,12 @@ func TestTiledPanesMoveOneWay(t *testing.T) {
 	}
 }
 
-// The workspace slide: a switch to a higher workspace number moves the
-// workspace being left out to the left while the new one comes in from the
-// right, and a lower number the other way. Read off the host stream the real
-// binary sends, replayed one presented frame at a time.
-//
-// How this could pass wrongly, written down first:
-//   - A frame could show both workspaces for a reason other than a slide, such
-//     as a half drawn frame. Only frames a host presents (the close of a
-//     synchronized update) are read, and every mixed frame has to keep the old
-//     workspace on one side and the new one on the other, with the seam moving
-//     one way.
-//   - The rail and the dock could slide with the panes and still show two
-//     workspaces. The columns left of the pane area and the dock row of every
-//     mixed frame have to match the settled frame's.
-//   - A slide could end one frame short and leave a column of the old
-//     workspace behind. The last presented frame has to equal the settled
-//     screen and hold none of the old workspace's cells.
-//   - Keys typed during the slide could reach the old pane, or wait for the
-//     slide to end. The keys are sent once a mixed frame is on the screen,
-//     and their output has to land in the new pane alone.
-//   - With motion none the slide could still run for one frame. No presented
-//     frame of that run may show both workspaces.
-//
-// Frames, the host stream and PNGs are saved under artifactDir.
-
 const (
 	slideCols, slideRows = 120, 36
 	slideOldMark         = 'A'
 	slideNewMark         = 'B'
 )
 
-// slideScreen is one presented frame, copied out of the replaying emulator so
-// it can be kept and drawn as a PNG.
 type slideScreen struct {
 	cols, rows int
 	cells      []tuitest.Cell
@@ -809,8 +722,6 @@ func slideColor(c color.Color) tuitest.Color {
 	}
 }
 
-// presentedScreens replays the tape and returns the whole screen at the close
-// of every synchronized update that ends after from.
 func presentedScreens(tape []byte, cols, rows, from int) []*slideScreen {
 	emu := vt.NewEmulator(cols, rows)
 	var out []*slideScreen
@@ -846,8 +757,6 @@ func presentedScreens(tape []byte, cols, rows, from int) []*slideScreen {
 	}
 }
 
-// slideMarks finds the two fills on a row: the last column of the old
-// workspace's mark and the first of the new one's, -1 for either absent.
 func slideMarks(line string, lo, hi int) (lastOld, firstNew int) {
 	lastOld, firstNew = -1, -1
 	for x, r := range []rune(line) {
@@ -866,19 +775,11 @@ func slideMarks(line string, lo, hi int) (lastOld, firstNew int) {
 	return lastOld, firstNew
 }
 
-// startSlideClient starts a daemon session with workspace 1 filled with A
-// and workspace 2 filled with B, both shells, and attaches a client that
-// records the host stream.
-//
-// extra is more appearance keys. It may set animation_speed, which is 50
-// otherwise.
 func startSlideClient(t *testing.T, level string, extra ...string) (*tuitest.Terminal, *hostTape, string) {
 	t.Helper()
 	base := t.TempDir()
 	killDaemon(t, base)
 	useShippedLooks(base)
-	// At half speed the slide runs 400ms, so a loaded machine still presents
-	// enough of its frames to read the direction off.
 	speed := "animation_speed = 50\n"
 	if len(extra) > 0 && strings.Contains(extra[0], "animation_speed") {
 		speed = ""
@@ -891,8 +792,6 @@ func startSlideClient(t *testing.T, level string, extra ...string) (*tuitest.Ter
 	if out, err := tuiosCLI(t, base, "new-window", "-s", sess, "--workspace", "2", "--no-focus", "bee"); err != nil {
 		t.Fatalf("open the pane on workspace 2: %v\n%s", err, out)
 	}
-	// Each workspace has its own ink, so a fade shows as colours between
-	// the two.
 	fill := func(w string, mark rune, rgb string) {
 		line := fmt.Sprintf(`clear; yes "$(printf '\033[38;2;%sm')%s" | head -n 80`+"\n", rgb, strings.Repeat(string(mark), 150))
 		if out, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", w, line); err != nil {
@@ -913,19 +812,13 @@ func startSlideClient(t *testing.T, level string, extra ...string) (*tuitest.Ter
 	return term, tape, base
 }
 
-// slideResult is one switch as the host presented it.
 type slideResult struct {
 	frames []*slideScreen
-	// mixed are the indexes of frames that show both workspaces on the probe
-	// row, and seams the first column of the new workspace's mark on each.
-	mixed []int
-	seams []int
-	final *slideScreen
+	mixed  []int
+	seams  []int
+	final  *slideScreen
 }
 
-// runSlide presses the switch key and reads back every frame presented until
-// the screen settles. During, when set, runs as soon as a frame on the
-// screen shows both workspaces.
 func runSlide(t *testing.T, term *tuitest.Terminal, tape *hostTape, key rune, newMark rune, during func()) slideResult {
 	t.Helper()
 	return runSlideBy(t, term, tape, func() {
@@ -935,7 +828,6 @@ func runSlide(t *testing.T, term *tuitest.Terminal, tape *hostTape, key rune, ne
 	}, newMark, during)
 }
 
-// runSlideBy is runSlide with the switch made by switchFn.
 func runSlideBy(t *testing.T, term *tuitest.Terminal, tape *hostTape, switchFn func(), newMark rune, during func()) slideResult {
 	t.Helper()
 	mark := tape.len()
@@ -987,9 +879,6 @@ func runSlideBy(t *testing.T, term *tuitest.Terminal, tape *hostTape, switchFn f
 	return r
 }
 
-// slidePaneArea is the pane area of a settled frame that shows one tiled
-// pane filled with mark: the box from the pane's top left corner to its
-// bottom right one, around every cell of the mark.
 func slidePaneArea(s tuitest.Screen, mark rune) image.Rectangle {
 	cols, rows := s.Size()
 	box := image.Rectangle{}
@@ -1004,9 +893,6 @@ func slidePaneArea(s tuitest.Screen, mark rune) image.Rectangle {
 	return box
 }
 
-// chromeOf is the text of every cell outside the pane area: the rail, the
-// dock and anything else that must not move. Colours are left out, since a
-// notice in the dock counts down in colour while the slide runs.
 func chromeOf(s tuitest.Screen, pane image.Rectangle) string {
 	var b strings.Builder
 	cols, rows := s.Size()
@@ -1037,7 +923,6 @@ func TestWorkspaceSwitchSlides(t *testing.T) {
 		t.Fatalf("the settled pane area after the slides differs from the one after the cuts\nslide:\n%s\ncut:\n%s", finals["full"], finals["none"])
 	}
 
-	// appearance.workspace_transition and workspace_transition_ms.
 	t.Run("fade", func(t *testing.T) {
 		r := switchOnce(t, `workspace_transition = "fade"`+"\nanimation_speed = 25")
 		t.Logf("fade: %d presented frames, %d blended, %d offset", len(r.frames), r.blended, len(r.mixed))
@@ -1071,18 +956,13 @@ func TestWorkspaceSwitchSlides(t *testing.T) {
 	})
 }
 
-// switchResult is one alt+2 switch with the pane area compared by colour.
 type switchResult struct {
 	slideResult
-	pane image.Rectangle
-	// blended counts frames with a pane cell whose ink is neither
-	// workspace's own.
+	pane    image.Rectangle
 	blended int
 	settled tuitest.Screen
 }
 
-// switchOnce starts a client with the extra appearance keys, switches from
-// workspace 1 to 2 and reads the frames back.
 func switchOnce(t *testing.T, extra string) switchResult {
 	t.Helper()
 	term, tape, _ := startSlideClient(t, "full", extra)
@@ -1090,9 +970,6 @@ func switchOnce(t *testing.T, extra string) switchResult {
 	mid := pane.Min.Add(pane.Size().Div(2))
 	inkA := term.Screen().Cell(mid.X, mid.Y).Fg
 	r := switchResult{pane: pane}
-	// A fade keeps the text where it is, so waiting for the text to settle
-	// is not enough: wait for the ink of workspace 2 itself, and a little
-	// longer for the last frame.
 	inkB := tuitest.Color{Kind: tuitest.ColorRGB, R: 40, G: 80, B: 230}
 	from := tape.len()
 	if err := term.SendKeys(tuitest.Alt('2')); err != nil {
@@ -1146,8 +1023,6 @@ func switchOnce(t *testing.T, extra string) switchResult {
 	return r
 }
 
-// requireExactFinal fails unless the last presented frame holds the settled
-// pane area, colours included.
 func (r switchResult) requireExactFinal(t *testing.T) {
 	t.Helper()
 	for y := r.pane.Min.Y; y < r.pane.Max.Y; y++ {
@@ -1164,7 +1039,6 @@ func slideRun(t *testing.T, level string) string {
 	dir := artifactDir(t)
 	host := hostPalette(t, "")
 	slides := level != "none"
-	// The pane area, from workspace 1's one pane before any switch.
 	pane := slidePaneArea(term.Screen(), slideOldMark)
 	t.Logf("pane area %v", pane)
 
@@ -1182,22 +1056,15 @@ func slideRun(t *testing.T, level string) string {
 		if len(r.mixed) < 3 {
 			t.Fatalf("%s: only %d presented frames showed both workspaces; the switch was a cut", name, len(r.mixed))
 		}
-		// The strip: up to five frames of the slide, evenly picked.
 		for k := range min(5, len(r.mixed)) {
 			i := r.mixed[k*(len(r.mixed)-1)/max(min(5, len(r.mixed))-1, 1)]
 			savePNG(t, r.frames[i], host, dir, fmt.Sprintf("%s-mid-%d", name, k))
 			_ = os.WriteFile(filepath.Join(dir, fmt.Sprintf("%s-mid-%d.txt", name, k)), []byte(r.frames[i].Text()), 0o644)
 		}
-		// Against the first frame of the slide, not the settled one: a
-		// switch from the command line puts a notice in the dock, which is
-		// gone by the time the screen settles.
 		ref := r.frames[r.mixed[0]]
 		chrome := chromeOf(ref, pane)
 		for n, i := range r.mixed {
 			f := r.frames[i]
-			// A is the workspace with the lower number, so it is on the left
-			// both ways: leaving to the left on the way up, coming in from the
-			// left on the way down.
 			lastA, firstB := slideMarks(f.Line(slideRows/2), 0, slideCols)
 			if lastA >= firstB {
 				t.Fatalf("%s: frame %d has the A workspace at column %d, right of the B one at %d\n%s", name, i, lastA, firstB, f.Text())
@@ -1227,7 +1094,6 @@ func slideRun(t *testing.T, level string) string {
 		}
 	}
 
-	// Up: 1 to 2. The A workspace leaves to the left.
 	up := runSlide(t, term, tape, '2', slideNewMark, nil)
 	check("up", up, true)
 	settled := term.Screen()
@@ -1238,15 +1104,12 @@ func slideRun(t *testing.T, level string) string {
 		t.Fatalf("up: the settled frame still holds the old workspace\n%s", up.final.Text())
 	}
 
-	// Down: 2 to 1. The A workspace comes back in from the left.
 	down := runSlide(t, term, tape, '1', slideOldMark, nil)
 	check("down", down, false)
 	if strings.ContainsRune(down.final.Text(), slideNewMark) {
 		t.Fatalf("down: the settled frame still holds the old workspace\n%s", down.final.Text())
 	}
 
-	// Up again, typing as soon as the slide is on the screen. The keys go to
-	// the pane on workspace 2 at once.
 	const typed = "echo slid-$((6*7))"
 	var during func()
 	if slides {
@@ -1281,8 +1144,6 @@ func slideRun(t *testing.T, level string) string {
 		}
 		t.Logf("typed: the new pane's answer was drawn while it slid in: %v", seen)
 	}
-	// From the command line: the switch reaches the client as a state sync
-	// from the daemon, and slides all the same.
 	cli := runSlideBy(t, term, tape, func() {
 		if out, err := tuiosCLI(t, base, "select-workspace", "-s", "e2e-slide", "1"); err != nil {
 			t.Fatalf("select-workspace: %v\n%s", err, out)
@@ -1290,16 +1151,8 @@ func slideRun(t *testing.T, level string) string {
 	}, slideOldMark, nil)
 	check("cli", cli, false)
 
-	// Back mid-slide: alt+2 and, while it slides, alt+1. The slide turns
-	// round where it is. A slide started again from the edge would move the
-	// seam across most of the pane area in one frame.
 	if slides {
 		back := runSlide(t, term, tape, '2', slideOldMark, func() {
-			// A kitty key reaches tuios at once, where the legacy ESC 1
-			// waited out the escape timeout. Pressed on the slide's first
-			// frame, it turns the slide before the seam has moved, and the
-			// turn cannot be seen. So the press waits until the seam is a
-			// fifth of the pane in.
 			if err := term.WaitForDesc("the slide to cross a fifth of the pane", func(s tuitest.Screen) bool {
 				_, first := slideMarks(s.Line(slideRows/2), 0, slideCols)
 				return first >= 0 && first <= pane.Max.X-pane.Dx()/5
@@ -1332,7 +1185,6 @@ func slideRun(t *testing.T, level string) string {
 		}
 	}
 
-	// The pane area alone: the rail names the run's own directory.
 	var b strings.Builder
 	final := term.Screen()
 	for y := pane.Min.Y; y < pane.Max.Y; y++ {
@@ -1343,10 +1195,6 @@ func slideRun(t *testing.T, level string) string {
 	return b.String()
 }
 
-// zoomFrames starts a client with the extra config, opens a second pane on
-// workspace 1, zooms it and reports how many presented frames fell between the
-// split and the zoomed screen. Then it unzooms and switches workspace, and
-// reports how many frames showed both workspaces.
 func zoomFrames(t *testing.T, extra string) (zoomMid, slideMid int) {
 	t.Helper()
 	term, tape, base := startSlideClient(t, "full", extra)
@@ -1357,8 +1205,6 @@ func zoomFrames(t *testing.T, extra string) (zoomMid, slideMid int) {
 		t.Fatalf("screen never settled: %v", err)
 	}
 	time.Sleep(time.Second)
-	// Only the pane region counts. The dock and the rail change for reasons
-	// of their own, such as a notice appearing.
 	body := func(s tuitest.Screen) string {
 		var b strings.Builder
 		for y := 1; y < slideRows-3; y++ {
@@ -1403,7 +1249,6 @@ func TestMotionZoomOffKeepsWorkspaceSlide(t *testing.T) {
 	if onZoom < 10 {
 		t.Fatalf("with motion.zoom on, only %d frames fell between the split and the zoom; the control shows no slide", onZoom)
 	}
-	// A cut can present one frame between, while the host draws a repaint.
 	if offZoom > 1 {
 		t.Errorf("with motion.zoom off, %d frames fell between the split and the zoom; want a cut", offZoom)
 	}

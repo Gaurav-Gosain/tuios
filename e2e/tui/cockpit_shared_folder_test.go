@@ -44,7 +44,6 @@ func TestCockpitWarnsWhenAgentsShareAFolder(t *testing.T) {
 		if out, err := tuiosCLI(t, base, "new-window", a.name, "-s", a.session, "--", "/bin/sh", "-c", "sleep 900"); err != nil {
 			t.Fatalf("open %s: %v\n%s", a.name, err, out)
 		}
-		// The daemon learns a new pane's folder a moment after it starts.
 		waitUntil(t, "the folder of "+a.name, uiTimeout, func() (bool, string) {
 			out, _ := tuiosCLI(t, base, "list-windows", "-s", a.session, "--json")
 			var res struct {

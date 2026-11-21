@@ -138,8 +138,6 @@ func digest(name string, src []byte) (sums, error) {
 	s.assertHash = short(asserts.Bytes())
 	s.waitHash = short(waits.Bytes())
 
-	// rest: drop the sleeps and the time import, then compare tokens only, so
-	// the blank line a deleted statement leaves does not count.
 	isSleep := func(st ast.Stmt) bool {
 		es, ok := st.(*ast.ExprStmt)
 		if !ok {

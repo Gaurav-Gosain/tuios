@@ -16,18 +16,6 @@ import (
 	"time"
 )
 
-// The GUI bridge's Inbox (plan 2.13): the verb proxy with the person's nonce,
-// the "attention", "notify" and "detached" events. Each test runs a real
-// bridge against a real daemon, as tuios-gpui does, and an agent made of a
-// shell script in a real pane.
-//
-// The nonce is a security boundary. Only the person may answer an agent's
-// prompt, and the daemon proves the person by the attach nonce of a client
-// outside every pane. The bridge adds its own nonce to the renderer's verbs,
-// so the GUI never holds it. These tests check that the renderer's pipe can
-// answer, and that a process in a pane cannot: neither with tuios respond,
-// nor by starting a bridge of its own.
-
 type wireVerbResult struct {
 	Req    int64           `json:"req"`
 	Verb   string          `json:"verb"`
@@ -70,8 +58,6 @@ type wireInboxEvent struct {
 	} `json:"detached"`
 }
 
-// waitEvent waits for an event the reader kept that satisfies ok, and returns
-// it. The newest event is looked at first.
 func (b *guiBridge) waitEvent(ok func(*wireInboxEvent) bool, what string, d time.Duration) *wireInboxEvent {
 	b.t.Helper()
 	deadline := time.Now().Add(d)
@@ -94,7 +80,6 @@ func (b *guiBridge) waitEvent(ok func(*wireInboxEvent) bool, what string, d time
 	}
 }
 
-// eventsOf returns the kept events of one type, in order.
 func (b *guiBridge) eventsOf(typ string) []wireInboxEvent {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -108,13 +93,11 @@ func (b *guiBridge) eventsOf(typ string) []wireInboxEvent {
 	return out
 }
 
-// verb proxies one daemon verb through the bridge and returns its result.
 func (b *guiBridge) verb(verb string, params map[string]any) wireVerbResult {
 	b.t.Helper()
 	return b.verbOn("", verb, params)
 }
 
-// verbOn is verb on a host's daemon. An empty host is this machine.
 func (b *guiBridge) verbOn(host, verb string, params map[string]any) wireVerbResult {
 	b.t.Helper()
 	b.mu.Lock()
@@ -142,7 +125,6 @@ func (b *guiBridge) verbOn(host, verb string, params map[string]any) wireVerbRes
 	return *ev.VerbRes
 }
 
-// writeAgentScript writes an executable script into the root's work folder.
 func writeAgentScript(t *testing.T, base, name, body string) string {
 	t.Helper()
 	path := filepath.Join(workDirIn(t, base), name)
@@ -152,7 +134,6 @@ func writeAgentScript(t *testing.T, base, name, body string) string {
 	return path
 }
 
-// newPaneRunning opens a pane in session that runs argv, and returns its id.
 func newPaneRunning(t *testing.T, base, session, name string, argv ...string) string {
 	t.Helper()
 	args := append([]string{"new-window", "-s", session, "--no-focus", "--print-id", name, "--"}, argv...)
@@ -167,15 +148,11 @@ func newPaneRunning(t *testing.T, base, session, name string, argv ...string) st
 	return id
 }
 
-// waitFile waits for a file to hold text that satisfies ok, and returns it.
 func waitFile(t *testing.T, path string, ok func(string) bool, what string) string {
 	t.Helper()
 	return waitFileHas(t, path, what, shellTimeout, ok)
 }
 
-// questionAgent is a Claude Code question as the pane shows it: the
-// claude-code manifest's screen rules read the prompt and its numbered
-// options from it. The first key typed is written to the answer file.
 func questionAgent(answer string) string {
 	return `#!/bin/bash
 printf '\e[2J\e[H'
@@ -216,7 +193,6 @@ func TestGUIBridgeVerbAnswersOnlyFromTheRenderer(t *testing.T) {
 		t.Fatalf("set-agent-state: %v\n%s", err, out)
 	}
 
-	// The Inbox reaches the renderer as an attention event.
 	b.waitEvent(func(e *wireInboxEvent) bool {
 		if e.Type != "attention" || e.Attention == nil || !e.Attention.Live {
 			return false
@@ -229,7 +205,6 @@ func TestGUIBridgeVerbAnswersOnlyFromTheRenderer(t *testing.T) {
 		return false
 	}, "an attention event with the question", shellTimeout)
 
-	// A process in a pane: tuios respond is refused.
 	denied := filepath.Join(work, "denied.txt")
 	newPaneRunning(t, base, "inbox", "intruder", "/bin/sh", "-c",
 		fmt.Sprintf("%q respond -s inbox -w %s choose 1 >%q 2>&1; echo rc=$? >>%q; sleep 600", tuiosBin, agent, denied, denied))
@@ -238,8 +213,6 @@ func TestGUIBridgeVerbAnswersOnlyFromTheRenderer(t *testing.T) {
 		t.Fatalf("tuios respond from a pane was not refused as the person's:\n%s", got)
 	}
 
-	// A process in a pane: a bridge it starts is refused too. It attaches to
-	// a session of its own and asks through its own renderer pipe.
 	if out, err := tuiosCLI(t, base, "new", "-d", "side"); err != nil {
 		t.Fatalf("new session: %v\n%s", err, out)
 	}
@@ -265,7 +238,6 @@ func TestGUIBridgeVerbAnswersOnlyFromTheRenderer(t *testing.T) {
 		t.Fatalf("the agent got a key from inside a pane: %q", data)
 	}
 
-	// The renderer's own pipe answers. Its forged nonce is dropped.
 	peek := b.verb("peek-prompt", map[string]any{"session": "inbox", "window": agent})
 	if !peek.OK {
 		t.Fatalf("peek-prompt: %s %s", peek.Code, peek.Error)
@@ -286,7 +258,6 @@ func TestGUIBridgeVerbAnswersOnlyFromTheRenderer(t *testing.T) {
 	waitFile(t, answer, func(s string) bool { return strings.Contains(s, "key=1") }, "the agent's answer")
 }
 
-// openFifo opens a FIFO for writing, once its reader has it open.
 func openFifo(t *testing.T, path string) *os.File {
 	t.Helper()
 	done := make(chan *os.File, 1)
@@ -310,7 +281,6 @@ func openFifo(t *testing.T, path string) *os.File {
 	return nil
 }
 
-// writeFrame writes one JSON command frame.
 func writeFrame(t *testing.T, w io.Writer, cmd map[string]any) {
 	t.Helper()
 	body, _ := json.Marshal(cmd)
@@ -323,7 +293,6 @@ func writeFrame(t *testing.T, w io.Writer, cmd map[string]any) {
 	}
 }
 
-// waitFrames reads a file of bridge frames until a JSON event satisfies ok.
 func waitFrames(t *testing.T, path string, ok func(map[string]any) bool, what string) map[string]any {
 	t.Helper()
 	deadline := time.Now().Add(shellTimeout)
@@ -356,8 +325,6 @@ func waitFrames(t *testing.T, path string, ok func(map[string]any) bool, what st
 	}
 }
 
-// approvalAgent holds a risky Bash call for the Inbox through the Claude
-// Code hook, as the installed integration does, and writes the hook's answer.
 func approvalAgent(out string) string {
 	return `#!/bin/bash
 echo "asking to remove build"
@@ -404,8 +371,6 @@ func TestGUIBridgeAttentionCarriesARiskyApproval(t *testing.T) {
 		t.Fatalf("the approval came without its risk or options: %+v", item)
 	}
 
-	// The second press is the GUI's: one allow that names no risk is
-	// refused by the daemon.
 	r := b.verb("reply-approval", map[string]any{"request_id": item.RequestID, "decision": "once", "summary": item.Summary})
 	if r.OK || r.Code != "risk_unacknowledged" {
 		t.Fatalf("an allow without risk_ack: ok=%v code=%q", r.OK, r.Code)

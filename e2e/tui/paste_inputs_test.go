@@ -9,9 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// pastePrompt is the shell prompt the pane under every input shows. A paste
-// that leaks to the pane lands after it, so the pane's last line reading
-// exactly this is the proof that nothing reached the shell.
 const pastePrompt = "PST>"
 
 // TestPasteIntoInputBoxes pastes into every kind of input box from terminal
@@ -67,14 +64,8 @@ func TestPasteIntoInputBoxes(t *testing.T) {
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
-	// paneClean fails when any word of a paste is anywhere in the pane. A
-	// leaked paste with a line break in it runs as a command and leaves a
-	// fresh prompt, so the whole pane is read, not its last line, and every
-	// word is looked for, since a leak can lose a character on its way.
 	paneClean := func(t *testing.T, what, pasted string) {
 		t.Helper()
-		// A leaked paste is written to the pane at once, and the shell echoes
-		// it well inside this.
 		time.Sleep(700 * time.Millisecond)
 		out, err := tuiosCLI(t, base, "capture-pane", "-s", renameClearSession, "-w", win)
 		if err != nil {
@@ -93,12 +84,6 @@ func TestPasteIntoInputBoxes(t *testing.T) {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}
 	art := artifactDir(t)
-	// settle leaves whatever a failed case left open, and the shell line
-	// empty, so the next case starts from terminal mode with nothing open.
-	// toTerminalMode puts the client in terminal mode from either mode.
-	// alt+esc leaves terminal mode and says so, but says nothing in window
-	// mode, so it is not waited on: after it the i that enters terminal mode
-	// cannot reach the shell.
 	toTerminalMode := func(t *testing.T) {
 		t.Helper()
 		sendKeys(t, term, tuitest.Alt(tuitest.Esc))
@@ -116,8 +101,6 @@ func TestPasteIntoInputBoxes(t *testing.T) {
 	windowManagementMode(t, term)
 	enterTerminalMode(t, term)
 
-	// The paste reaches the pane with nothing open, which is what makes the
-	// pane clean afterwards mean something.
 	if err := term.Paste("pz0"); err != nil {
 		t.Fatalf("paste: %v", err)
 	}
@@ -130,14 +113,11 @@ func TestPasteIntoInputBoxes(t *testing.T) {
 	waitPane("ctrl+u did not clear the shell line")
 
 	cases := []struct {
-		name string
-		// open opens the input from terminal mode and waits for it.
-		open func(t *testing.T)
-		// paste is what is pasted, want what the field must then show.
+		name        string
+		open        func(t *testing.T)
 		paste, want string
-		// close leaves the input; gone is on screen only while it is open.
-		close []any
-		gone  string
+		close       []any
+		gone        string
 	}{
 		{
 			name: "window rename",
@@ -153,8 +133,6 @@ func TestPasteIntoInputBoxes(t *testing.T) {
 			gone:  "╭─ rename",
 		},
 		{
-			// The session switcher's rename keeps terminal mode, so a paste
-			// nothing claims there types into the pane under it.
 			name: "session rename",
 			open: func(t *testing.T) {
 				sendKeys(t, term, tuitest.Ctrl('b'), "S")
@@ -234,8 +212,6 @@ func TestPasteIntoInputBoxes(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			defer settle(t)
-			// Every input opens from terminal mode, where a paste nothing
-			// claims goes to the pane. Some of them leave it as they open.
 			toTerminalMode(t)
 			c.open(t)
 			if err := term.Paste(c.paste); err != nil {
@@ -255,7 +231,6 @@ func TestPasteIntoInputBoxes(t *testing.T) {
 		})
 	}
 
-	// A list that takes no text drops the paste: the help with no search line.
 	t.Run("help list drops it", func(t *testing.T) {
 		defer settle(t)
 		toTerminalMode(t)
@@ -272,9 +247,6 @@ func TestPasteIntoInputBoxes(t *testing.T) {
 		paneClean(t, "closing the help", "hl1 hl2")
 	})
 
-	// The paste key asks the host terminal for its clipboard, and the answer
-	// goes into the field. Both keys: the one bound to terminal_paste_host,
-	// and ctrl+v, the Inbox editors' paste key.
 	for _, k := range []struct {
 		name string
 		key  any

@@ -11,42 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// These tests run real tapes with tuios tape exec against a real daemon and a
-// real attached client, and read the result off the client's screen and the
-// command's exit status.
-//
-// Every marker a tape waits for is computed by the shell ($((40+2))), so the
-// command line typed into the pane cannot satisfy the wait: only output can.
-//
-// The frame each test ends on is saved under artifactDir.
-//
-// Negative controls (NEGATIVE_CONTROLS.md):
-//   - TestTapeExecPlaysActionsAndWaits: the CommandTypeWaitFor case cut from
-//     the player's tick (update.go): WaitFor reaches Execute, which refuses it,
-//     and exec exits 1 at line 2. The `case CommandTypeAction` cut from
-//     Execute: exec exits 1 at the Action line.
-//   - TestTapeExecStopsAtTheFailedLine: the failScript call cut from
-//     checkScriptWait's timeout: the wait is dropped, the line after it runs,
-//     and exec exits 0. The Locate call cut from runTapeExec: the message
-//     names line 3 of the sent text, not lib.tape line 2. The finished
-//     check in stepScript placed before the holds: a tape that ends in the
-//     WaitFor exits 0 at once.
-//   - TestTapeExecKeepsTimeAndDrawsTheLeaderMenu: the tree before the fix:
-//     the tick returned early while a Sleep held playback, so no frame was
-//     drawn and the menu never opened; and a final Sleep did not hold the
-//     end of the tape, so exec returned after about 3s.
-//   - TestRunCommandRunsAnyAction: the IsActionName fallback cut from
-//     resolveCommandName: run-command open_settings fails with "unknown
-//     command".
-//   - TestTapeRecordingReplaysActions: the Action branch cut from
-//     Recorder.RecordAction: the saved tape holds no Action line.
-//   - TestTapeSnapFullscreenFillsTheScreen: the tree before the fix: the
-//     window is a quarter of the screen.
-//   - TestLayoutExportValidates: the tree before the fix: the exported tape
-//     has an unquoted command after Type and does not parse.
-
-// tapeSession starts a daemon session named name with one pane and an
-// attached client, and returns the client's terminal and the isolation root.
 func tapeSession(t *testing.T, name string) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -56,7 +20,6 @@ func tapeSession(t *testing.T, name string) (*tuitest.Terminal, string) {
 	return term, base
 }
 
-// writeTape writes a tape file under base and returns its path.
 func writeTape(t *testing.T, base, name, body string) string {
 	t.Helper()
 	path := filepath.Join(base, name)
@@ -90,8 +53,6 @@ Expect mode window
 	if !strings.Contains(out, "Tape finished") {
 		t.Errorf("tape exec printed %q, want it to report the tape finished", out)
 	}
-	// exec answers when the tape ends: by then the second pane exists and
-	// shows the second marker, with no wait on the test's side.
 	if err := term.WaitForText("second-43", time.Second); err != nil {
 		t.Errorf("tape exec returned after %s, before the tape's last output was on screen: %v\n%s", time.Since(start), err, term.Snapshot())
 	}
@@ -120,26 +81,17 @@ Run "echo AFTER-$((1+1))"
 			t.Errorf("tape exec stderr = %q, want it to contain %q", errOut, want)
 		}
 	}
-	// The client shows FAILED for scriptDoneLinger (2s) after the tape
-	// stops, and the first frame drawn after that drops it. exec has
-	// returned, so the tape has stopped: look now, before the sleep below
-	// outlasts the indicator.
 	if err := term.WaitForText("FAILED", uiTimeout); err != nil {
 		t.Errorf("the client never showed that the tape failed: %v\n%s", err, term.Snapshot())
 	}
 	saveArtifact(t, term, artifactDir(t), "tape-failed")
-	// The positive half: the line before the failure ran.
 	if err := term.WaitForText("before-2", shellTimeout); err != nil {
 		t.Fatalf("the line before the failed wait never ran: %v\n%s", err, term.Snapshot())
 	}
-	// The negative half: the line after it never runs. The shell answers an
-	// echo in well under this, and the first line's output proves it is up.
 	time.Sleep(2 * time.Second)
 	if strings.Contains(term.Screen().Text(), "AFTER-2") {
 		t.Errorf("the tape went on past the failed WaitFor\n%s", term.Snapshot())
 	}
-	// A WaitFor on the tape's last line holds the end of the tape, and its
-	// timeout fails the tape like any other.
 	last := writeTape(t, base, "last.tape", `WaitFor text "never-printed-xyz" 1s
 `)
 	out, errOut, err = splitCLI(t, base, "tape", "exec", "-s", "tapefail", last)
@@ -172,9 +124,6 @@ Sleep 2s
 		out, errOut, err := splitCLI(t, base, "tape", "exec", "-s", "tapetime", path)
 		done <- result{out, errOut, err, time.Since(start)}
 	}()
-	// The menu opens 500 ms after the leader, inside the first Sleep. Look
-	// for it well before that Sleep ends: the tick that ends a Sleep draws a
-	// frame of its own, and the esc after it closes the menu.
 	menuErr := term.WaitForText("Focus pane", 2*time.Second)
 	if menuErr == nil {
 		saveArtifact(t, term, artifactDir(t), "tape-leader-menu")
@@ -186,8 +135,6 @@ Sleep 2s
 	if menuErr != nil {
 		t.Errorf("the which-key menu never opened while the tape held the leader: %v\n%s", menuErr, term.Snapshot())
 	}
-	// Sleeps of 3 s and 2 s. A little slack for the clock of the tick that
-	// ends each one, none for a Sleep that was skipped.
 	if res.took < 4900*time.Millisecond {
 		t.Errorf("tape exec returned after %s, before the tape's Sleeps were over", res.took)
 	}
@@ -212,8 +159,6 @@ func TestRunCommandRunsAnyAction(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("Press esc did not close the settings panel: %v\n%s", err, term.Snapshot())
 	}
-	// A name that is neither a command nor an action is refused, and the
-	// message says where the names are.
 	out, err := tuiosCLI(t, base, "run-command", "-s", "actions", "no_such_action")
 	if err == nil || !strings.Contains(out, "tuios keybinds list") {
 		t.Errorf("run-command no_such_action: err %v, output %q, want a refusal naming tuios keybinds list", err, out)
@@ -226,7 +171,6 @@ func TestRunCommandRunsAnyAction(t *testing.T) {
 func TestTapeRecordingReplaysActions(t *testing.T) {
 	term, base := tapeSession(t, "record")
 	leader := tuitest.Ctrl('b')
-	// leader T r opens the naming dialog with a default name; Enter starts.
 	for _, k := range []any{leader, "T", "r"} {
 		if err := term.SendKeys(k); err != nil {
 			t.Fatal(err)
@@ -242,11 +186,7 @@ func TestTapeRecordingReplaysActions(t *testing.T) {
 	if err := term.WaitForText("Recording started", uiTimeout); err != nil {
 		t.Fatalf("the recording never started: %v\n%s", err, term.Snapshot())
 	}
-	// Starting a recording puts the pane in terminal mode. In window
-	// management mode "," is open_settings rather than a character for the
-	// shell.
 	leaveTerminalMode(t, term)
-	// "," is open_settings, an action the recorder used to drop.
 	if err := term.SendKeys(","); err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +235,6 @@ func TestTapeRecordingReplaysActions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Played back, the recording opens the panel again.
 	if out, errOut, err := splitCLI(t, base, "tape", "exec", "-s", "record", list.Tapes[0].Path); err != nil {
 		t.Fatalf("tape exec of the recording: %v\n%s%s", err, out, errOut)
 	}

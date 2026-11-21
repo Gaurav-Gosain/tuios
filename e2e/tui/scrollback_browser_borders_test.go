@@ -77,13 +77,8 @@ func TestScrollbackBrowserFollowsBorderStyle(t *testing.T) {
 	}
 }
 
-// browserHelpDismiss is the last line of the browser's help modal.
 const browserHelpDismiss = "Press ? or esc to close"
 
-// waitFramedBox waits until topLeft finds a frame's top-left corner from the
-// surface's own text, and a frame glyph sits there, then finds the right edge
-// as the last frame glyph along the row under the top edge and the bottom edge
-// as the last frame glyph down the left edge.
 func waitFramedBox(t *testing.T, term *tuitest.Terminal, what string, topLeft func(tuitest.Screen) (int, int)) overlayBox {
 	t.Helper()
 	isFrame := func(c string) bool { return c != "" && c != " " && strings.Contains(frameGlyphs, c) }

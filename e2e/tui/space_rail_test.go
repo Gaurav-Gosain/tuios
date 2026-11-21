@@ -11,16 +11,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The rail's space headings: the sessions section draws a heading per space
-// over that space's sessions, the way tuios ls groups its tables, and the
-// sessions in no space after every space with no heading. Every claim is read
-// off a real client's screen, and the screens are saved under artifactDir.
-
-// spaceRailConfig opens the rail from the start, at the width railLine reads.
 const spaceRailConfig = "[appearance.sidebar]\nenabled = true\nwidth = 28\n"
 
-// spaceRailFixture makes detached sessions in a fresh daemon, in the order
-// given, each filed under its space ("" for none).
 func spaceRailFixture(t *testing.T, base string, sessions ...[2]string) {
 	t.Helper()
 	killDaemon(t, base)
@@ -35,8 +27,6 @@ func spaceRailFixture(t *testing.T, base string, sessions ...[2]string) {
 	}
 }
 
-// attachSpaceRail attaches a 120x40 client to session and waits for its first
-// pane and for the daemon to list the client on it.
 func attachSpaceRail(t *testing.T, base, session string) *tuitest.Terminal {
 	t.Helper()
 	term := startIn(t, base, startOpts{args: []string{"attach", session}})
@@ -47,7 +37,6 @@ func attachSpaceRail(t *testing.T, base, session string) *tuitest.Terminal {
 	return term
 }
 
-// spaceRailRows is the rail row of each needle, -1 for one not drawn.
 func spaceRailRows(s tuitest.Screen, needles ...string) []int {
 	out := make([]int, len(needles))
 	for i, n := range needles {
@@ -56,8 +45,6 @@ func spaceRailRows(s tuitest.Screen, needles ...string) []int {
 	return out
 }
 
-// railRowsIncreasing reports whether every row is drawn and each is below the
-// one before it.
 func railRowsIncreasing(rows []int) bool {
 	for i, r := range rows {
 		if r < 0 || (i > 0 && r <= rows[i-1]) {
@@ -67,9 +54,6 @@ func railRowsIncreasing(rows []int) bool {
 	return true
 }
 
-// railRuledFrom reports whether the rail's rule glyph runs on row after
-// column fromCol, inside the rail. A heading draws it out to the spine, and no
-// session row draws anything there.
 func railRuledFrom(s tuitest.Screen, row, fromCol int) bool {
 	for col := fromCol; col < railWidth; col++ {
 		if s.Cell(col, row).Content == "─" {
@@ -79,8 +63,6 @@ func railRuledFrom(s tuitest.Screen, row, fromCol int) bool {
 	return false
 }
 
-// waitSpaceRail waits until ok holds for the rail and the frame settles, and
-// returns that frame.
 func waitSpaceRail(t *testing.T, term *tuitest.Terminal, what string, ok func(tuitest.Screen) bool) tuitest.Screen {
 	t.Helper()
 	if err := term.WaitFor(ok, uiTimeout); err != nil {
@@ -94,7 +76,6 @@ func waitSpaceRail(t *testing.T, term *tuitest.Terminal, what string, ok func(tu
 	return s
 }
 
-// railDraws reports whether every needle is on the rail.
 func railDraws(needles ...string) func(tuitest.Screen) bool {
 	return func(s tuitest.Screen) bool {
 		for _, n := range needles {
@@ -106,8 +87,6 @@ func railDraws(needles ...string) func(tuitest.Screen) bool {
 	}
 }
 
-// underHeading reports whether the rail draws heading with members on the
-// rows right below it, each stepped two columns in from the heading.
 func underHeading(heading string, members ...string) func(tuitest.Screen) bool {
 	return func(s tuitest.Screen) bool {
 		h := railRowOf(s, heading)
@@ -124,8 +103,6 @@ func underHeading(heading string, members ...string) func(tuitest.Screen) bool {
 	}
 }
 
-// setSessionSpace files session under space with the command a person runs,
-// "" to take it out.
 func setSessionSpace(t *testing.T, base, session, space string) {
 	t.Helper()
 	args := []string{"set-session-space", "-s", session}
@@ -204,7 +181,6 @@ func TestSpaceRailHeadings(t *testing.T) {
 		t.Fatalf("ASSERTION: the e2e-loose session row carries a heading's rule\n%s", term.Snapshot())
 	}
 
-	// The cursor passes over a heading.
 	windowManagementMode(t, term)
 	if err := term.SendKeys("s"); err != nil {
 		t.Fatalf("enter the rail: %v", err)

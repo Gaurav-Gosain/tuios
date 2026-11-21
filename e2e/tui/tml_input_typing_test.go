@@ -11,8 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// tmlTypingDoc is a form with one text field bound to the state, and a
-// submit button.
 const tmlTypingDoc = `<tml version="1" title="Release note">
   <state>{"note": ""}</state>
   <col pad="1" gap="1">
@@ -64,8 +62,6 @@ func TestTMLInputTyping(t *testing.T) {
 	}
 	waitText(t, term, "the form", "Write the release note.", "Say why")
 
-	// A click on the field: the popup takes the focus, and the caret goes
-	// into the field.
 	cockpitClick(t, term, "Say why")
 	cockpitClick(t, term, "Say why")
 	steps := []struct {
@@ -98,7 +94,6 @@ func TestTMLInputTyping(t *testing.T) {
 		t.Fatalf("ASSERTION: a key closed the form while the field had the focus\n%s", term.Snapshot())
 	}
 
-	// The agents view takes the same form, with its text and caret.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatal(err)
 	}

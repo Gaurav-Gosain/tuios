@@ -9,14 +9,10 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// onBravo reports whether the strip is lined up on BRAVO: BRAVO starts at the
-// screen's left edge, where its top left corner is drawn, and none of ALPHA
-// is on screen.
 func onBravo(band string) bool {
 	return strings.Contains(band, "BRAVO") && !strings.Contains(band, "ALPHA") && strings.HasPrefix(band, "╭")
 }
 
-// waitBand waits for the strip's band to satisfy ok.
 func waitBand(t *testing.T, term *tuitest.Terminal, ok func(string) bool, what string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -93,10 +89,6 @@ func TestStripSnapReachesTheOtherClient(t *testing.T) {
 	}
 }
 
-// touch is the report tuios-web's touch layer writes for a finger's sideways
-// drag that started on cell (col, row): kind 2 brings the columns to the
-// right into view by cells, 1 those to the left, and 3 is the lift. See
-// cmd/tuios-web/strip_touch.js and internal/app/strip_touch.go.
 func touch(kind, col, row, cells int) string {
 	if kind == 3 {
 		return fmt.Sprintf("\x1b[7503;3;%d;%d~", col, row)
@@ -205,7 +197,6 @@ func TestStripTouchLeavesTheWheelToThePane(t *testing.T) {
 	if snap := term.Snapshot(); strings.Contains(snap, "^[[") || strings.Contains(snap, "7503") {
 		t.Fatalf("ASSERTION: a finger's report reached the pane off the strip\n%s", snap)
 	}
-	// Ctrl and Alt with the wheel to the right: 67 + 8 + 16.
 	if err := term.SendKeys("\x1b[<91;50;15M"); err != nil {
 		t.Fatalf("ctrl+alt wheel: %v", err)
 	}

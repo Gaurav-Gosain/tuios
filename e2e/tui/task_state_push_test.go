@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// pushPlanPrompt is a card prompt of a few KiB, as a person writes one for
-// an agent.
 var pushPlanPrompt = strings.Join([]string{
 	"The reconnect test in the e2e suite fails about one run in twenty on a loaded machine, and only when the client",
 	"attaches while the daemon is still writing the previous state push. Start by running it a hundred times under",
@@ -40,7 +38,6 @@ var pushPlanPrompt = strings.Join([]string{
 	"and put the numbers in your note. A fix that makes the test much slower is worth knowing about before review.",
 }, " ")
 
-// pushCardDetail is what tuios task get --json says of a card.
 type pushCardDetail struct {
 	Prompt  string            `json:"prompt"`
 	History []json.RawMessage `json:"history"`
@@ -50,7 +47,6 @@ type pushCardDetail struct {
 	} `json:"verify"`
 }
 
-// pushTaskGet reads card id of session with tuios task get --json.
 func pushTaskGet(t *testing.T, base, session, id string) (pushCardDetail, string) {
 	t.Helper()
 	raw := mustCLI(t, base, "task", "get", id, "-s", session, "--json")
@@ -83,17 +79,14 @@ func TestTaskCardsKeepTheirBodiesThroughStatePushes(t *testing.T) {
 	mustCLI(t, base, "new", sess, "--detach")
 	waitForSessionInfo(t, base, sess)
 
-	// An agent pane in a git repository, as the verify command needs.
 	repo := filepath.Join(base, "demo")
 	lifeRepo(t, repo)
 	a := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", sess, "agent-a", "--no-focus", "--print-id", "--cwd", repo))
 	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", a, "working", "--harness", "codex", "-m", "on it")
 
-	// The board's verify command first, then the card its agent is done
-	// with: the verify fails and the card goes back to todo with the output.
 	mustCLI(t, base, "task", "dispatch", "verify", "-s", sess, `test -f ok || { echo "first line"; echo "not ok yet"; exit 3; }`)
 	const verifyTitle, planTitle = "fix the flaky reconnect test", "plan the reconnect rework"
-	mustCLI(t, base, "task", "add", "-s", sess, "-p", "make the reconnect test pass", verifyTitle) // t1
+	mustCLI(t, base, "task", "add", "-s", sess, "-p", "make the reconnect test pass", verifyTitle)
 	mustCLI(t, base, "task", "claim", "t1", "-s", sess, "-w", a)
 	if out := inPane(t, base, sess, a, "task done t1"); !strings.Contains(out, "EXIT=0") {
 		t.Fatalf("ASSERTION: tuios task done t1 in the agent's pane failed:\n%s", out)
@@ -102,9 +95,8 @@ func TestTaskCardsKeepTheirBodiesThroughStatePushes(t *testing.T) {
 		func(c map[string]lifeCard) bool {
 			return c["t1"].Stage == "todo" && c["t1"].Verify != nil && c["t1"].Verify.State == "failed"
 		})
-	mustCLI(t, base, "task", "add", "-s", sess, "-p", pushPlanPrompt, planTitle) // t2
+	mustCLI(t, base, "task", "add", "-s", sess, "-p", pushPlanPrompt, planTitle)
 
-	// A client attached, and the session changes under it.
 	term := attachIn(t, base, sess, startOpts{cols: 200, rows: 55, shippedLooks: true})
 	mustCLI(t, base, "set-window", "-s", sess, "--name", "renamed-shell")
 	for deadline := time.Now().Add(uiTimeout); ; time.Sleep(100 * time.Millisecond) {
@@ -120,7 +112,6 @@ func TestTaskCardsKeepTheirBodiesThroughStatePushes(t *testing.T) {
 	waitLife(t, base, sess, uiTimeout, "t2 did not move to doing",
 		func(c map[string]lifeCard) bool { return c["t2"].Stage == "doing" })
 
-	// The daemon still holds every body.
 	plan, raw := pushTaskGet(t, base, sess, "t2")
 	if plan.Prompt != pushPlanPrompt || len(plan.History) == 0 {
 		t.Errorf("ASSERTION: after the pushes t2 has a %d-byte prompt (want the %d bytes it was given) and %d history entries:\n%s",
@@ -132,8 +123,6 @@ func TestTaskCardsKeepTheirBodiesThroughStatePushes(t *testing.T) {
 		t.Errorf("ASSERTION: after the pushes t1 lost its prompt, its history or its verify output:\n%s", raw)
 	}
 
-	// The client's board shows both cards. Neither is held, so neither title
-	// is drawn in the agents view before b.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatalf("open the agents view: %v", err)
 	}

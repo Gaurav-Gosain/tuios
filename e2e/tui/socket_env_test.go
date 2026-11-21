@@ -12,24 +12,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// TUIOS_SOCKET is what a pane is told about the daemon that runs it. It never
-// chose the daemon a command reaches: XDG_RUNTIME_DIR does. An agent that set
-// TUIOS_SOCKET to a fresh path, expecting a daemon of its own, got the
-// person's daemon instead and created a session in it. A command now refuses
-// when TUIOS_SOCKET names a socket other than the one it would reach and no
-// daemon listens there, which is exactly that mistake.
-//
-// How this could pass wrongly, written down first:
-//   - the refusal might come from something else going wrong, so its output
-//     is checked for the words that explain it;
-//   - the command might refuse and still have acted, so the daemon is asked
-//     afterwards whether the session exists;
-//   - the check might refuse far more than the mistake, which would break
-//     every script that isolates itself with XDG_RUNTIME_DIR from inside a
-//     pane (whose TUIOS_SOCKET names the pane's own, live, daemon), so both
-//     that case and TUIOS_SOCKET naming the same socket are shown to work.
-
-// sessionNames lists the sessions of the daemon under base.
 func sessionNames(t *testing.T, base string) []string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "ls", "--json")
@@ -74,9 +56,6 @@ func TestSocketEnvRefusalKeepsThePathWholeOnATerminal(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "new", "home", "--detach"); err != nil {
 		t.Fatalf("start the daemon: %v\n%s", err, out)
 	}
-	// The runtime directory can be a short stand-in (see xdgDir), so the path
-	// is made long on purpose. The hyphens are there because a hyphen is a
-	// place a word wrapper will break a word.
 	const cols = 60
 	fresh := filepath.Join(base, "a-directory-named-past-the-width-of-the-box", "fresh.sock")
 	if len(fresh) <= cols-4 {
@@ -86,10 +65,9 @@ func TestSocketEnvRefusalKeepsThePathWholeOnATerminal(t *testing.T) {
 	var raw syncBuffer
 	term := startIn(t, base, startOpts{
 		cols: cols, rows: 30,
-		args: []string{"new", "stray", "--detach"},
-		env:  []string{"TUIOS_SOCKET=" + fresh},
-		out:  &raw,
-		// --no-animations is a flag of the interface, not of `new`.
+		args:       []string{"new", "stray", "--detach"},
+		env:        []string{"TUIOS_SOCKET=" + fresh},
+		out:        &raw,
 		animations: true,
 	})
 	code, err := term.WaitExit(15 * time.Second)
@@ -109,9 +87,6 @@ func TestSocketEnvRefusalKeepsThePathWholeOnATerminal(t *testing.T) {
 	if !strings.Contains(out, fresh) {
 		t.Errorf("the refusal on a terminal cut the path %q:\n%s", fresh, out)
 	}
-	// Only the path's own line may run past the terminal. lipgloss pads every
-	// line of a block to its widest, so a whole path must not drag the rest of
-	// the message past the edge, where each line wraps onto a blank row.
 	for line := range strings.SplitSeq(out, "\n") {
 		line = strings.TrimSuffix(line, "\r")
 		if !strings.Contains(line, fresh) && ansi.StringWidth(line) > cols {
@@ -156,13 +131,9 @@ func TestSocketEnvNamingNoDaemonIsRefused(t *testing.T) {
 			t.Errorf("the refusal does not say %q:\n%s", want, out)
 		}
 	}
-	// The output is a pipe, so it gets the bare text. It used to get the
-	// terminal's box, wrapped at 80 columns, which cut a long path in two.
 	if strings.Contains(out, "ERROR") {
 		t.Errorf("the refusal to a pipe was drawn as a terminal error box:\n%s", out)
 	}
-	// A command that only reads, over the verb protocol, is refused the same
-	// way rather than reading the other daemon.
 	for _, args := range [][]string{{"ls"}, {"list-windows", "-s", "home"}} {
 		out, err := tuiosCLIEnv(t, base, []string{"TUIOS_SOCKET=" + fresh}, args...)
 		transcript.WriteString("$ TUIOS_SOCKET=")
@@ -180,8 +151,6 @@ func TestSocketEnvNamingNoDaemonIsRefused(t *testing.T) {
 		t.Errorf("the refused command still created its session in the daemon under base: %v", names)
 	}
 
-	// The positive halves. TUIOS_SOCKET naming the socket the command reaches
-	// anyway, as it does in every pane.
 	out, err = tuiosCLIEnv(t, base, []string{"TUIOS_SOCKET=" + own}, "new", "same", "--detach")
 	transcript.WriteString("$ TUIOS_SOCKET=")
 	transcript.WriteString(own)
@@ -191,9 +160,6 @@ func TestSocketEnvNamingNoDaemonIsRefused(t *testing.T) {
 	if err != nil {
 		t.Errorf("TUIOS_SOCKET naming the daemon's own socket was refused: %v\n%s", err, out)
 	}
-	// A script that isolates itself with XDG_RUNTIME_DIR from inside a pane:
-	// TUIOS_SOCKET names another, live, daemon, and the command goes where
-	// XDG_RUNTIME_DIR says, as it always did.
 	other := t.TempDir()
 	killDaemon(t, other)
 	if out, err := tuiosCLI(t, other, "new", "elsewhere", "--detach"); err != nil {

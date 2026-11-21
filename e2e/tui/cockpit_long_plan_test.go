@@ -13,9 +13,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// longPlan is a plan the way Claude Code writes one: Markdown, with the lines
-// of a paragraph broken at the agent's own width, and long enough that the
-// card shows it a window at a time.
 func longPlan() string {
 	var b strings.Builder
 	b.WriteString("# Cache the fib table\n\n## Context\n\nThe table is built\nfresh on each call.\nKeep it in `fibCache` for the\nlife of the process.\n\n## Steps\n\n")
@@ -26,7 +23,6 @@ func longPlan() string {
 	return b.String()
 }
 
-// planShown is the card's "Lines A-B of N".
 var planShown = regexp.MustCompile(`(?i)lines (\d+)-(\d+) of (\d+)`)
 
 func planWindow(s tuitest.Screen) (first, last, total int) {
@@ -85,8 +81,6 @@ func TestCockpitLongPlanReadsByPageAsMarkdown(t *testing.T) {
 	}
 	pause(t, "the view takes no answer key in the moment after a card is shown", answerSettle)
 
-	// pgdown reads the plan a page at a time: the end is within the pages
-	// the plan has, and the list cursor stays on the plan.
 	pages := (total+window-2)/max(window-1, 1) + 1
 	reached := false
 	for range pages {
@@ -107,7 +101,6 @@ func TestCockpitLongPlanReadsByPageAsMarkdown(t *testing.T) {
 	saveFrame(t, term, "long-plan-end")
 	savePNG(t, term.Screen(), shot.XTermPalette(), dir, "long-plan-end")
 
-	// g goes back to the start, and G to the end in one press.
 	if err := term.SendKeys("g"); err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +117,6 @@ func TestCockpitLongPlanReadsByPageAsMarkdown(t *testing.T) {
 		t.Fatalf("ASSERTION: G did not go to the plan's end: %v\n%s", err, term.Snapshot())
 	}
 
-	// Z gives the card the whole focus: more of the plan shows at once.
 	if err := term.SendKeys("g", "Z"); err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +132,6 @@ func TestCockpitLongPlanReadsByPageAsMarkdown(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Read to its end, the plan is approved.
 	if err := term.SendKeys("a"); err != nil {
 		t.Fatal(err)
 	}

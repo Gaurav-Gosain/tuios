@@ -10,8 +10,6 @@ import (
 	"testing"
 )
 
-// hexAgentScript is a stand-in agent that prints every line typed into it as
-// GOT[<hex of its bytes>], so the test reads exactly what reached it.
 const hexAgentScript = `T="$1"
 stty -echo
 "$T" set-agent-state idle -w "$TUIOS_PANE_ID" >/dev/null
@@ -23,8 +21,6 @@ while IFS= read -r l; do
 done
 `
 
-// tagText spells s in Unicode tag characters, which draw nothing but which a
-// model reads as text.
 func tagText(s string) string {
 	var b strings.Builder
 	for _, r := range s {
@@ -96,7 +92,6 @@ func TestAskAgentRemovesHiddenTextAndSendTextDoesNot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ask-agent failed: %v\n%s", err, out)
 	}
-	// The pane wraps a long GOT line, so lines are joined before the match.
 	if !strings.Contains(strings.ReplaceAll(res.Reply, "\n", ""), "GOT["+hex.EncodeToString([]byte(want))+"]") {
 		t.Fatalf("ASSERTION: the agent did not read the question clean with its emoji whole\nwant GOT[%x]\nreply %q", want, res.Reply)
 	}

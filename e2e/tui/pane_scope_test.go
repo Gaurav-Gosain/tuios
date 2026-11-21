@@ -44,8 +44,6 @@ func TestPaneRunsInItsOwnScope(t *testing.T) {
 			killDaemon(t, base)
 			t.Setenv(testknob.Env, testknob.Merge(os.Getenv(testknob.Env), "pane_scope=1"))
 			if c == "private socket" {
-				// The daemon's runtime dir is the test's, so the manager's
-				// socket is linked in and the bus is taken away.
 				if _, err := os.Stat(private); err != nil {
 					t.Skipf("no private socket of the user manager: %v", err)
 				}
@@ -77,15 +75,12 @@ func TestPaneWithoutAUserManagerStartsAsBefore(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
 	t.Setenv(testknob.Env, testknob.Merge(os.Getenv(testknob.Env), "pane_scope=1"))
-	// The daemon's runtime dir is the test's, with no systemd/private
-	// and no bus in it.
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "")
 	const sess = "e2e-noscope"
 	mustCLI(t, base, "new", sess, "--detach")
 	out := filepath.Join(base, "cgroup.txt")
 	deadline := time.Now().Add(uiTimeout)
 	for {
-		// Sent again until it runs, as paneScope does.
 		mustCLI(t, base, "send-text", "-s", sess, "cat /proc/$$/cgroup > "+out+".tmp && mv "+out+".tmp "+out+"\n")
 		pause(t, "poll again until the state it waits for shows", 100*time.Millisecond)
 		if raw, err := os.ReadFile(out); err == nil {
@@ -110,8 +105,6 @@ func TestPaneWithoutAUserManagerStartsAsBefore(t *testing.T) {
 	}
 }
 
-// paneScope checks the scope of the first pane of a new session, and that it
-// goes with the pane.
 func paneScope(t *testing.T, base string) {
 	const sess = "e2e-scope"
 	mustCLI(t, base, "new", sess, "--detach")
@@ -130,7 +123,6 @@ func paneScope(t *testing.T, base string) {
 			t.Fatalf("ASSERTION: the pane's shell is not in a scope of its own: %q", line)
 		}
 		pause(t, "poll again until the state it waits for shows", 50*time.Millisecond)
-		// The scope is made just after the shell starts: read again.
 		mustCLI(t, base, "send-text", "-s", sess, "cat /proc/$$/cgroup > "+out+".tmp && mv "+out+".tmp "+out+"\n")
 	}
 	show := func() string {

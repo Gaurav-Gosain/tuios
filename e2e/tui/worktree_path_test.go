@@ -33,9 +33,6 @@ func TestWorktreePathTemplate(t *testing.T) {
 	defaultDir := filepath.Join(base, "worktrees")
 	t.Setenv("TUIOS_WORKTREE_DIR", defaultDir)
 	writeConfig(t, base, "[worktree]\npath = \"{{ repo_path }}/.worktrees/{{ branch | slug }}\"\n")
-	// The test's own git reads the same ignore files the daemon's does: a
-	// .worktrees/ in the person's ~/.config/git/ignore would hide the
-	// untracked folder from git status here and not from the daemon.
 	t.Setenv("XDG_CONFIG_HOME", xdgDir(base, "XDG_CONFIG_HOME"))
 	var log strings.Builder
 	record := func(step, out string) {
@@ -53,8 +50,6 @@ func TestWorktreePathTemplate(t *testing.T) {
 		t.Fatalf("start the daemon: %v: %s", err, out)
 	}
 
-	// Inside the repository and not ignored: made where the template says,
-	// with a warning that names what to ignore.
 	out, err := tuiosCLI(t, base, "worktree", "new", "feat/a", "--repo", repo, "--detach")
 	record("worktree new feat/a", out)
 	if err != nil {
@@ -83,7 +78,6 @@ func TestWorktreePathTemplate(t *testing.T) {
 		}
 	}
 
-	// Ignored by the person: no warning.
 	exclude := filepath.Join(repo, ".git", "info", "exclude")
 	f, err := os.OpenFile(exclude, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)
 	if err != nil {
@@ -103,8 +97,6 @@ func TestWorktreePathTemplate(t *testing.T) {
 		t.Fatalf("a warning for a worktree git ignores:\n%s", out)
 	}
 
-	// A relative template, applied to the running daemon. It starts at the
-	// main checkout, and {{ repo }} is its base name.
 	writeConfig(t, base, "[worktree]\npath = \".trees/{{ repo }}-{{ branch | slug }}\"\n")
 	if out, err := tuiosCLI(t, base, "config", "apply"); err != nil {
 		t.Fatalf("config apply: %v: %s", err, out)
@@ -118,9 +110,6 @@ func TestWorktreePathTemplate(t *testing.T) {
 		t.Fatalf("the relative template did not start at the main checkout:\n%s", out)
 	}
 
-	// worktrunk's name for the filter, and a layout under a folder people
-	// commit files in: the hint names the folder that holds the worktrees,
-	// not .claude.
 	writeConfig(t, base, "[worktree]\npath = \".claude/worktrees/{{ branch | sanitize }}\"\n")
 	if out, err := tuiosCLI(t, base, "config", "apply"); err != nil {
 		t.Fatalf("config apply: %v: %s", err, out)
@@ -137,9 +126,6 @@ func TestWorktreePathTemplate(t *testing.T) {
 		t.Fatalf("the hint does not name .claude/worktrees, the folder that holds the worktrees:\n%s", out)
 	}
 
-	// A branch with }} in its name, which git takes, under a template that
-	// uses the branch as it is. The braces are the branch's, not a mistake in
-	// the template.
 	writeConfig(t, base, "[worktree]\npath = \".worktrees/{{ branch }}\"\n")
 	if out, err := tuiosCLI(t, base, "config", "apply"); err != nil {
 		t.Fatalf("config apply: %v: %s", err, out)
@@ -153,7 +139,6 @@ func TestWorktreePathTemplate(t *testing.T) {
 		t.Fatalf("worktree new did not put x}}y in .worktrees/x}}y:\n%s", out)
 	}
 
-	// A stray }} in the template itself is still a mistake in it.
 	writeConfig(t, base, "[worktree]\npath = \".worktrees/{{ branch }}}}\"\n")
 	if out, err := tuiosCLI(t, base, "config", "apply"); err != nil {
 		t.Fatalf("config apply: %v: %s", err, out)
@@ -164,8 +149,6 @@ func TestWorktreePathTemplate(t *testing.T) {
 		t.Fatalf("a stray }} in the template was not refused: %v:\n%s", err, out)
 	}
 
-	// A template without {{ branch }} would give every branch one folder:
-	// refused, and nothing made.
 	writeConfig(t, base, "[worktree]\npath = \"{{ repo_path }}/.worktrees/fixed\"\n")
 	if out, err := tuiosCLI(t, base, "config", "apply"); err != nil {
 		t.Fatalf("config apply: %v: %s", err, out)
@@ -190,7 +173,6 @@ func TestWorktreePathTemplate(t *testing.T) {
 func TestFanUsesWorktreePathTemplate(t *testing.T) {
 	base, repo := fanFixture(t)
 	writeConfig(t, base, "[worktree]\npath = \"{{ repo_path }}/.worktrees/{{ branch | slug }}\"\n")
-	// A folder in the way of the first name: the fan takes the next two.
 	if err := os.MkdirAll(filepath.Join(repo, ".worktrees", "try-retry"), 0o755); err != nil {
 		t.Fatal(err)
 	}

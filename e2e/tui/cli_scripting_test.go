@@ -9,23 +9,6 @@ import (
 	"testing"
 )
 
-// These tests hold the CLI to what a script and an agent read from it: the
-// list commands print JSON with --json, set-config says when the daemon only
-// recorded a value, and a command given a name that does not exist refuses it
-// and names the command that lists the real ones.
-//
-// Negative controls (NEGATIVE_CONTROLS.md):
-//   - the findLayoutTemplate check cut from `layout delete`: the delete of a
-//     missing layout exits 0.
-//   - the AvailableThemes check cut from --preview-theme: an unknown theme
-//     prints the default palette and exits 0.
-//   - the "Not applied" print cut from runSetConfig: stderr is empty while the
-//     value was only recorded.
-//   - the --json flag of each list command: before the change each run fails
-//     with "unknown flag: --json".
-
-// splitCLI runs a tuios subcommand under base and returns stdout and stderr
-// apart, which tuiosCLI does not: JSON goes to stdout and notes to stderr.
 func splitCLI(t *testing.T, base string, args ...string) (string, string, error) {
 	t.Helper()
 	pinPreV080Looks(t, base)
@@ -45,7 +28,6 @@ func TestCLIListsPrintJSON(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
 
-	// One saved layout, so layout list --json has a row to print.
 	dir, _, err := splitCLI(t, base, "layout", "dir")
 	if err != nil {
 		t.Fatalf("layout dir: %v", err)
@@ -116,8 +98,6 @@ func TestCLIListsPrintJSON(t *testing.T) {
 		t.Errorf("ASSERTION: send-text --json = %s, want type ok", out)
 	}
 
-	// No client is attached, so the daemon only records the value. The JSON
-	// says so, and the plain run keeps its stdout line and says so on stderr.
 	out, errOut, err = splitCLI(t, base, "set-config", "appearance.border_style", "rounded", "-s", "cli", "--json")
 	if err != nil {
 		t.Fatalf("set-config --json: %v\n%s%s", err, out, errOut)

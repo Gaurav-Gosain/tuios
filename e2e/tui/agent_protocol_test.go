@@ -12,7 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// buildFakeACP builds the scripted ACP agent in testdata/fakeacp.
 func buildFakeACP(t *testing.T) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "fakeacp")
@@ -23,7 +22,6 @@ func buildFakeACP(t *testing.T) string {
 	return bin
 }
 
-// waitCapture polls capture-pane until every marker is in the pane.
 func waitCapture(t *testing.T, base, session, window string, markers ...string) string {
 	t.Helper()
 	return waitTextOf(t, fmt.Sprintf("the pane never showed %v", markers), uiTimeout, func() string {
@@ -67,10 +65,7 @@ func TestProtocolPaneTurnAndInboxApproval(t *testing.T) {
 	if !strings.Contains(out, "is ready: it reads idle") || !strings.Contains(out, "The prompt was typed and taken.") {
 		t.Fatalf("start-agent printed:\n%s", out)
 	}
-	// The reply's OSC title sequence arrives as inert text: its ESC and BEL
-	// are gone, so the pane shows what is left of it.
 	pane := waitCapture(t, base, "e2e-agent", "helper", "connected to fakeacp 1.0", "you  hello there", "ECHO: hello there]0;pwned", "turn finished")
-	// The agent tried to write to its terminal; it has none.
 	if strings.Contains(pane, "TTYLEAK") {
 		t.Errorf("the agent wrote to the pane past the transcript:\n%s", pane)
 	}
@@ -92,8 +87,6 @@ func TestProtocolPaneTurnAndInboxApproval(t *testing.T) {
 	if len(listing.Agents) != 1 || listing.Agents[0].Protocol != "acp" || listing.Agents[0].State != "done" {
 		t.Fatalf("list-agents = %+v, want the helper done with protocol acp", listing.Agents)
 	}
-	// The window title is the name the pane was given: the agent's OSC
-	// sequence did not set it.
 	raw, _ = tuiosCLI(t, base, "list-windows", "-s", "e2e-agent", "--json")
 	var windows struct {
 		Windows []struct {
@@ -119,7 +112,6 @@ func TestProtocolPaneTurnAndInboxApproval(t *testing.T) {
 	}
 	saveFrame(t, term, "protocol-pane-approval-held")
 	time.Sleep(answerSettle)
-	// The key asks, and enter answers.
 	if err := term.SendKeys("1", tuitest.Enter); err != nil {
 		t.Fatalf("answer: %v", err)
 	}

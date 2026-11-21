@@ -1,24 +1,5 @@
 package tuie2e
 
-// The backends. TUIOS_E2E_BACKEND picks how startIn runs a tuios client:
-//
-//   - real, the default: the built binary on a PTY, as tuitest.StartT runs it.
-//   - sim: the client runs in the test process as a tuitest.Program, through
-//     internal/localclient, and the daemon of the test's isolation root runs
-//     in the test process too (session.DaemonConfig.SharedProcess). The test
-//     drives the client through the same *tuitest.Terminal, so its keys,
-//     waits and screen reads do not change.
-//
-// Under sim the CLI calls (tuiosCLI) and hooks still run the built binary,
-// against the in-process daemon's socket. Panes run real shells. The process
-// environment is shared, so the harness sets a client's environment with
-// t.Setenv, and the test knobs go through testknob.Set. A test that can never
-// run in process calls requireReal. See cleanup-2026-11/testing.md, section 3.
-//
-// With TUITEST_TRACE set to a file, both backends append the observation
-// trace of each test to it: every CLI call through tuiosCLI, and the marks
-// tuitest records for every wait and every input of each client.
-
 import (
 	"bytes"
 	"encoding/json"
@@ -51,15 +32,10 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// backendEnv names the variable that picks the backend.
 const backendEnv = "TUIOS_E2E_BACKEND"
 
-// simOn says the tests run on the sim backend. setupBackend sets it.
 var simOn bool
 
-// setupBackend reads TUIOS_E2E_BACKEND. Under sim it sets the process
-// globals the client reads, as cmd/tuios does, and the terminal the client
-// draws to, so nothing probes the terminal the suite runs in.
 func setupBackend() error {
 	switch v := os.Getenv(backendEnv); v {
 	case "", "real":
@@ -69,12 +45,7 @@ func setupBackend() error {
 	default:
 		return fmt.Errorf("%s=%q: use real or sim", backendEnv, v)
 	}
-	// No reaper and no release installer: those name the tuios executable,
-	// and this process is the test binary.
 	procsetup.Setup(procsetup.Options{})
-	// The tests set HOME and the XDG folders in this process's environment.
-	// The go builds a test runs for its helper programs keep the caches
-	// they had.
 	for key, dir := range map[string]func() (string, error){
 		"GOCACHE":    func() (string, error) { return goEnv("GOCACHE") },
 		"GOMODCACHE": func() (string, error) { return goEnv("GOMODCACHE") },
@@ -91,34 +62,23 @@ func setupBackend() error {
 	return nil
 }
 
-// simBinEnv names the built tuios for the processes the sim backend starts.
 const simBinEnv = "TUIOS_E2E_SIM_BIN"
 
-// runAsTuiosIfAsked runs the built tuios in place of this process when it was
-// started with a tuios command line. The in-process daemon and client start
-// their own executable for some work (agent-proto, look pick, a plugin's
-// TUIOS_BIN), and under sim that executable is the test binary.
 func runAsTuiosIfAsked() {
 	bin := os.Getenv(simBinEnv)
 	if bin == "" || len(os.Args) < 2 || strings.HasPrefix(os.Args[1], "-test.") {
 		return
 	}
-	// argv[0] stays: a program that tuios runs under another name, such as
-	// the herdr shim, reads it.
 	err := syscall.Exec(bin, os.Args, os.Environ())
 	fmt.Fprintf(os.Stderr, "e2e: run %s: %v\n", bin, err)
 	os.Exit(2)
 }
 
-// goEnv is the value go env prints for key.
 func goEnv(key string) (string, error) {
 	out, err := exec.Command("go", "env", key).Output()
 	return strings.TrimSpace(string(out)), err
 }
 
-// requireReal skips the test under the sim backend. why says what the test
-// needs that the test process cannot give it, such as real ssh or another
-// tuios binary.
 func requireReal(t *testing.T, why string) {
 	t.Helper()
 	if simOn {
@@ -126,34 +86,21 @@ func requireReal(t *testing.T, why string) {
 	}
 }
 
-// simCaps is the terminal a client that probes nothing finds. It is the
-// process's seed, so no code asks the terminal the suite runs in. Each sim
-// client probes its own terminal (simProbe).
 func simCaps() *app.HostCapabilities {
 	return &app.HostCapabilities{Term: "xterm-256color", CellWidth: 8, CellHeight: 16}
 }
 
-// simProbe asks the client's terminal what it can do, with the probe the
-// binary sends to its own terminal: the queries go to out, and the replies
-// come from in, before the program reads it.
 func simProbe(in *probeInput, out io.Writer, cols, rows int) *app.HostCapabilities {
 	return app.DetectHostCapabilitiesWith(app.HostCapabilities{Cols: cols, Rows: rows}, func(c *app.HostCapabilities) {
 		app.ProbeTerminal(c, out, in.probe)
 	})
 }
 
-// probeInput is the client's input. The probe reads the replies from it
-// first, with a timeout, and the program then reads the rest. A read the
-// probe gave up on is finished by the program's first read, so no byte is
-// lost.
 type probeInput struct {
-	in      io.Reader
-	results chan probeRead
-	pending bool
-	left    []byte
-	// stopped closes when the client is asked to stop. A read then
-	// returns io.EOF at once, so Bubble Tea's reader ends with the program
-	// and not when tuitest closes the pipe after its grace.
+	in       io.Reader
+	results  chan probeRead
+	pending  bool
+	left     []byte
 	stopped  chan struct{}
 	stopOnce sync.Once
 }
@@ -169,7 +116,6 @@ func newProbeInput(in io.Reader) *probeInput {
 	return &probeInput{in: in, results: make(chan probeRead, 1), stopped: make(chan struct{})}
 }
 
-// next waits up to timeout for the next chunk.
 func (p *probeInput) next(timeout time.Duration) (probeRead, bool) {
 	if !p.pending {
 		p.pending = true
@@ -188,7 +134,6 @@ func (p *probeInput) next(timeout time.Duration) (probeRead, bool) {
 	}
 }
 
-// probe reads replies until done holds or the timeout runs out.
 func (p *probeInput) probe(timeout time.Duration, done func(string) bool) string {
 	var got strings.Builder
 	deadline := time.Now().Add(timeout)
@@ -232,14 +177,8 @@ func (p *probeInput) Read(b []byte) (int, error) {
 	return n, nil
 }
 
-// simEnv makes env the process environment for the rest of the test, as the
-// environment of a spawned tuios would hold it, and reloads the XDG paths.
-// The test knobs in env go to testknob.Set instead, merged over the ones the
-// suite runs with.
 func simEnv(t *testing.T, env []string) {
 	t.Helper()
-	// Registered first, so it runs after t.Setenv has put the old values
-	// back.
 	t.Cleanup(xdg.Reload)
 	for _, kv := range env {
 		k, v, ok := strings.Cut(kv, "=")
@@ -258,7 +197,6 @@ func simEnv(t *testing.T, env []string) {
 	xdg.Reload()
 }
 
-// simDaemon is the in-process daemon of one isolation root.
 type simDaemon struct {
 	t    *testing.T
 	base string
@@ -266,8 +204,6 @@ type simDaemon struct {
 	once sync.Once
 }
 
-// stop stops the daemon, once, and forgets it, so the root may start a new
-// one, as a tuios started after a kill-server would.
 func (s *simDaemon) stop() {
 	s.once.Do(func() {
 		s.d.Stop()
@@ -275,18 +211,13 @@ func (s *simDaemon) stop() {
 	})
 }
 
-// simDaemons maps an isolation root to its *simDaemon.
 var (
 	simDaemons  sync.Map
 	simDaemonMu sync.Mutex
 )
 
-// simEnsureDaemon starts the in-process daemon of base, once. A test has one
-// isolation root under sim, because the daemon reads the process
-// environment: a second root fails the test.
 func simEnsureDaemon(t *testing.T, base string) {
 	t.Helper()
-	// CLI calls a test makes at once all ask for the daemon.
 	simDaemonMu.Lock()
 	defer simDaemonMu.Unlock()
 	if _, ok := simDaemons.Load(base); ok {
@@ -304,9 +235,6 @@ func simEnsureDaemon(t *testing.T, base string) {
 	}
 	simEnv(t, env)
 	pinPreV080Looks(t, base)
-	// The daemon and the client log with the standard logger, which the
-	// binary keeps off the screen. Here it goes to a file, shown when the
-	// test fails.
 	logPath := filepath.Join(t.TempDir(), "process.log")
 	if f, err := os.Create(logPath); err == nil {
 		log.SetOutput(f)
@@ -332,25 +260,14 @@ func simEnsureDaemon(t *testing.T, base string) {
 	s := &simDaemon{t: t, base: base, d: d}
 	simDaemons.Store(base, s)
 	simKilledRoots.Delete(base)
-	// Registered after the environment, so the daemon stops while the
-	// test's directories are still the ones it writes to.
 	t.Cleanup(s.stop)
 }
 
-// simStartsDaemon names the commands that start a daemon when none runs
-// (ensureDaemon in cmd/tuios). Under sim tuiosCLI starts the in-process
-// daemon before any call, so the binary never starts one of its own. After
-// the test's own kill-server only these start it again, and every other
-// command finds no daemon, as it does with the binary.
 var simStartsDaemon = map[string]bool{
 	"new": true, "attach": true, "start-server": true, "start-agent": true,
 	"delegate": true, "gui-bridge": true, "cp": true, "worktree": true,
 }
 
-// simKillServer is kill-server under sim. The binary would signal the pid
-// of the daemon's process, which is this one, so the in-process daemon stops
-// here, with the binary's words. A command that starts a daemon starts a new
-// one, as it does with the binary.
 func simKillServer(base string) string {
 	v, ok := simDaemons.Load(base)
 	if !ok {
@@ -361,10 +278,6 @@ func simKillServer(base string) string {
 	return fmt.Sprintf("Sent SIGTERM to daemon (PID %d)\n", os.Getpid())
 }
 
-// simBeforeCLI is the sim backend's part of a CLI call against base, for
-// tuiosCLI and the helpers like it: it starts the in-process daemon, so the
-// binary never starts a daemon of its own. kill-server it answers itself
-// (done).
 func simBeforeCLI(t *testing.T, base string, args []string) (out string, done bool) {
 	t.Helper()
 	if !simOn {
@@ -379,8 +292,6 @@ func simBeforeCLI(t *testing.T, base string, args []string) (out string, done bo
 	return "", false
 }
 
-// simKilledRoots holds the roots whose daemon the test stopped with
-// kill-server. simEnsureDaemon clears it.
 var simKilledRoots sync.Map
 
 func simKilled(base string) bool {
@@ -388,11 +299,6 @@ func simKilled(base string) bool {
 	return ok
 }
 
-// simRealDaemonCheck stops a daemon process that serves base after the
-// in-process one stopped, and fails the test: a helper that runs the binary
-// outside tuiosCLI started it, so the test did not run in process. Left
-// running, it writes the sessions back into the test's folder after
-// t.TempDir removed it.
 func simRealDaemonCheck(t *testing.T, base string) {
 	out, _ := tuiosCLIRun(t, base, "kill-server")
 	if strings.Contains(out, "not running") {
@@ -401,7 +307,6 @@ func simRealDaemonCheck(t *testing.T, base string) {
 	t.Errorf("sim backend: a daemon process served %s, so this test did not run in process; kill-server: %s", base, strings.TrimSpace(out))
 }
 
-// simStopDaemon stops the in-process daemon of base, if one runs.
 func simStopDaemon(base string) {
 	if v, ok := simDaemons.Load(base); ok {
 		v.(*simDaemon).stop()
@@ -415,16 +320,12 @@ func tail(b []byte, n int) []byte {
 	return b
 }
 
-// simArgs is a tuios command line the sim client runs: a bare tuios, attach
-// [NAME] or new NAME, with the interface flags.
 type simArgs struct {
-	verb  string // "", "attach" or "new"
+	verb  string
 	name  string
 	flags cliflags.Interface
 }
 
-// parseSimArgs reads args as cmd/tuios would for the three command lines the
-// sim client runs. ok is false for any other command line.
 func parseSimArgs(args []string) (a simArgs, ok bool) {
 	fs := pflag.NewFlagSet("tuios", pflag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -448,8 +349,6 @@ func parseSimArgs(args []string) (a simArgs, ok bool) {
 	return a, true
 }
 
-// simClient is a tuios client that runs in the test process: what
-// cmd/tuios runs for a bare tuios, attach and new, on a localclient.Pipe.
 type simClient struct {
 	args simArgs
 	env  []string
@@ -494,8 +393,6 @@ func (c *simClient) getenv(key string) string {
 	return ""
 }
 
-// connect makes the daemon client of an attach or a new, as
-// runDaemonSessionOn does for a local daemon: a new attaches with createNew.
 func (c *simClient) connect(out io.Writer, settings *config.Settings, caps *app.HostCapabilities, cols, rows int) (*session.TUIClient, *session.SessionState, bool) {
 	createNew := c.args.verb == "new"
 	client := session.NewTUIClient()
@@ -518,8 +415,6 @@ func (c *simClient) connect(out io.Writer, settings *config.Settings, caps *app.
 	return client, state, true
 }
 
-// Run is runLocal or runDaemonSessionOn of cmd/tuios on a Pipe. It does not
-// print the notices the binary prints after the TUI has ended.
 func (c *simClient) Run(in io.Reader, out io.Writer, cols, rows int) int {
 	defer close(c.ended)
 	ov := c.args.flags.Overrides()
@@ -533,8 +428,6 @@ func (c *simClient) Run(in io.Reader, out io.Writer, cols, rows int) int {
 		pin.stop()
 	}
 	caps := simProbe(pin, out, cols, rows)
-	// Code that reads the process's terminal and not the model's finds this
-	// client's.
 	app.SetClientCapabilities(caps)
 	defer app.SetClientCapabilities(simCaps())
 	opts := app.OSOptions{
@@ -575,8 +468,6 @@ func (c *simClient) Run(in io.Reader, out io.Writer, cols, rows int) int {
 	lc.Close()
 	code := 0
 	if fo, ok := final.(*app.OS); ok {
-		// The binary exits 1 for these, with a diagnostic it prints. The
-		// sim client prints no notice.
 		switch fo.ExitReason {
 		case app.ExitSessionKilled, app.ExitDaemonLost, app.ExitHostLost, app.ExitNestedRefused, app.ExitRestartFailed:
 			code = 1
@@ -586,7 +477,6 @@ func (c *simClient) Run(in io.Reader, out io.Writer, cols, rows int) int {
 		}
 		lc.Finish(fo)
 		if client == nil {
-			// The binary's exit takes its pane shells with it.
 			for _, w := range fo.Windows {
 				w.Close()
 			}
@@ -601,10 +491,6 @@ func (c *simClient) Run(in io.Reader, out io.Writer, cols, rows int) int {
 	return code
 }
 
-// simStart is the last step of startIn under the sim backend. argv is the
-// tuios command line after the program, env the client's environment, and
-// dir its directory. A command line the sim client does not run starts the
-// built binary, against the in-process daemon.
 func simStart(t *testing.T, base string, o startOpts, argv, env []string, dir string, opts []tuitest.Option) *tuitest.Terminal {
 	t.Helper()
 	args, ok := parseSimArgs(argv)
@@ -622,8 +508,6 @@ func simStart(t *testing.T, base string, o startOpts, argv, env []string, dir st
 	simEnv(t, env)
 	t.Chdir(dir)
 	c := &simClient{args: args, env: env, dir: dir, base: base, resize: make(chan localclient.Size, 16), ended: make(chan struct{})}
-	// Registered after the root folder, so it runs before t.TempDir removes
-	// it, and after tuitest's Close has asked the client to stop.
 	t.Cleanup(func() {
 		select {
 		case <-c.ended:
@@ -636,8 +520,6 @@ func simStart(t *testing.T, base string, o startOpts, argv, env []string, dir st
 	return tuitest.StartProgramT(t, c, opts...)
 }
 
-// lastWins keeps the last entry of each name in env, in the order the names
-// first appear, as tuitest builds the environment of the binary.
 func lastWins(env []string) []string {
 	val := map[string]string{}
 	var order []string
@@ -655,15 +537,10 @@ func lastWins(env []string) []string {
 	return out
 }
 
-// The observation trace.
-
-// traceFile is TUITEST_TRACE: where the trace lines go.
 var traceFile = os.Getenv("TUITEST_TRACE")
 
 var traceMu sync.Mutex
 
-// traceLine appends one line of the trace: the test, the stream (cli, or
-// the client's number), and what happened.
 func traceLine(t *testing.T, stream, what string) {
 	traceMu.Lock()
 	defer traceMu.Unlock()
@@ -676,18 +553,14 @@ func traceLine(t *testing.T, stream, what string) {
 	_, _ = fmt.Fprintf(f, "%s\t%s\t%s\n", t.Name(), stream, what)
 }
 
-// traceCLI records a CLI call.
 func traceCLI(t *testing.T, args []string) {
 	if traceFile != "" {
 		traceLine(t, "cli", strings.Join(args, " "))
 	}
 }
 
-// clientCount numbers the clients of each test, for the trace.
-var clientCount sync.Map // *testing.T -> *int
+var clientCount sync.Map
 
-// traceOptions records the client's waits and inputs when TUITEST_TRACE is
-// set.
 func traceOptions(t *testing.T) []tuitest.Option {
 	if traceFile == "" {
 		return nil
@@ -695,8 +568,6 @@ func traceOptions(t *testing.T) []tuitest.Option {
 	return []tuitest.Option{tuitest.WithCastDir(filepath.Join(t.TempDir(), "casts"))}
 }
 
-// traceClient writes the marks of term to the trace once the test is done,
-// before the client is closed.
 func traceClient(t *testing.T, term *tuitest.Terminal) {
 	if traceFile == "" {
 		return

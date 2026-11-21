@@ -11,9 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// slowSheetClaude is fakeSheetClaude with a wait before it says it is
-// ready, so start-agent, and with it the answer to a ctrl+enter on the
-// capture sheet, comes about eight seconds after the file.
 const slowSheetClaude = `#!/bin/sh
 if [ "$1" = auth ]; then
   if [ -f "__MARK__" ]; then echo '{"loggedIn": true}'; exit 0; fi
@@ -74,7 +71,6 @@ func TestTaskCaptureLateAnswerKeepsTheNextSheet(t *testing.T) {
 	const toast = "claude works on it."
 	has := func(s string) bool { return strings.Contains(term.Screen().Text(), s) }
 
-	// The first card, filed with ctrl+enter: the agent starts on it.
 	sendKeys(t, term, tuitest.Ctrl('b'), "+")
 	waitText(t, term, "the first sheet", "New task", sheet)
 	sendKeys(t, term, "First task")
@@ -84,7 +80,6 @@ func TestTaskCaptureLateAnswerKeepsTheNextSheet(t *testing.T) {
 		t.Fatalf("ASSERTION: the sheet did not close on ctrl+enter: %v\n%s", err, term.Snapshot())
 	}
 
-	// The sheet again, while claude starts.
 	sendKeys(t, term, tuitest.Ctrl('b'), "+")
 	waitText(t, term, "the second sheet", "New task", sheet)
 	_ = term.WaitStable(uiTimeout)
@@ -95,8 +90,6 @@ func TestTaskCaptureLateAnswerKeepsTheNextSheet(t *testing.T) {
 	if has("First task") {
 		t.Errorf("ASSERTION: the second sheet offers the filed draft again\n%s", term.Snapshot())
 	}
-	// enter on the second sheet before it has text adds nothing, and says
-	// to write the task. The next key clears that notice.
 	const empty = "Write the task first."
 	sendKeys(t, term, tuitest.Enter)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), empty) }, uiTimeout); err != nil {

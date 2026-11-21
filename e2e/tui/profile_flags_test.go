@@ -31,16 +31,11 @@ func TestPprofServedByLongRunningCommands(t *testing.T) {
 		t.Skip("reads the command's listeners from /proc")
 	}
 
-	// launched is a started command: its pid, and the ports of its own that
-	// change from one run to the next (pair's link port).
 	type launched struct {
 		pid int
 		own []int
 	}
 
-	// piped starts tuios with args, stdin an open pipe held until cleanup,
-	// and returns the pid, the stdin pipe, the stdout lines and whether the
-	// process has ended.
 	piped := func(t *testing.T, base string, args ...string) (int, *os.File, <-chan string, <-chan struct{}) {
 		t.Helper()
 		cmd := exec.Command(tuiosBin, args...)
@@ -72,7 +67,6 @@ func TestPprofServedByLongRunningCommands(t *testing.T) {
 			for sc.Scan() {
 				lines <- sc.Text()
 			}
-			// A read error ends the lines as EOF does.
 			_ = sc.Err()
 			close(lines)
 			_ = cmd.Wait()
@@ -102,8 +96,6 @@ func TestPprofServedByLongRunningCommands(t *testing.T) {
 		return ""
 	}
 
-	// framed starts tuios with args on a fake terminal and waits for the
-	// first painted frame, which frame matches.
 	framed := func(t *testing.T, base string, cols, rows int, frame *regexp.Regexp, args ...string) launched {
 		t.Helper()
 		opts := fakeTermOpts{bg: "rgb:0000/0000/0000", fg: "rgb:ffff/ffff/ffff"}
@@ -114,7 +106,6 @@ func TestPprofServedByLongRunningCommands(t *testing.T) {
 		return launched{pid: ft.cmd.Process.Pid}
 	}
 
-	// daemonRun starts a daemon under a fresh isolation root.
 	daemonRun := func(t *testing.T) string {
 		t.Helper()
 		base := t.TempDir()
@@ -123,9 +114,7 @@ func TestPprofServedByLongRunningCommands(t *testing.T) {
 	}
 
 	cases := []struct {
-		name string
-		// setup prepares what both runs share and returns the start recipe,
-		// which takes the extra flags and returns once the command is ready.
+		name  string
 		setup func(t *testing.T) func(t *testing.T, extra ...string) launched
 	}{
 		{"mcp", func(t *testing.T) func(*testing.T, ...string) launched {
@@ -146,9 +135,6 @@ func TestPprofServedByLongRunningCommands(t *testing.T) {
 			base := daemonRun(t)
 			return func(t *testing.T, extra ...string) launched {
 				pid, _, _, done := piped(t, base, append([]string{"stdio-proxy"}, extra...)...)
-				// It dials the daemon socket only for a stream opened on its
-				// input, so it holds no daemon socket before input: ready is
-				// two seconds after start with the process still running.
 				time.Sleep(2 * time.Second)
 				select {
 				case <-done:
@@ -199,8 +185,6 @@ func TestPprofServedByLongRunningCommands(t *testing.T) {
 				t.Fatal(err)
 			}
 			return func(t *testing.T, extra ...string) launched {
-				// The fake terminal does not report synchronized output, so the
-				// frame is the alternate screen entered, cleared and drawn on.
 				frame := regexp.MustCompile(`\x1b\[\?1049h[\s\S]*\x1b\[2J[^\x1b]*\x1b\[[0-9;]*m[^\x1b]+`)
 				return framed(t, base, 120, 36, frame, append([]string{"tape", "play", tapeFile}, extra...)...)
 			}
@@ -217,9 +201,6 @@ func TestPprofServedByLongRunningCommands(t *testing.T) {
 		}},
 	}
 
-	// loopbackRows reports, among the LISTEN rows whose socket inode the pid
-	// holds, whether /proc/PID/net/tcp has one on 127.0.0.1:port and whether
-	// /proc/PID/net/tcp6 has one on port.
 	loopbackRows := func(t *testing.T, pid, port int) (v4Loopback, v6 bool) {
 		t.Helper()
 		fdDir := fmt.Sprintf("/proc/%d/fd", pid)

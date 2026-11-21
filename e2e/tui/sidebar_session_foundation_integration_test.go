@@ -109,8 +109,6 @@ command = %q
 	}, uiTimeout); err != nil {
 		t.Fatalf("assigned rail session did not appear: %v\n%s", err, term.Snapshot())
 	}
-	// A custom component on an open rail runs promptly. Give it a full
-	// refresh interval before claiming that replacing its section suppressed it.
 	time.Sleep(700 * time.Millisecond)
 	for _, marker := range []string{primaryMarker, secondaryMarker} {
 		if _, err := os.Stat(marker); err == nil {

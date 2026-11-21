@@ -9,10 +9,6 @@ import (
 	"time"
 )
 
-// oscExitScript is the agent's side, run by the stand-in claude. It writes a
-// line, waits for one from the test, and exits. With "clear" as its argument
-// it clears its OSC 9;4 progress bar as its last word, which is how Claude
-// Code leaves a pane.
 const oscExitScript = `#!/bin/sh
 printf 'FAKE-UP\n'
 read -r _
@@ -20,7 +16,6 @@ if [ "$1" = clear ]; then printf '\033]9;4;0\007'; fi
 exit 0
 `
 
-// oscExitReading is one get-agent-state read, kept for the saved trace.
 type oscExitReading struct {
 	At      string         `json:"at"`
 	State   string         `json:"state"`
@@ -145,8 +140,6 @@ func TestAgentStateClearsWhenTheLastWordWasAProgressClear(t *testing.T) {
 			}); !ok {
 				t.Fatalf("the pane lost its osc-tier state before the agent ran, last read %+v", r)
 			}
-			// Three detector passes with the agent in the foreground, so it
-			// has seen the process before the agent leaves.
 			time.Sleep(3 * time.Second)
 			read()
 

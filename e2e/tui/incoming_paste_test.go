@@ -25,10 +25,6 @@ func TestIncomingBracketedPasteReachesPaneSilently(t *testing.T) {
 	newWindow(t, term)
 	enterTerminalMode(t, term)
 
-	// The inner /bin/sh does not enable bracketed paste, so tuios forwards the
-	// text raw and the shell echoes it at the prompt. Sending the outer markers
-	// is what a real terminal (or fcitx5) does; tuios's input parser turns them
-	// into a single paste event.
 	if err := term.Type("\x1b[200~中文\x1b[201~"); err != nil {
 		t.Fatalf("send bracketed paste burst: %v", err)
 	}
@@ -43,11 +39,6 @@ func TestIncomingBracketedPasteReachesPaneSilently(t *testing.T) {
 	alive(t, term, "after an incoming bracketed paste")
 }
 
-// osc52Responder mirrors the PTY output stream and, once armed, answers the
-// first OSC 52 clipboard read query with a fixed payload, exactly as a real
-// terminal with a populated clipboard would. This is what lets the harness
-// exercise tuios's OWN clipboard paste end to end: Ctrl+Shift+V emits the query,
-// the terminal answers, and tuios pastes the answer.
 type osc52Responder struct {
 	mu      sync.Mutex
 	buf     []byte
@@ -61,14 +52,10 @@ func (r *osc52Responder) Write(p []byte) (int, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.buf = append(r.buf, p...)
-	// An OSC 52 read query is ESC ] 52 ; <selection> ; ? <terminator>. Matching
-	// the "]52;" introducer and a trailing "?" is enough to recognize it without
-	// depending on the selection byte or terminator.
 	if r.armed && !r.replied && r.term != nil &&
 		bytes.Contains(r.buf, []byte("]52;")) && bytes.Contains(r.buf, []byte("?")) {
 		r.replied = true
 		term, reply := r.term, r.replyB
-		// Answer off the reader goroutine so this Write does not block.
 		go func() { _ = term.Type("\x1b]52;c;" + reply + "\x07") }()
 	}
 	return len(p), nil
@@ -98,9 +85,6 @@ func TestClipboardPasteStillPastesAndNotifies(t *testing.T) {
 
 	resp.arm(term)
 
-	// Ctrl+Shift+V in the Kitty CSI u encoding: 'v' is 118, modifier 6 is
-	// ctrl+shift. tuios reads this as a clipboard-paste request and emits the
-	// OSC 52 query the responder answers.
 	if err := term.SendKeys(tuitest.Key("\x1b[118;6u")); err != nil {
 		t.Fatalf("send ctrl+shift+v: %v", err)
 	}

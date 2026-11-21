@@ -9,12 +9,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// latteGround is catppuccin_latte's background, the ground the rail and the
-// dock are drawn on under that theme, since neither paints one of its own.
 var latteGround = color.RGBA{R: 0xef, G: 0xf1, B: 0xf5, A: 0xff}
 
-// inkAt is the foreground of the cell at col, row as a colour, and false when
-// the cell carries no 24-bit colour to measure.
 func inkAt(s tuitest.Screen, col, row int) (color.Color, bool) {
 	c := s.Cell(col, row).Fg
 	if c.Kind != tuitest.ColorRGB {
@@ -23,8 +19,6 @@ func inkAt(s tuitest.Screen, col, row int) (color.Color, bool) {
 	return color.RGBA{R: c.R, G: c.G, B: c.B, A: 0xff}, true
 }
 
-// textAt finds want on screen, right of column from, and returns its row and
-// column.
 func textAt(s tuitest.Screen, want string, from int) (row, col int, ok bool) {
 	_, rows := s.Size()
 	for r := range rows {

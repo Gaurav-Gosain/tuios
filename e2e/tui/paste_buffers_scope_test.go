@@ -10,11 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Paste buffers across sessions (#514): which buffers a pane may read, what
-// the paste key may take, and the byte cap. See paste_buffers_test.go for the
-// list of ways these could pass wrongly; the same rules apply here.
-
-// onlyPaneOf returns the id of the one window in session.
 func onlyPaneOf(t *testing.T, base, session string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "-s", session, "--json")
@@ -53,7 +48,6 @@ func TestAPaneSeesOnlyItsOwnBuffers(t *testing.T) {
 	for _, id := range []string{pane, sibling} {
 		mustCLI(t, base, "set-pane-grants", "-s", pbSession, "-w", id, "--grants", "read,write")
 	}
-	// The sibling pane sets a buffer of its own.
 	line := tuiosBin + " set-buffer sibling-text\n"
 	mustCLI(t, base, "send-text", "-s", pbSession, "-w", sibling, line)
 	deadline := time.Now().Add(shellTimeout)
@@ -80,7 +74,6 @@ func TestAPaneSeesOnlyItsOwnBuffers(t *testing.T) {
 	}
 	saveFrame(t, term, "paste-buffers-own-only")
 
-	// The positive half: with admin the same pane reaches the others.
 	mustCLI(t, base, "set-pane-grants", "-s", pbSession, "-w", pane, "--grants", "admin")
 	runInShell(t, term, "clear; "+bin+" show-buffer -b persons | head -c 3; echo; echo ADMIN_SHOW=$?", "ADMIN_SHOW=0", shellTimeout)
 	if !strings.Contains(term.Screen().Text(), "ppp") {
@@ -89,7 +82,6 @@ func TestAPaneSeesOnlyItsOwnBuffers(t *testing.T) {
 	alive(t, term, "after the ownership checks")
 }
 
-// onlyPaneOfFirst is the window of session that is not other.
 func onlyPaneOfFirst(t *testing.T, base, session, other string) string {
 	t.Helper()
 	out := mustCLI(t, base, "list-windows", "-s", session, "--json")
@@ -151,7 +143,6 @@ func TestThePersonsNewestIsNeverAPanes(t *testing.T) {
 	if out := mustCLI(t, base, "show-buffer"); out != "persons-text" {
 		t.Fatalf("the person's bare show-buffer printed %q, want persons-text, not the agent's buffer", out)
 	}
-	// The person's bare paste-buffer, into the home pane.
 	if err := term.SendKeys("echo GOT-"); err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +158,6 @@ func TestThePersonsNewestIsNeverAPanes(t *testing.T) {
 	if !screenHasLine(term.Screen(), "GOT-persons-text") {
 		t.Fatalf("the person's bare paste-buffer pasted the agent's buffer\n%s", term.Snapshot())
 	}
-	// prefix ] takes the same.
 	if err := term.SendKeys("echo KEY-"); err != nil {
 		t.Fatal(err)
 	}
@@ -189,9 +179,6 @@ func TestThePersonsNewestIsNeverAPanes(t *testing.T) {
 		t.Fatalf("prefix ] pasted the agent's buffer\n%s", term.Snapshot())
 	}
 
-	// The chooser lists the agent's buffer and says whose it is. The agent's
-	// pane has a long name with tabs in it, and the row still shows the
-	// buffer's own text and size, with the tag cut short.
 	mustCLI(t, base, "set-window", "-s", "work", "-w", agent, "--name", strings.Repeat("x", 60)+"\t\t\tend")
 	time.Sleep(300 * time.Millisecond)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "#"); err != nil {
@@ -217,7 +204,6 @@ func TestThePersonsNewestIsNeverAPanes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A buffer an admin pane sets with no name is the person's.
 	mustCLI(t, base, "set-pane-grants", "-s", "work", "-w", agent, "--grants", "admin")
 	mustCLI(t, base, "send-text", "-s", "work", "-w", agent, tuiosBin+" set-buffer by-admin-pane\n")
 	deadline = time.Now().Add(shellTimeout)

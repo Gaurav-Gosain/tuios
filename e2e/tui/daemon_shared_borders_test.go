@@ -8,11 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// countTallVerticalBorders returns how many interior columns are a vertical
-// box-drawing border for most of the usable height. The splash screen's own
-// centered welcome box contributes its two side borders, so the test compares
-// this count against a fresh-splash baseline rather than expecting zero: a
-// leftover separator adds a column the clean splash never had.
 func countTallVerticalBorders(s tuitest.Screen) int {
 	cols, rows := s.Size()
 	if cols < 8 || rows < 6 {
@@ -41,9 +36,6 @@ func countTallVerticalBorders(s tuitest.Screen) int {
 	return n
 }
 
-// countWideHorizontalBorders is the horizontal analogue: interior rows that are
-// a horizontal border for most of the usable width. The welcome box's top and
-// bottom borders contribute here, so the same baseline comparison applies.
 func countWideHorizontalBorders(s tuitest.Screen) int {
 	cols, rows := s.Size()
 	if cols < 8 || rows < 8 {
@@ -72,10 +64,6 @@ func countWideHorizontalBorders(s tuitest.Screen) int {
 	return n
 }
 
-// closeFocusedWindow closes the focused window through the 'w' window-management
-// binding and waits for the dock count to drop by one. In a daemon session the
-// close is a round trip: the client asks the daemon, the daemon kills the pane
-// and pushes state back, and only then does the count move.
 func closeFocusedWindow(t *testing.T, term *tuitest.Terminal, want int) {
 	t.Helper()
 	if err := term.SendKeys("w"); err != nil {
@@ -100,36 +88,26 @@ func TestDaemonSharedBordersSeparatorClearsOnClose(t *testing.T) {
 	killDaemon(t, base)
 	waitBoot(t, term)
 
-	// Baseline: the clean splash already draws its own centered welcome box, whose
-	// side, top and bottom borders count as full-length interior borders. A
-	// leftover separator is anything drawn on top of this, so the after-close
-	// screen must not exceed these counts.
 	baseV := countTallVerticalBorders(term.Screen())
 	baseH := countWideHorizontalBorders(term.Screen())
 
-	// Tiling on while empty, then three windows into the tiled session.
 	enableTiling(t, term)
 	for i := 1; i <= 3; i++ {
 		newWindow(t, term)
 		waitWindowCount(t, term, i, fmt.Sprintf("after new window #%d", i))
 	}
 
-	// Sanity: three tiled panes under shared borders show an interior vertical
-	// divider. If they never do, the rest of the test proves nothing.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return hasInteriorVerticalSplit(s)
 	}, uiTimeout); err != nil {
 		t.Fatalf("three tiled windows never drew an interior separator: %v\n%s", err, term.Snapshot())
 	}
 
-	// Close every window.
 	for remaining := 2; remaining >= 0; remaining-- {
 		closeFocusedWindow(t, term, remaining)
 	}
 	waitWindowCount(t, term, 0, "after closing all windows")
 
-	// The splash screen is back. Give the final close round trip a beat to land
-	// and settle, then require that no separator survives beyond the splash box.
 	if err := term.WaitForText(welcomeText, uiTimeout); err != nil {
 		t.Fatalf("splash never returned after closing all windows: %v\n%s", err, term.Snapshot())
 	}
@@ -163,8 +141,6 @@ func TestDaemonForcedVerticalSplitStaysVertical(t *testing.T) {
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "first window")
 
-	// Force a vertical split three times via the window-management '|' binding,
-	// which calls the same SplitFocusedVertical as ctrl+b |.
 	for i := 2; i <= 4; i++ {
 		if err := term.SendKeys("|"); err != nil {
 			t.Fatalf("send '|' #%d: %v", i, err)
@@ -177,9 +153,6 @@ func TestDaemonForcedVerticalSplitStaysVertical(t *testing.T) {
 		t.Logf("window %s: (%d,%d) %dx%d", r.ID, r.X, r.Y, r.Width, r.Height)
 	}
 
-	// Under pure vertical splits every pane spans the full height: same Y, same
-	// Height. Any horizontal split leaves at least one pane at a different Y or a
-	// reduced Height, which is the signature of the alternating-direction bug.
 	y0, h0 := rects[0].Y, rects[0].Height
 	for _, r := range rects {
 		if r.Y != y0 || r.Height != h0 {

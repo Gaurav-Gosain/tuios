@@ -24,14 +24,10 @@ func TestScrolledOutputRendersCorrectly(t *testing.T) {
 	newWindow(t, term)
 	enterTerminalMode(t, term)
 
-	// Enough lines to scroll the pane many times over. Each line is tagged so
-	// the tail can be identified exactly rather than by counting.
 	const last = 400
 	runInShell(t, term, fmt.Sprintf("for i in $(seq 1 %d); do echo \"LINE-$i-END\"; done", last),
 		fmt.Sprintf("LINE-%d-END", last), bulkTimeout)
 
-	// The final lines must be the ones on screen: a pane that scrolled but
-	// rendered a stale cache would be showing earlier lines instead.
 	s := term.Screen()
 	for _, n := range []int{last, last - 1, last - 2} {
 		want := fmt.Sprintf("LINE-%d-END", n)
@@ -40,18 +36,13 @@ func TestScrolledOutputRendersCorrectly(t *testing.T) {
 				want, term.Snapshot())
 		}
 	}
-	// And early lines must have scrolled off, proving the viewport really moved
-	// rather than the whole output happening to fit.
 	if strings.Contains(s.Text(), "LINE-1-END") {
 		t.Fatalf("LINE-1-END is still on screen after %d lines: the pane did not scroll, "+
 			"so this test is not exercising the scroll path\n%s", last, term.Snapshot())
 	}
 
-	// The pane must still be live after the scroll, not frozen on a final frame.
 	runInShell(t, term, "echo POST-SCROLL-$((6*7))", "POST-SCROLL-42", shellTimeout)
 
-	// And it must survive losing and regaining focus, which is when a stale or
-	// discarded cached layer would show itself.
 	leaveTerminalMode(t, term)
 	newWindow(t, term)
 	waitWindowCount(t, term, 2, "after second window")
@@ -79,9 +70,6 @@ func TestScrollbackModeShowsEarlierOutput(t *testing.T) {
 		fmt.Sprintf("SB-%d-END", last), bulkTimeout)
 	leaveTerminalMode(t, term)
 
-	// Ctrl+B [ enters copy mode over the scrollback. Motions are vim's, so the
-	// jump to the oldest line is "gg" rather than a single "g"; a single "g"
-	// only arms the pending-g state and silently does nothing.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
 		t.Fatalf("enter copy mode: %v", err)
 	}
@@ -95,7 +83,6 @@ func TestScrollbackModeShowsEarlierOutput(t *testing.T) {
 		t.Fatalf("scrollback did not reach the oldest line: %v\n%s", err, term.Snapshot())
 	}
 
-	// G returns to the newest line.
 	if err := term.SendKeys("G"); err != nil {
 		t.Fatalf("jump to newest: %v", err)
 	}

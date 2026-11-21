@@ -53,9 +53,6 @@ const (
 	rows    = 10
 )
 
-// width and height are the picture's size. With fraction it is 1950x390, 19.5
-// pixels a column and 39 a row, so a crop worked out in whole pixels a cell
-// comes out short.
 var width, height = 2000, 400
 
 func main() {
@@ -77,7 +74,6 @@ func main() {
 		return
 	}
 
-	// Bottom right, then back to 41 columns and 4 rows of the picture showing.
 	os.Stdout.WriteString("\x1b[?1049h\x1b[999;999H\x1b[3A\x1b[40D")
 	place := fmt.Sprintf("a=T,f=100,i=%d,c=%d,r=%d,C=1,q=2", imageID, cols, rows)
 	switch how {
@@ -117,7 +113,6 @@ func main() {
 	time.Sleep(60 * time.Second)
 }
 
-// send transmits the picture by medium with the given command keys.
 func send(medium, keys string, data []byte) error {
 	switch medium {
 	case "direct":
@@ -134,8 +129,6 @@ func send(medium, keys string, data []byte) error {
 	return nil
 }
 
-// writeMedium writes the picture where the medium says and returns the rest of
-// the command: the medium's own keys and the base64 path.
 func writeMedium(medium string, data []byte) (string, error) {
 	pattern := "overflow-*.png"
 	if medium == "temp" {
@@ -194,9 +187,6 @@ func sendDirect(place string, data []byte) {
 	}
 }
 
-// picture is a PNG of the stand-in's size with a gradient, so it is not a flat
-// colour a host could draw at any scale and look the same. tint changes every
-// pixel, for a second picture under the same id.
 func picture(tint uint8) ([]byte, error) {
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
 	for y := range height {

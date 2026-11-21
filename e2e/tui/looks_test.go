@@ -14,24 +14,11 @@ import (
 	"testing"
 )
 
-// The suite runs with the looks tuios shipped before v0.8.0, the way it runs
-// standalone (see startIn): almost every test here was written against that
-// screen. The dock row is the last line, the rail is off or on the left, a
-// click on a pane starts typing in it, a zoomed pane fills the screen. Left to
-// the v0.8.0 defaults, hundreds of assertions would quietly change what they
-// check. startOpts.shippedLooks opts out, and shipped_looks_test.go is where
-// the v0.8.0 defaults are driven for real.
-
-// lookPin is one key the suite pins, with the value it pins it to, as TOML.
 type lookPin struct {
 	table, key, value string
-	// legacy is a flat [appearance] key an older config spelled this one as.
-	// A config that sets it has made its choice, so the pin stays out.
-	legacy string
+	legacy            string
 }
 
-// preV080Pins are the seven defaults v0.8.0 changed, at their old values. It
-// mirrors config.PinPreV080Appearance, which this module does not import.
 var preV080Pins = []lookPin{
 	{table: "appearance", key: "dockbar_position", value: `"bottom"`},
 	{table: "appearance", key: "window_title_position", value: `"bottom"`},
@@ -41,19 +28,11 @@ var preV080Pins = []lookPin{
 	{table: "appearance.sidebar", key: "enabled", value: `false`, legacy: "sidebar_enabled"},
 	{table: "appearance.sidebar", key: "position", value: `"left"`, legacy: "sidebar_position"},
 	{table: "appearance.sidebar", key: "width", value: `28`, legacy: "sidebar_width"},
-	// Not a v0.8.0 change: the modal dim came after it, and it darkens every
-	// cell behind an overlay, which is what many of these tests read while
-	// one is open. The screen before v0.8.0 had no dim. modal_dim_test.go
-	// drives it with the shipped looks.
 	{table: "appearance", key: "modal_dim", value: `0`},
 }
 
-// shippedLooksBases holds the isolation roots whose tests asked for the
-// shipped looks, so no tuios started against them gets the pins, whichever
-// helper starts it.
 var shippedLooksBases sync.Map
 
-// useShippedLooks keeps the pins out of every tuios started against base.
 func useShippedLooks(base string) { shippedLooksBases.Store(base, true) }
 
 var (
@@ -62,42 +41,20 @@ var (
 	tomlKeyRe    = regexp.MustCompile(`^\s*([A-Za-z0-9_.\-]+)\s*=`)
 )
 
-// pinPreV080Looks makes the config under base carry every pin the test's own
-// config does not already set. A test that writes a key keeps its value; a
-// test that writes none gets the whole set. It reads the file line by line
-// rather than decoding it, which is enough for the plain tables tests write,
-// and it inserts each pin right under its table's header so the file stays
-// valid TOML.
 func pinPreV080Looks(t *testing.T, base string) {
 	t.Helper()
 	pinPreV080LooksIn(t, base, xdgDir(base, "XDG_CONFIG_HOME"))
 }
 
-// pinnedConfigs holds the config files the pins have already been through.
 var pinnedConfigs sync.Map
 
-// tuiosConfigHeader is the first line of every config file tuios writes.
 const tuiosConfigHeader = "# TUIOS Configuration File\n"
 
-// writtenByTuios reports whether data is a config file tuios wrote, or the
-// part of one a reader sees while tuios is still writing it: nothing, or a
-// prefix of the header.
 func writtenByTuios(data []byte) bool {
 	s := string(data)
 	return strings.HasPrefix(s, tuiosConfigHeader) || strings.HasPrefix(tuiosConfigHeader, s)
 }
 
-// pinPreV080LooksIn is pinPreV080Looks for a config home other than the
-// root's own, which is what a second client started with its own
-// XDG_CONFIG_HOME reads.
-//
-// Every CLI call pins, so this runs while a client is attached and saving the
-// file. A file the pins have been through and that tuios wrote since is left
-// alone: tuios wrote it from a config that already held the pins. Pinning it
-// read the file mid-save, while it was empty, and wrote a file of pins and
-// nothing else over the finished save. The client's watcher then applied
-// that file, which moved the dock to the bottom row under a test that had
-// just hidden it.
 func pinPreV080LooksIn(t *testing.T, base, configHome string) {
 	t.Helper()
 	if _, ok := shippedLooksBases.Load(base); ok {
@@ -110,11 +67,6 @@ func pinPreV080LooksIn(t *testing.T, base, configHome string) {
 	}
 	replace := false
 	if errors.Is(err, fs.ErrNotExist) {
-		// No file is a first run, and a first run writes the whole default
-		// config: startup.tiled and startup.daemon are on only because that
-		// file says so, and a file of pins alone would turn them off. So the
-		// binary writes its own first-run file, and the pins replace the
-		// looks in it.
 		data, err = firstRunConfig(t, base, configHome, path)
 		replace = true
 	}
@@ -128,9 +80,6 @@ func pinPreV080LooksIn(t *testing.T, base, configHome string) {
 	pinnedConfigs.Store(path, true)
 }
 
-// writeConfigAtomically puts data at path through a temporary file and a
-// rename, so a client watching the file never reads it half written. The
-// temporary file is created 0600, the mode the suite gives every config.
 func writeConfigAtomically(t *testing.T, path string, data []byte) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
@@ -153,8 +102,6 @@ func writeConfigAtomically(t *testing.T, path string, data []byte) {
 	}
 }
 
-// firstRunConfig has the binary under test write the config file a first run
-// writes, by running a subcommand that loads the config, and returns it.
 func firstRunConfig(t *testing.T, base, configHome, path string) ([]byte, error) {
 	t.Helper()
 	cmd := exec.Command(tuiosBin, "keybinds", "list")
@@ -163,8 +110,6 @@ func firstRunConfig(t *testing.T, base, configHome, path string) ([]byte, error)
 	for _, key := range xdgKeys {
 		cmd.Env = append(cmd.Env, key+"="+xdgDir(base, key))
 	}
-	// Last, so it wins over the root's own: exec keeps the last value of a
-	// repeated key.
 	cmd.Env = append(cmd.Env, "XDG_CONFIG_HOME="+configHome)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("pin looks: first-run config: %v\n%s", err, out)
@@ -172,9 +117,6 @@ func firstRunConfig(t *testing.T, base, configHome, path string) ([]byte, error)
 	return os.ReadFile(path)
 }
 
-// withPreV080Pins is src with the missing pins added. With replace, the pinned
-// keys src already sets are dropped first, so every pin lands; that is for a
-// first-run file, whose values are the defaults rather than a test's choice.
 func withPreV080Pins(src string, replace bool) string {
 	lines := strings.Split(src, "\n")
 	if replace {
@@ -197,8 +139,6 @@ func withPreV080Pins(src string, replace bool) string {
 		lines = kept
 	}
 	set := map[string]bool{}
-	// implicit holds the tables a dotted key defined, which no header may
-	// open afterwards.
 	implicit := map[string]bool{}
 	headerAt := map[string]int{}
 	table := ""
@@ -228,9 +168,6 @@ func withPreV080Pins(src string, replace bool) string {
 		}
 	}
 
-	// A table written as an inline table or as dotted keys cannot be given
-	// a header afterwards, so its pins are left out rather than breaking the
-	// file.
 	inline := func(tbl string) bool { return set[tbl] || implicit[tbl] }
 
 	missing := map[string][]string{}
@@ -248,8 +185,6 @@ func withPreV080Pins(src string, replace bool) string {
 		return src
 	}
 
-	// Insert under existing headers from the bottom up, so earlier indexes
-	// stay good, then append the tables the file never opened.
 	var appended []string
 	type insertion struct {
 		at   int

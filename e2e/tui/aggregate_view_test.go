@@ -10,16 +10,11 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// aggregateTitle is the header the all-windows list draws, and aggregateHint
-// the one string on screen that only the open list produces. The list is the
-// go-to picker filtered to this session's panes.
 const (
 	aggregateTitle = "Go to"
 	aggregateHint  = "@ # !"
 )
 
-// openAggregateView opens the all-windows picker through the command palette,
-// which is the only way in: it has no default keybinding.
 func openAggregateView(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Ctrl('p')); err != nil {
@@ -37,13 +32,6 @@ func openAggregateView(t *testing.T, term *tuitest.Terminal) {
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("activate palette entry: %v", err)
 	}
-	// Waited for on the picker's own hint rather than on its title. The title is
-	// the word "Windows", which the palette row that opens it also contains, so
-	// waiting on the title returned while the palette was still on screen and
-	// every measurement below then described the palette instead.
-	//
-	// A screen too short for the footer drops the hint, so there the picker is
-	// known by its title on a line of its own and its position readout.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
 		if strings.Contains(text, paletteTitle) {
@@ -55,8 +43,6 @@ func openAggregateView(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// aggregateTitleRow is the screen row whose only text is the picker's title,
-// or -1. The palette row that opens the picker holds more than the title.
 func aggregateTitleRow(s tuitest.Screen) int {
 	_, height := s.Size()
 	for r := range height {
@@ -67,11 +53,6 @@ func aggregateTitleRow(s tuitest.Screen) int {
 	return -1
 }
 
-// panelExtent measures the block of rows the picker occupies, by the rows
-// between its title and its hint line. It is the measurement the redesign is
-// about: the old overlay took three quarters of the screen whatever it held.
-// On a screen too short for the hint, the position readout is the last line
-// measured.
 func panelExtent(t *testing.T, term *tuitest.Terminal) (rows int) {
 	t.Helper()
 	s := term.Screen()
@@ -92,8 +73,6 @@ func panelExtent(t *testing.T, term *tuitest.Terminal) (rows int) {
 	if bottom < 0 {
 		t.Fatalf("the picker's hint line and readout are not on screen\n%s", term.Snapshot())
 	}
-	// The nearest title above the hint, which with the palette gone is the
-	// picker's own.
 	for r := bottom; r >= 0; r-- {
 		if strings.Contains(s.Line(r), aggregateTitle) {
 			return bottom - r + 1
@@ -128,8 +107,6 @@ func TestAggregateViewSizesToItsContent(t *testing.T) {
 		t.Errorf("the picker is %d rows for an empty session and %d rows for eight windows; it is not sizing to its content\n%s",
 			small, large, term.Snapshot())
 	}
-	// The screen is forty rows tall. A picker holding nothing that still takes
-	// most of them is the bug being fixed, whatever the comparison above says.
 	if small > 12 {
 		t.Errorf("an empty picker is %d rows tall\n%s", small, term.Snapshot())
 	}
@@ -156,12 +133,9 @@ func TestAggregateViewRowClickJumpsToThatWindow(t *testing.T) {
 		t.Fatalf("the picker did not list both windows: %v\n%s", err, term.Snapshot())
 	}
 
-	// Click the row for the window that is not the focused one.
 	col, row := findOnScreen(t, term, "ALPHA")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 
-	// The click closes the picker and lands on that window, which is what Enter
-	// on the same row does.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(s.Text(), aggregateHint)
 	}, uiTimeout); err != nil {
@@ -181,8 +155,6 @@ func TestAggregateViewFitsAShortScreen(t *testing.T) {
 	term, _ := start(t, startOpts{cols: 60, rows: 14})
 	waitBoot(t, term)
 
-	// Ten, so the list cannot possibly fit: a shorter one legitimately does, and
-	// then there is nothing to scroll and no readout to look for.
 	for range 10 {
 		newWindow(t, term)
 	}
@@ -192,7 +164,6 @@ func TestAggregateViewFitsAShortScreen(t *testing.T) {
 	if rows > 14 {
 		t.Errorf("the picker is %d rows tall on a 14-row screen\n%s", rows, term.Snapshot())
 	}
-	// A list it cannot show whole says so, the way every other list overlay does.
 	if !strings.Contains(term.Screen().Text(), " of ") {
 		t.Errorf("a scrolled picker showed no position readout\n%s", term.Snapshot())
 	}

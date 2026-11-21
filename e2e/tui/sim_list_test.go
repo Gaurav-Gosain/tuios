@@ -21,7 +21,7 @@ func TestSimListNamesTestsThatCanRunInProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tests := map[string]bool{} // name -> calls requireReal first
+	tests := map[string]bool{}
 	for _, file := range files {
 		f, err := parser.ParseFile(fset, file, nil, 0)
 		if err != nil {

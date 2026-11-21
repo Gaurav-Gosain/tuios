@@ -8,15 +8,6 @@ import (
 	"testing"
 )
 
-// The owners of the TML surfaces that callers outside every pane open. The
-// daemon's hooks together are one owner, each herdr plugin is one, and the
-// other processes tuios starts outside every pane, such as the line of an
-// exec, are a third. Each changes and closes only what its own kind opened;
-// the person changes and closes everything, and reads stay as they are.
-//
-// The negative controls are in NEGATIVE_CONTROLS.md, "The owners of hook and
-// herdr plugin surfaces".
-
 const hookOwnerManifest = `id = "e2e.hookowner"
 name = "Owner probe"
 version = "1.0.0"
@@ -29,16 +20,11 @@ contexts = ["pane"]
 command = ["sh", "step.sh"]
 `
 
-// ownerStepPrelude starts every step script: run keeps the exit code and the
-// output of one call under its row name, open opens a form as a pane and
-// keeps its id, and sid reads an id back.
 const ownerStepPrelude = `run() { n=$1; shift; "$@" >"$D/$n.out" 2>&1; echo $? >"$D/$n.code"; }
 open() { n=$1; shift; "$T" tml show "$D/form.tml" --pane "$@" >"$D/$n.open" 2>&1; awk '/^tml-/ {print $1; exit}' "$D/$n.open" >"$D/$n.id"; }
 sid() { cat "$D/$1.id"; }
 `
 
-// writeOwnerStep writes the step script at path. It ends by writing
-// name.done, which the test waits for.
 func writeOwnerStep(t *testing.T, path, rows, name, body string) {
 	t.Helper()
 	script := "D=" + rows + "\nT=" + tuiosBin + "\n" + ownerStepPrelude + body + "echo ok >\"$D/" + name + ".done\"\n"
@@ -47,7 +33,6 @@ func writeOwnerStep(t *testing.T, path, rows, name, body string) {
 	}
 }
 
-// readOwnerRow is the exit code and the output a step kept for a row.
 func readOwnerRow(rows, name string) (string, string) {
 	code, _ := os.ReadFile(filepath.Join(rows, name+".code"))
 	out, _ := os.ReadFile(filepath.Join(rows, name+".out"))
@@ -67,9 +52,6 @@ func TestTMLOwnersKeepHooksAndHerdrPluginsApart(t *testing.T) {
 	})
 	patch := `'[{"op":"add","path":"/by","value":"someone"}]'`
 
-	// The hook runs a step once each time it is armed. Every window opens
-	// a hook run, the hook's own forms too, so the run that takes the
-	// armed file is the one that runs the step.
 	armed := filepath.Join(base, "armed")
 	hookStep := filepath.Join(base, "hook-step.sh")
 	hook := filepath.Join(base, "hook.sh")
@@ -95,8 +77,6 @@ func TestTMLOwnersKeepHooksAndHerdrPluginsApart(t *testing.T) {
 		waitFile(t, filepath.Join(rows, name+".done"), func(s string) bool { return strings.Contains(s, "ok") }, "hook run "+name)
 	}
 
-	// A herdr plugin, installed as the person installs one, runs a step as
-	// its action.
 	plugin := t.TempDir()
 	herdrStep := filepath.Join(base, "herdr-step.sh")
 	writeFiles(t, plugin, map[string]string{"herdr-plugin.toml": hookOwnerManifest, "step.sh": ". " + herdrStep + "\n"})
@@ -112,7 +92,6 @@ func TestTMLOwnersKeepHooksAndHerdrPluginsApart(t *testing.T) {
 		waitFile(t, filepath.Join(rows, name+".done"), func(s string) bool { return strings.Contains(s, "ok") }, "herdr run "+name)
 	}
 
-	// The person's exec runs a line as a daemon child outside every pane.
 	execStep := filepath.Join(base, "exec-step.sh")
 	execRun := func(name, step string) {
 		t.Helper()
@@ -155,7 +134,6 @@ func TestTMLOwnersKeepHooksAndHerdrPluginsApart(t *testing.T) {
 		"run areplace \"$T\" tml replace \"$(sid h1)\" \"$D/replace.tml\"\n"+
 		"run aclose \"$T\" tml close \"$(sid h1)\"\n")
 
-	// Refused: each owner's forms are its own.
 	for _, r := range []struct{ name, what string }{
 		{"apatch", "the herdr plugin's patch of the hook's form"},
 		{"areplace", "the herdr plugin's replace of the hook's form"},
@@ -168,8 +146,6 @@ func TestTMLOwnersKeepHooksAndHerdrPluginsApart(t *testing.T) {
 			t.Errorf("%s: exit %s, want 1 and the owner's refusal\n%s", r.what, code, out)
 		}
 	}
-	// Served: an owner changes its own forms, one hook run what another
-	// opened, and every class still reads every form.
 	for _, r := range []struct{ name, what string }{
 		{"e1patch", "the exec line's patch of its own form"},
 		{"h2patch", "a second hook run's patch of the first run's form"},
@@ -185,7 +161,6 @@ func TestTMLOwnersKeepHooksAndHerdrPluginsApart(t *testing.T) {
 		}
 	}
 
-	// The person changes and closes both.
 	for _, f := range []string{"h1", "r1"} {
 		s := formID(f)
 		if out, err := tuiosCLI(t, base, "tml", "patch", s, `[{"op":"add","path":"/by","value":"the person"}]`); err != nil {

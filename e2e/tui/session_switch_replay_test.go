@@ -9,12 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// twoSessionClient creates alpha and bravo detached and attaches a client to
-// alpha, settled in terminal mode with the session's one window focused.
-//
-// Two sessions is the minimum that makes next_session a round trip: alt+shift+n
-// walks to bravo and again walks back to alpha, so a test never has to name a
-// session or drive the sidebar to switch.
 func twoSessionClient(t *testing.T) *tuitest.Terminal {
 	t.Helper()
 	base := t.TempDir()
@@ -32,17 +26,11 @@ func twoSessionClient(t *testing.T) *tuitest.Terminal {
 	}, bootTimeout); err != nil {
 		t.Fatalf("client never attached to alpha: %v\n%s", err, term.Snapshot())
 	}
-	// An attached client boots straight into terminal mode, so settle it in
-	// window-management mode first and enter terminal mode from there: that is
-	// the transition enterTerminalMode knows how to wait on.
 	windowManagementMode(t, term)
 	enterTerminalMode(t, term)
 	return term
 }
 
-// switchSession walks to the next session and waits for the switch to announce
-// itself. next_session is terminal-safe, so this works without leaving the mode
-// the shell is typed in.
 func switchSession(t *testing.T, term *tuitest.Terminal, want string) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Alt("N")); err != nil {
@@ -64,8 +52,6 @@ func TestSessionSwitchKeepsPaneContent(t *testing.T) {
 	const marker = "SESSMARK-5120"
 
 	term := twoSessionClient(t)
-	// Printed by the shell rather than typed, so the command line itself cannot
-	// be mistaken for the output and every hit is a real paint.
 	runInShell(t, term, `printf '%s\n' "$(echo SESSMARK)-5120"`, marker, shellTimeout)
 
 	switchSession(t, term, "bravo")
@@ -88,8 +74,6 @@ func TestSessionSwitchDoesNotRepaintThePane(t *testing.T) {
 	const marker = "BRAVOMARK-8802"
 
 	term := twoSessionClient(t)
-	// A switch lands on the new session already in terminal mode, so the shell
-	// can be typed at directly.
 	switchSession(t, term, "bravo")
 	runInShell(t, term, `printf '%s\n' "$(echo BRAVOMARK)-8802"`, marker, shellTimeout)
 
@@ -116,9 +100,6 @@ func TestSessionSwitchSwapsPanesAtomically(t *testing.T) {
 	const bmark = "BRAVOMARK-3311"
 
 	term := twoSessionClient(t)
-	// Enough history that catching the returning client up is a real replay
-	// rather than a line or two, since a pane repainting its history is exactly
-	// what the flash would look like.
 	runInShell(t, term, fmt.Sprintf("for i in $(seq 1 %d); do echo \"ALPHA-$i-END\"; done", last),
 		amark, bulkTimeout)
 	switchSession(t, term, "bravo")
@@ -128,8 +109,6 @@ func TestSessionSwitchSwapsPanesAtomically(t *testing.T) {
 		t.Fatalf("back to alpha: %v", err)
 	}
 
-	// Sampled rather than waited on: the fault being ruled out is a frame that
-	// exists only between two good ones, which any wait would step over.
 	type frame struct {
 		alpha, bravo bool
 		text         string
@@ -157,8 +136,6 @@ func TestSessionSwitchSwapsPanesAtomically(t *testing.T) {
 	if settled < 30 {
 		t.Fatalf("never settled back on alpha across %d frames\n%s", len(frames), term.Snapshot())
 	}
-	// Sampling that began after the swap had already happened would assert
-	// nothing, so the run only counts if it saw the pane being left.
 	sawBravo := 0
 	for _, f := range frames {
 		if f.bravo {
@@ -177,9 +154,6 @@ func TestSessionSwitchSwapsPanesAtomically(t *testing.T) {
 		}
 	}
 
-	// And the pane arrives finished. A pane that is painted once and then
-	// painted over is the same flash seen from the other side, so every frame
-	// showing alpha has to show the same alpha.
 	var first string
 	for _, f := range frames {
 		if !f.alpha {
@@ -196,9 +170,6 @@ func TestSessionSwitchSwapsPanesAtomically(t *testing.T) {
 	alive(t, term, "after the atomic swap")
 }
 
-// paneRegion is the screen above the dock, which is where pane content lives.
-// The dock is excluded because its notification and its countdown change on
-// their own and would make every frame differ from every other.
 func paneRegion(s tuitest.Screen) string {
 	_, rows := s.Size()
 	var b strings.Builder

@@ -11,14 +11,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// sidebarHeader is the label the sidebar renders above its session list.
-// Asserting on it proves the sidebar panel is actually on screen rather than
-// that a config flag was flipped. Lowercase: the rail's headers are furniture
-// and are drawn as such.
 const sidebarHeader = "sessions"
 
-// toggleSidebarViaPalette opens the command palette, runs the "Toggle sidebar"
-// entry, and waits for the palette to close.
 func toggleSidebarViaPalette(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Ctrl('p')); err != nil {
@@ -57,38 +51,28 @@ func TestSidebarRendersAndPanesTileBesideIt(t *testing.T) {
 	newWindow(t, term)
 	renameWindow(t, term, "BRAVO")
 
-	// Tiled so both panes show at once; a floating layout would overlap them.
 	enableTiling(t, term, "ALPHA", "BRAVO")
 
-	// The sidebar is off by default, so its header must not be on screen yet.
 	if strings.Contains(term.Screen().Text(), sidebarHeader) {
 		t.Fatalf("sidebar header %q on screen before it was enabled\n%s", sidebarHeader, term.Snapshot())
 	}
 
 	toggleSidebarViaPalette(t, term)
 
-	// The sidebar panel is up: its header, plus at least one of the window rows
-	// it lists, must be on screen.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return screenHas(s, sidebarHeader, "ALPHA")
 	}, uiTimeout); err != nil {
 		t.Fatalf("sidebar did not render with its header and a window row: %v\n%s", err, term.Snapshot())
 	}
 
-	// Panes still tile beside it: both markers remain visible at the same time,
-	// so the panes were re-tiled into the reduced content box, not covered by the
-	// sidebar or squeezed off screen.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return screenHas(s, "ALPHA", "BRAVO")
 	}, uiTimeout); err != nil {
 		t.Fatalf("both panes not visible beside the sidebar: %v\n%s", err, term.Snapshot())
 	}
 
-	// The dock still reports both windows, so nothing was lost to the relayout.
 	waitWindowCount(t, term, 2, "after enabling the sidebar")
 
-	// Toggling again removes the sidebar; the header leaves the screen and the
-	// panes reclaim the space.
 	toggleSidebarViaPalette(t, term)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(s.Text(), sidebarHeader) && screenHas(s, "ALPHA", "BRAVO")
@@ -99,7 +83,6 @@ func TestSidebarRendersAndPanesTileBesideIt(t *testing.T) {
 	alive(t, term, "after toggling the sidebar off")
 }
 
-// findOnScreen returns the leftmost cell of the first row containing needle.
 func findOnScreen(t *testing.T, term *tuitest.Terminal, needle string) (col, row int) {
 	t.Helper()
 	s := term.Screen()
@@ -144,18 +127,14 @@ func TestSidebarClickSwitchesSession(t *testing.T) {
 	toggleSidebarViaPalette(t, term)
 	waitForAll(t, term, uiTimeout, "sidebar with both session rows", sidebarHeader, "bravo")
 
-	// Terminal mode is where the owner lives, and the sidebar band must own
-	// clicks there too, ahead of any forwarding to the pane underneath.
 	enterTerminalMode(t, term)
 
-	// Click the bravo row and land on bravo.
 	col, row := findOnScreen(t, term, "bravo")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	if err := term.WaitForText("Session: bravo", uiTimeout); err != nil {
 		t.Fatalf("click on the bravo row did not switch: %v\n%s", err, term.Snapshot())
 	}
 
-	// And back: from bravo, a click on the alpha row returns to alpha.
 	if err := term.WaitForText("alpha", uiTimeout); err != nil {
 		t.Fatalf("alpha row not visible after switching: %v\n%s", err, term.Snapshot())
 	}
@@ -168,9 +147,6 @@ func TestSidebarClickSwitchesSession(t *testing.T) {
 	alive(t, term, "after switching sessions from the sidebar")
 }
 
-// screenRowOf returns the topmost row containing needle, or -1. The sidebar
-// sits at the top of the screen, so the topmost occurrence is the sidebar row
-// even when the dock repeats the name further down.
 func screenRowOf(s tuitest.Screen, needle string) int {
 	_, rows := s.Size()
 	for r := range rows {
@@ -214,7 +190,6 @@ func TestSidebarDragReordersSessions(t *testing.T) {
 	toggleSidebarViaPalette(t, term)
 	waitForAll(t, term, uiTimeout, "sidebar with both session rows", sidebarHeader, "bravo")
 
-	// Creation order puts alpha above bravo.
 	s := term.Screen()
 	alphaRow, bravoRow := screenRowOf(s, "alpha"), screenRowOf(s, "bravo")
 	if alphaRow < 0 || bravoRow < 0 || alphaRow >= bravoRow {
@@ -222,7 +197,6 @@ func TestSidebarDragReordersSessions(t *testing.T) {
 			alphaRow, bravoRow, term.Snapshot())
 	}
 
-	// Drag bravo up onto alpha's row; the rows swap and the release commits.
 	col, _ := findOnScreen(t, term, "bravo")
 	mouseDrag(t, term, col, bravoRow, col, alphaRow, tuitest.MouseLeft, 0)
 
@@ -233,7 +207,6 @@ func TestSidebarDragReordersSessions(t *testing.T) {
 		t.Fatalf("drag did not reorder bravo above alpha: %v\n%s", err, term.Snapshot())
 	}
 
-	// The drag must not have switched sessions: releasing a drag is not a click.
 	if strings.Contains(term.Screen().Text(), "Session: bravo") {
 		t.Fatalf("drag release switched sessions\n%s", term.Snapshot())
 	}
@@ -242,10 +215,6 @@ func TestSidebarDragReordersSessions(t *testing.T) {
 	sidebarDragMovesGroups(t, base, repo, away, term)
 }
 
-// sidebarDragMovesGroups is #1418: a group's row moves the whole group, and a
-// worktree row moves only inside its group. It runs in the default layout, then
-// with group_main on, where the repository has a row of its own. The controls are
-// in NEGATIVE_CONTROLS.md.
 func sidebarDragMovesGroups(t *testing.T, base, repo, away string, term *tuitest.Terminal) {
 	for _, step := range []struct {
 		dir  string
@@ -262,8 +231,6 @@ func sidebarDragMovesGroups(t *testing.T, base, repo, away string, term *tuitest
 	}
 	waitForAll(t, term, uiTimeout, "the group and the session under it", "mainsess", "f/one", "f/two", "zulu")
 
-	// rail is the rows of the names in the order the rail draws them. The order
-	// is the assertion: a block moved whole leaves its rows next to each other.
 	rail := func(s tuitest.Screen, names ...string) []string {
 		rows := map[int]string{}
 		for _, name := range names {
@@ -293,7 +260,6 @@ func sidebarDragMovesGroups(t *testing.T, base, repo, away string, term *tuitest
 	names := []string{"bravo", "alpha", "mainsess", "f/one", "f/two", "zulu"}
 	wantOrder("before the drags", names...)
 
-	// A worktree row moves inside its group and stops at the group's edge.
 	drag("f/two", "f/one")
 	wantOrder("a worktree row dragged over its sibling", "bravo", "alpha", "mainsess", "f/two", "f/one", "zulu")
 	drag("f/one", "zulu")
@@ -301,16 +267,11 @@ func sidebarDragMovesGroups(t *testing.T, base, repo, away string, term *tuitest
 	drag("f/two", "alpha")
 	wantOrder("a worktree row dragged above its group", "bravo", "alpha", "mainsess", "f/two", "f/one", "zulu")
 
-	// A main checkout's row moves the group, past a block taller and shorter
-	// than itself, and stays put between the two events of a slow drag.
 	drag("mainsess", "zulu")
 	wantOrder("the group's row dragged down", "bravo", "alpha", "zulu", "mainsess", "f/two", "f/one")
 	railShot(t, term, "rail-drag-group-down")
 	drag("zulu", "f/one")
 	wantOrder("a session dragged past a group", "bravo", "alpha", "mainsess", "f/two", "f/one", "zulu")
-	// A session that stops over the middle of a taller block stays where it is,
-	// however the pointer shakes there. The block it would pass is under the
-	// pointer on both sides of a swap, so a swap here would flip on every event.
 	{
 		s := term.Screen()
 		col, _ := findOnScreen(t, term, "zulu")
@@ -329,15 +290,12 @@ func sidebarDragMovesGroups(t *testing.T, base, repo, away string, term *tuitest
 		t.Errorf("dragging the group's row opened its session\n%s", term.Snapshot())
 	}
 
-	// The reorder keys follow the same rule, on the main checkout's row and on a
-	// worktree row. The attached session is alpha, so k walks up to the row wanted.
 	if err := term.SendKeys("s"); err != nil {
 		t.Fatalf("enter the rail: %v", err)
 	}
 	if err := term.WaitForText(railPill, uiTimeout); err != nil {
 		t.Fatalf("s did not give the keyboard to the rail: %v\n%s", err, term.Snapshot())
 	}
-	// alpha, bravo, f/one, f/two, mainsess.
 	if err := term.SendKeys("k", "k", "k", "k", "J"); err != nil {
 		t.Fatalf("reorder the main checkout's row: %v", err)
 	}
@@ -357,8 +315,6 @@ func sidebarDragMovesGroups(t *testing.T, base, repo, away string, term *tuitest
 		t.Fatalf("esc did not leave the rail: %v\n%s", err, term.Snapshot())
 	}
 
-	// With group_main on, the repository's own row moves the group, and the main
-	// checkout's row is one more row inside it.
 	if err := term.Close(); err != nil {
 		t.Logf("close: %v", err)
 	}

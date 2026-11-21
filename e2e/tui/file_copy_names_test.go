@@ -40,8 +40,6 @@ func TestCopyShowsAFarNameWithEscapesAsText(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// A file of the same name that differs here makes the name a conflict,
-	// which every output names.
 	conflictAt := func(dst string) {
 		t.Helper()
 		dir := filepath.Join(dst, "dir")
@@ -61,7 +59,6 @@ func TestCopyShowsAFarNameWithEscapesAsText(t *testing.T) {
 		}
 	}
 
-	// Plain: not a terminal, so skip is the default and the run exits 3.
 	plain := filepath.Join(base, "plain")
 	conflictAt(plain)
 	r := runTuios(t, base, "cp", "build:dir", plain)
@@ -75,7 +72,6 @@ func TestCopyShowsAFarNameWithEscapesAsText(t *testing.T) {
 		t.Fatalf("ASSERTION: the summary does not name the skipped file as visible text %s:\n%s", visible, r.Stdout)
 	}
 
-	// JSON: the exact name, escaped by JSON.
 	r = runTuios(t, base, "cp", "--json", "build:dir", plain)
 	artifact["json"] = r
 	noControls("--json stdout", r.Stdout)
@@ -89,12 +85,10 @@ func TestCopyShowsAFarNameWithEscapesAsText(t *testing.T) {
 		t.Fatalf("ASSERTION: no --json file event has the exact name as its rel:\n%s", r.Stdout)
 	}
 
-	// A pane: a terminal that acts on what it is sent.
 	pane, cwd := copyTestPane(t, base, "work")
 	conflictAt(filepath.Join(cwd, "dstp"))
 	codeFile := filepath.Join(base, "pane.code")
 	typeInPane(t, base, "work", pane, "clear; "+tuiosBin+" cp build:dir ./dstp; echo $? >"+codeFile)
-	// A long path wraps, so the screen is read with its lines joined.
 	waitJoined := func(marker string) string {
 		t.Helper()
 		deadline := time.Now().Add(30 * time.Second)
@@ -161,8 +155,6 @@ func TestEventsCarryAFarNameWithC1ControlsEscaped(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	// The daemon's own event lines, read from its socket, so the test sees
-	// what every consumer gets and not only what the CLI cleans.
 	sub := dialFileVerbs(t, base)
 	sub.must("subscribe", map[string]any{"types": []string{"transfer", "transfer-file"}}, nil)
 	var events bytes.Buffer

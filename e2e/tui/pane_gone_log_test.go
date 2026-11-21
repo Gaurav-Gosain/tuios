@@ -42,15 +42,11 @@ func TestPaneGoneSaysWhyInTheLog(t *testing.T) {
 	}
 	closed := rows[1].ID
 
-	// The client places both panes, which gives each a BSP number, and the
-	// daemon saves the session within two seconds of a change.
 	waitSavedBSP(t, base, session, closed, true, "the window before its close")
 
 	if out, err := tuiosCLI(t, base, "close-window", "-s", session, closed); err != nil {
 		t.Fatalf("close-window: %v\n%s", err, out)
 	}
-	// Read before the panes below end: a pane ended by a signal from outside
-	// keeps the saved layout as it was for two minutes (signalHoldFor).
 	waitSavedBSP(t, base, session, closed, false, "the window after its close")
 	exits, err := tuiosCLI(t, base, "new-window", "-s", session, "--no-focus", "--print-id", "exits", "--", "sh", "-c", "sleep 1; exit 3")
 	if err != nil {
@@ -78,7 +74,6 @@ func TestPaneGoneSaysWhyInTheLog(t *testing.T) {
 			strings.Contains(line, "after its pane was closed")
 	})
 
-	// The artifact: the lines the daemon wrote about the three panes.
 	if b, err := os.ReadFile(daemonLogOf(t, base)); err == nil {
 		out := filepath.Join(artifactDir(t), "pane-gone-daemon-log.txt")
 		if err := os.WriteFile(out, []byte(paneGoneLines(string(b))+"\n"), 0o644); err != nil {
@@ -87,13 +82,11 @@ func TestPaneGoneSaysWhyInTheLog(t *testing.T) {
 	}
 }
 
-// lastLine is the last non-empty line of out.
 func lastLine(out string) string {
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	return strings.TrimSpace(lines[len(lines)-1])
 }
 
-// wantLog waits for a line of the daemon log under base that match accepts.
 func wantLog(t *testing.T, base, what string, match func(string) bool) {
 	t.Helper()
 	path := daemonLogOf(t, base)
@@ -112,8 +105,6 @@ func wantLog(t *testing.T, base, what string, match func(string) bool) {
 	}
 }
 
-// paneGoneLines is the lines of a daemon log that say a pane or a window is
-// gone.
 func paneGoneLines(log string) string {
 	var out []string
 	for line := range strings.SplitSeq(log, "\n") {
@@ -124,8 +115,6 @@ func paneGoneLines(log string) string {
 	return strings.Join(out, "\n")
 }
 
-// waitSavedBSP waits for the session's saved state to hold, or not hold, a
-// BSP number for window.
 func waitSavedBSP(t *testing.T, base, session, window string, want bool, what string) {
 	t.Helper()
 	path := filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "sessions", session+".json")

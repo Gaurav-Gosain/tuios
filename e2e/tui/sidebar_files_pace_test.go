@@ -12,8 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// churnFor is how long each subtest changes the listed folder, ten times a
-// second, the rate of a build or an editor writing swap files.
 const churnFor = 5 * time.Second
 
 // TestRailFilesRefreshIsPaced changes the listed folder ten times a second
@@ -30,12 +28,9 @@ const churnFor = 5 * time.Second
 // against 17 and 5 now. See NEGATIVE_CONTROLS.md.
 func TestRailFilesRefreshIsPaced(t *testing.T) {
 	cases := []struct {
-		name string
-		// change is one change to the folder, the i-th.
+		name   string
 		change func(t *testing.T, dir string, i int)
-		// last is the name the rail shows once the changes stop, if any.
-		last string
-		// budget is the most rail rebuilds the whole run may take.
+		last   string
 		budget uint64
 	}{
 		{
@@ -117,7 +112,6 @@ func TestRailFilesRefreshIsPaced(t *testing.T) {
 	}
 }
 
-// readStat reads one named count from the line DumpTickStats writes.
 func readStat(t *testing.T, path, name string) uint64 {
 	t.Helper()
 	data, err := os.ReadFile(path)

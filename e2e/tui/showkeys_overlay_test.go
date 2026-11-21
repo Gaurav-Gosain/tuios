@@ -9,19 +9,10 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// pillLeft is the left Powerline half-circle the showkeys overlay wraps each key
-// in. The dock status bar and window titles use it too, so a row also has to be
-// checked for not being the dock before it counts as the keycast.
 const pillLeft = ""
 
-// removedKeyEventsPanelSignatures are strings the deleted top-left key-events
-// diagnostic panel rendered. None may appear again: that overlay was removed and
-// its controls now drive the single bottom-right showkeys keycast.
 var removedKeyEventsPanelSignatures = []string{"Key events", "code="}
 
-// showkeysRow returns the keycast overlay row, or "" when the overlay is not on
-// screen. It scans from the bottom because the keycast sits just above the dock,
-// and it skips the dock status row (which also carries pill glyphs).
 func showkeysRow(s tuitest.Screen) string {
 	_, rows := s.Size()
 	for r := rows - 1; r >= 0; r-- {
@@ -37,8 +28,6 @@ func showkeysRow(s tuitest.Screen) string {
 	return ""
 }
 
-// assertNoRemovedPanel fails if any signature of the deleted top-left key-events
-// panel is anywhere on screen.
 func assertNoRemovedPanel(t *testing.T, term *tuitest.Terminal, when string) {
 	t.Helper()
 	text := term.Screen().Text()
@@ -59,7 +48,6 @@ func TestShowKeysOverlayConsolidated(t *testing.T) {
 	term, _ := start(t, startOpts{args: []string{"--show-keys"}})
 	waitBoot(t, term)
 
-	// Window-management mode: 'n' creates a window and must appear in the keycast.
 	newWindow(t, term)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(showkeysRow(s), "n")
@@ -68,13 +56,10 @@ func TestShowKeysOverlayConsolidated(t *testing.T) {
 	}
 	assertNoRemovedPanel(t, term, "in window-management mode")
 
-	// The palette is not open, so the overlay showing proves it does not depend on
-	// the palette being visible.
 	if strings.Contains(term.Screen().Text(), paletteTitle) {
 		t.Fatalf("command palette unexpectedly open; overlay must show without it\n%s", term.Snapshot())
 	}
 
-	// Terminal mode: keys typed at the shell must still reach the keycast.
 	enterTerminalMode(t, term)
 	if err := term.SendKeys("Z"); err != nil {
 		t.Fatalf("send Z: %v", err)

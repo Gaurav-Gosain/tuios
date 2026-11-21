@@ -14,13 +14,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// The suite already drives daemon mode through 'tuios new' and 'tuios attach',
-// so subscribe/resubscribe (workspace switching) and two clients on one session
-// have real coverage. These two cover what nothing here reached: a client
-// leaving and coming back to the same session, and a session outliving the
-// daemon that held it. Both are the paths a user exercises the moment something
-// goes wrong, and both were only ever tested below the daemon boundary.
-
 // TestDetachAndReattachKeepsLayoutAndPaneContent is the detach the docs promise
 // costs nothing: the daemon holds the PTYs and keeps an emulator fed, so a new
 // client asks for each window's screen and repaints it.
@@ -45,8 +38,6 @@ func TestDetachAndReattachKeepsLayoutAndPaneContent(t *testing.T) {
 		t.Fatalf("first client never attached: %v\n%s", err, first.Snapshot())
 	}
 
-	// Printed by the shell, so the typed command line cannot be mistaken for the
-	// output and every hit on screen is a real paint.
 	if err := first.SendKeys(`printf '%s\n' "$(echo REATTACHMARK)-3182"`, tuitest.Enter); err != nil {
 		t.Fatalf("write the marker: %v", err)
 	}
@@ -54,8 +45,6 @@ func TestDetachAndReattachKeepsLayoutAndPaneContent(t *testing.T) {
 		t.Fatalf("the marker never appeared before the detach: %v\n%s", err, first.Snapshot())
 	}
 
-	// A second window, so the reattach has a layout to bring back and not just
-	// one pane's contents.
 	if err := first.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("to window mode: %v", err)
 	}
@@ -80,14 +69,6 @@ func TestDetachAndReattachKeepsLayoutAndPaneContent(t *testing.T) {
 			countWindows(second.Screen()), err, second.Snapshot())
 	}
 
-	// Raise the pane that holds the marker before reading it off the screen.
-	// Both windows are floating and the second one was opened on top, so the
-	// marker is behind it. That is what a floating layout is, not a loss of
-	// content. Without the raise, the marker is visible only when the
-	// restored window has the wrong size (a client that attaches claiming a
-	// placeholder 80x24 leaves it in an 80x24 box that sticks out from under
-	// the newer window). With both windows at their right size, the newer one
-	// covers it.
 	windowManagementMode(t, second)
 	if err := second.SendKeys(tuitest.Tab); err != nil {
 		t.Fatalf("cycle focus to the pane holding the marker: %v", err)
@@ -189,13 +170,11 @@ func TestSessionSurvivesTheDaemonAndSaysItWasRestored(t *testing.T) {
 	}
 	newWindow(t, first)
 
-	// kill-server is synchronous and saves every session on the way out.
 	if out, err := tuiosCLI(t, base, "kill-server"); err != nil {
 		t.Fatalf("kill-server: %v: %s", err, out)
 	}
 	waitExit(t, first, "after kill-server")
 
-	// Starting any session starts a daemon, and a daemon restores on start.
 	if out, err := tuiosCLI(t, base, "new", "e2e-trigger", "--detach"); err != nil {
 		t.Fatalf("start a fresh daemon: %v: %s", err, out)
 	}
@@ -207,12 +186,10 @@ func TestSessionSurvivesTheDaemonAndSaysItWasRestored(t *testing.T) {
 	if !restored.Restored {
 		t.Error("the restored session is not marked restored, so nothing but a pane banner says its shells are new")
 	}
-	// A session nobody restored must not wear the tag.
 	if trigger := waitForSessionInfo(t, base, "e2e-trigger"); trigger.Restored {
 		t.Error("a freshly created session is marked restored")
 	}
 
-	// 'tuios ls' has to say it too, since that is where a user looks first.
 	out, err := tuiosCLI(t, base, "ls")
 	if err != nil {
 		t.Fatalf("ls: %v: %s", err, out)
@@ -221,7 +198,6 @@ func TestSessionSurvivesTheDaemonAndSaysItWasRestored(t *testing.T) {
 		t.Errorf("'tuios ls' does not mention the restored session:\n%s", out)
 	}
 
-	// And the attach path, before it takes the screen.
 	second, logPath := startInLogged(t, base, startOpts{args: []string{"attach", "e2e-restore"}})
 	if err := second.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 2 }, bootTimeout); err != nil {
 		t.Fatalf("the restored session did not bring its layout back (count %d): %v\n%s",
@@ -232,27 +208,22 @@ func TestSessionSurvivesTheDaemonAndSaysItWasRestored(t *testing.T) {
 		t.Errorf("the attach said nothing about the session having been restored; PTY log:\n%s", string(logBytes))
 	}
 
-	// The mark is spent: attaching answered the question it exists to ask.
 	if again := waitForSessionInfo(t, base, "e2e-restore"); again.Restored {
 		t.Error("the restored mark survived the first attach")
 	}
 	alive(t, second, "after attaching to the restored session")
 }
 
-// sessionInfo is the part of 'tuios ls --json' these tests read.
 type sessionInfo struct {
 	Name        string `json:"name"`
 	WindowCount int    `json:"window_count"`
 	Restored    bool   `json:"restored"`
-	// Worktree is the record the rail groups the session by.
-	Worktree *struct {
+	Worktree    *struct {
 		Repo string `json:"repo"`
 		Main bool   `json:"main"`
 	} `json:"worktree"`
 }
 
-// waitForSessionInfo polls the daemon's listing until the named session appears,
-// so a test never races the daemon's own start.
 func waitForSessionInfo(t *testing.T, base, name string) sessionInfo {
 	t.Helper()
 	var found sessionInfo
@@ -274,9 +245,6 @@ func waitForSessionInfo(t *testing.T, base, name string) sessionInfo {
 	return found
 }
 
-// restartMidVersion stamps the build the client starts as in
-// TestRestartTheDaemonFromTheVersionNotice: a third version, apart from the
-// daemon's and from the one an update installs.
 const restartMidVersion = "e2e-mid"
 
 var (
@@ -285,7 +253,6 @@ var (
 	restartMidErr  error
 )
 
-// restartMidBinary builds the client's version once per run.
 func restartMidBinary(t *testing.T) string {
 	t.Helper()
 	restartMidOnce.Do(func() {
@@ -307,8 +274,6 @@ func restartMidBinary(t *testing.T) string {
 	return restartMidBin
 }
 
-// copyExecutable copies a binary to dst through a rename, the way an update
-// puts a new build in place: a process that runs the old file keeps it.
 func copyExecutable(t *testing.T, src, dst string) {
 	t.Helper()
 	data, err := os.ReadFile(src)
@@ -375,9 +340,6 @@ func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "send-text", "-s", name, "-w", "sleeper", "sleep 300\n"); err != nil {
 		t.Fatalf("start a program: %v\n%s", err, out)
 	}
-	// Many more programs in a second session, as a person with an agent in
-	// every pane has. The restart stops them too, so the plan is taller than
-	// the screen: it has to scroll, and the answers have to stay on screen.
 	const busy = 40
 	const busySession = name + "-busy"
 	if out, err := tuiosCLI(t, base, "new", busySession, "--detach"); err != nil {
@@ -397,7 +359,6 @@ func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
 		}
 	}
 
-	// The client runs from a path of its own, which the update replaces.
 	client := filepath.Join(base, "bin", "tuios")
 	if err := os.MkdirAll(filepath.Dir(client), 0o755); err != nil {
 		t.Fatal(err)
@@ -410,12 +371,9 @@ func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
 		term = startIn(t, base, startOpts{cols: 100, rows: 40, args: []string{"--debug", "new", name}, out: wire})
 	})
 	pid := term.Pid()
-	// A second client, of the daemon's own build, attached beside it. It has
-	// to come back by itself.
 	other := attachIn(t, base, name, startOpts{cols: 100, rows: 40})
 	otherPid := other.Pid()
 
-	// The whole notice fits the dock of a 100-column terminal.
 	notice := "The daemon runs dev. ctrl+b j restarts it."
 	if err := term.WaitForText(notice, bootTimeout); err != nil {
 		t.Fatalf("ASSERTION: the client never showed the whole version notice: %v\n%s", err, term.Snapshot())
@@ -424,7 +382,6 @@ func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
 		savePNG(t, term.Screen(), shot.XTermPalette(), frames, "restart-notice")
 	}
 
-	// The update.
 	copyExecutable(t, next, client)
 
 	row, col := findText(t, term, "The daemon runs dev.")
@@ -449,8 +406,6 @@ func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
 	if frames != "" {
 		savePNG(t, term.Screen(), shot.XTermPalette(), frames, "restart-confirm")
 	}
-	// Page down to the end of the plan: the last program and the line after
-	// the list come into view, and the answers are still there.
 	lastBusy := fmt.Sprintf(`sleep in "busy-%02d"`, busy)
 	for range 4 {
 		if err := term.SendKeys(tuitest.PageDown); err != nil {
@@ -468,8 +423,6 @@ func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
 		savePNG(t, term.Screen(), shot.XTermPalette(), frames, "restart-confirm-end")
 	}
 
-	// The notice and the dialog had to fit 100 columns. The success line is
-	// longer than a 100-column dock, so the terminal widens.
 	if err := term.Resize(130, 40); err != nil {
 		t.Fatalf("resize: %v", err)
 	}
@@ -487,8 +440,6 @@ func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
 		savePNG(t, term.Screen(), shot.XTermPalette(), frames, "restart-success")
 	}
 
-	// The old client gave the terminal back before the exec: the reset, the
-	// cursor shown, and then the line that says it attaches again.
 	out := wire.String()
 	again := strings.Index(out, "tuios attaches to session")
 	reset := -1
@@ -499,7 +450,6 @@ func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
 		t.Errorf("ASSERTION: the client did not reset the terminal and show the cursor before it started again (reset at %d, line at %d)", reset, again)
 	}
 
-	// The same process, attached to the same session.
 	var clients []struct {
 		PID     int    `json:"pid"`
 		Session string `json:"session"`
@@ -522,15 +472,11 @@ func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
 	if !found {
 		t.Errorf("ASSERTION: the client (pid %d) is not attached to %q after the restart: %+v", pid, name, clients)
 	}
-	// The flags it started with went along, the root's --debug included. The
-	// client was started by new, so the root's flags are not in attach's own
-	// set when the restart reads them.
 	if argv, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid)); err != nil ||
 		!strings.Contains(string(argv), "--debug=true") || !strings.Contains(string(argv), "--no-animations=true") {
 		t.Errorf("ASSERTION: the client started again without its flags: %v %q", err, argv)
 	}
 
-	// The second client reattached by itself, in the same process.
 	if err := other.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
 		return strings.Contains(text, "The daemon restarted on "+syncNextVersion+". tuios reattached.") &&
@@ -561,7 +507,6 @@ func TestRestartTheDaemonFromTheVersionNotice(t *testing.T) {
 	}
 	alive(t, other, "after it reattached")
 
-	// The layout and the history.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
 		return countWindows(s) == 2 && strings.Contains(text, fmt.Sprintf("RHIST-%d-END", last)) &&

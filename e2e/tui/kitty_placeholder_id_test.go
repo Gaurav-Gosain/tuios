@@ -16,25 +16,8 @@ import (
 	"tuios.dev/vt"
 )
 
-// Kitty Unicode placeholders, checked on the stream tuios writes to the host.
-//
-// A placeholder cell names its image by id: the low 24 bits in the cell's
-// foreground and the high 8 in a third combining mark. tuios re-registers
-// every image under an id of its own, so both halves have to be rewritten.
-// kitten icat --unicode-placeholder writes the high byte on every cell, and
-// tuios rewrote the colour but kept the guest's mark, so the host was told
-// about image 1 and the cells named 0xF7000001. Nothing was drawn.
-//
-// The host these tests play takes 256 colours (TERM=xterm-256color and no
-// COLORTERM), which is the profile that rounded a true-colour id to another
-// image in issue 292.
-
-// icatPlaceholderGuestID has a non-zero high byte, as the ids icat picks do.
 const icatPlaceholderGuestID = 0xF7000A0B
 
-// icatStylePlaceholders is what kitten icat --unicode-placeholder writes for a
-// 3x2 image, in stream mode: the image in one a=T,U=1 command, then the cells,
-// each with its row, column and high byte marks, in the id's colour.
 func icatStylePlaceholders(marker string) string {
 	const cols, rows = 3, 2
 	var b strings.Builder
@@ -56,8 +39,6 @@ func icatStylePlaceholders(marker string) string {
 	return octalEscapes(b.String())
 }
 
-// octalEscapes spells every byte outside ASCII as a printf octal escape, so
-// the command line the shell echoes holds no placeholder cells of its own.
 func octalEscapes(s string) string {
 	var b strings.Builder
 	for i := range len(s) {
@@ -72,9 +53,6 @@ func octalEscapes(s string) string {
 
 var virtualPlaceRE = regexp.MustCompile(`\x1b_Ga=p,U=1,i=(\d+),`)
 
-// hostPlaceholderIDs replays what the host was sent into an emulator that
-// keeps placeholder cells and returns the image id every such cell names, and
-// the ids the host was given virtual placements for.
 func hostPlaceholderIDs(t *testing.T, stream []byte, cols, rows int) (cells map[uint32]int, declared map[uint32]bool) {
 	t.Helper()
 	stream = markRE.ReplaceAll(stream, nil)
@@ -102,8 +80,6 @@ func hostPlaceholderIDs(t *testing.T, stream []byte, cols, rows int) (cells map[
 	return cells, declared
 }
 
-// checkPlaceholdersNameDeclaredImages fails unless the host was given at least
-// one virtual placement and every placeholder cell on its screen names one.
 func checkPlaceholdersNameDeclaredImages(t *testing.T, host *kittyHost, want int) {
 	t.Helper()
 	cells, declared := hostPlaceholderIDs(t, host.bytes(), 120, 40)
@@ -122,9 +98,6 @@ func checkPlaceholdersNameDeclaredImages(t *testing.T, host *kittyHost, want int
 	}
 }
 
-// startPlaceholderPane is startGraphicsPane with placeholders on. The fake
-// host answers the probe the way kitty does but cannot answer XTVERSION in a
-// way tuios reads, so the setting is pinned.
 func startPlaceholderPane(t *testing.T, daemon bool) (*tuitest.Terminal, *kittyHost) {
 	t.Helper()
 	host := newKittyHost()
@@ -225,8 +198,6 @@ func TestPlaceholdersOnAKittyAndAPlainClient(t *testing.T) {
 	if bytes.Contains(got, []byte("\x1b_G")) {
 		t.Error("the plain client's host was sent kitty graphics")
 	}
-	// The three image cells stay three blanks, so AFTER starts three
-	// columns right of the pane's left edge, where the image did.
 	scr := plainTerm.Screen()
 	_, rows := scr.Size()
 	for y := range rows {
@@ -243,8 +214,6 @@ func TestPlaceholdersOnAKittyAndAPlainClient(t *testing.T) {
 	t.Errorf("AFTER is not on the plain client's screen\n%s", plainTerm.Snapshot())
 }
 
-// lockedStream records what a client writes to its host, with a mark to read
-// from.
 type lockedStream struct {
 	kittyHost
 	from int

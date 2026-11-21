@@ -109,10 +109,6 @@ func TestKittyImageNumberDeletePlacement(t *testing.T) {
 			logNumbered(t, cmds)
 			id := hostIDBySize(t, cmds, 40, 40)
 
-			// p=1 at column 2, p=2 at column 20, then p=1 deleted by
-			// number and p=3 placed at column 40. Each guest placement
-			// has host placement ids of its own, so the host's state is
-			// replayed rather than read off one command.
 			live := hostPlacements(stream, id)
 			t.Logf("placements of host image %d at the end: %v", id, live)
 			cols := map[int]bool{}
@@ -208,8 +204,6 @@ func assertUploadReplies(t *testing.T, term *tuitest.Terminal) {
 
 type uploadAnswer struct{ id, msg string }
 
-// uploadReplies reads the REPLY lines the stand-in printed, keyed by the
-// image number when the answer names one and by the id when not.
 func uploadReplies(t *testing.T, screen string) map[string]uploadAnswer {
 	t.Helper()
 	got := map[string]uploadAnswer{}
@@ -247,10 +241,6 @@ func btoi(b bool) int {
 	return 0
 }
 
-// runImageNumbers runs the stand-in in one mode in a fresh tuios and returns
-// what the host was sent from the launch on. With second, a second client
-// attaches to the daemon session before the launch, with a kitty host of its
-// own. It saves the stream and the screen as the test's artifacts.
 func runImageNumbers(t *testing.T, mode string, daemon, second bool) ([]byte, *tuitest.Terminal) {
 	t.Helper()
 	bin := buildImageNumbers(t)
@@ -281,8 +271,6 @@ func runImageNumbers(t *testing.T, mode string, daemon, second bool) ([]byte, *t
 	if err := term.WaitForText("IMAGENUMBERS-DONE", shellTimeout); err != nil {
 		t.Fatalf("the guest never finished: %v\n%s", err, term.Snapshot())
 	}
-	// Several render passes, each of which could take a placement down or
-	// put a deleted one back.
 	time.Sleep(2 * time.Second)
 
 	stream := host.bytes()
@@ -298,9 +286,6 @@ func runImageNumbers(t *testing.T, mode string, daemon, second bool) ([]byte, *t
 	return stream, term
 }
 
-// attachSecondKittyClient attaches one more client to the only session of
-// the daemon under base, on a host that draws kitty graphics, and waits until
-// it shows the pane.
 func attachSecondKittyClient(t *testing.T, base string) *kittyHost {
 	t.Helper()
 	var session string
@@ -341,7 +326,6 @@ func logNumbered(t *testing.T, cmds []numberedCmd) {
 	t.Logf("graphics commands on the host:\n  %s", strings.Join(lines, "\n  "))
 }
 
-// hostIDBySize is the host id of the last upload of a w by h image.
 func hostIDBySize(t *testing.T, cmds []numberedCmd, w, h int) int {
 	t.Helper()
 	id := 0
@@ -356,7 +340,6 @@ func hostIDBySize(t *testing.T, cmds []numberedCmd, w, h int) int {
 	return id
 }
 
-// lastNaming is the last placement or delete that names a host image.
 func lastNaming(cmds []numberedCmd, id int) numberedCmd {
 	var last numberedCmd
 	for _, c := range cmds {
@@ -367,8 +350,6 @@ func lastNaming(cmds []numberedCmd, id int) numberedCmd {
 	return last
 }
 
-// numberedCmd is one graphics command on the host wire, with its keys and,
-// for a transmission, the size of the image it carries.
 type numberedCmd struct {
 	keys     map[string]string
 	w, h     int
@@ -380,9 +361,6 @@ func (c numberedCmd) num(key string) int {
 	return n
 }
 
-// parseNumberedStream reads every graphics command from the host stream. A
-// transmission split over chunks is joined, and its pixel size is taken from
-// s= and v= or, for a PNG, from the PNG header.
 func parseNumberedStream(stream []byte) []numberedCmd {
 	var out []numberedCmd
 	var payload strings.Builder
@@ -395,7 +373,6 @@ func parseNumberedStream(stream []byte) []numberedCmd {
 			}
 		}
 		if open >= 0 && c.keys["a"] == "" {
-			// A continuation chunk of the transmission still open.
 			payload.Write(m[2])
 			if c.keys["m"] != "1" {
 				out[open].w, out[open].h = transmittedSize(out[open], payload.String())
@@ -436,8 +413,6 @@ func assertImageNumbers(t *testing.T, stream []byte) {
 	t.Helper()
 	cmds := parseNumberedStream(stream)
 
-	// Which host id each of the three images went out under, found by its
-	// size, which only the guest's own PNG carries.
 	type want struct {
 		label   string
 		w, h    int
@@ -485,15 +460,12 @@ func assertImageNumbers(t *testing.T, stream []byte) {
 		seen[id] = img.label
 	}
 
-	// Every placement must name an image the host holds.
 	for _, c := range cmds {
 		if c.keys["a"] == "p" && !transmitted[c.num("i")] {
 			t.Errorf("a placement names host image %d, which was never transmitted: %q", c.num("i"), c.rawParam)
 		}
 	}
 
-	// The cell counts of every placement, by image, to be checked against
-	// one cell size below.
 	cells := map[string]map[[2]int]bool{}
 	for _, img := range images {
 		id := hostOf[img.label]
@@ -535,10 +507,6 @@ func assertImageNumbers(t *testing.T, stream []byte) {
 	})
 }
 
-// assertOneCellSize checks that every image was placed at its own pixel size:
-// one cell size must turn each image's pixels into the cells it was placed
-// in. A placement sized from a guess, or from no size at all, fits no cell
-// size the others fit.
 func assertOneCellSize(t *testing.T, cells map[string]map[[2]int]bool, size func(string) (int, int)) {
 	t.Helper()
 	ceil := func(a, b int) int { return (a + b - 1) / b }
@@ -548,8 +516,6 @@ func assertOneCellSize(t *testing.T, cells map[string]map[[2]int]bool, size func
 			for label, seen := range cells {
 				w, h := size(label)
 				for cr := range seen {
-					// An image at a pixel offset or on a layer has no box: it
-					// is drawn at its own pixels.
 					if cr == [2]int{} {
 						continue
 					}
@@ -567,7 +533,6 @@ func assertOneCellSize(t *testing.T, cells map[string]map[[2]int]bool, size func
 	t.Errorf("no one cell size gives the cell counts the images were placed in: %v", cells)
 }
 
-// buildImageNumbers compiles the image-number stand-in once per test binary.
 func buildImageNumbers(t *testing.T) string {
 	t.Helper()
 	imageNumbersOnce.Do(func() {
@@ -859,13 +824,8 @@ func TestKittyMultiplePlacements(t *testing.T) {
 	}
 }
 
-// movedPlacementRE is a cursor move followed by a graphics command, the way the
-// passthrough positions every a=p.
 var movedPlacementRE = regexp.MustCompile(`(?:\x1b\[(\d+);(\d+)H)?\x1b_G([^;\x1b]*)(?:;[^\x1b]*)?\x1b\\`)
 
-// hostPlacements replays the host stream's placements and deletes of one host
-// image and returns where each placement still up is, by host placement id.
-// A placement with no p= gets an id of its own, as the host gives it one.
 func hostPlacements(stream []byte, id int) map[string][2]int {
 	live := map[string][2]int{}
 	anon := 0

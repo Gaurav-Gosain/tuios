@@ -10,52 +10,11 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// A zoom inside a scratch group stays inside the scratch box. The group is
-// split into three panes and one of them is zoomed: the zoomed pane takes most
-// of the box, the panes around it show only inside the box, and the box's own
-// frame is not drawn over. Zooming out gives the three tiles back.
-//
-// How this could pass wrongly, written down first:
-//   - The zoom could fail to come on, and three tiles in the box pass the
-//     overflow check trivially. The zoomed pane's fill must span most of the
-//     box on both axes, which no tile of a three-pane layout does.
-//   - The panes beside the zoomed one could be hidden by accident (not
-//     drawn at all), which also passes the overflow check. The zoom size is
-//     90 percent, so the camera keeps them at the edges: at least one of
-//     their fills must still show inside the box.
-//   - A fill character could come from somewhere other than the scratch
-//     panes. Each pane is filled with its own character by tr from an octal
-//     escape, so the command line carries none of them, and the backdrop
-//     pane prints none either. Before the zoom, every fill cell must already
-//     be inside the box, which proves the backdrop and the chrome have none.
-//   - The box could be measured off the frame under test, so a pane drawn over
-//     the frame would move the box with it. The box is read off the frame
-//     before the zoom, and after the zoom its perimeter must still be frame
-//     glyphs.
-//   - A pane could leak a styled cell outside the box that is not a fill
-//     character: a border, a title bar, a scrollbar. Every cell outside the
-//     box, above the dock, must be the same glyph in the same colours as in
-//     the frame before the zoom.
-//   - A border could be cut short inside the box, or drawn in pieces of two
-//     colours. The zoomed pane's border and the scratch frame's bottom edge
-//     must each be one unbroken run of border glyphs in one colour.
-//   - The spotlight shades every cell outside its beam, so a stray key that
-//     turns it on makes one border look like broken pieces. The test waits
-//     for each split before it types, and fails if the dock names the
-//     spotlight.
-//   - A second client could draw the group its own way. In the daemon run a
-//     second client attaches while the zoom is on and must pass the same
-//     checks against its own frame.
-//
-// Negative control: see NEGATIVE_CONTROLS.md, "A zoom inside the scratch".
-
 const (
 	scratchZoomCols = 140
 	scratchZoomRows = 44
 )
 
-// scratchFills are the characters the three scratch panes are filled with,
-// and the octal escapes tr gets for them.
 var scratchFills = []struct {
 	char   string
 	escape string
@@ -65,7 +24,6 @@ var scratchFills = []struct {
 	{"&", `\046`},
 }
 
-// fillScratchPane fills the focused pane, all but its last row, with one character.
 func fillScratchPane(t *testing.T, term *tuitest.Terminal, escape string) {
 	t.Helper()
 	cmd := fmt.Sprintf(`clear; head -c $(( $(tput cols) * ($(tput lines) - 1) )) /dev/zero | tr '\0' '%s'`, escape)
@@ -74,11 +32,6 @@ func fillScratchPane(t *testing.T, term *tuitest.Terminal, escape string) {
 	}
 }
 
-// waitFillShown waits until the fill character is on the screen, which says
-// the shell has already read the pane's size. A split sent before that races
-// the shell: tput then reads the half-width pane and the fill is half as long.
-// The short fill leaves no history, so the zoom keeps it at the top of the
-// widened pane, above the rows the camera shows, and no neighbour peeks.
 func waitFillShown(t *testing.T, term *tuitest.Terminal, char string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -88,16 +41,12 @@ func waitFillShown(t *testing.T, term *tuitest.Terminal, char string) {
 	}
 }
 
-// scratchBoxRect is the outer scratch box on the screen, frame included.
 type scratchBoxRect struct{ x0, y0, x1, y1 int }
 
 func (b scratchBoxRect) inside(x, y int) bool {
 	return x >= b.x0 && x <= b.x1 && y >= b.y0 && y <= b.y1
 }
 
-// findScratchBox reads the scratch frame off the screen: the row whose frame
-// starts with "╭─ scratch ", the ╮ that closes that row, and the ╰ under the
-// first corner.
 func findScratchBox(s tuitest.Screen) (scratchBoxRect, bool) {
 	cols, rows := s.Size()
 	for y := range rows {
@@ -128,7 +77,6 @@ func findScratchBox(s tuitest.Screen) (scratchBoxRect, bool) {
 	return scratchBoxRect{}, false
 }
 
-// fillBounds is where one fill character is on the screen.
 type fillBounds struct {
 	n              int
 	x0, y0, x1, y1 int
@@ -137,8 +85,6 @@ type fillBounds struct {
 	firstOutY      int
 }
 
-// measureFills finds each fill character above the dock, and counts the cells
-// of it outside the box.
 func measureFills(s tuitest.Screen, box scratchBoxRect) map[string]*fillBounds {
 	cols, _ := s.Size()
 	top := dockTop(s)
@@ -166,8 +112,6 @@ func measureFills(s tuitest.Screen, box scratchBoxRect) map[string]*fillBounds {
 	return out
 }
 
-// framePerimeterIntact reports the first cell of the box's perimeter that is
-// not a frame glyph or the title, or ok.
 func framePerimeterIntact(s tuitest.Screen, box scratchBoxRect) (x, y int, got string, ok bool) {
 	frame := "╭╮╰╯─│"
 	for xx := box.x0; xx <= box.x1; xx++ {
@@ -182,16 +126,12 @@ func framePerimeterIntact(s tuitest.Screen, box scratchBoxRect) (x, y int, got s
 			}
 		}
 	}
-	// The top row carries the title, so only its two corners are checked
-	// above. A pane drawn over it would put its own border there.
 	if s.Cell(box.x0+1, box.y0).Content != "─" {
 		return box.x0 + 1, box.y0, s.Cell(box.x0+1, box.y0).Content, false
 	}
 	return 0, 0, "", true
 }
 
-// waitPanes waits until n panes carry a title bar, so the next text typed
-// goes to the new pane.
 func waitPanes(t *testing.T, term *tuitest.Terminal, n int, what string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -202,7 +142,6 @@ func waitPanes(t *testing.T, term *tuitest.Terminal, n int, what string) {
 	}
 }
 
-// cellsOutside is every cell outside the box and above the dock.
 func cellsOutside(s tuitest.Screen, box scratchBoxRect) map[[2]int]tuitest.Cell {
 	cols, _ := s.Size()
 	out := map[[2]int]tuitest.Cell{}
@@ -216,13 +155,10 @@ func cellsOutside(s tuitest.Screen, box scratchBoxRect) map[[2]int]tuitest.Cell 
 	return out
 }
 
-// sameCell compares the glyph and the colours of two cells.
 func sameCell(a, b tuitest.Cell) bool {
 	return a.Content == b.Content && a.Fg == b.Fg && a.Bg == b.Bg && a.Reverse == b.Reverse
 }
 
-// borderRun checks that the cells from (x0,y0) to (x1,y1), a row or a column,
-// are border glyphs of one colour. It returns what is wrong, or "".
 func borderRun(s tuitest.Screen, x0, y0, x1, y1 int) string {
 	first := s.Cell(x0, y0)
 	for y := y0; y <= y1; y++ {
@@ -239,8 +175,6 @@ func borderRun(s tuitest.Screen, x0, y0, x1, y1 int) string {
 	return ""
 }
 
-// checkZoomInBox is every check on a frame with the zoom on. before is the
-// frame's cells outside the box before the zoom, or nil to skip that check.
 func checkZoomInBox(t *testing.T, term *tuitest.Terminal, box scratchBoxRect, zoomed, who string, before map[[2]int]tuitest.Cell) {
 	t.Helper()
 	s := term.Screen()
@@ -263,7 +197,6 @@ func checkZoomInBox(t *testing.T, term *tuitest.Terminal, box scratchBoxRect, zo
 				who, changed, first[0], first[1], s.Cell(first[0], first[1]).Content, before[first].Content, term.Snapshot())
 		}
 	}
-	// The frame's bottom edge, and the zoomed pane's border: one run each.
 	if why := borderRun(s, box.x0, box.y1, box.x1, box.y1); why != "" {
 		t.Errorf("%s: the scratch frame's bottom edge is broken: %s\n%s", who, why, term.Snapshot())
 	}
@@ -282,14 +215,10 @@ func checkZoomInBox(t *testing.T, term *tuitest.Terminal, box scratchBoxRect, zo
 	if z.n == 0 {
 		t.Fatalf("%s: the zoomed pane's fill %q is not on the screen\n%s", who, zoomed, term.Snapshot())
 	}
-	// Its last row is the prompt, so the fill is one row short of the pane.
 	if w, h := z.x1-z.x0+1, z.y1-z.y0+2; w*100 < innerW*75 || h*100 < innerH*75 {
 		t.Errorf("%s: the zoomed pane's fill is %dx%d, want at least 75%% of the box's inside %dx%d\n%s",
 			who, w, h, innerW, innerH, term.Snapshot())
 	}
-	// The fill covers every column of the pane and every row but the prompt,
-	// so the border is one cell out from it on each side and one row under
-	// the prompt.
 	left, right, bottom := z.x0-1, z.x1+1, z.y1+2
 	for _, side := range []struct {
 		name           string
@@ -322,9 +251,6 @@ func TestScratchZoomStaysInTheBox(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			base := t.TempDir()
-			// The base workspace tiles, so its pane fills the screen and shows
-			// all round the scratch box: a floating pane in the middle is
-			// wholly under it, and the cells outside the box would be empty.
 			writeConfig(t, base, "[startup]\ntiled = true\n[appearance]\nzoom_size = 90\nzoom_animation = false\n")
 			o := startOpts{cols: scratchZoomCols, rows: scratchZoomRows}
 			var term *tuitest.Terminal
@@ -334,8 +260,6 @@ func TestScratchZoomStaysInTheBox(t *testing.T) {
 			term = startIn(t, base, o)
 			waitBoot(t, term)
 			newWindow(t, term)
-			// The new pane is in window management mode, where the B of
-			// BASE is the spotlight's key.
 			enterTerminalMode(t, term)
 			typeUntil(t, term, "echo BASE-$((5*5))", "BASE-25")
 
@@ -355,8 +279,6 @@ func TestScratchZoomStaysInTheBox(t *testing.T) {
 				savePNG(t, term.Screen(), host, dir, frame)
 			}
 
-			// Show the group and split it into three panes, each filled with
-			// its own character.
 			toggleScratch(t, term)
 			allOnScreen(t, term, "the group shown", "─ scratch ")
 			waitPanes(t, term, 2, "the group shown")
@@ -395,8 +317,6 @@ func TestScratchZoomStaysInTheBox(t *testing.T) {
 			tiledW := tiled["&"].x1 - tiled["&"].x0 + 1
 			outsideBefore := cellsOutside(s, box)
 
-			// Zoom the focused pane, the third, and fill it again at its new
-			// size.
 			windowManagementMode(t, term)
 			if err := term.SendKeys("z"); err != nil {
 				t.Fatalf("send z: %v", err)
@@ -423,7 +343,6 @@ func TestScratchZoomStaysInTheBox(t *testing.T) {
 				checkZoomInBox(t, second, box2, "&", "the second client", nil)
 			}
 
-			// Zoom out: three tiles again, all inside the box.
 			windowManagementMode(t, term)
 			if err := term.SendKeys("z"); err != nil {
 				t.Fatalf("send z: %v", err)

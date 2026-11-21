@@ -16,21 +16,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// tuios hosts sync, against fake hosts.
-//
-// Each host is a real isolation root with its own HOME and its own daemon,
-// reached through an ssh stand-in that routes by address the way the
-// federation tests do. Everything on the far side is real: the probe and
-// install scripts run in a real sh, the binary is renamed into the host's
-// ~/.local/bin, and the daemon is read over a real link. Nothing touches the
-// developer's own tuios: every host names its binary with command = in the
-// config, so the search the link does without one never runs, and the PATH
-// on the far side starts with the host's own ~/.local/bin.
-//
-// The "new" version is a second build of this checkout stamped
-// e2e-sync-next, so it differs from tuiosBin, which the old hosts and their
-// daemons run.
-
 const syncNextVersion = "e2e-sync-next"
 
 var (
@@ -39,7 +24,6 @@ var (
 	syncNextErr  error
 )
 
-// syncNextBinary builds the "new" version once per run.
 func syncNextBinary(t *testing.T) string {
 	t.Helper()
 	syncNextOnce.Do(func() {
@@ -63,20 +47,16 @@ func syncNextBinary(t *testing.T) string {
 	return syncNextBin
 }
 
-// syncHost is one fake host.
 type syncHost struct {
 	name, base, home, bin string
 }
 
-// syncFleet is this machine and its fake hosts.
 type syncFleet struct {
 	here  string
 	env   []string
 	hosts map[string]*syncHost
 }
 
-// newSyncFleet makes one root per name and an ssh stand-in that reaches each
-// at someone@NAMEbox. A name in down has no machine behind it.
 func newSyncFleet(t *testing.T, names []string, down []string) *syncFleet {
 	t.Helper()
 	f := &syncFleet{here: remoteMachine(t), hosts: map[string]*syncHost{}}
@@ -124,8 +104,6 @@ func newSyncFleet(t *testing.T, names []string, down []string) *syncFleet {
 		cfg.WriteString(bin)
 		cfg.WriteString("\"\nconnect_timeout = 5\n\n")
 	}
-	// A paired phone dials in. Its table has only a link policy and no addr, so
-	// a sync of the whole table skips it and does not stop at it.
 	cfg.WriteString("[hosts.phone]\nallow = [\"list\", \"mail\"]\n\n")
 	dir := filepath.Join(f.here, "XDG_CONFIG_HOME", "tuios")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -137,7 +115,6 @@ func newSyncFleet(t *testing.T, names []string, down []string) *syncFleet {
 	return f
 }
 
-// install copies bin to the host's ~/.local/bin/tuios.
 func (h *syncHost) install(t *testing.T, bin string) {
 	t.Helper()
 	data, err := os.ReadFile(bin)
@@ -152,7 +129,6 @@ func (h *syncHost) install(t *testing.T, bin string) {
 	}
 }
 
-// run runs the host's own tuios with the host's environment.
 func (h *syncHost) run(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 	pinPreV080Looks(t, h.base)
@@ -166,7 +142,6 @@ func (h *syncHost) run(t *testing.T, args ...string) (string, error) {
 	return string(out), err
 }
 
-// sha is the sha256 of the host's binary, or "" when it has none.
 func (h *syncHost) sha(t *testing.T) string {
 	t.Helper()
 	data, err := os.ReadFile(h.bin)
@@ -180,7 +155,6 @@ func (h *syncHost) sha(t *testing.T) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// syncResultRow is the part of one JSON row the tests read.
 type syncResultRow struct {
 	Host          string   `json:"host"`
 	Before        string   `json:"before"`
@@ -208,7 +182,6 @@ type syncResultRow struct {
 	} `json:"daemon"`
 }
 
-// syncJSON runs sync with --json and reads the rows by host.
 func (f *syncFleet) syncJSON(t *testing.T, args ...string) (map[string]syncResultRow, string, error) {
 	t.Helper()
 	out, err := tuiosCLIEnv(t, f.here, f.env, append([]string{"hosts", "sync", "--json"}, args...)...)
@@ -230,7 +203,6 @@ func (f *syncFleet) syncJSON(t *testing.T, args ...string) (map[string]syncResul
 	return rows, out, err
 }
 
-// busyPrograms lists the programs a row says a restart would end.
 func busyPrograms(r syncResultRow) []string {
 	var busy []string
 	for _, s := range r.Daemon.Sessions {
@@ -241,7 +213,6 @@ func busyPrograms(r syncResultRow) []string {
 	return busy
 }
 
-// saveSyncArtifact keeps one run's output for a person to read.
 func saveSyncArtifact(t *testing.T, name, out string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(artifactDir(t), name), []byte(out), 0o644); err != nil { //nolint:gosec // a test artifact
@@ -249,12 +220,6 @@ func saveSyncArtifact(t *testing.T, name, out string) {
 	}
 }
 
-// startSyncFleet sets up the four hosts the main test uses:
-//
-//	fresh  no tuios at all
-//	same   the new version, with a daemon of the new version
-//	old    the old version, with a daemon holding a session and a busy pane
-//	gone   in the config, with no machine behind the address
 func startSyncFleet(t *testing.T) (*syncFleet, string) {
 	t.Helper()
 	next := syncNextBinary(t)
@@ -283,9 +248,6 @@ func TestHostsSync(t *testing.T) {
 	fresh, same, old := f.hosts["fresh"], f.hosts["same"], f.hosts["old"]
 	sameSHA, oldSHA := same.sha(t), old.sha(t)
 
-	// The dry run: the plan, and no change anywhere. The pane that runs
-	// sleep is read from ps, and a pane just made can still be between fork
-	// and exec, so the plan is read again until it settles.
 	var plan map[string]syncResultRow
 	var out string
 	var err error
@@ -327,8 +289,6 @@ func TestHostsSync(t *testing.T) {
 		t.Fatalf("ASSERTION: the dry run changed a binary on a host")
 	}
 
-	// --restart off a terminal and without --yes: refused before anything
-	// moves, and the refusal names what a restart would end.
 	out, err = tuiosCLIEnv(t, f.here, f.env, "hosts", "sync", "--binary", next, "--restart")
 	saveSyncArtifact(t, "restart-refused.txt", out)
 	if err == nil {
@@ -344,7 +304,6 @@ func TestHostsSync(t *testing.T) {
 		t.Fatalf("ASSERTION: the refused restart changed a binary on a host")
 	}
 
-	// The real run.
 	rows, out, err := f.syncJSON(t, "--binary", next)
 	saveSyncArtifact(t, "sync.json", out)
 	if err == nil {
@@ -377,7 +336,6 @@ func TestHostsSync(t *testing.T) {
 		t.Errorf("ASSERTION: the install left files beside the binary: %v", names)
 	}
 
-	// The daemon on old is the one from before, with its session.
 	after, out, _ := f.syncJSON(t, "--binary", next, "--dry-run")
 	saveSyncArtifact(t, "after.json", out)
 	if d := after["old"].Daemon; d.PID != oldPID || d.Version == syncNextVersion || d.SessionCount != 1 {
@@ -520,7 +478,6 @@ func TestRestartServerMovesTheDaemonToTheNewBuild(t *testing.T) {
 		}
 	}
 
-	// A plan the caller did not see is refused, and nothing changes.
 	withBinary("", func() {
 		tuiosBin = next
 		out, err := tuiosCLI(t, base, "restart-server", "--yes", "--expect", "0000000000000000")
@@ -556,8 +513,6 @@ func TestRestartServerMovesTheDaemonToTheNewBuild(t *testing.T) {
 		t.Errorf("ASSERTION: the session is not marked restored, so no new daemon holds it")
 	}
 
-	// The client reattached to a daemon of its own build. The notice about
-	// the old daemon is sticky, so it would come back after the reattach line.
 	const reattached = "The daemon restarted. tuios reattached."
 	if err := term.WaitForText(reattached, bootTimeout); err != nil {
 		t.Fatalf("ASSERTION: the client did not reattach after restart-server: %v\n%s", err, term.Snapshot())
@@ -620,9 +575,6 @@ func TestRestartServerFromAPaneLeavesADaemon(t *testing.T) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	// The worker writes its last lines after the session is back, so the session
-	// showing in the listing does not mean the log is complete. The same deadline
-	// holds: a worker that never writes them still fails here.
 	for {
 		log, err := tuiosCLI(t, base, "restart-server", "--last")
 		if err == nil && strings.Contains(log, "The daemon restarted on ") && strings.Contains(log, "This session came back: "+name+".") {
@@ -637,7 +589,6 @@ func TestRestartServerFromAPaneLeavesADaemon(t *testing.T) {
 	}
 }
 
-// sameFile reports whether two paths name one file, through any links.
 func sameFile(a, b string) bool {
 	ra, errA := filepath.EvalSymlinks(a)
 	rb, errB := filepath.EvalSymlinks(b)

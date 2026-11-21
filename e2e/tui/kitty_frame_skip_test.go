@@ -12,11 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Which frames a client that is behind may skip. The rules are in
-// internal/session/kitty_frames.go. These tests stop a real client with
-// SIGSTOP while a real guest writes, and compare what it shows when it reads
-// again with what a client that kept up shows.
-
 // TestKittySkippedFrameKeepsTheScroll: an a=T without C=1 at the bottom row
 // scrolls the pane. A cursor move and a newer frame of the same image follow.
 // A client that was stopped through all of it must show the same rows as one
@@ -36,8 +31,6 @@ func TestKittySkippedFrameKeepsTheScroll(t *testing.T) {
 	goFile := filepath.Join(dir, "go")
 	script := filepath.Join(dir, "s.sh")
 	img := `\033_Ga=T,f=32,s=1,v=1,i=7,r=3,c=2,q=2;/wAA/w==\033\\`
-	// 1.5 MB of text first, so the stopped client is behind when the frames
-	// come.
 	body := fmt.Sprintf(`L=$(tput lines)
 while [ ! -f %s ]; do sleep 0.05; done
 head -c 1500000 /dev/zero | tr '\0' 'x'
@@ -82,9 +75,6 @@ sleep 30
 	}
 }
 
-// startMpvGuest starts a session with one pane and runs the frameloop guest
-// in it the way mpv's --vo=kitty draws: every frame a new image with no id,
-// at the same cell.
 func startMpvGuest(t *testing.T, clients int) (base string, cs []*pacingClient, count string) {
 	t.Helper()
 	base = t.TempDir()

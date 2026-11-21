@@ -16,41 +16,6 @@ import (
 	"time"
 )
 
-// search-panes, command-history, list-ports and started_by, the four things
-// the GUI's find bar, command palette, ports list and pane tree read, against
-// a real daemon and a real bash that marks its commands with OSC 133.
-//
-// How each could pass wrongly, written down first:
-//
-//   - search-panes could find the marker in the typed command line rather
-//     than in the output. The commands print it with printf and the marker
-//     split in two, so only the output holds it whole, and the count of
-//     matches is checked exactly.
-//   - Its row could count from the top of the screen and not from the top of
-//     the history. The first marker is printed before 80 filler lines, so it
-//     sits in the history, and every row is checked against the same row of
-//     a capture of history and screen.
-//   - Smart case could always ignore case: a query with a capital must miss
-//     the lower-case match, and case sensitive must miss it too.
-//   - The guards could be missing: a pattern over 512 bytes and a pattern
-//     that matches an empty line must be refused, not run.
-//   - command-history could read the screen rather than the marks, or keep
-//     every run. The command run twice must come back once, the failing one
-//     must carry exit 1, the cwd must be the folder bash reported over OSC 7
-//     when the command started (which a cd changes), and the prompt row must
-//     be the row search-panes finds the prompt on.
-//   - list-ports could list every listening socket on the machine. The test
-//     opens a listener of its own, outside every pane, which must not be
-//     listed, and the pane's port must name the pane's window and python.
-//     It could read only the pane's own process: python runs under sh, so
-//     the socket is held by a child of the pane's process.
-//   - started_by could be set on every window, or read from the focus. The
-//     window the test opens from outside every pane must have none, and the
-//     one the pane's shell opens must name that pane, in list-windows and in
-//     list-agents.
-
-// findRC is the bash setup: OSC 133 A, B, C and D around every command, and
-// OSC 7 with the folder before every prompt.
 const findRC = `PS1='$ \[\e]133;B\a\]'
 PS0='\e]133;C\a'
 PROMPT_COMMAND='printf "\e]133;D;%s\a\e]7;file://%s\a\e]133;A\a" "$?" "$PWD"'
@@ -143,10 +108,6 @@ func TestFindPortsAndStartedBy(t *testing.T) {
 		return out
 	}
 	run(`printf 'FIND%s\n' ME-one`)
-	// The filler ends in a word longer than any pane is wide, so the shell's
-	// line soft-wraps inside a word, and command-history must read it back
-	// as one line. It used to put a space at every wrap ("f iller"), and
-	// only narrow panes wrapped, so CI saw it now and then.
 	filler := `for i in $(seq 1 80); do echo filler $i; done; : ` + strings.Repeat("wrapped", 40)
 	run(filler)
 	if out := run(`printf 'FIND%s\n' ME-two; false`); out["exit_code"] != float64(1) {
@@ -156,7 +117,6 @@ func TestFindPortsAndStartedBy(t *testing.T) {
 	run(`cd sub`)
 	run(`pwd`)
 
-	// search-panes.
 	search := func(params map[string]any) findResult {
 		t.Helper()
 		var r findResult
@@ -226,7 +186,6 @@ func TestFindPortsAndStartedBy(t *testing.T) {
 		}
 	}
 
-	// command-history.
 	var hist struct {
 		Commands []historyCommand `json:"commands"`
 	}
@@ -247,7 +206,6 @@ func TestFindPortsAndStartedBy(t *testing.T) {
 	if h := byCmd[want[3]]; h.Exit == nil || *h.Exit != 1 {
 		t.Errorf("the failing command has exit %v, want 1", h.Exit)
 	}
-	// The shell reports the folder with symlinks resolved (see sameFolder).
 	if h := byCmd["pwd"]; h.Exit == nil || *h.Exit != 0 || !sameFolder(h.Cwd, sub) {
 		t.Errorf("pwd: exit %v, cwd %q; want 0 and %q", h.Exit, h.Cwd, sub)
 	}
@@ -274,7 +232,6 @@ func TestFindPortsAndStartedBy(t *testing.T) {
 		t.Errorf("command-history query FIND limit 1 = %+v, want the newest printf", filtered.Commands)
 	}
 
-	// list-ports. The test's own listener is outside every pane.
 	outside, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -328,8 +285,6 @@ func TestFindPortsAndStartedBy(t *testing.T) {
 		t.Errorf("list-ports with no session lists %d rows, and for the only session %d", len(noSession.Ports), len(ports.Ports))
 	}
 
-	// started_by. The shell in sh opens a window; the test opened sh and srv
-	// from outside every pane.
 	out := run(`"$TUIOS_BIN" new-window --print-id child -- sleep 600`)
 	childID := strings.TrimSpace(out["output"].(string))
 	if childID == "" {

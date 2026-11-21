@@ -22,7 +22,6 @@ func TestUnknownKeybindTableIsNamed(t *testing.T) {
 	if err := term.WaitForText(welcomeHint, bootTimeout); err != nil {
 		t.Fatalf("tuios never booted: %v\n%s", err, term.Snapshot())
 	}
-	// The log viewer holds every config problem tuios found at start.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "D", "l"); err != nil {
 		t.Fatalf("open the log viewer: %v", err)
 	}
@@ -103,8 +102,6 @@ func TestUnknownKeybindActionIsNamed(t *testing.T) {
 	if strings.Contains(out, "copy_mode_word_end is not an action") {
 		t.Fatalf("ASSERTION: tuios config apply names copy_mode_word_end, a real action:\n%s", out)
 	}
-	// nav_up and nav_down are retired actions an older tuios wrote into the
-	// config it generated. They must not warn, and must not count.
 	if strings.Contains(out, "nav_up") || strings.Contains(out, "nav_down") {
 		t.Fatalf("ASSERTION: tuios config apply names a retired action:\n%s", out)
 	}

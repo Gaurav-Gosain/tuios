@@ -13,35 +13,20 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The window_size policy (internal/session/window_size.go), driven through
-// two real clients of different sizes on one daemon, asserted on what each
-// client draws and on the size the daemon settled on.
-//
-// The latest client is decided by input, and a client keeps the session for
-// one second after its own last input (latestHold). Every step that hands the
-// session over waits out that hold first, so the step tests the hand-over
-// and not the hold.
-
 const (
 	wsSession            = "ws"
 	wsBigCols, wsBigRows = 200, 50
 	wsSmallCols          = 80
 	wsSmallRows          = 24
-	// wsHoldGap is longer than latestHold, with room for the round trip.
-	wsHoldGap = 1500 * time.Millisecond
-	// wsMark is the text of the mark a client shows over a view of a larger
-	// session.
-	wsMark = "Part of session"
+	wsHoldGap            = 1500 * time.Millisecond
+	wsMark               = "Part of session"
 )
 
-// wsSize is the size the daemon settled on, and the policy it used.
 func wsSize(t *testing.T, base string) (w, h int, policy string) {
 	t.Helper()
 	return sessionPolicySize(t, base, wsSession)
 }
 
-// sessionPolicySize is the size the daemon settled a session on, and the
-// policy it used.
 func sessionPolicySize(t *testing.T, base, session string) (w, h int, policy string) {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "session-info", "-s", session, "--json")
@@ -59,7 +44,6 @@ func sessionPolicySize(t *testing.T, base, session string) (w, h int, policy str
 	return res.W, res.H, res.Policy
 }
 
-// waitWSSize waits for the daemon to settle the session at w x h.
 func waitWSSize(t *testing.T, base string, w, h int, what string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -74,8 +58,6 @@ func waitWSSize(t *testing.T, base string, w, h int, what string) {
 	t.Fatalf("%s: the session is %dx%d under %s, want %dx%d", what, gw, gh, policy, w, h)
 }
 
-// waitMark waits for the client to show, or not show, the mark of a view of
-// a larger session.
 func waitMark(t *testing.T, term *tuitest.Terminal, shown bool, what string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -85,8 +67,6 @@ func waitMark(t *testing.T, term *tuitest.Terminal, shown bool, what string) {
 	}
 }
 
-// activity is a key press: Esc is a key in either mode, and it changes
-// nothing in the window manager or in a shell.
 func activity(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Esc); err != nil {
@@ -94,10 +74,6 @@ func activity(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// windowSizePair makes a session with two side by side panes, set to the
-// policy, and attaches a 200x50 client and then an 80x24 one. extraConfig is
-// added to the config file, and smallEnv and bigEnv to each client's
-// environment.
 func windowSizePair(t *testing.T, policy, extraConfig string, smallEnv []string, bigEnv ...string) (big, small *tuitest.Terminal, base string) {
 	t.Helper()
 	base = t.TempDir()
@@ -127,14 +103,11 @@ func windowSizePair(t *testing.T, policy, extraConfig string, smallEnv []string,
 func TestWindowSizeLatestFollowsInput(t *testing.T) {
 	big, small, base := windowSizePair(t, "latest", "", nil)
 
-	// The big client attached first and nobody else has typed, so it is the
-	// latest. The small client shows part of the session, with the mark.
 	waitWSSize(t, base, wsBigCols, wsBigRows, "with the big client latest")
 	waitMark(t, small, true, "the small client, with the big client latest")
 	waitSpanRight(t, big, wsBigCols, "the big client, with itself latest")
 	saveArtifact(t, small, artifactDir(t), "small-cropped")
 
-	// Input in the small client hands it the session: 80x24 on both.
 	time.Sleep(wsHoldGap)
 	activity(t, small)
 	waitWSSize(t, base, wsSmallCols, wsSmallRows, "after input in the small client")
@@ -143,7 +116,6 @@ func TestWindowSizeLatestFollowsInput(t *testing.T) {
 	waitMark(t, big, false, "the big client, larger than the session")
 	saveArtifact(t, big, artifactDir(t), "big-letterboxed")
 
-	// Input in the big client takes it back.
 	time.Sleep(wsHoldGap)
 	activity(t, big)
 	waitWSSize(t, base, wsBigCols, wsBigRows, "after input in the big client")
@@ -190,7 +162,6 @@ func TestWindowSizeSmallestIgnoresInput(t *testing.T) {
 	waitSpanRight(t, big, wsSmallCols, "the big client under smallest")
 	waitMark(t, small, false, "the small client under smallest")
 
-	// The policy changes at run time, for this session, with no input.
 	if out, err := tuiosCLI(t, base, "set-config", "daemon.window_size", "largest", "-s", wsSession); err != nil {
 		t.Fatalf("set-config daemon.window_size: %v\n%s", err, out)
 	}
@@ -212,10 +183,6 @@ func TestWindowSizeSmallestIgnoresInput(t *testing.T) {
 func TestWindowSizeSwitchToLatestStartsFromInput(t *testing.T) {
 	big, small, base := windowSizePair(t, "largest", "", nil)
 	waitWSSize(t, base, wsBigCols, wsBigRows, "under largest")
-	// The daemon names the policy to the other clients when one resizes the
-	// session. Until then a client does not know it and reports all input.
-	// The small client grows past the big one and back, so the big client
-	// learns the policy is largest.
 	for _, sz := range [][2]int{{wsBigCols + 1, wsSmallRows}, {wsSmallCols, wsSmallRows}} {
 		if err := small.Resize(sz[0], sz[1]); err != nil {
 			t.Fatalf("resize the small client: %v", err)
@@ -226,9 +193,6 @@ func TestWindowSizeSwitchToLatestStartsFromInput(t *testing.T) {
 
 	time.Sleep(wsHoldGap)
 	activity(t, big)
-	// A lone Esc reaches the client after its escape timeout. The switch
-	// waits for it, so the key is handled under largest, and still well
-	// inside the time a switch carries input over.
 	time.Sleep(500 * time.Millisecond)
 	if out, err := tuiosCLI(t, base, "set-config", "daemon.window_size", "latest", "-s", wsSession); err != nil {
 		t.Fatalf("set-config daemon.window_size: %v\n%s", err, out)
@@ -243,15 +207,12 @@ func TestWindowSizeSwitchToLatestStartsFromInput(t *testing.T) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	// Past the hold, so a switch to the client that attached last would have
-	// landed.
 	time.Sleep(wsHoldGap)
 	if w, h, _ := wsSize(t, base); w != wsBigCols || h != wsBigRows {
 		t.Fatalf("after the switch to latest the session is %dx%d, want the big client's %dx%d", w, h, wsBigCols, wsBigRows)
 	}
 	saveArtifact(t, small, artifactDir(t), "switch-to-latest-small")
 
-	// From there input moves it as usual.
 	activity(t, small)
 	waitWSSize(t, base, wsSmallCols, wsSmallRows, "after input in the small client")
 }
@@ -267,7 +228,6 @@ func TestWindowSizeSwitchToLatestStartsFromInput(t *testing.T) {
 func TestWindowSizeSwitchIntoLatestReportsInput(t *testing.T) {
 	const other = "other"
 	base := t.TempDir()
-	// The other session is smallest, from the file. ws is set to latest below.
 	writeConfig(t, base, "[daemon]\nwindow_size = \"smallest\"\n")
 	killDaemon(t, base)
 	for _, name := range []string{other, wsSession} {
@@ -281,9 +241,6 @@ func TestWindowSizeSwitchIntoLatestReportsInput(t *testing.T) {
 	attachIn(t, base, wsSession, startOpts{cols: wsBigCols, rows: wsBigRows})
 	waitWSSize(t, base, wsBigCols, wsBigRows, "with the big client alone in ws")
 
-	// The small client attaches to the other session, and learns from a
-	// resize there that it is smallest: a third client shrinks the session
-	// and grows it back.
 	small := attachSmall(t, base, other, startOpts{cols: wsSmallCols, rows: wsSmallRows})
 	third := attachSmall(t, base, other, startOpts{cols: 100, rows: 30})
 	for _, sz := range [][2]int{{70, 20}, {100, 30}} {
@@ -304,7 +261,6 @@ func TestWindowSizeSwitchIntoLatestReportsInput(t *testing.T) {
 		}
 	}
 
-	// The small client moves to ws, where the big client holds the session.
 	if err := small.SendKeys(tuitest.Alt("N")); err != nil {
 		t.Fatalf("next session: %v", err)
 	}
@@ -321,8 +277,6 @@ func TestWindowSizeSwitchIntoLatestReportsInput(t *testing.T) {
 		if err := json.Unmarshal([]byte(out), &sessions); err != nil {
 			t.Fatalf("ls --json printed %q: %v", out, err)
 		}
-		// The third client is alone in the other session once the small
-		// client has left it, so the other session takes its 100 columns.
 		left := false
 		for _, s := range sessions {
 			left = left || (s.Name == other && s.Width == 100)
@@ -335,7 +289,6 @@ func TestWindowSizeSwitchIntoLatestReportsInput(t *testing.T) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	// The move is not input, so the big client keeps the session.
 	time.Sleep(wsHoldGap)
 	waitWSSize(t, base, wsBigCols, wsBigRows, "after the small client moved into ws")
 
@@ -438,8 +391,6 @@ func TestWindowSizeLatestDebounce(t *testing.T) {
 			time.Sleep(50 * time.Millisecond)
 		}
 	}()
-	// Twenty presses, 150 ms apart, the small client last: each client's
-	// input is at most 300 ms old when the other one types.
 	for i := range 20 {
 		if i%2 == 0 {
 			activity(t, big)
@@ -452,8 +403,6 @@ func TestWindowSizeLatestDebounce(t *testing.T) {
 	if got, want := <-sizes, fmt.Sprintf("%dx%d", wsBigCols, wsBigRows); got != want {
 		t.Fatalf("while both clients typed the session was %s, want only %s: the layout flapped", got, want)
 	}
-	// The small client typed last. Once the big client's hold runs out, the
-	// daemon hands it the session with no further input.
 	waitWSSize(t, base, wsSmallCols, wsSmallRows, "after the alternation, with the small client last")
 }
 
@@ -467,15 +416,12 @@ func TestWindowSizeLatestDebounce(t *testing.T) {
 // the left pane, which is under the same screen column in the layout, and
 // the focus never moves.
 func TestWindowSizeViewFollowsCursorAndClicks(t *testing.T) {
-	// largest keeps the session at the big client's size while the small
-	// client is clicked, which is the whole point here.
 	_, small, base := windowSizePair(t, "largest", "", nil)
 	waitWSSize(t, base, wsBigCols, wsBigRows, "under largest")
 	waitMark(t, small, true, "the small client under largest")
 
 	left, right := viewOverTheSplit(t, base, small)
 
-	// A click on the right pane, as the small client draws it.
 	row, col := findText(t, small, "RIGHTSIDE")
 	if col >= wsSmallCols || focusedWindowID(t, base, wsSession) != left {
 		t.Fatalf("the fixture is wrong: RIGHTSIDE at column %d, focus on %s", col, focusedWindowID(t, base, wsSession))
@@ -494,11 +440,6 @@ func TestWindowSizeViewFollowsCursorAndClicks(t *testing.T) {
 	saveArtifact(t, small, artifactDir(t), "view-after-click")
 }
 
-// viewOverTheSplit puts the small client's view over the split between the
-// two panes, with the focus on the left one. The right pane prints RIGHTSIDE,
-// then the left pane's cursor is moved near its right edge by a long line of
-// L, and the view follows it. On the way it checks that the view starts at
-// the left edge while the cursor is there. It returns the two panes.
 func viewOverTheSplit(t *testing.T, base string, small *tuitest.Terminal) (left, right string) {
 	t.Helper()
 	left, right = sideBySide(t, base)
@@ -508,8 +449,6 @@ func viewOverTheSplit(t *testing.T, base string, small *tuitest.Terminal) (left,
 	if out, err := tuiosCLI(t, base, "focus-window", "-s", wsSession, left); err != nil {
 		t.Fatalf("focus-window left: %v\n%s", err, out)
 	}
-	// The cursor is at the start of the left pane: the view starts at the
-	// left edge, and the right pane is out of it.
 	if err := small.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(s.Text(), "RIGHTSIDE") && strings.Contains(s.Text(), wsMark) &&
 			!strings.Contains(s.Text(), "←")
@@ -518,8 +457,6 @@ func viewOverTheSplit(t *testing.T, base string, small *tuitest.Terminal) (left,
 	}
 	saveArtifact(t, small, artifactDir(t), "view-left")
 
-	// A long line moves the cursor near the left pane's right edge. The view
-	// follows it, and the start of the right pane comes into view.
 	line := "# " + strings.Repeat("L", 80)
 	if out, err := tuiosCLI(t, base, "send-text", "-s", wsSession, "-w", left, line); err != nil {
 		t.Fatalf("send-text left: %v\n%s", err, out)
@@ -533,7 +470,6 @@ func viewOverTheSplit(t *testing.T, base string, small *tuitest.Terminal) (left,
 	return left, right
 }
 
-// sideBySide returns the two panes of the session, left first.
 func sideBySide(t *testing.T, base string) (left, right string) {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "-s", wsSession, "--json")
@@ -571,10 +507,6 @@ func TestWindowSizeRailStaysWhole(t *testing.T) {
 	_, small, base := windowSizePair(t, "largest", "[appearance.sidebar]\nenabled = true\n", nil)
 	waitWSSize(t, base, wsBigCols, wsBigRows, "under largest with the rail")
 	waitMark(t, small, true, "the small client with the rail")
-	// The rail heads the screen and ends with its footer (the fold control,
-	// «) on the row above the dock, whose rule runs the full width of the
-	// small client's own screen.
-	// The mark sits at the right end of that rule and nowhere over a pane.
 	rule := strings.Repeat("─", wsSmallCols/2)
 	if err := small.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Line(0), "sessions") && strings.Contains(s.Line(wsSmallRows-3), "«") &&
@@ -599,7 +531,6 @@ func TestWindowSizeTmuxShim(t *testing.T) {
 		t.Fatalf("create session: %v: %s", err, out)
 	}
 	term := attachIn(t, base, wsSession, startOpts{cols: wsSmallCols, rows: wsSmallRows})
-	// The quotes keep the typed line itself from matching the marker.
 	line := tuiosBin + " tmux-shim -- sh -c 'tmux set -g window-size largest && echo SHIM_$(tmux show -gv window-size)_\"DONE\"'\n"
 	if out, err := tuiosCLI(t, base, "send-text", "-s", wsSession, line); err != nil {
 		t.Fatalf("send-text: %v\n%s", err, out)

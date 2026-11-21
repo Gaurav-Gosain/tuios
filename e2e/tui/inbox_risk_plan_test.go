@@ -12,15 +12,11 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// heldHook is a tuios agent-hook run the way Claude Code runs it, for the
-// agent's pane, and what it printed.
 type heldHook struct {
 	stdout bytes.Buffer
 	exited chan error
 }
 
-// startHeldHook starts the hook with payload and returns once it runs. The
-// test's cleanup kills it.
 func startHeldHook(t *testing.T, base, payload string) *heldHook {
 	t.Helper()
 	cmd := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", "e2e-agent", "--window", "0")
@@ -47,15 +43,11 @@ func startHeldHook(t *testing.T, base, payload string) *heldHook {
 	return h
 }
 
-// approvalsClient starts a daemon with approvals on for claude-code, an
-// agent's session nobody looks at, and a client attached to another session
-// in window management mode.
 func approvalsClient(t *testing.T) (string, *tuitest.Terminal) {
 	t.Helper()
 	return approvalsClientWith(t, "")
 }
 
-// approvalsClientWith is approvalsClient with extra appended to the config.
 func approvalsClientWith(t *testing.T, extra string) (string, *tuitest.Terminal) {
 	t.Helper()
 	base := t.TempDir()
@@ -83,8 +75,6 @@ func approvalsClientWith(t *testing.T, extra string) (string, *tuitest.Terminal)
 	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
 	}
-	// As in windowManagementMode: TestCockpitAnswerAdvances fails on CI
-	// without it.
 	pause(t, "no sign on screen says a client that just booted is ready for keys", insertGuard)
 	return base, term
 }
@@ -111,7 +101,6 @@ func TestInboxRiskyApprovalTakesTwoPresses(t *testing.T) {
 	saveFrame(t, term, "inbox-risky-held")
 	time.Sleep(answerSettle)
 
-	// A key only asks: the card says what enter does, and nothing is sent.
 	if err := term.SendKeys("1"); err != nil {
 		t.Fatalf("first press: %v", err)
 	}
@@ -125,10 +114,6 @@ func TestInboxRiskyApprovalTakesTwoPresses(t *testing.T) {
 	}
 	saveFrame(t, term, "inbox-risky-asks")
 
-	// A sentence typed slowly into the list, by a person who thinks a reply
-	// box has the keys, answers nothing: "please also" holds two a and a 1
-	// would have armed. One key every 400 ms is a slow typist; a guard on
-	// the time between keys let such a typist allow the call.
 	if err := term.SendKeys("2"); err != nil {
 		t.Fatalf("2: %v", err)
 	}
@@ -192,8 +177,6 @@ func TestInboxKeepsAPlanPlanningWithAReason(t *testing.T) {
 	if err := term.SendKeys("R"); err != nil {
 		t.Fatalf("R: %v", err)
 	}
-	// The reason is a one-line composer under a "Reason:" label, with a
-	// placeholder until the first key.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return screenHas(s, "Reason:", "Type the reason, or press enter to reject without one.")
 	}, uiTimeout); err != nil {

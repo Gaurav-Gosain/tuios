@@ -35,7 +35,6 @@ func TestDoubleClickIntervalIsAnOption(t *testing.T) {
 			row, col := findText(t, term, word)
 
 			clickAt(t, term, col+6, row, 1)
-			// The gap is past 300 ms and inside 1000 ms.
 			pause(t, "the gap between two clicks, past 300 ms and inside 1000 ms", 600*time.Millisecond)
 			clickAt(t, term, col+6, row, 1)
 
@@ -43,8 +42,6 @@ func TestDoubleClickIntervalIsAnOption(t *testing.T) {
 				waitClipboardSequence(t, term, out, 0, word)
 				return
 			}
-			// The copy is deferred past the interval, so a copy that was going to
-			// happen has happened well inside this.
 			stayTrue(t, "no copy for two clicks 600 ms apart at the default interval", 1500*time.Millisecond, func() (bool, string) {
 				got := clipboardSince(out, 0)
 				return len(got) == 0, fmt.Sprintf("copied %q", got)

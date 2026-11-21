@@ -14,9 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// railBand returns the first and last screen column the sidebar rail draws in,
-// found from the rail's own header row rather than from a config value. It
-// returns (-1, -1) when the rail is not on screen.
 func railBand(s tuitest.Screen) (first, last int) {
 	for line := range strings.SplitSeq(s.Text(), "\n") {
 		runes := []rune(line)
@@ -24,8 +21,6 @@ func railBand(s tuitest.Screen) (first, last int) {
 		if i < 0 {
 			continue
 		}
-		// The header sits inside the rail's own padding; the band is the run of
-		// non-space either side of it on this row.
 		first, last = i, i+len([]rune(sidebarHeader))-1
 		for first > 0 && runes[first-1] != ' ' {
 			first--
@@ -49,11 +44,8 @@ func railBand(s tuitest.Screen) (first, last int) {
 // arrives, and the rail opening under an image that is already placed.
 func TestKittyImageStaysOutOfTheRail(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		side string
-		// railFirst boots with the rail already up. Otherwise the image is
-		// placed against the full-width layout first and the rail is toggled on
-		// underneath it, which is the order the report was hit in.
+		name      string
+		side      string
 		railFirst bool
 	}{
 		{"rail-right-first", "right", true},
@@ -85,7 +77,6 @@ func TestKittyImageStaysOutOfTheRail(t *testing.T) {
 				waitRailUp(t, term)
 			}
 
-			// The pane that shares an edge with the rail.
 			clickX := 90
 			if tc.side == "left" {
 				clickX = 30
@@ -98,9 +89,6 @@ func TestKittyImageStaysOutOfTheRail(t *testing.T) {
 			}
 			rows, cols := reportedPaneSize(t, term, "A")
 
-			// A guest that renders at exactly the pane it was told it has, the
-			// way terminal-browser does. The e2e host reports no pixel size, so
-			// tuios falls back to 9x20 per cell.
 			frame := kittyFrameFile(t, t.TempDir(), cols*9, rows*20)
 			stream.mark("frame")
 			typeLine(t, term, "cat "+frame)
@@ -145,7 +133,6 @@ func waitRailUp(t *testing.T, term *tuitest.Terminal) {
 	time.Sleep(600 * time.Millisecond)
 }
 
-// runeIndex is strings.Index in screen columns rather than bytes.
 func runeIndex(line []rune, want string) int {
 	w := []rune(want)
 	for i := 0; i+len(w) <= len(line); i++ {
@@ -156,9 +143,6 @@ func runeIndex(line []rune, want string) int {
 	return -1
 }
 
-// windowCorner finds a pane box corner on screen. The top-left one is the handle
-// a drag has to grab; the top-right one is the only one still visible when the
-// pane has been shoved under a left-hand rail.
 func windowCorner(t *testing.T, term *tuitest.Terminal, corner string) (col, row int) {
 	t.Helper()
 	for r, line := range strings.Split(term.Screen().Text(), "\n") {
@@ -202,11 +186,6 @@ func TestKittyImageStaysOutOfTheRailWhenPaneOverlapsIt(t *testing.T) {
 			newWindow(t, term)
 			waitWindowCount(t, term, 1, "one floating pane")
 
-			// The image goes up while the pane is where it can be read, then the
-			// pane is shoved against the screen edge the rail will take and the
-			// rail is opened under it. A floating pane is not re-tiled, and the
-			// clamp only guarantees a reachable strip, so the pane keeps a
-			// rectangle that runs under the rail.
 			col, row := windowTopLeft(t, term)
 			mouseClick(t, term, col+5, row+4, tuitest.MouseLeft, 0)
 			time.Sleep(400 * time.Millisecond)
@@ -250,11 +229,6 @@ func TestKittyImageStaysOutOfTheRailWhenPaneOverlapsIt(t *testing.T) {
 					got.col, got.col+got.cols-1, railFirst, railLast)
 			}
 			if side == "left" {
-				// Cropping off the left moves the image as well as narrowing
-				// it. Without a source rectangle that starts past the cropped
-				// columns the host draws the same number of cells from the
-				// wrong pixel column: the page slides right by the width of the
-				// rail.
 				if srcX := lastPlacementSrcX(t, stream.bytes()); srcX <= 0 {
 					t.Errorf("placement carries x=%d; a left crop needs a source rectangle "+
 						"that starts past the columns the rail took", srcX)
@@ -269,8 +243,6 @@ var (
 	placementSrcXRE = regexp.MustCompile(`,x=(\d+)`)
 )
 
-// lastPlacementRows is lastPlacement's r=, the rows the host is told to draw the
-// image over.
 func lastPlacementRows(t *testing.T, stream []byte) int {
 	t.Helper()
 	ms := placementRE.FindAllSubmatch(stream, -1)
@@ -286,8 +258,6 @@ func lastPlacementRows(t *testing.T, stream []byte) int {
 	return n
 }
 
-// dockTopRow is the first screen row the dock draws in, found from the rule it
-// draws across the whole screen above its status line.
 func dockTopRow(s tuitest.Screen) int {
 	lines := strings.Split(s.Text(), "\n")
 	for r, line := range slices.Backward(lines) {
@@ -318,7 +288,6 @@ func TestKittyImageStaysOutOfTheDock(t *testing.T) {
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "one floating pane")
 
-	// Shove the pane down until it hangs past the dock.
 	col, row := windowTopLeft(t, term)
 	mouseDrag(t, term, col+10, row, col+10, 25, tuitest.MouseLeft, 0)
 	time.Sleep(700 * time.Millisecond)
@@ -354,8 +323,6 @@ func TestKittyImageStaysOutOfTheDock(t *testing.T) {
 	}
 }
 
-// lastPlacementSrcX is the x= source offset in pixels on the final placement,
-// or 0 when it carries none.
 func lastPlacementSrcX(t *testing.T, stream []byte) int {
 	t.Helper()
 	ms := placementRE.FindAllSubmatch(stream, -1)
@@ -370,10 +337,6 @@ func lastPlacementSrcX(t *testing.T, stream []byte) int {
 	return n
 }
 
-// paintedFrame is the composed frame with the host's placement rectangle drawn
-// over it, which is what the user actually sees: tuios composes every cell,
-// then the host paints the image on top. The image itself is not in the cell
-// grid, so this is the only way to see the two layers together.
 func paintedFrame(s tuitest.Screen, col, row, cols, rows int) string {
 	lines := strings.Split(s.Text(), "\n")
 	for r := row; r < row+rows && r < len(lines); r++ {
@@ -436,17 +399,12 @@ func TestKittyImageStopsAtAShortPaneBottom(t *testing.T) {
 	}
 }
 
-// hostRect is one placement the host is showing, in screen cells.
 type hostRect struct{ col, row, cols, rows int }
 
 func (r hostRect) has(col, row int) bool {
 	return col >= r.col && col < r.col+r.cols && row >= r.row && row < r.row+r.rows
 }
 
-// hostImageRects replays every placement and delete in a host stream and
-// returns the rectangles the host is still drawing at its end, every image
-// and every placement id. An a=p with no c= or r= is counted as one cell on
-// that axis, which can only make an overlap harder to find, never easier.
 func hostImageRects(stream []byte) []hostRect {
 	type key struct{ image, placement string }
 	live := map[key]hostRect{}
@@ -498,7 +456,6 @@ func hostImageRects(stream []byte) []hostRect {
 	return out
 }
 
-// paintedRects is paintedFrame for every rectangle the host is drawing.
 func paintedRects(s tuitest.Screen, rects []hostRect) string {
 	lines := strings.Split(s.Text(), "\n")
 	for _, r := range rects {
@@ -603,8 +560,6 @@ func TestKittyImageStaysUnderPopovers(t *testing.T) {
 			t.Logf("before:\n%s\n\nwith the %s open (image cells drawn as ▓):\n%s",
 				paintedRects(plain, before), cover, paintedRects(s, during))
 
-			// The covered cells: the popup's box when the daemon can say where
-			// it is, and every cell whose text the cover changed besides.
 			nowText := strings.Split(s.Text(), "\n")
 			covered := 0
 			for y := range min(len(nowText), len(beforeText)) {
@@ -635,7 +590,6 @@ func TestKittyImageStaysUnderPopovers(t *testing.T) {
 				t.Errorf("the image was hidden whole; the part the %s leaves clear must still show", cover)
 			}
 
-			// Closing the cover gives the whole image back.
 			if popupID != "" {
 				if out, err := tuiosCLI(t, base, "close-window", "-s", "kio", popupID); err != nil {
 					t.Fatalf("close the popup: %v\n%s", err, out)

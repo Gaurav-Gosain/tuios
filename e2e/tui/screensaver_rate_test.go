@@ -9,14 +9,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// saverMarker is the text the saver hides and then puts back. The shell prints
-// it, so it sits in the capture the saver animates.
 const saverMarker = "SAVERRATEMARK"
 
-// saverOpening starts the saver with one effect at one max_fps and returns how
-// long the marker was off the screen: from the frame that first hides it to
-// the frame that first shows it whole again. That span is the effect's opening
-// in wall time.
 func saverOpening(t *testing.T, effect string, maxFPS int, limit time.Duration) time.Duration {
 	t.Helper()
 	base := t.TempDir()

@@ -14,12 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// herdr plugins hosted by tuios. Each test runs a real daemon with a client
-// attached, and a stand-in plugin from testdata/herdrplugins that writes
-// what it saw into its HERDR_PLUGIN_STATE_DIR. The test reads those files,
-// and keeps them, with the frames, under TUIOS_E2E_FRAMES when it is set.
-
-// pluginFixture is the absolute folder of a stand-in plugin.
 func pluginFixture(t *testing.T, name string) string {
 	t.Helper()
 	dir, err := filepath.Abs(filepath.Join("testdata", "herdrplugins", name))
@@ -32,8 +26,6 @@ func pluginFixture(t *testing.T, name string) string {
 	return dir
 }
 
-// pluginsConfig is a [plugins] table with the named fixtures in dirs and the
-// given ids enabled.
 func pluginsConfig(t *testing.T, enabled []string, fixtures ...string) string {
 	t.Helper()
 	quote := func(list []string) string {
@@ -50,7 +42,6 @@ func pluginsConfig(t *testing.T, enabled []string, fixtures ...string) string {
 	return "[plugins]\nenabled = " + quote(enabled) + "\ndirs = " + quote(dirs) + "\n"
 }
 
-// pluginClient is crushClient with a [plugins] table in config.toml.
 func pluginClient(t *testing.T, plugins string) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -73,18 +64,15 @@ func pluginClient(t *testing.T, plugins string) (*tuitest.Terminal, string) {
 	return term, base
 }
 
-// pluginState is the state folder the daemon gives plugin id.
 func pluginState(base, id string) string {
 	return filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "plugins", id)
 }
 
-// readPluginFile reads a file a stand-in wrote, "" when it is not there.
 func readPluginFile(base, id, name string) string {
 	b, _ := os.ReadFile(filepath.Join(pluginState(base, id), name))
 	return string(b)
 }
 
-// waitPluginFile waits until a file a stand-in writes holds want.
 func waitPluginFile(t *testing.T, base, id, name, want string) string {
 	t.Helper()
 	return waitTextOf(t, name+" of "+id+" never held "+strconv.Quote(want), 2*uiTimeout,
@@ -92,7 +80,6 @@ func waitPluginFile(t *testing.T, base, id, name, want string) string {
 		func(got string) bool { return strings.Contains(got, want) })
 }
 
-// savePluginArtifact keeps a file a stand-in wrote beside the frames.
 func savePluginArtifact(t *testing.T, base, id, name string) {
 	t.Helper()
 	dir := os.Getenv("TUIOS_E2E_FRAMES")
@@ -105,7 +92,6 @@ func savePluginArtifact(t *testing.T, base, id, name string) {
 	}
 }
 
-// envValue reads KEY=VALUE from a file a stand-in wrote.
 func envValue(text, key string) string {
 	for l := range strings.SplitSeq(text, "\n") {
 		if v, ok := strings.CutPrefix(l, key+"="); ok {
@@ -165,15 +151,12 @@ func TestHerdrPluginTrustAndHooks(t *testing.T) {
 		t.Fatalf("plugins list: %v, want e2e.hooks and e2e.actions off and broken refused\n%s", seen, out)
 	}
 
-	// Off: nothing runs, at start or on a new pane.
 	crushPanes(t, base, "w1")
 	time.Sleep(2 * time.Second)
 	if got := readPluginFile(base, id, "startup.log") + readPluginFile(base, id, "events.log"); got != "" {
 		t.Fatalf("a disabled plugin ran:\n%s", got)
 	}
 
-	// A pane cannot enable it. The tuios command is run with the pane's
-	// variables taken away, so the daemon's own check is what refuses it.
 	steps := runHerdrSteps(t, base, "w1", "trust", fmt.Sprintf(
 		"step cli env -u TUIOS_PANE_ID -u TUIOS_WINDOW_ID %s plugins enable %s\nstep herdr \"$H\" plugin enable %s\nstep link \"$H\" plugin link %s\n",
 		tuiosBin, id, id, pluginFixture(t, "panes")))
@@ -192,24 +175,16 @@ func TestHerdrPluginTrustAndHooks(t *testing.T) {
 		t.Fatalf("the plugin ran after a refused enable:\n%s", got)
 	}
 
-	// A pane can still write config.toml itself. Its entry waits, and the
-	// person's enable of another plugin does not apply it.
 	cfgPath := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios", "config.toml")
 	if err := os.WriteFile(cfgPath, []byte(strings.Replace(string(cfg), "enabled = []", `enabled = ["e2e.actions"]`, 1)), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(time.Second)
 
-	// The person enables it: startup runs once, and the hook runs on a new
-	// pane, with herdr's event name, pane id and event JSON.
 	if out, err := tuiosCLI(t, base, "plugins", "enable", id); err != nil {
 		t.Fatalf("plugins enable: %v\n%s", err, out)
 	}
 	waitPluginFile(t, base, id, "startup.log", "startup startup e2e.hooks")
-	// A pane cannot restart it either. plugin.restart has no herdr CLI
-	// command, so the step sends the request on the socket itself. A
-	// restart that went through would run startup a second time, which the
-	// count below catches.
 	steps = runHerdrSteps(t, base, "w1", "restart", "step restart python3 -c '"+
 		`import json,os,socket,sys; s=socket.socket(socket.AF_UNIX); s.connect(os.environ["HERDR_SOCKET_PATH"]); `+
 		`s.sendall((json.dumps({"id":"r1","method":"plugin.restart","params":{"plugin_id":sys.argv[1]}})+"\n").encode()); `+
@@ -220,8 +195,6 @@ func TestHerdrPluginTrustAndHooks(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "plugins", "run", "e2e.actions", "hello", "--wait"); err == nil || !strings.Contains(out, "plugin_disabled") {
 		t.Fatalf("the person's enable of %s also enabled e2e.actions, which a pane wrote into config.toml: %v\n%s", id, err, out)
 	}
-	// The startup command left a process behind, outside every pane, that
-	// tries to enable e2e.actions. It is the plugin's, not the person's.
 	orphan := waitPluginFile(t, base, id, "orphan.out", "code=")
 	if !strings.Contains(orphan, "forbidden") || strings.Contains(orphan, "code=0") {
 		t.Fatalf("a process the startup command left behind enabled a plugin:\n%s", orphan)
@@ -258,8 +231,6 @@ func TestHerdrPluginTrustAndHooks(t *testing.T) {
 	savePluginArtifact(t, base, id, "startup.log")
 	savePluginArtifact(t, base, id, "events.log")
 
-	// The person disables it: the startup process stops, and the next pane
-	// runs no hook.
 	pid, _ := strconv.Atoi(strings.TrimSpace(readPluginFile(base, id, "startup.pid")))
 	if pid <= 0 || syscall.Kill(pid, 0) != nil {
 		t.Fatalf("the startup process %d is not running while the plugin is on", pid)
@@ -327,7 +298,6 @@ func TestHerdrPluginActions(t *testing.T) {
 		t.Errorf("HERDR_PLUGIN_CONFIG_DIR %q is not tuios's", envValue(run, "config"))
 	}
 
-	// From a pane, through herdr's CLI, as a herdr tool runs it.
 	steps := runHerdrSteps(t, base, "w1", "actions", "step invoke \"$H\" plugin action invoke hello --plugin e2e.actions\nstep list \"$H\" plugin action list\n")
 	steps["invoke"].ok(t, "plugin action invoke")
 	inv := steps["invoke"].json(t, "plugin action invoke")
@@ -363,8 +333,6 @@ func TestHerdrPluginActions(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	// A read-only pane may neither run an action nor read the log, which
-	// holds what the commands printed.
 	crushPanes(t, base, "held")
 	if out, err := tuiosCLI(t, base, "set-pane-grants", "-s", crushSession, "-w", windowID(t, base, crushSession, "held"), "--grants", "read"); err != nil {
 		t.Fatalf("set-pane-grants: %v\n%s", err, out)
@@ -380,13 +348,8 @@ func TestHerdrPluginActions(t *testing.T) {
 	checkHerdrInstallLease(t, base)
 }
 
-// herdrLeaseID is the plugin checkHerdrInstallLease installs as herdr does.
 const herdrLeaseID = "e2e.lease"
 
-// checkHerdrInstallLease makes an install as herdr plugin install makes it,
-// github-installations/<plugin>/<install>/checkout with an .in-use marker
-// beside the checkout, lists it in herdr's plugins.json, and runs its action.
-// While the action runs, herdr's cleanup cannot get the marker's lock.
 func checkHerdrInstallLease(t *testing.T, base string) {
 	t.Helper()
 	herdrDir := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "herdr")
@@ -421,8 +384,6 @@ command = ["sh", "-c", "touch \"$HERDR_PLUGIN_STATE_DIR/held\"; while [ ! -e \"$
 		t.Fatal(err)
 	}
 
-	// cleanupLock is herdr's reclaim: an exclusive flock without waiting.
-	// It reports whether the lock was taken, and drops it at once.
 	cleanupLock := func() bool {
 		f, err := os.OpenFile(marker, os.O_RDWR, 0)
 		if err != nil {
@@ -501,7 +462,6 @@ func TestHerdrPluginPanes(t *testing.T) {
 		t.Fatalf("EnableTiling: %v\n%s", err, out)
 	}
 
-	// The popup, from outside every pane.
 	if res := herdrCall(t, base, "plugin.pane.open", map[string]any{"plugin_id": id, "entrypoint": "pop"}); res["type"] != "ok" {
 		t.Fatalf("plugin.pane.open pop answered %v", res)
 	}
@@ -513,8 +473,6 @@ func TestHerdrPluginPanes(t *testing.T) {
 	if envValue(pop, "entry") != "pop" || envValue(pop, "id") != id || envValue(pop, "cwd") != root || envValue(pop, "tuios_pane") == "" || envValue(pop, "pane") == "" {
 		t.Fatalf("the popup pane saw:\n%s", pop)
 	}
-	// The manifest asks for 12 rows, which no tile of this screen has: the
-	// pane is the popup, at the size the entry names.
 	wins, _ := tuiosCLI(t, base, "list-windows", "--json", "-s", crushSession)
 	var listed struct {
 		Windows []struct {
@@ -539,7 +497,6 @@ func TestHerdrPluginPanes(t *testing.T) {
 		t.Fatalf("popup.close left the popup on screen\n%s", term.Snapshot())
 	}
 
-	// The split, from a pane, through herdr's CLI.
 	crushPanes(t, base, "w1")
 	steps := runHerdrSteps(t, base, "w1", "panes", "step open \"$H\" plugin pane open --plugin e2e.panes --entrypoint side\n")
 	steps["open"].ok(t, "plugin pane open")
@@ -558,7 +515,6 @@ func TestHerdrPluginPanes(t *testing.T) {
 	if envValue(side, "entry") != "side" || envValue(side, "pane") != paneID || envValue(side, "cwd") != root {
 		t.Fatalf("the split pane saw (opened as %s):\n%s", paneID, side)
 	}
-	// The split pane tagged the pane focused when it opened.
 	mark := waitPluginFile(t, base, id, "mark.out", "code=")
 	_, target, _ := strings.Cut(mark, "code=0 target=")
 	target = strings.TrimSpace(target)
@@ -569,7 +525,6 @@ func TestHerdrPluginPanes(t *testing.T) {
 	if got := dig(tagged, "pane", "tokens", "e2e-mark"); got != "from-plugin-pane" {
 		t.Fatalf("%s holds e2e-mark %v after the plugin pane tagged it: %v", target, got, tagged)
 	}
-	// A plain pane may still tag only itself.
 	plain := runHerdrSteps(t, base, "w1", "plain-mark", "step mark \"$H\" pane report-metadata "+paneID+" --source e2e.plain --token e2e-mark=from-w1\n")
 	if st := plain["mark"]; st.code == 0 || !strings.Contains(st.out+st.err, "may report only for itself") {
 		t.Fatalf("a plain pane tagged the plugin pane: exit %d, stdout %q, stderr %q", st.code, st.out, st.err)
@@ -604,8 +559,6 @@ func TestHerdrPluginPalette(t *testing.T) {
 	term, base := pluginClient(t, pluginsConfig(t, []string{"e2e.actions", "e2e.panes"}, "actions", "panes", "hidden")+keys)
 	const id = "e2e.actions"
 
-	// A plugin_action key that no plugin has is a config problem, not an
-	// error: tuios starts and says so.
 	if err := term.WaitForText("1 config problem", uiTimeout); err != nil {
 		t.Fatalf("the key for an action no plugin has was not reported: %v\n%s", err, term.Snapshot())
 	}
@@ -621,7 +574,6 @@ func TestHerdrPluginPalette(t *testing.T) {
 		}
 	}
 
-	// The hidden plugin is off: its action is not in the palette.
 	openPaletteQuery("Never offered")
 	time.Sleep(500 * time.Millisecond)
 	if screenHas(term.Screen(), "E2E hidden") {
@@ -629,8 +581,6 @@ func TestHerdrPluginPalette(t *testing.T) {
 	}
 	closePalette(t, term, "after the hidden query")
 
-	// The enabled action runs from the palette, with the palette as its
-	// source.
 	openPaletteQuery("Say hello")
 	if err := term.WaitForText("E2E actions: Say hello", uiTimeout); err != nil {
 		t.Fatalf("the palette never listed the plugin action: %v\n%s", err, term.Snapshot())
@@ -650,9 +600,6 @@ func TestHerdrPluginPalette(t *testing.T) {
 	}
 	savePluginArtifact(t, base, id, "run-0.env")
 
-	// The command key runs the action, with keybinding as its source. Its
-	// bare id hello is also an action of the hidden plugin, which is off, so
-	// the enabled plugin's action runs.
 	if err := term.SendKeys(tuitest.Alt('y')); err != nil {
 		t.Fatalf("press the plugin action key: %v", err)
 	}
@@ -663,7 +610,6 @@ func TestHerdrPluginPalette(t *testing.T) {
 	}
 	savePluginArtifact(t, base, id, "run-1.env")
 
-	// The enabled pane opens from the palette as a popup.
 	openPaletteQuery("E2E popup")
 	if err := term.WaitForText("E2E panes: E2E popup", uiTimeout); err != nil {
 		t.Fatalf("the palette never listed the plugin pane: %v\n%s", err, term.Snapshot())

@@ -14,15 +14,10 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// probeCmd prints an SGR 31 marker the shell assembles itself, so the command
-// line the harness typed never carries the marker and every hit is real output.
 func probeCmd(tag string) string {
 	return `printf '\033[31m%s` + tag + `\033[0m\n' "$(echo INK)"`
 }
 
-// probeInk returns the colour the host terminal was given for the first cell of
-// marker, which is the only place the question can honestly be asked: what
-// tuios put on the wire, read off the terminal it wrote to.
 func probeInk(t *testing.T, term *tuitest.Terminal, marker string) tuitest.Color {
 	t.Helper()
 	if err := term.WaitForText(marker, uiTimeout); err != nil {
@@ -39,14 +34,11 @@ func probeInk(t *testing.T, term *tuitest.Terminal, marker string) tuitest.Color
 	return tuitest.Color{}
 }
 
-// pickTheme drives the theme picker to a name and waits for it to close.
 func pickTheme(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	closeThemePicker(t, term, filterThemePicker(t, term, name), tuitest.Enter)
 }
 
-// filterThemePicker opens the theme picker and types name, so the picker
-// shows the themes on the way. It returns name for closeThemePicker.
 func filterThemePicker(t *testing.T, term *tuitest.Terminal, name string) string {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Ctrl('p')); err != nil {
@@ -76,8 +68,6 @@ func filterThemePicker(t *testing.T, term *tuitest.Terminal, name string) string
 	return name
 }
 
-// closeThemePicker presses key (Enter to apply, Esc to cancel) and waits for
-// the picker to close.
 func closeThemePicker(t *testing.T, term *tuitest.Terminal, name string, key tuitest.Key) {
 	t.Helper()
 	if err := term.SendKeys(key); err != nil {
@@ -115,10 +105,6 @@ func TestThemeOffLeavesThePaletteToTheTerminal(t *testing.T) {
 	pickTheme(t, term, "catppuccin_mocha")
 	enterTerminalMode(t, term)
 
-	// A theme replaces the index with its own colour. The harness terminal is
-	// not truecolor, so that colour arrives stepped down to a 256 slot; what
-	// makes the point either way is that slot 1, the user's own red, is no
-	// longer what the host was asked for.
 	runInShell(t, term, probeCmd("B"), "INKB", shellTimeout)
 	if got := probeInk(t, term, "INKB"); got.Kind == tuitest.ColorIndexed && got.Index == 1 {
 		t.Errorf("with a theme, SGR 31 still reached the host as %+v, want the theme's own colour", got)
@@ -164,9 +150,6 @@ func TestPickerShowsTheUsersOwnSixteen(t *testing.T) {
 		t.Fatalf("the accent picker did not open: %v\n%s", err, term.Snapshot())
 	}
 
-	// The sixteen are the only cells in the dialog whose backgrounds are palette
-	// indices, which is the whole claim: found by that property rather than by
-	// counting rows, so the layout can move without the test lying.
 	s := term.Screen()
 	cols, rows := s.Size()
 	seen := map[uint8]bool{}
@@ -177,8 +160,6 @@ func TestPickerShowsTheUsersOwnSixteen(t *testing.T) {
 			}
 		}
 	}
-	// Bright black has no normal twin in the picker's grid, so fifteen of the
-	// sixteen slots are on offer.
 	if len(seen) < 15 {
 		t.Errorf("the picker painted %d of the terminal's own palette slots, want 15\n%s", len(seen), term.Snapshot())
 	}
@@ -205,8 +186,6 @@ func TestAnEditedThemeFileRepaints(t *testing.T) {
 	}
 
 	writeConfigPart(t, base, "themes/mine.json", `{"id": "mine", "base": "nord", "red": "#00ff00"}`)
-	// The reload lands after the watcher's debounce, so the probe is printed
-	// again until it shows, within the usual wait.
 	deadline := time.Now().Add(uiTimeout)
 	for i := 0; ; i++ {
 		marker := fmt.Sprintf("INKB%d", i)
@@ -267,7 +246,6 @@ func TestThemeExportWritesOnlyTheChanges(t *testing.T) {
 		t.Fatalf("the export of ember2 is\n%s\nwant only the base and the changes: %v", sparse, want)
 	}
 
-	// The same file under another id is the same theme.
 	writeConfigPart(t, base, "themes/copy.json", strings.Replace(sparse, `"ember2"`, `"copy"`, 1))
 	full := decode("the full export", run("ember2-full.json", "theme", "export", "ember2", "--full"))
 	copied := decode("the full export of the copy", run("copy-full.json", "theme", "export", "copy", "--full"))
@@ -355,7 +333,6 @@ func TestThemeChromeRolesPaint(t *testing.T) {
 	}
 	saveArtifact(t, term, artifactDir(t), "config-wins")
 
-	// The focused pane in copy mode takes the theme's border.copy.
 	enterTerminalMode(t, term)
 	sendKeys(t, term, tuitest.Ctrl('b'), "[")
 	copyBorder := func(c tuitest.Cell) bool {
@@ -382,8 +359,6 @@ func TestBorderGradientSteps(t *testing.T) {
 	waitBoot(t, term)
 	newWindow(t, term)
 
-	// steps reads each run of border cells on one row, left to right, and
-	// returns the colours along the run that changes colour most often.
 	steps := func(s tuitest.Screen) []tuitest.Color {
 		cols, rows := s.Size()
 		var best []tuitest.Color
@@ -449,10 +424,6 @@ func TestBorderGradientKeepsPillCaps(t *testing.T) {
 			writeConfig(t, base, "[appearance]\ntheme = \"boreal\"\nborder_focused_gradient = \"#7cf2c5 #b69cff\"\nborder_gradient_angle = 0\nwindow_title_style = \"pill\"\nwindow_button_style = \"pill\"\n")
 			term := startIn(t, base, startOpts{cols: 120, rows: 30, env: d.env})
 			waitBoot(t, term)
-			// Each pane sets its title, as an editor does, so each carries a
-			// title pill beside its control pill.
-			// The shell builds the title, so "main.go" on screen is the
-			// title and never the echo of the typed line.
 			for range 2 {
 				newWindow(t, term)
 				enterTerminalMode(t, term)
@@ -473,8 +444,6 @@ func TestBorderGradientKeepsPillCaps(t *testing.T) {
 					inks = borderInks(s)
 					return pairs >= 8 && len(bad) == 0 && (d.name == "16" || inks >= 3)
 				}, uiTimeout)
-				// The frame is saved before the verdict, so a failing run
-				// leaves the frame that shows the fault.
 				dir := artifactDir(t)
 				saveArtifact(t, term, dir, name)
 				savePNG(t, term.Screen(), pal, dir, name)
@@ -489,9 +458,6 @@ func TestBorderGradientKeepsPillCaps(t *testing.T) {
 	}
 }
 
-// pillCapPairs finds each round pill cap on screen whose inner neighbour has a
-// fill, and returns how many there are and the ones whose ink is not that
-// fill.
 func pillCapPairs(s tuitest.Screen) (pairs int, bad []string) {
 	cols, rows := s.Size()
 	for y := range rows {
@@ -520,8 +486,6 @@ func pillCapPairs(s tuitest.Screen) (pairs int, bad []string) {
 	return pairs, bad
 }
 
-// borderInks counts the colours the horizontal border cells on screen are
-// drawn in.
 func borderInks(s tuitest.Screen) int {
 	cols, rows := s.Size()
 	seen := map[tuitest.Color]bool{}
@@ -683,11 +647,6 @@ func TestThemeEditorQuickAndFix(t *testing.T) {
 		t.Fatalf("the fixed accent %s is not a lighter red", got.Chrome.Accent)
 	}
 
-	// The picker opens on the colour a role shows, also for a role the theme
-	// leaves unset. These rows had no colour and enter on them was a panic:
-	// the grounds in every built-in theme, Selection in one_dark and others.
-	// The source and the arrow are the picker's readout, and the spaces are
-	// its swatch: the rows behind it print the same hex.
 	pickerOn := func(hex, source string) {
 		t.Helper()
 		sendKeys(t, term, tuitest.Enter)
@@ -714,15 +673,11 @@ func TestThemeEditorQuickAndFix(t *testing.T) {
 	sendKeys(t, term, tuitest.Esc)
 	waitGone(t, term, "the theme editor", "Edit theme: nord-custom")
 
-	// The steps of the report, on a saved copy of a theme. Nothing paints the
-	// dock, so it shows the host's background, and the picker opens on that.
 	editTheme("nord-custom")
 	for range 8 {
 		sendKeys(t, term, tuitest.Down)
 	}
 	pickerOn(hostBg, "from base")
-	// The cursor's flash paints the dock for a moment. Once it ends the dock's
-	// cells have the default background, which is the host's.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		cols, rows := s.Size()
 		return s.Cell(cols/2, rows-1).Bg.Kind == tuitest.ColorDefault
@@ -733,7 +688,6 @@ func TestThemeEditorQuickAndFix(t *testing.T) {
 	savePNG(t, term.Screen(), hostGroundPalette(hostFg, hostBg), artifactDir(t), "dock-ground-picker")
 	closePicker()
 
-	// A config key wins over the theme, so the picker opens on the key's colour.
 	sendKeys(t, term, tuitest.Down)
 	pickerOn("#123456", "set in config.toml")
 	saveArtifact(t, term, artifactDir(t), "rail-ground-picker")
@@ -741,7 +695,6 @@ func TestThemeEditorQuickAndFix(t *testing.T) {
 	sendKeys(t, term, tuitest.Esc)
 	waitGone(t, term, "the theme editor", "Edit theme: nord-custom")
 
-	// one_dark names no selection colour, so the row shows the configured one.
 	editTheme("one_dark")
 	sendKeys(t, term, tuitest.Tab)
 	waitScreen(t, term, "the pane colours tab never opened", "Foreground", "The sixteen")
@@ -772,7 +725,6 @@ func TestAfterThemeChangeHookFiresOncePerPick(t *testing.T) {
 	waitBoot(t, term)
 	artifacts := artifactDir(t)
 
-	// waitLines waits until the log has n lines and returns them.
 	waitLines := func(n int) []string {
 		t.Helper()
 		var got []string
@@ -790,8 +742,6 @@ func TestAfterThemeChangeHookFiresOncePerPick(t *testing.T) {
 		}
 		return got
 	}
-	// Startup is not a change. Hooks run in their own goroutine, so give a
-	// firing time to land before saying there was none.
 	time.Sleep(time.Second)
 	if got := waitLines(0); len(got) != 0 {
 		t.Fatalf("the hook fired at startup:\n%s", strings.Join(got, "\n"))
@@ -807,7 +757,6 @@ func TestAfterThemeChangeHookFiresOncePerPick(t *testing.T) {
 		t.Errorf("the hook was given %q, want \"after-theme-change dracula #rrggbb 0\"", got[0])
 	}
 
-	// A cancelled pick puts Dracula back, which is no change.
 	closeThemePicker(t, term, filterThemePicker(t, term, "catppuccin_latte"), tuitest.Esc)
 	time.Sleep(time.Second)
 

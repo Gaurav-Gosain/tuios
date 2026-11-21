@@ -57,8 +57,6 @@ func main() {
 	case "both":
 		params = fmt.Sprintf(",c=%d,r=%d", cols, rows)
 	case "crop":
-		// The left half of the picture: the fitted axis follows its aspect,
-		// not the whole picture's.
 		params = fmt.Sprintf(",c=%d,x=0,y=0,w=%d,h=%d", cols, width/2, height)
 	case "none":
 	case "place":
@@ -116,7 +114,6 @@ func main() {
 	time.Sleep(30 * time.Second)
 }
 
-// parseSize reads WxH, defaulting to a 512px square.
 func parseSize(spec string) (width, height int, err error) {
 	if spec == "" {
 		return 512, 512, nil

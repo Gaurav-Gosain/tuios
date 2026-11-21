@@ -45,10 +45,6 @@ func railRightClickMakesAWorktree(t *testing.T, startupLayout string, tiled bool
 	repo := testutil.GitRepo(t)
 	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
 
-	// A session that is not a worktree, which is what this client attaches to,
-	// and one CLI-made worktree so the rail has the repository row to click.
-	// The plain one starts the daemon, so it is created from a directory in no
-	// repository.
 	if out, err := tuiosCLIIn(t, base, t.TempDir(), "new", "plain", "--detach"); err != nil {
 		t.Fatalf("create the plain session: %v: %s", err, out)
 	}
@@ -66,7 +62,6 @@ func railRightClickMakesAWorktree(t *testing.T, startupLayout string, tiled bool
 	toggleSidebarViaPalette(t, term)
 	waitForAll(t, term, uiTimeout, "sidebar with the repository row", sidebarHeader, "repo")
 
-	// Right-click the repository's group header and take its worktree row.
 	col, row := findOnScreen(t, term, "repo")
 	mouseClick(t, term, col, row, tuitest.MouseRight, 0)
 	if err := term.WaitForText("New worktree...", uiTimeout); err != nil {
@@ -78,9 +73,6 @@ func railRightClickMakesAWorktree(t *testing.T, startupLayout string, tiled bool
 		t.Fatalf("the menu row did not open the dialog: %v\n%s", err, term.Snapshot())
 	}
 
-	// Type the branch. The session field's empty state reads as the name the
-	// daemon will derive, which is the assertion that the derivation the rail
-	// shows is the derivation the daemon does.
 	if err := term.SendKeys("feat/ui"); err != nil {
 		t.Fatalf("type the branch: %v", err)
 	}
@@ -89,8 +81,6 @@ func railRightClickMakesAWorktree(t *testing.T, startupLayout string, tiled bool
 	}
 	saveFrame(t, term, "rail-worktree-dialog")
 
-	// Tab to the session name and type one, so the create is by the name the
-	// user chose and not the derived one.
 	if err := term.SendKeys("\t"); err != nil {
 		t.Fatalf("tab to the session name: %v", err)
 	}
@@ -101,9 +91,6 @@ func railRightClickMakesAWorktree(t *testing.T, startupLayout string, tiled bool
 		t.Fatalf("submit the dialog: %v", err)
 	}
 
-	// The daemon is the authority on what was made: the session by the name
-	// the user typed, the worktree on disk, and no session for the derived
-	// name that stopped being the answer the moment a name was typed.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return hasName(sessionNames(t, base), "custom")
 	}, uiTimeout); err != nil {
@@ -120,10 +107,6 @@ func railRightClickMakesAWorktree(t *testing.T, startupLayout string, tiled bool
 		t.Errorf("the worktree on disk is not on feat/ui: %v: %s", err, out)
 	}
 
-	// The new session joins the repository's group on the rail once the
-	// client's listing carries it, and the client is attached to it: the rail
-	// is the screen the user is looking at, and the gutter mark on the row is
-	// the screen's own word for "this is the session you are in".
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		r := railLineWith(s, "feat/ui")
 		return r >= 0 && strings.Contains(s.Line(r), "▎")
@@ -149,8 +132,6 @@ func railRightClickMakesAWorktree(t *testing.T, startupLayout string, tiled bool
 		info.TilingMode, info.LayoutMode, rects[0], term.Snapshot())
 	saveFrame(t, term, "rail-worktree-created-"+wantTiling+"-"+startupLayout)
 
-	// A later daemon-created pane must join the layout without a manual
-	// tiling toggle; checking the session flag alone would miss stale boxes.
 	if tiled {
 		if out, err := tuiosCLI(t, base, "new-window", "-s", "custom"); err != nil {
 			t.Fatalf("open another worktree pane: %v: %s", err, out)
@@ -198,7 +179,6 @@ printf '%s|%s|%s|%s|%s|%s\n' "$TUIOS_EVENT" "$TUIOS_SESSION_ID" "$TUIOS_WORKTREE
 		t.Fatal(err)
 	}
 	writeConfig(t, base, "[hooks]\nafter-new-worktree = \""+hook+"\"\n")
-	// wantHook reads what the hook wrote into one worktree.
 	wantHook := func(session, branch, created string) {
 		t.Helper()
 		dir := filepath.Join(base, "worktrees", "repo", strings.ReplaceAll(branch, "/", "-"))
@@ -220,8 +200,6 @@ printf '%s|%s|%s|%s|%s|%s\n' "$TUIOS_EVENT" "$TUIOS_SESSION_ID" "$TUIOS_WORKTREE
 	}
 	wantHook("repo-feat-one", "feat/one", "1")
 
-	// A branch that exists already, with a first window that reports whether
-	// the hook's file was there when it started.
 	if out, err := exec.Command("git", "-C", repo, "branch", "feat/seen").CombinedOutput(); err != nil {
 		t.Fatalf("make the feat/seen branch: %v: %s", err, out)
 	}
@@ -254,9 +232,6 @@ printf '%s|%s|%s|%s|%s|%s\n' "$TUIOS_EVENT" "$TUIOS_SESSION_ID" "$TUIOS_WORKTREE
 	toggleSidebarViaPalette(t, term)
 	waitForAll(t, term, uiTimeout, "sidebar with the worktree session row", sidebarHeader, "feat/one")
 
-	// openFromSessionRow right-clicks the worktree session's row, labelled by
-	// its branch, and takes its worktree row. The dialog names the session's
-	// repository, which is what the row's carry resolved to.
 	openFromSessionRow := func() {
 		t.Helper()
 		col, row := findOnScreen(t, term, "feat/one")
@@ -271,8 +246,6 @@ printf '%s|%s|%s|%s|%s|%s\n' "$TUIOS_EVENT" "$TUIOS_SESSION_ID" "$TUIOS_WORKTREE
 		}
 	}
 
-	// Enter on an empty branch is the dialog's own refusal: it stays open and
-	// says what is missing, and the daemon is never asked.
 	openFromSessionRow()
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("submit the empty dialog: %v", err)
@@ -282,9 +255,6 @@ printf '%s|%s|%s|%s|%s|%s\n' "$TUIOS_EVENT" "$TUIOS_SESSION_ID" "$TUIOS_WORKTREE
 	}
 	saveFrame(t, term, "rail-worktree-empty-branch")
 
-	// A branch already checked out in the CLI-made worktree is the daemon's
-	// refusal. The dialog has closed by then, so the notification is the only
-	// place it shows, and it has to say the create is the step that failed.
 	if err := term.SendKeys("feat/one"); err != nil {
 		t.Fatalf("type the taken branch: %v", err)
 	}
@@ -296,7 +266,6 @@ printf '%s|%s|%s|%s|%s|%s\n' "$TUIOS_EVENT" "$TUIOS_SESSION_ID" "$TUIOS_WORKTREE
 	}
 	saveFrame(t, term, "rail-worktree-daemon-refusal")
 
-	// Esc closes the dialog without asking the daemon anything.
 	openFromSessionRow()
 	if err := term.SendKeys("feat/esc"); err != nil {
 		t.Fatalf("type a branch: %v", err)
@@ -313,8 +282,6 @@ printf '%s|%s|%s|%s|%s|%s\n' "$TUIOS_EVENT" "$TUIOS_SESSION_ID" "$TUIOS_WORKTREE
 		t.Errorf("a cancelled dialog left a worktree on disk: %v", err)
 	}
 
-	// The key from the plain session's pane, which is in no repository: a
-	// message, and no dialog.
 	leaderKey(t, term, "U")
 	if err := term.WaitForText("This pane is not in a git repository.", uiTimeout); err != nil {
 		t.Fatalf("the key did not say the pane is in no repository: %v\n%s", err, term.Snapshot())
@@ -324,9 +291,6 @@ printf '%s|%s|%s|%s|%s|%s\n' "$TUIOS_EVENT" "$TUIOS_SESSION_ID" "$TUIOS_WORKTREE
 	}
 	saveFrame(t, term, "worktree-key-no-repo")
 
-	// A pane in a subfolder of the repository: the key finds the repository
-	// from any folder in it, not only from its top. The new pane takes the
-	// focus, so the key acts on it.
 	sub := filepath.Join(repo, "sub")
 	if err := os.Mkdir(sub, 0o755); err != nil {
 		t.Fatalf("make a subfolder in the repository: %v", err)
@@ -352,8 +316,6 @@ printf '%s|%s|%s|%s|%s|%s\n' "$TUIOS_EVENT" "$TUIOS_SESSION_ID" "$TUIOS_WORKTREE
 		t.Fatalf("submit the dialog: %v", err)
 	}
 
-	// The daemon made the session, the client is attached to it, and the rail
-	// shows it as the current row under the repository's group.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		got := attachedSessions(base)
 		return len(got) == 1 && got[0] == "repo-feat-key"
@@ -373,8 +335,6 @@ printf '%s|%s|%s|%s|%s|%s\n' "$TUIOS_EVENT" "$TUIOS_SESSION_ID" "$TUIOS_WORKTREE
 	saveFrame(t, term, "worktree-key-created")
 	wantHook("repo-feat-key", "feat/key", "1")
 
-	// A hook that fails keeps the worktree and the session, and the rail
-	// leads with the hook's exit and the end of its stderr.
 	leaderKey(t, term, "U")
 	if err := term.WaitForText("Worktree of repo", uiTimeout); err != nil {
 		t.Fatalf("the key did not open the dialog: %v\n%s", err, term.Snapshot())
@@ -389,8 +349,6 @@ printf '%s|%s|%s|%s|%s|%s\n' "$TUIOS_EVENT" "$TUIOS_SESSION_ID" "$TUIOS_WORKTREE
 		t.Fatalf("the dock did not say the hook failed: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "worktree-hook-failed")
-	// The dock cuts the message, and a click on it shows the whole of it,
-	// which ends with the last line the hook wrote to stderr.
 	col, row := findOnScreen(t, term, "The after-new-worktree hook")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	if err := term.WaitForText(".env: no such file", uiTimeout); err != nil {

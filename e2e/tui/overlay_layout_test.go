@@ -7,16 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The layout of the overlays that list keys and commands: the command palette
-// under category headers, the which-key menu in sections and columns, key-hint
-// footers that shorten rather than wrap, and empty states that say why a list
-// is empty in the middle of it.
-//
-// Every step saves the frame as text, styled text and a PNG drawn by tuios's
-// own renderer (tuios.dev/shot), at 120x40 and 80x24, on a dark terminal and
-// under a light theme, and at 256 and 16 colours at 120x40.
-
-// overlayLayoutRun is one terminal the layouts are drawn in.
 type overlayLayoutRun struct {
 	name       string
 	cols, rows int
@@ -46,8 +36,6 @@ func overlayLayoutRuns() []overlayLayoutRun {
 	return runs
 }
 
-// span is the cells [from, to) of line, padded with blanks: a screen line
-// comes back with its trailing blanks trimmed.
 func span(line string, from, to int) string {
 	r := []rune(line)
 	for len(r) < to {
@@ -56,8 +44,6 @@ func span(line string, from, to int) string {
 	return string(r[from:to])
 }
 
-// runeCol is the cell column of the first needle in line, or -1. The overlays
-// here draw only single-width glyphs, so a rune is a cell.
 func runeCol(line, needle string) int {
 	before, _, ok := strings.Cut(line, needle)
 	if !ok {
@@ -130,26 +116,22 @@ func TestOverlayLayouts(t *testing.T) {
 				savePNG(t, term.Screen(), host, dir, name)
 			}
 
-			// The palette with nothing typed.
 			sendKeys(t, term, legacyCtrlP)
 			waitScreen(t, term, "the palette never opened", paletteTitle, "Run a program")
 			shot("palette-grouped")
 			checkPaletteGrouped(t, term)
 
-			// Filtering.
 			sendKeys(t, term, "w", "i", "n")
 			waitScreen(t, term, "the palette never filtered", "› win", "Navigation")
 			shot("palette-filtered")
 			checkPaletteFiltered(t, term)
 
-			// Nothing matches.
 			sendKeys(t, term, "q", "q", "q")
 			waitScreen(t, term, "the palette never emptied", "No matching commands")
 			shot("palette-empty")
 			checkCentredEmpty(t, term, "No matching commands", "esc close")
 			closePalette(t, term, "after the empty state")
 
-			// Which-key.
 			sendKeys(t, term, tuitest.Ctrl('b'))
 			waitScreen(t, term, "which-key never drew", "prefix", "Workspace", "Help")
 			shot("which-key")
@@ -161,8 +143,6 @@ func TestOverlayLayouts(t *testing.T) {
 			sendKeys(t, term, tuitest.Esc)
 			waitGone(t, term, "which-key", "Equalize splits")
 
-			// An empty list overlay: go-to on the sessions with a name nothing
-			// has, which says enter makes it.
 			sendKeys(t, term, tuitest.Ctrl('b'), "S")
 			waitScreen(t, term, "go-to never opened on the sessions", "Go to", "e2e-layout")
 			sendKeys(t, term, "q", "q", "q", "q")
@@ -176,7 +156,6 @@ func TestOverlayLayouts(t *testing.T) {
 	}
 }
 
-// paletteBody is the palette's body edge and its first list row.
 func paletteBody(t *testing.T, term *tuitest.Terminal) (s tuitest.Screen, left, right, first, last int) {
 	t.Helper()
 	s = term.Screen()
@@ -216,10 +195,9 @@ func checkPaletteGrouped(t *testing.T, term *tuitest.Terminal) {
 			t.Errorf("row %d carries a bracketed tag: %q\n%s", y, row, term.Snapshot())
 		}
 		if !strings.HasPrefix(row, " ") {
-			headers++ // a header starts at the edge
+			headers++
 			continue
 		}
-		// A command: the marker cells, then the name on the third cell.
 		r := []rune(row)
 		if len(r) < 3 || r[2] == ' ' {
 			t.Errorf("row %d does not start its name on the name column: %q\n%s", y, row, term.Snapshot())
@@ -255,8 +233,6 @@ func checkPaletteFiltered(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// checkCentredEmpty holds an empty state to its layout: the message centred
-// between the panel's rule ends, and the hint under it, centred too.
 func checkCentredEmpty(t *testing.T, term *tuitest.Terminal, message, hint string) {
 	t.Helper()
 	s := term.Screen()
@@ -264,8 +240,6 @@ func checkCentredEmpty(t *testing.T, term *tuitest.Terminal, message, hint strin
 	if y < 0 {
 		t.Fatalf("no %q on screen\n%s", message, term.Snapshot())
 	}
-	// The panel's width is its footer rule's, the longest run of rule glyphs
-	// below the message.
 	_, rows := s.Size()
 	left, width := -1, 0
 	for r := y; r < rows; r++ {
@@ -310,8 +284,6 @@ func checkWhichKey(t *testing.T, term *tuitest.Terminal, wide bool) {
 	if strings.Contains(text, " more") {
 		t.Errorf("which-key left keys out\n%s", term.Snapshot())
 	}
-	// A submenu's label lines up with the other labels, and the chevron the
-	// cursor uses marks it at the right of its column.
 	for _, sub := range []string{"Workspace", "Minimize", "Window", "Layout", "Tape", "Debug"} {
 		marked := false
 		_, rows := s.Size()
@@ -337,8 +309,6 @@ func checkWhichKey(t *testing.T, term *tuitest.Terminal, wide bool) {
 			}
 		}
 	}
-	// The key lines run from two rows under the title to the last row
-	// holding a known entry.
 	height := bottom - (top + 2)
 	if wide && height > 16 {
 		t.Errorf("which-key takes %d rows at 120 columns, want at most 16\n%s", height, term.Snapshot())
@@ -359,18 +329,8 @@ func checkWhichKey(t *testing.T, term *tuitest.Terminal, wide bool) {
 	}
 }
 
-// lightSlots are the slots that are light in xterm's defaults and in nearly
-// every theme's palette.
 var lightSlots = map[uint8]bool{2: true, 3: true, 6: true, 7: true, 10: true, 11: true, 14: true, 15: true}
 
-// checkSlotInk fails on text in a light slot drawn on a light slot's ground at
-// 16 colours. Neither colour is known to tuios there, so a chip on a light slot
-// has to take the dark ink: the armed-leader chip on slot 3 took slot 15, which
-// a light theme paints close to its own ground. The chip is the dock's mode
-// pill with the keyboard icon (appearance.dock_prefix_indicator = "pill").
-//
-// How this could pass wrongly: the chip could be missing from the frame, so
-// the check first requires the pill's icon on a slot ground.
 func checkSlotInk(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	s := term.Screen()
@@ -398,9 +358,6 @@ func checkSlotInk(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// checkWhichKeyFramed holds the which-key panel to a frame at 16 colours: the
-// row above its title has a top-left corner two cells left of the title, and
-// the title row has the left wall there.
 func checkWhichKeyFramed(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	s := term.Screen()
@@ -448,8 +405,6 @@ func TestHintFootersShortenInTiers(t *testing.T) {
 		want, gone []string
 	}{
 		{cols: 50, want: []string{"^r rename", "esc close"}, gone: []string{"ctrl+", "^d"}},
-		// Narrower, a whole low-priority hint goes before any label does, and
-		// "esc close" always keeps its label: no key is left standing bare.
 		{cols: 44, want: []string{"@ # ! filter", "esc close"}, gone: []string{"ctrl+", "^d", "^r"}},
 		{cols: 40, want: []string{"@ # ! filter", "esc close"}, gone: []string{"ctrl+", "^d", "^r"}},
 	}
@@ -464,10 +419,7 @@ func TestHintFootersShortenInTiers(t *testing.T) {
 			if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
 				t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 			}
-			// The prefix works from either mode, and the status line that says
-			// which mode is in force does not fit on a screen this narrow.
 			sendKeys(t, term, tuitest.Ctrl('b'), "S")
-			// At 40 columns the row cuts the name to "e2e-hi…".
 			waitScreen(t, term, "go-to never opened on the sessions", "Go to", "e2e-hi", "esc close")
 			if err := term.WaitStable(uiTimeout); err != nil {
 				t.Fatalf("the screen never settled: %v", err)
@@ -478,7 +430,6 @@ func TestHintFootersShortenInTiers(t *testing.T) {
 			savePNG(t, s, hostPalette(t, ""), dir, "switcher")
 
 			y := rowWith(s, "esc close")
-			// The footer is the last row holding "esc close".
 			_, rows := s.Size()
 			for r := rows - 1; r > y; r-- {
 				if strings.Contains(s.Line(r), "esc close") {

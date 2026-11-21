@@ -13,42 +13,15 @@ import (
 	"tuios.dev/shot"
 )
 
-// The copies between machines in the TUI: the dock item, the mark on the
-// machine's rail row, the Copies panel, the question a file that is there
-// asks, the send from the rail's files list, and a dropped file on a pane on
-// another machine.
-//
-// Each test runs a real client attached to a real hub daemon, linked to a
-// second daemon (build) over the ssh stand-in, and the copies run in the hub
-// as they do for a person. What would pass a weaker test and fail these:
-//   - A dock item drawn from a stale listing: the bar has to move while the
-//     bytes move, and leave after the copy ends.
-//   - An item drawn when no copy exists: the frame before the first copy is
-//     read for the bar and the panel's rows.
-//   - A pause that only changed the row's word: the daemon's byte count is
-//     read twice while paused.
-//   - A keep-both answer sent as replace: the file there is read back, and
-//     the copy has to be next to it under "name (from HOST).ext".
-//   - A drop that reached a local pane: the same paste into a pane on this
-//     machine has to arrive as the text it was.
-
-// dockBarRe is the dock's bar for one copy: six cells and a percent. The
-// panel's bar is ten cells, so it never matches.
 var dockBarRe = regexp.MustCompile(`\[[#-]{6}\] +(\d+)%`)
 
-// railMarkRe is the mark on a machine's rail row.
 var railMarkRe = regexp.MustCompile(`(→|->) (\d+)%`)
 
-// copiesMachines starts build's daemon and a client on this machine attached
-// to a new session, whose daemon links to build through a stand-in ssh that
-// passes build's bytes at rate. Build lets a link write in its own root.
 func copiesMachines(t *testing.T, rate int, env ...string) (base, remote string, term *tuitest.Terminal) {
 	t.Helper()
 	return copiesMachinesConf(t, rate, "", env...)
 }
 
-// copiesMachinesConf is copiesMachines with more lines in this machine's
-// config.toml, such as keys bound again.
 func copiesMachinesConf(t *testing.T, rate int, conf string, env ...string) (base, remote string, term *tuitest.Terminal) {
 	t.Helper()
 	base = t.TempDir()
@@ -79,7 +52,6 @@ func copiesMachinesConf(t *testing.T, rate int, conf string, env ...string) (bas
 	return base, remote, term
 }
 
-// copiesFrame saves the screen as a PNG and as text under TUIOS_E2E_FRAMES.
 func copiesFrame(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	saveFrame(t, term, name)
@@ -88,7 +60,6 @@ func copiesFrame(t *testing.T, term *tuitest.Terminal, name string) {
 	}
 }
 
-// openCopies opens the Copies panel with the prefix chord.
 func openCopies(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Ctrl('b'), "u"); err != nil {
@@ -99,7 +70,6 @@ func openCopies(t *testing.T, term *tuitest.Terminal) {
 	}
 }
 
-// dockPercent is the percent the dock's bar shows, or -1.
 func dockPercent(s tuitest.Screen) int {
 	m := dockBarRe.FindStringSubmatch(s.Text())
 	if m == nil {
@@ -109,7 +79,6 @@ func dockPercent(s tuitest.Screen) int {
 	return n
 }
 
-// startHubCopy starts a copy in the hub's daemon and returns its id.
 func startHubCopy(t *testing.T, base string, params map[string]any) string {
 	t.Helper()
 	var row transferRow
@@ -120,7 +89,6 @@ func startHubCopy(t *testing.T, base string, params map[string]any) string {
 	return row.ID
 }
 
-// waitTransferState polls the hub until the copy is in state.
 func waitTransferState(t *testing.T, base, id, state string, timeout time.Duration) transferRow {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -144,7 +112,6 @@ func waitTransferState(t *testing.T, base, id, state string, timeout time.Durati
 func TestCopiesShowInTheDockRailAndPanel(t *testing.T) {
 	base, remote, term := copiesMachines(t, 64<<20)
 
-	// Nothing before the first copy.
 	if s := term.Screen().Text(); dockBarRe.MatchString(s) || railMarkRe.MatchString(s) || strings.Contains(s, "copies") {
 		t.Fatalf("ASSERTION: a copy element is drawn while no copy exists:\n%s", term.Snapshot())
 	}
@@ -177,7 +144,6 @@ func TestCopiesShowInTheDockRailAndPanel(t *testing.T) {
 		"rate_limit": 1 << 20,
 	})
 
-	// The bar moves.
 	first := -1
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		first = dockPercent(s)
@@ -193,7 +159,6 @@ func TestCopiesShowInTheDockRailAndPanel(t *testing.T) {
 	}
 	copiesFrame(t, term, "copies-dock-running")
 
-	// The panel lists it, and p pauses the bytes.
 	openCopies(t, term)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return containsAll(s.Text(), "big.bin", strings.TrimSuffix(thisMachineRow(), " (this machine)")+" -> build")
@@ -222,7 +187,6 @@ func TestCopiesShowInTheDockRailAndPanel(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A cut link: the dock says waiting.
 	if n := cutSlowLink(t, base); n == 0 {
 		t.Fatalf("no link to cut")
 	}
@@ -233,7 +197,6 @@ func TestCopiesShowInTheDockRailAndPanel(t *testing.T) {
 	}
 	copiesFrame(t, term, "copies-dock-waiting")
 
-	// It ends checked, and the dock says so.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "Copied big.bin to build. Checked.")
 	}, 90*time.Second); err != nil {
@@ -245,9 +208,6 @@ func TestCopiesShowInTheDockRailAndPanel(t *testing.T) {
 	}
 	copiesFrame(t, term, "copies-dock-done")
 
-	// Once the notice is gone the item says done, and then it and the mark
-	// leave on their own. The notice holds the dock's right end while it is
-	// up, so the item is read after it.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "] done")
 	}, 15*time.Second); err != nil {
@@ -340,8 +300,6 @@ func TestCopiesReadAtLowColour(t *testing.T) {
 				"src": map[string]any{"path": src}, "dst": map[string]any{"host": "build", "path": filepath.Join(remote, "slow.bin")},
 				"rate_limit": 256 << 10,
 			})
-			// Far enough that the bar has filled cells: with no colour, the
-			// filled cells are what says how far the copy is.
 			if err := term.WaitFor(func(s tuitest.Screen) bool { return dockPercent(s) >= 20 }, 3*uiTimeout); err != nil {
 				t.Fatalf("ASSERTION: no dock bar at %s colours: %v\n%s", depth.name, err, term.Snapshot())
 			}
@@ -412,7 +370,6 @@ func TestSendFromTheRailFilesList(t *testing.T) {
 		t.Fatalf("ASSERTION: the folder field is not filled with the receive folder: %v\n%s", err, term.Snapshot())
 	}
 	copiesFrame(t, term, "copies-send-folder")
-	// A folder in build's own root, not the person's Downloads.
 	to := filepath.Join(remote, "inbox")
 	if err := term.SendKeys(tuitest.Ctrl('u')); err != nil {
 		t.Fatal(err)
@@ -450,7 +407,6 @@ func TestADroppedFileOnAFarPaneIsSent(t *testing.T) {
 	}
 	quoted := "'" + src + "' "
 
-	// A pane on this machine: the paste is the text.
 	if out, err := tuiosCLI(t, base, "new-window", "near", "-s", "home"); err != nil {
 		t.Fatalf("create a window: %v\n%s", err, out)
 	}
@@ -477,7 +433,6 @@ func TestADroppedFileOnAFarPaneIsSent(t *testing.T) {
 	}
 	leaveTerminalMode(t, term)
 
-	// A pane on build: tuios asks.
 	if out, err := tuiosCLI(t, base, "new-window", "faraway", "-s", "home", "--host", "build"); err != nil {
 		t.Fatalf("create a window on build: %v\n%s", err, out)
 	}
@@ -596,7 +551,6 @@ func TestCopiesLeaveThePanelWhenCleared(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("the panel does not list the copy: %v\n%s", err, term.Snapshot())
 	}
-	// Nothing lists the copies here: the panel must hear the expiry itself.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return !strings.Contains(s.Text(), "expired.txt") && strings.Contains(s.Text(), "No copies.")
 	}, 40*time.Second); err != nil {

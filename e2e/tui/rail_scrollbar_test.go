@@ -39,37 +39,26 @@ import (
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Rail scrollbar on
 // overflowing sections").
 
-// railScrollTitle is the custom section's heading, a word nothing else on the
-// screen prints.
 const railScrollTitle = "scrollfeed"
 
-// railScrollFeed is a custom section of 70 rows, each long enough to be cut
-// at the rail's width. Its share gives it 8 lines on a 120x40 screen.
 func railScrollFeed(position string) string {
 	return "[appearance.sidebar]\nenabled = true\nposition = \"" + position + "\"\nwidth = 28\n" +
 		"sections = \"sessions,custom:25\"\n\n[appearance.sidebar.custom]\ntitle = \"" + railScrollTitle + "\"\n" +
 		"command = \"i=1; while [ $i -le 70 ]; do printf 'FEED-%02d-abcdefghijklmnopqrstuvwxyz\\\\n' $i; i=$((i+1)); done\"\n"
 }
 
-// railBar is how a test reads one rail: the edge rule's column, where the
-// thumb is drawn, and the columns of the rail's content.
 type railBar struct {
-	col    int // the edge rule's column, the thumb's
-	cut    int // the last content column, where a cut row's ellipsis sits
-	x0, x1 int // the rail's columns, the edge rule included
+	col    int
+	cut    int
+	x0, x1 int
 	thumb  string
-	rule   string // the edge rule's glyph, on the lines with no thumb
+	rule   string
 }
 
-// leftRailBar reads a 28-column rail on the left: the content is columns 0
-// to 26 and the edge rule 27.
 func leftRailBar(thumb string) railBar {
 	return railBar{col: railWidth - 1, cut: railWidth - 2, x0: 0, x1: railWidth, thumb: thumb, rule: "│"}
 }
 
-// rightRailBar reads a 28-column rail on the right of a cols-wide screen:
-// the edge rule faces the panes, so it is the rail's first column and the
-// content ends at the screen's last.
 func rightRailBar(cols int, thumb string) railBar {
 	return railBar{col: cols - railWidth, cut: cols - 1, x0: cols - railWidth, x1: cols, thumb: thumb, rule: "│"}
 }
@@ -79,8 +68,6 @@ func (b railBar) line(s tuitest.Screen, row int) string {
 	return string(runes[min(b.x0, len(runes)):min(b.x1, len(runes))])
 }
 
-// header is the screen row whose rail text starts with label, or -1. The
-// text starts after the edge rule on a right rail.
 func (b railBar) header(s tuitest.Screen, label string) int {
 	_, rows := s.Size()
 	for r := range rows {
@@ -91,9 +78,6 @@ func (b railBar) header(s tuitest.Screen, label string) int {
 	return -1
 }
 
-// cells is the thumb's column on the lines of the section under a header,
-// one entry per line. A line is the section's while it carries the row mark,
-// a text every row of the fixture's section holds, or a "+N".
 func (b railBar) cells(s tuitest.Screen, header, rowMark string) (top int, cells []string) {
 	top = b.header(s, header) + 1
 	_, rows := s.Size()
@@ -106,8 +90,6 @@ func (b railBar) cells(s tuitest.Screen, header, rowMark string) (top int, cells
 	return top, cells
 }
 
-// state is where the thumb is: "top", "middle", "bottom", or a description
-// of what is wrong with the column.
 func (b railBar) state(s tuitest.Screen, header, rowMark string) string {
 	top, cells := b.cells(s, header, rowMark)
 	if len(cells) < 2 {
@@ -141,7 +123,6 @@ func (b railBar) state(s tuitest.Screen, header, rowMark string) string {
 	return fmt.Sprintf("thumb on lines %d to %d of %d, +N on the last line %v", first, end-1, len(cells), plusLine)
 }
 
-// waitBarState waits for the thumb to reach want and saves the screen.
 func waitBarState(t *testing.T, term *tuitest.Terminal, b railBar, header, rowMark, want, dir, name string) tuitest.Screen {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return b.state(s, header, rowMark) == want }, uiTimeout); err != nil {
@@ -151,9 +132,6 @@ func waitBarState(t *testing.T, term *tuitest.Terminal, b railBar, header, rowMa
 	return term.Screen()
 }
 
-// rowsKeepTheirWidth checks that the thumb takes no column from the rows: a cut row's
-// ellipsis sits in the rail's last content column, and the "+N" line has a
-// blank there.
 func rowsKeepTheirWidth(t *testing.T, term *tuitest.Terminal, s tuitest.Screen, b railBar, header, rowMark string) {
 	t.Helper()
 	top, cells := b.cells(s, header, rowMark)
@@ -253,9 +231,6 @@ func TestRailScrollbarOnAPeek(t *testing.T) {
 		t.Fatalf("the sessions section never listed the other session:\n%s", term.Snapshot())
 	}
 	moveMouse(t, term, b.x0+5, row)
-	// window says what is wrong with the peek's window, or "" when its rows
-	// are the peeked list's first, its last line owns up to exactly the rest,
-	// and its thumb is at the top.
 	window := func(s tuitest.Screen) string {
 		top, cells := b.cells(s, "terminals", "peek")
 		if len(cells) < 2 {
@@ -291,8 +266,6 @@ func TestRailScrollbarOnAPeek(t *testing.T) {
 	alive(t, term, "after peeking a scrolled terminals section")
 }
 
-// openPanes names the session's first pane and opens n more, so every row of
-// its terminals section carries "pane".
 func openPanes(t *testing.T, base, session string, n int) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "set-window", "-s", session, "--name", "pane-first"); err != nil {
@@ -305,9 +278,6 @@ func openPanes(t *testing.T, base, session string, n int) {
 	}
 }
 
-// railBarWalk wheels one section from its top to its bottom and back,
-// asserting the thumb at each stop. cut says whether the section's rows are
-// long enough to be cut, which is what the full width is checked on.
 func railBarWalk(t *testing.T, term *tuitest.Terminal, b railBar, header, rowMark string, cut bool) {
 	t.Helper()
 	dir := artifactDir(t)
@@ -398,8 +368,6 @@ func TestRailScrollbarDepthsAndASCII(t *testing.T) {
 		b.rule = "|"
 		railBarEnds(t, term, b)
 	})
-	// A thick border draws its rule as the thumb's own glyph, so the thumb
-	// is a full block there, or it would not show at all.
 	t.Run("thick-border", func(t *testing.T) {
 		term, _ := railClient(t, "bar", "[appearance]\nborder_style = \"thick\"\n"+railScrollFeed("left"), startOpts{cols: 120, rows: 40})
 		b := leftRailBar("█")
@@ -408,7 +376,6 @@ func TestRailScrollbarDepthsAndASCII(t *testing.T) {
 	})
 }
 
-// railBarEnds asserts the top and the bottom of the custom section.
 func railBarEnds(t *testing.T, term *tuitest.Terminal, b railBar) {
 	t.Helper()
 	dir := artifactDir(t)

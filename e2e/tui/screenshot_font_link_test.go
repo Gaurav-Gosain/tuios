@@ -52,9 +52,6 @@ func TestScreenshotFindsFontsInALinkedFontsFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The reference capture names the font file itself, so it draws in the
-	// font whatever the index finds. A capture through the linked folder that
-	// found the font is the same picture, pixel for pixel.
 	refBase := t.TempDir()
 	refHome := filepath.Join(refBase, "home")
 	if err := os.MkdirAll(refHome, 0o755); err != nil {
@@ -74,12 +71,9 @@ func TestScreenshotFindsFontsInALinkedFontsFolder(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(store, "nerd", filepath.Base(regular)), data, 0o644); err != nil {
 				t.Fatal(err)
 			}
-			// A loop: a folder that links back to the store above it.
 			if err := os.Symlink(store, filepath.Join(store, "nerd", "again")); err != nil {
 				t.Fatal(err)
 			}
-			// The places the index reads on each system: the home's
-			// Library/Fonts on macOS, XDG_DATA_HOME/fonts elsewhere.
 			for _, dir := range []string{
 				filepath.Join(home, "Library", "Fonts"),
 				filepath.Join(xdgDir(base, "XDG_DATA_HOME"), "fonts"),
@@ -113,9 +107,6 @@ func TestScreenshotFindsFontsInALinkedFontsFolder(t *testing.T) {
 	}
 }
 
-// captureIcon starts a session under base, prints a line with a Nerd Font
-// icon in it, holds the screen still, and saves a capture of it as name. It
-// returns the path of the PNG.
 func captureIcon(t *testing.T, base string, env []string, name string) string {
 	t.Helper()
 	const session = "e2e-fontlink"
@@ -123,8 +114,6 @@ func captureIcon(t *testing.T, base string, env []string, name string) string {
 	if out, err := tuiosCLIEnv(t, base, env, "new", session, "--detach"); err != nil {
 		t.Fatalf("create the session: %v\n%s", err, out)
 	}
-	// sleep keeps the prompt off the screen, so the two captures hold the
-	// same cells whatever each shell's prompt is.
 	if out, err := tuiosCLIEnv(t, base, env, "send-keys", "-s", session, "-l",
 		"clear; printf 'icon \\356\\202\\240 here\\n'; sleep 600\r"); err != nil {
 		t.Fatalf("print the icon: %v\n%s", err, out)
@@ -148,8 +137,6 @@ func captureIcon(t *testing.T, base string, env []string, name string) string {
 	return out
 }
 
-// differentPixels counts the pixels two PNGs do not share, and counts all
-// of both when they are not one size.
 func differentPixels(t *testing.T, a, b string) int {
 	t.Helper()
 	decode := func(path string) image.Image {
@@ -165,8 +152,6 @@ func differentPixels(t *testing.T, a, b string) int {
 	}
 	ia, ib := decode(a), decode(b)
 	if ia.Bounds() != ib.Bounds() {
-		// Another face has other cell metrics, so the picture is another
-		// size: every pixel is a different one.
 		return ia.Bounds().Dx()*ia.Bounds().Dy() + ib.Bounds().Dx()*ib.Bounds().Dy()
 	}
 	diff := 0

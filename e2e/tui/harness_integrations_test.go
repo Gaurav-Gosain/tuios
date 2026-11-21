@@ -22,15 +22,6 @@ import (
 	"github.com/charmbracelet/x/xpty"
 )
 
-// The harness integrations, end to end: the real tuios agent-hook, the real
-// plugins run by node against a stand-in for the harness's plugin API, a
-// stand-in Crush that speaks herdr's protocol the way Crush does, and a
-// stand-in Codex that chooses OSC 9 or the bell the way Codex does, each
-// against a real daemon, with a real client attached where the result is
-// something a person sees. Every test writes what the pane went through to a
-// log under TUIOS_E2E_FRAMES, beside the frames it saves.
-
-// agentStateJSON is what get-agent-state --json says about a pane.
 type agentStateJSON struct {
 	State        string `json:"state"`
 	Message      string `json:"message"`
@@ -41,7 +32,6 @@ type agentStateJSON struct {
 	Reason       string `json:"reason"`
 }
 
-// readAgentState reads a pane's agent state, the zero value when it cannot.
 func readAgentState(t *testing.T, base, session, window string) agentStateJSON {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "get-agent-state", "--json", "-s", session, "-w", window)
@@ -52,8 +42,6 @@ func readAgentState(t *testing.T, base, session, window string) agentStateJSON {
 	return st
 }
 
-// stateLog is the artifact a test leaves: every state it waited for, and what
-// the pane said when it got there.
 type stateLog struct {
 	name  string
 	lines []string
@@ -63,7 +51,6 @@ func (l *stateLog) add(format string, args ...any) {
 	l.lines = append(l.lines, fmt.Sprintf(format, args...))
 }
 
-// save writes the log beside the frames, when frames are kept.
 func (l *stateLog) save(t *testing.T) {
 	t.Helper()
 	dir := os.Getenv("TUIOS_E2E_FRAMES")
@@ -75,8 +62,6 @@ func (l *stateLog) save(t *testing.T) {
 	}
 }
 
-// waitAgentState polls until the pane is in state, with harness when it is
-// not empty, and logs what it saw.
 func waitAgentState(t *testing.T, base, session, window, state, harness string, log *stateLog, step string) agentStateJSON {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -94,8 +79,6 @@ func waitAgentState(t *testing.T, base, session, window, state, harness string, 
 	}
 }
 
-// runHook runs the real hook for harness with payload, for a pane named on
-// the command line, and returns what it printed.
 func runHook(t *testing.T, base, harness, session, window, payload string) string {
 	t.Helper()
 	cmd := exec.Command(tuiosBin, "agent-hook", harness, "--session", session, "--window", window)
@@ -113,8 +96,6 @@ func runHook(t *testing.T, base, harness, session, window, payload string) strin
 	return out.String()
 }
 
-// windowID is the id of the window named name: by the name it shows, which is
-// a rename's when it has one, or by its title.
 func windowID(t *testing.T, base, session, name string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "--json", "-s", session)
@@ -140,16 +121,11 @@ func windowID(t *testing.T, base, session, name string) string {
 	return ""
 }
 
-// agentSessions makes the detached session the agents run in, and a home
-// session with a client attached, which is where a person would be looking.
-// env is layered over the client's environment.
 func agentSessions(t *testing.T, env ...string) (*tuitest.Terminal, string) {
 	t.Helper()
 	return agentSessionsWith(t, "", env...)
 }
 
-// agentSessionsWith is agentSessions with config.toml written first, when cfg
-// is not empty, so the daemon reads it as it starts.
 func agentSessionsWith(t *testing.T, cfg string, env ...string) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -190,9 +166,7 @@ func TestHookIntegrationsReportTheTurn(t *testing.T) {
 	term, base := agentSessionsWith(t, "[appearance.sidebar]\nenabled = true\nsections = \"sessions,agents\"\n\n[agents]\nsilent_after = \"4s\"\n")
 	type step struct {
 		name, payload, state string
-		// silent waits after the step for the pane to go silent, and saves
-		// a frame of its row.
-		silent bool
+		silent               bool
 	}
 	cases := []struct {
 		harness string
@@ -244,10 +218,6 @@ func TestHookIntegrationsReportTheTurn(t *testing.T) {
 	alive(t, term, "after three harnesses' turns")
 }
 
-// waitSilent waits for a working pane to go silent: get-agent-state says
-// unknown with the reason silent and the rail row says it has no report.
-// The state underneath stays working, which the step after it checks by the
-// report that brings the pane back.
 func waitSilent(t *testing.T, term *tuitest.Terminal, base, win string, log *stateLog, step string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -324,9 +294,6 @@ func TestCodexSharedServerKeepsAnotherConversationOffThePane(t *testing.T) {
 		out, _ := tuiosCLI(t, base, "list-attention")
 		return out
 	}
-	// refused checks a report from the other conversation changed nothing:
-	// the pane keeps its state and its conversation, and the other
-	// conversation's approval reaches neither the Inbox nor the dock.
 	refused := func(step, state string) {
 		t.Helper()
 		st := readAgentState(t, base, "e2e-agent", win)
@@ -353,10 +320,6 @@ func TestCodexSharedServerKeepsAnotherConversationOffThePane(t *testing.T) {
 	hook(foreignApproval)
 	refused("other PermissionRequest mid-turn", "working")
 
-	// #1183: with approvals_reviewer = "auto_review", Codex's own reviewer
-	// decides every PermissionRequest, so the pane stays working and nothing
-	// asks the person. The rollout's last turn_context says who reviews: after
-	// /approvals switches back to the person, the next request is an approval.
 	rollout := filepath.Join(t.TempDir(), "rollout.jsonl")
 	turnContext := func(reviewer string) string {
 		return `{"timestamp":"2026-10-26T09:00:00.000Z","type":"turn_context","payload":{"cwd":"/work","approval_policy":"on-request","approvals_reviewer":"` + reviewer + `","model":"gpt-5"}}` + "\n"
@@ -381,7 +344,6 @@ func TestCodexSharedServerKeepsAnotherConversationOffThePane(t *testing.T) {
 		`{"timestamp":"2026-10-26T09:00:01.000Z","type":"response_item","payload":{"type":"function_call_output","output":"{\"type\":\"turn_context\"}"}}`+"\n")
 	hook(`{"hook_event_name":"PreToolUse","session_id":"cx-pane","tool_name":"Bash","tool_input":{"command":"gh pr list"}}`)
 	hook(reviewed("gh pr list"))
-	// The report would land within a socket round trip; give it a moment.
 	time.Sleep(500 * time.Millisecond)
 	if st := readAgentState(t, base, "e2e-agent", win); st.State != "working" || st.AgentSession != "cx-pane" {
 		log.save(t)
@@ -411,7 +373,6 @@ func TestCodexSharedServerKeepsAnotherConversationOffThePane(t *testing.T) {
 	refused("other SessionStart after a compaction", "done")
 	saveFrame(t, term, "codex-shared-server-refused")
 
-	// A SessionStart looks like /resume in the pane, and takes it over.
 	start := func(session, source string) string {
 		return `{"hook_event_name":"SessionStart","session_id":"` + session + `","source":"` + source + `"}`
 	}
@@ -422,8 +383,6 @@ func TestCodexSharedServerKeepsAnotherConversationOffThePane(t *testing.T) {
 			t.Fatalf("%s: the SessionStart did not take the pane over: %+v", step, st)
 		}
 	}
-	// reclaim sends an approval from session and checks it lands: the pane
-	// is that conversation's, and the approval is in the Inbox and the dock.
 	reclaim := func(step, session, command string) {
 		t.Helper()
 		before := readAgentState(t, base, "e2e-agent", win)
@@ -434,9 +393,6 @@ func TestCodexSharedServerKeepsAnotherConversationOffThePane(t *testing.T) {
 		if out := inbox(); !strings.Contains(out, command) {
 			t.Fatalf("%s: the Inbox does not list the approval:\n%s", step, out)
 		}
-		// The dock announces a pane that turns blocked. A pane that was
-		// already blocked is not announced again, so only the Inbox is
-		// checked for it.
 		if before.State == "needs_input" {
 			return
 		}
@@ -452,22 +408,16 @@ func TestCodexSharedServerKeepsAnotherConversationOffThePane(t *testing.T) {
 	reclaim("pane PermissionRequest reclaims", "cx-pane", "go test ./...")
 	saveFrame(t, term, "codex-shared-server-reclaimed")
 
-	// Two SessionStarts from elsewhere in a row: the pane's own conversation
-	// is still in the guard's history, and its next approval takes it back.
 	takeover("other SessionStart again", "cx-quick", "resume")
 	takeover("third SessionStart", "cx-third", "startup")
 	reclaim("pane PermissionRequest after two takeovers", "cx-pane", "go test ./...")
 
-	// The other conversation takes the pane, /new in the pane makes cx-new,
-	// and the other conversation reports again and takes the pane back. The
-	// pane's new conversation must still reach the pane with its approval.
 	takeover("other SessionStart before /new", "cx-quick", "resume")
 	takeover("/new in the pane", "cx-new", "startup")
 	reclaim("other PermissionRequest after /new", "cx-quick", "rm -rf build")
 	reclaim("new conversation PermissionRequest", "cx-new", "make lint")
 	saveFrame(t, term, "codex-shared-server-after-new")
 
-	// A conversation that never sent a SessionStart is still refused.
 	hook(`{"hook_event_name":"PermissionRequest","session_id":"cx-stranger","tool_name":"Bash","tool_input":{"command":"curl example.invalid"}}`)
 	if st := readAgentState(t, base, "e2e-agent", win); st.AgentSession != "cx-new" || !strings.Contains(st.Message, "make lint") {
 		t.Fatalf("a conversation with no SessionStart took the pane: %+v", st)
@@ -477,8 +427,6 @@ func TestCodexSharedServerKeepsAnotherConversationOffThePane(t *testing.T) {
 	}
 	log.add("%-44s refused", "stranger PermissionRequest")
 
-	// codex exits and the pane is back at its shell: the guard forgets both
-	// conversations, so a report for another one is taken again.
 	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-agent", "-w", win, "\n"); err != nil {
 		t.Fatalf("stop the stand-in codex: %v\n%s", err, out)
 	}
@@ -571,7 +519,6 @@ func TestQwenApprovalFromTheInbox(t *testing.T) {
 	}
 	saveFrame(t, term, "qwen-approval-held")
 	time.Sleep(answerSettle)
-	// The key asks, and enter answers.
 	if err := term.SendKeys("1", tuitest.Enter); err != nil {
 		t.Fatalf("answer: %v", err)
 	}
@@ -603,21 +550,11 @@ func TestQwenApprovalFromTheInbox(t *testing.T) {
 	alive(t, term, "after answering a Qwen Code approval")
 }
 
-// pluginDriver loads a real plugin tuios installed, under node, with a
-// stand-in for the harness's plugin API, and emits the events the test writes
-// to it, one JSON line each. It runs in the pane, and the plugin runs the real
-// tuios agent-hook for every event, against the test's daemon, for the pane
-// named in the environment.
 type pluginDriver struct {
-	stdin io.WriteCloser
-	// outFile is what the driver prints, where it answers an event that
-	// carries an ack.
+	stdin   io.WriteCloser
 	outFile string
 }
 
-// pluginLoadDeadline is a failsafe, not a budget. The driver says when the
-// plugin has loaded, and the wait ends there; this only bounds a driver that
-// hangs without exiting.
 const pluginLoadDeadline = 60 * time.Second
 
 var (
@@ -626,16 +563,6 @@ var (
 	nodeErr  error
 )
 
-// realNode is the node binary itself, asked of node under the suite's own
-// environment, once.
-//
-// The node on PATH is often a version manager's shim (vite-plus, volta, asdf,
-// nvm's wrappers), and a shim keeps the runtime it hands out under HOME. Each
-// plugin runs with a HOME of its own, empty, so the shim installed a whole
-// Node into it before the plugin could load: about five seconds and 200 MB
-// per plugin on an idle machine, more under load, and the fixed wait for the
-// plugin ran out. process.execPath is the binary the shim ended up running,
-// which needs nothing from HOME.
 func realNode() (string, error) {
 	nodeOnce.Do(func() {
 		shim, err := exec.LookPath("node")
@@ -656,30 +583,20 @@ func realNode() (string, error) {
 	return nodePath, nodeErr
 }
 
-// startPlugin renders harness's plugin with tuios integration install and
-// starts it under the driver script, which knows each harness's API shape.
 func startPlugin(t *testing.T, base, harness, session, window string, reportCommand ...string) *pluginDriver {
 	t.Helper()
 	return startPluginWith(t, base, harness, session, window, nil, reportCommand...)
 }
 
-// startPluginWith is startPlugin with variables set for the driver alone, such
-// as TUIOS_SOCKET= to send every report through the report command rather
-// than the daemon's socket.
 func startPluginWith(t *testing.T, base, harness, session, window string, driverEnv []string, reportCommand ...string) *pluginDriver {
 	t.Helper()
 	return startPluginAs(t, base, harness, session, window, pluginRun{}, driverEnv, reportCommand...)
 }
 
-// pluginRun says how startPluginAs starts the driver.
 type pluginRun struct {
-	// name, when not empty, runs node under that name: a link to node
-	// called name. The process is then named name, as the harness's own
-	// binary is, and the agent detector takes the pane for that harness.
 	name string
 }
 
-// startPluginAs is startPluginWith with the driver started as run says.
 func startPluginAs(t *testing.T, base, harness, session, window string, run pluginRun, driverEnv []string, reportCommand ...string) *pluginDriver {
 	t.Helper()
 	if _, err := exec.LookPath("node"); err != nil {
@@ -732,10 +649,6 @@ func startPluginAs(t *testing.T, base, harness, session, window string, run plug
 			}
 		}
 	}
-	// The driver runs in the pane, the way a harness runs its plugins in the
-	// pane it was started in: the daemon takes a hook's report only from a
-	// harness on the pane's terminal or below its process. Events reach it
-	// through a fifo, and what it prints goes to a file.
 	driver, _ := filepath.Abs(filepath.Join("testdata", "plugindriver.mjs"))
 	dir := filepath.Join(base, "plugin-driver-"+harness)
 	mustMkdir(dir)
@@ -766,7 +679,6 @@ func startPluginAs(t *testing.T, base, harness, session, window string, run plug
 	}
 	opened := make(chan io.WriteCloser, 1)
 	go func() {
-		// Opening a fifo to write waits for its reader, the driver's shell.
 		if w, err := os.OpenFile(events, os.O_WRONLY, 0); err == nil {
 			opened <- w
 		}
@@ -811,7 +723,6 @@ func startPluginAs(t *testing.T, base, harness, session, window string, run plug
 	return d
 }
 
-// emit hands the plugin one event.
 func (d *pluginDriver) emit(t *testing.T, event map[string]any) {
 	t.Helper()
 	line, _ := json.Marshal(event)
@@ -820,9 +731,6 @@ func (d *pluginDriver) emit(t *testing.T, event map[string]any) {
 	}
 }
 
-// waitAck waits for the driver to print the ack an event carried. The driver
-// prints it after the plugin's handler for that event returned, so a handler
-// that waits on its own reports has finished by then.
 func (d *pluginDriver) waitAck(t *testing.T, ack string) {
 	t.Helper()
 	for end := time.Now().Add(uiTimeout); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
@@ -853,9 +761,6 @@ func TestOpenCodeV2PluginReportsOnlyItsSession(t *testing.T) {
 	if err := os.WriteFile(slow, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// The slow start is the report process's, so the plugin is kept off the
-	// daemon's socket. Over the socket each report waits for the daemon's
-	// answer before the next leaves, so the order holds by construction.
 	d := startPluginWith(t, base, "opencode-v2", "e2e-agent", win, []string{"TUIOS_SOCKET="}, slow)
 	log := &stateLog{name: "opencode-v2-session-isolation"}
 	steps := []struct {
@@ -877,7 +782,6 @@ func TestOpenCodeV2PluginReportsOnlyItsSession(t *testing.T) {
 	}
 	for _, step := range steps {
 		d.emit(t, map[string]any{"event": map[string]any{"type": step.typeName, "data": step.data}})
-		// Give ignored events a chance to arrive before asserting no change.
 		time.Sleep(200 * time.Millisecond)
 		st := waitAgentState(t, base, "e2e-agent", win, step.state, "opencode", log, step.typeName)
 		if st.AgentSession != "ses_e2e" {
@@ -1012,8 +916,6 @@ func TestPluginsReportBlockingPrompts(t *testing.T) {
 	alive(t, term, "after the plugins' prompts")
 }
 
-// buildFakeCrush builds the stand-in Crush as a program named crush, so a
-// pane that runs it runs "crush" the way a person would.
 func buildFakeCrush(t *testing.T) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "crush")
@@ -1073,8 +975,6 @@ func TestHerdrProtocolReportsACrushPane(t *testing.T) {
 	send("idle")
 	waitAgentState(t, base, "e2e-agent", win, "done", "crush", log, "idle after a turn, done")
 
-	// A report older than the last one is dropped without an error, as
-	// herdr drops it: the pane stays done.
 	send("stale")
 	time.Sleep(500 * time.Millisecond)
 	if st := readAgentState(t, base, "e2e-agent", win); st.State != "done" {
@@ -1091,8 +991,6 @@ func TestHerdrProtocolReportsACrushPane(t *testing.T) {
 	send("release")
 	waitAgentState(t, base, "e2e-agent", win, "none", "", log, "release, none")
 
-	// A shell pane is a herdr pane too by default, as in herdr, so a Crush
-	// started from a prompt reports.
 	if out, err := tuiosCLI(t, base, "new-window", "shell", "-s", "e2e-agent", "--no-focus"); err != nil {
 		t.Fatalf("new-window: %v\n%s", err, out)
 	}
@@ -1135,8 +1033,6 @@ func TestHerdrProtocolAlwaysTellsShellPanes(t *testing.T) {
 	if err := os.WriteFile(cfg, []byte("[agents]\nherdr_protocol = \"always\"\n"), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	// The daemon follows the file; wait for a pane made after the change to
-	// see it.
 	deadline := time.Now().Add(uiTimeout)
 	for i := 0; ; i++ {
 		name := "shell" + itoa(i)
@@ -1148,7 +1044,6 @@ func TestHerdrProtocolAlwaysTellsShellPanes(t *testing.T) {
 			t.Fatalf("send-text: %v\n%s", err, out)
 		}
 		out := waitCapture(t, base, "e2e-agent", name, "HE=")
-		// HERDR_PANE_ID is herdr's form, w<session>:p<window>.
 		if strings.Contains(out, "HE=1 HP=w") && strings.Contains(out, ":p"+strings.ReplaceAll(win, "-", "")[:12]) {
 			break
 		}
@@ -1162,8 +1057,6 @@ func TestHerdrProtocolAlwaysTellsShellPanes(t *testing.T) {
 	if err := os.WriteFile(cfg, []byte("[agents]\nherdr_protocol = \"off\"\n"), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	// The daemon follows the file; wait for a pane made after the change to
-	// see it.
 	deadline = time.Now().Add(uiTimeout)
 	for i := 0; ; i++ {
 		name := "crush" + itoa(i)
@@ -1181,7 +1074,6 @@ func TestHerdrProtocolAlwaysTellsShellPanes(t *testing.T) {
 	}
 }
 
-// firstLineWith is the first line of s that holds sub.
 func firstLineWith(s, sub string) string {
 	for line := range strings.SplitSeq(s, "\n") {
 		if strings.Contains(line, sub) {
@@ -1209,14 +1101,10 @@ func firstLineWith(s, sub string) string {
 // Codex too, the stand-in sees TUIOS and rings the bell instead, and the test
 // fails on the name the pane was told.
 func TestCodexPaneNotificationsArrive(t *testing.T) {
-	// The terminal the suite drives answers kitty graphics, so the client is
-	// told the host has neither protocol, which is the host this is about.
 	term, base := agentSessions(t, "TUIOS_KITTY_GRAPHICS=0", "TUIOS_SIXEL_GRAPHICS=0")
 	log := &stateLog{name: "codex-notification"}
 	dir := t.TempDir()
 	codex := filepath.Join(dir, "codex")
-	// supports_osc9 in codex-rs/tui/src/notifications/mod.rs, by the names
-	// codex-rs/terminal-detection maps TERM_PROGRAM to.
 	script := `#!/bin/sh
 echo "CODEX-SAW TERM_PROGRAM=$TERM_PROGRAM"
 read -r prompt
@@ -1293,7 +1181,6 @@ func TestGooseIsRecognisedWhereItsInstallerPutsIt(t *testing.T) {
 	win := windowID(t, base, "e2e-agent", "goose")
 	waitCapture(t, base, "e2e-agent", "goose", "fake goose started")
 	waitAgentState(t, base, "e2e-agent", win, "working", "goose", log, "recognised")
-	// The prompt comes after goose has started, as a tool call does.
 	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-agent", "-w", win, "ask\n"); err != nil {
 		t.Fatalf("send-text: %v\n%s", err, out)
 	}
@@ -1316,8 +1203,6 @@ func TestGooseIsRecognisedWhereItsInstallerPutsIt(t *testing.T) {
 		t.Fatalf("send-text: %v\n%s", err, out)
 	}
 	waitCapture(t, base, "e2e-agent", "migrate", "Goose would like to call the above tool")
-	// Several detector ticks, and long enough for the screen rules to have
-	// read the same prompt had the pane been goose.
 	time.Sleep(4 * time.Second)
 	st = readAgentState(t, base, "e2e-agent", other)
 	if st.Harness == "goose" || st.State != "none" {
@@ -1330,8 +1215,6 @@ func TestGooseIsRecognisedWhereItsInstallerPutsIt(t *testing.T) {
 	alive(t, term, "after the goose panes")
 }
 
-// fakeClaudePID is the pid of the fakeclaude running scenario, the process
-// the hook names as its harness.
 func fakeClaudePID(t *testing.T, scenario string) int {
 	t.Helper()
 	out, err := exec.Command("ps", "-axo", "pid=,command=").Output()
@@ -1406,8 +1289,6 @@ func fakeClaudePID(t *testing.T, scenario string) int {
 func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 	const cols, rows, width = 120, 36, 28
 	const railCol = cols - width
-	// No pid namespace reaches this pid (Linux caps pid_max at 2^22, macOS
-	// at 99999), so it stands for a process this machine cannot read.
 	const foreignPID = 2_000_000_000
 	sessionEnd := cc("", `"hook_event_name":"SessionEnd","reason":"prompt_input_exit"`)
 	fakeClaudeBin := filepath.Join(t.TempDir(), "claude")
@@ -1416,32 +1297,16 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 	}
 	fakeACP := buildFakeACP(t)
 	for _, tc := range []struct {
-		name string
-		end  string
-		// home is the session the client attaches to, "" for the agent's own.
-		home string
-		// typed types into the pane through the client, as the person does,
-		// so every keystroke is also a state push from the client.
-		typed bool
-		// note has a person leave a state on the pane once the agent has
-		// gone, which has to stay: only the harness's own claim lapses.
-		note bool
-		// foreign reports from outside the pane with a harness_pid this
-		// machine cannot read, and runs no stand-in.
-		foreign bool
-		// hostPID reports from outside the pane with a harness_pid that names
-		// a live process the reporter does not descend from, then ends that
-		// process, and runs no stand-in.
-		hostPID bool
-		// protocol starts a protocol pane on the scripted ACP agent, and a
-		// harness under it reports with its own pid and exits.
+		name     string
+		end      string
+		home     string
+		typed    bool
+		note     bool
+		foreign  bool
+		hostPID  bool
 		protocol bool
-		// outside reports from outside the running agent with its harness_pid
-		// and conversation, before the agent leaves.
-		outside bool
-		// late is a payload a process the agent leaves behind reports once
-		// the agent has exited.
-		late string
+		outside  bool
+		late     string
 	}{
 		{name: "session-end", end: sessionEnd},
 		{name: "session-end-typed", end: sessionEnd, typed: true},
@@ -1457,8 +1322,6 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			base := t.TempDir()
 			useShippedLooks(base)
-			// claude on PATH and run by that name, so the foreground-process
-			// detector takes it for Claude Code as it does the real one.
 			bin := filepath.Join(base, "bin")
 			if err := os.MkdirAll(bin, 0o755); err != nil {
 				t.Fatal(err)
@@ -1525,8 +1388,6 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 				out, _ := tuiosCLI(t, base, "list-agents", "-s", session, "--all", "--json")
 				return out
 			}
-			// Three detection ticks at the default interval, with the pane at
-			// its shell.
 			const ticks = 6 * time.Second
 
 			if tc.foreign {
@@ -1549,8 +1410,6 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 
 			if tc.hostPID {
 				win := windowID(t, base, session, "pilot")
-				// A process of this machine's that the reporter, tuios call
-				// below, does not descend from: its sibling.
 				host := exec.Command("sleep", "300")
 				if err := host.Start(); err != nil {
 					t.Fatalf("start the host process: %v", err)
@@ -1587,8 +1446,6 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 				}
 				win := windowID(t, base, session, "helper")
 				helperShown := func(s tuitest.Screen) bool { return railHasAgent(s, railCol, "helper") }
-				// The harness is the reporter itself: sh hands its pid to the
-				// tuios call it execs, which reports and exits.
 				format := fmt.Sprintf(`{"session":%q,"window":%q,"state":"working","harness":"acp","agent_session_id":"child-1","harness_pid":%%d}`, session, win)
 				report := exec.Command("/bin/sh", "-c", `exec "$0" call set-agent-state "$(printf "$1" "$$")"`, tuiosBin, format)
 				report.Dir = workDirIn(t, base)
@@ -1632,15 +1489,12 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 			typeLine("claude " + script + " " + scenario + " " + hookLog)
 			waitCapture(t, base, session, "0", "FAKE-AT rest")
 
-			// The finished turn, looked at: the row is in the section, at rest.
 			if err := term.WaitFor(shown, uiTimeout); err != nil {
 				t.Fatalf("the agents section never listed the agent: %v\n%s", err, term.Snapshot())
 			}
 			saveFrame(t, term, "agent-exit-"+tc.name+"-before")
 
 			if tc.outside {
-				// The test process is no ancestor of the stand-in, so this
-				// report does not run under the harness it names.
 				params := fmt.Sprintf(`{"session":%q,"window":%q,"state":"working","harness":"claude-code","agent_session_id":%q,"harness_pid":%d}`,
 					session, windowID(t, base, session, "pilot"), ccSession, fakeClaudePID(t, scenario))
 				if out, err := tuiosCLI(t, base, "call", "set-agent-state", params); err != nil || !strings.Contains(strings.Join(strings.Fields(out), ""), `"applied":true`) {
@@ -1648,8 +1502,6 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 				}
 			}
 
-			// Leave the way /exit does: SessionEnd (when there is one), then the
-			// process ends and the shell has the pane again.
 			typeLine("/exit")
 			if tc.end != "" {
 				waitCapture(t, base, session, "0", "FAKE-DONE")
@@ -1664,8 +1516,6 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 					err, railAgentRows(term.Screen(), railCol), listing(), term.Snapshot())
 			}
 			if tc.late != "" {
-				// The late hook is the second SessionStart in the log, and it
-				// has to have been taken: a refused one would pass for free.
 				var last string
 				for end := time.Now().Add(uiTimeout); time.Now().Before(end); time.Sleep(50 * time.Millisecond) {
 					data, _ := os.ReadFile(hookLog)
@@ -1704,45 +1554,16 @@ func TestHookClaimLapsesWithTheHarness(t *testing.T) {
 	}
 }
 
-// The stand-ins for a harness that runs a hook, played by this test binary.
-// standInEnv names the part it plays:
-//
-//   - harness: runs its arguments as a child, with its own stdin, stdout,
-//     stderr and environment, and exits with the child's status. It is not a
-//     shell, so tuios agent-hook takes it for the harness of its hooks and
-//     reports its pid as harness_pid, the way it takes Claude Code.
-//   - read: reads its input until it ends, as a program that holds the
-//     terminal does (ssh), under the name of the copy it runs from.
-//   - detach: the program a person or a harness starts, which leaves at once
-//     and leaves a server running in a session of its own, under init, the
-//     way tmux starts its server and Claude Code starts its daemon. The
-//     server runs a harness on a terminal of its own, with the environment it
-//     was started with, and that harness runs the arguments. The harness's
-//     stdin is the file standInInEnv names, and its stderr and stdout go to
-//     the file standInOutEnv names and that name plus ".stdout", which appear
-//     once it has exited. What the server is, to the daemon, is the name of
-//     the file it runs from and its argument: a copy named claude started
-//     with standInServerArgEnv set to --bg-pty-host is the host Claude
-//     Code's daemon runs a background session under, and a copy named
-//     conmon is the helper a rootless container detaches through.
 const (
-	standInEnv    = "TUIOS_E2E_STANDIN"
-	standInBinEnv = "TUIOS_E2E_STANDIN_HARNESS"
-	standInInEnv  = "TUIOS_E2E_STANDIN_IN"
-	standInOutEnv = "TUIOS_E2E_STANDIN_OUT"
-	// standInLauncherEnv is the pid of the program that started the server.
-	standInLauncherEnv = "TUIOS_E2E_STANDIN_LAUNCHER"
-	// standInServerArgEnv is an argument the server is started with ahead of
-	// the harness's, and drops before it runs the harness.
+	standInEnv          = "TUIOS_E2E_STANDIN"
+	standInBinEnv       = "TUIOS_E2E_STANDIN_HARNESS"
+	standInInEnv        = "TUIOS_E2E_STANDIN_IN"
+	standInOutEnv       = "TUIOS_E2E_STANDIN_OUT"
+	standInLauncherEnv  = "TUIOS_E2E_STANDIN_LAUNCHER"
 	standInServerArgEnv = "TUIOS_E2E_STANDIN_SERVER_ARG"
-	// standInStayEnv, set, keeps the program that started the server running
-	// until the server exits, so the server stays its child, as Claude Code's
-	// daemon stays a child of the claude that started it.
-	standInStayEnv = "TUIOS_E2E_STANDIN_STAY"
+	standInStayEnv      = "TUIOS_E2E_STANDIN_STAY"
 )
 
-// runStandInIfAsked plays the part standInEnv names, and exits, or returns
-// when it names none.
 func runStandInIfAsked() {
 	switch os.Getenv(standInEnv) {
 	case "":
@@ -1778,9 +1599,6 @@ func runStandInIfAsked() {
 	os.Exit(2)
 }
 
-// runStandInServer is the detach part's server. It waits for the program that
-// started it to leave, so that it runs under init, then runs the harness on a
-// terminal of its own and moves its output into place.
 func runStandInServer() {
 	out := os.Getenv(standInOutEnv)
 	fail := func(err error) {
@@ -1832,7 +1650,6 @@ func runStandInServer() {
 	os.Exit(0)
 }
 
-// runStandInChild runs cmd with the given stdio and returns its exit status.
 func runStandInChild(cmd *exec.Cmd, stdin io.Reader, stdout, stderr io.Writer) int {
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, stdout, stderr
 	if err := cmd.Run(); err != nil {
@@ -1845,9 +1662,6 @@ func runStandInChild(cmd *exec.Cmd, stdin io.Reader, stdout, stderr io.Writer) i
 	return 0
 }
 
-// standInAs copies this test binary to a file called name, so that a process
-// started from the copy has that name to the daemon. A link would not do: the
-// daemon reads the file a process executes, which a symbolic link resolves to.
 func standInAs(t *testing.T, name string) string {
 	t.Helper()
 	self, err := os.Executable()
@@ -1865,8 +1679,6 @@ func standInAs(t *testing.T, name string) string {
 	return path
 }
 
-// detachedEnv is the environment a detach stand-in needs beyond its caller's:
-// the harness to run, its stdin's file and its output's file.
 func detachedEnv(t *testing.T, in, out string) []string {
 	t.Helper()
 	self, err := os.Executable()
@@ -1876,8 +1688,6 @@ func detachedEnv(t *testing.T, in, out string) []string {
 	return []string{standInEnv + "=detach", standInBinEnv + "=" + self, standInInEnv + "=" + in, standInOutEnv + "=" + out}
 }
 
-// waitStandIn waits for a detach stand-in's harness to exit and returns what
-// it wrote to stderr and to stdout.
 func waitStandIn(t *testing.T, out string) (stderr, stdout string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -1893,8 +1703,6 @@ func waitStandIn(t *testing.T, out string) (stderr, stdout string) {
 	}
 }
 
-// hookExplained is the part of agent-hook --explain's line the pane check
-// reads.
 type hookExplained struct {
 	Window     string `json:"window"`
 	PaneBy     string `json:"pane_by"`
@@ -1914,7 +1722,6 @@ func parseExplained(t *testing.T, line string) hookExplained {
 	return got
 }
 
-// appliedText prints an --explain line's applied field.
 func appliedText(applied *bool) string {
 	if applied == nil {
 		return "absent"
@@ -2003,8 +1810,6 @@ func TestAgentReportOnlyFromTheHarnessInThePane(t *testing.T) {
 	note("pane %s of session %s, shell %s", win, session, shellPID)
 
 	runs := 0
-	// files makes a detached run's stdin file, holding payload, and names its
-	// output file.
 	files := func(payload string) (in, out string) {
 		runs++
 		in = filepath.Join(base, fmt.Sprintf("standin-%d.in", runs))
@@ -2014,10 +1819,6 @@ func TestAgentReportOnlyFromTheHarnessInThePane(t *testing.T) {
 		}
 		return in, out
 	}
-	// outsideRun runs argv under a harness on a terminal of its own, under a
-	// background-session host that left the test, with paneID as the
-	// TUIOS_PANE_ID the harness carries. It returns what argv wrote to stderr
-	// and stdout.
 	outsideRun := func(paneID, payload string, argv ...string) (string, string) {
 		t.Helper()
 		in, out := files(payload)
@@ -2034,8 +1835,6 @@ func TestAgentReportOnlyFromTheHarnessInThePane(t *testing.T) {
 		}
 		return waitStandIn(t, out)
 	}
-	// outside runs the hook that way. args are agent-hook's flags beyond the
-	// ones every run takes.
 	outside := func(paneID, harnessID, payload string, args ...string) hookExplained {
 		t.Helper()
 		stderr, _ := outsideRun(paneID, payload, append([]string{tuiosBin, "agent-hook", harnessID, "--timeout", "10s", "--explain"}, args...)...)
@@ -2076,8 +1875,6 @@ func TestAgentReportOnlyFromTheHarnessInThePane(t *testing.T) {
 	}
 	checkUntouched("the outside conversation id")
 
-	// A caller outside the pane that names the pane's own shell as its
-	// harness. The shell is in the pane, so the claim alone would pass.
 	params := fmt.Sprintf(`{"session":%q,"window":%q,"state":"working","harness":"claude-code","agent_session_id":"liar-1","harness_pid":%s}`, session, win, shellPID)
 	_, stdout := outsideRun(win, "", tuiosBin, "call", "set-agent-state", params)
 	note("outside %-10s %s", "call", strings.TrimSpace(stdout))
@@ -2093,7 +1890,6 @@ func TestAgentReportOnlyFromTheHarnessInThePane(t *testing.T) {
 	}
 	checkUntouched("the claim of the pane's shell")
 
-	// The positive half: the same harness and hook, run from the pane's shell.
 	explain := filepath.Join(base, "inside-explain.json")
 	line := "printf '%s' '" + `{"hook_event_name":"UserPromptSubmit","session_id":"own-1","prompt":"in the pane"}` + "' | " +
 		standInEnv + "=harness " + quote(self) + " " + quote(tuiosBin) + " agent-hook claude-code --timeout 10s --explain 2>" + quote(explain) + "; printf '%s-%s\\n' INSIDE DONE\n"
@@ -2122,18 +1918,11 @@ func TestAgentReportOnlyFromTheHarnessInThePane(t *testing.T) {
 		t.Error("list-agents does not list the pane its own harness reported")
 	}
 
-	// A pane chosen with --window by a harness whose environment names no pane
-	// is the caller's choice, as the suite's other hook tests make it, and is
-	// taken although the harness runs outside the pane.
 	got = outside("", "claude-code", `{"hook_event_name":"Stop","session_id":"own-1"}`, "--session", session, "--window", win)
 	if got.PaneBy != "flag" || got.Applied == nil || !*got.Applied || got.State != "done" {
 		t.Errorf("a report for a pane chosen with --window: pane_by=%q applied=%s state=%q reason=%q, want applied, done", got.PaneBy, appliedText(got.Applied), got.State, got.Reason)
 	}
 
-	// inPaneDetached starts server from the pane's shell, and the hook under
-	// the harness it runs on a terminal of its own. The server leaves the
-	// pane, and the harness carries the pane's environment, as the
-	// background session does.
 	inPaneDetached := func(label, server, payload string, env ...string) hookExplained {
 		t.Helper()
 		in, out := files(payload)
@@ -2161,12 +1950,6 @@ func TestAgentReportOnlyFromTheHarnessInThePane(t *testing.T) {
 		if got.State != state {
 			t.Errorf("%s from a harness in %s in the pane set %q, want %s", step, label, got.State, state)
 		}
-		// The stand-in harness exits as soon as its hook returns, which a real
-		// one does not. The daemon then lapses a reported state on a pane at
-		// its shell, by design (agent_detect.go), and that sweep can come
-		// before this read. So the state the hook set is read from its
-		// --explain line, and the pane is checked for the conversation, which
-		// the lapse keeps, and for a state no other report set.
 		st := readAgentState(t, base, session, win)
 		note("  pane after %s in %s: state=%s harness=%s agent_session_id=%s", step, label, st.State, st.Harness, st.AgentSession)
 		if st.AgentSession != conversation || (st.State != state && st.State != "none") {
@@ -2174,25 +1957,17 @@ func TestAgentReportOnlyFromTheHarnessInThePane(t *testing.T) {
 		}
 	}
 
-	// A rootless container in the pane: its helper leaves the pane, and the
-	// shell inside gets a terminal of its own.
 	got = inPaneDetached("conmon", conmon, `{"hook_event_name":"UserPromptSubmit","session_id":"box-1","prompt":"in a container"}`)
 	checkTaken("conmon", "a prompt", got, "working", "box-1")
 	got = inPaneDetached("conmon", conmon, `{"hook_event_name":"Stop","session_id":"box-1"}`)
 	checkTaken("conmon", "a Stop", got, "done", "box-1")
 
-	// tmux in the pane: its server leaves the pane the same way.
 	got = inPaneDetached("tmux", tmux, `{"hook_event_name":"UserPromptSubmit","session_id":"mux-1","prompt":"in tmux"}`)
 	checkTaken("tmux", "a prompt", got, "working", "mux-1")
 
 	got = inPaneDetached("tmux", tmux, `{"hook_event_name":"Stop","session_id":"mux-1"}`)
 	checkTaken("tmux", "a Stop", got, "done", "mux-1")
 
-	// A background-session host that a program in the pane started, and that
-	// stays its child: Claude Code's daemon stays a child of the claude in the
-	// pane that started it, so each background session it runs descends from
-	// the pane. The pane is done, so no guard on a running turn stands in the
-	// way. Its prompt is refused, and the pane keeps tmux's state.
 	got = inPaneDetached("bg-child", bgHost, `{"hook_event_name":"UserPromptSubmit","session_id":"phantom-2","prompt":"forked conversation"}`,
 		standInServerArgEnv+"=--bg-pty-host", standInStayEnv+"=1")
 	if got.Applied == nil || *got.Applied || got.Reason != "foreign_pane" {
@@ -2200,9 +1975,6 @@ func TestAgentReportOnlyFromTheHarnessInThePane(t *testing.T) {
 	}
 	st = readAgentState(t, base, session, win)
 	note("  pane after the prompt under bg-child: state=%s harness=%s agent_session_id=%s", st.State, st.Harness, st.AgentSession)
-	// tmux's harness has exited, so its done state may have lapsed to none
-	// (see checkTaken). What must not happen is the refused report taking
-	// the pane: its conversation or its working state.
 	if st.AgentSession != "mux-1" || (st.State != "done" && st.State != "none") {
 		t.Errorf("a background session whose daemon the pane started took the pane over: %+v, want done (or none once tmux's harness left) with mux-1", st)
 	}

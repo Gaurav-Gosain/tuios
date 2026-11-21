@@ -13,7 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// tmlTypeDoc has a button that types into the pane named build.
 const tmlTypeDoc = `<tml version="1" title="Typer">
   <state>{"run": {"window": "build", "text": "echo TYPED-BY-%s\n"}, "n": 0}</state>
   <col pad="1" gap="1">
@@ -23,7 +22,6 @@ const tmlTypeDoc = `<tml version="1" title="Typer">
 </tml>
 `
 
-// tmlCapture reads a pane's screen as plain text.
 func tmlCapture(t *testing.T, base, sess, window string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "capture-pane", "-s", sess, "-w", window)
@@ -81,19 +79,13 @@ func TestTMLPaneActionsRunWithTheOwnersGrants(t *testing.T) {
 		t.Fatalf("the agent's tml show printed %q (%v)", data, err)
 	}
 
-	// The pane holds write and not read, and reads its own surface.
 	ownGet := filepath.Join(base, "own-get.out")
 	tmlRunIn(t, base, sess, "agent", fmt.Sprintf("%s tml get %s > %s 2>&1", tuiosBin, agentSurface.Surface, ownGet))
 	if data, _ := os.ReadFile(ownGet); !strings.Contains(string(data), "TYPED-BY-AGENT") {
 		t.Fatalf("the pane that opened a surface could not read it:\n%s", data)
 	}
 
-	// A surface a pane opened does not take the keys, so the person clicks
-	// its button. It asks the person first, under the surface, and names
-	// the session.
 	col, row := tmlLocate(t, term, "Type into build")
-	// The first click only focuses a surface a pane opened; the second
-	// presses the button.
 	mouseClick(t, term, col+2, row, tuitest.MouseLeft, 0)
 	time.Sleep(gestureGap)
 	mouseClick(t, term, col+2, row, tuitest.MouseLeft, 0)
@@ -113,7 +105,6 @@ func TestTMLPaneActionsRunWithTheOwnersGrants(t *testing.T) {
 		t.Fatalf("a surface typed into a pane with more grants than its owner:\n%s", got)
 	}
 
-	// The person's own surface, the same button: it types.
 	personDoc := writeTMLDoc(t, base, "person.tml", fmt.Sprintf(tmlTypeDoc, "PERSON"))
 	out, err := tuiosCLI(t, base, "tml", "show", personDoc, "--pane", "--json", "-s", sess)
 	if err != nil {
@@ -143,7 +134,6 @@ func TestTMLPaneActionsRunWithTheOwnersGrants(t *testing.T) {
 		time.Sleep(200 * time.Millisecond)
 	}
 
-	// The agent pane may not change the person's surface.
 	patchOut := filepath.Join(base, "patch.out")
 	line = fmt.Sprintf("%s tml patch %s '[{\"op\":\"replace\",\"path\":\"/n\",\"value\":7}]' > %s 2>&1\n", tuiosBin, personSurface.Surface, patchOut)
 	if out, err := tuiosCLI(t, base, "send-text", "-s", sess, "-w", "agent", line); err != nil {
@@ -164,14 +154,11 @@ func TestTMLPaneActionsRunWithTheOwnersGrants(t *testing.T) {
 		t.Fatalf("the person's surface changed:\n%s", got)
 	}
 
-	// The window names who opened each surface.
 	listed, err := tuiosCLI(t, base, "list-windows", "-s", sess, "--json")
 	if err != nil || !strings.Contains(listed, "from agent · Typer") || !strings.Contains(listed, "from tuios tml show · Typer") {
 		t.Fatalf("the windows do not name their owners: %v\n%s", err, listed)
 	}
 
-	// A burst past 100 patches a second is refused in part. One connection
-	// sends them back to back, as a busy owner would.
 	c := dialFileVerbs(t, base)
 	refused := 0
 	for i := range 250 {

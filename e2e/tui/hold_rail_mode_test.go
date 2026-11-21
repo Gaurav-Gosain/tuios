@@ -7,8 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// kittyAltS is s struck while the left Option key is held: s is focus_sidebar
-// in window mode, so it gives the rail the keyboard during a hold.
 const kittyAltS = "\x1b[115;3u"
 
 // TestHoldThenRailHandsBackTerminalMode: the hold key and the rail both
@@ -39,7 +37,6 @@ func TestHoldThenRailHandsBackTerminalMode(t *testing.T) {
 				if err := term.SendKeys(tuitest.Key(k)); err != nil {
 					t.Fatal(err)
 				}
-				// Each key is a separate event the client must see on its own.
 				time.Sleep(300 * time.Millisecond)
 				saveArtifact(t, term, art, "step-"+string(rune('1'+i)))
 			}

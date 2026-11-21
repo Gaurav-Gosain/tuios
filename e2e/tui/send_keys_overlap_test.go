@@ -34,7 +34,6 @@ func TestOverlappingSendKeysDoNotAnswerAnApproval(t *testing.T) {
 	if err := term.WaitForText("Allow the plugin Overlap probe?", bootTimeout); err != nil {
 		t.Fatalf("no approval dialog: %v\n%s", err, term.Snapshot())
 	}
-	// Past the half second the dialog ignores keys for.
 	time.Sleep(700 * time.Millisecond)
 	saveArtifact(t, term, art, "overlap-dialog")
 
@@ -76,7 +75,6 @@ func TestOverlappingSendKeysDoNotAnswerAnApproval(t *testing.T) {
 		t.Fatalf("the dialog closed under keys that were not the person's:\n%s", term.Snapshot())
 	}
 
-	// The person's own keys still allow it.
 	for _, k := range []string{"\x15", "a", "l", "l", "o", "w", "\r"} {
 		if err := term.SendKeys(k); err != nil {
 			t.Fatal(err)

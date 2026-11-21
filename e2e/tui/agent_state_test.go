@@ -7,8 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// needsInputGlyph is the indicator tuios draws for the needs_input agent state.
-// It is the whole assertion: the client must render it once the state is set.
 const needsInputGlyph = "▲"
 
 // TestAgentStateIndicatorRenders drives a real daemon: it sets a window's agent
@@ -33,23 +31,16 @@ func TestAgentStateIndicatorRenders(t *testing.T) {
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "first window")
 
-	// A named window guarantees a title is drawn, so the indicator has a place to
-	// appear regardless of the default title position.
 	renameWindow(t, term, "AGENTPANE")
 
-	// The indicator must not already be on screen, or the assertion below would
-	// prove nothing.
 	if strings.Contains(term.Screen().Text(), needsInputGlyph) {
 		t.Fatalf("the needs_input indicator was on screen before the state was set\n%s", term.Snapshot())
 	}
 
-	// Report the state the way a pane reports its own, over the daemon socket.
 	if out, err := tuiosCLI(t, base, "set-agent-state", "needs_input", "-s", "e2e", "-w", "AGENTPANE"); err != nil {
 		t.Fatalf("set-agent-state failed: %v\n%s", err, out)
 	}
 
-	// The daemon pushes the new state to the attached client, which redraws the
-	// title with the indicator.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
 		return strings.Contains(text, needsInputGlyph) && strings.Contains(text, "AGENTPANE")
@@ -58,8 +49,6 @@ func TestAgentStateIndicatorRenders(t *testing.T) {
 			err, term.Snapshot())
 	}
 
-	// And it clears when the state is cleared, so the indicator tracks the state
-	// rather than merely appearing once.
 	if out, err := tuiosCLI(t, base, "set-agent-state", "none", "-s", "e2e", "-w", "AGENTPANE"); err != nil {
 		t.Fatalf("set-agent-state none failed: %v\n%s", err, out)
 	}

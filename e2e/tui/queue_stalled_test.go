@@ -9,39 +9,6 @@ import (
 	"time"
 )
 
-// A queued message is typed into a pane, and the daemon then waits five
-// seconds for the agent to show it took it. With Claude Code that sign is the
-// hook's working report, and on a loaded machine Claude Code killed the hook
-// at its five second timeout: the report never came, the message read as not
-// taken, and the Inbox asked the person to look at a pane that was busy on
-// it. Nothing closed that question, since the hook that would have said done
-// was killed too and the pane's state never changed.
-//
-// What could go wrong, written down before the fix:
-//   - the gate reads only the pane's state, which a lost or late report never
-//     moves, so a taken message reads as stalled;
-//   - the agent is busy when the message lands and takes it at the end of its
-//     turn, after the five seconds;
-//   - the pane's state changes after the gate gave up and before the question
-//     opens, so the close runs before the open and the question stays;
-//   - the question closes only on a state change, so with every report lost it
-//     stays open for good;
-//   - the other way: a message left in the input box, which is the stall the
-//     gate is for, reads as taken because the screen shows the agent at work
-//     on something else;
-//   - closing by the pane's screen closes a different question the pane
-//     raised on the same key.
-//
-// The tests run the real hook for the reports that do arrive, against a pane
-// drawing Claude Code's input box, and leave the pane's state log and frames
-// under TUIOS_E2E_FRAMES.
-
-// stallBoxScript is the stand-in: Claude Code's input box between two rules.
-// Enter does what the file named by $1 says. "take" moves the box's text above
-// it and shows a turn running, as Claude Code does when it takes a prompt.
-// "busy" leaves the text in the box, a submit key the agent did not read as
-// one, while the screen shows a turn running on something else. Ctrl+U clears
-// the box and Ctrl+R ends the turn on the screen.
 const stallBoxScript = `stty -icanon -echo min 1 2>/dev/null
 mode="$1"
 draft=""
@@ -75,8 +42,6 @@ while IFS= read -r -n1 -d '' c; do
 done
 `
 
-// stallStage is one pane in a throwaway daemon running stallBoxScript, with
-// Claude Code's real hook run for it.
 type stallStage struct {
 	t               *testing.T
 	base, sess, win string
@@ -124,15 +89,11 @@ func (s *stallStage) setMode(mode string) {
 	}
 }
 
-// hook runs Claude Code's hook for event and waits for the pane to be on
-// state.
 func (s *stallStage) hook(event, state string) {
 	s.t.Helper()
 	s.hookWith(event, state, "")
 }
 
-// hookWith is hook with extra JSON fields in the payload, such as a
-// notification's type.
 func (s *stallStage) hookWith(event, state, extra string) {
 	s.t.Helper()
 	payload := `{"hook_event_name":"` + event + `","session_id":"stall-e2e","prompt":"the queued message","last_assistant_message":"done"` + extra + `}`
@@ -162,8 +123,6 @@ func (s *stallStage) waitScreen(step string, ok func(string) bool) string {
 	}
 }
 
-// stalledQuestions lists the open Inbox questions saying the pane did not take
-// a queued message.
 func (s *stallStage) stalledQuestions() []string {
 	s.t.Helper()
 	out := s.cli("list-attention", "list-attention", "--json")
@@ -187,8 +146,6 @@ func (s *stallStage) stalledQuestions() []string {
 	return ids
 }
 
-// queue queues text for the pane and waits for it to be typed: the box holds
-// it, or the stand-in moved it above the box.
 func (s *stallStage) queue(text string) {
 	s.t.Helper()
 	s.cli("queue "+text, "queue", "-s", s.sess, "-w", s.win, text)
@@ -196,14 +153,11 @@ func (s *stallStage) queue(text string) {
 	s.log.add("%-44s typed", "queue "+text)
 }
 
-// queueState is what tuios queue ls says about the pane.
 func (s *stallStage) queueState() string {
 	s.t.Helper()
 	return s.cli("queue ls", "queue", "ls", "-s", s.sess, "-w", s.win)
 }
 
-// waitQuestion waits for the stalled question to be open (want true) or
-// closed, and fails the test with step when it does not come to that.
 func (s *stallStage) waitQuestion(step string, want bool, within time.Duration) {
 	s.t.Helper()
 	deadline := time.Now().Add(within)
@@ -221,8 +175,6 @@ func (s *stallStage) waitQuestion(step string, want bool, within time.Duration) 
 	}
 }
 
-// rest ends a turn: the screen's turn is over, Ctrl+R, and the Stop hook says
-// done.
 func (s *stallStage) rest() {
 	s.t.Helper()
 	s.cli("end the turn on the screen", "send-keys", "-s", s.sess, "-w", s.win, "C-r")
@@ -247,7 +199,6 @@ func TestQueuedMessageTakenWhileItsHookIsLostRaisesNoQuestion(t *testing.T) {
 	const marker = "queued-and-taken-4d2b"
 	s.queue(marker)
 	s.waitScreen("the stand-in took it", func(text string) bool { return strings.Contains(text, "> "+marker) })
-	// Past the five second gate, with no report from the hook.
 	deadline := time.Now().Add(7 * time.Second)
 	for time.Now().Before(deadline) {
 		if ids := s.stalledQuestions(); len(ids) > 0 {
@@ -264,7 +215,6 @@ func TestQueuedMessageTakenWhileItsHookIsLostRaisesNoQuestion(t *testing.T) {
 		t.Errorf("the pane is %s, want it still on the done its last report said", st.State)
 	}
 
-	// The hook comes late.
 	s.hook("UserPromptSubmit", "working")
 	s.waitQuestion("the late hook", false, time.Second)
 	s.rest()
@@ -301,7 +251,6 @@ func TestQueuedMessageLeftInTheBoxRaisesAQuestionThatClosesOnceTaken(t *testing.
 	if strings.Contains(s.screen(), "> "+first) {
 		t.Fatalf("the stand-in took a message it was meant to leave in the box\n%s", s.screen())
 	}
-	// The pane's next state change closes it.
 	s.hook("UserPromptSubmit", "working")
 	s.waitQuestion("a hook report of working", false, uiTimeout)
 	if out := s.queueState(); !strings.Contains(out, "Nothing is queued") {
@@ -311,7 +260,6 @@ func TestQueuedMessageLeftInTheBoxRaisesAQuestionThatClosesOnceTaken(t *testing.
 	s.waitScreen("the box was cleared", func(text string) bool { return !strings.Contains(text, first) })
 	s.rest()
 
-	// Taken late, and nothing reports it.
 	const second = "queued-taken-late-3e9f"
 	s.queue(second)
 	s.waitQuestion("left in the box again", true, 3*promptStallE2E)
@@ -341,8 +289,6 @@ func TestQueuedMessageLeftInTheBoxRaisesAQuestionThatClosesOnceTaken(t *testing.
 // fails on it.
 func TestQueuedMessageLeftInTheBoxStaysStalledThroughALateStop(t *testing.T) {
 	s := newStallStage(t, "queue-stalled-late-stop")
-	// At rest on idle, so the late Stop is a state change, as it is for an
-	// agent whose turn began before the message was typed.
 	s.hook("SessionStart", "idle")
 
 	s.setMode("busy")
@@ -352,8 +298,6 @@ func TestQueuedMessageLeftInTheBoxStaysStalledThroughALateStop(t *testing.T) {
 
 	stillStalled := func(step string) {
 		t.Helper()
-		// The watch looks every second and hears every state change at once,
-		// so three seconds is time for it to have acted.
 		time.Sleep(3 * time.Second)
 		out := s.queueState()
 		s.log.add("%-44s question open=%v queue=%q", step, len(s.stalledQuestions()) > 0, strings.TrimSpace(out))
@@ -365,14 +309,12 @@ func TestQueuedMessageLeftInTheBoxStaysStalledThroughALateStop(t *testing.T) {
 		}
 	}
 
-	// The turn the agent was on ends, with the message still in the box.
 	s.cli("end the turn on the screen", "send-keys", "-s", s.sess, "-w", s.win, "C-r")
 	s.hook("Stop", "done")
 	stillStalled("a late Stop")
 	s.hookWith("Notification", "needs_input", `,"notification_type":"agent_needs_input","message":"Claude needs your input"`)
 	stillStalled("a late agent_needs_input")
 
-	// The person presses Enter and the agent takes it, with no report.
 	s.setMode("take")
 	s.cli("the person presses Enter", "send-keys", "-s", s.sess, "-w", s.win, "Enter")
 	s.waitScreen("the stand-in took it", func(text string) bool { return strings.Contains(text, "> "+marker) })
@@ -425,5 +367,4 @@ func TestDroppingAStalledQueuedMessageEndsItsWatch(t *testing.T) {
 	s.rest()
 }
 
-// promptStallE2E is the daemon's stall window, five seconds.
 const promptStallE2E = 5 * time.Second

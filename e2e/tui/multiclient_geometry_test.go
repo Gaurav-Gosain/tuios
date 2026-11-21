@@ -35,10 +35,6 @@ import (
 // nothing below moves a rectangle.
 func TestGeometryConfigDisagreementDoesNotMovePanes(t *testing.T) {
 	base := t.TempDir()
-	// The first client's config file turns shared borders on. The second
-	// client's config directory is separate and empty, so its process runs the
-	// default: shared borders off. This is the disagreement in the report, and
-	// nothing propagates the file between the two.
 	writeConfig(t, base, "[appearance]\nshared_borders = true\n")
 	killDaemon(t, base)
 	if out, err := tuiosCLI(t, base, "new", "geometry", "--detach"); err != nil {
@@ -56,16 +52,11 @@ func TestGeometryConfigDisagreementDoesNotMovePanes(t *testing.T) {
 		env: []string{"XDG_CONFIG_HOME=" + t.TempDir()},
 	})
 
-	// The join is allowed one settling round (the box is negotiated once), but
-	// it must settle back on the same rectangles: both clients are the same
-	// size with the same chrome, so nothing about the box changed.
 	joined := waitForSettledGeometryIn(t, base, "geometry", 2)
 	if !sameGeometry(before, joined) {
 		t.Errorf("the second client's attach moved the panes:\n before %v\n after  %v", before, joined)
 	}
 
-	// The report's gesture: pane switches, pressed on the client whose config
-	// disagrees. Each one pushes state; none of them may move a rectangle.
 	for range 6 {
 		if err := b.SendKeys("\t"); err != nil {
 			t.Fatalf("focus cycle: %v", err)
@@ -79,8 +70,6 @@ func TestGeometryConfigDisagreementDoesNotMovePanes(t *testing.T) {
 		t.Errorf("switching panes moved the daemon's windows:\n before %v\n after  %v", joined, after)
 	}
 
-	// And from the first client, for the direction that used to yield rather
-	// than fight: it must be equally still.
 	for range 6 {
 		if err := a.SendKeys("\t"); err != nil {
 			t.Fatalf("focus cycle on the first client: %v", err)

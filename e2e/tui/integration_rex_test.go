@@ -115,8 +115,6 @@ func TestIntegrationInstallRex(t *testing.T) {
 		saveText(t, "init-after", read(r.cfg))
 	})
 
-	// status says which status records Rex's tabs get, from [agents]
-	// host_program_status, so a person can tell whether Rex shows each agent.
 	t.Run("status names the records Rex gets", func(t *testing.T) {
 		r := newRig(t, false, true)
 		if out, err := run(t, r, "install", "rex"); err != nil {
@@ -388,8 +386,6 @@ func TestRexActionsComeFromTuios(t *testing.T) {
 	})
 
 	t.Run("no tuios", func(t *testing.T) {
-		// tuios.lua looks in the install folders outside HOME too, so a tuios
-		// installed on the test machine is found, as it should be.
 		for _, d := range []string{"/opt/homebrew/bin", "/usr/local/bin", "/nix/var/nix/profiles/default/bin", "/run/current-system/sw/bin",
 			"/etc/profiles/per-user/" + os.Getenv("USER") + "/bin"} {
 			if _, err := os.Stat(filepath.Join(d, "tuios")); err == nil {
@@ -408,16 +404,6 @@ func TestRexActionsComeFromTuios(t *testing.T) {
 		}
 	})
 
-	// The suggested keys are off until asked for. They are one key that
-	// enters the tuios key mode once, and the tuios actions inside the mode.
-	// The key that enters is clear of every key Rex for Mac ships, of the
-	// macOS ctrl+cmd shortcuts, and of every key a program in the terminal
-	// could get (it holds cmd, which a Mac never sends to a terminal
-	// program). How it could pass wrongly: the list of Rex keys could fail to
-	// read and match nothing, so it must hold Rex's palette key; a key could
-	// be written in another modifier order than Rex's list, so both sides are
-	// put in one order before comparing; a suggested key could still sit
-	// outside the mode, so every other binding must start with tuios/.
 	t.Run("suggested keys", func(t *testing.T) {
 		home := newHome(t, tuiosBin)
 		if got := field(load(t, home, "rex-load-nokeys"), "BIND", 1); len(got) != 0 {
@@ -492,9 +478,6 @@ func TestRexActionsComeFromTuios(t *testing.T) {
 		}
 	})
 
-	// Rex runs tuios actions --json at each config load, so it is time a
-	// person waits at Rex start. The fastest of five runs, since load only
-	// adds time.
 	t.Run("budget", func(t *testing.T) {
 		home := newHome(t, tuiosBin)
 		best := time.Hour

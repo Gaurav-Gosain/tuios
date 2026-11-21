@@ -8,15 +8,12 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// enterCopyModeHere opens copy mode on the focused pane with the leader and
-// [, and waits for its cursor.
 func enterCopyModeHere(t *testing.T, term *tuitest.Terminal, what string) {
 	t.Helper()
 	sendKeys(t, term, tuitest.Ctrl('b'), "[")
 	waitCopyCursor(t, term, what)
 }
 
-// waitCopyModeLeft waits until no copy cursor is on screen.
 func waitCopyModeLeft(t *testing.T, term *tuitest.Terminal, what string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -47,10 +44,7 @@ func TestEnterLeavesCopyMode(t *testing.T) {
 	waitCopyModeLeft(t, term, "Enter in normal navigation")
 	runInShell(t, term, "echo back-$((16+21))", "back-37", shellTimeout)
 
-	// Enter from a selection copies it first, as tmux's copy-mode-vi does:
-	// the line above the prompt, "back-37", selected whole with V.
 	enterCopyModeHere(t, term, "copy mode again")
-	// The dock names Enter among the keys that leave.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "q/↵/esc") || strings.Contains(s.Text(), "q/enter/esc")
 	}, uiTimeout); err != nil {
@@ -70,7 +64,6 @@ func TestEnterLeavesCopyMode(t *testing.T) {
 	}
 	time.Sleep(300 * time.Millisecond)
 	sendKeys(t, term, tuitest.Enter)
-	// The search ran: the copy cursor is on the needle's row, still in copy mode.
 	row := lastRowWith(term.Screen(), "needle-1637")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		r, _, ok := copyCursorCell(s)

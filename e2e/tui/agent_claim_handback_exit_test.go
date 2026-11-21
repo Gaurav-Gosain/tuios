@@ -10,11 +10,6 @@ import (
 	"time"
 )
 
-// handbackExitScript is the agent's side, run by the stand-in claude. It draws
-// what its first argument names, a Claude Code permission prompt or its empty
-// prompt box, waits for a line from the test, then wipes the screen and exits
-// at once. The wipe is what makes the daemon's next look find nothing, so the
-// tier that read the screen hands its claim back in the moment the agent goes.
 const handbackExitScript = `#!/bin/sh
 if [ "$1" = prompt ]; then
   printf 'Bash command\n  rm -rf build\nDo you want to proceed?\n\342\235\257 1. Yes\n  2. No\n'
@@ -91,12 +86,6 @@ func TestAgentClaimHandedBackAsTheAgentExits(t *testing.T) {
 			if err := os.WriteFile(script, []byte(handbackExitScript), 0o755); err != nil {
 				t.Fatal(err)
 			}
-			// A slow detector, so its pass lands well away from the exit. The
-			// look that hands the claim back runs on the shell's prompt or
-			// 400ms after it, and a pass between the exit and that look
-			// clears the pane while the screen tier still holds it, which is
-			// the path that does not need the fix. At one second it landed
-			// there on every run of blocker-released-on-exit.
 			writeConfig(t, base, "[daemon]\nagent_detect_seconds = 4\n")
 			killDaemon(t, base)
 			var session string
@@ -146,12 +135,6 @@ func TestAgentClaimHandedBackAsTheAgentExits(t *testing.T) {
 				}
 			}
 
-			// The detector ticks on the daemon's clock, so where the exit falls
-			// between two passes is chance. A pass that lands between the exit
-			// and the look clears the pane before the hand-back, which tests
-			// nothing, and under load that happened on about one run in three.
-			// Such a run is tried again on a fresh session. An assertion fails
-			// at once, and only a run that reached the hand-back can pass.
 			const tries = 3
 			for try := 1; ; try++ {
 				session = fmt.Sprintf("e2e-handback-%d", try)
@@ -170,9 +153,6 @@ func TestAgentClaimHandedBackAsTheAgentExits(t *testing.T) {
 				}); !ok {
 					t.Fatalf("the screen tier never took the pane at %s, last read %+v", tc.wantState, r)
 				}
-				// A detector pass with the agent in the foreground, so it has
-				// seen the process before the agent leaves, and the exit half
-				// way to the next one.
 				time.Sleep(6 * time.Second)
 				if r := read(); r.State != tc.wantState || r.Source != "screen" {
 					t.Fatalf("the screen tier let go of the pane before the agent exited, read %+v", r)

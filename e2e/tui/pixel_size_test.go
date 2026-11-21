@@ -14,33 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Issue #506: a Textual app quit with ZeroDivisionError as soon as the mouse
-// entered its pane. Textual turns on in-band resize reports (mode 2048) and,
-// when the terminal has them, SGR-pixel mouse reports (mode 1016). It reads the
-// pane's size in pixels from the 2048 report and divides each mouse report by
-// pixels per cell. tuios sent 0 for both pixel sizes in every 2048 report.
-//
-// The guest here asks for every size a program can read: TIOCGWINSZ, the 2048
-// report, XTWINOPS 14 (text area in pixels) and XTWINOPS 16 (cell in pixels),
-// and then prints each SGR-pixel mouse report it gets.
-//
-// How these could pass wrongly, written down first:
-//   - The sizes could be non-zero and still disagree, and a program that takes
-//     its scale from one and its pointer from another lands on the wrong cell.
-//     Every size is checked against one cell size, the host's.
-//   - The cell size could be a constant that happens to be non-zero. The host
-//     cell here is 8x16, which is no fallback tuios has, so the numbers must
-//     come from the host.
-//   - The mouse reports could be in cells and still be non-zero. Two hovers one
-//     cell apart must be one cell width apart in the reports.
-//   - A pane made before any client attached has no host to ask. Its sizes
-//     must still be non-zero, and that case runs on a detached session.
-
-// pixelGuest prints the sizes as SIZES ws=<rows>;<cols>;<xpix>;<ypix>
-// ib=<rows>;<cols>;<ypix>;<xpix> t14=<ypix>;<xpix> t16=<h>;<w> END, then, unless
-// run with "once", tracks the mouse in SGR-pixel mode and prints each motion
-// report as PX<button>;<x>;<y>. and each later 2048 report as
-// IB<rows>;<cols>;<ypix>;<xpix>. A q ends it.
 const pixelGuest = `import fcntl, os, re, select, struct, sys, termios, tty
 fd = sys.stdin.fileno()
 old = termios.tcgetattr(fd)
@@ -83,7 +56,6 @@ termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 var pixelSizes = regexp.MustCompile(`SIZES ws=(\d+);(\d+);(\d+);(\d+) ib=(\S+) t14=(\S+) t16=(\S+) END`)
 
-// paneSizes is what pixelGuest printed.
 type paneSizes struct {
 	rows, cols, xpix, ypix int
 	ib, t14, t16           string
@@ -98,7 +70,6 @@ func parsePaneSizes(text string) (paneSizes, bool) {
 	return paneSizes{rows: n(m[1]), cols: n(m[2]), xpix: n(m[3]), ypix: n(m[4]), ib: m[5], t14: m[6], t16: m[7]}, true
 }
 
-// check says what is wrong with the sizes for a cell of cw x ch pixels, or "".
 func (s paneSizes) check(cw, ch int) string {
 	var bad []string
 	if s.rows <= 0 || s.cols <= 0 {
@@ -161,20 +132,9 @@ func TestPaneReportsItsPixelSize(t *testing.T) {
 				t.Fatalf("ASSERTION: %s\n%s", bad, term.Snapshot())
 			}
 
-			// Two hovers one cell apart. In pixels the reports are one cell
-			// width apart, and both land inside the pane's pixel width. The
-			// first hover is in cells: tuios turns 1016 on in its own
-			// terminal only after it, as TestSGRPixelMouseCarriesTheHostPixel
-			// covers, and the hovers after that are in host pixels.
 			col, row := paneCell(t, term)
-			// Sent once. A resend would be a cell report reaching tuios after
-			// it has turned 1016 on in its terminal, and it would read the
-			// cell as pixels.
 			mouseHover(t, term, col, row)
 			x0 := lastPixelX(t, term, "the first hover", -1, func() {})
-			// The first hover is a cell report, so the guest is told the
-			// centre of the pane cell under it: the pane's first column is
-			// where the guest's SIZES line starts on the screen.
 			left := paneLeftOf(t, term, "SIZES ws=")
 			if want := (col-left)*8 + 4 + 1; x0 != want {
 				t.Fatalf("ASSERTION: the first hover, at pane column %d, was reported at x %d, want %d, the centre of that cell in pixels\n%s", col-left, x0, want, term.Snapshot())
@@ -202,8 +162,6 @@ func TestPaneReportsItsPixelSize(t *testing.T) {
 	}
 }
 
-// paneLeftOf is the screen column of marker, which the guest printed at the
-// start of a line, so it is the pane's first column.
 func paneLeftOf(t *testing.T, term *tuitest.Terminal, marker string) int {
 	t.Helper()
 	for line := range strings.SplitSeq(term.Screen().Text(), "\n") {
@@ -215,8 +173,6 @@ func paneLeftOf(t *testing.T, term *tuitest.Terminal, marker string) int {
 	return 0
 }
 
-// lastPixelX sends with send until the guest's last motion report has an x
-// other than not, and returns it.
 func lastPixelX(t *testing.T, term *tuitest.Terminal, what string, not int, send func()) int {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -349,8 +305,6 @@ func TestDetachedPaneTakesTheCellOfAClientElsewhere(t *testing.T) {
 	}
 }
 
-// ibReports is every 2048 report the guest printed, as rows, cols, pixel
-// height and pixel width, read from the daemon's copy of the pane.
 func ibReports(base, session string) (string, [][4]int) {
 	out, _ := tuiosOut(base, "capture-pane", "-s", session)
 	var got [][4]int
@@ -364,7 +318,6 @@ func ibReports(base, session string) (string, [][4]int) {
 	return out, got
 }
 
-// cellOf is the cell a 2048 report implies, as width x height.
 func cellOf(r [4]int) string {
 	if r[0] == 0 || r[1] == 0 {
 		return "none"
@@ -372,10 +325,6 @@ func cellOf(r [4]int) string {
 	return fmt.Sprintf("%dx%d", r[3]/r[1], r[2]/r[0])
 }
 
-// startPixelLoop makes a detached session and runs the pixel guest in its
-// report loop there, and returns once the guest has turned 2048 on with the
-// fallback cell. Otherwise the first client could settle the cell before the
-// guest turns 2048 on, and no report would follow.
 func startPixelLoop(t *testing.T, base, session, guest string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "new", "-d", session); err != nil {
@@ -403,8 +352,6 @@ func startPixelLoop(t *testing.T, base, session, guest string) {
 	}
 }
 
-// waitIBCell waits until the guest's last 2048 report implies cell, and
-// returns how many reports there were then.
 func waitIBCell(t *testing.T, base, session, what, cell string) int {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -517,9 +464,6 @@ func TestPaneCellFollowsOneClient(t *testing.T) {
 	waitCell("client a attached", "8x16")
 
 	b := attachIn(t, base, "cells", startOpts{cols: 100, rows: 30, env: []string{"TUIOS_CELL_SIZE=12x24"}})
-	// b is smaller, so the session shrinks to it and the guest gets a report
-	// for the new size. That report must still be in a's cell. The wait is for
-	// the shrink to reach the guest, so the check below has b's attach in it.
 	deadline := time.Now().Add(uiTimeout)
 	for {
 		_, got := ibReports(base, "cells")

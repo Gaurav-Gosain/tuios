@@ -28,32 +28,12 @@ import (
 	"time"
 )
 
-// tuios pair, end to end: the real binary prints a pairing link, and this
-// test is the phone. It reads the link, makes the MAC with the token, posts
-// its key, and checks the reply against the token and the host key file.
-// Then the key that was installed logs in to a real sshd and reaches a real
-// daemon, which holds it to the link policy pair wrote.
-//
-// The failure modes this is written against:
-//   - a request with a MAC that was not made with the token is accepted
-//     (wrong token, or a key swapped in by a machine on the path);
-//   - the token works twice, or after its time;
-//   - a weak key, a bad device name, or a huge body is accepted;
-//   - the key goes into authorized_keys without the forced command or
-//     restrict, so it can open a shell or a port forward;
-//   - the forced command does not pin the name, so the link policy of the
-//     device does not apply;
-//   - a key or a [hosts] table that is there already is changed;
-//   - the QR code on screen holds something other than the printed link.
-
-// pairPhone is the phone side: its key line and the token from the link.
 type pairPhone struct {
 	token []byte
 	addr  string
 	link  *url.URL
 }
 
-// pairRun is one tuios pair process.
 type pairRun struct {
 	cmd    *exec.Cmd
 	lines  chan string
@@ -79,7 +59,6 @@ func (l *lockedBuf) String() string {
 	return l.b.String()
 }
 
-// needTools skips when a tool the test drives is not installed.
 func needTools(t *testing.T, tools ...string) {
 	t.Helper()
 	for _, tool := range tools {
@@ -89,8 +68,6 @@ func needTools(t *testing.T, tools ...string) {
 	}
 }
 
-// keygen makes an ssh key pair under dir and returns the private key path and
-// the public key line.
 func keygen(t *testing.T, dir, name string, args ...string) (string, string) {
 	t.Helper()
 	path := filepath.Join(dir, name)
@@ -105,7 +82,6 @@ func keygen(t *testing.T, dir, name string, args ...string) (string, string) {
 	return path, strings.TrimSpace(string(pub))
 }
 
-// keyBody is the "TYPE BASE64" part of a key line.
 func keyBody(line string) string {
 	f := strings.Fields(line)
 	if len(f) < 2 {
@@ -114,7 +90,6 @@ func keyBody(line string) string {
 	return f[0] + " " + f[1]
 }
 
-// sha256FP is the fingerprint of a key line as ssh-keygen -lf prints it.
 func sha256FP(t *testing.T, line string) string {
 	t.Helper()
 	f := strings.Fields(line)
@@ -126,8 +101,6 @@ func sha256FP(t *testing.T, line string) string {
 	return "SHA256:" + base64.RawStdEncoding.EncodeToString(sum[:])
 }
 
-// keygenFP is the fingerprint ssh-keygen itself prints for a key file, so the
-// test does not check tuios against a copy of its own arithmetic.
 func keygenFP(t *testing.T, pubPath string) string {
 	t.Helper()
 	out, err := exec.Command("ssh-keygen", "-lf", pubPath).Output()
@@ -137,28 +110,21 @@ func keygenFP(t *testing.T, pubPath string) string {
 	return strings.Fields(string(out))[1]
 }
 
-// startPair runs tuios pair --json with the environment of base and waits
-// for the first line, the link.
 func startPair(t *testing.T, base string, env []string, args ...string) *pairRun {
 	t.Helper()
 	return startPairInput(t, base, "", env, args...)
 }
 
-// startPairInput is startPair with what the person types on stdin.
 func startPairInput(t *testing.T, base, input string, env []string, args ...string) *pairRun {
 	t.Helper()
 	return startPairStdin(t, base, strings.NewReader(input), env, args...)
 }
 
-// startPairStdin is startPair with stdin read from r, for a person who
-// answers later. The test's phone posts from this machine, so it passes
-// --accept-local. startPairFromHere leaves it out.
 func startPairStdin(t *testing.T, base string, stdin io.Reader, env []string, args ...string) *pairRun {
 	t.Helper()
 	return startPairFromHere(t, base, stdin, env, append([]string{"--accept-local"}, args...)...)
 }
 
-// startPairFromHere runs tuios pair --json with exactly the flags given.
 func startPairFromHere(t *testing.T, base string, stdin io.Reader, env []string, args ...string) *pairRun {
 	t.Helper()
 	cmd := exec.Command(tuiosBin, append([]string{"pair", "--json"}, args...)...)
@@ -191,7 +157,6 @@ func startPairFromHere(t *testing.T, base string, stdin io.Reader, env []string,
 		for sc.Scan() {
 			run.lines <- sc.Text()
 		}
-		// A read error ends the lines as EOF does, and next reports it.
 		_ = sc.Err()
 		close(run.lines)
 		run.done <- cmd.Wait()
@@ -203,7 +168,6 @@ func startPairFromHere(t *testing.T, base string, stdin io.Reader, env []string,
 	return run
 }
 
-// next is the next stdout line.
 func (r *pairRun) next(t *testing.T, within time.Duration) string {
 	t.Helper()
 	select {
@@ -218,8 +182,6 @@ func (r *pairRun) next(t *testing.T, within time.Duration) string {
 	return ""
 }
 
-// wait waits for the process to end and returns the last JSON line and the
-// exit error.
 func (r *pairRun) wait(t *testing.T, within time.Duration) (map[string]any, error) {
 	t.Helper()
 	var last map[string]any
@@ -242,7 +204,6 @@ func (r *pairRun) wait(t *testing.T, within time.Duration) (map[string]any, erro
 	}
 }
 
-// phone reads the link the way the phone does.
 func (r *pairRun) phone(t *testing.T) pairPhone {
 	t.Helper()
 	raw, _ := r.first["url"].(string)
@@ -258,24 +219,18 @@ func (r *pairRun) phone(t *testing.T) pairPhone {
 	return pairPhone{token: token, addr: p[0], link: link}
 }
 
-// pairLabel is the protocol label every MAC message starts with. The
-// messages are built from it in pairMessage, one line per part.
 const pairLabel = "tuios-pair-v1"
 
-// pairMessage joins a MAC message: the label with its suffix, then each part,
-// one per line, with no line end at the end.
 func pairMessage(suffix string, parts ...string) string {
 	return strings.Join(append([]string{pairLabel + suffix}, parts...), "\n")
 }
 
-// pairMACFor is the MAC the phone sends, or the one the reply carries.
 func pairMACFor(token []byte, msg string) string {
 	m := hmac.New(sha256.New, token)
 	m.Write([]byte(msg))
 	return base64.RawURLEncoding.EncodeToString(m.Sum(nil))
 }
 
-// pairBody is a request body with a MAC made with token over device and key.
 func pairBody(token []byte, device, key string) []byte {
 	b, _ := json.Marshal(map[string]string{
 		"device": device,
@@ -285,8 +240,6 @@ func pairBody(token []byte, device, key string) []byte {
 	return b
 }
 
-// pairCheckFor is the check code both screens show, computed here the way
-// the docs give it, so the test does not borrow tuios's arithmetic.
 func pairCheckFor(token []byte, key string) string {
 	m := hmac.New(sha256.New, token)
 	m.Write([]byte(pairMessage("-check", key)))
@@ -295,7 +248,6 @@ func pairCheckFor(token []byte, key string) string {
 	return fmt.Sprintf("%06d", n%1000000)
 }
 
-// pairReplyT is the listener's answer.
 type pairReplyT struct {
 	OK      bool   `json:"ok"`
 	Error   string `json:"error"`
@@ -307,12 +259,10 @@ type pairReplyT struct {
 	Check   string `json:"check"`
 }
 
-// post sends one request. A listener that is gone is an error.
 func post(addr, method, path string, body []byte) (int, pairReplyT, error) {
 	return postWithin(addr, method, path, body, 10*time.Second)
 }
 
-// postWithin is post for a phone that waits up to within for the answer.
 func postWithin(addr, method, path string, body []byte, within time.Duration) (int, pairReplyT, error) {
 	req, err := http.NewRequest(method, "http://"+addr+path, bytes.NewReader(body))
 	if err != nil {
@@ -333,7 +283,6 @@ func postWithin(addr, method, path string, body []byte, within time.Duration) (i
 	return resp.StatusCode, reply, nil
 }
 
-// transcript collects what the phone sent and got, for the artifact.
 type transcript struct{ b strings.Builder }
 
 func (tr *transcript) add(format string, args ...any) { fmt.Fprintf(&tr.b, format+"\n", args...) }
@@ -384,9 +333,6 @@ func TestPairAddsAPhoneKey(t *testing.T) {
 		t.Errorf("ASSERTION: fp=%q, ssh-keygen -lf says %q", q.Get("fp"), want)
 	}
 
-	// Refusals of a request whose MAC is good. They do not count toward the
-	// limit of wrong requests, so they all go to this one listener. The
-	// requests that do count are in TestPairRefusesWrongRequests.
 	refusals := []struct {
 		name   string
 		body   []byte
@@ -396,7 +342,6 @@ func TestPairAddsAPhoneKey(t *testing.T) {
 		{"device name with a quote", pairBody(ph.token, `x",permitopen="*`, phoneLine), http.StatusBadRequest},
 		{"weak key", pairBody(ph.token, "phone", weakLine), http.StatusBadRequest},
 		{"two keys", pairBody(ph.token, "phone", phoneLine+"\n"+otherLine), http.StatusBadRequest},
-		// The ssh parser skips a line it cannot read, so this reads as one key.
 		{"a line before the key", pairBody(ph.token, "phone", "not a key\n"+phoneLine), http.StatusBadRequest},
 		{"a terminal escape in the name", pairBody(ph.token, "phone\x1b]0;owned\x07", phoneLine), http.StatusBadRequest},
 	}
@@ -434,7 +379,6 @@ func TestPairAddsAPhoneKey(t *testing.T) {
 		t.Errorf("ASSERTION: the reply check code %q is not %q", reply.Check, wantCheck)
 	}
 
-	// The same code again, with a key that is not in the file yet.
 	status, again, err := post(ph.addr, http.MethodPost, "/v1/pair", pairBody(ph.token, "tablet", otherLine))
 	tr.add("reuse: %d %+v %v", status, again, err)
 	if err == nil && again.OK {
@@ -487,8 +431,6 @@ func TestPairRefusesWrongRequests(t *testing.T) {
 	keygen(t, keys, "host", "-t", "ed25519")
 	_, phoneLine := keygen(t, keys, "phone", "-t", "ecdsa", "-b", "256")
 	_, otherLine := keygen(t, keys, "other", "-t", "ed25519")
-	// A token the code does not hold: a MAC made with it is a MAC made by
-	// someone who did not see the code.
 	wrongToken := bytes.Repeat([]byte{7}, 16)
 	cases := []struct {
 		name   string
@@ -499,13 +441,11 @@ func TestPairRefusesWrongRequests(t *testing.T) {
 	}{
 		{"get", http.MethodGet, "/v1/pair", func([]byte) []byte { return nil }, http.StatusMethodNotAllowed},
 		{"wrong path", http.MethodPost, "/v1/other", func(tok []byte) []byte { return pairBody(tok, "phone", phoneLine) }, http.StatusNotFound},
-		// The MAC is good: only the cap refuses it.
 		{"oversize body", http.MethodPost, "/v1/pair", func(tok []byte) []byte {
 			return pairBody(tok, "phone", phoneLine+" "+strings.Repeat("x", 9000))
 		}, http.StatusRequestEntityTooLarge},
 		{"not json", http.MethodPost, "/v1/pair", func([]byte) []byte { return []byte("device=phone") }, http.StatusBadRequest},
 		{"wrong mac", http.MethodPost, "/v1/pair", func([]byte) []byte { return pairBody(wrongToken, "phone", phoneLine) }, http.StatusForbidden},
-		// The key a machine on the path would swap in, with the phone's MAC.
 		{"swapped key", http.MethodPost, "/v1/pair", func(tok []byte) []byte {
 			var m map[string]string
 			_ = json.Unmarshal(pairBody(tok, "phone", phoneLine), &m)
@@ -529,8 +469,6 @@ func TestPairRefusesWrongRequests(t *testing.T) {
 			if _, err := os.Stat(ak); !errors.Is(err, os.ErrNotExist) {
 				t.Fatalf("ASSERTION: authorized_keys was written")
 			}
-			// Each run writes [hosts.DEVICE] to the one config, so each
-			// pairs a name of its own.
 			status, reply, err = post(ph.addr, http.MethodPost, "/v1/pair", pairBody(ph.token, fmt.Sprintf("phone%d", i), phoneLine))
 			if err != nil || !reply.OK {
 				t.Errorf("ASSERTION: the good request after one wrong one: %d %+v %v", status, reply, err)
@@ -580,11 +518,6 @@ func TestPairOversizeBodySentLateGetsItsReply(t *testing.T) {
 	if _, err := fmt.Fprintf(c, "POST /v1/pair HTTP/1.1\r\nHost: %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n", ph.addr, len(body)); err != nil {
 		t.Fatal(err)
 	}
-	// The listener refuses on the header and replies. The body goes after
-	// that, in two parts, as a phone's HTTP client writes a body: the first
-	// part reaches a listener that is gone, which answers with a reset, and
-	// the second write fails on it. An HTTP client stops at a failed write
-	// and never reads the reply.
 	time.Sleep(300 * time.Millisecond)
 	_, werr1 := c.Write(body[:len(body)/2])
 	time.Sleep(300 * time.Millisecond)
@@ -617,9 +550,6 @@ func TestPairListensOnlyWhereTheCodeSays(t *testing.T) {
 	common := []string{"--yes", "--authorized-keys", filepath.Join(base, "ak"),
 		"--host-key", filepath.Join(keys, "host.pub"), "--advertise-ssh", "127.0.0.1:2222", "--timeout", "1s"}
 
-	// "0:0" is not an unspecified address as text, but it binds one where
-	// the resolver reads "0" as 0.0.0.0. Go's own resolver, which CI's
-	// runners use, does not, and there the bind fails before any check.
 	zeroResolves := false
 	if addrs, err := net.LookupHost("0"); err == nil && len(addrs) > 0 {
 		zeroResolves = true
@@ -637,9 +567,6 @@ func TestPairListensOnlyWhereTheCodeSays(t *testing.T) {
 		}
 	}
 
-	// A public address: the listener is plain HTTP, and the internet has no
-	// reason to reach it. The address is not on this machine, so only a check
-	// made before the bind names --listen-all.
 	for _, addr := range []string{"8.8.8.8:0", "[2001:4860:4860::8888]:0"} {
 		out, err := tuiosCLI(t, base, append([]string{"pair", "--listen", addr}, common...)...)
 		if err == nil || !strings.Contains(out, "--listen-all") || !strings.Contains(out, "public address") {
@@ -659,8 +586,6 @@ func TestPairListensOnlyWhereTheCodeSays(t *testing.T) {
 		}
 	}
 
-	// The default: the addresses tuios finds. On a machine with none, the
-	// command says so, which is also not a listener everywhere.
 	run := startPair(t, base, nil, common...)
 	listen, _ := run.first["listen"].([]any)
 	pairs := strings.Split(run.phone(t).link.Query().Get("p"), ",")
@@ -705,8 +630,6 @@ func TestPairAsksBeforeItAddsTheKey(t *testing.T) {
 			if !strings.Contains(prompt, "Name:  pixel-9") || !strings.Contains(prompt, fp) || !strings.Contains(prompt, "[y/N]") {
 				t.Errorf("ASSERTION: the question does not show the name and the fingerprint %s:\n%s", fp, prompt)
 			}
-			// The check code the phone computes for itself, and the policy
-			// the device gets without --allow.
 			if check := pairCheckFor(ph.token, phoneLine); !strings.Contains(prompt, "Check: "+check) {
 				t.Errorf("ASSERTION: the question does not show the check code %s:\n%s", check, prompt)
 			}
@@ -856,9 +779,6 @@ func TestPairLeavesWhatIsThereAlone(t *testing.T) {
 	}
 }
 
-// qrModules reads the QR code tuios pair drew back into modules. Colour
-// output paints each cell with ▀, the top module in the foreground and the
-// bottom one in the background. Plain output draws the light modules.
 func qrModules(t *testing.T, out string, colour bool) [][]bool {
 	t.Helper()
 	cell := regexp.MustCompile(`\x1b\[(\d+);(\d+)m▀`)
@@ -899,7 +819,6 @@ func qrModules(t *testing.T, out string, colour bool) [][]bool {
 	return grid
 }
 
-// qrPNG writes the modules as a PNG with a wide quiet zone, for a decoder.
 func qrPNG(t *testing.T, grid [][]bool, path string) {
 	t.Helper()
 	const scale, margin = 8, 4
@@ -977,10 +896,6 @@ func TestPairQRCodeHoldsTheLink(t *testing.T) {
 	}
 }
 
-// startScratchSSHD runs an sshd of this test's own: its own host key, port and
-// authorized keys file, run as this user. The sessions it starts get the XDG
-// directories of remote, so stdio-proxy reaches the scratch daemon and never
-// the person's own.
 func startScratchSSHD(t *testing.T, dir, hostKey, ak, port, remote string) string {
 	t.Helper()
 	sshd, err := exec.LookPath("sshd")
@@ -1068,7 +983,6 @@ func TestPairedKeyOpensOnlyTheLink(t *testing.T) {
 	port := strconv.Itoa(freePort(t))
 	me, _ := user.Current()
 
-	// Pair against the far machine's config, as the person there would.
 	run := startPair(t, remote, nil, "--yes", "--authorized-keys", ak, "--listen", "127.0.0.1:0",
 		"--host-key", hostKey+".pub", "--advertise-ssh", "127.0.0.1:"+port, "--allow", "list", "--timeout", "1m")
 	ph := run.phone(t)
@@ -1079,8 +993,6 @@ func TestPairedKeyOpensOnlyTheLink(t *testing.T) {
 	if _, err := run.wait(t, 15*time.Second); err != nil {
 		t.Fatalf("tuios pair exit: %v\nstderr:\n%s", err, run.stderr)
 	}
-	// The phone pins the host key from the reply, which it checked against
-	// the fingerprint in the code.
 	if sha256FP(t, reply.HostKey) != ph.link.Query().Get("fp") {
 		t.Fatalf("the reply host key does not match the code")
 	}
@@ -1094,8 +1006,6 @@ func TestPairedKeyOpensOnlyTheLink(t *testing.T) {
 	}
 	startScratchSSHD(t, dir, hostKey, ak, port, remote)
 
-	// ssh that reads nothing of the person's: no config, no agent, no known
-	// hosts but the pinned key.
 	sshWrap := filepath.Join(dir, "ssh")
 	wrap := "#!/bin/sh\nexec ssh -F /dev/null -p " + port +
 		" -o UserKnownHostsFile=" + knownHosts + " -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=yes" +
@@ -1105,7 +1015,6 @@ func TestPairedKeyOpensOnlyTheLink(t *testing.T) {
 	}
 	var tr transcript
 
-	// A command of the client's own choosing runs the link instead.
 	cmd := exec.Command(sshWrap, "-T", me.Username+"@127.0.0.1", "echo NOT-FORCED")
 	stdin, _ := cmd.StdinPipe()
 	stdout, _ := cmd.StdoutPipe()
@@ -1133,7 +1042,6 @@ func TestPairedKeyOpensOnlyTheLink(t *testing.T) {
 	_ = cmd.Process.Kill()
 	_ = cmd.Wait()
 
-	// restrict: no port forwarding.
 	fwd := exec.Command(sshWrap, "-N", "-o", "ExitOnForwardFailure=yes", "-R", "0:127.0.0.1:9", me.Username+"@127.0.0.1")
 	fwdDone := make(chan error, 1)
 	var fwdOut []byte
@@ -1154,7 +1062,6 @@ func TestPairedKeyOpensOnlyTheLink(t *testing.T) {
 		t.Errorf("ASSERTION: ssh -R kept running, so the forward was allowed")
 	}
 
-	// A daemon here dials the far one through the same sshd and key.
 	cfgDir := filepath.Join(xdgDir(base, "XDG_CONFIG_HOME"), "tuios")
 	mustMkdir(cfgDir)
 	hubCfg := "[hosts.studio]\naddr = \"" + me.Username + "@127.0.0.1\"\nconnect_timeout = 10\n"
@@ -1188,8 +1095,6 @@ func TestPairedKeyOpensOnlyTheLink(t *testing.T) {
 	tr.save(t, "pair-sshd.txt")
 }
 
-// pairSetup makes a scratch base with a host key and an Ed25519 phone key.
-// It returns the base, the host key path and the phone key line.
 func pairSetup(t *testing.T) (base, hostPub, phoneLine string) {
 	t.Helper()
 	needTools(t, "ssh-keygen")
@@ -1209,7 +1114,6 @@ func TestPairReplyReachesAPhoneAfterASlowAnswer(t *testing.T) {
 	requireReal(t, "real ssh or sshd")
 	base, hostPub, phoneLine := pairSetup(t)
 	ak := filepath.Join(base, "authorized_keys")
-	// An *os.File, so exec does not copy it and Wait does not wait for it.
 	answer, typing, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -1229,7 +1133,6 @@ func TestPairReplyReachesAPhoneAfterASlowAnswer(t *testing.T) {
 		status, reply, err := postWithin(ph.addr, http.MethodPost, "/v1/pair", pairBody(ph.token, "phone", phoneLine), 40*time.Second)
 		got <- result{status, reply, err}
 	}()
-	// Longer than the 10 second deadline of a connection.
 	time.Sleep(13 * time.Second)
 	if _, err := io.WriteString(typing, "y\n"); err != nil {
 		t.Fatalf("type y: %v", err)
@@ -1257,7 +1160,6 @@ func TestPairStopDuringTheQuestionWritesNothing(t *testing.T) {
 	requireReal(t, "real ssh or sshd")
 	base, hostPub, phoneLine := pairSetup(t)
 	ak := filepath.Join(base, "authorized_keys")
-	// An *os.File, so exec does not copy it and Wait does not wait for it.
 	answer, typing, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -1321,8 +1223,6 @@ func TestPairIgnoresConnectionsClosedUnused(t *testing.T) {
 			t.Fatalf("ASSERTION: connection %d was refused, so the listener stopped: %v\nstderr:\n%s", i+1, err, run.stderr)
 		}
 		_ = c.Close()
-		// Longer than the pause after a wrong request, so a build that
-		// counts these counts each one and does not answer some with 429.
 		time.Sleep(400 * time.Millisecond)
 	}
 	status, reply, err := post(ph.addr, http.MethodPost, "/v1/pair", pairBody(ph.token, "phone", phoneLine))
@@ -1396,7 +1296,6 @@ func TestPairMachineNameInTheCode(t *testing.T) {
 	}
 }
 
-// pairArgs are the flags every test run of tuios pair here shares.
 func pairArgs(ak, hostPub string, more ...string) []string {
 	return append([]string{"--yes", "--authorized-keys", ak, "--listen", "127.0.0.1:0",
 		"--host-key", hostPub, "--advertise-ssh", "127.0.0.1:2222", "--timeout", "1m"}, more...)
@@ -1471,7 +1370,6 @@ func TestPairRefusesANameInUse(t *testing.T) {
 		}
 	}
 
-	// The runs above add the harness's pinned settings to the file.
 	cfgBefore, _ = func() (string, error) {
 		b, err := os.ReadFile(filepath.Join(cfgDir, "config.toml"))
 		return string(b), err
@@ -1510,7 +1408,6 @@ func TestPairRefusesRequestsFromThisMachine(t *testing.T) {
 	requireReal(t, "real ssh or sshd")
 	base, hostPub, phoneLine := pairSetup(t)
 
-	// An address of this machine that is not loopback, when it has one.
 	var lan string
 	if addrs, err := net.InterfaceAddrs(); err == nil {
 		for _, a := range addrs {

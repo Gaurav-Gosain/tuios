@@ -8,7 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// switchWorkspace moves to a workspace and waits for it to hold n windows.
 func switchWorkspace(t *testing.T, term *tuitest.Terminal, ws string, n int) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Ctrl('b'), "w", ws); err != nil {
@@ -37,8 +36,6 @@ func TestWorkspaceSwitchDoesNotRepaintThePane(t *testing.T) {
 
 	newWindow(t, term)
 	enterTerminalMode(t, term)
-	// Printed by the shell rather than typed, so the command line itself cannot
-	// be mistaken for the output and every hit is a real paint.
 	runInShell(t, term, `printf '%s\n' "$(echo PANEMARK)-7431"`, marker, shellTimeout)
 	leaveTerminalMode(t, term)
 
@@ -47,7 +44,6 @@ func TestWorkspaceSwitchDoesNotRepaintThePane(t *testing.T) {
 		switchWorkspace(t, term, "1", 1)
 	}
 
-	// WaitStable so the count is taken after the switch's repaint has landed.
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("screen never settled after the switches: %v", err)
 	}

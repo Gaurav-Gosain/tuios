@@ -38,7 +38,6 @@ func TestTheBoardShowsTheLinkedMachinesProjectCards(t *testing.T) {
 	}
 
 	term := attachIn(t, base, "home", startOpts{cols: 160, rows: 45, shippedLooks: true})
-	// No agent runs here, so the view has no "Needs you" group yet.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +46,6 @@ func TestTheBoardShowsTheLinkedMachinesProjectCards(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitText(t, term, "the board", "Home card")
-	// The columns, the wide layout, name the far machine too.
 	waitText(t, term, "the far cards in the columns", "free on build", "worker on build")
 	saveCockpitFrames(t, term, "board-far-columns-160x45")
 	if err := term.SendKeys("B"); err != nil {
@@ -74,7 +72,6 @@ func TestTheBoardShowsTheLinkedMachinesProjectCards(t *testing.T) {
 		t.Errorf("ASSERTION: home's own card is missing or says build\n%s", term.Snapshot())
 	}
 
-	// t on the free far card says how to take it, and takes nothing here.
 	for range 8 {
 		if r := fleetRowWith(term.Screen(), "Write the docs"); r >= 0 && strings.Contains(term.Screen().Line(r), "▌") {
 			break
@@ -95,7 +92,6 @@ func TestTheBoardShowsTheLinkedMachinesProjectCards(t *testing.T) {
 		}
 	}
 
-	// L on the far card moves no card on either machine.
 	if err := term.SendKeys("L"); err != nil {
 		t.Fatal(err)
 	}

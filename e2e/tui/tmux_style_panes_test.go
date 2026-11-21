@@ -9,7 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// paneRow is one window of list-windows --json, with the workspace it is on.
 type paneRow struct {
 	ID        string `json:"window_id"`
 	Workspace int    `json:"workspace"`
@@ -38,7 +37,6 @@ func listPanes(t *testing.T, base, session string) map[string]paneRow {
 	return rows
 }
 
-// waitPane waits until ok holds for pane id, and fails with what it last saw.
 func waitPane(t *testing.T, base, session, id, what string, ok func(paneRow) bool) paneRow {
 	t.Helper()
 	var last paneRow
@@ -90,13 +88,11 @@ join_marked_left = ["alt+u"]
 	c := newWindowIn(t, base, "joiner")
 	waitForSettledGeometryIn(t, base, "joiner", 3)
 
-	// c is right of a before anything is pressed.
 	rows := listPanes(t, base, "joiner")
 	if rows[c].X < rows[a].X+rows[a].Width {
 		t.Fatalf("setup: c %+v is not right of a %+v", rows[c], rows[a])
 	}
 
-	// Positive half's counterpart: with nothing marked, joining moves nothing.
 	if out, err := tuiosCLI(t, base, "focus-window", "-s", "joiner", a); err != nil {
 		t.Fatalf("focus a: %v\n%s", err, out)
 	}
@@ -108,7 +104,6 @@ join_marked_left = ["alt+u"]
 		t.Fatalf("join_marked_left with no mark moved c from %+v to %+v", rows[c], got)
 	}
 
-	// Mark c, go back to a, join.
 	if out, err := tuiosCLI(t, base, "focus-window", "-s", "joiner", c); err != nil {
 		t.Fatalf("focus c: %v\n%s", err, out)
 	}
@@ -152,7 +147,6 @@ send_to_workspace_2 = ["alt+i"]
 	b := newWindowIn(t, base, "crossjoin")
 	waitForSettledGeometryIn(t, base, "crossjoin", 2)
 
-	// b is focused, so it is the one sent to workspace 2.
 	if out, err := tuiosCLI(t, base, "focus-window", "-s", "crossjoin", b); err != nil {
 		t.Fatalf("focus b: %v\n%s", err, out)
 	}
@@ -161,7 +155,6 @@ send_to_workspace_2 = ["alt+i"]
 	}
 	waitPane(t, base, "crossjoin", b, "b is sent to workspace 2", func(p paneRow) bool { return p.Workspace == 2 })
 
-	// On workspace 2 b is the only pane: mark it, and come back.
 	if err := term.SendKeys(tuitest.Alt('2')); err != nil {
 		t.Fatalf("press alt+2: %v", err)
 	}
@@ -230,10 +223,8 @@ send_to_workspace_3 = ["alt+i"]
 	}
 }
 
-// markBadge is the text the title bar of the marked pane carries.
 const markBadge = "[marked]"
 
-// waitMarkBadges waits until the screen shows the mark badge n times.
 func waitMarkBadges(t *testing.T, term *tuitest.Terminal, n int, what string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -288,10 +279,8 @@ mark_pane = ["alt+m"]
 	waitMarkBadges(t, term, 1, "b marked again")
 	focus(a)
 	mark()
-	// The mark moved: one badge, not two.
 	waitMarkBadges(t, term, 1, "the mark moved to a")
 
-	// Close the marked pane: its badge goes with it.
 	if out, err := tuiosCLI(t, base, "close-window", "-s", "badge", a); err != nil {
 		t.Fatalf("close a: %v\n%s", err, out)
 	}

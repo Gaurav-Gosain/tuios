@@ -9,14 +9,11 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The lock glyphs the dock's mode pill shows while keybindings.lock is on,
-// with Nerd Fonts (nf-fa-lock, nf-fa-unlock) and without.
 const (
 	lockGlyph   = ""
 	unlockGlyph = ""
 )
 
-// dockLock reports the lock state the dock shows: "locked", "unlocked" or "".
 func dockLock(s tuitest.Screen) string {
 	text := s.Text()
 	switch {
@@ -28,9 +25,6 @@ func dockLock(s tuitest.Screen) string {
 	return ""
 }
 
-// lockedSession is panesSession for a config with lock on. It leaves the
-// client in terminal mode, where an attached client starts: alt+esc, which
-// panesSession presses to reach window mode, is a key lock gives the pane.
 func lockedSession(t *testing.T, name, config string) (*tuitest.Terminal, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -121,7 +115,6 @@ func TestLockModeGivesEveryKeyToThePane(t *testing.T) {
 	send("cat -v", tuitest.Enter)
 	time.Sleep(500 * time.Millisecond)
 
-	// 1. Locked: the tuios keys are bytes for the pane.
 	send(tuitest.Alt('2'), tuitest.Alt('n'), tuitest.Ctrl('p'), tuitest.Enter)
 	if err := term.WaitForText("^[2^[n^P", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: alt+2 alt+n ctrl+p did not reach cat -v as bytes: %v\n%s", err, term.Snapshot())
@@ -131,7 +124,6 @@ func TestLockModeGivesEveryKeyToThePane(t *testing.T) {
 		t.Fatalf("ASSERTION: locked ctrl+p opened the palette\n%s", term.Snapshot())
 	}
 
-	// 2. A focus move holds the pane menu open until esc.
 	send(tuitest.Ctrl('g'), "p", "h")
 	waitFocus(a, "ctrl+g p h")
 	send("l")
@@ -154,9 +146,6 @@ func TestLockModeGivesEveryKeyToThePane(t *testing.T) {
 	}
 	stays(1, b, "h alt+2 after esc")
 
-	// 2b. A held menu takes only the repeatable keys. x is close in the pane
-	// menu, which inherits the window prefix: it must close nothing and reach
-	// cat -v, and the client locks again, so alt+2 after it goes there too.
 	send(tuitest.Ctrl('g'), "p", "h")
 	waitFocus(a, "ctrl+g p h, the second time")
 	send("l")
@@ -173,7 +162,6 @@ func TestLockModeGivesEveryKeyToThePane(t *testing.T) {
 		t.Fatalf("ASSERTION: x in the held pane menu did not lock again: %v\n%s", err, term.Snapshot())
 	}
 
-	// 3. One action that does not repeat, then locked again.
 	send(tuitest.Ctrl('g'), "p", "d")
 	waitForSettledGeometryIn(t, base, sess, 3)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return dockLock(s) == "locked" }, uiTimeout); err != nil {
@@ -184,7 +172,6 @@ func TestLockModeGivesEveryKeyToThePane(t *testing.T) {
 	stays(1, c, "alt+2 after ctrl+g p d")
 }
 
-// windowCount is the number of windows the daemon reports for sess now.
 func windowCount(t *testing.T, base, sess string) int {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "list-windows", "--json", "--session", sess)
@@ -258,9 +245,6 @@ func TestLockModeHeldLeaderMenuTakesOnlyRepeatKeys(t *testing.T) {
 	}
 	railShot(t, term, "unlocked-badge")
 
-	// The which-key panel of the held menu lists only the keys that still
-	// work, the focus moves, and says what esc and any other key do. Close
-	// window (x) and Create window (c) are leader keys the held menu refuses.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
 		return strings.Contains(text, "(repeat)") && strings.Contains(text, "Focus pane") &&
@@ -292,9 +276,6 @@ func TestLockModeHeldLeaderMenuTakesOnlyRepeatKeys(t *testing.T) {
 		t.Fatalf("ASSERTION: the badge still shows after x\n%s", term.Snapshot())
 	}
 
-	// The hold key is a key lock gives the pane, its release included. A
-	// pane that asked for every key and for releases (CSI > 11 u) must see
-	// the press and the release of left alt, then z.
 	send(tuitest.Ctrl('c'))
 	time.Sleep(300 * time.Millisecond)
 	send("clear; stty raw -echo; printf '\\033[>11u'; cat -v", tuitest.Enter)
@@ -352,7 +333,6 @@ lock = true
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}
 	time.Sleep(time.Second)
-	// A click on the rail's pane gives it the keyboard.
 	mousePress(t, term, 15, 5, tuitest.MouseLeft, 0)
 	mouseRelease(t, term, 15, 5, tuitest.MouseLeft, 0)
 	time.Sleep(500 * time.Millisecond)
@@ -378,9 +358,6 @@ lock = true
 		t.Fatalf("ASSERTION: the session is on workspace %d, want 1", got)
 	}
 
-	// A key a held menu refuses goes to the rail pane too. ctrl+b left holds
-	// the leader menu, and x is a key it refuses: x and the y after it must
-	// both reach the rail pane's cat -v as xy, and nothing the center.
 	if err := term.SendKeys(tuitest.Ctrl('b'), tuitest.Left); err != nil {
 		t.Fatal(err)
 	}
@@ -456,7 +433,6 @@ func TestWindowModeOffKeepsTheClientInThePane(t *testing.T) {
 			return m == "terminal", m
 		})
 	}
-	// typed sends a line to cat -v and waits for it on screen.
 	typed := func(line, what string) {
 		t.Helper()
 		send(line, tuitest.Enter)
@@ -479,7 +455,6 @@ func TestWindowModeOffKeepsTheClientInThePane(t *testing.T) {
 	pause(t, "cat -v prints no prompt to wait for", 500*time.Millisecond)
 	typed("ready0", "cat -v")
 
-	// 1. alt+esc says window mode is off, once, and leaves the pane typing.
 	send(tuitest.Alt(tuitest.Esc))
 	if err := term.WaitForText("Window mode is off", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: alt+esc showed no notice: %v\n%s", err, term.Snapshot())
@@ -488,7 +463,6 @@ func TestWindowModeOffKeepsTheClientInThePane(t *testing.T) {
 	inTerminal("after alt+esc")
 	typed("line1", "after alt+esc")
 
-	// 2. The leader menu has no window mode row, and leader esc stays put.
 	send(tuitest.Ctrl('b'))
 	if err := term.WaitForText("Nest mode", uiTimeout); err != nil {
 		t.Fatalf("the leader menu never opened: %v\n%s", err, term.Snapshot())
@@ -504,7 +478,6 @@ func TestWindowModeOffKeepsTheClientInThePane(t *testing.T) {
 	inTerminal("after leader esc")
 	typed("line2", "after leader esc")
 
-	// 3. Leader t H swaps b to the left, from the window menu.
 	before := rectOf(b)
 	send(tuitest.Ctrl('b'), "t")
 	if err := term.WaitForText("Swap pane", uiTimeout); err != nil {
@@ -522,7 +495,6 @@ func TestWindowModeOffKeepsTheClientInThePane(t *testing.T) {
 	inTerminal("after leader t H")
 	typed("line3", "after leader t H")
 
-	// 4. A click on a's title bar focuses a and keeps terminal mode.
 	ra := rectOf(a)
 	mouseClick(t, term, ra.X+ra.Width/2, ra.Y, tuitest.MouseLeft, 0)
 	waitUntil(t, "focus on a after the click", uiTimeout, func() (bool, string) {
@@ -532,8 +504,6 @@ func TestWindowModeOffKeepsTheClientInThePane(t *testing.T) {
 	inTerminal("after a click on a title bar")
 	typed("echo clicked4", "after a click on a title bar")
 
-	// 5. The settings page has the row. enter turns window mode on at once,
-	// and then alt+esc enters window mode.
 	send(tuitest.Ctrl('b'), ",")
 	if err := term.WaitForText("Focused border color", uiTimeout); err != nil {
 		t.Fatalf("the settings page never opened: %v\n%s", err, term.Snapshot())

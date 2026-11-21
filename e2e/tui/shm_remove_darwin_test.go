@@ -7,8 +7,6 @@ import (
 	"unsafe"
 )
 
-// removeShmObject deletes a shared memory object a host stand-in never read. On
-// macOS an object has no path.
 func removeShmObject(name string) error {
 	p, err := syscall.BytePtrFromString("/" + name)
 	if err != nil {

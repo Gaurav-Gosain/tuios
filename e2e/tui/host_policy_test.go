@@ -10,15 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// What another machine may do here, a pane that outlives a dropped link, and
-// mail that waits for a machine whose link is down, through the real
-// transport: the ssh stand-in runs the real stdio-proxy against a second real
-// daemon. The stand-in below can also be switched off with a file, which is a
-// network that is gone: every dial fails the way ssh does when the machine
-// cannot be reached, until the file is removed.
-
-// writeGatedFakeSSH is writeFakeSSHTo with a gate: while gate exists, the
-// stand-in fails as ssh does for a machine it cannot reach.
 func writeGatedFakeSSH(t *testing.T, dir, remoteBase, gate string) string {
 	t.Helper()
 	inner := writeFakeSSHTo(t, dir, remoteBase)
@@ -32,8 +23,6 @@ func writeGatedFakeSSH(t *testing.T, dir, remoteBase, gate string) string {
 	return path
 }
 
-// dumpLinkLogs logs both daemons' logs, for a failure that happened between
-// them.
 func dumpLinkLogs(t *testing.T, base, remote string) {
 	t.Helper()
 	for name, root := range map[string]string{"this machine": base, "build": remote} {
@@ -43,8 +32,6 @@ func dumpLinkLogs(t *testing.T, base, remote string) {
 	}
 }
 
-// writeRemoteConfig writes the far machine's config.toml before its daemon
-// starts.
 func writeRemoteConfig(t *testing.T, remote, body string) {
 	t.Helper()
 	dir := filepath.Join(xdgDir(remote, "XDG_CONFIG_HOME"), "tuios")
@@ -56,8 +43,6 @@ func writeRemoteConfig(t *testing.T, remote, body string) {
 	}
 }
 
-// cutTheLink closes the gate and kills the link's proxy, so the link drops
-// and cannot be dialled again until openTheLink.
 func cutTheLink(t *testing.T, gate string) {
 	t.Helper()
 	if err := os.WriteFile(gate, nil, 0o600); err != nil {
@@ -122,7 +107,6 @@ func TestAPaneOnAnotherMachineOutlivesALinkDrop(t *testing.T) {
 		dumpLinkLogs(t, base, remote)
 		t.Fatalf("ASSERTION: the window went with the link: %v %+v", err, wl)
 	}
-	// The process goes on printing while nobody is attached.
 	if err := os.WriteFile(flag, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -136,8 +120,6 @@ func TestAPaneOnAnotherMachineOutlivesALinkDrop(t *testing.T) {
 		t.Fatalf("ASSERTION: the pane never came back with what it printed during the drop: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "hosted-pane-reattached")
-	// Typed the way an agent types, so the keys go to the pane whatever mode
-	// the client is in.
 	if out, err := tuiosCLIEnv(t, base, env, "send-text", "-s", "home", "-w", "deploy", "typed-after-the-drop\n"); err != nil {
 		t.Fatalf("type into the pane: %v\n%s", err, out)
 	}
@@ -253,8 +235,6 @@ func TestAMachineHoldsALinkToItsPolicy(t *testing.T) {
 	if err == nil {
 		t.Fatalf("ASSERTION: typing into a pane on a machine that allows only list went through:\n%s", out)
 	}
-	// The CLI wraps its message to the terminal, so words are compared, not
-	// lines.
 	if flat := strings.Join(strings.Fields(out), " "); !contains(flat, "(write) on") {
 		t.Errorf("the refusal does not name what is missing:\n%s", out)
 	}

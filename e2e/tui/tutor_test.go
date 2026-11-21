@@ -58,8 +58,6 @@ func TestTutorBasics(t *testing.T) {
 	useShippedLooks(base)
 	omarchySwitch(t, base, "catppuccin-latte")
 
-	// Every folder the harness makes, made now, so the tree below is the
-	// one before any tutor ran.
 	tmp := filepath.Join(base, "tmp")
 	mustMkdir(tmp)
 	for _, key := range xdgKeys {
@@ -70,7 +68,6 @@ func TestTutorBasics(t *testing.T) {
 		mustMkdir(filepath.Join(base, key, "fish", "generated_completions"))
 	}
 
-	// The daemon's socket, with a listener that counts who dials it.
 	sock := filepath.Join(xdgDir(base, "XDG_RUNTIME_DIR"), "tuios", "tuios.sock")
 	mustMkdir(filepath.Dir(sock))
 	ln, err := net.Listen("unix", sock)
@@ -103,7 +100,6 @@ func TestTutorBasics(t *testing.T) {
 		})
 		return term, watchChildren(term.Pid())
 	}
-	// sandboxes are the tutor's temp dirs in TMPDIR.
 	sandboxes := func() []string {
 		m, _ := filepath.Glob(filepath.Join(tmp, "tuios-tutor-*"))
 		return m
@@ -114,17 +110,12 @@ func TestTutorBasics(t *testing.T) {
 		saveArtifact(t, term, frames, name)
 		savePNG(t, term.Screen(), shot16, frames, name)
 	}
-	// atSizes saves the frame at 120x36, 80x24 and 60x18, waiting at each
-	// for markers, and goes back to 120x36.
 	atSizes := func(term *tuitest.Terminal, name string, lesson bool, markers ...string) {
 		t.Helper()
 		for _, sz := range [][2]int{{120, 36}, {80, 24}, {60, 18}} {
 			if err := term.Resize(sz[0], sz[1]); err != nil {
 				t.Fatalf("resize to %dx%d: %v", sz[0], sz[1], err)
 			}
-			// The card says where the lesson is in its own words at each
-			// size: "6 of 9" on the 4-row card, "6/9" on the strip. A frame
-			// still drawn for the old size has the other one.
 			want := markers
 			if lesson {
 				if sz[0] >= 80 && sz[1] >= 24 {
@@ -133,8 +124,6 @@ func TestTutorBasics(t *testing.T) {
 					want = append(slices.Clone(markers), "/9 ")
 				}
 			} else {
-				// A screen of the tutor's own is drawn whole for each
-				// size; give the frame for the new one time to land.
 				time.Sleep(500 * time.Millisecond)
 			}
 			waitFor(t, term, name+" at "+strconv.Itoa(sz[0])+"x"+strconv.Itoa(sz[1]), func(s tuitest.Screen) bool {
@@ -162,10 +151,8 @@ func TestTutorBasics(t *testing.T) {
 		waitScreen(t, term, "step "+strconv.Itoa(n), " "+strconv.Itoa(n)+" of 9", title)
 	}
 
-	// Run 1: 16 colours, three steps, SIGTERM.
 	term, kids := tutor(80, 24, "TERM=xterm", "COLORTERM=")
 	waitScreen(t, term, "the menu", "tuios tutor", "The basics", "Nothing on your computer changes")
-	// With no progress the track's row is its plain title.
 	if text := term.Screen().Text(); strings.Contains(text, "Continue") || strings.Contains(text, "over") {
 		t.Errorf("a first run's menu offers to continue or start over:\n%s", text)
 	}
@@ -195,14 +182,11 @@ func TestTutorBasics(t *testing.T) {
 		t.Errorf("after SIGTERM the temp dir is still there: %v", left)
 	}
 
-	// Run 2: truecolor, Continue, the whole track.
 	term, kids = tutor(120, 36, "COLORTERM=truecolor")
 	waitScreen(t, term, "Continue on the menu", "Continue the basics", "3 steps of 9 done", "Start the basics over")
 	atSizes(term, "menu", false, "Continue the basics", "Start the basics over")
 	press(term, tuitest.Enter)
 	step(term, 1, "Open a window")
-	// The card sits on the default dark surface. Followed, the Omarchy
-	// theme under HOME would make it light.
 	if g := cardGround(term.Screen()); luminance(g) == 0 || luminance(g) > 128*1000 {
 		t.Errorf("the card's ground is %+v: the tutor took the theme from the person's HOME (Catppuccin Latte), want the dark default", g)
 	}
@@ -225,7 +209,6 @@ func TestTutorBasics(t *testing.T) {
 	press(term, "|")
 	step(term, 5, "Back to window mode")
 
-	// The mouse: F2 on the card opens the menu, Continue goes back.
 	s := term.Screen()
 	row, col, ok := textAt(s, "F2 menu", 0)
 	if !ok {
@@ -240,7 +223,6 @@ func TestTutorBasics(t *testing.T) {
 	}
 	mouseClick(t, term, col+2, row, tuitest.MouseLeft, 0)
 	step(term, 5, "Back to window mode")
-	// A quit key of tuios opens the menu too.
 	press(term, tuitest.Ctrl('b'), "q")
 	waitScreen(t, term, "the menu after ctrl+b q", "Back one step", "Leave")
 	press(term, tuitest.Esc)
@@ -248,12 +230,10 @@ func TestTutorBasics(t *testing.T) {
 
 	press(term, tuitest.Ctrl('b'), tuitest.Esc)
 	step(term, 6, "Hop between windows")
-	// Idle: the hint comes after 8 seconds.
 	waitFor(t, term, "the hint", func(s tuitest.Screen) bool {
 		return screenHas(s, "Hint: In window mode, tab moves")
 	}, 15*time.Second)
 	atSizes(term, "step6-hint", true, "Hint:")
-	// Too small: the lesson waits, and comes back.
 	if err := term.Resize(50, 14); err != nil {
 		t.Fatal(err)
 	}
@@ -291,7 +271,6 @@ func TestTutorBasics(t *testing.T) {
 		t.Errorf("after q the temp dir is still there: %v", left)
 	}
 
-	// Run 3: inside a tuios pane.
 	term, kids = tutor(80, 24, "TUIOS_PANE_ID=e2e-pane", "TUIOS_SESSION=e2e")
 	waitScreen(t, term, "the nested screen", "You are inside tuios", "ctrl+b then enter", "F12 gives the keys back")
 	frame(term, "nested")
@@ -303,7 +282,6 @@ func TestTutorBasics(t *testing.T) {
 		t.Fatalf("the tutor did not end on q: %v", err)
 	}
 
-	// The machine after three tutors.
 	if n := dials.Load(); n != 0 {
 		t.Errorf("the daemon socket took %d connections from the tutor, want none", n)
 	}
@@ -323,13 +301,10 @@ func TestTutorBasics(t *testing.T) {
 		t.Errorf("a temp dir is left: %v", left)
 	}
 
-	// Positive halves. tuios ls reaches the listener, so the socket is the
-	// one a tuios dials.
 	_, _ = tuiosCLI(t, base, "ls")
 	if dials.Load() == 0 {
 		t.Errorf("tuios ls did not dial %s: the socket check above watched the wrong path", sock)
 	}
-	// A plain tuios follows the Omarchy theme under HOME, and runs a shell.
 	plain := startIn(t, base, startOpts{env: []string{"COLORTERM=truecolor"}})
 	plainKids := watchChildren(plain.Pid())
 	waitBoot(t, plain)
@@ -354,7 +329,6 @@ func TestTutorBasics(t *testing.T) {
 	plainKids.halt()
 }
 
-// waitFor waits for cond, uiTimeout unless a timeout is given.
 func waitFor(t *testing.T, term *tuitest.Terminal, what string, cond func(tuitest.Screen) bool, timeout ...time.Duration) {
 	t.Helper()
 	d := uiTimeout
@@ -366,16 +340,11 @@ func waitFor(t *testing.T, term *tuitest.Terminal, what string, cond func(tuites
 	}
 }
 
-// cardAtFoot reports whether the card ends on the screen's last row: the
-// full card's last row holds the tutor's keys, and the strip's first row,
-// one up from the foot, holds F2.
 func cardAtFoot(s tuitest.Screen) bool {
 	_, rows := s.Size()
 	return strings.Contains(s.Line(rows-1), "F2 menu") || strings.Contains(s.Line(rows-2), "F2 menu")
 }
 
-// cardRow is the screen row of the card's first line, the one with "of 9",
-// or -1.
 func cardRow(s tuitest.Screen) int {
 	_, rows := s.Size()
 	for y := rows - 1; y >= 0; y-- {
@@ -386,7 +355,6 @@ func cardRow(s tuitest.Screen) int {
 	return -1
 }
 
-// cardGround is the background of the card's first cell.
 func cardGround(s tuitest.Screen) tuitest.Color {
 	y := cardRow(s)
 	if y < 0 {
@@ -395,8 +363,6 @@ func cardGround(s tuitest.Screen) tuitest.Color {
 	return s.Cell(0, y).Bg
 }
 
-// capGround is the ground under the first letter of the keycap reading
-// label, on the card's second row.
 func capGround(s tuitest.Screen, label string) (tuitest.Color, bool) {
 	y := cardRow(s)
 	if y < 0 {
@@ -409,14 +375,11 @@ func capGround(s tuitest.Screen, label string) (tuitest.Color, bool) {
 	return s.Cell(c, r).Bg, true
 }
 
-// capReversed reports whether the bracketed keycap is in reverse video, as a
-// lit key is at 16 colours.
 func capReversed(s tuitest.Screen, label string) bool {
 	r, c, ok := textAt(s, label, 0)
 	return ok && s.Cell(c+1, r).Reverse
 }
 
-// tree lists every file and folder under roots, sockets aside.
 func tree(t *testing.T, roots []string) map[string]bool {
 	t.Helper()
 	out := map[string]bool{}
@@ -438,8 +401,6 @@ func tree(t *testing.T, roots []string) map[string]bool {
 	return out
 }
 
-// childWatch records every child process of one pid, read from /proc every
-// 50 ms, until it is stopped.
 type childWatch struct {
 	pid  int
 	mu   sync.Mutex
@@ -479,8 +440,6 @@ func (w *childWatch) scan() {
 		if err != nil {
 			continue
 		}
-		// pid (comm) state ppid ...: comm may hold spaces, so read after
-		// its closing paren.
 		s := string(stat)
 		end := strings.LastIndexByte(s, ')')
 		if end < 0 {
@@ -506,7 +465,6 @@ func (w *childWatch) seen() map[int]string {
 
 func (w *childWatch) halt() { w.once.Do(func() { close(w.quit) }) }
 
-// stop ends the watch and fails the test if the tutor had a child.
 func (w *childWatch) stop(t *testing.T, run string) {
 	t.Helper()
 	w.scan()

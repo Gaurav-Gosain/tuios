@@ -13,24 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The fan-out, end to end through the binary a person runs: a throwaway
-// repository, a fake agent named claude on PATH, and the daemon the CLI
-// starts. Nothing here touches any repository but the one testutil.GitRepo
-// makes under the test.
-
-// fanFixture is an isolation root, a repository, and a fake claude on PATH.
-// The fake sets the window title real Claude Code sets at rest ("✳ Claude
-// Code") and sends the SessionStart hook, which report idle: a quiet pane
-// alone is not ready for a harness that can show it is at its prompt. When it
-// reads a prompt it sets the spinner title real Claude Code sets while a turn
-// runs and sends the UserPromptSubmit hook, which report working: that is the
-// evidence fan waits for before it records the prompt as sent rather than
-// stalled, and for this harness output alone is not.
-//
-// Negative control: with the waitInputLive call cut from typeFirstPrompt, the
-// prompt is typed while the fake drops keys, TestFanTypesPromptWhenReady and
-// TestCockpitSpawnSheet read stalled, and both fail. The agent timers are shortened so
-// detection takes seconds rather than the shipped half minute.
 func fanFixture(t *testing.T) (base, repo string) {
 	t.Helper()
 	base = t.TempDir()
@@ -40,18 +22,9 @@ func fanFixture(t *testing.T) (base, repo string) {
 	if err := os.MkdirAll(bin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// hook is the shell line that sends a Claude Code hook event, the way
-	// the hooks tuios installs for Claude Code do.
 	hook := func(event string) string {
 		return "printf '%s' '{\"hook_event_name\":\"" + event + "\",\"session_id\":\"fake\"}' | '" + tuiosBin + "' agent-hook claude-code >/dev/null 2>&1; "
 	}
-	// The fake starts the way Claude Code does: its SessionStart hook reports
-	// idle before its input box is live, and what is typed in that gap is
-	// lost. It drops the keys, which loses the Enter as Claude Code's
-	// early-input capture does (the text it keeps for the box would be the
-	// same stall). Its box turns bracketed paste on when it is live.
-	// "claude auth status" is the New agent sheet's signed-in check
-	// (agent-readiness): the fake is signed in.
 	script := "#!/bin/sh\nif [ \"$1\" = auth ]; then echo '{\"loggedIn\": true}'; exit 0; fi\n" +
 		"printf '\\033]0;\\342\\234\\263 Claude Code\\007'\necho fake claude starting\n" +
 		hook("SessionStart") + "\n" +
@@ -67,7 +40,6 @@ func fanFixture(t *testing.T) (base, repo string) {
 	return base, repo
 }
 
-// worktreeRows reads `tuios worktree ls --json`.
 func worktreeRows(t *testing.T, base string, args ...string) []map[string]any {
 	t.Helper()
 	out, err := tuiosCLI(t, base, append([]string{"worktree", "ls", "--json"}, args...)...)
@@ -97,8 +69,6 @@ func TestFanTypesPromptWhenReady(t *testing.T) {
 		}
 	}
 
-	// The prompt is typed once the agent is quiet, which the shortened stall
-	// window turns into a couple of seconds.
 	deadline := time.Now().Add(30 * time.Second)
 	for {
 		rows := worktreeRows(t, base, "--group", "try/retry")
@@ -126,8 +96,6 @@ func TestFanTypesPromptWhenReady(t *testing.T) {
 		}
 	}
 
-	// The rail shows the group under the repository, from a client attached to
-	// the first agent's session.
 	term := attachIn(t, base, "repo-try-retry", startOpts{})
 	toggleSidebarViaPalette(t, term)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -289,7 +257,6 @@ func TestFanKeepRefusesDirtySibling(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// No flag: the dirty sibling is left alone and the command says why.
 	out, err = tuiosCLI(t, base, "fan", "keep", "repo-try-keep-2")
 	if err == nil {
 		t.Fatalf("fan keep exited 0 with a dirty sibling:\n%s", out)
@@ -306,7 +273,6 @@ func TestFanKeepRefusesDirtySibling(t *testing.T) {
 		t.Fatalf("the refusal still killed a session: %v", rows)
 	}
 
-	// --stash: the work goes into the repository's stash and the sibling goes.
 	out, err = tuiosCLI(t, base, "fan", "keep", "repo-try-keep-2", "--stash")
 	if err != nil {
 		t.Fatalf("fan keep --stash: %v: %s", err, out)
@@ -333,7 +299,6 @@ func TestFanKeepRefusesDirtySibling(t *testing.T) {
 	}
 }
 
-// gitOut runs a read-only git command in the throwaway repository.
 func gitOut(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)

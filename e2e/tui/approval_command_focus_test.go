@@ -81,7 +81,6 @@ func TestApprovalHoldOutlastsACommandFocusMove(t *testing.T) {
 	}
 	fmt.Fprintf(&log, "hold on %s, the person's client on %s\n", held, other)
 
-	// An agent's command moves the focus to the held pane.
 	cli("run-command", "-s", "e2e-agent", "NextWindow")
 	focusOn(held, "run-command NextWindow")
 	select {
@@ -92,7 +91,6 @@ func TestApprovalHoldOutlastsACommandFocusMove(t *testing.T) {
 		fmt.Fprintf(&log, "run-command NextWindow: focus on %s, the hold runs on\n", held)
 	}
 
-	// The person turns to the pane with tab: the hold ends there.
 	cli("focus-window", "-s", "e2e-agent", "other")
 	focusOn(other, "focus-window other again")
 	if err := term.SendKeys(tuitest.Tab); err != nil {

@@ -16,14 +16,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The cockpit of DESIGN.md frame (a), built for real: twelve agents on three
-// machines, one approval held, three branches ready for review with their
-// pull requests, a fan of three attempts, and an agent running two
-// subagents. The local machine runs the worktrees and the fan, build and gpu
-// are second daemons reached through the ssh stand-in.
-
-// frameAPR is the pull request the fake gh answers for a branch: number,
-// state and checks, as gh pr view --json prints them.
 var frameAPR = map[string]string{
 	"docs/cli-flags": `{"number":884,"url":"https://github.example/o/r/pull/884","state":"OPEN","statusCheckRollup":[` +
 		`{"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"SUCCESS"}]}`,
@@ -32,7 +24,6 @@ var frameAPR = map[string]string{
 		`{"__typename":"CheckRun","name":"lint","status":"COMPLETED","conclusion":"SUCCESS"}]}`,
 }
 
-// frameAWorktree is one local agent in a worktree session of its own.
 type frameAWorktree struct {
 	session, branch, name, harness, state, message string
 	meta                                           []string
@@ -46,7 +37,6 @@ var frameAWorktrees = []frameAWorktree{
 	{"migrate", "chore/config-v3", "migrate-cfg", "claude-code", "working", "", []string{"diff=+230/-198"}},
 }
 
-// frameARemote is one agent on another machine.
 type frameARemote struct {
 	host, name, harness, state, message string
 	meta                                []string
@@ -58,15 +48,12 @@ var frameAFar = []frameARemote{
 	{"gpu", "bench-idle", "claude-code", "working", "Bash go test -bench Idle -count 5", []string{"context=31%", "diff=+18/-2"}},
 }
 
-// frameAFan is the fan: its attempts, what each runs, and what each reports.
 var frameAFan = []struct{ session, name, harness, message, diff string }{
 	{"repo-cache", "cache-1", "gemini", "Bash go test ./internal/cache/...", "+142/-20"},
 	{"repo-cache-2", "cache-2", "claude-code", "Edit internal/cache/lru.go", "+61/-9"},
 	{"repo-cache-3", "cache-3", "codex", "Read internal/cache/evict.go", "+97/-31"},
 }
 
-// frameAJudge is the judge's part of the fake agents: ready at once, and on
-// its task, the verdict of frame (g) through the real CLI.
 const frameAJudge = `  "$TUIOS_E2E_TUIOS" set-agent-state idle -w "$TUIOS_PANE_ID"
   while IFS= read -r line; do
     case "$line" in *"You judge"*)
@@ -84,7 +71,6 @@ const frameAJudge = `  "$TUIOS_E2E_TUIOS" set-agent-state idle -w "$TUIOS_PANE_I
     esac
   done`
 
-// frameALRU is the cache the fan's attempts change.
 const frameALRU = `package cache
 
 import "sync"
@@ -103,16 +89,10 @@ func (c *Cache) Get(key string) string {
 }
 `
 
-// claudeAuthPane is what api-auth's pane prints: Claude Code at its
-// permission prompt, as the live box should show it.
 const claudeAuthPane = "\033[32m●\033[0m \033[1mUpdate(internal/auth/token.go)\033[0m\n  \033[2m└  Updated with 12 additions and 3\n     removals\033[0m\n\n\033[33m●\033[0m \033[1mBash(go test ./internal/auth/...\n       -run Token -count=1)\033[0m\n\n \033[33;1mBash command\033[0m\n Do you want to proceed?\n \033[36m❯ 1. Yes\033[0m\n   2. Yes, and do not ask again for\n      go test commands\n   3. No, and tell Claude what to do\n"
 
-// frameARig is the scenario's machine here: its isolation root and its
-// repository.
 type frameARig struct{ base, repo string }
 
-// startFrameA builds the scenario and opens the cockpit at cols x rows. It
-// returns the client.
 func startFrameA(t *testing.T, cols, rows int) (*tuitest.Terminal, frameARig) {
 	t.Helper()
 	base := t.TempDir()
@@ -121,8 +101,6 @@ func startFrameA(t *testing.T, cols, rows int) (*tuitest.Terminal, frameARig) {
 	build, gpu := remoteMachine(t), remoteMachine(t)
 	repo := testutil.GitRepo(t)
 
-	// The fakes: an ssh that routes by address, gh that answers per branch,
-	// and agents that print a line and wait.
 	fakes := filepath.Join(t.TempDir(), "fakes")
 	if err := os.MkdirAll(fakes, 0o755); err != nil {
 		t.Fatal(err)
@@ -145,13 +123,6 @@ func startFrameA(t *testing.T, cols, rows int) (*tuitest.Terminal, frameARig) {
 	}
 	gh.WriteString("  esac; echo \"no pull requests found for branch \\\"$3\\\"\" >&2; exit 1;;\nesac\nexit 2\n")
 	files := map[string]string{"ssh": ssh.String(), "gh": gh.String()}
-	// Each fake keeps its own name as the pane's process, so the daemon
-	// sees the harness still running: the script is not replaced by sleep.
-	// One started in the repository's main checkout is the judge
-	// judge-fan starts: it says it is ready, and on its task it reports
-	// the verdict of DESIGN.md frame (g).
-	// Each turns bracketed paste on first, as the real ones do when their
-	// input box is live: a first prompt waits for it.
 	for _, a := range []string{"claude", "codex", "gemini", "opencode", "goose"} {
 		files[a] = "#!/bin/sh\nprintf '\\033[?2004h'\nif [ \"$PWD\" = '" + repo + "' ]; then\n" + frameAJudge + "\nfi\n" +
 			"if [ -n \"$1\" ]; then cat \"$1\"; else echo " + a + " ready; fi\nwhile :; do sleep 900; done\n"
@@ -169,13 +140,10 @@ func startFrameA(t *testing.T, cols, rows int) (*tuitest.Terminal, frameARig) {
 		"[hosts.build]\naddr = \"someone@buildbox\"\ncommand = \""+tuiosBin+"\"\nconnect_timeout = 5\n\n"+
 		"[hosts.gpu]\naddr = \"someone@gpubox\"\ncommand = \""+tuiosBin+"\"\nconnect_timeout = 5\n")
 	env := []string{"TUIOS_SSH=" + filepath.Join(fakes, "ssh")}
-	// bin is the fake of a harness, by its id.
 	bin := func(harness string) string {
 		return filepath.Join(fakes, strings.TrimSuffix(harness, "-code"))
 	}
 
-	// Each machine's daemon reports a known load, the design frame's: a
-	// test machine's own load would read as an alarm or as nothing.
 	loads := map[string]float64{base: 0.21, build: 0.38, gpu: 0.72}
 	cli := func(b string, args ...string) {
 		t.Helper()
@@ -198,7 +166,6 @@ func startFrameA(t *testing.T, cols, rows int) (*tuitest.Terminal, frameARig) {
 		}
 	}
 
-	// The machines over the links.
 	for _, far := range []string{build, gpu} {
 		cli(far, "new", "work", "--detach")
 	}
@@ -211,7 +178,6 @@ func startFrameA(t *testing.T, cols, rows int) (*tuitest.Terminal, frameARig) {
 		report(far, "work", a.name, a.harness, a.state, a.message, a.meta)
 	}
 
-	// This machine: the worktrees, each with its agent's pane.
 	cli(base, "new", "misc", "--detach")
 	for _, w := range frameAWorktrees {
 		if out, err := tuiosCLIInDir(t, base, repo, env, "worktree", "new", w.branch, "--name", w.session, "--detach"); err != nil {
@@ -234,21 +200,17 @@ func startFrameA(t *testing.T, cols, rows int) (*tuitest.Terminal, frameARig) {
 	cli(base, "new-window", "scratch", "-s", "misc", "--", bin("claude-code"))
 	report(base, "misc", "scratch", "claude-code", "idle", "", nil)
 
-	// The fan of three, on a cache the base already has.
 	if err := os.MkdirAll(filepath.Join(repo, "internal", "cache"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(repo, "internal", "cache", "lru.go"), []byte(frameALRU), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Git ignores .env, which a keep deletes with a worktree.
 	if err := os.WriteFile(filepath.Join(repo, ".gitignore"), []byte(".env\n*.log\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	testutil.Git(t, repo, "add", ".")
 	testutil.Git(t, repo, "commit", "-q", "-m", "cache")
-	// Each attempt reports idle, which is what fan waits
-	// for before it types the task, then goes to work.
 	if out, err := tuiosCLIInDir(t, base, repo, env, "fan", "3", "--agent", "gemini,claude,codex", "--repo", repo, "--name", "cache",
 		"Make the LRU cache safe for concurrent reads"); err != nil {
 		t.Fatalf("fan: %v\n%s", err, out)
@@ -278,7 +240,6 @@ func startFrameA(t *testing.T, cols, rows int) (*tuitest.Terminal, frameARig) {
 		report(base, a.session, a.name, a.harness, "working", a.message, []string{"diff=" + a.diff})
 	}
 
-	// migrate-cfg runs two subagents.
 	hook := func(session, window string, payload string) {
 		t.Helper()
 		cmd := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", session, "--window", window)
@@ -301,7 +262,6 @@ func startFrameA(t *testing.T, cols, rows int) (*tuitest.Terminal, frameARig) {
 		hook("migrate", "migrate-cfg", subagentTool(sa.id, sa.call+"t", sa.tool, sa.input, false))
 	}
 
-	// api-auth: its transcript, then the approval it waits on.
 	fixture, err := os.ReadFile(filepath.Join("testdata", "transcript", "cockpit-frame-a.jsonl"))
 	if err != nil {
 		t.Fatal(err)
@@ -332,8 +292,6 @@ func startFrameA(t *testing.T, cols, rows int) (*tuitest.Terminal, frameARig) {
 	report(base, "auth", "api-auth", "claude-code", "", "", frameAWorktrees[0].meta)
 
 	term := startIn(t, base, startOpts{args: []string{"attach", "auth"}, cols: cols, rows: rows, shippedLooks: true,
-		// HOME at the test's folder, so a frame names its folders from ~
-		// and never the machine's own.
 		env: append([]string{"TERM=xterm-256color", "COLORTERM=truecolor", "HOME=" + base}, env...)})
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), "Do you want to proceed?") }, bootTimeout); err != nil {
 		t.Fatalf("client never showed api-auth's pane: %v\n%s", err, term.Snapshot())
@@ -369,20 +327,17 @@ func TestCockpitFrameA(t *testing.T) {
 	}
 	_ = term.WaitStable(uiTimeout)
 	s := term.Screen()
-	// The fan's attempts are under its row, before the next agent.
 	fan := fleetRowWith(s, "fan of 3")
 	for i, name := range []string{"cache-1", "cache-2", "cache-3"} {
 		if r := fleetRowWith(s, name); r != fan+2+i {
 			t.Fatalf("ASSERTION: %s is on row %d, not under the fan's row %d\n%s", name, r, fan, term.Snapshot())
 		}
 	}
-	// The machines: this one and the two hosts, each with its agents.
 	for _, want := range []string{"build     2 agents", "gpu       1 agent"} {
 		if fleetRowWith(s, want) < 0 {
 			t.Fatalf("ASSERTION: the machines block lacks %q\n%s", want, term.Snapshot())
 		}
 	}
-	// Each host's load and round trip ride on its link's hello.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		r := fleetRowWith(s, "build     2 agents")
 		if r < 0 {
@@ -395,8 +350,6 @@ func TestCockpitFrameA(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "frame-a-200x55")
 
-	// The scope narrows to build, from its row in the machines block, and
-	// back to every machine from the header.
 	row, col := findText(t, term, "build     2 agents")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -405,8 +358,6 @@ func TestCockpitFrameA(t *testing.T) {
 		t.Fatalf("ASSERTION: the build row did not narrow the fleet to build: %v\n%s", err, term.Snapshot())
 	}
 	saveCockpitFrames(t, term, "frame-a-200x55-build")
-	// The header's machine control opens its menu, and gpu in it scopes
-	// the fleet to gpu.
 	row, col = findText(t, term, "build "+"\ueab4")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	var gr, gc int
@@ -426,8 +377,6 @@ func TestCockpitFrameA(t *testing.T) {
 	alive(t, term, "after frame a")
 }
 
-// frameGDiffs are what each attempt of the fan wrote: A changes the most,
-// B the least, C adds a file of its own.
 var frameGDiffs = map[string]map[string]string{
 	"repo-cache": {
 		"internal/cache/lru.go":      strings.Replace(frameALRU, "\tc.mu.Lock()\n\tdefer c.mu.Unlock()", "\tc.mu.RLock()\n\tdefer c.mu.RUnlock()\n\tc.hits.Add(1)", 1),
@@ -474,15 +423,10 @@ func TestCockpitFanCompare(t *testing.T) {
 			t.Fatalf("report %s done: %v\n%s", a.name, err, out)
 		}
 	}
-	// One check, the person's: does the cache take a RWMutex? A and C fail,
-	// B passes, and the verdict says so.
 	out, _ := tuiosCLI(t, rig.base, "fan", "verify", "repo-cache", "--", "grep -q sync.RWMutex internal/cache/lru.go")
 	if !strings.Contains(out, "1 of 3 passed") {
 		t.Fatalf("fan verify did not pass B alone:\n%s", out)
 	}
-	// The done reports move the fan from Working to Ready for review. The
-	// row is clicked where it ends up: on a slow runner the click once
-	// landed on the row the fan had left.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		ready, fan, working := fleetRowWith(s, "Ready for review"), fleetRowWith(s, "fan of 3"), fleetRowWith(s, "Working")
 		return ready >= 0 && fan > ready && (working < 0 || fan < working) && fleetRowWith(s, "cache-2") == fan+3
@@ -506,9 +450,6 @@ func TestCockpitFanCompare(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "frame-g-before-judge")
 
-	// enter goes to the focused attempt's pane, B's. B reported done, so its
-	// row is its finished item, whose row key is the item's and not the
-	// agent's: enter once found no row and said the pane was not in the list.
 	if err := term.SendKeys("\r"); err != nil {
 		t.Fatal(err)
 	}
@@ -516,8 +457,6 @@ func TestCockpitFanCompare(t *testing.T) {
 	if text := term.Screen().Text(); strings.Contains(text, "is not in the list") {
 		t.Fatalf("ASSERTION: enter in the comparison did not find B's row:\n%s", term.Snapshot())
 	}
-	// Back to the comparison, from B's row. The client lands on the pane a
-	// moment after the daemon says so, and the mode switch waits for that.
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "fan of 3") }, uiTimeout); err != nil {
 		t.Fatalf("enter did not leave the comparison for B's pane: %v\n%s", err, term.Snapshot())
 	}
@@ -545,11 +484,9 @@ func TestCockpitFanCompare(t *testing.T) {
 		t.Fatalf("the comparison did not open again: %v\n%s", err, term.Snapshot())
 	}
 
-	// The key bar names the answers by their keys.
 	if s := term.Screen(); screenLineHolds(s, "K keep", "J judge") == "" {
 		t.Errorf("ASSERTION: the key bar does not name K keep and J judge:\n%s", term.Snapshot())
 	}
-	// j moves, as it does everywhere else in the view: it starts no judge.
 	if err := term.SendKeys("j"); err != nil {
 		t.Fatal(err)
 	}
@@ -558,7 +495,6 @@ func TestCockpitFanCompare(t *testing.T) {
 		return !strings.Contains(s, "A judge reads the attempts"), s
 	})
 
-	// J: the judge reads the attempts and picks B.
 	if err := term.SendKeys("J"); err != nil {
 		t.Fatal(err)
 	}
@@ -572,14 +508,12 @@ func TestCockpitFanCompare(t *testing.T) {
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "frame-g-200x55")
 
-	// K once says what it does, K again keeps B.
 	if err := term.SendKeys("K"); err != nil {
 		t.Fatal(err)
 	}
 	if err := term.WaitForText("Press K again to keep B", uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the first k did not say what a keep does: %v\n%s", err, term.Snapshot())
 	}
-	// C's .env is ignored by git: the warning names it before the keep.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return containsAll(s.Text(), "These files git ignores are deleted, not stashed:", "C: .env")
 	}, uiTimeout); err != nil {
@@ -587,8 +521,6 @@ func TestCockpitFanCompare(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "frame-g-keep")
 
-	// Another ignored file in C after the list was read: the second k reads
-	// again, says the list changed, and keeps nothing.
 	var cPath string
 	for _, r := range rows {
 		if r["session"] == "repo-cache-3" {
@@ -610,9 +542,6 @@ func TestCockpitFanCompare(t *testing.T) {
 		t.Fatalf("ASSERTION: a keep went ahead over a list that grew: %d attempts left", n)
 	}
 
-	// The daemon holds a keep to the names shown, not their count: one
-	// ignored file swapped for another, with the hash read before, is
-	// refused and keeps nothing.
 	shown := fanIgnoredHashes(t, rig.base, "repo-cache-2")
 	if err := os.Rename(filepath.Join(cPath, "build.log"), filepath.Join(cPath, "other.log")); err != nil {
 		t.Fatal(err)
@@ -628,7 +557,6 @@ func TestCockpitFanCompare(t *testing.T) {
 		t.Fatalf("ASSERTION: a keep went ahead over a swapped ignored file: %d attempts left", n)
 	}
 
-	// A list git cannot read keeps nothing, and says why.
 	gitFile := filepath.Join(cPath, ".git")
 	if err := os.Rename(gitFile, gitFile+".off"); err != nil {
 		t.Fatal(err)
@@ -649,7 +577,6 @@ func TestCockpitFanCompare(t *testing.T) {
 	if err := os.Rename(gitFile+".off", gitFile); err != nil {
 		t.Fatal(err)
 	}
-	// k reads the list again; then k keeps.
 	if err := term.SendKeys("K"); err != nil {
 		t.Fatal(err)
 	}
@@ -683,8 +610,6 @@ func TestCockpitFanCompare(t *testing.T) {
 	alive(t, term, "after the fan comparison")
 }
 
-// waitClientOn waits until the daemon lists term's client as attached to
-// session.
 func waitClientOn(t *testing.T, base string, term *tuitest.Terminal, session string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -708,8 +633,6 @@ func waitClientOn(t *testing.T, base string, term *tuitest.Terminal, session str
 	}
 }
 
-// fleetHasRow reports whether a row of the fleet column is named name: the
-// name is the first word after the row's marks.
 func fleetHasRow(s tuitest.Screen, name string) bool {
 	_, rows := s.Size()
 	for r := range rows {
@@ -724,8 +647,6 @@ func fleetHasRow(s tuitest.Screen, name string) bool {
 	return false
 }
 
-// fanIgnoredHashes reads, through compare-fan, the ignored_hash of every
-// attempt of session's fan but session itself.
 func fanIgnoredHashes(t *testing.T, base, session string) map[string]string {
 	t.Helper()
 	params, _ := json.Marshal(map[string]any{"session": session, "detail": true})
@@ -754,8 +675,6 @@ func fanIgnoredHashes(t *testing.T, base, session string) map[string]string {
 	return hashes
 }
 
-// screenLineHolds is the first line of s that holds every marker, "" when no
-// line does.
 func screenLineHolds(s tuitest.Screen, markers ...string) string {
 	for line := range strings.SplitSeq(s.Text(), "\n") {
 		ok := true

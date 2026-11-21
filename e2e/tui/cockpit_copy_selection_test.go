@@ -85,7 +85,6 @@ func TestCockpitCopyModeEndsWithItsAgent(t *testing.T) {
 		_ = term.WaitStable(uiTimeout)
 	}
 	const notice = "Copy mode. v selects"
-	// The copy mode legend in the dock, there only while copy mode runs.
 	const copyLegendQuit = "q/esc quit"
 	noticeGone := func() {
 		t.Helper()
@@ -100,14 +99,12 @@ func TestCockpitCopyModeEndsWithItsAgent(t *testing.T) {
 	waitText(t, term, "copy mode over A", notice)
 	noticeGone()
 
-	// A click on B's row, as a person does while copy mode runs.
 	show("docs-fix", "Write the release notes")
 	sendKeys(t, term, tuitest.Ctrl('b'), "[")
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), notice) }, uiTimeout); err != nil {
 		saveArtifact(t, term, dir, "b-no-copy")
 		t.Errorf("ASSERTION: ctrl+b [ on B did not start copy mode after copy mode on A\n%s", term.Snapshot())
 	} else {
-		// Copy mode runs over B's rows: a search finds B's words.
 		sendKeys(t, term, "/")
 		if err := term.Type("quarter"); err != nil {
 			t.Fatal(err)
@@ -122,8 +119,6 @@ func TestCockpitCopyModeEndsWithItsAgent(t *testing.T) {
 		noticeGone()
 	}
 
-	// Back on A: copy mode is off. The dock shows copy mode's legend while
-	// it runs ("q/esc quit").
 	show("retry-fix", "Why does the retry loop stop")
 	saveArtifact(t, term, dir, "back-on-a")
 	if strings.Contains(term.Screen().Text(), copyLegendQuit) {
@@ -132,8 +127,6 @@ func TestCockpitCopyModeEndsWithItsAgent(t *testing.T) {
 	t.Logf("frames in %s", dir)
 }
 
-// docsTranscript is a short thread for a second agent, with words the first
-// one does not have.
 func docsTranscript(t *testing.T) []byte {
 	t.Helper()
 	recs := []map[string]any{

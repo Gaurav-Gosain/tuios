@@ -8,10 +8,6 @@ import (
 	"time"
 )
 
-// capabilityQuery is the exact query ratatui-image 11.1.0 sends from
-// Picker::from_query_stdio(): a kitty graphics query, DA1, the cell size and
-// DSR 5. Its read loop ends only on "[0n", so the reply to DSR 5 must be the
-// ANSI form CSI 0 n (issue #253).
 const capabilityQuery = `\033_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\033\\\033[c\033[16t\033[5n`
 
 // TestCapabilityQueryEndsWithANSIStatusReport sends the capability query from
@@ -28,9 +24,6 @@ func TestCapabilityQueryEndsWithANSIStatusReport(t *testing.T) {
 			dir := t.TempDir()
 			out := filepath.Join(dir, "reply")
 			script := filepath.Join(dir, "probe.sh")
-			// Raw mode so the reply reaches the file unchanged and unechoed.
-			// With min 0 time 10 a read returns nothing after a second of
-			// silence, so cat collects every chunk and then sees end of file.
 			body := "stty raw -echo min 0 time 10\n" +
 				"printf '" + capabilityQuery + "'\n" +
 				"cat > " + out + "\n" +

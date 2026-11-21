@@ -71,7 +71,6 @@ func TestCockpitSendNowKeys(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "send-now-sent")
 
-	// A plain CR is enter: the reply is queued for the rest.
 	sendWith(t, term, "queued-cr", "\r")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "queued-cr") && strings.Contains(s.Text(), "Queued, typed when it rests")
@@ -82,8 +81,6 @@ func TestCockpitSendNowKeys(t *testing.T) {
 	alive(t, term, "after the send-now keys")
 }
 
-// sendWith opens the reply area, types text and sends seq, the bytes a
-// terminal sends for the key.
 func sendWith(t *testing.T, term *tuitest.Terminal, text, seq string) {
 	t.Helper()
 	for _, k := range []any{"r", text, seq} {
@@ -94,9 +91,6 @@ func sendWith(t *testing.T, term *tuitest.Terminal, text, seq string) {
 	}
 }
 
-// sendNowHint is the reply area's send-now hint as the platform names it: ⌥↵
-// or ⌃↵ on a Mac, by whether the host speaks the kitty keyboard protocol,
-// and alt+↵ elsewhere. On a Mac it is the part both share.
 func sendNowHint() string {
 	if runtime.GOOS == "darwin" {
 		return "↵ send now"

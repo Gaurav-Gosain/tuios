@@ -9,14 +9,6 @@ import (
 	"time"
 )
 
-// The task state a live upgrade must keep beside the cards: which cards a
-// pane holds in another session or on another machine (remoteHolds), and
-// which cards auto runs (its cap). State machine plan S3, PR 1, and
-// notes/sm2/design-S3.md (H1, H2, H3).
-//
-// Negative controls (NEGATIVE_CONTROLS.md, "Task holds across a live upgrade").
-
-// sessionsWith counts the sessions in `tuios ls` whose name has sub.
 func sessionsWith(t *testing.T, base, sub string) (int, string) {
 	t.Helper()
 	ls := mustCLI(t, base, "ls")
@@ -46,8 +38,8 @@ func TestAutoCardsKeepTheirHoldsAcrossALiveUpgrade(t *testing.T) {
 	waitForSessionInfo(t, base, "home")
 
 	note("%s", mustCLI(t, base, "task", "dispatch", "cap", "1"))
-	mustCLI(t, base, "task", "add", "-s", "home", "-p", "One.", "First card")  // t1
-	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Two.", "Second card") // t2
+	mustCLI(t, base, "task", "add", "-s", "home", "-p", "One.", "First card")
+	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Two.", "Second card")
 	note("%s", mustCLI(t, base, "task", "dispatch", "mode", "auto", "--agent", "claude", "-s", "home"))
 	cards, _ := waitAutoCards(t, base, "home", "auto did not start t1", func(c map[string]autoCard) bool { return held(c, "t1") })
 	agent := cards["t1"].Holder.Window
@@ -69,8 +61,7 @@ func TestAutoCardsKeepTheirHoldsAcrossALiveUpgrade(t *testing.T) {
 		t.Fatalf("ASSERTION: t1 is not held by its agent right after the upgrade:\n%s", raw)
 	}
 
-	// A kick after the upgrade: the cap still holds.
-	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Three.", "Third card") // t3
+	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Three.", "Third card")
 	time.Sleep(8 * time.Second)
 	n, ls := sessionsWith(t, base, "api-task-")
 	status := mustCLI(t, base, "task", "dispatch", "-s", "home")
@@ -82,7 +73,6 @@ func TestAutoCardsKeepTheirHoldsAcrossALiveUpgrade(t *testing.T) {
 		t.Errorf("ASSERTION: the status after the upgrade does not say 1 running:\n%s", status)
 	}
 
-	// The agent's pane closes: t1 is let go, and t2 takes the slot.
 	mustCLI(t, base, "close-window", "-s", "api-task-first-card", agent)
 	_, raw = waitAutoCards(t, base, "home", "t1 was not let go when its agent's pane closed after the upgrade",
 		func(c map[string]autoCard) bool { return !held(c, "t1") })
@@ -109,7 +99,7 @@ func TestAFarCardIsLetGoAfterALiveUpgrade(t *testing.T) {
 	defer func() { saveText(t, "task-adopt-far", report.String()) }()
 
 	const proj = "https://example.com/acme/api.git"
-	mustCLI(t, pp.base, "task", "add", "-s", "home", "--project", proj, "-p", "Retry on a 503.", "Fix the retry") // t1
+	mustCLI(t, pp.base, "task", "add", "-s", "home", "--project", proj, "-p", "Retry on a 503.", "Fix the retry")
 	note("%s", mustCLI(t, pp.base, "task", "dispatch", "mode", "auto", "--agent", "claude", "--machine", "build", "--project", proj, "-s", "home"))
 	cards, raw := waitAutoCards(t, pp.base, "home", "auto did not start t1 on build",
 		func(c map[string]autoCard) bool { return held(c, "t1") && c["t1"].Holder.Host != "" })
@@ -132,7 +122,6 @@ func TestAFarCardIsLetGoAfterALiveUpgrade(t *testing.T) {
 		t.Fatalf("ASSERTION: t1 is not held right after build's upgrade:\n%s", raw)
 	}
 
-	// Close build's pane by its session.
 	ls := ansiCSI.ReplaceAllString(mustCLI(t, pp.remote, "ls"), "")
 	sess := regexp.MustCompile(`[a-z0-9-]*task-fix-the-retry[a-z0-9-]*`).FindString(ls)
 	if sess == "" {
@@ -144,10 +133,8 @@ func TestAFarCardIsLetGoAfterALiveUpgrade(t *testing.T) {
 	note("after build's pane closed:\n%s", raw)
 }
 
-// ansiCSI matches the colour sequences of tuios ls.
 var ansiCSI = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
-// untilTrue polls ok until it holds, within limit.
 func untilTrue(t *testing.T, limit time.Duration, why string, ok func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(limit)

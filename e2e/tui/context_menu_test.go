@@ -10,27 +10,16 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// shiftRightClick performs a shift+right-click at a cell: press and release,
-// both carrying the shift bit, as a terminal reports them. That chord is what
-// opens a context menu; plain right-click is a window resize and must keep
-// being one.
-//
-// The release is not optional. A right press starts a resize and sets
-// OS.Resizing and OS.InteractionMode; while either is set tuios stops polling
-// pane content on purpose. Both helpers here used to send a press and no
-// release, which left the program in that state for the rest of the test.
 func shiftRightClick(t *testing.T, term *tuitest.Terminal, x, y int) {
 	t.Helper()
 	mouseClick(t, term, x, y, tuitest.MouseRight, tuitest.ModShift)
 }
 
-// leftClick performs a plain left click at a cell: press then release.
 func leftClick(t *testing.T, term *tuitest.Terminal, x, y int) {
 	t.Helper()
 	mouseClick(t, term, x, y, tuitest.MouseLeft, 0)
 }
 
-// waitMenu fails unless every marker is on screen together within uiTimeout.
 func waitMenu(t *testing.T, term *tuitest.Terminal, what string, markers ...string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -40,7 +29,6 @@ func waitMenu(t *testing.T, term *tuitest.Terminal, what string, markers ...stri
 	}
 }
 
-// waitMenuGone fails unless the marker leaves the screen.
 func waitMenuGone(t *testing.T, term *tuitest.Terminal, marker, what string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -62,10 +50,8 @@ func TestContextMenuTargets(t *testing.T) {
 	term, _ := start(t, startOpts{})
 	waitBoot(t, term)
 
-	// Desktop: no window anywhere yet, so the middle of the screen is empty.
 	shiftRightClick(t, term, 40, 15)
 	waitMenu(t, term, "desktop", "Desktop", "New window", "Command palette")
-	// Escape closes without running anything: no window may appear.
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("esc: %v", err)
 	}
@@ -77,9 +63,6 @@ func TestContextMenuTargets(t *testing.T) {
 
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "after first window")
-	// A new window floats at a size the layout picks, so tile it: a single tiled
-	// window fills the usable area, which makes "inside the pane" and "on its
-	// top border row" fixed coordinates rather than a guess.
 	enableTiling(t, term)
 
 	shiftRightClick(t, term, 20, 10)
@@ -87,13 +70,9 @@ func TestContextMenuTargets(t *testing.T) {
 	if strings.Contains(term.Screen().Text(), "Command palette") {
 		t.Fatalf("the pane menu is showing desktop rows\n%s", term.Snapshot())
 	}
-	leftClick(t, term, 70, 30) // click away
+	leftClick(t, term, 70, 30)
 	waitMenuGone(t, term, "Split right", "after click-away on the pane menu")
 
-	// The pane's top border row is part of the pane and opens the same menu.
-	// There is no separate title-bar target: it was one row tall and sat on the
-	// opposite edge from the window's name, so it was a target users could not
-	// reliably hit.
 	shiftRightClick(t, term, 20, 0)
 	waitMenu(t, term, "pane top row", "Split right", "Rename", "Minimize")
 	if err := term.SendKeys(tuitest.Esc); err != nil {
@@ -101,7 +80,6 @@ func TestContextMenuTargets(t *testing.T) {
 	}
 	waitMenuGone(t, term, "Minimize", "after esc on the pane menu")
 
-	// The dock band is the last row.
 	_, rows := term.Screen().Size()
 	shiftRightClick(t, term, 60, rows-1)
 	waitMenu(t, term, "dock", "Dock", "Restore all")
@@ -125,8 +103,6 @@ func TestContextMenuRunsRegistryAction(t *testing.T) {
 	shiftRightClick(t, term, 40, 15)
 	waitMenu(t, term, "desktop", "New window")
 
-	// "New window" is the first row and the menu opens with it selected, so
-	// enter runs it.
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("enter: %v", err)
 	}
@@ -164,7 +140,6 @@ func TestContextMenuArrowsSkipDimmedRows(t *testing.T) {
 	shiftRightClick(t, term, 20, 10)
 	waitMenu(t, term, "pane", "Copy selection", "Split right", "Zoom")
 
-	// One full lap of the runnable rows, ending back where it started.
 	lap := []string{
 		"Split right", "Split down", "Rename", "Zoom", "Screenshot this window",
 		"Minimize", "Close pane",
@@ -187,9 +162,6 @@ func TestContextMenuArrowsSkipDimmedRows(t *testing.T) {
 	alive(t, term, "after arrowing through the context menu")
 }
 
-// markedRow returns the text of the row carrying the selection marker, or "".
-// The marker is the only thing on screen that says which row enter would run,
-// so navigation assertions read it rather than trusting internal state.
 func markedRow(s tuitest.Screen) string {
 	_, rows := s.Size()
 	for r := range rows {
@@ -224,10 +196,6 @@ func TestContextMenuFitsAtScreenEdges(t *testing.T) {
 			shiftRightClick(t, term, tc.x, tc.y)
 			waitMenu(t, term, tc.name, "New window", "Command palette")
 
-			// Every row of the menu has to be complete. "Command palette" is the
-			// longest label, so its row is the one that goes missing first if the
-			// menu is hanging off an edge: its key hint, whatever key the mode
-			// shows for it, has to be on the line after the label.
 			screen := term.Screen()
 			if !rowHasHint(screen, "Command palette") {
 				t.Fatalf("%s: the menu's key hints are drawn off the screen edge\n%s",
@@ -244,7 +212,6 @@ func TestContextMenuFitsAtScreenEdges(t *testing.T) {
 	alive(t, term, "after opening the menu at every screen edge")
 }
 
-// assertNoLineOverflow checks no rendered line is wider than the terminal.
 func assertNoLineOverflow(t *testing.T, s tuitest.Screen, cols int, what string) {
 	t.Helper()
 	_, rows := s.Size()
@@ -271,11 +238,8 @@ func TestPlainRightClickOpensMenuAndRightDragResizes(t *testing.T) {
 	waitBoot(t, term)
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "after first window")
-	// Tile so the single pane fills the usable area and (20,10) is reliably
-	// inside it, the same trick TestContextMenuTargets uses.
 	enableTiling(t, term)
 
-	// A plain right-click (press + release in place) over a shell opens the menu.
 	mousePress(t, term, 20, 10, tuitest.MouseRight, 0)
 	mouseRelease(t, term, 20, 10, tuitest.MouseRight, 0)
 	if err := term.WaitForText("Close pane", uiTimeout); err != nil {
@@ -286,7 +250,6 @@ func TestPlainRightClickOpensMenuAndRightDragResizes(t *testing.T) {
 	}
 	waitMenuGone(t, term, "Close pane", "after esc on the plain right-click menu")
 
-	// Ctrl+right-click opens the pane menu.
 	mouseClick(t, term, 20, 10, tuitest.MouseRight, tuitest.ModCtrl)
 	if err := term.WaitForText("Close pane", uiTimeout); err != nil {
 		t.Fatalf("ctrl+right-click did not open the pane menu: %v\n%s", err, term.Snapshot())
@@ -296,9 +259,6 @@ func TestPlainRightClickOpensMenuAndRightDragResizes(t *testing.T) {
 	}
 	waitMenuGone(t, term, "Close pane", "after esc on the ctrl+right-click menu")
 
-	// A right-drag past the threshold resizes and must show no menu at all.
-	// The new pane is the barrier: input is handled in order, and an open menu
-	// would take the key, so the pane appears only when no menu opened.
 	noMenuAfter := func(what string) {
 		t.Helper()
 		before := countWindows(term.Screen())
@@ -317,7 +277,6 @@ func TestPlainRightClickOpensMenuAndRightDragResizes(t *testing.T) {
 	mouseRelease(t, term, 30, 16, tuitest.MouseRight, 0)
 	noMenuAfter("a right-drag")
 
-	// The same drag, brought back to where it started before the release.
 	mousePress(t, term, 20, 10, tuitest.MouseRight, 0)
 	mouseMotion(t, term, 30, 16, tuitest.MouseRight, 0)
 	mouseMotion(t, term, 20, 10, tuitest.MouseRight, 0)
@@ -327,8 +286,6 @@ func TestPlainRightClickOpensMenuAndRightDragResizes(t *testing.T) {
 	alive(t, term, "after a right-drag resize")
 }
 
-// sgrRightPressReport matches a forwarded right-button press as the pane's tty
-// echoes it: button 2, a column, a row, and the press marker.
 var sgrRightPressReport = regexp.MustCompile(`(?:^|[^0-9;])2;\d+;\d+M`)
 
 // TestPlainRightClickOpensMenuOverAMouseApp covers a pane whose program tracks
@@ -351,7 +308,6 @@ func TestPlainRightClickOpensMenuOverAMouseApp(t *testing.T) {
 	enterTerminalMode(t, term)
 	runInShell(t, term, `printf '\033[?1000h\033[?1006h'; echo MOUSE""ON`, "MOUSEON", shellTimeout)
 
-	// Terminal mode: the right button belongs to the program.
 	mousePress(t, term, 20, 10, tuitest.MouseRight, 0)
 	mouseRelease(t, term, 20, 10, tuitest.MouseRight, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -364,7 +320,6 @@ func TestPlainRightClickOpensMenuOverAMouseApp(t *testing.T) {
 	}
 	reports := len(sgrRightPressReport.FindAllString(term.Screen().Text(), -1))
 
-	// Window-management mode: the click is tuios's.
 	leaveTerminalMode(t, term)
 	mousePress(t, term, 20, 10, tuitest.MouseRight, 0)
 	mouseRelease(t, term, 20, 10, tuitest.MouseRight, 0)
@@ -376,7 +331,6 @@ func TestPlainRightClickOpensMenuOverAMouseApp(t *testing.T) {
 		t.Fatalf("esc: %v", err)
 	}
 	waitMenuGone(t, term, "Close pane", "after esc on the window-mode menu")
-	// Counted once the menu is gone: open, it covers the echoed reports.
 	if got := len(sgrRightPressReport.FindAllString(term.Screen().Text(), -1)); got != reports {
 		t.Fatalf("ASSERTION: the window-mode right-click reached the program (%d reports, %d before)\n%s", got, reports, term.Snapshot())
 	}
@@ -395,8 +349,6 @@ func TestContextMenuOnDockEntry(t *testing.T) {
 	newWindow(t, term)
 	waitWindowCount(t, term, 1, "after first window")
 
-	// Name the window so the dock entry is identifiable, then minimize it: only
-	// minimized windows appear in the dock.
 	renameFocused(t, term, "logs")
 	if err := term.SendKeys("m"); err != nil {
 		t.Fatalf("minimize: %v", err)
@@ -417,15 +369,10 @@ func TestContextMenuOnDockEntry(t *testing.T) {
 	waitMenu(t, term, "dock entry", "Restore")
 
 	screen := term.Screen().Text()
-	// The dock entry's menu is titled after the window and offers Restore. The
-	// dock's own menu offers New window, so seeing that row means the click
-	// resolved to the dock background instead of to the entry on it.
 	if strings.Contains(screen, "New window") {
 		t.Fatalf("shift+right-click on the dock entry %q opened the dock's general menu\n%s",
 			"logs", term.Snapshot())
 	}
-	// The hint has to be the key the registry actually binds for restoring the
-	// first minimized window.
 	if !strings.Contains(screen, "shift+1") {
 		t.Fatalf("the Restore row does not show its registry keybinding\n%s", term.Snapshot())
 	}
@@ -455,24 +402,11 @@ func TestContextMenuDrawsOverZoomedPane(t *testing.T) {
 	alive(t, term, "after opening a menu over a zoomed pane")
 }
 
-// renameFocused gives the focused window a name through the rename keybinding.
-// It used to sleep for the editor to open and then treat the editor's own echo
-// of the typed name as proof the rename committed; renameWindow waits on
-// something each step actually causes instead.
 func renameFocused(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	renameWindow(t, term, name)
 }
 
-// moveMouse sends a bare pointer motion: the mouse moving with no button held,
-// which is what hovering a menu actually produces.
-//
-// The report is written out rather than built with tuitest.MouseEvent because
-// the pinned harness has no "no button" constant, and its zero value encodes
-// button one, which is a drag. SGR button code 35 is the low two bits set to 3
-// ("no button") plus the motion bit (32), and the trailing M is a press-or-motion
-// report. Sending a drag here would still reach the handler, but it would not be
-// the event a hovering user generates.
 func moveMouse(t *testing.T, term *tuitest.Terminal, x, y int) {
 	t.Helper()
 	if err := term.SendKeys(fmt.Sprintf("\x1b[<35;%d;%dM", x+1, y+1)); err != nil {
@@ -498,14 +432,10 @@ func TestContextMenuHoverFollowsPointer(t *testing.T) {
 	shiftRightClick(t, term, 40, 15)
 	waitMenu(t, term, "desktop", "New window", "Command palette")
 
-	// The menu opens with its first runnable row selected.
 	if got := markedRow(term.Screen()); !strings.Contains(got, "New window") {
 		t.Fatalf("menu opened with the marker on %q, want New window\n%s", got, term.Snapshot())
 	}
 
-	// Find the screen row holding a row further down the menu, then move the
-	// pointer onto it. Reading the row off the screen keeps the test honest
-	// about where the menu actually landed.
 	target := "Command palette"
 	row := rowContaining(term.Screen(), target)
 	if row < 0 {
@@ -522,8 +452,6 @@ func TestContextMenuHoverFollowsPointer(t *testing.T) {
 			row, target, markedRow(term.Screen()), err, term.Snapshot())
 	}
 
-	// Moving back up tracks too, so this is following the pointer rather than
-	// latching onto the last row it saw.
 	back := rowContaining(term.Screen(), "Toggle tiling")
 	if back < 0 {
 		t.Fatalf("Toggle tiling is not on screen\n%s", term.Snapshot())
@@ -539,7 +467,6 @@ func TestContextMenuHoverFollowsPointer(t *testing.T) {
 	alive(t, term, "after hovering the context menu")
 }
 
-// rowContaining returns the screen row holding the given text, or -1.
 func rowContaining(s tuitest.Screen, text string) int {
 	_, rows := s.Size()
 	for r := range rows {
@@ -570,8 +497,6 @@ func TestContextMenuReachesTopWindowRowWithTopDock(t *testing.T) {
 	enableTiling(t, term)
 	time.Sleep(500 * time.Millisecond)
 
-	// Find the window's top border: the first row below the dock's separator
-	// rule that carries a box-drawing corner.
 	top := -1
 	_, rows := term.Screen().Size()
 	for r := range rows {
@@ -595,8 +520,6 @@ func TestContextMenuReachesTopWindowRowWithTopDock(t *testing.T) {
 	alive(t, term, "after opening the pane menu on the top window row")
 }
 
-// rowHasHint reports whether the menu row with label shows a key hint after
-// it on the same line, inside the menu's frame.
 func rowHasHint(s tuitest.Screen, label string) bool {
 	_, rows := s.Size()
 	for r := range rows {

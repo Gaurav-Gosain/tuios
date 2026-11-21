@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// kittyKeyDump turns on the kitty keyboard protocol in its pane, as fish 4
-// and Codex do, and prints each byte it reads in hex, one per row: "B1b".
 const kittyKeyDump = `stty raw -echo
 printf '\033[>1u'
 echo KEYDUMP-READY
@@ -39,7 +37,6 @@ func TestF3ReachesAKittyKeyboardPane(t *testing.T) {
 	}
 	enterTerminalMode(t, term)
 
-	// rows is what the pane printed after the ready line, one byte per row.
 	rows := func(s tuitest.Screen) string {
 		_, after, _ := strings.Cut(s.Text(), "KEYDUMP-READY")
 		var out []string

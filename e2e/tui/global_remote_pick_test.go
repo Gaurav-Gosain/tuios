@@ -12,17 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Picks made while the client is attached to a session on another machine.
-//
-// The picker lists machines as this machine's daemon knows them: "this
-// machine" is the one the user sits at, and alpha and beta are hosts in this
-// machine's [hosts] table. The calls behind a pick used to go to whichever
-// daemon the client was attached to. From a session on alpha, "this machine"
-// made a session or a pane on alpha, and a pane asked of a host went to this
-// machine's daemon, into a session of the same name, where the user could not
-// see it.
-
-// daemonSessionNames is the sessions the daemon at base holds.
 func daemonSessionNames(t *testing.T, base string, env []string) []string {
 	t.Helper()
 	out, err := cliWithin(t, base, env, "ls", "--json")
@@ -42,8 +31,6 @@ func daemonSessionNames(t *testing.T, base string, env []string) []string {
 	return names
 }
 
-// newSessionName waits for a session on the daemon at base that is not in
-// before.
 func newSessionName(t *testing.T, base string, env []string, before []string, within time.Duration) (string, bool) {
 	t.Helper()
 	old := map[string]bool{}
@@ -62,7 +49,6 @@ func newSessionName(t *testing.T, base string, env []string, before []string, wi
 	return "", false
 }
 
-// attachOnAlpha starts a client attached to alpha's session sess.
 func attachOnAlpha(t *testing.T, f *globalFleet, sess string) *tuitest.Terminal {
 	t.Helper()
 	term := startIn(t, f.here, startOpts{args: []string{"attach", "--host", "alpha", sess}, env: f.env})
@@ -74,8 +60,6 @@ func attachOnAlpha(t *testing.T, f *globalFleet, sess string) *tuitest.Terminal 
 	return term
 }
 
-// openNewSessionPicker opens the "New session on" picker, by the palette or by
-// the dock's "+".
 func openNewSessionPicker(t *testing.T, term *tuitest.Terminal, byDock bool) {
 	t.Helper()
 	if !byDock {
@@ -121,7 +105,6 @@ func TestTheSessionPickerMakesTheSessionWhereItWasAskedFor(t *testing.T) {
 		hereBefore := daemonSessionNames(t, f.here, f.env)
 		alphaBefore := daemonSessionNames(t, f.alpha, f.env)
 		openNewSessionPicker(t, term, byDock)
-		// The rows are this machine, global, then the hosts.
 		choosePickerRow(t, term, pickerSessionTitle, rows[row], row, click)
 		waitPickerClosed(t, term, pickerSessionTitle)
 
@@ -133,7 +116,6 @@ func TestTheSessionPickerMakesTheSessionWhereItWasAskedFor(t *testing.T) {
 		} else if rows[row] == "global" && !strings.HasPrefix(name, "global") {
 			wrong = append(wrong, fmt.Sprintf("%s: the session made here is %q, not a global one", how, name))
 		} else if rows[row] == "global" {
-			// A new global session asks for its first pane at once.
 			if err := term.WaitFor(func(s tuitest.Screen) bool {
 				return pickerOpen(s, pickerWindowTitle)
 			}, uiTimeout); err != nil {
@@ -180,10 +162,6 @@ func TestFromAlphaAHostOnlyThisMachineKnowsIsNotOffered(t *testing.T) {
 		[]string{"alpha", thisMachineRow()}, []string{"alpha", "here"}, []string{"beta", "home"})
 }
 
-// remoteGlobalPicks makes a global session on alpha, attaches it from this
-// machine, and picks each row many times by every path. wants[i] is the
-// daemon rows[i] must run on. absent are rows the picker must not show.
-// alphaLink is a host alpha must report up before the picks start.
 func remoteGlobalPicks(t *testing.T, f *globalFleet, alphaLink string, rows, wants, absent []string) {
 	t.Helper()
 	if out, err := tuiosCLIEnv(t, f.alpha, f.env, "new", "global", "--global"); err != nil {
@@ -217,7 +195,6 @@ func remoteGlobalPicks(t *testing.T, f *globalFleet, alphaLink string, rows, wan
 		}
 	}
 
-	// The rows this session cannot use are not on offer.
 	newWindowPaths[0].open(t, term)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		_, _, found := findPickerRow(s, pickerWindowTitle, rows[len(rows)-1])
@@ -258,8 +235,6 @@ func TestAPickOfAHostWhoseLinkIsDownSaysSo(t *testing.T) {
 	}
 	for i, click := range []bool{false, true} {
 		if i == 1 {
-			// alpha's link was broken too, and it redials. The picker opens
-			// only while a second machine is up, so this pick waits for it.
 			waitForHostListing(t, f.here, func(s string) bool { return hostLineUp(s, "alpha") },
 				"alpha never came back")
 		}
@@ -286,16 +261,11 @@ func TestAPickOfAHostWhoseLinkIsDownSaysSo(t *testing.T) {
 		}
 	}
 
-	// beta comes back. This client must hear it and let beta be picked
-	// again, without waiting for its minute poll.
 	if err := os.Remove(filepath.Join(f.here, "down-someone@betabox")); err != nil {
 		t.Fatal(err)
 	}
 	waitForHostListing(t, f.here, func(s string) bool { return hostLineUp(s, "beta") },
 		"this machine never saw beta come back")
-	// The client hears of it by a push a moment after the daemon does. The
-	// picker's list is taken when it opens, so it is opened until beta's row
-	// reads up, within the time a push takes and well inside the minute poll.
 	deadline := time.Now().Add(uiTimeout)
 	for {
 		newWindowPaths[0].open(t, term)
@@ -316,7 +286,6 @@ func TestAPickOfAHostWhoseLinkIsDownSaysSo(t *testing.T) {
 	choosePickerRow(t, term, pickerWindowTitle, "beta", 2, false)
 	id, _, ok := waitNewWindow(t, f.here, f.env, "global", before, 3*time.Second)
 	if !ok {
-		// Whatever the pick said is on screen now, before it times out.
 		said := term.Snapshot()
 		if id, _, ok = waitNewWindow(t, f.here, f.env, "global", before, 17*time.Second); !ok {
 			t.Fatalf("ASSERTION: beta is up again and a pick of it made no pane:\n%s", said)
@@ -327,8 +296,6 @@ func TestAPickOfAHostWhoseLinkIsDownSaysSo(t *testing.T) {
 	}
 }
 
-// betaRowUp reports whether the picker's beta row shows a session count,
-// which is what a row whose link is up shows in place of the link's state.
 func betaRowUp(s tuitest.Screen) bool {
 	for line := range strings.SplitSeq(s.Text(), "\n") {
 		if strings.Contains(line, " beta ") && strings.Contains(line, "session") {

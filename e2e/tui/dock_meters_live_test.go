@@ -88,7 +88,6 @@ func TestDockMetersFollowLiveSettings(t *testing.T) {
 				setMeter(name, true)
 				waitDockMeter(t, base, name, true)
 			}
-			// No keys or config writes here: the sampler itself must keep running.
 			for _, name := range []string{"cpu", "ram"} {
 				first := waitDockMeter(t, base, name, true)
 				deadline := time.Now().Add(uiTimeout)
@@ -155,7 +154,6 @@ func TestDockMeterSyncDoesNotReloadAnUnchangedPlan(t *testing.T) {
 					}
 				}
 			}
-			// Exercise the post-handler sync over more than one meter interval.
 			deadline = time.Now().Add(3 * time.Second)
 			for time.Now().Before(deadline) {
 				meters := readDockMeters(t, base)
@@ -173,9 +171,6 @@ func TestDockMeterSyncDoesNotReloadAnUnchangedPlan(t *testing.T) {
 			saveArtifact(t, term, artifactDir(t), "unchanged-plan")
 			saveDockMeterListing(t, base, "unchanged-plan")
 
-			// Positive half: the same engine must rebuild when a meter really
-			// joins its sampler set. Placement changes use the config watcher;
-			// an already placed meter uses the live setting handled by the sync.
 			if placed {
 				if out, err := tuiosCLI(t, base, "set-config", "appearance.show_cpu", "true", "-s", "e2e"); err != nil {
 					t.Fatalf("enable placed CPU: %v\n%s", err, out)

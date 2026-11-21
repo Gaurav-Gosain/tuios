@@ -44,8 +44,6 @@ session = "later-side"
 	}, uiTimeout); err != nil {
 		t.Fatalf("rail did not reconnect after assigned session appeared: %v\n%s", err, term.Snapshot())
 	}
-	// Removing and recreating the assigned daemon session must also reconnect
-	// this passive viewer. Its original PTY and stream sequence no longer exist.
 	if out, err := tuiosCLI(t, base, "kill-session", "later-side"); err != nil {
 		t.Fatalf("remove assigned session: %v\n%s", err, out)
 	}

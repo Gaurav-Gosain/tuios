@@ -58,7 +58,6 @@ unset TUIOS_PANE_ID TUIOS_PANE_TOKEN
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
-	// Room for a second wake to show, if there were one.
 	time.Sleep(mailWakeWait)
 	if n, out := gotLines(t, base, session, idle); n != 2 {
 		t.Fatalf("the agent got %d typed lines, want the queued prompt and one wake:\n%s", n, out)

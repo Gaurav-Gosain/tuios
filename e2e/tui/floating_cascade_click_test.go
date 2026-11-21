@@ -95,8 +95,6 @@ start_in_terminal_mode = true
 			saveTMLFrame(t, term, "cascade-before-click")
 
 			t.Run("floating", func(t *testing.T) {
-				// A first click focuses an unfocused surface without activating
-				// its button. Derive the point from the screen the user sees.
 				x, y := tmlLocate(t, term, "CLICK_TARGET")
 				mouseClick(t, term, x+1, y, tuitest.MouseLeft, 0)
 				deadline := time.Now().Add(uiTimeout)
@@ -130,8 +128,6 @@ start_in_terminal_mode = true
 				}
 			})
 
-			// Run the control even when floating fails. It uses the same owner,
-			// surface and mouse transport, after the public tiling toggle.
 			if tc.count == 3 {
 				t.Run("tiled-control", func(t *testing.T) {
 					before, err := os.ReadFile(events)

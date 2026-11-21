@@ -14,16 +14,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// The chrome at each colour depth a terminal can have. The depth is what the
-// test terminal's TERM and COLORTERM say, which is how a user's terminal
-// selects it too: xterm is 16 colours, xterm-256color without COLORTERM is 256
-// (Apple Terminal, mosh, tmux without Tc), and COLORTERM=truecolor is 24-bit.
-//
-// Each run saves the frame as text, as styled text and as a PNG drawn by
-// tuios's own renderer (tuios.dev/shot) from the cells the terminal received,
-// with the palette a terminal of that kind would paint the sixteen slots with.
-
-// chromeDepth is one terminal the chrome is drawn for.
 type chromeDepth struct {
 	name string
 	env  []string
@@ -35,16 +25,11 @@ var chromeDepths = []chromeDepth{
 	{name: "truecolor", env: []string{"TERM=xterm-256color", "COLORTERM=truecolor"}},
 }
 
-// chromeLooks are the two grounds: no theme on a dark terminal, and a light
-// theme.
 var chromeLooks = []struct{ name, theme string }{
 	{name: "dark", theme: ""},
 	{name: "light", theme: "catppuccin_latte"},
 }
 
-// hostPalette is the palette the picture paints default and indexed colours
-// with: the xterm defaults for the dark look, and the theme's own sixteen for
-// a themed one, since a user on a light theme runs a terminal set to it.
 func hostPalette(t *testing.T, themeName string) *shot.Palette {
 	t.Helper()
 	if themeName == "" {
@@ -67,7 +52,6 @@ func shotColor(c color.Color) shot.Color {
 	return shot.RGB(uint8(r>>8), uint8(g>>8), uint8(b>>8))
 }
 
-// resolveCell is a tuitest colour as the host terminal paints it.
 func resolveCell(c tuitest.Color, p *shot.Palette, def shot.Color) shot.Color {
 	switch c.Kind {
 	case tuitest.ColorIndexed:
@@ -81,11 +65,6 @@ func resolveCell(c tuitest.Color, p *shot.Palette, def shot.Color) shot.Color {
 	return def
 }
 
-// frameFont is the font the PNG frames are drawn in: TUIOS_E2E_FONT and
-// TUIOS_E2E_FONT_BOLD name the files. Unset, the frames use JetBrainsMono
-// Nerd Font Mono when the machine has it installed (frames attached to pull
-// requests should not depend on someone remembering to set the variables),
-// and shot's own Go Mono otherwise, as on CI.
 func frameFont() *shot.Frame {
 	regularPath, boldPath := frameFontPaths()
 	if regularPath == "" {
@@ -102,9 +81,6 @@ func frameFont() *shot.Frame {
 	return f
 }
 
-// frameFontPaths returns the regular and bold font files for frames: the
-// TUIOS_E2E_FONT variables when set, else an installed JetBrainsMono Nerd
-// Font Mono, else nothing.
 func frameFontPaths() (regular, bold string) {
 	if path := os.Getenv("TUIOS_E2E_FONT"); path != "" {
 		return path, os.Getenv("TUIOS_E2E_FONT_BOLD")
@@ -140,14 +116,11 @@ func frameFontPaths() (regular, bold string) {
 	return "", ""
 }
 
-// savePNG draws the screen through tuios.dev/shot and writes it beside the
-// text artifacts, so the frame can be looked at the way the terminal shows it.
 func savePNG(t *testing.T, s tuitest.Screen, p *shot.Palette, dir, name string) {
 	t.Helper()
 	saveGridPNG(t, screenGrid(s, p), dir, name)
 }
 
-// screenGrid is the screen as a shot grid, in the palette p.
 func screenGrid(s tuitest.Screen, p *shot.Palette) *shot.Grid {
 	cols, rows := s.Size()
 	g := shot.NewGrid(cols, rows, p.FG, p.BG)
@@ -173,7 +146,6 @@ func screenGrid(s tuitest.Screen, p *shot.Palette) *shot.Grid {
 	return g
 }
 
-// saveGridPNG draws a grid in the frame font and writes it as dir/name.png.
 func saveGridPNG(t *testing.T, g *shot.Grid, dir, name string) {
 	t.Helper()
 	data, err := shot.RenderPNG(g, frameFont())
@@ -185,20 +157,17 @@ func saveGridPNG(t *testing.T, g *shot.Grid, dir, name string) {
 	}
 }
 
-// palettePanel is where the command palette landed on screen.
 type palettePanel struct {
-	titleRow  int // the row of the title chip
-	left      int // the panel's first column
-	right     int // one past its last column
-	ruleStart int // the first column of the search rule, the body's left edge
-	ruleEnd   int // one past its last
-	selRow    int // the selected command's row
-	bottomRow int // the panel's last row
-	searchRow int // the search line
+	titleRow  int
+	left      int
+	right     int
+	ruleStart int
+	ruleEnd   int
+	selRow    int
+	bottomRow int
+	searchRow int
 }
 
-// findPalette reads the palette's geometry off the screen: the title, then the
-// search rule two rows under it, whose run of rule glyphs is the body's width.
 func findPalette(t *testing.T, term *tuitest.Terminal) palettePanel {
 	t.Helper()
 	s := term.Screen()
@@ -214,9 +183,6 @@ func findPalette(t *testing.T, term *tuitest.Terminal) palettePanel {
 	}
 	p.ruleStart, p.ruleEnd = col, col+w
 	p.left, p.right = p.ruleStart-overlay.DefaultPanelPadding, p.ruleEnd+overlay.DefaultPanelPadding
-	// The first list row is the first category's header when nothing is
-	// typed; the selected command is the first row under the rule with the
-	// cursor mark.
 	p.selRow = p.titleRow + 4
 	if !strings.Contains(s.Line(p.selRow), "›") {
 		p.selRow++
@@ -269,8 +235,6 @@ func TestChromeAtEveryColourDepth(t *testing.T) {
 				base := t.TempDir()
 				killDaemon(t, base)
 				useShippedLooks(base)
-				// The dock's caps are on so checkPillCaps has dock pills to
-				// read. They ship on, and the test does not lean on that.
 				cfg := "[appearance]\ndock_pill_caps = true\n"
 				if look.theme != "" {
 					cfg += "theme = \"" + look.theme + "\"\n"
@@ -313,9 +277,6 @@ func TestChromeAtEveryColourDepth(t *testing.T) {
 					checkTrueColor(t, term, s, p)
 				}
 
-				// The rail with the keyboard: its cursor row is the same rule
-				// as the palette's selected row, a ground or, at 16 colours,
-				// reverse video.
 				closePalette(t, term, "before focusing the rail")
 				if err := term.SendKeys("s"); err != nil {
 					t.Fatalf("focus the rail: %v", err)
@@ -343,8 +304,6 @@ func TestChromeAtEveryColourDepth(t *testing.T) {
 	}
 }
 
-// checkNoNavy holds the whole screen to the finding that started this work:
-// no ground of index 17 or 4.
 func checkNoNavy(t *testing.T, term *tuitest.Terminal, s tuitest.Screen) {
 	t.Helper()
 	cols, rows := s.Size()
@@ -362,7 +321,7 @@ func check256(t *testing.T, term *tuitest.Terminal, s tuitest.Screen, p paletteP
 	checkNoNavy(t, term, s)
 	for y := p.titleRow - 1; y <= p.bottomRow; y++ {
 		if y == p.titleRow {
-			continue // the title chip is the accent
+			continue
 		}
 		for x := p.left; x < p.right; x++ {
 			bg := s.Cell(x, y).Bg
@@ -376,14 +335,8 @@ func check256(t *testing.T, term *tuitest.Terminal, s tuitest.Screen, p paletteP
 	}
 }
 
-// pillCapGlyphs are the rounded ends the dock and the rail draw round a pill.
 var pillCapGlyphs = map[string]bool{"\ue0b6": true, "\ue0b4": true, "◖": true, "◗": true}
 
-// checkPillCaps fails on a pill cap drawn in the terminal's default ink. A cap
-// takes the pill's fill as its ink, so a default ink means the fill had no
-// colour: at 16 colours a workspace pill's fill is the terminal's own ground,
-// and its caps were drawn as white half circles round a label on nothing,
-// which read as brackets.
 func checkPillCaps(t *testing.T, term *tuitest.Terminal, s tuitest.Screen) {
 	t.Helper()
 	cols, rows := s.Size()
@@ -440,11 +393,6 @@ func checkTrueColor(t *testing.T, term *tuitest.Terminal, s tuitest.Screen, p pa
 	}
 }
 
-// checkRailInk measures the attached session's name on the rail against the
-// ground it is written on. Under the light theme the ground is the theme's
-// background as the depth shows it; at 16 colours the name is the terminal's
-// own foreground, which is readable by construction, and any other colour
-// there fails.
 func checkRailInk(t *testing.T, term *tuitest.Terminal, themeName, depth string) {
 	t.Helper()
 	s := term.Screen()
@@ -479,7 +427,6 @@ func checkRailInk(t *testing.T, term *tuitest.Terminal, themeName, depth string)
 	}
 }
 
-// tuiColor is a tuitest colour as RGB, through the xterm table for an index.
 func tuiColor(c tuitest.Color) color.Color {
 	s := resolveCell(c, shot.XTermPalette(), shot.XTermFg)
 	return color.RGBA{R: s.R, G: s.G, B: s.B, A: 0xff}
@@ -563,10 +510,6 @@ func TestUnfocusedListKeepsItsCursor(t *testing.T) {
 				t.Fatalf("the focused cursor ground %+v is not its own (quiet %+v, rest %+v)\n%s",
 					focused.Bg, quiet.Bg, rest.Bg, term.SnapshotStyled())
 			}
-			// The diff's cursor is on its first row, the hunk header. It has to
-			// keep a cursor ground of its own there: different from the ground
-			// the header rests on, which is what it shows once the cursor moves
-			// off it.
 			hunkRow, hunkCol, ok := textAt(s, "@@", col+10)
 			if !ok {
 				t.Fatalf("no hunk header in the diff\n%s", term.Snapshot())

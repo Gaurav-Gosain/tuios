@@ -8,8 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// numberedSessionRow reports whether the rail portion of the screen carries
-// the session's row led by a switch number.
 func numberedSessionRow(screen, name string) bool {
 	for line := range strings.SplitSeq(screen, "\n") {
 		rail := line
@@ -41,8 +39,6 @@ func TestRailSwitchNumbersSurviveReattach(t *testing.T) {
 		t.Fatalf("create first session: %v: %s", err, out)
 	}
 	term := startIn(t, base, startOpts{args: []string{"attach", "e2e-alpha"}})
-	// An attached client boots straight into the session: no welcome screen,
-	// so the wait is on the dock's count, the way daemon_persistence does it.
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("first client never attached: %v\n%s", err, term.Snapshot())
 	}
@@ -62,8 +58,6 @@ func TestRailSwitchNumbersSurviveReattach(t *testing.T) {
 	expectNumber(term, "e2e-alpha", "on the first client")
 	expectNumber(term, "e2e-beta", "on the first client")
 
-	// Detach and come back: the reattached client rebuilds the session tree
-	// from the daemon's listing.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "d"); err != nil {
 		t.Fatalf("detach: %v", err)
 	}

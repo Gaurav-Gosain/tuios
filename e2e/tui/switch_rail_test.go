@@ -7,14 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The rail is session state, so a session switch can move it: the session
-// being shown has its own. The box the panes are laid out in has to follow
-// the rail of the session on screen after every switch, in the daemon's
-// rectangles and on the screen, and a toggle after a switch has to move the
-// panes as it does before one.
-
-// switchToNext moves the client to the other of the two sessions and waits
-// for the switch to land.
 func switchToNext(t *testing.T, term *tuitest.Terminal, to string) {
 	t.Helper()
 	sendKeys(t, term, tuitest.Alt("N"))
@@ -43,8 +35,6 @@ func TestSwitchedSessionTakesItsOwnRail(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "new", "-d", "bravo"); err != nil {
 		t.Fatalf("create bravo: %v\n%s", err, out)
 	}
-	// A client of bravo applies the config's startup tiling there, and
-	// leaves.
 	maker := attachIn(t, base, "bravo", startOpts{cols: bigCols, rows: bigRows})
 	waitForSettledGeometryIn(t, base, "bravo", 1)
 	if err := maker.Close(); err != nil {
@@ -55,13 +45,11 @@ func TestSwitchedSessionTakesItsOwnRail(t *testing.T) {
 	})).left
 	dir := artifactDir(t)
 
-	// Four toggles: the rail ends shown, and alpha's generation is ahead.
 	for i := range 4 {
 		toggleRail(t, term)
 		waitRail(t, term, i%2 == 1, map[bool]int{true: rail, false: 0}[i%2 == 1], fmt.Sprintf("alpha after toggle %d", i+1))
 	}
 
-	// bravo: one pane, and the rail shown, as its maker had it.
 	bravoSpan := func(what string, left int) {
 		t.Helper()
 		waitForShape(t, base, "bravo", 1, what, func(rects []winRect) error {
@@ -81,10 +69,6 @@ func TestSwitchedSessionTakesItsOwnRail(t *testing.T) {
 	bravoSpan("the daemon after the rail is hidden in bravo", 0)
 	saveArtifact(t, term, dir, "bravo-hidden")
 
-	// Back in alpha. The rail is one state for every session (issue 589), so
-	// the hide made in bravo holds here too, and alpha's panes take the
-	// space back: the resize answers of alpha, numbered from its own
-	// generation, must not be dropped as stale.
 	switchToNext(t, term, "alpha")
 	waitRail(t, term, false, 0, "the client back in alpha")
 	waitSpan(t, base, "alpha", "the daemon back in alpha", func(s paneSpan) bool {
@@ -99,7 +83,6 @@ func TestSwitchedSessionTakesItsOwnRail(t *testing.T) {
 	})
 	saveArtifact(t, term, dir, "alpha-shown")
 
-	// And in bravo again, where the show made in alpha holds.
 	switchToNext(t, term, "bravo")
 	waitRail(t, term, true, rail, "the client in bravo again")
 	bravoSpan("the daemon in bravo again", rail)
@@ -144,7 +127,6 @@ func TestSwitchIntoASmallerSessionKeepsItsSize(t *testing.T) {
 		t.Fatalf("bravo is %dx%d, want 80x24", w, h)
 	}
 
-	// Back in alpha, alone again: the whole terminal.
 	switchToNext(t, wide, "alpha")
 	waitSpanRight(t, wide, bigCols, "the wide client back in alpha")
 }

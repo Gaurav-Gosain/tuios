@@ -12,28 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// How TestCopyModeEditScrollback could pass wrongly, written down first:
-//   - The editor could get the client's copy of the pane, which after an
-//     attach holds only the newest 1000 history rows. The daemon case prints
-//     3000 rows before any client attaches and requires the first of them.
-//   - The search could land on the typed command rather than its output. The
-//     command spells the marker as "row-$i", so only the output holds
-//     "row-2990".
-//   - A +LINE that is right by accident: the line is read from the file the
-//     editor got, and row-2990 is far from both ends of it.
-//   - The file could be removed only when the client ends. The client is
-//     still running when the test looks for the file.
-//   - The editor could be handed a pipe for stdout instead of the terminal
-//     (bubbletea gives a command the program's output, and the client's is a
-//     wrapper, not a file). Then the editor cannot set the terminal raw, runs
-//     with echo on, and the host's replies to its startup queries print on the
-//     screen. The fake editor records whether its stdout is a terminal.
-//   - The fake editor could fail before it records anything. Each record is
-//     required, and the editor prints a marker the test waits for.
-
-// fakeVim is an editor named vim, so tuios passes it +LINE. It records its
-// arguments, a copy of the file, the modes of the file and its folder, and
-// whether its stdout is a terminal, then holds the terminal for a moment.
 const fakeVim = `#!/bin/sh
 dir=%DIR%
 : > "$dir/args"

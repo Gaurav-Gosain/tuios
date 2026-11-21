@@ -26,8 +26,6 @@ import (
 //
 // NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md, "Live handoff").
 
-// daemonUpgrade runs `tuios daemon upgrade --binary bin --json` and decodes
-// its outcome.
 func daemonUpgrade(t *testing.T, base, bin string) (map[string]any, string, error) {
 	t.Helper()
 	out, err := handoffCLI(t, base, 90*time.Second, "daemon", "upgrade", "--binary", bin, "--json")
@@ -37,7 +35,6 @@ func daemonUpgrade(t *testing.T, base, bin string) (map[string]any, string, erro
 	return res, out, err
 }
 
-// childCommands is the command line of every child of pid.
 func childCommands(t *testing.T, pid int) []string {
 	t.Helper()
 	var out []string
@@ -52,8 +49,6 @@ func childCommands(t *testing.T, pid int) []string {
 			if err != nil {
 				continue
 			}
-			// The command name in field 2 may hold spaces; the fields after
-			// its closing parenthesis do not.
 			fields := strings.Fields(string(stat[strings.LastIndexByte(string(stat), ')')+1:]))
 			if len(fields) < 2 || fields[1] != strconv.Itoa(pid) {
 				continue
@@ -100,9 +95,6 @@ func TestDaemonUpgradeCommandKeepsPanes(t *testing.T) {
 	before := panePIDs(t, base, sess)
 	img := helloImage(t, base)
 
-	// A call waiting in the daemon when it is upgraded ends with
-	// daemon_upgrading, which says to call again, and not with a dropped
-	// connection.
 	waiting := make(chan string, 1)
 	go func() {
 		out, err := handoffCLI(t, base, 60*time.Second, "call", "wait-for",
@@ -272,8 +264,6 @@ func TestAttachedClientIsToldToReattach(t *testing.T) {
 	if !exited {
 		t.Fatalf("ASSERTION: the client still runs %s after an upgrade to a protocol it does not speak\n%s", took.Round(time.Second), term.Snapshot())
 	}
-	// The wait for a new daemon lasts 15 s. A client that found the protocol
-	// apart exits on its first dial.
 	if took > 8*time.Second {
 		t.Errorf("ASSERTION: the client took %s to exit after the upgrade: it waited for a daemon it cannot talk to instead of stopping at its answer", took.Round(time.Millisecond))
 	}
@@ -291,16 +281,9 @@ var (
 	otherProtocolOnce sync.Once
 	otherProtocolBin  string
 	otherProtocolErr  error
-	// otherProtocolDir holds that build, and runE2E removes it when the run
-	// ends: the binary is tens of megabytes, and a test's cleanup is too early
-	// for it, since every test that wants it shares the one build.
-	otherProtocolDir string
+	otherProtocolDir  string
 )
 
-// otherProtocolTuios builds this tree once per run with the wire protocol one
-// ahead and the oldest it serves moved up with it, as a release that changes
-// a message's shape would. Its daemon refuses this build's clients at the
-// hello, and a client of this build would refuse its welcome.
 func otherProtocolTuios(t *testing.T) string {
 	t.Helper()
 	otherProtocolOnce.Do(func() {
@@ -380,8 +363,6 @@ func TestFederationLinkRedialsAfterUpgrade(t *testing.T) {
 	img := helloImage(t, base)
 	links := func() (live, dead int, all []string) {
 		for _, c := range childCommands(t, img.PID) {
-			// The stand-in execs this test binary as the relay for the
-			// link's ssh command.
 			if !strings.Contains(c, testBinary(t)) {
 				continue
 			}
@@ -530,7 +511,6 @@ func TestDaemonUpgradeFromAPaneIsRefused(t *testing.T) {
 	}
 }
 
-// linkRef is a pane of an agent's parent chain, as list-agents gives it.
 type linkRef struct {
 	Session        string `json:"session"`
 	Window         string `json:"window"`
@@ -538,7 +518,6 @@ type linkRef struct {
 	Gone           bool   `json:"gone"`
 }
 
-// linkRow is the part of a list-agents row the parent link test reads.
 type linkRow struct {
 	Window string   `json:"window_id"`
 	Name   string   `json:"name"`
@@ -547,7 +526,6 @@ type linkRow struct {
 	Depth  int      `json:"depth"`
 }
 
-// linkRows lists the windows of session, agent or not, by name.
 func linkRows(t *testing.T, base string, params map[string]any) map[string]linkRow {
 	t.Helper()
 	res := mustCall(t, base, "list-agents", params)
@@ -563,22 +541,13 @@ func linkRows(t *testing.T, base string, params map[string]any) map[string]linkR
 	return out
 }
 
-// writeChainAgent writes the fake agent of the parent link tests under base
-// and returns its path. Run as `agent.sh N`, it reports idle with the
-// conversation id conv-N, so it is an agent start-agent can wait for, then
-// starts generation N-1 with tuios start-agent, named genN-1, from its pane.
-// gen2 then starts sib1 as well, and gen1 is slow to report.
 func writeChainAgent(t *testing.T, base string) string {
 	t.Helper()
 	agent := filepath.Join(base, "agent.sh")
 	script := "#!/bin/sh\nT='" + tuiosBin + "'\n" +
-		// gen1 takes a few seconds to come up, so gen2 waits in its first
-		// start-agent across the daemon's agent detection poll.
 		`if [ "$1" -eq 1 ]; then sleep 3; fi` + "\n" +
 		`"$T" set-agent-state idle --agent-session-id "conv-$1"` + "\n" +
 		`if [ "$1" -gt 0 ]; then "$T" start-agent "$0 $(($1 - 1))" --name "gen$(($1 - 1))" --json > "$0.start$1" 2>&1; fi` + "\n" +
-		// The root starts a second child right after the first, with no
-		// report in between: a pane that has been an agent keeps linking.
 		`if [ "$1" -eq 2 ]; then "$T" start-agent "$0 0" --name sib1 --json > "$0.sib" 2>&1; fi` + "\n" +
 		"exec sleep 600\n"
 	if err := os.WriteFile(agent, []byte(script), 0o755); err != nil {
@@ -622,8 +591,6 @@ func TestAgentParentLinkSurvivesUpgradeAndRestart(t *testing.T) {
 	gen2, gen1 := rows["gen2"].Window, rows["gen1"].Window
 	evidence := map[string]any{"started": rows}
 
-	// check holds the chain to what it must be. gone is the set of panes
-	// that have closed.
 	check := func(when string, rows map[string]linkRow, gone map[string]bool) {
 		t.Helper()
 		if r := rows["gen2"]; r.Window != "" && (r.Parent != nil || r.Root != nil) {
@@ -652,7 +619,6 @@ func TestAgentParentLinkSurvivesUpgradeAndRestart(t *testing.T) {
 	}
 	check("after start", rows, nil)
 
-	// The selector: a parent's children, and a root's whole chain.
 	names := func(sel string) []string {
 		t.Helper()
 		var out []string
@@ -671,8 +637,6 @@ func TestAgentParentLinkSurvivesUpgradeAndRestart(t *testing.T) {
 		t.Errorf("ASSERTION: wait-for agent-state --select root:%s --every did not end on the idle chain: %v\n%s", gen2, err, out)
 	}
 
-	// A script outside every pane names the parent. Six more links reach
-	// depth 8, and the ninth is refused with nothing started.
 	parent := gen1
 	for i := range 6 {
 		name := "deep" + strconv.Itoa(i)
@@ -703,7 +667,6 @@ func TestAgentParentLinkSurvivesUpgradeAndRestart(t *testing.T) {
 		t.Errorf("ASSERTION: the refused start at depth 9 still opened a pane")
 	}
 
-	// A live upgrade keeps every link.
 	res, upOut, err := daemonUpgrade(t, base, copyTuios(t))
 	if err != nil {
 		t.Fatalf("ASSERTION: daemon upgrade: %v\n%s", err, upOut)
@@ -713,7 +676,6 @@ func TestAgentParentLinkSurvivesUpgradeAndRestart(t *testing.T) {
 	evidence["after_upgrade"] = rows
 	check("after the upgrade", rows, nil)
 
-	// The parent closes: its child keeps the link, marked gone.
 	if out, err := handoffCLI(t, base, 30*time.Second, "close-window", "-s", sess, gen1); err != nil {
 		t.Fatalf("close-window gen1: %v\n%s", err, out)
 	}
@@ -727,8 +689,6 @@ func TestAgentParentLinkSurvivesUpgradeAndRestart(t *testing.T) {
 		t.Errorf("ASSERTION: list-agents text shows no parent column or no gone parent:\n%s", text)
 	}
 
-	// A restart restores the session, and the links with it. The panes
-	// are new shells, so they are listed with all.
 	if out, err := handoffCLI(t, base, 30*time.Second, "kill-server"); err != nil {
 		t.Fatalf("kill-server: %v\n%s", err, out)
 	}

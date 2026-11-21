@@ -11,8 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// macConfig holds the keybindings of the config.toml attached to issue #556,
-// written on a Mac: the leader and all 25 of its opt+ keys.
 const macConfig = `[keybindings]
 leader_key = 'ctrl+s'
 
@@ -104,8 +102,6 @@ func TestMacConfigWorksOnLinux(t *testing.T) {
 		t.Fatalf("the first frame never settled: %v\n%s", err, term.Snapshot())
 	}
 
-	// opt+2 then opt+1, as Alt+2 and Alt+1. The session starts on
-	// workspace 1, so the first press is what makes the second one count.
 	openPaneOnTheSplash(t, term, base)
 	if err := term.SendKeys(tuitest.Alt("2")); err != nil {
 		t.Fatalf("send Alt+2: %v", err)
@@ -124,9 +120,6 @@ func TestMacConfigWorksOnLinux(t *testing.T) {
 	}
 	saveFrame(t, term, "mac-config-leader-ctrl-s")
 
-	// The log viewer holds every config problem tuios found at start. The
-	// notification that counts them can be replaced by the next one before
-	// a frame shows it, so the log is the place to look.
 	if err := term.SendKeys("D", "l"); err != nil {
 		t.Fatalf("open the log viewer: %v", err)
 	}
@@ -142,10 +135,6 @@ func TestMacConfigWorksOnLinux(t *testing.T) {
 	}
 }
 
-// openPaneOnTheSplash opens a pane on workspace 1 from the splash. A
-// workspace key pressed from the splash stays on 1, which is the empty
-// workspace on screen, so a test that proves a key is bound by where it goes
-// opens a pane first: the key then lands on 2.
 func openPaneOnTheSplash(t *testing.T, term *tuitest.Terminal, base string) {
 	t.Helper()
 	newWindow(t, term)
@@ -193,7 +182,6 @@ terminal_exit_mode = ['hyper+esc']
 		t.Fatalf("the first frame never settled: %v\n%s", err, term.Snapshot())
 	}
 
-	// switch_workspace_2 had only the bad key, so it is back on its default.
 	openPaneOnTheSplash(t, term, base)
 	if err := term.SendKeys(tuitest.Alt("2")); err != nil {
 		t.Fatalf("send Alt+2: %v", err)
@@ -334,8 +322,6 @@ switch_workspace_1 = ['hyper+1']
 	}
 }
 
-// altF7 and altF8 are Alt+F7 and Alt+F8 as a terminal sends them. No default
-// binds either, so a press of one shows that the config bound it.
 const (
 	altF7 = "\x1b[18;3~"
 	altF8 = "\x1b[19;3~"
@@ -386,8 +372,6 @@ leader_key = 'ctrl+s'
 [keybindings.workspaces]
 switch_workspace_1 = ['alt+f8']
 `)
-	// The workspace keys of the second save are the only sign that it
-	// applied. Alt+F8 is bound by nothing else.
 	deadline := time.Now().Add(configWatchTimeout)
 	for {
 		if err := term.SendKeys(altF8); err != nil {
@@ -429,7 +413,6 @@ func TestConfigApplyListsTheKeysItCannotRead(t *testing.T) {
 		"The daemon applied config.toml.",
 		"tuios cannot read 1 key:",
 		"config.d/keys.toml: [workspaces] hyper+3: invalid modifier: hyper.",
-		// The default the daemon names is this platform's: opt+3 on macOS.
 		"switch_workspace_3 uses its default key, " + config.DefaultConfig().Keybindings.Workspaces["switch_workspace_3"][0] + ".",
 	} {
 		if !strings.Contains(out, want) {

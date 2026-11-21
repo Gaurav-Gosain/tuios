@@ -8,8 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// foldedHeads are the group headings the test folds, with the count each
-// must keep while folded.
 var foldedHeads = []struct {
 	title string
 	re    *regexp.Regexp
@@ -77,8 +75,6 @@ func TestCockpitFoldedGroupsKeepTheirHeadings(t *testing.T) {
 	}
 	open("the agents view")
 
-	// Fold each group from its first row: F on a row folds its group and
-	// leaves the cursor on the heading, and j goes on to the next one.
 	for _, h := range foldedHeads {
 		row, col := findText(t, term, h.title)
 		mouseClick(t, term, col, row+1, tuitest.MouseLeft, 0)
@@ -93,8 +89,6 @@ func TestCockpitFoldedGroupsKeepTheirHeadings(t *testing.T) {
 					return false
 				}
 			}
-			// The focus column lists the folded group's agents under "The
-			// group is folded.", which says the fold took.
 			return regexp.MustCompile(`The group is folded\.`).MatchString(text)
 		}, uiTimeout); err != nil {
 			t.Fatalf("ASSERTION: %s, every group is not folded to its heading and count (want %q): %v\n%s", when, []string{"Working 2", "Idle 2"}, err, term.Snapshot())
@@ -112,8 +106,6 @@ func TestCockpitFoldedGroupsKeepTheirHeadings(t *testing.T) {
 	railShot(t, term, "folded-again")
 }
 
-// waitAbsent is nil once text is not on screen for a moment, an error when it
-// stays.
 func waitAbsent(term *tuitest.Terminal, text string) error {
 	return term.WaitFor(func(s tuitest.Screen) bool {
 		return !regexp.MustCompile(regexp.QuoteMeta(text)).MatchString(s.Text())

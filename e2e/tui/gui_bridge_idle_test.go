@@ -10,21 +10,18 @@ import (
 	"time"
 )
 
-// procTicks is a process's user and system CPU time, in clock ticks.
 func procTicks(t *testing.T, pid int) int64 {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
 	if err != nil {
 		t.Skipf("no /proc here: %v", err)
 	}
-	// The command name is in parentheses and may hold spaces.
 	f := strings.Fields(string(b[strings.LastIndexByte(string(b), ')')+2:]))
 	utime, _ := strconv.ParseInt(f[11], 10, 64)
 	stime, _ := strconv.ParseInt(f[12], 10, 64)
 	return utime + stime
 }
 
-// procReads is how many read calls a process has made, from /proc.
 func procReads(t *testing.T, pid int) int64 {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "io"))
@@ -66,10 +63,6 @@ func TestGUIBridgeIdleCostsLittle(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	const window = 10 * time.Second
-	// The daemon's own reads over the same time, with the bridge stopped,
-	// are the baseline: a timer or a file watch reads too, and a CI
-	// machine reads more than this one. The bridge is judged by what it
-	// adds on top.
 	if err := syscall.Kill(b.pid, syscall.SIGSTOP); err != nil {
 		t.Fatalf("stop the bridge: %v", err)
 	}
@@ -94,7 +87,6 @@ func TestGUIBridgeIdleCostsLittle(t *testing.T) {
 		t.Errorf("ASSERTION: an idle bridge with no hosts made the daemon read %d more times in %v than with it stopped, budget 8: the bridge is polling it", added, window)
 	}
 
-	// A host added now comes to the renderer by the daemon's push.
 	if out, err := tuiosCLIEnv(t, base, env, "hosts", "add", "build", "someone@buildbox", "--command", tuiosBin, "--connect-timeout", "5"); err != nil {
 		t.Fatalf("hosts add: %v\n%s", err, out)
 	}

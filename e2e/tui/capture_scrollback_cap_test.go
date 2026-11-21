@@ -11,14 +11,6 @@ import (
 	"time"
 )
 
-// capture-pane --scrollback with no --lines keeps the last 3 commands, cut
-// by the shell's OSC 133 marks, in at most 2000 lines. A long output keeps
-// its start and its end, with one line in the middle that says how many lines
-// it left out. A shell with no marks gives the last 2000 lines. --lines 0
-// gives the whole history.
-
-// captureRun runs capture-pane on one pane and returns stdout and stderr
-// apart, so a note on stderr can never pass for pane text.
 func captureRun(t *testing.T, base, sess, window string, args ...string) (string, string) {
 	t.Helper()
 	cmd := exec.Command(tuiosBin, append([]string{"capture-pane", "-s", sess, "-w", window}, args...)...)
@@ -32,7 +24,6 @@ func captureRun(t *testing.T, base, sess, window string, args ...string) (string
 	return string(stdout), stderr.String()
 }
 
-// nonBlankLines counts content's lines up to the last one that is not blank.
 func nonBlankLines(content string) int {
 	lines := strings.Split(strings.TrimSuffix(content, "\n"), "\n")
 	n := len(lines)
@@ -77,7 +68,6 @@ func TestCaptureScrollbackFallsBackToLinesWithoutMarks(t *testing.T) {
 		return captureRun(t, base, sess, "0", append([]string{"--scrollback"}, args...)...)
 	}
 
-	// Positive half first: --lines 0 is the whole history.
 	full, fullErr := run("--lines", "0")
 	for _, want := range []string{"CAP1", "CAP1250", "CAP2500"} {
 		if !hasLine(full, want) {
@@ -132,8 +122,6 @@ func TestCaptureScrollbackFallsBackToLinesWithoutMarks(t *testing.T) {
 	t.Logf("whole history %d lines, capped capture %d lines, note: %s", total, nonBlankLines(capped), strings.TrimSpace(cappedErr))
 }
 
-// markedRC is a bash setup that sends OSC 133 A, B, C and D around every
-// command, as tuios doctor shell prints for bash.
 const markedRC = `PS1='$ \[\e]133;B\a\]'
 PS0='\e]133;C\a'
 PROMPT_COMMAND='printf "\e]133;D;%s\a\e]133;A\a" "$?"'
@@ -169,8 +157,6 @@ func TestCaptureScrollbackKeepsTheLastCommands(t *testing.T) {
 	if err := os.WriteFile(rc, []byte(markedRC), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Room for the long output and the commands before it: the default
-	// history of 10,000 lines would drop them.
 	writeConfig(t, base, "[appearance]\nscrollback_lines = 30000\n")
 	if out, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
 		t.Fatalf("create the session: %v: %s", err, out)
@@ -186,7 +172,6 @@ func TestCaptureScrollbackKeepsTheLastCommands(t *testing.T) {
 			if err == nil {
 				return
 			}
-			// The first prompt may not be up yet.
 			if time.Now().After(deadline) || !strings.Contains(out, "not_at_prompt") && !strings.Contains(out, "no_shell_integration") {
 				t.Fatalf("run %q: %v: %s", command, err, out)
 			}
@@ -197,8 +182,6 @@ func TestCaptureScrollbackKeepsTheLastCommands(t *testing.T) {
 		run(c)
 	}
 
-	// Three short commands: the last three come back whole, the older one
-	// does not.
 	short, shortErr := captureRun(t, base, sess, "sh", "--scrollback")
 	for _, want := range []string{"$ printf 'ONE%s\\n' A", "ONEA", "$ printf 'TWO%s\\n' B", "TWOB", "$ printf 'THREE%s\\n' C", "THREEC"} {
 		if !hasLine(short, want) {
@@ -212,7 +195,6 @@ func TestCaptureScrollbackKeepsTheLastCommands(t *testing.T) {
 		t.Fatalf("ASSERTION: want the 3 short commands whole and a note that names them, got stderr %q:\n%s", shortErr, short)
 	}
 
-	// One long command: its middle goes, its start and its end stay.
 	run(`printf 'BIG%d\n' $(seq 1 10000)`)
 	long, longErr := captureRun(t, base, sess, "sh", "--scrollback")
 	if n := nonBlankLines(long); n > 2000 {
@@ -254,13 +236,10 @@ func TestCaptureScrollbackKeepsTheLastCommands(t *testing.T) {
 		t.Fatalf("ASSERTION: want command_marks, 3 commands and lines_omitted %s, got %v, %d, %d", count, res.CommandMarks, len(res.Commands), res.LinesOmitted)
 	}
 	big := res.Commands[2]
-	// The command line, 10000 output lines and the prompt after it, less the
-	// marker line.
 	if big.LinesOmitted != res.LinesOmitted || big.Lines-1+big.LinesOmitted != 10002 {
 		t.Fatalf("ASSERTION: the long command kept %d lines and left out %d, want them to add up to its 10002 lines with the marker", big.Lines, big.LinesOmitted)
 	}
 
-	// The positive half: --lines 0 still gives everything.
 	full, _ := captureRun(t, base, sess, "sh", "--scrollback", "--lines", "0")
 	for _, want := range []string{"ZEROZ", "BIG1", "BIG5000", "BIG10000"} {
 		if !hasLine(full, want) {

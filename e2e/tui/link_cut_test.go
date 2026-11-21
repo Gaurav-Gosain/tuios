@@ -12,21 +12,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// A bare URL wrapped across rows is one address, and the viewport can cut it:
-// the head can sit in the scrollback above the first row on screen, or, in a
-// pane scrolled back to the URL, the tail can sit below the last one. Both the
-// click and the OSC 8 in the frame used to read only the rows on screen, so
-// the address they handed on was cut where the viewport was. These tests print
-// a URL exactly cutLinkRows rows long and click the part of it that is on screen.
-
-// cutLinkRows is how many rows the URL fills. It is more than a wheel notch
-// scrolls, so some notch leaves the head on screen and the tail below it.
 const cutLinkRows = 12
 
-// cutLinkScript prints a screen of history, a bare URL that fills cutLinkRows
-// rows, and then enough lines that the last two rows of the URL are at the top
-// of the screen. The history above is room to scroll the URL down. It
-// writes the URL it printed to urlFile, which is what the opener must receive.
 func cutLinkScript(urlFile string) string {
 	return `#!/bin/sh
 set -- $(stty size)
@@ -50,9 +37,6 @@ printf 'CUT''DONE\n'
 `
 }
 
-// cutLinkSetup starts tuios with the recording opener and the cut URL on
-// screen. It returns the terminal, the host stream, the opener's record, and
-// the URL the script printed.
 func cutLinkSetup(t *testing.T) (*tuitest.Terminal, *lockedBuffer, string, string) {
 	t.Helper()
 	base := t.TempDir()
@@ -86,9 +70,6 @@ func cutLinkSetup(t *testing.T) (*tuitest.Terminal, *lockedBuffer, string, strin
 	return term, out, record, string(url)
 }
 
-// paneBottomRow returns the screen row of the only pane's last row of content:
-// the row above its bottom border. findOnGrid matches single-byte cells only,
-// so the corner glyph is looked for cell by cell here.
 func paneBottomRow(t *testing.T, term *tuitest.Terminal) int {
 	t.Helper()
 	s := term.Screen()
@@ -104,7 +85,6 @@ func paneBottomRow(t *testing.T, term *tuitest.Terminal) int {
 	return 0
 }
 
-// bareLinkFrame matches the OSC 8 a frame carries for a detected URL.
 func bareLinkFrame(url string) *regexp.Regexp {
 	return regexp.MustCompile(`\x1b\]8;id=tuios-[0-9a-z]+;` + regexp.QuoteMeta(url) + `(\x07|\x1b\\)`)
 }
@@ -121,8 +101,6 @@ func bareLinkFrame(url string) *regexp.Regexp {
 func TestACutURLOpensWhole(t *testing.T) {
 	term, out, record, url := cutLinkSetup(t)
 
-	// The top: the row above FILL-001 is the URL's last row, and its head is
-	// in the scrollback.
 	col, row := mustFind(t, term, "FILL-001")
 	if !gridMatchesAt(term.Screen(), col, row-1, "wwww") {
 		t.Fatalf("the row above FILL-001 is not the URL's tail:\n%s", term.Snapshot())
@@ -133,9 +111,6 @@ func TestACutURLOpensWhole(t *testing.T) {
 	mouseClick(t, term, col+2, row-1, tuitest.MouseLeft, tuitest.ModCtrl)
 	waitOpened(t, record, []string{url}, "ctrl+click on the tail of a URL whose head is in the scrollback")
 
-	// The bottom: scroll back a notch at a time. The head comes into view at
-	// the top and moves down, and the scrolling stops once the pane's last
-	// row is inside the URL, short of its last row.
 	pc, pr := paneCell(t, term)
 	bottom := paneBottomRow(t, term)
 	mark := len(out.String())

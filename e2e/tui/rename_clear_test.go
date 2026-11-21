@@ -52,7 +52,6 @@ func TestRenameDialogClears(t *testing.T) {
 		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
 	}
 
-	// ctrl+u: the field opens holding the old name and empties.
 	openRenameOn(t, term, "oldname")
 	sendKeys(t, term, tuitest.Ctrl('u'))
 	waitRenameField(t, term, "ctrl+u left the dialog open with an empty field", "")
@@ -62,7 +61,6 @@ func TestRenameDialogClears(t *testing.T) {
 	sendKeys(t, term, tuitest.Enter)
 	waitWindowName(t, base, term, "fresh")
 
-	// ctrl+c with text: the field empties and the dialog stays.
 	openRenameOn(t, term, "fresh")
 	sendKeys(t, term, tuitest.Ctrl('c'))
 	waitRenameField(t, term, "ctrl+c with text left the dialog open with an empty field", "")
@@ -72,7 +70,6 @@ func TestRenameDialogClears(t *testing.T) {
 	sendKeys(t, term, tuitest.Enter)
 	waitWindowName(t, base, term, "second")
 
-	// ctrl+c on an empty field: the dialog closes and the name is kept.
 	openRenameOn(t, term, "second")
 	sendKeys(t, term, tuitest.Ctrl('c'))
 	waitRenameField(t, term, "the first ctrl+c emptied the field", "")
@@ -86,7 +83,6 @@ func TestRenameDialogClears(t *testing.T) {
 		t.Fatalf("ctrl+c on an empty field renamed the window to %q, want it left as second\n%s", got, term.Snapshot())
 	}
 
-	// The clear hint, clicked.
 	openRenameOn(t, term, "second")
 	row, col := renameHint(t, term, "clear")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
@@ -96,7 +92,6 @@ func TestRenameDialogClears(t *testing.T) {
 	sendKeys(t, term, tuitest.Enter)
 	waitWindowName(t, base, term, "third")
 
-	// The help overlay's search field takes the same clear key.
 	sendKeys(t, term, tuitest.Ctrl('b'), "?")
 	if err := term.WaitForText("Keybindings", uiTimeout); err != nil {
 		t.Fatalf("the help never opened: %v\n%s", err, term.Snapshot())
@@ -113,7 +108,6 @@ func TestRenameDialogClears(t *testing.T) {
 		t.Fatalf("ctrl+u did not clear the help search query: %v\n%s", err, term.Snapshot())
 	}
 	saveArtifact(t, term, art, "help-search-after-ctrl-u")
-	// Still searching: what is typed next is a query, and it finds.
 	sendKeys(t, term, "rename")
 	if err := term.WaitForText("Rename window", uiTimeout); err != nil {
 		t.Fatalf("the help left search after ctrl+u: %v\n%s", err, term.Snapshot())
@@ -122,17 +116,12 @@ func TestRenameDialogClears(t *testing.T) {
 	alive(t, term, "after clearing the rename dialog")
 }
 
-// openRenameOn opens the focused window's rename dialog with r and waits for
-// its field to hold the name it is seeded with.
 func openRenameOn(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	sendKeys(t, term, "r")
 	waitRenameField(t, term, "the rename dialog opened on the window's name", name)
 }
 
-// renameField is what the dialog's field holds, read off the row under its
-// title border between the dialog's own side borders, and whether the dialog
-// is up at all.
 func renameField(s tuitest.Screen) (string, bool) {
 	if !renameDialogUp(s) {
 		return "", false
@@ -159,8 +148,6 @@ func renameField(s tuitest.Screen) (string, bool) {
 	return "", false
 }
 
-// waitRenameField waits for the dialog to be up with its field holding
-// exactly want.
 func waitRenameField(t *testing.T, term *tuitest.Terminal, what, want string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
@@ -171,8 +158,6 @@ func waitRenameField(t *testing.T, term *tuitest.Terminal, what, want string) {
 	}
 }
 
-// renameHint is where the hint labelled label sits on the dialog's bottom
-// border, in cells.
 func renameHint(t *testing.T, term *tuitest.Terminal, label string) (row, col int) {
 	t.Helper()
 	s := term.Screen()
@@ -210,7 +195,6 @@ func windowName(t *testing.T, base string) string {
 	return listing.Windows[0].Name
 }
 
-// waitWindowName waits for the daemon to hold want as the window's name.
 func waitWindowName(t *testing.T, base string, term *tuitest.Terminal, want string) {
 	t.Helper()
 	var got string

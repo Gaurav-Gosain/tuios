@@ -8,26 +8,6 @@ import (
 	"time"
 )
 
-// A tuios call from inside a pane that leaves out -s acts on the pane's own
-// session, not on the session the person used last.
-//
-// How this could pass wrongly, written down first:
-//   - The pane's session could also be the most recent one, and then both
-//     rules give the same answer. So the person's CLI, outside every pane,
-//     runs the same capture and must read the other session's window. That
-//     proves the other session was the most recent one when the pane ran.
-//   - The probe could fail for a reason that is not the session, such as the
-//     CLI not reaching the daemon, and print neither marker. Each probe must
-//     print the home marker, not only miss the other one.
-//   - The text typed by the probe could reach both windows, or reach neither
-//     because the shell had not started. The test waits for each window's
-//     marker before the probe runs, and checks both windows after it.
-//   - The pane could inherit TUIOS_SESSION, and a CLI that filled -s from it
-//     would hide a daemon that still picks the most recent session. The probe
-//     unsets TUIOS_SESSION, so only the daemon's rule decides.
-
-// paneSessionProbe waits for its go file, then runs each call without -s and
-// writes what it printed into the out folder.
 const paneSessionProbe = `#!/usr/bin/env bash
 out=$1 bin=$2
 unset TUIOS_SESSION
@@ -58,7 +38,6 @@ func TestAPaneCallWithoutSessionUsesThePaneSession(t *testing.T) {
 	probe := writeAgentScript(t, base, "probe.sh", paneSessionProbe)
 	probeID := newPaneRunning(t, base, "home", "probe", "bash", probe, out, tuiosBin)
 
-	// Made after home, so it is the most recently active session.
 	if o, err := tuiosCLI(t, base, "new", "other", "--detach"); err != nil {
 		t.Fatalf("new other: %v\n%s", err, o)
 	}
@@ -81,8 +60,6 @@ func TestAPaneCallWithoutSessionUsesThePaneSession(t *testing.T) {
 	waitText("home", homeX, "HOME_MARK")
 	waitText("other", otherX, "OTHER_MARK")
 
-	// The positive half: the person's CLI, outside every pane, still gets the
-	// most recent session, which is other.
 	person, err := tuiosCLI(t, base, "capture-pane", "-w", "x")
 	if err != nil || !strings.Contains(person, "OTHER_MARK") {
 		t.Fatalf("ASSERTION: the person's capture with no -s did not read the most recent session (other): %v\n%s", err, person)
@@ -116,7 +93,6 @@ func TestAPaneCallWithoutSessionUsesThePaneSession(t *testing.T) {
 		t.Errorf("send-text -w x from the probe printed something: %s", got)
 	}
 	waitText("home", homeX, "TYPED_BY_PROBE")
-	// Give a stray copy time to land before the other window is read.
 	time.Sleep(500 * time.Millisecond)
 	if got := capture("other", otherX); strings.Contains(got, "TYPED_BY_PROBE") {
 		t.Errorf("ASSERTION: send-text -w x from a pane in home typed into other's x:\n%s", got)

@@ -41,8 +41,6 @@ func TestKittyAltScreenImageSurvivesStateSync(t *testing.T) {
 		t.Fatalf("the session's pane never showed: %v\n%s", err, term.Snapshot())
 	}
 
-	// The delay puts the screen switch after the client has adopted the new
-	// pane and pushed its state, which is where a slow-starting app puts it.
 	if out, err := tuiosCLI(t, base, "new-window", "img", "-s", "kitty", "--", bin, "2s"); err != nil {
 		t.Fatalf("open the graphics pane: %v\n%s", err, out)
 	}
@@ -75,8 +73,6 @@ func TestKittyAltScreenImageSurvivesStateSync(t *testing.T) {
 	}
 }
 
-// imageHistory lists the placements and deletes of the 64x64 image in the
-// host stream, from the named phase on, or from the start when phase is empty.
 func imageHistory(stream []byte, phase string) []string {
 	cmds := wireCmds(stream)
 	hostID := 0
@@ -97,7 +93,6 @@ func imageHistory(stream []byte, phase string) []string {
 	return out
 }
 
-// buildAltOnce compiles the alternate-screen stand-in once per test binary.
 func buildAltOnce(t *testing.T) string {
 	t.Helper()
 	altOnceOnce.Do(func() {

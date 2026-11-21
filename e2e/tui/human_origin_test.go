@@ -50,7 +50,6 @@ func TestAPaneCannotAnswerAsThePerson(t *testing.T) {
 		}
 	}
 
-	// Outside every pane the call is still served, as a claim.
 	if out, err := tuiosCLI(t, base, "send-agent-message", "-s", "e2e-ctrlp", "--from", "human", "from a script"); err != nil {
 		t.Fatalf("send-agent-message from outside a pane failed: %v\n%s", err, out)
 	}

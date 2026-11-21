@@ -8,18 +8,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The pane background, set where a user sets it: the settings panel's colour
-// row and its picker. Every assertion is a cell colour read off the terminal,
-// because the question is what the terminal was told to draw behind the pane,
-// and a unit test of the config field cannot answer it.
-
-// paneBgMarker is text only the shell's printf output carries: the typed
-// command splits it with a %s, so the echo of the keystrokes never matches.
 const paneBgMarker = "REDMARK"
 
-// paneBgCells finds the marker row and returns the cells the test reads: the
-// program's own red cell, a default-background cell on the same row past the
-// text, and the pane border on that row when the pane has one.
 func paneBgCells(s tuitest.Screen) (red, blank, border tuitest.Cell, hasBorder, ok bool) {
 	row := findRow(s, paneBgMarker)
 	if row < 0 {
@@ -27,7 +17,6 @@ func paneBgCells(s tuitest.Screen) (red, blank, border tuitest.Cell, hasBorder, 
 	}
 	line := s.Line(row)
 	col := strings.Index(line, paneBgMarker)
-	// Line is text, so a column is a rune count and not a byte offset.
 	col = len([]rune(line[:col]))
 	red = s.Cell(col, row)
 	blank = s.Cell(col+len(paneBgMarker)+6, row)
@@ -67,7 +56,6 @@ func TestPaneBackgroundFromTheSettingsPanel(t *testing.T) {
 	if err := term.WaitForText("pane background", uiTimeout); err != nil {
 		t.Fatalf("the colour picker did not open on the pane background row: %v\n%s", err, term.Snapshot())
 	}
-	// The keywords are offered beside the grid, like the scrollbar tint's.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return screenHas(s, "off", "theme")
 	}, uiTimeout); err != nil {
@@ -82,8 +70,6 @@ func TestPaneBackgroundFromTheSettingsPanel(t *testing.T) {
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	// The picker's own field shows the hex before enter lands, so what is
-	// waited for is the row itself carrying it, which only an apply does.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		y := findRow(s, "Pane background")
 		return y >= 0 && strings.Contains(s.Line(y), "#123456")
@@ -110,8 +96,6 @@ func TestPaneBackgroundFromTheSettingsPanel(t *testing.T) {
 		t.Log("no border glyph on the marker row, so the border was not checked")
 	}
 
-	// Clearing puts the pane back on the terminal's own background: unset, it
-	// follows All surfaces, which is off.
 	openBackgrounds(t, term)
 	clickSettingsRow(t, term, "Pane background")
 	if err := term.WaitForText("pane background", uiTimeout); err != nil {

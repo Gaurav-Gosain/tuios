@@ -11,15 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// startInLogged is startIn returning the path of the raw PTY log as well, so a
-// test can read what tuios printed to stdout after the TUI exited (the
-// detach/kill message lands there, past the alt-screen reset).
-//
-// It used to be a second copy of startIn's environment, and a copy is where a
-// harness fix goes missing: the seven tests that start here ran without the
-// output-only host stream and without fish's completion directory. Every
-// caller attaches, and TUIOS_NO_DAEMON only decides what a bare "tuios" does,
-// so daemonDefault keeps their environment exactly what it was.
 func startInLogged(t *testing.T, base string, o startOpts) (*tuitest.Terminal, string) {
 	t.Helper()
 	var logPath string
@@ -42,9 +33,6 @@ func waitExit(t *testing.T, term *tuitest.Terminal, what string) int {
 	return -1
 }
 
-// sessionListed reports whether a daemon is holding the named session. Rows
-// marked saved are skipped: with no daemon the listing shows what is on disk,
-// and a session that only exists there is not one anybody can talk to.
 func sessionListed(t *testing.T, base, name string) bool {
 	t.Helper()
 	out, _ := tuiosCLI(t, base, "ls", "--json")
@@ -81,8 +69,6 @@ func TestLeaderQuitKillsSession(t *testing.T) {
 		t.Fatalf("never attached: %v\n%s", err, term.Snapshot())
 	}
 
-	// leader q opens the quit menu; x runs the kill row (the only session, so
-	// the row is "Kill and quit").
 	if err := term.SendKeys(tuitest.Ctrl('b'), "q"); err != nil {
 		t.Fatalf("send leader q: %v", err)
 	}
@@ -94,16 +80,12 @@ func TestLeaderQuitKillsSession(t *testing.T) {
 	}
 	waitExit(t, term, "after leader q, x")
 
-	// Give the daemon a moment to process the kill.
 	time.Sleep(300 * time.Millisecond)
 	if sessionListed(t, base, "repro-kill") {
 		out, _ := tuiosCLI(t, base, "ls")
 		t.Fatalf("BUG1: session 'repro-kill' still exists after leader q (q did not kill)\nls:\n%s", out)
 	}
 
-	// The exit message must say the session was killed, not detached: the row
-	// run was "Kill and quit", and reporting a detach after a kill is what
-	// made the old kill path look like it only detached.
 	logBytes, _ := os.ReadFile(logPath)
 	msg := exitLine(string(logBytes))
 	t.Logf("leader q killed the session (repro-kill gone); exit line: %q", msg)
@@ -121,8 +103,6 @@ func TestLeaderQuitConfirm(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
 
-	// Turn on the always-confirm-quit preference through the config file, which
-	// the attach path reads via ApplyAppearanceConfig.
 	cfgPath := filepath.Join(base, "XDG_CONFIG_HOME", "tuios", "config.toml")
 	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o700); err != nil {
 		t.Fatalf("mkdir config dir: %v", err)
@@ -142,7 +122,6 @@ func TestLeaderQuitConfirm(t *testing.T) {
 		t.Fatalf("never attached: %v\n%s", err, term.Snapshot())
 	}
 
-	// leader q raises the quit menu, with detach first as the safe default.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "q"); err != nil {
 		t.Fatalf("send leader q: %v", err)
 	}
@@ -150,7 +129,6 @@ func TestLeaderQuitConfirm(t *testing.T) {
 		t.Fatalf("quit menu never appeared: %v\n%s", err, term.Snapshot())
 	}
 
-	// Cancel: the client keeps running and the session survives.
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("send esc: %v", err)
 	}
@@ -160,7 +138,6 @@ func TestLeaderQuitConfirm(t *testing.T) {
 		t.Fatalf("session was killed after cancelling the quit dialog")
 	}
 
-	// Now kill: leader q, then the kill row's accelerator.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "q"); err != nil {
 		t.Fatalf("send leader q (second time): %v", err)
 	}
@@ -234,14 +211,12 @@ func TestExitMessageNamesCurrentSession(t *testing.T) {
 		t.Fatalf("never attached: %v\n%s", err, term.Snapshot())
 	}
 
-	// Open session switcher (leader S), type myproj, enter.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "S"); err != nil {
 		t.Fatalf("send leader S: %v", err)
 	}
 	if err := term.WaitForText("myproj", uiTimeout); err != nil {
 		t.Fatalf("session switcher never showed myproj: %v\n%s", err, term.Snapshot())
 	}
-	// Type the name to filter, then Enter to switch.
 	if err := term.SendKeys("myproj"); err != nil {
 		t.Fatalf("type myproj: %v", err)
 	}
@@ -249,12 +224,10 @@ func TestExitMessageNamesCurrentSession(t *testing.T) {
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("enter: %v", err)
 	}
-	// Wait until we are on myproj (notification "Session: myproj").
 	if err := term.WaitForText("Session: myproj", uiTimeout); err != nil {
 		t.Fatalf("never switched to myproj: %v\n%s", err, term.Snapshot())
 	}
 
-	// Detach now.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "d"); err != nil {
 		t.Fatalf("send leader d: %v", err)
 	}
@@ -275,10 +248,6 @@ func TestExitMessageNamesCurrentSession(t *testing.T) {
 	}
 }
 
-// exitLine returns the client's final "Detached from session ..." or "Killed
-// session ..." line printed to stdout after the alt-screen reset. It ignores
-// the alt-screen render (which can contain session names from overlays like the
-// session switcher) by matching only the literal message prefixes.
 func exitLine(raw string) string {
 	for line := range strings.SplitSeq(raw, "\n") {
 		line = strings.TrimSpace(line)
@@ -290,8 +259,6 @@ func exitLine(raw string) string {
 	return ""
 }
 
-// tailMessage extracts printable lines mentioning session from raw PTY bytes,
-// for diagnostics only.
 func tailMessage(raw string) string {
 	var out []string
 	for line := range strings.SplitSeq(raw, "\n") {

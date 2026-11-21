@@ -43,21 +43,15 @@ func TestKittyStretchWhileGuestLagsAResize(t *testing.T) {
 
 	clickToType(t, term, 20, 12)
 	runInShell(t, term, "echo IMAG\"\"EPANE", "IMAGEPANE", shellTimeout)
-	// 900ms to relay out: long enough that the interval is many frames wide
-	// rather than something to be caught between two of them.
 	_, cols, rows, xpx, ypx := startFrameloop(t, term, 900)
 	t.Logf("left pane: %dx%d cells, %dx%d px", cols, rows, xpx, ypx)
 	leaveTerminalMode(t, term)
 
-	// The neighbour prints throughout, as reported: it is what keeps the render
-	// loop awake, and an idle render loop re-places nothing.
 	clickToType(t, term, 95, 12)
 	typeLine(t, term, "while :; do ls; done")
 	leaveTerminalMode(t, term)
 	time.Sleep(time.Second)
 
-	// Hold the pane at its smaller size for most of the guest's relayout, so
-	// every frame that arrives is one the pane has outgrown.
 	host.mark("guest-behind")
 	mousePress(t, term, 20, 12, tuitest.MouseLeft, 0)
 	time.Sleep(800 * time.Millisecond)

@@ -5,9 +5,6 @@ import (
 	"time"
 )
 
-// kittyCtrlAltB is the leader, ctrl+b, struck while the left Option key is
-// held; kittyAltG is g then. The hold takes Option off both, so they are the
-// leader and the scratch key.
 const (
 	kittyCtrlAltB = "\x1b[98;7u"
 	kittyAltG     = "\x1b[103;3u"

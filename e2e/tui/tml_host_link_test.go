@@ -26,8 +26,6 @@ import (
 //
 // NEGATIVE CONTROL in NEGATIVE_CONTROLS.md, "TML surfaces over a host link".
 
-// tmlTasksDoc is the far program's sidebar: two tasks and a button that asks
-// the program to review the first.
 const tmlTasksDoc = `<tml version="1" title="Tasks">
   <state>{"t1": "pending", "t2": "pending", "filter": "all"}</state>
   <col pad="1" gap="1">
@@ -42,7 +40,6 @@ const tmlTasksDoc = `<tml version="1" title="Tasks">
 </tml>
 `
 
-// tmlReviewDoc is the popup the far program opens for a review.
 const tmlReviewDoc = `<tml version="1" title="Review">
   <col pad="1" gap="1">
     <text>Review the fix for the login bug.</text>
@@ -55,10 +52,6 @@ const tmlReviewDoc = `<tml version="1" title="Review">
 </tml>
 `
 
-// tmlTasksProgram is the task system: it runs in a pane on build, opens the
-// sidebar as a pane, opens the review popup when the person asks, and answers
-// approve and send back with a patch to the sidebar and a close of the popup.
-// It logs every line it reads, so the test sees what reached it.
 const tmlTasksProgram = `#!/bin/sh
 T='@TUIOS@'
 D='@DIR@'
@@ -85,9 +78,6 @@ D='@DIR@'
 done
 `
 
-// pressTMLButton clicks a button of a surface a pane opened. Such a surface
-// does not take the focus, and the first click only focuses it, so the first
-// click lands on text of the same surface that runs nothing.
 func pressTMLButton(t *testing.T, term *tuitest.Terminal, plain, button string) {
 	t.Helper()
 	col, row := tmlLocate(t, term, plain)
@@ -125,7 +115,6 @@ func TestTMLSurfacesCrossAHostLink(t *testing.T) {
 	if err := os.WriteFile(script, []byte(program), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// The program runs in a pane on build, as a task system would.
 	if out, err := tuiosCLI(t, remote, "new-window", "-s", "far-tasks", "tasks", "--no-focus", "--", "/bin/sh", script); err != nil {
 		t.Fatalf("start the far program: %v\n%s", err, out)
 	}
@@ -134,15 +123,12 @@ func TestTMLSurfacesCrossAHostLink(t *testing.T) {
 		return strings.HasPrefix(s, "tml-")
 	}, "the far program never opened its sidebar"))
 
-	// This machine's client, switched onto the far session from the rail.
 	term := startIn(t, base, startOpts{cols: 140, rows: 40, args: []string{"new", "home"}, env: env})
 	waitBoot(t, term)
 	toggleSidebarViaPalette(t, term)
 	railShows(t, term, "far-tasks")
 	clickRailSession(t, term, "far-tasks")
 	waitRailCurrent(t, term, "far-tasks")
-	// The panes tile, so the sidebar is a column of its own. The far daemon
-	// made them with no client, and this client does not tile them itself.
 	leaveTerminalMode(t, term)
 	if err := term.SendKeys("t"); err != nil {
 		t.Fatalf("toggle tiling: %v", err)
@@ -155,7 +141,6 @@ func TestTMLSurfacesCrossAHostLink(t *testing.T) {
 	}
 	time.Sleep(gestureGap)
 
-	// 1. The far sidebar is drawn here, and not as the placeholder line.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return screenHas(s, "Fix login bug: pending", "Add retry: pending", "Review")
 	}, uiTimeout); err != nil {
@@ -166,7 +151,6 @@ func TestTMLSurfacesCrossAHostLink(t *testing.T) {
 	}
 	saveTMLFrame(t, term, "1-far-sidebar")
 
-	// 2. A click on Review reaches the far program, which opens a popup.
 	pressTMLButton(t, term, "Add retry", "Review")
 	waitFile(t, events, func(s string) bool { return strings.Contains(s, `"name":"review"`) },
 		"ASSERTION: the click on Review never reached the far program")
@@ -177,8 +161,6 @@ func TestTMLSurfacesCrossAHostLink(t *testing.T) {
 	}
 	saveTMLFrame(t, term, "2-far-popup")
 
-	// 3. Approve reaches the far program. Its patch to the sidebar is drawn
-	// here, and its close takes the popup away.
 	pressTMLButton(t, term, "Review the fix", "Approve")
 	waitFile(t, events, func(s string) bool { return strings.Contains(s, `"name":"approve"`) },
 		"ASSERTION: the click on Approve never reached the far program")
@@ -189,8 +171,6 @@ func TestTMLSurfacesCrossAHostLink(t *testing.T) {
 	}
 	saveTMLFrame(t, term, "3-approved")
 
-	// 4. The link drops. The far daemon keeps the surface, and a patch it
-	// takes while the link is down is drawn once the link is back.
 	breakTheLink(t)
 	if err := term.WaitForText("Reconnecting to build", uiTimeout); err != nil {
 		t.Fatalf("the client did not say it was dialing the link again: %v\n%s", err, term.Snapshot())
@@ -209,7 +189,6 @@ func TestTMLSurfacesCrossAHostLink(t *testing.T) {
 	}
 	saveTMLFrame(t, term, "5-link-back")
 
-	// 5. A click after the link is back reaches the far program too.
 	pressTMLButton(t, term, "Add retry", "Review")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return screenHas(s, "Review the fix for the login bug.", "Send back")
@@ -224,9 +203,6 @@ func TestTMLSurfacesCrossAHostLink(t *testing.T) {
 	}
 	saveTMLFrame(t, term, "6-sent-back")
 
-	// 6. The link drops again, and the person sets a value the far daemon
-	// never gets. When the link is back, the far daemon's value is drawn,
-	// with no change on build to carry it.
 	breakTheLink(t)
 	if err := term.WaitForText("Reconnecting to build", uiTimeout); err != nil {
 		t.Fatalf("the client did not say it was dialing the link again: %v\n%s", err, term.Snapshot())

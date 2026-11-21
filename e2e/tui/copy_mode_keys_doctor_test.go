@@ -8,19 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// A [keybindings.copy_mode] binding on a key that copy mode or a copy pipe
-// entry already uses is a key that does one of two things, and only one runs.
-// The doctor names each such binding, and the help overlay lists the bound
-// line keys next to the fixed ones that do the same.
-//
-// How these could pass wrongly, written down first:
-//   - The doctor could warn about every copy_mode key. The default home and
-//     end are bound in the same config and must not be named.
-//   - A config with no clash could still produce a warning. The positive half
-//     runs the defaults and wants no copy mode problem at all.
-//   - The help rows could be found in a filtered search, where every other row
-//     is gone and any order looks adjacent. The overlay is read unfiltered.
-
 func TestKeybindsDoctorNamesACopyModeKeyUsedTwice(t *testing.T) {
 	type problem struct {
 		Action  string `json:"action"`
@@ -67,12 +54,6 @@ func TestKeybindsDoctorNamesACopyModeKeyUsedTwice(t *testing.T) {
 		}
 	})
 
-	// At startup only the binding that never runs is a config problem (#1291).
-	// w and b taken from copy mode work as bound, and window mode is still
-	// entered from the leader's exit key, so neither is warned about. The
-	// doctor still names w and b. The copy pipe key in the same config is the
-	// positive half: it must still be warned about, so a log that shows no
-	// config problem at all is not mistaken for the fix.
 	t.Run("startup", func(t *testing.T) {
 		base := t.TempDir()
 		writeConfig(t, base, "[[keybindings.copy_pipe]]\nkey = \"p\"\ncommand = \"cat\"\n\n"+
@@ -94,8 +75,6 @@ func TestKeybindsDoctorNamesACopyModeKeyUsedTwice(t *testing.T) {
 		}
 		saveFrame(t, term, "copy-mode-startup-log")
 		screen := term.Screen().Text()
-		// The log viewer cuts long lines, so each warning is told by its
-		// field and key, which come first.
 		for _, unwanted := range []string{"copy_mode_line_start] w", "copy_mode_line_end] b", "enter_window_mode", "config problems"} {
 			if strings.Contains(screen, unwanted) {
 				t.Errorf("the startup log warns %q about a binding that works:\n%s", unwanted, term.Snapshot())
@@ -130,7 +109,6 @@ func TestHelpListsHomeAndEndWithTheLineKeys(t *testing.T) {
 		}
 		return -1
 	}
-	// The overlay shows one category at a time. Walk right to copy mode.
 	for range 30 {
 		if lineRow(term.Screen()) >= 0 {
 			break

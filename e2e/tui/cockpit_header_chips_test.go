@@ -7,20 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// How TestCockpitHeaderChipsFilter could pass wrongly, written down first:
-//   - The counts could be taken from the filtered list, so every other chip
-//     goes to 0 and leaves the header, and the person cannot switch to it.
-//     The test reads every count while a chip filters.
-//   - A click could land on the wrong chip, or on a list row. The test clicks
-//     working, then to review, and reads which heading is left each time.
-//   - A second click on the active chip could leave the filter on. It must
-//     give the whole list back.
-//   - esc could skip the chip (the list stays filtered) or close the view.
-//     The first esc must clear the chip and keep the view.
-//   - The filter could miss the bands of a grouping by session, so working
-//     rows hide under Group: state only. The test turns on session grouping
-//     with the chip on.
-
 // TestCockpitHeaderChipsFilter clicks the header's counts at 200x50. A click
 // on "6 working" keeps the Working group alone and marks the chip, the other
 // counts stay drawn, a click on "3 to review" moves the filter there, and a
@@ -73,7 +59,6 @@ func TestCockpitHeaderChipsFilter(t *testing.T) {
 		t.Fatalf("ASSERTION: a second click on the active chip did not give the whole list back: %v\n%s", err, term.Snapshot())
 	}
 
-	// The chip filters the bands of a grouping too.
 	click("6 working")
 	waitFor(t, term, "the Working group alone", only("Working"))
 	ckPress(t, term, "s", "2")
@@ -95,8 +80,6 @@ func TestCockpitHeaderChipsFilter(t *testing.T) {
 	alive(t, term, "after the header chips")
 }
 
-// onlyWorkingRows reports whether the list shows every working agent of the
-// fleet and none of the others.
 func onlyWorkingRows(s tuitest.Screen) bool {
 	for _, name := range cockpitWorking {
 		if fleetRowWith(s, name) < 0 {

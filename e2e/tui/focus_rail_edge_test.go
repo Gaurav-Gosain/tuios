@@ -45,14 +45,11 @@ func TestFocusKeysWalkIntoAndOutOfRail(t *testing.T) {
 		}
 	}
 
-	// The positive half of the left edge below: with a pane to the left, the
-	// key moves between panes and the rail stays out of it.
 	send(t, term, tuitest.Alt(tuitest.Left))
 	left := waitFocusChange(t, base, session, cur)
 	if left == cur {
 		t.Fatalf("alt+left from the rightmost pane did not move focus\n%s", term.Snapshot())
 	}
-	// The leftmost pane runs into the screen edge, and no rail is there.
 	send(t, term, tuitest.Alt(tuitest.Left))
 	railStaysOut(t, term, "alt+left on the leftmost pane entered the rail on the right edge")
 	send(t, term, tuitest.Alt(tuitest.Right))
@@ -61,7 +58,6 @@ func TestFocusKeysWalkIntoAndOutOfRail(t *testing.T) {
 	}
 	railStaysOut(t, term, "alt+right into a pane also entered the rail")
 
-	// Into the rail: the rightmost pane runs into the rail's edge.
 	send(t, term, tuitest.Alt(tuitest.Right))
 	waitText(t, term, "the mode pill after alt+right on the rightmost pane", "SIDEBAR")
 	if _, f := focusedLayout(t, base, session); f != cur {
@@ -69,13 +65,10 @@ func TestFocusKeysWalkIntoAndOutOfRail(t *testing.T) {
 	}
 	saveFrame(t, term, "rail-entered")
 
-	// And back out, onto the pane it was entered from.
 	send(t, term, tuitest.Alt(tuitest.Left))
 	leaveRail(t, term, base, session, cur, "alt+left", "BACK")
 	saveFrame(t, term, "rail-left")
 
-	// The prefix arrows take the same path in and out. The rail swallows no
-	// prefix key, so leaving rests on FocusTerminalDirection alone.
 	send(t, term, tuitest.Ctrl('b'), tuitest.Right)
 	waitText(t, term, "the mode pill after ctrl+b right on the rightmost pane", "SIDEBAR")
 	send(t, term, tuitest.Ctrl('b'), tuitest.Left)
@@ -84,8 +77,6 @@ func TestFocusKeysWalkIntoAndOutOfRail(t *testing.T) {
 	alive(t, term, "after walking into and out of the rail")
 }
 
-// railStaysOut fails when the mode pill turns to SIDEBAR within a few frames,
-// so a key that wrongly entered the rail is caught after its frame lands.
 func railStaysOut(t *testing.T, term *tuitest.Terminal, what string) {
 	t.Helper()
 	if term.WaitFor(func(s tuitest.Screen) bool {
@@ -95,9 +86,6 @@ func railStaysOut(t *testing.T, term *tuitest.Terminal, what string) {
 	}
 }
 
-// leaveRail waits for the rail to give the keyboard back, then proves a pane
-// has it by echoing word-42, and that the pane is the one the rail was entered
-// from.
 func leaveRail(t *testing.T, term *tuitest.Terminal, base, session, from, key, word string) {
 	t.Helper()
 	if err := term.WaitFor(func(s tuitest.Screen) bool {

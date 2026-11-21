@@ -8,15 +8,8 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// dockAgentsStrip matches the dock's session controls under --ascii-only, at
-// the bar's right-hand end: the agents control "i" with its count when there is
-// one, then "+", "d" and "X". The controls without the agents control match
-// with the first group empty.
 var dockAgentsStrip = regexp.MustCompile(`(\si(?: (\d+))?)?  \+  d  X$`)
 
-// dockAgents finds the dock row and reads its session controls: the column
-// of the agents control's "i" (-1 when it is not drawn), its count ("" for
-// none) and the column of "+". The dock is the first or the last row.
 func dockAgents(s tuitest.Screen) (row, col int, count string, plus int, ok bool) {
 	_, rows := s.Size()
 	for _, y := range []int{0, rows - 1} {
@@ -60,8 +53,6 @@ func TestDockAgentsButton(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "set-window", "-s", "e2e", "--name", "AGENTPANE"); err != nil {
 		t.Fatalf("name the pane: %v\n%s", err, out)
 	}
-	// attachIn waits for a rounded pane border, which --ascii-only does not
-	// draw, so the client is attached here and waited on by its dock.
 	term := startIn(t, base, startOpts{cols: 120, rows: 32, args: []string{"--ascii-only", "attach", "e2e"}, shippedLooks: true})
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		_, _, _, _, ok := dockAgents(s)

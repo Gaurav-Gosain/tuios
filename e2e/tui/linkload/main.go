@@ -132,7 +132,6 @@ func main() {
 			"mb_per_s": float64(count*len(img)) / (1 << 20) / secs}
 	}
 	if m, ok := result.(map[string]any); ok {
-		// Says the pane really ran on the far machine.
 		m["hosted"] = os.Getenv("TUIOS_PANE_HOSTED") == "1"
 	}
 	line, _ := json.Marshal(result)
@@ -141,10 +140,6 @@ func main() {
 	_ = out.Flush()
 }
 
-// shape copies stdin to stdout at a fixed rate. It reads what is there, up
-// to 4 KiB, and sends it when the rate allows, so it keeps no queue of its
-// own beyond one step: what waits, waits in the pipes, as it would in a
-// network's buffers.
 func shape(arg string) {
 	mbps, err := strconv.ParseFloat(arg, 64)
 	if err != nil || mbps <= 0 {
@@ -162,7 +157,6 @@ func shape(arg string) {
 			if wait := time.Until(due); wait > 0 {
 				time.Sleep(wait)
 			} else if wait < -50*time.Millisecond {
-				// Idle time is not saved up into a burst.
 				start = start.Add(-wait - 50*time.Millisecond)
 			}
 			if _, werr := os.Stdout.Write(buf[:n]); werr != nil {
@@ -175,7 +169,6 @@ func shape(arg string) {
 	}
 }
 
-// roundTrip asks for the cursor position and waits for the answer.
 func roundTrip(out *bufio.Writer, in *bufio.Reader) {
 	_, _ = out.WriteString("\x1b[6n")
 	_ = out.Flush()
@@ -187,7 +180,6 @@ func roundTrip(out *bufio.Writer, in *bufio.Reader) {
 	}
 }
 
-// readAPC reads one graphics reply.
 func readAPC(in *bufio.Reader) string {
 	var b []byte
 	for {

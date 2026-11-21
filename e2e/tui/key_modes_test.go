@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// keyModesConfig declares three key modes. resize is exclusive and turns on
-// split, which is exclusive and ends after one key. pass is not exclusive,
-// so the keys it does not bind reach the pane. Nothing here ships.
 const keyModesConfig = `
 [keybindings.prefix_mode]
 "enter_mode:resize" = ["y"]

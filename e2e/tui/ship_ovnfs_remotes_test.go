@@ -49,7 +49,6 @@ func TestShipPushLeavesOvnfsCheckoutRemotesOut(t *testing.T) {
 		return strings.TrimSpace(string(out))
 	}
 
-	// One real remote and a checkout's: the push goes to the real one.
 	out, err := f.tr.run("ship", "push", "-s", f.session, "--yes")
 	if err != nil || !strings.Contains(out, "to upstream") {
 		t.Fatalf("ASSERTION: ship push with upstream and an ovnfs checkout remote = %v:\n%s\nwant a push to upstream", err, out)
@@ -61,8 +60,6 @@ func TestShipPushLeavesOvnfsCheckoutRemotesOut(t *testing.T) {
 		t.Errorf("ASSERTION: the push reached the checkout's git folder: %s", got)
 	}
 
-	// Only the checkout's remote: there is nowhere to ship to.
-	// The push above made upstream the branch's upstream; it goes with it.
 	_ = exec.Command("git", "-C", f.repo, "branch", "--unset-upstream", "feat/ship").Run()
 	testutil.Git(t, f.repo, "remote", "remove", "upstream")
 	out, err = f.tr.run("ship", "push", "-s", f.session, "--yes")

@@ -10,19 +10,10 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// A config split over several files (#518): config.toml names more files in a
-// top-level include list, and every *.toml file in config.d beside it is read
-// too. These drive the real binary against real files: what loads at start,
-// what a save to an included file does to a running client, and where each
-// command that writes the config puts its change.
-
-// configDirIn is the tuios config directory of the isolation root.
 func configDirIn(base string) string {
 	return filepath.Dir(configPathIn(base))
 }
 
-// writeConfigPart writes one more config file, relative to the config
-// directory, the way an editor saves: a temporary file renamed into place.
 func writeConfigPart(t *testing.T, base, rel, body string) string {
 	t.Helper()
 	path := filepath.Join(configDirIn(base), rel)
@@ -39,7 +30,6 @@ func writeConfigPart(t *testing.T, base, rel, body string) string {
 	return path
 }
 
-// readFileString reads a file the test made, failing the test when it cannot.
 func readFileString(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path) //nolint:gosec // a file of this test's own
@@ -49,13 +39,11 @@ func readFileString(t *testing.T, path string) string {
 	return string(data)
 }
 
-// waitForFileText polls path until want accepts its content.
 func waitForFileText(t *testing.T, path string, want func(string) bool, why string) string {
 	t.Helper()
 	return waitFileHas(t, path, why, configWatchTimeout, want)
 }
 
-// pressUntilFile presses the chord until its marker appears.
 func pressUntilFile(t *testing.T, term *tuitest.Terminal, k rune, marker, why string) {
 	t.Helper()
 	deadline := time.Now().Add(configWatchTimeout)
@@ -86,11 +74,9 @@ func TestIncludedConfigFilesLoadAndReload(t *testing.T) {
 	waitBoot(t, term)
 	newWindow(t, term)
 
-	// At start: the binding is in keys.toml and nowhere else.
 	pressChord(t, term, 'y')
 	waitForFile(t, term, late, "the binding in the included keys.toml")
 
-	// The positive half of the reload steps: h is not bound yet.
 	added := filepath.Join(base, "added.fired")
 	pressChord(t, term, 'h')
 	time.Sleep(2 * time.Second)
@@ -99,27 +85,21 @@ func TestIncludedConfigFilesLoadAndReload(t *testing.T) {
 			"save would prove nothing\n%s", term.Snapshot())
 	}
 
-	// A save to the included file, not to config.toml.
 	writeConfigPart(t, base, "keys.toml",
 		keybindConfigFor("late", "y", late)+keybindConfigFor("added", "h", added))
 	pressUntilFile(t, term, 'h', added,
 		"a binding saved in an included file never reached the running client")
 
-	// config.d did not exist at start. A file in it arrives with the
-	// directory, and its binding merges with the included file's by name.
 	dropped := filepath.Join(base, "dropped.fired")
 	writeConfigPart(t, base, filepath.Join("config.d", "50-more.toml"), keybindConfigFor("dropped", "j", dropped))
 	pressUntilFile(t, term, 'j', dropped,
 		"a binding in a config.d file made after start never reached the running client")
 
-	// later.toml was missing at start, which is a warning and not an error.
-	// The file appearing is a change like any other.
 	later := filepath.Join(base, "later.fired")
 	writeConfigPart(t, base, "later.toml", keybindConfigFor("later", "k", later))
 	pressUntilFile(t, term, 'k', later,
 		"an included file that appeared after start never reached the running client")
 
-	// The first binding survived every merge.
 	_ = os.Remove(late)
 	pressUntilFile(t, term, 'y', late, "the binding from keys.toml was lost in a later merge")
 
@@ -137,7 +117,6 @@ func TestSetConfigWritesTheFileThatHoldsTheKey(t *testing.T) {
 	look := writeConfigPart(t, base, "look.toml", "[appearance]\nborder_style = \"double\"\n")
 	lockedBody := "[appearance]\nhide_window_buttons = false\n"
 	locked := writeConfigPart(t, base, "locked.toml", lockedBody)
-	// A Nix store link is read-only. The file mode is what tuios can see.
 	if err := os.Chmod(locked, 0o444); err != nil {
 		t.Fatalf("make locked.toml read-only: %v", err)
 	}
@@ -185,8 +164,6 @@ func TestSetConfigWritesTheFileThatHoldsTheKey(t *testing.T) {
 	saveSyncArtifact(t, "look.toml", readFileString(t, look))
 }
 
-// originLine reports whether the origin listing has key on a line that names
-// file as the source.
 func originLine(out, key, file string) bool {
 	for line := range strings.SplitSeq(out, "\n") {
 		fields := strings.Fields(line)
@@ -207,7 +184,6 @@ func TestConfigCommandsWriteTheFileThatHoldsTheKey(t *testing.T) {
 	env := []string{"TUIOS_SSH=/bin/false"}
 	writeConfig(t, base, `include = ["hosts.toml", "keys.toml", "locked.toml", "loop.toml", "absent.toml"]`+"\n")
 	hosts := writeConfigPart(t, base, "hosts.toml", "# hosts for this machine only\n[hosts.alpha]\naddr = \"me@alpha\"\n")
-	// keys.toml uses CR LF line endings, as a file saved on Windows does.
 	keys := writeConfigPart(t, base, "keys.toml", "# keys\r\n[keybindings.window_management]\r\nclose_window = [\"w\"]\r\n")
 	lockedBody := "[hosts.beta]\naddr = \"me@beta\"\n"
 	locked := writeConfigPart(t, base, "locked.toml", lockedBody)
@@ -237,7 +213,6 @@ func TestConfigCommandsWriteTheFileThatHoldsTheKey(t *testing.T) {
 		}
 	}
 
-	// A host the included hosts.toml sets is changed there, in place.
 	if out, err := run("hosts", "add", "alpha", "me@alpha2"); err != nil {
 		t.Fatalf("tuios hosts add alpha: %v\n%s", err, out)
 	}
@@ -249,8 +224,6 @@ func TestConfigCommandsWriteTheFileThatHoldsTheKey(t *testing.T) {
 		t.Fatalf("ASSERTION: hosts add wrote alpha into config.toml:\n%s", readFileString(t, configPathIn(base)))
 	}
 
-	// A host a read-only file sets: config.toml gets the change, and the
-	// command says so.
 	out, err = run("hosts", "add", "beta", "me@beta2")
 	if err != nil {
 		t.Fatalf("tuios hosts add beta: %v\n%s", err, out)
@@ -265,8 +238,6 @@ func TestConfigCommandsWriteTheFileThatHoldsTheKey(t *testing.T) {
 		t.Fatalf("ASSERTION: tuios wrote the read-only locked.toml:\n%s", got)
 	}
 
-	// A remove cannot take beta out of locked.toml, so it changes nothing
-	// and names the file.
 	out, err = run("hosts", "remove", "beta")
 	if err == nil || !strings.Contains(out, "locked.toml") {
 		t.Fatalf("ASSERTION: hosts remove of a host in a read-only file did not refuse and name it: %v\n%s", err, out)
@@ -275,7 +246,6 @@ func TestConfigCommandsWriteTheFileThatHoldsTheKey(t *testing.T) {
 		t.Fatalf("ASSERTION: the refused remove still changed config.toml:\n%s", readFileString(t, configPathIn(base)))
 	}
 
-	// A keybinding the included keys.toml sets is unbound there.
 	if out, err := run("keybinds", "unbind", "close_window"); err != nil {
 		t.Fatalf("tuios keybinds unbind: %v\n%s", err, out)
 	}

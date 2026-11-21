@@ -47,11 +47,9 @@ func TestRailLabelsAnUnnamedSessionByItsDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A generated name, exactly as `tuios new` with no argument hands out.
 	if out, err := tuiosCLI(t, base, "new", "session-0", "--detach"); err != nil {
 		t.Fatalf("create session-0: %v: %s", err, out)
 	}
-	// A session a person named, with an agent in it that sets a title.
 	if out, err := tuiosCLI(t, base, "new", "billing", "--detach"); err != nil {
 		t.Fatalf("create billing: %v: %s", err, out)
 	}
@@ -66,9 +64,6 @@ func TestRailLabelsAnUnnamedSessionByItsDirectory(t *testing.T) {
 		t.Fatalf("sidebar did not open: %v\n%s", err, term.Snapshot())
 	}
 
-	// The shell reports where it is the way fish does on every cd. /bin/sh
-	// does not, so the report is printed by hand: the daemon reads the bytes
-	// either way.
 	report := func(dir string) {
 		t.Helper()
 		enterTerminalMode(t, term)
@@ -82,7 +77,6 @@ func TestRailLabelsAnUnnamedSessionByItsDirectory(t *testing.T) {
 		leaveTerminalMode(t, term)
 	}
 
-	// railHas reports whether one line of the frame carries every marker.
 	railHas := func(markers ...string) func(tuitest.Screen) bool {
 		return func(s tuitest.Screen) bool {
 			for line := range strings.SplitSeq(s.Text(), "\n") {
@@ -102,8 +96,6 @@ func TestRailLabelsAnUnnamedSessionByItsDirectory(t *testing.T) {
 	}
 
 	report(repo)
-	// The listing behind the rail refreshes every few seconds while the rail is
-	// open, so the label lands within that, not on the keystroke.
 	if err := term.WaitFor(railHas("labelrepo", "feature-x"), 15*time.Second); err != nil {
 		t.Fatalf("the rail never labelled the session by its checkout: %v\n%s", err, term.Snapshot())
 	}
@@ -120,8 +112,6 @@ func TestRailLabelsAnUnnamedSessionByItsDirectory(t *testing.T) {
 	}
 	t.Logf("labelled by a plain directory:\n%s", term.Snapshot())
 
-	// sessionRow reports whether a row of the rail's sessions section, and not
-	// the files section under it, which names the directory too, says want.
 	sessionRow := func(want string) func(tuitest.Screen) bool {
 		return func(s tuitest.Screen) bool {
 			in := false
@@ -144,7 +134,6 @@ func TestRailLabelsAnUnnamedSessionByItsDirectory(t *testing.T) {
 		t.Fatalf("the sessions section does not show the directory:\n%s", term.Snapshot())
 	}
 
-	// A title from a pane that is not an agent's leaves the label alone.
 	setTitle(t, base, "session-0", "Fix login redirect")
 	waitForWindowTitle(t, base, "session-0", "Fix login redirect")
 	if !sessionRow("plaindir")(term.Screen()) {
@@ -159,8 +148,6 @@ func TestRailLabelsAnUnnamedSessionByItsDirectory(t *testing.T) {
 	}, 15*time.Second); err != nil {
 		t.Fatalf("the rail never labelled the session by its agent's title: %v\n%s", err, term.Snapshot())
 	}
-	// The named session keeps its name. The listing behind its row refreshes on
-	// the same clock, so its row is waited for, not read once.
 	if err := term.WaitFor(sessionRow("billing"), 15*time.Second); err != nil {
 		t.Fatalf("the named session lost its name in the rail: %v\n%s", err, term.Snapshot())
 	}
@@ -169,8 +156,6 @@ func TestRailLabelsAnUnnamedSessionByItsDirectory(t *testing.T) {
 			t.Fatalf("the named session's row carries its agent's title: %q", line)
 		}
 	}
-	// The frame waits for the agents section to name the pane by the same
-	// title, which it adopts on its own clock, so the picture is settled.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		n := 0
 		for line := range strings.SplitSeq(s.Text(), "\n") {
@@ -198,7 +183,6 @@ func TestRailLabelsAnUnnamedSessionByItsDirectory(t *testing.T) {
 		t.Errorf("tuios ls shows an agent's title for the named session:\n%s", out)
 	}
 
-	// The label follows a new title.
 	setTitle(t, base, "session-0", "Add rate limits")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return sessionRow("Add rate limits")(s) && !sessionRow("Fix login redirect")(s)
@@ -206,7 +190,6 @@ func TestRailLabelsAnUnnamedSessionByItsDirectory(t *testing.T) {
 		t.Fatalf("the label did not follow the agent's new title: %v\n%s", err, term.Snapshot())
 	}
 
-	// The agent ends, and the directory comes back.
 	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", "session-0", "none"); err != nil {
 		t.Fatalf("end the agent: %v\n%s", err, out)
 	}
@@ -215,8 +198,6 @@ func TestRailLabelsAnUnnamedSessionByItsDirectory(t *testing.T) {
 	}
 }
 
-// setTitle has the shell in the session's pane set its terminal title, with
-// the escape Claude Code writes.
 func setTitle(t *testing.T, base, session, title string) {
 	t.Helper()
 	cmd := "printf '\\033]2;" + title + "\\007'\n"
@@ -226,8 +207,6 @@ func setTitle(t *testing.T, base, session, title string) {
 	waitForWindowTitle(t, base, session, title)
 }
 
-// waitForWindowTitle waits until the daemon lists the session's pane with the
-// title.
 func waitForWindowTitle(t *testing.T, base, session, title string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)

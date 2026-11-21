@@ -106,7 +106,6 @@ func TestAWindowNameWinsOverAnIdPrefix(t *testing.T) {
 		t.Errorf("ASSERTION: the pane whose id starts with %q took the state meant for the pane of that name: it is at %q", name, got)
 	}
 
-	// The prefix still reaches the other pane once no name is in the way.
 	if out, err := tuiosCLI(t, base, "set-window", "-s", sess, "-w", name, "--name", "first"); err != nil {
 		t.Fatalf("rename the first pane: %v\n%s", err, out)
 	}

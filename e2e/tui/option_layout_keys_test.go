@@ -10,87 +10,39 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// Issues #566 and #575: Option chords on macOS and the US layout assumption.
-//
-// Each sequence below is byte for byte what a terminal writes for the key, so
-// the tests run the same decoder and the same key path as the reports.
-// knob platform=darwin puts tuios on its macOS defaults (opt+N switches workspace N,
-// opt+shift+N moves the pane there) and turns on its macOS key paths on the
-// Linux machine that runs the suite.
-//
-// How these could pass wrongly, written down first:
-//   - The key could do nothing for an unrelated reason. Every test that says
-//     a key does nothing also presses a key that does something, in the same
-//     session, and waits for it.
-//   - A wrong action could leave no trace. The wrong action in #575 is
-//     move_and_follow_7, which moves the pane, so each test reads the pane's
-//     workspace from the daemon as well as the session's.
-//   - Typed text could match the echo of the command. The marker is computed
-//     by the shell.
 const (
-	// wezComposedBullet is WezTerm with send_composed_key_when_right_alt_is_pressed:
-	// right Option and 8 on a US layout sends the composed character as text,
-	// with no ESC and no modifier.
 	wezComposedBullet = "•"
 
-	// normalOptionPound is Terminal.app, or iTerm2 with Option on "Normal", as
-	// they ship: Option and 3 on a US layout sends the composed £ as text.
 	normalOptionPound = "£"
 
-	// normalOptionInvExcl is Option and 1 on such a terminal: the composed ¡.
 	normalOptionInvExcl = "¡"
 
-	// kittyComposedDegree is Ghostty or kitty under the Kitty protocol with
-	// Option left to compose: Option, Shift and 8 is the composed ° (176) with
-	// the Alt and Shift bits set and no base-layout key. CSI 176 ; 4 u.
 	kittyComposedDegree = "\x1b[176;4u"
 
-	// kittyAltShift8Base is the same chord reported with its base-layout key,
-	// 56 (8): the key that was pressed is known. CSI 176::56 ; 4 u.
 	kittyAltShift8Base = "\x1b[176::56;4u"
 
-	// optionNote is the start of the one-time note about Option not being
-	// sent as Alt: as much as the dock shows beside a pill for every
-	// workspace the fixture opens.
 	optionNote = "Your Option key types"
 
-	// escPlus8, escPlus3, escPlus1 and escPlusHash are the left Option key as
-	// Meta (WezTerm) or Esc+ (iTerm2): ESC, then the character the key types
-	// without Option. Option, Shift and 3 on a US layout types #.
 	escPlus8    = "\x1b8"
 	escPlus3    = "\x1b3"
 	escPlus1    = "\x1b1"
 	escPlusHash = "\x1b#"
 
-	// escPlusAmp and escPlusEacute are iTerm2 Esc+ on a French AZERTY Mac:
-	// Option and the 1 key, and Option and the 2 key. The terminal says
-	// nothing about the layout.
 	escPlusAmp    = "\x1b&"
 	escPlusEacute = "\x1bé"
 
-	// kittyAzertyAltAmp is Option and the 1 key on AZERTY under the Kitty
-	// protocol with alternate keys: key code 38 (&), base-layout key 49 (1),
-	// Alt. CSI 38::49 ; 3 u.
 	kittyAzertyAltAmp = "\x1b[38::49;3u"
 
-	// kittyAzertyAltShiftAmp is Option, Shift and the 1 key on AZERTY: key
-	// code 38 (&), shifted key 49 (1), base-layout key 49, Alt and Shift.
 	kittyAzertyAltShiftAmp = "\x1b[38:49:49;4u"
 
-	// kittyAltAmp is alt+& from a terminal on the Kitty protocol that reports
-	// no alternate keys. Nothing in it says which layout typed it.
 	kittyAltAmp = "\x1b[38;3u"
 )
 
-// macSession starts a daemon session with tuios on its macOS defaults and one
-// pane on workspace 1, in window mode. config is written first when not empty.
 func macSession(t *testing.T, base, session, config string) *tuitest.Terminal {
 	t.Helper()
 	return macSessionOn(t, base, session, config, "")
 }
 
-// macSessionOn is macSession on a Mac whose keyboard input source is source,
-// as /usr/bin/defaults prints it. Empty is a Mac whose layout cannot be read.
 func macSessionOn(t *testing.T, base, session, config, source string) *tuitest.Terminal {
 	t.Helper()
 	if config != "" {
@@ -111,11 +63,6 @@ func macSessionOn(t *testing.T, base, session, config, source string) *tuitest.T
 		t.Fatalf("the session has %d panes, want 1", len(rows))
 	}
 	macPanes.Store(session, rows[0].ID)
-	// A workspace's number is its position, and opt+N past the last one opens
-	// the next one. Every workspace holds a pane, so each opt+N reaches its
-	// own number and a key read as the wrong digit lands somewhere else.
-	// Workspace 1 holds a second one, so the pane under test can move away
-	// without workspace 1 going.
 	for ws := 1; ws <= 9; ws++ {
 		if out, err := tuiosCLI(t, base, "new-window", "-s", session, "--workspace", strconv.Itoa(ws), "--no-focus"); err != nil {
 			t.Fatalf("a pane on workspace %d: %v\n%s", ws, err, out)
@@ -124,11 +71,8 @@ func macSessionOn(t *testing.T, base, session, config, source string) *tuitest.T
 	return term
 }
 
-// macPanes is the pane each macSession made, by session: the pane the
-// keys act on, among the ones that hold the other workspaces open.
 var macPanes sync.Map
 
-// press sends one raw key sequence.
 func press(t *testing.T, term *tuitest.Terminal, what, seq string) {
 	t.Helper()
 	if err := term.SendKeys(tuitest.Key(seq)); err != nil {
@@ -136,7 +80,6 @@ func press(t *testing.T, term *tuitest.Terminal, what, seq string) {
 	}
 }
 
-// paneWorkspace is the workspace the session's only pane is on.
 func paneWorkspace(t *testing.T, base, session string) int {
 	t.Helper()
 	id, _ := macPanes.Load(session)
@@ -149,9 +92,6 @@ func paneWorkspace(t *testing.T, base, session string) int {
 	return 0
 }
 
-// waitPaneOn waits for the pane to be on workspace ws. A move and its follow
-// reach the daemon as two steps, so the session can show ws before the pane
-// is there.
 func waitPaneOn(t *testing.T, term *tuitest.Terminal, base, session string, ws int, why string) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
@@ -163,7 +103,6 @@ func waitPaneOn(t *testing.T, term *tuitest.Terminal, base, session string, ws i
 	}
 }
 
-// wantPaneOn fails unless the pane is on workspace ws.
 func wantPaneOn(t *testing.T, term *tuitest.Terminal, base, session string, ws int, why string) {
 	t.Helper()
 	if got := paneWorkspace(t, base, session); got != ws {
@@ -187,9 +126,6 @@ func TestComposedOptionCharacterReachesThePane(t *testing.T) {
 	term := macSession(t, base, session, "[keybindings]\nleader_key = \"opt+1\"\noption_glyphs = \"type\"\n")
 	enterTerminalMode(t, term)
 
-	// The shell prints x2•¡y only if the "•" and the "¡" reached it between
-	// the two halves. The "¡" is the leader's composed character, so it also
-	// shows that "type" keeps it from starting the leader.
 	if err := term.SendKeys(`echo "x$((1+1))`); err != nil {
 		t.Fatalf("type the command: %v", err)
 	}
@@ -206,7 +142,6 @@ func TestComposedOptionCharacterReachesThePane(t *testing.T) {
 	}
 	saveFrame(t, term, "option-composed-bullet-typed")
 
-	// The positive half: the left Option key, sent as Alt, still switches.
 	press(t, term, "left Option and 8 (ESC 8)", escPlus8)
 	waitWorkspace(t, base, session, 8)
 }
@@ -236,16 +171,11 @@ func TestBareOptionCharacterFollowsTheMacLayout(t *testing.T) {
 
 		press(t, term, "Option and 3 (composed)", normalOptionPound)
 		waitWorkspace(t, base, session, 3)
-		// The one-time note says Option is not sent as Alt. This is the
-		// positive half of the test that says it stays quiet.
 		if err := term.WaitForText(optionNote, uiTimeout); err != nil {
 			t.Fatalf("the note about Option did not show: %v\n%s", err, term.Snapshot())
 		}
 		saveFrame(t, term, "option-normal-pound-us")
 
-		// Back on workspace 1 the shell's prompt line holds no "£". A "£"
-		// the shell got is echoed there, since the prompt waits for the rest
-		// of a line.
 		press(t, term, "Option and 1 (ESC 1)", escPlus1)
 		waitWorkspace(t, base, session, 1)
 		if err := term.WaitForText("ready-5", uiTimeout); err != nil {
@@ -282,7 +212,6 @@ func TestBareOptionCharacterFollowsTheMacLayout(t *testing.T) {
 		}
 		saveFrame(t, term, "option-bare-pound-uk")
 
-		// The positive half: Option sent as Alt still switches.
 		press(t, term, "Option and 3 (ESC 3)", escPlus3)
 		waitWorkspace(t, base, session, 3)
 	})
@@ -336,12 +265,10 @@ move_and_follow_2 = ["opt+é"]
 `)
 
 	press(t, term, "Option and the 1 key (alt+&)", escPlusAmp)
-	// A key that does something, so the one before it has been read.
 	press(t, term, "Option, Shift and the 3 key (alt+3)", escPlus3)
 	waitWorkspace(t, base, session, 3)
 	wantPaneOn(t, term, base, session, 1, "Option and the 1 key with keyboard_layout = \"other\"")
 
-	// Back to the pane, which the move takes with it.
 	press(t, term, "Option, Shift and the 1 key (alt+1)", escPlus1)
 	waitWorkspace(t, base, session, 1)
 	press(t, term, "Option and the 2 key (alt+é)", escPlusEacute)
@@ -461,7 +388,6 @@ func TestKittyComposedCharacterFollowsOptionGlyphs(t *testing.T) {
 		t.Fatalf("the note about Option shows with option_glyphs = \"type\":\n%s", term.Snapshot())
 	}
 
-	// The positive half: with the base-layout key, the chord is alt+shift+8.
 	press(t, term, "Option and 1 (ESC 1)", escPlus1)
 	waitWorkspace(t, base, session, 1)
 	press(t, term, "Option, Shift and 8 (kitty, base 8)", kittyAltShift8Base)
@@ -487,7 +413,6 @@ func TestAzertyCedillaIsNotOptionC(t *testing.T) {
 	term := macSession(t, base, session,
 		"[keybindings]\noption_glyphs = \"bind\"\n\n[keybindings.workspaces]\nmove_and_follow_4 = [\"opt+c\"]\n")
 
-	// CSI 231 :: 57 u: ç, base-layout key 9, no modifier.
 	press(t, term, "the AZERTY 9 key (kitty, ç, base 9)", "\x1b[231::57u")
 	press(t, term, "Option and 3 (ESC 3)", escPlus3)
 	waitWorkspace(t, base, session, 3)

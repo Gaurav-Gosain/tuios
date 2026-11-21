@@ -63,16 +63,12 @@ func TestUndoOfferEndsWithTheUndoWindow(t *testing.T) {
 	}
 	waitText(t, term, "both errored items in the agents view", "2 needs you", "build failed on main", "lint failed on main")
 
-	// A dock message is drawn behind its notification cap; a dock row with
-	// none of them holds no message.
 	dockEmpty := func(s tuitest.Screen) bool { return !strings.ContainsAny(dockRow(s), "▎▌▊") }
 	waitUntil(t, "the dock shows no message", 25*time.Second, func() (bool, string) {
 		s := term.Screen()
 		return dockEmpty(s), s.Text()
 	})
 
-	// gone waits for the offer's head to leave the screen and the dock to
-	// hold no message, on a frame that still shows mark.
 	gone := func(what, head, mark string) {
 		t.Helper()
 		waitUntil(t, what, 4*time.Second, func() (bool, string) {
@@ -82,7 +78,6 @@ func TestUndoOfferEndsWithTheUndoWindow(t *testing.T) {
 		})
 	}
 
-	// The dismiss offer, on the second item. j moves the selection to it.
 	if err := term.SendKeys("j"); err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +97,6 @@ func TestUndoOfferEndsWithTheUndoWindow(t *testing.T) {
 	gone("the dismiss offer leaves the dock with the undo window", "Dismissed ", "build failed on main")
 	saveFrame(t, term, "undo-offer-dismiss-gone")
 
-	// The snooze offer, on the last item.
 	if err := term.SendKeys("z"); err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +108,6 @@ func TestUndoOfferEndsWithTheUndoWindow(t *testing.T) {
 	gone("the snooze offer leaves the dock with the undo window", "Snoozed ", "1 snoozed")
 	saveFrame(t, term, "undo-offer-snooze-gone")
 
-	// The window has ended: u restores nothing and says which window it was.
 	if err := term.SendKeys("u"); err != nil {
 		t.Fatal(err)
 	}

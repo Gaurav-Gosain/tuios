@@ -44,7 +44,6 @@ break_pane = ["alt+b"]
 	clientShows(t, base, "tmuxish")
 	waitForSettledGeometryIn(t, base, "tmuxish", 1)
 
-	// Positive half first: before any key, the session is on workspace 1 in bsp.
 	if info := sessionInfoOf(t, base, "tmuxish"); info.CurrentWorkspace != 1 || info.LayoutMode != "bsp" {
 		t.Fatalf("tmuxish starts on workspace %d in %q, want 1 in bsp", info.CurrentWorkspace, info.LayoutMode)
 	}
@@ -59,7 +58,6 @@ break_pane = ["alt+b"]
 	}
 	waitWorkspace(t, base, "tmuxish", 2)
 
-	// last_workspace goes back to 1, and a second press goes to 2 again.
 	for _, want := range []int{1, 2, 1} {
 		if err := term.SendKeys(tuitest.Alt('g')); err != nil {
 			t.Fatalf("press alt+g: %v", err)
@@ -67,10 +65,6 @@ break_pane = ["alt+b"]
 		waitWorkspace(t, base, "tmuxish", want)
 	}
 
-	// break_pane takes the pane of workspace 1 to the first empty workspace
-	// and follows it. Workspace 2 may hold a pane by now, opened by the switch
-	// to it when workspaces.new_window_when_empty is on, so the pane's new
-	// workspace is read, not assumed.
 	pane := ""
 	for id, p := range listPanes(t, base, "tmuxish") {
 		if p.Workspace == 1 {

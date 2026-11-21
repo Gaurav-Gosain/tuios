@@ -32,10 +32,8 @@ func TestAltScreenReleasedBySweep(t *testing.T) {
 		width   = 200
 		narrow  = 180
 		height  = 60
-		cellLen = 112 // bytes in a uv.Cell
+		cellLen = 112
 	)
-	// seq writes every row of the alternate screen, as a full-screen
-	// program's first frame does.
 	const fullScreen = `printf '\033[?1049h'; seq 1 3000; printf '\033[?1049l'; echo ALT$((1+1))DONE` + "\n"
 	corner := fmt.Sprintf(`printf '\033[?1049h\033[%d;%dHCORNER'; read x; printf '\033[?1049l'; echo BACK$((1+1))HOME`+"\n", height, narrow-5)
 
@@ -102,7 +100,6 @@ func TestAltScreenReleasedBySweep(t *testing.T) {
 		resize(d, width)
 		run(d, fullScreen, "ALT2DONE")
 	}
-	// The sweeping daemon runs its sweep at least twice in this time.
 	time.Sleep(3 * time.Second)
 
 	sweptHeap, err := pprofHeapHeld(swept.addr)
@@ -122,14 +119,10 @@ func TestAltScreenReleasedBySweep(t *testing.T) {
 			released/1024, panes, want/1024, width, height)
 	}
 
-	// A resize, then a program that draws only in the bottom right corner of
-	// the new size.
 	for _, d := range []daemon{swept, held} {
 		resize(d, narrow)
 		run(d, corner, "CORNER")
 	}
-	// The sweep runs while the program is on the alternate screen, and must
-	// leave the screen being shown alone.
 	time.Sleep(1500 * time.Millisecond)
 	for i := range swept.ids {
 		got, want := capture(swept, swept.ids[i]), capture(held, held.ids[i])

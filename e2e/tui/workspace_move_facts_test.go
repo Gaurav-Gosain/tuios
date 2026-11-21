@@ -33,9 +33,7 @@ func TestMoveKeepsItsWorkspaceWhileThePaneAnnouncesFolders(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt('m')); err != nil {
 		t.Fatalf("press alt+m: %v", err)
 	}
-	// Workspaces are numbered densely, so 3 is 2 with only 1 before it.
 	waitShowing(t, base, sess, 2, "", term)
-	// The loop ends after its last report. The move must still stand then.
 	if err := term.WaitForText("LOOP-45", shellTimeout); err != nil {
 		t.Fatalf("the folder loop never ended: %v\n%s", err, term.Snapshot())
 	}

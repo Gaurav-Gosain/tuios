@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The colours the frame-match test configures: the focused pane border's, the
-// ground behind pane content, and the overlay frame colour the option sets.
-// None is anything a theme or a panel surface would land on by chance.
 var (
 	matchBorder  = tuitest.Color{Kind: tuitest.ColorRGB, R: 0xff, G: 0x88, B: 0x00}
 	matchPaneBg  = tuitest.Color{Kind: tuitest.ColorRGB, R: 0x20, G: 0x30, B: 0x40}
@@ -101,15 +98,11 @@ func TestOverlayFramesMatchPaneBorders(t *testing.T) {
 	})
 }
 
-// cellProbe is one named cell a check reads.
 type cellProbe struct {
 	name string
 	x, y int
 }
 
-// paletteInterior is the command palette's interior probes: the padding cell
-// right of the left edge on the blank row under the title, and the first cell
-// of a command row the cursor is not on.
 func paletteInterior(s tuitest.Screen, b overlayBox) []cellProbe {
 	body := cellProbe{"body text", -1, -1}
 	for y := b.y0 + 1; y < b.y1; y++ {
@@ -121,17 +114,10 @@ func paletteInterior(s tuitest.Screen, b overlayBox) []cellProbe {
 	return []cellProbe{{"padding", b.x0 + 1, b.y0 + 2}, body}
 }
 
-// renameInterior is the rename dialog's interior probes: the padding cell right
-// of the left edge on the field row, and the sigil that fronts the field.
 func renameInterior(_ tuitest.Screen, b overlayBox) []cellProbe {
 	return []cellProbe{{"padding", b.x0 + 1, b.y0 + 1}, {"body text", b.x0 + 2, b.y0 + 1}}
 }
 
-// wantFrameColours fails unless every frame cell of b checked carries ink on
-// the pane's ground, the interior cells interior names and the cell just
-// outside the frame are on the pane's ground too, and a pane border cell
-// outside b carries the focused border's colour. It writes what it read beside
-// the screen artifacts.
 func wantFrameColours(t *testing.T, term *tuitest.Terminal, art, name, what string, b overlayBox, ink tuitest.Color, interior func(tuitest.Screen, overlayBox) []cellProbe) {
 	t.Helper()
 	frame := []cellProbe{
@@ -178,11 +164,6 @@ func wantFrameColours(t *testing.T, term *tuitest.Terminal, art, name, what stri
 	}
 }
 
-// wantFrameRowsOnPane fails unless every cell of b's top and bottom rows sits
-// on the pane's ground: the dialog's title and its hints ride in those rows,
-// and a label on the dialog's own surface would be a shaded patch on an
-// unshaded line. The title row must hold a letter, so a frame drawn with no
-// title cannot pass for one whose title was checked.
 func wantFrameRowsOnPane(t *testing.T, term *tuitest.Terminal, art, name string, b overlayBox) {
 	t.Helper()
 	var report string
@@ -211,8 +192,6 @@ func wantFrameRowsOnPane(t *testing.T, term *tuitest.Terminal, art, name string,
 	}
 }
 
-// paneBorderCell finds a box-drawing cell outside b drawn in the focused
-// border's colour: the focused pane's own border.
 func paneBorderCell(s tuitest.Screen, b overlayBox) (int, int, bool) {
 	cols, rows := s.Size()
 	for y := range rows {

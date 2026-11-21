@@ -9,29 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// The mode legend: a mode that takes the keyboard over says what its keys do
-// in the dock, as key and label pairs fitted to the room, for as long as the
-// mode is open. Hints mode used to say it in a message, which the dock cut in
-// the middle of a word ("Ctrl+label ope…") and which burnt down while the
-// mode stayed open.
-//
-// How these could pass wrongly, written down first:
-//   - The legend could be read off the pane rather than the dock. Every
-//     assertion reads the dock row only.
-//   - A cut word could hide among whole ones. Every word right of the
-//     workspace readout must be a whole key or a whole label of the mode's
-//     legend, and no ellipsis may be on the row.
-//   - The legend could be on the dock all the time and so prove nothing about
-//     the mode. Each test checks the dock before the mode opens and after it
-//     closes, and the legend must be absent both times.
-//   - A width could have room for every key, so nothing is ever fitted. The
-//     widths run from 60 to 200 columns, and at 60 the full legend does not
-//     fit, which the test checks.
-//
-// Each run saves its frames under artifactDir (TUIOS_E2E_FRAMES).
-
-// legendSize is a terminal each legend is checked on: its size, and the
-// colour depth when it is not the harness default.
 type legendSize struct {
 	cols, rows int
 	depth      string
@@ -46,8 +23,6 @@ func (s legendSize) name() string {
 	return n
 }
 
-// legendSizes are the terminals each legend is checked on. At 16 colours the
-// chrome paints no ground, so bold is all that tells a key from its label.
 var legendSizes = []legendSize{
 	{cols: 60, rows: 20},
 	{cols: 80, rows: 24},
@@ -55,8 +30,6 @@ var legendSizes = []legendSize{
 	{cols: 200, rows: 50},
 }
 
-// checkKeyBold asserts the key is drawn bold on the dock row and its label is
-// not, which is how a legend tells the two apart at any colour depth.
 func checkKeyBold(t *testing.T, s tuitest.Screen, key, label string) {
 	t.Helper()
 	_, rows := s.Size()
@@ -78,15 +51,12 @@ func checkKeyBold(t *testing.T, s tuitest.Screen, key, label string) {
 	t.Errorf("%q %q is not on the screen", key, label)
 }
 
-// legendItem is one pair of a mode's legend: the key, the forms the dock may
-// shorten it to, and the label.
 type legendItem struct {
 	key   string
 	short []string
 	label string
 }
 
-// legendVocabulary is every word a legend may show.
 func legendVocabulary(items []legendItem) map[string]bool {
 	vocab := map[string]bool{}
 	for _, it := range items {
@@ -101,8 +71,6 @@ func legendVocabulary(items []legendItem) map[string]bool {
 	return vocab
 }
 
-// legendShown reports whether the pair is on the row whole, with the key in
-// any of its forms.
 func legendShown(row string, it legendItem) bool {
 	for _, k := range append([]string{it.key}, it.short...) {
 		if strings.Contains(row, k+" "+it.label) {
@@ -112,11 +80,8 @@ func legendShown(row string, it legendItem) bool {
 	return false
 }
 
-// trailRe is the dock's workspace readout, "1:1". The legend is right of it.
 var trailRe = regexp.MustCompile(`^\d+:\d+$`)
 
-// legendWords is the words of the dock row right of the workspace readout,
-// less the session controls at its end, which are one Nerd Font icon each.
 func legendWords(row string) []string {
 	fields := strings.Fields(row)
 	last := -1
@@ -135,12 +100,6 @@ func legendWords(row string) []string {
 	return words
 }
 
-// checkLegend asserts the dock row shows the legend with no word cut and
-// every key in must. With whole set, each key in must has its label too, and
-// with all set every pair of items is there.
-//
-// A key in must may lose its label only on a screen narrower than 80
-// columns, which is the last thing the fitting gives up before a key.
 func checkLegend(t *testing.T, row string, items []legendItem, must []string, whole, all bool) {
 	t.Helper()
 	vocab := legendVocabulary(items)
@@ -187,7 +146,6 @@ func checkLegend(t *testing.T, row string, items []legendItem, must []string, wh
 	}
 }
 
-// hintsLegendItems is hints mode's legend as the dock may draw it.
 var hintsLegendItems = []legendItem{
 	{key: "label", label: "copy"},
 	{key: "shift+label", short: []string{"S-label"}, label: "type"},
@@ -196,7 +154,6 @@ var hintsLegendItems = []legendItem{
 	{key: "esc", label: "cancel"},
 }
 
-// startLegend starts a client at the size with one shell in terminal mode.
 func startLegend(t *testing.T, size legendSize) *tuitest.Terminal {
 	t.Helper()
 	term := startIn(t, t.TempDir(), startOpts{cols: size.cols, rows: size.rows, env: size.env})
@@ -206,7 +163,6 @@ func startLegend(t *testing.T, size legendSize) *tuitest.Terminal {
 	return term
 }
 
-// waitLegendRow waits for the dock row to satisfy ok and returns it.
 func waitLegendRow(t *testing.T, term *tuitest.Terminal, what string, ok func(string) bool) string {
 	t.Helper()
 	var row string
@@ -277,7 +233,6 @@ func TestHintsHelpKeyListsAllKeys(t *testing.T) {
 	}
 }
 
-// copyLegendItems is copy mode's legend, normal state.
 var copyLegendItems = []legendItem{
 	{key: "hjkl", label: "move"},
 	{key: "w/b/e", label: "word"},
@@ -293,7 +248,6 @@ var copyLegendItems = []legendItem{
 	{key: "ctrl+c", short: []string{"^c"}, label: "quit"},
 }
 
-// copySearchLegendItems is copy mode's legend at the search prompt.
 var copySearchLegendItems = []legendItem{
 	{key: "type", label: "search"},
 	{key: "n/N", label: "next"},
@@ -302,7 +256,6 @@ var copySearchLegendItems = []legendItem{
 	{key: "ctrl+c", short: []string{"^c"}, label: "quit"},
 }
 
-// copyVisualLegendItems is copy mode's legend with a selection started by v.
 var copyVisualLegendItems = []legendItem{
 	{key: "hjkl", label: "extend"},
 	{key: "w/b/e", label: "word"},
@@ -343,7 +296,6 @@ func TestCopyModeLegend(t *testing.T) {
 			saveArtifact(t, term, dir, "copy-visual")
 			checkLegend(t, row, copyVisualLegendItems, []string{"y", "esc"}, size.cols >= 80, size.cols >= 200)
 
-			// Esc and q apart, so the two do not arrive as alt+q.
 			if err := term.SendKeys("\x1b"); err != nil {
 				t.Fatalf("send esc: %v", err)
 			}

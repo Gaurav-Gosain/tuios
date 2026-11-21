@@ -98,9 +98,6 @@ func TestCockpitChangesTabGetsTheFocus(t *testing.T) {
 	if out, err := hook.CombinedOutput(); err != nil {
 		t.Fatalf("agent-hook SessionStart: %v\n%s", err, out)
 	}
-	// The fake agent answers the fan's prompt with a turn of its own, a
-	// moment after it starts. A new turn closes the Done item set below, as
-	// it must, so that turn ends first.
 	waitUntil(t, "the fake agent's own turn ends", 20*time.Second, func() (bool, string) {
 		pane, _ := tuiosCLI(t, base, "capture-pane", "-s", sess)
 		wins, _ := tuiosCLI(t, base, "list-windows", "-s", sess)
@@ -128,7 +125,6 @@ func TestCockpitChangesTabGetsTheFocus(t *testing.T) {
 	}
 	_ = term.WaitStable(uiTimeout)
 	saveFrame(t, term, "changes-thread-before")
-	// The recap counts the fake's own turn too, so the count is not fixed.
 	recap := regexp.MustCompile(`\b\d+ turns?\.`)
 	cardWords := recap.MatchString(term.Screen().Text())
 
@@ -151,7 +147,6 @@ func TestCockpitChangesTabGetsTheFocus(t *testing.T) {
 	if !cardWords || recap.MatchString(text) || !strings.Contains(text, "Done") {
 		t.Errorf("ASSERTION: the Done card keeps its recap on the Changes tab:\n%s", term.Snapshot())
 	}
-	// A diff row starts with its line number. On main the diff gets 10.
 	diffRows := 0
 	numbered := regexp.MustCompile(`\s\d+ [ +-] `)
 	for _, line := range strings.Split(text, "\n") {
@@ -163,7 +158,6 @@ func TestCockpitChangesTabGetsTheFocus(t *testing.T) {
 		t.Errorf("ASSERTION: the diff gets %d rows of 40, want 16 or more:\n%s", diffRows, term.Snapshot())
 	}
 
-	// Back on the Thread tab, the reply is whole.
 	sendKeys(t, term, "[")
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return screenHas(s, "Added the flag in four files.", "Write a reply.")

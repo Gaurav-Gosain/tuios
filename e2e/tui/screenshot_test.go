@@ -9,15 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// End-to-end screenshot coverage against a real tuios in a real terminal.
-//
-// Unit tests can prove the renderer draws what it was asked to. Only this can
-// prove the capture mode is reachable, that the preview panel appears on
-// screen, and that a file lands where the config said. This project has been
-// burned by unit-level proof of a visual feature before.
-
-// shotDir points screenshot.directory at the test's own directory and returns
-// it, so a capture cannot land in the developer's Pictures folder.
 func shotDir(t *testing.T, base string) string {
 	t.Helper()
 	dir := filepath.Join(base, "shots")
@@ -27,8 +18,6 @@ func shotDir(t *testing.T, base string) string {
 	return dir
 }
 
-// setShotOption sets one screenshot option on the running session, through the
-// same set-config path a person would use.
 func setShotOption(t *testing.T, term *tuitest.Terminal, base, path, value string) {
 	t.Helper()
 	if out, err := tuiosCLI(t, base, "set-config", path, value); err != nil {
@@ -36,7 +25,6 @@ func setShotOption(t *testing.T, term *tuitest.Terminal, base, path, value strin
 	}
 }
 
-// shotFiles lists what has been written into dir so far.
 func shotFiles(t *testing.T, dir string) []string {
 	t.Helper()
 	entries, err := os.ReadDir(dir)
@@ -45,8 +33,6 @@ func shotFiles(t *testing.T, dir string) []string {
 	}
 	var out []string
 	for _, e := range entries {
-		// A capture is written to a hidden temporary file and renamed into
-		// place, so a dot file is one still being written.
 		if strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
@@ -73,11 +59,8 @@ func TestScreenshotCaptureModeAndPreview(t *testing.T) {
 	newWindow(t, term)
 
 	setShotOption(t, term, base, "screenshot.directory", dir)
-	// txt is the cheapest format to render and the easiest to read back, and
-	// what this test is about is the interaction, not the raster.
 	setShotOption(t, term, base, "screenshot.format", "txt")
 
-	// The leader chord opens capture mode.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "C"); err != nil {
 		t.Fatalf("send leader+C: %v", err)
 	}
@@ -87,7 +70,6 @@ func TestScreenshotCaptureModeAndPreview(t *testing.T) {
 		t.Fatalf("capture mode never showed its hints: %v\n%s", err, term.Snapshot())
 	}
 
-	// Enter takes the focused window.
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("send enter: %v", err)
 	}
@@ -97,10 +79,6 @@ func TestScreenshotCaptureModeAndPreview(t *testing.T) {
 		t.Fatalf("the preview panel never appeared: %v\n%s", err, term.Snapshot())
 	}
 
-	// The panel is up before the file is: the cells are in hand at capture
-	// time and the artifacts catch up, which is the whole of the fix for
-	// "it does not show the preview after". So the file is waited for here
-	// rather than expected to already exist.
 	if err := term.WaitFor(func(tuitest.Screen) bool {
 		return len(shotFiles(t, dir)) == 1
 	}, uiTimeout); err != nil {
@@ -118,7 +96,6 @@ func TestScreenshotCaptureModeAndPreview(t *testing.T) {
 		t.Errorf("wrote %s, want the configured .txt format", files[0])
 	}
 
-	// Enter closes the panel and keeps the file.
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("send enter: %v", err)
 	}
@@ -212,7 +189,6 @@ func TestScreenshotCaptureModeCancels(t *testing.T) {
 	if files := shotFiles(t, dir); len(files) != 0 {
 		t.Errorf("a cancelled capture wrote %v", files)
 	}
-	// The session still takes a window, so the mode gave the keyboard back.
 	newWindow(t, term)
 	alive(t, term, "after cancelling a capture")
 }
@@ -251,8 +227,6 @@ func TestScreenshotPanelBeatsTheFile(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("capture mode never opened: %v\n%s", err, term.Snapshot())
 	}
-	// f takes the whole screen, which is the most pixels this terminal can ask
-	// for and so the slowest render available here.
 	if err := term.SendKeys("f"); err != nil {
 		t.Fatalf("send f: %v", err)
 	}
@@ -270,7 +244,6 @@ func TestScreenshotPanelBeatsTheFile(t *testing.T) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("the pending capture never landed: %v\n%s", err, term.Snapshot())
 	}
-	// And the panel then names the file instead of still saying it is saving.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return screenHas(s, ".png") && !screenHas(s, "Saving the image")
 	}, uiTimeout); err != nil {

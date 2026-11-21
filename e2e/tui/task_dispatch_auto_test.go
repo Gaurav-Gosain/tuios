@@ -12,8 +12,6 @@ import (
 	"time"
 )
 
-// autoCard is one card of tuios task ls --json, with the fields the auto
-// tests read.
 type autoCard struct {
 	ID         string `json:"id"`
 	Stage      string `json:"stage"`
@@ -24,7 +22,6 @@ type autoCard struct {
 	} `json:"holder"`
 }
 
-// autoCards is the session's cards by id.
 func autoCards(t *testing.T, base, session string) (map[string]autoCard, string) {
 	t.Helper()
 	raw := mustCLI(t, base, "task", "ls", "-s", session, "--json")
@@ -41,7 +38,6 @@ func autoCards(t *testing.T, base, session string) (map[string]autoCard, string)
 	return out, raw
 }
 
-// waitAutoCards polls the cards until ok, and returns the last listing.
 func waitAutoCards(t *testing.T, base, session, why string, ok func(map[string]autoCard) bool) (map[string]autoCard, string) {
 	t.Helper()
 	deadline := time.Now().Add(90 * time.Second)
@@ -57,7 +53,6 @@ func waitAutoCards(t *testing.T, base, session, why string, ok func(map[string]a
 	}
 }
 
-// claudeAgents counts the Claude Code panes in list-agents --json.
 func claudeAgents(t *testing.T, raw string) int {
 	t.Helper()
 	var l struct {
@@ -77,10 +72,8 @@ func claudeAgents(t *testing.T, raw string) int {
 	return n
 }
 
-// held reports whether card id is held.
 func held(cards map[string]autoCard, id string) bool { return cards[id].Holder != nil }
 
-// waitDispatchText polls tuios task dispatch until its text has want.
 func waitDispatchText(t *testing.T, base, want, why string) string {
 	t.Helper()
 	deadline := time.Now().Add(60 * time.Second)
@@ -96,7 +89,6 @@ func waitDispatchText(t *testing.T, base, want, why string) string {
 	}
 }
 
-// gitIn runs git in dir and returns its output.
 func gitIn(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
@@ -143,13 +135,12 @@ func TestAutoDispatchStartsAnAgentPerCard(t *testing.T) {
 	add := func(args ...string) {
 		mustCLI(t, pp.base, append([]string{"task", "add", "-s", "home", "--project", proj}, args...)...)
 	}
-	add("-p", "Time out a call after 30 seconds.", "Add a timeout") // t1
-	add("-p", "Make the client retry on a 503.", "Fix the retry")   // t2
-	add("--ask-first", "-p", "Needs a person.", "Ask me first")     // t3
-	add("-p", "Say how retries work.", "Write the docs")            // t4
+	add("-p", "Time out a call after 30 seconds.", "Add a timeout")
+	add("-p", "Make the client retry on a 503.", "Fix the retry")
+	add("--ask-first", "-p", "Needs a person.", "Ask me first")
+	add("-p", "Say how retries work.", "Write the docs")
 	note("%s", mustCLI(t, pp.base, "task", "dispatch", "cap", "2", "--machine-cap", "1"))
 
-	// Two clients turn auto on at once, and a third resumes.
 	var wg sync.WaitGroup
 	outs := make([]string, 3)
 	for i, args := range [][]string{
@@ -165,9 +156,6 @@ func TestAutoDispatchStartsAnAgentPerCard(t *testing.T) {
 	wg.Wait()
 	note("%s", strings.Join(outs, "\n"))
 
-	// The preset's machine is this one unless the person picks another:
-	// t1 starts on home, and t2 waits, as home is at its cap and build is
-	// not picked.
 	cards, raw := waitAutoCards(t, pp.base, "home", "auto did not start t1",
 		func(c map[string]autoCard) bool { return held(c, "t1") })
 	note("cards with the preset on this machine:\n%s\n%s", raw, waitDispatchText(t, pp.base, "2 waiting (each machine it may use is full)", "t2 does not wait while the preset is this machine"))
@@ -189,7 +177,6 @@ func TestAutoDispatchStartsAnAgentPerCard(t *testing.T) {
 	if cards["t1"].Holder.Host != "" {
 		t.Errorf("ASSERTION: t1 is not held by a pane on home: %+v", cards["t1"].Holder)
 	}
-	// The starts settle: no third agent, t3 and t4 untouched.
 	status := waitDispatchText(t, pp.base, "1 waiting", "t4 does not wait for a free machine")
 	note("status:\n%s", status)
 	time.Sleep(3 * time.Second)
@@ -204,7 +191,6 @@ func TestAutoDispatchStartsAnAgentPerCard(t *testing.T) {
 		t.Fatalf("ASSERTION: %d claude agents run on the two machines, want 2 (the cap)", n)
 	}
 
-	// The worktrees, on branches from the titles.
 	if got := gitIn(t, pp.here, "branch", "--list", "task/*"); !strings.Contains(got, "task/add-a-timeout") {
 		t.Errorf("ASSERTION: home has no branch task/add-a-timeout:\n%s", got)
 	}
@@ -212,7 +198,6 @@ func TestAutoDispatchStartsAnAgentPerCard(t *testing.T) {
 		t.Errorf("ASSERTION: build has no branch task/fix-the-retry:\n%s", got)
 	}
 
-	// The card reached each agent as mail from tuios.
 	homeSess := "api-task-add-a-timeout"
 	mail := mustCLI(t, pp.base, "read-agent-messages", "-s", homeSess, "-w", cards["t1"].Holder.Window, "--peek", "--json")
 	note("home agent's mail:\n%s", mail)
@@ -224,14 +209,12 @@ func TestAutoDispatchStartsAnAgentPerCard(t *testing.T) {
 	if !strings.Contains(farMail, "Make the client retry on a 503.") || !strings.Contains(farMail, "tuios task done t2 -s home:home") {
 		t.Fatalf("ASSERTION: build's agent has no mail with t2 and its done command over the link:\n%s", farMail)
 	}
-	// Nothing typed the card: the agent read only the fixed wake line.
 	screen := mustCLI(t, pp.base, "capture-pane", "-s", homeSess, "-w", cards["t1"].Holder.Window)
 	note("home agent's screen:\n%s", screen)
 	if strings.Contains(screen, "Time out a call") {
 		t.Fatalf("ASSERTION: the card's prompt was typed into the agent's pane:\n%s", screen)
 	}
 
-	// t1 finishes: its slot goes to t4, on home (build is still at its cap).
 	mustCLI(t, pp.base, "task", "done", "t1", "-s", "home")
 	cards, raw = waitAutoCards(t, pp.base, "home", "t4 did not start after t1 finished",
 		func(c map[string]autoCard) bool { return held(c, "t4") })
@@ -240,9 +223,8 @@ func TestAutoDispatchStartsAnAgentPerCard(t *testing.T) {
 		t.Errorf("ASSERTION: t4 started on build, which is at its cap: %+v", cards["t4"].Holder)
 	}
 
-	// Pause holds a new card; resume starts it.
 	note("%s", mustCLI(t, pp.base, "task", "dispatch", "pause"))
-	add("-p", "Added while paused.", "After the pause") // t5
+	add("-p", "Added while paused.", "After the pause")
 	mustCLI(t, pp.base, "task", "done", "t4", "-s", "home")
 	note("status while paused:\n%s", waitDispatchText(t, pp.base, "dispatch is paused", "the pause did not hold t5"))
 	if cards, raw := autoCards(t, pp.base, "home"); held(cards, "t5") {
@@ -253,7 +235,6 @@ func TestAutoDispatchStartsAnAgentPerCard(t *testing.T) {
 		func(c map[string]autoCard) bool { return held(c, "t5") })
 	note("after resume:\n%s", raw)
 
-	// build goes down: its card stays held, and no second agent starts.
 	before := claudeAgents(t, mustCLI(t, pp.base, "list-agents", "--all-sessions", "--json"))
 	killDaemonNow(t, pp.remote)
 	time.Sleep(5 * time.Second)
@@ -292,7 +273,6 @@ func TestAutoDispatchSafety(t *testing.T) {
 	note := func(format string, args ...any) { fmt.Fprintf(&report, format+"\n", args...) }
 	defer func() { saveText(t, "task-auto-dispatch-safety", report.String()) }()
 	t.Cleanup(func() { dumpDaemonLogOnFail(t, base) })
-	// codex here is a program that exits at once, on the daemon's PATH.
 	quitter := filepath.Join(t.TempDir(), "bin")
 	if err := os.MkdirAll(quitter, 0o755); err != nil {
 		t.Fatal(err)
@@ -301,7 +281,6 @@ func TestAutoDispatchSafety(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", quitter+string(os.PathListSeparator)+os.Getenv("PATH"))
-	// An agent that never comes up is given 5 seconds, not 2 minutes.
 	t.Setenv("TUIOS_DISPATCH_READY_SECONDS", "5")
 	here := filepath.Join(base, "work", "api")
 	cloneWithOrigin(t, origin, here, "git@example.com:acme/api")
@@ -309,7 +288,7 @@ func TestAutoDispatchSafety(t *testing.T) {
 	mustCLI(t, base, "new", "home", "--detach", "--cwd", here)
 	waitForSessionInfo(t, base, "home")
 
-	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Retry on a 503.", "Fix the retry") // t1
+	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Retry on a 503.", "Fix the retry")
 	note("%s", mustCLI(t, base, "task", "dispatch", "mode", "auto", "--agent", "claude", "-s", "home"))
 	waitAutoCards(t, base, "home", "auto did not start t1", func(c map[string]autoCard) bool { return held(c, "t1") })
 	wts := gitIn(t, here, "worktree", "list")
@@ -321,22 +300,20 @@ func TestAutoDispatchSafety(t *testing.T) {
 		t.Fatalf("ASSERTION: auto checked out the person's branch task/fix-the-retry:\n%s", wts)
 	}
 
-	// A preset whose agent is on no machine stops the board at once.
 	note("%s", mustCLI(t, base, "task", "dispatch", "preset", "--agent", "nosuchagent", "-s", "home"))
-	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Two.", "Second card") // t2
+	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Two.", "Second card")
 	status := waitDispatchText(t, base, "nosuchagent is not installed on any machine", "the board did not stop for the missing agent")
 	note("status:\n%s", status)
 	if strings.Contains(status, "failed in a row") || strings.Contains(status, "3 failures") {
 		t.Fatalf("ASSERTION: the missing agent counted as failures:\n%s", status)
 	}
 
-	// An agent that exits as it starts: three failures stop the board.
 	note("%s", mustCLI(t, base, "task", "dispatch", "preset", "--agent", "codex", "-s", "home"))
 	mustCLI(t, base, "task", "done", "t1", "-s", "home")
 	note("%s", mustCLI(t, base, "task", "dispatch", "cap", "1"))
-	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Three.", "Third card") // t3
-	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Four.", "Fourth card") // t4
-	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Five.", "Fifth card")  // t5
+	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Three.", "Third card")
+	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Four.", "Fourth card")
+	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Five.", "Fifth card")
 	note("%s", mustCLI(t, base, "task", "dispatch", "resume"))
 	status = waitDispatchText(t, base, "stopped: 3 failures in a row", "three failed starts did not stop the board")
 	note("status:\n%s", status)
@@ -357,7 +334,6 @@ func TestAutoDispatchSafety(t *testing.T) {
 	}
 }
 
-// dumpDaemonLogOnFail prints the end of base's daemon log when t failed.
 func dumpDaemonLogOnFail(t *testing.T, base string) {
 	if !t.Failed() {
 		return
@@ -414,7 +390,6 @@ func TestAutoDispatchFailedStartsLeaveNothingBehind(t *testing.T) {
 	note := func(format string, args ...any) { fmt.Fprintf(&report, format+"\n", args...) }
 	defer func() { saveText(t, "task-auto-dispatch-failed-starts", report.String()) }()
 	t.Cleanup(func() { dumpDaemonLogOnFail(t, base) })
-	// codex here never comes up and never exits.
 	stall := filepath.Join(t.TempDir(), "bin")
 	if err := os.MkdirAll(stall, 0o755); err != nil {
 		t.Fatal(err)
@@ -449,8 +424,7 @@ func TestAutoDispatchFailedStartsLeaveNothingBehind(t *testing.T) {
 		return c, raw
 	}
 
-	// An agent that errors keeps its card, and no second agent starts.
-	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Retry on a 503.", "Fix the retry") // t1
+	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Retry on a 503.", "Fix the retry")
 	note("%s", mustCLI(t, base, "task", "dispatch", "mode", "auto", "--agent", "claude", "-s", "home"))
 	cards, _ := waitAutoCards(t, base, "home", "auto did not start t1", func(c map[string]autoCard) bool { return held(c, "t1") })
 	first := cards["t1"].Holder.Window
@@ -459,7 +433,7 @@ func TestAutoDispatchFailedStartsLeaveNothingBehind(t *testing.T) {
 		return n == 1, fmt.Sprintf("%d claude agents", n)
 	})
 	mustCLI(t, base, "set-agent-state", "-s", "api-task-fix-the-retry", "-w", first, "errored", "--harness", "claude-code", "-m", "the API said no")
-	time.Sleep(8 * time.Second) // longer than a start of the fake agent takes
+	time.Sleep(8 * time.Second)
 	c, raw := cardOf("t1")
 	ls := mustCLI(t, base, "ls")
 	note("t1 after its agent errored:\n%s\nsessions:\n%s", raw, ls)
@@ -469,7 +443,6 @@ func TestAutoDispatchFailedStartsLeaveNothingBehind(t *testing.T) {
 	if c.Holder == nil || c.Holder.Window != first || c.Blocked == nil || !strings.Contains(c.Blocked.Reason, "the API said no") || c.Attempts != 1 {
 		t.Fatalf("ASSERTION: t1 after its agent errored is %s; want held by the first agent %s, blocked with its last line, one attempt", raw, first)
 	}
-	// The pane closes: the card goes back and auto starts it again.
 	mustCLI(t, base, "close-window", "-s", "api-task-fix-the-retry", first)
 	cards, raw = waitAutoCards(t, base, "home", "t1 was not started again after its errored agent's pane closed",
 		func(c map[string]autoCard) bool { return held(c, "t1") && c["t1"].Holder.Window != first })
@@ -478,14 +451,12 @@ func TestAutoDispatchFailedStartsLeaveNothingBehind(t *testing.T) {
 		t.Fatalf("ASSERTION: t1 is still blocked after its errored agent left: %s", raw)
 	}
 
-	// A start that never comes up: nothing it opened is left.
 	note("%s", mustCLI(t, base, "task", "dispatch", "preset", "--agent", "codex", "-s", "home"))
-	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Stalls.", "Never comes up") // t2
+	mustCLI(t, base, "task", "add", "-s", "home", "-p", "Stalls.", "Never comes up")
 	waitUntil(t, "t2 was never let go after its agent did not come up", 90*time.Second, func() (bool, string) {
 		c, _ := cardOf("t2")
 		return c.Stage == "doing" && c.Holder == nil, fmt.Sprintf("stage %q, holder %v", c.Stage, c.Holder)
 	})
-	// The start ends at its ready timeout (3 s here); give it room.
 	deadline := time.Now().Add(20 * time.Second)
 	for time.Now().Before(deadline) && strings.Contains(mustCLI(t, base, "ls"), "api-task-never-comes-up") {
 		time.Sleep(300 * time.Millisecond)
@@ -503,8 +474,6 @@ func TestAutoDispatchFailedStartsLeaveNothingBehind(t *testing.T) {
 	}
 	note("t2 after its start failed:\n%s\nsessions:\n%s\ngit worktree list:\n%s\ndispatch:\n%s\ndaemon log:\n%s",
 		raw, ls, wts, mustCLI(t, base, "task", "dispatch", "-s", "home"), strings.Join(lines, "\n"))
-	// Two failures in all: the errored agent's card when its pane let it
-	// go, and t2. The block alone is none, as that agent may go on.
 	if status := mustCLI(t, base, "task", "dispatch", "-s", "home"); strings.Contains(status, "stopped") {
 		t.Errorf("ASSERTION: the board stopped, so one errored agent counted more than one failure:\n%s", status)
 	}

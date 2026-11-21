@@ -43,10 +43,8 @@ import (
 //   - with the resize branch of paneRecorder.take returning before it writes
 //     the r event, the test fails at "no r event".
 
-// recordSession is the session the recording test uses.
 const recordSession = "e2e-record"
 
-// castEvent is one event line of an asciicast v2 file.
 type castEvent struct {
 	t    float64
 	code string
@@ -77,15 +75,10 @@ func TestRecordPaneWritesACastThatReplaysToTheScreen(t *testing.T) {
 	}
 	cli("new", recordSession, "--detach")
 
-	// Before the recording: rows only the snapshot event can carry.
-	// The recorded commands are functions defined here, so each takes one
-	// short row and the rows printed before the start stay on the screen to
-	// the end.
 	typeLine(`a() { echo "A-$((20+1))"; sleep 1; echo "B-$((40+2))"; printf '\342\224\200%.0s' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; echo; }; ` +
 		`b() { echo "SZ-$(stty size | tr ' ' x)"; printf 'W%.0s' $(seq 1 70); echo; }; for i in 1 2 3; do echo "pre-$i"; done`)
 	waitPaneCapture(t, base, recordSession, false, func(s string) bool { return strings.Contains(s, "\npre-3") })
 
-	// Failure mode: a file already there is refused, and left alone.
 	if err := os.WriteFile(cast, []byte("keep"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -103,19 +96,16 @@ func TestRecordPaneWritesACastThatReplaysToTheScreen(t *testing.T) {
 		t.Fatalf("a second recording of one pane: want a refusal, got %v\n%s", err, out)
 	}
 
-	// Output with a real pause in it, and multibyte characters.
 	typeLine("a")
 	waitPaneCapture(t, base, recordSession, false, func(s string) bool { return strings.Contains(s, "\nB-42") && strings.Contains(s, "────") })
 	cli("record-pane", "mark", "-s", recordSession, "after sleep")
 
-	// A resize, then a line longer than the new width.
 	cli("call", "resize", `{"session":"`+recordSession+`","width":50,"height":12}`)
 	typeLine("b")
 	waitPaneCapture(t, base, recordSession, false, func(s string) bool { return strings.Contains(s, "\nSZ-12x50") })
 	want := captureLines(t, base)
 	cli("record-pane", "mark", "-s", recordSession, "captured")
 
-	// The pane ends, and the recording with it.
 	typeLine("exit")
 	waitUntil(t, "the recording ends with its pane", shellTimeout, func() (bool, string) {
 		out, err := tuiosCLI(t, base, "record-pane", "list", "--json")
@@ -166,7 +156,6 @@ func TestRecordPaneWritesACastThatReplaysToTheScreen(t *testing.T) {
 		t.Fatalf("no r event for the resize to 50x12")
 	}
 
-	// Replay up to the marker set right after the capture.
 	emu := vt.NewEmulator(cols, rows)
 	marked := false
 	for _, e := range events {
@@ -203,8 +192,6 @@ func TestRecordPaneWritesACastThatReplaysToTheScreen(t *testing.T) {
 	}
 }
 
-// captureLines is the daemon's capture of the recorded pane, as spScreen
-// lays out an emulator: right-trimmed rows, no blank rows at the end.
 func captureLines(t *testing.T, base string) string {
 	t.Helper()
 	out, err := tuiosCLI(t, base, "call", "capture-pane", `{"session":"`+recordSession+`"}`)
@@ -227,8 +214,6 @@ func captureLines(t *testing.T, base string) string {
 	return strings.Join(lines, "\n")
 }
 
-// readCast parses an asciicast v2 file: every line must be JSON, the first an
-// object, the rest [time, code, data] arrays.
 func readCast(t *testing.T, path string) (map[string]any, []castEvent) {
 	t.Helper()
 	f, err := os.Open(path)
@@ -286,7 +271,6 @@ func readCast(t *testing.T, path string) (map[string]any, []castEvent) {
 // pty.recording.Store(true) line left out of verbRecordPane, the test fails
 // at "the rail does not mark the recorded pane".
 
-// recordRailSession is the session the rail test uses.
 const recordRailSession = "e2e-record-rail"
 
 // TestRecordPaneMarksTheRailAndStopsOnDemand records a pane with a client
@@ -315,8 +299,6 @@ func TestRecordPaneMarksTheRailAndStopsOnDemand(t *testing.T) {
 		t.Helper()
 		_ = mustCall(t, base, "send-text", map[string]any{"session": recordRailSession, "window": pane, "text": text + "\n"})
 	}
-	// railRow is the rail's row of the recorded pane, empty while the rail
-	// does not show it.
 	client := attachIn(t, base, recordRailSession, startOpts{cols: bigCols, rows: bigRows})
 	showRail(t, client)
 	railRow := func() string {
@@ -402,8 +384,6 @@ func TestRecordPaneMarksTheRailAndStopsOnDemand(t *testing.T) {
 		t.Errorf("list-windows after stop: want no recording, got %v", got)
 	}
 
-	// The size cap: the pane prints more than the cap, and the recording
-	// ends by itself, saying why.
 	capped := filepath.Join(art, "capped.cast")
 	_ = os.Remove(capped)
 	cli("record-pane", "start", "-s", recordRailSession, "-w", pane, "-o", capped, "--max-size", "4096")
@@ -424,6 +404,4 @@ func TestRecordPaneMarksTheRailAndStopsOnDemand(t *testing.T) {
 	})
 }
 
-// sidebarRecordingTag is the rail's mark of a pane being recorded
-// (internal/app/render_sidebar.go, sidebarRecordingTag).
 const sidebarRecordingTag = "rec"

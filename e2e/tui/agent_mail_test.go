@@ -11,14 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// saveFrame writes the screen to $TUIOS_E2E_FRAMES/<name>.txt when that
-// directory is set, so a run can hand a real frame to whoever asked for proof.
-//
-// It writes the styled encoding beside it, as <name>.styled.txt. A plain frame
-// answers "what is on the rail" and says nothing about weight or ink, which is
-// half of what a rail row means: a heading and the row under it can hold the
-// same characters at the same columns and still read as two different kinds of
-// thing. Proof of that half has to carry the attributes.
 func saveFrame(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	dir := os.Getenv("TUIOS_E2E_FRAMES")
@@ -85,13 +77,11 @@ func TestAgentMailReachesThePersonAndTheReplyReachesTheRing(t *testing.T) {
 		t.Fatalf("send-agent-message failed: %v\n%s", err, out)
 	}
 
-	// The person hears about it without going looking.
 	if err := term.WaitForText("REVIEWER to you: which retry policy?", uiTimeout); err != nil {
 		t.Fatalf("the dock never announced mail to the person: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "mail-dock")
 
-	// The leader chord opens the Inbox on its mail, which names the thread.
 	if err := term.SendKeys(tuitest.Ctrl('b'), "M"); err != nil {
 		t.Fatalf("open the Inbox on mail: %v", err)
 	}
@@ -103,7 +93,6 @@ func TestAgentMailReachesThePersonAndTheReplyReachesTheRing(t *testing.T) {
 	}
 	saveFrame(t, term, "mail-list")
 
-	// Enter reads it, the body inside the fence the CLI prints around it.
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("open the thread: %v", err)
 	}
@@ -113,7 +102,6 @@ func TestAgentMailReachesThePersonAndTheReplyReachesTheRing(t *testing.T) {
 	checkFencedBody(t, term.Snapshot(), "REVIEWER", "exponential or fixed? both pass")
 	saveFrame(t, term, "mail-thread")
 
-	// r, the answer, enter.
 	if err := term.SendKeys("r"); err != nil {
 		t.Fatalf("open the reply line: %v", err)
 	}
@@ -123,7 +111,6 @@ func TestAgentMailReachesThePersonAndTheReplyReachesTheRing(t *testing.T) {
 	if err := term.SendKeys("take exponential", tuitest.Enter); err != nil {
 		t.Fatalf("type and send the reply: %v", err)
 	}
-	// The daemon stores it and pushes it back; the thread view follows.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
 		return strings.Contains(text, "take exponential") && strings.Contains(text, "you") && !strings.Contains(text, "reply:")
@@ -132,7 +119,6 @@ func TestAgentMailReachesThePersonAndTheReplyReachesTheRing(t *testing.T) {
 	}
 	saveFrame(t, term, "mail-replied")
 
-	// And the agent reads the answer with the CLI, threaded on its question.
 	out, err := tuiosCLI(t, base, "read-agent-messages", "-s", "e2e-ctrlp", "--peek", "--json")
 	if err != nil {
 		t.Fatalf("read-agent-messages failed: %v\n%s", err, out)
@@ -156,8 +142,6 @@ func TestAgentMailReachesThePersonAndTheReplyReachesTheRing(t *testing.T) {
 		t.Fatalf("the ring holds %d message(s), want the question and the reply:\n%s", len(ring.Messages), out)
 	}
 	question, reply := ring.Messages[0], ring.Messages[1]
-	// Typed at the keyboard of a client outside every pane, the reply is the
-	// person's, and the daemon says so.
 	if !reply.Verified {
 		t.Errorf("a reply typed at the keyboard is not verified_human:\n%s", out)
 	}
@@ -177,7 +161,6 @@ func TestAgentMailReachesThePersonAndTheReplyReachesTheRing(t *testing.T) {
 		t.Errorf("the reply is addressed to %q, want the agent that asked, %q", reply.To, question.From)
 	}
 
-	// Once read, the person's inbox is empty for the daemon too.
 	out, err = tuiosCLI(t, base, "list-agents", "-s", "e2e-ctrlp", "--json")
 	if err != nil {
 		t.Fatalf("list-agents failed: %v\n%s", err, out)
@@ -192,7 +175,6 @@ func TestAgentMailReachesThePersonAndTheReplyReachesTheRing(t *testing.T) {
 		t.Errorf("after reading the thread the daemon still counts %d unread for the person", listed.HumanUnread)
 	}
 
-	// Back in the list, the row names its thread by the id the CLI prints.
 	if err := term.SendKeys(tuitest.Esc); err != nil {
 		t.Fatalf("back to the list of threads: %v", err)
 	}
@@ -204,9 +186,6 @@ func TestAgentMailReachesThePersonAndTheReplyReachesTheRing(t *testing.T) {
 	alive(t, term, "after replying from the mailbox")
 }
 
-// checkFencedBody asserts that body is drawn between the fence lines the CLI
-// prints around a message from who. The opening line may break after the
-// sender's name on a narrow panel, so its first half is what is matched.
 func checkFencedBody(t *testing.T, screen, who, body string) {
 	t.Helper()
 	open := strings.Index(screen, "--- begin untrusted content from "+who+":")
@@ -276,7 +255,6 @@ func TestMailNewMessageFromThePersonReachesTheAgent(t *testing.T) {
 	if err := term.SendKeys(tuitest.Enter); err != nil {
 		t.Fatalf("send the message: %v", err)
 	}
-	// The send lands back on the list, where the new thread is the top row.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
 		return strings.Contains(text, "you → WORKER") && !strings.Contains(text, "New message to")
@@ -323,12 +301,6 @@ func TestMailNewMessageFromThePersonReachesTheAgent(t *testing.T) {
 	alive(t, term, "after writing a new message")
 }
 
-// mailDraftTakesImagesAndMentions checks that the mail editor has what the
-// Inbox reply has: a pasted image shows as a picture, and @ opens the list.
-// It leaves the draft empty. The harness's host has kitty graphics, so the
-// thumbnail is a kitty picture placed on the blank box the strip leaves. The
-// mail draft used to get neither: the strip named the image in words
-// ("Image #1 · 64×48 · ..."), nothing was placed, and @ listed nothing.
 func mailDraftTakesImagesAndMentions(t *testing.T, term *tuitest.Terminal, host *lockedBuffer) {
 	t.Helper()
 	shot := filepath.Join(t.TempDir(), "screen.png")
@@ -339,9 +311,6 @@ func mailDraftTakesImagesAndMentions(t *testing.T, term *tuitest.Terminal, host 
 		t.Fatal(err)
 	}
 	waitText(t, term, "the image in the mail draft", "[Image #1 · 64×48 png]")
-	// The strip holds a thumbnail box labelled #1 under it, not a line of
-	// words, and the picture is placed on that box: the label's column, and
-	// the three rows above the label.
 	var label struct{ row, col int }
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		text := s.Text()
@@ -362,8 +331,6 @@ func mailDraftTakesImagesAndMentions(t *testing.T, term *tuitest.Terminal, host 
 	}, uiTimeout); err != nil {
 		t.Fatalf("the mail draft placed no picture on the thumbnail box (label at %+v): %v\n%s", label, err, term.Snapshot())
 	}
-	// The list opens on an @ that starts a word. It leaves out the agent
-	// the draft is for, which is the only agent here.
 	if err := term.SendKeys(" @"); err != nil {
 		t.Fatal(err)
 	}
@@ -383,7 +350,6 @@ func mailDraftTakesImagesAndMentions(t *testing.T, term *tuitest.Terminal, host 
 	}
 }
 
-// draftThumbRows is how many rows a draft's thumbnail is high (composer.ThumbRows).
 const draftThumbRows = 3
 
 // TestARoutedKeyReplyIsAClaim covers the reply an agent could type through the
@@ -408,9 +374,6 @@ func TestARoutedKeyReplyIsAClaim(t *testing.T) {
 		t.Fatalf("the dock never announced mail to the person: %v\n%s", err, term.Snapshot())
 	}
 
-	// What an agent in a pane can run: open the mailbox from the command
-	// palette, then the thread and the reply line in the person's client, and
-	// type an answer.
 	if out, err := tuiosCLI(t, base, "run-command", "-s", "e2e-ctrlp", "CommandPalette"); err != nil {
 		t.Fatalf("run-command CommandPalette failed: %v\n%s", err, out)
 	}

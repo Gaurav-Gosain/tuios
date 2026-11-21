@@ -12,7 +12,6 @@ import (
 
 const welcomeQuestion = "How do you want to use tuios?"
 
-// configText is the config.toml under base.
 func configText(t *testing.T, base string) string {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(base, "XDG_CONFIG_HOME", "tuios", "config.toml"))
@@ -22,14 +21,12 @@ func configText(t *testing.T, base string) string {
 	return string(data)
 }
 
-// welcomeShot saves the frame as text and as a PNG drawn by tuios.dev/shot.
 func welcomeShot(t *testing.T, term *tuitest.Terminal, name string) {
 	t.Helper()
 	saveFrame(t, term, name)
 	savePNG(t, term.Screen(), shot.XTermPalette(), artifactDir(t), name)
 }
 
-// waitConfig waits until config.toml under base holds want.
 func waitConfig(t *testing.T, term *tuitest.Terminal, base, want string) {
 	t.Helper()
 	if err := term.WaitFor(func(tuitest.Screen) bool {
@@ -48,7 +45,6 @@ func waitConfig(t *testing.T, term *tuitest.Terminal, base, want string) {
 // shows.
 func TestWelcomeAsksOnTheFirstStart(t *testing.T) {
 	base := t.TempDir()
-	// A true first start: no config.toml, not even the harness's own.
 	useShippedLooks(base)
 	term := startIn(t, base, startOpts{})
 	waitBoot(t, term)
@@ -76,7 +72,6 @@ func TestWelcomeAsksOnTheFirstStart(t *testing.T) {
 // and the welcome screen shows today's hints.
 func TestWelcomeEscKeepsTheKeyboard(t *testing.T) {
 	base := t.TempDir()
-	// A true first start: no config.toml, not even the harness's own.
 	useShippedLooks(base)
 	term := startIn(t, base, startOpts{})
 	waitBoot(t, term)
@@ -101,7 +96,6 @@ func TestWelcomeEscKeepsTheKeyboard(t *testing.T) {
 // tmux preset with window mode off.
 func TestWelcomeClickPicksTmuxKeys(t *testing.T) {
 	base := t.TempDir()
-	// A true first start: no config.toml, not even the harness's own.
 	useShippedLooks(base)
 	term := startIn(t, base, startOpts{})
 	waitBoot(t, term)
