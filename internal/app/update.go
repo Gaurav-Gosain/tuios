@@ -2924,10 +2924,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.applyInboxAskAnswered(msg)
 		return m, nil
 
-	case AskpassAnsweredMsg:
-		m.applyAskpassAnswered(msg)
-		return m, nil
-
 	case InboxResumedMsg:
 		m.applyInboxResumed(msg)
 		return m, nil

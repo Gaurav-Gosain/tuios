@@ -545,26 +545,31 @@ func (d *Daemon) verbAnswerAsk(cs *connState, params json.RawMessage) (any, *ver
 		// dialog. Only that dialog sends it, and the GUI bridge drops it from
 		// what a renderer sends.
 		UpgradeDialog bool `json:"upgrade_dialog"`
+		// Secret answers a secret prompt (askpass.go), base64 in JSON, so it
+		// is decoded straight into a buffer that is zeroed. Cancel ends one
+		// with no answer.
+		Secret []byte `json:"secret"`
+		Cancel bool   `json:"cancel"`
 	}
-	if verr := decodeParams(params, &p); verr != nil {
+	verr := decodeParams(params, &p)
+	defer clear(p.Secret)
+	if verr != nil {
 		return nil, verr
 	}
 	if p.RequestID == "" {
 		return nil, invalidParam("request_id", "request_id is required: the question's, from its Inbox item")
 	}
-	if p.Answer == "" {
+	secret := d.attention.askIsSecret(p.RequestID)
+	if secret && (len(p.Secret) > askpassMaxSecret || (len(p.Secret) == 0 && !p.Cancel)) {
+		return nil, invalidParam("secret", "a secret prompt takes secret, at most 4096 bytes, or cancel")
+	}
+	if !secret && p.Answer == "" {
 		return nil, invalidParam("answer", "answer is required: one of the question's options")
 	}
 	if !d.humanNonceHeld(p.HumanNonce, cs) {
 		return nil, hintedVerbError(ErrVerbNotHuman, "answer-ask is for the person at an attached client", &VerbHint{
 			Param:  "human_nonce",
 			Detail: "Nothing was answered. Only a client attached right now can answer a question, by passing the nonce its attach reply carried. An agent never can.",
-		})
-	}
-	if d.attention.askIsSecret(p.RequestID) {
-		return nil, hintedVerbError(ErrVerbInvalidParams, "request "+echoName(p.RequestID)+" is a secret prompt, which askpass-answer answers", &VerbHint{
-			Verb:   "askpass-answer",
-			Detail: "Nothing was answered.",
 		})
 	}
 	if d.attention.askIsUpgrade(p.RequestID) {
@@ -590,6 +595,18 @@ func (d *Daemon) verbAnswerAsk(cs *connState, params json.RawMessage) (any, *ver
 	by, ok := d.humanNonceFor(p.HumanNonce, d.sessionIDOf(askSession), cs)
 	if !ok {
 		return nil, nonceScopeError("answer-ask")
+	}
+	if secret {
+		// A secret never leaves the machine it is typed on.
+		if cs != nil && cs.viaLink {
+			return nil, hintedVerbError(ErrVerbForbidden, "a secret prompt is answered only at a client attached on this machine", nil)
+		}
+		applied, reason, err := d.attention.answerSecret(p.RequestID, p.Secret, p.Cancel, by)
+		if err != nil {
+			return nil, invalidParam("request_id", "no question is open under request "+echoName(p.RequestID))
+		}
+		LogBasic("Secret prompt %s %s by %s", p.RequestID, reason, by)
+		return map[string]any{"type": "ask_answered", "request_id": p.RequestID, "applied": applied, "reason": reason}, nil
 	}
 	out, hold, applied, mail, err := d.attention.answerAsk(p.RequestID, p.Answer, by, p.Question)
 	switch {

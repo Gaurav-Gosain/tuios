@@ -130,8 +130,7 @@ func (m *OS) renderIntegrationAsk() (string, overlay.Geometry, []overlayRowHit) 
 		word, question, effect = "Update", "Update the "+a.st.Name+" integration?", "This updates the hooks in "+joinPaths(a.paths)+"."
 	}
 	body := []string{
-		overlay.Fill(overlay.Style(bg).Render(" ")+
-			overlay.Style(bg).Foreground(pal.Fg).Bold(true).Render(overlay.Truncate(question, max(width-1, 1))), width, bg),
+		dialogTitleLine(question, max(width-1, 1), width, pal.Fg, bg),
 	}
 	for _, l := range wrapPlain(effect, max(width-2, 10)) {
 		body = append(body, dialogBodyLine(l, width, pal.FgDim, bg))

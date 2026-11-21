@@ -126,18 +126,10 @@ func (d *Daemon) confirmUpgrade(cs *connState, bin handoffBinary, closeExited []
 		Upgrade: &UpgradeAsk{Binary: bin.path, Version: bin.accepts.Version, CloseExited: closeExited},
 	}
 	_, window := d.peerPane(cs)
-	for _, sess := range d.manager.AllSessions() {
-		if item.Session == "" {
-			// A pane that cannot be placed still needs a session for its
-			// item.
-			item.Session = sess.Name()
-		}
-		st := sess.GetState()
-		if idx, err := findWindowStateIndex(st.Windows, window); window != "" && err == nil {
-			w := st.Windows[idx]
-			item.Session, item.Window, item.Name = sess.Name(), w.ID, windowLabelOf(w)
-			item.Harness, item.Workspace = w.AgentHarness, w.Workspace
-			break
+	if window == "" || !d.placeOnPane(window, &item) {
+		// A pane that cannot be placed still needs a session for its item.
+		if all := d.manager.AllSessions(); len(all) > 0 {
+			item.Session = all[0].Name()
 		}
 	}
 	hold, err := d.attention.openAsk(item, true)
@@ -167,6 +159,21 @@ func (d *Daemon) confirmUpgrade(cs *connState, bin handoffBinary, closeExited []
 		return "The daemon is shutting down"
 	}
 	return fmt.Sprintf("The dialog closed without an answer (%s). Run the command again, and ask the person to choose Yes in the dialog", out.Reason)
+}
+
+// placeOnPane fills in the item's session, pane, name, harness and workspace
+// from the pane window, and reports false when no session holds it.
+func (d *Daemon) placeOnPane(window string, item *AttentionItem) bool {
+	for _, sess := range d.manager.AllSessions() {
+		st := sess.GetState()
+		if idx, err := findWindowStateIndex(st.Windows, window); err == nil {
+			w := st.Windows[idx]
+			item.Session, item.Window, item.Name = sess.Name(), w.ID, windowLabelOf(w)
+			item.Harness, item.Workspace = w.AgentHarness, w.Workspace
+			return true
+		}
+	}
+	return false
 }
 
 // upgradeDialogRefusal says why no dialog could be shown for a pane's upgrade

@@ -302,8 +302,7 @@ func (m *OS) renderPluginApproval() (string, overlay.Geometry, []overlayRowHit) 
 	if name == "" {
 		name = a.ID
 	}
-	body = append(body, overlay.Fill(overlay.Style(bg).Render(" ")+
-		overlay.Style(bg).Foreground(pal.Fg).Bold(true).Render(overlay.Truncate("Allow the plugin "+name+"?", inner)), width, bg))
+	body = append(body, dialogTitleLine("Allow the plugin "+name+"?", inner, width, pal.Fg, bg))
 	line(a.ID+" "+herdrplugin.ShownName(a.Version), pal.FgDim)
 	from, src := "from ", a.Source
 	if p, ok := strings.CutPrefix(src, "folder "); ok {
