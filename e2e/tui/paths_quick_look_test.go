@@ -112,6 +112,12 @@ func TestPanePathsOpenInQuickLook(t *testing.T) {
 	// screen are the output's.
 	runInShell(t, term, "printf 'build failed at %s:%s\\nnot found: %s:3\\ndocs: https://%s\\n' "+pathsFile+" 120 "+pathsMissing+" "+strings.TrimPrefix(pathsURL, "https://"), pathsURL, uiTimeout)
 	leaveTerminalMode(t, term)
+	// A relative path resolves against the pane's folder, which the client
+	// learns from the shell after the cd: the pane's title shows it. A hover
+	// before that finds no file under the pointer.
+	if err := term.WaitForText("~/proj", uiTimeout); err != nil {
+		t.Fatalf("the pane never showed its folder: %v\n%s", err, term.Snapshot())
+	}
 	_ = term.WaitStable(uiTimeout)
 
 	// The output row, not the command line: the command holds no :120.

@@ -114,7 +114,9 @@ func TestTheBoardShowsTheCardLifecycle(t *testing.T) {
 	}
 	_ = term.WaitStable(uiTimeout)
 
-	// M, c: commit with the card's title.
+	// M, c: commit with the card's title. The daemon commits only once the
+	// agent is at rest, which its row says a moment after it finished.
+	waitText(t, term, "the agent at rest", "1 idle")
 	if err := term.SendKeys("M"); err != nil {
 		t.Fatal(err)
 	}

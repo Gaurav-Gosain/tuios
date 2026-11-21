@@ -11,6 +11,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
@@ -260,12 +261,19 @@ func (m *OS) notifStatus() (notifStatus, bool) {
 		}
 	}
 
-	if !s.msg.Sticky && s.msg.Duration > 0 {
+	if !s.msg.Sticky && s.msg.Duration > 0 && !noticeBurnOff() {
 		left := 1 - float64(now.Sub(s.msg.StartTime))/float64(s.msg.Duration)
 		s.frac = min(max(left, 0), 1)
 	}
 	return s, true
 }
+
+// noticeBurnOff is the test knob notice_burn=off: a message draws with its
+// rule full and still goes when its time is up. The burn redraws the dock on
+// each frame for the message's whole time, and a test that waits for a still
+// screen waited it out. The e2e harness sets it for every client, and the
+// tests of the burn set notice_burn=on. testknob parses the variable once.
+func noticeBurnOff() bool { return testknob.String("notice_burn") == "off" }
 
 // notifBudget is how many columns the message block may take.
 //
