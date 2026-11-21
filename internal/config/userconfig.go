@@ -19,6 +19,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/hints"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+	"github.com/Gaurav-Gosain/tuios/internal/scrollclear"
 	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/adrg/xdg"
@@ -524,6 +525,12 @@ const (
 // WindowSizeModes lists the valid values for daemon.window_size.
 var WindowSizeModes = []string{WindowSizeSmallest, WindowSizeLargest, WindowSizeLatest}
 
+// KeepsScrollbackOnClear reports whether ED 3, which clear sends, keeps a
+// pane's scrollback. Unset means true. See internal/scrollclear.
+func (a AppearanceConfig) KeepsScrollbackOnClear() bool {
+	return a.ScrollbackKeepOnClear == nil || *a.ScrollbackKeepOnClear
+}
+
 // AppearanceConfig holds appearance-related settings
 type AppearanceConfig struct {
 	BorderStyle              string                  `toml:"border_style"`                 // Border style: rounded, normal, thick, double, hidden, block, ascii, outer-half-block, inner-half-block, glyphs
@@ -540,6 +547,7 @@ type AppearanceConfig struct {
 	WindowButtonPosition     string                  `toml:"window_button_position"`       // Which end of the title bar the window controls sit on: right, left (default: left)
 	HideScrollbar            bool                    `toml:"hide_scrollbar"`               // Hide the window scrollbar thumb on the border
 	ScrollbackLines          int                     `toml:"scrollback_lines"`             // Number of lines to keep in scrollback buffer (default: 10000, min: 100, max: 1000000)
+	ScrollbackKeepOnClear    *bool                   `toml:"scrollback_keep_on_clear"`     // Keep the scrollback when a program sends ED 3, as clear does (default: true)
 	ScrollLines              int                     `toml:"scroll_lines"`                 // Lines scrolled per mouse wheel notch (default: 3, min: 1, max: 50)
 	CopyOnSelect             *bool                   `toml:"copy_on_select"`               // Copy a mouse selection to the clipboard on release (default: true)
 	NvimNavigation           *bool                   `toml:"nvim_navigation"`              // Let the Neovim navigator plugin hand terminal focus keys back to TUIOS (default: false)
@@ -3194,6 +3202,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if cfg.Appearance.ScrollbackLines > 0 {
 		s.ScrollbackLines = cfg.Appearance.ScrollbackLines
 	}
+	// A process global, as the glyph set above: every pane emulator of this
+	// process reads it when a program sends ED 3.
+	scrollclear.SetKeep(cfg.Appearance.KeepsScrollbackOnClear())
 
 	s.CellFrames = cfg.Appearance.CellFrames
 	s.MaxFPSAuto = cfg.Appearance.MaxFPS.IsAuto()

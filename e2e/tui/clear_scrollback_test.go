@@ -224,3 +224,70 @@ func checkNoHistory(t *testing.T, term *tuitest.Terminal, when string) {
 	}
 	sendEach(t, term, "q")
 }
+
+// TestClearKeepsScrollback runs what clear prints (ED 2 then ED 3) in a daemon
+// pane after 200 numbered rows. By default the history must survive it: copy
+// mode at the top shows row-1, and so does the daemon's copy, which an attach
+// rebuilds the pane from. With appearance.scrollback_keep_on_clear = false the
+// history must go, as before. How it could pass wrongly:
+//   - The rows could never have reached the history: the drop case proves the
+//     same rows are there to drop, and the keep case reads row-1 after it.
+//   - The clear could do nothing: the screen must lose every row in both.
+func TestClearKeepsScrollback(t *testing.T) {
+	const rows = 200
+	loop := `for i in $(seq 1 ` + strconv.Itoa(rows) + `); do echo "row-$i"; done`
+	// clear's own bytes, so the test does not hang on the pane's terminfo.
+	const clearSeq = `printf '\033[H\033[2J\033[3J'`
+	for _, keep := range []bool{true, false} {
+		name := "keep"
+		config := copyCursorConfig
+		if !keep {
+			name = "drop"
+			config = "[appearance]\nscrollback_keep_on_clear = false\n" + copyCursorConfig
+		}
+		t.Run(name, func(t *testing.T) {
+			base := t.TempDir()
+			writeConfig(t, base, config)
+			killDaemon(t, base)
+			const sess = "e2e-clear-keep"
+			if o, err := tuiosCLI(t, base, "new", sess, "--detach"); err != nil {
+				t.Fatalf("create session: %v\n%s", err, o)
+			}
+			if o, err := tuiosCLI(t, base, "send-keys", "-s", sess, "--raw", loop); err != nil {
+				t.Fatalf("send the loop: %v\n%s", err, o)
+			}
+			if o, err := tuiosCLI(t, base, "send-keys", "-s", sess, "Enter"); err != nil {
+				t.Fatalf("send Enter: %v\n%s", err, o)
+			}
+			waitPaneCapture(t, base, sess, false, func(out string) bool { return rowLine(rows).MatchString(out) })
+			term := attachClear(t, base, sess, copyColorOpts)
+
+			if err := term.SendKeys(clearSeq, tuitest.Enter); err != nil {
+				t.Fatalf("type the clear: %v", err)
+			}
+			if err := term.WaitFor(func(s tuitest.Screen) bool { return !anyRow.MatchString(s.Text()) }, uiTimeout); err != nil {
+				t.Fatalf("the clear left rows on the screen\n%s", term.Snapshot())
+			}
+
+			out := waitPaneCapture(t, base, sess, true, func(out string) bool {
+				return rowLine(1).MatchString(out) == keep
+			})
+			// The rows on the screen at the clear are erased, as tmux erases
+			// them. The ones that had scrolled off stay.
+			if keep && !rowLine(rows/2).MatchString(out) {
+				t.Fatalf("the daemon kept only part of the history: row-%d is gone\n%s", rows/2, out)
+			}
+
+			if !keep {
+				checkNoHistory(t, term, "after the clear with keep_on_clear off")
+				return
+			}
+			copyTop(t, term)
+			if err := term.WaitFor(func(s tuitest.Screen) bool { return rowLine(1).MatchString(s.Text()) }, uiTimeout); err != nil {
+				t.Fatalf("copy mode at the top does not show row-1 after clear\n%s", term.Snapshot())
+			}
+			saveFrame(t, term, "clear-keeps-scrollback")
+			sendEach(t, term, "q")
+		})
+	}
+}

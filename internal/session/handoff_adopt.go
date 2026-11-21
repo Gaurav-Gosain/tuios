@@ -14,6 +14,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
+	"github.com/Gaurav-Gosain/tuios/internal/scrollclear"
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"tuios.dev/vt"
 )
@@ -260,6 +261,7 @@ func applyHandoffPanes(panes []handoffPane, lines int, stats *HandoffStats) ([]v
 	terms := make([]vt.Terminal, len(panes))
 	err := forEachBounded(len(panes), min(runtime.GOMAXPROCS(0), 4), func(i int) error {
 		t := vt.NewWithScrollback(panes[i].Width, panes[i].Height, lines)
+		scrollclear.Apply(t)
 		if st := panes[i].State; st != nil {
 			ApplyTerminalState(t, st)
 			panes[i].Live.vtSeq = st.Seq

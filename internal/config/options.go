@@ -271,6 +271,11 @@ var optionSpecs = []Option{
 		Flag: "scrollback-lines",
 	},
 	{
+		Path: "appearance.scrollback_keep_on_clear", Type: OptionBool, Section: "appearance",
+		Description: "Keep the scrollback when a program sends ED 3, as clear does. Set false to let clear drop the scrollback. The daemon reads it when it starts",
+		Default:     "true",
+	},
+	{
 		Path: "appearance.scroll_lines", Type: OptionInt, Section: "appearance",
 		Description: "Lines scrolled per mouse wheel notch",
 		Min:         1, Max: 50,

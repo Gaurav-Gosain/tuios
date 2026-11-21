@@ -27,6 +27,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/pastebuf"
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
+	"github.com/Gaurav-Gosain/tuios/internal/scrollclear"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 	"github.com/google/uuid"
 )
@@ -1007,6 +1008,10 @@ type DaemonConfig struct {
 	// takes it when it is made and keeps it, so a change applies to panes made
 	// after the daemon next reads its config.
 	ScrollbackLines int
+	// ScrollbackDropOnClear lets ED 3, which clear sends, drop a pane's
+	// history, from appearance.scrollback_keep_on_clear = false. The zero
+	// value keeps it, the default. See internal/scrollclear.
+	ScrollbackDropOnClear bool
 	// NewWindowInheritCwd starts a new window in the focused pane's working
 	// directory, from appearance.new_window_inherit_cwd. The daemon is the side
 	// that spawns the shell, so it is the side that has to know.
@@ -1281,6 +1286,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.pastes = newPasteStore(func() string { return d.manager.SocketPath() })
 	d.buffers = pastebuf.New(cfg.pasteBufferLimit(), cfg.PasteBufferMaxBytes)
 	d.manager.SetScrollbackLines(cfg.ScrollbackLines)
+	scrollclear.SetKeep(!cfg.ScrollbackDropOnClear)
 	d.manager.SetHistoryPolicy(cfg.History)
 	d.manager.SetNewWindowInheritCwd(cfg.NewWindowInheritCwd)
 	d.manager.SetPreferredShell(cfg.PreferredShell)

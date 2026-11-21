@@ -66,6 +66,9 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	// has to reach it, or the client's emulator honours the setting while the
 	// daemon's keeps ten thousand lines whatever it says.
 	cfg.ScrollbackLines = uc.Appearance.ScrollbackLines
+	// The daemon's emulators are the ones an attach rebuilds a pane from, so
+	// they have to keep the history on clear as the client's do.
+	cfg.ScrollbackDropOnClear = !uc.Appearance.KeepsScrollbackOnClear()
 	// The daemon spawns every pane, so where a new one starts is its decision
 	// to make. Absent from the file means the default, which is to inherit.
 	cfg.NewWindowInheritCwd = newWindowInheritCwd(uc)

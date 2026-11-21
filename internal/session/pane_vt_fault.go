@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/scrollclear"
 	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 	"tuios.dev/vt"
 )
@@ -108,7 +109,7 @@ func (p *PTY) vtFault(chunk vtChunk, fault any, stack []byte, faults []time.Time
 	}
 	// RIS and ED 3 put the new emulator and every client's at the same
 	// blank state, at the same byte of the stream.
-	p.queueFaultNotice([]byte("\x1bc\x1b[3J\x1b[2m" + notice + "\x1b[m\r\n"))
+	p.queueFaultNotice([]byte("\x1bc" + scrollclear.Drop + "\x1b[2m" + notice + "\x1b[m\r\n"))
 	return recent, frozen
 }
 
