@@ -10,6 +10,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // HelpBinding represents a single keybinding for the help menu
@@ -1053,9 +1054,10 @@ func (m *OS) RenderHelpMenu() (string, overlay.Geometry) {
 	hints := helpHints(inSearch)
 	// Body lines that are not binding rows: the scroll indicator, plus the
 	// search prompt and its rule when searching.
-	extra := 1
+	// The glossary line heads the list when not searching.
+	extra := 2
 	if inSearch {
-		extra += 2
+		extra++
 	}
 	rows, hints := m.panelBody(helpVisibleRows, extra, width, tabs, hints)
 	if width < helpCategoryTagWidth {
@@ -1085,6 +1087,9 @@ func (m *OS) renderHelpBody(bindings []HelpBinding, inSearch, showCategoryTag bo
 	bg := pal.Surface
 	var lines []string
 
+	if !inSearch {
+		lines = append(lines, overlay.Style(bg).Foreground(pal.FgDim).Render(ansi.Truncate(" "+tmuxGlossary, width, "…")))
+	}
 	if inSearch {
 		label := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render("Search ")
 		before, at, after := m.helpSearch.Parts()

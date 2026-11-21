@@ -18,6 +18,10 @@ import (
 // file. Esc keeps today's tuios, which is Keyboard, and writes nothing.
 // An existing install never sees the question.
 
+// tmuxGlossary maps the two words tmux uses differently. The first start
+// and the help panel show it, since a tmux user reads "window" as a tab.
+const tmuxGlossary = "A window here is a tmux pane. A workspace is a tmux window."
+
 // welcomeChoice is one answer.
 type welcomeChoice struct {
 	name, title, text string
@@ -69,6 +73,7 @@ func (m *OS) welcomeQuestionLines(width int) []string {
 		lines = append(lines, line)
 	}
 	lines = append(lines, "", lipgloss.NewStyle().Foreground(ui.FgDim).Render("Press 1, 2 or 3, or click a choice. Esc keeps the keyboard."))
+	lines = append(lines, "", lipgloss.NewStyle().Foreground(ui.FgDim).Render(ansi.Truncate(tmuxGlossary, width, "…")))
 	return lines
 }
 
