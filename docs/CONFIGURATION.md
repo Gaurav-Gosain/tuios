@@ -3164,6 +3164,21 @@ with 2: the pane speaks 1 to it. The daemon reads the value when it starts a
 protocol pane, and a change to the file applies to the next one. See
 [ACP versions](AGENT_STATE.md#acp-versions).
 
+## Passphrases for agents' commands
+
+`askpass` in `[agents]` says whether ssh, ssh-keygen and git over ssh in a
+pane ask you for a passphrase in the Inbox when they have no terminal:
+
+```toml
+[agents]
+askpass = "on"   # on (default), off
+```
+
+With `on`, a pane starts with `SSH_ASKPASS` and `SSH_ASKPASS_REQUIRE=force`.
+A command that you type in a pane still asks in the pane. A pane keeps an
+`SSH_ASKPASS` that you set yourself. The daemon reads the value when it starts
+a pane. See [Passphrases and passwords](AGENT_STATE.md#passphrases-and-passwords).
+
 ## Harnesses that report to herdr
 
 Crush, and other agents that herdr lists as reporting by themselves, report

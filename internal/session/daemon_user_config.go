@@ -127,6 +127,8 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	// The daemon spawns every pane, so it decides which are told about the
 	// herdr protocol socket.
 	cfg.HerdrProtocol = uc.Agents.HerdrProtocol
+	// It decides which panes get tuios's askpass program too.
+	cfg.Askpass = uc.Agents.Askpass
 	// The daemon starts every protocol pane, so it says which ACP version
 	// the pane asks for.
 	cfg.ACPVersion = uc.Agents.ACPVersionOr()

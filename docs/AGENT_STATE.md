@@ -3969,6 +3969,37 @@ the manifest names, for at most 2 seconds, and the answer is kept a minute.
 The output is matched and dropped. The `agent-readiness` verb answers with
 it, per machine: installed, and signed in yes, no or unknown.
 
+## Passphrases and passwords
+
+An agent's command has no terminal. When ssh needs the passphrase of a key
+there, it cannot ask on a terminal. tuios asks you in the Inbox instead.
+
+- Every pane starts with `SSH_ASKPASS` set to tuios's askpass program, and
+  `SSH_ASKPASS_REQUIRE=force`. ssh, ssh-add, ssh-keygen and git over ssh run
+  that program for each passphrase, password or PIN.
+- When you type the command yourself in a shell pane, the program asks in
+  the pane, as ssh does without it. The answer does not show on the screen.
+- When nobody can type in that terminal, as in an agent's command, the
+  prompt goes to the Inbox. The client that shows the pane opens a dialog
+  with a hidden field. Another client shows the usual Inbox alert.
+- The dialog names the pane and the program that asks. For a program that
+  tuios does not know, it shows a warning. Check the program before you
+  answer.
+- Enter sends the answer. Esc cancels the prompt, and the program gets no
+  answer. A prompt with no answer closes after 5 minutes.
+- Only you can answer, from a client that is attached now. An agent cannot
+  answer a prompt, its own or another's.
+- tuios keeps the answer only until the program has it. The answer is never
+  written to a file, a log, an event or a message.
+
+A pane keeps an `SSH_ASKPASS` program that you set yourself, for example
+ksshaskpass. To turn the feature off, set this:
+
+```toml
+[agents]
+askpass = "off"
+```
+
 ## Harness integrations
 
 A harness with a hooks system reports its own state, which outranks everything
@@ -5571,6 +5602,11 @@ name the harness it runs. See [Behind a wrapper](#behind-a-wrapper).
 Every pane also gets `HERDR_ENV`, `HERDR_SOCKET_PATH`, `HERDR_PANE_ID` and
 `HERDR_BIN_PATH`, unless `herdr_protocol` in `[agents]` says otherwise. See
 [herdr's pane state protocol](#herdrs-pane-state-protocol).
+
+Every pane also gets `SSH_ASKPASS`, which names tuios's askpass program, and
+`SSH_ASKPASS_REQUIRE=force`. A pane keeps an `SSH_ASKPASS` that you set
+yourself. `askpass = "off"` in `[agents]` turns this off. See
+[Passphrases and passwords](#passphrases-and-passwords).
 
 ### What a pane says its terminal is
 

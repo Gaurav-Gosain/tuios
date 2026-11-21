@@ -55,6 +55,11 @@ type AgentsConfig struct {
 	// HERDR_ENV, herdr itself included, which refuses to start inside one
 	// unless its own config allows nesting. See docs/AGENT_STATE.md.
 	HerdrProtocol string `toml:"herdr_protocol,omitempty"`
+	// Askpass says whether a pane's ssh, git and gpg ask the person in the
+	// Inbox when they have no terminal: "on" (the default) or "off". A pane
+	// whose environment already names an SSH_ASKPASS program keeps it. See
+	// session/askpass.go.
+	Askpass string `toml:"askpass,omitempty"`
 	// NameHint says whether the start hint tells an agent to name its pane
 	// after its task: "on" (the default) or "off". Off also tells the agent
 	// not to rename its pane or its session. See NameHintOn.
@@ -290,6 +295,9 @@ const (
 
 // NameHints is every value [agents] name_hint accepts.
 var NameHints = []string{NameHintOn, NameHintOff}
+
+// AskpassOff is [agents] askpass turned off. Any other value is on.
+const AskpassOff = "off"
 
 // NormalizeNameHint reads an [agents] name_hint value. Empty and anything
 // unrecognised mean the default, "on".
