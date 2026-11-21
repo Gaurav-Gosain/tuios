@@ -92,6 +92,9 @@ type host struct {
 	mute bool
 	// programStatus answers the OSC 7501 query.
 	programStatus bool
+	// programStatusMore is what the answer carries after its "?", as
+	// ":states=idle,working:kinds=permission" from zellij 0.46.
+	programStatusMore string
 	// xtversion, when set, is the name and version XTVERSION is answered
 	// with. tuitest's emulator does not answer XTVERSION, and an answer typed
 	// by a test arrives after the DA1 that ends tuios's probe, so a test that
@@ -139,6 +142,7 @@ func run(args []string) int {
 	logPath := fs.String("log", "", "append every answered question here")
 	mute := fs.Bool("mute", false, "swallow every colour question and answer none, as mosh does")
 	programStatus := fs.Bool("program-status", false, "answer the OSC 7501 query, as a terminal that supports the protocol does")
+	programStatusMore := fs.String("program-status-more", "", "with -program-status, put this after the ? of the answer, as zellij 0.46 puts its states and kinds")
 	xtversion := fs.String("xtversion", "", "answer XTVERSION (CSI > q) with this name and version, as in \"xterm.js(6.1.0)\"")
 	xtversionDelay := fs.Duration("xtversion-delay", 0, "wait this long before the XTVERSION answer")
 	da1 := fs.String("da1", "", "answer DA1 (CSI c) with these attributes, as in \"?62;4;9;22c\"")
@@ -153,7 +157,7 @@ func run(args []string) int {
 	}
 
 	h := &host{
-		ansi: map[int]string{}, mute: *mute, programStatus: *programStatus,
+		ansi: map[int]string{}, mute: *mute, programStatus: *programStatus, programStatusMore: *programStatusMore,
 		xtversion: *xtversion, xtversionDelay: *xtversionDelay,
 		da1: *da1, da1Delay: *da1Delay,
 	}
@@ -398,7 +402,7 @@ func (f *filter) oscQuery(body string) bool {
 	if strings.HasPrefix(body, "7501;") {
 		f.h.note("7501 %s", strings.TrimPrefix(body, "7501;"))
 		if body == "7501;?" && f.h.programStatus {
-			f.answer("\x1b]7501;?\x1b\\")
+			f.answer("\x1b]7501;?" + f.h.programStatusMore + "\x1b\\")
 		}
 		return true
 	}
