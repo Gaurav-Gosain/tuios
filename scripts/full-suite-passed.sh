@@ -13,9 +13,7 @@ set -uo pipefail
 
 repo=$1
 sha=$2
-shards=${E2E_SHARDS:-16}
-
-e2e=$("$(dirname "$0")/e2e-tested.sh" "$repo" "$sha" "$shards" full)
+e2e=$("$(dirname "$0")/e2e-tested.sh" "$repo" "$sha" full)
 
 ci=""
 runs=$(gh api "repos/$repo/actions/workflows/ci.yml/runs?head_sha=$sha&status=completed&per_page=20" \

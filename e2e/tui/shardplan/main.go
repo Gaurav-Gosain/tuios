@@ -8,10 +8,17 @@
 // largest first onto the lightest shard, which keeps every shard within a few
 // seconds of the others.
 //
+// A shard is one runner, and its lanes run side by side on it. The tests in
+// alone.txt go to one more shard of their own, which runs them one at a time
+// with nothing beside them.
+//
 // Usage:
 //
 //	go test -list '^Test' ./... | shardplan -shards 9 -shard 3
 //	    prints the tests of shard 3, one per line.
+//	go test -list '^Test' ./... | shardplan -shards 4 -lanes 4 -shard 3 -lane 2
+//	    prints the tests of lane 2 of shard 3. Shard 5, lane 0, is the tests
+//	    that run alone.
 //	go test -list '^Test' ./... | shardplan -shards 9 -max 11m
 //	    prints the estimated time of each shard and fails if one is over.
 //	testselect ... | shardplan -shards 9 -shard 3 -fill 8m
@@ -21,10 +28,10 @@
 //	    rewrites durations.txt from go test -v output, such as gh run view --log.
 //
 // A test missing from durations.txt is estimated at the mean of the known
-// tests. The tests on one line of together.txt always land in one shard, in
-// the order the shard runs them, so they never run at the same time as each
-// other. Every shard computes the same plan from the same list and file, so
-// the shards together run each test exactly once.
+// tests. The tests on one line of together.txt always land in one lane, in
+// the order the lane runs them, so they never run at the same time as each
+// other. Every lane computes the same plan from the same list and files, so
+// the lanes together run each test exactly once.
 package main
 
 import (
@@ -45,9 +52,12 @@ import (
 
 func main() {
 	durations := flag.String("durations", "shardplan/durations.txt", "file of measured test durations")
-	togetherFile := flag.String("together", "shardplan/together.txt", "file of test groups that share a shard")
+	togetherFile := flag.String("together", "shardplan/together.txt", "file of test groups that share a lane")
+	aloneFile := flag.String("alone", "shardplan/alone.txt", "file of tests that run with no other test beside them")
 	shards := flag.Int("shards", 0, "number of shards")
+	lanes := flag.Int("lanes", 1, "number of lanes in each shard")
 	shard := flag.Int("shard", 0, "print the tests of this shard (1-based)")
+	lane := flag.Int("lane", -1, "with -shard: print the tests of this lane (1-based), or with 0 the tests that run alone (shard -shards plus 1)")
 	limit := flag.Duration("max", 0, "fail if a shard's estimated time is over this")
 	fill := flag.Duration("fill", 0, "use only as many shards as the tests need at about this much each")
 	update := flag.Bool("update", false, "rewrite the durations file from the go test -v logs given as arguments")
@@ -59,8 +69,11 @@ func main() {
 		}
 		return
 	}
-	if *shards < 1 || (*shard == 0) == (*limit == 0) || *shard > *shards {
-		fail(fmt.Errorf("give -shards and one of -shard (1 to %d) or -max", *shards))
+	if *shards < 1 || *lanes < 1 || (*shard == 0) == (*limit == 0) || *shard > *shards+1 {
+		fail(fmt.Errorf("give -shards and one of -shard (1 to %d) or -max", *shards+1))
+	}
+	if *shard > 0 && (*lane > *lanes || (*lane < 0 && *lanes > 1)) {
+		fail(fmt.Errorf("give -lane 0 to %d with -shard when -lanes is over 1", *lanes))
 	}
 
 	known, err := readDurations(*durations)
@@ -68,6 +81,10 @@ func main() {
 		fail(err)
 	}
 	groups, err := readGroups(*togetherFile)
+	if err != nil {
+		fail(err)
+	}
+	alone, err := readAlone(*aloneFile)
 	if err != nil {
 		fail(err)
 	}
@@ -80,29 +97,59 @@ func main() {
 	}
 	used := *shards
 	if *fill > 0 && *shard > 0 {
-		used = shardsNeeded(names, known, groups, *fill, *shards)
+		used = shardsNeeded(names, known, groups, alone, *fill, *shards, *lanes)
 	}
-	plan := pack(names, known, groups, used)
+	plan := pack(names, known, groups, alone, used, *lanes)
 
 	if *shard > 0 {
-		if *shard > used {
+		// The shard after the last holds the tests that run alone, whatever
+		// the fill.
+		if *shard == *shards+1 {
+			*shard = used + 1
+		} else if *shard > used {
 			return
 		}
-		for _, name := range plan[*shard-1].names {
+		s := plan[*shard-1]
+		var out []string
+		switch {
+		case *lane > 0:
+			if *lane <= len(s.lanes) {
+				out = s.lanes[*lane-1].names
+			}
+		case *lane == 0:
+			out = s.alone.names
+		default: // one lane: the lane, or the tests that run alone
+			if len(s.lanes) > 0 {
+				out = s.lanes[0].names
+			}
+			out = append(slices.Clone(out), s.alone.names...)
+		}
+		for _, name := range out {
 			fmt.Println(name)
 		}
 		return
 	}
 
+	secs := func(s float64) time.Duration { return time.Duration(s * float64(time.Second)).Round(time.Second) }
 	over := false
 	for i, s := range plan {
 		mark := ""
-		if s.load > limit.Seconds() {
+		if s.load() > limit.Seconds() {
 			mark = "  over the limit"
 			over = true
 		}
-		fmt.Printf("shard %d of %d: %3d tests, about %s%s\n", i+1, *shards, len(s.names),
-			time.Duration(s.load*float64(time.Second)).Round(time.Second), mark)
+		n := len(s.alone.names)
+		for _, l := range s.lanes {
+			n += len(l.names)
+		}
+		if len(s.lanes) == 0 {
+			if n == 0 {
+				continue
+			}
+			fmt.Printf("shard %d of %d: %3d tests alone, one at a time, about %s%s\n", i+1, *shards+1, n, secs(s.load()), mark)
+			continue
+		}
+		fmt.Printf("shard %d of %d: %3d tests, about %s%s\n", i+1, *shards, n, secs(s.load()), mark)
 	}
 	missing := 0
 	for _, name := range names {
@@ -120,33 +167,52 @@ func main() {
 	}
 }
 
-// shardsNeeded is how many shards hold the tests at about fill each, at least
-// one and at most shards. A selection of a few tests then starts a few
-// runners, not all of them.
-func shardsNeeded(names []string, known map[string]float64, groups [][]string, fill time.Duration, shards int) int {
-	total := 0.0
-	for _, s := range pack(names, known, groups, 1) {
-		total += s.load
-	}
+// shardsNeeded is how many shards hold the tests at about fill in each lane,
+// at least one and at most shards. A selection of a few tests then starts a
+// few runners, not all of them. The tests that run alone have a shard of
+// their own and do not count.
+func shardsNeeded(names []string, known map[string]float64, groups [][]string, alone map[string]bool, fill time.Duration, shards, lanes int) int {
+	s := pack(names, known, groups, alone, 1, 1)[0]
+	total := s.lanes[0].load / float64(lanes)
 	n := int(math.Ceil(total / fill.Seconds()))
 	return max(1, min(n, shards))
 }
 
-type shardLoad struct {
+type laneLoad struct {
 	names []string
 	load  float64
 }
 
-// pack assigns the longest test first to the shard with the least time so
-// far. A group from together.txt counts as one test as long as its members
-// together. The order is fixed by time and then name, so the plan depends
-// only on its inputs.
-func pack(names []string, known map[string]float64, groups [][]string, shards int) []shardLoad {
+// shardLoad is the lanes of one shard, or, in the shard after the last, the
+// tests that run alone.
+type shardLoad struct {
+	lanes []laneLoad
+	alone laneLoad
+}
+
+// load is the time of the shard: its longest lane, then the tests alone.
+func (s shardLoad) load() float64 {
+	longest := 0.0
+	for _, l := range s.lanes {
+		longest = max(longest, l.load)
+	}
+	return longest + s.alone.load
+}
+
+// pack assigns the longest test first to the lane with the least time so far,
+// over shards shards. A test that runs alone goes to the shard after them,
+// which has no lanes. A group from together.txt counts as one test as long as
+// its members together, and runs alone when one of them does. The order is
+// fixed by time and then name, so the plan depends only on its inputs.
+func pack(names []string, known map[string]float64, groups [][]string, alone map[string]bool, shards, lanes int) []shardLoad {
 	fallback := 1.0
 	if len(known) > 0 {
+		// Sum in name order. A sum over the map in its random order differs
+		// in the last bits from run to run, which moves tests between shards,
+		// and each lane computes its plan in a run of its own.
 		sum := 0.0
-		for _, d := range known {
-			sum += d
+		for _, name := range slices.Sorted(maps.Keys(known)) {
+			sum += known[name]
 		}
 		fallback = sum / float64(len(known))
 	}
@@ -161,6 +227,7 @@ func pack(names []string, known map[string]float64, groups [][]string, shards in
 	type unit struct {
 		names []string
 		load  float64
+		alone bool
 	}
 	selected := map[string]bool{}
 	for _, name := range names {
@@ -175,6 +242,7 @@ func pack(names []string, known map[string]float64, groups [][]string, shards in
 				grouped[name] = true
 				u.names = append(u.names, name)
 				u.load += estimate(name)
+				u.alone = u.alone || alone[name]
 			}
 		}
 		if len(u.names) > 0 {
@@ -183,28 +251,62 @@ func pack(names []string, known map[string]float64, groups [][]string, shards in
 	}
 	for _, name := range names {
 		if !grouped[name] {
-			units = append(units, unit{names: []string{name}, load: estimate(name)})
+			units = append(units, unit{names: []string{name}, load: estimate(name), alone: alone[name]})
 		}
 	}
 	slices.SortFunc(units, func(a, b unit) int {
 		return cmp.Or(cmp.Compare(b.load, a.load), cmp.Compare(a.names[0], b.names[0]))
 	})
 
-	plan := make([]shardLoad, shards)
+	plan := make([]shardLoad, shards+1)
+	for i := range shards {
+		plan[i].lanes = make([]laneLoad, lanes)
+	}
+	apart := &plan[shards].alone
 	for _, u := range units {
-		lightest := 0
-		for i := range plan {
-			if plan[i].load < plan[lightest].load {
-				lightest = i
+		if u.alone {
+			apart.names = append(apart.names, u.names...)
+			apart.load += u.load
+			continue
+		}
+		fs, fl := 0, 0
+		for i := range shards {
+			for j := range plan[i].lanes {
+				if plan[i].lanes[j].load < plan[fs].lanes[fl].load {
+					fs, fl = i, j
+				}
 			}
 		}
-		plan[lightest].names = append(plan[lightest].names, u.names...)
-		plan[lightest].load += u.load
+		plan[fs].lanes[fl].names = append(plan[fs].lanes[fl].names, u.names...)
+		plan[fs].lanes[fl].load += u.load
 	}
 	for i := range plan {
-		slices.Sort(plan[i].names)
+		for j := range plan[i].lanes {
+			slices.Sort(plan[i].lanes[j].names)
+		}
+		slices.Sort(plan[i].alone.names)
 	}
 	return plan
+}
+
+// readAlone reads alone.txt: test names apart by spaces or lines, and #
+// comments. A missing file means none.
+func readAlone(path string) (map[string]bool, error) {
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("read alone: %w", err)
+	}
+	alone := map[string]bool{}
+	for line := range strings.SplitSeq(string(data), "\n") {
+		line, _, _ = strings.Cut(line, "#")
+		for name := range strings.FieldsSeq(line) {
+			alone[name] = true
+		}
+	}
+	return alone, nil
 }
 
 // readGroups reads together.txt: one group per line, the test names apart by
