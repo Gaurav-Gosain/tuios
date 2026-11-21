@@ -15178,6 +15178,13 @@ Run on 2026-11-08 on macOS (arm64). The branch passes.
 | No timer at the quiet end (`armPullQuiet` returns at once) | "agent b's offer held by the quiet hours ... was not made when they ended" | **caught** |
 | No offer when a card comes free (the added/released/staged/unblocked branch in afterTaskEvent off) | "agent b, at rest with no card, was not offered t6 when it was added" | **caught** |
 | A pane offered the card it let go (`releasedBy` check off in pullNext) | "t5 is held by <a> and t6 by <b>; want each agent offered the card the other let go" | **caught** |
+| No kill-line key before the command in `inPane` (the `\x15` cut) | "tuios task done t2 in pane ... failed: sh: You: command not found, EXIT=127" | **caught** |
+
+The last control is the CI failure of 2026-11-21. The daemon's mail wake pasted
+its line into agent b's pane, and the test's `task done t2` arrived before the
+wake's Enter. The shell ran the two as one line. The test now leaves a line half
+typed in b's pane before that finish, so the race happens on every run. With
+the fix, the test passed 20 of 20 runs on 2026-11-21 on Linux (amd64).
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPullDispatchOffersAgainWhenTheSwitchesLift$' -v .`.
