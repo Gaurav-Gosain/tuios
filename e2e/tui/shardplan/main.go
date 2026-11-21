@@ -144,9 +144,12 @@ type shardLoad struct {
 func pack(names []string, known map[string]float64, groups [][]string, shards int) []shardLoad {
 	fallback := 1.0
 	if len(known) > 0 {
+		// Sum in name order. A sum over the map in its random order differs
+		// in the last bits from run to run, which moves tests between shards,
+		// and each lane computes its plan in a run of its own.
 		sum := 0.0
-		for _, d := range known {
-			sum += d
+		for _, name := range slices.Sorted(maps.Keys(known)) {
+			sum += known[name]
 		}
 		fallback = sum / float64(len(known))
 	}
