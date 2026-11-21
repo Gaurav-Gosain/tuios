@@ -181,12 +181,12 @@ func (v *paneView) followStatus() {
 }
 
 func (v *paneView) followStatusOnce() {
-	reader, err := dialVerb()
+	reader, err := v.dial()
 	if err != nil {
 		return
 	}
 	defer func() { _ = reader.Close() }()
-	events, err := dialVerb()
+	events, err := v.dial()
 	if err != nil {
 		return
 	}

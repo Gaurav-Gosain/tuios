@@ -100,7 +100,10 @@ and 1 for an error.`,
   tuios pane-view -s work -w build
 
   # Keep the pane at the size the session gives it
-  tuios pane-view -s work -w build --size pane`,
+  tuios pane-view -s work -w build --size pane
+
+  # Show a pane of the session work on the host build, through the link
+  tuios pane-view -s build:work -w agent`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if window == "" {
@@ -109,7 +112,11 @@ and 1 for an error.`,
 			if size != "follow" && size != "pane" {
 				return errfmt.Errorf("--size takes follow or pane, not %q", size)
 			}
-			return runPaneView(sessionName, window, size == "follow")
+			host, sess, win, err := resolveTarget(sessionName, window)
+			if err != nil {
+				return err
+			}
+			return runPaneView(host, sess, win, size == "follow")
 		},
 	}
 	addSessionFlag(cmd, &sessionName)
@@ -120,6 +127,9 @@ and 1 for an error.`,
 
 // paneView is one run of pane-view.
 type paneView struct {
+	// host is the machine the pane is on, "" for this one. A host is
+	// reached through this machine's daemon and its link.
+	host      string
 	session   string
 	sessionID string
 	window    string
@@ -149,12 +159,12 @@ type paneView struct {
 	filter queryFilter
 }
 
-func runPaneView(sessionName, window string, follow bool) error {
+func runPaneView(host, sessionName, window string, follow bool) error {
 	in, out := os.Stdin, os.Stdout
 	if !term.IsTerminal(int(in.Fd())) || !term.IsTerminal(int(out.Fd())) {
 		return errfmt.Errorf("pane-view needs a terminal on its input and output")
 	}
-	v := &paneView{session: sessionName, window: window, follow: follow, in: in, out: out}
+	v := &paneView{host: host, session: sessionName, window: window, follow: follow, in: in, out: out}
 	v.cols, v.rows = v.termSize()
 
 	old, err := term.MakeRaw(int(in.Fd()))
@@ -387,8 +397,24 @@ var permanentCodes = map[string]bool{
 }
 
 // connect opens the stream, resuming from v.seq when there is one.
+// dial connects to the daemon the pane is on: this machine's, or the host's
+// through this machine's daemon and its link.
+func (v *paneView) dial() (*session.VerbClient, error) {
+	if v.host == "" {
+		return dialVerb()
+	}
+	if err := ensureDaemon(); err != nil {
+		return nil, err
+	}
+	client, _, err := session.DialVerbClientThroughHost(v.host, version)
+	if err != nil {
+		return nil, explainHostConnectError(v.host, err)
+	}
+	return client, nil
+}
+
 func (v *paneView) connect() (session.PaneStreamReply, error) {
-	client, err := dialVerb()
+	client, err := v.dial()
 	if err != nil {
 		return session.PaneStreamReply{}, err
 	}
