@@ -28,9 +28,6 @@ var drop atomic.Bool
 // SetKeep sets whether ED 3 keeps the history.
 func SetKeep(keep bool) { drop.Store(!keep) }
 
-// Keep reports whether ED 3 keeps the history.
-func Keep() bool { return !drop.Load() }
-
 // Drop is ED 3 that tuios writes into a pane's stream itself, for
 // clear-history, the clear_scrollback key and a resync. Its second parameter
 // tells it apart from the ED 3 a program sends: Apply lets it through
