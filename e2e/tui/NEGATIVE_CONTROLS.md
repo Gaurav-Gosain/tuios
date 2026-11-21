@@ -18750,3 +18750,18 @@ Run on 2026-11-21 on Linux. Each control is one change to the branch, run alone 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestKeysLostWithALinkAreDroppedAndThePersonIsTold$' .
 ```
+
+## A mode notice under a notice tuios raises on its own
+
+`TestAModeNoticeStaysAboveANoticeItDidNotAsk` attaches two clients of different sizes. The client that did not size the session presses alt+esc, so the session takes its size and the daemon sends it the new size a moment after the key. The dock must show "Window management mode" with the size notice counted in +1 under it, and keep the mode notice up for a second.
+
+Run on 2026-11-21 on Linux, real backend, against main at 16ae1ca77.
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| Main | `TestAModeNoticeStaysAboveANoticeItDidNotAsk` | 3 of 3 runs: "the dock does not show the mode notice with the size notice counted under it". The dock showed "Session size: 120x40 (2 clients) +1". | **caught** |
+| This change | `TestAModeNoticeStaysAboveANoticeItDidNotAsk` | 15 of 15 runs pass | fixed |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestAModeNoticeStaysAboveANoticeItDidNotAsk$' .
+```
