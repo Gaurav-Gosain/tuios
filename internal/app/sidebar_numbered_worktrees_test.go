@@ -37,8 +37,6 @@ func TestNumberedWorktreeRowsKeepTheTreeSpine(t *testing.T) {
 		t.Fatalf("worktree rows not found:\n%s", strings.Join(lines, "\n"))
 	}
 
-	// Columns read off the stripped lines: the styled ones carry escape
-	// prefixes that shift every offset.
 	plainRepo, plainChild := stripANSIForTrace(repo), stripANSIForTrace(child)
 	repoCol := utf8.RuneCountInString(plainRepo[:strings.Index(plainRepo, "tuios")])
 	childCol := utf8.RuneCountInString(plainChild[:strings.Index(plainChild, "├─")])

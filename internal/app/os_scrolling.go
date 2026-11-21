@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// applyScrollingGeometry refreshes the settings shared by the live strip and
-// pane-size predictions, including settings changed after a strip was created.
 func (m *OS) applyScrollingGeometry(sl *layout.ScrollingLayout) {
 	sl.Gap = m.separatorGap()
 	sl.DefaultWidth = m.ScrollColumnWidthFraction()
@@ -29,13 +27,6 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 		sl = layout.NewScrollingLayout()
 		m.WorkspaceScrollingLayouts[m.CurrentWorkspace] = sl
 
-		// The columns the session holds for this workspace, when a restore left
-		// any; otherwise one column per visible window.
-		//
-		// Built here, in the one place a strip comes into being, rather than by
-		// the restore itself, so a strip rebuilt from the session gets the same
-		// focus sync and the same reveal below as one built from nothing. The
-		// restore only says what the columns are.
 		if pending, ok := m.pendingScrollColumns[m.CurrentWorkspace]; ok {
 			delete(m.pendingScrollColumns, m.CurrentWorkspace)
 			sl.Columns = m.scrollColumnsFromState(m.CurrentWorkspace, pending, -1)
@@ -48,23 +39,6 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 			}
 		}
 
-		// Sync FocusedCol with the OS focused window so the viewport
-		// shows the correct column instead of always the last one, and put the
-		// strip where that column is on screen.
-		//
-		// The reveal belongs here, at the one moment a strip has no position
-		// yet, rather than in tileAllWindows. A workspace laid out for the
-		// first time (a client starting up, a session restored, a workspace
-		// entered) has focus on a column that nothing
-		// has scrolled to, and without this the user is typing into a pane off
-		// the left of the screen. Every later retile reuses this strip and so
-		// leaves the offset alone, which is the whole point: a retile is not a
-		// focus change.
-		//
-		// A peer's offset arriving afterwards still wins. adoptScrollStrip
-		// reaches the strip through here and then writes the session's offset
-		// over whatever this chose, so a joining client lands on the session's
-		// strip and not on its own idea of home.
 		if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 			fw := m.Windows[m.FocusedWindow]
 			if fw.Workspace == m.CurrentWorkspace && !fw.IsFloating {
@@ -73,22 +47,11 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 			}
 		}
 	}
-	// Refresh geometry on every access: session sync and settings can change it
-	// without rebuilding the strip.
 	m.applyScrollingGeometry(sl)
-	// The presets are per client like the cap, so a config reload reaches a
-	// live strip here too. Both slices are shared and only read: no allocation
-	// on this path.
 	sl.PresetWidths = layout.DefaultPresetWidths
 	if len(m.Settings.ScrollColumnPresets) > 0 {
 		sl.PresetWidths = m.Settings.ScrollColumnPresets
 	}
-	// A zoom on the strip is one column widened past the cap the others are
-	// held to. The strip is already a camera, wider than the screen and showing
-	// what it cannot fit at the edges, so a second camera over it would be two
-	// viewports on one arrangement: the pane gets its share of the screen and
-	// the rest of the strip goes on running off the edges, which is the peek
-	// the other layouts build a canvas for.
 	sl.ZoomedCol, sl.ZoomProportion = -1, 0
 	if zw := m.zoomedWindow(); zw != nil && m.zoomSize() < 100 {
 		if i := sl.ColumnContaining(m.GetWindowIntID(zw.ID)); i >= 0 {
@@ -96,8 +59,6 @@ func (m *OS) GetOrCreateScrollingLayout() *layout.ScrollingLayout {
 			sl.ZoomProportion = float64(m.zoomSize()) / 100
 		}
 	}
-	// Revealed after the geometry above, because the reveal measures columns
-	// with it, and only on the pass that built the strip.
 	if created {
 		sl.EnsureFocusedVisible(m.ScrollingViewWidth())
 	}
@@ -119,14 +80,10 @@ func (m *OS) ScrollingSetPositions() {
 	m.scrollingSetPositionsAnimated(true)
 }
 
-// scrollingSetPositionsInstant applies positions without animation (mouse wheel).
 func (m *OS) scrollingSetPositionsInstant() {
 	m.scrollingSetPositionsAnimated(false)
 }
 
-// scrollDuration is how long the scrolling layout slides. With appearance.motion
-// off it still slides for 150ms, because a viewport shift with no slide is
-// disorienting. Only motion.scroll = "off" makes it a cut.
 func (m *OS) scrollDuration() time.Duration {
 	if m.Settings.Aspects[config.AspectScroll].Off {
 		return 0
@@ -146,58 +103,30 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 
 	layouts := sl.ComputePositions(viewW, m.PaneHeight(), m.PaneTop())
 
-	// Scrolling layout transitions always animate (even with --no-animations)
-	// because the viewport shift is disorienting without the slide.
 	dur := m.scrollDuration()
 	if m.layoutInstant {
 		dur = 0
 	}
 
-	// Asked once for the whole layout, as ApplyBSPLayout does, because it ends a
-	// stale deferral as a side effect. Skipping the deferral would announce a
-	// real size per pane per resize step, which is one SIGWINCH per pane for
-	// every column the user drags the host edge through: the exact storm the
-	// deferral exists to stop.
 	deferring := m.resizeDeferralActive()
 	borderless := m.panesBorderless()
 
-	// The slide that runs with animations off moves panes and never resizes
-	// them. A pass that changes a column's width is placed in one step instead,
-	// every pane at once: sliding some panes while others jump to their new
-	// width opens the same gap between them that this pass exists to avoid,
-	// and resizing first and sliding after is that gap. Someone who turned
-	// animations off gets the cut they asked for.
 	if animate && m.Settings.MotionLength(config.AspectScroll, config.DefaultAnimationDuration) <= 0 && m.scrollingPassResizes(layouts) {
 		animate = false
 	}
 
 	for windowIntID, rect := range layouts {
-		// ComputePositions works in strip coordinates; place the strip inside
-		// the content region.
 		rect.X += leftMargin
 		win := m.GetWindowByIntID(windowIntID)
 		if win == nil || win.Workspace != m.CurrentWorkspace || win.Minimized || win.IsFloating {
 			continue
 		}
-		// A zoomed pane keeps its column and loses its rectangle to the zoom
-		// box. See the same skip in ApplyBSPLayout.
-		//
-		// Not for a zoom of part of the screen: there the zoom is the column's
-		// own width, so the pane is placed by the strip along with every other
-		// and there is no box for it to be holding.
 		if win.Zoomed && !m.zoomUsesLayout(win) {
 			continue
 		}
-		// A pane the pointer is dragging keeps its rectangle; the slot is
-		// recorded for the drop. See LiveWindowDrag.
 		if m.noteDragSlot(win, rect) {
 			continue
 		}
-		// Under shared borders the strip's panes give up their own border to
-		// the dividers drawn between the columns, as every tiler's do. Settle
-		// that allowance before the rectangle, as placePane does: it decides
-		// how much of the rectangle the guest gets, so settling it afterwards
-		// announces the rectangle twice, once at each allowance.
 		borderChanged := win.Tiled != borderless
 		if borderChanged {
 			win.Tiled = borderless
@@ -206,33 +135,11 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 		moved := win.X != rect.X || win.Y != rect.Y
 		resized := win.Width != rect.W || win.Height != rect.H
 		alreadyPlaced := win.X != 0 || win.Y != 0 || win.Width != 0
-		// A pane that slides takes its new width along the way, and the snap
-		// tells the guest the size once when it lands, as every tiler's slide
-		// does. Resizing first and sliding only the position would make a column
-		// changing width jump to it at the old position: when a zoom moves to the
-		// next column, the column losing it would shrink at once while the strip is
-		// still on its way, and the screen would show empty ground between it and its
-		// neighbour for the whole slide.
-		//
-		// Not while a host resize is deferred. The pane takes the size visually
-		// now and the real one on the release.
 		slide := animate && alreadyPlaced && !deferring && dur > 0 && (moved || resized)
-		// A changed allowance owes the guest a new box even at the same
-		// rectangle, and owes it now: the pane stops or starts drawing its
-		// border on this frame, slide or not, so its guest's grid changes on
-		// this frame too. A resize alone is paid when a slide lands: the
-		// snap's last step resizes against the size last announced.
 		if borderChanged || (!slide && resized) {
 			m.resizePane(win, rect.W, rect.H, deferring)
 		}
 
-		// If this window already has an in-flight animation heading to
-		// the same target, don't touch it. TileAllWindows and other
-		// callers re-run ScrollingSetPositions frequently; without this
-		// guard each call would cancel + recreate the animation from the
-		// current intermediate position, making it stutter.
-		//
-		// A pass placed in one step lands it instead, with the rest.
 		if animate && m.windowHasAnimationTo(win, rect.X, rect.Y, rect.W, rect.H) {
 			continue
 		}
@@ -243,17 +150,9 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 			}
 		}
 		if slide {
-			// No snap after all, so nothing else will tell the guest.
 			m.resizePane(win, rect.W, rect.H, deferring)
 		}
 
-		// A snap left over from an earlier placement owns this window's geometry
-		// and stamps its own rectangle back on the next tick, without resizing
-		// the emulator with it. The branch above only retires one when it creates
-		// a replacement, so a column that changes width without changing column
-		// (the host resizing while the strip stays put) falls through to here with
-		// the old snap still live, and left alone, one tick later the pane would draw
-		// at one size while its guest writes at another.
 		m.CancelSnapAnimation(win)
 		win.X = rect.X
 		win.Y = rect.Y
@@ -264,8 +163,6 @@ func (m *OS) scrollingSetPositionsAnimated(animate bool) {
 	}
 }
 
-// scrollingPassResizes reports whether placing the strip's rectangles would
-// change the size of any pane the pass places.
 func (m *OS) scrollingPassResizes(layouts map[int]layout.Rect) bool {
 	for windowIntID, rect := range layouts {
 		win := m.GetWindowByIntID(windowIntID)
@@ -282,9 +179,6 @@ func (m *OS) scrollingPassResizes(layouts map[int]layout.Rect) bool {
 	return false
 }
 
-// windowHasAnimationTo checks if a window has an active animation
-// heading to the exact target position. Used to avoid canceling
-// in-flight animations when ScrollingSetPositions is called repeatedly.
 func (m *OS) windowHasAnimationTo(win *terminal.Window, x, y, w, h int) bool {
 	for _, anim := range m.Animations {
 		if anim.Window == win && !anim.Complete &&
@@ -374,10 +268,6 @@ func (m *OS) ScrollingExpelWindow() {
 // ScrollingScrollViewport scrolls the viewport manually (mouse wheel).
 // Uses instant positioning so scrolling feels direct and responsive.
 func (m *OS) ScrollingScrollViewport(delta int) {
-	// A flat number of cells rather than a share of the view. See
-	// config.NiriScrollCellsDefault: a trackpad sends one wheel event per cell
-	// the fingers cross, so a step measured against the screen's width made one
-	// flick cross the whole strip and stop dead at the clamp.
 	m.ScrollingScrollViewportCells(delta * max(m.Settings.NiriScrollCells, config.NiriScrollCellsMin))
 }
 
@@ -386,7 +276,6 @@ func (m *OS) ScrollingScrollViewport(delta int) {
 func (m *OS) ScrollingScrollViewportCells(cells int) {
 	sl := m.GetOrCreateScrollingLayout()
 	viewW := m.ScrollingViewWidth()
-	// Cancel any in-flight slide animations so the wheel feels direct
 	m.CompleteAllAnimations()
 	sl.ViewportX += cells
 	sl.ClampViewport(viewW)
@@ -555,9 +444,6 @@ func (m *OS) ReleaseClickReveal(x, y int) {
 func (m *OS) ScrollingOnWindowAdded(w *terminal.Window) {
 	sl := m.GetOrCreateScrollingLayout()
 	intID := m.GetWindowIntID(w.ID)
-	// GetOrCreateScrollingLayout populates from m.Windows on first call.
-	// If the window was already appended to m.Windows before this call,
-	// the layout already has it. Don't add a duplicate.
 	if sl.HasWindow(intID) {
 		m.LogInfo("[SCROLL-ADD] ScrollingOnWindowAdded: window=%s intID=%d already in layout, skipping", shortID(w.ID), intID)
 		return
@@ -577,15 +463,6 @@ func (m *OS) ScrollingOnWindowRemoved(windowIntID int) {
 	}
 }
 
-// scrollingLayoutStale reports whether the panes on screen are somewhere other
-// than this client's own strip puts them, which is the scrolling layout's
-// version of the question tiledLayoutStale asks of the other two.
-//
-// It is asked against the strip rather than against the box because the strip
-// is longer than the box by design. What it catches is the same thing: a
-// rectangle computed by somebody else and adopted here. What it must not catch
-// is a strip scrolled off the focused column, which is a position the user
-// chose and not a layout in need of recomputing.
 func (m *OS) scrollingLayoutStale() bool {
 	sl := m.WorkspaceScrollingLayouts[m.CurrentWorkspace]
 	if sl == nil || len(sl.Columns) == 0 {
@@ -599,20 +476,12 @@ func (m *OS) scrollingLayoutStale() bool {
 		}
 		rect, ok := want[m.GetWindowIntID(w.ID)]
 		if !ok {
-			// A pane the strip has never heard of: the strip is behind the
-			// window list, which the retile is what fixes.
 			return true
 		}
 		rect.X += leftMargin
-		// A pane already sliding to where the strip wants it is not stale, it is
-		// in flight. The strip's own transitions always animate, so without this
-		// every sync that arrived during a slide would read the intermediate
-		// position as somebody else's layout.
 		if m.windowHasAnimationTo(w, rect.X, rect.Y, rect.W, rect.H) {
 			continue
 		}
-		// A pane in mid-drag is read at the slot it left, not where the
-		// pointer has it. See dragSlotOf.
 		wx, wy, ww, wh := m.dragSlotOf(w)
 		if wx != rect.X || wy != rect.Y || ww != rect.W || wh != rect.H {
 			return true
@@ -637,33 +506,6 @@ func (m *OS) ScrollStripState() *session.ScrollStripState {
 	return &session.ScrollStripState{ViewportX: sl.ViewportX}
 }
 
-// adoptScrollStrip takes the strip as the session has it: the offset a peer
-// scrolled to, and the column the session's focus is on.
-//
-// Both halves are needed and neither is enough. The offset alone leaves the
-// strip pointing at the column this client last focused, which is what decides
-// where a new column is inserted and where a left/right step starts from. The
-// focused column alone leaves the viewport where it was, which is the report
-// this exists for: the border moves to a window that is not on screen.
-//
-// It acts only on a change. A broadcast repeating the state everyone already
-// holds must not restart the slide, and, since the offset is shared, must
-// not drag the strip back to the focused column either: a peer scrolling away
-// from the focused window is a decision, and re-broadcasting it is not a
-// request to undo it. EnsureFocusedVisible therefore runs on a focus change and
-// not otherwise, which is also what keeps it agreeing with the threshold it was
-// given in 5f3af88a: a column any of which is on screen is left alone.
-//
-// A focus that landed on a pane the same sync brought is the other rule. A
-// new pane takes the column after the focused one, which is the peek a
-// keyboard step leaves at the edge, so the least-scroll rule found some of it
-// on screen and left the pane the user had just opened cut off there (issue
-// 1507). Opening a pane is asking for it, as a focus key is, so focusOnNew
-// shows the whole column with ScrollToFocusedColumn. Every client works that
-// out from the same strip too.
-//
-// Called from inside a sync, so it never pushes. The answer owed to the daemon
-// for the whole sync is sent once, by ApplyStateSync.
 func (m *OS) adoptScrollStrip(strip *session.ScrollStripState, focusChanged, focusOnNew bool) {
 	if !m.AutoTiling || !m.UseScrollingLayout {
 		return
@@ -680,21 +522,11 @@ func (m *OS) adoptScrollStrip(strip *session.ScrollStripState, focusChanged, foc
 	if focusChanged {
 		if fw := m.GetFocusedWindow(); fw != nil && !fw.IsFloating && !fw.Minimized &&
 			fw.Workspace == m.CurrentWorkspace {
-			// Only a column change is a move. Focus landing on another window
-			// stacked in the column it was already on is worth recording (it is
-			// what the column returns to when it is focused again), but every
-			// window in a column keeps its row whichever of them is active, so
-			// there is nothing to lay out again.
 			was := sl.FocusedCol
 			if sl.FocusColumnContaining(m.GetWindowIntID(fw.ID)) && sl.FocusedCol != was {
 				moved = true
 			}
 		}
-		// The offset the peer sent has usually done this already, and then this
-		// is a no-op. It is what answers the cases where nothing sent one: a
-		// focus the daemon moved on its own, or a peer too old to say where its
-		// strip is. Every client works it out from the same strip and the same
-		// content width, so they all land on the same offset.
 		before := sl.ViewportX
 		if focusOnNew {
 			sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
@@ -747,14 +579,10 @@ func (m *OS) ScrollingResizeColumnVisual(win *terminal.Window, width int, keepRi
 		}
 		w.X = stripLeft + rect.X
 		w.Y = rect.Y
-		// The width only, without ResizeVisual or Resize: the emulator keeps
-		// its size until the release.
 		w.Width = rect.W
 		w.MarkPositionDirty()
 		w.InvalidateCache()
 	}
-	// Every window stacked in the column takes the new width, so every one
-	// of them owes its guest the size on release, not only the one dragged.
 	for _, wid := range sl.Columns[col].WindowIDs {
 		if w := m.GetWindowByIntID(wid); w != nil {
 			m.PendingResizes[w.ID] = [2]int{width, w.Height}
@@ -762,26 +590,20 @@ func (m *OS) ScrollingResizeColumnVisual(win *terminal.Window, width int, keepRi
 	}
 }
 
-// scrollingResizeColumn changes the focused column's width by delta pixels.
 func (m *OS) scrollingResizeColumn(delta int) {
 	sl := m.GetOrCreateScrollingLayout()
 	if sl.FocusedCol < 0 || sl.FocusedCol >= len(sl.Columns) {
 		return
 	}
 	col := &sl.Columns[sl.FocusedCol]
-	// Cap at scroll_column_max, not at nine tenths of the view: somebody who
-	// here: somebody who set scroll_column_max = 100 wants a full-width column
-	// from the resize keys, not a stuck one at 90%. The other layouts'
-	// resize_width_N actions accept up to 90, which mirrors that ceiling; the
-	// strip's wider is what a pane on a strip needs to take the screen.
 	viewW := m.ScrollingViewWidth()
 	maxWidth := sl.MaxColumnWidth(viewW)
 	currentWidth := sl.ResolveColumnWidth(sl.FocusedCol, viewW)
 	newWidth := max(min(currentWidth+delta, maxWidth), 20)
 	col.FixedWidth = newWidth
-	col.Proportion = 0 // FixedWidth takes priority
+	col.Proportion = 0
 	sl.ScrollToFocusedColumn(m.ScrollingViewWidth())
-	m.scrollingSetPositionsInstant() // resize must be instant, not animated
+	m.scrollingSetPositionsInstant()
 }
 func (m *OS) scrollingSyncFocusToOS() {
 	sl := m.GetOrCreateScrollingLayout()
@@ -803,14 +625,6 @@ func (m *OS) scrollingSyncFocusToOS() {
 	}
 }
 
-// scrollColumnsState is the scrolling layout's columns on every workspace, in
-// the form the session state carries them. See
-// session.SessionState.WorkspaceScrollColumns.
-//
-// A workspace restored and not visited since has its columns waiting in
-// pendingScrollColumns rather than in a strip. They are still the session's
-// columns, so they are sent as they are: leaving them out would tell a peer the
-// workspace has none.
 func (m *OS) scrollColumnsState() map[int][]session.SerializedScrollColumn {
 	out := make(map[int][]session.SerializedScrollColumn)
 	for ws, sl := range m.WorkspaceScrollingLayouts {
@@ -832,7 +646,6 @@ func (m *OS) scrollColumnsState() map[int][]session.SerializedScrollColumn {
 	return out
 }
 
-// scrollColumnsToState names a strip's columns by window ID.
 func (m *OS) scrollColumnsToState(cols []layout.ScrollColumn) []session.SerializedScrollColumn {
 	out := make([]session.SerializedScrollColumn, 0, len(cols))
 	for _, c := range cols {
@@ -843,8 +656,6 @@ func (m *OS) scrollColumnsToState(cols []layout.ScrollColumn) []session.Serializ
 			if w == nil {
 				continue
 			}
-			// The index is re-counted as panes are skipped, so it still names
-			// the pane the column was focused on.
 			if i == c.Active {
 				active = len(ids)
 			}
@@ -863,24 +674,6 @@ func (m *OS) scrollColumnsToState(cols []layout.ScrollColumn) []session.Serializ
 	return out
 }
 
-// scrollColumnsFromState turns the session's columns for one workspace back
-// into a strip's.
-//
-// The session can name panes this client should not put in a column: one that
-// has closed, one on another workspace, one minimized or floating, or one
-// already placed by an earlier column. Those are left out, the way the strip
-// built from nothing leaves them out.
-//
-// A pane on the workspace that no column names is one opened since the state
-// was written. It gets a column of its own right after the column that holds
-// the pane whose int ID is after. Callers pass the focused pane, so this is
-// where ScrollingLayout.AddColumn puts a new pane. With after in no column, it
-// goes at the end.
-//
-// The state a daemon sends with a pane it has just made is one such state. The
-// daemon never computes columns, so they are the ones a client last pushed and
-// do not name the new pane. Putting it at the end there sent every new pane in
-// a daemon session to the end of the strip (issue 952).
 func (m *OS) scrollColumnsFromState(ws int, cols []session.SerializedScrollColumn, after int) []layout.ScrollColumn {
 	tileable := func(w *terminal.Window) bool {
 		return w != nil && w.Workspace == ws && !w.Minimized && !w.IsFloating
@@ -934,18 +727,6 @@ func (m *OS) scrollColumnsFromState(ws int, cols []session.SerializedScrollColum
 	return out
 }
 
-// adoptScrollColumns takes the session's columns for every workspace it names.
-//
-// A workspace with a strip already has its columns replaced in place, so the
-// strip keeps its offset and the focus stays on the pane it was on. The strip
-// is first told about the panes that left it, so a closed focused column hands
-// the focus to the column on its left, as a close without a daemon does. A
-// pane the session's columns do not name opens after the focused column. See
-// scrollColumnsFromState.
-//
-// A workspace without one has the columns set aside for GetOrCreateScrollingLayout, which
-// builds them the first time the strip is wanted, with the focus sync and the
-// reveal every new strip gets.
 func (m *OS) adoptScrollColumns(cols map[int][]session.SerializedScrollColumn) {
 	if len(cols) == 0 {
 		return
@@ -959,9 +740,6 @@ func (m *OS) adoptScrollColumns(cols map[int][]session.SerializedScrollColumn) {
 			m.pendingScrollColumns[ws] = c
 			continue
 		}
-		// The panes that closed, or that left the strip by a minimize, a float
-		// or a move to another workspace. RemoveWindow moves the focus the way
-		// ScrollingOnWindowRemoved does without a daemon.
 		for _, col := range slices.Clone(sl.Columns) {
 			for _, intID := range col.WindowIDs {
 				w := m.GetWindowByIntID(intID)

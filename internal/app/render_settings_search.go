@@ -9,18 +9,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// settingsRowExtra is what a row shows beyond itself when it is a search
-// result.
 type settingsRowExtra struct {
-	// match is the byte offsets of the label the query matched, lit in the
-	// accent the palette and the launcher light theirs in.
 	match []int
-	// tag is a quiet word after the label: the tab the row lives on.
-	tag string
+	tag   string
 }
 
-// settingsSearchLine is the search line at the top of the body: the query
-// being typed on the left, and how many rows it found on the right.
 func (m *OS) settingsSearchLine(found, width int, pal overlay.Palette) string {
 	bg := pal.Surface
 	query := m.settingsSearch.query.String()
@@ -29,7 +22,6 @@ func (m *OS) settingsSearchLine(found, width int, pal overlay.Palette) string {
 		left += overlay.Cursor(" ", bg, pal.Fg) +
 			overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render(" name, key, value or description")
 	} else {
-		// The query with its caret, leaving the count on the right its room.
 		before, at, after := m.settingsSearch.query.Parts()
 		left += overlay.FieldLine(before, at, after, max(width-lipgloss.Width(left)-14, 1), bg, pal.Fg)
 	}
@@ -52,8 +44,6 @@ func (m *OS) settingsSearchLine(found, width int, pal overlay.Palette) string {
 	return left + overlay.Style(bg).Render(strings.Repeat(" ", gap)) + right
 }
 
-// settingsSearchEmpty is the line a search that found nothing shows in place
-// of the rows.
 func settingsSearchEmpty(query string, width int, pal overlay.Palette) string {
 	msg := "No settings match"
 	if strings.TrimSpace(query) == "" {
@@ -63,10 +53,6 @@ func settingsSearchEmpty(query string, width int, pal overlay.Palette) string {
 		Render("  " + overlay.Truncate(msg, max(width-2, 1)))
 }
 
-// settingsSearchDescription is the description box while searching. Its first
-// line is where the selected row lives: its config key, with the characters
-// the query matched lit when the key is what matched, and its tab. The rest is
-// the row's description, as the tab view shows it.
 func (m *OS) settingsSearchDescription(items []settingItem, hits []settingsHit, cats []settingsCategory, width, n int, pal overlay.Palette) []string {
 	if len(items) == 0 || n <= 0 {
 		return settingsDescription("", width, n, pal)
@@ -94,9 +80,6 @@ func (m *OS) settingsSearchDescription(items []settingItem, hits []settingsHit, 
 	return out
 }
 
-// joinSentences puts note after text, closing text with a full stop first
-// when it has none, so a description and the line added to it read as two
-// sentences.
 func joinSentences(text, note string) string {
 	switch {
 	case note == "":

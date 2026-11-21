@@ -21,14 +21,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// The other views of a file in quick look.
-//
-// v steps through them. The first press makes one read, of the details: the machine
-// with the file sends its permissions, what git says, the diff of a changed file and
-// the words of a PDF page. Nothing runs until then. The file's own view stays in
-// ql.res, so v comes back to it with no read.
-//
-// A CSV file is also read here: a table in place of text, with h and l for columns.
 const (
 	quickLookViewMain    = "main"
 	quickLookViewText    = "text"
@@ -39,7 +31,6 @@ const (
 	quickLookColMax      = 40
 )
 
-// quickLookTable is a CSV file in rows. numeric says a column is right aligned.
 type quickLookTable struct {
 	rows    [][]string
 	widths  []int
@@ -47,7 +38,6 @@ type quickLookTable struct {
 	cut     bool
 }
 
-// quickLookArchiveRow is one row of an archive's listing, indented as a tree.
 type quickLookArchiveRow struct {
 	depth int
 	name  string
@@ -55,7 +45,6 @@ type quickLookArchiveRow struct {
 	dir   bool
 }
 
-// quickLookDetails is the answer to the first v.
 type quickLookDetails struct {
 	target                   quickLookTarget
 	path, mode, owner, group string
@@ -65,10 +54,8 @@ type quickLookDetails struct {
 	failed                   string
 }
 
-// quickLookDetailsMsg carries the details back to the loop.
 type quickLookDetailsMsg struct{ details *quickLookDetails }
 
-// quickLookIsCSV reports whether the name is a table, and which comma it has.
 func quickLookIsCSV(name string) (rune, bool) {
 	switch strings.ToLower(filepath.Ext(name)) {
 	case ".csv":
@@ -79,7 +66,6 @@ func quickLookIsCSV(name string) (rune, bool) {
 	return 0, false
 }
 
-// quickLookParseTable reads a CSV text, or nil for a text that is not one.
 func quickLookParseTable(text string, comma rune, truncated, ascii bool) *quickLookTable {
 	r := csv.NewReader(strings.NewReader(text))
 	r.Comma, r.LazyQuotes, r.FieldsPerRecord = comma, true, -1
@@ -115,7 +101,6 @@ func quickLookParseTable(text string, comma rune, truncated, ascii bool) *quickL
 	return t
 }
 
-// quickLookHexLines is bytes as a hex dump: 16 to a row, then the same as text.
 func quickLookHexLines(b []byte) []string {
 	lines := make([]string, 0, len(b)/16+1)
 	for off := 0; off < len(b); off += 16 {
@@ -146,11 +131,8 @@ func quickLookHexLines(b []byte) []string {
 	return lines
 }
 
-// quickLookArchiveDepth is the most folder levels of a path drawn as rows; the rest of a deeper path is one row.
 const quickLookArchiveDepth = 64
 
-// quickLookArchiveRows turns a listing into a tree. An archive need not name its
-// folders, so a folder is added the first time something is in it.
 func quickLookArchiveRows(entries []session.PreviewArchiveEntry, ascii bool) (rows []quickLookArchiveRow, unpacked int64) {
 	seen := map[string]bool{}
 	slices.SortStableFunc(entries, func(a, b session.PreviewArchiveEntry) int { return strings.Compare(a.Name, b.Name) })
@@ -179,7 +161,6 @@ func quickLookArchiveRows(entries []session.PreviewArchiveEntry, ascii bool) (ro
 	return rows, unpacked
 }
 
-// quickLookViews is the views of the file now, in the order v steps through them.
 func (m *OS) quickLookViews() []string {
 	ql := &m.quickLook
 	views := []string{quickLookViewMain}
@@ -198,7 +179,6 @@ func (m *OS) quickLookViews() []string {
 	return views
 }
 
-// quickLookViewName is a view's name on the row of tabs.
 func quickLookViewName(r *quickLookResult, v string) string {
 	switch v {
 	case quickLookViewText:
@@ -235,9 +215,6 @@ func (m *OS) QuickLookNextView() tea.Cmd {
 		return nil
 	}
 	ql.prompt, ql.status = quickLookNoPrompt, ""
-	// The details are read once for each file. A read that failed is kept
-	// too, so the next press goes on to the next view and does not start
-	// the same read again.
 	d := ql.details
 	read := d == nil || d.target != ql.target
 	if read && (r.table == nil || ql.view == quickLookViewText) {
@@ -247,7 +224,6 @@ func (m *OS) QuickLookNextView() tea.Cmd {
 		return m.quickLookReadDetails()
 	}
 	if !read && d.failed != "" && r.table == nil {
-		// The file has no other view: say again why.
 		ql.status, ql.statusLine = d.failed, true
 		return nil
 	}
@@ -258,7 +234,6 @@ func (m *OS) QuickLookNextView() tea.Cmd {
 	return nil
 }
 
-// quickLookReadDetails reads the details off the loop.
 func (m *OS) quickLookReadDetails() tea.Cmd {
 	ql := &m.quickLook
 	ql.detailsOut = true
@@ -277,7 +252,6 @@ func (m *OS) quickLookReadDetails() tea.Cmd {
 	}
 }
 
-// quickLookDecodeDetails reads the answer to the first v.
 func quickLookDecodeDetails(t quickLookTarget, raw json.RawMessage, err error, ascii bool) *quickLookDetails {
 	d := &quickLookDetails{target: t}
 	var r struct {
@@ -312,7 +286,6 @@ func quickLookDecodeDetails(t quickLookTarget, raw json.RawMessage, err error, a
 	return d
 }
 
-// applyQuickLookDetails files the details away and goes to the first new view.
 func (m *OS) applyQuickLookDetails(msg quickLookDetailsMsg) {
 	ql := &m.quickLook
 	ql.detailsOut = false
@@ -331,7 +304,6 @@ func (m *OS) applyQuickLookDetails(msg quickLookDetailsMsg) {
 	ql.viewScroll = 0
 }
 
-// quickLookOffMain reports whether the panel shows a view other than the file's own.
 func (ql *quickLookState) quickLookOffMain() bool {
 	return ql.view != "" && ql.view != quickLookViewMain
 }
@@ -355,7 +327,6 @@ func (m *OS) QuickLookColumn(forward bool) {
 	}
 }
 
-// quickLookDrawTabs draws the row of views, and returns the first row below it.
 func (m *OS) quickLookDrawTabs(c *ckCanvas, pal overlay.Palette, r *quickLookResult, y, w int) {
 	ql := &m.quickLook
 	x := 1
@@ -370,7 +341,6 @@ func (m *OS) quickLookDrawTabs(c *ckCanvas, pal overlay.Palette, r *quickLookRes
 	}
 }
 
-// quickLookDrawView draws a view that is not the file's own.
 func (m *OS) quickLookDrawView(c *ckCanvas, pal overlay.Palette, r *quickLookResult, top, rows, w int) {
 	ql := &m.quickLook
 	d := ql.details
@@ -405,7 +375,6 @@ func (m *OS) quickLookDrawView(c *ckCanvas, pal overlay.Palette, r *quickLookRes
 	}
 }
 
-// quickLookDrawDetails draws the facts of a file.
 func quickLookDrawDetails(c *ckCanvas, pal overlay.Palette, d *quickLookDetails, top, w int) {
 	rows := [][2]string{
 		{"Path", d.path},
@@ -421,8 +390,6 @@ func quickLookDrawDetails(c *ckCanvas, pal overlay.Palette, d *quickLookDetails,
 	}
 }
 
-// quickLookDrawTable draws a table: the header, a rule, and the rows from the
-// position, with the first column the keys chose on the left.
 func quickLookDrawTable(c *ckCanvas, pal overlay.Palette, ql *quickLookState, t *quickLookTable, top, rows, w int) {
 	cell := func(row []string, y int, attrs uint8) {
 		x := 1
@@ -454,7 +421,6 @@ func quickLookDrawTable(c *ckCanvas, pal overlay.Palette, ql *quickLookState, t 
 	}
 }
 
-// quickLookColumnsShown says which columns fit, for the top of the panel.
 func quickLookColumnsShown(t *quickLookTable, first, w int) string {
 	x, last := 1, first
 	for i := first; i < len(t.widths) && x+t.widths[i] < w-1; i++ {
@@ -467,7 +433,6 @@ func quickLookColumnsShown(t *quickLookTable, first, w int) string {
 	return "Columns " + strconv.Itoa(first+1) + " to " + strconv.Itoa(last+1)
 }
 
-// quickLookDrawArchive draws an archive's listing.
 func quickLookDrawArchive(c *ckCanvas, pal overlay.Palette, ql *quickLookState, r *quickLookResult, top, rows, w int) {
 	ql.scroll = max(min(ql.scroll, len(r.archive)-rows), 0)
 	for i := 0; i < rows && ql.scroll+i < len(r.archive); i++ {
@@ -484,7 +449,6 @@ func quickLookDrawArchive(c *ckCanvas, pal overlay.Palette, ql *quickLookState, 
 	}
 }
 
-// quickLookDrawHex draws a hex dump, with the offset in the quiet ink.
 func quickLookDrawHex(c *ckCanvas, pal overlay.Palette, ql *quickLookState, r *quickLookResult, top, rows, w int) {
 	ql.scroll = max(min(ql.scroll, len(r.lines)-rows), 0)
 	for i := 0; i < rows && ql.scroll+i < len(r.lines); i++ {
@@ -493,7 +457,6 @@ func quickLookDrawHex(c *ckCanvas, pal overlay.Palette, ql *quickLookState, r *q
 	}
 }
 
-// quickLookViewMeta is the words at the top of a table, an archive or a hex dump.
 func quickLookViewMeta(r *quickLookResult) []string {
 	switch r.kind {
 	case "table":
@@ -519,7 +482,6 @@ func quickLookViewMeta(r *quickLookResult) []string {
 	return nil
 }
 
-// quickLookDecodeHead turns the start of a binary file into a hex dump.
 func quickLookDecodeHead(res *quickLookResult, head string) {
 	if b, err := base64.StdEncoding.DecodeString(head); err == nil && len(b) > 0 {
 		res.kind, res.lines = "hex", quickLookHexLines(b)

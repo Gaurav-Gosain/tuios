@@ -20,13 +20,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
-// The board: b groups the fleet column by task stage instead of by agent
-// state. A card held by an agent pane is drawn with that agent's mark and
-// line two, so who holds what reads in one glance. The cards come through
-// the Inbox watcher (inboxListCards and the task events), and a card's prompt
-// and history are read with get-task for the Card tab, after the frame.
-
-// ckTaskDetail is the Card tab's detail of one card.
 type ckTaskDetail struct {
 	key         string
 	prompt      string
@@ -34,12 +27,10 @@ type ckTaskDetail struct {
 	attachments []session.TaskAttachment
 	err         string
 	loading     bool
-	// md is the prompt laid out as preview lines, for mdKey.
-	md    []ckLine
-	mdKey ckMDKey
+	md          []ckLine
+	mdKey       ckMDKey
 }
 
-// ckTaskMsg is a get-task reply.
 type ckTaskMsg struct {
 	key         string
 	prompt      string
@@ -48,26 +39,22 @@ type ckTaskMsg struct {
 	err         error
 }
 
-// ckTakeMsg is a claim-task reply.
 type ckTakeMsg struct {
 	row session.TaskRow
 	err error
 }
 
-// sortCards orders cards by session, then by number.
 func sortCards(cards []session.TaskRow) {
 	num := func(id string) uint64 {
 		n, _ := strconv.ParseUint(strings.TrimPrefix(id, "t"), 10, 64)
 		return n
 	}
-	// sort.Slice, not slices.SortFunc: see docs/perf.md, "Where the bytes go".
 	sort.Slice(cards, func(i, j int) bool {
 		a, b := cards[i], cards[j]
 		return cmp.Or(strings.Compare(a.Session, b.Session), cmp.Compare(num(a.ID), num(b.ID))) < 0
 	})
 }
 
-// applyBoardSnapshot takes the watcher's listing of the cards.
 func (m *OS) applyBoardSnapshot(msg InboxSnapshotMsg) {
 	ck := &m.Inbox.ck
 	ck.cards, ck.noBoard, ck.boardErr = append(slices.Clip(msg.Cards), ck.farCards...), msg.NoBoard, msg.BoardErr
@@ -77,13 +64,8 @@ func (m *OS) applyBoardSnapshot(msg InboxSnapshotMsg) {
 	ck.cardsGen++
 }
 
-// ckFarCardsMsg is the project cards of the linked machines.
 type ckFarCardsMsg struct{ rows []session.TaskRow }
 
-// cockpitFarCardsCmd asks this daemon for every linked machine's project
-// cards. It runs when the board opens, never on a frame: each machine may
-// take the link's budget to answer. A daemon from before projects, or with
-// no links, answers none.
 func (m *OS) cockpitFarCardsCmd() tea.Cmd {
 	if m.AttachedHost != "" || (m.DaemonClient == nil && m.Inbox.call == nil) {
 		return nil
@@ -110,7 +92,6 @@ func (m *OS) cockpitFarCardsCmd() tea.Cmd {
 	}
 }
 
-// applyFarCards puts the linked machines' cards after this machine's.
 func (m *OS) applyFarCards(msg ckFarCardsMsg) {
 	ck := &m.Inbox.ck
 	local := ck.cards[:0:0]
@@ -125,8 +106,6 @@ func (m *OS) applyFarCards(msg ckFarCardsMsg) {
 	m.cockpitTouchRows()
 }
 
-// ckFarCard says, for a card another machine owns, how to act on it, and
-// reports whether it is one. The view acts on this machine's cards only.
 func (m *OS) ckFarCard(c session.TaskRow) bool {
 	if c.Host == "" {
 		return false
@@ -135,11 +114,8 @@ func (m *OS) ckFarCard(c session.TaskRow) bool {
 	return true
 }
 
-// applyTaskEvent folds one task event into the cards.
 func (m *OS) applyTaskEvent(action string, row session.TaskRow) {
 	ck := &m.Inbox.ck
-	// The events are this machine's: a card of another machine never
-	// matches.
 	i := slices.IndexFunc(ck.cards, func(c session.TaskRow) bool { return c.Host == "" && c.Session == row.Session && c.ID == row.ID })
 	switch {
 	case action == session.TaskActionRemoved:
@@ -155,21 +131,16 @@ func (m *OS) applyTaskEvent(action string, row session.TaskRow) {
 	ck.cardsGen++
 }
 
-// stageFolded reports whether stage g shows its head only. Done starts
-// folded.
 func (ck *cockpitState) stageFolded(g int) bool {
 	s := session.TaskStages[g]
 	return ck.boardFolded[s] != (s == session.TaskStageDone)
 }
 
-// ckStageTitle is a stage as its head says it.
 func ckStageTitle(g int) string {
 	s := session.TaskStages[g]
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-// ckStagesShown is [tasks] stages as the rows key holds it, joined once per
-// config load: a frame compares a pointer, not the list.
 func (m *OS) ckStagesShown() string {
 	ck := &m.Inbox.ck
 	if ck.stagesCfg != m.UserConfig {
@@ -181,8 +152,6 @@ func (m *OS) ckStagesShown() string {
 	return ck.stages
 }
 
-// ckHeldCards indexes the cards by holder, session and window id, built once
-// per change of the cards.
 func (m *OS) ckHeldCards() map[string][]session.TaskRow {
 	ck := &m.Inbox.ck
 	if ck.held == nil || ck.heldGen != ck.cardsGen {
@@ -197,14 +166,10 @@ func (m *OS) ckHeldCards() map[string][]session.TaskRow {
 	return ck.held
 }
 
-// ckStageShows reports whether [tasks] stages shows stage.
 func (m *OS) ckStageShows(stage string) bool {
 	return m.UserConfig == nil || m.UserConfig.Tasks.Shows(stage)
 }
 
-// boardPick is a card the board shows, with what its column sorts by: the
-// rank, the stage time, then the card's place in the cards. The place breaks
-// every tie, so the order is total and an unstable sort in place keeps it.
 type boardPick struct {
 	g, rank int
 	at      int64
@@ -212,7 +177,6 @@ type boardPick struct {
 	agent   int
 }
 
-// ckCardKeys is each card's row key, built once per change of the cards.
 func (m *OS) ckCardKeys() []string {
 	ck := &m.Inbox.ck
 	if ck.cardKeys == nil || ck.cardKeysGen != ck.cardsGen || len(ck.cardKeys) != len(ck.cards) {
@@ -228,13 +192,6 @@ func (m *OS) ckCardKeys() []string {
 	return ck.cardKeys
 }
 
-// boardStageItems groups the cards by stage, each stage in its order. A card
-// shows when its holder is in list, which the selector and the search have
-// narrowed, or with no selector when the search matches its own words.
-//
-// The order is blocked first, then a holder that needs the person, then the
-// oldest. A row is large (it holds an item and a subagent by value), so the
-// sort runs on small picks, and each row is built once, in its place.
 func (m *OS) boardStageItems(list []sidebarAgentEntry) [][]ckRow {
 	ck := &m.Inbox.ck
 	st := &m.Inbox
@@ -301,8 +258,6 @@ func (m *OS) boardStageItems(list []sidebarAgentEntry) [][]ckRow {
 	return stages
 }
 
-// buildBoardRows lays the stages out as one list: a head per stage that has a
-// card, then its cards.
 func (m *OS) buildBoardRows(list []sidebarAgentEntry) []ckRow {
 	ck := &m.Inbox.ck
 	var rows []ckRow
@@ -356,7 +311,6 @@ func (m *OS) CockpitToggleBoard() tea.Cmd {
 	return nil
 }
 
-// cockpitCard is the card of the row under the cursor.
 func (m *OS) cockpitCard() (ckRow, session.TaskRow, bool) {
 	r, ok := m.cockpitSelected()
 	if !ok || r.kind != ckRowCard || r.card >= len(m.Inbox.ck.cards) {
@@ -365,8 +319,6 @@ func (m *OS) cockpitCard() (ckRow, session.TaskRow, bool) {
 	return r, m.Inbox.ck.cards[r.card], true
 }
 
-// ckTakeWindow is the pane t takes a card for: the focused pane behind the
-// agents view, when it is in the card's session on this machine.
 func (m *OS) ckTakeWindow(c session.TaskRow) string {
 	if m.AttachedHost != "" || !m.IsDaemonSession || c.Host != "" || c.Session != m.SessionName {
 		return ""
@@ -407,7 +359,6 @@ func (m *OS) CockpitTake() tea.Cmd {
 	}
 }
 
-// applyTake takes a claim-task reply. The event stream brings the same row.
 func (m *OS) applyTake(msg ckTakeMsg) {
 	if msg.err != nil {
 		m.ShowNotification("The card was not taken: "+printableTitle(msg.err.Error()), "error", m.Settings.NotificationDuration)
@@ -441,7 +392,6 @@ func (m *OS) CockpitNewAgentFor(c session.TaskRow) tea.Cmd {
 	s.task.SetText(text)
 	m.spawnFollowTask(s)
 	s.card = &spawnCard{session: c.Session, id: c.ID}
-	// The card says where its agent starts: any, a machine, or this one.
 	for i, mc := range s.machines {
 		switch {
 		case c.Machine == session.TaskMachineAny && mc.any,
@@ -452,12 +402,8 @@ func (m *OS) CockpitNewAgentFor(c session.TaskRow) tea.Cmd {
 	return cmd
 }
 
-// spawnCard is the card a sheet opened on, which Start claims for the new
-// pane.
 type spawnCard struct{ session, id string }
 
-// spawnClaim claims the sheet's card for the pane start-agent opened. It runs
-// in the start's command, after the start answered.
 func spawnClaim(call inboxVerbCall, nonce string, card *spawnCard, sess, win string) string {
 	if card == nil || win == "" || sess != card.session {
 		return ""
@@ -469,8 +415,6 @@ func spawnClaim(call inboxVerbCall, nonce string, card *spawnCard, sess, win str
 	return " It holds " + card.id + "."
 }
 
-// ckTaskKey is what a card's detail was read for: a change to any of these
-// adds to its history.
 func ckTaskKey(c session.TaskRow) string {
 	k := c.Host + ":" + c.Session + "/" + c.ID + "/" + strconv.FormatInt(c.StageAt, 10)
 	if c.Holder != nil {
@@ -485,8 +429,6 @@ func ckTaskKey(c session.TaskRow) string {
 	return k
 }
 
-// cockpitCardFetch reads the selected card's prompt and history when the
-// Card tab shows it and none are read for its current state.
 func (m *OS) cockpitCardFetch() tea.Cmd {
 	ck := &m.Inbox.ck
 	ck.cardWant = false
@@ -499,7 +441,6 @@ func (m *OS) cockpitCardFetch() tea.Cmd {
 		return nil
 	}
 	if c.Host != "" {
-		// The prompt and history are on the owner.
 		ck.card = &ckTaskDetail{key: key, err: "This card is on " + printableTitle(c.Host) + ". tuios task get " + c.ID + " -s " + printableTitle(c.Host) + ":" + printableTitle(c.Session) + " shows it."}
 		return nil
 	}
@@ -521,15 +462,12 @@ func (m *OS) cockpitCardFetch() tea.Cmd {
 	}
 }
 
-// cockpitNoteCard is called while a frame draws the Card tab: a card changed
-// by an event is read after the frame (cardWant), never in it.
 func (m *OS) cockpitNoteCard(c session.TaskRow) {
 	if d := m.Inbox.ck.card; d == nil || d.key != ckTaskKey(c) {
 		m.Inbox.ck.cardWant = true
 	}
 }
 
-// applyCard takes a get-task reply.
 func (m *OS) applyCard(msg ckTaskMsg) {
 	d := m.Inbox.ck.card
 	if d == nil || d.key != msg.key {
@@ -549,7 +487,6 @@ func (m *OS) applyCard(msg ckTaskMsg) {
 	m.cockpitTouch()
 }
 
-// ckCardHints are the footer's keys on a card row.
 func (m *OS) ckCardHints(c session.TaskRow) []overlay.Hint {
 	var hints []overlay.Hint
 	if c.Host != "" {
@@ -564,8 +501,6 @@ func (m *OS) ckCardHints(c session.TaskRow) []overlay.Hint {
 	return append(hints, m.ckLifeHints(c)...)
 }
 
-// cockpitCardGo is enter on a card: the holder's pane, or the Card tab on a
-// narrow screen for a free card.
 func (m *OS) cockpitCardGo(r ckRow, c session.TaskRow) tea.Cmd {
 	switch {
 	case c.Host != "" && !m.kanbanOn():
@@ -580,8 +515,6 @@ func (m *OS) cockpitCardGo(r ckRow, c session.TaskRow) tea.Cmd {
 		m.inboxJump(session.AttentionItem{Session: c.Session, Window: c.Holder.Window})
 		return nil
 	case m.kanbanOn():
-		// The columns have no focus area: a free card starts an agent on
-		// it, as n does on the list.
 		if c.Stage == session.TaskStageDone || c.Blocked != nil {
 			return nil
 		}
@@ -590,8 +523,6 @@ func (m *OS) cockpitCardGo(r ckRow, c session.TaskRow) tea.Cmd {
 	return m.CockpitOpenFocus(true)
 }
 
-// drawCardRow draws a card's row: its mark, title and age, and on the second
-// line its holder, or Blocked and why, or free.
 func (m *OS) drawCardRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x, y, w, top int) {
 	ck := &m.Inbox.ck
 	pal := l.pal
@@ -645,7 +576,6 @@ func (m *OS) drawCardRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x, 
 	rx := c.textR(right, y, ckSeg{t: units.Waited(card.StageAt, time.Now()), fg: ink(pal.FgMute)})
 	title := printableTitle(card.Title)
 	if r.lines == 1 {
-		// One line: the title to a fixed width, then the holder.
 		tw := max(min(rx-1-nx-10, 30), 8)
 		c.text(nx, y, nx+tw, ckSeg{t: ckTrunc(title, tw-1), fg: ink(pal.Fg), attrs: ckBold})
 		who, whoInk := "free", pal.FgMute
@@ -684,10 +614,8 @@ func (m *OS) drawCardRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x, 
 		}
 		switch {
 		case card.Host != "":
-			// A card another machine owns says which.
 			harness = "on " + ckTrunc(printableTitle(card.Host), 6)
 		case card.Session != m.SessionName:
-			// A card of another session says where its holder is.
 			harness = ckTrunc(printableTitle(card.Session), 9)
 		}
 		lx = c.text(lx, y+1, rx2, ckSeg{t: ckPad(harness, 9), fg: ink(pal.FgDim)})
@@ -719,8 +647,6 @@ func (m *OS) drawCardRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x, 
 	}
 }
 
-// drawCardFocus draws the Card tab: the card's title, stage, holder and
-// block, its prompt, and its history.
 func (m *OS) drawCardFocus(c *ckCanvas, l ckLook, r ckRow, card session.TaskRow, x, y, w, y1, top int, now time.Time) {
 	st := &m.Inbox
 	pal := l.pal
@@ -751,11 +677,6 @@ func (m *OS) drawCardFocus(c *ckCanvas, l ckLook, r ckRow, card session.TaskRow,
 	m.cockpitNoteCard(card)
 }
 
-// ckHistoryBy is who made a history entry, as the person reads it. The
-// daemon keeps the stable form: a pane by its window id, the person as
-// "human", a caller outside every pane as "shell", a linked machine as
-// "link:NAME". A pane here is named as the rail names it; a pane this client
-// does not have is its short id.
 func (m *OS) ckHistoryBy(by string) string {
 	switch {
 	case by == session.AgentInboxHuman:
@@ -776,7 +697,6 @@ func (m *OS) ckHistoryBy(by string) string {
 	return printableTitle(by)
 }
 
-// ckFreeWords says how a free card is taken.
 func (m *OS) ckFreeWords(c session.TaskRow) string {
 	if m.ckTakeWindow(c) != "" {
 		return m.inboxKeyOr(config.ActionInboxTake, "t") + " takes it for the focused pane, " +
@@ -785,7 +705,6 @@ func (m *OS) ckFreeWords(c session.TaskRow) string {
 	return "A pane takes it with tuios task claim " + c.ID + "."
 }
 
-// ckBoardEmptyLines is the board's empty state.
 func (m *OS) ckBoardEmptyLines() []string {
 	st := &m.Inbox
 	back := m.inboxKeyOr(config.ActionInboxBoard, "b") + " shows the agents again."
@@ -802,8 +721,6 @@ func (m *OS) ckBoardEmptyLines() []string {
 	return []string{"No task cards yet.", "Add one with tuios task add. " + back}
 }
 
-// ckAgentCounts are the header's counts while the board is up: the agents by
-// the group their state puts them in, as the fleet would count them.
 func (m *OS) ckAgentCounts() [ckGroups]int {
 	var n [ckGroups]int
 	for _, e := range m.Inbox.ck.agents {

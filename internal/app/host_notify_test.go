@@ -56,7 +56,6 @@ func TestNotifyPayloadDoesNotStartWithACommandNumber(t *testing.T) {
 	if !strings.HasPrefix(got, "\x1b]9; ") {
 		t.Fatalf("sequence = %q, want a space before the digits", got)
 	}
-	// A number that is not a command prefix is left alone.
 	if got := string(hostNotifySequence("3 panes finished", outerNone)); got != "\x1b]9;3 panes finished\x07" {
 		t.Fatalf("a bare leading digit was padded: %q", got)
 	}

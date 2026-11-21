@@ -7,12 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// sidebarRenderCache holds a fully styled rail so a frame composed for an
-// unrelated reason can reuse it. It is keyed by sidebarSignature, a cheap fold
-// of every input the rows depend on; when the signature is unchanged the rows
-// cannot have changed, so the lipgloss styling and the BuildSessionTree walk
-// (which locks the daemon client) are both skipped. Theme and config changes
-// go through MarkAllDirty, which drops the cache outright.
 type sidebarRenderCache struct {
 	valid      bool
 	sig        uint64
@@ -28,17 +22,8 @@ type sidebarRenderCache struct {
 	shimmer    []shimmerSpan
 }
 
-// invalidate drops the cached rail, forcing the next frame to rebuild. Called
-// from MarkAllDirty so a theme swap, config reload, or full repaint restyles.
 func (c *sidebarRenderCache) invalidate() { c.valid = false }
 
-// sidebarPanel is the rail as the one string the layer takes. The join is
-// cached alongside the rows because renderSidebar runs on every composed frame,
-// and joining the rows there rebuilt the whole rail on frames the cache had just
-// declared unchanged, which is the one thing a render cache exists to stop.
-//
-// An animating rail is not cached (see sidebarPanelLines), so it joins every
-// frame, which is correct: its rows are different every frame.
 func (m *OS) sidebarPanel() (string, int) {
 	lines, w := m.sidebarPanelLines()
 	if lines == nil {
@@ -54,12 +39,8 @@ func (m *OS) sidebarPanel() (string, int) {
 	return panel, w
 }
 
-// railTimeNow is the rail's clock. A test steps it to put a second's turn at
-// an exact point of a frame.
 var railTimeNow = time.Now
 
-// railClock is the time the rail being keyed and built is drawn for: the
-// clock sidebarPanelLines read for this frame, or now outside a frame.
 func (m *OS) railClock() time.Time {
 	if m.railNow.IsZero() {
 		return railTimeNow()
@@ -67,18 +48,10 @@ func (m *OS) railClock() time.Time {
 	return m.railNow
 }
 
-// sidebarPanelLines builds the sidebar's rows, reusing the cached rail when
-// nothing that affects it has changed since the last frame. A scrolling marquee
-// or an in-progress drag animates every frame, so neither is ever served cached.
 func (m *OS) sidebarPanelLines() ([]string, int) {
-	// One clock for the key, the build and the rail check, so a label that
-	// moves with the clock ("seen 3s ago") reads the same second in all three.
-	// Three reads of the clock let a second turn between the key and the draw.
 	m.railNow = railTimeNow()
 	defer func() { m.railNow = time.Time{} }()
 	animating := m.SidebarMarqueeKey != "" || m.SidebarDrag.Dragging
-	// Read before the key, so a listing that lands between the two reads is
-	// seen as one that moved during the frame. See railCacheMiss.
 	var ext railGens
 	if railCheckPath != "" {
 		ext = m.railExternalGens()
@@ -86,8 +59,6 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 	sig := m.sidebarSignature()
 	if !animating && m.sidebarCache.valid && m.sidebarCache.sig == sig {
 		m.checkRailCache(ext)
-		// Restore the per-frame side effects the mouse handlers read; the model
-		// truncates and refills these buffers on a real rebuild, so hand back copies.
 		m.SidebarHits = append(m.SidebarHits[:0], m.sidebarCache.hits...)
 		m.SidebarSessionIDs = append(m.SidebarSessionIDs[:0], m.sidebarCache.sessionIDs...)
 		m.SidebarHostIDs = append(m.SidebarHostIDs[:0], m.sidebarCache.hostIDs...)
@@ -117,12 +88,6 @@ func (m *OS) sidebarPanelLines() ([]string, int) {
 	return lines, w
 }
 
-// sidebarSignature folds every input the rendered rows depend on into one
-// value, allocation-free (an inlined FNV-1a). Geometry and view state come from
-// the model; the live windows contribute id, title, and agent state in order;
-// foreign-session data is summarised by the client's cache generation so the
-// daemon mutex is not taken per frame. A changed signature forces a rebuild; an
-// unchanged one guarantees identical rows.
 func (m *OS) sidebarSignature() uint64 {
 	const prime = 1099511628211
 	h := uint64(1469598103934665603)
@@ -149,84 +114,42 @@ func (m *OS) sidebarSignature() uint64 {
 		}
 	}
 
-	// The colours every row is drawn in. The rail's palette is built on the
-	// host terminal's own ground when no theme is set, and the host's colours
-	// arrive on their own reply, after the first frames; a theme, or a live
-	// one's new colours, changes it too. Both count their changes.
 	mixU(m.host.gen)
 	mixU(theme.Generation())
 
-	// Geometry and layout knobs.
 	mixI(m.GetSidebarWidth())
 	mixI(m.ViewUsableHeight())
 	mixI(m.viewReserve().Top)
 	mixI(m.GetRenderWidth())
 	mixS(m.Settings.SidebarPosition)
-	// The layout: which sections are stacked, in what order, with what share,
-	// and where the spacers are. It carries what show_windows used to say, and
-	// it was missing from this key for as long as it has existed: a rail redrawn
-	// after the layout moved and nothing else did was served the old frame.
 	mixS(m.Settings.SidebarSections)
-	// The dragged split rewrites the pinned section's share, and the drag
-	// itself brightens the divider.
 	mixI(m.SidebarSectionSplit)
-	// The agent row's tokens and their value rules decide what every agent
-	// row prints and in what ink.
 	mixS(m.Settings.SidebarAgentRow.Fingerprint)
 	mixB(m.sidebarSplit.Active)
 	mixB(m.Settings.SidebarShowGlyphs)
 	mixB(m.Settings.SidebarShowCounts)
-	// The mailbox mirror: an unread count beside an agent row, and the count
-	// on the agents header, come from it.
 	mixU(m.AgentMail.Gen)
-	// The Inbox mirror: the agents header counts it while it is live.
 	mixU(m.Inbox.Gen)
 	mixB(m.Inbox.Live)
 
-	// The glyph set the rows are drawn from. ASCII mode swaps the collapse
-	// chevrons and the agent-state indicators for their fallbacks, and both it
-	// and the border style pick the character of the edge rule facing the panes,
-	// so a rail drawn before either moved is not the rail this frame draws.
 	mixB(m.Settings.UseASCIIOnly)
 	mixB(m.Settings.NoNerdFont)
 	mixS(m.Settings.BorderStyle)
 
-	// View state: scroll, focus, and hover all restyle rows. Each section holds
-	// its own offset, so all three are folded.
 	mixI(m.SidebarScroll[sidebarSectionSessions])
 	mixI(m.SidebarScroll[sidebarSectionTerminals])
 	mixI(m.SidebarScroll[sidebarSectionAgents])
-	// The agents offset is derived from the anchor on any frame whose sort has
-	// moved, so the anchor picks the rows that are drawn just as directly as the
-	// offset does, and a frame drawn under one anchor cannot be served from an
-	// entry keyed on another.
 	mixB(m.sidebarAgentAnchor.Valid)
 	mixI(m.sidebarAgentAnchor.Offset)
 	mixS(m.sidebarAgentAnchor.SessionID)
 	mixS(m.sidebarAgentAnchor.WindowID)
 	mixI(m.FocusedWindow)
-	// The reveal is not folded. It acts on the difference between this frame's
-	// focus and the last one's, and both halves of that are already here: the
-	// focused pane above, the attached session and the offsets it moves below.
-	// A cache hit is a frame whose focus did not change, which is exactly a
-	// frame the reveal would have left alone.
 	mixB(m.SidebarHoverActive)
 	mixI(m.SidebarHoverX)
 	mixI(m.SidebarHoverY)
 
-	// The peek swaps the whole terminals section and re-marks its header, so a
-	// peeked frame and a resting one can never share a cache entry.
 	mixS(m.SidebarPeek)
 
-	// The files section: whether it is on, what it is showing, and how far down
-	// it is scrolled are all drawn state, and the layout string decides which
-	// sections are stacked in what order, which is every line of the rail.
-	//
-	// Gen is what makes a refresh visible. The path can be the same directory
-	// before and after a reload, and a listing that changed underneath it would
-	// otherwise be served from the entry keyed on the old one. Loading is folded
-	// separately because it is a row the section draws and it flips without the
-	// path or the generation moving.
 	mixS(m.Settings.SidebarSections)
 	mixB(m.Settings.SidebarFileIcons)
 	mixB(m.Settings.SidebarFileIconColors)
@@ -238,25 +161,18 @@ func (m *OS) sidebarSignature() uint64 {
 	mixB(m.filesView.Loading)
 	mixI(m.SidebarScroll[sidebarSectionFiles])
 	mixU(m.filesView.Gen)
-	// The row a drag carries is drawn picked up.
 	mixS(m.fileDragHeldKey())
-	// The tree: its style, and every open, close and read of an open folder.
 	mixS(m.Settings.SidebarFilesStyle)
 	mixU(m.filesTree.gen)
 	if m.filesTreeOn() {
 		mixS(m.sidebarCurrentSessionID())
 	}
-	// The custom section: its rows change when its command's output does,
-	// which is the generation, and the section scrolls like the others.
 	if m.sidebarDrawing {
 		mixU(m.railCustomSecond.gen)
 	} else {
 		mixU(m.railCustom.gen)
 	}
 	mixI(m.SidebarScroll[sidebarSectionCustom])
-	// The pane section: its output, which is the generation, whether it has
-	// the keyboard (the dim and the cursor change), and the line it draws
-	// when there is no pane.
 	mixU(m.railPaneView.gen)
 	mixB(m.RailPaneFocused())
 	mixB(m.railPaneView.stopped)
@@ -268,31 +184,17 @@ func (m *OS) sidebarSignature() uint64 {
 		mixS(pane.Title)
 		mixI(pane.Height)
 	}
-	// The git section scrolls like the others once it is given fewer lines
-	// than its two rows.
 	mixI(m.SidebarScroll[sidebarSectionGit])
-	// A reading of the repository changes the section's rows. It arrives on
-	// its own message, with nothing else moving.
 	mixU(m.gitView.gen)
 
-	// The agents section's two controls decide which rows it holds and in what
-	// order, so both are drawn state and both are folded. The tokens themselves
-	// change ink with them, which is the other half of what the frame shows.
 	mixB(m.agentsOn())
 	mixS(m.sidebarAgentsFilter())
 	mixS(m.sidebarAgentsSort())
-	// The fold of rows at rest: whether it is open, its threshold, and the
-	// minute, since a row crosses the threshold with nothing else moving. The
-	// minute is folded only once an agent has been seen and while folding is
-	// on, so a rail with no agents is never rebuilt for it, and one with
-	// agents at most once a minute, on a frame that was being drawn anyway.
 	mixB(m.sidebarAgentsUnfolded)
 	mixI(int(m.Settings.SidebarAgentRestFold / time.Second))
 	if m.Settings.SidebarAgentRestFold > 0 && m.SidebarAgentsSeen {
 		mixI(int(sidebarFoldClock().Unix() / 60))
 	}
-	// The subagent options of the rail being drawn, which differ per edge,
-	// and the open or shut headings, which a toggle on either rail moves.
 	sv := m.Settings.SidebarSubagents
 	mixB(sv.Rows)
 	mixB(sv.Tree)
@@ -311,17 +213,8 @@ func (m *OS) sidebarSignature() uint64 {
 		hideNow = time.Now()
 	}
 
-	// Rail keyboard focus: the accent edge and the cursor-row highlight both
-	// depend on it, so a focus change or a cursor move must rebuild.
 	mixB(m.sidebarRailFocused())
 	mixI(m.SidebarCursor)
-	// The row the cursor is on, by identity, as the draw finds it. The index
-	// alone is not enough: the draw reads the row at that index from the nav
-	// rows the last build wrote, so a build that moved the rows moves the
-	// cursor to another row with the index unchanged.
-	// The draw marks that row only while the rail has the keyboard, so the
-	// target is folded only then: an unfocused rail would otherwise rebuild
-	// once after every build, as the nav rows it wrote move the target.
 	mixB(m.sidebarCursorWantSet)
 	if target, ok := m.sidebarCursorTarget(); ok && m.sidebarRailFocused() {
 		mixI(int(target.Kind))
@@ -331,22 +224,13 @@ func (m *OS) sidebarSignature() uint64 {
 		mixI(-1)
 	}
 
-	// The switch numbers are drawn state, on while show_numbers is set.
 	mixB(m.Settings.SidebarShowNumbers)
-	// The row style marks the current row's gutter or its name.
 	mixS(m.Settings.RailRowStyle)
 	mixS(m.Settings.RailHeaderStyle)
 	mixS(m.Settings.RailHeaderCase)
 	mixB(m.Settings.RailRoomy)
 
-	// Which terminal rows carry a workspace tag turns on which workspace is
-	// current; the per-window workspaces themselves are folded in below. The
-	// names print in the tag, so renaming a workspace has to restyle the rows on
-	// it. Order-independent, so map iteration order does not matter.
 	mixI(m.CurrentWorkspace)
-	// The order arranges the rail's terminals section and the dock's pills both,
-	// and a draft one is live for the length of a drag, so it is drawn state and
-	// belongs in here.
 	for _, ws := range m.pendingWorkspaceOrder {
 		mixI(ws)
 	}
@@ -367,10 +251,6 @@ func (m *OS) sidebarSignature() uint64 {
 	}
 	mixU(wsFold)
 
-	// In the tiled scrolling layout the terminals section lists a workspace's
-	// panes in strip order rather than creation order. Both the layout switch
-	// and each workspace's column sequence decide which rows are drawn where.
-	// Order-independent across workspaces, order-dependent along each strip.
 	mixB(m.UseScrollingLayout && m.AutoTiling)
 	var stripFold uint64
 	if m.UseScrollingLayout && m.AutoTiling {
@@ -395,10 +275,6 @@ func (m *OS) sidebarSignature() uint64 {
 	}
 	mixU(stripFold)
 
-	// Session identity and the user's drag-defined order, and whose order
-	// the rail draws: the daemon's, or this client's while a move of its own
-	// is on its way (see session_order.go). A failed move flips the second
-	// with nothing else changing.
 	mixS(m.SessionName)
 	for _, o := range m.SidebarOrder {
 		mixS(o)
@@ -407,11 +283,6 @@ func (m *OS) sidebarSignature() uint64 {
 	mixB(m.sessionOrderPending(attached))
 	mixB(m.sessionOrderFromDaemon(attached))
 
-	// The worktree groups. Which repositories are folded decides which rows the
-	// sessions section draws at all, and the attached session's own record is
-	// the one the client's cache generation below cannot speak for: it arrives
-	// on the session state instead. Order-independent over the folded set, so
-	// map iteration order does not matter.
 	var repoFold uint64
 	for repo, collapsed := range m.SidebarCollapsedRepos {
 		if !collapsed {
@@ -426,9 +297,6 @@ func (m *OS) sidebarSignature() uint64 {
 	}
 	mixU(repoFold)
 
-	// The machine groups: which machine the rows come from, the user's order
-	// over the others, their session orders, and which are folded. The
-	// snapshot's own generation is folded below.
 	mixS(m.AttachedHost)
 	for _, h := range m.SidebarHostOrder {
 		mixS(h)
@@ -471,26 +339,14 @@ func (m *OS) sidebarSignature() uint64 {
 	} else {
 		mixI(-1)
 	}
-	// The attached session's space decides which heading its row is drawn
-	// under, and like its worktree record it arrives on the session state, so
-	// the client's cache generation below does not speak for it.
 	mixS(m.SessionSpace)
-	// The attached session's note rides the state push the same way.
 	mixS(m.SessionNote)
 
-	// Foreign-session data, folded by generation instead of by locking the client.
 	if m.DaemonClient != nil {
 		mixU(m.DaemonClient.CacheGen())
 	}
 
-	// The federated host groups, folded by their snapshot generation for the
-	// same reason: the rows come from a stored snapshot, and a new snapshot is
-	// the only thing that can change them.
 	mixU(m.federationGen)
-	// A machine that is down says when it was last heard from, "seen 28s
-	// ago", and that text moves with the clock while the snapshot stays the
-	// same. The label is folded as the header draws it, so the key moves
-	// exactly when the words do.
 	if len(m.FederationHosts) > 0 {
 		now := m.railClock()
 		for _, h := range m.FederationHosts {
@@ -498,15 +354,6 @@ func (m *OS) sidebarSignature() uint64 {
 		}
 	}
 
-	// A rename in flight is not folded in: the buffer lives in its own dialog
-	// and the rail keeps drawing the old name, so typing no longer rebuilds the
-	// whole rail once per keystroke.
-
-	// An open accent picker previews the colour under its cursor on the row it
-	// targets, so the rail rebuilds exactly on picker navigation, which is
-	// already a frame, and never otherwise. No tick. Only what the preview
-	// actually draws is folded, so a closed picker's leftover cursor cannot hold
-	// the rail on a signature it no longer renders.
 	mixB(m.ShowAccentPicker)
 	if m.ShowAccentPicker {
 		mixI(int(m.AccentPickerTarget))
@@ -519,45 +366,24 @@ func (m *OS) sidebarSignature() uint64 {
 		}
 	}
 
-	// Session colours mark the sessions and agents sections. They are derived
-	// from the session names, which are folded above and, for foreign sessions,
-	// covered by the cache generation; the attached session's explicit accent is
-	// the one input nothing else carries, and it is folded only while the
-	// colours are actually drawn.
 	mixB(m.Settings.SessionColors)
 	if m.Settings.SessionColors {
 		mixS(m.SessionAccent)
 	}
 
-	// The attached session's row is labelled by its agent's title as the pane
-	// reports it now, not by the rail's debounced copy below, so the label is
-	// folded on its own.
 	mixS(m.sessionTitle(m.SessionName))
-	// Live windows in row order: id, label, agent state, harness, workspace,
-	// accent.
 	for _, w := range m.Windows {
 		if w == nil {
 			continue
 		}
 		mixS(w.ID)
 		mixS(m.railTitleShown(w))
-		// An unnamed workspace's tag is its active pane's icon name.
 		mixS(m.paneIconName(w))
 		mixS(w.AgentState)
-		// A finished turn changes how the row is drawn with no state change of
-		// its own once the user has looked, so the count is folded in too.
 		mixU(w.AgentCompletionSeq)
-		// The agents section prints which agent a row is running and the note it
-		// reported, so a pane that swaps harness or says something new redraws
-		// even when its state and title hold still.
 		mixS(w.AgentHarness)
 		mixS(w.AgentMessage)
-		// The kind is the need word on the same line.
 		mixS(w.AgentKind)
-		// The metadata a pane reported is drawn on its row's second line. The
-		// count goes first so two lists that concatenate the same do not fold
-		// the same. A pane with none folds nothing, so the common case costs
-		// this per-frame fold nothing.
 		if n := len(w.AgentMeta); n > 0 {
 			mixI(n)
 			for _, t := range w.AgentMeta {
@@ -565,8 +391,6 @@ func (m *OS) sidebarSignature() uint64 {
 				mixS(t.Value)
 			}
 		}
-		// The queue's length is drawn at the row's right edge. A pane with
-		// nothing queued folds nothing, like the meta.
 		if w.AgentQueued > 0 {
 			mixI(w.AgentQueued)
 		}
@@ -579,15 +403,11 @@ func (m *OS) sidebarSignature() uint64 {
 		if w.AgentQuiet {
 			mixS("quiet")
 		}
-		// The folder decides the agents view's shared folder mark.
 		mixS(w.Cwd)
 		mixS(w.DaemonCwd)
 		if w.AgentSubagents > 0 {
 			mixI(w.AgentSubagents)
 		}
-		// The subagents' rows: each one's name, state, tool and end, and the
-		// minute a running one's age reads as. A pane with none folds
-		// nothing.
 		if n := len(w.AgentSubagentList); n > 0 {
 			mixI(n)
 			for _, sa := range w.AgentSubagentList {
@@ -599,8 +419,6 @@ func (m *OS) sidebarSignature() uint64 {
 				mixS(sa.Last)
 				mixI(sa.Tools)
 				mixS(sa.Result)
-				// Whether subagent_hide_finished hides it by now, so the
-				// row goes on the frame the hide is due.
 				if sv.Hide {
 					mixB(sidebarSubagentHidden(sv, sa, hideNow))
 				}
@@ -611,7 +429,6 @@ func (m *OS) sidebarSignature() uint64 {
 				}
 			}
 		}
-		// The OSC 7501 records draw the app and the progress on the row.
 		if n := len(w.ProgramStatus); n > 0 {
 			mixI(n)
 			for _, r := range w.ProgramStatus {
@@ -623,10 +440,6 @@ func (m *OS) sidebarSignature() uint64 {
 				mixS(r.Msg)
 			}
 		}
-		// The agents section prints the age of the state, so the row changes on a
-		// minute boundary with no other input moving. Folding the whole timestamp
-		// would rebuild the rail on every frame; the minute bucket rebuilds it at
-		// most once a minute per pane, on a frame that was happening anyway.
 		mixI(int(agentElapsedBucket(w.AgentStateAt)))
 		mixI(w.Workspace)
 		if accent, ok := m.WindowAccent(w.ID); ok {
@@ -636,9 +449,6 @@ func (m *OS) sidebarSignature() uint64 {
 		}
 	}
 
-	// Unread bits, order-independent and over every window rather than only the
-	// live ones: a foreign session's done pane is ranked and coloured by this
-	// too, and the daemon's cache generation cannot see a purely local look.
 	var seenFold uint64
 	for id, seen := range m.SidebarAgentSeen {
 		if !seen {
@@ -652,7 +462,6 @@ func (m *OS) sidebarSignature() uint64 {
 		seenFold ^= e
 	}
 	mixU(seenFold)
-	// And the finished-turn counts looked at, on the same terms.
 	var seqFold uint64
 	for id, seq := range m.SidebarAgentSeenSeq {
 		e := uint64(1469598103934665603) ^ seq

@@ -12,13 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The welcome question. On the first start, when tuios wrote a new
-// config.toml, the welcome screen asks one question: Simple, Keyboard or tmux
-// keys. Keys 1, 2 and 3 or a click pick one, and the choice goes into the
-// file. Esc keeps today's tuios, which is Keyboard, and writes nothing.
-// An existing install never sees the question.
-
-// welcomeChoice is one answer.
 type welcomeChoice struct {
 	name, title, text string
 }
@@ -29,8 +22,6 @@ var (
 	welcomeTmux     = welcomeChoice{"tmux", "tmux keys", "Your tmux keys after Ctrl+B. No window mode."}
 )
 
-// welcomeChoices are the answers in the order the screen shows them. The
-// tmux card comes first when tuios finds a tmux.conf.
 func (m *OS) welcomeChoices() []welcomeChoice {
 	if m.presetSuggestion().preset == "tmux" {
 		return []welcomeChoice{welcomeTmux, welcomeSimple, welcomeKeyboard}
@@ -38,7 +29,6 @@ func (m *OS) welcomeChoices() []welcomeChoice {
 	return []welcomeChoice{welcomeSimple, welcomeKeyboard, welcomeTmux}
 }
 
-// welcomeChoiceHit is the screen row a choice was drawn on.
 type welcomeChoiceHit struct {
 	Y, X0, X1 int
 	Choice    int
@@ -50,7 +40,6 @@ func (m *OS) WelcomeQuestionShown() bool {
 	return m.welcomeAsk && len(m.GetVisibleWindows()) == 0
 }
 
-// welcomeQuestionLines are the question's lines for the splash, in a width.
 func (m *OS) welcomeQuestionLines(width int) []string {
 	ui := theme.UI()
 	lines := []string{
@@ -72,8 +61,6 @@ func (m *OS) welcomeQuestionLines(width int) []string {
 	return lines
 }
 
-// recordWelcomeChoices finds the choice rows in the drawn splash and keeps
-// where they are, for a click. top and left are the splash's first cell.
 func (m *OS) recordWelcomeChoices(splash string, left, top int) {
 	m.welcomeHits = m.welcomeHits[:0]
 	choices := m.welcomeChoices()
@@ -122,7 +109,6 @@ func (m *OS) WelcomeChoiceKey(key string) (tea.Cmd, bool) {
 	return nil, false
 }
 
-// welcomeSavedMsg says the config file was written with the answer.
 type welcomeSavedMsg struct {
 	title string
 	err   error
@@ -187,7 +173,6 @@ func (m *OS) SetProfile(name string) tea.Cmd {
 	}
 }
 
-// profileItem is the Settings row of the profile.
 func (m *OS) profileItem() settingItem {
 	item := boolItem("Simple controls", "Buttons on the dock, no window mode, and a workspace is a tab.",
 		func() bool { return m.UserConfig.Simple() },
@@ -202,7 +187,6 @@ func (m *OS) profileItem() settingItem {
 	return item
 }
 
-// handleWelcomeSaved reloads the config the answer was written to.
 func (m *OS) handleWelcomeSaved(msg welcomeSavedMsg) tea.Cmd {
 	if msg.err != nil {
 		config.RewindSave(m.UserConfig, msg.err)

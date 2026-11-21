@@ -13,15 +13,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// Palette rows for the herdr plugins config.toml enables: one per action
-// and one per pane. The daemon runs them (internal/session/plugin_host.go),
-// so a row is offered only in a daemon session on this machine, and the
-// daemon refuses a plugin that is not enabled there.
-
-// paletteCategoryPlugins is the palette category of the plugin rows.
 const paletteCategoryPlugins = "Plugins"
 
-// pluginCaller sends one plugin method to the daemon. Tests replace it.
 var pluginCaller = callPluginMethod
 
 func callPluginMethod(method string, params map[string]any) error {
@@ -39,13 +32,8 @@ func callPluginMethod(method string, params map[string]any) error {
 	return nil
 }
 
-// errPluginsNeedDaemon is a plugin action key pressed where no daemon on
-// this machine runs plugins.
 var errPluginsNeedDaemon = errors.New("plugins run in a daemon session on this machine")
 
-// runPluginActionKey runs the plugin action a [[keybindings.command]] entry of
-// type plugin_action names. The daemon finds the action by its id, bare or
-// qualified, and refuses a plugin that is not enabled.
 func (m *OS) runPluginActionKey(c config.CommandBinding) tea.Cmd {
 	label := c.Label()
 	if !m.IsDaemonSession || m.AttachedHost != "" {
@@ -59,7 +47,6 @@ func (m *OS) runPluginActionKey(c config.CommandBinding) tea.Cmd {
 	return func() tea.Msg { return CommandRanMsg{Label: label, Err: pluginCaller("plugin.action.invoke", params)} }
 }
 
-// pluginPaletteItems are the rows of the enabled plugins.
 func (m *OS) pluginPaletteItems() []CommandPaletteItem {
 	if m.UserConfig == nil || len(m.UserConfig.Plugins.Enabled) == 0 || !m.IsDaemonSession || m.AttachedHost != "" {
 		return nil

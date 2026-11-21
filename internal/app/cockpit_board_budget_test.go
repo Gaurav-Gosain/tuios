@@ -113,8 +113,6 @@ func TestBoardSortsALongColumnByItsKeys(t *testing.T) {
 	})
 }
 
-// boardSortOS is benchAgents200OS with cards, given as the watcher gives
-// them, in place of its own, and the index of the Done stage.
 func boardSortOS(t *testing.T, cards []session.TaskRow) (*OS, int) {
 	t.Helper()
 	m := benchAgents200OS(t)
@@ -126,12 +124,6 @@ func boardSortOS(t *testing.T, cards []session.TaskRow) (*OS, int) {
 	return m, done
 }
 
-// boardSortCards is a Done column of n cards of session sess, in an order
-// that is not their ids' order. Each fifth card is blocked (every tenth with
-// a holder that needs the person as well), each fifth after that is held by
-// a pane that needs the person and is not in the agents list, and the rest
-// are held by a working pane or by nobody. The stage times are shuffled,
-// four cards to each.
 func boardSortCards(sess string, n int, seed uint64) []session.TaskRow {
 	r := rand.New(rand.NewPCG(seed, uint64(n)))
 	ids, ages := r.Perm(n), r.Perm(n)
@@ -161,8 +153,6 @@ func boardSortCards(sess string, n int, seed uint64) []session.TaskRow {
 	return cards
 }
 
-// boardSortRank is the test's own rank of a card the agents list does not
-// hold: blocked, then a holder that needs the person, then the rest.
 func boardSortRank(c session.TaskRow) int {
 	switch {
 	case c.Blocked != nil:
@@ -173,8 +163,6 @@ func boardSortRank(c session.TaskRow) int {
 	return 2
 }
 
-// boardSortWant is the order of cards by rank, then stage time, then their
-// place in cards, each named by its session and id.
 func boardSortWant(cards []session.TaskRow) []string {
 	want := make([]string, 0, len(cards))
 	for rank := range 3 {
@@ -184,8 +172,6 @@ func boardSortWant(cards []session.TaskRow) []string {
 				at = append(at, i)
 			}
 		}
-		// The place breaks a tie, so the comparison is total and the sort
-		// need not be stable.
 		slices.SortFunc(at, func(a, b int) int {
 			return cmp.Or(cmp.Compare(cards[a].StageAt, cards[b].StageAt), cmp.Compare(a, b))
 		})
@@ -196,8 +182,6 @@ func boardSortWant(cards []session.TaskRow) []string {
 	return want
 }
 
-// boardSortFixtureHolds stops the test when cards could not tell a wrong
-// order from the right one.
 func boardSortFixtureHolds(t *testing.T, cards []session.TaskRow) {
 	t.Helper()
 	ranks := map[int]bool{}

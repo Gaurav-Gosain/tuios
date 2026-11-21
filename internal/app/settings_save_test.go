@@ -31,7 +31,6 @@ func TestSettingsSavesLandInTheOrderTheyWereMade(t *testing.T) {
 	if older == nil || newer == nil {
 		t.Fatal("a settings change made no save")
 	}
-	// The newer command runs first, as the scheduler is free to run it.
 	newer()
 	older()
 

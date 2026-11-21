@@ -51,8 +51,6 @@ func TestAccentHarmonyChipsAreClickableAtEveryLayout(t *testing.T) {
 	}
 }
 
-// accentHintRect returns where the named hint was drawn, off the recorded
-// geometry rather than off the layout arithmetic that produced it.
 func accentHintRect(t *testing.T, m *OS, which int) overlay.Rect {
 	t.Helper()
 	for _, h := range m.accentHits {
@@ -74,7 +72,6 @@ func TestAccentHintsArePressable(t *testing.T) {
 		t.Fatal("the fixture hex does not parse")
 	}
 
-	// The words are in the cells the rects claim.
 	m := accentTestOS(t, 120, 30)
 	m.OpenAccentPicker(id)
 	lines, _ := accentFrame(t, m)
@@ -86,7 +83,6 @@ func TestAccentHintsArePressable(t *testing.T) {
 		}
 	}
 
-	// Apply stores the colour under the cursor.
 	m = accentTestOS(t, 120, 30)
 	m.Settings = config.Global
 	m.SetWindowAccent(id, RGBAccent(seed))
@@ -105,7 +101,6 @@ func TestAccentHintsArePressable(t *testing.T) {
 		t.Errorf("the apply hint stored %s, want %s", got.Hex(), overlay.Hex(want))
 	}
 
-	// Cancel closes and writes nothing, even after moving.
 	m = accentTestOS(t, 120, 30)
 	m.Settings = config.Global
 	m.SetWindowAccent(id, RGBAccent(seed))
@@ -123,7 +118,6 @@ func TestAccentHintsArePressable(t *testing.T) {
 		t.Errorf("the cancel hint wrote %s over the colour that was there", got.Hex())
 	}
 
-	// Clear takes the accent away, which is a return to inheriting.
 	m = accentTestOS(t, 120, 30)
 	m.Settings = config.Global
 	m.SetWindowAccent(id, RGBAccent(seed))
@@ -137,7 +131,6 @@ func TestAccentHintsArePressable(t *testing.T) {
 		t.Error("the clear hint left the accent in place")
 	}
 
-	// And the focus hint walks the controls, so no hint is a dead word.
 	m = accentTestOS(t, 120, 30)
 	m.Settings = config.Global
 	m.OpenAccentPicker(id)
@@ -177,17 +170,12 @@ func TestAccentPickerStaysCoherentOnALesserTerminal(t *testing.T) {
 					}
 				}
 				text := strings.Join(lines, "\n")
-				// The numbers are the picker's floor: they survive every profile,
-				// and on the ones that cannot show the colour they are all there is.
 				if !strings.Contains(text, overlay.Hex(m.AccentPicker.Cur)) {
 					t.Errorf("%s ascii=%v w=%d: the frame lost the hex:\n%s", name, ascii, w, text)
 				}
-				// Where the sliders are drawn at all, their numbers are the last
-				// thing standing on a terminal that can paint no colour.
 				if m.accentSlidersShown() && !strings.Contains(text, "137") {
 					t.Errorf("%s ascii=%v w=%d: the frame lost the red channel's value:\n%s", name, ascii, w, text)
 				}
-				// A terminal that cannot show the colour exactly says so, beside it.
 				if fb := accentFallbackLabel(m.AccentPicker.Cur); fb != "" && !strings.Contains(text, fb) {
 					t.Errorf("%s w=%d: the frame does not admit the fallback %q:\n%s", name, w, fb, text)
 				}
@@ -221,13 +209,11 @@ func TestAccentHarmonyKeepsTheHeldSaturationAndLightness(t *testing.T) {
 		if got := m.AccentPicker.sliderValue(accentChanL); got != 73 {
 			t.Errorf("chip %d left lightness at %d%%, want 73%%", i, got)
 		}
-		// A chip is a literal colour, never a theme slot.
 		if m.AccentPicker.Slot != -1 {
 			t.Errorf("chip %d was taken as slot %d", i, m.AccentPicker.Slot)
 		}
 	}
 
-	// Walking the chips must not move the chips.
 	before := make([]string, count)
 	for i := range count {
 		before[i] = overlay.Hex(m.AccentPicker.harmonyColor(i, count))

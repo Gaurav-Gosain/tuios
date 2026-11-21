@@ -29,28 +29,15 @@ import (
 // program writes to; on a real file it is also a term.File, so Bubble Tea
 // sees a terminal.
 type PostRenderWriter struct {
-	out io.Writer
-	// file is out when out is a file, nil otherwise. A write to it is a
-	// direct call, not one through the interface.
-	file    *os.File
-	mu      sync.Mutex
-	pending []byte
-	// frameHook edits each frame and returns output that must follow it:
-	// the sixel images drawn on it. It runs only for the renderer's writes,
-	// not for WriteHost, because it answers for the frame being written. See
-	// FrameHook.
+	out       io.Writer
+	file      *os.File
+	mu        sync.Mutex
+	pending   []byte
 	frameHook FrameHook
-	// frameOwed is set while a frame the client composed has not reached
-	// the renderer's Write yet. Data queued while it is clear has no frame
-	// coming to carry it. See FlushIfDrawn.
 	frameOwed bool
-	// written runs after each frame the renderer wrote. See FrameWriter.
-	written func()
-	// erased is what has to follow a frame that erases the host's screen. See
-	// AddEraseHook.
-	erased []func(kept bool) []byte
-	// repaint follows a kitty picture with a second write. See pictureRepaint.
-	repaint pictureRepaint
+	written   func()
+	erased    []func(kept bool) []byte
+	repaint   pictureRepaint
 }
 
 // FrameHook runs on each frame the renderer writes. out is the frame to send
@@ -101,10 +88,6 @@ func (w *PostRenderWriter) Output() io.Writer {
 	return &postRenderFile{f: w.file, w: w}
 }
 
-// postRenderFile is the terminal file with its writes taken by the writer.
-// It has the term.File methods only: embedding the *os.File would add a
-// wrapper for each of its methods to the binary, and a WriteString that
-// goes round the writer.
 type postRenderFile struct {
 	f *os.File
 	w *PostRenderWriter
@@ -115,7 +98,6 @@ func (f *postRenderFile) Write(p []byte) (int, error) { return f.w.Write(p) }
 func (f *postRenderFile) Close() error                { return f.f.Close() }
 func (f *postRenderFile) Fd() uintptr                 { return f.f.Fd() }
 
-// writeOut writes buf to the terminal, straight to the file when it is one.
 func (w *PostRenderWriter) writeOut(buf []byte) (int, error) {
 	if w.file != nil {
 		return w.file.Write(buf)
@@ -123,41 +105,22 @@ func (w *PostRenderWriter) writeOut(buf []byte) (int, error) {
 	return w.out.Write(buf)
 }
 
-// frameSyncBegin and frameSyncEnd bracket a synchronized update (DEC private
-// mode 2026): the host buffers everything between them and presents it in one
-// step. A terminal without the mode ignores both.
 var (
 	frameSyncBegin = []byte("\x1b[?2026h")
 	frameSyncEnd   = []byte("\x1b[?2026l")
 )
 
-// kittyGraphicsStart begins a kitty graphics command.
 var kittyGraphicsStart = []byte("\x1b_G")
 
-// pictureRepaintDelay is how long after a kitty picture its second write goes out.
-// A real kitty painted at 5 ms and did not with no gap at all.
 const pictureRepaintDelay = 20 * time.Millisecond
 
-// emptySyncUpdate changes nothing on any host, and a host without the mode ignores it.
 var emptySyncUpdate = []byte("\x1b[?2026h\x1b[?2026l")
 
-// pictureRepaint sends one empty write a moment after a kitty picture.
-//
-// With its cursor hidden, as ours always is, kitty 0.49.2 does not show a picture
-// until it has read one more write. A cell changed in the same write does not help,
-// and any later write does, even one that changes nothing. A visible cursor hides
-// this, because its blink paints. So a picture prepared off the update loop stayed
-// blank until the next key or pointer move. The replay that shows it is in
-// quicklook's notes: a captured stream with one thing changed per run.
-//
-// The timer is reset, not added to, so a burst of pictures costs one write after the
-// last, and nothing runs until a picture is sent.
 type pictureRepaint struct {
 	mu    sync.Mutex
 	timer *time.Timer
 }
 
-// note arms the second write. write is the writer's own way to send it.
 func (r *pictureRepaint) note(write func()) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -168,22 +131,13 @@ func (r *pictureRepaint) note(write func()) {
 	r.timer.Reset(pictureRepaintDelay)
 }
 
-// hostEraseScreen is ED 2. See AddEraseHook.
 var hostEraseScreen = []byte("\x1b[2J")
 
-// The renderer's whole-screen clear, and the same clear with no ED 2.
 var (
 	rendererClear     = []byte("\x1b[H\x1b[2J")
 	rendererClearKeep = []byte("\x1b[H\x1b[J")
 )
 
-// keepPicturesFrame takes the ED 2 out of a frame for a host with kitty graphics.
-//
-// The renderer writes one on each resize. kitty and ghostty drop every picture on
-// an ED 2, its data too, and only a program can send a picture again: a pane's
-// program may have shown it once and gone on. An ED 0 from the home position
-// clears the same cells and leaves the pictures alone. It reports whether the
-// frame erased.
 func keepPicturesFrame(frame []byte) ([]byte, bool) {
 	if !bytes.Contains(frame, rendererClear) {
 		return frame, false
@@ -212,11 +166,7 @@ func (w *PostRenderWriter) Write(p []byte) (n int, err error) {
 	return w.write(p, true)
 }
 
-// write is Write, with the frame hook run only for a frame.
 func (w *PostRenderWriter) write(p []byte, frame bool) (n int, err error) {
-	// Held across both file writes: releasing it before them would let another
-	// writer in between the frame and the data that has to follow it, and
-	// would leave every other host writer unordered against this one.
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -233,9 +183,6 @@ func (w *PostRenderWriter) write(p []byte, frame bool) (n int, err error) {
 		}
 	}
 	if frame && len(w.erased) > 0 && bytes.Contains(p, hostEraseScreen) {
-		// Behind what was queued for this frame: a picture that had its upload
-		// or placement queued is sent again, and the same id and placement
-		// replace it.
 		kept := !bytes.Contains(out, hostEraseScreen)
 		for _, fn := range w.erased {
 			pending = append(pending, fn(kept)...)
@@ -246,12 +193,7 @@ func (w *PostRenderWriter) write(p []byte, frame bool) (n int, err error) {
 		return 0, nil
 	}
 
-	// One Write for the whole frame: the bracket is worth nothing if this
-	// code is itself what splits it across two syscalls.
 	buf := make([]byte, 0, len(frameSyncBegin)+len(out)+len(pending)+len(frameSyncEnd))
-	// Contains, not HasPrefix: bubbletea writes an alt-screen mode change
-	// ahead of its own bracket, so the frame that enters or leaves the alt
-	// screen does not start with one.
 	wrap := !bytes.Contains(out, frameSyncBegin)
 	if wrap {
 		buf = append(buf, frameSyncBegin...)
@@ -274,8 +216,6 @@ func (w *PostRenderWriter) write(p []byte, frame bool) (n int, err error) {
 	return len(p), nil
 }
 
-// writeRepaint is the second write of pictureRepaint. It takes the writer's lock, so
-// it cannot land inside a frame.
 func (w *PostRenderWriter) writeRepaint() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -352,9 +292,6 @@ func (m *OS) WriteHost(parts ...[]byte) {
 	_, _ = os.Stdout.Write(buf)
 }
 
-// appendInsideSync appends frame and then after, putting after inside the
-// frame's own synchronized update when the frame ends with one, so the host
-// presents the images in the same step as the text they sit on.
 func appendInsideSync(buf, frame, after []byte) []byte {
 	if len(after) > 0 && bytes.HasSuffix(frame, frameSyncEnd) {
 		buf = append(buf, frame[:len(frame)-len(frameSyncEnd)]...)
@@ -471,7 +408,6 @@ func (f *FrameHookWriter) WriteOutside(p []byte) {
 	}
 }
 
-// writeRepaint is the second write of pictureRepaint.
 func (f *FrameHookWriter) writeRepaint() { _, _ = f.w.Write(emptySyncUpdate) }
 
 // SetFrameHook is SetHook, for FrameWriter.

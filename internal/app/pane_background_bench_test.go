@@ -99,8 +99,6 @@ func BenchmarkPaneBackground(b *testing.B) {
 				m := keystrokeOS(b, n, realCols, realRows)
 				m.Settings.PaneBackground = setting
 				if n == 1 {
-					// The shape the fullscreen fast path takes: one pane over
-					// the whole usable region, nothing beside it.
 					m.Settings.SidebarEnabled = false
 					w := m.Windows[0]
 					w.X, w.Y, w.Width, w.Height = 0, m.GetTopMargin(), m.GetRenderWidth(), m.GetUsableHeight()

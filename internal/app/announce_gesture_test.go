@@ -7,19 +7,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// The announcement hold a pointer gesture opens must never outlive the gesture.
-// A pane that holds for ever is a pane that never learns its size again, which
-// is worse than the SIGWINCH the hold exists to withhold. These pin the two
-// backstops that make the hold's end unconditional: the button coming up, and
-// the pointer going silent with a button still believed down.
-
-// heldPane arms the gesture hold on a two-pane model and hands back a recorder
-// of the sizes the first pane is told, plus the size it is waiting to be told.
 func heldPane(t *testing.T, m *OS) (told *[][2]int, wantW, wantH int) {
 	t.Helper()
 	win := m.Windows[0]
-	// Announce the settled layout once, which is the state a session is in
-	// before a gesture starts, and only then start counting.
 	win.Resize(win.Width, win.Height)
 	var got [][2]int
 	win.DaemonResizeFunc = func(w, h int) error {
@@ -27,7 +17,6 @@ func heldPane(t *testing.T, m *OS) (told *[][2]int, wantW, wantH int) {
 		return nil
 	}
 
-	// A press arms the hold. Everything after it is held back.
 	m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: 10, Y: 10})
 	if !m.announceGestureHeld {
 		t.Fatal("a press did not arm the gesture's announcement hold")
@@ -46,13 +35,11 @@ func TestAReleaseThatWentMissingStillEndsTheHold(t *testing.T) {
 	m := newDeferralOS(t, 120, 40, 2)
 	told, wantW, wantH := heldPane(t, m)
 
-	// Ticks drawn while the button is still down leave the hold alone.
 	m.Update(TickerMsg(time.Now()))
 	if len(*told) != 0 {
 		t.Fatalf("a tick during the gesture told the pane %v; the hold is the whole point", *told)
 	}
 
-	// The release is claimed by something else, or never arrives at all.
 	m.pointerDown = false
 	m.Update(TickerMsg(time.Now()))
 
@@ -73,15 +60,12 @@ func TestAPointerGoneSilentStillEndsTheHold(t *testing.T) {
 	m := newDeferralOS(t, 120, 40, 2)
 	told, wantW, wantH := heldPane(t, m)
 
-	// The button is still believed down and the pointer reported a moment ago,
-	// which is an ordinary pause in the middle of a drag.
 	m.lastPointerAt = time.Now()
 	m.Update(TickerMsg(time.Now()))
 	if len(*told) != 0 {
 		t.Fatalf("a pause in the middle of a drag told the pane %v, want nothing", *told)
 	}
 
-	// Nothing has reported for longer than a gesture can plausibly stall.
 	m.lastPointerAt = time.Now().Add(-announceHoldTimeout - time.Second)
 	m.Update(TickerMsg(time.Now()))
 

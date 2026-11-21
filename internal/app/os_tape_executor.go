@@ -20,26 +20,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// scriptDoneLinger is how long (tape.done_linger_ms) the "DONE" completion indicator stays on screen
-// after a tape script finishes. Once it elapses, script mode is left entirely
-// (see maybeExitFinishedScript). It matches the auto-hide window used by the
-// script indicator renderer.
 func (m *OS) scriptDoneLinger() time.Duration {
 	return time.Duration(m.Settings.TapeDoneLingerMS) * time.Millisecond
 }
 
-// maybeExitFinishedScript leaves script mode once a finished tape's completion
-// indicator has been shown for tape.done_linger_ms. This is what re-arms Ctrl+P:
-// while ScriptMode is set, Ctrl+P is intercepted for script pause/resume
-// (internal/input/handler.go) and never reaches the command palette. Neither the
-// local playback finish path nor the remote-exec done path cleared ScriptMode,
-// so after any in-session tape ran, Ctrl+P silently toggled pause forever
-// instead of opening the palette. Resetting here, keyed off ScriptFinishedTime,
-// covers both the local (ScriptPlayer) and remote (RemoteScript*) paths because
-// both stamp ScriptFinishedTime on completion.
-//
-// It returns true when it actually left script mode, so the caller can force a
-// render to clear the indicator.
 func (m *OS) maybeExitFinishedScript() bool {
 	if !m.ScriptMode || m.ScriptFinishedTime.IsZero() {
 		return false
@@ -51,9 +35,6 @@ func (m *OS) maybeExitFinishedScript() bool {
 	return true
 }
 
-// exitScriptMode clears all tape-playback state so the session behaves as if no
-// script were running: notably, the Ctrl+P pause/resume intercept is disabled
-// and the command palette binding works again.
 func (m *OS) exitScriptMode() {
 	m.ScriptMode = false
 	m.ScriptPaused = false
@@ -68,17 +49,11 @@ func (m *OS) exitScriptMode() {
 	m.ScriptWait = nil
 	m.scriptInFlight = false
 	m.scriptCmds = nil
-	// A tape left while a tuios tape exec still waits on it has ended, and
-	// the caller is told so rather than left to time out.
 	if m.scriptRequestID != "" {
 		m.reportScriptResult(false, "the tape was stopped before it finished")
 	}
 }
 
-// The following methods implement the tape.Executor interface for
-// scripted automation and tape playback functionality.
-
-// getWindowDisplayName returns the display name for a window (CustomName if set, else Title).
 func (m *OS) getWindowDisplayName(w *terminal.Window) string {
 	if w.CustomName != "" {
 		return w.CustomName
@@ -86,7 +61,6 @@ func (m *OS) getWindowDisplayName(w *terminal.Window) string {
 	return w.Title()
 }
 
-// findWindowsByName returns all windows matching the given name (checks CustomName first, then Title).
 func (m *OS) findWindowsByName(name string) []*terminal.Window {
 	var matches []*terminal.Window
 	for _, w := range m.Windows {
@@ -98,7 +72,6 @@ func (m *OS) findWindowsByName(name string) []*terminal.Window {
 	return matches
 }
 
-// findSingleWindowByName returns a single window by name, or an error if not found or ambiguous.
 func (m *OS) findSingleWindowByName(name string) (*terminal.Window, error) {
 	matches := m.findWindowsByName(name)
 	if len(matches) == 0 {
@@ -123,12 +96,6 @@ func (m *OS) GetFocusedWindowID() string {
 	return ""
 }
 
-// resolveWindowTarget resolves a window target string to a window ID.
-// If target is empty, returns the focused window ID.
-// Matching order: exact ID, the position list-windows prints (all-digit
-// targets), window name (CustomName then Title), a unique ID prefix. The
-// order matches the daemon-side findWindowStateIndex so a target means the
-// same thing whether or not a client is attached.
 func (m *OS) resolveWindowTarget(target string) (string, error) {
 	if target == "" {
 		windowID := m.GetFocusedWindowID()
@@ -138,21 +105,16 @@ func (m *OS) resolveWindowTarget(target string) (string, error) {
 		return windowID, nil
 	}
 
-	// Try exact ID match
 	for _, w := range m.Windows {
 		if w.ID == target {
 			return w.ID, nil
 		}
 	}
 
-	// The index list-windows prints, which is the position in m.Windows.
 	if idx, ok := session.WindowIndexTarget(target, len(m.Windows)); ok {
 		return m.Windows[idx].ID, nil
 	}
 
-	// Window name (CustomName first, then Title), before the id prefix: a
-	// name made of hex digits is also a prefix of some window's uuid now and
-	// then, and the name is the one the caller meant. See findWindowStateIndex.
 	matches := m.findWindowsByName(target)
 	if len(matches) == 1 {
 		return matches[0].ID, nil
@@ -161,7 +123,6 @@ func (m *OS) resolveWindowTarget(target string) (string, error) {
 		return "", errfmt.Errorf("ambiguous window name %q matches %d windows", target, len(matches))
 	}
 
-	// Try unique ID prefix match
 	var prefixMatch *terminal.Window
 	prefixCount := 0
 	for _, w := range m.Windows {
@@ -191,32 +152,13 @@ func (m *OS) SendToWindow(windowID string, data []byte) error {
 	return errfmt.Errorf("window not found: %s", windowID)
 }
 
-// scriptWindowWait is how long tape playback will wait for a pane it asked for
-// to actually exist before giving up on it. It is generous because the pane is
-// created by the daemon on a loaded machine, and bounded because a tape that
-// stalls forever is worse than one that reports what went wrong.
 const scriptWindowWait = 5 * time.Second
 
-// awaitNewWindow arms the pane-readiness gate for a pane this command just
-// asked for. Playback holds the next command until the window set has grown or
-// the deadline passes; see the ScriptAwaitWindows field and its use in Update.
-//
-// It is armed after the request rather than inside AddWindow so it measures the
-// growth caused by this command only, and so the non-tape paths that create
-// windows never touch playback state.
 func (m *OS) awaitNewWindow(before int) {
 	m.ScriptAwaitWindows = before + 1
 	m.ScriptAwaitDeadline = time.Now().Add(scriptWindowWait)
 }
 
-// scriptPaneReady reports whether tape playback may dispatch its next command.
-// It is false only while a pane an earlier command asked for has not turned up
-// yet, and it stops being false either when the pane arrives or when the wait
-// runs out of time.
-//
-// The timeout is reported, not swallowed: a tape that carries on typing into
-// the pane it meant to split away from produces a layout that looks built and
-// is not, and the only way anyone finds out is if something says so.
 func (m *OS) scriptPaneReady() bool {
 	if m.ScriptAwaitWindows == 0 {
 		return true
@@ -258,7 +200,6 @@ func (m *OS) CreateNewWindowWithName(name string) error {
 	return nil
 }
 
-// getWindowInfo returns detailed information about a window.
 func (m *OS) getWindowInfo(w *terminal.Window, isFocused bool) map[string]any {
 	info := map[string]any{
 		"id":             w.ID,
@@ -280,7 +221,6 @@ func (m *OS) getWindowInfo(w *terminal.Window, isFocused bool) map[string]any {
 	if w.CustomName != "" {
 		info["custom_name"] = w.CustomName
 	}
-	// Marked as list-windows marks it. See session.windowStateToData.
 	if w.IsScratch {
 		info["scratch"] = true
 	}
@@ -289,17 +229,14 @@ func (m *OS) getWindowInfo(w *terminal.Window, isFocused bool) map[string]any {
 		info["pty_id"] = w.PTYID
 	}
 
-	// Get cursor info from terminal emulator
 	if w.Terminal != nil {
 		cursorPos := w.Terminal.CursorPosition()
 		info["cursor_x"] = cursorPos.X
 		info["cursor_y"] = cursorPos.Y
 		info["cursor_visible"] = !w.Terminal.IsCursorHidden()
-		// Get scrollback info from the terminal's screen
 		info["scrollback_lines"] = w.Terminal.ScrollbackLen()
 	}
 
-	// Get process info (Unix only, will be 0 on Windows)
 	if w.Cmd != nil && w.Cmd.Process != nil {
 		info["shell_pid"] = w.Cmd.Process.Pid
 	}
@@ -307,7 +244,6 @@ func (m *OS) getWindowInfo(w *terminal.Window, isFocused bool) map[string]any {
 		info["shell_pgid"] = w.ShellPgid
 	}
 
-	// Check if there's a foreground process running
 	info["has_foreground_process"] = w.HasForegroundProcess()
 
 	return info
@@ -322,7 +258,6 @@ func (m *OS) GetWindowListData() map[string]any {
 		windows = append(windows, m.getWindowInfo(w, isFocused))
 	}
 
-	// Count windows per workspace
 	workspaceWindows := make([]int, m.NumWorkspaces)
 	for _, w := range m.Windows {
 		if w.Workspace >= 1 && w.Workspace <= m.NumWorkspaces {
@@ -347,26 +282,21 @@ func (m *OS) GetWindowListData() map[string]any {
 
 // GetSessionInfoData returns data about the current session.
 func (m *OS) GetSessionInfoData() map[string]any {
-	// Determine mode
 	mode := "window_management"
 	if m.Mode == TerminalMode {
 		mode = "terminal"
 	}
 
-	// The same two words the daemon's session-info uses, so a caller can
-	// dispatch on the field without caring which side answered.
 	tilingMode := "floating"
 	if m.AutoTiling {
 		tilingMode = "tiling"
 	}
 
-	// Get dockbar position. It's stored as a string in config
 	dockbarPosition := m.Settings.DockbarPosition
 	if dockbarPosition == "" {
 		dockbarPosition = "bottom"
 	}
 
-	// Count windows per workspace
 	workspaceWindows := make([]int, m.NumWorkspaces)
 	for _, w := range m.Windows {
 		if w.Workspace >= 1 && w.Workspace <= m.NumWorkspaces {
@@ -379,7 +309,6 @@ func (m *OS) GetSessionInfoData() map[string]any {
 		focusedWindowID = m.Windows[m.FocusedWindow].ID
 	}
 
-	// Get current theme name from theme package
 	themeName := ""
 	if theme.IsEnabled() {
 		if current := theme.Current(); current != nil {
@@ -403,12 +332,9 @@ func (m *OS) GetSessionInfoData() map[string]any {
 		"height":             m.Height,
 		"workspace_windows":  workspaceWindows,
 		"num_workspaces":     m.NumWorkspaces,
-		// Workspaces a switch asked a pane for that has not arrived. See
-		// workspaces.new_window_when_empty.
-		"pane_requests": m.PaneRequestsInFlight(),
+		"pane_requests":      m.PaneRequestsInFlight(),
 	}
 
-	// Script playback info
 	if m.ScriptMode {
 		info["script_mode"] = true
 		info["script_paused"] = m.ScriptPaused
@@ -421,7 +347,6 @@ func (m *OS) GetSessionInfoData() map[string]any {
 		info["script_mode"] = false
 	}
 
-	// Add prefix key state
 	info["prefix_active"] = m.PrefixActive
 
 	return info
@@ -429,14 +354,12 @@ func (m *OS) GetSessionInfoData() map[string]any {
 
 // GetWindowData returns data about a specific window by ID or name.
 func (m *OS) GetWindowData(identifier string) (map[string]any, error) {
-	// First try by ID
 	for i, w := range m.Windows {
 		if w.ID == identifier {
 			return m.getWindowInfo(w, i == m.FocusedWindow), nil
 		}
 	}
 
-	// Then try by name
 	matches := m.findWindowsByName(identifier)
 	if len(matches) == 0 {
 		return nil, errfmt.Errorf("no window found with ID or name: %s", identifier)
@@ -445,7 +368,6 @@ func (m *OS) GetWindowData(identifier string) (map[string]any, error) {
 		return nil, errfmt.Errorf("multiple windows (%d) found with name: %s", len(matches), identifier)
 	}
 
-	// Find the index to check if focused
 	for i, w := range m.Windows {
 		if w.ID == matches[0].ID {
 			return m.getWindowInfo(w, i == m.FocusedWindow), nil
@@ -482,7 +404,6 @@ func (m *OS) CloseWindowByName(name string) error {
 		return errfmt.Errorf("no window found with name: %s", name)
 	}
 
-	// Close in reverse order to avoid index shifting issues
 	for i := len(m.Windows) - 1; i >= 0; i-- {
 		displayName := m.getWindowDisplayName(m.Windows[i])
 		if displayName == name {
@@ -502,8 +423,6 @@ func (m *OS) SwitchWorkspace(workspace int) error {
 	}
 	recorder := m.TapeRecorder
 	m.TapeRecorder = nil
-	// A script brings its own panes, so this is not a switch that opens a
-	// pane on an empty workspace. See SwitchToWorkspace.
 	m.switchToWorkspace(workspace, -1)
 	m.TapeRecorder = recorder
 	m.MarkAllDirty()
@@ -693,8 +612,6 @@ func (m *OS) SnapByDirection(direction string) error {
 		return errNoFocusedWindow
 	}
 
-	// An unrecognized direction must not fall through to SnapTopLeft: a typo
-	// would snap the window somewhere the tape never asked for.
 	var quarter SnapQuarter
 	switch direction {
 	case "left":
@@ -702,8 +619,6 @@ func (m *OS) SnapByDirection(direction string) error {
 	case "right":
 		quarter = SnapRight
 	case "fullscreen":
-		// It snapped to the top-left quarter, which is what the key's
-		// snap_fullscreen action has never done.
 		m.Snap(m.FocusedWindow, SnapFullScreen)
 		m.MarkAllDirty()
 		return nil
@@ -748,15 +663,8 @@ func (m *OS) MoveAndFollowWorkspaceByID(windowID string, workspace int) error {
 	return errfmt.Errorf("window not found: %s", windowID)
 }
 
-// errTilingOff is what the BSP commands report when tiling is off. Returning
-// nil and doing nothing would let a tape whose EnableTiling had not taken
-// effect silently skip every Split and then type the next command into
-// whatever pane happens to be focused. A tape command that quietly does
-// nothing is the worst kind of failure to debug, so it says so instead.
 var errTilingOff = errors.New("tiling is not enabled; run EnableTiling before this command")
 
-// errNoFocusedWindow is what the commands that act on the focused window report
-// when there is not one, rather than returning nil and doing nothing.
 var errNoFocusedWindow = errors.New("no focused window")
 
 // SplitHorizontal splits the focused window horizontally.
@@ -858,19 +766,6 @@ func (m *OS) Preselect(direction string) error {
 	return nil
 }
 
-// remember records a live appearance change in the config struct the registry
-// setter re-applies from.
-//
-// The setters below reach straight for the global the renderer reads, which is
-// enough right up until the next registry option is set: that path funnels
-// m.UserConfig through ApplyAppearanceConfig, and the struct still holds what
-// it held at startup. So setting a theme put the border style back to rounded,
-// and get-option went on reporting the thick the caller had asked for. Every
-// hand-written setter has to leave the struct saying what the global says.
-//
-// A path the registry cannot hold is not an error worth failing a set over: the
-// global is already written and the display is already correct. Only the
-// re-apply would drift, and there is nothing better to do about it here.
 func (m *OS) remember(path, value string) {
 	if m.UserConfig == nil {
 		return
@@ -970,17 +865,8 @@ func (m *OS) SetConfig(path, value string) error {
 	}
 }
 
-// setConfigFromRegistry applies any option the config registry knows.
-//
-// The switch above is six paths, hand-written. Everything else in the file,
-// which is most of the sidebar and all but one of the dock's settings, reaches
-// a running tuios through here. The registry already describes every settable
-// path and can set one on a UserConfig, so the live path is that plus the
-// funnel that pushes a config onto the globals the renderer reads.
 func (m *OS) setConfigFromRegistry(path, value string) error {
 	if _, ok := config.LookupOption(path); !ok {
-		// The bare spelling of an appearance key is accepted here for the same
-		// reason the switch above accepts it: callers use both.
 		if !strings.Contains(path, ".") {
 			if _, ok := config.LookupOption("appearance." + path); ok {
 				return m.setConfigFromRegistry("appearance."+path, value)
@@ -997,57 +883,36 @@ func (m *OS) setConfigFromRegistry(path, value string) error {
 	if err := config.SetOptionValue(m.UserConfig, path, value); err != nil {
 		return err
 	}
-	// The window size policy is the daemon's to apply, so the session this
-	// client shows is told as well as the file. See session/window_size.go.
 	if path == "daemon.window_size" {
 		m.sendWindowSizeToDaemon(value)
 	}
-	// A level chosen now outranks --no-animations. See SetMotion.
 	if path == "appearance.motion" {
 		m.Settings.NoAnimationsFlag = false
 	}
 
-	// ApplyAppearanceConfig is the one funnel from the config struct to the
-	// settings the render path reads, so going through it means a registry
-	// option lands exactly where the same key from the config file would.
-	//
-	// It lands in THIS session's settings and nowhere else. A server holds a
-	// session per connection, and this is the call every keypress in the
-	// settings panel comes through: writing the process seed here is what used
-	// to give one client's border style to every other client attached.
 	config.ApplyAppearanceConfig(m.UserConfig, &m.Settings)
-	// Whether the rail is shown is the session's, and only its own option
-	// changes it. See keepSessionSidebar.
 	m.keepSessionSidebar(path == "appearance.sidebar.enabled" || path == "appearance.sidebar_enabled")
-	// Retile unconditionally: most of what is reachable here changes how much
-	// room the panes have (the sidebar's width and side, the dock's position),
-	// and a retile on a change that did not need one costs a frame.
 	m.applyAppearanceLive(true)
 	return nil
 }
 
 // SetTheme changes the active theme.
 func (m *OS) SetTheme(themeName string) error {
-	// Initialize the new theme
 	if err := theme.Initialize(themeName); err != nil {
 		return errfmt.Errorf("failed to set theme: %w", err)
 	}
 
-	// Update terminal colors for all windows
 	for _, w := range m.Windows {
 		if w != nil && w.Terminal != nil {
-			// The PTY reader reads the palette while it parses SGR, under
-			// this lock.
 			w.LockIO()
 			if fg, _, cur, pal, ok := theme.EmulatorColors(); ok {
 				w.Terminal.SetThemeColors(
 					fg,
-					nil, // Always use transparent background
+					nil,
 					cur,
 					pal,
 				)
 			} else {
-				// Disable theme colors
 				w.Terminal.SetThemeColors(nil, nil, nil, [16]color.Color{})
 			}
 			w.UnlockIO()
@@ -1062,8 +927,6 @@ func (m *OS) SetTheme(themeName string) error {
 
 // SetDockbarPosition changes the dockbar position.
 func (m *OS) SetDockbarPosition(position string) error {
-	// Checked against config.DockbarPositions, the list set-config, the
-	// config validator and 'run-command --list' all read.
 	if !slices.Contains(config.DockbarPositions, position) {
 		return errfmt.Errorf("invalid dockbar position: %s (use: %s)",
 			position, strings.Join(config.DockbarPositions, ", "))
@@ -1077,9 +940,6 @@ func (m *OS) SetDockbarPosition(position string) error {
 
 // SetBorderStyle changes the window border style.
 func (m *OS) SetBorderStyle(style string) error {
-	// Checked against config.BorderStyles rather than a list written here, so
-	// set-config takes every style the config file takes, and refuses only a
-	// style that does not exist.
 	if !slices.Contains(config.BorderStyles, style) {
 		return errfmt.Errorf("invalid border style: %s (use: %s)",
 			style, strings.Join(config.BorderStyles, ", "))
@@ -1097,9 +957,6 @@ func (m *OS) ShowNotificationCmd(message, notificationType string) error {
 	return nil
 }
 
-// focusTiledNeighbour moves focus one pane left or right under tiling. The
-// scrolling layout steps along its strip, which also brings the column on
-// screen; every other layout asks the geometry.
 func (m *OS) focusTiledNeighbour(direction string) error {
 	if m.UseScrollingLayout {
 		if direction == "left" {
@@ -1183,10 +1040,6 @@ func (m *OS) ScreenshotExec() error {
 	if cmd == nil {
 		return errors.New("no window to screenshot")
 	}
-	// The tape executor already runs on the Update goroutine, and a tape wants
-	// its steps in order: running the render here rather than handing back a
-	// command means the file exists before the next line of the tape runs, so
-	// a tape can screenshot and then act on the file.
 	msg, ok := cmd().(screenshotResultMsg)
 	if !ok {
 		return nil
@@ -1228,23 +1081,8 @@ func (m *OS) LoadLayoutExec(name string) error {
 	return m.LayoutTemplateNow("load", name)
 }
 
-// startRemoteSendKeys initiates sequential key processing for remote send-keys.
-// Keys are processed one at a time via RemoteKeyMsg to allow proper UI updates between keys.
-// Animations are disabled during remote key processing to ensure immediate layout updates.
-//
-// When literal=true, keys are sent directly to the target terminal PTY (the
-// focused one when there is no target). When raw=true, each character is
-// treated as a separate key (no splitting on space/comma). When both are false,
-// keys are parsed as space/comma separated tokens:
-//   - Single keys: "i", "n", "Enter", "Escape", "Space"
-//   - Key combos: "ctrl+b", "alt+1", "shift+Enter"
-//   - Sequences (space or comma-separated): "ctrl+b,n" or "ctrl+b n"
-//
-// Special key names: Enter, Return, Space, Tab, Escape, Esc, Backspace, Delete,
-// Up, Down, Left, Right, Home, End, PageUp, PageDown, F1-F12
 func (m *OS) startRemoteSendKeys(keys string, literal bool, raw bool, windowTarget string, requestID string) (tea.Cmd, error) {
 	if literal {
-		// Send directly to the target terminal PTY (or focused if no target)
 		windowID, err := m.resolveWindowTarget(windowTarget)
 		if err != nil {
 			return nil, err
@@ -1252,35 +1090,26 @@ func (m *OS) startRemoteSendKeys(keys string, literal bool, raw bool, windowTarg
 		if err := m.SendToWindow(windowID, []byte(keys)); err != nil {
 			return nil, err
 		}
-		// Nothing follows to report the result for this path, unlike the
-		// parsed one whose last key does, so report it here. Without this the
-		// daemon waited out its timeout on a send that had worked.
 		if m.DaemonClient != nil && requestID != "" {
 			_ = m.DaemonClient.SendCommandResult(requestID, true, "keys sent")
 		}
 		return nil, nil
 	}
 
-	// Parse and synthesize TUIOS key events
 	var keyMsgs []tea.KeyPressMsg
 	if raw {
-		// Raw mode: each character is a separate key, no splitting
 		keyMsgs = m.parseKeysToMessagesRaw(keys)
 	} else {
-		// Normal mode: split by space/comma
 		keyMsgs = m.parseKeysToMessages(keys)
 	}
 	if len(keyMsgs) == 0 {
 		return nil, errfmt.Errorf("no valid keys in sequence: %s", keys)
 	}
 
-	// Disable animations during remote key processing
-	// This ensures immediate layout updates instead of animations that might not complete
 	m.remoteKeyChains++
 	m.ProcessingRemoteKeys = true
 	m.Settings.AnimationsSuppressed = true
 
-	// Start processing the first key, remaining keys will be processed sequentially
 	firstKey := keyMsgs[0]
 	remaining := keyMsgs[1:]
 
@@ -1293,8 +1122,6 @@ func (m *OS) startRemoteSendKeys(keys string, literal bool, raw bool, windowTarg
 	}, nil
 }
 
-// parseKeysToMessagesRaw parses a key sequence treating each character as a separate key.
-// No splitting on spaces or commas, which is useful for typing literal text with spaces.
 func (m *OS) parseKeysToMessagesRaw(keys string) []tea.KeyPressMsg {
 	var msgs []tea.KeyPressMsg
 	for _, char := range keys {
@@ -1304,29 +1131,18 @@ func (m *OS) parseKeysToMessagesRaw(keys string) []tea.KeyPressMsg {
 	return msgs
 }
 
-// parseKeysToMessages parses a key sequence string into tea.KeyPressMsg events.
-// Supports multiple separators: comma, space, or both.
-// Special tokens:
-//   - $PREFIX or PREFIX: expands to the configured leader key (default: ctrl+b)
 func (m *OS) parseKeysToMessages(keys string) []tea.KeyPressMsg {
 	var msgs []tea.KeyPressMsg
 
-	// Normalize: replace commas with spaces, then split by whitespace
-	// This allows "ctrl+b,q", "ctrl+b q", or "ctrl+b, q" to all work
 	normalized := strings.ReplaceAll(keys, ",", " ")
 
 	for part := range strings.FieldsSeq(normalized) {
 
-		// Handle $PREFIX or PREFIX special token
 		if strings.EqualFold(part, "$PREFIX") || strings.EqualFold(part, "PREFIX") {
-			// Get the configured leader key
 			leaderKey := m.Settings.LeaderKey
 			if leaderKey == "" {
 				leaderKey = "ctrl+b"
 			}
-			// The leader comes from config.toml, where option+ and command+
-			// are accepted too. The canonical spelling only uses the names
-			// parseKeyToMessage reads.
 			msg := m.parseKeyToMessage(config.CanonicalKey(leaderKey))
 			msgs = append(msgs, msg)
 			continue
@@ -1339,13 +1155,11 @@ func (m *OS) parseKeysToMessages(keys string) []tea.KeyPressMsg {
 	return msgs
 }
 
-// parseKeyToMessage parses a single key or key combo into a tea.KeyPressMsg.
 func (m *OS) parseKeyToMessage(key string) tea.KeyPressMsg {
 	var mod tea.KeyMod
 	var code, shifted rune
 	var text string
 
-	// Check if it's a key combo (contains +)
 	if strings.Contains(key, "+") {
 		parts := strings.Split(key, "+")
 		keyPart := ""
@@ -1373,21 +1187,16 @@ func (m *OS) parseKeyToMessage(key string) tea.KeyPressMsg {
 		key = keyPart
 	}
 
-	// Parse the key itself
 	lowerKey := strings.ToLower(key)
-	// Comma is the name send-keys gives ",", which it splits keys on.
 	if lowerKey == "comma" {
 		key, lowerKey = ",", ","
 	}
 
-	// Check for special keys
 	switch lowerKey {
 	case "enter", "return":
 		code = tea.KeyEnter
 	case "space":
 		code = tea.KeySpace
-		// Only set Text when there are no modifiers, otherwise String() drops
-		// the modifier (matching the regular-character branch below).
 		if mod == 0 {
 			text = " "
 		}
@@ -1442,21 +1251,15 @@ func (m *OS) parseKeyToMessage(key string) tea.KeyPressMsg {
 	case "f12":
 		code = tea.KeyF12
 	default:
-		// Regular character
 		if len(key) == 1 {
 			char := rune(key[0])
-			// Normalize to lowercase for the code (consistent with how bubbletea handles keys)
 			if char >= 'A' && char <= 'Z' {
-				code = char - 'A' + 'a' // Convert to lowercase
+				code = char - 'A' + 'a'
 			} else {
 				code = char
 			}
-			// Only set Text if there are no modifiers (otherwise String() ignores modifiers)
 			if mod == 0 {
 				text = string(code)
-				// A capital letter is the shifted key, as a terminal
-				// reports it: its text keeps the case, so "PREFIX P"
-				// reaches the binding for P and not the one for p.
 				if code != char {
 					text = string(char)
 					shifted = char
@@ -1464,7 +1267,6 @@ func (m *OS) parseKeyToMessage(key string) tea.KeyPressMsg {
 				}
 			}
 		} else {
-			// Unknown key, try as-is
 			if len(key) > 0 {
 				code = rune(strings.ToLower(key)[0])
 				if mod == 0 {
@@ -1482,14 +1284,6 @@ func (m *OS) parseKeyToMessage(key string) tea.KeyPressMsg {
 	}
 }
 
-// findWindowInDirection is the index of the window focus moves to from from
-// toward side, or -1. It looks at the visible windows of the current workspace.
-// Floating windows need not line up, so with tiling off a window that lies that
-// way without facing from is still reachable.
-//
-// With appearance.focus_wrap on, a tiled layout with nothing that way wraps to
-// the pane on the far side (layout.Wrap). Left and right in the scrolling
-// layout step along its strip, which does not wrap, so they are left alone.
 func (m *OS) findWindowInDirection(from *terminal.Window, side layout.Side) int {
 	var cands []layout.Rect
 	var index []int
@@ -1501,11 +1295,6 @@ func (m *OS) findWindowInDirection(from *terminal.Window, side layout.Side) int 
 		index = append(index, i)
 	}
 	origin := layout.Rect{X: from.X, Y: from.Y, W: from.Width, H: from.Height}
-	// A pane zoomed to a box of its own covers the region, so no pane lies
-	// beside it and every direction found nothing: the focus never left it and
-	// the zoom never followed. Its slot in the layout is where it sits among
-	// the others. Under a camera the layout places it, so its rectangle is
-	// already that.
 	if from.Zoomed && !m.zoomUsesLayout(from) && from.PreZoomWidth > 0 && from.PreZoomHeight > 0 {
 		origin = layout.Rect{X: from.PreZoomX, Y: from.PreZoomY, W: from.PreZoomWidth, H: from.PreZoomHeight}
 	}
@@ -1521,10 +1310,6 @@ func (m *OS) findWindowInDirection(from *terminal.Window, side layout.Side) int 
 	return -1
 }
 
-// startScriptWaitRegex arms a WaitUntilRegex condition for tape playback. It
-// compiles Args[0] as the pattern and Args[1] (optional, milliseconds) as the
-// timeout, defaulting to 5000ms. A bad or missing pattern is reported and the
-// command is skipped without arming a wait.
 func (m *OS) startScriptWaitRegex(cmd *tape.Command) {
 	if len(cmd.Args) == 0 {
 		m.ShowNotification("WaitUntilRegex: missing pattern", "error", m.Settings.NotificationDuration)
@@ -1545,10 +1330,6 @@ func (m *OS) startScriptWaitRegex(cmd *tape.Command) {
 	m.ScriptWaitDeadline = time.Now().Add(timeout)
 }
 
-// checkScriptWaitRegex reports whether a pending WaitUntilRegex condition is
-// satisfied, so playback may resume. It returns true (clearing the wait state)
-// on a match against the focused window's visible screen or once the deadline
-// passes, warning on timeout. It returns false while still waiting.
 func (m *OS) checkScriptWaitRegex() bool {
 	if m.ScriptWaitRegex == nil {
 		return true

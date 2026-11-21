@@ -6,8 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// editableSidebarEdge creates a file-backed edge table without changing the
-// original rail's shared appearance options or any other edge's assignment.
 func (m *OS) editableSidebarEdge(edge sidebarEdge) *config.SidebarEdgeConfig {
 	if m.UserConfig == nil {
 		m.UserConfig = config.DefaultConfig()

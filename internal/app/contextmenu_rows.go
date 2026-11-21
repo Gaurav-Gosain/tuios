@@ -9,43 +9,18 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
 )
 
-// The right-click menus as data. Each target's shipped rows are a list of
-// menuRow below: the action a row runs, its glyph and label, and two
-// conditions on the menu's facts, whether it shows and whether it is dimmed.
-// A row that reads differently by state (a file's open row, a group's fold,
-// the kill rows of the attached session) is a few rows whose show conditions
-// leave one. The builders in contextmenu_build.go work out the facts and the
-// title, and buildMenu makes the rows.
-//
-// A [menus.TARGET] table (config/menus_config.go) changes the shipped rows: it
-// replaces them, or adds rows after one and removes others. A row it names by
-// a built-in action that the target ships keeps that row's glyph, label and
-// conditions; another built-in action reads its description; user:NAME reads
-// the action's label, and shows only on a target the action is offered on,
-// when its when matches. A { menu = "NAME" } row, the action open_menu:NAME,
-// opens that menu in the menu's place: a [menus.NAME], or the older
-// [keybindings.menus.NAME] read as rows.
-//
-// The facts are bits and a condition is two masks, not a func: a func per
-// condition cost about 20 KB of binary in closures and their line tables.
-
-// menuFact is one fact a menu's rows read about its target.
 type menuFact uint32
 
 const (
-	// pane
 	mfSelection menuFact = 1 << iota
 	mfCanPaste
 	mfCanSplit
 	mfScratch
 	mfSidebar
-	// dock item: the window is one of the first nine minimized
 	mfRestorable
-	// dock, workspace
 	mfMinimized
 	mfWsCurrent
 	mfWsEmpty
-	// session, repo
 	mfAttached
 	mfOthers
 	mfDeletable
@@ -53,11 +28,9 @@ const (
 	mfHeadRepo
 	mfCollapsed
 	mfNoRepoRoot
-	// machine
 	mfFirst
 	mfLast
 	mfRestart
-	// file
 	mfUp
 	mfDir
 	mfNamed
@@ -68,7 +41,6 @@ const (
 	mfNoFocus
 )
 
-// is is v when c holds, for building a menu's facts.
 func is(c bool, v menuFact) menuFact {
 	if c {
 		return v
@@ -76,15 +48,11 @@ func is(c bool, v menuFact) menuFact {
 	return 0
 }
 
-// menuFacts are what a menu's rows read, worked out once when it opens.
 type menuFacts struct {
 	bits menuFact
-	// pos is the dock item's place among the minimized windows.
-	pos int
+	pos  int
 }
 
-// rowCond holds when every bit of all is set and no bit of none is, or the
-// opposite when not is set.
 type rowCond struct {
 	all, none menuFact
 	not       bool
@@ -94,10 +62,6 @@ func (c rowCond) holds(f menuFact) bool {
 	return (f&c.all == c.all && f&c.none == 0) != c.not
 }
 
-// menuRow is one row. An action of config.MenuSeparator is a separator. The
-// zero show always shows, and the zero dim never dims. when are the when
-// tables of a row from config, the action's and the row's own, which all
-// have to match.
 type menuRow struct {
 	action, icon, label string
 	show, dim           rowCond
@@ -105,7 +69,6 @@ type menuRow struct {
 	when                []map[string]any
 }
 
-// sep is a separator row.
 var sep = menuRow{action: config.MenuSeparator}
 
 var (
@@ -179,8 +142,6 @@ var (
 		{action: config.MenuSeparator, show: rowCond{all: mfRestart}},
 		{action: "restart_daemon", icon: glyphRestore, label: "Restart the daemon", show: rowCond{all: mfRestart}},
 	}
-	// A row that names nothing has nothing to open, so mfCanOpen is never set
-	// with the open row of an unnamed one, which is always dimmed.
 	menuFileRows = []menuRow{
 		{action: "file_open", icon: glyphUp, label: "Go up", show: rowCond{all: mfUp}, dim: rowCond{none: mfCanOpen}},
 		{action: "file_open", icon: glyphFolder, label: "Open folder", show: rowCond{all: mfDir | mfNamed, none: mfUp}, dim: rowCond{none: mfCanOpen}},
@@ -204,7 +165,6 @@ var (
 	}
 )
 
-// shippedRows are the rows tuios ships for a target, nil for a submenu.
 func shippedRows(name string) []menuRow {
 	switch name {
 	case "pane":
@@ -231,12 +191,8 @@ func shippedRows(name string) []menuRow {
 	return nil
 }
 
-// menuDepthMax bounds how deep submenus nest, so a loop a validation warning
-// named still stops.
 const menuDepthMax = 8
 
-// menuRowsFor is the rows of the menu name before the facts: the shipped
-// rows with the person's table applied, or a declared menu's rows.
 func (m *OS) menuRowsFor(name string) []menuRow {
 	rows := shippedRows(name)
 	if m.UserConfig == nil {
@@ -268,7 +224,6 @@ func (m *OS) menuRowsFor(name string) []menuRow {
 	return slices.Concat(kept[:at], m.menuRowsOf(name, spec.MenuAdd()), kept[at:])
 }
 
-// menuRowsOf turns the rows a person wrote into menu rows for the menu name.
 func (m *OS) menuRowsOf(name string, entries []config.MenuEntry) []menuRow {
 	var out []menuRow
 	for _, e := range entries {
@@ -300,8 +255,6 @@ func (m *OS) menuRowsOf(name string, entries []config.MenuEntry) []menuRow {
 				out = append(out, menuRow{action: e.Action, label: label})
 			}
 		}
-		// The row's own label and when apply to what it became. A label from
-		// config passes the invisible-character strip, as every label here.
 		for i := n; i < len(out); i++ {
 			if e.Label != "" {
 				out[i].label = e.Label
@@ -315,10 +268,6 @@ func (m *OS) menuRowsOf(name string, entries []config.MenuEntry) []menuRow {
 	return out
 }
 
-// appendUserRow adds the row of the user action behind action to the menu
-// name, when the action is offered there. A submenu takes the action
-// wherever its parent menu is. A [[keybindings.command]] entry is offered on
-// a pane.
 func (m *OS) appendUserRow(out []menuRow, name, action string) []menuRow {
 	a, ok := m.UserConfig.UserActionFor(action)
 	if !ok {
@@ -342,8 +291,6 @@ func (m *OS) appendUserRow(out []menuRow, name, action string) []menuRow {
 	return append(out, r)
 }
 
-// buildMenu makes the rows of the menu name for the facts f: the rows that
-// show, each dimmed or not, with no separator at either end or two in a row.
 func (m *OS) buildMenu(name string, f menuFacts) []ContextMenuItem {
 	var out []ContextMenuItem
 	var user map[string]string
@@ -370,16 +317,12 @@ func (m *OS) buildMenu(name string, f menuFacts) []ContextMenuItem {
 				action = ""
 			}
 		}
-		// A row from config has no glyph. A blank one keeps its label in line
-		// with the labels of the rows that have one.
 		icon := r.icon
 		if icon == "" {
 			icon = " "
 		}
 		it := m.item(icon, r.label, action, r.dim != rowCond{} && r.dim.holds(f.bits))
 		it.Warn = r.warn
-		// A row that opens a menu says so in the right column, with the
-		// cursor's chevron, where the other rows have their key.
 		if _, sub := config.MenuNameOf(action); sub {
 			it.Hint = chevron(&m.Settings)
 		}
@@ -391,7 +334,6 @@ func (m *OS) buildMenu(name string, f menuFacts) []ContextMenuItem {
 	return out
 }
 
-// userFacts are what an action's when reads about the focused pane.
 func (m *OS) userFacts() map[string]string {
 	f := map[string]string{"host": m.AttachedHost, "has_selection": "false"}
 	if w := m.GetFocusedWindow(); w != nil {
@@ -401,12 +343,10 @@ func (m *OS) userFacts() map[string]string {
 	return f
 }
 
-// dockItemRows is the dock item menu of the minimized window at pos.
 func (m *OS) dockItemRows(pos int) []ContextMenuItem {
 	return m.buildMenu("dock_item", menuFacts{bits: is(pos >= 0 && pos < 9, mfRestorable), pos: pos})
 }
 
-// menu builds the menu name from the facts bits.
 func (m *OS) menu(name string, bits menuFact) []ContextMenuItem {
 	return m.buildMenu(name, menuFacts{bits: bits})
 }

@@ -8,14 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// TML surfaces in Learn mode. The browser tab has no daemon to hold a
-// surface, so the tour's host (internal/learn) holds it instead: the tree,
-// the state store and the versions, as session/tml_surface.go does. The
-// client half is the one every session runs (tml.go): it draws the surface
-// with loom, takes the keys and the mouse, and sends tml-input, tml-get and
-// tml-place to the host in place of the daemon. Nothing here runs outside
-// Learn mode.
-
 // LearnTMLPlaceholder is the program a TML window runs in Learn mode. The
 // fake shell holds the pane with it, as the daemon's placeholder does.
 const LearnTMLPlaceholder = "tuios-tml"
@@ -70,8 +62,6 @@ func (m *OS) OpenLearnTMLWindow(o LearnTMLWindow) string {
 	if o.Focus {
 		m.FocusWindow(len(m.Windows) - 1)
 	} else if prev != "" {
-		// A new pane takes the focus as it opens. The keys go back where
-		// they were.
 		for i, win := range m.Windows {
 			if win.ID == prev {
 				m.FocusWindow(i)

@@ -24,7 +24,6 @@ func TestToggleSidebarSurvivesASave(t *testing.T) {
 			m := &OS{Settings: s, UserConfig: cfg, Width: 120, Height: 40}
 			m.ToggleSidebar()
 
-			// What a reload of the saved file applies.
 			again := config.Resolve(cfg, config.Overrides{})
 			if again.SidebarEnabled == start {
 				t.Errorf("toggled from %v, but the saved config still says %v", start, again.SidebarEnabled)

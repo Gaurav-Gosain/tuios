@@ -5,29 +5,16 @@ import (
 	"os"
 )
 
-// tickStats is the idle-cost regression guard's counter. Ticks is every
-// TickerMsg handled; Work is those that ran the full maintenance scans (the
-// idle diet skips the rest); Render is those that drew a frame. At idle Work
-// and Render must stay flat while Ticks climbs.
 type tickStats struct {
-	Ticks  uint64
-	Work   uint64
-	Render uint64
-	// Motion is every motion clock frame handled (see motion.go). With nothing
-	// moving it stays at zero, because the clock is never armed.
-	Motion uint64
-	// Rail is every rebuild of the rail's rows, a frame the render cache
-	// could not serve. A quiet folder refresh that changed nothing adds none.
-	Rail uint64
-	// TickerWakes is every time a frame woke Bubble Tea's frame ticker from
-	// idle to the frame rate, and TickerSleeps every time the ticker went
-	// idle. See noteFrame and idleFrameTicker.
+	Ticks        uint64
+	Work         uint64
+	Render       uint64
+	Motion       uint64
+	Rail         uint64
 	TickerWakes  uint64
 	TickerSleeps uint64
-	// AgentsTicks is every minute tick of the open agents view, and Cockpit
-	// every frame of it drawn afresh, which an unchanged view never is.
-	AgentsTicks uint64
-	Cockpit     uint64
+	AgentsTicks  uint64
+	Cockpit      uint64
 }
 
 // TickStats returns the maintenance-tick counters (ticks, work, renders). The
@@ -51,6 +38,4 @@ func (m *OS) DumpTickStats() {
 		st.Ticks, st.Work, st.Render, st.Rail, st.Motion, st.TickerWakes, st.TickerSleeps, st.AgentsTicks, st.Cockpit), 0o600)
 }
 
-// tickStatsDumpMsg asks Update to write the tick counters now. See
-// dumpTickStatsOnSignal.
 type tickStatsDumpMsg struct{}

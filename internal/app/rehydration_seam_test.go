@@ -27,15 +27,6 @@ func TestResizeSeamStaysClosed(t *testing.T) {
 	r.feedPTY(ptyID, `printf 'SW''-READY\n'`, "SW-READY")
 	w := r.winByPTY(ptyID)
 
-	// Bursts with pauses: a burst keeps bytes in flight on both sides while a
-	// resize is being applied, which is the state the two copies can disagree
-	// in, and the pauses keep the total small enough to stay held. Lines longer
-	// than a third of the pane so each is a wrap decision at the narrow width.
-	//
-	// The guest runs until the test removes its go-ahead file, with a cap on
-	// the total, rather than for a fixed twelve bursts. Twelve bursts raced
-	// the resize loop: on a loaded Linux runner the loop took longer than the
-	// bursts did, and the case failed without reaching the seam.
 	r.producing = filepath.Join(t.TempDir(), "producing")
 	if err := os.WriteFile(r.producing, nil, 0o600); err != nil {
 		t.Fatal(err)
@@ -53,11 +44,6 @@ func TestResizeSeamStaysClosed(t *testing.T) {
 		w.Resize(full, w.Height)
 		time.Sleep(3 * time.Millisecond)
 	}
-	// The seam only exists while the guest is producing. A guest that got to
-	// the end first makes this run prove nothing, and that is worth a failure
-	// because the pass would be indistinguishable from a real one. Only the
-	// cap can end it now, and the cap is a hundred bursts with a pause after
-	// each.
 	if r.daemonShows(ptyID, "SW-DONE") {
 		t.Fatal("the guest finished before the resizes landed, so this run never reached the seam")
 	}

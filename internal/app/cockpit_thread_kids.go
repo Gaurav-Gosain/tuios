@@ -12,40 +12,13 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
-// Child pills on the cards that started agents.
-//
-// A Task or Agent card in the thread started one of the harness's own
-// subagents, and a tuios start-agent or delegate call started agent panes
-// that are linked to this one (the parent link, agent_parent.go). Under such
-// a card the thread draws a pill per child: its mark, its name and its state.
-// The pill cursor (inbox_child, "." by default) steps through the pills of
-// linked panes, newest first, and enter on one opens that agent's thread in
-// the cockpit. A subagent's pill is drawn and takes no cursor: the client has
-// no thread of a subagent to show, since the daemon reads the pane's own
-// transcript only.
-//
-// Everything comes from what the client holds: the thread's entries, the
-// pane's subagent list, and the agents the cockpit lists. Nothing here calls
-// the daemon or runs a timer. The pills sit on tool cards, which the thread
-// builds on every rebuild rather than from the card cache, and the body key
-// carries ckKidsSig, so a child that changes state redraws the thread and a
-// thread whose children did not change keeps its lines.
-
-// ckPill is one child on a card.
 type ckPill struct {
-	// id is the pill's identity in the thread: "a:" and the child's agent
-	// key for a linked pane, "s:" and the subagent's id or the card's for a
-	// subagent.
 	id    string
 	name  string
 	state string
-	// open is the agent key of a linked pane, which enter opens. Empty for
-	// a subagent.
-	open string
+	open  string
 }
 
-// ckStartsSubagent reports whether a tool call starts one of the harness's
-// own subagents.
 func ckStartsSubagent(tool string) bool {
 	switch tool {
 	case "Task", "Agent":
@@ -54,9 +27,6 @@ func ckStartsSubagent(tool string) bool {
 	return false
 }
 
-// ckStartsAgents reports whether a tool call starts tuios agent panes: a
-// shell command that runs start-agent, delegate or fan, or the MCP tools of
-// the same names.
 func ckStartsAgents(tool, target string) bool {
 	low := strings.ToLower(tool)
 	if strings.Contains(low, "start_agent") || strings.Contains(low, "delegate") {
@@ -69,8 +39,6 @@ func ckStartsAgents(tool, target string) bool {
 		(strings.Contains(target, "start-agent") || strings.Contains(target, " delegate") || strings.Contains(target, " fan "))
 }
 
-// ckLinkedKids are the agents the cockpit lists that the pane e started,
-// in the cockpit's order.
 func (m *OS) ckLinkedKids(e sidebarAgentEntry) []sidebarAgentEntry {
 	if e.Host != "" {
 		return nil
@@ -84,14 +52,6 @@ func (m *OS) ckLinkedKids(e sidebarAgentEntry) []sidebarAgentEntry {
 	return out
 }
 
-// ckChildPills is the pills of each card of the thread that started
-// children, by the card's entry id.
-//
-// A subagent card takes the first subagent of its description not yet
-// taken, and without one the card's own status says the state. A start card
-// takes the linked panes whose name its command names; the panes no command
-// names go to the newest start card, which is the call most likely to have
-// started them.
 func (m *OS) ckChildPills(e sidebarAgentEntry, entries []threadEntry) map[string][]ckPill {
 	var out map[string][]ckPill
 	put := func(id string, p ckPill) {
@@ -136,7 +96,6 @@ func (m *OS) ckChildPills(e sidebarAgentEntry, entries []threadEntry) map[string
 	return out
 }
 
-// ckSubagentPill is the pill of a subagent card.
 func ckSubagentPill(en threadEntry, list []sessiontree.Subagent, used []bool) ckPill {
 	desc := printableTitle(en.Target)
 	for i, s := range list {
@@ -159,14 +118,11 @@ func ckSubagentPill(en threadEntry, list []sessiontree.Subagent, used []bool) ck
 	return ckPill{id: "s:" + en.ID, name: name, state: state}
 }
 
-// ckLinkedPill is the pill of a linked agent pane.
 func ckLinkedPill(k sidebarAgentEntry) ckPill {
 	key := agentKey(k)
 	return ckPill{id: "a:" + key, name: sidebarAgentName(k), state: sidebarKinState(k), open: key}
 }
 
-// ckPillLines lays a card's pills out in rows under its tool line. sel is
-// the pill under the pill cursor. A line's hit names the pills on it.
 func (m *OS) ckPillLines(l ckLook, pills []ckPill, sel string, width int) []ckLine {
 	pal := l.pal
 	const indent = 4
@@ -213,9 +169,6 @@ func (m *OS) ckPillLines(l ckLook, pills []ckPill, sel string, width int) []ckLi
 	return out
 }
 
-// ckKidsSig is what the pills of e's thread depend on beyond the entries:
-// the pill cursor, the pane's subagents and its linked panes' names and
-// states. The thread's body key carries it.
 func (m *OS) ckKidsSig(e sidebarAgentEntry, t *agentThread) uint64 {
 	if t == nil {
 		return 0
@@ -229,14 +182,11 @@ func (m *OS) ckKidsSig(e sidebarAgentEntry, t *agentThread) uint64 {
 		h.Write([]byte("\x00" + agentKey(k) + "\x00" + k.Title + "\x00" + sidebarKinState(k)))
 	}
 	if ckThreadTalks(t) {
-		// A message card names agents anywhere in the fleet.
 		h.Write([]byte("\x00" + strconv.FormatUint(m.ckPeersSig(), 10)))
 	}
 	return h.Sum64()
 }
 
-// ckOpenablePills is every stop of the pill cursor in the thread, newest
-// first: the pills enter can open, and the agents the message cards name.
 func (m *OS) ckOpenablePills(e sidebarAgentEntry, t *agentThread) []string {
 	by := m.ckChildPills(e, t.entries)
 	var peers map[string][]ckPeer
@@ -289,7 +239,6 @@ func (m *OS) CockpitNextChild() bool {
 	if next != "" {
 		for j, hit := range slices.Backward(t.hits) {
 			if h, ok := strings.CutPrefix(hit, "kid:"); ok && ckHasID(h, next) || hit == "peer:"+next {
-				// A few lines of the thread stay under the pill.
 				t.follow.Scroll(max(len(t.hits)-1-j-3, 0) - t.follow.Up)
 				break
 			}
@@ -299,7 +248,6 @@ func (m *OS) CockpitNextChild() bool {
 	return true
 }
 
-// ckHasID reports whether a pill line's hit names id.
 func ckHasID(hit, id string) bool {
 	for p := range strings.SplitSeq(hit, "\x1f") {
 		if p == id {
@@ -309,9 +257,6 @@ func ckHasID(hit, id string) bool {
 	return false
 }
 
-// cockpitChildGo opens the thread of the pane under the pill cursor: the
-// cockpit's cursor goes to that agent's row. ok is false when no pill is
-// under the cursor, so enter does what it did before.
 func (m *OS) cockpitChildGo() (tea.Cmd, bool) {
 	e, ok := m.cockpitAgent()
 	t := m.cockpitThread()
@@ -339,9 +284,6 @@ func (m *OS) cockpitChildGo() (tea.Cmd, bool) {
 	return m.cockpitOpenAgent(key), true
 }
 
-// cockpitChildClick handles a click on a pill line: the pill under the
-// cursor on that line opens, and on a line without it the first pill that
-// opens takes the cursor.
 func (m *OS) cockpitChildClick(hit string) tea.Cmd {
 	t := m.cockpitThread()
 	if t == nil {
@@ -361,9 +303,6 @@ func (m *OS) cockpitChildClick(hit string) tea.Cmd {
 	return nil
 }
 
-// cockpitOpenAgent puts the cockpit's cursor on the agent with key, which
-// shows its thread, and asks for the thread. It does nothing when the fleet
-// does not list that agent, as under a filter that hides it.
 func (m *OS) cockpitOpenAgent(key string) tea.Cmd {
 	ck := &m.Inbox.ck
 	for i, r := range m.cockpitRows() {
@@ -378,9 +317,6 @@ func (m *OS) cockpitOpenAgent(key string) tea.Cmd {
 	return nil
 }
 
-// ckChildHints are the footer's hints for the pills: the step key while the
-// thread has pills that open. Enter's own hint says "open agent" while a pill
-// is under the cursor.
 func (m *OS) ckChildHints() []overlay.Hint {
 	e, ok := m.cockpitAgent()
 	t := m.cockpitThread()

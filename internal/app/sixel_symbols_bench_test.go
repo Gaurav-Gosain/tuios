@@ -14,8 +14,6 @@ import (
 // box (the cost before image_symbols) and as each glyph set. The glyphs are
 // drawn when the image arrives; a frame only looks them up.
 func BenchmarkSymbolImageFrame(b *testing.B) {
-	// The test binary's stdout is not a terminal, and a frame with no colour
-	// draws the box (symbolColors).
 	was := theme.ColorProfile()
 	theme.SetColorProfile(colorprofile.TrueColor)
 	b.Cleanup(func() { theme.SetColorProfile(was) })

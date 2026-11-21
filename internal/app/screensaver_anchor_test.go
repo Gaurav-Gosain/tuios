@@ -7,31 +7,8 @@ import (
 	tfx "github.com/Gaurav-Gosain/tuiffects"
 )
 
-// The saver must start without moving the screen.
-//
-// The engine places a capture by anchor: it measures the block the capture
-// fills and slides that block to a corner. A screen is not a block. Its top
-// rows are often empty, so the block is shorter than the screen, and any anchor
-// that pins the block's top edge lifts the whole picture by the difference.
-// What the user sees is the screen jumping upwards the moment the saver starts.
-//
-// These tests measure that jump on real composed screens and require it to be
-// zero. The measurement is the offset at which the most captured glyphs line
-// up, so a frame that is merely close scores its real displacement instead of
-// passing.
-//
-// Negative control: put AnchorNW back in screensaverBuild and
-// TestSaverDoesNotMoveAScreenWithEmptyTopRows reports offset row -3. Drop the
-// screensaverFit call and TestSaverKeepsTheTopLeftOnATallerCanvas reports
-// offset row +4, TestSaverKeepsTheTopLeftOnAShorterCanvas offset row -4. All
-// three compile and all three fail on the number.
-
-// The effect these tests run. highlight is the one effect that never moves a
-// character and never hides one, so its first frame is the captured screen and
-// any displacement in it is placement, not animation. See effectOpenings.
 const anchorTestEffect = "highlight"
 
-// anchorFrame is a rendered frame as plain symbols, one string per row.
 func anchorFrame(engine *tfx.Engine) []string {
 	rows := engine.FrameRows()
 	out := make([]string, len(rows))
@@ -49,7 +26,6 @@ func anchorFrame(engine *tfx.Engine) []string {
 	return out
 }
 
-// anchorCapture is a capture as plain symbols, one string per row.
 func anchorCapture(capture [][]tfx.InputCell) []string {
 	out := make([]string, len(capture))
 	for y, row := range capture {
@@ -66,7 +42,6 @@ func anchorCapture(capture [][]tfx.InputCell) []string {
 	return out
 }
 
-// anchorGlyphs counts the cells of a capture that hold a glyph.
 func anchorGlyphs(want []string) int {
 	glyphs := 0
 	for _, line := range want {
@@ -79,8 +54,6 @@ func anchorGlyphs(want []string) int {
 	return glyphs
 }
 
-// anchorScore counts the captured glyphs a frame shows at a given shift, and
-// how many were in reach of it at all.
 func anchorScore(want, got []string, dy, dx int) (match, total int) {
 	for y, line := range want {
 		gy := y + dy
@@ -105,9 +78,6 @@ func anchorScore(want, got []string, dy, dx int) (match, total int) {
 	return match, total
 }
 
-// anchorOffset is the shift at which the frame best reproduces the capture, and
-// the share of the capture's glyphs that land there. A frame drawn where it was
-// captured scores (0, 0) with every glyph.
 func anchorOffset(want, got []string) (dy, dx, match, total int) {
 	const reach = 6
 	best := -1
@@ -122,8 +92,6 @@ func anchorOffset(want, got []string) (dy, dx, match, total int) {
 	return dy, dx, match, total
 }
 
-// requireNoOffset builds the effect over a capture and fails unless the first
-// frame reproduces it exactly where it was captured.
 func requireNoOffset(t *testing.T, capture [][]tfx.InputCell, width, height int) {
 	t.Helper()
 	d, ok := tfx.Lookup(anchorTestEffect)
@@ -138,8 +106,6 @@ func requireNoOffset(t *testing.T, capture [][]tfx.InputCell, width, height int)
 	if len(got) != height {
 		t.Fatalf("frame is %d rows over a canvas of %d", len(got), height)
 	}
-	// A canvas too short to hold the capture has to lose rows, and the ones it
-	// is allowed to lose are at the bottom.
 	want := anchorCapture(capture)
 	if len(want) > height {
 		want = want[:height]
@@ -154,9 +120,6 @@ func requireNoOffset(t *testing.T, capture [][]tfx.InputCell, width, height int)
 	}
 }
 
-// anchorTestOS composes a real screen at the given size. The window is floating
-// at (x, y), so a y above zero leaves the top rows of the capture empty, which
-// is the shape the bug needs.
 func anchorTestOS(t *testing.T, id string, cols, rows, x, y int) *OS {
 	t.Helper()
 	win := newTestWindow(t, id, cols-2*x, rows-y-5)
@@ -175,8 +138,6 @@ func anchorTestOS(t *testing.T, id string, cols, rows, x, y int) *OS {
 	return m
 }
 
-// anchorTestCapture composes the screen and hands back the capture the saver
-// would take of it.
 func anchorTestCapture(t *testing.T, m *OS, cols, rows int) [][]tfx.InputCell {
 	t.Helper()
 	grid := m.composedGrid(0, 0, cols, rows)
@@ -189,8 +150,6 @@ func anchorTestCapture(t *testing.T, m *OS, cols, rows int) [][]tfx.InputCell {
 	return screensaverCells(grid)
 }
 
-// anchorLeadingEmptyRows counts the rows at the top of a capture that hold no
-// glyph and no background, which are the rows the engine places nothing in.
 func anchorLeadingEmptyRows(capture [][]tfx.InputCell) int {
 	for y, row := range capture {
 		for _, cell := range row {

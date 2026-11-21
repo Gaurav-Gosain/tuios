@@ -18,48 +18,10 @@ import (
 	"tuios.dev/vt"
 )
 
-// The picture-in-picture view: a small live copy of one pane, drawn in a
-// corner of the screen while another pane has the focus, so a person working
-// in one pane can watch another (typically a coding agent) without giving it
-// room in the layout.
-//
-// The view is not a pane. The source pane stays where it is in the layout, or
-// keeps running where it is when it sits on another workspace, is minimised
-// or is a hidden scratch terminal. The view only reads the cells that pane's
-// emulator already holds; there is no second emulator and no second stream.
-// It never takes the focus or a key. A click on it jumps to the source pane,
-// and the view is not drawn while the source pane has the focus, because the
-// pane itself is then on the screen.
-//
-// It is this client's, like the spotlight. Nothing about it is in session
-// state, so each attached client pins its own pane (or none), and a detach
-// forgets it. One view per client: a second pin replaces the first. More than
-// one would need a stacking rule for the corners and the cursor avoidance
-// below, and nobody has asked for it yet.
-//
-// What it costs. The view's body is read from the emulator only when the
-// source pane had output since the last read (MarkTerminalsWithNewContent
-// sets pip.dirty), and the finished box is a layer with an id, so on any
-// other frame the compositor copies cells it already parsed. It adds no tick
-// and no timer, so an idle session stays idle. It does take the fullscreen
-// fast path away while it is drawn, because that path composes no layers.
-//
-// It never covers the focused pane's cursor, nor the text to the cursor's left
-// on its row, which is the line being typed. The box stays in its corner until
-// that line reaches it, then moves to the first other corner clear of it. It
-// stays there until the line reaches it again, rather than going back, so a
-// cursor that moves about near an edge does not make the box jump to and fro.
-
-// pipLayerID is the view's layer id. The compositor keys its parsed cells on
-// it, and layerFill paints its grounds by it.
 const pipLayerID = "pip"
 
-// pipMargin is the gap in cells between the box and the edges of the pane
-// region, so the box never sits on a pane's border row or column.
 const pipMargin = 1
 
-// pipCorner is one of the six places the box can sit: the four corners, and
-// the centre of the top and the bottom edge.
 type pipCorner int
 
 const (
@@ -71,7 +33,6 @@ const (
 	pipBottomCenter
 )
 
-// parsePiPCorner reads a [pip] corner value. An unknown one is bottom-right.
 func parsePiPCorner(s string) pipCorner {
 	switch s {
 	case config.PiPCornerBottomLeft:
@@ -88,12 +49,6 @@ func parsePiPCorner(s string) pipCorner {
 	return pipBottomRight
 }
 
-// pipCornerOrder is the order the places are tried in, starting from the
-// preferred one. From a corner: the other end of the same edge (the box
-// keeps to the same edge of the screen when it can), then the opposite edge,
-// same side first. From a centre: the centre of the opposite edge, so the box
-// stays in the middle, then the corners of its own edge and of the opposite
-// one.
 func pipCornerOrder(preferred pipCorner) []pipCorner {
 	switch preferred {
 	case pipBottomCenter:
@@ -106,10 +61,6 @@ func pipCornerOrder(preferred pipCorner) []pipCorner {
 	return []pipCorner{preferred, mirrorX[preferred], mirrorY[preferred], mirrorY[mirrorX[preferred]]}
 }
 
-// pipBox is the box of a w by h view in corner c of region, kept pipMargin
-// cells from its edges. ok is false when the region cannot hold even the
-// smallest box, which is when the view is not drawn at all. A region smaller
-// than the asked size shrinks the box rather than hiding it.
 func pipBox(region image.Rectangle, w, h int, c pipCorner) (image.Rectangle, bool) {
 	w = min(w, region.Dx()-2*pipMargin)
 	h = min(h, region.Dy()-2*pipMargin)
@@ -130,13 +81,6 @@ func pipBox(region image.Rectangle, w, h int, c pipCorner) (image.Rectangle, boo
 	return image.Rect(x, y, x+w, y+h), true
 }
 
-// pipChooseCorner is the corner the box is drawn in this frame. clear is the
-// part of the screen the box must not cover: the cursor's cell and the text
-// left of it on its row, empty when no cursor is drawn. current is where the
-// box was last frame and is kept while it misses clear. When it does not, the
-// corners are tried in pipCornerOrder(preferred) and the first whose box
-// misses clear wins. ok is false when every corner's box meets clear, which
-// only a region barely bigger than the box can do; the view is then not drawn.
 func pipChooseCorner(region image.Rectangle, w, h int, current, preferred pipCorner, clear image.Rectangle) (pipCorner, bool) {
 	holds := func(c pipCorner) bool {
 		box, ok := pipBox(region, w, h, c)
@@ -153,44 +97,25 @@ func pipChooseCorner(region image.Rectangle, w, h int, current, preferred pipCor
 	return current, false
 }
 
-// pipState is this client's picture-in-picture view.
 type pipState struct {
-	// windowID is the source pane, empty when nothing is pinned.
-	windowID string
-	// corner is where the box sits now, and from is the configured corner it
-	// was worked out from: a change of pip.corner puts the box back there.
-	corner pipCorner
-	from   string
-	// dirty says the source pane had output since body was read.
-	dirty bool
-	// body is the source's cells as the view last read them, cols by rows.
-	body       string
-	cols, rows int
-	// box is the finished frame, and boxKey what it was built from, so a
-	// frame that changes none of it reuses the string and the compositor
-	// reuses the cells it parsed from it.
-	box    string
-	boxKey string
-	// rect is where the box was drawn on the last composed frame, empty when
-	// it was not drawn. Clicks are tested against it.
-	rect image.Rectangle
-	// occluder is the scratch slice the graphics pass hands the box in.
-	occluder []cellRect
-	// layer is the last layer built from box.
-	layer *lipgloss.Layer
-	// spliceRows and spliceCells are pipSplice's scratch buffers.
+	windowID                string
+	corner                  pipCorner
+	from                    string
+	dirty                   bool
+	body                    string
+	cols, rows              int
+	box                     string
+	boxKey                  string
+	rect                    image.Rectangle
+	occluder                []cellRect
+	layer                   *lipgloss.Layer
 	spliceRows, spliceCells frameCanvas
-	// closedNote is the dock note for a pinned pane that closed while a
-	// state sync was being applied. The sync's own "Window closed" note is
-	// shown after the sync, and the newest note is the one the dock draws, so
-	// this one waits and goes up after it. See flushPiPNote.
-	closedNote string
+	closedNote              string
 }
 
 // PiPWindowID is the pane pinned as the picture-in-picture view, or "".
 func (m *OS) PiPWindowID() string { return m.pip.windowID }
 
-// pipSource is the pinned pane, or nil.
 func (m *OS) pipSource() *terminal.Window {
 	if m.pip.windowID == "" {
 		return nil
@@ -201,10 +126,6 @@ func (m *OS) pipSource() *terminal.Window {
 	return nil
 }
 
-// pipWanted reports whether the view is to be drawn: a pane is pinned, it
-// still exists, and it is not the focused pane on the screen. A focused pane
-// that is not on the screen still gets the view: moving the focused pane to
-// another workspace leaves the focus on it, off the screen.
 func (m *OS) pipWanted() bool {
 	src := m.pipSource()
 	if src == nil || src.Terminal == nil {
@@ -215,7 +136,6 @@ func (m *OS) pipWanted() bool {
 	return !focused || !onScreen
 }
 
-// pipConfig is the [pip] table in force.
 func (m *OS) pipConfig() config.PiPConfig {
 	if m.UserConfig == nil {
 		return config.PiPConfig{}
@@ -223,33 +143,23 @@ func (m *OS) pipConfig() config.PiPConfig {
 	return m.UserConfig.PiP
 }
 
-// pipRegion is the rectangle the panes are laid out in, which the box is
-// placed inside. It leaves out the rail and the dock.
 func (m *OS) pipRegion() image.Rectangle {
 	view := m.viewReserve()
 	x, y := view.Left, view.Top
 	return image.Rect(x, y, x+m.ViewContentWidth(), y+m.ViewUsableHeight())
 }
 
-// pipKeepClear is the part of the screen the view must not cover: the focused
-// pane's cursor and the text left of it on the same row, from the pane's left
-// edge. It is empty when no cursor is drawn, which is the case in window mode
-// and under an open panel.
 func (m *OS) pipKeepClear() image.Rectangle {
 	cur, _ := m.viewCursor()
 	return m.pipKeepClearAt(cur)
 }
 
-// pipKeepClearAt is pipKeepClear for the cursor c, as viewCursor returned it.
-// A cursor parked hidden counts: it is where the guest is taking typing.
 func (m *OS) pipKeepClearAt(c *tea.Cursor) image.Rectangle {
 	if c == nil {
 		return image.Rectangle{}
 	}
 	left := c.X
 	if w := m.GetFocusedWindow(); w != nil {
-		// The same offset getRealCursor puts the cursor at, on the screen,
-		// as the cursor is.
 		left, _ = m.sessionView.toScreen(w.X, 0)
 		if !w.Tiled {
 			left++
@@ -259,9 +169,6 @@ func (m *OS) pipKeepClearAt(c *tea.Cursor) image.Rectangle {
 	return image.Rect(left, c.Y, c.X+1, c.Y+1)
 }
 
-// pipCoversCursor reports whether the box, where the last composed frame drew
-// it, covers what the view keeps clear around the cursor c. View composes a
-// frame again when it does, rather than show c under the box.
 func (m *OS) pipCoversCursor(c *tea.Cursor) bool {
 	if m.pip.rect.Empty() || c == nil {
 		return false
@@ -283,10 +190,6 @@ func (m *OS) PinPiP(windowID string) error {
 	m.pip.windowID = w.ID
 	m.pip.dirty = true
 	m.pip.box, m.pip.boxKey = "", ""
-	// In a daemon session a pane on another workspace is not streamed to
-	// this client, so its emulator would stop at whatever it held when the
-	// workspace was left. Priming it fetches the daemon's screen and starts
-	// the stream, and unsubscribeFromPTY keeps the stream while it is pinned.
 	if m.IsDaemonSession && w.DaemonMode && w.PTYID != "" && !m.SubscribedPTYs[w.PTYID] {
 		m.primePaneFromDaemon(w)
 	}
@@ -299,15 +202,11 @@ func (m *OS) UnpinPiP() {
 	src := m.pipSource()
 	m.pip = pipState{occluder: m.pip.occluder[:0]}
 	m.cachedViewContent = ""
-	// A pane that is streamed only because it was pinned goes back to not
-	// being streamed, as the rest of its workspace is not.
 	if src != nil && m.IsDaemonSession && src.DaemonMode && src.Workspace != m.CurrentWorkspace {
 		m.unsubscribeFromPTY(src)
 	}
 }
 
-// pipKeepsStream reports whether w's output stream has to stay open because
-// it is the pinned pane. See unsubscribeFromPTY.
 func (m *OS) pipKeepsStream(w *terminal.Window) bool {
 	return w != nil && m.pip.windowID != "" && w.ID == m.pip.windowID
 }
@@ -359,9 +258,6 @@ func (m *OS) SetPiP(window string, off bool) (pinned bool, windowID string, err 
 	return true, window, nil
 }
 
-// pipSourceClosed is called as a pane is torn down. When it is the pinned
-// pane the view goes with it, and the dock says so, because a view that just
-// vanishes reads as a bug.
 func (m *OS) pipSourceClosed(w *terminal.Window) {
 	if w == nil || m.pip.windowID == "" || w.ID != m.pip.windowID {
 		return
@@ -376,7 +272,6 @@ func (m *OS) pipSourceClosed(w *terminal.Window) {
 	m.ShowNotification(note, "info", m.Settings.NotificationDuration)
 }
 
-// flushPiPNote shows the note pipSourceClosed held back during a state sync.
 func (m *OS) flushPiPNote() {
 	if note := m.pip.closedNote; note != "" {
 		m.pip.closedNote = ""
@@ -418,8 +313,6 @@ func (m *OS) JumpToPiP() bool {
 	return true
 }
 
-// pipPaneName is how the view and its messages name a pane: the name the
-// user gave it, else the title its program set, else its short id.
 func pipPaneName(w *terminal.Window) string {
 	if w.CustomName != "" {
 		return printableTitle(w.CustomName)
@@ -430,8 +323,6 @@ func pipPaneName(w *terminal.Window) string {
 	return "pane " + shortID(w.ID)
 }
 
-// renderPiP is the view's layer for this frame, or nil when it is not drawn.
-// It records where the box went, for clicks and for the graphics pass.
 func (m *OS) renderPiP() *lipgloss.Layer {
 	m.pip.rect = image.Rectangle{}
 	if !m.pipWanted() {
@@ -465,19 +356,12 @@ func (m *OS) renderPiP() *lipgloss.Layer {
 		m.pip.boxKey = key
 	}
 	m.pip.rect = box
-	// NewLayer measures its string, so the layer is built only when the box
-	// or its place changed.
 	if l := m.pip.layer; l == nil || l.GetContent() != m.pip.box || l.GetX() != box.Min.X || l.GetY() != box.Min.Y {
 		m.pip.layer = lipgloss.NewLayer(m.pip.box).X(box.Min.X).Y(box.Min.Y).Z(config.ZIndexPiP).ID(pipLayerID)
 	}
 	return m.pip.layer
 }
 
-// pipReadBody reads the source's cells into pip.body when the source had
-// output since the last read or the view changed size. It never waits for
-// the source's lock: a pane flooding output holds it almost all the time, and
-// the frame that would wait is the one carrying the user's keystrokes. The
-// last body is kept and the read is tried again next frame.
 func (m *OS) pipReadBody(src *terminal.Window, cols, rows int) {
 	if !m.pip.dirty && m.pip.body != "" && m.pip.cols == cols && m.pip.rows == rows {
 		return
@@ -491,15 +375,12 @@ func (m *OS) pipReadBody(src *terminal.Window, cols, rows int) {
 	}
 	src.RUnlockIO()
 	if body != m.pip.body {
-		// A new string is a new frame for the compositor; the same string
-		// is a memcmp and a copy of cells it already parsed.
 		m.pip.boxKey = ""
 	}
 	m.pip.body, m.pip.cols, m.pip.rows = body, cols, rows
 	m.pip.dirty = false
 }
 
-// pipScreen is the part of an emulator the view reads.
 type pipScreen interface {
 	Width() int
 	Height() int
@@ -507,20 +388,6 @@ type pipScreen interface {
 	CursorPosition() uv.Position
 }
 
-// pipCells renders the part of the screen the view shows: the last rows rows
-// that hold text, from the left edge, cols wide, at one cell per cell.
-//
-// The rows end at the lower of the last row with text on it and the cursor's
-// row, rather than at the bottom of the screen. A shell that has printed ten
-// lines on a fifty-row pane has nothing but blanks at the bottom, and a view of
-// the bottom would show nothing until the screen had filled. The columns start
-// at the left edge because that is where text starts; the right-hand part of a
-// line is most often blank.
-//
-// Every row is exactly cols cells wide. A wide glyph cut by the right edge
-// becomes a blank, and a kitty image placeholder cell becomes a blank, because
-// the view is text only. Links are dropped: the view is for looking at, and a
-// click on it goes to the pane.
 func pipCells(scr pipScreen, cols, rows int) string {
 	sw, sh := scr.Width(), scr.Height()
 	if cols <= 0 || rows <= 0 || sw <= 0 || sh <= 0 {
@@ -562,14 +429,11 @@ func pipCells(scr pipScreen, cols, rows int) string {
 			}
 			line[x] = cell
 		}
-		// A wide glyph's tail is a zero cell, which Render skips, so the
-		// row stays cols cells wide however many wide glyphs it holds.
 		b.WriteString(line.Render())
 	}
 	return b.String()
 }
 
-// pipRowHasText reports whether row y has anything on it but default blanks.
 func pipRowHasText(scr pipScreen, y, w int) bool {
 	for x := range w {
 		c := scr.CellAt(x, y)
@@ -583,8 +447,6 @@ func pipRowHasText(scr pipScreen, y, w int) bool {
 	return false
 }
 
-// pipFrame draws the box: a border in the accent, the source's agent mark and
-// name on the top edge, and the body inside.
 func pipFrame(body string, cols, rows int, name, state string, seen bool, running int, pal overlay.Palette) string {
 	tl, tr, bl, br, hz, vl := "╭", "╮", "╰", "╯", "─", "│"
 	if overlay.UseASCII() {
@@ -592,8 +454,6 @@ func pipFrame(body string, cols, rows int, name, state string, seen bool, runnin
 	}
 	edge := lipgloss.NewStyle().Foreground(pal.Accent)
 
-	// The title: the state's mark in its own colour, then the name, cut to
-	// fit between the corner and a cell of rule on the right.
 	glyph, glyphColor := agentMark(state, seen, running, pal)
 	mark := ""
 	if glyph != "" {
@@ -633,20 +493,6 @@ func pipFrame(body string, cols, rows int, name, state string, seen bool, runnin
 	return b.String()
 }
 
-// pipSplice draws box over frame with its top-left cell at x, y, as the
-// compositor draws a layer. It is how the fullscreen fast path draws the view
-// without composing layers, and it touches only the rows the box covers.
-//
-// A row is cut with ansi.Cut, which keeps every escape sequence before the
-// cut, so the part right of the box starts in the style and the link it had
-// there. That is exact unless a wide glyph straddles an edge of the box: Cut
-// drops it, where the compositor leaves blanks in its style. Such a row is
-// parsed to cells instead, the box's rectangle cleared and its cells set with
-// uv.Line.Set, the way cellLayer.blit draws it, and rendered again. rows and
-// cells are scratch buffers kept between frames.
-//
-// width is the frame's width and w the box's, both known to the caller, so no
-// row is measured in full.
 func pipSplice(frame, box string, x, y, w, width int, rows, cells *frameCanvas) string {
 	lines := strings.Split(frame, "\n")
 	boxLines := strings.Split(box, "\n")
@@ -686,9 +532,6 @@ func pipSplice(frame, box string, x, y, w, width int, rows, cells *frameCanvas) 
 	return strings.Join(lines, "\n")
 }
 
-// pipOccluders adds the view's box to the rectangles an image must not be
-// drawn over. A kitty image is painted by the host over the finished frame, so
-// without this an image in a pane under the view would draw on top of it.
 func (m *OS) pipOccluders(rects []cellRect) []cellRect {
 	if m.pip.rect.Empty() {
 		return rects

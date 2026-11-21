@@ -11,11 +11,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// spoofedCwd is a directory a pane can announce over OSC 7. Inside shell
-// double quotes, which Go's %q produces, the $(...) runs.
 const spoofedCwd = `/tmp/x"$(touch /tmp/tuios-layout-pwned)"`
 
-// layoutWindow is an existing pane whose typed input is recorded.
 func layoutWindow(t *testing.T, id string) (*terminal.Window, *strings.Builder) {
 	t.Helper()
 	w := terminal.NewDaemonWindow(id, "t", 0, 0, 40, 10, 0, "pty-"+id, make(chan struct{}, 1), 100)
@@ -47,8 +44,6 @@ func TestLayoutSaveRecordsTheKernelCwdOverASpoofedOne(t *testing.T) {
 	w, _ := layoutWindow(t, "save-win")
 	w.Workspace = 1
 	w.Cwd = spoofedCwd
-	// This test process stands in for the pane's shell: its cwd is what the
-	// kernel reports for the pane.
 	w.ShellPgid = os.Getpid()
 	m := layoutOS(w)
 
@@ -164,8 +159,6 @@ func TestSidebarCdRefusesAQuoteInTheFolder(t *testing.T) {
 	if lastMessage(m) != cdRefusedMessage {
 		t.Fatalf("dock = %q, want the refusal", lastMessage(m))
 	}
-	// A plain folder is not typed either: a daemon pane has no local PTY, so
-	// tuios cannot see its shell at a prompt, whatever it reports.
 	m.sendCdToOrigin("/tmp/plain dir")
 	if got := typed.String(); got != "" {
 		t.Fatalf("typed %q into a pane tuios cannot see", got)

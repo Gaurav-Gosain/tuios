@@ -7,20 +7,6 @@ import (
 	"time"
 )
 
-// The capability probe used to cost a fixed half second of every start, and
-// the reason was invisible from the outside: it waited for a count of
-// terminator bytes, and two of the three replies it asked for never contain
-// one. These pin the two properties that fixes it, that the read stops on the
-// reply rather than on the clock, and that every answer is still read out of
-// the single response that gets.
-
-// probeReply feeds a canned terminal response through a pipe and returns what
-// readTTYResponse made of it, and how long it waited. A pipe stands in for the
-// tty because readTTYResponse only ever polls and reads a file descriptor.
-//
-// The write end is held open for the whole read, because a closed one reports
-// EOF and would end the read for a reason a real terminal never supplies. That
-// is exactly what the backstop case has to avoid being fooled by.
 func probeReply(t *testing.T, reply string, timeout time.Duration) (string, time.Duration) {
 	t.Helper()
 	r, w, err := os.Pipe()
@@ -40,17 +26,12 @@ func probeReply(t *testing.T, reply string, timeout time.Duration) (string, time
 }
 
 func TestProbeStopsOnDA1(t *testing.T) {
-	// The order a terminal answers in: the XTWINOPS replies it understood, the
-	// kitty reply, then DA1 last because it was asked last.
 	reply := "\x1b[4;1080;1920t\x1b[6;20;9t\x1b_Gi=1;OK\x1b\\\x1b[?62;4c"
 
 	got, elapsed := probeReply(t, reply, probeTimeout)
 	if got != reply {
 		t.Fatalf("probe lost part of the reply:\n got %q\nwant %q", got, reply)
 	}
-	// The whole point is that the answer ends the read. A tenth of the backstop
-	// is generous for a pipe and still fails loudly if the clock is back in
-	// charge.
 	if limit := probeTimeout / 10; elapsed > limit {
 		t.Errorf("probe waited %s for a complete reply, expected well under %s", elapsed, limit)
 	}
@@ -104,15 +85,6 @@ func TestProbeSilentHostFallsBack(t *testing.T) {
 	}
 }
 
-// The animation probe used to be a one-pixel image with a one-pixel patch, and
-// it could not fail. The patch covered the whole image, so a host that read s=
-// and v= as the patch rectangle and a host that read them as the image's new
-// size both answered OK, and the second one is exactly the host the probe
-// existed to catch. These pin the two answers it now takes.
-
-// hostReply builds the graphics half of a probe response: an answer to the
-// direct-transmission probe, then to each half of the animation probe, then
-// DA1.
 func hostReply(accept, reject string) string {
 	r := "\x1b_Gi=1;OK\x1b\\"
 	if accept != "" {
@@ -216,8 +188,6 @@ func TestCellSizeOverrideReplacesTheHostsAnswer(t *testing.T) {
 				t.Fatalf("%q gave a %dx%d cell, want %dx%d",
 					tc.spec, caps.CellWidth, caps.CellHeight, tc.w, tc.h)
 			}
-			// The window's pixel size is derived from it, so the two cannot
-			// disagree about how big the screen is.
 			if caps.PixelWidth != tc.w*caps.Cols || caps.PixelHeight != tc.h*caps.Rows {
 				t.Errorf("the window is %dx%d px for a %dx%d cell on %dx%d cells",
 					caps.PixelWidth, caps.PixelHeight, tc.w, tc.h, caps.Cols, caps.Rows)

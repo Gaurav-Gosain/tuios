@@ -46,9 +46,6 @@ func TestSessionAccentEntryPointsSeedIdentically(t *testing.T) {
 	}
 	m.CloseAccentPicker()
 
-	// The session row's menu offers it, and carries which session was clicked so
-	// the action does not fall back to the attached one. The menu asks the daemon
-	// what else is running, which this fixture has no socket for.
 	m.DaemonClient = nil
 	title, items := m.sessionMenu("docs")
 	if title != "docs" {
@@ -73,8 +70,6 @@ func TestPinningASessionSettlesTheOthers(t *testing.T) {
 	withSessionColors(t, true)
 	m, tree := accentInheritOS(t)
 
-	// Pin the attached session to the hue one of the others prefers, so the
-	// collision is real rather than hypothetical.
 	var clash Accent
 	for _, name := range []string{"api", "docs"} {
 		if a, ok := m.SessionColor(name); ok {

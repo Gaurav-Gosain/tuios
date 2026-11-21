@@ -12,8 +12,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// focusedOS builds a minimal OS with a single focused window whose terminal
-// renders the given screen content.
 func focusedOS(t *testing.T, screen string) *OS {
 	t.Helper()
 	em := vt.NewEmulator(80, 24)
@@ -52,7 +50,6 @@ func TestCheckScriptWaitRegexBlocksThenTimesOut(t *testing.T) {
 		t.Error("expected to keep waiting while pattern is absent")
 	}
 
-	// Force the deadline into the past to exercise the timeout path.
 	m.ScriptWaitDeadline = time.Now().Add(-time.Millisecond)
 	if !m.checkScriptWaitRegex() {
 		t.Error("expected timeout to resume playback")
@@ -72,20 +69,16 @@ func TestParseKeyToMessage(t *testing.T) {
 		expectedString string
 		expectedMod    tea.KeyMod
 	}{
-		// Basic keys
 		{"single letter", "a", "a", 0},
-		// A capital is the shifted key, so it reaches the binding for A.
 		{"uppercase letter", "A", "A", tea.ModShift},
 		{"number", "5", "5", 0},
 
-		// Modifier combos
 		{"ctrl+b", "ctrl+b", "ctrl+b", tea.ModCtrl},
 		{"ctrl+c", "ctrl+c", "ctrl+c", tea.ModCtrl},
 		{"alt+1", "alt+1", "alt+1", tea.ModAlt},
 		{"shift+a", "shift+a", "shift+a", tea.ModShift},
 		{"ctrl+shift+a", "ctrl+shift+a", "ctrl+shift+a", tea.ModCtrl | tea.ModShift},
 
-		// Special keys
 		{"enter", "Enter", "enter", 0},
 		{"return", "return", "enter", 0},
 		{"space", "Space", "space", 0},
@@ -94,23 +87,17 @@ func TestParseKeyToMessage(t *testing.T) {
 		{"esc", "esc", "esc", 0},
 		{"backspace", "Backspace", "backspace", 0},
 
-		// Arrow keys
 		{"up", "Up", "up", 0},
 		{"down", "Down", "down", 0},
 		{"left", "Left", "left", 0},
 		{"right", "Right", "right", 0},
 
-		// Function keys
 		{"f1", "F1", "f1", 0},
 		{"f12", "F12", "f12", 0},
 
-		// Modifier with special key
 		{"ctrl+enter", "ctrl+Enter", "ctrl+enter", tea.ModCtrl},
 		{"alt+tab", "alt+Tab", "alt+tab", tea.ModAlt},
-		// A modified space keeps its modifier: Text must stay empty so
-		// String() does not drop Ctrl.
 		{"ctrl+space", "ctrl+space", "ctrl+space", tea.ModCtrl},
-		// Comma is the name send-keys gives ",", which it splits keys on.
 		{"comma", "Comma", ",", 0},
 		{"alt+comma", "alt+Comma", "alt+,", tea.ModAlt},
 	}
@@ -178,11 +165,10 @@ func TestApplyStateSyncSkipsInvalidWindows(t *testing.T) {
 		WorkspaceFocus:   make(map[int]int),
 	}
 
-	// Sync with an invalid window (empty ID)
 	state := &session.SessionState{
 		Windows: []session.WindowState{
-			{ID: "", PTYID: ""},         // Invalid: empty ID
-			{ID: "valid-id", PTYID: ""}, // Invalid: empty PTYID
+			{ID: "", PTYID: ""},
+			{ID: "valid-id", PTYID: ""},
 		},
 	}
 
@@ -191,7 +177,6 @@ func TestApplyStateSyncSkipsInvalidWindows(t *testing.T) {
 		t.Fatalf("ApplyStateSync failed: %v", err)
 	}
 
-	// Should have 0 windows, since both were invalid
 	if len(m.Windows) != 0 {
 		t.Errorf("Windows count = %d, want 0", len(m.Windows))
 	}
@@ -226,18 +211,15 @@ func TestSplitWithoutTilingIsLoud(t *testing.T) {
 func TestScriptPaneReadyWaitsThenGivesUp(t *testing.T) {
 	m := focusedOS(t, "")
 
-	// Nothing pending: playback runs.
 	if !m.scriptPaneReady() {
 		t.Fatal("playback blocked with no pane pending")
 	}
 
-	// A pane was asked for and has not arrived: playback waits.
 	m.awaitNewWindow(len(m.Windows))
 	if m.scriptPaneReady() {
 		t.Fatal("playback ran on while the pane it asked for did not exist")
 	}
 
-	// The wait is bounded, and running out of it is reported, not swallowed.
 	m.ScriptAwaitDeadline = time.Now().Add(-time.Millisecond)
 	if !m.scriptPaneReady() {
 		t.Fatal("playback stayed blocked past the deadline")
@@ -246,7 +228,6 @@ func TestScriptPaneReadyWaitsThenGivesUp(t *testing.T) {
 		t.Fatalf("a pane that never arrived produced %d notifications, want 1", len(m.Notifications))
 	}
 
-	// The pane arriving clears the gate without a complaint.
 	m.awaitNewWindow(len(m.Windows))
 	m.Windows = append(m.Windows, m.Windows[0])
 	if !m.scriptPaneReady() {

@@ -15,16 +15,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The machine picker: which machine a new window's process runs on.
-//
-// A session can hold windows whose processes are on different machines.
-// `tuios new-window --host` makes one from the command line, and this is the
-// way from inside the UI.
-//
-// It is a picker rather than a prompt because the answer is one of a known
-// list, and a typed machine name is a typo waiting to become a twenty second
-// link timeout. The list is fuzzy-filtered like every other list here.
-
 // HostPickerItem is one machine the picker offers.
 type HostPickerItem struct {
 	// Name is the machine as the [hosts] table spells it, or "" for this one.
@@ -47,13 +37,6 @@ type HostPickerItem struct {
 	Pending bool
 }
 
-// buildHostPickerItems is this machine followed by every configured one, in the
-// order the rail lists them, so the picker and the rail agree.
-//
-// A window is made by the daemon that holds the session, so while the client
-// is attached to another machine the window rows are that machine's hosts, by
-// its names. See host_picker_attached.go. A session is always made on this
-// machine's daemon, so the session rows are this machine's.
 func (m *OS) buildHostPickerItems() []HostPickerItem {
 	if m.HostPickerPurpose == HostPickerNewWindow && m.AttachedHost != "" {
 		return m.attachedWindowItems()
@@ -64,14 +47,6 @@ func (m *OS) buildHostPickerItems() []HostPickerItem {
 		Detail: "local",
 		Up:     true,
 	}}
-	// A global session is the answer to the same question, and the only place
-	// the question is asked, so it is a row here rather than a second control
-	// somewhere else. It is offered first because a session that will hold
-	// panes from several machines is not a session on any of the rows below
-	// it, and putting it among them would say it was.
-	//
-	// Only for a session. A window is made in the session you are already in,
-	// and "global" is not a machine to run a process on.
 	if m.HostPickerPurpose == HostPickerNewSession && m.GlobalSessionOffered() {
 		items = append(items, HostPickerItem{
 			Global: true,
@@ -99,7 +74,6 @@ func (m *OS) buildHostPickerItems() []HostPickerItem {
 	return items
 }
 
-// pluralSessions is the count a machine's row shows when its link is up.
 func pluralSessions(n int) string {
 	switch n {
 	case 0:
@@ -134,14 +108,9 @@ func (m *OS) OpenHostPicker() {
 		return
 	}
 	m.HostPickerPurpose = HostPickerNewWindow
-	// From another machine the rows come from that machine's daemon. What
-	// is held is shown at once, and the fresh list fills in a picker that
-	// was still waiting for one.
 	m.refreshAttachedHosts()
 	m.HostPickerItems = m.buildHostPickerItems()
 	if len(m.HostPickerItems) <= 1 {
-		// Only this machine. Offering a list of one is a dialog that asks a
-		// question with one answer, so the window is simply made here.
 		m.ShowNotification("No other machines are configured. Add one with 'tuios hosts add'",
 			"info", m.Settings.NotificationDuration)
 		return
@@ -188,11 +157,6 @@ func (m *OS) OpenNewSessionPicker() {
 	m.ShowHostPicker = true
 }
 
-// newSessionShouldPickHost reports whether making a session is a question.
-//
-// It is the same rule as newWindowShouldPickHost minus the global session
-// part: a session belongs to a machine, so the machine is worth asking about
-// wherever you are, as soon as there is more than one to choose from.
 func (m *OS) newSessionShouldPickHost() bool {
 	if !m.CanCreateSession() {
 		return false
@@ -259,23 +223,18 @@ func (m *OS) ChooseHostForNewWindow(item HostPickerItem) tea.Cmd {
 		return nil
 	}
 	if !item.Up || (item.Name != "" && !m.windowHostUp(item.Name)) {
-		// The window is not being made, so a split waiting for it is not
-		// happening either.
 		m.CancelPendingSplit()
 		m.ShowNotification(item.Label+" is unavailable", "warning",
 			m.Settings.NotificationWarningDuration)
 		return nil
 	}
 	if item.Name == "" {
-		// The machine that holds the session: an ordinary window there.
 		_ = m.CreateNewWindow()
 		return nil
 	}
 	return m.newWindowOnHostCmd(item.Name)
 }
 
-// windowHostUp reports whether the daemon that holds the session has its link
-// to name up: this machine's, or the attached machine's by its newest view.
 func (m *OS) windowHostUp(name string) bool {
 	if m.AttachedHost == "" {
 		return m.hostIsUp(name)
@@ -283,27 +242,6 @@ func (m *OS) windowHostUp(name string) bool {
 	return m.attachedHostUp(name)
 }
 
-// newWindowOnHostCmd asks the daemon for a window on host, off the UI
-// goroutine.
-//
-// It goes over the verb plane rather than through AddWindow. AddWindow sends
-// the NewWindow tape intent, whose arguments are positional (a name, then an
-// argv) with nowhere to put a machine, and the verb already takes one and is
-// already tested. The rail's own host poll reaches the daemon the same way.
-//
-// Off the UI goroutine because it is not fast: opening a pane on another
-// machine dials a stream on the link and waits for that daemon to spawn a
-// process, with a budget of twenty seconds when something is wrong. Doing that
-// inline would freeze every pane on screen while it ran.
-//
-// Nothing here adds the window. The daemon creates it and pushes the session
-// state, and this client adopts it the way it adopts a window any other client
-// made. This only reports the failure, which is the half no push can carry.
-//
-// The call goes to the daemon that holds the session: this machine's, or the
-// attached machine's through the link. Sent to this machine's daemon from a
-// session on another machine, the window would be made in a session of the
-// same name here, or not at all.
 func (m *OS) newWindowOnHostCmd(host string) tea.Cmd {
 	name := m.SessionName
 	dial := m.sessionDaemonDialer()
@@ -322,9 +260,6 @@ func (m *OS) newWindowOnHostCmd(host string) tea.Cmd {
 	}
 }
 
-// sessionDaemonDialer opens a verb connection to the daemon that holds the
-// attached session: this machine's directly, or another machine's through the
-// link. It is read on the UI goroutine and called off it.
 func (m *OS) sessionDaemonDialer() func() (*session.VerbClient, error) {
 	host, build := m.AttachedHost, ""
 	if m.DaemonClient != nil {
@@ -333,15 +268,11 @@ func (m *OS) sessionDaemonDialer() func() (*session.VerbClient, error) {
 	return func() (*session.VerbClient, error) { return dialSessionDaemon(host, build) }
 }
 
-// newWindowOnHostTimeout covers the far daemon spawning a process over a link
-// that is already up, plus the room the open itself is given.
 const newWindowOnHostTimeout = 30 * time.Second
 
 // ApplyNewWindowOnHost reports what came back. Success says nothing: the window
 // appearing is the answer, and a notification on top of it would be noise.
 func (m *OS) ApplyNewWindowOnHost(msg NewWindowOnHostMsg) {
-	// A link that went down after the pick says so in its own words, which
-	// already name the machine.
 	var call *session.VerbCallError
 	if errors.As(msg.Err, &call) && call.Code == session.ErrVerbHostUnreachable {
 		m.ShowNotification(call.Message, "warning", m.Settings.NotificationWarningDuration)
@@ -353,9 +284,6 @@ func (m *OS) ApplyNewWindowOnHost(msg NewWindowOnHostMsg) {
 	}
 }
 
-// hostPickerActivate runs row idx, for a click. It goes through ChooseHost,
-// as enter does, so a click in the session picker makes a session, not a
-// window.
 func (m *OS) hostPickerActivate(idx int) tea.Cmd {
 	filtered := m.hostPickerRows()
 	if idx < 0 || idx >= len(filtered) {
@@ -364,19 +292,15 @@ func (m *OS) hostPickerActivate(idx int) tea.Cmd {
 	return m.ChooseHost(filtered[idx])
 }
 
-// hostPickerRows is the machine list as the query filters it.
 func (m *OS) hostPickerRows() []HostPickerItem {
 	return FilterHostPickerItems(m.HostPickerItems, m.hostList.Query.String())
 }
 
-// hostPicker is the machine picker's list behaviour. See list_picker.go.
 func hostPicker() *listPicker {
 	return &listPicker{
 		kind:  "hostpicker",
 		state: func(m *OS) *listnav.State { return &m.hostList },
 		count: func(m *OS) int { return len(m.hostPickerRows()) },
-		// The cursor starts on the first machine that is up, as the picker
-		// opens on it.
 		first: func(m *OS) int { return FirstPickableHostRow(m.hostPickerRows()) },
 		keys: func(m *OS, key string) (tea.Cmd, bool) {
 			if key == "ctrl+c" {
@@ -405,9 +329,6 @@ func hostPicker() *listPicker {
 // somebody working locally never meets the picker at all.
 const GlobalSessionName = "global"
 
-// nextGlobalSessionName is the first free name for a new global session:
-// "global", then "global-2" and up. The first one keeps the bare name because
-// most people will only ever have one.
 func (m *OS) nextGlobalSessionName() string {
 	if m.DaemonClient == nil {
 		return freeGlobalSessionName(nil)
@@ -415,7 +336,6 @@ func (m *OS) nextGlobalSessionName() string {
 	return freeGlobalSessionName(m.DaemonClient.AvailableSessionNames())
 }
 
-// freeGlobalSessionName is the first global session name not in names.
 func freeGlobalSessionName(names []string) string {
 	taken := map[string]bool{}
 	for _, n := range names {
@@ -438,7 +358,6 @@ func freeGlobalSessionName(names []string) string {
 // sessions as such. The mark is what says it now; see SessionState.Global.
 func IsGlobalSession(name string) bool { return name == GlobalSessionName }
 
-// inGlobalSession reports whether this client is attached to a global session.
 func (m *OS) inGlobalSession() bool {
 	return m.SessionGlobal || IsGlobalSession(m.SessionName)
 }
@@ -477,8 +396,6 @@ func (m *OS) NewWindowHere() {
 	m.OpenHostPicker()
 }
 
-// newWindowShouldPickHost reports whether a new window has a machine to
-// choose between.
 func (m *OS) newWindowShouldPickHost() bool {
 	if !m.IsDaemonSession || m.DaemonClient == nil {
 		return false
@@ -487,8 +404,6 @@ func (m *OS) newWindowShouldPickHost() bool {
 		return false
 	}
 	if m.AttachedHost != "" {
-		// The choice is the attached daemon's. Until its list is in, the
-		// picker is shown and fills in when it lands.
 		n, known := m.attachedReachable()
 		if !known {
 			m.refreshAttachedHosts()
@@ -496,8 +411,6 @@ func (m *OS) newWindowShouldPickHost() bool {
 		}
 		return n > 1
 	}
-	// A global session with nothing to reach but this machine has no choice in
-	// it, and a picker with one row is a question with one answer.
 	return m.reachableMachines() > 1
 }
 
@@ -519,10 +432,6 @@ func (m *OS) GlobalSessionOffered() bool {
 	return m.reachableMachines() > 1
 }
 
-// reachableMachines counts this machine and every configured one whose link is
-// up. A machine that is not answering is not a choice: it is listed in the
-// picker so nobody wonders where it went, but it cannot be picked, so it must
-// not be the reason a picker appears at all.
 func (m *OS) reachableMachines() int {
 	n := 1
 	for _, h := range m.FederationHosts {

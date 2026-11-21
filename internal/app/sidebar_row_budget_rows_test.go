@@ -13,8 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// Rows drawn on the row budget, at the widths a person can set.
-
 // TestADownMachineSaysSoOnANarrowRail: with the budget, a narrow rail kept a
 // down machine's name and dropped the whole figure, so "workstation" with
 // three messages queued read "▾ workstation ───": no mail, and nothing but
@@ -35,8 +33,6 @@ func TestADownMachineSaysSoOnANarrowRail(t *testing.T) {
 		if !strings.Contains(queued, "3 queued") {
 			t.Errorf("rail %d: a down machine with mail lost its count: %q", rail, queued)
 		}
-		// The mail outranks the name here, so the narrowest rails read
-		// "w… 3 queued", as they did before the budget.
 		if !strings.Contains(queued, "▾ w") {
 			t.Errorf("rail %d: the header names no machine: %q", rail, queued)
 		}
@@ -44,8 +40,6 @@ func TestADownMachineSaysSoOnANarrowRail(t *testing.T) {
 		if !strings.Contains(down, "offline") && !strings.Contains(down, mark) {
 			t.Errorf("rail %d: a down machine reads like an up one: %q", rail, down)
 		}
-		// The positive half: the mark means down, so an up machine and one
-		// on its way up never wear it.
 		if up := row(federation.StatusUp, 0, cw); strings.Contains(up, mark) {
 			t.Errorf("rail %d: an up machine wears the down mark: %q", rail, up)
 		}
@@ -58,7 +52,6 @@ func TestADownMachineSaysSoOnANarrowRail(t *testing.T) {
 			}
 		}
 	}
-	// A rail with room for everything says all of it.
 	if got := row(federation.StatusUnreachable, 3, 39); !strings.Contains(got, "3 queued, offline") {
 		t.Errorf("a wide rail should say the mail and why: %q", got)
 	}
@@ -71,21 +64,20 @@ func TestADownMachineSaysSoOnANarrowRail(t *testing.T) {
 func TestAgentQueuedFigureIsPickedInTheBudget(t *testing.T) {
 	after := []sidebarAgentToken{{Name: "state", Text: "working"}}
 	queued := []string{"2 queued", "2q"}
-	const nameW = 22 // "deploy-the-api-gateway"
+	const nameW = 22
 	for _, tc := range []struct {
 		avail   int
 		figure  string
 		working bool
 	}{
 		{40, "2 queued", true},
-		{29, "2 queued", true}, // both fit exactly beside the name's keep
-		{28, "2q", true},       // the long form would cost the state
-		{23, "2q", true},       // the short form and the state fit exactly
-		// Neither form keeps the state, so the longest one kept at all.
+		{29, "2 queued", true},
+		{28, "2q", true},
+		{23, "2q", true},
 		{22, "2 queued", false},
 		{19, "2 queued", false},
 		{13, "2q", false},
-		{12, "", false}, // no form fits beside the name's keep
+		{12, "", false},
 	} {
 		var s railScratch
 		figure, keep, _ := sidebarAgentFit(&s, nil, after, nameW, "", queued, "", sidebarAgentSep(), tc.avail)
@@ -111,7 +103,6 @@ func TestNoteLineNeverEndsInABareEllipsis(t *testing.T) {
 		return ansi.Strip(m.sidebarAgentNoteText(tokens, lipgloss.NewStyle(), avail, pal))
 	}
 	sep := sidebarAgentSep()
-	// "claude · " is 9 cells, so 11 leaves the message 2.
 	if got := note("日本語のメモ", 11); got != "claude" {
 		t.Errorf("a wide sentence cut to its ellipsis: got %q, want %q", got, "claude")
 	}

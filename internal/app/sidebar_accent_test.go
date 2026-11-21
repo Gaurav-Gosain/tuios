@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// railText renders the rail and returns its rows with styling stripped, which is
-// what a user actually reads.
 func railText(t *testing.T, m *OS) []string {
 	t.Helper()
 	lines, _ := m.sidebarPanelLines()
@@ -24,10 +22,6 @@ func railText(t *testing.T, m *OS) []string {
 func TestAccentSurvivesFocus(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
 
-	// "logs" carries no agent state, so its accent is the glyph. Focus it,
-	// which used to render the row as a saturated focus pill that swallowed a
-	// coloured mark; now the focused pane's own gutter mark burns the accent
-	// instead of drawing a separate chip beside it.
 	idx := m.windowIndexByID("cccccccc3333")
 	if idx < 0 {
 		t.Fatal("fixture window missing")
@@ -67,9 +61,6 @@ func TestSidebarSignatureFoldsWhatTheRailDraws(t *testing.T) {
 		t.Error("setting an accent left the signature unchanged, so the rail would keep the old row")
 	}
 
-	// A rename is deliberately absent from the signature: the buffer lives in
-	// its own dialog and the rail draws the old name throughout, so typing must
-	// not rebuild the rail once per keystroke.
 	m.BeginRenameWindow(m.Windows[2])
 	m.SetRenameText("a")
 	if m.sidebarSignature() != withAccent {

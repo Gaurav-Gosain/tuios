@@ -31,19 +31,16 @@ func TestRailRowFit(t *testing.T) {
 			keep: []bool{true, true}, room: 11,
 		},
 		{
-			// Drop from the end keeps the first token and loses the last.
 			name:  "the rightmost token survives",
 			nameW: 6, tokens: []railToken{{Cost: 5}, {Cost: 5}}, avail: 12,
 			keep: []bool{false, true}, room: 7,
 		},
 		{
-			// No skip stops at the long last token and keeps nothing.
 			name:  "a token that does not fit is passed over",
 			nameW: 6, tokens: []railToken{{Cost: 3}, {Cost: 9}}, avail: 12,
 			keep: []bool{true, false}, room: 9,
 		},
 		{
-			// Name first gives the 20-cell name the whole row and drops the state.
 			name:  "a long name holds only its keep while tokens are placed",
 			nameW: 20, tokens: []railToken{{Cost: 10}}, avail: 20,
 			keep: []bool{true}, room: 10,
@@ -64,7 +61,6 @@ func TestRailRowFit(t *testing.T) {
 			keep: []bool{true}, room: 6,
 		},
 		{
-			// A plain token here would be kept: 7 cells and the name's keep of 6.
 			name:  "context goes before a cell of the name",
 			nameW: 6, tokens: []railToken{{Cost: 7, Whole: true}}, avail: 12,
 			keep: []bool{false}, room: 12,
@@ -75,7 +71,6 @@ func TestRailRowFit(t *testing.T) {
 			keep: []bool{false, true}, room: 7,
 		},
 		{
-			// A plain token here would come back: 3 cells beside the whole name.
 			name:  "context is never passed over",
 			nameW: 6, tokens: []railToken{{Cost: 3, Whole: true}, {Cost: 7, Whole: true}}, avail: 12,
 			keep: []bool{false, false}, room: 12,

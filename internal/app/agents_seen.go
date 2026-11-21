@@ -10,16 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 )
 
-// Some chrome only means something to a person who runs agents: the prefix
-// menu's Inbox lines, the palette's agent entries and its "@ state" hint, and
-// the agent rows of the Alerts settings. None of it is removed. It waits until
-// an agent has been seen, so a person who never runs one is not shown controls
-// for something that is not there.
-
-// agentsSeen reports whether an agent has been seen: now or before in this
-// client (the flag is persisted with the rail's state), in any session of the
-// daemon this client can see, or through an agent integration installed on
-// this machine.
 func (m *OS) agentsSeen() bool {
 	if !m.agentsOn() {
 		return false
@@ -27,10 +17,6 @@ func (m *OS) agentsSeen() bool {
 	return m.SidebarAgentsSeen || m.agentIntegrationInstalled || m.agentsPresent()
 }
 
-// agentsPresent reports whether anything an agent leaves behind is in view
-// right now: a pane with an agent state or a named harness in the attached
-// session or in any session the client has listed, an Inbox item, or mail.
-// Reads only what the client already holds; nothing here asks the daemon.
 func (m *OS) agentsPresent() bool {
 	for _, w := range m.Windows {
 		if w != nil && (w.AgentState != "" || w.AgentHarness != "") {
@@ -52,9 +38,6 @@ func (m *OS) agentsPresent() bool {
 	return false
 }
 
-// noteAgentsSeen persists the flag the first time an agent is in view. Called
-// from the paths an agent's state, an Inbox item or mail arrives by, so the
-// render path never writes the state file.
 func (m *OS) noteAgentsSeen() {
 	if m.SidebarAgentsSeen || !m.agentsPresent() {
 		return
@@ -63,12 +46,6 @@ func (m *OS) noteAgentsSeen() {
 	m.saveSidebarState()
 }
 
-// prefixMenuGroups is the which-key menu after the prefix key, in its
-// sections. The Copies line waits until a copy exists. The Inbox's lines wait
-// until an agent has been seen, and a section
-// they leave empty goes with them; the keys work either way. The review line
-// is left out on a daemon that cannot review, where the key does what an
-// unbound key does.
 func (m *OS) prefixMenuGroups() []config.KeybindingGroup {
 	multi, multiOK := m.MultiCopyEligible()
 	if !multiOK {
@@ -99,23 +76,14 @@ func (m *OS) prefixMenuGroups() []config.KeybindingGroup {
 	return out
 }
 
-// agentIntegrationMsg reports that a harness on this machine has tuios's
-// hooks installed.
 type agentIntegrationMsg struct{}
 
-// checkAgentIntegrationCmd looks, once and off the UI goroutine, for an agent
-// integration installed with `tuios integration install`. A harness whose
-// configuration directory does not exist is skipped with one stat, so a
-// machine with no agents on it pays a handful of stats at start.
 func (m *OS) checkAgentIntegrationCmd() tea.Cmd {
 	if m.SidebarAgentsSeen || runtime.GOOS == "js" {
 		return nil
 	}
 	return func() tea.Msg {
 		env := integration.SystemEnv()
-		// Only Installed is read, and it needs no hook socket tool. Finding
-		// one runs nc or socat against a probe socket, a few hundred ms the
-		// menu's Agents section would wait for.
 		env.HookSocket = nil
 		for _, t := range integration.Targets() {
 			if fi, err := os.Stat(t.ConfigDir(env)); err != nil || !fi.IsDir() {

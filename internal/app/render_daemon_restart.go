@@ -9,15 +9,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/restartplan"
 )
 
-// overlayKindRestart is the restart dialog's overlay kind.
 const overlayKindRestart = "restartdaemon"
 
-// restartInnerWidth is the dialog's preferred inner width.
 const restartInnerWidth = 66
 
-// renderDaemonRestart draws the restart dialog in its phase: the plan and the
-// question, the steps while they run, or the failure. The plan's words are
-// restartplan.Lines, the ones `tuios restart-server` prints.
 func (m *OS) renderDaemonRestart() (string, overlay.Geometry, []overlayRowHit) {
 	pal := m.overlayUI()
 	bg := pal.Canvas
@@ -70,9 +65,6 @@ func (m *OS) renderDaemonRestart() (string, overlay.Geometry, []overlayRowHit) {
 			dialogAnswerRow("Restart the daemon", r.list.Cursor == RestartRowRestart, true, width, pal),
 			dialogAnswerRow("Cancel", r.list.Cursor == RestartRowCancel, false, width, pal))
 		hints = []overlay.Hint{{Key: "r", Label: "restart"}, cancel}
-		// A daemon with many programs has a plan taller than the screen. The
-		// plan scrolls, and the rule, the answers and the hints stay on screen:
-		// two frame rows, the rule and the answers.
 		r.scrollMax, r.scrollPage = 0, 0
 		if room := m.panelRoomHeight() - 3 - len(rows); room > 0 && len(body) > room {
 			view := max(room-1, 1)
@@ -132,7 +124,6 @@ func (m *OS) renderDaemonRestart() (string, overlay.Geometry, []overlayRowHit) {
 		y := geo.BodyY + rowStart + i
 		idx := i
 		if r.phase != restartConfirm {
-			// The one row of the other phases closes the dialog.
 			idx = RestartRowCancel
 		}
 		hits = append(hits, overlayRowHit{Rect: overlay.Rect{X0: 0, Y0: y, X1: geo.Width, Y1: y + 1}, Idx: idx})

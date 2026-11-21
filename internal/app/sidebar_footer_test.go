@@ -6,9 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// railFrame renders the rail and returns its rows with the styling stripped, so
-// an assertion is against what the user sees rather than against a fragment a
-// helper built.
 func railFrame(t *testing.T, m *OS) []string {
 	t.Helper()
 	return railText(t, m)

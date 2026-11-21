@@ -12,16 +12,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The rail rows the agent work added (a machine's header with the sessions
-// that want a person and the mail queued for it, a session on another machine
-// with its agent glyph, a pane whose link is lost) were measured on the 28
-// column rail, and the other tests here still render them 40 wide. v0.8.0
-// ships the rail on at 24 columns. These render each one on the shipped rail,
-// at the width the rail actually takes, and check it still names what it is
-// about.
-
-// shippedRailOS is hostAgentOS on the looks v0.8.0 ships, and the content
-// width of its rail's rows.
 func shippedRailOS(t *testing.T, status federation.Status, states ...string) (*OS, int) {
 	t.Helper()
 	m := hostAgentOS(t, status, states...)
@@ -30,7 +20,7 @@ func shippedRailOS(t *testing.T, status federation.Status, states ...string) (*O
 	if w != config.SidebarDefaultWidth || m.Settings.SidebarPosition != "right" {
 		t.Fatalf("not the shipped rail: width %d, position %q", w, m.Settings.SidebarPosition)
 	}
-	return m, w - 1 // the row's content columns beside the edge rule
+	return m, w - 1
 }
 
 // TestAnOfflineMachineHeaderNamesItOnTheShippedRail. The header of a machine
@@ -60,7 +50,6 @@ func TestAnOfflineMachineHeaderNamesItOnTheShippedRail(t *testing.T) {
 		t.Errorf("the header is %d cells, wider than the rail's %d", w, cw)
 	}
 
-	// With room for it the whole label stays.
 	wide := ansi.Strip(m.sidebarHostRow(node, 40, theme.UI(), "", sidebarRowState{}, false))
 	if !strings.Contains(wide, "build") || !strings.Contains(wide, "3 queued, seen 3m ago") {
 		t.Errorf("40 wide the header lost part of its label: %q", wide)

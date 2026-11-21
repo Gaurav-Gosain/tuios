@@ -6,30 +6,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// The strip's snap: appearance.niri_scroll_snap.
-//
-// A wheel and a trackpad move the strip in steps of niri_scroll_cells, and a
-// finger on tuios-web one cell at a time, so wherever they stop the strip can
-// be left with a column cut at the edge. niri lines the strip up on a column
-// when the gesture ends.
-//
-// A finger's end is known: tuios-web's touch layer reports the lift, and the
-// strip snaps then to the nearest column (SnapStripNow), however long the
-// finger rested on the way. A wheel and a trackpad report no end, only the
-// steps, so their end is a pause: stripSnapQuiet after the last step that
-// moved the strip, it snaps to the next column in the way the steps went
-// (ScrollingLayout.SnapViewport), sliding there as a keyboard move does. A
-// step in the pause starts the wait again. Snapping to the nearest column
-// instead would send one notch, shorter than half a column, back to where it
-// started, and the wheel could never move the strip.
-//
-// A snap changes the strip's offset like any other scroll, so it is sent to
-// the daemon, or the other clients would not see it and the next state the
-// daemon sends would undo it.
-
-// stripSnapQuiet is how long the strip has to stay still before it snaps.
-// Long enough for the gaps in a trackpad's momentum tail, short enough to
-// read as the end of the gesture.
 const stripSnapQuiet = 180 * time.Millisecond
 
 // StripSnapMsg is the snap's timer. Gen is the step it was armed by, and
@@ -75,8 +51,6 @@ func (m *OS) SnapStripNow() {
 	m.snapStrip(0)
 }
 
-// snapStrip lines the strip up on a column, if the workspace is on the
-// strip, and reports whether it moved. dir is as for SnapViewport.
 func (m *OS) snapStrip(dir int) bool {
 	if !m.AutoTiling || !m.UseScrollingLayout {
 		return false

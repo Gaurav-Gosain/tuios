@@ -7,7 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// nvimNavigationReplyWindow bounds replies to forwarded focus keys.
 const nvimNavigationReplyWindow = 500 * time.Millisecond
 
 type pendingNvimNavigation struct {
@@ -24,8 +23,6 @@ type NvimNavigationMsg struct {
 	Reset     bool
 }
 
-// listenNvimNavigationUntil waits for the next message on its channel and returns nil once
-// stop is closed, so a session that ends leaves no listener parked.
 func listenNvimNavigationUntil(stop <-chan struct{}, ch chan NvimNavigationMsg) tea.Cmd {
 	return listenOnce(stop, ch, func(msg NvimNavigationMsg) tea.Msg { return msg })
 }
@@ -94,13 +91,9 @@ func (m *OS) onNvimNavigation(msg NvimNavigationMsg) {
 // FocusTerminalDirection moves terminal focus and refreshes its pane cache.
 func (m *OS) FocusTerminalDirection(direction string) int {
 	previous := m.FocusedWindow
-	// A key pointing from the focused rail back at the panes only leaves the
-	// rail, onto the pane it was entered from.
 	if m.LeaveRailToward(direction) {
 		return previous
 	}
-	// Any other focus key while the rail holds the keyboard would move pane
-	// focus under it, out of sight; it does nothing instead.
 	if m.SidebarFocused {
 		return previous
 	}

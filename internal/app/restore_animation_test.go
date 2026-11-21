@@ -18,8 +18,6 @@ func TestRestoreAnimationStartsOnTheDrawnEntry(t *testing.T) {
 			m.Settings.Motion = config.MotionFull
 			m.Settings.AnimationsSuppressed = false
 
-			// Draw the dock once so its entry rectangles are recorded, as
-			// the last frame would have before the user asked to restore.
 			m.renderDockString()
 
 			idx := len(m.Windows) - 1

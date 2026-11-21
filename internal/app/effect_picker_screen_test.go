@@ -9,11 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The screen saver's effect picker, opened from its settings row the way a
-// person finds it and driven with its keys. The tests of the preview's frames
-// and of the effects themselves stay in package app: they step frames the
-// fixture has no clock for, and measure the effect engine.
-
 const effectPickerTitle = "Screen saver effect"
 
 func effectPickerOpen(f *apptest.Fixture) bool {
@@ -23,8 +18,6 @@ func effectPickerOpen(f *apptest.Fixture) bool {
 
 func effectSetting(f *apptest.Fixture) string { return f.M.UserConfig.Screensaver.EffectName() }
 
-// effectPickerRows is the text inside the picker's frame, row by row: the
-// query, the list and the line under it.
 func effectPickerRows(t *testing.T, f *apptest.Fixture) []string {
 	t.Helper()
 	screen := f.Screen()
@@ -36,8 +29,6 @@ func effectPickerRows(t *testing.T, f *apptest.Fixture) []string {
 		var rows []string
 		for y := b.Y0 + 2; y < b.Y1; y++ {
 			row := strings.TrimSpace(panelRow(screen[y], b))
-			// The line under the list names the effect the preview runs,
-			// and random picks a new one each time it starts.
 			if !strings.HasPrefix(row, "The preview shows") {
 				rows = append(rows, row)
 			}
@@ -48,9 +39,6 @@ func effectPickerRows(t *testing.T, f *apptest.Fixture) []string {
 	return nil
 }
 
-// effectFixture opens the picker (openEffectPicker in
-// list_picker_screen_test.go) with framed panels, so the picker's rows can be
-// read apart from the settings page under it.
 func effectFixture(t *testing.T) *apptest.Fixture {
 	t.Helper()
 	return openEffectPicker(t, apptest.Config(func(c *config.UserConfig) { c.Appearance.FramePanels = true }))
@@ -75,7 +63,7 @@ func TestEffectPickerCommitsOnEnterAndLeavesItAloneOnEsc(t *testing.T) {
 		t.Errorf("enter left the setting on %q, want expand", got)
 	}
 
-	f.Keys("esc", "esc") // the search, then settings
+	f.Keys("esc", "esc")
 	if _, _, ok := f.Find("Settings"); ok {
 		t.Fatalf("settings did not close:\n%s", f.Text())
 	}

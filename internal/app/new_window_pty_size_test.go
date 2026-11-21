@@ -8,8 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// ptySpy records the size the daemon PTY has actually been told, the way the
-// real ResizePTY round trip would leave it.
 type ptySpy struct {
 	w, h  int
 	calls int
@@ -24,7 +22,6 @@ func (p *ptySpy) install(win *terminal.Window) {
 	}
 }
 
-// newTilingClient is an attached client with a known viewport, tiling on, BSP.
 func newTilingClient(width, height, workspace int) *OS {
 	return &OS{
 		Settings:             config.Global,
@@ -41,8 +38,6 @@ func newTilingClient(width, height, workspace int) *OS {
 	}
 }
 
-// daemonNewWindow appends the box AddDaemonWindow produces: a nominal full-size
-// window flagged Unplaced, because the daemon has no viewport to place it in.
 func daemonNewWindow(state *session.SessionState, id string, width, height, workspace int) {
 	state.Windows = append(state.Windows, session.WindowState{
 		ID:        id,
@@ -96,13 +91,9 @@ func TestNewWindowPTYMatchesPaneAfterRepeatedUnplacedSync(t *testing.T) {
 	}
 	win := m.Windows[0]
 
-	// The client has placed and tiled the window; the daemon PTY carries that
-	// size. Start watching from there.
 	var pty ptySpy
 	pty.install(win)
 
-	// The daemon re-broadcasts the creating state: same window, still Unplaced,
-	// newer version.
 	daemonState.Version++
 	if err := m.ApplyStateSync(daemonState); err != nil {
 		t.Fatalf("echo sync: %v", err)

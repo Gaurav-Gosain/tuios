@@ -8,8 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// railTitleClient seeds a client cache with the attached session's windows as
-// the daemon reports them.
 func railTitleClient(windows ...session.WindowSummary) *session.TUIClient {
 	c := session.NewTUIClient()
 	c.UpdateSessionCache([]session.SessionInfo{{Name: "attached", Windows: windows}})
@@ -25,7 +23,7 @@ func TestRailRetitlesWindowsItStoppedWatching(t *testing.T) {
 	watched := &terminal.Window{ID: "w1", PTYID: "p1", DaemonMode: true}
 	watched.SetTitle("bash")
 	dropped := &terminal.Window{ID: "w2", PTYID: "p2", DaemonMode: true}
-	dropped.SetTitle("bash") // what it was called when the client stopped watching
+	dropped.SetTitle("bash")
 
 	m := &OS{
 		Settings:    config.Global,
@@ -43,8 +41,6 @@ func TestRailRetitlesWindowsItStoppedWatching(t *testing.T) {
 	if got := m.railTitleShown(dropped); got != "vim" {
 		t.Errorf("rail title for an unwatched window = %q, want the daemon's %q", got, "vim")
 	}
-	// A window this client still watches is titled from its own emulator, which
-	// is live and ahead of any listing.
 	if got := m.railTitleShown(watched); got != "bash" {
 		t.Errorf("rail title for a watched window = %q, want the local %q", got, "bash")
 	}

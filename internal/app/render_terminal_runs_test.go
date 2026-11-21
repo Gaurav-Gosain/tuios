@@ -17,14 +17,11 @@ func TestRenderTerminalKeepsEveryStyleRun(t *testing.T) {
 	m := newTestOS(win)
 	cols, rows := win.Terminal.Width(), win.Terminal.Height()
 	win.LockIO()
-	// The cursor is hidden so no cell wears the fake cursor's colours.
 	_, _ = win.Terminal.Write([]byte("\x1b[?25l"))
 	for y := 1; y <= rows; y++ {
 		var b []byte
 		b = fmt.Appendf(b, "\x1b[%d;1H", y)
 		for x := range cols {
-			// A different foreground on every cell, a background every third,
-			// bold every fifth: every neighbour differs in something.
 			b = fmt.Appendf(b, "\x1b[0;38;5;%dm", 16+(x*7+y)%200)
 			if x%3 == 0 {
 				b = fmt.Appendf(b, "\x1b[48;5;%dm", 100+x)

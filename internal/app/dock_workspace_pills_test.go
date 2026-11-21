@@ -11,12 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// pillOS is a dock w columns wide with one window per listed workspace and the
-// given names applied.
-//
-// ASCII glyphs are on throughout: every icon on the bar is then one cell, so a
-// rune index into the drawn row is a screen column and a test can compare a
-// recorded rectangle against the cells that were actually painted in it.
 func pillOS(t *testing.T, w int, names map[int]string, workspaces ...int) *OS {
 	t.Helper()
 	prevTabs, prevASCII := config.Global.DockWorkspaceTabs, config.Global.UseASCIIOnly
@@ -36,8 +30,6 @@ func pillOS(t *testing.T, w int, names map[int]string, workspaces ...int) *OS {
 	return m
 }
 
-// overflowOS is a dock whose named workspaces cannot all fit its bar, which is
-// the state the scrolling is for.
 func overflowOS(t *testing.T) *OS {
 	t.Helper()
 	names := map[int]string{
@@ -47,8 +39,6 @@ func overflowOS(t *testing.T) *OS {
 	return pillOS(t, 90, names, 1, 2, 3, 4, 5, 6)
 }
 
-// dockBarRow renders the dock and returns its bar row as plain text, asserting
-// the row measures one cell per rune so the caller may index it by column.
 func dockBarRow(t *testing.T, m *OS) string {
 	t.Helper()
 	dock, _ := m.renderDockString()
@@ -64,7 +54,6 @@ func dockBarRow(t *testing.T, m *OS) string {
 	return row
 }
 
-// cells returns the drawn text of columns [x0, x1) of a bar row.
 func cells(row string, x0, x1 int) string {
 	r := []rune(row)
 	if x0 < 0 || x1 > len(r) || x0 > x1 {
@@ -73,10 +62,6 @@ func cells(row string, x0, x1 int) string {
 	return string(r[x0:x1])
 }
 
-// pillCapsOS is pillOS with the Nerd Font glyph set and dock_pill_caps on, the state the
-// rounded caps are drawn in. Every glyph the bar uses is still one cell wide, so
-// dockBarRow's rune-per-column assertion holds and a recorded rectangle can
-// still be compared against the cells that were painted in it.
 func pillCapsOS(t *testing.T, w int, names map[int]string, workspaces ...int) *OS {
 	t.Helper()
 	prev := config.Global.UseASCIIOnly
@@ -87,8 +72,6 @@ func pillCapsOS(t *testing.T, w int, names map[int]string, workspaces ...int) *O
 	return m
 }
 
-// pillText is what a pill carrying label draws: a column of padding either side
-// of the label, inside the rounded caps the glyph set provides.
 func pillText(label string, s *config.Settings) string {
 	return s.GetDockWorkspaceCapLeft() + " " + label + " " + s.GetDockWorkspaceCapRight()
 }
@@ -133,8 +116,6 @@ func TestWorkspacePillRectsMatchTheirDrawnCells(t *testing.T) {
 							h.Workspace, h.X0, h.X1, got, want)
 					}
 					if capped {
-						// The cap columns are the rect's own first and last, so
-						// the shape and the target are the same rectangle.
 						if got := cells(row, h.X0, h.X0+1); got != lc {
 							t.Errorf("workspace %d's rect opens on %q, not its left cap %q", h.Workspace, got, lc)
 						}
@@ -144,10 +125,8 @@ func TestWorkspacePillRectsMatchTheirDrawnCells(t *testing.T) {
 						}
 					}
 					if h.Workspace == 0 {
-						continue // the add pill resolves at click time
+						continue
 					}
-					// Both edges, then the cells either side of them: the gap
-					// between pills belongs to neither.
 					for _, x := range []int{h.X0, h.X1 - 1} {
 						if got := m.DockWorkspaceAt(x, h.Y); got != h.Workspace {
 							t.Errorf("column %d of workspace %d's pill resolves to %d", x, h.Workspace, got)
@@ -206,9 +185,6 @@ func TestWorkspaceStripScrollsRatherThanTruncates(t *testing.T) {
 			t.Errorf("workspace %d is drawn but its name %q is not whole in the row: %q", h.Workspace, label, row)
 		}
 	}
-	// Scrolling to the end brings the workspaces that were cut off into view,
-	// which is the difference between a strip that scrolls and one that drops
-	// its tail.
 	seen := map[int]bool{}
 	for range tabs {
 		for _, h := range m.dockWorkspaceHits {
@@ -231,7 +207,6 @@ func TestWorkspaceStripScrollsRatherThanTruncates(t *testing.T) {
 	}
 }
 
-// arrowHit returns the recorded arrow stepping the given direction, or nil.
 func arrowHit(m *OS, delta int) *dockWorkspaceArrowHit {
 	for i, h := range m.dockWorkspaceArrowHits {
 		if h.Delta == delta {
@@ -256,7 +231,6 @@ func TestWorkspaceStripArrowsFollowTheContent(t *testing.T) {
 		t.Fatal("the strip has workspaces past its right-hand end but no arrow to them")
 	}
 
-	// Step to the far end, then the arrows have swapped roles.
 	for range m.buildDockWorkspaceTabs() {
 		r := arrowHit(m, 1)
 		if r == nil {
@@ -272,7 +246,6 @@ func TestWorkspaceStripArrowsFollowTheContent(t *testing.T) {
 		t.Error("the strip has scrolled but does not offer the way back")
 	}
 
-	// An arrow's own columns are its own: they must not resolve to a workspace.
 	for _, h := range m.dockWorkspaceArrowHits {
 		for x := h.X0; x < h.X1; x++ {
 			if ws := m.DockWorkspaceAt(x, h.Y); ws != 0 {
@@ -300,7 +273,7 @@ func TestWorkspaceStripArrowStepsOnePill(t *testing.T) {
 	if !m.ScrollDockWorkspacesAt(right.X1-1, right.Y) {
 		t.Fatal("the arrow's own last column did not take the click")
 	}
-	m.dockWorkspaceScroll-- // undo the second click, one step is what is under test
+	m.dockWorkspaceScroll--
 	dockBarRow(t, m)
 
 	pills := m.occupiedWorkspaces()
@@ -337,13 +310,12 @@ func TestWorkspaceStripKeepsTheActivePillInView(t *testing.T) {
 		t.Fatal("workspace 4 is already in view, so the switch under test proves nothing")
 	}
 
-	m.SwitchToWorkspace(4) // the keyboard path: no arrow was touched
+	m.SwitchToWorkspace(4)
 	dockBarRow(t, m)
 	if !drawn()[4] {
 		t.Errorf("switching to workspace 4 left its pill off the strip: %v", m.dockWorkspaceHits)
 	}
 
-	// And back the other way, from the far end to the first workspace.
 	m.SwitchToWorkspace(1)
 	dockBarRow(t, m)
 	if !drawn()[1] {
@@ -389,8 +361,6 @@ func TestWorkspaceStripLeavesTheRestOfTheBarAlone(t *testing.T) {
 			if lipgloss.Width(row) != m.GetRenderWidth() {
 				t.Errorf("the bar is %d cells on a %d-column screen", lipgloss.Width(row), m.GetRenderWidth())
 			}
-			// The control that makes a workspace is pinned outside the scrolling
-			// run, so it is there whatever the strip is doing.
 			add := false
 			for _, h := range m.dockWorkspaceHits {
 				if h.Workspace == 0 {
@@ -403,14 +373,12 @@ func TestWorkspaceStripLeavesTheRestOfTheBarAlone(t *testing.T) {
 			if !add {
 				t.Error("the add pill was swallowed by the strip")
 			}
-			// The dock's live pane count, which the e2e harness reads.
 			if want := " " + strconv.Itoa(m.CurrentWorkspace) + ":"; !strings.Contains(row, want) {
 				t.Errorf("the bar lost its %q readout: %q", want, row)
 			}
 			if len(m.dockSessionHits) == 0 {
 				t.Fatalf("the session controls are off at %d columns", w)
 			}
-			// Nothing the strip drew may reach the controls' columns.
 			for _, s := range m.dockSessionHits {
 				for _, h := range m.dockWorkspaceHits {
 					if h.Y == s.Y && h.X1 > s.X0 {

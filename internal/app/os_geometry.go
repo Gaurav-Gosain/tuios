@@ -11,20 +11,16 @@ func (m *OS) Snap(i int, quarter SnapQuarter) *OS {
 		return m
 	}
 
-	// Create and start snap animation
 	anim := m.CreateSnapAnimation(i, quarter)
 	if anim != nil {
 		m.addAnimation(anim)
 	} else {
-		// No animation needed (already at target), but still resize terminal if needed
 		win := m.Windows[i]
 		_, _, targetWidth, targetHeight := m.calculateSnapBounds(quarter)
 
-		// Enforce minimum size
 		targetWidth = max(targetWidth, config.DefaultWindowWidth)
 		targetHeight = max(targetHeight, config.DefaultWindowHeight)
 
-		// Make sure terminal is properly sized even if no animation
 		if win.Width != targetWidth || win.Height != targetHeight {
 			win.Resize(targetWidth, targetHeight)
 		}
@@ -74,9 +70,6 @@ func (m *OS) SnapZoneAt(x, y int) SnapQuarter {
 }
 
 func (m *OS) calculateSnapBounds(quarter SnapQuarter) (x, y, width, height int) {
-	// Snapping partitions the content region, not the raw screen: a sidebar
-	// reserves columns the same way the dock reserves rows, so a left-snapped
-	// pane starts at the left margin and a fullscreen snap fills the content box.
 	usableHeight := m.GetUsableHeight()
 	left := m.GetLeftMargin()
 	contentWidth := m.GetContentWidth()
@@ -113,15 +106,13 @@ func (m *OS) calculateSnapBounds(quarter SnapQuarter) (x, y, width, height int) 
 // newWidth/newHeight are the current terminal dimensions.
 func (m *OS) ScaleWindowsToTerminal(oldWidth, oldHeight, newWidth, newHeight int) {
 	if m.AutoTiling {
-		return // Tiling mode handles its own layout
+		return
 	}
 
 	if oldWidth <= 0 || oldHeight <= 0 || newWidth <= 0 || newHeight <= 0 {
-		return // Invalid dimensions
+		return
 	}
 
-	// The reserve did not move with the viewport, so the old viewport lost the
-	// same rows to it that the new one does.
 	oldUsableHeight := oldHeight - m.GetTopMargin() - m.GetBottomMargin()
 
 	newUsableHeight := m.GetUsableHeight()
@@ -137,13 +128,11 @@ func (m *OS) ScaleWindowsToTerminal(oldWidth, oldHeight, newWidth, newHeight int
 			continue
 		}
 
-		// Scale position and size
 		win.X = int(float64(win.X) * widthScale)
 		win.Y = int(float64(win.Y) * heightScale)
 		win.Width = int(float64(win.Width) * widthScale)
 		win.Height = int(float64(win.Height) * heightScale)
 
-		// Ensure minimum size
 		if win.Width < config.DefaultWindowWidth {
 			win.Width = config.DefaultWindowWidth
 		}
@@ -151,8 +140,6 @@ func (m *OS) ScaleWindowsToTerminal(oldWidth, oldHeight, newWidth, newHeight int
 			win.Height = config.DefaultWindowHeight
 		}
 
-		// Ensure windows don't exceed the content region beside a reserved
-		// sidebar band, matching ClampWindowsToView.
 		leftMargin := m.GetLeftMargin()
 		contentRight := leftMargin + m.GetContentWidth()
 		if win.Width > contentRight-leftMargin {
@@ -162,7 +149,6 @@ func (m *OS) ScaleWindowsToTerminal(oldWidth, oldHeight, newWidth, newHeight int
 			win.Height = newUsableHeight
 		}
 
-		// Ensure position keeps window inside the content region
 		if win.X < leftMargin {
 			win.X = leftMargin
 		}
@@ -176,7 +162,6 @@ func (m *OS) ScaleWindowsToTerminal(oldWidth, oldHeight, newWidth, newHeight int
 			win.Y = newUsableHeight - win.Height
 		}
 
-		// Mark dirty and resize PTY
 		win.MarkPositionDirty()
 		win.Resize(win.Width, win.Height)
 	}
@@ -187,21 +172,17 @@ func (m *OS) ScaleWindowsToTerminal(oldWidth, oldHeight, newWidth, newHeight int
 // Windows that would be off-screen are repositioned to remain visible.
 func (m *OS) ClampWindowsToView() {
 	if m.AutoTiling {
-		return // Tiling mode handles its own layout
+		return
 	}
 
 	usableHeight := m.GetUsableHeight()
 	renderWidth := m.GetRenderWidth()
-	// The sidebar reserves a horizontal band the same way the dock reserves a
-	// vertical one, so a floating pane is clamped against the content region
-	// [leftMargin, leftMargin+contentWidth), not the full screen. Without this a
-	// pane could be shoved wholly under the sidebar and become unreachable.
 	leftMargin := m.GetLeftMargin()
 	contentWidth := m.GetContentWidth()
 	rightEdge := leftMargin + contentWidth
 	topMargin := m.GetTopMargin()
-	minVisibleX := 20 // Minimum visible horizontal pixels (matches mouse.go)
-	minVisibleY := 3  // Minimum visible vertical rows (matches mouse.go)
+	minVisibleX := 20
+	minVisibleY := 3
 	clampedCount := 0
 
 	for _, win := range m.Windows {
@@ -212,7 +193,6 @@ func (m *OS) ClampWindowsToView() {
 		originalX, originalY := win.X, win.Y
 		needsResize := false
 
-		// Clamp window size to fit within the content region if larger
 		if win.Width > contentWidth {
 			win.Width = contentWidth
 			needsResize = true
@@ -222,7 +202,6 @@ func (m *OS) ClampWindowsToView() {
 			needsResize = true
 		}
 
-		// Ensure minimum size
 		if win.Width < config.DefaultWindowWidth {
 			win.Width = config.DefaultWindowWidth
 			needsResize = true
@@ -232,8 +211,6 @@ func (m *OS) ClampWindowsToView() {
 			needsResize = true
 		}
 
-		// Clamp X position: ensure at least minVisibleX pixels are visible within
-		// the content region, so a pane can never hide fully behind the sidebar.
 		if win.X+win.Width < leftMargin+minVisibleX {
 			win.X = leftMargin + minVisibleX - win.Width
 		}
@@ -241,7 +218,6 @@ func (m *OS) ClampWindowsToView() {
 			win.X = rightEdge - minVisibleX
 		}
 
-		// Clamp Y position: ensure at least minVisibleY rows visible, and can't go behind dock
 		if win.Y < topMargin {
 			win.Y = topMargin
 		}
@@ -250,13 +226,7 @@ func (m *OS) ClampWindowsToView() {
 			win.Y = maxY
 		}
 
-		// If position changed, mark as dirty and log
 		if win.X != originalX || win.Y != originalY || needsResize {
-			// The new viewport decides where this pane goes, so a snap still
-			// heading somewhere the old one implied is obsolete. Left running it
-			// stamps that rectangle back on the next tick without resizing the
-			// emulator with it, and the pane draws at one size while its guest
-			// writes at another.
 			m.CancelSnapAnimation(win)
 			win.MarkPositionDirty()
 			if needsResize {
@@ -301,10 +271,6 @@ func (m *OS) GetTimeYPosition() int {
 	return 0
 }
 
-// badgeY is the row the floating badge of kind sits on. An armed leader
-// with a full dock goes on the dock's rule row, the dock's own chrome. On the
-// panes' edge row it covered the focused pane's title for every dock that
-// lists no mode pill.
 func (m *OS) badgeY(kind badgeKind) int {
 	if kind == badgeLeader && m.Settings.DockbarPosition != "hidden" && m.Settings.DockHeight() >= 2 {
 		if m.Settings.DockbarPosition == "top" {
@@ -315,8 +281,6 @@ func (m *OS) badgeY(kind badgeKind) int {
 	return m.GetTimeYPosition()
 }
 
-// badgeOnBottomRow reports whether the floating badge sits on the screen's
-// last row, which it does when the dock has the first.
 func (m *OS) badgeOnBottomRow() bool {
 	return m.Settings.DockbarPosition == "top"
 }
@@ -340,7 +304,6 @@ func (m *OS) GetUsableHeight() int {
 // pane_view.go). Against an older daemon it is the minimum of the terminal
 // width and the session's.
 func (m *OS) GetRenderWidth() int {
-	// If terminal size not yet known, use effective size if available
 	if m.Width == 0 {
 		if m.EffectiveWidth > 0 {
 			return m.EffectiveWidth
@@ -350,7 +313,6 @@ func (m *OS) GetRenderWidth() int {
 	if m.windowSizeAware() {
 		return m.Width
 	}
-	// Use minimum of terminal and effective size
 	if m.EffectiveWidth > 0 && m.EffectiveWidth < m.Width {
 		return m.EffectiveWidth
 	}
@@ -381,10 +343,6 @@ func (m *OS) GetSidebarWidth() int {
 	return m.sidebarWidthFor(m.sidebarPreferredWidth())
 }
 
-// sidebarPreferredWidth is the width the user is asking for: the stored one, or
-// the glyph strip while the rail is collapsed. Collapse rides the same path the
-// breakpoints do rather than short-circuiting them, so a collapsed rail on a
-// wide screen and a rail the screen collapsed for itself are one state.
 func (m *OS) sidebarPreferredWidth() int {
 	if m.SidebarCollapsed {
 		return config.SidebarGlyphWidth
@@ -392,18 +350,10 @@ func (m *OS) sidebarPreferredWidth() int {
 	return m.sidebarStoredWidth()
 }
 
-// sidebarStoredWidth is the expanded width the rail returns to, never below the
-// narrow variant: an expand that lands back on the glyph strip is not an expand.
 func (m *OS) sidebarStoredWidth() int {
 	return max(m.sidebarWidthPreference(), config.SidebarNarrowWidth)
 }
 
-// sidebarWidthPreference is the expanded width this session asks for: the one
-// dragged or synced, falling back to the configured default when nobody has
-// asked for anything. It is model state rather than a global because the rail
-// is shared with the session's other clients and because one tuios-web process
-// serves several sessions at once, where a global is one drag away from
-// resizing a rail nobody touched.
 func (m *OS) sidebarWidthPreference() int {
 	if m.SidebarWidthPref > 0 {
 		return m.SidebarWidthPref
@@ -411,9 +361,6 @@ func (m *OS) sidebarWidthPreference() int {
 	return m.Settings.SidebarWidth
 }
 
-// sidebarWidthFor is GetSidebarWidth against a hypothetical preferred width, so
-// the footer stepper can ask what a width would actually get it before offering
-// the step. GetSidebarWidth is this with the configured preference.
 func (m *OS) sidebarWidthFor(prefer int) int {
 	if m.NoRail || !m.Settings.SidebarEnabled || m.Settings.SidebarPosition == "hidden" {
 		return 0
@@ -421,9 +368,6 @@ func (m *OS) sidebarWidthFor(prefer int) int {
 	return sidebarResponsiveWidth(prefer, m.GetRenderWidth())
 }
 
-// secondarySidebarWidth gives the newly configured edge only columns left
-// after the original rail and the pane floor. Without an explicit enabled
-// override, a second rail cannot appear merely because a table was written.
 func (m *OS) secondarySidebarWidth() int {
 	if m.NoRail || m.UserConfig == nil {
 		return 0
@@ -467,8 +411,6 @@ func sidebarResponsiveWidth(prefer, rw int) int {
 		w = max(prefer, config.SidebarGlyphWidth)
 	}
 
-	// Enforce the pane floor by stepping down to a narrower variant rather than
-	// starving the content area.
 	if rw-w < config.SidebarMinPaneFloor {
 		switch {
 		case rw-config.SidebarNarrowWidth >= config.SidebarMinPaneFloor:
@@ -523,23 +465,6 @@ func (m *OS) OwnLayoutReserve() session.LayoutReserve {
 	return r
 }
 
-// paneReserve is the chrome the panes are laid out around, which is not the
-// same question as what this client draws. Every client attached is looking at
-// the same PTYs and a PTY has exactly one size, so the box the panes are
-// partitioned into has to be identical on every client. The daemon settles that
-// by taking the largest reserve any client asks for; this returns it, floored by
-// this client's own chrome so that a client on its own, or one whose
-// announcement has not landed yet, still reserves what it is about to draw.
-//
-// The consequence is deliberate: a client with less chrome than the session
-// agreed leaves the difference blank rather than handing it to the panes. A
-// client absorbs its own chrome; it never moves the panes to make room.
-//
-// Under window_size latest the daemon agrees on the latest client's reserve
-// alone. A client whose size or chrome differs from the latest client's along
-// an axis draws the session as a view inside its own chrome, so along that
-// axis it takes the session's reserve as it is. Floored by its own chrome
-// there, it would lay the panes out in a box no other client uses.
 func (m *OS) paneReserve() session.LayoutReserve {
 	own := m.OwnLayoutReserve()
 	r := own.Max(m.SessionReserve)
@@ -569,10 +494,6 @@ func (m *OS) GetRightMargin() int {
 	return m.clampReserve(m.paneReserve().Right, m.GetLayoutWidth())
 }
 
-// clampReserve keeps a reserve from eating the screen it is measured against. A
-// reserve is agreed across clients and a client can be narrower than the one
-// that asked for it, so the arithmetic has to survive a reserve wider than this
-// client's viewport rather than hand a negative extent to a renderer.
 func (m *OS) clampReserve(reserve, extent int) int {
 	if reserve <= 0 || extent <= 0 {
 		return 0
@@ -584,17 +505,12 @@ func (m *OS) clampReserve(reserve, extent int) int {
 // left and right reserved margins. This is what tiling partitions and what the
 // pane floor is enforced against.
 func (m *OS) GetContentWidth() int {
-	// Floored, the way GetUsableHeight is floored. The reserve is agreed across
-	// clients and this client can be the narrow one, so the subtraction has to
-	// survive a reserve as wide as the viewport rather than hand a negative
-	// extent to a renderer or a tiler.
 	return max(m.GetLayoutWidth()-m.GetLeftMargin()-m.GetRightMargin(), 0)
 }
 
 // GetRenderHeight returns the height to use for rendering. See
 // GetRenderWidth.
 func (m *OS) GetRenderHeight() int {
-	// If terminal size not yet known, use effective size if available
 	if m.Height == 0 {
 		if m.EffectiveHeight > 0 {
 			return m.EffectiveHeight
@@ -604,7 +520,6 @@ func (m *OS) GetRenderHeight() int {
 	if m.windowSizeAware() {
 		return m.Height
 	}
-	// Use minimum of terminal and effective size
 	if m.EffectiveHeight > 0 && m.EffectiveHeight < m.Height {
 		return m.EffectiveHeight
 	}

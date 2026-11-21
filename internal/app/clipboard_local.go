@@ -8,31 +8,12 @@ import (
 	"time"
 )
 
-// Native system clipboard fallback.
-//
-// TUIOS normally reaches the clipboard through OSC 52, which asks the user's
-// terminal to carry the text. Terminals built on VTE (GNOME Terminal, Ptyxis)
-// never implement it, so copy and paste silently fail there. When this process
-// can reach a native clipboard tool (wl-clipboard on Wayland, xclip or xsel on
-// X11, pbcopy/pbpaste on macOS), tuios talks to the system clipboard directly
-// instead, and OSC 52 stays the path for a client whose clipboard lives
-// somewhere else.
-//
-// Where the clipboard lives decides who may touch it. A plain local TUI is the
-// person at this box. A loopback SSH session is the same person on the same
-// box, so the server's native clipboard is still theirs. A remote SSH peer or
-// a browser tab is someone else, whose clipboard this process must not reach;
-// OSC 52 is how their terminal carries it.
-
 type clipboardTool struct {
 	name     string
 	copyCmd  []string
 	pasteCmd []string
 }
 
-// detectClipboardToolEnv is the environment a clipboard decision is made from.
-// Both fields are injectable so the whole decision table becomes a plain test
-// with no compositor and no host environment leaking in.
 type detectClipboardToolEnv struct {
 	getenv   func(string) string
 	lookPath func(string) bool
@@ -55,9 +36,6 @@ func hasExecutable(name string) bool {
 
 func detectClipboardTool(env detectClipboardToolEnv) *clipboardTool {
 	getenv, lp := env.getenv, env.lookPath
-	// Wayland: the runtime dir and the display socket both have to be named
-	// for the tool to reach the compositor, so a tool on PATH with neither is
-	// not a usable route.
 	if getenv("XDG_RUNTIME_DIR") != "" && getenv("WAYLAND_DISPLAY") != "" {
 		if lp("wl-copy") && lp("wl-paste") {
 			return &clipboardTool{
@@ -93,44 +71,25 @@ func detectClipboardTool(env detectClipboardToolEnv) *clipboardTool {
 	return nil
 }
 
-// Write sends text to the native clipboard. The tool owns the data: wl-copy
-// forks a keeper that holds the selection until it is replaced, which is the
-// semantics wanted, so the write is started and reaped in the background
-// rather than waited on (waiting would block until the selection changes).
 func (t *clipboardTool) Write(text string) error {
 	cmd := exec.Command(t.copyCmd[0], t.copyCmd[1:]...)
 	cmd.Stdin = strings.NewReader(text)
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	// Reap the keeper so it does not linger as a zombie. Its exit status
-	// says nothing about the copy, which Start already handed over.
 	go func() { _ = cmd.Wait() }()
 	return nil
 }
 
-// nativePasteTimeout bounds a native clipboard read. A hung xclip (the X
-// server gone, a stalled selection) would otherwise leave the paste pending
-// forever; on timeout the read fails and the caller reports that nothing came
-// back rather than pretending an empty paste succeeded.
 const nativePasteTimeout = 2 * time.Second
 
-// Read returns the current native clipboard contents.
 func (t *clipboardTool) Read() (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), nativePasteTimeout)
 	defer cancel()
-	// wl-paste -n suppresses the trailing newline it otherwise adds; xclip -o
-	// and pbpaste do not add one, so a selection that genuinely ends in a
-	// newline keeps it.
 	out, err := exec.CommandContext(ctx, t.pasteCmd[0], t.pasteCmd[1:]...).Output()
 	return string(out), err
 }
 
-// hostTerminalLacksOSC52 reports whether the outer terminal is one that never
-// answers OSC 52: the VTE family (GNOME Terminal, Ptyxis) and macOS
-// Terminal.app. That is where the native route earns its keep; on a terminal
-// that does answer, OSC 52 already works and spawning a helper would only add a
-// duplicate clipboard-manager entry per selection.
 func hostTerminalLacksOSC52(getenv func(string) string) bool {
 	return getenv("VTE_VERSION") != "" || getenv("TERM_PROGRAM") == "Apple_Terminal"
 }
@@ -147,9 +106,6 @@ func ShouldUseNativeClipboard(loopback bool) bool {
 }
 
 func shouldUseNativeClipboard(env detectClipboardToolEnv, hostLacksOSC52, loopback bool) bool {
-	// A loopback SSH session is the same human on the same box: the server
-	// process cannot see the client's terminal, but the native clipboard is
-	// still theirs, so a loopback session is treated like one without OSC 52.
 	if !hostLacksOSC52 && !loopback {
 		return false
 	}

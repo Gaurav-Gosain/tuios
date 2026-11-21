@@ -27,7 +27,7 @@ func TestDragAfterPeerOpStands(t *testing.T) {
 	r, p, ex := geometryRig(t, clientGlobals{}, clientGlobals{})
 	p.m.ResizeFocusedWindowWidth(-6)
 	p.m.SyncStateToDaemon()
-	time.Sleep(150 * time.Millisecond) // the op lands, its broadcast queued and unread
+	time.Sleep(150 * time.Millisecond)
 	for range 8 {
 		r.m.ResizeFocusedWindowWidth(2)
 		r.m.SyncStateToDaemon()
@@ -61,8 +61,6 @@ func TestSlowDragCrossingPeerOpConverges(t *testing.T) {
 	}
 }
 
-// leavesByWorkspace names the leaves of every tree a client holds, each with
-// the workspace its window is on.
 func leavesByWorkspace(m *OS) map[int][]string {
 	out := map[int][]string{}
 	for ws, tree := range m.WorkspaceTrees {
@@ -80,8 +78,6 @@ func leavesByWorkspace(m *OS) map[int][]string {
 	return out
 }
 
-// settleCrossing lets every message through and waits a little longer, so a
-// late reconcile has time to arrive and undo something.
 func settleCrossing(ex *exchange) {
 	ex.settle(400, 300*time.Millisecond)
 	time.Sleep(300 * time.Millisecond)
@@ -174,7 +170,6 @@ func TestFocusWhilePeerResizesStands(t *testing.T) {
 func TestDefaultTreeDoesNotReplaceThePeersTree(t *testing.T) {
 	r, p, ex := geometryRig(t, clientGlobals{}, clientGlobals{})
 	ws := p.m.CurrentWorkspace
-	// The peer as it is when it attached before the session had a tree.
 	delete(p.m.treeSeen, ws)
 	p.m.WorkspaceTrees[ws] = nil
 	p.m.TileAllWindows()

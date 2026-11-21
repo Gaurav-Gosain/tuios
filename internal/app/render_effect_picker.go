@@ -10,27 +10,13 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// Effect picker layout constants, matching the theme and glyph pickers so the
-// three panels are one object with three previews.
 const (
-	// Six cells wider than its two siblings. This is the only one of the three
-	// whose detail block is prose: the engine's own sentence about the effect
-	// is what answers the names, and at 52 the longest of them needed a third
-	// line to land.
 	effectPickerInnerWidth  = 58
 	effectPickerVisibleRows = 10
-	// effectPickerDetailRows is the description box under the list. Two lines
-	// hold every description the engine carries at this width, and the box is
-	// padded to that height whatever the text needs, so the panel does not
-	// change size as the selection moves.
-	effectPickerDetailRows = 2
-	// effectOpeningColumn is the width of the right-hand column holding the
-	// opening band. Six cells hold "medium" and every band word is shorter.
-	effectOpeningColumn = 6
+	effectPickerDetailRows  = 2
+	effectOpeningColumn     = 6
 )
 
-// effectPickerHints is the footer, shared by the renderer and the sizing helper
-// so both measure the same panel.
 var effectPickerHints = []overlay.Hint{
 	{Key: "type", Label: "filter"},
 	{Key: hintListMove, Label: "preview"},
@@ -38,19 +24,12 @@ var effectPickerHints = []overlay.Hint{
 	{Key: "esc", Label: "cancel"},
 }
 
-// effectPickerLayout returns the fitted inner width and visible row count.
 func (m *OS) effectPickerLayout() (width, rows int, hints []overlay.Hint) {
 	width = m.panelWidth(effectPickerInnerWidth)
-	// Body lines that are not effect rows: the search input, its rule, the
-	// description box and the line under it saying how long the effect hides
-	// the screen.
 	rows, hints = m.panelBody(effectPickerVisibleRows, 3+effectPickerDetailRows, width, nil, effectPickerHints)
 	return width, rows, hints
 }
 
-// renderEffectPicker draws the searchable effect picker, returning the panel,
-// geometry, and per-row hit rects. The preview itself is not in here: it is a
-// full-screen layer under the panel, placed by renderOverlays.
 func (m *OS) renderEffectPicker() (string, overlay.Geometry, []overlayRowHit) {
 	items := m.effectPickerItems()
 	pal := m.overlayUI()
@@ -90,7 +69,7 @@ func (m *OS) renderEffectPicker() (string, overlay.Geometry, []overlayRowHit) {
 
 	var rows []overlayRowHit
 	for i := start; i < end; i++ {
-		rowY := geo.BodyY + (i - start) + 2 // +2 for the search line and its rule
+		rowY := geo.BodyY + (i - start) + 2
 		rows = append(rows, overlayRowHit{
 			Rect: overlay.Rect{X0: 0, Y0: rowY, X1: geo.Width, Y1: rowY + 1},
 			Idx:  i,
@@ -99,18 +78,6 @@ func (m *OS) renderEffectPicker() (string, overlay.Geometry, []overlayRowHit) {
 	return content, geo, rows
 }
 
-// effectRow renders one effect: its name on the left and how long it hides the
-// screen on the right, with a highlight bar when selected.
-//
-// The wait is on the row rather than only in the detail line because it is the
-// one property that separates these thirty-six from each other in a way a user
-// cares about before choosing. wipe hands the screen back at once and swarm
-// keeps it for most of a minute, and nothing in either name says so.
-//
-// It is a band and not a time. The measured seconds behind it move by more than
-// tenfold with the size of the screen and the amount of text on it, so a figure
-// here would be a fact about a screen nobody is looking at. See
-// effectOpenings.
 func (m *OS) effectRow(name string, selected bool, pal overlay.Palette, width int) string {
 	st := overlay.RowState{Cursor: selected, Focused: true}
 	bg := pal.Ground(st, pal.Surface)
@@ -125,12 +92,9 @@ func (m *OS) effectRow(name string, selected bool, pal overlay.Palette, width in
 	timing := effectOpeningWord(band)
 	timingColor := pal.FgMute
 	if band == effectOpeningLong {
-		// The flag, not a filter. A slow opener is still a choice someone may
-		// want; what it must not be is a surprise.
 		timingColor = pal.Warning
 	}
 	timingW := lipgloss.Width(timing)
-	// On a panel too narrow for a name and a time, the name wins.
 	if timingW+effectOpeningColumn+8 > width {
 		timing, timingW = "", 0
 	}
@@ -144,12 +108,6 @@ func (m *OS) effectRow(name string, selected bool, pal overlay.Palette, width in
 	return pal.Row(left+overlay.Style(bg).Render(strings.Repeat(" ", gap))+right, width, st, pal.Surface)
 }
 
-// effectOpeningWord is a band in the row's right-hand column.
-//
-// The words are a scale and read as one down the column, which is the whole of
-// what the column is for: it answers "which of these gives me my screen back
-// soonest", and it must not answer "how many seconds", because that answer
-// changes with the screen it is asked about.
 func effectOpeningWord(band effectOpeningBand) string {
 	switch band {
 	case effectOpeningNone:
@@ -165,16 +123,6 @@ func effectOpeningWord(band effectOpeningBand) string {
 	}
 }
 
-// effectOpeningSentence is the line under the list.
-//
-// Every band that hides the screen says the time depends on the screen, because
-// it does: the same effect over a bare prompt and over a full 200x50 screen can
-// differ by more than tenfold. The band survives that. A number would not.
-//
-// The none band says something stronger and keeps saying it. An effect gets
-// there by never taking a character off the screen and never moving one, on any
-// screen, so there is no wait for anything to depend on. See
-// effectOpening.keepsScreen.
 func effectOpeningSentence(band effectOpeningBand) string {
 	switch band {
 	case effectOpeningNone:
@@ -190,13 +138,6 @@ func effectOpeningSentence(band effectOpeningBand) string {
 	}
 }
 
-// effectPickerDetail is the block under the list: what the selected effect
-// does, and how long it takes before the screen is readable again.
-//
-// The description is the engine's own. It is the answer to the question the
-// names raise: nothing about "errorcorrect" or "orbittingvolley" says what
-// arrives on screen, and a list of thirty-six such names is barely better than
-// the cycler it replaced.
 func (m *OS) effectPickerDetail(items []string, pal overlay.Palette, width int) []string {
 	bg := pal.Surface
 	if m.effectList.Cursor < 0 || m.effectList.Cursor >= len(items) {
@@ -209,18 +150,13 @@ func (m *OS) effectPickerDetail(items []string, pal overlay.Palette, width int) 
 
 	style := overlay.Style(bg).Foreground(pal.FgMute).Italic(true)
 	if m.effectPreview.resized || effectOpeningBandOf(name, &m.Settings) == effectOpeningLong {
-		// The flag, not a filter. A slow opener is still a choice someone may
-		// want; what it must not be is a surprise.
 		style = overlay.Style(bg).Foreground(pal.Warning)
 	}
 	return append(lines, style.Render("  "+overlay.Truncate(status, max(width-2, 1))))
 }
 
-// effectDetailText is the description and the status line for one effect.
 func (m *OS) effectDetailText(name string) (description, status string) {
 	if m.effectPreview.resized {
-		// The capture is stale and the animation is gone. Say why, rather than
-		// leaving a still frame that looks like an effect that does nothing.
 		status = "The screen size changed. The preview stopped."
 	}
 
@@ -244,7 +180,6 @@ func (m *OS) effectDetailText(name string) (description, status string) {
 	return description, effectOpeningSentence(effectOpeningBandOf(name, &m.Settings))
 }
 
-// blankLines is n surface-filled spacer rows.
 func blankLines(bg color.Color, n int) []string {
 	out := make([]string, n)
 	for i := range out {

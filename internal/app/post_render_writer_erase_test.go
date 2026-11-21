@@ -61,8 +61,6 @@ func TestAnErasingFrameCarriesItsPictures(t *testing.T) {
 		t.Errorf("the picture on screen is under %d, want 7", id)
 	}
 
-	// A frame rewritten for a kitty host leaves the pictures on the host: only
-	// the placement goes out again, and nothing counts as lost.
 	kept := string(p.hostErased(true))
 	if strings.Contains(kept, "a=t,") || strings.Count(kept, "a=p,i=7,p=1,") != 1 {
 		t.Errorf("a kept frame sent %q, want one placement and no upload", kept)

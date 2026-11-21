@@ -25,18 +25,8 @@ type MultiCopyPane struct {
 	Lines []string
 }
 
-// multiCopyTitleMax caps a title in a header. A title is a label; one that
-// runs to kilobytes is either a mistake or an attempt to bury the content.
 const multiCopyTitleMax = 200
 
-// sanitizeMultiCopyTitle makes an untrusted pane title safe to print as a
-// label in a Markdown header or a JSON string.
-//
-// It removes every control character (a newline in a title would end the
-// Markdown header and let the title write its own document body), every
-// bidirectional and zero-width formatting rune (which make a title read as
-// something other than what it is), and caps the length. JSON escaping is
-// the encoder's job and happens on top of this.
 func sanitizeMultiCopyTitle(title string) string {
 	var b strings.Builder
 	n := 0
@@ -56,7 +46,6 @@ func sanitizeMultiCopyTitle(title string) string {
 	return strings.TrimSpace(b.String())
 }
 
-// multiCopyFormatExt is the file extension a saved yank takes in each format.
 func multiCopyFormatExt(format string) string {
 	switch format {
 	case config.MultiCopyFormatMarkdown:
@@ -67,8 +56,6 @@ func multiCopyFormatExt(format string) string {
 	return "txt"
 }
 
-// nextMultiCopyFormat is the format after f in the cycle the format key steps
-// through.
 func nextMultiCopyFormat(f string) string {
 	for i, v := range config.MultiCopyFormats {
 		if v == f {
@@ -116,8 +103,6 @@ func formatMultiCopyMarkdown(panes []MultiCopyPane) string {
 		} else {
 			fmt.Fprintf(&b, "## Pane %d: %s\n\n", p.Index, title)
 		}
-		// The fence has to be longer than any run of backticks in the text, or
-		// a line of the pane's output could close it early.
 		fence := strings.Repeat("`", max(3, longestBacktickRun(p.Lines)+1))
 		b.WriteString(fence)
 		b.WriteByte('\n')
@@ -147,7 +132,6 @@ func longestBacktickRun(lines []string) int {
 	return best
 }
 
-// multiCopyJSONPane is the shape of one element of the json format.
 type multiCopyJSONPane struct {
 	Pane     int      `json:"pane"`
 	WindowID string   `json:"window_id"`
@@ -169,11 +153,9 @@ func formatMultiCopyJSON(panes []MultiCopyPane) string {
 	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
-	// The text goes to a clipboard or a file, not into HTML: "<" stays "<".
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(out); err != nil {
-		// Strings and ints cannot fail to encode.
 		return "[]\n"
 	}
 	return buf.String()

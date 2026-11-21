@@ -7,11 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// panicWriter panics on Write, standing in for any graphics-path failure that
-// could bubble up while the render goroutine flushes kitty output to the host
-// (ssh session). A panic on this path escapes View() into bubbletea's top-level
-// recover, which returns from Program.Run and tears the ssh session down. That
-// is the shape of the captured crash, so the render path must contain it.
 type panicWriter struct{}
 
 func (panicWriter) Write(p []byte) (int, error) {
@@ -42,18 +37,11 @@ func TestGetKittyGraphicsCmdSurvivesHostWritePanic(t *testing.T) {
 	m.Windows = append(m.Windows, win)
 	m.FocusedWindow = 0
 
-	// A direct (inline) transmit produces pending output that the render flush
-	// writes to the host, which panics.
 	raw := []byte("\x1b_Ga=T,i=1,f=32,s=2,v=2;AAAAAAAAAAAAAAAA\x1b\\")
 	win.LockIO()
 	_, _ = win.Terminal.Write(raw)
 	win.UnlockIO()
 
-	// flushGraphicsForView is exactly what View() runs after setting content.
-	// Before the fix its body (GetKittyGraphicsCmd -> WriteToHost) let this
-	// panic escape into bubbletea's top-level recover, ending Program.Run and,
-	// over SSH, tearing the session down. It must now swallow the panic and
-	// drop the frame.
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("render-path graphics flush propagated a panic (would kill the ssh session): %v", r)
@@ -74,8 +62,6 @@ func TestAsyncFrameWriterSurvivesPanic(t *testing.T) {
 		Output:       panicWriter{},
 		RemoteClient: true,
 	})
-	// writeFrameSafely is the unit the async goroutine runs per frame; it must
-	// not propagate a panic from the host write.
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("async frame write propagated a panic (would crash the server process): %v", r)

@@ -7,7 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// hasWarning reports whether any warning mentions substr.
 func hasWarning(warnings []string, substr string) bool {
 	for _, w := range warnings {
 		if strings.Contains(w, substr) {
@@ -51,7 +50,6 @@ func TestBrowserWarningsStayQuietForSinksThatWork(t *testing.T) {
 		t.Errorf("warned about sinks a browser can deliver: %v", got)
 	}
 
-	// Alerts switched off entirely means nothing to warn about either.
 	cfg.Notifications.Agent.Enabled = &off
 	cfg.Notifications.Agent.Notify = &on
 	cfg.Notifications.Agent.SoundMode = "audio"
@@ -72,7 +70,6 @@ func TestBrowserWarningsReachTheSession(t *testing.T) {
 		t.Errorf("a browser session was not told: %v", web.ConfigNotices)
 	}
 
-	// A terminal session delivers OSC 9 perfectly well and must not be warned.
 	local := NewOS(OSOptions{UserConfig: cfg})
 	if hasWarning(local.ConfigNotices, "notify") {
 		t.Errorf("a terminal session was warned about a sink that works: %v", local.ConfigNotices)

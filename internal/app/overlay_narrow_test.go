@@ -11,9 +11,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// narrowScreens are the sizes the overlays have to survive: a tall narrow
-// terminal, a short wide one, the narrowest viewport worth supporting, and a
-// normal terminal as a control.
 var narrowScreens = []struct {
 	name string
 	w, h int
@@ -23,25 +20,11 @@ var narrowScreens = []struct {
 	{"very-narrow", 30, 24},
 	{"very-short", 100, 12},
 	{"desktop", 120, 40},
-	// The accent picker's wide layout: the first screen that gets it, one just
-	// over it, and a wide screen too short to keep everything.
 	{"wide-picker-floor", 73, 30},
 	{"wide-picker", 74, 20},
 	{"wide-picker-short", 100, 14},
 }
 
-// assertFitsScreen fails if any line of out is wider than w, the block is
-// taller than h, or any line pads itself with a control character. An overlay
-// wider than the screen has its right-hand side drawn off the edge, where it
-// cannot be read or scrolled to.
-//
-// The control-character half guards a different way of getting the same answer
-// wrong. Every row here is padded to the panel width with literal spaces, and
-// the fitting arithmetic in overlay_fit.go measures those rows to decide what
-// else fits. A tab would break that: it is one byte that lipgloss measures as
-// one cell but a terminal advances to its next tab stop, so the panel's own
-// idea of where a row ends would stop matching the screen's. Carriage returns
-// and the rest are the same failure with a different glyph.
 func assertFitsScreen(t *testing.T, name, out string, w, h int) {
 	t.Helper()
 	if out == "" {
@@ -64,8 +47,6 @@ func assertFitsScreen(t *testing.T, name, out string, w, h int) {
 	}
 }
 
-// newNarrowOS builds an OS sized to a given screen with every overlay's state
-// populated enough to render.
 func newNarrowOS(t *testing.T, w, h int) *OS {
 	t.Helper()
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
@@ -194,10 +175,6 @@ func TestTapeReviewFitsNarrowScreens(t *testing.T) {
 	}
 }
 
-// tinyScreens are sizes a shrunk client reaches: a narrowed browser tab, a
-// pane-sized client, and the least a terminal can be. All but 40x10 leave the
-// which-key panel no room for a single binding, and the narrow ones are
-// narrower than its "+N more" count.
 var tinyScreens = []struct {
 	name string
 	w, h int
@@ -240,9 +217,6 @@ func TestWhichKeyOnTinyScreens(t *testing.T) {
 						continue
 					}
 					found = true
-					// Under the title's rule, a line of dashes alone (a frame's
-					// edge has corners), there is a binding or the count of the
-					// ones that did not fit.
 					lines := strings.Split(ansi.Strip(layer.GetContent()), "\n")
 					rule := slices.IndexFunc(lines, func(l string) bool {
 						l = strings.TrimSpace(l)
@@ -251,8 +225,6 @@ func TestWhichKeyOnTinyScreens(t *testing.T) {
 					if rule < 0 || !slices.ContainsFunc(lines[rule+1:], func(l string) bool { return strings.TrimSpace(l) != "" }) {
 						t.Errorf("the menu shows no binding and no count:\n%s", layer.GetContent())
 					}
-					// Every line is the panel's width: a count wider than a
-					// narrow panel used to run past it.
 					for i, l := range lines {
 						if w := lipgloss.Width(l); w != layer.Width() {
 							t.Errorf("line %d is %d cells wide, the panel is %d: %q", i, w, layer.Width(), l)
@@ -262,8 +234,6 @@ func TestWhichKeyOnTinyScreens(t *testing.T) {
 				if !found {
 					t.Fatal("no whichkey layer rendered")
 				}
-				// The whole frame, with the menu over the panes: the compositor
-				// takes a panel taller or wider than the screen.
 				if _, ok := m.safeComposeFrame(); !ok {
 					t.Errorf("drawing the frame with the menu up crashed")
 				}

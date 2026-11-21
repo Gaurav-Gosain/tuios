@@ -18,8 +18,6 @@ func skipWithoutSh(t *testing.T) {
 	}
 }
 
-// pipeOS is a client whose clipboard writes are OSC 52 only, so a test never
-// touches the clipboard of the machine that runs it.
 func pipeOS(t *testing.T) *OS {
 	t.Helper()
 	m := scratchOS(t, false)

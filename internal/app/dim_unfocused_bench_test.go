@@ -24,8 +24,6 @@ func BenchmarkDimUnfocusedRuns(b *testing.B) {
 		cells[i] = uv.Cell{Content: "x", Width: 1}
 		cells[i].Style.Fg = inks[i%len(inks)]
 	}
-	// Held as interfaces, the way renderTerminal holds the pane's dim ground,
-	// so the benchmark does not box them on every call.
 	var fg, bg color.Color = color.RGBA{R: 0xe5, G: 0xe5, B: 0xe5, A: 0xff}, color.RGBA{R: 0x1a, G: 0x1b, B: 0x26, A: 0xff}
 	for _, memo := range []bool{true, false} {
 		name := "memo"

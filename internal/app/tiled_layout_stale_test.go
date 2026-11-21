@@ -9,7 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// nPaneTiledOS builds a tiled client with n panes on one workspace.
 func nPaneTiledOS(t testing.TB, n, w, h int) *OS {
 	t.Helper()
 	wins := make([]*terminal.Window, 0, n)
@@ -19,9 +18,7 @@ func nPaneTiledOS(t testing.TB, n, w, h int) *OS {
 		wins = append(wins, win)
 	}
 	m := &OS{
-		Settings: config.Global,
-		// The layout reads the model's session-settled geometry, seeded from
-		// the globals the way NewOS seeds it.
+		Settings:         config.Global,
 		SharedBorders:    config.Global.SharedBorders,
 		PaneGap:          config.Global.PaneGap,
 		Windows:          wins,
@@ -114,7 +111,6 @@ func TestLayoutFromASmallerScreenIsStale(t *testing.T) {
 		t.Fatal("the fixture reads as stale before anything is done to it")
 	}
 
-	// Halve every pane, as adopting a layout from a client half the size does.
 	for _, w := range m.Windows {
 		w.Width /= 2
 		w.Height /= 2

@@ -16,77 +16,25 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The host terminal's own colours.
-//
-// A program that picks a light or a dark palette asks the terminal for its
-// background with OSC 11, and some ask for the default text colour (OSC 10)
-// and the sixteen ANSI colours (OSC 4) too. Inside tuios the terminal that
-// answers is a pane's emulator, and with no tuios theme and no pane background
-// it would answer with its own defaults: a black background and a white
-// foreground, whatever the terminal around tuios really is. Codex, Claude
-// Code and helix would then draw their dark palettes on a light terminal.
-//
-// So each client asks its own terminal. The local client's startup probe
-// already does (capabilities.go), and every client asks again through Bubble
-// Tea when the probe had nothing, which is the case for the SSH and browser
-// clients, whose terminals the probe never saw. The answers are held here,
-// per client, because one server process serves clients on different
-// terminals. They are what panes are told while no theme is set (see
-// paneReportNow), and the background is the ground the rail and the dock are
-// measured against (railGround, groundUI), so a light terminal with no theme
-// gets the light chrome ramp a light theme gets.
-//
-// A terminal that answers nothing (mosh answers no colour queries) leaves all
-// of it unset: panes get the emulator's defaults and the chrome its constant
-// dark ramp.
-//
-// The local client also follows the terminal's light and dark switch. It turns
-// on mode 2031, and a terminal that supports it (ghostty, kitty, contour and
-// others) then reports every change of the system appearance with DSR 997.
-// tuios answers each report by asking for the colours again, since the new
-// scheme's background is what matters and the report only says light or dark.
-// The mode is only turned on for a local client, because only the local
-// client turns it off again when it exits (terminal.ResetTerminal): an SSH or
-// browser client that went away with the mode on would leave its terminal
-// sending reports into whatever runs there next.
-
-// hostColors is what this client's terminal said about its own colours. A nil
-// colour is one it did not answer for.
 type hostColors struct {
-	fg, bg color.Color
-	ansi   [16]color.Color
-	// light is the verdict on bg, held with hysteresis so a background near
-	// the middle does not flip the chrome between ramps. Meaningful only while
-	// bg is set.
-	light bool
-	// fgHex, bgHex and palHex spell the colours the way the daemon is sent
-	// them; palHex is empty until some slot is known.
+	fg, bg               color.Color
+	ansi                 [16]color.Color
+	light                bool
 	fgHex, bgHex, palHex string
-	// gen counts changes, so a memo keyed on it notices one.
-	gen uint64
-	// settlePending is set while a settle message is on its way. See
-	// hostColorsSettledMsg.
-	settlePending bool
+	gen                  uint64
+	settlePending        bool
 }
 
-// The hysteresis band for the light verdict, in 8-bit luminance. A dark
-// verdict turns light only above hostLightAbove, and a light one turns dark
-// only below hostDarkBelow. The numbers are Gemini CLI's, which follows the
-// terminal's appearance the same way.
 const (
 	hostLightAbove = 140
 	hostDarkBelow  = 110
 )
 
-// hostLuminance is a colour's luminance on 0 to 255, weighted the way the eye
-// weighs the three channels.
 func hostLuminance(c color.Color) float64 {
 	r, g, b, _ := c.RGBA()
 	return 0.2126*float64(r>>8) + 0.7152*float64(g>>8) + 0.0722*float64(b>>8)
 }
 
-// seedHostColors takes what the startup probe learned. It is called once, from
-// NewOS, before anything is drawn, so nothing needs repainting.
 func (m *OS) seedHostColors(caps *HostCapabilities) {
 	if caps == nil {
 		return
@@ -105,8 +53,6 @@ func (m *OS) seedHostColors(caps *HostCapabilities) {
 	m.followSchemeTheme()
 }
 
-// schemeTheme is the theme the config asks for on this terminal: theme_light
-// while the local terminal is light and a pair is set, else theme.
 func (m *OS) schemeTheme() string {
 	if m.UserConfig == nil {
 		return ""
@@ -118,12 +64,6 @@ func (m *OS) schemeTheme() string {
 	return a.Theme
 }
 
-// followSchemeTheme puts the theme of the pair that fits the terminal in
-// force, when the config sets theme_light. It runs when the local terminal
-// reports its background, and after a light and dark switch (mode 2031). The
-// picker's and the theme editor's previews are left alone while they are
-// open. The editor calls this again when it closes. A --theme flag is an
-// explicit choice, so with one the pair is not followed.
 func (m *OS) followSchemeTheme() {
 	if m.UserConfig == nil || m.UserConfig.Appearance.ThemeLight == "" ||
 		m.Client != ClientLocal || m.LearnMode || m.ShowThemePicker || m.themeEditor.open ||
@@ -138,12 +78,10 @@ func (m *OS) followSchemeTheme() {
 	m.applyTheme(name)
 }
 
-// unpackColor turns a 0xRRGGBB word into a colour.
 func unpackColor(packed uint32) color.Color {
 	return color.RGBA{R: uint8(packed >> 16), G: uint8(packed >> 8), B: uint8(packed), A: 0xff}
 }
 
-// setHostBg records the host's background and reports whether it changed.
 func (m *OS) setHostBg(c color.Color) bool {
 	if isNilColor(c) {
 		return false
@@ -157,8 +95,6 @@ func (m *OS) setHostBg(c color.Color) bool {
 	lum := hostLuminance(c)
 	switch {
 	case h.bg == nil:
-		// The first answer has no verdict to hold, so it is judged the way a
-		// theme's ground is: by which ink reads better on it.
 		h.light = theme.GroundIsLight(c)
 	case h.light && lum < hostDarkBelow:
 		h.light = false
@@ -167,9 +103,6 @@ func (m *OS) setHostBg(c color.Color) bool {
 	}
 	h.bg, h.bgHex = c, hex
 	h.gen++
-	// The local client is alone in its process, so the dialogs may follow
-	// its terminal while no theme is set. A served client's terminal is one
-	// of several, and the process-wide chrome is not its to move.
 	if m.Client == ClientLocal && !m.LearnMode {
 		theme.SetHostGround(c, h.light)
 		theme.SetSchemeLight(h.light)
@@ -177,8 +110,6 @@ func (m *OS) setHostBg(c color.Color) bool {
 	return true
 }
 
-// setHostFg records the host's default foreground and reports whether it
-// changed.
 func (m *OS) setHostFg(c color.Color) bool {
 	if isNilColor(c) {
 		return false
@@ -194,8 +125,6 @@ func (m *OS) setHostFg(c color.Color) bool {
 	return true
 }
 
-// setHostSlot records one of the host's sixteen and reports whether it
-// changed.
 func (m *OS) setHostSlot(i int, c color.Color) bool {
 	if i < 0 || i > 15 || isNilColor(c) {
 		return false
@@ -218,7 +147,6 @@ func (m *OS) setHostSlot(i int, c color.Color) bool {
 	return true
 }
 
-// hostPaletteQuery asks for the sixteen in one write.
 var hostPaletteQuery = func() string {
 	var b strings.Builder
 	for i := range 16 {
@@ -227,28 +155,19 @@ var hostPaletteQuery = func() string {
 	return b.String()
 }()
 
-// Mode 2031 on and off: the terminal reports light and dark switches while it
-// is on.
 const (
 	hostSchemeReportsOn  = "\x1b[?2031h"
 	hostSchemeReportsOff = "\x1b[?2031l"
 )
 
-// asksHostColors reports whether this client talks to a terminal of its own.
-// A model built without a kind (the tests, the benchmarks) and the browser
-// tour's fake terminal do not.
 func (m *OS) asksHostColors() bool {
 	return m.Client != ClientUnknown && !m.LearnMode
 }
 
-// followsHostScheme reports whether this client turns mode 2031 on. Only the
-// local client does; see the comment at the top of the file.
 func (m *OS) followsHostScheme() bool {
 	return m.Client == ClientLocal && !m.LearnMode
 }
 
-// hostColorQueries is what Init sends: the colour questions the startup probe
-// left unanswered, and mode 2031 for a client that follows the scheme.
 func (m *OS) hostColorQueries() tea.Cmd {
 	if !m.asksHostColors() {
 		return nil
@@ -261,10 +180,6 @@ func (m *OS) hostColorQueries() tea.Cmd {
 	if m.followsHostScheme() {
 		cmds = append(cmds, tea.Raw(hostSchemeReportsOn))
 	}
-	// What the startup probe already learned goes to the daemon now, rather
-	// than with the first push some input happens to cause: a program started
-	// in a pane before the person touches a key asks the daemon's emulator,
-	// and it has to be told by then.
 	if m.IsDaemonSession && m.host.gen > 0 && !m.host.settlePending {
 		m.host.settlePending = true
 		cmds = append(cmds, func() tea.Msg { return hostColorsSettledMsg{} })
@@ -272,23 +187,14 @@ func (m *OS) hostColorQueries() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// hostColorRequests asks for the background, the foreground and the sixteen.
 func hostColorRequests() []tea.Cmd {
 	return []tea.Cmd{tea.RequestBackgroundColor, tea.RequestForegroundColor, tea.Raw(hostPaletteQuery)}
 }
 
-// hostColorsSettledMsg lands a batch of host colour answers. A terminal
-// answers the seventeen questions as seventeen replies, and repainting and
-// pushing state after each would be seventeen of both; the first answer that
-// changes something schedules this, and the rest ride along.
 type hostColorsSettledMsg struct{}
 
-// hostColorsSettle is how long the answers after the first are given to
-// arrive. They come back in one burst, so a few milliseconds is plenty.
 const hostColorsSettle = 15 * time.Millisecond
 
-// handleHostColorMsg takes the host colour messages. It reports whether msg
-// was one, and the command to run.
 func (m *OS) handleHostColorMsg(msg tea.Msg) (tea.Cmd, bool) {
 	changed := false
 	switch msg := msg.(type) {
@@ -303,8 +209,6 @@ func (m *OS) handleHostColorMsg(msg tea.Msg) (tea.Cmd, bool) {
 		}
 		changed = m.setHostSlot(idx, c)
 	case uv.LightColorSchemeEvent, uv.DarkColorSchemeEvent:
-		// The report says light or dark and nothing else. The colours of the
-		// new scheme are what panes and the chrome need, so ask for them.
 		if !m.asksHostColors() {
 			return nil, true
 		}
@@ -323,7 +227,6 @@ func (m *OS) handleHostColorMsg(msg tea.Msg) (tea.Cmd, bool) {
 	return tea.Tick(hostColorsSettle, func(time.Time) tea.Msg { return hostColorsSettledMsg{} }), true
 }
 
-// parseHostSlotReply reads an OSC 4 answer for one of the sixteen.
 func parseHostSlotReply(s string) (int, color.Color, bool) {
 	m := oscColorReply().FindStringSubmatch(s)
 	if m == nil || !strings.HasPrefix(m[1], "4;") {
@@ -336,8 +239,6 @@ func parseHostSlotReply(s string) (int, color.Color, bool) {
 	return idx, unpackColor(packOSCColor(m[3], m[4], m[5])), true
 }
 
-// hostColorsChanged lands a change of the host's colours: the chrome is
-// rebuilt on the new ground, and panes and the daemon are told.
 func (m *OS) hostColorsChanged() {
 	m.followSchemeTheme()
 	m.MarkAllDirty()
@@ -345,9 +246,6 @@ func (m *OS) hostColorsChanged() {
 	m.SyncStateToDaemon()
 }
 
-// railGround is what the rail and the dock are drawn on: the theme's
-// background when a theme is on, else the host's own when it said, else the
-// chrome ramp's canvas, which every constant ink was picked against.
 func (m *OS) railGround() color.Color {
 	if t := theme.Current(); t != nil {
 		return theme.AsColor(t.Bg)
@@ -358,11 +256,6 @@ func (m *OS) railGround() color.Color {
 	return theme.RailGround()
 }
 
-// terminalBg is theme.TerminalBg on this client's terminal: the theme's
-// background when a theme is on, else the host's own when it said, else the
-// black theme.TerminalBg assumes. Everything that measures an ink against the
-// ground under a pane or a rail row asks here, so a light terminal with no
-// theme is not measured as black.
 func (m *OS) terminalBg() color.Color {
 	if theme.Current() == nil && m.host.bg != nil {
 		return m.host.bg
@@ -370,7 +263,6 @@ func (m *OS) terminalBg() color.Color {
 	return theme.TerminalBg()
 }
 
-// groundUI is theme.GroundUI on this client's ground.
 func (m *OS) groundUI() overlay.Palette {
 	if theme.Current() == nil && m.host.bg != nil {
 		return theme.GroundUIOn(m.host.bg, m.host.light)
@@ -378,39 +270,26 @@ func (m *OS) groundUI() overlay.Palette {
 	return theme.GroundUI()
 }
 
-// railRule is theme.RailRule on this client's ground.
 func (m *OS) railRule() color.Color {
 	return theme.RailRuleOn(m.railGround())
 }
 
-// paneReport is what a pane's emulator answers colour questions with, and
-// the key that names it. A nil colour or a nil palette keeps the emulator's
-// own answer.
 type paneReport struct {
-	fg, bg color.Color
-	pal    *[16]color.Color
-	key    string
-	// bgHex, fgHex and palHex are the same for the daemon.
+	fg, bg               color.Color
+	pal                  *[16]color.Color
+	key                  string
 	bgHex, fgHex, palHex string
 }
 
-// paneReportMemo keeps the answer and what it was worked out from, so asking
-// on every frame costs comparisons.
 type paneReportMemo struct {
 	groundKey string
 	themed    bool
-	// tint is the theme the answer was worked out from. A theme switch
-	// gives a new pointer, and so does a theme registered again under the
-	// same id with new colours.
-	tint  *tint.Tint
-	gen   uint64
-	valid bool
-	r     paneReport
+	tint      *tint.Tint
+	gen       uint64
+	valid     bool
+	r         paneReport
 }
 
-// themeReportPalette is a theme's sixteen as a pane is told them, and as the
-// comma list the daemon is sent. A slot the theme does not set stays nil and
-// empty, which keeps the emulator's own answer for it.
 func themeReportPalette(t *tint.Tint) (*[16]color.Color, string) {
 	var pal [16]color.Color
 	var b strings.Builder
@@ -424,16 +303,6 @@ func themeReportPalette(t *tint.Tint) (*[16]color.Color, string) {
 	return &pal, b.String()
 }
 
-// paneReportNow is what panes are told they are drawn on.
-//
-// A painted pane background is the answer for the ground, as it always was.
-// With no theme the host's own colours fill in whatever the paint does not
-// say: the background when nothing is painted, the text colour when a colour
-// of the user's is painted with no theme to take ink from, and the sixteen.
-// With a theme the theme's colours fill in the rest. A pane this process runs
-// is given them as its defaults anyway, but the daemon's emulators are not:
-// the daemon never loads a theme, so without this a pane in a daemon session
-// answered black and white under any theme.
 func (m *OS) paneReportNow() *paneReport {
 	g := m.paneGround()
 	themed := theme.IsEnabled()

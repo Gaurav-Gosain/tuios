@@ -7,15 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
-// The session tree carries the other machines' rows alongside this machine's,
-// and the palette reads that tree. Neither kind of remote row is a local
-// session, and treating them as one is what produced
-// `switch to "\x00host/local" failed`: a machine's heading has a rail identity
-// for an id, not a session name, and the palette handed it straight to the
-// daemon.
-
-// paletteHostOS is a client with two machines in its listing and one local
-// session, which is the shape the report came from.
 func paletteHostOS(t *testing.T) *OS {
 	t.Helper()
 	m := sidebarTestOS(t, 120, 40, "left")

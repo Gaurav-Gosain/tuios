@@ -16,27 +16,15 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// What the copies draw: the dock item, the mark on a machine's rail row, and
-// the Copies panel.
-//
-// The bar is "[####--]": filled cells and empty cells are different glyphs,
-// so it reads at 16 colours and with no colour at all. The colour only adds
-// to it: the fill is the accent, a copy that waits is the warning token, a
-// failed one the error token, a finished one the success token.
-
-// transferDockBarCells is the dock bar's width inside its brackets.
 const transferDockBarCells = 6
 
-// transferPanelBarCells is the panel bar's width inside its brackets.
 const transferPanelBarCells = 8
 
-// transfersPanelWidth and transfersPanelRows size the Copies panel.
 const (
 	transfersPanelWidth = 86
 	transfersPanelRows  = 10
 )
 
-// transferBar draws a bar of cells cells for pct percent, in two inks.
 func transferBar(pct, cells int, fill, track, bg color.Color) string {
 	n := min(max(pct*cells/100, 0), cells)
 	st := func(c color.Color) lipgloss.Style { return lipgloss.NewStyle().Background(bg).Foreground(c) }
@@ -44,7 +32,6 @@ func transferBar(pct, cells int, fill, track, bg color.Color) string {
 		st(track).Render(strings.Repeat("-", cells-n)) + st(track).Render("]")
 }
 
-// transferArrow is the mark for a copy on a machine's rail row.
 func transferArrow() string {
 	if overlay.UseASCII() {
 		return "->"
@@ -52,12 +39,6 @@ func transferArrow() string {
 	return "→"
 }
 
-// transfersDockCell is the dock item, or "" while no copy is to be shown.
-//
-// One copy is a bar and its percent, several are a count and the percent of
-// their bytes together. A failed copy the person has not seen outranks both,
-// then a copy that waits for an answer, then copies that all wait for their
-// machine.
 func (m *OS) transfersDockCell() string {
 	if !m.transfersShown() {
 		return ""
@@ -113,7 +94,6 @@ func (m *OS) transfersDockCell() string {
 	case active > 1:
 		body = ink(pal.FgDim).Render(strconv.Itoa(active) + " copies " + strconv.Itoa(transferPercent(done, size)) + "%")
 	default:
-		// The last copy ended, and the item stays for the linger.
 		if m.transfersAnyDoneLately() {
 			body = transferBar(100, transferDockBarCells, theme.Readable(pal.Success, bg), theme.Readable(pal.FgMute, bg), bg) +
 				pad + ink(pal.Success).Render("done")
@@ -124,7 +104,6 @@ func (m *OS) transfersDockCell() string {
 	return pad + body + pad
 }
 
-// transfersAnyDoneLately reports whether a copy ended done within the linger.
 func (m *OS) transfersAnyDoneLately() bool {
 	cut := time.Now().Add(-transferLinger - time.Second).UnixMilli()
 	for _, r := range m.transfers.rows {
@@ -135,8 +114,6 @@ func (m *OS) transfersAnyDoneLately() bool {
 	return false
 }
 
-// transfersHostFigure is the mark a machine's rail row shows while it has a
-// copy, "→ 61%", in the accent on the row's ground, and its width.
 func (m *OS) transfersHostFigure(host string, rowBg color.Color, pal overlay.Palette) (string, int) {
 	pct, ok := m.transfersHostMark(host)
 	if !ok {
@@ -146,8 +123,6 @@ func (m *OS) transfersHostFigure(host string, rowBg color.Color, pal overlay.Pal
 	return sidebarStyle(rowBg, pal.Accent).Render(text), lipgloss.Width(text)
 }
 
-// transfersKeyHint is a footer hint for a Copies action, from what the
-// config binds. An action bound to nothing has no hint.
 func (m *OS) transfersKeyHint(action, label string) (overlay.Hint, bool) {
 	reg := m.KeybindRegistry
 	if reg == nil {
@@ -164,8 +139,6 @@ func (m *OS) transfersKeyHint(action, label string) (overlay.Hint, bool) {
 	return overlay.Hint{Key: key, Label: label}, true
 }
 
-// transfersKey is the first key bound now to a Copies action, as a sentence
-// names it, or "" when the config binds it to nothing.
 func (m *OS) transfersKey(action string) string {
 	reg := m.KeybindRegistry
 	if reg == nil {
@@ -179,8 +152,6 @@ func (m *OS) transfersKey(action string) string {
 	return ""
 }
 
-// transfersPressTo is "Press KEY to WHAT." for a Copies action, or "" when the
-// action has no key: a sentence that names a dead key is worse than none.
 func (m *OS) transfersPressTo(action, what string) string {
 	if key := m.transfersKey(action); key != "" {
 		return "Press " + key + " to " + what + "."
@@ -188,8 +159,6 @@ func (m *OS) transfersPressTo(action, what string) string {
 	return ""
 }
 
-// railSendKey is the key bound now to send a file from the rail's files
-// list, or "".
 func (m *OS) railSendKey() string {
 	reg := m.KeybindRegistry
 	if reg == nil {
@@ -203,7 +172,6 @@ func (m *OS) railSendKey() string {
 	return ""
 }
 
-// transfersEmptyText is what the empty panel says: how to send a file.
 func (m *OS) transfersEmptyText() string {
 	if m.transfers.unsupported {
 		return "This daemon cannot copy files to a host. Restart it with a newer tuios."
@@ -214,7 +182,6 @@ func (m *OS) transfersEmptyText() string {
 	return "No copies. Open the menu of a file in the rail to send it to a host."
 }
 
-// transfersHints is the panel's footer, for the copy under the cursor.
 func (m *OS) transfersHints() []overlay.Hint {
 	var out []overlay.Hint
 	add := func(action, label string) {
@@ -243,8 +210,6 @@ func (m *OS) transfersHints() []overlay.Hint {
 	return out
 }
 
-// renderTransfers draws the Copies panel on the shared list overlay: one row
-// per copy, newest first, through pal.Row like every list.
 func (m *OS) renderTransfers() (string, overlay.Geometry, []overlayRowHit) {
 	rows := m.transfers.rows
 	m.clampTransfersSelection()
@@ -272,12 +237,10 @@ func (m *OS) renderTransfers() (string, overlay.Geometry, []overlayRowHit) {
 	})
 }
 
-// transferRoute is "laptop -> build": where a copy goes from and to.
 func transferRoute(row session.TransferRow) string {
 	return transferPlaceShort(row.Src.Host) + " -> " + transferPlaceShort(row.Dst.Host)
 }
 
-// transferStatus is the right-hand part of a panel row, and its ink.
 func transferStatus(row session.TransferRow, pal overlay.Palette, bg color.Color) string {
 	st := func(c color.Color) lipgloss.Style { return overlay.Style(bg).Foreground(c) }
 	pct := transferPercent(row.Done, row.Size)
@@ -328,7 +291,6 @@ func transferStatus(row session.TransferRow, pal overlay.Palette, bg color.Color
 	return st(pal.FgMute).Render(row.State)
 }
 
-// transferFarHost is the machine of a copy that is not this one.
 func transferFarHost(row session.TransferRow) string {
 	if row.Dst.Host != "" {
 		return row.Dst.Host
@@ -336,8 +298,6 @@ func transferFarHost(row session.TransferRow) string {
 	return row.Src.Host
 }
 
-// transferPanelRow draws one copy: its name and route on the left, keeping
-// their room, and its progress or its end on the right.
 func transferPanelRow(row session.TransferRow, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
 	nameInk := pal.FgDim
 	if selected {
@@ -357,8 +317,6 @@ func transferPanelRow(row session.TransferRow, selected bool, rowBg color.Color,
 	return listRowSpans(width, listRowMarker(selected), left, status, rowBg, pal)
 }
 
-// transferDetail is the lines under the list about the copy under the
-// cursor: where it goes, and what to do next.
 func (m *OS) transferDetail(row session.TransferRow, width int) []string {
 	cut := func(s string) string { return " " + overlay.Truncate(s, max(width-2, 1)) }
 	where := row.Dst.Path
@@ -367,7 +325,6 @@ func (m *OS) transferDetail(row session.TransferRow, width int) []string {
 	} else if row.Target != "" {
 		where = row.Target
 	}
-	// Paths are cut from the front: the tail names the file.
 	at := func(label, p string) string {
 		label += ": "
 		return " " + label + truncPathLeft(printableTitle(p), max(width-2-len(label), 1))

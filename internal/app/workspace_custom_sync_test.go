@@ -9,10 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// customClient is a client with two panes on workspace 3, under the
-// master-stack layout the custom flag is most visible in. The panes are real
-// because these cases are about where a rectangle ends up, not only about which
-// flag a map holds.
 func customClient(t *testing.T, name string) *OS {
 	t.Helper()
 	m := &OS{
@@ -97,8 +93,6 @@ func TestALaggingSyncCannotUndoALayoutJustArranged(t *testing.T) {
 	}
 }
 
-// paneWidths reports every pane's width, which is what a retile changes and a
-// preserved layout does not.
 func paneWidths(m *OS) string {
 	out := ""
 	for _, w := range m.Windows {
@@ -110,7 +104,6 @@ func paneWidths(m *OS) string {
 	return out
 }
 
-// pushedWidths is the same reading taken off a state about to go on the wire.
 func pushedWidths(s *session.SessionState) string {
 	out := ""
 	for _, w := range s.Windows {
@@ -122,8 +115,6 @@ func pushedWidths(s *session.SessionState) string {
 	return out
 }
 
-// arrangeCustom gives A a layout the tiler would not have chosen: a 40 column
-// pane beside a 120 column one, where tiling gives 80 and 80.
 func arrangeCustom(t *testing.T, a *OS) {
 	t.Helper()
 	a.CurrentWorkspace = 3
@@ -136,8 +127,6 @@ func arrangeCustom(t *testing.T, a *OS) {
 	a.MarkLayoutCustom()
 }
 
-// noAnimations stops tiling applying its geometry through an animation, which
-// would leave every pane at its old size for the length of the test.
 func noAnimations(t *testing.T) {
 	t.Helper()
 	prev := config.Global.Motion
@@ -172,7 +161,6 @@ func TestACustomLayoutSurvivesAPeersFirstVisit(t *testing.T) {
 		t.Fatalf("A pushed widths %s, want the 40/120 it arranged", got)
 	}
 
-	// B has never been to workspace 3. It adopts the session.
 	b := customClient(t, "b")
 	if err := b.RestoreFromState(pushed); err != nil {
 		t.Fatalf("RestoreFromState: %v", err)
@@ -183,13 +171,11 @@ func TestACustomLayoutSurvivesAPeersFirstVisit(t *testing.T) {
 	}
 	b.CurrentWorkspace = 1
 
-	// B's user presses the workspace key.
 	b.SwitchToWorkspace(3)
 	if got := paneWidths(b); got != "40/120" {
 		t.Errorf("B's first visit to workspace 3 retiled to %s over A's 40/120", got)
 	}
 
-	// And B's own push carries the layout rather than replacing it.
 	if got := pushedWidths(b.BuildSessionState()); got != "40/120" {
 		t.Errorf("B pushed %s, want A's 40/120: B is overwriting a layout it never touched", got)
 	}
@@ -219,7 +205,6 @@ func TestACustomLayoutSurvivesAWorkspaceSwitchThatArrivesOverTheWire(t *testing.
 	}
 	b.CurrentWorkspace = 1
 
-	// The session moves to workspace 3 and B is told rather than asked.
 	pushed.Version = b.DaemonStateVersion + 1
 	if err := b.ApplyStateSync(pushed); err != nil {
 		t.Fatalf("ApplyStateSync: %v", err)

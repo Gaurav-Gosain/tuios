@@ -9,35 +9,13 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// The way out of the spotlight.
-//
-// The beam dims most of the screen, and a person who switched it on by
-// accident saw "Spotlight: ON" for a few seconds and then nothing that said
-// what had happened or how to undo it. So while the beam is on, the dock
-// carries a chip that names it and says the key that turns it off, and a click
-// on the chip turns it off too. The chip and the dock's message block are
-// left out of the dimming, so the way out is never in the dark.
-//
-// The keys. In window mode esc turns the beam off: esc is bound to
-// enter_window_mode there, which does nothing in window mode, so nothing is
-// taken from anyone. In terminal mode esc belongs to the program in the pane
-// and stays there. A double esc was considered and rejected: vim users press
-// esc twice out of habit, and Claude Code and readline give a double esc a
-// meaning of their own, so the beam would go off in the middle of a demo and
-// the program would lose its key. The terminal-mode way out is the leader
-// chord toggle_spotlight (leader, B), which the chip names in that mode.
-
-// spotlightChipHit is where the chip was drawn last frame, in screen cells.
 type spotlightChipHit struct {
 	x0, x1, y int
 	drawn     bool
 }
 
-// spotlightChipLabel is the chip's name for the feature.
 const spotlightChipLabel = "Spotlight"
 
-// spotlightOffChord is the leader chord that turns the beam off, as the help
-// overlay spells a chord ("ctrl+b, B"), or "" when the chord is unbound.
 func (m *OS) spotlightOffChord() string {
 	if m.KeybindRegistry == nil {
 		return ""
@@ -49,9 +27,6 @@ func (m *OS) spotlightOffChord() string {
 	return m.Settings.LeaderKey + ", " + keys[0]
 }
 
-// spotlightOffHint is the key the chip shows for turning the beam off in the
-// mode the keyboard is in. In terminal mode with the chord unbound there is no
-// key, and the chip says to click it.
 func (m *OS) spotlightOffHint() overlay.Hint {
 	if m.Mode != TerminalMode {
 		return overlay.Hint{Key: "esc", Label: "turn off", Priority: overlay.HintEssential}
@@ -62,8 +37,6 @@ func (m *OS) spotlightOffHint() overlay.Hint {
 	return overlay.Hint{Key: "click", Label: "turn off", Priority: overlay.HintEssential}
 }
 
-// spotlightChip is the dock chip drawn while the beam is on, with a column in
-// front of it to keep it off the mode pill, or "" while the beam is off.
 func (m *OS) spotlightChip() string {
 	if !m.spotlight.on {
 		return ""
@@ -79,13 +52,10 @@ func (m *OS) spotlightChip() string {
 	return " " + label + pad + strip + pad
 }
 
-// spotlightChipWidth is the room the chip takes in the dock's left block.
 func (m *OS) spotlightChipWidth() int {
 	return lipgloss.Width(m.spotlightChip())
 }
 
-// recordSpotlightChip notes where the chip landed, from the column the dock
-// drew it at. The leading separator column is not part of the target.
 func (m *OS) recordSpotlightChip(x, width, y int) {
 	if width <= 1 {
 		m.spotlight.chip = spotlightChipHit{}
@@ -119,7 +89,6 @@ func (m *OS) AnnounceSpotlight() {
 	m.ShowNotification(m.spotlightMessage(), "info", m.Settings.NotificationDuration)
 }
 
-// spotlightMessage is the text AnnounceSpotlight shows.
 func (m *OS) spotlightMessage() string {
 	if !m.spotlight.on {
 		return "Spotlight is off."
@@ -133,7 +102,6 @@ func (m *OS) spotlightMessage() string {
 	return "Spotlight is on. Click Spotlight in the dock to turn it off."
 }
 
-// spotlightChordWords writes "ctrl+b, B" as "Ctrl+B, B" for a sentence.
 func spotlightChordWords(chord string) string {
 	parts := strings.Split(chord, ", ")
 	for i, p := range parts {
@@ -151,8 +119,6 @@ func spotlightChordWords(chord string) string {
 	return strings.Join(parts, ", ")
 }
 
-// spotlightLitSpans is the way out (the chip, and the dock's message block),
-// which the pass leaves undimmed so it is never in the dark.
 func (m *OS) spotlightLitSpans() [2]spotlightSpan {
 	var out [2]spotlightSpan
 	if c := m.spotlight.chip; c.drawn {
@@ -164,8 +130,6 @@ func (m *OS) spotlightLitSpans() [2]spotlightSpan {
 	return out
 }
 
-// spotlightSpan is a run of cells on one row, x0 inclusive and x1 exclusive.
-// The zero value is empty.
 type spotlightSpan struct {
 	y, x0, x1 int
 }

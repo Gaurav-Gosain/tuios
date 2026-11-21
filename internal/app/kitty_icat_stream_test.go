@@ -12,8 +12,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// icatHarness is a pane emulator wired to a passthrough whose host reads
-// files, with a function that returns everything the host has been sent.
 func icatHarness(t *testing.T) (*vt.Emulator, func() string) {
 	t.Helper()
 	clientCapabilities.Store(&HostCapabilities{
@@ -50,8 +48,6 @@ func icatHarness(t *testing.T) (*vt.Emulator, func() string) {
 
 var hostAPC = regexp.MustCompile(`\x1b_G([^;\x1b]*)(?:;([^\x1b]*))?\x1b\\`)
 
-// transmittedBytes joins and decodes the payload of every transmit the host
-// was sent, which is the image the host will draw.
 func transmittedBytes(t *testing.T, host string) []byte {
 	t.Helper()
 	var encoded []byte
@@ -68,9 +64,6 @@ func transmittedBytes(t *testing.T, host string) []byte {
 	return out
 }
 
-// icatStream writes an image the way kitten icat streams it: a=T and the
-// geometry on a first m=1 chunk, bare continuation chunks, and the whole of it
-// unpadded base64, so the final chunk ends short of a group of four.
 func icatStream(em *vt.Emulator, img []byte, chunk int) {
 	enc := base64.RawStdEncoding.EncodeToString(img)
 	first := true
@@ -116,8 +109,6 @@ func TestIcatFileModeForwardsThePath(t *testing.T) {
 	for _, name := range []string{"a.png", "ab.png", "abc.png"} {
 		t.Run(name, func(t *testing.T) {
 			em, host := icatHarness(t)
-			// The host is handed the resolved path, so the want is resolved
-			// too: on macOS the temp folder is under the /var symlink.
 			dir, err := filepath.EvalSymlinks(t.TempDir())
 			if err != nil {
 				t.Fatal(err)

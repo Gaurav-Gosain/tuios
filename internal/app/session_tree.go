@@ -14,7 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// windowRowTitle is the label a session-management surface shows for a window.
 func windowRowTitle(w *terminal.Window) string {
 	if label, ok := tmlRailLabel(w); ok {
 		return label
@@ -22,16 +21,6 @@ func windowRowTitle(w *terminal.Window) string {
 	return railWindowLabel(w.CustomName, w.AgentHarness, w.ForegroundCmd, w.Title())
 }
 
-// railWindowLabel is that label built from the pieces every surface has, live
-// window or wire summary. The user's name wins; then the title an agent set
-// about itself, such as the name from claude -n, when it says more than the
-// program's name (harness.TitleLabel); then what the pane is running, which is
-// the one part that differs between shells; then the shell's own title,
-// shortened, because in full it is "<cwd> - <shell>" and reads the same on every
-// pane in one directory. Never blank, so a fresh pane still has a row.
-//
-// This runs per pane on every polled tick. For a pane with no agent it adds one
-// comparison, and for an agent it does not allocate.
 func railWindowLabel(customName, harnessID, foregroundCmd, title string) string {
 	if customName != "" {
 		return customName
@@ -43,8 +32,6 @@ func railWindowLabel(customName, harnessID, foregroundCmd, title string) string 
 		return foregroundCmd
 	}
 	if harnessID != "" {
-		// An agent the process table has not named yet. Its spinner must not
-		// reach the row, because each frame would be a new label.
 		title = harness.TrimTitleMarks(title)
 	}
 	if s := shellTitleLabel(title); s != "" {
@@ -53,25 +40,16 @@ func railWindowLabel(customName, harnessID, foregroundCmd, title string) string 
 	return "shell"
 }
 
-// agentRowUnnamed reports whether a row is an agent's and its label fell through
-// to the program, because neither a person nor the title gave a name. label is
-// the label the row shows, which on a debounced row can differ from what the
-// title says now.
 func agentRowUnnamed(customName, harnessID, foregroundCmd, label string) bool {
 	return customName == "" && harnessID != "" && foregroundCmd != "" && label == foregroundCmd
 }
 
-// shellTitleLabel keeps the part of a shell's title that carries information:
-// the last element of the directory it names. "~/dev/tuios - fish" says the
-// same thing in every pane of one repo, where "tuios" at least says which repo,
-// in a quarter of the columns.
 func shellTitleLabel(title string) string {
 	head, _, _ := strings.Cut(title, " - ")
 	head = strings.TrimSpace(head)
 	if head == "" {
 		return strings.TrimSpace(title)
 	}
-	// bash writes "user@host:~/path"; the path is the half worth keeping.
 	if _, after, ok := strings.Cut(head, ":"); ok && after != "" {
 		head = after
 	}
@@ -84,14 +62,9 @@ func shellTitleLabel(title string) string {
 	return head
 }
 
-// currentSessionInput builds the rich SessionInput for the session this client
-// is attached to, entirely from live state with no network round trip. This is
-// what the sidebar rebuilds every frame.
 func (m *OS) currentSessionInput() sessiontree.SessionInput {
 	windows := make([]sessiontree.WindowInput, 0, len(m.Windows))
 	for i, w := range m.Windows {
-		// The scratch terminal has no row, shown or hidden. It is reached by
-		// its key, and a row for it read as one more pane of the layout.
 		if w == nil || hiddenFromLists(w) {
 			continue
 		}
@@ -129,8 +102,6 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 	}
 	name := m.SessionName
 	if name == "" {
-		// Standalone mode has no daemon session name; present one synthetic
-		// session so the surfaces still have a root to show.
 		name = "local"
 	}
 	dir, branch := m.sessionPlace(name)
@@ -153,11 +124,6 @@ func (m *OS) currentSessionInput() sessiontree.SessionInput {
 	}
 }
 
-// foreignSessionInput builds the SessionInput for a session this client is not
-// attached to, filling its windows from the client's cached listing so the
-// sidebar can expand it. The cache is refreshed off the UI goroutine, so this
-// stays a pure read with no round trip. Windows are nil until the first refresh
-// lands, which leaves the row coarse (name only) exactly as before.
 func (m *OS) foreignSessionInput(client *session.TUIClient, name string) sessiontree.SessionInput {
 	summaries := client.SessionWindows(name)
 	windows := make([]sessiontree.WindowInput, 0, len(summaries))
@@ -167,8 +133,6 @@ func (m *OS) foreignSessionInput(client *session.TUIClient, name string) session
 		}
 		state, seen := m.railAgentState(w.ID, w.AgentState, w.CompletionSeq)
 		message, kind := m.paneAskNote(w.ID, w.AgentMessage, w.AgentKind)
-		// The daemon folds a custom name into Title and withholds a command for
-		// a named pane, so passing no name here still lets one win.
 		title := railWindowLabel("", w.AgentHarness, w.ForegroundCmd, w.Title)
 		windows = append(windows, sessiontree.WindowInput{
 			ID:           w.ID,
@@ -249,38 +213,21 @@ func (m *OS) BuildSessionTree() sessiontree.Tree {
 		sessions = append(sessions, m.foreignSessionInput(m.DaemonClient, name))
 	}
 	if !seen {
-		// The cache has not caught up with a just-created session yet; it goes
-		// last, which is where the creation order will put it anyway.
 		sessions = append(sessions, current)
 	}
-	// The drag order of the machine these sessions are on. Keyed by machine,
-	// because session names repeat across machines: build's session-0 must not
-	// take this machine's slot for the same name.
 	sessions = orderByKey(sessions, func(s sessiontree.SessionInput) string { return s.Name },
 		m.sidebarSessionOrderFor(m.attachedMachine()))
 	return m.withHostGroups(sessiontree.Build(sessions))
 }
 
-// withHostGroups appends the other machines' rows to a tree.
-//
-// They go after the attached machine's sessions, always, and after the user's
-// drag order has been applied to them. The tree's order is not the rail's: the
-// sessions section lays the machines out in its own fixed order (see
-// sidebarMachineRows), and appending here is what keeps a remote row out of
-// the surfaces that read the tree by position, which take the attached
-// machine's sessions as the prefix.
 func (m *OS) withHostGroups(tree sessiontree.Tree) sessiontree.Tree {
 	tree.Sessions = append(tree.Sessions, m.hostGroupNodes()...)
-	// With the agent features off no row wears an agent mark, a machine's
-	// or a session's on another machine included, whose daemon may still
-	// have them on. See agents_off.go.
 	if !m.agentsOn() {
 		clearAgentMarks(tree.Sessions)
 	}
 	return tree
 }
 
-// clearAgentMarks takes the agent state off every node and its children.
 func clearAgentMarks(nodes []sessiontree.Node) {
 	for i := range nodes {
 		nodes[i].AgentState, nodes[i].AgentKind, nodes[i].DoneSeen = "", "", false
@@ -288,25 +235,10 @@ func clearAgentMarks(nodes []sessiontree.Node) {
 	}
 }
 
-// railNeighbourSession returns the session delta places from the current one in
-// the rail's own order, wrapping at both ends, or "" when there is nowhere to go.
-// Reading the order from BuildSessionTree rather than the raw daemon listing is
-// what makes "next" mean the row below the current one even after the user has
-// dragged the rail into a different order. Only the attached machine's
-// sessions are cycled: a row on another machine is a different connection,
-// which a cycle key must not open by surprise.
 func (m *OS) railNeighbourSession(delta int) string {
 	return railNeighbourIn(m.railSessionOrder(m.BuildSessionTree().Sessions), delta)
 }
 
-// railSessionOrder is the attached machine's sessions in the order the rail's
-// sessions section draws them: under their space and, inside that, with a
-// repository's worktree sessions pulled up under the repository, as
-// sidebarGroupedRows lays them out. Only the session rows are kept, not the
-// space and repository headings. A folded repository's sessions stay in, at
-// the place they would be drawn, so a cycle key can still reach them and the
-// current session is never missing from the list. With no space and no
-// worktree record the grouping changes nothing and this is the tree's order.
 func (m *OS) railSessionOrder(nodes []sessiontree.Node) []sessiontree.Node {
 	rows := sessiontree.GroupBySpace(localSessionNodes(nodes), m.sidebarRepoGrouping())
 	sessions := make([]sessiontree.Node, 0, len(rows))
@@ -318,8 +250,6 @@ func (m *OS) railSessionOrder(nodes []sessiontree.Node) []sessiontree.Node {
 	return sessions
 }
 
-// railNeighbourIn returns the session delta places from the current one in
-// sessions, wrapping at both ends, or "" when there is nowhere to go.
 func railNeighbourIn(sessions []sessiontree.Node, delta int) string {
 	current := slices.IndexFunc(sessions, func(s sessiontree.Node) bool { return s.IsCurrent })
 	if len(sessions) < 2 || current < 0 {
@@ -338,7 +268,6 @@ func (m *OS) CycleSession(delta int) {
 		m.ShowNotification("No other sessions", "info", m.Settings.NotificationDuration)
 		return
 	}
-	// railNeighbourSession cycles the attached machine's sessions only.
 	m.openSession("", target)
 }
 
@@ -358,8 +287,6 @@ func (m *OS) SwitchToSessionByIndex(n int) {
 	m.openSession("", target.ID)
 }
 
-// railSessionAt is the session at the rail position n (0-based) in
-// railSessionOrder, and false when there is no session there.
 func (m *OS) railSessionAt(n int) (sessiontree.Node, bool) {
 	sessions := m.railSessionOrder(m.BuildSessionTree().Sessions)
 	if n < 0 || n >= len(sessions) {
@@ -368,9 +295,6 @@ func (m *OS) railSessionAt(n int) (sessiontree.Node, bool) {
 	return sessions[n], true
 }
 
-// sessionPaletteLabel formats a "Session: " or "Window: " palette row, folding
-// in the agent-state glyph the same way the window title bar does, so the
-// palette and the title bar never disagree about what a glyph means.
 func sessionPaletteLabel(prefix, name, agentState string, doneSeen bool, running int) string {
 	if glyph := agentStateIndicator(displayState(agentState, doneSeen, running)); glyph != "" {
 		return prefix + glyph + agentMarkGap(glyph) + name
@@ -378,28 +302,10 @@ func sessionPaletteLabel(prefix, name, agentState string, doneSeen bool, running
 	return prefix + name
 }
 
-// getSessionPaletteItems walks the unified session tree and returns one palette
-// entry per session and one per window of every session, not only the attached
-// one. This is what lets the palette jump straight to a session or a pane by
-// name instead of going through go-to first; the sidebar, the
-// switcher, and this list all read the same tree so they can never disagree
-// about what exists or which one is current.
-//
-// A pane of a session this client is not attached to costs a session switch to
-// reach, which is a heavier thing than the palette usually does: it tears down
-// every PTY subscription and rebuilds the layout. So the row says so, in the
-// slot a row's key hint would otherwise use, and the label carries the session
-// it is in. The palette never performs it silently.
-//
-// Built once when the palette opens (see OpenCommandPalette), not on every
-// render. BuildSessionTree is non-blocking (live state plus cached session
-// names), so this is safe to call on the UI goroutine.
 func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 	tree := m.BuildSessionTree()
 
 	items := make([]CommandPaletteItem, 0, len(tree.Sessions))
-	// A thread with mail waiting for the person is findable by what it says,
-	// and selecting it opens the mailbox on that thread.
 	for _, th := range m.agentMailThreads() {
 		if !th.Unread {
 			continue
@@ -415,15 +321,6 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 		})
 	}
 	for _, s := range tree.Sessions {
-		// The tree carries the other machines' rows as well as this one's, and
-		// neither kind is a local session.
-		//
-		// A machine's own heading is not somewhere you can go at all. A session
-		// on another machine is, but it is reached by attaching through its
-		// host rather than by name, and its node id is a rail identity rather
-		// than a session name. Handing that id to SwitchToSession is what
-		// produced "switch to \x00host/local failed": the palette asked the
-		// daemon for a session literally called that.
 		if s.Kind == sessiontree.KindHost {
 			continue
 		}
@@ -448,8 +345,6 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 		sessionName := s.ID
 		isCurrent := s.IsCurrent
 		items = append(items, CommandPaletteItem{
-			// The rail's title for the session, so a session reads by one name
-			// here and there; the action still switches by its identity.
 			Name:           sessionPaletteLabel("Session: ", s.Title, s.AgentState, s.DoneSeen, s.Subagents),
 			Category:       "Sessions",
 			AgentState:     s.AgentState,
@@ -469,8 +364,6 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 		for _, w := range s.Children {
 			windowID, label, warn := w.ID, w.Title, ""
 			if !isCurrent {
-				// Qualified by session, the way the rail's own agent rows qualify a
-				// pane that lives elsewhere, and marked with what selecting it costs.
 				label, warn = s.Title+"/"+w.Title, "switches session"
 			}
 			items = append(items, CommandPaletteItem{
@@ -496,13 +389,6 @@ func getSessionPaletteItems(m *OS) []CommandPaletteItem {
 	return items
 }
 
-// focusWindowByID focuses the pane with the given ID among the windows this
-// client holds, and says nothing when it holds none: after a session switch the
-// daemon's listing can name a pane the restored state no longer has.
-//
-// Every caller is a jump the user asked for by name (the palette, the
-// navigator, a host switch landing), so the scrolling strip shows the whole
-// column, as it does for a focus key. See RevealFocusedColumn.
 func (m *OS) focusWindowByID(id string) {
 	if i := m.windowIndexByID(id); i >= 0 {
 		m.FocusWindow(i)
@@ -510,11 +396,6 @@ func (m *OS) focusWindowByID(id string) {
 	}
 }
 
-// sidebarLeaveForJump hands the keyboard back to the panes when a palette row
-// opened from the rail is about to relocate the user. Attaching to a session and
-// focusing a pane are the two things the rail already treats as "this is where I
-// asked to end up" rather than as a browse, so the return record is dropped
-// first: restoring the pane the rail borrowed from would undo the jump.
 func (m *OS) sidebarLeaveForJump() {
 	if !m.SidebarFocused {
 		return

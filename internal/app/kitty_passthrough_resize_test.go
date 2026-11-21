@@ -9,11 +9,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// placementHarness wires a real VT emulator to a native kitty passthrough for a
-// single full-screen pane and streams a browser-style direct frame (a=T, i=1)
-// into it. It returns the passthrough, the emulator, a mutable window-info the
-// caller drives, and a refresh function that returns everything forwarded to the
-// host on that refresh.
 func placementHarness(t *testing.T, screenW, screenH, border int) (*KittyPassthrough, *vt.Emulator, *WindowPositionInfo, func() string) {
 	t.Helper()
 	clientCapabilities.Store(&HostCapabilities{
@@ -39,8 +34,6 @@ func placementHarness(t *testing.T, screenW, screenH, border int) (*KittyPassthr
 		kp.ForwardCommand(cmd, rawData, winID, 0, 0, screenW-2*border, screenH-2*border, border, border,
 			cur.X, cur.Y, em.ScrollbackLen(), em.IsAltScreen(), func([]byte) {})
 	})
-	// Alt screen + a frame that fills the pane exactly (contentW*cellW x
-	// contentH*cellH), the way a full-window graphics app draws.
 	_, _ = em.Write([]byte("\x1b[?1049h\x1b[H"))
 	imgW := (screenW - 2*border) * 10
 	imgH := (screenH - 2*border) * 20
@@ -63,8 +56,6 @@ func placementHarness(t *testing.T, screenW, screenH, border int) (*KittyPassthr
 	return kp, em, info, refresh
 }
 
-// streamBrowserFrame writes one direct transmit+place (a=T, reused id) frame, as
-// terminal-browser emits every rendered frame.
 func streamBrowserFrame(em *vt.Emulator, id, w, h int) {
 	var b strings.Builder
 	b.WriteString("\x1b_Ga=T,f=32,s=")
@@ -101,14 +92,8 @@ func lastPlacement(s string) string {
 func TestResizeCoalescesPlacementChurn(t *testing.T) {
 	_, _, info, refresh := placementHarness(t, 120, 40, 1)
 
-	// Prime: one refresh places the image at the starting size.
 	_ = refresh()
 
-	// Drag-resize: the window's rectangle shrinks every tick while the guest is
-	// told nothing, because the PTY resize is deferred until the gesture settles
-	// (resize_deferral.go). ContentWidth/ContentHeight are what the guest has
-	// been told, so they deliberately do not move here: the image is still the
-	// size they name, and there is nothing to re-place it against.
 	info.IsBeingManipulated = true
 	sizes := [][2]int{{110, 38}, {100, 36}, {90, 34}, {80, 32}, {70, 30}}
 	churn := 0
@@ -122,9 +107,6 @@ func TestResizeCoalescesPlacementChurn(t *testing.T) {
 			"must hold the frame during an interactive resize (flicker)", churn, len(sizes))
 	}
 
-	// Settle: the gesture ends and the guest is finally told its new size, which
-	// is the first moment the image can be measured against anything new.
-	// Exactly one re-place must bring it to the settled geometry.
 	info.IsBeingManipulated = false
 	info.ContentWidth, info.ContentHeight = 70-2, 30-2
 	settle := refresh()
@@ -147,8 +129,6 @@ func TestPlacementIdempotentOnUnrelatedRefresh(t *testing.T) {
 		t.Fatalf("first refresh should place once, got %d a=p", countCmd(first, "a=p"))
 	}
 
-	// Many unrelated renders (sibling pane activity). The browser geometry never
-	// changes, so nothing may be forwarded.
 	for i := range 8 {
 		out := refresh()
 		if out != "" {

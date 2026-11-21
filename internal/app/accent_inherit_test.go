@@ -9,17 +9,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
-// accentInheritOS is a rail whose attached session has a colour of its own, so
-// its panes wear one without carrying one. That is the shape the picker has to
-// open on: what is on screen, not what is stored.
 func accentInheritOS(t *testing.T) (*OS, sessiontree.Tree) {
 	t.Helper()
 	m, tree := sessionColorOS(t, 120, 40)
 	truecolorForTest(t)
 	m.SidebarFocused = true
-	// Render once so the hues are arbitrated the way the rail has them: the
-	// picker has to agree with the row the user right-clicked, not with an
-	// unarbitrated guess.
 	m.sidebarPanelLinesForTree(tree)
 	return m, tree
 }
@@ -44,8 +38,6 @@ func TestAccentPickerSeedsOnTheColourThePaneWears(t *testing.T) {
 	}
 	m.CloseAccentPicker()
 
-	// An explicit session accent outranks the automatic colour, and the picker
-	// follows the same precedence rather than a second copy of it.
 	m.SessionAccent = "brightmagenta"
 	m.OpenAccentPicker("aaaaaaaa1111")
 	if got, want := m.AccentPicker.Cur, SlotAccent(5).RGB(); got != want {
@@ -54,7 +46,6 @@ func TestAccentPickerSeedsOnTheColourThePaneWears(t *testing.T) {
 	m.CloseAccentPicker()
 	m.SessionAccent = ""
 
-	// A pane pinned to a colour opens on that colour, session or no session.
 	green := RGBAccent(color.RGBA{R: 0x33, G: 0x99, B: 0x66, A: 0xff})
 	m.SetWindowAccent("aaaaaaaa1111", green)
 	m.OpenAccentPicker("aaaaaaaa1111")
@@ -103,8 +94,6 @@ func TestAccentApplyWithoutMovingKeepsInheritance(t *testing.T) {
 		t.Errorf("applying without moving pinned the pane to %s", a.Hex())
 	}
 
-	// The same rule keeps a slot a slot: applying the colour it resolves to today
-	// would silently stop it following the theme.
 	m.SetWindowAccent("bbbbbbbb2222", SlotAccent(3))
 	m.OpenAccentPicker("bbbbbbbb2222")
 	m.AccentPickerApply()
@@ -112,7 +101,6 @@ func TestAccentApplyWithoutMovingKeepsInheritance(t *testing.T) {
 		t.Errorf("applying without moving turned the slot into %+v", a)
 	}
 
-	// Moving first still pins, which is the point of the picker.
 	m.OpenAccentPicker("aaaaaaaa1111")
 	m.AccentPickerHueCell(3)
 	m.AccentPickerCell(6, 1)

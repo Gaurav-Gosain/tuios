@@ -15,47 +15,25 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// The Inbox's lifecycle beyond answering and dismissing: snoozing an item,
-// undoing a dismiss or a snooze made a moment ago, showing what is snoozed,
-// marking a finished pane unread from the rail, and walking the unseen
-// finished turns newest first (ctrl+b O). Each is the person's act, sent with
-// mark-attention and the attach nonce, so the daemon can tell the person from
-// an agent (see session/attention_lifecycle.go).
-//
-// Nothing here runs on its own. There is no timer on the client: a snoozed
-// item wakes on the daemon, which publishes it open again, and the mirror
-// takes it back into the list from that event.
-
-// inboxUndoWindow is how long after a dismiss or a snooze u restores it:
-// agents.undo_window_seconds, which the daemon keeps as well.
 func (m *OS) inboxUndoWindow() time.Duration {
 	return time.Duration(cmp.Or(max(m.Settings.UndoWindowSeconds, 0), config.DefaultUndoWindowSeconds)) * time.Second
 }
 
-// inboxUndoNotice is how long an undo offer stays on the dock, raised to
-// notifications.duration when that is longer, and never past the undo window.
 const inboxUndoNotice = 5 * time.Second
 
-// showUndoOffer tells the person an undo is on offer. The offer leaves the dock
-// no later than the undo it offers ends.
 func (m *OS) showUndoOffer(message string) {
 	m.showNotification(message, "info", "", inboxUndoNotice, nil, m.inboxUndoWindow(), false)
 }
 
-// inboxUndoMax bounds the closes kept for u.
 const inboxUndoMax = 16
 
-// inboxSnoozeChoice is one length the snooze picker offers.
 type inboxSnoozeChoice struct {
-	key   string
-	label string
-	// words say how long in a sentence: "for 15 minutes".
-	words string
-	// params are what mark-attention takes for it, given the time now.
+	key    string
+	label  string
+	words  string
 	params func(now time.Time) map[string]any
 }
 
-// inboxSnoozeChoices are the four lengths, on the digits 1 to 4.
 var inboxSnoozeChoices = []inboxSnoozeChoice{
 	{"1", "15m", "for 15 minutes", func(time.Time) map[string]any { return map[string]any{"for_ms": (15 * time.Minute).Milliseconds()} }},
 	{"2", "1h", "for an hour", func(time.Time) map[string]any { return map[string]any{"for_ms": time.Hour.Milliseconds()} }},
@@ -65,37 +43,21 @@ var inboxSnoozeChoices = []inboxSnoozeChoice{
 	{"4", "until it changes", "until it changes", func(time.Time) map[string]any { return map[string]any{"until_change": true} }},
 }
 
-// nextMorning is 9:00 tomorrow, local time.
 func nextMorning(now time.Time) time.Time {
 	y, mo, d := now.Date()
 	return time.Date(y, mo, d+1, 9, 0, 0, 0, now.Location())
 }
 
-// inboxLifecycle is the client's half of the lifecycle.
 type inboxLifecycle struct {
-	// Snoozed are the items the person snoozed, from the listing and from the
-	// snoozed closes that followed it, in Inbox order.
-	Snoozed []session.AttentionItem
-	// ShowSnoozed lists them under the open items.
-	ShowSnoozed bool
-	// pickFor is the item the snooze picker is open for, empty when it is
-	// not. closeAfterPick closes the Inbox once a length is picked, for a
-	// picker the rail opened.
+	Snoozed        []session.AttentionItem
+	ShowSnoozed    bool
 	pickFor        string
 	closeAfterPick bool
-	// undo are this client's dismisses and snoozes, newest last.
-	undo []inboxUndoEntry
-	// walk is the ctrl+b O walk in progress.
-	walk inboxFinishedWalk
-	// asked are the items (by id, or by "unread:" and the window for an
-	// unread) this client just asked the daemon to open, with when, so their
-	// open raises no alert.
-	asked map[string]time.Time
+	undo           []inboxUndoEntry
+	walk           inboxFinishedWalk
+	asked          map[string]time.Time
 }
 
-// probeVerb asks a daemon's list-verbs whether it has the verb name. known is
-// false when the probe itself failed for a reason that says nothing about the
-// verb, and the caller then assumes nothing.
 func probeVerb(call func(verb string, params map[string]any) ([]byte, error), name string) (supported, known bool) {
 	raw, err := call("list-verbs", map[string]any{"verb": name})
 	if err != nil {
@@ -120,11 +82,8 @@ func probeVerb(call func(verb string, params map[string]any) ([]byte, error), na
 	return false, true
 }
 
-// inboxAskedWindow is how long an item this client asked to open is kept
-// from alerting when it does.
 const inboxAskedWindow = 10 * time.Second
 
-// noteInboxAsked records that this client asked for key's item to open.
 func (m *OS) noteInboxAsked(key string) {
 	life := &m.Inbox.life
 	if life.asked == nil {
@@ -139,10 +98,6 @@ func (m *OS) noteInboxAsked(key string) {
 	life.asked[key] = now
 }
 
-// inboxAskedFor reports, once, whether this client asked for an item that
-// opened: woke or restored it by id, or marked its pane unread. An unread
-// asks for the pane's finished item only, so another kind opening on the
-// same pane, an approval say, still alerts.
 func (m *OS) inboxAskedFor(it session.AttentionItem) bool {
 	life := &m.Inbox.life
 	keys := []string{it.ID}
@@ -160,14 +115,8 @@ func (m *OS) inboxAskedFor(it session.AttentionItem) bool {
 	return false
 }
 
-// inboxUnreadKey is the asked key of an unread sent for a pane.
 func inboxUnreadKey(windowID string) string { return "unread:" + windowID }
 
-// settleInboxUnreadAsk is the answer to an unread arriving. The daemon names
-// the item it opened or marked. One already in the list was marked in place
-// and its update raised no alert, so there is nothing left to keep quiet; one
-// not yet in the list is still to open, and is kept quiet by its id. Either
-// way the pane's key goes, so it cannot silence a later item on that pane.
 func (m *OS) settleInboxUnreadAsk(windowID, id string) {
 	life := &m.Inbox.life
 	if windowID != "" {
@@ -179,17 +128,13 @@ func (m *OS) settleInboxUnreadAsk(windowID, id string) {
 	m.noteInboxAsked(id)
 }
 
-// inboxUndoEntry is one close u can restore, or one settle u takes back.
 type inboxUndoEntry struct {
-	id  string
-	who string
-	at  time.Time
-	// session and window name the pane of a settle, and item the finished
-	// turn it closed. Empty for a dismiss or a snooze.
+	id                    string
+	who                   string
+	at                    time.Time
 	session, window, item string
 }
 
-// inboxFinishedWalk is where a run of ctrl+b O presses has got to.
 type inboxFinishedWalk struct {
 	lastSeq uint64
 	newest  uint64
@@ -209,7 +154,6 @@ type InboxMarkedMsg struct {
 	Err   error
 }
 
-// inboxSnoozedIndex is the index of a snoozed item in the mirror, by id, or -1.
 func (m *OS) inboxSnoozedIndex(id string) int {
 	for i := range m.Inbox.life.Snoozed {
 		if m.Inbox.life.Snoozed[i].ID == id {
@@ -219,8 +163,6 @@ func (m *OS) inboxSnoozedIndex(id string) int {
 	return -1
 }
 
-// splitSnoozed takes the snoozed items out of a listing, which lists them
-// after the open ones when asked with include_snoozed.
 func splitSnoozed(items []session.AttentionItem) (open, snoozed []session.AttentionItem) {
 	for _, it := range items {
 		if it.SnoozedUntil != 0 {
@@ -232,11 +174,6 @@ func splitSnoozed(items []session.AttentionItem) (open, snoozed []session.Attent
 	return open, snoozed
 }
 
-// applySnoozedEvent folds one event into the snoozed mirror and reports
-// whether the event was about a snoozed item and needs nothing more: a snooze
-// moves the item from the list to the snoozed ones; an open of a snoozed item
-// takes it back (the caller then adds it to the list); a close of a snoozed
-// item drops it.
 func (m *OS) applySnoozedEvent(action string, it session.AttentionItem) bool {
 	life := &m.Inbox.life
 	idx := m.inboxSnoozedIndex(it.ID)
@@ -261,13 +198,10 @@ func (m *OS) applySnoozedEvent(action string, it session.AttentionItem) bool {
 	}
 }
 
-// inboxCanMark reports whether this client can send the person's acts to the
-// daemon holding the Inbox, and says why not when it cannot.
 func (m *OS) inboxCanMark(what string) bool {
 	return m.inboxCanAct(what)
 }
 
-// inboxMarkCmd sends mark-attention with this client's attach nonce.
 func (m *OS) inboxMarkCmd(params map[string]any, who, words string) tea.Cmd {
 	nonce := m.inboxNonce()
 	action, _ := params["action"].(string)
@@ -303,7 +237,6 @@ func (m *OS) inboxMarkCmd(params map[string]any, who, words string) tea.Cmd {
 	}
 }
 
-// applyInboxMarked says what happened, and keeps a snooze for u.
 func (m *OS) applyInboxMarked(msg InboxMarkedMsg) {
 	if msg.Err != nil {
 		m.ShowNotification(inboxMarkFailWords(msg.Action)+": "+inboxActErr(msg.Err, m.AttachedHost), "error", m.Settings.NotificationDuration*2)
@@ -330,7 +263,6 @@ func (m *OS) applyInboxMarked(msg InboxMarkedMsg) {
 	}
 }
 
-// inboxMarkFailWords opens the message for a mark that did not go through.
 func inboxMarkFailWords(action string) string {
 	switch action {
 	case "snooze":
@@ -349,7 +281,6 @@ func inboxMarkFailWords(action string) string {
 	return "Nothing changed"
 }
 
-// markedID is the id a mark-attention answer names.
 func markedID(raw []byte) string {
 	var res struct {
 		ID string `json:"id"`
@@ -358,7 +289,6 @@ func markedID(raw []byte) string {
 	return res.ID
 }
 
-// rememberInboxUndo keeps a close this client's person made, for u.
 func (m *OS) rememberInboxUndo(id, who string) {
 	if id == "" {
 		return
@@ -374,10 +304,6 @@ func (m *OS) rememberInboxUndo(id, who string) {
 	}
 }
 
-// noteInboxDismissed is a dismiss the person made going through: it can be
-// undone for a moment, and the dock says so. Mail waiting for another
-// machine was discarded and a question put with ask-human was answered as
-// dismissed, so neither comes back.
 func (m *OS) noteInboxDismissed(id, kind, who string) {
 	if kind == session.AttentionOutbox || kind == session.AttentionAsk {
 		return
@@ -410,8 +336,6 @@ func (m *OS) InboxSnooze() (tea.Cmd, bool) {
 	return nil, true
 }
 
-// inboxSnoozeRefusal is why an item cannot be snoozed, empty when it can. It
-// is the daemon's rule, said before the person picks a length.
 func inboxSnoozeRefusal(it session.AttentionItem) string {
 	switch {
 	case it.Kind == session.AttentionApproval && it.RequestID != "":
@@ -468,7 +392,6 @@ func (m *OS) InboxSnoozeKey(key string) tea.Cmd {
 	return nil
 }
 
-// inboxSnoozeHints are the footer while the picker waits for a length.
 func inboxSnoozeHints() []overlay.Hint {
 	hints := make([]overlay.Hint, 0, len(inboxSnoozeChoices)+1)
 	for _, c := range inboxSnoozeChoices {
@@ -510,10 +433,6 @@ func (m *OS) InboxToggleSnoozed() (tea.Cmd, bool) {
 	return nil, true
 }
 
-// inboxSnoozedRows are the rows the snoozed items add under the list: a
-// muted group while they are shown, or one line saying how many there are
-// and the key that shows them. The line comes only under other rows; an
-// Inbox with nothing else open says it in its empty state.
 func (m *OS) inboxSnoozedRows(rows []inboxRow) []inboxRow {
 	life := &m.Inbox.life
 	if len(life.Snoozed) == 0 {
@@ -539,7 +458,6 @@ func (m *OS) inboxSnoozedRows(rows []inboxRow) []inboxRow {
 	return append(rows, items...)
 }
 
-// inboxSnoozedNote is the line that says how many items are snoozed.
 func (m *OS) inboxSnoozedNote() string {
 	n := len(m.Inbox.life.Snoozed)
 	key := m.inboxKeyOr(config.ActionInboxShowSnoozed, "S")
@@ -549,8 +467,6 @@ func (m *OS) inboxSnoozedNote() string {
 	return strconv.Itoa(n) + " snoozed. " + key + " shows them."
 }
 
-// inboxSnoozedWhen is when a snoozed item wakes, in a few cells: "9:00",
-// "tue 9:00", "changes".
 func inboxSnoozedWhen(until int64, now time.Time) string {
 	if until < 0 {
 		return "until it changes"
@@ -570,8 +486,6 @@ func inboxSnoozedWhen(until int64, now time.Time) string {
 // an agent has been seen, so for a person who runs none the key after the
 // prefix reaches the pane as it always did.
 func (m *OS) JumpToNewestFinished() (tea.Cmd, bool) {
-	// Unhandled with the agent features off, so the key does what an
-	// unbound key does.
 	if !m.agentsOn() {
 		return nil, false
 	}
@@ -593,9 +507,6 @@ func (m *OS) JumpToNewestFinished() (tea.Cmd, bool) {
 		m.ShowNotification(msg, "info", m.Settings.NotificationDuration)
 		return nil, true
 	}
-	// Newest first: an item's seq is the revision of its last change, which
-	// for a finished turn is the turn finishing.
-	// sort.Slice, not slices.SortFunc: see docs/perf.md, "Where the bytes go".
 	sort.Slice(done, func(i, j int) bool { return done[i].Seq > done[j].Seq })
 	walk := &st.life.walk
 	next := 0
@@ -618,9 +529,6 @@ func (m *OS) JumpToNewestFinished() (tea.Cmd, bool) {
 	return nil, true
 }
 
-// railPane is what the rail knows of a pane of this machine: its agent
-// state, its finished turns and its label. ok is false for a pane this client
-// cannot see, such as one on another machine.
 func (m *OS) railPane(sessionID, windowID string) (state string, seq uint64, label string, ok bool) {
 	if sessionID == "" || sessionID == m.sidebarCurrentSessionID() {
 		for _, w := range m.Windows {
@@ -676,8 +584,6 @@ func (m *OS) SidebarAgentUnread(sessionID, windowID string) (tea.Cmd, bool) {
 		m.sidebarCache.invalidate()
 	}
 	who := printableTitle(label)
-	// The daemon is asked whenever there is one: it holds the pane's turn
-	// count, which this client's copy of another session can trail.
 	if !m.IsDaemonSession || (m.Inbox.call == nil && m.DaemonClient == nil) {
 		m.ShowNotification("Marked "+who+" unread", "info", m.Settings.NotificationDuration)
 		return nil, true

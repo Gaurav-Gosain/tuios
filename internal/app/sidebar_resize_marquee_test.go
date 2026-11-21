@@ -34,7 +34,6 @@ func TestSidebarEdgeResizeClampAndPersist(t *testing.T) {
 
 	lo, hi := m.sidebarWidthBounds()
 
-	// Past the max clamps to the upper bound; past the min to the lower bound.
 	m.SidebarEdgeMotion(200, top)
 	if got := m.sidebarWidthPreference(); got != hi {
 		t.Errorf("over-wide drag: width = %d, want clamp %d", got, hi)
@@ -43,7 +42,6 @@ func TestSidebarEdgeResizeClampAndPersist(t *testing.T) {
 	if got := m.sidebarWidthPreference(); got != lo {
 		t.Errorf("over-narrow drag: width = %d, want clamp %d", got, lo)
 	}
-	// A width inside the range is taken as the pointer column plus one.
 	m.SidebarEdgeMotion(39, top)
 	if got := m.sidebarWidthPreference(); got != 40 {
 		t.Errorf("in-range drag: width = %d, want 40", got)
@@ -64,7 +62,6 @@ func TestSidebarEdgeResizeClampAndPersist(t *testing.T) {
 		t.Errorf("persisted width = %d, want 40", st.Width)
 	}
 
-	// The stored width wins over the config default on load.
 	m.Settings.SidebarWidth = config.SidebarDefaultWidth
 	m2 := &OS{Settings: config.Global, Width: 120, Height: 40}
 	m2.loadSidebarState()

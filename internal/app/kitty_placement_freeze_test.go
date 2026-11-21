@@ -27,12 +27,10 @@ import (
 func TestPlacementFreezeReleasesOnceSizeSettles(t *testing.T) {
 	_, em, info, refresh := placementHarness(t, 120, 40, 1)
 
-	// Prime at the starting size.
 	if got := countCmd(refresh(), "a=p"); got != 1 {
 		t.Fatalf("prime: expected one placement, got %d", got)
 	}
 
-	// Drag the shared border: the pane narrows every tick.
 	info.IsBeingManipulated = true
 	for _, w := range []int{110, 100, 90, 80} {
 		info.Width = w
@@ -41,9 +39,6 @@ func TestPlacementFreezeReleasesOnceSizeSettles(t *testing.T) {
 		}
 	}
 
-	// The pointer stops. The size has settled at 80 and the guest, resized,
-	// now streams frames drawn for the settled pane. The release never
-	// arrived, so IsBeingManipulated is still set.
 	var settled string
 	for frame := range 4 {
 		streamBrowserFrame(em, 1, (80-2)*10, (40-2)*20)
@@ -61,8 +56,6 @@ func TestPlacementFreezeReleasesOnceSizeSettles(t *testing.T) {
 			"them: the host is still showing them in the pre-resize rectangle")
 	}
 
-	// The repair: a click clears the flag. The geometry it produces is the
-	// correct one, and it must be what the settled passes already emitted.
 	info.IsBeingManipulated = false
 	streamBrowserFrame(em, 1, (80-2)*10, (40-2)*20)
 	want := lastPlacement(refresh())

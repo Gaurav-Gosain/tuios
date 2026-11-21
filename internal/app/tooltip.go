@@ -9,84 +9,31 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// A tooltip is what a control says when it has had to give up its words. Three
-// surfaces need one: the collapsed rail, which says a whole session in two
-// cells; the dock's session controls, which are a glyph each; and a dock
-// workspace pill, which cuts a name off at twelve.
-//
-// None is the only way to the meaning, which is the condition for taking the
-// words off at all. The expanded rail spells the sessions out, the help menu and
-// the which-key sheet name both session actions for the people who never hover
-// because they never reach for the mouse, and a workspace's full name is on its
-// rename dialog and its context menu.
-//
-// It costs no standing tick. Hover-enter records the target and the instant;
-// while the label is pending, TooltipPending joins tickNeedsWork exactly as the
-// marquee does, so the maintenance tick runs for at most the delay window of a
-// live gesture and then idles. A shown tooltip is static and persists in the
-// last frame with nothing driving it.
-
 const (
-	// tooltipPad is the cell of air on each side of the text. A border would
-	// make the label three rows tall and turn a glance into furniture.
 	tooltipPad = 1
 )
 
-// tooltipSource is the surface a hover was recorded on. The words are resolved
-// from that surface at draw time rather than copied in on the way past: a
-// session's label carries how long it has been blocked, and copying it would
-// freeze that at the moment the pointer stopped moving.
 type tooltipSource int
 
 const (
-	// tooltipNone is no hover, and the zero value, so an unset state means the
-	// pointer is on nothing that talks.
 	tooltipNone tooltipSource = iota
-	// tooltipRailStrip is a row of the collapsed rail.
 	tooltipRailStrip
-	// tooltipRailAdd is a section header's add control on the expanded rail. The
-	// rest of that rail spells itself out in words and so says nothing here; a
-	// one-cell "+" is the exception, since a glyph that has given up its words is
-	// exactly what a label is for.
 	tooltipRailAdd
-	// tooltipDockSession is one of the dock's session controls.
 	tooltipDockSession
-	// tooltipRailHost is a machine's header on the expanded rail while its
-	// link waits for a Tailscale sign-in. "sign in" is two words, and the
-	// label says why and what a click does. Key is the header's screen row.
 	tooltipRailHost
-	// tooltipDockWorkspace is a workspace pill on the dock strip whose name did
-	// not fit the twelve cells the pill has.
 	tooltipDockWorkspace
-	// tooltipDockNotif is the dock's message block holding a message it had to
-	// cut. See notification_hover.go.
 	tooltipDockNotif
-	// tooltipDockButton is a button of the dock's button row. Key is the
-	// button's index. See dock_buttons.go.
 	tooltipDockButton
 )
 
-// tooltipState is the live hover. Runtime only, gesture-scoped like the marquee
-// and the peek.
 type tooltipState struct {
-	// Source is the surface under the pointer. Key identifies the target within
-	// it: the screen row for a rail strip row, the action for a dock control.
-	Source tooltipSource
-	Key    int
-	// Secondary identifies a tooltip on the opposite rail. The source and
-	// row alone are not unique when both edges show the same controls.
+	Source    tooltipSource
+	Key       int
 	Secondary bool
-	// At is when the pointer arrived on this target.
-	At time.Time
-	// Shown latches on the frame that draws the label, so moving to the next
-	// control swaps it instantly instead of waiting the delay out again: the
-	// warm-state behaviour a browser's tab titles have. It is also what closes
-	// the tick gate, so it latches on the drawing frame whether or not the
-	// target turned out to have anything to say.
-	Shown bool
+	At        time.Time
+	Shown     bool
 }
 
-// tooltipsEnabled reports whether a surface pops labels at all.
 func (m *OS) tooltipsEnabled(src tooltipSource) bool {
 	if !m.Settings.Tooltips || src == tooltipNone {
 		return false
@@ -96,13 +43,9 @@ func (m *OS) tooltipsEnabled(src tooltipSource) bool {
 		w = m.secondarySidebarWidth()
 	}
 	if src == tooltipRailStrip {
-		// The expanded rail says all of it in words already, so a label over it
-		// would only repeat what is on the screen.
 		return sidebarVariant(w) == sidebarVariantGlyph
 	}
 	if src == tooltipRailAdd || src == tooltipRailHost {
-		// The mirror of the rule above: these controls only exist on the expanded
-		// rail, and they are the one thing on it drawn as a bare glyph.
 		return sidebarVariant(w) != sidebarVariantGlyph
 	}
 	if src == tooltipDockWorkspace {
@@ -111,27 +54,19 @@ func (m *OS) tooltipsEnabled(src tooltipSource) bool {
 	return true
 }
 
-// tooltipTrack records the pointer landing on a target. Called from the motion
-// handlers, which are the only things that know the pointer moved.
 func (m *OS) tooltipTrack(src tooltipSource, key int) {
 	if !m.tooltipsEnabled(src) {
 		m.tooltipClear()
 		return
 	}
 	if m.Tooltip.Source == src && m.Tooltip.Key == key && m.Tooltip.Secondary == m.sidebarDrawing {
-		return // already on this target; the clock keeps running
+		return
 	}
 	m.Tooltip = tooltipState{Source: src, Key: key, Secondary: m.sidebarDrawing, At: time.Now(), Shown: m.Tooltip.Shown}
 }
 
-// tooltipClear drops the hover and the latch. Called when the pointer leaves a
-// surface, when anything is pressed, and whenever a surface stops being the kind
-// that talks.
 func (m *OS) tooltipClear() { m.Tooltip = tooltipState{} }
 
-// tooltipVisible reports whether src's label should be drawn this frame: the
-// pointer is on one of its targets and has been there long enough, or a label is
-// already up and has only moved to a neighbour.
 func (m *OS) tooltipVisible(src tooltipSource) bool {
 	if m.Tooltip.Source != src || !m.tooltipsEnabled(src) {
 		return false
@@ -148,31 +83,21 @@ func (m *OS) TooltipPending() bool {
 	return m.tooltipsEnabled(m.Tooltip.Source) && !m.Tooltip.Shown
 }
 
-// tooltipLabel styles the words and truncates them to the room they have, so a
-// long session name ends in an ellipsis rather than off the side of the screen.
 func tooltipLabel(text string, room int, pal overlay.Palette) string {
 	pad := strings.Repeat(" ", tooltipPad)
 	body := pad + overlay.Truncate(text, max(room-2*tooltipPad, 1)) + pad
 	return lipgloss.NewStyle().Background(pal.Surface).Foreground(pal.Fg).Render(body)
 }
 
-// tooltipLayer floats a composed label above the panes and the dock, placed
-// against anchor on side by overlay.Place inside screen. The label starts at
-// the anchor's first column (or row) and is shifted onto the screen, which for
-// a control at the bar's right-hand end means it opens leftward from it.
 func tooltipLayer(label string, anchor overlay.Rect, side overlay.Side, screen overlay.Rect, id string) *lipgloss.Layer {
 	x, y, _ := overlay.Place(anchor, lipgloss.Width(label), lipgloss.Height(label), screen, overlay.Placement{Side: side})
 	return lipgloss.NewLayer(label).X(x).Y(y).Z(config.ZIndexDock + 1).ID(id)
 }
 
-// screenRect is the whole screen as a rectangle.
 func (m *OS) screenRect() overlay.Rect {
 	return overlay.Rect{X1: m.GetRenderWidth(), Y1: m.GetRenderHeight()}
 }
 
-// railTooltipLayer places a rail label on row beside the rail: to its right
-// when the rail is on the left edge, to its left when it is on the right, with
-// the label's edge flush against the rail.
 func (m *OS) railTooltipLayer(label string, row int) *lipgloss.Layer {
 	railW, renderW := m.GetSidebarWidth(), m.GetRenderWidth()
 	anchor, side := overlay.Rect{X0: 0, Y0: row, X1: railW, Y1: row + 1}, overlay.SideRight
@@ -182,8 +107,6 @@ func (m *OS) railTooltipLayer(label string, row int) *lipgloss.Layer {
 	return tooltipLayer(label, anchor, side, m.screenRect(), "sidebar-tooltip")
 }
 
-// dockTooltipSide is the side of the bar a dock label opens on: the panes'
-// side, on the hairline the dock owns, so the label never covers the bar.
 func (m *OS) dockTooltipSide() overlay.Side {
 	if m.Settings.DockbarPosition == "top" {
 		return overlay.SideBelow
@@ -191,18 +114,12 @@ func (m *OS) dockTooltipSide() overlay.Side {
 	return overlay.SideAbove
 }
 
-// pointerLabelLayer places a label that follows the pointer: on the row under
-// it, two columns to its right so the box's corner is off the pointer cell,
-// and above it when the row under it is the dock's. The screen ends at the
-// dock so the label never covers it.
 func (m *OS) pointerLabelLayer(label, id string) *lipgloss.Layer {
 	screen := m.screenRect()
 	screen.Y1 = m.viewReserve().Top + m.ViewUsableHeight()
 	return tooltipLayer(label, overlay.PointRect(m.LastMouseX+2, m.LastMouseY), overlay.SideBelow, screen, id)
 }
 
-// renderTooltip composes whichever surface's label is live. Nil when there is
-// nothing to show.
 func (m *OS) renderTooltip() *lipgloss.Layer {
 	if m.Tooltip.Secondary {
 		var layer *lipgloss.Layer

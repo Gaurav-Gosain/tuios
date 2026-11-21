@@ -13,7 +13,7 @@ import (
 // The dial itself, and the open once the link is up, are proved end to end
 // in e2e/tui.
 func TestOpenRemoteSessionOnADownHostWaitsForTheLink(t *testing.T) {
-	m := cachedDownHostOS(t) // "build" up, "stale" connecting
+	m := cachedDownHostOS(t)
 	before := m.SessionName
 
 	m.openRemoteSession("stale", "old")
@@ -36,7 +36,6 @@ func TestOpenRemoteSessionOnADownHostWaitsForTheLink(t *testing.T) {
 		t.Error("ASSERTION: the click did not ask the daemon to dial the host")
 	}
 
-	// The link reaches a state that waiting cannot change.
 	m.FederationHosts[1].Status = string(federation.StatusNoBinary)
 	m.FederationHosts[1].Reason = "The link cannot find tuios on the host."
 	_ = m.advanceHostOpen()
@@ -47,7 +46,6 @@ func TestOpenRemoteSessionOnADownHostWaitsForTheLink(t *testing.T) {
 		t.Errorf("ASSERTION: the stop does not say why: %q", last)
 	}
 
-	// The wait runs out.
 	m.FederationHosts[1].Status = string(federation.StatusUnreachable)
 	m.FederationHosts[1].Reason = "The host did not answer."
 	m.openRemoteSession("stale", "old")
@@ -60,7 +58,6 @@ func TestOpenRemoteSessionOnADownHostWaitsForTheLink(t *testing.T) {
 		t.Errorf("ASSERTION: the time out does not say what happened and what to do: %q", last)
 	}
 
-	// A host that leaves the table ends the wait at once.
 	m.openRemoteSession("stale", "old")
 	m.FederationHosts = m.FederationHosts[:1]
 	_ = m.advanceHostOpen()
@@ -68,16 +65,14 @@ func TestOpenRemoteSessionOnADownHostWaitsForTheLink(t *testing.T) {
 		t.Error("ASSERTION: the click still waits for a host that left the table")
 	}
 
-	// A local switch ends the wait, so a late dial cannot pull the person away.
 	m.FederationHosts = append(m.FederationHosts, FederationHost{Name: "stale", Status: string(federation.StatusReconnecting)})
 	m.openRemoteSession("stale", "old")
 	gen := m.hostOpen.gen
-	m.cancelHostOpen() // what SwitchToSession, a create, detach and esc call
+	m.cancelHostOpen()
 	if cmd := m.finishHostOpen(SessionCreatedMsg{OpenGen: gen, Host: "stale", Switched: true}); cmd != nil || m.hostOpen != nil {
 		t.Error("ASSERTION: a dial for a click that was replaced still acted")
 	}
 
-	// Creating a session still needs a host that is up.
 	m.createRemoteSession("stale")
 	if len(m.Notifications) == 0 || !strings.Contains(m.Notifications[len(m.Notifications)-1].Message, "stale is unavailable") {
 		t.Errorf("ASSERTION: creating a session on a down host did not say the host is unavailable: %+v", m.Notifications)
@@ -101,7 +96,6 @@ func TestRailShowsThisMachineAsAHostWhileAttachedElsewhere(t *testing.T) {
 		}},
 	})
 
-	// At home: the local entry is not a host group and build is.
 	names := func() string {
 		var out []string
 		for _, n := range m.hostGroupNodes() {
@@ -113,7 +107,6 @@ func TestRailShowsThisMachineAsAHostWhileAttachedElsewhere(t *testing.T) {
 		t.Fatalf("ASSERTION: at home the host groups are %q, want only build", got)
 	}
 
-	// Away on build: local becomes a group, build is the main group.
 	m.AttachedHost = "build"
 	if got := names(); got != "local/local local/here" {
 		t.Errorf("ASSERTION: away on build the host groups are %q, want only local", got)

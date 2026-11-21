@@ -37,7 +37,6 @@ func TestRenameVerbRenamesTheSession(t *testing.T) {
 		t.Errorf("workspace rename params = %v", params)
 	}
 
-	// A session cannot be without a name, so an empty field sends nothing.
 	if _, _, ok = renameVerb(RenameSession, "work", "work", ""); ok {
 		t.Error("an empty session name produced a verb")
 	}
@@ -51,8 +50,6 @@ func TestRenameVerbRenamesTheSession(t *testing.T) {
 // so it belongs in a command. Committing must hand back a command and return at
 // once, doing no network work itself.
 func TestSessionRenameDoesNotBlockUpdate(t *testing.T) {
-	// An empty runtime dir means the socket does not exist, so a call made
-	// inline would fail here rather than reach a daemon.
 	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 
 	m := &OS{Settings: config.Global, SessionName: "work", SessionDisplayName: "old"}
@@ -79,7 +76,6 @@ func TestSessionRenameDoesNotBlockUpdate(t *testing.T) {
 		t.Errorf("SessionName = %q, want work until the daemon pushes the new name", m.SessionName)
 	}
 
-	// The round trip happens when the runtime runs the command, not before.
 	msg := cmd()
 	applied, ok := msg.(RenameAppliedMsg)
 	if !ok {
@@ -119,8 +115,6 @@ func TestRenameAppendGate(t *testing.T) {
 			t.Errorf("appending %q gave %q, want %q", in, m.RenameText(), before+in)
 		}
 	}
-	// A Nerd Font icon follows the font: kept while Nerd Fonts are on,
-	// refused while they are off, where it would draw as a tofu box.
 	overlay.SetNerdFonts(false)
 	t.Cleanup(func() { overlay.SetNerdFonts(false) })
 	for _, in := range []string{"\x1b", "\u0301", "\U0001f600", "\ue0a0", "\u25b6"} {
@@ -139,7 +133,6 @@ func TestRenameAppendGate(t *testing.T) {
 		}
 	}
 
-	// Nothing lands anywhere once the editor is closed.
 	m.EndRename()
 	m.RenameAppend("x")
 	if m.RenameText() != "" {

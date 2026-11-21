@@ -27,7 +27,6 @@ func TestAPaneThatArrivesZoomedGetsTheLayoutsBorder(t *testing.T) {
 			m.Width, m.Height = 100, 40
 			m.AutoTiling = true
 			m.SharedBorders = tc.shared
-			// What createWindowFromSync leaves: the flag adopted, never tiled.
 			win.Tiled = false
 			win.Zoomed = true
 

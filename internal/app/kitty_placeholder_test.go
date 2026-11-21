@@ -12,7 +12,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// pendingString is what the passthrough has queued for the host.
 func pendingString(kp *KittyPassthrough) string {
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
@@ -39,7 +38,6 @@ func TestAVirtualPlacementIsForwardedAsVirtual(t *testing.T) {
 		Action: vt.KittyActionPlace, ImageID: guestID,
 		Columns: 20, Rows: 10, Virtual: true,
 	}
-	// A cursor far from the origin: a virtual placement must ignore it.
 	kp.ForwardCommand(place, nil, winID, 0, 0, 80, 24, 0, 0, 7, 3, 0, false, nil)
 
 	out := pendingString(kp)
@@ -178,7 +176,6 @@ func TestDimmingLeavesAPlaceholderCellAlone(t *testing.T) {
 		t.Errorf("dimming renamed the image to %#x, want %#x", gotID, id)
 	}
 
-	// An ordinary cell must still dim, or the guard is too wide.
 	text := &uv.Cell{Content: "a", Width: 1, Style: uv.Style{Fg: color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}}}
 	var scratch2 uv.Cell
 	dimmed := dimCell(&scratch2, text, color.White, color.Black, nil, 0.5, true, nil)
@@ -207,7 +204,6 @@ func TestAVirtualPlacementReservesNoRows(t *testing.T) {
 		t.Errorf("a virtual placement asked for %d rows of space, want none", got.Rows)
 	}
 
-	// A real placement still reserves, or the guard is too wide.
 	real := &vt.KittyCommand{
 		Action: vt.KittyActionPlace, ImageID: 4, Columns: 20, Rows: 10,
 	}
@@ -226,10 +222,7 @@ func TestTheWholePlaceholderFlow(t *testing.T) {
 	const guestID uint32 = 0x0a0b0c
 	const cols, rows = 4, 2
 
-	// The guest's emulator, wired the way a real pane's is.
 	term := vt.New(40, 10)
-	// Placeholder cells are kept only on a host that draws them, which is what
-	// setupKittyPassthrough decides per pane. See kitty_placeholder_caps.go.
 	term.SetKittyPlaceholderMode(vt.KittyPlaceholdersKeep)
 	term.SetKittyImageIDTranslator(func(g uint32) (uint32, bool) {
 		return kp.HostImageID(winID, g)
@@ -262,8 +255,6 @@ func TestTheWholePlaceholderFlow(t *testing.T) {
 		t.Errorf("the host was never told the image is placed by its cells:\n%q", host)
 	}
 
-	// Every cell of the grid is present, and names the same image the host was
-	// told about.
 	for y := range rows {
 		for x := range cols {
 			cell := term.CellAt(x, y)

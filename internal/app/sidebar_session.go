@@ -11,27 +11,23 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// A rail session is a second *client* of the daemon, not a shell owned by the
-// center client. Its state and subscriptions must never enter OS.Windows: a
-// center-session state sync replaces that slice, and leaving this client must
-// not close the processes in either of the docked sessions.
 type sidebarSessionView struct {
 	name       string
 	generation uint64
 	client     *session.TUIClient
-	window     *terminal.Window // daemon-active pane; the focus may be another visible pane
+	window     *terminal.Window
 	ptyID      string
-	panes      []session.WindowState // ordered visible panes, at least four rows each
+	panes      []session.WindowState
 	windows    map[string]*terminal.Window
 	pending    map[string]bool
 	focusPTY   string
-	zoomPTY    string // client-local expansion of a rail pane, not the daemon layout
+	zoomPTY    string
 	workspace  int
 	paneIndex  int
 	width      int
 	height     int
 	problem    string
-	failures   int // consecutive failed attachments, for bounded reconnect backoff
+	failures   int
 }
 
 type sidebarSessionEvent struct {
@@ -47,16 +43,12 @@ type sidebarSessionEvent struct {
 
 type sidebarSessionNotice struct{ sidebarSessionEvent }
 
-// resetFailuresWhenReady leaves post-attach snapshot and subscription failures
-// in the same backoff sequence as connect failures. An empty session is ready
-// immediately; otherwise every visible pane must be subscribed first.
 func (v *sidebarSessionView) resetFailuresWhenReady() {
 	if len(v.pending) == 0 {
 		v.failures = 0
 	}
 }
 
-// A failed attachment backs off; the generation invalidates obsolete retries.
 func (m *OS) retrySidebarSession(edge sidebarEdge) tea.Cmd {
 	v := &m.sidebarSessions[edge]
 	generation := v.generation
@@ -91,9 +83,6 @@ func (m *OS) sidebarSessionVisible(edge sidebarEdge) bool {
 		m.sidebarSessionWidth(edge) >= 8 && m.ViewUsableHeight() >= 4
 }
 
-// refreshSidebarSessions reconciles both independent attachments with the
-// current config, workspace and geometry. An inactive rail disconnects its
-// viewing client, not the daemon session whose process it was displaying.
 func (m *OS) refreshSidebarSessions() tea.Cmd {
 	var cmds []tea.Cmd
 	for _, edge := range []sidebarEdge{sidebarLeft, sidebarRight} {
@@ -128,9 +117,9 @@ func (m *OS) refreshSidebarSessions() tea.Cmd {
 
 func (m *OS) closeSidebarSession(edge sidebarEdge) {
 	v := &m.sidebarSessions[edge]
-	v.generation++ // invalidate any connect/snapshot still in flight
+	v.generation++
 	if v.client != nil {
-		_ = v.client.Close() // detaches only this viewer, not the daemon session
+		_ = v.client.Close()
 		v.client = nil
 	}
 	for _, w := range v.windows {
@@ -164,12 +153,7 @@ func (m *OS) connectSidebarSession(edge sidebarEdge, generation uint64, name str
 }
 
 func (m *OS) listenSidebarSession() tea.Cmd {
-	// Capture the shutdown channel before starting the async command. Stop
-	// closes it and clears the OS field; reading that field later could race
-	// with shutdown or leave a listener parked on a nil channel forever.
 	events, states, done := m.sidebarSessionEvents, m.sidebarSessionStateEvents, m.sidebarSessionDone
-	// Cleanup closes stop too. A listener a mid-run Cleanup left to be re-armed
-	// would otherwise capture the nil done channel and park for ever.
 	stop := m.stopSignal()
 	return func() tea.Msg {
 		select {
@@ -206,9 +190,6 @@ func sidebarActivePane(state *session.SessionState) *session.WindowState {
 	return nil
 }
 
-// sidebarPaneSlots partitions a rail's body into vertical framed panes. If
-// the rail cannot give every pane six rows (four guest rows), show a contiguous group that
-// contains the daemon-active pane; the header still reports the full count.
 func (m *OS) layoutSidebarSessionPanes(edge sidebarEdge) {
 	v := &m.sidebarSessions[edge]
 	count := len(v.panes)
@@ -298,8 +279,6 @@ func (m *OS) applySidebarSessionState(edge sidebarEdge, state *session.SessionSt
 		v.ptyID = active.PTYID
 		v.window = v.windows[v.ptyID]
 	}
-	// Daemon navigation changes the active pane without a mouse click. Keep
-	// the rail's keyboard target aligned with that active pane on state sync.
 	if m.sidebarSessionFocus == int(edge)+1 || !visible[v.focusPTY] {
 		v.focusPTY = v.ptyID
 	}
@@ -357,7 +336,7 @@ func (m *OS) handleSidebarSessionEvent(event sidebarSessionEvent) tea.Cmd {
 		m.WireSidebarSessionClient(v.client, edge, generation)
 		v.client.StartReadLoop()
 		cmd := m.applySidebarSessionState(edge, event.state)
-		v.resetFailuresWhenReady() // an empty session needs no subscriptions
+		v.resetFailuresWhenReady()
 		return cmd
 	case "state":
 		if v.client != nil {
@@ -397,15 +376,13 @@ func (m *OS) handleSidebarSessionEvent(event sidebarSessionEvent) tea.Cmd {
 			v.problem = err.Error()
 			return m.retrySidebarSession(event.edge)
 		} else {
-			// Crop the subscribed guest to its rail frame. The shared daemon
-			// PTY keeps the dimensions chosen by ordinary session clients.
 			v.resetFailuresWhenReady()
 			m.layoutSidebarSessionPanes(event.edge)
 		}
 		m.MarkAllDirty()
 	case "ended":
 		m.closeSidebarSession(event.edge)
-		v.name = m.sidebarSessionConfig(event.edge).Session // show the failure, not an empty rail
+		v.name = m.sidebarSessionConfig(event.edge).Session
 		if event.err != nil {
 			v.problem = event.err.Error()
 		} else {
@@ -417,17 +394,12 @@ func (m *OS) handleSidebarSessionEvent(event sidebarSessionEvent) tea.Cmd {
 	return nil
 }
 
-// sidebarSessionPanel replaces a rail's ordinary sections when a daemon
-// session is assigned. Its visible panes stack vertically in this client;
-// they are normal daemon panes, not client-owned shell sections.
 func (m *OS) sidebarSessionPanel(edge sidebarEdge, width int) (string, bool) {
 	if !m.sidebarSessionVisible(edge) || width == 0 {
 		return "", false
 	}
 	v := &m.sidebarSessions[edge]
 	lines := make([]string, m.ViewUsableHeight())
-	// The rail has no extra header: its panes use the same title bars as
-	// ordinary windows. Only an empty rail needs a loading placeholder.
 	if len(v.panes) == 0 {
 		lines[0] = sidebarFit(" Connecting to session…", width, m.railGround())
 	}
@@ -559,8 +531,6 @@ func (m *OS) SidebarSessionTitlePaneAt(x, y int) (int, *terminal.Window) {
 	return 0, nil
 }
 
-// sidebarSessionWindowByID finds a currently drawn rail pane for title-bar
-// button hit testing. A zoomed rail does not expose the hidden panes' buttons.
 func (m *OS) sidebarSessionWindowByID(id string) *terminal.Window {
 	for _, side := range []sidebarEdge{sidebarLeft, sidebarRight} {
 		if !m.sidebarSessionVisible(side) {
@@ -631,7 +601,6 @@ func (m *OS) SidebarSessionWindow() *terminal.Window {
 // FocusSidebarSessionPane makes a clicked stacked pane the input target and
 // records its daemon focus, without changing the center session attachment.
 func (m *OS) FocusSidebarSessionPane(w *terminal.Window) {
-	// The rail pane is the only pane its focus target has.
 	if w == nil || m.sidebarSessionFocus == 0 || m.sidebarSessionFocus == railPaneFocus {
 		return
 	}
@@ -667,8 +636,6 @@ func (m *OS) PasteSidebarSession(text string) bool {
 // SidebarSessionIntent runs a pane command in the assigned session, without
 // mutating the center session's layout or attachment.
 func (m *OS) SidebarSessionIntent(command string, args ...string) bool {
-	// The rail pane is not a session: a pane command acts where it always
-	// does.
 	if m.sidebarSessionFocus == 0 || m.sidebarSessionFocus == railPaneFocus {
 		return false
 	}
@@ -693,8 +660,6 @@ func (m *OS) NewSidebarSessionWindow() bool {
 	if v.client == nil || m.SidebarSessionWindow() == nil {
 		return false
 	}
-	// SendNewWindowFrom is only for an *empty* workspace and deliberately
-	// skips when there is already a pane. A normal split needs NewWindow.
 	if err := v.client.SendNewWindowIntent("", v.workspace, "", "NewWindow"); err != nil {
 		m.LogError("Sidebar session %s: new pane: %v", v.name, err)
 		return false

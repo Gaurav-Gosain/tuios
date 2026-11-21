@@ -9,23 +9,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// Loading states are drawn only once a load has run past overlay.LoadingDelay.
-// Most reads answer well inside it, and a "reading" line that is drawn for one
-// frame and gone the next is a flicker rather than news. A load records when
-// it started next to its flag, the renderer asks overlay.ShowLoading, and
-// Update arms one frame at the delay (loadingFrameCmd) so the state is drawn
-// even when nothing else would draw a frame then.
-
-// loadingShownMsg is the frame asked for at the loading delay. It carries
-// nothing: the renderer reads each load's start time.
 type loadingShownMsg struct{}
 
-// loadingFrameCmd arms the frame for the earliest load that has not had one
-// armed yet. Update asks it after every message, like the files sync, so the
-// places that start a load do not each have to carry a timer. It reads a few
-// fields and allocates nothing when no load is out.
 func (m *OS) loadingFrameCmd() tea.Cmd {
-	// The clock is read on the first load found, not on every message.
 	var now, due time.Time
 	consider := func(loading bool, since time.Time) {
 		if !loading || since.IsZero() {
@@ -52,10 +38,6 @@ func (m *OS) loadingFrameCmd() tea.Cmd {
 	return tea.Tick(due.Sub(now), func(time.Time) tea.Msg { return loadingShownMsg{} })
 }
 
-// emptyPanel draws a panel whose body is an empty state: the message centred
-// in rows rows, with detail wrapped to the panel's width and one key hint
-// under it. It is for overlays that have nothing to list, which used to say
-// so in a line of text at the top left of an otherwise blank panel.
 func (m *OS) emptyPanel(title string, preferredWidth, rows int, message string, detail []string, hint overlay.Hint, hints []overlay.Hint) (string, overlay.Geometry, []overlayRowHit) {
 	pal := m.overlayUI()
 	bg := pal.Surface

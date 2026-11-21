@@ -39,11 +39,6 @@ func TestDockEventAliasesMatchTheValidatedSet(t *testing.T) {
 		}
 	}
 	for _, event := range hooks.AllEvents() {
-		// Only the daemon follows a shell's OSC 133 marks, so no client ever
-		// sees a command finish and a dock component could not refresh on it.
-		// Accepting the name would be a contract that never fires. The same
-		// holds for after-new-worktree, which the daemon runs inside the verb,
-		// and for after-settle, which the daemon runs inside mark-attention.
 		if event == hooks.AfterCommandFinished || event == hooks.AfterNewWorktree || event == hooks.AfterSettle {
 			if slices.Contains(valid, string(event)) {
 				t.Errorf("%q is accepted as a dock event, but no client fires it", event)
@@ -94,8 +89,6 @@ func TestDockFixedSideComponentsDrawWhereTheyBelong(t *testing.T) {
 		t.Error("a misplaced component was dropped instead of being moved")
 	}
 
-	// It is a warning, not silence: the user wrote something that did not mean
-	// what it looked like it meant.
 	cfg := &config.UserConfig{Dock: config.DockConfig{Left: &left, Center: &center, Right: &right}}
 	warnings := config.ConfigWarnings(cfg)
 	found := 0

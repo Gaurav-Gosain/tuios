@@ -9,7 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// runSaveCmd is runSave for a caller that expects a save to have been queued.
 func runSaveCmd(t *testing.T, cmd tea.Cmd) tea.Msg {
 	t.Helper()
 	if cmd == nil {
@@ -27,13 +26,11 @@ func TestStaleSaveGivesWayToNewer(t *testing.T) {
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig()})
 	focusSetting(t, m, "Sidebar", "File icons")
 
-	first := m.SettingsAdjust(1) // file_icons -> false
+	first := m.SettingsAdjust(1)
 	second := m.SettingsAdjust(1)
 	if first == nil || second == nil {
 		t.Fatal("expected a save command from each change")
 	}
-	// Out of order on purpose: the newer render lands, then the older one is
-	// asked to write and must decline.
 	runSaveCmd(t, second)
 	runSaveCmd(t, first)
 
@@ -50,10 +47,6 @@ func TestStaleSaveGivesWayToNewer(t *testing.T) {
 	}
 }
 
-// runSave runs the command a settings change handed back, which is where the
-// file write lives now. A nil command means there was nothing to save (no
-// config held, or a read-only session), so it is not an error here; the tests
-// that care assert on the command themselves.
 func runSave(t *testing.T, cmd tea.Cmd) tea.Msg {
 	t.Helper()
 	if cmd == nil {

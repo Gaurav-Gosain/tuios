@@ -6,14 +6,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// hostPasteTimeout is how long tuios waits for the terminal to answer the OSC 52
-// clipboard query before it tells the user nothing came back.
-//
-// The query is a request to a terminal that is free to ignore it, and many do:
-// kitty answers a write and refuses a read unless clipboard_control names
-// read-clipboard, and Ghostty asks the user first. Bubble Tea's ReadClipboard
-// has no deadline of its own, so without this the refusal reads as a paste that
-// simply never happens.
 const hostPasteTimeout = 2 * time.Second
 
 // PasteTimeoutMsg fires when a clipboard query has gone unanswered for
@@ -33,7 +25,6 @@ type BrowserPasteKeys struct {
 	CtrlVToProgram bool
 }
 
-// keys names the keys that paste, in the form the dock shows keys.
 func (k BrowserPasteKeys) keys() string {
 	switch {
 	case k.Apple:
@@ -77,10 +68,6 @@ func (m *OS) RequestHostPaste() tea.Cmd {
 	m.pasteAskedAt = time.Now()
 	seq := m.pasteSeq
 
-	// A terminal that never answers the OSC 52 read is asked natively instead,
-	// when the human is at this machine (a local VTE terminal, or a loopback
-	// SSH session). The reply is a tea.ClipboardMsg, so it lands in the same
-	// handler the OSC 52 answer does. See clipboard_local.go.
 	if m.nativeClipboardAllowed() {
 		if tool := DetectClipboardTool(); tool != nil {
 			return tea.Batch(
@@ -102,9 +89,6 @@ func (m *OS) RequestHostPaste() tea.Cmd {
 	)
 }
 
-// hostPasteReplyWindow is how long after a clipboard query tuios still takes
-// the answer as the reply to it. It is long because a terminal can ask the
-// user before it answers.
 const hostPasteReplyWindow = time.Minute
 
 // NotePasteArrived records that the terminal answered, which disarms the
@@ -133,8 +117,6 @@ func (m *OS) ClaimPasteReply(content string) bool {
 	return !asked.IsZero() && time.Since(asked) <= hostPasteReplyWindow
 }
 
-// pasteTimedOut reports whether msg belongs to a query that is still waiting,
-// and disarms it. A stale timer answers false and says nothing.
 func (m *OS) pasteTimedOut(msg PasteTimeoutMsg) bool {
 	if !m.pastePending || msg.Seq != m.pasteSeq {
 		return false

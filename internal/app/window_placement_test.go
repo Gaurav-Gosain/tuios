@@ -8,8 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// placementOS is a floating (untiled) client with no pointer history, which is
-// what every headless and scripted path looks like.
 func placementOS(t testing.TB) *OS {
 	t.Helper()
 	return &OS{
@@ -23,8 +21,6 @@ func placementOS(t testing.TB) *OS {
 	}
 }
 
-// placeNext asks for a placement and records a window there, as both callers of
-// NewWindowPlacement do.
 func placeNext(m *OS, id string) *terminal.Window {
 	x, y, width, height := m.NewWindowPlacement()
 	w := &terminal.Window{ID: id, Workspace: m.CurrentWorkspace, X: x, Y: y, Width: width, Height: height}
@@ -63,7 +59,6 @@ func TestNewFloatingWindowsDoNotLandOnTopOfEachOther(t *testing.T) {
 func TestNewFloatingWindowsStayOnScreen(t *testing.T) {
 	m := placementOS(t)
 
-	// More windows than the cascade has distinct slots, so the wrap is covered.
 	for i := range 12 {
 		w := placeNext(m, fmt.Sprintf("win-%d", i))
 		if w.X < m.GetLeftMargin() || w.Y < m.GetTopMargin() {

@@ -9,11 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/pkg/applist"
 )
 
-// What the GUI bridge (internal/guibridge) reads off the model for a native
-// renderer that draws the views itself: the palette's rows, the multifocus
-// group, the pinned pane and the scrolling strip. The scratch box is
-// ScratchBox in scratch.go.
-
 // BridgePaletteItems is the command palette as a client with no screen of its
 // own offers it: the static commands, the user's command keys and the
 // plugins' actions, with the same rows left out as the terminal client leaves
@@ -127,7 +122,6 @@ func (m *OS) ScrollStrip() (viewport, width int, panes []StripPane, ok bool) {
 		if w == nil || w.Workspace != m.CurrentWorkspace || w.Minimized || w.IsFloating {
 			continue
 		}
-		// ComputePositions works on screen: put the viewport back.
 		panes = append(panes, StripPane{ID: w.ID, X: r.X + sl.ViewportX + left, Y: r.Y, W: r.W, H: r.H})
 	}
 	sort.Slice(panes, func(i, j int) bool {

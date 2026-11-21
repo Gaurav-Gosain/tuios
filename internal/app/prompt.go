@@ -10,40 +10,17 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The prompt: a text field or a list that an action, a script or a plugin
-// asked the person for (session/prompt.go). The daemon pushes it to every
-// client attached on this machine, and this client shows it in the command
-// palette: the field is the palette's search line, and a pick's rows are the
-// palette's rows, filtered as the person types.
-//
-// Enter answers and Esc cancels, each sent with this client's attach nonce,
-// so only the person's own keys answer: keys that send-keys or a tape put
-// through the client send nothing. Enter in the first moment after the
-// prompt opens does nothing, since it was typed for what was in front of the
-// person before. The first answer from any client wins, and the daemon's push
-// that closes the prompt takes it off every other client.
-
-// promptSettle is how long a prompt ignores Enter after it opens.
 const promptSettle = 400 * time.Millisecond
 
-// promptHeadMax is how many lines the question may take.
 const promptHeadMax = 3
 
-// promptState is the prompt the palette shows.
 type promptState struct {
-	// req is the open prompt, nil when none shows.
-	req *session.PromptRequest
-	// openedAt is when it opened. Enter waits promptSettle.
+	req      *session.PromptRequest
 	openedAt time.Time
-	// marked are the ids Tab marked in a pick that takes more than one row.
-	marked map[string]bool
-	// done is the id of the prompt this client last answered, cancelled or
-	// closed, so a push of it that crossed the answer does not open it again.
-	done string
+	marked   map[string]bool
+	done     string
 }
 
-// Marks a pick row can carry: none, or the off and on marks of a pick that
-// takes more than one row.
 const (
 	promptMarkNone int8 = iota
 	promptMarkOff
@@ -58,8 +35,6 @@ type PromptMsg struct {
 // PromptOpen reports whether a prompt shows in the palette.
 func (m *OS) PromptOpen() bool { return m.prompt.req != nil }
 
-// setPrompt takes the daemon's push: it opens the prompt, or closes it and
-// says how it ended when this client did not end it.
 func (m *OS) setPrompt(p session.PromptPayload) {
 	st := &m.prompt
 	if p.Prompt == nil {
@@ -92,8 +67,6 @@ func (m *OS) setPrompt(p session.PromptPayload) {
 	m.MarkAllDirty()
 }
 
-// promptClosedText says how a prompt ended at another client or at the
-// daemon.
 func promptClosedText(reason string) string {
 	switch reason {
 	case session.PromptAnswered:
@@ -106,7 +79,6 @@ func promptClosedText(reason string) string {
 	return "The prompt closed"
 }
 
-// endPrompt takes the prompt off the palette and closes it. It sends nothing.
 func (m *OS) endPrompt() {
 	st := &m.prompt
 	if st.req == nil {
@@ -120,8 +92,6 @@ func (m *OS) endPrompt() {
 	m.MarkAllDirty()
 }
 
-// promptPaletteItems are a pick's rows as palette rows: the icon before the
-// title, and the subtitle in the quiet slot on the right.
 func promptPaletteItems(req *session.PromptRequest) []CommandPaletteItem {
 	if req.Kind != session.PromptPick {
 		return []CommandPaletteItem{}
@@ -137,8 +107,6 @@ func promptPaletteItems(req *session.PromptRequest) []CommandPaletteItem {
 	return items
 }
 
-// promptRows are the pick rows the query matches, with their marks, and the
-// row that sends the typed text when the prompt takes other text.
 func (m *OS) promptRows() []CommandPaletteItem {
 	req := m.prompt.req
 	if req.Kind != session.PromptPick {
@@ -166,8 +134,6 @@ func (m *OS) promptRows() []CommandPaletteItem {
 	return append(rows, CommandPaletteItem{Name: "Use \"" + query + "\"", promptOther: true})
 }
 
-// promptKey reads the prompt's own keys: Tab marks a row of a pick that
-// takes more than one. The rebind key does nothing here.
 func (m *OS) promptKey(key string) (tea.Cmd, bool) {
 	req := m.prompt.req
 	switch key {
@@ -190,7 +156,6 @@ func (m *OS) promptKey(key string) (tea.Cmd, bool) {
 	return nil, false
 }
 
-// promptAccept sends the answer: the typed text, or the rows chosen.
 func (m *OS) promptAccept() tea.Cmd {
 	st := &m.prompt
 	req := st.req
@@ -236,14 +201,10 @@ func (m *OS) promptAccept() tea.Cmd {
 	return m.sendPromptAnswer(params)
 }
 
-// promptCancel sends the cancel.
 func (m *OS) promptCancel() tea.Cmd {
 	return m.sendPromptAnswer(map[string]any{"request_id": m.prompt.req.ID, "cancel": true})
 }
 
-// sendPromptAnswer sends params to answer-prompt with this client's attach
-// nonce, and closes the prompt here. A key that was not the person's sends
-// nothing, and the prompt stays.
 func (m *OS) sendPromptAnswer(params map[string]any) tea.Cmd {
 	if !m.inboxCanAct("Answering a prompt") {
 		return nil
@@ -262,7 +223,6 @@ func (m *OS) sendPromptAnswer(params map[string]any) tea.Cmd {
 	}
 }
 
-// promptHead is the question, wrapped to width, at most promptHeadMax lines.
 func (m *OS) promptHead(width int) []string {
 	if m.prompt.req == nil {
 		return nil
@@ -275,7 +235,6 @@ func (m *OS) promptHead(width int) []string {
 	return lines
 }
 
-// promptFooter is the palette's footer while a prompt shows.
 func (m *OS) promptFooter() []overlay.Hint {
 	req := m.prompt.req
 	if req.Kind == session.PromptInput {
@@ -288,7 +247,6 @@ func (m *OS) promptFooter() []overlay.Hint {
 	return append(hints, overlay.Hint{Key: "esc", Label: "cancel"})
 }
 
-// promptMarks are a pick row's marks, in ASCII when the chrome asks for it.
 func promptMarks() (on, off string) {
 	if overlay.UseASCII() {
 		return "x", "-"
@@ -296,7 +254,6 @@ func promptMarks() (on, off string) {
 	return "✓", "·"
 }
 
-// promptPanelTitle is the palette's title while a prompt shows: who asks.
 func promptPanelTitle(req *session.PromptRequest) string {
 	if req.From == "" {
 		return "Prompt"

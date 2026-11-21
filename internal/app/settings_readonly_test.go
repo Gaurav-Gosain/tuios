@@ -15,8 +15,6 @@ import (
 // connected, so a save would write one client's stale view over everyone's.
 func TestConfigReadOnlySessionAppliesWithoutWriting(t *testing.T) {
 	path := useTempConfig(t)
-	// A file with a value the panel is about to change, so a write that did
-	// happen is visible as a changed file rather than as a created one.
 	if err := config.WriteConfigFile(config.DefaultConfig(), path); err != nil {
 		t.Fatalf("seed config: %v", err)
 	}
@@ -25,9 +23,6 @@ func TestConfigReadOnlySessionAppliesWithoutWriting(t *testing.T) {
 		t.Fatalf("read seeded config: %v", err)
 	}
 
-	// Both globals the panel is driven through, restored afterwards: a
-	// read-only session still applies its change, so without this the second
-	// toggle below leaks out of the test.
 	swapBool(t, &config.Global.SidebarFileIcons, true)
 	swapBool(t, &config.Global.SidebarMarquee, true)
 	m := NewOS(OSOptions{UserConfig: config.DefaultConfig(), ConfigReadOnly: true})
@@ -57,8 +52,6 @@ func TestConfigReadOnlySessionAppliesWithoutWriting(t *testing.T) {
 		t.Errorf("raised the not-saved notice %d times, want exactly 1", told)
 	}
 
-	// Changing a second setting must not raise it again, or the panel becomes
-	// unusable behind a stack of the same message.
 	focusSetting(t, m, "Sidebar", "Marquee")
 	m.SettingsAdjust(1)
 	told = 0

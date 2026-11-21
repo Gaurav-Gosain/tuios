@@ -16,77 +16,34 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
-// An agent's words in the thread are Markdown: internal/markdown reads them
-// into blocks, and this lays the blocks out as card lines at the thread's
-// width, in the look's colours. Headings, strong and emphasis are bold and
-// italic in the body ink, code spans and links take the accent, a code block
-// sits on the card ground highlighted by internal/diffview, a table is drawn
-// with rules and keeps every cell, and a link carries its address as OSC 8.
-//
-// The lines are built once per card: the thread keeps a card until its
-// entry's text, the width or the look changes.
-
-// ckCodeLexMax bounds the code of one message the lexer reads. A block past
-// it is drawn plain.
 const ckCodeLexMax = 8 << 10
 
-// ckBullets are the list marks by depth, then by glyph set.
 var ckBullets = [3]ckGlyph{{"•", "•", "-"}, {"◦", "◦", "*"}, {"▹", "▹", "+"}}
 
-// ckTaskGlyphs are a task item's open and done marks, the plan card's.
 var ckTaskGlyphs = [2]ckGlyph{ckGlyphIdle, ckGlyphReview}
 
-// ckMD is the state of one message's layout.
 type ckMD struct {
-	m     *OS
-	l     ckLook
-	lines []ckLine
-	// lexed is how many bytes of code the lexer has read.
-	lexed int
-	// fold is the hit that opens a long code block, "" for a layout that
-	// shows every line, and open says the message's blocks are open.
-	fold string
-	open bool
-	// wrap breaks a code line wider than the block onto more rows, each
-	// after the first with a continuation mark. Without it the line is cut,
-	// with a cut mark at the block's right edge.
-	wrap bool
-	// t is the thread the message is in, nil outside a thread: it keeps how
-	// far each code block is scrolled sideways. id is the message's entry,
-	// and codes counts its code blocks so far, for each block's key.
-	t     *agentThread
-	id    string
-	codes int
-	// hook lays out a block kind a reader draws itself, such as a picture,
-	// and reports whether it did. A reader plugs a kind in here; nil draws
-	// every block the usual way. See quicklook_markdown.go.
-	hook func(md *ckMD, b markdown.Block, first, rest []ckSeg, width int) bool
-	// heads draws a second level heading in the accent too, and a third in
-	// the body ink, for a document read as a page: quick look's Markdown.
-	heads bool
-	// headAt is the line each heading starts on, and headLevel its level,
-	// for a layout with heads: quick look marks them on its ruler.
+	m                 *OS
+	l                 ckLook
+	lines             []ckLine
+	lexed             int
+	fold              string
+	open              bool
+	wrap              bool
+	t                 *agentThread
+	id                string
+	codes             int
+	hook              func(md *ckMD, b markdown.Block, first, rest []ckSeg, width int) bool
+	heads             bool
 	headAt, headLevel []int
-	// lead says the next runs start a paragraph, whose first bold run is
-	// its lead label. See runs.
-	lead bool
-	// blockScope names the layout's rich blocks: the thread and entry, or the
-	// file, "" for a layout that draws them as code. nblocks counts them so
-	// far, for each block's key. See cockpit_blocks.go.
-	blockScope string
-	nblocks    int
-	// pics takes the pictures of Mermaid blocks, nil for a layout that
-	// draws them as text. See cockpit_mermaid_pic.go.
-	pics *ckPics
+	lead              bool
+	blockScope        string
+	nblocks           int
+	pics              *ckPics
 }
 
-// ckCodeFold is how many lines of a code block a closed message shows.
 const ckCodeFold = 12
 
-// ckMarkdownFold is ckMarkdown for a thread's message: a code block longer
-// than ckCodeFold lines shows that many and a line that opens it, unless
-// open.
-// The thread t keeps the sideways scroll of its code blocks.
 func (m *OS) ckMarkdownFold(l ckLook, text string, width int, id string, open bool, t *agentThread) []ckLine {
 	md := &ckMD{m: m, l: l, fold: "fold:" + id, open: open, wrap: m.Inbox.ck.codeWrap, t: t, id: id}
 	if t != nil {
@@ -96,18 +53,14 @@ func (m *OS) ckMarkdownFold(l ckLook, text string, width int, id string, open bo
 	return md.layout(text, width, markdown.Options{})
 }
 
-// ckMarkdown lays out an agent's message as card lines of at most width
-// cells.
 func (m *OS) ckMarkdown(l ckLook, text string, width int) []ckLine {
 	return m.ckMarkdownWith(l, text, width, markdown.Options{})
 }
 
-// ckMarkdownWith is ckMarkdown with the parser's options.
 func (m *OS) ckMarkdownWith(l ckLook, text string, width int, opt markdown.Options) []ckLine {
 	return (&ckMD{m: m, l: l}).layout(text, width, opt)
 }
 
-// layout lays out a message's text.
 func (md *ckMD) layout(text string, width int, opt markdown.Options) []ckLine {
 	l := md.l
 	blocks, cut := markdown.ParseWith(strings.TrimSpace(text), opt)
@@ -118,10 +71,6 @@ func (md *ckMD) layout(text string, width int, opt markdown.Options) []ckLine {
 	return md.lines
 }
 
-// blocks lays out bs. first is the prefix of the first line, such as a list
-// mark, and rest the prefix of every other line. tight leaves out the blank
-// line between blocks, as inside a list item. A heading sits on the block
-// it heads, and the items of a list on each other.
 func (md *ckMD) blocks(bs []markdown.Block, first, rest []ckSeg, width int, ink color.Color, list int, tight bool) {
 	for i, b := range bs {
 		pre := rest
@@ -134,7 +83,6 @@ func (md *ckMD) blocks(bs []markdown.Block, first, rest []ckSeg, width int, ink 
 	}
 }
 
-// ckAlert is a GitHub alert's label and ink.
 func ckAlert(pal overlay.Palette, kind string) (string, color.Color) {
 	switch kind {
 	case "TIP":
@@ -149,7 +97,6 @@ func ckAlert(pal overlay.Palette, kind string) (string, color.Color) {
 	return "Note", pal.Accent
 }
 
-// slicesClone copies a prefix, so lines never share one backing array.
 func slicesClone(s []ckSeg) []ckSeg {
 	if len(s) == 0 {
 		return nil
@@ -157,7 +104,6 @@ func slicesClone(s []ckSeg) []ckSeg {
 	return append([]ckSeg(nil), s...)
 }
 
-// block lays out one block.
 func (md *ckMD) block(b markdown.Block, first, rest []ckSeg, width int, ink color.Color, list int) {
 	l := md.l
 	pal := l.pal
@@ -167,7 +113,6 @@ func (md *ckMD) block(b markdown.Block, first, rest []ckSeg, width int, ink colo
 	}
 	switch b.Kind {
 	case markdown.Paragraph:
-		// A bold label at the start of a paragraph is its lead label.
 		md.lead = true
 		md.text(md.runs(markdown.Inline(b.Text), ink, 0), first, rest, avail)
 	case markdown.Heading:
@@ -198,7 +143,6 @@ func (md *ckMD) block(b markdown.Block, first, rest []ckSeg, width int, ink colo
 		default:
 			mark = l.g(ckBullets[list%len(ckBullets)])
 		}
-		// A list's marks take the accent, so its items stand out.
 		markInk := pal.Accent
 		if b.Task == 2 {
 			markInk = pal.Success
@@ -230,8 +174,6 @@ func (md *ckMD) block(b markdown.Block, first, rest []ckSeg, width int, ink colo
 			md.blocks(b.Children, first, append(slicesClone(rest), bar), width, pal.Fg, list, false)
 			return
 		}
-		// Past a third of the width, a deeper quote or list draws no more
-		// indent, so its text keeps room on a narrow thread.
 		if ckSegsWidth(rest)+2 > width/3 {
 			md.blocks(b.Children, first, rest, width, pal.FgDim, list, false)
 			return
@@ -246,12 +188,10 @@ func (md *ckMD) block(b markdown.Block, first, rest []ckSeg, width int, ink colo
 	case markdown.Table:
 		md.table(b, first, rest, avail)
 	case markdown.Image:
-		// A reader with no hook for pictures shows the words.
 		md.text([]ckSeg{{t: "Image: " + b.Text, fg: pal.FgMute}}, first, rest, avail)
 	}
 }
 
-// runs turns inline runs into segments in ink, each with attrs added.
 func (md *ckMD) runs(rs []markdown.Run, ink color.Color, attrs uint8) []ckSeg {
 	l := md.l
 	pal := l.pal
@@ -271,12 +211,8 @@ func (md *ckMD) runs(rs []markdown.Run, ink color.Color, attrs uint8) []ckSeg {
 		if r.Style&markdown.Strong != 0 {
 			s.attrs |= ckBold
 			if attrs&ckBold == 0 {
-				// Bold in running text is an anchor term, in the link ink.
 				s.fg = pal.Accent
 			}
-			// A bold lead label the list knows, at the start of a
-			// paragraph, takes its icon in the bright accent. A lead-in
-			// that names an action takes its icon with its colon anywhere.
 			icon := ""
 			if lead && i == 0 {
 				if icon = ckIconFor(ckLabelIcons, r.Text); icon != "" {
@@ -316,8 +252,6 @@ func (md *ckMD) runs(rs []markdown.Run, ink color.Color, attrs uint8) []ckSeg {
 	return out
 }
 
-// ckLinkTarget is the address a link opens: only web and mail addresses,
-// with no control character and of a sane length. Any other link is drawn and opens nothing.
 func ckLinkTarget(u string) string {
 	if len(u) > 2048 {
 		return ""
@@ -327,8 +261,6 @@ func ckLinkTarget(u string) string {
 		return ""
 	}
 	for _, r := range u {
-		// C0, space, DEL and C1: a C1 such as ST or CSI, written as UTF-8,
-		// ends the OSC 8 string on some terminals.
 		if r <= ' ' || r >= 0x7f && r < 0xa0 || r == utf8.RuneError {
 			return ""
 		}
@@ -336,8 +268,6 @@ func ckLinkTarget(u string) string {
 	return u
 }
 
-// text wraps segments to avail cells and adds them as lines, the first
-// with first before it and the rest with rest.
 func (md *ckMD) text(segs []ckSeg, first, rest []ckSeg, avail int) {
 	if ckHasTree(segs) {
 		md.treeText(segs, first, rest, avail)
@@ -353,7 +283,6 @@ func (md *ckMD) text(segs []ckSeg, first, rest []ckSeg, avail int) {
 	}
 }
 
-// ckHasTree reports whether segs hold a row of a tree an agent drew.
 func ckHasTree(segs []ckSeg) bool {
 	for _, s := range segs {
 		if strings.ContainsAny(s.t, "├└") {
@@ -363,15 +292,8 @@ func ckHasTree(segs []ckSeg) bool {
 	return false
 }
 
-// ckTreeGuide is a tree row's lead as its wrapped rows show it: a branch
-// that goes on below (├) is a guide (│), and the rest of the branch is
-// blank, so the row's text lines up under its first line.
 var ckTreeGuide = strings.NewReplacer("├", "│", "└", " ", "─", " ")
 
-// treeText is text for a paragraph that holds tree rows. Each row is wrapped
-// on its own, with a hanging indent: a row that runs past the width goes on
-// under its text, after the branch, and the guides of the rows around it go
-// on beside it.
 func (md *ckMD) treeText(segs []ckSeg, first, rest []ckSeg, avail int) {
 	for i, row := range ckSplitRows(segs) {
 		pre := rest
@@ -407,7 +329,6 @@ func (md *ckMD) treeText(segs []ckSeg, first, rest []ckSeg, avail int) {
 	}
 }
 
-// ckSplitRows cuts segments at their hard breaks into rows.
 func ckSplitRows(segs []ckSeg) [][]ckSeg {
 	var rows [][]ckSeg
 	var cur []ckSeg
@@ -433,9 +354,6 @@ func ckSplitRows(segs []ckSeg) [][]ckSeg {
 	return append(rows, cur)
 }
 
-// ckTreeLead cuts a row at the end of its tree lead: the spaces, guides and
-// branch before its text, and the space after the branch. lead is empty for a
-// row that is not a tree row.
 func ckTreeLead(row []ckSeg) (lead, body []ckSeg) {
 	n, branch := 0, false
 	for _, s := range row {
@@ -471,10 +389,6 @@ done:
 	return lead, body
 }
 
-// ckRuneWidth is the cells a rune takes as ckCanvas.text draws it: one
-// rune at a time, controls dropped, a combining mark joined to the cell
-// before it. The layout measures the same way, so a line it lays out fits
-// the cells the canvas draws.
 func ckRuneWidth(r rune) int {
 	switch {
 	case r < 0x20 || r == 0x7f || r >= 0x80 && r < 0xa0:
@@ -486,7 +400,6 @@ func ckRuneWidth(r rune) int {
 	return ansi.StringWidth(string(b[:utf8.EncodeRune(b[:], r)]))
 }
 
-// ckTextWidth is the cells s takes, rune by rune.
 func ckTextWidth(s string) int {
 	n := 0
 	for _, r := range s {
@@ -495,7 +408,6 @@ func ckTextWidth(s string) int {
 	return n
 }
 
-// ckSegsWidth is the cells segs take, rune by rune.
 func ckSegsWidth(segs []ckSeg) int {
 	n := 0
 	for _, s := range segs {
@@ -504,7 +416,6 @@ func ckSegsWidth(segs []ckSeg) int {
 	return n
 }
 
-// ckCutText is the longest start of s at most w cells wide.
 func ckCutText(s string, w int) string {
 	n := 0
 	for i, r := range s {
@@ -517,13 +428,8 @@ func ckCutText(s string, w int) string {
 	return s
 }
 
-// ckWrapSegs breaks styled segments into lines of at most width cells, at
-// spaces, and at "\n" (a hard break). A word wider than the line is cut.
-// A word is kept as byte ranges of its segments and sliced once, so a long
-// word costs its length, not its length squared.
 func ckWrapSegs(segs []ckSeg, width int) [][]ckSeg {
 	width = max(width, 1)
-	// piece is part of a word: bytes start to end of segs[seg].
 	type piece struct{ seg, start, end, w int }
 	var (
 		lines [][]ckSeg
@@ -558,14 +464,9 @@ func ckWrapSegs(segs []ckSeg, width int) [][]ckSeg {
 			endLine()
 		}
 		if space && curW > 0 {
-			// The space takes the ink of the word before it, so the line
-			// is written with fewer colour changes, and never its ground:
-			// a code span's ground does not run into the gap.
 			gap := ckSeg{t: " "}
 			prev := cur[len(cur)-1]
 			gap.fg = prev.fg
-			// Inside one link, or one struck or underlined phrase, the
-			// gap carries the look, so the line under it does not break.
 			if first := segs[word[0].seg]; first.link == prev.link && first.attrs == prev.attrs {
 				gap.link, gap.attrs = prev.link, prev.attrs
 			}
@@ -577,7 +478,6 @@ func ckWrapSegs(segs []ckSeg, width int) [][]ckSeg {
 				emit(p.seg, p.start, p.end, p.w)
 				continue
 			}
-			// Cut a word too wide for any line, in one pass.
 			t := segs[p.seg].t
 			start, w := p.start, 0
 			for i, r := range t[p.start:p.end] {
@@ -602,8 +502,6 @@ func ckWrapSegs(segs []ckSeg, width int) [][]ckSeg {
 				endLine()
 				space = false
 			case r == ' ' && s.bg == nil && s.attrs&uv.AttrReverse == 0:
-				// A space on a ground of its own, or in reverse as a pill
-				// is at 16 colours, is part of the word.
 				endWord()
 				space = true
 			default:
@@ -629,11 +527,6 @@ func ckWrapSegs(segs []ckSeg, width int) [][]ckSeg {
 	return lines
 }
 
-// code lays out a code block on the card ground, highlighted when the fence
-// names a language the lexers know. A line wider than the block is cut, with
-// a cut mark in the mute ink in its last cell, or, with wrap on (W in the
-// thread), broken onto more rows, each with a continuation mark in the
-// gutter, so a wrapped row does not read as another line.
 func (md *ckMD) code(b markdown.Block, first, rest []ckSeg, avail int) {
 	l := md.l
 	pal := l.pal
@@ -653,14 +546,12 @@ func (md *ckMD) code(b markdown.Block, first, rest []ckSeg, avail int) {
 	codeW := max(avail-3, 4)
 	head := ckLine{bg: l.panel, bgAt: at, segs: slicesClone(first)}
 	if len(first) > 0 && ckSegsWidth(first) > at {
-		// A list mark stays on the canvas, beside the block's ground.
 		head.bgAt = ckSegsWidth(first)
 	}
 	if b.Lang != "" {
 		head.right = []ckSeg{{t: ckTrunc(b.Lang, 16), fg: pal.FgMute}, {t: " "}}
 	}
 	if md.t != nil {
-		// A click on the header copies the block.
 		head.right = append([]ckSeg{{t: "copy", fg: pal.FgMute}, {t: "  "}}, head.right...)
 		if b.Lang == "" {
 			head.right = append(head.right, ckSeg{t: " "})
@@ -700,10 +591,6 @@ func (md *ckMD) code(b markdown.Block, first, rest []ckSeg, avail int) {
 	}
 }
 
-// codeScroll is the next code block's key and how far it is scrolled
-// sideways, in cells, held to what its widest line shown leaves past
-// codeW. The key is "" outside a thread. It writes that bound to the
-// thread, for the scroll.
 func (md *ckMD) codeScroll(texts []string, codeW int) (string, int) {
 	if md.t == nil {
 		return "", 0
@@ -728,7 +615,6 @@ func (md *ckMD) codeScroll(texts []string, codeW int) (string, int) {
 func (m *OS) CockpitCodeWrap() {
 	ck := &m.Inbox.ck
 	ck.codeWrap = !ck.codeWrap
-	// The cards are kept by look: a new one draws every card again.
 	ck.lookGen++
 	word := "Code lines are cut at the edge."
 	if ck.codeWrap {
@@ -738,20 +624,13 @@ func (m *OS) CockpitCodeWrap() {
 	m.cockpitTouch()
 }
 
-// ckCodeCutMark and ckCodeWrapMark are a code row's marks: the line goes on
-// past the block's edge (the right one, or the left one when the block is
-// scrolled sideways), and the row goes on with the line above.
 var (
 	ckCodeCutMark  = ckGlyph{"…", "…", ">"}
 	ckCodeWrapMark = ckGlyph{"↳", "↳", "+"}
 )
 
-// codeLine lays out one line of a code block at column at, in codeW cells:
-// whole, cut with the cut mark, or wrapped. A cut line starts xOff cells
-// in, with the cut mark in the gutter when that leaves some of it out.
 func (md *ckMD) codeLine(dv *diffview.Theme, text string, spans []diffview.Span, at, codeW, xOff int) {
 	l := md.l
-	// The ink of the block's language label, on the same ground.
 	ink := l.pal.FgMute
 	lmark := ""
 	if !md.wrap && xOff > 0 && text != "" {
@@ -775,13 +654,10 @@ func (md *ckMD) codeLine(dv *diffview.Theme, text string, spans []diffview.Span,
 	for a, first := 0, true; a < len(text); first = false {
 		b := a + len(ckCutText(text[a:], codeW))
 		if b == a {
-			// A character wider than the block: it goes alone.
 			_, size := utf8.DecodeRuneInString(text[a:])
 			b = a + size
 		}
 		if b < len(text) {
-			// A row never ends on a space, so copy mode, which trims
-			// each row's end, joins the rows back to the line.
 			k := len(strings.TrimRight(text[a:b], " "))
 			if k > 0 {
 				b = a + k
@@ -797,7 +673,6 @@ func (md *ckMD) codeLine(dv *diffview.Theme, text string, spans []diffview.Span,
 	}
 }
 
-// ckSpansIn is the spans of bytes a to b of a line, moved to start at 0.
 func ckSpansIn(spans []diffview.Span, a, b int) []diffview.Span {
 	var out []diffview.Span
 	for _, sp := range spans {
@@ -810,17 +685,8 @@ func ckSpansIn(spans []diffview.Span, a, b int) []diffview.Span {
 	return out
 }
 
-// ckTableMinCol is the narrowest column a table wraps its cells in.
-// Narrower than that, the table is drawn as one record a row.
 const ckTableMinCol = 6
 
-// table lays out a table and keeps every cell, in the thread, quick look and
-// every other reader. The header is bold over a rule, and the columns are set
-// off by a line, each as wide as its widest cell. A table wider than the room
-// gives its widest columns one cap, the largest that fits, and a cell wraps in
-// its column. A row of more than one line has a rule under it, so the rows
-// stay apart. A table that does not fit at ckTableMinCol cells a column is
-// drawn as records: each row its cells under the header's names.
 func (md *ckMD) table(b markdown.Block, first, rest []ckSeg, avail int) {
 	l := md.l
 	pal := l.pal
@@ -922,9 +788,6 @@ func (md *ckMD) table(b markdown.Block, first, rest []ckSeg, avail int) {
 	}
 }
 
-// tableRecords lays out a table too wide for its columns as records: for
-// each row, each header's name and the row's cell under it, and a blank line
-// between the rows.
 func (md *ckMD) tableRecords(rows [][][]ckSeg, first, rest []ckSeg, avail int) {
 	pal := md.l.pal
 	for ri, r := range rows[1:] {
@@ -947,7 +810,6 @@ func (md *ckMD) tableRecords(rows [][][]ckSeg, first, rest []ckSeg, avail int) {
 	}
 }
 
-// ckAlignSegs cuts or pads a cell to w cells, by its column's alignment.
 func ckAlignSegs(segs []ckSeg, w int, align markdown.Align) []ckSeg {
 	have := ckSegsWidth(segs)
 	if have > w {

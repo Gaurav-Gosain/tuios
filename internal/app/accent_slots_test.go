@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// withTheme pins the active theme for one test and puts the old one back. The
-// theme is global, which is exactly why a slot accent is worth keeping as a
-// slot: it is the thing that moves under a stored colour.
 func withTheme(t *testing.T, id string) {
 	t.Helper()
 	prev := theme.CurrentThemeID()
@@ -29,7 +26,7 @@ func TestAnsiQuickPickStoresASlotNotAHex(t *testing.T) {
 	m := accentTestOS(t, 120, 30)
 
 	m.OpenAccentPicker("aaaaaaaa1111")
-	const cyan = 6 // bright cyan
+	const cyan = 6
 	m.AccentPickerSlot(cyan)
 	if got := m.AccentPicker.Cur; got != SlotAccent(cyan).RGB() {
 		t.Errorf("picking a slot left the working colour at %s", overlay.Hex(got))
@@ -41,7 +38,6 @@ func TestAnsiQuickPickStoresASlotNotAHex(t *testing.T) {
 		t.Fatalf("the pane stored %+v, want the slot itself", got)
 	}
 
-	// The proof: the colour it renders as follows the theme.
 	before := got.RGB()
 	withTheme(t, "atom_one_light")
 	if after := got.RGB(); after == before {
@@ -77,8 +73,6 @@ func TestAnsiRowIsReachableByMouseAndKeys(t *testing.T) {
 		t.Fatalf("%d of %d swatches are clickable", len(seen), accentSwatchCount)
 	}
 
-	// Right walks the bright row and stops at its end rather than spilling into
-	// the normal one, which is a different row on screen.
 	m.AccentPickerSlot(0)
 	for range accentBrightCount + 2 {
 		m.AccentPickerMove(1, 0)
@@ -87,10 +81,9 @@ func TestAnsiRowIsReachableByMouseAndKeys(t *testing.T) {
 		t.Errorf("walking right off the bright row landed on %d, want %d", got, accentBrightCount-1)
 	}
 
-	// Down steps to the normal colour under the bright one, and up comes back.
-	m.AccentPickerSlot(6) // bright cyan
+	m.AccentPickerSlot(6)
 	m.AccentPickerMove(0, 1)
-	if got, want := m.AccentPicker.Slot, 13; got != want { // cyan
+	if got, want := m.AccentPicker.Slot, 13; got != want {
 		t.Errorf("down from bright cyan landed on %d (%s), want %d", got, accentSlotNames[got], want)
 	}
 	m.AccentPickerMove(0, -1)
@@ -144,7 +137,7 @@ func TestSessionSlotPickSendsTheName(t *testing.T) {
 	m, _ := accentInheritOS(t)
 
 	m.OpenSessionAccentPicker("main")
-	m.AccentPickerSlot(13) // cyan
+	m.AccentPickerSlot(13)
 	sel := m.AccentPicker.selection()
 	if cmd := m.AccentPickerApply(); cmd == nil {
 		t.Fatal("applying a slot to a session reached nothing")
@@ -155,7 +148,6 @@ func TestSessionSlotPickSendsTheName(t *testing.T) {
 	if a, ok := ParseAccent(accentPayload(sel)); !ok || a != SlotAccent(13) {
 		t.Errorf("the name does not read back as the slot it was sent for: %+v", a)
 	}
-	// A colour no slot names still goes over as a literal.
 	if got := accentPayload(RGBAccent(hslToRGB(31, 0.63, 0.42))); !strings.HasPrefix(got, "#") {
 		t.Errorf("a literal colour is sent as %q", got)
 	}

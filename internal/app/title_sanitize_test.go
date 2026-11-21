@@ -47,15 +47,8 @@ func TestPrintableTitleDropsDecorative(t *testing.T) {
 	}
 }
 
-// decorativeTitle carries the junk an agent tends to inject into a terminal
-// title: a Dingbat sparkle, a Miscellaneous-Symbols diamond, an emoji, and a
-// symbol carrying the emoji variation selector. None of it should survive as
-// chrome.
 const decorativeTitle = "✳ claude ♦ \U0001f680 build️"
 
-// spinnerTitle is the title Claude Code actually sets while it works: a Braille
-// spinner frame in front of its name, which tofus in any font that stops at
-// Latin.
 const spinnerTitle = "⠂ Claude Code"
 
 // TestContextMenuTitleStripsDecorative checks the pane menu's header launders
@@ -81,8 +74,6 @@ func TestContextMenuTitleStripsDecorative(t *testing.T) {
 // window title or session name, so a sanitizer gap cannot come back one overlay
 // at a time.
 func TestOverlayTitlesStripDecorative(t *testing.T) {
-	// Checking for the real name too: a surface that drew nothing at all would
-	// otherwise pass for having drawn nothing dirty.
 	laundered := func(t *testing.T, what, out string) {
 		t.Helper()
 		if strings.ContainsAny(out, "✳♦️⠂") || strings.ContainsRune(out, '\U0001f680') {
@@ -109,9 +100,6 @@ func TestOverlayTitlesStripDecorative(t *testing.T) {
 	})
 }
 
-// ctxMenuOS builds an OS sized to a screen with one visible window filling the
-// left half, one minimized window, and a registry, which between them can reach
-// every context menu target.
 func ctxMenuOS(t *testing.T, w, h int) *OS {
 	t.Helper()
 	m := newNarrowOS(t, w, h)

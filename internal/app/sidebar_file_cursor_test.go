@@ -2,13 +2,6 @@ package app
 
 import "testing"
 
-// A file row is identified by its name, so walking into a folder replaces every
-// row the cursor could have been on. The rebuild then fell back to index 0,
-// which is the first session row at the very top of the rail, and the keyboard
-// was thrown out of the section it was working in on every step.
-
-// navWithFiles is a rail layout with a couple of sessions above a listing, which
-// is the shape that makes the fallback to index 0 visible.
 func navWithFiles(entries ...string) []sidebarNavRow {
 	nav := []sidebarNavRow{
 		{Kind: sidebarRowSession, SessionID: "s1"},
@@ -28,8 +21,6 @@ func TestWalkingIntoAFolderKeepsTheCursorInTheListing(t *testing.T) {
 	m.filesView.Gen = 7
 	m.followFileRow("")
 
-	// The row the cursor was on: the folder that was just entered, which is not
-	// in the listing that replaced it.
 	gone := sidebarNavRow{Kind: sidebarRowFileEntry, WindowID: "src"}
 	nav := navWithFiles("main.go", "README.md")
 	m.sidebarPublishNav(nav, gone, true)

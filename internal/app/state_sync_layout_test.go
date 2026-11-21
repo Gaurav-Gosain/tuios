@@ -8,14 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// These tests cover what happens when the window set changes underneath the
-// renderer: the daemon owns window lifecycle but not layout, so a window it
-// created arrives through a state sync with nominal geometry and no place in any
-// tiling structure. Absorbing that is what makes the TUI a subscriber to the
-// daemon rather than the only thing allowed to create windows.
-
-// tiledOS builds an auto-tiling model holding one window, sized so tiling has
-// room to work.
 func tiledOS(existingID string) *OS {
 	m := &OS{
 		Settings:         config.Global,
@@ -35,9 +27,6 @@ func tiledOS(existingID string) *OS {
 	return m
 }
 
-// syncWith returns the state the daemon would push after creating daemonID
-// alongside existingID. Daemon-created windows carry a nominal full-size box:
-// the daemon has no viewport of its own to tile against.
 func syncWith(existingID, daemonID string, width, height int) *session.SessionState {
 	return &session.SessionState{
 		Name:             "test-session",
@@ -117,7 +106,6 @@ func TestSyncedCloseLeavesNoTile(t *testing.T) {
 	if tree.HasWindow(m.GetWindowIntID(goneID)) {
 		t.Error("closed window is still in the BSP tree")
 	}
-	// The survivor takes the whole area back.
 	rects := tree.ApplyLayout(m.GetBSPBounds(), m.separatorGap())
 	if len(rects) != 1 {
 		t.Fatalf("tree laid out %d windows, want 1", len(rects))

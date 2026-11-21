@@ -11,12 +11,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// pillTooltipName is longer than a pill can carry, so the strip has to cut it
-// and the hover is the only way to the rest of it.
 const pillTooltipName = "release/hotfix-payments"
 
-// pillTooltipOS is a dock with three occupied workspaces, the middle one named
-// past what its pill can print.
 func pillTooltipOS(t *testing.T) *OS {
 	t.Helper()
 	m := newNarrowOS(t, 140, 30)
@@ -37,14 +33,10 @@ func pillTooltipOS(t *testing.T) *OS {
 	return m
 }
 
-// pillFrame is the whole screen as the app would draw it, colours dropped. The
-// label has to be found in the frame rather than in the layer it came from: a
-// layer that composes to nothing readable is the failure worth catching.
 func pillFrame(m *OS) []string {
 	return strings.Split(stripANSIForTrace(lipgloss.Sprint(m.GetCanvas(true).Render())), "\n")
 }
 
-// pillRect is where workspace ws was drawn on the last frame.
 func pillRect(t *testing.T, m *OS, ws int) dockWorkspaceHit {
 	t.Helper()
 	for _, h := range m.dockWorkspaceHits {
@@ -56,14 +48,10 @@ func pillRect(t *testing.T, m *OS, ws int) dockWorkspaceHit {
 	return dockWorkspaceHit{}
 }
 
-// pillHits copies the recorded rects, which the renderer reuses in place.
 func pillHits(m *OS) []dockWorkspaceHit {
 	return append([]dockWorkspaceHit(nil), m.dockWorkspaceHits...)
 }
 
-// hoverPill draws a frame, rests the pointer on workspace ws's pill, and draws
-// the frame that follows. The delay is faked rather than waited out: the clock
-// is arriving motion, and what is under test is the frame past it.
 func hoverPill(t *testing.T, m *OS, ws int) (before, after []string, rect dockWorkspaceHit) {
 	t.Helper()
 	before = pillFrame(m)
@@ -88,8 +76,6 @@ func TestWorkspacePillTooltipRevealsTheWholeName(t *testing.T) {
 	if got := strings.Join(after, "\n"); !strings.Contains(got, pillTooltipName) {
 		t.Errorf("hovering the pill never said %q:\n%s", pillTooltipName, got)
 	}
-	// On the row beside the bar, not over it: a label drawn on the pill would
-	// cover the thing the pointer is asking about.
 	row := rect.Y - 1
 	if config.Global.DockbarPosition == "top" {
 		row = rect.Y + 1
@@ -125,8 +111,6 @@ func TestWorkspacePillTooltipLeavesTheStripWhereItWas(t *testing.T) {
 	if before[rect.Y] != after[rect.Y] {
 		t.Errorf("the bar redrew itself under the label:\n%q\n%q", before[rect.Y], after[rect.Y])
 	}
-	// Everything but the one row the label occupies is untouched, which is what
-	// makes this a label over the frame rather than a change to it.
 	labelRow := rect.Y - 1
 	if config.Global.DockbarPosition == "top" {
 		labelRow = rect.Y + 1
@@ -147,7 +131,7 @@ func TestWorkspacePillTooltipLeavesTheStripWhereItWas(t *testing.T) {
 func TestWorkspacePillTooltipStaysOffWhenTheNameFits(t *testing.T) {
 	m := pillTooltipOS(t)
 	_ = pillFrame(m)
-	rect := pillRect(t, m, 3) // "docs"
+	rect := pillRect(t, m, 3)
 
 	if !m.DockWorkspaceHoverAt(rect.X0, rect.Y) {
 		t.Fatal("the pointer was not on workspace 3's pill")
@@ -206,7 +190,6 @@ func TestWorkspacePillTooltipCostsNoIdleTick(t *testing.T) {
 	}
 }
 
-// safeRow is row i of a frame, or "" when the frame is shorter than that.
 func safeRow(frame []string, i int) string {
 	if i < 0 || i >= len(frame) {
 		return ""

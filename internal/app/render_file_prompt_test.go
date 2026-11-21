@@ -10,12 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// These read the composed dialog rather than the model. A confirmation that
-// says the right thing in a string and truncates it on screen is the failure
-// this codebase keeps hitting, so the claims here are about the drawn frame:
-// what is on it, and that nothing fell off the side.
-
-// dialogFrame renders whichever file dialog is open, with the styling stripped.
 func dialogFrame(t *testing.T, m *OS) []string {
 	t.Helper()
 	if !m.FilePromptOpen() {
@@ -43,7 +37,7 @@ func TestClickingTheConfirmationRunsTheRowUnderThePointer(t *testing.T) {
 	m := filesOS(t, dir, "report.txt")
 	m.SidebarFileDelete(false)
 
-	_ = m.View() // the overlay publishes its rectangles as it draws
+	_ = m.View()
 	hit, ok := overlayHitOfKind(m, "filedialog")
 	if !ok {
 		t.Fatal("the dialog published no panel geometry")
@@ -52,7 +46,6 @@ func TestClickingTheConfirmationRunsTheRowUnderThePointer(t *testing.T) {
 		t.Fatalf("the dialog published %d rows, want %d", len(hit.Rows), fileConfirmRowCount)
 	}
 
-	// Cancel first: a click on it must close the dialog and run nothing.
 	x, y := rowCenter(hit, fileConfirmRowCancel)
 	handled, cmd := m.OverlayMouseClick(x, y, false)
 	if !handled {
@@ -65,7 +58,6 @@ func TestClickingTheConfirmationRunsTheRowUnderThePointer(t *testing.T) {
 		t.Fatalf("clicking Cancel deleted the file: %v", err)
 	}
 
-	// Then the destructive row.
 	m.SidebarFileDelete(false)
 	_ = m.View()
 	hit, _ = overlayHitOfKind(m, "filedialog")
@@ -108,7 +100,6 @@ func TestAClickOutsideTheConfirmationCancelsIt(t *testing.T) {
 	}
 }
 
-// overlayHitOfKind returns the recorded geometry for one overlay kind.
 func overlayHitOfKind(m *OS, kind string) (overlayPanelHit, bool) {
 	for _, h := range m.OverlayHits {
 		if h.Kind == kind {
@@ -118,7 +109,6 @@ func overlayHitOfKind(m *OS, kind string) (overlayPanelHit, bool) {
 	return overlayPanelHit{}, false
 }
 
-// rowCenter is a screen point inside one published answer row.
 func rowCenter(h overlayPanelHit, idx int) (int, int) {
 	r := h.Rows[idx].Rect
 	return h.OriginX + (r.X0+r.X1)/2, h.OriginY + r.Y0

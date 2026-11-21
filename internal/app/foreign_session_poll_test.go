@@ -27,7 +27,7 @@ func TestForeignSessionRefreshPlan(t *testing.T) {
 		sidebar     bool
 		switcher    bool
 		wantRefresh bool
-		wantActive  bool // true => fast cadence, false => slow
+		wantActive  bool
 	}{
 		{"no daemon", nil, true, false, false, false},
 		{"lone session, sidebar on", session.NewTUIClient(), true, false, true, true},

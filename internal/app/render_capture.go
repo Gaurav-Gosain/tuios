@@ -11,42 +11,21 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// Capture mode's drawing: a hint strip along the top, a highlight around the
-// window under the pointer, and a marquee while a region is being dragged.
-//
-// All three are cells. There is no graphics tier here at all, deliberately: a
-// selection has to be visible on a plain xterm or the mode is unusable there,
-// and the marquee is the same shapes the rest of tuios draws its chrome from,
-// so a riced glyph set carries into it.
-//
-// The rectangles the hover highlight draws are recorded here as they are
-// drawn, in captureHits, and the click handler reads them. Nothing recomputes
-// a layout in a handler.
-
-// captureHit is one window rectangle capture mode drew a highlight around.
 type captureHit struct {
 	Index          int
 	X0, Y0, X1, Y1 int
 }
 
-// The two layers capture mode draws, and the order they draw in. The strip is
-// the higher of the two: see renderCaptureMode.
 const (
 	captureMarqueeZ = config.ZIndexContextMenu + 1
 	captureHintZ    = captureMarqueeZ + 1
 )
 
-// renderCaptureMode returns the layers capture mode adds. It records its own
-// hit rectangles as it goes.
 func (m *OS) renderCaptureMode() []*lipgloss.Layer {
 	m.captureHits = m.captureHits[:0]
 	if !m.Capture.Active {
 		return nil
 	}
-	// Every window a click can aim at, for CaptureWindowAt to read.
-	// Recorded where each pane is on the screen: capture mode takes the
-	// pointer as the screen reports it, and a view of a larger session draws
-	// the panes shifted and clipped. See pane_view.go.
 	for _, idx := range m.captureVisibleWindows() {
 		r, ok := m.paneOnScreen(m.Windows[idx])
 		if !ok {
@@ -59,17 +38,6 @@ func (m *OS) renderCaptureMode() []*lipgloss.Layer {
 	return m.captureLayers()
 }
 
-// captureOccluders returns the cells capture mode draws over the panes, one
-// rectangle per layer, or nil when capture mode is not open.
-//
-// Capture mode leaves the panes showing, images included, because they are
-// what is being captured. A kitty image is painted by the host over the
-// finished frame, though, so an image under the hint strip or the marquee
-// would paint over them. The passthrough crops every image around these
-// rectangles instead, the same way it crops one around a higher window.
-//
-// They are read off the layers themselves, so what is cropped around is
-// exactly what is drawn.
 func (m *OS) captureOccluders() []cellRect {
 	if !m.Capture.Active {
 		return nil
@@ -83,23 +51,10 @@ func (m *OS) captureOccluders() []cellRect {
 	return out
 }
 
-// captureLayers builds capture mode's layers. It has no side effects, so the
-// graphics flush can ask what is drawn without redoing the hit bookkeeping.
 func (m *OS) captureLayers() []*lipgloss.Layer {
 	pal := theme.UI()
 	var layers []*lipgloss.Layer
 
-	// The hint strip. It says what this mode can do, and it says different
-	// things for a pointer and for a keyboard, because on a mouse-less entry
-	// the drag is not reachable and offering it would be a lie.
-	//
-	// It sits one step above the marquee, which is the only other thing this
-	// mode draws. Both want row 0: the strip always, and the marquee's top edge
-	// whenever the highlighted pane starts there, which a tiled session's panes
-	// do. On equal z the marquee won, because it is appended second, and the
-	// whole instruction bar disappeared behind a pane border. Losing a few
-	// cells of an outline is the cheaper of the two, and the outline still has
-	// three edges and a highlighted interior saying which pane is picked.
 	strip := m.captureHintStrip(pal)
 	if strip != "" {
 		layers = append(layers, lipgloss.NewLayer(strip).
@@ -107,8 +62,6 @@ func (m *OS) captureLayers() []*lipgloss.Layer {
 			Z(captureHintZ).ID("capture-hints"))
 	}
 
-	// The window under the pointer or the keyboard cursor, lifted so "click
-	// captures this" is visible before the click.
 	if !m.Capture.Dragging && m.Capture.Hover >= 0 && m.Capture.Hover < len(m.Windows) {
 		if w := m.Windows[m.Capture.Hover]; w != nil {
 			if r, ok := m.paneOnScreen(w); ok {
@@ -125,10 +78,8 @@ func (m *OS) captureLayers() []*lipgloss.Layer {
 	return layers
 }
 
-// captureHintStrip is the one-line instruction bar, in whichkey styling.
 func (m *OS) captureHintStrip(pal overlay.Palette) string {
 	if m.Capture.OverOverlay {
-		// The panes are under the overlay, so none is offered.
 		hints := []overlay.Hint{
 			{Key: "drag", Label: "select region"},
 			{Key: "click", Label: "full screen"},
@@ -159,7 +110,6 @@ func (m *OS) captureHintStrip(pal overlay.Palette) string {
 	return captureHints(pal, hints)
 }
 
-// captureHints draws hints as the strip, in whichkey styling.
 func captureHints(pal overlay.Palette, hints []overlay.Hint) string {
 	key := lipgloss.NewStyle().Background(pal.Card).Foreground(pal.AccentBright).Bold(true)
 	label := lipgloss.NewStyle().Background(pal.Card).Foreground(pal.Fg)
@@ -173,23 +123,10 @@ func captureHints(pal overlay.Palette, hints []overlay.Hint) string {
 	return pad + strings.Join(parts, sep) + pad
 }
 
-// captureOutline draws a rectangle in the user's own border shapes, in the
-// accent, with an optional size chip on the bottom edge.
-//
-// It returns four layers, not one. A lipgloss layer is opaque, so a single
-// block with spaces down its middle would blank the very content the user is
-// aiming at; four edge layers leave the interior showing through. Dimming
-// outside the selection instead would need a translucency lipgloss does not
-// have, and costs one full cache invalidation per mode change, so it is left
-// out with the cost written down rather than faked.
 func (m *OS) captureOutline(pal overlay.Palette, x, y, w, h int, chip string) []*lipgloss.Layer {
 	if w < 1 || h < 1 {
 		return nil
 	}
-	// The same resolver every window border goes through: it honours the
-	// glyph set, the border style and ascii-only mode, so a riced session's
-	// marquee is drawn in its own strokes rather than in a set spelled out
-	// here.
 	g := m.Settings.GetBorderForStyle()
 	ink := lipgloss.NewStyle().Foreground(pal.AccentBright).Bold(true)
 	z := captureMarqueeZ
@@ -205,8 +142,6 @@ func (m *OS) captureOutline(pal overlay.Palette, x, y, w, h int, chip string) []
 	if h > 1 {
 		bottomFill := strings.Repeat(orSpace(g.Bottom), inner)
 		if chip != "" && len([]rune(chip))+2 <= inner {
-			// The size readout sits on the bottom edge, the macOS crosshair
-			// readout translated to cell units.
 			runes := []rune(bottomFill)
 			label := []rune(" " + chip + " ")
 			copy(runes[len(runes)-len(label):], label)
@@ -225,8 +160,6 @@ func (m *OS) captureOutline(pal overlay.Palette, x, y, w, h int, chip string) []
 	return layers
 }
 
-// orSpace substitutes a space for a border glyph a style leaves empty, so a
-// hidden border does not collapse the marquee to nothing.
 func orSpace(s string) string {
 	if s == "" {
 		return " "

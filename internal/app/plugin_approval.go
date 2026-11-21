@@ -14,61 +14,28 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The plugin approval dialog: a native plugin waits for the person's answer
-// on this machine, and the daemon told this client (MsgPluginApprovals,
-// session/plugin_approval.go).
-//
-// It opens by itself, once per plugin and trust hash in this client: a
-// plugin that waits does nothing until someone answers, and only the person
-// can. Not now closes it and leaves the plugin waiting. tuios plugins
-// approve answers the same question from a terminal. A plugin that asks for
-// admin needs the person to type admin before Allow does anything.
-//
-// The answer is plugin.approve with the trust hash the dialog showed, so an
-// answer to a plugin that changed in the meantime is refused, and the
-// daemon's next list asks about what it is now.
-
-// overlayKindPluginApproval is the dialog's overlay kind.
 const overlayKindPluginApproval = "pluginapproval"
 
-// pluginApprovalWidth is the dialog's preferred inner width.
 const pluginApprovalWidth = 64
 
-// pluginApprovalRows are the answers, in drawn order.
 var pluginApprovalRows = []string{"Allow", "Deny", "Not now"}
 
-// The rows by index.
 const (
 	pluginRowAllow = iota
 	pluginRowDeny
 	pluginRowLater
 )
 
-// pluginApprovalState is the open question and what this client was told.
 type pluginApprovalState struct {
-	// asks are the plugins that wait, as the daemon last said.
-	asks []session.PluginApprovalAsk
-	// seen are the questions this client showed: id and trust hash. A
-	// question is opened by itself once.
-	seen map[string]bool
-	// open is the question shown, nil when the dialog is closed.
-	open *session.PluginApprovalAsk
-	// selected is the answer row under the cursor.
-	selected int
-	// typed is what the person typed in the field: allow, or admin for
-	// a plugin that asks for admin.
-	typed string
-	// denyArmed is true after Deny was chosen once. A second Enter or click
-	// on Deny denies. Any other key takes it back.
+	asks      []session.PluginApprovalAsk
+	seen      map[string]bool
+	open      *session.PluginApprovalAsk
+	selected  int
+	typed     string
 	denyArmed bool
-	// openedAt is when the question opened. Keys and clicks are ignored
-	// for pluginApprovalSettle after it, so what the person was typing
-	// into a pane, or clicking, as it opened answers nothing.
-	openedAt time.Time
-	// err is the daemon's last refusal.
-	err string
-	// busy is true while an answer is on its way.
-	busy bool
+	openedAt  time.Time
+	err       string
+	busy      bool
 }
 
 // PluginApprovalsMsg carries the daemon's list of plugins that wait.
@@ -76,7 +43,6 @@ type PluginApprovalsMsg struct {
 	Asks []session.PluginApprovalAsk
 }
 
-// pluginApprovalDoneMsg is the daemon's reply to an answer.
 type pluginApprovalDoneMsg struct {
 	id, trust string
 	allow     bool
@@ -92,8 +58,6 @@ func pluginAskAdmin(a *session.PluginApprovalAsk) bool {
 	return a != nil && slices.Contains(a.Grants, "admin")
 }
 
-// setPluginAsks takes the daemon's list, and opens the first question this
-// client has not shown yet.
 func (m *OS) setPluginAsks(asks []session.PluginApprovalAsk) {
 	st := &m.pluginApproval
 	st.asks = asks
@@ -101,8 +65,6 @@ func (m *OS) setPluginAsks(asks []session.PluginApprovalAsk) {
 		st.seen = map[string]bool{}
 	}
 	if st.open != nil {
-		// The question shown is still asked: keep it as it is. A plugin
-		// that changed, or that someone answered elsewhere, closes it.
 		if slices.ContainsFunc(asks, func(a session.PluginApprovalAsk) bool { return pluginAskKey(a) == pluginAskKey(*st.open) }) {
 			return
 		}
@@ -111,7 +73,6 @@ func (m *OS) setPluginAsks(asks []session.PluginApprovalAsk) {
 	m.openNextPluginAsk()
 }
 
-// openNextPluginAsk opens the first question not shown yet, if any.
 func (m *OS) openNextPluginAsk() {
 	st := &m.pluginApproval
 	for i := range st.asks {
@@ -131,20 +92,14 @@ func (m *OS) ClosePluginApproval() {
 	m.openNextPluginAsk()
 }
 
-// pluginApprovalSettle is how long the dialog ignores keys and clicks
-// after it opens.
 const pluginApprovalSettle = 500 * time.Millisecond
 
-// pluginApprovalNow is the clock the dialog reads. Tests replace it.
 var pluginApprovalNow = time.Now
 
-// pluginApprovalSettled reports whether the dialog has been open long
-// enough to take an answer.
 func (m *OS) pluginApprovalSettled() bool {
 	return pluginApprovalNow().Sub(m.pluginApproval.openedAt) >= pluginApprovalSettle
 }
 
-// pluginApprovalWord is what the person types to allow the plugin.
 func pluginApprovalWord(a *session.PluginApprovalAsk) string {
 	if pluginAskAdmin(a) {
 		return "admin"
@@ -167,8 +122,6 @@ func (m *OS) PluginApprovalSelect(idx int) {
 func (m *OS) PluginApprovalKey(key, text string) tea.Cmd {
 	st := &m.pluginApproval
 	if st.open == nil || !m.pluginApprovalSettled() || m.ProcessingRemoteKeys || m.pressingTapeKeys {
-		// Keys a script or a pane sent through the client (send-keys, a
-		// tape's Press) are not the person's, and answer nothing.
 		return nil
 	}
 	if key != "enter" {
@@ -222,7 +175,6 @@ func (m *OS) PluginApprovalActivate(idx int) tea.Cmd {
 	return m.pluginApprovalChoose(idx)
 }
 
-// pluginApprovalChoose acts on answer row idx.
 func (m *OS) pluginApprovalChoose(idx int) tea.Cmd {
 	st := &m.pluginApproval
 	st.selected = idx
@@ -242,7 +194,6 @@ func (m *OS) pluginApprovalChoose(idx int) tea.Cmd {
 	return m.pluginApprovalAnswer(false)
 }
 
-// pluginApprovalAnswer sends the answer to the daemon.
 func (m *OS) pluginApprovalAnswer(allow bool) tea.Cmd {
 	st := &m.pluginApproval
 	if st.open == nil || st.busy {
@@ -257,7 +208,6 @@ func (m *OS) pluginApprovalAnswer(allow bool) tea.Cmd {
 	}
 }
 
-// pluginApprovalDone takes the daemon's reply to an answer.
 func (m *OS) pluginApprovalDone(msg pluginApprovalDoneMsg) {
 	st := &m.pluginApproval
 	if st.open != nil && st.open.ID == msg.id && st.open.Trust == msg.trust {
@@ -279,13 +229,8 @@ func (m *OS) pluginApprovalDone(msg pluginApprovalDoneMsg) {
 	m.openNextPluginAsk()
 }
 
-// pluginApprovalMaxRuns is how many of the plugin's commands the dialog
-// lists. The rest are counted.
 const pluginApprovalMaxRuns = 4
 
-// renderPluginApproval draws the dialog. Every line is cut to the width,
-// never wrapped, except the note at the end, so the grants and the answer
-// rows are always on screen whatever the plugin calls itself.
 func (m *OS) renderPluginApproval() (string, overlay.Geometry, []overlayRowHit) {
 	st := &m.pluginApproval
 	a := st.open
@@ -333,7 +278,6 @@ func (m *OS) renderPluginApproval() (string, overlay.Geometry, []overlayRowHit) 
 			if g == "admin" || g == "write" {
 				ink = pal.Warn
 			}
-			// The grant's name stays whole. Its words wrap.
 			for i, w := range wrapPlain(herdrplugin.GrantMeaning(g), max(inner-9, 10)) {
 				label := ""
 				if i == 0 {
@@ -380,9 +324,6 @@ func (m *OS) renderPluginApproval() (string, overlay.Geometry, []overlayRowHit) 
 	return content, geo, hits
 }
 
-// pluginApprovalRow draws one answer. The cursor row is on the Surface
-// ground with the sigil, as the copy dialog's are. Allow on a plugin that
-// asks for admin takes the warn ink under the cursor.
 func (m *OS) pluginApprovalRow(idx, width int, pal overlay.Palette) string {
 	st := &m.pluginApproval
 	bg := pal.Canvas

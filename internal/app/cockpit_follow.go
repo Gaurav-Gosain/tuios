@@ -7,15 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/transcriptview"
 )
 
-// The thread's scroll: it follows the newest line, a new prompt among them,
-// and holds still once the person scrolls up (transcriptview.Follow has the
-// rules). A held thread says how many entries arrived under it, and G
-// shows them. The ruler in the thread's right column marks each prompt, and
-// { and } jump between them. Nothing here runs on a timer: the view moves on
-// a frame drawn for a delivery, a key or a send.
-
-// threadLayout is what Follow needs of a thread drawn as lines lines with
-// room rows to show them.
 func threadLayout(t *agentThread, lines, room int) transcriptview.Layout {
 	l := transcriptview.Layout{Lines: lines, Room: room, Taken: t.taken, PromptAt: -1}
 	for _, en := range slices.Backward(t.entries) {
@@ -55,24 +46,17 @@ func (m *OS) CockpitPromptJump(next bool) {
 	if t.follow.Jump(t.prompts, d) {
 		m.cockpitTouch()
 	} else if !next && t.older {
-		// The previous prompt is in a turn not drawn yet: draw more, so
-		// the next press reaches it.
 		t.keep *= 2
 		m.cockpitTouch()
 	}
 }
 
-// threadFollowOnSend makes the thread of the agent a reply went to follow
-// again, so the reply's echo, and then the prompt the transcript logs in its
-// place, show at the bottom.
 func (m *OS) threadFollowOnSend(host, sess, window string) {
 	if t := m.Inbox.threads.byKey[host+"\x00"+sess+"\x00"+window]; t != nil {
 		t.follow.Bottom()
 	}
 }
 
-// drawThreadUnseen draws the line that says how many entries arrived under a
-// held thread, on its last row. A click on it shows them.
 func (m *OS) drawThreadUnseen(c *ckCanvas, l ckLook, t *agentThread, x, w, y, top int) {
 	n := t.follow.Unseen
 	if !t.follow.Held() || n <= 0 {
@@ -91,36 +75,20 @@ func (m *OS) drawThreadUnseen(c *ckCanvas, l ckLook, t *agentThread, x, w, y, to
 	m.Inbox.ck.hits = append(m.Inbox.ck.hits, ckHit{x0: x, y0: top + y, x1: x1, y1: top + y + 1, kind: ckHitAction, action: "follow"})
 }
 
-// drawThreadRuler draws the thread's ruler in column x, rows y to y+rows,
-// for a thread of lines lines shown from line start: where the view is, and
-// a mark for each prompt. A thread that fits has none.
 func drawThreadRuler(c *ckCanvas, l ckLook, t *agentThread, x, y, rows, lines, start int) {
 	ckRuler{lines: lines, start: start, marks: t.prompts}.draw(c, l, x, y, rows)
 }
 
-// ckRuler is a scroll ruler: a column as high as the view, with a thumb that
-// says where a view of lines lines, shown from line start, is, and a mark at
-// each line of marks. The agents thread marks its prompts on one, and quick
-// look the headings of a Markdown file.
 type ckRuler struct {
 	lines, start int
 	marks        []int
-	// track draws the whole column under the thumb, for a ruler the mouse
-	// moves: the column is where a click goes.
-	track bool
+	track        bool
 }
 
-// ckRulerMarksShare is the share of the rows marks may take: marks on more
-// rows than one in three point at nothing in particular. A thread of many
-// short turns, or of mail an agent got, would fill the ruler, and then the
-// thumb alone shows where the view is.
 const ckRulerMarksShare = 3
 
-// shows reports whether a ruler rows high has anything to say: the view does
-// not fit.
 func (r ckRuler) shows(rows int) bool { return r.lines > rows && rows >= 2 }
 
-// rows are the ruler's mark rows, nil when there are too many.
 func (r ckRuler) markRows(rows int) []int {
 	marks := transcriptview.RulerMarks(r.marks, r.lines, rows)
 	if len(marks)*ckRulerMarksShare > rows {
@@ -129,8 +97,6 @@ func (r ckRuler) markRows(rows int) []int {
 	return marks
 }
 
-// draw draws the ruler in column x, rows y to y+rows. It reports whether it
-// drew one.
 func (r ckRuler) draw(c *ckCanvas, l ckLook, x, y, rows int) bool {
 	if !r.shows(rows) {
 		return false
@@ -144,7 +110,6 @@ func (r ckRuler) draw(c *ckCanvas, l ckLook, x, y, rows int) bool {
 		for i := range rows {
 			c.text(x, y+i, x+1, ckSeg{t: track, fg: l.pal.FgMute})
 		}
-		// The thumb stands out from the track.
 		thumbInk = l.pal.Fg
 		if l.ascii {
 			thumb = "#"
@@ -161,14 +126,11 @@ func (r ckRuler) draw(c *ckCanvas, l ckLook, x, y, rows int) bool {
 	return true
 }
 
-// thumb is the thumb's first row and its rows, on a ruler rows high.
 func (r ckRuler) thumb(rows int) (top, size int) {
 	top, size, _ = sidebarScrollThumb(r.start, r.lines, rows)
 	return top, size
 }
 
-// startFor is the start of the view that puts the thumb's first row at row
-// top of a ruler rows high: the way back from a thumb the mouse moved.
 func (r ckRuler) startFor(top, rows int) int {
 	_, size := r.thumb(rows)
 	travel := rows - size

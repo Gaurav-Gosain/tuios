@@ -17,54 +17,29 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The body of the selected attachment in the card preview: a picture through
-// the reply previews' pipeline (kitty graphics where the host has them, block
-// glyphs where it does not, a line of words at 16 colours), a Markdown file as
-// Markdown, a diff and a text highlighted, a Mermaid diagram drawn as text by
-// the sketch plugin with its source as the fallback, and a pull request with its state.
-//
-// The bytes are read with get-task-attachment when the preview first shows
-// the attachment, after a frame and never in one, and kept by their hash: a
-// card that comes back, or a second card with the same file, reads nothing.
-// What is kept is bounded (kbFilesMax). A pull request's state is kept by its
-// address, and the daemon asks gh at most once a minute for it. An
-// attachment is shown, never typed into a pane or given to an agent.
-
-// kbFilesMax bounds the bytes the preview keeps.
 const kbFilesMax = 32 << 20
 
-// kbBodyLines bounds the lines a text attachment shows in the preview.
 const kbBodyLines = 400
 
-// The picture box of an attachment in the preview, in cells.
 const (
 	kbImgRows = 16
 	kbImgCols = 96
 )
 
-// kbFile is one attachment's content, once read.
 type kbFile struct {
 	loading bool
 	err     string
 	size    int
-	// img is a picture.
-	img *composer.Image
-	// text is a text kind's content, or a Mermaid diagram's source, and
-	// diagram the diagram drawn as text.
+	img     *composer.Image
 	text    string
 	diagram []string
-	// pr is a pull request link's state, and prErr why it could not be read.
-	pr    *ghpr.PR
-	prErr string
-	// seq orders the files for the bound: the oldest read goes first.
-	seq uint64
-	// md is the file laid out as preview lines, for mdKey: a redraw of the
-	// board lexes no code again.
-	md    []ckLine
-	mdKey ckMDKey
+	pr      *ghpr.PR
+	prErr   string
+	seq     uint64
+	md      []ckLine
+	mdKey   ckMDKey
 }
 
-// ckMDKey is what a preview's laid-out Markdown depends on beside its text.
 type ckMDKey struct {
 	width       int
 	theme, look uint64
@@ -72,13 +47,10 @@ type ckMDKey struct {
 	ascii, nerd bool
 }
 
-// ckMDKeyFor is the key of Markdown laid out at width in look l.
 func (m *OS) ckMDKeyFor(l ckLook, width int) ckMDKey {
 	return ckMDKey{width: width, theme: theme.Generation(), look: m.Inbox.ck.lookGen, depth: l.pal.Depth, ascii: l.ascii, nerd: l.nerd}
 }
 
-// kbFileMarkdown is src, f's text as Markdown, laid out at width, once per
-// width and look.
 func (m *OS) kbFileMarkdown(l ckLook, f *kbFile, src string, width int) []ckLine {
 	if k := m.ckMDKeyFor(l, width); f.md == nil || f.mdKey != k {
 		f.md, f.mdKey = m.ckMarkdown(l, src, width), k
@@ -86,14 +58,12 @@ func (m *OS) kbFileMarkdown(l ckLook, f *kbFile, src string, width int) []ckLine
 	return f.md
 }
 
-// kbFiles keeps the files the preview read.
 type kbFiles struct {
 	m     map[string]*kbFile
 	bytes int
 	seq   uint64
 }
 
-// kbFileKey is what a file is kept by: its hash, or a link's address.
 func kbFileKey(a session.TaskAttachment) string {
 	if a.Hash != "" {
 		return a.Hash
@@ -101,14 +71,12 @@ func kbFileKey(a session.TaskAttachment) string {
 	return "url:" + a.URL
 }
 
-// kbFileMsg carries an attachment's content back to the Update goroutine.
 type kbFileMsg struct {
 	key   string
 	f     kbFile
 	bytes int
 }
 
-// kbPreviewSelected is the attachment the preview has selected, if any.
 func (m *OS) kbPreviewSelected() (session.TaskAttachment, bool) {
 	d, pv := m.Inbox.ck.card, &m.Inbox.ck.kb.pv
 	if d == nil || pv.att < 0 || pv.att >= len(d.attachments) {
@@ -117,8 +85,6 @@ func (m *OS) kbPreviewSelected() (session.TaskAttachment, bool) {
 	return d.attachments[pv.att], true
 }
 
-// kbPreviewFileFetch reads the selected attachment's content when the
-// preview shows it and it is not kept. A plain link has nothing to read.
 func (m *OS) kbPreviewFileFetch() tea.Cmd {
 	pv := &m.Inbox.ck.kb.pv
 	pv.fileWant = false
@@ -169,8 +135,6 @@ func (m *OS) kbPreviewFileFetch() tea.Cmd {
 	}
 }
 
-// kbFileFrom makes a kept file from an attachment's bytes, off the Update
-// goroutine: a picture is decoded, and a Mermaid diagram is drawn.
 func kbFileFrom(kind string, data []byte, f kbFile) kbFile {
 	f.size = len(data)
 	switch kind {
@@ -194,10 +158,6 @@ func kbFileFrom(kind string, data []byte, f kbFile) kbFile {
 	return f
 }
 
-// mermaidLines draws a Mermaid source as text through the sketch plugin, as
-// a TML surface's diagram is drawn (drawWithSketchPlugin), and nil when the
-// plugin is not installed or cannot draw it. The diagram engine stays out of
-// the binary: linked in, it adds 2.7 MB.
 func mermaidLines(src string) []string {
 	rows, _, err := drawWithSketchPlugin(src, kbImgCols)
 	if err != nil || len(rows) == 0 {
@@ -218,8 +178,6 @@ func mermaidLines(src string) []string {
 	return out
 }
 
-// applyKBFile keeps an attachment's content, drops the oldest files past the
-// bound, and prepares the picture.
 func (m *OS) applyKBFile(msg kbFileMsg) tea.Cmd {
 	files := &m.Inbox.ck.kb.pv.files
 	if files.m == nil {
@@ -247,8 +205,6 @@ func (m *OS) applyKBFile(msg kbFileMsg) tea.Cmd {
 	return m.kbPreviewPictureCmd()
 }
 
-// kbPreviewImageBox is the cell box of a picture in a preview width cells
-// wide.
 func (m *OS) kbPreviewImageBox(img *composer.Image, width int) (int, int) {
 	maxCols, maxRows := min(width-2, kbImgCols), kbImgRows
 	if img.Width > 0 && img.Height > 0 {
@@ -262,8 +218,6 @@ func (m *OS) kbPreviewImageBox(img *composer.Image, width int) (int, int) {
 	return ckFitBox(img, max(maxCols, 1), max(maxRows, 1), m.replyPreviewer().CellAspect(), 1)
 }
 
-// kbPreviewPictureCmd prepares the selected attachment's picture for the box
-// the preview last drew it in.
 func (m *OS) kbPreviewPictureCmd() tea.Cmd {
 	pv := &m.Inbox.ck.kb.pv
 	a, ok := m.kbPreviewSelected()
@@ -301,8 +255,6 @@ func (m *OS) kbPreviewPictureCmd() tea.Cmd {
 	}
 }
 
-// ckAttachmentBody is the selected attachment's body as preview lines width
-// cells wide.
 func (m *OS) ckAttachmentBody(l ckLook, a session.TaskAttachment, width int) []ckLine {
 	pal := l.pal
 	pv := &m.Inbox.ck.kb.pv
@@ -343,7 +295,6 @@ func (m *OS) ckAttachmentBody(l ckLook, a session.TaskAttachment, width int) []c
 	return note("This kind of file has no preview. tuios task attachment get saves it.")
 }
 
-// kbCut keeps the first kbBodyLines lines, and says how many it left out.
 func kbCut(lines []ckLine, pal overlay.Palette) []ckLine {
 	if len(lines) <= kbBodyLines {
 		return lines
@@ -352,8 +303,6 @@ func kbCut(lines []ckLine, pal overlay.Palette) []ckLine {
 	return append(lines[:kbBodyLines:kbBodyLines], ckLine{segs: []ckSeg{{t: strconv.Itoa(more) + " more lines. tuios task attachment get saves the whole file.", fg: pal.FgMute}}})
 }
 
-// ckFence puts text in a Markdown code block of lang, with a fence longer
-// than any run of backticks in it, so the text cannot close it.
 func ckFence(text, lang string) string {
 	run, longest := 0, 0
 	for _, r := range text {
@@ -368,7 +317,6 @@ func ckFence(text, lang string) string {
 	return fence + lang + "\n" + strings.TrimRight(text, "\n") + "\n" + fence + "\n"
 }
 
-// ckPRLines are a pull request link's state.
 func (m *OS) ckPRLines(l ckLook, a session.TaskAttachment, f *kbFile, width int) []ckLine {
 	pal := l.pal
 	if f.pr == nil {
@@ -404,9 +352,6 @@ func (m *OS) ckPRLines(l ckLook, a session.TaskAttachment, f *kbFile, width int)
 	return out
 }
 
-// kbPictureLines are a picture's rows in the preview. A row carries
-// "pimg:row/rows/cols/hash" so the kitty picture is placed where the frame
-// drew it.
 func (m *OS) kbPictureLines(l ckLook, f *kbFile, a session.TaskAttachment, width int) []ckLine {
 	pv := &m.Inbox.ck.kb.pv
 	pv.imgWidth = width
@@ -449,8 +394,6 @@ func (m *OS) kbPictureLines(l ckLook, f *kbFile, a session.TaskAttachment, width
 	return out
 }
 
-// kbPreviewOpen is the artifact key in the preview: the selected picture in
-// the image view.
 func (m *OS) kbPreviewOpen() tea.Cmd {
 	a, ok := m.kbPreviewSelected()
 	if !ok {
@@ -466,9 +409,6 @@ func (m *OS) kbPreviewOpen() tea.Cmd {
 	return m.CockpitImagePicture()
 }
 
-// kbPreviewPlacements adds the kitty picture of the attachment the preview
-// drew, at the rows the frame drew it on, cropped to the rows in view.
-// Nothing is placed while a menu or the image view is over the board.
 func (m *OS) kbPreviewPlacements(want []previewPlacement) []previewPlacement {
 	if !m.ShowInbox || !m.kbPreviewShown() || m.Inbox.ck.img != nil || m.ContextMenu != nil || !m.overlayOnTop("inbox") || !m.replyPixelsReady() {
 		return want

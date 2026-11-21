@@ -8,19 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The pane geometry inputs (shared borders and the pane gap) are session
-// state, because they are arithmetic and not appearance: they decide where the
-// rectangles inside the panes' box fall and how much of each rectangle a guest
-// may draw in. A PTY has exactly one size, so every client of a session has to
-// run this arithmetic on identical inputs; two clients whose config files
-// disagreed here computed different rectangles for the same panes and dragged
-// the shared PTYs between the two answers on every push.
-//
-// The line is drawn on purpose and the rest of appearance sits on the other
-// side of it: theme, colours, glyphs, border style, title position and dimming
-// change what cells look like, never how many cells a pane gets, so they stay
-// per-client and riceable. Only what moves a rectangle is settled session-wide.
-
 // SetSharedBordersSetting is the one way a user-facing control changes shared
 // borders. It writes the model (the value layout reads), mirrors the choice
 // into this client's config as its preference for future sessions, and lands
@@ -100,12 +87,6 @@ func (m *OS) ScrollColumnWidthFraction() float64 {
 	return float64(clampInt(w, config.ScrollColumnWidthMin, m.scrollColumnMax())) / 100
 }
 
-// scrollColumnMax is the highest a column's width may be set to on this client.
-//
-// appearance.scroll_column_max, which defaults to the 90 that leaves the next
-// column peeking in at the edge. Somebody who wants a pane at full width
-// without zooming, because zooming costs them the strip's fast switching, sets
-// it to 100 and spends the peek.
 func (m *OS) scrollColumnMax() int { return m.Settings.GetScrollColumnMax() }
 
 // MasterRatioPercent is the session's master ratio as the settings row shows
@@ -115,14 +96,6 @@ func (m *OS) MasterRatioPercent() int {
 	return clampInt(int(m.MasterRatio*100+0.5), config.MasterRatioMin, config.MasterRatioMax)
 }
 
-// adoptPaneGeometry takes the pane geometry as the session has it. Nil is a
-// peer that has not said (an older client, or state written before the field
-// existed) and leaves this client on its own configured values, which is the
-// pre-existing behaviour. It reports whether anything moved, because a moved
-// input obsoletes every tiled rectangle and the caller owes the layout a
-// retile that the geometry checks cannot always see: flipping shared borders
-// with the gap pinned changes every pane's guest grid without moving a single
-// rectangle.
 func (m *OS) adoptPaneGeometry(state *session.SessionState) bool {
 	if state == nil || state.PaneGeometry == nil {
 		return false
@@ -135,9 +108,6 @@ func (m *OS) adoptPaneGeometry(state *session.SessionState) bool {
 	changed := m.SharedBorders != shared || m.PaneGap != pg.PaneGap
 	m.SharedBorders = shared
 	m.PaneGap = pg.PaneGap
-	// Zero is a peer that has not said (state written before the field existed)
-	// and leaves this client on its own configured width, which is the
-	// pre-existing behaviour and the rule a nil PaneGeometry already follows.
 	if pg.ScrollColumnWidth != 0 && pg.ScrollColumnWidth != m.ScrollColumnWidth {
 		m.ScrollColumnWidth = pg.ScrollColumnWidth
 		changed = true
@@ -145,11 +115,6 @@ func (m *OS) adoptPaneGeometry(state *session.SessionState) bool {
 	return changed
 }
 
-// sharedBordersItem is the settings row for shared borders. It is written by
-// hand rather than derived from the registry because the value in force is the
-// session's, not this client's config: after a peer's setting has been
-// adopted, a row reading the config would show a value the layout is not
-// using, and its first toggle would appear to do nothing.
 func (m *OS) sharedBordersItem() settingItem {
 	item := boolItem(
 		settingLabel("appearance.shared_borders"),
@@ -163,8 +128,6 @@ func (m *OS) sharedBordersItem() settingItem {
 	return item
 }
 
-// paneGapItem is the settings row for the pane gap, hand-written for the same
-// reason as sharedBordersItem.
 func (m *OS) paneGapItem() settingItem {
 	return settingItem{
 		Label:   settingLabel("appearance.gap"),
@@ -178,15 +141,9 @@ func (m *OS) paneGapItem() settingItem {
 		numMin:  0,
 		numMax:  config.PaneGapMax,
 		differs: differsFromDefault("appearance.gap", func(m *OS) string { return strconv.Itoa(m.PaneGap) }),
-		// No gauge. The gap is a count of cells over a range of eight, so the
-		// number is already the whole story and a bar beside it only says the
-		// same thing less exactly.
 	}
 }
 
-// masterRatioItem is the settings row for the master pane's share, hand-written
-// for the same reason sharedBordersItem is: the value in force is the session's
-// and not this client's config, and the resize keys move it under the row.
 func (m *OS) masterRatioItem() settingItem {
 	return percentItem("appearance.master_ratio",
 		config.MasterRatioMin, config.MasterRatioMax,
@@ -194,7 +151,6 @@ func (m *OS) masterRatioItem() settingItem {
 		(*OS).SetMasterRatioSetting)
 }
 
-// scrollColumnWidthItem is the settings row for a scrolling column's width.
 func (m *OS) scrollColumnWidthItem() settingItem {
 	return percentItem("appearance.scroll_column_width",
 		config.ScrollColumnWidthMin, m.scrollColumnMax(),
@@ -204,10 +160,6 @@ func (m *OS) scrollColumnWidthItem() settingItem {
 		(*OS).SetScrollColumnWidthSetting)
 }
 
-// percentItem is a stepper over a percentage the session settles: it reads the
-// model and writes through a setter that pushes the change to the session's
-// other clients. The meter fills against the option's own range rather than
-// against 100, so the whole travel of the control is the travel of the setting.
 func percentItem(path string, lo, hi int, get func(*OS) int, set func(*OS, int)) settingItem {
 	return settingItem{
 		Label:   settingLabel(path),
@@ -228,8 +180,6 @@ func percentItem(path string, lo, hi int, get func(*OS) int, set func(*OS, int))
 	}
 }
 
-// registryDescription is the registry's own description for a path, so a
-// hand-written row reads exactly as the derived row it stands in for did.
 func registryDescription(path string) string {
 	if o, ok := config.LookupOption(path); ok {
 		return o.Description

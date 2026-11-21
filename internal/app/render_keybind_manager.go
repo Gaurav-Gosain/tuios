@@ -9,23 +9,13 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// Keybind manager layout. Preferred sizes; a smaller screen gets a fitted
-// panel (see overlay_fit.go).
 const (
 	keybindInnerWidth  = 74
 	keybindVisibleRows = 11
-	// keybindKeyColumn is how much of a row the chord gets before the
-	// description starts. Wide enough for "ctrl+b shift+tab" unabbreviated,
-	// because a truncated chord is not a chord.
-	keybindKeyColumn = 20
-	// keybindScopeColumn is the recorder's scope column. Two cells wider than
-	// the longest scope name ("workspace prefix"), which ran straight into the
-	// text beside it at its natural width.
+	keybindKeyColumn   = 20
 	keybindScopeColumn = 18
 )
 
-// keybindHints is the footer, shared by the renderer and the sizing helper so
-// both measure the same panel.
 var keybindHints = []overlay.Hint{
 	{Key: "tab", Label: "section"},
 	{Key: hintListMove, Label: "move"},
@@ -35,20 +25,12 @@ var keybindHints = []overlay.Hint{
 	{Key: "esc", Label: "close"},
 }
 
-// keybindMarks are the non-colour signals. A conflict has to survive a
-// monochrome terminal and a colour-blind reader, so severity is carried by a
-// glyph and by a word in the text; the colour is the third channel, not the
-// only one.
 type keybindMarks struct {
-	dead string // a binding that never fires
-	// unbound is an action the config deliberately left with no key. Its own
-	// glyph rather than dead's: a dead binding is a mistake to fix, an unbound
-	// action is a choice already made, and one mark for both would report the
-	// user's own decision back to them as a problem.
+	dead    string
 	unbound string
-	clash   string // a key a guest program wants
-	ok      string // nothing wrong with this row
-	live    string // the guest program actually running right now
+	clash   string
+	ok      string
+	live    string
 	bullet  string
 }
 
@@ -59,37 +41,20 @@ func keybindGlyphs() keybindMarks {
 	return keybindMarks{dead: "✕", unbound: "○", clash: "▲", ok: " ", live: "◂", bullet: "·"}
 }
 
-// keybindChrome is which of the body's non-row lines a given screen has room
-// for. Every field is a line count so the renderer and the fitter agree on the
-// panel's height by construction rather than by two matching constants.
 type keybindChrome struct {
-	// header is the filter line and its rule: 2, or 0 when they are shed.
 	header int
-	// count is the "n of m" line: 1, or 0.
-	count int
-	// detail is the explanation box under the list, plus the rule above it when
-	// it is present.
+	count  int
 	detail int
 }
 
-// lines is how many body lines this chrome costs.
 func (c keybindChrome) lines() int {
 	n := c.header + c.count + c.detail
 	if c.detail > 0 {
-		n++ // the rule above the box
+		n++
 	}
 	return n
 }
 
-// keybindShedOrder is every layout the panel will accept, most generous first.
-//
-// The order is what the panel gives up as the screen shrinks, and it is an
-// argument about what the surface is for rather than an arbitrary sequence. The
-// footer goes first, handled by panelBody: the keys it names are still on the
-// keyboard. Then the detail box, a line at a time and then entirely, because it
-// restates the row above it. Then the count, which is a convenience. The filter
-// line goes last, because on a list of a few hundred bindings it is the only way
-// to reach most of them.
 var keybindShedOrder = []keybindChrome{
 	{header: 2, count: 1, detail: 4},
 	{header: 2, count: 1, detail: 3},
@@ -100,8 +65,6 @@ var keybindShedOrder = []keybindChrome{
 	{header: 0, count: 0, detail: 0},
 }
 
-// keybindLayout returns the fitted inner width, the list row count, the footer,
-// and which body lines survived.
 func (m *OS) keybindLayout() (width, rows int, hints []overlay.Hint, chrome keybindChrome) {
 	width = m.panelWidth(keybindInnerWidth)
 	rh := m.GetRenderHeight()
@@ -112,25 +75,17 @@ func (m *OS) keybindLayout() (width, rows int, hints []overlay.Hint, chrome keyb
 			return width, rows, hints, c
 		}
 	}
-	// Nothing left to shed: the last entry is a bare list, and a panel that
-	// still does not fit is one the screen cannot hold at all.
 	last := keybindShedOrder[len(keybindShedOrder)-1]
 	rows, hints = m.panelBody(keybindVisibleRows, last.lines(), width, KeybindTabNames, keybindHints)
 	return width, rows, hints, last
 }
 
-// renderKeybindManager draws the overlay and returns the panel, its geometry,
-// and the per-row hit rects the renderer recorded as it drew them.
 func (m *OS) renderKeybindManager() (string, overlay.Geometry, []overlayRowHit) {
 	pal := m.overlayUI()
 	width, visible, hints, chrome := m.keybindLayout()
 
 	var lines []string
 	var rows []overlayRowHit
-	// rowYOffset is how far the first list row sits below the body origin. It is
-	// counted from the lines actually emitted above it rather than from a
-	// constant, so a tab that draws a different header cannot silently shift
-	// every hit rect by one.
 	rowYOffset := 0
 
 	switch m.KeybindTab {
@@ -141,8 +96,6 @@ func (m *OS) renderKeybindManager() (string, overlay.Geometry, []overlayRowHit) 
 	}
 
 	panel := overlay.Panel{
-		// Written as an escape so the codepoint survives tooling that does not
-		// carry private-use glyphs. The panel drops it in ASCII mode itself.
 		Title:     "Keybinds",
 		Width:     width,
 		Tabs:      KeybindTabNames,
@@ -152,9 +105,6 @@ func (m *OS) renderKeybindManager() (string, overlay.Geometry, []overlayRowHit) 
 	}
 	content, geo := panel.Render(pal)
 
-	// The hit rects were built in panel-relative row order while the body was
-	// laid out; only now is the body's origin known, so they are offset here
-	// rather than recomputed.
 	for i := range rows {
 		rows[i].Rect.Y0 += geo.BodyY + rowYOffset
 		rows[i].Rect.Y1 += geo.BodyY + rowYOffset
@@ -163,21 +113,14 @@ func (m *OS) renderKeybindManager() (string, overlay.Geometry, []overlayRowHit) 
 	return content, geo, rows
 }
 
-// keybindListBody lays out the three list tabs: a filter line, the rows, a
-// count, and a detail box for the selected row.
 func (m *OS) keybindListBody(pal overlay.Palette, width, visible int, chrome keybindChrome) ([]string, []overlayRowHit, int) {
 	bg := pal.Surface
 	var lines []string
 
-	// Filter line. Shown on every list tab so the control is in one place,
-	// rather than appearing and disappearing as the user moves between them.
 	cursor := overlay.Style(bg).Foreground(pal.Accent).Render("█")
 	query := m.KeybindQuery()
 	prompt := overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render("› ")
 	if m.KeybindTab != KeybindTabBindings {
-		// The other two tabs are short enough to read whole, so the filter is
-		// there for consistency of layout, not of function; say so rather than
-		// offering a control that does nothing.
 		prompt = overlay.Style(bg).Foreground(pal.FgMute).Render("  ")
 		query = m.keybindTabSubtitle()
 		cursor = ""
@@ -185,7 +128,6 @@ func (m *OS) keybindListBody(pal overlay.Palette, width, visible int, chrome key
 	if chrome.header > 0 {
 		filter := overlay.Style(bg).Foreground(pal.Fg).Render(query) + cursor
 		if m.KeybindTab == KeybindTabBindings {
-			// The filter with its caret.
 			before, at, after := m.keybinds.lists[KeybindTabBindings].Query.Parts()
 			filter = overlay.FieldLine(before, at, after, max(width-lipgloss.Width(prompt), 1), bg, pal.Fg)
 		}
@@ -229,7 +171,6 @@ func (m *OS) keybindListBody(pal overlay.Palette, width, visible int, chrome key
 		lines = append(lines, overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render(countLine))
 	}
 
-	// Detail box for the selected row, when the screen left room for one.
 	if chrome.detail > 0 {
 		lines = append(lines, overlay.Rule(width, bg, pal))
 		lines = append(lines, settingsDescription(m.keybindDetail(selected), width, chrome.detail, pal)...)
@@ -238,8 +179,6 @@ func (m *OS) keybindListBody(pal overlay.Palette, width, visible int, chrome key
 	return lines, rows, rowYOffset
 }
 
-// keybindTabSubtitle is the one-line summary that stands in for the filter box
-// on the tabs that do not filter.
 func (m *OS) keybindTabSubtitle() string {
 	rep := m.KeybindReport()
 	switch m.KeybindTab {
@@ -257,8 +196,6 @@ func (m *OS) keybindTabSubtitle() string {
 	return ""
 }
 
-// keybindEmptyMessage is what an empty list says. Each tab's emptiness means
-// something different, and "no results" would flatten all three.
 func (m *OS) keybindEmptyMessage() string {
 	switch m.KeybindTab {
 	case KeybindTabConflicts:
@@ -272,7 +209,6 @@ func (m *OS) keybindEmptyMessage() string {
 	return "No bindings configured"
 }
 
-// keybindRow renders row i of the active tab.
 func (m *OS) keybindRow(i int, selected bool, pal overlay.Palette, width int) string {
 	var row string
 	switch m.KeybindTab {
@@ -286,8 +222,6 @@ func (m *OS) keybindRow(i int, selected bool, pal overlay.Palette, width int) st
 	return pal.Row(row, width, overlay.RowState{Cursor: selected, Focused: true}, pal.Surface)
 }
 
-// keybindRowChrome is the shared start of every row: the background, the
-// selection marker, and the mark column.
 func keybindRowChrome(selected bool, mark string, markFg color.Color, pal overlay.Palette) (color.Color, string) {
 	bg := pal.Ground(overlay.RowState{Cursor: selected, Focused: true}, pal.Surface)
 	marker := "  "
@@ -295,15 +229,11 @@ func keybindRowChrome(selected bool, mark string, markFg color.Color, pal overla
 		marker = "› "
 	}
 	left := overlay.Style(bg).Foreground(pal.Accent).Bold(true).Render(marker)
-	// The mark is held to MarkFloor rather than to text contrast: it carries its
-	// meaning in its shape as much as its colour, and lifting a warning colour
-	// all the way to text contrast is what turns a theme's red into pink.
 	left += overlay.Style(bg).Foreground(overlay.ReadableAt(markFg, bg, overlay.MarkFloor)).
 		Bold(true).Render(overlay.Fill(mark, 2, bg))
 	return bg, left
 }
 
-// keybindBindingRow is one binding: what to press, what it does, and where.
 func (m *OS) keybindBindingRow(i int, selected bool, pal overlay.Palette, width int) string {
 	all := m.FilteredKeybindRows()
 	if i < 0 || i >= len(all) {
@@ -327,16 +257,9 @@ func (m *OS) keybindBindingRow(i int, selected bool, pal overlay.Palette, width 
 		descFg = pal.Fg
 	}
 	if b.Shadowed || b.Unbound {
-		// A dead binding is drawn quiet as well as marked. Quiet alone would be
-		// a colour-only signal; the mark and the "dead" word in the detail box
-		// carry it without the colour. An unbound action is quiet for the same
-		// reason and says "unbound" where its chord would be.
 		keyFg, descFg = pal.FgMute, pal.FgMute
 	}
 
-	// The word rather than an empty column: a blank there reads as a rendering
-	// fault, and the row has to say what it is without the detail box, which a
-	// short screen sheds.
 	press := b.Press
 	if b.Unbound {
 		press = "unbound"
@@ -352,13 +275,10 @@ func (m *OS) keybindBindingRow(i int, selected bool, pal overlay.Palette, width 
 
 	row := left + key + desc
 	gap := max(width-lipgloss.Width(row)-lipgloss.Width(scope), 0)
-	// The scope is structure, not content: it repeats down the column and the
-	// row is readable without it.
 	return row + overlay.Style(bg).Render(strings.Repeat(" ", gap)) +
 		overlay.Style(bg).Foreground(overlay.Structure(bg)).Render(scope)
 }
 
-// keybindConflictRow is one contested key: what wins, and how many lost.
 func (m *OS) keybindConflictRow(i int, selected bool, pal overlay.Palette, width int) string {
 	all := m.KeybindReport().Collisions
 	if i < 0 || i >= len(all) {
@@ -373,11 +293,6 @@ func (m *OS) keybindConflictRow(i int, selected bool, pal overlay.Palette, width
 	key := overlay.Style(bg).Foreground(overlay.Readable(pal.AccentBright, bg)).Bold(true).
 		Render(overlay.Fill(overlay.Truncate(c.Press, keyCol-1), keyCol, bg))
 
-	// The word "dead" is what makes this legible without colour: the count of
-	// losers alone reads as a quantity, not as a problem.
-	// Kept short enough to survive the description column: the detail box under
-	// the list carries the whole sentence, and a row that truncates its own
-	// verdict is a row that says nothing.
 	text := lipgloss.Sprintf("runs %s %s %d dead", c.Winner, glyphs.bullet, len(c.Losers))
 	if c.CrossSection {
 		text += lipgloss.Sprintf(" %s 2 tables", glyphs.bullet)
@@ -397,7 +312,6 @@ func (m *OS) keybindConflictRow(i int, selected bool, pal overlay.Palette, width
 		overlay.Style(bg).Foreground(overlay.Structure(bg)).Render(scope)
 }
 
-// keybindGuestRow is one key tuios withholds that a curated program wants.
 func (m *OS) keybindGuestRow(i int, selected bool, pal overlay.Palette, width int) string {
 	all := m.KeybindReport().GuestClashes
 	if i < 0 || i >= len(all) {
@@ -412,8 +326,6 @@ func (m *OS) keybindGuestRow(i int, selected bool, pal overlay.Palette, width in
 	key := overlay.Style(bg).Foreground(overlay.Readable(pal.AccentBright, bg)).Bold(true).
 		Render(overlay.Fill(overlay.Truncate(c.Key, keyCol-1), keyCol, bg))
 
-	// The running program's row is marked with a glyph and with the word "now",
-	// not by being a different colour.
 	tail := c.Program
 	if c.Running {
 		tail = c.Program + " " + glyphs.live + " now"
@@ -436,10 +348,6 @@ func (m *OS) keybindGuestRow(i int, selected bool, pal overlay.Palette, width in
 		overlay.Style(bg).Foreground(tailFg).Render(tail)
 }
 
-// keybindDetail is the sentence in the box under the list, for the selected
-// row. It is where a finding says which tier it came from, because the row
-// above it has no room to and a finding without its tier is the one thing this
-// overlay must not print.
 func (m *OS) keybindDetail(selected int) string {
 	rep := m.KeybindReport()
 	switch m.KeybindTab {
@@ -457,10 +365,6 @@ func (m *OS) keybindDetail(selected int) string {
 		if c.CrossSection {
 			detail += " The bindings sit in different tables in config.toml. The later table wins."
 		}
-		// The row is only worth reading if it can be acted on. ctrl+d is named
-		// first and described by what it does rather than by its name, because
-		// "resolve" would not tell the reader that nothing about their keyboard
-		// changes.
 		return detail + " ctrl+d removes the dead ones, which changes no key. ctrl+x frees " + c.Key + "."
 	case KeybindTabGuests:
 		if selected < 0 || selected >= len(rep.GuestClashes) {
@@ -509,7 +413,6 @@ func (m *OS) keybindDetail(selected int) string {
 	return detail.String()
 }
 
-// scopeShortName is the scope label for a row's right edge.
 func scopeShortName(id string) string {
 	for _, s := range config.Scopes("") {
 		if s.ID == id {
@@ -519,8 +422,6 @@ func scopeShortName(id string) string {
 	return id
 }
 
-// keybindRecordBody draws the recorder: what was pressed, what tuios does with
-// it, what a terminal can and cannot tell apart, and who else wants it.
 func (m *OS) keybindRecordBody(pal overlay.Palette, width, visible int, chrome keybindChrome) []string {
 	bg := pal.Surface
 	glyphs := keybindGlyphs()
@@ -566,9 +467,6 @@ func (m *OS) keybindRecordBody(pal overlay.Palette, width, visible int, chrome k
 			add(overlay.Style(bg).Foreground(overlay.Readable(pal.Accent, bg)).
 				Render("  " + overlay.EnterKey() + " bind it to " + bindAction + "   esc  leave it alone"))
 		case !fate.Free:
-			// The offer only appears for a key tuios actually holds. Printing it
-			// for a free key would invite a gesture that does nothing and read
-			// as though the key had been taken.
 			add(overlay.Style(bg).Foreground(overlay.Readable(pal.Accent, bg)).
 				Render("  ctrl+d  take " + key + " off every action, so the pane gets it"))
 		}
@@ -627,10 +525,8 @@ func (m *OS) keybindRecordBody(pal overlay.Palette, width, visible int, chrome k
 		section("seen in this pane")
 		for _, o := range rep.Observations {
 			if o.What == "Host keyboard" {
-				continue // already covered by the ambiguity block above
+				continue
 			}
-			// Wrapped, not truncated: these are sentences that carry a fact
-			// about the pane, and half of one says only that something was cut.
 			for i, l := range wrapPlain(o.Detail, max(width-6, 10)) {
 				lead := "  " + glyphs.bullet + " "
 				if i > 0 {
@@ -641,8 +537,6 @@ func (m *OS) keybindRecordBody(pal overlay.Palette, width, visible int, chrome k
 		}
 	}
 
-	// The panel keeps a fixed height whatever the recorder is showing, so it
-	// does not jump around the screen between one key and the next.
 	target := visible + chrome.lines()
 	for len(lines) < target {
 		add(overlay.Style(bg).Render(" "))
@@ -650,7 +544,6 @@ func (m *OS) keybindRecordBody(pal overlay.Palette, width, visible int, chrome k
 	return lines[:target]
 }
 
-// keybindFateHeadline is the one line beside a captured key.
 func keybindFateHeadline(fate config.KeyFate) string {
 	switch {
 	case fate.Free:

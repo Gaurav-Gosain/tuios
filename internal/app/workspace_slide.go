@@ -13,112 +13,41 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// A workspace switch slides. Going to a higher workspace number moves the
-// workspace being left out to the left while the new one comes in from the
-// right; a lower number goes the other way. Only the pane area moves: the
-// rail, the dock and every panel are drawn where they always are.
-//
-// How it works. At the moment of the switch, before any state changes, the
-// pane layers of the workspace being left are composed once more, with no
-// chrome, and the pane area of that canvas is kept (slideSnapshot). The switch
-// then happens at once, exactly as a cut does: focus, mode, subscriptions and
-// keys are the new workspace's from the first frame. While the slide runs,
-// every frame is composed as usual, with two changes in composeLayersIn: the
-// pane layers are shifted and clipped through the same path a view of a
-// larger session uses, and the kept cells of the old workspace are copied
-// into the part of the pane area the new one has not reached. The new
-// workspace is live while it slides; the old one is the frame it left.
-//
-// A second switch while one runs keeps what is on screen. Going straight back
-// reverses from where the slide is, so nothing jumps. Going on to another
-// workspace keeps the half and half pane area as the frame being left and
-// slides it out. A jump over several workspaces is one slide.
-//
-// What it costs. Idle, nothing: no timer, no buffer. The frames come from the
-// motion clock (motion.go), which exists only while something moves. A slide
-// frame copies the kept cells, a row segment at a time, and blits the pane
-// layers from the cells the compositor already holds. The snapshot is one
-// compose without the rail or the dock, once per switch.
-//
-// The fade. appearance.workspace_transition = "fade" keeps the same snapshot
-// and the same clock, but the new panes are drawn in place and each kept cell
-// is blended into the cell the compositor drew (themeBlendCell, the theme
-// fade's mix and its table), so a frame costs one pass over the pane area and
-// no allocation beyond the slide's. appearance.workspace_transition_ms sets
-// the length and animation_speed scales it.
-//
-// When it is a cut. appearance.workspace_transition = none or a length of 0,
-// a fade at 16 colours, appearance.motion = none, calm mode, a tape or a remote
-// command (MotionAllows), the screen saver, a first frame not yet drawn, a
-// scratch group shown or hidden, and a client too slow to draw the slide: one
-// whose frame rate gives the slide fewer than slideMinFrames frames, or whose
-// frames take longer to compose than a slide frame lasts, three of the last five
-// (tooSlow). An SSH or web
-// client runs it at slideRemoteFPS, since each frame repaints the pane area
-// over the network.
-
-// Slide timing.
 const (
-	// slideRemoteFPS caps the frame rate for a client across a network.
-	slideRemoteFPS = 30
-	// slideMinFrames is the fewest frames a slide may be drawn in. Fewer
-	// reads as a stutter, and a cut is better.
-	slideMinFrames = 4
-	// slideCostFrames is how many recent frames decide whether the client is
-	// too slow to slide, and slideSlowFrames how many of them must be slow.
+	slideRemoteFPS  = 30
+	slideMinFrames  = 4
 	slideCostFrames = 5
 	slideSlowFrames = 3
 )
 
-// workspaceSlide is this client's running slide. The zero value is idle.
 type workspaceSlide struct {
-	// dir is +1 when the content moves left (to a higher number), -1 right.
-	dir int
-	// from and to are the workspaces the slide goes between.
-	from, to int
-	// start is when it began, dur how long it runs, and at the progress it
-	// started from: zero for a new slide, part way for one reversed.
-	start time.Time
-	dur   time.Duration
-	at    float64
-	// area is the pane area on screen the kept cells cover. A slide whose
-	// pane area moves (a resize, the rail toggled) ends.
-	area image.Rectangle
-	// old is the pane area of the workspace being left. spare is the buffer
-	// the next snapshot is taken into, so a retarget allocates nothing.
+	dir        int
+	from, to   int
+	start      time.Time
+	dur        time.Duration
+	at         float64
+	area       image.Rectangle
 	old, spare *uv.Buffer
-	// fade is set when the switch is a cross-fade: the new panes stay in
-	// place and the kept cells blend into them, with no offset.
-	fade bool
-	// still turns the slide pass off while a snapshot is composed.
-	still bool
-	// costs are how long the last frames took to compose, a ring that next
-	// writes into. Frames are timed on the wall clock, so a frame the system
-	// descheduled is slow without the client being slow: see tooSlow.
-	costs [slideCostFrames]time.Duration
-	next  int
+	fade       bool
+	still      bool
+	costs      [slideCostFrames]time.Duration
+	next       int
 }
 
-// running reports whether a slide is drawing.
 func (s *workspaceSlide) running() bool { return s.old != nil }
 
-// end stops the slide and lets the kept cells go.
 func (s *workspaceSlide) end() {
 	s.old, s.spare = nil, nil
 	s.start = time.Time{}
 	s.fade = false
 }
 
-// slideEase is ease-out cubic: fast at first, settling onto the end with no
-// overshoot.
 func slideEase(p float64) float64 {
 	p = min(max(p, 0), 1)
 	q := 1 - p
 	return 1 - q*q*q
 }
 
-// progress is how far the slide is at now, from 0 to 1, and whether it is
-// done.
 func (s *workspaceSlide) progress(now time.Time) (float64, bool) {
 	if s.dur <= 0 {
 		return 1, true
@@ -130,9 +59,6 @@ func (s *workspaceSlide) progress(now time.Time) (float64, bool) {
 	return s.at + (1-s.at)*slideEase(p), false
 }
 
-// slideFrameInterval is the motion clock's interval while a slide runs: 60
-// frames a second, the session's own rate when that is lower, and at most
-// slideRemoteFPS for a client across a network.
 func (m *OS) slideFrameInterval() time.Duration {
 	frame := config.OverlayFadeFrame
 	if fps := m.Settings.NormalFPS; fps > 0 {
@@ -144,18 +70,11 @@ func (m *OS) slideFrameInterval() time.Duration {
 	return frame
 }
 
-// noteFrameCost records one frame's compose time.
 func (s *workspaceSlide) noteFrameCost(d time.Duration) {
 	s.costs[s.next] = d
 	s.next = (s.next + 1) % slideCostFrames
 }
 
-// tooSlow reports whether this client composes its frames slower than one
-// frame of a slide lasts: slideSlowFrames of the last slideCostFrames frames
-// took longer than frame. One or two late frames are a process the system
-// descheduled for a moment, and the slide still has its frames. A smoothed
-// cost read them as a slow client: one frame of 155 ms after quick ones gave
-// 43 ms, and the next switch was a cut.
 func (s *workspaceSlide) tooSlow(frame time.Duration) bool {
 	slow := 0
 	for _, d := range s.costs {
@@ -166,23 +85,18 @@ func (s *workspaceSlide) tooSlow(frame time.Duration) bool {
 	return slow >= slideSlowFrames
 }
 
-// slideRemote reports whether the client draws across a network.
 func (m *OS) slideRemote() bool {
 	return m.BrowserClient || (m.RemoteClient && !m.SSHIsLoopback)
 }
 
-// slideDur is the transition's length: appearance.workspace_transition_ms,
-// scaled by appearance.animation_speed.
 func (m *OS) slideDur() time.Duration {
 	return m.Settings.WorkspaceTransitionDuration()
 }
 
-// slideAllowed reports whether a switch made now slides.
 func (m *OS) slideAllowed() bool {
 	if m.Settings.WorkspaceTransitionStyle() == config.WorkspaceTransitionNone || m.screensaver.active || !m.themeFx.drawn {
 		return false
 	}
-	// A fade mixes colours, which 16 colours cannot show: it is a cut.
 	if m.Settings.WorkspaceTransitionStyle() == config.WorkspaceTransitionFade && theme.Depth() == overlay.Depth16 {
 		return false
 	}
@@ -190,12 +104,9 @@ func (m *OS) slideAllowed() bool {
 	if m.slideDur() < frame*slideMinFrames {
 		return false
 	}
-	// A client whose frames already take longer than a slide frame would
-	// draw the slide as a few jumps.
 	return !m.wsSlide.tooSlow(frame)
 }
 
-// slideArea is the part of the screen the panes are drawn in.
 func (m *OS) slideArea() image.Rectangle {
 	if m.sessionView.on {
 		return m.sessionView.clip
@@ -205,9 +116,6 @@ func (m *OS) slideArea() image.Rectangle {
 	return area.Intersect(image.Rect(0, 0, m.GetRenderWidth(), m.GetRenderHeight()))
 }
 
-// beginWorkspaceSlide starts the slide for a switch from one workspace to
-// another. It runs before the switch changes any state, since what it keeps
-// is the workspace being left.
 func (m *OS) beginWorkspaceSlide(from, to int) {
 	s := &m.wsSlide
 	if from == to || session.IsScratchWorkspace(from) || session.IsScratchWorkspace(to) || !m.slideAllowed() {
@@ -231,11 +139,8 @@ func (m *OS) beginWorkspaceSlide(from, to int) {
 		switch {
 		case done || area != s.area:
 		case to == s.from && from == s.to:
-			// Straight back: the workspace on its way in is the one leaving
-			// now, from where it is.
 			at = 1 - e
 		default:
-			// On to another: the pane area as it is drawn now leaves.
 			mixed = true
 		}
 	}
@@ -250,14 +155,8 @@ func (m *OS) beginWorkspaceSlide(from, to int) {
 	m.renderSkipped = false
 }
 
-// slideSnapshot composes the pane layers as they are now, with no chrome,
-// and keeps the cells of area as the frame being left. mixed keeps the slide
-// pass on, so a slide still running is kept as it is drawn.
 func (m *OS) slideSnapshot(area image.Rectangle, mixed bool) bool {
 	s := &m.wsSlide
-	// The off-render compose clears the rail's hit rectangles and shimmer
-	// spans, which the frame on screen still shows. Nothing is appended to
-	// them on that path, so the slices are put back as they were.
 	hits, rail := m.SidebarHits, m.motion.rail
 	s.still = !mixed
 	m.keepLayerCells = true
@@ -265,7 +164,6 @@ func (m *OS) slideSnapshot(area image.Rectangle, mixed bool) bool {
 	m.keepLayerCells = false
 	s.still = false
 	m.SidebarHits, m.motion.rail = hits, rail
-	// The canvas no longer holds the frame on screen.
 	m.canvasIsFrame = false
 	if !area.In(canvas.Bounds()) {
 		return false
@@ -283,24 +181,16 @@ func (m *OS) slideSnapshot(area image.Rectangle, mixed bool) bool {
 	return true
 }
 
-// slideFrame is one frame's slide: how far the new workspace's panes are
-// shifted, the part of the pane area they show, and the part the old one
-// keeps.
 type slideFrame struct {
 	area      image.Rectangle
 	newShift  int
 	newClip   image.Rectangle
 	oldClip   image.Rectangle
 	oldOrigin int
-	// fade is how much of the new workspace shows, out of themeMixLevels,
-	// when the switch is a cross-fade. A fade has no shift and no clip.
-	fade   uint8
-	isFade bool
+	fade      uint8
+	isFade    bool
 }
 
-// slideAt works out the slide for a frame composed at now. It ends a slide
-// that has run its course, or whose pane area moved, and then reports false:
-// that frame is the new workspace whole.
 func (m *OS) slideAt(now time.Time) (slideFrame, bool) {
 	s := &m.wsSlide
 	if !s.running() || s.still {
@@ -328,8 +218,6 @@ func (m *OS) slideAt(now time.Time) (slideFrame, bool) {
 	}
 	f := slideFrame{area: a}
 	if s.dir > 0 {
-		// The old frame leaves to the left: its columns from moved on are
-		// at the left edge. The new one comes in behind it.
 		f.oldClip = image.Rect(a.Min.X, a.Min.Y, a.Max.X-moved, a.Max.Y)
 		f.oldOrigin = moved
 		f.newShift = w - moved
@@ -343,8 +231,6 @@ func (m *OS) slideAt(now time.Time) (slideFrame, bool) {
 	return f, true
 }
 
-// drawSlideOld copies the kept cells of the old workspace into the part of
-// the pane area it still holds, and repairs the wide glyphs cut at the seam.
 func (m *OS) drawSlideOld(canvas *frameCanvas, f slideFrame) {
 	old := m.wsSlide.old
 	if f.isFade {
@@ -355,8 +241,6 @@ func (m *OS) drawSlideOld(canvas *frameCanvas, f slideFrame) {
 			for x := range line {
 				m.themeBlendCell(&line[x], &src[x], f.fade)
 			}
-			// The glyph changes cell by cell at half way, which can split a
-			// wide glyph from its second half.
 			fixWideEdges(line, 0, len(line))
 		}
 		return
@@ -366,17 +250,11 @@ func (m *OS) drawSlideOld(canvas *frameCanvas, f slideFrame) {
 		line := canvas.Lines[y]
 		src := old.Lines[y-f.area.Min.Y]
 		copy(line[r.Min.X:r.Max.X], src[f.oldOrigin:f.oldOrigin+r.Dx()])
-		// Both edges of the old part can cut a wide glyph: the seam with
-		// the new workspace, and the pane area's own edge, where the old
-		// frame's columns were cut.
 		fixWideEdges(line, r.Min.X, r.Min.X)
 		fixWideEdges(line, r.Max.X, r.Max.X)
 	}
 }
 
-// expireWorkspaceSlide ends a slide that has run its course without its last
-// frame being composed. It reports whether a slide was running, which asks
-// the motion clock for a frame: the one at the end is the new workspace whole.
 func (m *OS) expireWorkspaceSlide(now time.Time) bool {
 	s := &m.wsSlide
 	if !s.running() {

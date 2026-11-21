@@ -8,10 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The tiling switch's doors are tested on screen in
-// tiling_switch_screen_test.go. What stays here is the stacking arithmetic,
-// which no screen shows directly: the z order that raising a pane gives.
-
 // TestRecalcZOrderKeepsTheStackingOrder: raising a window moves that window
 // and nothing else. Three panes stacked A, C, B from the bottom: raising A
 // leaves C under B.
@@ -42,8 +38,6 @@ func TestRecalcZOrderKeepsTheStackingOrder(t *testing.T) {
 		t.Errorf("raising A reordered B and C: %v, want [2 1 0]", got)
 	}
 
-	// A floating pane stays above every tiled pane, focused or not, and the
-	// floating band keeps its own order too.
 	m.Windows = append(m.Windows, &terminal.Window{ID: "F1", IsFloating: true}, &terminal.Window{ID: "F2", IsFloating: true})
 	m.FocusedWindow = 4
 	m.RecalcZOrder()
@@ -91,8 +85,6 @@ func TestFloatingWindowsStayBelowEveryOverlay(t *testing.T) {
 			t.Fatalf("Z=%d: the floating band is not monotonic (%d after %d)", z, got, prev)
 		}
 		prev = got
-		// A float being dragged keeps its place in the band rather than
-		// dropping to the animating layer under the other floats.
 		floating.IsBeingManipulated = true
 		if moving := windowLayerZ(floating, true); moving != got {
 			t.Fatalf("Z=%d: a dragged float moves from %d to %d", z, got, moving)
@@ -104,8 +96,6 @@ func TestFloatingWindowsStayBelowEveryOverlay(t *testing.T) {
 			}
 		}
 	}
-	// The first two floats are in distinct layers, so a click can raise one
-	// above the other.
 	if windowLayerZ(&terminal.Window{Z: 1, IsFloating: true}, false) <= windowLayerZ(&terminal.Window{Z: 0, IsFloating: true}, false) {
 		t.Error("two floats share a layer")
 	}

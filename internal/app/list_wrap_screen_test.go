@@ -8,15 +8,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// listDoor is one list a person opens, and the keys that step it.
 type listDoor struct {
-	name string
-	// prepare runs before the model is built, for a list whose rows come
-	// from the machine (programs on PATH, tape files).
-	prepare func(t *testing.T)
-	open    func(f *apptest.Fixture)
-	// prev and next step the cursor one row; page jumps further; end goes to
-	// the last row. Lists move on up and down unless they say otherwise.
+	name                  string
+	prepare               func(t *testing.T)
+	open                  func(f *apptest.Fixture)
 	prev, next, page, end string
 }
 
@@ -41,7 +36,6 @@ func listDoors() []listDoor {
 		{name: "tape manager", prepare: tapeFiles, open: func(f *apptest.Fixture) { f.Action("toggle_tape_manager") }},
 		{name: "context menu", open: func(f *apptest.Fixture) {
 			windowMode(f)
-			// A right click inside the pane, away from its frame.
 			x, y := f.PaneCenter()
 			f.Send(apptest.RightClick(x, y))
 			f.Send(apptest.RightRelease(x, y))
@@ -73,7 +67,6 @@ func openList(t *testing.T, d listDoor, wrap bool) *apptest.Fixture {
 	)
 	d.open(f)
 	if d.prev == "" {
-		// Some lists open on the row last used, not the first.
 		f.Keys("home")
 	}
 	if len(f.Highlighted()) == 0 {

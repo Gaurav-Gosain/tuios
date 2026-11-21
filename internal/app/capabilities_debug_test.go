@@ -22,7 +22,6 @@ func TestCapabilitiesDebugFileIsPrivate(t *testing.T) {
 	if !strings.HasPrefix(path, filepath.Join(dir, "tuios")) {
 		t.Fatalf("the capabilities log is outside the state directory: %s", path)
 	}
-	// The name carries the pid, so two clients on one machine cannot collide.
 	if !strings.Contains(filepath.Base(path), ".") {
 		t.Fatalf("the file name does not separate the clients: %s", path)
 	}

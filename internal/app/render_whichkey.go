@@ -12,42 +12,23 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The which-key panel lays the prefix menu out in sections and columns. The
-// leader's menu is about forty lines, and as one column it was taller than a
-// laptop terminal, so the eye had to run down a list to find a key. In columns
-// it is a dozen or so rows, read across.
-//
-// A section is kept whole in one column when that costs little height, which
-// keeps each heading over all of its keys. When the screen is short, sections
-// flow on into the next column and the heading is repeated at the top of it,
-// so no column starts with keys nobody has named.
-
 const (
-	// whichKeyGap is the cells between two columns.
-	whichKeyGap = 4
-	// whichKeyKeyGap is the cells between a key and what it does.
-	whichKeyKeyGap = 2
-	// whichKeySplitCost is what one section split across two columns costs
-	// against the panel's height, in rows (see layoutWhichKey).
+	whichKeyGap       = 4
+	whichKeyKeyGap    = 2
 	whichKeySplitCost = 3
-	// whichKeyMinDesc is the fewest cells a description is cut to before the
-	// panel gives up a column instead.
-	whichKeyMinDesc = 10
+	whichKeyMinDesc   = 10
 )
 
-// wkLine is one line of a which-key column.
 type wkLine struct {
-	header string             // a section heading, or "" for a key line or a blank
-	bind   *config.Keybinding // the key line, nil for a heading or a blank
+	header string
+	bind   *config.Keybinding
 }
 
-// wkColumn is one column: its lines and the widths its key and description
-// columns take.
 type wkColumn struct {
 	lines        []wkLine
 	keyW, descW  int
 	headerW      int
-	truncateDesc int // the width descriptions are cut to, 0 for none
+	truncateDesc int
 }
 
 func (c *wkColumn) width() int {
@@ -62,8 +43,6 @@ func (c *wkColumn) width() int {
 	return w
 }
 
-// wkDescWidth is a line's description as drawn: a submenu carries the
-// chevron at the right of its column, one cell, as the + it replaced did.
 func wkDescWidth(b *config.Keybinding) int {
 	w := lipgloss.Width(b.Description)
 	if b.Submenu {
@@ -72,7 +51,6 @@ func wkDescWidth(b *config.Keybinding) int {
 	return w
 }
 
-// measure fills a column's widths from its lines.
 func (c *wkColumn) measure() {
 	c.keyW, c.descW, c.headerW = 0, 0, 0
 	for _, l := range c.lines {
@@ -86,7 +64,6 @@ func (c *wkColumn) measure() {
 	}
 }
 
-// wkBlock is a section as lines: its heading, if it has one, then its keys.
 func wkBlock(g config.KeybindingGroup) []wkLine {
 	lines := make([]wkLine, 0, len(g.Bindings)+1)
 	if g.Title != "" {
@@ -98,9 +75,6 @@ func wkBlock(g config.KeybindingGroup) []wkLine {
 	return lines
 }
 
-// packWhole lays the sections into columns of at most height lines each,
-// keeping every section whole and in order, a blank line between two in one
-// column. It reports false when that takes more than cols columns.
 func packWhole(groups []config.KeybindingGroup, cols, height int) ([]wkColumn, bool) {
 	var out []wkColumn
 	var cur []wkLine
@@ -128,9 +102,6 @@ func packWhole(groups []config.KeybindingGroup, cols, height int) ([]wkColumn, b
 	return out, len(out) <= cols
 }
 
-// packFlow lays the sections into columns of at most height lines, letting a
-// section run on into the next column under its heading repeated. A column
-// never ends on a heading or a blank, and never starts with a blank.
 func packFlow(groups []config.KeybindingGroup, cols, height int) ([]wkColumn, bool) {
 	if height < 2 {
 		return nil, false
@@ -148,9 +119,6 @@ func packFlow(groups []config.KeybindingGroup, cols, height int) ([]wkColumn, bo
 	}
 	for _, g := range groups {
 		if len(cur) > 0 {
-			// A new section needs its blank, its heading and two keys here, or
-			// it starts the next column: one key under a heading at the foot
-			// of a column reads as a section of one.
 			need := 1 + min(len(g.Bindings), 2)
 			if g.Title != "" {
 				need++
@@ -165,8 +133,6 @@ func packFlow(groups []config.KeybindingGroup, cols, height int) ([]wkColumn, bo
 			cur = append(cur, wkLine{header: g.Title})
 		}
 		for i := range g.Bindings {
-			// Nor does a column start with the last key of a section alone
-			// under its repeated heading: the key before it goes too.
 			orphan := len(cur) == height-1 && len(g.Bindings)-i == 2 && i > 0
 			if len(cur) >= height || orphan {
 				flush()
@@ -181,7 +147,6 @@ func packFlow(groups []config.KeybindingGroup, cols, height int) ([]wkColumn, bo
 	return out, len(out) <= cols
 }
 
-// wkHeight is the tallest column.
 func wkHeight(cols []wkColumn) int {
 	h := 0
 	for _, c := range cols {
@@ -190,7 +155,6 @@ func wkHeight(cols []wkColumn) int {
 	return h
 }
 
-// wkWidth is the columns laid side by side.
 func wkWidth(cols []wkColumn) int {
 	w := 0
 	for i := range cols {
@@ -202,9 +166,6 @@ func wkWidth(cols []wkColumn) int {
 	return w
 }
 
-// layoutWhichKey picks the columns for groups on a screen that gives the panel
-// avail cells across and maxRows lines of keys. It returns the columns and how
-// many key lines had to be left out.
 func layoutWhichKey(groups []config.KeybindingGroup, avail, maxRows int) ([]wkColumn, int) {
 	lines, keys := 0, 0
 	for _, g := range groups {
@@ -212,13 +173,6 @@ func layoutWhichKey(groups []config.KeybindingGroup, avail, maxRows int) ([]wkCo
 		keys += len(g.Bindings)
 	}
 
-	// Every height is tried with both packings, as many columns as they take,
-	// and the one that fits across with the lowest cost wins: its height,
-	// plus whichKeySplitCost for each section that runs on into another
-	// column. A split costs a repeated heading and a section read in two
-	// places, so the panel takes a few more rows rather than split one, and
-	// splits only when the screen is too short or too narrow for that. Ties
-	// go to the fewer splits, then to the shorter panel.
 	var pick []wkColumn
 	pickCost, pickSplits := 0, 0
 	for h := 1; h <= min(lines, maxRows); h++ {
@@ -244,10 +198,6 @@ func layoutWhichKey(groups []config.KeybindingGroup, avail, maxRows int) ([]wkCo
 		return pick, 0
 	}
 
-	// Nothing fits as it is. Descriptions are cut to make room for more
-	// columns, as far as whichKeyMinDesc, and then the lines that still do
-	// not fit are left out with a count.
-	// Of those, the one that cuts the fewest cells wins, then the cheapest.
 	pickCut := 0
 	for h := 1; h <= min(lines, maxRows); h++ {
 		cols, _ := packFlow(groups, keys, h)
@@ -278,9 +228,6 @@ func layoutWhichKey(groups []config.KeybindingGroup, avail, maxRows int) ([]wkCo
 	return clipWhichKey(groups, avail, max(maxRows, 2))
 }
 
-// wkSplits counts the sections that run on from one column into the next: a
-// column that starts with a key, or with the heading the column before it
-// ended under.
 func wkSplits(cols []wkColumn) int {
 	n := 0
 	last := ""
@@ -300,8 +247,6 @@ func wkSplits(cols []wkColumn) int {
 	return n
 }
 
-// cutTo shortens the descriptions of cols, evenly, until they fit avail or
-// reach whichKeyMinDesc.
 func cutTo(cols []wkColumn, avail int) {
 	for wkWidth(cols) > avail {
 		widest, at := 0, -1
@@ -321,9 +266,6 @@ func cutTo(cols []wkColumn, avail int) {
 	}
 }
 
-// clipWhichKey is the last resort on a screen too small for the menu: the
-// columns that fit, filled to maxRows, with the last line saying how many
-// keys were left out.
 func clipWhichKey(groups []config.KeybindingGroup, avail, maxRows int) ([]wkColumn, int) {
 	total := 0
 	for _, g := range groups {
@@ -351,7 +293,6 @@ func clipWhichKey(groups []config.KeybindingGroup, avail, maxRows int) ([]wkColu
 	return nil, total
 }
 
-// trimGroups is groups cut to their first keep bindings.
 func trimGroups(groups []config.KeybindingGroup, keep int) []config.KeybindingGroup {
 	var out []config.KeybindingGroup
 	for _, g := range groups {
@@ -367,31 +308,19 @@ func trimGroups(groups []config.KeybindingGroup, keep int) []config.KeybindingGr
 	return out
 }
 
-// whichKeyCache holds the last layout. The menu is drawn on every frame while
-// the prefix is held, and the layout tries every height with both packings,
-// which is work worth doing once per menu and screen size rather than per
-// frame.
 type whichKeyCache struct {
-	key  uint64
-	cols []wkColumn
-	more int
-	// valid says the entry holds a layout. A screen too small for any
-	// binding has no columns, and that layout is kept like any other.
+	key   uint64
+	cols  []wkColumn
+	more  int
 	valid bool
 }
 
-// whichKeyLayout is layoutWhichKey for the screen in force, cached. The panel
-// is laid out in the room beside the rail first, so it does not cover it; only
-// when the menu would have to be cut there does it take the whole width.
 func (m *OS) whichKeyLayout(title string, groups []config.KeybindingGroup, maxRows int) ([]wkColumn, int) {
-	// Two cells of padding each side, and two cells in from the screen edge.
 	full := max(m.GetRenderWidth()-8, 1)
 	beside := full
 	if cw := m.ViewContentWidth(); cw > 0 && cw < m.GetRenderWidth() {
 		beside = max(cw-8, 1)
 	}
-	// At the centre it is centred on the whole screen, as the panels are,
-	// so it is laid out in the room that clears the rail on both sides.
 	if m.Settings.WhichKeyPosition == "center" {
 		beside = max(min(beside, m.modalRoomWidth()-8), 1)
 	}
@@ -407,7 +336,6 @@ func (m *OS) whichKeyLayout(title string, groups []config.KeybindingGroup, maxRo
 	return cols, more
 }
 
-// wkCut reports whether any column had its descriptions shortened.
 func wkCut(cols []wkColumn) bool {
 	for _, c := range cols {
 		if c.truncateDesc > 0 {
@@ -417,7 +345,6 @@ func wkCut(cols []wkColumn) bool {
 	return false
 }
 
-// whichKeySignature is an FNV-1a hash of everything the layout depends on.
 func whichKeySignature(title string, groups []config.KeybindingGroup, sizes ...int) uint64 {
 	h := uint64(14695981039346656037)
 	mix := func(str string) {
@@ -446,9 +373,6 @@ func whichKeySignature(title string, groups []config.KeybindingGroup, sizes ...i
 	return h
 }
 
-// whichKeyMenu is the title and sections of the prefix menu in force. Every
-// menu reads its keys from the keybind registry, so a key rebound in the
-// config shows here as soon as the config reloads.
 func (m *OS) whichKeyMenu() (string, []config.KeybindingGroup) {
 	menu := func(prefixType string) []config.KeybindingGroup {
 		return config.PrefixMenuGroups(m.KeybindRegistry, prefixType, config.MenuState{Daemon: m.IsDaemonSession, Minimized: -1})
@@ -464,7 +388,6 @@ func (m *OS) whichKeyMenu() (string, []config.KeybindingGroup) {
 		}
 		return kb.MenuTitle(m.Menu), config.MenuKeybindingGroups(kb, m.Menu)
 	case m.SubMenu == SubMenuMinimize:
-		// The restore row counts the minimized windows.
 		minimizedCount := 0
 		for _, win := range m.Windows {
 			if win.Minimized && win.Workspace == m.CurrentWorkspace && !win.IsScratch {
@@ -480,23 +403,16 @@ func (m *OS) whichKeyMenu() (string, []config.KeybindingGroup) {
 	return "Prefix", m.prefixMenuGroups()
 }
 
-// renderWhichKey draws the which-key panel and returns it with its position.
 func (m *OS) renderWhichKey() (string, int, int) {
 	title, groups := m.whichKeyMenu()
 	if m.LockHeld {
 		title, groups = m.heldWhichKey(title, groups)
 	}
 
-	// The panel spends four rows on a blank pad above and below, the title
-	// and its rule, and keeps a row clear of the screen's edge. The room
-	// starts under a dock at the top: measured from the top of the screen, a
-	// long menu ran up over that dock and cut its notice in half.
 	maxRows := 1 << 20
 	if room := m.GetRenderHeight() - m.viewReserve().Top; room > 0 {
 		maxRows = max(room-5, 1)
 	} else if m.GetRenderHeight() > 0 {
-		// A dock that takes every row leaves no room: the least panel, not
-		// one with no limit at all.
 		maxRows = 1
 	}
 	cols, more := m.whichKeyLayout(title, groups, maxRows)
@@ -523,8 +439,6 @@ func (m *OS) renderWhichKey() (string, int, int) {
 			key := keyStyle.Render(l.bind.Key) +
 				overlay.Style(bg).Render(strings.Repeat(" ", c.keyW-lipgloss.Width(l.bind.Key)+whichKeyKeyGap))
 			if l.bind.Submenu {
-				// The label in line with the others, and the chevron at the
-				// right edge, as a right-click menu marks a submenu.
 				mark := chevron(&m.Settings)
 				desc := overlay.Truncate(l.bind.Description, max(descW-1, 1))
 				pad := max(descW-lipgloss.Width(desc)-lipgloss.Width(mark), 0)
@@ -554,9 +468,6 @@ func (m *OS) renderWhichKey() (string, int, int) {
 		body = append(body, overlay.Fill(b.String(), contentWidth, bg))
 	}
 	if more > 0 {
-		// The count takes the last line of the last column, which clipWhichKey
-		// left free for it. On a screen too small for any binding there is no
-		// column, and the count is the panel's one line.
 		x, y := 0, 0
 		if last := len(cols) - 1; last >= 0 {
 			for i := range last {
@@ -569,8 +480,6 @@ func (m *OS) renderWhichKey() (string, int, int) {
 			body = append(body, overlay.Fill("", contentWidth, bg))
 			y = len(body) - 1
 		}
-		// Cut to the panel: on a screen narrower than "+N more" the panel is
-		// narrower than the count, and Fill only pads.
 		row := body[y]
 		body[y] = overlay.Fill(ansi.Truncate(ansi.Truncate(row, x, "")+note, contentWidth, ""), contentWidth, bg)
 	}
@@ -585,15 +494,10 @@ func (m *OS) renderWhichKey() (string, int, int) {
 		lines = append(lines, pad+l+pad)
 	}
 	lines = append(lines, blank)
-	// Where the surface would vanish into the ground, at 16 colours, the
-	// panel keeps a hairline edge the way every Panel does.
 	lines = overlay.FrameBlock(lines, contentWidth+4, bg, pal)
 	return strings.Join(lines, "\n"), contentWidth + 4, len(lines)
 }
 
-// whichKeyTitle is the panel's title as drawn. The leader's own panels are in
-// lower case. A declared menu keeps the title its table gives, so "Menu"
-// stays "Menu".
 func whichKeyTitle(title string, declared bool) string {
 	if declared {
 		return title

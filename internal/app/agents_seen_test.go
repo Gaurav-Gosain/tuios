@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// agentChrome is what a client shows of its agent chrome: the prefix menu's
-// Inbox lines, the palette's agent entries and "@ state" hint, the help's
-// Agents section, and whether the Alerts tab shows its agent rows.
 type agentChrome struct {
 	prefixLines, paletteEntries, stateHint, helpSection, alertRows bool
 }
@@ -61,7 +58,6 @@ func TestAgentChromeWaitsForAnAgent(t *testing.T) {
 	if got := readAgentChrome(m); got != (agentChrome{}) {
 		t.Fatalf("with no agent seen the client shows %+v", got)
 	}
-	// The Alerts tab says what it folded.
 	for _, cat := range m.settingsCategories() {
 		if cat.Name != "Alerts" {
 			continue
@@ -81,7 +77,6 @@ func TestAgentChromeWaitsForAnAgent(t *testing.T) {
 		t.Error("the first agent state was not remembered")
 	}
 
-	// Once seen, it stays: the agent leaving does not take the chrome away.
 	m.noteAgentState(m.Windows[0], "")
 	if got := readAgentChrome(m); got != want {
 		t.Errorf("after the agent left the client shows %+v", got)

@@ -1,14 +1,5 @@
 package app
 
-// A client with a screen (screen.go) diffs the composed canvas. A client
-// without one hands Bubble Tea the frame string, which its renderer parses
-// back into cells and diffs. These hold the two to the same terminal screen
-// and measure what the string costs.
-//
-// cellSink diffs the canvas with uv.TerminalRenderer directly; frameSink is
-// the string path. Both are configured the same way and mark every row
-// touched, so the diff does the same work.
-
 import (
 	"bytes"
 	"fmt"
@@ -23,7 +14,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// cellSink is frameSink without the string: the canvas is the new buffer.
 type cellSink struct {
 	buf     bytes.Buffer
 	scr     *uv.TerminalRenderer
@@ -42,7 +32,6 @@ func newCellSink() *cellSink {
 	return s
 }
 
-// emit diffs c against the last frame and returns the bytes it produced.
 func (s *cellSink) emit(c *frameCanvas) int {
 	s.buf.Reset()
 	w, h := c.Width(), c.Height()
@@ -60,8 +49,6 @@ func (s *cellSink) emit(c *frameCanvas) int {
 	return s.buf.Len()
 }
 
-// composeCells composes a frame and returns its canvas. The cases here never
-// take the saver or the fullscreen fast path.
 func composeCells(tb testing.TB, m *OS) *frameCanvas {
 	c, _ := m.composeFrameParts()
 	if c == nil {
@@ -248,7 +235,6 @@ func TestDirectPaneMatchesItsText(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			m, win := fastPathOS(t, tc.dock)
 			if tc.tiled {
-				// The shipped layout: a lone borderless tiled pane.
 				m = keyPaneOS(t, io.Discard)
 				win = m.Windows[0]
 				win.WriteOutput([]byte("\x1b[2J\x1b[H" + fastPathContent))

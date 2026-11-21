@@ -21,8 +21,6 @@ func (m *OS) ToggleFloating() {
 		m.queueTMLCmd(m.tmlTogglePlacement(fw))
 		return
 	}
-	// A popup is always floating. Tiling one put it in the layout tree, where
-	// it took a slot from the panes and every peer read the tree back.
 	if fw == nil || fw.IsPopup || fw.IsScratch {
 		return
 	}
@@ -38,28 +36,15 @@ func (m *OS) ToggleFloating() {
 	}
 }
 
-// liftFromLayout takes a window that just floated out of the tiling
-// structure.
 func (m *OS) liftFromLayout(fw *terminal.Window) {
-	// Lift the pane out of the tiling structure. The strip and the tree are
-	// asked the way a peer's sync asks them (ApplyStateSync): the BSP call
-	// used to be the only one here, and it does nothing under a scrolling
-	// layout, so the float kept its column and the strip laid an empty slot
-	// out where it had been, while every peer removed it.
 	if m.AutoTiling {
 		if m.UseScrollingLayout {
-			// Not ScrollingOnWindowRemoved: that is for a pane that closed
-			// and moves the focus to the strip's column, and the pane the
-			// user just floated is the pane they are still in.
 			sl := m.GetOrCreateScrollingLayout()
 			sl.RemoveWindow(m.GetWindowIntID(fw.ID))
 			m.ScrollingSetPositions()
 		} else if m.UseBSPLayout {
 			m.RemoveWindowFromBSPTree(fw)
 		} else {
-			// Master-stack has no tree to take the pane out of. The BSP
-			// call above ends in ApplyBSPLayout, which would lay the
-			// rest out as BSP.
 			m.TileAllWindows()
 		}
 	}
@@ -68,7 +53,6 @@ func (m *OS) liftFromLayout(fw *terminal.Window) {
 	m.RecalcZOrder()
 }
 
-// addToLayout puts a window that stopped floating into the tiling layout.
 func (m *OS) addToLayout(fw *terminal.Window) {
 	if m.AutoTiling {
 		if m.UseScrollingLayout {
@@ -88,12 +72,6 @@ func (m *OS) addToLayout(fw *terminal.Window) {
 	m.RecalcZOrder()
 }
 
-// installPassthroughs registers every emulator callback for a window, under
-// the window's IO lock. The PTY reader is already pumping the emulator by the
-// time these run, and it drives the callbacks from under the same lock
-// (window_io.go), so installing them under it is what publishes the
-// registration to the reader without a data race. None of the setup functions
-// take the lock themselves; they only assign callback fields.
 func (m *OS) installPassthroughs(window *terminal.Window) {
 	window.LockIO()
 	m.setupKittyPassthrough(window)
@@ -107,7 +85,6 @@ func (m *OS) installPassthroughs(window *terminal.Window) {
 	window.UnlockIO()
 }
 
-// setupClipboardPassthrough wires a window's OSC 52 clipboard to bubbletea.
 func (m *OS) setupClipboardPassthrough(window *terminal.Window) {
 	if window == nil {
 		return
@@ -118,7 +95,6 @@ func (m *OS) setupClipboardPassthrough(window *terminal.Window) {
 			select {
 			case m.PendingClipboardSet <- ClipboardSetMsg{Text: text, WindowID: windowID}:
 			default:
-				// Channel full, drop (non-blocking)
 			}
 		}
 	}
@@ -153,7 +129,6 @@ func (m *OS) ToggleMultifocus(windowIndex int) {
 		m.MultifocusSet[windowID] = true
 		m.showMultifocusCount()
 	}
-	// Invalidate caches to show visual indicator on all affected windows
 	window.InvalidateCache()
 	for _, w := range m.Windows {
 		if m.MultifocusSet[w.ID] {
@@ -183,8 +158,6 @@ func (m *OS) MultifocusPeers() []*terminal.Window {
 	return out
 }
 
-// showMultifocusCount shows how many panes of the current workspace are in
-// the multifocus set.
 func (m *OS) showMultifocusCount() {
 	n := 0
 	for _, w := range m.Windows {
@@ -264,14 +237,6 @@ func (m *OS) MultifocusUndimmed(id string) bool {
 	return !m.Settings.DimMultifocus && m.MultifocusSet[id]
 }
 
-// cyclableWindows lists the indexes the window cycle steps through: the visible
-// panes on the current workspace, with popups left out.
-//
-// A popup is left out because it is not a pane the user is arranging. It is one
-// command with a lifetime, focused the moment it opens and gone when the command
-// exits, so cycling onto it would put the focus in a box that is about to
-// disappear, and cycling off it would leave the box on screen with the focus
-// somewhere else. It is still reachable with the mouse and by name.
 func (m *OS) cyclableWindows() []int {
 	out := []int{}
 	for i, w := range m.Windows {
@@ -287,13 +252,11 @@ func (m *OS) CycleToNextVisibleWindow() {
 	if len(m.Windows) == 0 {
 		return
 	}
-	// Find next visible (non-minimized and non-minimizing) window in current workspace
 	visibleWindows := m.cyclableWindows()
 	if len(visibleWindows) == 0 {
 		return
 	}
 
-	// Find current position in visible windows
 	currentPos := -1
 	for i, idx := range visibleWindows {
 		if idx == m.FocusedWindow {
@@ -302,7 +265,6 @@ func (m *OS) CycleToNextVisibleWindow() {
 		}
 	}
 
-	// Cycle to next visible window
 	if currentPos >= 0 && currentPos < len(visibleWindows)-1 {
 		m.FocusWindow(visibleWindows[currentPos+1])
 	} else {
@@ -315,13 +277,11 @@ func (m *OS) CycleToPreviousVisibleWindow() {
 	if len(m.Windows) == 0 {
 		return
 	}
-	// Find previous visible (non-minimized and non-minimizing) window in current workspace
 	visibleWindows := m.cyclableWindows()
 	if len(visibleWindows) == 0 {
 		return
 	}
 
-	// Find current position in visible windows
 	currentPos := -1
 	for i, idx := range visibleWindows {
 		if idx == m.FocusedWindow {
@@ -330,7 +290,6 @@ func (m *OS) CycleToPreviousVisibleWindow() {
 		}
 	}
 
-	// Cycle to previous visible window
 	if currentPos > 0 {
 		m.FocusWindow(visibleWindows[currentPos-1])
 	} else {
@@ -338,10 +297,6 @@ func (m *OS) CycleToPreviousVisibleWindow() {
 	}
 }
 
-// reconcilePrevFocus moves the previous-pane record to the pane focus just
-// left, whatever moved it. FocusWindow, new panes, workspace switches, closes
-// and daemon sync all land focus without a shared hook, so the record is read
-// off the landed focus once a message instead of written by every caller.
 func (m *OS) reconcilePrevFocus() {
 	var cur string
 	if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
@@ -362,9 +317,6 @@ func (m *OS) reconcilePrevFocus() {
 // it moved; a dead target (closed pane, nothing recorded yet) says so rather
 // than moving somewhere random.
 func (m *OS) LastPane() bool {
-	// Two presses can land in one Update, and the flip needs the pane the
-	// last press left, so settle the record here rather than trust the last
-	// message boundary.
 	m.reconcilePrevFocus()
 	if m.PrevFocusedID == "" {
 		return false
@@ -379,91 +331,56 @@ func (m *OS) LastPane() bool {
 
 // FocusWindow sets focus to the window at the specified index.
 func (m *OS) FocusWindow(i int) *OS {
-	// Simple bounds check
 	if len(m.Windows) == 0 || i < 0 || i >= len(m.Windows) {
 		return m
 	}
-	// A pane of a hidden scratch group is shown with its group before it
-	// takes the focus. Every jump comes through here (the rail, the Inbox, a
-	// notification, focus-window), and the switch below into the group's
-	// workspace is the show. A focus on an ordinary pane while a group is on
-	// the screen is the same switch the other way, which hides the group.
 	if isScratch(m.Windows[i]) && !m.Windows[i].IsPopup && m.Windows[i].Workspace != m.CurrentWorkspace && !m.InScratchView() {
 		m.rememberScratchReturn()
 		m.scratchViewName = scratchNameOf(m.Windows[i])
 	}
-	// Shift and a label types into the pane that had focus.
 	if m.hints != nil && m.Windows[i].ID != m.hints.focusID {
 		m.CloseHints()
 	}
 
-	// Ahead of the already-focused early return: focusing IS the look, whether
-	// or not it moves focus.
 	m.markFocusedAgentSeen(i)
 	m.refoldAgentsOnPaneFocus()
 
-	// A jump from the sidebar or palette can target a window on another
-	// workspace, which is invisible until we go there. Switch first, handing the
-	// switch our target so it focuses i directly instead of firing the focus hooks
-	// for a default window we would immediately override. The switch focuses i on
-	// the workspace it enters, so by the time it returns i is already focused and
-	// the rest of this function is a no-op.
 	if m.Windows[i].Workspace != m.CurrentWorkspace {
 		m.switchToWorkspace(m.Windows[i].Workspace, i)
 	}
 
-	// Don't do anything if already focused
 	if m.FocusedWindow == i {
 		return m
 	}
 
 	oldFocused := m.FocusedWindow
-	// Leaving an agent pane is when the person looked away from it.
 	if oldFocused >= 0 && oldFocused < len(m.Windows) {
 		m.markAgentSeenAt(m.Windows[oldFocused])
 	}
 
-	// ATOMIC: Set focus and Z-index in one operation
 	m.FocusedWindow = i
 	m.FocusHistory = session.RecordFocus(m.FocusHistory, m.Windows[i].Workspace, m.Windows[i].ID)
-	// A pane that never got a report still assumes it has focus, as a
-	// program does when it turns 1004 on, so leaving it reports the loss.
 	if m.focusReportedID == "" && oldFocused >= 0 && oldFocused < len(m.Windows) {
 		m.focusReportedID = m.Windows[oldFocused].ID
 	}
 	m.reportFocusChange()
 
-	// Save focus for current workspace
 	if m.Windows[i].Workspace == m.CurrentWorkspace {
 		m.WorkspaceFocus[m.CurrentWorkspace] = i
 	}
 
-	// Recalculate Z-ordering (floating always above non-floating)
 	m.RecalcZOrder()
 
-	// Always invalidate caches for immediate visual feedback on focus change
-	// The Z-index change needs to be visible immediately when user clicks
 	if oldFocused >= 0 && oldFocused < len(m.Windows) {
-		m.Windows[oldFocused].MarkPositionDirty() // Use lighter invalidation
+		m.Windows[oldFocused].MarkPositionDirty()
 	}
 
-	// Invalidate cache for new focused window (border color change + fresh content)
-	m.Windows[i].InvalidateCache() // Full invalidation to show latest content
+	m.Windows[i].InvalidateCache()
 
-	// A zoomed workspace shows one pane, so the pane the focus landed on has to
-	// be that one or the keys go somewhere invisible. See ZoomFollowsFocus.
-	//
-	// Here rather than in the next-pane command because every local focus move
-	// comes through here and none of them should land beside a zoom. A peer's
-	// focus arrives by assignment rather than through this, so a client whose
-	// focus sits elsewhere while somebody else's pane is zoomed keeps drawing
-	// that zoom, which is what the render intends.
 	m.ZoomFollowsFocus(i)
 
 	m.FireHook(hooks.AfterFocusChange, m.Windows[i].ID, m.Windows[i].Title())
 
-	// Sync scrolling layout focus and scroll into view when focus changes
-	// via click or external means (not from scrollingSyncFocusToOS).
 	if m.AutoTiling && m.UseScrollingLayout && !m.scrollingFocusSyncing {
 		m.LogInfo("[SCROLL-FOCUS] FocusWindow(%d) -> triggering ScrollingOnFocusChange (old=%d)", i, oldFocused)
 		m.ScrollingOnFocusChange()
@@ -550,13 +467,10 @@ func (m *OS) recalcZOrderWithTop(top []*terminal.Window) {
 // why a window the daemon created arrives marked Unplaced for a client to run
 // this on.
 func (m *OS) NewWindowPlacement() (x, y, width, height int) {
-	// A new floating window spawns inside the content region beside any
-	// reserved sidebar band, so it is never born half-hidden under the sidebar.
 	leftMargin := m.PaneLeft()
 	contentWidth := m.PaneWidth()
 	screenHeight := m.PaneHeight()
 	if contentWidth <= 0 || screenHeight <= 0 {
-		// Sensible defaults when the screen size is not known yet.
 		leftMargin = 0
 		contentWidth = 80
 		screenHeight = 24
@@ -565,14 +479,8 @@ func (m *OS) NewWindowPlacement() (x, y, width, height int) {
 	width = contentWidth / 2
 	height = screenHeight / 2
 
-	// The pointer's last reported position, not the last motion that reached
-	// Update: the filter drops the motion nothing reacts to, and a pane that
-	// spawned where a hover last happened to be would land somewhere random.
 	if px, py := m.PointerSeen(); !m.AutoTiling && px > 0 && py > 0 {
-		// The pointer is on the screen and the pane goes in the layout,
-		// which differ in a view of a larger session. See pane_view.go.
 		px, py = m.sessionView.toLayout(px, py)
-		// Spawn at the cursor, kept inside the content region.
 		x = min(px, leftMargin+contentWidth-width)
 		y = min(py, screenHeight-height)
 		return max(x, leftMargin), max(y, 0), width, height
@@ -583,25 +491,6 @@ func (m *OS) NewWindowPlacement() (x, y, width, height int) {
 	return x, y, width, height
 }
 
-// cascadeFrom returns the home slot, or the first free step along a short
-// diagonal from it when the home slot is already taken.
-//
-// Without it the placement is a pure function of the screen, so every floating
-// window opens at exactly the same rectangle and each one hides the last
-// completely: two panes exist, one is visible, and nothing on screen says
-// otherwise. It is reachable from an ordinary sequence: a window the daemon
-// created while nothing was attached is placed by the first client to see it,
-// and the next window opened takes the same slot. What it looks like is a
-// pane and its whole scrollback disappearing.
-//
-// Only an exact collision is stepped away from. Windows overlapping is what a
-// floating layout is, and a rule that kept looking for clear space would move
-// windows the user had deliberately arranged. What is ruled out is the one case
-// that carries no information at all: a window with no edge of its own showing.
-//
-// The walk is bounded and gives up back at the home slot. Past a handful of
-// windows the screen is the constraint rather than the offset, and marching off
-// the edge would trade one invisible pane for another.
 func (m *OS) cascadeFrom(homeX, homeY, width, height, leftMargin, contentWidth, screenHeight int) (x, y int) {
 	const (
 		stepX = 2
@@ -645,8 +534,6 @@ func (m *OS) cascadeFrom(homeX, homeY, width, height, leftMargin, contentWidth, 
 //
 // Every deliberate quit path routes through here so they cannot drift apart.
 func (m *OS) QuitSession() {
-	// Learn mode never quits, so it must not tear the panes down either. The
-	// tea.Quit that follows is turned into a note by FilterLearnMode.
 	if m.LearnMode {
 		return
 	}
@@ -689,31 +576,19 @@ func (m *OS) AddWindowIn(dir, name string, command ...string) *OS {
 	return m.addLocalWindow(dir, name, command)
 }
 
-// addDaemonWindow is AddWindowIn in a daemon session. sshFrom names a window
-// the daemon follows into ssh, empty for none; see ssh_split.go.
 func (m *OS) addDaemonWindow(dir, name, sshFrom string, command []string) *OS {
 	return m.addDaemonWindowWith(dir, name, sshFrom, command, false)
 }
 
-// addDaemonWindowWith is addDaemonWindow with keepOpen, which keeps the
-// window after command exits. See ExecuteCommandPayload.KeepOpen.
 func (m *OS) addDaemonWindowWith(dir, name, sshFrom string, command []string, keepOpen bool) *OS {
 	var args []string
 	if name != "" || len(command) > 0 {
-		// The name always travels when a command does, because the args are
-		// positional: name first, argv after.
 		args = append([]string{name}, command...)
 	}
-	// Inside a scratch group the window goes on the group's workspace,
-	// which is never the session's current one.
 	ws := 0
 	if m.InScratchView() {
 		ws = m.CurrentWorkspace
 	}
-	// A preselection belongs to the pane focused now, and the window it is
-	// for arrives later through a state sync. Record it for that sync the
-	// way a split key records its direction, and spend it here, so it
-	// applies once. See insertSyncedWindow.
 	if m.pendingSplitTarget == "" && m.PreselectionDir != layout.PreselectionNone {
 		if fw := m.GetFocusedWindow(); fw != nil {
 			m.pendingSplitDir = m.PreselectionDir
@@ -721,8 +596,6 @@ func (m *OS) addDaemonWindowWith(dir, name, sshFrom string, command []string, ke
 		}
 		m.PreselectionDir = layout.PreselectionNone
 	}
-	// The size the pane will be placed at, so the daemon starts its process
-	// at it. See newPaneBox. Zero when this client cannot tell.
 	cols, rows, _ := m.newPaneContentSize()
 	send := func() error {
 		if keepOpen && len(command) > 0 {
@@ -735,15 +608,11 @@ func (m *OS) addDaemonWindowWith(dir, name, sshFrom string, command []string, ke
 		m.windowIntentErr = err
 		m.CancelPendingSplit()
 	} else {
-		// From here until the daemon says what it did, this client does not
-		// know the session's window set, so the state it holds must not be
-		// pushed. See SyncStateToDaemon.
 		m.daemonWindowIntent = true
 	}
 	return m
 }
 
-// addLocalWindow is AddWindowIn when this client runs the pane itself.
 func (m *OS) addLocalWindow(dir, name string, command []string) *OS {
 	newID := createID()
 	title := fmt.Sprintf("Terminal %s", newID[:8])
@@ -751,22 +620,17 @@ func (m *OS) addLocalWindow(dir, name string, command []string) *OS {
 	m.LogInfo("Creating new window: %s (workspace %d)", title, m.CurrentWorkspace)
 
 	x, y, width, height := m.NewWindowPlacement()
-	// In a tiled layout the pane is born at its tile's size, so the process
-	// starts at the size it keeps. See newPaneBox. NewWindowIn gives the
-	// process the box less a border on each side.
 	if m.AutoTiling {
 		if cols, rows, ok := m.newPaneContentSize(); ok {
 			width, height = cols+2, rows+2
 		}
 	}
 
-	// Born with the host's cell, so the pixels set below change nothing and
-	// the shell is not signalled at the size it starts with.
 	caps := m.hostCaps()
 	window, err := terminal.NewWindowInCell(dir, newID, title, x, y, width, height, len(m.Windows), m.WindowExitChan, m.PTYDataChan, m.Settings.ScrollbackLines, caps.CellWidth, caps.CellHeight, command...)
 	if err != nil {
 		m.LogError("Failed to create window %s: %v", title, err)
-		return m // Failed to create window
+		return m
 	}
 
 	if caps.CellWidth > 0 && caps.CellHeight > 0 {
@@ -775,7 +639,6 @@ func (m *OS) addLocalWindow(dir, name string, command []string) *OS {
 
 	window.Workspace = m.CurrentWorkspace
 	window.CustomName = name
-	// A window made inside a scratch group joins the group.
 	if m.InScratchView() {
 		window.IsScratch = true
 		window.ScratchName = m.scratchViewName
@@ -791,34 +654,12 @@ func (m *OS) addLocalWindow(dir, name string, command []string) *OS {
 	m.LogInfo("Window created successfully: %s (ID: %s, total windows: %d)", title, newID[:8], len(m.Windows))
 	m.FireHook(hooks.AfterNewWindow, newID, title)
 
-	// In scrolling mode, add to layout BEFORE focusing so that
-	// ScrollingOnFocusChange can find the window's column.
 	if m.AutoTiling && m.UseScrollingLayout {
 		m.ScrollingOnWindowAdded(window)
 	}
 
-	// Placed before it is focused.
-	//
-	// Focusing hands a pane the workspace's zoom (see ZoomFollowsFocus), and
-	// the handover retiles. Retiling around a pane the tree has not been told
-	// about leaves that retile inserting it wherever its repair path can rather
-	// than where the block below is about to put it, and records its pre-zoom
-	// rectangle as the raw creation box it has not left yet.
-	//
-	// The repair path covers for both, so no test tells the two orders apart
-	// and this fixed nothing that was reported. It is here because a pane that
-	// is in the layout before anything asks the layout about it needs no
-	// covering for, which is one less thing depending on a repair.
-	//
-	// Auto-tile if in tiling mode
 	if m.AutoTiling {
-		// Set only here, immediately before the layout that consumes it, so an
-		// untiled session cannot leave the flag on a pane for whenever tiling is
-		// next turned on.
 		window.Opening = true
-		// Only BSP places a new pane by splitting the tree. The tree path
-		// ends in ApplyBSPLayout, so under master-stack it laid the panes
-		// out as BSP while the session still said master-stack.
 		if m.UseScrollingLayout || !m.UseBSPLayout {
 			m.TileAllWindows()
 		} else {
@@ -831,62 +672,23 @@ func (m *OS) addLocalWindow(dir, name string, command []string) *OS {
 		}
 	}
 
-	// Focus the new window, which will bring it to the front, and hand it the
-	// zoom if the workspace has one: a zoomed workspace shows one pane, and a
-	// new pane focused underneath somebody else's zoom is one you are typing
-	// into and cannot see.
 	m.FocusWindow(len(m.Windows) - 1)
-	// Opening a pane is asking for it, so the strip shows all of it. See
-	// adoptScrollStrip, which does the same for a pane the daemon opened.
 	m.RevealFocusedColumn()
 
 	return m
 }
 
-// applyStartupTiling puts the session into the tiling mode the user's [startup]
-// tiled asks for. The daemon builds every session with AutoTiling false and has
-// no access to the config, so the client is the only thing that can answer this,
-// and it has to answer it for every session it lands on rather than only the one
-// it booted into.
-//
-// Going through ToggleAutoTiling is deliberate: it builds the BSP tree, applies
-// the layout (so a window already placed at its floating box is retiled through
-// Window.Resize), and syncs the flag to the daemon rather than only flipping a
-// local field.
 func (m *OS) applyStartupTiling() {
 	if m.UserConfig == nil || !m.UserConfig.Startup.Tiled || m.AutoTiling {
 		return
 	}
-	// The first layout is placed, not animated. A pane that slides into its
-	// tile keeps its old size until the slide ends, and a shell that ran a
-	// command in that time read the old size: a popup's first
-	// command saw half the popup.
 	m.layoutInstant = true
 	defer func() { m.layoutInstant = false }()
-	// The scheme before the switch: ToggleAutoTiling builds the layout the
-	// current mode asks for, so choosing the mode afterwards would build a BSP
-	// tree and then throw it away. An unset or unknown name leaves the mode
-	// alone, which is BSP, the way ApplyLayoutModeName already handles it.
 	m.ApplyLayoutModeName(m.UserConfig.Startup.Layout)
 	m.ToggleAutoTiling()
 }
 
-// applyStartupPreferences runs the one-shot [startup] settings once the real
-// terminal size is known (on the first WindowSizeMsg). It opens a default
-// terminal window and/or enables tiling, but only for a session nobody has
-// arranged yet: attaching to a session that already has windows restores that
-// session's own layout from daemon state, and forcing a window or a tiling mode
-// on top of it would silently override the user's saved session.
-//
-// "Nobody has arranged it" is not the same as "it has no windows". The daemon
-// builds a detached session with one window of its own, and a client attaching
-// to it lands on a session that is brand new and already has a window, which
-// used to skip every [startup] setting the user had asked for. What tells the
-// two apart is whether any client ever placed those windows: see
-// sessionUnarranged.
 func (m *OS) applyStartupPreferences() {
-	// Asked for on the command line, so it holds for a session that is
-	// already arranged too, and without a config.
 	if m.forceTerminalMode {
 		m.pendingStartTerminalMode = true
 		m.maybeEnterPendingTerminalMode()
@@ -900,44 +702,23 @@ func (m *OS) applyStartupPreferences() {
 
 	s := m.UserConfig.Startup
 
-	// Enable tiling first. Doing it before the window is opened matters in a
-	// daemon session: the daemon owns window creation and only tiles the window
-	// it creates when the session's AutoTiling is already on, so the flag has to
-	// reach the daemon before the NewWindow request does.
 	m.applyStartupTiling()
 
-	// Open the first window through the same path the `n` key uses, so it is
-	// created, focused and (with tiling now on) tiled exactly like a manual one.
-	// Only when the session has none: the option opens the terminal a session
-	// starts without, and a session the daemon pre-populated already has it.
 	opened := s.OpenDefaultWindow && len(m.Windows) == 0
 	if opened {
 		m.AddWindow("")
 	}
 
-	// Start focused in terminal mode so the user can type into the shell straight
-	// away. This only makes sense with a window to type into: terminal mode with
-	// nothing focused is a dead end where keystrokes reach no terminal. On the
-	// local path AddWindow above already created and focused the window, so this
-	// enters terminal mode immediately. On the daemon path the window is created
-	// asynchronously and does not exist here yet; the entry is deferred until it
-	// arrives (see maybeEnterPendingTerminalMode), but only when a window was
-	// actually requested. With neither a focused window nor one on the way, the
-	// session is left in window-management mode.
 	if s.StartInTerminalMode && (opened || m.hasFocusedWindow()) {
 		m.pendingStartTerminalMode = true
 		m.maybeEnterPendingTerminalMode()
 	}
 }
 
-// hasFocusedWindow reports whether FocusedWindow points at a real window.
 func (m *OS) hasFocusedWindow() bool {
 	return m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows)
 }
 
-// maybeEnterPendingTerminalMode applies the deferred start_in_terminal_mode
-// startup preference once a window exists to focus. It is a no-op unless the
-// preference is still pending and a window is focused, and it fires at most once.
 func (m *OS) maybeEnterPendingTerminalMode() {
 	if !m.pendingStartTerminalMode || !m.hasFocusedWindow() {
 		return
@@ -974,15 +755,11 @@ func (m *OS) DeleteWindow(i int) *OS {
 		if err := m.DaemonClient.SendIntent("CloseWindow", windowID); err != nil {
 			m.LogError("Failed to ask the daemon to close window %s: %v", shortID(windowID), err)
 		} else {
-			// The same as opening one: the window set is the daemon's answer to
-			// give, and until it does the snapshot here still has the window in
-			// it. See SyncStateToDaemon.
 			m.daemonWindowIntent = true
 		}
 		return m
 	}
 
-	// Clean up window resources
 	deletedWindow := m.Windows[i]
 	wasZoomed := deletedWindow.Zoomed
 	deletedWasPopup := deletedWindow.IsPopup
@@ -991,7 +768,6 @@ func (m *OS) DeleteWindow(i int) *OS {
 	m.pipSourceClosed(deletedWindow)
 	m.LogInfo("Deleting window: %s (index: %d, ID: %s)", deletedWindow.Title(), i, shortID(deletedWindow.ID))
 
-	// In daemon mode, clean up daemon-managed PTY
 	if deletedWindow.DaemonMode && deletedWindow.PTYID != "" && m.DaemonClient != nil {
 		m.DaemonClient.UnsubscribePTY(deletedWindow.PTYID)
 		if err := m.DaemonClient.ClosePTY(deletedWindow.PTYID); err != nil {
@@ -999,13 +775,9 @@ func (m *OS) DeleteWindow(i int) *OS {
 		}
 	}
 
-	// Get the window int ID BEFORE deleting (for BSP tree removal), and the
-	// workspace it lived on: the pointer is cleared below, and the tree that has
-	// to lose its leaf is the window's own, not whichever one is on screen.
 	windowIntID := m.GetWindowIntID(deletedWindow.ID)
 	deletedWorkspace := deletedWindow.Workspace
 
-	// Clean up the BSP ID mapping
 	if m.WindowToBSPID != nil {
 		delete(m.WindowToBSPID, deletedWindow.ID)
 		if m.BSPIDToWindowID != nil {
@@ -1025,7 +797,6 @@ func (m *OS) DeleteWindow(i int) *OS {
 		}
 	}
 
-	// MultifocusSet is keyed by window ID, so removal is a plain delete.
 	if len(m.MultifocusSet) > 0 {
 		delete(m.MultifocusSet, deletedWindow.ID)
 		if len(m.MultifocusSet) == 0 {
@@ -1035,7 +806,6 @@ func (m *OS) DeleteWindow(i int) *OS {
 
 	deletedWindow.Close()
 
-	// Remove any animations referencing this window to prevent memory leaks
 	cleanedAnimations := make([]*ui.Animation, 0, len(m.Animations))
 	animsCleaned := 0
 	for _, anim := range m.Animations {
@@ -1054,7 +824,6 @@ func (m *OS) DeleteWindow(i int) *OS {
 	for j := range m.Windows {
 		if m.Windows[j].Z > movedZ {
 			m.Windows[j].Z--
-			// Invalidate cache for windows whose Z changed
 			m.Windows[j].InvalidateCache()
 		}
 	}
@@ -1063,41 +832,28 @@ func (m *OS) DeleteWindow(i int) *OS {
 	m.FocusHistory = session.RemoveFocus(m.FocusHistory, deletedWindow.ID)
 	m.closeStaleHints()
 
-	// Explicitly clear the deleted window pointer to help GC
 	deletedWindow = nil
 
 	m.LogInfo("Window deleted successfully (remaining windows: %d)", len(m.Windows))
 
-	// Update focused window index
 	if len(m.Windows) == 0 {
 		m.FocusedWindow = -1
 		m.LogInfo("No windows remaining, switching to window management mode")
-		// Reset to window management mode when no windows are left
 		m.ChooseMode(WindowManagementMode, ModeCauseNoPane)
 	} else if i < m.FocusedWindow {
 		m.FocusedWindow--
 	} else if i == m.FocusedWindow {
-		// If we deleted the focused window, find the next visible window to focus
 		m.FocusMostRecentVisibleWindow()
 	}
 
-	// Retile if in tiling mode
 	if m.AutoTiling {
 		if m.UseScrollingLayout {
-			// Scrolling mode: only touch the scrolling layout
 			if windowIntID > 0 {
 				m.ScrollingOnWindowRemoved(windowIntID)
 			}
 		} else {
-			// BSP/master-stack mode. A pane whose shell exits is swept up wherever
-			// it lives, so this is not always the workspace on screen; removing
-			// from the visible tree left the other workspace holding a tile for a
-			// window that was gone, and its next retile, finding an id it cannot
-			// place, discarded that whole layout and rebuilt a default one.
 			if owner := m.WorkspaceTrees[deletedWorkspace]; owner != nil && windowIntID > 0 {
 				owner.RemoveWindow(windowIntID)
-				// A stack that lost its open pane opens its next member,
-				// which the retile below gives a tile.
 				m.openOrphanStacks()
 				m.LogInfo("BSP: Removed window from the workspace %d tree, which now has %d windows",
 					deletedWorkspace, owner.WindowCount())
@@ -1107,11 +863,6 @@ func (m *OS) DeleteWindow(i int) *OS {
 				}
 			}
 
-			// Place what is left through the one path that knows which tiler is
-			// active. Applying the BSP layout directly when a tree happened to
-			// exist laid the panes out with that tree even in master-stack mode,
-			// so the retile that followed moved every one of them again: two
-			// sizes announced for one close, and a guest repaints on each.
 			hasVisibleInWorkspace := false
 			for _, w := range m.Windows {
 				if w.Workspace == m.CurrentWorkspace && !w.Minimized {
@@ -1125,8 +876,6 @@ func (m *OS) DeleteWindow(i int) *OS {
 		}
 	}
 
-	// The person was working zoomed, so the zoom goes to the pane that took
-	// the focus.
 	if wasZoomed && !deletedWasPopup {
 		if fw := m.GetFocusedWindow(); fw != nil && !fw.IsPopup && !fw.Zoomed {
 			m.settleSizes(func() {
@@ -1140,7 +889,6 @@ func (m *OS) DeleteWindow(i int) *OS {
 		}
 	}
 
-	// Sync state to daemon after window deletion
 	m.SyncStateToDaemon()
 
 	return m
@@ -1164,7 +912,6 @@ func (m *OS) FocusMostRecentVisibleWindow() {
 // GetFocusedWindow returns the currently focused window.
 func (m *OS) GetFocusedWindow() *terminal.Window {
 	if len(m.Windows) > 0 && m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
-		// Only return the focused window if it's in the current workspace
 		if m.Windows[m.FocusedWindow].Workspace == m.CurrentWorkspace {
 			return m.Windows[m.FocusedWindow]
 		}

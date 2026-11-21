@@ -8,8 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// listingOf builds a client whose cached listing is one session holding the
-// given windows, which is what a complete refresh leaves behind.
 func listingOf(name string, ids ...string) *session.TUIClient {
 	c := session.NewTUIClient()
 	windows := make([]session.WindowSummary, 0, len(ids))
@@ -91,8 +89,7 @@ func TestPruneRefusesAnotherDaemonsState(t *testing.T) {
 			"w1":      SlotAccent(2),
 			"foreign": SlotAccent(3),
 		},
-		SidebarAgentSeen: map[string]bool{"foreign": true},
-		// A socket no run of this test could be talking to.
+		SidebarAgentSeen:   map[string]bool{"foreign": true},
 		sidebarStateSocket: "/nonexistent/other-daemon.sock",
 	}
 
@@ -134,8 +131,6 @@ func TestClientWindowStateDoesNotOutliveTheWindows(t *testing.T) {
 		m.markAgentSeen(w.ID)
 	}
 
-	// A local close, then a close pushed by the daemon, which is the only
-	// teardown a daemon session performs.
 	m.DeleteWindow(2)
 	if err := m.ApplyStateSync(&session.SessionState{
 		Name:            "s",
@@ -148,8 +143,6 @@ func TestClientWindowStateDoesNotOutliveTheWindows(t *testing.T) {
 		t.Fatalf("windows = %d, want only w1", len(m.Windows))
 	}
 
-	// The next session-list refresh sees the closes, and the tick that drives it
-	// is where the client's window-keyed state is reconciled.
 	m.DaemonClient.UpdateSessionCache([]session.SessionInfo{
 		{Name: "s", WindowCount: 1, Windows: []session.WindowSummary{{ID: "w1"}}},
 	})

@@ -9,7 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
-// syncWindow builds a window state the daemon would push, without a PTY.
 func syncWindow(id string) session.WindowState {
 	return session.WindowState{
 		ID: id, PTYID: "pty-" + id, Title: id,
@@ -17,9 +16,6 @@ func syncWindow(id string) session.WindowState {
 	}
 }
 
-// osWithWindow builds a model holding one window that a sync can then remove.
-// It deliberately does not go through AddWindow: in a daemon session that sends
-// an intent and creates nothing locally, which is the behavior under test.
 func osWithWindow(t *testing.T, id string) (*OS, *terminal.Window) {
 	t.Helper()
 	m := NewOS(OSOptions{})
@@ -44,7 +40,6 @@ func osWithWindow(t *testing.T, id string) (*OS, *terminal.Window) {
 func TestSyncCloseReleasesWindowReferences(t *testing.T) {
 	m, w := osWithWindow(t, "doomed")
 
-	// Give the window everything a live one accumulates.
 	intID := m.GetWindowIntID(w.ID)
 	if intID == 0 {
 		t.Fatal("window was not assigned a BSP id")
@@ -52,7 +47,6 @@ func TestSyncCloseReleasesWindowReferences(t *testing.T) {
 	m.Animations = []*ui.Animation{{Window: w}}
 	m.MultifocusSet = map[string]bool{w.ID: true}
 
-	// The daemon says the window is gone.
 	if err := m.ApplyStateSync(&session.SessionState{
 		Name: "s", CurrentWorkspace: 1, Windows: nil,
 	}); err != nil {
@@ -110,13 +104,8 @@ func TestSyncPlacesUnplacedWindow(t *testing.T) {
 
 	ws := syncWindow("fresh")
 	ws.Unplaced = true
-	// The nominal box the daemon sends is the whole session, which is exactly
-	// what must not end up on screen.
 	ws.X, ws.Y, ws.Width, ws.Height = 0, 0, 100, 40
 
-	// Asked for before the sync, not after. NewWindowPlacement steps away from
-	// a slot that is already taken, so asking once the window is placed answers
-	// for the window after this one.
 	wantX, wantY, wantW, wantH := m.NewWindowPlacement()
 
 	if err := m.ApplyStateSync(&session.SessionState{

@@ -15,9 +15,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// daemonClientHandlers lists the TUIClient's session-wide callbacks by
-// reflection: every On* method that takes one handler. The per-PTY ones take a
-// PTY id first and are registered per window elsewhere.
 func daemonClientHandlers(t *testing.T) []string {
 	t.Helper()
 	typ := reflect.TypeFor[*session.TUIClient]()

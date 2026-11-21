@@ -18,7 +18,6 @@ func TestSidebarFocusResolvesByID(t *testing.T) {
 	c := &terminal.Window{ID: "c"}
 	m := &OS{Settings: config.Global, Windows: []*terminal.Window{a, b, c}, FocusedWindow: 0}
 
-	// The rail drew B at index 1. A exits before the click lands.
 	hit := sidebarRowHit{Kind: sidebarRowWindow, WindowID: "b", WindowIndex: 1}
 	m.Windows = []*terminal.Window{b, c}
 

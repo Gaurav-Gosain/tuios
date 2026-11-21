@@ -10,7 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// notifTestOS is an OS wide enough to draw a dock, with nothing else on it.
 func notifTestOS(t testing.TB, width int) *OS {
 	t.Helper()
 	win := newTestWindow(t, "notif-render-0001", 60, 20)
@@ -21,10 +20,6 @@ func notifTestOS(t testing.TB, width int) *OS {
 	return m
 }
 
-// notifWidths are the widths every geometry assertion is run at. 80 is there
-// because that is where the dock is tight enough for the message and the mode
-// pill to be fighting over the same columns, which is where the old renderer's
-// after-the-fact clamp did its damage.
 var notifWidths = []int{40, 60, 80, 100, 120, 200}
 
 // TestNotificationBlockStaysInsideItsBudget is the geometry contract.
@@ -68,8 +63,6 @@ func TestNotificationBlockStaysInsideItsBudget(t *testing.T) {
 	}
 }
 
-// dockRows splits a drawn dock into its hairline row and its content row,
-// whichever way round the bar is configured.
 func dockRows(t *testing.T, dock string) (hairline, content string) {
 	t.Helper()
 	rows := strings.Split(dock, "\n")
@@ -82,10 +75,6 @@ func dockRows(t *testing.T, dock string) (hairline, content string) {
 	return rows[0], rows[1]
 }
 
-// notifBurnSpan is the stretch of the drawn hairline carrying the burn stroke,
-// as [x0, x1). Read off the frame rather than off the block, which is the whole
-// point: the two used to be a session strip's width apart and every measurement
-// taken from the block itself agreed with the block.
 func notifBurnSpan(t *testing.T, hairline string) (int, int) {
 	t.Helper()
 	stroke := []rune(config.Global.GetNotificationRule(config.NotificationRuleHeavy))[0]
@@ -108,7 +97,6 @@ func notifBurnSpan(t *testing.T, hairline string) (int, int) {
 	return x0, x1
 }
 
-// cellsFrom is what a plain row shows from an absolute column onwards.
 func cellsFrom(plain string, col int) string {
 	x := 0
 	for i, r := range plain {
@@ -137,8 +125,6 @@ func TestNotificationBurnSitsUnderItsOwnBlock(t *testing.T) {
 	for _, width := range []int{80, 120, 200} {
 		for _, message := range messages {
 			m := notifTestOS(t, width)
-			// An error is sticky, so the whole span is lit and the burn's extent
-			// is the block's extent exactly.
 			m.ShowNotification(message, "error", m.Settings.NotificationDuration)
 
 			dock, _ := m.renderDockString()
@@ -154,14 +140,11 @@ func TestNotificationBurnSitsUnderItsOwnBlock(t *testing.T) {
 					width, lipgloss.Width(message), x0, x1, z.X0, z.X1)
 			}
 
-			// The recorded rect is the block's real place on the row below, so
-			// the two assertions above are about the same thing the user sees.
 			if got := cellsFrom(stripANSIForTrace(content), z.X0); !strings.HasPrefix(got, notifCap("error", &m.Settings)) {
 				t.Errorf("width %d: column %d of the bar reads %q, want the block's opening cap",
 					width, z.X0, cellsFrom(got, 0))
 			}
 
-			// And nothing else is under it.
 			for _, h := range m.dockSessionHits {
 				if h.X0 < x1 && x0 < h.X1 {
 					t.Errorf("width %d: the burn [%d,%d) runs under a session control [%d,%d)",
@@ -239,7 +222,6 @@ func TestNotificationOutranksCopyModeHelp(t *testing.T) {
 		t.Errorf("the help line should give the block up for a live message: %q", plain)
 	}
 
-	// And it comes back when the message goes.
 	m.DismissNotifications()
 	dock, _ = m.renderDockString()
 	if !strings.Contains(stripANSIForTrace(dock), "hjkl") {

@@ -5,22 +5,6 @@ import (
 	"testing"
 )
 
-// Benchmarks do not fail a build, so they cannot stop a performance
-// regression from being merged. These guards do: they pin the allocation
-// count of the render hot paths with testing.AllocsPerRun, which is
-// deterministic in a way wall time is not, so they hold up on a loaded
-// machine where a timing assertion would flake.
-//
-// Each ceiling below is the measured count plus a small margin. When one
-// trips, the fix is to find the new allocation, not to raise the number: the
-// counts here are the ones the paths were profiled at, and per-frame
-// allocation was a recurring finding in review.
-
-// skipAllocCountsUnderRace skips a test that asserts an allocation count when
-// the binary was built with -race. There sync.Pool drops a share of what is put
-// back on purpose, so a path that is allocation free through a pool allocates
-// on some calls, and the count varies from run to run. See
-// race_enabled_test.go.
 func skipAllocCountsUnderRace(t *testing.T) {
 	t.Helper()
 	if raceEnabled {
@@ -28,13 +12,9 @@ func skipAllocCountsUnderRace(t *testing.T) {
 	}
 }
 
-// allocsAtMost runs fn under testing.AllocsPerRun and fails when it allocates
-// more than limit times per call.
 func allocsAtMost(t *testing.T, name string, limit float64, fn func()) {
 	t.Helper()
 	skipAllocCountsUnderRace(t)
-	// One warm-up call outside the measurement so first-call lazy setup (style
-	// cache fill, builder pool priming) is not charged to the average.
 	fn()
 	got := testing.AllocsPerRun(50, fn)
 	if got > limit {
@@ -53,7 +33,6 @@ func TestRenderCachedPathIsAllocationFree(t *testing.T) {
 	win := benchWindow(t, "guard-cached", realCols, realRows)
 	m := newTestOS(win)
 
-	// Prime the cache.
 	win.MarkContentDirty()
 	if got := m.renderTerminal(win, false, false); got == "" {
 		t.Fatal("priming render returned empty content")
@@ -121,8 +100,6 @@ func TestLineWidthFastPathCoversRenderedFrames(t *testing.T) {
 		t.Errorf("measuring a rendered frame fell back to the reference implementation %d times, want 0", n)
 	}
 
-	// The fallback must still be reachable, otherwise the counter is proving
-	// nothing and the non-ASCII correctness path has been lost.
 	before = LineWidthFallbackCount()
 	if got, want := lineWidth("日本語"), 6; got != want {
 		t.Errorf("lineWidth(CJK) = %d, want %d", got, want)
@@ -139,12 +116,10 @@ func TestLineWidthFastPathCoversRenderedFrames(t *testing.T) {
 func TestClipWindowContentAllocations(t *testing.T) {
 	frame := renderedFrame(t, realCols, realRows)
 
-	// strings.Split of the frame plus the join of the result.
 	allocsAtMost(t, "clipWindowContent/fully-visible", 3, func() {
 		_, _, _ = clipWindowContent(frame, 0, 0, realCols, realRows)
 	})
 
-	// Rejected on the cheap axes before the width scan, so only the split.
 	allocsAtMost(t, "clipWindowContent/offscreen-right", 2, func() {
 		_, _, _ = clipWindowContent(frame, realCols+10, 0, realCols, realRows)
 	})
@@ -229,9 +204,6 @@ func TestCompositorSkipsCleanWindows(t *testing.T) {
 		w.MarkContentDirty()
 	}
 	_ = oneDirty.GetCanvas(false)
-	// The last window, not the first: benchOS focuses window 0, and the
-	// focused pane is drawn by a different and costlier path than the other
-	// eight, so it would compare one kind of pane against a mix.
 	dirtyOne := testing.AllocsPerRun(10, func() {
 		oneDirty.Windows[windows-1].MarkContentDirty()
 		_ = oneDirty.GetCanvas(false)
@@ -248,13 +220,6 @@ func TestCompositorSkipsCleanWindows(t *testing.T) {
 			dirtyOne, windows, dirtyAll)
 	}
 
-	// A single dirty pane out of nine should add well under half of what a
-	// full redraw adds. Anything approaching the full cost means the cache
-	// is being missed for reasons other than damage. The comparison is of
-	// what each adds over a compose with nothing dirty, because the frame
-	// has a fixed cost that damage tracking does not touch: once a dirty
-	// pane got cheap to render, that floor was most of both totals and a
-	// ratio of totals no longer said anything about skipped windows.
 	if dirtyOne-dirtyNone > (dirtyAll-dirtyNone)/2 {
 		t.Errorf("one dirty window adds %.0f allocs over a clean frame against %.0f for all %d: damage tracking is not limiting work as expected",
 			dirtyOne-dirtyNone, dirtyAll-dirtyNone, windows)

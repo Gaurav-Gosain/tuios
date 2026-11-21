@@ -29,7 +29,6 @@ func TestPaletteReachesASettingByName(t *testing.T) {
 		if got[0].Shortcut != "Backgrounds" {
 			t.Errorf("the row names tab %q, want Backgrounds", got[0].Shortcut)
 		}
-		// The highlight is on the name as drawn, never past its end.
 		for _, p := range got[0].Match {
 			if p < 0 || p >= len(got[0].Name) {
 				t.Errorf("%q lights byte %d of %q", q, p, got[0].Name)

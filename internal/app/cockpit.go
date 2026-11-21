@@ -19,23 +19,6 @@ import (
 	"tuios.dev/loom"
 )
 
-// The cockpit is the Inbox drawn as one full-screen surface on ctrl+b i: a
-// fleet of every agent grouped by what it needs from the person, and a focus
-// area that draws the selected agent's work. The attention items are the
-// fleet's Needs you group, so the queue and the agents are one list.
-//
-// It keeps the Inbox's state machine. Every answer, dismiss, snooze, peek and
-// reply runs through the same functions the old panel called, on the item or
-// agent under the cockpit's cursor. Before a key runs, cockpitSync points the
-// Inbox's own cursors at that row, so a key never acts on a row the person
-// cannot see.
-//
-// Cost: the fleet is rebuilt only when the rail's signature, the Inbox or the
-// cockpit's own state changes, and the frame is kept until any of them does.
-// Nothing polls. The one timer is the minute tick that moves the ages on,
-// armed only while the cockpit is open. Closed, it costs nothing.
-
-// The fleet's groups, in the order they are drawn.
 const (
 	ckNeeds = iota
 	ckReview
@@ -46,23 +29,14 @@ const (
 	ckGroups
 )
 
-// ckGroupTitles names each group, as its heading says it.
 var ckGroupTitles = [ckGroups]string{"Needs you", "Ready for review", "Working", "Idle", "Settled", "Snoozed"}
 
-// ckSettleAfter is how long an agent rests before it goes to Settled by
-// itself. The person settles one at once with D (cockpit_settle.go).
 const ckSettleAfter = time.Hour
 
-// ckFoldAt is how many rows a group keeps when the list is taller than its
-// column. Needs you never folds.
 const ckFoldAt = 8
 
-// ckChildMax is how many subagent rows an agent shows under it.
 const ckChildMax = 3
 
-// ckHold is how long an agent's new group must last before its row moves
-// there, so a hook that flips working, needs you, working in a moment does
-// not move the row twice.
 const ckHold = 400 * time.Millisecond
 
 type ckRowKind uint8
@@ -76,63 +50,39 @@ const (
 	ckRowGap
 	ckRowNote
 	ckRowFan
-	// ckRowCard is a task card on the board (cockpit_board.go).
 	ckRowCard
-	// ckRowBand heads the rows of one session, machine or project when
-	// the list is grouped by one (cockpit_groupby.go).
 	ckRowBand
 )
 
-// ckRow is one row of the fleet.
 type ckRow struct {
-	kind  ckRowKind
-	group int
-	// count is a heading's count, and how many rows a "more" row stands
-	// for.
-	count int
-	// agent indexes the cockpit's agents, -1 for a row with no agent. A
-	// card's agent is its holder.
-	agent int
-	// card indexes the cockpit's cards, for a card row.
+	kind    ckRowKind
+	group   int
+	count   int
+	agent   int
 	card    int
 	item    session.AttentionItem
 	hasItem bool
 	child   sessiontree.Subagent
 	last    bool
-	// attempt marks an agent row drawn as one attempt under its fan's row.
 	attempt bool
 	note    string
 	key     string
-	// lines is how many lines the row takes.
-	lines int
-	// folded marks the heading of a folded group, and hidden holds the
-	// rows the fold hides, for the marks on the heading and the focus.
-	folded bool
-	hidden []ckRow
-	// title names a band's heading.
-	title string
-	// rest lets the cursor rest on a heading: a column of the board's
-	// columns that shows no card.
-	rest bool
-	// inline marks a row drawn on one line for want of room whose second
-	// line goes on that line, after the name.
-	inline bool
+	lines   int
+	folded  bool
+	hidden  []ckRow
+	title   string
+	rest    bool
+	inline  bool
 }
 
-// selectable reports whether the row is an agent's, an item's or a card's:
-// a row the keys act on.
 func (r ckRow) selectable() bool {
 	return r.kind == ckRowAgent || r.kind == ckRowItem || r.kind == ckRowCard
 }
 
-// cursorable reports whether the cursor can rest on the row: a selectable
-// row, or the heading of a folded group, so a key can open it again.
 func (r ckRow) cursorable() bool {
 	return r.selectable() || r.kind == ckRowHead && (r.folded || r.rest)
 }
 
-// cursorOn reports whether r is the row the cursor is on, by its key or its
-// agent.
 func (ck *cockpitState) cursorOn(r ckRow, list []sidebarAgentEntry) bool {
 	if ck.key != "" && r.key == ck.key {
 		return true
@@ -140,298 +90,145 @@ func (ck *cockpitState) cursorOn(r ckRow, list []sidebarAgentEntry) bool {
 	return ck.akey != "" && r.agent >= 0 && r.agent < len(list) && agentKey(list[r.agent]) == ck.akey
 }
 
-// cockpitState is the cockpit's own state, beside the Inbox's.
 type cockpitState struct {
-	// hostPal is the palette on a light host with no theme
-	// (cockpitPalette).
-	hostPal ckHostPal
-	// region has the keys (see cockpit_regions.go), and regionBox is where
-	// the last frame drew each region.
-	region    ckRegion
-	regionBox [ckRegions]ckRegionBox
-	// listWidth is the list width in cells the person chose (0: none),
-	// sideHidden hides the side column, zoom shows the focused region
-	// alone, and div is the edge of the list a drag resizes. See
-	// cockpit_layout.go.
-	listWidth  int
-	sideHidden bool
-	// groupBy groups the list by session, machine or project, "" by state.
-	// See cockpit_groupby.go.
-	groupBy string
-	// menu is the open dropdown, nil when none is, and anchors are where
-	// the header drew the controls that open one. See cockpit_menu.go.
-	menu    *ckMenu
-	anchors map[string]ckAnchor
-	// ship is Ready to merge on a card in review, nil when it is closed.
-	ship *ckShip
-	zoom bool
-	// zoomTook says the zoom moved the keys from the list to the focus,
-	// for a plan, so the end of the zoom gives them back.
-	zoomTook bool
-	div      ckDivider
-	// key is the selected row, and akey its agent, so the cursor stays on
-	// an agent whose approval was answered and whose row key changed.
-	key, akey string
-	idx       int
-	// hover is the row under the pointer. It lights the row and selects
-	// nothing.
-	hover string
-	// scroll is the first fleet line drawn. follow says to bring the
-	// cursor's row into view; the wheel turns it off until the cursor moves.
-	scroll int
-	follow bool
-	// folded groups show their heading only; opened ones show every row
-	// when the list folds long groups. foldSet says the person chose the
-	// fold, with F or a click; a group without a choice takes its default
-	// from [agents] fold_working (ckGroupFolded). The choices are kept in
-	// the state file (sidebar_state.go).
-	folded, opened, foldSet [ckGroups]bool
-	// pins are the agents the person pinned with P, by ckPinKey. A pinned
-	// row comes first in its group. The pins are kept in the state file.
-	pins map[string]bool
-	// needsOnly is the f filter: the Needs you group alone, which is the
-	// old flat Inbox.
-	needsOnly bool
-	// chip is the header count a click chose: its state group alone in the
-	// list (1 + the group, 0 for none). Idle keeps Settled with it.
-	chip int
-	// groupN is each group's count of rows before the chip filters them,
-	// which the header's counts say, so every chip stays to click.
-	groupN [ckGroups]int
-	// The layout the rows were last built for.
-	colH    int
-	oneLine bool
-	agents  []sidebarAgentEntry
-	// branches are the worktree sessions' records, by host and session,
-	// read for the rail signature branchesAt.
-	branches   map[string]ckWorktree
-	branchesAt uint64
-	// machines counts the agents on each machine, by host, "" for this
-	// one, from the last list no selector or search narrowed.
-	machines map[string]int
-	// tall is how many lines the fleet takes with two-line rows, whatever
-	// it is drawn with, so the choice of one-line rows does not feed back
-	// into itself.
-	tall   int
-	rows   []ckRow
-	rowsAt ckRowsKey
-	// hits are the click targets of the last frame.
-	hits []ckHit
-	// code is where the last frame drew the thread's lines, for the wheel
-	// and the keys that scroll a code block sideways.
-	code ckCodeView
-	// lastClick and lastClickKey find a double-click.
-	lastClick    time.Time
-	lastClickKey string
-	// frame is the last frame drawn, and frameAt what it was drawn from.
-	frame   string
-	frameAt ckFrameKey
-	// liveID is the live pane, and live its last rows as last read, for
-	// liveCols by liveRows; liveDirty says the pane had output since.
-	liveID             string
-	live               string
-	liveCols, liveRows int
-	liveDirty          bool
-	// liveGen counts the live box's new reads, for the frame key; liveTick
-	// paces them. liveShown says the last frame drew the box. liveOwned
-	// says the view subscribed the live pane, and livePrime counts the
-	// primes asked for, so one the cursor left is dropped.
+	hostPal                      ckHostPal
+	region                       ckRegion
+	regionBox                    [ckRegions]ckRegionBox
+	listWidth                    int
+	sideHidden                   bool
+	groupBy                      string
+	menu                         *ckMenu
+	anchors                      map[string]ckAnchor
+	ship                         *ckShip
+	zoom                         bool
+	zoomTook                     bool
+	div                          ckDivider
+	key, akey                    string
+	idx                          int
+	hover                        string
+	scroll                       int
+	follow                       bool
+	folded, opened, foldSet      [ckGroups]bool
+	pins                         map[string]bool
+	needsOnly                    bool
+	chip                         int
+	groupN                       [ckGroups]int
+	colH                         int
+	oneLine                      bool
+	agents                       []sidebarAgentEntry
+	branches                     map[string]ckWorktree
+	branchesAt                   uint64
+	machines                     map[string]int
+	tall                         int
+	rows                         []ckRow
+	rowsAt                       ckRowsKey
+	hits                         []ckHit
+	code                         ckCodeView
+	lastClick                    time.Time
+	lastClickKey                 string
+	frame                        string
+	frameAt                      ckFrameKey
+	liveID                       string
+	live                         string
+	liveCols, liveRows           int
+	liveDirty                    bool
 	liveGen, liveTick, livePrime uint64
-	// primeID is the pane the prime timer is for, and primeTimer the one
-	// timer, moved on every step of the cursor.
-	primeID              string
-	primeTimer           *time.Timer
-	liveShown, liveOwned bool
-	// cpWant says a frame drew checkpoints read for an older state.
-	cpWant bool
-	// cps are the agents' checkpoints, by agent.
-	cps map[string]*ckCheckpoints
-	// img is the image view, nil when it is not up.
-	img *ckImageView
-	// tab is the focus tab by name, so it stays put when the tabs change
-	// with the screen's width or the agent: Thread, Changes, Checkpoints,
-	// Pane. A name the row has not is its first tab.
-	tab string
-	// dv is the diff theme the thread's cards draw with, for dvKey.
-	dv    *diffview.Theme
-	dvKey string
-	// cardRoom is how many detail lines the item card showed whole in the
-	// last frame. A plan is read to its end only when its last line fit.
-	cardRoom int
-	// gen counts changes of the state above, for the frame key. rowsGen
-	// counts the changes that move rows: folds, filters, a held group let
-	// go. A cursor move or a hover changes gen alone.
-	gen, rowsGen uint64
-	// pending is the item to put the cursor on once the rows hold it: an
-	// item a notification link or a question's pop opened the view on.
-	pending string
-	// fleetW is the fleet column's width in the last frame, 0 when the
-	// fleet was not drawn.
-	fleetW int
-	// placed is the group each agent's row is drawn in, and the group it
-	// is moving to. holdUntil is when the next held move is due.
-	placed    map[string]ckPlaced
-	holdUntil time.Time
-	holdTimer *time.Timer
-	// back is where the cursor was when ctrl+] left for a pane, for the
-	// view to open on again. Nil once used.
-	back *ckBack
-	// jumps are the threads a jump from a message card left, newest last,
-	// for the back key; seen are the agents the fleet has listed, kept
-	// after they close so a card can name one. See cockpit_thread_mail.go.
-	jumps []ckJump
-	seen  map[string]ckSeenAgent
-	// talk is the Talked with line's agents as last worked out, and
-	// talkShown how many chips the header had room for. See
-	// cockpit_talked.go.
-	talk      ckTalkCache
-	talkShown int
-	// look is the palette the frames are drawn with, and lookAt what it
-	// was built from. canvas is the grid kept from frame to frame.
-	look   ckLook
-	lookAt ckLookKey
-	// lookGen counts the looks built, for the keys of what is drawn with
-	// one.
-	lookGen uint64
-	canvas  *ckCanvas
-	// canvasTop is the screen row of the canvas's first row. linkHover is
-	// the link under the pointer, and linkPointX, linkPointY where the
-	// pointer was. See cockpit_links.go.
-	canvasTop              int
-	linkHover              ckLinkRun
-	linkPointX, linkPointY int
-	// codeWrap wraps the long lines of the thread's code blocks, W, for as
-	// long as the client runs.
-	codeWrap bool
-	// linkPress is the link a press in the view was on, which opens when
-	// the button goes up on it. See cockpit_links.go.
-	linkPress string
-	// mouse is a press in the thread and the selection it makes. See
-	// cockpit_mouse.go.
-	mouse CopyMouseGesture
-	// lastTop is the layer CockpitTop gave after the last message, for the
-	// verbose log of its changes (cockpit_layers.go).
-	lastTop CockpitLayer
-	// replyCheck says the rows moved the cursor, so the reply editor is
-	// checked against the row after the message.
-	replyCheck bool
-	// edW is the width the reply editor was last drawn at.
-	edW int
-	// cutKey is the held approval or question the card could not show
-	// whole, by inboxShownKey. Its keys are refused with a word.
-	cutKey string
-	// folders counts the agents at work in each folder, by machine and
-	// path, from the list the rows were built from (ckActiveFolders).
-	folders map[string]int
-	// spawn is the open spawn sheet, and spawnDraft a closed one kept for
-	// the next n. spawnGen counts openings, and spawnLast is the agent the
-	// last Start used. See cockpit_spawn.go.
-	spawn, spawnDraft *spawnSheet
-	spawnGen          uint64
-	spawnLast         string
-	spawnPreset       *spawnPreset
-	// spawnBg is the dimmed cockpit under the sheet, and spawnBgAt the
-	// frame it was drawn from, so a key typed on the sheet does not draw
-	// the cockpit again. spawnFade holds the faded colours.
-	spawnBg   []uv.Line
-	spawnBgAt ckFrameKey
-	spawnFade map[color.Color]color.Color
-	// cmp is the open comparison of a fan's attempts, nil when it is not up.
-	// See cockpit_compare.go.
-	cmp *ckCompare
-	// art is the Artifacts tab. See cockpit_artifacts.go.
-	art ckArtState
-	// board says the fleet column groups the cards by stage. cards are
-	// every card the daemon listed, by session then number, and cardsGen
-	// counts their changes. noBoard says the daemon is older than the
-	// board, and boardErr why it refused to list the cards otherwise.
-	// boardFolded flips a stage's fold (Done starts folded), and boardOpened
-	// shows every row of a long one, by stage. card is the Card tab's
-	// detail, and cardWant says a frame drew it stale. farCards are the
-	// project cards of the linked machines, read when the board opens, and
-	// a part of cards too. See cockpit_board.go.
-	board                    bool
-	cards                    []session.TaskRow
-	farCards                 []session.TaskRow
-	cardsGen                 uint64
-	noBoard                  bool
-	boardErr                 string
-	boardFolded, boardOpened map[string]bool
-	card                     *ckTaskDetail
-	cardWant                 bool
-	// held indexes the cards by their holder, session and window, built
-	// once per cardsGen (heldGen). stages is [tasks] stages joined, once
-	// per config (stagesCfg).
-	held    map[string][]session.TaskRow
-	heldGen uint64
-	// cardKeys is each card's row key, built once per cardsGen
-	// (cardKeysGen).
-	cardKeys    []string
-	cardKeysGen uint64
-	stages      string
-	stagesCfg   *config.UserConfig
-	// boardList says the person chose the board's list over its columns.
-	// kb is the columns' own state. See cockpit_kanban.go.
-	boardList bool
-	kb        ckKanban
-	// dispatch is the task dispatch status, read when the board opens and
-	// kept by the task-dispatch events; dispatchBoard is the board the
-	// header names, and dispatchBusy a change in flight. See
-	// cockpit_dispatch.go.
-	dispatch      *session.DispatchStatus
-	dispatchBoard string
-	dispatchBusy  bool
-	// listMode is the list layout the person chose with the list key: one
-	// of the [agents] view_list values, and "" for no choice, where the
-	// config decides. It is kept in the state file. stripShown says the last
-	// frame folded the list into the strip, which the key turns around.
-	listMode   string
-	stripShown bool
-	// sideRoom and focusShown are the last frame's room for the side column
-	// and whether it laid out the focus, read by the keys. focusShown stays
-	// true when a region is zoomed. Both are true on a frame that returns
-	// before the room is measured (the board, the empty view, the image view).
-	sideRoom, focusShown bool
-	// layoutRefused is the layout action whose key was just refused, "" for
-	// none. The key bar says why until the next action.
-	layoutRefused string
+	primeID                      string
+	primeTimer                   *time.Timer
+	liveShown, liveOwned         bool
+	cpWant                       bool
+	cps                          map[string]*ckCheckpoints
+	img                          *ckImageView
+	tab                          string
+	dv                           *diffview.Theme
+	dvKey                        string
+	cardRoom                     int
+	gen, rowsGen                 uint64
+	pending                      string
+	fleetW                       int
+	placed                       map[string]ckPlaced
+	holdUntil                    time.Time
+	holdTimer                    *time.Timer
+	back                         *ckBack
+	jumps                        []ckJump
+	seen                         map[string]ckSeenAgent
+	talk                         ckTalkCache
+	talkShown                    int
+	look                         ckLook
+	lookAt                       ckLookKey
+	lookGen                      uint64
+	canvas                       *ckCanvas
+	canvasTop                    int
+	linkHover                    ckLinkRun
+	linkPointX, linkPointY       int
+	codeWrap                     bool
+	linkPress                    string
+	mouse                        CopyMouseGesture
+	lastTop                      CockpitLayer
+	replyCheck                   bool
+	edW                          int
+	cutKey                       string
+	folders                      map[string]int
+	spawn, spawnDraft            *spawnSheet
+	spawnGen                     uint64
+	spawnLast                    string
+	spawnPreset                  *spawnPreset
+	spawnBg                      []uv.Line
+	spawnBgAt                    ckFrameKey
+	spawnFade                    map[color.Color]color.Color
+	cmp                          *ckCompare
+	art                          ckArtState
+	board                        bool
+	cards                        []session.TaskRow
+	farCards                     []session.TaskRow
+	cardsGen                     uint64
+	noBoard                      bool
+	boardErr                     string
+	boardFolded, boardOpened     map[string]bool
+	card                         *ckTaskDetail
+	cardWant                     bool
+	held                         map[string][]session.TaskRow
+	heldGen                      uint64
+	cardKeys                     []string
+	cardKeysGen                  uint64
+	stages                       string
+	stagesCfg                    *config.UserConfig
+	boardList                    bool
+	kb                           ckKanban
+	dispatch                     *session.DispatchStatus
+	dispatchBoard                string
+	dispatchBusy                 bool
+	listMode                     string
+	stripShown                   bool
+	sideRoom, focusShown         bool
+	layoutRefused                string
 }
 
-// ckBack is the cursor and the scroll to open the view on again.
 type ckBack struct {
 	key, akey string
 	scroll    int
 }
 
-// ckPlaced is the group an agent's row is in, and the group its state asks
-// for since when.
 type ckPlaced struct {
 	shown, want int
 	since       time.Time
 }
 
-// ckRowsKey is what the fleet's rows were built from.
 type ckRowsKey struct {
-	list       agentsListKey
-	inbox, gen uint64
-	// arts moves when a surface opens or closes, or one is seen: a new
-	// surface puts a chip on its agent's row.
-	arts    uint64
-	colH    int
-	oneLine bool
-	groupBy string
-	minute  int64
-	// foldWorking is [agents] fold_working, which a set-option can change.
+	list        agentsListKey
+	inbox, gen  uint64
+	arts        uint64
+	colH        int
+	oneLine     bool
+	groupBy     string
+	minute      int64
 	foldWorking bool
-	// The board's: the cards, and the stages [tasks] shows.
-	cards  uint64
-	board  bool
-	stages string
-	// kanban says the board is drawn as columns.
-	kanban bool
+	cards       uint64
+	board       bool
+	stages      string
+	kanban      bool
 }
 
-// ckHit is a click target: a fleet row, a group heading, a button.
 type ckHit struct {
 	x0, y0, x1, y1 int
 	kind           ckHitKind
@@ -449,14 +246,11 @@ const (
 	ckHitAction
 	ckHitTab
 	ckHitMark
-	// ckHitColumn is a column of the board's columns, behind its cards.
 	ckHitColumn
 )
 
-// cockpitTouch marks the cockpit's own state changed.
 func (m *OS) cockpitTouch() { m.Inbox.ck.gen++ }
 
-// cockpitTouchRows marks a change that moves the fleet's rows.
 func (m *OS) cockpitTouchRows() {
 	m.Inbox.ck.gen++
 	m.Inbox.ck.rowsGen++
@@ -468,14 +262,10 @@ func (m *OS) CockpitTouch() { m.cockpitTouch() }
 // CockpitSync is cockpitSync for the input path.
 func (m *OS) CockpitSync() { m.cockpitSync() }
 
-// cockpitList is the agents the fleet is built from: the rail's model, with
-// the selector and the search applied, sorted needs-you first and oldest
-// wait first in each state.
 func (m *OS) cockpitList() []sidebarAgentEntry {
 	return m.inboxAgentsList()
 }
 
-// cockpitRows is the fleet as rows, rebuilt only when what it shows changed.
 func (m *OS) cockpitRows() []ckRow {
 	ck := &m.Inbox.ck
 	list := m.cockpitList()
@@ -515,16 +305,10 @@ func (m *OS) cockpitRows() []ckRow {
 	return ck.rows
 }
 
-// ckFolderKey names a folder on a machine.
 func ckFolderKey(host, cwd string) string { return host + "\x00" + cwd }
 
-// ckActive reports whether an agent is at work in its folder: working, or
-// waiting on the person in the middle of a turn.
 func ckActive(state string) bool { return state == "working" || state == "needs_input" }
 
-// ckActiveFolders counts the agents at work in each folder. Two agents that
-// edit one folder at once step on each other's files, and nothing else on
-// screen says they share it.
 func ckActiveFolders(list []sidebarAgentEntry) map[string]int {
 	out := map[string]int{}
 	for _, e := range list {
@@ -535,13 +319,10 @@ func ckActiveFolders(list []sidebarAgentEntry) map[string]int {
 	return out
 }
 
-// ckSharesFolder reports whether another agent is at work in the folder an
-// agent at work runs in.
 func (m *OS) ckSharesFolder(e sidebarAgentEntry) bool {
 	return e.Cwd != "" && ckActive(e.State) && m.Inbox.ck.folders[ckFolderKey(e.Host, e.Cwd)] > 1
 }
 
-// ckFolderAgents is how many agents are at work in folder on this machine.
 func (m *OS) ckFolderAgents(folder string) int {
 	if folder == "" {
 		return 0
@@ -555,7 +336,6 @@ func (m *OS) ckFolderAgents(folder string) int {
 	return n
 }
 
-// buildCockpitRows groups the agents and the Inbox's items.
 func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 	ck := &m.Inbox.ck
 	st := &m.Inbox
@@ -565,7 +345,6 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 		byKey[e.Host+"\x00"+e.SessionID+"\x00"+e.WindowID] = i
 	}
 	used := make(map[int]bool)
-	// An agent whose item is snoozed rests out of sight with the item.
 	for _, it := range st.life.Snoozed {
 		if i, ok := byKey[it.Host+"\x00"+it.Session+"\x00"+it.Window]; ok && it.Window != "" {
 			used[i] = true
@@ -582,7 +361,6 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 		}
 		it := *r.item
 		if it.Kind == session.AttentionFinished && judges[it.Host+"\x00"+it.Window] {
-			// A judge's finished turn is told of on its fan's row.
 			continue
 		}
 		g := ckNeeds
@@ -592,8 +370,6 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 		case it.Kind == session.AttentionFinished:
 			g = ckReview
 		case inboxWithParent(it):
-			// The parent agent answers it first: the child waits on its
-			// parent, as a working agent's row does.
 			g = ckWorking
 		}
 		idx := -1
@@ -603,14 +379,10 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 				used[i] = true
 			}
 		}
-		// A search narrows the items with the agents: an item stays when
-		// its agent matched, or when its own words do.
 		if searching && idx < 0 && !m.ckItemMatches(it) {
 			continue
 		}
 		if g == ckReview && idx >= 0 {
-			// A finished turn the agent has moved on from: the row goes
-			// where the agent's state says, without the stale item.
 			switch list[idx].State {
 			case "working", "needs_input":
 				used[idx] = false
@@ -624,20 +396,14 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 		}
 		groups[g] = append(groups[g], ckRow{kind: kind, group: g, agent: idx, item: it, hasItem: true, key: "i:" + it.ID})
 	}
-	// The Inbox filter narrows to items. Agents join only the unfiltered
-	// list, and the f filter keeps the agents that need you.
 	kindFilter := st.Filter != ""
 	for i, e := range list {
 		if used[i] || kindFilter || judges[e.Host+"\x00"+e.WindowID] {
-			// A fan's judge is told of on the fan's row, not as a row.
 			continue
 		}
 		g := ckIdle
 		switch sidebarAgentGroup(e.State, e.DoneSeen) {
 		case sidebarGroupNeedsYou:
-			// A blocked agent needs you whether or not the Inbox holds an
-			// item for it. An error the person dismissed rests with the
-			// idle agents, its mark still saying it failed.
 			if e.State == "needs_input" {
 				g = ckNeeds
 			}
@@ -646,21 +412,14 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 		case sidebarGroupWorking:
 			g = ckWorking
 		default:
-			// An agent stopped on its usage limit rests with the idle ones
-			// and does not settle on its own: a limit lasts hours, and its
-			// work is not done.
 			if e.State != "limit_reached" && e.StateAt > 0 && now.Sub(time.Unix(0, e.StateAt)) > ckSettleAfter {
 				g = ckSettled
 			}
 		}
-		// A settled agent stays on the shelf whatever it does, until the
-		// daemon takes it off because it needs the person.
 		if e.Settled && g != ckNeeds {
 			g = ckSettled
 		}
 		if g != ckNeeds && m.ckArtifactNew(e, true) {
-			// A popup the person has not seen in this view waits for them,
-			// so its agent rests with the agents that need them.
 			g = ckNeeds
 		}
 		g = m.ckHoldGroup(agentKey(e), g, now)
@@ -670,8 +429,6 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 	var rows []ckRow
 	ck.tall = 0
 	itemsOnly := ck.needsOnly || kindFilter
-	// add puts one row of group g in the list, with the subagent rows under
-	// it, and works out how many lines it takes.
 	add := func(g int, r ckRow) {
 		if r.kind == ckRowFan {
 			r.lines = 1
@@ -691,17 +448,11 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 			e = list[r.agent]
 		}
 		r.inline = false
-		// An idle or settled row is one line, unless its chain has
-		// something waiting for the person, or it stopped on its usage
-		// limit: the second line says so.
 		chainWaits := r.agent >= 0 && (m.childrenWaiting(e) > 0 || e.State == "limit_reached")
 		if (g == ckIdle || g == ckSettled) && !chainWaits || g == ckSnoozed || r.kind == ckRowNote || r.attempt || !m.ckHasLine2(r, e) {
 			r.lines = 1
 		}
 		ck.tall += r.lines
-		// A row that needs the person keeps the line that says what it
-		// needs. Any other row, when the list is short of room, puts what
-		// it does on its one line, in place of the harness and the session.
 		if ck.oneLine && r.lines == 2 && g != ckNeeds {
 			r.lines, r.inline = 1, true
 		}
@@ -729,8 +480,6 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 			continue
 		}
 		if by != "" && g != ckNeeds {
-			// Grouped by session, machine or project: Needs you stays on
-			// top as it is, and the other rows go to their band.
 			bands = m.ckBandAdd(bands, by, g, items, itemsOnly, list)
 			continue
 		}
@@ -739,8 +488,6 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 		}
 		head := ckRow{kind: ckRowHead, group: g, agent: -1, count: n, lines: 1, key: "h:" + strconv.Itoa(g)}
 		if m.ckGroupFolded(g) {
-			// The heading stands for the rows: their marks show on it, and
-			// the cursor can rest on it so a key opens it again.
 			head.folded = true
 			for _, r := range items {
 				if r.selectable() && (r.hasItem || !itemsOnly) {
@@ -756,8 +503,6 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 			if itemsOnly && !r.hasItem && r.kind != ckRowNote {
 				continue
 			}
-			// The fold never hides the cursor's row: a search cleared, or a
-			// row the person went to, stays where the cursor is.
 			if r.selectable() && g != ckNeeds && ck.oneLine && !ck.opened[g] && shown >= ckFoldAt && !ck.cursorOn(r, list) {
 				continue
 			}
@@ -782,9 +527,6 @@ func (m *OS) buildCockpitRows(list []sidebarAgentEntry, now time.Time) []ckRow {
 	return rows
 }
 
-// ckHoldGroup is the group an agent's row is drawn in: the group its state
-// asks for, once it has asked for it for ckHold. A row new to the fleet goes
-// straight to its group.
 func (m *OS) ckHoldGroup(key string, want int, now time.Time) int {
 	ck := &m.Inbox.ck
 	if ck.placed == nil {
@@ -811,12 +553,8 @@ func (m *OS) ckHoldGroup(key string, want int, now time.Time) int {
 	return p.shown
 }
 
-// ckHoldMsg wakes the client when a held row's move is due.
 type ckHoldMsg struct{}
 
-// armCockpitHold wakes the client after wait, once, for the held move. The
-// hold is found while a frame is drawn, after Update has asked what is due,
-// so a message brings the client back: one timer, moved, never a poll.
 func (m *OS) armCockpitHold(wait time.Duration) {
 	p := m.frameRate.program
 	if p == nil {
@@ -830,15 +568,11 @@ func (m *OS) armCockpitHold(wait time.Duration) {
 	ck.holdTimer.Reset(wait)
 }
 
-// cockpitHoldDue reports whether a held row's move is due: the tick that
-// wakes for it has work, and settles it.
 func (m *OS) cockpitHoldDue(now time.Time) bool {
 	h := m.Inbox.ck.holdUntil
 	return m.ShowInbox && !h.IsZero() && !now.Before(h)
 }
 
-// cockpitSettleHold lets a held row move once its hold is due: the rows are
-// built again, and the frame drawn again.
 func (m *OS) cockpitSettleHold(now time.Time) {
 	if m.cockpitHoldDue(now) {
 		m.Inbox.ck.holdUntil = time.Time{}
@@ -846,23 +580,13 @@ func (m *OS) cockpitSettleHold(now time.Time) {
 	}
 }
 
-// ckItemMatches reports whether the search's words match an item's own: who
-// it is from, where, and what it says. The selector has narrowed the items
-// already (inboxRows).
 func (m *OS) ckItemMatches(it session.AttentionItem) bool {
 	q := m.Inbox.agents.query
 	return q == "" || fuzzy.Match(q, inboxWho(it)+" "+m.inboxWhere(it)+" "+it.Summary)
 }
 
-// ckGatherFans puts the attempts of a fan together under one row for the
-// fan, at the place of its first attempt: the agents of one group whose
-// worktree sessions share a fan's name on one machine. A fan with one attempt
-// in the group stays a plain row. An attempt with an item to answer is never
-// moved under a fan row: its item stays where the person sees it.
 func (m *OS) ckGatherFans(items []ckRow, list []sidebarAgentEntry) []ckRow {
 	fanOf := func(r ckRow) string {
-		// A finished turn's item is the attempt's own state, so it joins the
-		// fan; any other item stays where the person answers it.
 		if r.kind != ckRowAgent || r.agent < 0 || r.hasItem && r.item.Kind != session.AttentionFinished {
 			return ""
 		}
@@ -913,8 +637,6 @@ func (m *OS) ckGatherFans(items []ckRow, list []sidebarAgentEntry) []ckRow {
 	return out
 }
 
-// ckFanOrder sorts a fan's sessions the way fan numbers them: the stem,
-// then -2, -3 and on.
 func ckFanOrder(a, b string) int {
 	num := func(s string) (string, int) {
 		if i := strings.LastIndexByte(s, '-'); i > 0 {
@@ -932,7 +654,6 @@ func ckFanOrder(a, b string) int {
 	return na - nb
 }
 
-// ckFanSize is how many sessions belong to the fan f, by ckFanKey.
 func (m *OS) ckFanSize(f string) int {
 	n := 0
 	for k, w := range m.Inbox.ck.branches {
@@ -944,7 +665,6 @@ func (m *OS) ckFanSize(f string) int {
 	return n
 }
 
-// ckChildRows are an agent's subagents, one line each under its row.
 func ckChildRows(e sidebarAgentEntry, g int) []ckRow {
 	var rows []ckRow
 	for i, c := range e.Children {
@@ -960,8 +680,6 @@ func ckChildRows(e sidebarAgentEntry, g int) []ckRow {
 	return rows
 }
 
-// cockpitClamp keeps the cursor on the selected row, on its agent's new row
-// when the row changed kind, or on the nearest row.
 func (m *OS) cockpitClamp() {
 	ck := &m.Inbox.ck
 	rows := ck.rows
@@ -992,13 +710,10 @@ func (m *OS) cockpitClamp() {
 	was := ck.key
 	m.cockpitSetCursor(i)
 	if ck.key != was {
-		// The rows moved the cursor to another agent: the reply editor is
-		// checked against it after this message (CockpitReplyCheck).
 		ck.replyCheck = true
 	}
 }
 
-// ckNearest is the cursorable row nearest idx, -1 when there is none.
 func ckNearest(rows []ckRow, idx int) int {
 	idx = min(max(idx, 0), len(rows)-1)
 	for d := range rows {
@@ -1011,7 +726,6 @@ func ckNearest(rows []ckRow, idx int) int {
 	return -1
 }
 
-// cockpitSetCursor puts the cursor on row i.
 func (m *OS) cockpitSetCursor(i int) {
 	ck := &m.Inbox.ck
 	if i < 0 || i >= len(ck.rows) {
@@ -1026,7 +740,6 @@ func (m *OS) cockpitSetCursor(i int) {
 	}
 }
 
-// cockpitSelected is the row under the cursor.
 func (m *OS) cockpitSelected() (ckRow, bool) {
 	rows := m.cockpitRows()
 	ck := &m.Inbox.ck
@@ -1036,7 +749,6 @@ func (m *OS) cockpitSelected() (ckRow, bool) {
 	return rows[ck.idx], true
 }
 
-// cockpitAgent is the agent of the row under the cursor.
 func (m *OS) cockpitAgent() (sidebarAgentEntry, bool) {
 	r, ok := m.cockpitSelected()
 	if !ok || r.agent < 0 {
@@ -1045,10 +757,6 @@ func (m *OS) cockpitAgent() (sidebarAgentEntry, bool) {
 	return m.Inbox.ck.agents[r.agent], true
 }
 
-// cockpitSync points the Inbox's item cursor at the row under the cockpit's
-// cursor, and at nothing when the row has no item. The agent functions read
-// the row's agent from cockpitAgent. Every key and click calls it first, so the functions the old
-// panel used act on the row the person sees.
 func (m *OS) cockpitSync() (ckRow, bool) {
 	st := &m.Inbox
 	r, ok := m.cockpitSelected()
@@ -1090,8 +798,6 @@ func (m *OS) CockpitMove(delta int) {
 	if at < 0 {
 		at = 0
 	} else {
-		// j on the last row of a long group the list folds opens the
-		// group, so the rows its "+N more" stands for are a key away.
 		if delta == 1 && ck.idx+1 < len(rows) && rows[ck.idx+1].kind == ckRowMore && rows[ck.idx+1].group >= 0 && !ck.board {
 			g := rows[ck.idx+1].group
 			key := ck.key
@@ -1116,22 +822,15 @@ func (m *OS) CockpitMove(delta int) {
 	m.Inbox.ck.pending = ""
 	m.cockpitTouch()
 	m.cockpitReplyFollow()
-	// The detail reads that follow a key ask the Inbox's cursors.
 	m.cockpitSync()
 }
 
-// cockpitReplyFollow closes the reply editor, keeping its draft, when the
-// cursor left the agent it writes to: the area under another agent's thread
-// must not send to the one before.
 func (m *OS) cockpitReplyFollow() {
 	if m.cockpitReplyMismatch() {
 		m.InboxReplyCancel()
 	}
 }
 
-// cockpitReplyMismatch reports whether the reply editor writes to another
-// agent than the one under the cursor. Until it closes, the area draws the
-// row's own closed area, never the other agent's draft.
 func (m *OS) cockpitReplyMismatch() bool {
 	ed := m.Inbox.reply.editor
 	if ed == nil || len(ed.targets) > 0 {
@@ -1157,7 +856,6 @@ func (m *OS) CockpitReplyCheck() {
 	}
 }
 
-// cockpitSelectKey puts the cursor on the row with key.
 func (m *OS) cockpitSelectKey(key string) bool {
 	for i, r := range m.cockpitRows() {
 		if r.key == key && r.cursorable() {
@@ -1203,13 +901,10 @@ func (m *OS) CockpitToggleGroup(g int, more bool) {
 	m.cockpitTouchRows()
 }
 
-// ckFoldWorking is [agents] fold_working: Working starts folded.
 func (m *OS) ckFoldWorking() bool {
 	return m.UserConfig != nil && m.UserConfig.Agents.FoldWorkingOn()
 }
 
-// ckGroupFolded reports whether group g is folded: the person's choice, or
-// the default, which folds Working when fold_working is on.
 func (m *OS) ckGroupFolded(g int) bool {
 	ck := &m.Inbox.ck
 	if ck.foldSet[g] {
@@ -1218,12 +913,8 @@ func (m *OS) ckGroupFolded(g int) bool {
 	return g == ckWorking && m.ckFoldWorking()
 }
 
-// ckGroupIDs name the groups in the state file. They are not the titles, so
-// a change of a title keeps the folds.
 var ckGroupIDs = [ckGroups]string{"needs", "review", "working", "idle", "earlier", "snoozed"}
 
-// ckFoldsToFile is the person's fold choices as the state file holds them,
-// by group id: true folded, false opened. Nil when there are none.
 func (ck *cockpitState) ckFoldsToFile() map[string]bool {
 	var out map[string]bool
 	for g := range ckGroups {
@@ -1237,7 +928,6 @@ func (ck *cockpitState) ckFoldsToFile() map[string]bool {
 	return out
 }
 
-// ckFoldsFromFile sets the fold choices from the state file.
 func (ck *cockpitState) ckFoldsFromFile(folds map[string]bool) {
 	for g, id := range ckGroupIDs {
 		if f, ok := folds[id]; ok {
@@ -1262,8 +952,6 @@ func (m *OS) CockpitFold() {
 	if r.kind != ckRowHead {
 		m.cockpitSelectKey(head)
 	} else {
-		// The heading of an open group takes no cursor: the cursor goes to
-		// the group's first row, next to it.
 		m.cockpitRows()
 		m.cockpitSync()
 	}
@@ -1271,8 +959,6 @@ func (m *OS) CockpitFold() {
 	m.cockpitReplyFollow()
 }
 
-// ckPinKey names an agent's pane for a pin: its pane id, after its
-// machine for a pane on another machine.
 func ckPinKey(e sidebarAgentEntry) string {
 	if e.Host != "" {
 		return e.Host + "/" + e.WindowID
@@ -1280,14 +966,11 @@ func ckPinKey(e sidebarAgentEntry) string {
 	return e.WindowID
 }
 
-// ckPinned reports whether row r is a pinned agent's row.
 func (ck *cockpitState) ckPinned(r ckRow, list []sidebarAgentEntry) bool {
 	return len(ck.pins) > 0 && r.kind == ckRowAgent && r.agent >= 0 && r.agent < len(list) &&
 		list[r.agent].WindowID != "" && ck.pins[ckPinKey(list[r.agent])]
 }
 
-// ckPinFirst moves the pinned rows of a group to its top, each kind of row
-// in the order it had.
 func (ck *cockpitState) ckPinFirst(items []ckRow, list []sidebarAgentEntry) []ckRow {
 	if len(ck.pins) == 0 {
 		return items
@@ -1336,9 +1019,6 @@ func (m *OS) CockpitPin() {
 	m.cockpitTouch()
 }
 
-// ckPrunePins drops the pins of the panes on this machine that are gone,
-// so the state file does not keep them. It reads the whole list only: a
-// search or a selector hides panes that are still there.
 func (m *OS) ckPrunePins() {
 	ck := &m.Inbox.ck
 	if m.Inbox.Select != "" || m.Inbox.agents.query != "" || m.Inbox.Filter != "" {
@@ -1355,7 +1035,6 @@ func (m *OS) ckPrunePins() {
 	}
 }
 
-// ckPinsToFile is the pins as the state file holds them, sorted.
 func (ck *cockpitState) ckPinsToFile() []string {
 	if len(ck.pins) == 0 {
 		return nil
@@ -1368,7 +1047,6 @@ func (ck *cockpitState) ckPinsToFile() []string {
 	return out
 }
 
-// ckPinsFromFile sets the pins from the state file.
 func (ck *cockpitState) ckPinsFromFile(pins []string) {
 	ck.pins = nil
 	for _, k := range pins {
@@ -1379,14 +1057,10 @@ func (ck *cockpitState) ckPinsFromFile(pins []string) {
 	}
 }
 
-// chipKeeps reports whether the header chip in force keeps group g in the
-// list.
 func (ck *cockpitState) chipKeeps(g int) bool {
 	return ck.chip == 0 || ck.chip == g+1 || ck.chip == ckIdle+1 && g == ckSettled
 }
 
-// cockpitChip is a click on a header count: the list keeps that state group
-// alone, and a second click on the same count gives the whole list back.
 func (m *OS) cockpitChip(g int) {
 	ck := &m.Inbox.ck
 	if ck.chip == g+1 {
@@ -1427,8 +1101,6 @@ func (m *OS) CockpitCycleFilter() {
 	m.cockpitTouchRows()
 }
 
-// ckListMode is the list layout in force: the person's choice, else [agents]
-// view_list.
 func (m *OS) ckListMode() string {
 	if mode := m.Inbox.ck.listMode; mode != "" {
 		return mode
@@ -1454,8 +1126,6 @@ func (m *OS) CockpitToggleList() {
 // CockpitNeedsOnly reports whether the f filter shows only Needs you.
 func (m *OS) CockpitNeedsOnly() bool { return m.Inbox.ck.needsOnly }
 
-// cockpitHeldItem is the held approval, plan or question of the row under the
-// cursor, which a, A, r and R answer.
 func (m *OS) cockpitHeldItem() (session.AttentionItem, bool) {
 	r, ok := m.cockpitSelected()
 	if !ok || !r.hasItem || r.item.RequestID == "" {
@@ -1468,8 +1138,6 @@ func (m *OS) cockpitHeldItem() (session.AttentionItem, bool) {
 	return session.AttentionItem{}, false
 }
 
-// cockpitUnheldApproval reports whether the row under the cursor is an
-// approval or a plan that no hold waits behind.
 func (m *OS) cockpitUnheldApproval() bool {
 	r, ok := m.cockpitSelected()
 	if !ok || !r.hasItem || r.item.RequestID != "" {
@@ -1483,9 +1151,6 @@ func (m *OS) cockpitUnheldApproval() bool {
 // approval waits, and the key then does what it does on any row.
 func (m *OS) CockpitAnswerLetter(key string) (tea.Cmd, bool) {
 	if _, ok := m.cockpitHeldItem(); !ok {
-		// An approval with no hold behind it is answered in its pane. a and
-		// A and X say so, as the digits do, instead of doing nothing in
-		// silence.
 		if m.cockpitUnheldApproval() {
 			m.ShowNotification(inboxNotHeldWords, "warning", m.Settings.NotificationDuration)
 			return nil, true
@@ -1500,7 +1165,6 @@ func (m *OS) CockpitAnswerLetter(key string) (tea.Cmd, bool) {
 	case "A":
 		decision = session.ApprovalAlways
 	}
-	// A decision the prompt does not offer is refused with a word.
 	return m.InboxReplyApproval(decision), true
 }
 
@@ -1534,18 +1198,15 @@ func (m *OS) CockpitOpenFocus(open bool) tea.Cmd {
 	return nil
 }
 
-// cockpitWideFocus reports whether the focus area is drawn beside the fleet.
 func (m *OS) cockpitWideFocus() bool { return m.GetRenderWidth() >= ckOneColumn }
 
 // CockpitClick handles a click at screen x, y while the cockpit is up.
 // handled is false for a click outside it.
 func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 	ck := &m.Inbox.ck
-	// A click on the open dropdown picks its row.
 	if cmd, ok := m.cockpitMenuClick(x, y); ok {
 		return cmd, true
 	}
-	// A one-key menu on top: a click off it closes it and does nothing else.
 	if m.cockpitClickDismisses(x, y) {
 		return nil, true
 	}
@@ -1553,7 +1214,6 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 		m.cockpitImageClick(x, y)
 		return nil, true
 	}
-	// A click on the open draft places its cursor or selects in it.
 	if m.draftClick("inbox", x, y) {
 		return nil, true
 	}
@@ -1564,7 +1224,6 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 		return cmd, true
 	}
 	if ck.art.focus {
-		// A click anywhere else gives the keys back to the view.
 		ck.art.focus = false
 		m.cockpitTouch()
 	}
@@ -1589,7 +1248,6 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 		case ckHitRow:
 			m.kanbanPress(h, x, y)
 			if ck.cmp != nil {
-				// A row of the fleet leaves the comparison for its agent.
 				m.CockpitCompareClose()
 			}
 			now := time.Now()
@@ -1619,7 +1277,6 @@ func (m *OS) CockpitClick(x, y int) (tea.Cmd, bool) {
 	return nil, true
 }
 
-// cockpitAction runs a button's action.
 func (m *OS) cockpitAction(action string) tea.Cmd {
 	if cmd, ok := m.kanbanPreviewAction(action); ok {
 		return cmd
@@ -1644,15 +1301,10 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		g, _ := strconv.Atoi(strings.TrimPrefix(action, "chip:"))
 		m.cockpitChip(g)
 	case "dismiss":
-		// The cross on a card that asks nothing: the card's item goes, as
-		// the dismiss key puts it away.
 		return m.InboxDismiss()
 	case "follow":
 		m.CockpitThreadBottom()
 	case "a", "A", "X":
-		// A click on the card's button is no typed text: it answers at
-		// once. On a risky call it asks, as a key does, and a second click
-		// on the same button (or enter) answers.
 		decision := map[string]string{"a": session.ApprovalOnce, "A": session.ApprovalAlways, "X": session.ApprovalDeny}[action]
 		if m.InboxConfirmOpen() && m.Inbox.approvals.answer.confirm.decision == decision {
 			return m.InboxConfirmKey("enter")
@@ -1710,7 +1362,6 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 		if i, ok := strings.CutPrefix(action, "mention:"); ok {
 			n, _ := strconv.Atoi(i)
 			if ed := m.Inbox.reply.editor; ed != nil && ed.comp.PickMention(n) {
-				// A folder keeps the list open, on the folder's files.
 				return m.replyMentionCmd()
 			}
 			return nil
@@ -1763,8 +1414,6 @@ func (m *OS) cockpitAction(action string) tea.Cmd {
 	return nil
 }
 
-// cockpitHeldReplyWords is what r says on a held approval or plan: the keys
-// that answer it.
 func (m *OS) cockpitHeldReplyWords(it session.AttentionItem) string {
 	allow := m.inboxKeyOr(config.ActionInboxAllow, "a")
 	reject := m.inboxKeyOr(config.ActionInboxReject, "X")
@@ -1774,8 +1423,6 @@ func (m *OS) cockpitHeldReplyWords(it session.AttentionItem) string {
 	return "Answer first. Press " + allow + " to allow or " + reject + " to reject."
 }
 
-// cockpitReply opens the reply editor for the row under the cursor: mail
-// replies to the mail, anything else to the agent.
 func (m *OS) cockpitReply() tea.Cmd {
 	r, ok := m.cockpitSync()
 	if !ok {
@@ -1792,7 +1439,6 @@ func (m *OS) CockpitHover(x, y int) {
 	ck := &m.Inbox.ck
 	if s := ck.spawn; s != nil {
 		m.cockpitClearLinkHover()
-		// The sheet's open list lights the row under the pointer.
 		if s.list && s.dd != nil && s.dd.Hover(x, y) {
 			m.cockpitTouch()
 		}
@@ -1827,8 +1473,6 @@ func (m *OS) CockpitHover(x, y int) {
 func (m *OS) CockpitWheel(x, y int, up bool) {
 	ck := &m.Inbox.ck
 	if ck.img != nil || ck.spawn != nil {
-		// The image view and the spawn sheet cover everything behind
-		// them.
 		return
 	}
 	button := loom.WheelDown
@@ -1852,8 +1496,6 @@ func (m *OS) CockpitWheel(x, y int, up bool) {
 		m.cockpitTouch()
 		return
 	}
-	// In copy mode the wheel scrolls copy mode's view, which holds the
-	// thread still, and copy mode stays on.
 	if m.cockpitCopyWheel(x, y, -3*wheelDelta(up)) {
 		return
 	}
@@ -1868,8 +1510,6 @@ func (m *OS) CockpitWheel(x, y int, up bool) {
 	}
 }
 
-// cockpitThread is the kept thread of the agent under the cursor, nil when
-// it has none.
 func (m *OS) cockpitThread() *agentThread {
 	e, ok := m.cockpitAgent()
 	if !ok {
@@ -1878,8 +1518,6 @@ func (m *OS) cockpitThread() *agentThread {
 	return m.Inbox.threads.byKey[agentKey(e)]
 }
 
-// cockpitTab is the name of the focus tab in force: Thread, Changes,
-// Checkpoints or Pane.
 func (m *OS) cockpitTab() string {
 	e, _ := m.cockpitAgent()
 	r, _ := m.cockpitSelected()
@@ -1891,9 +1529,6 @@ func (m *OS) cockpitTab() string {
 	return name
 }
 
-// ckTabFolds reports whether the tab in force lists something the focus
-// gives its rows to: the Changes and Checkpoints tabs fold a card that asks
-// nothing and the closed reply to one line each.
 func (m *OS) ckTabFolds() bool {
 	switch m.cockpitTab() {
 	case "Changes", "Checkpoints":
@@ -1902,7 +1537,6 @@ func (m *OS) ckTabFolds() bool {
 	return false
 }
 
-// cockpitTabIndex is the place of the tab in force among the row's tabs.
 func (m *OS) cockpitTabIndex() int {
 	e, _ := m.cockpitAgent()
 	r, _ := m.cockpitSelected()
@@ -1927,13 +1561,11 @@ func (m *OS) CockpitTab(delta int) {
 	m.Inbox.ck.tab, _, _ = strings.Cut(tabs[i], " ")
 	if t := m.cockpitThread(); t != nil {
 		t.follow.Bottom()
-		// The Changes tab opens at its first file, as a diff is read.
 		t.fromTop = m.Inbox.ck.tab == "Changes"
 	}
 	m.cockpitTouch()
 }
 
-// cockpitGroupHides reports whether a group shows only its first rows.
 func (m *OS) cockpitGroupHides(g int) bool {
 	for _, r := range m.Inbox.ck.rows {
 		if r.kind == ckRowMore && r.group == g {
@@ -1986,8 +1618,6 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		cmd, _ := m.CockpitAnswerLetter(letter)
 		return cmd, true
 	case config.ActionInboxReply:
-		// r only replies. An agent held on an approval reads no reply
-		// until the approval is answered, so r names the keys that answer.
 		if it, held := m.cockpitHeldItem(); held {
 			m.ShowNotification(m.cockpitHeldReplyWords(it), "info", m.Settings.NotificationDuration)
 			return nil, true
@@ -2007,7 +1637,6 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		}
 		return nil, true
 	case config.ActionInboxHelp:
-		// Help opens over the view, which stays as it is behind it.
 		m.OpenHelpAtCategory(HelpCategoryAgents)
 		return nil, true
 	case config.ActionInboxTabPrev, config.ActionInboxTabNext:
@@ -2050,8 +1679,6 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 	case config.ActionInboxArtifact:
 		return m.CockpitArtifactOpen(), true
 	case config.ActionInboxDetailDown, config.ActionInboxDetailUp:
-		// J and K scroll a plan's detail first, then the thread. On the
-		// Artifacts tab they move through the artifacts.
 		d := 1
 		if action == config.ActionInboxDetailUp {
 			d = -1
@@ -2106,7 +1733,6 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		if cmd, ok := m.cockpitChildGo(); ok {
 			return cmd, true
 		}
-		// enter on a folded group's heading opens the group.
 		if r, ok := m.cockpitSelected(); ok && r.kind == ckRowHead {
 			m.CockpitFold()
 			return nil, true
@@ -2117,7 +1743,6 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		return m.CockpitGo(), true
 	case config.ActionInboxUp, config.ActionInboxDown, config.ActionInboxPageUp, config.ActionInboxPageDown,
 		config.ActionInboxFirst, config.ActionInboxLast:
-		// On a plan the page keys, g and G read the plan first, then move.
 		if m.inboxPlanMove(action, false) {
 			return nil, true
 		}
@@ -2132,7 +1757,6 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 		case config.ActionInboxFirst:
 			d = -1 << 20
 		case config.ActionInboxLast:
-			// G shows a held thread's newest lines first, then moves.
 			if m.CockpitThreadBottom() {
 				return nil, true
 			}
@@ -2144,9 +1768,6 @@ func (m *OS) CockpitKey(action string) (tea.Cmd, bool) {
 	return nil, false
 }
 
-// leaveInboxForPane closes the agents view for a pane and says how to come
-// back. The view opens again on this agent, as far down the fleet as it was,
-// the way it does after ctrl+] (InboxAgentsViewPane).
 func (m *OS) leaveInboxForPane() {
 	ck := &m.Inbox.ck
 	back := ckBack{key: ck.key, akey: ck.akey, scroll: ck.scroll}

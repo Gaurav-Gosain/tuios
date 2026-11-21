@@ -9,10 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// fileOnlyKey is one row of "Keys set in the file only" in
-// docs/config-options.md. internal/config writes that section from its
-// fileKeys table, which is a test file there, and
-// TestConfigOptionsDocMatchesRegistry keeps the page equal to it.
 type fileOnlyKey struct{ path, typ string }
 
 func fileOnlyKeys(t *testing.T) []fileOnlyKey {
@@ -36,8 +32,6 @@ func fileOnlyKeys(t *testing.T) []fileOnlyKey {
 	return keys
 }
 
-// covers reports whether the row names path: the key itself, or a key in its
-// table. NAME matches any one part.
 func (k fileOnlyKey) covers(path string) bool {
 	want, got := strings.Split(k.path, "."), strings.Split(path, ".")
 	table := k.typ == "table" || k.typ == "tables" || k.typ == "map"

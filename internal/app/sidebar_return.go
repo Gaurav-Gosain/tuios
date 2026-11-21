@@ -1,17 +1,5 @@
 package app
 
-// The rail borrows the keyboard, not the user's place in the panes. Entering it
-// records the mode and the focused pane so leaving it hands both back: browsing
-// the sessions is not a request to stop typing, any more than moving a pane is
-// (BeginPointerGesture and BeginCtrlDrag, the same bargain).
-//
-// A rail action that deliberately relocates the user disarms the return, and
-// what it chose stands. There are three: focusing a pane from a window row,
-// attaching to another session, and creating one. Everything else in the rail
-// is a browse, and a browse is what esc undoes.
-
-// beginSidebarReturn records what the rail is borrowing from: the mode, as a
-// lease on the keyboard (mode.go), and the focused pane.
 func (m *OS) beginSidebarReturn() {
 	m.borrowKeyboard(leaseRail)
 	m.sidebarReturnWindow = ""
@@ -20,30 +8,16 @@ func (m *OS) beginSidebarReturn() {
 	}
 }
 
-// The rail remembers its own place the same way, and for the same reason. Enter
-// on a terminal row hands the keyboard to that pane, and coming back to the
-// attached session's row would make a user three rows into the terminals
-// section walk down again. The row the rail was left on is part of what the
-// rail borrowed.
-
-// recordSidebarRow saves the row the cursor was on as the rail gives the
-// keyboard back.
 func (m *OS) recordSidebarRow() {
 	m.sidebarLastRow, m.sidebarLastRowSet = m.sidebarCursorRow()
 }
 
-// restoreSidebarRow puts the cursor back on the row the rail was last left on,
-// and reports whether it could. It refuses on a row the current frame no longer
-// draws (a pane closed, a session gone, the agents filter changed under it), so
-// the caller can fall back to landing on the attached session.
 func (m *OS) restoreSidebarRow() bool {
 	if !m.sidebarLastRowSet {
 		return false
 	}
 	for i, r := range m.SidebarNav {
 		if sidebarNavRowsEqual(r, m.sidebarLastRow) {
-			// The next render re-anchors by identity off the cursor, so setting the
-			// index is enough; no follow request of its own is needed.
 			m.sidebarSetCursor(i)
 			return true
 		}
@@ -51,21 +25,11 @@ func (m *OS) restoreSidebarRow() bool {
 	return false
 }
 
-// clearSidebarReturn drops the record, leaving the user where the rail put them.
 func (m *OS) clearSidebarReturn() {
 	m.cancelLease(leaseRail)
 	m.sidebarReturnWindow = ""
 }
 
-// endSidebarReturn hands back the borrowed mode and pane. Idempotent: every path
-// out of the rail runs it, and only the first has anything to do. The pane is
-// restored by ID rather than index, since the rail can close or reorder panes
-// while it holds the keyboard.
-//
-// The pane goes back first, then the mode. When the pane is gone (closed,
-// minimized, or on another workspace now) and nothing else is in focus, the
-// lease's end chooses window management, the mode that can go find another
-// one: a terminal mode with nothing to type into is not handed back.
 func (m *OS) endSidebarReturn() {
 	if !m.modeLeased(leaseRail) {
 		return

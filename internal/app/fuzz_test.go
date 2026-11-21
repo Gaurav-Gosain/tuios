@@ -8,54 +8,39 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// clipSeeds are the content shapes a pane's renderer produces, with the
-// adversarial ones the blank-pane bug taught us to care about: a frame whose
-// first line is empty (the width used to be measured from lines[0] alone), lines
-// that are nothing but escape sequences, wide characters landing exactly on the
-// clip boundary, and content larger than the viewport in both directions.
 var clipSeeds = []string{
 	"",
 	"\n",
 	"\n\n\n",
 	"hello",
 	"hello\nworld",
-	// Blank first line: the shape that discarded a whole pane.
 	"\nsecond line has content\nthird",
 	"\n\n\ncontent far down",
-	// Lines of only escape sequences, which have width zero but are not empty.
 	"\x1b[0m",
 	"\x1b[31m\x1b[0m\n\x1b[32mgreen\x1b[0m",
 	"\x1b[38;2;1;2;3m\x1b[48;5;9m\x1b[1m\x1b[4m",
 	"\x1b]8;;https://example.com\x1b\\link\x1b]8;;\x1b\\",
 	"\x1b]0;title\x07text",
-	// Truncated escape sequences, which the left cut has to walk safely.
 	"\x1b",
 	"\x1b[",
 	"\x1b[31",
 	"\x1b]8;;",
 	"\x1b]",
 	"a\x1bb\x1b[c",
-	// Wide characters at and across a boundary.
 	strings.Repeat("\xe4\xb8\x96", 40),
 	"ab\xe4\xb8\x96cd",
 	strings.Repeat("\xf0\x9f\x91\x8d", 40),
 	"\x1b[31m\xe4\xb8\x96\x1b[0m\xe4\xb8\x96",
-	// Combining marks and zero-width joiners.
 	"e\xcc\x81\xcc\x82\xcc\x83",
 	"\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9",
-	// Content larger than any viewport in both directions.
 	strings.Repeat("x", 500),
 	strings.Repeat("line\n", 200),
 	strings.Repeat(strings.Repeat("y", 300)+"\n", 100),
-	// Ragged widths, including a long line after short ones.
 	"a\nbb\nccc\n" + strings.Repeat("d", 400),
 	strings.Repeat("z", 400) + "\na\nb",
-	// Tabs and control characters, which StringWidth and the scanner disagree
-	// about more than one might hope.
 	"a\tb\tc",
 	"\x00\x01\x07\x08",
 	"a\rb",
-	// Invalid UTF-8 in the middle of a line.
 	"ab\xffcd",
 	"\xff\xfe\xfd",
 }
@@ -78,23 +63,14 @@ func FuzzClipWindowContent(f *testing.F) {
 	f.Add("x", -1000000, -1000000, 80, 24)
 	f.Add("x", 1000000, 1000000, 80, 24)
 	f.Add("wide\ncontent", 0, 0, 1, 1)
-	// Issue #743: a pane whose wide text runs off the left edge. The cut
-	// counted one position per rune, so every wide grapheme it dropped took
-	// an extra cell, and the right border moved left on those rows. Each
-	// offset cuts the rows at a different place: inside the first emoji,
-	// between graphemes, inside a CJK character, and past them all.
 	pane743 := "╭──────────╮\n│😀😀ab      │\n│你好世界xy  │\n│plain-line│\n╰──────────╯"
 	for _, x := range []int{-1, -2, -3, -4, -5, -6, -9} {
 		f.Add(pane743, x, 0, 80, 24)
 	}
-	// The same pane cut by the right edge, inside a wide grapheme.
 	f.Add(pane743, 74, 0, 80, 24)
 	f.Add(pane743, 75, 0, 80, 24)
 
 	f.Fuzz(func(t *testing.T, content string, x, y, vw, vh int) {
-		// The caller is the compositor, which always has a real viewport and
-		// coordinates within an int16's worth of the screen. Fuzzing outside
-		// that would only test Go's arithmetic.
 		vw = max(vw%512+1, 1)
 		vh = max(vh%512+1, 1)
 		x = clampFuzzCoord(x)
@@ -105,7 +81,6 @@ func FuzzClipWindowContent(f *testing.F) {
 
 		got, finalX, finalY := clipWindowContent(content, x, y, vw, vh)
 
-		// The placement must land inside the viewport.
 		if finalX < 0 || finalY < 0 {
 			t.Fatalf("clip placed content at negative (%d,%d)", finalX, finalY)
 		}
@@ -115,13 +90,6 @@ func FuzzClipWindowContent(f *testing.F) {
 		}
 
 		if got == "" {
-			// Discarding is only allowed when no row that would have landed in
-			// the viewport had anything to show. This is the blank-pane
-			// invariant: it is not enough for the bounding box to overlap, and
-			// it is not enough for some row to be non-empty; the row has to be
-			// non-empty and on screen. A frame whose first row is blank but
-			// whose later rows carry content satisfies this, and that is exactly
-			// the frame the old width measurement threw away.
 			for i, line := range strings.Split(content, "\n") {
 				row := y + i
 				if row < 0 || row >= vh {
@@ -136,7 +104,6 @@ func FuzzClipWindowContent(f *testing.F) {
 			return
 		}
 
-		// The result must fit the space the caller offered.
 		gotLines := strings.Split(got, "\n")
 		if maxRows := vh - finalY; len(gotLines) > maxRows {
 			t.Fatalf("clip returned %d rows for %d rows of space", len(gotLines), maxRows)
@@ -149,11 +116,6 @@ func FuzzClipWindowContent(f *testing.F) {
 			}
 		}
 
-		// Every row keeps its width, less what the edges cut off. A row
-		// that comes out short or long moves the pane's border, the last
-		// cell of the row, out of its column. Content that is not valid
-		// UTF-8 is left out: the width of a stray byte depends on its
-		// neighbours, so a cut can change it.
 		if utf8.ValidString(content) {
 			srcLines := strings.Split(content, "\n")
 			for i, line := range gotLines {
@@ -166,16 +128,11 @@ func FuzzClipWindowContent(f *testing.F) {
 			}
 		}
 
-		// The clip rewrites lines by walking their escape sequences. It must
-		// never invent rows.
 		if srcRows := strings.Count(content, "\n") + 1; len(gotLines) > srcRows {
 			t.Fatalf("clip returned %d rows from %d rows of content",
 				len(gotLines), srcRows)
 		}
 
-		// Clipping is idempotent at the same placement: re-clipping a result
-		// that already fits must not shrink it further, or a second compositor
-		// pass would erode the pane.
 		again, againX, againY := clipWindowContent(got, finalX, finalY, vw, vh)
 		if againX != finalX || againY != finalY {
 			t.Fatalf("re-clipping moved the content from (%d,%d) to (%d,%d)",
@@ -187,8 +144,6 @@ func FuzzClipWindowContent(f *testing.F) {
 	})
 }
 
-// maxLineWidth returns the width of the widest row, which is the width the
-// compositor allocates for a layer.
 func maxLineWidth(s string) int {
 	w := 0
 	for line := range strings.SplitSeq(s, "\n") {
@@ -199,9 +154,6 @@ func maxLineWidth(s string) int {
 	return w
 }
 
-// clampFuzzCoord keeps a fuzzed coordinate in the range a compositor can
-// actually produce, so the target exercises the clip rather than integer
-// overflow in the arithmetic around it.
 func clampFuzzCoord(v int) int {
 	const bound = 1 << 20
 	v %= bound
@@ -226,7 +178,6 @@ func FuzzClipWindowContentNoPanicOnEscapes(f *testing.F) {
 		if len(content) > 1<<16 {
 			content = content[:1<<16]
 		}
-		// A negative x forces the left-clip path.
 		shift = max(shift%1024+1, 1)
 
 		const vw, vh = 80, 24

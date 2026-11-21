@@ -13,20 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// Learn mode is the guided tour at tuios.dev/learn, where tuios runs as
-// WebAssembly in a browser tab with a fake shell in every pane (see
-// cmd/tuios-wasm). Two things differ from a normal session there:
-//
-//   - Nothing quits. Closing the tab is the way out, and a quit key that ended
-//     the program would leave a beginner staring at a dead terminal. Every quit
-//     path shows a friendly note instead.
-//   - Anything that needs a daemon, a real process, the network or the host's
-//     files is not there. Those actions show a note that says so, instead of the
-//     error the missing piece would otherwise produce.
-//
-// Everything else is the real tuios.
-
-// Notes shown in Learn mode. Short, friendly, and never an error.
 const (
 	learnNoteQuit     = "No need to quit here. Just close the tab when you're done."
 	learnNoteSessions = "Sessions are not in the browser demo. Install tuios for them."
@@ -38,9 +24,6 @@ const (
 	learnNotePaste    = "Paste with your browser here: Cmd+V or Ctrl+Shift+V."
 )
 
-// learnUnavailable maps each action Learn mode turns off to the note it shows.
-// The dispatcher consults it for keys, prefix chords and menu rows; the OS
-// methods behind the command palette rows check learnOff themselves.
 var learnUnavailable = map[string]string{
 	"quit":                    learnNoteQuit,
 	"prefix_quit":             learnNoteQuit,
@@ -106,8 +89,6 @@ func (m *OS) LearnBlocksAction(action string) bool {
 	return true
 }
 
-// learnOff shows note and reports true in Learn mode. The OS methods a
-// command palette row reaches without the dispatcher call it first.
 func (m *OS) learnOff(note string) bool {
 	if m == nil || !m.LearnMode {
 		return false
@@ -127,7 +108,6 @@ func (m *OS) showLearnNote(note string) {
 	m.MarkAllDirty()
 }
 
-// learnQuitMsg stands in for a quit in Learn mode. See FilterLearnMode.
 type learnQuitMsg struct{}
 
 // FilterLearnMode turns every way the program could end into a note, in Learn
@@ -146,8 +126,6 @@ func FilterLearnMode(m *OS, msg tea.Msg) tea.Msg {
 	return msg
 }
 
-// handleLearnQuit is what a quit does in Learn mode: close the quit menu if it
-// is up, and say why nothing else happened.
 func (m *OS) handleLearnQuit() {
 	if m.ShowQuitMenu {
 		m.CloseQuitMenu()
@@ -176,8 +154,6 @@ func (m *OS) LearnApplyPreset(name string) tea.Cmd {
 		m.ShowNotification("Keys not changed: "+err.Error(), "error", 0)
 		return nil
 	}
-	// The rest of the tab's config stays: the tour's pinned look and any
-	// option a lesson set.
 	cfg := *m.UserConfig
 	cfg.Keybindings = parsed.Keybindings
 	cmd := m.ApplyReloadedConfig(&cfg)
@@ -214,7 +190,6 @@ func (m *OS) SetLearnBackend(b LearnBackend) {
 	}
 }
 
-// learnFiles reports whether Learn mode reads the fake files.
 func (m *OS) learnFiles() bool { return m.LearnMode && m.learn != nil }
 
 // LearnFilesChangedMsg says a file of the fake shell was written, made or
@@ -222,8 +197,6 @@ func (m *OS) learnFiles() bool { return m.LearnMode && m.learn != nil }
 // it do on a real machine.
 type LearnFilesChangedMsg struct{}
 
-// learnFilesChanged reads the listed folder and the tree's open folders
-// again, quietly.
 func (m *OS) learnFilesChanged() tea.Cmd {
 	if !m.learnFiles() || !m.filesOn() {
 		return nil
@@ -231,10 +204,6 @@ func (m *OS) learnFilesChanged() tea.Cmd {
 	return tea.Batch(m.refreshChangedFolder(), m.refreshTreeAll())
 }
 
-// learnOpenFile opens a file of the fake shell in a new pane: in the viewer
-// that stands in for vim with edit, in the one that stands in for less
-// otherwise. On a real machine enter copies the path and shift+enter opens
-// the editor, and the dock says so.
 func (m *OS) learnOpenFile(path string, edit bool) {
 	program, note := "less", "Opened %s. On your machine, enter copies the path and shift+enter opens your editor."
 	if edit {
@@ -253,9 +222,6 @@ func (m *OS) learnOpenFile(path string, edit bool) {
 	m.maybeEnterPendingTerminalMode()
 }
 
-// learnNewWorktree makes a worktree of the fake repository and opens a pane
-// in it. A real machine makes a session there and attaches to it. The tab
-// has no sessions, so the pane opens here, and the dock names the session.
 func (m *OS) learnNewWorktree(repoRoot, branch string) {
 	path, session, err := m.learn.NewWorktree(repoRoot, branch)
 	if err != nil {

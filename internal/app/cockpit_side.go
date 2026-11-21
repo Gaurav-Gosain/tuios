@@ -17,32 +17,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The side column of the agents view (DESIGN.md 2.4): a live copy of the
-// selected agent's pane, the files its last turn changed, and its turn
-// checkpoints. At 170 columns and wider it sits beside the focus. Narrower,
-// the same pieces are focus tabs: Checkpoints, and Pane for the live copy at
-// the focus's size.
-//
-// The live copy is the picture-in-picture reader (pip.go pipCells): the cells
-// the client's emulator already holds, read again only when the pane had
-// output, with no second emulator and no stream of its own. A pane of this
-// session on another workspace is primed from the daemon and kept streamed
-// while it is the live pane, as a pinned PiP pane is. A pane of another
-// session or machine has no cells here, and the box says so.
-//
-// The checkpoints are read with list-checkpoints when the selection moves to
-// an agent or its state changes, never on a timer.
-
-// ckSideWidth is the side column's width at ckWide columns and more.
 const ckSideWidth = 46
 
-// ckLiveRows is how many rows the live box holds in the side column.
 const ckLiveRows = 14
 
-// ckCheckpointsShown is how many checkpoints the side column lists.
 const ckCheckpointsShown = 5
 
-// ckCheckpoint is one checkpoint as list-checkpoints sends it.
 type ckCheckpoint struct {
 	N     int    `json:"n"`
 	Kind  string `json:"kind"`
@@ -51,18 +31,14 @@ type ckCheckpoint struct {
 	At    int64  `json:"at"`
 }
 
-// ckCheckpoints are an agent's checkpoints, read for key: the agent and the
-// time its state last changed.
 type ckCheckpoints struct {
 	key     string
 	list    []ckCheckpoint
 	err     string
 	loading bool
-	// off says the daemon takes no checkpoints: [agents.checkpoints] off.
-	off bool
+	off     bool
 }
 
-// ckCheckpointsMsg is a list-checkpoints reply.
 type ckCheckpointsMsg struct {
 	agent, key string
 	list       []ckCheckpoint
@@ -70,8 +46,6 @@ type ckCheckpointsMsg struct {
 	err        error
 }
 
-// cockpitLiveWindow is the selected agent's pane when this client holds its
-// cells: a pane of the attached session on this machine.
 func (m *OS) cockpitLiveWindow(e sidebarAgentEntry) *terminal.Window {
 	if e.Host != "" || e.Foreign || e.WindowID == "" {
 		return nil
@@ -83,27 +57,17 @@ func (m *OS) cockpitLiveWindow(e sidebarAgentEntry) *terminal.Window {
 	return w
 }
 
-// ckLivePrimeAfter is how long the cursor rests on an agent before its pane,
-// streamed from no other place, is fetched from the daemon. Holding j
-// through agents on other workspaces asks for nothing.
 const ckLivePrimeAfter = 150 * time.Millisecond
 
-// ckLivePrimeMsg primes the live pane once the cursor has rested on it.
 type ckLivePrimeMsg struct {
 	id  string
 	gen uint64
 }
 
-// cockpitLiveVisible reports whether the live box is on screen: the side
-// column at ckWide columns and wider, or the Pane tab.
 func (m *OS) cockpitLiveVisible() bool {
 	return m.ShowInbox && (m.GetRenderWidth() >= ckWide || m.cockpitTab() == "Pane")
 }
 
-// cockpitLiveFollow makes the selected agent's pane the live pane while the
-// live box is on screen. A pane no stream feeds is primed once the cursor
-// rests on it, and the one before goes back to how its workspace has it when
-// the view subscribed it. It runs after input, never in a render.
 func (m *OS) cockpitLiveFollow() tea.Cmd {
 	ck := &m.Inbox.ck
 	id := ""
@@ -128,12 +92,9 @@ func (m *OS) cockpitLiveFollow() tea.Cmd {
 	ck.primeID = id
 	p := m.frameRate.program
 	if p == nil {
-		// A model no program runs, as in a test: a command of its own.
 		msg := ckLivePrimeMsg{id: id, gen: ck.livePrime}
 		return tea.Tick(ckLivePrimeAfter, func(time.Time) tea.Msg { return msg })
 	}
-	// One timer, moved on every step of the cursor: holding j arms nothing
-	// new, and only the agent it rests on is primed.
 	if ck.primeTimer == nil {
 		ck.primeTimer = time.AfterFunc(ckLivePrimeAfter, func() { p.Send(ckLivePrimeMsg{}) })
 	} else {
@@ -142,12 +103,10 @@ func (m *OS) cockpitLiveFollow() tea.Cmd {
 	return nil
 }
 
-// applyLivePrime primes the live pane the cursor rested on.
 func (m *OS) applyLivePrime(msg ckLivePrimeMsg) {
 	ck := &m.Inbox.ck
 	id := msg.id
 	if msg.gen == 0 {
-		// The timer's: the pane the cursor last rested on.
 		id = ck.primeID
 	} else if msg.gen != ck.livePrime {
 		return
@@ -165,9 +124,6 @@ func (m *OS) applyLivePrime(msg ckLivePrimeMsg) {
 	ck.liveGen++
 }
 
-// cockpitLiveRelease lets the live pane go: a pane on another workspace the
-// view subscribed is unsubscribed, and one something else streams is left
-// streaming.
 func (m *OS) cockpitLiveRelease() {
 	ck := &m.Inbox.ck
 	old := m.windowByID(ck.liveID)
@@ -178,9 +134,6 @@ func (m *OS) cockpitLiveRelease() {
 	}
 }
 
-// cockpitLiveForget drops the live pane without touching its stream, for
-// a client whose panes were just replaced. A prime still pending is dropped
-// with it.
 func (m *OS) cockpitLiveForget() {
 	ck := &m.Inbox.ck
 	ck.liveID, ck.liveOwned, ck.live, ck.primeID = "", false, "", ""
@@ -189,17 +142,10 @@ func (m *OS) cockpitLiveForget() {
 	ck.liveGen++
 }
 
-// cockpitKeepsStream reports whether w's stream stays open because it is the
-// live pane of the open agents view.
 func (m *OS) cockpitKeepsStream(w *terminal.Window) bool {
 	return w != nil && m.ShowInbox && m.Inbox.ck.liveID != "" && w.ID == m.Inbox.ck.liveID
 }
 
-// cockpitNoteOutput marks the live pane as having new output. The box is
-// read again only while it is on screen, and paced as the picture-in-picture
-// view is: every third pass, with the pane's output flag kept between, so
-// the last output is still drawn once the pane goes quiet. It reports
-// whether a frame is wanted for it.
 func (m *OS) cockpitNoteOutput(w *terminal.Window) bool {
 	ck := &m.Inbox.ck
 	if !m.ShowInbox || w == nil || w.ID != ck.liveID || ck.liveID == "" {
@@ -218,8 +164,6 @@ func (m *OS) cockpitNoteOutput(w *terminal.Window) bool {
 	return true
 }
 
-// cockpitLiveBody is the live pane's last rows that hold text, cols by rows,
-// read again only after output or a change of size.
 func (m *OS) cockpitLiveBody(e sidebarAgentEntry, cols, rows int) (string, bool) {
 	w := m.cockpitLiveWindow(e)
 	ck := &m.Inbox.ck
@@ -228,8 +172,6 @@ func (m *OS) cockpitLiveBody(e sidebarAgentEntry, cols, rows int) (string, bool)
 	}
 	if ck.liveDirty || ck.live == "" || ck.liveCols != cols || ck.liveRows != rows {
 		if !w.TryRLockIO() {
-			// The pane is busy: the next pass reads it, so the box does not
-			// keep old rows until the pane prints again.
 			w.HasNewOutput.Store(true)
 			return ck.live, true
 		}
@@ -240,7 +182,6 @@ func (m *OS) cockpitLiveBody(e sidebarAgentEntry, cols, rows int) (string, bool)
 	return ck.live, true
 }
 
-// drawLiveBox draws the live pane in a frame, at x, y, w by h cells.
 func (m *OS) drawLiveBox(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y, w, h int) {
 	if w < 6 || h < 3 {
 		return
@@ -287,14 +228,11 @@ func (m *OS) drawLiveBox(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y, w, h 
 	}
 }
 
-// ckTurnFile is one file the last turn changed.
 type ckTurnFile struct {
 	path     string
 	add, del int
 }
 
-// cockpitLastTurn is what the agent's last turn changed, from its thread:
-// each file once, with the lines it added and removed.
 func (m *OS) cockpitLastTurn(e sidebarAgentEntry) []ckTurnFile {
 	t := m.Inbox.threads.byKey[agentKey(e)]
 	if t == nil {
@@ -311,7 +249,6 @@ func (m *OS) cockpitLastTurn(e sidebarAgentEntry) []ckTurnFile {
 			continue
 		}
 		if !ckInRoot(root, en.Diff.File) {
-			// Not the agent's work, such as its plan file.
 			continue
 		}
 		p := ckRelPath(root, printableTitle(en.Diff.File))
@@ -327,8 +264,6 @@ func (m *OS) cockpitLastTurn(e sidebarAgentEntry) []ckTurnFile {
 	return out
 }
 
-// drawSideSection draws a section's heading: its name, a hairline, and words
-// on the right.
 func drawSideSection(c *ckCanvas, l ckLook, x, y, w int, title, right string) {
 	end := c.text(x, y, x+w, ckSeg{t: title, fg: l.pal.FgDim, attrs: ckBold})
 	r := x + w
@@ -338,8 +273,6 @@ func drawSideSection(c *ckCanvas, l ckLook, x, y, w int, title, right string) {
 	c.hline(end+2, y, r-end-2, hzGlyph(), l.edgePanel)
 }
 
-// drawLastTurn draws the files of the last turn from row y, at most rows of
-// them, and returns the row under them.
 func (m *OS) drawLastTurn(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y, w, rows int) int {
 	pal := l.pal
 	files := m.cockpitLastTurn(e)
@@ -374,8 +307,6 @@ func (m *OS) drawLastTurn(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y, w, r
 	return y
 }
 
-// drawFileStat draws one changed file at y: its path, cut from the left to
-// fit, its counts and a bar of their proportion.
 func drawFileStat(c *ckCanvas, l ckLook, x, y, w int, path string, add, del int) {
 	total := add + del
 	cells := min(5, max(1, total/12))
@@ -394,8 +325,6 @@ func drawFileStat(c *ckCanvas, l ckLook, x, y, w int, path string, add, del int)
 	c.text(x, y, r-1, ckSeg{t: name, fg: l.pal.FgDim})
 }
 
-// drawCheckpoints draws the agent's checkpoints, newest first, as a timeline
-// from row y, and returns the row under them.
 func (m *OS) drawCheckpoints(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y, w, shown int) int {
 	pal := l.pal
 	m.cockpitNoteCheckpoints(e)
@@ -459,11 +388,9 @@ func (m *OS) drawCheckpoints(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y, w
 	return y
 }
 
-// drawSide draws the side column at x, from row y0 to y1.
 func (m *OS) drawSide(c *ckCanvas, l ckLook, e sidebarAgentEntry, x, y0, w, y1 int) {
 	c.fill(x, y0, w, y1-y0, l.panel)
 	if l.pal.Depth == overlay.Depth16 {
-		// No grounds at 16 colours: a hairline parts the columns.
 		for y := y0; y < y1; y++ {
 			c.text(x-1, y, 0, ckSeg{t: vtGlyph(), fg: l.edge})
 		}
@@ -516,7 +443,6 @@ func (m *OS) CockpitSideFetch() tea.Cmd {
 		cp.list, cp.off = prev.list, prev.off
 	}
 	ck.cps[akey] = cp
-	// The far daemon holds the pane of a session attached through a host.
 	call, sess, win := m.agentCaller(), e.SessionID, e.WindowID
 	return tea.Batch(follow, func() tea.Msg {
 		raw, err := call("list-checkpoints", map[string]any{"session": sess, "window": win}, threadReadTimeout)
@@ -534,9 +460,6 @@ func (m *OS) CockpitSideFetch() tea.Cmd {
 	})
 }
 
-// cockpitNoteCheckpoints is called while a frame draws the checkpoints: a
-// state the agent reached with no input, such as a turn that ended, is read
-// after the frame (cpWant), never in it.
 func (m *OS) cockpitNoteCheckpoints(e sidebarAgentEntry) {
 	ck := &m.Inbox.ck
 	key := strconv.FormatInt(e.StateAt, 10) + e.State
@@ -562,8 +485,6 @@ func (m *OS) CockpitSideWanted() tea.Cmd {
 	return m.cockpitSideWantedRest()
 }
 
-// cockpitSideWantedRest is CockpitSideFetch when a frame found the
-// checkpoints or the card on screen stale.
 func (m *OS) cockpitSideWantedRest() tea.Cmd {
 	if !m.Inbox.ck.cpWant && !m.Inbox.ck.cardWant {
 		return nil
@@ -571,7 +492,6 @@ func (m *OS) cockpitSideWantedRest() tea.Cmd {
 	return m.CockpitSideFetch()
 }
 
-// applyCheckpoints takes a list-checkpoints reply.
 func (m *OS) applyCheckpoints(msg ckCheckpointsMsg) {
 	cp := m.Inbox.ck.cps[msg.agent]
 	if cp == nil || cp.key != msg.key {

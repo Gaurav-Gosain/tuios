@@ -25,21 +25,12 @@ func sixelPassthroughLog(format string, args ...any) {
 	_, _ = fmt.Fprintf(f, "[%s] SIXEL-PASSTHROUGH: %s\n", time.Now().Format("15:04:05.000"), fmt.Sprintf(format, args...))
 }
 
-// sixelMode is how this connection's terminal is shown a pane's sixel image.
 type sixelMode int
 
 const (
-	// sixelPlaceholder draws a dim box where the image is. The host has
-	// neither sixel nor kitty graphics, and a sixel sent to it would at best
-	// be dropped and at worst print as text.
 	sixelPlaceholder sixelMode = iota
-	// sixelNative sends the image as sixel, cropped to what is visible.
 	sixelNative
-	// sixelViaKitty sends the decoded image as a kitty graphics image, for a
-	// host that has kitty graphics and not sixel.
 	sixelViaKitty
-	// sixelSymbols draws the image as block glyphs, for a host with neither
-	// (see shot/mosaic). It is text, so nothing is sent beside the frame.
 	sixelSymbols
 )
 
@@ -56,18 +47,9 @@ func (m sixelMode) String() string {
 	}
 }
 
-// Memory bounds. A pane keeps the images whose cells may still be on screen
-// or in its scrollback; these cap what that can cost.
 const (
-	// sixelWindowBudget is the most decoded image data one pane holds. Past
-	// it the pane's oldest images are dropped, and their cells, if they are
-	// ever shown again, show the placeholder. Images whose cells are all gone
-	// are freed long before this, by the sweep (sixel_sweep.go); the budget
-	// is for a pane that keeps many pictures in its scrollback.
 	sixelWindowBudget = 16 << 20
-	// sixelMaxImages bounds the number of images across all panes, which an
-	// animation of tiny frames could otherwise grow without limit.
-	sixelMaxImages = 4096
+	sixelMaxImages    = 4096
 )
 
 // SixelPassthrough shows the sixel images panes draw on this connection's
@@ -80,62 +62,38 @@ const (
 // this type turns that into bytes for the host, after the frame's text, from
 // the renderer's writer (FrameBytes).
 type SixelPassthrough struct {
-	mu   sync.Mutex
-	mode sixelMode
-	caps *HostCapabilities
-	// symbols is the glyph set an image is drawn with on a host that draws
-	// no graphics, mosaic.Off for the placeholder box.
+	mu      sync.Mutex
+	mode    sixelMode
+	caps    *HostCapabilities
 	symbols mosaic.Kind
 
 	nextID   uint32
 	images   map[uint32]*sixelEntry
-	byWindow map[string]int // decoded bytes held per window
+	byWindow map[string]int
 
-	frame sixelFrameState
-	// direct writes to the host outside the renderer's writes, for output a
-	// background job made ready. See ConnectFrameWriter.
-	direct func([]byte)
-	// lastSweep is when the last sweep started. See sixel_sweep.go.
+	frame     sixelFrameState
+	direct    func([]byte)
 	lastSweep time.Time
 
-	// budgets are the panes' budgets for drawing glyphs, and wakers ask a
-	// pane for a frame. See sixel_symbols.go.
-	budgets map[string]*symbolBudget
-	wakers  map[string]func()
-	// frameBudget is the drawing budget the frame pass shares across panes.
+	budgets     map[string]*symbolBudget
+	wakers      map[string]func()
 	frameBudget symbolBudget
-	// boxes is the frame pass's boxed colours. Used on the UI goroutine
-	// only, without the lock.
-	boxes *colorBoxes
+	boxes       *colorBoxes
 }
 
-// sixelEntry is one image a pane drew.
 type sixelEntry struct {
-	windowID string
-	img      *vt.SixelImage // nil in placeholder mode
-	// raw is the guest's own DCS body, sent unchanged when the whole image
-	// is visible at the size it was drawn for.
-	raw []byte
-	// cellW and cellH are the cell size the pane measured the image with,
-	// and rows and cols the cells it covers at that size.
+	windowID     string
+	img          *vt.SixelImage
+	raw          []byte
 	cellW, cellH int
 	rows, cols   int
-	// kittyID is the id the image was sent to a kitty host under, 0 until
-	// it is sent, and kittyPayload the transmission once it is built.
 	kittyID      uint32
 	kittyPayload []byte
-	// sym is the image drawn as glyphs, for a host without graphics. See
-	// symbolImage for who may touch it.
-	sym   *symbolImage
-	bytes int
-	seq   uint64 // registration order, for eviction
-	// born is when the image was registered. The sweep leaves a young image
-	// alone: its cells are written just after it is registered.
-	born time.Time
-	// glyphOnly marks a kitty image drawn as glyphs (kitty_symbols.go). Its
-	// palette is larger than a sixel's, so it is never sent as graphics: a
-	// change to a mode that would send it drops it.
-	glyphOnly bool
+	sym          *symbolImage
+	bytes        int
+	seq          uint64
+	born         time.Time
+	glyphOnly    bool
 }
 
 // SixelPassthroughOptions configures a SixelPassthrough instance.
@@ -173,9 +131,6 @@ func NewSixelPassthroughWithOptions(opts SixelPassthroughOptions) *SixelPassthro
 	return sp
 }
 
-// chooseSixelMode prefers the host's own sixel, then kitty, then glyphs, then
-// the box. Sixel first because it is the format the image arrived in: the
-// whole image goes out byte for byte, and only a crop is re-encoded.
 func chooseSixelMode(sixel, kitty bool, symbols mosaic.Kind) sixelMode {
 	switch {
 	case sixel:
@@ -226,8 +181,6 @@ func (sp *SixelPassthrough) setModeLocked(mode sixelMode) {
 			}
 		}
 	}
-	// Images decoded for the old mode stay valid; ones registered in
-	// placeholder mode were never decoded and keep showing the box.
 }
 
 // IsEnabled reports whether images are shown as pictures, in either format.
@@ -268,8 +221,6 @@ func (sp *SixelPassthrough) Register(windowID string, cmd *vt.SixelCommand, view
 
 	e := &sixelEntry{windowID: windowID, cellW: cw, cellH: ch, rows: rows, cols: cols}
 	if mode != sixelPlaceholder {
-		// Decoded outside the lock: it is the expensive part, and nothing
-		// else touches the image until it is registered below.
 		e.img = vt.DecodeSixel(cmd)
 		if e.img != nil {
 			e.bytes = e.img.Bytes()
@@ -278,11 +229,7 @@ func (sp *SixelPassthrough) Register(windowID string, cmd *vt.SixelCommand, view
 				e.bytes += len(e.raw)
 			}
 		}
-		// An image too large to decode still gets an id, so its cells show
-		// the placeholder rather than nothing.
 		if colors, colored := symbolColors(); mode == sixelSymbols && e.img != nil && colored {
-			// The part on screen is drawn here, on the PTY reader, so the
-			// frame mostly looks cells up.
 			sp.drawSymbolsOnReader(e, symbols, colors, view)
 		}
 	}
@@ -369,8 +316,6 @@ func (sp *SixelPassthrough) Forget(ids []uint32) {
 	}
 }
 
-// allocateIDLocked returns a free id in 1..vt.SixelMaxID, or 0 when every id
-// is taken, which the image cap makes impossible in practice.
 func (sp *SixelPassthrough) allocateIDLocked() uint32 {
 	for range vt.SixelMaxID {
 		sp.nextID++
@@ -384,9 +329,6 @@ func (sp *SixelPassthrough) allocateIDLocked() uint32 {
 	return 0
 }
 
-// evictLocked drops the oldest images of windowID until the window is within
-// budget, and the oldest overall past the image count cap. An image on screen
-// in the last frame is kept while there is anything older to drop.
 func (sp *SixelPassthrough) evictLocked(windowID string) {
 	for sp.byWindow[windowID] > sixelWindowBudget || len(sp.images) > sixelMaxImages {
 		overCount := len(sp.images) > sixelMaxImages
@@ -410,7 +352,6 @@ func (sp *SixelPassthrough) evictLocked(windowID string) {
 	}
 }
 
-// dropLocked forgets one image, and frees it on a kitty host.
 func (sp *SixelPassthrough) dropLocked(id uint32) {
 	e := sp.images[id]
 	if e == nil {
@@ -452,9 +393,6 @@ func (sp *SixelPassthrough) ImageCount() int {
 	return len(sp.images)
 }
 
-// imagesOnScreen reports whether any image is held for this client's panes.
-// Their cells are drawn and replaced on the canvas after the compositor, so a
-// frame with one cannot keep the canvas (compose.go).
 func (m *OS) imagesOnScreen() bool {
 	sp := m.SixelPassthrough
 	if sp == nil {
@@ -483,7 +421,6 @@ func (sp *SixelPassthrough) WindowHasImages(windowID string) bool {
 	return false
 }
 
-// setupSixelPassthrough connects a window's emulator to the passthrough.
 func (m *OS) setupSixelPassthrough(window *terminal.Window) {
 	if m.SixelPassthrough == nil || window == nil || window.Terminal == nil {
 		return

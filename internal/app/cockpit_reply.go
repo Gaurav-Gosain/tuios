@@ -11,41 +11,19 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// The reply area at the foot of the focus: who the reply is for and when it
-// is typed, the draft, a chip for each image in it, and a Send button. Closed,
-// it is a quiet line that opens the editor; open, it is the composer the
-// Inbox reply always used. A click on an image chip opens the image view.
-
-// drawReplyArea draws the reply area over rows up to y1 and returns its top
-// row. name is who the reply is for.
-//
-// fold draws the closed area as one line, for a tab that lists something
-// and wants the rows: who the reply is for, the key that opens it, and when
-// it is typed.
 func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name string, x, w, bodyTop, y1, top int, fold bool) int {
 	st := &m.Inbox
 	st.ck.edW = w
 	pal := l.pal
 	right := x + w
-	// What a reply does when it is sent: it is typed into the pane at once,
-	// or held until the agent rests. It says nothing about a reply that went
-	// before.
 	when := "typed at once"
 	if e.State == "working" {
 		when = "typed when it rests"
 	}
-	// The area is text on the panel: what a key does is read, so its label
-	// is the secondary ink, held to text contrast, as every panel footer's
-	// is. The quiet ink is held to 3:1 only and is for marks. A key is a
-	// mark in the accent, held to 3:1 on the panel it is drawn on.
 	label, key := pal.FgDim, overlay.ReadableAt(pal.AccentBright, l.panel, overlay.MarkFloor)
 	hints := []ckSeg{{t: "@", fg: key, attrs: ckBold}, {t: " mention   ", fg: label},
 		{t: "ctrl+v", fg: key, attrs: ckBold}, {t: " image   ", fg: label},
 		{t: "ctrl+j", fg: key, attrs: ckBold}, {t: " new line", fg: label}}
-	// While the agent works, enter queues the reply and alt+enter sends it
-	// now. The button names what enter does, and the send-now hint goes
-	// first, so a narrow area cuts the other hints before it. A bulk reply
-	// and a reply to a linked machine have no send now.
 	verb := "Send"
 	if replyEnterQueues(e.State) {
 		verb = "Queue"
@@ -54,18 +32,12 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 		}
 	}
 	send := ckSeg{t: " " + overlay.EnterGlyph + " " + verb + " ", fg: overlay.Readable(pal.Fg, pal.Card), bg: pal.Card, attrs: ckBold}
-	// A hint that does not fit goes whole: a key with its label cut off
-	// says nothing.
-	// The header, the hints and the pictures start where the draft's text
-	// does, after the editor's two-cell gutter.
 	tx := x + 4
 	hints = ckFitHints(hints, right-14-tx)
 
 	ed := st.reply.editor
 	if ed == nil || m.cockpitReplyMismatch() {
 		if ed != nil {
-			// The editor is not drawn, so nothing may be placed by
-			// where it was last.
 			ed.at.ok, ed.at.drawn = false, false
 		}
 		if fold {
@@ -83,7 +55,6 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 			st.ck.hits = append(st.ck.hits, ckHit{x0: x, y0: top + y, x1: right, y1: top + y1, kind: ckHitAction, action: "reply"})
 			return y - 1
 		}
-		// A row of air above the hints, when the screen has rows to spare.
 		h := 3
 		if c.h >= 30 {
 			h = 4
@@ -94,8 +65,6 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 		c.text(tx, y, right-16, ckSeg{t: "Reply to ", fg: label}, ckSeg{t: name, fg: pal.Fg, attrs: ckBold})
 		c.textR(right-2, y, ckSeg{t: when, fg: label})
 		prompt := []ckSeg{{t: " ", bg: pal.FgMute}, {t: " Write a reply.", fg: label}}
-		// A draft kept for this agent shows here, so the person knows r
-		// brings it back.
 		if d := st.reply.drafts[inboxDraftKey(e.SessionID, e.WindowID)]; d != nil && !d.Empty() {
 			prompt = []ckSeg{{t: "Draft: ", fg: label}, {t: ansi.Truncate(ckDraftLine(d), max(w-11, 1), "…"), fg: pal.Fg}}
 		}
@@ -109,9 +78,6 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 
 	inner := max(w-4, 8)
 	images := ckDraftImages(ed.comp)
-	// The editor's room is every row from under the focus header to above
-	// the hints: its title row, the pictures' row and the hints row are not
-	// its own. It never grows past it, and alt+m takes all of it.
 	img := 0
 	if len(images) > 0 {
 		img = 1
@@ -123,13 +89,9 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	if len(images) > 0 {
 		h++
 	}
-	// The area never runs over the focus header and its tabs: on a short
-	// screen the editor gets fewer rows.
 	y := max(y1-h, bodyTop+1)
 	c.hline(x, y-1, w, hzGlyph(), l.edge)
 	c.fill(x, y, w, y1-y, l.panel)
-	// The focus edge: while the editor is open it has the keys, and a bar
-	// in the accent runs down the area's left side.
 	bar := "▌"
 	if overlay.UseASCII() {
 		bar = "|"
@@ -140,12 +102,8 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	c.text(tx, y, right-24, ckSeg{t: "Reply to ", fg: label}, ckSeg{t: ed.who, fg: pal.Fg, attrs: ckBold})
 	ctx := ed.context
 	if strings.HasPrefix(ctx, "working") {
-		// A reply to an agent at work waits, and the line says so before
-		// it is sent.
 		ctx = "typed when it rests" + sepWord() + ctx
 	} else if replyEnterQueues(e.State) {
-		// The agent went to work after the editor opened: the context
-		// it opened with is old, and enter now queues.
 		ctx = "typed when it rests"
 	}
 	if ctx != "" {
@@ -169,18 +127,13 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 		row++
 	}
 	fy := y1 - 1
-	// Squeezed under the header, the editor keeps its last rows, where the
-	// cursor most often is, and never draws over its hints.
 	cut := max(len(body)-max(fy-row, 0), 0)
 	for i, s := range body[cut:] {
 		c.draw(x+2, row+i, inner, s)
-		// An entry of the @ list takes a click. Any other line places the
-		// cursor or selects (draft_mouse.go).
 		if j, ok := ed.comp.MentionAt(cut + i); ok {
 			st.ck.hits = append(st.ck.hits, ckHit{x0: x + 2, y0: top + row + i, x1: x + 2 + inner, y1: top + row + i + 1, kind: ckHitAction, action: "mention:" + strconv.Itoa(j)})
 		}
 	}
-	// The pictures the draft shows are placed relative to the layer.
 	ed.at.x, ed.at.y, ed.at.ok = x+2, row-cut, cut == 0
 	ed.at.drawn, ed.at.top = true, cut
 	c.text(tx, fy, right-14, hints...)
@@ -190,26 +143,17 @@ func (m *OS) drawReplyArea(c *ckCanvas, l ckLook, e sidebarAgentEntry, name stri
 	return y - 1
 }
 
-// ckDraftLine is a kept draft as one line: its words, with the line breaks
-// and runs of spaces closed up.
 func ckDraftLine(d *composer.Model) string {
 	return printableTitle(strings.Join(strings.Fields(composer.JoinParts(d.Parts())), " "))
 }
 
-// replyStyles are the composer's styles on the reply area's panel. The
-// palette's list cursor is the panel's own grey, so the @ list's selected
-// entry takes the input field's ground, which the draft gives up while the
-// list is open.
 func replyStyles(l ckLook) composer.Styles {
 	st := composerStyles(l.pal)
 	st.Selected = l.pal.Card
-	// The draft is drawn on the reply area's own ground: one ground for
-	// the whole area, with no band of its own inside it.
 	st.Field = l.panel
 	return st
 }
 
-// ckDraftImages are the images a draft holds, in order.
 func ckDraftImages(comp *composer.Model) []*composer.Image {
 	if comp == nil {
 		return nil
@@ -223,7 +167,6 @@ func ckDraftImages(comp *composer.Model) []*composer.Image {
 	return out
 }
 
-// ckImageName is an image's name: the file it was read from, or a number.
 func ckImageName(img *composer.Image, i int) string {
 	if img.Name != "" {
 		return printableTitle(img.Name)
@@ -231,7 +174,6 @@ func ckImageName(img *composer.Image, i int) string {
 	return "Image " + strconv.Itoa(i+1) + "." + img.Format
 }
 
-// ckImageSize is an image's size in pixels, as "1280×720".
 func ckImageSize(img *composer.Image) string {
 	if img.Width <= 0 || img.Height <= 0 {
 		return strings.ToUpper(img.Format)
@@ -243,8 +185,6 @@ func ckImageSize(img *composer.Image) string {
 	return strconv.Itoa(img.Width) + x + strconv.Itoa(img.Height)
 }
 
-// ckFitHints keeps the leading key and label pairs of hints that fit in w
-// cells, trailing spaces of the last one aside.
 func ckFitHints(hints []ckSeg, w int) []ckSeg {
 	used := 0
 	for i := 0; i+1 < len(hints); i += 2 {

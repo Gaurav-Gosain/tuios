@@ -29,7 +29,6 @@ func TestGotoWorkspaceRowKeepsItsFacts(t *testing.T) {
 		content, geo, _ := m.renderGotoPicker()
 		lines := strings.Split(content, "\n")
 		var row string
-		// The long name gives way, so the row is found by its number.
 		for _, ln := range lines {
 			if strings.Contains(ansiEscape.ReplaceAllString(ln, ""), "› 1 · ") {
 				row = ln
@@ -49,8 +48,6 @@ func TestGotoWorkspaceRowKeepsItsFacts(t *testing.T) {
 		if !strings.Contains(plain, "pane") {
 			t.Errorf("term=%d: the pane count was cut: %q", term, plain)
 		}
-		// The panel's own right-hand pad survives, so the row does not run to the
-		// panel edge the way an over-wide row does.
 		if !strings.HasSuffix(plain, "  ") {
 			t.Errorf("term=%d: row runs to the panel edge: %q", term, plain)
 		}

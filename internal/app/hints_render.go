@@ -10,22 +10,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// The hints frame is a pass over the composed canvas, the way the scrim is,
-// not a layer and not a change to the pane's own render.
-//
-// composeLayersIn calls applyHints right after it draws each pane hints mode is
-// open on. The pass writes the copied view over the pane's content rectangle
-// (so the text holds still under the labels), dims everything that is not a
-// match, lights the matches, and puts the labels on them. Anything drawn
-// above the pane (a floating pane, a panel, a message) is drawn after this and
-// stays on top. The pane's cached layer is never touched, so closing hints
-// mode is nothing more than the next frame not running this pass.
-//
-// It runs only while hints mode is open. With it closed the cost is the nil
-// check in composeLayersIn.
-
-// hintsInk is the colour of text that names no colour of its own, which is
-// what a dimmed cell is dimmed from.
 func (m *OS) hintsInk() color.Color {
 	if theme.Current() == nil && m.host.fg != nil {
 		return m.host.fg
@@ -33,7 +17,6 @@ func (m *OS) hintsInk() color.Color {
 	return theme.TerminalFg()
 }
 
-// applyHints draws hints mode over the pane whose layer id is id.
 func (m *OS) applyHints(canvas *frameCanvas, id string, grounds *frameGrounds) {
 	h := m.hints
 	if h == nil {
@@ -50,8 +33,6 @@ func (m *OS) applyHints(canvas *frameCanvas, id string, grounds *frameGrounds) {
 		return
 	}
 	if m.hintsFocused() == nil {
-		// The copy no longer matches the screen. Drawing it would put labels
-		// on text that has moved, so hints mode ends here.
 		m.CloseHints()
 		return
 	}
@@ -68,14 +49,10 @@ func (m *OS) applyHints(canvas *frameCanvas, id string, grounds *frameGrounds) {
 
 	labelBg, labelFg := pal.Accent, pal.PillFg
 	matchFg := overlay.Readable(pal.Warning, ground)
-	// A label whose first letters are typed shows them quieter, so the next
-	// letter to press is the loud one.
 	typedFg := overlay.Readable(pal.Accent, ground)
 
 	rect := paneContentRect(window)
 	area := canvas.Bounds()
-	// In a view of a larger session the pane is drawn shifted and clipped,
-	// and its labels go with it. See pane_view.go.
 	if v := m.sessionView; v.on {
 		rect = rect.Add(image.Pt(v.dx, v.dy))
 		area = area.Intersect(v.clip)
@@ -114,8 +91,6 @@ func (m *OS) applyHints(canvas *frameCanvas, id string, grounds *frameGrounds) {
 				}
 			}
 			if cell.Content == "" && cell.Width == 0 {
-				// The tail of a wide glyph. Styling it would draw it as a
-				// cell of its own.
 				continue
 			}
 			if owner := p.owner[idx]; owner >= 0 && (h.typed == "" || strings.HasPrefix(h.matches[owner].label, h.typed)) {
@@ -138,10 +113,6 @@ func (m *OS) applyHints(canvas *frameCanvas, id string, grounds *frameGrounds) {
 	}
 }
 
-// dimFg carries a cell's text toward its ground by the configured percent.
-// A cell that names no colour is dimmed from the terminal's own text colour.
-// The results are kept, because a pane has a few dozen colours and a frame
-// asks about thousands of cells.
 func (h *hintsState) dimFg(fg, bg, ink, ground color.Color) color.Color {
 	from := fg
 	if isNilColor(from) {
@@ -163,17 +134,12 @@ func (h *hintsState) dimFg(fg, bg, ink, ground color.Color) color.Color {
 	return c
 }
 
-// fixHintsWideCells repairs the wide glyphs a label was written over. A label
-// letter is one column, so a wide glyph under it loses its second half, and a
-// glyph whose tail a label covered has nothing left to draw into. Either one
-// left as it is would push the rest of the row a column over.
 func fixHintsWideCells(line uv.Line, from, to int) {
 	to = min(to, len(line))
 	for x := max(from, 0); x < to; x++ {
 		c := &line[x]
 		switch {
 		case c.Width > 1:
-			// A wide glyph needs its tail cells to still be tails.
 			whole := x+c.Width <= to
 			for k := 1; whole && k < c.Width; k++ {
 				if t := line[x+k]; t.Content != "" || t.Width != 0 {
@@ -184,7 +150,6 @@ func fixHintsWideCells(line uv.Line, from, to int) {
 				c.Content, c.Width = " ", 1
 			}
 		case c.Content == "" && c.Width == 0:
-			// A tail must follow its glyph.
 			owned := false
 			for k := 1; k <= 3 && x-k >= from; k++ {
 				p := line[x-k]

@@ -14,37 +14,19 @@ import (
 	"tuios.dev/shot"
 )
 
-// Share my look.
-//
-// One action takes the person from "I like my setup" to a comment ready to
-// paste in the setups discussion: the look file of the config in force, a
-// screenshot of the whole screen, the comment on the clipboard, and the
-// discussion open in the browser. `tuios look share` runs the same flow here,
-// through the routed ShareLook command, because only the client has the
-// composed screen and a terminal to carry the clipboard write over ssh.
-//
-// The flow takes three turns of the loop. The screen is read now, before any
-// toast is on it. gh is asked for the login off this goroutine. The look is
-// exported back on this goroutine, which owns the config and the theme
-// registry. The picture, the native clipboard and the browser run off it again.
-
-// lookShareRequest is one share in flight.
 type lookShareRequest struct {
 	name, author string
-	// requestID is the CLI waiting for the result, or empty.
-	requestID string
-	grid      *shot.Grid
-	pieces    []shotPiece
-	settings  capture.Settings
+	requestID    string
+	grid         *shot.Grid
+	pieces       []shotPiece
+	settings     capture.Settings
 }
 
-// lookShareAuthorMsg brings the gh login back to the loop.
 type lookShareAuthorMsg struct {
 	req    lookShareRequest
 	author string
 }
 
-// lookShareDoneMsg is a finished share.
 type lookShareDoneMsg struct {
 	req     lookShareRequest
 	comment string
@@ -79,7 +61,6 @@ func (m *OS) ShareLook(name, author, requestID string) tea.Cmd {
 	}
 }
 
-// handleLookShareAuthor exports the look and starts the slow part.
 func (m *OS) handleLookShareAuthor(msg lookShareAuthorMsg) tea.Cmd {
 	req := msg.req
 	ex, err := config.ExportLook(m.UserConfig, config.LookExportOptions{Name: req.name, Author: msg.author})
@@ -88,8 +69,6 @@ func (m *OS) handleLookShareAuthor(msg lookShareAuthorMsg) tea.Cmd {
 		return nil
 	}
 	comment := lookshare.Comment(req.name, lookshare.Summary(m.UserConfig), ex.Text)
-	// A served client's person is on another machine, so a browser started
-	// here opens in front of nobody.
 	local := !m.RemoteClient || m.SSHIsLoopback
 	opener := m.Settings.LinkOpener
 	work := func() tea.Msg {
@@ -103,7 +82,6 @@ func (m *OS) handleLookShareAuthor(msg lookShareAuthorMsg) tea.Cmd {
 	return tea.Batch(m.clipboardWriteCmd(comment), work)
 }
 
-// saveLookShot renders the screen the share read as a PNG.
 func saveLookShot(req lookShareRequest) (string, error) {
 	if req.grid == nil {
 		return "", errors.New("there is no screen to capture")
@@ -130,14 +108,11 @@ func saveLookShot(req lookShareRequest) (string, error) {
 	return path, nil
 }
 
-// handleLookShareDone tells the person what to do next, and answers the CLI.
 func (m *OS) handleLookShareDone(msg lookShareDoneMsg) {
 	lines := lookShareLines(msg.path, msg.shotErr == nil, msg.opened)
 	if msg.tooLong {
 		lines = append(lines, lookshare.MsgTooLong)
 	}
-	// The dock gets a short line that is never cut. The full message, with
-	// the screenshot path, is what prefix+N opens.
 	toast := lookshare.MsgToast
 	if !msg.opened {
 		toast = lookshare.MsgToastNoBrowser
@@ -158,7 +133,6 @@ func (m *OS) handleLookShareDone(msg lookShareDoneMsg) {
 	m.MarkAllDirty()
 }
 
-// lookShareLines are the lines the toast shows and the CLI prints.
 func lookShareLines(path string, shotOK, opened bool) []string {
 	lines := []string{lookshare.MsgCopied}
 	if shotOK && path != "" {
@@ -172,13 +146,11 @@ func lookShareLines(path string, shotOK, opened bool) []string {
 	return lines
 }
 
-// failLookShare says the share failed, and answers the CLI.
 func (m *OS) failLookShare(requestID string, err error) {
 	m.ShowNotification("tuios cannot share the look: "+err.Error(), "error", 2*m.Settings.NotificationDuration)
 	m.replyLookShare(requestID, err, nil)
 }
 
-// replyLookShare answers a routed ShareLook command.
 func (m *OS) replyLookShare(requestID string, err error, data map[string]any) {
 	if m.DaemonClient == nil || requestID == "" {
 		return

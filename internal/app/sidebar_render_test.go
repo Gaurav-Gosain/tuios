@@ -9,8 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// wideRail widens the rail to 34 columns, for a test whose frame needs room
-// for a listing's names.
 func wideRail(m *OS) {
 	m.SidebarWidthPref = 34
 }
@@ -23,7 +21,7 @@ func TestSidebarFitsNarrowScreens(t *testing.T) {
 	sizes := []struct {
 		name  string
 		w, h  int
-		wantW int // 0 means auto-hidden
+		wantW int
 	}{
 		{"desktop", 120, 40, railFixtureWidth},
 		{"narrow-rail", 80, 24, config.SidebarNarrowWidth},
@@ -67,10 +65,6 @@ func TestSidebarFitsNarrowScreens(t *testing.T) {
 					sidebarX = m.GetRenderWidth() - w
 				}
 				for _, hit := range m.SidebarHits {
-					// A row hit claims the whole band. A control that shares its
-					// line with a label or a sibling (the headers' add controls,
-					// the agents header's filter and sort, the footer's toggle)
-					// claims only its own columns and has to stay inside them.
 					switch hit.Kind {
 					case sidebarRowNewSession, sidebarRowNewWindow, sidebarRowCollapse,
 						sidebarRowAgentSort, sidebarRowAgentFilter, sidebarRowAgentMail, sidebarRowFiles:

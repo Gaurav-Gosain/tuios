@@ -18,90 +18,58 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// The board as columns: one column per stage [tasks] shows, side by side,
-// each with its cards. It is the board's default; B shows the list of
-// cockpit_board.go instead, and under ckOneColumn the list is drawn whatever
-// the choice. The rows are the list's rows in another order: a head per
-// stage, then its cards, so the cursor, t, enter and the Card reads work on
-// the same rows. h and l move between columns, j and k inside one, H and L
-// move the card a stage, and a card dragged onto another column moves there.
-// Nothing here runs a timer: every change is a key, a click or a task event.
-
-// The widths of a column: the narrowest a column of cards is drawn, and the
-// widest, past which the columns leave the rest of the row empty.
 const (
 	kbMinW = 26
 	kbMaxW = 48
 )
 
-// ckKanban is the columns' own state.
 type ckKanban struct {
-	// first is the first column drawn when they do not all fit, by its
-	// place among the stages shown.
-	first int
-	// scroll is each column's first card drawn, by stage.
+	first  int
 	scroll map[string]int
-	// cols are the columns of the last frame, for the mouse.
-	cols []kbCol
-	// drag is the card a press on it may drag, nil when none.
-	drag *kbDrag
-	// add is the line a new card's title is typed into, nil when closed.
-	add *kbNewCard
-	// pv is the card preview (cockpit_preview.go).
-	pv kbPreview
+	cols   []kbCol
+	drag   *kbDrag
+	add    *kbNewCard
+	pv     kbPreview
 }
 
-// kbCol is a column as the last frame drew it, in screen cells.
 type kbCol struct{ g, x0, x1 int }
 
-// kbDrag is a press on a card, and where the pointer took it since.
 type kbDrag struct {
 	key          string
 	from         int
 	x0, y0, x, y int
-	// moving says the pointer left the cell it was pressed on: the press
-	// is a drag, not a click.
-	moving bool
-	// over is the stage of the column under the pointer, -1 for none.
-	over int
+	moving       bool
+	over         int
 }
 
-// kbNewCard is the line a new card's title is typed into.
 type kbNewCard struct {
 	session, stage string
 	ed             *composer.Model
 }
 
-// kbPlace is where a column is drawn.
 type kbPlace struct {
 	i, x, w int
 	slim    bool
 }
 
-// ckCardMsg is the reply to a move or an add from the columns.
 type ckCardMsg struct {
 	row    session.TaskRow
 	err    error
 	failed string
-	// focus puts the cursor on the card.
-	focus bool
+	focus  bool
 }
 
-// kanbanOn reports whether the board is drawn as columns.
 func (m *OS) kanbanOn() bool {
 	ck := &m.Inbox.ck
 	return ck.board && !ck.boardList && m.GetRenderWidth() >= ckOneColumn
 }
 
-// kanbanDrawable reports whether the columns have cards to show, and not a
-// word about why there are none.
 func (m *OS) kanbanDrawable() bool {
 	st := &m.Inbox
 	scope := m.ckScope()
 	return !st.Unsupported && m.IsDaemonSession && !st.ck.noBoard && st.ck.boardErr == "" && (scope == "" || scope == "local")
 }
 
-// kbShown is the stages [tasks] shows, by their place in TaskStages.
 func (m *OS) kbShown() []int {
 	var out []int
 	for g, s := range session.TaskStages {
@@ -112,9 +80,6 @@ func (m *OS) kbShown() []int {
 	return out
 }
 
-// buildKanbanRows lays the stages out as columns: a head for every stage
-// shown, then its cards unless the column is folded. Done lists the newest
-// first, since it only grows.
 func (m *OS) buildKanbanRows(list []sidebarAgentEntry) []ckRow {
 	ck := &m.Inbox.ck
 	items := m.boardStageItems(list)
@@ -123,8 +88,6 @@ func (m *OS) buildKanbanRows(list []sidebarAgentEntry) []ckRow {
 		stage := session.TaskStages[g]
 		cards := items[g]
 		if stage == session.TaskStageDone {
-			// Oldest first within each rank, so reversed the newest
-			// leads. A sort of its own would add a sort to the binary.
 			slices.Reverse(cards)
 		}
 		head := ckRow{kind: ckRowHead, group: g, agent: -1, count: len(cards), lines: 1, key: "bh:" + stage}
@@ -144,8 +107,6 @@ func (m *OS) buildKanbanRows(list []sidebarAgentEntry) []ckRow {
 	return rows
 }
 
-// kbColumn is the place among the stages shown of the cursor's column, 0
-// when the cursor is on none.
 func (m *OS) kbColumn() int {
 	r, ok := m.cockpitSelected()
 	if !ok {
@@ -154,8 +115,6 @@ func (m *OS) kbColumn() int {
 	return max(slices.Index(m.kbShown(), r.group), 0)
 }
 
-// kbColumnRows are the rows the cursor can rest on in the column of stage
-// g, by their index in the rows.
 func (m *OS) kbColumnRows(g int) []int {
 	var out []int
 	for i, r := range m.cockpitRows() {
@@ -166,7 +125,6 @@ func (m *OS) kbColumnRows(g int) []int {
 	return out
 }
 
-// kbSelect puts the cursor on row i of the rows.
 func (m *OS) kbSelect(i int) {
 	ck := &m.Inbox.ck
 	m.cockpitSetCursor(i)
@@ -177,8 +135,6 @@ func (m *OS) kbSelect(i int) {
 	m.cockpitSync()
 }
 
-// kanbanMoveColumn moves the cursor d columns, to the card at the same
-// place in the new column, or its last.
 func (m *OS) kanbanMoveColumn(d int) {
 	shown := m.kbShown()
 	if len(shown) == 0 {
@@ -198,15 +154,12 @@ func (m *OS) kanbanMoveColumn(d int) {
 	m.kbSelect(rows[min(pos, len(rows)-1)])
 }
 
-// kanbanFocusColumn puts the cursor on the column of stage g, on its first
-// card.
 func (m *OS) kanbanFocusColumn(g int) {
 	if rows := m.kbColumnRows(g); len(rows) > 0 {
 		m.kbSelect(rows[0])
 	}
 }
 
-// kanbanMoveCard moves the cursor d cards inside its column.
 func (m *OS) kanbanMoveCard(d int) {
 	r, ok := m.cockpitSelected()
 	if !ok {
@@ -223,8 +176,6 @@ func (m *OS) kanbanMoveCard(d int) {
 	m.kbSelect(rows[min(max(at+d, 0), len(rows)-1)])
 }
 
-// kanbanStep moves the card under the cursor to the shown stage before or
-// after its own.
 func (m *OS) kanbanStep(next bool) tea.Cmd {
 	_, c, ok := m.cockpitCard()
 	if !ok {
@@ -246,15 +197,11 @@ func (m *OS) kanbanStep(next bool) tea.Cmd {
 	}
 }
 
-// kanbanSetStage moves card c to stage with set-task-stage. The reply and
-// the event stream both bring the moved row.
 func (m *OS) kanbanSetStage(c session.TaskRow, stage string) tea.Cmd {
 	if c.Stage == stage {
 		return nil
 	}
 	if c.Host != "" {
-		// set-task-stage names a session of this machine, which may hold a
-		// card of the same id.
 		m.ShowNotification(c.ID+" is on "+printableTitle(c.Host)+". Move it on that machine.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
@@ -273,7 +220,6 @@ func (m *OS) kanbanSetStage(c session.TaskRow, stage string) tea.Cmd {
 	}
 }
 
-// applyCardReply takes the reply to a move or an add.
 func (m *OS) applyCardReply(msg ckCardMsg) {
 	ck := &m.Inbox.ck
 	if msg.err != nil {
@@ -289,8 +235,6 @@ func (m *OS) applyCardReply(msg ckCardMsg) {
 	m.inboxChanged()
 }
 
-// kanbanAddSession is the session a new card goes to: the one this client
-// is attached to, "" when it is not attached to one here.
 func (m *OS) kanbanAddSession() string {
 	if m.AttachedHost != "" || !m.IsDaemonSession {
 		return ""
@@ -298,8 +242,6 @@ func (m *OS) kanbanAddSession() string {
 	return m.SessionName
 }
 
-// kanbanNewCard is n: the line for a new card's title, in the cursor's
-// column. A card is never added to Done: n there adds to Todo.
 func (m *OS) kanbanNewCard() tea.Cmd {
 	ck := &m.Inbox.ck
 	sess := m.kanbanAddSession()
@@ -357,19 +299,15 @@ func (m *OS) CockpitNewCardPaste(text string) {
 	}
 }
 
-// kanbanAddSend adds the typed card with add-task and closes the line. An
-// empty line adds nothing.
 func (m *OS) kanbanAddSend() tea.Cmd {
 	ck := &m.Inbox.ck
 	a := ck.kb.add
 	nonce, signed := m.signedNonce()
 	if !signed {
-		// The draft stays open, so the person can add it with their own key.
 		return nil
 	}
 	text, ok := a.ed.Submit()
 	if !ok {
-		// Invisible characters were removed; the line says so.
 		return nil
 	}
 	ck.kb.add = nil
@@ -388,9 +326,6 @@ func (m *OS) kanbanAddSend() tea.Cmd {
 	}
 }
 
-// kanbanKey handles the board's own keys. B switches the layout and H and L
-// move a card in both layouts; the rest act only on the columns. handled
-// is false for a key the cockpit handles as it always does.
 func (m *OS) kanbanKey(action string) (tea.Cmd, bool) {
 	ck := &m.Inbox.ck
 	if !ck.board {
@@ -445,14 +380,12 @@ func (m *OS) kanbanKey(action string) (tea.Cmd, bool) {
 		}
 	case config.ActionInboxTabPrev, config.ActionInboxTabNext, config.ActionInboxExpand, config.ActionInboxCodeWrap, config.ActionInboxCodeLeft, config.ActionInboxCodeRight, config.ActionInboxCodeCopy,
 		config.ActionInboxBlockSource, config.ActionInboxBlockPicture, config.ActionInboxDetailDown, config.ActionInboxDetailUp:
-		// The columns have no focus area for these to act on.
 	default:
 		return nil, false
 	}
 	return nil, true
 }
 
-// kanbanPress arms a drag of the card a press landed on.
 func (m *OS) kanbanPress(h ckHit, x, y int) {
 	ck := &m.Inbox.ck
 	ck.kb.drag = nil
@@ -467,8 +400,6 @@ func (m *OS) kanbanPress(h ckHit, x, y int) {
 	}
 }
 
-// kanbanColumnAt is the stage of the column at screen column x, -1 for
-// none.
 func (m *OS) kanbanColumnAt(x int) int {
 	for _, c := range m.Inbox.ck.kb.cols {
 		if x >= c.x0 && x < c.x1 {
@@ -478,8 +409,6 @@ func (m *OS) kanbanColumnAt(x int) int {
 	return -1
 }
 
-// kanbanDragTo follows the pointer while a press on a card is down. It
-// reports whether a drag took the motion.
 func (m *OS) kanbanDragTo(x, y int) bool {
 	d := m.Inbox.ck.kb.drag
 	if d == nil {
@@ -529,8 +458,6 @@ func (m *OS) CockpitRelease(x, y int) (tea.Cmd, bool) {
 	return nil, true
 }
 
-// kanbanWheel scrolls the column under the pointer by a card. It reports
-// whether the columns took the wheel.
 func (m *OS) kanbanWheel(x, y int, up bool) bool {
 	if m.kanbanPreviewWheel(x, y, up) {
 		return true
@@ -557,14 +484,12 @@ func (m *OS) kanbanWheel(x, y int, up bool) bool {
 	return true
 }
 
-// kanbanHints are the footer's keys on the columns.
 func (m *OS) kanbanHints() []overlay.Hint {
 	ck := &m.Inbox.ck
 	if ck.kb.add != nil {
 		return []overlay.Hint{{Key: overlay.EnterKey(), Label: "add card"}, {Key: "esc", Label: "cancel", Priority: overlay.HintEssential}}
 	}
 	if m.kbPreviewShown() {
-		// esc closes the preview, which the peek key's hint already says.
 		return m.kanbanPreviewHints()
 	}
 	var hints []overlay.Hint
@@ -574,7 +499,6 @@ func (m *OS) kanbanHints() []overlay.Hint {
 		c := ck.cards[r.card]
 		switch {
 		case c.Host != "":
-			// A card of another machine is changed there.
 		case c.Holder != nil:
 			hints = append(hints, m.keyHints(config.ActionInboxGo, "open pane")...)
 		case c.Stage != session.TaskStageDone && c.Blocked == nil:
@@ -606,7 +530,6 @@ func (m *OS) kanbanHints() []overlay.Hint {
 	return append(hints, m.cockpitEscHints()...)
 }
 
-// kbTitleLines is a card's title wrapped to w cells, two lines at most.
 func kbTitleLines(title string, w int) []string {
 	lines := strings.Split(ansi.Wordwrap(title, max(w, 4), ""), "\n")
 	if len(lines) > 2 {
@@ -618,11 +541,6 @@ func kbTitleLines(title string, w int) []string {
 	return lines
 }
 
-// kanbanPlace lays the columns out across w cells: the cursor's column and
-// every column with cards at kbMinW or wider, the folded and the empty ones
-// as narrow as their head. When they do not fit, the run of columns that
-// holds the cursor's is drawn, and left and right count the columns past
-// each edge.
 func (m *OS) kanbanPlace(heads []ckRow, cur, w int) (places []kbPlace, left, right int) {
 	ck := &m.Inbox.ck
 	n := len(heads)
@@ -677,8 +595,6 @@ func (m *OS) kanbanPlace(heads []ckRow, cur, w int) (places []kbPlace, left, rig
 		first--
 	}
 	ck.kb.first = first
-	// Share the room among the columns of cards. When they would pass
-	// kbMaxW, the empty columns take cards' widths too.
 	var fullW, extra int
 	for pass := range 2 {
 		wide = pass == 1
@@ -717,14 +633,12 @@ func (m *OS) kanbanPlace(heads []ckRow, cur, w int) (places []kbPlace, left, rig
 	return places, first, n - 1 - last
 }
 
-// drawKanban draws the columns between rows y0 and y1.
 func (m *OS) drawKanban(c *ckCanvas, l ckLook, y0, y1, top, width int) {
 	ck := &m.Inbox.ck
 	kb := &ck.kb
 	pal := l.pal
 	rows := m.cockpitRows()
 	sel, selOK := m.cockpitSelected()
-	// The heads, and the cards under each.
 	var heads []ckRow
 	var cards [][]ckRow
 	for _, r := range rows {
@@ -776,8 +690,6 @@ func (m *OS) drawKanban(c *ckCanvas, l ckLook, y0, y1, top, width int) {
 		focused := p.i == cur
 		drop := drag != nil && drag.over == h.group && drag.from != h.group
 		kb.cols = append(kb.cols, kbCol{g: h.group, x0: x, x1: x + w})
-		// The head: the stage and its count. The cursor rests on it in
-		// an empty or a folded column.
 		headCursor := selOK && sel.key == h.key
 		headGround := l.canvas
 		if headCursor {
@@ -831,7 +743,6 @@ func (m *OS) drawKanban(c *ckCanvas, l ckLook, y0, y1, top, width int) {
 				}
 			}
 		}
-		// The cards, from the column's scroll, the cursor's card in view.
 		inner := w - 3
 		heights := make([]int, len(col))
 		titles := make([][]string, len(col))
@@ -865,7 +776,6 @@ func (m *OS) drawKanban(c *ckCanvas, l ckLook, y0, y1, top, width int) {
 			y += heights[j] + 1
 			shown = j + 1
 		}
-		// What the scroll hides, on the rule.
 		var more []ckSeg
 		if scroll > 0 {
 			more = append(more, ckSeg{t: " " + up + strconv.Itoa(scroll), fg: pal.FgMute})
@@ -879,7 +789,6 @@ func (m *OS) drawKanban(c *ckCanvas, l ckLook, y0, y1, top, width int) {
 		}
 		ck.hits = append(ck.hits, ckHit{x0: x, y0: top + y0, x1: x + w, y1: top + y1, kind: ckHitColumn, group: h.group})
 	}
-	// The card under a drag follows the pointer.
 	if drag != nil {
 		for _, r := range rows {
 			if r.key == drag.key && r.kind == ckRowCard {
@@ -893,8 +802,6 @@ func (m *OS) drawKanban(c *ckCanvas, l ckLook, y0, y1, top, width int) {
 	}
 }
 
-// drawKanbanAdd draws the line a new card's title is typed into at y, and
-// returns the row under it.
 func (m *OS) drawKanbanAdd(c *ckCanvas, l ckLook, a *kbNewCard, x, y, w int) int {
 	pal := l.pal
 	c.fill(x, y, w, 3, l.cursor)
@@ -909,8 +816,6 @@ func (m *OS) drawKanbanAdd(c *ckCanvas, l ckLook, a *kbNewCard, x, y, w int) int
 	return y + 4
 }
 
-// drawKanbanCard draws one card: its title, then its holder's mark and name,
-// or Blocked and why, or free, with its id and age on the right.
 func (m *OS) drawKanbanCard(c *ckCanvas, l ckLook, r ckRow, title []string, x, y, w, h int, cursor, hover bool, top int) {
 	ck := &m.Inbox.ck
 	pal := l.pal
@@ -958,7 +863,6 @@ func (m *OS) drawKanbanCard(c *ckCanvas, l ckLook, r ckRow, title []string, x, y
 	}
 	free := "free"
 	if card.AskFirst {
-		// Dispatch never gives it to an agent: a person starts it.
 		free = "free, ask first"
 	}
 	if card.Host != "" {

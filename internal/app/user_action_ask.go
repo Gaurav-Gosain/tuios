@@ -13,13 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The ask steps of a user action (config/user_action_args.go). A step asks
-// the person in the palette with the prompt verb (session/prompt.go), the way
-// tuios prompt does, so any attached client may answer it. The calls block
-// until the person answers, so they run in a command, and the answers come
-// back to Update as userActionAskedMsg, which runs the action.
-
-// userActionAskedMsg carries the values of an action whose steps asked.
 type userActionAskedMsg struct {
 	action config.UserAction
 	extra  map[string]string
@@ -27,8 +20,6 @@ type userActionAskedMsg struct {
 	err    error
 }
 
-// askUserAction asks the steps of a that given has no value for, then runs
-// it.
 func (m *OS) askUserAction(a config.UserAction, extra, given map[string]string) tea.Cmd {
 	if !m.inboxCanAct("An action that asks") {
 		return nil
@@ -76,8 +67,6 @@ func AskActionStep(call func(verb string, params map[string]any, timeout time.Du
 	return res.Value, nil
 }
 
-// userActionAsked runs an action once its steps were answered. A cancel at
-// a client runs nothing and says nothing more: the person chose it.
 func (m *OS) userActionAsked(msg userActionAskedMsg) tea.Cmd {
 	if ended, ok := errors.AsType[*config.ErrActionAskEnded](msg.err); ok && ended.Status == session.PromptCancelled {
 		return nil

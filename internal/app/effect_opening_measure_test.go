@@ -11,22 +11,6 @@ import (
 	tfx "github.com/Gaurav-Gosain/tuiffects"
 )
 
-// This is how the frames column of effectOpenings was measured, kept so it can
-// be measured
-// again. TestEffectOpeningTableCoversEveryEffect fails when the engine gains an
-// effect, and the person it fails on needs a number rather than a guess.
-//
-// Run it and paste the map it prints over the one in effect_picker.go:
-//
-//	TUIOS_MEASURE=1 go test ./internal/app -run TestMeasureEffectOpenings -v
-//
-// It is skipped otherwise. It builds every effect five times over an 80x24
-// screen, which is a few seconds nobody needs on an ordinary run.
-
-// measureReferenceScreen writes the reference screen the table is measured
-// over: a prompt, a run of output, and colour on some of it but not all. It is
-// one screen at one size, and the picker only takes a band from it. See the
-// comment on effectOpenings.
 func measureReferenceScreen(t testing.TB, win interface{ Write([]byte) (int, error) }) {
 	t.Helper()
 	_, _ = win.Write([]byte("\x1b[32m~/dev/tuios\x1b[0m on \x1b[35mmain\x1b[0m\r\n$ go test ./internal/app\r\n"))
@@ -37,8 +21,6 @@ func measureReferenceScreen(t testing.TB, win interface{ Write([]byte) (int, err
 	_, _ = win.Write([]byte("$ "))
 }
 
-// measureCoord and measureLook are one captured cell: what it showed and what
-// colour it showed it in.
 type measureCoord struct{ x, y int }
 type measureLook struct {
 	symbol string
@@ -47,7 +29,6 @@ type measureLook struct {
 	hasBg  bool
 }
 
-// measureLuminance is the WCAG relative luminance of a colour.
 func measureLuminance(c tfx.Color) float64 {
 	channel := func(v uint8) float64 {
 		s := float64(v) / 255
@@ -59,8 +40,6 @@ func measureLuminance(c tfx.Color) float64 {
 	return 0.2126*channel(c.R) + 0.7152*channel(c.G) + 0.0722*channel(c.B)
 }
 
-// measureContrast is the WCAG contrast ratio between two colours, from 1 (the
-// same colour) to 21 (black against white).
 func measureContrast(fg, bg tfx.Color) float64 {
 	lighter, darker := measureLuminance(fg), measureLuminance(bg)
 	if lighter < darker {
@@ -69,14 +48,8 @@ func measureContrast(fg, bg tfx.Color) float64 {
 	return (lighter + 0.05) / (darker + 0.05)
 }
 
-// measureReadableContrast is the ratio at which a character is taken to be
-// readable. 3:1 is the WCAG floor for large text, and it is the level that
-// separates burn from highlight: see TestMeasureEffectOpenings.
 const measureReadableContrast = 3.0
 
-// measureReadable counts the captured glyphs a frame gives back: the ones
-// showing their captured symbol, in their captured place, in a colour that
-// stands off the background they are drawn on.
 func measureReadable(engine *tfx.Engine, want map[measureCoord]measureLook) int {
 	readable := 0
 	for y, line := range engine.FrameRows() {
@@ -207,9 +180,6 @@ func TestMeasureEffectOpenings(t *testing.T) {
 			float64(median(opening[name]))/60)
 	}
 
-	// keepsScreen is not measured here. It is a claim about every screen, not
-	// this one, so TestEffectsWithNoOpeningNeverHideTheScreen is what settles
-	// it, and it is left alone by a re-measurement.
 	var b strings.Builder
 	b.WriteString("\nvar effectOpenings = map[string]effectOpening{\n")
 	for _, name := range names {
@@ -223,9 +193,6 @@ func TestMeasureEffectOpenings(t *testing.T) {
 	t.Log("paste over effectOpenings:" + b.String())
 }
 
-// median is the middle of a set of runs. The effects that place characters at
-// random vary by a few percent between runs and the rest are identical, so the
-// middle is a stabler number than any one run.
 func median(v []int) int {
 	if len(v) == 0 {
 		return 0

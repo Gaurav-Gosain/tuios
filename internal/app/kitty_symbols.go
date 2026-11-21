@@ -9,59 +9,31 @@ import (
 	"tuios.dev/vt"
 )
 
-// Kitty images as block glyphs, on a host that draws no graphics.
-//
-// A sixel picture is drawn there as glyphs (sixel_symbols.go): its cells are
-// marked in the pane's grid, so it scrolls, clips and clears with the text,
-// and each frame draws the marked cells as glyphs. A kitty picture had no such
-// path: with the kitty passthrough off its commands were dropped, and chafa
-// -f kitty showed nothing (issue #586). Here a kitty upload is put together
-// from its chunks, decoded, made into the palette image the glyph path draws,
-// registered with the sixel passthrough, and its cells marked the same way.
-// A delete (a=d) of all images or of one id blanks the cells it drew.
-//
-// Not covered: Unicode placeholders (U=1), and a host with sixel but no
-// kitty graphics, whose kitty images stay off.
-
-// Bounds on what one pane may hold for kitty glyphs. A guest picks every
-// number here, so each is bounded.
 const (
-	// kittySymbolsMaxStored is how many uploaded (a=t) images a pane keeps
-	// for a later placement.
-	kittySymbolsMaxStored = 16
-	// kittySymbolsMaxStoredBytes bounds the pixels those images hold.
+	kittySymbolsMaxStored      = 16
 	kittySymbolsMaxStoredBytes = 64 << 20
-	// kittySymbolsMaxDrawn is how many drawn pictures a pane remembers, for
-	// a delete by id.
-	kittySymbolsMaxDrawn = 256
+	kittySymbolsMaxDrawn       = 256
 )
 
-// kittySymbols holds every pane's kitty glyph state.
 type kittySymbols struct {
 	mu   sync.Mutex
 	wins map[string]*kittySymbolWindow
 }
 
-// kittySymbolWindow is one pane's: the upload in progress, the images kept
-// for a placement, and the marker ids each image's pictures were drawn with.
 type kittySymbolWindow struct {
 	pending *kittySymbolUpload
 	stored  map[uint32]*vt.SixelImage
 	order   []uint32
-	bytes   int                 // what stored holds, two bytes a pixel
-	drawn   map[uint32][]uint32 // guest image id -> marker ids
+	bytes   int
+	drawn   map[uint32][]uint32
 	nDrawn  int
 }
 
-// kittySymbolUpload is an upload being put together from its chunks: the
-// first chunk's keys, and the data of every chunk.
 type kittySymbolUpload struct {
 	cmd  vt.KittyCommand
 	data []byte
 }
 
-// kittySymbolPlace is what a command asks the pane to draw, once the lock is
-// released: an image, the cells it covers, and whether the cursor moves.
 type kittySymbolPlace struct {
 	imageID    uint32
 	img        *vt.SixelImage
@@ -81,15 +53,12 @@ func (ks *kittySymbols) window(id string) *kittySymbolWindow {
 	return w
 }
 
-// forget drops a closed pane's state.
 func (ks *kittySymbols) forget(windowID string) {
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
 	delete(ks.wins, windowID)
 }
 
-// take reads one command. It returns the picture to draw, or the marker ids
-// a delete takes down. cells turns a command into the cells it covers.
 func (ks *kittySymbols) take(windowID string, cmd *vt.KittyCommand, cells func(*vt.KittyCommand) (rows, cols int)) (place *kittySymbolPlace, erase []uint32) {
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
@@ -97,7 +66,7 @@ func (ks *kittySymbols) take(windowID string, cmd *vt.KittyCommand, cells func(*
 	switch cmd.Action {
 	case vt.KittyActionTransmit, vt.KittyActionTransmitPlace:
 		if cmd.Medium != vt.KittyMediumDirect && cmd.Medium != 0 {
-			return nil, nil // a file names a file of the guest's machine
+			return nil, nil
 		}
 		if w.pending == nil {
 			w.pending = &kittySymbolUpload{cmd: *cmd}
@@ -162,14 +131,11 @@ func (ks *kittySymbols) take(windowID string, cmd *vt.KittyCommand, cells func(*
 	return nil, nil
 }
 
-// drew notes that image imageID's picture was drawn under marker id.
 func (ks *kittySymbols) drew(windowID string, imageID, id uint32) {
 	ks.mu.Lock()
 	defer ks.mu.Unlock()
 	w := ks.window(windowID)
 	if w.nDrawn >= kittySymbolsMaxDrawn {
-		// The oldest are forgotten: their cells have long scrolled off in
-		// practice, and a delete by id of them then leaves them.
 		for k := range w.drawn {
 			w.nDrawn -= len(w.drawn[k])
 			delete(w.drawn, k)
@@ -205,9 +171,6 @@ func (w *kittySymbolWindow) unstore(id uint32) {
 	}
 }
 
-// kittySymbolImage decodes an upload into the palette image the glyph path
-// draws, cropped to the command's source rectangle, or nil when it does not
-// decode or is larger than a sixel may be.
 func kittySymbolImage(cmd *vt.KittyCommand, data []byte) *vt.SixelImage {
 	k := keptFromCommand(cmd, data)
 	if k.format == vt.KittyFormatPNG && (k.width <= 0 || k.height <= 0) {
@@ -229,9 +192,6 @@ func kittySymbolImage(cmd *vt.KittyCommand, data []byte) *vt.SixelImage {
 	return cropKittySymbol(img, cmd)
 }
 
-// quantizeKittySymbol turns pixels into a palette image of 5 bits a channel,
-// which the glyph path draws (shot/mosaic). A pixel less than half opaque is
-// transparent, as an unpainted sixel pixel is.
 func quantizeKittySymbol(src image.Image) *vt.SixelImage {
 	b := src.Bounds()
 	w, h := b.Dx(), b.Dy()
@@ -256,8 +216,6 @@ var (
 	kittyPalette     []color.RGBA
 )
 
-// kittySymbolPalette is the 32768 colours of 5 bits a channel, entry n the
-// colour of index n+1. It is shared and never written.
 func kittySymbolPalette() []color.RGBA {
 	kittyPaletteOnce.Do(func() {
 		kittyPalette = make([]color.RGBA, 1<<15)
@@ -269,7 +227,6 @@ func kittySymbolPalette() []color.RGBA {
 	return kittyPalette
 }
 
-// cropKittySymbol is img cut to the command's source rectangle (x, y, w, h).
 func cropKittySymbol(img *vt.SixelImage, cmd *vt.KittyCommand) *vt.SixelImage {
 	r := image.Rect(0, 0, img.Width, img.Height)
 	if cmd.SourceX > 0 || cmd.SourceY > 0 || cmd.SourceWidth > 0 || cmd.SourceHeight > 0 {
@@ -296,8 +253,6 @@ func cropKittySymbol(img *vt.SixelImage, cmd *vt.KittyCommand) *vt.SixelImage {
 	return out
 }
 
-// resampleKittySymbol is img scaled to w by h pixels, nearest pixel, the size
-// the glyph path reads: cols cells of cellW pixels by rows of cellH.
 func resampleKittySymbol(img *vt.SixelImage, w, h int) *vt.SixelImage {
 	if w == img.Width && h == img.Height {
 		return img
@@ -313,8 +268,6 @@ func resampleKittySymbol(img *vt.SixelImage, w, h int) *vt.SixelImage {
 	return out
 }
 
-// drawKittySymbols draws one kitty command of window win as glyphs: a
-// picture's cells marked at the cursor, or a deleted one's blanked.
 func (m *OS) drawKittySymbols(win *terminal.Window, kp *KittyPassthrough, cmd *vt.KittyCommand) {
 	sp, term := m.SixelPassthrough, win.Terminal
 	if sp == nil || term == nil || cmd.Virtual {

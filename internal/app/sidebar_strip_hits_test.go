@@ -6,8 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// stripHits renders a collapsed strip on the given side and hands back the
-// model with the rectangles it recorded while drawing.
 func stripHits(t *testing.T, pos string, h int) *OS {
 	t.Helper()
 	m, tree := stripOS(t, 120, h)
@@ -26,7 +24,7 @@ func TestStripEdgeColumnStillResizesWhenTheGestureMoves(t *testing.T) {
 	m := stripHits(t, "left", 20)
 	edgeX := m.GetSidebarWidth() - 1
 	top := m.GetTopMargin()
-	m.DaemonClient = nil // the resize re-lays the panes, which syncs to the daemon
+	m.DaemonClient = nil
 
 	if !m.SidebarClick(edgeX, top+1, false) || !m.SidebarEdgeActive() {
 		t.Fatal("a press on the strip's edge rule did not arm the resize")
@@ -39,8 +37,6 @@ func TestStripEdgeColumnStillResizesWhenTheGestureMoves(t *testing.T) {
 	if m.SidebarCollapsed {
 		t.Error("dragging the strip's edge out left the rail collapsed")
 	}
-	// Read off the model: the drag moves this session's rail, not a global
-	// every session in the process shares. See TestSidebarEdgeResizeClampAndPersist.
 	if got := m.sidebarWidthPreference(); got != 25 {
 		t.Errorf("the drag set the width to %d, want the pointer's column", got)
 	}

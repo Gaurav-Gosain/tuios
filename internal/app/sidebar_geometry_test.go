@@ -9,11 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// tileDaemonWindowsMode drives the same daemon create/sync loop the tiling test
-// uses, returning the client OS holding the tiled windows, for an explicit
-// layout mode ("bsp", "master-stack", or "scrolling"), so the content-box
-// assertions can run against every tiling path, not only the BSP one. The
-// sidebar globals must be set before calling.
 func tileDaemonWindowsMode(t *testing.T, width, height, count int, layoutMode string) *OS {
 	t.Helper()
 	prevAnim := config.Global.Motion
@@ -92,7 +87,6 @@ func TestSidebarTilingPartitionsContentWidth(t *testing.T) {
 				rects := make([]rect, 0, 6)
 				for _, w := range m.Windows {
 					rects = append(rects, rect{w.X, w.Y, w.Width, w.Height})
-					// Every pane sits inside the content region, never under the sidebar.
 					if w.X < leftMargin {
 						t.Errorf("window at x=%d starts before content left margin %d", w.X, leftMargin)
 					}
@@ -142,7 +136,6 @@ func TestSidebarFloatingClampRespectsReservedRegion(t *testing.T) {
 		Height:           height,
 		AutoTiling:       false,
 	}
-	// A floating window shoved fully into the reserved band on the left.
 	win := &terminal.Window{ID: "float", X: -5, Y: 5, Width: 20, Height: 10, Workspace: 1}
 	m.Windows = []*terminal.Window{win}
 
@@ -174,9 +167,6 @@ func TestSidebarScrollingStripStartsAtLeftMargin(t *testing.T) {
 		t.Fatalf("client holds %d windows, want 2", len(m.Windows))
 	}
 
-	// Settle the slide animations from the create loop first, then reposition
-	// from the strip origin and settle again, so the assertion reads final
-	// geometry rather than a mid-slide frame.
 	m.CompleteAllAnimations()
 	sl := m.GetOrCreateScrollingLayout()
 	sl.ViewportX = 0
@@ -209,7 +199,6 @@ func TestSidebarResizeCannotEnterReservedBand(t *testing.T) {
 		withSidebar(t, true, "left", config.SidebarDefaultWidth)
 
 		m := tileDaemonWindowsMode(t, width, height, 2, LayoutModeMasterStack)
-		// Focus the window sitting against the left margin.
 		leftMargin := m.GetLeftMargin()
 		for i, w := range m.Windows {
 			if w.X == leftMargin {
@@ -219,7 +208,6 @@ func TestSidebarResizeCannotEnterReservedBand(t *testing.T) {
 		win := m.Windows[m.FocusedWindow]
 		beforeX, beforeW := win.X, win.Width
 
-		// Grow from the left edge: would move X to leftMargin-2, under the band.
 		m.ResizeFocusedWindowWidthLeft(-2)
 
 		if win.X != beforeX || win.Width != beforeW {
@@ -247,9 +235,6 @@ func TestSidebarResizeCannotEnterReservedBand(t *testing.T) {
 		win := m.Windows[m.FocusedWindow]
 		beforeRight := win.X + win.Width
 
-		// The right edge is the sidebar band, not a divider, so > grows the pane
-		// from its left edge instead. The right edge must stay put and never cross
-		// into the reserved band.
 		m.ResizeFocusedWindowWidth(2)
 
 		if win.X+win.Width > contentRight {

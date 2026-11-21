@@ -9,10 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// fitScreens are the sizes the panels have to survive: a tall narrow
-// terminal, a short wide one, the narrowest viewport worth supporting, and a
-// normal terminal as a control, plus the accent picker's wide layout at its
-// floor, just over it, and on a wide screen too short to keep everything.
 var fitScreens = []struct {
 	name string
 	w, h int
@@ -27,7 +23,6 @@ var fitScreens = []struct {
 	{"wide-picker-short", 100, 14},
 }
 
-// palette opens a command palette row by its name, as a person does.
 func palette(name string) func(f *apptest.Fixture) {
 	return func(f *apptest.Fixture) {
 		f.Action("command_palette")
@@ -36,9 +31,6 @@ func palette(name string) func(f *apptest.Fixture) {
 	}
 }
 
-// panelDoor is one panel and how a person opens it. A door that steps
-// through the panel's states lists them in steps; the panel is checked after
-// opening and after each step.
 type panelDoor struct {
 	name    string
 	prepare func(t *testing.T)
@@ -65,12 +57,10 @@ func typed(text string) func(f *apptest.Fixture) {
 
 func panelDoors() []panelDoor {
 	return []panelDoor{
-		// Help, every section, then its search.
 		{name: "help", open: func(f *apptest.Fixture) { f.Action("toggle_help") },
 			steps: append(repeat(14, keys("right")), keys("/"), typed("window"))},
 		{name: "command palette", open: func(f *apptest.Fixture) { f.Action("command_palette") },
 			steps: []func(*apptest.Fixture){typed("zzzz-no-match")}},
-		// Settings, every tab, then a long free-text value being edited.
 		{name: "settings", open: func(f *apptest.Fixture) { f.Action("open_settings") },
 			steps: repeat(14, keys("tab"))},
 		{name: "settings editing", open: func(f *apptest.Fixture) {
@@ -79,13 +69,10 @@ func panelDoors() []panelDoor {
 			f.Type("Preferred shell")
 			f.Keys("enter", "enter")
 		}, steps: []func(*apptest.Fixture){typed(strings.Repeat("/very/long/path", 8))}},
-		// The keybind manager, every tab, a recorded key, and a filter that
-		// matches nothing.
 		{name: "keybind manager", open: func(f *apptest.Fixture) { f.Action("prefix_keybinds") },
 			steps: append(repeat(6, keys("tab")), typed("zzzz-no-match"))},
 		{name: "theme picker", open: palette("Theme picker")},
 		{name: "accent picker", panes: 1, open: func(f *apptest.Fixture) { f.Action("set_accent") }},
-		// Outside a daemon session the switcher is the informational panel.
 		{name: "session switcher", open: func(f *apptest.Fixture) { f.Action("prefix_session_switcher") }},
 		{name: "layout picker", open: palette("Load layout")},
 		{name: "layout save", open: palette("Save layout"),
@@ -98,25 +85,18 @@ func panelDoors() []panelDoor {
 		}},
 		{name: "logs", open: func(f *apptest.Fixture) { f.Action("toggle_logs") }},
 		{name: "cache stats", open: func(f *apptest.Fixture) { f.Action("toggle_cache_stats") }},
-		// The tape manager, then naming a tape with a long name, then asking
-		// to delete one.
 		{name: "tape manager", prepare: longTapeFiles, open: func(f *apptest.Fixture) { f.Action("toggle_tape_manager") },
 			steps: []func(*apptest.Fixture){keys("r"), typed(strings.Repeat("name", 30)), keys("esc"), keys("d")}},
-		// With no pane open the screen shows the welcome panel.
 		{name: "welcome", panes: -1, open: func(*apptest.Fixture) {}},
 	}
 }
 
-// longTapeFiles puts a tape with a long name where the tape manager looks.
 func longTapeFiles(t *testing.T) {
 	tapeFiles(t)
 	dir := tapeDir(t)
 	writeFile(t, dir+"/a-tape-file-name-that-is-much-too-long-to-fit.tape", "Type \"x\"\n")
 }
 
-// knownCut lists the panels the test finds cut today, by screen and door.
-// Each is a bug: the case runs and must fail, so a fix that makes it pass
-// has to take it off this list.
 var knownCut = map[string]bool{}
 
 // TestPanelsFitTheScreen opens every panel at each screen size, as a person
@@ -151,7 +131,6 @@ func TestPanelsFitTheScreen(t *testing.T) {
 	}
 }
 
-// cutProbe records a failure instead of failing, for a knownCut case.
 type cutProbe struct {
 	testing.TB
 	failed bool

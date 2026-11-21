@@ -10,7 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// hintsTestOS is one focused pane on workspace 1 with body printed in it.
 func hintsTestOS(t *testing.T, body string) (*OS, *terminal.Window) {
 	t.Helper()
 	win := newTestWindow(t, "hints0000001", 60, 10)
@@ -22,7 +21,6 @@ func hintsTestOS(t *testing.T, body string) (*OS, *terminal.Window) {
 	return m, win
 }
 
-// ctrlLabel opens hints, finds the match text, and types its label with Ctrl.
 func ctrlLabel(t *testing.T, m *OS, text string) {
 	t.Helper()
 	m.OpenHints()
@@ -38,7 +36,6 @@ func ctrlLabel(t *testing.T, m *OS, text string) {
 	}
 }
 
-// hintsLastNote is the newest dock message.
 func hintsLastNote(m *OS) string {
 	if len(m.Notifications) == 0 {
 		return ""
@@ -170,7 +167,7 @@ func TestHintsCloseWhenThePaneLeaves(t *testing.T) {
 	t.Run("the frame closes what nothing else did", func(t *testing.T) {
 		m, win := hintsTestOS(t, body)
 		m.OpenHints()
-		win.Workspace = 3 // moved away behind hints' back
+		win.Workspace = 3
 		m.closeStaleHints()
 		if m.hints != nil {
 			t.Error("a stale hints mode survived the frame's check")

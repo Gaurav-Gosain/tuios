@@ -10,7 +10,6 @@ import (
 
 const hostPickerWidth = 48
 
-// renderHostPicker draws the machine picker on the shared list grammar.
 func (m *OS) renderHostPicker() (string, overlay.Geometry, []overlayRowHit) {
 	filtered := m.hostPickerRows()
 	m.hostList.Fit(len(filtered), listOverlayRows)
@@ -31,10 +30,6 @@ func (m *OS) renderHostPicker() (string, overlay.Geometry, []overlayRowHit) {
 		},
 		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
 			item := filtered[i]
-			// A machine that cannot be reached is listed and dimmed rather than
-			// hidden: hiding it leaves someone wondering whether they imagined
-			// configuring it, which is the same argument the rail makes for
-			// keeping a host's heading when its link is down.
 			nameFg := pal.FgDim
 			if selected {
 				nameFg = pal.Fg
@@ -49,8 +44,6 @@ func (m *OS) renderHostPicker() (string, overlay.Geometry, []overlayRowHit) {
 	})
 }
 
-// hostPickerTitle says which question is being asked, since the list is the
-// same for both.
 func hostPickerTitle(p HostPickerPurpose) string {
 	if p == HostPickerNewSession {
 		return "New session on"

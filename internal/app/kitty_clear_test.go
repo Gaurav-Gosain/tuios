@@ -36,10 +36,6 @@ func TestKittyClearOnED2(t *testing.T) {
 	emu.KittyMainState().SetClearCallback(clearCB)
 	emu.KittyAltState().SetClearCallback(clearCB)
 
-	// youterm enters alt screen immediately. The VT has separate KittyState
-	// objects for main / alt screens — if the callback is only registered on
-	// the currently-active state at setup time, the alt-screen ClearPlacements
-	// fires with nil callback and no deletes reach the host.
 	_, _ = emu.Write([]byte("\x1b[?1049h"))
 	emu.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
 		cursorPos := emu.CursorPosition()
@@ -159,8 +155,6 @@ func TestKittyNoStaleAccumulation(t *testing.T) {
 		return b.Bytes()
 	}
 
-	// Simulate 10 scroll redraws back-to-back. Drain pendingOutput between
-	// frames (like the render cycle does) so each frame starts clean.
 	for range 10 {
 		_, _ = emu.Write(frame())
 		_ = kp.FlushPending()

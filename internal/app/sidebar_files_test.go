@@ -13,19 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// fileViewTree builds a directory with a known shape: two folders and three
-// files, deliberately named so that a plain lexical sort and a folders-first
-// sort disagree, and so that case-insensitive and byte order disagree too.
-//
-//	Zeta/      README.md
-//	apple/     beta.txt
-//	           Alpha.go
-//
-// Folders first, then each group case-insensitively, is:
-//
-//	apple, Zeta, Alpha.go, beta.txt, README.md
-//
-// which is written out below and is not derived from the code under test.
 func fileViewTree(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -44,12 +31,6 @@ func fileViewTree(t *testing.T) string {
 
 var wantFileOrder = []string{"apple", "Zeta", "Alpha.go", "beta.txt", "README.md"}
 
-// loadFileViewNow reads dir into the files section and waits for the answer.
-//
-// It goes through the real command and the real handler rather than filling the
-// model in: the read runs on its own goroutine in the app, so a test that wrote
-// the entries directly would prove nothing about the path that actually runs,
-// including the generation guard that decides whether a reply is applied at all.
 func (m *OS) loadFileViewNow(t *testing.T, dir string) {
 	t.Helper()
 	m.filesView.Show = 1
@@ -81,8 +62,6 @@ func TestPaneBusyReasonRefusesWhenSomethingIsRunning(t *testing.T) {
 		t.Fatalf("an idle pane was refused: %s", why)
 	}
 
-	// A full-screen program. The emulator knows this on every platform, which
-	// is why it is the first test.
 	win.WriteOutput([]byte("\x1b[?1049h"))
 	if !win.Terminal.IsAltScreen() {
 		t.Fatal("the emulator did not record the alternate screen")
@@ -96,8 +75,6 @@ func TestPaneBusyReasonRefusesWhenSomethingIsRunning(t *testing.T) {
 	}
 	win.WriteOutput([]byte("\x1b[?1049l"))
 
-	// The daemon's own observation of the foreground process, which is what an
-	// attached, SSH or web client has instead of a local PTY to ask.
 	win.ForegroundCmd = "nvim"
 	why, ok = paneBusyReason(win)
 	if ok {
@@ -149,8 +126,6 @@ func TestFileReadRunsOffTheUpdateGoroutine(t *testing.T) {
 	}
 	go func() {
 		if msg := cmd(); msg != nil {
-			// The reply is thrown away: this test is about the loop staying
-			// alive while the read is stuck, not about what comes back.
 			_ = msg
 		}
 	}()
@@ -160,8 +135,6 @@ func TestFileReadRunsOffTheUpdateGoroutine(t *testing.T) {
 		t.Fatal("the read never started")
 	}
 
-	// The read is now stuck in the kernel. Everything the loop does next has to
-	// come back anyway.
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -176,8 +149,6 @@ func TestFileReadRunsOffTheUpdateGoroutine(t *testing.T) {
 		t.Fatal("the client stopped answering while a directory read was stuck")
 	}
 
-	// And the section says a read is running rather than showing a listing it
-	// does not have.
 	if out := strings.Join(railLines(t, m), "\n"); !strings.Contains(out, "loading") {
 		t.Errorf("a section waiting on a stuck read does not say so:\n%s", out)
 	}
@@ -214,8 +185,6 @@ func TestALargeDirectoryIsBounded(t *testing.T) {
 		t.Error("a listing that was cut short did not say so")
 	}
 
-	// And a directory under the cap is not marked, so the note only ever
-	// appears where it is true.
 	m.loadFileViewNow(t, fileViewTree(t))
 	if m.filesView.Capped {
 		t.Error("a five-name directory reported itself as cut short")
@@ -251,9 +220,6 @@ func TestPaneBusyReasonLetsALocalIdleShellThrough(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("no process group to read on windows")
 	}
-	// A shell with no rc files and a prompt this test can recognise. The pane
-	// is only idle once the shell is at that prompt: a shell that is still
-	// starting can have its rc files' programs in the foreground.
 	t.Setenv("SHELL", "/bin/sh")
 	t.Setenv("ENV", "")
 	const prompt = "IDLE-PROMPT$"
@@ -281,11 +247,6 @@ func TestPaneBusyReasonLetsALocalIdleShellThrough(t *testing.T) {
 		t.Errorf("a pane at its shell prompt was refused: %s", why)
 	}
 
-	// And a program run from that prompt is still refused, by name. The shell
-	// hands the terminal to its child before the child has run exec, and for
-	// that moment the foreground group is a copy of the shell still under the
-	// shell's name, so the wait is for sleep itself rather than for any
-	// foreground process.
 	if err := win.SendInput([]byte("sleep 30\r")); err != nil {
 		t.Fatalf("type into the pane: %v", err)
 	}
@@ -305,10 +266,6 @@ func TestPaneBusyReasonLetsALocalIdleShellThrough(t *testing.T) {
 	}
 }
 
-// runSync drives the one comparison Update makes after every message: does the
-// files section still agree with the focused pane's directory. It runs the
-// command it produces and applies the reply, which is what the loop does one
-// message later.
 func (m *OS) runSync(t *testing.T) bool {
 	t.Helper()
 	cmd := m.FilesSyncCmd()
@@ -343,12 +300,10 @@ func TestFilesSectionDoesNotDragTheUserBack(t *testing.T) {
 	m.FocusedWindow = 0
 	m.runSync(t)
 
-	// The user walks the listing into Zeta. The pane is still in root.
 	if cmd := m.requestFileList(elsewhere, m.filesView.Origin, true); cmd != nil {
 		m.HandleFileList(cmd().(fileListMsg))
 	}
 
-	// The pane now cds to apple. The listing must stay where the user put it.
 	m.onCwdChange(CwdChangedMsg{WindowID: m.Windows[0].ID, Cwd: "file://" + sub})
 	if m.runSync(t) {
 		t.Error("a cd in the pane moved a listing the user had steered")
@@ -360,8 +315,6 @@ func TestFilesSectionDoesNotDragTheUserBack(t *testing.T) {
 		t.Errorf("the pane's own cwd was not recorded: %q", m.Windows[0].Cwd)
 	}
 
-	// The pin is about one pane. Focusing another drops it, because the listing
-	// is then about a pane the user has steered nothing in.
 	m.Windows[1].Cwd = root
 	m.FocusedWindow = 1
 	if !m.runSync(t) {

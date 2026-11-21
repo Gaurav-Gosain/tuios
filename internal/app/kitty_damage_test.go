@@ -15,8 +15,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// withAnimatingHost installs a host that advertises frame edits, which is what
-// the damage path needs before it will emit a patch at all.
 func withAnimatingHost(t *testing.T) {
 	t.Helper()
 	withClientCaps(t, &HostCapabilities{
@@ -38,8 +36,6 @@ func newDamagePassthrough(t *testing.T) *KittyPassthrough {
 	return kp
 }
 
-// emitAndCapture runs one frame through the damage path and returns both the
-// decision and exactly the bytes that frame appended to the host stream.
 func emitAndCapture(
 	kp *KittyPassthrough,
 	windowID string,
@@ -54,8 +50,6 @@ func emitAndCapture(
 	return update, append([]byte(nil), kp.pendingOutput[before:]...)
 }
 
-// makeBitmap builds a deterministic bitmap that is not uniform, so a copied
-// rectangle landing at the wrong offset shows up as a mismatch.
 func makeBitmap(width, height, bpp int, seed int) []byte {
 	b := make([]byte, width*height*bpp)
 	for i := range b {
@@ -64,7 +58,6 @@ func makeBitmap(width, height, bpp int, seed int) []byte {
 	return b
 }
 
-// paintRect overwrites a rectangle with a recognisable ramp.
 func paintRect(b []byte, width, bpp, x, y, w, h, seed int) {
 	stride := width * bpp
 	for row := y; row < y+h; row++ {
@@ -77,7 +70,6 @@ func paintRect(b []byte, width, bpp, x, y, w, h, seed int) {
 	}
 }
 
-// splitAPC pulls the individual APC sequences out of a host byte stream.
 func splitAPC(t *testing.T, out []byte) [][]byte {
 	t.Helper()
 	var seqs [][]byte
@@ -98,23 +90,13 @@ func splitAPC(t *testing.T, out []byte) [][]byte {
 	return seqs
 }
 
-// replayHost is an independent reference kitty host holding one image, so
-// patches can be applied to it exactly as a kitty terminal would apply them.
-// It implements only the protocol slice the damage path emits: a=f edits of
-// the root frame (r=1), chunked with m=1, applied with X=1 overwrite or X=0
-// alpha blend. It is written from the kitty spec rather than sharing code
-// with the patch builder, so the round trip is checked against a second
-// reading of the protocol, not against the code under test.
 type replayHost struct {
-	id  uint32
-	img *replayImage
-	// pending accumulates a chunked a=f: the first chunk carries the frame
-	// parameters, continuation chunks carry only payload.
+	id          uint32
+	img         *replayImage
 	pendingCmd  *vt.KittyCommand
 	pendingData []byte
 }
 
-// replayImage is what the host holds under an id.
 type replayImage struct {
 	Width  int
 	Height int
@@ -131,7 +113,6 @@ func newReplayHost(id uint32, format vt.KittyGraphicsFormat, width, height int, 
 	}}
 }
 
-// image returns what the host now holds under this id.
 func (h *replayHost) image(t *testing.T) *replayImage {
 	t.Helper()
 	if h.img == nil {
@@ -164,9 +145,6 @@ func (h *replayHost) handle(cmd *vt.KittyCommand) error {
 	return h.applyFrameEdit(cmd)
 }
 
-// applyFrameEdit applies one complete a=f to the root frame. In a=f, r names
-// the target frame, x/y the destination offset, s/v the source rectangle, and
-// X=1 means overwrite rather than blend.
 func (h *replayHost) applyFrameEdit(cmd *vt.KittyCommand) error {
 	if h.img == nil || cmd.ImageID != h.id {
 		return fmt.Errorf("ENOENT: image %d not found", cmd.ImageID)
@@ -217,8 +195,6 @@ func (h *replayHost) applyFrameEdit(cmd *vt.KittyCommand) error {
 	return nil
 }
 
-// replayBlendPixel writes one source pixel over one destination pixel. A
-// source without an alpha channel is opaque.
 func replayBlendPixel(dst []byte, dstBPP int, src []byte, srcBPP int, overwrite bool) {
 	alpha := 255
 	if srcBPP == 4 {
@@ -269,8 +245,6 @@ func rectContaining(rects []damageRect, x, y int) string {
 	return "outside every damage rect"
 }
 
-// assertHostShowsFrame is the round trip itself: after the patches, the pixels
-// the host holds must be the pixels the guest drew.
 func assertHostShowsFrame(t *testing.T, host *replayHost, want []byte, width, height, bpp int, rects []damageRect) {
 	t.Helper()
 	img := host.image(t)
@@ -317,9 +291,6 @@ func TestBitmapPatchRoundTripReproducesFrame(t *testing.T) {
 			},
 		},
 		{
-			// The grid is 32 px wide and 8 rows tall, so the final tile and the
-			// final band are both partial whenever the bitmap does not divide
-			// evenly. A rectangle clipped wrong here writes past the row.
 			name: "last row and last column", width: 96, height: 64, format: vt.KittyFormatRGBA,
 			mutate: func(b []byte, w, h, bpp int) {
 				paintRect(b, w, bpp, w-1, h-1, 1, 1, 6)
@@ -408,8 +379,6 @@ func TestBitmapWidePatchIsNeverChunked(t *testing.T) {
 	}
 	host := newReplayHost(hostID, vt.KittyFormatRGBA, width, height, old)
 
-	// A full-width band: 256 x 8 x 4 bytes is 8192, which is more than twice
-	// what one escape can carry, so the unsplit patch would have been chunked.
 	next := append([]byte(nil), old...)
 	paintRect(next, width, bpp, 0, 0, width, damageBandHeight, 3)
 
@@ -590,8 +559,6 @@ func TestBitmapNonDiffablePayloadsGoWhole(t *testing.T) {
 					len(entry.data), entry.width, entry.height)
 			}
 
-			// The host now holds whatever that payload drew, which we cannot
-			// reason about, so the next raw frame must go whole as well.
 			if update, _ := emitAndCapture(kp, "win", 9, vt.KittyFormatRGBA,
 				vt.KittyCompressionNone, 96, 64, seed); update != bitmapFull {
 				t.Fatalf("frame after an undiffable one: update=%v, want bitmapFull", update)
@@ -657,7 +624,6 @@ func TestBitmapGeometryChangeReseeds(t *testing.T) {
 		t.Fatalf("resized frame appended %d bytes", len(out))
 	}
 
-	// Reseeded means the new geometry is now the baseline.
 	if update, _ := emitAndCapture(kp, "win", 4, vt.KittyFormatRGBA,
 		vt.KittyCompressionNone, 64, 96, append([]byte(nil), tall...)); update != bitmapUnchanged {
 		t.Fatalf("frame after resize: update=%v, want bitmapUnchanged", update)
@@ -669,11 +635,9 @@ func TestBitmapGeometryChangeReseeds(t *testing.T) {
 // wrong until something else forces a whole frame.
 func TestDamageRectsCoverEveryChangedPixel(t *testing.T) {
 	const (
-		width  = 256
-		height = 128
-		bpp    = 4
-		// Few enough scattered pixels that the tiles they damage stay well
-		// under maxDamageShare, so rectangles are what comes back.
+		width   = 256
+		height  = 128
+		bpp     = 4
 		changes = 16
 	)
 	prev := makeBitmap(width, height, bpp, 10)
@@ -744,8 +708,6 @@ func TestRewriteKittyImageIDReplacesOnlyImageID(t *testing.T) {
 			"\x1b_Ga=a,i=99,s=3,q=2\x1b\\",
 		},
 		{
-			// I= is the image NUMBER and addresses a different thing entirely;
-			// rewriting it would retarget the command.
 			"image number left alone",
 			"\x1b_Ga=f,I=7,i=7,q=2;QUJD\x1b\\",
 			"\x1b_Ga=f,I=7,i=99,q=2;QUJD\x1b\\",
@@ -844,10 +806,6 @@ func TestBitmapPacingDropsOnlyReusedFrames(t *testing.T) {
 		}, path, "win", false, 0, 0, 40, 20, 1, 1, 0, 0, 0, true)
 	}
 
-	// A slow host is simulated by setting the pacing deadline directly rather
-	// than by trying to make a real write take too long. The window is set
-	// afresh before each send so no amount of scheduling delay between the
-	// assertions can let it lapse mid-test.
 	holdHost := func() {
 		kp.pacedUntilNanos.Store(time.Now().Add(time.Minute).UnixNano())
 		if !kp.hostBacklogged() {
@@ -878,7 +836,6 @@ func TestBitmapPacingDropsOnlyReusedFrames(t *testing.T) {
 		t.Fatal("first frame of a second stream was dropped")
 	}
 
-	// With the host draining again the stream resumes.
 	kp.pacedUntilNanos.Store(0)
 	afterSecond := len(kp.pendingOutput)
 	writeFrame(4)
@@ -904,7 +861,6 @@ func TestAnUnpatchableImageRemembersNoBitmap(t *testing.T) {
 	const w, h = 40, 30
 	for i := range 20 {
 		raw := makeBitmap(w, h, 4, i)
-		// A fresh host id each time, which is what i=0 gets.
 		update := kp.emitBitmap("win", uint32(i+1), vt.KittyFormatRGBA,
 			vt.KittyCompressionNone, w, h, raw, false)
 		if update != bitmapFull {
@@ -958,8 +914,6 @@ func TestTheGraphicsQueueStopsGrowing(t *testing.T) {
 		t.Fatal("a queue over the budget does not report itself full")
 	}
 
-	// An empty queue takes an image of any size: the test is made before the
-	// append, never against it, so a single large image is never refused.
 	kp.pendingOutput = nil
 	if kp.pendingGraphicsFull() {
 		t.Error("an empty queue reports itself full, which would refuse every image")

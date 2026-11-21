@@ -9,10 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 )
 
-// The machine a screen test's lists read from: programs on PATH for the
-// launcher, tape files for the tape manager.
-
-// programsOnPath gives the launcher three programs to list and nothing else.
 func programsOnPath(t *testing.T) {
 	t.Helper()
 	dir := t.TempDir()
@@ -25,7 +21,6 @@ func programsOnPath(t *testing.T) {
 	t.Setenv("PATH", dir)
 }
 
-// tapeDir is where the tape manager looks for tapes.
 func tapeDir(t *testing.T) string {
 	t.Helper()
 	dir, err := app.GetTapeDirectory()
@@ -35,8 +30,6 @@ func tapeDir(t *testing.T) string {
 	return dir
 }
 
-// tapeFiles puts three tapes where the tape manager looks, and takes them
-// away afterwards: the directory is the test binary's whole XDG tree.
 func tapeFiles(t *testing.T) {
 	t.Helper()
 	dir := tapeDir(t)

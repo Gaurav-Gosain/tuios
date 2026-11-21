@@ -7,18 +7,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The maintainer runs a 207x55 host terminal. Every benchmark here uses that as
-// the realistic size rather than the 120x40 used by the older benchmarks, since
-// the per-frame cost of the render path scales with total cells and the
-// difference between the two is a factor of about 2.4.
 const (
 	realCols = 207
 	realRows = 55
 )
 
-// fillWindow paints every row of a window's emulator with styled text, which is
-// the shape of a frame the batching loop in renderTerminal actually has to
-// work through: a colour run per line rather than a uniform blank screen.
 func fillWindow(tb testing.TB, win *terminal.Window, cols, rows int) {
 	tb.Helper()
 	win.LockIO()
@@ -33,7 +26,6 @@ func fillWindow(tb testing.TB, win *terminal.Window, cols, rows int) {
 	}
 }
 
-// benchWindow builds a window at the given size with realistic painted content.
 func benchWindow(tb testing.TB, id string, cols, rows int) *terminal.Window {
 	tb.Helper()
 	win := newTestWindow(tb, id, cols, rows)
@@ -77,8 +69,6 @@ func BenchmarkRenderTerminalReal(b *testing.B) {
 			}
 		})
 
-		// The clean-cache hit is what the great majority of windows take on a
-		// typical frame, so its cost bounds the floor of a multi-window frame.
 		b.Run(sz.name+"/cached", func(b *testing.B) {
 			win := benchWindow(b, "bench-c-"+sz.name, sz.cols, sz.rows)
 			m := newTestOS(win)
@@ -93,9 +83,6 @@ func BenchmarkRenderTerminalReal(b *testing.B) {
 	}
 }
 
-// renderedFrame returns a realistic rendered window frame for the clip
-// benchmarks: styled, full width, with the trailing-space trimming the
-// unfocused fast path performs.
 func renderedFrame(tb testing.TB, cols, rows int) string {
 	tb.Helper()
 	win := benchWindow(tb, "bench-frame", cols, rows)

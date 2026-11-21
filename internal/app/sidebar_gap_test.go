@@ -20,8 +20,6 @@ import (
 //
 // The gap is not negotiable: what shortens is the name.
 func TestRailKeepsAGapBeforeEveryRightHandFigure(t *testing.T) {
-	// Every width from the narrowest the rail draws at up past the point the
-	// names stop needing truncation, so the boundary case cannot be missed.
 	for w := config.SidebarNarrowWidth; w <= 34; w++ {
 		names := []string{
 			"documentation-site",
@@ -49,18 +47,12 @@ func TestRailKeepsAGapBeforeEveryRightHandFigure(t *testing.T) {
 	}
 }
 
-// assertFigureHasItsGap checks the cell in front of a row's trailing figure is
-// blank. The figure is right-aligned one cell in from the rail's edge, so the
-// check reads the row from its right-hand end.
 func assertFigureHasItsGap(t *testing.T, row string, cw, width int, name string) {
 	t.Helper()
-	// Past the rail's own edge rule, which every row ends on.
 	trimmed := strings.TrimRight(row, " │|")
 	if trimmed == "" {
 		return
 	}
-	// A row ending in a figure ends in digits, or in a duration like "18m": a
-	// unit letter is only part of one when digits come before it.
 	tail := []rune(trimmed)
 	i := len(tail) - 1
 	if strings.ContainsRune("smhd", tail[i]) {
@@ -83,8 +75,6 @@ func assertFigureHasItsGap(t *testing.T, row string, cw, width int, name string)
 
 func isDigit(r rune) bool { return r >= '0' && r <= '9' }
 
-// railGapOS is a session whose pane carries the given name, at a rail width the
-// caller sets.
 func railGapOS(t *testing.T, name string) *OS {
 	t.Helper()
 	m := newNarrowOS(t, 120, 40)

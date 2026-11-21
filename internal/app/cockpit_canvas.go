@@ -10,43 +10,28 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// ckCanvas is the grid the cockpit is drawn on: grounds first, then runs of
-// text that keep the ground under them. The cockpit has three columns, cards
-// and right-aligned meta, and laying them out by cell is simpler and safer
-// than padding styled strings to widths.
 type ckCanvas struct {
 	w, h int
 	buf  uv.ScreenBuffer
-	// tmp is the one-line buffer draw lays a styled string on, kept from
-	// call to call.
-	tmp uv.ScreenBuffer
+	tmp  uv.ScreenBuffer
 }
 
-// ckSeg is one styled run of text. A nil ground keeps the cell's.
 type ckSeg struct {
 	t      string
 	fg, bg color.Color
 	attrs  uint8
-	// link is the address the run opens, sent as OSC 8 and underlined.
-	link string
+	link   string
 }
 
-// Styles of a run.
 const (
 	ckBold   = uv.AttrBold
 	ckItalic = uv.AttrItalic
 	ckStrike = uv.AttrStrikethrough
 )
 
-// reset makes c a blank w by h canvas on bg, keeping its buffers when the
-// size is the same, so a frame drawn again allocates no grid.
 func (c *ckCanvas) reset(w, h int, bg color.Color) *ckCanvas {
 	if c == nil || c.w != w || c.h != h {
 		c = &ckCanvas{w: w, h: h, buf: uv.NewScreenBuffer(w, h), tmp: uv.NewScreenBuffer(w, 1)}
-		// The frame canvas cuts strings by grapheme, so draw has to as
-		// well: by code point, a Hangul syllable written as jamo takes a
-		// cell per jamo here and one 2-cell cluster in the frame, and the
-		// row comes out short (#1184).
 		c.buf.Method = ansi.GraphemeWidth
 		c.tmp.Method = ansi.GraphemeWidth
 	}
@@ -54,8 +39,6 @@ func (c *ckCanvas) reset(w, h int, bg color.Color) *ckCanvas {
 	return c
 }
 
-// ckASCII is each printable ASCII character as a string, so drawing ASCII
-// text allocates nothing.
 var ckASCII = func() (t [128]string) {
 	for i := 32; i < 127; i++ {
 		t[i] = string(rune(i))
@@ -63,8 +46,6 @@ var ckASCII = func() (t [128]string) {
 	return t
 }()
 
-// ckColor drops a colour that is no colour at all, which a cell would write
-// as black.
 func ckColor(c color.Color) color.Color {
 	if noColor(c) {
 		return nil
@@ -72,11 +53,8 @@ func ckColor(c color.Color) color.Color {
 	return c
 }
 
-// fill paints a rectangle of blank cells on bg.
 func (c *ckCanvas) fill(x, y, w, h int, bg color.Color) {
 	cell := uv.Cell{Content: " ", Width: 1, Style: uv.Style{Bg: ckColor(bg)}}
-	// The canvas is only ever rendered line by line, so its cells are
-	// written directly, past the buffer's damage tracking.
 	for j := max(y, 0); j < min(y+h, c.h); j++ {
 		line := c.buf.Lines[j]
 		for i := max(x, 0); i < min(x+w, c.w); i++ {
@@ -85,8 +63,6 @@ func (c *ckCanvas) fill(x, y, w, h int, bg color.Color) {
 	}
 }
 
-// text draws segs at x, y, clipped at limit (the canvas edge when 0), and
-// returns the column after the last cell drawn.
 func (c *ckCanvas) text(x, y, limit int, segs ...ckSeg) int {
 	if limit <= 0 || limit > c.w {
 		limit = c.w
@@ -101,8 +77,6 @@ func (c *ckCanvas) text(x, y, limit int, segs ...ckSeg) int {
 			w := 1
 			switch {
 			case r < 0x20 || r == 0x7f || r >= 0x80 && r < 0xa0:
-				// A control character never reaches the terminal: ESC
-				// would start a sequence there.
 				continue
 			case r < 0x80:
 				cl = ckASCII[r]
@@ -111,7 +85,6 @@ func (c *ckCanvas) text(x, y, limit int, segs ...ckSeg) int {
 				w = ansi.StringWidth(cl)
 			}
 			if w == 0 {
-				// A combining mark joins the cell before it.
 				if prev := c.buf.CellAt(x-1, y); prev != nil && x > 0 && x <= limit {
 					prev.Content += cl
 				}
@@ -144,16 +117,12 @@ func (c *ckCanvas) text(x, y, limit int, segs ...ckSeg) int {
 	return x
 }
 
-// textR draws segs so they end at column right, and returns where they
-// start.
 func (c *ckCanvas) textR(right, y int, segs ...ckSeg) int {
 	x := right - ckWidth(segs...)
 	c.text(x, y, right, segs...)
 	return x
 }
 
-// draw lays a styled one-line string at x, y, at most w cells of it. Cells
-// it draws with no ground keep the ground under them.
 func (c *ckCanvas) draw(x, y, w int, s string) {
 	if y < 0 || y >= c.h || w <= 0 {
 		return
@@ -170,13 +139,6 @@ func (c *ckCanvas) draw(x, y, w int, s string) {
 		}
 		cp := *src
 		if cp.Content == "" && cp.Width == 0 {
-			// The second cell of a wide character. The copy of the wide
-			// character itself already wrote this column through SetCell,
-			// which marks the continuation with a zero-width cell; setting
-			// the placeholder again would split the wide cell we just drew
-			// and blank it, so skip it.
-			// When the wide cell itself fell off the left edge, blank this
-			// cell instead of leaving what was under it.
 			if i == 0 || x+i-1 < 0 {
 				blank := uv.EmptyCell
 				blank.Style = cp.Style
@@ -193,22 +155,18 @@ func (c *ckCanvas) draw(x, y, w int, s string) {
 	}
 }
 
-// hline draws a run of glyph in fg.
 func (c *ckCanvas) hline(x, y, w int, glyph string, fg color.Color) {
 	if w > 0 {
 		c.text(x, y, x+w, ckSeg{t: strings.Repeat(glyph, w), fg: fg})
 	}
 }
 
-// mark applies the 16-colour attribute that stands in for st's ground to
-// the rectangle: the cell form of pal.Mark. It does nothing at other depths.
 func (c *ckCanvas) mark(pal overlay.Palette, x, y, w, h int, st overlay.RowState) {
 	if fn := pal.MarkCell(st); fn != nil {
 		c.restyle(x, y, w, h, fn)
 	}
 }
 
-// restyle applies fn to every cell of the rectangle.
 func (c *ckCanvas) restyle(x, y, w, h int, fn func(*uv.Cell)) {
 	for j := max(y, 0); j < min(y+h, c.h); j++ {
 		for i := max(x, 0); i < min(x+w, c.w); i++ {
@@ -219,7 +177,6 @@ func (c *ckCanvas) restyle(x, y, w, h int, fn func(*uv.Cell)) {
 	}
 }
 
-// render is the canvas as lines of styled text.
 func (c *ckCanvas) render() string {
 	var b strings.Builder
 	b.Grow(c.w * c.h * 4)
@@ -232,7 +189,6 @@ func (c *ckCanvas) render() string {
 	return b.String()
 }
 
-// ckWidth is the width of segs in cells.
 func ckWidth(segs ...ckSeg) int {
 	n := 0
 	for _, s := range segs {
@@ -241,7 +197,6 @@ func ckWidth(segs ...ckSeg) int {
 	return n
 }
 
-// ckTrunc cuts s to n cells with an ellipsis.
 func ckTrunc(s string, n int) string {
 	if n <= 0 {
 		return ""
@@ -252,7 +207,6 @@ func ckTrunc(s string, n int) string {
 	return ansi.Truncate(s, n, overlay.Ellipsis())
 }
 
-// ckPad pads or cuts s to n cells.
 func ckPad(s string, n int) string {
 	s = ckTrunc(s, n)
 	if w := ansi.StringWidth(s); w < n {

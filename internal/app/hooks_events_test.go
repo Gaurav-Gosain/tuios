@@ -8,28 +8,16 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The hooks system declared eight events and fired three. These tests pin one
-// event each to the action that must produce it, so an event cannot go back to
-// being a name in the config reference that nothing ever emits.
-
-// hookRecorder collects the contexts hooks fired with, in place of running a
-// shell per event.
 type hookRecorder struct {
 	mu    sync.Mutex
 	fired []hooks.Context
 }
 
-// record registers every event on m and returns the recorder collecting them.
-// Registering all of them (rather than only the one under test) is what catches
-// an action that fires the wrong event as well as one that fires none.
 func record(t *testing.T, m *OS) *hookRecorder {
 	t.Helper()
 	if m.HookManager == nil {
 		m.HookManager = hooks.NewManager()
 	}
-	// NewOS loads the config of whoever is running the tests, hooks included.
-	// Drop those first: a developer with a real hook configured would otherwise
-	// see it fire alongside the test's and fail the one-event-per-action checks.
 	m.HookManager.ClearAll()
 	r := &hookRecorder{}
 	m.HookManager.SetRunner(func(_ string, ctx hooks.Context) {
@@ -43,10 +31,6 @@ func record(t *testing.T, m *OS) *hookRecorder {
 	return r
 }
 
-// only returns the single context fired for event, failing when the count is
-// anything but one: a hook firing twice for one action is as wrong as not
-// firing, and a resize hook that runs per mouse-motion event is the specific
-// version of that this guards.
 func (r *hookRecorder) only(t *testing.T, m *OS, event hooks.Event) hooks.Context {
 	t.Helper()
 	m.HookManager.Wait()
@@ -65,7 +49,6 @@ func (r *hookRecorder) only(t *testing.T, m *OS, event hooks.Event) hooks.Contex
 	return got[0]
 }
 
-// events lists what fired, for failure messages.
 func (r *hookRecorder) events() []hooks.Event {
 	out := make([]hooks.Event, 0, len(r.fired))
 	for _, c := range r.fired {
@@ -151,7 +134,7 @@ func TestAfterLayoutChangeReportsResultingLayout(t *testing.T) {
 	m.UseBSPLayout, m.UseScrollingLayout = true, false
 	r := record(t, m)
 
-	m.ToggleLayoutMode() // bsp -> master-stack
+	m.ToggleLayoutMode()
 
 	if ctx := r.only(t, m, hooks.AfterLayoutChange); ctx.Layout != LayoutModeMasterStack {
 		t.Errorf("Layout = %q, want %q", ctx.Layout, LayoutModeMasterStack)
@@ -210,21 +193,11 @@ func TestEveryDeclaredEventIsCovered(t *testing.T) {
 		hooks.AfterDetach:          true,
 		hooks.AfterLayoutChange:    true,
 		hooks.AfterResize:          true,
-		// Fire site and payload: TestAgentAlertHookCarriesTheDocumentedContract
-		// in agent_alert_test.go, which is where the policy that gates it lives.
-		hooks.AfterAgentState: true,
-		// Daemon only. Fire site: the session event sink, proved with its
-		// payload by TestRunReturnsExitCodeAndOutput in internal/session.
+		hooks.AfterAgentState:      true,
 		hooks.AfterCommandFinished: true,
-		// Fire site: noteThemeChange in theme_hook.go, proved with its payload
-		// by TestAfterThemeChangeHookFiresOncePerPick in e2e/tui.
-		hooks.AfterThemeChange: true,
-		// Daemon only. Fire site: runWorktreeHook in internal/session, proved
-		// with its payload and its wait by TestRailWorktreeRefusals in e2e/tui.
-		hooks.AfterNewWorktree: true,
-		// Daemon only. Fire site: fireSettleHook in internal/session, proved
-		// with its payload by TestCockpitGroupsTheFleet in e2e/tui.
-		hooks.AfterSettle: true,
+		hooks.AfterThemeChange:     true,
+		hooks.AfterNewWorktree:     true,
+		hooks.AfterSettle:          true,
 	}
 	for _, e := range hooks.AllEvents() {
 		if !covered[e] {

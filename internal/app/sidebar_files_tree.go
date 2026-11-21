@@ -10,89 +10,40 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// # The files section as a tree
-//
-// appearance.sidebar.files_style = "tree" draws the section the way neo-tree
-// does: one root, the folder the list style would show, and every folder opens
-// in place under its own row. The list style and the tree share the root's
-// listing, its read, its watch and every file action; what the tree adds is
-// the set of open folders and a listing for each one on screen.
-//
-// # What it costs
-//
-// Nothing is read until a folder is opened, and nothing is read on an idle
-// client. An open folder costs its listing (capped at fileViewMaxEntries names,
-// like the root) and one inotify watch on the client's single extra inotify
-// instance (dirwatch.Set). A closed folder drops its listing and its watch.
-// The sync that decides what to read runs once per message, and answers from
-// a fingerprint comparison unless the root, the session or the tree changed.
-//
-// # What is remembered
-//
-// Which folders are open, per session, for as long as the client runs. Opening
-// a folder whose parent is closed costs nothing until the parent opens again.
-// The open set is not saved: it is where a person was looking, not a setting.
-
-// fileTreeMaxOpen bounds the open folders the tree reads and watches at once.
-// Past it a folder will not open, and a remembered one stays drawn closed.
 const fileTreeMaxOpen = 64
 
-// fileTreeOpenDirGlyph is the nerd font mark of an open folder, drawn in place
-// of the icon table's closed folder on a folder the tree has open.
 const fileTreeOpenDirGlyph = "\ue5fe"
 
-// The expander marks neo-tree draws by default, used where the file icons
-// are: a nerd font chevron right for a closed folder and down for an open one.
-// Without the icons the glyph set's fold marks draw instead.
 const (
 	fileTreeChevronShut = "\uf460"
 	fileTreeChevronOpen = "\uf47c"
 )
 
-// fileTreeDir is one open folder's listing.
 type fileTreeDir struct {
 	Entries []fileEntry
 	Capped  bool
 	Err     string
 	Loading bool
-	// Req stamps the read in flight. A reply that does not carry it is for a
-	// read a newer one replaced, or for a folder that closed and opened again.
-	Req uint64
-	// Again says the folder changed while its first read was running, so it
-	// is read once more when that read lands, as the root is.
-	Again bool
+	Req     uint64
+	Again   bool
 }
 
-// fileTreeState is the tree's runtime state. It is shared by both rail edges,
-// like the root listing it hangs from.
 type fileTreeState struct {
-	// open is the open folders, per session, keyed by fileTreeKey.
-	open map[string]map[string]struct{}
-	// dirs is the listing of each open folder the tree draws now, by absolute
-	// path. It never holds a folder that is not on screen.
-	dirs map[string]*fileTreeDir
-	// host is the machine dirs were read from.
-	host string
-	// req is the last read stamp handed out.
-	req uint64
-	// gen moves whenever what the tree draws changes. The rail's cache folds it.
-	gen uint64
-	// guides keeps each indent guide drawn, by its shape. There are a few
-	// dozen shapes in any tree a rail can show.
+	open   map[string]map[string]struct{}
+	dirs   map[string]*fileTreeDir
+	host   string
+	req    uint64
+	gen    uint64
 	guides map[string]string
-	// synced is what the last sync saw, so a sync on an idle client is one
-	// comparison.
 	synced fileTreeSync
 }
 
-// fileTreeSync is the fingerprint syncFileTree compares.
 type fileTreeSync struct {
 	on                  bool
 	session, root, host string
 	rootGen, treeGen    uint64
 }
 
-// fileTreeListMsg is one open folder's finished read.
 type fileTreeListMsg struct {
 	Dir     string
 	Req     uint64
@@ -102,16 +53,12 @@ type fileTreeListMsg struct {
 	Err     string
 }
 
-// filesTreeOn reports whether the files section draws as a tree.
 func (m *OS) filesTreeOn() bool {
 	return m.Settings.SidebarFilesStyle == config.SidebarFilesTree
 }
 
-// fileTreeKey names an open folder across machines: the same path on two
-// machines is two folders.
 func fileTreeKey(host, dir string) string { return host + "\x00" + dir }
 
-// fileTreeOpenSet is the open set of the attached session.
 func (m *OS) fileTreeOpenSet(create bool) map[string]struct{} {
 	sid := m.sidebarCurrentSessionID()
 	set := m.filesTree.open[sid]
@@ -125,9 +72,6 @@ func (m *OS) fileTreeOpenSet(create bool) map[string]struct{} {
 	return set
 }
 
-// fileTreeVisible is the open folders the tree draws now, in drawn order: each
-// is open, and so is every folder between it and the root. A folder that is
-// open but whose parent is closed costs nothing.
 func (m *OS) fileTreeVisible() []string {
 	v := m.filesView
 	if !m.filesTreeOn() || v.Dir == "" || v.Err != "" || v.Elsewhere != "" {
@@ -158,11 +102,6 @@ func (m *OS) fileTreeVisible() []string {
 	return out
 }
 
-// syncFileTree makes the tree's listings match the open folders on screen:
-// it reads a folder that has just come into view, drops the listing of one
-// that left it, and points the watch at what remains. It is called once per
-// message from FilesSyncCmd, and answers nil after one comparison when nothing
-// it depends on moved.
 func (m *OS) syncFileTree() tea.Cmd {
 	v := m.filesView
 	t := &m.filesTree
@@ -177,7 +116,6 @@ func (m *OS) syncFileTree() tea.Cmd {
 	}
 	changed := false
 	if t.host != v.Host {
-		// Nothing read on the last machine is about this one.
 		if len(t.dirs) > 0 {
 			t.dirs = nil
 			changed = true
@@ -215,10 +153,6 @@ func (m *OS) syncFileTree() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// fileTreeForgetGone closes the open folders that are gone from a listing on
-// screen, so a folder deleted and later made again under the same name comes
-// back closed, as a new folder. Only a listing read cleanly says a name is
-// gone; one being read or one that failed says nothing.
 func (m *OS) fileTreeForgetGone() {
 	set := m.fileTreeOpenSet(false)
 	v := m.filesView
@@ -247,9 +181,6 @@ func (m *OS) fileTreeForgetGone() {
 	}
 }
 
-// fileTreeRead asks for one open folder's listing. A quiet read is a re-read
-// because the folder changed on disk: the names stay up and nothing is drawn
-// again unless the answer differs.
 func (m *OS) fileTreeRead(dir string, quiet bool) tea.Cmd {
 	t := &m.filesTree
 	if t.dirs == nil {
@@ -266,8 +197,6 @@ func (m *OS) fileTreeRead(dir string, quiet bool) tea.Cmd {
 	if !quiet {
 		d.Loading = true
 	}
-	// A folder below the root is one the person opened by hand, so it is read
-	// as one they named, the same way a list walk into it is.
 	client, host, origin := m.DaemonClient, m.AttachedHost, m.filesView.Origin
 	return func() tea.Msg {
 		l := readListing(client, host, origin, dir, true, 0, false)
@@ -282,8 +211,6 @@ func (m *OS) HandleFileTreeList(msg fileTreeListMsg) tea.Cmd {
 		return nil
 	}
 	if msg.Quiet && msg.Err == "" {
-		// Read because it changed: the change may have been the folder itself
-		// being deleted and made again, which ends its watch.
 		m.rewatchTree(msg.Dir)
 	}
 	var again tea.Cmd
@@ -297,21 +224,12 @@ func (m *OS) HandleFileTreeList(msg fileTreeListMsg) tea.Cmd {
 	d.Loading = false
 	d.Entries, d.Capped, d.Err = msg.Entries, msg.Capped, msg.Err
 	m.filesTree.gen++
-	// The new names can hold folders the person opened before: they come into
-	// view now, and are read now.
 	if again == nil {
 		return m.syncFileTree()
 	}
 	return tea.Batch(again, m.syncFileTree())
 }
 
-// refreshChangedTree re-reads the open folders the watch said changed. A
-// folder in its first read is read again when that read lands. root says the
-// root changed too.
-//
-// An open folder whose read failed has no watch, so it cannot say it came
-// back. Its parent can: when a folder changes, the open folders under it that
-// failed are read again with it.
 func (m *OS) refreshChangedTree(dirs []string, root bool) tea.Cmd {
 	if root && m.filesView.Dir != "" {
 		dirs = append(dirs, m.filesView.Dir)
@@ -338,7 +256,6 @@ func (m *OS) refreshChangedTree(dirs []string, root bool) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// refreshTreeAll re-reads every open folder quietly, after a file action.
 func (m *OS) refreshTreeAll() tea.Cmd {
 	if !m.filesTreeOn() {
 		return nil
@@ -350,7 +267,6 @@ func (m *OS) refreshTreeAll() tea.Cmd {
 	return m.refreshChangedTree(dirs, false)
 }
 
-// fileTreeOpenDir opens a folder of the tree.
 func (m *OS) fileTreeOpenDir(dir string) tea.Cmd {
 	if m.filesTree.dirs[dir] != nil {
 		return nil
@@ -365,15 +281,12 @@ func (m *OS) fileTreeOpenDir(dir string) tea.Cmd {
 	return m.syncFileTree()
 }
 
-// fileTreeCloseDir closes a folder of the tree. The folders open under it stay
-// remembered, and show again when it opens.
 func (m *OS) fileTreeCloseDir(dir string) tea.Cmd {
 	delete(m.fileTreeOpenSet(false), fileTreeKey(m.filesView.Host, dir))
 	m.filesTree.gen++
 	return m.syncFileTree()
 }
 
-// fileTreeToggleDir opens a closed folder and closes an open one.
 func (m *OS) fileTreeToggleDir(dir string) tea.Cmd {
 	if m.filesTree.dirs[dir] != nil {
 		return m.fileTreeCloseDir(dir)
@@ -381,10 +294,6 @@ func (m *OS) fileTreeToggleDir(dir string) tea.Cmd {
 	return m.fileTreeOpenDir(dir)
 }
 
-// fileTreeEntry resolves a tree row's key, the path from the root with "/"
-// between names, to the folder that holds it and its entry in that folder's
-// listing. A key whose folder is not listed, or whose name has left the
-// listing, names nothing.
 func (m *OS) fileTreeEntry(key string) (parent string, e fileEntry, ok bool) {
 	root := m.filesView.Dir
 	if root == "" || key == "" {
@@ -410,7 +319,6 @@ func (m *OS) fileTreeEntry(key string) (parent string, e fileEntry, ok bool) {
 	return "", fileEntry{}, false
 }
 
-// fileTreeParentKey is the key of a row's folder, or "" for a row of the root.
 func fileTreeParentKey(key string) string {
 	if i := strings.LastIndexByte(key, '/'); i >= 0 {
 		return key[:i]
@@ -418,10 +326,6 @@ func fileTreeParentKey(key string) string {
 	return ""
 }
 
-// fileViewEnterRow is what taking a listing row does, by click or by enter.
-// The list style addresses the row by its index into the listing on screen;
-// the tree addresses it by its key, because a row below the root is not in
-// the root's listing.
 func (m *OS) fileViewEnterRow(index int, key string) tea.Cmd {
 	if !m.filesTreeOn() {
 		return m.FileViewEnter(index)
@@ -433,13 +337,6 @@ func (m *OS) fileViewEnterRow(index int, key string) tea.Cmd {
 	return m.fileViewOpen(parent, e.Name, e.Dir)
 }
 
-// fileTreeTake is the tree's answer to taking a folder row: it opens or
-// closes in place.
-//
-// folder_click = "cd" still types the cd and opens nothing, because that is
-// all the person asked a folder row to do. "both" opens it and does not cd:
-// the tree follows the pane, so a cd would put the tree's root on the folder
-// just opened, and the open would be undone by the same click.
 func (m *OS) fileTreeTake(full string) tea.Cmd {
 	if m.Settings.SidebarFolderClick == config.SidebarFolderClickCd {
 		m.sendCdToOrigin(full)
@@ -448,8 +345,6 @@ func (m *OS) fileTreeTake(full string) tea.Cmd {
 	return m.fileTreeToggleDir(full)
 }
 
-// fileTreeUnderRoot reports whether full is a folder below the listed root,
-// which is the only kind the tree can open in place.
 func (m *OS) fileTreeUnderRoot(full string) bool {
 	root := m.filesView.Dir
 	if root == "" {
@@ -459,7 +354,6 @@ func (m *OS) fileTreeUnderRoot(full string) bool {
 	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// fileTreeCursorRow is the cursor's row when it is a name of the tree.
 func (m *OS) fileTreeCursorRow() (sidebarNavRow, bool) {
 	if !m.filesTreeOn() || !m.filesOn() {
 		return sidebarNavRow{}, false
@@ -471,9 +365,6 @@ func (m *OS) fileTreeCursorRow() (sidebarNavRow, bool) {
 	return row, true
 }
 
-// fileTreeCursorExpand is l on a row of the tree: a closed folder opens, an
-// open one puts the cursor on its first name. It reports whether the row was
-// the tree's, so the key does not also step to the next section.
 func (m *OS) fileTreeCursorExpand() bool {
 	row, ok := m.fileTreeCursorRow()
 	if !ok {
@@ -497,9 +388,6 @@ func (m *OS) fileTreeCursorExpand() bool {
 	return true
 }
 
-// fileTreeCursorCollapse is h on a row of the tree: an open folder closes, any
-// other row puts the cursor on its folder's row. On a name of the root it does
-// nothing, and reports true so the key does not leave the section either.
 func (m *OS) fileTreeCursorCollapse() bool {
 	row, ok := m.fileTreeCursorRow()
 	if !ok {
@@ -526,13 +414,6 @@ func (m *OS) fileTreeCursorCollapse() bool {
 	return true
 }
 
-// fileTreeRows appends the tree under dir to rows, depth first, in the order
-// the listing gives: folders first, then names.
-//
-// cont says, for each folder between the root's names and these rows, whether
-// that folder has names after it. It is what draws a guide down the column of
-// a folder whose rows continue below the rows open under it. more says a note
-// row follows these names, so the last of them is not drawn as the last.
 func (m *OS) fileTreeRows(rows []fileRowSpec, dir, key string, entries []fileEntry, cont []bool, more bool) []fileRowSpec {
 	depth := 0
 	if key != "" {
@@ -574,8 +455,6 @@ func (m *OS) fileTreeRows(rows []fileRowSpec, dir, key string, entries []fileEnt
 	return rows
 }
 
-// fileTreeNote is the row an open folder adds after its names, if any: that it
-// is being read, that it could not be, that it is empty, or that it was cut.
 func fileTreeNote(d *fileTreeDir) fileRowSpec {
 	switch {
 	case d.Err != "":
@@ -590,13 +469,6 @@ func fileTreeNote(d *fileTreeDir) fileRowSpec {
 	return fileRowSpec{}
 }
 
-// fileTreeGuide is the indent in front of a row of the tree: a guide down the
-// column of each folder above whose rows go on, and a corner on the last name
-// of the row's own folder. Two cells per level, so each guide sits under its
-// folder's open mark.
-//
-// The strings are kept by shape, so the thousands of rows of one folder share
-// one guide string rather than each building its own.
 func (m *OS) fileTreeGuide(cont []bool, depth int, last bool) string {
 	if depth == 0 {
 		return ""
@@ -630,11 +502,7 @@ func (m *OS) fileTreeGuide(cont []bool, depth int, last bool) string {
 	return g
 }
 
-// buildTreeGuide draws the guide fileTreeGuide keeps.
 func (m *OS) buildTreeGuide(cont []bool, depth int, last bool) string {
-	// neo-tree's two marks: a bar down the column of a folder whose names go
-	// on below, and a corner on its last name. No tee and no dash, so the
-	// guides stay a quiet line and do not reach for the row's mark.
 	bar, corner := "│", "└"
 	if m.Settings.UseASCIIOnly {
 		bar, corner = "|", "`"

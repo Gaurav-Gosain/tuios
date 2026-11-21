@@ -98,7 +98,6 @@ func KeybindRows(cfg *config.UserConfig) []KeybindRow {
 			rows[i].Keys = append(rows[i].Keys, b.Press)
 		}
 	}
-	// An action whose every key another action took runs from no key.
 	for i := range rows {
 		if len(rows[i].Keys) == 0 && len(rows[i].Shadowed) > 0 {
 			rows[i].Unbound = true
@@ -109,13 +108,8 @@ func KeybindRows(cfg *config.UserConfig) []KeybindRow {
 		for _, h := range g.Bindings {
 			keys := make([]string, 0, len(h.Keys))
 			for _, k := range h.Keys {
-				// The help overlay spells a chord "ctrl+b, [". The list spells
-				// every chord as presses with spaces, as the registry does.
 				keys = append(keys, strings.Replace(k, leader+", ", leader+" ", 1))
 			}
-			// A fixed row names an action only when it is one a config can
-			// bind. spotlight_off is the overlay's name for a row, not an
-			// action.
 			action := h.Action
 			if config.ActionDescriptions[action] == "" {
 				action = ""

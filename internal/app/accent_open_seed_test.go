@@ -39,10 +39,6 @@ func TestAccentPickerOpensOnOneAnswer(t *testing.T) {
 		if s.Base != s.Cur {
 			t.Errorf("prior=%v: the harmony chips hang off %v, not the working colour %v", prior, s.Base, s.Cur)
 		}
-		// The markers sit on the grid cell nearest the working colour. The grid
-		// quantises, so the test is the round trip: the colour under the markers
-		// resolves back to the cell they are on. A picker showing red markers
-		// over a black swatch fails this by the width of the grid.
 		cols, rows := m.accentGridSize()
 		under := accentCellColor(s.Hue, s.Col, s.Row, cols, rows)
 		if _, col, row := accentCellFor(under, s.Hue, cols, rows); col != s.Col || row != s.Row {

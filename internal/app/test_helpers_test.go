@@ -18,10 +18,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// Fixtures and helpers shared across the package's tests. They used to sit in
-// the files of the tests that were removed, beside the tests still using them.
-
-// cellAt returns the rune at x, y of a frame grid, or a space off its edge.
 func cellAt(g [][]rune, x, y int) rune {
 	if y < 0 || y >= len(g) || x < 0 || x >= len(g[y]) {
 		return ' '
@@ -29,7 +25,6 @@ func cellAt(g [][]rune, x, y int) rune {
 	return g[y][x]
 }
 
-// railLines renders the rail and returns its rows with the styling stripped.
 func railLines(t *testing.T, m *OS) []string {
 	t.Helper()
 	lines, w := m.sidebarPanelLines()
@@ -43,9 +38,6 @@ func railLines(t *testing.T, m *OS) []string {
 	return out
 }
 
-// openFilesOn puts the files section on the rail and waits for its first
-// listing, so a render test has names to look at. It drives the real command,
-// which is the only way the entries ever arrive in the app.
 func openFilesOn(t *testing.T, m *OS, dir string) {
 	t.Helper()
 	if !m.OpenFileView(dir) {
@@ -62,24 +54,16 @@ func openFilesOn(t *testing.T, m *OS, dir string) {
 	m.HandleFileList(msg)
 }
 
-// saverSettings is the settings a saver engine is built from, with the frame
-// rate the caller names. NormalFPS is the only field screensaverBuild reads,
-// and it is per session now, so a test says the rate by handing one over
-// instead of writing a package variable another session could read.
 func saverSettings(rate int) *config.Settings {
 	s := config.DefaultSettings()
 	s.NormalFPS = rate
 	return &s
 }
 
-// defaultSaverSettings is saverSettings at the rate a session starts on, for
-// the tests that build an engine but make no claim about its clock.
 func defaultSaverSettings() *config.Settings {
 	return saverSettings(config.DefaultSettings().NormalFPS)
 }
 
-// findSetting locates a setting row by category and label, returning its
-// category/item indices and the item itself.
 func findSetting(m *OS, category, label string) (catIdx, itemIdx int, item settingItem, ok bool) {
 	for ci, cat := range m.settingsCategories() {
 		if cat.Name != category {
@@ -94,7 +78,6 @@ func findSetting(m *OS, category, label string) (catIdx, itemIdx int, item setti
 	return 0, 0, settingItem{}, false
 }
 
-// focusSetting selects a setting row so the Settings* methods act on it.
 func focusSetting(t *testing.T, m *OS, category, label string) settingItem {
 	t.Helper()
 	ci, ii, item, ok := findSetting(m, category, label)
@@ -106,14 +89,8 @@ func focusSetting(t *testing.T, m *OS, category, label string) settingItem {
 	return item
 }
 
-// useTempConfig points the XDG config dir at a temp location of this test's
-// own, so one test's saved settings cannot be read by the next, and returns the
-// resolved path.
 func useTempConfig(t *testing.T) string {
 	t.Helper()
-	// Registered before t.Setenv so it runs after it: cleanups are LIFO, and
-	// without it the xdg globals stayed on this test's temp dir for the rest of
-	// the binary, after the directory is gone.
 	t.Cleanup(xdg.Reload)
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	xdg.Reload()
@@ -124,17 +101,12 @@ func useTempConfig(t *testing.T) string {
 	return path
 }
 
-// styleGlyphs is every glyph the style draws its own frame with. A divider cell
-// outside this set is borrowed from another style, which is the failure being
-// guarded: a box-drawing tee welded onto a bar of blocks.
 func styleGlyphs(b lipgloss.Border) string {
 	return b.Top + b.Bottom + b.Left + b.Right +
 		b.TopLeft + b.TopRight + b.BottomLeft + b.BottomRight +
 		b.Middle + b.MiddleTop + b.MiddleBottom + b.MiddleLeft + b.MiddleRight
 }
 
-// dividerCells lists every cell the dividers of this layout own, clipped to the
-// content region: the whole of each division, both ends included.
 func dividerCells(m *OS) []layout.Rect {
 	b := m.GetBSPBounds()
 	var cells []layout.Rect
@@ -152,8 +124,6 @@ func dividerCells(m *OS) []layout.Rect {
 	return cells
 }
 
-// gapTestOS builds a tiled session of n panes under shared borders, each
-// pane holding a marker that starts in its own first column.
 func gapTestOS(t testing.TB, n int) *OS {
 	t.Helper()
 	origAnim := config.Global.Motion
@@ -161,9 +131,7 @@ func gapTestOS(t testing.TB, n int) *OS {
 	t.Cleanup(func() { config.Global.Motion = origAnim })
 
 	m := &OS{
-		Settings: config.Global,
-		// The layout reads the model's session-settled geometry, seeded from
-		// the globals the way NewOS seeds it.
+		Settings:         config.Global,
 		SharedBorders:    config.Global.SharedBorders,
 		PaneGap:          config.Global.PaneGap,
 		Windows:          make([]*terminal.Window, 0, n),
@@ -190,10 +158,8 @@ func gapTestOS(t testing.TB, n int) *OS {
 	return m
 }
 
-// paneMarker is the text a pane paints into its own top-left cell.
 func paneMarker(i int) string { return fmt.Sprintf("PANE%dEDGE", i) }
 
-// swapBool sets a config global for the duration of the test.
 func swapBool(t *testing.T, p *bool, v bool) {
 	t.Helper()
 	old := *p
@@ -201,9 +167,6 @@ func swapBool(t *testing.T, p *bool, v bool) {
 	t.Cleanup(func() { *p = old })
 }
 
-// withSidebar sets the sidebar globals for a test and restores them after. It
-// also points the sidebar state file at a scratch directory so a test that
-// toggles or reorders never touches the developer's real state.
 func withSidebar(t *testing.T, enabled bool, pos string, width int) {
 	t.Helper()
 	pe, pp, pw := config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth
@@ -219,13 +182,8 @@ func withSidebar(t *testing.T, enabled bool, pos string, width int) {
 	})
 }
 
-// railFixtureWidth is the rail width the rail's row tests were measured at,
-// the shipped width before v0.8.0. The shipped width is now 24, where an
-// agent row's second line and the files section's read-only mark are cut
-// short; these fixtures test what a row says, so they keep the room to say it.
 const railFixtureWidth = 28
 
-// sidebarTestOS builds an OS with a few local windows and the sidebar enabled.
 func sidebarTestOS(t *testing.T, w, h int, pos string) *OS {
 	t.Helper()
 	m := newNarrowOS(t, w, h)
@@ -239,15 +197,10 @@ func sidebarTestOS(t *testing.T, w, h int, pos string) *OS {
 	m.FocusedWindow = 0
 	withSidebar(t, true, pos, railFixtureWidth)
 	m.Settings = config.Global
-	// NewOS ran before withSidebar redirected the state dir, so it read the
-	// tree the whole binary shares, where an earlier test may have saved an
-	// order. Drop it, so the rows come out in the order set below.
 	m.SidebarOrder = nil
 	return m
 }
 
-// sectionsTestOS is a rail attached to "main" beside two foreign sessions that
-// carry real panes, which is what a peek needs to have something to preview.
 func sectionsTestOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	t.Helper()
 	m := newNarrowOS(t, w, h)
@@ -280,8 +233,6 @@ func sectionsTestOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	return m, tree
 }
 
-// stripOS is a collapsed rail with three sessions, one of them attached and one
-// of them holding two panes that want a human.
 func stripOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	t.Helper()
 	m, _ := sectionsTestOS(t, w, h)
@@ -300,8 +251,6 @@ func stripOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	return m, tree
 }
 
-// ContextMenuSelectedActionAt selects the row carrying action and takes it the
-// way the keyboard path does, so the carry is set exactly as it is in use.
 func (m *OS) ContextMenuSelectedActionAt(t *testing.T, action string) string {
 	t.Helper()
 	cm := m.ContextMenu
@@ -315,7 +264,6 @@ func (m *OS) ContextMenuSelectedActionAt(t *testing.T, action string) string {
 	return ""
 }
 
-// drawableSizes records the size every pane can draw in, keyed by pane ID.
 func drawableSizes(m *OS) map[string][2]int {
 	sizes := make(map[string][2]int, len(m.Windows))
 	for _, w := range m.Windows {
@@ -324,7 +272,6 @@ func drawableSizes(m *OS) map[string][2]int {
 	return sizes
 }
 
-// callCounts snapshots how many times each pane's PTY has been told a size.
 func callCounts(told map[string]*toldSize) map[string]int {
 	counts := make(map[string]int, len(told))
 	for id, rec := range told {
@@ -333,7 +280,6 @@ func callCounts(told map[string]*toldSize) map[string]int {
 	return counts
 }
 
-// navIndexOfWindow returns the nav index of a window row, or -1.
 func navIndexOfWindow(m *OS, id string) int {
 	for i, r := range m.SidebarNav {
 		if r.Kind == sidebarRowWindow && r.WindowID == id {
@@ -343,7 +289,6 @@ func navIndexOfWindow(m *OS, id string) int {
 	return -1
 }
 
-// navIndexOfSession returns the nav index of a session row, or -1.
 func navIndexOfSession(m *OS, id string) int {
 	for i, r := range m.SidebarNav {
 		if r.Kind == sidebarRowSession && r.SessionID == id {
@@ -353,9 +298,6 @@ func navIndexOfSession(m *OS, id string) int {
 	return -1
 }
 
-// isUnderlined reports whether any SGR sequence in s sets the underline
-// attribute. The parameters arrive merged with the colours, so the sequence is
-// parsed rather than matched as a literal.
 func isUnderlined(s string) bool {
 	for seq := range strings.SplitSeq(s, "\x1b[") {
 		before, _, ok := strings.Cut(seq, "m")
@@ -364,8 +306,6 @@ func isUnderlined(s string) bool {
 		}
 		params := strings.Split(before, ";")
 		for i := 0; i < len(params); i++ {
-			// A colour carries its channels as parameters of its own, and one of
-			// them may well be a 4.
 			if p := params[i]; p == "38" || p == "48" {
 				if i+1 < len(params) && params[i+1] == "5" {
 					i += 2
@@ -382,8 +322,6 @@ func isUnderlined(s string) bool {
 	return false
 }
 
-// renderSettingsHit renders the settings panel and records its hit geometry the
-// way renderOverlays would, so the mouse routing can be exercised in a test.
 func (m *OS) renderSettingsHit() {
 	m.reconcileOverlayZOrder()
 	content, geo, rows := m.renderSettings()
@@ -398,8 +336,6 @@ func itoa(n int) string {
 	return strconv.Itoa(n)
 }
 
-// railPlain renders the rail and strips the styling, which is what most of the
-// claims below are about: where a row landed, not how it was painted.
 func railPlain(t *testing.T, m *OS, tree sessiontree.Tree) []string {
 	t.Helper()
 	lines, _ := m.sidebarPanelLinesForTree(tree)
@@ -410,7 +346,6 @@ func railPlain(t *testing.T, m *OS, tree sessiontree.Tree) []string {
 	return out
 }
 
-// lineOf returns the index of the first rendered line containing want, or -1.
 func lineOf(lines []string, want string) int {
 	for i, l := range lines {
 		if strings.Contains(l, want) {
@@ -421,20 +356,14 @@ func lineOf(lines []string, want string) int {
 }
 
 func fgParams(c color.Color) string {
-	// Rendered rather than formatted: a palette index leaves as SGR 3x or 9x,
-	// and only a literal colour leaves as 38;2.
 	rendered := lipgloss.NewStyle().Foreground(c).Render("X")
 	return strings.TrimSuffix(strings.TrimPrefix(rendered[:strings.Index(rendered, "X")], "\x1b["), "m")
 }
 
-// newSwitchOS builds a client with panes spread over two workspaces, each pane
-// carrying a recorder for the sizes its PTY is told.
 func newSwitchOS(t *testing.T, width, height int, perWorkspace map[int]int) (*OS, map[string]*toldSize) {
 	t.Helper()
 	m := &OS{
-		Settings: config.Global,
-		// The layout reads the model's session-settled geometry, seeded from
-		// the globals the way NewOS seeds it.
+		Settings:             config.Global,
 		SharedBorders:        config.Global.SharedBorders,
 		PaneGap:              config.Global.PaneGap,
 		NumWorkspaces:        9,
@@ -463,7 +392,6 @@ func newSwitchOS(t *testing.T, width, height int, perWorkspace map[int]int) (*OS
 	return m, told
 }
 
-// screenText reads the guest's visible grid as text.
 func screenText(w *terminal.Window) string {
 	w.RLockIO()
 	defer w.RUnlockIO()
@@ -482,8 +410,6 @@ func screenText(w *terminal.Window) string {
 	return out
 }
 
-// zoomPeekOS is four panes in a two by two split, which is the layout that makes
-// the anchoring visible: each pane has a neighbour on exactly two sides.
 func zoomPeekOS(t *testing.T) (*OS, []*terminal.Window) {
 	t.Helper()
 	prev := config.Global
@@ -495,7 +421,6 @@ func zoomPeekOS(t *testing.T) (*OS, []*terminal.Window) {
 		w.Workspace = 1
 		wins = append(wins, w)
 	}
-	// Top left, top right, bottom left, bottom right of a 120x40 region.
 	wins[0].X, wins[0].Y, wins[0].Width, wins[0].Height = 0, 0, 60, 20
 	wins[1].X, wins[1].Y, wins[1].Width, wins[1].Height = 60, 0, 60, 20
 	wins[2].X, wins[2].Y, wins[2].Width, wins[2].Height = 0, 20, 60, 20
@@ -515,7 +440,6 @@ func zoomPeekOS(t *testing.T) (*OS, []*terminal.Window) {
 	return m, wins
 }
 
-// renderInbox draws the Inbox, which is the cockpit, as the overlay pass does.
 func (m *OS) renderInbox() (string, overlay.Geometry, []overlayRowHit) {
 	s, _, w, h := m.renderCockpit()
 	return s, overlay.Geometry{Width: w, Height: h}, nil

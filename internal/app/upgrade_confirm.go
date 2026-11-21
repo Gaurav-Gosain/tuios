@@ -14,51 +14,24 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The upgrade dialog: a process inside a pane asked for a live upgrade of the
-// daemon, and the daemon asks the person whether to go ahead
-// (session/upgrade_confirm.go). The question is an ask in the Inbox mirror
-// marked with Upgrade, and this client opens it as a dialog of its own.
-//
-// Only a key the person pressed here answers it. Keys send-keys or a tape put
-// through the client answer nothing, a paste goes nowhere, and a click does
-// nothing. A key in the first moment after it opens is dropped, since it was
-// typed for whatever was in front of the person before. No is the default,
-// and Esc is No.
-//
-// The dialog closes when the ask does: this client's answer, another
-// client's, or the daemon giving up on it.
-
-// overlayKindUpgradeConfirm is the dialog's overlay kind.
 const overlayKindUpgradeConfirm = "upgradeconfirm"
 
-// upgradeConfirmWidth is the dialog's preferred inner width.
 const upgradeConfirmWidth = 66
 
-// upgradeConfirmSettle is how long the dialog ignores keys after it opens.
 const upgradeConfirmSettle = 500 * time.Millisecond
 
-// upgradeConfirmRows are the answers, in drawn order: the daemon's options.
 var upgradeConfirmRows = []string{"No", "Yes"}
 
-// upgradeConfirmState is the ask the dialog shows.
 type upgradeConfirmState struct {
-	// open is the ask shown, nil when the dialog is closed.
-	open *session.AttentionItem
-	// selected is the answer row under the cursor.
+	open     *session.AttentionItem
 	selected int
-	// openedAt is when it opened. Keys are ignored for upgradeConfirmSettle.
 	openedAt time.Time
-	// sent is true once this client sent an answer.
-	sent bool
+	sent     bool
 }
 
 // UpgradeConfirmOpen reports whether the dialog owns the keyboard.
 func (m *OS) UpgradeConfirmOpen() bool { return m.upgradeConfirm.open != nil }
 
-// syncUpgradeConfirm opens the dialog on an upgrade ask in the Inbox mirror,
-// and closes it once its ask is gone. A client attached to another machine,
-// one the daemon issued no nonce, or one whose attach did not say it shows
-// the dialog (gui-bridge), could not answer, so it shows nothing.
 func (m *OS) syncUpgradeConfirm() {
 	st := &m.upgradeConfirm
 	if st.open != nil && m.inboxIndex(st.open.ID) < 0 {
@@ -79,14 +52,8 @@ func (m *OS) syncUpgradeConfirm() {
 func (m *OS) UpgradeConfirmKey(key string) tea.Cmd {
 	st := &m.upgradeConfirm
 	if st.open == nil || m.ProcessingRemoteKeys || m.pressingTapeKeys || time.Since(st.openedAt) < upgradeConfirmSettle {
-		// Keys a script or a pane sent through the client (send-keys, a
-		// tape's Press) are not the person's, and answer nothing.
 		return nil
 	}
-	// Each key names its row rather than toggling, so no count of move keys
-	// lands on Yes: Up then Enter, a shell's "run that again", stays on No.
-	// Tab is not a move: a shell completes on it, so a line typed through the
-	// settle delay, such as cd pro<Tab><Enter>, would say yes.
 	switch key {
 	case "down", "right":
 		st.selected = 1
@@ -100,8 +67,6 @@ func (m *OS) UpgradeConfirmKey(key string) tea.Cmd {
 	return nil
 }
 
-// upgradeConfirmAnswer sends the answer on row idx, with this client's attach
-// nonce. The daemon takes the first answer from any client.
 func (m *OS) upgradeConfirmAnswer(idx int) tea.Cmd {
 	st := &m.upgradeConfirm
 	if st.sent {
@@ -111,8 +76,6 @@ func (m *OS) upgradeConfirmAnswer(idx int) tea.Cmd {
 	return m.inboxAnswerAskCmd(*st.open, upgradeConfirmRows[idx], true)
 }
 
-// renderUpgradeConfirm draws the dialog. The binary's path is never cut: it
-// wraps, since the path is what the person decides on.
 func (m *OS) renderUpgradeConfirm() (string, overlay.Geometry, []overlayRowHit) {
 	st := &m.upgradeConfirm
 	it := st.open
@@ -130,8 +93,6 @@ func (m *OS) renderUpgradeConfirm() (string, overlay.Geometry, []overlayRowHit) 
 	body = append(body, overlay.Fill(overlay.Style(bg).Render(" ")+
 		overlay.Style(bg).Foreground(pal.Fg).Bold(true).Render(overlay.Truncate("Upgrade the daemon?", inner)), width, bg))
 	body = append(body, dialogBodyLine("", width, pal.FgDim, bg))
-	// The title is the pane's own, and says whatever the pane set, so the
-	// pane id and session name the daemon placed it by stand beside it.
 	who := inboxWho(*it)
 	if it.Window != "" {
 		who += " (pane " + shortID(it.Window) + " in session " + printableTitle(it.Session) + ")"
@@ -142,8 +103,6 @@ func (m *OS) renderUpgradeConfirm() (string, overlay.Geometry, []overlayRowHit) 
 	}
 	body = append(body, dialogBodyLine("", width, pal.FgDim, bg))
 	if n := len(it.Upgrade.CloseExited); n > 0 {
-		// Panes on other machines cannot be handed over; the exited ones are
-		// closed, and the person is told which before saying yes.
 		text(fmt.Sprintf("It closes %d exited %s on other machines:", n, plural.Word(n, "pane", "panes")), pal.Fg)
 		for _, label := range it.Upgrade.CloseExited {
 			text("  "+printableTitle(label), pal.Warn)
@@ -165,8 +124,6 @@ func (m *OS) renderUpgradeConfirm() (string, overlay.Geometry, []overlayRowHit) 
 	return content, geo, nil
 }
 
-// breakEvery cuts s into lines of at most width cells, keeping every
-// character, spaces included.
 func breakEvery(s string, width int) []string {
 	width = max(width, 1)
 	var out []string

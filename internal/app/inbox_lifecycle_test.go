@@ -11,11 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// These tests pin what E2E cannot reach in the Inbox's lifecycle: the keys
-// against an older daemon, the mark-attention probe, the fold's zero cost
-// without agents, and an unread mark that must not swallow a later alert.
-
-// markRecorder answers mark-attention and records what it was sent.
 type markRecorder struct {
 	calls []map[string]any
 	err   error
@@ -36,7 +31,6 @@ func (r *markRecorder) call(verb string, params map[string]any, _ time.Duration)
 	return json.Marshal(map[string]any{"type": "attention_marked", "id": id, "action": params["action"]})
 }
 
-// lifecycleOS is a client with an Inbox and a recorder behind mark-attention.
 func lifecycleOS(t *testing.T, items ...session.AttentionItem) (*OS, *markRecorder) {
 	t.Helper()
 	m := inboxOS(t, zeroSettle())
@@ -138,13 +132,11 @@ func TestAnUnreadMarkedInPlaceSilencesNothingLater(t *testing.T) {
 		t.Error("the pane's key outlived the unread's answer")
 	}
 
-	// Before the answer, an approval on the pane is still not the unread's.
 	m.inboxMarkCmd(map[string]any{"session": "other", "window": "w-2", "action": "unread"}, "docs", "")
 	if m.inboxAskedFor(item("10", session.AttentionApproval, "other", "w-2", "", 1)) {
 		t.Error("an approval was taken for the unread's finished item")
 	}
 
-	// An answer that arrives before the open keeps the open quiet by id.
 	m.settleInboxUnreadAsk("w-3", "11")
 	if !m.inboxAskedFor(item("11", session.AttentionFinished, "other", "w-3", "", 1)) {
 		t.Error("the item the unread opened after its answer alerts")

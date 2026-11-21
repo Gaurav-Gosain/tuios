@@ -14,37 +14,12 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// The mark a copy leaves behind: a band of light that crosses what was copied,
-// once, and then it is gone.
-//
-// Copying is the one gesture in a terminal with no result to look at. The text
-// stays exactly as it was, the selection usually disappears, and the only
-// feedback was a line of words in the dock saying how many characters went.
-// That says it happened; it does not say what went. The sweep runs over the
-// cells that were taken, so the answer is in the same place the question was.
-//
-// It is drawn rather than animated in any real sense: there is no state
-// machine and nothing to cancel. A copy writes down the region and the time,
-// every frame until the time runs out draws the band where the clock says it
-// is, and after that the region is forgotten. A client that renders no frames
-// in between simply misses it, which is the correct amount of machinery for a
-// flourish.
-
-// copyFlash is what was copied and when, for as long as the sweep lasts.
 type copyFlash struct {
-	// Block says Start and End are the corners of a rectangle.
-	Block bool
-	// WindowID is the pane the text came from. The sweep is drawn there and
-	// nowhere else, even though a copy can be made while another pane is
-	// focused.
+	Block    bool
 	WindowID string
-	// Start and End are the region in the pane's absolute coordinates, the
-	// same ones copy mode's visual selection uses, so the sweep covers exactly
-	// the cells that were taken.
-	Start terminal.Position
-	End   terminal.Position
-	// At is when the copy happened.
-	At time.Time
+	Start    terminal.Position
+	End      terminal.Position
+	At       time.Time
 }
 
 // NoteCopyFlash records a copy so the next frames can sweep over it.
@@ -88,21 +63,13 @@ func (m *OS) NoteCopyFlashRegion(window *terminal.Window, start, end terminal.Po
 	}
 	m.copyFlash = &copyFlash{WindowID: window.ID, Start: start, End: end, At: time.Now()}
 	m.copyFlashMore = nil
-	// Nothing in the pane changed, so nothing else is going to ask for a
-	// frame. The first one is asked for here and the motion clock keeps them
-	// coming while the sweep runs; see effects.go.
 	window.ContentDirty = true
 }
 
-// copyFlashAllowed reports whether a copy sweeps at all: copy_flash is on,
-// its duration is above zero, and appearance.motion allows it.
 func (m *OS) copyFlashAllowed() bool {
 	if !m.Settings.CopyFlash || m.copyFlashDuration() <= 0 {
 		return false
 	}
-	// appearance.motion = none draws every change in one frame, and a sweep is
-	// nothing but frames. The selection and the dock message still say what
-	// was copied.
 	return m.Settings.MotionOn(config.AspectCopy)
 }
 
@@ -129,7 +96,6 @@ func (m *OS) NoteCopyFlashMany(windows []*terminal.Window) {
 	m.copyFlashMore = noted[1:]
 }
 
-// copyFlashFor is the sweep crossing the pane with this id, or nil.
 func (m *OS) copyFlashFor(id string) *copyFlash {
 	if m.copyFlash == nil {
 		return nil
@@ -145,7 +111,6 @@ func (m *OS) copyFlashFor(id string) *copyFlash {
 	return nil
 }
 
-// copyFlashIDs is every pane a sweep is crossing.
 func (m *OS) copyFlashIDs() []string {
 	if m.copyFlash == nil {
 		return nil
@@ -157,7 +122,6 @@ func (m *OS) copyFlashIDs() []string {
 	return ids
 }
 
-// dropCopyFlash ends the sweep over one pane and leaves the others running.
 func (m *OS) dropCopyFlash(id string) {
 	if m.copyFlash == nil {
 		return
@@ -175,30 +139,11 @@ func (m *OS) dropCopyFlash(id string) {
 	m.copyFlashMore = m.copyFlashMore[1:]
 }
 
-// markCopyFlashPane asks the pane a sweep is crossing to draw another frame,
-// and reports whether there was a sweep to draw for, including one that has
-// just this moment ended.
-//
-// It is called on every frame of the motion clock, and it is what makes the
-// sweep move at all. A pane is drawn from its cached frame unless something marks it, a
-// copy changes nothing in the pane, and nothing else was marking it, so the
-// light was computed every tick and painted into a frame that was thrown away.
-// One frame reached the screen: the one the copy itself asked for, which is
-// the frame where the light has not arrived yet.
 func (m *OS) markCopyFlashPane() bool {
 	if m.copyFlash == nil {
 		return false
 	}
 	ids := m.copyFlashIDs()
-	// Asked whether it is still running or has just this moment stopped, and
-	// the pane is marked either way.
-	//
-	// The last frame of a sweep has light in it. Nothing was asking for a
-	// frame after that, so that frame stayed on the screen until the pane
-	// changed for some other reason: the block the sweep had been crossing sat
-	// there lit, and clicking about produced another copy and another one
-	// stuck behind it. The tick that finds the sweep finished is the one that
-	// asks for the frame without it.
 	m.CopyFlashActive()
 	for _, id := range ids {
 		if w := m.windowByID(id); w != nil {
@@ -230,16 +175,10 @@ func (m *OS) CancelCopyFlash() {
 	}
 }
 
-// copyFlashDuration is how long one sweep takes.
 func (m *OS) copyFlashDuration() time.Duration {
 	return time.Duration(m.Settings.CopyFlashMs) * time.Millisecond
 }
 
-// copyFlashProgress is how far through the sweep this frame is, from 0 to 1,
-// and whether there is a sweep to draw for this pane at all.
-//
-// The flash is dropped as soon as it has run its course, so an idle client
-// holds nothing and asks for no frames on its account.
 func (m *OS) copyFlashProgress(windowID string) (float64, bool) {
 	if m.copyFlash == nil {
 		return 0, false
@@ -269,18 +208,10 @@ func (m *OS) CopyFlashActive() bool {
 	return true
 }
 
-// copyFlashBand is the light on one frame: where its centre is along whichever
-// axis the sweep runs, how far its glow reaches, and what it is made of.
 type copyFlashBand struct {
-	centre float64
-	reach  float64
-	// amp is the whole sweep's brightness on this frame, from 0 to 1. It is
-	// what makes the light arrive and leave, rather than switch on at full
-	// strength at one edge and off at the other.
-	amp float64
-	// slope is how far the light leans, in columns per row, and vertical makes
-	// it travel down the rows instead of across the columns. Together they are
-	// the four shapes; see copyFlashBandFor.
+	centre   float64
+	reach    float64
+	amp      float64
 	slope    float64
 	vertical bool
 
@@ -288,30 +219,8 @@ type copyFlashBand struct {
 	ink  color.Color
 }
 
-// The shapes a sweep can take.
-//
-// They are a setting because which one reads best depends on what is usually
-// being copied. A diagonal falls across a paragraph. A horizontal one crosses
-// a single long line properly, where a diagonal barely leans at all over one
-// row. A vertical one moves down a tall narrow block, where the other three
-// cross it in an instant.
-//
-// The names live in config, with the option that names the set.
-
-// copyFlashSlope is how far a diagonal leans, in columns per row.
-//
-// A character grid holds a diagonal exactly when its slope is a whole number
-// of columns per row, which is the one thing a grid does better than a
-// gradient: there is nothing to interpolate and nothing to alias.
 const copyFlashSlope = 2
 
-// position is where a cell sits along the axis the sweep runs.
-//
-// The row is subtracted rather than added, so a positive slope means each row
-// down is lit further to the right: the light peaks where position equals the
-// centre, which is at x = centre + row*slope. Added, the sign came out
-// backwards and the diagonal leaned the wrong way, which is the opposite of
-// the effect this is copying.
 func (b copyFlashBand) position(x, row int) float64 {
 	if b.vertical {
 		return float64(row)
@@ -319,10 +228,6 @@ func (b copyFlashBand) position(x, row int) float64 {
 	return float64(x) - float64(row)*b.slope
 }
 
-// intensity is how lit one cell is, from 0 to 1.
-//
-// The falloff is what makes it read as light passing over the text rather than
-// a block sliding across it.
 func (b copyFlashBand) intensity(x, row int) float64 {
 	if b.reach <= 0 || b.amp <= 0 {
 		return 0
@@ -334,57 +239,19 @@ func (b copyFlashBand) intensity(x, row int) float64 {
 	if d >= b.reach {
 		return 0
 	}
-	// Smoothstep rather than a square.
-	//
-	// A square is steep at the centre and shallow at the edge, so most of the
-	// band sits at nearly the same brightness and then drops away: in a grid,
-	// where every step is a whole cell, that reads as a hard block with a
-	// fringe. Smoothstep is flat at both ends and steepest in between, which
-	// spreads the change over more cells and gives the eye more intermediate
-	// shades to read as a gradient.
 	t := 1 - d/b.reach
 	return t * t * (3 - 2*t) * b.amp
 }
 
-// styleFor is how one cell of the sweep is drawn, and whether the light has
-// reached it at all.
-//
-// Only lit cells are painted. An earlier version also painted the whole block
-// in the selection colour for the length of the sweep, on the grounds that the
-// effect this copies keeps its selection: there, the selection is still there
-// because the app leaves it. Here a copy clears it, so painting it back put a
-// block of colour on the screen that nobody had asked for and that read as the
-// selection having come back rather than as an acknowledgement.
-//
-// Both halves of a lit cell move. The background is the pane's own ground
-// carried toward the light, and a cell holding a character has its text
-// carried toward the light as well, because a sweep that touched only the
-// background would pass behind the words rather than over them.
 func (b copyFlashBand) styleFor(x, row int, hasGlyph bool, bg color.Color) (lipgloss.Style, bool) {
 	i := b.intensity(x, row)
 	if i <= 0.02 {
 		return lipgloss.Style{}, false
 	}
-	// Only the background. The text is left exactly as the program wrote it.
-	//
-	// It used to be carried toward the same colour as the ground, so at the
-	// centre of the band the two were equal and the characters were gone:
-	// eleven to one down to one to one on a dark theme, with everything above
-	// about half intensity below the contrast floor the rest of the interface
-	// holds its marks to. Text disappearing and coming back is a far louder
-	// event than a tint, and it is what the sweep actually looked like.
-	//
-	// It also mixed from the interface's own foreground rather than the
-	// cell's, so a coloured line lost its colour for the duration and snapped
-	// back at the end. Light passing over text does not repaint the text.
 	_ = hasGlyph
 	return lipgloss.NewStyle().Background(overlay.MixColors(bg, b.tint, i)), true
 }
 
-// copyFlashEnvelope is the sweep's brightness over its life: it ramps in,
-// holds, and fades. Without it the light appears at full strength at one edge
-// and vanishes at the other, which reads as a wipe rather than as something
-// passing over.
 func copyFlashEnvelope(progress float64) float64 {
 	const (
 		rampIn  = 0.15
@@ -402,17 +269,6 @@ func copyFlashEnvelope(progress float64) float64 {
 	}
 }
 
-// copyFlashBandFor builds the band for this frame.
-//
-// It crosses the copied block, not the pane.
-//
-// It used to cross the pane, on the reasoning that three characters and a
-// whole line should take the same time so the sweep could not be read as a
-// progress bar. That was wrong in the way that matters: the light is only
-// visible while it is over the block, so a short selection on a wide pane was
-// lit for a twentieth of the run and what reached the screen was a blink. The
-// band is sized to the block instead, so the run takes the same time whatever
-// was copied and the light is on the text for all of it.
 func (m *OS) copyFlashBandFor(progress float64, box copyFlashBox) copyFlashBand {
 	pal := theme.UI()
 	band := copyFlashBand{
@@ -430,32 +286,20 @@ func (m *OS) copyFlashBandFor(progress float64, box copyFlashBox) copyFlashBand 
 		band.slope = copyFlashSlope
 	}
 
-	// How far along its axis the block runs, from the extremes of the cells in
-	// it. Taking it from the corners rather than assuming a rectangle is what
-	// lets the same arithmetic serve all four shapes.
 	lo, hi := band.axisRange(box)
 	span := hi - lo
 	band.reach = span * m.copyFlashReach()
-	// A floor, or the light over a short block is one cell wide and reads as a
-	// cursor rather than as a sweep. In rows rather than columns when the
-	// sweep runs down, because a block is far shorter than it is wide.
 	floor := 4.0
 	if band.vertical {
-		// In rows rather than columns, because a block is far shorter than it
-		// is wide. Below one row the light would be thinner than the thing it
-		// is crossing and a one-row block would never light at all.
 		floor = 1.5
 	}
 	if band.reach < floor {
 		band.reach = floor
 	}
-	// From fully off one end to fully off the other.
 	band.centre = lo - band.reach + progress*(span+2*band.reach)
 	return band
 }
 
-// axisRange is the lowest and highest position any cell of the block takes
-// along the axis this sweep runs.
 func (b copyFlashBand) axisRange(box copyFlashBox) (lo, hi float64) {
 	if b.vertical {
 		return float64(box.top), float64(box.bottom)
@@ -471,16 +315,6 @@ func (b copyFlashBand) axisRange(box copyFlashBox) (lo, hi float64) {
 	return lo, hi
 }
 
-// copyFlashBox is the block the sweep crosses, in the pane's own coordinates:
-// the leftmost and rightmost lit columns, and the first and last lit rows.
-//
-// The rows are the pane's row numbers, not a count, and that is the whole
-// point of them. They used to be a count, so the band's travel was worked out
-// over rows zero to n while the cells were drawn at their real row numbers.
-// For a block twenty rows down the diagonal was off by twenty times its slope
-// and the light passed to one side of the text; the vertical sweep travelled
-// over rows zero to n and never reached row twenty at all. Only the
-// horizontal one worked, because it is the one shape with no row term.
 type copyFlashBox struct {
 	left   int
 	right  int
@@ -488,8 +322,6 @@ type copyFlashBox struct {
 	bottom int
 }
 
-// copyFlashBoxOf measures the marked region, so the sweep can be sized to what
-// was copied rather than to the pane it sits in.
 func copyFlashBoxOf(grid *pool.HighlightGrid, maxY, maxX int) (copyFlashBox, bool) {
 	box := copyFlashBox{left: maxX, right: -1, top: -1, bottom: -1}
 	for y := range maxY {
@@ -515,15 +347,6 @@ func copyFlashBoxOf(grid *pool.HighlightGrid, maxY, maxX int) (copyFlashBox, boo
 	return box, true
 }
 
-// fillPaneRegion marks the cells of a pane region on a grid, mapping the
-// pane's absolute coordinates onto the rows currently on screen.
-//
-// It is the mapping copy mode's visual selection does, lifted out so the copy
-// sweep covers exactly the same cells rather than a second implementation of
-// the same arithmetic that could disagree with it.
-//
-// textEnd, when given, is the last column holding text on a row of the view,
-// or -1 for a blank row, and no cell past it is marked.
 func fillPaneRegion(grid *pool.HighlightGrid, start, end terminal.Position, block bool,
 	scrollbackLen, scrollbackOffset, maxY, maxX int, textEnd func(y int) int,
 ) {
@@ -551,8 +374,6 @@ func fillPaneRegion(grid *pool.HighlightGrid, start, end terminal.Position, bloc
 	}
 }
 
-// paneViewportRow is the row of the pane's view that shows absolute row absY,
-// and whether the view shows it at all.
 func paneViewportRow(absY, scrollbackLen, scrollbackOffset, maxY int) (int, bool) {
 	var viewportY int
 	if absY < scrollbackLen {
@@ -569,10 +390,6 @@ func paneViewportRow(absY, scrollbackLen, scrollbackOffset, maxY int) (int, bool
 	return viewportY, viewportY >= 0 && viewportY < maxY
 }
 
-// fillBlockSelection marks a rectangular selection on a grid. Every row is drawn
-// to the same columns, past the end of a short row too, so the selection reads
-// as a rectangle. A wide character on an edge is marked whole, because the copy
-// takes it whole.
 func fillBlockSelection(grid *pool.HighlightGrid, window *terminal.Window, screen cellGrid, a, b terminal.Position,
 	scrollbackLen, maxY, maxX int,
 ) {
@@ -603,25 +420,6 @@ func fillBlockSelection(grid *pool.HighlightGrid, window *terminal.Window, scree
 	}
 }
 
-// copyFlashGrid is the swept region of one pane as this frame draws it, and
-// the band of light over it. The grid is nil when there is nothing to light,
-// and the caller puts a non-nil grid back in the pool.
-//
-// Its region is built exactly the way the visual selection's is, from the
-// same absolute coordinates, because it is the same region: the sweep covers
-// the cells that were taken. It outlives the selection, which a copy usually
-// clears, which is why the coordinates were written down at the copy rather
-// than read from the pane now.
-//
-// Each row is clamped to where its text ends before the block is measured.
-// The band is sized to the block, so a block measured over whole rows sent
-// the light across the empty right half of the pane: on a selection of many
-// short lines it was over the text for the first few frames and then crossed
-// nothing.
-//
-// A region with nothing in it ends the sweep here. That is a copy of blank
-// rows, or a block that has scrolled out of view, and a sweep kept running
-// over it would hold the motion clock at the frame rate to draw nothing.
 func (m *OS) copyFlashGrid(window *terminal.Window, screen cellGrid, scrollbackLen, maxY, maxX int) (*pool.HighlightGrid, copyFlashBand) {
 	progress, ok := m.copyFlashProgress(window.ID)
 	fl := m.copyFlashFor(window.ID)
@@ -644,11 +442,6 @@ func (m *OS) copyFlashGrid(window *terminal.Window, screen cellGrid, scrollbackL
 	return grid, m.copyFlashBandFor(progress, box)
 }
 
-// paneRowTextEnd is the last column on row y of the pane's view that holds
-// text, or -1 when the row is blank. A wide character counts to its last
-// column, so the block measured from it covers the whole glyph. The view is
-// the one the frame draws: scrolled back, the top rows are scrollback lines
-// and the rest are the screen shifted down.
 func paneRowTextEnd(window *terminal.Window, screen cellGrid, y, maxX, scrollbackLen int) int {
 	blank := func(c *uv.Cell) bool {
 		return c == nil || c.Width == 0 || c.Content == "" || c.Content == " "
@@ -679,28 +472,8 @@ func paneRowTextEnd(window *terminal.Window, screen cellGrid, y, maxX, scrollbac
 	return -1
 }
 
-// copyFlashReach is the share of the pane's width the glow spans, as a
-// fraction. A wider band on a wider pane, so the sweep looks the same on a
-// narrow pane and a full-screen one.
-// A wider band than it was. Every step of the gradient is a whole cell, so a
-// narrow band has few cells to spread its shades over and arrives as an edge;
-// a wider one has more, and reads as light rather than as a bar.
 func (m *OS) copyFlashReach() float64 { return 0.30 }
 
-// copyFlashTint is the colour the light is made of.
-//
-// Derived from the pane's own background unless a colour is configured. What a
-// person sees is the change relative to the ground they are looking at, not a
-// particular colour, and one literal cannot serve both ends of the theme
-// range: the pale gold this shipped with measures fourteen to one against a
-// dark ground and one point oh three against a light one, so it was a strobe
-// on one theme and invisible on the other.
-//
-// The ground is lifted by a ratio instead, in whichever direction has room,
-// which ContrastText answers by measuring rather than by guessing at the
-// theme. The lift is capped against the selection colour, which is the most
-// familiar "this region is marked" signal in the product: an acknowledgement
-// should land just under it, the same order and read as weaker.
 func (m *OS) copyFlashTint() color.Color {
 	if c := theme.ConfigColor(m.Settings.CopyFlashColor); c != nil {
 		return c
@@ -708,7 +481,4 @@ func (m *OS) copyFlashTint() color.Color {
 	return overlay.Tone(m.terminalBg(), copyFlashLift)
 }
 
-// copyFlashLift is how far the ground is carried, as a contrast ratio. The
-// selection measures about 1.8 to 1 against a dark ground, so this sits under
-// it.
 const copyFlashLift = 1.6

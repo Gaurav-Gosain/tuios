@@ -15,19 +15,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The backgrounds beyond the pane's: the desktop, the window chrome, the dock
-// and the rail, and appearance.background, which sets them all. Each test
-// composes the same frame with the option off and on and compares them cell
-// by cell, which is the whole of the contract: a cell that had no background
-// takes the surface's, a cell that had one keeps it, and a foreground that
-// was set is kept.
-
 const surfaceHex = "#2a1b3d"
 
 var surfaceRGBA = color.RGBA{R: 0x2a, G: 0x1b, B: 0x3d, A: 0xff}
 
-// surfaceOS is a client with the rail on the left and the dock at the bottom,
-// holding two bordered panes with a gap between them and room around them.
 func surfaceOS(t *testing.T) (*OS, *terminal.Window, *terminal.Window) {
 	t.Helper()
 	a := paneBgWindow(t, "surf-a", 30, 2, 40, 12)
@@ -41,8 +32,6 @@ func surfaceOS(t *testing.T) (*OS, *terminal.Window, *terminal.Window) {
 	return m, a, b
 }
 
-// composedCells composes a frame with the sidebar, the overlays and the dock and
-// copies its cells, since the canvas is reused by the next frame.
 func composedCells(m *OS) [][]uv.Cell {
 	canvas := m.GetCanvas(true)
 	out := make([][]uv.Cell, len(canvas.Lines))
@@ -52,8 +41,6 @@ func composedCells(m *OS) [][]uv.Cell {
 	return out
 }
 
-// paintCheck compares the frame before and after a surface was painted over
-// the rectangle r, and returns how many cells took the ground.
 func paintCheck(t *testing.T, name string, off, on [][]uv.Cell, r image.Rectangle, bg, fg color.Color) int {
 	t.Helper()
 	painted := 0
@@ -93,7 +80,6 @@ func paintCheck(t *testing.T, name string, off, on [][]uv.Cell, r image.Rectangl
 	return painted
 }
 
-// unchanged checks that painting one surface left the cells of r as they were.
 func unchanged(t *testing.T, name string, off, on [][]uv.Cell, r image.Rectangle) {
 	t.Helper()
 	for y := r.Min.Y; y < r.Max.Y && y < len(off); y++ {
@@ -107,13 +93,12 @@ func unchanged(t *testing.T, name string, off, on [][]uv.Cell, r image.Rectangle
 	}
 }
 
-// surfaceRects are the rectangles of the fixture's surfaces, in screen cells.
 type surfaceRects struct {
 	sidebar, dock image.Rectangle
-	paneA, paneB  image.Rectangle // the whole window
+	paneA, paneB  image.Rectangle
 	contentA      image.Rectangle
-	gap           image.Rectangle // between the two panes
-	below         image.Rectangle // the empty region under both panes
+	gap           image.Rectangle
+	below         image.Rectangle
 }
 
 func rectsOf(m *OS, a, b *terminal.Window) surfaceRects {
@@ -157,7 +142,6 @@ func TestEachSurfacePaintsOnlyItsOwnCells(t *testing.T) {
 					name: "window chrome",
 					set:  func(s *config.Settings, v string) { s.WindowChromeBackground = v },
 					painted: func(r surfaceRects) []image.Rectangle {
-						// The title row and the bottom border.
 						return []image.Rectangle{
 							image.Rect(r.paneA.Min.X, r.paneA.Min.Y, r.paneA.Max.X, r.paneA.Min.Y+1),
 							image.Rect(r.paneA.Min.X, r.paneA.Max.Y-1, r.paneA.Max.X, r.paneA.Max.Y),
@@ -194,8 +178,6 @@ func TestEachSurfacePaintsOnlyItsOwnCells(t *testing.T) {
 					r := rectsOf(m, a, b)
 					off := composedCells(m)
 					tc.set(&m.Settings, surfaceHex)
-					// No dirty marking: a layer that did not change has to be
-					// repainted from its cached cells when its ground does.
 					on := composedCells(m)
 					total := 0
 					for _, pr := range tc.painted(r) {
@@ -207,7 +189,6 @@ func TestEachSurfacePaintsOnlyItsOwnCells(t *testing.T) {
 					for _, or := range tc.other(r) {
 						unchanged(t, tc.name, off, on, or)
 					}
-					// And off again puts every cell back.
 					tc.set(&m.Settings, config.BackgroundOff)
 					back := composedCells(m)
 					unchanged(t, tc.name+" switched off", off, back, image.Rect(0, 0, m.Width, m.Height))
@@ -352,9 +333,6 @@ func TestBackgroundsAndTheFullscreenFastPath(t *testing.T) {
 // Every background off has to cost nothing per frame beyond the comparisons
 // that find it off: no allocation.
 func TestBackgroundsOffAllocateNothing(t *testing.T) {
-	// A colour setting is checked by config.IsHexColor, a regexp match, and
-	// regexp keeps its matchers in a sync.Pool that -race empties at random.
-	// The cached path allocates once a run there and never here.
 	skipAllocCountsUnderRace(t)
 	withTheme(t, "catppuccin_mocha")
 	m := paneBgOS(t, "")
@@ -431,7 +409,6 @@ func TestPaneBackgroundAnswersOSC11(t *testing.T) {
 		t.Errorf("the state pushed to the daemon carries %q/%q, want %s/%s", state.PaneReportBg, state.PaneReportFg, paneBgHex, wantFg)
 	}
 
-	// The pane's own off wins over the default for every surface.
 	m.Settings.PaneBackground = config.BackgroundOff
 	_ = string(m.composeView())
 	if got := ask("\x1b]11;?\x1b\\"); got != before {

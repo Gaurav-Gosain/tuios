@@ -14,12 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The band of light that crosses text after a copy.
-//
-// Copying is the one gesture in a terminal with no result to look at: the text
-// does not change and the selection usually disappears. The sweep puts the
-// feedback where the text was.
-
 func flashOS(t *testing.T) *OS {
 	t.Helper()
 	m := sidebarTestOS(t, 120, 40, "left")
@@ -77,8 +71,6 @@ func TestACopyAsksForAFrame(t *testing.T) {
 	}
 }
 
-// selectedWindow is a pane holding a visual selection, which is what a copy
-// takes its region from.
 func selectedWindow() *terminal.Window {
 	return &terminal.Window{
 		ID: "w1", Width: 80, Height: 24,
@@ -106,11 +98,9 @@ func TestOnlyLitCellsArePainted(t *testing.T) {
 	ground := lipgloss.Color("#101010")
 	band := m.copyFlashBandFor(0.5, copyFlashBox{left: 0, right: 80, top: 20, bottom: 20})
 
-	// A cell the light is nowhere near.
 	if _, lit := band.styleFor(80, 0, false, ground); lit {
 		t.Error("a cell the light has not reached is painted, so the block is a slab")
 	}
-	// And one it is on.
 	centre := int(band.peakColumn(0))
 	if _, lit := band.styleFor(centre, 0, false, ground); !lit {
 		t.Error("the centre of the band is not painted")
@@ -128,11 +118,8 @@ func TestOnlyLitCellsArePainted(t *testing.T) {
 // light outside the block at the halfway point and this fails.
 func TestTheSweepIsSizedToWhatWasCopied(t *testing.T) {
 	m := flashOS(t)
-	// A short block near the left of a wide pane, which is the case that
-	// showed the fault.
 	box := copyFlashBox{left: 4, right: 23, top: 20, bottom: 20}
 
-	// At the halfway point the light has to be inside the block.
 	mid := m.copyFlashBandFor(0.5, box)
 	lit := false
 	for x := box.left; x <= box.right; x++ {
@@ -144,7 +131,6 @@ func TestTheSweepIsSizedToWhatWasCopied(t *testing.T) {
 		t.Error("halfway through the sweep, nothing in the copied block is lit")
 	}
 
-	// And it has to be lit for most of the run, not a sliver of it.
 	runs := 0
 	const steps = 20
 	for i := range steps {
@@ -180,7 +166,6 @@ func TestEveryShapeCrossesTheWholeBlock(t *testing.T) {
 			m.Settings.CopyFlashStyle = shape
 			ground := lipgloss.Color("#101010")
 
-			// Every cell of the block is lit at some point in the run.
 			const steps = 40
 			for row := box.top; row <= box.bottom; row++ {
 				for x := box.left; x <= box.right; x++ {
@@ -198,10 +183,6 @@ func TestEveryShapeCrossesTheWholeBlock(t *testing.T) {
 				}
 			}
 
-			// And something in the block is lit in most frames, not a
-			// handful. Any cell counts: a horizontal sweep lights every row
-			// at once and passes a given column in a moment, so asking about
-			// one column would say it was mostly dark when it was not.
 			runs := 0
 			for i := range steps {
 				band := m.copyFlashBandFor(float64(i)/steps, box)
@@ -216,7 +197,6 @@ func TestEveryShapeCrossesTheWholeBlock(t *testing.T) {
 	}
 }
 
-// blockLit reports whether any cell of the block is lit on this frame.
 func blockLit(band copyFlashBand, box copyFlashBox, ground color.Color) bool {
 	for row := box.top; row <= box.bottom; row++ {
 		for x := box.left; x <= box.right; x++ {
@@ -251,7 +231,6 @@ func TestEveryShapeLightsABlockThatIsNotAtTheTopOfThePane(t *testing.T) {
 			m := flashOS(t)
 			m.Settings.CopyFlashStyle = shape
 
-			// A short selection on one row, a long way down a tall pane.
 			box := copyFlashBox{left: 12, right: 30, top: 34, bottom: 34}
 
 			lit := 0
@@ -268,7 +247,6 @@ func TestEveryShapeLightsABlockThatIsNotAtTheTopOfThePane(t *testing.T) {
 				t.Errorf("the block is lit in %d of %d frames, so the sweep is mostly off the text", lit, steps)
 			}
 
-			// And every cell of it is reached.
 			for x := box.left; x <= box.right; x++ {
 				ever := false
 				for i := range steps {
@@ -377,9 +355,6 @@ func TestTheSweepMeasuresTheBlock(t *testing.T) {
 	g := pool.GetHighlightGrid()
 	defer pool.PutHighlightGrid(g)
 	g.Init(4, 60)
-	// One row, so the block's bounds are that row's bounds. A selection over
-	// several rows reaches column zero on every row after the first, which is
-	// what a selection is, so its left edge is zero and says nothing.
 	fillPaneRegion(g, terminal.Position{X: 5, Y: 0}, terminal.Position{X: 20, Y: 0}, false, 0, 0, 4, 60, nil)
 
 	box, ok := copyFlashBoxOf(g, 4, 60)
@@ -459,8 +434,6 @@ func TestTheSweepRunsOnTheMotionClock(t *testing.T) {
 			m.renderSkipped, w.ContentDirty)
 	}
 
-	// The frame after the sweep ends draws once more, without the light, and
-	// then the clock stops.
 	m.copyFlash.At = time.Now().Add(-time.Hour)
 	m.renderSkipped = true
 	dueNow(m)
@@ -489,10 +462,6 @@ func TestMotionNoneDrawsNoSweep(t *testing.T) {
 	}
 }
 
-// flashPane is a live pane of short lines with history above the screen. Two
-// lines end in a wide character: one lands in the scrollback and one on the
-// screen. It returns the window and the text of every line, oldest first,
-// indexed by the absolute row the copy region uses.
 func flashPane(t *testing.T, id string) (*terminal.Window, []string) {
 	t.Helper()
 	win := newTestWindow(t, id, 40, 10)
@@ -513,8 +482,6 @@ func flashPane(t *testing.T, id string) (*terminal.Window, []string) {
 	return win, lines
 }
 
-// wantTextEnd is the last column a line's text covers, counting the one wide
-// character these lines use as two.
 func wantTextEnd(line string) int {
 	w := 0
 	for _, r := range line {
@@ -573,7 +540,6 @@ func TestTheSweptRegionStopsWhereEachRowsTextEnds(t *testing.T) {
 	maxY, maxX := win.Terminal.Height(), win.Terminal.Width()
 	win.ScrollbackOffset = 3
 	top := sb - win.ScrollbackOffset
-	// Whole rows, from two scrollback rows to two screen rows past the seam.
 	first, last := top+1, top+win.ScrollbackOffset+2
 	m.copyFlash = &copyFlash{
 		WindowID: win.ID, At: time.Now(),
@@ -620,11 +586,9 @@ func TestASweepWithNothingToLightEnds(t *testing.T) {
 			var win *terminal.Window
 			var start, end terminal.Position
 			if blank {
-				// Rows below the prompt of a pane that has hardly been used.
 				win = newTestWindow(t, "flash-blank-01", 40, 10)
 				start, end = terminal.Position{X: 0, Y: 2}, terminal.Position{X: 39, Y: 4}
 			} else {
-				// The oldest scrollback rows, with the view at the bottom.
 				win, _ = flashPane(t, "flash-gone-01")
 				start, end = terminal.Position{X: 0, Y: 0}, terminal.Position{X: 39, Y: 1}
 			}

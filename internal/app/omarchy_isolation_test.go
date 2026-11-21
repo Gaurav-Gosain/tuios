@@ -11,7 +11,6 @@ import (
 	"tuios.dev/swatch/omarchy"
 )
 
-// omarchyChildEnv marks the run of this test binary that checks the theme.
 const omarchyChildEnv = "TUIOS_TEST_OMARCHY_CHILD"
 
 // TestTheDevelopersOmarchyThemeStaysOutside runs this package's test binary
@@ -65,7 +64,6 @@ func TestTheDevelopersOmarchyThemeStaysOutside(t *testing.T) {
 	}
 }
 
-// omarchyChild is the check, run inside the child.
 func omarchyChild(t *testing.T) {
 	if id := theme.CurrentThemeID(); id == theme.OmarchyID {
 		t.Errorf("ASSERTION: the active theme is %q, the developer's applied Omarchy theme", id)

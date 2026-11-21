@@ -9,8 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// assertSolidRect fails if any line has a different display width than the
-// first, which would mean a ragged fill or a transparent hole in the panel.
 func assertSolidRect(t *testing.T, name, out string) {
 	t.Helper()
 	lines := strings.Split(out, "\n")

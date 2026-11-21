@@ -7,8 +7,6 @@ import (
 	"tuios.dev/shot"
 )
 
-// shotOS builds a client holding two live windows and a screenshot config that
-// writes into the test's own directory.
 func shotOS(t testing.TB) *OS {
 	t.Helper()
 	cfg := config.DefaultConfig()
@@ -74,7 +72,6 @@ func TestRemoteClientNeverRunsAClipboardHelper(t *testing.T) {
 	if m.screenshotIsLocal() {
 		t.Error("a remote client would run a clipboard helper on the server")
 	}
-	// CopyScreenshot on a remote client with no offer must do nothing at all.
 	m.ShotPreview = screenshotPreview{Open: true, Format: shot.FormatPNG, CopyLabel: ""}
 	if cmd := m.CopyScreenshot(); cmd != nil {
 		t.Error("the copy key did something on a client that has no copy route")
@@ -97,7 +94,6 @@ func TestCaptureModeReleasesTheGesture(t *testing.T) {
 	if m.CaptureDragActive() {
 		t.Error("a lost release left the drag running")
 	}
-	// Leaving the mode has to leave nothing behind at all.
 	m.EndCapture()
 	if m.CaptureActive() || m.Capture != (captureState{}) {
 		t.Errorf("capture mode left state behind: %+v", m.Capture)
@@ -149,8 +145,6 @@ func TestCaptureClickSlopTakesTheWindow(t *testing.T) {
 			if !ok || msg.err != nil {
 				t.Fatalf("capture failed: %+v", msg)
 			}
-			// A window capture is that pane's own cells, which is the
-			// emulator inside the border and not the whole screen.
 			win := m.Windows[1]
 			win.RLockIO()
 			cols, rows := win.Terminal.Width(), win.Terminal.Height()
@@ -208,8 +202,6 @@ func TestClosingThePreviewForgetsTheUpload(t *testing.T) {
 		t.Fatal("the capture did not open the preview")
 	}
 
-	// Uploaded but never placed, which is every frame before the panel's hit
-	// geometry has been recorded.
 	m.shotImageSent = true
 	m.shotImagePlaced = false
 
@@ -261,7 +253,6 @@ func TestFrameToGridDoesNotCascadeRows(t *testing.T) {
 // that says how to leave the mode.
 func TestTheCaptureHintStripSurvivesAPaneOnRowZero(t *testing.T) {
 	m := shotOS(t)
-	// A tiled pane: the whole content box, starting at the top row.
 	m.Windows = m.Windows[:1]
 	m.Windows[0].X, m.Windows[0].Y = 0, 0
 	m.Windows[0].Width, m.Windows[0].Height = 120, 38

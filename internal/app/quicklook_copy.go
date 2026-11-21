@@ -14,49 +14,24 @@ import (
 	"tuios.dev/vt"
 )
 
-// Copy mode in the preview. Inside a text preview, the copy_mode key starts
-// the copy mode a pane has, over the text: the same motions, selections,
-// search and yanks, run by the same code in internal/input. The preview is a
-// terminal.CopyGrid for it: the rows of the text as the panel wraps them,
-// the rows above the view as the history and the view as the screen.
-//
-// Copy mode needs every character on a row it can reach, so it wraps long
-// lines while it runs. The text it moves over is what the preview has read;
-// no more is read while it runs, so a row keeps its number.
-
-// quickLookCopyRow is one row of the text: the bytes [at, end) of line.
 type quickLookCopyRow struct {
 	line, at, end int
-	// more says the next row is more of the same line, so a selection that
-	// crosses the edge copies no newline there.
-	more bool
+	more          bool
 }
 
-// quickLookCopy is copy mode over the preview's text.
 type quickLookCopy struct {
-	cm terminal.CopyMode
-	// res is the result the rows were laid out from. Copy mode ends when
-	// the preview shows another.
-	res   *quickLookResult
-	lines []string
-	rows  []quickLookCopyRow
-	// cells is each row as cells, built when copy mode first reads it.
-	cells [][]uv.Cell
-	// w and h are the code column's width and the rows of the view.
+	cm     terminal.CopyMode
+	res    *quickLookResult
+	lines  []string
+	rows   []quickLookCopyRow
+	cells  [][]uv.Cell
 	w, h   int
 	offset int
-	// wrap is what the preview's wrap was before copy mode turned it on.
-	wrap bool
-	// x0 and y0 are where the view was drawn in the panel's body in the
-	// last frame, for the mouse.
+	wrap   bool
 	x0, y0 int
-	// md is the rows of a Markdown file as the panel draws it, nil over
-	// text. Each row is one laid-out line, and rows holds its number.
-	md []ckCopyRow
+	md     []ckCopyRow
 }
 
-// newQuickLookCopy lays the lines out as rows of width w. cut gives each
-// line one row, cut at the edge, as the panel draws it with wrap off.
 func newQuickLookCopy(lines []string, w, h int, cut bool) *quickLookCopy {
 	q := &quickLookCopy{lines: lines, w: max(w, 1), h: max(h, 1)}
 	for n, line := range lines {
@@ -79,8 +54,6 @@ func newQuickLookCopy(lines []string, w, h int, cut bool) *quickLookCopy {
 	return q
 }
 
-// newQuickLookMDCopy is copy mode over the laid-out lines of a Markdown
-// file, one row each.
 func newQuickLookMDCopy(rows []ckCopyRow, w, h int) *quickLookCopy {
 	q := &quickLookCopy{md: rows, w: max(w, 1), h: max(h, 1)}
 	q.rows = make([]quickLookCopyRow, len(rows))
@@ -90,8 +63,6 @@ func newQuickLookMDCopy(rows []ckCopyRow, w, h int) *quickLookCopy {
 	return q
 }
 
-// rowCells is row i as w cells: a cluster's cell, a blank cell after it for
-// each column more it takes, and spaces to the edge.
 func (q *quickLookCopy) rowCells(i int) []uv.Cell {
 	if i < 0 || i >= len(q.rows) {
 		return nil
@@ -124,22 +95,16 @@ func (q *quickLookCopy) rowCells(i int) []uv.Cell {
 	return out
 }
 
-// top is the row at the top of the view.
 func (q *quickLookCopy) top() int { return q.ScrollbackLen() - q.offset }
 
-// screenRow is the row on line y of the view, the screen.
 func (q *quickLookCopy) screenRow(y int) int { return q.ScrollbackLen() + y }
 
-// Text is the copy grid's text, the preview itself.
 func (q *quickLookCopy) Text() terminal.CopyText { return q }
 
-// ScrollbackLen is the rows above the view when it is at the bottom.
 func (q *quickLookCopy) ScrollbackLen() int { return max(len(q.rows)-q.h, 0) }
 
-// ScrollbackLine is row i above the bottom view.
 func (q *quickLookCopy) ScrollbackLine(i int) uv.Line { return q.rowCells(i) }
 
-// ScrollbackText calls fn with the rows from to end-1 as text cells.
 func (q *quickLookCopy) ScrollbackText(from, end int, fn func(index, width int, cells []vt.TextCell) bool) {
 	var buf []vt.TextCell
 	for i := max(from, 0); i < min(end, q.ScrollbackLen()); i++ {
@@ -153,11 +118,8 @@ func (q *quickLookCopy) ScrollbackText(from, end int, fn func(index, width int, 
 	}
 }
 
-// ScrollbackGeneration does not change: the rows are fixed while copy mode
-// runs.
 func (q *quickLookCopy) ScrollbackGeneration() uint64 { return 1 }
 
-// CellAt is the cell at column x of line y of the bottom view.
 func (q *quickLookCopy) CellAt(x, y int) *uv.Cell {
 	cells := q.rowCells(q.screenRow(y))
 	if x < 0 || x >= len(cells) {
@@ -166,10 +128,8 @@ func (q *quickLookCopy) CellAt(x, y int) *uv.Cell {
 	return &cells[x]
 }
 
-// Width is the code column's width.
 func (q *quickLookCopy) Width() int { return q.w }
 
-// Height is the view's rows.
 func (q *quickLookCopy) Height() int { return q.h }
 
 func (q *quickLookCopy) wraps(i int) (bool, bool) {
@@ -179,36 +139,26 @@ func (q *quickLookCopy) wraps(i int) (bool, bool) {
 	return q.rows[i].more, true
 }
 
-// RowSoftWrapped says line y of the bottom view goes on in the next row.
 func (q *quickLookCopy) RowSoftWrapped(y int) (bool, bool) { return q.wraps(q.screenRow(y)) }
 
-// ScrollbackSoftWrapped says row i goes on in the next row.
 func (q *quickLookCopy) ScrollbackSoftWrapped(i int) (bool, bool) { return q.wraps(i) }
 
-// RowPadded is false: a row ends where its last whole cluster does.
 func (q *quickLookCopy) RowPadded(int) bool { return false }
 
-// ScrollbackPadded is false, as RowPadded.
 func (q *quickLookCopy) ScrollbackPadded(int) bool { return false }
 
-// ScrollOffset is how many rows the view is above the bottom.
 func (q *quickLookCopy) ScrollOffset() int { return q.offset }
 
-// SetScrollOffset moves the view offset rows above the bottom.
 func (q *quickLookCopy) SetScrollOffset(offset int) {
 	q.offset = max(min(offset, q.ScrollbackLen()), 0)
 }
 
-// ViewHeight is the view's rows.
 func (q *quickLookCopy) ViewHeight() int { return q.h }
 
-// ContentHeight is the view's rows.
 func (q *quickLookCopy) ContentHeight() int { return q.h }
 
-// LastContentRow is the view's last row.
 func (q *quickLookCopy) LastContentRow() int { return q.h - 1 }
 
-// LastContentCol is the code column's last column.
 func (q *quickLookCopy) LastContentCol() int { return q.w - 1 }
 
 // QuickLookCopyStart starts copy mode over the text in the preview, with the
@@ -218,11 +168,6 @@ func (m *OS) QuickLookCopyStart() bool {
 	return m.quickLookCopyBegin(false)
 }
 
-// quickLookCopyBegin starts copy mode over the text in view, as the key does
-// or, implicit, for a mouse selection. A mouse selection keeps the rows as
-// the panel draws them, so nothing moves under the pointer, and it runs over
-// a Markdown file too. The key wraps long lines, so every character is on a
-// row it can reach.
 func (m *OS) quickLookCopyBegin(implicit bool) bool {
 	ql := &m.quickLook
 	r := ql.res
@@ -235,7 +180,6 @@ func (m *OS) quickLookCopyBegin(implicit bool) bool {
 		q = newQuickLookCopy(r.lines, ql.textW, ql.bodyRows, implicit && !ql.wrap)
 	case r.kind == "markdown" && implicit && len(ql.mdLines) > 0:
 		rows := ckCopyOf(ql.look, ql.mdLines, nil, ql.textW)
-		// A picture's rows hold no text.
 		for i, ln := range ql.mdLines {
 			if strings.HasPrefix(ln.hit, "qimg:") {
 				for x := range rows[i].cells {
@@ -292,8 +236,6 @@ func (m *OS) QuickLookCopyEnd() {
 	}
 }
 
-// drawQuickLookCopy draws the text as copy mode lays it out, with the search
-// matches, the selection and the cursor on it.
 func (m *OS) drawQuickLookCopy(c *ckCanvas, pal overlay.Palette, dv *diffview.Theme, r *quickLookResult, q *quickLookCopy, codeX, gutter, bodyTop int) {
 	ql := &m.quickLook
 	q.x0, q.y0 = codeX, bodyTop
@@ -315,8 +257,6 @@ func (m *OS) drawQuickLookCopy(c *ckCanvas, pal overlay.Palette, dv *diffview.Th
 	drawCopyMarks(c, m.marks(), &q.cm, codeX, bodyTop, q.w, q.h, top)
 }
 
-// drawQuickLookMDCopy draws the Markdown from copy mode's top row, with the
-// selection on it.
 func (m *OS) drawQuickLookMDCopy(c *ckCanvas, q *quickLookCopy, x, bodyTop int) {
 	q.x0, q.y0 = x, bodyTop
 	lines := m.quickLook.mdLines
@@ -328,9 +268,6 @@ func (m *OS) drawQuickLookMDCopy(c *ckCanvas, q *quickLookCopy, x, bodyTop int) 
 	m.quickLookMDMarks(lines, top, q.h, bodyTop)
 }
 
-// drawCopyMarks draws copy mode's search matches, selection and cursor over
-// a view of h rows and w columns at x, y, whose first row is the grid's row
-// first.
 func drawCopyMarks(c *ckCanvas, marks *markStyles, cm *terminal.CopyMode, x0, y0, w, h, first int) {
 	view := func(abs int) int {
 		if y := abs - first; y >= 0 && y < h {
@@ -385,8 +322,6 @@ func drawCopyMarks(c *ckCanvas, marks *markStyles, cm *terminal.CopyMode, x0, y0
 	}
 }
 
-// markCell paints a cell with a mark style: its ground and ink where the style
-// sets them, and bold.
 func markCell(st lipgloss.Style) func(*uv.Cell) {
 	bg, fg, bold := st.GetBackground(), st.GetForeground(), st.GetBold()
 	_, noBg := bg.(lipgloss.NoColor)

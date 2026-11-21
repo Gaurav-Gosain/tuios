@@ -6,18 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// The agents view's regions. One has the keys at a time: the list of agents,
-// the focus (the tab body: thread, changes, checkpoints, pane), the reply and
-// the side column. tab and shift+tab step them in that order and skip a
-// region the frame does not draw. The focused region wears an accent rule on
-// its top edge, and the key bar names it and shows its keys.
-//
-// The keys of the list keep their meaning in every region. In the focus the
-// moves scroll the thread instead of the list. In the side column enter
-// opens the agent's pane. The reply is the editor: it is the focused region
-// while it is open.
-
-// ckRegion is one region of the agents view.
 type ckRegion uint8
 
 const (
@@ -28,11 +16,8 @@ const (
 	ckRegions
 )
 
-// ckRegionNames is what the key bar calls each region.
 var ckRegionNames = [ckRegions]string{"List", "Focus", "Reply", "Side"}
 
-// ckRegionBox is where the frame drew a region, in screen cells, so a click
-// can focus it. A region the frame did not draw has an empty box.
 type ckRegionBox struct {
 	x0, x1, y0, y1 int
 }
@@ -56,15 +41,12 @@ func (m *OS) CockpitRegion() ckRegion {
 	return ckRegionList
 }
 
-// cockpitRegionShown reports whether tab can step onto region r now.
 func (m *OS) cockpitRegionShown(r ckRegion) bool {
 	ck := &m.Inbox.ck
 	switch r {
 	case ckRegionList:
 		return true
 	case ckRegionReply:
-		// The reply is drawn in the focus. It takes the step only when a
-		// reply can go to the agent under the cursor.
 		if !ck.regionBox[ckRegionFocus].shown() {
 			return false
 		}
@@ -101,8 +83,6 @@ func (m *OS) CockpitStepRegion(d int) tea.Cmd {
 	return nil
 }
 
-// cockpitFocusRegionAt gives the keys to the region under a click. A click
-// outside every region leaves them where they are.
 func (m *OS) cockpitFocusRegionAt(x, y int) {
 	ck := &m.Inbox.ck
 	for _, r := range [...]ckRegion{ckRegionFocus, ckRegionSide, ckRegionList} {
@@ -141,9 +121,6 @@ func (m *OS) CockpitEscape() tea.Cmd {
 	return nil
 }
 
-// cockpitShowAll drops everything that narrows the list: the selector, the
-// search, the f filter and the state chip. esc and a click on the header's
-// narrowed chip run it.
 func (m *OS) cockpitShowAll() {
 	st := &m.Inbox
 	ck := &st.ck
@@ -156,8 +133,6 @@ func (m *OS) cockpitShowAll() {
 	m.cockpitSync()
 }
 
-// ckEscStep is what esc does in the view's base layer, from the top rung of
-// the ladder down.
 type ckEscStep uint8
 
 const (
@@ -168,9 +143,6 @@ const (
 	ckEscClear
 )
 
-// cockpitEscapeStep is the rung of the esc ladder that applies now, and its
-// words for the key bar. CockpitEscape and the key bar both read it, so the
-// bar says what esc does.
 func (m *OS) cockpitEscapeStep() (ckEscStep, string) {
 	switch {
 	case m.Inbox.ck.zoom:
@@ -187,18 +159,15 @@ func (m *OS) cockpitEscapeStep() (ckEscStep, string) {
 	return ckEscClose, "close"
 }
 
-// cockpitNarrowed reports whether a search or a filter narrows the list.
 func (m *OS) cockpitNarrowed() bool {
 	st := &m.Inbox
 	return st.Select != "" || st.Filter != "" || st.agents.query != "" || st.ck.needsOnly || st.ck.chip > 0
 }
 
-// cockpitSearched reports whether a search line narrows the list.
 func (m *OS) cockpitSearched() bool {
 	return m.Inbox.Select != "" || m.Inbox.agents.query != ""
 }
 
-// cockpitEscapeLabel is what esc does now, for the key bar.
 func (m *OS) cockpitEscapeLabel() string {
 	_, label := m.cockpitEscapeStep()
 	return label
@@ -225,9 +194,6 @@ func (m *OS) CockpitNextNeeds() bool {
 	return false
 }
 
-// cockpitRegionKey runs an action the focused region gives its own meaning,
-// ahead of the list's. handled is false for every other action, which then
-// does what it does in the list.
 func (m *OS) cockpitRegionKey(action string) (tea.Cmd, bool) {
 	switch m.CockpitRegion() {
 	case ckRegionFocus:
@@ -240,13 +206,10 @@ func (m *OS) cockpitRegionKey(action string) (tea.Cmd, bool) {
 	return nil, false
 }
 
-// cockpitFocusKey scrolls the thread with the moves: j k a line, the page
-// keys a screen, g G the ends. y starts copy mode over the thread.
 func (m *OS) cockpitFocusKey(action string) (tea.Cmd, bool) {
 	if action == config.ActionInboxResume && m.CockpitCopyStart() {
 		return nil, true
 	}
-	// A plan on the card is what the focus reads: the moves scroll it.
 	if m.inboxPlanMove(action, true) {
 		return nil, true
 	}
@@ -255,8 +218,6 @@ func (m *OS) cockpitFocusKey(action string) (tea.Cmd, bool) {
 		switch action {
 		case config.ActionInboxUp, config.ActionInboxDown, config.ActionInboxPageUp, config.ActionInboxPageDown,
 			config.ActionInboxFirst, config.ActionInboxLast:
-			// Nothing to scroll: the key does nothing, and the list
-			// cursor stays.
 			return nil, true
 		}
 		return nil, false
@@ -291,8 +252,6 @@ func (m *OS) CockpitKeyAction(action string) tea.Cmd {
 	return cmd
 }
 
-// cockpitEscHints is the way out for the key bar: esc and what it does now.
-// A config that gave esc back to inbox_close shows that key and "close".
 func (m *OS) cockpitEscHints() []overlay.Hint {
 	if hints := m.keyHints(config.ActionInboxEscape, m.cockpitEscapeLabel()); len(hints) > 0 {
 		return hints
@@ -300,7 +259,6 @@ func (m *OS) cockpitEscHints() []overlay.Hint {
 	return m.keyHints(config.ActionInboxClose, "close")
 }
 
-// cockpitFocusHints are the focus's keys for the key bar.
 func (m *OS) cockpitFocusHints() []overlay.Hint {
 	pair := func(a, b, label string) []overlay.Hint {
 		ka, kb := m.inboxKey(a), m.inboxKey(b)
@@ -327,14 +285,12 @@ func (m *OS) cockpitFocusHints() []overlay.Hint {
 	return append(hints, m.cockpitEscHints()...)
 }
 
-// cockpitSideHints are the side column's keys for the key bar.
 func (m *OS) cockpitSideHints() []overlay.Hint {
 	hints := m.keyHints(config.ActionInboxGo, "open pane", config.ActionInboxRegionNext, "next region")
 	hints = append(hints, overlay.Hint{Key: "?", Label: "all keys"})
 	return append(hints, m.cockpitEscHints()...)
 }
 
-// cockpitNeedsCount is how many rows of the list need the person.
 func (m *OS) cockpitNeedsCount() int {
 	n := 0
 	for _, r := range m.Inbox.ck.rows {

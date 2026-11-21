@@ -21,26 +21,8 @@ import (
 	"tuios.dev/vt"
 )
 
-// Multi copy mode is copy mode on every pane of the multifocus set at once.
-//
-// Multifocus already means "the keys go to all of these panes" in terminal
-// mode, so copy mode follows the same set: each pane gets its own cursor and
-// selection, and every copy-mode key moves them all in lockstep, the way a
-// multi-cursor editor does. Search moves each pane to its own match. A pane
-// the search finds nothing in is parked: it keeps its cursor, is drawn dimmed,
-// and stays out of the selection until a later search finds something in it.
-// The yank takes exactly what is highlighted in each pane that has a
-// selection and formats the lot as one block.
-//
-// The state is client-side, like the multifocus set it comes from. The key
-// handling lives in the input package (copymode_multi.go); this file owns the
-// set of panes, the format, and where the yank goes.
-
-// paletteMultiCopyName is the palette entry that starts multi copy mode.
 const paletteMultiCopyName = "Multi copy mode"
 
-// multiCopyLargeYank is the size, in bytes, past which a yank warns that the
-// terminal may cut the OSC 52 write.
 const multiCopyLargeYank = 100 * 1024
 
 // MultiCopy is multi copy mode's state.
@@ -76,8 +58,6 @@ func (mc *MultiCopy) Has(id string) bool {
 	return slices.Contains(mc.IDs, id)
 }
 
-// multiCopyCandidates is the panes multi copy mode would take: the multifocus
-// set's panes that are on screen now, in window-list order.
 func (m *OS) multiCopyCandidates() []*terminal.Window {
 	if len(m.MultifocusSet) == 0 {
 		return nil
@@ -115,8 +95,6 @@ func (m *OS) EnterCopyModeFocused() {
 	}
 	if fw := m.GetFocusedWindow(); fw != nil {
 		m.ExitMultiCopyMode()
-		// No message says the keys: the dock's legend does, for as long as
-		// copy mode is open (see mode_legend.go).
 		m.enterCopyMode(fw)
 	}
 }
@@ -130,8 +108,6 @@ func (m *OS) EnterMultiCopyMode() bool {
 		m.ShowNotification("Multi copy mode needs two or more panes in multifocus. Add panes with Ctrl+Shift+Click.", "warning", 2*m.Settings.NotificationDuration)
 		return false
 	}
-	// The keys go to the focused pane first. Focus a pane of the set if the
-	// focused one is not in it.
 	if fw := m.GetFocusedWindow(); fw == nil || !m.MultifocusSet[fw.ID] {
 		for i, w := range m.Windows {
 			if w == panes[0] {
@@ -148,8 +124,6 @@ func (m *OS) EnterMultiCopyMode() bool {
 		m.enterCopyMode(w)
 		mc.IDs = append(mc.IDs, w.ID)
 	}
-	// The mode pill says "MULTI" and the pane count, and the dock's legend
-	// says the keys, so no message repeats either over the legend.
 	m.MultiCopy = mc
 	return true
 }
@@ -213,8 +187,6 @@ func (m *OS) SettleMultiCopy() {
 	}
 }
 
-// multiCopyOnScreen reports whether a pane can take part in the mode: it is on
-// the current workspace and not minimised.
 func (m *OS) multiCopyOnScreen(w *terminal.Window) bool {
 	return w.Workspace == m.CurrentWorkspace && !w.Minimized
 }
@@ -384,8 +356,6 @@ func (m *OS) yankMultiCopy(panes []MultiCopyPane, skipped int, pipe *config.Copy
 		msg += fmt.Sprintf(" %s had no selection.", paneCount(skipped))
 	}
 	if len(text) > multiCopyLargeYank {
-		// OSC 52 carries the text base64 encoded in one escape sequence, and
-		// many terminals cut a long one short or drop it.
 		m.ShowNotification(msg+" The copy is large. Your terminal may cut it.", "warning", 2*m.Settings.NotificationDuration)
 	} else {
 		m.ShowNotification(msg, "success", m.Settings.NotificationDuration)
@@ -453,8 +423,6 @@ func (m *OS) MultiCopySaveKey(key, text string) {
 	}
 }
 
-// cleanSavePath keeps what a typed path may hold: no control character and no
-// invisible format rune.
 func cleanSavePath(text string) string {
 	var b strings.Builder
 	for _, r := range text {
@@ -466,10 +434,6 @@ func cleanSavePath(text string) string {
 	return b.String()
 }
 
-// multiCopySaveBase is the directory a relative save path is taken from: the
-// focused pane's working directory when its shell reported one on this
-// machine (OSC 7), and the home directory otherwise. The tuios process's own
-// directory means nothing to the person typing the path.
 func (m *OS) multiCopySaveBase() string {
 	if fw := m.GetFocusedWindow(); fw != nil && fw.Cwd != "" && filepath.IsAbs(fw.Cwd) {
 		return fw.Cwd
@@ -504,8 +468,6 @@ func (m *OS) MultiCopySaveResolved() (string, error) {
 	return filepath.Clean(path), nil
 }
 
-// multiCopySaveHost is " on <machine>" when the person is not at the machine
-// the file is written on (an SSH or browser client), and empty otherwise.
 func (m *OS) multiCopySaveHost() string {
 	if !m.RemoteClient || m.SSHIsLoopback {
 		return ""
@@ -562,8 +524,6 @@ func (m *OS) CommitMultiCopySave() bool {
 	_, werr := f.WriteString(text)
 	cerr := f.Close()
 	if werr != nil || cerr != nil {
-		// The file is new (O_EXCL), so it is ours to remove. Leaving the
-		// partial file would make the retry fail as "a file is already here".
 		_ = os.Remove(path)
 		s.Err = "Cannot save: " + errors.Join(werr, cerr).Error()
 		return false
@@ -574,17 +534,12 @@ func (m *OS) CommitMultiCopySave() bool {
 	return true
 }
 
-// multiCopyFile is what a save writes to. It is an interface so a test can
-// make the write fail part way.
 type multiCopyFile interface {
 	WriteString(string) (int, error)
 	Close() error
 }
 
-// multiCopyCreate creates the save file. It never opens one that exists.
 var multiCopyCreate = func(path string) (multiCopyFile, error) {
-	// A failed open returns a nil *os.File. Returned as it is, it would be a
-	// non-nil multiCopyFile holding a nil pointer.
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return nil, err

@@ -10,17 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The master-stack shape: where the masters go and how many panes are masters.
-//
-// Each workspace has its own. A workspace nobody has changed uses the
-// configured default (appearance.master_position, master_count and
-// master_grid), read live, so a config change reaches every such workspace on
-// the next retile. The actions below change the current workspace only and
-// record the result in WorkspaceMasterLayout. In a daemon session that map is
-// the session's: a change goes to the daemon as an op (session.MsgMasterLayout)
-// and every attached client lays the workspace out the same way.
-
-// masterLayoutFor is the shape workspace ws is laid out with.
 func (m *OS) masterLayoutFor(ws int) session.MasterLayoutState {
 	if st, ok := m.WorkspaceMasterLayout[ws]; ok {
 		return normalMasterLayout(st)
@@ -28,7 +17,6 @@ func (m *OS) masterLayoutFor(ws int) session.MasterLayoutState {
 	return m.configMasterLayout()
 }
 
-// configMasterLayout is the configured default shape.
 func (m *OS) configMasterLayout() session.MasterLayoutState {
 	return normalMasterLayout(session.MasterLayoutState{
 		Position: m.Settings.MasterPosition,
@@ -37,14 +25,12 @@ func (m *OS) configMasterLayout() session.MasterLayoutState {
 	})
 }
 
-// normalMasterLayout turns the zero values into the defaults they stand for.
 func normalMasterLayout(st session.MasterLayoutState) session.MasterLayoutState {
 	st.Position = config.ValidMasterPosition(st.Position)
 	st.Count = config.ClampMasterCount(st.Count)
 	return st
 }
 
-// masterParams is what the tiler reads for the current workspace.
 func (m *OS) masterParams() layout.MasterParams {
 	st := m.masterLayoutFor(m.CurrentWorkspace)
 	return layout.MasterParams{
@@ -58,18 +44,14 @@ func (m *OS) masterParams() layout.MasterParams {
 	}
 }
 
-// inMasterStack reports whether the master-stack layout is the one on screen.
 func (m *OS) inMasterStack() bool {
 	return m.AutoTiling && !m.UseBSPLayout && !m.UseScrollingLayout
 }
 
-// masterOpsOn reports whether master layout changes go to the daemon as ops.
 func (m *OS) masterOpsOn() bool {
 	return m.IsDaemonSession && m.DaemonClient != nil
 }
 
-// setMasterLayout records a new shape for the current workspace, tells the
-// daemon, and lays the panes out again. It reports whether anything changed.
 func (m *OS) setMasterLayout(st session.MasterLayoutState) bool {
 	st = normalMasterLayout(st)
 	ws := m.CurrentWorkspace
@@ -92,14 +74,6 @@ func (m *OS) setMasterLayout(st session.MasterLayoutState) bool {
 	return true
 }
 
-// seedMasterLayout gives the session this client's configured shape for the
-// workspace on screen when the session has none. Two clients with different
-// defaults would otherwise lay one workspace out two ways and fight over the
-// size of every PTY on it. The op is sent once per workspace, and the daemon
-// applies it only while the workspace still has no shape, so the first client
-// to tile it decides. That holds for the default shape too: a client with the
-// default config that tiles first keeps the workspace on the default when a
-// client with another config attaches later.
 func (m *OS) seedMasterLayout() {
 	if !m.inMasterStack() || !m.masterOpsOn() {
 		return
@@ -118,10 +92,6 @@ func (m *OS) seedMasterLayout() {
 	}
 }
 
-// adoptWorkspaceMasterLayout takes the session's master-stack shapes, and
-// reports whether the shape of the workspace on screen changed. The session's
-// map is the whole answer when the daemon takes the ops. An older daemon
-// never carries the field, and then the shapes stay this client's own.
 func (m *OS) adoptWorkspaceMasterLayout(state *session.SessionState) bool {
 	if state == nil || !m.masterOpsOn() {
 		return false
@@ -188,8 +158,6 @@ func (m *OS) RemoveMaster() int {
 	return m.SetMasterCount(m.masterLayoutFor(m.CurrentWorkspace).Count - 1)
 }
 
-// masterIndex is the index in m.Windows of the current workspace's first
-// master, or -1 when the workspace has no tiled pane.
 func (m *OS) masterIndex() int {
 	panes := m.tilablePanes(m.CurrentWorkspace)
 	if len(panes) == 0 {
@@ -225,7 +193,6 @@ func (m *OS) SwapWithMaster() bool {
 	if focused.Workspace != m.CurrentWorkspace || focused.Minimized || focused.IsFloating {
 		return false
 	}
-	// The first master, or the pane after it when the focus is on it.
 	panes := m.tilablePanes(m.CurrentWorkspace)
 	if len(panes) < 2 {
 		return false
@@ -236,8 +203,6 @@ func (m *OS) SwapWithMaster() bool {
 	}
 	target := m.windowIndex(other)
 	m.SwapWindowsInstant(m.FocusedWindow, target)
-	// The panes swapped rectangles, which are the slots they now hold. A
-	// retile settles anything a resize had left between slots.
 	m.TileAllWindows()
 	m.SyncStateToDaemon()
 	return true
@@ -256,8 +221,6 @@ func MasterCountMessage(m *OS, n int) string {
 	return m.masterLayoutMessage("Master panes: " + strconv.Itoa(n))
 }
 
-// masterLayoutMessage is msg, with where it takes effect added outside the
-// master-stack layout.
 func (m *OS) masterLayoutMessage(msg string) string {
 	if !m.inMasterStack() {
 		msg += ". This applies in the master-stack layout."
@@ -265,11 +228,6 @@ func (m *OS) masterLayoutMessage(msg string) string {
 	return msg
 }
 
-// adoptConfigMasterLayout lands a config-side change to the master-stack shape
-// (the settings page, set-config, a config reload) on the workspace on screen.
-// The other workspaces follow the config until something changes them, except
-// in a daemon session, where each one keeps the shape the session settled for
-// it.
 func (m *OS) adoptConfigMasterLayout() {
 	cur := m.configMasterLayout()
 	if cur == m.lastConfigMaster {

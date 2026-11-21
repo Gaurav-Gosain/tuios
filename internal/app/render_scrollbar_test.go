@@ -11,9 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// fillScrollback pushes enough lines through the emulator that the pane has a
-// scrollback deep enough for a thumb shorter than the viewport, which is the
-// last of windowNeedsScrollbar's arithmetic gates.
 func fillScrollback(t *testing.T, win *terminal.Window, lines int) {
 	t.Helper()
 	win.LockIO()
@@ -27,8 +24,6 @@ func fillScrollback(t *testing.T, win *terminal.Window, lines int) {
 	}
 }
 
-// scrollBack puts the pane into the state the scrollbar exists to report: a
-// view some way up its own history.
 func scrollBack(t *testing.T, win *terminal.Window, offset int) {
 	t.Helper()
 	win.EnterCopyModeImplicit()
@@ -39,9 +34,6 @@ func scrollBack(t *testing.T, win *terminal.Window, offset int) {
 	win.ScrollbackOffset = offset
 }
 
-// scrollbarDefaults pins the globals the bar reads to a fresh install's for the
-// duration of a test. They are process-wide, and the package's other tests move
-// several of them (ASCII, border style) on their way past.
 func scrollbarDefaults(t *testing.T) {
 	t.Helper()
 	ascii, border, hide := config.Global.UseASCIIOnly, config.Global.BorderStyle, config.Global.HideScrollbar
@@ -55,7 +47,6 @@ func scrollbarDefaults(t *testing.T) {
 	config.Global.ScrollbarTint = config.ScrollbarTintBorder
 }
 
-// withSharedBorders sets config.SharedBorders for the duration of fn.
 func withSharedBorders(t *testing.T, shared bool, fn func()) {
 	t.Helper()
 	prev := config.Global.SharedBorders
@@ -64,8 +55,6 @@ func withSharedBorders(t *testing.T, shared bool, fn func()) {
 	fn()
 }
 
-// withScrollbarStyle sets the scrollbar style for the duration of fn, on the
-// process seed and on any model already built from it.
 func withScrollbarStyle(t *testing.T, m *OS, style string, fn func()) {
 	t.Helper()
 	prev := config.Global.ScrollbarStyle
@@ -82,10 +71,6 @@ func withScrollbarStyle(t *testing.T, m *OS, style string, fn func()) {
 	fn()
 }
 
-// barFrame composes the bar the way the compositor does and returns the frame's
-// rows. Every visual claim below is read off this rather than off the
-// arithmetic that produced it: the bar is one column of glyphs on a frame, and
-// that is where a bug in it shows.
 func barFrame(t *testing.T, m *OS, win *terminal.Window, focused bool) []string {
 	t.Helper()
 	layer := m.renderScrollbarLayer(win, 1000, 1, focused)
@@ -97,8 +82,6 @@ func barFrame(t *testing.T, m *OS, win *terminal.Window, focused bool) []string 
 	return strings.Split(canvas.Render(), "\n")
 }
 
-// barGlyphs returns what the frame shows in the bar's column, one entry per
-// viewport row, styling stripped.
 func barGlyphs(t *testing.T, frame []string, win *terminal.Window) []string {
 	t.Helper()
 	x := scrollbarColumn(win)
@@ -106,7 +89,7 @@ func barGlyphs(t *testing.T, frame []string, win *terminal.Window) []string {
 	glyphs := make([]string, win.ContentHeight())
 	for i := range glyphs {
 		row := []rune(ansi.Strip(frame[top+i]))
-		glyphs[i] = " " // a row the bar left untouched shows the guest's own cell
+		glyphs[i] = " "
 		if x < len(row) {
 			glyphs[i] = string(row[x])
 		}
@@ -274,7 +257,6 @@ func TestScrollbarHitIsRecordedAsItIsDrawn(t *testing.T) {
 			t.Errorf("tiled=%v: the thumb rows are misreported", tiled)
 		}
 
-		// The frame that stops drawing the bar takes the grab with it.
 		m.resetScrollbarRects()
 		if _, ok := m.ScrollbarHit(win); ok {
 			t.Errorf("tiled=%v: last frame's grab survived into a frame without a bar", tiled)

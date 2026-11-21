@@ -7,7 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
-// sessionRowY is the screen row a session's rail row was drawn on.
 func sessionRowY(t *testing.T, m *OS, id string) int {
 	t.Helper()
 	for _, h := range m.SidebarHits {
@@ -36,7 +35,6 @@ func TestPeekCostsNoExtraRebuild(t *testing.T) {
 		t.Fatal("crossing a session row leaves the rail signature alone, so the cost claim needs rechecking")
 	}
 
-	// The same crossing with the preview held still: the signature moves anyway.
 	m.sidebarClearPeek()
 	m.SidebarHoverX, m.SidebarHoverY = 1, api
 	held := m.sidebarSignature()
@@ -63,11 +61,6 @@ func TestPeekNeedsNoTick(t *testing.T) {
 
 var _ = sessiontree.Tree{}
 
-// framePeek reads back off the rendered rail which session the terminals
-// section is showing: the peeked session's name is right-aligned in the
-// section's header, and "" is a rested frame showing the attached session.
-// Every claim below goes through this rather than through the state, because
-// the state was never what the complaint was about.
 func framePeek(t *testing.T, m *OS, tree sessiontree.Tree) string {
 	t.Helper()
 	lines := railPlain(t, m, tree)
@@ -94,7 +87,7 @@ func TestPeekFollowsTheHoveredRow(t *testing.T) {
 	m, tree := sectionsTestOS(t, 120, 30)
 	m.sidebarPanelLinesForTree(tree)
 	main, api, docs := sessionRowY(t, m, "main"), sessionRowY(t, m, "api"), sessionRowY(t, m, "docs")
-	pane := -1 // a y standing for "off the band entirely"
+	pane := -1
 
 	for _, tc := range []struct {
 		name string
@@ -105,15 +98,9 @@ func TestPeekFollowsTheHoveredRow(t *testing.T) {
 		{"a second event on the same row holds it", []int{api, api}, "api"},
 		{"entering sideways from the panes peeks at once", []int{pane, api}, "api"},
 
-		// Failed before: the first row committed and then kept showing while
-		// the pointer moved on, so the header named a session the hover band
-		// was no longer on.
 		{"stepping to the next row moves the preview with it", []int{pane, api, docs}, "docs"},
 		{"a fast sweep ends on the row under the pointer", []int{pane, api, docs, api}, "api"},
 
-		// Failed before: leaving the attached row armed it, so the neighbour
-		// needed a wobble to commit and the section stayed on the attached
-		// session's panes.
 		{"stepping off the attached row peeks the neighbour", []int{main, api}, "api"},
 		{"a sweep from the attached row through every session", []int{main, api, docs}, "docs"},
 

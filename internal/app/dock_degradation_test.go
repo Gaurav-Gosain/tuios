@@ -10,9 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// dockCrowdedOS is a session with named workspaces and minimized panes, which
-// is the state the bar has to ration: the strip wants the left region, the
-// meters want the right, and the entries are what is left in the middle.
 func dockCrowdedOS(t testing.TB, width, workspaces, minimized int) *OS {
 	t.Helper()
 	m := &OS{
@@ -24,8 +21,6 @@ func dockCrowdedOS(t testing.TB, width, workspaces, minimized int) *OS {
 		Height:           30,
 		FocusedWindow:    -1,
 	}
-	// Flat pills: the edge checks below find an entry by its label, and a
-	// cap would put the entry's edge one column out from it.
 	m.Settings.DockPillCaps = false
 	names := []string{"editor", "server", "logs", "notes", "build", "review"}
 	m.WorkspaceNames = map[int]string{}
@@ -33,8 +28,6 @@ func dockCrowdedOS(t testing.TB, width, workspaces, minimized int) *OS {
 		win := newTestWindow(t, fmt.Sprintf("ws%d", ws), 40, 12)
 		win.Workspace = ws
 		m.Windows = append(m.Windows, win)
-		// Named workspaces are what make the strip wide enough to be worth
-		// rationing, which is the state the audit captured.
 		m.WorkspaceNames[ws] = names[(ws-1)%len(names)]
 	}
 	for i := range minimized {
@@ -47,7 +40,6 @@ func dockCrowdedOS(t testing.TB, width, workspaces, minimized int) *OS {
 	return m
 }
 
-// dockRow is the dock's content row as drawn, with its styling stripped.
 func dockRow(t *testing.T, m *OS) string {
 	t.Helper()
 	dock, top := m.renderDockString()
@@ -59,8 +51,6 @@ func dockRow(t *testing.T, m *OS) string {
 	return stripANSIForTrace(lines[r])
 }
 
-// withMeters turns the system readouts on for the duration of a test. They are
-// off by default, which is itself part of what the bar was rationing for.
 func withMeters(t *testing.T) {
 	t.Helper()
 	cpu, ram := config.Global.ShowCPU, config.Global.ShowRAM
@@ -90,9 +80,6 @@ func TestDockKeepsTheEntryTheMetersWereCrowdingOut(t *testing.T) {
 	}
 	h := m.dockItemHits[0]
 
-	// The rectangle is the cells the pill was drawn on, exactly: the bug this
-	// guards was a rectangle sitting a few columns right of them, so both edge
-	// columns are checked from both sides.
 	x0, x1 := dockEntryColumns(t, m, " 1:min0 ")
 	if h.X0 != x0 || h.X1 != x1 {
 		t.Errorf("the entry is drawn over columns %d..%d but its rectangle is %d..%d", x0, x1-1, h.X0, h.X1-1)
@@ -129,7 +116,6 @@ func TestDockDropsTheMetersBeforeTheEntries(t *testing.T) {
 			if layout.TruncatedCount > 0 && layout.RightWidth > 0 {
 				t.Errorf("%d entries dropped while the right block held %d columns", layout.TruncatedCount, layout.RightWidth)
 			}
-			// Whatever survived is clickable where it is drawn.
 			y := m.GetDockbarContentYPosition()
 			for _, it := range layout.VisibleItems {
 				name := m.Windows[it.WindowIndex].CustomName

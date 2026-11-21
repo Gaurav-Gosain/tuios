@@ -15,17 +15,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// The add sheet's drawing: a card over the dimmed screen on the spawn
-// sheet's canvas, tones and frame. It has three parts: the step strip, one
-// list of steps per machine (hostsetup.Flow), and one drawer for the prompt
-// that waits. The steps' words and marks are hostsetup's. It is laid out for
-// 120 columns and more, and at 80 it cuts what does not fit.
-
-// msStepNames is the strip of the five steps.
 var msStepNames = []string{"Pick", "Test", "Set up tuios", "Both ways", "Done"}
 
-// msPainter draws the sheet: x and w are the inner column, y the next row,
-// and bottom the row of the keys.
 type msPainter struct {
 	c          *ckCanvas
 	l          ckLook
@@ -38,9 +29,7 @@ type msPainter struct {
 	sec, prime string
 }
 
-// renderMachineSheet draws the sheet.
 func (m *OS) renderMachineSheet() (string, overlay.Geometry) {
-	// The width is the room that clears the rail, as panelWidth's is.
 	cw, ch := m.modalRoomWidth(), m.GetRenderHeight()
 	w0 := min(128, cw-4)
 	if cw < 100 {
@@ -64,7 +53,6 @@ func (m *OS) renderMachineSheet() (string, overlay.Geometry) {
 	default:
 		p.doneView()
 	}
-	// The content stops above the keys: on a short screen it is cut.
 	p.c.fill(0, p.bottom-1, w0, h0-p.bottom+1, t.sheet)
 	if l.pal.Depth == overlay.Depth16 {
 		spawnFrame(p.c, l, 0, 0, w0, h0)
@@ -76,8 +64,6 @@ func (m *OS) renderMachineSheet() (string, overlay.Geometry) {
 func seg(t string, fg color.Color) ckSeg  { return ckSeg{t: t, fg: fg} }
 func bold(t string, fg color.Color) ckSeg { return ckSeg{t: t, fg: fg, attrs: ckBold} }
 
-// put draws t at x, y in fg, bold when b, cut at the right edge, and returns
-// the column after it.
 func (p *msPainter) put(x, y int, fg color.Color, b bool, t string) int {
 	var a uint8
 	if b {
@@ -86,7 +72,6 @@ func (p *msPainter) put(x, y int, fg color.Color, b bool, t string) int {
 	return p.c.text(x, y, p.x+p.w, ckSeg{t: t, fg: fg, attrs: a})
 }
 
-// wrap draws t wrapped from x to the right edge, and returns the row under it.
 func (p *msPainter) wrap(x, y int, t string, fg color.Color, b bool) int {
 	if t == "" {
 		return y
@@ -100,7 +85,6 @@ func (p *msPainter) wrap(x, y int, t string, fg color.Color, b bool) int {
 	return y
 }
 
-// at is the step of the strip the sheet is on.
 func (s *machineSheet) at() int {
 	switch {
 	case s.view == msViewPick:
@@ -127,7 +111,6 @@ func (s *machineSheet) at() int {
 	return at
 }
 
-// head draws the title, the close key, the step strip and the rule.
 func (p *msPainter) head() {
 	pal, x, y := p.pal, p.x, p.y
 	ex := p.c.textR(p.x+p.w, y, bold("esc", pal.AccentBright), seg(" close", pal.FgMute))
@@ -151,12 +134,10 @@ func (p *msPainter) head() {
 	p.y = y + 4
 }
 
-// keys sets the footer: the hints, and the buttons.
 func (p *msPainter) keys(hints [][2]string, secondary, primary string) {
 	p.hints, p.sec, p.prime = hints, secondary, primary
 }
 
-// footer draws the hints on the left and the buttons on the right.
 func (p *msPainter) footer() {
 	pal, fy, r := p.pal, p.bottom, p.x+p.w
 	for i, label := range []string{p.prime, p.sec} {
@@ -182,7 +163,6 @@ func (p *msPainter) footer() {
 	}
 }
 
-// field draws a labelled one-line field, with a cursor when it has the keys.
 func (p *msPainter) field(y int, label string, l *textedit.Line, placeholder string, focused bool) {
 	pal, w := p.pal, min(p.w, 72)
 	p.put(p.x, y, pal.FgDim, true, label)
@@ -198,7 +178,6 @@ func (p *msPainter) field(y int, label string, l *textedit.Line, placeholder str
 		}
 		return
 	}
-	// The focused field draws its caret where it is (textedit.Line).
 	before, at, after := l.Parts()
 	x := p.put(p.x+1, y+1, pal.Fg, false, before)
 	caret := at
@@ -213,8 +192,6 @@ func (p *msPainter) field(y int, label string, l *textedit.Line, placeholder str
 	}
 }
 
-// row draws the cursor's ground on row y when cur, and returns the column
-// its text starts at.
 func (p *msPainter) row(y int, cur bool) int {
 	if cur {
 		st := overlay.RowState{Cursor: true, Focused: true}
@@ -296,7 +273,6 @@ func (p *msPainter) tailnetTab() {
 	p.wrap(p.x, p.y+1, answers, pal.FgDim, false)
 }
 
-// markInk is the ink of a step state's mark.
 func (p *msPainter) markInk(state string) color.Color {
 	switch state {
 	case hostsetup.StateOK:
@@ -311,7 +287,6 @@ func (p *msPainter) markInk(state string) color.Color {
 	return p.pal.FgMute
 }
 
-// cmd draws a command, tagged with where it runs, on the field ground.
 func (p *msPainter) cmd(x, y int, c hostsetup.Command) {
 	p.c.fill(x, y, p.x+p.w-x, 1, p.t.field)
 	p.put(p.put(x+1, y, p.pal.FgMute, false, ckPad(c.Where, 9)+" "), y, p.pal.Fg, false, ckTrunc(c.Line, p.x+p.w-x-12))
@@ -331,7 +306,6 @@ func (p *msPainter) runView() {
 	}
 }
 
-// lines draws the steps of each machine, from its Flow.
 func (p *msPainter) lines() {
 	s, pal := p.s, p.pal
 	bulk := len(s.flows) > 1
@@ -364,7 +338,6 @@ func (p *msPainter) lines() {
 	}
 }
 
-// prompt draws the question that waits, and its keys.
 func (p *msPainter) prompt(ask *hostsetup.Prompt) {
 	pal, y := p.pal, p.y+1
 	who := ""
@@ -431,7 +404,6 @@ func (p *msPainter) prompt(ask *hostsetup.Prompt) {
 	}
 }
 
-// doneView is the end of the run: what it came to, over the steps.
 func (p *msPainter) doneView() {
 	s, pal := p.s, p.pal
 	head := ""
@@ -451,7 +423,6 @@ func (p *msPainter) doneView() {
 	p.lines()
 }
 
-// msCount is n with the words for one or for more.
 func msCount(n int, one, more string) string {
 	if n == 1 {
 		return "1 " + one
@@ -459,7 +430,6 @@ func msCount(n int, one, more string) string {
 	return strconv.Itoa(n) + " " + more
 }
 
-// cmpOr is the first of a and b that is not empty.
 func cmpOr(a, b string) string {
 	if a != "" {
 		return a

@@ -15,26 +15,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The compare view: the attempts of the reviewed pane's fan side by side,
-// reached with w from the review of one of them.
-//
-// Each row is one attempt: its agent and state, what it changed against the
-// fan's base, and the last check. enter reviews an attempt, m marks one and d
-// diffs the two marked, V runs one command in every attempt (verify-fan, in a
-// window with no grants), and K keeps the attempt under the cursor and
-// removes the others (keep-fan) after a confirmation that names them. esc goes
-// back to the review the view was opened from.
-//
-// The rows are read with compare-fan when the view opens. While a check runs
-// and the view is on screen they are read again every second, without
-// counting, until none runs. The reads stop while the review of one attempt,
-// or the review the view was opened from, is shown instead, and start again
-// when the view comes back. The view costs nothing otherwise.
-//
-// Only one refresh chain runs at a time. Each read that may start a chain
-// (opening the view, coming back to it, a check or a keep) moves tickGen on,
-// and a tick or an answer that carries an older tickGen ends where it is.
-
 // ReviewCompare opens the compare view, for a pane in a fan.
 func (m *OS) ReviewCompare() tea.Cmd {
 	r := &m.review
@@ -54,13 +34,10 @@ func (m *OS) ReviewCompare() tea.Cmd {
 			c.cursor = i
 		}
 	}
-	// A new chain: a chain a check started before esc left the view ends at
-	// its next tick instead of running beside this one.
 	c.tickGen++
 	return m.reviewCompareCmd(true, c.tickGen)
 }
 
-// reviewCompareCmd reads the fan's rows, with changes counted or not.
 func (m *OS) reviewCompareCmd(changes bool, tickGen uint64) tea.Cmd {
 	r := &m.review
 	if r.compare == nil || len(r.compare.rows) == 0 && r.fan == nil {
@@ -98,8 +75,6 @@ func (m *OS) reviewCompareCmd(changes bool, tickGen uint64) tea.Cmd {
 	}
 }
 
-// applyReviewCompare takes the rows compare-fan answered with. A read without
-// counts keeps the counts the rows already had.
 func (m *OS) applyReviewCompare(msg ReviewCompareMsg) tea.Cmd {
 	r := &m.review
 	c := r.compare
@@ -113,9 +88,6 @@ func (m *OS) applyReviewCompare(msg ReviewCompareMsg) tea.Cmd {
 		if msg.Changes {
 			m.reviewNotify("The attempts could not be read: "+reviewErrorText(msg.Err), "error", m.Settings.NotificationDuration*2)
 		}
-		// A read that failed, a timeout say, leaves the rows as they were.
-		// While they say a check runs, the chain goes on and the next tick
-		// reads again, so a check that ends is still seen to end.
 		if msg.TickGen != c.tickGen {
 			return nil
 		}
@@ -149,15 +121,12 @@ func (m *OS) applyReviewCompare(msg ReviewCompareMsg) tea.Cmd {
 	return m.reviewTickIfRunning()
 }
 
-// reviewChecking reports whether the rows say a check runs in an attempt.
 func (c *reviewCompare) reviewChecking() bool {
 	return slices.ContainsFunc(c.rows, func(row reviewFanRow) bool {
 		return row.Verify != nil && row.Verify.State == session.VerifyRunning
 	})
 }
 
-// reviewTickIfRunning schedules the next read while a check runs in an
-// attempt and the compare view is on screen. Nothing is scheduled otherwise.
 func (m *OS) reviewTickIfRunning() tea.Cmd {
 	r := &m.review
 	c := r.compare
@@ -168,7 +137,6 @@ func (m *OS) reviewTickIfRunning() tea.Cmd {
 	return m.tickUntilStop(reviewTickEvery, func(time.Time) tea.Msg { return ReviewTickMsg{Gen: gen, TickGen: tickGen} })
 }
 
-// applyReviewTick reads the rows again for a tick of the current chain.
 func (m *OS) applyReviewTick(msg ReviewTickMsg) tea.Cmd {
 	r := &m.review
 	if msg.Gen != r.gen || r.compare == nil || msg.TickGen != r.compare.tickGen || !r.open || !r.compare.shown {
@@ -177,9 +145,6 @@ func (m *OS) applyReviewTick(msg ReviewTickMsg) tea.Cmd {
 	return m.reviewCompareCmd(false, msg.TickGen)
 }
 
-// reviewCompareResume starts the refresh again for a compare view back on
-// screen, when a check was running as it was left: the rows are read now,
-// without counting, under a new chain. Nothing is read otherwise.
 func (m *OS) reviewCompareResume() tea.Cmd {
 	r := &m.review
 	c := r.compare
@@ -199,7 +164,6 @@ func (m *OS) ReviewCompareMove(delta int) {
 	c.cursor = min(max(c.cursor+delta, 0), len(c.rows)-1)
 }
 
-// reviewCompareSelected is the attempt under the cursor.
 func (m *OS) reviewCompareSelected() (reviewFanRow, bool) {
 	c := m.review.compare
 	if c == nil || c.cursor < 0 || c.cursor >= len(c.rows) {
@@ -226,9 +190,6 @@ func (m *OS) ReviewCompareBack() tea.Cmd {
 	return nil
 }
 
-// reviewAgentWindow is the pane of a session the agent runs in, as far as
-// this client knows: the first with an agent in it. Empty lets the daemon
-// take the session's focused pane.
 func (m *OS) reviewAgentWindow(sessionName string) string {
 	if sessionName == m.SessionName {
 		for _, w := range m.Windows {
@@ -258,7 +219,6 @@ func (m *OS) ReviewCompareOpen() tea.Cmd {
 	return m.reviewFromCompare(reviewQuery{Session: row.Session, Window: m.reviewAgentWindow(row.Session), Uncommitted: m.reviewOpensUncommitted()}, row.Session)
 }
 
-// reviewFromCompare shows a review asked for in the compare view.
 func (m *OS) reviewFromCompare(q reviewQuery, who string) tea.Cmd {
 	r := &m.review
 	r.compare.shown = false
@@ -314,7 +274,6 @@ func (m *OS) ReviewCompareVerifyPrompt() {
 	m.review.editor = &reviewEditor{kind: reviewEditVerify, draft: last, automated: m.ProcessingRemoteKeys, hunkIdx: -1, lineIdx: -1}
 }
 
-// reviewVerifyCmd runs a command in every attempt with verify-fan.
 func (m *OS) reviewVerifyCmd(command string) tea.Cmd {
 	r := &m.review
 	c := r.compare
@@ -344,8 +303,6 @@ func (m *OS) reviewVerifyCmd(command string) tea.Cmd {
 	}
 }
 
-// applyReviewVerify marks the attempts a check started in and starts reading
-// them until it ends.
 func (m *OS) applyReviewVerify(msg ReviewVerifyMsg) tea.Cmd {
 	r := &m.review
 	if msg.Err != nil {
@@ -381,7 +338,6 @@ func (m *OS) ReviewCompareKeep() {
 	c.confirmKeep = row.Session
 }
 
-// reviewKeepOthers is every attempt keeping name would remove.
 func (c *reviewCompare) reviewKeepOthers(name string) []string {
 	var out []string
 	for _, row := range c.rows {
@@ -431,8 +387,6 @@ func (m *OS) ReviewCompareConfirm(yes bool) tea.Cmd {
 	}
 }
 
-// applyReviewKept says what keep-fan removed and left, and reads the rows
-// again. esc from the view then goes to the kept attempt's review.
 func (m *OS) applyReviewKept(msg ReviewKeptMsg) tea.Cmd {
 	r := &m.review
 	if msg.Err != nil {
@@ -475,8 +429,6 @@ func (m *OS) applyReviewKept(msg ReviewKeptMsg) tea.Cmd {
 	return m.reviewCompareCmd(true, c.tickGen)
 }
 
-// reviewCheckWords says an attempt's last check, in full on a wide screen and
-// in a word or two on a narrow one.
 func reviewCheckWords(row reviewFanRow, narrow bool) string {
 	if v := row.Verify; v != nil {
 		cmd := reviewText(v.Command)
@@ -517,7 +469,6 @@ func reviewCheckWords(row reviewFanRow, narrow bool) string {
 	return "not run"
 }
 
-// reviewCheckAge is how long ago an attempt's check or last command ran.
 func reviewCheckAge(row reviewFanRow, now time.Time) string {
 	at := int64(0)
 	if v := row.Verify; v != nil {
@@ -532,7 +483,6 @@ func reviewCheckAge(row reviewFanRow, now time.Time) string {
 	return units.Waited(at, now)
 }
 
-// reviewCheckColor colours a check by how it went.
 func reviewCheckColor(row reviewFanRow, pal overlay.Palette) color.Color {
 	if v := row.Verify; v != nil {
 		switch v.State {
@@ -549,16 +499,12 @@ func reviewCheckColor(row reviewFanRow, pal overlay.Palette) color.Color {
 	return pal.FgDim
 }
 
-// renderReviewCompare draws the compare view: one row per attempt, what it
-// changed and its last check, and the keys.
 func (m *OS) renderReviewCompare(w, h int, pal overlay.Palette) string {
 	c := m.review.compare
 	inner := w - 2
 	narrow := inner < 100
 	now := time.Now()
 
-	// The header row and its rule, the way the review draws its own, so
-	// w and esc move between two views of one frame rather than two frames.
 	about := ""
 	if c.repo != "" {
 		about += " in " + reviewText(c.repo)

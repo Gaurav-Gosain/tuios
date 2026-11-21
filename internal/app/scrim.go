@@ -12,69 +12,17 @@ import (
 	"tuios.dev/vt"
 )
 
-// The scrim is the screen behind a modal overlay turned down, so the panel
-// reads as the thing in front and the busy pane under it stops competing for
-// the eye. Every reference app does it (Textual's palette, opencode, Posting,
-// Elia), and it is the cheapest depth cue a terminal has.
-//
-// Where it runs. composeLayersIn draws the layers in z order, and the scrim is
-// applied to the canvas once, immediately before the first modal overlay's
-// layer is drawn. Everything under that layer is darkened (panes, borders, the
-// rail, the dock) and nothing the modal draws is, because it has not been drawn
-// yet: the contrast floors the chrome is held to inside the panel are the ones
-// the panel was designed against. A layer above the modal (a notification, the
-// context menu, a tooltip) is drawn after the scrim and stays lit.
-//
-// Why the canvas and not the panes. Dimming each pane's content where it is
-// rendered, as dim_unfocused does, would put the modal in every pane's cache
-// key, so every pane would re-render when a modal opens and again when it
-// closes, and the borders, the rail and the dock would still need a pass of
-// their own. On the canvas no pane is re-rendered at all: the cached layers
-// are copied in as always and the pass edits the composed cells in place. It
-// costs one walk over the canvas on the frames drawn while a modal is open,
-// and a modal left open over a quiet screen draws no frames.
-//
-// How it darkens. It is the spotlight's shade (see cellShade): every colour it
-// can read channels off is carried toward black by the configured percent,
-// through the same 16-level cache, so a frame of a few dozen colours costs a
-// few dozen blends and no allocations. At 16 colours no blend can be drawn, so
-// the text goes faint instead and the grounds, which are the terminal's own,
-// stay as they are.
-//
-// On a light ground it carries toward the ground instead (see scrimToward).
-// Toward black, 30% turned a near-white screen a mid grey behind a light
-// panel, which read as a dirty screen rather than a quiet one. Toward the
-// ground the screen behind keeps its light and its text fades into it, which is
-// the veil a light interface draws behind a sheet.
-
-// modalOverlay is one overlay the screen is dimmed behind and that fades in.
 type modalOverlay struct {
-	// id is the layer id the overlay is drawn under.
-	id string
-	// open reports whether the overlay is up.
-	open func(*OS) bool
-	// scrim is whether the screen is dimmed behind it. It is false for the
-	// pickers whose preview is the screen behind them: the theme, accent and
-	// glyph pickers restyle the chrome as the selection moves, the effect
-	// picker plays its effect there, and the dock and section editors change
-	// the dock and the rail. Dimming what is being previewed would make the
-	// preview wrong. It is false for the agents view too, which fills the
-	// pane area and leaves the dock and the rail to be read beside it.
+	id    string
+	open  func(*OS) bool
 	scrim bool
 }
 
-// modalOverlays lists every modal overlay. It is the one table the scrim, the
-// fade and the open tracking read, so an overlay added here gets all three.
-// Transient chrome is not here on purpose: the which-key popup, the dock, the
-// context menu, tooltips, notifications and the key cast are not modal and the
-// screen behind them is still the thing being worked on.
 var modalOverlays = [...]modalOverlay{
 	{id: "palette", open: func(m *OS) bool { return m.ShowCommandPalette }, scrim: true},
 	{id: "launcher", open: func(m *OS) bool { return m.ShowLauncher }, scrim: true},
 	{id: "goto", open: func(m *OS) bool { return m.gotoPicker.open }, scrim: true},
 	{id: "agentmail", open: func(m *OS) bool { return m.ShowAgentMail }, scrim: true},
-	// The agents view covers the pane area and is a view, not a question:
-	// dimmed, the dock and the rail beside it read as muddy, so they stay lit.
 	{id: "inbox", open: func(m *OS) bool { return m.ShowInbox }},
 	{id: overlayKindBuffers, open: func(m *OS) bool { return m.buffers.open }, scrim: true},
 	{id: overlayKindTransfers, open: func(m *OS) bool { return m.transfers.open }, scrim: true},
@@ -84,7 +32,6 @@ var modalOverlays = [...]modalOverlay{
 	{id: "settings", open: func(m *OS) bool { return m.ShowSettings }, scrim: true},
 	{id: "keybinds", open: func(m *OS) bool { return m.ShowKeybindManager }, scrim: true},
 	{id: "themepicker", open: func(m *OS) bool { return m.ShowThemePicker }},
-	// The theme editor's preview is the whole screen, the sheet sits beside it.
 	{id: "themeeditor", open: func(m *OS) bool { return m.themeEditor.open }},
 	{id: "presetpicker", open: func(m *OS) bool { return m.presetPicker.open }, scrim: true},
 	{id: "dockeditor", open: func(m *OS) bool { return m.ShowDockEditor }},
@@ -113,11 +60,8 @@ var modalOverlays = [...]modalOverlay{
 	{id: "cache-stats", open: func(m *OS) bool { return m.ShowCacheStats }, scrim: true},
 }
 
-// maxModalOverlays is how many overlays modalOverlays may list: the open set
-// is one bit per overlay in a uint64.
 const maxModalOverlays = 64
 
-// sidebarLayerID is the rail's layer id, which the shimmer pass follows.
 const sidebarLayerID = "sidebar"
 
 func init() {
@@ -126,7 +70,6 @@ func init() {
 	}
 }
 
-// modalIndex finds an overlay in modalOverlays by its layer id.
 var modalIndex = func() map[string]int {
 	idx := make(map[string]int, len(modalOverlays))
 	for i, o := range modalOverlays {
@@ -135,21 +78,15 @@ var modalIndex = func() map[string]int {
 	return idx
 }()
 
-// scrimBehind reports whether the layer with this id is a modal the screen is
-// dimmed behind. The layer being on the frame is what says the overlay is
-// open, so no separate flag can disagree with what is drawn.
 func scrimBehind(id string) bool {
 	i, ok := modalIndex[id]
 	return ok && modalOverlays[i].scrim
 }
 
-// applyScrim darkens every cell on the canvas by dim percent. It runs once
-// per frame at most, before the popup or first modal layer is drawn.
 func (m *OS) applyScrim(canvas *frameCanvas, dim int) {
 	m.applyScrimIn(canvas, canvas.Bounds(), dim)
 }
 
-// applyScrimIn is applyScrim on the cells of one rectangle of the canvas.
 func (m *OS) applyScrimIn(canvas *frameCanvas, area image.Rectangle, dim int) {
 	area = area.Intersect(canvas.Bounds())
 	if area.Empty() {
@@ -170,10 +107,6 @@ func (m *OS) applyScrimIn(canvas *frameCanvas, area image.Rectangle, dim int) {
 	for _, line := range canvas.Lines[area.Min.Y:area.Max.Y] {
 		for x := area.Min.X; x < min(area.Max.X, len(line)); x++ {
 			cell := &line[x]
-			// A zero cell is the tail of a wide glyph; styling it would draw
-			// it as a cell of its own. A kitty placeholder's foreground is the
-			// image's id, not a colour, and a blended one names an image the
-			// host has never seen.
 			if cell.Content == "" || vt.IsKittyPlaceholder(cell.Content) {
 				continue
 			}
@@ -183,9 +116,6 @@ func (m *OS) applyScrimIn(canvas *frameCanvas, area image.Rectangle, dim int) {
 			} else {
 				s.dimCell(cell, level)
 			}
-			// Faint on a blank that paints no ground draws nothing, but it
-			// still breaks the row's style run and costs an SGR pair on the
-			// wire each time the run resumes. Leave such a blank as it was.
 			if !wasFaint && faintIsInvisible(cell) {
 				cell.Style.Attrs &^= uv.AttrFaint
 			}
@@ -193,17 +123,11 @@ func (m *OS) applyScrimIn(canvas *frameCanvas, area image.Rectangle, dim int) {
 	}
 }
 
-// faintIsInvisible reports whether SGR 2 on this cell changes nothing on
-// screen: a space with no ground of its own, not reversed and not underlined,
-// shows no ink for faint to reach.
 func faintIsInvisible(cell *uv.Cell) bool {
 	return cell.Content == " " && isNilColor(cell.Style.Bg) &&
 		cell.Style.Attrs&uv.AttrReverse == 0 && cell.Style.Underline == 0
 }
 
-// scrimToward is the colour the scrim carries the screen toward: the ground
-// when it is light, the theme's background or, with no theme, the host
-// terminal's own when it has said, and nil, which is black, on a dark one.
 func (m *OS) scrimToward() color.Color {
 	if t := theme.Current(); t != nil {
 		if theme.GroundIsLight(t.Bg) {
@@ -217,15 +141,6 @@ func (m *OS) scrimToward() color.Color {
 	return nil
 }
 
-// scrimDialogGround dims the ground of a TML dialog to the ground of the
-// screen behind it, and leaves its text, its frame and any ground of its
-// own, such as a button's, as drawn. The dialog has no fill: the scrim on
-// the screen behind it, the frame, and its text at full strength are what
-// set it apart. Left undimmed, its ground read as a lighter box, and the
-// half of each edge cell outside the frame line as a band.
-//
-// The dialog's ground is the one its top-left corner cell is on, which is
-// frame and never a button.
 func (m *OS) scrimDialogGround(canvas *frameCanvas, r image.Rectangle, dim int) {
 	r = r.Intersect(canvas.Bounds())
 	if r.Empty() || dim <= 0 || theme.Depth() == overlay.Depth16 {
@@ -251,8 +166,6 @@ func (m *OS) scrimDialogGround(canvas *frameCanvas, r image.Rectangle, dim int) 
 	}
 }
 
-// sameGround is sameColor for cell grounds, which may be nil or an
-// interface holding a nil pointer.
 func sameGround(a, b color.Color) bool {
 	if isNilColor(a) || isNilColor(b) {
 		return isNilColor(a) && isNilColor(b)

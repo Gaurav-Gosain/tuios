@@ -11,10 +11,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
-// paletteCategoryAgents is the palette's section for the agent entries.
 const paletteCategoryAgents = "Agents"
 
-// paletteReviewName is the palette row of the review of the focused pane.
 const paletteReviewName = "Agents: Review changes of the focused pane"
 
 // ConfigReloadedMsg carries a config parsed by the file watcher goroutine so it
@@ -52,69 +50,33 @@ func (m *OS) ApplyReloadedConfig(cfg *config.UserConfig) tea.Cmd {
 	return m.applyReloadedConfig(cfg, false)
 }
 
-// applyReloadedConfig is ApplyReloadedConfig. byPerson says the person asked
-// for the reload with their own key, which lets a new hook run.
 func (m *OS) applyReloadedConfig(cfg *config.UserConfig, byPerson bool) tea.Cmd {
 	if cfg == nil {
 		return nil
 	}
-	// Runs on the Bubble Tea goroutine, so applying it to this session's
-	// settings is single-threaded and reaches nobody else's session.
 	if m.ReloadFilter != nil {
 		cfg = m.ReloadFilter(cfg)
 	}
-	// A value set with set-config --no-save stays in force over the file
-	// until the client exits or the option is saved. See config/hold.go.
 	cfg.KeepHolds(m.UserConfig)
 	m.reloadHooks(cfg, byPerson)
 	themeBefore := theme.Generation()
 	config.ApplyAppearanceConfig(m.overrides.Config(cfg), &m.Settings)
 	m.ListKeys = config.ListKeymap(cfg)
-	// ApplyAppearanceConfig switches the theme package, which recolours the
-	// chrome, but each pane's emulator holds its own copy of the palette. The
-	// theme picker pushes the new one into every pane (applyTheme); this path
-	// did not, so a theme saved in any config file recoloured the borders and
-	// left every pane, and all output after the save, in the old colours.
 	if theme.Generation() != themeBefore {
 		m.UpdateAllWindowThemes()
 	}
-	// A reload is the one time the display's rate is looked for again, after
-	// startup: the person may have changed the monitor's mode. Started before
-	// applyAppearanceLive below, which would otherwise keep the first answer.
 	m.detectDisplayRate(true)
-	// Whether the rail is shown is the session's once the session has a
-	// value. The file's value is what a new session starts with, so a reload
-	// does not show or hide the rail on every client. See keepSessionSidebar.
 	m.keepSessionSidebar(false)
-	// Retiled, not just repainted. The sidebar's width and side, the dock's
-	// position and the pane gap all change how much room the panes have, and
-	// this path had only ever repainted them: a gap edited in the file moved
-	// the global and left the rectangles where they were.
 	m.applyAppearanceLive(true)
-	// The file can move the sidebar and the dock, which is the chrome the
-	// session's reserve is settled from. settleChrome announces it.
-	// The dock section is rebuilt here too rather than only at startup. A
-	// feature whose distribution story is "copy a file" that then needed a
-	// restart to see the file would be most of the story missing. This is also
-	// what puts the new config on the model, which every section outside
-	// [appearance] is read from live.
 	cmd := m.ReloadDockComponents(cfg)
-	// A scratch entry the new file renamed or removed has no key any more.
 	m.pruneOrphanScratches()
-	// Keybindings reload the same way, minus the write-back: the edit came
-	// from the file, so persisting it would be the tail wagging the dog.
 	if m.KeybindRegistry != nil {
 		m.KeybindRegistry.Reload(cfg)
 		m.keybinds.report = m.buildKeybindReport()
 		m.keybinds.filtered = nil
 	}
-	// A key mode the new file no longer declares is off.
 	m.PruneKeyModes()
-	// The beam is client-local, so nothing else carries it: without this the
-	// screen and the config disagree about whether it is on, and the next
-	// toggle writes the disagreement back to the file.
 	m.SetSpotlight(cfg.Spotlight.IsEnabled())
-	// The agent switch, which the file can flip as well as the settings page.
 	cmd = tea.Batch(cmd, m.applyAgentsSwitch())
 	m.MarkAllDirty()
 	return cmd
@@ -134,9 +96,7 @@ type CommandPaletteItem struct {
 	// A Bind row spells no key in Shortcut: defaultShortcuts fills it from the
 	// shipped keymap. Its Shortcut holds only a note, for an action with no
 	// default key ("drag to select").
-	Bind string
-	// shortcutIsKey marks a Shortcut that defaultShortcuts filled with a key,
-	// which liveShortcuts may replace, as opposed to a note it keeps.
+	Bind          string
 	shortcutIsKey bool
 	Category      string // "Window", "Layout", "Session", "Navigation", "Clipboard"
 	// Match holds the byte offsets in Name that the live query matched, filled
@@ -147,10 +107,7 @@ type CommandPaletteItem struct {
 	// AgentState marks a session/window entry whose Name carries an agent-state
 	// glyph (sessionPaletteLabel), so the renderer can color the glyph without
 	// putting ANSI into Name, which the fuzzy filter matches raw.
-	AgentState string
-	// promptID is the id of the pick row this row shows, promptOther marks
-	// the row that sends the typed text, and promptMark is the row's mark in
-	// a pick that takes more than one row. See prompt.go.
+	AgentState  string
 	promptID    string
 	promptOther bool
 	promptMark  int8
@@ -178,19 +135,12 @@ type CommandPaletteItem struct {
 // GetCommandPaletteItems returns all available commands for the command palette.
 func GetCommandPaletteItems() []CommandPaletteItem {
 	items := []CommandPaletteItem{
-		// The launcher is its own overlay, and this is the row that opens it.
-		// It is the bridge that keeps "one box finds everything" true as an
-		// entry point without the two lists having to be ranked against each
-		// other (see launcher.go).
 		{
 			Name:     "Run a program",
 			Bind:     "launcher",
 			Category: PaletteCategoryRun,
 		},
 
-		// Screenshots. Three rows, because the three things a person means by
-		// "take a screenshot" want different gestures and only the first needs
-		// one.
 		{
 			Name:     "Start the screen saver",
 			Bind:     "start_screensaver",
@@ -218,7 +168,6 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Category: "Clipboard",
 		},
 
-		// Window management
 		{
 			Name:     "New window",
 			Bind:     "new_window",
@@ -266,7 +215,6 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Category: "Window",
 		},
 
-		// Layout
 		{
 			Name:     "Toggle tiling",
 			Bind:     "toggle_tiling",
@@ -377,7 +325,6 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Category: "Layout",
 		},
 
-		// Layout templates
 		{
 			Name:     "Save layout",
 			Category: "Layout",
@@ -389,7 +336,6 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Category: "Layout",
 		},
 
-		// Navigation
 		{
 			Name:     "Next window",
 			Bind:     "prefix_next_window",
@@ -456,7 +402,6 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Bind:     "prev_workspace",
 		},
 
-		// Layout
 		{
 			Name:     "Next layout",
 			Bind:     "next_saved_layout",
@@ -487,7 +432,6 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Bind:     "clear_multifocus",
 			Category: "Window",
 		},
-		// Layout mode: individual commands
 		{
 			Name:     "Layout: BSP tiling",
 			Bind:     "layout_bsp",
@@ -508,7 +452,6 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Bind:     "layout_off",
 			Category: "Layout",
 		},
-		// Scrolling-specific actions
 		{
 			Name:     "Scroll: cycle column width",
 			Category: "Layout",
@@ -529,7 +472,6 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Category: "Layout",
 			Bind:     "scroll_expel",
 		},
-		// Scrollback
 		{
 			Name:     "Edit the scrollback in the editor",
 			Bind:     config.ActionEditScrollback,
@@ -540,25 +482,17 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Bind:     config.ActionClearScrollback,
 			Category: "Window",
 		},
-		// Floating
 		{
 			Name:     "Toggle floating",
 			Category: "Window",
 			Bind:     "window_prefix_float",
 		},
-		// Navigation
 		{
-			// No Shortcut: go-to on this session's panes has no binding of
-			// its own and is reached from this palette.
 			Name:     "All windows",
 			Bind:     "all_windows",
 			Category: "Navigation",
 		},
-		// Session & Config
 		{
-			// The palette's own way in to making a session, which had none.
-			// It was a one-cell "+" on a rail heading, and the rail is not
-			// always open.
 			Name:     "New session",
 			Category: "Session",
 			Bind:     "new_session",
@@ -569,8 +503,6 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Category: "Session",
 		},
 		{
-			// The Agents tab, where each harness's integration is shown,
-			// installed and updated. Left out while the tab is.
 			Name:     paletteAgentsSettingsName,
 			Bind:     "prefix_agents_settings",
 			Category: "Session",
@@ -610,11 +542,6 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Bind:     "edit_theme",
 			Category: "Session",
 		},
-		// Keybinds. Three rows onto one overlay, because "change a key" and
-		// "stop tuios taking a key" are the two things people come here for and
-		// neither of them is spelled "keybind manager". Two of the three spend
-		// their meta slot on the "#" token, which is the part nothing else
-		// would ever tell the user about.
 		{
 			Name:     "Keybind manager",
 			Bind:     "prefix_keybinds",
@@ -633,8 +560,6 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Category: PaletteCategoryKeybind,
 		},
 		{
-			// The way to move the daemon to the build an update installed.
-			// Left out on a client that cannot restart its daemon.
 			Name:     paletteRestartDaemonName,
 			Shortcut: "stops programs",
 			Bind:     "restart_daemon",
@@ -661,22 +586,16 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Category: "Session",
 		},
 		{
-			// A task card from anywhere. See task_capture.go.
 			Name:     "New task",
 			Category: "Session",
 			Bind:     "prefix_new_task",
 		},
 		{
-			// The add sheet: test a machine over ssh, install tuios there,
-			// and add it. See machine_sheet.go.
 			Name:     "Add a machine",
 			Bind:     "add_machine",
 			Category: "Session",
 		},
 		{
-			// The machines in the rail's order, as next_host and prev_host
-			// step through them. Neither has a default key, so the palette
-			// is where a person finds them before binding one.
 			Name:     "Next machine",
 			Bind:     "next_host",
 			Category: "Session",
@@ -687,21 +606,11 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Category: "Session",
 		},
 		{
-			// The agent mailbox: the messages agents leave for each other and
-			// for the person, and the place to answer one.
-			// It was "Mail: open inbox" on prefix+M; the Inbox is its own thing
-			// now, and prefix+M opens it on its mail.
-			//
-			// The agent rows lead with "Agents:" so typing "agent" finds them.
-			// It found "Window management mode", which fuzzy-matches the
-			// letters, and nothing to do with agents. Each keeps the word its
-			// overlay is called by (Inbox, mailbox), so those still find them.
 			Name:     "Agents: open mailbox",
 			Bind:     "open_mailbox",
 			Category: paletteCategoryAgents,
 		},
 		{
-			// The Inbox: everything waiting for the person, in every session.
 			Name:     "Agents: what needs you",
 			Bind:     "prefix_inbox",
 			Category: paletteCategoryAgents,
@@ -712,8 +621,6 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Category: paletteCategoryAgents,
 		},
 		{
-			// Task dispatch: stop every card going to agents at once, or
-			// start it again (cockpit_dispatch.go).
 			Name:     "Agents: pause all task dispatch",
 			Bind:     "dispatch_pause",
 			Category: paletteCategoryAgents,
@@ -724,7 +631,6 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Category: paletteCategoryAgents,
 		},
 		{
-			// The copies between machines: the Copies panel.
 			Name:     "Copies between machines",
 			Bind:     "prefix_transfers",
 			Category: "Files",
@@ -735,7 +641,6 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Category: paletteCategoryAgents,
 		},
 		{
-			// The agent panes in the rail's order, across sessions.
 			Name:     "Agents: next agent",
 			Bind:     "next_agent",
 			Category: paletteCategoryAgents,
@@ -746,15 +651,11 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Category: paletteCategoryAgents,
 		},
 		{
-			// The review overlay on the focused pane's changes. The word
-			// "review" finds it, like "Review changes" in the prefix menu.
 			Name:     paletteReviewName,
 			Bind:     "prefix_review",
 			Category: paletteCategoryAgents,
 		},
 		{
-			// prefix+M had no palette row; "open mailbox" above opens a
-			// different view, every thread rather than mail for you.
 			Name:     "Agents: mail for you",
 			Bind:     "prefix_mail",
 			Category: paletteCategoryAgents,
@@ -865,13 +766,11 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 			Category: "Session",
 		},
 		{
-			// No Shortcut: copy_mode_search_forward has no default binding.
 			Name:     "Copy mode: search forward",
 			Bind:     "copy_mode_search_forward",
 			Category: "Session",
 		},
 		{
-			// No Shortcut: copy_mode_search_backward has no default binding.
 			Name:     "Copy mode: search backward",
 			Bind:     "copy_mode_search_backward",
 			Category: "Session",
@@ -886,14 +785,6 @@ func GetCommandPaletteItems() []CommandPaletteItem {
 	return items
 }
 
-// paletteStateTokens are the states a leading "@" token narrows the palette to.
-// Resolved by prefix in this order, so "@a" is attention, "@w" working, "@n"
-// needs input, "@d" done, "@i" idle and "@e" errored: one keystroke past the
-// "@", which is what makes "who needs me" worth typing at all.
-//
-// attention is first and is the reason the mechanism exists. It is the rail's
-// own definition of a state that wants a human (sidebarAttention), so the
-// palette and the rail's gutter mark can never come to mean different things.
 var paletteStateTokens = []struct {
 	name   string
 	states []string
@@ -907,14 +798,6 @@ var paletteStateTokens = []struct {
 	{"limit_reached", []string{"limit_reached"}},
 }
 
-// splitPaletteQuery pulls a leading "@state" token off a query and reports the
-// states it admits, whether one was present at all, and the text left to match
-// on. A bare "@" names no state and admits every entry that carries one, which
-// is the halfway house the user is in while typing the next character.
-//
-// An "@" naming nothing (a typo, or a state this build does not have) admits
-// nothing: a filter the user typed and that quietly did not apply is worse than
-// an empty list, which at least says so.
 func splitPaletteQuery(query string) (states []string, filtered bool, rest string) {
 	tok, after, _ := strings.Cut(strings.TrimSpace(query), " ")
 	if !strings.HasPrefix(tok, "@") {
@@ -933,15 +816,12 @@ func splitPaletteQuery(query string) (states []string, filtered bool, rest strin
 	return []string{}, true, rest
 }
 
-// paletteStateMatches reports whether an entry survives a state filter. Only the
-// session and window entries carry a state, so filtering by one is also what
-// drops every static command: "@attention" is a question about panes.
 func paletteStateMatches(item CommandPaletteItem, states []string) bool {
 	if item.AgentState == "" {
 		return false
 	}
 	if states == nil {
-		return true // a bare "@": anything running an agent
+		return true
 	}
 	return slices.Contains(states, item.AgentState)
 }
@@ -955,10 +835,6 @@ func paletteStateMatches(item CommandPaletteItem, states []string) bool {
 // fallback, so a row admitted only by its section name can never outrank one
 // that matched what it actually says.
 func FilterCommandPalette(items []CommandPaletteItem, query string) []CommandPaletteItem {
-	// The keybind token is resolved first and it is exclusive both ways: "#" is
-	// a search over actions, so it admits nothing else, and every other query
-	// admits no action rows. A few hundred actions leaking into an ordinary
-	// search would bury the commands the palette is for.
 	keybinds, keybindRest := splitPaletteKeybinds(query)
 	kept := make([]CommandPaletteItem, 0, len(items))
 	for _, item := range items {
@@ -968,9 +844,6 @@ func FilterCommandPalette(items []CommandPaletteItem, query string) []CommandPal
 	}
 	items = kept
 	if keybinds {
-		// Straight to the matcher rather than back through this function: the
-		// text after the token carries no token of its own, and re-entering
-		// would partition the list a second time and throw away every row.
 		return matchPaletteItems(items, keybindRest)
 	}
 	if states, filtered, rest := splitPaletteQuery(query); filtered {
@@ -980,13 +853,8 @@ func FilterCommandPalette(items []CommandPaletteItem, query string) []CommandPal
 				kept = append(kept, item)
 			}
 		}
-		// The scored matcher runs over what is left, so "@a server" still ranks a
-		// prefix hit above a mid-word one.
 		return matchPaletteItems(kept, rest)
 	}
-	// The setting rows are matched on their own and put after everything
-	// else, so the few hundred of them never bury a command, and an empty
-	// query does not list them at all.
 	commands := make([]CommandPaletteItem, 0, len(items))
 	var settings []CommandPaletteItem
 	for _, item := range items {
@@ -1003,10 +871,6 @@ func FilterCommandPalette(items []CommandPaletteItem, query string) []CommandPal
 	if strings.TrimSpace(query) == "" || len(settings) == 0 {
 		return out
 	}
-	// A setting row is matched as "Settings: <name>", so typing the word the
-	// row is tagged with reaches it, and drawn as its name alone beside the
-	// [Settings] tag. The highlight is moved back by the prefix it was matched
-	// with.
 	var m fuzzy.Matcher
 	for _, h := range m.FilterIndex(query, len(settings), func(i int) string { return paletteSettingPrefix + settings[i].Name }) {
 		item := settings[h.Index]
@@ -1021,15 +885,8 @@ func FilterCommandPalette(items []CommandPaletteItem, query string) []CommandPal
 	return out
 }
 
-// paletteGrouped reports whether the palette lists its commands under category
-// headers: only while nothing is typed. A typed query ranks the rows by how
-// well they match, and headers over a ranked list would split it into runs
-// that each restart the ranking.
 func paletteGrouped(query string) bool { return query == "" }
 
-// groupPaletteItems orders items by category, the categories in the order
-// they first appear and the items inside each in the order they were given,
-// so each category is one run under one header.
 func groupPaletteItems(items []CommandPaletteItem) []CommandPaletteItem {
 	rank := map[string]int{}
 	for _, it := range items {
@@ -1042,11 +899,8 @@ func groupPaletteItems(items []CommandPaletteItem) []CommandPaletteItem {
 	return out
 }
 
-// paletteSettingPrefix is what a setting row is matched with ahead of its name.
 const paletteSettingPrefix = "Settings: "
 
-// matchPaletteItems is the scored pass, with no token handling: names first,
-// then rows admitted only by their category.
 func matchPaletteItems(items []CommandPaletteItem, query string) []CommandPaletteItem {
 	if query == "" {
 		return items
@@ -1065,10 +919,6 @@ func matchPaletteItems(items []CommandPaletteItem, query string) []CommandPalett
 		out = append(out, item)
 	}
 
-	// Category hits land after every name hit rather than being scored beside
-	// them. That is the old scoring's intent without its magic numbers: typing
-	// "layout" should list the Layout section, below anything actually called
-	// layout.
 	for i, item := range items {
 		if named[i] || item.Category == "" || !fuzzy.Match(query, item.Category) {
 			continue
@@ -1079,10 +929,6 @@ func matchPaletteItems(items []CommandPaletteItem, query string) []CommandPalett
 	return out
 }
 
-// defaultShortcuts gives each row that names a keybind action and has no
-// Shortcut text of its own the key the shipped keymap binds that action to,
-// so no row spells a key that can drift from the keymap. A client with no
-// keymap of its own, such as the GUI bridge, shows these.
 func defaultShortcuts(items []CommandPaletteItem) {
 	presses := config.PressesByAction(config.DefaultKeybindRegistry())
 	for i := range items {
@@ -1096,11 +942,6 @@ func defaultShortcuts(items []CommandPaletteItem) {
 	}
 }
 
-// liveShortcuts sets the Shortcut of every row that names a keybind action to
-// the key the config binds that action to now. It runs each time the palette
-// list is built, so a reloaded config shows on the next open. A row whose
-// action has a default key but no live key shows no shortcut. A row with a
-// note of its own keeps it, such as "drag to select".
 func (m *OS) liveShortcuts(items []CommandPaletteItem) {
 	reg := m.KeybindRegistry
 	if reg == nil {
@@ -1115,9 +956,6 @@ func (m *OS) liveShortcuts(items []CommandPaletteItem) {
 		if items[i].Bind == "" || (items[i].Shortcut != "" && !items[i].shortcutIsKey) {
 			continue
 		}
-		// The first press is the one to show: presses come in scope order,
-		// so a global key (launcher's alt+space) wins over its prefix chord,
-		// and the chord shows when the global key is unbound.
 		items[i].Shortcut, items[i].shortcutIsKey = "", false
 		if p := presses[items[i].Bind]; len(p) > 0 {
 			items[i].Shortcut, items[i].shortcutIsKey = paletteShortcut(p[0], leader), true
@@ -1125,9 +963,6 @@ func (m *OS) liveShortcuts(items []CommandPaletteItem) {
 	}
 }
 
-// paletteShortcut spells a press the way the palette always has: a chord under
-// the leader reads "prefix+" and then the rest, as in "prefix+w 1". The leader
-// itself is configurable, and "prefix" names it whatever it is.
 func paletteShortcut(press, leader string) string {
 	if rest, ok := strings.CutPrefix(press, leader+" "); ok {
 		return "prefix+" + rest

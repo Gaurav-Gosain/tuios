@@ -23,37 +23,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
-// The task capture sheet: a task card written from anywhere, in one key
-// (ctrl+b + by default, or "New task" in the palette). It is the New agent
-// sheet's editor and pills, made small: the task, then the session the card
-// goes to, its stage, and the agent ctrl+enter starts on it.
-//
-// enter files the card and closes; ctrl+enter files it and starts the agent
-// on it now, which holds the card from the start (start-agent with task);
-// esc closes and keeps the draft for the next open. The first line is the
-// title, and the rest is the prompt. An image is attached to the card
-// (attach-task), which keeps it as long as the card, also after a restart,
-// and the prompt names it by its attachment's name.
-//
-// A file is two calls. While add-task is out the draft waits in tcFiling and
-// the sheet does not open, so a refusal can give the draft back and the
-// draft cannot file twice. Once the card is added the draft is done: the
-// next open is a new sheet, and the start-agent answer, which can take
-// minutes, is a toast that touches no sheet.
-//
-// The card goes to the current session. The first pill is its project: the
-// repository of the focused pane's folder, by its origin URL, so the card
-// shows on that repository's board in every session and on linked machines;
-// or none, for a card of the session only. When a machine is linked, the
-// last pill is where the card's agent starts: Any machine (the daemon picks,
-// place-agent), this machine (the default), or one linked machine. ctrl+enter places the
-// agent there; on another machine its pane claims the card here over that
-// machine's link back.
-
-// overlayKindTaskCapture is the sheet's overlay kind.
 const overlayKindTaskCapture = "taskcapture"
 
-// tcField is one stop of the sheet's tab order.
 type tcField uint8
 
 const (
@@ -65,44 +36,27 @@ const (
 	tcFields
 )
 
-// tcTaskRows is how many rows the editor shows before it scrolls.
 const tcTaskRows = 6
 
-// tcTitleMax is add-task's limit on a title, in bytes.
 const tcTitleMax = 200
 
-// tcStages are the stages a captured card can start in: todo, or plan,
-// where the agent that takes it writes a plan first and waits.
 var tcStages = []string{session.TaskStageTodo, session.TaskStagePlan}
 
-// taskCapture is the open sheet, or a closed one kept as the draft.
 type taskCapture struct {
-	ed    *composer.Model
-	wires draftWires
-	field tcField
-	// project is the origin URL of the focused pane's repository, empty
-	// when it has none or it is not read yet, and noProject the person's
-	// pick of a card of the session only.
+	ed        *composer.Model
+	wires     draftWires
+	field     tcField
 	project   string
 	noProject bool
 	stage     int
-	// agents are the harnesses installed on this machine, and agent the
-	// one ctrl+enter starts.
-	agents []spawnAgent
-	agent  int
-	// machines are where the card's agent may start: "" for this machine,
-	// "any" for the machine the daemon picks, and each linked machine.
-	// machine is the pick. The pill shows only when a machine is linked.
-	machines []string
-	machine  int
-	notice   string
-	// gen is the opening the sheet is in, from OS.tcOpenGen.
-	gen uint64
+	agents    []spawnAgent
+	agent     int
+	machines  []string
+	machine   int
+	notice    string
+	gen       uint64
 }
 
-// tcMachineValues are the Machine pill's values: this machine first, the
-// default, then "any" and the linked machines this client knows. Nil when
-// none is linked. A card's agent moves only when the person picks it.
 func (m *OS) tcMachineValues() []string {
 	var hosts []string
 	for _, h := range m.FederationHosts {
@@ -116,7 +70,6 @@ func (m *OS) tcMachineValues() []string {
 	return append([]string{"", session.TaskMachineAny}, hosts...)
 }
 
-// machineLabel is a Machine pill value as a person reads it.
 func tcMachineLabel(v string) string {
 	switch v {
 	case session.TaskMachineAny:
@@ -127,8 +80,6 @@ func tcMachineLabel(v string) string {
 	return v
 }
 
-// lastField is the last stop of the tab order: the Machine pill shows only
-// when a machine is linked.
 func (s *taskCapture) lastField() tcField {
 	if len(s.machines) == 0 {
 		return tcAgent
@@ -168,7 +119,6 @@ func (m *OS) OpenTaskCapture() tea.Cmd {
 	s.ed.SetCompleter(c)
 	s.wires = draftWires{mentions: c}
 	s.project = ""
-	// The pick stays across openings while the machine is still linked.
 	picked := ""
 	if s.machine < len(s.machines) {
 		picked = s.machines[s.machine]
@@ -180,8 +130,6 @@ func (m *OS) OpenTaskCapture() tea.Cmd {
 	return tea.Batch(tcAgentsCmd(s.gen), tcProjectCmd(s.gen, c.dir))
 }
 
-// tcOpening is the sheet of opening gen, or nil when the sheet was opened
-// again since, or filed.
 func (m *OS) tcOpening(gen uint64) *taskCapture {
 	if s := m.taskCapture; s != nil && s.gen == gen {
 		return s
@@ -189,15 +137,11 @@ func (m *OS) tcOpening(gen uint64) *taskCapture {
 	return nil
 }
 
-// tcProjectMsg carries the origin URL of the folder the sheet opened in,
-// read off the update loop.
 type tcProjectMsg struct {
 	gen uint64
 	url string
 }
 
-// tcProjectCmd reads dir's origin URL. A folder on no machine this client
-// can read (a remote client) has none.
 func tcProjectCmd(gen uint64, dir string) tea.Cmd {
 	if dir == "" {
 		return nil
@@ -211,15 +155,12 @@ func tcProjectCmd(gen uint64, dir string) tea.Cmd {
 	}
 }
 
-// applyTCProject takes the folder's project.
 func (m *OS) applyTCProject(msg tcProjectMsg) {
 	if s := m.tcOpening(msg.gen); s != nil {
 		s.project = msg.url
 	}
 }
 
-// projectLabel is the project pill's value: the repository as host and
-// path without the host, or none.
 func (s *taskCapture) projectLabel() string {
 	if s.project == "" || s.noProject {
 		return "None, this session"
@@ -231,7 +172,6 @@ func (s *taskCapture) projectLabel() string {
 	return p
 }
 
-// tcAgentsMsg carries the installed harnesses, read off the update loop.
 type tcAgentsMsg struct {
 	gen    uint64
 	agents []spawnAgent
@@ -250,7 +190,6 @@ func tcAgentsCmd(gen uint64) tea.Cmd {
 	}
 }
 
-// applyTCAgents takes the installed harnesses, keeping the picked one.
 func (m *OS) applyTCAgents(msg tcAgentsMsg) {
 	s := m.tcOpening(msg.gen)
 	if s == nil {
@@ -266,7 +205,6 @@ func (m *OS) applyTCAgents(msg tcAgentsMsg) {
 	s.agent = max(slices.IndexFunc(s.agents, func(a spawnAgent) bool { return a.id == cur }), 0)
 }
 
-// closeTaskCapture closes the sheet. keep keeps the draft for the next open.
 func (m *OS) closeTaskCapture(keep bool) {
 	if keep {
 		m.taskCaptureClosed = true
@@ -292,8 +230,6 @@ func (m *OS) TaskCaptureKey(msg tea.KeyPressMsg) tea.Cmd {
 	if !m.TaskCaptureOpen() {
 		return nil
 	}
-	// A notice answers the last key: the next one clears it, and a file
-	// that is refused again says so again.
 	s.notice = ""
 	key := msg.String()
 	switch key {
@@ -331,8 +267,6 @@ func (m *OS) TaskCaptureKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "enter":
 		return m.taskCaptureFile(false)
 	}
-	// The list keys of [keybindings.lists] move between the fields: up and
-	// down by default, k and j too.
 	switch motion := m.ListKeys.Keys(key, true); motion {
 	case listnav.Up:
 		s.field--
@@ -357,9 +291,6 @@ func (m *OS) TaskCaptureKey(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// tcSplit is a draft as a card: the first line is the title, and the rest is
-// the prompt. An image on the first line goes to the prompt, which is what
-// the agent reads.
 func tcSplit(parts []composer.Part) (title string, prompt []composer.Part) {
 	var t strings.Builder
 	inTitle := true
@@ -380,8 +311,6 @@ func tcSplit(parts []composer.Part) (title string, prompt []composer.Part) {
 	return strings.TrimSpace(t.String()), prompt
 }
 
-// tcFiledMsg is the daemon's answer to add-task for the draft s. next,
-// when set, starts the agent on the card.
 type tcFiledMsg struct {
 	s    *taskCapture
 	text string
@@ -389,21 +318,15 @@ type tcFiledMsg struct {
 	next tea.Cmd
 }
 
-// tcStartedMsg is the answer to start-agent on a filed card.
 type tcStartedMsg struct {
 	text string
 	warn bool
 }
 
-// taskCaptureFile files the card, and with start starts the picked agent on
-// it. The sheet closes at once; a refused file opens it again with the draft.
 func (m *OS) taskCaptureFile(start bool) tea.Cmd {
 	s := m.taskCapture
 	parts, ok := s.ed.SubmitParts()
 	if !ok {
-		// Invisible characters are removed before any other check. The
-		// editor's notice is drawn only in the task field; the next press
-		// adds what the sheet shows.
 		s.field = tcTask
 		return nil
 	}
@@ -452,8 +375,6 @@ func (m *OS) taskCaptureFile(start bool) tea.Cmd {
 	m.closeTaskCapture(false)
 	m.tcFiling = s
 	return func() tea.Msg {
-		// The images are attached once the card is added, and the prompt
-		// names them.
 		prompt, images := tcAttachmentParts(promptParts)
 		params := map[string]any{"session": sess, "title": title, "stage": stage, "human_nonce": nonce}
 		if prompt != "" {
@@ -486,26 +407,18 @@ func (m *OS) taskCaptureFile(start bool) tea.Cmd {
 		if !start {
 			return tcFiledMsg{s: s, text: filed}
 		}
-		// The draft is done once the card is added. The agent's start,
-		// which can take minutes, is a call of its own whose answer is a
-		// toast only.
 		return tcFiledMsg{s: s, text: filed, next: func() tea.Msg {
 			first := "Take task " + row.ID + ": tuios task get " + row.ID + "."
 			if stage == session.TaskStagePlan {
 				first = "Take task " + row.ID + ": tuios task get " + row.ID + ". Write a plan first, and wait for the person before you change files."
 			}
 			sp := map[string]any{"agent": agent.cmd, "session": sess, "task": row.ID, "human_nonce": nonce, "prompt": first}
-			// Plan first starts the agent in its own plan mode where it has
-			// one. Its plan approval moves the card back to plan, and the
-			// person's yes on to doing (task_auto.go).
 			if stage == session.TaskStagePlan && slices.Contains(agent.launch.Permissions, "plan") {
 				sp["permission_mode"] = "plan"
 			}
 			start := call
 			where := ""
 			if machine != "" {
-				// The daemon picks the machine, or checks the one named: the
-				// agent there needs the agent, the repository and a link back.
 				pp := map[string]any{"agent": agent.cmd, "task": row.ID, "task_session": sess, "local_origin": project}
 				if machine != session.TaskMachineAny {
 					pp["exclude"] = append(others, federation.LocalHostName)
@@ -550,17 +463,12 @@ func (m *OS) taskCaptureFile(start bool) tea.Cmd {
 	}
 }
 
-// applyTCFiled says what add-task did. A refused card opens the sheet again
-// with its draft; an added one ends the draft, and starts the agent when
-// ctrl+enter asked for one.
 func (m *OS) applyTCFiled(msg tcFiledMsg) tea.Cmd {
 	if m.tcFiling != msg.s {
 		return nil
 	}
 	m.tcFiling = nil
 	if msg.err != nil {
-		// The sheet stays shut while add-task is out, so no other draft
-		// is open to replace.
 		m.tcOpenGen++
 		m.taskCapture, m.taskCaptureClosed = msg.s, false
 		msg.s.gen, msg.s.notice = m.tcOpenGen, "The card was not added: "+msg.err.Error()
@@ -573,7 +481,6 @@ func (m *OS) applyTCFiled(msg tcFiledMsg) tea.Cmd {
 	return nil
 }
 
-// applyTCStarted says what start-agent did on a filed card.
 func (m *OS) applyTCStarted(msg tcStartedMsg) {
 	kind := "success"
 	if msg.warn {
@@ -582,8 +489,6 @@ func (m *OS) applyTCStarted(msg tcStartedMsg) {
 	m.ShowNotification(msg.text, kind, m.Settings.NotificationDuration)
 }
 
-// tcVerbMessage is a verb error as the toast says it: the daemon's own words
-// without the code.
 func tcVerbMessage(err error) string {
 	if callErr, ok := errors.AsType[*session.VerbCallError](err); ok {
 		return printableTitle(callErr.Message)
@@ -591,14 +496,11 @@ func tcVerbMessage(err error) string {
 	return printableTitle(err.Error())
 }
 
-// tcImage is an image of a task to attach to its card.
 type tcImage struct {
 	name string
 	data []byte
 }
 
-// tcAttachmentParts is a task's prompt with each image named by the name it
-// is attached by, and the images. Two images never share a name.
 func tcAttachmentParts(parts []composer.Part) (string, []tcImage) {
 	var b strings.Builder
 	var images []tcImage

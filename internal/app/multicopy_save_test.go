@@ -11,8 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The save prompt's paths and messages.
-
 func saveOS(t *testing.T) (*OS, string) {
 	t.Helper()
 	home := t.TempDir()
@@ -26,8 +24,6 @@ func saveOS(t *testing.T) (*OS, string) {
 	return m, home
 }
 
-// failingFile writes part of the text to a real file and then fails, the way
-// a full disk does.
 type failingFile struct{ f *os.File }
 
 func (ff failingFile) WriteString(s string) (int, error) {
@@ -76,8 +72,6 @@ func TestMultiCopySaveFailureLeavesNoFile(t *testing.T) {
 func TestMultiCopySavePathMessages(t *testing.T) {
 	m, home := saveOS(t)
 
-	// A relative path is taken from the focused pane's directory, not from
-	// wherever tuios was started.
 	cwd := filepath.Join(home, "rack")
 	if err := os.Mkdir(cwd, 0o755); err != nil {
 		t.Fatal(err)
@@ -87,7 +81,6 @@ func TestMultiCopySavePathMessages(t *testing.T) {
 	if got, _ := m.MultiCopySaveResolved(); got != filepath.Join(cwd, "lldp.txt") {
 		t.Errorf("a relative path resolves to %q, want it in the pane's directory %q", got, cwd)
 	}
-	// Without a directory from the pane, the home directory.
 	m.Windows[0].Cwd = ""
 	if got, _ := m.MultiCopySaveResolved(); got != filepath.Join(home, "lldp.txt") {
 		t.Errorf("with no pane directory a relative path resolves to %q, want the home directory", got)
@@ -105,9 +98,6 @@ func TestMultiCopySavePathMessages(t *testing.T) {
 		t.Errorf("folder path: %q, want %q", got, want)
 	}
 
-	// The prompt shows the full path. The pane is made wide enough for it:
-	// the prompt truncates a path that does not fit, and the temp folder on
-	// macOS is long.
 	m.Windows[0].Width = len(home) + 80
 	m.MultiCopy.Save.Err = ""
 	m.MultiCopy.Save.Path.Set("~/rack/a.txt")
@@ -116,7 +106,6 @@ func TestMultiCopySavePathMessages(t *testing.T) {
 		t.Errorf("the prompt does not show the full path")
 	}
 
-	// A remote client is told which machine the file is on.
 	m.RemoteClient = true
 	host, _ := os.Hostname()
 	m.MultiCopy.Save.Path.Set("~/remote.txt")

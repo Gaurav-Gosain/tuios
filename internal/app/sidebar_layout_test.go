@@ -47,8 +47,6 @@ func TestALayoutStringIsForgivingAndSaysWhy(t *testing.T) {
 		})
 	}
 
-	// A share out of range is clamped rather than dropped, so the section keeps
-	// its place in the order.
 	got := config.ParseSidebarSections("sessions:400,files")
 	if got[0].Share != 100 {
 		t.Errorf("a share of 400 percent came through as %d", got[0].Share)
@@ -73,14 +71,12 @@ func TestAStaleListingIsDropped(t *testing.T) {
 	m := &OS{Settings: config.Global}
 	m.filesView.Show = 1
 
-	// A read is asked for and its answer is held back.
 	slow := m.requestFileList(root, "", true)
 	if slow == nil {
 		t.Fatal("no read was scheduled")
 	}
 	stale := slow().(fileListMsg)
 
-	// The user walks somewhere else, and that answer lands first.
 	m.loadFileViewNow(t, root+"/apple")
 	want := m.FileViewDir()
 
@@ -93,7 +89,6 @@ func TestAStaleListingIsDropped(t *testing.T) {
 	}
 }
 
-// withSections sets the rail's layout for one test and puts it back after.
 func withSections(t *testing.T, spec string) {
 	t.Helper()
 	prev := config.Global.SidebarSections
@@ -132,11 +127,6 @@ func TestRailSectionsNeverOverlapAtAnyHeight(t *testing.T) {
 		"terminals,files",
 		"agents:50,files:50,sessions,terminals",
 		"sessions:90,terminals:90,files:90,agents:90",
-		// Spacers, which are the entries with no rows to be capped by and so
-		// the ones that could take the rail past its own bottom edge. Every
-		// shape they come in: leading, trailing, in the middle, two at once,
-		// with a share and without, and one asking for more of the rail than
-		// the sections leave.
 		"sessions,spacer,terminals,files",
 		"sessions:25,spacer:20,terminals,files:25,agents:34",
 		"spacer,sessions,terminals",
@@ -144,12 +134,8 @@ func TestRailSectionsNeverOverlapAtAnyHeight(t *testing.T) {
 		"files,spacer,sessions,spacer,agents",
 		"spacer:90,sessions,terminals,agents",
 		"spacer:50,spacer:50,files,terminals",
-		// And reordered layouts, since the band arithmetic runs in plan order
-		// and the pinned block is the last entry rather than a fixed section.
 		"agents,files,terminals,sessions",
 		"files,agents:20,spacer:15,terminals,sessions:20",
-		// The custom section, with its one notional row when it has no
-		// command, in the middle and at the pinned end.
 		"sessions,custom:30,terminals",
 		"sessions,terminals,custom:40",
 	} {
@@ -181,7 +167,6 @@ func TestRailSectionsNeverOverlapAtAnyHeight(t *testing.T) {
 					}
 				}
 			}
-			// And every recorded rectangle is on a line the rail drew.
 			for _, hit := range m.SidebarHits {
 				if hit.Y0 < top || hit.Y1 > bottom {
 					t.Fatalf("%s at height %d recorded a rectangle at %d..%d, outside %d..%d",
@@ -258,9 +243,6 @@ func TestBudgetNeverOverrunsOrInvents(t *testing.T) {
 								next := 0
 								for i, p := range plans {
 									if p.Spacer {
-										// What the render gives a spacer: one
-										// notional row, so the allocator does
-										// not read it as an empty section.
 										rows[i] = 1
 										continue
 									}
@@ -316,8 +298,6 @@ func TestFileIconsDegrade(t *testing.T) {
 		{name: "nothing.unknownext", wantPUA: true},
 	}
 
-	// On, with a font: every row wears a private use codepoint, and a folder,
-	// a parent and a file wear three different ones.
 	seen := map[string]string{}
 	for _, r := range rows {
 		got := fileRowGlyphFor(r.name, r.dir, r.parent)
@@ -334,7 +314,6 @@ func TestFileIconsDegrade(t *testing.T) {
 		t.Error("a known and an unknown extension drew the same icon")
 	}
 
-	// Off, and in ASCII, the three glyph set roles draw instead.
 	for _, tc := range []struct {
 		name  string
 		setup func(t *testing.T)
@@ -368,8 +347,6 @@ func TestFileIconsDegrade(t *testing.T) {
 		})
 	}
 
-	// And the glyph column can be switched off entirely, which is the option
-	// every other row on the rail already answers to.
 	prev := config.Global.SidebarShowGlyphs
 	config.Global.SidebarShowGlyphs = false
 	t.Cleanup(func() { config.Global.SidebarShowGlyphs = prev })
@@ -378,16 +355,10 @@ func TestFileIconsDegrade(t *testing.T) {
 	}
 }
 
-// fileRowGlyphFor is the mark a name draws in the glyph column, resolved the
-// way the listing resolves it and then drawn the way a row draws it. The two
-// halves are separate in the app because the lookup happens once per file and
-// the draw happens once per frame; the tests below are about the pair.
 func fileRowGlyphFor(name string, dir, parent bool) string {
 	return fileRowMark(fileIconFor(name, dir), dir, parent, &config.Global).Glyph
 }
 
-// isPUA reports whether every rune of s is in a private use area, which is
-// where nerd font icons live and where nothing a plain font can draw does.
 func isPUA(s string) bool {
 	if s == "" {
 		return false
@@ -410,8 +381,6 @@ func isPUA(s string) bool {
 // fileIconFit, and the wide-glyph case draws two cells; drop the Glyph == ""
 // arm of fileRowMark and the same case draws nothing at all.
 func TestEveryFileIconIsOneCell(t *testing.T) {
-	// A glyph the layout cannot place is dropped, and the row falls back to a
-	// mark it can. "🚀" is two cells in every width table there is.
 	for _, tc := range []struct{ name, glyph string }{
 		{"a two-cell glyph", "🚀"},
 		{"two glyphs", ""},
@@ -421,15 +390,11 @@ func TestEveryFileIconIsOneCell(t *testing.T) {
 			t.Errorf("%s survived the fit as %+v, want it dropped", tc.name, got)
 		}
 	}
-	// And the pair together: a dropped icon leaves the row a mark it can place,
-	// rather than an empty glyph column that would move the name.
 	wide := fileRowMark(fileIconFit(fileIcon{Glyph: "🚀", Hex: "#FF0000"}), false, false, &config.Global)
 	if lipgloss.Width(wide.Glyph) != 1 {
 		t.Errorf("a row whose icon was dropped drew %q, %d cells wide", wide.Glyph, lipgloss.Width(wide.Glyph))
 	}
 
-	// And every mark the section actually draws is measured, through the same
-	// pair of calls the app makes.
 	for _, name := range []string{
 		"main.go", "lib.rs", "a.py", "a.ts", "a.tsx", "a.svg", "a.txt", "a.log",
 		"a.zst", "a.pdf", "a.mp4", "a.so", "Makefile", "Dockerfile", ".gitignore",

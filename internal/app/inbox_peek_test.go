@@ -12,8 +12,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// fakeDaemon answers the peek's verb calls from canned replies and records
-// every call it gets.
 type fakeDaemon struct {
 	peeks   []session.PromptPeek
 	respond func(params map[string]any) (json.RawMessage, error)
@@ -50,7 +48,6 @@ func (f *fakeDaemon) count(verb string) int {
 	return n
 }
 
-// claudePeek is what peek-prompt says about Claude Code's permission menu.
 func claudePeek(id string) session.PromptPeek {
 	return session.PromptPeek{
 		Session: "here", Window: "w-2", Harness: "claude-code", State: "needs_input",
@@ -62,8 +59,6 @@ func claudePeek(id string) session.PromptPeek {
 	}
 }
 
-// peekOS is a client with one approval in its Inbox, selected, and a fake
-// daemon behind the peek.
 func peekOS(t *testing.T, f *fakeDaemon) *OS {
 	t.Helper()
 	m := inboxOS(t, zeroSettle())
@@ -75,7 +70,6 @@ func peekOS(t *testing.T, f *fakeDaemon) *OS {
 	return m
 }
 
-// run runs a command and feeds its message back, the way Update would.
 func run(t *testing.T, m *OS, cmd tea.Cmd) {
 	t.Helper()
 	for cmd != nil {

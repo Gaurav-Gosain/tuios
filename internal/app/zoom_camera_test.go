@@ -7,21 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// Zooming a pane to part of the screen is a camera move over the layout, not a
-// resize of the one pane.
-//
-// The layout is laid out in a box larger than the screen and the screen is
-// panned to the pane you zoomed. Every pane keeps its place and its proportions
-// relative to every other; the zoomed one is the one the camera is on, and its
-// neighbours run off the edges because the box is bigger than the window you
-// are looking through.
-//
-// These drive the tilers rather than the transform, because the transform is
-// half the answer: the other half is that the layout is computed again at the
-// camera's size, and only a test that goes through the tiler can see it.
-
-// camOS is n panes under the named layout with a camera zoom configured, laid
-// out and settled.
 func camOS(t *testing.T, mode string, pct int) (*OS, []*terminal.Window) {
 	t.Helper()
 	m, wins := tiledZoomOS(t, mode)
@@ -29,7 +14,6 @@ func camOS(t *testing.T, mode string, pct int) (*OS, []*terminal.Window) {
 	return m, wins
 }
 
-// zoomAndSettle zooms the pane at i and lands every slide.
 func zoomAndSettle(m *OS, i int) {
 	m.FocusedWindow = i
 	m.ToggleZoom()
@@ -69,8 +53,6 @@ func TestTheCameraKeepsTheGapsTheSize(t *testing.T) {
 	}
 }
 
-// smallestGapBetweenPanes is the narrowest horizontal run of empty columns
-// between two panes that share rows, or -1 when no two do.
 func smallestGapBetweenPanes(m *OS) int {
 	best := -1
 	for _, a := range m.Windows {
@@ -78,7 +60,6 @@ func smallestGapBetweenPanes(m *OS) int {
 			if a == b || a.Workspace != m.CurrentWorkspace || b.Workspace != m.CurrentWorkspace {
 				continue
 			}
-			// b starts to the right of a, and they overlap vertically.
 			if b.X <= a.X+a.Width {
 				continue
 			}
@@ -133,8 +114,6 @@ func TestEverySideWithANeighbourPeeks(t *testing.T) {
 	}
 }
 
-// gridZoomOS is n panes under the named layout at the given zoom size, laid out
-// and settled, in a region wide enough for a grid.
 func gridZoomOS(t *testing.T, mode string, n, pct int) (*OS, []*terminal.Window) {
 	t.Helper()
 	prev := config.Global

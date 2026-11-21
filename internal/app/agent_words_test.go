@@ -24,7 +24,6 @@ func TestOneSessionNameEverywhere(t *testing.T) {
 	if got := m.inboxAlertText([]session.AttentionItem{it}); !strings.HasPrefix(got, "demo: ") {
 		t.Errorf("dock alert = %q, want it to name the session \"demo\"", got)
 	}
-	// Another machine's session keeps the name that machine sent.
 	far := it
 	far.Host = "build"
 	if got := m.inboxWhere(far); got != "build:session-0" {

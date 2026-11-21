@@ -12,8 +12,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// sixelTestImage is cols x rows cells of 10x20 pixels, each cell its own
-// colour.
 func sixelTestImage(cols, rows int) []byte {
 	img := &vt.SixelImage{Width: cols * 10, Height: rows * 20, Palette: make([]color.RGBA, vt.SixelMaxRegisters)}
 	img.Pix = make([]uint16, img.Width*img.Height)
@@ -31,8 +29,6 @@ func sixelTestImage(cols, rows int) []byte {
 	return vt.EncodeSixel(img, image.Rect(0, 0, img.Width, img.Height), img.Width, img.Height)
 }
 
-// sixelOS is one bordered pane at (2,1), 40x12, drawing to a sixel host with
-// 10x20 cells.
 func sixelOS(t *testing.T, mode sixelMode) (*OS, *terminal.Window) {
 	t.Helper()
 	win := newTestWindow(t, "sixel-win-0001", 40, 12)
@@ -58,7 +54,6 @@ func (m *OS) testFrame() []sixelRect {
 
 func TestSixelFrameFindsImageAndClips(t *testing.T) {
 	m, win := sixelOS(t, sixelNative)
-	// 50 columns in a pane with 38: the host gets the first 38.
 	win.WriteOutput([]byte("top\r\n"))
 	win.WriteOutput(sixelTestImage(50, 3))
 	win.MarkContentDirty()
@@ -68,8 +63,6 @@ func TestSixelFrameFindsImageAndClips(t *testing.T) {
 		t.Fatalf("rects = %+v, want one", rects)
 	}
 	r := rects[0]
-	// Content starts inside the border at (3,2); the image is on the pane's
-	// second row.
 	if r.x != 3 || r.y != 3 || r.r0 != 0 || r.c0 != 0 || r.rows() != 3 || r.cols() != 38 {
 		t.Fatalf("rect = %+v, want 38x3 at 3,3 from image 0,0", r)
 	}
@@ -77,28 +70,22 @@ func TestSixelFrameFindsImageAndClips(t *testing.T) {
 	if !strings.Contains(out, "\x1b[4;4H\x1bP") {
 		t.Fatalf("host was not sent a sixel at row 4 col 4: %q", out[:min(80, len(out))])
 	}
-	// The crop, decoded, is 380x60 pixels.
 	i := strings.Index(out, "\x1bP")
 	j := strings.Index(out[i:], "\x1b\\")
 	img := vt.DecodeSixel(vt.ParseSixelCommand([]byte(out[i+2 : i+j])))
 	if img == nil || img.Width != 380 || img.Height != 60 {
 		t.Fatalf("crop decoded to %+v, want 380x60", img)
 	}
-	// Nothing new and nothing written over it: nothing sent.
 	m.testFrame()
 	if again := m.GraphicsFrameBytes(nil); len(again) != 0 {
 		t.Fatalf("an unchanged frame was sent again: %q", again[:min(40, len(again))])
 	}
-	// A renderer write that rewrites one of the image's cells has it sent
-	// again, and one that writes elsewhere does not.
 	if again := m.GraphicsFrameBytes([]byte("\x1b[1;1Hx")); len(again) != 0 {
 		t.Fatalf("a write outside the image had it sent again")
 	}
 	if again := m.GraphicsFrameBytes([]byte("\x1b[5;10H\x1b[8m   \x1b[m")); len(again) == 0 {
 		t.Fatalf("a rewrite of blanks inside the image did not have it sent again")
 	}
-	// An erase inside it means the host does not show its frame: it is sent
-	// once its blanks are back.
 	if again := m.GraphicsFrameBytes([]byte("\x1b[5;10H\x1b[3X")); len(again) != 0 {
 		t.Fatalf("the image was sent over cells that hold no blank for it")
 	}
@@ -106,7 +93,6 @@ func TestSixelFrameFindsImageAndClips(t *testing.T) {
 		t.Fatalf("the image was not sent once its blanks were back")
 	}
 
-	// A popup over the image cuts it.
 	m.ShowCommandPalette = true
 	rects = m.testFrame()
 	cells := 0
@@ -122,7 +108,6 @@ func TestSixelFrameFindsImageAndClips(t *testing.T) {
 		t.Fatalf("after the palette closed rects = %+v", rects)
 	}
 
-	// Clearing the pane leaves nothing to show.
 	win.WriteOutput([]byte("\x1b[2J"))
 	win.MarkContentDirty()
 	if rects = m.testFrame(); len(rects) != 0 {
@@ -138,7 +123,7 @@ func TestSixelRectsAroundAPopup(t *testing.T) {
 	for row := range 4 {
 		for col := range 6 {
 			if row >= 2 && col >= 3 {
-				continue // under the popup
+				continue
 			}
 			hits = append(hits, sixelHit{x: 10 + col, y: 5 + row, row: row, col: col})
 		}
@@ -151,17 +136,12 @@ func TestSixelRectsAroundAPopup(t *testing.T) {
 	if len(rects) != 2 || cells != 4*6-2*3 {
 		t.Fatalf("rects = %+v, want two covering %d cells", rects, 4*6-2*3)
 	}
-	// On the host's last row nothing is sent: a sixel there scrolls the host.
 	last := sixelRects(9, []sixelHit{{x: 0, y: 38, row: 0, col: 0}, {x: 0, y: 39, row: 1, col: 0}}, true, 40)
 	if len(last) != 1 || last[0].rows() != 1 {
 		t.Fatalf("an image on the last row gave %+v, want its first row only", last)
 	}
 }
 
-// TestHostDamage checks the renderer's output is read into the cells it
-// wrote: text, erases, a repeat, and a whole-screen redraw.
-// groundBytes is what the renderer writes for rects: the concealed blanks
-// an image sits on.
 func groundBytes(rects []sixelRect) []byte {
 	var b []byte
 	for _, r := range rects {
@@ -192,22 +172,16 @@ func TestSixelWaitsForItsFrame(t *testing.T) {
 	}
 	r := rects[0]
 
-	// The older frame: text where the image will be, two rows down from
-	// where the next frame's scroll puts it.
 	older := []byte("\x1b[4;4Hline-a    \x1b[5;4Hline-b    ")
 	if out := m.GraphicsFrameBytes(older); strings.Contains(string(out), "\x1bP") {
 		t.Fatalf("ASSERTION: the image was sent onto a frame that holds text in its cells: %q", out[:min(60, len(out))])
 	}
 
-	// The frame it belongs to scrolls the screen up two rows and writes the
-	// blanks. The image goes out with it.
 	scroll := append([]byte("\x1b[1;29r\x1b[29;1H\n\n\x1b[r"), groundBytes(rects)...)
 	if out := string(m.GraphicsFrameBytes(scroll)); !strings.Contains(out, "\x1b[4;4H\x1bP") {
 		t.Fatalf("ASSERTION: the image was not sent with the frame that holds its blanks: %q", out[:min(60, len(out))])
 	}
 
-	// The blanks follow a scroll: two rows up, the rectangle two rows up
-	// is on its blanks and the old place is not.
 	var d hostDamage
 	d.resize(100, 30)
 	d.feed(groundBytes(rects))
@@ -217,8 +191,6 @@ func TestSixelWaitsForItsFrame(t *testing.T) {
 	if !d.grounded(up) || d.grounded(r) {
 		t.Errorf("after a scroll of two rows: grounded at %d = %v, at %d = %v; want true, false", up.y, d.grounded(up), r.y, d.grounded(r))
 	}
-	// An insert of a line above moves them back down, and SGR 28 writes
-	// text that is not a blank for an image.
 	d.feed([]byte("\x1b[1;1H\x1b[2L"))
 	if !d.grounded(r) {
 		t.Errorf("an insert of two lines did not move the blanks down")
@@ -233,7 +205,7 @@ func TestHostDamage(t *testing.T) {
 	var d hostDamage
 	d.resize(20, 5)
 	d.reset()
-	rect := sixelRect{x: 5, y: 2, r1: 2, c1: 4} // cells 5..8 on rows 2..3
+	rect := sixelRect{x: 5, y: 2, r1: 2, c1: 4}
 	for _, tc := range []struct {
 		name string
 		in   string
@@ -274,7 +246,6 @@ func TestSixelFallbackModes(t *testing.T) {
 	mu.Lock()
 	out += string(first)
 	mu.Unlock()
-	// The transmission is built in the background and sent when ready.
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		mu.Lock()
@@ -352,7 +323,6 @@ func TestSixelSweepFreesOverwrittenImages(t *testing.T) {
 	if n := m.SixelPassthrough.ImageCount(); n != 1 {
 		t.Fatalf("after the sweep %d images are held, want the 1 on screen", n)
 	}
-	// Clearing the pane leaves nothing to hold.
 	win.WriteOutput([]byte("\x1b[2J\x1b[3J"))
 	win.MarkContentDirty()
 	m.testFrame()
@@ -429,7 +399,6 @@ func TestSixelOnKittyKeepsTheOldImageUntilTheNewOne(t *testing.T) {
 	out = ""
 	mu.Unlock()
 
-	// The same cells, a new image.
 	win.WriteOutput([]byte("\x1b[H"))
 	win.WriteOutput(sixelTestImage(20, 3))
 	win.MarkContentDirty()

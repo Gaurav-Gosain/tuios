@@ -9,10 +9,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// readCPUTicks reads the kern.cp_time sysctl: one C long per CPU state, summed
-// over all CPUs, in stathz ticks. FreeBSD has five states and OpenBSD six (it
-// adds spin), and on both the idle state comes last. A C long is the size of a
-// Go int on every port either system has.
 func readCPUTicks() (cpuTicks, bool) {
 	buf, err := unix.SysctlRaw("kern.cp_time")
 	if err != nil {

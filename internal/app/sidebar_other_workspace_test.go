@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
-// fgSeq is the escape sequence a foreground color renders as, so a row can be
-// checked for the color it was actually drawn in rather than for a color name.
 func fgSeq(c color.Color) string {
 	rendered := lipgloss.NewStyle().Foreground(c).Render("x")
 	return rendered[:strings.Index(rendered, "x")]
@@ -24,7 +22,6 @@ func fgSeq(c color.Color) string {
 func TestUnknownWorkspaceTagsNothing(t *testing.T) {
 	m, _ := sectionsTestOS(t, 120, 30)
 	tree := sessiontree.Build([]sessiontree.SessionInput{
-		// No CurrentWorkspace and no per-pane workspace: an older daemon's reply.
 		{Name: "api", Windows: []sessiontree.WindowInput{
 			{ID: "dddddddd4444", Title: "server"},
 			{ID: "eeeeeeee5555", Title: "worker"},
@@ -76,7 +73,6 @@ func TestTerminalsFollowStripOrder(t *testing.T) {
 	m, _ := sectionsTestOS(t, 120, 30)
 	m.UseScrollingLayout, m.AutoTiling = true, true
 	m.SessionName = "api"
-	// Created a, b, c, d; the strip holds them c, a, (d over b stacked).
 	ids := map[string]int{"aaaaaaaa1111": 1, "bbbbbbbb2222": 2, "cccccccc3333": 3, "dddddddd4444": 4}
 	m.BSPIDToWindowID = map[int]string{}
 	for w, n := range ids {
@@ -101,8 +97,6 @@ func TestTerminalsFollowStripOrder(t *testing.T) {
 		t.Errorf("terminals order = %v, want %q", got, want)
 	}
 
-	// Moving a column in the strip or disabling scrolling layout moves the rail
-	// signature so cached frames do not serve stale pane ordering.
 	sigScrolling := m.sidebarSignature()
 	m.WorkspaceScrollingLayouts[1] = &layout.ScrollingLayout{
 		Columns: []layout.ScrollColumn{{WindowIDs: []int{1}}, {WindowIDs: []int{3}}, {WindowIDs: []int{4, 2}}},
@@ -111,7 +105,6 @@ func TestTerminalsFollowStripOrder(t *testing.T) {
 		t.Error("sidebarSignature did not move when strip columns rearranged")
 	}
 
-	// Outside the scrolling layout the creation order stands.
 	m.UseScrollingLayout = false
 	if sigDisabled := m.sidebarSignature(); sigDisabled == sigScrolling {
 		t.Error("sidebarSignature did not move when scrolling layout disabled")

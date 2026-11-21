@@ -16,102 +16,54 @@ import (
 	"tuios.dev/vt"
 )
 
-// dndPhase is where a drag is in its life.
 type dndPhase int
 
 const (
-	// dndOffered: the gesture was seen and t=o went to the program; it has
-	// not answered yet.
 	dndOffered dndPhase = iota + 1
-	// dndBuilding: the program answered with its MIME types and may be
-	// pre-sending data and an image.
 	dndBuilding
-	// dndStarted: the program sent t=P:x=-1 and the drag follows the pointer.
 	dndStarted
-	// dndDropped: t=M went to a target, which may now request data.
 	dndDropped
 )
 
-// dndPress is a left press forwarded to a pane whose program offers drags.
-// It is the only way a drag can start: the gesture needs a button held in
-// the pane the offer goes to.
 type dndPress struct {
 	window       string
-	x, y         int // layout cell of the press
-	termX, termY int // the same cell inside the pane
+	x, y         int
+	termX, termY int
 }
 
-// dndDrag is one drag, from the gesture to the finish.
 type dndDrag struct {
-	phase  dndPhase
-	source string
-	// released says the button came up before the program started the drag;
-	// a start that arrives after that is refused with EPERM.
-	released bool
-	// flags is the operations the source allows (1 copy, 2 move, 3 either)
-	// and mimes the types it offers, in its order.
-	flags int
-	mimes []string
-	// presented is data the source sent ahead, decoded, by MIME index.
-	presented map[int][]byte
-	// names is the label text for the URI list in namesOf, kept so a frame
-	// does not split the list again. See dndLabelWhat.
-	names   string
-	namesOf []byte
-	// icon is the text drag image the source gave, cleaned for the label.
-	icon string
-	// x and y are where the pointer is, in layout cells; sx and sy the same
-	// in screen cells, kept from the last mouse event because a message from
-	// a pane arrives outside one and the mapping is only known inside.
-	x, y   int
-	sx, sy int
-	// verdict is the drop on the pane under the pointer, as the rail's drop
-	// path judges it: the pane's rules, the paths quoted for its program, and
-	// for a pane that speaks the protocol its own answer. The ring, the label
-	// and the pointer shape read it. See file_drop.go.
-	verdict dropVerdict
-	// target is the pane under the pointer that was sent t=m, or "". op is
-	// its last answer (0 until it answers), and wants the types it asked for.
-	target string
-	op     int
-	wants  []string
-	// told is whether the source has been told the target accepts.
-	told bool
-	// dropTarget is the pane the drop went to; requests from it are served.
-	// pending marks MIME indexes whose data was asked of the source for it.
-	dropTarget string
-	pending    map[int]bool
-	// fallback says the drop went to a pane without the protocol, which gets
-	// the paths as a paste once the data for fallbackIdx is in hand.
+	phase       dndPhase
+	source      string
+	released    bool
+	flags       int
+	mimes       []string
+	presented   map[int][]byte
+	names       string
+	namesOf     []byte
+	icon        string
+	x, y        int
+	sx, sy      int
+	verdict     dropVerdict
+	target      string
+	op          int
+	wants       []string
+	told        bool
+	dropTarget  string
+	pending     map[int]bool
 	fallback    bool
 	fallbackIdx int
-	// fromHost says the drag came in from outside the tuios window, through
-	// the terminal's own protocol; relay that it started in a pane and runs
-	// as the window system's drag, through the terminal. See dnd_host.go.
-	fromHost bool
-	relay    bool
-	// hostPending marks MIME indexes whose data the terminal asked the
-	// source for (relay), or tuios asked the terminal for (fromHost).
+	fromHost    bool
+	relay       bool
 	hostPending map[int]bool
-	// hostBuf collects the terminal's data for a fallback paste (fromHost).
-	hostBuf []byte
-	// gen names this drop to its deadline tick, and active is when the drop
-	// last moved: a data request, or data for one. See dndDropTimeout.
-	gen    int
-	active time.Time
+	hostBuf     []byte
+	gen         int
+	active      time.Time
 }
 
-// dndDropTimeout is how long a drop may wait with nothing moving. A target
-// that accepted the drop and never asks for the data, or a source or terminal
-// that never sends it, would otherwise hold the drag for good, and every later
-// drag in this client is refused while one is held.
 const dndDropTimeout = 30 * time.Second
 
-// dndDropTimeoutMsg is the deadline tick of the drop named gen.
 type dndDropTimeoutMsg struct{ gen int }
 
-// dndDropArm starts the deadline of the drop that has just gone to a target.
-// Update's tail turns the flag into the tick (dndDropDeadline).
 func (m *OS) dndDropArm(d *dndDrag) {
 	m.dndDropGen++
 	d.gen = m.dndDropGen
@@ -119,10 +71,8 @@ func (m *OS) dndDropArm(d *dndDrag) {
 	m.dndDropArmed = true
 }
 
-// dndDropMoved notes that the drop in hand is still moving.
 func (d *dndDrag) dndDropMoved() { d.active = time.Now() }
 
-// dndDropDeadline returns the tick for a deadline armed during this message.
 func (m *OS) dndDropDeadline() tea.Cmd {
 	if !m.dndDropArmed {
 		return nil
@@ -139,8 +89,6 @@ func dndDropTick(gen int, after time.Duration) tea.Cmd {
 	return tea.Tick(after, func(time.Time) tea.Msg { return dndDropTimeoutMsg{gen: gen} })
 }
 
-// onDnDDropTimeout ends a drop that has not moved for dndDropTimeout, and
-// waits out the rest of the time for one that moved since the tick was set.
 func (m *OS) onDnDDropTimeout(msg dndDropTimeoutMsg) tea.Cmd {
 	d := m.dndDrag
 	if d == nil || d.phase != dndDropped || d.gen != msg.gen {
@@ -153,10 +101,8 @@ func (m *OS) onDnDDropTimeout(msg dndDropTimeoutMsg) tea.Cmd {
 	return nil
 }
 
-// viaHost reports whether the terminal carries this drag.
 func (d *dndDrag) viaHost() bool { return d.fromHost || d.relay }
 
-// dndMaxMimes bounds the MIME list a source may offer.
 const dndMaxMimes = 64
 
 // DnDNotePress records a left press tuios forwarded to a pane. It is the arm
@@ -172,21 +118,14 @@ func (m *OS) DnDNotePress(w *terminal.Window, x, y, termX, termY int) {
 	}
 	if d := m.dndDrag; d != nil {
 		if d.phase >= dndStarted {
-			// A drag is in flight; a second press belongs to no gesture.
 			return
 		}
-		// A gesture the program never took up (a press on nothing it drags)
-		// is over with the next press, or it would block every later one.
 		m.dndDrag = nil
 	}
 	m.dndPress = &dndPress{window: w.ID, x: x, y: y, termX: termX, termY: termY}
 	dndLog("press in %s at cell (%d,%d)", shortID(w.ID), termX, termY)
 }
 
-// dndSourceOK reports whether a pane may offer a drag: drag and drop is on,
-// and the pane's shell runs on this machine, reports no other host and is
-// not ssh or the like. A program over ssh offers paths on the far machine,
-// which name nothing here. The same rule a target pane is held to.
 func (m *OS) dndSourceOK(w *terminal.Window) bool {
 	if !m.dndPaneLocal(w) || w.CwdHost != "" {
 		return false
@@ -205,7 +144,6 @@ func (m *OS) DnDActive() bool {
 func (m *OS) DnDMotion(x, y int, button tea.MouseButton) bool {
 	d := m.dndDrag
 	if d != nil && d.viaHost() {
-		// The terminal carries this drag and reports where it is.
 		return false
 	}
 	if d != nil {
@@ -213,7 +151,6 @@ func (m *OS) DnDMotion(x, y int, button tea.MouseButton) bool {
 		d.sx, d.sy = m.ScreenPoint(x, y)
 	}
 	if button == tea.MouseNone {
-		// No button held: a release went missing. The gesture ends here.
 		if m.dndPress != nil {
 			m.dndPress = nil
 		}
@@ -231,7 +168,6 @@ func (m *OS) DnDMotion(x, y int, button tea.MouseButton) bool {
 		return true
 	}
 	if d != nil && d.phase == dndDropped {
-		// The drop is done; the pointer is the target's again.
 		return false
 	}
 	press := m.dndPress
@@ -242,13 +178,8 @@ func (m *OS) DnDMotion(x, y int, button tea.MouseButton) bool {
 		return false
 	}
 	if m.dndHostOn() {
-		// The terminal recognises the gesture and starts a real drag with
-		// the window system; it tells tuios with a t=o. See dnd_host.go.
 		return false
 	}
-	// The gesture: the button held in a pane that offers drags, and the
-	// pointer in another cell. The program is told where the press was,
-	// which is the thing the person took hold of.
 	w := m.windowByID(press.window)
 	if w == nil {
 		m.dndPress = nil
@@ -261,9 +192,6 @@ func (m *OS) DnDMotion(x, y int, button tea.MouseButton) bool {
 	return false
 }
 
-// dndPixel is the pixel inside a pane for one of its cells, as the protocol
-// reports beside the cell: what the host reported when it reports pixels,
-// otherwise the cell's corner from the pane's cell size.
 func (m *OS) dndPixel(w *terminal.Window, termX, termY int) vt.MousePixel {
 	if px := m.PointerPixelIn(w.CellPixelWidth, w.CellPixelHeight, termX, termY); px.OK {
 		return px
@@ -283,8 +211,6 @@ func (m *OS) DnDRelease(x, y int) bool {
 	d.sx, d.sy = m.ScreenPoint(x, y)
 	switch d.phase {
 	case dndOffered, dndBuilding:
-		// The program has not started the drag; it may still answer, and
-		// the answer will be refused. The release is the pane's.
 		d.released = true
 		return false
 	case dndStarted:
@@ -294,10 +220,6 @@ func (m *OS) DnDRelease(x, y int) bool {
 	return false
 }
 
-// dndTargetAt is the pane under the drag's pointer with the cell inside it,
-// or nil when the pointer is on no pane's content. It is the rail's drop
-// path that finds the pane, from the screen cell, so a cell on a rail or on
-// the dock is no pane whatever is drawn under it.
 func (m *OS) dndTargetAt(d *dndDrag) (*terminal.Window, int, int) {
 	w := m.dropTargetAt(d.sx, d.sy)
 	if w == nil {
@@ -310,22 +232,12 @@ func (m *OS) dndTargetAt(d *dndDrag) (*terminal.Window, int, int) {
 	return w, tx, ty
 }
 
-// dndRefusedByProgram is the verdict's refusal while the program in a pane
-// that speaks the protocol has not accepted the drop where the pointer is.
 const dndRefusedByProgram = "The program in this pane does not take the drop here."
 
-// dndNoLocalFile is the refusal for a URI list that names no file on this
-// machine: another scheme, or a file:// with a host.
 const dndNoLocalFile = "The drop names no file on this machine."
 
-// dndNoBracketedPaste is the refusal for text dropped on a pane whose program
-// has not turned bracketed paste on.
 const dndNoBracketedPaste = "The program in this pane has no bracketed paste on. Text is not dropped there."
 
-// dndJudge is the verdict of a drop on w: the pane's rules first, for every
-// pane; then, for a pane that speaks the protocol, its own answer, which
-// onDnDTargetStatus fills in; for another pane, the paths it would be
-// pasted, quoted for its program, when the source sent them ahead.
 func (m *OS) dndJudge(w *terminal.Window) dropVerdict {
 	d := m.dndDrag
 	if p := m.dndPanes[w.ID]; p != nil && p.accepts {
@@ -349,9 +261,6 @@ func (m *OS) dndJudge(w *terminal.Window) dropVerdict {
 	if dndMimeIndex(d.mimes, "text/plain") >= 0 {
 		v := m.judgeDropPaths(w, nil)
 		if v.Refusal == "" && !(w.Terminal != nil && w.Terminal.BracketedPasteEnabled()) {
-			// Text keeps its newlines. A shell without bracketed paste would
-			// run a line of it as typed. Paths are quoted one at a time and
-			// are safe either way.
 			v.Refusal = dndNoBracketedPaste
 		}
 		return v
@@ -359,10 +268,6 @@ func (m *OS) dndJudge(w *terminal.Window) dropVerdict {
 	return dropVerdict{Window: w.ID, Pane: pipPaneName(w), Refusal: "The program in this pane takes neither files nor text from a drag."}
 }
 
-// dndHover routes a move of a started drag: the pane that lost the pointer
-// is told the drag left, the pane under it is told where the drag is. Only
-// a pane whose program registered for drops is told anything; another is a
-// fallback target and learns of the drop as a paste.
 func (m *OS) dndHover(x, y int) {
 	d := m.dndDrag
 	d.x, d.y = x, y
@@ -385,24 +290,15 @@ func (m *OS) dndHover(x, y int) {
 		return
 	}
 	if d.verdict.Refusal != "" && d.verdict.Refusal != dndRefusedByProgram {
-		// The pane's own rules refuse it (its shell is elsewhere, or it is in
-		// copy mode); its program is not asked.
 		return
 	}
 	if p := m.dndPanes[id]; p != nil && p.accepts {
-		// Every move carries the MIME list, as kitty's do. The specification
-		// allows sending it once, but yazi reads the list from each move and
-		// takes an empty one as no types to drop, so it refused every move
-		// after the first. The pane answers with what it wants
-		// (onDnDTargetStatus).
 		px := m.dndPixel(w, tx, ty)
 		m.dndSend(id, dnd.Command{Type: 'm', X: tx, Y: ty, PX: px.X, PY: px.Y, Op: d.flags,
 			Payload: []byte(strings.Join(d.mimes, " "))})
 	}
 }
 
-// dndLeaveTarget tells the pane the pointer was over that the drag left it,
-// and forgets its answer.
 func (m *OS) dndLeaveTarget() {
 	d := m.dndDrag
 	if d.target == "" {
@@ -417,20 +313,15 @@ func (m *OS) dndLeaveTarget() {
 	d.target, d.op, d.wants, d.told = "", 0, nil, false
 }
 
-// dndDrop is the release of a started drag.
 func (m *OS) dndDrop(x, y int) {
 	d := m.dndDrag
 	m.dndHover(x, y)
 	w, tx, ty := m.dndTargetAt(d)
 	if w == nil || w.ID == d.source {
-		// Nothing under the pointer, or the pane the drag came from. kitty
-		// refuses the data of such a drop; here the drop never happens.
 		m.dndCancel("")
 		return
 	}
 	if d.verdict.Refusal != "" {
-		// The pane's rules, or its program, said no. The label said why
-		// while the drag was held; the notice says it once more.
 		m.ShowNotification(d.verdict.Refusal, "warning", m.Settings.NotificationDuration*2)
 		m.dndCancel("")
 		return
@@ -443,8 +334,6 @@ func (m *OS) dndDrop(x, y int) {
 	m.dndDeliverDrop(w, tx, ty)
 }
 
-// dndDeliverDrop sends the drop to a pane that speaks the protocol and
-// accepted it.
 func (m *OS) dndDeliverDrop(w *terminal.Window, tx, ty int) {
 	d := m.dndDrag
 	d.phase = dndDropped
@@ -459,10 +348,6 @@ func (m *OS) dndDeliverDrop(w *terminal.Window, tx, ty int) {
 		Payload: []byte(strings.Join(d.mimes, " "))})
 }
 
-// dndDropFallback is a drop on a pane whose program does not speak the
-// protocol: its paths, or its text, go in as a paste through the rail's drop
-// path. The verdict allowed it; the data is asked of the source if it was
-// not sent ahead.
 func (m *OS) dndDropFallback(w *terminal.Window) {
 	d := m.dndDrag
 	idx := dndMimeIndex(d.mimes, "text/uri-list")
@@ -479,7 +364,6 @@ func (m *OS) dndDropFallback(w *terminal.Window) {
 	d.pending = map[int]bool{}
 	m.dndDropArm(d)
 	if d.fromHost {
-		// The data is the terminal's to give.
 		d.hostPending[idx] = true
 		d.hostBuf = nil
 		m.dndHostSend(dnd.Command{Type: 'r', X: idx + 1})
@@ -496,9 +380,6 @@ func (m *OS) dndDropFallback(w *terminal.Window) {
 	m.dndSend(d.source, dnd.Command{Type: 'e', X: 5, Y: idx})
 }
 
-// dndPasteFallback delivers dropped data to the fallback target through the
-// rail's drop path, judged once more with the data in hand, and finishes the
-// drag.
 func (m *OS) dndPasteFallback(data []byte) {
 	d := m.dndDrag
 	w := m.windowByID(d.dropTarget)
@@ -514,8 +395,6 @@ func (m *OS) dndPasteFallback(data []byte) {
 			v = dropVerdict{Window: w.ID, Pane: pipPaneName(w), Refusal: dndNoLocalFile}
 		}
 	} else if v = m.judgeDropPaths(w, nil); v.Refusal == "" {
-		// Judged again with the text in hand: the program may have turned
-		// bracketed paste off since the hover, and text keeps its newlines.
 		if w.Terminal == nil || !w.Terminal.BracketedPasteEnabled() {
 			v.Refusal = dndNoBracketedPaste
 		} else {
@@ -533,7 +412,6 @@ func (m *OS) dndPasteFallback(data []byte) {
 	m.dndFinish(op)
 }
 
-// dndMimeIndex is the index of mime in mimes, or -1.
 func dndMimeIndex(mimes []string, mime string) int {
 	for i, m := range mimes {
 		if m == mime {
@@ -543,16 +421,12 @@ func dndMimeIndex(mimes []string, mime string) int {
 	return -1
 }
 
-// dndFinish ends a drag after a drop. op is the operation the target took,
-// 0 when it took nothing.
 func (m *OS) dndFinish(op int) {
 	d := m.dndDrag
 	if d == nil {
 		return
 	}
 	if d.viaHost() {
-		// The terminal ends the window system's drop. For a relay it then
-		// tells the source the drag finished, and the drag ends there.
 		m.dndHostSend(dnd.Command{Type: 'r', Op: op})
 		if d.relay {
 			d.phase, d.dropTarget, d.fallback, d.target, d.verdict = dndStarted, "", false, "", dropVerdict{}
@@ -575,9 +449,6 @@ func (m *OS) dndFinish(op int) {
 	m.ResetPointerShape()
 }
 
-// dndCancel ends a drag at any phase: the target is told the drag left, or
-// the drop failed, and the source that it was cancelled. why is logged when
-// given.
 func (m *OS) dndCancel(why string) {
 	d := m.dndDrag
 	if d == nil {
@@ -596,7 +467,6 @@ func (m *OS) dndCancel(why string) {
 	case d.fromHost && d.phase == dndDropped:
 		m.dndHostSend(dnd.Command{Type: 'r'})
 	case d.relay:
-		// Cancel the window system's drag too.
 		m.dndHostSend(dnd.Command{Type: 'E', Y: -1})
 	}
 	if d.source != "" && d.phase >= dndStarted {
@@ -609,8 +479,6 @@ func (m *OS) dndCancel(why string) {
 	m.dndPress = nil
 }
 
-// onDnDOffer is a t=o from a pane: a registration (x=1 start, x=2 stop) or,
-// with the operations and a MIME list, the program taking up the gesture.
 func (m *OS) onDnDOffer(id string, p *dndPane, cmd dnd.Command) {
 	switch cmd.X {
 	case 1:
@@ -626,10 +494,6 @@ func (m *OS) onDnDOffer(id string, p *dndPane, cmd dnd.Command) {
 	}
 	d := m.dndDrag
 	if d == nil || d.source != id || d.phase > dndBuilding {
-		// No gesture asked for this, or the drag is past building. kitty
-		// takes an offer at any time; here the button has to be held in the
-		// pane, which is the one check the protocol leaves to the terminal.
-		// The gesture may be another client's, which answers it.
 		m.dndRefuse(id, 'E', 0, 0, "EPERM", "no drag gesture in this pane")
 		return
 	}
@@ -652,23 +516,18 @@ func (m *OS) onDnDOffer(id string, p *dndPane, cmd dnd.Command) {
 	}
 }
 
-// onDnDPresent is a chunk of t=p: data sent ahead for a MIME type (x >= 0),
-// or a drag image (x < 0; only a text image, y=0, is kept).
 func (m *OS) onDnDPresent(id string, p *dndPane, cmd dnd.Command) {
 	d := m.dndDrag
 	if d == nil || d.source != id || d.phase != dndBuilding {
 		m.dndRefuse(id, 'E', 0, 0, "EINVAL", "no drag is being built")
 		return
 	}
-	// A drag that fails here is cancelled with dndCancel, which for a relay
-	// also takes back the offer the terminal already holds.
 	if cmd.X >= 0 && cmd.X >= len(d.mimes) {
 		m.dndError(id, 'E', 0, 0, "EINVAL", "pre-sent data index out of range")
 		m.dndCancel("the source sent data for a type it did not offer")
 		return
 	}
 	if cmd.X < 0 && cmd.Y != 0 {
-		// A bitmap image. tuios draws text, so it keeps none.
 		return
 	}
 	data, done, ok := m.dndStreamAdd(p, 'p', cmd)
@@ -678,9 +537,6 @@ func (m *OS) onDnDPresent(id string, p *dndPane, cmd dnd.Command) {
 		return
 	}
 	if d.relay && cmd.X >= 0 {
-		// The terminal serves data sent ahead, so it gets every chunk as the
-		// program sent it, once the chunk is known to fit. The image stays
-		// here: the terminal shows tuios's own (dndHostImage).
 		fwd := cmd
 		fwd.ID = 0
 		m.dndHostSend(fwd)
@@ -697,9 +553,6 @@ func (m *OS) onDnDPresent(id string, p *dndPane, cmd dnd.Command) {
 	}
 }
 
-// dndStreamAdd appends a chunk to a pane's stream for (typ, cmd.X) and
-// returns the decoded data when the chunk ended it. ok is false past the
-// size bound, and the stream is dropped.
 func (m *OS) dndStreamAdd(p *dndPane, typ byte, cmd dnd.Command) (data []byte, done, ok bool) {
 	key := dndStreamKey{typ: typ, idx: cmd.X}
 	if typ == 'e' {
@@ -726,7 +579,6 @@ func (m *OS) dndStreamAdd(p *dndPane, typ byte, cmd dnd.Command) (data []byte, d
 	return data, true, true
 }
 
-// onDnDStart is t=P: x=-1 starts the drag, another x picks an image.
 func (m *OS) onDnDStart(id string, cmd dnd.Command) {
 	d := m.dndDrag
 	if cmd.X >= 0 {
@@ -741,11 +593,6 @@ func (m *OS) onDnDStart(id string, cmd dnd.Command) {
 		m.dndCancel("")
 		return
 	}
-	// Pre-sent data still open is complete now: the start says everything
-	// the program meant to send ahead has been sent. yazi closes its URI
-	// list with the empty message but not its text image, and kitty takes
-	// pre-sent data with no close at all, so the start is the one end every
-	// program agrees on.
 	if p := m.dndPanes[id]; p != nil {
 		for key, s := range p.streams {
 			if key.typ != 'p' {
@@ -765,8 +612,6 @@ func (m *OS) onDnDStart(id string, cmd dnd.Command) {
 		}
 	}
 	if d.relay {
-		// The terminal starts the window system's drag and answers OK or an
-		// error, which goes to the program as the terminal's answer.
 		m.dndHostImage()
 		m.dndHostSend(dnd.Command{Type: 'P', X: -1})
 		return
@@ -776,13 +621,9 @@ func (m *OS) onDnDStart(id string, cmd dnd.Command) {
 	m.dndHover(d.x, d.y)
 }
 
-// onDnDItemData is a chunk of t=e from the source: data for the MIME type
-// at y, asked for with t=e:x=5. It goes to the pane that asked, or into the
-// fallback paste.
 func (m *OS) onDnDItemData(id string, p *dndPane, cmd dnd.Command) {
 	d := m.dndDrag
 	if d != nil && d.relay && d.source == id && d.hostPending[cmd.Y] {
-		// The terminal asked for it, for the window system's drop target.
 		d.dndDropMoved()
 		m.dndHostSend(dnd.Command{Type: 'e', Y: cmd.Y, More: cmd.More, Payload: cmd.Payload})
 		if !cmd.More && len(cmd.Payload) == 0 {
@@ -795,8 +636,6 @@ func (m *OS) onDnDItemData(id string, p *dndPane, cmd dnd.Command) {
 		return
 	}
 	if d.phase != dndDropped || cmd.Y < 0 || cmd.Y >= len(d.mimes) {
-		// Data before the drop, or for a type the offer did not name. The
-		// specification ends the drag on it.
 		m.dndError(id, 'E', 0, cmd.Y, "EINVAL", "no request is open for this data")
 		m.dndCancel("the source sent data nobody asked for")
 		return
@@ -825,8 +664,6 @@ func (m *OS) onDnDItemData(id string, p *dndPane, cmd dnd.Command) {
 	m.dndSendData(d.dropTarget, dnd.Command{Type: 'r', X: cmd.Y + 1}, data)
 }
 
-// onDnDSourceError is t=E from the source: y=-1 cancels the drag, another y
-// is an error for that item's data, passed to the target.
 func (m *OS) onDnDSourceError(id string, cmd dnd.Command) {
 	d := m.dndDrag
 	if d == nil || d.source != id {
@@ -853,9 +690,6 @@ func (m *OS) onDnDSourceError(id string, cmd dnd.Command) {
 	m.dndFinish(0)
 }
 
-// onDnDTargetStatus is t=m from the pane under the pointer: the operation it
-// would perform (0 for none) and the MIME types it wants. The source hears
-// of the first acceptance and of each change.
 func (m *OS) onDnDTargetStatus(id string, cmd dnd.Command) {
 	d := m.dndDrag
 	if d == nil || d.phase != dndStarted || d.target != id {
@@ -880,8 +714,6 @@ func (m *OS) onDnDTargetStatus(id string, cmd dnd.Command) {
 		m.dropPointer(d.verdict)
 	}
 	if d.viaHost() {
-		// The window system shows whether the drop is accepted, so the
-		// terminal hears the pane's answer as tuios's own.
 		m.dndHostAnswer()
 		return
 	}
@@ -898,14 +730,9 @@ func (m *OS) onDnDTargetStatus(id string, cmd dnd.Command) {
 	m.dndSend(d.source, dnd.Command{Type: 'e', X: 2, Op: op})
 }
 
-// onDnDRequest is t=r from a pane: with x, a request for the data of the
-// MIME type at that 1-based index; without, the end of the drop with the
-// operation taken.
 func (m *OS) onDnDRequest(id string, cmd dnd.Command) {
 	d := m.dndDrag
 	if d == nil || d.phase != dndDropped || d.dropTarget != id || d.fallback {
-		// The specification says this error alone ends nothing. The drop may
-		// be another client's, which serves it.
 		m.dndRefuse(id, 'R', cmd.X, cmd.Y, "EPERM", "drop data can only be requested after a drop")
 		return
 	}
@@ -920,12 +747,8 @@ func (m *OS) onDnDRequest(id string, cmd dnd.Command) {
 		m.dndError(id, 'R', cmd.X, cmd.Y, "ENOENT", "no such MIME type in the drop")
 		m.dndFinish(0)
 	case cmd.Y != 0 || cmd.PY != 0:
-		// The contents of a file behind a URI. tuios reads no file for a
-		// pane; the target opens the path itself.
 		m.dndError(id, 'R', cmd.X, cmd.Y, "EINVAL", "file contents are not served between panes")
 	case d.fromHost:
-		// The terminal has the data; its answer comes back chunk by chunk
-		// and goes on to the pane as it arrives (onHostData).
 		d.hostPending[idx] = true
 		m.dndHostSend(dnd.Command{Type: 'r', X: cmd.X})
 	default:
@@ -940,8 +763,6 @@ func (m *OS) onDnDRequest(id string, cmd dnd.Command) {
 	}
 }
 
-// dndURILines are the entries of a text/uri-list: one URI a line, comment
-// lines dropped.
 func dndURILines(list string) []string {
 	var lines []string
 	for line := range strings.SplitSeq(list, "\n") {
@@ -953,10 +774,6 @@ func dndURILines(list string) []string {
 	return lines
 }
 
-// dndURIPaths are the paths a text/uri-list names, read by the parser a
-// dropped paste goes through, or false when an entry is not a file on this
-// machine: another scheme, or a file:// with a host. Such a list is pasted
-// as the URIs it is; a path on another machine is not one here.
 func dndURIPaths(list string) ([]string, bool) {
 	lines := dndURILines(list)
 	if len(lines) == 0 {
@@ -965,27 +782,16 @@ func dndURIPaths(list string) ([]string, bool) {
 	return parseDroppedPaths(strings.Join(lines, "\n"))
 }
 
-// dndLabelText cleans text from a program for the label: printable, one
-// line, at most n cells.
 func dndLabelText(s string, n int) string {
 	return overlay.Truncate(strings.Join(strings.Fields(printableTitle(s)), " "), n)
 }
 
-// renderDnDLabel is the label that follows the pointer while a drag is in
-// flight: what is being dragged, by the names in the data when the source
-// sent it ahead, the pane it comes from, and where it would land or why it
-// would not, as the rail's drop label says it. The names and the source come
-// first because they are the two things the person has to be able to check:
-// a program in a pane can offer any path and call it anything. The program's
-// own image text comes last.
 func (m *OS) renderDnDLabel() *lipgloss.Layer {
 	d := m.dndDrag
 	if d == nil || d.phase != dndStarted {
 		return nil
 	}
 	if d.viaHost() && d.verdict.Window == "" {
-		// The window system draws the drag; tuios adds where it would land
-		// only while it is over a pane, and nothing once it has left.
 		return nil
 	}
 	text := m.dndLabelWhat() + " from " + m.dndLabelFrom()
@@ -1003,20 +809,11 @@ func (m *OS) renderDnDLabel() *lipgloss.Layer {
 	return m.renderDropLabel(text, v.Refusal != "", "dnd-label")
 }
 
-// dndLabelWhat names what is being dragged: the file names when the source
-// sent its URI list ahead, else its first type.
 func (m *OS) dndLabelWhat() string {
 	d := m.dndDrag
 	what := ""
 	if idx := dndMimeIndex(d.mimes, "text/uri-list"); idx >= 0 {
 		if data, ok := d.presented[idx]; ok {
-			// The label is drawn on every frame, and a long list costs a split
-			// per frame, so the text is kept against the identity of the slice
-			// it was made from. A stream's completion stores a fresh slice
-			// (DecodePayload returns one) and presented is not rewritten in
-			// place during a drag; the identity key is a defence for that. namesOf
-			// keeps the previous slice alive until the next label or the end of
-			// the drag, so a new decode cannot reuse its address.
 			if !sameBytes(data, d.namesOf) {
 				d.names = dndNamesText(data)
 				d.namesOf = data
@@ -1031,19 +828,13 @@ func (m *OS) dndLabelWhat() string {
 	return dndLabelText(what, 48)
 }
 
-// sameBytes says whether a and b are the same slice: the same first byte and
-// length, not equal contents.
 func sameBytes(a, b []byte) bool {
 	return len(a) > 0 && len(a) == len(b) && &a[0] == &b[0]
 }
 
-// dndNamesText is the label text for a URI list: the first three file names
-// and how many more follow.
 func dndNamesText(data []byte) string {
 	names := dndURILines(string(data))
 	if paths, ok := dndURIPaths(string(data)); ok {
-		// A line with a space splits into more than one path, and the drop
-		// splits the same way, so the label names the paths.
 		names = make([]string, len(paths))
 		for i, p := range paths {
 			names[i] = path.Base(p)
@@ -1058,8 +849,6 @@ func dndNamesText(data []byte) string {
 	return strings.Join(names[:3], ", ") + " +" + strconv.Itoa(len(names)-3)
 }
 
-// dndLabelFrom names where the drag comes from: its pane, or the desktop
-// for a drag that came in through the terminal.
 func (m *OS) dndLabelFrom() string {
 	d := m.dndDrag
 	if d.fromHost {
@@ -1071,8 +860,6 @@ func (m *OS) dndLabelFrom() string {
 	return "a pane"
 }
 
-// dndPaneName names a pane for the label: its machine first when its shell
-// runs elsewhere, then the name the context menu would show.
 func (m *OS) dndPaneName(w *terminal.Window) string {
 	name := printableTitle(contextMenuWindowName(m, m.windowIndexByID(w.ID), "pane "+shortID(w.ID)))
 	if w.Host != "" {

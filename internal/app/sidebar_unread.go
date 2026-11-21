@@ -9,23 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The unread bit on a finished pane, herdr's best idea: "done" means the agent
-// stopped AND you have not looked yet. Without it a done row is permanent green
-// noise, identical whether it was reviewed an hour ago or never seen at all.
-//
-// The bit is derived from two events and nothing else: focusing a done pane
-// sets it, and any state change out of done drops it, so the next time that
-// pane finishes it is unread again. There is no daemon protocol for it because
-// "has this human looked at it" is per client, not per session.
-//
-// done only comes from an explicit report, so the daemon also counts finished
-// turns: every working-to-rest transition bumps a pane's CompletionSeq (see
-// session/agent_turns.go). This client remembers the count each pane had when
-// its user last focused it, and a pane at rest (idle or unknown) whose count
-// has moved past that is drawn exactly as an unread done pane is. Looking at it
-// records the new count, and the pane goes back to its own state on the rail.
-
-// agentSeen reports whether a finished pane has already been looked at.
 func (m *OS) agentSeen(windowID string) bool {
 	return m.SidebarAgentSeen[windowID]
 }
@@ -50,9 +33,6 @@ func (m *OS) AgentSeenWindows() []string {
 	return out
 }
 
-// markAgentSeen records a look at a finished pane. The write to disk is guarded
-// by the current value, so walking a focus chain over already-seen panes costs
-// nothing.
 func (m *OS) markAgentSeen(windowID string) {
 	if windowID == "" || m.SidebarAgentSeen[windowID] {
 		return
@@ -64,11 +44,6 @@ func (m *OS) markAgentSeen(windowID string) {
 	m.saveSidebarState()
 }
 
-// agentTransitionNotice is the word and severity a state change earns, or "" for
-// a transition with nothing to say. Which of these actually reaches the user is
-// the [notifications.agent] policy's decision, not this function's: working and
-// idle have words here because they are configurable, and are silent by default
-// because an agent starting is not news and the stall timer guesses at idle.
 func agentTransitionNotice(to string) (string, string) {
 	switch to {
 	case "needs_input":
@@ -85,14 +60,6 @@ func agentTransitionNotice(to string) (string, string) {
 	return "", ""
 }
 
-// noteAgentState folds one window's agent-state transition into the unread bit
-// and hands it to the alert policy. Leaving done clears the bit; finishing under
-// the user's own eyes counts as seen.
-//
-// It adopts the new state itself, so a caller applies the rest of the pane's
-// agent fields first and lets this one land last. That ordering is what lets an
-// alert read the message and harness that arrived with the state rather than the
-// ones it replaced.
 func (m *OS) noteAgentState(w *terminal.Window, to string) {
 	if w == nil || w.AgentState == to {
 		return
@@ -111,7 +78,6 @@ func (m *OS) noteAgentState(w *terminal.Window, to string) {
 	case focused:
 		m.markAgentSeen(w.ID)
 	}
-	// A turn that finished under the user's own eyes has been seen.
 	if focused {
 		m.markAgentSeenSeq(w.ID, w.AgentCompletionSeq)
 	}
@@ -120,30 +86,17 @@ func (m *OS) noteAgentState(w *terminal.Window, to string) {
 	m.considerAgentAlert(w, from, to)
 }
 
-// noteAgentTurnWithin handles a sync that finished a turn and left the pane in
-// the state it already had. The daemon sends snapshots, not transitions, so a
-// done pane that goes working and then done again between two of them arrives
-// as done to done, and noteAgentState sees no change. The finished turn shows
-// only as CompletionSeq moving. Without this the seen bit from the first done
-// survived, and the second finish never read as unread. The caller has already
-// adopted the new CompletionSeq.
-//
-// It does what noteAgentState does for a working-to-rest transition: the
-// unread bit is set again, a turn under the user's own eyes is seen, and the
-// alert policy hears of the finish.
 func (m *OS) noteAgentTurnWithin(w *terminal.Window) {
 	if w == nil {
 		return
 	}
 	m.noteAgentsSeen()
 	if m.GetFocusedWindow() == w {
-		// Finished under the user's own eyes, as in noteAgentState.
 		if w.AgentState == "done" {
 			m.markAgentSeen(w.ID)
 		}
 		m.markAgentSeenSeq(w.ID, w.AgentCompletionSeq)
 	} else if m.SidebarAgentSeen[w.ID] {
-		// The pane left done and came back, which clears the bit.
 		delete(m.SidebarAgentSeen, w.ID)
 		m.saveSidebarState()
 	}
@@ -151,9 +104,6 @@ func (m *OS) noteAgentTurnWithin(w *terminal.Window) {
 	m.considerAgentAlert(w, "working", w.AgentState)
 }
 
-// markFocusedAgentSeen clears the unread bit of the window being focused, which
-// is every route into a pane (click, rail, palette, notification jump) since
-// they all land in FocusWindow.
 func (m *OS) markFocusedAgentSeen(i int) {
 	if i < 0 || i >= len(m.Windows) {
 		return
@@ -162,8 +112,6 @@ func (m *OS) markFocusedAgentSeen(i int) {
 	if w == nil {
 		return
 	}
-	// Before the marks below move: they are what the away recap measures
-	// from. See inbox_recap.go.
 	m.noteAgentReturn(w)
 	if w.AgentState == "done" {
 		m.markAgentSeen(w.ID)
@@ -172,10 +120,6 @@ func (m *OS) markFocusedAgentSeen(i int) {
 	m.markAgentSeenAt(w)
 }
 
-// markSwitchSeen marks the focused pane seen after a session switch, once the
-// message that switched has been handled. A route that switches and then
-// focuses another pane has already marked that pane through FocusWindow, so
-// only the pane left in front is marked here.
 func (m *OS) markSwitchSeen() {
 	if !m.switchSeenPending {
 		return
@@ -184,14 +128,8 @@ func (m *OS) markSwitchSeen() {
 	m.markFocusedAgentSeen(m.FocusedWindow)
 }
 
-// agentSeenAtNow is the clock markAgentSeenAt reads. A test replaces it.
 var agentSeenAtNow = func() int64 { return time.Now().UnixNano() }
 
-// markAgentSeenAt records that the user had an agent pane in front of them
-// now. Called as focus enters and as it leaves such a pane, so for a pane
-// out of view the value is when the user looked away. Only a pane an agent
-// has reported on counts: a plain shell pane writes nothing, which keeps
-// focus changes free for someone with no agents.
 func (m *OS) markAgentSeenAt(w *terminal.Window) {
 	if w == nil || w.ID == "" || (w.AgentState == "" && w.AgentCompletionSeq == 0) {
 		return
@@ -203,16 +141,11 @@ func (m *OS) markAgentSeenAt(w *terminal.Window) {
 	m.saveSidebarState()
 }
 
-// agentAwaySince is when this client's user last had the pane in front of
-// them, and false when they never have. The away recap starts here.
 func (m *OS) agentAwaySince(windowID string) (int64, bool) {
 	at, ok := m.SidebarAgentSeenAt[windowID]
 	return at, ok && at > 0
 }
 
-// markAgentSeenSeq records that a pane was looked at with seq turns finished.
-// Guarded by the current value, like markAgentSeen, so refocusing costs
-// nothing.
 func (m *OS) markAgentSeenSeq(windowID string, seq uint64) {
 	if windowID == "" || seq == 0 || m.SidebarAgentSeenSeq[windowID] >= seq {
 		return
@@ -224,8 +157,6 @@ func (m *OS) markAgentSeenSeq(windowID string, seq uint64) {
 	m.saveSidebarState()
 }
 
-// agentFinishedUnread reports whether a pane at rest finished a turn this
-// client's user has not looked at.
 func (m *OS) agentFinishedUnread(windowID, state string, seq uint64) bool {
 	if seq == 0 || (state != "idle" && state != "unknown") {
 		return false
@@ -233,9 +164,6 @@ func (m *OS) agentFinishedUnread(windowID, state string, seq uint64) bool {
 	return seq > m.SidebarAgentSeenSeq[windowID]
 }
 
-// railAgentState is the state and unread bit the rail draws for a pane: a
-// pane with an ask-human question open reads as needs_input, an unread
-// finished turn as an unread done, and anything else as itself.
 func (m *OS) railAgentState(windowID, state string, seq uint64) (string, bool) {
 	if _, ok := m.paneAsk(windowID); ok {
 		return "needs_input", false
@@ -246,15 +174,6 @@ func (m *OS) railAgentState(windowID, state string, seq uint64) (string, bool) {
 	return state, m.agentSeen(windowID)
 }
 
-// paneAsk is the ask-human question a pane of this machine has open in the
-// Inbox, if it has one.
-//
-// Asking moves no agent state: ask-human is often run by a script with no
-// agent in the pane at all. So that the pane that asked gets a mark on the
-// rail, a row in the agents section and a match for "@n" in the palette, every
-// surface that reads a pane's state through railAgentState reads it as
-// needs_input while the question is open, which is what it is: the pane is
-// waiting for the person.
 func (m *OS) paneAsk(windowID string) (session.AttentionItem, bool) {
 	if windowID == "" {
 		return session.AttentionItem{}, false
@@ -267,14 +186,9 @@ func (m *OS) paneAsk(windowID string) (session.AttentionItem, bool) {
 	return session.AttentionItem{}, false
 }
 
-// paneAskNote is what the rail's row for a pane says when the pane has an
-// ask-human question open and reported nothing of its own: the question, as a
-// question.
 func (m *OS) paneAskNote(windowID, message, kind string) (string, string) {
 	it, ok := m.paneAsk(windowID)
 	if !ok || message != "" {
-		// A plan or a risky call says so in the need word. See
-		// inbox_approvals_ext.go.
 		return message, m.paneApprovalWord(windowID, kind)
 	}
 	return it.Summary, harness.PromptKindQuestion

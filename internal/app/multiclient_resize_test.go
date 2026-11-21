@@ -10,17 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// A second client of a different size joining a session is the one route where
-// a client has to re-lay-out without anything happening on its own end. The
-// daemon's effective size is the minimum over every attached client, so the
-// client already connected is the one that has to give up columns, and the
-// only thing that can tell it so is the session-resize broadcast.
-//
-// These run on the rehydration rig: a real daemon, real client connections, and
-// a real OS attached through the same entry points cmd/tuios uses.
-
-// joinerSize is the second client's viewport: narrower and shorter than the
-// rig's, so the effective size is unambiguously the joiner's.
 const (
 	joinerCols = 60
 	joinerRows = 18
@@ -28,14 +17,10 @@ const (
 	holderRows = 40
 )
 
-// watchSessionResize routes the client's session-resize notifications into the
-// OS event channel, which is what cmd/tuios and cmd/tuios-web both do.
 func (r *rig) watchSessionResize() {
 	r.t.Helper()
 	r.client.OnSessionResize(func(width, height, clientCount int, reserve session.LayoutReserve) {
 		select {
-		// The generation is read here, on the read loop, as WireDaemonClient
-		// reads it.
 		case r.m.ClientEventChan <- ClientEvent{
 			Type:        "resize",
 			Width:       width,
@@ -50,13 +35,6 @@ func (r *rig) watchSessionResize() {
 	})
 }
 
-// awaitSessionResize waits for the session's size to change and applies every
-// event it sees on the way through, as the program loop does.
-//
-// It waits for a size change rather than for one message, because this message
-// also carries the chrome reserve the session has settled on: a client saying
-// what it keeps for its own rail moves that without moving the size, and the
-// tests here are about the size.
 func (r *rig) awaitSessionResize(what string) SessionResizeMsg {
 	r.t.Helper()
 	fromW, fromH := r.m.GetRenderWidth(), r.m.GetRenderHeight()
@@ -67,7 +45,6 @@ func (r *rig) awaitSessionResize(what string) SessionResizeMsg {
 			if ev.Type != "resize" {
 				r.t.Fatalf("waiting for %s: got a %q event", what, ev.Type)
 			}
-			// The message the program loop makes of the event.
 			msg := clientEventMsg(ev).(SessionResizeMsg)
 			r.m.Update(msg)
 			if msg.Width != fromW || msg.Height != fromH {
@@ -80,8 +57,6 @@ func (r *rig) awaitSessionResize(what string) SessionResizeMsg {
 	}
 }
 
-// tile puts the rig's panes side by side, which is the layout the report is
-// about: the divider is where the stale width shows.
 func (r *rig) tile() {
 	r.t.Helper()
 	r.m.AutoTiling = true
@@ -93,8 +68,6 @@ func (r *rig) tile() {
 	}
 }
 
-// joinClient attaches another client of the given size and leaves it attached
-// for the rest of the test unless the caller drops it first.
 func joinClient(t *testing.T, name string, width, height int) *session.TUIClient {
 	t.Helper()
 	c := session.NewTUIClient()
@@ -109,8 +82,6 @@ func joinClient(t *testing.T, name string, width, height int) *session.TUIClient
 	return c
 }
 
-// paneSizes reports what the client's emulators and the daemon's panes each
-// think every pane's grid is, so a disagreement names the pane.
 func (r *rig) paneSizes() (client, daemon []string) {
 	r.t.Helper()
 	for _, w := range r.m.Windows {
@@ -127,8 +98,6 @@ func (r *rig) paneSizes() (client, daemon []string) {
 	return client, daemon
 }
 
-// waitPaneSizesAgree gives the resize the time it needs to travel the stream,
-// since the client's emulator is resized by its output goroutine.
 func (r *rig) waitPaneSizesAgree() (client, daemon []string, ok bool) {
 	r.t.Helper()
 	deadline := time.Now().Add(rigWait)
@@ -155,7 +124,6 @@ func TestFloatingPanesAreClampedWhenAnotherClientShrinksTheSession(t *testing.T)
 		t.Fatalf("the rig came up tiling; this test is about the floating layout")
 	}
 
-	// Put a pane out where the narrow client's edge will cut through it.
 	w := r.win(0)
 	w.X, w.Y = holderCols-40, 2
 	w.Resize(40, 12)
@@ -163,10 +131,6 @@ func TestFloatingPanesAreClampedWhenAnotherClientShrinksTheSession(t *testing.T)
 	joinClient(t, r.session, joinerCols, joinerRows)
 	r.awaitSessionResize("the session to shrink around the client already attached")
 
-	// The clamp's own guarantee, the one the host terminal's resize gets: the
-	// pane is no wider than the session, and enough of it is still inside the
-	// content region to be grabbed. Off the right-hand edge entirely is what it
-	// rules out, not hanging over it.
 	rightEdge := r.m.GetLeftMargin() + r.m.GetContentWidth()
 	if w.Width > r.m.GetContentWidth() {
 		t.Fatalf("pane is %d columns wide, past the %d the session now has",
@@ -196,7 +160,6 @@ func TestFloatingPanesAreClampedWhenAnotherClientShrinksTheSession(t *testing.T)
 // handed whatever width the last client to sync happened to render at, which
 // for a local client joining a browser session is the browser's.
 func TestAttachingAtTheMinimumIsToldTheMinimum(t *testing.T) {
-	// The rig client is wide and syncs its wide layout to the daemon.
 	r := newRigSized(t, 2, holderCols, holderRows)
 	r.tile()
 	r.m.SyncStateToDaemon()
@@ -246,9 +209,6 @@ func TestUnchangedStateIsNotDeliveredToAPeer(t *testing.T) {
 	r := newRigSized(t, 2, holderCols, holderRows)
 	r.tile()
 
-	// Every sync the peer is sent, by the pane names it carries.
-	// The daemon delivers broadcasts to one client in the order it made them,
-	// so a named sync arriving proves every sync made before it has arrived.
 	var mu sync.Mutex
 	var names []string
 	peer := session.NewTUIClient()
@@ -272,8 +232,6 @@ func TestUnchangedStateIsNotDeliveredToAPeer(t *testing.T) {
 	}
 	peer.StartReadLoop()
 
-	// syncsUntil pushes a rename and waits for the peer to be sent it. It
-	// returns how many syncs the peer was sent before that one.
 	syncsUntil := func(name, what string) int {
 		t.Helper()
 		r.win(0).CustomName = name
@@ -297,22 +255,13 @@ func TestUnchangedStateIsNotDeliveredToAPeer(t *testing.T) {
 		}
 	}
 
-	// One push that does say something, so the fixture is proven to deliver at
-	// all: without it a zero below would be indistinguishable from a peer that
-	// never receives anything. The syncs before it are not counted: the tile
-	// above reaches the daemon with this push as a tree op, and the daemon
-	// sends the peer that op's state on its own, ahead of the push.
 	_ = syncsUntil("renamed", "the one sync that changed something; the count below would prove nothing")
 
-	// The case under test: repeated syncs with nothing changed between them,
-	// which is what typing into a pane produces.
 	const repeats = 30
 	for range repeats {
 		r.m.SyncStateToDaemon()
 	}
 
-	// A second rename marks the end. Anything forwarded for the repeats
-	// arrives ahead of it.
 	if got := syncsUntil("barrier", "the rename that marks the end of the repeats"); got != 0 {
 		t.Errorf("the peer was sent %d of %d syncs carrying a state it already held, want 0",
 			got, repeats)

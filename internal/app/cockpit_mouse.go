@@ -9,22 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// Selecting the agents view's thread with the mouse.
-//
-// The mouse works through the thread's copy mode (cockpit_copy.go), the grid
-// whose chrome is blank, so a selection never holds a card's edge, a mark or a
-// fold glyph, and a copy joins wrapped rows the way the y key does. A drag or a
-// double or triple click starts copy mode by itself, implicit, and the
-// internal/input side moves the cursor and the selection with the same code
-// that moves them for a key (copymode_grid_mouse.go). The release copies the
-// selection when appearance.copy_on_select is on, as a pane's does, and the
-// selection stays drawn. The next key or plain click ends an implicit copy
-// mode; copy mode the key started stays until esc.
-//
-// A plain click that does not move is still the view's own click: it opens a
-// fold, picks a row, follows a link. Only a press that moves, or a second and
-// third click, becomes a selection.
-
 // CopyMouseGesture is a press on a copy grid that is not a pane (the
 // thread, quick look's text) and what came of it.
 type CopyMouseGesture struct {
@@ -38,8 +22,7 @@ type CopyMouseGesture struct {
 	Clicks  int
 	// Dir is the way the selection scrolls while the pointer is held past
 	// the top (-1) or the bottom (1) of the thread.
-	Dir int
-	// lastAt, lastX and lastY are the last press, for the click count.
+	Dir          int
 	lastAt       time.Time
 	lastX, lastY int
 }
@@ -102,8 +85,6 @@ func (m *OS) CockpitCopyCell(x, y int) (cx, cy, rows int) {
 	if q == nil || t == nil {
 		return 0, 0, 0
 	}
-	// A thread shorter than its view sits on the view's bottom
-	// (drawThreadCopy).
 	top := t.viewY + t.viewH - q.visible()
 	return x - t.viewX, y - top, q.visible()
 }
@@ -131,8 +112,6 @@ func (m *OS) CockpitCopyFinish(clicks int) tea.Cmd {
 		note = "Copied 1 line"
 	}
 	if clicks == 2 {
-		// A double click is the first two thirds of a triple click: the
-		// copy waits out the rest of the click time.
 		m.ShowNotification(note, "success", m.Settings.NotificationDuration)
 		return m.DeferCopyToClipboard(text, m.DoubleClickWindow()-time.Since(m.Inbox.ck.mouse.lastAt))
 	}
@@ -182,8 +161,6 @@ func (m *OS) OpenCockpitSelectionMenu(x, y int) bool {
 	return true
 }
 
-// cockpitCopyWheel scrolls copy mode's view by delta rows (up is negative)
-// when the wheel turns over the thread. Copy mode stays on.
 func (m *OS) cockpitCopyWheel(x, y, delta int) bool {
 	q := m.threadCopy()
 	if q == nil || !m.CockpitThreadAt(x, y) {
@@ -196,9 +173,6 @@ func (m *OS) cockpitCopyWheel(x, y, delta int) bool {
 	return true
 }
 
-// cockpitAutoScroll moves copy mode's view a row while a drag is held past
-// the thread's top or bottom, and the selection's end with it. The tick that
-// calls it runs only while the drag is held there.
 func (m *OS) cockpitAutoScroll() bool {
 	g := &m.Inbox.ck.mouse
 	q := m.threadCopy()

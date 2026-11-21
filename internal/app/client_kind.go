@@ -45,39 +45,19 @@ func (k ClientKind) Remote() bool {
 	return k == ClientSSH || k == ClientBrowser
 }
 
-// previewsLive reports whether a picker may preview by applying what it
-// highlights. The theme and the glyph set are process-wide, and a tuios ssh or
-// tuios-web process serves many clients, so a preview there repainted every
-// other guest and the operator too. A served client previews inside the
-// picker instead, and Enter still applies. The Learn tour is a browser client
-// in a process of its own, one page per process, so it previews as before.
 func (m *OS) previewsLive() bool { return !m.Client.Remote() || m.LearnMode }
 
-// applyClientKind fills the per-client flags a kind implies. Each is OR-ed
-// with what the caller set, so a test that sets one flag directly keeps it and
-// a caller that names a kind cannot forget one.
 func (o *OSOptions) applyClientKind() {
 	switch o.Client {
 	case ClientSSH:
 		o.IsSSHMode = true
-		// The terminal is reached over the network and does not share the
-		// server's filesystem, so file-medium kitty transmissions are
-		// re-encoded as direct data.
 		o.GraphicsRemoteClient = true
 	case ClientBrowser:
 		o.BrowserClient = true
-		// stdin is not a TTY in a web server, so capability detection cannot
-		// see the browser's image addon. The browser's inline mode reads
-		// file-medium transmissions server-side itself.
 		o.ForceGraphicsEnabled = true
 	}
 	if o.Client.Remote() {
-		// The config file belongs to the server operator, and several clients
-		// each hold a stale snapshot of it. Settings still apply live to the
-		// session, they are just not written back.
 		o.ConfigReadOnly = true
-		// Nothing here may touch the host's own desktop: a clipboard helper or
-		// a file viewer opened here acts on the operator's machine.
 		o.RemoteClient = true
 	}
 }

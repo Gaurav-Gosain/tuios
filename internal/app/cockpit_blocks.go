@@ -13,35 +13,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/tmldraw"
 )
 
-// Rich blocks: a fenced block of Mermaid or TML in an agent's reply or a
-// Markdown file is drawn as a picture, by the renderer the agents thread and
-// quick look share (cockpit_markdown.go). Both kinds go through loom, the
-// engine that draws TML surfaces: a Mermaid block is a TML document of one
-// <mermaid>, which sketch draws, and a type this build does not draw goes to
-// the sketch plugin off the loop (renderSurface). The picture is static: no
-// key or click reaches the document, so it runs no action and no command,
-// and loom reads no file and no address.
-//
-// A header line over the picture names the kind, and a click on it shows
-// the source as a code block, and a click on that header the picture again.
-// The thread's copy (C, or the header of the source) copies the source. A
-// block that does not parse shows its source under a line that says why.
-// A block still being written stays code.
-//
-// A drawing is kept by kind, source, width and look, so a card that is built
-// again draws nothing again.
-
-// ckBlockRows bounds the rows of one drawing.
 const ckBlockRows = 30
 
-// ckBlocksMax bounds the drawings kept.
 const ckBlocksMax = 64
 
-// ckBlockHit starts the hit of a rich block's header: a click shows the
-// source, or the picture again.
 const ckBlockHit = "blk:"
 
-// ckBlockKey is one drawing.
 type ckBlockKey struct {
 	kind, src    string
 	width, gen   int
@@ -50,13 +27,11 @@ type ckBlockKey struct {
 	ascii, plain bool
 }
 
-// ckBlockDrawing is a drawing: its rows as styled text, or why there is none.
 type ckBlockDrawing struct {
 	rows []string
 	fail string
 }
 
-// ckRichKind is the kind of rich block a fence names, "" for code.
 func ckRichKind(lang string) string {
 	switch strings.ToLower(lang) {
 	case "mermaid":
@@ -67,9 +42,6 @@ func ckRichKind(lang string) string {
 	return ""
 }
 
-// richBlock lays out a fenced block of Mermaid or TML as a picture, or as its
-// source when the person asked for it. It reports false for any other block,
-// which is drawn as code.
 func (md *ckMD) richBlock(b markdown.Block, first, rest []ckSeg, avail int) bool {
 	kind := ckRichKind(b.Lang)
 	if kind == "" || b.Open || len(b.Lines) == 0 || md.blockScope == "" {
@@ -113,11 +85,9 @@ func (md *ckMD) richBlock(b markdown.Block, first, rest []ckSeg, avail int) bool
 	}
 	md.lines[start] = ckBlockHead(head, key, can, drawn, pal)
 	if !drawn {
-		// A picture keeps a little clear room of its own under it.
 		md.lines = append(md.lines, ckLine{segs: slicesClone(rest)})
 	}
 	if md.t != nil {
-		// C and the source's own header copy the source.
 		code := md.id + "/" + strconv.Itoa(md.codes)
 		md.codes++
 		if md.t.code == nil {
@@ -131,7 +101,6 @@ func (md *ckMD) richBlock(b markdown.Block, first, rest []ckSeg, avail int) bool
 	return true
 }
 
-// blockDrawing is the drawing of a rich block at width cells, made once.
 func (m *OS) blockDrawing(kind, src string, width int, pal overlay.Palette) *ckBlockDrawing {
 	k := ckBlockKey{kind: kind, src: src, width: width, gen: m.blockGen, look: theme.Generation(),
 		depth: pal.Depth, ascii: overlay.UseASCII(), plain: m.Settings.NoNerdFont}
@@ -146,7 +115,6 @@ func (m *OS) blockDrawing(kind, src string, width int, pal overlay.Palette) *ckB
 	return d
 }
 
-// drawBlock draws a rich block with loom, at most ckBlockRows rows.
 func (m *OS) drawBlock(kind, src string, width int, pal overlay.Palette, ascii bool) *ckBlockDrawing {
 	doc := src
 	switch {
@@ -185,7 +153,6 @@ func (m *OS) drawBlock(kind, src string, width int, pal overlay.Palette, ascii b
 	return &ckBlockDrawing{rows: rows[:n]}
 }
 
-// ckXMLText escapes text for an XML element.
 var ckXMLText = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
 
 // ToggleBlock shows the source of the rich block key, or its picture again.
@@ -232,14 +199,8 @@ func (m *OS) CockpitBlockToggle(pic bool) {
 	m.ShowNotification(what, "info", m.Settings.NotificationDuration)
 }
 
-// ckBlockPicHit starts the hit of a Mermaid block's picture and text switch.
 const ckBlockPicHit = "bpic:"
 
-// ckBlockHead is a drawn block's header: "show the source" on the right, and,
-// for a Mermaid block this client can draw as a picture, the switch between
-// picture and text before it, the drawing in use in bold. A click on the
-// switch flips the drawing. A click anywhere else on the header shows the
-// source.
 func ckBlockHead(head ckLine, key string, can, pic bool, pal overlay.Palette) ckLine {
 	source := []ckSeg{{t: "show the source", fg: pal.FgMute}, {t: "  "}}
 	if !can {
@@ -259,15 +220,10 @@ func ckBlockHead(head ckLine, key string, can, pic bool, pal overlay.Palette) ck
 	return head
 }
 
-// ckSplitHit gives part of a line's hit to another action: a click from
-// "from" cells to "to" cells left of the line's right edge does alt, and a
-// click anywhere else on the line does hit.
 func ckSplitHit(hit, alt string, from, to int) string {
 	return hit + "\x1f" + strconv.Itoa(from) + "\x1f" + strconv.Itoa(to) + "\x1f" + alt
 }
 
-// ckSplitRead reads a hit ckSplitHit made. A plain hit is main, with split
-// false.
 func ckSplitRead(hit string) (main, alt string, from, to int, split bool) {
 	parts := strings.SplitN(hit, "\x1f", 4)
 	if len(parts) != 4 {
@@ -281,9 +237,6 @@ func ckSplitRead(hit string) (main, alt string, from, to int, split bool) {
 	return parts[0], parts[3], f, t, true
 }
 
-// ckLineHits adds the hits of a line from column x0 to x1 on screen row y,
-// its right edge at column edge: the switch of a split hit first, so a click
-// on it finds it before the line's own action.
 func ckLineHits(hits []ckHit, hit string, x0, x1, edge, y int) []ckHit {
 	main, alt, from, to, split := ckSplitRead(hit)
 	if split {
@@ -295,8 +248,6 @@ func ckLineHits(hits []ckHit, hit string, x0, x1, edge, y int) []ckHit {
 	return append(hits, ckHit{x0: x0, y0: y, x1: x1, y1: y + 1, kind: ckHitAction, action: main})
 }
 
-// blocksChanged makes every layout that may hold a rich block again: the
-// threads and quick look's Markdown.
 func (m *OS) blocksChanged() {
 	for _, t := range m.Inbox.threads.byKey {
 		t.gen++

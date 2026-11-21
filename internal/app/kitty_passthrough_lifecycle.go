@@ -15,9 +15,6 @@ func (kp *KittyPassthrough) OnWindowMove(windowID string, newX, newY, contentOff
 	if !kp.enabled {
 		return
 	}
-	// In web mode, RefreshAllPlacements handles repositioning via the
-	// overlay. OnWindowMove's delete-then-reposition pattern sends d=i
-	// which wipes image data from the overlay's storage.
 	if kp.inlineGraphics {
 		return
 	}
@@ -38,7 +35,6 @@ func (kp *KittyPassthrough) OnWindowMove(windowID string, newX, newY, contentOff
 		p.HostX = newX + contentOffsetX + p.GuestX
 		p.HostY = newY + contentOffsetY + relativeY
 
-		// Check if in viewport
 		if relativeY >= 0 && relativeY < viewportHeight {
 			kp.placeOne(p)
 			p.Hidden = false
@@ -52,8 +48,6 @@ func (kp *KittyPassthrough) OnWindowClose(windowID string) {
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
 
-	// A closed window's open update never closes. What it held goes ahead
-	// of the deletes below.
 	kp.releaseHeld(windowID)
 	delete(kp.held, windowID)
 	delete(kp.syncProbes, windowID)
@@ -78,11 +72,6 @@ func (kp *KittyPassthrough) OnWindowClose(windowID string) {
 	kp.deleteVirtualImages(windowID)
 }
 
-// deleteVirtualImages deletes the host images this window declared for kitty
-// Unicode placeholders. They carry no placement of their own, so the placement
-// teardown above cannot see them, and without this every document a pane
-// scrolled through would stay resident in the host terminal after the pane was
-// gone.
 func (kp *KittyPassthrough) deleteVirtualImages(windowID string) {
 	ids := kp.virtualImages[windowID]
 	if len(ids) == 0 {
@@ -91,8 +80,6 @@ func (kp *KittyPassthrough) deleteVirtualImages(windowID string) {
 	}
 	var buf bytes.Buffer
 	for hostID := range ids {
-		// d=I frees the image data as well as the placements: the window is
-		// gone and no cell will name this image again.
 		fmt.Fprintf(&buf, "\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", hostID)
 		kp.forgetKept(windowID, hostID)
 	}
@@ -100,9 +87,6 @@ func (kp *KittyPassthrough) deleteVirtualImages(windowID string) {
 	delete(kp.virtualImages, windowID)
 }
 
-// deleteRemoteVideoImages deletes the host images backing this window's
-// self-placed remote-terminal video streams (they are not in `placements`, so
-// the placement teardown above misses them) and forgets them.
 func (kp *KittyPassthrough) deleteRemoteVideoImages(windowID string) {
 	ids := kp.remoteVideo[windowID]
 	delete(kp.lastFrameHash, windowID)
@@ -112,7 +96,6 @@ func (kp *KittyPassthrough) deleteRemoteVideoImages(windowID string) {
 	}
 	var buf bytes.Buffer
 	for hostID := range ids {
-		// d=I frees the image data too: the window is gone, nothing will re-show it.
 		fmt.Fprintf(&buf, "\x1b_Ga=d,d=I,i=%d,q=2\x1b\\", hostID)
 	}
 	kp.pendingOutput = append(kp.pendingOutput, buf.Bytes()...)
@@ -122,7 +105,6 @@ func (kp *KittyPassthrough) deleteRemoteVideoImages(windowID string) {
 func (kp *KittyPassthrough) ClearWindow(windowID string) {
 	kp.mu.Lock()
 	defer kp.mu.Unlock()
-	// A clear inside a guest's update deletes as part of that update.
 	kp.beginGuestCapture()
 	defer kp.endGuestCapture(windowID)
 
@@ -139,10 +121,6 @@ func (kp *KittyPassthrough) ClearWindow(windowID string) {
 	}
 	kp.dropWindowPlacements(windowID)
 	kp.deleteRemoteVideoImages(windowID)
-	// A screen clear takes the placeholder cells with it, so nothing names
-	// these images any more and their data would sit in the host until the
-	// window closed. A pager walked through a directory of pictures is exactly
-	// the case that accumulates them.
 	kp.deleteVirtualImages(windowID)
 }
 
@@ -154,11 +132,6 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 	win := window
 	kp := m.KittyPassthrough
 
-	// Set up callback for when placements are cleared (e.g., clear screen, ED sequences).
-	// The VT keeps separate KittyState objects for the main and alt screens; the
-	// active one depends on IsAltScreen() at call time. Register on BOTH so the
-	// clear callback fires regardless of which screen the app is on (youterm,
-	// yazi, etc. run on alt screen and rely on ED 2 clearing their thumbnails).
 	clearCallback := func() {
 		kittyPassthroughLog("CALLBACK FIRED: winID=%s", win.ID[:min(8, len(win.ID))])
 		kp.ClearWindow(win.ID)
@@ -168,27 +141,15 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 	kittyPassthroughLog("setupKittyPassthrough: registered clear callback on BOTH main/alt for winID=%s",
 		win.ID[:min(8, len(win.ID))])
 
-	// Kitty Unicode placeholder cells name their image in their foreground
-	// colour, using the id the guest chose. The host knows that image by an id
-	// tuios allocated, so the emulator rewrites the colour as the cells are
-	// built. Installed here because this is where the window and the
-	// passthrough are introduced to each other.
 	window.Terminal.SetKittyImageIDTranslator(func(guestID uint32) (uint32, bool) {
 		return kp.HostImageIDForPlaceholder(win.ID, guestID)
 	})
-	// Placeholder cells are only worth keeping on a host that draws them. Kept
-	// anywhere else they are missing-glyph boxes where the picture should be,
-	// which is worse than the blank space the application left. See
-	// kitty_placeholder_caps.go for how that is decided.
 	mode := vt.KittyPlaceholdersDrop
 	if m.placeholdersEnabled() {
 		mode = vt.KittyPlaceholdersKeep
 	}
 	window.Terminal.SetKittyPlaceholderMode(mode)
 
-	// Hold what the guest sends inside a synchronized update until it closes
-	// the update, so the host never shows half a frame; see
-	// kitty_sync_hold.go.
 	kp.SetGuestSyncProbe(win.ID, func() (bool, uint64) {
 		if t := win.Terminal; t != nil {
 			return t.SyncUpdate()
@@ -197,39 +158,22 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 	})
 
 	window.Terminal.SetKittyPassthroughFunc(func(cmd *vt.KittyCommand, rawData []byte) {
-		// In daemon mode, the daemon's VT emulator responds to queries directly
-		// with low latency. Skip here to avoid sending a duplicate response.
 		if win.DaemonMode && cmd.Action == vt.KittyActionQuery {
 			return
 		}
-		// A path from a pane on another machine names a file over there.
-		// That machine's daemon reads it and sends the bytes
-		// (session/kitty_link_far.go); one that reaches this client anyway
-		// is never handed on, where this machine's terminal would read a
-		// file of this machine.
 		if win.ProcessElsewhere() && cmd.Medium.IsFile() {
 			kp.DropRemoteFileMedium(win.ID, cmd)
 			return
 		}
 
-		// A frame edit in a daemon pane is refused, when it is, by the
-		// daemon: its answer is in order with the rest, and this one would
-		// come a round trip later. See session.Session.SetKittyAnimation.
 		answer := clientAnswersKittyCommand(win.DaemonMode, cmd.Action)
 
-		// On a host without graphics a kitty picture is drawn as glyphs,
-		// as a sixel one is (kitty_symbols.go). The passthrough below then
-		// sends nothing, and still answers a query as before.
 		if !kp.IsEnabled() && m.SixelPassthrough.DrawsSymbols() {
 			m.drawKittySymbols(win, kp, cmd)
 		}
 
 		cursorPos := win.Terminal.CursorPosition()
 		scrollbackLen := win.Terminal.ScrollbackLen()
-		// This callback runs on the PTY-reader goroutine while the update loop
-		// may be mutating the live geometry fields; read the published
-		// snapshot instead. It is at most a frame stale, and the placement is
-		// re-laid out against fresh geometry every frame anyway.
 		geo := win.LastGeometry()
 		result := kp.ForwardCommand(
 			cmd, rawData, win.ID,
@@ -253,17 +197,12 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 				}
 			},
 		)
-		// Reserve space in guest terminal for the image placement
-		// Only move cursor when C=0 (default behavior), not when C=1 (no cursor move)
 		if result != nil && result.Rows > 0 && result.CursorMove == 0 {
 			win.Terminal.ReserveImageSpace(result.Rows, result.Cols)
 		}
 	})
 }
 
-// clientAnswersKittyCommand reports whether this client writes its own answer
-// to a guest's kitty command into the pane. In a daemon pane a frame edit is
-// the daemon's to refuse.
 func clientAnswersKittyCommand(daemonPane bool, action vt.KittyGraphicsAction) bool {
 	return !daemonPane || !vt.IsKittyAnimationAction(action)
 }

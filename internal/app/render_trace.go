@@ -15,14 +15,6 @@ import (
 	"github.com/adrg/xdg"
 )
 
-// The render trace is a diagnostic for panes that go blank when focus moves to
-// another window. It is off unless TUIOS_RENDER_TRACE names it, and the check
-// is a single package-level bool read on the hot path, resolved once at
-// startup, so a normal run pays one predictable branch per window per frame and
-// no syscall.
-//
-// Set TUIOS_RENDER_TRACE to 1, true, on, or yes to write to the default path,
-// or to an explicit file path to choose where it lands.
 var (
 	renderTraceEnabled bool
 	renderTracePath    string
@@ -49,8 +41,6 @@ func init() {
 	}
 	fh, err := debuglog.Open(renderTracePath)
 	if err != nil {
-		// Tracing is a diagnostic; never take the session down over it. stdout
-		// is the TUI, so there is nowhere useful to report this.
 		return
 	}
 	renderTraceFH = fh
@@ -61,12 +51,8 @@ func init() {
 		renderTraceT0.Format(time.RFC3339), os.Getpid())
 }
 
-// defaultRenderTracePath puts the trace under the state directory when the
-// environment defines one, and falls back to the temp directory. The pid keeps
-// a daemon and its attached clients in separate files.
 func defaultRenderTracePath() string {
 	name := fmt.Sprintf("tuios-render-trace.%d.log", os.Getpid())
-	// A named server's state home is set on xdg, not in the environment.
 	if serverscope.Name() != "" {
 		return filepath.Join(xdg.StateHome, "tuios", name)
 	}
@@ -85,10 +71,6 @@ func traceWrite(line string) {
 	fmt.Fprintf(renderTraceFH, "%8.3f %s\n", time.Since(renderTraceT0).Seconds(), line)
 }
 
-// traceFrame records the rectangle every pane on screen is drawn at in this
-// frame, and how many animations are moving them. One line per call to View,
-// so a layout transition can be read back frame by frame: a pane that jumps,
-// or moves one way and then back, shows up as the numbers doing so.
 func (m *OS) traceFrame() {
 	var b strings.Builder
 	fmt.Fprintf(&b, "frame anims=%d", len(m.Animations))
@@ -101,9 +83,6 @@ func (m *OS) traceFrame() {
 	traceWrite(b.String())
 }
 
-// shortID trims a window or PTY ID to something readable in a log line. IDs
-// restored from session state are not guaranteed UUID-length (a non-daemon
-// window carries an empty PTYID), so a plain id[:8] slice would panic.
 func shortID(id string) string {
 	if len(id) > 8 {
 		return id[:8]
@@ -111,11 +90,6 @@ func shortID(id string) string {
 	return id
 }
 
-// traceSample summarises a rendered string so the fast and slow paths can be
-// compared directly. The blank case is the one under investigation: the fast
-// path drops trailing blank lines and trailing spaces and does not pad to the
-// content box, so a collapsed or empty render shows up here as a small byte
-// count and a low line count against the slow path's full padded grid.
 func traceSample(s string) string {
 	lines := 0
 	if s != "" {
@@ -135,8 +109,6 @@ func traceSample(s string) string {
 		len(s), lines, blank, head, tail)
 }
 
-// stripANSIForTrace removes escape sequences so the blank check reports whether
-// a frame carries visible text, not whether it carries styling.
 func stripANSIForTrace(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))
@@ -155,14 +127,6 @@ func stripANSIForTrace(s string) string {
 	return b.String()
 }
 
-// traceRender records one window's render for one frame: which early return the
-// renderer took, the emulator and window geometry it was working against, the
-// alternate screen state as both the mode bits and the active buffer pointer
-// report it, and a summary of the bytes produced.
-//
-// branch is the path taken through renderTerminal, and out is what that path
-// returned, so a focus change can be read as a pair of lines for the same
-// window that differ only in branch.
 func traceRender(window *terminal.Window, isFocused, inTerminalMode, entryDirty bool, branch, out string) {
 	if !renderTraceEnabled || window == nil {
 		return
@@ -175,9 +139,6 @@ func traceRender(window *terminal.Window, isFocused, inTerminalMode, entryDirty 
 		altMode = window.Terminal.IsAltScreen()
 		altBuf = window.Terminal.ActiveScreenIsAlt()
 	}
-	// entryDirty is ContentDirty as it was on entry to renderTerminal. The
-	// render paths clear the flag before returning, so reading it here would
-	// always report false and hide which frames were actually asked to repaint.
 	traceWrite(fmt.Sprintf(
 		"render id=%s title=%q focused=%t termMode=%t branch=%-22s "+
 			"dirtyIn=%t dirtyOut=%t cachedLen=%d altMode=%t altBuf=%t winAlt=%t "+
@@ -190,11 +151,6 @@ func traceRender(window *terminal.Window, isFocused, inTerminalMode, entryDirty 
 	))
 }
 
-// traceLayerBuild records the step between the terminal renderer and the
-// compositor: what renderWindowBox produced, what clipWindowContent did to it,
-// and where the resulting layer was placed. A pane can render perfectly and
-// still composite as bare background if the clip discards the frame, so this is
-// the seam where healthy bytes go missing.
 func traceLayerBuild(window *terminal.Window, isFocused bool, boxContent, clipped string,
 	wx, wy, finalX, finalY, z, viewportW, viewportH int,
 ) {
@@ -215,9 +171,6 @@ func traceLayerBuild(window *terminal.Window, isFocused bool, boxContent, clippe
 	))
 }
 
-// traceLayerHold records the compositor reusing a cached layer, with the reason
-// it did so. There are three such paths and they are easy to confuse, so each
-// names itself.
 func traceLayerHold(window *terminal.Window, isFocused bool, reason string) {
 	if !renderTraceEnabled || window == nil {
 		return
@@ -249,10 +202,6 @@ func firstN(s string, n int) string {
 	return s
 }
 
-// traceSync records one window's pass through the daemon state sync. This path
-// only runs when the daemon broadcasts, which it does when more than one client
-// is attached, so these lines also answer whether the session had a second
-// client at all.
 func traceSync(w *terminal.Window, incomingAlt bool, resized bool, newW, newH int, note string) {
 	if !renderTraceEnabled || w == nil {
 		return
@@ -270,17 +219,11 @@ func traceSync(w *terminal.Window, incomingAlt bool, resized bool, newW, newH in
 	))
 }
 
-// traceAnnounce records a size handed to a guest and the path that handed it.
-// One of these per SIGWINCH the shell gets, so a pane that repaints its prompt
-// when focus moves is explained by the frames on the line that appears with
-// it, or by the absence of the line.
 func traceAnnounce(w *terminal.Window, cols, rows int) {
 	traceWrite(fmt.Sprintf("announce id=%s title=%q size=%dx%d rect=%dx%d tiled=%t via %s",
 		shortID(w.ID), w.Title(), cols, rows, w.Width, w.Height, w.Tiled, traceCallers(3, 8)))
 }
 
-// traceCallers names the frames above the caller, innermost first, without
-// their package paths.
 func traceCallers(skip, n int) string {
 	pcs := make([]uintptr, n)
 	got := runtime.Callers(skip, pcs)

@@ -15,101 +15,42 @@ import (
 	"tuios.dev/vt"
 )
 
-// How a pane's sixel image reaches the host, frame by frame.
-//
-// The compositor builds the frame as cells. A pane's image is in it as marker
-// cells (vt/sixel_marker.go), wherever the pane's text put them: moved
-// by the pane's position and scroll offset, clipped by the pane's edges, cut
-// by whatever popup or window was drawn over them, absent when the pane is on
-// another workspace. So the frame already holds the answer to "which part of
-// which image is visible where", and scanSixelFrame reads it off.
-//
-// Each marker is then replaced by a blank the host can draw, and the visible
-// cells of each image are grouped into rectangles. A rectangle is what the host
-// is sent: the image cropped to those cells, as sixel, or as a kitty
-// placement of the image with a source rectangle.
-//
-// Sixel has no delete. What removes an image from the host is the text drawn
-// over it: every terminal that draws sixel clears an image from a cell when a
-// character is written into the cell. The blank a marker becomes is therefore
-// a space with the conceal attribute, which draws nothing but differs from a
-// plain space. Where an image was and no longer is, the frame's cell changes
-// from that concealed space to something else, the renderer rewrites the cell,
-// and the host drops the picture there. The attribute also keeps the renderer
-// from erasing a run of them with EL or ECH, which it only does over plain
-// blanks. Alternate images get italic as well, so an image replaced by another
-// in the same cells still has every cell rewritten under it.
-//
-// The one thing the frame cannot say is whether the renderer repainted cells
-// that did not change, which it does after the host is resized; Invalidate
-// covers that.
-
 // GraphicsFrameBytes is the output that has to follow each frame the
 // renderer writes: the sixel images on it. The renderer's writer calls it.
 func (m *OS) GraphicsFrameBytes(frame []byte) []byte {
 	return m.SixelPassthrough.FrameBytes(frame)
 }
 
-// sixelRect is one rectangle of one image visible on the frame.
 type sixelRect struct {
-	id uint32
-	// x and y are the host cell the rectangle's top-left lands on.
-	x, y int
-	// r0, c0 are the image cell at that corner, and r1, c1 one past the
-	// bottom-right image cell.
+	id             uint32
+	x, y           int
 	r0, c0, r1, c1 int
-	// ground is a hash of the backgrounds of the blanks under the rectangle.
-	// A modal's scrim or a dim changes them, the renderer then rewrites those
-	// cells and the host drops the picture there, so a change of ground has to
-	// resend the rectangle like a change of place does.
-	ground uint64
+	ground         uint64
 }
 
 func (r sixelRect) rows() int { return r.r1 - r.r0 }
 func (r sixelRect) cols() int { return r.c1 - r.c0 }
 
-// sixelFrameState is what the passthrough knows about the frames it has been
-// given and what it has sent. Guarded by SixelPassthrough.mu.
 type sixelFrameState struct {
-	// gen counts SetFrame calls: one per View.
-	gen uint64
-	// rects is the latest frame's visible rectangles.
-	rects []sixelRect
-	// visible is the set of ids in rects, which eviction spares, and of the
-	// images the latest frame drew as glyphs.
-	visible map[uint32]bool
-	// drawn is the images drawn as glyphs on the frame being composed
-	// (drawImageSymbols). SetFrame moves them into visible. Eviction spares
-	// them too, since it can run before SetFrame.
-	drawn map[uint32]bool
-	// hostW and hostH are the host's cell size in pixels, and hostRows its
-	// height in cells, as of the latest frame.
+	gen                    uint64
+	rects                  []sixelRect
+	visible                map[uint32]bool
+	drawn                  map[uint32]bool
 	hostW, hostH, hostRows int
 
-	// shown is the set of rectangles the host was last sent.
-	shown map[sixelRect]bool
-	// force resends every rectangle on the next write.
-	force bool
-	// damage is the host cells the renderer wrote since the last send.
+	shown    map[sixelRect]bool
+	force    bool
 	damage   hostDamage
 	hostCols int
 
-	// placements are the kitty placement ids of the rectangles placed on a
-	// kitty host, and nextPlacement the next one to hand out.
 	placements    map[sixelRect]uint32
 	nextPlacement uint32
 
-	// cache holds encoded sixel crops by rectangle and host cell size, so a
-	// rectangle that is resent is not encoded again.
 	cache map[sixelCacheKey][]byte
-	// jobs are the background encodes in flight, by cache key.
-	jobs map[any]bool
+	jobs  map[any]bool
 
-	// pending is output that has to reach the host with the next write
-	// whatever the frame says: kitty deletes for images that were dropped.
 	pending []byte
 
-	// seq numbers registrations, for eviction order.
 	seq uint64
 }
 
@@ -207,8 +148,6 @@ func (sp *SixelPassthrough) FrameBytes(frame []byte) []byte {
 	return out
 }
 
-// nativeBytesLocked sends every rectangle that is new on this frame, or all of
-// them when forced.
 func (sp *SixelPassthrough) nativeBytesLocked(out []byte) []byte {
 	f := &sp.frame
 	if f.shown == nil {
@@ -221,14 +160,10 @@ func (sp *SixelPassthrough) nativeBytesLocked(out []byte) []byte {
 			continue
 		}
 		if !f.damage.grounded(r) {
-			// The host does not show this rectangle's frame yet: the
-			// renderer wrote an older one. Sent with the write that
-			// puts its blanks there. See hostDamage.
 			continue
 		}
 		seq, ready := sp.sixelCropLocked(r)
 		if !ready {
-			// Being encoded off this goroutine; sent when it is done.
 			continue
 		}
 		next[r] = true
@@ -245,17 +180,8 @@ func (sp *SixelPassthrough) nativeBytesLocked(out []byte) []byte {
 	return out
 }
 
-// sixelSyncPixels is the largest crop encoded on the renderer's goroutine,
-// which holds bubbletea's renderer lock while it runs. A larger one is encoded
-// on a goroutine of its own and sent when it is ready, so a big picture that
-// has to be cut costs the UI nothing. At this size a crop encodes in a few
-// milliseconds even when every colour spans the whole width.
 const sixelSyncPixels = 128 << 10
 
-// sixelCropLocked is the sixel sequence for one rectangle: the guest's own
-// bytes when the whole image is visible at the size it was drawn for, and a
-// re-encoded crop otherwise. ready is false while the crop is being encoded
-// in the background.
 func (sp *SixelPassthrough) sixelCropLocked(r sixelRect) (seq []byte, ready bool) {
 	f := &sp.frame
 	e := sp.images[r.id]
@@ -267,10 +193,6 @@ func (sp *SixelPassthrough) sixelCropLocked(r sixelRect) (seq []byte, ready bool
 		hw, hh = e.cellW, e.cellH
 	}
 	whole := r.r0 == 0 && r.c0 == 0 && r.r1 == e.rows && r.c1 == e.cols
-	// The guest's bytes only when they draw exactly the decoded image; see
-	// vt.SixelImage.Exact. Anything else is re-encoded, which costs 2 to 18
-	// ms for a 800x500 crop (BenchmarkEncodeSixelCrop, ...Noise) and is done
-	// off the renderer's goroutine past sixelSyncPixels.
 	if whole && hw == e.cellW && hh == e.cellH && len(e.raw) > 0 && e.img.Exact {
 		out := make([]byte, 0, len(e.raw)+4)
 		out = append(out, "\x1bP"...)
@@ -278,7 +200,6 @@ func (sp *SixelPassthrough) sixelCropLocked(r sixelRect) (seq []byte, ready bool
 		return append(out, "\x1b\\"...), true
 	}
 	key := sixelCacheKey{rect: r, hostW: hw, hostH: hh}
-	// The crop depends on neither where it lands nor what is under it.
 	key.rect.x, key.rect.y, key.rect.ground = 0, 0, 0
 	if seq, ok := f.cache[key]; ok {
 		return seq, true
@@ -296,7 +217,6 @@ func (sp *SixelPassthrough) sixelCropLocked(r sixelRect) (seq []byte, ready bool
 		if f.cache == nil {
 			f.cache = make(map[sixelCacheKey][]byte)
 		}
-		// Crops of images no longer visible are the ones to go.
 		if len(f.cache) > 256 {
 			for k := range f.cache {
 				if !f.visible[k.rect.id] {
@@ -315,9 +235,6 @@ func (sp *SixelPassthrough) sixelCropLocked(r sixelRect) (seq []byte, ready bool
 	return nil, false
 }
 
-// startJobLocked runs work on a goroutine, one at a time, then stores its
-// result under the lock and sends whatever became ready. A job whose image
-// was dropped or replaced meanwhile stores nothing.
 func (sp *SixelPassthrough) startJobLocked(key any, e *sixelEntry, work func() []byte, store func([]byte)) {
 	f := &sp.frame
 	if f.jobs == nil {
@@ -348,11 +265,8 @@ func (sp *SixelPassthrough) startJobLocked(key any, e *sixelEntry, work func() [
 	}()
 }
 
-// sixelJobSlot lets one background encode run at a time, whatever the number
-// of panes and connections.
 var sixelJobSlot = make(chan struct{}, 1)
 
-// idOf is the id an entry is held under, 0 if none.
 func (sp *SixelPassthrough) idOf(e *sixelEntry) uint32 {
 	for id, v := range sp.images {
 		if v == e {
@@ -362,11 +276,6 @@ func (sp *SixelPassthrough) idOf(e *sixelEntry) uint32 {
 	return 0
 }
 
-// kickLocked is what a finished background job makes ready to send: the
-// rectangles of the latest frame not yet on the host. It is written outside
-// the renderer's writes, which is safe because the frame those rectangles
-// belong to has been written or, if not, will rewrite their cells and so have
-// them sent again.
 func (sp *SixelPassthrough) kickLocked() []byte {
 	switch sp.mode {
 	case sixelNative:
@@ -377,9 +286,6 @@ func (sp *SixelPassthrough) kickLocked() []byte {
 	return nil
 }
 
-// kittyBytesLocked places each visible rectangle on a kitty host and deletes
-// the placements of rectangles that are gone. kitty can delete, so unlike
-// sixel nothing depends on the text being rewritten.
 func (sp *SixelPassthrough) kittyBytesLocked(out []byte) []byte {
 	f := &sp.frame
 	if f.placements == nil {
@@ -389,11 +295,6 @@ func (sp *SixelPassthrough) kittyBytesLocked(out []byte) []byte {
 	for _, r := range f.rects {
 		next[r] = true
 	}
-	// Place first, then delete. A rectangle whose image is still being
-	// compressed is not placed this frame, and the placement it replaces has
-	// to stay up until it is: deleting it now leaves the cells empty for a
-	// frame. A program that sends a new image for every frame, a browser
-	// drawing a page as sixel, then blinks between the picture and nothing.
 	var waiting []sixelRect
 	for _, r := range f.rects {
 		if _, placed := f.placements[r]; placed {
@@ -404,8 +305,6 @@ func (sp *SixelPassthrough) kittyBytesLocked(out []byte) []byte {
 			continue
 		}
 		if e.kittyID == 0 {
-			// The compressed transmission is built in the background: a
-			// photo-sized image takes tens of milliseconds to compress.
 			if e.kittyPayload == nil {
 				img, id := e.img, sixelKittyIDBase+r.id
 				ent := e
@@ -452,7 +351,6 @@ func (sp *SixelPassthrough) kittyBytesLocked(out []byte) []byte {
 	return out
 }
 
-// overlapsAny reports whether r covers a host cell that one of rs covers.
 func overlapsAny(r sixelRect, rs []sixelRect) bool {
 	for _, o := range rs {
 		if r.x < o.x+o.cols() && o.x < r.x+r.cols() &&
@@ -463,8 +361,6 @@ func overlapsAny(r sixelRect, rs []sixelRect) bool {
 	return false
 }
 
-// takeDownLocked removes everything this passthrough put on a kitty host, for
-// a mode change. Sixel output needs nothing: the next frame's text clears it.
 func (sp *SixelPassthrough) takeDownLocked() []byte {
 	var out []byte
 	for id, e := range sp.images {
@@ -480,8 +376,6 @@ func (sp *SixelPassthrough) takeDownLocked() []byte {
 	return out
 }
 
-// sixelKittyIDBase keeps the ids of images sent to a kitty host clear of the
-// ones the kitty passthrough allocates, which count up from 1.
 const sixelKittyIDBase = 0x7e000000
 
 func kittyTransmitRGBA(out []byte, id uint32, img *vt.SixelImage) []byte {
@@ -527,39 +421,27 @@ func appendCUP(out []byte, y, x int) []byte {
 	return append(out, 'H')
 }
 
-// sixelHit is one marker cell found on the frame.
 type sixelHit struct {
 	x, y     int
 	row, col int
 }
 
-// sixelGroupKey groups the hits that belong to one placement of one image:
-// the same image with its top-left cell at the same host cell. A marker whose
-// row and column do not line up with its neighbours, which a reflow can
-// produce, lands in a group of its own.
 type sixelGroupKey struct {
 	id     uint32
 	ox, oy int
 }
 
-// scanSixelFrame finds every sixel marker on the canvas, replaces it with
-// the blank described at the top of this file (or with the placeholder box),
-// and gives the passthrough the rectangles to show. It is the last pass over
-// the canvas before it becomes the frame string.
 func (m *OS) scanSixelFrame(canvas *frameCanvas) {
 	sp := m.SixelPassthrough
 	if sp == nil {
 		return
 	}
-	// Image glyphs, for a marker drawn after the pass that ran before the
-	// shading. Usually there is none left.
 	m.drawImageSymbols(canvas)
 	sp.mu.Lock()
 	mode := sp.mode
 	sp.mu.Unlock()
 
 	var groups map[sixelGroupKey][]sixelHit
-	// What is known of each id met on this frame, asked once per id.
 	infos := map[uint32]sixelInfo{}
 	var dim color.Color
 	for y, line := range canvas.Lines {
@@ -578,16 +460,10 @@ func (m *OS) scanSixelFrame(canvas *frameCanvas) {
 				infos[id] = info
 			}
 			if info.rows == 0 {
-				// An image this client never held, drawn before it
-				// attached or freed since: its cells are plain blanks.
 				blankCellKeepGround(c)
 				continue
 			}
-			// A marker left in symbols mode is an image that cannot be
-			// drawn as glyphs: one never decoded, or a frame without
-			// colour.
 			if mode == sixelPlaceholder || mode == sixelSymbols || !info.picture {
-				// The theme's dim text colour, read once a frame.
 				if dim == nil {
 					dim = theme.UI().FgDim
 				}
@@ -612,7 +488,6 @@ func (m *OS) scanSixelFrame(canvas *frameCanvas) {
 			rects = append(rects, r)
 		}
 	}
-	// Map order is random; a stable order keeps the output deterministic.
 	slices.SortFunc(rects, func(a, b sixelRect) int {
 		if a.y != b.y {
 			return a.y - b.y
@@ -630,7 +505,6 @@ func (m *OS) scanSixelFrame(canvas *frameCanvas) {
 	m.sweepSixelImages()
 }
 
-// groundHash hashes the backgrounds of the cells a rectangle covers (FNV-1a).
 func groundHash(canvas *frameCanvas, r sixelRect) uint64 {
 	h := uint64(14695981039346656037)
 	for y := r.y; y < r.y+r.rows(); y++ {
@@ -650,8 +524,6 @@ func groundHash(canvas *frameCanvas, r sixelRect) uint64 {
 	return h
 }
 
-// sixelInfo is what the scan needs to know of an image: whether it can be
-// drawn as a picture, and its size in cells (zero when it is not held).
 type sixelInfo struct {
 	picture    bool
 	rows, cols int
@@ -669,17 +541,12 @@ func (sp *SixelPassthrough) info(id uint32) sixelInfo {
 	return info
 }
 
-// blankCellKeepGround makes an image cell a plain blank on its background.
 func blankCellKeepGround(c *uv.Cell) {
 	bg := c.Style.Bg
 	*c = uv.Cell{Content: " ", Width: 1}
 	c.Style.Bg = bg
 }
 
-// sixelRects turns one image's visible cells into rectangles: each row's runs
-// of adjacent cells, with runs that match on consecutive rows merged. native
-// drops the host's last row, where a sixel would scroll the host screen: a
-// sixel terminal moves the cursor below the image it draws.
 func sixelRects(id uint32, hits []sixelHit, native bool, hostRows int) []sixelRect {
 	slices.SortFunc(hits, func(a, b sixelHit) int {
 		if a.y != b.y {
@@ -751,9 +618,6 @@ func sixelRects(id uint32, hits []sixelHit, native bool, hostRows int) []sixelRe
 	return out
 }
 
-// sixelBlankCell turns a marker into the concealed blank the host sees under
-// the picture. Only the background is kept: it shows through the image's
-// transparent pixels.
 func sixelBlankCell(c *uv.Cell, id uint32) {
 	bg := c.Style.Bg
 	*c = uv.Cell{Content: " ", Width: 1}
@@ -764,9 +628,6 @@ func sixelBlankCell(c *uv.Cell, id uint32) {
 	}
 }
 
-// placeholderCell draws one cell of the box shown where an image of rows by
-// cols cells cannot be, in fg with the faint attribute: a thin frame around
-// the image's cells with "image" in the middle.
 func placeholderCell(c *uv.Cell, row, col, rows, cols int, fg color.Color) {
 	blankCellKeepGround(c)
 	c.Style.Fg = fg

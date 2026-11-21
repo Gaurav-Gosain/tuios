@@ -74,8 +74,6 @@ func (m *OS) BeginEditNote(name string) {
 // BeginRenameWorkspace starts a rename of a workspace, seeded with its current
 // name. An unnamed workspace opens empty: its number is not a name it was given.
 func (m *OS) BeginRenameWorkspace(ws int) {
-	// A scratch group's workspace has no name to give: its box shows the
-	// group's name.
 	if ws <= 0 || session.IsScratchWorkspace(ws) {
 		return
 	}
@@ -90,7 +88,6 @@ func (m *OS) RenameText() string { return m.rename.String() }
 // SetRenameText replaces the rename editor's text, the caret at its end.
 func (m *OS) SetRenameText(s string) { m.rename.Set(s) }
 
-// renameClean is cleanName, and a note takes no more than the daemon keeps.
 func (m *OS) renameClean(text string) string {
 	add := cleanName(text)
 	if add != "" && m.RenameKind == RenameNote && len(m.rename.String())+len(add) > session.NoteMaxBytes {
@@ -112,8 +109,6 @@ func (m *OS) RenameKey(key, text string) bool {
 	if !m.Renaming() {
 		return false
 	}
-	// The rename dialog draws a selection (fieldRow), so shift with a move
-	// selects in it.
 	changed, consumed := lineKeyWith(&m.rename, key, text, m.renameClean, textedit.LineOpts{AllowClear: true, Select: true})
 	if changed {
 		m.renameChanged()
@@ -148,15 +143,12 @@ func (m *OS) RenameClear() {
 	m.renameChanged()
 }
 
-// renameChanged redraws the thing being renamed, whose title shows the draft.
 func (m *OS) renameChanged() {
 	if t := m.RenameTarget(); t != nil {
 		t.InvalidateCache()
 	}
 }
 
-// combiningOnly reports whether s is nothing but marks that attach to a
-// preceding character.
 func combiningOnly(s string) bool {
 	for _, r := range s {
 		if !unicode.In(r, unicode.Mn, unicode.Me) {
@@ -239,8 +231,6 @@ func (m *OS) CommitRename() tea.Cmd {
 		return labelVerbCmd(m.verbDialer(), "Note", "set-note", map[string]any{"session": target, "note": label})
 	}
 	if kind == RenameSession && label == m.SessionLabel(target) {
-		// Nothing changed, so there is nothing to send. A session that
-		// shows a display label keeps it.
 		return nil
 	}
 	verb, params, ok := renameVerb(kind, target, m.SessionName, label)
@@ -250,11 +240,6 @@ func (m *OS) CommitRename() tea.Cmd {
 	return labelVerbCmd(m.verbDialer(), "Rename", verb, params)
 }
 
-// renameVerb picks the daemon verb a rename goes through and builds its params.
-// A session rename changes the session's name with rename-session, so the name
-// the UI shows is the name ls lists and attach takes (issue #266). It used to
-// send set-session-name, which only set a display label.
-// An empty name is not sent: a session cannot be without a name.
 func renameVerb(kind RenameKind, target, sessionName, label string) (string, map[string]any, bool) {
 	switch kind {
 	case RenameSession:

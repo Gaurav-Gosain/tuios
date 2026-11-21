@@ -7,8 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// dockTabTestOS is an OS with one window per named workspace, wide enough to
-// draw a full dock.
 func dockTabTestOS(t testing.TB, current int, workspaces ...int) *OS {
 	t.Helper()
 	wins := make([]*terminal.Window, 0, len(workspaces))
@@ -37,7 +35,6 @@ func TestDockWorkspaceAddTabOpensTheNextFreeOne(t *testing.T) {
 	if add.Workspace != 0 {
 		t.Fatalf("the trailing tab should be the add tab (workspace 0), got %d", add.Workspace)
 	}
-	// Clicking it resolves to a real, empty workspace.
 	if got := m.DockWorkspaceAt(add.X0, add.Y); got != 2 {
 		t.Fatalf("the add tab resolved to workspace %d, want the next free one (2)", got)
 	}

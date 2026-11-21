@@ -9,7 +9,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// railRowFor finds the drawn row naming a session, stripped of styling.
 func railRowFor(t *testing.T, m *OS, tree sessiontree.Tree, name string) string {
 	t.Helper()
 	lines, _ := m.sidebarPanelLinesForTree(tree)
@@ -47,7 +46,6 @@ func TestRailRowsStayQuietWithoutShowNumbers(t *testing.T) {
 	}
 }
 
-// withSidebarNumbers turns show_numbers on for one test and puts it back.
 func withSidebarNumbers(t *testing.T) {
 	t.Helper()
 	prev := config.Global.SidebarShowNumbers

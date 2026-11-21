@@ -13,19 +13,6 @@ type RenameAppliedMsg struct {
 	Err  error
 }
 
-// labelVerbCmd calls a daemon verb from a command, never from Update. The verb
-// protocol is a blocking round trip, and the TUI client's own round trips are
-// serialised behind one mutex, so a call made inline would park input, rendering
-// and socket draining for as long as the daemon took to answer.
-//
-// The daemon owns the label: it writes it into the session state, pushes it to
-// every attached client, and saves it with the rest, which is what makes the
-// change outlive the client that made it.
-//
-// dial reaches the daemon that holds the session this client shows. For a
-// client attached through a host that is the host's daemon, not this
-// machine's: dialing the local socket renamed a local session that happened
-// to share the name, or failed.
 func labelVerbCmd(dial agentMailDial, what, verb string, params map[string]any) tea.Cmd {
 	return func() tea.Msg {
 		c, err := dial()
@@ -44,9 +31,6 @@ func labelVerbCmd(dial agentMailDial, what, verb string, params map[string]any) 
 	}
 }
 
-// sessionAccentVerb builds the daemon call that records a session's accent. An
-// empty accent is how the verb says "clear it", which puts the session back on
-// the colour it is assigned automatically rather than on no colour.
 func sessionAccentVerb(name, accent string) (string, map[string]any, bool) {
 	if name == "" {
 		return "", nil, false
@@ -54,8 +38,6 @@ func sessionAccentVerb(name, accent string) (string, map[string]any, bool) {
 	return "set-session-accent", map[string]any{"session": name, "accent": accent}, true
 }
 
-// setSessionAccentCmd writes a session's accent through the daemon, which is
-// what makes it survive a reattach and reach every other client attached to it.
 func (m *OS) setSessionAccentCmd(name, accent string) tea.Cmd {
 	verb, params, ok := sessionAccentVerb(name, accent)
 	if !ok {
@@ -64,15 +46,8 @@ func (m *OS) setSessionAccentCmd(name, accent string) tea.Cmd {
 	return labelVerbCmd(m.verbDialer(), "Accent", verb, params)
 }
 
-// listingRefreshedMsg says a session-listing refresh this client asked for has
-// landed, so the open switcher can be rebuilt from it. A rename and a new
-// worktree both ask for one, for the same reason: the row the user just acted
-// on is not in the cached listing yet.
 type listingRefreshedMsg struct{}
 
-// refreshListingCmd refreshes the cached session listing off the Update
-// goroutine and reports back with a listingRefreshedMsg, or is nil without a
-// daemon.
 func (m *OS) refreshListingCmd() tea.Cmd {
 	client := m.DaemonClient
 	if client == nil {
@@ -84,9 +59,6 @@ func (m *OS) refreshListingCmd() tea.Cmd {
 	}
 }
 
-// refreshGotoRows rebuilds the go-to picker's places while it is open, so a
-// rename (this client's or another client's) shows up in the list it was made
-// from.
 func (m *OS) refreshGotoRows() {
 	g := &m.gotoPicker
 	if !g.open {

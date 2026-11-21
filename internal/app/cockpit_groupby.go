@@ -5,19 +5,6 @@ import (
 	"sort"
 )
 
-// Grouping the agents view's list. By default the list is grouped by what
-// each agent needs from the person (Needs you, Ready for review, Working,
-// Idle, Settled). The person can group it by session, by machine or by
-// project (the repository) instead. Needs you stays on top in every
-// grouping, as it is, so nothing waiting is pushed down by the bands. In a
-// band the rows keep the order of their state groups, and each row keeps its
-// state group for its mark, its lines and its keys.
-//
-// s opens a small picker: 1 to 4 choose the grouping, s again steps the sort
-// order as s did before, and any other key closes it. The grouping is kept in
-// the client's state file.
-
-// The groupings the picker offers, in its order. "" is by state.
 const (
 	ckGroupState   = ""
 	ckGroupSession = "session"
@@ -27,26 +14,20 @@ const (
 
 var ckGroupings = [...]string{ckGroupState, ckGroupSession, ckGroupMachine, ckGroupProject}
 
-// ckGroupingNames is what the picker and the header call each grouping.
 var ckGroupingNames = [...]string{"state", "session", "machine", "project"}
 
-// ckBand is one session's, machine's or project's rows.
 type ckBand struct {
 	key, title string
-	// local sorts this machine first among the machines.
-	local bool
-	count int
-	rows  []ckBandRow
+	local      bool
+	count      int
+	rows       []ckBandRow
 }
 
-// ckBandRow is a row of a band and the state group it came from.
 type ckBandRow struct {
 	group int
 	row   ckRow
 }
 
-// ckGroupBy is the grouping in force, "" for by state. The board has its
-// own grouping, by stage, and keeps it.
 func (m *OS) ckGroupBy() string {
 	ck := &m.Inbox.ck
 	if ck.board {
@@ -55,7 +36,6 @@ func (m *OS) ckGroupBy() string {
 	return ck.groupBy
 }
 
-// ckBandOf is the band a row goes in under grouping by: its key and title.
 func (m *OS) ckBandOf(by string, r ckRow, list []sidebarAgentEntry) (key, title string, local bool) {
 	host, sess, label := "", "", ""
 	var e sidebarAgentEntry
@@ -83,8 +63,6 @@ func (m *OS) ckBandOf(by string, r ckRow, list []sidebarAgentEntry) (key, title 
 	return "", "", false
 }
 
-// ckBandAdd puts the rows of state group g in their bands, and keeps the
-// bands sorted: this machine first, then by title.
 func (m *OS) ckBandAdd(bands []ckBand, by string, g int, items []ckRow, itemsOnly bool, list []sidebarAgentEntry) []ckBand {
 	for _, r := range items {
 		if itemsOnly && !r.hasItem && r.kind != ckRowNote {
@@ -116,7 +94,6 @@ func (m *OS) ckBandAdd(bands []ckBand, by string, g int, items []ckRow, itemsOnl
 	return bands
 }
 
-// cockpitSetGrouping groups the list by g, "" by state, and keeps it.
 func (m *OS) cockpitSetGrouping(g string) {
 	ck := &m.Inbox.ck
 	ck.groupBy = g
@@ -128,7 +105,6 @@ func (m *OS) cockpitSetGrouping(g string) {
 	m.cockpitTouch()
 }
 
-// ckGroupingName is the grouping in force as the header names it.
 func (m *OS) ckGroupingName() string {
 	by := m.ckGroupBy()
 	for i, g := range ckGroupings {

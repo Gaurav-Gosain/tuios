@@ -14,7 +14,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// replyDaemon answers reply-approval and get-approval and records the calls.
 type replyDaemon struct {
 	calls []fakeCall
 	plan  string
@@ -42,7 +41,6 @@ func (r *replyDaemon) replies() []map[string]any {
 	return out
 }
 
-// riskyHeld is a held approval a risk rule matched.
 func riskyHeld() session.AttentionItem {
 	it := heldApproval("1", "r1", session.ApprovalOnce, session.ApprovalAlways, session.ApprovalDeny)
 	it.Summary = "approve Bash: rm -rf build/"
@@ -52,14 +50,10 @@ func riskyHeld() session.AttentionItem {
 	return it
 }
 
-// approvalsOS is a client with items in its Inbox, the first selected, drawn
-// once and settled, and a fake daemon behind it.
 func approvalsOS(t *testing.T, items ...session.AttentionItem) (*OS, *replyDaemon) {
 	t.Helper()
 	m := inboxOS(t, zeroSettle())
 	m.Height, m.Width = 24, 80
-	// The plan windows below are measured in a focus as wide as the screen,
-	// which the strip gives at 80 columns.
 	m.Inbox.ck.listMode = "strip"
 	m.applyInboxSnapshot(InboxSnapshotMsg{Items: items})
 	m.OpenInbox("")
@@ -70,7 +64,6 @@ func approvalsOS(t *testing.T, items ...session.AttentionItem) (*OS, *replyDaemo
 	return m, r
 }
 
-// press is one key in the Inbox list the way the input path delivers it.
 func press(m *OS, key string) {
 	m.InboxKeyPressed(key)
 }
@@ -120,7 +113,6 @@ func TestAnswerKeyAsksFirst(t *testing.T) {
 	}
 }
 
-// numberEnter is a digit and then enter, as a person answers.
 func numberEnter(m *OS, n int) tea.Cmd {
 	cmd := m.InboxNumber(n)
 	if m.InboxConfirmOpen() {
@@ -129,7 +121,6 @@ func numberEnter(m *OS, n int) tea.Cmd {
 	return cmd
 }
 
-// replyEnter is an answer key and then enter.
 func replyEnter(m *OS, decision string) tea.Cmd {
 	cmd := m.InboxReplyApproval(decision)
 	if m.InboxConfirmOpen() {
@@ -138,7 +129,6 @@ func replyEnter(m *OS, decision string) tea.Cmd {
 	return cmd
 }
 
-// letterEnter is a letter on an approval and then enter.
 func letterEnter(m *OS, key string) (tea.Cmd, bool) {
 	cmd, ok := m.CockpitAnswerLetter(key)
 	if m.InboxConfirmOpen() {
@@ -147,7 +137,6 @@ func letterEnter(m *OS, key string) (tea.Cmd, bool) {
 	return cmd, ok
 }
 
-// planItem is a held plan of n lines.
 func planItem(lines int) (session.AttentionItem, string) {
 	var b strings.Builder
 	b.WriteString("# Refactor the retry loop\n")
@@ -167,7 +156,6 @@ func planItem(lines int) (session.AttentionItem, string) {
 	return it, text
 }
 
-// fetchPlan runs the plan read and feeds its reply back.
 func fetchPlan(t *testing.T, m *OS) {
 	t.Helper()
 	cmd := m.InboxApprovalFetch()
@@ -221,7 +209,6 @@ func TestPlanApprovesOnlyOnceReadToTheEnd(t *testing.T) {
 		t.Fatalf("the approve sent %v", got)
 	}
 
-	// Keep planning needs no reading.
 	it2, text2 := planItem(30)
 	it2.RequestID, it2.PlanSHA = "p6", "other"
 	m2, r2 := approvalsOS(t, it2)
@@ -279,7 +266,6 @@ func TestRiskyPeekAllowsOnTheSecondPress(t *testing.T) {
 		t.Fatalf("respond sent %v", sent)
 	}
 
-	// d denies at once.
 	f.peeks = []session.PromptPeek{claudePeek("p2")}
 	run(t, m, m.InboxPeek())
 	press(m, "d")

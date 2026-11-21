@@ -62,7 +62,6 @@ func TestSettingsMeterBoundsAndNaN(t *testing.T) {
 	for _, f := range []float64{-1.0, 0, 0.5, 1.0, 2.0, math.NaN(), math.Inf(1), math.Inf(-1)} {
 		out := settingsMeter(f, true, bg, pal)
 		w := lipgloss.Width(out)
-		// settingsMeterCells + 1 space = 7 cells
 		if w != settingsMeterCells+1 {
 			t.Errorf("settingsMeter(%v) width = %d, want %d", f, w, settingsMeterCells+1)
 		}

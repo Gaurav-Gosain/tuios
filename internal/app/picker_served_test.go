@@ -36,7 +36,6 @@ func TestServedPickersDoNotPreviewForEveryone(t *testing.T) {
 		{"local", ClientLocal, false, true},
 		{"ssh", ClientSSH, false, false},
 		{"web", ClientBrowser, false, false},
-		// The Learn tour is a browser client alone in its process.
 		{"learn", ClientBrowser, true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -88,7 +87,6 @@ func TestServedPickerCannotDeleteThemeFiles(t *testing.T) {
 	}{
 		{"ssh", ClientSSH, false, false},
 		{"local", ClientLocal, false, true},
-		// Another file names it as its base, and would stop loading.
 		{"local base", ClientLocal, true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -105,8 +103,6 @@ func TestServedPickerCannotDeleteThemeFiles(t *testing.T) {
 				t.Cleanup(func() { _ = os.Remove(kid) })
 			}
 			theme.ReloadCustomThemes()
-			// A local client previews the theme it highlights, and a refused
-			// delete leaves that preview up. Later tests expect no theme.
 			t.Cleanup(func() { _ = theme.Initialize(theme.NoneID) })
 
 			m := &OS{Settings: config.Global, Width: 120, Height: 40, Client: tc.kind,

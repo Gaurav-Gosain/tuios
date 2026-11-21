@@ -5,16 +5,6 @@ import (
 	"testing"
 )
 
-// The files section's context menu, driven through the real right-click handler
-// and read off the drawn frame.
-//
-// The claims here are the four the feature makes: the menu is about the row the
-// pointer was on and not the row the cursor was on, the rows it offers change
-// with what was clicked, its hints come from the live keybind registry, and the
-// delete it offers is the same delete the key offers, dialog and all.
-
-// fileRowCell is the screen cell of the listing row for name, read off the
-// rectangles the render published. "" asks for the ".." row.
 func fileRowCell(t *testing.T, m *OS, name string) (int, int) {
 	t.Helper()
 	want := name
@@ -32,8 +22,6 @@ func fileRowCell(t *testing.T, m *OS, name string) (int, int) {
 	return 0, 0
 }
 
-// filesBlankCell is a cell in the files section's band that no row covers,
-// which is the "empty space below the listing" the menu has to answer on.
 func filesBlankCell(t *testing.T, m *OS) (int, int) {
 	t.Helper()
 	band := m.sidebarSectionY[sidebarSectionFiles]
@@ -46,7 +34,6 @@ func filesBlankCell(t *testing.T, m *OS) (int, int) {
 	return 0, 0
 }
 
-// menuLabels is the menu's rows as "label" or "label (dim)".
 func menuLabels(m *OS) []string {
 	var out []string
 	for _, it := range m.ContextMenu.Items {
@@ -62,7 +49,6 @@ func menuLabels(m *OS) []string {
 	return out
 }
 
-// rightClickFile opens the menu on a listing row through the real handler.
 func rightClickFile(t *testing.T, m *OS, name string) {
 	t.Helper()
 	x, y := fileRowCell(t, m, name)
@@ -134,7 +120,6 @@ func TestFileRowMenuOffersWhatTheRowCanDo(t *testing.T) {
 			if got := menuLabels(m); strings.Join(got, "|") != strings.Join(tc.want, "|") {
 				t.Errorf("menu rows are\n  %v\nwant\n  %v", got, tc.want)
 			}
-			// The menu opens on a row that can run, never on a dimmed one.
 			cm := m.ContextMenu
 			if !cm.selectable(cm.List.Cursor) {
 				t.Errorf("the menu opened on row %d, which cannot be run", cm.List.Cursor)
@@ -152,17 +137,16 @@ func TestFileRowMenuOffersWhatTheRowCanDo(t *testing.T) {
 // the row the cursor was parked on.
 func TestFileMenuNamesTheRowThePointerWasOn(t *testing.T) {
 	dir := fileViewTree(t)
-	m := filesOS(t, dir, "beta.txt") // the cursor sits here
+	m := filesOS(t, dir, "beta.txt")
 	if got := m.FileActionTargetNameForTest(); got != "beta.txt" {
 		t.Fatalf("the cursor is on %q, want beta.txt", got)
 	}
 
-	rightClickFile(t, m, "README.md") // the pointer is here
+	rightClickFile(t, m, "README.md")
 	if got := m.FileActionTargetNameForTest(); got != "beta.txt" {
 		t.Errorf("opening the menu moved the cursor to %q; a right-click must not", got)
 	}
 
-	// Taking the Rename row is what hands the menu's row to the action.
 	for i, it := range m.ContextMenu.Items {
 		if it.Label == "Rename" {
 			m.ContextMenu.List.Cursor = i
@@ -179,7 +163,6 @@ func TestFileMenuNamesTheRowThePointerWasOn(t *testing.T) {
 		t.Errorf("the rename opened on %q, want the clicked README.md", got)
 	}
 	m.ClearMenuTarget()
-	// And the carry is spent: the same action by key is back on the cursor row.
 	m.FilePromptCancel()
 	if !m.SidebarFileRename() {
 		t.Fatal("the rename refused the cursor row")

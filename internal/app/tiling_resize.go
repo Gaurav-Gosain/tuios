@@ -21,12 +21,6 @@ func (m *OS) ResizeFocusedWindowHeight(deltaPixels int) {
 		return
 	}
 
-	// The bottom edge is the screen boundary, not a divider, so move the TOP
-	// edge instead: the primary height keys resize the bottommost pane too, and
-	// grow still grows. If the top edge is also the boundary the pane fills the
-	// column and there is nothing to move. Both boundaries are the content
-	// region's, measured from the top margin, as the width keys measure from
-	// the left margin.
 	contentBottom := m.PaneTop() + m.PaneHeight()
 	atBottomEdge := (focusedWindow.Y + focusedWindow.Height) >= (contentBottom - edgeTolerance)
 	if atBottomEdge {
@@ -37,13 +31,11 @@ func (m *OS) ResizeFocusedWindowHeight(deltaPixels int) {
 		return
 	}
 
-	// Calculate new dimensions (bottom edge moves)
 	newX := focusedWindow.X
 	newY := focusedWindow.Y
 	newWidth := focusedWindow.Width
 	newHeight := focusedWindow.Height + deltaPixels
 
-	// Call the shared tiling adjustment logic
 	m.AdjustTilingNeighbors(focusedWindow, newX, newY, newWidth, newHeight)
 }
 
@@ -59,17 +51,11 @@ func (m *OS) ResizeFocusedWindowWidth(deltaPixels int) {
 		return
 	}
 
-	// In scrolling mode, change the column's fixed width
 	if m.UseScrollingLayout {
 		m.scrollingResizeColumn(deltaPixels)
 		return
 	}
 
-	// The right edge is the content-region boundary (the screen edge, or the
-	// sidebar band when it reserves the right margin), not a divider, so move the
-	// LEFT edge instead: the primary width keys resize the rightmost pane too, and
-	// grow still grows. If the left edge is also the boundary the pane fills the
-	// row and there is nothing to move.
 	contentRight := m.PaneLeft() + m.PaneWidth()
 	atRightEdge := (focusedWindow.X + focusedWindow.Width) >= (contentRight - edgeTolerance)
 	if atRightEdge {
@@ -80,13 +66,11 @@ func (m *OS) ResizeFocusedWindowWidth(deltaPixels int) {
 		return
 	}
 
-	// Calculate new dimensions (right edge moves)
 	newX := focusedWindow.X
 	newY := focusedWindow.Y
 	newWidth := focusedWindow.Width + deltaPixels
 	newHeight := focusedWindow.Height
 
-	// Call the shared tiling adjustment logic
 	m.AdjustTilingNeighbors(focusedWindow, newX, newY, newWidth, newHeight)
 }
 
@@ -102,26 +86,21 @@ func (m *OS) ResizeFocusedWindowWidthLeft(deltaPixels int) {
 		return
 	}
 
-	// In scrolling mode, change the column's fixed width
 	if m.UseScrollingLayout {
 		m.scrollingResizeColumn(-deltaPixels)
 		return
 	}
 
-	// Block resizing if left edge is at the content-region boundary (the screen
-	// edge, or the sidebar band when it reserves the left margin)
 	atLeftEdge := focusedWindow.X <= m.PaneLeft()+edgeTolerance
 	if atLeftEdge {
 		return
 	}
 
-	// Calculate new dimensions (left edge moves)
 	newX := focusedWindow.X + deltaPixels
 	newY := focusedWindow.Y
 	newWidth := focusedWindow.Width - deltaPixels
 	newHeight := focusedWindow.Height
 
-	// Call the shared tiling adjustment logic
 	m.AdjustTilingNeighbors(focusedWindow, newX, newY, newWidth, newHeight)
 }
 
@@ -137,20 +116,16 @@ func (m *OS) ResizeFocusedWindowHeightTop(deltaPixels int) {
 		return
 	}
 
-	// Block resizing if the top edge is at the content-region boundary (the
-	// screen edge, or the dock or a session reserve above the panes)
 	atTopEdge := focusedWindow.Y <= m.PaneTop()+edgeTolerance
 	if atTopEdge {
 		return
 	}
 
-	// Calculate new dimensions (top edge moves)
 	newX := focusedWindow.X
 	newY := focusedWindow.Y + deltaPixels
 	newWidth := focusedWindow.Width
-	newHeight := focusedWindow.Height - deltaPixels // Height decreases when Y increases
+	newHeight := focusedWindow.Height - deltaPixels
 
-	// Call the shared tiling adjustment logic
 	m.AdjustTilingNeighbors(focusedWindow, newX, newY, newWidth, newHeight)
 }
 
@@ -204,24 +179,18 @@ func (m *OS) ResizesWithTiling(w *terminal.Window) bool {
 	return m.AutoTiling && w != nil && !w.IsFloating
 }
 
-// resizeOp defines how a window should be resized during tiling adjustments
 type resizeOp func(m *OS, win *terminal.Window, width, height int)
 
-// resizeImmediate performs an immediate resize with PTY update
 func resizeImmediate(m *OS, win *terminal.Window, width, height int) {
 	m.resizeNow(win, width, height)
 }
 
-// resizeVisual performs a visual-only resize, deferring PTY update
 func resizeVisual(m *OS, win *terminal.Window, width, height int) {
 	win.ResizeVisual(width, height)
 	win.IsBeingManipulated = true
 	m.PendingResizes[win.ID] = [2]int{width, height}
 }
 
-// adjustTilingNeighborsGeneric is the core tiling resize algorithm.
-// It adjusts ALL windows on affected split lines with constraint-based positioning.
-// The resize parameter controls whether to use immediate or visual-only resize.
 func (m *OS) adjustTilingNeighborsGeneric(resized *terminal.Window, newX, newY, newWidth, newHeight int, resize resizeOp) (finalX, finalY, finalRight, finalBottom int) {
 	oldX := resized.X
 	oldY := resized.Y
@@ -230,9 +199,6 @@ func (m *OS) adjustTilingNeighborsGeneric(resized *terminal.Window, newX, newY, 
 	newRight := newX + newWidth
 	newBottom := newY + newHeight
 
-	// A floating pane is on no split line. Its old edges can still lie on a
-	// tiled pane's edge (it floats out of the slot it was tiled in), and moving
-	// that line would resize the tiled pane behind it.
 	if resized.IsFloating {
 		return newX, newY, newRight, newBottom
 	}
@@ -241,22 +207,9 @@ func (m *OS) adjustTilingNeighborsGeneric(resized *terminal.Window, newX, newY, 
 	const minHeight = config.DefaultWindowHeight
 	minY := m.PaneTop()
 	maxY := minY + m.PaneHeight()
-	// Vertical split lines live inside the content region: they can be dragged
-	// no further left than the reserved left margin and no further right than
-	// the content's right edge, so a resize can never push a pane under the
-	// sidebar band.
 	minX := m.PaneLeft()
 	maxX := minX + m.PaneWidth()
 
-	// The right edge first, then the left, then the bottom, then the top: each
-	// move sees the panes the one before it already moved.
-	//
-	// A split is named by the far edge of the panes before it, and the panes
-	// after it start gap cells later. The gap is the column or row the layout
-	// keeps between neighbours: the divider's cell under shared borders, plus
-	// appearance.gap. Moving both sides to the same line would close that gap,
-	// and the divider would have nowhere to be drawn for as long as the panes
-	// stayed where the resize left them.
 	gap := m.separatorGap()
 	if newRight != oldRight {
 		newRight = m.moveVerticalSplit(oldRight, newRight, gap, resized, resize, minWidth, minX, maxX)
@@ -274,15 +227,6 @@ func (m *OS) adjustTilingNeighborsGeneric(resized *terminal.Window, newX, newY, 
 	return newX, newY, newRight, newBottom
 }
 
-// moveVerticalSplit moves the vertical split whose left panes end at column
-// old toward requested, resizing every pane on it except resized, and returns
-// the column the left panes end at once every pane's minimum width is
-// respected. The right panes start gap columns after it.
-//
-// resized takes part in the constraint and not in the move: the caller sets
-// its rectangle from the returned line, and a line that left it narrower than
-// the minimum would be clamped afterwards into a pane that no longer meets its
-// neighbour.
 func (m *OS) moveVerticalSplit(old, requested, gap int, resized *terminal.Window, resize resizeOp, minWidth, minX, maxX int) int {
 	leftWindows, rightWindows := findWindowsOnVerticalSplitAll(m, old, gap)
 
@@ -307,8 +251,6 @@ func (m *OS) moveVerticalSplit(old, requested, gap int, resized *terminal.Window
 	return split
 }
 
-// moveHorizontalSplit is moveVerticalSplit for the horizontal split whose top
-// panes end at row old.
 func (m *OS) moveHorizontalSplit(old, requested, gap int, resized *terminal.Window, resize resizeOp, minHeight, minY, maxY int) int {
 	topWindows, bottomWindows := findWindowsOnHorizontalSplitAll(m, old, gap)
 
@@ -333,19 +275,6 @@ func (m *OS) moveHorizontalSplit(old, requested, gap int, resized *terminal.Wind
 	return split
 }
 
-// applyBSPResize moves the dividers that own the edges the caller changed and
-// rebuilds every pane's geometry from the tree. It reports false when the
-// workspace is not on a BSP tree that holds this window, in which case the
-// caller falls back to the geometry scan, which is still what master-stack and
-// untracked windows need.
-//
-// Driving the resize through the tree rather than through the geometry scan is
-// what keeps unrelated panes still: the tree knows the divider separates
-// exactly two subtrees, while a geometry scan cannot tell the dragged divider
-// apart from another one that happens to sit on the same line. It also removes
-// a whole class of staleness, because the tree is updated first and the window
-// rectangles are derived from it, so there is never a window of time in which
-// the two disagree and a retile can throw the resize away.
 func (m *OS) applyBSPResize(resized *terminal.Window, newX, newY, newWidth, newHeight int, resize resizeOp) bool {
 	if !m.AutoTiling || !m.UseBSPLayout || m.UseScrollingLayout || resized.IsFloating {
 		return false
@@ -384,8 +313,6 @@ func (m *OS) applyBSPResize(resized *terminal.Window, newX, newY, newWidth, newH
 		return false
 	}
 
-	// A pending deferred sync would re-derive ratios from geometry that has not
-	// been rebuilt yet, undoing the divider that was just moved.
 	m.pendingBSPSync = false
 
 	if m.bspResizeScratch == nil {
@@ -396,10 +323,6 @@ func (m *OS) applyBSPResize(resized *terminal.Window, newX, newY, newWidth, newH
 		if win == nil || win.Workspace != m.CurrentWorkspace || win.Minimized || win.IsFloating {
 			continue
 		}
-		// Unconditionally, before the unchanged-geometry check below: a window
-		// this resize leaves alone can still be mid-snap from an earlier
-		// layout change, and that animation would go on stamping its own
-		// rectangles over the drag on every tick.
 		m.CancelSnapAnimation(win)
 
 		if win.X == rect.X && win.Y == rect.Y && win.Width == rect.W && win.Height == rect.H {
@@ -412,9 +335,6 @@ func (m *OS) applyBSPResize(resized *terminal.Window, newX, newY, newWidth, newH
 	return true
 }
 
-// constrainVerticalSplit calculates the valid column for the far edge of the
-// panes left of a vertical split, kept within the content region [minX, maxX]
-// with gap columns left over for the panes on its right.
 func (m *OS) constrainVerticalSplit(requested, gap int, leftWindows, rightWindows []*terminal.Window, minWidth, minX, maxX int) int {
 	minValidX := minX
 	for _, win := range leftWindows {
@@ -429,8 +349,6 @@ func (m *OS) constrainVerticalSplit(requested, gap int, leftWindows, rightWindow
 	return max(minValidX, min(requested, maxValidX))
 }
 
-// constrainHorizontalSplit is constrainVerticalSplit for the bottom edge of
-// the panes above a horizontal split.
 func (m *OS) constrainHorizontalSplit(requested, gap int, topWindows, bottomWindows []*terminal.Window, minHeight, minY, maxY int) int {
 	minValidY := minY
 	for _, win := range topWindows {
@@ -445,8 +363,6 @@ func (m *OS) constrainHorizontalSplit(requested, gap int, topWindows, bottomWind
 	return max(minValidY, min(requested, maxValidY))
 }
 
-// applyTilingResult updates the resized window with constrained values from adjustTilingNeighborsGeneric
-// and validates that the dimensions remain within bounds, clamping as a last resort.
 func (m *OS) applyTilingResult(resized *terminal.Window, finalX, finalY, finalRight, finalBottom int) {
 	const minWidth = config.DefaultWindowWidth
 	const minHeight = config.DefaultWindowHeight
@@ -460,9 +376,6 @@ func (m *OS) applyTilingResult(resized *terminal.Window, finalX, finalY, finalRi
 	resized.Width = finalRight - finalX
 	resized.Height = finalBottom - finalY
 
-	// Fallback clamp if constraint calculation produced invalid values; the
-	// clamp box is the content region, so a pane can never be pushed under a
-	// reserved sidebar band.
 	if resized.Width < minWidth || resized.Height < minHeight ||
 		resized.X < minX || resized.Y < 0 ||
 		resized.X+resized.Width > maxX || resized.Y+resized.Height > maxY {
@@ -486,9 +399,6 @@ func (m *OS) AdjustTilingNeighbors(resized *terminal.Window, newX, newY, newWidt
 	}
 	m.MarkLayoutCustom()
 
-	// This is the keyboard resize path, where every press is a finished resize.
-	// The mouse path goes through AdjustTilingNeighborsVisual and announces
-	// itself once on release instead of once per motion event.
 	m.FireResized(resized)
 }
 
@@ -552,9 +462,6 @@ func (m *OS) SyncMasterStackFromGeometry() {
 		rects[i] = layout.Rect{X: w.X, Y: w.Y, W: w.Width, H: w.Height}
 	}
 	p := m.masterParams()
-	// The rest of the splits, the grid's included, which the two ratios below
-	// do not cover. Read first, against the parameters the panes were laid
-	// out with.
 	if splits, ok := layout.MasterSplitsFrom(rects, region, p); ok {
 		m.setWorkspaceMasterSplits(m.CurrentWorkspace, splits)
 	}
@@ -571,9 +478,6 @@ func (m *OS) SyncMasterStackFromGeometry() {
 	}
 }
 
-// setWorkspaceMasterSplits records the splits of a workspace's master-stack
-// panes. Like WorkspaceStackRatio, the map is the only copy, and it may be nil
-// in an OS built by hand.
 func (m *OS) setWorkspaceMasterSplits(workspace int, splits layout.MasterSplits) {
 	if m.WorkspaceMasterSplits == nil {
 		m.WorkspaceMasterSplits = make(map[int]layout.MasterSplits)
@@ -581,8 +485,6 @@ func (m *OS) setWorkspaceMasterSplits(workspace int, splits layout.MasterSplits)
 	m.WorkspaceMasterSplits[workspace] = splits
 }
 
-// setMasterRatio sets the master ratio in force and records it for the current
-// workspace, the two places a retile and a workspace switch read it from.
 func (m *OS) setMasterRatio(ratio float64) {
 	m.MasterRatio = ratio
 	if m.WorkspaceMasterRatio == nil {
@@ -591,14 +493,6 @@ func (m *OS) setMasterRatio(ratio float64) {
 	m.WorkspaceMasterRatio[m.CurrentWorkspace] = ratio
 }
 
-// setWorkspaceStackRatio records a workspace's stack ratio: the top stacked
-// pane's share of the height in the three pane master-stack layout.
-//
-// WorkspaceStackRatio has no live copy beside it the way MasterRatio has one:
-// the tiler reads the current workspace's entry straight from the map, so
-// there is nothing to save on the way out of a workspace or restore on the way
-// in. No entry means the stacked panes split the height equally. The map may be
-// nil in an OS built by hand, which is why writes go through here.
 func (m *OS) setWorkspaceStackRatio(workspace int, ratio float64) {
 	if m.WorkspaceStackRatio == nil {
 		m.WorkspaceStackRatio = make(map[int]float64)
@@ -606,11 +500,6 @@ func (m *OS) setWorkspaceStackRatio(workspace int, ratio float64) {
 	m.WorkspaceStackRatio[workspace] = ratio
 }
 
-// splitTolerance is how far off a split a pane edge may sit and still count
-// as on it. Panes the layout placed edge to edge are matched with a cell of
-// slack, as they always were. Panes the layout spaced apart are matched
-// exactly: with slack, the edge of a pane on one side of a one-cell gap would
-// also read as on the other side.
 func splitTolerance(gap int) int {
 	if gap == 0 {
 		return 1
@@ -618,9 +507,6 @@ func splitTolerance(gap int) int {
 	return 0
 }
 
-// findWindowsOnVerticalSplitAll finds the tiled panes of the current
-// workspace on a vertical split: those that end at column splitX, and those
-// that start gap columns after it.
 func findWindowsOnVerticalSplitAll(m *OS, splitX, gap int) (leftWindows, rightWindows []*terminal.Window) {
 	tolerance := splitTolerance(gap)
 	for _, win := range m.Windows {
@@ -636,8 +522,6 @@ func findWindowsOnVerticalSplitAll(m *OS, splitX, gap int) (leftWindows, rightWi
 	return leftWindows, rightWindows
 }
 
-// findWindowsOnHorizontalSplitAll is findWindowsOnVerticalSplitAll for a
-// horizontal split whose top panes end at row splitY.
 func findWindowsOnHorizontalSplitAll(m *OS, splitY, gap int) (topWindows, bottomWindows []*terminal.Window) {
 	tolerance := splitTolerance(gap)
 	for _, win := range m.Windows {
@@ -653,7 +537,6 @@ func findWindowsOnHorizontalSplitAll(m *OS, splitY, gap int) (topWindows, bottom
 	return topWindows, bottomWindows
 }
 
-// abs returns the absolute value of an integer
 func abs(x int) int {
 	if x < 0 {
 		return -x
@@ -706,7 +589,6 @@ func (m *OS) ResizeWindowByID(id, dir string, amount float64) (bool, error) {
 			near, far = atTop, atBottom
 		}
 	}
-	// The border on the side the move goes toward, else the far one.
 	moveFar := near
 	if near && far {
 		return false, nil
@@ -714,16 +596,12 @@ func (m *OS) ResizeWindowByID(id, dir string, amount float64) (bool, error) {
 	nx, ny, nw, nh := x, y, width, height
 	switch {
 	case horizontal && (dir == "right") != moveFar:
-		// The right border.
 		nw = width + delta
 	case horizontal:
-		// The left border.
 		nx, nw = x+delta, width-delta
 	case (dir == "down") != moveFar:
-		// The bottom border.
 		nh = height + delta
 	default:
-		// The top border.
 		ny, nh = y+delta, height-delta
 	}
 	if nw < 1 || nh < 1 {

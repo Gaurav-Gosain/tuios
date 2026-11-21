@@ -12,9 +12,6 @@ import (
 	"time"
 )
 
-// The cross-device case needs a second filesystem at a known place and the
-// device number from a unix stat, so it runs on unix only.
-
 // TestTrashOnAnotherDiskNamesTheWayRound is the cross-filesystem gap, and it is
 // the one thing the home trash cannot do. It needs two real filesystems, so it
 // skips where there is only one.
@@ -51,7 +48,6 @@ func TestTrashOnAnotherDiskNamesTheWayRound(t *testing.T) {
 	}
 }
 
-// sameDevice reports whether two paths sit on one filesystem.
 func sameDevice(t *testing.T, a, b string) bool {
 	t.Helper()
 	sa, err := os.Stat(a)

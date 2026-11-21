@@ -25,70 +25,29 @@ import (
 	"tuios.dev/shot/mosaic"
 )
 
-// Previews of the images in a reply (see composer/preview.go for the layout).
-//
-// The host decides how a picture is shown, the way it does for a pane's
-// images:
-//
-//   - kitty graphics, when the host terminal has them and said how large a
-//     cell is: the picture is uploaded once per image and size and placed
-//     after the frame, as the launcher's icons are (launcher_icons.go).
-//   - block glyphs from shot/mosaic otherwise, at 256 colours and
-//     truecolor. They are ordinary cells, so they need nothing after the frame.
-//     A sixel host gets these too: sixel cannot take a placement down, which
-//     a panel that moves and closes needs, so the launcher and the screenshot
-//     preview skip it for the same reason.
-//   - a line of words at 16 colours.
-//
-// Decoding and scaling are CPU work, so they run in a tea.Cmd, once per image
-// and size, and the result is kept for the life of the client, bounded by
-// replyPreviewMax pictures and replyPreviewBytes bytes. Nothing runs on a
-// timer, and with no image in an open reply nothing here runs at all.
-
-// replyPreviewMax bounds the pictures kept. A thumbnail is tens of kilobytes;
-// a view of a large photo is megabytes, which is why the bytes are bounded too.
 const replyPreviewMax = 64
 
-// replyPreviewBytes bounds the memory the pictures kept hold, counted the way
-// previewPicture.size does. A picture on screen is never dropped for it, so a
-// view larger than this still shows; the rest wait their turn oldest first.
 const replyPreviewBytes = 32 << 20
 
-// replyPreviewMaxPixels bounds the images a preview decodes, by the size the
-// header gives. A small file can declare a huge image, and decoding it would
-// take gigabytes. A larger image is still sent; it is shown blank here.
 const replyPreviewMaxPixels = 24 << 20
 
-// replyPreviewIDBase is where the reply previews' kitty image ids start, apart
-// from the launcher's (0xF000_0000) and the screenshot preview's
-// (0xF100_0000).
 const replyPreviewIDBase = 0xF200_0000
 
-// previewKey is one picture: an image at a box, for a way of showing it.
 type previewKey struct {
 	sum        [sha256.Size]byte
 	cols, rows int
 	mode       composer.PreviewMode
-	// For block glyphs: the colours and glyphs, and the ground a
-	// transparent pixel is laid on.
-	colors mosaic.Colors
-	kind   mosaic.Kind
-	ground [4]uint32
+	colors     mosaic.Colors
+	kind       mosaic.Kind
+	ground     [4]uint32
 }
 
-// previewPicture is a prepared picture: lines of glyphs, or PNG bytes for the
-// host. A nil picture is an image that cannot be decoded here.
 type previewPicture struct {
 	lines []string
 	png   []byte
-	// w and h are the PNG's size in pixels.
-	w, h int
+	w, h  int
 }
 
-// size is the bytes the picture holds: the capacity of the PNG and the glyph
-// lines. preparePicture keeps the PNG at its length, so the capacity equals it;
-// counting the capacity stays right if a later change keeps a larger buffer. A
-// nil picture holds nothing.
 func (pic *previewPicture) size() int {
 	if pic == nil {
 		return 0
@@ -100,68 +59,42 @@ func (pic *previewPicture) size() int {
 	return n
 }
 
-// replyPreview is the client's previewer. It is reached from the Update
-// goroutine and from the render; the decode commands only build pictures and
-// hand them back as messages.
 type replyPreview struct {
 	m *OS
 
-	mu      sync.Mutex
-	version uint64
-	pics    map[previewKey]*previewPicture
-	order   []previewKey
-	// held is the bytes of the pictures in pics, by previewPicture.size.
-	held  int
-	asked map[previewKey]bool
-	// hostID is the kitty image id a picture was uploaded under, hostOrder the
-	// same pictures oldest first, and shown what is placed on the host now. See
-	// inbox_reply_preview_unix.go.
-	hostID    map[previewKey]uint32
-	hostOrder []previewKey
-	// gone is the kitty ids of evicted pictures, freed at the next flush.
-	gone   []uint32
-	nextID uint32
-	shown  map[previewID]previewPlacement
-	// ph is the pictures drawn as kitty Unicode placeholders (see
-	// thread_image_placeholder.go): the id the cells name, made when the
-	// frame draws them, and what the host holds of it.
-	ph map[previewKey]*placeholderPic
-	// eraseHooked says the writer tells hostErased when it erases the host's
-	// screen. Only the render touches it.
+	mu          sync.Mutex
+	version     uint64
+	pics        map[previewKey]*previewPicture
+	order       []previewKey
+	held        int
+	asked       map[previewKey]bool
+	hostID      map[previewKey]uint32
+	hostOrder   []previewKey
+	gone        []uint32
+	nextID      uint32
+	shown       map[previewID]previewPlacement
+	ph          map[previewKey]*placeholderPic
 	eraseHooked bool
 
-	// openDir is the private folder of the copy the desktop viewer opened,
-	// removed when the view closes and when the client ends.
 	openDir string
 }
 
-// previewID is one placement on the host: the image, and the placement id
-// within it, as kitty scopes them.
 type previewID struct {
 	img, placement uint32
 }
 
-// previewPlacement is one picture on the host: which, and its cell box.
 type previewPlacement struct {
 	key        previewKey
 	x, y       int
 	cols, rows int
-	// skip is the picture rows cut off the top, and rows the ones shown
-	// from there: a card the window cuts shows its part in the window. Both
-	// count rows of key's box, so a whole picture has skip 0 and rows
-	// key.rows.
-	skip int
-	// virtual says the frame drew the picture as placeholder cells: the host
-	// gets the picture and a virtual placement, and the cells place it.
-	virtual bool
+	skip       int
+	virtual    bool
 }
 
-// replyPreviewMsg carries prepared pictures back to the Update goroutine.
 type replyPreviewMsg struct {
 	pics map[previewKey]*previewPicture
 }
 
-// replyPreviewer is the OS's previewer, made on first use.
 func (m *OS) replyPreviewer() *replyPreview {
 	if m.replyPreview == nil {
 		m.replyPreview = &replyPreview{
@@ -176,7 +109,6 @@ func (m *OS) replyPreviewer() *replyPreview {
 	return m.replyPreview
 }
 
-// Mode is how images are shown on this host now.
 func (p *replyPreview) Mode() composer.PreviewMode {
 	m := p.m
 	if m.replyPixelsReady() {
@@ -188,14 +120,12 @@ func (p *replyPreview) Mode() composer.PreviewMode {
 	return composer.PreviewCells
 }
 
-// Version changes when a picture arrives.
 func (p *replyPreview) Version() uint64 {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.version
 }
 
-// CellAspect is a host cell's height over its width, 2 when unknown.
 func (p *replyPreview) CellAspect() float64 {
 	if w, h := p.m.hostCellSize(); w > 0 && h > 0 {
 		return float64(h) / float64(w)
@@ -203,14 +133,10 @@ func (p *replyPreview) CellAspect() float64 {
 	return 2
 }
 
-// CanOpen reports whether an image can be opened in the desktop's viewer:
-// only on the machine the person is at.
 func (p *replyPreview) CanOpen() bool {
 	return p.m.replyImagesOK() && desktopOpener() != ""
 }
 
-// Cells is a picture as glyph lines, nil while it is being prepared or when it
-// cannot be.
 func (p *replyPreview) Cells(img *composer.Image, cols, rows int) []string {
 	k := p.cellsKey(img, cols, rows)
 	p.mu.Lock()
@@ -221,7 +147,6 @@ func (p *replyPreview) Cells(img *composer.Image, cols, rows int) []string {
 	return nil
 }
 
-// cellsKey is the key of a glyph picture as this frame would draw it.
 func (p *replyPreview) cellsKey(img *composer.Image, cols, rows int) previewKey {
 	colors, _ := symbolColors()
 	kind := mosaic.Quadrant
@@ -231,12 +156,10 @@ func (p *replyPreview) cellsKey(img *composer.Image, cols, rows int) previewKey 
 	return previewKey{sum: img.Sum, cols: cols, rows: rows, mode: composer.PreviewCells, colors: colors, kind: kind, ground: rgbaKey(theme.UI().Card)}
 }
 
-// pixelsKey is the key of a picture the host draws.
 func pixelsKey(img *composer.Image, cols, rows int) previewKey {
 	return previewKey{sum: img.Sum, cols: cols, rows: rows, mode: composer.PreviewPixels}
 }
 
-// rgbaKey is c's channels.
 func rgbaKey(c color.Color) [4]uint32 {
 	if c == nil {
 		return [4]uint32{}
@@ -245,10 +168,6 @@ func rgbaKey(c color.Color) [4]uint32 {
 	return [4]uint32{r, g, b, a}
 }
 
-// replyPreviewCmd prepares the pictures the open draft shows that are not
-// ready. It is called after a key, a paste or an image reaches the draft, and
-// it is nil, at the cost of a loop over at most five boxes, when they are all
-// ready.
 func (m *OS) replyPreviewCmd() tea.Cmd {
 	d, ok := m.openDraft()
 	if !ok {
@@ -297,8 +216,6 @@ func (m *OS) replyPreviewCmd() tea.Cmd {
 	}
 }
 
-// applyReplyPreview files prepared pictures away and has the next frame draw
-// them.
 func (m *OS) applyReplyPreview(msg replyPreviewMsg) {
 	p := m.replyPreviewer()
 	p.mu.Lock()
@@ -316,10 +233,6 @@ func (m *OS) applyReplyPreview(msg replyPreviewMsg) {
 		p.version++
 		return
 	}
-	// A picture on screen stays whatever its size: the message just applied,
-	// and what the host shows now. In cells mode, and on builds without kitty
-	// placements, a glyph picture from an earlier message is not protected;
-	// glyph pictures are small, so that is accepted.
 	onScreen := make(map[previewKey]bool, len(msg.pics)+len(p.shown))
 	for k := range msg.pics {
 		onScreen[k] = true
@@ -349,10 +262,6 @@ func (m *OS) applyReplyPreview(msg replyPreviewMsg) {
 	p.version++
 }
 
-// preparePicture decodes img and draws it for k: as glyph lines, or as PNG
-// bytes of the box's size in pixels. The PNG is copied into a slice of exactly
-// its length, so the encoder's larger buffer is not kept. It returns nil for an
-// image this build cannot decode, such as WebP, which is then shown blank.
 func preparePicture(img *composer.Image, k previewKey, cellW, cellH int, ground color.Color) *previewPicture {
 	if img.Width <= 0 || img.Height <= 0 || img.Width > replyPreviewMaxPixels/img.Height {
 		return nil
@@ -371,8 +280,6 @@ func preparePicture(img *composer.Image, k previewKey, cellW, cellH int, ground 
 		copy(out, b.Bytes())
 		return &previewPicture{png: out, w: dst.Bounds().Dx(), h: dst.Bounds().Dy()}
 	}
-	// Four by eight pixels a cell is enough for every glyph set, octants
-	// included, and keeps the palette small.
 	const pw, ph = 4, 8
 	dst := image.NewRGBA(image.Rect(0, 0, k.cols*pw, k.rows*ph))
 	draw.Draw(dst, dst.Bounds(), image.NewUniform(ground), image.Point{}, draw.Src)
@@ -384,9 +291,6 @@ func preparePicture(img *composer.Image, k previewKey, cellW, cellH int, ground 
 	return &previewPicture{lines: glyphLines(cells, k.cols)}
 }
 
-// boxScale scales src to w by h pixels, each the average of the source
-// pixels under it, so a large picture made small keeps its edges smooth. It
-// reads every source pixel once. The launcher's icons are scaled the same way.
 func boxScale(src image.Image, w, h int) *image.RGBA {
 	dst := image.NewRGBA(image.Rect(0, 0, max(w, 1), max(h, 1)))
 	b := src.Bounds()
@@ -394,9 +298,6 @@ func boxScale(src image.Image, w, h int) *image.RGBA {
 		return dst
 	}
 	if w >= b.Dx() && h >= b.Dy() {
-		// Made larger, a box of one source pixel per target pixel is a
-		// nearest-pixel blow-up: hard steps that block glyphs then draw as
-		// a checker. Bilinear keeps a gradient smooth.
 		shot.ScaleBilinear(dst, dst.Bounds(), src, b, false)
 		return dst
 	}
@@ -423,7 +324,6 @@ func boxScale(src image.Image, w, h int) *image.RGBA {
 	return dst
 }
 
-// indexed is an opaque picture in the paletted form mosaic takes.
 func indexed(img *image.RGBA) mosaic.Indexed {
 	b := img.Bounds()
 	out := mosaic.Indexed{Width: b.Dx(), Height: b.Dy(), Pix: make([]uint16, b.Dx()*b.Dy())}
@@ -444,9 +344,6 @@ func indexed(img *image.RGBA) mosaic.Indexed {
 	return out
 }
 
-// glyphLines writes cells as lines of styled text, cols cells a line. The
-// colours are the picture's own; the frame's colour profile brings them down
-// to what the host shows, as it does for a pane's glyph images.
 func glyphLines(cells []mosaic.Cell, cols int) []string {
 	lines := make([]string, 0, len(cells)/cols)
 	var b strings.Builder
@@ -467,7 +364,6 @@ func glyphLines(cells []mosaic.Cell, cols int) []string {
 	return append(lines, b.String())
 }
 
-// writeRGB writes c as the r;g;b of an SGR colour.
 func writeRGB(b *strings.Builder, c color.RGBA) {
 	b.WriteString(strconv.Itoa(int(c.R)))
 	b.WriteByte(';')
@@ -476,8 +372,6 @@ func writeRGB(b *strings.Builder, c color.RGBA) {
 	b.WriteString(strconv.Itoa(int(c.B)))
 }
 
-// desktopOpener is the program that opens a file in the desktop's viewer, ""
-// for none.
 func desktopOpener() string {
 	switch runtime.GOOS {
 	case "darwin":
@@ -490,8 +384,6 @@ func desktopOpener() string {
 	return ""
 }
 
-// replyOpenImage opens the image the reply's view shows in the desktop's
-// viewer, from a copy in a private folder that goes when the view closes.
 func (m *OS) replyOpenImage(img *composer.Image) tea.Cmd {
 	p := m.replyPreviewer()
 	opener := desktopOpener()
@@ -520,7 +412,6 @@ func (m *OS) replyOpenImage(img *composer.Image) tea.Cmd {
 	}
 }
 
-// removeOpened removes the copy the desktop viewer was given, if any.
 func (p *replyPreview) removeOpened() {
 	if p == nil || p.openDir == "" {
 		return
@@ -529,8 +420,6 @@ func (p *replyPreview) removeOpened() {
 	p.openDir = ""
 }
 
-// replyPreviewClosed is called when a draft editor or its image view
-// closes: the copy for the desktop viewer goes.
 func (m *OS) replyPreviewClosed() {
 	if m.replyPreview != nil {
 		d, ok := m.openDraft()
@@ -540,9 +429,6 @@ func (m *OS) replyPreviewClosed() {
 	}
 }
 
-// shotPieces is the previews the host shows now, for a screen capture. Each
-// picture is already the size of its cell box, and it is drawn over the
-// cells, as the host draws it. A nil previewer has none.
 func (p *replyPreview) shotPieces() []shotPiece {
 	if p == nil {
 		return nil
@@ -569,8 +455,7 @@ func (p *replyPreview) shotPieces() []shotPiece {
 				return png.Decode(bytes.NewReader(data))
 			},
 			source: func(pix image.Image) image.Rectangle { return pix.Bounds() },
-			// A cropped placement is the rows from skip of the whole box.
-			col: pl.x, row: pl.y - pl.skip, cols: pl.cols, rows: max(pl.key.rows, pl.skip+pl.rows),
+			col:    pl.x, row: pl.y - pl.skip, cols: pl.cols, rows: max(pl.key.rows, pl.skip+pl.rows),
 			sub: image.Rect(0, pl.skip, pl.cols, pl.skip+pl.rows),
 			z:   math.MaxInt32,
 		})

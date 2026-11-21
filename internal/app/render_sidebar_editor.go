@@ -7,17 +7,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// Rail layout editor panel size.
 const (
 	sectionEditorInnerWidth  = 46
 	sectionEditorVisibleRows = 12
 )
 
-// sectionEditorHints is the footer, shared by the renderer and the sizing
-// helper so both measure the same panel.
-//
-// The keys are the dock editor's, plus the one control the rail has that the
-// dock does not: the share.
 var sectionEditorHints = []overlay.Hint{
 	{Key: hintListMoveLetters, Label: "select"},
 	{Key: "⇧↑↓", Label: "move"},
@@ -28,17 +22,12 @@ var sectionEditorHints = []overlay.Hint{
 	{Key: "esc", Label: "close"},
 }
 
-// sectionEditorLayout returns the fitted inner width and visible row count.
 func (m *OS) sectionEditorLayout() (width, rows int, hints []overlay.Hint) {
 	width = m.panelWidth(sectionEditorInnerWidth)
-	// One body line that is not a row: the line describing the selection.
 	rows, hints = m.panelBody(sectionEditorVisibleRows, 1, width, nil, sectionEditorHints)
 	return width, rows, hints
 }
 
-// renderSectionEditor draws the rail layout editor: the sections in the order
-// the rail stacks them with the share each may claim, and what is off the rail
-// underneath.
 func (m *OS) renderSectionEditor() (string, overlay.Geometry, []overlayRowHit) {
 	rows := m.sectionEditorRows()
 	pal := m.overlayUI()
@@ -58,8 +47,6 @@ func (m *OS) renderSectionEditor() (string, overlay.Geometry, []overlayRowHit) {
 	}
 	lines = append(lines, m.sectionEditorDetail(rows, pal, width))
 
-	// A read-only session says so here as well as on the settings panel: the
-	// editor can be opened on its own and the layout it writes goes nowhere.
 	title := "Rail sections"
 	if m.ConfigReadOnly {
 		title = "Rail sections (this session only)"
@@ -73,9 +60,6 @@ func (m *OS) renderSectionEditor() (string, overlay.Geometry, []overlayRowHit) {
 	}
 	content, geo := panel.Render(pal)
 
-	// The rectangles are recorded here, off the lines this loop just drew,
-	// rather than worked out again by the click handler. A second copy of the
-	// arithmetic is how a scrolled list starts sending clicks to the wrong row.
 	var hits []overlayRowHit
 	for i := start; i < end; i++ {
 		if rows[i].Kind == railRowHeader {
@@ -90,14 +74,11 @@ func (m *OS) renderSectionEditor() (string, overlay.Geometry, []overlayRowHit) {
 	return content, geo, hits
 }
 
-// sectionEditorLine renders one line of the editor.
 func (m *OS) sectionEditorLine(row railEditorRow, selected bool, pal overlay.Palette, width int) string {
 	bg := pal.Surface
 
 	if row.Kind == railRowHeader {
 		head := overlay.Style(bg).Foreground(pal.FgMute).Bold(true).Render("  " + row.Name)
-		// A rule out to the panel edge, so the two lists read as bands rather
-		// than as one list with words in it.
 		rule := max(width-lipgloss.Width(head)-1, 0)
 		return head + overlay.Style(bg).Foreground(pal.FgMute).
 			Render(" "+strings.Repeat(m.Settings.GetWindowSeparatorChar(), rule))
@@ -116,14 +97,10 @@ func (m *OS) sectionEditorLine(row railEditorRow, selected bool, pal overlay.Pal
 			overlay.Style(bg).Foreground(pal.FgMute).Italic(true).Render("nothing here")
 	}
 
-	// A section that is off the rail is drawn quieter than one on it, because
-	// the list it is in is "what you could add" rather than "what you have".
 	if row.Kind == railRowAvailable && !selected {
 		nameColor = pal.FgMute
 	}
 
-	// The tail is the share for a placed entry, and nothing for one that is off
-	// the rail: a section that is not drawn has no share to read.
 	tail := ""
 	if row.Kind == railRowPlaced {
 		tail = sectionShareLabel(row.Share)
@@ -153,18 +130,6 @@ func (m *OS) sectionEditorLine(row railEditorRow, selected bool, pal overlay.Pal
 		overlay.Style(bg).Render(" ")
 }
 
-// sectionEditorDetail is the line under the list, saying what the selected row
-// is and what can be done to it.
-//
-// Every line here describes the layout, never this frame. That is deliberate:
-// the panel measures nothing, so it must claim nothing a measurement could
-// contradict. A spacer with a share gets those lines on a rail with room and
-// nothing at all on one without, because empty space is the first thing the
-// rail gives up when its sections cannot fit; a line reading "it keeps 40% of
-// the rail" would be a promise this panel is in no position to make, and it
-// would be wrong exactly when the user most needed to know. So a share is what
-// the entry asks for, a bare spacer takes what nothing else needs, and a
-// section's share is a ceiling and is spelled "at most".
 func (m *OS) sectionEditorDetail(rows []railEditorRow, pal overlay.Palette, width int) string {
 	if m.sectionList.Cursor < 0 || m.sectionList.Cursor >= len(rows) {
 		return overlay.Style(pal.Surface).Render(" ")
@@ -172,8 +137,6 @@ func (m *OS) sectionEditorDetail(rows []railEditorRow, pal overlay.Palette, widt
 	return m.sectionEditorDetailFor(rows[m.sectionList.Cursor], pal, width)
 }
 
-// sectionEditorDetailFor is the description of one row, split out so a test can
-// ask what the panel would say about a row without building the whole list.
 func (m *OS) sectionEditorDetailFor(row railEditorRow, pal overlay.Palette, width int) string {
 	bg := pal.Surface
 

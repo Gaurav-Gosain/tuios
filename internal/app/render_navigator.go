@@ -17,43 +17,17 @@ import (
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
-// The navigator's frame: one panel as wide and as tall as the screen allows,
-// holding three framed boxes. Search runs across the top, Panes lists the
-// tree (or the flat list, or the cards) on the left, and Preview shows the
-// highlighted pane's screen in its own colours on the right.
-//
-// The colours carry the hierarchy, so the rows need no headings: a session
-// is bold in its own colour (the one the rail gives it), a workspace is the
-// secondary ink, a pane's name is the primary ink with its running command in
-// the informational one, and the folder, the breadcrumb and the counts are
-// quiet. A search lights the characters it matched in the accent.
-
 const (
-	// navigatorWidth is the panel width asked for. The screen narrows it.
-	navigatorWidth = 160
-	// navigatorRowsWanted is the list lines asked for. The screen shortens
-	// it.
+	navigatorWidth      = 160
 	navigatorRowsWanted = 40
-	// navigatorListMin and navigatorListMax bound the list box's inner width.
-	navigatorListMin = 28
-	navigatorListMax = 64
-	// navigatorPreviewMin is the narrowest preview worth drawing. Below it
-	// the list takes the whole panel.
+	navigatorListMin    = 28
+	navigatorListMax    = 64
 	navigatorPreviewMin = 24
-	// navigatorChrome is the body lines that are not list lines: the search
-	// box's three and the list box's two borders.
-	navigatorChrome = 5
-	// navigatorListTop is the body line the first list line is on: under the
-	// search box and the list box's top border.
-	navigatorListTop = 4
-	// navigatorMarginRows is the rows the navigator leaves free above and
-	// below it. It is the one panel tall enough to fill the room between the
-	// docks, and drawn flush against both it read as pushed down under the top
-	// bar, while the columns beside it showed a margin.
+	navigatorChrome     = 5
+	navigatorListTop    = 4
 	navigatorMarginRows = 1
 )
 
-// navigatorHints are the footer's keys, in the order of their worth.
 func (m *OS) navigatorHints() []overlay.Hint {
 	if m.navigator.searching {
 		return []overlay.Hint{
@@ -76,14 +50,10 @@ func (m *OS) navigatorHints() []overlay.Hint {
 	)
 }
 
-// navigatorGeometry is the panel's inner width, the list box's and the
-// preview box's inner widths (0 when there is no room for a preview), and
-// the list lines the screen has room for.
 func (m *OS) navigatorGeometry() (width, listW, previewW, lines int, hints []overlay.Hint) {
 	width = m.panelWidth(navigatorWidth)
 	lines, hints = m.panelBody(navigatorRowsWanted, navigatorChrome+2*navigatorMarginRows, width, nil, m.navigatorHints())
 	listW = max(width-2, 1)
-	// Two boxes side by side cost five cells: two borders each and the gap.
 	if width-5-navigatorListMin >= navigatorPreviewMin {
 		listW = min(max(width*2/5, navigatorListMin), navigatorListMax)
 		previewW = width - listW - 5
@@ -91,7 +61,6 @@ func (m *OS) navigatorGeometry() (width, listW, previewW, lines int, hints []ove
 	return width, listW, previewW, lines, hints
 }
 
-// navItemLines is how many list lines one row takes.
 func (m *OS) navItemLines() int {
 	if m.navCards() {
 		return 2
@@ -99,14 +68,11 @@ func (m *OS) navItemLines() int {
 	return 1
 }
 
-// navigatorVisibleRows is how many list rows the frame draws.
 func (m *OS) navigatorVisibleRows() int {
 	_, _, _, lines, _ := m.navigatorGeometry()
 	return max(lines/m.navItemLines(), 1)
 }
 
-// renderNavigator draws the navigator and returns the panel, its geometry and
-// the list rows' hit areas.
 func (m *OS) renderNavigator() (string, overlay.Geometry, []overlayRowHit) {
 	pal := m.overlayUI()
 	bg := pal.Surface
@@ -119,7 +85,6 @@ func (m *OS) renderNavigator() (string, overlay.Geometry, []overlayRowHit) {
 
 	m.navigatorSessionColors()
 
-	// The list box.
 	list := make([]string, 0, lines)
 	end := min(nav.list.Scroll+visible, len(rows))
 	for i := nav.list.Scroll; i < end; i++ {
@@ -191,9 +156,6 @@ func (m *OS) renderNavigator() (string, overlay.Geometry, []overlayRowHit) {
 	return content, geo, hits
 }
 
-// navigatorListNote is set into the Panes box's top border: the layout, or
-// "results" while a search is in force, since a search lists the panes it
-// found in place of the layout.
 func (m *OS) navigatorListNote() string {
 	if m.navSearch() {
 		return "results"
@@ -201,9 +163,6 @@ func (m *OS) navigatorListNote() string {
 	return m.navigator.layout
 }
 
-// navigatorSessionColors settles the session colours for the sessions the
-// navigator lists, as the rail does for its own, so a session wears the
-// same colour in both.
 func (m *OS) navigatorSessionColors() {
 	names := make([]string, 0, len(m.navigator.sessions))
 	for _, s := range m.navigator.sessions {
@@ -214,8 +173,6 @@ func (m *OS) navigatorSessionColors() {
 	m.refreshSessionColors(names)
 }
 
-// navigatorCount is the search box's count: the panes listed over the panes
-// known, as in "3/7".
 func (m *OS) navigatorCount(rows []navRow) string {
 	total := 0
 	for _, s := range m.navigator.sessions {
@@ -235,8 +192,6 @@ func (m *OS) navigatorCount(rows []navRow) string {
 	return fmt.Sprintf("%d/%d", n, total)
 }
 
-// navigatorSearchLine is the search line: the query and a cursor while the
-// keyboard is in it, else what / searches.
 func (m *OS) navigatorSearchLine(width int, bg color.Color, pal overlay.Palette) string {
 	nav := &m.navigator
 	st := overlay.Style(bg)
@@ -247,7 +202,6 @@ func (m *OS) navigatorSearchLine(width int, bg color.Color, pal overlay.Palette)
 	case nav.searching && query == "":
 		return sigil + overlay.Cursor(" ", bg, pal.Fg) + st.Foreground(pal.FgMute).Render(overlay.Truncate("Type a name, a folder, a command or screen text", max(room-1, 1)))
 	case nav.searching:
-		// The line with its caret, which the arrows and word keys move.
 		before, at, after := nav.list.Query.Parts()
 		return sigil + overlay.FieldLine(before, at, after, room, bg, pal.Fg)
 	case query != "":
@@ -256,7 +210,6 @@ func (m *OS) navigatorSearchLine(width int, bg color.Color, pal overlay.Palette)
 	return sigil + st.Foreground(pal.FgMute).Render(overlay.Truncate("Press / to search names, folders, commands and screen text", room))
 }
 
-// navInks are the inks of one list row, each measured on the row's ground.
 type navInks struct {
 	ground                   color.Color
 	fg, dim, mute, edge      color.Color
@@ -264,39 +217,25 @@ type navInks struct {
 	hit                      lipgloss.Style
 }
 
-// navRowInks are the inks for a row drawn on ground.
 func navRowInks(ground color.Color, pal overlay.Palette) navInks {
 	return navInks{
-		ground: ground,
-		// The cursor row's ground is tinted past the palette's own steps
-		// (see navGround), so the inks are measured again on it.
-		fg:   overlay.ReadableAt(pal.Fg, ground, overlay.ContrastFloor),
-		dim:  overlay.ReadableAt(pal.FgDim, ground, overlay.ContrastFloor),
-		mute: overlay.ReadableAt(pal.FgMute, ground, overlay.MarkFloor),
-		// The guides are structure, but they are read: a row's place in the
-		// tree is what they say. The quiet ink, not the frame's.
+		ground:  ground,
+		fg:      overlay.ReadableAt(pal.Fg, ground, overlay.ContrastFloor),
+		dim:     overlay.ReadableAt(pal.FgDim, ground, overlay.ContrastFloor),
+		mute:    overlay.ReadableAt(pal.FgMute, ground, overlay.MarkFloor),
 		edge:    overlay.ReadableAt(pal.FgMute, ground, overlay.MarkFloor),
 		command: theme.Readable(pal.Info, ground),
 		current: theme.Readable(pal.Success, ground),
 		accent:  theme.Readable(pal.Accent, ground),
-		// At 16 colours the accent may be a slot close to the name's own
-		// ink, so a match is underlined as well as bold there.
-		hit: overlay.Style(ground).Foreground(theme.Readable(pal.AccentBright, ground)).Bold(true).Underline(pal.Depth == overlay.Depth16),
+		hit:     overlay.Style(ground).Foreground(theme.Readable(pal.AccentBright, ground)).Bold(true).Underline(pal.Depth == overlay.Depth16),
 	}
 }
 
-// navCursorTint is how far the cursor row's ground is carried toward the
-// accent: the palette's cursor step alone is a few percent of lightness,
-// which on a dark theme's surface read as no cursor at all. A list without
-// the keyboard keeps a quieter tint.
 const (
 	navCursorTint      = 0.22
 	navCursorTintQuiet = 0.10
 )
 
-// navGround is the ground of a list row in state st: the palette's ground,
-// and on the cursor row that ground tinted toward the accent. At 16 colours
-// the row is the palette's (pal.Row makes the cursor reverse video there).
 func navGround(st overlay.RowState, pal overlay.Palette) color.Color {
 	g := pal.Ground(st, pal.Surface)
 	if pal.Depth == overlay.Depth16 || !st.Cursor {
@@ -313,10 +252,8 @@ func navGround(st overlay.RowState, pal overlay.Palette) color.Color {
 	return c
 }
 
-// ink is a style in c on the row's ground.
 func (k navInks) ink(c color.Color) lipgloss.Style { return overlay.Style(k.ground).Foreground(c) }
 
-// lit draws text in base with the bytes at match in the hit style.
 func (k navInks) lit(text string, base lipgloss.Style, match []int) string {
 	if len(match) == 0 {
 		return base.Render(text)
@@ -350,8 +287,6 @@ func (k navInks) lit(text string, base lipgloss.Style, match []int) string {
 	return out.String()
 }
 
-// navMatch is where the search lights text: its fuzzy match, or for screen
-// text, every place it holds the query whole.
 func (m *OS) navMatch(text string, whole bool) []int {
 	if !m.navSearch() || text == "" {
 		return nil
@@ -381,8 +316,6 @@ func (m *OS) navMatch(text string, whole bool) []int {
 	return nil
 }
 
-// navTreeGlyphs are the tree's guides: the branch, the last branch, the
-// line that carries a branch past a row, and the blank as wide.
 func (m *OS) navTreeGlyphs() (branch, last, pipe, blank string) {
 	branch, last = m.Settings.GetRailTreeBranch(), m.Settings.GetRailTreeLast()
 	w := lipgloss.Width(branch)
@@ -404,9 +337,6 @@ func (m *OS) navTreeGlyphs() (branch, last, pipe, blank string) {
 	return branch, last, pipe, blank
 }
 
-// navTreePlace says where a row sits among its siblings: whether its
-// workspace is the session's last, and whether the pane is its workspace's
-// last.
 func navTreePlace(s *navSession, r navRow) (wsLast, paneLast bool) {
 	ws := s.workspaces()
 	wsLast = len(ws) > 0 && ws[len(ws)-1] == r.Workspace
@@ -423,14 +353,6 @@ func navTreePlace(s *navSession, r navRow) (wsLast, paneLast bool) {
 	return wsLast, paneLast
 }
 
-// navigatorItem draws one row of the list as its lines: one, or two for a
-// card. Each line is drawn on the row's ground, the whole width across, and
-// left for pal.Row to finish.
-//
-// The tree is drawn the way tree(1) draws it. A session starts at the left
-// edge, its workspaces hang from a trunk under its first cell, and a
-// workspace's panes hang from a trunk under its own first cell. A trunk runs
-// down past a row only while a later sibling follows it.
 func (m *OS) navigatorItem(r navRow, st overlay.RowState, width int, pal overlay.Palette) []string {
 	k := navRowInks(navGround(st, pal), pal)
 	bar := k.ink(k.accent).Render(" ")
@@ -509,8 +431,6 @@ func (m *OS) navigatorItem(r navRow, st overlay.RowState, width int, pal overlay
 	return []string{navSpans(width, left, right, k)}
 }
 
-// navSessionSpans is a session row: its name bold in its own colour and its
-// machine, and on the right what is known of it.
 func (m *OS) navSessionSpans(s *navSession, k navInks) (left, right string) {
 	tint := k.fg
 	if c := m.sessionTint(navTintKey(s), k.ground); c != nil {
@@ -532,8 +452,6 @@ func (m *OS) navSessionSpans(s *navSession, k navInks) (left, right string) {
 	return left, right
 }
 
-// navSessionFacts is a session's second card line: why its panes are not
-// listed, or how many it has.
 func (m *OS) navSessionFacts(s *navSession) string {
 	if s.Note != "" {
 		return "  " + s.Note
@@ -541,7 +459,6 @@ func (m *OS) navSessionFacts(s *navSession) string {
 	return "  " + plural.Count(s.Count, "pane")
 }
 
-// navWorkspaceLabel is "workspace 2" and the workspace's name, if it has one.
 func (m *OS) navWorkspaceLabel(s *navSession, ws int, k navInks) string {
 	out := k.ink(k.mute).Render("workspace ") + k.ink(k.dim).Bold(true).Render(strconv.Itoa(m.workspaceDisplayNumber(ws)))
 	if name := printableTitle(s.WorkspaceNames[ws]); name != "" {
@@ -550,11 +467,6 @@ func (m *OS) navWorkspaceLabel(s *navSession, ws int, k navInks) string {
 	return out
 }
 
-// navPaneLabel is what a pane's row calls it. A name the person gave it or a
-// title its program set comes first. A pane with only the name tuios made
-// up ("Terminal 1a2b3c4d") is called by its folder instead, and byFolder
-// says so, so the row does not show the folder twice. With no folder known
-// the made-up name stands, and quiet says to draw it in the quiet ink.
 func navPaneLabel(p *navPane) (label string, byFolder, quiet bool) {
 	name := printableTitle(p.Name)
 	if name != "" && !isDefaultTitle(p.Name, p.ID) {
@@ -572,9 +484,6 @@ func navPaneLabel(p *navPane) (label string, byFolder, quiet bool) {
 	return name, false, true
 }
 
-// navPaneCommand is what a pane is running, for its row: the foreground
-// command, or the session's shell at a prompt. An ssh session says where it
-// went when the pane's shell reported the command line.
 func navPaneCommand(s *navSession, p *navPane) string {
 	cmd := printableTitle(p.Command)
 	if cmd == "" && p.AgentState == "" {
@@ -588,14 +497,11 @@ func navPaneCommand(s *navSession, p *navPane) string {
 	return cmd
 }
 
-// navSSHTarget is the destination of an ssh command line: its first word
-// after ssh that is not an option or an option's value.
 func navSSHTarget(cmdline string) string {
 	f := strings.Fields(cmdline)
 	if len(f) == 0 || filepath.Base(f[0]) != "ssh" {
 		return ""
 	}
-	// The options of ssh(1) that take a value.
 	const valued = "BbcDEeFIiJLlmOopQRSWw"
 	for i := 1; i < len(f); i++ {
 		a := f[i]
@@ -613,10 +519,6 @@ func navSSHTarget(cmdline string) string {
 	return ""
 }
 
-// navPaneName is a pane's mark, label and command: the agent state's mark in
-// its colour (a blank cell when there is no agent), the label, and the
-// running command after a rule in the informational ink. byFolder is
-// navPaneLabel's.
 func (m *OS) navPaneName(s *navSession, p *navPane, selected bool, k navInks) (string, bool) {
 	mark := k.ink(k.fg).Render(strings.Repeat(" ", agentMarkLead()))
 	if glyph, c := agentMark(p.AgentState, p.DoneSeen, p.Subagents, theme.UI()); glyph != "" {
@@ -634,8 +536,6 @@ func (m *OS) navPaneName(s *navSession, p *navPane, selected bool, k navInks) (s
 	return out, byFolder
 }
 
-// navBreadcrumb is where a pane is: its session in the session's colour, its
-// machine, and its workspace, as "work › 2 logs".
 func (m *OS) navBreadcrumb(s *navSession, ws int, k navInks) string {
 	tint := k.dim
 	if c := m.sessionTint(navTintKey(s), k.ground); c != nil {
@@ -650,9 +550,6 @@ func (m *OS) navBreadcrumb(s *navSession, ws int, k navInks) string {
 	return out + k.ink(k.mute).Render(" › ") + k.lit(label, k.ink(k.mute), m.navMatch(label, false))
 }
 
-// navSpans lays a row out to width: the left part, then the right part
-// against the right edge. The left part gives way first: the right part is
-// the row's facts.
 func navSpans(width int, left, right string, k navInks) string {
 	rw := lipgloss.Width(right)
 	if rw > 0 && rw > width/2 {
@@ -671,9 +568,6 @@ func navSpans(width int, left, right string, k navInks) string {
 	return left + k.ink(k.fg).Render(strings.Repeat(" ", gap)) + right
 }
 
-// navigatorPreview is the preview box's lines for a row: a pane's screen
-// under a header that names it, or a session's or a workspace's panes as a
-// tree.
 func (m *OS) navigatorPreview(r navRow, width, height int, bg color.Color, pal overlay.Palette) []string {
 	s := &m.navigator.sessions[r.Session]
 	k := navRowInks(bg, pal)
@@ -698,8 +592,6 @@ func (m *OS) navigatorPreview(r navRow, width, height int, bg color.Color, pal o
 				out = append(out, line(plural.Count(s.Count, "pane")+".", pal.FgDim))
 			}
 		}
-		// The session's panes as the tree draws them, under their
-		// workspaces.
 		for _, ws := range s.workspaces() {
 			if r.Kind == navRowWorkspace && ws != r.Workspace {
 				continue
@@ -747,8 +639,6 @@ func (m *OS) navigatorPreview(r navRow, width, height int, bg color.Color, pal o
 		}
 		return append(out, line(msg, pal.FgMute))
 	}
-	// The screen runs to the foot of the box, so it reads as a screen and
-	// not as a few lines of text.
 	for len(screen) < room {
 		screen = append(screen, navScreenLine("", width-2))
 	}
@@ -758,8 +648,6 @@ func (m *OS) navigatorPreview(r navRow, width, height int, bg color.Color, pal o
 	return out
 }
 
-// navigatorPreviewPane is one pane of a session's preview, drawn as a tree
-// row with its guides.
 func (m *OS) navigatorPreviewPane(r navRow, width int, pal overlay.Palette) string {
 	s := &m.navigator.sessions[r.Session]
 	p := &s.Panes[r.Pane]
@@ -782,9 +670,6 @@ func (m *OS) navigatorPreviewPane(r navRow, width int, pal overlay.Palette) stri
 	return navSpans(width, left, right, k)
 }
 
-// navigatorScreen is the pane's screen for the preview, rows lines of width
-// cells at most, each on the pane's own ground: read live from this client's
-// emulator for a pane it draws, else the styled text the load read.
 func (m *OS) navigatorScreen(s *navSession, p *navPane, width, rows int) []string {
 	if rows <= 0 {
 		return nil
@@ -792,9 +677,6 @@ func (m *OS) navigatorScreen(s *navSession, p *navPane, width, rows int) []strin
 	if s.Current {
 		if i := m.windowIndexByID(p.ID); i >= 0 {
 			w := m.Windows[i]
-			// The lock is not waited for: a pane flooding output holds it,
-			// and the frame that waits is the one carrying the keystrokes.
-			// The text read when the navigator opened stands in.
 			if w.Terminal != nil && w.TryRLockIO() {
 				body := pipCells(w.Terminal, width, min(rows, w.Terminal.Height()))
 				w.RUnlockIO()
@@ -811,8 +693,6 @@ func (m *OS) navigatorScreen(s *navSession, p *navPane, width, rows int) []strin
 	}
 	text := p.Styled
 	if len(text) == 0 {
-		// A plain row is drawn as styled text with no styling, so it takes
-		// the same path. Text holds no escape: it was read from cells.
 		text = p.Text
 	}
 	if len(text) > rows {
@@ -825,9 +705,6 @@ func (m *OS) navigatorScreen(s *navSession, p *navPane, width, rows int) []strin
 	return out
 }
 
-// navTintKey is the name a session's colour is kept under: its name, or for
-// a session on another machine the id the rail gives its row, so the rail and
-// the navigator give a session the same colour.
 func navTintKey(s *navSession) string {
 	if s.Host == "" {
 		return s.Name
@@ -835,8 +712,6 @@ func navTintKey(s *navSession) string {
 	return hostNodeID(s.Host) + ":" + s.Name
 }
 
-// navFolder is a folder short enough for a list row: the home folder as ~,
-// and only the last two parts of a deep path.
 func navFolder(p string) string {
 	p = navShortPath(p)
 	parts := strings.Split(strings.TrimSuffix(p, "/"), "/")
@@ -846,8 +721,6 @@ func navFolder(p string) string {
 	return overlay.Ellipsis() + "/" + strings.Join(parts[len(parts)-2:], "/")
 }
 
-// navShortPath writes the home folder as ~. The home folder has to be the
-// whole first part of the path: /home/al is not ~ in /home/alex.
 func navShortPath(p string) string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {

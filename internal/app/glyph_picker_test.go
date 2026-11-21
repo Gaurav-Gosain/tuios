@@ -7,8 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// newGlyphPickerOS builds a model with the picker open and a config to write
-// into, which is the state every path below starts from.
 func newGlyphPickerOS(t *testing.T) *OS {
 	t.Helper()
 	m := &OS{Settings: config.Global, Width: 120, Height: 40}
@@ -77,7 +75,7 @@ func TestGlyphPickerCancelRestoresTheOriginal(t *testing.T) {
 // which is what makes it survive a restart and what get-config reports.
 func TestGlyphPickerApplyWritesTheConfig(t *testing.T) {
 	m := newGlyphPickerOS(t)
-	m.ConfigReadOnly = true // no file write from a test
+	m.ConfigReadOnly = true
 
 	items := m.glyphPickerItems()
 	if len(items) < 2 {

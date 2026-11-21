@@ -13,21 +13,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// A divider is the whole boundary between two panes, so it has to reach both
-// ends of the region it splits: the dock's hairline where the dock closes the
-// content region, the sidebar's edge rule where the sidebar does, and the last
-// cell where nothing does. These read the composed frame, because the extent the
-// user sees is the glyph in the cell and not the numbers in the split.
-
-// extentOS builds a shared-border session of n tiled panes with the dock and the
-// sidebar on the given sides ("" for no sidebar), so the separator overlay is
-// exercised against every shape the content region takes.
 func extentOS(t *testing.T, n int, dock, sidebar string) *OS {
 	t.Helper()
 	return extentOSStyled(t, n, dock, sidebar, "rounded")
 }
 
-// extentOSStyled is the same session drawn in a given border style.
 func extentOSStyled(t *testing.T, n int, dock, sidebar, borderStyle string) *OS {
 	t.Helper()
 	shared, anim, ascii := config.Global.SharedBorders, config.Global.Motion, config.Global.UseASCIIOnly
@@ -49,9 +39,7 @@ func extentOSStyled(t *testing.T, n int, dock, sidebar, borderStyle string) *OS 
 	})
 
 	m := &OS{
-		Settings: config.Global,
-		// The layout reads the model's session-settled geometry, seeded from
-		// the globals the way NewOS seeds it.
+		Settings:         config.Global,
 		SharedBorders:    config.Global.SharedBorders,
 		PaneGap:          config.Global.PaneGap,
 		Windows:          make([]*terminal.Window, 0, n),
@@ -75,8 +63,6 @@ func extentOSStyled(t *testing.T, n int, dock, sidebar, borderStyle string) *OS 
 	return m
 }
 
-// frameCells composes the frame with its chrome and returns it as rows of runes,
-// so a cell can be read where the user sees it.
 func frameCells(t *testing.T, m *OS) [][]rune {
 	t.Helper()
 	var g [][]rune

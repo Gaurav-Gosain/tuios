@@ -54,14 +54,12 @@ func TestPluginApprovalTakesOnlyTheTypedWord(t *testing.T) {
 		return false
 	}
 
-	// Keys as it opens answer nothing, also the word.
 	m := open()
 	press(m, "a", "l", "l", "o", "w", "enter")
 	if allowed() || !m.PluginApprovalOpen() {
 		t.Fatalf("keys in the first half second answered the dialog: %v", calls)
 	}
 
-	// Keys meant for a shell, after it settled, allow nothing.
 	now = now.Add(time.Second)
 	m = open()
 	now = now.Add(time.Second)
@@ -73,7 +71,6 @@ func TestPluginApprovalTakesOnlyTheTypedWord(t *testing.T) {
 		t.Fatalf("the cursor is on row %d, want Allow: the test did not reach it", m.pluginApproval.selected)
 	}
 
-	// A click on Allow asks for the word. A click on Deny needs a second.
 	if cmd := m.PluginApprovalActivate(pluginRowAllow); cmd != nil || allowed() {
 		t.Fatal("a click on Allow answered")
 	}
@@ -81,8 +78,6 @@ func TestPluginApprovalTakesOnlyTheTypedWord(t *testing.T) {
 		t.Fatal("one click on Deny answered")
 	}
 
-	// Up then Enter puts the cursor on Deny and asks again. A second
-	// Enter denies.
 	denied := func() bool {
 		for _, c := range calls {
 			if c["allow"] == false {
@@ -102,8 +97,6 @@ func TestPluginApprovalTakesOnlyTheTypedWord(t *testing.T) {
 		t.Fatal("a second Enter on Deny did not deny")
 	}
 
-	// Keys a pane or a script sends through the client are not the
-	// person's: send-keys of allow and Enter answers nothing.
 	mr := open()
 	now = now.Add(time.Second)
 	mr.ProcessingRemoteKeys = true
@@ -113,7 +106,6 @@ func TestPluginApprovalTakesOnlyTheTypedWord(t *testing.T) {
 	}
 	mr.ProcessingRemoteKeys = false
 
-	// The word and Enter allow it.
 	press(m, "a", "l", "l", "o", "w", "enter")
 	if !allowed() {
 		t.Fatalf("allow and Enter did not allow: %v", calls)

@@ -53,9 +53,6 @@ func TestClientKindDerivesTheClientFlags(t *testing.T) {
 	}
 }
 
-// entryPointKinds is the kind each entry point's directory must name. A
-// literal in one of these directories that names another kind, or none, is a
-// client built by hand, which is what the kind exists to end.
 var entryPointKinds = map[string]string{
 	"cmd/tuios/":       "ClientLocal",
 	"internal/server/": "ClientSSH",
@@ -106,15 +103,11 @@ func TestEveryEntryPointNamesItsClientKind(t *testing.T) {
 			return true
 		})
 	}
-	// The SSH and web servers build one literal each and hand it to
-	// internal/served for both their ephemeral and daemon sessions.
 	if found < 5 {
 		t.Fatalf("found %d app.OSOptions literals, expected the local, attach, tape, SSH and web ones", found)
 	}
 }
 
-// literalField returns the source of the named field's value in a composite
-// literal, or "" when it is not set.
 func literalField(lit *ast.CompositeLit, field string) string {
 	for _, elt := range lit.Elts {
 		kv, ok := elt.(*ast.KeyValueExpr)

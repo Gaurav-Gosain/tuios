@@ -7,12 +7,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The bordered dialogs (logs, cache stats, tape manager, tape review) predate
-// the panel grammar and size themselves from their own content. The helpers
-// here fit them to the screen the same way overlay_fit.go fits the panels.
-
-// dialogRows returns how many scrolling content rows a centered dialog can show
-// given the rows it spends on everything else.
 func (m *OS) dialogRows(preferred, chrome int) int {
 	rh := m.GetRenderHeight()
 	if rh <= 0 {
@@ -21,13 +15,7 @@ func (m *OS) dialogRows(preferred, chrome int) int {
 	return max(min(preferred, rh-chrome), minPanelRows)
 }
 
-// squeezeLines shortens a dialog body to rows lines. The blank spacer lines go
-// first, since a dialog that reads a little tighter is better than one whose
-// last rows are off the bottom of the screen; only if that is not enough does
-// it drop content, keeping the last line (which is where the key hints live).
 func squeezeLines(lines []string, rows int) []string {
-	// An entry can itself be several lines tall (a bordered input field, say),
-	// so the budget is measured in rendered lines, not in entries.
 	height := func(ls []string) int {
 		n := 0
 		for _, ln := range ls {
@@ -48,17 +36,12 @@ func squeezeLines(lines []string, rows int) []string {
 		}
 		out = append(out, ln)
 	}
-	// Still too tall: keep the top and the last line, which is where a dialog
-	// puts its key hints.
 	for len(out) > 1 && height(out) > rows {
 		out = append(out[:len(out)-2], out[len(out)-1])
 	}
 	return out
 }
 
-// clipStyled cuts an already-styled line to at most width cells, keeping its
-// escape sequences intact. Used where the text being fitted has colors baked in
-// and cannot be re-measured as plain runes.
 func clipStyled(s string, width int) string {
 	if width <= 0 {
 		return ""
@@ -69,7 +52,6 @@ func clipStyled(s string, width int) string {
 	return ansi.Truncate(s, width, "")
 }
 
-// clipStyledLines applies clipStyled to every line of a multi-line block.
 func clipStyledLines(s string, width int) string {
 	lines := strings.Split(s, "\n")
 	for i, ln := range lines {

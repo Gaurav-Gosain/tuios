@@ -9,16 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// close_workspace closes every pane on a workspace, like tmux kill-window: the
-// workspace whose dock tab menu ran it, or the current one when a key or the
-// palette did. It asks first, in the session-close dialog, every time: the
-// dialog counts the panes and the agents it would take down, which is the
-// reason to read it. tuios close-workspace is the same for a script.
-//
-// A scratch pane stays unless the workspace is its scratch workspace, as in
-// the close-workspace verb (session.WindowsToCloseOnWorkspace).
-
-// workspacePanes is the panes close_workspace closes on ws, in window order.
 func (m *OS) workspacePanes(ws int) []*terminal.Window {
 	var out []*terminal.Window
 	for _, w := range m.Windows {
@@ -30,7 +20,6 @@ func (m *OS) workspacePanes(ws int) []*terminal.Window {
 	return out
 }
 
-// workspaceToll counts what closing ws would take down.
 func (m *OS) workspaceToll(ws int) sessionToll {
 	var t sessionToll
 	for _, w := range m.workspacePanes(ws) {
@@ -40,8 +29,6 @@ func (m *OS) workspaceToll(ws int) sessionToll {
 	return t
 }
 
-// workspaceLabel names a workspace in the dialog: "workspace 2", or the name
-// it shows after it when it has one, its own or its active pane's OSC 1 name.
 func (m *OS) workspaceLabel(ws int) string {
 	label := fmt.Sprintf("workspace %d", m.workspaceDisplayNumber(ws))
 	if name := m.workspaceGivenName(ws); name != "" {
@@ -50,8 +37,6 @@ func (m *OS) workspaceLabel(ws int) string {
 	return label
 }
 
-// sessionCloseTitle and sessionCloseLabel are the dialog's frame title and its
-// destructive row, for the session or for a workspace.
 func (m *OS) sessionCloseTitle() string {
 	if m.SessionCloseWindow != "" {
 		return "close pane"
@@ -86,9 +71,6 @@ func (m *OS) OpenWorkspaceClose() {
 		m.ShowNotification(fmt.Sprintf("Workspace %d has no panes to close.", m.workspaceDisplayNumber(ws)), "info", m.Settings.NotificationDuration)
 		return
 	}
-	// The workspace is set first, so the dialog opens as a workspace one: it
-	// carries no delete-worktree row, and the toll that row would need is
-	// never fetched.
 	m.SessionCloseWorkspace = ws
 	m.OpenSessionClose()
 }
@@ -108,7 +90,6 @@ func (m *OS) CloseWorkspacePanes(ws int) {
 	m.ShowNotification(fmt.Sprintf("Closed %s on workspace %d.", countOf(len(panes), "pane"), m.workspaceDisplayNumber(ws)), "info", m.Settings.NotificationDuration)
 }
 
-// windowIndex is the index of w in m.Windows, or -1.
 func (m *OS) windowIndex(w *terminal.Window) int {
 	return slices.Index(m.Windows, w)
 }

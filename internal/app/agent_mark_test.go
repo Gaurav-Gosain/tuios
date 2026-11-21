@@ -13,12 +13,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// agentMarkStates are the states that draw a mark: every agent state but none,
-// read from agentstate so a new state is tested here too.
 var agentMarkStates = slices.DeleteFunc(agentstate.Names(), func(n string) bool { return n == agentstate.None.Name() })
 
-// inGlyphMode runs f with ASCII-only rendering set to on, and puts it back
-// after.
 func inGlyphMode(t *testing.T, on bool, f func()) {
 	t.Helper()
 	prev := overlay.UseASCII()
@@ -59,7 +55,6 @@ func TestAgentMarksAreOneCharacterPerMeaning(t *testing.T) {
 			claim(inboxKindGlyph(session.AttentionOutbox), "outbox")
 			claim(agentMailLinkGlyph(), "mail over a link")
 
-			// The Inbox kinds that stand for a state wear that state's mark.
 			for kind, state := range map[string]string{
 				session.AttentionApproval: "needs_input",
 				session.AttentionQuestion: "needs_input",
@@ -142,7 +137,6 @@ func TestAgentAlertWearsTheStateMark(t *testing.T) {
 		}
 	}
 
-	// A message that is not about an agent keeps its severity icon.
 	m := notifTestOS(t, 160)
 	m.ShowNotification("Layout saved", "success", m.Settings.NotificationDuration)
 	block, _ := m.renderNotificationBlock(160, 0)

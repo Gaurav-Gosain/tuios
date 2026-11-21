@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// Workspace management methods
-
 // SwitchToWorkspace switches to the specified workspace, picking a default focus
 // (the workspace's saved window, else its first visible one).
 //
@@ -32,20 +30,14 @@ func (m *OS) SwitchToWorkspace(workspace int) {
 	if fw := m.GetFocusedWindow(); fw != nil && fw.Workspace == from && !fw.IsScratch {
 		fromPane = fw
 	}
-	// The switch to an empty workspace leaves terminal mode. The pane it
-	// opens there takes it back (#1173).
 	typing := m.Mode == TerminalMode
 	m.switchToWorkspace(workspace, -1)
-	// A switch to a new workspace from the empty one on screen stays on it,
-	// and is still a switch to a new workspace: it opens the pane one opens.
 	if asked != from && workspace == from {
 		from = 0
 	}
 	m.openPaneOnEmptyWorkspace(from, workspace, fromPane, typing)
 }
 
-// workspaceTabKey is the tab key of workspace ws as this client last adopted
-// the session's keys: the number itself in a session never renumbered.
 func (m *OS) workspaceTabKey(ws int) int {
 	if k, ok := m.workspaceTabKeys[ws]; ok {
 		return k
@@ -53,22 +45,12 @@ func (m *OS) workspaceTabKey(ws int) int {
 	return ws
 }
 
-// newWorkspaceSlot is where a switch to workspace lands. A daemon session
-// numbers its workspaces from 1 (see the session's noteWorkspacesLocked), so a
-// switch to a number past the last workspace that holds a pane opens the one
-// after it instead: opt+5 with three workspaces opens workspace 4, and opt+6
-// from that empty 4 stays on it, since the empty workspace on screen is the
-// new one, unless a pane is on its way to it. Landing there at once, rather
-// than on 5 until the daemon renumbers it, keeps a pane opened right after the
-// switch on the workspace the user sees.
 func (m *OS) newWorkspaceSlot(workspace int) int {
 	if !m.IsDaemonSession || session.IsScratchWorkspace(workspace) {
 		return workspace
 	}
 	last := 0
 	for ws := 1; ws <= m.NumWorkspaces; ws++ {
-		// A pane asked for and on its way counts as there: opt+2 opt+3 with
-		// new_window_when_empty opens both.
 		req, asked := m.paneRequests[ws]
 		if m.GetWorkspaceWindowCount(ws) > 0 || (asked && time.Since(req.at) < paneRequestTimeout) {
 			last = ws
@@ -121,15 +103,6 @@ func (m *OS) cycleWorkspace(step int) {
 	}
 }
 
-// openPaneOnEmptyWorkspace opens a pane on workspace when the switch from
-// from landed there, the workspace is an ordinary one with no panes, and
-// workspaces.new_window_when_empty is on. The pane starts in fromPane's
-// directory, else in the session's start directory. A minimized pane counts
-// as a pane: the workspace is not empty, only its panes are out of view.
-//
-// typing is whether the switch was made in terminal mode. The switch left
-// it, since an empty workspace has nothing to type into, and the pane opened
-// here enters it again when it arrives and takes the focus.
 func (m *OS) openPaneOnEmptyWorkspace(from, workspace int, fromPane *terminal.Window, typing bool) {
 	if m.UserConfig == nil || !m.UserConfig.Workspaces.NewWindowWhenEmpty {
 		return
@@ -143,12 +116,6 @@ func (m *OS) openPaneOnEmptyWorkspace(from, workspace int, fromPane *terminal.Wi
 		}
 	}
 	if m.IsDaemonSession && m.DaemonClient != nil {
-		// A pane already asked for and not yet here: a switch back and
-		// forth asks for nothing more. This only saves a shell. The daemon
-		// opens one pane per workspace whatever reaches it (see
-		// ErrWorkspaceHasPane), which covers a request slower than the
-		// timeout and a second client.
-		// The latest switch decides the mode the pane arrives in.
 		if req, ok := m.paneRequests[workspace]; ok && time.Since(req.at) < paneRequestTimeout {
 			req.typing = typing
 			m.paneRequests[workspace] = req
@@ -157,19 +124,10 @@ func (m *OS) openPaneOnEmptyWorkspace(from, workspace int, fromPane *terminal.Wi
 		cwdFrom, sshFrom := "", ""
 		if fromPane != nil {
 			cwdFrom = fromPane.ID
-			// As the new-window key does with
-			// appearance.new_window_follow_ssh: a pane that runs ssh gives a
-			// pane that runs the same ssh.
 			if m.FollowSSHOnNewWindow() {
 				sshFrom = fromPane.ID
 			}
 		}
-		// The switch's state push went out in switchToWorkspace, before this.
-		// The request names the workspace and asks for no focus move, so the
-		// pane cannot pull the session back to it after a later switch. It
-		// does not hold back this client's pushes the way addDaemonWindow's
-		// intent does: a push that leaves the pane out is reconciled by the
-		// daemon, and holding one back would lose the next switch.
 		cols, rows, _ := m.newPaneContentSize()
 		if err := m.DaemonClient.SendNewWindowFrom(workspace, m.workspaceTabKey(workspace), cols, rows, cwdFrom, sshFrom); err != nil {
 			m.LogError("Failed to ask the daemon for a pane on workspace %d: %v", workspace, err)
@@ -192,29 +150,13 @@ func (m *OS) openPaneOnEmptyWorkspace(from, workspace int, fromPane *terminal.Wi
 	}
 }
 
-// paneRequest is a request for the pane on an empty workspace, in flight.
 type paneRequest struct {
-	// at is when the request went out.
-	at time.Time
-	// typing is set when the switch that asked was made in terminal mode.
-	// The pane enters terminal mode when it arrives, if this client still
-	// shows the workspace and still is in window management mode.
+	at     time.Time
 	typing bool
 }
 
-// paneRequestTimeout is how long a request for a pane on an empty workspace
-// counts as in flight. A daemon answers in milliseconds, so an entry this old
-// is one whose answer was lost, and the next switch may ask again.
 const paneRequestTimeout = 5 * time.Second
 
-// settlePaneRequests clears the request for each workspace a sync shows a
-// window on. When that workspace is on screen with nothing focused, which is
-// where a push this client sent before the pane arrived leaves it, the pane
-// takes the focus, as the daemon gives it when the workspace is still shown.
-// A pane asked for by a switch made in terminal mode enters terminal mode
-// when it is the focused pane on the workspace on screen. A pane that arrives
-// on a workspace this client has left, or after the request timed out, leaves
-// the mode alone.
 func (m *OS) settlePaneRequests() {
 	for ws, req := range m.paneRequests {
 		idx := -1
@@ -254,15 +196,10 @@ func (m *OS) PaneRequestsInFlight() []int {
 	return out
 }
 
-// switchToWorkspace switches to the workspace and resolves focus. A focusTarget
-// of -1 keeps the default pick; a valid index focuses that window and skips the
-// default, so a cross-workspace FocusWindow lands its target without first
-// firing the focus hooks for an intermediate window.
 func (m *OS) switchToWorkspace(workspace, focusTarget int) {
 	m.settleSizes(func() { m.switchToWorkspaceHeld(workspace, focusTarget) })
 }
 
-// switchToWorkspaceHeld is switchToWorkspace with the announcements already held.
 func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 	if (workspace < 1 || workspace > m.NumWorkspaces) && !session.IsScratchWorkspace(workspace) {
 		m.LogWarn("Cannot switch to workspace %d: out of range (1-%d)", workspace, m.NumWorkspaces)
@@ -272,18 +209,10 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 	if workspace == m.CurrentWorkspace {
 		return
 	}
-	// A resize in flight is abandoned on the workspace it started on. It moves
-	// the held pane's neighbours as well as the pane, by ResizeVisual, and its
-	// cancel lays the layout again from the tree to put them back, which only
-	// covers the workspace on screen. Cancelled after the switch, the
-	// neighbours kept a rectangle their guests were never told, and the next
-	// PTY sync resized them for it.
 	m.CancelWindowResize()
-	// The labels are on a pane of the workspace being left.
 	m.CloseHints()
 	m.ClosePaneLabels()
 
-	// Record workspace switch for tape recording
 	if m.TapeRecorder != nil && m.TapeRecorder.IsRecording() {
 		m.TapeRecorder.RecordWorkspaceSwitch(workspace)
 	}
@@ -295,41 +224,25 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 	windowsInNew := m.GetWorkspaceWindowCount(workspace)
 	m.LogInfo("Switching workspace: %d → %d (%d windows)", oldWorkspace, workspace, windowsInNew)
 
-	// Clear all animations BEFORE switching to prevent windows from getting stuck
-	// mid-animation. A pane left at an interpolated rectangle keeps it until
-	// something retiles the workspace, which may be never.
-	//
-	// Land each one where it was already heading, through the resize path, so
-	// the emulator and the guest hear the real size now. A recomputed
-	// master-stack layout would be the wrong rectangles under BSP or scrolling.
 	if len(m.Animations) > 0 {
 		m.landSnapAnimations()
-		// Anything else in flight belongs to a workspace that is leaving the
-		// screen, so there is nothing left for it to animate.
 		m.Animations = m.Animations[:0]
 		m.LogInfo("Landed and cancelled animations during workspace switch")
 	}
-	// The workspace being left is kept for the slide now, with its panes
-	// landed and before anything below changes what is drawn.
 	m.beginWorkspaceSlide(oldWorkspace, workspace)
 
-	// Save current workspace focus and layout
 	if m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) {
 		if m.Windows[m.FocusedWindow].Workspace == m.CurrentWorkspace {
 			m.WorkspaceFocus[m.CurrentWorkspace] = m.FocusedWindow
 		}
 	}
-	m.SaveCurrentLayout() // Save layout before switching
+	m.SaveCurrentLayout()
 
-	// Unsubscribe from old workspace PTYs and subscribe to new workspace PTYs
-	// This optimization reduces network traffic by only streaming output for visible windows
 	if m.IsDaemonSession && m.DaemonClient != nil {
 		m.UnsubscribeWorkspaceWindows(oldWorkspace)
 		m.SubscribeWorkspaceWindows(workspace)
 	}
 
-	// A scratch group is shown over the workspace it was switched to from,
-	// and always tiles. See scratch.go.
 	switch {
 	case session.IsScratchWorkspace(workspace):
 		m.enterScratchWorkspace(oldWorkspace, workspace)
@@ -337,30 +250,20 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 		m.leaveScratchWorkspace()
 	}
 
-	// Switch to new workspace
 	m.CurrentWorkspace = workspace
-	// Looking at a workspace clears its dock marks now, not at the next pane
-	// output, which an idle workspace may never send.
 	m.clearViewedWorkspaceMarks()
-	// A switch can change the layout mode: the workspace being shown chose a
-	// different one. The change is announced once the switch has landed, beside
-	// the workspace-switch hook below.
 	layoutModeBefore := m.LayoutModeName()
-	m.RestoreWorkspaceLayout(workspace) // Restore layout after switching
+	m.RestoreWorkspaceLayout(workspace)
 	layoutModeChanged := m.LayoutModeName() != layoutModeBefore
 
-	// A caller-supplied target wins: focus exactly it, so the switch does not fire
-	// the focus hooks for a default window the caller is about to override.
 	focusedSet := false
 	if focusTarget >= 0 && focusTarget < len(m.Windows) && m.Windows[focusTarget].Workspace == workspace {
 		m.FocusWindow(focusTarget)
 		focusedSet = true
 	}
 
-	// Try to restore previous focus for this workspace
 	if !focusedSet {
 		if savedFocus, exists := m.WorkspaceFocus[workspace]; exists {
-			// Check if the saved focus is still valid
 			if savedFocus >= 0 && savedFocus < len(m.Windows) {
 				if m.Windows[savedFocus].Workspace == workspace && !m.Windows[savedFocus].Minimized {
 					m.FocusWindow(savedFocus)
@@ -371,7 +274,6 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 		}
 	}
 
-	// If no saved focus or it's invalid, find first visible window in new workspace
 	if !focusedSet {
 		for i, w := range m.Windows {
 			if w.Workspace == workspace && !w.Minimized {
@@ -383,18 +285,14 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 		}
 	}
 
-	// If no window to focus in new workspace, set focus to -1
 	if !focusedSet {
 		m.FocusedWindow = -1
 		m.LogInfo("No visible windows in workspace %d", workspace)
-		// Exit terminal mode when switching to empty workspace
 		if m.Mode == TerminalMode {
 			m.ChooseMode(WindowManagementMode, ModeCauseNoPane)
 			m.LogInfo("Switched to window management mode (empty workspace)")
 		}
 	} else {
-		// Record the preserved mode after workspace switch (for consistent playback)
-		// This ensures playback maintains the correct mode even if window state differs
 		if m.TapeRecorder != nil && m.TapeRecorder.IsRecording() {
 			if m.Mode == TerminalMode {
 				m.TapeRecorder.RecordModeSwitch(tape.CommandTypeTerminalMode)
@@ -404,17 +302,8 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 		}
 	}
 
-	// Retile if in tiling mode, unless the workspace holds a custom layout
-	// that still fills the box. The box moves while a workspace is off
-	// screen: a client resizes, another attaches or leaves, the rail moves.
-	// Rectangles kept from before that fill some other box, and the shells
-	// behind them keep a size no client draws. The tiler keeps the user's
-	// splits (the BSP tree, the master-stack ratios and splits), so the
-	// retile lays the custom layout out again in the new box.
 	if m.AutoTiling && (!m.WorkspaceHasCustom[workspace] || m.tiledLayoutStale()) {
 		m.LogInfo("Auto-tiling workspace %d (no custom layout)", workspace)
-		// Nobody saw the workspace change while it was off screen, so the
-		// panes land where the layout puts them, slide or no slide.
 		m.arriving = true
 		m.TileVisibleWorkspaceWindows()
 		m.arriving = false
@@ -422,21 +311,14 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 		m.settleBorderMode(workspace)
 	}
 
-	// Mark all windows in new workspace as dirty for immediate render
 	for _, w := range m.Windows {
 		if w.Workspace == workspace {
 			w.MarkPositionDirty()
 		}
 	}
 
-	// Sync state to daemon after workspace switch
 	m.SyncStateToDaemon()
 
-	// Fire after the switch has fully landed (focus resolved, layout applied),
-	// so a hook that inspects the session sees the workspace it was told about.
-	// The newly focused window is reported alongside the workspace pair.
-	// A scratch group shown or hidden is not a workspace switch: no hook
-	// hears of a scratch workspace.
 	if session.IsScratchWorkspace(workspace) || session.IsScratchWorkspace(oldWorkspace) {
 		return
 	}
@@ -455,27 +337,10 @@ func (m *OS) switchToWorkspaceHeld(workspace, focusTarget int) {
 	})
 }
 
-// settleBorderMode gives a workspace's panes the border mode its layout already
-// implies, moving nothing.
-//
-// Border mode is not geometry. Disabling tiling clears Tiled on every window in
-// the session, while enabling it again only tiles the workspace that happens to
-// be current, so every other workspace is left claiming a border of its own
-// inside rectangles whose separator gaps are still reserved. Switching back
-// normally settles that as a side effect of the retile, but a workspace holding
-// a custom layout skips the retile to keep its rectangles, and then the panes
-// draw boxes while the overlay fills the gaps between them: two border systems
-// in one frame, with the divider stuck on the unfocused color because a pane
-// that is not Tiled contributes no focus perimeter.
-//
-// Settling here, as the workspace becomes visible, is what a flag written by a
-// retile that may never run cannot do.
 func (m *OS) settleBorderMode(workspace int) {
 	if !m.AutoTiling || m.UseScrollingLayout {
 		return
 	}
-	// Without a tree there is no tiled layout to match, and borderless panes
-	// would leave the frame with no pane edges at all.
 	if m.UseBSPLayout {
 		if tree := m.WorkspaceTrees[workspace]; tree == nil || tree.IsEmpty() {
 			return
@@ -494,7 +359,6 @@ func (m *OS) MoveWindowToWorkspace(windowIndex int, workspace int) {
 	if windowIndex < 0 || windowIndex >= len(m.Windows) {
 		return
 	}
-	// A scratch pane stays in its group, and no window moves into one.
 	if isScratch(m.Windows[windowIndex]) || session.IsScratchWorkspace(m.Windows[windowIndex].Workspace) {
 		m.ShowNotification("A scratch pane stays in its scratch group.", "info", m.Settings.NotificationDuration)
 		return
@@ -512,55 +376,40 @@ func (m *OS) MoveWindowToWorkspace(windowIndex int, workspace int) {
 	oldWorkspace := window.Workspace
 
 	if oldWorkspace == workspace {
-		return // Already in target workspace
+		return
 	}
 
 	m.LogInfo("Moving window %s: workspace %d → %d", window.Title(), oldWorkspace, workspace)
 
-	// If window is moving away from the current visible workspace, unsubscribe from its PTY
 	if m.IsDaemonSession && m.DaemonClient != nil && oldWorkspace == m.CurrentWorkspace {
 		m.unsubscribeFromPTY(window)
 	}
 
-	// Move window to new workspace FIRST
 	window.Workspace = workspace
 	window.MarkPositionDirty()
 
-	// If we moved the focused window, find next window to focus in current workspace
 	if windowIndex == m.FocusedWindow {
 		m.LogInfo("Moved focused window, finding next in workspace %d", m.CurrentWorkspace)
 		m.FocusNextVisibleWindowInWorkspace()
 	}
 
-	// Retile current workspace AFTER moving (if in tiling mode)
-	// Now the filter excludes the moved window, so we tile N-1 windows correctly
 	if m.AutoTiling {
 		m.LogInfo("Auto-tiling workspace %d after window move", m.CurrentWorkspace)
 		m.TileVisibleWorkspaceWindows()
-		// Save the layout immediately to capture the correct window positions
 		m.SaveCurrentLayout()
-		// Mark as non-custom so it can be retiled later if needed
 		m.WorkspaceHasCustom[m.CurrentWorkspace] = false
 	}
 }
 
 // MoveWindowToWorkspaceAndFollow moves a window to the specified workspace and switches to that workspace.
 func (m *OS) MoveWindowToWorkspaceAndFollow(windowIndex int, workspace int) {
-	// One settled size per pane for the whole move. It retiles the workspace the
-	// pane leaves, switches to the one it joins and gives the pane the focus,
-	// and a zoom follows the focus: announced as each step went, the moved pane
-	// was told the size it had in the new workspace's tiling and then the size
-	// of its zoom.
 	m.settleSizes(func() { m.moveWindowToWorkspaceAndFollow(windowIndex, workspace) })
 }
 
-// moveWindowToWorkspaceAndFollow is MoveWindowToWorkspaceAndFollow with the
-// announcements already held.
 func (m *OS) moveWindowToWorkspaceAndFollow(windowIndex int, workspace int) {
 	if windowIndex < 0 || windowIndex >= len(m.Windows) {
 		return
 	}
-	// A scratch pane stays in its group, and no window moves into one.
 	if isScratch(m.Windows[windowIndex]) || session.IsScratchWorkspace(m.Windows[windowIndex].Workspace) {
 		m.ShowNotification("A scratch pane stays in its scratch group.", "info", m.Settings.NotificationDuration)
 		return
@@ -576,37 +425,27 @@ func (m *OS) moveWindowToWorkspaceAndFollow(windowIndex int, workspace int) {
 	oldWorkspace := window.Workspace
 
 	if oldWorkspace == workspace {
-		return // Already in target workspace
+		return
 	}
 
-	// If window is moving away from the current visible workspace, unsubscribe from its PTY
-	// This must be done BEFORE changing window.Workspace, so we can track it correctly
 	if m.IsDaemonSession && m.DaemonClient != nil && oldWorkspace == m.CurrentWorkspace {
 		m.unsubscribeFromPTY(window)
 	}
 
-	// Move window to new workspace FIRST
 	window.Workspace = workspace
 	window.MarkPositionDirty()
 
-	// Retile old workspace AFTER moving (while still on it)
-	// Now the filter excludes the moved window, so we tile N-1 windows correctly
 	if m.AutoTiling && m.CurrentWorkspace == oldWorkspace {
 		m.TileVisibleWorkspaceWindows()
-		// Save the layout immediately to capture the correct window positions
 		m.SaveCurrentLayout()
-		// Mark as non-custom so it can be retiled later if needed
 		m.WorkspaceHasCustom[m.CurrentWorkspace] = false
 	}
 
-	// Switch to the new workspace and focus the moved window
 	m.SwitchToWorkspace(workspace)
 	m.FocusWindow(windowIndex)
 
-	// Retile new workspace if in tiling mode
 	if m.AutoTiling {
 		m.TileVisibleWorkspaceWindows()
-		// Save the layout for the new workspace too
 		m.SaveCurrentLayout()
 		m.WorkspaceHasCustom[m.CurrentWorkspace] = false
 	}
@@ -614,7 +453,6 @@ func (m *OS) moveWindowToWorkspaceAndFollow(windowIndex int, workspace int) {
 
 // FocusNextVisibleWindowInWorkspace focuses the next visible window in the workspace.
 func (m *OS) FocusNextVisibleWindowInWorkspace() {
-	// Find the next non-minimized window in current workspace to focus
 	for i := range m.Windows {
 		w := m.Windows[i]
 		if w.Workspace == m.CurrentWorkspace && !w.Minimized {
@@ -623,7 +461,6 @@ func (m *OS) FocusNextVisibleWindowInWorkspace() {
 		}
 	}
 
-	// No visible windows in workspace
 	m.FocusedWindow = -1
 	if m.Mode == TerminalMode {
 		m.ChooseMode(WindowManagementMode, ModeCauseNoPane)

@@ -2,12 +2,6 @@ package app
 
 import "fmt"
 
-// Focus only (ctrl+b m f, minimize_prefix_focus_only, issue 1723) minimizes
-// every other pane on the workspace and keeps the focused one. A second
-// press brings back the panes it hid, and only those: a pane minimized
-// before stays minimized. The panes it hid are kept per workspace by id, so
-// a pane closed or restored by hand in between is skipped.
-
 // ToggleFocusOnly hides the other panes on the current workspace, or brings
 // back the ones the last press there hid.
 func (m *OS) ToggleFocusOnly() {
@@ -18,8 +12,6 @@ func (m *OS) ToggleFocusOnly() {
 			m.ShowNotification(fmt.Sprintf("Restored %s.", countOf(n, "pane")), "info", m.Settings.NotificationDuration)
 			return
 		}
-		// Every pane it hid came back or closed some other way, so the press
-		// hides again.
 	}
 
 	focused := m.GetFocusedWindow()
@@ -51,8 +43,6 @@ func (m *OS) ToggleFocusOnly() {
 	m.ShowNotification(fmt.Sprintf("Minimized %s. Press again to restore.", countOf(len(hidden), "other pane")), "info", m.Settings.NotificationDuration)
 }
 
-// restoreFocusOnly restores the panes in ids that are still minimized and
-// gives the focus back to the pane that had it. It returns how many came back.
 func (m *OS) restoreFocusOnly(ids []string) int {
 	focused := m.GetFocusedWindow()
 	n := 0

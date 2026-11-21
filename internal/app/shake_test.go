@@ -9,11 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The gesture is cheap to detect and expensive to get wrong. Every test here is
-// about the second half: what must not count as a shake. The one positive test
-// is there so the negatives are known to be testing something.
-
-// shakeOS is a client with the gesture turned on and the beam off.
 func shakeOS(t *testing.T) *OS {
 	t.Helper()
 	win := newTestWindow(t, "shake", 40, 10)
@@ -32,9 +27,6 @@ func TestTheDetectorAllocatesNothing(t *testing.T) {
 	m := shakeOS(t)
 	now := time.Now()
 	x := 40
-	// Turns wide enough and slow enough to be counted and then dropped, so the
-	// whole path runs on every call and the gesture never fires: the toggle
-	// itself renders the config, which is not what this measures.
 	if got := testing.AllocsPerRun(2000, func() {
 		x = 100 - x
 		now = now.Add(shakeMaxReversalGap + 10*time.Millisecond)
@@ -44,17 +36,11 @@ func TestTheDetectorAllocatesNothing(t *testing.T) {
 	}
 }
 
-// shakeMove is one pointer sample: a column and how long after the last one it
-// arrived.
 type shakeMove struct {
 	x     int
 	after time.Duration
 }
 
-// wiggle is the sample sequence a person's hand makes: legs of the given width,
-// alternating, one sample per leg, at a steady rate. It emits one leg more than
-// the turns asked for, because the first leg only says which way the pointer is
-// going and turns nothing round.
 func wiggle(startX, leg, turns int, every time.Duration) []shakeMove {
 	moves := []shakeMove{{x: startX, after: time.Second}}
 	x, dir := startX, 1
@@ -66,9 +52,6 @@ func wiggle(startX, leg, turns int, every time.Duration) []shakeMove {
 	return moves
 }
 
-// play feeds a sequence to the detector on a clock the test owns, so the pause
-// between two gestures is a duration rather than a sleep. The button is the one
-// held throughout, so a drag is the same call.
 func play(m *OS, clock *time.Time, button tea.MouseButton, moves []shakeMove) {
 	for _, mv := range moves {
 		*clock = clock.Add(mv.after)
@@ -139,11 +122,9 @@ func TestTwoOvershootCorrectionsAreNotAShake(t *testing.T) {
 
 	play(m, &clock, tea.MouseNone, []shakeMove{
 		{x: 10, after: time.Second},
-		// Out to the first target, past it, and back.
 		{x: 70, after: 40 * time.Millisecond},
 		{x: 55, after: 40 * time.Millisecond},
 		{x: 68, after: 40 * time.Millisecond},
-		// The hand picks the next target.
 		{x: 20, after: 400 * time.Millisecond},
 		{x: 35, after: 40 * time.Millisecond},
 		{x: 22, after: 40 * time.Millisecond},
@@ -178,12 +159,8 @@ func TestAShakeCannotSpanAButtonPress(t *testing.T) {
 	m := shakeOS(t)
 	clock := time.Now()
 
-	// Two turns with the button up.
 	play(m, &clock, tea.MouseNone, wiggle(40, 20, 2, 60*time.Millisecond))
-	// A drag.
 	play(m, &clock, tea.MouseLeft, wiggle(40, 20, 6, 60*time.Millisecond))
-	// Two more turns with the button up. Four in all, if the drag were not
-	// there.
 	play(m, &clock, tea.MouseNone, wiggle(40, 20, 2, 60*time.Millisecond))
 
 	if m.SpotlightOn() {
@@ -198,7 +175,6 @@ func TestOneShakeTogglesOnce(t *testing.T) {
 	m := shakeOS(t)
 	clock := time.Now()
 
-	// A long vigorous shake: three times the turns the gesture needs.
 	play(m, &clock, tea.MouseNone, wiggle(40, 20, 3*shakeReversalsToFire, 60*time.Millisecond))
 
 	if !m.SpotlightOn() {
@@ -216,7 +192,6 @@ func TestASecondShakeTogglesBack(t *testing.T) {
 	if !m.SpotlightOn() {
 		t.Fatal("the first shake did not turn the beam on")
 	}
-	// The hand comes off the mouse, then shakes again.
 	play(m, &clock, tea.MouseNone, wiggle(40, 20, shakeReversalsToFire, 60*time.Millisecond))
 	if m.SpotlightOn() {
 		t.Error("a second shake after a rest did not turn the beam off; " +

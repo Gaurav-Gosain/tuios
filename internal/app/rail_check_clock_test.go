@@ -35,7 +35,7 @@ func TestRailCheckOneClockPerFrame(t *testing.T) {
 	prevPath, prevNow := railCheckPath, railTimeNow
 	t.Cleanup(func() { railCheckPath, railTimeNow = prevPath, prevNow })
 	railTimeNow = func() time.Time { return t0 }
-	m.sidebarPanelLines() // the cached rail, in the second t0
+	m.sidebarPanelLines()
 
 	reads := 0
 	railTimeNow = func() time.Time {
@@ -47,7 +47,7 @@ func TestRailCheckOneClockPerFrame(t *testing.T) {
 	}
 	railCheckPath = check
 	builds := m.tickStats.Rail
-	m.sidebarPanelLines() // served from the cache, and checked
+	m.sidebarPanelLines()
 	if m.tickStats.Rail != builds {
 		t.Fatal("the second frame built the rail again, so it tested no cache hit")
 	}

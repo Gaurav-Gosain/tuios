@@ -32,7 +32,6 @@ func SetActionRunner(r ActionRunner) {
 	actionRunner.Store(&r)
 }
 
-// scriptWait is a WaitFor that playback is holding for.
 type scriptWait struct {
 	cmd      tape.Command
 	cond     tape.Condition
@@ -52,7 +51,6 @@ func (m *OS) RunAction(name string) error {
 	return m.runAction(name)
 }
 
-// runAction runs a keybinding action by its registry name.
 func (m *OS) runAction(name string) error {
 	r := actionRunner.Load()
 	if r == nil {
@@ -85,14 +83,9 @@ func (m *OS) PressKeys(keys []string) error {
 	if handler == nil {
 		return errors.New("keys cannot be pressed here: this program has no key handling")
 	}
-	// The script scope answers only while a tape plays, and its keys (ctrl+p
-	// pauses) are not what a tape pressing keys means: the tape presses them
-	// as the person would outside playback.
 	wasScript := m.ScriptMode
 	m.ScriptMode = false
 	defer func() { m.ScriptMode = wasScript }()
-	// A tape is not the person: what it presses must not answer a
-	// question only the person may answer (plugin_approval.go).
 	wasPressing := m.pressingTapeKeys
 	m.pressingTapeKeys = true
 	defer func() { m.pressingTapeKeys = wasPressing }()
@@ -178,8 +171,6 @@ func (m *OS) CheckCondition(c tape.Condition) error {
 	return errfmt.Errorf("%q is not a condition", c.Kind)
 }
 
-// conditionPane is the pane a condition reads: the one named, or the focused
-// one when no name is given.
 func (m *OS) conditionPane(name string) (*terminal.Window, error) {
 	if name == "" {
 		if w := m.GetFocusedWindow(); w != nil {
@@ -197,7 +188,6 @@ func (m *OS) conditionPane(name string) (*terminal.Window, error) {
 	}
 }
 
-// windowsNamed is every window whose name or id is name.
 func (m *OS) windowsNamed(name string) []*terminal.Window {
 	var out []*terminal.Window
 	for _, w := range m.Windows {
@@ -208,7 +198,6 @@ func (m *OS) windowsNamed(name string) []*terminal.Window {
 	return out
 }
 
-// paneLabel names a pane for a message: its name in quotes, or its short id.
 func (m *OS) paneLabel(w *terminal.Window) string {
 	if name := m.getWindowDisplayName(w); name != "" {
 		return fmt.Sprintf("%q", name)
@@ -220,17 +209,12 @@ func (m *OS) paneLabel(w *terminal.Window) string {
 	return id
 }
 
-// queueScriptCmd keeps a command an action or a key returned, so the Update
-// call that ran the tape command can return it. A tape command only returns
-// an error, and the work an action starts (a dialog's first load, a quit)
-// would be lost without this.
 func (m *OS) queueScriptCmd(cmd tea.Cmd) {
 	if cmd != nil {
 		m.scriptCmds = append(m.scriptCmds, cmd)
 	}
 }
 
-// takeScriptCmds returns the commands queueScriptCmd kept, and forgets them.
 func (m *OS) takeScriptCmds() tea.Cmd {
 	cmds := m.scriptCmds
 	m.scriptCmds = nil
@@ -240,8 +224,6 @@ func (m *OS) takeScriptCmds() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// startScriptWait arms a WaitFor. Playback holds until checkScriptWait says
-// the condition held or the wait failed.
 func (m *OS) startScriptWait(cmd *tape.Command) {
 	cond, err := tape.ParseCondition(cmd)
 	if err != nil {
@@ -251,8 +233,6 @@ func (m *OS) startScriptWait(cmd *tape.Command) {
 	m.ScriptWait = &scriptWait{cmd: *cmd, cond: cond, deadline: time.Now().Add(cond.Timeout)}
 }
 
-// checkScriptWait reports whether playback may go on: the condition holds, or
-// the wait ran out of time and failed the tape.
 func (m *OS) checkScriptWait() bool {
 	w := m.ScriptWait
 	if w == nil {
@@ -271,11 +251,6 @@ func (m *OS) checkScriptWait() bool {
 	return true
 }
 
-// failScript stops the tape at cmd. The rest of it does not run: a tape that
-// carried on past a failed step typed into the wrong pane, or checked a
-// screen that was never going to show what it waited for, and reported
-// success. The failure is shown, kept for tuios tape play to exit with, and
-// sent to a tuios tape exec that is waiting for the result.
 func (m *OS) failScript(cmd *tape.Command, err error) {
 	msg := cmd.Where() + ": " + err.Error()
 	m.ScriptFailure = msg
@@ -293,8 +268,6 @@ func (m *OS) failScript(cmd *tape.Command, err error) {
 	m.reportScriptResult(false, msg)
 }
 
-// reportScriptResult answers the tuios tape exec that started this tape, if
-// one did, and gives back the animations the run held off.
 func (m *OS) reportScriptResult(ok bool, msg string) {
 	if m.scriptRestoreAnimations {
 		m.Settings.AnimationsSuppressed = false
@@ -311,17 +284,10 @@ func (m *OS) reportScriptResult(ok bool, msg string) {
 	_ = m.DaemonClient.SendCommandResult(id, ok, msg)
 }
 
-// scriptBusy reports whether a tape is playing now. A finished tape keeps
-// script mode for a moment to show that it is done; that tape is not busy.
 func (m *OS) scriptBusy() bool {
 	return m.ScriptMode && m.ScriptFinishedTime.IsZero()
 }
 
-// executeTapeScript plays a tape sent by tuios tape exec. It runs on the same
-// player as tuios tape play, so a tape behaves the same way in both: Wait,
-// WaitUntilRegex and WaitFor hold playback, a command waits for the pane the
-// one before it asked for, and the first failure stops the tape. The result
-// goes back to the caller when the tape ends, not when it starts.
 func (m *OS) executeTapeScript(script string, requestID string) (tea.Cmd, error) {
 	commands, errs := tape.ParseFile(script)
 	if len(errs) > 0 {
@@ -345,60 +311,34 @@ func (m *OS) executeTapeScript(script string, requestID string) (tea.Cmd, error)
 	return m.armTick(m.framePeriod()), nil
 }
 
-// stepScript runs one step of tape playback on a maintenance tick, and returns
-// the command that carries the next tape command to Update, if any. The tick
-// runs at the frame rate while a tape plays: nextWake arms it.
-//
-// A step that has to hold returns nil, and the tick goes on with the rest of
-// its work. It used to end the tick instead, so for the whole of a Sleep or a
-// wait nothing else the tick does happened: the which-key menu a tape's
-// leader key opened was never drawn, since nothing else drew a frame.
 func (m *OS) stepScript() tea.Cmd {
 	if !m.ScriptMode || m.ScriptPaused || m.ScriptPlayer == nil {
 		return nil
 	}
-	// The tape has ended, or failed. failScript stamps the time too.
 	if !m.ScriptFinishedTime.IsZero() {
 		return nil
 	}
-	// Every hold below also holds the end of the tape. A tape that ends on a
-	// Sleep, a WaitFor, a new pane or a command Update has not run yet ends
-	// only when that is over, so tuios tape exec returns only then, and a last
-	// WaitFor that times out or a last command that fails fails the tape.
 	if !m.ScriptSleepUntil.IsZero() {
 		if time.Now().Before(m.ScriptSleepUntil) {
 			return nil
 		}
 		m.ScriptSleepUntil = time.Time{}
 	}
-	// Wait for animations to complete before the next command, so playback
-	// stays visually consistent.
 	if m.HasActiveAnimations() {
 		return nil
 	}
-	// Hold the next command until a pane the previous one asked for actually
-	// exists. In a daemon session Split and NewWindow only send the request;
-	// the pane arrives later on a state push, and until it does
-	// GetFocusedWindowID still names the pane the tape was splitting away
-	// from, so the next Type would be typed into the wrong pane.
 	if !m.scriptPaneReady() {
 		return nil
 	}
-	// Hold the next command until Update has run the one before it. See
-	// OS.scriptInFlight.
 	if m.scriptInFlight {
 		return nil
 	}
-	// Hold for a WaitFor until its condition holds. A wait that runs out of
-	// time fails the tape, which stops the player.
 	if m.ScriptWait != nil && !m.checkScriptWait() {
 		return nil
 	}
-	// Hold for a WaitUntilRegex from a command dispatched before.
 	if m.ScriptWaitRegex != nil && !m.checkScriptWaitRegex() {
 		return nil
 	}
-	// A wait that timed out above failed the tape.
 	if !m.ScriptFinishedTime.IsZero() {
 		return nil
 	}
@@ -407,11 +347,6 @@ func (m *OS) stepScript() tea.Cmd {
 	if player.IsFinished() {
 		m.ScriptFinishedTime = time.Now()
 		m.reportScriptResult(true, "")
-		// A tape that builds a layout creates panes whose early output (a
-		// split pane's shell prompt, an echo) can land before the client
-		// subscribed, leaving an unfocused pane blank on screen while the
-		// daemon holds the real content. Refresh every pane from the daemon a
-		// beat after playback, once output has settled.
 		if m.DaemonClient != nil {
 			return m.tickUntilStop(tapeFinishRefreshDelay, func(time.Time) tea.Msg {
 				return tapeLayoutRefreshMsg{}
@@ -426,17 +361,13 @@ func (m *OS) stepScript() tea.Cmd {
 	}
 	player.Advance()
 	switch {
-	// Sleep and its Wait alias only delay playback.
 	case (next.Type == tape.CommandTypeSleep || next.Type == tape.CommandTypeWait) && next.Delay > 0:
 		m.ScriptSleepUntil = time.Now().Add(next.Delay)
 	case next.Type == tape.CommandTypeWaitUntilRegex:
-		// Armed here; playback holds above until it resolves. It does not
-		// go to the executor.
 		m.startScriptWaitRegex(next)
 	case next.Type == tape.CommandTypeWaitFor:
 		m.startScriptWait(next)
 	default:
-		// The command runs as a message rather than here.
 		m.scriptInFlight = true
 		return func() tea.Msg { return ScriptCommandMsg{Command: next} }
 	}

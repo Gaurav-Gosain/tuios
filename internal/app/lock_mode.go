@@ -2,25 +2,6 @@ package app
 
 import "github.com/Gaurav-Gosain/tuios/internal/config"
 
-// Lock mode: zellij's locked mode, as keybindings.lock.
-//
-// With lock on, terminal mode gives the focused pane every key but the
-// leader. The terminal_mode keys, the global keys, the workspace chords and
-// the hold key all go to the pane as bytes. The leader is the unlock key: it
-// opens the leader menu as it always does, one action runs, the menu closes,
-// and with it closed the client is locked again. There is no lock flag to
-// set and clear. Locked is derived from the menus, so every path that closes
-// a menu also locks.
-//
-// The one state of its own is LockHeld. A repeatable action (keybindings.repeat)
-// run from a menu keeps that menu open until esc, so a focus or resize move
-// can be pressed again and again. A held menu takes only the repeatable
-// actions, as tmux's -r does. Any other key closes it, the client locks again,
-// and the key goes to the pane, so the menu's other keys (close, kill, quit)
-// never stay live behind a run of moves. That replaces the timed repeat window
-// while lock is on: zellij's modes stay until esc, and a deadline would relock
-// in the middle of a run of moves.
-
 // MenuState is which leader menu waits for a key: the leader itself, one of
 // its sub-prefixes, or a declared menu.
 type MenuState struct {
@@ -65,8 +46,6 @@ const (
 	numSubMenus
 )
 
-// subMenus describes each leader sub-menu: the title of its which-key panel,
-// and the name its keybinding table and the verbose log give it.
 var subMenus = [numSubMenus]struct{ title, name string }{
 	SubMenuWorkspace: {"Workspace", "workspace"},
 	SubMenuMinimize:  {"Minimize", "minimize"},
@@ -93,16 +72,10 @@ func (m *OS) Locked() bool {
 	return (m.Settings.Lock || m.nest) && m.Mode == TerminalMode && !m.prefixArmed()
 }
 
-// lockPillShown reports whether the dock's mode pill carries the lock state:
-// lock is on and the client is in terminal mode, where it applies.
 func (m *OS) lockPillShown() bool {
 	return m.Settings.Lock && m.Mode == TerminalMode
 }
 
-// heldWhichKey is the which-key panel of a menu lock mode holds open. The
-// held menu takes only repeatable actions, so the panel lists only those
-// rows, and says that esc closes it and any other key goes to the pane. A
-// row stands for the first action it was built from (Keybinding.Action).
 func (m *OS) heldWhichKey(title string, groups []config.KeybindingGroup) (string, []config.KeybindingGroup) {
 	var out []config.KeybindingGroup
 	for _, g := range groups {

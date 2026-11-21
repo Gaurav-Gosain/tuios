@@ -7,8 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// paletteOS is a model with a config and a registry, which is all the keybind
-// rows need.
 func paletteOS(t *testing.T) *OS {
 	t.Helper()
 	cfg := config.DefaultConfig()

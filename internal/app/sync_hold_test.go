@@ -10,20 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The synchronized-output contract (DEC private mode 2026) is one sentence: a
-// guest that wraps an update in 2026h/2026l must never be shown a frame from
-// the middle of it. tuios honours it by holding the window's last complete
-// layer, and the hold is only as good as what is left to hold with.
-//
-// These tests are deterministic. The emulator is written to synchronously and
-// the update is left open, so the guest is provably mid-frame at the moment the
-// render happens: a pass means the hold held, not that a race failed to fire.
-// The invalidation is the variable. Each case marks the window dirty exactly
-// the way one real user action does and asserts the same thing.
-
-// paintCompleteFrame paints a complete two-line frame, the last thing the guest
-// finished and the only thing tuios is allowed to show until the next update
-// closes.
 func paintCompleteFrame(t *testing.T, win *terminal.Window) {
 	t.Helper()
 	win.LockIO()
@@ -32,9 +18,6 @@ func paintCompleteFrame(t *testing.T, win *terminal.Window) {
 	win.MarkContentDirty()
 }
 
-// applyHalfUpdate opens a synchronized update and writes the first half of the
-// guest's next frame, leaving it open. The emulator now holds a frame no guest
-// ever intended to be seen.
 func applyHalfUpdate(t *testing.T, win *terminal.Window) {
 	t.Helper()
 	win.LockIO()
@@ -46,7 +29,6 @@ func applyHalfUpdate(t *testing.T, win *terminal.Window) {
 	}
 }
 
-// closeUpdate writes the second half and closes the update.
 func closeUpdate(t *testing.T, win *terminal.Window) {
 	t.Helper()
 	win.LockIO()
@@ -58,19 +40,12 @@ func closeUpdate(t *testing.T, win *terminal.Window) {
 	}
 }
 
-// invalidations are the ways a user action reaches a window's caches. Every one
-// of them happens routinely in the layout the bug was reported from: a split
-// with a full-screen guest repainting in one pane while the other is retiled,
-// scrolled, renamed or re-themed.
 var invalidations = []struct {
 	name string
 	do   func(*terminal.Window)
 }{
-	// A move, or an animation frame. Nils CachedLayer, keeps CachedContent.
 	{"MarkPositionDirty", func(w *terminal.Window) { w.MarkPositionDirty() }},
-	// A scroll, a rename, a palette change, a tape run. Nils both.
 	{"InvalidateCache", func(w *terminal.Window) { w.InvalidateCache() }},
-	// A resize does both, which is the retile the report describes.
 	{"resize", func(w *terminal.Window) { w.MarkPositionDirty(); w.MarkContentDirty() }},
 }
 
@@ -105,8 +80,6 @@ func TestSyncHoldSurvivesCacheInvalidation(t *testing.T) {
 					t.Errorf("dropped the last complete frame after %s:\n%q", inv.name, got)
 				}
 
-				// The hold must be a hold, not a freeze: the frame that arrives
-				// when the guest closes the update has to land.
 				closeUpdate(t, win)
 				got = m.renderTerminal(win, focused, false)
 				if !strings.Contains(got, "NEWLINEONE") || !strings.Contains(got, "NEWLINETWO") {
@@ -132,8 +105,6 @@ func TestComposedFrameHoldsThroughRetile(t *testing.T) {
 	}
 
 	applyHalfUpdate(t, win)
-	// The user retiles. Every pane's layer goes, and this one has no complete
-	// content left either.
 	win.MarkPositionDirty()
 	win.MarkContentDirty()
 
@@ -189,8 +160,6 @@ func TestFullscreenFastPathHoldsMidUpdate(t *testing.T) {
 	}
 }
 
-// composedPane builds one live pane laid out on a screen, so a test can assert
-// on the frame the host is handed rather than on a render helper's return.
 func composedPane(t *testing.T, id string) (*terminal.Window, *OS) {
 	t.Helper()
 	win := newTestWindow(t, id, 60, 20)

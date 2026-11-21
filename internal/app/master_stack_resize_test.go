@@ -9,13 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
 
-// A master-stack resize goes through the geometry scan, which moves the pane
-// rectangles and nothing else, while the master-stack tiler recomputes every
-// rectangle from its ratios on the next retile. These cases resize, retile,
-// and check the resize is still there. Before the ratios were written back
-// from the geometry, every one of them came back at the split it started at.
-
-// paneRectsByID is the geometry of every pane, by window ID.
 func paneRectsByID(m *OS) map[string]layout.Rect {
 	out := make(map[string]layout.Rect, len(m.Windows))
 	for _, w := range m.Windows {
@@ -24,17 +17,11 @@ func paneRectsByID(m *OS) map[string]layout.Rect {
 	return out
 }
 
-// retile lays the workspace out again from the model's ratios, the way any
-// later layout pass does.
 func retile(m *OS) {
 	m.TileAllWindows()
 	m.CompleteAllAnimations()
 }
 
-// requireSurvives checks that the retiled geometry is the resized geometry: the
-// resized pane exactly in the dimension that was resized, and every edge of
-// every pane within a cell. The cell is the separator gap, which the geometry
-// scan closes and the retile opens again.
 func requireSurvives(t *testing.T, m *OS, resized map[string]layout.Rect, id string, height bool) {
 	t.Helper()
 	after := paneRectsByID(m)

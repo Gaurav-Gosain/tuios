@@ -8,11 +8,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// renderTaskCapture draws the task capture sheet: the title, the editor, the
-// pills, a notice when there is one, and the keys.
 func (m *OS) renderTaskCapture() (string, overlay.Geometry) {
 	s := m.taskCapture
-	// The width is the room that clears the rail, as panelWidth's is.
 	cw, ch := m.modalRoomWidth(), m.GetRenderHeight()
 	w0 := min(96, cw-4)
 	if cw < 64 {
@@ -36,7 +33,6 @@ func (m *OS) renderTaskCapture() (string, overlay.Geometry) {
 	c.text(x, y, ex-2, ckSeg{t: "New task", fg: pal.Fg, attrs: ckBold}, ckSeg{t: "   the first line is its title", fg: pal.FgMute})
 	y += 2
 
-	// The editor, on the field's ground.
 	box := rows + 1
 	c.fill(x, y, w, box, t.field)
 	if s.field == tcTask {
@@ -53,7 +49,6 @@ func (m *OS) renderTaskCapture() (string, overlay.Geometry) {
 		if text == "" {
 			text, ink = "What is the task? The first line is its title.", pal.FgDim
 		}
-		// Every line shows, wrapped, as the editor would show it.
 		var lines []string
 		for para := range strings.SplitSeq(text, "\n") {
 			lines = append(lines, strings.Split(ansi.Wordwrap(para, w-6, ""), "\n")...)
@@ -69,9 +64,6 @@ func (m *OS) renderTaskCapture() (string, overlay.Geometry) {
 	}
 	y += box + 1
 
-	// The pills: the card's project, its stage, the agent ctrl+enter
-	// starts, and with a linked machine where it starts. Each steps with
-	// the arrows.
 	px := x
 	stage := "Todo"
 	if tcStages[s.stage] != tcStages[0] {

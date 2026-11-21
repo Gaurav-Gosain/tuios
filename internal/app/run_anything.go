@@ -34,8 +34,6 @@ func (m *OS) ScanPathApps() tea.Cmd {
 	}
 	cache := m.pathApps
 	if cache == nil {
-		// An OS built outside NewOS (tests, the fuzz target) has no cache and no
-		// launcher; it must still open one.
 		return nil
 	}
 	desktop := m.desktopApps
@@ -45,41 +43,18 @@ func (m *OS) ScanPathApps() tea.Cmd {
 	}
 }
 
-// holdScanForTest lets the end-to-end tests decide when a scan finishes.
-//
-// The launcher's contract for a verb pressed before the scan lands is real
-// behaviour, but a test driving a separate tuios process cannot reach the scan
-// with a Go-level fake, and racing it with keystrokes loses on machines whose
-// scan is faster than their PTY: CI proved that both ways. So the seam is a
-// file. The hold_scan knob names a path, and while that file exists a scan
-// waits here before reading anything; the test removes the file when it wants
-// the scan to land. Ordinary runs never set the knob, pay one map read per
-// scan, and the wait sits in the scan's own goroutine, so the input loop and
-// the idle path cost nothing.
 func holdScanForTest() {
 	hold := testknob.String("hold_scan")
 	if hold == "" {
 		return
 	}
-	// An hour stands for "until the test lifts it".
 	testknob.WaitWhile(hold, 2*time.Millisecond, time.Hour)
 }
 
-// knownPathApps is the last merged scan.
-//
-// It is held here rather than re-merged from the two caches on demand, because
-// the merge is a pass over several thousand entries and the launcher opens more
-// often than the filesystem changes.
 func (m *OS) knownPathApps() []applist.Entry {
 	return m.launcherSource
 }
 
-// applyPathApps files a finished scan away and rebuilds the rows from it.
-//
-// A scan can outlive the launcher that asked for it, since it runs elsewhere
-// and the user may close the overlay before it returns. The entries are kept
-// either way, so the next open still builds from them; what is skipped is
-// holding a few thousand built rows for an overlay nobody is looking at.
 func (m *OS) applyPathApps(entries []applist.Entry) {
 	m.launcherSource = entries
 	if !m.ShowLauncher {
@@ -88,8 +63,6 @@ func (m *OS) applyPathApps(entries []applist.Entry) {
 	m.rebuildLauncherItems()
 }
 
-// stableSortByBoost orders items by launch history, strongest first, keeping
-// the input order between equal ones.
 func stableSortByBoost(items []LauncherItem, hist *applist.Frecency) {
 	sortx.SortStableFunc(items, func(a, b LauncherItem) int {
 		return hist.Boost(b.Entry.Name) - hist.Boost(a.Entry.Name)
@@ -118,15 +91,10 @@ func (m *OS) RunProgram(e applist.Entry) tea.Cmd {
 		return cmd
 	}
 	save := m.noteLaunch(e.Name)
-	// launcher.keep_open: the daemon keeps the pane after the program exits
-	// and writes the exit status under its output. Without a daemon nothing
-	// would keep it, so the pane closes as before.
 	if m.UserConfig != nil && m.UserConfig.Launcher.KeepOpen && m.IsDaemonSession && m.DaemonClient != nil {
 		m.addDaemonWindowWith("", e.Name, "", e.Argv(), true)
 		return save
 	}
-	// The pane is named after the program so the dock and the rail say what is
-	// running in it before the program has printed anything.
 	m.AddWindow(e.Name, e.Argv()...)
 	return save
 }
@@ -148,24 +116,14 @@ func (m *OS) RunProgram(e applist.Entry) tea.Cmd {
 // need quoting falls back to the quoted path, which is unambiguous if uglier.
 func (m *OS) TypeProgram(e applist.Entry) tea.Cmd {
 	save := m.noteLaunch(e.Name)
-	// A trailing space so the first thing typed is an argument, not the rest of
-	// a word.
 	line := e.CommandLine() + " "
 
-	// Which half this is has to be asked directly rather than inferred from
-	// whether a pane appeared. AddWindow also returns without one when the PTY
-	// could not be created, and reading that as "this must be the daemon" put
-	// the line in a queue nothing would ever drain and told the user nothing.
 	daemon := m.IsDaemonSession && m.DaemonClient != nil
 
 	before := len(m.Windows)
 	m.AddWindow(e.Name)
 
 	if daemon {
-		// The pane is created by the daemon and arrives with a later state
-		// sync, so the line waits for it there. Waiting on the pane's arrival is
-		// an event rather than a poll, which is the whole difference from the
-		// version this replaces.
 		m.queueSeed(e.Name, line)
 		m.EnterTerminalMode()
 		return save
@@ -175,11 +133,6 @@ func (m *OS) TypeProgram(e applist.Entry) tea.Cmd {
 		m.ShowNotification("Could not open a pane for "+e.Name, "error", m.Settings.NotificationDuration*2)
 		return save
 	}
-	// Typing it out means the user is about to keep typing, so the pane is
-	// handed over ready for that. Run does not do this and should not: the two
-	// keys differ in exactly this intent, and landing in window management mode
-	// with a half-written command on the prompt would send the arguments to the
-	// window manager instead of the shell.
 	m.EnterTerminalMode()
 	if err := m.SendToWindow(m.Windows[before].ID, []byte(line)); err != nil {
 		m.ShowNotification("Could not type "+e.Name+": "+err.Error(),
@@ -188,33 +141,21 @@ func (m *OS) TypeProgram(e applist.Entry) tea.Cmd {
 	return save
 }
 
-// noteLaunch records that a program was chosen and returns the command that
-// writes the history out.
 func (m *OS) noteLaunch(name string) tea.Cmd {
 	if m.launchHistory == nil {
 		return nil
 	}
-	// Noted here so the next open already ranks it, written out in a command so
-	// the file never lands on the Update goroutine.
 	m.launchHistory.Note(name)
 	return saveLaunchHistory(m.launchHistory)
 }
 
-// pendingSeed is a command line waiting for the daemon-created pane it belongs
-// to.
 type pendingSeed struct {
-	// name is the pane's CustomName, which the daemon sets from the same
-	// argument that named it here.
 	name string
 	line string
 }
 
-// maxPendingSeeds bounds the queue. A pane that never arrives would otherwise
-// leave its line waiting for the life of the session, and typing an old one
-// into an unrelated pane later is worse than dropping it.
 const maxPendingSeeds = 8
 
-// queueSeed parks a command line until its pane turns up.
 func (m *OS) queueSeed(name, line string) {
 	if len(m.pendingSeeds) >= maxPendingSeeds {
 		m.pendingSeeds = m.pendingSeeds[1:]
@@ -222,15 +163,6 @@ func (m *OS) queueSeed(name, line string) {
 	m.pendingSeeds = append(m.pendingSeeds, pendingSeed{name: name, line: line})
 }
 
-// seedAdoptedWindows types any queued command line into the pane it was meant
-// for. Called with the panes a state sync just created, so no poll is needed.
-//
-// Matching is by name and each pane is claimed once, so two launches of the
-// same program in quick succession fill their own panes rather than both
-// filling the first. It is best effort and nothing more: a pane opened by Run
-// carries the same name as one opened by Tab, so launching a program both ways
-// at once can hand the line to whichever arrives first. Closing that needs a
-// token carried through the NewWindow intent, which is a protocol change.
 func (m *OS) seedAdoptedWindows(created []*terminal.Window) {
 	if len(m.pendingSeeds) == 0 || len(created) == 0 {
 		return
@@ -253,9 +185,6 @@ func (m *OS) seedAdoptedWindows(created []*terminal.Window) {
 	}
 }
 
-// saveLaunchHistory writes the history off the Update goroutine. A failure is
-// swallowed: the history is a convenience, and a launch that ran is not worth
-// interrupting to report that its record did not persist.
 func saveLaunchHistory(h *applist.Frecency) tea.Cmd {
 	return func() tea.Msg {
 		_ = h.Save()

@@ -11,84 +11,43 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// listOverlay configures the shared search-and-list overlay used by the command
-// palette, go-to, layout picker and theme picker. It renders a panel
-// with an optional search line, a scrolling list of rows, a scroll indicator,
-// and returns the per-row hit rects for mouse routing.
 type listOverlay struct {
-	Title      string
-	Width      int
-	MaxVisible int
-	Search     bool
-	Query      string
-	// SearchLine, when set, draws the search line in place of the sigil,
-	// the query and a cursor at its end, for a line edited with a cursor.
-	SearchLine func(width int) string
-	Count      int
-	Selected   int
-	// Scroll points at the caller's scroll offset; the renderer clamps it to the
-	// rows it can actually show, which depends on the screen height.
-	Scroll *int
-	// EmptyMsg is what the list says when it has no rows, centred in the room
-	// the rows would take, with EmptyHint under it: the one key worth
-	// pressing next, "esc close" unless the caller names a better one.
-	EmptyMsg  string
-	EmptyHint overlay.Hint
-	// Pending says a load is out that has not yet run past
-	// overlay.LoadingDelay. An empty list draws nothing while it is set, so a
-	// fast load never flashes a loading line.
-	Pending bool
-	Hints   []overlay.Hint
-	// Detail is lines shown under the list, above the position line, each at
-	// most the fitted width: more about the selected row than the row holds.
-	// DetailFor builds them for the fitted width.
-	DetailFor func(width int) []string
-	// DetailAt, when set, is told where the detail's first line was drawn,
-	// relative to the panel, for a detail that puts pictures on the host.
-	DetailAt func(x, y int)
-	// DetailStyled says the detail lines carry their own colours and fill
-	// the width, as the reply editor's do, so they are drawn as they are.
+	Title        string
+	Width        int
+	MaxVisible   int
+	Search       bool
+	Query        string
+	SearchLine   func(width int) string
+	Count        int
+	Selected     int
+	Scroll       *int
+	EmptyMsg     string
+	EmptyHint    overlay.Hint
+	Pending      bool
+	Hints        []overlay.Hint
+	DetailFor    func(width int) []string
+	DetailAt     func(x, y int)
 	DetailStyled bool
-	// RenderRow returns the content for row i on the given row background, at
-	// most width cells wide (width is the fitted panel width, not the requested
-	// one); the helper fills the remainder with rowBg so the selection highlight
-	// spans the row.
-	//
-	// Every fragment of the row, spacers included, has to carry rowBg. Padding
-	// with a bare " " measures the same but paints nothing, so those cells are
-	// written with the pen reset and the desktop shows through the panel there.
-	RenderRow func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string
-	// Position, when set, is where the cursor is for the readout, counted in
-	// what a person counts: the Inbox's items, not its group headings.
-	Position func() (n, of int)
-	// Unfocused says the keyboard is elsewhere, in an editor under the list
-	// say. The cursor row is still drawn, on the quiet ground (see
-	// overlay.RowState), so the list says which row the editor is for.
-	Unfocused bool
+	RenderRow    func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string
+	Position     func() (n, of int)
+	Unfocused    bool
 }
 
-// listOverlayLayout returns the fitted inner width and visible row count for a
-// list overlay, so the keyboard and wheel navigation can scroll by the same
-// number of rows the renderer draws.
 func (m *OS) listOverlayLayout(cfg listOverlay) (width, rows int, hints []overlay.Hint) {
 	width = m.panelWidth(cfg.Width)
-	// Body lines that are not list rows: the scroll indicator, plus the search
-	// input and its rule when the list has one.
 	extra := 1
 	if cfg.Search {
 		extra += 2
 	}
 	if cfg.DetailFor != nil {
 		if n := len(cfg.DetailFor(width)); n > 0 {
-			extra += n + 1 // the lines and a rule above them
+			extra += n + 1
 		}
 	}
 	rows, hints = m.panelBody(cfg.MaxVisible, extra, width, nil, cfg.Hints)
 	return width, rows, hints
 }
 
-// renderListOverlay renders cfg into a panel and returns the string, geometry
-// and hit rows.
 func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []overlayRowHit) {
 	pal := m.overlayUI()
 	bg := pal.Surface
@@ -137,9 +96,6 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 		lines = append(lines, overlay.Style(bg).Render(" "))
 		shown++
 	}
-	// Where the cursor is in the list, under the list it counts. Under the
-	// detail it read as the detail's own count: "4 of 7" under a plan of seven
-	// lines, all shown.
 	if cfg.Count > cfg.MaxVisible {
 		n, of := cfg.Selected+1, cfg.Count
 		if cfg.Position != nil {
@@ -187,14 +143,10 @@ func (m *OS) renderListOverlay(cfg listOverlay) (string, overlay.Geometry, []ove
 	return content, geo, rows
 }
 
-// simpleOverlayPanel renders a plain informational panel (no list) for overlay
-// sub-states such as confirmations or empty/unavailable messages.
 func (m *OS) simpleOverlayPanel(title string, bodyLines []string, hints []overlay.Hint) (string, overlay.Geometry, []overlayRowHit) {
 	pal := m.overlayUI()
 	bg := pal.Surface
 	width := m.panelWidth(simplePanelWidth)
-	// A message narrower than the panel is one line; a longer one wraps rather
-	// than running off the edge.
 	var styled []string
 	for _, l := range bodyLines {
 		for _, wrapped := range wrapPlain(l, width-2) {
@@ -211,19 +163,8 @@ func (m *OS) simpleOverlayPanel(title string, bodyLines []string, hints []overla
 	return content, geo, nil
 }
 
-// simplePanelWidth is the preferred inner width of an informational panel.
 const simplePanelWidth = 52
 
-// wrapPlain breaks an unstyled string onto lines of at most width cells,
-// preferring word boundaries. An empty input yields one empty line so blank
-// spacer lines survive.
-//
-// It is linear in the length of s: each word is measured once, the line's
-// width is carried as a running sum, and a word longer than the line is cut by
-// stepping through its grapheme clusters once. The text can be a pane's
-// notification, and it is wrapped on every frame the message view or the
-// hover label is drawn, so a version that measured the line again for every
-// word froze the client on one long OSC 9.
 func wrapPlain(s string, width int) []string {
 	if width < 1 {
 		width = 1
@@ -244,8 +185,6 @@ func wrapPlain(s string, width int) []string {
 	for word := range strings.FieldsSeq(s) {
 		wordW := ansi.StringWidth(word)
 		if wordW > width {
-			// A word longer than the line (a path, say) is broken across
-			// lines rather than dropped. It starts on a line of its own.
 			flush()
 			rest := word
 			for rest != "" {
@@ -280,11 +219,8 @@ func wrapPlain(s string, width int) []string {
 	return out
 }
 
-// listOverlayRows is the page the list overlays scroll by before the renderer
-// fits them to the screen, and the page a page key moves them by.
 const listOverlayRows = 10
 
-// listRowMarker returns the two-cell leading marker for a list row.
 func listRowMarker(selected bool) string {
 	if selected {
 		return overlay.Sigil()
@@ -292,15 +228,8 @@ func listRowMarker(selected bool) string {
 	return "  "
 }
 
-// listRowSpans composes a list row from segments the caller has already styled,
-// right-aligning the trailing one. It is listRowLine for rows whose two halves
-// are not one colour each, such as a label followed by a dimmer identity.
 func listRowSpans(width int, marker, left, right string, bg color.Color, pal overlay.Palette) string {
 	m := overlay.Style(bg).Foreground(pal.Accent).Bold(true).Render(marker)
-	// The label yields to the trailing segment, which is the row's facts: a
-	// workspace's pane count, a session's state. Clamping the gap alone left the
-	// row over-wide and the panel's backstop then took those facts off the right
-	// end, so a named workspace showed its name and nothing else.
 	ell := overlay.Style(bg).Foreground(pal.FgMute).Render(overlay.Ellipsis())
 	avail := width - lipgloss.Width(m) - lipgloss.Width(right) - 1
 	if lipgloss.Width(left) > avail {
@@ -310,9 +239,6 @@ func listRowSpans(width int, marker, left, right string, bg color.Color, pal ove
 	return m + left + overlay.Style(bg).Render(strings.Repeat(" ", gap)) + right
 }
 
-// listRowLine composes a standard "marker + label ... trailing" list row on the
-// given background, right-aligning the trailing text. Used by the list-based
-// overlays for a consistent look.
 func listRowLine(width int, marker, label, trailing string, labelColor, trailingColor color.Color, bold bool, bg color.Color, pal overlay.Palette) string {
 	left := overlay.Style(bg).Foreground(pal.Accent).Bold(true).Render(marker) +
 		overlay.Style(bg).Foreground(labelColor).Bold(bold).Render(label)

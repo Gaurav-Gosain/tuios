@@ -9,28 +9,17 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The flood profile that motivated this benchmark was taken at 158x40, which is
-// the maintainer's terminal when a pane is fullscreen.
 const (
 	floodCols = 158
 	floodRows = 40
 )
 
-// doomFirePalette is the colour ramp a DOOM fire demo cycles through: a black
-// floor, then reds, oranges and yellows up to white. A flood repaints every
-// cell of every row from this ramp, so neighbouring cells rarely share a style
-// and the render loop flushes a styled batch every few columns.
 var doomFirePalette = []int{
 	0, 52, 88, 124, 160, 196, 202, 208, 214, 220, 226, 227, 228, 229, 230, 231,
 }
 
-// doomFireGlyphs are the block characters a fire demo shades its cells with.
-// They are multi-byte and one column wide, which is the case a byte or a rune
-// count gets wrong and the cell grid gets right.
 var doomFireGlyphs = []string{"█", "▓", "▒", "░"}
 
-// floodFrame writes one DOOM-fire frame into a window's emulator: a full
-// repaint from home, every cell carrying a colour and a glyph from the ramp.
 func floodFrame(tb testing.TB, win *terminal.Window, rng *rand.Rand, cols, rows int) {
 	tb.Helper()
 	buf := make([]byte, 0, cols*rows*16)
@@ -52,11 +41,8 @@ func floodFrame(tb testing.TB, win *terminal.Window, rng *rand.Rand, cols, rows 
 	win.UnlockIO()
 }
 
-// floodWindow builds a fullscreen-sized window carrying one DOOM-fire frame.
 func floodWindow(tb testing.TB, id string, cols, rows int) *terminal.Window {
 	tb.Helper()
-	// The pane is two cells larger than its grid in each direction, which is
-	// what a bordered pane holding a cols-by-rows emulator measures.
 	win := newTestWindow(tb, id, cols+2, rows+2)
 	floodFrame(tb, win, rand.New(rand.NewSource(1)), cols, rows)
 	return win

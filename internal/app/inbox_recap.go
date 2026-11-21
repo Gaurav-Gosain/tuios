@@ -17,51 +17,22 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// The away recap: what an agent did while the person was looking at
-// something else, from the activity ring the daemon keeps per agent pane
-// (agent-activity, see session/agent_activity.go).
-//
-// It is shown in two places. The Inbox's detail for a Finished item says it
-// under the list whenever [agents.recap] mode is toast or inbox. The dock says
-// it in one line when the person comes back to a pane that finished at least
-// one turn while they were away for at least [agents.recap] away, when mode
-// is toast, the default.
-//
-// "Away" is this client's: SidebarAgentSeenAt records when the person last
-// had the pane in front of them (sidebar_unread.go), and the recap starts
-// there. Nothing here runs on a timer. The Inbox reads a recap when a
-// finished item comes under the cursor, and the toast reads one when focus
-// lands on a pane, both from calls the input path already makes; a pane no
-// agent has reported on never gets as far as either.
-
-// inboxRecapTimeout bounds one agent-activity call.
 const inboxRecapTimeout = 5 * time.Second
 
-// inboxRecapView is the recap the Inbox shows for the selected finished item,
-// and the return toast waiting to be read.
 type inboxRecapView struct {
-	// key names the item and the time the recap starts at, so a recap is
-	// read once per item and change.
 	key     string
 	loading bool
 	err     error
 	recap   *session.AgentActivityRecap
-	// since is where the shown recap starts, 0 for the whole ring.
-	since int64
-	// pending is a return the dock should say, waiting for AgentRecapFetch.
+	since   int64
 	pending *agentReturn
 }
 
-// agentReturn is the person coming back to a pane that finished turns while
-// they were away.
 type agentReturn struct {
 	session, window, who string
-	// since is when they looked away, in unix nanoseconds.
-	since int64
-	// turns is how many turns finished since then, by the pane's count.
-	turns uint64
-	// state is the pane's agent state now.
-	state string
+	since                int64
+	turns                uint64
+	state                string
 }
 
 // InboxRecapMsg is an agent-activity reply for the Inbox's detail.
@@ -78,7 +49,6 @@ type AgentReturnRecapMsg struct {
 	Err    error
 }
 
-// recapSettings is [agents.recap] with its defaults applied.
 func (m *OS) recapSettings() config.ResolvedRecap {
 	if m.UserConfig == nil {
 		return config.RecapConfig{}.Resolved()
@@ -86,7 +56,6 @@ func (m *OS) recapSettings() config.ResolvedRecap {
 	return m.UserConfig.Agents.Recap.Resolved()
 }
 
-// agentActivityRecapCall reads a pane's recap since a time.
 func agentActivityRecapCall(call inboxVerbCall, sessionID, windowID string, since int64) (*session.AgentActivityRecap, error) {
 	params := map[string]any{"session": sessionID, "window": windowID, "recap": true, "limit": 1}
 	if since > 0 {
@@ -108,14 +77,11 @@ func agentActivityRecapCall(call inboxVerbCall, sessionID, windowID string, sinc
 	return res.Recap, nil
 }
 
-// inboxRecapFor reports whether the Inbox shows a recap for an item: a
-// finished turn of a pane on this machine, with the recap not turned off.
 func (m *OS) inboxRecapFor(it session.AttentionItem) bool {
 	return it.Kind == session.AttentionFinished && it.Window != "" && it.Host == "" && !it.Stale &&
 		m.recapSettings().Mode != config.RecapOff
 }
 
-// inboxRecapKey names the recap an item shows.
 func (m *OS) inboxRecapKey(it session.AttentionItem) (string, int64) {
 	since, _ := m.agentAwaySince(it.Window)
 	return it.ID + ":" + strconv.FormatUint(it.Seq, 10) + ":" + strconv.FormatInt(since, 10), since
@@ -150,7 +116,6 @@ func (m *OS) InboxRecapFetch() tea.Cmd {
 	}
 }
 
-// applyInboxRecap takes an agent-activity reply for the Inbox's detail.
 func (m *OS) applyInboxRecap(msg InboxRecapMsg) {
 	m.cockpitTouch()
 	v := &m.Inbox.recap
@@ -160,9 +125,6 @@ func (m *OS) applyInboxRecap(msg InboxRecapMsg) {
 	v.loading, v.recap, v.err = false, msg.Recap, msg.Err
 }
 
-// inboxRecapDetail is the detail under the list for a finished item: what
-// the agent did while the person was away, and the agent's model, context
-// and cost when the pane reported them.
 func (m *OS) inboxRecapDetail(it session.AttentionItem) (func(width int) []string, bool) {
 	if !m.inboxRecapFor(it) {
 		return nil, false
@@ -170,7 +132,6 @@ func (m *OS) inboxRecapDetail(it session.AttentionItem) (func(width int) []strin
 	return func(width int) []string { return m.inboxRecapLines(it, width, time.Now()) }, true
 }
 
-// inboxRecapLines draws the recap for an item.
 func (m *OS) inboxRecapLines(it session.AttentionItem, width int, now time.Time) []string {
 	width = max(width-2, 8)
 	var lines []string
@@ -185,8 +146,6 @@ func (m *OS) inboxRecapLines(it session.AttentionItem, width int, now time.Time)
 	case v.key != key || v.loading:
 		add("Reading what " + inboxWho(it) + " did...")
 	case v.err != nil || v.recap == nil || recapEmpty(v.recap):
-		// A daemon without the ring, or a pane whose harness sends no
-		// hooks: the turn's own line is all there is.
 		if s := printableTitle(it.Summary); s != "" {
 			add("Last said: " + s)
 		}
@@ -206,13 +165,10 @@ func (m *OS) inboxRecapLines(it session.AttentionItem, width int, now time.Time)
 	return lines
 }
 
-// recapEmpty reports whether a recap says nothing: no ring, or nothing in it
-// since the time asked.
 func recapEmpty(rc *session.AgentActivityRecap) bool {
 	return rc.Turns == 0 && rc.FilesTotal == 0 && rc.Commands == 0 && rc.Tests == nil && rc.LastSaid == ""
 }
 
-// recapCount is n and the word for it: 1 turn, 3 turns.
 func recapCount(n int, one, many string) string {
 	if n == 1 {
 		return "1 " + one
@@ -220,7 +176,6 @@ func recapCount(n int, one, many string) string {
 	return strconv.Itoa(n) + " " + many
 }
 
-// recapFiles names the first shown files and says how many more.
 func recapFiles(files []string, total, shown int, root string) string {
 	var names []string
 	for _, f := range files {
@@ -239,7 +194,6 @@ func recapFiles(files []string, total, shown int, root string) string {
 	return strings.Join(names, "")
 }
 
-// recapTestWord says how a test run went.
 func recapTestWord(ok *bool) string {
 	switch {
 	case ok == nil:
@@ -250,8 +204,6 @@ func recapTestWord(ok *bool) string {
 	return "failed"
 }
 
-// recapTestName is a test command cut to what names it: "go test ./..." is
-// "go test", "pytest -x tests/" is "pytest".
 func recapTestName(cmdline string) string {
 	words := strings.Fields(printableTitle(cmdline))
 	var keep []string
@@ -267,10 +219,6 @@ func recapTestName(cmdline string) string {
 	return strings.Join(keep, " ")
 }
 
-// findPane finds a pane of this machine as this client holds it: the window
-// when the pane is in the session on screen, else the daemon's summary of
-// it. Both are nil for a pane it does not find, and for a client attached to
-// another machine.
 func (m *OS) findPane(sessionID, windowID string) (*terminal.Window, *session.WindowSummary) {
 	if sessionID == "" || sessionID == m.sidebarCurrentSessionID() {
 		for _, w := range m.Windows {
@@ -291,8 +239,6 @@ func (m *OS) findPane(sessionID, windowID string) (*terminal.Window, *session.Wi
 	return nil, nil
 }
 
-// agentPaneMeta is the metadata a pane of this machine reported, as this
-// client holds it.
 func (m *OS) agentPaneMeta(sessionID, windowID string) []sessiontree.MetaToken {
 	w, sum := m.findPane(sessionID, windowID)
 	switch {
@@ -304,11 +250,6 @@ func (m *OS) agentPaneMeta(sessionID, windowID string) []sessiontree.MetaToken {
 	return nil
 }
 
-// agentFactsLine is the one line of facts about an agent the Inbox's detail
-// and the peek show: "claude · opus 4.7 · 42% ctx · $1.20 · plan 3/7". A fact
-// the harness did not state is left out with its separator, and a pane that
-// stated none of the metadata gets no line, not a line that names only the
-// harness.
 func (m *OS) agentFactsLine(sessionID, windowID, harness string) string {
 	meta := m.agentPaneMeta(sessionID, windowID)
 	if len(meta) == 0 {
@@ -339,10 +280,6 @@ func (m *OS) agentFactsLine(sessionID, windowID, harness string) string {
 	return strings.Join(parts, sepWord())
 }
 
-// noteAgentReturn is focus landing on a pane. When the person was away from
-// it for at least [agents.recap] away and it finished a turn meanwhile, the
-// dock is to say what it did, which AgentRecapFetch reads. It runs before the
-// focus marks the pane seen, since those marks are what it measures from.
 func (m *OS) noteAgentReturn(w *terminal.Window) {
 	if w == nil || w.ID == "" || (w.AgentState == "" && w.AgentCompletionSeq == 0) {
 		return
@@ -386,7 +323,6 @@ func (m *OS) AgentRecapFetch() tea.Cmd {
 	m.Inbox.recap.pending = nil
 	r := *ret
 	if !m.IsDaemonSession || (m.Inbox.call == nil && (m.DaemonClient == nil || m.AttachedHost != "")) {
-		// No ring to read here: the dock says what this client counted.
 		m.showAgentReturn(r, nil)
 		return nil
 	}
@@ -397,8 +333,6 @@ func (m *OS) AgentRecapFetch() tea.Cmd {
 	}
 }
 
-// applyAgentReturnRecap says the return in the dock. A recap that could not
-// be read still says the turns this client counted.
 func (m *OS) applyAgentReturnRecap(msg AgentReturnRecapMsg) {
 	rc := msg.Recap
 	if msg.Err != nil {
@@ -407,13 +341,10 @@ func (m *OS) applyAgentReturnRecap(msg AgentReturnRecapMsg) {
 	m.showAgentReturn(msg.Return, rc)
 }
 
-// showAgentReturn puts the recap line in the dock.
 func (m *OS) showAgentReturn(r agentReturn, rc *session.AgentActivityRecap) {
 	m.ShowNotification(agentReturnLine(r, rc, time.Now()), "info", m.Settings.NotificationDuration*2)
 }
 
-// agentReturnLine is the dock's one line: "api while you were away (42m): 3
-// turns, 6 files, 11 commands, go test passed, at prompt".
 func agentReturnLine(r agentReturn, rc *session.AgentActivityRecap, now time.Time) string {
 	turns := r.turns
 	state := r.state
@@ -444,8 +375,6 @@ func agentReturnLine(r agentReturn, rc *session.AgentActivityRecap, now time.Tim
 	return r.who + " while you were away (" + units.Waited(r.since, now) + "): " + strings.Join(parts, ", ")
 }
 
-// agentReturnState says where an agent is now, in the words the dock line
-// ends with.
 func agentReturnState(state string) string {
 	switch state {
 	case "idle", "done":
@@ -456,8 +385,6 @@ func agentReturnState(state string) string {
 	return sidebarStateWords(state)
 }
 
-// recapSentences is what a recap says, a sentence a line: since when, the
-// turns and files, the commands and the last test run, and the last words.
 func recapSentences(rc *session.AgentActivityRecap, since int64, now time.Time, root string) []string {
 	var out []string
 	if since > 0 {
@@ -481,8 +408,6 @@ func recapSentences(rc *session.AgentActivityRecap, since int64, now time.Time, 
 	return out
 }
 
-// recapPath is a file a recap names: relative to the pane's folder root when
-// it is under it, from ~ when it is under the home folder, as it is otherwise.
 func recapPath(f, root string) string {
 	if root != "" && root != "/" {
 		if rel, ok := strings.CutPrefix(f, strings.TrimSuffix(root, "/")+"/"); ok && rel != "" {
@@ -492,9 +417,6 @@ func recapPath(f, root string) string {
 	return ckHomePath(f)
 }
 
-// recapTestCommand is a test command as a recap names it: the command and its
-// targets, with no flags, no variables set in front of it and nothing of the
-// shell after it (redirections, pipes, a second command).
 func recapTestCommand(cmdline string) string {
 	const most = 4
 	var keep []string

@@ -10,9 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// videoDragHarness is a headless ssh browser-pane rig: a self-placed remote
-// video stream for one window, a mutable window info the test drives, and a
-// refresh that runs one render pass and flushes it to the host.
 type videoDragHarness struct {
 	kp      *KittyPassthrough
 	host    *recWriter
@@ -23,13 +20,6 @@ type videoDragHarness struct {
 	send    func()
 }
 
-// newVideoDragHarness establishes the stream. Geometry: 400x300px frame at
-// 10x20 cells = 40 cols x 15 rows; window 100x30 with a 1-cell border on a
-// 200x60 screen; guest cursor at (0,0).
-//
-// out is the writer handed to the passthrough and rec the recorder used for
-// assertions; they are the same object except when a test wraps the recorder
-// (gatedWriter).
 func newVideoDragHarness(t *testing.T, out io.Writer, rec *recWriter) *videoDragHarness {
 	t.Helper()
 	host := rec
@@ -45,8 +35,8 @@ func newVideoDragHarness(t *testing.T, out io.Writer, rec *recWriter) *videoDrag
 		resendShm(t, shmName)
 		kp.ForwardCommand(cmd, raw, winID, 0, 0, 98, 28, 1, 1, 0, 0, 0, false, func([]byte) {})
 	}
-	send() // frame 1: establishes the id via the placement path
-	send() // frame 2: reused -> handed off to the self-placing path
+	send()
+	send()
 	if !waitUntil(func() bool { return host.has("a=T,i=") }, 2*time.Second) {
 		t.Fatal("remote video stream never self-placed")
 	}
@@ -62,7 +52,6 @@ func newVideoDragHarness(t *testing.T, out io.Writer, rec *recWriter) *videoDrag
 	}
 }
 
-// refresh runs one render pass and returns what it forwarded to the host.
 func (h *videoDragHarness) refresh() string {
 	h.kp.RefreshAllPlacements(func() map[string]*WindowPositionInfo { return h.infos })
 	out := h.kp.FlushPending()
@@ -80,11 +69,8 @@ func TestRemoteVideoTracksDragCoalesced(t *testing.T) {
 	rec := &recWriter{}
 	h := newVideoDragHarness(t, rec, rec)
 
-	_ = h.refresh() // prime: records show geometry at the resting spot
+	_ = h.refresh()
 
-	// A drag updates the window position on every mouse event; the render loop
-	// only runs refresh once per frame. All intermediate positions must
-	// coalesce into a single a=p at the last one.
 	h.info.IsBeingManipulated = true
 	for _, p := range [][2]int{{5, 2}, {11, 4}, {17, 3}} {
 		h.info.WindowX, h.info.WindowY = p[0], p[1]
@@ -93,12 +79,10 @@ func TestRemoteVideoTracksDragCoalesced(t *testing.T) {
 	if n := countCmd(out, "a=p"); n != 1 {
 		t.Fatalf("drag tick emitted %d a=p, want exactly 1 (coalesced): %q", n, out)
 	}
-	// Window (17,3), border 1, guest (0,0) -> host cell (18,4) -> CUP row 5 col 19.
 	if !strings.Contains(out, "\x1b[5;19H") {
 		t.Fatalf("a=p not at the window's current content origin: %q", out)
 	}
 
-	// Same geometry again: nothing may be re-emitted (no per-tick spam).
 	if out := h.refresh(); countCmd(out, "a=p")+countCmd(out, "a=d") != 0 {
 		t.Fatalf("refresh with unchanged geometry churned the placement: %q", out)
 	}
@@ -118,9 +102,8 @@ func TestRemoteVideoFreezesDuringResize(t *testing.T) {
 	rec := &recWriter{}
 	h := newVideoDragHarness(t, rec, rec)
 
-	_ = h.refresh() // prime: records the settled size for the freeze baseline
+	_ = h.refresh()
 
-	// Top-left corner drag: both origin and size change every tick.
 	h.info.IsBeingManipulated = true
 	for _, g := range [][4]int{{2, 1, 96, 28}, {4, 2, 92, 26}, {6, 3, 88, 24}} {
 		h.info.WindowX, h.info.WindowY, h.info.Width, h.info.Height = g[0], g[1], g[2], g[3]
@@ -129,13 +112,11 @@ func TestRemoteVideoFreezesDuringResize(t *testing.T) {
 		}
 	}
 
-	// Gesture settles: exactly one re-place at the final geometry.
 	h.info.IsBeingManipulated = false
 	out := h.refresh()
 	if n := countCmd(out, "a=p"); n != 1 {
 		t.Fatalf("after resize settled, expected exactly one a=p, got %d: %q", n, out)
 	}
-	// Window (6,3), border 1 -> host cell (7,4) -> CUP row 5 col 8.
 	if !strings.Contains(out, "\x1b[5;8H") {
 		t.Fatalf("settled a=p not at the final content origin: %q", out)
 	}
@@ -150,7 +131,7 @@ func TestRemoteVideoFreezesDuringResize(t *testing.T) {
 func TestResizeHidesGraphicsAndRestoresThem(t *testing.T) {
 	rec := &recWriter{}
 	h := newVideoDragHarness(t, rec, rec)
-	_ = h.refresh() // prime: the image is placed and visible
+	_ = h.refresh()
 
 	m := &OS{Settings: config.Global, KittyPassthrough: h.kp}
 
@@ -161,7 +142,6 @@ func TestResizeHidesGraphicsAndRestoresThem(t *testing.T) {
 		t.Fatalf("resize did not hide the image: a=d,d=i count %d -> %d, want one more", hidden, got)
 	}
 
-	// Further frames mid-gesture must not put it back on screen.
 	shown := rec.count("a=p")
 	m.flushGraphicsForView()
 	if got := rec.count("a=p"); got != shown {
@@ -175,9 +155,6 @@ func TestResizeHidesGraphicsAndRestoresThem(t *testing.T) {
 	}
 }
 
-// gatedWriter is a recWriter whose next Write (once armed) blocks until
-// released, to hold an async video frame mid-write while the test moves the
-// window underneath it.
 type gatedWriter struct {
 	recWriter
 	armed   atomic.Bool
@@ -212,14 +189,8 @@ func TestRemoteVideoFrameConvergesAfterMidWriteMove(t *testing.T) {
 	host := newGatedWriter()
 	h := newVideoDragHarness(t, host, &host.recWriter)
 
-	_ = h.refresh() // prime at the resting position
+	_ = h.refresh()
 
-	// Arm the gate and send changed frames until one reaches the host write,
-	// where the async writer blocks. Frames are sent until one lands rather
-	// than exactly once because the passthrough paces a stream against what
-	// the host's last frame cost, and this harness produces frames faster than
-	// any guest: some are deliberately dropped. A real stream keeps arriving,
-	// which is what this loop stands in for.
 	host.armed.Store(true)
 	rewriteShm(t, h.shmName, 400, 300, 77)
 	deadline := time.After(2 * time.Second)
@@ -234,18 +205,12 @@ func TestRemoteVideoFrameConvergesAfterMidWriteMove(t *testing.T) {
 		}
 	}
 
-	// The window moves while the frame is mid-write. The render pass records
-	// the new desired position, but its own a=p flush is NOT written to the
-	// host, modeling the production ordering where it reached the host before
-	// the in-flight frame did.
 	h.info.WindowX, h.info.WindowY = 30, 10
 	h.kp.RefreshAllPlacements(func() map[string]*WindowPositionInfo { return h.infos })
 	_ = h.kp.FlushPending()
 
 	close(host.release)
 
-	// Window (30,10), border 1 -> host cell (31,11) -> CUP row 12 col 32. The
-	// frame stream must leave the host at that position, not the stale one.
 	if !waitUntil(func() bool { return host.has("\x1b[12;32H") }, 2*time.Second) {
 		t.Fatal("after a mid-write move, the host was left with the image at the stale position; " +
 			"the frame stream and the reposition are fighting")
@@ -260,10 +225,8 @@ func TestRemoteVideoClampsAtScreenEdge(t *testing.T) {
 	rec := &recWriter{}
 	h := newVideoDragHarness(t, rec, rec)
 
-	_ = h.refresh() // prime
+	_ = h.refresh()
 
-	// Bottom-right: host origin (171,51) on a 200x60 screen; the 40x15 image
-	// must clamp to 29 cols x 8 rows (last row kept free) with a matching crop.
 	h.info.WindowX, h.info.WindowY = 170, 50
 	out := h.refresh()
 	if countCmd(out, "a=p") != 1 {
@@ -283,9 +246,8 @@ func TestRemoteVideoClampsAtScreenEdge(t *testing.T) {
 func TestRemoteVideoHidesOffscreenAndOccluded(t *testing.T) {
 	host := &recWriter{}
 	h := newVideoDragHarness(t, host, host)
-	_ = h.refresh() // prime
+	_ = h.refresh()
 
-	// A higher-z window covers the pane: the image must be hidden with d=i.
 	h.infos["occluder"] = &WindowPositionInfo{
 		WindowX: 0, WindowY: 0, Width: 200, Height: 60, Visible: true,
 		ScreenWidth: 200, ScreenHeight: 60, WindowZ: 5,
@@ -295,7 +257,6 @@ func TestRemoteVideoHidesOffscreenAndOccluded(t *testing.T) {
 		t.Fatalf("occluded video image was not hidden; it draws over the covering window: %q", out)
 	}
 
-	// Frames arriving while hidden must be dropped, not painted.
 	placed := host.count("a=T,i=")
 	rewriteShm(t, h.shmName, 400, 300, 123)
 	h.send()
@@ -304,7 +265,6 @@ func TestRemoteVideoHidesOffscreenAndOccluded(t *testing.T) {
 		t.Fatal("a frame painted while the image was occluded")
 	}
 
-	// Occluder gone: the image must re-show via a=p from resident data.
 	delete(h.infos, "occluder")
 	out = h.refresh()
 	if countCmd(out, "a=p") != 1 {

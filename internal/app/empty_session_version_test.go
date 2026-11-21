@@ -36,7 +36,6 @@ func TestAPushFromAnEmptyAttachKeepsADaemonCreatedWindow(t *testing.T) {
 	if err := c.Connect("test", rigCols, rigRows); err != nil {
 		t.Fatalf("connect: %v", err)
 	}
-	// An attach that creates the session hands it back with no windows.
 	state, err := c.AttachSession(name, true, rigCols, rigRows)
 	if err != nil {
 		t.Fatalf("attach: %v", err)
@@ -57,10 +56,6 @@ func TestAPushFromAnEmptyAttachKeepsADaemonCreatedWindow(t *testing.T) {
 	})
 	m.RestoreAttachedSession(state)
 
-	// A window the daemon makes on its own account, the way a verb does. The
-	// state sync it causes reaches the client's read loop, and nothing applies
-	// it: this client's next push is built from the empty session it attached
-	// to, which is the push that raced the sync in the e2e test.
 	ctl := session.NewTUIClient()
 	if err := ctl.Connect("test", rigCols, rigRows); err != nil {
 		t.Fatalf("control connect: %v", err)
@@ -89,8 +84,6 @@ func TestAPushFromAnEmptyAttachKeepsADaemonCreatedWindow(t *testing.T) {
 	rigWaitUntil(t, "the daemon to create the window", func() bool { return windows(ctl) == 1 })
 
 	m.SyncStateToDaemon()
-	// Asked on the connection the push went out on, which the daemon reads in
-	// order, so the answer comes after the push has been applied.
 	if n := windows(c); n != 1 {
 		t.Fatalf("a push built before the client saw the new window left the session with %d windows, want 1: "+
 			"the client pushed base version %d", n, m.DaemonStateVersion)

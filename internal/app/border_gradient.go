@@ -11,43 +11,20 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The focused pane's border as a static gradient
-// (appearance.border_focused_gradient). The frame is drawn in one colour as
-// before, and a pass over the canvas, right after the focused pane's layer is
-// drawn, recolours the border cells that carry that colour. Cells in another
-// colour, the title badge's ink and the window buttons, keep theirs. So do the
-// round caps of a pill on the border (the title and the controls): a cap is
-// the pill's fill drawn as ink, and a recoloured cap split the pill from its
-// body.
-//
-// The colours step: a cell takes one of gradientLevels colours, so a run of
-// border cells shares one SGR and a full redraw over SSH grows by a few
-// sequences per edge, not one per cell. The levels are blended once per
-// change of the stops, the theme or the depth. At 16 colours there is no
-// gradient: the terminal's own slots have no blend.
-
-// gradientLevels is how many colours the gradient steps through.
 const gradientLevels = 8
 
-// borderGradient is the gradient's state on this client.
 type borderGradient struct {
-	// key is what levels were blended from.
 	setting string
 	gen     uint64
 	depth   overlay.Depth
 	ok      bool
 	levels  [gradientLevels]color.Color
-	// target is the colour the focused border was drawn in on this frame,
-	// and rect the cells its frame runs on, in screen cells. id is the layer
-	// that draws it. Set by the render pass, read by the compose pass.
-	target color.Color
-	rect   image.Rectangle
-	id     string
-	on     bool
+	target  color.Color
+	rect    image.Rectangle
+	id      string
+	on      bool
 }
 
-// gradientOn reports whether the focused border draws a gradient on this
-// frame: one is configured and the depth can show one.
 func (m *OS) gradientOn() bool {
 	if m.Settings.BorderFocusedGradient == "" || theme.Depth() == overlay.Depth16 {
 		return false
@@ -55,8 +32,6 @@ func (m *OS) gradientOn() bool {
 	return m.gradientLevels()
 }
 
-// gradientLevels blends the levels when an input changed, and reports whether
-// there are levels: two stops or more, every one a colour.
 func (m *OS) gradientLevels() bool {
 	g := &m.gradient
 	setting, gen, depth := m.Settings.BorderFocusedGradient, theme.Generation(), theme.Depth()
@@ -90,15 +65,10 @@ func (m *OS) gradientLevels() bool {
 	return true
 }
 
-// markGradient records the focused pane's border for the compose pass: the
-// colour it was drawn in, the cells its frame runs on and the layer that draws
-// them. It is called once per frame by whichever path draws the frame.
 func (m *OS) markGradient(id string, rect image.Rectangle, target color.Color) {
 	m.gradient.id, m.gradient.rect, m.gradient.target, m.gradient.on = id, rect, target, true
 }
 
-// gradientLayer reports whether the layer id draws the focused border: the
-// focused pane's own layer, or for a tiled pane a rule of the border grid.
 func (m *OS) gradientLayer(id string) bool {
 	if m.gradient.id != "" {
 		return id == m.gradient.id
@@ -106,9 +76,6 @@ func (m *OS) gradientLayer(id string) bool {
 	return strings.HasPrefix(id, "sep-")
 }
 
-// applyBorderGradient recolours the focused border's cells inside region, a
-// rectangle of the canvas a layer was just drawn on. off is where the layer
-// was moved by the session view.
 func (m *OS) applyBorderGradient(canvas *frameCanvas, region image.Rectangle, off image.Point) {
 	g := &m.gradient
 	if !g.on || g.target == nil {
@@ -131,9 +98,6 @@ func (m *OS) applyBorderGradient(canvas *frameCanvas, region image.Rectangle, of
 		r, gg, b, _ := c.RGBA()
 		return r == tr && gg == tg && b == tb
 	}
-	// The direction, in the rectangle's own units so 45 degrees runs corner
-	// to corner whatever its shape, and the span of the projection over the
-	// four corners, which maps the projection onto 0..1.
 	rad := float64(m.Settings.BorderGradientAngle) * math.Pi / 180
 	cos, sin := math.Cos(rad), math.Sin(rad)
 	lo := math.Min(0, cos) + math.Min(0, sin)

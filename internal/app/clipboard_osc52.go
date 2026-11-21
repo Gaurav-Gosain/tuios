@@ -10,55 +10,19 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// A program in a pane sets the clipboard with OSC 52. The pane keeps no copy:
-// an OSC 52 query gets empty content back, as in xterm, because the answer is
-// written to the pane's input. Whether the host clipboard gets the write is
-// appearance.selection.osc52_write:
-//
-//   - off: never.
-//   - ask: the dock asks, and a click on the message allows it. The key that
-//     jumps to a message skips these, so no stray key allows a write.
-//   - focused (the default): the focused pane writes and the dock says so. A
-//     write from any other pane asks.
-//   - on: every pane writes.
-//
-// The reason for a setting at all is that OSC 52 is output, and any output can
-// carry it: a file an agent prints, a log line, a web page in a text browser.
-// Unchecked, whatever a pane prints can put a command on the clipboard for the
-// user to paste later. See config.OSC52WriteModes for why focused is the
-// default.
-
-// clipboardAsk is a pane's clipboard write waiting for the user. There is at
-// most one per pane: a newer write from the same pane replaces its text, so a
-// pane that writes fifty times raises one message, not fifty.
 type clipboardAsk struct {
 	seq      uint64
 	version  uint64
 	text     string
 	windowID string
-	// raised is when the ask last put a message on the dock. A pane whose
-	// message the user dismissed raises a new one at most once per
-	// notifications.rate_limit_ms, the limit guest notifications keep.
-	raised time.Time
-	// shown is when the message last showed this text: when it was raised,
-	// or when a newer write changed its text in place. A click sooner than
-	// clipboardAskSettle after it allows nothing.
-	shown time.Time
+	raised   time.Time
+	shown    time.Time
 }
 
-// clipboardAskSettle is how long a clipboard ask's message must have shown
-// its text before a click allows it, the settle the plugin approval dialog
-// keeps. A click already on its way when the message appeared under the
-// pointer, or when its text changed, was not aimed at that text.
 const clipboardAskSettle = 500 * time.Millisecond
 
-// clipboardPreviewLen is how many characters of the text an ask shows.
 const clipboardPreviewLen = 24
 
-// paneClipboardWrite decides what a pane's OSC 52 write does to the host
-// clipboard and returns the command that writes it, or nil. An allowed write
-// goes out the way tuios's own copies do (clipboardWriteCmd), so it reaches the
-// system clipboard on a terminal that ignores OSC 52.
 func (m *OS) paneClipboardWrite(msg ClipboardSetMsg) tea.Cmd {
 	mode := m.Settings.OSC52Write
 	switch mode {
@@ -69,7 +33,6 @@ func (m *OS) paneClipboardWrite(msg ClipboardSetMsg) tea.Cmd {
 		return m.clipboardWriteCmd(msg.Text)
 	case config.OSC52WriteAsk:
 	default:
-		// focused, and anything unknown, which is treated as the default.
 		if fw := m.GetFocusedWindow(); fw != nil && fw.ID == msg.WindowID {
 			m.noteFocusedCopy(msg)
 			return m.clipboardWriteCmd(msg.Text)
@@ -79,11 +42,6 @@ func (m *OS) paneClipboardWrite(msg ClipboardSetMsg) tea.Cmd {
 	return nil
 }
 
-// noteFocusedCopy says on the dock that the focused pane set the clipboard,
-// when the text is of the kind that runs something if pasted: it holds a line
-// break or a control character. A one-line yank, which is most of what an
-// editor copies, says nothing. Each pane has one such line, updated in place,
-// so a pane that copies often does not push other messages off the dock.
 func (m *OS) noteFocusedCopy(msg ClipboardSetMsg) {
 	if !strings.ContainsFunc(msg.Text, func(r rune) bool {
 		return (r < 0x20 && r != '\t') || r == 0x7f || (r >= 0x80 && r <= 0x9f)
@@ -116,13 +74,10 @@ func (m *OS) noteFocusedCopy(msg ClipboardSetMsg) {
 	}
 }
 
-// askClipboardWrite records a pane's write as waiting and shows, or updates,
-// the one dock message for that pane.
 func (m *OS) askClipboardWrite(msg ClipboardSetMsg) {
 	if m.clipboardAsks == nil {
 		m.clipboardAsks = make(map[string]*clipboardAsk)
 	}
-	// An ask from a pane that has closed can never be read in context again.
 	for id := range m.clipboardAsks {
 		if m.windowByID(id) == nil {
 			delete(m.clipboardAsks, id)
@@ -145,9 +100,6 @@ func (m *OS) askClipboardWrite(msg ClipboardSetMsg) {
 		text = "The text changed. " + text
 	}
 
-	// The pane's message is still up: the newest text replaces it in place,
-	// and its target moves to the new version. A click aimed at the old text
-	// then no longer matches what was drawn, and is dropped.
 	for i := range m.Notifications {
 		if t := m.Notifications[i].Target; t != nil && t.ClipboardAsk == ask.seq {
 			m.Notifications[i].Message = text
@@ -163,7 +115,6 @@ func (m *OS) askClipboardWrite(msg ClipboardSetMsg) {
 	m.ShowNotificationFrom(text, "warning", 2*m.Settings.NotificationDuration, NotifTarget{ClipboardAsk: ask.seq, ClipboardVersion: ask.version})
 }
 
-// clipboardAskText is the dock message for an ask.
 func (m *OS) clipboardAskText(ask *clipboardAsk) string {
 	preview := []rune(notifyPlainText(ask.text))
 	quoted := string(preview)
@@ -174,9 +125,6 @@ func (m *OS) clipboardAskText(ask *clipboardAsk) string {
 		m.clipboardPaneName(ask.windowID), len([]rune(ask.text)), quoted)
 }
 
-// clipboardPaneName is how a clipboard message names the pane that wrote: by
-// the name the user gave it, or by its number. Never by the title the pane
-// sets itself, since the pane could name itself after another one.
 func (m *OS) clipboardPaneName(windowID string) string {
 	for i, w := range m.Windows {
 		if w == nil || w.ID != windowID {
@@ -190,8 +138,6 @@ func (m *OS) clipboardPaneName(windowID string) string {
 	return "A pane"
 }
 
-// clipboardAskSettling reports whether ask seq showed its text less than
-// clipboardAskSettle ago.
 func (m *OS) clipboardAskSettling(seq uint64) bool {
 	for _, a := range m.clipboardAsks {
 		if a.seq == seq {
@@ -201,9 +147,6 @@ func (m *OS) clipboardAskSettling(seq uint64) bool {
 	return false
 }
 
-// allowClipboardAsk lets the waiting write with this number through.
-// version is the text version the activated message showed. An ask whose text
-// has changed since is not allowed.
 func (m *OS) allowClipboardAsk(seq, version uint64) {
 	var ask *clipboardAsk
 	for _, a := range m.clipboardAsks {

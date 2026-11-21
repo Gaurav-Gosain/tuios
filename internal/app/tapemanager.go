@@ -20,7 +20,6 @@ import (
 	"github.com/adrg/xdg"
 )
 
-// tapeManagerVisibleRows is the number of tape files shown at once in the list.
 const tapeManagerVisibleRows = 10
 
 // TapeManagerMode represents the current mode of the tape manager
@@ -67,12 +66,10 @@ func GetTapeDirectory() (string, error) {
 		return "", errfmt.Errorf("failed to get tape directory: %w", err)
 	}
 
-	// Create directory if it doesn't exist
 	if err := os.MkdirAll(filepath.Dir(tapeDir), 0750); err != nil {
 		return "", errfmt.Errorf("failed to create tape directory: %w", err)
 	}
 
-	// Return the directory path (not the file path)
 	return filepath.Dir(tapeDir), nil
 }
 
@@ -83,7 +80,6 @@ func LoadTapeFiles() ([]TapeFile, error) {
 		return nil, err
 	}
 
-	// Ensure directory exists
 	if err := os.MkdirAll(tapeDir, 0750); err != nil {
 		return nil, errfmt.Errorf("failed to create tape directory: %w", err)
 	}
@@ -117,7 +113,6 @@ func LoadTapeFiles() ([]TapeFile, error) {
 		})
 	}
 
-	// Sort by modification time (newest first)
 	sort.Slice(files, func(i, j int) bool {
 		return files[i].Modified.After(files[j].Modified)
 	})
@@ -137,12 +132,10 @@ func SaveTape(name string, content string) (string, error) {
 		return "", err
 	}
 
-	// Ensure directory exists
 	if err := os.MkdirAll(tapeDir, 0750); err != nil {
 		return "", errfmt.Errorf("failed to create tape directory: %w", err)
 	}
 
-	// Clean the name and add extension
 	name = strings.TrimSpace(name)
 	if name == "" {
 		name = fmt.Sprintf("recording_%s", time.Now().Format("20060102_150405"))
@@ -269,27 +262,21 @@ func (m *OS) TapeManagerConfirmRecording() {
 		name = fmt.Sprintf("recording_%s", time.Now().Format("20060102_150405"))
 	}
 
-	// Initialize tape recorder if needed
 	if m.TapeRecorder == nil {
 		m.TapeRecorder = tape.NewRecorder()
 	}
 
-	// Store the tape name for later
 	m.TapeRecordingName = name
 
-	// Determine current mode for recording
 	mode := "window"
 	if m.Mode == TerminalMode {
 		mode = "terminal"
 	}
 
-	// Start recording with initial state (mode, workspace, tiling)
 	m.TapeRecorder.StartWithState(mode, m.CurrentWorkspace, m.AutoTiling)
 	m.TapeManager.Mode = TapeManagerRecording
-	m.ShowTapeManager = false // Close the manager UI
+	m.ShowTapeManager = false
 
-	// Switch to terminal mode if we have a focused window
-	// This ensures keystrokes are recorded
 	if m.GetFocusedWindow() != nil {
 		m.ChooseMode(TerminalMode, ModeCauseRecording)
 	}
@@ -305,7 +292,6 @@ func (m *OS) TapeManagerStopRecording() {
 
 	m.TapeRecorder.Stop()
 
-	// Save the recording
 	content := m.TapeRecorder.String(m.TapeRecordingName)
 	path, err := SaveTape(m.TapeRecordingName, content)
 	if err != nil {
@@ -314,11 +300,9 @@ func (m *OS) TapeManagerStopRecording() {
 		m.ShowNotification(fmt.Sprintf("Recording saved: %s", filepath.Base(path)), "success", 2*time.Second)
 	}
 
-	// Clear recorder
 	m.TapeRecorder.Clear()
 	m.TapeRecordingName = ""
 
-	// Refresh file list
 	m.RefreshTapeFiles()
 }
 
@@ -336,15 +320,12 @@ func (m *OS) TapeManagerPlaySelected() {
 		return
 	}
 
-	// Read the tape file, with its Source lines resolved
 	script, err := tape.LoadFile(selected.Path)
 	if err != nil {
 		m.TapeManager.ErrorMessage = fmt.Sprintf("Failed to read tape: %s", err)
 		m.TapeManager.MessageTime = time.Now()
 		return
 	}
-	// A tape with errors does not play. It used to play whatever parsed and
-	// skip the rest without a word.
 	if len(script.Errors) > 0 {
 		m.TapeManager.ErrorMessage = fmt.Sprintf("Tape has %s. The first is at %s", plural.Count(len(script.Errors), "error"), script.Errors[0])
 		m.TapeManager.MessageTime = time.Now()
@@ -355,7 +336,6 @@ func (m *OS) TapeManagerPlaySelected() {
 	}
 	m.startTapePlayback(script.Commands, 0)
 
-	// Close the manager UI
 	m.ShowTapeManager = false
 	m.ShowNotification("Playing: "+selected.Name, "info", 2*time.Second)
 }
@@ -448,15 +428,10 @@ func (m *OS) RenderTapeManager() string {
 	return content
 }
 
-// tapeManagerWidth is the panel's preferred inner width: a name, a size and a
-// timestamp with room to breathe.
 const tapeManagerWidth = 56
 
-// tapeMessageLinger is how long a tape's own success or error line stays up.
 const tapeMessageLinger = 3 * time.Second
 
-// tapeFileRow renders one tape as a full-width row. The fill spans the panel so
-// the selection reads as a row rather than as a slab painted around the text.
 func (m *OS) tapeFileRow(i, width int, pal overlay.Palette) string {
 	file := m.TapeManager.Files[i]
 	selected := i == m.TapeManager.List.Cursor
@@ -473,8 +448,6 @@ func (m *OS) tapeFileRow(i, width int, pal overlay.Palette) string {
 		}
 	}
 
-	// The name gives way first, then the timestamp: a row that keeps its whole
-	// name at the cost of the panel's edge is not a row anyone can read.
 	size := units.Bytes(file.Size)
 	stamp := file.Modified.Format("Jan 02 15:04")
 	nameW := max(width-lipgloss.Width(size)-lipgloss.Width(stamp)-6, 6)
@@ -511,8 +484,6 @@ func (m *OS) HandleTapeManagerInput(key string) bool {
 			m.TapeManager.Mode = TapeManagerList
 			return true
 		}
-		// The name is a field like every other: caret, word keys, ctrl+u.
-		// A key types its name when it is one printable ASCII character.
 		_, consumed := lineKey(&m.TapeManager.Name, key, "", cleanTapeName)
 		return consumed
 
@@ -554,7 +525,6 @@ func (m *OS) HandleTapeManagerInput(key string) bool {
 	return false
 }
 
-// tapeNameField draws the tape name with its caret.
 func (m *OS) tapeNameField(width int, bg, fg color.Color) string {
 	before, at, after := m.TapeManager.Name.Parts()
 	return overlay.FieldLine(before, at, after, width, bg, fg)
@@ -567,8 +537,6 @@ func (m *OS) TapeNamePaste(s string) {
 	}
 }
 
-// cleanTapeName keeps what a tape's name may hold: it is a file name of
-// printable ASCII.
 func cleanTapeName(s string) string {
 	return strings.Map(func(r rune) rune {
 		if r < 32 || r > 126 {

@@ -23,7 +23,6 @@ func TestAReadingForAnAbandonedDirectoryIsDropped(t *testing.T) {
 		t.Errorf("a reading for a directory the focus had left was applied: %+v", m.gitView.State)
 	}
 
-	// The positive half, so the guard is not just refusing everything.
 	m.ApplyGitState(GitStateMsg{
 		Dir:   "/src/tuios",
 		Found: true,

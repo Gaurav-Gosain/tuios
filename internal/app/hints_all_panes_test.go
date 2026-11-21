@@ -12,8 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// hintsTwoPaneOS is two panes side by side on workspace 1, the left one
-// focused, each with its own text printed in it.
 func hintsTwoPaneOS(t *testing.T, left, right string) (*OS, *terminal.Window, *terminal.Window) {
 	t.Helper()
 	a := newTestWindow(t, "hintsA000001", 60, 12)
@@ -27,12 +25,10 @@ func hintsTwoPaneOS(t *testing.T, left, right string) (*OS, *terminal.Window, *t
 	m.CurrentWorkspace = 1
 	m.UserConfig = config.DefaultConfig()
 	m.Width, m.Height = 120, 30
-	// The panes sit in the content region, under the dock when it is on top.
 	a.Y, b.Y = m.GetTopMargin(), m.GetTopMargin()
 	return m, a, b
 }
 
-// shaLine prints n distinct hashes, one per line.
 func shaLines(prefix string, n int) string {
 	var b strings.Builder
 	for i := range n {
@@ -45,9 +41,6 @@ func shaLines(prefix string, n int) string {
 // two texts, and every label on the focused pane is as short as the shortest
 // label on the other pane.
 func TestHintsAllPanesLabelsAreUniqueAndShortestOnTheFocusedPane(t *testing.T) {
-	// The focused pane's matches are far from its cursor, and the other
-	// pane's are near its own, so only the pane order can put the focused
-	// pane first. The other pane alone has more texts than there are letters.
 	var right strings.Builder
 	for i := range 6 {
 		fmt.Fprintf(&right, "def%04d fed%04d\r\n", i, i)
@@ -109,7 +102,6 @@ func TestHintsAllPanesSkipPanesNotOnScreen(t *testing.T) {
 	}
 	m.CloseHints()
 
-	// A floating pane over the right pane's first row hides its match.
 	float := newTestWindow(t, "hintsE000001", 30, 5)
 	float.Workspace, float.IsFloating = 1, true
 	float.X, float.Y = 60, 0
@@ -121,7 +113,6 @@ func TestHintsAllPanesSkipPanesNotOnScreen(t *testing.T) {
 	m.CloseHints()
 	m.Windows = m.Windows[:len(m.Windows)-1]
 
-	// A zoom that fills the region hides every other pane.
 	a.Zoomed = true
 	a.X, a.Y = m.GetLeftMargin(), m.GetTopMargin()
 	a.Width, a.Height = m.GetContentWidth(), m.GetUsableHeight()
@@ -240,8 +231,6 @@ func TestHintsAllPanesDrawOnEveryPane(t *testing.T) {
 	m.UserConfig = config.DefaultConfig()
 	left, right := m.Windows[0], m.Windows[1]
 	left.WriteOutput([]byte("left deadbee01\r\n"))
-	// The right pane prints its hash and then enough lines to push it into
-	// the scrollback, and is scrolled back to show it again.
 	right.WriteOutput([]byte("right deadbee02\r\n" + strings.Repeat("filler\r\n", right.ContentHeight()+4)))
 	if right.ScrollbackLen() == 0 {
 		t.Fatal("the right pane has no scrollback")
@@ -281,7 +270,6 @@ func TestHintsAllPanesDrawOnEveryPane(t *testing.T) {
 func TestHintsAllPanesSkipTextUnderAPlainPane(t *testing.T) {
 	m, a, b := hintsTwoPaneOS(t, "focus deadbee01\r\n", "other deadbee02\r\n")
 	a.Z, b.Z = 0, 5
-	// b is a plain pane, not floating, over the left pane's hash.
 	b.X = a.X + 5
 	m.OpenHintsAllPanes()
 	if _, ok := m.HintLabels()["deadbee01"]; ok {
@@ -322,8 +310,6 @@ func TestHintsAllPanesLabelIsNeverCutByAPane(t *testing.T) {
 	m.UserConfig.Hints.Alphabet = "ab"
 	float := newTestWindow(t, "hintsG000001", 20, 3)
 	float.Workspace, float.IsFloating = 1, true
-	// The top row holds the match furthest from the cursor, which gets the
-	// longest label. The pane starts on its second cell.
 	origin := paneContentRect(a).Min
 	float.X, float.Y = origin.X+1, origin.Y-1
 	m.Windows = append(m.Windows, float)

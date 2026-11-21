@@ -11,19 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The client signs a call with its attach nonce, human_nonce, and the
-// daemon takes a signed call as the person's. The daemon cannot tell who
-// pressed the key that made the call, so the client must not sign one that
-// a key from send-keys or a tape's Press started. Each case below makes one
-// signed call from a key handler. From the person's key it must sign, which
-// shows the case reaches the call. From a RemoteKeyMsg, and from a tape's
-// Press, nothing may go out signed.
-//
-// Negative control: with inboxNonce returning the nonce whatever the key's
-// origin, every case fails for send-keys and for the tape. See
-// e2e/tui/NEGATIVE_CONTROLS.md, "Signed calls from send-keys".
-
-// signedCalls records the verbs called with a human_nonce.
 type signedCalls struct{ verbs []string }
 
 func (s *signedCalls) call(verb string, params map[string]any, _ time.Duration) (json.RawMessage, error) {
@@ -33,7 +20,6 @@ func (s *signedCalls) call(verb string, params map[string]any, _ time.Duration) 
 	return json.RawMessage(`{}`), nil
 }
 
-// runSignedCmd runs cmd and every command a batch in it holds.
 func runSignedCmd(cmd tea.Cmd) {
 	if cmd == nil {
 		return

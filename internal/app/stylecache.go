@@ -10,9 +10,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 )
 
-// styleEntry holds a cached style together with its derived ANSI escape prefix
-// and suffix. The escape is a pure function of the style, so caching it here
-// avoids rebuilding it via styleToANSI on every batch flush.
 type styleEntry struct {
 	style  lipgloss.Style
 	prefix string
@@ -26,19 +23,18 @@ type StyleCache struct {
 	cache map[uint64]styleEntry
 	seed  maphash.Seed
 
-	// Statistics for monitoring (atomic counters)
 	hits   atomic.Uint64
 	misses atomic.Uint64
 	evicts atomic.Uint64
 
-	maxSize int // Maximum cache entries before eviction
+	maxSize int
 }
 
 // NewStyleCache creates a new style cache with the specified maximum size.
 // Recommended size: 256-1024 entries (covers most terminal use cases).
 func NewStyleCache(maxSize int) *StyleCache {
 	if maxSize <= 0 {
-		maxSize = 512 // Default size
+		maxSize = 512
 	}
 	return &StyleCache{
 		cache:   make(map[uint64]styleEntry, maxSize),
@@ -47,12 +43,6 @@ func NewStyleCache(maxSize int) *StyleCache {
 	}
 }
 
-// hashColor writes a cell style colour into h. A wrapped-nil colour hashes like
-// an absent one, because calling RGBA through it panics.
-//
-// The indexed colour, the one the emulator hands out most, is tested before
-// isNilColor, whose reflection it does not need: a value type cannot hold a
-// nil pointer.
 func hashColor(h *maphash.Hash, c color.Color) {
 	if ansiColor, ok := c.(lipgloss.ANSIColor); ok {
 		_ = h.WriteByte(1)
@@ -71,14 +61,10 @@ func hashColor(h *maphash.Hash, c color.Color) {
 	_ = h.WriteByte(byte(a >> 8))
 }
 
-// hashCellAttrs creates a hash key from cell attributes.
-// The hash combines the colours, text attributes, underline style and cursor
-// state, which is everything buildCellStyle reads.
 func (sc *StyleCache) hashCellAttrs(cell *uv.Cell, isCursor bool) uint64 {
 	var h maphash.Hash
 	h.SetSeed(sc.seed)
 
-	// Hash cursor state (1 bit)
 	if isCursor {
 		_ = h.WriteByte(1)
 	} else {
@@ -92,15 +78,11 @@ func (sc *StyleCache) hashCellAttrs(cell *uv.Cell, isCursor bool) uint64 {
 
 	_ = h.WriteByte(1)
 
-	// Text attributes (bold, italic, etc.) and the underline style are one
-	// byte each.
 	_ = h.WriteByte(cell.Style.Attrs)
 	_ = h.WriteByte(byte(cell.Style.Underline))
 
 	hashColor(&h, cell.Style.Fg)
 	hashColor(&h, cell.Style.Bg)
-	// Almost no cell carries an underline colour, so the absent case skips
-	// the call.
 	if cell.Style.UnderlineColor == nil {
 		_ = h.WriteByte(0)
 	} else {
@@ -110,11 +92,9 @@ func (sc *StyleCache) hashCellAttrs(cell *uv.Cell, isCursor bool) uint64 {
 	return h.Sum64()
 }
 
-// getEntry retrieves a cached style entry or builds and caches it if not found.
 func (sc *StyleCache) getEntry(cell *uv.Cell, isCursor bool) styleEntry {
 	hash := sc.hashCellAttrs(cell, isCursor)
 
-	// Fast path: try read lock first
 	sc.mu.RLock()
 	if entry, ok := sc.cache[hash]; ok {
 		sc.mu.RUnlock()
@@ -123,18 +103,15 @@ func (sc *StyleCache) getEntry(cell *uv.Cell, isCursor bool) styleEntry {
 	}
 	sc.mu.RUnlock()
 
-	// Cache miss: build style and cache it
 	sc.misses.Add(1)
 
 	style := buildCellStyle(cell, isCursor)
 	prefix, suffix := styleToANSI(style)
 	entry := styleEntry{style: style, prefix: prefix, suffix: suffix}
 
-	// Store in cache with write lock
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
-	// Check size and evict if necessary (simple LRU approximation: clear half the cache)
 	if len(sc.cache) >= sc.maxSize {
 		sc.evictHalf()
 	}
@@ -152,15 +129,10 @@ func (sc *StyleCache) GetWithANSI(cell *uv.Cell, isCursor bool) (lipgloss.Style,
 	return entry.style, entry.prefix, entry.suffix
 }
 
-// evictHalf removes approximately half of the cache entries.
-// This is a simple but effective eviction strategy that maintains good hit rates
-// while preventing unbounded growth. Must be called with write lock held.
 func (sc *StyleCache) evictHalf() {
 	targetSize := sc.maxSize / 2
 	evicted := 0
 
-	// Delete entries until we reach target size
-	// Note: map iteration order is randomized in Go, providing natural LRU-like behavior
 	for key := range sc.cache {
 		delete(sc.cache, key)
 		evicted++
@@ -217,7 +189,6 @@ func (sc *StyleCache) ResetStats() {
 	sc.evicts.Store(0)
 }
 
-// Global style cache instance
 var globalStyleCache = NewStyleCache(1024)
 
 // GetGlobalStyleCache returns the global style cache instance.

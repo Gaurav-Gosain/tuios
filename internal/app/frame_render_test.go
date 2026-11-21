@@ -9,8 +9,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// randomStyle draws a style from a small palette that covers every kind of
-// colour a cell can carry, including none, and every attribute bit.
 func randomStyle(rng *rand.Rand) uv.Style {
 	pick := func() color.Color {
 		switch rng.Intn(6) {
@@ -47,9 +45,6 @@ func randomStyle(rng *rand.Rand) uv.Style {
 	return s
 }
 
-// randomLines fills a buffer the way a composed frame is filled: mostly
-// blanks and ASCII, with runs of styled cells, wide glyphs and their
-// placeholders, links, and the odd carriage return.
 func randomLines(rng *rand.Rand, w, h int) []uv.Line {
 	glyphs := []string{"a", "b", "x", " ", "-", "│", "█", "é", "\t"}
 	lines := make([]uv.Line, h)
@@ -74,11 +69,9 @@ func randomLines(rng *rand.Rand, w, h int) []uv.Line {
 			}
 			switch rng.Intn(10) {
 			case 0:
-				// A blank cell, which resets the pen.
 				line[x] = uv.EmptyCell
 				x++
 			case 1:
-				// A styled space, which is not blank.
 				line[x] = uv.Cell{Content: " ", Width: 1, Style: style, Link: link}
 				x++
 			case 2:
@@ -90,7 +83,6 @@ func randomLines(rng *rand.Rand, w, h int) []uv.Line {
 					x++
 				}
 			case 3:
-				// A stray zero cell, as after a wide cell was clipped.
 				line[x] = uv.Cell{}
 				x++
 			case 4:
@@ -128,9 +120,6 @@ func TestFrameRenderMatchesUltraviolet(t *testing.T) {
 		t.Fatalf("empty frame rendered %q", got)
 	}
 
-	// Two colours of different Go types with the same RGBA are the same
-	// colour to ultraviolet, so no SGR is emitted between them. A renderer
-	// that compared the structs alone would emit one.
 	same := uv.Line{
 		{Content: "a", Width: 1, Style: uv.Style{Fg: color.RGBA{R: 255, A: 255}}},
 		{Content: "b", Width: 1, Style: uv.Style{Fg: ansi.RGBColor{R: 0xff, G: 0x00, B: 0x00}}},

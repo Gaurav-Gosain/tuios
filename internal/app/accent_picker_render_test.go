@@ -8,9 +8,6 @@ import (
 	"github.com/charmbracelet/colorprofile"
 )
 
-// accentTestOS is sidebarTestOS with a pane that has no agent state, so the
-// accent mark has a glyph column to occupy: state outranks identity, and a
-// preview drawn over a state glyph would be testing the wrong rule.
 func accentTestOS(t *testing.T, w, h int) *OS {
 	t.Helper()
 	m := sidebarTestOS(t, w, h, "left")
@@ -19,9 +16,6 @@ func accentTestOS(t *testing.T, w, h int) *OS {
 	return m
 }
 
-// truecolorForTest pins the colour profile so a swatch is painted with the exact
-// colour asked for. Without this the tests would assert against whatever
-// terminal happened to run them.
 func truecolorForTest(t *testing.T) {
 	t.Helper()
 	prev := theme.ColorProfile()
@@ -29,7 +23,6 @@ func truecolorForTest(t *testing.T) {
 	t.Cleanup(func() { SetAccentColorProfile(prev) })
 }
 
-// pickerLines renders the picker and returns its rows with styling stripped.
 func pickerLines(t *testing.T, m *OS) []string {
 	t.Helper()
 	content, _, _ := m.renderAccentPicker()
@@ -58,15 +51,12 @@ func TestAccentPickerHueDragStaysOnTheStrip(t *testing.T) {
 			cell = h
 		}
 	}
-	// Update tracks the button for the real path; this drives the routing
-	// directly, so it has to say the button is down itself.
 	m.pointerDown = true
 	if ok, _ := m.accentPickerPress(strip.Rect.X0, strip.Rect.Y0); !ok {
 		t.Fatal("the press on the hue strip was not routed")
 	}
 	hue := m.AccentPicker.Hue
 
-	// Slip onto the grid mid-drag: nothing moves.
 	m.accentPickerDragTo(cell.Rect.X0, cell.Rect.Y0)
 	if m.AccentPicker.Hue != hue {
 		t.Errorf("the drag followed the pointer off the strip: hue %v -> %v", hue, m.AccentPicker.Hue)
@@ -75,7 +65,6 @@ func TestAccentPickerHueDragStaysOnTheStrip(t *testing.T) {
 		t.Error("the drag handed focus to the grid it slipped over")
 	}
 
-	// Back on the strip it keeps working.
 	for _, h := range m.accentHits {
 		if h.Kind == accentHitHue && h.Col == 9 {
 			m.accentPickerDragTo(h.Rect.X0, h.Rect.Y0)
@@ -99,7 +88,7 @@ func TestAccentPreviewFoldStaysAllocationFree(t *testing.T) {
 	m := accentTestOS(t, 120, 30)
 	m.OpenAccentPicker("aaaaaaaa1111")
 	m.AccentPickerSetSlider(accentChanS, 61)
-	m.sidebarSignature() // warm anything one-off
+	m.sidebarSignature()
 
 	if got := testing.AllocsPerRun(200, func() { m.sidebarSignature() }); got != 0 {
 		t.Errorf("folding the signature with the picker open allocates %.1f times a frame", got)

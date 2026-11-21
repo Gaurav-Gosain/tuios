@@ -15,18 +15,6 @@ import (
 	tint "github.com/lrstanley/bubbletint/v2"
 )
 
-// The theme editor: a side sheet that edits a theme file while the rail, the
-// dock and the panes stay in view. It opens on the side with no rail and
-// draws over the panes without moving them.
-//
-// Every change goes through a theme.Draft. A client alone in its process puts
-// the draft in force under a scratch id, so the whole screen is the preview. A
-// served client (tuios ssh, tuios-web) shares the theme with every client of
-// its server, so it only measures the draft, and the sheet's swatches are the
-// preview. Saving writes the sparse file through the draft and is refused on a
-// client that may not write the config, like every writer.
-
-// Tabs of the theme editor.
 const (
 	themeEditorTabQuick = iota
 	themeEditorTabRoles
@@ -34,34 +22,23 @@ const (
 	themeEditorTabCount
 )
 
-// themeEditorTabs are the tab labels, in tab order.
 var themeEditorTabs = [themeEditorTabCount]string{"Quick", "Roles", "Pane colours"}
 
-// themeEditorRow is one row of a tab: a chrome role, or one of the pane
-// colours, under a group heading.
 type themeEditorRow struct {
 	group string
 	label string
 	role  theme.Role
-	// pane is the index into the draft's pane colours, or -1 for a role.
-	pane int
-	// fixed is a row that shows a value and takes no edit: the text inks,
-	// which tuios measures from the surface.
+	pane  int
 	fixed bool
-	// dark is the row that says whether the theme is dark: enter toggles it.
-	dark bool
+	dark  bool
 }
 
-// themeEditorQuickRows are the Quick tab: two seeds and the shade. The rest of
-// the chrome derives from them: the ramp and the text inks from the surface,
-// the pills and marks from the accent and the sixteen.
 var themeEditorQuickRows = []themeEditorRow{
 	{group: "Seeds", label: "Accent", role: theme.RoleAccent, pane: -1},
 	{group: "Seeds", label: "Surface", role: theme.RoleSurface, pane: -1},
 	{group: "Shade", label: "Dark theme", pane: -1, dark: true},
 }
 
-// themeEditorRoleRows are the Roles tab, grouped by what the user sees.
 var themeEditorRoleRows = []themeEditorRow{
 	{group: "Accents", label: "Accent", role: theme.RoleAccent, pane: -1},
 	{group: "Accents", label: "Bright accent", role: theme.RoleAccentBright, pane: -1},
@@ -89,10 +66,8 @@ var themeEditorRoleRows = []themeEditorRow{
 	{group: "Status", label: "Busy", role: theme.RoleBusy, pane: -1},
 }
 
-// themeEditorPaneSelection is the Selection row's index in themeEditorPaneRows.
 const themeEditorPaneSelection = 2
 
-// themeEditorPaneRows are the Pane colours tab, in the draft's colour order.
 var themeEditorPaneRows = func() []themeEditorRow {
 	labels := []string{"Foreground", "Background", "Selection", "Cursor",
 		"Black", "Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White",
@@ -109,44 +84,24 @@ var themeEditorPaneRows = func() []themeEditorRow {
 	return rows
 }()
 
-// themeEditorState is the editor's state, kept on the OS.
 type themeEditorState struct {
-	open bool
-	// hidden takes the sheet off the screen and keeps the editor open, so the
-	// whole screen shows the draft.
-	hidden bool
-	tab    int
-	// lists is each tab's cursor and window, so a tab keeps its place when
-	// the person comes back to it. Scroll counts drawn lines, headings
-	// included, and the renderer keeps it (renderThemeEditor).
-	lists [themeEditorTabCount]listnav.State
-	// draft is the theme being edited, saved what the file held when the
-	// editor opened or last saved, and undo the drafts before each change.
+	open         bool
+	hidden       bool
+	tab          int
+	lists        [themeEditorTabCount]listnav.State
 	draft, saved *theme.Draft
 	undo         []*theme.Draft
-	// original is the theme in force when the editor opened, put back when
-	// it closes.
-	original string
-	// live is whether this client previews by putting the draft in force.
-	live bool
-	// resolved is the draft merged over its base and the palette it draws,
-	// rebuilt after each change. err is why the draft does not resolve.
-	resolved *tint.Tint
-	chrome   *theme.Chrome
-	pal      overlay.Palette
-	err      error
-	// typing is the value being typed for the selected row, and typingOn
-	// whether a value is being typed.
-	typing   textedit.Line
-	typingOn bool
-	// leaving is set by an esc over unsaved changes. A second esc drops them.
-	leaving bool
-	// overwrite is set when a save found the file changed on disk. The next
-	// ctrl+s replaces it.
-	overwrite bool
-	// flashSeq numbers the role flashes, so only the last one's end puts
-	// the draft back.
-	flashSeq int
+	original     string
+	live         bool
+	resolved     *tint.Tint
+	chrome       *theme.Chrome
+	pal          overlay.Palette
+	err          error
+	typing       textedit.Line
+	typingOn     bool
+	leaving      bool
+	overwrite    bool
+	flashSeq     int
 }
 
 // ThemeEditorOpen reports whether the theme editor is open.
@@ -190,8 +145,6 @@ func (m *OS) OpenThemeEditor(id string, fresh bool, original string) {
 		open: true, draft: d, saved: d.Clone(), original: original, live: m.previewsLive(),
 	}
 	if !fresh {
-		// An existing theme opens on the roles, where most edits are. A new
-		// one opens on the two seeds.
 		m.themeEditor.tab = themeEditorTabRoles
 	}
 	m.themeEditorChanged(true)
@@ -210,7 +163,6 @@ func (m *OS) CloseThemeEditor() {
 	if live {
 		m.applyTheme(original)
 		theme.DropScratch(id)
-		// A light and dark switch while the editor was open was held back.
 		m.followSchemeTheme()
 	}
 }
@@ -233,7 +185,6 @@ func (m *OS) ThemeEditorEscape() {
 	}
 }
 
-// themeEditorDirty reports whether the draft differs from what was saved.
 func (m *OS) themeEditorDirty() bool {
 	st := &m.themeEditor
 	if st.draft == nil || st.saved == nil {
@@ -242,15 +193,12 @@ func (m *OS) themeEditorDirty() bool {
 	return *withoutDark(st.draft) != *withoutDark(st.saved) || !sameDark(st.draft.Dark, st.saved.Dark)
 }
 
-// withoutDark is a copy of d without its dark pointer, so two drafts compare
-// by value.
 func withoutDark(d *theme.Draft) *theme.Draft {
 	c := *d
 	c.Dark = nil
 	return &c
 }
 
-// sameDark reports whether two dark flags say the same.
 func sameDark(a, b *bool) bool {
 	if a == nil || b == nil {
 		return a == b
@@ -258,7 +206,6 @@ func sameDark(a, b *bool) bool {
 	return *a == *b
 }
 
-// themeEditorRows are the rows of the open tab.
 func (m *OS) themeEditorRows() []themeEditorRow {
 	switch m.themeEditor.tab {
 	case themeEditorTabQuick:
@@ -277,7 +224,6 @@ func (m *OS) ThemeEditorMove(delta int) {
 		return
 	}
 	st.leaving = false
-	// The list rule and appearance.wrap_lists, as every list.
 	st.lists[st.tab].Cursor = m.listStep(st.lists[st.tab].Cursor, delta, n)
 }
 
@@ -294,7 +240,6 @@ func (m *OS) ThemeEditorToggleHidden() {
 	m.themeEditor.hidden = !m.themeEditor.hidden
 }
 
-// themeEditorRowAt is the selected row of the open tab.
 func (m *OS) themeEditorRowAt() (themeEditorRow, bool) {
 	rows := m.themeEditorRows()
 	i := m.themeEditor.lists[m.themeEditor.tab].Cursor
@@ -304,7 +249,6 @@ func (m *OS) themeEditorRowAt() (themeEditorRow, bool) {
 	return rows[i], true
 }
 
-// themeEditorRaw is what the draft's own file sets for row, "" for nothing.
 func (st *themeEditorState) raw(row themeEditorRow) string {
 	if row.dark {
 		if st.draft.Dark == nil {
@@ -324,8 +268,6 @@ func (st *themeEditorState) raw(row themeEditorRow) string {
 	return ""
 }
 
-// set records a value for row in the draft, with the draft before it on the
-// undo stack. An empty value takes the base's again.
 func (m *OS) themeEditorSet(row themeEditorRow, value string) {
 	st := &m.themeEditor
 	if row.fixed || st.raw(row) == value {
@@ -351,7 +293,6 @@ func (m *OS) themeEditorSet(row themeEditorRow, value string) {
 	m.themeEditorChanged(row.pane >= 0 || row.dark)
 }
 
-// themeEditorUndoMax bounds the undo stack.
 const themeEditorUndoMax = 200
 
 // ThemeEditorUndo takes back the last change.
@@ -374,9 +315,6 @@ func (m *OS) ThemeEditorReset() {
 	}
 }
 
-// themeEditorChanged resolves the draft again and, on a client that previews
-// live, puts it in force. Only a change to the pane colours repaints the
-// panes' emulators; a chrome change is the next frame's palette.
 func (m *OS) themeEditorChanged(pane bool) {
 	st := &m.themeEditor
 	t, c, err := st.draft.Resolve()
@@ -399,10 +337,6 @@ func (m *OS) themeEditorChanged(pane bool) {
 	m.MarkAllDirty()
 }
 
-// themeEditorColour is the colour row shows in the draft, or nil for a draft
-// that does not resolve. A row the theme leaves unset still shows a colour on
-// the screen, and this is that colour: the picker opens on it and the row
-// prints it.
 func (m *OS) themeEditorColour(row themeEditorRow) color.Color {
 	st := &m.themeEditor
 	if st.resolved == nil {
@@ -411,8 +345,6 @@ func (m *OS) themeEditorColour(row themeEditorRow) color.Color {
 	if row.pane >= 0 {
 		c := theme.AsColor(theme.ColourOf(st.resolved, row.pane))
 		if c == nil && row.pane == themeEditorPaneSelection {
-			// Some built-in themes name no selection colour. A selection is
-			// drawn in appearance.selection, which has a default.
 			return configInk(m.Settings.SelectionBg)
 		}
 		return c
@@ -423,11 +355,6 @@ func (m *OS) themeEditorColour(row themeEditorRow) color.Color {
 	return theme.RoleColour(row.role, st.resolved, st.chrome, st.pal)
 }
 
-// themeEditorGround is the colour under the dock or the rail. No built-in
-// theme names either ground, and by default nothing is painted there, so a
-// cell shows the host terminal's own background. Only when the host has not
-// said what that is does the theme's background stand in, as it does for the
-// inks measured against this ground (see railGround).
 func (m *OS) themeEditorGround(row themeEditorRow) color.Color {
 	st := &m.themeEditor
 	if m.themeEditorConfigWins(row) {
@@ -447,12 +374,8 @@ func (m *OS) themeEditorGround(row themeEditorRow) color.Color {
 	return theme.AsColor(st.resolved.Bg)
 }
 
-// themeEditorFloor is the contrast row has to clear and the ground it is
-// measured on, or 0 for a row with no floor.
 func (m *OS) themeEditorFloor(row themeEditorRow) (float64, color.Color) {
 	st := &m.themeEditor
-	// At 16 colours the frame writer steps each colour down to a slot whose
-	// RGB only the terminal knows, so there is no ratio to show or to fix.
 	if st.resolved == nil || theme.Depth() == overlay.Depth16 {
 		return 0, nil
 	}
@@ -464,8 +387,6 @@ func (m *OS) themeEditorFloor(row themeEditorRow) (float64, color.Color) {
 		case 1, 2:
 			return 0, nil
 		case 4, 11:
-			// Black and white: one of the two is meant to sit near the
-			// ground, so a floor would only ask for a broken palette.
 			return 0, nil
 		}
 		return theme.MarkFloor, bg
@@ -477,14 +398,10 @@ func (m *OS) themeEditorFloor(row themeEditorRow) (float64, color.Color) {
 	return floor, ground
 }
 
-// themeEditorRatio is the contrast of c on ground as the terminal shows
-// them: at 256 colours, the palette entries the frame writer picks.
 func themeEditorRatio(c, ground color.Color) float64 {
 	return overlay.ContrastRatio(overlay.Shown(c), overlay.Shown(ground))
 }
 
-// themeEditorSource says where row's colour comes from: a key in the config
-// that wins over the theme, the draft's own value, or the base.
 func (m *OS) themeEditorSource(row themeEditorRow) string {
 	if row.fixed {
 		return "measured"
@@ -505,8 +422,6 @@ func (m *OS) themeEditorSource(row themeEditorRow) string {
 	return "slot"
 }
 
-// themeEditorConfigWins reports whether a key in the config draws row's piece
-// in place of the theme's colour.
 func (m *OS) themeEditorConfigWins(row themeEditorRow) bool {
 	if row.pane >= 0 || m.UserConfig == nil {
 		return false
@@ -539,7 +454,6 @@ func (m *OS) ThemeEditorPick() {
 	}
 	c := m.themeEditorColour(row)
 	if overlay.IsNoColor(c) {
-		// The row has no colour to start from, so the picker says none.
 		m.openAccentPicker(AccentTargetThemeRole, m.themeEditorRowID(row), Accent{}, accentSourceNone)
 		return
 	}
@@ -553,8 +467,6 @@ func (m *OS) ThemeEditorPick() {
 	}
 }
 
-// themeEditorRowID names a row for the colour picker: the role's name, or
-// pane: and the colour's key.
 func (m *OS) themeEditorRowID(row themeEditorRow) string {
 	if row.pane >= 0 {
 		return "pane:" + theme.ColourKeys()[row.pane]
@@ -562,7 +474,6 @@ func (m *OS) themeEditorRowID(row themeEditorRow) string {
 	return row.role.String()
 }
 
-// themeEditorRowByID is the row the colour picker was opened on.
 func (m *OS) themeEditorRowByID(id string) (themeEditorRow, bool) {
 	if key, ok := strings.CutPrefix(id, "pane:"); ok {
 		i := slices.Index(theme.ColourKeys(), key)
@@ -579,9 +490,6 @@ func (m *OS) themeEditorRowByID(id string) (themeEditorRow, bool) {
 	return themeEditorRow{}, false
 }
 
-// applyThemeRoleColor takes the colour picker's choice for a row. A slot
-// chip is kept as the slot's name on a role, so the role follows the slot. A
-// pane colour is always written as hex.
 func (m *OS) applyThemeRoleColor(id string, sel Accent) {
 	row, ok := m.themeEditorRowByID(id)
 	if !ok || !m.themeEditor.open {
@@ -653,9 +561,6 @@ func (m *OS) ThemeEditorCommitTyping() {
 			m.ShowNotification("A theme cannot name "+value+". tuios measures the text inks", "warning", m.Settings.NotificationWarningDuration)
 			return
 		}
-		// A role that names itself, or two that name each other, parses
-		// and does not resolve. Refuse it here, while the value is still
-		// in the field to correct.
 		trial := st.draft.Clone()
 		trial.Chrome[row.role] = value
 		if _, _, err := trial.Resolve(); err != nil {
@@ -685,8 +590,6 @@ func (m *OS) ThemeEditorSave() tea.Cmd {
 	}
 	path, err := save()
 	if errors.Is(err, theme.ErrChangedOnDisk) {
-		// Someone else wrote the file since the editor read it. Their
-		// change is lost on a write, so the second ctrl+s decides.
 		st.overwrite = true
 		m.ShowNotification("The theme file changed on disk. Press ctrl+s again to replace it", "warning", m.Settings.NotificationWarningDuration)
 		return nil
@@ -725,11 +628,8 @@ func (m *OS) ThemeEditorFix() {
 	m.themeEditorSet(row, overlay.Hex(toRGBA(fixed)))
 }
 
-// themeEditorFlashFor is how long a role shows inverted after the cursor
-// lands on it, so every piece of the screen in that role blinks once.
 const themeEditorFlashFor = 400 * time.Millisecond
 
-// themeEditorFlashEndMsg ends the flash numbered seq.
 type themeEditorFlashEndMsg struct{ seq int }
 
 // ThemeEditorFlash shows the selected role in its inverse for a moment, on a
@@ -757,8 +657,6 @@ func (m *OS) ThemeEditorFlash() tea.Cmd {
 	return tea.Tick(themeEditorFlashFor, func(time.Time) tea.Msg { return themeEditorFlashEndMsg{seq: seq} })
 }
 
-// endThemeEditorFlash puts the draft back after a flash, unless a later
-// flash or a closed editor made it stale.
 func (m *OS) endThemeEditorFlash(msg themeEditorFlashEndMsg) {
 	st := &m.themeEditor
 	if !st.open || !st.live || msg.seq != st.flashSeq {

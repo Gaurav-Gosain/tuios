@@ -24,7 +24,7 @@ func BenchmarkSidebarPanelLinesCached(b *testing.B) {
 		wins = append(wins, &terminal.Window{ID: "w" + string(rune('a'+i)), CustomName: "window"})
 	}
 	m := &OS{Settings: config.Global, Windows: wins, Width: 120, Height: 40, SessionName: "s"}
-	m.sidebarPanelLines() // prime the cache
+	m.sidebarPanelLines()
 
 	b.ReportAllocs()
 	for b.Loop() {
@@ -48,7 +48,7 @@ func BenchmarkSidebarPanelCached(b *testing.B) {
 		wins = append(wins, &terminal.Window{ID: "w" + string(rune('a'+i)), CustomName: "window"})
 	}
 	m := &OS{Settings: config.Global, Windows: wins, Width: 120, Height: 40, SessionName: "s"}
-	m.sidebarPanel() // prime the cache
+	m.sidebarPanel()
 
 	b.ReportAllocs()
 	for b.Loop() {
@@ -93,7 +93,6 @@ func TestSidebarCacheServesAndInvalidates(t *testing.T) {
 	}
 	sig := m.sidebarCache.sig
 
-	// No change: the cache is reused and the signature holds.
 	if again := sidebarText(t, m); again != first {
 		t.Fatalf("cached render diverged with no state change")
 	}
@@ -101,7 +100,6 @@ func TestSidebarCacheServesAndInvalidates(t *testing.T) {
 		t.Fatal("signature moved with no state change")
 	}
 
-	// A rename must not serve the stale label.
 	win.CustomName = "GAMMA"
 	renamed := sidebarText(t, m)
 	if strings.Contains(renamed, "ALPHA") {
@@ -111,7 +109,6 @@ func TestSidebarCacheServesAndInvalidates(t *testing.T) {
 		t.Fatalf("new title GAMMA missing after rename:\n%s", renamed)
 	}
 
-	// Signature-affecting view changes must each move the signature.
 	base := m.sidebarSignature()
 	m.FocusedWindow = 1
 	if m.sidebarSignature() == base {
@@ -144,7 +141,6 @@ func TestSidebarCacheServesAndInvalidates(t *testing.T) {
 	}
 	m.SidebarScroll[sidebarSectionAgents] = 0
 
-	// MarkAllDirty drops the cache so a theme or config change restyles.
 	sidebarText(t, m)
 	if !m.sidebarCache.valid {
 		t.Fatal("cache should be valid before MarkAllDirty")
@@ -179,7 +175,6 @@ func TestSidebarCacheFollowsForeignCache(t *testing.T) {
 		t.Fatalf("foreign session missing from first render:\n%s", before)
 	}
 
-	// A refresh that drops the foreign session bumps CacheGen; the rail must follow.
 	client.UpdateSessionCache([]session.SessionInfo{{Name: "s"}})
 	if after := sidebarText(t, m); strings.Contains(after, "other") {
 		t.Fatalf("stale foreign session 'other' survived a cache update:\n%s", after)
@@ -225,8 +220,6 @@ func TestSidebarSignatureFollowsTheGlyphSet(t *testing.T) {
 
 			f.flip()
 			overlay.SetASCII(m.Settings.UseASCIIOnly)
-			// The cache is dropped so this render shows what the rail draws now,
-			// which is what the signature has to have followed.
 			m.sidebarCache.invalidate()
 			after := sidebarText(t, m)
 
@@ -279,7 +272,6 @@ func TestRailCacheMovesTheCursorWithItsRow(t *testing.T) {
 		t.Fatalf("the cursor moved from index %d to %d, so the order this test needs did not happen", up, m.SidebarCursor)
 	}
 
-	// The frame the cache serves, against a build of the same state.
 	m.sidebarPanelLines()
 	if !m.sidebarCache.valid {
 		t.Fatal("the rail was not cached")
@@ -323,24 +315,18 @@ func TestRailCheckIgnoresAListingThatLandsMidFrame(t *testing.T) {
 		Width: 120, Height: 40, SessionName: "s", DaemonClient: client,
 	}
 	before := sidebarText(t, m)
-	sidebarText(t, m) // a frame served from the cache
+	sidebarText(t, m)
 
-	// The next frame reads its key here, and the listing lands before the
-	// check builds the rail again.
 	ext := m.railExternalGens()
 	client.UpdateSessionCache(listing("errored"))
 	if diff := m.railCacheMiss(ext); diff != "" {
 		t.Fatalf("the check reported a listing that landed during the frame as a key miss:\n%s", diff)
 	}
 
-	// The check still reports a difference when the key read the same
-	// generations as the rebuild, so the guard above is not a check that
-	// stopped comparing.
 	if diff := m.railCacheMiss(m.railExternalGens()); diff == "" {
 		t.Fatal("the check found no difference between the cached rail and a build of a newer listing")
 	}
 
-	// And the frame after the listing draws it.
 	if after := sidebarText(t, m); after == before {
 		t.Fatal("the frame after the listing landed still draws the old rail")
 	}

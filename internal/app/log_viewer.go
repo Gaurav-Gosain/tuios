@@ -7,24 +7,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// The log viewer is a list of entries with a cursor, drawn by the shared list
-// overlay so it scrolls, highlights and takes the mouse the way every other
-// list does. A row is one line and cuts a long entry, so the entry under the
-// cursor is also shown wrapped under the list, and enter opens it in the
-// message view.
-
-// overlayKindLogs is the log viewer's overlay kind and layer id.
 const overlayKindLogs = "logs"
 
-// logViewerWidth is the viewer's preferred inner width.
 const logViewerWidth = 80
 
-// logDetailLines is how many lines of the selected entry the viewer shows
-// under the list. The count is fixed, so the list does not change height as
-// the cursor moves.
 const logDetailLines = 3
 
-// logViewerHints is the footer the log viewer advertises.
 func logViewerHints() []overlay.Hint {
 	return []overlay.Hint{
 		{Key: hintListMoveLetters, Label: "move"},
@@ -35,9 +23,6 @@ func logViewerHints() []overlay.Hint {
 	}
 }
 
-// logViewerList is the viewer as a list overlay. The key handler, the wheel and
-// the renderer all measure through it, so the rows that scroll are the rows
-// that are drawn.
 func (m *OS) logViewerList() listOverlay {
 	n := len(m.LogMessages)
 	return listOverlay{
@@ -60,12 +45,8 @@ func (m *OS) logViewerList() listOverlay {
 	}
 }
 
-// logViewerRow draws one entry: the time, the level, and as much of the message
-// as the row holds.
 func (m *OS) logViewerRow(i int, _ bool, rowBg color.Color, pal overlay.Palette, width int) string {
 	msg := m.LogMessages[i]
-	// The severity tokens the rest of the app reads by, so a log line says the
-	// same thing a message in the dock does.
 	level := msg.Level
 	line := overlay.Style(rowBg).Foreground(pal.FgDim).Render(" "+msg.Time.Format("15:04:05")+" ") +
 		overlay.Style(rowBg).Foreground(messageLevelColor(level, pal)).Render("["+level+"] ")
@@ -74,13 +55,9 @@ func (m *OS) logViewerRow(i int, _ bool, rowBg color.Color, pal overlay.Palette,
 	return line + overlay.Style(rowBg).Foreground(pal.Fg).Render(overlay.Truncate(text, max(width-used, 1)))
 }
 
-// logDetail is the selected entry wrapped to the panel, in exactly
-// logDetailLines lines. An entry longer than that ends in an ellipsis, and
-// enter shows the rest.
 func (m *OS) logDetail(text string, width int) []string {
 	textW := max(width-2, 1)
 	wrapped := m.wrapCached(text, textW)
-	// A copy: the wrapped lines are the cache's, and these are edited below.
 	lines := append([]string(nil), wrapped[:min(len(wrapped), logDetailLines)]...)
 	if len(wrapped) > logDetailLines {
 		ell := overlay.Ellipsis()
@@ -96,7 +73,6 @@ func (m *OS) logDetail(text string, width int) []string {
 	return lines
 }
 
-// logViewerRows is how many entries the viewer shows at once.
 func (m *OS) logViewerRows() int {
 	_, rows, _ := m.listOverlayLayout(m.logViewerList())
 	return rows

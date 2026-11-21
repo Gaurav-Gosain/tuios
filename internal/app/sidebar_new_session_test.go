@@ -7,8 +7,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// daemonRailOS is a rail with a daemon client attached but no live connection:
-// enough for the pill to be offered, which is what these tests are about.
 func daemonRailOS(t *testing.T, w, h int) *OS {
 	t.Helper()
 	m := sidebarTestOS(t, w, h, "left")

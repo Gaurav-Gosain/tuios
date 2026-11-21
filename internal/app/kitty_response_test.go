@@ -28,13 +28,13 @@ func TestIsKittyResponse(t *testing.T) {
 
 	notResponses := []string{
 		"",
-		"E",                        // 'E' with no following uppercase letter
-		"Elephant",                 // lowercase after first uppercase -> real data
-		"OKgood",                   // not exactly "OK"
-		"ENOENTdata",               // trailing lowercase, no ':' separator
-		"iVBORw0KGgoAAAANSUhEUgAA", // typical base64 PNG header, mixed case
-		strings.Repeat("E", 300),   // over the length cap
-		"EABCDEF" + "abc",          // uppercase run then lowercase, no ':'
+		"E",
+		"Elephant",
+		"OKgood",
+		"ENOENTdata",
+		"iVBORw0KGgoAAAANSUhEUgAA",
+		strings.Repeat("E", 300),
+		"EABCDEF" + "abc",
 	}
 	for _, d := range notResponses {
 		if vt.IsKittyResponsePayload(d) {
@@ -49,7 +49,6 @@ func TestIsKittyResponse(t *testing.T) {
 // heuristic dropped ~0.04% of raw binary chunks; the wire-text heuristic must
 // drop none.
 func TestIsKittyResponseDoesNotDropBase64Chunks(t *testing.T) {
-	// Deterministic pseudo-random bytes so the test is reproducible.
 	var seed uint32 = 0x12345678
 	next := func() byte {
 		seed = seed*1664525 + 1013904223

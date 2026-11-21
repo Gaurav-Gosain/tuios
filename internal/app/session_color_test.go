@@ -48,9 +48,6 @@ func TestSessionAccentVocabulary(t *testing.T) {
 	}
 }
 
-// sessionColorOS is a rail attached to "main" beside two sessions that carry
-// panes of their own, which is the only shape the colours exist for: more than
-// one session on screen at once.
 func sessionColorOS(t *testing.T, w, h int) (*OS, sessiontree.Tree) {
 	t.Helper()
 	m := newNarrowOS(t, w, h)
@@ -84,15 +81,12 @@ func sessionColorTree() sessiontree.Tree {
 	})
 }
 
-// railStyled renders the rail with its styling intact, which is what a claim
-// about colour has to be made against.
 func railStyled(t *testing.T, m *OS, tree sessiontree.Tree) []string {
 	t.Helper()
 	lines, _ := m.sidebarPanelLinesForTree(tree)
 	return lines
 }
 
-// styledRow is the first rendered row whose text contains want.
 func styledRow(t *testing.T, lines []string, want string) string {
 	t.Helper()
 	for _, l := range lines {
@@ -104,7 +98,6 @@ func styledRow(t *testing.T, lines []string, want string) string {
 	return ""
 }
 
-// withSessionColors pins the config key for one test and puts it back.
 func withSessionColors(t *testing.T, on bool) {
 	t.Helper()
 	prev := config.Global.SessionColors
@@ -112,8 +105,6 @@ func withSessionColors(t *testing.T, on bool) {
 	t.Cleanup(func() { config.Global.SessionColors = prev })
 }
 
-// testPool is the pool for the ground the tests measure against: no theme is
-// on, so the terminal background is the black theme.TerminalBg assumes.
 func testPool(t *testing.T) []sessionHue {
 	t.Helper()
 	return sessionAccentPool(theme.TerminalBg())
@@ -128,19 +119,13 @@ func TestSessionColourIsStableAndShared(t *testing.T) {
 	withSessionColors(t, true)
 	here, tree := sessionColorOS(t, 120, 40)
 
-	// A second client, attached elsewhere, with its own focus and its own local
-	// window accents: everything that differs between two attached terminals.
 	there, thereTree := sessionColorOS(t, 120, 40)
 	here.Settings = config.Global
 	there.SessionName = "api"
 	there.FocusedWindow = 1
 	there.SetWindowAccent("aaaaaaaa1111", SlotAccent(9))
-	// The rail's row order is a local drag order, so the two clients are given
-	// the same sessions in different orders on purpose.
 	slices.Reverse(thereTree.Sessions)
 
-	// Both have drawn once, so both are answering with the arbitrated colours
-	// rather than with a bare preference.
 	railStyled(t, here, tree)
 	railStyled(t, there, thereTree)
 
@@ -155,8 +140,6 @@ func TestSessionColourIsStableAndShared(t *testing.T) {
 		}
 	}
 
-	// On screen: the row for a session neither client is attached to is drawn in
-	// the same ink in both frames.
 	want := styledRow(t, railStyled(t, here, tree), "docs")
 	got := styledRow(t, railStyled(t, there, thereTree), "docs")
 	ink := fgParams(here.sessionTint("docs", theme.TerminalBg()))
@@ -261,10 +244,6 @@ func TestSessionColoursOnOneDarkNeverShare(t *testing.T) {
 		t.Errorf("one_dark's pool holds %d hues, want the six main draws today", got)
 	}
 
-	// Four plain names, then two whose hash preference collides with one
-	// already taken, so the arbiter has to spill and the set still has to come
-	// out pairwise distinct. Names that hash to six different positions would
-	// pass with no arbitration at all.
 	names := []string{"session-0", "session-1", "session-2", "session-3"}
 	for i := 0; len(names) < 6; i++ {
 		name := fmt.Sprintf("collider-%d", i)

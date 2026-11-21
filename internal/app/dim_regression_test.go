@@ -6,10 +6,6 @@ import (
 )
 
 func TestDimReachesACellThatNamedNoColourOfItsOwn(t *testing.T) {
-	// A shell prompt is mostly cells carrying no colour at all. Gating the dim
-	// on "does this cell carry anything of its own" left the setting doing
-	// nothing to most of a pane even with a theme set, which reads as a broken
-	// option rather than a subtle one.
 	withDim(t, 60)
 	win := newTestWindow(t, "plain", 40, 6)
 	win.WriteOutput([]byte("plain text with no sgr at all\r\n"))
@@ -29,9 +25,6 @@ func TestDimReachesACellThatNamedNoColourOfItsOwn(t *testing.T) {
 }
 
 func TestAScrolledBackPaneDoesNotServeAFrameFromTheOtherFocusState(t *testing.T) {
-	// The scrollback path used to return the cache without the dim key, and it
-	// is reached only once the keyed check has already failed, so it fired
-	// exactly on the mismatch it was meant to catch.
 	withDim(t, 50)
 	win := dimTestWindow(t, 40, 6)
 	win.ScrollbackOffset = 1

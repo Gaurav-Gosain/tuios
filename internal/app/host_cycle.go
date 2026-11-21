@@ -6,17 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 )
 
-// Stepping between machines: next_host and prev_host.
-//
-// The keys move the client to the next or previous machine the way
-// next_session and prev_session move it between sessions on one machine. They
-// read only what the client already holds, the host snapshot the rail draws
-// from, so a step costs no probe and nothing runs while the keys are idle. The
-// switch itself goes through openSession, the path the rail, the switcher and
-// last_session take.
-
-// rememberShownOn records that this client showed the session name on host,
-// so a later step back to that machine lands on it again.
 func (m *OS) rememberShownOn(host, name string) {
 	if host == "" || name == "" {
 		return
@@ -27,9 +16,6 @@ func (m *OS) rememberShownOn(host, name string) {
 	m.shownOn[host] = name
 }
 
-// machineCycleOrder is the machines in the order the rail draws their groups:
-// this machine first, then the [hosts] table in the daemon's order, overlaid
-// with the order the user dragged the groups into.
 func (m *OS) machineCycleOrder() []string {
 	others := make([]string, 0, len(m.FederationHosts))
 	for _, h := range m.FederationHosts {
@@ -41,10 +27,6 @@ func (m *OS) machineCycleOrder() []string {
 	return append([]string{federation.LocalHostName}, others...)
 }
 
-// hostCycleSession is the session a step onto host lands on: the one this
-// client last showed there, else the one attached there, else the first in the
-// rail's order. It is "" when the host lists no sessions. A remembered session
-// that is gone from the listing is passed over.
 func (m *OS) hostCycleSession(host string) string {
 	i := slices.IndexFunc(m.FederationHosts, func(h FederationHost) bool { return h.Name == host })
 	if i < 0 {
@@ -78,8 +60,6 @@ func (m *OS) CycleHost(delta int) {
 	n := len(order)
 	cur := slices.Index(order, m.attachedMachine())
 	if cur < 0 {
-		// The attached machine left the table. Step from just outside it, so
-		// next lands on the first machine and previous on the last.
 		cur = -1
 		if delta < 0 {
 			cur = n

@@ -24,8 +24,6 @@ func TestHistoryRowWithAWideRuneAtTheEdgeIsClippedToThePane(t *testing.T) {
 	win := newTestWindow(t, "wide-hist-0001", 40, 12)
 	m := newTestOS(win)
 
-	// Runes on odd columns ("A" then "世" pairs) and on even columns ("AB" then
-	// pairs), on a blue background, so one line straddles any narrower edge.
 	win.LockIO()
 	_, _ = win.Terminal.Write([]byte("\x1b[44mA" + strings.Repeat("世", 18) + "\x1b[0m\r\n"))
 	_, _ = win.Terminal.Write([]byte("\x1b[44mAB" + strings.Repeat("世", 18) + "\x1b[0m\r\n"))
@@ -35,11 +33,9 @@ func TestHistoryRowWithAWideRuneAtTheEdgeIsClippedToThePane(t *testing.T) {
 	win.UnlockIO()
 	win.MarkContentDirty()
 
-	// Narrow the pane so its content is far shorter than the lines.
 	win.Resize(14, 12)
 	cols := win.ContentWidth()
 
-	// Scroll back to the top, where the two lines are.
 	scrollBack(t, win, win.ScrollbackLenSync())
 
 	out := m.renderTerminal(win, true, false)
@@ -50,7 +46,6 @@ func TestHistoryRowWithAWideRuneAtTheEdgeIsClippedToThePane(t *testing.T) {
 			continue
 		}
 		rows++
-		// The positive half: the row reaches the edge, so the edge is in question.
 		if !strings.Contains(plain, "世") {
 			t.Fatalf("the history row %q holds no wide rune, so it tests nothing", plain)
 		}

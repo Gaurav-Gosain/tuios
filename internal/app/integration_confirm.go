@@ -10,45 +10,25 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// The question an integration notice opens. The notice's key is ctrl+b j, the
-// key people press to jump to the newest message, so a press from habit must
-// not write a harness's settings file. The notice opens this dialog, which
-// names the file, and only its Install row writes it.
-//
-// It takes no answer for pluginApprovalSettle after it opens, as the plugin
-// approval dialog does: an enter that was on its way as the dialog opened,
-// or a second click, answers nothing.
-
-// overlayKindIntegrationAsk is the dialog's overlay kind.
 const overlayKindIntegrationAsk = "integrationask"
 
-// integrationAskWidth is the dialog's preferred inner width.
 const integrationAskWidth = 56
 
-// The rows by index.
 const (
 	integrationRowYes = iota
 	integrationRowLater
 	integrationRows
 )
 
-// integrationAsk is the open question.
 type integrationAsk struct {
-	// open is true while the dialog is up.
-	open bool
-	// st is the harness the question is about, as the report said.
-	st integration.Status
-	// verb is agentInstall or agentUpdate.
-	verb agentVerb
-	// paths are the files the install writes.
-	paths []string
-	// selected is the row under the cursor.
+	open     bool
+	st       integration.Status
+	verb     agentVerb
+	paths    []string
 	selected int
-	// openedAt is when the dialog opened. See integrationAskSettled.
 	openedAt time.Time
 }
 
-// openIntegrationAsk opens the question for st.
 func (m *OS) openIntegrationAsk(st integration.Status, verb agentVerb) {
 	paths := []string{st.Path}
 	if t, ok := integration.LookupTarget(st.Harness); ok {
@@ -63,8 +43,6 @@ func (m *OS) IntegrationAskOpen() bool { return m.integrationAsk.open }
 // CloseIntegrationAsk closes the dialog. Nothing is written.
 func (m *OS) CloseIntegrationAsk() { m.integrationAsk = integrationAsk{} }
 
-// integrationAskSettled reports whether the dialog has been open long enough
-// to take an answer.
 func (m *OS) integrationAskSettled() bool {
 	return pluginApprovalNow().Sub(m.integrationAsk.openedAt) >= pluginApprovalSettle
 }
@@ -83,8 +61,6 @@ func (m *OS) IntegrationAskKey(key string) tea.Cmd {
 	if !a.open || !m.integrationAskSettled() || m.ProcessingRemoteKeys || m.pressingTapeKeys {
 		return nil
 	}
-	// The list keys of [keybindings.lists] move the cursor; it stops at the
-	// ends.
 	if delta, ok := listDelta(m.ListKeys, key, integrationRows); ok {
 		a.selected = min(max(a.selected+delta, 0), integrationRows-1)
 		return nil
@@ -119,7 +95,6 @@ func (m *OS) IntegrationAskActivate(idx int) tea.Cmd {
 	return m.runAgentAction(a.st, a.verb)
 }
 
-// renderIntegrationAsk draws the dialog: the question, the file, the rows.
 func (m *OS) renderIntegrationAsk() (string, overlay.Geometry, []overlayRowHit) {
 	a := &m.integrationAsk
 	pal := m.overlayUI()

@@ -11,55 +11,22 @@ import (
 	"tuios.dev/vt"
 )
 
-// Copy mode in the agents view's thread. The copy_mode key starts the copy
-// mode a pane has over the thread as it is drawn: the same motions,
-// selections, search and yanks, run by the same code in internal/input
-// (copymode_cockpit.go), as quick look's preview does (quicklook_copy.go).
-//
-// The thread is a terminal.CopyGrid for it. Each row is a line of the thread
-// at the columns the screen shows it, with the chrome left out: a card's
-// edge, the marks at the right (a status, a language), and the fold and state
-// glyphs are blank cells. So the cursor and the selection sit on the text the
-// person sees, and a yank holds none of the chrome.
-//
-// The rows are taken when copy mode starts and held: the thread may grow
-// while it runs, and a row keeps its number. Copy mode ends when the thread
-// is drawn at another width, or another agent is selected.
-//
-// A yank is the selected text as the agent wrote it, not as the thread
-// wrapped it: rows that wrap one paragraph join with a space, and the indent
-// the selection shares is taken off. Y yanks the entries under the selection
-// as Markdown: the agent's own text, a prompt as a quote, and an edit as a
-// diff block.
-
-// ckCopyRow is one row of the thread for copy mode.
 type ckCopyRow struct {
-	cells []uv.Cell
-	// more says the next row goes on with the same paragraph, and cont
-	// that the row goes on with the one above with nothing between, as a
-	// wrapped code row does.
+	cells      []uv.Cell
 	more, cont bool
-	// id is the entry the row belongs to, "" for a row of no entry.
-	id string
+	id         string
 }
 
-// ckThreadCopy is copy mode over a thread.
 type ckThreadCopy struct {
-	cm   terminal.CopyMode
-	key  string
-	rows []ckCopyRow
-	// out is the thread's lines as drawn when copy mode started.
-	out []string
-	// w and h are the thread's width and the rows of its view.
-	w, h   int
-	offset int
-	// implicit says a mouse selection started copy mode, not the copy_mode
-	// key: the next key or plain click ends it. See cockpit_mouse.go.
+	cm       terminal.CopyMode
+	key      string
+	rows     []ckCopyRow
+	out      []string
+	w, h     int
+	offset   int
 	implicit bool
 }
 
-// ckCopyOf is the copy rows of the thread's lines: each line at width w
-// cells, its chrome blank.
 func ckCopyOf(l ckLook, lines []ckLine, ids []string, w int) []ckCopyRow {
 	glyphs := ckGlyphSet(l)
 	rows := make([]ckCopyRow, len(lines))
@@ -108,15 +75,11 @@ func ckCopyOf(l ckLook, lines []ckLine, ids []string, w int) []ckCopyRow {
 	return rows
 }
 
-// ckChromeGlyph reports whether t is one Nerd Font glyph alone, such as a
-// pill's cap or icon or a label's icon: chrome that copy mode leaves out.
 func ckChromeGlyph(t string) bool {
 	r, n := utf8.DecodeRuneInString(t)
 	return n == len(t) && r >= 0xe000 && r <= 0xf8ff
 }
 
-// ckGlyphSet is the glyphs the thread draws as chrome, in the look's glyph
-// set.
 func ckGlyphSet(l ckLook) map[string]bool {
 	set := map[string]bool{"▎": true, "━": true, "─": true}
 	for _, g := range []ckGlyph{ckGlyphFold, ckGlyphOpen, ckGlyphReview, ckGlyphFailed, ckGlyphWorking, ckGlyphIdle, ckGlyphNeeds, ckGlyphUnseen} {
@@ -127,8 +90,6 @@ func ckGlyphSet(l ckLook) map[string]bool {
 	return set
 }
 
-// threadCopy is the copy mode of the shown thread, nil when it is off or no
-// longer fits what the thread shows.
 func (m *OS) threadCopy() *ckThreadCopy {
 	q := m.Inbox.threads.copy
 	if q == nil || !m.ShowInbox || !m.threadShown() {
@@ -155,8 +116,6 @@ func (m *OS) CockpitCopyStart() bool {
 	return true
 }
 
-// cockpitCopyBegin starts copy mode over the shown thread, as the key does
-// or, implicit, for a mouse selection.
 func (m *OS) cockpitCopyBegin(implicit bool) bool {
 	if !m.ShowInbox || !m.threadShown() || m.Inbox.threads.copy != nil || m.cockpitTab() != "Thread" {
 		return false
@@ -171,10 +130,8 @@ func (m *OS) cockpitCopyBegin(implicit bool) bool {
 	}
 	q := &ckThreadCopy{key: t.key, out: t.body, w: t.viewW, h: t.viewH}
 	q.rows = ckCopyOf(m.cockpitLook(), t.lines, t.lineIDs, q.w)
-	// The view copy mode starts at is the one on screen.
 	_, end := t.follow.Window()
 	if t.actRow {
-		// The activity row is drawn past the body copy mode holds.
 		end--
 	}
 	q.SetScrollOffset(len(q.rows) - min(end, len(q.rows)))
@@ -229,7 +186,6 @@ func (m *OS) CockpitCopyText(start, end terminal.Position, line, block bool) str
 	return ckCopyRowsText(q.rows, q.w, start, end, line, block)
 }
 
-// ckCopyRowsText is CockpitCopyText over rows of width w.
 func ckCopyRowsText(rows []ckCopyRow, w int, start, end terminal.Position, line, block bool) string {
 	if start.Y > end.Y || start.Y == end.Y && start.X > end.X {
 		start, end = end, start
@@ -256,7 +212,6 @@ func ckCopyRowsText(rows []ckCopyRow, w int, start, end terminal.Position, line,
 		}
 		parts = append(parts, piece{text: ckCellsText(r.cells, a, b), more: r.more && !block && y < end.Y, cont: r.cont && !block && y > start.Y})
 	}
-	// The indent the rows share is chrome: a card's, a list's.
 	indent := -1
 	for i, p := range parts {
 		if strings.TrimSpace(p.text) == "" || i > 0 && parts[i-1].more {
@@ -289,7 +244,6 @@ func ckCopyRowsText(rows []ckCopyRow, w int, start, end terminal.Position, line,
 	return strings.Join(out[:len(out)-1], "")
 }
 
-// ckCellsText is the text of cells a to b.
 func ckCellsText(cells []uv.Cell, a, b int) string {
 	var sb strings.Builder
 	for x := max(a, 0); x <= min(b, len(cells)-1); x++ {
@@ -330,7 +284,6 @@ func (m *OS) CockpitCopyMarkdown(y0, y1 int) string {
 	return strings.Join(out, "\n\n")
 }
 
-// ckEntryMarkdown is one entry as Markdown, "" for one with none.
 func ckEntryMarkdown(en *threadEntry) string {
 	switch {
 	case en.Image != nil:
@@ -367,10 +320,6 @@ func ckEntryMarkdown(en *threadEntry) string {
 	return ""
 }
 
-// drawThreadCopy draws the thread as copy mode holds it, in room rows from
-// row top, with the search matches, the selection and the cursor on it, and
-// reports whether copy mode is on. It also notes the thread's view, which
-// copy mode starts from.
 func (m *OS) drawThreadCopy(c *ckCanvas, t *agentThread, x, w, top, room, screenTop int) bool {
 	if t == nil {
 		return false
@@ -382,12 +331,9 @@ func (m *OS) drawThreadCopy(c *ckCanvas, t *agentThread, x, w, top, room, screen
 		return false
 	}
 	if q.w != w || q.h != room {
-		// The thread is drawn at another size: the rows no longer fit it.
 		m.Inbox.threads.copy = nil
 		return false
 	}
-	// A thread shorter than its view sits on the view's bottom, as the thread
-	// draws it, so copy mode starts with every line where the view had it.
 	top += room - q.visible()
 	first := q.top()
 	for y := 0; y < q.visible() && first+y < len(q.out); y++ {
@@ -397,17 +343,12 @@ func (m *OS) drawThreadCopy(c *ckCanvas, t *agentThread, x, w, top, room, screen
 	return true
 }
 
-// visible is the rows of the view that hold the thread: all of them, or fewer
-// when the thread is shorter than its view. The cursor stays on these rows.
 func (q *ckThreadCopy) visible() int { return min(q.h, len(q.rows)) }
 
-// top is the row at the top of the view.
 func (q *ckThreadCopy) top() int { return q.ScrollbackLen() - q.offset }
 
-// screenRow is the row on line y of the view.
 func (q *ckThreadCopy) screenRow(y int) int { return q.ScrollbackLen() + y }
 
-// row is row i's cells, nil past the rows.
 func (q *ckThreadCopy) row(i int) []uv.Cell {
 	if i < 0 || i >= len(q.rows) {
 		return nil
@@ -415,16 +356,12 @@ func (q *ckThreadCopy) row(i int) []uv.Cell {
 	return q.rows[i].cells
 }
 
-// Text is the grid's text, the thread itself.
 func (q *ckThreadCopy) Text() terminal.CopyText { return q }
 
-// ScrollbackLen is the rows above the view when it is at the bottom.
 func (q *ckThreadCopy) ScrollbackLen() int { return max(len(q.rows)-q.h, 0) }
 
-// ScrollbackLine is row i above the bottom view.
 func (q *ckThreadCopy) ScrollbackLine(i int) uv.Line { return q.row(i) }
 
-// ScrollbackText calls fn with the rows from to end-1 as text cells.
 func (q *ckThreadCopy) ScrollbackText(from, end int, fn func(index, width int, cells []vt.TextCell) bool) {
 	var buf []vt.TextCell
 	for i := max(from, 0); i < min(end, q.ScrollbackLen()); i++ {
@@ -438,11 +375,8 @@ func (q *ckThreadCopy) ScrollbackText(from, end int, fn func(index, width int, c
 	}
 }
 
-// ScrollbackGeneration does not change: the rows are held while copy mode
-// runs.
 func (q *ckThreadCopy) ScrollbackGeneration() uint64 { return 1 }
 
-// CellAt is the cell at column x of line y of the bottom view.
 func (q *ckThreadCopy) CellAt(x, y int) *uv.Cell {
 	cells := q.row(q.screenRow(y))
 	if x < 0 || x >= len(cells) {
@@ -451,10 +385,8 @@ func (q *ckThreadCopy) CellAt(x, y int) *uv.Cell {
 	return &cells[x]
 }
 
-// Width is the thread's width.
 func (q *ckThreadCopy) Width() int { return q.w }
 
-// Height is the view's rows.
 func (q *ckThreadCopy) Height() int { return q.h }
 
 func (q *ckThreadCopy) wraps(i int) (bool, bool) {
@@ -464,40 +396,28 @@ func (q *ckThreadCopy) wraps(i int) (bool, bool) {
 	return q.rows[i].more, true
 }
 
-// RowSoftWrapped says line y of the bottom view goes on in the next row.
 func (q *ckThreadCopy) RowSoftWrapped(y int) (bool, bool) { return q.wraps(q.screenRow(y)) }
 
-// ScrollbackSoftWrapped says row i goes on in the next row.
 func (q *ckThreadCopy) ScrollbackSoftWrapped(i int) (bool, bool) { return q.wraps(i) }
 
-// RowPadded is false: a row ends where its last cluster does.
 func (q *ckThreadCopy) RowPadded(int) bool { return false }
 
-// ScrollbackPadded is false, as RowPadded.
 func (q *ckThreadCopy) ScrollbackPadded(int) bool { return false }
 
-// ScrollOffset is how many rows the view is above the bottom.
 func (q *ckThreadCopy) ScrollOffset() int { return q.offset }
 
-// SetScrollOffset moves the view offset rows above the bottom.
 func (q *ckThreadCopy) SetScrollOffset(offset int) {
 	q.offset = max(min(offset, q.ScrollbackLen()), 0)
 }
 
-// ViewHeight is the view's rows that hold the thread.
 func (q *ckThreadCopy) ViewHeight() int { return q.visible() }
 
-// ContentHeight is the view's rows that hold the thread.
 func (q *ckThreadCopy) ContentHeight() int { return q.visible() }
 
-// LastContentRow is the last row that holds the thread.
 func (q *ckThreadCopy) LastContentRow() int { return q.visible() - 1 }
 
-// LastContentCol is the thread's last column.
 func (q *ckThreadCopy) LastContentCol() int { return q.w - 1 }
 
-// threadWrapMore is threadWrap, and for each row whether the next one goes
-// on with the same line of the text.
 func threadWrapMore(text string, width int) ([]string, []bool) {
 	var out []string
 	var more []bool

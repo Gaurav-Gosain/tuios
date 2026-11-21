@@ -12,20 +12,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The rail check finds the inputs the rail's cache key misses. With
-// TUIOS_RAIL_CHECK naming a file, every frame the cache would serve also
-// builds the rail again and compares the two. A difference is an input that
-// changed what the rail draws without changing sidebarSignature: the person
-// would have been shown the old rail. It is written to the file, and the e2e
-// harness fails the test that drew it.
-//
-// It costs a full rail build on every frame, so it is for tests only.
-
-// railCheckPath is the file the rail check writes to, or "" when it is off.
 var railCheckPath = os.Getenv("TUIOS_RAIL_CHECK")
 
-// railCheckMax bounds the reports one process writes: the first misses name
-// the input, and a key that misses on every frame would fill the disk.
 const railCheckMax = 20
 
 var railCheckState struct {
@@ -34,10 +22,6 @@ var railCheckState struct {
 	seen    map[string]bool
 }
 
-// checkRailCache builds the rail again on a frame the cache serves and
-// reports how the build differs from the cached rail. The build's side effects
-// on the frame's buffers are replaced by the cache's afterwards, as a cache
-// hit does, and the rebuild is not counted as a rail draw.
 func (m *OS) checkRailCache(ext railGens) {
 	if railCheckPath == "" {
 		return
@@ -47,26 +31,6 @@ func (m *OS) checkRailCache(ext railGens) {
 	}
 }
 
-// railCacheMiss builds the rail again and says how it differs from the
-// cache, or "" when it does not, or when it cannot be compared. ext is what
-// railExternalGens read when this frame's key was taken.
-//
-// The daemon client's listing and a live theme change on goroutines of their
-// own, and the key reads their generations without a lock. A listing that lands
-// after the key is read and before the rebuild is in the rebuild and not in the
-// key, which is not a key that misses an input: the generation moves when the
-// listing lands, and the frame its message asks for draws it. That case is not
-// compared.
-//
-// The rail pane's emulator moves off the UI goroutine too: its output lands on
-// the window's writer, and the key holds it once a pass takes the window's
-// output flag and moves railPaneView.gen. Output that lands before that pass
-// is in the rebuild when the pane is content dirty, as it stays after a blank
-// render, and not in the key. The pass the write asks for draws it, so that
-// case is not compared either. The pane's writes begun since the last pass
-// read its noted writes say whether there is such output. A pass that took the
-// output in without moving gen leaves the two equal, so that miss is still
-// reported.
 func (m *OS) railCacheMiss(ext railGens) string {
 	c := &m.sidebarCache
 	rails := m.tickStats.Rail
@@ -83,8 +47,6 @@ func (m *OS) railCacheMiss(ext railGens) string {
 	return railCacheDiff(c, lines, w, m)
 }
 
-// railGens are the generations the rail's key folds that move off the UI
-// goroutine.
 type railGens struct{ daemon, theme uint64 }
 
 func (m *OS) railExternalGens() railGens {
@@ -95,9 +57,6 @@ func (m *OS) railExternalGens() railGens {
 	return g
 }
 
-// railCacheDiff says how a fresh build differs from the cache, or "" when it
-// does not. The fresh build's buffers are read from m, where the build left
-// them.
 func railCacheDiff(c *sidebarRenderCache, lines []string, w int, m *OS) string {
 	var b strings.Builder
 	if w != c.w {
@@ -129,8 +88,6 @@ func railCacheDiff(c *sidebarRenderCache, lines []string, w int, m *OS) string {
 		b.WriteString("section rows differ\n")
 	}
 	if b.Len() > 0 {
-		// Both rails whole, so the rows around the first difference say which
-		// section and which row moved.
 		fmt.Fprintf(&b, "session %q, focused window %d\n", m.SessionName, m.FocusedWindow)
 		for i := range max(len(lines), len(c.lines)) {
 			var was, now string
@@ -150,8 +107,6 @@ func railCacheDiff(c *sidebarRenderCache, lines []string, w int, m *OS) string {
 	return b.String()
 }
 
-// reportRailMiss appends one miss to the check's file, once per distinct
-// difference and at most railCheckMax times.
 func reportRailMiss(diff string) {
 	s := &railCheckState
 	s.Lock()

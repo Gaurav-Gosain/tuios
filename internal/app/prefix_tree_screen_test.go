@@ -11,14 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The tmux-style pane commands that move panes between workspaces. The
-// same-workspace join and the workspace a pane reports are covered by
-// TestMarkAndJoinPane and TestMoveWorkspaceAndSendPane in e2e/tui; these stay
-// for what one workspace of panes there cannot show: a pane leaving one
-// workspace's tree for another's, and the per-workspace state that travels
-// with a moved workspace.
-
-// paneBoxes is the pane frames on screen by title.
 func paneBoxes(t *testing.T, f *apptest.Fixture) map[string]apptest.Box {
 	t.Helper()
 	whole, cut := f.PaneFrames()
@@ -32,7 +24,6 @@ func paneBoxes(t *testing.T, f *apptest.Fixture) map[string]apptest.Box {
 	return out
 }
 
-// paneWorkspace is the workspace the model puts a pane on, by title.
 func paneWorkspace(t *testing.T, f *apptest.Fixture, title string) int {
 	t.Helper()
 	for _, w := range f.M.Windows {
@@ -128,7 +119,6 @@ func TestMoveWorkspaceBySwapsAndFollows(t *testing.T) {
 		t.Errorf("workspace 1's layout did not move with its panes:\nbefore %v\nafter  %v", before, after)
 	}
 
-	// At the first workspace there is nothing to the left.
 	f.Action("switch_workspace_1")
 	only := paneBoxes(t, f)
 	f.Action("move_workspace_left")

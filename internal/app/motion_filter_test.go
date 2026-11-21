@@ -8,7 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// filterOS builds a model with the rail on the left and one pane beside it.
 func filterOS(t *testing.T) *OS {
 	t.Helper()
 	pe, pp, pw := config.Global.SidebarEnabled, config.Global.SidebarPosition, config.Global.SidebarWidth
@@ -48,18 +47,11 @@ func TestMotionFilterPassesRailHover(t *testing.T) {
 			o := filterOS(t)
 			o.Mode = mode.mode
 
-			// Deep inside the rail band, well below the rows, where the footer
-			// controls live.
 			onRail := tea.MouseMotionMsg{X: 3, Y: 35}
 			if FilterMouseMotion(o, onRail) == nil {
 				t.Error("motion over the rail was dropped; nothing downstream can hover")
 			}
 
-			// The pane keeps the CPU guard when nothing out there hovers. Link
-			// hover is the one thing that does, so the guard is now conditional
-			// on it rather than absolute: with appearance.links off, a plain
-			// shell asked for no mouse mode, tuios draws no hover out there, and
-			// that motion is noise exactly as it always was.
 			o.Settings.Links = config.LinksOff
 
 			offRail := tea.MouseMotionMsg{X: 50, Y: 10}
@@ -80,19 +72,14 @@ func TestMotionFilterPassesTheBandExitEvent(t *testing.T) {
 	o := filterOS(t)
 	o.Mode = TerminalMode
 
-	// Links off, so the rail's own clause is the only thing that can pass this
-	// event and the assertions below are about it and nothing else.
 	o.Settings.Links = config.LinksOff
 
-	// The pointer is in the band and hovering, then steps out over a plain pane.
 	o.SidebarHoverActive = true
 	exit := tea.MouseMotionMsg{X: 50, Y: 10}
 	if FilterMouseMotion(o, exit) == nil {
 		t.Fatal("the band-exit event was dropped; the peek and the hover highlight both outlive the pointer")
 	}
 
-	// And once it has been delivered the guard closes again: the handler clears
-	// HoverActive, so the next event over the same pane is noise once more.
 	o.SidebarHoverActive = false
 	if FilterMouseMotion(o, exit) != nil {
 		t.Error("motion over a plain pane stayed whitelisted after the exit event")
@@ -115,9 +102,6 @@ func TestMotionFilterPassesPaneContentForLinks(t *testing.T) {
 	o.Mode = WindowManagementMode
 	o.Settings.Links = config.LinksAll
 
-	// A real emulator in the pane, with a bare URL on one row and plain text
-	// on another. The pane is at X=31, Y=1 with a border, so its content
-	// starts at (32, 2).
 	win := newTestWindow(t, "aaaaaaaa1111", 40, 20)
 	win.X, win.Y, win.Workspace = 31, 1, 1
 	win.WriteOutput([]byte("\x1b[3;1Hplain text with no address on it\x1b[10;1Hsee https://example.com/e2e now"))
@@ -132,21 +116,16 @@ func TestMotionFilterPassesPaneContentForLinks(t *testing.T) {
 		t.Error("motion over plain text passed; a sweep across a pane composes a frame per cell")
 	}
 
-	// Off is off: the guard the two tests above pin is restored exactly.
 	o.Settings.Links = config.LinksOff
 	if FilterMouseMotion(o, tea.MouseMotionMsg{X: linkX, Y: linkY}) != nil {
 		t.Error("appearance.links = off still passed pane motion")
 	}
 
-	// A pane's border is not its content, so the pointer resting on the frame
-	// buys nothing. Column 31 is the border and column 32 the first content cell.
 	o.Settings.Links = config.LinksAll
 	if FilterMouseMotion(o, tea.MouseMotionMsg{X: 31, Y: linkY}) != nil {
 		t.Error("motion on a pane's border was passed as content")
 	}
 
-	// A hover that is showing keeps one more event flowing, so the pointer
-	// leaving the run for plain text is the event that clears the underline.
 	if !o.LinkHoverAt(linkX, linkY) {
 		t.Fatal("the fixture's URL did not resolve as a link")
 	}
@@ -155,8 +134,6 @@ func TestMotionFilterPassesPaneContentForLinks(t *testing.T) {
 	}
 	o.clearLinkHover()
 
-	// And a motion that lands on the cell the pointer is already on resolves to
-	// the run it is already showing, so it is dropped.
 	o.LastMouseX, o.LastMouseY = linkX, linkY
 	if FilterMouseMotion(o, tea.MouseMotionMsg{X: linkX, Y: linkY}) != nil {
 		t.Error("a motion that changed no cell was passed")
@@ -190,7 +167,6 @@ func TestMotionFilterPassesACtrlDragGrab(t *testing.T) {
 func TestMotionFilterFeedsZenMouseMode(t *testing.T) {
 	o := filterOS(t)
 	o.Settings.Links = config.LinksOff
-	// A pane's border: chrome no other clause claims.
 	overChrome := tea.MouseMotionMsg{X: 31, Y: 10}
 	if FilterMouseMotion(o, overChrome) != nil {
 		t.Fatal("motion over chrome passed with zen off; the CPU guard is gone")
@@ -250,7 +226,7 @@ func TestDockHoverChangesAtAgreesWithTheHandler(t *testing.T) {
 	o.dockWorkspaceHits = []dockWorkspaceHit{
 		{X0: 40, X1: 46, Y: row, Workspace: 2},
 		{X0: 47, X1: 51, Y: row, Workspace: 3},
-		{X0: 52, X1: 55, Y: row, Workspace: 0}, // the "+" tab
+		{X0: 52, X1: 55, Y: row, Workspace: 0},
 	}
 	o.dockSessionHits = []dockSessionHit{
 		{X0: 110, X1: 112, Y: row, Action: DockSessionLeave},

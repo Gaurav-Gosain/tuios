@@ -6,48 +6,22 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// sidebarDragState is the click-or-drag gesture on a session row. A left press
-// arms it (PressActive); vertical motion past the press row turns it into a
-// reorder drag (Dragging) whose draft Order is displayed live; the release
-// either commits the draft or, when the pointer never left the row, performs
-// the plain click (switch or toggle).
 type sidebarDragState struct {
 	PressActive bool
-	// SessionID is the pressed row's session, or its host name when Host is
-	// set: the gesture then reorders the machine groups rather than the
-	// sessions, and a plain click folds the group.
-	SessionID string
-	Host      bool
-	// Repo says the pressed row is a repository's fold control, and SessionID
-	// and Space name that repository's group: a plain click folds it, and a drag
-	// moves it. A main checkout's row moves its group the same way, with Repo
-	// unset, because a click on the row itself opens the session.
-	Repo     bool
-	Space    string
-	PressX   int
-	PressY   int
-	Dragging bool
-	Order    []string
-	// Blocks is what moves together, read once when the drag starts. See
-	// sidebarOrderBlocks.
-	Blocks sidebarOrderBlocks
-	// PinnedTold says this gesture has already answered a drag on the machine
-	// that cannot be dragged. Motion arrives on every cell the pointer crosses,
-	// and a toast per cell is not an answer.
-	PinnedTold bool
+	SessionID   string
+	Host        bool
+	Repo        bool
+	Space       string
+	PressX      int
+	PressY      int
+	Dragging    bool
+	Order       []string
+	Blocks      sidebarOrderBlocks
+	PinnedTold  bool
 }
 
-// sidebarEdgeState is the width-resize gesture on the rail's edge rule. A left
-// press on that one-cell column arms it; motion sets the width to the pointer
-// column; release persists. It is disjoint from the session reorder drag: the
-// edge column belongs to the rail's frame, not to any row.
 type sidebarEdgeState struct {
-	Active bool
-	// PressX is the column the gesture started on, and Row the strip slot under
-	// it. On the collapsed strip the edge rule is a third of the rail's width, so
-	// a press there is far more often a click on the row than a grab of the
-	// handle; the row is activated on a release that never moved, and the handle
-	// takes the gesture back the moment the pointer changes column.
+	Active  bool
 	PressX  int
 	Row     sidebarRowHit
 	HaveRow bool
@@ -64,16 +38,10 @@ type sidebarEdgeState struct {
 func (m *OS) ToggleSidebar() {
 	on := !m.Settings.SidebarEnabled
 	m.setSidebarShown(on)
-	// The [appearance.sidebar] table, not the legacy flat key: the migration
-	// folds the flat key in only when the table leaves enabled unset, and the
-	// table sets it whenever the file came from a first run, so a toggle
-	// written to the flat key was lost on the next save.
 	if m.UserConfig != nil {
 		v := on
 		m.UserConfig.Appearance.Sidebar.Enabled = &v
 	}
-	// A rail shown only to host the keyboard scope is now one the person
-	// asked for, so leaving the scope does not hide it again.
 	m.SidebarRevealedForFocus = false
 	if m.sidebarOpsOn() {
 		m.sidebarSession = sidebarVisibility(on)
@@ -95,7 +63,7 @@ func (m *OS) ToggleOtherSidebar() bool {
 		cfg = m.UserConfig.Appearance.Sidebar.Right
 	}
 	if cfg == nil || cfg.Enabled == nil {
-		return false // a table alone must never opt a rail in
+		return false
 	}
 	on := !*cfg.Enabled
 	if !on && m.SidebarFocusOnSecondary() {
@@ -113,9 +81,6 @@ func (m *OS) ToggleOtherSidebar() bool {
 	return on
 }
 
-// setSidebarShown shows or hides the rail on this client alone and lays the
-// panes out in the content region that leaves. It does not save the config
-// and does not tell the daemon.
 func (m *OS) setSidebarShown(on bool) {
 	if !m.applySidebarFlag(on) {
 		return
@@ -127,10 +92,6 @@ func (m *OS) setSidebarShown(on bool) {
 	}
 }
 
-// applySidebarFlag sets whether the rail is shown and resets what a rail
-// that opens or closes must not keep. It reports whether anything changed.
-// Laying the panes out is the caller's job: a state sync does it once for
-// everything the sync moved.
 func (m *OS) applySidebarFlag(on bool) bool {
 	if m.Settings.SidebarEnabled == on {
 		return false
@@ -139,24 +100,16 @@ func (m *OS) applySidebarFlag(on bool) bool {
 	m.SidebarScroll = [sidebarSectionCount]int{}
 	m.sidebarClearPeek()
 	m.tooltipClear()
-	// The listing the rail labels sessions from is polled slowly, or not at
-	// all, while the rail is hidden, and the poll re-plans only when its timer
-	// fires. A rail that opens should read as it is now rather than as of half
-	// a minute ago, so the open asks Update to re-plan the poll; see
-	// foreignSessionReplanCmd.
 	if on {
 		m.foreignSessionReplan = true
 	}
 	return true
 }
 
-// sidebarOpsOn reports whether showing the rail is session state:
-// the daemon keeps it, and a toggle goes to the daemon as an op.
 func (m *OS) sidebarOpsOn() bool {
 	return !m.NoRail && m.IsDaemonSession && m.DaemonClient != nil
 }
 
-// sidebarVisibility is the session's word for a rail that is shown or not.
 func sidebarVisibility(on bool) string {
 	if on {
 		return session.SidebarShown
@@ -164,9 +117,6 @@ func sidebarVisibility(on bool) string {
 	return session.SidebarHidden
 }
 
-// seedSidebar offers this client's configured visibility to a session that
-// has none yet. The offer applies only if no other client got there first, so
-// the first client to attach settles the rail, as it does the master layout.
 func (m *OS) seedSidebar() {
 	if !m.sidebarOpsOn() || m.sidebarSeeded || m.sidebarSession != "" {
 		return
@@ -178,11 +128,6 @@ func (m *OS) seedSidebar() {
 	}
 }
 
-// syncSidebarToSession sends this client's rail to the session when it was
-// shown or hidden by a path other than ToggleSidebar: the settings panel, or
-// set-config from the command line. A rail shown only for the keyboard scope
-// is this client's own and is not sent, and neither is a rail too narrow to
-// draw, which changes the rail's width and not whether it is shown.
 func (m *OS) syncSidebarToSession() {
 	if !m.sidebarOpsOn() || m.sidebarSession == "" || m.SidebarRevealedForFocus {
 		return
@@ -197,11 +142,6 @@ func (m *OS) syncSidebarToSession() {
 	}
 }
 
-// keepSessionSidebar puts the session's rail back after a config was applied
-// to this client's settings. The config holds this client's own last choice,
-// and applying it for another option (a theme, a border) must not show or
-// hide the rail on every client. A caller that sets the rail's own option
-// passes changed, and settleChrome sends that change to the session.
 func (m *OS) keepSessionSidebar(changed bool) {
 	if changed || !m.sidebarOpsOn() || m.sidebarSession == "" {
 		return
@@ -209,14 +149,7 @@ func (m *OS) keepSessionSidebar(changed bool) {
 	m.Settings.SidebarEnabled = m.sidebarSession == session.SidebarShown || m.SidebarRevealedForFocus
 }
 
-// joinSession takes the rail and the layout generation of a session this
-// client has just attached to or switched to. What this client knew and
-// offered belongs to the session it left, so it is dropped first. A session with no value yet is
-// offered this client's own. Both paths into a session call it: RestoreFromState
-// for a session with windows, and adoptEmptySessionVersion for one without.
 func (m *OS) joinSession(state *session.SessionState) {
-	// The layout generations are the session's own, and the ones this client
-	// knew were the session it left. See session/layout_gen.go.
 	m.layoutGenPushed = 0
 	if m.DaemonClient != nil {
 		m.layoutGenApplied = m.DaemonClient.SessionLayoutGeneration()
@@ -229,11 +162,6 @@ func (m *OS) joinSession(state *session.SessionState) {
 	m.seedSidebar()
 }
 
-// adoptSidebarVisibility takes whether the rail is shown from the session's
-// state. It acts only when the session's value moved since this client last
-// took it, so a rail this client shows for its own keyboard scope is not
-// hidden by every sync that arrives while it is open. It reports whether the
-// rail changed, which moves the panes' box.
 func (m *OS) adoptSidebarVisibility(state *session.SessionState) bool {
 	if !m.sidebarOpsOn() {
 		m.sidebarSession = ""
@@ -246,11 +174,8 @@ func (m *OS) adoptSidebarVisibility(state *session.SessionState) bool {
 	m.sidebarSession = v
 	on := v == session.SidebarShown
 	if on {
-		// Shown for the session now, so leaving the scope keeps it.
 		m.SidebarRevealedForFocus = false
 	} else if m.SidebarFocused {
-		// The keyboard is in the rail. It stays open until the scope is
-		// left, as a rail revealed for the scope does.
 		m.SidebarRevealedForFocus = true
 		return false
 	}
@@ -290,7 +215,6 @@ func (m *OS) SidebarBandContains(x, y int) bool {
 	return x >= secondaryX && x < secondaryX+secondary
 }
 
-// sidebarRowAt returns the recorded row hit at absolute (x, y), if any.
 func (m *OS) sidebarRowAt(x, y int) (sidebarRowHit, bool) {
 	for _, h := range m.SidebarHits {
 		if h.Contains(x, y) {
@@ -300,46 +224,20 @@ func (m *OS) sidebarRowAt(x, y int) (sidebarRowHit, bool) {
 	return sidebarRowHit{}, false
 }
 
-// sidebarClearPeek drops any live preview. It is called from every path that
-// makes the preview a lie: attaching, leaving the band or the rail scope, and
-// hiding the rail.
 func (m *OS) sidebarClearPeek() {
 	m.SidebarPeek = ""
 }
 
-// sidebarPeekAllowed reports whether the person leaves the peek on
-// (appearance.sidebar.peek). Off, the terminals section shows the attached
-// session's panes until a click attaches another one.
 func (m *OS) sidebarPeekAllowed() bool {
 	return m.Settings.SidebarPeekEnabled
 }
 
-// sidebarPeekAt sets the preview to the session row under the pointer, or
-// clears it when the pointer is anywhere else. One event decides: session rows
-// are one cell tall and terminals report motion per cell, so a pointer crossing
-// a row vertically delivers exactly one event on it whether it crosses fast or
-// slow. A rule needing two events on the same row therefore fired only when the
-// hand happened to wobble sideways, which is why the preview committed on some
-// rows and not others, and why it could keep showing the row before the one the
-// hover band was on.
-//
-// Snap-back is the same single event: the first one landing off the session
-// rows clears the preview, which is why the pointer can never reach a peeked
-// terminal row while the peek is still on screen.
 func (m *OS) sidebarPeekAt(x, y int) {
 	if !m.sidebarPeekAllowed() {
 		m.sidebarClearPeek()
 		return
 	}
 	if sidebarVariant(m.GetSidebarWidth()) == sidebarVariantGlyph {
-		// The strip does now have a terminals list to preview into, and the one
-		// thing it cannot do is say whose panes it is showing: the open rail
-		// prints the peeked session's name in that session's colour on the
-		// section header, and two cells have no room for it. A list that swapped
-		// under the pointer with nothing saying so is worse than one that holds
-		// still, so the strip's hover means its tooltip and nothing else. Giving
-		// the folded rail a peek is a change to what the group's header can say,
-		// not to this handler.
 		m.sidebarClearPeek()
 		return
 	}
@@ -389,13 +287,8 @@ func (m *OS) sidebarClick(x, y int, right bool) bool {
 	if !m.SidebarBandContains(x, y) {
 		return false
 	}
-	// Any press takes the label down: it is a hover readout, and leaving it up
-	// over whatever the press opened is how a tooltip becomes litter.
 	m.tooltipClear()
 
-	// The edge rule is the rail's frame, so a left press on it arms the width
-	// resize before any row routing: the column belongs to the sidebar, not to
-	// the session row whose hit rectangle spans it.
 	if !right && m.sidebarOnEdge(x) {
 		m.SidebarEdge = sidebarEdgeState{Active: true, PressX: x}
 		if sidebarVariant(m.GetSidebarWidth()) == sidebarVariantGlyph {
@@ -409,11 +302,6 @@ func (m *OS) sidebarClick(x, y int, right bool) bool {
 	hit, ok := m.sidebarRowAt(x, y)
 	if !ok {
 		if right {
-			// Blank rail inside the files section is still the files section.
-			// The two rows that need no name (make a file, paste one) are what
-			// a right-click under a short listing can mean, and sending it to
-			// the rail's settings instead was the one place on the section
-			// where the pointer found nothing.
 			if m.filesBandContains(y) {
 				m.openFilesSectionMenu(x, y, fileMenuTarget{Dir: m.filesView.Dir})
 				return true
@@ -421,11 +309,6 @@ func (m *OS) sidebarClick(x, y int, right bool) bool {
 			m.openRailSettingsMenu(x, y)
 			return true
 		}
-		// A left click on blank rail is still a click at the rail: the user aimed
-		// at it, and the band is mostly blank on any rail taller than its rows, so
-		// "nothing happens here" made the rail look inert. It takes the keyboard
-		// and leaves the cursor alone, because the click named no row to move it
-		// to and moving it would lose the row the user was already on.
 		m.EnterSidebarFocus()
 		return true
 	}
@@ -435,8 +318,6 @@ func (m *OS) sidebarClick(x, y int, right bool) bool {
 		return true
 	}
 
-	// A click inside the rail while it holds keyboard focus keeps the focus and
-	// moves the cursor to the clicked row: mouse and keyboard share one cursor.
 	if m.SidebarFocused {
 		m.sidebarSetCursorToHit(hit)
 	}
@@ -475,8 +356,6 @@ func (m *OS) sidebarClick(x, y int, right bool) bool {
 	case sidebarRowCollapse:
 		m.SidebarToggleCollapsed()
 	case sidebarRowRepo:
-		// The same gesture as a session row: a release on the row folds the
-		// group, a drag moves the whole group. See sidebarDragGroupMotion.
 		m.SidebarDrag = sidebarDragState{
 			PressActive: true,
 			SessionID:   hit.SessionID,
@@ -496,14 +375,10 @@ func (m *OS) sidebarClick(x, y int, right bool) bool {
 	case sidebarRowFileBack:
 		m.queueSidebarCmd(m.FileViewBack())
 	case sidebarRowFileEntry:
-		// A press arms the drag of the row into a pane. The release does
-		// what a click does when the pointer never left the rail.
 		if !m.armFileDrag(hit, x, y) {
 			m.fileRowClick(hit, m.sidebarPressCopy)
 		}
 	case sidebarRowDivider:
-		// A press arms the split drag; a second press inside the double-click
-		// window resets the split instead.
 		m.sidebarSplitPress()
 	case sidebarRowSession:
 		m.SidebarDrag = sidebarDragState{
@@ -513,8 +388,6 @@ func (m *OS) sidebarClick(x, y int, right bool) bool {
 			PressY:      y,
 		}
 	case sidebarRowHost:
-		// The same gesture as a session row: a release on the row folds the
-		// group, a drag reorders the machines.
 		m.SidebarDrag = sidebarDragState{
 			PressActive: true,
 			SessionID:   hit.SessionID,
@@ -532,9 +405,6 @@ func (m *OS) SidebarDragActive() bool {
 	return m.SidebarDrag.PressActive || m.SidebarDrag.Dragging || m.secondaryRailView.drag.PressActive || m.secondaryRailView.drag.Dragging
 }
 
-// sidebarOnEdge reports whether column x is the rail's edge rule, the one-cell
-// hairline facing the panes: the last band column for a left rail, the first
-// for a right one.
 func (m *OS) sidebarOnEdge(x int) bool {
 	w := m.GetSidebarWidth()
 	if w <= 0 {
@@ -556,9 +426,6 @@ func (m *OS) SidebarEdgeActive() bool {
 	return m.SidebarEdge.Active || m.secondaryRailView.edge.Active
 }
 
-// sidebarWidthBounds returns the clamp range for the rail's full width: no
-// narrower than the glyph rail, no wider than about two fifths of the screen so
-// the panes always keep the larger share.
 func (m *OS) sidebarWidthBounds() (int, int) {
 	lo := config.SidebarGlyphWidth
 	hi := max(m.GetRenderWidth()*2/5, lo)
@@ -581,7 +448,7 @@ func (m *OS) sidebarEdgeMotion(x, y int) bool {
 		return false
 	}
 	if x != m.SidebarEdge.PressX {
-		m.SidebarEdge.HaveRow = false // the gesture is a resize now, not a click
+		m.SidebarEdge.HaveRow = false
 	}
 	var w int
 	edge := m.legacySidebarEdge()
@@ -605,8 +472,6 @@ func (m *OS) sidebarEdgeMotion(x, y int) bool {
 		}
 		return true
 	}
-	// Dragging the edge out of the strip is an expand: the gesture asks for a
-	// width, and a collapsed rail that ignored it would look broken.
 	collapsed := m.SidebarCollapsed && w <= config.SidebarGlyphWidth
 	if w == m.sidebarWidthPreference() && collapsed == m.SidebarCollapsed {
 		return true
@@ -645,9 +510,6 @@ func (m *OS) sidebarEdgeRelease(x, y int) bool {
 	return true
 }
 
-// sidebarActivateRow runs what a completed click on a row means, for the paths
-// that resolve a whole gesture at release: the edge column's click, and the
-// keyboard's enter through SidebarActivateCursor.
 func (m *OS) sidebarActivateRow(hit sidebarRowHit) {
 	if m.SidebarFocused {
 		m.sidebarSetCursorToHit(hit)
@@ -720,13 +582,9 @@ func (m *OS) sidebarDragMotion(x, y int) bool {
 	}
 	if !d.Dragging {
 		if y == d.PressY {
-			return true // horizontal jitter is still a click
+			return true
 		}
 		if d.Host && d.SessionID == federation.LocalHostName {
-			// This machine is pinned first. Its header folds and is not dragged,
-			// and it says so once per gesture rather than sitting still: a
-			// header that does not move under the pointer is how a person
-			// decides the rail cannot be reordered at all.
 			if !d.PinnedTold {
 				d.PinnedTold = true
 				m.sidebarSayMachinePinned()
@@ -763,19 +621,11 @@ func (m *OS) sidebarDragMotion(x, y int) bool {
 	}
 	id := d.Order[from]
 	d.Order = append(d.Order[:from], d.Order[from+1:]...)
-	// target was read before the removal, so after it the dragged session
-	// lands past the target row when moving down and before it when moving
-	// up: the rows swap as the pointer crosses them.
 	at := min(target, len(d.Order))
 	d.Order = append(d.Order[:at], append([]string{id}, d.Order[at:]...)...)
 	return true
 }
 
-// sidebarSessionRowIDAt maps a screen row to the session row on it: the last
-// visible session row starting at or above y, so a pointer on a window row
-// answers with the session it belongs to, and a drag past the bottom lands on
-// the last row. Above the first visible session row it clamps to that row.
-// Returns "" when no session rows are on screen at all.
 func (m *OS) sidebarSessionRowIDAt(y int) string {
 	id, first := "", ""
 	for _, h := range m.SidebarHits {
@@ -795,10 +645,6 @@ func (m *OS) sidebarSessionRowIDAt(y int) string {
 	return id
 }
 
-// sidebarHostRowIDAt is sidebarSessionRowIDAt for the machine groups: the
-// machine whose group holds screen row y, which is the last machine header at
-// or above it. This machine's group is never an answer, since it is pinned
-// first and nothing can be dropped over it.
 func (m *OS) sidebarHostRowIDAt(y int) string {
 	id, first := "", ""
 	for _, h := range m.SidebarHits {
@@ -848,7 +694,7 @@ func (m *OS) sidebarRelease(x, y int) bool {
 
 	hit, ok := m.sidebarRowAt(x, y)
 	if !ok || hit.SessionID != d.SessionID {
-		return true // the pointer left the row; the click is void
+		return true
 	}
 	switch {
 	case d.Host && hit.Kind == sidebarRowHost:
@@ -878,8 +724,6 @@ func (m *OS) SidebarMotion(x, y int) bool {
 func (m *OS) sidebarMotion(x, y int) bool {
 	if !m.SidebarBandContains(x, y) {
 		m.SidebarHoverActive = false
-		// The one out-of-band event the motion whitelist keeps flowing is what
-		// clears the stale highlight; the preview and the label leave with it.
 		m.sidebarClearPeek()
 		m.tooltipClear()
 		return false
@@ -914,7 +758,6 @@ func (m *OS) sidebarWheel(x, y int, up bool) bool {
 		if up {
 			*offsets[s] = max(*offsets[s]-m.Settings.ScrollLines, 0)
 		} else {
-			// The upper bound is clamped against the row count on the next render.
 			*offsets[s] += m.Settings.ScrollLines
 		}
 		break
@@ -922,8 +765,6 @@ func (m *OS) sidebarWheel(x, y int, up bool) bool {
 	return true
 }
 
-// sidebarCurrentSessionID is the session this client is attached to, matching the
-// name BuildSessionTree marks IsCurrent.
 func (m *OS) sidebarCurrentSessionID() string {
 	if m.SessionName == "" {
 		return "local"
@@ -931,37 +772,19 @@ func (m *OS) sidebarCurrentSessionID() string {
 	return m.SessionName
 }
 
-// sidebarSwitchSession attaches to another session from a sidebar click or key.
-// Attaching makes any preview the truth, so it takes the preview down.
 func (m *OS) sidebarSwitchSession(sessionID string) {
 	m.sidebarClearPeek()
 	if sessionID == "" || sessionID == m.sidebarCurrentSessionID() {
 		return
 	}
-	m.clearSidebarReturn() // attaching elsewhere is not something esc should undo
-	// A session row is always on the attached machine: rows under another
-	// machine are sidebarRowHostSession hits and go through openRemoteSession.
+	m.clearSidebarReturn()
 	m.openSession("", sessionID)
 }
 
-// sidebarFocusWindow focuses the window a window row points at, switching session
-// first when it lives in another session. It returns the pane it landed on and
-// whether it landed at all: a switch can fail, and a pane of a session whose
-// windows have not arrived yet cannot be resolved, and on both of those the
-// focus is still wherever it was. A caller building anything about "the pane"
-// afterwards has to ask, or it is building it about the pane the user was on
-// before they pointed at this row.
-//
-// A minimized pane is restored as well (issue 1730): the row is where the
-// person looks for an agent that needs them, and a focus on a pane that
-// stays hidden looks like the click did nothing.
 func (m *OS) sidebarFocusWindow(hit sidebarRowHit) (idx int, ok bool) {
 	return m.sidebarPickWindow(hit, true)
 }
 
-// sidebarPickWindow is sidebarFocusWindow. With restore false a minimized
-// pane takes the focus and stays minimized, for the row's context menu,
-// which is about the pane and is not a request to show it.
 func (m *OS) sidebarPickWindow(hit sidebarRowHit, restore bool) (idx int, ok bool) {
 	focus := func(i int) {
 		if restore && m.Windows[i].Minimized {
@@ -969,35 +792,24 @@ func (m *OS) sidebarPickWindow(hit sidebarRowHit, restore bool) (idx int, ok boo
 		}
 		m.FocusWindow(i)
 	}
-	m.clearSidebarReturn() // picking a pane is the whole point; esc must not undo it
-	// Whichever way this resolves, a pane picked off the rail is brought fully
-	// into view in the scrolling layout. Both the click and the keyboard reach
-	// here, and a pane you chose by name that stays half off the edge is the
-	// same complaint as a pane you clicked that does.
+	m.clearSidebarReturn()
 	defer func() {
 		if ok {
-			// The rail is the pointer, so it answers to the pointer's setting.
 			if m.Settings.NiriClickReveals {
 				m.RevealFocusedColumn()
 			}
 		}
 	}()
-	// Resolve by ID, never by the index the row was drawn with. A pane closing
-	// between that render and this click shifts every later index, so the index
-	// alone could focus a different pane than the row names, and the context menu
-	// built on top of it would then offer to close that one instead.
 	if hit.WindowID != "" {
 		if idx := m.windowIndexByID(hit.WindowID); idx >= 0 {
 			focus(idx)
 			return idx, true
 		}
 	}
-	// WindowIndex still answers for a row with no ID to match on.
 	if hit.WindowID == "" && hit.WindowIndex >= 0 && hit.WindowIndex < len(m.Windows) {
 		focus(hit.WindowIndex)
 		return hit.WindowIndex, true
 	}
-	// Window of another session: switch first, then focus by ID.
 	if hit.SessionID != "" && hit.SessionID != m.sidebarCurrentSessionID() {
 		if !m.openSession("", hit.SessionID) {
 			return -1, false
@@ -1010,10 +822,6 @@ func (m *OS) sidebarPickWindow(hit sidebarRowHit, restore bool) (idx int, ok boo
 	return -1, false
 }
 
-// openSidebarContextMenu opens the context menu for a sidebar row, reusing the
-// existing menu builders (contextmenu_build.go): the pane menu for a window or
-// agent row (after focusing it), the files menu for a row of the listing, the
-// desktop menu for a session row.
 func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 	cm := &ContextMenu{
 		AnchorX: x,
@@ -1023,15 +831,9 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 
 	switch hit.Kind {
 	case sidebarRowCustomLink:
-		// A row of the command's output names no session or pane, so it
-		// offers what blank rail does, as it did before it took a click.
 		m.openRailSettingsMenu(x, y)
 		return
 	case sidebarRowHost:
-		// A machine's header. Its menu says where the machine sits among the
-		// others, and the rows that move it act on the rail's cursor, so the
-		// cursor goes to the header the pointer named first. Right-clicking a
-		// pane focuses that pane for the same reason.
 		if hit.SessionID == "" {
 			m.openRailSettingsMenu(x, y)
 			return
@@ -1041,41 +843,20 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 		cm.SessionID = hit.SessionID
 		cm.Title, cm.Items = m.machineMenu(hit.SessionID)
 	case sidebarRowRepo:
-		// A repository's group header. Its row names a repository, which is the
-		// one thing a right-click on it can act on: a worktree of that
-		// repository. Without a daemon, or when the cached listing no longer
-		// names the repository's main checkout, there is nothing for the row to
-		// offer, so the right-click opens the rail's own settings the way a
-		// click on blank rail would.
 		if !m.IsDaemonSession || m.worktreeRepoRoot(hit.SessionID) == "" {
 			m.openRailSettingsMenu(x, y)
 			return
 		}
 		cm.Target = CtxTargetRepo
-		// The hit names the repository in its session field; the menu gives it
-		// a field of its own so no session action can be handed it.
 		cm.Repo = hit.SessionID
 		cm.Title, cm.Items = m.repoHeaderMenu(hit.SessionID)
 	case sidebarRowHostSession, sidebarRowHostNew, sidebarRowHostSignIn, sidebarRowGlobalNew:
-		// A session on another machine. It is not a local session and has no
-		// per-row menu in this release, so the right-click opens the rail's own
-		// settings the way a click on blank rail would, rather than building a
-		// session menu for a name that is not a local session.
 		m.openRailSettingsMenu(x, y)
 		return
 	case sidebarRowFileCd, sidebarRowFileClose, sidebarRowFileUp, sidebarRowFileBack, sidebarRowFileEntry:
-		// A listing row's menu is about the row the pointer is on, and the
-		// pointer does not have to take the keyboard cursor there first: the
-		// name rides on the menu and is handed to whatever row runs. See
-		// fileMenuTarget.
 		m.openFilesSectionMenu(x, y, m.fileMenuTargetFor(hit))
 		return
 	case sidebarRowWindow, sidebarRowAgent:
-		// The menu is about the pane the focus actually landed on, and when it
-		// landed nowhere there is no menu to open: reading the focused pane back
-		// out of the model would have offered the previous pane's rows under the
-		// title of the row that was clicked, and its close row would have closed
-		// that one. The failure has already said what happened.
 		idx, ok := m.sidebarPickWindow(hit, false)
 		if !ok {
 			m.CloseContextMenu()
@@ -1088,12 +869,7 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 		cm.Target = CtxTargetDesktop
 		cm.WindowIndex = -1
 		if m.IsDaemonSession {
-			// A session row gets the session lifecycle menu: the same rows the
-			// quit menu offers, anchored where the user right-clicked, plus the
-			// colour of the row's own session.
 			cm.SessionID = hit.SessionID
-			// A main checkout's row is its repository's row too, and the menu's
-			// fold row reads the repository from here.
 			cm.Repo = m.sidebarHeadRepo(hit.SessionID)
 			cm.Title, cm.Items = m.sessionMenu(hit.SessionID)
 		} else {
@@ -1101,17 +877,12 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 		}
 	}
 
-	// The rail's own settings ride under whatever the row offers, so the tab is
-	// reachable from the thing it configures without a gear of its own.
 	cm.Items = append(cm.Items, separator(), m.railSettingsItem())
 
 	cm.home()
 	m.ContextMenu = cm
 }
 
-// openFilesSectionMenu opens the files section's menu, anchored where the
-// gesture was, with the rail's settings row under it the way every other rail
-// menu carries it.
 func (m *OS) openFilesSectionMenu(x, y int, t fileMenuTarget) {
 	cm := &ContextMenu{
 		AnchorX:     x,
@@ -1127,15 +898,6 @@ func (m *OS) openFilesSectionMenu(x, y int, t fileMenuTarget) {
 	m.ContextMenu = cm
 }
 
-// fileMenuTargetFor resolves what a listing row's menu is about, from the row
-// the renderer published and the listing in memory.
-//
-// The name is looked up rather than taken from the row's index. The index came
-// off the listing the render drew, which can be one reply behind the one in
-// memory, and a menu that offered to delete whatever now sits at that position
-// would be naming one file and destroying another. A name that has left the
-// listing resolves to no target at all, and the menu opens with its target rows
-// dimmed.
 func (m *OS) fileMenuTargetFor(hit sidebarRowHit) fileMenuTarget {
 	t := fileMenuTarget{Dir: m.filesView.Dir}
 	switch hit.Kind {
@@ -1143,15 +905,11 @@ func (m *OS) fileMenuTargetFor(hit sidebarRowHit) fileMenuTarget {
 		t.Up = true
 	case sidebarRowFileEntry:
 		if m.filesTreeOn() {
-			// A row of the tree carries its path from the root, and its folder
-			// is the one it is in.
 			if dir, e, ok := m.fileTreeEntry(hit.WindowID); ok {
 				t.Dir, t.Name, t.IsDir = dir, e.Name, e.Dir
 			}
 			break
 		}
-		// The row carries the entry's name in WindowID; see the note on
-		// fileRowSpec.Key.
 		for _, e := range m.filesView.Entries {
 			if e.Name == hit.WindowID {
 				t.Name, t.IsDir = e.Name, e.Dir
@@ -1162,12 +920,6 @@ func (m *OS) fileMenuTargetFor(hit sidebarRowHit) fileMenuTarget {
 	return t
 }
 
-// filesBandContains reports whether a rail row falls in the files section's
-// band.
-//
-// The band is what the renderer wrote down as it laid the sections out, the
-// same rectangle the wheel already routes against. Nothing here works out where
-// the section is; it reads where the section was drawn.
 func (m *OS) filesBandContains(y int) bool {
 	if !m.filesSectionEnabled() {
 		return false
@@ -1176,8 +928,6 @@ func (m *OS) filesBandContains(y int) bool {
 	return y >= band[0] && y < band[1]
 }
 
-// openRailSettingsMenu is the menu for a right-click on blank rail: there is no
-// row to act on, so the only thing the click can mean is the rail itself.
 func (m *OS) openRailSettingsMenu(x, y int) {
 	m.ContextMenu = &ContextMenu{
 		AnchorX:     x,
@@ -1190,8 +940,6 @@ func (m *OS) openRailSettingsMenu(x, y int) {
 	}
 }
 
-// railSettingsItem is the row that deep-links to the settings overlay's Sidebar
-// tab, shared by both rail menus.
 func (m *OS) railSettingsItem() ContextMenuItem {
 	return m.item(glyphSettings, "Sidebar settings", "settings_sidebar", false)
 }

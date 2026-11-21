@@ -13,14 +13,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// cdProbe is a pane whose writes are recorded instead of reaching a PTY, so a
-// test can assert the bytes a cd actually typed rather than that a function was
-// called. The window is a real daemon window, so SendInput takes the same path
-// it takes for an attached client.
 func cdProbe(t *testing.T, id string) (*terminal.Window, func(want string) bool) {
 	t.Helper()
-	// A shell tuios spawned itself: the cd is typed only into a shell tuios
-	// can see at its prompt, which a daemon pane is not.
 	t.Setenv("SHELL", "/bin/sh")
 	win, err := terminal.NewWindow(id, "t", 0, 0, 40, 10, 0, make(chan string, 4), make(chan struct{}, 1), 100)
 	if err != nil {
@@ -34,7 +28,6 @@ func cdProbe(t *testing.T, id string) (*terminal.Window, func(want string) bool)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	// inDir reports whether the shell reaches want within a short wait.
 	return win, func(want string) bool {
 		until := time.Now().Add(2 * time.Second)
 		for time.Now().Before(until) {
@@ -82,7 +75,6 @@ func TestFolderClickCanCdThePane(t *testing.T) {
 			m.Settings.SidebarFolderClick = tc.mode
 			t.Cleanup(func() { m.Settings.SidebarFolderClick = prev })
 
-			// "apple" is the first entry, per the order fileViewTree pins.
 			cmd := m.FileViewEnter(0)
 			if (cmd != nil) != tc.wantNavigate {
 				t.Errorf("%s scheduled a listing read: %v, want %v", tc.mode, cmd != nil, tc.wantNavigate)
@@ -119,7 +111,7 @@ func TestFileViewRowsFitTheRail(t *testing.T) {
 	for _, size := range []struct{ w, h int }{{120, 40}, {80, 24}, {90, 10}} {
 		m := sidebarTestOS(t, size.w, size.h, "left")
 		if !m.OpenFileView(dir) {
-			continue // too narrow for the section, which is its own correct answer
+			continue
 		}
 		if cmd := m.TakeSidebarCmd(); cmd != nil {
 			m.HandleFileList(cmd().(fileListMsg))
@@ -159,15 +151,11 @@ func TestFileViewRowsFitTheRail(t *testing.T) {
 // never opened.
 func TestFilesSectionReachableFromTheKeyboard(t *testing.T) {
 	root := fileViewTree(t)
-	// The layout leaves the files section out, so the footer control is the
-	// thing that turns it on.
 	withSections(t, "sessions:25,terminals,agents:34")
 	m := sidebarTestOS(t, 120, 40, "left")
 	m.Windows[0].Cwd = root
 	m.FocusedWindow = 0
 
-	// enter runs the cursor's row and then the read it scheduled, which is what
-	// the loop does one message later.
 	enter := func() {
 		t.Helper()
 		m.SidebarActivateCursor()
@@ -196,8 +184,6 @@ func TestFilesSectionReachableFromTheKeyboard(t *testing.T) {
 		}
 	}
 
-	// Enter on the footer's "files" control opens the section on the focused
-	// pane's directory.
 	land(sidebarRowFiles, "files control")
 	enter()
 	if !m.FileViewOpen() {
@@ -207,7 +193,6 @@ func TestFilesSectionReachableFromTheKeyboard(t *testing.T) {
 		t.Fatalf("the section opened at %q, want the pane's own directory %q", got, root)
 	}
 
-	// Enter on a folder row walks into it. "apple" is the first entry.
 	land(sidebarRowFileEntry, "entry row")
 	if name := m.filesView.Entries[m.SidebarNav[m.SidebarCursor].WindowIndex].Name; name != "apple" {
 		t.Fatalf("the first entry row is %q, want apple", name)
@@ -217,15 +202,12 @@ func TestFilesSectionReachableFromTheKeyboard(t *testing.T) {
 		t.Fatalf("enter on a folder left the listing at %q, want %q", got, want)
 	}
 
-	// Enter on ".." walks back out. It is the first row of a listing that has a
-	// parent, which this one does.
 	land(sidebarRowFileUp, ".. row")
 	enter()
 	if got := m.FileViewDir(); got != root {
 		t.Fatalf("enter on .. left the listing at %q, want %q", got, root)
 	}
 
-	// And enter on the same footer control takes the section off again.
 	land(sidebarRowFiles, "files control")
 	enter()
 	if m.FileViewOpen() {

@@ -11,9 +11,6 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// blitClippedReference is blitClipped with no fast path: the layer's span in
-// the clip cleared, then each head cell set, through Line.Set. It is the
-// oracle the copy has to match.
 func blitClippedReference(cl *cellLayer, canvas *frameCanvas, x, y int, clip image.Rectangle) {
 	for row := range cl.h {
 		cy := y + row
@@ -34,7 +31,6 @@ func blitClippedReference(cl *cellLayer, canvas *frameCanvas, x, y int, clip ima
 	}
 }
 
-// randomCellLayer parses a random block of narrow and wide glyphs.
 func randomCellLayer(rng *rand.Rand, w, h int) *cellLayer {
 	glyphs := []string{"a", " ", "界", "é", "█", "👍"}
 	styles := []lipgloss.Style{
@@ -83,8 +79,6 @@ func TestBlitClippedMatchesCellByCell(t *testing.T) {
 	}
 }
 
-// clippedPaneLayer is a full screen of text and the clip of a session view
-// one column narrower, the case blitClipped is drawn for on every frame.
 func clippedPaneLayer(tb testing.TB) (*cellLayer, *frameCanvas, image.Rectangle) {
 	tb.Helper()
 	row := strings.Repeat("the quick brown fox jumps over the lazy dog ", realCols/44+1)[:realCols]
@@ -142,13 +136,8 @@ func TestBlitClippedBudget(t *testing.T) {
 	}
 }
 
-// fastestInTurns times a and b in turns, a short sample of each per round,
-// and returns the fastest sample of each in ns per call. The order inside a
-// round alternates, so neither side always runs on a cache the other warmed.
 func fastestInTurns(a, b func()) (nsA, nsB float64) {
 	const rounds = 40
-	// Calls per sample: enough that a sample outlasts the timer's grain, few
-	// enough that a sample often fits between two bursts of other load.
 	calls := 1
 	for calls < 1<<20 {
 		start := time.Now()

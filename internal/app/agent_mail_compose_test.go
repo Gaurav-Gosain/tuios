@@ -10,7 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// renderMailPlain is the mailbox overlay as the person reads it.
 func renderMailPlain(t *testing.T, m *OS) string {
 	t.Helper()
 	content, _, _ := m.renderAgentMail()
@@ -27,7 +26,6 @@ func TestMailThreadFencesEachBody(t *testing.T) {
 
 	frame := renderMailPlain(t, m)
 	open := fmt.Sprintf(session.UntrustedOpen, "build")
-	// The panel may wrap the open line; its two halves are what is checked.
 	head, tail, _ := strings.Cut(open, ": ")
 	for _, want := range []string{head, tail, session.UntrustedClose} {
 		if !strings.Contains(frame, want) {
@@ -73,7 +71,6 @@ func TestNewMessageGoesToTheChosenAgent(t *testing.T) {
 		t.Fatalf("n did not open the picker; error %q", m.AgentMail.Error)
 	}
 	frame := renderMailPlain(t, m)
-	// The plain pane nvim runs no agent and is not an address here.
 	if !strings.Contains(frame, "refactor") || !strings.Contains(frame, "build") || strings.Contains(frame, "nvim") {
 		t.Fatalf("the picker does not list the session's agents only:\n%s", frame)
 	}
@@ -107,8 +104,6 @@ func TestNewMessageGoesToTheChosenAgent(t *testing.T) {
 			m.AgentMail.Composing, m.AgentMail.ComposeTo, m.AgentMail.Thread)
 	}
 
-	// The daemon pushes the message back. The person wrote it, so the new
-	// thread is not marked new.
 	sent := mail(20, session.AgentInboxHuman, "human", "cccccccc3333", "build", "", "please rebase")
 	sent.VerifiedHuman = true
 	m.noteAgentMail(session.AgentMailPayload{Message: sent})
@@ -143,7 +138,6 @@ func TestMailAlertsFollowTheirOwnTable(t *testing.T) {
 		return mail(id, "cccccccc3333", "build", session.AgentInboxHuman, "human", "q", "q?")
 	}
 
-	// No mail table: the agent table's dock = false holds, as before.
 	m := mailOS(t)
 	captureHost(t, m)
 	m.UserConfig = &config.UserConfig{}
@@ -153,14 +147,12 @@ func TestMailAlertsFollowTheirOwnTable(t *testing.T) {
 		t.Error("with no mail table, mail ignored notifications.agent.dock = false")
 	}
 
-	// The mail table's own dock wins over the agent table's.
 	m.UserConfig.Notifications.Mail.Dock = &on
 	m.noteAgentMail(session.AgentMailPayload{Message: toHuman(2)})
 	if len(m.Notifications) != 1 {
 		t.Errorf("notifications.mail.dock = true raised %d dock messages, want 1", len(m.Notifications))
 	}
 
-	// Mail between two agents stays quiet until between_agents asks for it.
 	before := len(m.Notifications)
 	m.noteAgentMail(session.AgentMailPayload{Message: mail(3, "cccccccc3333", "build", "bbbbbbbb2222", "refactor", "s", "t")})
 	if len(m.Notifications) != before {
@@ -172,7 +164,6 @@ func TestMailAlertsFollowTheirOwnTable(t *testing.T) {
 		t.Error("between_agents = true did not alert on a message between two agents")
 	}
 
-	// And enabled = false in the mail table silences mail alone.
 	m.UserConfig.Notifications.Mail.Enabled = &off
 	m.noteAgentMail(session.AgentMailPayload{Message: toHuman(5)})
 	if len(m.Notifications) != before+1 {

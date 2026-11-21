@@ -22,9 +22,6 @@ import (
 // side-by-side one. Against a daemon too old for ops the adoptTopology gate
 // in ApplyStateSyncFrom does the same job.
 
-// treeShape renders a client's tree for the current workspace with the panes
-// named by their PTYs rather than by int IDs, so two clients' trees can be
-// compared whatever numbers each handed out.
 func treeShape(m *OS) string {
 	state := m.BuildSessionState()
 	tree := state.WorkspaceTrees[m.CurrentWorkspace]

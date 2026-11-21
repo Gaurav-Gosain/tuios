@@ -24,7 +24,6 @@ func TestCockpitAnswersOnlyWhatItShowed(t *testing.T) {
 		t.Fatalf("the agent waiting on you is not selected: %+v", e)
 	}
 
-	// Not drawn yet: nothing is sent.
 	if cmd, _ := letterEnter(m, "a"); cmd != nil {
 		runMsg(t, m, cmd)
 	}
@@ -32,7 +31,6 @@ func TestCockpitAnswersOnlyWhatItShowed(t *testing.T) {
 		t.Fatal("an approval the thread never showed was answered")
 	}
 
-	// Drawn just now: still too soon.
 	m.renderInbox()
 	if cmd, _ := letterEnter(m, "a"); cmd != nil {
 		runMsg(t, m, cmd)
@@ -41,7 +39,6 @@ func TestCockpitAnswersOnlyWhatItShowed(t *testing.T) {
 		t.Fatal("an approval drawn a moment ago was answered")
 	}
 
-	// Shown for the settle time: 1 allows once, for that request.
 	m.Inbox.shown.since = time.Now().Add(-time.Second)
 	cmd, _ := letterEnter(m, "a")
 	if cmd == nil {

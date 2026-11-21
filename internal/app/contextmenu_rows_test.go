@@ -6,13 +6,6 @@ import (
 	"testing"
 )
 
-// The shipped menus became data (contextmenu_rows.go). The builders below are
-// the code they replaced, kept as the oracle: each reads the same facts the
-// old builder read off the OS, in the old builder's own words. Every target's
-// menu is compared over every combination of its facts, so a row whose label,
-// glyph, hint, dim, warn or place moved fails here and not in front of a
-// person.
-
 func legacyPane(m *OS, f menuFact) []ContextMenuItem {
 	closeItem := m.item(glyphClose, "Close pane", "close_window", false)
 	closeItem.Warn = true
@@ -179,8 +172,6 @@ func legacyFile(m *OS, f menuFact) []ContextMenuItem {
 	)
 }
 
-// menuFactFlags are the facts each target reads, so the test can walk every
-// combination of them.
 var menuFactFlags = map[string][]menuFact{
 	"pane":      {mfSelection, mfCanPaste, mfCanSplit, mfScratch, mfSidebar},
 	"selection": nil,
@@ -194,8 +185,6 @@ var menuFactFlags = map[string][]menuFact{
 	"file":      {mfUp, mfDir, mfNamed, mfOn, mfTarget, mfCanOpen, mfClipEmpty, mfNoFocus},
 }
 
-// legacyPos is the dock item's place for legacyDockItem, which read it off
-// the OS.
 var legacyPos int
 
 // TestShippedMenusAsDataMatchTheOldBuilders compares every target's menu,
@@ -222,11 +211,8 @@ func TestShippedMenusAsDataMatchTheOldBuilders(t *testing.T) {
 			}
 			switch target {
 			case "repo":
-				// The repo menu always heads a repository.
 				f |= mfHeadRepo
 			case "file":
-				// fileRowMenu works these out from the others: a row that names
-				// nothing opens nothing and is no target.
 				if f.has(mfCanOpen) && !f.has(mfNamed) && !f.has(mfUp) ||
 					f.has(mfTarget) && !(f.has(mfOn) && f.has(mfNamed)) {
 					continue

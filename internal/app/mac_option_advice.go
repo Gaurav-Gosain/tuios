@@ -38,8 +38,6 @@ func (m *OS) NoteRewrittenAltArrow(got, arrow string) {
 	m.noteOptionProblem(arrow, arrow+" (it arrives as "+got+")")
 }
 
-// noteOptionProblem is the one advice, shown once per run. bound is the chord
-// to check is worth talking about; named is how the message spells it.
 func (m *OS) noteOptionProblem(bound, named string) {
 	if m.optionAdviceShown {
 		return
@@ -47,25 +45,16 @@ func (m *OS) noteOptionProblem(bound, named string) {
 	if m.KeybindRegistry == nil {
 		return
 	}
-	// Only worth saying for a chord that is bound to something. A stray µ typed
-	// into a shell is not a misfiring keybinding.
 	if m.KeybindRegistry.GetAction(bound) == "" &&
 		m.KeybindRegistry.Action(config.TableTerminalMode, bound) == "" {
 		return
 	}
 	chord := named
-	// A browser tab has no terminal settings to change, so there is no advice to
-	// give. The composition happens in macOS before the page ever sees the key,
-	// and nothing in the browser can undo it.
 	if m.BrowserClient {
 		return
 	}
 	m.optionAdviceShown = true
 
-	// The environment this process reads belongs to the machine tuios runs on.
-	// For a client on the far end of a network that is the server, not the
-	// terminal the user is sitting at, so name no product and give the step that
-	// is true of every terminal.
 	host := config.DetectHostTerminal()
 	if m.RemoteClient {
 		host = config.HostUnknown

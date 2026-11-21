@@ -8,41 +8,22 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The dock is three ordered lists, which is the one thing on the settings page
-// that no row can express. A cycler has no order, a toggle has no place to put
-// what it turns off, and a text field holding a TOML array is the config file
-// with extra steps and no validation.
-//
-// So it is an editor: the three regions and their components as one list, with
-// what is not placed underneath it. Moving a component is one keystroke, and it
-// crosses into the next region when it runs off the end of its own, which is
-// what makes "put the clock on the left" a thing you do rather than a thing you
-// look up.
-
-// dockEditorSides is the regions in draw order, which is also the order they
-// are listed in.
 var dockEditorSides = []string{"left", "center", "right"}
 
-// dockRowKind is what one line of the editor is.
 type dockRowKind int
 
 const (
-	dockRowHeader    dockRowKind = iota // a region's name
-	dockRowComponent                    // a placed component
-	dockRowEmpty                        // a region with nothing in it
-	dockRowAvailable                    // a component that is defined and not placed
+	dockRowHeader dockRowKind = iota
+	dockRowComponent
+	dockRowEmpty
+	dockRowAvailable
 )
 
-// dockEditorRow is one line: enough to draw it and to act on it.
 type dockEditorRow struct {
-	Kind dockRowKind
-	Side string // the region, for a header or a placed component
-	Name string // the component, for a component or available row
-	// Fixed is the side this component always draws on whatever list names it,
-	// empty for one that can be moved.
-	Fixed string
-	// Custom marks a cell from a [dock.custom.NAME] table rather than a
-	// built-in, which is worth saying because its behaviour is the user's own.
+	Kind   dockRowKind
+	Side   string
+	Name   string
+	Fixed  string
 	Custom bool
 }
 
@@ -57,8 +38,6 @@ func (m *OS) OpenDockEditor() {
 	m.dockList.Scroll = 0
 	m.DockEditorOriginal = m.dockLists()
 
-	// Land on the first component rather than on the first header, so the first
-	// keystroke does something.
 	m.dockList.Cursor = 0
 	for i, row := range m.dockEditorRows() {
 		if row.Kind == dockRowComponent {
@@ -94,15 +73,8 @@ func (m *OS) DockEditorRevert() tea.Cmd {
 	return m.commitDockLists(true)
 }
 
-// dockLists is a snapshot of the three lists, for cancel to restore.
-//
-// A nil list is kept nil rather than resolved to the default it stands for. The
-// difference is what a config file records: nil is "[dock] says nothing", and a
-// cancel that put the defaults back as three explicit lists would leave the
-// file naming a layout the user never chose, pinned to today's defaults.
 type dockLists struct{ Left, Center, Right *[]string }
 
-// dockLists reads the current lists in a form that can be compared and restored.
 func (m *OS) dockLists() dockLists {
 	if m.UserConfig == nil {
 		return dockLists{}
@@ -121,8 +93,6 @@ func (m *OS) dockLists() dockLists {
 	}
 }
 
-// equal reports whether two snapshots name the same layout, an unset list
-// counting as different from the same list written out.
 func (l dockLists) equal(other dockLists) bool {
 	same := func(a, b *[]string) bool {
 		if a == nil || b == nil {
@@ -135,7 +105,6 @@ func (l dockLists) equal(other dockLists) bool {
 		same(l.Right, other.Right)
 }
 
-// setDockLists writes a snapshot back onto the config.
 func (m *OS) setDockLists(l dockLists) {
 	if m.UserConfig == nil {
 		return
@@ -145,7 +114,6 @@ func (m *OS) setDockLists(l dockLists) {
 	m.UserConfig.Dock.Right = l.Right
 }
 
-// sideList is one region's components.
 func (m *OS) sideList(side string) []string {
 	if m.UserConfig == nil {
 		return nil
@@ -153,7 +121,6 @@ func (m *OS) sideList(side string) []string {
 	return slices.Clone(m.UserConfig.Dock.DockList(side))
 }
 
-// writeSide replaces one region's list.
 func (m *OS) writeSide(side string, list []string) {
 	if m.UserConfig == nil {
 		return
@@ -169,7 +136,6 @@ func (m *OS) writeSide(side string, list []string) {
 	}
 }
 
-// dockEditorRows is the flattened list the editor draws and navigates.
 func (m *OS) dockEditorRows() []dockEditorRow {
 	var rows []dockEditorRow
 	placed := map[string]bool{}
@@ -192,9 +158,6 @@ func (m *OS) dockEditorRows() []dockEditorRow {
 		}
 	}
 
-	// What is defined and not on the bar. Without this, removing a component
-	// would be one-way from inside the editor and the only way back would be
-	// the config file, which is the trip the editor exists to save.
 	var available []string
 	for _, name := range config.DockBuiltinComponents() {
 		if !placed[name] {
@@ -226,7 +189,6 @@ func (m *OS) dockEditorRows() []dockEditorRow {
 	return rows
 }
 
-// dockAvailableSide is the pseudo-region holding what is not on the bar.
 const dockAvailableSide = "available"
 
 // DockEditorCursor is the dock editor's row under the cursor.
@@ -274,7 +236,6 @@ func (m *OS) DockEditorShift(dir int) tea.Cmd {
 		return m.commitDockLists(false)
 	}
 
-	// Off the end of this region, so into the next one.
 	sideIdx := slices.Index(dockEditorSides, row.Side)
 	nextIdx := sideIdx + dir
 	if nextIdx < 0 || nextIdx >= len(dockEditorSides) {
@@ -282,9 +243,6 @@ func (m *OS) DockEditorShift(dir int) tea.Cmd {
 	}
 	nextSide := dockEditorSides[nextIdx]
 	if row.Fixed != "" && row.Fixed != nextSide {
-		// A pinned component draws on its own side whatever list names it, so
-		// moving it would change the file and nothing on screen. Saying so
-		// beats an edit that appears to do nothing.
 		m.ShowNotification(row.Name+" always draws on the "+row.Fixed+
 			". You cannot move it.", "info", m.Settings.NotificationDuration)
 		return nil
@@ -318,9 +276,6 @@ func (m *OS) DockEditorToggle() tea.Cmd {
 			m.writeSide(row.Side, slices.Delete(list, idx, idx+1))
 		}
 	case dockRowAvailable:
-		// Onto the side it is pinned to where it has one, so a component that
-		// can only draw on the right does not land in a list that will not
-		// draw it.
 		side := row.Fixed
 		if side == "" {
 			side = "right"
@@ -331,8 +286,6 @@ func (m *OS) DockEditorToggle() tea.Cmd {
 	}
 
 	m.selectDockComponent(row.Name)
-	// The set of placed components changed, so the engine is rebuilt: which
-	// components are scheduled comes from the plan.
 	return m.commitDockLists(true)
 }
 
@@ -348,8 +301,6 @@ func (m *OS) DockEditorReset() tea.Cmd {
 	return m.commitDockLists(true)
 }
 
-// selectDockComponent puts the selection back on a component after the lists
-// moved under it, so the row a person is dragging stays under the cursor.
 func (m *OS) selectDockComponent(name string) {
 	rows := m.dockEditorRows()
 	for i, row := range rows {
@@ -361,13 +312,6 @@ func (m *OS) selectDockComponent(name string) {
 	}
 }
 
-// commitDockLists applies an edit and hands back the save.
-//
-// rebuild says whether the set of placed components changed. A reorder does not
-// change which components exist, so it costs a re-plan and a repaint; going
-// through the engine for it would stop and restart every custom component's
-// process on each keystroke, and a push component would lose its stream every
-// time the list moved.
 func (m *OS) commitDockLists(rebuild bool) tea.Cmd {
 	if rebuild {
 		cmd := m.InitDockComponents()

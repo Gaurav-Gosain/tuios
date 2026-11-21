@@ -9,10 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// Rate limits for guest-driven notifications (notifications.rate_limit_ms and
-// bell_rate_limit_ms). A guest that spams OSC 9 or BEL (for example `yes` piped
-// to a terminal that beeps) must not flood the in-app notification stack or the
-// host terminal.
 func (m *OS) notifyRateLimit() time.Duration {
 	return time.Duration(m.Settings.NotifyRateLimitMS) * time.Millisecond
 }
@@ -39,15 +35,10 @@ type NotificationMsg struct {
 	Bell bool
 }
 
-// listenNotificationUntil waits for the next message on its channel and returns nil once
-// stop is closed, so a session that ends leaves no listener parked.
 func listenNotificationUntil(stop <-chan struct{}, ch chan NotificationMsg) tea.Cmd {
 	return listenOnce(stop, ch, func(notif NotificationMsg) tea.Msg { return notif })
 }
 
-// ensureNotificationChan lazily creates the notification channel. It is only
-// called on the bubbletea goroutine (from Init and from window setup), so the
-// nil check needs no lock.
 func (m *OS) ensureNotificationChan() chan NotificationMsg {
 	if m.PendingNotification == nil {
 		m.PendingNotification = make(chan NotificationMsg, 16)
@@ -55,12 +46,6 @@ func (m *OS) ensureNotificationChan() chan NotificationMsg {
 	return m.PendingNotification
 }
 
-// setupNotificationPassthrough wires a window's guest notifications (OSC 9/777/99)
-// and bell (BEL) to the in-app notification stack and, where appropriate, the host
-// terminal. In-app notifications route through PendingNotification because these
-// callbacks fire on the window's PTY writer goroutine while the render goroutine
-// reads m.Notifications; the host writes go through KittyPassthrough.WriteToHost,
-// which is mutex guarded and safe to call off-goroutine.
 func (m *OS) setupNotificationPassthrough(window *terminal.Window) {
 	if window == nil {
 		return
@@ -69,18 +54,8 @@ func (m *OS) setupNotificationPassthrough(window *terminal.Window) {
 	ch := m.ensureNotificationChan()
 	windowID := window.ID
 
-	// Per-window rate-limit state, kept in the closure so each window is
-	// independent and no shared OS map is touched from the PTY goroutine.
 	var mu sync.Mutex
 	var lastNotify, lastBell time.Time
-
-	// Both closures below run on the PTY reader goroutine and read
-	// m.Settings.NotificationDuration while Update may be writing it. That is
-	// an unsynchronised read of one word, and it is exactly the read the
-	// package global had before Settings existed, so this is no worse than it
-	// was. It is not fixed here because the honest fix is a published snapshot
-	// of the settings for off-loop readers, which is a change of its own; the
-	// worst case is one notification held for the previous duration.
 
 	window.NotifyFunc = func(title, body string) {
 		mu.Lock()
@@ -91,10 +66,6 @@ func (m *OS) setupNotificationPassthrough(window *terminal.Window) {
 		lastNotify = time.Now()
 		mu.Unlock()
 
-		// The text is whatever the pane printed, and OSC 99 with e=1 decodes
-		// it from base64, so it can hold ESC, BEL and C1 controls. Those are
-		// removed before it reaches the dock or the host terminal, where they
-		// would run as sequences of their own.
 		title = notifyPlainText(title)
 		body = notifyPlainText(body)
 
@@ -108,18 +79,13 @@ func (m *OS) setupNotificationPassthrough(window *terminal.Window) {
 		if message == "" {
 			return
 		}
-		// Capped here, on the pane's goroutine, so a pane cannot hand the
-		// Update loop more text than any surface will show.
 		message = capText(message, notifTextCap)
 
 		select {
 		case ch <- NotificationMsg{Message: message, Type: "info", Duration: m.Settings.NotificationDuration, WindowID: windowID}:
 		default:
-			// Channel full, drop (non-blocking).
 		}
 
-		// Forward to the host terminal so kitty/ghostty/wezterm raises a real
-		// desktop notification (OSC 9). Prefer the body, fall back to the title.
 		if m.KittyPassthrough != nil {
 			hostText := body
 			if hostText == "" {
@@ -143,20 +109,10 @@ func (m *OS) setupNotificationPassthrough(window *terminal.Window) {
 		select {
 		case ch <- NotificationMsg{Message: "bell", Type: "info", Duration: m.Settings.NotificationDuration, WindowID: windowID, Bell: true}:
 		default:
-			// Channel full, drop (non-blocking).
 		}
-
-		// The BEL itself is not written from here. notifications.bell decides
-		// whether it reaches the host terminal, and the Update goroutine owns
-		// that setting, so ringBell writes it when it handles this message.
 	}
 }
 
-// ringBell carries out notifications.bell for one rate-limited pane bell, on
-// the Update goroutine. It writes the BEL to the host terminal when the mode
-// forwards, through the same writer as the agent alert bell, so a served
-// client gets it on its own connection. It reports whether the dock should
-// also show the bell message.
 func (m *OS) ringBell() bool {
 	mode := m.Settings.Bell
 	if mode == config.BellForward || mode == config.BellBoth {

@@ -15,7 +15,6 @@ func (m *OS) OverlayDragActive() bool {
 	return m.OverlayDrag.Active
 }
 
-// overlayHitAt returns the highest-z overlay panel containing screen (x, y).
 func (m *OS) overlayHitAt(x, y int) (overlayPanelHit, bool) {
 	best := overlayPanelHit{}
 	found := false
@@ -29,7 +28,6 @@ func (m *OS) overlayHitAt(x, y int) (overlayPanelHit, bool) {
 	return best, found
 }
 
-// topmostOverlayKind returns the kind of the frontmost open overlay, or "".
 func (m *OS) topmostOverlayKind() string {
 	if len(m.OverlayZOrder) == 0 {
 		return ""
@@ -37,15 +35,11 @@ func (m *OS) topmostOverlayKind() string {
 	return m.OverlayZOrder[len(m.OverlayZOrder)-1]
 }
 
-// inboxCovered reports whether a panel is open over the agents view. The
-// view fills the screen, so a pointer outside that panel still lands on the
-// view: it belongs to the panel on top, not to the rows under it.
 func (m *OS) inboxCovered() bool {
 	stack := m.OverlayStack()
 	return len(stack) > 0 && stack[len(stack)-1] != "inbox"
 }
 
-// overlayHitByKind returns the recorded hit geometry for a kind.
 func (m *OS) overlayHitByKind(kind string) (overlayPanelHit, bool) {
 	for _, h := range m.OverlayHits {
 		if h.Kind == kind {
@@ -67,22 +61,14 @@ func (m *OS) OverlayMouseClick(x, y int, right bool) (bool, tea.Cmd) {
 
 	h, ok := m.overlayHitAt(x, y)
 	if !ok || h.Kind == "inbox" && m.inboxCovered() {
-		// Clicked outside every panel, or on the agents view outside the
-		// panel over it: dismiss the frontmost. The row under the pointer
-		// is not selected.
 		m.closeOverlay(m.topmostOverlayKind())
 		return true, nil
 	}
 
-	// Clicking a panel brings it to the front.
 	m.raiseOverlay(h.Kind)
 
-	// The cockpit fills the screen and is not dragged: a click selects, a
-	// second one goes. See cockpit.go.
 	if h.Kind == "inbox" {
 		if right {
-			// A right click on the thread's selection offers what to do
-			// with it. See cockpit_mouse.go.
 			m.OpenCockpitSelectionMenu(x, y)
 			return true, nil
 		}
@@ -90,21 +76,17 @@ func (m *OS) OverlayMouseClick(x, y int, right bool) (bool, tea.Cmd) {
 		return true, cmd
 	}
 
-	// A click on the open draft of the panel places its cursor or selects.
 	if !right && m.draftClick(h.Kind, x, y) {
 		return true, nil
 	}
 
 	lx, ly := x-h.OriginX, y-h.OriginY
 
-	// Right-click anywhere on the panel grabs it for dragging.
 	if right {
 		m.startOverlayDrag(h.Kind, lx, ly)
 		return true, nil
 	}
 
-	// Left-click on a tab switches section. The strip's overflow arrows step to
-	// the neighbouring section, which is the tab the run would scroll to anyway.
 	switch {
 	case h.Geo.TabPrev.Contains(lx, ly):
 		m.stepOverlayTab(h.Kind, -1)
@@ -120,30 +102,22 @@ func (m *OS) OverlayMouseClick(x, y int, right bool) (bool, tea.Cmd) {
 		}
 	}
 
-	// The accent picker is a field of cells rather than a list of rows, so it
-	// routes off its own recorded geometry. Ahead of the row loop because it
-	// registers no rows for the generic path to find.
 	if h.Kind == "accent" {
 		if handled, cmd := m.accentPickerPress(lx, ly); handled {
 			return true, cmd
 		}
 	}
 
-	// Left-click on a body row selects/activates it.
 	for _, row := range h.Rows {
 		if row.Rect.Contains(lx, ly) {
 			return true, m.overlayRowClick(h.Kind, row, lx, ly)
 		}
 	}
 
-	// Left-click on any other part of the panel (title, padding, footer, blank
-	// space) grabs it for dragging, so the panel is easy to move.
 	m.startOverlayDrag(h.Kind, lx, ly)
 	return true, nil
 }
 
-// startOverlayDrag begins dragging the given panel, remembering the grab point
-// within it so it tracks the cursor.
 func (m *OS) startOverlayDrag(kind string, lx, ly int) {
 	m.OverlayDrag = overlayDragState{Active: true, Kind: kind, OffsetX: lx, OffsetY: ly}
 }
@@ -158,7 +132,7 @@ func (m *OS) OverlayMouseMotion(x, y int) bool {
 	if m.OverlayDrag.Active {
 		h, ok := m.overlayHitByKind(m.OverlayDrag.Kind)
 		if !ok {
-			return true // still dragging; geometry will be back next frame
+			return true
 		}
 		rw, rh := m.GetRenderWidth(), m.GetRenderHeight()
 		centerX := (rw - h.Geo.Width) / 2
@@ -175,7 +149,6 @@ func (m *OS) OverlayMouseMotion(x, y int) bool {
 		return false
 	}
 	if h.Kind == "inbox" {
-		// A panel over the view keeps the hover off the rows under it.
 		if !m.inboxCovered() {
 			m.CockpitHover(x, y)
 		}
@@ -183,9 +156,6 @@ func (m *OS) OverlayMouseMotion(x, y int) bool {
 	}
 	lx, ly := x-h.OriginX, y-h.OriginY
 	if h.Kind == "accent" {
-		// Only a held button paints in the picker. Bare hover must not, or the
-		// colour under the pointer would keep overwriting the one the user
-		// chose just by crossing the dialog on the way somewhere else.
 		m.accentPickerDragTo(lx, ly)
 		return true
 	}
@@ -198,12 +168,8 @@ func (m *OS) OverlayMouseMotion(x, y int) bool {
 	return true
 }
 
-// overlayRowHover moves an overlay's selection to the hovered row. It selects
-// only, never activates: the theme picker's live preview counts as selection
-// because that is what its keyboard selection does too.
 func (m *OS) overlayRowHover(kind string, idx int) {
 	if p := listPickerOfKind(kind); p != nil {
-		// A hover cannot return a command; a preview runs its own frames.
 		_ = p.hover(m, idx)
 		return
 	}
@@ -245,9 +211,6 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 	case overlayKindLogs:
 		m.logList.Cursor = idx
 	case "filedialog":
-		// Hover moves the cursor onto the answer under the pointer. It cannot
-		// run one: the dialog is answered by a click or by enter, and a pointer
-		// crossing the rows on its way somewhere else must not delete a file.
 		m.filePrompt.List.Cursor = idx
 	}
 }
@@ -264,14 +227,11 @@ func (m *OS) OverlayMouseRelease() {
 func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 	h, ok := m.overlayHitAt(x, y)
 	if !ok || h.Kind == "inbox" && m.inboxCovered() {
-		// Off every panel, or on the view under a panel: the wheel moves the
-		// panel on top.
 		h, ok = m.overlayHitByKind(m.topmostOverlayKind())
 		if !ok {
 			return false
 		}
 	}
-	// A wheel move stops at the ends of a list. See listWraps.
 	m.wheelMoving = true
 	defer func() { m.wheelMoving = false }()
 	if p := listPickerOfKind(h.Kind); p != nil {
@@ -283,7 +243,7 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 		if up {
 			m.HelpScrollOffset = max(m.HelpScrollOffset-2, 0)
 		} else {
-			m.HelpScrollOffset += 2 // clamped against row count on next render
+			m.HelpScrollOffset += 2
 		}
 	case "settings":
 		m.SettingsMove(wheelDelta(up))
@@ -314,8 +274,6 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 	case "filedialog":
 		m.FileConfirmMove(wheelDelta(up))
 	case "accent":
-		// The wheel drives whatever is under it: the strip turns the hue, the
-		// grid steps through lightness.
 		lx, ly := x-h.OriginX, y-h.OriginY
 		if hit, ok := m.accentHitAt(lx, ly); ok && hit.Kind == accentHitHue {
 			m.AccentPickerMoveHue(wheelDelta(up))
@@ -334,7 +292,6 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 	return true
 }
 
-// wheelDelta maps a wheel direction to a selection delta.
 func wheelDelta(up bool) int {
 	if up {
 		return -1
@@ -342,15 +299,12 @@ func wheelDelta(up bool) int {
 	return 1
 }
 
-// setOverlayTab switches the active section tab of the overlay.
 func (m *OS) setOverlayTab(kind string, i int) {
 	switch kind {
 	case "help":
 		m.HelpCategory = i
 		m.HelpScrollOffset = 0
 	case "settings":
-		// A tab clicked during a search is a request for that tab, so the
-		// search gives way to it.
 		m.settingsSearch = settingsSearchState{}
 		m.SettingsCategory = i
 		m.settingsList.Cursor = 0
@@ -362,9 +316,6 @@ func (m *OS) setOverlayTab(kind string, i int) {
 	}
 }
 
-// stepOverlayTab moves the overlay's active section by delta. The arrow that
-// calls this is only drawn while there is a section that way, so the neighbour
-// always exists.
 func (m *OS) stepOverlayTab(kind string, delta int) {
 	switch kind {
 	case "help":
@@ -378,7 +329,6 @@ func (m *OS) stepOverlayTab(kind string, delta int) {
 	}
 }
 
-// overlayRowClick handles a click on a body row of the given overlay.
 func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd {
 	if p := listPickerOfKind(kind); p != nil {
 		return p.click(m, row.Idx)
@@ -390,18 +340,11 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		if row.Idx < len(items) {
 			switch items[row.Idx].Control {
 			case controlString:
-				// A click anywhere on a text row opens its inline editor.
 				m.SettingsBeginEdit()
 				return nil
 			case controlStatus:
-				// A status row has nothing to step, so a click anywhere on it
-				// is the row's enter.
 				return m.SettingsActivate()
 			case controlColor:
-				// And anywhere on a colour row, swatch included, opens its picker.
-				// The row's rect is the one the renderer recorded as it drew, so
-				// this lands where the user is pointing whatever the panel reflowed
-				// to.
 				return m.SettingsActivate()
 			}
 		}
@@ -411,15 +354,9 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		case !row.Inc.Empty() && row.Inc.Contains(lx, ly):
 			return m.SettingsAdjust(1)
 		case settingsControlSpanContains(row, lx, ly):
-			// A click on the value itself, between the stepper arrows, does what
-			// Enter does: toggles a bool, cycles an enum, or runs the row's
-			// activate hook (the Theme row opens the picker).
 			return m.SettingsActivate()
 		}
 	case "keybinds":
-		// Selecting only. Every row here is a finding to read, and the detail box
-		// under the list is the thing a click is asking for; there is no action to
-		// activate and nothing a stray click could change.
 		m.KeybindSelect(row.Idx)
 	case "themeeditor":
 		m.themeEditor.lists[m.themeEditor.tab].Cursor = row.Idx
@@ -431,13 +368,10 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		m.sectionList.Cursor = row.Idx
 		return m.SectionEditorToggle()
 	case "agentmail":
-		// A click opens, exactly like enter on the selected row.
 		m.AgentMailSelect(row.Idx)
 		return m.AgentMailOpenSelected()
 	case "inbox":
 		if m.Inbox.agents.on {
-			// A click with the bulk allow's sheet up closes the sheet,
-			// as any key but enter does, and goes nowhere.
 			if m.Inbox.agents.sheet != nil {
 				m.Inbox.agents.sheet = nil
 				return nil
@@ -445,8 +379,6 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 			m.InboxSelect(row.Idx)
 			return m.InboxAgentsGo()
 		}
-		// A click goes, exactly like enter on the selected row. A click on a
-		// group heading selects nothing and so does nothing.
 		if rows := m.inboxRows(); row.Idx < 0 || row.Idx >= len(rows) || rows[row.Idx].item == nil {
 			return nil
 		}
@@ -455,8 +387,6 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case overlayKindBuffers:
 		return m.BufferChooserActivate(row.Idx)
 	case overlayKindTransfers:
-		// A click puts the cursor on the copy; a copy that waits for an
-		// answer opens its question.
 		m.TransfersSelect(row.Idx)
 		if r, ok := m.selectedTransfer(); ok && r.State == "conflict" {
 			m.TransfersAnswer()
@@ -468,12 +398,9 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 	case overlayKindIntegrationAsk:
 		return m.IntegrationAskActivate(row.Idx)
 	case "navigator":
-		// A click on a session or a workspace row folds it, and a click on
-		// a pane goes to it, as enter does.
 		m.NavigatorSelect(row.Idx)
 		if !m.NavigatorClickFolds(row.Idx) {
 			m.NavigatorActivate(row.Idx)
-			// A session on another machine opens off the Update goroutine.
 			return m.TakeSidebarCmd()
 		}
 	case "quit":
@@ -488,16 +415,12 @@ func (m *OS) overlayRowClick(kind string, row overlayRowHit, lx, ly int) tea.Cmd
 		m.filePrompt.List.Cursor = row.Idx
 		return m.FileConfirmActivate(row.Idx)
 	case overlayKindLogs:
-		// A click opens the entry in full, exactly like enter on it.
 		m.logList.Cursor = row.Idx
 		m.LogViewerOpenSelected()
 	}
 	return nil
 }
 
-// settingsControlSpanContains reports whether panel-relative (lx, ly) falls on
-// a settings row's control area: the whole span from the left stepper arrow to
-// the right one, so the value between them is clickable, not only the arrows.
 func settingsControlSpanContains(row overlayRowHit, lx, ly int) bool {
 	left := row.Inc
 	if !row.Dec.Empty() {
@@ -509,8 +432,6 @@ func settingsControlSpanContains(row overlayRowHit, lx, ly int) bool {
 	return ly >= left.Y0 && ly < left.Y1 && lx >= left.X0 && lx < row.Inc.X1
 }
 
-// layoutPickerActivate applies the layout at the given index of the filtered
-// picker list and closes the picker, mirroring its Enter binding.
 func (m *OS) layoutPickerActivate(idx int) {
 	filtered := m.layoutPickerRows()
 	if idx < 0 || idx >= len(filtered) {
@@ -522,11 +443,8 @@ func (m *OS) layoutPickerActivate(idx int) {
 	m.CloseLayoutPicker()
 }
 
-// closeOverlay dismisses a specific floating overlay by kind.
 func (m *OS) closeOverlay(kind string) {
 	if p := listPickerOfKind(kind); p != nil {
-		// A click away has nowhere to return a command; the save a cancel
-		// returns is the same file the next save writes.
 		_ = p.close(m)
 		return
 	}
@@ -542,11 +460,8 @@ func (m *OS) closeOverlay(kind string) {
 	case "keybinds":
 		m.CloseKeybindManager()
 	case "dockeditor":
-		// Click-away closes and keeps, matching Esc: the layout is already
-		// applied and saved.
 		m.CloseDockEditor()
 	case "sectioneditor":
-		// Click-away closes and keeps, for the same reason.
 		m.CloseSectionEditor()
 	case "agentmail":
 		m.CloseAgentMail()
@@ -559,39 +474,26 @@ func (m *OS) closeOverlay(kind string) {
 	case overlayKindCopyDialog:
 		m.CloseCopyDialog()
 	case overlayKindPluginApproval:
-		// Click-away is not now: the plugin keeps waiting.
 		m.ClosePluginApproval()
 	case overlayKindIntegrationAsk:
-		// Click-away is not now: nothing is written.
 		m.CloseIntegrationAsk()
 	case "worktreeprompt":
-		// Click-away cancels, matching Esc: nothing was asked yet, so nothing
-		// is lost.
 		m.WorktreePromptCancel()
 	case "navigator":
 		m.CloseNavigator()
 	case overlayKindShot:
-		// Click-away keeps the file. Only esc discards, because a click that
-		// lands outside a panel is as often a miss as an intention, and a
-		// deleted screenshot cannot be got back.
 		m.CloseScreenshotPreview(false)
 	case "accent":
 		m.CloseAccentPicker()
 	case "quit":
 		m.CloseQuitMenu()
 	case "sessionclose":
-		// Click-away cancels, like esc. Dismissing is the safe answer, so it is
-		// the one an ambiguous gesture gets.
 		m.CloseSessionClose()
 	case overlayKindRestart:
-		// The same rule. A failure that left no daemon is the exception:
-		// CloseDaemonRestart quits then, and an ambiguous gesture must not.
 		if !(m.restart.phase == restartFailed && m.restart.lost) {
 			_ = m.CloseDaemonRestart()
 		}
 	case "filedialog":
-		// Same rule, and it matters more here: the ambiguous gesture must never
-		// be the one that removes a file.
 		m.FilePromptCancel()
 	case overlayKindLogs:
 		m.CloseLogViewer()

@@ -32,9 +32,6 @@ func TestWindowExitFloodKeepsTheReadLoopAlive(t *testing.T) {
 		}
 	}
 
-	// The precondition this test exists for: more exits in flight than the
-	// channel holds. Without it a pass would only prove the flood never
-	// happened.
 	rigWaitUntil(t, "the window-exit channel to fill", func() bool {
 		return len(r.m.WindowExitChan) == cap(r.m.WindowExitChan)
 	})
@@ -42,8 +39,6 @@ func TestWindowExitFloodKeepsTheReadLoopAlive(t *testing.T) {
 		t.Fatalf("vacuous: %d exits fit in a channel of %d", len(doomed), cap(r.m.WindowExitChan))
 	}
 
-	// A round trip is the honest liveness probe: it is answered by the read
-	// loop, so it comes back only if the read loop is still reading.
 	type reply struct {
 		state *session.TerminalState
 		err   error
@@ -63,9 +58,6 @@ func TestWindowExitFloodKeepsTheReadLoopAlive(t *testing.T) {
 			len(doomed), cap(r.m.WindowExitChan))
 	}
 
-	// Nothing may be dropped either: an unreported exit is a pane that stays on
-	// screen forever, because a daemon-backed window has no ProcessExited
-	// backstop for the maintenance tick to find.
 	seen := make(map[string]bool, len(doomed))
 	deadline := time.After(10 * time.Second)
 	for len(seen) < len(doomed) {

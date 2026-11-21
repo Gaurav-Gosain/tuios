@@ -43,7 +43,6 @@ func TestHelpDocumentsTheRailScope(t *testing.T) {
 		case action == "new_session" || action == "new_window":
 			continue
 		case strings.HasPrefix(action, "jump_"):
-			// Listed as one range row rather than nine rows of the same sentence.
 			continue
 		}
 		covered := false

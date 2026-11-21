@@ -8,9 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// ratioClient is a client with nothing on screen: these cases are about which
-// number a workspace switch lands on and where that number came from, not about
-// where any pane ends up.
 func ratioClient(t *testing.T) *OS {
 	t.Helper()
 	return &OS{
@@ -18,7 +15,7 @@ func ratioClient(t *testing.T) *OS {
 		SharedBorders:        config.Global.SharedBorders,
 		PaneGap:              config.Global.PaneGap,
 		AutoTiling:           true,
-		UseBSPLayout:         false, // master-stack: the mode MasterRatio drives
+		UseBSPLayout:         false,
 		WorkspaceLayouts:     map[int][]WindowLayout{},
 		WorkspaceMasterRatio: map[int]float64{},
 		WorkspaceHasCustom:   map[int]bool{},
@@ -51,7 +48,6 @@ func TestATunedMasterRatioReachesAClientThatNeverVisitedTheWorkspace(t *testing.
 	a := ratioClient(t)
 	b := ratioClient(t)
 
-	// A goes to workspace 3, tunes the split to 0.7 and leaves.
 	a.CurrentWorkspace = 3
 	a.MasterRatio = 0.7
 	a.SaveCurrentLayout()
@@ -61,7 +57,6 @@ func TestATunedMasterRatioReachesAClientThatNeverVisitedTheWorkspace(t *testing.
 		t.Fatalf("A pushed %v for workspace 3, want the 0.7 it tuned", got)
 	}
 
-	// B has never been to workspace 3. It adopts the session.
 	if err := b.RestoreFromState(pushed); err != nil {
 		t.Fatalf("RestoreFromState: %v", err)
 	}
@@ -69,12 +64,10 @@ func TestATunedMasterRatioReachesAClientThatNeverVisitedTheWorkspace(t *testing.
 		t.Fatalf("B holds %v for workspace 3 after adopting the session, want 0.7", got)
 	}
 
-	// B's own push must carry A's value rather than replacing it with B's config.
 	if got := b.BuildSessionState().WorkspaceMasterRatio[3]; got != 0.7 {
 		t.Errorf("B pushed %v for workspace 3, want A's 0.7: B is overwriting a ratio it never touched", got)
 	}
 
-	// And B's first visit lands on A's ratio.
 	b.CurrentWorkspace = 1
 	b.RestoreWorkspaceLayout(3)
 	if b.MasterRatio != 0.7 {
@@ -94,7 +87,7 @@ func TestTheTunedWorkspaceOnScreenIsPushedBeforeItIsLeft(t *testing.T) {
 	a.CurrentWorkspace = 2
 	a.MasterRatio = 0.5
 	a.SaveCurrentLayout()
-	a.MasterRatio = 0.8 // tuned with the resize keys, still on workspace 2
+	a.MasterRatio = 0.8
 
 	if got := a.BuildSessionState().WorkspaceMasterRatio[2]; got != 0.8 {
 		t.Errorf("the push carries %v for the workspace on screen, want the 0.8 in force", got)

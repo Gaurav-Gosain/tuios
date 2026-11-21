@@ -6,21 +6,6 @@ import (
 	"unicode/utf8"
 )
 
-// The emulator keeps a link's address percent-encoded outside printable ASCII
-// (vt.LinkURI), which is what the host terminal and the opener get. A label
-// that showed that form would name https://example.com/%E6%96%87%E6%A1%A3
-// where the program wrote https://example.com/文档. linkDisplayAddress is the
-// form the hover label shows, and only the label.
-//
-// The two parts are treated differently on purpose. The host is what a user
-// reads to decide whether to trust a link, and a non-ASCII host can imitate
-// another one with a look-alike letter, so it is shown in its punycode form
-// (xn--...), whether it arrived encoded or raw. The path is decoded, but only
-// into printable characters past ASCII: an escaped "/", "?" or "#" would change
-// what the address appears to be, and an escaped control or bidi character
-// could reorder or hide the text around it, so those stay escaped.
-
-// linkDisplayAddress returns raw as the hover label shows it.
 func linkDisplayAddress(raw string) string {
 	scheme, rest, ok := strings.Cut(raw, "://")
 	if !ok || scheme == "" {
@@ -38,8 +23,6 @@ func linkDisplayAddress(raw string) string {
 	return scheme + "://" + displayAuthority(authority) + decodeForDisplay(tail[:pathEnd]) + tail[pathEnd:]
 }
 
-// displayAuthority returns an authority with its host in punycode. The user
-// info and the port, when present, are left as they are.
 func displayAuthority(a string) string {
 	userinfo := ""
 	if i := strings.LastIndexByte(a, '@'); i >= 0 {
@@ -69,8 +52,6 @@ func displayAuthority(a string) string {
 	return userinfo + strings.Join(labels, ".") + port
 }
 
-// decodeForDisplay decodes the percent escapes in s that spell a printable
-// character past ASCII, and keeps every other escape as it is.
 func decodeForDisplay(s string) string {
 	if !strings.Contains(s, "%") {
 		return s
@@ -83,7 +64,6 @@ func decodeForDisplay(s string) string {
 			i++
 			continue
 		}
-		// The run of escapes from i, decoded.
 		j, raw := i, []byte(nil)
 		for j+2 < len(s) && s[j] == '%' && isHex(s[j+1]) && isHex(s[j+2]) {
 			raw = append(raw, unhex(s[j+1])<<4|unhex(s[j+2]))
@@ -94,8 +74,6 @@ func decodeForDisplay(s string) string {
 			i++
 			continue
 		}
-		// Each decoded rune is shown when it is printable and past ASCII, and
-		// its escapes are kept otherwise.
 		at := i
 		for len(raw) > 0 {
 			r, size := utf8.DecodeRune(raw)
@@ -112,7 +90,6 @@ func decodeForDisplay(s string) string {
 	return b.String()
 }
 
-// percentDecode decodes every well-formed escape in s.
 func percentDecode(s string) string {
 	if !strings.Contains(s, "%") {
 		return s
@@ -152,8 +129,6 @@ func asciiOnly(s string) bool {
 	return true
 }
 
-// punycodeEncode is RFC 3492 section 6.3 for one label. It reports false when
-// the label overflows, which no real label does.
 func punycodeEncode(label string) (string, bool) {
 	const (
 		base        = 36

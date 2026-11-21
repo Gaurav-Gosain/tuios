@@ -13,7 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// watchTempConfig points the hub at a file of the test's own and returns it.
 func watchTempConfig(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.toml")
@@ -104,9 +103,6 @@ func TestConfigEditReachesEverySession(t *testing.T) {
 	}
 
 	for i, o := range models {
-		// Applying it re-arms the listener, so the next edit is heard too. The
-		// command Update returns is run the way the runtime runs it, and one of
-		// the messages it produces has to be the second edit.
 		_, cmd := o.Update(first[i])
 		if cmd == nil {
 			t.Fatalf("session %d applied the reload and armed no listener for the next", i)
@@ -128,8 +124,6 @@ func TestConfigEditReachesEverySession(t *testing.T) {
 				if r, ok := w.msg.(ConfigReloadedMsg); ok && r.Config != nil && r.Config.Appearance.ScrollLines == 8+i {
 					break wait
 				}
-				// An earlier edit this session had queued. The runtime would
-				// apply it and re-arm, so do the same and keep waiting.
 				_, next := o.Update(w)
 				runCmd(next, heard)
 			case <-deadline:
@@ -139,8 +133,6 @@ func TestConfigEditReachesEverySession(t *testing.T) {
 	}
 }
 
-// runCmd runs a command the way the runtime does, batches included, and
-// delivers what it produces on out.
 func runCmd(cmd tea.Cmd, out chan<- tea.Msg) {
 	if cmd == nil {
 		return
@@ -176,8 +168,6 @@ func TestLastSessionOutStopsTheWatcher(t *testing.T) {
 	}
 }
 
-// chanClosed reports whether a subscription's channel was closed. An open one
-// has nothing to read and says so at once.
 func chanClosed(ch <-chan tea.Msg) bool {
 	select {
 	case _, ok := <-ch:

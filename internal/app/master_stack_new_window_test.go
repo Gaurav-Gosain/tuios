@@ -32,7 +32,6 @@ func TestNewPaneKeepsTheMasterStackLayout(t *testing.T) {
 				t.Fatalf("layout mode is %q, want %q", got, LayoutModeMasterStack)
 			}
 			created := boxes(m)
-			// What master-stack places for these panes, asked for directly.
 			m.TileAllWindows()
 			m.CompleteAllAnimations()
 			if want := boxes(m); fmt.Sprint(created) != fmt.Sprint(want) {

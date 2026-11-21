@@ -9,25 +9,10 @@ import (
 	"testing"
 )
 
-// These run against a real temporary directory, made per test and removed with
-// it. Nothing here touches a path outside t.TempDir().
-//
-// The awkward name below is the whole of the "no shell" claim, checked rather
-// than asserted: a file called `a b"c';$(touch pwned)\n` is created, renamed,
-// copied, moved, trashed and deleted, and after each one the directory is read
-// back to prove that exactly the names that were asked for exist and nothing
-// called "pwned" ever appeared.
-
-// awkwardName holds a space, both quotes, a semicolon, a command substitution,
-// a backtick, a newline and a leading dash.
 const awkwardName = "-a b\"c';$(touch pwned)`id`\nx.txt"
 
-// shellBaitName is the same idea without the quotes that would break a shell
-// before it got to the interesting part. A shell handed this one runs three
-// commands. Nothing here hands it to one.
 const shellBaitName = "pwn $(touch pwned) `touch pwned2` ;touch pwned3.txt"
 
-// mustWrite makes a file with content, failing the test if it cannot.
 func mustWrite(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -35,7 +20,6 @@ func mustWrite(t *testing.T, path, content string) {
 	}
 }
 
-// namesIn is the sorted set of names directly in dir.
 func namesIn(t *testing.T, dir string) []string {
 	t.Helper()
 	entries, err := os.ReadDir(dir)
@@ -87,16 +71,12 @@ func TestCreatePathRefusesAnExistingName(t *testing.T) {
 		t.Errorf("the existing file was changed: %q %v", body, err)
 	}
 
-	// A folder is the case the check has to catch on its own: MkdirAll is happy
-	// to be handed a folder that is already there and says nothing, so a create
-	// that leant on it would report success for a folder it did not make.
 	if err := os.Mkdir(filepath.Join(dir, "build"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if what, err := createPath(dir, "build/"); err == nil {
 		t.Errorf("creating a folder that already exists reported %q", what)
 	}
-	// And a name that is a folder must not be reported as a new file.
 	if what, err := createPath(dir, "build"); err == nil {
 		t.Errorf("creating a file over an existing folder reported %q", what)
 	}
@@ -121,7 +101,6 @@ func TestAnAwkwardNameIsInert(t *testing.T) {
 		t.Fatalf("src holds %q, want exactly [%q]", got, awkwardName)
 	}
 
-	// Copy it next door, then move the copy back with a second name.
 	if _, _, err := pastePaths(dst, fileClipboard{Paths: []string{filepath.Join(src, awkwardName)}}); err != nil {
 		t.Fatalf("copying the awkward name: %v", err)
 	}
@@ -144,8 +123,6 @@ func TestAnAwkwardNameIsInert(t *testing.T) {
 		t.Fatalf("dst still holds %q after a delete", got)
 	}
 
-	// The name asks a shell to make a file called "pwned" three separate ways.
-	// Nothing here runs a shell, so nothing anywhere grew one.
 	for _, d := range []string{dir, src, dst} {
 		if _, err := os.Lstat(filepath.Join(d, "pwned")); err == nil {
 			t.Fatalf("a name was interpreted: %q appeared in %q", "pwned", d)
@@ -175,8 +152,6 @@ func TestAShellBaitNameIsNotRun(t *testing.T) {
 		t.Fatalf("the folder holds %q, want exactly [%q]", got, shellBaitName)
 	}
 
-	// And through the rest of the set, so no single operation is the one that
-	// reaches for a shell.
 	if _, err := renameEntry(dir, shellBaitName, shellBaitName+" 2"); err != nil {
 		t.Fatalf("renaming the bait name: %v", err)
 	}
@@ -193,8 +168,6 @@ func TestAShellBaitNameIsNotRun(t *testing.T) {
 	}
 }
 
-// trashPathsPermanentForTest is deletePaths for one path, named so the call
-// above reads as what it is.
 func trashPathsPermanentForTest(path string) (int, error) { return deletePaths([]string{path}) }
 
 func TestRenameEntryRefusesAnExistingDestination(t *testing.T) {
@@ -233,8 +206,6 @@ func TestRenameEntryOnAVanishedTargetSaysSo(t *testing.T) {
 		t.Error("a failed rename created the destination anyway")
 	}
 
-	// And it stays "gone" when the destination name is taken: the source is
-	// what the user pointed at, so the source is what the message is about.
 	mustWrite(t, filepath.Join(dir, "taken.txt"), "taken")
 	_, err = renameEntry(dir, "never-existed.txt", "taken.txt")
 	if !errors.Is(err, fs.ErrNotExist) {
@@ -326,7 +297,6 @@ func TestPasteRefusesAFolderIntoItself(t *testing.T) {
 			t.Errorf("pasting into itself reported %d done", done)
 		}
 	}
-	// Nothing recursed: the tree still holds exactly what it did.
 	if got := namesIn(t, tree); len(got) != 2 {
 		t.Errorf("the tree grew under a refused paste: %q", got)
 	}

@@ -15,42 +15,19 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// Drawing the review overlay: one frame over the whole screen, a header line,
-// the file list beside the diff of the file under it, and a footer of the keys
-// that do something where the cursor is. Only the rows on screen are drawn.
-//
-// Everything in the diff and in a note is someone else's text: the
-// repository's, or whoever wrote the note. It is drawn through printableRune,
-// so a control character in a file cannot move the cursor or restyle the
-// screen, and tabs are laid out as spaces.
-//
-// The diff itself is drawn by internal/diffview: line numbers, the code
-// coloured by its file type, added and removed lines on tinted grounds and
-// the changed part of a changed line marked, one column or the two sides
-// next to each other (s). Every cell of the overlay carries a background, so
-// nothing of the desktop or the host terminal shows through it. See
-// review_look.go for where the colours come from.
-
-// reviewMinW and reviewMinH are the smallest screen the overlay lays out on.
-// On a smaller one it says so and esc still closes it.
 const (
 	reviewMinW = 48
 	reviewMinH = 10
 )
 
-// reviewListMin is the file list's narrowest width, and reviewListShare the
-// largest share of the frame it takes, in percent.
 const (
 	reviewListMin   = 16
 	reviewListShare = 35
 )
 
-// reviewRowKind is what one row of the diff column is.
 type reviewRowKind int
 
 const (
-	// reviewRowInfo is a line of words: a placeholder for a file with no
-	// text to show, or the empty diff.
 	reviewRowInfo reviewRowKind = iota
 	reviewRowHunk
 	reviewRowLine
@@ -58,31 +35,20 @@ const (
 	reviewRowEditor
 )
 
-// reviewRow is one row of the diff column.
 type reviewRow struct {
-	kind reviewRowKind
-	// hunk and line locate a hunk or line row in the file; hunk is also the
-	// hunk a note row sits in, -1 outside every hunk. In the split layout a
-	// row can hold two lines: line is the new side's when it has one, and
-	// other the removed line beside it, -1 when there is none.
+	kind              reviewRowKind
 	hunk, line, other int
-	// note is the index in reviewState.notes of a note row, -1 otherwise.
-	note int
-	// text is an info row's words, or one wrapped line of a note.
-	text string
-	// first marks a note's first row.
-	first bool
+	note              int
+	text              string
+	first             bool
 }
 
-// reviewSeg is a run of text in one colour.
 type reviewSeg struct {
 	fg   color.Color
 	text string
 	bold bool
 }
 
-// reviewPaint draws segments into exactly width cells over bg (nil for the
-// terminal's own), cutting the last one with an ellipsis when they do not fit.
 func reviewPaint(segs []reviewSeg, width int, bg color.Color) string {
 	if width <= 0 {
 		return ""
@@ -114,13 +80,6 @@ func reviewPaint(segs []reviewSeg, width int, bg color.Color) string {
 	return b.String()
 }
 
-// reviewSGR is the bytes lipgloss renders for text in bold, fg and bg, without
-// the style machinery: bold, then the foreground, then the background, each
-// only when set. A nil colour and lipgloss.NoColor{} are left out, as lipgloss
-// leaves them out (ansi.Style would write NoColor as black); a
-// *lipgloss.NoColor is written, as lipgloss writes it. Text holding a tab, a
-// carriage return or a newline goes through lipgloss, which lays those out
-// where an SGR would not.
 func reviewSGR(fg, bg color.Color, bold bool, text string) string {
 	if strings.ContainsAny(text, "\t\r\n") {
 		s := lipgloss.NewStyle().Foreground(fg).Bold(bold)
@@ -142,7 +101,6 @@ func reviewSGR(fg, bg color.Color, bold bool, text string) string {
 	return st.Styled(text)
 }
 
-// reviewSpaces is n blank cells on bg.
 func reviewSpaces(n int, bg color.Color) string {
 	if n <= 0 {
 		return ""
@@ -150,13 +108,10 @@ func reviewSpaces(n int, bg color.Color) string {
 	return lipgloss.NewStyle().Background(bg).Render(strings.Repeat(" ", n))
 }
 
-// reviewInk is text in fg on bg.
 func reviewInk(text string, fg, bg color.Color) string {
 	return lipgloss.NewStyle().Foreground(fg).Background(bg).Render(text)
 }
 
-// reviewText is a line of a file or a note as the overlay draws it: tabs as
-// spaces, and nothing that is not printable.
 func reviewText(s string) string {
 	s = strings.ReplaceAll(s, "\t", "    ")
 	ascii := overlay.UseASCII()
@@ -170,7 +125,6 @@ func reviewText(s string) string {
 	return b.String()
 }
 
-// reviewBar is the mark down the left of a note.
 func reviewBar() string {
 	if overlay.UseASCII() {
 		return ">"
@@ -178,8 +132,6 @@ func reviewBar() string {
 	return "▌"
 }
 
-// reviewLayout is how the screen is split: the frame's size, the file list's
-// width, the diff column's width and how many rows the panes have.
 func (m *OS) reviewLayout() (w, h, listW, diffW, paneH int) {
 	w, h = m.GetRenderWidth(), m.GetRenderHeight()
 	inner := w - 2
@@ -190,20 +142,16 @@ func (m *OS) reviewLayout() (w, h, listW, diffW, paneH int) {
 		}
 	}
 	listW = min(max(widest, reviewListMin), inner*reviewListShare/100)
-	// A space either side of the list and of the diff, and the rule between.
 	diffW = inner - listW - 5
 	paneH = h - 6
 	return
 }
 
-// reviewRowsWidth is the diff column's width, which the keys lay the rows out
-// at so they move over what is on screen.
 func (m *OS) reviewRowsWidth() int {
 	_, _, _, diffW, _ := m.reviewLayout()
 	return max(diffW, 1)
 }
 
-// reviewFileCounts is the right side of a file list row.
 func reviewFileCounts(r reviewState, e reviewFileEntry) string {
 	if e.file == nil {
 		n := 0
@@ -223,7 +171,6 @@ func reviewFileCounts(r reviewState, e reviewFileEntry) string {
 	return "+" + strconv.Itoa(e.file.Added) + " -" + strconv.Itoa(e.file.Removed)
 }
 
-// reviewAuthor names who wrote a note, for a note not written by the person.
 func reviewAuthor(by string) string {
 	switch {
 	case by == "shell":
@@ -235,8 +182,6 @@ func reviewAuthor(by string) string {
 	}
 }
 
-// reviewNoteLines is a note laid out in width cells: what it is on and who
-// wrote it, then its text, wrapped.
 func reviewNoteLines(n review.Note, placed bool, width int, now time.Time) []string {
 	label := "note"
 	switch {
@@ -264,8 +209,6 @@ func reviewNoteLines(n review.Note, placed bool, width int, now time.Time) []str
 	return strings.Split(ansi.Wrap(text, width, ""), "\n")
 }
 
-// reviewNumW is the width of a line number in a file's diff: its largest
-// number's, and never less than three.
 func reviewNumW(f *review.File) int {
 	numW := 3
 	if f == nil {
@@ -277,14 +220,8 @@ func reviewNumW(f *review.File) int {
 	return numW
 }
 
-// reviewSplitMinCode is the fewest cells of code each side gets in the split
-// layout. Narrower than that, the two sides would show too little of a line
-// to compare, and the diff stays in one column.
 const reviewSplitMinCode = 24
 
-// reviewSplitFits reports whether a file's two sides fit next to each other
-// in width cells: the cursor mark, then on each side a line number, the
-// sign and the code, with a rule between the sides.
 func reviewSplitFits(f *review.File, width int) bool {
 	if f == nil || len(f.Hunks) == 0 {
 		return false
@@ -292,16 +229,11 @@ func reviewSplitFits(f *review.File, width int) bool {
 	return width >= 2+2*(reviewNumW(f)+1+diffview.SignWidth+reviewSplitMinCode)
 }
 
-// reviewSplitOn reports whether the current file is drawn side by side at
-// width cells: asked for, and wide enough.
 func (m *OS) reviewSplitOn(width int) bool {
 	e := m.review.currentFile()
 	return m.review.split && e != nil && reviewSplitFits(e.file, width)
 }
 
-// reviewNoteIndent is how many cells come before a note's bar: the cursor
-// mark and the line number columns, so a note sits under the code of the
-// line it is on.
 func reviewNoteIndent(f *review.File, split bool) int {
 	if f == nil || len(f.Hunks) == 0 {
 		return 1
@@ -312,12 +244,6 @@ func reviewNoteIndent(f *review.File, split bool) int {
 	return 1 + 2*(reviewNumW(f)+1)
 }
 
-// reviewRows lays out the current file's diff column at width cells: notes
-// the diff no longer holds first, then each hunk with its lines, a note on a
-// line under that line, and a note on a hunk under its last line. The note
-// editor takes the place of the note it edits, or sits where the new note
-// will. In the split layout a removed line and the added line that replaced
-// it share a row, and the notes on either sit under it.
 func (m *OS) reviewRows(width int) []reviewRow {
 	r := &m.review
 	e := r.currentFile()
@@ -352,8 +278,6 @@ func (m *OS) reviewRows(width int) []reviewRow {
 		}
 	}
 
-	// One row per hunk and per line, plus the info row and a few per note,
-	// so a file of thousands of lines is laid out without regrowing.
 	size := 1 + 2*len(atLine) + 2*len(atHunk) + 2*len(loose)
 	if e.file != nil {
 		for _, hunk := range e.file.Hunks {
@@ -392,8 +316,6 @@ func (m *OS) reviewRows(width int) []reviewRow {
 	if e.file == nil {
 		return rows
 	}
-	// line adds the row of one line, or of a pair of lines side by side,
-	// with the notes on each and the editor of a new note on either.
 	line := func(h, l, other int) {
 		rows = append(rows, reviewRow{kind: reviewRowLine, hunk: h, line: l, other: other, note: -1})
 		for _, at := range []int{other, l} {
@@ -436,7 +358,6 @@ func (m *OS) reviewRows(width int) []reviewRow {
 	return rows
 }
 
-// reviewStatusWord says a file's status in words.
 func reviewStatusWord(status string) string {
 	switch status {
 	case review.StatusAdded:
@@ -451,9 +372,6 @@ func reviewStatusWord(status string) string {
 	return "modified"
 }
 
-// reviewPlace finds where a note sits in a file's diff: the hunk, and the
-// line in it, -1 for a note on the whole hunk. hunk is -1 when the diff does
-// not hold the note's line.
 func reviewPlace(f *review.File, n review.Note) (hunk, line int) {
 	if n.IsHunk() {
 		for h, hk := range f.Hunks {
@@ -486,8 +404,6 @@ func reviewPlace(f *review.File, n review.Note) (hunk, line int) {
 	return -1, -1
 }
 
-// reviewFrame draws a frame of w by h cells around body, which holds h-2
-// rows of w-2 cells, on bg. A title goes into the top edge.
 func reviewFrame(w, h int, title string, body []string, border, bg color.Color) string {
 	tl, tr, bl, br, hz, vt := "╭", "╮", "╰", "╯", "─", "│"
 	lj, rj := "├", "┤"
@@ -513,8 +429,6 @@ func reviewFrame(w, h int, title string, body []string, border, bg color.Color) 
 		if i < len(body) {
 			row = body[i]
 		}
-		// A rule across the whole frame meets the sides, rather than stopping
-		// half a cell short of them on each end.
 		l, r := vt, vt
 		if inner > 0 && ansi.Strip(row) == strings.Repeat(hz, inner) {
 			l, r = lj, rj
@@ -525,9 +439,6 @@ func reviewFrame(w, h int, title string, body []string, border, bg color.Color) 
 	return strings.Join(lines, "\n")
 }
 
-// reviewHintParts returns one rendered string per hint, keys bright and labels
-// muted on the overlay's ground, with the Enter glyph mapped and no joins, so
-// reviewHints can measure each hint and reviewHintStrip can join them.
 func reviewHintParts(hints []overlay.Hint, pal overlay.Palette) []string {
 	key := lipgloss.NewStyle().Foreground(pal.AccentBright).Background(pal.Surface).Bold(true)
 	label := lipgloss.NewStyle().Foreground(pal.FgDim).Background(pal.Surface)
@@ -542,18 +453,10 @@ func reviewHintParts(hints []overlay.Hint, pal overlay.Palette) []string {
 	return parts
 }
 
-// reviewHintStrip draws key hints the way every footer does, joining the
-// hints of reviewHintParts with two spaces on the overlay's ground.
 func reviewHintStrip(hints []overlay.Hint, pal overlay.Palette) string {
 	return strings.Join(reviewHintParts(hints, pal), reviewSpaces(2, pal.Surface))
 }
 
-// reviewHints draws key hints in width cells: as many as fit, in order, with
-// the last one always shown. A cell of margin is kept on both sides; with it
-// on the left only, a strip that fitted to the cell ran into the frame's
-// right edge. Each hint is rendered once and fitted by the width of its own
-// render, so the strip is the one reviewHintStrip would draw for the hints
-// that fit.
 func reviewHints(hints []overlay.Hint, width int, pal overlay.Palette) string {
 	if len(hints) == 0 {
 		return reviewSpaces(width, pal.Surface)
@@ -561,7 +464,6 @@ func reviewHints(hints []overlay.Hint, width int, pal overlay.Palette) string {
 	parts := reviewHintParts(hints, pal)
 	n := len(parts) - 1
 	room := width - 2 - ansi.StringWidth(parts[n])
-	// used is the width of the hints kept so far with their joins.
 	used := 0
 	keep := make([]string, 0, len(parts))
 	for _, p := range parts[:n] {
@@ -581,8 +483,6 @@ func reviewHints(hints []overlay.Hint, width int, pal overlay.Palette) string {
 	return strip + reviewSpaces(width-ansi.StringWidth(strip), pal.Surface)
 }
 
-// renderReview draws the review overlay over the whole screen, or the
-// compare view when it shows. Empty when the overlay is closed.
 func (m *OS) renderReview() string {
 	r := &m.review
 	if !r.open {
@@ -616,10 +516,6 @@ func (m *OS) renderReview() string {
 	return reviewFrame(w, h, "", body, pal.Accent, pal.Surface)
 }
 
-// reviewStatusRule is the rule above the footer, or in its place the last
-// message the review raised while it is still up: the overlay covers the dock,
-// and "queued", "kept" or a refusal would otherwise go unread until it closed.
-// Messages from anything else stay the dock's. See reviewState.statusID.
 func (m *OS) reviewStatusRule(width int, pal overlay.Palette) string {
 	for i := len(m.Notifications) - 1; i >= 0 && m.review.statusID != ""; i-- {
 		last := m.Notifications[i]
@@ -637,7 +533,6 @@ func (m *OS) reviewStatusRule(width int, pal overlay.Palette) string {
 	return reviewInk(strings.Repeat(hzGlyph(), width), pal.FgMute, pal.Surface)
 }
 
-// hzGlyph and vtGlyph are the rule glyphs, ASCII where the glyphs are.
 func hzGlyph() string {
 	if overlay.UseASCII() {
 		return "-"
@@ -652,12 +547,9 @@ func vtGlyph() string {
 	return "│"
 }
 
-// reviewHeader is the top line: whose changes, how many, against what, and
-// how many notes.
 func (m *OS) reviewHeader(pal overlay.Palette) []reviewSeg {
 	r := &m.review
 	d := r.diff
-	// The session, then the pane when it is named otherwise: "api-2  claude".
 	name, pane := r.who, ""
 	if d != nil && d.Session != "" {
 		name = d.Session
@@ -700,7 +592,6 @@ func (m *OS) reviewHeader(pal overlay.Palette) []reviewSeg {
 	return segs
 }
 
-// reviewListLines draws the file list, paneH rows of width cells.
 func (m *OS) reviewListLines(width, paneH int, pal overlay.Palette) []string {
 	r := &m.review
 	out := make([]string, paneH)
@@ -722,8 +613,6 @@ func (m *OS) reviewListLines(width, paneH int, pal overlay.Palette) []string {
 			status = e.file.Status
 		}
 		counts := reviewFileCounts(*r, e)
-		// The file under the cursor keeps a quiet ground while the diff has
-		// the keyboard, so the list still says which file the diff is.
 		st := overlay.RowState{Cursor: idx == r.file, Focused: r.listFocus}
 		mark := " "
 		bg := pal.Ground(st, pal.Surface)
@@ -750,20 +639,14 @@ func (m *OS) reviewListLines(width, paneH int, pal overlay.Palette) []string {
 	return out
 }
 
-// reviewListPathWidth is the room a list row of width cells has for its path.
 func reviewListPathWidth(width int, counts string) int {
 	return max(width-4-ansi.StringWidth(counts), 1)
 }
 
-// reviewPathOverflow is how many cells of e's path a list of width cells
-// cuts off.
 func reviewPathOverflow(r reviewState, e reviewFileEntry, width int) int {
 	return max(ansi.StringWidth(reviewText(e.path))-reviewListPathWidth(width, reviewFileCounts(r, e)), 0)
 }
 
-// reviewListPath fits path into pathW cells. A path too long shows its end,
-// the part that tells files apart, or with back > 0 the part that many cells
-// before the end. An ellipsis marks each side that is cut.
 func reviewListPath(path string, pathW, back int) string {
 	w := ansi.StringWidth(path)
 	if w <= pathW {
@@ -788,7 +671,6 @@ func reviewListPath(path string, pathW, back int) string {
 	return head + ansi.Cut(path, start, end) + tail
 }
 
-// reviewStatusColor colours a file's status letter.
 func reviewStatusColor(status string, pal overlay.Palette) color.Color {
 	switch status {
 	case review.StatusAdded, review.StatusUntracked:
@@ -799,9 +681,6 @@ func reviewStatusColor(status string, pal overlay.Palette) color.Color {
 	return pal.Info
 }
 
-// reviewDiffLines draws the visible rows of the diff column, keeping the
-// cursor (and an open note editor) on screen. Only these rows are drawn,
-// and only their hunks are tokenised.
 func (m *OS) reviewDiffLines(width, paneH int, look *reviewLook) []string {
 	r := &m.review
 	pal := look.pal
@@ -816,7 +695,6 @@ func (m *OS) reviewDiffLines(width, paneH int, look *reviewLook) []string {
 		r.cursor = max(len(rows)-1, 0)
 	}
 	r.cursor = reviewNoteStart(rows, r.cursor)
-	// A note wrapped onto several rows is selected whole.
 	selNote := -1
 	if r.cursor < len(rows) && rows[r.cursor].kind == reviewRowNote {
 		selNote = rows[r.cursor].note
@@ -832,8 +710,6 @@ func (m *OS) reviewDiffLines(width, paneH int, look *reviewLook) []string {
 	if focus < r.scroll {
 		r.scroll = focus
 	}
-	// The notes on the cursor's line come into view with it, so a cursor
-	// moved down onto a noted line shows the note, not only the line.
 	end := focus
 	for end+1 < len(rows) && rows[end+1].kind == reviewRowNote && end+1-focus < paneH {
 		end++
@@ -875,14 +751,11 @@ func (m *OS) reviewDiffLines(width, paneH int, look *reviewLook) []string {
 			continue
 		}
 		sel := idx == r.cursor || (selNote >= 0 && rows[idx].kind == reviewRowNote && rows[idx].note == selNote)
-		// The diff's cursor stays on a quiet ground while the file list has
-		// the keyboard, so the place the diff will resume is always shown.
 		out[i] = d.row(rows[idx], overlay.RowState{Cursor: sel, Focused: !r.listFocus})
 	}
 	return out
 }
 
-// reviewDraw draws rows of one file's diff column.
 type reviewDraw struct {
 	m     *OS
 	look  *reviewLook
@@ -892,21 +765,13 @@ type reviewDraw struct {
 	split bool
 }
 
-// row draws one diff row in d.width cells, in the state st the cursor gives
-// it (see overlay.RowState).
 func (d reviewDraw) row(row reviewRow, st overlay.RowState) string {
 	if row.kind == reviewRowLine {
-		// A line row marks its cursor on the gutter only, so at 16 colours the
-		// code keeps its colours and its changed words under the cursor.
 		return d.rowBody(row, st)
 	}
 	return d.look.pal.Mark(d.rowBody(row, st), st)
 }
 
-// reviewCursorTint is the cursor's ground on a row that has a tint of its own,
-// a hunk header or a note: the accent carried into that tint, half as far for
-// the cursor of the column without the keyboard. At 16 colours the row keeps
-// its ground and the cursor is an attribute (see overlay.Palette.Mark).
 func reviewCursorTint(bg color.Color, pal overlay.Palette, st overlay.RowState) color.Color {
 	if pal.Depth == overlay.Depth16 {
 		return bg
@@ -918,7 +783,6 @@ func reviewCursorTint(bg color.Color, pal overlay.Palette, st overlay.RowState) 
 	return overlay.Shown(overlay.MixColors(bg, pal.Accent, t))
 }
 
-// rowBody is row before the 16-colour cursor attributes.
 func (d reviewDraw) rowBody(row reviewRow, st overlay.RowState) string {
 	pal, dv := d.look.pal, d.look.dv
 	cursor := st.Cursor
@@ -926,8 +790,6 @@ func (d reviewDraw) rowBody(row reviewRow, st overlay.RowState) string {
 	if cursor && st.Focused && (row.kind != reviewRowNote || row.first) {
 		mark = overlay.SigilMark()
 	}
-	// markCell is the first cell, which holds the cursor's mark on the
-	// ground of the column it starts.
 	markCell := func(bg color.Color) string {
 		return reviewInk(mark, overlay.Readable(pal.AccentBright, bg), bg)
 	}
@@ -948,9 +810,6 @@ func (d reviewDraw) rowBody(row reviewRow, st overlay.RowState) string {
 			bg = reviewCursorTint(bg, pal, st)
 		}
 		head, ctx := reviewSplitHeader(reviewText(d.file.Hunks[row.hunk].Header))
-		// How much of the hunk is in the index, from the index diffs read
-		// while the overlay is open, at the right end of the row. Words, so
-		// it reads at every depth.
 		var stage reviewSeg
 		switch d.m.review.reviewHunkMark(d.file, row.hunk) {
 		case reviewInIndex:
@@ -1007,7 +866,6 @@ func (d reviewDraw) rowBody(row reviewRow, st overlay.RowState) string {
 		if ed != nil {
 			draft = reviewText(ed.draft)
 		}
-		// The end of what is typed stays in view on a long note.
 		space := room - 2 - ansi.StringWidth(label) - 1
 		if ansi.StringWidth(draft) > space && space > 0 {
 			draft = ansi.TruncateLeft(draft, ansi.StringWidth(draft)-space, "")
@@ -1020,8 +878,6 @@ func (d reviewDraw) rowBody(row reviewRow, st overlay.RowState) string {
 	return reviewSpaces(d.width, pal.Surface)
 }
 
-// reviewSplitHeader splits a hunk header into its ranges, "@@ -1,3 +1,4 @@",
-// and the context git wrote after them.
 func reviewSplitHeader(h string) (string, string) {
 	if strings.HasPrefix(h, "@@") {
 		if i := strings.Index(h[2:], "@@"); i >= 0 {
@@ -1031,7 +887,6 @@ func reviewSplitHeader(h string) (string, string) {
 	return h, ""
 }
 
-// lineKind is the diff kind of a line.
 func lineKind(ln review.Line) diffview.Kind {
 	switch ln.Op {
 	case review.OpAdd:
@@ -1042,7 +897,6 @@ func lineKind(ln review.Line) diffview.Kind {
 	return diffview.Context
 }
 
-// code draws line l of hunk h in width cells, coloured.
 func (d reviewDraw) code(h, l int, kind diffview.Kind, cursor bool, width int) string {
 	hl := d.m.review.reviewHunk(d.file, h, l)
 	text, spans := hl.text[l], hl.spans[l]
@@ -1054,8 +908,6 @@ func (d reviewDraw) code(h, l int, kind diffview.Kind, cursor bool, width int) s
 	return d.look.dv.Code(text, spans, hl.changed[l], kind, cursor, d.m.review.xOff, width)
 }
 
-// scrolled reports whether line l of hunk h has code to the left of what
-// the sideways scroll shows.
 func (d reviewDraw) scrolled(h, l int) bool {
 	x := d.m.review.xOff
 	if x <= 0 {
@@ -1065,9 +917,6 @@ func (d reviewDraw) scrolled(h, l int) bool {
 	return strings.TrimSpace(ansi.Truncate(text, x, "")) != ""
 }
 
-// unifiedLine draws a line row in one column: both line numbers, the sign,
-// and the code. The cursor's attributes at 16 colours go on the mark and the
-// numbers only (see reviewDraw.row).
 func (d reviewDraw) unifiedLine(row reviewRow, st overlay.RowState, markCell func(color.Color) string) string {
 	dv, pal := d.look.dv, d.look.pal
 	cursor := st.Cursor
@@ -1083,8 +932,6 @@ func (d reviewDraw) unifiedLine(row reviewRow, st overlay.RowState, markCell fun
 	return lead + oldNum + newNum + sign + code
 }
 
-// splitLine draws a line row as its two sides: the old line on the left, the
-// new on the right, and an empty side where a line has no counterpart.
 func (d reviewDraw) splitLine(row reviewRow, st overlay.RowState, markCell func(color.Color) string) string {
 	dv, pal := d.look.dv, d.look.pal
 	cursor := st.Cursor
@@ -1101,9 +948,6 @@ func (d reviewDraw) splitLine(row reviewRow, st overlay.RowState, markCell func(
 	gw := d.numW + 1
 	avail := d.width - 2 - 2*(gw+diffview.SignWidth)
 	leftW := avail / 2
-	// side is one side's number column and the rest of it: its sign and
-	// code. lead goes in front of the numbers, and the cursor's attributes at
-	// 16 colours go on the two of them together.
 	side := func(lead string, l int, num func(review.Line) int, w int) string {
 		var gutter, sign, code string
 		if l < 0 {
@@ -1129,8 +973,6 @@ func (d reviewDraw) splitLine(row reviewRow, st overlay.RowState, markCell func(
 		side("", right, func(ln review.Line) int { return ln.New }, avail-leftW)
 }
 
-// reviewFooter is the key line under the panes: the editor's line while one
-// is open, the keys that do something here otherwise.
 func (m *OS) reviewFooter(width int, pal overlay.Palette) string {
 	r := &m.review
 	if ed := r.editor; ed != nil {
@@ -1145,7 +987,6 @@ func (m *OS) reviewFooter(width int, pal overlay.Palette) string {
 	return reviewHints(m.reviewKeyHints(), width, pal)
 }
 
-// reviewPromptLine draws a one-line prompt with its keys after it.
 func (m *OS) reviewPromptLine(label, draft string, hints []overlay.Hint, width int, pal overlay.Palette) string {
 	keys := reviewHintStrip(hints, pal)
 	room := max(width-2-ansi.StringWidth(label)-1-2-ansi.StringWidth(keys), 4)
@@ -1157,8 +998,6 @@ func (m *OS) reviewPromptLine(label, draft string, hints []overlay.Hint, width i
 	return line + keys + reviewSpaces(1, pal.Surface)
 }
 
-// reviewKey is the first key the config binds a review action to, for its
-// hint, or "" when it binds the action to nothing.
 func (m *OS) reviewKey(action string) string {
 	reg := m.KeybindRegistry
 	if reg == nil {
@@ -1172,8 +1011,6 @@ func (m *OS) reviewKey(action string) string {
 	return ""
 }
 
-// reviewKeyHints are the review's keys that do something where the cursor
-// is, most wanted first. The footer shows as many as fit, and always esc.
 func (m *OS) reviewKeyHints() []overlay.Hint {
 	r := &m.review
 	var hints []overlay.Hint

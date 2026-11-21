@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// writerToFile gives PostRenderWriter a real *os.File to wrap, since it embeds
-// one for the term.File interface, and returns a reader for what was written.
 func writerToFile(t *testing.T) (*PostRenderWriter, func() string) {
 	t.Helper()
 	f, err := os.CreateTemp(t.TempDir(), "prw")
@@ -54,8 +52,6 @@ func TestPostRenderWriterKeepsPostRenderDataInsideTheBracket(t *testing.T) {
 func TestPostRenderWriterDoesNotNestBrackets(t *testing.T) {
 	w, read := writerToFile(t)
 
-	// The alt-screen mode change bubbletea writes ahead of its own bracket is
-	// why this is not just a prefix check.
 	frame := "\x1b[?1049h" + string(frameSyncBegin) + "\x1b[5;1Hhello" + string(frameSyncEnd)
 	if _, err := w.Write([]byte(frame)); err != nil {
 		t.Fatalf("write: %v", err)

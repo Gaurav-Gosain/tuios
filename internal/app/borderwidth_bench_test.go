@@ -1,28 +1,5 @@
 package app
 
-// What it costs to measure a box that has already been sized.
-//
-// A profile of the flood benchmark puts ansi.StringWidth at 43.75% cumulative,
-// and one of the five passes over the content is tuios's own: addToBorder
-// opens with
-//
-//	width := max(lipgloss.Width(content)-2, 0)
-//
-// where content is the whole rendered box. lipgloss.Width walks every row
-// through a grapheme-cluster iterator to find the widest one, so a 40-row pane
-// pays 40 full-width scans of styled text, per pane, per frame, to recover a
-// number the caller already holds: the same call takes *terminal.Window, whose
-// Width is the box's width by construction.
-//
-// These two benchmarks are the same question asked twice: what the scan costs,
-// and what knowing the answer costs. The gap is the size of the saving, and
-// once the call site reads the width off the window instead, the ratio here is
-// what proves it stayed fixed.
-//
-// The call site now passes window.ContentWidth(), and
-// TestBorderBoxInnerWidthIsKnown below is the differential proof that the
-// cheap answer is the measured one.
-
 import (
 	"fmt"
 	"testing"

@@ -9,27 +9,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// A guest that streams frames over the direct medium (t=d, the payload inline
-// in the escape) and one that streams them over shared memory (t=s) are the
-// same guest as far as the pane is concerned: same bitmap, same pixel size,
-// same cell rectangle. What tuios tells the host to draw must be the same too.
-//
-// It was not. The file and shared-memory path refreshes a repeat stream's
-// placement record in full on every frame, so a pane that changed size is
-// measured again against the frame that just arrived. The direct path refreshed
-// only the position, because the bitmap behind a repeat frame is usually
-// patched rather than re-sent and the cell count was assumed to be unchanged
-// along with it. It is not: the cell count is the pane's, not the bitmap's, and
-// the pane can change under a bitmap that does not.
-//
-// The visible result is a pane that grows and an image that does not: the
-// placement keeps the column count from the smaller pane, the guest's extra
-// pixels are cropped away, and the new columns stay blank. Rows escaped it
-// because the refresh recomputes them from the image's own row count, so only
-// one axis froze, which is the shape that reads as a distorted picture.
-
-// paneRig drives one long-lived pane through frames and resizes and reports
-// everything tuios forwarded to the host for each of them.
 type paneRig struct {
 	kp       *KittyPassthrough
 	em       *vt.Emulator
@@ -75,8 +54,6 @@ func newPaneRig(t *testing.T, screenW, screenH, border int) *paneRig {
 	return r
 }
 
-// frame feeds one guest frame and runs a render cycle, returning the graphics
-// commands tuios emitted for it.
 func (r *paneRig) frame(stream []byte) []string {
 	_, _ = r.em.Write(stream)
 	info := &WindowPositionInfo{
@@ -99,9 +76,6 @@ func (r *paneRig) frame(stream []byte) []string {
 
 var graphicsParamsRE = regexp.MustCompile(`\x1b_G([^;\x1b]*)`)
 
-// graphicsCommands is the parameter list of every graphics command in a chunk
-// of host output, minus the continuation chunks of a chunked transmission,
-// which carry payload rather than instructions.
 func graphicsCommands(out []byte) []string {
 	var res []string
 	for _, m := range graphicsParamsRE.FindAllSubmatch(out, -1) {

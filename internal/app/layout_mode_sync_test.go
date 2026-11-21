@@ -33,8 +33,6 @@ func TestLayoutModeSurvivesReattach(t *testing.T) {
 				t.Fatalf("BuildSessionState LayoutMode = %q, want %q", state.LayoutMode, tc.wantMode)
 			}
 
-			// A fresh client starts on the BSP default, which is exactly why the
-			// mode has to arrive with the state rather than be assumed.
 			dst := NewOS(OSOptions{})
 			dst.Width, dst.Height = 100, 40
 			if err := dst.RestoreFromState(state); err != nil {

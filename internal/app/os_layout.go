@@ -16,7 +16,6 @@ import (
 // RebuildBSPTreeFromPositions rebuilds the BSP tree from current window positions.
 // Used after layout loading to sync the tree with the loaded positions without retiling.
 func (m *OS) RebuildBSPTreeFromPositions() {
-	// Clear existing tree and rebuild from scratch with current window order
 	delete(m.WorkspaceTrees, m.CurrentWorkspace)
 	tree := m.GetOrCreateBSPTree()
 	if tree == nil {
@@ -30,7 +29,6 @@ func (m *OS) RebuildBSPTreeFromPositions() {
 		}
 	}
 
-	// Re-add all windows to BSP tree
 	for _, w := range visibleWindows {
 		intID := m.GetWindowIntID(w.ID)
 		existingIDs := tree.GetAllWindowIDs()
@@ -41,7 +39,6 @@ func (m *OS) RebuildBSPTreeFromPositions() {
 		}
 	}
 
-	// Sync ratios from actual positions
 	windowRects := make(map[int]layout.Rect)
 	for _, w := range visibleWindows {
 		intID := m.GetWindowIntID(w.ID)
@@ -112,7 +109,6 @@ func (m *OS) FireResized(w *terminal.Window) {
 	})
 }
 
-// hookDrainTimeout bounds how long an exiting client waits for its hooks.
 const hookDrainTimeout = 2 * time.Second
 
 // FireAttached announces that this client is now driving a session, after its
@@ -141,16 +137,6 @@ func (m *OS) FireDetached() {
 	m.HookManager.WaitTimeout(hookDrainTimeout)
 }
 
-// recordWorkspaceLayoutMode pins the layout the current workspace is in. Every
-// row that names a layout calls it, so the choice belongs to the workspace that
-// was on screen when it was made and follows that workspace through switches
-// and session state.
-//
-// A scratch group is shown on a scratch workspace, and a choice made while one
-// is up is deliberately not recorded: the entry would sit under the scratch
-// workspace's number and travel to the daemon and saved state as if an ordinary
-// workspace had chosen it. The group always tiles and holds no layout choice of
-// its own.
 func (m *OS) recordWorkspaceLayoutMode() {
 	if session.IsScratchWorkspace(m.CurrentWorkspace) {
 		return
@@ -182,17 +168,6 @@ func (m *OS) ApplyLayoutModeName(name string) {
 	}
 }
 
-// adoptSessionLayoutMode migrates a session that predates the per-workspace
-// map. A state that names a mode but holds no entry for the workspace it is on
-// is one whose map predates the field: the mode it carries is the session's own,
-// so it is recorded for every workspace the state counts. Workspaces still
-// without an entry then take the mode the session was created with rather than
-// the attaching client's [startup] layout, and the mode is kept in
-// sessionLayoutMode for workspaces created after that state was built.
-//
-// Only attach and restore call it. A peer sync names whatever mode the peer
-// happens to be looking at, and letting it migrate would pin that peer's
-// current mode over every workspace that has no entry of its own.
 func (m *OS) adoptSessionLayoutMode(state *session.SessionState) {
 	if state == nil || state.LayoutMode == "" {
 		return
@@ -217,11 +192,9 @@ func (m *OS) ToggleLayoutMode() {
 	m.settleSizes(func() { m.toggleLayoutMode() })
 }
 
-// toggleLayoutMode is ToggleLayoutMode with the announcements already held.
 func (m *OS) toggleLayoutMode() {
 	m.resetTiledFlags()
 	if m.UseScrollingLayout {
-		// scrolling -> BSP
 		m.UseScrollingLayout = false
 		m.UseBSPLayout = true
 		if m.WorkspaceTrees == nil {
@@ -230,11 +203,9 @@ func (m *OS) toggleLayoutMode() {
 		m.WorkspaceTrees[m.CurrentWorkspace] = nil
 		m.ShowNotification("Layout: BSP tiling", "info", m.Settings.NotificationDuration)
 	} else if m.UseBSPLayout {
-		// BSP -> master-stack
 		m.UseBSPLayout = false
 		m.ShowNotification("Layout: master-stack", "info", m.Settings.NotificationDuration)
 	} else {
-		// master-stack -> scrolling
 		m.UseScrollingLayout = true
 		delete(m.WorkspaceScrollingLayouts, m.CurrentWorkspace)
 		m.ShowNotification("Layout: scrolling (niri)", "info", m.Settings.NotificationDuration)
@@ -249,16 +220,6 @@ func (m *OS) toggleLayoutMode() {
 	m.FireLayoutChanged()
 }
 
-// resetTiledFlags drops the cached frames of the current workspace's panes so
-// the new mode restyles them, and finishes a resize deferral still in flight so
-// the new layout is real rather than visual-only. See resize_deferral.go.
-//
-// It deliberately does not touch the Tiled flag. Every caller is a layout-mode
-// switch that goes on to place each pane, and placing a pane settles its border
-// allowance along with its rectangle. Clearing the flag here instead announced a
-// bordered box at the rectangle the pane still had, which the placement then
-// replaced: two SIGWINCHes for a switch that often left the pane exactly the
-// size it started at, and a full-screen guest repaints for each.
 func (m *OS) resetTiledFlags() {
 	m.requireRealLayout()
 
@@ -274,7 +235,6 @@ func (m *OS) EnableScrollingLayout() {
 	m.settleSizes(func() { m.enableScrollingLayout() })
 }
 
-// enableScrollingLayout is EnableScrollingLayout with the announcements already held.
 func (m *OS) enableScrollingLayout() {
 	m.resetTiledFlags()
 	m.UseScrollingLayout = true
@@ -282,7 +242,6 @@ func (m *OS) enableScrollingLayout() {
 	if !m.AutoTiling {
 		m.AutoTiling = true
 	}
-	// Clear old scrolling layout to rebuild from current windows
 	delete(m.WorkspaceScrollingLayouts, m.CurrentWorkspace)
 	m.recordWorkspaceLayoutMode()
 	m.TileAllWindows()
@@ -295,7 +254,6 @@ func (m *OS) EnableBSPLayout() {
 	m.settleSizes(func() { m.enableBSPLayout() })
 }
 
-// enableBSPLayout is EnableBSPLayout with the announcements already held.
 func (m *OS) enableBSPLayout() {
 	m.resetTiledFlags()
 	m.UseScrollingLayout = false
@@ -303,7 +261,6 @@ func (m *OS) enableBSPLayout() {
 	if !m.AutoTiling {
 		m.AutoTiling = true
 	}
-	// Clear old BSP tree to rebuild
 	if m.WorkspaceTrees == nil {
 		m.WorkspaceTrees = make(map[int]*layout.BSPTree)
 	}
@@ -319,7 +276,6 @@ func (m *OS) EnableMasterStackLayout() {
 	m.settleSizes(func() { m.enableMasterStackLayout() })
 }
 
-// enableMasterStackLayout is EnableMasterStackLayout with the announcements already held.
 func (m *OS) enableMasterStackLayout() {
 	m.resetTiledFlags()
 	m.UseScrollingLayout = false
@@ -339,8 +295,6 @@ func (m *OS) DisableAllTiling() {
 	wasOn := m.AutoTiling
 	m.SetAutoTiling(false)
 	if !wasOn {
-		// Nothing moved, but the row was chosen, and a hook on the layout
-		// hears about it the way it does for the rows that pick a layout.
 		m.FireLayoutChanged()
 	}
 	m.ShowNotification("Tiling off", "info", m.Settings.NotificationDuration)
@@ -352,8 +306,6 @@ func (m *OS) NextLayout() tea.Cmd { return m.cycleLayout(1) }
 // PrevLayout cycles to the previous saved layout template.
 func (m *OS) PrevLayout() tea.Cmd { return m.cycleLayout(-1) }
 
-// cycleLayout loads the saved layout step places from the last one cycled
-// to, from the daemon's list in a daemon session.
 func (m *OS) cycleLayout(step int) tea.Cmd {
 	return m.withLayoutTemplates(func(templates []LayoutTemplate) tea.Cmd {
 		if len(templates) == 0 {

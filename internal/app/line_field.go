@@ -8,17 +8,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
-// lineKey applies one key press to a one-line field by the rules every short
-// field shares (textedit.Line.Edit): the caret moves with the arrows, the word
-// keys delete a word, ctrl+u clears, ctrl+k cuts to the end. Typed text goes
-// through clean first, which keeps what the field may hold; a key whose text
-// clean drops entirely is spent and changes nothing. clean may be nil.
 func lineKey(l *textedit.Line, key, text string, clean func(string) string) (changed, consumed bool) {
 	return lineKeyWith(l, key, text, clean, textedit.LineOpts{AllowClear: true})
 }
 
-// lineKeyWith is lineKey with the field's options, for a field that draws a
-// selection (LineOpts.Select).
 func lineKeyWith(l *textedit.Line, key, text string, clean func(string) string, o textedit.LineOpts) (changed, consumed bool) {
 	if key == "space" {
 		text = " "
@@ -31,8 +24,6 @@ func lineKeyWith(l *textedit.Line, key, text string, clean func(string) string, 
 	return l.Edit(key, text, o)
 }
 
-// lineInsert types s at a one-line field's caret, as a paste does, after
-// clean. It reports whether the text changed.
 func lineInsert(l *textedit.Line, s string, clean func(string) string) bool {
 	if clean != nil {
 		s = clean(s)
@@ -40,9 +31,6 @@ func lineInsert(l *textedit.Line, s string, clean func(string) string) bool {
 	return l.Insert(s)
 }
 
-// cleanName is the rule for a name field: only what the chrome will draw
-// (printableRunes), and never a key press that is nothing but combining marks,
-// which has no base to sit on and would stack an accent on the caret.
 func cleanName(text string) string {
 	add := printableRunes(text)
 	if add == "" || combiningOnly(add) {
@@ -51,15 +39,10 @@ func cleanName(text string) string {
 	return add
 }
 
-// fieldRow draws a dialog's one-line field: a blank, the sigil, and the text
-// with its caret (overlay.FieldLine) in the rest of width, less one cell of
-// right pad so the caret never sits against the frame.
 func fieldRow(l *textedit.Line, width int, bg color.Color, pal overlay.Palette) string {
 	head := overlay.Style(bg).Render(" ") +
 		overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil())
 	if lo, hi, ok := l.Selection(); ok {
-		// The selection wears the palette's selection ground, the one the
-		// composer's selected text wears.
 		return head + overlay.FieldLineSelect(l.String(), l.Caret(), lo, hi, max(width-4, 1), bg, pal.Fg,
 			pal.Selected, overlay.Readable(pal.Fg, pal.Selected))
 	}
@@ -67,8 +50,6 @@ func fieldRow(l *textedit.Line, width int, bg color.Color, pal overlay.Palette) 
 	return head + overlay.FieldLine(before, at, after, max(width-4, 1), bg, pal.Fg)
 }
 
-// cleanControl drops the control characters from typed or pasted text, for a
-// field that holds an address or a path: anything printable stays.
 func cleanControl(text string) string {
 	return strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f {

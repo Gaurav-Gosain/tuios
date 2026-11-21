@@ -25,7 +25,7 @@ func TestKittyPlacementSurvivesMinimize(t *testing.T) {
 		Width:     80,
 		Height:    24,
 		Workspace: 1,
-		Tiled:     true, // BorderOffset 0
+		Tiled:     true,
 	}
 
 	const hostID uint32 = 1
@@ -39,7 +39,7 @@ func TestKittyPlacementSurvivesMinimize(t *testing.T) {
 			Cols:         5,
 			Rows:         3,
 			DisplayRows:  3,
-			Hidden:       true, // freshly transmitted; refresh places it
+			Hidden:       true,
 		},
 	}
 
@@ -52,13 +52,11 @@ func TestKittyPlacementSurvivesMinimize(t *testing.T) {
 		Windows:          []*terminal.Window{win},
 	}
 
-	// Visible: placement becomes active.
 	m.GetKittyGraphicsCmd()
 	if p := kp.placements[win.ID][imageKey(hostID)]; p == nil || p.Hidden {
 		t.Fatalf("after visible refresh: expected placed (not hidden), got %+v", p)
 	}
 
-	// Minimize the window, then refresh: hide but KEEP tracking.
 	win.Minimized = true
 	m.GetKittyGraphicsCmd()
 	p := kp.placements[win.ID][imageKey(hostID)]
@@ -69,7 +67,6 @@ func TestKittyPlacementSurvivesMinimize(t *testing.T) {
 		t.Fatal("minimized placement should be hidden")
 	}
 
-	// Restore: re-placed from surviving tracking.
 	win.Minimized = false
 	m.GetKittyGraphicsCmd()
 	if p := kp.placements[win.ID][imageKey(hostID)]; p == nil || p.Hidden {
@@ -99,7 +96,6 @@ func TestKittyPlacementSurvivesWorkspaceSwitch(t *testing.T) {
 		t.Fatal("expected placed while on current workspace")
 	}
 
-	// Switch to another workspace: window is now off-current; keep tracking.
 	m.CurrentWorkspace = 2
 	m.GetKittyGraphicsCmd()
 	if kp.placements[win.ID] == nil || kp.placements[win.ID][imageKey(hostID)] == nil {
@@ -121,7 +117,6 @@ func TestKittyPlacementDeletedWhenWindowGone(t *testing.T) {
 		imageKey(1): {HostImageID: 1, WindowID: winID, Cols: 5, Rows: 3, Hidden: false},
 	}
 
-	// No windows in the model -> the window is genuinely gone.
 	m := &OS{Settings: config.Global, Width: 80, Height: 24, CurrentWorkspace: 1, KittyPassthrough: kp}
 	m.GetKittyGraphicsCmd()
 

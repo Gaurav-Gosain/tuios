@@ -11,31 +11,14 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// Shared borders draw one line between two panes, so the focused pane cannot be
-// signalled by giving it its own border the way the non-shared mode does. These
-// tests pin the three signals that replace it: the focused window's perimeter is
-// tinted with the focus color, drawn bold, and capped with corner glyphs that
-// bend into the window that owns the divider. The corner caps are what keep two
-// side-by-side panes distinguishable, since the divider between them is the same
-// column whichever one is focused.
-
-// sharedBorderOS builds an auto-tiling model in shared-border mode holding n
-// windows, and restores the SharedBorders global when the test ends.
 func sharedBorderOS(t *testing.T, n int) *OS {
 	t.Helper()
 	originalShared, originalAnim := config.Global.SharedBorders, config.Global.Motion
 	originalStyle, originalASCII := config.Global.BorderStyle, config.Global.UseASCIIOnly
 	originalDock := config.Global.DockbarPosition
-	// The caps sit where the perimeter turns, and the dock's hairline is what a
-	// full-height divider turns on, so the dock's position is part of the shape
-	// these tests read. Other tests in this package move it.
 	config.Global.DockbarPosition = "bottom"
 	config.Global.SharedBorders = true
-	// Tiling applies geometry through an animation when animations are on, which
-	// would leave the windows at their nominal size for the duration of the test.
 	config.Global.Motion = config.MotionNone
-	// Pin the border style: other tests in this package mutate it, and the ASCII
-	// set draws every corner as "+", which would hide a difference in the caps.
 	config.Global.BorderStyle = "rounded"
 	config.Global.UseASCIIOnly = false
 	t.Cleanup(func() {
@@ -47,9 +30,7 @@ func sharedBorderOS(t *testing.T, n int) *OS {
 	})
 
 	m := &OS{
-		Settings: config.Global,
-		// The layout reads the model's session-settled geometry, seeded from
-		// the globals the way NewOS seeds it.
+		Settings:         config.Global,
 		SharedBorders:    config.Global.SharedBorders,
 		PaneGap:          config.Global.PaneGap,
 		NumWorkspaces:    9,
@@ -72,9 +53,6 @@ func sharedBorderOS(t *testing.T, n int) *OS {
 	}
 	m.TileAllWindows()
 
-	// Window.Resize is a no-op without a terminal emulator, so a bare model never
-	// picks up the tiled size. Assign the layout rects directly, which is what an
-	// emulator-backed resize would have produced.
 	tree := m.WorkspaceTrees[m.CurrentWorkspace]
 	if tree == nil {
 		t.Fatal("sharedBorderOS: no BSP tree")
@@ -87,8 +65,6 @@ func sharedBorderOS(t *testing.T, n int) *OS {
 	return m
 }
 
-// separatorText concatenates the rendered separator runs, and reports the text
-// of the runs that carry the focus styling separately.
 func separatorText(t *testing.T, m *OS) (all string, focused string) {
 	t.Helper()
 	layers := m.renderSeparatorOverlay()
@@ -99,8 +75,6 @@ func separatorText(t *testing.T, m *OS) (all string, focused string) {
 	for _, l := range layers {
 		content := l.GetContent()
 		allSB.WriteString(content)
-		// The focused runs are the bold ones; renderSeparatorOverlay emits SGR 1
-		// only for the focused perimeter.
 		if strings.Contains(content, "\x1b[1m") {
 			focusSB.WriteString(content)
 		}
@@ -147,9 +121,6 @@ func TestSharedBorderFocusHandlesEdgeCases(t *testing.T) {
 		m.Settings = config.Global
 		zw := m.Windows[m.FocusedWindow]
 		zw.Zoomed = true
-		// The rectangle a full zoom gives it. The flag alone is not the zoom:
-		// what suppresses the dividers is one pane covering the region, because
-		// a divider drawn then lands across that pane.
 		zw.X, zw.Y = m.GetLeftMargin(), m.GetTopMargin()
 		zw.Width, zw.Height = m.GetContentWidth(), m.GetUsableHeight()
 		if layers := m.renderSeparatorOverlay(); len(layers) != 0 {
@@ -160,10 +131,6 @@ func TestSharedBorderFocusHandlesEdgeCases(t *testing.T) {
 	t.Run("a zoom of part of the region keeps the frame", func(t *testing.T) {
 		m := sharedBorderOS(t, 3)
 		m.Settings = config.Global
-		// appearance.zoom_size draws the whole layout through a camera, so
-		// every pane is still on screen and the dividers between them are still
-		// the dividers. Suppressing them on any zoom at all took the shared
-		// borders away the moment the setting was used.
 		zw := m.Windows[m.FocusedWindow]
 		zw.Zoomed = true
 		zw.Width = m.GetContentWidth() * 3 / 4
@@ -193,8 +160,6 @@ func TestSharedBorderFocusHandlesEdgeCases(t *testing.T) {
 	})
 }
 
-// separatorSnapshot is a divider overlay reduced to what the compositor reads
-// from it: each layer's place, depth and text.
 func separatorSnapshot(layers []*lipgloss.Layer) string {
 	var sb strings.Builder
 	for _, l := range layers {

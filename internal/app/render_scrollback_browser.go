@@ -15,7 +15,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// renderScrollbackBrowser renders the scrollback browser as a full-screen overlay.
 func (m *OS) renderScrollbackBrowser() string {
 	browser := m.ScrollbackBrowser
 	if browser == nil {
@@ -28,14 +27,6 @@ func (m *OS) renderScrollbackBrowser() string {
 		return ""
 	}
 
-	// The browser's colours come from the theme and from the selection
-	// settings, like every other overlay.
-	//
-	// They were thirty-three hex literals. The one full-screen surface in
-	// tuios that ignored the user's theme was this one, so a person on a light
-	// theme, or on any theme at all, got a dark blue panel with its own idea
-	// of every colour, and the search highlight here was a different yellow
-	// from the search highlight in a pane two keystrokes away.
 	pal := m.overlayUI()
 	accent := pal.AccentBright
 	dimFg := pal.FgMute
@@ -46,35 +37,28 @@ func (m *OS) renderScrollbackBrowser() string {
 	multiClr := pal.Success
 	okClr := pal.Success
 	failClr := pal.Warn
-	// The marks a pane paints over its own output, so the browser's search
-	// and selection read as the same thing the pane's do. See
-	// config.SelectionConfig.
 	searchBgColor := configInk(m.Settings.SearchBg)
 	matchFg := configInk(m.Settings.MatchFg)
 	matchBgColor := configInk(m.Settings.MatchBg)
 
-	// Inner content area (border=2, padding=2 top/bot, 4 left/right)
-	innerW := w - 6 // border(2) + padding-left(2) + padding-right(2)
-	innerH := h - 4 // border(2) + padding-top(1) + padding-bottom(1)
+	innerW := w - 6
+	innerH := h - 4
 	if innerW < 20 || innerH < 6 {
 		return ""
 	}
 
-	// Pane layout
-	headerLines := 2 // title + separator
-	footerLines := 2 // separator + hints
+	headerLines := 2
+	footerLines := 2
 	paneH := max(innerH-headerLines-footerLines, 1)
 	leftW := browserListWidth(browserItems(browser), innerW)
-	rightW := innerW - leftW - 3 // " │ "
+	rightW := innerW - leftW - 3
 	if rightW < 8 {
 		rightW = 8
 		leftW = innerW - rightW - 3
 	}
 
-	// === HEADER ===
 	title := styled(accent, true, "Scrollback browser")
 
-	// Help-overlay style tabs
 	modes := []string{"Commands", "JSON", "Paths"}
 	var tabs []string
 	for i, name := range modes {
@@ -93,7 +77,6 @@ func (m *OS) renderScrollbackBrowser() string {
 		}
 	}
 
-	// Method indicator
 	methodStr := ""
 	if browser.ParseMethod != "" {
 		methodStr = styled(dimFg, false, " ("+browser.ParseMethod+")")
@@ -102,7 +85,6 @@ func (m *OS) renderScrollbackBrowser() string {
 		}
 	}
 
-	// Output mode badge
 	modeBadge := ""
 	if browser.OutputMode && browser.Vim != nil {
 		switch browser.Vim.Mode {
@@ -147,15 +129,11 @@ func (m *OS) renderScrollbackBrowser() string {
 	lines = append(lines, fitLine(headerStr, innerW))
 	lines = append(lines, styled(dimFg, false, strings.Repeat("─", innerW)))
 
-	// Store layout geometry for mouse input mapping.
 	browser.LayoutLeftW = leftW
 	browser.LayoutRightW = rightW
 	browser.LayoutPaneH = paneH
 
-	// === PANES ===
 	leftLines := buildLeftPane(browser, leftW, paneH, selBg, selFg, normalFg, dimFg, multiClr)
-	// At 16 colours the cursor row has no ground to show it by, so it takes
-	// the reverse video every list's cursor takes there.
 	if sel := browser.SelectedIdx - browser.ScrollOffset; sel >= 0 && sel < len(leftLines) {
 		leftLines[sel] = pal.Mark(leftLines[sel], cursorRow)
 	}
@@ -174,10 +152,8 @@ func (m *OS) renderScrollbackBrowser() string {
 		lines = append(lines, l+" "+sep+" "+r)
 	}
 
-	// === FOOTER ===
 	lines = append(lines, styled(dimFg, false, strings.Repeat("─", innerW)))
 
-	// The command list moves on the list keys, letters included.
 	nav := m.listMoveKeys(true)
 	var hints []browserHint
 	if browser.OutputMode {
@@ -225,28 +201,14 @@ func (m *OS) renderScrollbackBrowser() string {
 			}
 		}
 	}
-	// A motion the keymap left with no key has no hint.
 	hints = slices.DeleteFunc(hints, func(h browserHint) bool { return h.key == "" })
 	lines = append(lines, fitLine(browserFooterHints(hints, innerW, &m.Settings, pal), innerW))
 
-	// Pad to exact height
 	for len(lines) < innerH {
 		lines = append(lines, strings.Repeat(" ", innerW))
 	}
 	content := strings.Join(lines[:innerH], "\n")
 
-	// No fill on the panel, and that is deliberate rather than an omission.
-	//
-	// A fill would only cover the parts of the panel nothing is drawn on.
-	// Every line of content ends in an ANSI reset, because the output it shows
-	// carries the program's own colours and those have to be turned off again,
-	// and a reset clears the background for the rest of that line. So a fill
-	// would survive in the empty column beside the list and die everywhere a
-	// line is written, leaving a hard vertical seam down the middle of the
-	// panel and a different shade above and below the text.
-	//
-	// The border and the header and footer bands are what make it read as a
-	// panel. They are drawn, so they keep their colour.
 	box := lipgloss.NewStyle().
 		Padding(1, 2).
 		Border(overlay.EdgeBorder()).
@@ -255,7 +217,6 @@ func (m *OS) renderScrollbackBrowser() string {
 
 	result := lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, box)
 
-	// Help overlay (rendered on top)
 	if browser.ShowHelp {
 		result = overlayBrowserHelp(w, h, browser.OutputMode, accent, dimFg, pal)
 	}
@@ -263,7 +224,6 @@ func (m *OS) renderScrollbackBrowser() string {
 	return result
 }
 
-// browserItems is the list the left pane shows, for whichever mode is on.
 func browserItems(browser *scrollback.Browser) []string {
 	var items []string
 	switch browser.Mode {
@@ -284,22 +244,11 @@ func browserItems(browser *scrollback.Browser) []string {
 	return items
 }
 
-// The bounds on the list column.
-//
-// A floor so a list of one-word commands still reads as a column and the
-// header above it is not cut to nothing, and a ceiling as a share of the
-// panel so a single long command cannot take the output pane's room. The
-// output is what the browser is for; the list is how you choose which.
 const (
 	browserListMinWidth = 18
 	browserListMaxShare = 40
 )
 
-// browserListWidth is how wide the list column should be for what is in it.
-//
-// A fixed share of the panel would give a wide terminal seventy columns of
-// grey for a list of "ll" and "ls", with the selected row's highlight bar
-// drawn across every one of them, and the output squeezed into what was left.
 func browserListWidth(items []string, innerW int) int {
 	widest := 0
 	for _, it := range items {
@@ -307,8 +256,6 @@ func browserListWidth(items []string, innerW int) int {
 			widest = w
 		}
 	}
-	// Two for the "> " marker, one so the longest entry is not flush against
-	// the rule beside it.
 	want := widest + 3
 	ceiling := max(innerW*browserListMaxShare/100, browserListMinWidth)
 	return min(max(want, browserListMinWidth), ceiling)
@@ -329,7 +276,6 @@ func buildLeftPane(
 		return out
 	}
 
-	// Keep selection visible
 	vis := browser.ScrollOffset
 	if browser.SelectedIdx >= vis+height {
 		vis = browser.SelectedIdx - height + 1
@@ -340,7 +286,7 @@ func buildLeftPane(
 	vis = max(vis, 0)
 	browser.ScrollOffset = vis
 
-	textW := width - 2 // prefix "  " or "> "
+	textW := width - 2
 	for i := range height {
 		idx := vis + i
 		if idx >= len(items) {
@@ -348,7 +294,6 @@ func buildLeftPane(
 			continue
 		}
 
-		// Clean text for display
 		text := strings.ReplaceAll(items[idx], "\n", " ")
 		text = ansi.Truncate(text, textW, "…")
 
@@ -366,9 +311,6 @@ func buildLeftPane(
 	return out
 }
 
-// browserMarks are the colours the preview pane paints over the output it
-// shows: the cursor, a visual selection, and a search match. They are the
-// pane's own marks, so the browser and the pane it came from agree.
 type browserMarks struct {
 	cursorBg color.Color
 	visualBg color.Color
@@ -434,10 +376,8 @@ func buildRightPane(
 		return out
 	}
 
-	// Header
 	out[0] = fitLine(styled(accent, true, ansi.Truncate(headerText, width, "…")), width)
 
-	// Preview: prefer styled text for display
 	preview := styledPreview
 	if preview == "" {
 		preview = plainPreview
@@ -448,12 +388,10 @@ func buildRightPane(
 	availH := height - 1
 	browser.LastPaneHeight = height
 
-	// Determine scroll position
 	var scroll int
 	vim := browser.Vim
 
 	if browser.OutputMode && vim != nil {
-		// Reserve last line for scroll indicator when content overflows
 		effectiveH := availH
 		if len(vim.Lines) > availH {
 			effectiveH = availH - 1
@@ -462,13 +400,12 @@ func buildRightPane(
 		vim.EnsureVisible()
 		scroll = vim.ScrollY
 
-		// Clamp scroll using vim's line count (authoritative for cursor navigation)
 		maxScroll := max(len(vim.Lines)-effectiveH, 0)
 		if scroll > maxScroll {
 			scroll = maxScroll
 		}
 		scroll = max(scroll, 0)
-		vim.ScrollY = scroll // write back so EnsureVisible stays consistent
+		vim.ScrollY = scroll
 	} else {
 		scroll = browser.PreviewScroll
 		maxScroll := max(len(previewLines)-availH, 0)
@@ -482,9 +419,6 @@ func buildRightPane(
 	visualBg := marks.visualBg
 	searchBg := marks.searchBg
 	normalTextFg := marks.normalFg
-	// The selection ground is a setting and may be as dark as the text, as
-	// the default is on a light theme: the selected text is lifted until it
-	// reads. Once a frame, not once a span.
 	visualFg := overlay.Readable(normalTextFg, visualBg)
 	cursorFg := overlay.Readable(normalTextFg, cursorBg)
 
@@ -504,7 +438,6 @@ func buildRightPane(
 		}
 	}
 
-	// Scroll indicator on last line (reserved space when content overflows)
 	lineCount := len(previewLines)
 	if browser.OutputMode && vim != nil {
 		lineCount = len(vim.Lines)
@@ -526,14 +459,10 @@ func buildRightPane(
 	return out
 }
 
-// renderVimLine renders a single line with character-level cursor, visual, and search highlighting.
 func renderVimLine(vim *scrollback.VimState, lineIdx, width int,
 	cursorBg, cursorFg, visualBg, visualFg, searchBg, searchFg, normalFg color.Color,
 ) string {
-	// Whether this whole line is selected, which decides whether the padding
-	// past the last character carries the selection too.
 	lineSelected := false
-	// Get plain text from VimState lines
 	text := ""
 	if lineIdx < len(vim.Lines) {
 		text = vim.Lines[lineIdx]
@@ -543,11 +472,8 @@ func renderVimLine(vim *scrollback.VimState, lineIdx, width int,
 		runes = runes[:width]
 	}
 
-	// Per-rune highlight classification
-	// 0=none, 1=search, 2=visual, 3=cursor
 	hl := make([]int, len(runes))
 
-	// Search matches (lowest priority)
 	for _, m := range vim.SearchMatchesOnLine(lineIdx) {
 		for x := m.StartX; x < m.EndX && x < len(runes); x++ {
 			if x >= 0 {
@@ -556,7 +482,6 @@ func renderVimLine(vim *scrollback.VimState, lineIdx, width int,
 		}
 	}
 
-	// Visual selection (medium priority)
 	switch vim.Mode {
 	case scrollback.VimVisualChar:
 		sx, sy, ex, ey := vim.VisualBounds()
@@ -583,24 +508,16 @@ func renderVimLine(vim *scrollback.VimState, lineIdx, width int,
 			for x := range runes {
 				hl[x] = 2
 			}
-			// And on to the end of the pane. A line selection selects the
-			// line, so the highlight has to be the shape of a line: stopping
-			// at the last character gave every selected row a different
-			// right-hand edge, and a block of text with a ragged edge does
-			// not read as a selection at all.
 			lineSelected = true
 		}
 	}
 
-	// Cursor cell (highest priority)
 	if lineIdx == vim.CursorY && vim.CursorX >= 0 && vim.CursorX < len(runes) {
 		hl[vim.CursorX] = 3
 	}
 
-	// Handle empty lines
 	if len(runes) == 0 {
 		if lineIdx == vim.CursorY {
-			// Show cursor block on empty line
 			return lipgloss.NewStyle().
 				Foreground(normalFg).
 				Bold(true).
@@ -610,7 +527,6 @@ func renderVimLine(vim *scrollback.VimState, lineIdx, width int,
 		return strings.Repeat(" ", width)
 	}
 
-	// Check if any highlights exist on this line
 	hasHL := false
 	for _, h := range hl {
 		if h != 0 {
@@ -619,11 +535,9 @@ func renderVimLine(vim *scrollback.VimState, lineIdx, width int,
 		}
 	}
 
-	// If cursor is past end of line, add a cursor block at end
 	cursorPastEnd := lineIdx == vim.CursorY && vim.CursorX >= len(runes)
 
 	if !hasHL && !cursorPastEnd {
-		// No highlights: prefer styled text for ANSI colors
 		if vim.StyledLines != nil && lineIdx < len(vim.StyledLines) {
 			truncated := ansi.Truncate(vim.StyledLines[lineIdx], width, "")
 			return padANSI(truncated, width)
@@ -635,13 +549,11 @@ func renderVimLine(vim *scrollback.VimState, lineIdx, width int,
 		return strings.Repeat(" ", width)
 	}
 
-	// Parse per-rune ANSI state from styled line for color preservation
 	var ansiStates []string
 	if vim.StyledLines != nil && lineIdx < len(vim.StyledLines) {
 		ansiStates = parseANSIRuneStates(vim.StyledLines[lineIdx], len(runes))
 	}
 
-	// Build styled output, preserving original ANSI colors for non-highlighted chars
 	var result strings.Builder
 	i := 0
 	for i < len(runes) {
@@ -651,34 +563,28 @@ func renderVimLine(vim *scrollback.VimState, lineIdx, width int,
 		}
 		span := string(runes[i:j])
 		switch hl[i] {
-		case 3: // cursor
+		case 3:
 			result.WriteString("\x1b[0m")
 			result.WriteString(lipgloss.NewStyle().
 				Foreground(cursorFg).
 				Bold(true).
 				Background(cursorBg).
 				Render(span))
-		case 2: // visual
+		case 2:
 			result.WriteString("\x1b[0m")
 			result.WriteString(lipgloss.NewStyle().
 				Foreground(visualFg).
 				Background(visualBg).
 				Render(span))
-		case 1: // search
+		case 1:
 			result.WriteString("\x1b[0m")
-			// The text in the match's own text colour. It was drawn in the
-			// background colour, foreground and background the same, so every
-			// search match in this pane was a solid block with the thing you
-			// searched for invisible inside it.
 			result.WriteString(lipgloss.NewStyle().
 				Foreground(searchFg).
 				Background(searchBg).
 				Render(span))
 		default:
-			// Preserve original ANSI colors for non-highlighted text
 			if ansiStates != nil {
 				result.WriteString("\x1b[0m")
-				// Emit per-rune ANSI state with resets to prevent color leaking
 				for k := i; k < j; k++ {
 					if k < len(ansiStates) && ansiStates[k] != "" {
 						result.WriteString(ansiStates[k])
@@ -718,9 +624,6 @@ func renderVimLine(vim *scrollback.VimState, lineIdx, width int,
 	return rendered
 }
 
-// parseANSIRuneStates parses a styled ANSI string and returns per-rune ANSI
-// SGR state strings. ansiStates[i] contains the accumulated SGR sequences
-// active at rune position i (to be emitted before that rune to restore color).
 func parseANSIRuneStates(styled string, numRunes int) []string {
 	states := make([]string, numRunes)
 	var current strings.Builder
@@ -729,15 +632,13 @@ func parseANSIRuneStates(styled string, numRunes int) []string {
 
 	for i < len(styled) && runeIdx < numRunes {
 		if styled[i] == '\x1b' && i+1 < len(styled) && styled[i+1] == '[' {
-			// CSI sequence: ESC [ params final
 			j := i + 2
 			for j < len(styled) && !isCSIFinal(styled[j]) {
 				j++
 			}
 			if j < len(styled) {
-				j++ // include final byte
+				j++
 				seq := styled[i:j]
-				// Only track SGR sequences (ending in 'm')
 				if styled[j-1] == 'm' {
 					if seq == "\x1b[0m" || seq == "\x1b[m" {
 						current.Reset()
@@ -753,7 +654,6 @@ func parseANSIRuneStates(styled string, numRunes int) []string {
 		}
 
 		if styled[i] == '\x1b' {
-			// Non-CSI escape (OSC, etc): skip to end
 			i++
 			for i < len(styled) && styled[i] != '\x1b' && styled[i] >= 0x20 {
 				i++
@@ -761,7 +661,6 @@ func parseANSIRuneStates(styled string, numRunes int) []string {
 			continue
 		}
 
-		// Printable rune
 		if runeIdx < numRunes {
 			states[runeIdx] = current.String()
 		}
@@ -773,12 +672,10 @@ func parseANSIRuneStates(styled string, numRunes int) []string {
 	return states
 }
 
-// isCSIFinal returns true if byte is a CSI final byte (0x40-0x7E).
 func isCSIFinal(b byte) bool {
 	return b >= 0x40 && b <= 0x7E
 }
 
-// overlayBrowserHelp renders a help modal on top of the browser content.
 func overlayBrowserHelp(w, h int, outputMode bool, accent, dimFg color.Color, pal overlay.Palette) string {
 	var helpLines []string
 	titleText := "Keys"
@@ -831,17 +728,15 @@ func overlayBrowserHelp(w, h int, outputMode bool, accent, dimFg color.Color, pa
 		}
 	}
 
-	// Calculate modal dimensions
 	maxLineW := 0
 	for _, l := range helpLines {
 		if lw := len([]rune(l)); lw > maxLineW {
 			maxLineW = lw
 		}
 	}
-	modalW := min(maxLineW+6, w-10) // padding + margin
+	modalW := min(maxLineW+6, w-10)
 	modalH := min(len(helpLines)+4, h-6)
 
-	// Build modal content
 	title := styled(accent, true, titleText)
 	separator := styled(dimFg, false, strings.Repeat("─", modalW-4))
 	dismissHint := styled(dimFg, false, "Press ? or esc to close")
@@ -850,7 +745,7 @@ func overlayBrowserHelp(w, h int, outputMode bool, accent, dimFg color.Color, pa
 	modalLines = append(modalLines, fitLine(title, modalW-4))
 	modalLines = append(modalLines, separator)
 
-	contentH := modalH - 4 // title + sep + blank + dismiss
+	contentH := modalH - 4
 	for i, l := range helpLines {
 		if i >= contentH {
 			break
@@ -862,15 +757,12 @@ func overlayBrowserHelp(w, h int, outputMode bool, accent, dimFg color.Color, pa
 		}
 	}
 
-	// Pad remaining
 	for len(modalLines) < modalH-2 {
 		modalLines = append(modalLines, strings.Repeat(" ", modalW-4))
 	}
 	modalLines = append(modalLines, fitLine(dismissHint, modalW-4))
 
 	modalContent := strings.Join(modalLines, "\n")
-	// No fill, for the reason the panel has none: a line that ends in a reset
-	// takes the fill with it for the rest of that line.
 	modal := lipgloss.NewStyle().
 		Padding(1, 2).
 		Border(overlay.EdgeBorder()).
@@ -880,16 +772,11 @@ func overlayBrowserHelp(w, h int, outputMode bool, accent, dimFg color.Color, pa
 	return lipgloss.Place(w, h, lipgloss.Center, lipgloss.Center, modal)
 }
 
-// --- helpers ---
-
 type browserHint struct {
 	key  string
 	desc string
 }
 
-// browserFrameInk is the colour the browser's frames are drawn in: the
-// overlay frame ink when the client sets one (overlay_border_color, or the
-// focused pane's border under pane_overlays), else the accent.
 func browserFrameInk(pal overlay.Palette) color.Color {
 	if !isNilColor(pal.Frame) {
 		return pal.Frame
@@ -916,7 +803,6 @@ func browserFooterHints(hints []browserHint, maxWidth int, s *config.Settings, p
 	moreIndicator := renderHint(browserHint{"?", "help"})
 	moreW := ansi.StringWidth(moreIndicator)
 
-	// Try to fit as many hints as possible; append "? help" at the end
 	var parts []string
 	totalW := 0
 	truncated := false
@@ -925,11 +811,10 @@ func browserFooterHints(hints []browserHint, maxWidth int, s *config.Settings, p
 		partW := ansi.StringWidth(part)
 		sep := 0
 		if i > 0 {
-			sep = 2 // "  " separator
+			sep = 2
 		}
 
 		needed := totalW + sep + partW
-		// Reserve space for the "? help" indicator
 		if needed+2+moreW > maxWidth {
 			truncated = true
 			break
@@ -939,7 +824,6 @@ func browserFooterHints(hints []browserHint, maxWidth int, s *config.Settings, p
 		totalW = needed
 	}
 
-	// Always show the ? help pill (indicates help is available)
 	if truncated || totalW+2+moreW <= maxWidth {
 		parts = append(parts, moreIndicator)
 	}
@@ -988,8 +872,6 @@ func firstLine(s string) string {
 	return s
 }
 
-// searchFieldText draws a search line being typed, in c: the prefix, the text
-// and its caret where it is, as a reverse-video cell.
 func searchFieldText(c color.Color, prefix string, l *textedit.Line) string {
 	before, at, after := l.Parts()
 	if at == "" {

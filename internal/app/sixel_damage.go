@@ -4,30 +4,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// hostDamage follows the renderer's output to learn which host cells it
-// wrote.
-//
-// A sixel image is pixels in the host's cells, and a host drops them from any
-// cell a character or an erase is written into. The renderer writes more cells
-// than the ones that changed: a line whose two ends changed is often rewritten
-// from end to end, and some mode changes repaint the whole screen. Each of
-// those takes the picture away under an image cell that did not change at all.
-// So instead of guessing from the frame, the passthrough reads the bytes the
-// renderer actually sent and resends every rectangle one of them touched.
-//
-// It tracks only the cursor and the cells written, for the subset of controls
-// a renderer uses. A sequence it does not know is taken to write nothing,
-// which at worst leaves a picture missing until the next change, and never
-// leaves one where it should not be: that is the text's job, and the text is
-// always drawn.
-//
-// It also keeps which host cells hold the concealed blank an image sits on
-// (ground), through the renderer's scrolls and inserts. A rectangle is sent
-// only onto cells that hold it. bubbletea can write a frame older than the
-// rectangles the passthrough holds (see FrameBytes), and an image sent onto
-// that older text is moved with it by the renderer's next scroll, to rows
-// whose text did not change and so is never rewritten. That left a second
-// copy of the image over text (#1304).
 type hostDamage struct {
 	w, h     int
 	x, y     int
@@ -40,10 +16,8 @@ type hostDamage struct {
 	rows     [][]uint64
 	any      bool
 	allDirty bool
-	// ground is the cells that hold a concealed blank on the host, and
-	// conceal whether the renderer's current SGR conceals.
-	ground  [][]bool
-	conceal bool
+	ground   [][]bool
+	conceal  bool
 }
 
 func (d *hostDamage) resize(w, h int) {
@@ -63,7 +37,6 @@ func (d *hostDamage) resize(w, h int) {
 	d.allDirty = true
 }
 
-// reset forgets the damage recorded so far; the cursor is kept.
 func (d *hostDamage) reset() {
 	if d.any {
 		for _, r := range d.rows {
@@ -93,8 +66,6 @@ func (d *hostDamage) markRows(y0, y1 int) {
 	}
 }
 
-// put records that cells x0..x1 of row y were written: with a character
-// when concealed says so, or erased.
 func (d *hostDamage) put(y, x0, x1 int, concealed bool) {
 	d.mark(y, x0, x1)
 	if y < 0 || y >= d.h {
@@ -105,17 +76,14 @@ func (d *hostDamage) put(y, x0, x1 int, concealed bool) {
 	}
 }
 
-// erase records that cells x0..x1 of row y were erased.
 func (d *hostDamage) erase(y, x0, x1 int) { d.put(y, x0, x1, false) }
 
-// eraseRows records that rows y0..y1 were erased.
 func (d *hostDamage) eraseRows(y0, y1 int) {
 	for y := max(0, y0); y <= min(y1, d.h-1); y++ {
 		d.erase(y, 0, d.w)
 	}
 }
 
-// eraseAll records that the whole screen was erased.
 func (d *hostDamage) eraseAll() {
 	d.allDirty = true
 	for _, r := range d.ground {
@@ -123,9 +91,6 @@ func (d *hostDamage) eraseAll() {
 	}
 }
 
-// scroll moves rows top..bot up by n, or down for a negative n, as the
-// host does: the rows that come in are blank. Every row of the region is
-// damage, as before.
 func (d *hostDamage) scroll(top, bot, n int) {
 	top, bot = max(0, top), min(bot, d.h-1)
 	if top > bot || n == 0 {
@@ -157,9 +122,6 @@ func (d *hostDamage) scroll(top, bot, n int) {
 	}
 }
 
-// shiftRow moves the cells of row y from x on by n columns, right for a
-// positive n (ICH) and left for a negative one (DCH). The cells that come in
-// are blank.
 func (d *hostDamage) shiftRow(y, x, n int) {
 	d.mark(y, x, d.w)
 	if y < 0 || y >= d.h || x >= d.w {
@@ -178,11 +140,8 @@ func (d *hostDamage) shiftRow(y, x, n int) {
 	}
 }
 
-// grounded reports whether every cell of r holds the concealed blank an
-// image sits on.
 func (d *hostDamage) grounded(r sixelRect) bool {
 	if d.h == 0 || d.w == 0 {
-		// Nothing followed yet: no frame was fed.
 		return true
 	}
 	for y := r.y; y < r.y+r.rows(); y++ {
@@ -198,7 +157,6 @@ func (d *hostDamage) grounded(r sixelRect) bool {
 	return true
 }
 
-// sgr follows the conceal attribute through one SGR sequence.
 func (d *hostDamage) sgr() {
 	params := d.parser.Params()
 	if len(params) == 0 {
@@ -215,7 +173,6 @@ func (d *hostDamage) sgr() {
 		case 28:
 			d.conceal = false
 		case 38, 48, 58:
-			// An extended colour. Its arguments are not attributes.
 			if params[i].HasMore() {
 				for i+1 < len(params) && params[i].HasMore() {
 					i++
@@ -236,7 +193,6 @@ func (d *hostDamage) sgr() {
 	}
 }
 
-// hit reports whether any cell of r was written.
 func (d *hostDamage) hit(r sixelRect) bool {
 	if d.allDirty {
 		return true
@@ -263,7 +219,6 @@ func (d *hostDamage) clampCursor() {
 	d.y = max(0, min(d.y, d.h-1))
 }
 
-// lineFeed moves down a row, scrolling the region when at its bottom.
 func (d *hostDamage) lineFeed() {
 	if d.y == d.bot {
 		d.scroll(d.top, d.bot, 1)
@@ -272,7 +227,6 @@ func (d *hostDamage) lineFeed() {
 	d.y = min(d.y+1, d.h-1)
 }
 
-// feed follows one write of the renderer.
 func (d *hostDamage) feed(p []byte) {
 	if d.h == 0 || d.w == 0 {
 		return
@@ -289,7 +243,6 @@ func (d *hostDamage) feed(p []byte) {
 		p = p[n:]
 		if width > 0 {
 			if d.x >= d.w {
-				// Pending wrap: the character goes to the next line.
 				d.x = 0
 				d.lineFeed()
 			}

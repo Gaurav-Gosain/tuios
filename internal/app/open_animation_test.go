@@ -10,9 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
 )
 
-// openAnimHarness is a tiling client attached to a daemon, the arrangement the
-// report came from: the daemon creates the pane and marks it Unplaced, and the
-// client is the only thing that can place it and animate it into its tile.
 type openAnimHarness struct {
 	m     *OS
 	state *session.SessionState
@@ -23,8 +20,6 @@ func newOpenAnimHarness(width, height int) *openAnimHarness {
 	return newOpenAnimHarnessWithLayout(width, height, true)
 }
 
-// newOpenAnimHarnessWithLayout is the same harness under either tiled layout, so
-// the open animation can be checked in both. bsp false is master-stack.
 func newOpenAnimHarnessWithLayout(width, height int, bsp bool) *openAnimHarness {
 	h := &openAnimHarness{
 		m: &OS{
@@ -48,8 +43,6 @@ func newOpenAnimHarnessWithLayout(width, height int, bsp bool) *openAnimHarness 
 	return h
 }
 
-// createWindow runs one daemon-side creation and the client sync it produces,
-// and returns the animations the client armed for it.
 func (h *openAnimHarness) createWindow(t *testing.T) []*ui.Animation {
 	t.Helper()
 	h.next++
@@ -73,8 +66,6 @@ func (h *openAnimHarness) createWindow(t *testing.T) []*ui.Animation {
 	anims := h.m.Animations
 	h.m.CompleteAllAnimations()
 
-	// The client syncs the geometry it just chose back, so the next creation
-	// carries the client's tree exactly as the daemon would have stored it.
 	h.state = h.m.BuildSessionState()
 	h.state.Version = h.next + 1
 	return anims
@@ -116,7 +107,6 @@ func TestOpenAnimationGrowsFromItsOwnTile(t *testing.T) {
 				anim.EndX, anim.EndY, anim.EndWidth, anim.EndHeight)
 		}
 
-		// Centred on the tile, to within the odd cell integer division leaves.
 		startCX := 2*anim.StartX + anim.StartWidth
 		startCY := 2*anim.StartY + anim.StartHeight
 		endCX := 2*anim.EndX + anim.EndWidth
@@ -159,12 +149,6 @@ func TestRepeatCreationSyncLeavesAPlacedPaneAlone(t *testing.T) {
 	target := h.m.Windows[len(h.m.Windows)-1]
 	before := layout.Rect{X: target.X, Y: target.Y, W: target.Width, H: target.Height}
 
-	// The echo, as the daemon actually sends it: the same windows the client
-	// already knows, but the newest one still carrying the flag AND the nominal
-	// full-size box that goes with it, because the client's answer has not
-	// reached the daemon yet. Rebuilding the state from the client and only
-	// flipping the flag is not the same test: it hands the echo the client's own
-	// correct geometry, so a client that wrongly adopts it looks fine.
 	replay := h.m.BuildSessionState()
 	replay.Version = h.state.Version + 1
 	nominal := &replay.Windows[len(replay.Windows)-1]
@@ -278,8 +262,6 @@ func TestMasterStackAnimatesThePanesThatMove(t *testing.T) {
 			t.Errorf("creating pane %d armed nothing, so it appeared in one frame", i)
 			continue
 		}
-		// The pane that opened is among them, and so is anything that had to
-		// give it room.
 		newest := h.m.Windows[len(h.m.Windows)-1]
 		var sawNewest bool
 		for _, a := range anims {
@@ -292,7 +274,6 @@ func TestMasterStackAnimatesThePanesThatMove(t *testing.T) {
 		}
 	}
 
-	// A retile that moves nothing arms nothing at all.
 	h.m.CompleteAllAnimations()
 	h.m.Animations = nil
 	h.m.TileAllWindows()

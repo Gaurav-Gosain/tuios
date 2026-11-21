@@ -12,64 +12,26 @@ import (
 	"tuios.dev/shot"
 )
 
-// The screen saver animates a snapshot of the screen after a spell with no
-// input, and stops on the first key or pointer movement.
-//
-// It costs nothing at idle. Two rules make that true, and both matter:
-//
-//   - Arming is one deferred timer, never a standing tick. Input records the
-//     time and starts a timer only if none is in flight; when that timer fires
-//     early it re-arms for the remainder. So at most one timer exists, and it
-//     fires at most once per idle delay however hard the keyboard is used.
-//   - While running, the saver drives its own frames through screensaverFrame,
-//     the way autoScrollTick does. It adds no term to tickNeedsWork and none to
-//     needsRender, so the maintenance tick's idle path is untouched, byte for
-//     byte, whether the saver is armed or not.
-
-// screensaverArmMsg is the deferred idle timer firing. It is not proof that
-// the session is idle: the timer may have been armed before later input, which
-// is why the handler re-checks the elapsed time.
 type screensaverArmMsg struct{}
 
-// screensaverState is everything the saver needs. The zero value is a saver
-// that is off and unarmed.
 type screensaverState struct {
-	// active is true while the animation is on screen.
-	active bool
-	// armed is true while a deferred start timer is in flight.
-	armed bool
-	// lastInput is when input last arrived. The armed timer compares against
-	// it rather than assuming it fired at the right moment.
+	active    bool
+	armed     bool
 	lastInput time.Time
 
-	// player is a plugin's frames file playing, nil for an effect.
 	player *framesSaver
 
-	engine *tfx.Engine
-	effect tfx.Effect
-	// name is the running effect, for the hint line.
-	name string
-	// frame is the last rendered frame, held so a repaint that is not a new
-	// animation frame does not have to step the effect.
-	frame string
-	// width and height are the render size the capture was taken at. A resize
-	// rebuilds rather than stretching, and this is what it is compared against.
-	width  int
-	height int
-	// canvasWidth and canvasHeight are the size of the captured grid, which is
-	// what the effect was actually built over. It is normally the same as the
-	// render size, but the capture is the authority: building a canvas bigger
-	// than the grid anchors the content into a corner and the whole animation
-	// draws offset by the difference.
+	engine       *tfx.Engine
+	effect       tfx.Effect
+	name         string
+	frame        string
+	width        int
+	height       int
 	canvasWidth  int
 	canvasHeight int
-	// capture is the converted screen the effects are built over. It is kept
-	// so an effect that runs to an end can be replaced without composing and
-	// re-capturing a screen that is no longer showing.
-	capture [][]tfx.InputCell
+	capture      [][]tfx.InputCell
 }
 
-// screensaverConfig is the [screensaver] section this client holds.
 func (m *OS) screensaverConfig() config.ScreensaverConfig {
 	if m.UserConfig == nil {
 		return config.ScreensaverConfig{}
@@ -77,8 +39,6 @@ func (m *OS) screensaverConfig() config.ScreensaverConfig {
 	return m.UserConfig.Screensaver
 }
 
-// armScreensaver starts the single deferred timer, unless the saver is off,
-// already running, or a timer is already in flight.
 func (m *OS) armScreensaver() tea.Cmd {
 	if m.screensaver.active || m.screensaver.armed {
 		return nil
@@ -94,30 +54,16 @@ func (m *OS) armScreensaver() tea.Cmd {
 	return m.screensaverArmCmd(screensaverIdleDelay(cfg))
 }
 
-// screensaverIdleDelay is the quiet time before the saver starts.
 func screensaverIdleDelay(cfg config.ScreensaverConfig) time.Duration {
 	return time.Duration(cfg.IdleDelayMinutes()) * time.Minute
 }
 
-// screensaverArmCmd waits out a delay and then asks whether to start.
 func (m *OS) screensaverArmCmd(d time.Duration) tea.Cmd {
 	return m.tickUntilStop(d, func(time.Time) tea.Msg { return screensaverArmMsg{} })
 }
 
-// screensaverFPS caps the rate the saver and the effect picker's preview paint
-// at.
-//
-// tuiffects writes its effects for sixty frames a second, and 33 of its 36
-// effects count frames rather than read the clock. Painted at the session's
-// NormalFPS, which max_fps sets and which is 240 on a screen that will take it,
-// those effects ran four times too fast and cost four times the CPU, and at
-// 200x50 every frame also pays about 1.5 ms of parse, so the heavy ones could
-// not hold 240 anyway. celebrateFPS caps the confetti for the same reason.
 const screensaverFPS = 60
 
-// screensaverRate is the rate the saver and the preview paint at: the session's
-// NormalFPS, but never more than screensaverFPS. The tick, the engine's clock
-// and the opening bands all read it, so the three cannot disagree.
 func screensaverRate(s *config.Settings) int {
 	if s.NormalFPS <= 0 || s.NormalFPS > screensaverFPS {
 		return screensaverFPS
@@ -125,10 +71,6 @@ func screensaverRate(s *config.Settings) int {
 	return s.NormalFPS
 }
 
-// handleScreensaverArm runs when the deferred timer fires. It starts the saver
-// only if the session really has been quiet for the whole delay; otherwise it
-// re-arms for whatever is left, which is what keeps one timer serving any
-// amount of input.
 func (m *OS) handleScreensaverArm() tea.Cmd {
 	m.screensaver.armed = false
 	cfg := m.screensaverConfig()
@@ -141,8 +83,6 @@ func (m *OS) handleScreensaverArm() tea.Cmd {
 		return m.screensaverArmCmd(delay - idle)
 	}
 	if !m.screensaverMayStart(cfg) {
-		// Something is working. Wait another full delay and ask again rather
-		// than polling, so a long build costs one timer every few minutes.
 		m.screensaver.armed = true
 		return m.screensaverArmCmd(delay)
 	}
@@ -170,11 +110,6 @@ func (m *OS) StartScreensaverNow() tea.Cmd {
 	return m.motionCmd()
 }
 
-// screensaverMayStart reports whether it is polite to cover the screen now.
-//
-// A saver that hides a running build is a bug, so a pane with a foreground
-// process or an agent that is working or waiting on the user holds it off
-// unless the setting says otherwise.
 func (m *OS) screensaverMayStart(cfg config.ScreensaverConfig) bool {
 	if cfg.RunsWhileBusy() {
 		return true
@@ -194,8 +129,6 @@ func (m *OS) screensaverMayStart(cfg config.ScreensaverConfig) bool {
 	return true
 }
 
-// startScreensaver captures the screen and builds the effect over it. It
-// reports whether the saver actually started.
 func (m *OS) startScreensaver(cfg config.ScreensaverConfig) bool {
 	width, height := m.GetRenderWidth(), m.GetRenderHeight()
 	if width < 8 || height < 4 {
@@ -233,47 +166,15 @@ func (m *OS) startScreensaver(cfg config.ScreensaverConfig) bool {
 	return true
 }
 
-// screensaverBuild puts an effect over a captured screen.
-//
-// The colour policy is the whole reason a screen saver reads as one: every
-// character resolves back to the colour it was captured with, so the screen
-// reassembles as itself rather than in the effect's own palette.
-//
-// fill is the effect's own NeedsFillCharacters. A capture only covers the cells
-// that carry a glyph or a background, so a screen with plain empty space leaves
-// holes in the canvas, and an effect that animates the empty cells finds nothing
-// in them. burn and laseretch do not merely look thin without it: their build
-// picks a starting cell that can land on a hole, and the saver then refuses to
-// start at all.
 func screensaverBuild(capture [][]tfx.InputCell, width, height int, effect tfx.Effect, fill bool, s *config.Settings) (*tfx.Engine, bool) {
 	terminal := tfx.NewTerminalFromCells(screensaverFit(capture, height), tfx.TerminalConfig{
-		Width:              width,
-		Height:             height,
-		MakeFillCharacters: fill,
-		// South west, which is the one anchor that moves nothing.
-		//
-		// Every other anchor measures the block the capture fills and slides it
-		// to a corner. That is right for a caption placed on a canvas and wrong
-		// for a screen: a capture whose first two rows are empty fills a block
-		// two rows shorter than the screen, so north west lifts the whole
-		// picture two rows and the saver starts by jolting the screen upwards.
-		// The capture already carries the coordinate of every cell, and south
-		// west is the anchor that keeps them. screensaverFit does the only
-		// placing that is left.
+		Width:                 width,
+		Height:                height,
+		MakeFillCharacters:    fill,
 		AnchorText:            tfx.AnchorSW,
 		ExistingColorHandling: tfx.DynamicExistingColors,
 	})
 	engine := tfx.NewEngine(terminal, tfx.NewRng(rand.Uint64()))
-	// The clock has to be the rate this program really paints at. NewEngine
-	// installs one that steps a sixtieth of a second per frame. The saver ticks
-	// at screensaverRate, which is sixty unless max_fps asks for less. When the
-	// two differed, the engine's idea of time drifted from the wall and every
-	// effect written in seconds ran at the wrong speed: matrix rained for the
-	// wrong length, thunderstorm stormed for the wrong length, and tuffbaby
-	// played its clip at the wrong rate.
-	//
-	// screensaverFrameCmd and effectPreviewFrameCmd both tick at screensaverRate,
-	// so this one line covers the saver and the effect picker's preview alike.
 	engine.Clock = tfx.NewVirtualClock(screensaverRate(s))
 	if err := effect.Build(engine); err != nil {
 		return nil, false
@@ -281,17 +182,6 @@ func screensaverBuild(capture [][]tfx.InputCell, width, height int, effect tfx.E
 	return engine, true
 }
 
-// screensaverFit makes a capture exactly as tall as the canvas, keeping the top.
-//
-// The engine counts rows from the bottom, so it reads a capture bottom up and
-// the capture's own height decides where its first row lands. A capture shorter
-// than the canvas would therefore sit on the floor, and a taller one would lose
-// its top rows off the ceiling. Both are the wrong end: a screen is drawn from
-// the top left corner, so that is the corner it keeps. Padding at the bottom
-// costs nothing, because a row of empty cells makes no characters.
-//
-// The two are the same size on every screen the saver takes, and this is what
-// makes that a fact rather than an assumption.
 func screensaverFit(capture [][]tfx.InputCell, height int) [][]tfx.InputCell {
 	if height < 1 || len(capture) == height {
 		return capture
@@ -304,9 +194,6 @@ func screensaverFit(capture [][]tfx.InputCell, height int) [][]tfx.InputCell {
 	return fitted
 }
 
-// screensaverEffect resolves a configured name to a fresh effect. The random
-// setting picks a different one each time the saver starts. The third result is
-// the effect's fill requirement, which the caller hands to screensaverBuild.
 func screensaverEffect(name string) (string, tfx.Effect, bool) {
 	if name == config.ScreensaverRandomEffect {
 		names := tfx.Names()
@@ -322,12 +209,6 @@ func screensaverEffect(name string) (string, tfx.Effect, bool) {
 	return d.Name, d.New(), d.NeedsFillCharacters
 }
 
-// screensaverCells turns a captured grid into engine input.
-//
-// A glyph wider than one cell is dropped. The engine places one character per
-// column, so keeping a two-cell glyph would push the rest of its row one
-// column right and the whole capture would shear. A missing emoji in a screen
-// that is dissolving anyway is the cheaper loss.
 func screensaverCells(g *shot.Grid) [][]tfx.InputCell {
 	cells := make([][]tfx.InputCell, g.Rows)
 	for y := range g.Cells {
@@ -352,12 +233,7 @@ func screensaverCells(g *shot.Grid) [][]tfx.InputCell {
 	return cells
 }
 
-// stepScreensaver advances the animation by one frame. An effect that
-// finished restarts, so the saver keeps going until someone dismisses it.
 func (m *OS) stepScreensaver(time.Time) (bool, tea.Cmd) {
-	// A resize while the saver runs invalidates the capture it was built from.
-	// Rebuilding needs a screen to capture, and the screen is the animation, so
-	// the honest answer is to stop and let the idle timer bring it back.
 	if m.GetRenderWidth() != m.screensaver.width || m.GetRenderHeight() != m.screensaver.height {
 		m.stopScreensaver()
 		return true, m.armScreensaver()
@@ -378,8 +254,6 @@ func (m *OS) stepScreensaver(time.Time) (bool, tea.Cmd) {
 	return true, nil
 }
 
-// saverFrameEvery is how long the frame on screen stays: a frames file's own
-// time for it, or one frame at the effect rate.
 func (m *OS) saverFrameEvery() time.Duration {
 	if p := m.screensaver.player; p != nil {
 		return p.delays[p.at]
@@ -387,16 +261,12 @@ func (m *OS) saverFrameEvery() time.Duration {
 	return time.Second / time.Duration(screensaverRate(&m.Settings))
 }
 
-// restartScreensaverEffect builds a fresh effect over the same capture, so an
-// effect that runs to an end loops instead of freezing.
 func (m *OS) restartScreensaverEffect() bool {
 	cfg := m.screensaverConfig()
 	name, effect, fill := screensaverEffect(cfg.EffectName())
 	if effect == nil {
 		return false
 	}
-	// A fresh terminal, because the finished one has every character resolved
-	// and its scenes played out.
 	if m.screensaver.capture == nil {
 		return false
 	}
@@ -411,9 +281,6 @@ func (m *OS) restartScreensaverEffect() bool {
 	return true
 }
 
-// dismissScreensaver takes the animation off the screen and re-arms the idle
-// timer. It is called from the input path, which then drops the event that
-// triggered it.
 func (m *OS) dismissScreensaver() tea.Cmd {
 	m.stopScreensaver()
 	m.screensaver.lastInput = time.Now()
@@ -422,7 +289,6 @@ func (m *OS) dismissScreensaver() tea.Cmd {
 	return m.armScreensaver()
 }
 
-// stopScreensaver drops the animation and everything it held.
 func (m *OS) stopScreensaver() {
 	m.screensaver.active = false
 	m.screensaver.player = nil

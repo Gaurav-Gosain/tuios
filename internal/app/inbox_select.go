@@ -10,13 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The Inbox's selector filter: / opens a line where a selector is typed, the
-// same syntax list-agents --select and every other selector reader takes
-// (session/selector.go), and enter narrows the Inbox to the items it matches.
-// It sits beside the kind filter on f, and both apply. The selector stays
-// while the Inbox is closed and opened again, and the title says what it is,
-// so a narrowed Inbox never passes for an empty one.
-
 // InboxSelecting reports whether the selector line is open. While it is,
 // every printable key is text.
 func (m *OS) InboxSelecting() bool {
@@ -36,7 +29,6 @@ func (m *OS) InboxStartSelect() {
 	st.selectErr = ""
 }
 
-// selectDraft is what the selector line holds.
 func (st *InboxState) selectDraft() string {
 	if st.selectEd == nil {
 		return ""
@@ -76,7 +68,6 @@ func (m *OS) InboxSelectCancel() {
 	m.Inbox.selectErr = ""
 }
 
-// selectLine draws the selector line at width cells.
 func (m *OS) selectLine(width int) string {
 	pal := m.cockpitPalette()
 	bg := pal.Surface
@@ -112,20 +103,12 @@ func (m *OS) InboxSelectApply() {
 	st.selectEditing = false
 	st.selectEd = nil
 	st.selectErr = ""
-	// The rows changed under the cursor, so nothing counts as on screen until
-	// the next draw, the rule OpenInbox follows for the answer keys.
 	st.shown = inboxShown{}
 	st.Selected, st.SelectedID = 0, ""
 	st.Scroll = 0
 	m.clampInboxSelection()
 }
 
-// setInboxSelector puts sel in force, nil for none. It is the one writer of
-// the selector: Select is the text the search box, the esc ladder and the
-// list's cache key read, and selector is what the rows are matched with. The
-// esc clear set the text alone, so the box was empty, esc said close, and the
-// list stayed narrowed. A cache keyed on the text then kept the stale list
-// even after an empty search.
 func (m *OS) setInboxSelector(sel *session.Selector) {
 	st := &m.Inbox
 	if sel == nil {
@@ -135,10 +118,6 @@ func (m *OS) setInboxSelector(sel *session.Selector) {
 	st.Select, st.selector = sel.String(), sel
 }
 
-// inboxItemSelected reports whether an item passes the selector in force. An
-// item of this machine answers group from its session's worktree record; cwd
-// is not known here, so a cwd term matches no item in the Inbox (list-attention
-// --select answers it for this machine's items).
 func (m *OS) inboxItemSelected(it session.AttentionItem) bool {
 	sel := m.Inbox.selector
 	if sel == nil {

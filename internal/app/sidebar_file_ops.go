@@ -17,106 +17,37 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/textedit"
 )
 
-// # File actions on the rail
-//
-// Seven of them: create, rename, delete, copy, cut, paste, and send. The first
-// six are the set the maintainer named. Send is the seventh: it copies the row
-// to another machine through the daemon's transfers, after a small picker of
-// the machines whose link is up and a folder field (transfers_dialog.go).
-// There is no multi-select, no tree and no filter, because a twenty-six column
-// rail beside a terminal is not the place to grow a file manager and yeetui
-// already is one. Drag and drop is not in the rail either: files dropped on a
-// pane on another machine are a paste of their paths, and the pane's paste
-// handles them (DropPaste).
-//
-// # Where the prompts live
-//
-// Not in the rail. A create prompt, a rename field and a delete confirmation
-// each have to show a name and a question, and the rail has about twenty-two
-// columns left after its gutter and its glyph. "Delete /home/g/dev/tuios/in…?"
-// with the answer off the bottom is not a confirmation, it is a shape that
-// looks like one.
-//
-// So they are centred dialogs, which is what this codebase already does for
-// every focused question: the rename editor is one, the close-session
-// confirmation is one, and both are drawn by the same overlay.Dialog. A user
-// who has renamed a pane has already used this dialog. See
-// render_file_prompt.go for the frames.
-//
-// # Nothing touches the disk on the update goroutine
-//
-// Every one of the seven runs inside a tea.Cmd. This file decides what to do and
-// writes down what was asked for; the command does it. A paste of a large tree
-// takes as long as the disk takes and the rail keeps drawing for all of it.
-//
-// When an operation finishes it does not edit the listing in memory. It asks
-// for the listing again through requestFileList, which stamps a generation and
-// drops a superseded reply. Editing the slice instead would mean a read already
-// in flight, from before the delete, could land afterwards and put the deleted
-// name back on the rail.
-
-// fileSpoofRefusal is what the rail says when a pane named a folder the kernel
-// says its shell is not in. It is one sentence for what happened and one for
-// what to do instead, because a refusal the user cannot act on is a dead end.
-//
-// It does not say "OSC 7". The user did not print the escape and cannot see it,
-// and naming it would explain the mechanism instead of the situation.
 const fileSpoofRefusal = "This pane reports a folder it is not in. " +
 	"Open the folder in another pane to change files."
 
-// filePromptKind is what the open dialog is asking.
 type filePromptKind int
 
 const (
-	// filePromptNone means no dialog is up.
 	filePromptNone filePromptKind = iota
-	// filePromptCreate asks for a name to make. A trailing slash means a folder.
 	filePromptCreate
-	// filePromptRename asks for a new name for one entry.
 	filePromptRename
-	// filePromptConfirm asks a yes or no question about something destructive.
 	filePromptConfirm
 )
 
-// The confirmation's two rows, in drawn order. Cancel is first and is what the
-// dialog opens on, so enter on a dialog nobody has touched destroys nothing.
 const (
 	fileConfirmRowCancel = iota
 	fileConfirmRowGo
 	fileConfirmRowCount
 )
 
-// filePromptState is the open dialog. The zero value is no dialog.
 type filePromptState struct {
-	Kind filePromptKind
-	// Dir is the folder the dialog was opened over. It is remembered rather
-	// than re-read on submit: the listing can be replaced by a reply that was
-	// already in flight, and an operation must act on what the user was looking
-	// at when they pressed the key.
-	Dir string
-	// Target is the entry name a rename acts on, for the same reason.
+	Kind   filePromptKind
+	Dir    string
 	Target string
-	// Input is the typed name.
-	Input textedit.Line
-	// Err is the last refusal, drawn under the field so a second try can see
-	// what was wrong with the first.
-	Err string
-	// Paths is what a confirmation would act on, captured when it opened.
-	Paths []string
-	// Trash says the delete goes to the trash rather than being permanent. It
-	// decides the sentence the dialog shows and the operation that runs.
-	Trash bool
-	// List is the confirmation's cursor row.
-	List listnav.State
-	// Busy is true while an operation is running. It closes the dialog and
-	// stops a second operation starting on top of the first.
-	Busy bool
+	Input  textedit.Line
+	Err    string
+	Paths  []string
+	Trash  bool
+	List   listnav.State
+	Busy   bool
 }
 
-// fileOpMsg is one finished operation on its way back to the loop.
 type fileOpMsg struct {
-	// OK is the sentence for a run that worked, and Err the one for a run that
-	// did not. Both can be set: a batch that half worked has to say so.
 	OK  string
 	Err string
 }
@@ -154,17 +85,6 @@ func (m *OS) FileViewSpoofed() bool {
 	return m.filesView.Spoofed && m.filesView.Dir != ""
 }
 
-// fileActionTarget is the entry an action acts on, as an absolute path.
-//
-// The row a context menu was opened on comes first, and it is the only place
-// the mouse has to say what it aimed at: a right-click does not move the
-// keyboard cursor, and requiring it to would mean clicking a name twice to act
-// on it. The carry lives for one dispatch, so the same action reached by key
-// falls straight through to the cursor row. See fileMenuTarget.
-//
-// The ".." row names the folder above and is not a target on either path:
-// deleting the folder you are standing in from a row that means "go up" is the
-// kind of aim nobody takes on purpose.
 func (m *OS) fileActionTarget() (name, path string, ok bool) {
 	dir, e, ok := m.fileActionEntry()
 	if !ok {
@@ -173,14 +93,8 @@ func (m *OS) fileActionTarget() (name, path string, ok bool) {
 	return e.Name, filepath.Join(dir, e.Name), true
 }
 
-// fileActionEntry is fileActionTarget as the folder that holds the entry and
-// the entry itself, which is what says whether it is a folder.
 func (m *OS) fileActionEntry() (dir string, e fileEntry, ok bool) {
 	if t := m.menuFile; t.Active() && t.Name != "" {
-		// The folder the menu was opened over, not the one on screen now. A
-		// reply already in flight can replace the listing between the
-		// right-click and the row being chosen, and the action has to run on
-		// what the user was pointing at.
 		return t.Dir, fileEntry{Name: t.Name, Dir: t.IsDir}, true
 	}
 	row, have := m.sidebarCursorRow()
@@ -188,13 +102,8 @@ func (m *OS) fileActionEntry() (dir string, e fileEntry, ok bool) {
 		return "", fileEntry{}, false
 	}
 	if m.filesTreeOn() {
-		// A row of the tree is addressed by its path from the root, and is
-		// looked up in the listing of the folder that holds it.
 		return m.fileTreeEntry(row.WindowID)
 	}
-	// The index the row carries comes from the listing the render drew, which
-	// can be one reply behind the one in memory. A row past the end is that
-	// race, and it names nothing.
 	i := row.WindowIndex
 	if i < 0 || i >= len(m.filesView.Entries) {
 		return "", fileEntry{}, false
@@ -202,17 +111,8 @@ func (m *OS) fileActionEntry() (dir string, e fileEntry, ok bool) {
 	return m.filesView.Dir, m.filesView.Entries[i], true
 }
 
-// fileActionRefuse says why an action cannot run, once, in the notification
-// area. It answers true when it refused.
 func (m *OS) fileActionRefuse() bool {
 	if !m.FileActionsOn() {
-		// One gate, three reasons. All of them go through FileActionsOn so
-		// there is a single place that decides, and the setting cannot be
-		// honoured on one path and forgotten on another.
-		//
-		// The order matters: a user who switched the actions off is told that
-		// first, because it is the answer to why the key did nothing and it is
-		// the one they can act on from the settings row below.
 		switch {
 		case !m.Settings.SidebarFileActions:
 			m.ShowNotification("File actions are off. Turn them on in the settings.",
@@ -231,12 +131,6 @@ func (m *OS) fileActionRefuse() bool {
 	return false
 }
 
-// fileActionDir is the folder an action that needs no name acts in: the one the
-// menu was opened over, or the one on screen. Same carry, same reason.
-//
-// In the tree the folder is the one the row is in, or the row itself when it
-// is an open folder: a new file made on an open folder's row goes into it, the
-// way neo-tree does it.
 func (m *OS) fileActionDir() string {
 	if t := m.menuFile; t.Active() {
 		if full := filepath.Join(t.Dir, t.Name); t.Name != "" && t.IsDir && m.filesTree.dirs[full] != nil {
@@ -267,10 +161,6 @@ func (m *OS) SidebarFileCreate() {
 // name it already has.
 func (m *OS) SidebarFileRename() bool {
 	if !m.FileActionsOn() {
-		// A rename refused for the setting or for a closed section falls
-		// through to the rail's own rename binding, which is what the key does
-		// when the cursor is not on a file. A rename refused because the pane
-		// lied is a different event and says so.
 		if m.FileViewSpoofed() {
 			m.ShowNotification(fileSpoofRefusal, "warning", m.Settings.NotificationDuration)
 			return true
@@ -462,9 +352,6 @@ func looksLikeText(sample []byte) bool {
 	return false
 }
 
-// remoteEditIntentNote is the dock note for a file edit sent to a session on
-// another machine. This client has no way to check that host's editor or its
-// PATH, so it says what it asked for and what to check if nothing opens.
 func remoteEditIntentNote(host, name string, argv []string) string {
 	editor := "the editor"
 	if len(argv) > 0 && argv[0] != "" {
@@ -494,10 +381,6 @@ func (m *OS) handleFileEdit(msg fileEditMsg) tea.Cmd {
 		m.ShowNotification("tuios could not start the editor.", "error", m.Settings.NotificationDuration)
 		return nil
 	}
-	// A session on another machine gets no answer from this request: the
-	// daemon there opens the pane, or fails to, off this client's screen. Say
-	// what was asked for, because a client that stays silent here can not be
-	// told apart from one that is still waiting.
 	if remoteHost != "" && m.daemonWindowIntent {
 		m.ShowNotification(remoteEditIntentNote(remoteHost, filepath.Base(msg.Path), msg.Argv),
 			"info", m.Settings.NotificationDuration)
@@ -517,11 +400,6 @@ func (m *OS) SidebarFileCopy() { m.captureFileClipboard(false) }
 // SidebarFileCut puts the cursor row on the file clipboard for a move.
 func (m *OS) SidebarFileCut() { m.captureFileClipboard(true) }
 
-// captureFileClipboard records what a paste would act on.
-//
-// It takes no confirmation and touches nothing. A cut is a note about what to
-// move later, not the move: the source goes only when a paste has written the
-// destination, and even then only if the write worked.
 func (m *OS) captureFileClipboard(move bool) {
 	if m.fileActionRefuse() {
 		return
@@ -560,8 +438,6 @@ func (m *OS) SidebarFilePaste() tea.Cmd {
 	}
 	dir, clip := m.fileActionDir(), m.fileClip
 	m.filePrompt.Busy = true
-	// A cut is spent by the paste that moves it. Leaving it on the clipboard
-	// would let a second paste try to move a source that is no longer there.
 	if clip.Move {
 		m.fileClip = fileClipboard{}
 	}
@@ -608,7 +484,6 @@ func (m *OS) FilePromptKey(key, text string) {
 	}
 }
 
-// filePromptTyping reports whether the open prompt takes a typed name.
 func (m *OS) filePromptTyping() bool {
 	return m.filePrompt.Kind == filePromptCreate || m.filePrompt.Kind == filePromptRename
 }
@@ -616,8 +491,6 @@ func (m *OS) filePromptTyping() bool {
 // FilePromptCancel shuts the dialog and changes nothing.
 func (m *OS) FilePromptCancel() { m.closeFilePrompt() }
 
-// closeFilePrompt drops the dialog, keeping the busy flag: an operation already
-// running outlives the dialog that started it.
 func (m *OS) closeFilePrompt() {
 	busy := m.filePrompt.Busy
 	m.filePrompt = filePromptState{Busy: busy}
@@ -678,8 +551,6 @@ func (m *OS) FilePromptSubmit() tea.Cmd {
 	return nil
 }
 
-// trimTrailingSeparators drops the trailing slash a create prompt uses to mean
-// "a folder", so the validator sees the name and not the mark.
 func trimTrailingSeparators(s string) string {
 	for len(s) > 0 && (s[len(s)-1] == '/' || s[len(s)-1] == os.PathSeparator) {
 		s = s[:len(s)-1]
@@ -739,8 +610,6 @@ func (m *OS) HandleFileOp(msg fileOpMsg) tea.Cmd {
 	m.filePrompt.Busy = false
 	switch {
 	case msg.Err != "" && msg.OK != "":
-		// A batch that half worked. The failure is the half the user has to act
-		// on, so it is the half that gets the sentence and the warning colour.
 		m.ShowNotification(msg.OK+" "+msg.Err, "warning", m.Settings.NotificationDuration)
 	case msg.Err != "":
 		m.ShowNotification(msg.Err, "error", m.Settings.NotificationDuration)
@@ -750,7 +619,6 @@ func (m *OS) HandleFileOp(msg fileOpMsg) tea.Cmd {
 	return m.RefreshFileView()
 }
 
-// fileConfirmQuestion is the confirmation's first line: what goes, by name.
 func (m *OS) fileConfirmQuestion() string {
 	paths := m.filePrompt.Paths
 	switch len(paths) {
@@ -763,11 +631,6 @@ func (m *OS) fileConfirmQuestion() string {
 	}
 }
 
-// fileConfirmOutcome is the line that says whether the file comes back.
-//
-// The two sentences have to be told apart at a glance, because they are the
-// whole difference between the two deletes. One says where the file goes and
-// that it can be got back; the other says it is permanent.
 func (m *OS) fileConfirmOutcome() string {
 	if m.filePrompt.Trash {
 		return "The file goes to the trash. You can get it back."

@@ -13,9 +13,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// syncPane is one pane in a syncHoldHarness: an emulator of the build's
-// backend wired to the shared passthrough the way setupKittyPassthrough
-// wires it, synchronized-update probe included.
 type syncPane struct {
 	id   string
 	term vt.Terminal
@@ -51,7 +48,6 @@ func newSyncHoldHarness(t *testing.T) *syncHoldHarness {
 	}
 }
 
-// pane adds a pane whose content starts at column x of the host screen.
 func (h *syncHoldHarness) pane(id string, x int) *syncPane {
 	term := vt.New(40, 24)
 	h.t.Cleanup(func() { _ = term.Close() })
@@ -72,14 +68,11 @@ func (h *syncHoldHarness) pane(id string, x int) *syncPane {
 	return p
 }
 
-// tick is one render loop pass: refresh, then drain.
 func (h *syncHoldHarness) tick() string {
 	h.kp.RefreshAllPlacements(func() map[string]*WindowPositionInfo { return h.info })
 	return string(h.kp.FlushPending())
 }
 
-// hostWritten is what the passthrough wrote to the host directly, outside
-// the render loop's drain.
 func (h *syncHoldHarness) hostWritten() string {
 	b, err := os.ReadFile(h.host.Name())
 	if err != nil {
@@ -90,7 +83,6 @@ func (h *syncHoldHarness) hostWritten() string {
 
 var hostAction = regexp.MustCompile(`\x1b_G[^;\x1b]*?a=([a-zA-Z])`)
 
-// hostActions lists the kitty actions in some host output, in order.
 func hostActions(out string) string {
 	var b strings.Builder
 	for _, m := range hostAction.FindAllStringSubmatch(out, -1) {
@@ -99,9 +91,6 @@ func hostActions(out string) string {
 	return b.String()
 }
 
-// OpenTUI's Magick Arena demo, as captured from its own output: every frame
-// is one synchronized update that frees the previous image, transmits the new
-// one in raw RGB chunks under the same id, and places it with C=1.
 const (
 	arenaFirst  = "\x1b_Ga=t,f=24,s=2,v=2,i=77,m=1,q=2;AAAAAAAA\x1b\\"
 	arenaLast   = "\x1b_Gm=0,q=2;AAAAAAAA\x1b\\"
@@ -309,8 +298,6 @@ func TestHeldFrameGoesOutWithItsRefreshPlacement(t *testing.T) {
 		t.Run(medium, func(t *testing.T) {
 			h := newSyncHoldHarness(t)
 			a := h.pane("a", 0)
-			// Each frame differs, as a page being drawn does; an identical
-			// frame is not sent again at all.
 			dir := t.TempDir()
 			frame := func(n int) string {
 				pixels := bytes.Repeat([]byte{byte(n + 1)}, 16)

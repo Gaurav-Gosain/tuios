@@ -15,60 +15,24 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The Inbox's peek: space on an approval or a question reads the prompt the
-// agent is blocked on (the daemon's peek-prompt verb) and shows it over the
-// list, with its options and how long it has waited. From there the person
-// answers without attaching: a digit chooses an option, a approves, A approves
-// for good, d denies, tab opens a line to type an answer into, enter goes to
-// the pane instead, and esc goes back to the list.
-//
-// An answer is the daemon's respond verb, with this client's attach nonce and
-// the prompt_id the peek read. The daemon reads the prompt again before it
-// presses anything, so an answer to a prompt that changed, or that another
-// client answered first, presses nothing and comes back prompt_changed. The
-// peek then reads the prompt again and says so, and the person answers what
-// is there now.
-//
-// A key that did not come from the keyboard, one that tuios send-keys pushed
-// into this client, never answers: the nonce stands for the person, and an
-// agent that can drive the client with send-keys is not the person. The same
-// rule keeps such keys from signing a mail reply (agent_mail.go).
-
-// inboxPeekTimeout bounds the peek-prompt call.
 const inboxPeekTimeout = 5 * time.Second
 
-// inboxRespondWait is how long respond waits for the pane to move on, and
-// inboxRespondTimeout bounds the call around that wait.
 const (
 	inboxRespondWait    = 5000
 	inboxRespondTimeout = 15 * time.Second
 )
 
-// inboxPeek is the open peek.
 type inboxPeek struct {
-	// Item is the Inbox item the peek is about.
-	Item session.AttentionItem
-	// Loading is true while a read is out.
-	Loading bool
-	// LoadingSince is when the read went out; the peek says it is reading
-	// only once the read has run past overlay.LoadingDelay.
+	Item         session.AttentionItem
+	Loading      bool
 	LoadingSince time.Time
-	// Peek is the last read, nil until one arrives.
-	Peek *session.PromptPeek
-	// Sending is true while an answer is out.
-	Sending bool
-	// Err is the last read or answer that failed, in words.
-	Err string
-	// Note is what the peek says above the prompt: that the prompt changed
-	// before an answer landed, for one.
-	Note string
-	// Composing is true while the text line is open, and Answer is the
-	// line, a one-line composer. It records a key that did not come from
-	// the keyboard, and such a draft is never sent.
-	Composing bool
-	Answer    *composer.Model
-	// gen tells a reply to this peek from one to a peek since closed.
-	gen uint64
+	Peek         *session.PromptPeek
+	Sending      bool
+	Err          string
+	Note         string
+	Composing    bool
+	Answer       *composer.Model
+	gen          uint64
 }
 
 // InboxPeekMsg is a peek-prompt reply.
@@ -86,10 +50,8 @@ type InboxRespondedMsg struct {
 	Err    error
 }
 
-// inboxVerbCall makes one verb call to this machine's daemon.
 type inboxVerbCall func(verb string, params map[string]any, timeout time.Duration) (json.RawMessage, error)
 
-// inboxCaller is how the peek reaches the daemon. Tests set InboxState.call.
 func (m *OS) inboxCaller() inboxVerbCall {
 	if m.Inbox.call != nil {
 		return m.Inbox.call
@@ -115,12 +77,6 @@ func (m *OS) SetInboxVerbCaller(call func(verb string, params map[string]any, ti
 	m.Inbox.call, m.Inbox.nonce = call, nonce
 }
 
-// inboxNonce is this client's attach nonce, which signs a call as the
-// person's. Every call that carries human_nonce takes it from here. It is
-// empty while the client handles a key that send-keys or a tape's Press
-// typed: the daemon takes a signed call as the person's and cannot see who
-// pressed the key, so nothing such a key starts is signed. noNonceText says
-// why a call that needs it was not sent.
 func (m *OS) inboxNonce() string {
 	if m.notThePersonsKey() {
 		return ""
@@ -134,25 +90,16 @@ func (m *OS) inboxNonce() string {
 	return m.DaemonClient.HumanNonce()
 }
 
-// notThePersonsKey reports whether the key being handled came from send-keys
-// or a tape's Press, not from the person's keyboard. In a docs rig a tape's
-// Press counts as the person's; send-keys never does. See
-// internal/session/rig.go.
 func (m *OS) notThePersonsKey() bool {
 	return m.ProcessingRemoteKeys || (m.pressingTapeKeys && !m.inRig())
 }
 
-// rigClient is TUIOS_RIG=1 in this client's environment, read once.
 var rigClient = os.Getenv("TUIOS_RIG") == "1"
 
-// inRig reports whether this client and the daemon it is attached to are a
-// docs rig: both must say so.
 func (m *OS) inRig() bool {
 	return rigClient && m.DaemonClient != nil && m.DaemonClient.Rig()
 }
 
-// noNonceText is why a call that must be signed as the person's was not sent:
-// the key that asked for it was not theirs, or the daemon gave no nonce.
 func (m *OS) noNonceText() string {
 	if m.notThePersonsKey() {
 		return "A key that send-keys or a tape typed does not act for you. Only keys from your keyboard do"
@@ -160,8 +107,6 @@ func (m *OS) noNonceText() string {
 	return "This daemon issued no attach nonce, so it cannot tell you from an agent. Update the daemon"
 }
 
-// signedNonce is inboxNonce for a call that acts as the person. When there
-// is no nonce to sign with, it shows why, and the call is not made.
 func (m *OS) signedNonce() (string, bool) {
 	nonce := m.inboxNonce()
 	if nonce == "" {
@@ -171,9 +116,6 @@ func (m *OS) signedNonce() (string, bool) {
 	return nonce, true
 }
 
-// tmlNonce is signedNonce for a TML surface. A key that send-keys or a tape
-// typed does not act on a surface for the person, and the notice says what a
-// program uses instead.
 func (m *OS) tmlNonce() (string, bool) {
 	if m.notThePersonsKey() {
 		m.ShowNotification("A key that send-keys or a tape typed does not act on a surface for you. A program changes its own surface with tuios tml patch and closes it with tuios tml close", "error", m.Settings.NotificationDuration*2)
@@ -182,7 +124,6 @@ func (m *OS) tmlNonce() (string, bool) {
 	return m.signedNonce()
 }
 
-// inboxPeekable reports whether an item has a prompt to peek at.
 func inboxPeekable(it session.AttentionItem) bool {
 	return (it.Kind == session.AttentionApproval || it.Kind == session.AttentionQuestion) && it.Window != ""
 }
@@ -209,9 +150,6 @@ func (m *OS) InboxPeek() tea.Cmd {
 		return nil
 	}
 	if it.RequestID != "" {
-		// A hook holds this approval off the screen until the Inbox answers
-		// it, so the pane shows no prompt for the peek to read or press
-		// keys into. The Inbox answers it with reply-approval instead.
 		m.ShowNotification("tuios holds this approval: answer it with "+inboxAnswerKeys(it)+", or enter to answer in the pane", "info", m.Settings.NotificationDuration)
 		return nil
 	}
@@ -228,7 +166,6 @@ func (m *OS) InboxPeek() tea.Cmd {
 	return m.inboxPeekRead()
 }
 
-// inboxPeekRead reads the open peek's prompt again.
 func (m *OS) inboxPeekRead() tea.Cmd {
 	p := m.Inbox.Peek
 	if p == nil {
@@ -278,7 +215,6 @@ func (m *OS) InboxPeekGo() {
 	m.inboxJump(it)
 }
 
-// applyInboxPeek takes a peek-prompt reply for the open peek.
 func (m *OS) applyInboxPeek(msg InboxPeekMsg) {
 	p := m.Inbox.Peek
 	if p == nil || p.gen != msg.Gen {
@@ -299,8 +235,6 @@ func (m *OS) InboxAnswer(action, value string) tea.Cmd {
 	return m.inboxAnswer(action, value, false)
 }
 
-// inboxAnswer is InboxAnswer; confirmed says the answer is the enter after
-// the peek asked, its second step.
 func (m *OS) inboxAnswer(action, value string, confirmed bool) tea.Cmd {
 	p := m.Inbox.Peek
 	if p == nil || p.Sending || p.Loading {
@@ -328,8 +262,6 @@ func (m *OS) inboxAnswer(action, value string, confirmed bool) tea.Cmd {
 		p.Err = m.noNonceText() + "."
 		return nil
 	}
-	// An allow of a risky call takes a second press of the same key, and
-	// carries the rules it matched. See inbox_approvals_ext.go.
 	ack, send := m.inboxPeekRiskGate(p, action, value, confirmed)
 	if !send {
 		return nil
@@ -364,7 +296,6 @@ func (m *OS) inboxAnswer(action, value string, confirmed bool) tea.Cmd {
 	}
 }
 
-// inboxNotOffered says why an action is not offered on a prompt.
 func inboxNotOffered(pk *session.PromptPeek, action string) string {
 	if len(pk.Actions) == 0 {
 		why := strings.TrimSpace(pk.Reason)
@@ -376,7 +307,6 @@ func inboxNotOffered(pk *session.PromptPeek, action string) string {
 	return "This prompt does not take " + strings.ReplaceAll(action, "_", " ") + ". It takes " + strings.Join(pk.Actions, ", ") + "."
 }
 
-// inboxHasOption reports whether the peek shows option value.
 func inboxHasOption(pk *session.PromptPeek, value string) bool {
 	n, err := strconv.Atoi(value)
 	if err != nil {
@@ -390,7 +320,6 @@ func inboxHasOption(pk *session.PromptPeek, value string) bool {
 	return false
 }
 
-// capitalize upper-cases the first letter of a sentence.
 func capitalize(s string) string {
 	if s == "" {
 		return s
@@ -398,9 +327,6 @@ func capitalize(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-// applyInboxResponded takes a respond reply. An answer that landed closes the
-// peek and says where the pane went. A prompt that changed under the answer
-// is read again, so the person sees what is there now.
 func (m *OS) applyInboxResponded(msg InboxRespondedMsg) tea.Cmd {
 	p := m.Inbox.Peek
 	if p == nil || p.gen != msg.Gen {
@@ -433,7 +359,6 @@ func (m *OS) applyInboxResponded(msg InboxRespondedMsg) tea.Cmd {
 	return nil
 }
 
-// inboxSentWords is what respond pressed, as a toast says it.
 func inboxSentWords(sent string) string {
 	if sent == "text" {
 		return "your answer"
@@ -460,11 +385,8 @@ func (m *OS) InboxPeekStartText() {
 	}
 }
 
-// inboxPeekAnswerMax bounds a typed answer.
 const inboxPeekAnswerMax = 4 << 10
 
-// draftAutomated reports whether a key that did not come from the keyboard
-// touched the answer.
 func (p *inboxPeek) draftAutomated() bool {
 	return p.Answer != nil && p.Answer.Automated()
 }

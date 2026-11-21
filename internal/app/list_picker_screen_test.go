@@ -13,24 +13,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/layouttmpl"
 )
 
-// The list pickers share one list state and one line editor (list_picker.go).
-// These tests drive three of them as a person does and read the screen.
-//
-// How they could pass wrongly, written down first:
-//   - Typing could append at the end whatever the caret does. The filter is
-//     typed with the caret moved back into it, and the text on screen must be
-//     the edited one, not the typed order.
-//   - A list could still move on a hard-coded key. The list keys are rebound
-//     to one key in [keybindings.lists]; the default key must then do nothing
-//     and the rebound one must move the cursor.
-//   - A refilter could leave the cursor on a row that is gone. After typing,
-//     the cursor row must be the first row of the filtered list.
-//   - A paste could go around the editor. A paste into the filter must filter
-//     as typing does.
-//   - The save field could ignore the caret, or save the typed order. The
-//     name saved on disk must be the edited one.
-
-// openEffectPicker opens the screen saver effect picker from its settings row.
 func openEffectPicker(t *testing.T, opts ...apptest.Option) *apptest.Fixture {
 	t.Helper()
 	f := apptest.New(t, append([]apptest.Option{apptest.Size(120, 40), apptest.Colors16()}, opts...)...)
@@ -38,16 +20,11 @@ func openEffectPicker(t *testing.T, opts ...apptest.Option) *apptest.Fixture {
 	return f
 }
 
-// openFromSettings opens the picker behind a settings row, found by search.
-// marker is text the picker shows and the settings page does not.
 func openFromSettings(t *testing.T, f *apptest.Fixture, row, marker string) {
 	t.Helper()
 	f.Action("open_settings")
 	f.Keys("/")
 	f.Type(row)
-	// The first enter leaves the search on the row it found; the row's own
-	// enter opens the picker. The search may take one more, so press until
-	// the picker is there, at most three times.
 	for range 3 {
 		f.Keys("enter")
 		if _, _, ok := f.Find(marker); ok {
@@ -57,7 +34,6 @@ func openFromSettings(t *testing.T, f *apptest.Fixture, row, marker string) {
 	t.Fatalf("the %s picker did not open:\n%s", row, f.Text())
 }
 
-// highlighted is the cursor row's text, trimmed.
 func highlighted(f *apptest.Fixture) string {
 	return strings.TrimSpace(strings.Join(f.Highlighted(), " "))
 }
@@ -74,8 +50,6 @@ func TestPickerFilterEditsAtTheCaret(t *testing.T) {
 		t.Errorf("ASSERTION: after the refilter the cursor is on %q, want the first match, matrix", got)
 	}
 
-	// ctrl+u clears the filter, and the whole list comes back with the
-	// cursor on its first row.
 	f.Keys("ctrl+u")
 	if _, _, ok := f.Find("matr "); ok {
 		t.Errorf("ASSERTION: ctrl+u left the filter on screen:\n%s", f.Text())
@@ -93,8 +67,6 @@ func TestPickerPasteFilters(t *testing.T) {
 	}
 }
 
-// saveLayouts writes three saved layouts, the rows of the layout picker in a
-// session with no daemon.
 func saveLayouts(t *testing.T) {
 	t.Helper()
 	for _, name := range []string{"alpha", "beta", "gamma"} {
@@ -295,12 +267,10 @@ func TestTheOldSwitchersOpenGoto(t *testing.T) {
 		if _, _, ok := f.Find("Go to"); !ok || !strings.Contains(queryLine(f), "#") {
 			t.Fatalf("ASSERTION: prefix_session_switcher did not open go-to on #:\n%s", f.Text())
 		}
-		// A name nothing has: enter makes that session, and the list says so.
 		f.Type("newsess")
 		if _, _, ok := f.Find("No session 'newsess': enter makes it"); !ok {
 			t.Errorf("ASSERTION: a session name nothing has does not say enter makes it:\n%s", f.Text())
 		}
-		// ctrl+d on the session the client shows is refused, as before.
 		f.Keys("ctrl+u")
 		f.Type("# ")
 		f.Keys("ctrl+d")
@@ -315,9 +285,6 @@ func TestTheOldSwitchersOpenGoto(t *testing.T) {
 		if !strings.Contains(queryLine(f), "!") {
 			t.Fatalf("ASSERTION: prefix_workspace_switcher did not open go-to on !:\n%s", f.Text())
 		}
-		// ctrl+r renames the workspace under the cursor. The rename takes the
-		// keys, and go-to stays open under it, as the switcher did. The row
-		// reading the new name needs a daemon: the e2e rename test checks it.
 		f.Keys("ctrl+r")
 		f.Type("deploys")
 		f.Keys("enter")

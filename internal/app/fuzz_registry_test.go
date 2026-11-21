@@ -10,23 +10,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/fuzz"
 )
 
-// The registry has to name exactly the rules the oracle can break, and nothing
-// keeps the two in step except this test. The failure it guards is quiet: a
-// display matches a Violation's Rule against the registry, so a rule that can
-// break under a name the registry does not carry renders as passing for the
-// whole run, and a registered name nothing ever emits renders as a rule that is
-// being checked when it is not. Both are the display telling the maintainer
-// something untrue, which is worse than showing nothing.
-//
-// The check reads the oracle's source rather than running it, because the
-// alternative is waiting for a fuzz run to happen to break each rule.
-
-// oracleFiles are the files that construct Violations.
 var oracleFiles = []string{"fuzz_oracle_test.go", "fuzz_oracle_scope_test.go"}
 
-// emittedRules collects the first argument of every vio(...) call in the
-// oracle. vio is the single constructor for a Violation in these files, which
-// is what makes the scan complete.
 func emittedRules(t *testing.T) map[string]string {
 	t.Helper()
 	out := map[string]string{}

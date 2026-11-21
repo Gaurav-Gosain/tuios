@@ -7,8 +7,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// newQueryTestPassthrough builds a passthrough whose host either can or cannot
-// read files from this machine, without going near a real terminal.
 func newQueryTestPassthrough(t *testing.T, hostReadsFiles bool) *KittyPassthrough {
 	t.Helper()
 	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
@@ -17,8 +15,6 @@ func newQueryTestPassthrough(t *testing.T, hostReadsFiles bool) *KittyPassthroug
 	}
 	t.Cleanup(func() { _ = devnull.Close() })
 
-	// clientCapabilities takes precedence in GetHostCapabilities, so setting
-	// it keeps the test off the real terminal's detection path entirely.
 	previous := clientCapabilities.Load()
 	clientCapabilities.Store(&HostCapabilities{
 		KittyGraphics:     true,
@@ -30,8 +26,6 @@ func newQueryTestPassthrough(t *testing.T, hostReadsFiles bool) *KittyPassthroug
 
 	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: devnull})
 	kp.enabled = true
-	// ForceEnable would also pin inlineGraphics; leave it off so the test
-	// exercises the capability rather than the tuios-web override.
 	kp.inlineGraphics = false
 	return kp
 }
@@ -79,8 +73,6 @@ func TestForwardQueryAllowsFileMediaOnCapableHost(t *testing.T) {
 		"shared memory": vt.KittyMediumSharedMemory,
 	} {
 		want := "\x1b_Gi=7;OK\x1b\\"
-		// Shared memory without a filesystem path cannot be read by tuios,
-		// even when the host shares our ordinary files (for example macOS).
 		if medium == vt.KittyMediumSharedMemory && !kittyShmReadable() {
 			want = "\x1b_Gi=7;ENOTSUPPORTED:shared memory is not supported here\x1b\\"
 		}

@@ -43,9 +43,9 @@ func TestAStaleFederationTickIsDropped(t *testing.T) {
 	m.federationPolling = true
 	m.SidebarCollapsed = false
 
-	_ = m.federationRefreshTick(hostRefreshActive) // gen 1, the tick's own re-arm
+	_ = m.federationRefreshTick(hostRefreshActive)
 	old := m.federationTickGen
-	_ = m.federationRefreshTick(hostRefreshActive) // gen 2, the snapshot's re-arm
+	_ = m.federationRefreshTick(hostRefreshActive)
 
 	if _, cmd := m.Update(FederationRefreshTickMsg{Gen: old}); cmd != nil {
 		t.Error("ASSERTION: a tick from a retired generation still polled")
@@ -55,10 +55,6 @@ func TestAStaleFederationTickIsDropped(t *testing.T) {
 	}
 }
 
-// hostRailOS is the sidebar fixture with a federated snapshot already stored,
-// which is the only way host rows ever reach the rail: the poll runs in a Cmd
-// and the render path reads what it left behind. The attached session is
-// named home so the rows can be told from the machine named local.
 func hostRailOS(t *testing.T) *OS {
 	t.Helper()
 	m := sidebarTestOS(t, 120, 40, "left")
@@ -90,15 +86,11 @@ func hostRailOS(t *testing.T) *OS {
 	return m
 }
 
-// hostRailText is railText joined into one block, so an assertion can talk
-// about the order rows appear in as well as their content.
 func hostRailText(t *testing.T, m *OS) string {
 	t.Helper()
 	return strings.Join(railText(t, m), "\n")
 }
 
-// hostHeader is the text a machine's header row starts with: the fold mark
-// and the name, as the active glyph set draws them.
 func hostHeader(m *OS, name string, collapsed bool) string {
 	mark := m.Settings.GetRailFoldOpenGlyph()
 	if collapsed {
@@ -107,7 +99,6 @@ func hostHeader(m *OS, name string, collapsed bool) string {
 	return mark + " " + name
 }
 
-// railLineIndex is the index of the first rail line containing needle, or -1.
 func railLineIndex(lines []string, needle string) int {
 	for i, l := range lines {
 		if strings.Contains(l, needle) {
@@ -125,9 +116,6 @@ func railLineIndex(lines []string, needle string) int {
 func TestMachineOrderHoldsAcrossASwitch(t *testing.T) {
 	m := sidebarTestOS(t, 120, 40, "left")
 	m.SessionName = "home"
-	// build holds one session, which is what the live state below will show
-	// once the client is on it: the fixture has no daemon client to list the
-	// rest from.
 	m.applyFederationSnapshot(FederationHostsMsg{
 		Configured: 2,
 		Snapshot: FederationSnapshot{Hosts: []FederationHost{
@@ -152,9 +140,6 @@ func TestMachineOrderHoldsAcrossASwitch(t *testing.T) {
 		}
 	}
 
-	// The switch onto api on build, as adoptClient leaves the model: the
-	// attached session is now build's, and this machine's sessions arrive in
-	// the snapshot.
 	m.AttachedHost = "build"
 	m.SessionName = "api"
 	m.sidebarCache.invalidate()
@@ -173,7 +158,6 @@ func TestMachineOrderHoldsAcrossASwitch(t *testing.T) {
 	if strings.Contains(strings.Join(lines, "\n"), "@ build") {
 		t.Errorf("ASSERTION: the section header names the attached machine:\n%s", strings.Join(lines, "\n"))
 	}
-	// The attached session is a local row under build, not a remote one.
 	if got := m.SidebarSessionIDs; len(got) != 1 || got[0] != "api" {
 		t.Errorf("ASSERTION: the attached session is not the switchable row: %v", got)
 	}
@@ -268,9 +252,6 @@ func TestSessionCyclingSkipsOtherMachines(t *testing.T) {
 	}
 }
 
-// cachedDownHostOS is the rail with a host whose link is not up but whose last
-// listing is still cached. It is the fixture the two halves of the reachability
-// rule need: an up host with sessions, and a down host with sessions.
 func cachedDownHostOS(t *testing.T) *OS {
 	t.Helper()
 	m := sidebarTestOS(t, 120, 40, "left")
@@ -285,8 +266,6 @@ func cachedDownHostOS(t *testing.T) *OS {
 				},
 			},
 			{
-				// A cached listing shown while the link redials. Its rows are
-				// stale, so they are drawn and must not be reachable.
 				Name:   "stale",
 				Status: string(federation.StatusConnecting),
 				Sessions: []FederationSession{
@@ -379,8 +358,6 @@ func TestUpHostOffersANewControl(t *testing.T) {
 // TestHostRowsDoNotEnterTheColourArbitration keeps a machine elsewhere from
 // changing what a local session looks like.
 func TestHostRowsDoNotEnterTheColourArbitration(t *testing.T) {
-	// Restored to whatever it was, not to false: this is a package global, and
-	// another test in this binary asserts on it.
 	prev := config.Global.SessionColors
 	config.Global.SessionColors = true
 	t.Cleanup(func() { config.Global.SessionColors = prev })
@@ -388,9 +365,6 @@ func TestHostRowsDoNotEnterTheColourArbitration(t *testing.T) {
 	m := hostRailOS(t)
 	tree := m.BuildSessionTree()
 
-	// Fixture sanity, checked against the tree rather than against the function
-	// under test. Folding the two together made a failure of the filter read as
-	// "the fixture produced no host rows", which blames the wrong thing.
 	remotes := 0
 	for _, n := range tree.Sessions {
 		if isRemoteNode(n) {

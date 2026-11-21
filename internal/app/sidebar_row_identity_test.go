@@ -9,8 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// bareShellOS is the case the rail was worst at: n panes in one repo, none
-// named, none running anything, so every one of them reports the same title.
 func bareShellOS(t *testing.T, n int) *OS {
 	t.Helper()
 	m := newNarrowOS(t, 120, 40)
@@ -29,8 +27,6 @@ func bareShellOS(t *testing.T, n int) *OS {
 	return m
 }
 
-// paneRows returns the rendered rows that carry a pane label, which is every
-// row indented past its session and holding want.
 func paneRows(rows []string, want string) []string {
 	var out []string
 	for _, r := range rows {
@@ -58,8 +54,6 @@ func TestRailRowsDistinguishBareShells(t *testing.T) {
 		}
 		seen[strings.TrimSpace(r)] = true
 	}
-	// The noise is gone with the ambiguity: the shell's name says nothing that
-	// the pane beside it does not.
 	for _, r := range rows {
 		if strings.Contains(r, "fish") {
 			t.Errorf("row still carries the shell name: %q", r)

@@ -14,41 +14,17 @@ import (
 	"tuios.dev/vt"
 )
 
-// The matrix. Every route a client takes into a pane, crossed with every shape
-// a pane can be in when it takes it, asserting the one contract they all share:
-// the client ends up holding what the daemon holds. docs/REHYDRATION.md states
-// the contract and why the routes collapse into two implementations of it.
-//
-// The oracle is the daemon's own emulator, read over the wire the client reads
-// it over. Grid, scrollback, cursor and the alternate-screen flag are all
-// compared, because the bugs this replaces were each found by noticing one of
-// them on screen after the others looked fine.
-
-// paneShape arranges a pane into one of the states rehydration has to survive.
 type paneShape struct {
-	name string
-	// arrange runs with the pane visible and subscribed, before the route.
-	arrange func(r *rig, ptyID string)
-	// whileAway runs at the point in the route where this client is not
-	// subscribed to the pane. Nil when the shape is about the pane itself
-	// rather than about what happened behind the client's back.
+	name      string
+	arrange   func(r *rig, ptyID string)
 	whileAway func(r *rig, ptyID string)
-	// finish runs after the route and before the comparison, for a shape that
-	// leaves the pane still producing.
-	finish func(r *rig, ptyID string)
-	// check adds what this shape alone is about, on top of the comparison every
-	// shape gets.
-	check func(t *testing.T, r *rig, ptyID string)
+	finish    func(r *rig, ptyID string)
+	check     func(t *testing.T, r *rig, ptyID string)
 }
 
-// routeCase is one way a client comes to hold a pane. away runs while the pane
-// is not subscribed, which is where a shape's whileAway hook goes.
 type routeCase struct {
-	name string
-	run  func(r *rig, away func())
-	// rebuilds marks a route that closes every window and builds the session's
-	// panes again, which is what decides whether client-local view state can
-	// survive it at all.
+	name     string
+	run      func(r *rig, away func())
 	rebuilds bool
 }
 
@@ -65,9 +41,6 @@ var rehydrationShapes = []paneShape{
 			r.feedPTY(ptyID, `i=1; while [ $i -le 60 ]; do echo "SB-$i-END"; i=$((i+1)); done`, "SB-60-END")
 			w := r.winByPTY(ptyID)
 			r.settle()
-			// Scrolled up, which is a position the user chose and expects
-			// back. Copy mode carries the offset and mirrors it onto the
-			// window, which is what the wheel and the motion keys both do.
 			w.EnterCopyMode()
 			w.CopyMode.ScrollOffset = 10
 			w.ScrollbackOffset = 10
@@ -75,16 +48,6 @@ var rehydrationShapes = []paneShape{
 		check: func(t *testing.T, r *rig, ptyID string) {
 			w := r.winByPTY(ptyID)
 			if r.rebuiltWindows {
-				// Where the pane is scrolled to is this viewer's state, not the
-				// pane's: it is not on the wire, and a second client watching
-				// the same pane must not be dragged to where this one scrolled.
-				// A route that closes every window therefore loses it, and the
-				// pane comes back at the tail. Asserted rather than skipped so
-				// the loss is a decision on the record: restoring the raw
-				// offset after the pane produced more output would put the user
-				// somewhere they never were, so recovering this means anchoring
-				// to a scrollback line rather than to a distance from the
-				// bottom. See docs/REHYDRATION.md.
 				if w.InCopyMode() || w.ScrollbackOffset != 0 {
 					t.Errorf("a route that rebuilds windows came back at offset %d (copy mode %v), want the tail",
 						w.ScrollbackOffset, w.InCopyMode())
@@ -100,12 +63,7 @@ var rehydrationShapes = []paneShape{
 	{
 		name: "alt-screen",
 		arrange: func(r *rig, ptyID string) {
-			// Enter the alternate screen and draw in it, the way vim or htop
-			// leaves a pane. Written by hand rather than by running an editor so
-			// the test does not depend on one being installed.
 			r.feedPTY(ptyID, `printf '\033[?1049h\033[H\033[2JAL''T-SCREEN-BODY\r\n'`, "ALT-SCREEN-BODY")
-			// A shape that quietly failed to arrange itself would make every
-			// alt-screen row of the matrix pass by testing nothing.
 			st, err := r.ctl.GetTerminalState(ptyID, -1, 0)
 			if err != nil || st == nil || !st.IsAltScreen {
 				r.t.Fatalf("the pane never entered the alternate screen (err %v, state %v)", err, st)
@@ -131,10 +89,6 @@ var rehydrationShapes = []paneShape{
 			r.feedPTY(ptyID, `printf '\033[?1049h\033[H\033[2JAL''T-OVER-BODY\r\n'`, "ALT-OVER-BODY")
 		},
 		whileAway: func(r *rig, ptyID string) {
-			// More than the ring holds, produced inside the alternate screen,
-			// so the sequence that entered it has rolled out of the ring by the
-			// time the client comes back. A pane running vim or htop across a
-			// switch is exactly this.
 			r.feedPTY(ptyID, `i=1; while [ $i -le 2000 ]; do echo "AO-$i-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"; i=$((i+1)); done`, "AO-2000-")
 		},
 		check: func(t *testing.T, r *rig, ptyID string) {
@@ -157,16 +111,8 @@ var rehydrationShapes = []paneShape{
 		},
 	},
 	{
-		// The 16-colour palette with attributes on top, which is what ls,
-		// grep and a prompt put on screen. These follow the user's terminal
-		// theme, so a route that brings them back as the RGB they resolve to
-		// repaints the pane in shades the user never chose.
 		name: "heavy-sgr",
 		arrange: func(r *rig, ptyID string) {
-			// The sentinel goes on a row of its own. The four attribute runs
-			// come to 37 columns and the pane is 38, so a sentinel on the same
-			// row wrapped mid-word and never appeared whole: the wait was
-			// being satisfied by the shell's echo of the command instead.
 			r.feedPTY(ptyID, `printf '\033[1;31mBOLD-RED\033[m \033[4;32mUNDER-GREEN\033[m \033[7mREVERSED\033[m \033[3;9mSTRUCK\033[m\nSG''R-END\n'`, "SGR-END")
 		},
 	},
@@ -177,10 +123,6 @@ var rehydrationShapes = []paneShape{
 		},
 	},
 	{
-		// A guest that set a rendition and left it in force. What matters is
-		// not the text already on screen but the line printed after the route
-		// has finished: it arrives on the live stream and is painted with
-		// whatever pen the client's emulator is holding.
 		name: "colour-still-in-force",
 		arrange: func(r *rig, ptyID string) {
 			r.feedPTY(ptyID, `printf '\033[35;1mPE''N-LEFT-SET\n'`, "PEN-LEFT-SET")
@@ -190,8 +132,6 @@ var rehydrationShapes = []paneShape{
 		},
 	},
 	{
-		// A status line held out of the scrolling part of the screen, and
-		// enough output afterwards to make the pane scroll inside it.
 		name: "scroll-region",
 		arrange: func(r *rig, ptyID string) {
 			r.feedPTY(ptyID, `printf '\033[H\033[2JHEADER\033[3;9r\033[3;1H'; i=1; while [ $i -le 12 ]; do echo "SR-$i-END"; i=$((i+1)); done`, "SR-12-END")
@@ -204,12 +144,6 @@ var rehydrationShapes = []paneShape{
 		},
 	},
 	{
-		// A full-screen program using every row it has, with something on the
-		// last one, which is where an editor keeps its status line. The
-		// alternate screen has no scrollback, so a row lost off the bottom
-		// here is lost for good: the guest will not redraw it unless its own
-		// size changes, and a client resizing its local emulator does not
-		// change it.
 		name: "alt-screen-full-height",
 		arrange: func(r *rig, ptyID string) {
 			r.feedPTY(ptyID, `H=$(stty size | cut -d' ' -f1); printf '\033[?1049h\033[H\033[2J'; `+
@@ -230,9 +164,6 @@ var rehydrationShapes = []paneShape{
 		},
 	},
 	{
-		// A full-screen program caught between frames: in the alternate
-		// screen, drawing a box out of the DEC line-drawing set, with that set
-		// still selected and a colour still in force.
 		name: "tui-mid-draw",
 		arrange: func(r *rig, ptyID string) {
 			r.feedPTY(ptyID, `printf '\033[?1049h\033[H\033[2J\033[1;34m\033(0lqqqk\r\nx  x\r\nmqqqj\r\nTU''I-MID-DRAW\r\n'`, "TUI-MID-DRAW")
@@ -248,9 +179,6 @@ var rehydrationShapes = []paneShape{
 			r.feedPTY(ptyID, `printf 'MI''D-READY\n'`, "MID-READY")
 		},
 		whileAway: func(r *rig, ptyID string) {
-			// Started and not waited on, so it is still producing when the
-			// route puts the pane back on screen. A pane caught mid-output is
-			// the one whose replay lands in the middle of a line.
 			r.startPTY(ptyID, `i=1; while [ $i -le 400 ]; do echo "MID-$i-END"; i=$((i+1)); done`)
 		},
 		finish: func(r *rig, ptyID string) {
@@ -263,35 +191,14 @@ var rehydrationShapes = []paneShape{
 			r.feedPTY(ptyID, `printf 'OV''ER-READY\n'`, "OVER-READY")
 		},
 		whileAway: func(r *rig, ptyID string) {
-			// More than the 64KB ring holds, so the client cannot be resumed
-			// and the bytes it missed are gone.
 			r.feedPTY(ptyID, `i=1; while [ $i -le 2000 ]; do echo "OV-$i-XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"; i=$((i+1)); done`, "OV-2000-")
 		},
 	},
 	{
-		// A pane resized while it is producing. Where a line wraps is decided
-		// by the width the emulator had when it consumed the bytes, so the two
-		// copies agree only if they change width at the same byte. A line that
-		// wrapped on one side and not the other is in the scrollback for good:
-		// nothing lays a scrollback line out again, on either side.
-		//
-		// This is the seam the client used to lose. It resized its own emulator
-		// the moment the layout asked and told the daemon over a message that
-		// was not waited for, so everything the guest produced in between was
-		// laid out one width apart.
 		name: "resized-while-producing",
 		arrange: func(r *rig, ptyID string) {
 			r.feedPTY(ptyID, `printf 'RP''-READY\n'`, "RP-READY")
 			w := r.winByPTY(ptyID)
-			// Lines longer than the pane at every width it is taken through, so
-			// each one is a wrap decision, and started rather than waited for so
-			// the resizes below land among them.
-			//
-			// The guest runs until finish removes its go-ahead file, not for a
-			// fixed number of lines. A fixed count raced the resizes: on a
-			// Linux runner dash wrote twenty thousand lines in less time than
-			// the resize loop takes, so the guest was done before the first
-			// resize landed and the case failed without reaching the seam.
 			r.producing = filepath.Join(r.t.TempDir(), "producing")
 			if err := os.WriteFile(r.producing, nil, 0o600); err != nil {
 				r.t.Fatal(err)
@@ -299,28 +206,7 @@ var rehydrationShapes = []paneShape{
 			r.startPTY(ptyID, `A=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA; `+
 				`i=1; while [ -e '`+r.producing+`' ]; do echo "RP-$i-$A$A$A$A-END"; i=$((i+1)); done; `+
 				`echo RP-""STOPPED`)
-			// Resized only once the pane is known to be producing. A resize
-			// that lands before the guest has said anything settles on both
-			// sides before the first byte and tests nothing.
-			//
-			// Cut to a third of the width, so a line that took four rows takes
-			// ten: a seam laid out at the wrong width is a different number of
-			// scrollback lines, not only different content in them.
-			// Gated on any produced line rather than a numbered one. These
-			// lines wrap to about three rows each at this width, so the run
-			// fills more rows than the emulator keeps, and a line numbered low
-			// enough to prove the guest has only just started is also the first
-			// to be evicted. Waiting for one that is already gone spends the
-			// whole deadline and reports a timeout instead of a divergence.
-			// The gate is text only a produced line has: the RP-READY line
-			// above matches "RP-", and the shell's echo of the command has "$"
-			// after every dash, so neither can open it.
 			r.waitDaemonShows(ptyID, "-AAAAAAAAAA")
-			// Resized repeatedly, the way dragging a border over a pane that is
-			// producing does. One resize settles on both sides in about the time
-			// it takes the daemon to read a message; a run of them keeps the
-			// daemon a width behind for as long as the drag lasts, which is the
-			// state the two copies can disagree in.
 			before := r.latestRPLine(ptyID)
 			full := w.Width
 			for range 40 {
@@ -329,20 +215,10 @@ var rehydrationShapes = []paneShape{
 				w.Resize(full, w.Height)
 				time.Sleep(2 * time.Millisecond)
 			}
-			// The seam only exists while the guest is producing. If nothing was
-			// produced across the resizes, they landed on output that was
-			// already laid out and settled, and the case proves nothing. That
-			// is worth a failure rather than a pass, because the pass would be
-			// indistinguishable from a real one.
 			if after := r.latestRPLine(ptyID); after <= before {
 				r.t.Fatalf("the guest produced nothing while the resizes landed (line %d before, %d after), so this run never reached the seam",
 					before, after)
 			}
-			// Stopped here rather than after the route. The guest writes as
-			// fast as the machine lets it, and left running it floods the pane
-			// for as long as the comparison waits for things to settle. A
-			// client that falls that far behind drops output by design, which
-			// is a different question from the one this shape asks.
 			if err := os.Remove(r.producing); err != nil {
 				r.t.Fatal(err)
 			}
@@ -359,9 +235,6 @@ var rehydrationShapes = []paneShape{
 			if err := r.ctl.ResizePTY(ptyID, w-4, h-2); err != nil {
 				r.t.Fatalf("resize while away: %v", err)
 			}
-			// Waited for, so the shape is a pane that was resized while it was
-			// hidden rather than one whose resize is still in flight as it comes
-			// back. The latter is a different question and this row is not it.
 			rigWaitUntil(r.t, "the daemon to apply the resize", func() bool {
 				gw, gh := r.ptySize(ptyID)
 				return gw == w-4 && gh == h-2
@@ -403,10 +276,6 @@ var rehydrationRoutes = []routeCase{
 		},
 	},
 	{
-		// The first client stays attached and subscribed throughout, so this is
-		// a second client arriving at a live session rather than the same one
-		// coming back. It is also the mechanism a first attach uses, on a client
-		// that has never seen the pane.
 		name:     "second-client",
 		rebuilds: true,
 		run: func(r *rig, away func()) {
@@ -447,7 +316,6 @@ func TestRehydrationMatrix(t *testing.T) {
 	}
 }
 
-// compareSides is the assertion the whole matrix exists to make.
 func compareSides(t *testing.T, r *rig, ptyID string) {
 	t.Helper()
 
@@ -479,16 +347,11 @@ func compareSides(t *testing.T, r *rig, ptyID string) {
 		t.Errorf("cursor: client %d,%d, daemon %d,%d", pos.X, pos.Y, st.CursorX, st.CursorY)
 	}
 
-	// What the pane holds is only half of it. These three decide how the output
-	// that has not arrived yet is painted, where it lands, and which glyphs it
-	// draws, and none of them can be read back off the cells.
 	pen, link := term.CursorPen()
 	if got, want := stateCellSig(session.CellStateOf(&uv.Cell{Content: " ", Width: 1, Style: pen, Link: link})),
 		penSig(st.Pen); got != want {
 		t.Errorf("pen: client %s, daemon %s: the next thing this pane prints is painted with it", got, want)
 	}
-	// A pane whose guest set no margins carries none, and scrolls its whole
-	// screen at whatever size this client has it at.
 	m := term.ScrollRegion()
 	want := []int{0, 0, term.Width(), term.Height()}
 	if len(st.Margins) == 4 {
@@ -505,7 +368,6 @@ func compareSides(t *testing.T, r *rig, ptyID string) {
 		t.Errorf("charsets: client %q gl=%d gr=%d, daemon %v: the next box the guest draws comes out as letters", ids, gl, gr, st.Charsets)
 	}
 
-	// Grid, cell for cell.
 	var diffs []string
 	for y := range st.Height {
 		for x := range st.Width {
@@ -527,24 +389,12 @@ func compareSides(t *testing.T, r *rig, ptyID string) {
 			sideBySide(st, w))
 	}
 
-	// Scrollback: the client may hold less history than the daemon, never more,
-	// and never a line the daemon does not have at that offset.
 	dn, cn := len(st.Scrollback), term.ScrollbackLen()
 	if cn > dn {
-		// Counts alone say nothing about which side is wrong. Read from the
-		// oldest line down, the first line the two disagree on is where the
-		// extra one came from: a client line that is a prefix of the daemon's
-		// is the same output wrapped at a narrower width, which is a size the
-		// two applied at different points in the stream, not a duplicate.
 		t.Errorf("scrollback: client holds %d lines, daemon holds %d\n%s",
 			cn, dn, scrollbackSeam(st, term))
 		return
 	}
-	// Compared cell for cell like the screen, not as text. History that came
-	// back in the wrong colours read the same as history that came back right.
-	// The whole extent is scanned before anything is reported. The first
-	// differing line alone cannot tell a one-line seam from two windows offset
-	// against each other for their entire length, and those are different bugs.
 	base := dn - cn
 	first, last, ndiff := -1, -1, 0
 	firstCol, firstGot, firstWant := 0, "", ""
@@ -580,8 +430,6 @@ func compareSides(t *testing.T, r *rig, ptyID string) {
 	}
 }
 
-// scrollbackSeam reports the oldest scrollback line the two sides disagree on,
-// as text, with the lines either side of it for context.
 func scrollbackSeam(st *session.TerminalState, term vt.Terminal) string {
 	daemon := func(i int) string { return stateRow(st.Scrollback[i]) }
 	client := func(i int) string { return strings.TrimRight(term.ScrollbackLine(i).String(), " ") }
@@ -603,8 +451,6 @@ func scrollbackSeam(st *session.TerminalState, term vt.Terminal) string {
 	return b.String()
 }
 
-// penSig describes a serialized pen the way stateCellSig describes a cell, so
-// the two sides of the comparison read the same.
 func penSig(ps *session.StyleState) string {
 	if ps == nil {
 		return "<absent>"
@@ -612,7 +458,6 @@ func penSig(ps *session.StyleState) string {
 	return stateCellSig(session.CellState{Content: " ", Width: 1, StyleState: *ps})
 }
 
-// sideBySide renders both copies of a pane for a failure message.
 func sideBySide(st *session.TerminalState, w *terminal.Window) string {
 	var b strings.Builder
 	b.WriteString("--- daemon screen ---\n")

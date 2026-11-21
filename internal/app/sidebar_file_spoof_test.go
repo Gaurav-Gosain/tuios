@@ -15,20 +15,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// requireShellCWD skips when this platform cannot read another process's
-// working directory, which is the whole basis of the guard these tests assert.
-//
-// cwdIsSpoofed compares the directory a pane claims over OSC 7 against the one
-// its process group is really in, and terminal.ShellCWD answers that second
-// half through /proc/<pgid>/cwd on Linux and proc_pidinfo on darwin. On any
-// other platform ShellCWD reports "nobody looked", cwdIsSpoofed fails open, and
-// the six file actions stay live on whatever directory a pane names. Every test
-// in this file then passes or fails for a reason that has nothing to do with
-// what it claims: the ones asserting a refusal fail, and the ones asserting the
-// actions survive pass because the guard never ran.
-//
-// The gate is the capability rather than the GOOS, so these light up by
-// themselves on the day ShellCWD learns to answer somewhere else.
 func requireShellCWD(t *testing.T) {
 	t.Helper()
 	probe := exec.Command("sleep", "120")
@@ -46,12 +32,6 @@ func requireShellCWD(t *testing.T) {
 	}
 }
 
-// spoofPane builds a client with one local-PTY-shaped pane whose shell really
-// sits in realDir, and makes that pane print an OSC 7 naming sayDir instead.
-//
-// The shell is a real process, because /proc is the only thing that can
-// corroborate one and a fake pgid corroborates nothing. It is started in
-// realDir with its own process group, so its pgid is its pid.
 func spoofPane(t *testing.T, realDir, sayDir string) *OS {
 	t.Helper()
 	requireShellCWD(t)
@@ -80,7 +60,6 @@ func spoofPane(t *testing.T, realDir, sayDir string) *OS {
 	m.FocusedWindow = 0
 	m.filesView.Show = 1
 
-	// The whole attack surface, in one call: OSC 7 is a string the pane printed.
 	m.recordWindowCwd("spoofpane01", "file://localhost"+sayDir)
 	syncFiles(t, m)
 	m.SidebarFocused = true
@@ -88,8 +67,6 @@ func spoofPane(t *testing.T, realDir, sayDir string) *OS {
 	return m
 }
 
-// syncFiles runs the sync the update loop runs after every message and applies
-// the listing it asks for.
 func syncFiles(t *testing.T, m *OS) {
 	t.Helper()
 	cmd := m.FilesSyncCmd()
@@ -103,8 +80,6 @@ func syncFiles(t *testing.T, m *OS) {
 	m.HandleFileList(msg)
 }
 
-// spoofDirs makes a real folder for the shell to sit in and a victim folder
-// with one file in it, and returns both plus the file.
 func spoofDirs(t *testing.T) (real, victim, bait string) {
 	t.Helper()
 	root := t.TempDir()
@@ -164,7 +139,6 @@ func TestEveryFileActionRefusesASpoofedFolder(t *testing.T) {
 	}
 }
 
-// dirNames is one folder's contents as a comparable string.
 func dirNames(t *testing.T, dir string) string {
 	t.Helper()
 	ents, err := os.ReadDir(dir)
@@ -190,8 +164,6 @@ func TestAnUncorroboratedPaneKeepsItsFileActions(t *testing.T) {
 	real, victim, bait := spoofDirs(t)
 	m := spoofPane(t, real, victim)
 
-	// The one thing that separates an uncheckable pane from the local one above:
-	// nothing ever told the client which process the shell is.
 	m.Windows[0].ShellPgid = 0
 	m.filesView.Pinned = false
 	m.filesView.Want = ""
@@ -235,8 +207,6 @@ func TestASymlinkedPathIsNotADisagreement(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The shell sits in the resolved folder, which is what /proc will say, and
-	// reports the path it walked in through.
 	m := spoofPane(t, realDir, link)
 	if m.FileViewSpoofed() {
 		t.Fatalf("the same folder spelled two ways read as a disagreement: %q", m.FileViewDir())

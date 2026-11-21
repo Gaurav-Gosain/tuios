@@ -23,8 +23,6 @@ func TestNewWorkspaceStartsWithTheConfiguredScheme(t *testing.T) {
 		t.Fatalf("a new workspace under appearance.tiling_scheme=longest_side started with %v, want longest_side", got)
 	}
 
-	// The first workspace already has a tree, so it keeps spiral: changing
-	// the config default does not reach back and move it.
 	m.CurrentWorkspace = 1
 	if got := m.GetOrCreateBSPTree().AutoScheme; got != layout.SchemeSpiral {
 		t.Fatalf("an already-tiled workspace changed scheme to %v when the config default changed", got)
@@ -65,7 +63,7 @@ func TestCycleTilingSchemeStepsThroughAllFour(t *testing.T) {
 // workspace's tree is the scheme the next auto-placed split actually uses, not
 // just a label on the tree.
 func TestCycleTilingSchemeAppliesToNewSplits(t *testing.T) {
-	m := splitOS(t) // one window, 200x60, workspace 1
+	m := splitOS(t)
 	first := m.Windows[0]
 
 	if !m.SetTilingScheme(layout.SchemeLongestSide) {
@@ -78,8 +76,6 @@ func TestCycleTilingSchemeAppliesToNewSplits(t *testing.T) {
 	if parent == nil {
 		t.Fatal("the new window has no parent split")
 	}
-	// The pane is 200x60: wider than it is tall even scaled for cell aspect,
-	// so longest_side splits it vertically (left|right).
 	if parent.SplitType != layout.SplitVertical {
 		t.Fatalf("split type = %v under longest_side on a 200x60 pane, want vertical", parent.SplitType)
 	}
@@ -89,8 +85,6 @@ func TestCycleTilingSchemeAppliesToNewSplits(t *testing.T) {
 	}
 	third := split(m, second.ID, layout.PreselectionNone)
 	thirdParent := tree.WindowToNode[m.GetWindowIntID(third.ID)].Parent
-	// alternate keys off the tree's total split count (1 internal node so
-	// far), which is odd, so it splits horizontally.
 	if thirdParent.SplitType != layout.SplitHorizontal {
 		t.Fatalf("split type = %v under alternate with one existing split, want horizontal", thirdParent.SplitType)
 	}

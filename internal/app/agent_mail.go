@@ -17,28 +17,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The agent mailbox on the client. The daemon owns the ring (see
-// session/verb_mailbox.go); this is the person's view of it: a mirror of the
-// messages the daemon pushed, the unread counts the rail draws, and the overlay
-// that reads a thread and answers it.
-//
-// The mirror exists so an idle client costs nothing. A message arrives as a
-// push (MsgAgentMail) and is stored here; nothing polls, and an attached
-// client with no agent traffic does no work because this feature exists. The
-// ring is read once per attach, off the Update goroutine, so a client that
-// joined after a conversation started still sees all of it. A read receipt is
-// pushed the same way, so the count beside a pane follows the agent actually
-// reading rather than this client's guess.
-//
-// The person's address is "human", the reserved inbox the daemon knows (see
-// session.AgentInboxHuman). Mail to it is what raises an alert here; a reply
-// from the overlay is sent from it; and the overlay draws that label as "you".
-
-// agentMailKeep bounds the mirror, matching the daemon's ring.
 const agentMailKeep = 256
 
-// agentMailBottom is a scroll offset past any conversation, which the render
-// clamps to the last line. Opening a thread lands on its newest message.
 const agentMailBottom = 1 << 30
 
 // AgentMailMsg is one MsgAgentMail push from the daemon.
@@ -68,10 +48,8 @@ type AgentMailLoadedMsg struct {
 // sent. New is true for a new message. It rides on the result because the
 // line it was typed on may be closed by the time the daemon answers.
 type AgentMailSentMsg struct {
-	Err error
-	New bool
-	// history is the pane the message is kept in the history of, and parts
-	// what was sent, for a message the keyboard wrote to an agent here.
+	Err                     error
+	New                     bool
 	histSession, histWindow string
 	histParts               []composer.Part
 }
@@ -143,46 +121,29 @@ type AgentMailState struct {
 	// ComposeTo is the window a new message goes to, while the draft is a
 	// new message rather than a reply. Empty while the draft is a reply.
 	ComposeTo string
-	// wires is the draft's previewer, @ list and history state. See
-	// draft_wiring.go.
-	wires draftWires
+	wires     draftWires
 }
 
-// agentMailThread is one conversation as the list draws it.
 type agentMailThread struct {
-	ID      uint64
-	Kind    string
-	From    string
-	To      string
-	Subject string
-	Count   int
-	LastID  uint64
-	LastAt  int64
-	// Unread is true while a message to the person in this thread is unread.
-	Unread bool
-	// Untouched is true while an unread message to the person in this thread
-	// has not been seen either. Unread without Untouched is a thread whose
-	// unread mail was all seen with a peek.
+	ID        uint64
+	Kind      string
+	From      string
+	To        string
+	Subject   string
+	Count     int
+	LastID    uint64
+	LastAt    int64
+	Unread    bool
 	Untouched bool
-	// New is true while the thread holds a message the person has not seen.
-	New bool
-	// Link is true when a message in this thread arrived from another
-	// machine. The row wears a different mark for it, so a person scanning
-	// the list can tell mail from this machine from mail that came over a
-	// link without opening either.
-	Link bool
-	// Anonymous is true when the thread's first message named no sender, as a
-	// broadcast notice can.
+	New       bool
+	Link      bool
 	Anonymous bool
 }
 
-// agentMailFromLink reports whether a message arrived from another machine.
 func agentMailFromLink(m session.AgentMessage) bool {
 	return m.Origin == session.AgentOriginLink
 }
 
-// agentMailOriginHost is what to call the machine a message came from: the
-// name it claimed, else "another machine".
 func agentMailOriginHost(m session.AgentMessage) string {
 	if host := printableTitle(m.OriginHost); host != "" {
 		return host
@@ -190,13 +151,8 @@ func agentMailOriginHost(m session.AgentMessage) string {
 	return "another machine"
 }
 
-// agentMailSender is the sender's name as the overlay draws it. A sender on
-// another machine is named with that machine, "REVIEWER @ buildbox", so the
-// origin is in the name itself and not only in a mark beside it.
 func agentMailSender(m session.AgentMessage) string {
 	name := agentMailName(m.From, m.FromLabel, false)
-	// Something said it was the person and the daemon could not match it to
-	// an attached client, so it is not drawn as the person's own reply.
 	if m.From == session.AgentInboxHuman && m.ClaimedHuman {
 		name += " (unverified)"
 	}
@@ -206,8 +162,6 @@ func agentMailSender(m session.AgentMessage) string {
 	return name
 }
 
-// agentMailName is what to call a party to a message: its label, "you" for
-// the person at this client, or "all" for a notice with no recipient.
 func agentMailName(id, label string, recipient bool) string {
 	switch {
 	case id == session.AgentInboxHuman:
@@ -223,10 +177,6 @@ func agentMailName(id, label string, recipient bool) string {
 	}
 }
 
-// agentMailNotThePerson keeps a pane from being drawn as the person. A label
-// that reads "you" or "human", in any case, on anything but the person's own
-// inbox gets the short window id after it, since "you" is how the mailbox
-// names the person and a pane can set its title to anything.
 func agentMailNotThePerson(id, name string) string {
 	if id == session.AgentInboxHuman {
 		return name
@@ -241,11 +191,8 @@ func agentMailNotThePerson(id, name string) string {
 	return name
 }
 
-// shortWindowLabel is the first eight characters of a window id, which is how
-// list-windows prints one.
 func shortWindowLabel(id string) string {
 	if len(id) > 8 {
-		// By character, so a cut never splits one.
 		if r := []rune(id); len(r) > 8 {
 			return string(r[:8])
 		}
@@ -253,8 +200,6 @@ func shortWindowLabel(id string) string {
 	return id
 }
 
-// agentMailSummary is the one line a message is known by: its subject, else
-// the first line of its text.
 func agentMailSummary(m session.AgentMessage) string {
 	if s := strings.TrimSpace(m.Subject); s != "" {
 		return printableTitle(s)
@@ -263,7 +208,6 @@ func agentMailSummary(m session.AgentMessage) string {
 	return printableTitle(first)
 }
 
-// agentMailAge is how long ago a message was sent, in at most three cells.
 func agentMailAge(sentAt int64, now time.Time) string {
 	if sentAt <= 0 {
 		return ""
@@ -281,8 +225,6 @@ func agentMailAge(sentAt int64, now time.Time) string {
 	}
 }
 
-// agentMailUnreadFor counts the unread messages waiting in one inbox, as the
-// mirror knows them. The person's inbox is session.AgentInboxHuman.
 func (m *OS) agentMailUnreadFor(inbox string) int {
 	n := 0
 	for i := range m.AgentMail.Messages {
@@ -297,8 +239,6 @@ func (m *OS) agentMailUnreadFor(inbox string) int {
 // AgentMailUnread is how many messages are waiting for the person.
 func (m *OS) AgentMailUnread() int { return m.agentMailUnreadFor(session.AgentInboxHuman) }
 
-// noteAgentMail applies one push: a stored message, or a receipt for messages
-// an inbox read marked. It runs in Update, on the message the read loop queued.
 func (m *OS) noteAgentMail(p session.AgentMailPayload) {
 	st := &m.AgentMail
 	if len(p.SeenIDs) > 0 {
@@ -343,14 +283,10 @@ func (m *OS) noteAgentMail(p session.AgentMailPayload) {
 	sort.SliceStable(st.Messages, func(a, b int) bool { return st.Messages[a].ID < st.Messages[b].ID })
 	m.agentMailChanged()
 
-	// What the person wrote is not news to the person. A claim to be the
-	// person is, since something else wrote it.
 	if msg.From == session.AgentInboxHuman && !msg.ClaimedHuman {
 		m.agentMailSee(msg.ID)
 	}
 
-	// A message the overlay is already showing needs no announcement, and the
-	// view follows it.
 	if m.ShowAgentMail && st.Thread == msg.ThreadID {
 		m.agentMailSee(msg.ID)
 		st.ThreadScroll = agentMailBottom
@@ -359,14 +295,11 @@ func (m *OS) noteAgentMail(p session.AgentMailPayload) {
 	m.considerMailAlert(msg)
 }
 
-// agentMailChanged records that the mirror moved, so the rail redraws.
 func (m *OS) agentMailChanged() {
 	m.AgentMail.Gen++
 	m.sidebarCache.invalidate()
 }
 
-// mailAlertPolicy resolves the [notifications.mail] policy over the agent
-// one, per call for the reason agentAlertPolicy is.
 func (m *OS) mailAlertPolicy() config.MailAlertPolicy {
 	agent := m.agentAlertPolicy()
 	if m.UserConfig == nil {
@@ -375,12 +308,6 @@ func (m *OS) mailAlertPolicy() config.MailAlertPolicy {
 	return config.ResolveMailAlerts(&m.UserConfig.Notifications.Mail, agent)
 }
 
-// considerMailAlert decides whether a message earns an alert. Mail to the
-// person and a notice to the session do: they are the two things an agent can
-// say that are meant for a human to hear. A message between two agents is
-// their business and only counts against the recipient's row on the rail,
-// unless notifications.mail.between_agents asks for it. The person's own reply
-// comes back as a push too, and is not news.
 func (m *OS) considerMailAlert(msg session.AgentMessage) {
 	if msg.From == session.AgentInboxHuman {
 		return
@@ -402,8 +329,6 @@ func (m *OS) considerMailAlert(msg session.AgentMessage) {
 		m.ShowNotificationFrom(text, "info", m.Settings.NotificationDuration,
 			NotifTarget{SessionID: m.sidebarCurrentSessionID(), WindowID: msg.From, Thread: msg.ThreadID})
 	}
-	// The same sinks a needs_input transition writes to, for the same reason:
-	// the person is being asked for something, wherever they are looking.
 	var seq []byte
 	if policy.Notify && !m.BrowserClient {
 		seq = hostNotifySequence(text, m.detectOuterMultiplexer())
@@ -452,7 +377,6 @@ func (m *OS) openAgentMailFor(inbox string) tea.Cmd {
 	return m.agentMailLoad()
 }
 
-// agentMailLoad asks the daemon for the ring, when there is one to ask.
 func (m *OS) agentMailLoad() tea.Cmd {
 	if !m.IsDaemonSession || m.DaemonClient == nil {
 		return nil
@@ -469,14 +393,8 @@ func (m *OS) agentMailLoad() tea.Cmd {
 	return agentMailLoadCmd(m.agentMailDialer(), name)
 }
 
-// verbDialer reaches the daemon that holds the session this client shows:
-// the host's when the client is attached through one, else this machine's.
 func (m *OS) verbDialer() agentMailDial { return m.agentMailDialer() }
 
-// agentMailDialer is how a mailbox command reaches the daemon that holds the
-// ring: this machine's daemon directly, or, while this client is attached to
-// a session on another machine, that machine's daemon through the link. The
-// ring is the session's, so it lives where the session does.
 func (m *OS) agentMailDialer() agentMailDial {
 	host, build := m.AttachedHost, ""
 	if m.DaemonClient != nil {
@@ -491,14 +409,11 @@ func (m *OS) agentMailDialer() agentMailDial {
 	}
 }
 
-// dialVerbThroughHost and dialVerbLocal are the two ways verbDialer reaches a
-// daemon, as variables so a test can see which one a command used.
 var (
 	dialVerbThroughHost = session.DialVerbClientThroughHost
 	dialVerbLocal       = session.DialVerbClient
 )
 
-// agentMailDial opens a verb connection to the daemon that holds the ring.
 type agentMailDial func() (*session.VerbClient, error)
 
 // OpenAgentMailThread shows one conversation, the way a dock message about it
@@ -523,7 +438,6 @@ func (m *OS) OpenAgentMailThread(thread uint64) tea.Cmd {
 	return m.agentMailMarkRead(thread)
 }
 
-// agentMailSee records one message as seen, without touching any other.
 func (m *OS) agentMailSee(id uint64) {
 	st := &m.AgentMail
 	if id <= st.SeenID {
@@ -535,7 +449,6 @@ func (m *OS) agentMailSee(id uint64) {
 	st.Seen[id] = true
 }
 
-// agentMailSeeThread records every message in one thread as seen.
 func (m *OS) agentMailSeeThread(thread uint64) {
 	for _, mm := range m.agentMailThreadMessages(thread) {
 		m.agentMailSee(mm.ID)
@@ -548,7 +461,6 @@ func (m *OS) CloseAgentMail() {
 	if n := len(st.Messages); n > 0 {
 		st.SeenID = max(st.SeenID, st.Messages[n-1].ID)
 	}
-	// Everything up to the high-water mark is seen now, so the set is empty.
 	st.Seen = nil
 	m.ShowAgentMail = false
 	st.Composing = false
@@ -556,20 +468,15 @@ func (m *OS) CloseAgentMail() {
 	st.Error = ""
 	st.Picking = false
 	st.ComposeTo = ""
-	// The copy of an image the draft's view opened goes with it.
 	m.replyPreviewClosed()
 }
 
-// resetAgentMail forgets the mirror, on a session switch: the ring is per
-// session and the one just left has nothing to say about the one joined.
 func (m *OS) resetAgentMail() {
 	m.AgentMail = AgentMailState{}
 	m.ShowAgentMail = false
 	m.sidebarCache.invalidate()
 }
 
-// agentMailLoadCmd reads the whole ring without marking anything read: the
-// person looking at a message is not the agent it was addressed to.
 func agentMailLoadCmd(dial agentMailDial, sessionName string) tea.Cmd {
 	return func() tea.Msg {
 		client, err := dial()
@@ -597,9 +504,6 @@ func agentMailLoadCmd(dial agentMailDial, sessionName string) tea.Cmd {
 	}
 }
 
-// applyAgentMailLoaded merges what the daemon holds into the mirror. Runs in
-// Update and does no I/O. The push may have delivered something newer than
-// the read, so the two are merged rather than the read winning outright.
 func (m *OS) applyAgentMailLoaded(msg AgentMailLoadedMsg) {
 	st := &m.AgentMail
 	st.Loading = false
@@ -628,8 +532,6 @@ func (m *OS) applyAgentMailLoaded(msg AgentMailLoadedMsg) {
 	m.agentMailChanged()
 }
 
-// agentMailThreads groups the mirror into conversations, newest activity
-// first, narrowed to the overlay's inbox when it has one.
 func (m *OS) agentMailThreads() []agentMailThread {
 	st := &m.AgentMail
 	byThread := map[uint64]*agentMailThread{}
@@ -676,7 +578,6 @@ func (m *OS) agentMailThreads() []agentMailThread {
 	return out
 }
 
-// agentMailThreadMessages is one conversation, oldest first.
 func (m *OS) agentMailThreadMessages(thread uint64) []session.AgentMessage {
 	var out []session.AgentMessage
 	for _, mm := range m.AgentMail.Messages {
@@ -743,9 +644,6 @@ func (m *OS) AgentMailOpenSelected() tea.Cmd {
 	return m.agentMailMarkRead(st.Thread)
 }
 
-// agentMailMarkRead marks the person's unread mail in a thread read, off the
-// Update goroutine, when there is any. Reading anyone else's thread marks
-// nothing, which is the rule the CLI follows too.
 func (m *OS) agentMailMarkRead(thread uint64) tea.Cmd {
 	unread := false
 	for _, mm := range m.agentMailThreadMessages(thread) {
@@ -764,8 +662,6 @@ func (m *OS) agentMailMarkRead(thread uint64) tea.Cmd {
 	return agentMailMarkCmd(m.agentMailDialer(), name, thread)
 }
 
-// agentMailMarkCmd is the marking read of the person's inbox for one thread.
-// The receipt the daemon pushes back is what updates the mirror.
 func agentMailMarkCmd(dial agentMailDial, sessionName string, thread uint64) tea.Cmd {
 	return func() tea.Msg {
 		client, err := dial()
@@ -802,10 +698,6 @@ func (m *OS) AgentMailBack() {
 	st.Error = ""
 }
 
-// agentMailReplyTarget is who a reply to the open thread goes to: the sender
-// of the newest message that was not the person, so answering a thread answers
-// the agent that last spoke in it. A thread nobody but the person has spoken in
-// is answered with a notice, which every agent in the session can read.
 func (m *OS) agentMailReplyTarget() (inbox string, replyTo uint64, ok bool) {
 	msgs := m.agentMailThreadMessages(m.AgentMail.Thread)
 	if len(msgs) == 0 {
@@ -817,9 +709,6 @@ func (m *OS) agentMailReplyTarget() (inbox string, replyTo uint64, ok bool) {
 			return msgs[i].From, replyTo, true
 		}
 	}
-	// A sender on another machine is not a window here, so a reply to it
-	// is a notice in this ring: the sender reads it back over the link, in
-	// the thread it started, and nothing is typed at anyone.
 	return "", replyTo, true
 }
 
@@ -847,9 +736,6 @@ func (m *OS) AgentMailCancelReply() {
 	m.AgentMail.ComposeTo = ""
 }
 
-// agentMailComposeTargets are the panes a new message can go to: the windows
-// of this session that run an agent, in window order. The mailbox is the
-// session's, so a pane in another session is not an address here.
 func (m *OS) agentMailComposeTargets() []*terminal.Window {
 	var out []*terminal.Window
 	for _, w := range m.Windows {
@@ -877,7 +763,6 @@ func (m *OS) AgentMailStartNew() bool {
 	}
 	st.Picking = true
 	st.Pick.Cursor = 0
-	// A mailbox opened for one pane starts the list on that pane.
 	for i, w := range m.agentMailComposeTargets() {
 		if w.ID == st.Inbox {
 			st.Pick.Cursor = i
@@ -904,24 +789,16 @@ func (m *OS) AgentMailPick() bool {
 	return true
 }
 
-// agentMailMaxText is the daemon's bound for one message body.
 const agentMailMaxText = 8 << 10
 
-// agentMailMaxDraft bounds a mail draft, blocks included. The daemon writes a
-// block that does not fit in a message to a file.
 const agentMailMaxDraft = 1 << 20
 
-// newMailDraft is an empty mail draft to the pane windowID of this session,
-// wired as the Inbox reply is: image previews, the @ list and the pane's
-// history. An empty windowID, a sender on another machine, keeps no history.
 func (m *OS) newMailDraft(windowID string) *composer.Model {
 	comp := composer.New(composer.Options{MaxRows: m.composerRows(agentMailDraftRows), MaxBytes: agentMailMaxDraft, Placeholder: "Type the message.", Images: true, ListKey: m.composerListKey, ListKeyHint: m.composerListKeyHint})
 	m.AgentMail.wires = m.wireDraft(comp, m.sidebarCurrentSessionID(), windowID, windowID != "")
 	return comp
 }
 
-// agentMailDraftRows is how many rows the mail editor grows to, when [agents]
-// reply_rows is unset.
 const agentMailDraftRows = 6
 
 // AgentMailType types text into the draft at the cursor.
@@ -970,27 +847,18 @@ func (m *OS) AgentMailKey(msg tea.KeyPressMsg) tea.Cmd {
 			cmd = m.replyEditorCmd(comp)
 		}
 	case composer.EventCleared:
-		// A draft cleared by mistake goes to the history, as the Inbox
-		// reply's does.
 		if !comp.Automated() && !m.ProcessingRemoteKeys && wires.histWindow != "" {
 			cmd = m.replyHistoryAdd(wires.histSession, wires.histWindow, comp.Cleared())
 		}
 	}
-	// A view that closed takes its copy for the desktop viewer with it, and
-	// one that opened, or a strip that changed, may need pictures.
 	m.replyPreviewClosed()
 	return tea.Batch(cmd, m.replyPreviewCmd(), m.replyMentionCmd())
 }
 
-// draftAutomated reports whether a key that did not come from the keyboard
-// touched the mail draft.
 func (st *AgentMailState) draftAutomated() bool {
 	return st.Comp != nil && st.Comp.Automated()
 }
 
-// agentMailReplyNonce is the attach nonce a reply carries: attach, the nonce
-// of this client's attach, or "" for a reply that anything other than the
-// keyboard touched. See DraftAutomated.
 func (m *OS) agentMailReplyNonce(attach string) string {
 	if m.AgentMail.draftAutomated() || m.ProcessingRemoteKeys {
 		return ""
@@ -1011,7 +879,6 @@ func (m *OS) AgentMailSendReply() tea.Cmd {
 	}
 	parts, ok := st.Comp.SubmitParts()
 	if !ok {
-		// Invisible characters were removed; the editor says so.
 		return nil
 	}
 	parts = trimReplyParts(parts)
@@ -1027,17 +894,12 @@ func (m *OS) AgentMailSendReply() tea.Cmd {
 			st.Error = why
 			return nil
 		}
-		// The daemon writes a block that does not fit, and every image, to
-		// a file and attaches it. text goes too, for a daemon older than
-		// parts, only when it holds the whole message.
 		if n, _ := st.Comp.Images(); n > 0 || len(text) > agentMailMaxText {
 			text = ""
 		}
 	} else {
 		parts = nil
 	}
-	// A new message goes to the chosen pane and answers nothing, so the
-	// daemon starts a thread with it.
 	inbox, replyTo, ok := st.ComposeTo, uint64(0), st.ComposeTo != ""
 	if !ok {
 		inbox, replyTo, ok = m.agentMailReplyTarget()
@@ -1070,12 +932,6 @@ func (m *OS) AgentMailSendReply() tea.Cmd {
 	}
 }
 
-// agentMailSendCmd is the send-agent-message call a reply makes. remote says
-// the ring is on another machine, in which case the reply signs with this
-// machine's name, as any sender over a link does. nonce is the one the daemon
-// issued in this client's attach reply, and it is what makes the daemon store
-// the reply as verified_human rather than as a claim. It is sent only when
-// there is one, since a daemon that issues none also refuses the parameter.
 func agentMailSendCmd(dial agentMailDial, remote bool, sessionName, inbox string, replyTo uint64, text, nonce string, parts []composer.Part) tea.Cmd {
 	return func() tea.Msg {
 		client, err := dial()
@@ -1089,15 +945,12 @@ func agentMailSendCmd(dial agentMailDial, remote bool, sessionName, inbox string
 		}
 		_, err = client.Call("send-agent-message", params)
 		if err != nil && text == "" && parts != nil && strings.Contains(err.Error(), "text is required") {
-			// A daemon older than parts read no message.
 			err = errors.New("this daemon cannot take images or long pastes in mail. Update the daemon: tuios restart-server")
 		}
-		// A reply always answers a message, so no reply_to is a new message.
 		return AgentMailSentMsg{Err: err, New: replyTo == 0}
 	}
 }
 
-// agentMailReplyParams is the send-agent-message request a reply makes.
 func agentMailReplyParams(remote bool, sessionName, inbox string, replyTo uint64, text, nonce string) map[string]any {
 	params := map[string]any{
 		"session": sessionName,
@@ -1119,8 +972,6 @@ func agentMailReplyParams(remote bool, sessionName, inbox string, replyTo uint64
 	return params
 }
 
-// applyAgentMailSent closes the reply line on success and says what happened
-// on failure. The sent message itself arrives as a push, like any other.
 func (m *OS) applyAgentMailSent(msg AgentMailSentMsg) {
 	st := &m.AgentMail
 	st.Sending = false
@@ -1133,7 +984,6 @@ func (m *OS) applyAgentMailSent(msg AgentMailSentMsg) {
 		return
 	}
 	if msg.New && st.ComposeTo != "" {
-		// A new message starts the newest thread, which is the top row.
 		st.List.Cursor, st.List.Scroll = 0, 0
 	}
 	st.Composing = false

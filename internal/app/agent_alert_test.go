@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// alertOS builds a client with two panes and a policy, with nothing focused so
-// suppress_focused never hides an alert the test meant to see.
 func alertOS(t *testing.T, agent config.AgentAlertsConfig) *OS {
 	t.Helper()
 	m := &OS{
@@ -31,12 +29,10 @@ func alertOS(t *testing.T, agent config.AgentAlertsConfig) *OS {
 	return m
 }
 
-// hostCapture stands in for the terminal on the far end of the render stream.
 type hostCapture struct{ b strings.Builder }
 
 func (h *hostCapture) Write(p []byte) (int, error) { return h.b.Write(p) }
 
-// captureHost points the client's raw host writes at a buffer.
 func captureHost(t *testing.T, m *OS) *hostCapture {
 	t.Helper()
 	h := &hostCapture{}
@@ -44,7 +40,6 @@ func captureHost(t *testing.T, m *OS) *hostCapture {
 	return h
 }
 
-// recordHook installs a runner that collects the contexts the alert fired with.
 func recordHook(m *OS) *hookRecorder {
 	r := &hookRecorder{}
 	m.HookManager.ClearAll()
@@ -66,7 +61,6 @@ func TestAgentAlertFiresOnConfiguredTransitionsOnly(t *testing.T) {
 	m := alertOS(t, zeroSettle())
 	host := captureHost(t, m)
 
-	// The defaults: the agent stopped, in each of the three ways it can.
 	for _, state := range []string{"needs_input", "errored", "done"} {
 		m.Notifications = nil
 		host.b.Reset()
@@ -80,7 +74,6 @@ func TestAgentAlertFiresOnConfiguredTransitionsOnly(t *testing.T) {
 		}
 	}
 
-	// The ones that report progress rather than a stop.
 	for _, state := range []string{"working", "idle"} {
 		m.Notifications = nil
 		host.b.Reset()
@@ -190,7 +183,6 @@ func TestAgentAlertFlappingProducesOneAlert(t *testing.T) {
 	host := captureHost(t, m)
 	start := time.Now()
 
-	// Flip in and straight back out, four times.
 	for range 4 {
 		m.noteAgentState(m.Windows[0], "needs_input")
 		m.noteAgentState(m.Windows[0], "working")
@@ -200,7 +192,6 @@ func TestAgentAlertFlappingProducesOneAlert(t *testing.T) {
 		t.Fatalf("a flap that resolved itself alerted: %v / %q", m.Notifications, host.b.String())
 	}
 
-	// Now one that sticks.
 	m.noteAgentState(m.Windows[0], "needs_input")
 	if len(m.Notifications) != 0 {
 		t.Fatal("the settle window did not hold the alert back")
@@ -210,7 +201,6 @@ func TestAgentAlertFlappingProducesOneAlert(t *testing.T) {
 		t.Fatalf("a state that stuck alerted %d times, want 1", len(m.Notifications))
 	}
 
-	// And the parked entry is gone, so the tick can go back to sleep.
 	if len(m.pendingAgentAlerts) != 0 {
 		t.Fatalf("%d alerts still parked after the flush", len(m.pendingAgentAlerts))
 	}
@@ -221,7 +211,7 @@ func TestAgentAlertSettledAlertDropsWhenThePaneCloses(t *testing.T) {
 	m := alertOS(t, config.AgentAlertsConfig{SettleSeconds: &settle})
 
 	m.noteAgentState(m.Windows[0], "needs_input")
-	m.Windows = m.Windows[1:] // the pane exited while the alert waited
+	m.Windows = m.Windows[1:]
 	m.flushDueAgentAlerts(time.Now().Add(10 * time.Second))
 
 	if len(m.Notifications) != 0 {
@@ -249,7 +239,6 @@ func TestAgentAlertSuppressesTheFocusedPane(t *testing.T) {
 
 func TestAgentAlertQuietHoursSilenceEverything(t *testing.T) {
 	cfg := zeroSettle()
-	// A window covering the whole day, so the test does not depend on the clock.
 	cfg.QuietHours = "00:00-23:59"
 	m := alertOS(t, cfg)
 	host := captureHost(t, m)

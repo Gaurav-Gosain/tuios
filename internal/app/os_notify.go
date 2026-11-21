@@ -19,17 +19,6 @@ func (m *OS) Log(level, format string, args ...any) {
 	})
 }
 
-// appendLog adds an entry and keeps the buffer at MaxLogMessages.
-//
-// The viewer's cursor follows the newest entry while it is on the newest
-// entry, so an open viewer shows each line as it arrives. A cursor moved up to
-// read an older line stays on that line, and when the oldest lines are dropped
-// it moves with the line it was on.
-//
-// A full buffer drops its oldest info entry first, and its oldest entry only
-// when it holds nothing but warnings and errors. Every message the dock shows
-// is logged at info, so without this a burst of them pushed out the one error
-// the log is opened to find.
 func (m *OS) appendLog(entry LogMessage) {
 	entry.Message = capText(entry.Message, logTextCap)
 	atNewest := m.logList.Cursor >= len(m.LogMessages)-1
@@ -77,9 +66,6 @@ func (m *OS) FireHook(event hooks.Event, windowID, windowName string) {
 	})
 }
 
-// sessionSideHooks are the events the daemon fires for a daemon session. The
-// set is the daemon's own list rather than a copy, so the two sides cannot
-// disagree about which events each owns.
 var sessionSideHooks = func() map[hooks.Event]bool {
 	set := make(map[hooks.Event]bool)
 	for _, ev := range session.SessionSideHookEvents() {
@@ -88,13 +74,6 @@ var sessionSideHooks = func() map[hooks.Event]bool {
 	return set
 }()
 
-// firesHere reports whether this client runs the command for an event.
-//
-// A daemon session's window set, focus, workspace and agent states belong to the
-// daemon, and the daemon fires their hooks. This client stays silent on those,
-// which is what makes three attached clients produce one firing rather than
-// three, and what makes the same hook fire when nobody is attached at all. A
-// standalone tuios has no daemon, so it fires everything itself.
 func (m *OS) firesHere(event hooks.Event) bool {
 	return !m.IsDaemonSession || !sessionSideHooks[event]
 }
@@ -135,9 +114,6 @@ func (m *OS) FireHookContext(event hooks.Event, ctx hooks.Context) {
 	}
 	ctx.SessionID = m.SessionName
 	m.HookManager.Fire(event, ctx)
-	// A dock component watching this event refreshes from the same firing. The
-	// hook table and the component list are the two things a person wires to
-	// "when X happens", so they are wired to the same X.
 	m.NotifyDockEvent(string(event))
 }
 
@@ -153,31 +129,8 @@ func (m *OS) LogError(format string, args ...any) {
 	m.Log("ERROR", format, args...)
 }
 
-// maxLiveNotifications bounds the queue. Everything past the newest message is
-// only ever reported as a count, so there is no reason to keep an unbounded
-// backlog of them alive; the log viewer holds the full history.
 const maxLiveNotifications = 16
 
-// notificationLifetime resolves how long a message of this severity stays up,
-// and whether it stays until dismissed.
-//
-// The caller's duration is a floor, not the answer. Every call site passes some
-// duration it picked without much thought (config.NotificationDuration, that
-// same value doubled, a literal two seconds), and a default as short as 1500ms
-// leaves most of them unreadable. Severity decides the minimum, and a caller
-// that deliberately asked for longer than the severity's default still gets
-// the longer one.
-//
-// A non-positive duration means "do not show this", but only for info and
-// success. Copy mode pushes its state indicators that way ("VISUAL", a bare
-// "f", the pending count), and they stay invisible; promoting them to
-// full dock messages is a copy-mode decision.
-//
-// A warning or an error is shown whatever duration it was handed. Passing zero
-// for one of those is never a considered choice, it is a caller reaching for
-// "no timeout" and getting "no notification": os_selection asks for a sticky
-// error when a capture fails, and silence there is the worst possible outcome
-// for the one message class the user cannot afford to miss.
 func notificationLifetime(notifType string, requested time.Duration, s *config.Settings) (time.Duration, bool) {
 	switch notifType {
 	case "error":
@@ -205,10 +158,6 @@ func (m *OS) ShowNotification(message, notifType string, duration time.Duration)
 	m.showNotification(message, notifType, "", duration, nil, 0, false)
 }
 
-// showAmbientNotification is ShowNotification for a notice tuios raises on its
-// own about what changed around this client: another client made or closed a
-// window, or the session took another size. It never covers a live message
-// that is not ambient, such as the answer to a key. See queueNotification.
 func (m *OS) showAmbientNotification(message, notifType string, duration time.Duration) {
 	m.showNotification(message, notifType, "", duration, nil, 0, true)
 }
@@ -220,26 +169,14 @@ func (m *OS) ShowNotificationFrom(message, notifType string, duration time.Durat
 	m.showNotification(message, notifType, "", duration, &target, 0, false)
 }
 
-// showAgentNotification is ShowNotificationFrom for a message announcing an
-// agent state: the dock marks it with that state's own mark.
 func (m *OS) showAgentNotification(message, notifType, agentState string, duration time.Duration, target NotifTarget) {
 	m.showNotification(message, notifType, agentState, duration, &target, 0, false)
 }
 
-// showNotification is the one way a message reaches the dock. A limit above
-// zero caps the lifetime of a message that is not sticky, below the floor
-// notificationLifetime applies. ambient marks a notice tuios raises on its own
-// (see showAmbientNotification).
 func (m *OS) showNotification(message, notifType, agentState string, duration time.Duration, target *NotifTarget, limit time.Duration, ambient bool) {
-	// A pane writes the text of its own notifications, so it is held to the
-	// size the daemon holds a pane's notification to before anything wraps,
-	// logs or keeps it.
 	message = capText(message, notifTextCap)
 	source := m.notifSourceName(target)
 
-	// A warning or an error is always logged, even when it is not shown: the
-	// log viewer is where a message that was dropped or has already expired is
-	// read.
 	switch notifType {
 	case "error":
 		m.appendLog(LogMessage{Time: time.Now(), Level: "ERROR", Message: message, Source: source})
@@ -247,22 +184,10 @@ func (m *OS) showNotification(message, notifType, agentState string, duration ti
 		m.appendLog(LogMessage{Time: time.Now(), Level: "WARN", Message: message, Source: source})
 	}
 
-	// An empty message has nothing to draw. It reaches here from copy mode,
-	// whose handlers use it to mean "clear what I put up", and drawing an empty
-	// block for it would leave a bare cap sitting on the dock.
 	if message == "" {
 		return
 	}
 
-	// The crash overlay stands in for the dock while it is up.
-	//
-	// A notification is drawn in the dock, and the dock is drawn by the
-	// compositor, which the crash overlay replaces entirely. So a message
-	// raised while the overlay is up has nowhere to go: pressing c copies the
-	// report and the screen does not change, which reads as a key that does not
-	// work. Mirroring it onto the overlay is done here, before the lifetime
-	// gate below, so a message that would be dropped for being too short-lived
-	// still reaches the one surface that is on screen. See CopyCrashReport.
 	if m.crash != nil {
 		m.crashNotice = message
 	}
@@ -273,9 +198,6 @@ func (m *OS) showNotification(message, notifType, agentState string, duration ti
 	}
 	shown := effective > 0 || sticky
 
-	// Calm mode keeps a message from a pane, an agent or mail off the dock
-	// unless it needs the person. It is logged so it can be read later, and
-	// counted so the dock can say that something is waiting. See calm.go.
 	if shown && m.calmHolds(notifType, agentState, target) {
 		m.appendLog(LogMessage{Time: time.Now(), Level: "INFO", Message: message, Source: source})
 		m.calm.held++
@@ -283,19 +205,8 @@ func (m *OS) showNotification(message, notifType, agentState string, duration ti
 		return
 	}
 
-	// A message below notifications.level is only logged, and with
-	// notifications.log_hidden off not even that. A warning or an error was
-	// logged above. A message from a pane, an agent or mail is not held to the
-	// level: [notifications.agent] and [notifications.mail] decide those, and
-	// someone who quiets tuios's own notices still wants to hear an agent
-	// finish.
 	belowLevel := target == nil && notifSeverityRank(notifType) < notifLevelRank(m.Settings.NotificationLevel)
 
-	// An info or a success message is logged when the dock shows it. It used
-	// to be logged only with verbose logging on, so a message that went by
-	// too fast to read was nowhere to be found afterwards. The ones the dock
-	// does not show (copy mode's state marks, such as "VISUAL") stay out of
-	// the log unless it is verbose, or they would fill it.
 	if notifSeverityRank(notifType) < 2 && (!belowLevel || m.Settings.NotificationLogHidden) {
 		if shown {
 			m.appendLog(LogMessage{Time: time.Now(), Level: "INFO", Message: message, Source: source})
@@ -321,10 +232,6 @@ func (m *OS) showNotification(message, notifType, agentState string, duration ti
 		Ambient:    ambient,
 	}
 	m.Notifications = queueNotification(m.Notifications, n, n.StartTime)
-	// prefix+N reopens a message worth reading again: one from a pane, or one
-	// too long for the dock. tuios's own short notices ("Copied the
-	// message.", the mode names) are not kept, or the key would reopen its
-	// own feedback.
 	if target != nil || lipgloss.Width(message) > config.NotificationMaxWidth-notifChromeWidth {
 		m.rememberMessage(messageEntry{ID: n.ID, Text: message, Level: notifType, Time: n.StartTime, Source: source, Target: target})
 	}
@@ -337,12 +244,6 @@ func (m *OS) showNotification(message, notifType, agentState string, duration ti
 	}
 }
 
-// queueNotification adds n to the live messages, and the dock shows the last
-// one. An ambient notice does not cover a live message that is not ambient,
-// such as the answer to a key the person pressed: it goes in under it, and the
-// dock counts it in the +N. A size change once covered "Window management
-// mode" in the frame the key drew it, so the person pressed alt+esc and saw no
-// answer.
 func queueNotification(live []Notification, n Notification, now time.Time) []Notification {
 	if last := len(live) - 1; n.Ambient && last >= 0 && !live[last].Ambient && !live[last].NotificationExpired(now) {
 		live = append(live, live[last])
@@ -449,10 +350,6 @@ func (m *OS) ClearNotification(message string) bool {
 	return removed
 }
 
-// clearRestartNotice takes the version notice off the dock. It names the
-// build of the daemon the client was attached to, so it has to leave when that
-// daemon does: a restart from the command line ends the mismatch and leaves
-// the sticky notice behind otherwise.
 func (m *OS) clearRestartNotice() {
 	kept := m.Notifications[:0]
 	for _, n := range m.Notifications {
@@ -464,15 +361,10 @@ func (m *OS) clearRestartNotice() {
 	m.Notifications = kept
 }
 
-// dismissVisibleNotification pops the message the block is currently drawing,
-// revealing whatever was queued behind it. This is the granularity esc never
-// had: the mouse addresses one message at a time, so the +N counter doubles as
-// the way to read the queue.
 func (m *OS) dismissVisibleNotification() bool {
 	if len(m.Notifications) == 0 {
 		return false
 	}
-	// Dismissing the version notice is the "later" answer, for this run.
 	if isRestartNotice(m.Notifications[len(m.Notifications)-1].Target) {
 		m.restartLater = true
 	}

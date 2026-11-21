@@ -15,40 +15,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// Copy pipes: a yank piped through a command, after tmux's copy-pipe.
-//
-// Two things pipe a yank. appearance.selection.copy_command pipes every yank
-// in copy mode (y, c, and y in multi copy mode), and a [[keybindings.copy_pipe]]
-// entry pipes the yank of its own key through its own command.
-//
-// The command runs with sh -c, as a shell command key does: on the machine
-// that runs this client (for the SSH and web servers, the server), in the
-// focused pane's folder, with the command-key variables. The selection is its
-// stdin. The clipboard gets its stdout, and the selection is kept as a paste
-// buffer, because the point of a flatten or a jq filter is to paste its
-// result.
-//
-// A command that exits 0 and writes nothing is taken to have put the text
-// where it wants it itself: tmux-copy-it, for one, sets the clipboard and the
-// tmux buffer and prints nothing. tmux writes the selection first and runs
-// the command after, so the command's own write wins there. Here the
-// clipboard and the paste buffers are left alone for it, so its write wins
-// here too. A command that fails or runs too long has done nothing anyone
-// can rely on, so the clipboard and a buffer get the plain selection.
-//
-// The clipboard is written once, when the command ends, so a clipboard
-// manager records one entry and never the raw text then the result. The
-// buffer is saved then too, for the same reason: a buffer saved before the
-// command ran would land after a buffer the command set itself.
-//
-// The command runs in a tea.Cmd, off the update loop, and is stopped after
-// CopyPipeTimeout. Its process group goes with it where there is one.
-
 // CopyPipeTimeout is how long a copy command may run.
 const CopyPipeTimeout = 10 * time.Second
 
-// copyPipeMaxOutput caps what a copy command may write to stdout. A clipboard
-// write this large is already past what most terminals take over OSC 52.
 const copyPipeMaxOutput = 16 << 20
 
 // CopyPipeDoneMsg reports how a copy command ended.
@@ -59,14 +28,10 @@ type CopyPipeDoneMsg struct {
 	Err       error
 }
 
-// copyPipeRunner runs a copy command. Tests replace it.
 var copyPipeRunner = runCopyPipe
 
-// errCopyPipeTimeout is the error of a command stopped after CopyPipeTimeout.
 var errCopyPipeTimeout = errors.New("timeout")
 
-// errCopyPipeTooLarge is the error of a command that wrote more than
-// copyPipeMaxOutput.
 var errCopyPipeTooLarge = errors.New("output too large")
 
 // Yank puts a copy-mode selection on the clipboard: through
@@ -98,10 +63,6 @@ func (m *OS) PipeYank(text, command, label string) tea.Cmd {
 	}
 }
 
-// copyPipeOutput is the text the clipboard gets from a command's stdout. A
-// filter such as sed or jq ends its output with a new line, and a paste that
-// ends in one runs the line in a shell. So when the selection has no new line
-// at its end, one is taken off the output.
 func copyPipeOutput(out, selection string) string {
 	if strings.HasSuffix(selection, "\n") {
 		return out
@@ -112,10 +73,6 @@ func copyPipeOutput(out, selection string) string {
 	return strings.TrimSuffix(out, "\n")
 }
 
-// handleCopyPipeDone puts the result of a copy command on the clipboard,
-// keeps the selection as a paste buffer, and says what happened. A command
-// that succeeds with no output gets neither: it wrote them itself, if it
-// meant to.
 func (m *OS) handleCopyPipeDone(msg CopyPipeDoneMsg) tea.Cmd {
 	d := m.Settings.NotificationDuration
 	switch {
@@ -131,8 +88,6 @@ func (m *OS) handleCopyPipeDone(msg CopyPipeDoneMsg) tea.Cmd {
 	}
 }
 
-// copyPipeFailure is the dock message for a command that failed: the exit
-// code and the first line of stderr.
 func copyPipeFailure(label string, err error) string {
 	var exit *copyPipeExitError
 	switch {
@@ -150,10 +105,9 @@ func copyPipeFailure(label string, err error) string {
 	}
 }
 
-// copyPipeExitError is a command that exited with a code other than 0.
 type copyPipeExitError struct {
 	code   int
-	stderr string // the first line that is not empty
+	stderr string
 }
 
 func (e *copyPipeExitError) Error() string {
@@ -163,7 +117,6 @@ func (e *copyPipeExitError) Error() string {
 	return fmt.Sprintf("exit code %d: %s", e.code, e.stderr)
 }
 
-// cappedBuffer keeps the first max bytes written to it and notes the rest.
 type cappedBuffer struct {
 	buf  bytes.Buffer
 	max  int
@@ -177,12 +130,9 @@ func (b *cappedBuffer) Write(p []byte) (int, error) {
 		p = p[:max(room, 0)]
 	}
 	b.buf.Write(p)
-	// The whole write is reported, so the command is not killed by a short
-	// write while it drains the rest.
 	return n, nil
 }
 
-// runCopyPipe runs argv with input on stdin and returns its stdout.
 func runCopyPipe(argv []string, dir, input string, timeout time.Duration) (string, error) {
 	if len(argv) == 0 {
 		return "", errors.New("the command is empty")
@@ -196,8 +146,6 @@ func runCopyPipe(argv []string, dir, input string, timeout time.Duration) (strin
 	stdout := &cappedBuffer{max: copyPipeMaxOutput}
 	stderr := &cappedBuffer{max: 64 << 10}
 	cmd.Stdout, cmd.Stderr = stdout, stderr
-	// A child the command put in the background can hold stdout open after
-	// the command exits. It is let go after this long.
 	cmd.WaitDelay = time.Second
 	detachFromTerminal(cmd)
 	killGroupOnCancel(cmd)
@@ -217,7 +165,6 @@ func runCopyPipe(argv []string, dir, input string, timeout time.Duration) (strin
 	return stdout.buf.String(), nil
 }
 
-// firstTextLine is the first line of s that is not blank, trimmed.
 func firstTextLine(s string) string {
 	for line := range strings.Lines(s) {
 		if line = strings.TrimSpace(line); line != "" {

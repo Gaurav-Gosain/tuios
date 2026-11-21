@@ -6,14 +6,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The file section for a pane whose process is on another machine.
-//
-// The section needs a directory before it asks for a listing, and a remote
-// pane has none of the usual sources: no process here to read, and a shell
-// that never announces over OSC 7 says nothing. The daemon that owns the
-// window asks the machine running the process and puts the answer in the
-// window state, so the client's whole job is to take it.
-
 // TestMovingBetweenTwoMachinesAtTheSamePathAsksAgain.
 //
 // The section only asks for a listing when the answer would be different, and

@@ -6,13 +6,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// quitMenuInnerWidth is the preferred inner width of the quit menu panel.
 const quitMenuInnerWidth = 38
 
-// renderQuitMenu draws the quit menu on the shared list-overlay grammar and
-// returns the rendered panel, its geometry, and the per-row hit rectangles, so
-// hover, click, and click-away routing work exactly as they do for every other
-// list overlay.
 func (m *OS) renderQuitMenu() (string, overlay.Geometry, []overlayRowHit) {
 	items := m.QuitMenuItems
 	title := "Quit TUIOS"

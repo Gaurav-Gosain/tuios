@@ -19,59 +19,17 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// Acting on many agents at once, in the agents view.
-//
-// x marks the selected agent (or resume offer) and * marks every agent shown (or clears the
-// marks when all of them are marked). A marked row shows its mark, and a bulk
-// key acts only on the marked agents the fleet shows: a row in a folded group
-// or past a search is left out. Closing the view clears the marks. With
-// marks:
-//
-//   - r opens one reply editor for all of them, and enter queues the same
-//     message to each, at most bulkMax, as send-agent-message --select does.
-//     An agent waiting on a prompt, or on another machine, is left out, and
-//     the dock says so.
-//   - 3 rejects every held approval of the marked agents.
-//   - 1 opens a sheet that lists each approval it would allow, whole. enter
-//     allows them, once the sheet has been on screen for the settle time,
-//     and only those that are as the sheet showed them. An approval the
-//     screen has no room to show is not allowed: the sheet says how many
-//     wait, and 1 again shows them. A risky approval, a
-//     plan, and one with characters the terminal cannot show are never in a
-//     bulk allow. They stay marked, and the sheet says to allow them one by
-//     one.
-//   - d dismisses the marked agents' Inbox items, and z snoozes them after
-//     the length is picked.
-//   - y resumes every marked row that offers a resume, and the view stays
-//     open. A row that offers one has a mark even with no agent row, so the
-//     conversations a restart left can be marked and resumed together.
-//
-// Every one of these acts as the person, with the attach nonce, so a key from
-// send-keys does none of them.
-
-// bulkMax is how many agents one bulk action reaches.
 const bulkMax = 32
 
-// bulkSnoozeID is the snooze picker's target while it picks for the marks.
 const bulkSnoozeID = "\x00bulk"
 
-// bulkSheet is the bulk allow's confirm sheet.
 type bulkSheet struct {
-	// allow is what enter allows, by item id, with the key each had when
-	// the sheet was drawn.
 	allow []bulkAllow
-	// held are the approvals left out, as their agents' names.
-	held []string
-	// shown is how many of allow, from the first, the last frame drew
-	// whole. enter allows those and no more.
+	held  []string
 	shown int
-	// at is when the sheet was first drawn as it is now. It starts again
-	// when shown changes, so an approval that came into view has to be on
-	// screen for the settle time too.
-	at time.Time
+	at    time.Time
 }
 
-// bulkAllow is one approval the sheet allows.
 type bulkAllow struct {
 	item session.AttentionItem
 	key  string
@@ -131,9 +89,6 @@ func (m *OS) InboxAgentsMarkAll() {
 	}
 }
 
-// ckMarkKey is the key a row's mark is kept under: its agent's, or for a
-// resume offer with no agent row, the item's. ok is false for a row that
-// cannot be marked.
 func (m *OS) ckMarkKey(r ckRow) (string, bool) {
 	switch {
 	case r.agent >= 0:
@@ -144,7 +99,6 @@ func (m *OS) ckMarkKey(r ckRow) (string, bool) {
 	return "", false
 }
 
-// markedShown is how many marked rows the fleet shows.
 func (m *OS) markedShown() int {
 	n := 0
 	for _, k := range m.cockpitShownMarkKeys() {
@@ -155,8 +109,6 @@ func (m *OS) markedShown() int {
 	return n
 }
 
-// cockpitShownMarkKeys are the mark keys of the rows the fleet shows, in
-// fleet order, each once.
 func (m *OS) cockpitShownMarkKeys() []string {
 	var out []string
 	seen := map[string]bool{}
@@ -172,7 +124,6 @@ func (m *OS) cockpitShownMarkKeys() []string {
 	return out
 }
 
-// markedAgents are the marked agents the fleet shows, in fleet order.
 func (m *OS) markedAgents() []sidebarAgentEntry {
 	a := &m.Inbox.agents
 	var out []sidebarAgentEntry
@@ -184,8 +135,6 @@ func (m *OS) markedAgents() []sidebarAgentEntry {
 	return out
 }
 
-// cockpitShownAgents are the agents with a row in the fleet, in fleet order:
-// not those in a folded group or past the rows a long group shows.
 func (m *OS) cockpitShownAgents() []sidebarAgentEntry {
 	ck := &m.Inbox.ck
 	var out []sidebarAgentEntry
@@ -199,8 +148,6 @@ func (m *OS) cockpitShownAgents() []sidebarAgentEntry {
 	return out
 }
 
-// refuseBulkRemote refuses a bulk action from a key that did not come from
-// the keyboard.
 func (m *OS) refuseBulkRemote() bool {
 	return m.refuseRemoteAnswer("An action on marked agents")
 }
@@ -239,15 +186,13 @@ func (m *OS) InboxAgentsBulkReply() tea.Cmd {
 		m.openInboxReply(t.session, t.window, t.who, "", false)
 		return nil
 	}
-	// The bulk draft esc or ctrl+] kept opens again.
 	comp := m.Inbox.reply.bulkDraft
 	m.Inbox.reply.bulkDraft = nil
 	if comp == nil {
 		comp = composer.New(composer.Options{MaxRows: m.composerRows(inboxReplyRows), Placeholder: "Type the reply to send to each.", Images: true, ListKey: m.composerListKey, ListKeyHint: m.composerListKeyHint})
 	}
-	// No history: the targets each keep their own.
 	wires := m.wireDraft(comp, targets[0].session, targets[0].window, false)
-	wires.mentions.dir = "" // the targets have different folders
+	wires.mentions.dir = ""
 	m.Inbox.reply.editor = &inboxReplyEditor{
 		draftWires: wires,
 		session:    targets[0].session,
@@ -259,12 +204,10 @@ func (m *OS) InboxAgentsBulkReply() tea.Cmd {
 	return nil
 }
 
-// replyTarget is one agent a bulk reply goes to.
 type replyTarget struct {
 	session, window, who string
 }
 
-// agentName is an agent's name as a row shows it.
 func agentName(e sidebarAgentEntry) string {
 	if n := printableTitle(e.Title); n != "" {
 		return n
@@ -272,7 +215,6 @@ func agentName(e sidebarAgentEntry) string {
 	return shortWindowLabel(e.WindowID)
 }
 
-// bulkHeld is every held approval of the marked agents.
 func (m *OS) bulkHeld() []session.AttentionItem {
 	var out []session.AttentionItem
 	for _, e := range m.markedAgents() {
@@ -355,8 +297,6 @@ func (m *OS) InboxAgentsSheetKey(key string) tea.Cmd {
 	for _, b := range sheet.allow[:sheet.shown] {
 		it, ok := m.inboxItem(b.item.ID)
 		if !ok || inboxShownKey(it) != b.key {
-			// Answered, gone or changed since the sheet showed it: what
-			// would be allowed is not what the person read.
 			changed++
 			continue
 		}
@@ -370,9 +310,6 @@ func (m *OS) InboxAgentsSheetKey(key string) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// bulkSheetLines draws the sheet in width cells and at most rows lines. Each
-// approval is drawn whole or not at all, and the sheet records how many it
-// drew: enter allows only what the person could read.
 func (m *OS) bulkSheetLines(width, rows int) []string {
 	sheet := m.Inbox.agents.sheet
 	pal := theme.UI()
@@ -395,9 +332,6 @@ func (m *OS) bulkSheetLines(width, rows int) []string {
 	}
 	held := out
 	out = nil
-	// The approvals, each whole, under the heading line, in the room the
-	// held note and the more line (two lines) leave. Whatever does not fit
-	// is cut from the bottom of the sheet, so it is never an approval.
 	const moreRows = 2
 	room := rows - 1 - len(held) - moreRows
 	var items [][]string
@@ -409,12 +343,9 @@ func (m *OS) bulkSheetLines(width, rows int) []string {
 		}
 		left := room
 		if i == len(sheet.allow)-1 {
-			// The last approval needs no more line under it.
 			left += moreRows
 		}
 		if i == 0 && len(lines) > left {
-			// A held note too long to leave room for one approval gives
-			// way: the approval goes first, and the note is cut.
 			left = rows - 1
 		}
 		if used+len(lines) > left {
@@ -449,7 +380,6 @@ func (m *OS) bulkSheetLines(width, rows int) []string {
 	return append(out, held...)
 }
 
-// bulkSheetHints are the sheet's keys.
 func (m *OS) bulkSheetHints() []overlay.Hint {
 	if m.Inbox.agents.sheet.shown == 0 {
 		return []overlay.Hint{{Key: "esc", Label: "close"}}
@@ -477,8 +407,6 @@ func (m *OS) InboxAgentsBulkDismiss() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// bulkItems are the marked agents' Inbox items, and the marked resume
-// offers that have no agent row.
 func (m *OS) bulkItems() []session.AttentionItem {
 	var out []session.AttentionItem
 	seen := map[string]bool{}
@@ -518,8 +446,6 @@ func (m *OS) InboxAgentsBulkSnooze() {
 	m.Inbox.life.pickFor = bulkSnoozeID
 }
 
-// bulkSnoozeCmd snoozes every item the picker was opened for, with the
-// chosen length's params.
 func (m *OS) bulkSnoozeCmd(params func() map[string]any, words string) tea.Cmd {
 	a := &m.Inbox.agents
 	var cmds []tea.Cmd
@@ -537,18 +463,13 @@ func (m *OS) bulkSnoozeCmd(params func() map[string]any, words string) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// bulkHints are the agents view's keys while agents are marked.
 func (m *OS) bulkHints() []overlay.Hint {
 	var hints []overlay.Hint
-	// Resume comes first while a marked row offers one: after a restart it
-	// is what the marks are for.
 	resumes := len(m.markedResumes())
 	if resumes > 0 {
 		hints = m.keyHints(config.ActionInboxResume, "resume marked")
 	}
 	if resumes > 0 && resumes == m.markedShown() {
-		// Only resume offers are marked: reply, allow, reject and snooze
-		// do nothing for them, so the footer leaves them out.
 		hints = append(hints, m.keyHints(config.ActionInboxDismiss, "dismiss",
 			config.ActionInboxMark, "mark", config.ActionInboxMarkAll, "all or none")...)
 		return append(hints, m.cockpitEscHints()...)
@@ -572,8 +493,6 @@ type InboxBulkResumedMsg struct {
 	IDs []string
 }
 
-// markedResumes are the resume offers of the marked rows the fleet shows, in
-// fleet order.
 func (m *OS) markedResumes() []session.AttentionItem {
 	a := &m.Inbox.agents
 	var out []session.AttentionItem
@@ -585,8 +504,6 @@ func (m *OS) markedResumes() []session.AttentionItem {
 	return out
 }
 
-// shownResumes are the resume offers the fleet shows, in fleet order, less
-// those already sent.
 func (m *OS) shownResumes() []session.AttentionItem {
 	a := &m.Inbox.agents
 	var out []session.AttentionItem
@@ -610,9 +527,6 @@ func (m *OS) InboxAgentsBulkResume() tea.Cmd {
 	}
 	offers := m.markedResumes()
 	if len(offers) == 0 {
-		// The marks are for other answers: y acts on the row under the
-		// cursor, as it does with no marks. The input path synced the
-		// cursor before it called here.
 		return m.InboxResume()
 	}
 	if m.AttachedHost != "" || m.DaemonClient == nil {
@@ -624,10 +538,6 @@ func (m *OS) InboxAgentsBulkResume() tea.Cmd {
 	return m.resumeOffers(offers)
 }
 
-// resumeOffers has the daemon type each offer's resume command into its pane,
-// at most bulkMax. Nothing moves the focus: each row says Resuming until its
-// offer closes, and the agent's row comes back when its pane reports it. An
-// offer on another machine is left out, and the dock says so.
 func (m *OS) resumeOffers(offers []session.AttentionItem) tea.Cmd {
 	type target struct{ id, session, window, who string }
 	var targets []target
@@ -691,7 +601,6 @@ func (m *OS) resumeOffers(offers []session.AttentionItem) tea.Cmd {
 			msg.Resumed++
 		}
 		if len(targets) == 1 {
-			// One offer says what was typed, as it always did.
 			if len(msg.Failed) > 0 {
 				return InboxResumedMsg{Err: lastErr, ID: targets[0].id}
 			}
@@ -701,7 +610,6 @@ func (m *OS) resumeOffers(offers []session.AttentionItem) tea.Cmd {
 	}
 }
 
-// applyInboxBulkResumed says how many resumed, and which did not and why.
 func (m *OS) applyInboxBulkResumed(msg InboxBulkResumedMsg) {
 	m.unmarkResuming(msg.IDs...)
 	if len(msg.Failed) > 0 {
@@ -715,8 +623,6 @@ func (m *OS) applyInboxBulkResumed(msg InboxBulkResumedMsg) {
 	m.ShowNotification(words, "success", m.Settings.NotificationDuration)
 }
 
-// unmarkResuming shows the given offers as Resume again: their resume did
-// not go through.
 func (m *OS) unmarkResuming(ids ...string) {
 	a := &m.Inbox.agents
 	for _, id := range ids {
@@ -725,7 +631,6 @@ func (m *OS) unmarkResuming(ids ...string) {
 	a.marksGen++
 }
 
-// pruneResuming forgets the offers that have closed.
 func (m *OS) pruneResuming(items []session.AttentionItem) {
 	a := &m.Inbox.agents
 	if len(a.resuming) == 0 {
@@ -743,8 +648,6 @@ func (m *OS) pruneResuming(items []session.AttentionItem) {
 	}
 }
 
-// resumeAllHint is the hint for resuming every offer at once, shown while
-// the fleet shows more than one and nothing is marked.
 func (m *OS) resumeAllHint() []overlay.Hint {
 	if len(m.shownResumes()) < 2 {
 		return nil

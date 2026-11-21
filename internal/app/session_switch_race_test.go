@@ -5,15 +5,6 @@ import (
 	"time"
 )
 
-// Deterministic race regressions for a session switch and for a peer's sync
-// during a drag. Each runs on the rehydration rig: a real daemon, a real
-// client connection wired by WireDaemonClient, and a real OS. The race is made
-// deterministic by holding a message the read loop has already queued, doing
-// the thing it raced, and only then handing the message to Update, which is
-// what a busy Update goroutine does to it.
-
-// awaitClientEvent takes events off the client event queue until one matches,
-// and returns it without applying it.
 func (r *rig) awaitClientEvent(what string, match func(ClientEvent) bool) ClientEvent {
 	r.t.Helper()
 	deadline := time.After(rigWait)
@@ -30,8 +21,6 @@ func (r *rig) awaitClientEvent(what string, match func(ClientEvent) bool) Client
 	}
 }
 
-// awaitStateSync takes states off the sync queue until one matches, and
-// returns it without applying it.
 func (r *rig) awaitStateSync(what string, match func(StateSyncMsg) bool) StateSyncMsg {
 	r.t.Helper()
 	deadline := time.After(rigWait)
@@ -66,7 +55,6 @@ func TestSessionSwitchDropsTheLeftSessionsResize(t *testing.T) {
 	r.m.WireDaemonClient(r.client)
 	other := r.otherSession()
 
-	// A smaller client joins the first session, and the session shrinks to it.
 	joinClient(t, r.session, joinerCols, joinerRows)
 	held := r.awaitClientEvent("the first session's resize", func(ev ClientEvent) bool {
 		return ev.Type == "resize" && ev.Width == joinerCols
@@ -104,15 +92,12 @@ func TestPeerSyncDuringDragFollowsThePane(t *testing.T) {
 	r := newRig(t, 3)
 	r.m.WireDaemonClient(r.client)
 
-	// The drag and the scrollbar grab, as a click on a pane's scrollbar
-	// starts them.
 	dragged := r.m.Windows[1].ID
 	r.m.Dragging = true
 	r.m.DraggedWindowIndex = 1
 	r.m.ScrollbarDragging = true
 	r.m.ScrollbarDragWindowIndex = 1
 
-	// A peer closes the pane before the dragged one.
 	if err := r.ctl.SendIntent("CloseWindow", r.m.Windows[0].ID); err != nil {
 		t.Fatalf("close window: %v", err)
 	}
@@ -129,7 +114,6 @@ func TestPeerSyncDuringDragFollowsThePane(t *testing.T) {
 			i, windowIDs(r.m), dragged)
 	}
 
-	// A peer closes the dragged pane.
 	if err := r.ctl.SendIntent("CloseWindow", dragged); err != nil {
 		t.Fatalf("close window: %v", err)
 	}

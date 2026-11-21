@@ -11,8 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
-// themePickerItems returns the theme ids offered by the picker, filtered by the
-// current query. "none" (standard terminal colors) is always first.
 func (m *OS) themePickerItems() []string {
 	all := append([]string{themeNone}, theme.AvailableThemes()...)
 	if m.ThemePickerShade != themeShadeAll {
@@ -50,7 +48,6 @@ func (m *OS) OpenThemePicker() {
 	}
 	m.ThemePickerOriginal = current
 
-	// Position the selection on the current theme.
 	for i, id := range m.themePickerItems() {
 		if id == current {
 			m.themeList.Cursor = i
@@ -58,8 +55,6 @@ func (m *OS) OpenThemePicker() {
 		}
 	}
 
-	// When opened from the settings panel, cascade the picker down-right of it
-	// so both are visible and can be dragged as separate panels.
 	if m.ShowSettings {
 		so := m.overlayOffset("settings")
 		m.setOverlayOffset("themepicker", so[0]+10, so[1]+3)
@@ -78,7 +73,6 @@ func (m *OS) CloseThemePicker() {
 // not rewrite config.toml (and cannot overwrite the configured theme).
 func (m *OS) CancelThemePicker() tea.Cmd {
 	if !m.previewsLive() {
-		// Nothing was applied, so there is nothing to restore.
 		m.CloseThemePicker()
 		return nil
 	}
@@ -95,8 +89,6 @@ func (m *OS) CancelThemePicker() tea.Cmd {
 	return save
 }
 
-// themePickerPreview applies the theme under the cursor, when previews are
-// live, after a move or a refilter.
 func (m *OS) themePickerPreview() {
 	items := m.themePickerItems()
 	if c := m.themeList.Cursor; c >= 0 && c < len(items) && m.previewsLive() {
@@ -107,7 +99,6 @@ func (m *OS) themePickerPreview() {
 // ThemePickerMove moves the selection by delta and previews the new row.
 func (m *OS) ThemePickerMove(delta int) { themePicker().move(m, delta) }
 
-// themePicker is the theme picker's list behaviour. See list_picker.go.
 func themePicker() *listPicker {
 	return &listPicker{
 		kind:  "themepicker",
@@ -132,10 +123,6 @@ func themePicker() *listPicker {
 	}
 }
 
-// themePickerKeys are the picker's own keys. A pick with a light and dark
-// pair set waits for d, l or b, and a delete waits for y: any other key goes
-// back to the list and is used up. The commands are ctrl chords, because a
-// typed letter filters.
 func themePickerKeys(m *OS, key string) (tea.Cmd, bool) {
 	if m.ThemePickerPair != "" {
 		return m.ThemePickerAnswerPair(key), true
@@ -166,19 +153,10 @@ func themePickerKeys(m *OS, key string) (tea.Cmd, bool) {
 func (m *OS) ThemePickerApplySelection() tea.Cmd {
 	items := m.themePickerItems()
 	if m.themeList.Cursor < 0 || m.themeList.Cursor >= len(items) {
-		// Nothing to commit, so nothing is closed. CloseThemePicker leaves the
-		// applied theme alone, so closing here would leave the live preview
-		// from the last query that did match rows on the screen, unpersisted,
-		// with no Esc left to press. Staying up keeps both the query and the
-		// escape route that reverts.
 		m.ShowNotification("Nothing to apply: no theme matches "+m.themeList.Query.String(), "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	sel := items[m.themeList.Cursor]
-	// With a light and dark pair set, the pick is for one of the two, or
-	// both. The picker asks before it writes. See ThemePickerAnswerPair.
-	// A client that cannot write the config has nothing to ask: the pick
-	// applies as it does with no pair.
 	if m.UserConfig != nil && m.UserConfig.Appearance.ThemeLight != "" && !m.ConfigReadOnly {
 		m.ThemePickerPair = sel
 		return nil
@@ -205,7 +183,6 @@ func (m *OS) ThemePickerAnswerPair(key string) tea.Cmd {
 	}
 	if light {
 		m.setAppearance(func(a *config.AppearanceConfig) {
-			// Empty would end the pair, so no theme is written as none.
 			if sel == themeNone {
 				a.ThemeLight = theme.NoneID
 			} else {
@@ -215,10 +192,6 @@ func (m *OS) ThemePickerAnswerPair(key string) tea.Cmd {
 	}
 	save := m.persistSettings()
 	m.CloseThemePicker()
-	// The pick goes in force when it is for the scheme the terminal shows.
-	// Else the theme from before the picker opened comes back. This does not
-	// go through followSchemeTheme, which a --theme flag turns off: a pick in
-	// the picker is the latest explicit choice.
 	if (light && theme.SchemeLight()) || (dark && !theme.SchemeLight()) {
 		m.applyTheme(sel)
 	} else if m.previewsLive() {
@@ -228,20 +201,15 @@ func (m *OS) ThemePickerAnswerPair(key string) tea.Cmd {
 	return save
 }
 
-// persistThemeSelection writes the chosen theme to the config, mapping the
-// "none" sentinel to an empty theme name.
 func (m *OS) persistThemeSelection(sel string) tea.Cmd {
 	m.setThemeSelection(sel)
 	return m.persistSettings()
 }
 
-// setThemeSelection mirrors the chosen theme into the held config without
-// writing it out, for the callers whose own save step follows.
 func (m *OS) setThemeSelection(sel string) {
 	m.setAppearance(func(a *config.AppearanceConfig) {
 		switch {
 		case sel == themeNone && theme.OmarchyInstalled():
-			// An empty theme would follow Omarchy again on the next start.
 			a.Theme = theme.NoneID
 		case sel == themeNone:
 			a.Theme = ""
@@ -264,14 +232,12 @@ func (m *OS) ThemePickerEdit(fresh bool) {
 	m.OpenThemeEditor(id, fresh, original)
 }
 
-// The shades the picker can list: ctrl+f steps through them.
 const (
 	themeShadeAll = iota
 	themeShadeDark
 	themeShadeLight
 )
 
-// themeShadeNames are the words the picker's title shows for each shade.
 var themeShadeNames = [...]string{"all", "dark", "light"}
 
 // ThemePickerCycleShade lists all themes, then the dark ones, then the light
@@ -303,7 +269,6 @@ func (m *OS) ThemePickerCopyID() tea.Cmd {
 	return m.clipboardWriteCmd(id)
 }
 
-// themePickerHighlighted is the theme under the cursor.
 func (m *OS) themePickerHighlighted() (string, bool) {
 	items := m.themePickerItems()
 	if m.themeList.Cursor < 0 || m.themeList.Cursor >= len(items) {
@@ -324,8 +289,6 @@ func (m *OS) ThemePickerAskDelete() {
 	case m.ConfigReadOnly:
 		m.ShowNotification("This client cannot change the theme files", "info", m.Settings.NotificationDuration)
 	case !edited && len(theme.ThemesBasedOn(id)) > 0:
-		// The themes that name it as their base would stop loading. An
-		// edited built-in is safe to remove: they fall back to the built-in.
 		m.ShowNotification(id+" is the base of "+strings.Join(theme.ThemesBasedOn(id), ", ")+". Delete those first",
 			"warning", m.Settings.NotificationWarningDuration)
 	default:
@@ -342,8 +305,6 @@ func (m *OS) ThemePickerConfirmDelete(yes bool) tea.Cmd {
 	if !yes || id == "" {
 		return nil
 	}
-	// In use means the theme the picker will go back to on Esc, the one the
-	// config names. The highlighted theme is only a preview.
 	_, edited := theme.ThemeFileOf(id)
 	if m.ThemePickerOriginal == id && !edited {
 		m.ShowNotification(id+" is in use. Pick another theme, then delete it", "warning", m.Settings.NotificationWarningDuration)
@@ -356,7 +317,7 @@ func (m *OS) ThemePickerConfirmDelete(yes bool) tea.Cmd {
 	}
 	switch {
 	case edited && (previewed || m.ThemePickerOriginal == id):
-		m.applyTheme(id) // the built-in, under the same id
+		m.applyTheme(id)
 	case previewed:
 		m.applyTheme(m.ThemePickerOriginal)
 	}

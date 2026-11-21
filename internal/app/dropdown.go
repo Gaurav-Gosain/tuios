@@ -7,51 +7,22 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 )
 
-// The one dropdown of the TUI chrome. The New agent sheet's fields and the
-// agents view's header controls open the same list, drawn and driven here,
-// so they look and behave the same:
-//
-//   - It opens under the row of its control when it fits there, and above it
-//     otherwise, and scrolls to keep the cursor's row in view.
-//   - Each row is the choice's label, a note in a quieter ink, and the key
-//     that picks it at the right. The choice in force has the picked mark
-//     before it, the one the sheet's radios use. The cursor's row is drawn
-//     in the accent, and the row under the pointer on the hover ground.
-//   - Up and down move, enter and space pick, a row's key picks it, and esc
-//     closes. A click on a row picks it. A click outside the list closes it
-//     and does nothing else: the click is spent on the dismissal.
-//
-// The host keeps a dropdown, fills its items when it opens, draws it last
-// with drawDropdown, and asks it about keys, clicks and the pointer.
-
-// ddHover is the state of the row under the pointer.
 var ddHover = overlay.RowState{Hover: true}
 
-// ddItem is one choice.
 type ddItem struct {
-	label, note string
-	// key picks the row. Empty takes the next digit, up to nine.
-	key string
-	// current marks the choice in force; muted draws a choice that cannot
-	// be used now in the quiet ink.
+	label, note    string
+	key            string
 	current, muted bool
 }
 
-// dropdown is an open list and where it was last drawn.
 type dropdown struct {
-	items []ddItem
-	// list is the cursor and the first row drawn; the window is placed by
-	// drawDropdown, centred on the cursor when it can be.
-	list  listnav.State
-	hover int
-	// The box as last drawn, in screen cells, and the screen row of its
-	// first item.
+	items          []ddItem
+	list           listnav.State
+	hover          int
 	x0, y0, x1, y1 int
 	rowY0, rows    int
 }
 
-// newDropdown is an open list of items, with the cursor on the current one.
-// It hands out the digit keys.
 func newDropdown(items []ddItem) *dropdown {
 	d := &dropdown{items: items, hover: -1}
 	n := 0
@@ -67,32 +38,20 @@ func newDropdown(items []ddItem) *dropdown {
 	return d
 }
 
-// ddKey is what a key did to the list.
 type ddKey int
 
 const (
-	// ddKeyMoved moved the cursor.
 	ddKeyMoved ddKey = iota
-	// ddKeyPicked picked the row Key returned.
 	ddKeyPicked
-	// ddKeyClosed closed the list with nothing picked.
 	ddKeyClosed
 )
 
-// Key takes a key: up and down move, enter and space pick the cursor's row,
-// a row's key picks it, esc closes. With closeOthers any other key closes the
-// list too; without it, the key is the host's to handle (ddKeyMoved with no
-// move is returned and the list stays).
-//
-// The movement keys are the lists' of [keybindings.lists] (keys). The list
-// stops at its ends.
 func (d *dropdown) Key(key string, closeOthers bool, keys *listnav.Keymap) (int, ddKey) {
 	n := len(d.items)
 	if n == 0 {
 		return -1, ddKeyClosed
 	}
 	if delta, ok := listDelta(keys, key, listOverlayRows); ok {
-		// The list stops at its ends.
 		d.list.Move(delta, n, n, false, nil)
 		d.hover = -1
 		return -1, ddKeyMoved
@@ -114,8 +73,6 @@ func (d *dropdown) Key(key string, closeOthers bool, keys *listnav.Keymap) (int,
 	return -1, ddKeyMoved
 }
 
-// RowAt is the row at screen cell x, y, and whether the cell is inside the
-// list's box at all.
 func (d *dropdown) RowAt(x, y int) (int, bool) {
 	if d == nil || x < d.x0 || x >= d.x1 || y < d.y0 || y >= d.y1 {
 		return -1, false
@@ -126,8 +83,6 @@ func (d *dropdown) RowAt(x, y int) (int, bool) {
 	return -1, true
 }
 
-// Hover lights the row under the pointer, moving the cursor to it, and
-// reports whether the list changed.
 func (d *dropdown) Hover(x, y int) bool {
 	row, _ := d.RowAt(x, y)
 	if row == d.hover {
@@ -140,9 +95,6 @@ func (d *dropdown) Hover(x, y int) bool {
 	return true
 }
 
-// drawDropdown draws d under the control at canvas column x, row y, w cells
-// wide at the least: below it when the rows fit above bottom, above it
-// otherwise, never above top0. top is the canvas's first row on the screen.
 func drawDropdown(c *ckCanvas, l ckLook, d *dropdown, x, y, w, top0, bottom, top int) {
 	pal := l.pal
 	mark := l.g(ckGlyphPicked)
@@ -158,8 +110,6 @@ func drawDropdown(c *ckCanvas, l ckLook, d *dropdown, x, y, w, top0, bottom, top
 	}
 	w = min(max(w, inner), c.w)
 
-	// The list shows as many rows as the roomier side holds, and
-	// overlay.Place then picks the side: below when they fit there.
 	below := bottom - (y + 1) - 2
 	above := y - top0 - 2
 	rows := min(len(d.items), max(below, above))
@@ -169,7 +119,6 @@ func drawDropdown(c *ckCanvas, l ckLook, d *dropdown, x, y, w, top0, bottom, top
 	}
 	x, y0, _ := overlay.Place(overlay.Rect{X0: x, Y0: y, X1: x + w, Y1: y + 1}, w, rows+2,
 		overlay.Rect{X0: 0, Y0: top0, X1: c.w, Y1: bottom}, overlay.Placement{Side: overlay.SideBelow})
-	// The window keeps the cursor in view, centred when it can.
 	d.list.Scroll = min(max(d.list.Cursor-rows/2, 0), len(d.items)-rows)
 	c.fill(x, y0, w, rows+2, pal.Card)
 	c.hline(x, y0, w, hzGlyph(), l.edge)

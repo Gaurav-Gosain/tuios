@@ -20,8 +20,6 @@ func withButtonStyle(t *testing.T, style string, fn func()) {
 	fn()
 }
 
-// drawTopBorder renders a window's frame and returns the visible cells of its
-// top row, with the recorded controls.
 func drawTopBorder(t *testing.T, m *OS, win *terminal.Window, tiling bool) ([]rune, []WindowButtonRect) {
 	t.Helper()
 	content := strings.Repeat(" ", win.Width)
@@ -55,8 +53,6 @@ func TestOverlappingControlsResolveToTheirOwnWindow(t *testing.T) {
 	})
 }
 
-// buttonLayoutSettings is the shipped settings with the controls set to one
-// style and one end, and the title on the top bar so it competes with them.
 func buttonLayoutSettings(style, position string) config.Settings {
 	s := config.DefaultSettings()
 	s.WindowButtonStyle = style
@@ -66,13 +62,10 @@ func buttonLayoutSettings(style, position string) config.Settings {
 	return s
 }
 
-// wantControls is the run of cells the controls should take, and the action
-// of each control from left to right.
 func wantControls(m *OS, win *terminal.Window, tiling bool) (string, []WindowButtonAction) {
 	s := &m.Settings
 	zoom := windowButtonsHaveZoom(tiling, s)
 	if s.WindowButtonStyle == config.WindowButtonStyleDots {
-		// The traffic light is close, minimize, zoom at either end.
 		order := []WindowButtonAction{WindowButtonClose, WindowButtonMinimize}
 		if zoom {
 			order = append(order, WindowButtonZoom)
@@ -83,8 +76,6 @@ func wantControls(m *OS, win *terminal.Window, tiling bool) (string, []WindowBut
 		}
 		return text, order
 	}
-	// The pill keeps close at the outer corner: minimize, zoom, close on the
-	// right, mirrored on the left.
 	order := []WindowButtonAction{WindowButtonMinimize}
 	if zoom {
 		order = append(order, WindowButtonZoom)
@@ -100,7 +91,6 @@ func wantControls(m *OS, win *terminal.Window, tiling bool) (string, []WindowBut
 	return text + s.GetWindowPillRight(), order
 }
 
-// markAt is the glyph a control is drawn as on this frame.
 func markAt(m *OS, win *terminal.Window, a WindowButtonAction) string {
 	s := &m.Settings
 	if s.WindowButtonStyle == config.WindowButtonStyleDots {
@@ -231,8 +221,6 @@ func checkButtonLayoutWidths(t *testing.T, s config.Settings, tiling, hovered bo
 		want, order := wantControls(m, win, tiling)
 		wantW := len([]rune(want))
 		if width-2 < wantW {
-			// A bar the controls do not fit comes back empty, and must record
-			// nothing a press could land on.
 			if len(rects) != 0 {
 				t.Errorf("width %d: controls recorded on a bar they do not fit", width)
 			}
@@ -241,8 +229,6 @@ func checkButtonLayoutWidths(t *testing.T, s config.Settings, tiling, hovered bo
 		if len(row) != width {
 			t.Fatalf("width %d: the top border is %d cells", width, len(row))
 		}
-		// The controls sit against the corner at their end, and are the same
-		// run of cells at either end apart from the order.
 		var got string
 		if s.WindowButtonPosition == config.WindowButtonPositionLeft {
 			got = string(row[1 : 1+wantW])

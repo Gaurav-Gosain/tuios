@@ -5,34 +5,6 @@ import (
 	"time"
 )
 
-// TestRenderTerminalDoesNotReenterIOLock is the regression test for the freeze
-// that made tuios unusable: the whole UI would wedge at zero CPU within seconds
-// of a shell producing output, in both daemon and standalone mode.
-//
-// renderTerminal takes window.RLockIO() for the duration of its cell walk. It
-// then called m.getRealCursor(), which takes the focused window's RLockIO()
-// again. When the rendered window is the focused one, that is the same
-// sync.RWMutex twice on one goroutine.
-//
-// A sync.RWMutex is not reentrant for readers. Once a writer calls Lock, every
-// subsequent RLock blocks so the writer cannot be starved. So the interleaving
-// below is fatal:
-//
-//	UI goroutine   RLockIO            (read lock held)
-//	PTY goroutine  LockIO             (queues, waits for the reader)
-//	UI goroutine   RLockIO again      (parks behind the queued writer)
-//
-// The UI goroutine waits for the writer, the writer waits for the UI
-// goroutine's first read lock, and nothing runs again. The PTY writer at
-// internal/terminal/window_io.go fires on every chunk of shell output, so the
-// interleaving is hit constantly in normal use.
-//
-// This test drives that race directly: one goroutine renders in a loop while
-// another takes and releases the exclusive I/O lock the way the PTY reader
-// does. Against the unfixed code it deadlocks and fails on the deadline.
-// Against the fixed code the cursor query happens before the lock is taken, the
-// two acquisitions never nest, and it completes promptly.
-
 // Deliberately NOT ported to testing/synctest, despite the deadline-based
 // failure below looking like exactly what synctest is for. A goroutine blocked
 // on a sync.Mutex or sync.RWMutex is not "durably blocked" as synctest defines
@@ -51,9 +23,6 @@ func TestRenderTerminalDoesNotReenterIOLock(t *testing.T) {
 	win.WriteOutput([]byte("hello from the shell\r\n"))
 
 	m := newTestOS(win)
-	// TerminalMode with this window focused is what makes getRealCursor reach
-	// the lock rather than returning nil early, and focus is what makes it the
-	// same lock renderTerminal is already holding.
 	m.Mode = TerminalMode
 
 	const renders = 300
@@ -68,8 +37,6 @@ func TestRenderTerminalDoesNotReenterIOLock(t *testing.T) {
 				return
 			default:
 			}
-			// Exactly what the PTY reader does: take the exclusive side to
-			// mutate the cell buffer, then release it.
 			win.LockIO()
 			win.UnlockIO()
 		}
@@ -117,8 +84,6 @@ func TestGetRealCursorStillLocksForItsOwnCallers(t *testing.T) {
 				return
 			default:
 			}
-			// Drives the same emulator writes the PTY reader performs, under
-			// the same lock, so an unsynchronized read in getRealCursor races.
 			win.WriteOutput([]byte("x"))
 		}
 	}()

@@ -9,8 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// inboxOS is a client attached to session "here", with two panes, a live
-// Inbox and the given alert policy.
 func inboxOS(t *testing.T, agent config.AgentAlertsConfig) *OS {
 	t.Helper()
 	m := alertOS(t, agent)

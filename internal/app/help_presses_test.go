@@ -8,11 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// The help overlay tells a reader what to press. It listed the bare key from
-// the config, which is the right answer for the keymap and the wrong one for a
-// human as soon as an action lives behind a chord.
-
-// helpBindingFor returns the help entry for an action, across every category.
 func helpBindingFor(t *testing.T, r *config.KeybindRegistry, action string) (HelpBinding, bool) {
 	t.Helper()
 	for _, cat := range GetHelpCategories(r, &config.Global) {
@@ -63,14 +58,9 @@ func TestHelpShowsTheWholeChord(t *testing.T) {
 // PressesByAction and the help offers "z" for toggle_zoom, which never fires.
 func TestHelpDoesNotOfferADeadBinding(t *testing.T) {
 	cfg := config.DefaultConfig()
-	// layout is merged into the window-mode keymap after window_management, so
-	// snap_left takes z and toggle_zoom's only binding goes dark.
 	cfg.Keybindings.Layout["snap_left"] = []string{"z"}
 	r := config.NewKeybindRegistry(cfg)
 
-	// The premise: the help really does list this action, and the shadowing is
-	// real. Both are checked because either one being false would make the
-	// assertion below vacuous.
 	if _, ok := helpBindingFor(t, config.NewKeybindRegistry(config.DefaultConfig()), "toggle_zoom"); !ok {
 		t.Fatal("toggle_zoom is in no help category, so this case would prove nothing")
 	}
@@ -81,7 +71,6 @@ func TestHelpDoesNotOfferADeadBinding(t *testing.T) {
 	if b, ok := helpBindingFor(t, r, "toggle_zoom"); ok && slices.Contains(b.Keys, "z") {
 		t.Error("the help offers z for toggle_zoom, which snap_left already took")
 	}
-	// And the action that does run still says so.
 	b, ok := helpBindingFor(t, r, "snap_left")
 	if !ok {
 		t.Fatal("snap_left vanished from the help overlay")

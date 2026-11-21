@@ -2,20 +2,6 @@ package app
 
 import "time"
 
-// The prefix repeat window: tmux's repeat-time.
-//
-// A prefix command that is worth pressing twice leaves the prefix armed for a
-// moment, so ctrl+b then left left left walks three columns instead of one.
-// Without it every step costs its own prefix press, which is the difference
-// between navigating with the prefix and giving up on it. It matters most on
-// macOS, where the direct chords are the ones a terminal is most likely to
-// swallow, so the prefix is the path that always works.
-//
-// It is a deadline read on the next key rather than a timer. Nothing has to
-// fire when the window closes: the next key either arrives inside it or does
-// not, and a key arriving after it is an ordinary key. That also means an idle
-// client arms no work at all.
-
 // ArmPrefixRepeat keeps the prefix live for the configured window.
 func (m *OS) ArmPrefixRepeat() {
 	if m.Settings.PrefixRepeatTime <= 0 {

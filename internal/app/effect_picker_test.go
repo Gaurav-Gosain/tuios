@@ -10,9 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// effectPickerOS is a screen worth animating: one pane with recognisable text
-// in it, a dock, and the settings page open on the Saver section, which is
-// where the picker is reached from.
 func effectPickerOS(t *testing.T, w, h int) (*OS, *terminal.Window) {
 	t.Helper()
 	m := newNarrowOS(t, w, h)
@@ -38,7 +35,6 @@ func effectPickerOS(t *testing.T, w, h int) (*OS, *terminal.Window) {
 	return m, win
 }
 
-// pickerBody renders the effect picker and strips its styling.
 func pickerBody(t *testing.T, m *OS) string {
 	t.Helper()
 	content, _, _ := m.renderEffectPicker()
@@ -95,12 +91,6 @@ func TestEffectsWithNoOpeningNeverHideTheScreen(t *testing.T) {
 			t.Fatalf("setup: no capture at %dx%d", screen.w, screen.h)
 		}
 		for _, name := range none {
-			// The screen the effect ends on, read off the effect itself. The
-			// engine anchors the captured text to the top left of the canvas,
-			// so a capture whose content starts below the first row is drawn a
-			// row or two higher than it was taken; comparing against the
-			// capture's own coordinates would measure that shift rather than
-			// the effect. The end state is what the claim is about anyway.
 			settled := effectSettledScreen(t, p, name)
 			want := legibleGlyphs(settled)
 			if len(want) < 20 || len(want) < len(settled)/2 {
@@ -128,9 +118,6 @@ func TestEffectsWithNoOpeningNeverHideTheScreen(t *testing.T) {
 				t.Errorf("%s ran %d frames at %dx%d, too few to have hidden anything",
 					name, frame, screen.w, screen.h)
 			}
-			// The whole screen, not most of it. An effect that dims a
-			// corner of a small terminal for a second is hiding part of the
-			// screen, and the claim leaves no room for a part.
 			if worst < len(want) {
 				t.Errorf("%s is told to say the screen stays visible, but at frame %d of %d at %dx%d "+
 					"only %d of %d legible captured glyphs are readable",
@@ -160,8 +147,6 @@ func TestEffectOpeningTableCoversEveryEffect(t *testing.T) {
 	}
 }
 
-// effectSettledScreen runs an effect to its end and returns the screen it
-// leaves behind, cell by cell.
 func effectSettledScreen(t *testing.T, p *effectPreview, name string) map[measureCoord]measureLook {
 	t.Helper()
 	d, _ := tfx.Lookup(name)
@@ -194,10 +179,6 @@ func effectSettledScreen(t *testing.T, p *effectPreview, name string) map[measur
 	return settled
 }
 
-// legibleGlyphs keeps the cells of a screen that are readable as drawn, by the
-// same contrast rule measureReadable applies to a frame. A cell the screen
-// itself draws below that rule, such as a dim rule line, is not something an
-// effect can hide.
 func legibleGlyphs(screen map[measureCoord]measureLook) map[measureCoord]measureLook {
 	legible := make(map[measureCoord]measureLook, len(screen))
 	for at, look := range screen {
@@ -230,8 +211,6 @@ func TestEveryEffectBuildsOverACapturedScreen(t *testing.T) {
 		t.Fatal("setup: no capture")
 	}
 
-	// Setup: the capture really does have holes in it, or the fill flag is not
-	// being tested.
 	holes := 0
 	for _, row := range p.capture {
 		for _, c := range row {
@@ -265,20 +244,16 @@ func TestEffectPreviewFrameChainDoesNotDouble(t *testing.T) {
 	}
 	gen := m.effectPreview.gen
 
-	// A move while a frame is in flight rides the chain that exists.
 	if cmd := effectPicker().move(m, 1); cmd != nil {
 		t.Error("a move started a second chain of frames alongside the live one")
 	}
-	// The frame in flight arrives and schedules the next one.
 	if cmd := m.handleEffectPreviewFrame(effectPreviewFrameMsg{gen: gen}); cmd == nil {
 		t.Error("a live frame did not schedule the next one, so the preview freezes")
 	}
-	// A message from an earlier opening is dropped.
 	if cmd := m.handleEffectPreviewFrame(effectPreviewFrameMsg{gen: gen - 1}); cmd != nil {
 		t.Error("a stale frame message started a chain of its own")
 	}
 
-	// Reopening bumps the generation, so the old chain cannot come back.
 	m.CloseEffectPicker()
 	_ = m.OpenEffectPicker()
 	if m.effectPreview.gen == gen {
@@ -300,8 +275,6 @@ func TestClosedEffectPickerRunsNothing(t *testing.T) {
 	if cmd := m.handleEffectPreviewFrame(effectPreviewFrameMsg{gen: gen}); cmd != nil {
 		t.Error("a frame message for a closed picker scheduled another frame")
 	}
-	// And with the engine still in hand, which is the case the flag is the only
-	// guard for: nothing may run once the panel is gone.
 	_ = m.OpenEffectPicker()
 	gen = m.effectPreview.gen
 	m.ShowEffectPicker = false
@@ -318,7 +291,6 @@ func TestClosedEffectPickerRunsNothing(t *testing.T) {
 	if m.effectPreview.frame != "" {
 		t.Error("closing the picker left the last animation frame on screen")
 	}
-	// And nothing is drawn for it.
 	for _, l := range m.renderOverlays() {
 		if l.GetID() == "effectpreview" {
 			t.Error("a preview layer was placed with the picker shut")

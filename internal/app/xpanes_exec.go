@@ -10,23 +10,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The two tape commands tuios xpanes routes to the attached client, and that
-// anyone can run with tuios run-command: ArrangePanes and SetMultifocus. Both
-// act on state only the client holds: the BSP tree of a workspace and the
-// multifocus set live here, not in the daemon.
-//
-// Both take window ids. A window the daemon just created, and the switch to
-// its workspace, reach this client as state pushes, on a different channel
-// from the routed command, so the command can arrive first. The error then
-// holds ErrNotHereYet, and the caller tries again.
-
 // ErrNotHereYet is in the error for a window, or a workspace switch, this
 // client has not heard of yet. tuios xpanes matches it to retry.
 const ErrNotHereYet = "is not in this client yet"
 
-// lookUpWindows resolves each target to a window, in order. Each must be on
-// the current workspace and not minimized: the commands act on what is on
-// screen, and a window elsewhere may still be on its way here.
 func (m *OS) lookUpWindows(targets []string) ([]*terminal.Window, error) {
 	out := make([]*terminal.Window, 0, len(targets))
 	for _, t := range targets {

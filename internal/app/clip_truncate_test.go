@@ -17,22 +17,16 @@ import (
 // this is reachable from any program the user runs.
 func TestClipNeverExceedsViewportWidth(t *testing.T) {
 	lines := []string{
-		// The shape the fuzzer found: wide characters followed by a truncated
-		// multi-byte sequence.
 		"世世世世世\xe4\xb800\xb80",
 		"\xe4\xb8",
 		"ab\xffcd\xfe",
 		"世\xe4\xb8世\xb8世",
 		strings.Repeat("\xe4\xb8", 20),
-		// Valid content must keep working too.
 		"世世世世世世世世",
 		"a世b世c世d",
 		strings.Repeat("x", 200),
 	}
 
-	// Sweep the placement and the viewport width together. The overflow only
-	// appears when the space left for the row lands exactly on the cell where
-	// the two measurements disagree, so a single geometry proves nothing.
 	const viewportHeight = 24
 
 	for _, line := range lines {

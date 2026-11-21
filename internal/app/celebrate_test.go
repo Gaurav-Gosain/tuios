@@ -8,8 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 )
 
-// celebrateTestOS is a one pane screen with some text on it, so a burst has
-// something to be drawn over and something to leave alone.
 func celebrateTestOS(t *testing.T) *OS {
 	t.Helper()
 	withTheme(t, "catppuccin_mocha")
@@ -23,7 +21,6 @@ func celebrateTestOS(t *testing.T) *OS {
 	return m
 }
 
-// celebrateGlyphCount counts the particle glyphs a frame contains.
 func celebrateGlyphCount(frame string) int {
 	n := 0
 	for _, g := range []string{"✦", "✧", "•", "◆", "◇", "▘", "▝", "▗", "▖", "▀", "▐", "▄", "▌"} {
@@ -48,7 +45,6 @@ func TestCelebrationDrawsOverTheFrameAndLeavesItWhole(t *testing.T) {
 	}
 	start := m.celebration.at
 
-	// A quarter second in, every particle is born and in flight.
 	if m.stepCelebration(start.Add(250 * time.Millisecond)); !m.celebration.active() {
 		t.Fatal("a burst still in flight stopped asking for frames")
 	}
@@ -60,7 +56,6 @@ func TestCelebrationDrawsOverTheFrameAndLeavesItWhole(t *testing.T) {
 		t.Error("the frame did not change while the burst was running")
 	}
 
-	// Past every particle's life the burst is over.
 	m.stepCelebration(start.Add(3 * time.Second))
 	if m.celebration.active() {
 		t.Fatal("the burst is still active after every particle's life")
@@ -76,8 +71,6 @@ func TestCelebrationDrawsOverTheFrameAndLeavesItWhole(t *testing.T) {
 // taken away.
 func TestCelebrationIsFreeWhenIdle(t *testing.T) {
 	m := celebrateTestOS(t)
-	// The fixture's pane output counts as drawn: the client is idle, and no
-	// maintenance tick is due for it either.
 	m.Windows[0].HasNewOutput.Store(false)
 	if m.celebration.active() {
 		t.Fatal("a new OS has a celebration running")

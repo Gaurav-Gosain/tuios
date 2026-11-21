@@ -15,19 +15,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/listnav"
 )
 
-// The context menu, opened with shift and a right click as a person opens it,
-// and read off the screen. e2e/tui covers the targets, running a row, the
-// arrows over dimmed rows, the screen edges and hover through the real
-// program's motion filter; these cover the click and the hint rules.
-
-// openMenu opens the context menu for whatever is at a cell.
 func openMenu(f *apptest.Fixture, x, y int) {
 	m := tea.Mouse{X: x, Y: y, Button: tea.MouseRight, Mod: tea.ModShift}
 	f.Send(tea.MouseClickMsg(m))
 	f.Send(tea.MouseReleaseMsg(m))
 }
 
-// menuRow is one row of the open menu as drawn.
 type menuRow struct {
 	y           int
 	label, hint string
@@ -35,7 +28,6 @@ type menuRow struct {
 	selected    bool
 }
 
-// menuOnScreen finds the open menu: its frame, title and rows.
 func menuOnScreen(t *testing.T, f *apptest.Fixture) (apptest.Box, string, []menuRow) {
 	t.Helper()
 	if !f.M.ContextMenuActive() {
@@ -60,7 +52,6 @@ func menuOnScreen(t *testing.T, f *apptest.Fixture) (apptest.Box, string, []menu
 				r.sep = true
 			default:
 				text, r.selected = strings.CutPrefix(text, "›")
-				// A row may start with its icon, a private-use glyph.
 				text = strings.TrimLeftFunc(strings.TrimSpace(text), func(r rune) bool {
 					return unicode.Is(unicode.Co, r) || unicode.IsSpace(r)
 				})
@@ -75,8 +66,6 @@ func menuOnScreen(t *testing.T, f *apptest.Fixture) (apptest.Box, string, []menu
 	return apptest.Box{}, "", nil
 }
 
-// menuItem is the model's row with a label, for what the screen does not
-// say: the action a row names and whether it is dimmed.
 func menuItem(t *testing.T, f *apptest.Fixture, label string) app.ContextMenuItem {
 	t.Helper()
 	for _, it := range f.M.ContextMenu.Items {
@@ -99,16 +88,12 @@ func rowLabeled(t *testing.T, rows []menuRow, label string) menuRow {
 	return menuRow{}
 }
 
-// desktopCell is a cell of the desktop: right of the pane, left of the rail.
 func desktopCell(t *testing.T, f *apptest.Fixture) (int, int) {
 	t.Helper()
 	w := f.M.GetFocusedWindow()
 	return w.X + w.Width + 1, w.Y + w.Height/2
 }
 
-// menuAnchors are the cells a menu is opened from: one per target, and the
-// screen's corners, where placement has to flip rather than draw off the
-// edge.
 func menuAnchors(f *apptest.Fixture, w, h int) map[string][2]int {
 	px, py := f.PaneCenter()
 	pane := f.M.GetFocusedWindow()
@@ -137,8 +122,6 @@ func TestContextMenuFitsNarrowScreens(t *testing.T) {
 					continue
 				}
 				opened++
-				// A menu pushed off an edge loses that edge's frame, so it
-				// has to be found whole, not only found uncut.
 				t.Logf("opened at %s (%d,%d)", name, a[0], a[1])
 				menuOnScreen(t, f)
 				f.Keys("esc")
@@ -150,7 +133,6 @@ func TestContextMenuFitsNarrowScreens(t *testing.T) {
 	}
 }
 
-// menuFixture is a pane with the desktop menu open beside it.
 func menuFixture(t *testing.T, opts ...apptest.Option) *apptest.Fixture {
 	t.Helper()
 	opts = append([]apptest.Option{apptest.Panes(1),
@@ -164,11 +146,6 @@ func menuFixture(t *testing.T, opts ...apptest.Option) *apptest.Fixture {
 	return f
 }
 
-// hoverEveryRow points at each row of the open menu in turn and checks the
-// selection follows: a runnable row is selected where it is drawn, and a
-// separator or a dimmed row selects nothing new. Hover and click resolve a
-// cell to a row the same way, so this is the click's hit test without
-// running every row.
 func hoverEveryRow(t *testing.T, f *apptest.Fixture) {
 	t.Helper()
 	box, _, rows := menuOnScreen(t, f)
@@ -268,7 +245,7 @@ func TestContextMenuHitTestWhileScrolled(t *testing.T) {
 	if len(f.M.ContextMenu.Items) <= len(rows) {
 		t.Fatalf("the pane menu fits a 12-row screen (%d rows); nothing scrolls", len(rows))
 	}
-	f.Keys("up") // the selection wraps to the last row, and the menu scrolls to it
+	f.Keys("up")
 	if _, _, after := menuOnScreen(t, f); after[0] == rows[0] {
 		t.Fatalf("the menu did not scroll: its first row is still %+v", after[0])
 	}
@@ -348,14 +325,9 @@ func TestContextMenuHintsMatchRegistry(t *testing.T) {
 				len(reg.Keys(config.TableTerminalMode, it.Action)) == 0 &&
 				len(reg.Keys(config.TableGlobal, it.Action)) == 0 &&
 				len(reg.Keys(config.TablePrefixMode, it.Action)) == 0:
-				// No key of terminal mode, global or prefix runs it; its
-				// window-mode key would reach the pane, so no hint is right.
 			case len(keys) > 0 && !slices.Contains(keys, last):
 				t.Errorf("%s: row %q shows %q, whose key %q the registry does not bind to %s (%v)", title, r.label, r.hint, last, it.Action, keys)
 			}
-			// In terminal mode a window-mode key would be typed into the
-			// pane: an action with no key of terminal mode's own, or a
-			// global one, shows the chord behind the leader.
 			if f.M.Mode == app.TerminalMode && r.hint != "" &&
 				len(reg.Keys(config.TableTerminalMode, it.Action)) == 0 && len(reg.Keys(config.TableGlobal, it.Action)) == 0 &&
 				!strings.HasPrefix(r.hint, leader+" ") {
@@ -392,7 +364,6 @@ func TestContextMenuHintFollowsRebind(t *testing.T) {
 	}
 }
 
-// allBoundKeys are the keys every table of the registry binds to action.
 func allBoundKeys(reg *config.KeybindRegistry, action string) []string {
 	var keys []string
 	for t := config.TableWindowManagement; t <= config.TableLists; t++ {
@@ -410,7 +381,7 @@ func allBoundKeys(reg *config.KeybindRegistry, action string) []string {
 func TestContextMenuDimsUnavailableActions(t *testing.T) {
 	f := apptest.New(t, apptest.Panes(1), apptest.Config(func(c *config.UserConfig) { c.Appearance.FramePanels = true }))
 	f.Output("hello world")
-	f.Keys("ctrl+b", "space") // tiling off
+	f.Keys("ctrl+b", "space")
 	if f.M.AutoTiling {
 		t.Fatal("ctrl+b space did not turn tiling off")
 	}
@@ -431,12 +402,12 @@ func TestContextMenuDimsUnavailableActions(t *testing.T) {
 	}
 	f.Keys("esc")
 
-	f.Keys("ctrl+b", "space") // tiling on
+	f.Keys("ctrl+b", "space")
 	x, y, ok := f.Find("hello world")
 	if !ok {
 		t.Fatalf("the pane's text is not on screen:\n%s", f.Text())
 	}
-	f.Keys("i") // back to the terminal, where a drag selects
+	f.Keys("i")
 	f.Drag(x, y, x+4, y)
 	openMenu(f, x+2, y)
 	for _, it := range f.M.ContextMenu.Items {

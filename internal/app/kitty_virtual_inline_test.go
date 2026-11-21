@@ -12,8 +12,6 @@ import (
 	"tuios.dev/vt"
 )
 
-// recordingWriter keeps what the host was sent. It takes the same lock as
-// Write, so it is safe to read while the async frame writer is still active.
 type recordingWriter struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
@@ -43,8 +41,6 @@ var (
 // send as a self-placed video stream.
 func TestKittyVirtualPlacementOverSSHIsNeverSelfPlaced(t *testing.T) {
 	kp, host := remoteKittyRecording(t)
-	// Under /tmp by name: the suite puts HOME under TMPDIR, which rules
-	// TMPDIR out as a temporary directory.
 	dir, err := os.MkdirTemp("/tmp", "tuios-kitty-")
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +63,6 @@ func TestKittyVirtualPlacementOverSSHIsNeverSelfPlaced(t *testing.T) {
 			kp.WriteToHost(data)
 		}
 	}
-	// The video path writes from its own goroutine.
 	time.Sleep(100 * time.Millisecond)
 
 	sent := host.Bytes()
@@ -89,7 +84,6 @@ func TestKittyVirtualPlacementOverSSHIsNeverSelfPlaced(t *testing.T) {
 	}
 }
 
-// remoteKittyRecording is remoteKitty with a host that keeps what it is sent.
 func remoteKittyRecording(t *testing.T) (*KittyPassthrough, *recordingWriter) {
 	t.Helper()
 	withClientCaps(t, &HostCapabilities{KittyGraphics: true, TerminalName: "kitty", CellWidth: 10, CellHeight: 20})

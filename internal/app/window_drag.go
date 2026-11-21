@@ -38,16 +38,6 @@ func (m *OS) LiveWindowDrag() *terminal.Window {
 	return w
 }
 
-// noteDragSlot records the tiled slot a layout pass computed for the pane a
-// drag is holding, and reports whether win is that pane. The slot is what the
-// drop swaps out of or snaps back into, so a retile that runs mid-drag has to
-// refresh it: a peer closing a neighbour moves every slot, and a drop that
-// used the slot from the press would leave the pane at a rectangle the layout
-// no longer has.
-//
-// The pane itself is left where the pointer has it. Placing it would also
-// start a snap toward the slot, and a snap stamps its own rectangle over the
-// drag on every tick until it lands.
 func (m *OS) noteDragSlot(win *terminal.Window, rect layout.Rect) bool {
 	if win == nil || win != m.LiveWindowDrag() {
 		return false
@@ -56,10 +46,6 @@ func (m *OS) noteDragSlot(win *terminal.Window, rect layout.Rect) bool {
 	return true
 }
 
-// dragSlotOf is the rectangle a staleness check should read for win: the slot
-// a drag took it from while the pointer holds it, and its own rectangle
-// otherwise. A pane in mid-drag is by definition somewhere the layout did not
-// put it, and that is not the layout being stale.
 func (m *OS) dragSlotOf(win *terminal.Window) (x, y, w, h int) {
 	if win != nil && win == m.LiveWindowDrag() {
 		return m.TiledX, m.TiledY, m.TiledWidth, m.TiledHeight
@@ -99,8 +85,6 @@ func (m *OS) CancelWindowDrag() bool {
 	if m.AutoTiling && !win.IsFloating {
 		m.ReturnToDragSlot(win)
 	} else {
-		// The press offset is fixed for the whole drag, so the press point
-		// less the offset is where the pane was when the drag began.
 		win.X, win.Y = m.DragStartX-m.DragOffsetX, m.DragStartY-m.DragOffsetY
 		win.MarkPositionDirty()
 		win.InvalidateCache()
@@ -113,8 +97,6 @@ func (m *OS) CancelWindowDrag() bool {
 	m.endLostGesture()
 	m.DragOffsetX, m.DragOffsetY = 0, 0
 	m.DragStartX, m.DragStartY = 0, 0
-	// The drag gave up the pane's shared-border allowance on its first
-	// motion, and the retile is what gives it back, as on a drop.
 	if m.AutoTiling && m.PanesBorderless() {
 		m.TileAllWindows()
 	}
@@ -146,11 +128,6 @@ func (m *OS) CancelWindowResize() bool {
 	}
 	if i := m.DraggedWindowIndex; i >= 0 && i < len(m.Windows) {
 		win, pre := m.Windows[i], &m.PreResizeState
-		// A zoom that landed mid-gesture gave the pane the zoom's rectangle,
-		// which is the one it has to keep. So does a real resize mid-gesture,
-		// such as a host resize clamping a floating pane: the start rectangle
-		// is stale once the guest has been told another size, and putting it
-		// back would leave the pane at a size its guest was never told.
 		aw, ah := win.AnnouncedSize()
 		padW, padH := win.Width-win.ContentWidth(), win.Height-win.ContentHeight()
 		if win.ID == pre.ID && !win.Zoomed && pre.Width-padW == aw && pre.Height-padH == ah {
@@ -162,15 +139,11 @@ func (m *OS) CancelWindowResize() bool {
 	}
 	pending := m.PendingResizes
 	m.PendingResizes = make(map[string][2]int)
-	// Cleared before endLostGesture, which would otherwise read the resize as
-	// finished and write the abandoned geometry into the tree.
 	m.Resizing = false
 	m.ClickToTypePending = false
 	m.endLostGesture()
 	m.ResizeStartX, m.ResizeStartY = 0, 0
 	if m.AutoTiling && !m.UseScrollingLayout {
-		// A shared-border resize nudges the neighbours too; the retile puts
-		// every pane back where the tree has it.
 		m.TileAllWindows()
 	}
 	m.tellKeptDeferredSizes(pending)
@@ -178,14 +151,6 @@ func (m *OS) CancelWindowResize() bool {
 	return true
 }
 
-// tellKeptDeferredSizes tells each pane that still has the size a cancelled
-// resize deferred for it. The gesture's own steps are undone above, so a pane
-// left at its deferred size got it from something else during the gesture,
-// such as a layout switch or a shared-border toggle. That size is real and
-// its guest was not told, so it is told now. Left out, the pane kept a size
-// its guest never heard, and the next PTY sync resized it with nothing moved.
-// Resize measures against the announced size, so a pane the retile already
-// told is not told again.
 func (m *OS) tellKeptDeferredSizes(pending map[string][2]int) {
 	for _, win := range m.Windows {
 		if dims, ok := pending[win.ID]; ok && win.Width == dims[0] && win.Height == dims[1] {
@@ -194,13 +159,10 @@ func (m *OS) tellKeptDeferredSizes(pending map[string][2]int) {
 	}
 }
 
-// heldPaneIDs names the panes a pointer gesture holds by index into m.Windows.
 type heldPaneIDs struct {
 	drag, scrollbar string
 }
 
-// heldPanes reads which panes the live gesture holds, by ID. An index left
-// over with no gesture live names nothing.
 func (m *OS) heldPanes() heldPaneIDs {
 	var h heldPaneIDs
 	gesture := m.Dragging || m.Resizing || m.BorderResizing
@@ -213,11 +175,6 @@ func (m *OS) heldPanes() heldPaneIDs {
 	return h
 }
 
-// followHeldPanes points the gesture's indexes at the panes heldPanes named,
-// after a sync rebuilt m.Windows. A peer that opens, closes or reorders panes
-// moves the indexes, and a drag kept by index moved whatever pane came to sit
-// there. It reports false when a held pane is gone, and the caller ends the
-// gesture: there is nothing left under the pointer to move.
 func (m *OS) followHeldPanes(h heldPaneIDs) bool {
 	ok := true
 	follow := func(id string, index *int) {

@@ -11,8 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// multiCopyPill is the dock's mode label in multi copy mode: how many panes
-// are in the mode, and after a search how many it found something in.
 func (m *OS) multiCopyPill() (string, bool) {
 	fw := m.GetFocusedWindow()
 	if fw == nil || !m.MultiCopy.Has(fw.ID) {
@@ -29,16 +27,12 @@ func (m *OS) multiCopyPill() (string, bool) {
 	return fmt.Sprintf(" MULTI %d ", total), true
 }
 
-// copyModeHelp is the copy-mode legend for the focused pane (see
-// mode_legend.go): the plain copy-mode keys, or in multi copy mode the keys
-// that act on the whole set first, with the current format among them.
 func (m *OS) copyModeHelp(focused *terminal.Window) []overlay.Hint {
 	mc := m.MultiCopy
 	if !mc.Has(focused.ID) {
 		legend := copyModeLegend(focused.CopyMode.State, m.copyModeExitKey())
 		if focused.CopyMode.State == terminal.CopyModeNormal && m.KeybindRegistry != nil {
 			if keys := m.KeybindRegistry.Keys(config.TableCopyMode, config.ActionEditScrollback); len(keys) > 0 {
-				// Before the last pair, so quit stays at the end.
 				edit := overlay.Hint{Key: keys[0], Label: "edit", Priority: overlay.HintOptional}
 				legend = slices.Insert(legend, len(legend)-1, edit)
 			}
@@ -58,7 +52,6 @@ func (m *OS) copyModeHelp(focused *terminal.Window) []overlay.Hint {
 			{Key: "esc", Label: "cancel"},
 		}
 	}
-	// The lead's state is what the keys mean, so it is what the help says.
 	state := focused.CopyMode.State
 	if lead := m.MultiCopyLead(focused); lead != nil && lead.CopyMode != nil {
 		state = lead.CopyMode.State
@@ -91,11 +84,6 @@ func (m *OS) copyModeHelp(focused *terminal.Window) []overlay.Hint {
 	}
 }
 
-// multiCopySaveLayer draws the save prompt at the bottom of the focused pane,
-// where copy mode's search prompt sits. It is two rows: above, the full path
-// the text names (so a relative or ~ path is never a guess) or the reason the
-// last save failed; below, the path being typed. Each row is cut to the pane's
-// width so it never runs over the next pane.
 func (m *OS) multiCopySaveLayer() *lipgloss.Layer {
 	mc := m.MultiCopy
 	fw := m.GetFocusedWindow()
@@ -116,7 +104,6 @@ func (m *OS) multiCopySaveLayer() *lipgloss.Layer {
 		info = overlay.Style(bg).Foreground(pal.FgMute).
 			Render(overlay.Truncate("File: "+full, width-2))
 	}
-	// The typed text scrolls to keep its caret in view.
 	room := width - 2 - len("Save to: ")
 	before, at, after := mc.Save.Path.Parts()
 	input := overlay.Style(bg).Foreground(pal.FgMute).Render("Save to: ") +

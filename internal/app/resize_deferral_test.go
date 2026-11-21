@@ -11,11 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The deferred half of a resize used to be ended only by a message arriving.
-// These tests pin the property that replaced that: the deferral expires on its
-// own, so no dropped, superseded or never-armed message can leave the layout
-// permanently half-applied.
-
 func newDeferralOS(t *testing.T, width, height, windows int) *OS {
 	t.Helper()
 
@@ -42,10 +37,6 @@ func newDeferralOS(t *testing.T, width, height, windows int) *OS {
 	return m
 }
 
-// newDeferralWindow builds a window with a live emulator. A bare
-// terminal.Window is not enough here: Window.Resize returns early when Terminal
-// is nil, so the real (non-deferred) layout path would leave such a window at
-// its construction size and the test could not tell the two branches apart.
 func newDeferralWindow(t *testing.T, id string) *terminal.Window {
 	t.Helper()
 	ptyDataChan := make(chan struct{}, 1)
@@ -70,8 +61,6 @@ func newDeferralWindow(t *testing.T, id string) *terminal.Window {
 	return win
 }
 
-// tiledRects returns the geometry of the panes that should be partitioning the
-// screen right now.
 func tiledRects(m *OS) []*terminal.Window {
 	var out []*terminal.Window
 	for _, w := range m.Windows {
@@ -112,7 +101,6 @@ func assertNoOverlap(t *testing.T, m *OS, when string) {
 func TestDroppedSettleDoesNotWedgeTheLayout(t *testing.T) {
 	m := newDeferralOS(t, 120, 40, 2)
 
-	// A terminal resize arrives and its settle is dropped on the floor.
 	m.Width, m.Height = 100, 30
 	m.viewportResizing = true
 	m.viewportResizeGen++
@@ -123,11 +111,9 @@ func TestDroppedSettleDoesNotWedgeTheLayout(t *testing.T) {
 		t.Fatal("deferral should be live immediately after a resize")
 	}
 
-	// Nothing clears it. Time passes, as it does when the settle never comes.
 	m.noteResizeStep(time.Now().Add(-2 * resizeDeferralTimeout))
 	m.lastPointerAt = time.Now().Add(-2 * resizeDeferralTimeout)
 
-	// The next thing the user does is open a window.
 	w := newDeferralWindow(t, "win-00000000000000000000000000000new")
 	m.Windows = append(m.Windows, w)
 	m.AddWindowToBSPTree(w)
@@ -140,8 +126,6 @@ func TestDroppedSettleDoesNotWedgeTheLayout(t *testing.T) {
 	}
 	assertNoOverlap(t, m, "after opening a window on a wedged deferral")
 
-	// And the panes really cover the screen, rather than sitting wherever the
-	// pre-resize layout had left them.
 	for _, win := range tiledRects(m) {
 		if win.Width <= 0 || win.Height <= 0 {
 			t.Errorf("%s has degenerate size %dx%d", win.ID, win.Width, win.Height)
@@ -163,14 +147,11 @@ func TestLostMouseReleaseDoesNotFreezePaneContent(t *testing.T) {
 	m.InteractionMode = true
 	m.Windows[0].IsBeingManipulated = true
 
-	// While the gesture is live the flag is left alone.
 	m.clearStaleManipulation()
 	if !m.Windows[0].IsBeingManipulated {
 		t.Fatal("manipulation flag cleared while a drag was still in progress")
 	}
 
-	// The release never arrives, but the input layer eventually notices the
-	// pointer is gone and the drag ends. Nothing clears the per-window flag.
 	m.Dragging = false
 	m.InteractionMode = false
 
@@ -189,7 +170,6 @@ func TestLostMouseReleaseDoesNotFreezePaneContent(t *testing.T) {
 func TestGestureCannotSurviveAFrameWithNoButtonHeld(t *testing.T) {
 	m := newDeferralOS(t, 120, 40, 2)
 
-	// A press starts the gesture, and the button is now held.
 	m.Update(tea.MouseClickMsg{Button: tea.MouseLeft, X: 10, Y: 10})
 	m.Resizing = true
 	m.BorderResizing = true
@@ -197,14 +177,11 @@ func TestGestureCannotSurviveAFrameWithNoButtonHeld(t *testing.T) {
 	m.InteractionMode = true
 	m.Windows[0].IsBeingManipulated = true
 
-	// Frames drawn while the button is down leave the gesture alone.
 	m.endGestureWithoutButton()
 	if !m.Resizing {
 		t.Fatal("a frame during the drag ended the resize while the button was still held")
 	}
 
-	// The release is delivered but claimed elsewhere, or never arrives at all.
-	// Either way the button is up by the next frame.
 	m.pointerDown = false
 	m.endGestureWithoutButton()
 

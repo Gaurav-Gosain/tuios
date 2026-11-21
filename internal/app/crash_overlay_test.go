@@ -11,18 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The package's TestMain already points every XDG base at a throwaway tree (see
-// internal/testutil.RunIsolated), so the crash logs these tests write land there
-// and not in the developer's state directory. Nothing here redirects again: a
-// second redirect inside a single test is what trips RunIsolated's own guard.
-
-// These tests panic on purpose, through the real barriers, and read the real
-// frame that comes out of View. That is the only proof worth having here: a
-// crash overlay that is asserted through a flag says nothing about whether a
-// user would ever see it, because the whole failure mode it replaces was a
-// program that recovered correctly and drew nothing.
-
-// crashTestOS is a model with enough in it to compose a frame.
 func crashTestOS(t testing.TB) *OS {
 	t.Helper()
 	return &OS{
@@ -99,9 +87,6 @@ func TestRenderPanicPutsTheCrashOverlayOnScreen(t *testing.T) {
 			t.Fatalf("the crash frame never says %q:\n%s", want, frame)
 		}
 	}
-	// The frame returned on the panicking pass, not on some later one. A crash
-	// screen that only appears on the next tick is a blank screen for however
-	// long the next tick takes, and on the render path there may not be one.
 	if strings.TrimSpace(frame) == "" {
 		t.Fatal("View returned an empty frame instead of the crash overlay")
 	}
@@ -165,9 +150,6 @@ func TestCrashOverlayKeepsTheFirstReport(t *testing.T) {
 		t.Fatal("the frame does not show the first panic")
 	}
 
-	// Dismissing clears the way for a genuinely new one, which is what makes
-	// keeping the first a de-duplication rather than a one-crash-per-session
-	// limit.
 	m.DismissCrash()
 	m.NoteCrash("handling an event", "a new panic after the dismiss", []byte("goroutine 3:\n"))
 	if got := m.Crash(); got == nil || got.Panic != "a new panic after the dismiss" {
@@ -192,8 +174,6 @@ func TestCrashOverlayOwnsTheKeyboard(t *testing.T) {
 		t.Fatalf("setup: handler ran %d times, overlay %v", reached, m.CrashActive())
 	}
 
-	// n creates a window in window-management mode. With the overlay up it must
-	// do nothing at all.
 	windows := len(m.Windows)
 	m.Update(tea.KeyPressMsg{Code: 'n', Text: "n"})
 	if reached != 1 {
@@ -203,7 +183,6 @@ func TestCrashOverlayOwnsTheKeyboard(t *testing.T) {
 		t.Fatal("a key changed the model while the crash overlay was up")
 	}
 
-	// esc leaves.
 	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if m.CrashActive() {
 		t.Fatal("esc did not dismiss the crash overlay")
@@ -231,8 +210,6 @@ func TestCrashReportLeavesPrivateThingsOut(t *testing.T) {
 		t.Fatal("no report")
 	}
 
-	// Everything the report can reach a person through: the overlay, the
-	// clipboard, the issue body and the file on disk.
 	surfaces := map[string]string{
 		"overlay":   RenderCrashScreen(report, "", 120, 40),
 		"clipboard": report.Markdown(0),
@@ -285,22 +262,16 @@ func TestCrashOverlayDrawsOnABrokenModel(t *testing.T) {
 		}
 	}
 
-	// A report that does not exist. Not reachable through NoteCrash, but the
-	// renderer is public and takes a pointer.
 	if got := RenderCrashScreen(nil, "", 80, 24); !strings.Contains(got, "No report") {
 		t.Errorf("a nil report did not say so:\n%s", got)
 	}
 
-	// A model that is barely a model. crashFacts reads it from inside a
-	// recover, and the answer must be a report with the base facts rather than
-	// a second panic.
 	var zero OS
 	facts := zero.crashFacts("handling an event")
 	if len(facts) == 0 {
 		t.Error("a zero model produced no facts at all")
 	}
 
-	// And no model.
 	var nilOS *OS
 	nilOS.NoteCrash("handling an event", "boom", nil)
 	nilOS.DismissCrash()
@@ -330,8 +301,6 @@ func TestIssueURLStaysShortEnoughToOpen(t *testing.T) {
 	report := NewCrashReport("drawing the screen", "index out of range [7] with length 3",
 		[]byte(huge.String()), baseFacts("drawing the screen"))
 
-	// The untrimmed body is far over the limit, so an implementation that does
-	// not trim cannot pass by luck.
 	if untrimmed := len(report.Markdown(0)); untrimmed <= issueURLLimit {
 		t.Fatalf("the fixture is too small to test the cap: %d bytes", untrimmed)
 	}
@@ -347,13 +316,10 @@ func TestIssueURLStaysShortEnoughToOpen(t *testing.T) {
 			t.Errorf("the issue URL has no %s", want)
 		}
 	}
-	// The head of the trace is the part that names the bug, so it is the part
-	// that must survive the trim.
 	if !strings.Contains(got, "index+out+of+range") {
 		t.Error("the issue title lost the panic value")
 	}
 
-	// A short report keeps its whole trace.
 	small := NewCrashReport("handling an event", "boom",
 		[]byte("goroutine 1 [running]:\nmain.main()\n"), baseFacts("handling an event"))
 	if !strings.Contains(small.IssueURL(), "main.main") {
@@ -370,7 +336,7 @@ func TestIssueURLStaysShortEnoughToOpen(t *testing.T) {
 func TestCrashOverlaySaysWhatTheKeyDid(t *testing.T) {
 	m := crashTestOS(t)
 	m.Windows = append(m.Windows, nil)
-	_ = m.View() // panics in the compositor, arms the overlay
+	_ = m.View()
 
 	if got := m.CrashNotice(); got != "" {
 		t.Fatalf("a fresh overlay already had a notice: %q", got)
@@ -417,8 +383,6 @@ func TestCrashOverlaySaysWhenItLeftDetailsOut(t *testing.T) {
 	if !strings.Contains(short, "more details") {
 		t.Errorf("a short screen cut the details and did not say so:\n%s", short)
 	}
-	// And it still offers the way out, which is the point of cutting the facts
-	// rather than the footer.
 	for _, want := range []string{"copy report", "open an issue"} {
 		if !strings.Contains(short, want) {
 			t.Errorf("a short screen lost %q from the footer:\n%s", want, short)

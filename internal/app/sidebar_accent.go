@@ -9,29 +9,16 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The theme's own accent slots, and the quick-pick row's whole vocabulary. They
-// are also what a stored accent index means, so an accents file written before
-// the picker reached the full colour space keeps meaning what it meant. Eight
-// bright slots first, then seven normal ones; ANSI black is skipped, since an
-// accent nobody can see is not a choice, which is why this is fifteen and not
-// sixteen.
 const accentSwatchCount = 15
 
-// accentBrightCount is how many of the slots are the bright half.
 const accentBrightCount = 8
 
-// accentSlotNames names the slots, in the words set-session-accent already
-// takes: the picker prints them and the daemon is sent them, so the label on
-// screen and the value stored are the same string. ParseAccent ignores the
-// space, so "bright cyan" reads back as the slot it was drawn for.
 var accentSlotNames = [accentSwatchCount]string{
 	"bright black", "bright red", "bright green", "bright yellow",
 	"bright blue", "bright purple", "bright cyan", "bright white",
 	"red", "green", "yellow", "blue", "purple", "cyan", "white",
 }
 
-// accentColor resolves a legacy accent index against the live theme: the first
-// eight are ANSI 8-15, the rest ANSI 1-7.
 func accentColor(idx int) color.Color {
 	pal := theme.GetANSIPalette()
 	idx = clampInt(idx, 0, accentSwatchCount-1)
@@ -41,7 +28,6 @@ func accentColor(idx int) color.Color {
 	return pal[idx-accentBrightCount+1]
 }
 
-// accentMark is the one-cell chip an accented row wears in its glyph column.
 func accentMark() string {
 	if overlay.UseASCII() {
 		return "|"
@@ -77,25 +63,14 @@ func (m *OS) ClearWindowAccent(windowID string) {
 	m.saveSidebarState()
 }
 
-// accentFocus names the part of the picker the keyboard is driving. Tab walks
-// them in this order, which is the order they are drawn in.
 type accentFocus uint8
 
 const (
-	// The theme's own colours come first, drawn first and reached first, because
-	// picking one by name is the easy answer and the whole colour space below it
-	// is the expert one.
-	// The target's own keywords, where it has any. First because a value the
-	// option is documented in terms of beats one the user has to mix, and drawn
-	// first for the same reason. A target with no keywords does not draw the row
-	// and tab steps straight past it.
 	accentFocusNamed accentFocus = iota
 	accentFocusANSI
 	accentFocusHue
 	accentFocusGrid
 	accentFocusHex
-	// The sliders, in channel order, so accentChannel and the focus stop it owns
-	// are one addition apart.
 	accentFocusR
 	accentFocusG
 	accentFocusB
@@ -105,110 +80,49 @@ const (
 	accentFocusCount
 )
 
-// accentGridMaxRows caps the shades grid so the dialog stays a dialog on a tall
-// screen. Lightness is the axis with the least to say per row.
 const accentGridMaxRows = 8
 
-// accentPickerState is the picker's whole model.
-//
-// Cur is what would be applied and what the rail previews. Base is what the
-// harmony chips are computed from, and only the grid, the strip and the hex
-// field move it: walking the chips has to leave the chips where they are, or
-// the row slides out from under the cursor.
 type accentPickerState struct {
-	Hue float64 // 0..360, the hue the shades grid holds
-	// Sat and Light are the continuous 0..1 model the S and L sliders edit. The
-	// grid is a coarse projection of the same two numbers (9.1 % of saturation a
-	// column, 12.1 % of lightness a row), so the cursor shows the nearest cell
-	// while the sliders keep the value between cells. One model, two views,
-	// which is why they cannot disagree.
+	Hue        float64
 	Sat, Light float64
-	Col, Row   int // cursor in the grid: saturation across, lightness down
+	Col, Row   int
 	Cur        color.RGBA
 	Base       color.RGBA
-	Hex        string // the hex field's buffer
-	Harmony    int    // which chip the harmony cursor is on
-	// Slot is the theme slot the current colour was picked as, or -1 when it is
-	// a literal. Cur is the same colour either way; this is what says whether it
-	// will follow the next theme. Set to -1 by every control that produces a
-	// colour of its own, so a slot cannot outlive the pick that chose it.
-	Slot    int
-	Focus   accentFocus
-	Prev    Accent // the colour the target was wearing when the picker opened
-	HadPrev bool
-	// Named is the keyword the picker is currently pointing at, for a target
-	// whose value can be a word rather than a colour (the scrollbar tint's
-	// quiet, border and muted). Empty means the selection is the colour in Cur.
-	//
-	// It is a second discriminator alongside Slot and behaves like it: every
-	// control that produces a colour of its own clears it, so a keyword cannot
-	// outlive the pick that replaced it.
-	Named string
-	// NamedOpts are the keywords this target accepts, drawn as a row of chips.
-	// Empty for a target that only takes colours, and the row is then not drawn
-	// and its keyboard stop is skipped.
-	NamedOpts []string
-	// SrcWord names where an inherited colour comes from, for the readout. A
-	// pane says "session" and a session "auto"; a setting says which of its own
-	// fallbacks is in force.
-	SrcWord string
-	// Src says where Prev came from. A colour the target was given and a colour
-	// it derives look the same on the rail and behave differently: a pane with
-	// no accent follows its session wherever that goes, a session with no accent
-	// follows the arbitration, and a pinned one does neither. The picker has to
-	// keep them apart and say which it is showing.
-	Src accentSource
+	Hex        string
+	Harmony    int
+	Slot       int
+	Focus      accentFocus
+	Prev       Accent
+	HadPrev    bool
+	Named      string
+	NamedOpts  []string
+	SrcWord    string
+	Src        accentSource
 }
 
-// accentLayout names the shape the picker takes on this screen. Fit and
-// degrade, never refuse: the compact mode is the layout the picker shipped with
-// and it works down to MinDialogWidth.
 type accentLayout uint8
 
 const (
-	// accentLayoutCompact is one narrow column of one-cell swatches, no sliders.
 	accentLayoutCompact accentLayout = iota
-	// accentLayoutStacked is one column with everything on it.
 	accentLayoutStacked
-	// accentLayoutWide is two columns either side of a dashed rule: the colour
-	// space on the left, the numbers and the harmony on the right.
 	accentLayoutWide
 )
 
-// The three widths, as inner widths between the dialog's border cells. The wide
-// one is its two columns plus the rule between them.
 const (
-	accentWideLeft  = 38
-	accentWideRight = 32
-	accentWideInner = accentWideLeft + 1 + accentWideRight
-	// The one-column width, wider than the compact dialog because a slider needs
-	// a track worth dragging: eight cells go to the sigil, the label and the
-	// value, and what is left is the resolution.
+	accentWideLeft          = 38
+	accentWideRight         = 32
+	accentWideInner         = accentWideLeft + 1 + accentWideRight
 	accentStackedInnerWidth = accentWideLeft
 )
 
-// accentSlotRows is how many rows the theme's colours are drawn on.
 const accentSlotRows = 2
 
-// accentSliderRows is how many rows the slider block occupies: one per channel
-// plus the blank that separates the bytes from the two that move the whole
-// colour.
 const accentSliderRows = int(accentChanCount) + 1
 
-// accentSliderMinHeight is the screen height the stacked layout needs before it
-// will draw the slider block. It is the first of that layout's controls to go on
-// a short screen: it is the tallest thing in the dialog, and the grid and the
-// hex field still reach every colour without it.
 const accentSliderMinHeight = 22
 
-// accentWideSlotsMinHeight is the screen height the wide layout keeps the
-// theme's colours at. They are the last thing it drops, after the breathing
-// blanks, because they are the easy way in.
 const accentWideSlotsMinHeight = 16
 
-// accentWideRightRows is how tall the wide layout's right column comes out for
-// a set of choices: the hex line, the slider block, the harmony label, its rows
-// of chips, and the three breathing blanks when they are affordable.
 func accentWideRightRows(blanks bool, chipRows int) int {
 	n := 1 + accentSliderRows + 1 + chipRows
 	if blanks {
@@ -217,34 +131,24 @@ func accentWideRightRows(blanks bool, chipRows int) int {
 	return n
 }
 
-// The harmony wheel's width in chips, and how many cells one chip is painted in.
-// Twelve at a stroke is more useful than a second row would be in one column,
-// and the wide layout has the height for sixteen.
 const (
-	accentWideChipCols    = 8
-	accentStackedChipCols = 12
-	accentChipWidth       = 3
-	// The compact row names its three, so the chips are wider and the labels sit
-	// between them.
+	accentWideChipCols     = 8
+	accentStackedChipCols  = 12
+	accentChipWidth        = 3
 	accentCompactChipWidth = 4
 )
 
-// accentLayoutPlan is everything the picker decided about this screen. One
-// value, read by the renderer as it draws and by the keyboard as it moves, so a
-// cursor position always names a cell that is on screen.
 type accentLayoutPlan struct {
-	Mode      accentLayout
-	Inner     int // the dialog's inner width
-	ColInner  int // the width of the column the strip and the grid live in
-	Slots     bool
-	Sliders   bool
-	Blanks    bool
-	HueCells  int // cells around the hue circle, one column each
-	GridCols  int
-	GridRows  int
-	CellWidth int // cells one shades-grid swatch is painted in
-	// The harmony chips, as a grid of them. Wide draws two rows of eight under a
-	// label, stacked one row of twelve, compact the three named ones.
+	Mode         accentLayout
+	Inner        int
+	ColInner     int
+	Slots        bool
+	Sliders      bool
+	Blanks       bool
+	HueCells     int
+	GridCols     int
+	GridRows     int
+	CellWidth    int
 	HarmonyCols  int
 	HarmonyRows  int
 	HarmonyLabel bool
@@ -252,39 +156,24 @@ type accentLayoutPlan struct {
 	ChipGap      int
 }
 
-// HarmonyCount is how many chips the layout draws.
 func (p accentLayoutPlan) HarmonyCount() int { return p.HarmonyCols * p.HarmonyRows }
 
-// accentGridChunkyCols is the shades grid's width where a swatch can afford to
-// be three cells: twelve columns of saturation. Fewer steps than the strip of
-// one-cell cells it replaces, and the S slider is the fine path now, so what the
-// grid is for is reading a colour at a glance rather than resolving it.
 const accentGridChunkyCols = 12
 
-// accentGridChunkyCell is how many cells one of those swatches is painted in.
-// Three is the narrowest that reads as a swatch rather than as a stripe, and
-// twelve of them plus the sigil and a pad column is exactly the column width.
 const accentGridChunkyCell = 3
 
-// accentPlan works out the layout for the current screen.
 func (m *OS) accentPlan() accentLayoutPlan {
 	w, h := m.GetRenderWidth(), m.GetRenderHeight()
-	avail := h - 2 // the body, between the dialog's two border rows
+	avail := h - 2
 
-	// Wide needs the columns to be full width and the right one to fit whole. A
-	// clipped column is worse than a stacked one.
 	if w >= accentWideInner+2 && avail >= accentWideRightRows(false, 1) {
 		p := accentLayoutPlan{
 			Mode: accentLayoutWide, Inner: accentWideInner, ColInner: accentWideLeft,
-			Sliders: true,
-			Slots:   h >= accentWideSlotsMinHeight,
-			// Eight three-cell chips with a cell between them is the column exactly,
-			// and the gaps are what make them read as a set of chips.
+			Sliders:     true,
+			Slots:       h >= accentWideSlotsMinHeight,
 			HarmonyCols: accentWideChipCols, HarmonyRows: 2, HarmonyLabel: true,
 			ChipWidth: accentChipWidth, ChipGap: 1,
 		}
-		// Give up the breathing blanks before the second row of chips: a blank row
-		// is spacing and a chip is a colour the user can pick.
 		switch {
 		case avail >= accentWideRightRows(true, 2):
 			p.Blanks = true
@@ -292,8 +181,6 @@ func (m *OS) accentPlan() accentLayoutPlan {
 		default:
 			p.HarmonyRows = 1
 		}
-		// The left column around the grid: the hue strip, the rule under the grid,
-		// the now line, and the theme's colours with their breathing blank.
 		fixed := 3
 		if p.Slots {
 			fixed += accentSlotRows
@@ -314,8 +201,6 @@ func (m *OS) accentPlan() accentLayoutPlan {
 	}
 	p.ColInner = p.Inner
 	p.HueCells = max(p.Inner-2, 1)
-	// The compact layout has no width to spend on a chunky swatch, so it keeps
-	// the one-cell cells and the resolution that comes with them.
 	p.GridCols, p.CellWidth = accentGridChunkyCols, accentGridChunkyCell
 	p.HarmonyCols, p.HarmonyRows = accentStackedChipCols, 1
 	p.ChipWidth, p.ChipGap = accentChipWidth, 0
@@ -325,11 +210,7 @@ func (m *OS) accentPlan() accentLayoutPlan {
 		p.ChipWidth = accentCompactChipWidth
 	}
 
-	// Body furniture around the grid: the hue strip, a rule, the now line, the
-	// hex line and the harmony line, plus the dialog's two border rows, plus the
-	// slot rows and the sliders where they are drawn.
 	furniture := 7
-	// One grid row, the rest of the furniture, and the slot rows on top.
 	p.Slots = h >= 1+7+accentSlotRows
 	if p.Slots {
 		furniture += accentSlotRows
@@ -342,41 +223,22 @@ func (m *OS) accentPlan() accentLayoutPlan {
 	return p
 }
 
-// accentGridSize is the shades grid's dimensions for the current screen.
 func (m *OS) accentGridSize() (cols, rows int) {
 	p := m.accentPlan()
 	return p.GridCols, p.GridRows
 }
 
-// accentHueCells is how many steps the hue strip is drawn in. It is the strip's
-// own number, not the grid's: the strip is one cell a step and the grid's
-// swatches are three, so the two stopped being the same count when the swatches
-// got wide enough to read.
 func (m *OS) accentHueCells() int { return m.accentPlan().HueCells }
 
-// accentSlidersShown reports whether the sliders are drawn on this screen.
 func (m *OS) accentSlidersShown() bool { return m.accentPlan().Sliders }
 
-// accentSlotsShown reports whether the screen has room for the quick-pick rows.
-// In the stacked and compact layouts they are the first thing dropped on a
-// screen too short for everything: the readout, the hex field and one row of the
-// grid are what the picker cannot work without, and the same colours are still
-// reachable by name through the hex field and by eye through the grid.
 func (m *OS) accentSlotsShown() bool { return m.accentPlan().Slots }
 
-// accentGridLightRange is the lightness the grid's top and bottom rows carry.
-// It stops short of white and black: those are one colour each at every
-// saturation, so a row of either would be a row that says nothing.
 const (
 	accentLightTop    = 0.95
 	accentLightBottom = 0.10
 )
 
-// accentCellSL is the saturation and lightness shades-grid cell (col, row)
-// stands for: saturation runs left to right, lightness top to bottom. The cell
-// is those two numbers, and the colour below is what they make at a hue, which
-// is why picking a cell sets the model rather than reading it back off the
-// eight-bit colour the cell was painted with.
 func accentCellSL(col, row, cols, rows int) (sat, light float64) {
 	sat = 1.0
 	if cols > 1 {
@@ -389,17 +251,11 @@ func accentCellSL(col, row, cols, rows int) (sat, light float64) {
 	return sat, light
 }
 
-// accentCellColor is the colour of shades-grid cell (col, row) at the held hue.
 func accentCellColor(hue float64, col, row, cols, rows int) color.RGBA {
 	sat, light := accentCellSL(col, row, cols, rows)
 	return hslToRGB(hue, sat, light)
 }
 
-// accentCellForSL is the grid cell nearest to a saturation and lightness, the
-// inverse of accentCellSL. The sliders use this rather than accentCellFor
-// because they hold the two numbers exactly: going by way of the colour would
-// put the cursor a cell off near white, where eight bits a channel no longer
-// tell saturation and its neighbours apart.
 func accentCellForSL(sat, light float64, cols, rows int) (col, row int) {
 	if cols > 1 {
 		col = clampInt(int(sat*float64(cols-1)+0.5), 0, cols-1)
@@ -411,9 +267,6 @@ func accentCellForSL(sat, light float64, cols, rows int) (col, row int) {
 	return col, row
 }
 
-// accentCellFor is the grid cell nearest to a colour, which is how a hex the
-// user typed puts the cursor somewhere sensible. A grey carries no hue, so the
-// hue the picker is already holding stands.
 func accentCellFor(c color.RGBA, held float64, cols, rows int) (hue float64, col, row int) {
 	h, s, l := rgbToHSL(c)
 	hue = h
@@ -430,7 +283,6 @@ func accentCellFor(c color.RGBA, held float64, cols, rows int) (hue float64, col
 	return hue, col, row
 }
 
-// accentHueAt is the hue the hue strip's cell i stands for.
 func accentHueAt(i, cols int) float64 {
 	if cols <= 1 {
 		return 0
@@ -438,7 +290,6 @@ func accentHueAt(i, cols int) float64 {
 	return float64(i) * 360 / float64(cols)
 }
 
-// accentHueCell is the strip cell holding a hue, the inverse of accentHueAt.
 func accentHueCell(hue float64, cols int) int {
 	if cols <= 1 {
 		return 0
@@ -446,18 +297,10 @@ func accentHueCell(hue float64, cols int) int {
 	return clampInt(int(hue*float64(cols)/360+0.5)%cols, 0, cols-1)
 }
 
-// accentHarmonyCompactCount is how many chips the compact layout's row carries:
-// the complement, then the two analogous neighbours. Named rather than turned,
-// because three chips is a set of relationships and there is no room to draw the
-// wheel they would be points on.
 const accentHarmonyCompactCount = 3
 
-// accentHarmonyCompactRotations are the hue turns those three apply.
 var accentHarmonyCompactRotations = [accentHarmonyCompactCount]float64{180, -30, 30}
 
-// baseHue is the hue the harmony chips are turned from. A grey base reports no
-// hue, so the one the picker is holding stands, which is what keeps the chips
-// meaningful on the grid's left-hand column.
 func (s *accentPickerState) baseHue() float64 {
 	h, sat, _ := rgbToHSL(s.Base)
 	if sat == 0 {
@@ -466,11 +309,6 @@ func (s *accentPickerState) baseHue() float64 {
 	return h
 }
 
-// harmonyColor is the chip at index i of a set of count.
-//
-// A chip keeps the saturation and lightness the picker is holding and moves
-// only the hue. Picking one is asking for this colour at another hue, not for
-// the seed's whole look back, so the sliders' work survives the pick.
 func (s *accentPickerState) harmonyColor(i, count int) color.RGBA {
 	count = max(count, 1)
 	i = clampInt(i, 0, count-1)
@@ -481,31 +319,17 @@ func (s *accentPickerState) harmonyColor(i, count int) color.RGBA {
 	return hslToRGB(s.baseHue()+turn, s.Sat, s.Light)
 }
 
-// setCur moves the colour the picker would apply, and with it the base the
-// harmony chips hang off, the text in the hex field, and the saturation and
-// lightness the sliders show. The colour is a literal: every control but the
-// slot row produces one.
 func (s *accentPickerState) setCur(c color.RGBA) {
 	s.takeColor(c)
-	// A grey reports no hue, so the held one stands; saturation and lightness it
-	// does report, and zero saturation is the true answer for a grey.
 	_, s.Sat, s.Light = rgbToHSL(c)
 }
 
-// takeColor installs the colour without touching the HSL model, for the callers
-// that already hold the exact saturation and lightness it was built from. Going
-// through rgbToHSL there would be a round trip through eight bits a channel for
-// numbers that were never rounded.
 func (s *accentPickerState) takeColor(c color.RGBA) {
 	s.Cur, s.Base = c, c
 	s.Hex = overlay.Hex(c)
 	s.Slot, s.Named = -1, ""
 }
 
-// takeHarmony selects a harmony chip. It moves the colour without moving Base
-// or the model, so the chips stay where they are while the cursor walks them:
-// the chip was built from the saturation and lightness already held, and reading
-// them back off it would drift the whole row a little on every step.
 func (m *OS) takeHarmony(i int) {
 	s := &m.AccentPicker
 	count := m.accentPlan().HarmonyCount()
@@ -516,26 +340,17 @@ func (m *OS) takeHarmony(i int) {
 	s.Slot, s.Named = -1, ""
 }
 
-// accentPickerSetHSL moves the picker's saturation and lightness and rebuilds
-// the colour from them at the held hue. The sliders write the model directly
-// rather than editing the colour and reading the model back off it, so a step
-// out and back is not a round trip through eight bits a channel.
 func (m *OS) accentPickerSetHSL(sat, light float64) {
 	s := &m.AccentPicker
 	s.Sat, s.Light = clamp01(sat), clamp01(light)
 	c := hslToRGB(s.Hue, s.Sat, s.Light)
 	s.takeColor(c)
-	// The grid cursor is the coarse view of the same two numbers.
 	cols, rows := m.accentGridSize()
 	s.Col, s.Row = accentCellForSL(s.Sat, s.Light, cols, rows)
 }
 
-// clamp01 holds a fraction in range.
 func clamp01(v float64) float64 { return math.Min(math.Max(v, 0), 1) }
 
-// accentPickerAdopt takes a literal colour from a control that names one
-// outright rather than by cell, and walks the grid cursor and the held hue to
-// the nearest cell so every part of the dialog is pointing at the same colour.
 func (m *OS) accentPickerAdopt(c color.RGBA) {
 	cols, rows := m.accentGridSize()
 	s := &m.AccentPicker
@@ -543,9 +358,6 @@ func (m *OS) accentPickerAdopt(c color.RGBA) {
 	s.Hue, s.Col, s.Row = accentCellFor(c, s.Hue, cols, rows)
 }
 
-// selection is the accent the picker would store: the slot when the user picked
-// one by name, and the colour itself otherwise. Keeping the slot is what lets a
-// pane pinned to "cyan" follow the user to another theme.
 func (s *accentPickerState) selection() Accent {
 	if s.Slot >= 0 {
 		return SlotAccent(s.Slot)
@@ -553,9 +365,6 @@ func (s *accentPickerState) selection() Accent {
 	return RGBAccent(s.Cur)
 }
 
-// accentPayload is how an accent is written down for the daemon, which records
-// the string verbatim: a slot goes over as its name so every client resolves it
-// against its own theme, and a literal as its hex.
 func accentPayload(a Accent) string {
 	if a.IsSlot() {
 		return accentSlotNames[clampInt(a.Slot, 0, accentSwatchCount-1)]
@@ -563,9 +372,6 @@ func accentPayload(a Accent) string {
 	return a.Hex()
 }
 
-// accentNearestSlot is the slot closest to a colour, which is where the ANSI
-// cursor lands when the keyboard arrives from a colour no slot names. The grid
-// does the same thing with a typed hex.
 func accentNearestSlot(c color.RGBA) int {
 	best, bestDist := 0, math.MaxFloat64
 	for i := range accentSwatchCount {
@@ -627,9 +433,6 @@ func (m *OS) OpenSessionAccentPicker(name string) {
 	m.openAccentPicker(AccentTargetSession, name, prev, src)
 }
 
-// openAccentPicker installs the picker on a target already resolved to a colour
-// and a source. The seed is resolved before the picker is opened because an open
-// picker previews over the very thing it was seeded from.
 func (m *OS) openAccentPicker(target AccentTarget, id string, prev Accent, src accentSource) {
 	start := toRGBA(theme.UI().Accent)
 	if src != accentSourceNone {
@@ -646,9 +449,6 @@ func (m *OS) openAccentPicker(target AccentTarget, id string, prev Accent, src a
 	}
 	m.AccentPicker.setCur(start)
 
-	// A colour that is a slot opens on that slot, cursor and keyboard both: the
-	// target is wearing the name, not the hex, and the picker showing a grid
-	// position instead would hide the one thing it could say about it.
 	if src != accentSourceNone && prev.IsSlot() && m.accentSlotsShown() {
 		m.AccentPickerSlot(prev.Slot)
 	}
@@ -664,12 +464,6 @@ func (m *OS) CloseAccentPicker() {
 	m.accentHits = m.accentHits[:0]
 }
 
-// accentPreview is the accent the rail draws the picker's target in while the
-// picker is open, so the colour under the cursor shows on the thing being
-// accented before it is applied. Derived from the picker's own state rather
-// than stored beside it: one fewer thing that can disagree with what is on
-// screen, and the fields it reads are in the rail's signature, so the preview
-// repaints on the keystrokes that change it and on nothing else.
 func (m *OS) accentPreview(target AccentTarget, id string) (Accent, bool) {
 	if !m.ShowAccentPicker || id == "" {
 		return Accent{}, false
@@ -702,9 +496,6 @@ func (m *OS) AccentPickerApply() tea.Cmd {
 	unchanged := s.HadPrev && sel == s.Prev
 	defer m.CloseAccentPicker()
 
-	// A keyword and the colour it resolves to are the same pixels and different
-	// values, so a selection that is a keyword is never "unchanged" on the
-	// strength of its colour matching the seed.
 	if unchanged && s.Named == "" {
 		return nil
 	}
@@ -738,25 +529,17 @@ func (m *OS) AccentPickerClear() tea.Cmd {
 	case AccentTargetSession:
 		return m.setSessionAccentCmd(id, "")
 	case AccentTargetThemeRole:
-		// Back to the base's colour.
 		if row, ok := m.themeEditorRowByID(id); ok {
 			m.themeEditorSet(row, "")
 		}
 		return nil
 	case AccentTargetSetting:
-		// Unset, which for a border colour is back to the theme's and for the
-		// tint back to its default. A text field expresses this state by being
-		// empty, so the picker has to be able to take a colour back as well as
-		// set one.
 		return m.applySettingColor(id, "")
 	}
 	m.ClearWindowAccent(id)
 	return nil
 }
 
-// accentFocusShown reports whether a focus stop is drawn on this screen. The
-// sliders and the slot rows both come and go with the screen's height, and a
-// keyboard stop on a control nobody can see is a control the user has lost.
 func (m *OS) accentFocusShown(f accentFocus) bool {
 	if f == accentFocusNamed {
 		return len(m.AccentPicker.NamedOpts) > 0
@@ -781,8 +564,6 @@ func (m *OS) AccentPickerFocus(delta int) {
 	}
 	s := &m.AccentPicker
 	n := int(accentFocusCount)
-	// Tab must never land on a control that is not on screen, and a short screen
-	// can have dropped a run of them.
 	for range n {
 		s.Focus = accentFocus(((int(s.Focus)+delta)%n + n) % n)
 		if m.accentFocusShown(s.Focus) {
@@ -793,8 +574,6 @@ func (m *OS) AccentPickerFocus(delta int) {
 	case accentFocusHarmony:
 		m.takeHarmony(s.Harmony)
 	case accentFocusNamed:
-		// Focus names the selection here too: arriving on the keywords takes the
-		// one under the cursor, which is the one the chip row is showing.
 		m.AccentPickerNamed(m.accentNamedIndex())
 	case accentFocusANSI:
 		slot := s.Slot
@@ -803,8 +582,6 @@ func (m *OS) AccentPickerFocus(delta int) {
 		}
 		m.AccentPickerSlot(slot)
 	case accentFocusGrid, accentFocusHue:
-		// Focus names the selection, so arriving at the grid takes the cell the
-		// cursor is on, at that cell's own saturation and lightness.
 		cols, rows := m.accentGridSize()
 		s.Sat, s.Light = accentCellSL(s.Col, s.Row, cols, rows)
 		s.takeColor(hslToRGB(s.Hue, s.Sat, s.Light))
@@ -821,8 +598,6 @@ func (m *OS) AccentPickerMove(dx, dy int) {
 		return
 	}
 	if ch, ok := m.AccentPicker.Focus.sliderChannel(); ok {
-		// Right and up raise the channel, left and down lower it, so the number
-		// moves the way the thumb does and the way a column of them reads.
 		m.AccentPickerSliderStep(ch, dx-dy)
 		return
 	}
@@ -840,9 +615,6 @@ func (m *OS) AccentPickerMove(dx, dy int) {
 	}
 }
 
-// accentNamedIndex is the keyword chip the cursor is on. A selection that is a
-// colour rather than a keyword leaves the cursor at the first chip, which is
-// where arriving at the row from anywhere else should land.
 func (m *OS) accentNamedIndex() int {
 	for i, name := range m.AccentPicker.NamedOpts {
 		if name == m.AccentPicker.Named {
@@ -1024,7 +796,7 @@ func (m *OS) AccentPickerHexKey(r rune) bool {
 	}
 	digits := hexDigitsOf(m.AccentPicker.Hex)
 	if len(digits) >= 6 {
-		digits = "" // a seventh digit starts the next colour rather than being dropped
+		digits = ""
 	}
 	m.accentPickerSetHex("#" + digits + string(r))
 	return true
@@ -1042,16 +814,10 @@ func (m *OS) AccentPickerHexBackspace() {
 	m.accentPickerSetHex("#" + digits[:len(digits)-1])
 }
 
-// accentPickerSetHex installs a hex buffer and, when it names a colour, takes
-// it: the grid cursor and the held hue move to the nearest cell so every part
-// of the dialog agrees on what is selected.
 func (m *OS) accentPickerSetHex(buf string) {
 	s := &m.AccentPicker
 	s.Focus = accentFocusHex
 	s.Hex = buf
-	// Typing a hex is asking for that exact colour, so the slot and the keyword
-	// go even before the buffer names one: a half-typed hex is no longer "cyan"
-	// and no longer "muted".
 	s.Slot, s.Named = -1, ""
 	c, ok := parseHexColor(buf)
 	if !ok {
@@ -1063,7 +829,6 @@ func (m *OS) accentPickerSetHex(buf string) {
 	_, s.Sat, s.Light = rgbToHSL(c)
 }
 
-// hexDigitsOf strips the leading hash from a hex buffer.
 func hexDigitsOf(buf string) string {
 	if len(buf) > 0 && buf[0] == '#' {
 		return buf[1:]

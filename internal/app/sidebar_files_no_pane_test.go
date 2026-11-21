@@ -9,27 +9,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// The files section says what is in the focused pane's directory. When there is
-// no focused pane it has nothing to say, and these are the claims about what it
-// does then. They drive the real sequence: a pane reports a directory, the sync
-// reads it, the shell exits, and the rail is looked at afterwards.
-
-// pumpFiles runs one message through Update and applies the directory read it
-// asks for, if it asks for one.
-//
-// It goes through Update rather than calling FilesSyncCmd, because the whole
-// bug is about which message the sync sees and what it does with it. A test
-// that called the sync by hand would be testing the function and not the loop
-// that calls it. The reply is fed back through Update too, so the generation
-// guard in the real handler is the one that decides.
 func pumpFiles(t *testing.T, m *OS, msg tea.Msg) {
 	t.Helper()
 	gen := m.filesView.Gen
 	_, cmd := m.Update(msg)
-	// A read was scheduled only if the sync stamped a new generation for it.
-	// Asking the state rather than the command tree keeps this from having to
-	// run every command Update batched, which is how the loop itself decides
-	// nothing: bubbletea runs them, and some of them block on a channel.
 	if m.filesView.Gen == gen || !m.filesView.Loading {
 		return
 	}
@@ -40,12 +23,6 @@ func pumpFiles(t *testing.T, m *OS, msg tea.Msg) {
 	m.Update(reply)
 }
 
-// awaitFileList runs a command tree the way the program does, each command on
-// its own goroutine, and returns the directory listing one of them produces.
-//
-// Running them in line does not work: Update batches the sync with a tick that
-// sleeps and with a listener that blocks on a channel, so the first call would
-// never return. This is what bubbletea does with the same batch.
 func awaitFileList(cmd tea.Cmd) (fileListMsg, bool) {
 	out := make(chan fileListMsg, 8)
 	var run func(tea.Cmd)
@@ -73,14 +50,9 @@ func awaitFileList(cmd tea.Cmd) (fileListMsg, bool) {
 	}
 }
 
-// filesOSWithCwd is a rail with three panes, the focused one reporting dir, and
-// the files section already listing it. It is the state every test below starts
-// from and the state a user is in when they close their last pane.
 func filesOSWithCwd(t *testing.T, dir string) *OS {
 	t.Helper()
 	m := sidebarTestOS(t, 120, 40, "left")
-	// A closed exit channel so the listener the exit handler re-arms answers at
-	// once instead of parking a goroutine for the length of the run.
 	exits := make(chan string)
 	close(exits)
 	m.WindowExitChan = exits
@@ -92,8 +64,6 @@ func filesOSWithCwd(t *testing.T, dir string) *OS {
 	return m
 }
 
-// closeEveryPane exits every pane's shell, one WindowExitMsg at a time, which
-// is the message the client gets when a shell ends on its own.
 func closeEveryPane(t *testing.T, m *OS) {
 	t.Helper()
 	for range 16 {
@@ -119,8 +89,6 @@ func TestFilesSectionDropsALateReplyAfterTheLastPane(t *testing.T) {
 	dir := fileViewTree(t)
 	m := filesOSWithCwd(t, dir)
 
-	// The pane cds. The sync asks for the new directory and the answer is held
-	// back, so the read is in flight for the rest of this test.
 	other := fileViewTree(t)
 	m.Windows[0].Cwd = other
 	gen := m.filesView.Gen
@@ -131,7 +99,6 @@ func TestFilesSectionDropsALateReplyAfterTheLastPane(t *testing.T) {
 
 	closeEveryPane(t, m)
 
-	// And now the read finally answers.
 	reply, ok := awaitFileList(cmd)
 	if !ok {
 		t.Fatal("the outstanding read produced no listing")
@@ -198,10 +165,6 @@ func TestFilesSectionEmptiesWhenTheLastPaneCloses(t *testing.T) {
 	dir := fileViewTree(t)
 	m := filesOSWithCwd(t, dir)
 
-	// The header names the folder by its last component, and the rows name what
-	// is in it. The word "files" itself is not checked either way: the rail's
-	// footer carries a control with that label whether the section is drawn or
-	// not.
 	here := filepath.Base(dir)
 	before := strings.Join(railLines(t, m), "\n")
 	for _, want := range []string{here, "apple/", "README.md"} {
@@ -215,9 +178,6 @@ func TestFilesSectionEmptiesWhenTheLastPaneCloses(t *testing.T) {
 
 	after := strings.Join(railLines(t, m), "\n")
 	t.Logf("after the last pane closed:\n%s", after)
-	// "loading" is in the list because a half cleared state draws it forever:
-	// a Want with no Dir behind it is the section saying an answer is coming
-	// for a read nobody asked for.
 	for _, gone := range []string{here, "apple/", "Zeta/", "README.md", "Alpha.go", "beta.txt", "loading"} {
 		if strings.Contains(after, gone) {
 			t.Errorf("with no pane left the rail still draws %q:\n%s", gone, after)
@@ -283,7 +243,6 @@ func TestFilesSectionEmptiesOnAPaneThatWillNotSayWhereItIs(t *testing.T) {
 	dir := fileViewTree(t)
 	m := filesOSWithCwd(t, dir)
 
-	// The second pane runs something that does not report its directory.
 	m.Windows[1].Cwd = ""
 	m.FocusedWindow = 1
 	pumpFiles(t, m, TickerMsg(time.Now()))
@@ -296,7 +255,6 @@ func TestFilesSectionEmptiesOnAPaneThatWillNotSayWhereItIs(t *testing.T) {
 		t.Errorf("the section holds %q for a pane that never said where it is", m.FileViewDir())
 	}
 
-	// And back to the pane that does report one: the section fills again.
 	m.FocusedWindow = 0
 	pumpFiles(t, m, TickerMsg(time.Now()))
 	if m.FileViewDir() != dir {
@@ -320,8 +278,6 @@ func TestClosingAPinnedPaneReleasesThePin(t *testing.T) {
 	dir := fileViewTree(t)
 	m := filesOSWithCwd(t, dir)
 
-	// The user steers the listing into a subfolder of the focused pane's
-	// directory, which is what pins it.
 	sub := filepath.Join(dir, "apple")
 	cmd := m.requestFileList(sub, m.Windows[0].ID, true)
 	reply, ok := awaitFileList(cmd)
@@ -334,8 +290,6 @@ func TestClosingAPinnedPaneReleasesThePin(t *testing.T) {
 			m.filesView.Pinned, m.filesView.Origin)
 	}
 
-	// The pinned pane's shell exits. Two panes are left, and the section is
-	// about the focused one of those now.
 	other := fileViewTree(t)
 	m.Windows[1].Cwd = other
 	pumpFiles(t, m, WindowExitMsg{WindowID: m.Windows[0].ID})
@@ -346,7 +300,6 @@ func TestClosingAPinnedPaneReleasesThePin(t *testing.T) {
 		t.Errorf("the section is on %q, want the surviving focused pane's %q", m.FileViewDir(), other)
 	}
 
-	// And when the rest go, it empties like any other listing.
 	closeEveryPane(t, m)
 	if m.FileViewDir() != "" || m.filesView.Want != "" {
 		t.Errorf("the section held on to %q after every pane closed", m.filesView.Want)

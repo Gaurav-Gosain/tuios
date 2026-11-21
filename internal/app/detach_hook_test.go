@@ -11,14 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
 )
 
-// after-detach is documented as belonging to the client: three clients
-// attaching is three attaches, and the same for leaving. The attach half has
-// held for every client since cd9637cf. The detach half fired from
-// DetachClient alone, which is the leader-d path, so an SSH client whose
-// connection closed and a browser tab that went away left without a word.
-
-// detachHookOS is a daemon-session client with one after-detach command
-// registered, and the file that command would create.
 func detachHookOS(t *testing.T) (*OS, string) {
 	t.Helper()
 	marker := filepath.Join(t.TempDir(), "detached")
@@ -96,8 +88,6 @@ func TestOnePersonLeavingIsOneDetach(t *testing.T) {
 	mgr.Register(hooks.AfterDetach, "anything")
 	m.HookManager = mgr
 
-	// Both arrivals, in the order an SSH client meets them: leader-d detaches,
-	// then the middleware tears the session down anyway.
 	m.FireDetached()
 	m.Cleanup()
 

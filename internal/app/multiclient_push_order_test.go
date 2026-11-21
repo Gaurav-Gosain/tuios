@@ -8,37 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// Two orderings a client used to get wrong, each pinned by making it happen on
-// purpose. Both are deterministic race regressions: the interleaving is built
-// step by step against a real daemon, not waited for.
-//
-// The first is a push crossing a broadcast. A client pushes its state while a
-// peer's broadcast is already on its way to it, and applies the broadcast
-// afterwards. The daemon holds the client's push and sends it to every other
-// client, but never back to the client that made it, so that client alone is
-// left on the peer's older view for good. The convergence harness met it as a
-// pane zoomed on two clients and not on the third, about one sequence in two
-// hundred under load, once it stopped losing broadcasts of its own.
-//
-// The second is two copies of the session state arriving in the opposite order
-// to the one they were taken in. The daemon sends from more than one goroutine,
-// so it can happen, and a client that applied the older copy last dropped a
-// window the daemon had just opened.
-//
-// How these could pass without the fix, written down first:
-//   - The broadcast could be applied before the push instead of after it, which
-//     is the order that was always right. The test holds the broadcast in the
-//     exchange until the daemon is seen to hold the push.
-//   - The daemon could have merged the two pushes into one state both sides
-//     already agree with. The two pushes change the same pane in opposite
-//     directions, so the last one has to win on every client.
-//   - The client could be compared with a peer that is wrong the same way. It
-//     is compared with the daemon's own newest state as well.
-//   - The two copies could be the same state, so the order would not matter.
-//     The older one lacks the window the newer one has.
-
-// newestDaemonState records the newest state the daemon has broadcast to the
-// rig's control connection.
 type newestDaemonState struct {
 	mu sync.Mutex
 	st *session.SessionState
@@ -97,7 +66,6 @@ func TestAPushThatCrossesABroadcastIsNotUndoneByIt(t *testing.T) {
 	r, p, ex := twoClientsOnOneTiledSession(t)
 	daemon := trackDaemon(r)
 
-	// A zooms the first pane and both clients take it.
 	r.m.FocusedWindow = 0
 	zoomPTY := r.m.Windows[0].PTYID
 	r.m.ToggleZoom()
@@ -107,7 +75,6 @@ func TestAPushThatCrossesABroadcastIsNotUndoneByIt(t *testing.T) {
 		t.Fatalf("B never took A's zoom: %s", rectOf(w))
 	}
 
-	// B unzooms it. Its broadcast to A is received and held, not applied.
 	if f := p.m.GetFocusedWindow(); f == nil || f.PTYID != zoomPTY {
 		t.Fatalf("B is not focused on the zoomed pane")
 	}
@@ -125,10 +92,6 @@ func TestAPushThatCrossesABroadcastIsNotUndoneByIt(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	// A has not heard. It renames the other pane and pushes the state it is
-	// showing, zoom and all, which is what any change of A's does. The rename
-	// is what makes it a push at all: a client does not resend a state it
-	// already sent.
 	r.m.Windows[1].CustomName = "RENAMED"
 	r.m.SyncStateToDaemon()
 	daemon.waitFor(t, "the daemon to hold A's push", func(st *session.SessionState) bool {
@@ -136,7 +99,6 @@ func TestAPushThatCrossesABroadcastIsNotUndoneByIt(t *testing.T) {
 		return ok && z
 	})
 
-	// Now A hears B, and everything else still in flight lands.
 	ex.settle(60, 300*time.Millisecond)
 
 	a, b := winByPTY(r.m, zoomPTY), winByPTY(p.m, zoomPTY)
@@ -192,7 +154,6 @@ func TestAnOlderStateArrivingLastIsNotApplied(t *testing.T) {
 		t.Fatalf("the two copies differ in Version (%d, %d), so the test would not be about their order", older.Version, newer.Version)
 	}
 
-	// The two copies in the wrong order, as the client can be handed them.
 	if err := q.m.ApplyStateSyncFrom(newer, "peer"); err != nil {
 		t.Fatalf("apply the newer state: %v", err)
 	}

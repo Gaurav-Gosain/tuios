@@ -72,9 +72,6 @@ func (m *OS) NextSessionName() string {
 	return others[0]
 }
 
-// leaveTarget picks the session this client goes to when the one it shows
-// is killed under it, from live, the sessions the daemon still has: the
-// session it showed before when live holds it, else the first of live.
 func (m *OS) leaveTarget(live []string) string {
 	if m.lastSession.host == m.attachedMachine() && slices.Contains(live, m.lastSession.name) {
 		return m.lastSession.name
@@ -82,16 +79,6 @@ func (m *OS) leaveTarget(live []string) string {
 	return live[0]
 }
 
-// otherSessionNames lists the daemon sessions this client is not attached to,
-// by identity, from the listing this client already caches.
-//
-// It collects identities, not display titles. The title is the display name
-// once a session has one, so the kill-and-go-next row would switch to a name
-// that addresses nothing, and switching to a name no session answers to makes
-// one. It reads the cache rather than fetching a listing, because a fetch is a
-// blocking daemon round trip on the Update goroutine, taken to open a menu; the
-// cache is what the rail's own rows are drawn from and is refreshed off that
-// goroutine, so reading it is both cheaper and in agreement with the screen.
 func (m *OS) otherSessionNames() []string {
 	if m.DaemonClient == nil {
 		return nil
@@ -106,8 +93,6 @@ func (m *OS) otherSessionNames() []string {
 	return out
 }
 
-// anyForegroundProcess reports whether any window is running something beyond
-// its shell, i.e. whether killing the session would lose work.
 func (m *OS) anyForegroundProcess() bool {
 	for _, w := range m.Windows {
 		if w != nil && w.HasForegroundProcess() {
@@ -117,13 +102,8 @@ func (m *OS) anyForegroundProcess() bool {
 	return false
 }
 
-// buildQuitMenuItems assembles the rows for the current session state. Kill
-// rows carry the warn color only when a pane is running a foreground process,
-// so the color says "this loses work", not merely "this is a kill".
 func (m *OS) buildQuitMenuItems(others []string, busy bool) []QuitMenuItem {
 	if !m.IsDaemonSession {
-		// Standalone: there is no session to detach from, so detach is not
-		// offered. Quit is the default so pressing q twice still quits.
 		return []QuitMenuItem{
 			{Label: "Quit", Key: "q", Kind: QuitStandalone, Warn: busy},
 			{Label: "Cancel", Key: "esc", Kind: QuitCancel},
@@ -139,8 +119,6 @@ func (m *OS) buildQuitMenuItems(others []string, busy bool) []QuitMenuItem {
 	} else {
 		items = append(items, QuitMenuItem{Label: "Kill and quit", Key: "x", Kind: QuitKillAndQuit, Warn: busy})
 	}
-	// The attached session's worktree can go with it. Warn unconditionally:
-	// the row takes a directory, not just a session, whatever is running.
 	if m.sessionDeletableWorktree(m.SessionName) != nil {
 		items = append(items, QuitMenuItem{Label: "Delete worktree and quit", Key: "w", Kind: QuitDeleteWorktree, Warn: true})
 	}
@@ -189,16 +167,12 @@ func (m *OS) QuitMenuActivate(idx int) tea.Cmd {
 	case QuitKillGoNext:
 		return m.KillSessionGoNext(next)
 	case QuitDeleteWorktree:
-		// One confirmation, one place that shows the toll: the row opens the
-		// close dialog, whose delete-worktree row does the deleting — the
-		// same answer any other close of this session gets. A dialog that is
-		// dismissed leaves the client running.
 		return m.OpenSessionClose()
 	case QuitKillAndQuit, QuitStandalone:
 		m.QuitSession()
 		return m.QuitCmd()
 	}
-	return nil // QuitCancel
+	return nil
 }
 
 // DetachClient leaves the session running and quits this client, pushing state
@@ -213,7 +187,6 @@ func (m *OS) DetachClient() tea.Cmd {
 	m.cancelHostOpen()
 	m.SyncStateToDaemon()
 	m.FireDetached()
-	// Deliberately no Cleanup: the session outlives this client.
 	return m.QuitCmd()
 }
 
@@ -225,8 +198,6 @@ func (m *OS) DetachClient() tea.Cmd {
 // session outright, which quits.
 func (m *OS) KillSessionGoNext(next string) tea.Cmd {
 	old := m.SessionName
-	// Read while it is still this client's own session: afterwards the label
-	// belongs to the session switched to.
 	oldLabel := m.SessionLabel(old)
 	if next == "" || m.SwitchToSession(next) != nil {
 		m.QuitSession()

@@ -11,20 +11,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The semantic layout edits a client with a pointer of its own sends: the GUI
-// bridge (internal/guibridge) takes them from a native renderer that draws the
-// panes in pixels, works out the gesture itself, and names only its result.
-// Each one edits this client's model the way the terminal client's own drag
-// or key would, and pushes the result to the daemon, so every other client of
-// the session sees the same tree.
-
-// errNotTiledTree is the answer to a tree edit while the screen shows no BSP
-// tree to edit.
 var errNotTiledTree = errors.New("the workspace is not tiled with splits")
 
-// treeEditTarget returns the tree of the workspace on screen for an edit, and
-// lands every pane still sliding, so the edit starts from the rectangles the
-// layout gave and not from a frame in between.
 func (m *OS) treeEditTarget() (*layout.BSPTree, error) {
 	if m.LayoutName() != LayoutModeBSP {
 		return nil, errNotTiledTree
@@ -37,8 +25,6 @@ func (m *OS) treeEditTarget() (*layout.BSPTree, error) {
 	return tree, nil
 }
 
-// tiledLeaf returns the window and its leaf number for an edit, or an error
-// that says why the window cannot take part.
 func (m *OS) tiledLeaf(tree *layout.BSPTree, id string) (*terminal.Window, int, error) {
 	w := m.windowByID(id)
 	if w == nil {
@@ -54,7 +40,6 @@ func (m *OS) tiledLeaf(tree *layout.BSPTree, id string) (*terminal.Window, int, 
 	return w, n, nil
 }
 
-// finishTreeEdit lays the panes out from the edited tree and tells the daemon.
 func (m *OS) finishTreeEdit() {
 	m.ApplyBSPLayout()
 	m.MarkAllDirty()
@@ -80,9 +65,6 @@ func (m *OS) MovePaneBeside(id, target string, side layout.Side) error {
 	if n == tn {
 		return errfmt.Errorf("pane %s cannot move beside itself", id)
 	}
-	// MoveWindow refuses a move that would rebuild the tree it started from,
-	// the pane already on that side of the target. Nothing changes then, and
-	// the edit still finishes so the renderer gets the tree it has to show.
 	tree.MoveWindow(n, tn, side.Preselection())
 	_ = m.FocusWindowByID(id)
 	m.finishTreeEdit()
@@ -203,9 +185,6 @@ func (m *OS) CurrentSessionView() SessionView {
 		Cols: m.GetLayoutWidth(), Rows: m.GetLayoutHeight(),
 		ClientCols: m.Width, ClientRows: m.Height,
 	}
-	// The view is on whenever the session's size differs from this
-	// client's, smaller included (see viewShifted). Only a larger session
-	// crops, and only a crop has an offset.
 	if sv := m.computeSessionView(); sv.on && m.ViewCropped() {
 		v.Cropped = true
 		v.OffsetX, v.OffsetY = sv.offX, sv.offY

@@ -73,8 +73,6 @@ func TestApplyStateSyncResizeRacesOutput(t *testing.T) {
 	var wg sync.WaitGroup
 	stop := make(chan struct{})
 
-	// Background output, as the daemon read loop delivers it. The newlines force
-	// scrolling, which is what mutates the buffer under the resize.
 	payload := []byte("the quick brown fox jumps over the lazy dog 0123456789\r\n")
 	for range 4 {
 		wg.Go(func() {
@@ -89,9 +87,6 @@ func TestApplyStateSyncResizeRacesOutput(t *testing.T) {
 		})
 	}
 
-	// The UI goroutine: apply syncs whose geometry alternates, so every sync
-	// takes the sizeChanged branch, and render between them as the frame loop
-	// does.
 	for i := range 300 {
 		w, h := 40, 14
 		if i%2 == 0 {
@@ -169,8 +164,6 @@ func TestRestoreTerminalContentRacesOutput(t *testing.T) {
 		Height:         40,
 	}
 
-	// A full screenful of snapshot cells, the shape GetTerminalState returns for
-	// a shell pane, plus the modes a guest application leaves set.
 	screen := make([][]session.CellState, rows)
 	for y := range screen {
 		screen[y] = make([]session.CellState, cols)
@@ -277,11 +270,6 @@ func TestPlaceUnplacedWindowsRacesOutput(t *testing.T) {
 		})
 	}
 
-	// The daemon re-broadcasts the creation state until this client's placing
-	// push lands, so Unplaced arriving repeatedly is the real shape. The screen
-	// size alternates so NewWindowPlacement returns a different box each time
-	// and the emulator really reallocates rather than taking Buffer.Resize's
-	// same-dimensions early return.
 	for i := range 300 {
 		m.Width, m.Height = 120, 40
 		if i%2 == 0 {

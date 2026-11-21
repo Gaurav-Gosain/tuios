@@ -8,7 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
 )
 
-// railMachineOrder is the machines the rail draws, top to bottom.
 func railMachineOrder(t *testing.T, m *OS) []string {
 	t.Helper()
 	here := []sessiontree.Node{{

@@ -10,10 +10,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// The fleet in the client: the Inbox holds other machines' items, the rail
-// waits for the daemon's push instead of polling, and a machine that dropped
-// off keeps its rows, muted, saying when it was last heard from.
-
 func hostItem(id, host, kind string, stale bool, seenAt int64) session.AttentionItem {
 	it := item(id, kind, "remote-work", "w9", "approve Bash: make", time.Now().Add(-time.Minute).UnixNano())
 	it.Host = host
@@ -38,8 +34,6 @@ func TestAPushingDaemonReplacesTheHostPoll(t *testing.T) {
 	if after, refresh := m.federationRefreshPlan(); !refresh || after != hostRefreshPushed {
 		t.Errorf("a pushing daemon is polled every %v (refresh %v), want the %v backstop", after, refresh, hostRefreshPushed)
 	}
-	// Attached to another machine, the push goes to the far daemon's
-	// connection, not this client, so the rail keeps polling.
 	m.AttachedHost = "build"
 	if after, refresh := m.federationRefreshPlan(); !refresh || after != hostRefreshActive {
 		t.Errorf("attached to another machine, the rail is polled every %v (refresh %v), want %v", after, refresh, hostRefreshActive)

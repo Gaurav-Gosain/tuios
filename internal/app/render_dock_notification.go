@@ -14,86 +14,24 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The message block that lives in the dock's right-hand end.
-//
-// The placement is the whole point: a message belongs to the bar and never
-// covers a pane, where a freshly split pane's first output goes.
-//
-// The block wears no fill. A slab on the chrome's Surface step would be the
-// largest ink object in the bar while the words inside it are the
-// information: structure drawn at the weight of content. The bar's own ground
-// does the job for free, and it does it better for the marks, which then need
-// no lift toward the text colour to clear the mark floor: info blue measures
-// 3.16:1 on the bare canvas against 2.20:1 on a Surface fill. What separates
-// the message from the dock items beside it is that they are filled pills and
-// it is not, plus the cap on its left and the lit rule above its span.
-//
-// The cap is a freestanding partial block in the severity's ink, two eighths
-// for info and success, four for a warning, six for an error. The weight is a
-// channel that survives greyscale and a theme with no contrast to spare, which
-// colour alone does not, and the sliver doubles as the block's opening edge.
-//
-// Naming goes to the mark, a Nerd Font severity glyph in the severity colour
-// rather than knocked out of a coloured chip, so the message itself is never
-// on a coloured ground and stays as legible as the rest of the dock.
-//
-// Time is carried by the dock's own hairline, one row above: it lights in the
-// severity colour across exactly the block's span and burns down from the right
-// as the message ages. A sticky error lights it end to end and stops, so "not
-// moving" is the affordance that it is waiting for you.
-
-// notifBlock is a rendered message: the dock's right-hand block, and the run of
-// hairline that goes above it. They are produced together because the rule's
-// length is defined as the block's span, and the two drifting apart is exactly
-// the sort of thing that only shows up on screen.
 type notifBlock struct {
-	Text  string // styled, drawn as the dock bar's right-hand block
-	Rule  string // styled, replaces the right-hand end of the dock's hairline
-	Width int    // display width of both
-	// DismissW is how many of the trailing columns dismiss instead of
-	// activating: the meta (the esc affordance and the queue counter) and the
-	// bare columns past it. Everything to its left is the message itself,
-	// which is what a click follows.
+	Text     string
+	Rule     string
+	Width    int
 	DismissW int
-	// drawn is what this block shows that can change without a message
-	// arriving: see notifBurnMoved.
-	drawn notifDrawn
-	// Cut says the message did not fit and the block shows only its start.
-	// A click on a cut message opens it in full (see NotificationClick).
-	Cut bool
-	// Choices are the columns of the choices an offer draws after its text,
-	// from the block's first column, in offerChoices order. See
-	// machine_offer.go.
-	Choices []notifSpan
+	drawn    notifDrawn
+	Cut      bool
+	Choices  []notifSpan
 }
 
-// notifSpan is a run of columns, X1 past the last.
 type notifSpan struct{ X0, X1 int }
 
-// notifDrawn is what the last composed frame showed of the live message: which
-// message, how many waited behind it, and how many cells of its rule were lit
-// across how wide a span.
 type notifDrawn struct {
 	id        string
 	queued    int
 	lit, span int
 }
 
-// notifBurnMoved reports whether the live message would draw differently now
-// from the frame that last drew it, which is what the tick asks before it
-// composes for a message.
-//
-// The tick runs at the frame rate while a message is up, because the rule
-// burns down as it ages. But the rule moves one cell at a time, so over a
-// message's life it changes about as many times as the block is wide, and a
-// compose on every tick drew the same frame dozens of times per visible
-// change. Nothing else in the block moves on its own: the text, the mark and
-// the meta are fixed per message and queue, and a message arriving, leaving or
-// being dismissed changes the top message or the count.
-//
-// A message the dock did not draw (the dock hidden, the component off, or no
-// room for it) leaves notifDrawn behind, so this stays true on every tick,
-// which is what the tick did before it asked.
 func (m *OS) notifBurnMoved() bool {
 	s, ok := m.notifStatus()
 	if !ok {
@@ -104,19 +42,6 @@ func (m *OS) notifBurnMoved() bool {
 		m.notifLit(s.frac, d.span) != d.lit
 }
 
-// notifNextMove is how long from now until the live messages would draw
-// differently with nothing else happening: the next lit cell of the drawn rule
-// going out, or a message running out. ok is false when the last frame did not
-// draw the live message as it stands now. The tick answers that at the frame
-// rate, as it did before it asked.
-//
-// The tick sleeps until this moment instead of waking at the frame rate. A
-// six second message on a rule 35 cells wide moves about six times a second,
-// and a tick at 60 or 240 frames a second woke the client ten to forty times
-// for each of those moves.
-//
-// While the pointer holds the burn, the next move is the end of the hold. A
-// pointer move or a key ends it sooner, and each is a message of its own.
 func (m *OS) notifNextMove(now time.Time) (time.Duration, bool) {
 	s, ok := m.notifStatus()
 	if !ok {
@@ -129,8 +54,6 @@ func (m *OS) notifNextMove(now time.Time) (time.Duration, bool) {
 	}
 	next := time.Duration(math.MaxInt64)
 	if m.notifPaused() {
-		// Nothing moves until the hold ends, and notifMaxHold ends it with
-		// no event of its own.
 		return m.notifHoverAt.Add(notifMaxHold).Sub(now), true
 	}
 	for _, n := range m.Notifications {
@@ -138,9 +61,6 @@ func (m *OS) notifNextMove(now time.Time) (time.Duration, bool) {
 			next = min(next, n.StartTime.Add(n.Duration).Sub(now))
 		}
 	}
-	// notifLitSpan keeps d.lit cells while span*frac+0.5 >= d.lit, so the next
-	// cell goes out when frac falls below (d.lit-0.5)/span. The last cell
-	// stays lit until the message runs out, which the loop above covers.
 	if top := s.msg; !top.Sticky && top.Duration > 0 && d.lit > 1 {
 		frac := (float64(d.lit) - 0.5) / float64(d.span)
 		at := top.StartTime.Add(time.Duration((1 - frac) * float64(top.Duration)))
@@ -149,17 +69,13 @@ func (m *OS) notifNextMove(now time.Time) (time.Duration, bool) {
 	return next, true
 }
 
-// notifStatus is the reading of the live queue that the block is drawn from:
-// which message wins, what is stacked behind it, and how much life it has left.
 type notifStatus struct {
 	msg    Notification
-	queued int     // how many are waiting behind it
-	worst  string  // the worst severity among those waiting
-	frac   float64 // 1 at birth, 0 at death; a sticky message sits at 1
+	queued int
+	worst  string
+	frac   float64
 }
 
-// notifSeverityRank orders the severities so the counter behind a message can
-// report the worst thing queued rather than the most recent.
 func notifSeverityRank(notifType string) int {
 	switch notifType {
 	case "error":
@@ -173,8 +89,6 @@ func notifSeverityRank(notifType string) int {
 	}
 }
 
-// notifLevelRank is the notifSeverityRank of the least severe message
-// notifications.level lets the dock show.
 func notifLevelRank(level string) int {
 	switch level {
 	case config.NotificationLevelError:
@@ -186,8 +100,6 @@ func notifLevelRank(level string) int {
 	}
 }
 
-// notifGlyph is the severity mark. It is the one part of the block that is
-// never truncated: a message cut down to nothing still says how bad it was.
 func notifGlyph(notifType string, s *config.Settings) string {
 	if s.NerdFontsOff() {
 		switch notifType {
@@ -213,11 +125,6 @@ func notifGlyph(notifType string, s *config.Settings) string {
 	}
 }
 
-// notifCap is the weighted opening edge: two eighths, four eighths, six eighths.
-//
-// Two eighths apart rather than one. The first pass ran the three weights an
-// eighth apart and the step from info to warning was invisible, because you
-// never see two of them side by side to compare.
 func notifCap(notifType string, s *config.Settings) string {
 	switch notifType {
 	case "error":
@@ -229,8 +136,6 @@ func notifCap(notifType string, s *config.Settings) string {
 	}
 }
 
-// notifRuleStroke escalates the hairline's weight with severity, so a burning
-// info is no heavier than the rule it replaces and an error is a heavy line.
 func notifRuleStroke(notifType string, s *config.Settings) string {
 	if notifSeverityRank(notifType) >= 2 {
 		return s.GetNotificationRule(config.NotificationRuleHeavy)
@@ -238,15 +143,11 @@ func notifRuleStroke(notifType string, s *config.Settings) string {
 	return s.GetNotificationRule(config.NotificationRuleLight)
 }
 
-// notifStatus reads the live queue. The newest message wins the block and the
-// rest are reported as a count behind it.
 func (m *OS) notifStatus() (notifStatus, bool) {
 	if len(m.Notifications) == 0 {
 		return notifStatus{}, false
 	}
 
-	// Held at the moment the pointer came onto the block, so the burn stops
-	// while the message is being read. See notifPaused.
 	now := m.notifNow()
 	s := notifStatus{
 		msg:    m.Notifications[len(m.Notifications)-1],
@@ -267,13 +168,6 @@ func (m *OS) notifStatus() (notifStatus, bool) {
 	return s, true
 }
 
-// notifBudget is how many columns the message block may take.
-//
-// The dock's mode pill and workspace counts are never given up for a message,
-// which is what the reserve is; past the cap a message that keeps growing stops
-// being a status line and starts being a paragraph. On a dock too narrow to
-// split at all the message takes what the screen has less a small margin, which
-// is the only case where it may crowd the counts.
 func notifBudget(renderWidth int) int {
 	budget := min(renderWidth-config.NotificationDockReserve, config.NotificationMaxWidth)
 	if budget < config.NotificationMinWidth {
@@ -282,16 +176,7 @@ func notifBudget(renderWidth int) int {
 	return budget
 }
 
-// notifMeta draws the two things that must never be truncated: the esc
-// affordance on a message waiting to be dismissed, and the count of whatever is
-// queued behind this one.
-//
-// The counter takes the colour of the worst thing waiting, so an error that a
-// later info pushed out of the block still says so from underneath it.
-// Otherwise it is dim, because a queue of routine messages is not news.
 func (s notifStatus) notifMeta(pal overlay.Palette) string {
-	// Dim against the bar's own ground rather than a fixed grey: a grey picked
-	// for one background measures under 4.5:1 on two thirds of the themes.
 	bg := pal.Canvas
 	dim := theme.Readable(pal.FgDim, bg)
 
@@ -312,81 +197,35 @@ func (s notifStatus) notifMeta(pal overlay.Palette) string {
 	return "  " + strings.Join(parts, "  ")
 }
 
-// notifChromeWidth is every column of the block that is not the message: the
-// cap, the space and the mark, the two spaces before the text, and the two
-// columns of bare bar past the block's end.
-//
-// Those last columns are not decoration. Without them the message runs flush
-// into whatever holds the bar's right-hand end and stops reading as a block.
 const notifChromeWidth = 7
 
-// renderNotificationBlock builds the dock's message block and the run of
-// hairline above it, or reports false when nothing is live.
-//
-// avail is the room the rest of the dock has actually left, which is the
-// smaller of the two limits in play: the design's own budget says how wide a
-// message should ever get, and avail says how wide it can get here. Pass 0 for
-// avail to ask only what the design wants, which is what the layout pass does
-// before the dock items have been measured.
-//
-// Width is a hard contract, not an aspiration: the returned Width is what the
-// dock reserves, what the rule is drawn to, and what the block actually
-// measures. Clamping the message with MaxWidth after the fact would cut
-// whatever happens to be last, which is the block's own trailing columns.
 func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) {
 	s, ok := m.notifStatus()
 	if !ok {
 		return notifBlock{}, false
 	}
 
-	// The severity is the theme's, so it is measured against the bar's ground
-	// before it is drawn on it. A mark carries its meaning in its weight as well
-	// as its colour, so it is held to the mark floor and keeps more of its hue.
 	ground := m.groundUI()
 	bg := ground.Canvas
 	sev := theme.ReadableAt(theme.NotificationSeverity(s.msg.Type), bg, theme.MarkFloor)
 	inked := lipgloss.NewStyle().Foreground(sev)
 
-	// The cap is a freestanding sliver on the bare bar: its weight still reads
-	// as two, four or six eighths of a cell of ink, and it is the block's whole
-	// left edge now that there is no fill to open.
 	lead := inked.Render(notifCap(s.msg.Type, &m.Settings))
 	if m.Settings.NotificationsPlain() {
-		// The plain style keeps the column, so the block measures the same
-		// in both styles, and the mark alone carries the severity.
 		lead = " "
 	}
 	mark := inked.Render(" " + notifGlyph(s.msg.Type, &m.Settings))
 	if glyph, fg := agentMark(s.msg.AgentState, false, 0, ground); glyph != "" {
-		// A message about an agent wears that state's mark in that state's
-		// colour, the same one the rail and the title bar draw, so the dock
-		// does not say "needs you" in a shape used nowhere else.
 		mark = lipgloss.NewStyle().Foreground(theme.ReadableAt(fg, bg, theme.MarkFloor)).Render(" " + glyph)
 	}
 
-	// notifChromeWidth counts the mark as one cell. A glyph set's agent mark
-	// may be two, and the block is measured against what it draws.
 	chromeW := notifChromeWidth + max(lipgloss.Width(mark)-2, 0)
 
 	budget := notifBudget(renderWidth)
 	if avail > 0 {
-		// One column short of what is left, so the opening cap always has a
-		// column of bar in front of it. At 80 columns with two minimized
-		// windows in the dock the spacers collapse to nothing and the cap
-		// butted straight against the dock items' truncation dots, which reads
-		// as one run-on shape rather than as a message arriving in the bar.
-		//
-		// Never below the chrome, though: a budget that cannot hold the cap
-		// and the mark would have the block quietly overrun it,
-		// and a contract that is broken in the tight case is not a contract. A
-		// dock with fewer columns than that free is already overfull, and the
-		// bar's own one-screen backstop is what handles it.
 		budget = min(budget, max(avail-1, chromeW))
 	}
 
-	// The meta gives way before the message does only when it has to: the
-	// counter outranks the esc affordance, because a buried error is news and a
-	// dismissal hint the user has seen before is not.
 	meta := s.notifMeta(ground)
 	if chromeW+lipgloss.Width(meta) > budget {
 		bare := s
@@ -399,8 +238,6 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 
 	room := budget - chromeW - lipgloss.Width(meta)
 
-	// The offer to add a machine ends in its choices, which are never cut:
-	// the text gives way first. See machine_offer.go.
 	offer := isMachineOffer(s.msg.Target)
 	var choiceText []string
 	if offer {
@@ -415,9 +252,6 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 		}
 	}
 
-	// A message that does not fit says so in a word as well as with the
-	// ellipsis: "more" is what a click on it gives. The word is given up
-	// before the message is, on a block too narrow to hold both.
 	cut := lipgloss.Width(s.msg.Message) > room
 	more := ""
 	if cut && !offer && room-notifMoreWidth >= notifMoreMinText {
@@ -428,9 +262,6 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 	text := notifFit(s.msg.Message, room)
 	bodyStyle := lipgloss.NewStyle().Foreground(theme.Readable(ground.Fg, bg))
 	if (s.msg.Target != nil || cut) && !offer {
-		// Underline is the one link mark everyone reads without being taught,
-		// costs no columns, and never appears on a message a click does
-		// nothing with, so its absence says something too.
 		bodyStyle = bodyStyle.Underline(true)
 	}
 	body := "  " + bodyStyle.Render(text) + more
@@ -445,8 +276,6 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 		}
 	}
 
-	// The last two columns are bare bar: the gap that keeps the message off
-	// whatever holds the right-hand end of the screen.
 	block := lead + mark + body + meta + "  "
 	width := lipgloss.Width(block)
 
@@ -455,7 +284,7 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 		Text:     block,
 		Rule:     notifBurnRule(s, width, lit, &m.Settings, m.railRule()),
 		Width:    width,
-		DismissW: lipgloss.Width(meta) + 2, // meta and the bar columns after it
+		DismissW: lipgloss.Width(meta) + 2,
 		Cut:      cut && !offer,
 		Choices:  choices,
 		drawn: notifDrawn{
@@ -467,19 +296,12 @@ func (m *OS) renderNotificationBlock(renderWidth, avail int) (notifBlock, bool) 
 	}, true
 }
 
-// notifMoreLabel is the word a cut message ends with, and notifMoreWidth the
-// columns it takes with the gap in front of it. notifMoreMinText is the least
-// message text worth keeping beside it.
 const (
 	notifMoreLabel   = "more"
 	notifMoreWidth   = 2 + len(notifMoreLabel)
 	notifMoreMinText = 12
 )
 
-// notifFit truncates the message, and only the message. The severity mark, the
-// esc affordance and the overflow counter are the parts you cannot afford to
-// lose, so they are measured out of the room before this is called and this
-// takes whatever is left, including nothing.
 func notifFit(message string, room int) string {
 	if room <= 0 {
 		return ""
@@ -487,9 +309,6 @@ func notifFit(message string, room int) string {
 	if lipgloss.Width(message) <= room {
 		return message
 	}
-	// The shared ellipsis, "…" or "..." in ASCII mode. Below its width and a
-	// character of message there is room for neither, so the ellipsis alone
-	// says the message was cut.
 	ell := overlay.Ellipsis()
 	ellW := lipgloss.Width(ell)
 	if room <= ellW {
@@ -498,12 +317,6 @@ func notifFit(message string, room int) string {
 	return notifWordCut(truncateToWidth(message, room-ellW), message) + ell
 }
 
-// notifWordCut takes a cut message back to the end of its last whole word,
-// so the block never shows part of a word: "Ctrl+label ope" reads as a word
-// that does not exist, and the reader cannot tell what is missing. The word
-// boundary is given up only when it would throw away more than half of the
-// text, which is a long path or an address with no space in it, and then the
-// cut stays where it fell.
 func notifWordCut(cut, message string) string {
 	if len(cut) < len(message) && strings.HasPrefix(message, cut) && message[len(cut)] != ' ' {
 		if i := strings.LastIndexByte(cut, ' '); i > 0 && 2*lipgloss.Width(cut[:i]) >= lipgloss.Width(cut) {
@@ -513,14 +326,6 @@ func notifWordCut(cut, message string) string {
 	return strings.TrimRight(cut, " ,;:")
 }
 
-// notifBurnRule lights the dock's hairline across the message's span and
-// shortens it from the right as the message ages, so what is left of the rule
-// is what is left of the message.
-//
-// A sticky message sits at full length and does not move. That is the
-// affordance, and it is the reason the burn is on the rule rather than in a
-// cell of its own: a line that has stopped is legible as stopped at a glance,
-// where a single character that has stopped changing is not.
 func notifBurnRule(s notifStatus, span, lit int, set *config.Settings, rule color.Color) string {
 	if span <= 0 {
 		return ""
@@ -533,9 +338,6 @@ func notifBurnRule(s notifStatus, span, lit int, set *config.Settings, rule colo
 	return burnt + rest
 }
 
-// notifLit is notifLitSpan under the message style: the plain style lights no
-// cell, so its rule is the dock's own hairline, and with nothing that burns
-// down the tick sleeps until the message runs out.
 func (m *OS) notifLit(frac float64, span int) int {
 	if m.Settings.NotificationsPlain() {
 		return 0
@@ -543,15 +345,6 @@ func (m *OS) notifLit(frac float64, span int) int {
 	return notifLitSpan(frac, span)
 }
 
-// notifLitSpan is how many of the rule's cells are still lit at this fraction
-// of a message's life.
-//
-// It is separate from the styling because for an info message the lit stroke
-// and the unlit stroke are the same character, distinguished only by colour, so
-// this is the only place the burn can be read as a number rather than looked
-// at. A message with any life left keeps at least one lit cell: a rule that has
-// gone completely dark while its message is still on the dock reads as a
-// message that has already been dealt with.
 func notifLitSpan(frac float64, span int) int {
 	if span <= 0 {
 		return 0

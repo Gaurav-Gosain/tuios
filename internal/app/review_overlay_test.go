@@ -14,12 +14,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// These tests pin the review overlay's boundaries: a key from send-keys never
-// acts as the person, file text is laundered, the compare view runs one
-// refresh chain and reads nothing while hidden, and an older daemon hides the
-// keys it cannot serve.
-
-// reviewFake answers the review verbs and records what it was sent.
 type reviewFake struct {
 	calls   []queueCall
 	diff    map[string]any
@@ -103,8 +97,6 @@ func (f *reviewFake) count(verb string) int {
 	return n
 }
 
-// sampleDiff is a diff of two files: one hunk that changes a loop, and a new
-// file.
 func sampleDiff() map[string]any {
 	retry := review.File{Path: "api/retry.go", Status: "M", Added: 3, Removed: 1, Hunks: []review.Hunk{{
 		Header: "@@ -40,4 +40,6 @@ func Do(ctx context.Context) error {", OldStart: 40, OldLines: 4, NewStart: 40, NewLines: 6,
@@ -129,7 +121,6 @@ func sampleDiff() map[string]any {
 	}
 }
 
-// reviewOS is a client on a daemon session with a fake daemon behind it.
 func reviewOS(t *testing.T) (*OS, *reviewFake) {
 	t.Helper()
 	forgetSidebarState(t)
@@ -140,7 +131,6 @@ func reviewOS(t *testing.T) (*OS, *reviewFake) {
 	return m, f
 }
 
-// openReviewed opens the review of the focused pane and applies the diff.
 func openReviewed(t *testing.T, m *OS) {
 	t.Helper()
 	cmd, handled := m.ReviewFocusedPane()
@@ -156,7 +146,6 @@ func openReviewed(t *testing.T, m *OS) {
 	}
 }
 
-// reviewFrameText renders the overlay and checks it fills the screen exactly.
 func reviewFrameText(t *testing.T, m *OS) []string {
 	t.Helper()
 	out := m.renderReview()
@@ -172,7 +161,6 @@ func reviewFrameText(t *testing.T, m *OS) []string {
 	return lines
 }
 
-// rowWith is the index of the first line holding text, -1 for none.
 func rowWith(lines []string, text string) int {
 	for i, l := range lines {
 		if strings.Contains(l, text) {
@@ -226,8 +214,6 @@ func TestReviewKeysFromSendKeysDoNotActAsThePerson(t *testing.T) {
 		}
 	}
 
-	// The same keys from the keyboard do reach the daemon: a draft send-keys
-	// touched stays refused even then.
 	m.ProcessingRemoteKeys = false
 	m.ReviewCompareBack()
 	m.ReviewNote(false)
@@ -254,7 +240,6 @@ func TestReviewTextIsLaundered(t *testing.T) {
 	}
 }
 
-// runningFan is a fan of two attempts with a check running in the second.
 func runningFan() map[string]any {
 	return map[string]any{"group": "g", "rows": []map[string]any{
 		{"session": "api-1"},
@@ -262,9 +247,6 @@ func runningFan() map[string]any {
 	}}
 }
 
-// openCompare shows the compare view and applies its first read, returning
-// the command the answer left, which is the first tick of a refresh chain
-// while a check runs.
 func openCompare(t *testing.T, m *OS) (ReviewCompareMsg, uint64) {
 	t.Helper()
 	cmd := m.ReviewCompare()
@@ -297,7 +279,6 @@ func TestReviewCompareRunsOneRefreshChain(t *testing.T) {
 	if m.applyReviewCompare(second) == nil {
 		t.Fatal("the second w started no refresh while a check runs")
 	}
-	// An answer of the first chain arriving late starts nothing more.
 	if m.applyReviewCompare(first) != nil {
 		t.Error("a late answer to the first w started a second chain")
 	}
@@ -311,7 +292,6 @@ func TestReviewCompareRunsOneRefreshChain(t *testing.T) {
 		t.Errorf("a second each, %d chains read the rows, want 1", reads)
 	}
 
-	// A keep starts a new chain the same way.
 	m.ReviewCompareMove(-1)
 	m.ReviewCompareKeep()
 	m.Update(m.ReviewCompareConfirm(true)())
@@ -348,7 +328,6 @@ func TestReviewCompareRefreshOnlyWhileShown(t *testing.T) {
 	msg, _ := openCompare(t, m)
 	m.applyReviewCompare(msg)
 
-	// enter reviews an attempt: the tick of the running chain reads nothing.
 	runMsg(t, m, m.ReviewCompareOpen())
 	if m.ReviewCompareShown() {
 		t.Fatal("enter left the compare view up")
@@ -361,7 +340,6 @@ func TestReviewCompareRefreshOnlyWhileShown(t *testing.T) {
 		t.Error("a tick was scheduled with the compare view hidden")
 	}
 
-	// esc comes back: the rows are read at once, under a new chain.
 	gen := m.review.compare.tickGen
 	back := m.ReviewClose()
 	if !m.ReviewCompareShown() {
@@ -380,7 +358,6 @@ func TestReviewCompareRefreshOnlyWhileShown(t *testing.T) {
 		t.Errorf("coming back read the rows %d times, want 1", f.count("compare-fan")-before)
 	}
 
-	// esc again goes to the review the view was opened from: no more reads.
 	if cmd := m.ReviewCompareBack(); cmd != nil {
 		m.Update(cmd())
 	}

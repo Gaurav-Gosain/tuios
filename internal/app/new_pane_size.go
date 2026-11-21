@@ -8,19 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// newPaneBox is the outer box a pane will be placed in, and whether it is a
-// borderless tile. placing is nil before creation, or the pane already in
-// m.Windows when a daemon state is being placed. ok is false when this client
-// cannot tell; the pane is then created at the old size and resized once placed.
-//
-// It exists for the process in the pane. A shell started at one size and
-// resized a moment later takes a SIGWINCH while it is still starting, and zsh
-// answers that by drawing its prompt again under PROMPT_SP's mark: empty rows
-// and a "%" above the prompt in every new pane (#1205). A process started at
-// the size its pane is placed at is never resized while it starts.
-//
-// It covers floating panes and stock tilers, including adjusted dividers.
-// A zoom or scratch group places a pane by rules this does not repeat.
 func (m *OS) newPaneBox(placing *terminal.Window) (w, h int, tiled, ok bool) {
 	if m.InScratchView() || m.daemonWindowIntent {
 		return 0, 0, false, false
@@ -39,8 +26,6 @@ func (m *OS) newPaneBox(placing *terminal.Window) (w, h int, tiled, ok bool) {
 		if placing != nil {
 			sl := m.WorkspaceScrollingLayouts[m.CurrentWorkspace]
 			if id, mapped := m.WindowToBSPID[placing.ID]; mapped && sl != nil && sl.HasWindow(id) {
-				// A sync can bring an existing column or a stacked pane. Its
-				// box is the adopted strip's, not a fresh default-width column.
 				preview := *sl
 				m.applyScrollingGeometry(&preview)
 				preview.ZoomedCol, preview.ZoomProportion = -1, 0
@@ -51,8 +36,6 @@ func (m *OS) newPaneBox(placing *terminal.Window) (w, h int, tiled, ok bool) {
 				return 0, 0, false, false
 			}
 		}
-		// Each new pane starts a new column; its size does not depend on
-		// where that column is inserted in the strip.
 		sl := layout.NewScrollingLayout()
 		m.applyScrollingGeometry(sl)
 		sl.AddColumn(-1)
@@ -63,8 +46,6 @@ func (m *OS) newPaneBox(placing *terminal.Window) (w, h int, tiled, ok bool) {
 		panes := m.tilablePanes(m.CurrentWorkspace)
 		count, index := len(panes)+1, len(panes)
 		if placing != nil {
-			// A creating sync has already appended this pane. Count it once
-			// and use its own slot, also when several unplaced panes arrive.
 			count, index = len(panes), slices.Index(panes, placing)
 		}
 		if index < 0 {
@@ -78,15 +59,9 @@ func (m *OS) newPaneBox(placing *terminal.Window) (w, h int, tiled, ok bool) {
 	gap := m.separatorGap()
 	tree := m.WorkspaceTrees[m.CurrentWorkspace]
 	if tree == nil || tree.IsEmpty() {
-		// The first pane of a workspace takes the whole box.
 		return bounds.W, bounds.H, tiled, bounds.W > 0 && bounds.H > 0
 	}
 
-	// The same insertion the pane gets when it arrives, on a copy of the tree.
-	// The target and the direction are read the way the two insertion paths
-	// read them: AddWindowToBSPTree here, insertSyncedWindow in a daemon
-	// session, where addDaemonWindow has already moved a preselection into
-	// pendingSplitDir.
 	targetID, dir := m.SplitTargetWindowID, m.PreselectionDir
 	if m.pendingSplitTarget != "" {
 		targetID, dir = m.pendingSplitTarget, m.pendingSplitDir
@@ -97,7 +72,7 @@ func (m *OS) newPaneBox(placing *terminal.Window) (w, h int, tiled, ok bool) {
 		}
 	}
 	trial := tree.Serialize().Deserialize()
-	const probe = math.MaxInt32 // an int ID no window has
+	const probe = math.MaxInt32
 	target := m.bspSplitTarget(trial, targetID)
 	if dir != layout.PreselectionNone {
 		trial.InsertWindowWithPreselection(probe, target, dir, bounds, gap)
@@ -111,8 +86,6 @@ func (m *OS) newPaneBox(placing *terminal.Window) (w, h int, tiled, ok bool) {
 	return rect.W, rect.H, tiled, true
 }
 
-// newPaneContentSize is the content size of the pane newPaneBox places: the
-// size its process should start at.
 func (m *OS) newPaneContentSize() (cols, rows int, ok bool) {
 	w, h, tiled, ok := m.newPaneBox(nil)
 	if !ok {

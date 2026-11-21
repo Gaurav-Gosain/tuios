@@ -8,8 +8,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// benchInboxItems is a sixteen-way fan waiting on the person: one of each
-// kind across sixteen sessions.
 func benchInboxItems() []session.AttentionItem {
 	now := time.Now()
 	items := make([]session.AttentionItem, 0, 16)

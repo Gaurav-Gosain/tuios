@@ -10,18 +10,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// The machine picker is the way to put a window on another machine from inside
-// the UI. Until it existed the only way was the command line, which meant the
-// feature was invisible to anyone using tuios rather than scripting it.
-
 func pickerOS(t *testing.T) *OS {
 	t.Helper()
 	m := sidebarTestOS(t, 120, 40, "left")
 	m.SessionName = "work"
 	m.IsDaemonSession = true
-	// A client object, not a connection: the gates being tested ask whether
-	// this is a daemon session at all, and every path that would use it is
-	// guarded again where it is used.
 	m.DaemonClient = session.NewTUIClient()
 	m.applyFederationSnapshot(FederationHostsMsg{
 		Configured: 2,
@@ -106,8 +99,6 @@ func TestTheGlobalSessionDoesNotAskWithNowhereToGo(t *testing.T) {
 	}
 }
 
-// railGlobalGroup is the rail's global group: the header's index among the
-// rows, and the rows listed under it.
 func railGlobalGroup(t *testing.T, m *OS, here []sessiontree.Node) (int, []sessiontree.Node) {
 	t.Helper()
 	rows := m.sidebarMachineRows(here, m.hostGroupNodes())
@@ -300,7 +291,6 @@ func TestMakingASessionOnOneMachineAsksNothing(t *testing.T) {
 		t.Error("a machine that can reach nowhere else would be asked which machine")
 	}
 
-	// And with a second one up, it is a question.
 	m.applyFederationSnapshot(FederationHostsMsg{Snapshot: FederationSnapshot{Hosts: []FederationHost{
 		{Name: federation.LocalHostName, Status: string(federation.StatusUp)},
 		{Name: "build", Status: string(federation.StatusUp)},
@@ -335,8 +325,6 @@ func TestTheSessionPickerOffersAGlobalSession(t *testing.T) {
 	if global.Label != GlobalSessionName {
 		t.Errorf("the global row reads %q", global.Label)
 	}
-	// First, because a session holding panes from several machines is not a
-	// session on any of the machines listed under it.
 	if items[1].Global != true {
 		t.Error("the global row is not the first thing after this machine")
 	}

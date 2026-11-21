@@ -8,9 +8,6 @@ import (
 	"testing"
 )
 
-// benchBigThread gives the selected agent the 200 entries the client reads
-// of a long conversation (threadReadLimit): prompts, answers in Markdown with
-// code, reads, and edits with diffs, at 200x50.
 func benchBigThread(b testing.TB) (*OS, *agentThread) {
 	m, t := benchDiffThreadT(b)
 	m.Width, m.Height = 200, 50
@@ -114,10 +111,6 @@ func TestCockpitThreadOpenBudget(t *testing.T) {
 	if open > 600_000 {
 		t.Errorf("the first frame of a 200 entry thread made %.0f allocations, the budget is 600000", open)
 	}
-	// The entries slice is grown first, so a run is not charged for the
-	// append that doubles it. The budget holds the fewest allocations of a
-	// few measurements: the count moves by a few dozen between runs on
-	// Linux, and only extra work makes it rise in every one.
 	th.entries = slices.Grow(th.entries, 64)
 	i := 0
 	grow := math.Inf(1)

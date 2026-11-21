@@ -11,53 +11,31 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The leftover: the part of this client's pane area that a smaller session
-// does not reach (see pane_view.go). tmux fills it with a dot in a dim colour
-// (its fill-character option) so it reads as unused rather than as a pane
-// that failed to draw. tuios does the same, with a dot on every other column
-// so it stays quiet, and adds one line that says which client sets the size
-// and what to do about it. The pattern alone says "this space is not in use"
-// and the line says why, which the pattern cannot.
-
-// leftoverLayerID names the leftover layers. Each strip has its own id.
 const (
 	leftoverRightID  = "leftover-right"
 	leftoverBottomID = "leftover-bottom"
 )
 
-// leftoverZ is below every pane-independent layer, so the PiP view, the
-// rail, the dock and every overlay draw over the leftover. Panes never reach
-// it: they are clipped to the view's pane area.
 const leftoverZ = config.ZIndexSeparators - 1
 
-// leftoverHintMinWidth is the narrowest strip the hint is written in. A
-// narrower one shows the pattern alone.
 const leftoverHintMinWidth = 20
 
-// leftoverKey is everything a strip's content is built from.
 type leftoverKey struct {
-	w, h   int
-	x0, y0 int // the strip's screen origin, which the dot phase follows
-	hint   string
-	// textX and textW are the columns of the strip the hint is written in:
-	// the whole strip, less any rail drawn over it.
+	w, h         int
+	x0, y0       int
+	hint         string
 	textX, textW int
 	ascii        bool
 	dot          color.Color
 	text         color.Color
 }
 
-// leftoverCache keeps one strip's content across frames: the strips change
-// only when a size, the hint or the theme does.
 type leftoverCache struct {
 	valid bool
 	key   leftoverKey
 	body  string
 }
 
-// leftoverStrips are the two parts of the leftover on the screen: the
-// columns right of the session's panes, the full height of the pane area,
-// and the rows under them, as wide as the panes.
 func (v sessionView) leftoverStrips() (right, bottom image.Rectangle) {
 	if !v.on {
 		return image.Rectangle{}, image.Rectangle{}
@@ -67,15 +45,6 @@ func (v sessionView) leftoverStrips() (right, bottom image.Rectangle) {
 	return right.Canon(), bottom.Canon()
 }
 
-// leftoverHint is the line the leftover carries: which client sets the
-// session's size, and what makes this client's screen the size instead.
-//
-// A client that a server runs (SSH, web) is named by its kind, since the
-// machine its hello names is the server's. A terminal on this client's own
-// machine is "another client on this machine", so the line never names the
-// reader's machine as if it were someone else's. With no one client to name,
-// as under smallest when one client sets the width and another the height,
-// it says "another client".
 func (m *OS) leftoverHint() string {
 	who := "Another client sets the session size."
 	policy := ""
@@ -102,8 +71,6 @@ func (m *OS) leftoverHint() string {
 	return who
 }
 
-// renderLeftover draws the leftover, as up to two layers. It appends nothing
-// when the session fills this client's pane area.
 func (m *OS) renderLeftover(layers []*lipgloss.Layer) []*lipgloss.Layer {
 	right, bottom := m.sessionView.leftoverStrips()
 	if (right.Empty() && bottom.Empty()) || m.sessionClients == 1 {
@@ -111,8 +78,6 @@ func (m *OS) renderLeftover(layers []*lipgloss.Layer) []*lipgloss.Layer {
 	}
 	pal := theme.GroundUI()
 	hint := m.leftoverHint()
-	// The hint goes in the right strip when the part of it no rail covers is
-	// wide enough, else in the bottom one.
 	rx, rw := m.leftoverTextSpan(right)
 	bx, bw := m.leftoverTextSpan(bottom)
 	rightHint, bottomHint := "", ""
@@ -140,11 +105,6 @@ func (m *OS) renderLeftover(layers []*lipgloss.Layer) []*lipgloss.Layer {
 	return layers
 }
 
-// leftoverTextSpan is the part of a strip no rail covers, as the column it
-// starts at inside the strip and its width. A rail opened over the panes for
-// the keyboard is out of the reserve, so it can sit on the strip, and the
-// hint under it would be cut. The rails are at the screen's edges, so what
-// is left is one run of columns.
 func (m *OS) leftoverTextSpan(strip image.Rectangle) (x, w int) {
 	left, right := strip.Min.X, strip.Max.X
 	rw := m.GetRenderWidth()
@@ -170,7 +130,6 @@ func (m *OS) leftoverTextSpan(strip image.Rectangle) (x, w int) {
 	return left - strip.Min.X, right - left
 }
 
-// content is the strip's text for key, built again only when key changed.
 func (c *leftoverCache) content(key leftoverKey) string {
 	if !c.valid || c.key != key {
 		c.key, c.valid = key, true
@@ -179,9 +138,6 @@ func (c *leftoverCache) content(key leftoverKey) string {
 	return c.body
 }
 
-// leftoverBody builds a strip: a dot on every other screen column, and the
-// hint, wrapped to the strip and set in the middle of it with a clear cell
-// around it.
 func leftoverBody(k leftoverKey) string {
 	dot := "·"
 	if k.ascii {
@@ -200,8 +156,6 @@ func leftoverBody(k leftoverKey) string {
 			hintLines = nil
 		}
 	}
-	// The hint's block: a blank row above and below, and two blank columns
-	// each side, so the dots do not run into the words.
 	top := (k.h - len(hintLines)) / 2
 	pattern := func(x0, x1 int) string {
 		var b strings.Builder
