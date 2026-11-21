@@ -18787,3 +18787,18 @@ Run on 2026-11-21 on Linux, real backend.
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestARailMoveSurvivesAQuitRightAfterIt$' .
 ```
+
+## TestDeliveredPromptStaysWhole
+
+The daemon types a queued prompt as a paste and then its Enter, up to 300 ms
+apart. Text that another caller types into the pane in that gap must wait for
+the Enter. The prompt and the text must each arrive whole, the prompt first.
+
+Run on 2026-11-21 on Linux (amd64). The branch passes 20 of 20 runs.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (no delivery hold) | "the agent read \"the queued prompta line typed meanwhile\\r\\r\", want \"the queued prompt\\ra line typed meanwhile\\r\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestDeliveredPromptStaysWhole$' -v .`.

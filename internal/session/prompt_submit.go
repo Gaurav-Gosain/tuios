@@ -176,6 +176,13 @@ func submitPastesStamped(ctx context.Context, pane promptPane, pastes []string, 
 	if in.SubmitKey == "" {
 		in.SubmitKey = "\r"
 	}
+	// No other input goes in between the paste and the submit key. See
+	// delivery_hold.go.
+	if h, ok := pane.(deliveryHolder); ok {
+		held, release := h.holdForDelivery()
+		defer release()
+		pane = held
+	}
 	if in.FocusBeforeSubmit && pane.FocusReportingOn() {
 		if _, err := pane.Write([]byte(focusInReport)); err != nil {
 			return time.Time{}, errfmt.Errorf("failed to report focus: %w", err)
