@@ -55,7 +55,6 @@ const (
 	SubmitLF = "lf"
 )
 
-// normalize checks the block and fills the default submit key.
 func (in *Input) normalize() error {
 	switch in.Submit = strings.ToLower(strings.TrimSpace(in.Submit)); in.Submit {
 	case "":

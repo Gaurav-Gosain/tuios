@@ -2,15 +2,10 @@ package harness
 
 import "testing"
 
-// titleCase is one window title and what a harness's title rules must make of
-// it: a state, or "none".
 type titleCase struct {
 	harness, title, want string
 }
 
-// titleCases are the titles each bundled title rule is held to. The sources
-// are in each manifest's [title] comment: measured for claude-code, Gemini
-// CLI's windowTitle.ts for gemini-cli, and herdr's manifests for the others.
 var titleCases = []titleCase{
 	{"claude-code", "✳ Claude Code", "idle"},
 	{"claude-code", "⠂ Fix the flaky test", "working"},
@@ -19,15 +14,12 @@ var titleCases = []titleCase{
 	{"codex", "Action Required - codex", "needs_input"},
 	{"codex", "⠋ codex", "working"},
 	{"codex", "codex", "none"},
-	// The phrase Codex actually writes, and the strings a careless rule would
-	// also take.
 	{"codex", "Codex - Action Required", "needs_input"},
 	{"codex", "action required: approve the patch?", "needs_input"},
 	{"codex", "~/src/api — Action Required", "needs_input"},
 	{"codex", "~/src/codex-playground", "none"},
 	{"codex", "vim action_required.md", "none"},
 
-	// Gemini CLI pads its title to 80 columns and appends the folder.
 	{"gemini-cli", "✋  Action Required (tuios)                                                      ", "needs_input"},
 	{"gemini-cli", "⏲  Working… (tuios)", "working"},
 	{"gemini-cli", "✦  Refactoring the retry loop (tuios)", "working"},

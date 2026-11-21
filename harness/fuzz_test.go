@@ -9,37 +9,6 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-// Fuzzing the screen tier: the classifier the daemon acts on, and the
-// explanation `tuios explain-agent-screen` prints.
-//
-// There are two implementations of one decision. Classify walks the rules in
-// priority order, stops at the first match, and folds the text only when the
-// winning rule needs it. Explain walks every rule in declaration order, always
-// folds, and keeps the best. Neither can be checked against a written-down
-// answer for arbitrary screens, but they can be checked against each other: a
-// screen on which they disagree is one where the daemon marks a pane with one
-// state while the explanation tells the user another, which is the exact
-// situation the explanation exists to prevent.
-//
-// The ways this could fail, written down before the targets:
-//
-//  1. Classify and Explain pick different states, or different rules, for the
-//     same tail (the priority order and the declaration walk disagree, or the
-//     lazily folded text differs from the eagerly folded one).
-//  2. Classify reports a match with a rule index outside the manifest, or a
-//     state the screen block may not assert.
-//  3. Either path panics on a tail real panes produce: invalid UTF-8, empty
-//     lines, very long lines, box-drawing borders that open a prompt_box
-//     region with no bottom.
-//  4. A report's Text is cut inside a UTF-8 sequence, which turns the
-//     explain-agent-screen JSON into replacement characters.
-//  5. A manifest a user wrote parses cleanly and then panics or misorders its
-//     rules when it is used (a priority whose comparison overflows, a region
-//     name that validates and then indexes off the tail).
-//  6. RuleMessage is asked about the rule Classify returned and cannot answer.
-
-// fuzzTail splits a fuzz input into the screen lines a pane tail would hold.
-// The line count is capped at what a manifest may read.
 func fuzzTail(s string) []string {
 	if len(s) > 1<<14 {
 		s = s[:1<<14]
@@ -51,7 +20,6 @@ func fuzzTail(s string) []string {
 	return lines
 }
 
-// agreeOn checks the two paths against each other for one harness.
 func agreeOn(t *testing.T, r *Registry, id string, tail []string) {
 	t.Helper()
 	m := r.Lookup(id)
@@ -89,7 +57,6 @@ func agreeOn(t *testing.T, r *Registry, id string, tail []string) {
 	}
 	for _, rep := range reports {
 		if rep.Text != "" && !utf8.ValidString(rep.Text) {
-			// Only a cut can make it invalid when every line was valid.
 			valid := true
 			for _, l := range tail {
 				valid = valid && utf8.ValidString(l)
@@ -101,9 +68,6 @@ func agreeOn(t *testing.T, r *Registry, id string, tail []string) {
 	}
 }
 
-// screenSeeds are pane tails shaped like the ones the bundled rules are
-// written against, plus the adversarial ones: box borders with no bottom,
-// invalid bytes, and lines past the report cap.
 var screenSeeds = []string{
 	"",
 	"\n\n",
@@ -112,8 +76,6 @@ var screenSeeds = []string{
 	"╭──────────────╮\n│ > half a box",
 	"esc to interrupt",
 	"Allow this command? (y/n)",
-	// Kimi Code CLI's approval panel and Gemini CLI's confirmation, as their
-	// sources draw them (TestScreenAnswersFromSource).
 	"agent is requesting approval to run command:\n→ [1] Approve once\n  [2] Approve for this session\n  [3] Reject\n  ▲/▼ select  1/2/3/4 choose  ↵ confirm",
 	"│ Allow execution of: 'go'?            │\n│ ● Allow once                          │\n│   No, suggest changes (esc)           │",
 	"\xff\xfe\n\xed\xa0\x80",
@@ -131,8 +93,6 @@ func FuzzClassifyAgreesWithExplain(f *testing.F) {
 	for _, s := range screenSeeds {
 		f.Add(s)
 	}
-	// The strings the bundled rules look for are the fastest way in: a tail
-	// made of them reaches the rules that can match at all.
 	for _, id := range r.IDs() {
 		for _, rl := range r.Lookup(id).Screen.Rule {
 			f.Add(strings.Join(append(append([]string{}, rl.All...), rl.Any...), "\n"))
@@ -147,7 +107,6 @@ func FuzzClassifyAgreesWithExplain(f *testing.F) {
 	})
 }
 
-// fuzzRegions are the screen regions a rule may read, with one past the limit.
 var fuzzRegions = []string{"", "tail", "prompt_box", "above_prompt_box",
 	"last_non_empty_above_prompt_box", "after_last_horizontal_rule",
 	"bottom_non_empty_lines(1)", "bottom_non_empty_lines(3)", "bottom_non_empty_lines(0)"}

@@ -2,19 +2,6 @@ package harness
 
 import "strings"
 
-// A desktop notification as evidence.
-//
-// A harness that wants its user sends a desktop notification: OSC 9 from
-// iTerm2's vocabulary, OSC 777 from urxvt's, or OSC 99 from kitty's. Claude
-// Code sends "Claude needs your permission to use Bash" that way, and Codex
-// sends "Approval requested" before a command and a line of its answer when a
-// turn ends. It is the harness speaking about itself on purpose, which makes it
-// the same kind of evidence a title is, and it is filed under the same source.
-//
-// The rules have the shape of title rules and are matched as prose, the way a
-// screen is: a notification is a sentence, not a path, so a substring anywhere
-// in it counts. The title and the body are read as one text, title first.
-
 // NotifyText joins a notification's title and body into the text the rules
 // read.
 func NotifyText(title, body string) string {

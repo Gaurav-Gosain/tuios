@@ -9,8 +9,6 @@ import (
 	"tuios.dev/harness"
 )
 
-// sample is shaped like herdr's own manifests: nested gates, a narrowed
-// region, title and progress rules, and the rules tuios cannot carry.
 const sample = `id = "sample"
 version = "2026.09.11.1"
 

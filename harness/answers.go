@@ -6,39 +6,6 @@ import (
 	"unicode/utf8"
 )
 
-// Answers: how a person answers a prompt a needs_input rule reads, without
-// attaching to the pane.
-//
-// A rule that recognises a prompt can also say which keys answer it. Claude
-// Code's permission menu takes 1 for yes, 2 for yes and do not ask again, and
-// esc for no; its question forms take the digit of the chosen option. Writing
-// that down next to the rule that reads the menu keeps the two together, so a
-// release that changes the menu breaks the rule and the answer at the same
-// time, and a broken rule answers nothing.
-//
-// An answer is bound to what is on the screen, not only to a key. An answer
-// may name an option by the start of its label ("yes, and don't ask again"),
-// and it is then offered only while a numbered option with that label is on
-// the screen. Without the label check, approve_always = "2" would press No on
-// a menu that has only Yes and No. The respond verb in the daemon adds the
-// other half: it reads the screen again right before it presses anything, and
-// refuses when the prompt is not the one the caller read.
-//
-// The block, under a screen or title rule:
-//
-//	[screen.rule.answers]
-//	approve        = { option = "yes" }
-//	approve_always = { option = "yes, and don't ask again" }
-//	deny           = { keys = ["esc"] }
-//	choose         = "digit"
-//	text           = true
-//
-// approve, approve_always and deny each take keys, option, or both: with
-// option alone the option's digit is pressed, and with keys the keys are
-// pressed once the option is found. choose = "digit" lets a caller pick any
-// numbered option on the screen by its number. text = true lets a caller type
-// a free answer, which is pasted and submitted the way a prompt is.
-
 // Answer actions, as the respond verb and the peek result name them.
 const (
 	ActionApprove       = "approve"
@@ -51,9 +18,6 @@ const (
 // ChooseDigit is the one choose mode: the option's number, typed as digits.
 const ChooseDigit = "digit"
 
-// maxAnswerKeys bounds the keys one answer presses. An answer is a key or two;
-// a long sequence in a manifest is a macro, and a macro typed into a prompt is
-// what this feature exists to avoid.
 const maxAnswerKeys = 8
 
 // Answers is a rule's [answers] block. The zero value answers nothing.
@@ -83,8 +47,6 @@ func (a *Answers) Any() bool {
 	return a.Approve != nil || a.ApproveAlways != nil || a.Deny != nil || a.Choose != "" || a.Text
 }
 
-// check validates the block of one rule. block is "screen", "title" or
-// "notify", and state is the rule's state.
 func (a *Answers) check(block, state string) error {
 	if !a.Any() {
 		return nil
@@ -117,7 +79,6 @@ func (a *Answers) check(block, state string) error {
 	return nil
 }
 
-// check validates one answer.
 func (a *Answer) check(block string) error {
 	a.Option = strings.ToLower(strings.TrimSpace(a.Option))
 	if len(a.Keys) == 0 && a.Option == "" {
@@ -148,8 +109,6 @@ func (a *Answer) KeyBytes() ([]byte, error) {
 	return out, nil
 }
 
-// answerKeyNames maps the named keys an answer may press to their bytes, as
-// a terminal in raw mode sends them.
 var answerKeyNames = map[string]string{
 	"enter":     "\r",
 	"esc":       "\x1b",

@@ -20,20 +20,12 @@ func (r *Registry) Classify(id string, tail []string) (state string, rule int, o
 		return "", -1, false
 	}
 
-	// Joined once per region rather than per predicate: a rule carries several
-	// strings and every one of them would otherwise walk the slice again. The
-	// folded copy is likewise made once per scan, not per rule, and only when
-	// the manifest folds case or the region is read across a wrap.
-	// Rules are tried highest priority first, so the first match is the answer
-	// and no rule that could not win is read at all.
 	text := newRegionText(tail, m.Screen.FoldCase)
 	return firstMatch(m.Screen.order, m.Screen.Rule, func(rl *ScreenRule) bool {
 		hay, folded, ok := text.get(rl.Region, rl.substrings)
 		if !ok || !checkRule(rl, hay, folded, nil, strings.Contains) {
 			return false
 		}
-		// A dialog rule reads a dialog: its words in the transcript, with
-		// no box around them, are not one.
 		return rl.Show != ShowDialog || len(dialogsHolding(regionLines(tail, rl.Region), rl.All, m.Screen.FoldCase)) > 0
 	})
 }
@@ -79,11 +71,8 @@ type RuleReport struct {
 	Text string `json:"text,omitempty"`
 }
 
-// maxReportText bounds the region text one report carries, so an explanation of
-// a manifest with many narrow rules stays a readable size.
 const maxReportText = 2048
 
-// reportText is region text cut for a report.
 func reportText(s string) string {
 	if len(s) <= maxReportText {
 		return s

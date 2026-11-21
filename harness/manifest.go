@@ -55,9 +55,6 @@ type Manifest struct {
 	// queued message waits while the person has a draft there. See draft.go.
 	Box BoxRule `toml:"prompt_box"`
 
-	// source is where the manifest was loaded from: "bundled" or the path of
-	// a user file. replacedBundled is true for a user file that took the
-	// place of a bundled manifest with the same id. Both are set by Load.
 	source          string
 	replacedBundled bool
 }
@@ -97,7 +94,6 @@ type Title struct {
 	FoldCase bool         `toml:"fold_case"`
 	Rule     []ScreenRule `toml:"rule"`
 
-	// order is as Screen.order.
 	order []int
 }
 
@@ -129,7 +125,6 @@ type Detect struct {
 	// Require is corroboration a bare-name match must have. See Require.
 	Require Require `toml:"require"`
 
-	// argvSegments is ArgvPath pre-split into components, filled by normalize.
 	argvSegments [][]string
 }
 
@@ -153,12 +148,8 @@ type Require struct {
 	ExeGlob []string `toml:"exe_glob"`
 }
 
-// any reports whether any corroboration is demanded at all.
 func (r *Require) any() bool { return len(r.ExeBase)+len(r.ExeGlob) > 0 }
 
-// satisfied reports whether a process carries the corroboration. An unreadable
-// executable fails it: silence is not evidence, and a name that needed backing up
-// and did not get it must not match.
 func (r *Require) satisfied(p ProcInfo) bool {
 	if !r.any() {
 		return true
@@ -211,14 +202,9 @@ type Screen struct {
 	// background shell; see waits_on.go.
 	WaitsOn []WaitsOn `toml:"waits_on"`
 
-	// order is the rule indices highest priority first, ties in declaration
-	// order, so a scan can stop at the first rule that matches. Filled by
-	// parseManifest.
 	order []int
 }
 
-// scanOrder returns order when it was built for rules, and builds it when it
-// was not, for a manifest assembled in code rather than parsed.
 func scanOrder(order []int, rules []ScreenRule) []int {
 	if len(order) == len(rules) {
 		return order
@@ -226,9 +212,6 @@ func scanOrder(order []int, rules []ScreenRule) []int {
 	return priorityOrder(rules)
 }
 
-// firstMatch walks rules in scan order and returns the first one match
-// accepts: the best rule, since the order is highest priority first with ties
-// in declaration order.
 func firstMatch(order []int, rules []ScreenRule, match func(*ScreenRule) bool) (state string, rule int, ok bool) {
 	for _, i := range scanOrder(order, rules) {
 		if match(&rules[i]) {
@@ -238,17 +221,11 @@ func firstMatch(order []int, rules []ScreenRule, match func(*ScreenRule) bool) (
 	return "", -1, false
 }
 
-// priorityOrder returns the indices of rules, highest priority first and ties
-// in declaration order, which is the order a scan considers them in.
 func priorityOrder(rules []ScreenRule) []int {
 	order := make([]int, len(rules))
 	for i := range order {
 		order[i] = i
 	}
-	// cmp.Compare rather than a subtraction: priority is whatever integer a
-	// user wrote, and the difference of two far apart ones overflows, which
-	// sorted a lower priority rule first and made Classify disagree with
-	// Explain (FuzzManifest).
 	slices.SortStableFunc(order, func(a, b int) int { return cmp.Compare(rules[b].Priority, rules[a].Priority) })
 	return order
 }
@@ -309,7 +286,6 @@ type ScreenRule struct {
 	HintFields []string `toml:"hint_fields"`
 }
 
-// maxWhatFields bounds what_fields.
 const maxWhatFields = 8
 
 // WhatBody is the what_fields word for the dialog's first line under its
@@ -319,16 +295,8 @@ const WhatBody = "body"
 // ShowDialog is the one Show value: the dialog that holds the prompt line.
 const ShowDialog = "dialog"
 
-// maxScreenPattern bounds one regex pattern's length. RE2 compiles a pattern
-// into a program roughly proportional to its size, and the screen scan runs in
-// the daemon on every settle; a pattern too long to read is refused at load,
-// where the error names the file, rather than priced on the hot path.
 const maxScreenPattern = 512
 
-// defaultScreenLines is how much of the pane bottom a screen rule sees when a
-// manifest does not say. It is small because agent TUIs draw their live state in
-// a box at the bottom, and reading further up finds transcript history that says
-// what the agent did rather than what it is doing.
 const defaultScreenLines = 6
 
 // DefaultScreenLines is defaultScreenLines for callers outside the package. The
@@ -336,15 +304,8 @@ const defaultScreenLines = 6
 // named at all, so it needs an answer no manifest can give it.
 const DefaultScreenLines = defaultScreenLines
 
-// genericNameLimit is the length below which a bare name is too generic to
-// identify a harness on its own. Names like "pi", "cn" and "amp" are plausible
-// commands for unrelated software, and a false positive labels an innocent pane
-// as an agent, which is worse than missing a real one.
 const genericNameLimit = 5
 
-// parseManifest reads one manifest and checks it says enough to be usable. The
-// error names the file, since the whole point of the registry is that a user
-// edits these by hand.
 func parseManifest(name string, data []byte) (*Manifest, error) {
 	var m Manifest
 	if err := toml.Unmarshal(data, &m); err != nil {
@@ -377,9 +338,6 @@ func parseManifest(name string, data []byte) (*Manifest, error) {
 	if m.Screen.Lines > maxRegionLines {
 		return nil, errorf("%s: manifest %q screen lines %d, limit %d", name, m.ID, m.Screen.Lines, maxRegionLines)
 	}
-	// Title and notify rules are the same shape as screen rules and are checked
-	// the same way, so a mistake in one is reported in the same words as a
-	// mistake in the other. One budget covers the whole file.
 	var budget gateBudget
 	for i := range m.Screen.Rule {
 		if err := m.Screen.Rule[i].check("screen", screenStates, m.Screen.FoldCase, m.Screen.Lines, &budget); err != nil {
@@ -423,9 +381,6 @@ func parseManifest(name string, data []byte) (*Manifest, error) {
 	return &m, nil
 }
 
-// check validates one rule of the given block and compiles it. block is
-// "screen", "title" or "notify", states is what that block may assert, lines
-// is how far up a screen rule may read, and b counts the file's predicates.
 func (r *ScreenRule) check(block string, states map[string]struct{}, foldCase bool, lines int, b *gateBudget) error {
 	if _, ok := states[r.State]; !ok {
 		return errorf("unknown state %q", r.State)
@@ -494,20 +449,12 @@ func (r *ScreenRule) check(block string, states map[string]struct{}, foldCase bo
 		return errorf("region %s reads past the %d lines the manifest reads; raise [screen] lines", region, lines)
 	}
 	r.Region = region
-	// An idle rule has to prove the agent is at rest, and the proof is an input
-	// box on the screen. Reading the box region is that proof; a pattern on
-	// every path to a match can be, when it pins the box's own structure. A
-	// rule resting on a loose substring would call a pane idle because a word
-	// appeared in its output.
 	if r.State == "idle" && r.Region != RegionPromptBox && !r.provesShape() {
 		return errorf("an idle rule must read region = %q or carry a regex that pins the input box", RegionPromptBox)
 	}
 	return nil
 }
 
-// compilePatterns compiles each pattern with (?m), so ^ and $ mean lines: the
-// haystack is a pane tail joined with newlines, and anchoring the whole blob
-// is never what a rule about one rendered line wants.
 func compilePatterns(patterns []string) ([]*regexp.Regexp, error) {
 	if len(patterns) == 0 {
 		return nil, nil
@@ -526,14 +473,6 @@ func compilePatterns(patterns []string) ([]*regexp.Regexp, error) {
 	return out, nil
 }
 
-// screenStates are the states a screen rule may assert. It is deliberately
-// narrower than the full agent-state set: a rule reading someone else's UI can
-// credibly spot that it is asking a question or showing a spinner, and cannot
-// credibly tell "finished" from "finished and errored".
-//
-// limit_reached is the one claim past those: a harness that stops on its usage
-// limit prints the limit in its own fixed words, and nothing else on its screen
-// says so (testdata/limits).
 var screenStates = map[string]struct{}{
 	"working":       {},
 	"needs_input":   {},
@@ -541,9 +480,6 @@ var screenStates = map[string]struct{}{
 	"limit_reached": {},
 }
 
-// notifyStates are the states a notify rule may assert. done is allowed here
-// and nowhere else: a desktop notification is the harness itself speaking, and
-// "the turn finished" is a claim only the harness can honestly make.
 var notifyStates = map[string]struct{}{
 	"working":     {},
 	"needs_input": {},
@@ -551,8 +487,6 @@ var notifyStates = map[string]struct{}{
 	"done":        {},
 }
 
-// normalize lowercases and trims every predicate so matching can be a plain
-// lookup against an already-lowercased base name.
 func (d *Detect) normalize() {
 	for _, list := range []*[]string{&d.Comm, &d.Argv0, &d.ArgvPath, &d.ExeGlob} {
 		out := (*list)[:0]
@@ -563,26 +497,16 @@ func (d *Detect) normalize() {
 		}
 		*list = out
 	}
-	// Kept index-aligned with ArgvPath so a match can name the pattern it was
-	// written as, which is the string the manifest author will search for.
 	d.argvSegments = make([][]string, len(d.ArgvPath))
 	for i, want := range d.ArgvPath {
 		d.argvSegments[i] = segments(want)
 	}
 }
 
-// any reports whether the manifest carries any predicate at all.
 func (d *Detect) any() bool {
 	return len(d.Comm)+len(d.Argv0)+len(d.ArgvPath)+len(d.ExeGlob) > 0
 }
 
-// checkGenericNames enforces the collision policy: a short bare name may only
-// match with corroboration.
-//
-// Only [detect.require] constrains a name, so only that satisfies this. Another
-// predicate standing alongside the name does not: predicates are alternatives,
-// so an argv_path next to comm = ["pi"] does not constrain the comm match and
-// every process called pi would still match.
 func (d *Detect) checkGenericNames(file, id string) error {
 	if d.Require.any() {
 		return nil
@@ -597,13 +521,6 @@ func (d *Detect) checkGenericNames(file, id string) error {
 	return nil
 }
 
-// matches reports whether a process is this harness, and names the predicate
-// that decided it so a diagnostic can quote the rule rather than the verdict.
-//
-// The predicates are ordered by how much of the process's own identity they read.
-// comm, argv0 and exe describe what the process is; argv describes what it was
-// handed, and only an interpreter's argv stands in for its identity, which is why
-// run is empty for everything else.
 func (d *Detect) matches(p ProcInfo, run string) (string, bool) {
 	if d.Require.satisfied(p) {
 		if comm := p.CommBase(); contains(d.Comm, comm) {

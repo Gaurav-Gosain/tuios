@@ -57,9 +57,6 @@ type Transcript struct {
 // show the conversation to the person (internal/transcriptview).
 const ReaderJSONL = "claude-code-jsonl"
 
-// knownReaders is the set a manifest may name. Each is a format of
-// internal/transcriptview, which this package does not import, so the names
-// are kept in step by hand.
 var knownReaders = map[string]struct{}{
 	ReaderJSONL:        {},
 	"codex-rollout":    {},
@@ -72,10 +69,6 @@ var knownReaders = map[string]struct{}{
 	"pi-jsonl":         {},
 }
 
-// verifiableFields are the record fields Verify may name. They are the agent's
-// own identity: which directory it was started in, which build it is, and which
-// session it calls itself. None of them is conversation, which is why matching
-// on them is allowed at all.
 var verifiableFields = map[string]struct{}{
 	"cwd": {}, "version": {}, "session_id": {},
 }
@@ -90,10 +83,6 @@ func (t Transcript) Verifies(field string) bool {
 	return slices.Contains(t.Verify, field)
 }
 
-// checkTranscript validates the block, treating a half-written one as an error.
-// A transcript block that silently does nothing is the failure this registry
-// exists to avoid, and it matters more here than elsewhere: the user cannot see
-// the source not working, they can only see a pane whose state never updates.
 func checkTranscript(file, id string, t *Transcript) error {
 	t.Reader = strings.TrimSpace(t.Reader)
 	t.Dir = strings.TrimSpace(t.Dir)
@@ -188,9 +177,6 @@ func (t Transcript) MatchesGlob(root, path string) bool {
 	return ok
 }
 
-// dirDepth is how many folders Dir is below Root: 0 for a Dir with no
-// placeholder but {home}, 1 for Claude Code's {home}/.claude/projects/
-// {cwd:dashes}, whose placeholder is one folder.
 func (t Transcript) dirDepth() int {
 	dir := filepath.ToSlash(t.Dir)
 	i := strings.IndexByte(baseless(dir), '{')
@@ -262,8 +248,6 @@ func (t Transcript) RootIn(getenv func(string) string) string {
 	}
 	dir = filepath.Clean(dir)
 	if !filepath.IsAbs(dir) || dir == filepath.Dir(dir) {
-		// Relative, or the root of the file system: no folder to hold a
-		// path to.
 		return ""
 	}
 	return dir
@@ -272,11 +256,8 @@ func (t Transcript) RootIn(getenv func(string) string) string {
 // DashPath is the {cwd:dashes} mangling.
 func DashPath(cwd string) string { return strings.ReplaceAll(cwd, "/", "-") }
 
-// knownPlaceholders is what ExpandDir understands.
 var knownPlaceholders = map[string]struct{}{"{home}": {}, "{state}": {}, "{pi_agent}": {}, "{claude_config}": {}, "{codex_home}": {}, "{cwd:dashes}": {}}
 
-// agentHomes are the placeholders for a harness's own folder, each moved by
-// the variable the harness itself reads, else the folder under the home.
 var agentHomes = []struct {
 	placeholder, env string
 	under            []string
@@ -286,9 +267,6 @@ var agentHomes = []struct {
 	{"{codex_home}", "CODEX_HOME", []string{".codex"}},
 }
 
-// expandBase resolves the placeholders that name a fixed folder: {home};
-// {state}, the XDG state folder ($XDG_STATE_HOME, or ~/.local/state); and
-// the agentHomes, read through getenv (see agentHomeDir).
 func expandBase(dir, home string, getenv func(string) string) string {
 	if strings.Contains(dir, "{state}") {
 		state := os.Getenv("XDG_STATE_HOME")
@@ -305,12 +283,6 @@ func expandBase(dir, home string, getenv func(string) string) string {
 	return strings.ReplaceAll(dir, "{home}", home)
 }
 
-// agentHomeDir is a harness's own folder, the way the harness finds it: the
-// variable's value v with a leading ~ expanded, else home joined with under.
-// A relative value is returned as it is, and Root then gives "" for it, since
-// no path can be checked against a folder that depends on where a process
-// runs. A value with a { in it is refused the same way: Root cuts the path at
-// the first {, which in the value would move the folder up.
 func agentHomeDir(home, v string, under []string) string {
 	v = strings.TrimSpace(v)
 	switch {
@@ -324,8 +296,6 @@ func agentHomeDir(home, v string, under []string) string {
 	return v
 }
 
-// baseless is dir without its fixed-folder placeholders, for the checks of
-// which placeholders a dir names.
 func baseless(dir string) string {
 	dir = strings.ReplaceAll(strings.ReplaceAll(dir, "{home}", ""), "{state}", "")
 	for _, a := range agentHomes {
@@ -334,10 +304,6 @@ func baseless(dir string) string {
 	return dir
 }
 
-// placeholders returns the placeholders a template uses, erroring on one this
-// build does not know. Left unchecked, a typo would leave the literal braces in
-// a path, the directory would never exist, and the source would go quiet with
-// nothing to say why.
 func placeholders(tmpl string) ([]string, error) {
 	var out []string
 	rest := tmpl
