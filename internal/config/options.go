@@ -150,6 +150,9 @@ var (
 	// DockModePills are what the mode pill shows while tiling is on: the
 	// tiling icon, or the icon of the input mode (terminal or window).
 	DockModePills = []string{"tiling", "input"}
+	// WindowModeIndicators are what can show window mode beside the dock's
+	// mode pill. See Settings.WindowModeIndicator.
+	WindowModeIndicators = []string{"bar", "border", "tint"}
 	// WindowTitleStyles are the shapes of a pane's title: pill has rounded
 	// caps on a fill, tab is the fill alone, plain is the text on the line.
 	WindowTitleStyles = []string{"pill", "tab", "plain"}
@@ -170,6 +173,7 @@ const (
 	DefaultWindowTitlePosition = "top"
 	DefaultDockPrefixIndicator = "pill"
 	DefaultDockModePill        = "tiling"
+	DefaultWindowModeIndicator = "bar"
 	// DefaultBorderGradientAngle runs the gradient from the top left corner
 	// to the bottom right one.
 	DefaultBorderGradientAngle = 45
@@ -877,6 +881,11 @@ var optionSpecs = []Option{
 		Path: "appearance.dock_mode_pill", Type: OptionString, Section: "dock",
 		Description: "What the mode pill shows while tiling is on: tiling shows the tiling icon, input shows the terminal or window icon",
 		Accepted:    DockModePills,
+	},
+	{
+		Path: "appearance.window_mode_indicator", Type: OptionString, Section: "appearance",
+		Description: "What shows window mode as well as the dock's mode pill: bar shows the pill alone, border draws the focused border in the pill's colour, tint dims the text of every pane",
+		Accepted:    WindowModeIndicators,
 	},
 	{
 		Path: "appearance.dock_mode_split_letter", Type: OptionBool, Section: "dock",

@@ -231,7 +231,7 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 
 	// The dim this frame wants, which is also what the cached frame has to have
 	// been drawn at for the cache to be usable.
-	dim := paneDim(isFocused || m.MultifocusUndimmed(window.ID), &m.Settings)
+	dim := m.paneDimFor(isFocused || m.MultifocusUndimmed(window.ID))
 	// A pane the last multi copy mode search found nothing in is dimmed, so
 	// the panes that will take part in the selection stand out.
 	if m.MultiCopyParked(window.ID) {
@@ -628,6 +628,14 @@ func (m *OS) renderTerminal(window *terminal.Window, isFocused bool, inTerminalM
 		dimFg, dimBg, dimPal = m.paneDimGround()
 		dimT = float64(dim) / 100
 		dimText = m.Settings.DimForeground
+		// At 16 colours a blend lands on whichever of the sixteen is
+		// nearest, which turned a tinted pane's text blue. With no ground
+		// to blend toward, dimCell draws the text faint instead, which the
+		// host dims in its own colour.
+		if m.windowModeIndicator("tint") && theme.Depth() == overlay.Depth16 {
+			dimFg, dimBg, dimPal = nil, nil, nil
+			dimText = true
+		}
 	}
 
 	// The pane background, for the two things drawn here against it rather

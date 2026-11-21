@@ -624,6 +624,7 @@ type AppearanceConfig struct {
 	DockWorkspaceLabelMax  *int     `toml:"dock_workspace_label_max"`  // Cell cap on a workspace pill's label; 0 draws the whole name (default: 12)
 	DockPrefixIndicator    string   `toml:"dock_prefix_indicator"`     // Where an armed leader shows: pill (default) or badge
 	DockModePill           string   `toml:"dock_mode_pill"`            // What the mode pill shows while tiling is on: tiling (default) or input
+	WindowModeIndicator    string   `toml:"window_mode_indicator"`     // What else shows window mode: bar (the dock alone, default), border or tint
 	DockPillCaps           *bool    `toml:"dock_pill_caps"`            // Rounded caps on every dock pill (default: true; false draws flat pills)
 	DockModeSplitLetter    *bool    `toml:"dock_mode_split_letter"`    // V or H after the tiling icon in the mode pill (default: true)
 	DockModeIconWindow     *string  `toml:"dock_mode_icon_window"`     // Mode pill icon in window mode; "" draws none (default: the glyph set's)
@@ -1339,6 +1340,7 @@ func DefaultConfig() *UserConfig {
 			DockbarPosition:          DefaultDockbarPosition,
 			DockPrefixIndicator:      DefaultDockPrefixIndicator,
 			DockModePill:             DefaultDockModePill,
+			WindowModeIndicator:      DefaultWindowModeIndicator,
 			WindowTitlePosition:      DefaultWindowTitlePosition,
 			WindowTitleStyle:         DefaultWindowTitleStyle,
 			WindowTitleAlign:         DefaultWindowTitleAlign,
@@ -3143,6 +3145,11 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 		s.DockModePill = cfg.Appearance.DockModePill
 	} else {
 		s.DockModePill = DefaultDockModePill
+	}
+	if slices.Contains(WindowModeIndicators, cfg.Appearance.WindowModeIndicator) {
+		s.WindowModeIndicator = cfg.Appearance.WindowModeIndicator
+	} else {
+		s.WindowModeIndicator = DefaultWindowModeIndicator
 	}
 	// The mode icons are pointers so an empty string can hide the icon, which is
 	// different from unset. They are assigned unconditionally so a key removed
