@@ -26,7 +26,7 @@ func TestSkillKeyTableListsEveryKeyName(t *testing.T) {
 	}
 	for _, name := range session.KeyNames() {
 		if strings.HasPrefix(name, "F") && name != "F1" && name != "F12" {
-			continue // listed as F1 to F12
+			continue
 		}
 		if !strings.Contains(table, "`"+name+"`") {
 			t.Errorf("the key table does not list %s", name)

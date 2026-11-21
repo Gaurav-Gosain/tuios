@@ -7,9 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newCloseWindowCommand builds `tuios close-window`: close one pane by name or
-// id, through the close-window verb. The other route, run-command CloseWindow,
-// needs the binary protocol and the admin grant for every command it can run.
 func newCloseWindowCommand() *cobra.Command {
 	var sessionName string
 	var jsonOutput bool
@@ -41,9 +38,6 @@ list-windows until something closes it.`,
 
 func runCloseWindow(sessionName, window string, jsonOutput bool) error {
 	sessionName = paneSessionOr(sessionName)
-	// The window goes through dialTarget like -w does everywhere, so a host
-	// prefix resolves. params fills the window key from the target: an empty
-	// one would close the focused pane.
 	t, err := dialTarget(sessionName, window)
 	if err != nil {
 		return err

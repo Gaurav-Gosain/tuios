@@ -45,67 +45,21 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// tuios pair: a phone adds this machine by scanning a QR code.
-//
-// The code holds a tuios://pair URL with the ssh addresses, the ssh host key
-// fingerprint and a one-time token. The phone posts its public key to a short
-// lived HTTP listener here, with an HMAC of the key made with the token. The
-// listener never sees the token itself, so a machine on the path that did not
-// see the code cannot put its own key in place of the phone's. After the
-// person confirms, the key goes into authorized_keys behind a forced command
-// that can run nothing but `tuios stdio-proxy --as DEVICE`, so the key opens a
-// link under a pinned name and the [hosts.DEVICE] link policy applies to it.
-//
-// The reply carries the host key line and an HMAC over it, so the phone can
-// pin the key it will see on its first ssh connection without trusting the
-// network for it.
-//
-// Nothing else changes: no daemon is asked to do anything, and the only files
-// written are one new [hosts.DEVICE] table in the config and then
-// authorized_keys. The table goes first, and the key is written only once the
-// table is in the file and reads back as the policy of DEVICE: a key whose
-// name has no table of its own would get [hosts."*"] or the built-in default,
-// which can start processes and type into panes. A running daemon picks the
-// new table up from its watch on config.toml, as a change that narrows.
-
 const (
-	// pairProtocol is the v= value of the URL and the prefix of both MAC
-	// inputs. A change to either message bumps it.
-	pairProtocol = "tuios-pair-v1"
-	// pairPath is the one path the listener answers.
-	pairPath = "/v1/pair"
-	// pairBodyLimit caps a request body. A P-256 or Ed25519 key line is under
-	// 200 bytes and an RSA 4096 one under 800.
-	pairBodyLimit = 8 << 10
-	// pairFailureLimit is how many requests that fail before the MAC check,
-	// or fail it, the listener takes before it stops for good. The token is
-	// 128 bits, so this is not about guessing: a phone with the code makes
-	// none of these, so three of them mean someone else is trying.
+	pairProtocol     = "tuios-pair-v1"
+	pairPath         = "/v1/pair"
+	pairBodyLimit    = 8 << 10
 	pairFailureLimit = 3
-	// pairFailurePause slows each failed request, so the limit above cannot
-	// be spent in a burst.
 	pairFailurePause = 200 * time.Millisecond
-	// pairHeaderLimit caps the request line and headers together.
-	pairHeaderLimit = 4 << 10
-	// pairConnDeadline is how long one connection may take, from accept to
-	// the reply.
+	pairHeaderLimit  = 4 << 10
 	pairConnDeadline = 10 * time.Second
-	// pairDrainLimit and pairDrainWait bound what a connection reads after
-	// its reply, so a refused phone sees the reply. See drainPairConn.
-	pairDrainLimit = 64 << 10
-	pairDrainWait  = time.Second
-	// pairConnLimit caps the connections open at once. More are closed at
-	// accept.
-	pairConnLimit = 16
-	// pairMaxTimeout bounds --timeout. A pairing code is meant to be scanned
-	// now, not left on a screen.
-	pairMaxTimeout = time.Hour
-	// pairLANLimit is how many LAN addresses go into the code, to keep it
-	// small enough to scan.
-	pairLANLimit = 3
+	pairDrainLimit   = 64 << 10
+	pairDrainWait    = time.Second
+	pairConnLimit    = 16
+	pairMaxTimeout   = time.Hour
+	pairLANLimit     = 3
 )
 
-// pairOptions are the flags of tuios pair.
 type pairOptions struct {
 	name           string
 	machine        string
@@ -124,9 +78,6 @@ type pairOptions struct {
 	acceptLocal    bool
 }
 
-// pairDefaultAllow is what a paired device may do when --allow is not given:
-// read listings and send and read mail. Starting processes or typing into
-// panes from a phone is something the person turns on by name.
 var pairDefaultAllow = []string{config.LinkAllowList, config.LinkAllowMail}
 
 func newPairCommand() *cobra.Command {
@@ -176,8 +127,6 @@ code and the fingerprint on the phone with the ones here before you accept.`,
   tuios pair --listen 100.64.0.7:7420 --advertise-pair studio.example.ts.net:7420`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			// The pairing window keeps this process running; --pprof is a
-			// persistent flag that pair used to accept and ignore.
 			startPprofServer()
 			if err := startCPUProfile(); err != nil {
 				return err
@@ -207,20 +156,17 @@ code and the fingerprint on the phone with the ones here before you accept.`,
 	return cmd
 }
 
-// pairHostKey is the ssh host key the phone is told to expect.
 type pairHostKey struct {
-	line        string // "TYPE BASE64", without a comment
-	fingerprint string // SHA256:..., as ssh-keygen -lf prints it
+	line        string
+	fingerprint string
 }
 
-// pairRequest is the body the phone posts.
 type pairRequest struct {
 	Device string `json:"device"`
 	Key    string `json:"key"`
 	MAC    string `json:"mac"`
 }
 
-// pairReply is what the listener answers.
 type pairReply struct {
 	OK      bool   `json:"ok"`
 	Error   string `json:"error,omitempty"`
@@ -229,12 +175,9 @@ type pairReply struct {
 	Command string `json:"command,omitempty"`
 	HostKey string `json:"host_key,omitempty"`
 	MAC     string `json:"mac,omitempty"`
-	// Check is the check code of the request, which the phone shows while
-	// the person compares it with the one on this screen. See pairCheckCode.
-	Check string `json:"check,omitempty"`
+	Check   string `json:"check,omitempty"`
 }
 
-// pairResult is what a successful pairing did, for the final report.
 type pairResult struct {
 	Device         string   `json:"device"`
 	KeyType        string   `json:"key_type"`
@@ -246,12 +189,10 @@ type pairResult struct {
 	configNote     string
 }
 
-// pairAddr is one address the code names: what the phone dials, and what
-// this side binds for it.
 type pairAddr struct {
-	advertise string // a host name or IP, without a port
-	bind      string // an IP, without a port
-	public    bool   // bind is a public address
+	advertise string
+	bind      string
+	public    bool
 }
 
 func runPair(ctx context.Context, o pairOptions, stdout, stderr io.Writer, stdin io.Reader) error {
@@ -312,9 +253,6 @@ func runPair(ctx context.Context, o pairOptions, stdout, stderr io.Writer, stdin
 		machine, _, _ = strings.Cut(machine, ".")
 	}
 
-	// tailscale is asked once, and only when something needs its answer:
-	// the addresses in the code, or the tailnet addresses of the hosts in
-	// [hosts], which a request must not come from.
 	tailnet := sync.OnceValue(func() []federation.TailnetMachine {
 		opt, _ := tailnetOptions()
 		tctx, cancel := context.WithTimeout(ctx, tailnetProbeTimeout)
@@ -338,9 +276,6 @@ func runPair(ctx context.Context, o pairOptions, stdout, stderr io.Writer, stdin
 	}
 	peers := pairPeerAddrs(ctx, hosts, tailnet)
 
-	// The addresses tuios finds are needed for any list the flags leave to
-	// it: the ssh addresses, the listeners, and what a listener on every
-	// interface is advertised as.
 	var found []pairAddr
 	if len(o.advertiseSSH) == 0 || o.listen == "" || (len(o.advertisePair) == 0 && listensEverywhere(o.listen)) {
 		found = discoverPairAddrs(tailnet())
@@ -469,8 +404,6 @@ func runPair(ctx context.Context, o pairOptions, stdout, stderr io.Writer, stdin
 	return nil
 }
 
-// pairDeviceNameOK applies the rules of a link peer name and of a host
-// table name: the device gets a [hosts.DEVICE] table.
 func pairDeviceNameOK(name string) error {
 	if err := session.ValidLinkPeerName(name); err != nil {
 		return err
@@ -478,9 +411,6 @@ func pairDeviceNameOK(name string) error {
 	return federation.ValidHostName(name)
 }
 
-// pairHosts reads the [hosts] table of the config. A config that is not there
-// has none. A config that does not parse stops the pairing: tuios could not
-// tell whether the device's table reads back, and the daemon may not read it.
 func pairHosts(path string) (map[string]config.HostConfig, error) {
 	hosts, err := config.HostsInFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -492,16 +422,6 @@ func pairHosts(path string) (map[string]config.HostConfig, error) {
 	return hosts, nil
 }
 
-// pairNameInUse says why a device name may not be used here, or returns "".
-// A name is in use when it names a [hosts] table, a machine that a key in the
-// authorized keys file opens a link as, or this machine. Case does not
-// matter, because the link policy matches names without case.
-//
-// A [hosts] table: the device would get that machine's policy, and the table
-// would be written over or shared. A pinned key: two keys would open links
-// under one name, and the person could not tell their links apart or remove
-// one. This machine: links and mail from the phone would look like they came
-// from here.
 func pairNameInUse(device string, hosts map[string]config.HostConfig, keysPath string, ownNames []string) string {
 	for key := range hosts {
 		if strings.EqualFold(key, device) {
@@ -521,11 +441,8 @@ func pairNameInUse(device string, hosts map[string]config.HostConfig, keysPath s
 	return ""
 }
 
-// pairPinnedNamePattern finds the name in a forced command that pins one.
 var pairPinnedNamePattern = regexp.MustCompile(`stdio-proxy\s+--as[ =]([A-Za-z0-9._-]+)`)
 
-// pairPinnedNames is every name that a forced command in the authorized keys
-// file pins with stdio-proxy --as.
 func pairPinnedNames(keysPath string) []string {
 	data, err := os.ReadFile(keysPath) //nolint:gosec // the file the person names
 	if err != nil {
@@ -549,15 +466,6 @@ func pairPinnedNames(keysPath string) []string {
 	return names
 }
 
-// pairPeerAddrs maps each address of a machine in [hosts] to its name. A
-// pairing request from one of them is refused, because a linked machine can
-// read this machine's panes, the code among them.
-//
-// A host is known by its addr: an IP, or a name that resolves through DNS
-// or that names a machine on the tailnet. A host added with --tailnet has
-// its tailnet name as the table name too, so that is matched as well. A host
-// that ssh reaches through an alias in ~/.ssh/config, with no DNS name, is
-// not found. tuios does not run ssh to resolve it.
 func pairPeerAddrs(ctx context.Context, hosts map[string]config.HostConfig, tailnet func() []federation.TailnetMachine) map[netip.Addr]string {
 	out := map[netip.Addr]string{}
 	type lookup struct{ name, host string }
@@ -611,8 +519,6 @@ func pairPeerAddrs(ctx context.Context, hosts map[string]config.HostConfig, tail
 	return out
 }
 
-// pairAddrHost is the host part of a [hosts] addr: without the user, the port
-// and the brackets of an IPv6 address.
 func pairAddrHost(addr string) string {
 	addr = strings.TrimSpace(addr)
 	if i := strings.LastIndex(addr, "@"); i >= 0 {
@@ -624,7 +530,6 @@ func pairAddrHost(addr string) string {
 	return strings.Trim(addr, "[]")
 }
 
-// pairAllowList checks --allow against the link capabilities.
 func pairAllowList(in []string) ([]string, error) {
 	var out []string
 	for _, c := range in {
@@ -642,8 +547,6 @@ func pairAllowList(in []string) ([]string, error) {
 	return out, nil
 }
 
-// loadPairHostKey reads the host key to advertise: the file given, or the
-// first host key in /etc/ssh.
 func loadPairHostKey(path string) (pairHostKey, error) {
 	candidates := []string{path}
 	if path == "" {
@@ -676,18 +579,6 @@ func loadPairHostKey(path string) (pairHostKey, error) {
 		"Do not give it a user key such as ~/.ssh/id_ed25519.pub")
 }
 
-// pairTuiosPath is the tuios path for the forced command, written so the
-// shell sshd runs it with reads it as one word.
-//
-// The default is the tuios on PATH, as PATH names it, when it is this
-// binary. os.Executable resolves links, so it names the file a package
-// manager replaces on an upgrade: /nix/store/HASH-tuios/bin/tuios, or
-// /opt/homebrew/Cellar/tuios/VERSION/bin/tuios. A forced command with that
-// path stops working after the next upgrade, and the phone can no longer
-// link. The PATH entry (~/.nix-profile/bin/tuios, /opt/homebrew/bin/tuios)
-// is the link the package manager keeps current. A tuios on PATH that is
-// another binary is not used, because the phone would then run a version
-// nobody chose. tuios then uses this binary and says why.
 func pairTuiosPath(given string, stderr io.Writer) (string, error) {
 	p := given
 	if p == "" {
@@ -734,7 +625,6 @@ func pairTuiosPath(given string, stderr io.Writer) (string, error) {
 	return p, nil
 }
 
-// pairSameFile reports whether two paths reach one file, after links.
 func pairSameFile(a, b string) bool {
 	fa, err := os.Stat(a)
 	if err != nil {
@@ -747,10 +637,6 @@ func pairSameFile(a, b string) bool {
 	return os.SameFile(fa, fb)
 }
 
-// discoverPairAddrs finds the addresses to put in the code: this machine's
-// MagicDNS name when tailscale answers, then LAN IPv4 addresses. Each LAN
-// address says whether it is public, which the listener does not bind
-// without --listen-all.
 func discoverPairAddrs(machines []federation.TailnetMachine) []pairAddr {
 	var out []pairAddr
 	for _, a := range federation.LocalAddrs(machines, pairLANLimit) {
@@ -759,8 +645,6 @@ func discoverPairAddrs(machines []federation.TailnetMachine) []pairAddr {
 	return out
 }
 
-// listensEverywhere reports whether --listen names the unspecified address,
-// such as 0.0.0.0:7420 or :7420.
 func listensEverywhere(listen string) bool {
 	host, _, err := net.SplitHostPort(listen)
 	if err != nil {
@@ -773,10 +657,6 @@ func listensEverywhere(listen string) bool {
 	return ip != nil && ip.IsUnspecified()
 }
 
-// openPairListeners binds the pairing listener. With --listen it binds that
-// one address. Otherwise it binds each found address, on one port when it can.
-// Every interface and a public address need --listen-all: the listener is
-// plain HTTP, and the internet has no reason to reach it.
 func openPairListeners(listen string, listenAll bool, found []pairAddr, discover func() []pairAddr, stderr io.Writer) ([]net.Listener, []string, error) {
 	if listen != "" {
 		if host, _, err := net.SplitHostPort(listen); err == nil && !listenAll && federation.PublicIP(net.ParseIP(host)) {
@@ -789,9 +669,6 @@ func openPairListeners(listen string, listenAll bool, found []pairAddr, discover
 		host, port, _ := net.SplitHostPort(l.Addr().String())
 		var adv []string
 		ip := net.ParseIP(host)
-		// Check the address that was bound, not the text. A host such as
-		// "0" or a name that resolves to 0.0.0.0 binds every interface too,
-		// and a name can resolve to a public address.
 		if !listenAll && federation.PublicIP(ip) {
 			_ = l.Close()
 			return nil, nil, errfmt.Errorf("--listen %s is a public address. Give a private or tailnet address of this machine, or add --listen-all", listen)
@@ -851,7 +728,6 @@ func openPairListeners(listen string, listenAll bool, found []pairAddr, discover
 	return ls, adv, nil
 }
 
-// pairURL is the link the QR code holds.
 func pairURL(machine, user string, ssh, pair []string, fp, token string) string {
 	esc := func(s string) string {
 		s = url.QueryEscape(s)
@@ -873,38 +749,27 @@ func pairURL(machine, user string, ssh, pair []string, fp, token string) string 
 		"&t=" + token
 }
 
-// pairMAC is base64url(HMAC-SHA256(token, msg)), without padding.
 func pairMAC(token []byte, msg string) string {
 	m := hmac.New(sha256.New, token)
 	m.Write([]byte(msg))
 	return base64.RawURLEncoding.EncodeToString(m.Sum(nil))
 }
 
-// pairCheckCode is the six digit check code of a request. Both screens show
-// it: this one in the question, the phone while it waits for the answer.
-// A person who photographed the code and sent their own key gets another
-// code than the phone shows.
-//
-// It is HMAC-SHA256(token, "tuios-pair-v1-check\n" + key), where key is the
-// key field of the request byte for byte. The first four bytes of the MAC,
-// read as a big-endian unsigned 32-bit integer, modulo 1000000, written as
-// six decimal digits with leading zeros.
 func pairCheckCode(token []byte, key string) string {
 	m := hmac.New(sha256.New, token)
 	m.Write([]byte(pairProtocol + "-check\n" + key))
 	return fmt.Sprintf("%06d", binary.BigEndian.Uint32(m.Sum(nil)[:4])%1000000)
 }
 
-// pairServer is the listener's state. It answers one request at a time.
 type pairServer struct {
 	token     []byte
 	deadline  time.Time
 	name      string
 	allow     []string
-	config    string                // the config.toml the table goes to
-	ownNames  []string              // the names of this machine
-	peers     map[netip.Addr]string // the addresses of [hosts], by name
-	local     bool                  // --accept-local
+	config    string
+	ownNames  []string
+	peers     map[netip.Addr]string
+	local     bool
 	yes       bool
 	keysPath  string
 	hostKey   pairHostKey
@@ -913,10 +778,7 @@ type pairServer struct {
 	stdin     io.Reader
 	prompt    io.Writer
 
-	busy sync.Mutex
-	// commit orders the write of the key against a stop. A stop (Ctrl+C or
-	// the time) that comes first means nothing is written. A write that
-	// starts first ends, and the stop then finds the pairing finished.
+	busy     sync.Mutex
 	commit   sync.Mutex
 	failures int
 	used     bool
@@ -926,15 +788,12 @@ type pairServer struct {
 	doneOnce sync.Once
 }
 
-// stop ends the pairing from outside: Ctrl+C or the time. It waits for a
-// key write in progress, so the result reported is what happened.
 func (s *pairServer) stop(err error) {
 	s.commit.Lock()
 	defer s.commit.Unlock()
 	s.finish(nil, err)
 }
 
-// finish ends the pairing with a result or an error.
 func (s *pairServer) finish(res *pairResult, err error) {
 	s.doneOnce.Do(func() {
 		s.result, s.err = res, err
@@ -978,8 +837,6 @@ func (s *pairServer) serve(ctx context.Context, listeners []net.Listener) (*pair
 	for _, l := range listeners {
 		_ = l.Close()
 	}
-	// Wait for the reply in flight, so the phone gets its answer. Each
-	// connection has a deadline, so this ends.
 	waited := make(chan struct{})
 	go func() { conns.Wait(); close(waited) }()
 	select {
@@ -989,7 +846,6 @@ func (s *pairServer) serve(ctx context.Context, listeners []net.Listener) (*pair
 	return s.result, s.err
 }
 
-// serveConn answers the one request on a connection, then closes it.
 func (s *pairServer) serveConn(c net.Conn) {
 	defer func() { _ = c.Close() }()
 	_ = c.SetDeadline(time.Now().Add(pairConnDeadline))
@@ -1000,23 +856,11 @@ func (s *pairServer) serveConn(c net.Conn) {
 	}
 	req.remote = c.RemoteAddr().String()
 	status, reply, _ := s.answer(req)
-	// The question to the person can take minutes, far past the deadline set
-	// at accept. Give the reply its own time, or the key is added and the
-	// phone never learns the host key to pin.
 	_ = c.SetWriteDeadline(time.Now().Add(pairConnDeadline))
 	writePairReply(c, status, reply)
 	drainPairConn(c, br)
 }
 
-// drainPairConn ends the connection after the reply without a reset. A
-// refusal can come before the body is read, as 413 does for a body over
-// pairBodyLimit, and a phone that sends no Expect: 100-continue is still
-// writing it then. Closed with those bytes unread, or with more on the way,
-// the connection is reset, and a reset can reach the phone before it reads
-// the reply: it saw "connection reset", not 413. So the write side is shut
-// first, which tells the phone the reply is complete, and what it still
-// sends is read and dropped until it closes, up to pairDrainLimit bytes or
-// pairDrainWait. net/http's server does the same.
 func drainPairConn(c net.Conn, r io.Reader) {
 	if cw, ok := c.(interface{ CloseWrite() error }); ok {
 		_ = cw.CloseWrite()
@@ -1025,7 +869,6 @@ func drainPairConn(c net.Conn, r io.Reader) {
 	_, _ = io.CopyN(io.Discard, r, pairDrainLimit)
 }
 
-// answer handles one request that was read, one at a time.
 func (s *pairServer) answer(req pairHTTP) (int, pairReply, *pairResult) {
 	if !s.busy.TryLock() {
 		return http.StatusTooManyRequests, pairReply{Error: "Another request is in progress. Try again."}, nil
@@ -1042,28 +885,13 @@ func (s *pairServer) answer(req pairHTTP) (int, pairReply, *pairResult) {
 	return s.handle(req)
 }
 
-// pairHTTP is one HTTP/1.1 request as readPairHTTP read it.
 type pairHTTP struct {
 	method, path, remote string
 	body                 []byte
-	// bad is the status for a request that could not be read, or 0.
-	bad int
-	// closed is a connection that the client closed before it sent a byte.
-	// It is not a request, so it gets no answer and is not counted.
-	closed bool
+	bad                  int
+	closed               bool
 }
 
-// readPairHTTP reads one request: the request line, the headers and a body
-// of Content-Length bytes.
-//
-// The listener does not use net/http's server, which would add about 0.5 MB
-// to the binary for one request (the --pprof server does the same; see
-// pprof_server.go). What it accepts is narrower, and what a phone sends fits:
-//   - The body needs a Content-Length. Chunked bodies are refused with 411.
-//   - One request per connection. The reply closes it.
-//   - Expect: 100-continue gets its interim reply, so curl works.
-//   - The request line and headers together are at most pairHeaderLimit
-//     bytes, and the whole request must arrive within pairConnDeadline.
 func readPairHTTP(br *bufio.Reader, w io.Writer) pairHTTP {
 	var req pairHTTP
 	read := 0
@@ -1088,9 +916,6 @@ func readPairHTTP(br *bufio.Reader, w io.Writer) pairHTTP {
 	}
 	first, ok := line()
 	if !ok && read == 0 {
-		// A client that opens a connection and closes it unused, as one that
-		// races its connections to each address does, did not try anything.
-		// One that holds it open without a byte until the deadline did.
 		var ne net.Error
 		if !errors.As(readErr, &ne) || !ne.Timeout() {
 			req.closed = true
@@ -1155,10 +980,6 @@ func readPairHTTP(br *bufio.Reader, w io.Writer) pairHTTP {
 	return req
 }
 
-// fail counts a well-formed request that did not pass the MAC check, and
-// slows the next. Only those count: a request of another shape cannot pair
-// whatever it holds, and a browser, a scanner or a probe that sends one must
-// not end the pairing.
 func (s *pairServer) fail(status int, msg string) (int, pairReply, *pairResult) {
 	s.failures++
 	time.Sleep(pairFailurePause)
@@ -1170,12 +991,10 @@ func (s *pairServer) fail(status int, msg string) (int, pairReply, *pairResult) 
 	return status, pairReply{Error: msg}, nil
 }
 
-// refuse answers a request that is not a pairing request. It is not counted.
 func refuse(status int, msg string) (int, pairReply, *pairResult) {
 	return status, pairReply{Error: msg}, nil
 }
 
-// handle checks a request and, when it is good, adds the key.
 func (s *pairServer) handle(r pairHTTP) (int, pairReply, *pairResult) {
 	switch {
 	case r.bad == http.StatusBadRequest:
@@ -1202,18 +1021,12 @@ func (s *pairServer) handle(r pairHTTP) (int, pairReply, *pairResult) {
 		return s.fail(http.StatusForbidden, "The code does not match. Scan the QR code again.")
 	}
 
-	// From here the request comes from someone who has the code. When that
-	// is this machine or a machine it links with, a program there read the
-	// code off the screen or out of a pane, and it is not the phone. The
-	// code is spent, so the program cannot try again.
 	if why := s.sourceRefusal(r.remote); why != "" {
 		s.used = true
 		s.finish(nil, errors.New(why))
 		return http.StatusForbidden, pairReply{Error: "This computer does not accept a pairing request from itself or from a machine it links with. Pairing is stopped."}, nil
 	}
 
-	// A mistake from here is reported and the code stays good, so the phone
-	// can try again.
 	device := req.Device
 	if s.name != "" {
 		device = s.name
@@ -1228,8 +1041,6 @@ func (s *pairServer) handle(r pairHTTP) (int, pairReply, *pairResult) {
 	if why := pairNameInUse(device, hosts, s.keysPath, s.ownNames); why != "" {
 		return http.StatusConflict, pairReply{Error: "The name " + device + " is in use on this computer. Give the phone another name."}, nil
 	}
-	// ParseAuthorizedKey skips lines it cannot read, so "junk\nKEY" would
-	// pass as one key. A key is one line, with a line end at most.
 	pub, _, _, rest, err := ssh.ParseAuthorizedKey([]byte(req.Key))
 	if err != nil || strings.TrimSpace(string(rest)) != "" || strings.ContainsAny(strings.TrimRight(req.Key, "\r\n"), "\r\n") {
 		return http.StatusBadRequest, pairReply{Error: "The key is not one OpenSSH public key line."}, nil
@@ -1246,7 +1057,6 @@ func (s *pairServer) handle(r pairHTTP) (int, pairReply, *pairResult) {
 		return http.StatusConflict, pairReply{Error: "This key is in the authorized keys file already."}, nil
 	}
 
-	// The code is spent now, whatever the person answers.
 	s.used = true
 	fp := ssh.FingerprintSHA256(pub)
 	check := pairCheckCode(s.token, req.Key)
@@ -1258,8 +1068,6 @@ func (s *pairServer) handle(r pairHTTP) (int, pairReply, *pairResult) {
 		}
 	}
 
-	// The person may answer after Ctrl+C or after the time ran out. tuios
-	// has said that pairing is stopped by then, so nothing may be written.
 	s.commit.Lock()
 	defer s.commit.Unlock()
 	select {
@@ -1268,10 +1076,6 @@ func (s *pairServer) handle(r pairHTTP) (int, pairReply, *pairResult) {
 	default:
 	}
 
-	// The policy first. A key whose name has no table would get
-	// [hosts."*"] or the built-in default, which can start processes and
-	// type into panes. So the key is written only when the table is in the
-	// file and reads back as the policy of the device.
 	note, err := s.writePolicy(device)
 	if err != nil {
 		s.finish(nil, err)
@@ -1298,19 +1102,6 @@ func (s *pairServer) handle(r pairHTTP) (int, pairReply, *pairResult) {
 	}, res
 }
 
-// sourceRefusal says why a request with a good MAC may not come from where
-// it came from, or returns "".
-//
-// This machine: any address of its own interfaces, loopback included. A
-// program here that can read the screen, or a pane through tuios, has the
-// code. A phone in an emulator, or one that reaches this machine through a
-// userspace tailscaled, which hands every tailnet connection over from
-// 127.0.0.1, needs --accept-local.
-//
-// A machine it links with: an address of a [hosts] entry (see
-// pairPeerAddrs). A machine this one links with can read its panes over the
-// link, so a program there can have the code too. --accept-local does not
-// change this.
 func (s *pairServer) sourceRefusal(remote string) string {
 	ap, err := netip.ParseAddrPort(remote)
 	if err != nil {
@@ -1326,7 +1117,6 @@ func (s *pairServer) sourceRefusal(remote string) string {
 	return ""
 }
 
-// pairOwnAddr reports whether a is an address of this machine.
 func pairOwnAddr(a netip.Addr) bool {
 	if a.IsLoopback() || a.IsUnspecified() {
 		return true
@@ -1347,8 +1137,6 @@ func pairOwnAddr(a netip.Addr) bool {
 	return false
 }
 
-// confirm asks the person to accept the key. It returns false and the reason
-// when they do not, or when the time runs out first.
 func (s *pairServer) confirm(device, keyType, fp, check, from string) (bool, string) {
 	fmt.Fprintf(s.prompt, "\nA device asks to pair.\n  Name:  %s\n  Check: %s\n  Key:   %s %s\n  From:  %s\n  Allow: %s\nCompare the check code and the key with the phone. Add this key? [y/N] ",
 		device, check, keyType, fp, from, strings.Join(s.allow, ", "))
@@ -1362,8 +1150,6 @@ func (s *pairServer) confirm(device, keyType, fp, check, from string) (bool, str
 	select {
 	case a := <-answer:
 		if f, ok := s.stdin.(*os.File); !ok || !term.IsTerminal(int(f.Fd())) {
-			// A terminal echoes the answer and its newline. Input from a
-			// pipe does not, so the next line would join the question.
 			fmt.Fprintln(s.prompt, a)
 		}
 		if a == "y" || a == "yes" {
@@ -1379,9 +1165,6 @@ func (s *pairServer) confirm(device, keyType, fp, check, from string) (bool, str
 	}
 }
 
-// writePolicy writes the new [hosts.DEVICE] table and reads the config back.
-// It returns a sentence for the person, or an error when the table is not
-// in the file as the policy of the device. Then the key must not be added.
 func (s *pairServer) writePolicy(device string) (string, error) {
 	note, err := config.AddLinkPolicyInFile(s.config, device, s.allow)
 	if errors.Is(err, config.ErrHostTableExists) {
@@ -1406,7 +1189,6 @@ func (s *pairServer) writePolicy(device string) (string, error) {
 	return msg, nil
 }
 
-// sameCapabilities reports whether two allow lists hold the same set.
 func sameCapabilities(a, b []string) bool {
 	a, b = slices.Clone(a), slices.Clone(b)
 	slices.Sort(a)
@@ -1414,8 +1196,6 @@ func sameCapabilities(a, b []string) bool {
 	return slices.Equal(slices.Compact(a), slices.Compact(b))
 }
 
-// tomlHostKey is the name as a [hosts] key is written: quoted when it holds a
-// dot, so [hosts."a.b"] does not read as a nested table.
 func tomlHostKey(name string) string {
 	if strings.Contains(name, ".") {
 		return `"` + name + `"`
@@ -1423,9 +1203,6 @@ func tomlHostKey(name string) string {
 	return name
 }
 
-// pairKeyAccepted refuses key types other than ECDSA P-256, Ed25519 and RSA
-// of 3072 bits or more. It returns a short name for the type, or the reason
-// for the phone when it refuses.
 func pairKeyAccepted(pub ssh.PublicKey) (keyType, refusal string) {
 	switch pub.Type() {
 	case ssh.KeyAlgoECDSA256:
@@ -1443,8 +1220,6 @@ func pairKeyAccepted(pub ssh.PublicKey) (keyType, refusal string) {
 	return "", "This key type is not accepted. Use ECDSA P-256, Ed25519, or RSA with 3072 bits or more."
 }
 
-// writePairReply writes the reply and its status line. The connection
-// closes after it.
 func writePairReply(w io.Writer, status int, reply pairReply) {
 	body, _ := jsonx.Marshal(reply)
 	body = append(body, '\n')
@@ -1453,9 +1228,6 @@ func writePairReply(w io.Writer, status int, reply pairReply) {
 	_, _ = w.Write(body)
 }
 
-// renderQR draws the code with half blocks, two modules a character. With
-// colour it paints black on white whatever the terminal's colours are.
-// Without, it draws the light modules as blocks, for a dark terminal.
 func renderQR(text string, colour bool) string {
 	code, err := qr.Encode(text, qr.L)
 	if err != nil {

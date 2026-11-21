@@ -16,7 +16,6 @@ func TestAgentGuideCommandsResolve(t *testing.T) {
 	if !ok {
 		t.Fatal("AGENT_STATE.md has no Reference section to end the guide")
 	}
-	// The setup steps are a numbered list, so their fences are indented.
 	var flat strings.Builder
 	for line := range strings.SplitSeq(front, "\n") {
 		flat.WriteString(strings.TrimLeft(line, " "))
@@ -43,7 +42,6 @@ func TestAgentGuideCommandsResolve(t *testing.T) {
 	}
 }
 
-// readDoc returns a file under docs/.
 func readDoc(t *testing.T, name string) string {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("..", "..", "docs", name))

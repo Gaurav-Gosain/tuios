@@ -13,19 +13,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/pkg/fuzzy"
 )
 
-// The settings page searches its rows by name, key, value and description.
-// list-options --search is the same search for a shell: the query is ranked
-// against each option's path first, then its value in this session and its
-// default, then a word from its description, with the fuzzy matcher the page
-// and the palette use. A description has to match close together, or a short
-// query would find every sentence one letter at a time.
-
-// optionHit is one option a search found.
 type optionHit struct {
 	index, field, score int
 }
 
-// rankOptions orders the options that match query, best first.
 func rankOptions(options []optionRow, query string) []optionHit {
 	query = strings.TrimSpace(query)
 	if query == "" {
@@ -69,8 +60,6 @@ func rankOptions(options []optionRow, query string) []optionHit {
 	return hits
 }
 
-// printOptionSearch writes the options a search found, best first. The JSON
-// form keeps each option exactly as the daemon sent it.
 func printOptionSearch(w io.Writer, raw json.RawMessage, query string, jsonOutput bool) error {
 	var res struct {
 		Options []json.RawMessage `json:"options"`

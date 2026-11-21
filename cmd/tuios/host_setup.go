@@ -21,20 +21,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// `tuios hosts setup`: set up another machine in one command. The steps are
-// internal/hostsetup's. This file is the flag mode, for scripts and agents:
-// every choice comes from a flag, nothing waits on a prompt, and a choice
-// that is missing stops the command before it changes anything, with the
-// flag to pass. On a terminal, host_setup_tty.go asks for each missing
-// choice instead.
-
-// Exit statuses of a setup that stopped.
 const (
 	setupNeedChoice = 2
 	setupNeedPerson = 3
 )
 
-// hostSetupOptions are the flags.
 type hostSetupOptions struct {
 	name       string
 	install    string
@@ -144,7 +135,6 @@ tuios never takes a password. It never accepts a changed host key.`,
 	return cmd
 }
 
-// choices turns the flags into the engine's choices.
 func (o hostSetupOptions) choices() hostsetup.Choices {
 	c := hostsetup.Choices{Install: o.install, Manager: o.manager, Address: o.address, As: o.as, Yes: o.yes, DryRun: o.dryRun, Keep: o.keep}
 	switch {
@@ -162,12 +152,6 @@ func (o hostSetupOptions) choices() hostsetup.Choices {
 	return c
 }
 
-// setupBase is the engine's options for this process. waits is set for the
-// interactive mode, whose program owns the terminal: nothing else may write to
-// it while the program draws, or the program's next frame lands below what it
-// drew last and leaves the old lines behind. So the source's progress goes
-// nowhere (the step lines say it), and a host change the daemon keeps for the
-// person is recorded in waits for the view to say, not printed.
 func setupBase(o hostSetupOptions, waits *atomic.Bool) (hostsetup.Options, error) {
 	path, err := config.GetConfigPath()
 	if err != nil {
@@ -203,13 +187,10 @@ func setupBase(o hostSetupOptions, waits *atomic.Bool) (hostsetup.Options, error
 	}, nil
 }
 
-// setupContext ends on Ctrl+C or SIGTERM, so each machine stops at a step
-// boundary.
 func setupContext() (context.Context, context.CancelFunc) {
 	return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 }
 
-// runHostSetup is the flag mode for one machine.
 func runHostSetup(dest string, o hostSetupOptions) error {
 	var waits *atomic.Bool
 	if setupInteractive(o) {
@@ -242,8 +223,6 @@ func runHostSetup(dest string, o hostSetupOptions) error {
 	return setupExit(runErr, o.dryRun)
 }
 
-// setupExit is the command's error for a setup that stopped: status 2 for a
-// missing choice, 3 for a step that needs the person, 1 for the rest.
 func setupExit(err error, dryRun bool) error {
 	if err == nil {
 		return nil
@@ -251,7 +230,6 @@ func setupExit(err error, dryRun bool) error {
 	d := &diagnosticError{What: err.Error(), Status: 1}
 	if _, ok := errors.AsType[*hostsetup.NeedChoice](err); ok {
 		d.Status = setupNeedChoice
-		// The fix never names a flag the run already has.
 		if !dryRun {
 			d.Fix = "run with --dry-run to see each command"
 		}
@@ -268,8 +246,6 @@ func setupExit(err error, dryRun bool) error {
 	return d
 }
 
-// writeSetupPlan prints a dry run: what the probe found, the note on the
-// plan when it has one, then every command in order with where it runs.
 func writeSetupPlan(w io.Writer, steps []hostsetup.Event, note string) {
 	n := 0
 	for _, st := range steps {
@@ -294,16 +270,11 @@ func writeSetupPlan(w io.Writer, steps []hostsetup.Event, note string) {
 	fmt.Fprintln(w, "\nRun it again without --dry-run, with --yes, to do it.")
 }
 
-// flagAsker is the front end of the flag mode. It asks nothing: a choice the
-// flags did not make is either off (start at boot, both ways, keep) or a
-// NeedChoice that names the flag.
 type flagAsker struct {
-	out   io.Writer
-	quiet bool
-	yes   bool
-	name  string
-	// mu keeps whole the lines of machines that run at once, and prefix
-	// names the machine on each line, in a bulk run.
+	out    io.Writer
+	quiet  bool
+	yes    bool
+	name   string
 	mu     *sync.Mutex
 	prefix string
 }
@@ -322,7 +293,6 @@ func (a *flagAsker) Event(e hostsetup.Event) {
 	}
 }
 
-// setupMark is the mark of a step state on a plain line.
 func setupMark(state string) string {
 	switch state {
 	case hostsetup.StateOK:
@@ -345,7 +315,6 @@ func (a *flagAsker) PickInstall(context.Context, []hostsetup.InstallOption) (hos
 func (a *flagAsker) Confirm(_ context.Context, q hostsetup.Question) (bool, error) {
 	switch q.ID {
 	case "service", "both_ways", "keep":
-		// Extras are off unless a flag turns them on.
 		return false, nil
 	}
 	if a.yes {
@@ -366,7 +335,6 @@ func (a *flagAsker) Person(_ context.Context, p *hostsetup.PersonStep) error {
 	return &hostsetup.NeedPerson{Step: p}
 }
 
-// runTailnetSetup is the flag mode for a tailnet.
 func runTailnetSetup(o hostSetupOptions) error {
 	var waits *atomic.Bool
 	if setupInteractive(o) {
@@ -444,7 +412,6 @@ func runTailnetSetup(o hostSetupOptions) error {
 	return nil
 }
 
-// flagBulkAsker gives each machine a flagAsker whose lines name it.
 type flagBulkAsker struct {
 	quiet, yes bool
 	mu         sync.Mutex

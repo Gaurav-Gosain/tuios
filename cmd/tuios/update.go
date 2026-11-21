@@ -19,38 +19,14 @@ import (
 	"tuios.dev/vt"
 )
 
-// `tuios update`: replace a binary installed from a release archive with the
-// newest one.
-//
-// The shape of this command is set by one fact. A binary the curl one-liner put
-// on the machine has nothing that owns it, so nothing else can update it; every
-// other way of installing tuios has an owner, and writing over one of those
-// leaves that owner's records describing a file that is no longer there. So the
-// first thing this does is work out which of the two it is looking at, and the
-// second is refuse loudly if it is the wrong one.
-//
-// The second fact is that tuios-web is a separate binary that talks to the same
-// daemon, and the daemon compares build strings and warns when they differ. An
-// update that moved one and not the other would manufacture exactly the
-// mismatch that warning exists to catch, so the pair moves together or not at
-// all: both are downloaded and verified before either is put in place.
-
-// updateOptions are the flags, gathered so the work can be tested without cobra.
 type updateOptions struct {
-	// check reports what would happen and changes nothing.
-	check bool
-	// prerelease allows a prerelease to count as the newest release.
+	check      bool
 	prerelease bool
-	// source is where releases are read from. Nil means GitHub; a test supplies
-	// its own and never opens a socket.
-	source release.Source
-	// out is where the report goes.
-	out io.Writer
-	// facts describe the running binary. Zero means read them from the process.
-	facts *release.Facts
+	source     release.Source
+	out        io.Writer
+	facts      *release.Facts
 }
 
-// networkTimeout bounds the whole command, download included.
 const networkTimeout = 3 * time.Minute
 
 func runUpdate(opts updateOptions) error {
@@ -71,9 +47,6 @@ func runUpdate(opts updateOptions) error {
 		return refuseToReplace(prov, facts)
 	}
 	dir := filepath.Dir(facts.Path)
-	// Checked before the network is touched. Finding out that the directory is
-	// read-only after downloading forty megabytes is a worse version of the
-	// same refusal.
 	if !opts.check && !release.Writable(dir) {
 		return &diagnosticError{
 			What:  fmt.Sprintf("%s is not writable by you.", dir),
@@ -104,9 +77,6 @@ func runUpdate(opts updateOptions) error {
 	newer, comparable := release.Newer(facts.Version, rel.Tag)
 	switch {
 	case !comparable:
-		// A version neither side can read is not an argument for replacing
-		// anything. Saying which of the two could not be read is what makes the
-		// next step obvious.
 		return &diagnosticError{
 			What: fmt.Sprintf("%q is not a version this can compare against %q.", facts.Version, rel.Tag),
 			Cause: "Only a binary built from a published release carries a version tag, " +
@@ -126,8 +96,6 @@ func runUpdate(opts updateOptions) error {
 	return installRelease(ctx, src, rel, facts, dir, out)
 }
 
-// resolveFacts reads what is known about the running binary, unless the caller
-// supplied it.
 func (opts updateOptions) resolveFacts() (*release.Facts, error) {
 	if opts.facts != nil {
 		return opts.facts, nil
@@ -140,8 +108,6 @@ func (opts updateOptions) resolveFacts() (*release.Facts, error) {
 			Fix:   "reinstall with the install script, or use the package manager that installed tuios.",
 		}
 	}
-	// Resolved, because Homebrew and many distributions put a symlink on PATH
-	// and the real file somewhere that says who owns it.
 	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
 		exe = resolved
 	}
@@ -159,12 +125,6 @@ func (opts updateOptions) resolveFacts() (*release.Facts, error) {
 	return facts, nil
 }
 
-// refuseToReplace is the message for a binary something else owns.
-//
-// It names the installer and gives the exact command that does update it. A
-// refusal without that command is a dead end, and a user who hits a dead end
-// reaches for the curl script, which is how a second copy of tuios ends up
-// shadowing the packaged one on PATH.
 func refuseToReplace(prov release.Provenance, facts *release.Facts) error {
 	e := &diagnosticError{
 		What:  fmt.Sprintf("This tuios was installed by %s, so it is not this command's to replace.", prov.What),
@@ -179,7 +139,6 @@ func refuseToReplace(prov release.Provenance, facts *release.Facts) error {
 	return e
 }
 
-// ownerNoun is what the refusal says would be left out of date.
 func ownerNoun(prov release.Provenance) string {
 	switch prov.Origin {
 	case release.OriginNixStore:
@@ -196,7 +155,6 @@ func ownerNoun(prov release.Provenance) string {
 	return "whatever installed it"
 }
 
-// installRelease downloads, verifies and puts the new binaries in place.
 func installRelease(ctx context.Context, src release.Source, rel release.Release,
 	facts *release.Facts, dir string, out io.Writer,
 ) error {
@@ -205,10 +163,6 @@ func installRelease(ctx context.Context, src release.Source, rel release.Release
 		return err
 	}
 
-	// The pair moves together, so both are fetched and verified before either
-	// is staged, and both are staged before either is committed. A tuios newer
-	// than its tuios-web is the mismatch the daemon's build check exists to
-	// warn about, and this command must not be the thing that creates one.
 	wanted := []string{"tuios"}
 	webPath := filepath.Join(dir, release.ExecutableName("tuios-web"))
 	if _, err := os.Stat(webPath); err == nil {
@@ -220,7 +174,7 @@ func installRelease(ctx context.Context, src release.Source, rel release.Release
 	var staged []*release.Staged
 	defer func() {
 		for _, s := range staged {
-			s.Discard() // no-op once committed
+			s.Discard()
 		}
 	}()
 
@@ -233,11 +187,6 @@ func installRelease(ctx context.Context, src release.Source, rel release.Release
 				Fix:   "download the right archive by hand from " + releasePage(rel),
 			}
 		}
-		// A ghostty build is replaced by a ghostty build. Both install as
-		// `tuios`, so taking the pure Go archive here would quietly swap the
-		// emulator under the user. Only tuios has a ghostty archive, and not
-		// every platform publishes one, so the pure Go archive is the fallback
-		// and the report says so.
 		if binary == "tuios" && vt.Backend == "ghostty" {
 			ghosttyName, err := release.AssetName("tuios-ghostty", rel.Tag, runtime.GOOS, runtime.GOARCH)
 			if err == nil {
@@ -284,14 +233,9 @@ func installRelease(ctx context.Context, src release.Source, rel release.Release
 		staged = append(staged, s)
 	}
 
-	// Every download is verified by this point, so the only thing left that can
-	// fail is the rename itself.
 	for i, s := range staged {
 		if err := s.Commit(); err != nil {
 			if i > 0 {
-				// One of the pair moved and the other did not. Said plainly,
-				// because the daemon will report a build mismatch and the user
-				// needs to know this is why.
 				return &diagnosticError{
 					What:  "The update was applied to only one of the two binaries.",
 					Cause: err.Error(),
@@ -311,10 +255,6 @@ func installRelease(ctx context.Context, src release.Source, rel release.Release
 	return nil
 }
 
-// updateFirstPartyPlugins moves the plugins installed from the release to the
-// new one, with the new binary, which knows their assets. A failure keeps the
-// old plugin, which still runs. A plugin that asks for something new asks
-// here.
 func updateFirstPartyPlugins(bin string, out io.Writer) {
 	path, err := pluginsConfigPath()
 	if err != nil {
@@ -341,7 +281,6 @@ func updateFirstPartyPlugins(bin string, out io.Writer) {
 	}
 }
 
-// releasePage is where to send someone who has to do this by hand.
 func releasePage(rel release.Release) string {
 	if rel.URL != "" {
 		return rel.URL
@@ -349,12 +288,6 @@ func releasePage(rel release.Release) string {
 	return "https://github.com/" + release.Repo + "/releases"
 }
 
-// fetchChecksums reads the release's digest list.
-//
-// A release with no checksums.txt is refused rather than installed unverified.
-// The check is the only thing standing between a redirected download and a
-// binary this command puts on PATH, and a check that is skipped whenever it is
-// inconvenient is not a check.
 func fetchChecksums(ctx context.Context, src release.Source, rel release.Release) (release.Checksums, error) {
 	asset, ok := rel.AssetNamed(release.ChecksumFile)
 	if !ok {
@@ -379,8 +312,6 @@ func fetchChecksums(ctx context.Context, src release.Source, rel release.Release
 	return sums, nil
 }
 
-// maxAssetSize bounds a single download, so a redirect to something enormous
-// cannot be read into memory.
 const maxAssetSize = 512 << 20
 
 func readAsset(ctx context.Context, src release.Source, asset release.Asset) ([]byte, error) {
@@ -407,8 +338,6 @@ func readAsset(ctx context.Context, src release.Source, asset release.Asset) ([]
 	return data, nil
 }
 
-// explainChecksumError turns a failed verification into a message that says
-// what it means. A mismatch is not a hiccup to retry past.
 func explainChecksumError(err error, rel release.Release) error {
 	if mismatch, ok := errors.AsType[*release.ChecksumMismatch](err); ok {
 		return &diagnosticError{
@@ -431,7 +360,6 @@ func explainChecksumError(err error, rel release.Release) error {
 	}
 }
 
-// explainLookupError turns a network or API failure into an instruction.
 func explainLookupError(err error, prerelease bool) error {
 	if limit, ok := errors.AsType[*release.RateLimitError](err); ok {
 		e := &diagnosticError{
@@ -462,9 +390,6 @@ func explainLookupError(err error, prerelease bool) error {
 			Fix:   "try again shortly. If it keeps failing, check https://www.githubstatus.com.",
 		}
 	}
-	// Anything that reaches here is a transport failure: no route, DNS that
-	// answers nothing, a proxy that hung up. They read the same to a user, so
-	// they get one message.
 	var netErr net.Error
 	if errors.As(err, &netErr) || errors.Is(err, context.DeadlineExceeded) {
 		return &diagnosticError{
@@ -480,14 +405,6 @@ func explainLookupError(err error, prerelease bool) error {
 	}
 }
 
-// reportDaemonAfterUpdate says what the new binary does and does not change
-// about what is already running.
-//
-// The daemon holds the old binary open. It goes on running the code it started
-// with, and a new client attaching to it gets a build-mismatch warning, so the
-// instruction has to be here and not left to be discovered. update leaves the
-// daemon alone: a live upgrade is still experimental, and the person decides
-// when their attached clients are dropped.
 func reportDaemonAfterUpdate(out io.Writer) {
 	fmt.Fprintln(out, "The daemon is still running the old build. Sessions you have open keep working.")
 	fmt.Fprintln(out, "To move it to the new one and keep every program running, run `"+serverCommand("daemon upgrade")+"` (experimental).")

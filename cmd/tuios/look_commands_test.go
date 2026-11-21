@@ -23,7 +23,7 @@ func TestResolveLookSource(t *testing.T) {
 		{in: "abc-1", where: lookGalleryURL("abc-1"), remote: true},
 		{in: "https://example.com/a.toml", where: "https://example.com/a.toml", remote: true},
 		{in: "./mine.toml", where: "./mine.toml"},
-		{in: "tokyo", where: "tokyo"}, // a file of that name wins over the id
+		{in: "tokyo", where: "tokyo"},
 		{in: "http://example.com/a.toml", err: "https"},
 		{in: "ftp://example.com/a.toml", err: "https"},
 		{in: "file:///etc/passwd", err: "https"},

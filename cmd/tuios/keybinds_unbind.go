@@ -12,16 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The command-line half of unbinding. The overlay is the discoverable way to do
-// this; these exist so a dotfile script or an agent can do it without driving a
-// TUI, and so the two paths write the same thing to config.toml.
-//
-// Both write an empty list on the actions that ran out of keys, which is what
-// stops the default coming back at the next load. See
-// internal/config/keybind_unbind.go for the encoding.
-
-// keybindsUnbind takes keys off one action. With no key named it takes them
-// all, which is how an action is left with nothing.
 func keybindsUnbind(action, key string) error {
 	cfg, err := loadConfigForEdit()
 	if err != nil {
@@ -74,8 +64,6 @@ func keybindsUnbind(action, key string) error {
 	return nil
 }
 
-// keybindsFree takes one key off every action, so the program in the pane gets
-// it.
 func keybindsFree(key string) error {
 	cfg, err := loadConfigForEdit()
 	if err != nil {
@@ -98,7 +86,6 @@ func keybindsFree(key string) error {
 		fmt.Printf("No action was bound to %s.\n", key)
 	}
 
-	// Read after the edit, so what is reported is what the config now says.
 	registry.Reload(cfg)
 	if held := registry.StillHeldBy(key); len(held) > 0 {
 		fmt.Printf("\n%s still does not reach the pane: %s.\n", key, strings.Join(held, ", and "))
@@ -109,8 +96,6 @@ func keybindsFree(key string) error {
 	return nil
 }
 
-// unboundNote marks the actions that ran out of keys, since those are the ones
-// the file now spells as an empty list.
 func unboundNote(r config.Removal) string {
 	if r.LeftUnbound {
 		return "  (now unbound)"
@@ -118,9 +103,6 @@ func unboundNote(r config.Removal) string {
 	return ""
 }
 
-// loadConfigForEdit loads the config the way the app does. A load failure is
-// fatal here rather than falling back to the defaults: writing the defaults
-// over a config that failed to parse would throw the user's file away.
 func loadConfigForEdit() (*config.UserConfig, error) {
 	cfg, err := config.LoadUserConfig()
 	if err != nil {
@@ -133,7 +115,6 @@ func loadConfigForEdit() (*config.UserConfig, error) {
 	return cfg, nil
 }
 
-// keybindSectionOf is the config table an action lives in, or "".
 func keybindSectionOf(cfg *config.UserConfig, action string) string {
 	for _, name := range cfg.Keybindings.SectionNamesFor() {
 		if _, ok := cfg.Keybindings.SectionFor(name)[action]; ok {
@@ -143,8 +124,6 @@ func keybindSectionOf(cfg *config.UserConfig, action string) string {
 	return ""
 }
 
-// nearestActionHint is the closest action name to a misspelled one, as a line
-// to print under the error.
 func nearestActionHint(cfg *config.UserConfig, action string) []string {
 	var names []string
 	for _, name := range cfg.Keybindings.SectionNamesFor() {
@@ -159,9 +138,6 @@ func nearestActionHint(cfg *config.UserConfig, action string) []string {
 	return nil
 }
 
-// reportRunningDaemon says what a change means for panes that are already open.
-// The config is read at startup, so a daemon that is already running goes on
-// using what it read.
 func reportRunningDaemon() {
 	fmt.Fprintln(os.Stdout, "Open sessions keep the keys they started with. Reload the config from the command palette, or restart tuios.")
 }

@@ -27,19 +27,11 @@ import (
 	"golang.org/x/term"
 )
 
-// attachTerminalMode is tuios attach --terminal-mode: the client starts in
-// terminal mode on the focused pane, whatever [startup] says and whether the
-// session is new or not. A popup that runs tuios attach can use it.
 var attachTerminalMode bool
 
-// attachFocusWindow is the pane runAttach focuses before the client starts:
-// startup.window, set only by a bare "tuios". Every subcommand leaves it
-// empty, so the config never moves the focus of an attach someone typed.
 var attachFocusWindow string
 
 func runAttach(sessionName string, createIfMissing bool) error {
-	// First of all, because the refusal is the whole answer: a client in a pane
-	// of the session it asks for sizes the session by its own pane (#235).
 	if !nestedAllowed() {
 		if err := session.CheckNestedAttach(sessionName); err != nil {
 			nested, _ := session.AsNestedAttach(err)
@@ -47,24 +39,12 @@ func runAttach(sessionName string, createIfMissing bool) error {
 		}
 	}
 
-	// Check the terminal before anything else: a session that cannot be
-	// rendered is much harder to diagnose once the TUI has taken the screen.
 	if err := checkTerminal(); err != nil {
 		return err
 	}
 
-	// A daemon restores every saved session as it starts, so the sessions the
-	// user is asking for are one process away. Refusing here and naming a
-	// command that would create a different session is what made attach look
-	// like it had lost them.
 	if !session.IsDaemonRunning() {
-		// Said before the daemon starts, because afterwards the sessions simply
-		// exist and the user is left to work out where they came from.
 		if reportSavedSessionsBeforeStart() == 0 && sessionName == "" {
-			// An unnamed attach against an empty daemon opens a new session:
-			// that is what the daemon has always done, and it is the only thing
-			// left that gets the user to a terminal. Say so rather than let a
-			// session appear unannounced.
 			fmt.Println("No saved sessions to restore. Opening a new one.")
 		}
 		if err := ensureDaemon(); err != nil {
@@ -83,11 +63,6 @@ func runAttach(sessionName string, createIfMissing bool) error {
 	return runDaemonSession(sessionName, createIfMissing)
 }
 
-// focusBeforeAttach focuses a pane in a session before the client attaches,
-// through the focus-window verb, so a name resolves as "tuios focus-window -s
-// SESSION NAME" resolves it, workspace switch included. It is best effort: a
-// session that does not exist yet, or a name no pane has, leaves the focus
-// where it was and the attach goes ahead. Nothing is created.
 func focusBeforeAttach(sessionName, window string) {
 	client, err := dialVerb()
 	if err != nil {
@@ -102,9 +77,6 @@ func focusBeforeAttach(sessionName, window string) {
 	}
 }
 
-// reportSavedSessionsBeforeStart says what is about to be brought back, and
-// returns how many. It is said before the daemon starts because afterwards the
-// sessions simply exist, and the user is left to guess where they came from.
 func reportSavedSessionsBeforeStart() int {
 	infos, err := session.ListResurrectableInfos()
 	if err != nil || len(infos) == 0 {
@@ -124,15 +96,8 @@ func reportSavedSessionsBeforeStart() int {
 	return len(names)
 }
 
-// attachNotices are what ensureAttachTarget found to say about the session.
-// They are printed once the daemon has accepted the attach, so a refused
-// attach leaves only its refusal on the screen.
 var attachNotices []string
 
-// ensureAttachTarget verifies the named session exists before the TUI starts,
-// so a typo produces a list of real names instead of an empty screen or a
-// silently created session. It is a no-op when no name was given (attach picks
-// the most recent session) or when the caller asked to create the session.
 func ensureAttachTarget(sessionName string, createIfMissing bool) error {
 	if sessionName == "" || createIfMissing {
 		return nil
@@ -146,7 +111,6 @@ func ensureAttachTarget(sessionName string, createIfMissing bool) error {
 
 	sessions, err := listSessionInfos(client)
 	if err != nil {
-		// Listing is a courtesy; if it fails, let the attach itself report.
 		return nil
 	}
 
@@ -157,15 +121,8 @@ func ensureAttachTarget(sessionName string, createIfMissing bool) error {
 			continue
 		}
 		if s.Attached {
-			// Attaching to an already-attached session is supported, not an
-			// error, but the shared screen size surprises people who expect
-			// tmux's exclusive attach. Say so rather than letting them wonder
-			// why their window shrank.
 			attachNotices = append(attachNotices, sharedSessionNotice(sessionName, attachWindowSize(client, sessionName)))
 		}
-		// Said before the attach, because the attach itself clears the mark. This
-		// is the answer to "why is my session still here after I killed the
-		// daemon", at the moment the user is asking it.
 		if s.Restored {
 			attachNotices = append(attachNotices, fmt.Sprintf("Session %q was %s: %s.", sessionName, session.RestoredTag, session.RestoredNote))
 		}
@@ -174,11 +131,6 @@ func ensureAttachTarget(sessionName string, createIfMissing bool) error {
 	return explainMissingSession(sessionName, names)
 }
 
-// attachWindowSize reads the window_size policy in force for a session, as
-// session-info reports it, or "" when the daemon does not say (a daemon that
-// predates the option). It is the policy in force and not the one configured:
-// while a client from before the option is attached the session uses
-// smallest, whatever it is set to.
 func attachWindowSize(client *session.VerbClient, name string) string {
 	raw, err := client.Call("session-info", map[string]any{"session": name})
 	if err != nil {
@@ -193,9 +145,6 @@ func attachWindowSize(client *session.VerbClient, name string) string {
 	return res.WindowSize
 }
 
-// sharedSessionNotice is what attach says before it joins a session that
-// already has a client. It names the window_size policy, because the policy
-// decides which client's size the session takes.
 func sharedSessionNotice(name, policy string) string {
 	head := fmt.Sprintf("Session %q already has a client attached. TUIOS shares the session.", name)
 	switch policy {
@@ -208,7 +157,6 @@ func sharedSessionNotice(name, policy string) string {
 	}
 }
 
-// listSessionInfos returns the live sessions over the verb protocol.
 func listSessionInfos(client *session.VerbClient) ([]session.SessionInfo, error) {
 	raw, err := client.Call("list-sessions", nil)
 	if err != nil {
@@ -223,15 +171,8 @@ func listSessionInfos(client *session.VerbClient) ([]session.SessionInfo, error)
 	return listed.Sessions, nil
 }
 
-// newSessionDir is the start directory of the session tuios new makes: --cwd,
-// else the directory the command runs in. See newSessionStartDir.
 var newSessionDir string
 
-// newSessionStartDir is the directory a session tuios new makes starts its
-// windows in. --cwd wins. Without it, the caller's own directory, which is
-// what tmux new-session does too: the daemon's directory is wherever the
-// daemon happened to start, which says nothing about the caller. A caller
-// whose directory cannot be read sends none, and the daemon's is used.
 func newSessionStartDir(flag string) (string, error) {
 	if flag != "" {
 		return checkSessionDir(flag)
@@ -264,16 +205,10 @@ func runNewSession(sessionName string) error {
 	return runDaemonSession(sessionName, true)
 }
 
-// runNewSessionDetached creates a headless session in the daemon and returns
-// without launching the TUI. The session holds an initial window, is usable by
-// control verbs immediately, and can be attached later with 'tuios attach'.
 func runNewSessionDetached(sessionName string) error {
 	return newSessionDetached(sessionName, false)
 }
 
-// runNewGlobalSessionDetached creates a global session: one meant to hold
-// panes from more than one machine. It is created with no windows, since every
-// window in it names the machine it runs on.
 func runNewGlobalSessionDetached(sessionName string) error {
 	return newSessionDetached(sessionName, true)
 }
@@ -303,7 +238,6 @@ func newSessionDetached(sessionName string, global bool) error {
 
 	var err error
 	if global {
-		// A global session has no window of its own to start anywhere.
 		err = client.CreateGlobalSession(sessionName, 80, 24)
 	} else {
 		err = client.CreateDetachedSessionIn(sessionName, 80, 24, newSessionDir)
@@ -330,27 +264,12 @@ func generateUniqueSessionName(existingNames []string) string {
 	}
 }
 
-// clientLogf logs a step of the client's start. The log goes to the terminal,
-// and an attach the daemon refuses leaves the terminal to the refusal, so
-// these steps are logged only when debugging is on.
 func clientLogf(format string, args ...any) {
 	if debugMode || debuglog.Enabled() {
 		log.Printf(format, args...)
 	}
 }
 
-// runNewSessionInSpace is tuios new --space. The session is made by the
-// new-session verb, which takes the space and files the session under it as
-// it is created, so there is no moment it exists in no space. A daemon that
-// does not know the space parameter refuses it, rather than making a session
-// in no space.
-//
-// The windows match tuios new without --space: a detached session gets its
-// first window from the daemon, and an attached one is made empty and the
-// client opens its first window as startup.open_default_window says.
-//
-// An attached one checks the terminal before the verb call, as plain tuios new
-// does, so a caller that cannot host the client leaves no session behind.
 func runNewSessionInSpace(sessionName, space string, detach bool) error {
 	if !detach {
 		if err := checkTerminal(); err != nil {
@@ -389,19 +308,11 @@ func runDaemonSession(sessionName string, createNew bool) error {
 	return runDaemonSessionOn("", sessionName, createNew)
 }
 
-// runDaemonSessionOn is runDaemonSession with the daemon chosen: this
-// machine's for an empty host, or the daemon on a host from the [hosts] table,
-// reached through this machine's daemon over its link. The client is the same
-// either way, and so is everything it draws.
 func runDaemonSessionOn(host, sessionName string, createNew bool) error {
-	// Every path into the TUI funnels through here, so this is the one place
-	// that guarantees the terminal can host it before the screen is taken over.
 	if err := checkTerminal(); err != nil {
 		return err
 	}
 
-	// Written first, so it has reached any pane it is going to reach by the
-	// time the attach arrives. See session/nest_probe.go.
 	var probe session.NestProbe
 	if host == "" && session.NestProbeSafe(os.Getenv("TERM")) {
 		probe = session.WriteNestProbe(os.Stdout)
@@ -425,7 +336,6 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	clientLogf("[CLIENT] Detecting terminal capabilities...")
 	hostCaps := app.GetHostCapabilities()
 
-	// Build client capabilities from detected host capabilities
 	clientCaps := app.ClientCapabilitiesOf(hostCaps, settings.ImageSymbols)
 	clientLogf("[CLIENT] Capabilities: cell=%dx%d, kitty=%v, sixel=%v, term=%s",
 		clientCaps.CellWidth, clientCaps.CellHeight, clientCaps.KittyGraphics, clientCaps.SixelGraphics, clientCaps.TerminalName)
@@ -435,41 +345,16 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	client.AllowNested = nestedAllowed()
 	client.DetachOthers = attachDetachOthers
 	client.SetNestProbe(probe)
-	// This process runs where the person is, so its agent socket is theirs.
-	// The daemon decides whether to follow it: see
-	// internal/session/ssh_agent_follow.go. Through a host it goes to this
-	// machine's daemon, whose link forwards it, not to the host.
 	client.SSHAuthSock = os.Getenv("SSH_AUTH_SOCK")
-	// The display this process runs in, for a daemon started without one.
-	// See internal/session/display_follow.go.
 	client.Display = session.ClientDisplayFromEnv()
-	// The person's terminal, for the panes of a session this attach makes.
-	// The detached and verb paths send it too.
 	client.UseCallerTerm()
-	// The person is at this terminal, so the live upgrade dialog shows here
-	// and takes their keys. See internal/app/upgrade_confirm.go.
 	client.UpgradeDialog = true
 	if host == "" && createNew {
-		// tuios new may supply --cwd. The daemon ignores the directory if
-		// this attach finds a session that already exists.
 		client.StartDir = newSessionDir
 	}
 	if host == "" && sessionName == "" && client.StartDir == "" {
-		// A bare local attach may create the default session. Its first
-		// window starts where this client was invoked, not where the daemon
-		// happened to start.
 		client.StartDir, _ = os.Getwd()
 	}
-	// The real host size, asked for here rather than left at a placeholder.
-	//
-	// The session's size is the minimum over its attached clients, and this is
-	// the number this client contributes to that minimum. A placeholder 80x24
-	// is not a neutral guess: it is smaller than almost any real terminal, so a
-	// local client attaching beside a browser client would collapse the whole
-	// session to 80x24 until Bubble Tea delivers the first WindowSizeMsg, and
-	// every other client would clamp or scale its panes into that box and back
-	// out again (a resize storm). Bubble Tea still delivers the authoritative size a moment
-	// later; this only stops the interval in between from being a lie.
 	width, height := hostTerminalSize()
 
 	if host == "" {
@@ -484,9 +369,6 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	clientLogf("[CLIENT] Connected to daemon")
 
 	if host != "" && sessionName == "" && createNew {
-		// The far side's daemon picks nothing on its own for an empty name,
-		// so the first free name there is chosen here, from what it listed
-		// at the handshake.
 		sessionName = generateUniqueSessionName(client.AvailableSessionNames())
 	}
 
@@ -529,21 +411,17 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	client.StartReadLoop()
 
 	c := localclient.New(localclient.Stdio(), app.OSOptions{
-		Client:          app.ClientLocal,
-		KeybindRegistry: keybindRegistry,
-		UserConfig:      userConfig,
-		ShowKeys:        interfaceFlags.ShowKeys,
-		Overrides:       flagOverrides(),
-		Settings:        settings,
-		// The size this client told the daemon, so the restored windows are
-		// tiled into a real box rather than a zero one the first WindowSizeMsg
-		// then has to undo. The servers have always passed theirs.
-		Width:           width,
-		Height:          height,
-		IsDaemonSession: true,
-		DaemonClient:    client,
-		SessionName:     client.SessionName(),
-		// Only a local attach asks for it, and only with --terminal-mode.
+		Client:              app.ClientLocal,
+		KeybindRegistry:     keybindRegistry,
+		UserConfig:          userConfig,
+		ShowKeys:            interfaceFlags.ShowKeys,
+		Overrides:           flagOverrides(),
+		Settings:            settings,
+		Width:               width,
+		Height:              height,
+		IsDaemonSession:     true,
+		DaemonClient:        client,
+		SessionName:         client.SessionName(),
 		StartInTerminalMode: host == "" && attachTerminalMode,
 		AfterRestart:        host == "" && attachAfterRestart,
 		AfterUpgrade:        afterUpgradeFor(host),
@@ -551,14 +429,8 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		AttachedHost:        host,
 	}, state)
 
-	// A quit the event loop cannot carry out still has to end the process: a
-	// force-killed ssh client leaves a pty nobody drains, and the frame write
-	// that fills it is what wedges the loop. finish runs once the cleanup
-	// below is done, so a Ctrl+C during it cannot leave the terminal raw. See
-	// armSignalQuit.
 	runReturned, finish := armSignalQuit(c.Program)
 
-	// See withoutHardTabs: tmux drops the background under a tab.
 	restoreTabs := withoutHardTabs()
 	finalModel, err := c.Run()
 	runReturned()
@@ -566,16 +438,9 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	c.Close()
 
 	reason := app.ExitNormal
-	// The client may have switched sessions since it attached, so the name to
-	// report at exit is the one it is in now, not the one on the command line.
 	exitSession := sessionName
-	// A deliberate quit in a daemon session kills it (leader q); a detach leaves
-	// it running (leader d). Both exit normally, so QuitRequested is what tells
-	// the two apart and picks the message the user sees.
 	killed := false
 	exitHost := host
-	// The client the app ended on, which is not this one after a switch to a
-	// session on a host: that switch opens a new client.
 	exitClient := client
 	var restartExec *app.RestartExec
 	var restartFail *app.RestartFailure
@@ -591,10 +456,6 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		}
 		exitHost = finalOS.AttachedHost
 		killed = finalOS.QuitRequested
-		// Syncing state back is meaningful only for a detach, while the session
-		// still exists. A quit already killed it, a kill from elsewhere left no
-		// session to receive the state, and a lost connection cannot carry the
-		// write, so skip it rather than block on a dead socket on the way out.
 		if reason == app.ExitNormal && !killed {
 			finalOS.SyncStateToDaemon()
 		}
@@ -610,30 +471,20 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		return errfmt.Errorf("program error: %w", err)
 	}
 
-	// A restart from the app: the new daemon answers, and the client comes
-	// back on it. See restart_reattach.go.
 	if reason == app.ExitRestarted && restartExec != nil {
 		return reattachAfterRestart(restartExec)
 	}
 	if reason == app.ExitRestartFailed && restartFail != nil {
 		return appRestartFailure(restartFail)
 	}
-	// A live upgrade gave the daemon a newer build: this client runs it on
-	// the same session. See app/upgrade_follow.go.
 	if reason == app.ExitUpgradeFollowed && upgradeExec != nil {
 		return followUpgrade(upgradeExec)
 	}
 
-	// The daemon took this client off the session after the attach: its
-	// output turned out to reach a pane of the session. Said in the same words
-	// as the refusal an attach gets.
 	if reason == app.ExitNestedRefused {
 		return &diagnosticError{What: client.NestedRefusal()}
 	}
 
-	// Another client attached with -d, single_client is on, or
-	// detach-client named this client. The session runs on, and nothing
-	// failed here, so the reason is printed and the exit status is 0.
 	if reason == app.ExitDetached {
 		fmt.Println(exitClient.DetachedReason())
 		where := ""
@@ -644,8 +495,6 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		return nil
 	}
 
-	// A live upgrade replaced the daemon's image. The session and every
-	// program in it run on, and nothing failed here.
 	if reason == app.ExitDaemonUpgraded {
 		to, _ := exitClient.UpgradedTo()
 		if to == "" {
@@ -658,14 +507,6 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	return reportSessionExit(exitSession, exitHost, reason, killed)
 }
 
-// reportSessionExit prints why the client stopped and returns an error for the
-// cases that are not a normal exit, so a script or an agent driving tuios sees
-// a non-zero status instead of a message that reads like success.
-//
-// killed distinguishes the two normal exits: a deliberate quit that killed the
-// session (leader q) from a detach that left it running (leader d). They read
-// differently on the way out so the user is not told a session was detached when
-// it was in fact destroyed.
 func reportSessionExit(sessionName, host string, reason app.ExitReason, killed bool) error {
 	switch reason {
 	case app.ExitHostLost:
@@ -703,27 +544,15 @@ func reportSessionExit(sessionName, host string, reason app.ExitReason, killed b
 	}
 }
 
-// lsEntry is a row of 'tuios ls --json'. It is the wire type plus the one fact
-// the wire cannot carry: a session that exists only on disk, because no daemon
-// is holding it. The flag is omitted for live sessions, so a listing from a
-// running daemon is unchanged. Server names the server the row belongs to and
-// is omitted for the default one, whose listing is unchanged too.
 type lsEntry struct {
 	session.SessionInfo
-	Saved  bool   `json:"saved,omitempty"`
-	Server string `json:"server,omitempty"`
-	// AgentTitle is the title the session's first agent pane set, for a
-	// session whose name tuios made up and that has no display name. It is a
-	// label only; the session is still addressed by Name.
+	Saved      bool   `json:"saved,omitempty"`
+	Server     string `json:"server,omitempty"`
 	AgentTitle string `json:"agent_title,omitempty"`
 }
 
-// lsAgentTitleCells bounds the agent title in the text listing, so one long
-// title does not widen the name column for every row.
 const lsAgentTitleCells = 40
 
-// lsAgentTitle is the agent title tuios ls shows beside a session's name. A
-// display name a person set wins, and so does any name tuios did not make up.
 func lsAgentTitle(s session.SessionInfo) string {
 	if s.DisplayName != "" || !session.IsGeneratedSessionName(s.Name) {
 		return ""
@@ -731,15 +560,12 @@ func lsAgentTitle(s session.SessionInfo) string {
 	return session.SessionAgentTitle(s.Windows)
 }
 
-// printServerLine says which named server a command reached. The default
-// server prints nothing, so its output is what it always was.
 func printServerLine(socketPath string) {
 	if name := serverscope.Name(); name != "" {
 		fmt.Printf("Server: %s (%s)\n", name, socketPath)
 	}
 }
 
-// runListClients prints the daemon's current client connections.
 func runListClients(jsonOutput bool) error {
 	raw, err := localVerb("list-clients", nil, 0, false)
 	if err != nil {
@@ -817,16 +643,11 @@ func runListSessions(jsonOutput bool) error {
 		if s.Attached {
 			status = "attached"
 		}
-		// A restored session has by construction never been attached, so the tag
-		// replaces "detached" rather than needing a column of its own.
 		if s.Restored {
 			status = session.RestoredTag
 			anyRestored = true
 		}
 
-		// A display label set by set-session-name is shown beside the name,
-		// so ls and the UI never show a session by two unrelated names.
-		// An agent's title is shown the same way, for a session nobody named.
 		name := s.Name
 		if s.DisplayName != "" && s.DisplayName != s.Name {
 			name = fmt.Sprintf("%s (%s)", s.Name, s.DisplayName)
@@ -851,12 +672,6 @@ func runListSessions(jsonOutput bool) error {
 	return nil
 }
 
-// listSavedSessions is 'tuios ls' with no daemon listening. The sessions are on
-// disk and a daemon brings them back, so listing them is the truth; printing an
-// empty list was what made attach's refusal incomprehensible.
-//
-// It reports the no-daemon status, which is what lets a script tell this apart
-// from a daemon that is running and holds nothing.
 func listSavedSessions(diag session.DaemonDiagnosis, jsonOutput bool) error {
 	infos, err := session.ListResurrectableInfos()
 	if err != nil {
@@ -904,8 +719,6 @@ func listSavedSessions(diag session.DaemonDiagnosis, jsonOutput bool) error {
 	return &statusError{code: noDaemonStatus}
 }
 
-// savedUnix converts a save time to the epoch seconds the listing formats,
-// keeping zero as "unknown" rather than turning it into 1970.
 func savedUnix(t time.Time) int64 {
 	if t.IsZero() {
 		return 0
@@ -922,10 +735,6 @@ func printJSON(v any) error {
 	return nil
 }
 
-// renderSpaceGroups draws a session listing as one table per space, ordered by
-// space name, each under the space's name, and the sessions in no space last
-// with no heading. With no session in any space it is the one table. The live
-// listing, the saved one and each host of ls --all-hosts all draw through it.
 func renderSpaceGroups(rowsBySpace map[string][][]string) string {
 	spaces := make([]string, 0, len(rowsBySpace))
 	for space := range rowsBySpace {
@@ -946,8 +755,6 @@ func renderSpaceGroups(rowsBySpace map[string][][]string) string {
 	return strings.Join(groups, "\n\n")
 }
 
-// renderSessionTable draws the session listing. Both listings use it so a
-// session reads the same whether a daemon is holding it or a disk is.
 func renderSessionTable(rows [][]string) string {
 	return table.New().
 		Border(lipgloss.RoundedBorder()).
@@ -1026,8 +833,6 @@ func runKillSession(sessionName string) error {
 	return nil
 }
 
-// runResurrect lists resurrectable sessions (no name) or restores one on demand
-// and attaches to it (name given).
 func runResurrect(sessionName string, asJSON bool) error {
 	if sessionName == "" {
 		return listResurrectableSessions(asJSON)
@@ -1036,13 +841,10 @@ func runResurrect(sessionName string, asJSON bool) error {
 		return errors.New("--json lists the saved sessions. Run 'tuios resurrect --json' with no session name")
 	}
 
-	// Ensure the daemon is running so it can hold the restored session.
 	if err := ensureDaemon(); err != nil {
 		return err
 	}
 
-	// Ask the daemon to restore the session from saved state. This is a no-op if
-	// the daemon already auto-restored it on start.
 	client := session.NewClient(&session.ClientConfig{Version: version})
 	if err := client.Connect(); err != nil {
 		return explainDialError(err)
@@ -1055,14 +857,9 @@ func runResurrect(sessionName string, asJSON bool) error {
 
 	fmt.Printf("Resurrected session '%s'\n", sessionName)
 
-	// Attach to the now-live session.
 	return runDaemonSession(sessionName, false)
 }
 
-// explainResurrectFailure turns a failed restore into a message that says which
-// of the several reasons applies: no saved state at all, or state that exists
-// but cannot be read by this build. The daemon archives unreadable state rather
-// than deleting it, so the message says where it went.
 func explainResurrectFailure(sessionName string, err error) error {
 	msg := err.Error()
 
@@ -1119,16 +916,12 @@ func explainResurrectFailure(sessionName string, err error) error {
 	}
 }
 
-// listResurrectableSessions prints the sessions that can be restored from saved
-// state on disk.
 func listResurrectableSessions(asJSON bool) error {
 	infos, err := session.ListResurrectableInfos()
 	if err != nil {
 		return err
 	}
 
-	// Sessions currently live in the daemon are already available via attach;
-	// still list them so the user sees the full set, but mark their status.
 	liveNames := make(map[string]bool)
 	if session.IsDaemonRunning() {
 		client := session.NewClient(&session.ClientConfig{Version: version})
@@ -1226,8 +1019,6 @@ func runDaemon(foreground, disableAutoRestore bool) error {
 	}
 
 	if !foreground {
-		// start-server returns once the daemon is up, so a --pprof given to it
-		// is only any use to the daemon.
 		if pprofAddr != "" {
 			return startDaemonBackground("--pprof", pprofAddr)
 		}
@@ -1243,11 +1034,7 @@ func runDaemon(foreground, disableAutoRestore bool) error {
 	return err
 }
 
-// foregroundDaemonConfig is the configuration of the daemon this process
-// runs, with its logging installed.
 func foregroundDaemonConfig() *session.DaemonConfig {
-	// The file's daemon settings first, the same way every other starter maps
-	// them, then what only this command knows.
 	var daemonCfg *session.DaemonConfig
 	if userConfig, err := config.LoadUserConfig(); err == nil {
 		daemonCfg = session.DaemonConfigFromUser(userConfig)
@@ -1255,34 +1042,20 @@ func foregroundDaemonConfig() *session.DaemonConfig {
 		daemonCfg = session.DaemonConfigFromUser(nil)
 	}
 	daemonCfg.Version = version
-	// The profile is finished before the exec, which would cut it short. If
-	// the exec then fails this daemon carries on without a profile, and the
-	// adopting image runs with none.
 	daemonCfg.HandoffArgs = func(fd int) []string {
 		stopCPUProfile()
 		return handoffArgs(fd)
 	}
-	// A terminal on stderr is what makes this daemon a foreground one for
-	// logging. `tuios daemon` is also the command startDaemonBackground
-	// spawns for a detached daemon, with stderr pointed at the log file, so
-	// echoing there would write every line to that file twice.
 	daemonCfg.Foreground = term.IsTerminal(int(os.Stderr.Fd()))
 
-	// Install the log sinks before the daemon is built. NewDaemon already logs,
-	// and the level is settled by now, so the file header names the right one.
 	session.InstallDaemonLogging(daemonCfg.Foreground, daemonCfg.LogFile)
 
-	// One log line per firing, at the level that already logs connections. It
-	// is what answers "did my hook run at all". The sinks are in place above,
-	// so the line reaches the ring and the file in a background daemon.
 	hooks.SetVerbose(session.GetDebugLevel() >= session.DebugBasic)
 	return daemonCfg
 }
 
 func runKillDaemon(restart bool) error {
 	diag := session.DiagnoseDaemon()
-	// The clients reattach after a restart and quit after a stop. The daemon
-	// reads the mark on its way out. See internal/session/daemon_goodbye.go.
 	if restart && diag.State == session.DaemonRunning {
 		if err := session.MarkRestart(); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: the clients will not wait for the new daemon: %v\n", err)
@@ -1306,9 +1079,6 @@ func runKillDaemon(restart bool) error {
 		}
 
 	case session.DaemonStaleSocket:
-		// kill-server is the command every other message points at for this
-		// state, so it has to actually clear it rather than report "not
-		// running" and leave the socket in place.
 		if err := os.Remove(diag.SocketPath); err != nil && !os.IsNotExist(err) {
 			return &diagnosticError{
 				What:  fmt.Sprintf("A stale daemon socket at %s could not be removed: %v.", diag.SocketPath, err),
@@ -1326,18 +1096,8 @@ func runKillDaemon(restart bool) error {
 	}
 }
 
-// killServerTimeout bounds how long kill-server waits for the daemon to finish
-// persisting and exit. A shutdown that is going to succeed takes milliseconds;
-// the slow case is Daemon.shutdown's own 5s cap on draining goroutines, so this
-// leaves headroom past that before declaring the daemon wedged.
 const killServerTimeout = 10 * time.Second
 
-// awaitDaemonShutdown blocks until the signalled daemon has finished writing its
-// resurrection state and removed its socket, so that kill-server returning means
-// the next command can safely start a fresh daemon. Reporting success while the
-// old daemon is still saving is what lets 'kill-server && start-server' race:
-// the new daemon reads state the old one has not finished writing, or the old
-// one's final write lands on top of the new one's.
 func awaitDaemonShutdown(pid int, socketPath string) error {
 	err := session.WaitForDaemonShutdown(socketPath, killServerTimeout)
 	if err == nil {
@@ -1361,7 +1121,3 @@ func awaitDaemonShutdown(pid int, socketPath string) error {
 		Err: err,
 	}
 }
-
-// stopDaemon and forceKillCommand are defined in platform-specific files:
-// - session_commands_unix.go for Unix/Linux/macOS
-// - session_commands_windows.go for Windows

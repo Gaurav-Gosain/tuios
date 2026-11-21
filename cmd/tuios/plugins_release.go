@@ -22,24 +22,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/release"
 )
 
-// First-party plugins from the assets of the running tuios release.
-//
-// Each release carries tuios-plugins_<version>.tar.gz, the plugins/ folder of
-// this repository, and lists it in checksums.txt. tuios plugins install NAME
-// takes the folder NAME out of it. A plugin with a program also takes that
-// program's archive for this platform, which the release already builds,
-// into bin/. Both are checked against checksums.txt before anything is
-// written. The lock pins the version and a hash of what was downloaded, so
-// another machine that reads the lock gets the same files or nothing.
-
-// firstPartyPlugin is one plugin the release carries.
 type firstPartyPlugin struct {
-	// binary is a program of the release that the plugin runs, from its own
-	// archive, or "" for none.
 	binary string
 }
 
-// firstParty are the plugins tuios plugins install takes by name.
 var firstParty = map[string]firstPartyPlugin{
 	"ovnfs":     {},
 	"pr-status": {},
@@ -47,12 +33,10 @@ var firstParty = map[string]firstPartyPlugin{
 	"themes":    {},
 }
 
-// pluginsAsset is the name of the archive of plugin folders in a release.
 func pluginsAsset(version string) string {
 	return "tuios-plugins_" + strings.TrimPrefix(version, "v") + ".tar.gz"
 }
 
-// firstPartyNames lists the names, for a message.
 func firstPartyNames() string {
 	names := make([]string, 0, len(firstParty))
 	for n := range firstParty {
@@ -62,17 +46,12 @@ func firstPartyNames() string {
 	return strings.Join(names, ", ")
 }
 
-// releaseSource reads releases. TUIOS_RELEASE_API points it at another API
-// root, which the tests use. Every file is still checked against the
-// checksums.txt that root serves.
 func releaseSource() *release.GitHub {
 	g := release.NewGitHub()
 	g.BaseURL = os.Getenv("TUIOS_RELEASE_API")
 	return g
 }
 
-// runningTag is the release this tuios came from, or an error for a build
-// that came from none.
 func runningTag() (string, error) {
 	if _, ok := release.ParseVersion(version); !ok {
 		return "", errfmt.Errorf("this tuios is a %s build, which no release made, so it has no plugin assets. Install the plugin from its folder: tuios plugins install Gaurav-Gosain/tuios/plugins/NAME", version)
@@ -80,8 +59,6 @@ func runningTag() (string, error) {
 	return "v" + strings.TrimPrefix(version, "v"), nil
 }
 
-// fetchFirstParty downloads plugin name of release tag into dir, an empty
-// folder, and checks every file. It returns a hash of what it downloaded.
 func fetchFirstParty(name, tag, dir string) (string, error) {
 	fp := firstParty[name]
 	ctx, cancel := context.WithTimeout(context.Background(), networkTimeout)
@@ -143,11 +120,8 @@ func fetchFirstParty(name, tag, dir string) (string, error) {
 	return hex.EncodeToString(pin.Sum(nil)), nil
 }
 
-// maxPluginFile bounds one file of a plugin folder.
 const maxPluginFile = 16 << 20
 
-// extractPluginFolder writes the folder name/ of the archive into dir. It
-// takes folders and regular files only, each inside dir.
 func extractPluginFolder(data []byte, name, dir string) error {
 	gz, err := gzip.NewReader(bytes.NewReader(data))
 	if err != nil {
@@ -195,7 +169,6 @@ func extractPluginFolder(data []byte, name, dir string) error {
 	return nil
 }
 
-// installFirstParty is tuios plugins install NAME.
 func (in *installer) installFirstParty(name string) error {
 	tag, err := runningTag()
 	if err != nil {
@@ -204,9 +177,6 @@ func (in *installer) installFirstParty(name string) error {
 	return in.firstPartyAt(name, tag, nil)
 }
 
-// firstPartyAt fetches plugin name of release tag and finishes the install.
-// old is the lock entry it replaces, nil for a new one. A pinned entry must
-// download to its pin.
 func (in *installer) firstPartyAt(name, tag string, old *herdrplugin.LockEntry) error {
 	work, err := os.MkdirTemp(in.dirs.ManagedDir(), herdrplugin.FetchPrefix)
 	if err != nil {
@@ -235,8 +205,6 @@ func (in *installer) firstPartyAt(name, tag string, old *herdrplugin.LockEntry) 
 	return in.finish(e, p, work)
 }
 
-// pinnedRelease installs a lock entry of a release plugin on this machine.
-// The download must match the pin, or nothing is installed.
 func (in *installer) pinnedRelease(e herdrplugin.LockEntry) error {
 	work, err := os.MkdirTemp(in.dirs.ManagedDir(), herdrplugin.FetchPrefix)
 	if err != nil {

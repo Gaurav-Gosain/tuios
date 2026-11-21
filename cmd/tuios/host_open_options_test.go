@@ -17,7 +17,6 @@ import (
 // Negative control: with CheckSSHOptions back to a list of refused keywords,
 // the host resolves and ssh would run the command.
 func TestAQuotedProxyCommandIsNotRunByTheCLI(t *testing.T) {
-	// Registered before the Setenv calls, so it runs after they are undone.
 	t.Cleanup(xdg.Reload)
 	home := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", home)

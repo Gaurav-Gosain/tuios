@@ -15,8 +15,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/mcp"
 )
 
-// runMCPChild runs tuios mcp in this process, for a test that started the test
-// binary as its child. Its arguments come from TUIOS_TEST_MCP_ARGS.
 func runMCPChild() int {
 	cmd := newMCPCommand()
 	cmd.SetArgs(strings.Fields(os.Getenv("TUIOS_TEST_MCP_ARGS")))
@@ -26,8 +24,6 @@ func runMCPChild() int {
 	return 0
 }
 
-// mcpChild is tuios mcp running as a child process, driven over its stdio by a
-// scripted client.
 type mcpChild struct {
 	t     *testing.T
 	in    io.WriteCloser
@@ -193,7 +189,6 @@ func TestMCPServerOverStdioIsHeldToItsPane(t *testing.T) {
 		t.Errorf("the pane's state after its own report = %s, want working", st)
 	}
 
-	// The event stream carries its own session and not the other one.
 	if _, err := c.Call("new-window", map[string]any{"session": "theirs", "name": "other"}); err != nil {
 		t.Fatal(err)
 	}
@@ -220,9 +215,6 @@ func TestMCPServerOverStdioIsHeldToItsPane(t *testing.T) {
 		t.Errorf("no event of its own session: %s", text)
 	}
 
-	// Its own session goes quiet while the other one is busy. The replay
-	// after last_seq is empty for this caller, and the next call must still
-	// resume from where the daemon is, not hand the same seq back forever.
 	var point struct {
 		LastSeq float64 `json:"last_seq"`
 		BootID  string  `json:"boot_id"`
@@ -271,7 +263,6 @@ func TestMCPServerOverStdioIsHeldToItsPane(t *testing.T) {
 // TestMCPServerWithoutAPaneReachesNothing: a server restricted to its own
 // session that cannot prove a pane is refused everything that reads a session.
 func TestMCPServerWithoutAPaneReachesNothing(t *testing.T) {
-	// A run started in a tuios pane would hand the server that pane.
 	t.Setenv("TUIOS_PANE_ID", "")
 	t.Setenv("TUIOS_PANE_TOKEN", "")
 	c := startSubscribeDaemon(t)
@@ -287,7 +278,6 @@ func TestMCPServerWithoutAPaneReachesNothing(t *testing.T) {
 	if res["isError"] != true || !strings.Contains(text, "forbidden") {
 		t.Errorf("send_text from no pane = %s, want forbidden", text)
 	}
-	// --scope all lifts the session restriction, and read-only still holds.
 	all := startMCPChild(t, "--scope all")
 	res, text = all.tool("tuios_list_windows", map[string]any{"session": "any"})
 	if res["isError"] == true {
@@ -357,7 +347,6 @@ func TestIntegrationInstallMCPRegistersTheServer(t *testing.T) {
 	if e := doc.Servers["tuios"]; e.Command != "tuios" || strings.Join(e.Args, " ") != "mcp --write --integration 1" {
 		t.Errorf("registered server = %+v", e)
 	}
-	// The registered arguments parse: the hidden --integration flag exists.
 	if err := newMCPCommand().ParseFlags(doc.Servers["tuios"].Args[1:]); err != nil {
 		t.Errorf("tuios mcp does not accept the arguments install registers: %v", err)
 	}
@@ -368,8 +357,6 @@ func TestIntegrationInstallMCPRegistersTheServer(t *testing.T) {
 		t.Errorf("uninstall left the server: %s", data)
 	}
 
-	// --mcp for a harness without a registration is refused before anything
-	// is written.
 	root := newRootCommand()
 	root.SetArgs([]string{"integration", "install", "amp", "--mcp"})
 	root.SilenceErrors, root.SilenceUsage = true, true

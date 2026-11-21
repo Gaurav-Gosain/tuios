@@ -9,11 +9,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/tutor"
 )
 
-// groupGettingStarted is the help group a new person reads first.
 const groupGettingStarted = "getting-started"
 
-// newTutorCommand is tuios tutor: a guided tour in this terminal, on a
-// practice copy, with nothing of the person's touched.
 func newTutorCommand() *cobra.Command {
 	var list, reset, ascii bool
 	cmd := &cobra.Command{

@@ -27,7 +27,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// mermaidOptions are the flags of tuios mermaid.
 type mermaidOptions struct {
 	format     string
 	out        string
@@ -40,7 +39,6 @@ type mermaidOptions struct {
 	fit        bool
 }
 
-// liveOptions are the flags of the live view: --watch, --split and --demo.
 type liveOptions struct {
 	watch, split, demo, loop bool
 	medium                   string
@@ -119,8 +117,6 @@ is a Go port of pele and draws flowcharts, sequence diagrams, state diagrams, cl
 				if err != nil {
 					return err
 				}
-				// The live view keeps this process running; --pprof is a
-				// persistent flag that it used to accept and ignore.
 				startPprofServer()
 				if err := startCPUProfile(); err != nil {
 					return err
@@ -185,7 +181,6 @@ func runMermaid(name string, o mermaidOptions, stdout *os.File) error {
 	tty := term.IsTerminal(int(stdout.Fd()))
 	profile := colorprofile.Detect(stdout, os.Environ())
 	if !tty {
-		// A file or a pipe takes any colour.
 		profile = colorprofile.TrueColor
 	}
 	theme.SetColorProfile(profile)
@@ -232,7 +227,6 @@ func runMermaid(name string, o mermaidOptions, stdout *os.File) error {
 		out, err := sketch.Render(src, sketch.RenderOptions{Theme: th})
 		if err != nil {
 			failed++
-			// The message quotes the source, so it is made safe as the source is.
 			fmt.Fprintf(os.Stderr, "diagram %d: %s\n", i+1, mermaid.TermSafe(err.Error()))
 			if format == "text" || format == "kitty" {
 				fmt.Fprintln(stdout, mermaid.TermSafe(strings.TrimRight(src, "\n")))
@@ -249,8 +243,6 @@ func runMermaid(name string, o mermaidOptions, stdout *os.File) error {
 	return nil
 }
 
-// mermaidTheme is the diagram theme: the flag, else [mermaid] theme, else the
-// one built from the tuios theme in [appearance] theme.
 func mermaidTheme(flag string) (*sketch.Theme, error) {
 	name := flag
 	if cfg, err := config.LoadUserConfig(); err == nil && cfg != nil {
@@ -264,9 +256,6 @@ func mermaidTheme(flag string) (*sketch.Theme, error) {
 	return mermaid.ThemeFor(name, theme.UI(), theme.GetANSIPalette(), theme.TerminalBg(), theme.TerminalFg())
 }
 
-// mermaidBackground is the background of a picture: the flag, else
-// [mermaid] background, else "theme". "none" leaves it clear, so the diagram
-// sits on the terminal's own background.
 func mermaidBackground(flag string) (string, error) {
 	name := strings.ToLower(strings.TrimSpace(flag))
 	if name == "" {
@@ -283,7 +272,6 @@ func mermaidBackground(flag string) (string, error) {
 	return "", errfmt.Errorf("unknown background %q: use theme or none", name)
 }
 
-// diagramKinds are the names the help text and the docs give each diagram type.
 var diagramKinds = map[sketch.Type]string{
 	"xychart":       "XY charts",
 	"quadrantChart": "quadrant charts",
@@ -320,8 +308,6 @@ var diagramKinds = map[sketch.Type]string{
 	"swimlane":      "swimlane diagrams",
 }
 
-// diagramKind is the plural name of a diagram type for a message, such as
-// "XY charts". A type with no name in diagramKinds gives "<id> diagrams".
 func diagramKind(t sketch.Type) string {
 	if name, ok := diagramKinds[t]; ok {
 		return name
@@ -329,7 +315,6 @@ func diagramKind(t sketch.Type) string {
 	return string(t) + " diagrams"
 }
 
-// numbered is the output file for diagram i of n: name, or name-2.ext and so on.
 func numbered(name string, i, n int) string {
 	if n == 1 {
 		return name
@@ -361,8 +346,6 @@ func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaid
 			color := tty && profile >= colorprofile.ANSI
 			lines, err := sketchtext.Draw(d, sketchtext.Options{Cols: cols, Color: color})
 			if errors.Is(err, sketchtext.ErrTooWide) {
-				// Drawn at its full width: the terminal wraps or cuts the lines.
-				// The note comes once that drawing is known to work.
 				lines, err = sketchtext.Draw(d, sketchtext.Options{Color: color})
 				if err == nil {
 					fmt.Fprintf(os.Stderr, "diagram %d: the text drawing is wider than %d columns.\n", i+1, cols)
@@ -376,8 +359,6 @@ func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaid
 				}
 				return nil
 			}
-			// No text drawing for this type, or none that fits: say so on
-			// stderr, so that piped output stays the source alone.
 			switch {
 			case errors.Is(err, sketchtext.ErrUnsupported):
 				fmt.Fprintf(os.Stderr, "diagram %d: %s have no text drawing. The source follows.\n", i+1, mermaid.TermSafe(diagramKind(d.Type)))
@@ -409,11 +390,6 @@ func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaid
 		return write(b.Bytes())
 	}
 
-	// kitty: the diagram's text at the size of the terminal's own, and smaller
-	// only when the diagram is wider than the terminal. A taller diagram runs
-	// into the scrollback. With --fit it is also made to fit the height, less
-	// two rows: one for the gap or the prompt, and one because tuios keeps
-	// the last row of a pane clear of pictures.
 	maxRows := 0
 	if o.fit {
 		maxRows = max(rows-2, 4)
@@ -423,14 +399,11 @@ func writeMermaid(out sketch.SVG, src string, i, n int, format string, o mermaid
 		return errfmt.Errorf("cannot draw diagram %d: %w", i+1, err)
 	}
 	if i > 0 {
-		// A blank line between two diagrams.
 		fmt.Fprintln(stdout)
 	}
 	return mermaid.Kitty(stdout, pic.PNG, pic.Cols, pic.Rows)
 }
 
-// terminalCells is the width of the terminal in cells and the size of a cell
-// in pixels, with a common guess where the terminal does not say.
 func terminalCells(f *os.File) (cols, rows, cellW, cellH int) {
 	cols, rows, cellW, cellH = 100, 40, 10, 20
 	if w, h, err := term.GetSize(int(f.Fd())); err == nil && w > 0 && h > 0 {
@@ -444,9 +417,6 @@ func terminalCells(f *os.File) (cols, rows, cellW, cellH int) {
 
 var errNoAnswer = errors.New("no answer")
 
-// guardRaw restores a terminal put in raw mode for a query if a signal comes
-// before the query ends, and exits. The returned function restores it and
-// ends the guard.
 func guardRaw(fd int, state *term.State) func() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
@@ -466,13 +436,7 @@ func guardRaw(fd int, state *term.State) func() {
 	}
 }
 
-// kittyGraphics asks the terminal whether it shows kitty graphics: a query
-// image, then a primary device attributes request that every terminal answers.
-// The terminal supports kitty graphics when the image query answers first.
 func kittyGraphics(out *os.File) bool {
-	// The answer is read from the terminal, which readAnswer cannot do on
-	// Windows. A query there would leave the terminal's DA1 reply in the
-	// shell's input after tuios exits, so none is sent.
 	if runtime.GOOS == "windows" {
 		return false
 	}

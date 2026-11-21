@@ -30,31 +30,11 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// The interactive mode of `tuios hosts setup`: on a terminal, a choice the
-// flags did not make is asked in place. It is an inline Bubble Tea program
-// (no alt screen), and it only draws: the steps, the questions, their keys
-// and their words are hostsetup's Flow and Prompt, which the add sheet in
-// the app draws too. The engine asks through a hostsetup.Bridge whose Send
-// is this program's.
-//
-// What only a terminal needs is here: a person step runs in this terminal
-// with tea.ExecProcess, ctrl+c stops the run at its next step boundary, and
-// the done summary stays in the scrollback.
-//
-// The inks are escape prefixes made once from the dialog palette. The view
-// writes lines with one-byte ink markers into one builder, and paint turns
-// them into escapes, so drawing builds no styles. Nothing ticks while the
-// program waits for the person: the spinner runs only while a step runs and
-// no question is open.
-
-// setupInteractive says the command can ask: stdin and stdout are terminals,
-// and the output is not for a script.
 func setupInteractive(o hostSetupOptions) bool {
 	return !o.json && !o.dryRun && isTerminal(os.Stdin) && isTerminal(os.Stdout)
 }
 
 type (
-	// setupEndMsg says the engine ended. Its result is on setupModel.end.
 	setupEndMsg   struct{}
 	setupPeersMsg struct {
 		peers []hostsetup.Peer
@@ -67,14 +47,12 @@ type (
 	setupTickMsg struct{}
 )
 
-// setupEnd is what the engine returned.
 type setupEnd struct {
 	res  *hostsetup.Result
 	bulk *hostsetup.BulkResult
 	err  error
 }
 
-// The inks.
 const (
 	inkText = iota
 	inkBold
@@ -98,9 +76,6 @@ const (
 	inkN
 )
 
-// The ink markers: one byte each, written into a line where its ink starts.
-// They are C0 controls but tab, newline, carriage return and escape. Every
-// string from the far machine went through plainLine, which keeps none.
 const (
 	inkMarkers = "\x01\x02\x03\x04\x05\x06\x07\x08\x0b\x0c\x0e\x0f\x10\x11\x12\x13\x14\x15\x16"
 	mText      = "\x01"
@@ -121,15 +96,12 @@ const (
 	mTrack     = "\x16"
 )
 
-// setupModel draws one machine's Flow, or one line for each machine of a
-// tailnet run, and the Prompt that waits.
 type setupModel struct {
 	cancel context.CancelFunc
 	end    chan setupEnd
 	ink    [inkN]string
 	width  int
-	// b is the frame being written.
-	b strings.Builder
+	b      strings.Builder
 
 	dest  string
 	flows []*hostsetup.Flow
@@ -143,12 +115,10 @@ type setupModel struct {
 	ticking bool
 
 	started, finished, stopped bool
-	// box is the summary at the end, edge its ink, and fail the error.
-	box  []string
-	edge int
-	fail string
+	box                        []string
+	edge                       int
+	fail                       string
 
-	// A tailnet run: the checklist, then a line for each machine.
 	tailnet  bool
 	list     tea.Cmd
 	run      func([]hostsetup.Peer)
@@ -161,14 +131,9 @@ type setupModel struct {
 	all      bool
 	only     []string
 	answered string
-	// own are the machines with their own answers, and local the prompts
-	// that ask them, which have no engine behind them.
-	own   map[string]*hostsetup.Choices
-	local map[*hostsetup.Prompt]bool
+	own      map[string]*hostsetup.Choices
+	local    map[*hostsetup.Prompt]bool
 
-	// waits is set when the running daemon kept a host change for the
-	// person. The summary says so: the program owns the terminal, so the
-	// note is not printed while it draws.
 	waits *atomic.Bool
 }
 
@@ -208,10 +173,8 @@ func newSetupModel() (*setupModel, context.Context) {
 	return m, ctx
 }
 
-// inkMark is the marker of ink i.
 func inkMark(i int) string { return inkMarkers[i : i+1] }
 
-// paint turns the markers of a line into escapes, and resets at its end.
 func (m *setupModel) paint(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); i++ {
@@ -226,10 +189,8 @@ func (m *setupModel) paint(s string) string {
 	return b.String()
 }
 
-// send is the Bridge's Send.
 func send(prog *tea.Program) func(any) { return func(v any) { prog.Send(v) } }
 
-// runHostSetupTTY is the interactive mode for one machine.
 func runHostSetupTTY(s *hostsetup.Setup, dest string, o hostSetupOptions, waits *atomic.Bool) error {
 	m, ctx := newSetupModel()
 	m.waits = waits
@@ -243,8 +204,6 @@ func runHostSetupTTY(s *hostsetup.Setup, dest string, o hostSetupOptions, waits 
 	return m.finish(prog)
 }
 
-// runTailnetSetupTTY is the interactive mode for a tailnet: the checklist,
-// the shared answers, then a line for each machine and the summary.
 func runTailnetSetupTTY(base hostsetup.Options, o hostSetupOptions, waits *atomic.Bool) error {
 	added, err := hostsetup.ConfiguredHosts(base.ConfigPath)
 	if err != nil {
@@ -254,9 +213,6 @@ func runTailnetSetupTTY(base hostsetup.Options, o hostSetupOptions, waits *atomi
 	m, ctx := newSetupModel()
 	m.waits = waits
 	prog := tea.NewProgram(m, tea.WithOutput(os.Stdout))
-	// The shared answers: the flags, else the same version as here, start
-	// at boot, both ways. The checklist shows them, so enter on it is the
-	// person's yes.
 	c := o.choices()
 	if c.Install == "" {
 		c.Install = hostsetup.InstallCopy
@@ -287,9 +243,6 @@ func runTailnetSetupTTY(base hostsetup.Options, o hostSetupOptions, waits *atomi
 	return m.finish(prog)
 }
 
-// finish runs the program, then waits for the engine. The program can end
-// first (ctrl+c, SIGTERM): the engine then stops at its next step boundary,
-// and the stop line says what it left.
 func (m *setupModel) finish(prog *tea.Program) error {
 	_, perr := prog.Run()
 	m.cancel()
@@ -324,7 +277,6 @@ func (m *setupModel) finish(prog *tea.Program) error {
 	return nil
 }
 
-// stoppedLine says what a stopped setup left behind.
 func stoppedLine(res *hostsetup.Result) string {
 	added, installed := false, false
 	if res != nil {
@@ -348,7 +300,6 @@ func stoppedLine(res *hostsetup.Result) string {
 	return "Stopped. Nothing was added."
 }
 
-// bulkCount says the counts of a tailnet run in one sentence.
 func bulkCount(sm hostsetup.Summary) string {
 	s := strconv.Itoa(sm.Ready) + " machines are ready."
 	if sm.Ready == 1 {
@@ -373,7 +324,6 @@ func (m *setupModel) Init() tea.Cmd {
 	return nil
 }
 
-// tick starts the spinner when something runs and it is not running.
 func (m *setupModel) tick() tea.Cmd {
 	if m.ticking || !m.busy() {
 		return nil
@@ -382,7 +332,6 @@ func (m *setupModel) tick() tea.Cmd {
 	return tea.Tick(100*time.Millisecond, func(time.Time) tea.Msg { return setupTickMsg{} })
 }
 
-// busy says something runs that the person waits on, with no question open.
 func (m *setupModel) busy() bool {
 	if m.finished || m.stopped || m.ask != nil || m.execing {
 		return false
@@ -400,8 +349,6 @@ func (m *setupModel) busy() bool {
 	return m.tailnet && m.peers == nil && len(m.flows) > 0
 }
 
-// flow is the Flow of the machine called name: the only one, or the one of
-// that machine of a tailnet run.
 func (m *setupModel) flow(name string) *hostsetup.Flow {
 	for _, f := range m.flows {
 		if !m.tailnet || f.Name == name {
@@ -444,7 +391,6 @@ func (m *setupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, m.tick()
 }
 
-// stop cancels the run. The engine stops at its next step boundary.
 func (m *setupModel) stop() tea.Cmd {
 	m.stopped = true
 	m.cancel()
@@ -457,8 +403,6 @@ func (m *setupModel) stop() tea.Cmd {
 	return tea.Quit
 }
 
-// next opens the first waiting question. A person step with a command runs
-// it in this terminal at once; one with only a page opens the page.
 func (m *setupModel) next() tea.Cmd {
 	if m.ask != nil || len(m.queue) == 0 {
 		return nil
@@ -481,15 +425,12 @@ func (m *setupModel) next() tea.Cmd {
 	return tea.ExecProcess(cmd, func(err error) tea.Msg { return setupExecMsg{p, err} })
 }
 
-// done finishes the open question and opens the next one.
 func (m *setupModel) done(err error) tea.Cmd {
 	m.ask.Finish(err)
 	m.ask = nil
 	return tea.Batch(m.next(), m.tick())
 }
 
-// openSetupPage opens a sign-in page with the opener the app uses, and says
-// what happened.
 func openSetupPage(url string) string {
 	opener := ""
 	if cfg, err := config.LoadUserConfig(); err == nil {
@@ -504,7 +445,6 @@ func openSetupPage(url string) string {
 	return "The page is open. Press t when you are signed in."
 }
 
-// key gives a key to the open question, or to the checklist.
 func (m *setupModel) key(k string) tea.Cmd {
 	switch {
 	case k == "ctrl+c":
@@ -530,9 +470,6 @@ func (m *setupModel) key(k string) tea.Cmd {
 	return nil
 }
 
-// ownAnswers asks one machine of the checklist its own answers: how to
-// install, start at boot, and both ways. These prompts have no engine
-// behind them. ownAnswer keeps each answer.
 func (m *setupModel) ownAnswers(name string) tea.Cmd {
 	c := m.choices
 	m.own[name] = &c
@@ -554,7 +491,6 @@ func (m *setupModel) ownAnswers(name string) tea.Cmd {
 	return m.next()
 }
 
-// ownAnswer keeps one answer of a machine's own answers.
 func (m *setupModel) ownAnswer(p *hostsetup.Prompt) {
 	c := m.own[p.Machine]
 	switch {
@@ -567,8 +503,6 @@ func (m *setupModel) ownAnswer(p *hostsetup.Prompt) {
 	}
 }
 
-// peersArrived opens the checklist, or starts the run on the machines that
-// --all or --only named.
 func (m *setupModel) peersArrived(msg setupPeersMsg) tea.Cmd {
 	m.listing, m.listErr = false, msg.err
 	if msg.err != nil {
@@ -595,7 +529,6 @@ func (m *setupModel) peersArrived(msg setupPeersMsg) tea.Cmd {
 	return nil
 }
 
-// goOn starts the run on the picked machines.
 func (m *setupModel) goOn(picked []hostsetup.Peer) tea.Cmd {
 	if len(picked) == 0 {
 		return nil
@@ -611,7 +544,6 @@ func (m *setupModel) goOn(picked []hostsetup.Peer) tea.Cmd {
 	return m.tick()
 }
 
-// ended takes the engine's result: the summary box, or the error.
 func (m *setupModel) ended(r setupEnd) {
 	m.finished = true
 	m.end <- r
@@ -626,7 +558,6 @@ func (m *setupModel) ended(r setupEnd) {
 	}
 }
 
-// doneBox is the summary of a machine that is ready.
 func (m *setupModel) doneBox(res *hostsetup.Result) {
 	link := "up"
 	if res.Host != nil && res.Host.RTTMillis > 0 {
@@ -663,7 +594,6 @@ func (m *setupModel) doneBox(res *hostsetup.Result) {
 	}
 }
 
-// bulkEnded gives each machine its last line, and makes the summary box.
 func (m *setupModel) bulkEnded(res *hostsetup.BulkResult) {
 	sm := res.Summary
 	m.edge = inkEdgeOK
@@ -686,7 +616,6 @@ func (m *setupModel) bulkEnded(res *hostsetup.BulkResult) {
 		case r.OK:
 			end.State, end.Text = hostsetup.StateOK, "ready, link up"
 		case r.Person != nil || (r.Failure != nil && r.Failure.NeedsPerson):
-			// The reason only: the fix is the command the setup asks again.
 			if r.Failure != nil {
 				why = plainLine(r.Failure.Reason)
 			} else {
@@ -702,12 +631,8 @@ func (m *setupModel) bulkEnded(res *hostsetup.BulkResult) {
 	}
 }
 
-// The view.
-
 var spinFrames = [...]string{"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"}
 
-// mark is the mark of a state: hostsetup.Mark, inked, and the spinner for a
-// step that runs.
 func (m *setupModel) mark(state string) string {
 	ink := mMute
 	switch state {
@@ -729,8 +654,6 @@ func pad(s string, w int) string {
 	return s + strings.Repeat(" ", max(w-ansi.StringWidth(s), 0))
 }
 
-// ln writes one line of parts. bar starts it with the bar of a question
-// block in that ink, when it is not zero.
 func (m *setupModel) ln(bar int, parts ...string) {
 	if bar != 0 {
 		m.b.WriteString("  ")
@@ -743,7 +666,6 @@ func (m *setupModel) ln(bar int, parts ...string) {
 	m.b.WriteString("\n")
 }
 
-// hints writes the key hints of a prompt: the key, then what it does.
 func (m *setupModel) hints(h [][2]string) {
 	m.ln(0)
 	m.b.WriteString(" ")
@@ -755,7 +677,6 @@ func (m *setupModel) hints(h [][2]string) {
 	m.b.WriteString("\n")
 }
 
-// line writes one step of a Flow. w is the width of the label column.
 func (m *setupModel) line(l hostsetup.Line, label string, w int) {
 	name := mText
 	switch l.State {
@@ -819,7 +740,6 @@ func (m *setupModel) View() tea.View {
 		m.ln(0)
 		m.boxView()
 		if m.waits != nil && m.waits.Load() {
-			// configWaitsNote in two lines, so a narrow pane does not cut it.
 			m.ln(0)
 			m.ln(0, "  ", mDim, "The running daemon applies this change after tuios config apply")
 			m.ln(0, "  ", mDim, "from a terminal outside tuios, or a daemon restart.")
@@ -837,11 +757,8 @@ func (m *setupModel) View() tea.View {
 	return m.view()
 }
 
-// bulkSteps order the steps of a machine for its bar.
 var bulkSteps = [...]string{hostsetup.StepProbe, hostsetup.StepInstall, hostsetup.StepService, hostsetup.StepStart, hostsetup.StepAdd, hostsetup.StepTest, hostsetup.StepReverse, "end"}
 
-// machines writes the shared answers, then one line for each machine of a
-// tailnet run: its last step, a bar, and what that step said.
 func (m *setupModel) machines() {
 	c := m.choices
 	how := installWords(c.Install) + ", not at boot"
@@ -865,8 +782,6 @@ func (m *setupModel) machines() {
 		if len(f.Lines) > 0 {
 			l = f.Lines[len(f.Lines)-1]
 		}
-		// The bar shows how far the machine got: a machine that did not
-		// end ready keeps the bar of the last step it ran.
 		at := l.Step
 		if at == "end" && l.State != hostsetup.StateOK {
 			at = ""
@@ -897,8 +812,6 @@ func (m *setupModel) machines() {
 	}
 }
 
-// view paints the lines. A line never wraps: a path or ssh's words can be
-// longer than the terminal, and a wrapped line breaks the columns under it.
 func (m *setupModel) view() tea.View {
 	l := strings.Split(m.b.String(), "\n")
 	for i := range l {
@@ -907,7 +820,6 @@ func (m *setupModel) view() tea.View {
 	return tea.NewView(strings.Join(l, "\n"))
 }
 
-// boxView writes the summary in a rounded box.
 func (m *setupModel) boxView() {
 	w := 0
 	for _, s := range m.box {
@@ -924,15 +836,11 @@ func (m *setupModel) boxView() {
 	m.ln(0, edge, "╰", strings.Repeat("─", w+6), "╯")
 }
 
-// cmdLine writes one command of a question block, and where it runs.
 func (m *setupModel) cmdLine(bar int, c hostsetup.Command, indent string) {
 	m.ln(bar, indent, mMute, pad(c.Where+":", 11), mDim, plainLine(c.Line))
 }
 
-// askView writes the open question and its key hints.
 func (m *setupModel) askView(p *hostsetup.Prompt) {
-	// A prompt of a tailnet names its machine, also before the run, when
-	// there is no Flow yet.
 	who := p.Machine
 	if who == "" {
 		who = m.flows[0].Name
@@ -1004,7 +912,6 @@ func (m *setupModel) askView(p *hostsetup.Prompt) {
 	m.hints(p.Hints())
 }
 
-// checklist writes the tailnet's machines and the shared answers.
 func (m *setupModel) checklist() {
 	p := m.peers
 	ticked := 0
@@ -1056,7 +963,6 @@ func (m *setupModel) checklist() {
 	m.hints(p.Hints())
 }
 
-// installWords names an install choice in the shared answers.
 func installWords(id string) string {
 	switch id {
 	case hostsetup.InstallRelease:

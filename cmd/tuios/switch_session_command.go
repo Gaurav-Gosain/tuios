@@ -12,10 +12,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newSwitchSessionCmd is tuios switch-session: move an attached client to
-// another session in place, as go-to does. From a pane it
-// moves the client that shows the pane's session, which is what a popup
-// command key needs for a sessionizer.
 func newSwitchSessionCmd() *cobra.Command {
 	var (
 		fromSession string
@@ -141,9 +137,6 @@ func runSwitchSession(name, host, fromSession, clientID string, create bool, cwd
 	return nil
 }
 
-// checkSessionDir makes dir absolute and checks that it is a directory. The
-// daemon starts shells in it, and its own working directory is not the
-// caller's, so a relative path would mean somewhere else there.
 func checkSessionDir(dir string) (string, error) {
 	abs, err := filepath.Abs(dir)
 	if err != nil {

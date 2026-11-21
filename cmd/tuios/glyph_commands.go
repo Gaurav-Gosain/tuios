@@ -12,7 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
-// glyphSetDetail is the described set as list-glyphs reports it.
 type glyphSetDetail struct {
 	ID             string            `json:"id"`
 	DisplayName    string            `json:"display_name"`
@@ -24,13 +23,6 @@ type glyphSetDetail struct {
 	Drawn          map[string]string `json:"drawn"`
 }
 
-// runListGlyphs lists the glyph sets and, with a name, describes one.
-//
-// The human form prints what the set names beside what would actually be drawn,
-// because those are two different things and the gap between them is the whole
-// difficulty of authoring a set: a set states only what it changes, and a role
-// whose glyph was the wrong width for its slot is dropped back to the default
-// without anything on screen saying so.
 func runListGlyphs(sessionName, setName string, jsonOutput bool) error {
 	raw, err := localVerb("list-glyphs", map[string]any{
 		"session": sessionName,
@@ -70,9 +62,6 @@ func runListGlyphs(sessionName, setName string, jsonOutput bool) error {
 		fmt.Fprintf(w, " (%s)", res.Source)
 	}
 	fmt.Fprintf(w, "\nglyphs dir: %s\n", res.GlyphsDir)
-	// What a client started in this terminal would pick on its own. It is
-	// answered here, in the terminal the command runs in, because that is the
-	// terminal the question is about; the daemon's environment is not.
 	if env, why := config.DetectGlyphEnv(os.Getenv); why != "" {
 		fmt.Fprintf(w, "this terminal: %s glyphs, because %s (a glyph set or --ascii-only overrides it)\n", env, why)
 	}
@@ -82,7 +71,6 @@ func runListGlyphs(sessionName, setName string, jsonOutput bool) error {
 	return nil
 }
 
-// printGlyphSetList prints the ids in one wrapped run, like list-themes does.
 func printGlyphSetList(w *os.File, sets []string, total int) {
 	if len(sets) == 0 {
 		fmt.Fprintln(w, "no glyph sets")
@@ -95,7 +83,6 @@ func printGlyphSetList(w *os.File, sets []string, total int) {
 	fmt.Fprintf(w, "\n\n%s.\n", plural.Count(total, "glyph set"))
 }
 
-// printGlyphSet prints one set, role by role: what the set says, and what draws.
 func printGlyphSet(w *os.File, set glyphSetDetail) {
 	fmt.Fprintf(w, "%s  (%s)", set.ID, set.DisplayName)
 	if set.Inherits != "" {
@@ -122,12 +109,6 @@ func printGlyphSet(w *os.File, set glyphSetDetail) {
 	for _, role := range roles {
 		named, isNamed := set.Names[role]
 		drawn := set.Drawn[role]
-		// A role the set does not mention reads as "-" rather than blank, so
-		// the two columns cannot be misread as "it named this and it did not
-		// take". A role it did name and did not get is marked, which is what
-		// ASCII mode does to a glyph the terminal cannot draw; a role dropped
-		// for its width never reaches here, because it is dropped on load and
-		// reported as a problem instead.
 		mark := " "
 		switch {
 		case !isNamed:
@@ -148,7 +129,6 @@ func printGlyphSet(w *os.File, set glyphSetDetail) {
 	}
 }
 
-// quoteGlyph makes an empty or blank glyph visible in a column.
 func quoteGlyph(g string) string {
 	if g == "" {
 		return `""`

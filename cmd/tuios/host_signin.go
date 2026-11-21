@@ -18,18 +18,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// `tuios hosts signin` opens the Tailscale sign-in page of each host whose
-// link waits for one. It is the CLI twin of a click on the host's header in
-// the rail. See internal/app/host_signin.go.
-
-// signInURLWait is how long the command waits for the daemon's link to report
-// a sign-in page it does not have yet. A redial reaches Tailscale's banner in
-// a second or two.
 const signInURLWait = 15 * time.Second
 
-// hostStatusWord is the STATUS column of `tuios hosts`. A host that waits for
-// a Tailscale sign-in says "sign in", which says what to do. The JSON keeps
-// tailscale_check, so a script that reads it does not break.
 func hostStatusWord(status string) string {
 	if status == string(federation.StatusApproval) {
 		return "sign in"
@@ -37,17 +27,12 @@ func hostStatusWord(status string) string {
 	return status
 }
 
-// signInRow is one host in the result of `tuios hosts signin --json`.
 type signInRow struct {
-	Host string `json:"host"`
-	URL  string `json:"url,omitempty"`
-	// Opened says a browser was started for the page.
-	Opened bool `json:"opened"`
-	// Refused says the banner named an address that is not a Tailscale login
-	// origin, so nothing was opened or printed.
-	Refused bool `json:"refused,omitempty"`
-	// Note says why the page was not opened. Omitted when it was.
-	Note string `json:"note,omitempty"`
+	Host    string `json:"host"`
+	URL     string `json:"url,omitempty"`
+	Opened  bool   `json:"opened"`
+	Refused bool   `json:"refused,omitempty"`
+	Note    string `json:"note,omitempty"`
 }
 
 func newHostsSigninCommand() *cobra.Command {
@@ -116,8 +101,6 @@ func runHostSignin(w io.Writer, name string, printOnly, asJSON bool) error {
 	rows := make([]signInRow, 0, len(waiting))
 	if len(waiting) > 0 {
 		for _, host := range waiting {
-			// The redial stays quick while the person signs in, so the
-			// link comes up soon after they do.
 			if _, err := client.Call("retry-host", map[string]any{"host": host}); err != nil {
 				return reportVerbError(explainVerbError("retry-host", err), asJSON)
 			}
@@ -182,7 +165,6 @@ func runHostSignin(w io.Writer, name string, printOnly, asJSON bool) error {
 	return nil
 }
 
-// signInReports reads list-hosts.
 func signInReports(client *session.VerbClient) ([]federation.HostReport, error) {
 	raw, err := client.Call("list-hosts", nil)
 	if err != nil {
@@ -197,9 +179,6 @@ func signInReports(client *session.VerbClient) ([]federation.HostReport, error) 
 	return res.Hosts, nil
 }
 
-// waitForSignInURLs polls list-hosts until every host has a sign-in page, or
-// a refused one, or the wait ends. A host that has neither by then is left
-// out.
 func waitForSignInURLs(client *session.VerbClient, hosts []string, wait time.Duration) (map[string]string, map[string]bool) {
 	urls := map[string]string{}
 	refused := map[string]bool{}

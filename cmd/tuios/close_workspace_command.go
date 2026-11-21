@@ -9,8 +9,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newCloseWorkspaceCommand builds `tuios close-workspace`: close every pane on
-// a workspace in one call, like tmux kill-window.
 func newCloseWorkspaceCommand() *cobra.Command {
 	var sessionName string
 	var jsonOutput bool
@@ -77,7 +75,6 @@ func runCloseWorkspace(sessionName string, ws int, jsonOutput bool) error {
 	return nil
 }
 
-// closeWorkspaceSummary is the line close-workspace prints.
 func closeWorkspaceSummary(ws, n int) string {
 	switch n {
 	case 0:

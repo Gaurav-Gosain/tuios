@@ -17,13 +17,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// tuios plugins uninstall: undo tuios plugins install. It disables the
-// plugin (the daemon stops its processes and closes its panes), drops its
-// plugins.lock entry, its state file entry and its approval, and removes its
-// build folders under the managed folder. It never removes a folder it did
-// not make: a local install keeps its folder, and a plugin from [plugins]
-// dirs, the tuios plugins folder or herdr is refused.
-
 func newPluginsUninstallCommand() *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
@@ -48,7 +41,6 @@ In a terminal, tuios asks first. --yes skips the question. tuios keeps the confi
 	return cmd
 }
 
-// uninstallPlugin is tuios plugins uninstall ARG.
 func uninstallPlugin(out io.Writer, arg string, yes bool) error {
 	configPath, err := pluginsConfigPath()
 	if err != nil {
@@ -72,7 +64,6 @@ func uninstallPlugin(out io.Writer, arg string, yes bool) error {
 		return err
 	}
 
-	// A script with no terminal keeps working as it did before --yes existed.
 	if prompt := newLookPrompt(yes, false); prompt.tty {
 		ok, err := prompt.confirm(out, "Stop "+id+", close its panes and remove it?")
 		if err != nil {
@@ -88,7 +79,6 @@ func uninstallPlugin(out io.Writer, arg string, yes bool) error {
 		return err
 	}
 	defer release()
-	// Read again under the lock: an install may have run since.
 	if lock, err = herdrplugin.ReadLock(dirs.LockPath()); err != nil {
 		return err
 	}
@@ -96,7 +86,6 @@ func uninstallPlugin(out io.Writer, arg string, yes bool) error {
 		return err
 	}
 	entry := lock.Find(id)
-	// Check the folder before anything changes.
 	folder, real, err := pluginCheckout(dirs, id)
 	if err != nil {
 		return err
@@ -125,8 +114,6 @@ func uninstallPlugin(out io.Writer, arg string, yes bool) error {
 	if entry != nil && entry.Local() {
 		fmt.Fprintf(out, "tuios keeps the folder %s. You installed the plugin from it.\n", strings.TrimPrefix(entry.Source, herdrplugin.LocalPrefix))
 	}
-	// A local install has no folder under the managed folder, so real is
-	// "" for it.
 	if real != "" {
 		if err := os.RemoveAll(real); err != nil {
 			return errfmt.Errorf("tuios could not remove all of %s: %w. Close the programs that use it, then run the command again", folder, err)
@@ -146,9 +133,6 @@ func uninstallPlugin(out io.Writer, arg string, yes bool) error {
 	return nil
 }
 
-// installedID finds the id of the installed plugin that arg names: its id,
-// or the source it was installed from. A plugin that tuios plugins install
-// did not install is refused with the command that removes it.
 func installedID(arg string, lock *herdrplugin.Lock, state *herdrplugin.State, entries []herdrplugin.Entry) (string, error) {
 	if lock.Find(arg) != nil {
 		return arg, nil
@@ -169,24 +153,17 @@ func installedID(arg string, lock *herdrplugin.Lock, state *herdrplugin.State, e
 			return "", errfmt.Errorf("herdr installed the plugin %s, not tuios. Nothing was changed. Remove it with herdr. To stop it in tuios, run tuios plugins disable %s", arg, arg)
 		}
 	}
-	// What a killed uninstall left: no lock entry, and a state entry or a
-	// folder that only an install makes.
 	if id, ok := herdrplugin.NormalizeID(arg); ok && id == arg && state.Find(id) != nil {
 		return id, nil
 	}
 	return "", errfmt.Errorf("plugins.lock has no plugin with the id or the source %s. Run tuios plugins list to see the ids", arg)
 }
 
-// lockBySource is the lock entry installed from arg, a SOURCE as tuios
-// plugins install takes it. The ref in arg is ignored. A repository with no
-// folder matches its one entry, if it has only one.
 func lockBySource(arg string, lock *herdrplugin.Lock) (*herdrplugin.LockEntry, error) {
 	src, err := parsePluginSource(arg, installOpts{})
 	if err != nil {
 		return nil, nil
 	}
-	// A release name typed beside a folder of that name also finds the
-	// install of that folder.
 	if src.release != "" {
 		if _, err := os.Stat(arg); err == nil {
 			if abs, err := filepath.Abs(arg); err == nil {
@@ -222,7 +199,6 @@ func lockBySource(arg string, lock *herdrplugin.Lock) (*herdrplugin.LockEntry, e
 	return nil, nil
 }
 
-// sameSource compares two sources, with a trailing / or .git ignored.
 func sameSource(a, b string) bool {
 	norm := func(s string) string {
 		return strings.TrimSuffix(strings.TrimSuffix(s, "/"), ".git")
@@ -230,14 +206,10 @@ func sameSource(a, b string) bool {
 	return norm(a) == norm(b)
 }
 
-// disableForUninstall turns the plugin off. A running daemon applies it at
-// once: it stops the plugin's processes and closes its panes. With no
-// daemon, config.toml is changed.
 func disableForUninstall(out io.Writer, configPath, id string) error {
 	res, running, err := pluginCall("plugin.disable", map[string]any{"plugin_id": id, "close_panes": true}, 30*time.Second)
 	switch {
 	case herdrCode(err) == "plugin_not_found":
-		// The daemon does not list it, so it runs nothing of it.
 		running = false
 	case err != nil:
 		return errfmt.Errorf("tuios could not disable the plugin %s: %w. Nothing was removed", id, err)
@@ -250,7 +222,6 @@ func disableForUninstall(out io.Writer, configPath, id string) error {
 		return nil
 	}
 	fmt.Fprintf(out, "The plugin %s is disabled. Its processes are stopped.\n", id)
-	// herdrcli decodes numbers as json.Number.
 	raw, ok := res["panes_closed"].(json.Number)
 	n, err := raw.Int64()
 	switch {
@@ -264,10 +235,6 @@ func disableForUninstall(out io.Writer, configPath, id string) error {
 	return nil
 }
 
-// pluginCheckout finds the folder that holds the build folders of id. real
-// is that folder with its links resolved, and "" when there is none. It is
-// an error unless real is the one folder for id directly in the managed
-// folder, so the caller never removes anything outside it.
 func pluginCheckout(dirs herdrplugin.Dirs, id string) (folder, real string, err error) {
 	if n, ok := herdrplugin.NormalizeID(id); !ok || n != id {
 		return "", "", errfmt.Errorf("the plugin id %q is not valid", id)

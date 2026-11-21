@@ -20,13 +20,6 @@ import (
 	"golang.org/x/term"
 )
 
-// The CLI half of federation: `tuios hosts`, the --all-hosts listings, and the
-// stdio-proxy subcommand the far side of every link runs.
-//
-// Everything here reads. Attaching and creating a session on a host is in
-// host_open.go, over a connection the daemon opens on the same link.
-
-// hostReport is one row of the list-hosts result.
 type hostReport struct {
 	Host          string  `json:"host"`
 	Addr          string  `json:"addr"`
@@ -52,7 +45,6 @@ type hostReport struct {
 	RTTMillis     int64   `json:"rtt_ms"`
 }
 
-// runListHosts prints the configured hosts and the state of each link.
 func runListHosts(jsonOutput bool) error {
 	raw, err := localVerb("list-hosts", nil, 0, jsonOutput)
 	if err != nil {
@@ -142,16 +134,12 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 	lipgloss.Fprintln(w, t.Render())
 	fmt.Fprintf(w, "\n%s. Attach a session on a host with 'tuios attach --host NAME SESSION'.\n", plural.Count(res.Total, "host"))
 
-	// The reason a host is not usable is the only thing the table cannot say in
-	// a column, so it goes below, one line per host that has one.
 	for _, h := range res.Hosts {
 		if h.Status == string(federation.StatusUp) || h.Reason == "" {
 			continue
 		}
 		fmt.Fprintf(w, "%s: %s\n", h.Host, h.Reason)
 		if h.Detail != "" {
-			// The detail comes from ssh or from the other machine. It is
-			// labelled so a reader cannot mistake it for something tuios said.
 			fmt.Fprintf(w, "  the link reported: %s\n", h.Detail)
 		}
 		if h.Fix != "" {
@@ -165,8 +153,6 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 		}
 	}
 
-	// A link that keeps dropping and coming back reports "up" every time it is
-	// asked, so the count is the only place a person can see it happening.
 	for _, h := range res.Hosts {
 		if h.Drops == 0 && h.Stalls == 0 {
 			continue
@@ -179,8 +165,6 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 		}
 	}
 
-	// A host the daemon cannot stream is polled, and what waits there is not
-	// in the Inbox. That is version skew, and the note says what to update.
 	for _, h := range res.Hosts {
 		if h.Events != "polling" {
 			continue
@@ -191,7 +175,6 @@ func printHostList(w io.Writer, raw json.RawMessage) error {
 		}
 		fmt.Fprintf(w, "%s: %s\n", h.Host, note)
 	}
-	// Mail kept here for a machine whose link is down goes when it is back.
 	for _, h := range res.Hosts {
 		if h.Queued > 0 {
 			fmt.Fprintf(w, "%s: %s here for the link. The Inbox shows %s; dismissing the item there discards %s.\n", h.Host, plural.Count(h.Queued, "message")+" "+plural.Word(h.Queued, "waits", "wait"), plural.Word(h.Queued, "it", "them"), plural.Word(h.Queued, "it", "them"))
@@ -220,16 +203,13 @@ func hostStatusColor(status string) color.Color {
 	}
 }
 
-// hostSessionsEntry is one host's slice of an aggregated session listing.
 type hostSessionsEntry struct {
-	Host   string `json:"host"`
-	Status string `json:"status"`
-	Reason string `json:"reason"`
-	Error  string `json:"error"`
-	// Stale says the host did not answer and the sessions are the last ones
-	// it gave, at FetchedAt (unix seconds).
-	Stale     bool  `json:"stale"`
-	FetchedAt int64 `json:"fetched_at"`
+	Host      string `json:"host"`
+	Status    string `json:"status"`
+	Reason    string `json:"reason"`
+	Error     string `json:"error"`
+	Stale     bool   `json:"stale"`
+	FetchedAt int64  `json:"fetched_at"`
 	Sessions  []struct {
 		Name        string `json:"name"`
 		DisplayName string `json:"display_name"`
@@ -242,10 +222,6 @@ type hostSessionsEntry struct {
 	} `json:"sessions"`
 }
 
-// runListSessionsAllHosts is `tuios ls --all-hosts`. One dead host costs its own
-// row and nothing else. Each host's sessions are grouped by space under the
-// host's line, as ls on that host groups them. A space is a label on one
-// machine, so two hosts' spaces of the same name are two groups.
 func runListSessionsAllHosts(host string, jsonOutput bool) error {
 
 	params := map[string]any{}
@@ -275,7 +251,6 @@ func runListSessionsAllHosts(host string, jsonOutput bool) error {
 				fmt.Println()
 				continue
 			}
-			// The rows it gave last, said as such: nobody can check them now.
 			fmt.Printf("  As of %s, when it last answered:\n", formatTimeAgo(h.FetchedAt))
 		} else {
 			reachable++
@@ -317,20 +292,15 @@ func runListSessionsAllHosts(host string, jsonOutput bool) error {
 	return nil
 }
 
-// hostAgentsEntry is one host's slice of an aggregated agent listing.
 type hostAgentsEntry struct {
-	Host    string `json:"host"`
-	Status  string `json:"status"`
-	Reason  string `json:"reason"`
-	Error   string `json:"error"`
-	Session string `json:"session"`
-	// Stale says the host did not answer and the rows are the last ones it
-	// gave, at FetchedAt (unix seconds).
-	Stale     bool  `json:"stale"`
-	FetchedAt int64 `json:"fetched_at"`
+	Host      string `json:"host"`
+	Status    string `json:"status"`
+	Reason    string `json:"reason"`
+	Error     string `json:"error"`
+	Session   string `json:"session"`
+	Stale     bool   `json:"stale"`
+	FetchedAt int64  `json:"fetched_at"`
 	Agents    []struct {
-		// Session is the row's own session. Every session on a host is
-		// listed, so a row says which one it is in.
 		Session   string `json:"session"`
 		WindowID  string `json:"window_id"`
 		Name      string `json:"name"`
@@ -341,7 +311,6 @@ type hostAgentsEntry struct {
 	} `json:"agents"`
 }
 
-// runListAgentsAllHosts is `tuios list-agents --all-hosts`.
 func runListAgentsAllHosts(host string, all bool, selector string, jsonOutput bool) error {
 
 	params := map[string]any{"all": all}
@@ -374,7 +343,6 @@ func runListAgentsAllHosts(host string, all bool, selector string, jsonOutput bo
 				fmt.Println()
 				continue
 			}
-			// The rows it gave last, said as such: nobody can check them now.
 			fmt.Printf("  As of %s, when it last answered:\n", formatTimeAgo(h.FetchedAt))
 		} else {
 			fmt.Println(h.Host)
@@ -393,7 +361,6 @@ func runListAgentsAllHosts(host string, all bool, selector string, jsonOutput bo
 			if a.Unread > 0 {
 				unread = strconv.Itoa(a.Unread)
 			}
-			// Every name here was written on another machine.
 			rows = append(rows, []string{
 				plainLine(cmp.Or(a.Session, h.Session)),
 				shortWindowID(a.WindowID),
@@ -423,7 +390,6 @@ func runListAgentsAllHosts(host string, all bool, selector string, jsonOutput bo
 	return nil
 }
 
-// hostTrouble is the one line a host that did not answer gets.
 func hostTrouble(status, reason string) string {
 	if reason == "" {
 		return status
@@ -431,24 +397,8 @@ func hostTrouble(status, reason string) string {
 	return status + ". " + reason
 }
 
-// stdioProxyAs is stdio-proxy's --as flag.
 var stdioProxyAs string
 
-// runStdioProxy is the far side of a link.
-//
-// It connects the link framing on stdin and stdout to this machine's daemon
-// socket. It is meant to be run by the hub over ssh, never by hand, so it is
-// hidden. It refuses to run on a terminal: frames written to a tty would be
-// interpreted as escape sequences by whatever is watching.
-//
-// It does not start a daemon. Starting one restores that machine's saved
-// sessions, which is a change to remote state nobody on that machine asked
-// for. A machine with no daemon running is reported as such by 'tuios hosts'.
-//
-// pinnedPeer is the --as flag: the name this machine's link policy is resolved
-// for, whatever the hub says it is called. Set in a forced command in
-// authorized_keys, it is the one name the hub cannot choose. See
-// session.DialForLink.
 func runStdioProxy(pinnedPeer string) error {
 	if term.IsTerminal(int(os.Stdin.Fd())) {
 		return errfmt.Errorf("stdio-proxy is not meant to be run by hand. " +
@@ -468,7 +418,6 @@ func runStdioProxy(pinnedPeer string) error {
 	})
 }
 
-// timesWord counts events in words, so a report reads as a sentence.
 func timesWord(n int) string {
 	if n == 1 {
 		return "once"

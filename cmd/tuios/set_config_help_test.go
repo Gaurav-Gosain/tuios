@@ -24,7 +24,6 @@ func TestSetConfigHelpExamplesAreAccepted(t *testing.T) {
 			continue
 		}
 		path, value := fields[2], fields[3]
-		// The daemon also accepts a bare [appearance] option name.
 		if _, ok := config.LookupOption(path); !ok && !strings.Contains(path, ".") {
 			path = "appearance." + path
 		}

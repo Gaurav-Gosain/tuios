@@ -43,8 +43,6 @@ func TestMermaidWritesNoTerminalControls(t *testing.T) {
 				return runMermaid(path, mermaidOptions{format: format, cols: 120, rows: 40}, stdout)
 			})
 			if format == "kitty" {
-				// The kitty APC frames and the line break after each are tuios's
-				// own; what is left must be clean.
 				out = strings.ReplaceAll(stripKitty(out), "\r\n", "\n")
 			}
 			for what, s := range map[string]string{"stdout": out, "stderr": errOut} {
@@ -137,8 +135,6 @@ func stripKitty(s string) string {
 	}
 }
 
-// runCaptured runs f with stdout in a file and os.Stderr in another, and
-// returns what each got.
 func runCaptured(t *testing.T, f func(stdout *os.File) error) (string, string) {
 	t.Helper()
 	dir := t.TempDir()

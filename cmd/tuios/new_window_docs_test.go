@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// dockCommandPattern finds a tuios command in a TOML string value, such as a
-// dock component's on-click.
 var dockCommandPattern = regexp.MustCompile(`"(tuios [^"]*)"`)
 
 // TestDockExampleCommandsResolve checks the tuios commands the dock examples
@@ -37,8 +35,6 @@ func TestDockExampleCommandsResolve(t *testing.T) {
 	}
 }
 
-// resolveTuiosCommand resolves one command line against the real command tree
-// the way TestSkillCommandsResolve does.
 func resolveTuiosCommand(t *testing.T, where string, args []string) {
 	t.Helper()
 	line := strings.Join(args, " ")

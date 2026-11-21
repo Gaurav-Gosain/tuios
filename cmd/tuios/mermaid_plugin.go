@@ -13,16 +13,8 @@ import (
 	sketch "tuios.dev/sketch/core"
 )
 
-// tuios draws eight diagram types itself (tuios.dev/sketch/core). The rest
-// come from the sketch plugin, whose program is tuios.dev/sketch with every
-// type. tuios mermaid runs it for a diagram of another type, with the flags
-// both take. Without the plugin it says how to get it.
-
-// errNeedsSketchPlugin is what tuios says about a type it does not draw.
 const errNeedsSketchPlugin = "this diagram needs the sketch plugin. Run tuios plugins install sketch"
 
-// notBuiltIn names the first diagram type in sources that tuios knows and
-// does not draw, "" when it draws all of them.
 func notBuiltIn(sources []string) string {
 	for _, src := range sources {
 		if typ, ok := sketch.Detect(src); ok && !sketch.Supports(src) {
@@ -32,8 +24,6 @@ func notBuiltIn(sources []string) string {
 	return ""
 }
 
-// sketchPluginProgram is the program of the sketch plugin, or why there is
-// none.
 func sketchPluginProgram() (string, error) {
 	prog, e, err := procsetup.FindSketch()
 	switch {
@@ -49,8 +39,6 @@ func sketchPluginProgram() (string, error) {
 	return prog, nil
 }
 
-// delegateSketch draws the diagrams of name, whose text is data, with the
-// sketch plugin.
 func delegateSketch(name string, data []byte, typ string, o mermaidOptions, stdout *os.File) error {
 	prog, err := sketchPluginProgram()
 	if err != nil {

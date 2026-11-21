@@ -15,19 +15,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 )
 
-// signalQuitGrace is how long a requested quit may take before the process
-// stops waiting and exits. A Bubble Tea quit is normally immediate; the grace
-// elapses only when the event loop cannot act on the request at all, or the
-// cleanup after it is stuck.
 const signalQuitGrace = 3 * time.Second
 
-// forcedResetBudget bounds the terminal reset written on a forced exit. That
-// write goes to the same terminal that stopped draining, so it may never
-// finish; the process leaves without it rather than wait.
 const forcedResetBudget = 250 * time.Millisecond
 
-// signalExitCode is the shell's 128 + the signal number, so a caller sees the
-// run was signalled and by which one.
 func signalExitCode(sig os.Signal) int {
 	if n, ok := sig.(syscall.Signal); ok {
 		return 128 + int(n)
@@ -35,35 +26,6 @@ func signalExitCode(sig os.Signal) int {
 	return 1
 }
 
-// armSignalQuit turns SIGINT and SIGTERM into a quit, and guarantees the
-// process ends even when the program cannot carry one out. It returns finish,
-// which the caller runs once its cleanup after Program.Run is done.
-//
-// The guarantee is the point. The quit is asked for with Program.Send, which
-// writes to the message channel the event loop reads (tuios passes
-// tea.WithoutSignalHandler, so this is the only handler). When the loop is
-// stuck writing a frame to a terminal that has stopped draining, that write is
-// never read. A force-killed SSH client leaves exactly that behind: a socket
-// sshd has not noticed is gone, so it stops draining the pty and the frame
-// write blocks. The signal was delivered; the process simply cannot obey it,
-// and only SIGHUP, which nothing catches, ends it. So the quit is asked for
-// and then, if the run and its cleanup have not finished within
-// signalQuitGrace, the process exits outright. A second signal is somebody who
-// has already waited once and exits at once.
-//
-// The handler stays registered until finish, not until Program.Run returns.
-// Unregistered during cleanup, a second Ctrl+C would take the default action
-// and end the process with the terminal still raw; registered, it follows the
-// same policy, and a forced exit restores the terminal first.
-//
-// Call it before Program.Run: it records the terminal's state before Bubble
-// Tea puts it in raw mode, which is what a forced exit restores. Call
-// runReturned as soon as Program.Run returns: Bubble Tea's exit has then popped
-// the kitty keyboard flags and left the alternate screen, so a forced exit
-// during the cleanup must not do either again.
-//
-// Until finish, a panic on a goroutine tuios started (see crashexit) gets the
-// same terminal reset as a forced exit before the process ends.
 func armSignalQuit(p *tea.Program) (runReturned, finish func()) {
 	restore := captureTerminalState()
 	var returned atomic.Bool
@@ -77,9 +39,6 @@ func armSignalQuit(p *tea.Program) (runReturned, finish func()) {
 	}
 }
 
-// armSignalQuitWith is armSignalQuit with the grace and the exit passed in, so
-// a test can arm it against a real program and a real signal without the test
-// binary exiting.
 func armSignalQuitWith(p *tea.Program, grace time.Duration, exit func(int)) (finish func()) {
 	sigs := make(chan os.Signal, 2)
 	finished := make(chan struct{})
@@ -99,9 +58,6 @@ func armSignalQuitWith(p *tea.Program, grace time.Duration, exit func(int)) (fin
 	}
 }
 
-// runSignalQuit is armSignalQuit's policy, with the signal source, the quit and
-// the exit passed in so a test can drive it without a program or a real signal.
-// finished is closed once the program has returned and its cleanup is done.
 func runSignalQuit(sigs <-chan os.Signal, finished <-chan struct{}, grace time.Duration, ask func(), exit func(int)) {
 	var first os.Signal
 	select {
@@ -110,16 +66,12 @@ func runSignalQuit(sigs <-chan os.Signal, finished <-chan struct{}, grace time.D
 		return
 	}
 
-	// On its own goroutine: Send blocks until the event loop reads it, and the
-	// loop is the thing that may never get there. Once the program has
-	// returned, Send returns at once, so a signal during cleanup costs nothing.
 	go ask()
 
 	timer := time.NewTimer(grace)
 	defer timer.Stop()
 	select {
 	case <-finished:
-		// The quit landed and the cleanup finished without us.
 		return
 	case second := <-sigs:
 		exit(signalExitCode(second))
@@ -128,9 +80,6 @@ func runSignalQuit(sigs <-chan os.Signal, finished <-chan struct{}, grace time.D
 	}
 }
 
-// captureTerminalState records the termios of stdin and stdout, where they are
-// terminals, and returns what puts them back. It must run before Bubble Tea
-// switches the terminal to raw mode.
 func captureTerminalState() (restore func()) {
 	type saved struct {
 		fd    int
@@ -153,37 +102,10 @@ func captureTerminalState() (restore func()) {
 	}
 }
 
-// forceExit ends a process whose program could not quit, leaving the terminal
-// as usable as it can.
-//
-// The termios restore is the guaranteed part. It goes first because it is an
-// ioctl, which cannot block on a terminal that stopped reading output, and it
-// alone takes the terminal out of raw mode.
-//
-// The reset that leaves the alternate screen and turns mouse tracking off is
-// best effort. It is output, so it is written under a deadline, and it lands
-// only if the terminal is still reading (a slow link, a plain kill -TERM). In
-// the truly wedged case the stuck frame write holds the stdout write lock, the
-// reset waits behind it until the deadline, and the process leaves without it.
-// Running reset in the shell clears whatever is left. The reset is led by CAN,
-// which cancels any escape sequence a frame write left half finished, so the
-// reset is not swallowed into it.
-//
-// The daemon client's detach sync and Close are skipped: both can block on the
-// same wedge, and the session itself lives on in the daemon.
-// forcedExitPrefix undoes what Bubble Tea's exit would have: it pops the kitty
-// keyboard flags Bubble Tea pushed, so the host gets its own back, and resets
-// modifyOtherKeys and the alternate screen.
 const forcedExitPrefix = "\x1b[<1u\x1b[>4m\x1b[?1049l"
 
-// forcedExitAfterRunPrefix is the prefix once Program.Run has returned. Bubble
-// Tea's exit already popped the flags and left the alternate screen, so a
-// second pop would take the host's own entry off the main screen's stack.
-// modifyOtherKeys has no stack, and resetting it again is harmless.
 const forcedExitAfterRunPrefix = "\x1b[>4m"
 
-// forcedExitReset is what a forced exit writes, led by CAN. runReturned says
-// whether Bubble Tea's own exit has run.
 func forcedExitReset(runReturned bool) string {
 	prefix := forcedExitPrefix
 	if runReturned {
@@ -198,15 +120,10 @@ func forceExit(restoreTerminal func(), runReturned bool, code int) {
 	os.Exit(code)
 }
 
-// resetTerminalForExit is the terminal half of forceExit. A panic on a
-// goroutine tuios started runs it too, through crashexit.
 func resetTerminalForExit(restoreTerminal func(), runReturned bool) {
 	restoreTerminal()
 	wrote := make(chan struct{})
 	go func() {
-		// Unless Bubble Tea's own exit ran, this also leaves the alternate
-		// screen and turns off the keyboard modes it set. ResetSequence
-		// carries no RIS, which would do both by clearing everything.
 		_, _ = os.Stdout.WriteString(forcedExitReset(runReturned))
 		close(wrote)
 	}()

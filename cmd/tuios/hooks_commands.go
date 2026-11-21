@@ -12,15 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
-// tuios list-hooks is the dock's debugging story, applied to the extension
-// point that never had one.
-//
-// list-dock-components answers "why does my dock component print nothing"
-// because it reports the exit code, the last run and the last error. A hook ran
-// with its output discarded and its error dropped, so the same question about a
-// hook had no answer at all. This prints the same three columns.
-
-// hookRow is one row of the list-hooks result.
 type hookRow struct {
 	Event    string `json:"event"`
 	Side     string `json:"side"`
@@ -32,7 +23,6 @@ type hookRow struct {
 	LastMs   int64  `json:"last_ms"`
 }
 
-// runListHooks prints the hook table and what each command last did.
 func runListHooks(sessionName, event string, jsonOutput bool) error {
 
 	params := map[string]any{"session": sessionName}
@@ -49,7 +39,6 @@ func runListHooks(sessionName, event string, jsonOutput bool) error {
 	return printHookList(raw)
 }
 
-// printHookList renders the listing as a table.
 func printHookList(raw json.RawMessage) error {
 	var res struct {
 		Hooks          []hookRow `json:"hooks"`

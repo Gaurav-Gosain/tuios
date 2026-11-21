@@ -11,9 +11,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newDisplayEnvCmd is tuios display-env: print the display a new pane of the
-// session gets, as export lines for eval. See
-// internal/session/display_follow.go.
 func newDisplayEnvCmd() *cobra.Command {
 	var (
 		sessionName string

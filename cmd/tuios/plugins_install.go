@@ -30,19 +30,12 @@ import (
 	"golang.org/x/term"
 )
 
-// tuios plugins install: fetch a plugin with the system git, pin the commit
-// in plugins.lock, build it in this process and enable it. The daemon never
-// fetches and never builds. It reads the lock file and the checkouts, the
-// managed origin of herdrplugin.Discover. See internal/herdrplugin/lock.go.
-
-// buildTimeout bounds one build command.
 const buildTimeout = 10 * time.Minute
 
 type installOpts struct {
 	ref, subdir                     string
 	yes, noEnable, noBuild, replace bool
-	// grants are the grants the person typed with --grant.
-	grants []string
+	grants                          []string
 }
 
 func newPluginsInstallCommand() *cobra.Command {
@@ -79,17 +72,14 @@ tuios shows what the plugin runs and asks first. A plugin runs with your rights.
 	return cmd
 }
 
-// pluginSource is a parsed SOURCE argument.
 type pluginSource struct {
-	local string // absolute folder, for a local install
-	// release is a first-party plugin of the running release.
+	local   string
 	release string
-	url     string // what git fetches
+	url     string
 	ref     string
 	subdir  string
 }
 
-// shownSource is a source as the plan and the list show it.
 func shownSource(src string) string {
 	if name, ok := strings.CutPrefix(src, herdrplugin.ReleasePrefix); ok {
 		return "the tuios release, plugin " + name
@@ -100,15 +90,10 @@ func shownSource(src string) string {
 	return strings.TrimPrefix(src, herdrplugin.LocalPrefix)
 }
 
-// parsePluginSource reads SOURCE. --ref and --subdir win over the ones in
-// SOURCE.
 func parsePluginSource(arg string, o installOpts) (pluginSource, error) {
 	var s pluginSource
 	p := pathroot.ExpandHome(arg)
 	_, statErr := os.Stat(p)
-	// On a release build a name of the release is the release's plugin, also
-	// when a folder of that name is in this folder; give the folder as ./NAME.
-	// A dev build has no release to take, so it keeps the folder.
 	if _, ok := firstParty[arg]; ok && statErr == nil {
 		if _, err := runningTag(); err == nil {
 			s.release = arg
@@ -126,9 +111,6 @@ func parsePluginSource(arg string, o installOpts) (pluginSource, error) {
 	if err := herdrplugin.CheckSource(arg); err != nil {
 		return s, err
 	}
-	// pathAt is where the path starts, after scheme://host or the colon of
-	// git@host:path. An @ before it is a user name. The first @ after it
-	// starts the ref, so a tag such as pkg@1.0 keeps its own @.
 	pathAt := 0
 	if i := strings.Index(arg, "://"); i >= 0 {
 		pathAt = i + 3 + strings.IndexByte(arg[i+3:]+"/", '/')
@@ -170,12 +152,8 @@ func parsePluginSource(arg string, o installOpts) (pluginSource, error) {
 	return s, herdrplugin.CheckSubdir(s.subdir)
 }
 
-// gitTimeout bounds one git command, so a remote that stops answering
-// does not hold the install lock until Ctrl-C.
 const gitTimeout = 5 * time.Minute
 
-// git runs the system git. Only the transports a plugin source may name
-// are allowed.
 func git(dir string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
 	defer cancel()
@@ -193,13 +171,8 @@ func git(dir string, args ...string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-// errFetchFailed marks a fetch that reached nothing, which an update reports
-// as a source it cannot reach.
 var errFetchFailed = errors.New("tuios cannot get")
 
-// fetchInto fetches ref of url into dir, an empty folder, and checks out
-// the commit. "" is the remote's default branch. It returns the commit and
-// git's id of subdir at it, which must be a folder.
 func fetchInto(dir, url, ref, subdir string, history bool) (commit, tree string, err error) {
 	want := ref
 	if want == "" {
@@ -220,7 +193,6 @@ func fetchInto(dir, url, ref, subdir string, history bool) (commit, tree string,
 			_, err = git(dir, "fetch", "-q", "--depth", "1", "--no-tags", "--", "origin", want)
 		}
 		if err != nil && herdrplugin.IsCommit(ref) {
-			// A host that refuses a fetch by commit gets a full fetch.
 			_, err = git(dir, "fetch", "-q", "--no-tags", "--", "origin", "+refs/heads/*:refs/remotes/origin/*", "+refs/tags/*:refs/tags/*")
 		}
 	}
@@ -243,9 +215,6 @@ func fetchInto(dir, url, ref, subdir string, history bool) (commit, tree string,
 	return commit, tree, err
 }
 
-// loadInside loads the manifest in root. When checkout is not "", the
-// manifest must be in it after its links are resolved, so a link cannot
-// move the plugin, and its build, out of the repository.
 func loadInside(root, checkout string) (*herdrplugin.Plugin, error) {
 	p, perr := herdrplugin.Load(root)
 	if perr != nil {
@@ -257,32 +226,20 @@ func loadInside(root, checkout string) (*herdrplugin.Plugin, error) {
 	return p, nil
 }
 
-// installer holds what one tuios plugins install command shares between
-// plugins: the folders, config.toml, the flags and the signal handler. It
-// exists while the install lock is held.
 type installer struct {
-	cmd   *cobra.Command
-	out   io.Writer
-	dirs  herdrplugin.Dirs
-	cfg   config.PluginsConfig
-	o     installOpts
-	sig   *signals
-	state *herdrplugin.State
-	// configPath is config.toml.
+	cmd        *cobra.Command
+	out        io.Writer
+	dirs       herdrplugin.Dirs
+	cfg        config.PluginsConfig
+	o          installOpts
+	sig        *signals
+	state      *herdrplugin.State
 	configPath string
-	// history makes fetch get the history of the ref, for an update.
-	history bool
-	// ask, when set, says why the person must answer again, also with --yes.
-	ask string
-	// verb is the word for what finish did, "" for Installed.
-	verb string
+	history    bool
+	ask        string
+	verb       string
 }
 
-// newInstaller takes the install lock, then reads config.toml and the state
-// file: one tuios plugins command at a time builds or switches a plugin.
-// The kernel drops the lock when the process ends, so a killed install
-// never blocks the next one. Fetch folders a killed install left are
-// removed here.
 func newInstaller(cmd *cobra.Command, o installOpts) (*installer, func(), error) {
 	configPath, err := pluginsConfigPath()
 	if err != nil {
@@ -309,9 +266,6 @@ func newInstaller(cmd *cobra.Command, o installOpts) (*installer, func(), error)
 	return in, release, nil
 }
 
-// fetch gets ref of url into a new fetch folder and loads the manifest. The
-// caller removes the folder: finish moves it into place before the build,
-// so after a good install nothing is left to remove.
 func (in *installer) fetch(url, ref, subdir string) (string, *herdrplugin.LockEntry, *herdrplugin.Plugin, error) {
 	work, err := os.MkdirTemp(in.dirs.ManagedDir(), herdrplugin.FetchPrefix)
 	if err != nil {
@@ -332,9 +286,6 @@ func (in *installer) fetch(url, ref, subdir string) (string, *herdrplugin.LockEn
 	return work, e, p, err
 }
 
-// fetchedTag reports whether the fetch in work got a tag. git writes "tag
-// 'NAME' of URL" in FETCH_HEAD for a tag in any spelling, annotated or not,
-// and "branch 'NAME' of URL" for a branch.
 func fetchedTag(work string) bool {
 	data, err := os.ReadFile(filepath.Join(work, ".git", "FETCH_HEAD")) //nolint:gosec // the fetch folder tuios made
 	if err != nil {
@@ -345,9 +296,6 @@ func fetchedTag(work string) bool {
 	return len(fields) > 2 && strings.HasPrefix(fields[2], "tag '")
 }
 
-// errNoManifest says that the folder asked for holds no plugin manifest, and
-// names the folders of the repository that do. It never shows the fetch
-// folder, which is gone when the person reads this.
 func errNoManifest(work, url, subdir string) error {
 	where := "at the top of " + shownSource(url)
 	if subdir != "" {
@@ -367,15 +315,6 @@ func errNoManifest(work, url, subdir string) error {
 	return errfmt.Errorf("%s. A manifest is in %s. Add --subdir %s", msg, shownArgv(strings.Join(folders[:min(5, len(folders))], ", ")), shownArgv(folders[0]))
 }
 
-// finish shows the plan and asks. Then it builds into a new build folder
-// and commits: it writes the state file, then plugins.lock when the entry
-// changed, and makes the daemon run the new folder. Before the state
-// write, a failure or a kill leaves the old folder running, and the new
-// folder is garbage that the next install removes. A kill between the two
-// writes leaves the state a commit ahead of the lock, and Discover then
-// runs the previous folder, which the state keeps. fetched is the fetch
-// folder, "" for a local folder. e.Approved, when set, is what the person
-// approved before.
 func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetched string) error {
 	out := in.out
 	e.Format, e.Grants = cmp.Or(p.Format, "herdr"), p.Grants
@@ -383,8 +322,6 @@ func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetc
 		return err
 	}
 	if slices.Contains(e.Grants, "admin") {
-		// Ask before anything is built. It is asked again before the
-		// approval is written.
 		if err := confirmPerson(); err != nil {
 			return err
 		}
@@ -417,13 +354,10 @@ func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetc
 	if !ok {
 		return errors.New("the plugin is not installed. You did not approve it")
 	}
-	// From here a signal cancels the build instead of ending tuios.
 	in.sig.busy(true)
 	defer in.sig.busy(false)
 	dir := ""
 	if fetched != "" {
-		// The fetch folder becomes the build folder before the build, and
-		// it never moves again.
 		dir = in.dirs.BuildDir(rel)
 		if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
 			return err
@@ -442,15 +376,11 @@ func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetc
 	if p, err = loadInside(root, dir); err != nil {
 		return fail(err)
 	}
-	// A plugin of the release comes with what its build makes, such as the
-	// sketch program, so its build commands are for a folder install only.
 	built := e.Release() || !slices.ContainsFunc(p.Build, func(b herdrplugin.Command) bool { return p.Supported(b.Platforms, "build") == nil })
 	if !in.o.noBuild && !built {
 		if err := runPluginBuild(in.sig.ctx, in.cmd, p, in.dirs); err != nil {
 			return fail(errfmt.Errorf("%w. The plugin is not installed", err))
 		}
-		// A build step can write the manifest. What runs must be what the
-		// person approved.
 		if p, err = loadInside(root, dir); err != nil {
 			return fail(err)
 		}
@@ -475,12 +405,6 @@ func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetc
 		}
 	}
 	if p.Format == herdrplugin.FormatTuios && !p.RunsNothing() {
-		// A plugin of files only needs no approval (applyApproval).
-		// checkNativeAsks made sure the person typed --grant admin. Every
-		// daemon that runs confirms that the person runs this command
-		// before the approval is written. With no daemon to ask, the
-		// plugin is installed and waits: tuios asks on the next attach.
-		// Another machine that gets plugins.lock asks again.
 		admin := slices.Contains(e.Grants, "admin")
 		switch err := confirmPerson(); {
 		case err == nil:
@@ -517,12 +441,6 @@ func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetc
 	return nil
 }
 
-// restart makes the daemon run id from the folder the state file names
-// now, with plugin.restart, which changes no config. A plugin the daemon
-// does not run is enabled when enable is set. unless is a plugin folder:
-// the daemon skips the restart when the plugin already runs from it. root
-// is the plugin folder in rel. When nothing can run an older folder any
-// more, the old build folders of id go, except rel and the one before it.
 func (in *installer) restart(id string, enable bool, unless, root, rel string) {
 	params := map[string]any{"plugin_id": id, "unless_root": unless}
 	res, running, err := pluginCall("plugin.restart", params, 30*time.Second)
@@ -537,7 +455,6 @@ func (in *installer) restart(id string, enable bool, unless, root, rel string) {
 	}
 	switch {
 	case err == nil && !running:
-		// No daemon: the next one starts the plugin from the new folder.
 		if enable {
 			if _, err := config.SetPluginEnabledInFile(in.configPath, id, true); err != nil {
 				fmt.Fprintf(in.out, "tuios could not enable the plugin %s: %v.\n", id, err)
@@ -550,8 +467,6 @@ func (in *installer) restart(id string, enable bool, unless, root, rel string) {
 			fmt.Fprintf(in.out, "The plugin %s runs from the new folder.\n", id)
 		}
 	case code == "plugin_disabled":
-		// Off, and it stays off. Its panes may still run, so its folders
-		// stay until an install can ask about them.
 		return
 	case code == "plugin_not_found" || code == "unsupported":
 		if enable {
@@ -577,10 +492,6 @@ func (in *installer) restart(id string, enable bool, unless, root, rel string) {
 	in.collect(id, panes)
 }
 
-// collect removes the build folders of id that the state file does not
-// name as the live or the previous one, and that no open plugin pane runs
-// from. A folder that cannot be removed, such as one with a file in use on
-// Windows, stays until the next install.
 func (in *installer) collect(id string, panes []string) {
 	keep := map[string]bool{}
 	if st := in.state.Find(id); st != nil {
@@ -597,7 +508,6 @@ func (in *installer) collect(id string, panes []string) {
 	}
 }
 
-// herdrCode is the code of a daemon error from pluginCall, "" for none.
 func herdrCode(err error) string {
 	if err == nil {
 		return ""
@@ -609,11 +519,6 @@ func herdrCode(err error) string {
 	return "error"
 }
 
-// signals handles SIGINT, SIGTERM and SIGHUP during an install. While no
-// build runs, a signal ends tuios: the kernel drops the install lock, and
-// the next install removes what this one left. During the build and the
-// commit, it cancels ctx: that kills the build, and the install removes
-// its new build folder.
 type signals struct {
 	ctx     context.Context
 	mu      sync.Mutex
@@ -639,7 +544,6 @@ func trapSignals() *signals {
 
 func (s *signals) busy(on bool) { s.mu.Lock(); s.working = on; s.mu.Unlock() }
 
-// installPlugin is tuios plugins install SOURCE.
 func installPlugin(cmd *cobra.Command, arg string, o installOpts) error {
 	src, err := parsePluginSource(arg, o)
 	if err != nil {
@@ -700,8 +604,6 @@ func installPlugin(cmd *cobra.Command, arg string, o installOpts) error {
 	return in.finish(*e, p, fetched)
 }
 
-// ready reports whether le is built on this machine. Then it makes the
-// daemon run the plugin from that folder, if it runs it from another one.
 func (in *installer) ready(le herdrplugin.LockEntry) bool {
 	rel, built, ok := in.state.Live(le)
 	if !ok || !built || !dirExists(in.dirs.BuildDir(rel)) {
@@ -712,9 +614,6 @@ func (in *installer) ready(le herdrplugin.LockEntry) bool {
 	return true
 }
 
-// checkInstallConflict refuses an install that another plugin with the same
-// id would hide, or that replaces another source without --replace. A copy
-// herdr installed is found after the lock file, so the install hides it.
 func checkInstallConflict(entries []herdrplugin.Entry, old *herdrplugin.LockEntry, e herdrplugin.LockEntry, replace bool) error {
 	for _, x := range entries {
 		if x.ID != e.ID || (x.Origin != herdrplugin.OriginConfig && x.Origin != herdrplugin.OriginTuios) {
@@ -736,11 +635,8 @@ func dirExists(p string) bool {
 	return err == nil && info.IsDir()
 }
 
-// shownArgv is an argv as the plan shows it (herdrplugin.ShownArgv).
 func shownArgv(argv ...string) string { return herdrplugin.ShownArgv(argv...) }
 
-// grantsText says what a plugin may do when it calls tuios, one line per
-// grant, in the words the approval dialog uses.
 func grantsText(p *herdrplugin.Plugin) string {
 	switch {
 	case p.Format != herdrplugin.FormatTuios:
@@ -757,10 +653,8 @@ func grantsText(p *herdrplugin.Plugin) string {
 	return b.String()
 }
 
-// grantsNote keeps the limit of a grant beside the grants.
 const grantsNote = "Grants are not a sandbox. The plugin can read your files and run any program as you.\n"
 
-// planWord is the first word of the plan.
 func planWord(verb string) string {
 	if verb == "Updated" {
 		return "Update"
@@ -768,7 +662,6 @@ func planWord(verb string) string {
 	return "Install"
 }
 
-// installPlan is what the person approves: facts only.
 func installPlan(p *herdrplugin.Plugin, e herdrplugin.LockEntry, folder string, o installOpts, verb string) string {
 	var b strings.Builder
 	f := func(format string, a ...any) { fmt.Fprintf(&b, format, a...) }
@@ -814,9 +707,6 @@ func installPlan(p *herdrplugin.Plugin, e herdrplugin.LockEntry, folder string, 
 	return b.String()
 }
 
-// runPluginBuild runs p's build commands for this platform in its folder,
-// one at a time. Each command is printed first. Its output goes to the
-// terminal and to build.log in the plugin's state folder.
 func runPluginBuild(ctx context.Context, cmd *cobra.Command, p *herdrplugin.Plugin, dirs herdrplugin.Dirs) error {
 	out, errw := cmd.OutOrStdout(), cmd.ErrOrStderr()
 	logPath := filepath.Join(dirs.StateDir(p.PluginID), "build.log")
@@ -864,8 +754,6 @@ func runPluginBuild(ctx context.Context, cmd *cobra.Command, p *herdrplugin.Plug
 	return nil
 }
 
-// installFromLock is tuios plugins install with no SOURCE: each plugin in
-// plugins.lock at its pinned commit. It enables nothing.
 func installFromLock(cmd *cobra.Command, o installOpts) error {
 	o.noEnable = true
 	in, release, err := newInstaller(cmd, o)
@@ -897,8 +785,6 @@ func installFromLock(cmd *cobra.Command, o installOpts) error {
 	return nil
 }
 
-// installPinned builds one lock file entry on this machine, in a new build
-// folder, unless it is built already.
 func (in *installer) installPinned(e herdrplugin.LockEntry) error {
 	if err := herdrplugin.CheckLockEntry(e); err != nil {
 		return err
@@ -927,8 +813,6 @@ func (in *installer) installPinned(e herdrplugin.LockEntry) error {
 	return in.finish(e, p, fetched)
 }
 
-// checkNativeAsks refuses a native plugin that asks for admin when the person
-// did not type --grant admin. Load refuses one that needs a newer tuios.
 func checkNativeAsks(p *herdrplugin.Plugin, o installOpts) error {
 	if slices.Contains(p.Grants, "admin") && !slices.Contains(o.grants, "admin") {
 		return errfmt.Errorf("%s asks for the admin grant, which reaches every pane and verb. To give it, run the command again with --grant admin", p.PluginID)
@@ -936,16 +820,6 @@ func checkNativeAsks(p *herdrplugin.Plugin, o installOpts) error {
 	return nil
 }
 
-// confirmPerson asks each daemon of this user that runs whether the
-// caller is outside its panes and plugins: the kernel check that
-// attach-presence and plugin.enable make. Every daemon that answers must
-// agree, so a pane cannot pick a daemon that does not know it, and no
-// daemon is started for the question, since a new one has no panes and
-// proves nothing. This stops a pane or a plugin that runs the command, also
-// with its pane variables cut or under --server. It does not stop a process
-// that leaves its pane (setsid, ssh to this machine), one that points
-// XDG_RUNTIME_DIR somewhere else, or one that writes the approval file
-// itself: anything that runs as the user can. See approval.go.
 func confirmPerson() error {
 	socks := liveDaemonSockets()
 	if len(socks) == 0 {

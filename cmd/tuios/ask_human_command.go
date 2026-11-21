@@ -13,18 +13,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// askPendingStatus is the exit status of an ask the person has not answered
-// yet, so a script can tell "no answer yet" (2) from "no" and from a failure.
 const askPendingStatus = 2
 
-// askHumanResult is the ask-human result the CLI reads.
 type askHumanResult struct {
 	RequestID string `json:"request_id"`
 	Status    string `json:"status"`
 	Answer    string `json:"answer"`
 }
 
-// askHumanOptions is what tuios ask-human was given.
 type askHumanOptions struct {
 	session, window, requestID string
 	question                   string
@@ -72,8 +68,6 @@ func runAskHuman(o askHumanOptions) error {
 	return printAskHuman(os.Stdout, os.Stderr, raw)
 }
 
-// printAskHuman prints the answer alone on out, so it can be captured, and
-// anything else on errs with a status that says what happened.
 func printAskHuman(out, errs io.Writer, raw json.RawMessage) error {
 	var res askHumanResult
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
@@ -92,7 +86,6 @@ func printAskHuman(out, errs io.Writer, raw json.RawMessage) error {
 	}
 }
 
-// newAskHumanCommand is `tuios ask-human`.
 func newAskHumanCommand() *cobra.Command {
 	var o askHumanOptions
 	cmd := &cobra.Command{

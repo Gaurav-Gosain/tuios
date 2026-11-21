@@ -12,13 +12,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// These arm the handler for real and signal the test process itself. That is
-// only safe while the handler is registered: a SIGTERM or SIGINT arriving
-// after signal.Stop takes its default action and ends the test binary, which
-// is exactly the failure the cleanup test exists to catch.
-
-// floodModel redraws a screenful of changing text as fast as it is asked to,
-// so the renderer always has a frame to write.
 type floodModel struct{ n int }
 
 type floodTick struct{}
@@ -72,8 +65,6 @@ func TestSignalQuitEndsAWedgedProgram(t *testing.T) {
 		close(returned)
 	}()
 
-	// Nothing reads r, so the program fills the pipe and wedges on its write.
-	// Give it time to get there.
 	time.Sleep(500 * time.Millisecond)
 	if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
 		t.Fatal(err)
@@ -90,8 +81,6 @@ func TestSignalQuitEndsAWedgedProgram(t *testing.T) {
 		t.Fatal("SIGTERM did not end a wedged program")
 	}
 
-	// The exit was a stand-in, so the program is still stuck. Unwedge it by
-	// draining the pipe, and let it finish before the next test.
 	go func() {
 		buf := make([]byte, 64<<10)
 		for {
@@ -118,8 +107,6 @@ func TestSignalQuitStaysArmedThroughCleanup(t *testing.T) {
 	finish := armSignalQuitWith(p, time.Hour, func(code int) { exited <- code })
 	defer finish()
 
-	// Program.Run has returned and the cleanup is running: nothing reads the
-	// message channel any more.
 	if err := syscall.Kill(os.Getpid(), syscall.SIGINT); err != nil {
 		t.Fatal(err)
 	}

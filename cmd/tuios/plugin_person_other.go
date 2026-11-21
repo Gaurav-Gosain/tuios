@@ -9,8 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// liveDaemonSockets is the default daemon's socket when it accepts a
-// connection. Native plugins do not run here.
 func liveDaemonSockets() []string {
 	sock, err := session.GetSocketPath()
 	if err != nil {

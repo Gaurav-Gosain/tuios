@@ -23,26 +23,18 @@ import (
 	"golang.org/x/term"
 )
 
-// agentStatusLineDeadline bounds the tuios half of a status line run: reading
-// the payload, finding the pane and reporting. Claude Code runs the command
-// on every change to the conversation, so a slow daemon must not hold it.
 const agentStatusLineDeadline = 300 * time.Millisecond
 
-// agentStatusLineOptions are the flags of tuios agent-statusline.
 type agentStatusLineOptions struct {
-	session string
-	window  string
-	then    string
-	explain bool
-	// turnEnd says the harness's turn just ended, so values that changed
-	// go now, whatever the interval.
-	turnEnd bool
-	timeout time.Duration
-	// integration is the version marker of a managed entry, ignored.
+	session     string
+	window      string
+	then        string
+	explain     bool
+	turnEnd     bool
+	timeout     time.Duration
 	integration int
 }
 
-// agentStatusLineIO is everything a status line run touches outside itself.
 type agentStatusLineIO struct {
 	stdin    io.Reader
 	stdinTTY bool
@@ -51,11 +43,9 @@ type agentStatusLineIO struct {
 	getenv   func(string) string
 	dial     func() (verbCaller, error)
 	self     func() (sid int, ancestors []int)
-	// stampDir is where the last values sent for each pane are kept.
 	stampDir func() (string, error)
 	now      func() time.Time
-	// runThen runs the person's own status line command.
-	runThen func(ctx context.Context, command string, stdin []byte, stdout, stderr io.Writer) int
+	runThen  func(ctx context.Context, command string, stdin []byte, stdout, stderr io.Writer) int
 }
 
 func newAgentStatusLineCommand() *cobra.Command {
@@ -107,9 +97,6 @@ goes wrong on the tuios side.`,
 				stderr:   os.Stderr,
 				getenv:   os.Getenv,
 				dial: func() (verbCaller, error) {
-					// A failed dial returns a nil *VerbClient. Returning it as
-					// it is would put a typed nil in the interface, which a
-					// later io.Closer check takes for a live client (#374).
 					c, err := session.DialVerbClientAs(version)
 					if err != nil {
 						return nil, err
@@ -138,8 +125,6 @@ goes wrong on the tuios side.`,
 	return cmd
 }
 
-// runAgentStatusLine runs one status line and returns the exit code: the
-// chained command's, or 0.
 func runAgentStatusLine(o agentStatusLineOptions, harness string, sio agentStatusLineIO) int {
 	var payload []byte
 	if sio.stdin != nil && !sio.stdinTTY {
@@ -177,9 +162,6 @@ func runAgentStatusLine(o agentStatusLineOptions, harness string, sio agentStatu
 	return <-thenDone
 }
 
-// statusLineStampDir is the directory of the daemon's socket, which is per
-// user, 0700, and cleared with the boot on the systems that have
-// XDG_RUNTIME_DIR.
 func statusLineStampDir() (string, error) {
 	sock, err := session.GetSocketPath()
 	if err != nil {
@@ -188,9 +170,6 @@ func statusLineStampDir() (string, error) {
 	return filepath.Dir(sock), nil
 }
 
-// runStatusLineThen runs the person's status line command through the shell,
-// with the same stdin, its output copied through unchanged. It returns the
-// command's exit status.
 func runStatusLineThen(ctx context.Context, command string, stdin []byte, stdout, stderr io.Writer) int {
 	cmd := statusLineShell(ctx, command)
 	cmd.Stdin = bytes.NewReader(stdin)
@@ -212,9 +191,6 @@ func runStatusLineThen(ctx context.Context, command string, stdin []byte, stdout
 	}
 }
 
-// statusLineShell is the command that runs a status line command line: sh -c,
-// the shell Claude Code runs its status line through. On Windows it is the sh
-// on PATH (Git Bash, which Claude Code needs there), else cmd /C.
 func statusLineShell(ctx context.Context, command string) *exec.Cmd {
 	if runtime.GOOS == "windows" {
 		if sh, err := exec.LookPath("sh"); err == nil {

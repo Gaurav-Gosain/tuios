@@ -16,16 +16,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The reading side of `tuios hosts sync`: the probe of a host's binary and
-// the reading of its daemon. The scripts and the runner that carries them are
-// in internal/hostsync.
-
-// daemonCaller runs one verb on the machine's daemon.
 type daemonCaller func(ctx context.Context, verb string, params any) (json.RawMessage, error)
 
-// readHostDaemon reads the daemon on a host over a link this process opens,
-// the way 'tuios hosts test' does. The link runs the host's own tuios, so
-// nothing here starts a daemon there.
 func readHostDaemon(ctx context.Context, t *syncTarget) {
 	table, _ := federation.NewTable([]federation.Host{t.Host})
 	m := federation.New(table, federation.Options{
@@ -75,7 +67,6 @@ func readHostDaemon(ctx context.Context, t *syncTarget) {
 	}
 }
 
-// linkSettleBudget is how long the link to one host may take to come up.
 func linkSettleBudget(h federation.Host) time.Duration {
 	timeout := h.ConnectTimeout
 	if timeout <= 0 {
@@ -84,7 +75,6 @@ func linkSettleBudget(h federation.Host) time.Duration {
 	return timeout + 10*time.Second
 }
 
-// readLocalDaemon reads this machine's daemon over its socket.
 func readLocalDaemon(ctx context.Context, t *syncTarget) {
 	if !session.IsDaemonRunning() {
 		t.Res.Daemon.State = daemonStopped
@@ -125,10 +115,6 @@ func readLocalDaemon(ctx context.Context, t *syncTarget) {
 	readDaemonSessions(ctx, t, call)
 }
 
-// readDaemonSessions lists the daemon's sessions and the panes in each that
-// run a program. A pane counts as running one when its terminal's foreground
-// process is not the pane's own shell, or when the pane's own process is not
-// a shell at all.
 func readDaemonSessions(ctx context.Context, t *syncTarget, call daemonCaller) {
 	raw, err := call(ctx, "list-sessions", nil)
 	if err != nil {
@@ -190,8 +176,6 @@ func readDaemonSessions(ctx context.Context, t *syncTarget, call daemonCaller) {
 						pids = append(pids, strconv.Itoa(w.PID))
 					}
 				}
-				// A daemon of another build may not mark the panes, so the
-				// saved files answer for it.
 				if t.Local && t.Res.Daemon.Version != version {
 					ss.Resume = append(ss.Resume, resumableAgents(s.Name, live)...)
 				}
@@ -215,7 +199,6 @@ func readDaemonSessions(ctx context.Context, t *syncTarget, call daemonCaller) {
 	t.Res.Daemon.SessionCount = len(sessions)
 }
 
-// paneFacts is what the daemon said about one pane.
 type paneFacts struct {
 	pid         int
 	running     string
@@ -223,7 +206,6 @@ type paneFacts struct {
 	promptKnown bool
 }
 
-// paneProc is what ps said about one pane's process.
 type paneProc struct {
 	tpgid      int
 	comm       string
@@ -247,7 +229,6 @@ func parsePaneProcs(out string) map[int]paneProc {
 	return procs
 }
 
-// shellNames are the programs a pane runs at its prompt.
 var shellNames = map[string]bool{
 	"sh": true, "bash": true, "zsh": true, "fish": true, "dash": true, "ksh": true,
 	"mksh": true, "tcsh": true, "csh": true, "nu": true, "elvish": true, "xonsh": true,
@@ -258,7 +239,6 @@ func programName(comm string) string {
 	return strings.TrimPrefix(path.Base(strings.TrimSpace(comm)), "-")
 }
 
-// paneBusy decides whether a pane runs a program, and which.
 func paneBusy(f paneFacts, procs map[int]paneProc) (string, bool) {
 	if p, ok := procs[f.pid]; ok && f.pid > 0 {
 		own := programName(p.comm)
@@ -273,7 +253,6 @@ func paneBusy(f paneFacts, procs map[int]paneProc) (string, bool) {
 		}
 		return "", false
 	}
-	// No process to read: what the shell integration said, when it said it.
 	if f.running != "" {
 		return f.running, true
 	}

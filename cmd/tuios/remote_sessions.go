@@ -14,7 +14,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// querySession queries session info over the verb protocol (no TUI required).
 func querySession(sessionName string, jsonOutput bool) error {
 	t, err := dialSessionTarget(sessionName)
 	if err != nil {
@@ -32,8 +31,6 @@ func querySession(sessionName string, jsonOutput bool) error {
 	return printSessionInfo(raw)
 }
 
-// printSessionInfo renders session details as labelled lines, for the same
-// reason printWindowList exists.
 func printSessionInfo(raw json.RawMessage) error {
 	var res struct {
 		Name             string         `json:"session_name"`
@@ -71,12 +68,9 @@ func printSessionInfo(raw json.RawMessage) error {
 		[2]string{"size", fmt.Sprintf("%dx%d", res.Width, res.Height)},
 		[2]string{"attached", fmt.Sprintf("%t", res.TUIAttached)},
 	)
-	// Only a daemon that tracks it sends host_focus, and it says nothing
-	// useful with no client attached.
 	if res.HostFocus != "" && res.TUIAttached {
 		fields = append(fields, [2]string{"host focus", res.HostFocus})
 	}
-	// Only a daemon that has the option sends window_size.
 	if res.WindowSize != "" {
 		fields = append(fields, [2]string{"window size", res.WindowSize})
 	}
@@ -92,9 +86,6 @@ func printSessionInfo(raw json.RawMessage) error {
 		sort.Strings(named)
 		fmt.Printf("%-14s %s\n", "named", strings.Join(named, " "))
 	}
-	// Only a daemon of a build that kept a display order beside the numbering
-	// sends one. A current daemon renumbers the workspaces instead and always
-	// sends null.
 	if len(res.WorkspaceOrder) > 0 {
 		shown := make([]string, 0, len(res.WorkspaceOrder))
 		for _, ws := range res.WorkspaceOrder {
@@ -105,9 +96,6 @@ func printSessionInfo(raw json.RawMessage) error {
 	return nil
 }
 
-// runRenameSession changes a session's name through the daemon. With no
-// session given it renames the session of the pane it runs in, and never
-// guesses one outside a pane.
 func runRenameSession(target, name string) error {
 	target = paneSessionOr(target)
 	if target == "" {
@@ -121,8 +109,6 @@ func runRenameSession(target, name string) error {
 	})
 }
 
-// runSetSessionName sets a session's display label. The session keeps its own
-// name for addressing, so renaming the label never breaks a script.
 func runSetSessionName(sessionName, name string) error {
 	return callAndReport("set-session-name", map[string]any{
 		"session": sessionName,
@@ -136,8 +122,6 @@ func runSetSessionName(sessionName, name string) error {
 	})
 }
 
-// runSetSessionAccent sets a session's accent slot, shared by every attached
-// client.
 func runSetSessionAccent(sessionName, accent string) error {
 	return callAndReport("set-session-accent", map[string]any{
 		"session": sessionName,
@@ -151,8 +135,6 @@ func runSetSessionAccent(sessionName, accent string) error {
 	})
 }
 
-// runSetSessionSpace files a session under a space, or takes it out of any
-// when space is empty. A non-nil global sets or clears the global mark.
 func runSetSessionSpace(sessionName, space string, global *bool) error {
 	params := map[string]any{
 		"session": sessionName,
@@ -177,11 +159,6 @@ func runSetSessionSpace(sessionName, space string, global *bool) error {
 	})
 }
 
-// runSetSessionOrder puts the daemon's sessions in an order every client
-// lists, and prints the order that stands.
-//
-// The verb names no session, so it is called as it is, not through
-// callAndReport, which adds one and so has the verb refuse the call.
 func runSetSessionOrder(order []string) error {
 	t, err := dialSessionTarget("")
 	if err != nil {
@@ -202,7 +179,6 @@ func runSetSessionOrder(order []string) error {
 	return nil
 }
 
-// completeSessionNames returns available session names for shell completion.
 func completeSessionNames(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 	if !session.IsDaemonRunning() {
 		return nil, cobra.ShellCompDirectiveNoFileComp

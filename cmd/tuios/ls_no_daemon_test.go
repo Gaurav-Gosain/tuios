@@ -10,8 +10,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// seedSavedSessions writes state files for the named sessions, which is all a
-// session needs to exist while no daemon is running.
 func seedSavedSessions(t *testing.T, names ...string) {
 	t.Helper()
 	dir := session.ResurrectionStateDir()

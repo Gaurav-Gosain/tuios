@@ -156,7 +156,6 @@ as it returns. It fails if the daemon has not finished within 10 seconds.`,
 }
 
 func newCapturePaneCommand() *cobra.Command {
-	// capture-pane command
 	var capturePaneSession string
 	var capturePaneWindow string
 	var capturePaneScrollback bool
@@ -248,11 +247,6 @@ kept from it. With --json the result carries host and "untrusted": true.`,
 				}
 				capturePaneScrollback = true
 			}
-			// A scrollback capture with no --lines keeps the last
-			// captureDefaultCommands commands in captureScrollbackCap lines,
-			// or the last captureScrollbackCap lines with --unwrap, whose
-			// joined lines the command marks do not index. An explicit
-			// --lines, 0 included, is passed as given.
 			capped := capturePaneScrollback && !capturePaneLastCommand && !linesSet && !explicit
 			commands := 0
 			switch {
@@ -290,7 +284,6 @@ kept from it. With --json the result carries host and "untrusted": true.`,
 }
 
 func newScreenshotCommand() *cobra.Command {
-	// screenshot command
 	var shotReq screenshotRequest
 	screenshotCmd := &cobra.Command{
 		Use:   "screenshot",
@@ -894,9 +887,6 @@ sets as the title.`,
 			if setWindowMinimize && setWindowRestore {
 				return errfmt.Errorf("--minimize and --restore ask for opposite things. Pass one")
 			}
-			// An unset flag has to stay unset rather than send its zero value:
-			// --name "" is a request to clear the name, which is not the same as
-			// not mentioning the name at all.
 			var name *string
 			if cmd.Flags().Changed("name") {
 				name = &setWindowName
@@ -1597,7 +1587,6 @@ name to clear it.`,
 }
 
 func newLogsCommand() *cobra.Command {
-	// Logs command for debugging daemon
 	var logsCount int
 	var logsClear bool
 	var logsFollow bool
@@ -1644,7 +1633,6 @@ titles and paths.`,
 }
 
 func newListWindowsCommand() *cobra.Command {
-	// Inspection commands for scripting and hackability
 	var listWindowsSession string
 	var listWindowsJSON bool
 	var listWindowsAll, listWindowsAllHosts, listWindowsRail bool
@@ -2237,8 +2225,6 @@ command in authorized_keys to make the policy a boundary:
   command="tuios stdio-proxy --as laptop",restrict ssh-ed25519 AAAA...`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			// The proxy keeps this process running; --pprof is a persistent
-			// flag that stdio-proxy used to accept and ignore.
 			startPprofServer()
 			if err := startCPUProfile(); err != nil {
 				return err

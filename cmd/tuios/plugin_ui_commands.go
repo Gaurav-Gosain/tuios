@@ -4,10 +4,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// tuios plugin-cell and tuios plugin-notify: what a plugin's process shows
-// the person. The daemon places the caller and holds it to the ui grant
-// (session/plugin_ui.go). A person's shell is refused.
-
 func pluginVerb(verb string, params map[string]any) error {
 	client, err := dialVerb()
 	if err != nil {

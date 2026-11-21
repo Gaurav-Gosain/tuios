@@ -6,10 +6,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newClearHistoryCommand builds `tuios clear-history`: drop a pane's
-// scrollback through the clear-history verb, as tmux clear-history does. With
-// --screen it also removes the rows above the prompt, which is what the
-// clear_scrollback key does.
 func newClearHistoryCommand() *cobra.Command {
 	var sessionName, window string
 	var screen, jsonOutput bool

@@ -15,8 +15,6 @@ import (
 // thing that tells it apart from every other failure on the daemon path is the
 // sentinel, so the sentinel is what this pins.
 func TestADaemonThatWillNotStartLeavesTheUserAWayOut(t *testing.T) {
-	// Its own socket directory: ensureDaemon asks whether a daemon is reachable
-	// before it starts one, and the developer's own daemon would answer yes.
 	t.Setenv("XDG_RUNTIME_DIR", testutil.RuntimeDir(t))
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
@@ -35,8 +33,6 @@ func TestADaemonThatWillNotStartLeavesTheUserAWayOut(t *testing.T) {
 	if !errors.Is(err, refuse) {
 		t.Errorf("the underlying reason was dropped: %v", err)
 	}
-	// The fallback must not swallow the diagnosis. runLocal prints its own
-	// line, and this message is what "tuios attach" still shows.
 	if msg := err.Error(); !strings.Contains(msg, "tuios daemon") {
 		t.Errorf("the failure no longer names the command that explains it: %q", msg)
 	}

@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-// printedRead runs one read-agent-messages answer through the printer.
 func printedRead(t *testing.T, answer map[string]any) string {
 	t.Helper()
 	raw, err := json.Marshal(answer)

@@ -17,8 +17,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newTaskCommand builds `tuios task`: the session's task cards, one unit of
-// work each, which panes claim, finish and let go.
 func newTaskCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "task",
@@ -58,7 +56,6 @@ for itself, and it changes only the card it holds unless it holds admin.`,
 	return cmd
 }
 
-// taskFlags are the flags every task subcommand takes.
 type taskFlags struct {
 	session string
 	json    bool
@@ -69,7 +66,6 @@ func (f *taskFlags) register(cmd *cobra.Command) {
 	addJSONFlag(cmd, &f.json)
 }
 
-// taskRow is one card as the task verbs return it.
 type taskRow struct {
 	Session string `json:"session"`
 	ID      string `json:"id"`
@@ -106,7 +102,6 @@ type taskRow struct {
 	} `json:"history"`
 }
 
-// holderLabel is the pane that holds the card, as one plain word.
 func (r taskRow) holderLabel() string {
 	if r.Holder == nil {
 		return "-"
@@ -121,7 +116,6 @@ func (r taskRow) holderLabel() string {
 	return label
 }
 
-// byLabel shortens a pane's window id, as queue ls does.
 func byLabel(by string) string {
 	if len(by) > 12 && !strings.Contains(by, ":") {
 		return shortWindowID(by)
@@ -129,17 +123,12 @@ func byLabel(by string) string {
 	return plainLine(by)
 }
 
-// callTask calls verb with params on the session the flags name, and prints
-// the JSON result, or hands the card's row to describe. window is the pane a
-// claim names, resolved with the session, and empty for the other verbs.
 func callTask(f taskFlags, window, verb string, params map[string]any, describe func(taskRow, string) string) error {
 	host, sess, _, err := resolveTarget(f.session, window)
 	if err != nil {
 		return err
 	}
 	if host != "" && window == "" && heldOverLink(verb) && os.Getenv("TUIOS_PANE_ID") != "" {
-		// A pane takes or lets go of a card another machine owns through
-		// its own daemon, which records the hold for the pane.
 		return forwardTaskCall(f, host, sess, verb, params, describe)
 	}
 	t, err := dialTarget(f.session, window)
@@ -148,7 +137,6 @@ func callTask(f taskFlags, window, verb string, params map[string]any, describe 
 	}
 	defer t.Close()
 	if window != "" {
-		// t.params fills a window the caller asks for.
 		params["window"] = nil
 	}
 	raw, err := t.client.Call(verb, t.params(params))
@@ -166,14 +154,10 @@ func callTask(f taskFlags, window, verb string, params map[string]any, describe 
 	return nil
 }
 
-// heldOverLink reports whether verb changes who holds a card, so a pane on
-// another machine than the card's sends it through its own daemon.
 func heldOverLink(verb string) bool {
 	return verb == "claim-task" || verb == "release-task" || verb == "finish-task"
 }
 
-// forwardTaskCall sends verb to this machine's daemon with host, for the
-// pane the command runs in. The daemon passes it to host over the link.
 func forwardTaskCall(f taskFlags, host, sess, verb string, params map[string]any, describe func(taskRow, string) string) error {
 	if sess == "" {
 		return errfmt.Errorf("name the session of the card on %s: -s %s:SESSION (tuios task ls --project . --hosts lists them)", host, host)
@@ -195,8 +179,6 @@ func forwardTaskCall(f taskFlags, host, sess, verb string, params map[string]any
 	return nil
 }
 
-// projectFlag is the project a --project flag names: "." is the origin of
-// the repository the command runs in.
 func projectFlag(v string) (string, error) {
 	if v != "." {
 		return v, nil
@@ -212,7 +194,6 @@ func projectFlag(v string) (string, error) {
 	return url, nil
 }
 
-// newTaskAddCommand builds `tuios task add`.
 func newTaskAddCommand() *cobra.Command {
 	var f taskFlags
 	var prompt, stage, project, harnessID, machine string
@@ -284,7 +265,6 @@ machine's name. Omit it for this machine.`,
 	return cmd
 }
 
-// newTaskListCommand builds `tuios task ls`.
 func newTaskListCommand() *cobra.Command {
 	var f taskFlags
 	var stage, project string
@@ -338,7 +318,6 @@ func runTaskList(w io.Writer, f taskFlags, stage string, open, allSessions bool)
 	defer t.Close()
 	params := t.params(nil)
 	if allSessions {
-		// Every session, so no session is named, whatever TUIOS_SESSION says.
 		params = map[string]any{"all_sessions": true}
 	}
 	if stage != "" {
@@ -368,8 +347,6 @@ func runTaskList(w io.Writer, f taskFlags, stage string, open, allSessions bool)
 	return printTaskRows(w, "session "+res.Session+t.on(), res.Tasks, false)
 }
 
-// runProjectTaskList lists one project's cards from every session here, and
-// with hosts from every linked machine.
 func runProjectTaskList(w io.Writer, f taskFlags, project, stage string, open, hosts bool) error {
 	params := map[string]any{"project": project}
 	if stage != "" {
@@ -409,8 +386,6 @@ func runProjectTaskList(w io.Writer, f taskFlags, project, stage string, open, h
 	return nil
 }
 
-// printProjectRows is printTaskRows with the machine and the session of each
-// card, since a project's cards come from many of both.
 func printProjectRows(w io.Writer, project string, rows []taskRow) error {
 	if len(rows) == 0 {
 		_, err := fmt.Fprintf(w, "No task cards for %s.\n", plainLine(project))
@@ -429,9 +404,6 @@ func printProjectRows(w io.Writer, project string, rows []taskRow) error {
 	return tw.Flush()
 }
 
-// printTaskRows writes list-tasks' cards as a table. Every field but the id,
-// stage and age came from a caller, so each is kept to one plain line.
-// withSession adds a SESSION column first.
 func printTaskRows(w io.Writer, where string, rows []taskRow, withSession bool) error {
 	if len(rows) == 0 {
 		_, err := fmt.Fprintf(w, "No task cards in %s.\n", plainLine(where))
@@ -455,7 +427,6 @@ func printTaskRows(w io.Writer, where string, rows []taskRow, withSession bool) 
 	return tw.Flush()
 }
 
-// newTaskGetCommand builds `tuios task get`.
 func newTaskGetCommand() *cobra.Command {
 	var f taskFlags
 	cmd := &cobra.Command{
@@ -471,7 +442,6 @@ func newTaskGetCommand() *cobra.Command {
 	return cmd
 }
 
-// describeTask is what task get prints.
 func describeTask(r taskRow, on string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s%s: %s\n", plainLine(r.ID), on, plainLine(r.Title))
@@ -511,7 +481,6 @@ func describeTask(r taskRow, on string) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// newTaskClaimCommand builds `tuios task claim`.
 func newTaskClaimCommand() *cobra.Command {
 	var f taskFlags
 	var next bool
@@ -543,7 +512,6 @@ nothing to take, it fails with no_task.`,
 			return callTask(f, window, "claim-task", params, func(r taskRow, _ string) string {
 				out := plainLine(r.ID) + " " + plainLine(r.Title)
 				if r.Preview != "" {
-					// The whole prompt is tuios task get's.
 					out += "\n" + plainLine(r.Preview)
 				}
 				return out
@@ -556,7 +524,6 @@ nothing to take, it fails with no_task.`,
 	return cmd
 }
 
-// taskIDCommand builds a subcommand that names one card and calls verb.
 func taskIDCommand(use, short, long, verb string, describe func(taskRow, string) string) *cobra.Command {
 	var f taskFlags
 	cmd := &cobra.Command{
@@ -572,7 +539,6 @@ func taskIDCommand(use, short, long, verb string, describe func(taskRow, string)
 	return cmd
 }
 
-// newTaskDoneCommand builds `tuios task done`.
 func newTaskDoneCommand() *cobra.Command {
 	return taskIDCommand("done ID", "Mark a task card done",
 		`Mark a task card done. Its holder lets it go and its block, if any, is lifted.
@@ -582,7 +548,6 @@ From inside a pane, only the card the pane holds.`,
 		})
 }
 
-// newTaskReleaseCommand builds `tuios task release`.
 func newTaskReleaseCommand() *cobra.Command {
 	return taskIDCommand("release ID", "Let a task card go without finishing it",
 		`Let a task card go without finishing it. It keeps its stage, and another pane
@@ -592,7 +557,6 @@ can claim it. From inside a pane, only the card the pane holds.`,
 		})
 }
 
-// newTaskRemoveCommand builds `tuios task rm`.
 func newTaskRemoveCommand() *cobra.Command {
 	var f taskFlags
 	cmd := &cobra.Command{
@@ -621,7 +585,6 @@ func newTaskRemoveCommand() *cobra.Command {
 	return cmd
 }
 
-// newTaskStageCommand builds `tuios task stage`.
 func newTaskStageCommand() *cobra.Command {
 	var f taskFlags
 	cmd := &cobra.Command{
@@ -646,7 +609,6 @@ done lets the holder go. From inside a pane, only the card the pane holds.`,
 	return cmd
 }
 
-// newTaskBlockCommand builds `tuios task block`.
 func newTaskBlockCommand() *cobra.Command {
 	var f taskFlags
 	var clear bool

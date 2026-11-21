@@ -12,16 +12,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// recordPrivacyNote is said by every record-pane command's help.
 const recordPrivacyNote = `A recording holds everything the pane prints while it runs, and the history
 on its screen when it starts: a token a command echoed, a file that was shown.
 Nothing is recorded unless you ask. The file is made readable by you only.
 The keys typed into the pane are not recorded.`
 
-// newRecordPaneCommand builds `tuios record-pane`: a pane to an asciicast v2
-// file, through the record-pane, stop-recording, mark-recording and
-// list-recordings verbs. The daemon writes the file, so a recording runs on
-// with no client attached.
 func newRecordPaneCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "record-pane",
@@ -88,7 +83,6 @@ time.
 	return cmd
 }
 
-// parseRecordSize reads a size such as 8MiB, 512KiB or 1048576.
 func parseRecordSize(s string) (int64, error) {
 	if s == "" {
 		return 0, nil
@@ -125,8 +119,6 @@ func runRecordPaneStart(sessionName, window, out, title string, duration time.Du
 		return err
 	}
 	defer t.Close()
-	// A path on this machine is made absolute here, where the folder it is
-	// relative to is known. A path on another machine must say where it is.
 	if !filepath.IsAbs(out) && out != "~" && !strings.HasPrefix(out, "~/") {
 		if t.host != "" {
 			return errfmt.Errorf("-o %q is on %s, so give an absolute path or one that starts with ~", out, t.host)

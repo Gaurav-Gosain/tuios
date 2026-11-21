@@ -42,8 +42,6 @@ func TestKeybindingDefaultsDocMatchesKeymaps(t *testing.T) {
 	}
 }
 
-// renderKeybindingDefaultsDoc writes the tables of tuios keybinds list for
-// the default config as Markdown.
 func renderKeybindingDefaultsDoc() string {
 	var b strings.Builder
 	w := func(parts ...string) {
@@ -74,7 +72,6 @@ func renderKeybindingDefaultsDoc() string {
 	return b.String()
 }
 
-// mdCell makes s safe inside a Markdown table cell.
 func mdCell(s string) string {
 	return strings.ReplaceAll(strings.Join(strings.Fields(s), " "), "|", "\\|")
 }

@@ -32,7 +32,6 @@ func TestXpanesPanesBuildsEachArgv(t *testing.T) {
 		t.Fatalf("second pane argv = %q", got)
 	}
 
-	// -n 2 and a placeholder of its own.
 	panes = xpanesPanes([]string{"x", "y z", "w"}, 2, "diff %", "%", "", xpanesSpeedyClose)
 	if len(panes) != 2 || panes[0].Argv[5] != "diff x 'y z'" || panes[1].Argv[5] != "diff w" {
 		t.Fatalf("grouped panes = %+v", panes)
@@ -41,7 +40,6 @@ func TestXpanesPanesBuildsEachArgv(t *testing.T) {
 		t.Fatalf("grouped item = %q", panes[0].Argv[1])
 	}
 
-	// No command: the shell, with the item in the environment.
 	panes = xpanesPanes([]string{"db1"}, 1, "", "{}", "/bin/zsh", xpanesInteractive)
 	if want := []string{"env", "TUIOS_XPANES_ITEM=db1", "TUIOS_XPANES_INDEX=1", "/bin/zsh"}; !slices.Equal(panes[0].Argv, want) {
 		t.Fatalf("shell pane argv = %q", panes[0].Argv)
@@ -76,7 +74,6 @@ func TestXpanesRefusesTooManyPanes(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "Add --force") {
 		t.Fatalf("err = %v", err)
 	}
-	// Grouped two per pane, the same items fit.
 	if n := len(xpanesPanes(items, 2, "", "{}", "sh", xpanesInteractive)); n > xpanesMaxPanes {
 		t.Fatalf("%d panes with -n 2", n)
 	}
@@ -131,8 +128,6 @@ func TestXpanesSpeedyHoldsAndSpeedyCloseDoesNot(t *testing.T) {
 	if hold.Line != "" || hold.Argv[3] != "sh" || !strings.HasSuffix(hold.Argv[5], "read _") {
 		t.Fatalf("-s pane = %+v", hold)
 	}
-	// Run it with Enter on stdin: the command runs, the message shows, and
-	// the read takes the Enter.
 	cmd := exec.Command(hold.Argv[3], hold.Argv[4:]...)
 	cmd.Stdin = strings.NewReader("\n")
 	out, err := cmd.CombinedOutput()

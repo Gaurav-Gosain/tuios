@@ -9,10 +9,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// keybindsPreset prints the preset in use, or sets one. Setting a preset
-// writes keybindings.preset and empties keybindings.leader_key, so the leader
-// is the new preset's: a leader set for screen's ctrl+a must not follow the
-// person to tmux without them knowing why.
 func keybindsPreset(name string) error {
 	cfg, err := loadConfigForEdit()
 	if err != nil {
@@ -55,7 +51,6 @@ func keybindsPreset(name string) error {
 	return nil
 }
 
-// keybindsPresetList prints every preset, one line each.
 func keybindsPresetList() error {
 	for _, name := range config.Presets() {
 		about, err := config.PresetInfo(name)
@@ -72,7 +67,6 @@ func keybindsPresetList() error {
 	return nil
 }
 
-// keybindsPresetShow prints a preset's file as tuios ships it.
 func keybindsPresetShow(name string) error {
 	data, err := config.PresetSource(name)
 	if err != nil {
@@ -82,8 +76,6 @@ func keybindsPresetShow(name string) error {
 	return err
 }
 
-// keybindsCheatSheet prints a preset's cheat sheet: the same keys, the keys
-// that moved and the keys tuios does not have.
 func keybindsCheatSheet(name string, asJSON bool) error {
 	if name == "" {
 		cfg, err := loadConfigForEdit()
@@ -115,8 +107,6 @@ func keybindsCheatSheet(name string, asJSON bool) error {
 		}
 		for _, l := range lines {
 			if len(l.Keys) > 26 {
-				// A long chord list gets a line of its own, so the
-				// descriptions stay in one column.
 				fmt.Printf("  %s\n  %-26s %s\n", l.Keys, "", l.Does)
 				continue
 			}

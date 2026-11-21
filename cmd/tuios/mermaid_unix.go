@@ -10,7 +10,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// windowPixels is the terminal's size in pixels and cells, where it reports one.
 func windowPixels(f *os.File) (pw, ph, cols, rows int, ok bool) {
 	ws, err := unix.IoctlGetWinsize(int(f.Fd()), unix.TIOCGWINSZ)
 	if err != nil {
@@ -19,8 +18,6 @@ func windowPixels(f *os.File) (pw, ph, cols, rows int, ok bool) {
 	return int(ws.Xpixel), int(ws.Ypixel), int(ws.Col), int(ws.Row), ws.Xpixel > 0
 }
 
-// readAnswer reads the terminal's answers until the primary device attributes
-// reply ends them, or until the time is up.
 func readAnswer(in *os.File, wait time.Duration) (string, error) {
 	deadline := time.Now().Add(wait)
 	var got strings.Builder
@@ -44,7 +41,6 @@ func readAnswer(in *os.File, wait time.Duration) (string, error) {
 		}
 		got.Write(buf[:k])
 		s := got.String()
-		// The device attributes reply is CSI ? ... c.
 		if i := strings.LastIndex(s, "\x1b[?"); i >= 0 && strings.HasSuffix(s, "c") {
 			return s, nil
 		}

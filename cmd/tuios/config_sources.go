@@ -13,15 +13,12 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
-// printWriteNote tells the person when a save went to another file than the
-// one that holds the key, because that file is read-only.
 func printWriteNote(note config.WriteNote) {
 	if msg := note.Message(); msg != "" {
 		fmt.Fprintln(os.Stderr, msg)
 	}
 }
 
-// configFileRow is one file of the config, as tuios config files prints it.
 type configFileRow struct {
 	Path     string `json:"path"`
 	Kind     string `json:"kind"`
@@ -30,14 +27,12 @@ type configFileRow struct {
 	Missing  bool   `json:"missing,omitempty"`
 }
 
-// configFilesReport is tuios config files --json.
 type configFilesReport struct {
 	Main     string          `json:"main"`
 	Files    []configFileRow `json:"files"`
 	Warnings []string        `json:"warnings"`
 }
 
-// loadConfigLayers reads the user's config with every file it brings in.
 func loadConfigLayers() (*config.LayeredConfig, error) {
 	path, err := config.GetConfigPath()
 	if err != nil {
@@ -50,7 +45,6 @@ func loadConfigLayers() (*config.LayeredConfig, error) {
 	return lc, err
 }
 
-// runConfigFiles prints the files the config is read from, in merge order.
 func runConfigFiles(w io.Writer, asJSON bool) error {
 	lc, err := loadConfigLayers()
 	if err != nil {
@@ -95,7 +89,6 @@ func runConfigFiles(w io.Writer, asJSON bool) error {
 	return nil
 }
 
-// pruneOptions are the flags of tuios config prune, and where it asks.
 type pruneOptions struct {
 	dryRun bool
 	yes    bool
@@ -103,9 +96,6 @@ type pruneOptions struct {
 	in     io.Reader
 }
 
-// runConfigPrune removes the keys of config.toml that have their default
-// value. A key that another file also sets then takes that file's value,
-// which changes the config, so the command lists those keys first and asks.
 func runConfigPrune(w io.Writer, opts pruneOptions) error {
 	path, err := config.GetConfigPath()
 	if err != nil {
@@ -157,8 +147,6 @@ func runConfigPrune(w io.Writer, opts pruneOptions) error {
 	return nil
 }
 
-// runConfigOrigin prints the file each set key comes from. With a key, it
-// prints that key and the keys under it only.
 func runConfigOrigin(w io.Writer, key string, asJSON bool) error {
 	lc, err := loadConfigLayers()
 	if err != nil {

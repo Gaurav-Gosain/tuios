@@ -1,27 +1,5 @@
 package main
 
-// The macOS daemon app (issue #1133).
-//
-// macOS Local Network Privacy gives the grant to a responsible app, an app
-// bundle with a code signature. A daemon started from a terminal is the
-// terminal app's responsibility, so its panes reach the local network only
-// while that app runs: once it quits, every non-Apple program in a pane gets
-// EHOSTUNREACH for LAN addresses. A bare binary has no bundle, so there is no
-// entry in System Settings to allow.
-//
-// tuios daemon-app install writes a small bundle around tuios: the bundle's
-// executable is a copy of this binary, which sees its own name and runs
-// runDaemonAppLauncher instead of the CLI. Started through LaunchServices
-// (open -a), that process is its own responsible app, and it execs the real
-// tuios daemon in place. The pid, and the identity LaunchServices recorded for
-// it, stay the same, which is the shape the reporter's C launcher verified on
-// macOS 27.
-//
-// The bundle never changes after it is signed: the grant is tied to that
-// signature. The copy only ever execs the tuios at the path recorded in
-// Contents/Resources, normally a stable link such as /opt/homebrew/bin/tuios,
-// so an upgrade of tuios leaves the bundle, and the grant, alone.
-
 import (
 	"errors"
 	"fmt"
@@ -39,23 +17,13 @@ import (
 )
 
 const (
-	// daemonAppExecutable is CFBundleExecutable. main tells the launcher from
-	// the CLI by this name, so it must never be the name tuios is run under.
 	daemonAppExecutable = "tuios-daemon-app"
 	daemonAppBundleID   = "dev.tuios.daemon"
 	daemonAppName       = "TUIOS Daemon"
-	// daemonAppTargetFile holds the absolute path of the tuios the launcher
-	// execs, relative to Contents.
 	daemonAppTargetFile = "Resources/tuios-path"
-	// daemonAppOffEnv set to 1 makes a client start the daemon directly even
-	// when the app is installed.
-	daemonAppOffEnv = "TUIOS_NO_DAEMON_APP"
+	daemonAppOffEnv     = "TUIOS_NO_DAEMON_APP"
 )
 
-// daemonAppInfoPlist is the bundle's Info.plist. LSUIElement keeps it out of
-// the Dock. A pane program is checked against this app, so a protected
-// resource with no usage text here is denied without a prompt: the microphone
-// key is for voice input in agents.
 const daemonAppInfoPlist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -88,7 +56,6 @@ const daemonAppInfoPlist = `<?xml version="1.0" encoding="UTF-8"?>
 </plist>
 `
 
-// defaultDaemonAppPath is where install puts the bundle.
 func defaultDaemonAppPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -97,7 +64,6 @@ func defaultDaemonAppPath() string {
 	return filepath.Join(home, "Applications", daemonAppName+".app")
 }
 
-// daemonAppAgentPath is the LaunchAgent that opens the app at login.
 func daemonAppAgentPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -106,8 +72,6 @@ func daemonAppAgentPath() string {
 	return filepath.Join(home, "Library", "LaunchAgents", daemonAppBundleID+".plist")
 }
 
-// daemonAppLogPath is where the launcher writes what it cannot log through the
-// daemon: its own errors and a Go runtime panic of the daemon.
 func daemonAppLogPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -116,13 +80,11 @@ func daemonAppLogPath() string {
 	return filepath.Join(home, "Library", "Logs", "tuios-daemon-app.log")
 }
 
-// isDaemonApp reports whether app is a bundle install wrote.
 func isDaemonApp(app string) bool {
 	data, err := os.ReadFile(filepath.Join(app, "Contents", "Info.plist"))
 	return err == nil && strings.Contains(string(data), "<string>"+daemonAppBundleID+"</string>")
 }
 
-// daemonAppTarget is the tuios the bundle at app execs.
 func daemonAppTarget(app string) (string, error) {
 	data, err := os.ReadFile(filepath.Join(app, "Contents", daemonAppTargetFile))
 	if err != nil {
@@ -135,10 +97,6 @@ func daemonAppTarget(app string) (string, error) {
 	return target, nil
 }
 
-// stableTuiosPath is the path the bundle should exec: the tuios on PATH when
-// it is this same binary, since a package manager keeps that link stable
-// across upgrades (/opt/homebrew/bin/tuios), and the versioned file it points
-// at is removed by the next cleanup.
 func stableTuiosPath() (string, error) {
 	exe, err := os.Executable()
 	if err != nil {
@@ -249,9 +207,6 @@ func newDaemonAppInstallCommand() *cobra.Command {
 	return cmd
 }
 
-// installDaemonApp builds the bundle next to app, signs it, and moves it into
-// place. A bundle already at app is replaced only with force, because a new
-// signature voids the grant the old one had.
 func installDaemonApp(app, binary string, force bool) error {
 	if _, err := os.Stat(app); err == nil {
 		if !force {
@@ -332,10 +287,6 @@ func copyExecutable(src, dst string) error {
 	return out.Close()
 }
 
-// writeDaemonAppAgent writes a LaunchAgent that opens the app at login. It
-// goes through open(1) so LaunchServices starts the app as an app: launchd
-// running the executable itself would give it no app identity. When a daemon
-// already runs, the one the app starts loses the start lock and exits.
 func writeDaemonAppAgent(agent, app string) error {
 	if err := os.MkdirAll(filepath.Dir(agent), 0o700); err != nil {
 		return err

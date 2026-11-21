@@ -26,8 +26,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/mermaid"
 )
 
-// liveScreen is the full-screen view of tuios mermaid --watch and --demo: the
-// diagram, the source beside it when split, and a status line.
 type liveScreen struct {
 	out   *os.File
 	th    *sketch.Theme
@@ -42,7 +40,7 @@ type liveScreen struct {
 	cellW  int
 	cellH  int
 	src    string
-	caret  int // -1: no caret
+	caret  int
 	status string
 
 	statsMu sync.Mutex
@@ -63,8 +61,6 @@ func sgr(fg bool, c color.Color) string {
 	return fmt.Sprintf("\x1b[%d;2;%d;%d;%dm", k, r>>8, g>>8, b>>8)
 }
 
-// layout splits the screen: the source on the left when the screen is wide,
-// above when it is tall, and the status line at the bottom.
 func (s *liveScreen) layout() (src, diagram mermaid.Area) {
 	cols, rows := s.cols, s.rows-1
 	if !s.split {
@@ -80,7 +76,6 @@ func (s *liveScreen) layout() (src, diagram mermaid.Area) {
 		mermaid.Area{Top: h + 2, Left: 1, Cols: cols, Rows: rows - h - 1, CellW: s.cellW, CellH: s.cellH}
 }
 
-// paint draws the background, the source and the status line.
 func (s *liveScreen) paint(full bool) {
 	s.mu.Lock()
 	src, caret, status := s.src, s.caret, s.status
@@ -119,7 +114,6 @@ func (s *liveScreen) paint(full bool) {
 	if strings.HasPrefix(status, "!") {
 		text, status = s.th.Critical, status[1:]
 	}
-	// The status quotes file names and parse errors, which quote the source.
 	status = paneText(status)
 	fmt.Fprintf(&b, "\x1b[%d;1H%s%s %s", s.rows, bg, sgr(true, text), clip(status, s.cols-2))
 	fmt.Fprintf(&b, "\x1b[K%s%s", bg, strings.Repeat(" ", max(0, s.cols-2-len([]rune(status)))))
@@ -130,8 +124,6 @@ func (s *liveScreen) paint(full bool) {
 	_, _ = s.live.Write([]byte(b.String()))
 }
 
-// paneText is a line of the file as the view may write it: nothing a terminal
-// would act on (mermaid.TermSafe), and tabs as spaces, which keep to the pane.
 func paneText(s string) string {
 	return strings.ReplaceAll(mermaid.TermSafe(s), "\t", "    ")
 }
@@ -144,7 +136,6 @@ func clip(s string, n int) string {
 	return s
 }
 
-// caretPos is the line and the column, in characters, of a byte offset.
 func caretPos(src string, caret int) (int, int) {
 	if caret < 0 {
 		return 0, 0
@@ -160,8 +151,6 @@ var mermaidKeywords = []string{"flowchart", "graph", "subgraph", "end", "classDe
 	"activate", "deactivate", "autonumber", "stateDiagram", "stateDiagram-v2", "state", "erDiagram", "classDiagram",
 	"pie", "mindmap", "gantt", "title", "section", "direction", "LR", "RL", "TD", "TB", "BT", "over", "right", "left", "of"}
 
-// highlight colours one line of Mermaid as pele's video does: keywords in the
-// accent, strings and labels in green, numbers in yellow, punctuation muted.
 func highlight(line string, th *sketch.Theme) string {
 	fg, muted := sgr(true, th.Fg), sgr(true, th.Muted)
 	key, str, num := sgr(true, th.Accent), sgr(true, th.Series[3]), sgr(true, th.Series[2])
@@ -231,12 +220,8 @@ func (s *liveScreen) setStatus(st string) {
 	s.mu.Unlock()
 }
 
-// show draws a new source: the diagram moves to it, the source and the status
-// line follow.
 func (s *liveScreen) show(src string, caret int, typed bool) { s.showTyped(src, caret, src, typed) }
 
-// showTyped shows src in the editor and draws draw, which a typing demo
-// completes ahead of the caret.
 func (s *liveScreen) showTyped(src string, caret int, draw string, typed bool) {
 	s.mu.Lock()
 	s.src, s.caret = src, caret
@@ -265,8 +250,6 @@ func (s *liveScreen) resize() {
 	s.live.Resize(da)
 }
 
-// kittyFileMedium asks whether the terminal reads pictures from temporary
-// files (t=t), which saves compressing every frame.
 func kittyFileMedium(out *os.File) bool {
 	in := os.Stdin
 	f, err := os.CreateTemp("", "tty-graphics-protocol-sketch-probe-*.rgb")
@@ -289,16 +272,10 @@ func kittyFileMedium(out *os.File) bool {
 	return err == nil && strings.Contains(answer, "_Gi=32;OK")
 }
 
-// runMermaidLive runs the full-screen view until q, Esc or Ctrl+C.
 func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Theme, stdout *os.File) error {
 	if !term.IsTerminal(int(stdout.Fd())) || !term.IsTerminal(int(os.Stdin.Fd())) {
 		return errfmt.Errorf("--watch and --demo need a terminal")
 	}
-	// The terminal is given back on every way out: q, Ctrl+C, a signal, a
-	// panic in any goroutine, an error. termios is restored first, because it
-	// is one ioctl and cannot block. The picture and the screen are reset
-	// after it, within a time limit, as a terminal that has stopped reading
-	// would block those writes.
 	fd := int(os.Stdin.Fd())
 	orig, err := term.GetState(fd)
 	if err != nil {
@@ -313,10 +290,6 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 			go func() {
 				const reset = "\x1b[0m\x1b[2J\x1b[0 q\x1b]112\x1b\\\x1b[?25h\x1b[?1049l"
 				if s != nil && s.live != nil {
-					// Through the view, so the reset does not land inside a
-					// frame that a stalled terminal left half written.
-					// The delete goes again with the reset, for a terminal that
-					// was too slow for the one Close sends.
 					s.live.Close(600 * time.Millisecond)
 					s.live.WriteWithin([]byte(s.live.DeleteImage()+reset), 1200*time.Millisecond)
 				} else {
@@ -340,8 +313,6 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 			crash(v, debug.Stack())
 		}
 	}()
-	// safe runs f on another goroutine's behalf: a panic there ends the
-	// process the same way, with the terminal given back.
 	safe := func(f func()) func() {
 		return func() {
 			defer func() {
@@ -355,8 +326,6 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 	quit := make(chan struct{})
 	var once sync.Once
 	stop := func() { once.Do(func() { close(quit) }) }
-	// The first signal quits as q does. A second one, or one while the quit
-	// is stuck, ends the process at once.
 	sigs := make(chan os.Signal, 2)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
 	defer signal.Stop(sigs)
@@ -368,7 +337,6 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 				continue
 			}
 			cleanup()
-			// The profile is finished before the exit, which would cut it short.
 			stopCPUProfile()
 			os.Exit(130)
 		}
@@ -400,8 +368,6 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 		Out: stdout, Theme: th, Kitty: kitty, FileMedium: file, Motion: motion, Color: true,
 		OnPanic: crash,
 		OnFrame: func(f mermaid.FrameStat) {
-			// framePanicAt is zero in a release build, so the compiler drops
-			// this branch. See mermaid_panic.go.
 			if frames++; framePanicAt > 0 && frames == framePanicAt {
 				panic("mermaidpanic build: frame " + strconv.Itoa(frames))
 			}
@@ -417,7 +383,6 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 		return err
 	}
 	defer cleanup()
-	// The cursor is the caret: a bar in the theme's orange, as in pele's video.
 	_, _ = stdout.WriteString("\x1b[?1049h\x1b[?25l\x1b[6 q\x1b]12;" + hexOf(th.Series[1]) + "\x1b\\")
 	s.paint(true)
 
@@ -430,8 +395,6 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 				stop()
 				return
 			}
-			// A read that starts with ESC and goes on is a terminal reply or
-			// a special key, not the Esc key.
 			if n > 1 && buf[0] == 0x1b {
 				continue
 			}
@@ -463,11 +426,8 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 				return errfmt.Errorf("%s has no Mermaid diagram", name)
 			}
 			if !strings.HasSuffix(strings.ToLower(name), ".md") {
-				// One diagram: type it from nothing, a line at a time.
 				steps = linesOf(steps[0])
 			}
-			// Each keystroke holds the text typed so far, so the memory grows
-			// with the square of a step's length.
 			for _, st := range steps {
 				if len(st) > mermaid.MaxDemoStep {
 					cleanup()
@@ -537,10 +497,6 @@ func runMermaidLive(name string, o mermaidOptions, lo liveOptions, th *sketch.Th
 			cleanup()
 			return err
 		}
-		// Editors save in bursts (write, rename, chmod): one load after the
-		// burst. The timer exists only while a burst is in flight. Loads run
-		// one at a time on one goroutine, and a save during a load asks for
-		// one more, so the newest file is always the last one shown.
 		reload := make(chan struct{}, 1)
 		go safe(func() {
 			for {
@@ -599,7 +555,7 @@ loop:
 				if demoStart != nil {
 					demoStart()
 				}
-			case 12: // Ctrl+L
+			case 12:
 				s.resize()
 			}
 		}
@@ -612,7 +568,6 @@ loop:
 	return runErr
 }
 
-// linesOf is a source as steps: the first line, then each next line added.
 func linesOf(src string) []string {
 	lines := strings.Split(strings.TrimRight(src, "\n"), "\n")
 	var steps []string
@@ -655,7 +610,6 @@ func printFrameStats(w io.Writer, stats []mermaid.FrameStat) {
 		fmt.Fprintf(w, "bytes per motion frame: %d\n", bytes/len(draw))
 	}
 	fmt.Fprintf(w, "density of motion frames: %v\n", dens)
-	// Gaps between motion frames: the frame rate while something moves.
 	var gaps []time.Duration
 	for i := 1; i < len(stats); i++ {
 		if stats[i].Final || stats[i-1].Final {

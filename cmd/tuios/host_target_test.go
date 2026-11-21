@@ -80,11 +80,8 @@ func TestLandBranchLeavesNothingBehindOnFailure(t *testing.T) {
 	receiver := testutil.GitRepo(t)
 
 	cases := map[string]bundleReply{
-		// The far side named a head the bundled branch does not end at, as
-		// happened when it bundled a stale branch name.
 		"head is not the branch tip": {Branch: "feat/x", Head: strings.Repeat("1", 40), BundleBytes: int64(len(bundle)), Size: int64(len(bundle))},
-		// git cannot fetch from bytes that are not a bundle.
-		"bundle is not a bundle": {Branch: "feat/x", Head: tip, BundleBytes: 4, Size: 4},
+		"bundle is not a bundle":     {Branch: "feat/x", Head: tip, BundleBytes: 4, Size: 4},
 	}
 	for name, reply := range cases {
 		t.Run(name, func(t *testing.T) {

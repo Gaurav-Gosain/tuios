@@ -16,18 +16,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// The daemon as a service of the user: tuios daemon install-service,
-// uninstall-service and service-status. internal/service writes the unit,
-// the launchd agent or the task, and says why each line is there.
-
-// serviceOffEnv set to 1 makes a client start the daemon directly even when
-// a service is installed.
 const serviceOffEnv = "TUIOS_NO_SERVICE"
 
-// serviceName is the service of this command's server.
 func serviceName() string { return service.Name(serverscope.Name()) }
 
-// serviceSpec is the service install-service writes for this machine.
 func serviceSpec(binary string) (service.Spec, error) {
 	if binary == "" {
 		b, err := stableTuiosPath()
@@ -65,7 +57,6 @@ func serviceSpec(binary string) (service.Spec, error) {
 	return spec, nil
 }
 
-// unsupportedServiceError explains a machine with no service manager.
 func unsupportedServiceError(err error) error {
 	return &diagnosticError{
 		What:  "tuios cannot install the daemon as a service on this machine.",
@@ -137,7 +128,6 @@ func runInstallService(out io.Writer, binary string, dryRun bool) error {
 	return nil
 }
 
-// writeLingerAdvice says what to do when linger is off.
 func writeLingerAdvice(out io.Writer, st service.Status) {
 	if !service.UsesLinger() || st.Linger {
 		return
@@ -167,12 +157,9 @@ func newDaemonUninstallServiceCommand() *cobra.Command {
 	}
 }
 
-// serviceReport is service-status --json.
 type serviceReport struct {
 	service.Status
-	// DaemonPID is the daemon that serves the socket now, 0 when none runs.
-	DaemonPID int `json:"daemon_pid,omitzero"`
-	// UnderService says the daemon that runs is the service's.
+	DaemonPID    int  `json:"daemon_pid,omitzero"`
 	UnderService bool `json:"under_service"`
 }
 
@@ -222,11 +209,6 @@ func writeServiceStatus(out io.Writer, rep serviceReport) {
 	}
 }
 
-// startDaemonThroughService starts the daemon through the installed service
-// and reports whether it did. It does nothing when no enabled service serves
-// this socket, when the service runs another tuios than this one, or when
-// TUIOS_NO_SERVICE=1. A service that does not bring a daemon up in time
-// leaves the start to the caller.
 func startDaemonThroughService() bool {
 	if os.Getenv(serviceOffEnv) == "1" {
 		return false
@@ -250,7 +232,6 @@ func startDaemonThroughService() bool {
 	return waitForDaemon(daemonStartTimeout)
 }
 
-// mustExecutable is this binary's path, or "" when it is not known.
 func mustExecutable() string {
 	exe, err := os.Executable()
 	if err != nil {
@@ -259,7 +240,6 @@ func mustExecutable() string {
 	return exe
 }
 
-// sameFile reports whether two paths, links followed, name one file.
 func sameFile(a, b string) bool {
 	if a == "" || b == "" {
 		return false
@@ -275,10 +255,6 @@ func sameFile(a, b string) bool {
 	return os.SameFile(fa, fb)
 }
 
-// runServiceDaemon is the daemon a service manager started. A daemon that
-// already serves the socket is not an error here: the service exits 0, so
-// the manager does not start it again and again. A client or a live upgrade
-// keeper may have started that daemon.
 func runServiceDaemon(noRestore bool) error {
 	if session.IsDaemonRunning() {
 		fmt.Fprintf(os.Stderr, "A daemon already runs (PID %d). The service does not start another one.\n", session.GetDaemonPID())

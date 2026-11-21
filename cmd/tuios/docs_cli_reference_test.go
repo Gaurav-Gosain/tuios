@@ -26,8 +26,6 @@ func TestCLIReferenceNamesEveryCommandAndFlag(t *testing.T) {
 	doc := readDoc(t, "CLI_REFERENCE.md")
 	lines := strings.Split(doc, "\n")
 	heading := regexp.MustCompile("^(#{1,6}) ")
-	// A line starting with # inside a code fence is a shell comment, not a
-	// heading.
 	isHeading := make([]bool, len(lines))
 	fenced := false
 	for i, l := range lines {
@@ -37,8 +35,6 @@ func TestCLIReferenceNamesEveryCommandAndFlag(t *testing.T) {
 		isHeading[i] = !fenced && heading.MatchString(l)
 	}
 
-	// sectionOf returns the lines under the heading that names path, and
-	// whether there is one.
 	sectionOf := func(path string) (string, bool) {
 		for i, l := range lines {
 			if !isHeading[i] || !strings.Contains(l, "`"+path+"`") {
@@ -89,17 +85,10 @@ func TestCLIReferenceNamesEveryCommandAndFlag(t *testing.T) {
 	}
 }
 
-// cliReferenceSection is one heading of docs/CLI_REFERENCE.md and the text
-// under it, up to the next heading.
 type cliReferenceSection struct {
-	heading string
-	// commands are the commands the heading names, and the ones the usage
-	// lines in its code blocks run, such as the paste-buffer line under the
-	// list-buffers heading.
+	heading  string
 	commands []*cobra.Command
-	// lines are the section's lines outside code blocks, with their line
-	// numbers in the file.
-	lines []cliReferenceLine
+	lines    []cliReferenceLine
 }
 
 type cliReferenceLine struct {
@@ -107,14 +96,9 @@ type cliReferenceLine struct {
 	text string
 }
 
-// cliReferenceSections splits docs/CLI_REFERENCE.md at its headings and
-// resolves the commands each one documents against root. A heading that
-// names a command root does not have is reported through bad.
 func cliReferenceSections(t *testing.T, root *cobra.Command, bad func(line int, msg string)) []*cliReferenceSection {
 	t.Helper()
 	span := regexp.MustCompile("`(tuios(?: [^`]*)?)`")
-	// find resolves the command words at the start of a command line, up to
-	// the first flag or placeholder.
 	find := func(line string) (*cobra.Command, bool) {
 		var words []string
 		for _, w := range strings.Fields(line)[1:] {
@@ -175,7 +159,6 @@ func cliReferenceSections(t *testing.T, root *cobra.Command, bad func(line int, 
 // rather than a description such as "the focused pane".
 func TestCLIReferenceDocumentsOnlyRealCommandsAndFlags(t *testing.T) {
 	root := newRootCommand()
-	// cobra adds these two at Execute.
 	root.InitDefaultHelpCmd()
 	root.InitDefaultCompletionCmd()
 	bad := func(line int, msg string) { t.Errorf("CLI_REFERENCE.md:%d: %s", line, msg) }
@@ -219,9 +202,6 @@ func TestCLIReferenceDocumentsOnlyRealCommandsAndFlags(t *testing.T) {
 	}
 }
 
-// literalDefault returns the value a "(default: ...)" states when it is a
-// value: a number, or a quoted or code-span word. A description, such as
-// "this pane's session", is not one.
 func literalDefault(text string) (string, bool) {
 	first, _, _ := strings.Cut(strings.TrimSpace(text), ",")
 	first = strings.TrimSpace(first)
@@ -238,8 +218,6 @@ func literalDefault(text string) (string, bool) {
 	return "", false
 }
 
-// zeroDefault reports whether a flag default is the zero value, which a
-// command often reads as "use the built-in value" that the page names.
 func zeroDefault(v string) bool {
 	switch v {
 	case "", "0", "0s", "false", "[]":
@@ -248,8 +226,6 @@ func zeroDefault(v string) bool {
 	return false
 }
 
-// sameDefault compares a stated default with the code's, reading durations
-// such as 2m and 2m0s as the same.
 func sameDefault(claim, code string) bool {
 	if claim == code {
 		return true

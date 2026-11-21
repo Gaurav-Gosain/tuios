@@ -25,39 +25,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// `tuios restart-server`: stop the daemon and start it again with the newest
-// tuios installed.
-//
-// It is the one command for "the daemon runs an old build". Before it, the
-// answer was to detach, run kill-server, and start tuios again, and nothing
-// said what that stopped. This command says it first: the panes that run a
-// program, by session, and the agents that can resume. It asks, and then it
-// does the three steps and checks each one.
-//
-// The new daemon runs the newest tuios installed: the binary at the path
-// this tuios was started from, or the tuios on PATH, whichever is newer. See
-// release.NewestInstalled.
-//
-// With --json the command writes one JSON object per line, one for each step,
-// so the app can show the progress while it waits. The app runs this command,
-// so the plan it shows and the restart it runs cannot differ.
-
-// restartTimeout bounds the stop and the start, each.
 const restartTimeout = 30 * time.Second
 
-// restartReport is one line of --json. See internal/restartplan.
 type restartReport = restartplan.Report
 
-// restartOptions are the flags.
 type restartOptions struct {
 	yes    bool
 	dryRun bool
 	json   bool
 	last   bool
-	// expect is the digest of the plan the caller agreed to. See
-	// restartplan.Digest.
 	expect string
-	// worker is the plan a detached worker runs. See runRestartWorker.
 	worker string
 	out    io.Writer
 	in     io.Reader
@@ -135,9 +112,6 @@ func runRestartServer(opts restartOptions) error {
 	if opts.dryRun {
 		return nil
 	}
-	// The app passes the plan the person agreed to. A program that started
-	// since, or a session that went, makes it another plan, and the person
-	// has to see that one first.
 	if opts.expect != "" && opts.expect != restartplan.Digest(rep) {
 		changed := &restartReport{Step: restartplan.StepDone, Error: "What a restart stops changed after you agreed to it.",
 			Fix: "read the new list, then agree again. Nothing was changed."}
@@ -146,8 +120,6 @@ func runRestartServer(opts restartOptions) error {
 		}
 		return restartFailure(changed, opts)
 	}
-	// Every state but a stopped daemon loses something, or may: a daemon
-	// that did not answer is asked about too.
 	if !opts.yes && rep.Daemon.State != daemonStopped {
 		if opts.json {
 			return restartFailure(&restartReport{Step: restartplan.StepDone,
@@ -181,8 +153,6 @@ func runRestartServer(opts restartOptions) error {
 	return nil
 }
 
-// restartFailure is the error the command exits with. With --json the line
-// already carries it, so the error is one plain line.
 func restartFailure(rep *restartReport, opts restartOptions) error {
 	if opts.json {
 		return errors.New(rep.Error)
@@ -190,7 +160,6 @@ func restartFailure(rep *restartReport, opts restartOptions) error {
 	return &diagnosticError{What: rep.Error, Fix: rep.Fix}
 }
 
-// planRestart reads the daemon and the binary the new daemon runs.
 func planRestart() *restartReport {
 	rep := &restartReport{Step: restartplan.StepPlan}
 	bin, ver, err := release.NewestInstalled()
@@ -223,7 +192,6 @@ func planRestart() *restartReport {
 	return rep
 }
 
-// resumeModeName is daemon.resume_agents the way the daemon reads it.
 func resumeModeName(v string) string {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case config.ResumeAgentsOff:
@@ -234,10 +202,6 @@ func resumeModeName(v string) string {
 	return config.ResumeAgentsAsk
 }
 
-// resumableAgents lists the agent panes of one session whose conversation the
-// new daemon can offer to resume. live maps each pane that has an agent now to
-// its name. The conversation id and its harness are read from the session's
-// saved file, which is where the new daemon reads them from.
 func resumableAgents(sessionName string, live map[string]string) []syncAgent {
 	if len(live) == 0 {
 		return nil
@@ -262,14 +226,6 @@ func resumableAgents(sessionName string, live map[string]string) []syncAgent {
 	return out
 }
 
-// runRestart stops the daemon and starts it with rep.Binary. step is called
-// as each step begins.
-//
-// Both steps run the new binary as a command. kill-server stops a daemon of
-// any version, since it signals the process the pid file names, and it
-// returns only once the sessions are saved. start-server returns once the
-// new daemon takes the socket, and the new daemon restores every saved
-// session before it does.
 func runRestart(plan *restartReport, step func(string)) *restartReport {
 	rep := &restartReport{Step: restartplan.StepDone, Binary: plan.Binary, Version: plan.Version}
 	var before []string
@@ -280,8 +236,6 @@ func runRestart(plan *restartReport, step func(string)) *restartReport {
 	}
 	if plan.Daemon != nil && plan.Daemon.State != daemonStopped {
 		step(restartplan.StepStopping)
-		// --restart tells the attached clients to wait for the new daemon. A
-		// binary older than the flag stops the daemon without it.
 		out, err := runTuios(plan.Binary, "kill-server", "--restart")
 		if err != nil && strings.Contains(strings.ToLower(out), "unknown flag") {
 			out, err = runTuios(plan.Binary, "kill-server")
@@ -293,8 +247,6 @@ func runRestart(plan *restartReport, step func(string)) *restartReport {
 		}
 	}
 	step(restartplan.StepStarting)
-	// A daemon that some other start brought up in the meantime is as good
-	// as this start's own: what matters is that one answers.
 	if out, err := runTuios(plan.Binary, "start-server"); err != nil && !session.IsDaemonRunning() {
 		rep.Error = "The daemon did not start."
 		rep.Fix = "run 'tuios start-server' to see why. The sessions come back when the daemon starts." + outputTail(out)
@@ -317,7 +269,6 @@ func runRestart(plan *restartReport, step func(string)) *restartReport {
 	return rep
 }
 
-// runTuios runs one tuios command and keeps its output for the error.
 func runTuios(bin string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), restartTimeout)
 	defer cancel()
@@ -329,8 +280,6 @@ func runTuios(bin string, args ...string) (string, error) {
 	return out.String(), err
 }
 
-// outputTail is the last line a failed command wrote, as a sentence to add
-// to the fix.
 func outputTail(out string) string {
 	line := hostsync.LastLine(out)
 	if line == "" {
@@ -339,7 +288,6 @@ func outputTail(out string) string {
 	return " It said: " + plainLine(line)
 }
 
-// readRestartedDaemon asks the new daemon its version and its sessions.
 func readRestartedDaemon() (string, []string, error) {
 	client, err := session.DialVerbClientAs(version)
 	if err != nil {
@@ -374,8 +322,6 @@ func readRestartedDaemon() (string, []string, error) {
 	return after, names, nil
 }
 
-// confirmRestart asks the question. Without a terminal there is no one to
-// ask, and the command refuses rather than guess.
 func confirmRestart(opts restartOptions) error {
 	if !syncIsTTY(syncOptions{tty: opts.tty}) {
 		return &diagnosticError{
@@ -393,7 +339,6 @@ func confirmRestart(opts restartOptions) error {
 	return errors.New("the daemon was not restarted and nothing was changed")
 }
 
-// writeRestartJSON writes one report as one line.
 func writeRestartJSON(w io.Writer, rep *restartReport) {
 	data, err := jsonx.Marshal(rep)
 	if err != nil {
@@ -402,8 +347,6 @@ func writeRestartJSON(w io.Writer, rep *restartReport) {
 	_, _ = w.Write(append(data, '\n'))
 }
 
-// writeRestartPlan says what a restart does: the versions, what stops and
-// what comes back. The app draws the same lines.
 func writeRestartPlan(w io.Writer, rep *restartReport) {
 	if rep.Error != "" {
 		return
@@ -411,7 +354,6 @@ func writeRestartPlan(w io.Writer, rep *restartReport) {
 	fmt.Fprint(w, restartplan.Text(restartplan.Lines(rep, "")))
 }
 
-// writeRestartDone says the restart worked, and which sessions came back.
 func writeRestartDone(w io.Writer, rep *restartReport) {
 	fmt.Fprintf(w, "The daemon restarted on %s.\n", rep.After)
 	if len(rep.Back) > 0 {

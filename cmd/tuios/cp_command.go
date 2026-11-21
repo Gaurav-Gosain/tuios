@@ -24,16 +24,6 @@ import (
 	"golang.org/x/term"
 )
 
-// tuios cp: copy files and folders between this machine and its hosts.
-//
-// The command is a client of the daemon's copies (transfer-start). It reads
-// the paths with the host rule of -s HOST:SESSION, decides what the person
-// wants done with files that are there, starts one copy per source, and
-// follows them to their end (transfer_follow.go). The copies run in the
-// daemon, so a closed terminal does not stop them, and Ctrl+C asks whether
-// to keep them running or cancel them.
-
-// cpOptions are the flags of tuios cp.
 type cpOptions struct {
 	move            bool
 	recursive       bool
@@ -157,20 +147,16 @@ folder and the hosts' home folders.`,
 	return cmd
 }
 
-// usageError is a wrong command line, exit 2.
 func usageError(what, fix string) error {
 	return &diagnosticError{What: what, Fix: fix, Status: exitCopyUsage}
 }
 
-// cpPath is one path on the command line.
 type cpPath struct {
-	ep session.Endpoint
-	// slash is a path written with a / at its end: a folder.
+	ep    session.Endpoint
 	slash bool
 	arg   string
 }
 
-// configuredHostNames is the [hosts] names on this machine.
 func configuredHostNames() []string {
 	path, err := config.GetConfigPath()
 	if err != nil {
@@ -190,8 +176,6 @@ func configuredHostNames() []string {
 	return names
 }
 
-// parseCpPath reads one path. A path on this machine is made absolute here,
-// against this command's own folder, because the daemon has another.
 func parseCpPath(arg string, hosts []string) (cpPath, error) {
 	out := cpPath{arg: arg, slash: strings.HasSuffix(arg, "/") || (runtime.GOOS == "windows" && strings.HasSuffix(arg, `\`))}
 	local := func(p string) (cpPath, error) {
@@ -241,23 +225,17 @@ func parseCpPath(arg string, hosts []string) (cpPath, error) {
 	}
 	switch {
 	case rest == "":
-		// The host's receive folder: where it lets this machine write when
-		// nothing else is set, ~/Downloads/tuios unless files_roots there
-		// says otherwise. The far daemon names it.
 		out.slash = true
 	case rest == "~":
 		out.slash = true
 	case strings.HasPrefix(rest, "/") || strings.HasPrefix(rest, "~/"):
 	default:
-		// The scp rule: a relative path on a host is under its home.
 		rest = "~/" + rest
 	}
 	out.ep = session.Endpoint{Host: host, Path: rest}
 	return out, nil
 }
 
-// closestName is the name in names nearest to s by edit distance, when it is
-// close enough to be a typo.
 func closestName(s string, names []string) string {
 	best, bestD := "", min(len(s)/3+1, 3)+1
 	for _, n := range names {
@@ -288,8 +266,6 @@ func editDistance(a, b string) int {
 	return prev[len(b)]
 }
 
-// parseRate reads --bwlimit: a number of bytes a second, with K, M or G for
-// 1024, 1024^2 and 1024^3, and an optional B or /s.
 func parseRate(s string) (int64, error) {
 	t := strings.TrimSpace(strings.ToUpper(s))
 	t = strings.TrimSuffix(t, "/S")
@@ -316,7 +292,6 @@ func parseRate(s string) (int64, error) {
 	return int64(v * mult), nil
 }
 
-// conflictPolicy is the policy the flags name, and whether one was named.
 func (o cpOptions) conflictPolicy() (string, bool, error) {
 	var named []string
 	if o.conflict != "" {
@@ -360,7 +335,6 @@ func runCp(cmd *cobra.Command, args []string, o cpOptions) error {
 	interactive := isTerminal(os.Stdin) && isTerminal(os.Stderr)
 	if !explicit {
 		policy = "skip"
-		// A detached copy has nobody to answer a question.
 		if interactive && !o.json && !o.detach {
 			policy = "ask"
 		}
@@ -554,7 +528,6 @@ func runCp(cmd *cobra.Command, args []string, o cpOptions) error {
 				fl.draw(true)
 				if o.cancelOnTimeout {
 					cancelCopies(ctl, fl)
-					// Read the rows again, so the summary says cancelled.
 					fl.refresh()
 				}
 				fl.summary()
@@ -579,8 +552,6 @@ func exitStatusError(code int) error {
 	return &statusError{code: code}
 }
 
-// cancelCopies cancels every copy the command started. The follower then
-// sees them end.
 func cancelCopies(ctl *session.VerbClient, fl *follower) {
 	fl.mu.Lock()
 	ids := append([]string(nil), fl.ids...)
@@ -590,11 +561,8 @@ func cancelCopies(ctl *session.VerbClient, fl *follower) {
 	}
 }
 
-// keyCtrlC is Ctrl+C as a raw terminal reads it.
 const keyCtrlC = 3
 
-// readKey reads one key from the terminal, raw, so the person does not have
-// to press Enter. In raw mode Ctrl+C is the byte keyCtrlC, not a signal.
 func readKey() (byte, error) {
 	fd := int(os.Stdin.Fd())
 	if old, err := term.MakeRaw(fd); err == nil {
@@ -611,9 +579,6 @@ func readKey() (byte, error) {
 	return b[0], nil
 }
 
-// keepOrCancel asks the person what Ctrl+C means. It reports true for keep.
-// A second Ctrl+C cancels. A terminal that cannot be read keeps the copy,
-// which the daemon runs either way.
 func keepOrCancel(sigs <-chan os.Signal) bool {
 	_, _ = fmt.Fprint(os.Stderr, "Cancel the copy, or keep it running? [c/k] ")
 	type key struct {
@@ -645,8 +610,6 @@ func keepOrCancel(sigs <-chan os.Signal) bool {
 	}
 }
 
-// askConflicts asks the person about each file a copy waits on, and sends
-// the answers. It reports whether it answered any.
 func askConflicts(fl *follower, r copyRow) bool {
 	answered := false
 	fl.paused.Store(true)
@@ -665,8 +628,6 @@ func askConflicts(fl *follower, r copyRow) bool {
 		for choice == "" {
 			k, err := readKey()
 			if err != nil {
-				// No answer can come. Guessing one could replace a file, so
-				// the copy stops instead.
 				return cancel("The terminal could not be read, so no answer was given. The copy is cancelled.")
 			}
 			switch k {
@@ -708,7 +669,6 @@ func machineName(host string) string {
 	return host
 }
 
-// compareText says how the file there differs from the new one.
 func compareText(c session.ConflictItem) string {
 	var parts []string
 	switch {
@@ -729,7 +689,6 @@ func compareText(c session.ConflictItem) string {
 	return capitalize(s) + "."
 }
 
-// explainCopyStart says why a copy could not start.
 func explainCopyStart(src, dst cpPath, err error) error {
 	call, ok := errors.AsType[*session.VerbCallError](err)
 	if !ok {

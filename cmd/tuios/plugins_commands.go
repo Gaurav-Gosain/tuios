@@ -23,15 +23,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// tuios plugins: the plugins tuios runs, native (tuios-plugin.toml) and herdr
-// (herdr-plugin.toml). docs/PLUGINS.md is the contract. See internal/herdrplugin for
-// where plugins are found and internal/session/plugin_host.go for what runs.
-//
-// list and info read the files and need no daemon. enable, disable, link and
-// unlink change [plugins] in config.toml. With a daemon running they go
-// through the daemon, which applies the change at once and refuses it from a
-// pane. run, open and log need the daemon.
-
 func newPluginsCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "plugins",
@@ -54,28 +45,22 @@ You must run install, update, uninstall, approve, enable, disable, link, unlink 
 	return cmd
 }
 
-// pluginsConfigPath is config.toml.
 func pluginsConfigPath() (string, error) {
 	return config.GetConfigPath()
 }
 
-// discoverPlugins lists the plugins as config.toml says.
 func discoverPlugins() ([]herdrplugin.Entry, string, error) {
 	return procsetup.Plugins()
 }
 
-// inPane reports whether this command runs inside a tuios pane.
 func inPane() bool {
 	return os.Getenv("TUIOS_PANE_ID") != "" || os.Getenv("TUIOS_WINDOW_ID") != ""
 }
 
-// errFromPane is the refusal of a trust change from inside a pane.
 func errFromPane(what string) error {
 	return errfmt.Errorf("tuios plugins %s is for the person, and this command runs inside a tuios pane. Nothing was changed. Run it from a terminal outside tuios", what)
 }
 
-// pluginCall sends one plugin method to the daemon's herdr socket. ok is
-// false when no daemon runs.
 func pluginCall(method string, params map[string]any, timeout time.Duration) (map[string]any, bool, error) {
 	path, err := herdrSocketPath()
 	if err != nil {
@@ -95,7 +80,6 @@ func pluginCall(method string, params map[string]any, timeout time.Duration) (ma
 	return result, true, nil
 }
 
-// needDaemon is pluginCall for a method that has no meaning without one.
 func needDaemon(method string, params map[string]any, timeout time.Duration) (map[string]any, error) {
 	res, running, err := pluginCall(method, params, timeout)
 	if err != nil {
@@ -440,8 +424,6 @@ func newPluginsBuildCommand() *cobra.Command {
 	}
 }
 
-// buildEnv drops the variables herdr drops for a build: the ones that name
-// a server, a pane or a plugin.
 func buildEnv(env []string) []string {
 	out := env[:0:0]
 	for _, kv := range env {
@@ -595,8 +577,6 @@ func newPluginsLogCommand() *cobra.Command {
 	return cmd
 }
 
-// pluginConfigDir makes and returns a plugin's HERDR_PLUGIN_CONFIG_DIR, for
-// herdr plugin config-dir.
 func pluginConfigDir(id string) (string, error) {
 	n, ok := herdrplugin.NormalizeID(id)
 	if !ok {

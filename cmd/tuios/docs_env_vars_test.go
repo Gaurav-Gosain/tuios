@@ -10,9 +10,6 @@ import (
 	"testing"
 )
 
-// internalEnvVars are the TUIOS_ variables the code reads or sets that no doc
-// names on purpose: tuios sets them for itself, or a test or a developer sets
-// them. Each has the reason it stays out of the docs.
 var internalEnvVars = map[string]string{
 	"TUIOS_BASH_LOGIN":           "tuios sets it for its own bash rc file",
 	"TUIOS_ZSH_ZDOTDIR":          "tuios sets it for its own zsh shim",
@@ -38,18 +35,12 @@ var internalEnvVars = map[string]string{
 	"TUIOS_PANE":                 "a prefix that plugin commands match, not a variable",
 }
 
-// exampleEnvVars are TUIOS_ names that a doc uses as an example of a name a
-// person picks, so the code does not have them.
 var exampleEnvVars = map[string]bool{
-	"TUIOS_HOOK_TOKEN": true, // token_env in CONFIGURATION.md
+	"TUIOS_HOOK_TOKEN": true,
 }
 
-// envVarLiteral is a TUIOS_ variable at the start of a Go string, as in
-// os.Getenv("TUIOS_X") or "TUIOS_X="+v. A name inside a placeholder, such as
-// __TUIOS_NAME__, or in a comment does not match.
 var envVarLiteral = regexp.MustCompile(`"(TUIOS_[A-Z0-9_]*[A-Z0-9])["=]`)
 
-// envVarName is a TUIOS_ variable anywhere in a doc.
 var envVarName = regexp.MustCompile(`\bTUIOS_[A-Z0-9_]*[A-Z0-9]\b`)
 
 // TestEveryEnvVarIsDocumented fails on a TUIOS_ variable that tuios reads or
@@ -92,7 +83,6 @@ func TestEveryEnvVarIsDocumented(t *testing.T) {
 		default:
 			return nil
 		}
-		// A file with no extension may be a built binary.
 		if info, err := d.Info(); err != nil || info.Size() > 1<<20 {
 			return nil
 		}

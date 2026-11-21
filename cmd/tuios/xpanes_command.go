@@ -22,22 +22,10 @@ import (
 	"golang.org/x/term"
 )
 
-// tuios xpanes, after greymd/tmux-xpanes (discussion #273): one pane per item
-// in a new workspace, tiled, with multifocus on for all of them.
-//
-// It is made of the verbs any script has: list-workspaces, select-workspace,
-// new-window, focus-window, and run-command with the two client commands
-// ArrangePanes and SetMultifocus. Those two exist because the BSP tree of a
-// workspace and the multifocus set are the attached client's state, and no
-// verb reached them.
-
-// xpanesMaxPanes is how many panes xpanes opens without --force.
 const xpanesMaxPanes = 64
 
-// xpanesDefaultPlaceholder is what -c replaces with the item, as in xpanes.
 const xpanesDefaultPlaceholder = "{}"
 
-// xpanesOptions is the command line.
 type xpanesOptions struct {
 	session     string
 	workspace   int
@@ -49,10 +37,8 @@ type xpanesOptions struct {
 	noSync      bool
 	force       bool
 	jsonOutput  bool
-	// speedy is how many times -s was given: 0, 1 (-s) or 2 (-ss).
-	speedy int
-	// interval is the wait between panes, in seconds.
-	interval float64
+	speedy      int
+	interval    float64
 }
 
 func newXpanesCommand() *cobra.Command {
@@ -115,8 +101,6 @@ you what it could not do.`,
 		},
 	}
 	f := cmd.Flags()
-	// -s is speedy mode, as in tmux-xpanes, so the session has no short form
-	// here.
 	f.StringVar(&o.session, "session", "", "Session to open the panes in (default: this pane's session, else the most recently active)")
 	f.CountVarP(&o.speedy, "speedy", "s", "Speedy mode: run the command with no interactive shell, and hold the pane until Enter. -ss closes the pane when the command stops")
 	f.Float64Var(&o.interval, "interval", 0, "Seconds to wait between the panes, for example 0.5")
@@ -135,8 +119,6 @@ you what it could not do.`,
 	return cmd
 }
 
-// xpanesItems is the items from the arguments, else from stdin when stdin is
-// not a terminal. Empty items are left out.
 func xpanesItems(args []string, stdin io.Reader) ([]string, error) {
 	var items []string
 	if len(args) > 0 {
@@ -163,14 +145,11 @@ func xpanesItems(args []string, stdin io.Reader) ([]string, error) {
 	return items, nil
 }
 
-// readerIsTerminal reports whether r is a terminal.
 func readerIsTerminal(r io.Reader) bool {
 	f, ok := r.(*os.File)
 	return ok && term.IsTerminal(int(f.Fd()))
 }
 
-// xpanesLayout is the arrangement a -l value names: tmux's names and
-// xpanes' short forms.
 func xpanesLayout(name string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "", "t", layout.ArrangeTiled:
@@ -183,44 +162,24 @@ func xpanesLayout(name string) (string, error) {
 	return "", errfmt.Errorf("the layout %q is not known. Use tiled, even-horizontal or even-vertical", name)
 }
 
-// xpanesPane is one pane to open.
 type xpanesPane struct {
-	Items []string
-	Title string
-	// Argv is the pane's program. Empty means the daemon's own shell.
-	Argv []string
-	// Line is the command tuios types into the pane's shell, without speedy
-	// mode. Empty means nothing is typed.
-	Line string
-	// CloseOnExit asks the daemon to close the pane when its command exits,
-	// for -ss. A detached session keeps an exited pane otherwise.
+	Items       []string
+	Title       string
+	Argv        []string
+	Line        string
 	CloseOnExit bool
 }
 
-// Speedy modes, after tmux-xpanes -s and -ss.
 const (
-	// xpanesInteractive opens a shell and types the command into it. The
-	// shell stays when the command exits.
 	xpanesInteractive = 0
-	// xpanesSpeedy runs the command as the pane's program, then holds the
-	// pane until Enter.
-	xpanesSpeedy = 1
-	// xpanesSpeedyClose runs the command as the pane's program, and the pane
-	// closes when it exits.
+	xpanesSpeedy      = 1
 	xpanesSpeedyClose = 2
 )
 
-// xpanesHoldMessage is what a speedy pane shows when its command exits. It is
-// tmux-xpanes' "Pane is dead: Press [Enter] to exit...", in reverse video.
 const xpanesHoldMessage = "The command stopped. Press Enter to close the pane."
 
-// xpanesHold is the sh text that holds a speedy pane until Enter.
 var xpanesHold = `printf '\n\033[7m %s \033[0m\n' '` + xpanesHoldMessage + `' >&2; read _`
 
-// xpanesPanes groups the items perPane at a time and builds each pane's argv
-// and the line to type. command is the -c text, or "" for a shell. Without
-// speedy mode the pane is the shell, and the command is its typed line. With
-// no shell the argv is empty, and the daemon starts its own shell.
 func xpanesPanes(items []string, perPane int, command, placeholder, shell string, speedy int) []xpanesPane {
 	perPane = max(perPane, 1)
 	var panes []xpanesPane
@@ -261,7 +220,6 @@ func xpanesPanes(items []string, perPane int, command, placeholder, shell string
 	return panes
 }
 
-// xpanesTitle is the pane name for an item: one line, at most 60 characters.
 func xpanesTitle(item string) string {
 	item = strings.Join(strings.Fields(item), " ")
 	if r := []rune(item); len(r) > 60 {
@@ -270,36 +228,21 @@ func xpanesTitle(item string) string {
 	return item
 }
 
-// xpanesReadyTimeout is how long xpanes waits for a pane's shell to draw its
-// prompt before it types the command anyway.
 const xpanesReadyTimeout = 10 * time.Second
 
-// xpanesReadyIdle is how long a shell must be quiet after its first output
-// to count as ready to read a line.
 const xpanesReadyIdle = 300 * time.Millisecond
 
-// xpanesWindowParams is params for a verb on one window. verbTarget.params
-// sets the window to the -w flag of the command line, and xpanes has none, so
-// the window is set after it. Set before it, every call went to the focused
-// window: all the commands were typed into the first pane.
 func xpanesWindowParams(t *verbTarget, window string, p map[string]any) map[string]any {
 	p = t.params(p)
 	p["window"] = window
 	return p
 }
 
-// xpanesTypeError is a pane whose command xpanes could not type.
 type xpanesTypeError struct {
 	what string
 	err  error
 }
 
-// xpanesTypeCommands types each pane's line into that pane, by window id,
-// and presses Enter. It waits for the pane's shell first: for its first
-// output, the prompt, and then for xpanesReadyIdle of quiet. A shell that is
-// still starting can drop what is typed before its prompt, so typing at once
-// lost the commands. A pane that is not ready by the timeout gets its line
-// anyway. The interval is between the lines.
 func xpanesTypeCommands(c verbCaller, t *verbTarget, panes []xpanesPane, windows []string, interval, timeout time.Duration) []xpanesTypeError {
 	var errs []xpanesTypeError
 	typed := 0
@@ -326,8 +269,6 @@ func xpanesTypeCommands(c verbCaller, t *verbTarget, panes []xpanesPane, windows
 	return errs
 }
 
-// xpanesSpeedyMode is the speedy mode the options ask for. --ssh turns on -s,
-// as in tmux-xpanes. Speedy mode runs a command, so it needs one.
 func xpanesSpeedyMode(o xpanesOptions, command string) (int, error) {
 	speedy := o.speedy
 	if o.ssh && speedy == xpanesInteractive {
@@ -342,8 +283,6 @@ func xpanesSpeedyMode(o xpanesOptions, command string) (int, error) {
 	return speedy, nil
 }
 
-// xpanesCommandLine is the command each pane runs: -c, or ssh with --ssh.
-// The -- ends ssh's options, so an item that starts with - is a host.
 func xpanesCommandLine(o xpanesOptions) string {
 	if o.ssh {
 		return "ssh -- " + o.placeholder
@@ -351,9 +290,6 @@ func xpanesCommandLine(o xpanesOptions) string {
 	return o.command
 }
 
-// xpanesShell is the shell of a pane with no command: $SHELL on this machine,
-// else /bin/sh. On another machine this machine's $SHELL path means nothing,
-// so it is "", and the daemon there chooses the shell.
 func xpanesShell(host, envShell string) string {
 	switch {
 	case host != "":
@@ -364,7 +300,6 @@ func xpanesShell(host, envShell string) string {
 	return "/bin/sh"
 }
 
-// xpanesResult is what xpanes did, for the summary and --json.
 type xpanesResult struct {
 	Session    string
 	Workspace  int
@@ -400,10 +335,6 @@ func runXpanes(o xpanesOptions, items []string) error {
 	if err != nil {
 		return err
 	}
-	// A shell pane on this machine is $SHELL with the item in its
-	// environment. On another machine this machine's $SHELL path means
-	// nothing, so the daemon there chooses the shell, and the item is only
-	// the pane's name.
 	panes := xpanesPanes(items, o.perPane, command, o.placeholder, xpanesShell(host, os.Getenv("SHELL")), speedy)
 	if len(panes) > xpanesMaxPanes && !o.force {
 		return errfmt.Errorf("this opens %d panes, and the limit is %d. Add --force to open them all", len(panes), xpanesMaxPanes)
@@ -417,8 +348,6 @@ func runXpanes(o xpanesOptions, items []string) error {
 
 	res := xpanesResult{Layout: kind}
 	ws, name, current, err := 0, "", 0, error(nil)
-	// Run from a pane of a scratch group, the panes join that group: the
-	// group is a workspace of its own, on the screen already.
 	paneWS, inScratch := xpanesPaneWorkspace(t, os.Getenv("TUIOS_PANE_ID"))
 	scratchWS := 0
 	if o.workspace == 0 && inScratch {
@@ -435,9 +364,6 @@ func runXpanes(o xpanesOptions, items []string) error {
 	res.Session, res.Workspace = name, ws
 	if scratchWS == 0 {
 		params := map[string]any{"workspace": ws}
-		// When the panes are gone, the session shows the workspace that ran
-		// xpanes: the pane's own from inside the session, else the one
-		// showing. See internal/session/empty_workspace.go.
 		origin := current
 		if paneWS != 0 && !inScratch {
 			origin = paneWS
@@ -456,7 +382,6 @@ func runXpanes(o xpanesOptions, items []string) error {
 	}
 	for i, p := range panes {
 		if i > 0 && speedy != xpanesInteractive {
-			// The command starts with its pane, so the wait is here.
 			time.Sleep(interval)
 		}
 		params := map[string]any{
@@ -504,8 +429,6 @@ func runXpanes(o xpanesOptions, items []string) error {
 	}
 	_, _ = t.client.Call("focus-window", xpanesWindowParams(t, res.Windows[0], nil))
 
-	// Without speedy mode each pane is a shell, and the command is typed into
-	// it, as tmux-xpanes does.
 	for _, err := range xpanesTypeCommands(t.client, t, panes, res.Windows, interval, xpanesReadyTimeout) {
 		res.Warnings = append(res.Warnings, xpanesWarning(err.what, err.err, name))
 	}
@@ -525,9 +448,6 @@ func runXpanes(o xpanesOptions, items []string) error {
 	return nil
 }
 
-// xpanesWorkspace picks the workspace: the one asked for, which must be
-// empty, or the first empty one. It also returns the session's name and the
-// workspace showing.
 func xpanesWorkspace(t *verbTarget, asked int) (int, string, int, error) {
 	raw, err := t.client.Call("list-workspaces", t.params(nil))
 	if err != nil {
@@ -574,9 +494,6 @@ func xpanesWorkspace(t *verbTarget, asked int) (int, string, int, error) {
 	return 0, "", 0, errors.New("every workspace has windows. Close the windows on one workspace, then try again")
 }
 
-// xpanesClientCommand runs a client command through run-command. A window the
-// client has not heard of yet is tried again for a few seconds: see
-// app.ErrNotHereYet.
 func xpanesClientCommand(t *verbTarget, command string, args []string) error {
 	deadline := time.Now().Add(5 * time.Second)
 	for {
@@ -588,7 +505,6 @@ func xpanesClientCommand(t *verbTarget, command string, args []string) error {
 	}
 }
 
-// xpanesWarning says what xpanes could not do, and what to do about it.
 func xpanesWarning(what string, err error, sessionName string) string {
 	var call *session.VerbCallError
 	if errors.As(err, &call) && call.Code == session.ErrVerbNeedsClient {
@@ -601,7 +517,6 @@ func xpanesWarning(what string, err error, sessionName string) string {
 	return fmt.Sprintf("%s: %s", what, msg)
 }
 
-// xpanesSummary is the line xpanes prints.
 func xpanesSummary(r xpanesResult) string {
 	n := len(r.Windows)
 	noun := "panes"
@@ -619,9 +534,6 @@ func xpanesSummary(r xpanesResult) string {
 	return b.String()
 }
 
-// xpanesPaneWorkspace is the workspace of the pane id, and whether it is a
-// scratch group's. It is 0 for an empty id, a pane of another session, or a
-// session tuios cannot read.
 func xpanesPaneWorkspace(t *verbTarget, paneID string) (int, bool) {
 	if paneID == "" {
 		return 0, false

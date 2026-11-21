@@ -12,37 +12,13 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// Host-qualified targets on the command line.
-//
-// `-s build:api` names the session api on host build, and `-w build:api:0`
-// names window 0 in it. The grammar is federation.ParseSessionTarget and
-// ParseWindowTarget, and it is the same for every verb. A qualified target
-// makes the verb run on that host's daemon, through this machine's daemon and
-// its link: the client dials its own daemon, asks for a connection to the
-// host, and speaks the host's own verb protocol on it. Nothing about the
-// verb's parameters changes except that the qualifier is removed before they
-// are sent, so the far daemon sees exactly what a local caller would send.
-//
-// What comes back is the host's word about its own sessions, and it is data.
-// The CLI says which host answered, in the text and as a host field in the
-// JSON, so a reader can tell a listing of another machine from one of this
-// machine without looking at how the command was typed.
-
-// verbTarget is a resolved address: the daemon to talk to, which host it is,
-// and the session and window to pass to it.
 type verbTarget struct {
-	client *session.VerbClient
-	// host is the qualifier as typed, "" when the verb runs on this machine.
-	// federation.LocalHostName is folded to "", so `local:` and unqualified
-	// reach the same code paths.
+	client  *session.VerbClient
 	host    string
 	session string
 	window  string
 }
 
-// resolveTarget parses a session flag and a window flag together and says
-// which host they name. It is pure, so the grammar is testable without a
-// daemon. The two may both carry a qualifier when they agree.
 func resolveTarget(sessionFlag, windowFlag string) (host, sess, window string, err error) {
 	st := federation.ParseSessionTarget(sessionFlag)
 	wt := federation.ParseWindowTarget(windowFlag)
@@ -65,8 +41,6 @@ func resolveTarget(sessionFlag, windowFlag string) (host, sess, window string, e
 	return host, sess, window, nil
 }
 
-// dialTarget resolves the flags and connects to the daemon they name. The
-// caller closes the result.
 func dialTarget(sessionFlag, windowFlag string) (*verbTarget, error) {
 	host, sess, window, err := resolveTarget(sessionFlag, windowFlag)
 	if err != nil {
@@ -90,22 +64,16 @@ func dialTarget(sessionFlag, windowFlag string) (*verbTarget, error) {
 	return t, nil
 }
 
-// dialSessionTarget is dialTarget for a verb with no window.
 func dialSessionTarget(sessionFlag string) (*verbTarget, error) {
 	return dialTarget(sessionFlag, "")
 }
 
-// Close closes the connection.
 func (t *verbTarget) Close() {
 	if t != nil && t.client != nil {
 		_ = t.client.Close()
 	}
 }
 
-// params puts the resolved session, and the window when the verb has one,
-// into a parameter map. The window is set only when the caller passed the
-// key, because a verb without a window parameter must not be sent one.
-//
 //go:noinline
 func (t *verbTarget) params(p map[string]any) map[string]any {
 	if p == nil {
@@ -118,11 +86,6 @@ func (t *verbTarget) params(p map[string]any) map[string]any {
 	return p
 }
 
-// explain names the host a failed verb ran on, on top of the daemon's own
-// hint. On this machine it is explainVerbError unchanged.
-//
-// An error from another machine is returned as a *hostError, so the JSON
-// form of it says which host answered and that its words are untrusted.
 func (t *verbTarget) explain(verb string, err error) error {
 	if t.host == "" {
 		return explainVerbError(verb, err)
@@ -139,10 +102,6 @@ func (t *verbTarget) explain(verb string, err error) error {
 	return &hostError{host: t.host, err: errfmt.Errorf("tuios on %s: %w", t.host, explained)}
 }
 
-// hostError is a verb failure another machine answered. Its message is that
-// machine's word, so reportVerbError marks the JSON form with the host and
-// untrusted, as a result from there is marked. It prints and unwraps as the
-// error it carries.
 type hostError struct {
 	host string
 	err  error
@@ -151,8 +110,6 @@ type hostError struct {
 func (e *hostError) Error() string { return e.err.Error() }
 func (e *hostError) Unwrap() error { return e.err }
 
-// on is the suffix a line of human output carries when the answer came from
-// another machine: " on build", or nothing.
 func (t *verbTarget) on() string {
 	if t.host == "" {
 		return ""
@@ -160,12 +117,6 @@ func (t *verbTarget) on() string {
 	return " on " + t.host
 }
 
-// result adds the host to a verb result that came from another machine, so
-// the JSON a script reads says where it came from, and marks it untrusted.
-// Everything in it is that machine's word: a window title, a pane's content,
-// a matched line. untrusted is the JSON form of the fence the human output
-// puts around content, so a program reading the JSON is told the same thing
-// an agent reading the text is. A local result is returned as it is.
 func (t *verbTarget) result(raw json.RawMessage) json.RawMessage {
 	if t.host == "" {
 		return raw
@@ -182,18 +133,11 @@ func (t *verbTarget) result(raw json.RawMessage) json.RawMessage {
 	return out
 }
 
-// markUntrusted marks a JSON object as another machine's word: host names
-// the machine, and untrusted is the JSON form of the fence the text output
-// puts around content from there.
 func markUntrusted(fields map[string]any, host string) {
 	fields["host"] = host
 	fields["untrusted"] = true
 }
 
-// markHostRows marks each far host's entry in an aggregated listing
-// (list-host-sessions, list-host-agents) untrusted. This machine's own entry,
-// under federation.LocalHostName, is left as it is. A result that does not
-// have the expected shape is returned unchanged.
 func markHostRows(raw json.RawMessage) json.RawMessage {
 	var fields map[string]any
 	if err := jsonx.Unmarshal(raw, &fields); err != nil {
@@ -219,9 +163,6 @@ func markHostRows(raw json.RawMessage) json.RawMessage {
 	return out
 }
 
-// explainTargetConnectError is explainHostConnectError with the one thing a
-// qualified target adds: an unknown host may be a session on this machine
-// whose name has a colon, and the fix for that is the local: spelling.
 func explainTargetConnectError(host, sessionFlag, windowFlag string, err error) error {
 	explained := explainHostConnectError(host, err)
 	var connect *session.HostConnectError
@@ -241,7 +182,6 @@ func explainTargetConnectError(host, sessionFlag, windowFlag string, err error) 
 	return d
 }
 
-// printVerbResultOn is printVerbResult with the host added to the JSON.
 func printVerbResultOn(t *verbTarget, raw json.RawMessage, jsonOutput bool) error {
 	return printVerbResult(t.result(raw), jsonOutput)
 }

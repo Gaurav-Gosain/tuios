@@ -20,49 +20,18 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// pane-view shows one tuios pane in the terminal it runs in, with no tuios
-// around it: the pane's bytes go straight to the terminal, and the terminal's
-// input goes straight to the pane. A terminal that draws its own panes (Tern,
-// iTerm2, a GUI) runs one pane-view per tuios pane and so gives each its own
-// scrollback, selection and search. It rides stream-pane, so it never
-// attaches: the session's clients do not change.
-//
-// The daemon makes the decisions that need its lock. pane-view's lease is a
-// viewer's (fit): while no client shows the session the pane takes the size
-// of the largest viewer, and goes back to its own size when the last viewer
-// leaves. And pane-view reports the terminal it runs in (its colours and
-// graphics), which the daemon answers the pane's queries from while no client
-// shows the session.
-
-// paneViewLeaseRenew is how often the size lease is sent again. The daemon
-// drops a lease it has not heard of for 30 seconds.
 const paneViewLeaseRenew = 10 * time.Second
 
-// paneViewSizePoll is how often the terminal size is read. Polling works on
-// every platform, and costs one ioctl.
 const paneViewSizePoll = 200 * time.Millisecond
 
-// paneViewProbeWait bounds how long pane-view waits for the terminal to
-// answer what it is. A terminal that answers nothing is reported as unknown.
 const paneViewProbeWait = 1500 * time.Millisecond
 
-// paneViewReset leaves the terminal as pane-view found it: DECSTR first, then
-// the main screen, no mouse or focus reports, no bracketed paste, kitty
-// keyboard flags and modifyOtherKeys off, normal cursor keys and keypad, the
-// ASCII character set, the whole screen as the scroll region, the default
-// cursor shape, a visible cursor and the default pen.
 const paneViewReset = "\x1b[!p\x1b[?1049l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1004l" +
 	"\x1b[?2004l\x1b[=0;1u\x1b[>4m\x1b[?1l\x1b>\x1b(B\x1b[r\x1b[0 q\x1b[?25h\x1b[0m"
 
-// paneViewClear readies the terminal for a snapshot: the reset, then the
-// screen and scrollback cleared.
 const paneViewClear = paneViewReset + "\x1b[H\x1b[2J\x1b[3J"
 
-// Exit statuses. A pane's program that exited gives its own status, and one a
-// signal ended gives 128 plus the signal, as a shell reports it.
 const (
-	// paneViewClosed is the status when the pane's window closed while its
-	// program still ran: the pane went, and nothing failed.
 	paneViewClosed = 3
 )
 
@@ -118,7 +87,6 @@ and 1 for an error.`,
 	return cmd
 }
 
-// paneView is one run of pane-view.
 type paneView struct {
 	session   string
 	sessionID string
@@ -128,14 +96,8 @@ type paneView struct {
 	in        *os.File
 	out       *os.File
 	keys      <-chan []byte
-	// pending is what was typed while the probe waited.
-	pending []byte
+	pending   []byte
 
-	// outMu orders writes to out: the pane's output and the status record
-	// (pane_view_status.go). between says the output stands between whole
-	// sequences and characters. statusOn says the terminal reads OSC 7501;
-	// statusWant is the record it should have, statusSent the one it has,
-	// and statusTitle the pane's name for it.
 	outMu                               sync.Mutex
 	between, statusOn                   bool
 	statusWant, statusSent, statusTitle string
@@ -169,9 +131,6 @@ func runPaneView(sessionName, window string, follow bool) error {
 		})
 	}
 	defer restore()
-	// A signal that ends pane-view leaves the terminal as it found it. In
-	// raw mode Ctrl-C reaches the pane as a byte, so these come from outside:
-	// the terminal closing (SIGHUP), kill, or a script.
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, paneViewSignals...)
 	go func() {
@@ -207,15 +166,12 @@ func runPaneView(sessionName, window string, follow bool) error {
 	for {
 		end, err := v.pumpOutput()
 		if end == "the daemon stopped" {
-			// A restart or an upgrade: resume on the next daemon, which
-			// restores the session.
 			end, err = "", errors.New(end)
 		}
 		if end != "" {
 			restore()
 			return paneViewExit(end)
 		}
-		// The connection dropped. Resume from the last seq the terminal got.
 		if rerr := v.reconnect(); rerr != nil {
 			restore()
 			return errfmt.Errorf("lost the pane stream (%v) and could not resume it: %w", err, rerr)
@@ -223,7 +179,6 @@ func runPaneView(sessionName, window string, follow bool) error {
 	}
 }
 
-// paneViewExit turns the stream's end reason into pane-view's exit.
 func paneViewExit(end string) error {
 	if code, ok := strings.CutPrefix(end, "exited "); ok {
 		if n, err := strconv.Atoi(strings.TrimSpace(code)); err == nil {
@@ -255,8 +210,6 @@ func (v *paneView) termSize() (int, int) {
 	return min(cols, 4096), min(rows, 4096)
 }
 
-// readKeys reads the terminal's input for the whole run: first the answers
-// to the probe, then keys.
 func readKeys(in *os.File, keys chan<- []byte) {
 	buf := make([]byte, session.PaneStreamMaxInput)
 	for {
@@ -271,11 +224,6 @@ func readKeys(in *os.File, keys chan<- []byte) {
 	}
 }
 
-// paneViewProbeQuery asks the terminal for its default colours, its sixteen,
-// its name, kitty graphics and the Program Status Protocol (OSC 7501), and
-// ends with DA1, which every terminal
-// answers and which says whether it draws sixel. The answers come back in
-// order, so DA1's marks the end.
 var paneViewProbeQuery = func() string {
 	var b strings.Builder
 	b.WriteString("\x1b]10;?\x1b\\\x1b]11;?\x1b\\\x1b]12;?\x1b\\")
@@ -294,8 +242,6 @@ var (
 	probeKitty = regexp.MustCompile(`\x1b_Gi=31;OK\x1b\\`)
 )
 
-// probe asks the terminal what it is and reads the answers. Bytes typed
-// while it waits are kept and typed into the pane later.
 func (v *paneView) probe() *session.ViewerReport {
 	_, _ = io.WriteString(v.out, paneViewProbeQuery)
 	var got []byte
@@ -320,17 +266,12 @@ func (v *paneView) probe() *session.ViewerReport {
 	}
 }
 
-// probeAnswer matches any answer the probe can draw: an OSC, DCS or APC
-// string, and DA1.
 var probeAnswer = regexp.MustCompile(`\x1b[\]P_][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b\[\?[0-9;]*c`)
 
-// stripProbe removes the probe's answers from what the terminal sent while
-// the probe waited, leaving what was typed.
 func stripProbe(b []byte) []byte {
 	return probeAnswer.ReplaceAll(b, nil)
 }
 
-// parseProbe reads the answers to paneViewProbeQuery.
 func parseProbe(b []byte) *session.ViewerReport {
 	r := &session.ViewerReport{}
 	var pal [16]string
@@ -361,7 +302,6 @@ func parseProbe(b []byte) *session.ViewerReport {
 	return r
 }
 
-// probeHex reads one X11 colour component of 1 to 4 hex digits as two.
 func probeHex(c []byte) string {
 	n, err := strconv.ParseUint(string(c), 16, 32)
 	if err != nil || len(c) == 0 {
@@ -371,14 +311,11 @@ func probeHex(c []byte) string {
 	return fmt.Sprintf("%02x", n*255/maxv)
 }
 
-// errPaneViewPermanent wraps an error a reconnect cannot fix.
 type errPaneViewPermanent struct{ err error }
 
 func (e *errPaneViewPermanent) Error() string { return e.err.Error() }
 func (e *errPaneViewPermanent) Unwrap() error { return e.err }
 
-// permanentCodes are the verb errors a retry cannot fix: the pane or the
-// session is gone, or the caller may not read it.
 var permanentCodes = map[string]bool{
 	session.ErrVerbWindowNotFound:  true,
 	session.ErrVerbSessionNotFound: true,
@@ -386,7 +323,6 @@ var permanentCodes = map[string]bool{
 	session.ErrVerbForbidden:       true,
 }
 
-// connect opens the stream, resuming from v.seq when there is one.
 func (v *paneView) connect() (session.PaneStreamReply, error) {
 	client, err := dialVerb()
 	if err != nil {
@@ -444,8 +380,6 @@ func (v *paneView) current() *session.PaneStream {
 	return v.stream
 }
 
-// pumpOutput copies frames to the terminal until the stream ends or drops.
-// It returns the end message of an X frame, or the error that dropped it.
 func (v *paneView) pumpOutput() (string, error) {
 	stream := v.current()
 	for {
@@ -498,22 +432,17 @@ func (v *paneView) size() (int, int) {
 	return v.cols, v.rows
 }
 
-// pumpInput types what the terminal sends into the pane.
 func (v *paneView) pumpInput() {
 	if len(v.pending) > 0 {
 		_ = v.current().Input(v.pending)
 	}
 	for b := range v.keys {
 		if err := v.current().Input(b); err != nil {
-			// The output side sees the drop and reconnects; this keystroke
-			// is lost with the connection.
 			time.Sleep(50 * time.Millisecond)
 		}
 	}
 }
 
-// watchSize follows the terminal's size with a new lease. The daemon decides
-// what the lease does to the pane.
 func (v *paneView) watchSize() {
 	for range time.Tick(paneViewSizePoll) {
 		cols, rows := v.termSize()
@@ -534,7 +463,6 @@ func (v *paneView) renewLease() {
 	}
 }
 
-// sanitizeTitle keeps a title from ending the OSC it is sent in.
 func sanitizeTitle(s string) string {
 	return strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f {

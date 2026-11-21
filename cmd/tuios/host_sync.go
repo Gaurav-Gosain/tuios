@@ -29,39 +29,14 @@ import (
 	"golang.org/x/term"
 )
 
-// `tuios hosts sync`: bring the tuios on every host in the [hosts] table to
-// the version this machine runs.
-//
-// The dangerous part is the daemon. A new binary on disk changes nothing that
-// runs: the daemon keeps the file it started from. Restarting it ends every
-// program in every pane it holds, and resurrection brings back the layout with
-// new shells, not the programs. So the default installs and leaves the daemon
-// alone, and says what that means. --restart moves only the daemons whose
-// version differs, and only after it has listed what a restart would end and
-// the person has agreed. It upgrades each live where it can, which ends
-// nothing, and restarts it where it cannot, saying why.
-//
-// The work goes in four steps, and nothing is changed before the third:
-//
-//  1. Probe every host at once: its system, the tuios the link finds, that
-//     binary's version, and the daemon, its sessions and the panes that run
-//     a program.
-//  2. Plan: what each host needs. The binaries are made only for the
-//     platforms that need one, each once.
-//  3. Apply: upload, check, rename into place, and restart where asked.
-//  4. Report: one table, or JSON.
-
-// syncParallel bounds how many hosts are worked on at once.
 const syncParallel = 4
 
-// Budgets for each step on one host.
 const (
 	syncProbeTimeout   = 90 * time.Second
 	syncInstallTimeout = hostsync.InstallTimeout
 	syncRestartTimeout = hostsync.RestartTimeout
 )
 
-// syncOptions are the flags.
 type syncOptions struct {
 	hosts   []string
 	dev     bool
@@ -78,41 +53,31 @@ type syncOptions struct {
 	out     io.Writer
 	errOut  io.Writer
 	in      io.Reader
-	// tty says whether the person can answer a question. Nil means read it
-	// from stdin.
-	tty *bool
+	tty     *bool
 }
 
-// The sync types are hostsync's, which tuios hosts setup shares.
 type (
 	syncDaemon = hostsync.Daemon
 	syncResult = hostsync.Result
 	syncTarget = hostsync.Target
 )
 
-// Daemon states.
 const (
 	daemonRunning = hostsync.DaemonRunning
 	daemonStopped = hostsync.DaemonStopped
 	daemonUnknown = hostsync.DaemonUnknown
 )
 
-// planOptions are the sync flags the plan reads.
 func (o syncOptions) planOptions() hostsync.PlanOptions {
 	return hostsync.PlanOptions{Restart: o.restart, Start: o.start, Service: o.service, DryRun: o.dryRun}
 }
 
-// syncSession is one session on a daemon, with the panes that run a program
-// and the agents that can resume. restart-server reports the same shape.
 type syncSession = restartplan.Session
 
-// syncPane is a pane that runs a program a restart ends.
 type syncPane = restartplan.Pane
 
-// syncAgent is an agent pane whose conversation can resume after a restart.
 type syncAgent = restartplan.Agent
 
-// syncReport is the JSON result.
 type syncReport struct {
 	Version string       `json:"version"`
 	Source  string       `json:"source"`
@@ -121,7 +86,6 @@ type syncReport struct {
 	Hosts   []syncResult `json:"hosts"`
 }
 
-// newHostsSyncCommand builds `tuios hosts sync`.
 func newHostsSyncCommand() *cobra.Command {
 	var opts syncOptions
 	cmd := &cobra.Command{
@@ -224,7 +188,6 @@ scripts/install.sh ghostty.`,
 	return cmd
 }
 
-// runHostsSync is the whole command.
 func runHostsSync(opts syncOptions) error {
 	if opts.out == nil {
 		opts.out = os.Stdout
@@ -247,8 +210,6 @@ func runHostsSync(opts syncOptions) error {
 	if err != nil {
 		return err
 	}
-	// The ssh calls of this run share one connection per host, so one
-	// Tailscale SSH approval covers the run. See internal/hostsync/gate.go.
 	share := hostsync.NewShare(os.Getenv("TUIOS_SSH"))
 	defer share.Close()
 	desk := hostsync.NewApprovalDesk(opts.errOut, opts.in, syncIsTTY(opts) && !opts.json)
@@ -265,9 +226,6 @@ func runHostsSync(opts syncOptions) error {
 	}
 	defer src.Cleanup()
 
-	// 1. Probe. The probe goes first and the daemon is read after it, so the
-	// probe's connection is the one the link shares, and a host that
-	// Tailscale holds asks for one approval, not two.
 	forEachTarget(targets, func(t *syncTarget) {
 		ctx, cancel := context.WithTimeout(context.Background(), syncProbeTimeout)
 		defer cancel()
@@ -275,8 +233,6 @@ func runHostsSync(opts syncOptions) error {
 		if hostsync.GateErrorOf(probeErr) != nil {
 			t.Res.Daemon.State = daemonUnknown
 		} else {
-			// The approval wait does not count against the probe's budget,
-			// so the daemon gets a budget of its own.
 			dctx, dcancel := context.WithTimeout(context.Background(), syncProbeTimeout)
 			if t.Local {
 				readLocalDaemon(dctx, t)
@@ -289,14 +245,12 @@ func runHostsSync(opts syncOptions) error {
 		case probeErr != nil:
 			t.Fail(probeErr)
 		case t.Res.Path == "":
-			// No tuios, so no daemon the link could reach.
 			t.Res.Daemon = syncDaemon{State: daemonStopped}
 		case t.DaemonNote != "":
 			t.Note(t.DaemonNote)
 		}
 	})
 
-	// 2. Plan.
 	needed := map[string]bool{}
 	for _, t := range targets {
 		if t.Failed {
@@ -319,18 +273,15 @@ func runHostsSync(opts syncOptions) error {
 			}
 		}
 	} else if src.Kind == hostsync.KindRelease {
-		// The plan should not promise a release that does not exist.
 		if err := src.LookupRelease(); err != nil {
 			return err
 		}
 	}
 
-	// The restarts that end something are agreed to before anything moves.
 	if err := confirmSyncRestarts(targets, opts); err != nil {
 		return err
 	}
 
-	// 3. Apply.
 	if !opts.dryRun {
 		if slices.ContainsFunc(targets, func(t *syncTarget) bool { return t.LiveOnly && !t.Failed }) {
 			fmt.Fprintln(opts.errOut, "This command runs in a pane of this machine's daemon, so its upgrade asks you first.")
@@ -347,7 +298,6 @@ func runHostsSync(opts syncOptions) error {
 		hostsync.Finish(t, src, opts.planOptions())
 	}
 
-	// 4. Report.
 	report := syncReport{Version: src.DisplayVersion(), Source: src.Kind, DryRun: opts.dryRun, OK: true}
 	failed := 0
 	for _, t := range targets {
@@ -375,7 +325,6 @@ func runHostsSync(opts syncOptions) error {
 	return nil
 }
 
-// forEachTarget runs fn for every target, syncParallel at a time.
 func forEachTarget(targets []*syncTarget, fn func(*syncTarget)) {
 	sem := make(chan struct{}, syncParallel)
 	var wg sync.WaitGroup
@@ -389,8 +338,6 @@ func forEachTarget(targets []*syncTarget, fn func(*syncTarget)) {
 	wg.Wait()
 }
 
-// resolveSyncTargets reads the hosts to sync from the config file. Only hosts
-// in the file are synced, at the address the file gives.
 func resolveSyncTargets(opts syncOptions) ([]*syncTarget, error) {
 	cfgPath, err := config.GetConfigPath()
 	if err != nil {
@@ -403,8 +350,6 @@ func resolveSyncTargets(opts syncOptions) ([]*syncTarget, error) {
 	local := opts.local
 	var names []string
 	if len(opts.hosts) == 0 {
-		// A table with no addr holds only the link policy of a device that
-		// dials in, such as a phone added by tuios pair. Nothing can ssh there.
 		for _, n := range slices.Sorted(maps.Keys(hosts)) {
 			if strings.TrimSpace(hosts[n].Addr) != "" {
 				names = append(names, n)
@@ -451,7 +396,6 @@ func resolveSyncTargets(opts syncOptions) ([]*syncTarget, error) {
 	return targets, nil
 }
 
-// chooseSyncSource decides where the binaries come from.
 func chooseSyncSource(opts syncOptions) (*hostsync.Source, error) {
 	src := hostsync.NewSource(opts.errOut)
 	src.Releases = updateReleases{}
@@ -495,7 +439,6 @@ func chooseSyncSource(opts syncOptions) (*hostsync.Source, error) {
 		src.Version = version
 		return src, nil
 	}
-	// A dev build has no release to fetch. In a checkout it builds that.
 	if cwd, err := os.Getwd(); err == nil {
 		if dir, ok := hostsync.FindTuiosCheckout(cwd); ok {
 			return src, src.InitDev(dir)
@@ -508,8 +451,6 @@ func chooseSyncSource(opts syncOptions) (*hostsync.Source, error) {
 	}
 }
 
-// updateReleases gives hosts sync the release helpers of tuios update, so a
-// failed lookup or download reads the same in both commands.
 type updateReleases struct{}
 
 func (updateReleases) ExplainLookupError(err error) error { return explainLookupError(err, false) }
@@ -526,9 +467,6 @@ func (updateReleases) ExplainChecksumError(err error, rel release.Release) error
 	return explainChecksumError(err, rel)
 }
 
-// confirmSyncRestarts lists what the planned restarts end and asks before any
-// of them. A daemon with no sessions loses nothing and is not asked about. A
-// dry run lists and does not ask.
 func confirmSyncRestarts(targets []*syncTarget, opts syncOptions) error {
 	var costly []*syncTarget
 	for _, t := range targets {
@@ -565,7 +503,6 @@ func confirmSyncRestarts(targets []*syncTarget, opts syncOptions) error {
 	return errors.New("no daemon was restarted and nothing was changed")
 }
 
-// syncIsTTY reports whether the person can answer a question.
 func syncIsTTY(opts syncOptions) bool {
 	if opts.tty != nil {
 		return *opts.tty
@@ -573,7 +510,6 @@ func syncIsTTY(opts syncOptions) bool {
 	return term.IsTerminal(int(os.Stdin.Fd()))
 }
 
-// writeRestartCost writes what a restart of one daemon ends.
 func writeRestartCost(w io.Writer, t *syncTarget) {
 	d := t.Res.Daemon
 	fmt.Fprintf(w, "%s (daemon %s, %s):\n", t.Name, cmp.Or(d.Version, "unknown"), plural.Count(d.SessionCount, "session"))
@@ -584,8 +520,6 @@ func writeRestartCost(w io.Writer, t *syncTarget) {
 	writeSessionCost(w, d.Sessions)
 }
 
-// writeSessionCost writes one line per session: its panes, and the programs
-// a restart ends.
 func writeSessionCost(w io.Writer, sessions []syncSession) {
 	for _, s := range sessions {
 		if len(s.Busy) == 0 {
@@ -600,7 +534,6 @@ func writeSessionCost(w io.Writer, sessions []syncSession) {
 	}
 }
 
-// printSyncReport writes the table and the notes.
 func printSyncReport(w io.Writer, rep syncReport, opts syncOptions) {
 	rows := make([][]string, 0, len(rep.Hosts))
 	for _, h := range rep.Hosts {
@@ -668,7 +601,6 @@ func sourceWords(kind string) string {
 	return "the given binary"
 }
 
-// daemonCell is the DAEMON column.
 func daemonCell(d syncDaemon) string {
 	switch d.State {
 	case daemonStopped:

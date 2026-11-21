@@ -55,8 +55,6 @@ tuios integration install <harness> --mcp registers it with a harness.`,
   claude mcp add tuios -- tuios mcp`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			// The server keeps this process running; --pprof is a persistent
-			// flag that mcp used to accept and ignore.
 			startPprofServer()
 			if err := startCPUProfile(); err != nil {
 				return err
@@ -65,7 +63,7 @@ tuios integration install <harness> --mcp registers it with a harness.`,
 			if scope != session.ScopeOwn && scope != session.ScopeAll {
 				return errfmt.Errorf("--scope must be own or all, not %q", scope)
 			}
-			_ = integrationVersion // written by tuios integration install to mark its entry
+			_ = integrationVersion
 			srv := mcp.New(mcp.Options{
 				Name:      "tuios",
 				Version:   version,
@@ -92,7 +90,6 @@ tuios integration install <harness> --mcp registers it with a harness.`,
 	return cmd
 }
 
-// mcpVerbDocs is the verb table, in the shape the MCP server reads.
 func mcpVerbDocs() []mcp.VerbDoc {
 	raw, err := jsonx.Marshal(session.VerbDocs())
 	if err != nil {
@@ -103,10 +100,6 @@ func mcpVerbDocs() []mcp.VerbDoc {
 	return out
 }
 
-// mcpSocketPath finds the daemon's socket. A harness may start its MCP servers
-// with a pared-down environment, so TUIOS_SOCKET, which every pane exports,
-// comes first. Without it, the socket is the one every command uses, which
-// finds the daemon under /run/user when XDG_RUNTIME_DIR is unset.
 func mcpSocketPath() (string, error) {
 	if s := os.Getenv("TUIOS_SOCKET"); s != "" {
 		return s, nil
@@ -126,7 +119,6 @@ func dialMCPConn() (mcp.Conn, error) {
 	return mcpConn{c}, nil
 }
 
-// mcpConn adapts a verb client to what the MCP server calls.
 type mcpConn struct{ c *session.VerbClient }
 
 func (m mcpConn) Call(verb string, params any, timeout time.Duration) (json.RawMessage, error) {
@@ -147,9 +139,6 @@ func (m mcpConn) ReadEventLine(timeout time.Duration) ([]byte, error) {
 
 func (m mcpConn) Close() error { return m.c.Close() }
 
-// mcpLeaveAgentTools leaves the agent tools out of tools/list while this
-// machine's config has the agent features off: each would only answer
-// agents_disabled. It is read when the server starts.
 func mcpLeaveAgentTools() func(verb string) bool {
 	cfg, err := config.LoadUserConfig()
 	if err != nil || cfg == nil || cfg.Agents.On() {

@@ -8,7 +8,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newPiPCommand is tuios pip: the CLI half of the pip verb.
 func newPiPCommand() *cobra.Command {
 	var session string
 	var off, jsonOutput bool
@@ -49,7 +48,6 @@ client, and a detach forgets it. Set its size and corner in the [pip] table.`,
 	return cmd
 }
 
-// runPiP calls the pip verb and says what is pinned now.
 func runPiP(sessionName, window string, off, jsonOutput bool) error {
 
 	params := map[string]any{"session": sessionName}

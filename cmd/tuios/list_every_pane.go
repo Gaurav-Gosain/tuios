@@ -16,24 +16,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// list-windows --all: every pane of every session, on this machine and with
-// --all-hosts on every host in [hosts], with what the pane navigator
-// (choose_tree) shows for it. --text N adds the last N lines of each pane's
-// screen.
-//
-// It is built from the verbs a single list-windows and capture-pane already
-// make, one call per session and per pane, so the grants and the link policy
-// that hold for those verbs hold here: a pane whose text the caller may not
-// read is listed with the reason and no text.
-
-// maxListText caps --text, so one command cannot pull every pane's whole
-// scrollback.
 const maxListText = 200
 
-// listCallTimeout bounds one verb call of the listing.
 const listCallTimeout = 5 * time.Second
 
-// listedPane is one row of list-windows --all.
 type listedPane struct {
 	Host        string   `json:"host,omitempty"`
 	Untrusted   bool     `json:"untrusted,omitempty"`
@@ -51,15 +37,12 @@ type listedPane struct {
 	TextError   string   `json:"text_error,omitempty"`
 }
 
-// listError is a session or a machine the listing could not read.
 type listError struct {
 	Host    string `json:"host,omitempty"`
 	Session string `json:"session,omitempty"`
 	Error   string `json:"error"`
 }
 
-// runListAllWindows is list-windows with --all, --all-hosts or --text.
-// session limits it to one session when --all is not given.
 func runListAllWindows(sessionName string, all, allHosts bool, text int, jsonOutput bool) error {
 	if text < 0 || text > maxListText {
 		return errfmt.Errorf("--text takes a number of lines from 0 to %d", maxListText)
@@ -96,8 +79,6 @@ func runListAllWindows(sessionName string, all, allHosts bool, text int, jsonOut
 	defer conn.Close()
 	names, err := listSessionNames(conn)
 	if err != nil {
-		// A caller limited to its own session may not list the others. It
-		// still gets its own.
 		errs = append(errs, listError{Error: explainVerbError("list-sessions", err).Error()})
 		names = []string{""}
 	}
@@ -140,16 +121,11 @@ func runListAllWindows(sessionName string, all, allHosts bool, text int, jsonOut
 	return printListedPanes(panes, errs, text, jsonOutput)
 }
 
-// listConn is a verb connection that dials again after a call that left it
-// out of step: a timeout or a broken read (see session.ErrVerbClientBroken).
-// The call that failed reports its error, and the next call has a fresh
-// connection.
 type listConn struct {
 	c    *session.VerbClient
 	dial func() (*session.VerbClient, error)
 }
 
-// CallWithTimeout makes one call, dialling first when there is no connection.
 func (l *listConn) CallWithTimeout(verb string, params any, timeout time.Duration) (json.RawMessage, error) {
 	if l.c == nil {
 		c, err := l.dial()
@@ -168,7 +144,6 @@ func (l *listConn) CallWithTimeout(verb string, params any, timeout time.Duratio
 	return raw, err
 }
 
-// Close closes the connection, if there is one.
 func (l *listConn) Close() {
 	if l.c != nil {
 		_ = l.c.Close()
@@ -176,7 +151,6 @@ func (l *listConn) Close() {
 	}
 }
 
-// listSessionNames is every session on the client's machine.
 func listSessionNames(client *listConn) ([]string, error) {
 	raw, err := client.CallWithTimeout("list-sessions", nil, listCallTimeout)
 	if err != nil {
@@ -197,8 +171,6 @@ func listSessionNames(client *listConn) ([]string, error) {
 	return names, nil
 }
 
-// listSessionPanes lists one session's panes, and with text > 0 reads each
-// one's last lines with capture-pane.
 func listSessionPanes(client *listConn, host, name string, text int) ([]listedPane, []listError) {
 	raw, err := client.CallWithTimeout("list-windows", map[string]any{"session": name}, listCallTimeout)
 	if err != nil {
@@ -251,8 +223,6 @@ func listSessionPanes(client *listConn, host, name string, text int) ([]listedPa
 	return out, nil
 }
 
-// listWorkspaceNames is a session's named workspaces, and the session's
-// name as its daemon reports it.
 func listWorkspaceNames(client *listConn, name string) (map[int]string, string) {
 	out := map[int]string{}
 	raw, err := client.CallWithTimeout("session-info", map[string]any{"session": name}, listCallTimeout)
@@ -274,8 +244,6 @@ func listWorkspaceNames(client *listConn, name string) (map[int]string, string) 
 	return out, info.Name
 }
 
-// listPaneText reads a pane's last lines through capture-pane, or says why it
-// could not.
 func listPaneText(client *listConn, sessionName, window string, lines int) ([]string, string) {
 	raw, err := client.CallWithTimeout("capture-pane", map[string]any{
 		"session": sessionName, "window": window, "source": "recent", "lines": lines,
@@ -302,8 +270,6 @@ func listPaneText(client *listConn, sessionName, window string, lines int) ([]st
 	return out, ""
 }
 
-// printListedPanes writes the listing as JSON or as a table, with each
-// pane's text under its row when --text was given.
 func printListedPanes(panes []listedPane, errs []listError, text int, jsonOutput bool) error {
 	if jsonOutput {
 		if panes == nil {
@@ -331,10 +297,6 @@ func printListedPanes(panes []listedPane, errs []listError, text int, jsonOutput
 		return nil
 	}
 	for _, p := range panes {
-		// Every field a pane's program or another machine wrote is laundered
-		// of control and invisible characters before it reaches the terminal:
-		// a title can carry an escape sequence, and a host's text is fenced
-		// as untrusted, as capture-pane fences it.
 		where := plainLine(p.Session)
 		if p.Host != "" {
 			where = plainLine(p.Host) + ":" + where

@@ -9,19 +9,11 @@ import (
 	"tuios.dev/vt"
 )
 
-// versionReport is the body of `tuios --version`. It names the emulator
-// backend because both builds install as the same `tuios` binary, so a bug
-// report that does not say which emulator produced it cannot be placed.
 func versionReport() string {
 	rev, when, dirty := vcsBuildInfo()
 	return formatVersion(version, commit, date, builtBy, rev, when, dirty)
 }
 
-// formatVersion fills the placeholders the release ldflags would have set with
-// the stamps the go command already embeds, so a local build reports where it
-// came from instead of "none"/"unknown". Split out from versionReport so the
-// fallback is tested against known inputs rather than against whatever this
-// test binary happens to be stamped with.
 func formatVersion(v, commit, date, builtBy, rev, when string, dirty bool) string {
 	if commit == "none" && rev != "" {
 		commit = rev
@@ -33,19 +25,12 @@ func formatVersion(v, commit, date, builtBy, rev, when string, dirty bool) strin
 		date = when
 	}
 	report := fmt.Sprintf("%s [%s backend]\nCommit: %s\nBuilt: %s\nBy: %s", v, vt.Backend, commit, date, builtBy)
-	// The ghostty build says which library it linked: a build cache can link
-	// a library other than the one the build meant to (scripts/ghostty-lib.sh).
 	if lib := emulatorLibrary(); lib != "" {
 		report += "\nLibrary: " + lib
 	}
 	return report
 }
 
-// vcsBuildInfo reads the stamps the go command embeds in any binary built from
-// a checkout. Every field comes back empty for -buildvcs=false and for a build
-// from an unpacked source tarball. It is the fallback rather than the source of
-// truth because in a linked worktree the go command stamps the main checkout's
-// HEAD; scripts/install.sh passes the real one.
 func vcsBuildInfo() (rev, when string, dirty bool) {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
@@ -64,9 +49,6 @@ func vcsBuildInfo() (rev, when string, dirty bool) {
 	return rev, when, dirty
 }
 
-// applyBuildIdentity settles the build stamps (a `go install` build takes its
-// module version) and hands them to every package that reports them. See
-// app.SetBuildIdentity.
 func applyBuildIdentity() {
 	s := app.SetBuildIdentity(release.Stamps{Version: version, Commit: commit, Date: date, BuiltBy: builtBy})
 	version, commit, date, builtBy = s.Version, s.Commit, s.Date, s.BuiltBy

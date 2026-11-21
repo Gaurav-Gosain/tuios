@@ -17,57 +17,34 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// The Inbox on the command line: what is waiting for the person, in every
-// session, in the order the TUI's Inbox shows it.
-
-// attentionRow is one item of the list-attention result.
 type attentionRow struct {
-	ID        string `json:"id"`
-	Kind      string `json:"kind"`
-	Host      string `json:"host"`
-	Session   string `json:"session"`
-	Window    string `json:"window"`
-	Workspace int    `json:"workspace"`
-	Harness   string `json:"harness"`
-	Name      string `json:"name"`
-	Summary   string `json:"summary"`
-	// RiskyFlags are, on a resume row, the flags that turn approvals off.
-	RiskyFlags []string `json:"risky_flags"`
-	Since      int64    `json:"since"`
-	Thread     uint64   `json:"thread"`
-	Count      int      `json:"count"`
-	Seen       int      `json:"seen"`
-	// RequestID is set while a harness hook holds the approval for an answer
-	// from the Inbox.
-	RequestID string `json:"request_id"`
-	// Options are the answers a question ask-human put takes.
-	Options []string `json:"options"`
-	// Stale marks an item of a linked host whose link is down, last heard
-	// from at SeenAt (unix nanoseconds).
-	Stale  bool  `json:"stale"`
-	SeenAt int64 `json:"seen_at"`
-	// HeldFor is set on mail another machine sent an agent here that the
-	// link policy held for the person; HeldID is its message id.
-	HeldFor string `json:"held_for"`
-	HeldID  uint64 `json:"held_id"`
-	// ForHost is the machine an outbox item's mail waits for.
-	ForHost string `json:"for_host"`
-	// SnoozedUntil is set on an item the person snoozed, listed with
-	// --snoozed: when it opens again (unix nanoseconds), -1 for when it
-	// changes.
-	SnoozedUntil int64 `json:"snoozed_until"`
-	// WithParentUntil is set on a delegated child's question that waits for
-	// its parent agent first: when it comes to the person (unix nanoseconds).
-	WithParentUntil int64 `json:"with_parent_until"`
+	ID              string   `json:"id"`
+	Kind            string   `json:"kind"`
+	Host            string   `json:"host"`
+	Session         string   `json:"session"`
+	Window          string   `json:"window"`
+	Workspace       int      `json:"workspace"`
+	Harness         string   `json:"harness"`
+	Name            string   `json:"name"`
+	Summary         string   `json:"summary"`
+	RiskyFlags      []string `json:"risky_flags"`
+	Since           int64    `json:"since"`
+	Thread          uint64   `json:"thread"`
+	Count           int      `json:"count"`
+	Seen            int      `json:"seen"`
+	RequestID       string   `json:"request_id"`
+	Options         []string `json:"options"`
+	Stale           bool     `json:"stale"`
+	SeenAt          int64    `json:"seen_at"`
+	HeldFor         string   `json:"held_for"`
+	HeldID          uint64   `json:"held_id"`
+	ForHost         string   `json:"for_host"`
+	SnoozedUntil    int64    `json:"snoozed_until"`
+	WithParentUntil int64    `json:"with_parent_until"`
 }
 
-// attentionHeldNote ends the row of an approval a hook is holding, so the
-// person knows the pane shows no prompt and where to answer it.
 const attentionHeldNote = "held: answer in the Inbox"
 
-// attentionGroupTitle is the heading a kind's rows sit under, the TUI Inbox's
-// heading for it: a question put with ask-human sits under Questions with an
-// agent's own, and a finished turn under Done.
 func attentionGroupTitle(kind string) string {
 	switch kind {
 	case session.AttentionApproval:
@@ -122,9 +99,6 @@ func runListAttention(sessionName, host string, kinds []string, selector string,
 	return printAttentionList(os.Stdout, raw, time.Now())
 }
 
-// printAttentionList prints the Inbox grouped by kind, oldest first, one row
-// per item: how long it has waited, where it is, and what it says. Every name
-// and summary was written by an agent, so each is kept to one plain line.
 func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 	var res struct {
 		Items []attentionRow `json:"items"`
@@ -141,7 +115,6 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 	for _, it := range res.Items {
 		title := attentionGroupTitle(it.Kind)
 		if it.SnoozedUntil != 0 {
-			// Listed after everything open, under a heading of their own.
 			title = "Snoozed"
 		} else if it.WithParentUntil == 0 {
 			waiting++
@@ -186,7 +159,6 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 		}
 		switch {
 		case it.Kind == session.AttentionAsk:
-			// The answers are what the question is; the keys are the Inbox's.
 			opts := make([]string, len(it.Options))
 			for i, o := range it.Options {
 				opts[i] = strconv.Itoa(i+1) + " " + plainLine(o)
@@ -199,13 +171,10 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 			fmt.Fprintf(w, "  [%s]", snoozedUntilWords(it.SnoozedUntil, now))
 		}
 		if it.WithParentUntil != 0 {
-			// waitedFor measures back from now, so the time left is put
-			// that far back.
 			left := max(it.WithParentUntil-now.UnixNano(), 0)
 			fmt.Fprintf(w, "  [with the parent agent, comes to you in %s]", units.Waited(now.UnixNano()-left, now))
 		}
 		if it.Stale {
-			// What that machine said last. Nobody can check it now.
 			seen := "never"
 			if it.SeenAt > 0 {
 				seen = units.Waited(it.SeenAt, now) + " ago"
@@ -218,7 +187,6 @@ func printAttentionList(w io.Writer, raw json.RawMessage, now time.Time) error {
 	return nil
 }
 
-// snoozedUntilWords says when a snoozed item opens again.
 func snoozedUntilWords(until int64, now time.Time) string {
 	if until < 0 {
 		return "snoozed until it changes"
@@ -230,7 +198,6 @@ func snoozedUntilWords(until int64, now time.Time) string {
 	return "snoozed until " + at.Format("Mon Jan 2 15:04")
 }
 
-// newListAttentionCommand is `tuios list-attention`.
 func newListAttentionCommand() *cobra.Command {
 	var sessionName, host, selector string
 	var kinds []string

@@ -11,8 +11,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newPaneGrantsCommand builds `tuios pane-grants`: what the calling shell's
-// pane may do through tuios.
 func newPaneGrantsCommand() *cobra.Command {
 	var jsonOutput bool
 	cmd := &cobra.Command{
@@ -55,7 +53,6 @@ to nothing new.`,
 	return cmd
 }
 
-// newSetPaneGrantsCommand builds `tuios set-pane-grants`.
 func newSetPaneGrantsCommand() *cobra.Command {
 	var sessionName, window string
 	var grants []string
@@ -105,7 +102,6 @@ TUIOS_PANE_GRANTS its process started with is not rewritten.`,
 	return cmd
 }
 
-// completeGrantNames completes --grants.
 func completeGrantNames(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 	return append(append([]string{}, config.PaneGrantNames...), "none"), cobra.ShellCompDirectiveNoFileComp
 }
@@ -142,11 +138,8 @@ func runPaneGrants(jsonOutput bool) error {
 	return nil
 }
 
-// restartNeededNote is what pane-grants adds when config.toml gives panes
-// more than the daemon applied.
 const restartNeededNote = "config.toml gives panes or other machines more than this. That change applies after tuios config apply from a terminal outside tuios, or a daemon restart."
 
-// describePaneGrants is the text pane-grants prints.
 func describePaneGrants(pane bool, window, sess string, grants []string, explicit bool, mode string, defaults []string) string {
 	if !pane {
 		return fmt.Sprintf("This command runs in no pane of tuios, so no pane grants apply to it.\nMode %s: a pane started with no grants of its own holds %s.\n",
@@ -159,7 +152,6 @@ func describePaneGrants(pane bool, window, sess string, grants []string, explici
 	return fmt.Sprintf("Pane %s in session %s holds %s (%s).\n", shortWindowID(window), plainLine(sess), grantList(grants), source)
 }
 
-// grantList joins grant names for a sentence.
 func grantList(names []string) string {
 	if len(names) == 0 {
 		return "no grants"

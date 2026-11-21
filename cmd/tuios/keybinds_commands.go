@@ -15,8 +15,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newKeybindsCommand creates the parent "keybinds" command which acts as a
-// namespace for listing, checking, explaining, and modifying keybindings.
 func newKeybindsCommand() *cobra.Command {
 	keybindsCmd := &cobra.Command{
 		Use:     "keybinds",
@@ -42,8 +40,6 @@ what one key does.`,
 	return keybindsCmd
 }
 
-// newKeybindsListCommand creates the "list" subcommand to display every action
-// and its associated keys across all scopes, with an option to output as JSON.
 func newKeybindsListCommand() *cobra.Command {
 	var keybindsListJSON bool
 	keybindsListCmd := &cobra.Command{
@@ -74,8 +70,6 @@ Use --json to get the same rows as a JSON array.`,
 	return keybindsListCmd
 }
 
-// newKeybindsCustomCommand creates the "list-custom" subcommand to display
-// only those keybindings that differ from the application's default configuration.
 func newKeybindsCustomCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list-custom",
@@ -89,8 +83,6 @@ Each row shows the default keys and your keys.`,
 	}
 }
 
-// newKeybindsDoctorCommand creates the "doctor" subcommand to diagnose and report
-// keybinding conflicts, overlapping claims, and conflicts with common terminal programs.
 func newKeybindsDoctorCommand() *cobra.Command {
 	var (
 		keybindsJSON  bool
@@ -116,9 +108,6 @@ manager shows.`,
 	return keybindsDoctorCmd
 }
 
-// newKeybindsExplainCommand creates the "explain" subcommand to show how a
-// specific key is handled across all scopes, whether it is intercepted from
-// the pane, and which terminal or common applications also use it.
 func newKeybindsExplainCommand() *cobra.Command {
 	var (
 		keybindsJSON  bool
@@ -143,8 +132,6 @@ shows the same answer.`,
 	return keybindsExplainCmd
 }
 
-// newKeybindsUnbindCommand creates the "unbind" subcommand to remove specific keys
-// from an action and persist the change to the user configuration file.
 func newKeybindsUnbindCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "unbind <action> [key]",
@@ -174,8 +161,6 @@ your pane receives it, use ` + "`tuios keybinds free`" + `.`,
 	}
 }
 
-// newKeybindsFreeCommand creates the "free" subcommand to unbind a specific key
-// across all scopes simultaneously, returning input control back to the pane's guest program.
 func newKeybindsFreeCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "free <key>",
@@ -204,8 +189,6 @@ says so instead of reporting a success.`,
 	}
 }
 
-// newKeybindsPresetCommand creates the "preset" subcommand to view, list,
-// show details of, or apply keybinding presets (such as tmux compatibility mode).
 func newKeybindsPresetCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "preset [name]",
@@ -241,9 +224,6 @@ removes keybindings.leader_key, so the leader is the preset's.`,
 	}
 }
 
-// newKeybindsCheatSheetCommand creates the "cheatsheet" subcommand to display
-// a breakdown of a preset's kept keys, relocated keys, and missing features,
-// with an option for JSON output.
 func newKeybindsCheatSheetCommand() *cobra.Command {
 	var cheatSheetJSON bool
 
@@ -270,9 +250,6 @@ use.`,
 	return keybindsCheatSheetCmd
 }
 
-// listKeybindings loads the user configuration (or defaults if loading fails)
-// and either encodes the keybinding rows as a JSON stream or renders them
-// in a formatted table to stdout.
 func listKeybindings(asJSON bool) error {
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
@@ -297,14 +274,11 @@ func listKeybindings(asJSON bool) error {
 	return nil
 }
 
-// keybindGroup is the rows of one table of `tuios keybinds list`.
 type keybindGroup struct {
 	title string
 	rows  []keybindRow
 }
 
-// groupKeybindRows splits rows into the list's tables, in the order the rows
-// come: one per scope, with the command entries in a table of their own.
 func groupKeybindRows(rows []keybindRow) []keybindGroup {
 	var groups []keybindGroup
 	at := map[string]int{}
@@ -336,8 +310,6 @@ func groupKeybindRows(rows []keybindRow) []keybindGroup {
 	return groups
 }
 
-// printKeybindingsTable renders the categorized keybinding groups into formatted
-// terminal tables using Lipgloss, including leader key instructions and shortcuts.
 func printKeybindingsTable(rows []keybindRow, leader string) {
 	headerStyle := lipgloss.NewStyle().
 		Bold(true).
@@ -382,8 +354,6 @@ func printKeybindingsTable(rows []keybindRow, leader string) {
 	fmt.Println()
 }
 
-// keybindTableRows is the Keys, Action and Description columns of one table
-// of 'tuios keybinds list'.
 func keybindTableRows(rows []keybindRow) [][]string {
 	out := make([][]string, 0, len(rows))
 	for _, r := range rows {
@@ -407,8 +377,6 @@ func keybindTableRows(rows []keybindRow) [][]string {
 	return out
 }
 
-// listCustomKeybindings loads the user configuration, compares it against the defaults,
-// and prints a table displaying only the customized keybindings or a notice if none exist.
 func listCustomKeybindings() error {
 	userConfig, err := config.LoadUserConfig()
 	if err != nil {
@@ -476,8 +444,6 @@ type Customization struct {
 	CustomKeys  string
 }
 
-// findCustomizations iterates through all configuration sections and returns a slice
-// of Customization records identifying any keybindings that differ from default settings.
 func findCustomizations(userCfg, defaultCfg *config.UserConfig) []Customization {
 	var customizations []Customization
 
@@ -505,8 +471,6 @@ func findCustomizations(userCfg, defaultCfg *config.UserConfig) []Customization 
 	return customizations
 }
 
-// formatActionName translates an action identifier into a human-readable description
-// using configuration lookups or by replacing underscores with spaces.
 func formatActionName(action string) string {
 	if desc, ok := config.ActionDescriptions[action]; ok {
 		return desc
@@ -514,11 +478,6 @@ func formatActionName(action string) string {
 	return strings.ReplaceAll(action, "_", " ")
 }
 
-// loadKeybindConfig reads the user's config for a command that only reports
-// keys. Unlike config.LoadUserConfig it never writes a default config file, and
-// any failure falls back to the defaults. It reads the config the way the
-// running app does: the keys tuios cannot read are dropped, and the defaults
-// come back in their place. The dropped keys are on DroppedKeys.
 func loadKeybindConfig() *config.UserConfig {
 	path, err := config.GetConfigPath()
 	if err != nil {
@@ -540,9 +499,6 @@ func loadKeybindConfig() *config.UserConfig {
 	return cfg
 }
 
-// layoutSaveHint is what 'tuios layout list' prints when nothing is saved. A
-// layout is saved from inside a session, with the layout prefix or the command
-// palette, so the hint names the keys the user's config binds for it.
 func layoutSaveHint(cfg *config.UserConfig) string {
 	const palette = `pick "Save layout" in the command palette`
 	kb := cfg.Keybindings

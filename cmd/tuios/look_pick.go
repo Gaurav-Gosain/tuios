@@ -26,29 +26,14 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 )
 
-// The look list.
-//
-// The tuios.dev gallery publishes its entries as one JSON feed at
-// /gallery/feed: the comments of discussion #849 that the maintainer approved,
-// synced hourly. An entry whose config is a look carries a look id, and the
-// look itself is served at /r/<id>.toml. `tuios look list` and `tuios look
-// pick` read that feed. The CDN keeps it for five minutes, so tuios keeps no
-// copy of its own.
-
-// defaultLookGallery is the site the look list and the looks come from.
 const defaultLookGallery = "https://tuios.dev"
 
-// lookGalleryEnv moves the gallery to another site, for tests. A plain http
-// site is taken only on a loopback address.
 const lookGalleryEnv = "TUIOS_LOOK_GALLERY"
 
-// maxLookFeedBytes caps the feed download.
 const maxLookFeedBytes = 4 << 20
 
-// maxLookName caps a look's name and author in the list.
 const maxLookName = 60
 
-// lookGalleryBase is the gallery site, with no trailing slash.
 func lookGalleryBase() (string, error) {
 	base := strings.TrimRight(strings.TrimSpace(os.Getenv(lookGalleryEnv)), "/")
 	if base == "" {
@@ -62,8 +47,6 @@ func lookGalleryBase() (string, error) {
 	case "https":
 		return base, nil
 	case "http":
-		// A literal loopback address only: a name such as localhost goes
-		// through the resolver, which can answer anything.
 		if ip := net.ParseIP(u.Hostname()); ip != nil && ip.IsLoopback() {
 			return base, nil
 		}
@@ -71,7 +54,6 @@ func lookGalleryBase() (string, error) {
 	return "", errfmt.Errorf("%s must be an https URL", lookGalleryEnv)
 }
 
-// lookGalleryURL is where the gallery serves the look with id.
 func lookGalleryURL(id string) string {
 	base, err := lookGalleryBase()
 	if err != nil {
@@ -80,21 +62,14 @@ func lookGalleryURL(id string) string {
 	return base + "/r/" + id + ".toml"
 }
 
-// galleryLook is one look in the gallery list.
 type galleryLook struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Author string `json:"author"`
-	// Colors are the look's theme colours, for a preview: the background,
-	// the foreground, then the accent colours. Empty when the look has no
-	// theme tuios can read.
-	Colors []string `json:"colors,omitempty"`
-	// Requires is the lowest tuios version the look works on, or "" when
-	// the look sets none or sets a value that is not a version.
-	Requires string `json:"requires,omitempty"`
+	ID       string   `json:"id"`
+	Name     string   `json:"name"`
+	Author   string   `json:"author"`
+	Colors   []string `json:"colors,omitempty"`
+	Requires string   `json:"requires,omitempty"`
 }
 
-// errLookList is the one sentence a person sees when the list does not come.
 var errLookList = errors.New("tuios cannot get the look list from the gallery")
 
 var (
@@ -103,8 +78,6 @@ var (
 	lookFeedClient = &http.Client{Timeout: lookFetchTimeout, CheckRedirect: lookHTTP.CheckRedirect}
 )
 
-// fetchLookList downloads the gallery feed and returns its looks, in the
-// order the gallery shows them.
 func fetchLookList() ([]galleryLook, error) {
 	base, err := lookGalleryBase()
 	if err != nil {
@@ -135,7 +108,6 @@ func fetchLookList() ([]galleryLook, error) {
 	return looks, nil
 }
 
-// lookFeed is the part of the gallery feed tuios reads.
 type lookFeed struct {
 	Version int `json:"version"`
 	Entries []struct {
@@ -151,8 +123,6 @@ type lookFeed struct {
 	} `json:"entries"`
 }
 
-// parseLookFeed reads the looks out of the gallery feed. A stranger writes
-// each entry, so every text is cleaned and every colour checked.
 func parseLookFeed(data []byte) ([]galleryLook, error) {
 	var feed lookFeed
 	if err := jsonx.Unmarshal(data, &feed); err != nil {
@@ -181,10 +151,6 @@ func parseLookFeed(data []byte) ([]galleryLook, error) {
 	return looks, nil
 }
 
-// cleanLookText is s on one line, cut to maxLookName runes. Every control
-// character, format character (bidi controls and zero-width marks are
-// format characters), and line or paragraph separator becomes a space, so a
-// name cannot reorder or break the list.
 func cleanLookText(s string) string {
 	s = strings.TrimSpace(strings.Map(func(r rune) rune {
 		if theme.IsUnsafeRune(r) || unicode.Is(unicode.Cf, r) || r == '\u2028' || r == '\u2029' || r == '\u061c' {
@@ -198,8 +164,6 @@ func cleanLookText(s string) string {
 	return s
 }
 
-// lookColors are the preview colours of a look file: the theme's background,
-// foreground and accents, or the border colours of a look with no theme.
 func lookColors(text string) []string {
 	var raw map[string]any
 	if toml.Unmarshal([]byte(text), &raw) != nil {
@@ -225,7 +189,6 @@ func lookColors(text string) []string {
 	return nil
 }
 
-// printLookList prints the looks as a table, or as JSON.
 func printLookList(w io.Writer, looks []galleryLook, asJSON bool) error {
 	if asJSON {
 		data, err := json.MarshalIndent(looks, "", "  ")
@@ -247,7 +210,6 @@ func printLookList(w io.Writer, looks []galleryLook, asJSON bool) error {
 	return tw.Flush()
 }
 
-// lookNameShown is the look's name, or a stand-in for a look with none.
 func lookNameShown(l galleryLook) string {
 	if l.Name == "" {
 		return "(no name)"
@@ -255,8 +217,6 @@ func lookNameShown(l galleryLook) string {
 	return l.Name
 }
 
-// runLookPick shows the gallery looks, and applies the one the person
-// chooses through the same path as `tuios look apply`.
 func runLookPick(w io.Writer, takeOver bool) error {
 	looks, err := fetchLookList()
 	if err != nil {
@@ -276,11 +236,9 @@ func runLookPick(w io.Writer, takeOver bool) error {
 	}
 	l := looks[pick.chosen]
 	fmt.Fprintf(w, "You chose %s.\n\n", lookTitle(l))
-	// The prompt reads stdin only now, after the list gave the terminal back.
 	return runLookApply(w, "tuios.dev/r/"+l.ID, newLookPrompt(false, takeOver))
 }
 
-// lookTitle is "Name by author".
 func lookTitle(l galleryLook) string {
 	if l.Author == "" {
 		return lookNameShown(l)
@@ -288,7 +246,6 @@ func lookTitle(l galleryLook) string {
 	return lookNameShown(l) + " by " + l.Author
 }
 
-// lookPicker is the list `tuios look pick` shows.
 type lookPicker struct {
 	looks  []galleryLook
 	cur    int
@@ -300,7 +257,6 @@ type lookPicker struct {
 
 func (p *lookPicker) Init() tea.Cmd { return nil }
 
-// visible is how many rows of looks fit.
 func (p *lookPicker) visible() int { return max(p.height-4, 3) }
 
 func (p *lookPicker) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -351,7 +307,6 @@ func (p *lookPicker) View() tea.View {
 	return tea.NewView(b.String())
 }
 
-// lookNeeds is the note on a look that needs a newer tuios, or "".
 func lookNeeds(l galleryLook) string {
 	if !lookTooNew(l.Requires, version) {
 		return ""
@@ -359,7 +314,6 @@ func lookNeeds(l galleryLook) string {
 	return lipgloss.NewStyle().Faint(true).Render("  Needs tuios " + strings.TrimPrefix(l.Requires, "v") + " or later")
 }
 
-// lookSwatches draws each colour as two cells of that background.
 func lookSwatches(colors []string) string {
 	var b strings.Builder
 	for _, c := range colors {

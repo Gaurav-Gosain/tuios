@@ -13,7 +13,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newStartAgentCommand builds `tuios start-agent`.
 func newStartAgentCommand() *cobra.Command {
 	var sessionName, name, cwd, repo, prompt, protocol, task, parent, preset string
 	var model, effort, permissionMode string
@@ -182,41 +181,23 @@ the id printed when the agent is not ready, and the command exits non-zero.`,
 	return cmd
 }
 
-// startAgentOptions is what `tuios start-agent` sends.
 type startAgentOptions struct {
 	session, agent, name, cwd, repo, prompt string
-	// protocol is --protocol, empty for the agent's own TUI.
-	protocol string
-	// task is --task, the card to claim for the new pane.
-	task string
-	// parent is --parent, the agent pane the new agent reports to.
-	parent string
-	// model, effort and permissionMode are --model, --effort and
-	// --permission-mode, mapped by the daemon to the harness's own flags.
-	model, effort, permissionMode string
-	args                          []string
-	env                           map[string]string
-	// explicitEnv says the person passed --env. Without it the env holds
-	// only the PATH the CLI adds on its own.
-	explicitEnv             bool
-	workspace, readyTimeout int
-	focus, clone            bool
-	// grants is --grants, nil when it was not passed.
-	grants []string
-	// preset is --preset, merged by this machine's daemon.
-	preset string
-	// printID is --print-id.
-	printID bool
-	// noWait is --no-wait.
-	noWait bool
+	protocol                                string
+	task                                    string
+	parent                                  string
+	model, effort, permissionMode           string
+	args                                    []string
+	env                                     map[string]string
+	explicitEnv                             bool
+	workspace, readyTimeout                 int
+	focus, clone                            bool
+	grants                                  []string
+	preset                                  string
+	printID                                 bool
+	noWait                                  bool
 }
 
-// startAgentEnv is the env start-agent sends to a target on host ("" for
-// this machine). The PATH the CLI adds on its own is this machine's, so it is
-// not sent to another machine: the far daemon refuses env over a link, and
-// the agent is found on that machine's own PATH. An --env the person asked
-// for is always sent, so a remote target refuses it plainly rather than the
-// CLI dropping it quietly.
 func startAgentEnv(o startAgentOptions, host string) map[string]string {
 	if host != "" && !o.explicitEnv {
 		return nil
@@ -224,11 +205,6 @@ func startAgentEnv(o startAgentOptions, host string) map[string]string {
 	return o.env
 }
 
-// startAgentPlace is where the agent starts, as verb params, for the daemon
-// on host, "" for this machine. On this machine it is --cwd, made absolute
-// since the daemon is not in this shell's directory, or the checkout --repo
-// names, or nothing, for the focused pane's directory. On a host it is --cwd
-// or --repo as a directory there, or else this repository by its origin URL.
 func startAgentPlace(host string, o startAgentOptions) (map[string]any, error) {
 	switch {
 	case o.cwd != "" && (o.repo != "" || o.clone):
@@ -257,8 +233,6 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 	if err := ensureDaemon(); err != nil {
 		return err
 	}
-	// The params of the call, before the session and the place. With a
-	// preset, this machine's daemon merges it in, for any target.
 	host, _ := splitHostSession(o.session)
 	own := startAgentParams(o, host)
 	if o.preset != "" {
@@ -272,7 +246,6 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 			o.readyTimeout = int(n)
 		}
 	}
-	// -s any:SESSION: this machine's daemon picks the machine first.
 	var taskHost, taskSession string
 	if host, name := splitHostSession(o.session); host == hostAny {
 		if o.cwd != "" || o.repo != "" {
@@ -319,9 +292,6 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 	if wait <= 0 {
 		wait = 120000
 	}
-	// The daemon answers when the agent is ready, then types the prompt and
-	// waits for it to be taken, so the client waits past both, and past a
-	// clone on a host.
 	raw, err := t.client.CallWithTimeout("start-agent", params, time.Duration(wait)*time.Millisecond+5*time.Minute)
 	if err != nil {
 		return reportVerbError(explainHostedVerb(t, "start-agent", err), jsonOutput)
@@ -357,8 +327,6 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return errfmt.Errorf("failed to parse response: %w", err)
 	}
-	// This command sent its PATH, and the agent was not on it. Said on
-	// stderr, so --print-id still prints one line.
 	if !jsonOutput && res.PathFrom == "daemon" && params["env"] != nil {
 		fmt.Fprintln(os.Stderr, "The agent is not on this command's PATH. It was found on the PATH the daemon gives new panes, and runs with that PATH.")
 	}
@@ -422,12 +390,8 @@ func runStartAgent(o startAgentOptions, jsonOutput bool) error {
 	return nil
 }
 
-// startAgentParams is what start-agent sends besides the session and the
-// place, for the daemon on host ("" for this machine).
 func startAgentParams(o startAgentOptions, host string) map[string]any {
 	params := map[string]any{}
-	// A daemon older than protocol refuses the parameter by name, so an old
-	// daemon never starts the agent in its TUI when a protocol was asked for.
 	for k, v := range map[string]string{"agent": o.agent, "name": o.name, "prompt": o.prompt, "protocol": o.protocol, "task": o.task, "parent": o.parent,
 		"model": o.model, "effort": o.effort, "permission_mode": o.permissionMode} {
 		if v != "" {
@@ -458,7 +422,6 @@ func startAgentParams(o startAgentOptions, host string) map[string]any {
 	return params
 }
 
-// expandAgentPreset asks this machine's daemon to merge a preset into params.
 func expandAgentPreset(preset string, params map[string]any) (map[string]any, error) {
 	var res struct {
 		Params map[string]any `json:"params"`

@@ -18,7 +18,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/tmldraw"
 )
 
-// tmlRenderOptions is the `tuios tml render` command line.
 type tmlRenderOptions struct {
 	width  int
 	height int
@@ -29,12 +28,8 @@ type tmlRenderOptions struct {
 	popup  bool
 }
 
-// tmlRenderDefaultWidth is the width tml render draws at when standard
-// output is not a terminal.
 const tmlRenderDefaultWidth = 100
 
-// tmlRenderTallest bounds the height tml render draws a document at when no
-// height is given: the document then gets the rows it takes, up to this.
 const tmlRenderTallest = 400
 
 func newTMLRenderCommand() *cobra.Command {
@@ -133,8 +128,6 @@ func runTMLRender(name string, o tmlRenderOptions, stdin io.Reader, stdout, stde
 	return nil
 }
 
-// trimBlankTail drops the blank lines at the end of out but one, which is
-// the margin under the document.
 func trimBlankTail(out string) string {
 	lines := strings.Split(out, "\n")
 	end := len(lines)

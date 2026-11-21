@@ -48,7 +48,6 @@ func TestEveryHelpRenders(t *testing.T) {
 	}
 }
 
-// renderHelp executes root through fang and turns a panic into an error.
 func renderHelp(root *cobra.Command) (err error) {
 	defer func() {
 		if r := recover(); r != nil {

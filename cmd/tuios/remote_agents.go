@@ -18,7 +18,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newSetAgentQuietCommand creates the command that marks a window quiet.
 func newSetAgentQuietCommand() *cobra.Command {
 	var sessionName, window string
 	var off, jsonOutput bool
@@ -80,13 +79,6 @@ leaves an open question open, so mark workers before they ask.`,
 	return cmd
 }
 
-// runSetAgentState reports a pane's agent state to the daemon over the verb
-// protocol. It is what the reference shim calls, and what a user runs to mark a
-// pane by hand.
-//
-// A report the daemon declines because a higher-ranked source already owns the
-// window comes back as applied:false, not as an error. Saying so matters: the
-// caller otherwise believes it set a state that never took.
 func runSetAgentState(sessionName, windowTarget, state, message, source, harness string, extra setAgentStateExtras) error {
 	client, err := dialVerb()
 	if err != nil {
@@ -94,9 +86,6 @@ func runSetAgentState(sessionName, windowTarget, state, message, source, harness
 	}
 	defer func() { _ = client.Close() }()
 
-	// Run in a pane with no --window, the report is about that pane, not the
-	// focused one. A daemon that places the caller does the same. This covers
-	// one that does not.
 	if windowTarget == "" && (sessionName == "" || sessionName == os.Getenv("TUIOS_SESSION")) {
 		if pane := os.Getenv("TUIOS_PANE_ID"); pane != "" && os.Getenv("TUIOS_SESSION") != "" {
 			windowTarget, sessionName = pane, os.Getenv("TUIOS_SESSION")
@@ -110,10 +99,6 @@ func runSetAgentState(sessionName, windowTarget, state, message, source, harness
 		"source":  source,
 		"harness": harness,
 	}
-	// Sent only when set, so a call that uses none of them works against a
-	// daemon that predates them. Such a daemon ignores a param it does not
-	// know instead of refusing it, so --if-state is checked first: applied
-	// without its condition, the report would do what the caller ruled out.
 	if extra.ifState != "" {
 		if err := agenthook.RequireIfState(client); err != nil {
 			return err
@@ -149,8 +134,6 @@ func runSetAgentState(sessionName, windowTarget, state, message, source, harness
 	return nil
 }
 
-// runSetAgentSession stores a pane's conversation id without touching its
-// state. A refused report is said on stderr, as set-agent-state does.
 func runSetAgentSession(sessionName, windowTarget, harness, sessionID string) error {
 	var res struct {
 		Applied bool   `json:"applied"`
@@ -171,7 +154,6 @@ func runSetAgentSession(sessionName, windowTarget, harness, sessionID string) er
 	return nil
 }
 
-// agentRefusalText says in words why a report was not applied.
 func agentRefusalText(reason string) string {
 	switch reason {
 	case "if_state":
@@ -183,14 +165,10 @@ func agentRefusalText(reason string) string {
 	case "foreign_pane":
 		return "the harness that ran the hook is a background session outside this pane. It inherited the pane's TUIOS_PANE_ID."
 	default:
-		// outranked, or a daemon that predates reasons.
 		return "a higher-ranked source owns this pane."
 	}
 }
 
-// agentMetaTokensJSON turns key=value arguments into the tokens object of a
-// set-agent-meta call, in argument order, which the rail keeps. "key=" removes
-// the key.
 func agentMetaTokensJSON(args []string) (json.RawMessage, error) {
 	var b strings.Builder
 	b.WriteByte('{')
@@ -216,9 +194,6 @@ func agentMetaTokensJSON(args []string) (json.RawMessage, error) {
 	return json.RawMessage(b.String()), nil
 }
 
-// runSetAgentMeta records display metadata about a pane's agent. It prints
-// nothing on success, like set-agent-state, except the keys whose values were
-// cut to the length limit, on stderr.
 func runSetAgentMeta(sessionName, windowTarget string, args []string, source string, ttl time.Duration, clearFirst, jsonOutput bool) error {
 	tokens, err := agentMetaTokensJSON(args)
 	if err != nil {
@@ -263,12 +238,6 @@ func runSetAgentMeta(sessionName, windowTarget string, args []string, source str
 	return nil
 }
 
-// runWaitFor blocks until a daemon-side condition matches, so a caller can stop
-// polling a pane and sleeping between captures.
-//
-// The read deadline is stretched past the requested timeout because the daemon
-// only answers once the wait resolves: a client deadline shorter than the wait
-// would report a connection failure for a wait that was still perfectly healthy.
 func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idle int, thread uint64, timeout int, anySession bool, selector string, every, jsonOutput bool, commandSeq *uint64, fresh bool) error {
 	if fresh && condition != "window-output" {
 		return errors.New("--new goes with window-output")
@@ -365,9 +334,6 @@ func runWaitFor(sessionName, windowTarget, condition, pattern, until string, idl
 	return nil
 }
 
-// runWaitForSelect is wait-for agent-state over the panes a selector matches,
-// on this machine. The call names no session, whatever TUIOS_SESSION says: a
-// selector reaches every session.
 func runWaitForSelect(condition, until, selector string, every bool, timeout int, jsonOutput bool) error {
 	params := map[string]any{"condition": condition, "until": until, "select": selector, "timeout": timeout}
 	if every {
@@ -405,8 +371,6 @@ func runWaitForSelect(condition, until, selector string, every bool, timeout int
 	return nil
 }
 
-// runGetAgentState reads a pane's reported agent state and prints it. With
-// jsonOutput it prints the full result; otherwise it prints the state name.
 func runGetAgentState(sessionName, windowTarget string, jsonOutput bool) error {
 	t, err := dialTarget(sessionName, windowTarget)
 	if err != nil {
@@ -434,8 +398,6 @@ func runGetAgentState(sessionName, windowTarget string, jsonOutput bool) error {
 	return nil
 }
 
-// runExplainAgentDetect prints what the detector saw in a pane and what every
-// manifest made of it.
 func runExplainAgentDetect(sessionName, windowTarget string, jsonOutput bool) error {
 	raw, err := localVerb("explain-agent-detect", map[string]any{
 		"session": sessionName,
@@ -455,9 +417,6 @@ func runExplainAgentDetect(sessionName, windowTarget string, jsonOutput bool) er
 	return nil
 }
 
-// printDetectExplanation writes the human form. It leads with the verdict and
-// the evidence, because that is the answer; what the detector read and what
-// each manifest did with it follow, for the person writing a rule.
 func printDetectExplanation(w io.Writer, res detectExplanation) {
 	fmt.Fprintln(w, res.Verdict)
 	for _, line := range res.Evidence {
@@ -559,7 +518,6 @@ func orNone(s string) string {
 	return s
 }
 
-// runExplainAgentScreen prints what a harness's screen rules make of a pane.
 func runExplainAgentScreen(sessionName, windowTarget, harnessID string, lines int, jsonOutput bool) error {
 	raw, err := localVerb("explain-agent-screen", map[string]any{
 		"session": sessionName,
@@ -581,8 +539,6 @@ func runExplainAgentScreen(sessionName, windowTarget, harnessID string, lines in
 	return nil
 }
 
-// printScreenExplanation writes the human form: what the pane is, what the
-// classifier read, and what each rule did with it.
 func printScreenExplanation(w io.Writer, res screenExplanation) {
 	harnessName := res.HarnessID
 	if harnessName == "" {
@@ -624,7 +580,6 @@ func printScreenExplanation(w io.Writer, res screenExplanation) {
 	}
 	fmt.Fprintln(w, "\nrules:")
 	printRuleReports(w, res.Rules, res.Rule, "tail")
-	// The leading mark is only readable next to what it means.
 	fmt.Fprintln(w, "\n  > the rule that decided, * matched but outranked")
 	if res.Matched {
 		fmt.Fprintf(w, "  rule %d would report %s\n", res.Rule, res.RuleState)
@@ -648,9 +603,6 @@ func printScreenExplanation(w io.Writer, res screenExplanation) {
 	}
 }
 
-// printRuleReports writes one block per rule: its mark, state and priority,
-// the region it reads when that is not the block's default, the text it read
-// there, and why it refused.
 func printRuleReports(w io.Writer, reports []harness.RuleReport, decided int, defaultRegion string) {
 	for _, r := range reports {
 		mark := " "
@@ -680,7 +632,6 @@ func printRuleReports(w io.Writer, reports []harness.RuleReport, decided int, de
 	}
 }
 
-// ruleRefusals turns a rule's report into the lines saying why it refused.
 func ruleRefusals(r harness.RuleReport) []string {
 	var out []string
 	if r.Empty {

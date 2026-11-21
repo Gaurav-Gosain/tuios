@@ -2,15 +2,6 @@
 
 package main
 
-// This file is only in a binary built with -tags coverflush, which the e2e
-// test map job builds together with -cover. A coverage build writes its
-// counters when the program returns from main or calls os.Exit. The suite ends
-// most clients by closing their terminal or by a signal, and those exits write
-// nothing, so a test would look like it never ran the client code. Here the
-// counters go to one file per process every half second, which the next write
-// replaces. The runtime still writes its own file on a normal exit; the reader
-// only asks whether a block ran, so the overlap does no harm.
-
 import (
 	"bytes"
 	"fmt"
@@ -30,8 +21,6 @@ func init() {
 }
 
 func flushCoverage(dir string) {
-	// The runtime writes the meta-data file only on exit, so write it now. Its
-	// name carries the hash a counter file must repeat to be read with it.
 	if coverage.WriteMetaDir(dir) != nil {
 		return
 	}

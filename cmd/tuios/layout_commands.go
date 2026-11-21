@@ -10,11 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// The layout commands: split, zoom, swap and resize a named pane. The daemon
-// makes each change itself, so they work with no client attached. Without
-// -w, a command run in a pane acts on that pane, and one run outside every
-// pane acts on the focused pane.
-
 func newSplitWindowCommand() *cobra.Command {
 	var sessionName, window, name, cwd string
 	var ratio int
@@ -41,9 +36,6 @@ outside every pane. Works with no client attached, and turns tiling on.`,
 				cwd = abs
 			}
 			params := map[string]any{"name": name, "cwd": cwd, "ratio": ratio}
-			// A side is sent as side, an axis as direction. An older daemon
-			// that knows only the axes refuses a side for want of a
-			// direction, so it never splits the wrong way.
 			switch args[0] {
 			case "left", "right", "up", "down":
 				params["side"] = args[0]
@@ -77,7 +69,6 @@ outside every pane. Works with no client attached, and turns tiling on.`,
 	return cmd
 }
 
-// newLayoutCommands are zoom-window, swap-window and resize-window.
 func newLayoutCommands() []*cobra.Command {
 	var cmds []*cobra.Command
 	add := func(use, short, long, example string, args cobra.PositionalArgs, params func(c *cobra.Command, args []string) (map[string]any, error)) {
@@ -136,7 +127,6 @@ func newLayoutCommands() []*cobra.Command {
 	return cmds
 }
 
-// layoutLine says what a zoom, swap or resize did.
 func layoutLine(res map[string]any) string {
 	if with, ok := res["with"].(string); ok {
 		return "swapped with " + shortWindowID(with)
@@ -150,8 +140,6 @@ func layoutLine(res map[string]any) string {
 	return "no border could move"
 }
 
-// runLayoutVerb calls a layout verb on the pane -w names and prints the
-// pane's short id and what line says about the result.
 func runLayoutVerb(verb, sessionName, window string, params map[string]any, jsonOutput bool, line func(map[string]any) string) error {
 	t, err := dialTarget(sessionName, window)
 	if err != nil {
@@ -175,8 +163,6 @@ func runLayoutVerb(verb, sessionName, window string, params map[string]any, json
 	return nil
 }
 
-// newLayoutSaveCommand is tuios layout save: the workspace a session shows,
-// kept as a layout template by the daemon.
 func newLayoutSaveCommand() *cobra.Command {
 	var sessionName string
 	var jsonOutput bool
@@ -200,8 +186,6 @@ split tree. Works with no client attached. Load it with 'tuios layout load'.`,
 	return cmd
 }
 
-// newLayoutLoadCommand is tuios layout load: a layout template applied to
-// the workspace a session shows, by the daemon.
 func newLayoutLoadCommand() *cobra.Command {
 	var sessionName string
 	var jsonOutput bool
@@ -226,8 +210,6 @@ A bsp layout gets its split tree back. Works with no client attached.`,
 	return cmd
 }
 
-// runLayoutTemplate sends one layout-template action and prints line of
-// its result, or the result itself with --json.
 func runLayoutTemplate(action, sessionName, name string, jsonOutput bool, line func(map[string]any) string) error {
 	t, err := dialTarget(sessionName, "")
 	if err != nil {

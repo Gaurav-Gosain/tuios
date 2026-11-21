@@ -17,10 +17,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
-// Peek and respond on the command line: read the prompt an agent is blocked
-// on, and answer it, without attaching to its pane.
-
-// promptPeek is the peek-prompt result.
 type promptPeek struct {
 	Host       string           `json:"host"`
 	Session    string           `json:"session"`
@@ -56,10 +52,6 @@ func runPeekPrompt(sessionName, windowTarget string, jsonOutput bool) error {
 	return printPromptPeek(os.Stdout, t.result(raw))
 }
 
-// printPromptPeek prints a peek: who waits and for how long, the prompt fenced
-// as untrusted, its options, and the answers it takes, with the command that
-// gives one. Every line came from another program's screen, so each is kept
-// to plain text.
 func printPromptPeek(w io.Writer, raw json.RawMessage) error {
 	var p promptPeek
 	if err := jsonx.Unmarshal(raw, &p); err != nil {
@@ -87,8 +79,6 @@ func printPromptPeek(w io.Writer, raw json.RawMessage) error {
 		fmt.Fprintf(w, "%s. Look at the pane with: tuios capture-pane -w %s\n", capitalFirst(plainLine(p.Reason)), shortWindowID(p.Window))
 		return nil
 	}
-	// Each screen line is kept to one line, then fenced behind the gutter,
-	// so a line on the pane cannot pass for the close.
 	lines := make([]string, len(p.Lines))
 	for i, l := range p.Lines {
 		lines[i] = plainLine(l)
@@ -110,7 +100,6 @@ func printPromptPeek(w io.Writer, raw json.RawMessage) error {
 	return nil
 }
 
-// capitalFirst upper-cases the first letter of a sentence.
 func capitalFirst(s string) string {
 	if s == "" {
 		return s
@@ -161,7 +150,6 @@ func runRespond(sessionName, windowTarget, action, value, promptID string, timeo
 	return nil
 }
 
-// newPeekPromptCommand is `tuios peek-prompt`.
 func newPeekPromptCommand() *cobra.Command {
 	var sessionName, window string
 	var jsonOutput bool
@@ -191,7 +179,6 @@ A window on another machine is named HOST:SESSION:WINDOW.`,
 	return cmd
 }
 
-// newRespondCommand is `tuios respond`.
 func newRespondCommand() *cobra.Command {
 	var sessionName, window, promptID string
 	var timeout int

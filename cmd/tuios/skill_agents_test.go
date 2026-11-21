@@ -11,12 +11,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// The skill is the only thing standing between an agent and guessing, so the
-// claims it makes about numbers and lists have to be checked against the code
-// that makes them true. Six of them were wrong at once before these existed:
-// the option count, the harness list, the source ranking, the error codes, the
-// scrollback bound, and a recipe that could not work.
-
 // TestSkillListsEveryErrorCode holds the error catalogue to the protocol's own.
 // A code the skill omits is one a caller matching on codes will not handle.
 //
@@ -56,8 +50,6 @@ func TestSkillListsEveryErrorCode(t *testing.T) {
 func TestSkillIsHonestAboutRestoringConfig(t *testing.T) {
 	var unrestorable []string
 	for _, opt := range config.Options() {
-		// A colour option takes empty whatever its keyword list says (empty is
-		// how it is unset), so an empty default is one it can be set back to.
 		if opt.Default == "" && len(opt.Accepted) > 0 && !slices.Contains(opt.Accepted, "") && !opt.Color {
 			unrestorable = append(unrestorable, opt.Path)
 		}
@@ -72,13 +64,6 @@ func TestSkillIsHonestAboutRestoringConfig(t *testing.T) {
 		t.Errorf("the skill does not say that %d options cannot be restored to their defaults", len(unrestorable))
 	}
 
-	// And the inverse: a path the skill warns about that has since been fixed is
-	// a warning to delete.
-	//
-	// Read out of the warning sentence rather than looked for in the document.
-	// A backticked comma-separated list is the shape of every option list in the
-	// skill, and searching the whole text for one made the ricing table's
-	// `appearance.gap`, `appearance.panel_padding` read as a restore warning.
 	warned := warnedUnrestorable(skillText(t, "config"))
 	for _, opt := range config.Options() {
 		if slices.Contains(unrestorable, opt.Path) {
@@ -90,9 +75,6 @@ func TestSkillIsHonestAboutRestoringConfig(t *testing.T) {
 	}
 }
 
-// warnedUnrestorable returns the option paths named by the skill's restore
-// warning: the backticked names between "in that state today:" and the end of
-// that sentence, and nothing from any other list in the document.
 func warnedUnrestorable(skill string) []string {
 	const marker = "options are in that state today:"
 	_, after, ok := strings.Cut(skill, marker)
@@ -100,8 +82,6 @@ func warnedUnrestorable(skill string) []string {
 		return nil
 	}
 	rest := after
-	// The enumeration is one sentence, so it ends at the first full stop that
-	// closes a name.
 	if end := strings.Index(rest, "`. "); end >= 0 {
 		rest = rest[:end+1]
 	}

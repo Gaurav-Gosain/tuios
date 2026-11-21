@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// resumeAgentResult is the resume-agent result the CLI prints.
 type resumeAgentResult struct {
 	WindowID       string `json:"window_id"`
 	Harness        string `json:"harness"`
@@ -44,7 +43,6 @@ func runResumeAgent(sessionName, windowTarget string, dryRun, jsonOutput bool) e
 	return printResumeAgent(os.Stdout, raw)
 }
 
-// printResumeAgent says what was typed, or with a dry run what would be.
 func printResumeAgent(w io.Writer, raw json.RawMessage) error {
 	var res resumeAgentResult
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
@@ -62,7 +60,6 @@ func printResumeAgent(w io.Writer, raw json.RawMessage) error {
 	return nil
 }
 
-// newResumeAgentCommand is `tuios resume-agent`.
 func newResumeAgentCommand() *cobra.Command {
 	var sessionName, windowTarget string
 	var dryRun, jsonOutput bool

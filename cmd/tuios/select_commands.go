@@ -17,27 +17,14 @@ import (
 	"golang.org/x/term"
 )
 
-// The CLI half of selectors: the look-then-write step a write addressed by
-// selector goes through. The daemon never writes to a selection it has not
-// been handed the token for, so the CLI shows the person the set first and
-// sends the token only once they said yes, with --yes, or with --confirm and a
-// token they got from list-agents.
-
-// selectConfirm says how the CLI may confirm a selection.
 type selectConfirm struct {
-	// yes confirms whatever the selector matches now, without asking.
-	yes bool
-	// token is a confirm token the caller already has.
+	yes   bool
 	token string
-	// in and tty are where a question is read from and whether it can be
-	// asked at all. A caller that is not at a terminal is never asked.
-	in  io.Reader
-	tty bool
-	// out is where the set is printed.
-	out io.Writer
+	in    io.Reader
+	tty   bool
+	out   io.Writer
 }
 
-// stdinConfirm is selectConfirm on the process's own terminal.
 func stdinConfirm(yes bool, token string) selectConfirm {
 	return selectConfirm{
 		yes:   yes,
@@ -48,11 +35,6 @@ func stdinConfirm(yes bool, token string) selectConfirm {
 	}
 }
 
-// callWithSelection makes a write addressed by selector. The first call names
-// no token unless the caller has one, so the daemon answers confirm_required
-// with the set. The set is printed, and the call is made again with the token
-// when the caller confirms. A set that changed between the two calls is
-// refused by the daemon and reported, never retried.
 func callWithSelection(client *session.VerbClient, verb string, params map[string]any, timeout time.Duration, c selectConfirm) (json.RawMessage, error) {
 	if c.token != "" {
 		params["confirm"] = c.token
@@ -91,7 +73,6 @@ func callWithSelection(client *session.VerbClient, verb string, params map[strin
 	return client.CallWithTimeout(verb, params, timeout)
 }
 
-// selectedRow is one pane's row of a write by selector.
 type selectedRow struct {
 	Session string `json:"session"`
 	Window  string `json:"window"`
@@ -103,17 +84,14 @@ type selectedRow struct {
 	} `json:"error"`
 }
 
-// who is how a row names its pane.
 func (r selectedRow) who() string {
 	return fmt.Sprintf("%s/%s (%s)", plainLine(r.Session), orNone(plainLine(r.Name)), shortWindowID(r.Window))
 }
 
-// failure is a row's refusal, in one line.
 func (r selectedRow) failure() string {
 	return plainLine(r.RawErr.Message) + " (" + plainLine(r.RawErr.Code) + ")"
 }
 
-// runSendAgentMessageSelect sends one message to every pane a selector matches.
 func runSendAgentMessageSelect(selector, from, subject, text string, attachments []string, c selectConfirm, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
@@ -162,7 +140,6 @@ func runSendAgentMessageSelect(selector, from, subject, text string, attachments
 	return nil
 }
 
-// runAskAgentSelect asks every pane a selector matches the same question.
 func runAskAgentSelect(selector, from, text string, readyTimeout, settle, timeout, lines, stallTimeout int, force, allowBlocked bool, c selectConfirm, jsonOutput bool) error {
 	client, err := dialVerb()
 	if err != nil {
@@ -183,7 +160,6 @@ func runAskAgentSelect(selector, from, text string, readyTimeout, settle, timeou
 			params[name] = v
 		}
 	}
-	// The asks run at once, so the whole call takes as long as the slowest.
 	raw, err := callWithSelection(client, "ask-agent", params, askGrace(readyTimeout, timeout), c)
 	if err != nil {
 		return reportVerbError(explainVerbError("ask-agent", err), jsonOutput)
@@ -201,9 +177,6 @@ func runAskAgentSelect(selector, from, text string, readyTimeout, settle, timeou
 	return nil
 }
 
-// printSelectReplies prints the replies of an ask-agent over a selector, each
-// fenced as untrusted with every line behind the gutter, and returns how many
-// panes were not asked or failed.
 func printSelectReplies(w io.Writer, raw json.RawMessage) (int, error) {
 	var res struct {
 		Replies []struct {

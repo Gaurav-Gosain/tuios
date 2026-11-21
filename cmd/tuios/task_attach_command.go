@@ -16,7 +16,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// taskAttachment is one attachment as the task verbs return it.
 type taskAttachment struct {
 	Name      string `json:"name"`
 	Kind      string `json:"kind"`
@@ -29,16 +28,10 @@ type taskAttachment struct {
 	At        int64  `json:"at"`
 }
 
-// attachMaxFileBytes is the most one file may be on the wire. The daemon
-// holds the configured limit, which is at most this; a file over it is
-// refused here, before it is read whole.
 const attachMaxFileBytes = 8 << 20
 
-// attachBatchBytes bounds the base64 of the files one attach call carries:
-// a request line holds 12 MiB.
 const attachBatchBytes = 11 << 20
 
-// newTaskAttachCommand builds `tuios task attach`.
 func newTaskAttachCommand() *cobra.Command {
 	var f taskFlags
 	var name, note, link, window string
@@ -124,8 +117,6 @@ finished while that card waits in verify or review.`,
 				}
 				return attachCall(f, params)
 			}
-			// Several files go in as few calls as fit one request line each,
-			// so the card's history has one entry per call, not per file.
 			var batch []map[string]any
 			size := 0
 			flush := func() error {
@@ -166,8 +157,6 @@ finished while that card waits in verify or review.`,
 	return cmd
 }
 
-// attachFromPane has the daemon take the picture or the text of window and
-// attach it. The window is resolved in the card's session.
 func attachFromPane(f taskFlags, params map[string]any, window string, screenshot bool, opts map[string]any) error {
 	t, err := dialTarget(f.session, window)
 	if err != nil {
@@ -183,7 +172,6 @@ func attachFromPane(f taskFlags, params map[string]any, window string, screensho
 	return attachCall(f, params)
 }
 
-// cmpOr is a when set, else b.
 func cmpOr(a, b string) string {
 	if a != "" {
 		return a
@@ -191,8 +179,6 @@ func cmpOr(a, b string) string {
 	return b
 }
 
-// readAttachFile reads one file to attach, refusing a folder and a file over
-// the wire limit before it reads it whole.
 func readAttachFile(path string) ([]byte, error) {
 	fh, err := os.Open(path) // #nosec G304 -- the caller's own file, read with the caller's rights
 	if err != nil {
@@ -216,9 +202,6 @@ func readAttachFile(path string) ([]byte, error) {
 	return data, nil
 }
 
-// attachCall sends one attach-task and prints what it put on the card. A
-// card another machine owns is attached through this machine's daemon, for
-// the pane the command runs in, as a claim is.
 func attachCall(f taskFlags, params map[string]any) error {
 	if host, sess, _, err := resolveTarget(f.session, ""); err == nil && host != "" && os.Getenv("TUIOS_PANE_ID") != "" {
 		return attachForward(f, host, sess, params)
@@ -238,8 +221,6 @@ func attachCall(f taskFlags, params map[string]any) error {
 	return printAttached(raw, t.on())
 }
 
-// printAttached says what an attach-task answer put on the card, one line
-// per attachment, and which ones the card held as they were.
 func printAttached(raw []byte, on string) error {
 	var res struct {
 		Attachment  taskAttachment   `json:"attachment"`
@@ -267,8 +248,6 @@ func printAttached(raw []byte, on string) error {
 	return nil
 }
 
-// attachForward sends attach-task to this machine's daemon with host, which
-// passes it on for the calling pane.
 func attachForward(f taskFlags, host, sess string, params map[string]any) error {
 	if sess == "" {
 		return errfmt.Errorf("name the session of the card on %s: -s %s:SESSION (tuios task ls --project . --hosts lists them)", host, host)
@@ -285,7 +264,6 @@ func attachForward(f taskFlags, host, sess string, params map[string]any) error 
 	return printAttached(raw, " on "+plainLine(host))
 }
 
-// attachWhat is an attachment's kind and size, or its address.
 func attachWhat(a taskAttachment) string {
 	if a.URL != "" {
 		return plainLine(a.Kind) + ", " + plainLine(a.URL)
@@ -293,7 +271,6 @@ func attachWhat(a taskAttachment) string {
 	return plainLine(a.Kind) + ", " + units.Bytes(a.Size)
 }
 
-// newTaskAttachmentsCommand builds `tuios task attachments`.
 func newTaskAttachmentsCommand() *cobra.Command {
 	var f taskFlags
 	cmd := &cobra.Command{
@@ -334,7 +311,6 @@ func newTaskAttachmentsCommand() *cobra.Command {
 	return cmd
 }
 
-// writeAttachments prints attachments as a table.
 func writeAttachments(w io.Writer, list []taskAttachment) error {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "NAME\tKIND\tSIZE\tBY\tADDED\tNOTE")
@@ -348,7 +324,6 @@ func writeAttachments(w io.Writer, list []taskAttachment) error {
 	return tw.Flush()
 }
 
-// describeAttachments is the Attachments block of task get, in columns.
 func describeAttachments(b *strings.Builder, list []taskAttachment) {
 	if len(list) == 0 {
 		return
@@ -364,14 +339,12 @@ func describeAttachments(b *strings.Builder, list []taskAttachment) {
 		fmt.Fprintf(tw, "  %s\t%s\t%s by %s\t%s\n", plainLine(a.Name), what, agoOf(a.At), byLabel(a.By), plainLine(a.Note))
 	}
 	_ = tw.Flush()
-	// A row with no note ends in the padding of its last column.
 	for line := range strings.SplitSeq(strings.TrimRight(rows.String(), "\n"), "\n") {
 		b.WriteString(strings.TrimRight(line, " "))
 		b.WriteByte('\n')
 	}
 }
 
-// newTaskDetachCommand builds `tuios task detach`.
 func newTaskDetachCommand() *cobra.Command {
 	var f taskFlags
 	cmd := &cobra.Command{
@@ -390,7 +363,6 @@ From inside a pane, the same rule as attach.`,
 	return cmd
 }
 
-// newTaskAttachmentCommand builds `tuios task attachment`, which holds get.
 func newTaskAttachmentCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "attachment",
@@ -400,7 +372,6 @@ func newTaskAttachmentCommand() *cobra.Command {
 	return cmd
 }
 
-// newTaskAttachmentGetCommand builds `tuios task attachment get`.
 func newTaskAttachmentGetCommand() *cobra.Command {
 	var f taskFlags
 	var out string

@@ -14,7 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
-// runSelectWorkspace shows a workspace.
 func runSelectWorkspace(sessionName string, workspace int, jsonOutput bool) error {
 	raw, err := localVerb("select-workspace", map[string]any{
 		"session":   sessionName,
@@ -37,7 +36,6 @@ func runSelectWorkspace(sessionName string, workspace int, jsonOutput bool) erro
 	return nil
 }
 
-// runListWorkspaces lists every workspace with what is on it.
 func runListWorkspaces(sessionName string, jsonOutput bool) error {
 	raw, err := localVerb("list-workspaces", map[string]any{"session": sessionName}, 0, jsonOutput)
 	if err != nil {
@@ -49,8 +47,6 @@ func runListWorkspaces(sessionName string, jsonOutput bool) error {
 	return printWorkspaceList(raw)
 }
 
-// printWorkspaceList renders the workspace list in the same table shape as the
-// window list, so the two read as one tool.
 func printWorkspaceList(raw json.RawMessage) error {
 	var res struct {
 		Workspaces []struct {
@@ -107,8 +103,6 @@ func printWorkspaceList(raw json.RawMessage) error {
 	return nil
 }
 
-// checkSetLayoutMaster refuses a master position or count set-layout cannot
-// take, before anything is sent.
 func checkSetLayoutMaster(position string, masters int, mastersSet bool) error {
 	if position != "" && !config.IsMasterPosition(position) {
 		return errfmt.Errorf("--master-position takes %s, got %q", strings.Join(config.MasterPositions, ", "), position)
@@ -119,7 +113,6 @@ func checkSetLayoutMaster(position string, masters int, mastersSet bool) error {
 	return nil
 }
 
-// masterCountNames is the accepted master counts, as completions.
 func masterCountNames() []string {
 	names := make([]string, 0, config.MasterCountMax-config.MasterCountMin+1)
 	for n := config.MasterCountMin; n <= config.MasterCountMax; n++ {
@@ -128,8 +121,6 @@ func masterCountNames() []string {
 	return names
 }
 
-// runSetLayout turns tiling on or off and tidies the splits. tiling is a
-// pointer so a call that only equalizes leaves the tiling mode alone.
 func runSetLayout(sessionName string, tiling *bool, equalize, rotate bool, masterPosition string, masters int, jsonOutput bool) error {
 
 	params := map[string]any{
@@ -172,7 +163,6 @@ func runSetLayout(sessionName string, tiling *bool, equalize, rotate bool, maste
 	return nil
 }
 
-// runSetWorkspaceName labels a workspace. The number stays its identity.
 func runSetWorkspaceName(sessionName string, workspace int, name string) error {
 	return callAndReport("set-workspace-name", map[string]any{
 		"session":   sessionName,

@@ -16,7 +16,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// subscribeOptions are the flags of tuios subscribe.
 type subscribeOptions struct {
 	session  string
 	window   string
@@ -32,9 +31,6 @@ type subscribeOptions struct {
 	timeout  int
 }
 
-// newSubscribeCommand builds tuios subscribe, the command-line end of the
-// subscribe verb. It prints the stream as NDJSON so a script can pipe it to jq
-// or keep the last seq and boot id to resume from after a reconnect.
 func newSubscribeCommand() *cobra.Command {
 	var opts subscribeOptions
 	cmd := &cobra.Command{
@@ -101,8 +97,6 @@ trusting that you saw every change.`,
   tuios subscribe --hosts --types agent-state,host-changed`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			// The stream keeps this process running; --pprof is a persistent
-			// flag that subscribe used to accept and ignore.
 			startPprofServer()
 			opts.resume = cmd.Flags().Changed("after-seq")
 			if opts.bootID != "" && !opts.resume {
@@ -137,8 +131,6 @@ trusting that you saw every change.`,
 	return cmd
 }
 
-// runSubscribe subscribes and copies the stream to out until it ends, the
-// --count or --once limit is met, or the --timeout ends.
 func runSubscribe(opts subscribeOptions, out io.Writer) error {
 	text := opts.format == "text"
 	t, err := dialTarget(opts.session, opts.window)
@@ -151,9 +143,6 @@ func runSubscribe(opts subscribeOptions, out io.Writer) error {
 	if text {
 		printer = newTextPrinter()
 		printer.host = t.host
-		// The panes as they are now, so the first state line can say where
-		// its agent came from. A daemon that refuses the call costs only
-		// the names and the previous states.
 		seed := map[string]any{"all": true}
 		if t.session == "" {
 			seed["all_sessions"] = true
@@ -208,8 +197,6 @@ func runSubscribe(opts subscribeOptions, out io.Writer) error {
 		return t.explain("subscribe", err)
 	}
 	if text {
-		// The ack goes to standard error, so standard output holds one line
-		// per event and nothing else.
 		var ack struct {
 			Seq      uint64 `json:"seq"`
 			BootID   string `json:"boot_id"`
@@ -270,8 +257,6 @@ func runSubscribe(opts subscribeOptions, out io.Writer) error {
 			if t.host != "" {
 				line = t.result(json.RawMessage(line))
 			}
-			// The daemon escapes C1 controls itself; a daemon on another
-			// machine may be older, so the line is escaped here too.
 			if _, err := fmt.Fprintln(out, jsonSafe(string(line))); err != nil {
 				return err
 			}
@@ -283,9 +268,6 @@ func runSubscribe(opts subscribeOptions, out io.Writer) error {
 	return nil
 }
 
-// subscribeTimeout is how a --timeout ends the run. Without --once or
-// --count it only stops the stream, so the run succeeds. With one, the limit
-// was not met, and that fails like a wait-for that timed out.
 func subscribeTimeout(ms, printed, limit int) error {
 	if limit <= 0 {
 		return nil
@@ -296,8 +278,6 @@ func subscribeTimeout(ms, printed, limit int) error {
 	return errfmt.Errorf("the timeout of %d ms ended after %d of %d events", ms, printed, limit)
 }
 
-// checkSubscribeFlags checks the flags that work together and fills in what
-// --state implies. It runs before the daemon is dialed.
 func checkSubscribeFlags(cmd *cobra.Command, opts *subscribeOptions) error {
 	switch opts.format {
 	case "json", "text":

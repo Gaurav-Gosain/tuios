@@ -16,8 +16,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newReviewCommand builds `tuios review`: read what the agent in a pane
-// changed, leave notes on it, and send the notes to the agent.
 func newReviewCommand() *cobra.Command {
 	var sessionName, window, base, against string
 	var paths []string
@@ -86,11 +84,6 @@ past that are listed with their counts only.`,
 	return cmd
 }
 
-// dialReviewTarget is dialTarget for the review commands, which work on this
-// machine's sessions only. Reviewing a session on a linked machine is left out
-// for now, as worktree diff leaves it out: the diff is of files there, so the
-// person attaches there or brings the work here with worktree pull. The
-// refusal comes before anything is dialled.
 func dialReviewTarget(sessionName, window string) (*verbTarget, error) {
 	if err := reviewTargetRefusal(sessionName, window); err != nil {
 		return nil, err
@@ -98,8 +91,6 @@ func dialReviewTarget(sessionName, window string) (*verbTarget, error) {
 	return dialTarget(sessionName, window)
 }
 
-// reviewTargetRefusal is why the review commands refuse the target, nil when
-// it is on this machine. It dials nothing.
 func reviewTargetRefusal(sessionName, window string) error {
 	host, sess, _, err := resolveTarget(sessionName, window)
 	if err != nil {
@@ -111,8 +102,6 @@ func reviewTargetRefusal(sessionName, window string) error {
 	return nil
 }
 
-// reviewHostError is the refusal of a review command naming a session on
-// another machine.
 func reviewHostError(host, sess string) error {
 	name := host + ":" + sess
 	if sess == "" {
@@ -125,7 +114,6 @@ func reviewHostError(host, sess string) error {
 	}
 }
 
-// reviewOptions are the diff flags of tuios review.
 type reviewOptions struct {
 	base, against string
 	paths         []string
@@ -134,7 +122,6 @@ type reviewOptions struct {
 	context       int
 }
 
-// reviewDiffResult is review-diff's answer, as the CLI reads it.
 type reviewDiffResult struct {
 	Session     string        `json:"session"`
 	Window      string        `json:"window"`
@@ -185,7 +172,6 @@ func runReview(w io.Writer, sessionName, window string, o reviewOptions, jsonOut
 	return printReview(w, res, t.on(), o.stat)
 }
 
-// reviewHeading is the first line tuios review prints.
 func reviewHeading(res reviewDiffResult, on string) string {
 	var against string
 	switch {
@@ -208,17 +194,11 @@ func reviewHeading(res reviewDiffResult, on string) string {
 	return line
 }
 
-// printReview writes a review-diff answer as text: a heading, the list of
-// files, then each file's hunks with the notes under the lines they are on.
-// Every line of it came from the repository or from whoever wrote a note, so
-// each is printed with its control characters left out.
 func printReview(w io.Writer, res reviewDiffResult, on string, stat bool) error {
 	fmt.Fprintln(w, reviewHeading(res, on))
 	return printDiffFiles(w, res.Files, res.Notes, stat)
 }
 
-// printDiffFiles writes the list of changed files, then unless stat each
-// file's hunks with the notes under the lines they are on.
 func printDiffFiles(w io.Writer, files []review.File, notes []review.Note, stat bool) error {
 	if len(files) == 0 {
 		_, err := fmt.Fprintln(w, "Nothing changed.")
@@ -284,7 +264,6 @@ func printDiffFiles(w io.Writer, files []review.File, notes []review.Note, stat 
 	return nil
 }
 
-// diffLine is one line of a hunk with both line numbers before it.
 func diffLine(l review.Line) string {
 	num := func(n int) string {
 		if n == 0 {
@@ -302,7 +281,6 @@ func diffLine(l review.Line) string {
 	return fmt.Sprintf("%5s %5s %s %s", num(l.Old), num(l.New), mark, strings.ReplaceAll(plainText(strings.ReplaceAll(l.Text, "\n", " ")), "\t", "    "))
 }
 
-// noteLine is a note as it is printed under its line.
 func noteLine(n review.Note) string {
 	state := ""
 	switch {
@@ -314,7 +292,6 @@ func noteLine(n review.Note) string {
 	return fmt.Sprintf("            > note %s (%s%s): %s", plainLine(n.ID), noteAuthor(n.By), state, plainLine(n.Text))
 }
 
-// noteAuthor names who wrote a note.
 func noteAuthor(by string) string {
 	switch {
 	case by == "human", by == "shell", strings.HasPrefix(by, "link:"):
@@ -325,7 +302,6 @@ func noteAuthor(by string) string {
 	return "pane " + shortWindowID(by)
 }
 
-// parseNoteTarget reads FILE:LINE, or FILE alone for a note on a hunk.
 func parseNoteTarget(spec string, hunk bool) (string, int, error) {
 	if hunk {
 		if spec == "" {
@@ -344,15 +320,10 @@ func parseNoteTarget(spec string, hunk bool) (string, int, error) {
 	return spec[:i], line, nil
 }
 
-// newReviewNoteCommand builds `tuios review note`.
 func newReviewNoteCommand() *cobra.Command {
 	var sessionName, window, side, hunk, edit, remove string
 	var jsonOutput bool
 	cmd := &cobra.Command{
-		// FILE:LINE is not bracketed although --edit and --remove go without
-		// it: the help renderer moves a bracketed part to the end of the usage
-		// line, which printed "note TEXT... [FILE:LINE]", the opposite of every
-		// example. The other forms are in the text and the examples.
 		Use:   "note FILE:LINE TEXT...",
 		Short: "Leave a review note on a line of a pane's changes",
 		Long: `Leave a note on a line of what the agent in a pane changed, for 'tuios review
@@ -419,7 +390,6 @@ the ones left from the attached client.`,
 	return cmd
 }
 
-// newReviewNotesCommand builds `tuios review notes`.
 func newReviewNotesCommand() *cobra.Command {
 	var sessionName, window string
 	var clearAll, jsonOutput bool
@@ -494,7 +464,6 @@ func runReviewNote(w io.Writer, sessionName, window string, params map[string]an
 	return printReviewNotes(w, res.Notes)
 }
 
-// printReviewNotes writes notes as a table.
 func printReviewNotes(w io.Writer, notes []review.Note) error {
 	if len(notes) == 0 {
 		_, err := fmt.Fprintln(w, "No review notes on this pane. Add one with 'tuios review note FILE:LINE TEXT'.")
@@ -521,7 +490,6 @@ func printReviewNotes(w io.Writer, notes []review.Note) error {
 	return tw.Flush()
 }
 
-// newReviewSendCommand builds `tuios review send`.
 func newReviewSendCommand() *cobra.Command {
 	var sessionName, window string
 	var ids []string

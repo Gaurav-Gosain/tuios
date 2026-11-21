@@ -15,16 +15,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// daemonSysProcAttr starts the daemon on a console of its own with no window,
-// so it outlives the client that started it, and Ctrl+C in the client's
-// console does not reach it.
-//
-// It used to be DETACHED_PROCESS, which leaves the daemon with no console at
-// all. Then every console program the daemon started (git for a checkpoint,
-// ssh, a hook) got a new console, and with Windows Terminal as the default
-// terminal each one was a window (issue #656). A hidden console is inherited
-// instead. childproc still hides each child, for a daemon started some other
-// way.
 func daemonSysProcAttr() *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{
 		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP | windows.CREATE_NO_WINDOW,
@@ -32,18 +22,8 @@ func daemonSysProcAttr() *syscall.SysProcAttr {
 	}
 }
 
-// forceKillCommand is the command that kills the daemon without a shutdown.
 func forceKillCommand(pid int) string { return fmt.Sprintf("taskkill /F /PID %d", pid) }
 
-// stopDaemon stops the daemon on Windows. There is no SIGTERM to send, so
-// it sets the daemon's stop event and waits, as kill-server does on Unix,
-// for the daemon to save its sessions and remove its socket.
-//
-// When no daemon waits on the event, the daemon is from a tuios older than
-// the event, or it runs in a Windows session this one cannot see. That
-// daemon is terminated, as kill-server always did on Windows, and its
-// sockets and pid file are removed here, since it cannot remove them itself.
-// Without that, kill-server waited for a socket that never went away.
 func stopDaemon(pid int, socketPath string) error {
 	err := stopevent.Request(socketPath)
 	if err == nil {
@@ -70,8 +50,6 @@ func stopDaemon(pid int, socketPath string) error {
 	return nil
 }
 
-// terminateDaemon calls TerminateProcess and waits for the process to end,
-// so its files are no longer in use when they are removed.
 func terminateDaemon(pid int) error {
 	h, err := windows.OpenProcess(windows.PROCESS_TERMINATE|windows.SYNCHRONIZE, false, uint32(pid)) //nolint:gosec // a process id fits
 	if err != nil {

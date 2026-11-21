@@ -12,22 +12,10 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
-// daemonStartTimeout is how long a client waits for a spawned daemon to be
-// reachable before giving up on it.
 const daemonStartTimeout = 5 * time.Second
 
-// errDaemonUnreachable marks the one failure a bare "tuios" can recover from:
-// no daemon is running and a new one will not start. Every other failure on the
-// daemon path is about a session, not about the daemon, and has to be reported.
-//
-// It is a sentinel rather than a type because the only question asked of it is
-// "was this the daemon refusing to come up", and errors.Is answers that through
-// the diagnostic wrapper that carries the message the user reads.
 var errDaemonUnreachable = errors.New("no daemon is running and one could not be started")
 
-// ensureDaemon starts a daemon if none is reachable, and says so once. Every
-// command that may bring a daemon up funnels through here so the wording, the
-// timeout and the failure explanation cannot drift between them.
 func ensureDaemon() error {
 	if err := session.CheckSocketEnv(); err != nil {
 		return err
@@ -48,19 +36,6 @@ func ensureDaemon() error {
 	return nil
 }
 
-// daemonStderr opens the daemon log file for the child to write its stderr to,
-// and returns nil when it cannot be opened.
-//
-// Everything the daemon logs reaches the same file through its own sink.
-// Stderr is for the one thing it cannot log: a Go runtime panic the recover in
-// handleConnection does not catch writes its message and stack straight to
-// stderr, and then the process is gone. Sending it here is what makes a crashed daemon leave a
-// reason behind.
-//
-// The daemon appends to this file too, and may rotate it. Both ends open it
-// O_APPEND, so no line is interleaved with another mid-line. A rotation renames
-// the file rather than deleting it, so this descriptor keeps writing to what is
-// then daemon.log.old and nothing is lost.
 func daemonStderr() *os.File {
 	path := session.DefaultDaemonLogPath()
 	if dir := filepath.Dir(path); dir != "" {
@@ -73,32 +48,13 @@ func daemonStderr() *os.File {
 	return fh
 }
 
-// spawnDaemon is the call ensureDaemon makes to bring a daemon up. It is a
-// variable so a test can make the daemon refuse to start, which is the one
-// failure a bare "tuios" recovers from and therefore the one that has to be
-// proved rather than assumed.
 var spawnDaemon = func() error { return startDaemonBackground() }
 
-// startDaemonBackground spawns a detached daemon and returns once a daemon is
-// reachable.
-//
-// Success is "a daemon is up", not "my child is up". Two clients can decide to
-// start one at the same moment; the daemon's own start lock picks a winner and
-// the loser exits, which is the right outcome for both clients.
-//
-// daemonArgs are added after "daemon". Only start-server passes any: a client
-// that starts a daemon on the way to attaching keeps its own --pprof, and
-// handing the address on would make the two processes race to bind it.
 func startDaemonBackground(daemonArgs ...string) error {
-	// An installed service starts the daemon, so the daemon runs under the
-	// service manager and not in the scope of this terminal. A start with
-	// arguments of its own cannot go through the service.
 	if len(daemonArgs) == 0 && startDaemonThroughService() {
 		return nil
 	}
 
-	// On macOS, the TUIOS Daemon app (when installed) starts the daemon, so
-	// its panes keep local network access after the terminal quits.
 	if handled, err := startDaemonThroughApp(daemonArgs); handled {
 		return err
 	}
@@ -118,9 +74,6 @@ func startDaemonBackground(daemonArgs ...string) error {
 		return errfmt.Errorf("failed to start daemon: %w", err)
 	}
 
-	// Reap the child. A daemon that loses the start race exits at once, and
-	// without a Wait it would sit as a zombie for as long as this process runs,
-	// which for an attach is the length of the whole session.
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait() }()
 
@@ -137,10 +90,7 @@ func startDaemonBackground(daemonArgs ...string) error {
 		select {
 		case childErr = <-exited:
 			childGone = true
-			exited = nil // a nil channel blocks, so this case cannot fire twice
-			// The child may have exited because another client's daemon won the
-			// lock, so give that one a moment to finish binding before deciding
-			// nothing is coming.
+			exited = nil
 			if grace := time.Now().Add(time.Second); grace.Before(deadline) {
 				deadline = grace
 			}
@@ -157,7 +107,6 @@ func startDaemonBackground(daemonArgs ...string) error {
 	return errfmt.Errorf("daemon did not start within %v", daemonStartTimeout)
 }
 
-// waitForDaemon waits up to timeout for a daemon to answer on the socket.
 func waitForDaemon(timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for {

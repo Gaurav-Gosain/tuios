@@ -8,8 +8,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newDetachClientCmd is tuios detach-client: take attached clients off their
-// sessions, as tmux detach-client does. The sessions keep running.
 func newDetachClientCmd() *cobra.Command {
 	var (
 		clientID    string

@@ -14,9 +14,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 )
 
-// takeRex removes rex from the names integration install, status and
-// uninstall were given, and says whether it was there. Rex is a terminal, not
-// a harness, so --all never includes it.
 func takeRex(args []string) ([]string, bool) {
 	if !slices.Contains(args, integration.RexID) {
 		return args, false
@@ -24,9 +21,6 @@ func takeRex(args []string) ([]string, bool) {
 	return slices.DeleteFunc(slices.Clone(args), func(a string) bool { return a == integration.RexID }), true
 }
 
-// rexRunner runs the rex CLI found on PATH. It honours REX_CONFIG and
-// REX_SERVER as rex itself does, so a test or a second Rex server is reached
-// the same way a person reaches it.
 func rexRunner() (integration.RexRunner, error) {
 	path, err := exec.LookPath("rex")
 	if err != nil {
@@ -50,7 +44,6 @@ func rexRunner() (integration.RexRunner, error) {
 	}, nil
 }
 
-// runRexInstall is integration install rex.
 func runRexInstall(force bool) error {
 	rex, err := rexRunner()
 	if err != nil {
@@ -67,11 +60,9 @@ func runRexInstall(force bool) error {
 	return nil
 }
 
-// runRexUninstall is integration uninstall rex.
 func runRexUninstall() error {
 	rex, err := rexRunner()
 	if err != nil {
-		// Without rex the files can still go; Rex reads them at its next start.
 		rex = func(...string) (string, error) { return "", errors.New("rex is not on PATH") }
 	}
 	res, err := integration.RexUninstall(integration.SystemEnv(), rex)
@@ -84,7 +75,6 @@ func runRexUninstall() error {
 	return err
 }
 
-// runRexStatus is integration status rex.
 func runRexStatus(w io.Writer) error {
 	rex, err := rexRunner()
 	if err != nil {
@@ -131,8 +121,6 @@ func runRexStatus(w io.Writer) error {
 	return nil
 }
 
-// rexStatusRecords says which status records tuios gives Rex's tabs:
-// [agents] host_program_status of config.toml, read without writing one.
 func rexStatusRecords() string {
 	mode := config.HostProgramStatusSession
 	cfg, err := config.LoadExistingUserConfig()
@@ -151,8 +139,6 @@ func rexStatusRecords() string {
 	return "Status in Rex: one record for each tuios session. For one per agent, set host_program_status = \"panes\" under [agents] (docs/REX.md, \"Per-pane status\")."
 }
 
-// printRexCheck says what tuios_check found inside Rex, in plain words: the
-// tuios the actions run and whether the default agent would be found.
 func printRexCheck(w io.Writer, c *integration.RexCheck) {
 	if c == nil {
 		return

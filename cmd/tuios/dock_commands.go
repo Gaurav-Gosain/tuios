@@ -12,14 +12,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
-// The CLI half of the dock's two verbs.
-//
-// The listing is the debugging surface as much as the enumeration one. A
-// component whose command fails is hidden from the bar rather than left showing
-// a stale value, so the only place the failure is visible is here, which is why
-// the table carries the exit code and the error rather than only the text.
-
-// dockComponentRow is one listed component.
 type dockComponentRow struct {
 	Name     string `json:"name"`
 	Side     string `json:"side"`
@@ -37,7 +29,6 @@ type dockComponentRow struct {
 	Stopped  bool   `json:"stopped"`
 }
 
-// queryDockComponents lists the dock's components over the verb protocol.
 func queryDockComponents(sessionName string, jsonOutput bool) error {
 	raw, err := localVerb("list-dock-components", map[string]any{"session": sessionName}, 0, jsonOutput)
 	if err != nil {
@@ -49,7 +40,6 @@ func queryDockComponents(sessionName string, jsonOutput bool) error {
 	return printDockComponentList(raw)
 }
 
-// runRefreshDock re-runs one component, or all of them.
 func runRefreshDock(sessionName, component string, jsonOutput bool) error {
 
 	params := map[string]any{"session": sessionName}
@@ -77,7 +67,6 @@ func runRefreshDock(sessionName, component string, jsonOutput bool) error {
 	return nil
 }
 
-// printDockComponentList renders the listing as a table.
 func printDockComponentList(raw json.RawMessage) error {
 	var res struct {
 		Components []dockComponentRow `json:"components"`
@@ -155,8 +144,6 @@ func printDockComponentList(raw json.RawMessage) error {
 	return nil
 }
 
-// trimCell keeps a table cell to one readable line: the text a component emits
-// may carry colour, and a multi-line error should not break the table.
 func trimCell(s string, width int) string {
 	s = strings.ReplaceAll(strings.ReplaceAll(s, "\n", " "), "\r", "")
 	if lipgloss.Width(s) <= width {

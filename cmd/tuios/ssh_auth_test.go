@@ -14,7 +14,6 @@ import (
 // and not the developer's own authorized_keys.
 func TestCheckSSHAuth(t *testing.T) {
 	keysFile := filepath.Join(t.TempDir(), "authorized_keys")
-	// A real key line, so the file is accepted rather than reported as empty.
 	const key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL5s0dUf1Y7oCkQOxJmMB0uNjcnKpkOClPZ0M5ZKgnQ7 tuios-test\n"
 	if err := os.WriteFile(keysFile, []byte(key), 0o600); err != nil {
 		t.Fatalf("write keys: %v", err)

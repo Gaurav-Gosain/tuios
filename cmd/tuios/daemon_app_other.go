@@ -2,8 +2,6 @@
 
 package main
 
-// The TUIOS Daemon app exists only on macOS. See daemon_app.go.
-
 func isDaemonAppLauncher() bool { return false }
 
 func runDaemonAppLauncher() int { return 1 }

@@ -14,18 +14,8 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 )
 
-// The tailnet half of address discovery. See internal/federation's tailnet.go
-// for the rule this obeys: the machines are offered, never added.
-
-// tailnetProbeTimeout bounds the one local call. It is short because the call
-// goes to the tailscaled on this machine over a unix socket, so anything
-// slower than this means it is not answering, and a command that hangs while
-// completing an argument is worse than one that offers nothing.
 const tailnetProbeTimeout = 3 * time.Second
 
-// tailnetOptions is the [tailscale] table, or the defaults when the config
-// cannot be read. A config that will not parse must not cost the user the
-// suggestion list as well as everything else it costs them.
 func tailnetOptions() (federation.TailnetOptions, bool) {
 	path, err := config.GetConfigPath()
 	if err != nil {
@@ -33,15 +23,11 @@ func tailnetOptions() (federation.TailnetOptions, bool) {
 	}
 	ts, err := config.TailscaleInFile(path)
 	if err != nil {
-		// A config that will not parse must not cost the user the suggestion
-		// list as well as everything else it costs them.
 		return federation.DefaultTailnetOptions(), true
 	}
 	return ts.TailnetOptions(), ts.TailscaleEnabled()
 }
 
-// tailnetAddrs are the addresses to offer, empty on a machine with no tailnet
-// and empty when the table turns the suggestions off.
 func tailnetAddrs() []string {
 	opt, enabled := tailnetOptions()
 	if !enabled {
@@ -52,8 +38,6 @@ func tailnetAddrs() []string {
 	return federation.TailnetAddrs(ctx, opt)
 }
 
-// tailnetAddrFor is the address of one machine by name, for
-// 'tuios hosts add NAME --tailnet'.
 func tailnetAddrFor(name string) (string, bool) {
 	opt, _ := tailnetOptions()
 	ctx, cancel := context.WithTimeout(context.Background(), tailnetProbeTimeout)
@@ -61,7 +45,6 @@ func tailnetAddrFor(name string) (string, bool) {
 	return federation.TailnetAddrFor(ctx, name, opt)
 }
 
-// newHostsTailnetCommand builds 'tuios hosts tailnet'.
 func newHostsTailnetCommand() *cobra.Command {
 	var asJSON bool
 	cmd := &cobra.Command{
@@ -94,9 +77,6 @@ does not dial a tailnet address itself.
 	return cmd
 }
 
-// tailnetRow is one machine as JSON. The fields are named for what they say
-// rather than for the tailscale API, and the reason a machine was left out is
-// carried, so a script can tell "no such machine" from "filtered out".
 type tailnetRow struct {
 	Name    string   `json:"name"`
 	Addr    string   `json:"addr"`
@@ -162,9 +142,6 @@ func runHostsTailnet(asJSON bool) error {
 	for _, r := range rows {
 		already := configured[r.Addr]
 		if already == "" && configured[r.Name] != "" {
-			// A host of the same name, whatever address it was given. It may
-			// be reached another way, by an ssh_config alias for instance, and
-			// offering the machine again as if it were new would be wrong.
 			already = configured[r.Name]
 		}
 		mark := " "
@@ -191,9 +168,6 @@ func runHostsTailnet(asJSON bool) error {
 	return nil
 }
 
-// configuredHosts maps both the address and the name of every host already in
-// the [hosts] table to that host's name, so the listing can say which machines
-// are already set up rather than offering them again.
 func configuredHosts() map[string]string {
 	out := map[string]string{}
 	path, err := config.GetConfigPath()

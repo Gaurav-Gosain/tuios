@@ -13,10 +13,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// tuios plugins approve: the person's answer for a native plugin on this
-// machine, from a terminal. The attached client asks the same question in
-// a dialog (session/plugin_approval.go).
-
 func newPluginsApproveCommand() *cobra.Command {
 	var deny, yes bool
 	var grants []string
@@ -91,9 +87,6 @@ func approvePlugin(out io.Writer, id string, allow, admin, yes bool) error {
 	if !ok {
 		return errors.New("nothing was changed")
 	}
-	// Every daemon that runs confirms that the person runs this command,
-	// before any answer is written, also under --server. With no daemon to
-	// ask, nothing proves it, so nothing is written. See approval.go.
 	if err := confirmPerson(); err != nil {
 		return err
 	}
@@ -103,9 +96,6 @@ func approvePlugin(out io.Writer, id string, allow, admin, yes bool) error {
 		return err
 	}
 	if !running {
-		// The daemon this command names does not run, and every daemon
-		// that runs confirmed the person above. The next daemon reads the
-		// answer.
 		dirs := herdrplugin.DefaultDirs(pluginsConfigPathOrEmpty(), nil)
 		if allow {
 			err = herdrplugin.Approve(dirs.ApprovalsPath(), p, p.Trust, admin)
@@ -129,7 +119,6 @@ func approvePlugin(out io.Writer, id string, allow, admin, yes bool) error {
 	return nil
 }
 
-// pluginsConfigPathOrEmpty is config.toml, or "" when it cannot be found.
 func pluginsConfigPathOrEmpty() string {
 	p, err := pluginsConfigPath()
 	if err != nil {
