@@ -125,7 +125,25 @@ type remotePane struct {
 	// graphics commands into its output. Nil when the far machine does not
 	// read them. See kitty_link_near.go.
 	kitty *kittyLinkNear
+
+	// out is the input and the sizes waiting to go to the far machine, in the
+	// order they were asked for, and outBytes the input bytes in it. sending
+	// is set while the goroutine that drains it runs. See send.
+	out      []paneOut
+	outBytes int
+	sending  bool
 }
+
+// paneOut is one thing for the far machine: input bytes, or a size when data
+// is nil.
+type paneOut struct {
+	data                          []byte
+	width, height, xpixel, ypixel int
+}
+
+// remotePaneOutMax bounds the input waiting for one pane, so a link that
+// stalls cannot hold more than one large paste of it.
+const remotePaneOutMax = maxFrameBytes
 
 // remotePaneLinkReconnecting is the link state of a pane being reattached.
 const remotePaneLinkReconnecting = "reconnecting"
@@ -334,20 +352,92 @@ var errPaneReconnecting = errors.New("the link to this pane's machine is down an
 // is nowhere to send it, and the keystrokes are refused rather than queued:
 // typing into a pane whose screen is frozen and replaying it later is worse
 // than typing again.
+//
+// The input is handed to send and Write returns at once. The daemon calls
+// Write from the loop that reads a client's messages, and a write that waited
+// on a link that stalls held every key of that client behind it, to panes on
+// this machine too (#2303).
 func (p *remotePane) Write(b []byte) (int, error) {
 	p.mu.Lock()
-	closed, stream, link, ended := p.closed, p.stream, p.link, p.ended
-	p.mu.Unlock()
-	if ended != "" {
-		return 0, &remotePaneEndedError{host: p.host, why: ended}
+	if err := p.refuseLocked(); err != nil {
+		p.mu.Unlock()
+		return 0, err
 	}
-	if closed {
-		return 0, io.ErrClosedPipe
-	}
-	if link != "" {
+	if p.link != "" {
+		p.mu.Unlock()
 		return 0, errPaneReconnecting
 	}
-	return stream.Write(b)
+	if p.outBytes+len(b) > remotePaneOutMax {
+		p.mu.Unlock()
+		return 0, errPaneInputBusy
+	}
+	// The caller may reuse b once this returns.
+	p.out = append(p.out, paneOut{data: append([]byte(nil), b...)})
+	p.outBytes += len(b)
+	p.startSendLocked()
+	p.mu.Unlock()
+	return len(b), nil
+}
+
+// refuseLocked is why the pane takes no more input or sizes, or nil. The
+// caller holds p.mu.
+func (p *remotePane) refuseLocked() error {
+	if p.ended != "" {
+		return &remotePaneEndedError{host: p.host, why: p.ended}
+	}
+	if p.closed {
+		return io.ErrClosedPipe
+	}
+	return nil
+}
+
+// startSendLocked starts send unless it runs already. The caller holds p.mu.
+func (p *remotePane) startSendLocked() {
+	if !p.sending {
+		p.sending = true
+		go p.send()
+	}
+}
+
+// send sends what is in out to the far machine, in order, and ends when out
+// is empty. Input goes on the pane's own connection and a size goes as
+// resize-pane on the link. Both can wait on the link, which is why they are
+// sent here and not by the caller. Keeping one order means a key typed after
+// a resize reaches the process after its new size, so `stty size` typed
+// straight after a resize answers with the new size.
+func (p *remotePane) send() {
+	for {
+		p.mu.Lock()
+		if len(p.out) == 0 || p.refuseLocked() != nil {
+			p.out, p.outBytes, p.sending = nil, 0, false
+			p.mu.Unlock()
+			return
+		}
+		next := p.out[0]
+		p.out[0] = paneOut{}
+		p.out = p.out[1:]
+		p.outBytes -= len(next.data)
+		stream, link := p.stream, p.link
+		p.mu.Unlock()
+
+		if next.data == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), remotePaneResizeBudget)
+			_, err := p.fed.Call(ctx, p.host, "resize-pane", p.resizeParams(next.width, next.height, next.xpixel, next.ypixel))
+			cancel()
+			if err != nil {
+				debugLog("[DEBUG] remote pane %s on %s: resize to %dx%d failed: %v", p.id, p.host, next.width, next.height, err)
+			}
+			continue
+		}
+		// Input that was waiting when the link dropped is refused, as Write
+		// refuses it while the pane is being reattached.
+		if link != "" {
+			continue
+		}
+		if _, err := stream.Write(next.data); err != nil {
+			debugLog("[DEBUG] remote pane %s on %s: input of %d bytes failed: %v", p.id, p.host, len(next.data), err)
+		}
+	}
 }
 
 // Resize tells the far daemon the rectangle this pane is being drawn into.
@@ -355,8 +445,8 @@ func (p *remotePane) Write(b []byte) (int, error) {
 // It is sent on the link's control stream rather than on the pane's own
 // connection, and it is best effort: a resize that fails leaves the pane
 // readable at the size it already had, and the next layout change sends
-// another. A pane that the far side has forgotten reports itself, so the
-// caller learns the process is gone from the resize as well as from the read.
+// another. A pane that has ended or closed says so, so the caller learns the
+// process is gone from the resize as well as from the read.
 func (p *remotePane) Resize(width, height int) error {
 	return p.SetWinsize(width, height, 0, 0)
 }
@@ -366,22 +456,28 @@ func (p *remotePane) Resize(width, height int) error {
 // without it). It makes the pane a ptyspawn.WinsizeSetter. A far machine
 // that does not take pixels is sent the cells alone, and fills the pixels in
 // from its fallback cell.
+//
+// The size is handed to send, as input is, and SetWinsize returns at once: the
+// daemon resizes a pane from the loop that reads a client's messages, and a
+// resize-pane that waited on a link that stalls held every key of that client
+// for up to remotePaneResizeBudget (#2303). A size still waiting when a newer
+// one comes is replaced by it.
 func (p *remotePane) SetWinsize(width, height, xpixel, ypixel int) error {
 	p.mu.Lock()
-	closed, ended := p.closed, p.ended
+	defer p.mu.Unlock()
 	p.width, p.height = width, height
 	p.xpixel, p.ypixel = xpixel, ypixel
-	p.mu.Unlock()
-	if ended != "" {
-		return &remotePaneEndedError{host: p.host, why: ended}
+	if err := p.refuseLocked(); err != nil {
+		return err
 	}
-	if closed {
-		return io.ErrClosedPipe
+	size := paneOut{width: width, height: height, xpixel: xpixel, ypixel: ypixel}
+	if n := len(p.out); n > 0 && p.out[n-1].data == nil {
+		p.out[n-1] = size
+	} else {
+		p.out = append(p.out, size)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), remotePaneResizeBudget)
-	defer cancel()
-	_, err := p.fed.Call(ctx, p.host, "resize-pane", p.resizeParams(width, height, xpixel, ypixel))
-	return err
+	p.startSendLocked()
+	return nil
 }
 
 // resizeParams is a resize-pane request for this pane.

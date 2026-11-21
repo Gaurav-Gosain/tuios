@@ -18718,3 +18718,18 @@ Run on Linux on 2026-11-20. The branch passes it three times in one process (`-c
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -run '^TestComingHomeFromAHostAsksForNoRetry$' -v .
 ```
+
+## Keys to a pane on this machine do not wait on a link (#2303)
+
+`TestLocalKeysDoNotWaitOnABadLink` in `link_bad_keys_test.go` types into a pane on this machine while the link to build stalls and drops, and resizes the terminal every third command. The session also has a window on build. Each command must come back within three seconds. A command that does not sends SIGQUIT to the client and the daemon and logs both goroutine dumps.
+
+Run on 2026-11-21 on Linux.
+
+| Control | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| Main, no fix | `TestLocalKeysDoNotWaitOnABadLink` | "command 3 typed into a pane on this machine did not come back in 3.001s". The daemon dump shows `serveConnection` in `handleResize`, `PTY.Resize`, `remotePane.SetWinsize` and `federation.(*caller).call` | **caught** |
+| No window on build (the first form of the test) | `TestLocalKeysDoNotWaitOnABadLink` | passes on main: the slowest command took 115 ms over 4 link drops | not a control |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestLocalKeysDoNotWaitOnABadLink$' .
+```
