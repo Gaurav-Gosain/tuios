@@ -200,18 +200,36 @@ jobs:
             vt/go.sum
             .github/workflows/ghostty-vt.yml
 
-      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
-        with:
-          version: 0.17.1
-
-      - name: Cache libghostty-vt
-        uses: actions/cache@v6
+      # Only a build of libghostty-vt needs zig, so a cache hit skips the
+      # zig download.
+      - name: Restore libghostty-vt
+        id: libghostty
+        uses: actions/cache/restore@v6
         with:
           path: .ghostty-vt
           key: ghostty-vt-${{ hashFiles('scripts/ghostty-lib.sh') }}-native
 
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        if: steps.libghostty.outputs.cache-hit != 'true'
+        with:
+          version: 0.17.1
+          # Its cache of zig build output helps only the library build, and
+          # the library has a cache of its own. Each run saved a new entry of
+          # 80 to 135 MB, and those pushed other caches out of the repo's
+          # 10 GB.
+          use-cache: false
+
       - name: Build libghostty-vt
         run: ./scripts/ghostty-lib.sh
+
+      # Saved now, not at the end of the job, so a failed test later in the
+      # job still keeps the library for the next run.
+      - name: Save libghostty-vt
+        if: steps.libghostty.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: .ghostty-vt
+          key: ${{ steps.libghostty.outputs.cache-primary-key }}
 
       - name: Locate the fuzz cache
         id: gocache
