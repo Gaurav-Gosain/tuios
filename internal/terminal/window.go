@@ -613,6 +613,15 @@ func (s CopyModeState) InVisual() bool {
 	return s == CopyModeVisualChar || s == CopyModeVisualLine || s == CopyModeVisualBlock
 }
 
+// SelectionState is the kind of selection the pane draws: the visual state,
+// or the one the search prompt opened from, or normal when there is none.
+func (cm *CopyMode) SelectionState() CopyModeState {
+	if cm.State == CopyModeSearch {
+		return cm.SearchReturn
+	}
+	return cm.State
+}
+
 // Position represents a 2D coordinate
 type Position struct {
 	X, Y int
@@ -687,6 +696,11 @@ type CopyMode struct {
 	// Each key typed into the prompt searches again from here, not from the
 	// match the previous key jumped to, and Esc puts the cursor back here.
 	SearchOrigin SearchOrigin
+	// SearchReturn is the state the search prompt goes back to: the visual
+	// selection it opened from, or normal. While the prompt is open over a
+	// selection, the selection stays drawn and its end follows the cursor to
+	// each match, as in tmux.
+	SearchReturn CopyModeState
 
 	// Character search state (f/F/t/T commands)
 	PendingCharCount   int  // The count typed before f/F/t/T, 1 when none
@@ -735,6 +749,10 @@ type SearchOrigin struct {
 // absolute. Matches from an earlier search are dropped, so an empty query
 // shows none.
 func (cm *CopyMode) BeginSearch(backward bool, scrollbackLen int) {
+	cm.SearchReturn = CopyModeNormal
+	if cm.State.InVisual() {
+		cm.SearchReturn = cm.State
+	}
 	cm.State = CopyModeSearch
 	cm.Search.Set("")
 	cm.SearchBackward = backward
