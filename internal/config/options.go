@@ -1282,6 +1282,12 @@ var optionSpecs = []Option{
 		Fallback:    AgentsMermaidAuto, Normalize: trimLower,
 	},
 	{
+		Path: "agents.askpass", Type: OptionString, Section: "agents",
+		Description: "Whether ssh and git in a pane ask you for a passphrase in the Inbox when they have no terminal, as in an agent's command. A pane whose environment already names an SSH_ASKPASS program keeps it. The daemon reads it when it starts a pane",
+		Accepted:    AskpassModes,
+		Fallback:    AskpassOn, Normalize: trimLower,
+	},
+	{
 		Path: "agents.name_hint", Type: OptionString, Section: "agents",
 		Description: "Whether the start hint tells an agent to name its pane after its task. Off leaves that line out and tells the agent not to rename its pane or its session, so the title the program sets and the session's label stay as they are. A running agent keeps the hint it got at its start.",
 		Accepted:    NameHints,

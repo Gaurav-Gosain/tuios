@@ -2,12 +2,14 @@ package session
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"time"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/Gaurav-Gosain/tuios/internal/askpass"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/shimlink"
 )
 
 // Secrets a program in a pane asks the person for.
@@ -81,6 +83,29 @@ func askpassPromptShown(s string) bool {
 	return true
 }
 
+// AskpassLinkName is the name tuios's askpass program runs by: a link to the
+// tuios binary, which main runs as the askpass program when it is called by
+// this name.
+const AskpassLinkName = "tuios-askpass"
+
+// installAskpassLink makes the tuios-askpass link beside the daemon socket
+// and points every new pane's SSH_ASKPASS at it. OpenSSH runs SSH_ASKPASS as
+// one path with the prompt as its argument, so the program is chosen by the
+// link's name, not by an argument.
+func (d *Daemon) installAskpassLink(socketPath string) {
+	exe, err := d.agentProtoExecutable()
+	if err != nil {
+		return
+	}
+	link, err := shimlink.Install(filepath.Join(filepath.Dir(socketPath), "askpass"), AskpassLinkName, exe)
+	if err != nil {
+		LogBasic("The askpass link could not be made: %v. Programs in panes ask for passphrases on their terminal only.", err)
+		return
+	}
+	d.manager.SetAskpassBin(link)
+	d.manager.SetAskpassAgentsOn(d.agentsEnabled)
+}
+
 // askpassRefused is askpass's refusal, with nothing asked.
 func askpassRefused(why string) *verbError {
 	return hintedVerbError(ErrVerbForbidden, why, &VerbHint{Detail: "Nothing was asked. Answer the prompt in a terminal where you can type."})
@@ -92,6 +117,15 @@ func (d *Daemon) verbAskpass(cs *connState, params json.RawMessage) (any, *verbE
 	var p struct {
 		Prompt  string `json:"prompt"`
 		Timeout int    `json:"timeout"`
+		// Terminal says the askpass program can ask on the pane's terminal,
+		// where the asking program is the foreground job. In a pane that
+		// runs no agent a person typed it, so the call answers terminal and
+		// asks nothing.
+		Terminal bool `json:"terminal"`
+		// NoInbox says the prompt must not wait for the person
+		// (GIT_TERMINAL_PROMPT=0): the call answers no_inbox where it would
+		// put the prompt in the Inbox.
+		NoInbox bool `json:"no_inbox"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -109,8 +143,17 @@ func (d *Daemon) verbAskpass(cs *connState, params json.RawMessage) (any, *verbE
 	_, own := d.peerPane(cs)
 	read := askpass.Read(p.Prompt)
 	item := AttentionItem{Summary: attentionText(read.Text, attentionMaxSummary), Secret: &SecretAsk{Kind: read.Kind, Prompt: read.Text}}
-	if own == "" || !d.placeOnPane(own, &item) {
+	w, placed := d.placeOnPane(own, &item)
+	if own == "" || !placed {
 		return nil, askpassRefused("askpass is for a program inside a pane of this daemon")
+	}
+	switch {
+	case p.Terminal && !isAgentWindow(w):
+		// A plain shell pane: a person typed the command, whatever wraps
+		// ssh, and answers on the terminal.
+		return map[string]any{"type": "askpass", "status": "terminal"}, nil
+	case p.NoInbox:
+		return map[string]any{"type": "askpass", "status": "no_inbox"}, nil
 	}
 	// The caller is the askpass program. The program that asks is the one
 	// that started it. The dialog shows its command line, and never says

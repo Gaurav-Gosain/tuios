@@ -3,7 +3,9 @@ package session
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -84,6 +86,13 @@ type Manager struct {
 	herdrMode   atomic.Pointer[string]
 	// herdrBin is HERDR_BIN_PATH, this tuios. See SetHerdrBin.
 	herdrBin atomic.Pointer[string]
+	// askpassBin is the tuios-askpass link, and askpassOff is [agents]
+	// askpass turned off. See AskpassEnv.
+	askpassBin atomic.Pointer[string]
+	askpassOff atomic.Bool
+	// askpassAgentsOn reports whether the agent features are on: the
+	// prompts go to the Inbox, which is one. Nil counts as on.
+	askpassAgentsOn atomic.Pointer[func() bool]
 	// paneTokenKey signs the TUIOS_PANE_TOKEN every pane is started with. It
 	// is picked at random for each manager and never leaves memory. See
 	// pane_token.go.
@@ -263,6 +272,45 @@ func (m *Manager) SetHerdrBin(path string) {
 	m.herdrBin.Store(&path)
 }
 
+// SetAskpass sets [agents] askpass: "off" gives panes no SSH_ASKPASS.
+func (m *Manager) SetAskpass(mode string) {
+	m.askpassOff.Store(strings.EqualFold(strings.TrimSpace(mode), config.AskpassOff))
+}
+
+// SetAskpassAgentsOn gives the manager the daemon's agent switch. A pane gets
+// no SSH_ASKPASS while the agent features are off.
+func (m *Manager) SetAskpassAgentsOn(on func() bool) {
+	m.askpassAgentsOn.Store(&on)
+}
+
+// SetAskpassBin records the tuios-askpass link a pane's SSH_ASKPASS names.
+// "" gives no SSH_ASKPASS.
+func (m *Manager) SetAskpassBin(path string) {
+	m.askpassBin.Store(&path)
+}
+
+// AskpassEnv is what a pane is started with so that ssh, and git through
+// it, ask for a passphrase through tuios's askpass program: SSH_ASKPASS
+// naming the tuios-askpass link, and SSH_ASKPASS_REQUIRE=force, so ssh runs
+// it even with no display and with a terminal. The program asks on the
+// terminal itself when the asking ssh is the terminal's foreground job, so a
+// person who types ssh in a shell pane is asked there as before
+// (cmd/tuios/askpass.go). Nil when [agents] askpass is off or there is no
+// link.
+func (m *Manager) AskpassEnv() []string {
+	p := m.askpassBin.Load()
+	// On Windows the program cannot tell a person's ssh at a terminal from
+	// an agent's, so a shell pane's ssh would ask in a dialog. It is off
+	// there until that is solved.
+	if p == nil || *p == "" || m.askpassOff.Load() || runtime.GOOS == "windows" {
+		return nil
+	}
+	if on := m.askpassAgentsOn.Load(); on != nil && !(*on)() {
+		return nil
+	}
+	return []string{"SSH_ASKPASS=" + *p, "SSH_ASKPASS_REQUIRE=force"}
+}
+
 // HerdrEnv is the herdr environment a pane that runs command (nil for the
 // user's shell) is started with, nil for none: HERDR_ENV, HERDR_SOCKET_PATH
 // naming tuios's own socket, HERDR_PANE_ID, HERDR_TAB_ID and
@@ -387,6 +435,9 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	}
 	if cfg.HerdrEnv == nil {
 		cfg.HerdrEnv = m.HerdrEnv
+	}
+	if cfg.AskpassEnv == nil {
+		cfg.AskpassEnv = m.AskpassEnv
 	}
 	if cfg.AgentEnv == nil {
 		cfg.AgentEnv = m.agentEnv

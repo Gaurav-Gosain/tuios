@@ -3969,6 +3969,63 @@ the manifest names, for at most 2 seconds, and the answer is kept a minute.
 The output is matched and dropped. The `agent-readiness` verb answers with
 it, per machine: installed, and signed in yes, no or unknown.
 
+## Passphrases and passwords
+
+An agent's command has no terminal. When ssh needs the passphrase of a key
+there, it cannot ask on a terminal. tuios asks you in the Inbox instead.
+
+- Every pane starts with `SSH_ASKPASS` set to tuios's askpass program, and
+  `SSH_ASKPASS_REQUIRE=force`. ssh, ssh-add, ssh-keygen and git over ssh run
+  that program for each passphrase, password or PIN.
+- In a pane where tuios sees no agent, a command in the foreground asks in
+  the pane, as ssh does without tuios, whatever runs ssh: ssh itself, git,
+  make or a script. The answer does not show on the screen.
+- In a pane where tuios sees an agent, and for a command with no terminal,
+  the prompt goes to the Inbox. The agent's terminal is never read.
+- The client that shows the pane opens a dialog with a hidden field. Another
+  client shows the usual Inbox alert. The dialog belongs to one pane: when you
+  move to another pane, it closes and the prompt waits in the Inbox.
+- The dialog says which program in which pane asks, and shows its command
+  line. Passwords and tokens in the command line show as `***`. tuios cannot
+  tell a real prompt from a fake one, so check the command before you answer.
+- A yes or no question and a user name show as you type them.
+- Enter sends the answer. Esc cancels the prompt, and the program gets no
+  answer. A prompt with no answer closes after 5 minutes.
+- Only you can answer, from a client that is attached now. An agent cannot
+  answer a prompt, its own or another's.
+- tuios keeps the answer only until the program has it. The answer is never
+  written to a file, a log, an event or a message.
+
+tuios keeps these rules, so that programs behave as they did before:
+
+- A pane that already has `SSH_ASKPASS` or `SSH_ASKPASS_REQUIRE` in its
+  environment, for example for ksshaskpass, gets neither from tuios.
+- With the agent features off, panes get neither.
+- `GIT_TERMINAL_PROMPT=0`, which `go mod download` sets, stops a prompt
+  that would go to the Inbox: the program fails at once. A command you type
+  in a shell pane still asks in the pane.
+- git uses `SSH_ASKPASS` for an https user name or password only when
+  `GIT_ASKPASS` and `core.askPass` are not set and no credential helper
+  answers. tuios does not set `GIT_ASKPASS`.
+- An OpenSSH notice, such as "Confirm user presence" for a security key,
+  asks nothing.
+- gpg asks through its own pinentry program, not `SSH_ASKPASS`. A gpg in an
+  agent's command still cannot ask.
+- An ssh-agent that you start in a pane gets the same variables. A key that
+  you add with `ssh-add -c` then asks a yes or no question with no terminal,
+  which the Inbox cannot ask yet, so every use of that key is refused. Start
+  ssh-agent outside tuios, or add the key without `-c`.
+- On Windows, panes get neither variable.
+- On macOS, tuios cannot read the command line of the program that asks, so
+  the dialog says only that a program asks.
+
+To turn the feature off, set this:
+
+```toml
+[agents]
+askpass = "off"
+```
+
 ## Harness integrations
 
 A harness with a hooks system reports its own state, which outranks everything
@@ -5571,6 +5628,11 @@ name the harness it runs. See [Behind a wrapper](#behind-a-wrapper).
 Every pane also gets `HERDR_ENV`, `HERDR_SOCKET_PATH`, `HERDR_PANE_ID` and
 `HERDR_BIN_PATH`, unless `herdr_protocol` in `[agents]` says otherwise. See
 [herdr's pane state protocol](#herdrs-pane-state-protocol).
+
+Every pane also gets `SSH_ASKPASS`, which names tuios's askpass program, and
+`SSH_ASKPASS_REQUIRE=force`. A pane keeps an `SSH_ASKPASS` that you set
+yourself. `askpass = "off"` in `[agents]` turns this off. See
+[Passphrases and passwords](#passphrases-and-passwords).
 
 ### What a pane says its terminal is
 

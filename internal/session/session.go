@@ -2068,6 +2068,9 @@ type SessionConfig struct {
 	// window id that runs the given command is started with, nil for none.
 	// See Manager.HerdrEnv.
 	HerdrEnv func(sessionID, windowID string, workspace int, command []string) []string
+	// AskpassEnv returns SSH_ASKPASS naming tuios's askpass program, and
+	// SSH_ASKPASS_REQUIRE, nil for none. See Manager.AskpassEnv.
+	AskpassEnv func() []string
 	// AgentEnv returns SSH_AUTH_SOCK naming the session's ssh agent link
 	// while [daemon] ssh_agent is follow, nil otherwise. The manager stamps
 	// it. See ssh_agent_follow.go.
@@ -4530,6 +4533,21 @@ func (s *Session) buildEnvFor(windowID string, workspace int, restored bool, ext
 	// socket here, when this pane starts one. See herdr_compat.go.
 	if s.config != nil && s.config.HerdrEnv != nil {
 		env = append(env, s.config.HerdrEnv(s.ID, windowID, s.herdrTabFor(windowID, workspace), command)...)
+	}
+	// ssh, git and gpg ask the person in the Inbox when the pane's program
+	// has no terminal (askpass.go). The person's own choice wins: a pane
+	// whose environment, the daemon's or the caller's, sets SSH_ASKPASS or
+	// SSH_ASKPASS_REQUIRE (never, prefer or force) gets neither from tuios.
+	if s.config != nil && s.config.AskpassEnv != nil && !slices.ContainsFunc(env, func(kv string) bool {
+		k, v, _ := strings.Cut(kv, "=")
+		return (k == "SSH_ASKPASS" || k == "SSH_ASKPASS_REQUIRE") && v != ""
+	}) {
+		if ask := s.config.AskpassEnv(); len(ask) > 0 {
+			env = slices.DeleteFunc(env, func(kv string) bool {
+				return strings.HasPrefix(kv, "SSH_ASKPASS=") || strings.HasPrefix(kv, "SSH_ASKPASS_REQUIRE=")
+			})
+			env = append(env, ask...)
+		}
 	}
 	// Mark restored shells so the user's shell rc (and scripts) can react, and
 	// so the restore is observable without relying on the visual banner.

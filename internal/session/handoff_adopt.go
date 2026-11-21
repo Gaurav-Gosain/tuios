@@ -155,6 +155,8 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 	if l := listeners["herdr"]; l != nil {
 		d.serveHerdrOn(l, socketPath)
 	}
+	// The link names this binary now, not the one that handed over.
+	d.installAskpassLink(socketPath)
 	d.initSSHAgent()
 	d.initDisplayFollow()
 

@@ -667,6 +667,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("agents.answer_advance"),
 			opt("agents.view_list"),
 			opt("agents.mermaid"),
+			opt("agents.askpass"),
 			opt("agents.name_hint"),
 			opt("agents.reply_markers"),
 			opt("agents.acp_version"),
