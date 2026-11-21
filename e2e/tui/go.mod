@@ -9,7 +9,7 @@ require (
 	github.com/Gaurav-Gosain/tuitest v0.3.2
 	github.com/adrg/xdg v0.5.3
 	github.com/spf13/pflag v1.1.0
-	tuios.dev/vt v0.3.4-0.20261120215113-0f1cffa25ec1
+	tuios.dev/vt v0.3.4-0.20261121183006-f3315482dded
 )
 
 require (
@@ -41,14 +41,14 @@ require (
 	golang.org/x/image v0.48.0 // indirect
 	golang.org/x/term v0.48.0 // indirect
 	golang.org/x/text v0.44.0 // indirect
-	tuios.dev/acp v0.0.0-20261120180431-437c5b45ae51 // indirect
-	tuios.dev/harness v0.0.0-20261120215113-0f1cffa25ec1 // indirect
-	tuios.dev/loom v0.2.3-0.20261120122552-107c1a5ef7e3 // indirect
-	tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8 // indirect
-	tuios.dev/progstatus v0.1.2-0.20261030111253-c0f512aa3148 // indirect
-	tuios.dev/sketch v0.4.1-0.20261119182137-67b7911dffff // indirect
-	tuios.dev/swatch v0.1.2-0.20261120215113-0f1cffa25ec1 // indirect
-	tuios.dev/tml v0.1.2-0.20261112200225-e5512e40c8da // indirect
+	tuios.dev/acp v0.0.0-20261121183006-f3315482dded // indirect
+	tuios.dev/harness v0.0.0-20261121183006-f3315482dded // indirect
+	tuios.dev/loom v0.2.3-0.20261121183259-6f7123dc8e95 // indirect
+	tuios.dev/plot v0.2.3-0.20261121183006-f3315482dded // indirect
+	tuios.dev/progstatus v0.1.2-0.20261121183006-f3315482dded // indirect
+	tuios.dev/sketch v0.4.1-0.20261121183143-ff0f4c5f106a // indirect
+	tuios.dev/swatch v0.1.2-0.20261121183006-f3315482dded // indirect
+	tuios.dev/tml v0.1.2-0.20261121183006-f3315482dded // indirect
 )
 
 require (
@@ -71,7 +71,7 @@ require (
 	github.com/xo/terminfo v1.2.0 // indirect
 	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
-	tuios.dev/shot v0.2.2-0.20261120215113-0f1cffa25ec1
+	tuios.dev/shot v0.2.2-0.20261121183006-f3315482dded
 )
 
 replace github.com/Gaurav-Gosain/tuios => ../..

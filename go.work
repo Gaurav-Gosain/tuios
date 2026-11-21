@@ -18,22 +18,22 @@ use (
 	./vt
 )
 
-replace tuios.dev/progstatus v0.1.2-0.20261030111253-c0f512aa3148 => ./progstatus
+replace tuios.dev/acp v0.0.0-20261121183006-f3315482dded => ./acp
 
-replace tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8 => ./plot
+replace tuios.dev/harness v0.0.0-20261121183006-f3315482dded => ./harness
 
-replace tuios.dev/tml v0.1.2-0.20261112200225-e5512e40c8da => ./tml
+replace tuios.dev/loom v0.2.3-0.20261121183259-6f7123dc8e95 => ./loom
 
-replace tuios.dev/sketch v0.4.1-0.20261119182137-67b7911dffff => ./sketch
+replace tuios.dev/plot v0.2.3-0.20261121183006-f3315482dded => ./plot
 
-replace tuios.dev/loom v0.2.3-0.20261120122552-107c1a5ef7e3 => ./loom
+replace tuios.dev/progstatus v0.1.2-0.20261121183006-f3315482dded => ./progstatus
 
-replace tuios.dev/acp v0.0.0-20261120180431-437c5b45ae51 => ./acp
+replace tuios.dev/shot v0.2.2-0.20261121183006-f3315482dded => ./shot
 
-replace tuios.dev/harness v0.0.0-20261120215113-0f1cffa25ec1 => ./harness
+replace tuios.dev/sketch v0.4.1-0.20261121183143-ff0f4c5f106a => ./sketch
 
-replace tuios.dev/shot v0.2.2-0.20261120215113-0f1cffa25ec1 => ./shot
+replace tuios.dev/swatch v0.1.2-0.20261121183006-f3315482dded => ./swatch
 
-replace tuios.dev/swatch v0.1.2-0.20261120215113-0f1cffa25ec1 => ./swatch
+replace tuios.dev/tml v0.1.2-0.20261121183006-f3315482dded => ./tml
 
-replace tuios.dev/vt v0.3.4-0.20261120215113-0f1cffa25ec1 => ./vt
+replace tuios.dev/vt v0.3.4-0.20261121183006-f3315482dded => ./vt
