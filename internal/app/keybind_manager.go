@@ -121,7 +121,10 @@ func (m *OS) buildKeybindReport() config.KeybindReport {
 			facts.GuestKittyFlags = w.Terminal.KittyKeyboardFlags()
 		}
 	}
-	return m.KeybindRegistry.Report(facts)
+	rep := m.KeybindRegistry.Report(facts)
+	// The leader leads the list, so it is changed where every other key is.
+	rep.Bindings = append([]config.Binding{config.LeaderRow(rep.Leader)}, rep.Bindings...)
+	return rep
 }
 
 // KeybindReport exposes the open overlay's analysis, for the renderer.
@@ -316,6 +319,33 @@ func (m *OS) KeybindCapture(key string) {
 	m.keybinds.fate = m.KeybindRegistry.Fate(key, m.keybinds.report.Pane)
 }
 
+// keybindSetLeader makes key the leader and persists it. The leader is the
+// keybindings.leader_key setting, not a key in a table, and a key may become
+// it only when config.LeaderProblem finds nothing wrong: a change that would
+// take the key from an action is refused and names the action.
+func (m *OS) keybindSetLeader(key string) tea.Cmd {
+	kb := &m.UserConfig.Keybindings
+	current := kb.LeaderKey
+	if current == "" {
+		current = config.DefaultLeaderKey
+	}
+	if config.SameKey(current, key) {
+		m.ShowNotification(key+" is already the leader", "warning", 0)
+		return nil
+	}
+	if problem := config.LeaderProblem(m.UserConfig, key); problem != "" {
+		m.ShowNotification(problem, "warning", m.Settings.NotificationWarningDuration)
+		return nil
+	}
+	kb.LeaderKey = key
+	m.Settings.LeaderKey = key
+	cmd := m.keybindApply()
+	m.KeybindCapture(key)
+	m.keybinds.bound = key
+	m.ShowNotification("The leader is now "+key, "success", m.Settings.NotificationDuration)
+	return cmd
+}
+
 // KeybindCommitBinding writes the captured key to the armed target and
 // persists it.
 //
@@ -327,6 +357,9 @@ func (m *OS) KeybindCommitBinding() tea.Cmd {
 	section, action := m.keybinds.bindSection, m.keybinds.bindAction
 	if key == "" || action == "" || m.UserConfig == nil || m.KeybindRegistry == nil {
 		return nil
+	}
+	if action == config.LeaderAction {
+		return m.keybindSetLeader(key)
 	}
 	target := m.UserConfig.Keybindings.SectionFor(section)
 	if target == nil {

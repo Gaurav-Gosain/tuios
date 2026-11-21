@@ -18603,6 +18603,9 @@ TUIOS_E2E=1 TUIOS_E2E_BACKEND=sim TUIOS_E2E_BIN=/path/to/tuios \
 ## clear keeps the scrollback
 
 `TestClearKeepsScrollback` prints 200 rows in a daemon pane, then writes the bytes clear prints: ED 2, then ED 3. With the default, copy mode at the top and the daemon's capture must still show row-1. With `appearance.scrollback_keep_on_clear = false`, the history must go.
+## The leader in the keybind manager
+
+`TestKeybindManagerChangesTheLeader` opens the keybind manager, records ctrl+p on the leader row (refused: the palette holds it), then ctrl+a (taken). config.toml must hold `leader_key = "ctrl+a"`, and ctrl+a k must open the manager again.
 
 Run on 2026-11-21 on Linux, real backend, against main at 6419a7d9f.
 
@@ -18764,4 +18767,8 @@ Run on 2026-11-21 on Linux, real backend.
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestLauncherSaysWhenTheScanFoundNothing$' .
+| Main | `TestKeybindManagerChangesTheLeader` | "the Bindings list has no leader row" | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestKeybindManagerChangesTheLeader$' .
 ```
