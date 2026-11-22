@@ -34,6 +34,10 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ReleaseClickReveal(msg.X, msg.Y)
 	}()
 
+	if pointerCaptureRelease(o, msg.Mouse()) {
+		return o, nil
+	}
+
 	if o.QuickLookBarRelease() || o.CockpitImageRelease() {
 		return o, nil
 	}

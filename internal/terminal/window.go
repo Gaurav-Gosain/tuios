@@ -408,6 +408,10 @@ type Window struct {
 	// looking at, as the app last set it. The PTY reader reads it when the
 	// guest turns on focus reporting. See SetHasFocus.
 	hasFocus atomic.Bool
+	// pointerCapture is whether the guest asked for pointer capture (OSC
+	// 7731). Written by the PTY reader, read by the input handlers. See
+	// pointer_capture.go.
+	pointerCapture atomic.Bool
 	// focusReporting is whether the guest had focus reporting on after the
 	// last PTY read. Only the PTY reader goroutine touches it.
 	focusReporting bool
@@ -837,6 +841,9 @@ func newWindowBase(id, title string, x, y, width, height, z int, ptyDataChan cha
 				if !enabled && window.NvimNavResetFunc != nil {
 					window.NvimNavResetFunc()
 				}
+				if !enabled {
+					window.pointerCapture.Store(false)
+				}
 			}
 		},
 		Title: func(title string) {
@@ -882,6 +889,12 @@ func newWindowBase(id, title string, x, y, width, height, z int, ptyDataChan cha
 					if dnd, ok := dnd.Parse(data); ok {
 						window.DnDFunc(dnd)
 					}
+				}
+				return
+			}
+			if cmd == pointerCaptureOSC {
+				if on, ok := parsePointerCapture(data); ok {
+					window.pointerCapture.Store(on)
 				}
 				return
 			}

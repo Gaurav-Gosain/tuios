@@ -34,6 +34,13 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// with it, and the beam and the labels are drawn where it says.
 	o.LastMouseX, o.LastMouseY = o.ScreenPoint(mouse.X, mouse.Y)
 
+	// A drag owned by a pane whose program asked for pointer capture goes to
+	// that pane, wherever the pointer is, and nothing else sees it. See
+	// pointer_capture.go.
+	if pointerCaptureMotion(o, mouse) {
+		return o, nil
+	}
+
 	// The host is held in all-motion tracking so hover and focus-follows-mouse
 	// see the pointer, which means motion no longer implies a button is down.
 	// Everything below that means "drag" is routed off a flag a press set, so a
@@ -293,6 +300,9 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 					sendMouseToWindow(o, focusedWindow, adjustedMouse)
 					return o, nil
 				}
+				// Outside the pane, a program that asked for pointer
+				// capture hears bare motion too.
+				pointerCaptureHover(o, focusedWindow, mouse)
 			}
 		}
 	}
