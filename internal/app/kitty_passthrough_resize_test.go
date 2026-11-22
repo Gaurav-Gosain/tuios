@@ -54,11 +54,21 @@ func placementHarness(t *testing.T, screenW, screenH, border int) (*KittyPassthr
 		ScreenWidth: screenW, ScreenHeight: screenH,
 		IsAltScreen: em.IsAltScreen(), ScrollbackLen: em.ScrollbackLen(),
 	}
+	// A frame in place goes to the host at once rather than through the
+	// queue, so what the file took since the last refresh comes first.
+	written := 0
 	refresh := func() string {
 		kp.RefreshAllPlacements(func() map[string]*WindowPositionInfo {
 			return map[string]*WindowPositionInfo{winID: info}
 		})
-		return string(kp.FlushPending())
+		pending := kp.FlushPending()
+		direct, err := os.ReadFile(hostFile.Name())
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := string(direct[written:]) + string(pending)
+		written = len(direct)
+		return out
 	}
 	return kp, em, info, refresh
 }

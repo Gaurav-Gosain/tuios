@@ -47,7 +47,9 @@ func TestStreamedFileFrameIsPlacedEveryFrame(t *testing.T) {
 			t.Fatal(err)
 		}
 		streamFileFrame(em, 2, imgW, imgH, path)
-		if placed := countCmd(refresh(), "a=p,"); placed == 0 {
+		// A placement on its own (a=p) or with the frame (a=T).
+		out := refresh()
+		if placed := countCmd(out, "a=p,") + countCmd(out, "a=T,"); placed == 0 {
 			t.Errorf("frame %d was transmitted and never placed; the pane still shows frame %d",
 				frame, frame-1)
 		}

@@ -300,10 +300,11 @@ func TestDirectVideoWriteDoesNotOvertakeHeldDelete(t *testing.T) {
 }
 
 // terminal-browser draws every frame as one synchronized update holding a
-// single a=T for the same image id and placement, read from a file. tuios
-// turns that into a transmit and a placement from the refresh pass. Kitty
+// single a=T for the same image id and placement, read from a file. Kitty
 // removes an image's placements when the id is transmitted again, so the
-// transmit must never reach the host without the placement behind it.
+// transmit must never reach the host without the placement behind it. A
+// direct frame goes out as a transmit and the refresh pass's placement. A
+// frame named by a file goes out as one a=T that carries the placement.
 func TestHeldFrameGoesOutWithItsRefreshPlacement(t *testing.T) {
 	for _, medium := range []string{"file", "direct"} {
 		t.Run(medium, func(t *testing.T) {
@@ -334,8 +335,12 @@ func TestHeldFrameGoesOutWithItsRefreshPlacement(t *testing.T) {
 					t.Fatalf("frame %d: a tick inside the update sent %q", n, got)
 				}
 				a.write("\x1b[?2026l")
-				if got := hostActions(h.tick()); got != "tp" {
-					t.Fatalf("frame %d: the closed update reached the host as %q, want the transmit and its placement together", n, got)
+				want := "tp"
+				if medium == "file" {
+					want = "T"
+				}
+				if got := hostActions(h.tick()); got != want {
+					t.Fatalf("frame %d: the closed update reached the host as %q, want %q: the transmit and its placement together", n, got, want)
 				}
 			}
 		})

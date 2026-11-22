@@ -52,8 +52,12 @@ func writeFrame(t *testing.T, path string, w, h int, tint byte) {
 func graphicsKinds(cmds []string) (transmits, placements int) {
 	for _, c := range cmds {
 		switch {
-		case strings.HasPrefix(c, "a=t,"), strings.HasPrefix(c, "a=T,"):
+		case strings.HasPrefix(c, "a=t,"):
 			transmits++
+		case strings.HasPrefix(c, "a=T,"):
+			// A transmit that places the image as well.
+			transmits++
+			placements++
 		case strings.HasPrefix(c, "a=p,"):
 			placements++
 		}

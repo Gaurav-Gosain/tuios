@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
@@ -61,8 +62,10 @@ func main() {
 		}
 	}
 	// transport is "shm" (t=s, the default), "b64" (t=d, the payload inline
-	// in chunked escapes) or "mpv" (the way mpv's --vo=kitty sends a frame: a
-	// cursor move, then f=24 with no image id, inline in chunked escapes). The bitmap and the geometry are identical either
+	// in chunked escapes), "mpv" (the way mpv's --vo=kitty sends a frame: a
+	// cursor move, then f=24 with no image id, inline in chunked escapes) or
+	// "file" (the way srterm sends a frame: a=T,t=f inside a synchronized
+	// update, from a ring of three files it writes again in turn). The bitmap and the geometry are identical either
 	// way, so anything that differs downstream is the transport's own.
 	transport := "shm"
 	if len(os.Args) > 4 && os.Args[4] != "" {
@@ -101,12 +104,16 @@ func main() {
 	// direct transport's stand-in already did.
 	var made []string
 	var shmFile *os.File
+	var ring, madeFiles []string
 	defer func() {
 		if shmFile != nil {
 			_ = shmFile.Close()
 		}
 		for _, n := range made {
 			_ = os.Remove("/dev/shm/" + n)
+		}
+		for _, p := range madeFiles {
+			_ = os.Remove(p)
 		}
 	}()
 	gen := 0
@@ -121,6 +128,18 @@ func main() {
 		}
 		pixW, pixH = w, h
 		if transport == "b64" || transport == "mpv" || transport == "text" {
+			return nil
+		}
+		if transport == "file" {
+			ring = ring[:0]
+			for slot := range 3 {
+				path := filepath.Join(os.TempDir(), fmt.Sprintf("tuios-frameloop-%d-%d-%d", os.Getpid(), gen, slot))
+				if err := os.WriteFile(path, pix, 0o600); err != nil {
+					return err
+				}
+				ring = append(ring, path)
+				madeFiles = append(madeFiles, path)
+			}
 			return nil
 		}
 		// The harness names the objects with a prefix of its own, so it can
@@ -238,6 +257,16 @@ func main() {
 			}
 			if transport == "mpv" {
 				_, _ = os.Stdout.Write(buildMpvFrame(pix, pixW, pixH))
+				wrote()
+				continue
+			}
+			if transport == "file" {
+				path := ring[seq%len(ring)]
+				if err := os.WriteFile(path, pix, 0o600); err != nil {
+					return
+				}
+				fmt.Printf("\x1b[?2026h\x1b[H\x1b_Ga=T,f=32,t=f,s=%d,v=%d,i=1,p=1,q=2,C=1;%s\x1b\\\x1b[?2026l",
+					xpx, ypx, base64.StdEncoding.EncodeToString([]byte(path)))
 				wrote()
 				continue
 			}

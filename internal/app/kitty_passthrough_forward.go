@@ -898,11 +898,18 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		return
 	}
 
-	// A shared memory frame is one command, never chunked, so the test above
-	// never sees one. A guest that sends a=T,t=s again under an id it already
-	// used is streaming frames (a compositor in a pane, mpv with shared
-	// memory, a browser), and each frame used to wait in the queue for the
-	// render loop to place it again: an a=t now and an a=p on the next pass.
+	// A frame named by a file is one command, never chunked, so the test above
+	// never sees one. A guest that sends a=T again under an id it already used
+	// is streaming frames (a compositor in a pane, mpv with shared memory, a
+	// browser, a remote desktop viewer through a ring of t=f files), and each
+	// frame used to wait in the queue for the render loop to place it again: an
+	// a=t now and an a=p on the next pass. Two frames that came between passes
+	// were both read by the host, and only the second was drawn.
+	//
+	// That holds for t=f as for t=s and t=t. A t=f file is the guest's to keep
+	// and may be written again at any time, but a frame that waits for the
+	// render loop waits longer than one sent now, so the queue never kept the
+	// file's bytes safe.
 	// When the last pass placed the whole image exactly where this frame goes,
 	// the frame is that placement's new picture, so it travels as one a=T under
 	// the placement's own id. Anything else (a moved pane, a crop, a window over
@@ -914,7 +921,7 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 	// frame comes before the render loop sends it, the host would read a whole
 	// frame it never draws, so the next frame replaces it.
 	placedNow := false
-	if !isVideoFrame && reusingID && andPlace && kittyMediumIsOneFrame(cmd.Medium) &&
+	if !isVideoFrame && reusingID && andPlace &&
 		kp.hostOut != nil && kp.streamFrameFitsPlacement(windowID, hostID, hostX, hostY,
 		displayCols, displayRows, imgCols, imgRows, isAltScreen) {
 		guestOpen, guestSerial := false, uint64(0)
@@ -1090,13 +1097,6 @@ func (kp *KittyPassthrough) forwardFileTransmit(cmd *vt.KittyCommand, windowID s
 		ImagePixelHeight: sized.Height,
 	})
 	kittyPassthroughLog("forwardFileTransmit: stored placement hostID=%d (hidden, waiting for refresh)", hostID)
-}
-
-// kittyMediumIsOneFrame reports whether a medium holds a frame nothing rewrites,
-// so the name is good for as long as the frame waits. A t=f file may be
-// overwritten at any time, and it is the guest's to keep.
-func kittyMediumIsOneFrame(m vt.KittyGraphicsMedium) bool {
-	return m == vt.KittyMediumSharedMemory || m == vt.KittyMediumTempFile
 }
 
 // drawnDifferently reports whether a frame asks for what the host's placement
