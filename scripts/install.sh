@@ -150,6 +150,7 @@ mkdir -p "$prefix" || die "cannot create $prefix"
 [ -w "$prefix" ] || die "$prefix is not writable. Pick a prefix you own, or re-run under sudo."
 dest=$prefix/tuios
 webdest=$prefix/tuios-web
+rddest=$prefix/tuios-rd
 
 # The commit is stamped in rather than left to the stamps the go command
 # embeds by itself: in a linked worktree those come back naming the main
@@ -180,8 +181,9 @@ ldflags="$ldflags -X main.version=$buildversion"
 # writing over the destination in place would fail with ETXTBSY while a daemon
 # is running it.
 tmp=$prefix/.tuios.install.$$
-webtmp=$prefix/.tuios-web.install.$$
-trap 'rm -f "$tmp" "$webtmp"' EXIT HUP INT TERM
+webtmp=$prefix/.tuios-web.install.$
+rdtmp=$prefix/.tuios-rd.install.$
+trap 'rm -f "$tmp" "$webtmp" "$rdtmp"' EXIT HUP INT TERM
 
 say "==> tuios ($backend backend)"
 # Inlining off in the packages scripts/noinline-packages.txt lists, as the
@@ -208,13 +210,25 @@ say "==> tuios-web ($backend backend)"
     -ldflags "$ldflags" -o "$webtmp" ./cmd/tuios-web)
 chmod 755 "$webtmp"
 
+# tuios-rd, the remote desktop viewer that tuios remote-desktop runs. It is
+# pure Go and runs on Linux and macOS only.
+rd=
+case $(uname -s) in Linux | Darwin) rd=1 ;; esac
+if [ -n "$rd" ]; then
+    say "==> tuios-rd"
+    (cd "$ROOT" && CGO_ENABLED=0 go build -trimpath -ldflags "$ldflags" -o "$rdtmp" ./cmd/tuios-rd)
+    chmod 755 "$rdtmp"
+fi
+
 mv -f "$tmp" "$dest"
 mv -f "$webtmp" "$webdest"
+[ -z "$rd" ] || mv -f "$rdtmp" "$rddest"
 trap - EXIT HUP INT TERM
 
 say ""
 say "installed $dest"
 say "installed $webdest"
+[ -z "$rd" ] || say "installed $rddest"
 "$dest" --version
 
 case ":$PATH:" in

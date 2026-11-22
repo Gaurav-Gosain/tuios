@@ -6476,6 +6476,64 @@ until [ -s /tmp/fwd.addr ]; do sleep 0.1; done
 addr=$(cat /tmp/fwd.addr)
 ```
 
+### `tuios remote-desktop`
+
+Show the desktop of a linked machine in this pane.
+
+**Usage:**
+```bash
+tuios remote-desktop HOST [flags]
+```
+
+HOST is a machine in the `[hosts]` table. The first time, the command installs
+the screen engine on HOST and starts it as a user service on 127.0.0.1, with a
+random port and token. Each step shows one line in the pane:
+
+```
+Remote desktop on build
+  Checking the host ... Linux x86_64
+  Installing the engine ... done
+  Starting the engine ... done
+  Opening the connection ... 127.0.0.1:43543
+```
+
+Then the pane shows the desktop. Press Ctrl+] to take control of the desktop
+and to give it back. Press Ctrl+\\ to quit. A next run finds the engine and
+only opens the connection.
+
+- The engine is a binary (`--engine-bin`) or a build on HOST from the
+  screen-relay source (`--engine-src DIR`, or `TUIOS_RD_ENGINE_SRC`). The build
+  is tiles only (`make X264=0`). When build tools are missing, the command
+  names them and the command that installs them. It never runs sudo.
+- The service is a LaunchAgent on macOS, a systemd user unit on Linux, or a
+  plain process when HOST has neither (`--service`).
+- On macOS, the command opens System Settings on the Mac, shows which switches
+  to turn on, and goes on by itself when they are on. It never turns a switch
+  on itself.
+- The picture comes through `tuios forward`. When the tuios on HOST is too old
+  for it, the command uses `ssh -L` to the address in `tuios hosts`.
+- HOST keeps the token in a 0600 file under `~/.local/state/tuios-rd`. This
+  machine reads it over the link each time and does not store it.
+
+This command runs `tuios-rd`, a separate program that comes next to tuios.
+When it is not installed, the command says how to get it.
+
+**Flags:**
+- `--display NAME`: show this display of HOST.
+- `--all`: open one pane for each display of HOST.
+- `--check`: do every step, read one frame, print the result and quit.
+- `--engine-bin FILE`, `--engine-src DIR`: where the engine comes from.
+- `--service KIND`: `auto`, `launchd`, `systemd` or `process`.
+- The other flags go to the viewer. `tuios-rd --help` lists them.
+
+**Examples:**
+```bash
+tuios remote-desktop build
+tuios remote-desktop mac --display DP-2
+tuios remote-desktop mac --all
+tuios remote-desktop build --check
+```
+
 ### `tuios transfers`
 
 List the copies that the daemon runs, and control them. `tuios copies` is the
@@ -8136,6 +8194,13 @@ tuios completion fish > ~/.config/fish/completions/tuios.fish
 ---
 
 ## Environment Variables
+
+### `TUIOS_RD_BIN` and `TUIOS_RD_ENGINE_SRC`
+
+`tuios remote-desktop` runs `TUIOS_RD_BIN` when it is set. Otherwise it runs
+the `tuios-rd` next to the tuios binary, then the one on `PATH`.
+`TUIOS_RD_ENGINE_SRC` is the screen-relay source folder that `tuios-rd` builds
+the engine from on a host that has none, the same as `--engine-src`.
 
 ### `$EDITOR` / `$VISUAL`
 

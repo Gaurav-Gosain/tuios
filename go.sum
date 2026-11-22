@@ -86,6 +86,8 @@ github.com/hexops/gotextdiff v1.0.3 h1:gitA9+qJrrTCsiCl7+kh75nPqQt1cx4ZkudSTLoUq
 github.com/hexops/gotextdiff v1.0.3/go.mod h1:pSWU5MAI3yDq+fZBTazCSJysOMbxWL1BSow5/V2vxeg=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
+github.com/klauspost/compress v1.20.3 h1:zWNoFqq/lSuYQRim3dUXlXeA0IqwuZGicdG5ZTfY5j4=
+github.com/klauspost/compress v1.20.3/go.mod h1:LUdAzn7YLVvxLpc7y3V1m40wESHTgc1422pwwBSKYuI=
 github.com/lrstanley/bubbletint/v2 v2.0.2 h1:JvLHMf7qI/UE47AyNsD9jVI7h2VQvq+4AYcHNe8DwSQ=
 github.com/lrstanley/bubbletint/v2 v2.0.2/go.mod h1:HaBq3Yc6pcCrQDuW8huE+Bs1adVFUmg/O1B9Zu/kab4=
 github.com/lrstanley/go-nf v0.0.0-20261113000353-c3e5e7061bf4 h1:msoG0vDfA4i0doPv65kMrTG7Ruf9o+s/wRgnSWchZUc=
