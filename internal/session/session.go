@@ -1074,6 +1074,9 @@ type PTY struct {
 	largeSlot     chan struct{}
 	largeSlotOnce sync.Once
 	largeSince    atomic.Int64
+	// deliveryHold keeps other input out while the daemon types a prompt
+	// and its Enter. See delivery_hold.go.
+	deliveryHold deliveryHold
 	// sessionID is the session the pane was made in. home is the session
 	// it belongs to now, which move-window with to_session changes. Every
 	// callback the pane makes reads home, so its events, focus and place
@@ -4921,7 +4924,16 @@ func (p *PTY) unsubscribe(clientID string, only *ptySubscriber) int64 {
 // client input, send-text, paste-buffer, send-keys, submit-prompt and
 // respond. Only a caller that may already write to the pane can make it hold
 // that memory. See frame_budget.go.
+//
+// While the daemon types a prompt into the pane, Write first waits for the
+// prompt's Enter, so the input does not join the prompt. See delivery_hold.go.
 func (p *PTY) Write(data []byte) (int, error) {
+	p.deliveryHold.wait()
+	return p.writeNow(data)
+}
+
+// writeNow is Write without the wait for a delivery hold.
+func (p *PTY) writeNow(data []byte) (int, error) {
 	if p.pty == nil {
 		return 0, errfmt.Errorf("PTY not available")
 	}
