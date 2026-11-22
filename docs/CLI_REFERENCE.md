@@ -6510,6 +6510,13 @@ only opens the connection.
 - On macOS, the command opens System Settings on the Mac, shows which switches
   to turn on, and goes on by itself when they are on. It never turns a switch
   on itself.
+- On a Mac where a tiles engine already runs as a LaunchAgent, the command
+  uses that engine as it is, so its permissions still hold. `--engine-path`
+  runs a binary that is already on HOST, at its own path, for the same reason.
+- After an install on a Mac, the command signs the engine with a local code
+  signing identity when there is one. A signed engine keeps its permissions
+  when it is updated at the same path. Over the link the keychain is locked,
+  so the step then prints the `codesign` line to run in Terminal.app on the Mac.
 - The picture comes through `tuios forward`. When the tuios on HOST is too old
   for it, the command uses `ssh -L` to the address in `tuios hosts`.
 - HOST keeps the token in a 0600 file under `~/.local/state/tuios-rd`. This
@@ -6523,6 +6530,7 @@ When it is not installed, the command says how to get it.
 - `--all`: open one pane for each display of HOST.
 - `--check`: do every step, read one frame, print the result and quit.
 - `--engine-bin FILE`, `--engine-src DIR`: where the engine comes from.
+- `--engine-path FILE`: run this engine binary that is already on HOST.
 - `--service KIND`: `auto`, `launchd`, `systemd` or `process`.
 - The other flags go to the viewer. `tuios-rd --help` lists them.
 

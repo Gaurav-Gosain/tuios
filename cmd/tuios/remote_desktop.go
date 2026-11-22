@@ -51,6 +51,7 @@ separate binary. Run tuios remote-desktop HOST --help for its flags.`,
 	f.Bool("check", false, "do every step, read one frame, print the result and quit")
 	f.String("engine-bin", "", "install this engine binary on HOST (built for HOST)")
 	f.String("engine-src", "", "build the engine on HOST from this screen-relay source folder")
+	f.String("engine-path", "", "run this engine binary that is already on HOST, at its own path")
 	f.String("service", "auto", "the service on HOST: auto, launchd, systemd or process")
 	return cmd
 }
