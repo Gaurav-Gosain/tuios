@@ -18750,3 +18750,18 @@ Run on 2026-11-21 on Linux. Each control is one change to the branch, run alone 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestKeysLostWithALinkAreDroppedAndThePersonIsTold$' .
 ```
+
+## A question the agent takes back, and the end of its turn
+
+`TestProtocolPaneACPv2CancelAndWait` sends "withdraw it": the fake ACP agent asks a permission, takes it back with `$/cancel_request`, and ends its turn as soon as it has the answer. The pane must say "answered: cancelled (the agent withdrew the question)". The knob `acp_withdraw_hold_ms=500` holds the pane between its two steps for the withdrawal, answering the agent and telling the session, so the turn always ends inside the gap when the answer goes first.
+
+Run on 2026-11-21 on Linux, real backend.
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| Answer first, then tell the session (main with the knob) | `TestProtocolPaneACPv2CancelAndWait` | 3 of 3 runs: "the pane never showed answered: cancelled (the agent withdrew the question)". The pane said "(the turn ended)". | **caught** |
+| This change | `TestProtocolPaneACPv2CancelAndWait` | 8 of 8 runs pass | fixed |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestProtocolPaneACPv2CancelAndWait$' .
+```

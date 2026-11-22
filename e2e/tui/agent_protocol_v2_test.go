@@ -152,9 +152,15 @@ func TestProtocolPaneACPv2TurnAndPermission(t *testing.T) {
 // agent says it stopped, after its last words; requires_action with no
 // question on screen reads needs_input; a question the agent takes back
 // leaves the pane.
+//
+// The knob acp_withdraw_hold_ms holds the pane between its two steps for a
+// question taken back: answering the agent and dropping the question. The
+// agent ends its turn as soon as it has the answer, so a pane that answered
+// first saw the turn end before the withdrawal, and said "the turn ended".
 func TestProtocolPaneACPv2CancelAndWait(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
+	setKnobs(t, "acp_withdraw_hold_ms=500")
 	writeACPVersion(t, base, 2)
 	fake := buildFakeACP(t)
 	out, err := tuiosCLI(t, base, "start-agent", fake+" -versions=1,2", "--protocol", "acp", "-s", "e2e-agent", "--name", "helper", "--prompt", "a slow job")
