@@ -60,6 +60,9 @@ const (
 	// save a nested repository's history. Nothing was removed; force removes
 	// it anyway.
 	ErrVerbWorktreeNested = "worktree_nested"
+	// ErrVerbOwnedProcesses reports a close-out blocked by worker-owned
+	// processes that remain or cannot be safely inspected.
+	ErrVerbOwnedProcesses = "owned_processes"
 	// ErrVerbGitFailed reports a git command that failed, with git's own
 	// message. It is final: the repository is as it was.
 	ErrVerbGitFailed = "git_failed"
@@ -828,6 +831,15 @@ func (d *Daemon) verbRemoveWorktree(cs *connState, params json.RawMessage) (any,
 					Detail:  "Pass stash to keep the changes in git stash, or force to discard them. The branch " + info.Branch + " is kept either way.",
 				})
 		}
+		if !p.KeepSession {
+			if processes := stopOwnedPaneProcesses(sess, cs.peerPID); len(processes) > 0 {
+				message := ownedPaneProcessDetail(sess.Name(), processes)
+				return nil, hintedVerbError(ErrVerbOwnedProcesses, message, &VerbHint{
+					Detail: "The worktree remains. Follow the diagnostic: stop listed PIDs, run from outside the worker session when required, or use a Linux/macOS host when ownership cannot be inspected. Unmarked processes are never signaled.",
+				})
+			}
+		}
+
 		if changes > 0 && p.Stash {
 			if err := worktree.Stash(info.Path, "tuios: "+info.Branch); err != nil {
 				return nil, hintedVerbError(ErrVerbGitFailed, err.Error(), &VerbHint{

@@ -31,5 +31,8 @@ func Environ(int) (Env, bool) { return Env{}, false }
 // SessionMembers is nil here: the kernel does not say.
 func SessionMembers(int) []int { return nil }
 
+// ProcessIDs cannot be read where the kernel does not expose a process table.
+func ProcessIDs() ([]int, bool) { return nil, false }
+
 // RSS is not read here.
 func RSS(int) (int64, bool) { return 0, false }

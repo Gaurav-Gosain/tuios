@@ -171,22 +171,35 @@ func RSS(pid int) (int64, bool) {
 	return pages * int64(os.Getpagesize()), true
 }
 
+// ProcessIDs lists the process ids visible in /proc. The bool is false when
+// the process table could not be read.
+func ProcessIDs() ([]int, bool) {
+	ents, err := os.ReadDir("/proc")
+	if err != nil {
+		return nil, false
+	}
+	var out []int
+	for _, e := range ents {
+		pid, err := strconv.Atoi(e.Name())
+		if err == nil && pid > 0 {
+			out = append(out, pid)
+		}
+	}
+	return out, true
+}
+
 // SessionMembers lists the pids of the processes in session sid, read from
 // /proc. A process that exits during the scan may be listed or not.
 func SessionMembers(sid int) []int {
 	if sid <= 0 {
 		return nil
 	}
-	ents, err := os.ReadDir("/proc")
-	if err != nil {
+	pids, ok := ProcessIDs()
+	if !ok {
 		return nil
 	}
 	var out []int
-	for _, e := range ents {
-		pid, err := strconv.Atoi(e.Name())
-		if err != nil || pid <= 0 {
-			continue
-		}
+	for _, pid := range pids {
 		if s, ok := SessionID(pid); ok && s == sid {
 			out = append(out, pid)
 		}

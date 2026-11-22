@@ -411,6 +411,26 @@ tuios worktree rm api-feat-retry --force    # discard them
 tuios worktree rm api-feat-retry --keep-session
 ```
 
+For an agent worktree, stop browser audio and development servers before the
+agent reports `done`. Then remove the worktree from a pane outside that session:
+
+```sh
+tuios worktree ls
+tuios worktree rm <session> --stash
+```
+
+On Linux and macOS, removal matches processes by the exact `TUIOS_PANE_ID`,
+sends `SIGTERM`, and waits up to one second. A survivor blocks removal with its
+PID and pane id; unmarked processes are not signaled. On platforms without
+process-table inspection, agent worktree removal fails closed. This check does
+not replace verifying that browser playback stopped before the agent reports
+`done`.
+
+When a browser must be tracked, launch a new browser process with a profile
+unique to the pane, such as `${TMPDIR:-/tmp}/tuios-browser-$TUIOS_PANE_ID`. A shared
+profile may route the request to an existing process that does not inherit the
+pane id.
+
 The branch is never deleted. `tuios fan keep <session>` (the `keep-fan` verb)
 applies the same rule to every sibling of the session you keep, and leaves a
 dirty sibling in place. Only the person or a pane with `admin` may keep a fan.
