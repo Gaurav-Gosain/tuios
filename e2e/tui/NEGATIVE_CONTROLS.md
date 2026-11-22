@@ -18711,3 +18711,19 @@ Run on Linux on 2026-11-20. The branch passes it three times in one process (`-c
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
   go test -count=1 -run '^TestComingHomeFromAHostAsksForNoRetry$' -v .
 ```
+
+## The Inbox key after the file turns the agent features on
+
+`TestAgentsOnAfterStartingOffStartsTheInbox` starts a client with the agent features off, turns them on in config.toml, and presses the Inbox key. The daemon and the client each read the file with their own watcher. The test waited for the daemon only, so on a slow runner the key reached a client that still had the features off. The client showed "Agent features are off. Turn them on in Settings." and the Inbox stayed shut. The test now waits for the rail's agents section, which the client draws once it has the features on.
+
+Run on 2026-11-22 on Linux, real backend, against main at 6389da637. The control holds every config reload in the client for 3 s, in `configWatchHub.deliver`. The daemon reads the file at the usual time.
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| Old test, client reload held 3 s | `TestAgentsOnAfterStartingOffStartsTheInbox` | 3 of 3 runs: "the Inbox never showed the other session's prompt". The dock showed the off notice. | **caught** |
+| This change, client reload held 3 s | `TestAgentsOnAfterStartingOffStartsTheInbox` | 3 of 3 runs pass | fixed |
+| This change, no hold | `TestAgentsOnAfterStartingOffStartsTheInbox` | 5 of 5 runs pass | fixed |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestAgentsOnAfterStartingOffStartsTheInbox$' .
+```
