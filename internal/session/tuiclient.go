@@ -55,6 +55,11 @@ type TUIClient struct {
 	// daemon that says hello and then stalls must not hold it past that.
 	// AttachSession clears it.
 	AttachDeadline time.Time
+	// OnHostLinked, when set, is called by ConnectThroughHost once this
+	// machine's daemon has opened the connection to the host, before the
+	// hello to the host's daemon. The attach command uses it to say which
+	// step it waits on.
+	OnHostLinked func()
 	// goodbye is the daemon's last word before it closed, and when it came.
 	// See daemon_goodbye.go.
 	goodbye atomic.Pointer[Goodbye]

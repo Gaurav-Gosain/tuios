@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"sync/atomic"
 	"time"
@@ -111,6 +112,11 @@ func hostConnectionError(host string, err error) *verbError {
 		})
 	}
 	message, code := federationErrorText(err)
+	if errors.Is(err, context.DeadlineExceeded) {
+		// The first attempt of the link had not settled when the budget
+		// ran out. The bare context error said nothing a person can use.
+		message = fmt.Sprintf("The link to %s did not come up in %d seconds.", host, int(federationVerbBudget.Seconds()))
+	}
 	hint := &VerbHint{
 		Param:   "host",
 		Command: "tuios hosts",

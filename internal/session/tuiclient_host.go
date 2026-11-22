@@ -52,6 +52,9 @@ func (c *TUIClient) ConnectThroughHost(host, version string, width, height int, 
 		return HostConnectionInfo{}, err
 	}
 	c.viaHost = host
+	if c.OnHostLinked != nil {
+		c.OnHostLinked()
+	}
 	if err := c.handshake(version, width, height, caps); err != nil {
 		_ = conn.Close()
 		return info, &HostHandshakeError{Host: host, Info: info, Err: err}

@@ -446,12 +446,21 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// later; this only stops the interval in between from being a lie.
 	width, height := hostTerminalSize()
 
+	// wait follows an attach through a host. See host_wait.go.
+	var wait *hostWait
 	if host == "" {
 		if err := client.ConnectWithCapabilities(version, width, height, clientCaps); err != nil {
 			return explainDialError(err)
 		}
 	} else {
+		wait = startHostWait(host, hostAttachBudget, hostWaitOut, func() { _ = client.Close() })
+		client.OnHostLinked = func() {
+			wait.step(fmt.Sprintf("Connected to %s. Waiting for tuios on %s to answer...", host, host), "tuios on "+host+" to answer")
+		}
 		if _, err := client.ConnectThroughHost(host, version, width, height, clientCaps); err != nil {
+			if wait.stop(); wait.timedOut() {
+				return wait.err(err)
+			}
 			return explainHostConnectError(host, err)
 		}
 	}
@@ -465,7 +474,18 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	}
 
 	clientLogf("[CLIENT] Attaching to session '%s' (createNew=%v)", sessionName, createNew)
+	if wait != nil {
+		what := "the session"
+		if sessionName != "" {
+			what = fmt.Sprintf("session %q", sessionName)
+		}
+		wait.step(fmt.Sprintf("Attaching %s on %s...", what, host), "tuios on "+host+" to attach "+what)
+	}
 	state, err := client.AttachSession(sessionName, createNew, width, height)
+	if wait != nil && !wait.stop() {
+		_ = client.Close()
+		return wait.err(err)
+	}
 	if err != nil {
 		names := client.AvailableSessionNames()
 		_ = client.Close()
