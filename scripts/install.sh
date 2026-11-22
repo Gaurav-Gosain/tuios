@@ -181,8 +181,8 @@ ldflags="$ldflags -X main.version=$buildversion"
 # writing over the destination in place would fail with ETXTBSY while a daemon
 # is running it.
 tmp=$prefix/.tuios.install.$$
-webtmp=$prefix/.tuios-web.install.$
-rdtmp=$prefix/.tuios-rd.install.$
+webtmp=$prefix/.tuios-web.install.$$
+rdtmp=$prefix/.tuios-rd.install.$$
 trap 'rm -f "$tmp" "$webtmp" "$rdtmp"' EXIT HUP INT TERM
 
 say "==> tuios ($backend backend)"

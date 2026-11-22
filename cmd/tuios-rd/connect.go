@@ -96,7 +96,8 @@ Flags:
   --check            do every step, read one frame, print the result and quit
   --engine-bin FILE  install this engine binary on HOST (built for HOST)
   --engine-src DIR   build the engine on HOST from this source folder
-                     (default: $TUIOS_RD_ENGINE_SRC)
+                     (default: $TUIOS_RD_ENGINE_SRC); in a git checkout, the
+                     last commit
   --engine-path FILE run this engine binary that is already on HOST, at its
                      own path, so a macOS permission it has still holds
 
@@ -247,7 +248,7 @@ func (c *connectCfg) run(ctx context.Context) (int, error) {
 	fmt.Fprintln(c.out, addr)
 	base := "http://" + addr
 
-	if c.all {
+	if c.all && !c.check {
 		if err := c.openOtherDisplays(base, st.token); err != nil {
 			fmt.Fprintf(c.out, "  %v\n", err)
 		}
@@ -323,7 +324,10 @@ if [ "$TOK" = "$D/token" ] && [ ! -s "$TOK" ]; then (umask 077; od -An -N24 -tx1
 echo "token=$(cat "$TOK" 2>/dev/null)"
 echo "port=$PORTV"
 if command -v curl >/dev/null 2>&1; then
-  curl -fsS -m 2 -o /dev/null -H "Authorization: Bearer $(cat "$TOK" 2>/dev/null)" "http://127.0.0.1:$PORTV/capabilities" 2>/dev/null && echo up=yes
+  # The header goes in on stdin (printf is built in), so the token is not in
+  # curl's argv, which every user of the host can read.
+  printf 'header = "Authorization: Bearer %s"\n' "$(cat "$TOK" 2>/dev/null)" |
+    curl -fsS -m 2 -o /dev/null -K - "http://127.0.0.1:$PORTV/capabilities" 2>/dev/null && echo up=yes
 else
   echo nocurl=yes
 fi
@@ -480,6 +484,9 @@ func (c *connectCfg) build(ctx context.Context, st hostState) error {
 	src := c.engineSrc
 	var pack *exec.Cmd
 	if _, err := os.Stat(filepath.Join(src, ".git")); err == nil {
+		if out, err := childproc.Git(ctx, src, "status", "--porcelain", "--", "src", "Makefile", "packages.tsv").Output(); err == nil && len(out) > 0 {
+			fmt.Fprintf(c.out, "\n  %s has changes that are not committed. The build uses the last commit.\n  ", src)
+		}
 		pack = childproc.Git(ctx, src, "archive", "--format=tar.gz", "-o", tgz.Name(), "HEAD", "--", "src", "Makefile", "packages.tsv")
 	} else {
 		pack = exec.CommandContext(ctx, "tar", "-czf", tgz.Name(), "-C", src, "src", "Makefile", "packages.tsv")
@@ -605,7 +612,7 @@ func (c *connectCfg) start(ctx context.Context, st hostState) error {
 	case "launchd":
 		script = hostDirs + mark + `p="$HOME/Library/LaunchAgents/` + launchdLabel + `.plist"
 mkdir -p "$HOME/Library/LaunchAgents"
-cat > "$p" <<EOF
+cat > "$p.new" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -624,9 +631,14 @@ cat > "$p" <<EOF
 </dict></plist>
 EOF
 u=$(id -u)
-if launchctl print "gui/$u/` + launchdLabel + `" >/dev/null 2>&1; then
+# kickstart restarts the loaded job and does not read the file again, so a
+# changed plist goes in with bootout and bootstrap.
+if launchctl print "gui/$u/` + launchdLabel + `" >/dev/null 2>&1 && cmp -s "$p" "$p.new"; then
+  rm -f "$p.new"
   launchctl kickstart -k "gui/$u/` + launchdLabel + `"
 else
+  launchctl bootout "gui/$u/` + launchdLabel + `" 2>/dev/null
+  mv -f "$p.new" "$p"
   launchctl bootstrap "gui/$u" "$p"
 fi
 `
@@ -653,7 +665,7 @@ systemctl --user daemon-reload && systemctl --user restart ` + systemdUnit + `
 			return errors.New(c.host + " has no service manager tuios-rd can use and no setsid. Use --service launchd or systemd")
 		}
 		script = hostDirs + mark + `if [ -s "$D/engine.pid" ] && kill -0 "$(cat "$D/engine.pid")" 2>/dev/null; then kill "$(cat "$D/engine.pid")"; fi
-setsid sh -c 'echo $ > "$1/engine.pid"; shift; exec "$@"' sh "$D" "$BIN" ` + engineArgs(st) + ` >> "$LOG" 2>&1 < /dev/null &
+setsid sh -c 'echo $$ > "$1/engine.pid"; shift; exec "$@"' sh "$D" "$BIN" ` + engineArgs(st) + ` >> "$LOG" 2>&1 < /dev/null &
 `
 	}
 	_, err := c.hostRun(ctx, time.Minute, c.hostVars()+script)
@@ -732,6 +744,11 @@ func (c *connectCfg) permissions(ctx context.Context, st hostState) (hostState, 
 			fmt.Fprintln(c.out, "  The permissions are on. The engine runs.")
 			return st, nil
 		}
+		if !st.needScreen && !st.needInput {
+			// The permissions are on, and the engine stopped for another
+			// reason. Its log says which.
+			return st, c.notUp(st)
+		}
 		if st.needInput && !st.needScreen && opened != "Privacy_Accessibility" {
 			opened = "Privacy_Accessibility"
 			_, _ = c.hostRun(ctx, 20*time.Second, "open 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility'")
@@ -790,7 +807,7 @@ func (c *connectCfg) tunnel(ctx context.Context, port string) (string, func(), e
 			stopped = true
 			os.RemoveAll(dir)
 			msg := strings.TrimSpace(strings.TrimPrefix(errs.String(), "tuios: "))
-			if strings.Contains(msg, "too old") || strings.Contains(msg, "unknown") {
+			if strings.Contains(msg, "is too old for forward") {
 				return c.sshTunnel(ctx, port)
 			}
 			return "", nil, errors.New(msg)
@@ -886,7 +903,8 @@ func (c *connectCfg) openOtherDisplays(base, token string) error {
 			c.display = name
 			continue
 		}
-		args := []string{"new-window", "Remote desktop on " + c.host + ": " + name, "--", self, "connect", c.host, "--display", name}
+		args := []string{"new-window", "Remote desktop on " + c.host + ": " + name, "--", "env", "TUIOS_BIN=" + c.tuios, self, "connect", c.host, "--display", name}
+		args = append(args, c.viewArgs...)
 		if out, err := exec.Command(c.tuios, args...).CombinedOutput(); err != nil {
 			return fmt.Errorf("cannot open a pane for display %s: %v %s", name, err, strings.TrimSpace(string(out)))
 		}

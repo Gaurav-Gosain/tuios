@@ -41,7 +41,10 @@ type shmSlot struct {
 }
 
 func newSlot(size int, path string) (*shmSlot, error) {
-	fd, err := syscall.Open(path, syscall.O_CREAT|syscall.O_RDWR|syscall.O_TRUNC, 0o600)
+	// O_NOFOLLOW and O_EXCL after an unlink: another user cannot point the
+	// path at a file of theirs with a symlink planted first.
+	_ = syscall.Unlink(path)
+	fd, err := syscall.Open(path, syscall.O_CREAT|syscall.O_EXCL|syscall.O_RDWR|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return nil, err
 	}
@@ -226,5 +229,14 @@ func b64(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) 
 // probeShmFile makes a 1x1 RGB file for the t=f probe.
 func probeShmFile() (string, error) {
 	name := fmt.Sprintf("/dev/shm/tuios-rd-%d-probe", os.Getpid())
-	return name, os.WriteFile(name, []byte{0, 0, 0}, 0o600)
+	_ = os.Remove(name)
+	f, err := os.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0o600)
+	if err != nil {
+		return name, err
+	}
+	_, err = f.Write([]byte{0, 0, 0})
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	return name, err
 }

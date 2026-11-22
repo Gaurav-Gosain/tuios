@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -86,7 +88,9 @@ func runRemoteDesktop(args []string) error {
 		return err
 	}
 	argv := append([]string{rd, "connect"}, args...)
-	env := os.Environ()
+	// TUIOS_BIN is replaced, not added: a plugin's environment has one
+	// already, and the first entry is the one a program reads.
+	env := slices.DeleteFunc(os.Environ(), func(kv string) bool { return strings.HasPrefix(kv, "TUIOS_BIN=") })
 	if self, err := os.Executable(); err == nil {
 		env = append(env, "TUIOS_BIN="+self)
 	}
