@@ -2394,7 +2394,7 @@ A refusal:
 {"error": {"code": "forbidden",
  "message": "send-text is refused for this pane: writing into the pane's own session needs the write grant",
  "hint": {"verb": "pane-grants", "command": "tuios pane-grants",
-  "detail": "Pane 7f3c1a2b holds read, the grants it was given. Nothing was done. The person can give this pane more with tuios set-pane-grants -w 7f3c1a2b --grants <names>, or every pane started with none with mode and grants under [agents.permissions] in config.toml."}}}
+  "detail": "Pane 7f3c1a2b holds read, the grants it was given. Nothing was done. The person can give this pane more. They run tuios set-pane-grants -w 7f3c1a2b --grants <names> in a terminal outside tuios. A pane can give only the grants it holds, and no pane holds respond. Or they set mode and grants under [agents.permissions] in config.toml, for every pane started with none."}}}
 ```
 
 The daemon log records every refusal. For a pane without `admin`, a verb that
