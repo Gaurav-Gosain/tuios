@@ -64,6 +64,11 @@ func serveStream(s *Stream, dial func(StreamOpen) (net.Conn, error)) {
 	}
 	defer func() { _ = conn.Close() }()
 
+	if s.open.HalfClose {
+		serveHalfClose(s, conn)
+		return
+	}
+
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -103,6 +108,34 @@ func serveStream(s *Stream, dial func(StreamOpen) (net.Conn, error)) {
 	// stream. Close is idempotent, so the defer is still correct.
 	_ = s.Close()
 	<-done
+}
+
+// serveHalfClose connects a stream that carries a TCP connection to its
+// daemon connection. A half-close passes on in each direction: the end of
+// the peer's bytes becomes CloseWrite on the daemon connection, and the end of
+// the daemon's bytes becomes frameEOF on the stream. Both close when both
+// directions have ended, or at once when either side fails.
+func serveHalfClose(s *Stream, conn net.Conn) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, err := io.Copy(conn, s)
+		if err == nil && s.PeerWriteClosed() {
+			if cw, ok := conn.(interface{ CloseWrite() error }); ok {
+				_ = cw.CloseWrite()
+				return
+			}
+		}
+		_ = conn.Close()
+	}()
+	_, err := io.Copy(s, conn)
+	if err == nil {
+		_ = s.CloseWrite()
+	} else {
+		_ = s.Close()
+	}
+	<-done
+	_ = s.Close()
 }
 
 // rwc glues a separate reader and writer into the io.ReadWriteCloser the mux

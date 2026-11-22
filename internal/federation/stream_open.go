@@ -39,6 +39,12 @@ type StreamOpen struct {
 	// ignores it and answers with no credit, and the stream then runs
 	// without a window as before.
 	Window bool `json:"window,omitempty"`
+	// HalfClose marks a stream that carries a TCP connection (port-connect).
+	// Its ends pass on a half-close with frameEOF instead of closing the whole
+	// stream, so a client that shuts its write side still gets the answer.
+	// A proxy that predates it ignores it and sends no frameHalfOK, and the
+	// opener then closes the whole stream instead of half of it.
+	HalfClose bool `json:"half_close,omitempty"`
 }
 
 // maxStreamOpenPayload bounds what the accepting side decodes. The frame cap

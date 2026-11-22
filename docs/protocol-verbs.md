@@ -3034,6 +3034,7 @@ The connection stays open after the reply.
 |---|---|---|---|---|
 | `host` | string |  |  | A host by name from the [hosts] config table. |
 | `ssh_auth_sock` | string |  |  | The caller's SSH_AUTH_SOCK. With [daemon] ssh_agent = "follow", the agent link the link's ssh forwards points at it while this caller is the newest person attached. |
+| `half_close` | bool |  |  | For a connection that will carry a TCP connection (port-connect): pass on a half-close in each direction instead of closing the whole connection, so a client that shuts its write side still reads the answer. |
 
 | Result field | Type | Description |
 |---|---|---|

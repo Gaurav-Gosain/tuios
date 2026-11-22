@@ -44,6 +44,32 @@ func farEcho(t *testing.T) int {
 	return ln.Addr().(*net.TCPAddr).Port
 }
 
+// farSink is a TCP server on 127.0.0.1 that reads until its client shuts
+// its write side, then answers "got N" with the byte count and closes. It is
+// the shape of a client that half-closes (nc -N, printf | nc).
+func farSink(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer c.Close()
+				b, _ := io.ReadAll(c)
+				_, _ = io.WriteString(c, "got "+strconv.Itoa(len(b)))
+			}()
+		}
+	}()
+	return ln.Addr().(*net.TCPAddr).Port
+}
+
 // startForward runs tuios forward and returns the process and the local
 // address it prints first.
 func startForward(t *testing.T, base string, env []string, args ...string) (*exec.Cmd, string) {
@@ -198,6 +224,40 @@ func TestForwardReachesAPortOnAHost(t *testing.T) {
 			n := strings.Count(string(data), want)
 			return n >= 3, strconv.Itoa(n) + " lines " + strconv.Quote(want) + " in build's log, want 3"
 		})
+	})
+
+	t.Run("half close", func(t *testing.T) {
+		sink := farSink(t)
+		_, sinkAddr := startForward(t, base, env, "build:"+strconv.Itoa(sink), "--local", "0")
+		c, err := net.DialTimeout("tcp", sinkAddr, 5*time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
+		_ = c.SetDeadline(time.Now().Add(15 * time.Second))
+		if _, err := io.WriteString(c, "hello"); err != nil {
+			t.Fatal(err)
+		}
+		if err := c.(*net.TCPConn).CloseWrite(); err != nil {
+			t.Fatal(err)
+		}
+		got, err := io.ReadAll(c)
+		if err != nil || string(got) != "got 5" {
+			dumpLinkLogs(t, base, remote)
+			t.Fatalf("ASSERTION: after a half-close the far program's answer was %q (%v), want \"got 5\"", got, err)
+		}
+	})
+
+	t.Run("addr file", func(t *testing.T) {
+		file := filepath.Join(t.TempDir(), "addr")
+		_, printed := startForward(t, base, env, "build:"+strconv.Itoa(port), "--local", "0", "--addr-file", file)
+		data, err := os.ReadFile(file)
+		if err != nil || strings.TrimSpace(string(data)) != printed {
+			t.Fatalf("ASSERTION: --addr-file holds %q (%v), want the printed address %q", data, err, printed)
+		}
+		if got := askThrough(t, printed, "three"); got != "far:three" {
+			t.Fatalf("ASSERTION: through %s the far program answered %q", printed, got)
+		}
 	})
 
 	t.Run("loopback", func(t *testing.T) {

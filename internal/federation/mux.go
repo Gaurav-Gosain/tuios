@@ -292,6 +292,17 @@ func (m *mux) dropStalled(s *Stream) {
 	}
 }
 
+// handleEOF marks a stream whose peer writes no more. The data frames before
+// it were delivered on this same loop, so the reader sees all of them first.
+func (m *mux) handleEOF(id uint32) {
+	m.mu.Lock()
+	s := m.streams[id]
+	m.mu.Unlock()
+	if s != nil {
+		s.eofOnce.Do(func() { close(s.eof) })
+	}
+}
+
 func (m *mux) dropStream(id uint32) {
 	m.mu.Lock()
 	s := m.streams[id]
@@ -327,6 +338,14 @@ func (m *mux) run() error {
 			m.dropStream(f.Stream)
 		case frameCredit:
 			m.handleCredit(f.Stream, f.Payload)
+		case frameEOF:
+			m.handleEOF(f.Stream)
+		case frameHalfOK:
+			m.mu.Lock()
+			if s := m.streams[f.Stream]; s != nil {
+				s.halfOK.Store(true)
+			}
+			m.mu.Unlock()
 		}
 	}
 }
@@ -367,6 +386,12 @@ func (m *mux) handleOpen(id uint32, payload []byte) {
 		// before the accept handler can write a byte, so the opener hears it
 		// ahead of any data.
 		_ = m.writeFrame(frameCredit, id, encodeCredit(0))
+	}
+	if open.HalfClose {
+		// Only an opener that reads frameEOF asks for HalfClose, and it waits
+		// for this answer before it sends one.
+		s.halfOK.Store(true)
+		_ = m.writeFrame(frameHalfOK, id, nil)
 	}
 	m.wg.Go(func() {
 		m.accept(s)
@@ -485,7 +510,15 @@ type Stream struct {
 	space    chan struct{}
 	closed   chan struct{}
 	closeOne sync.Once
-	err      error
+	// eof is closed when the peer sent frameEOF: it writes no more, and this
+	// side may still write. wroteEOF says this side sent one.
+	eof      chan struct{}
+	eofOnce  sync.Once
+	wroteEOF atomic.Bool
+	// halfOK says the peer reads frameEOF: it answered a HalfClose open with
+	// frameHalfOK, or this side accepted such an open from a peer that sends it.
+	halfOK atomic.Bool
+	err    error
 }
 
 func newStream(m *mux, id uint32) *Stream {
@@ -504,6 +537,7 @@ func newStreamSized(m *mux, id uint32, bulk bool) *Stream {
 		id:       id,
 		incoming: make(chan []byte, frames),
 		closed:   make(chan struct{}),
+		eof:      make(chan struct{}),
 	}
 }
 
@@ -729,6 +763,20 @@ func (s *Stream) Read(p []byte) (int, error) {
 		return s.take(p, chunk), nil
 	case <-s.closed:
 	case <-s.m.done:
+	case <-s.eof:
+		// The peer writes no more, and the stream is still open for this
+		// side's writes. Drain what came before the end, as below.
+		s.mu.Lock()
+		if chunk, ok := s.next(); ok {
+			return s.take(p, chunk), nil
+		}
+		s.mu.Unlock()
+		select {
+		case <-s.closed:
+			return 0, s.readErr()
+		default:
+			return 0, io.EOF
+		}
 	}
 	// The stream or the whole link has ended. Drain anything already
 	// delivered before reporting the end, so a peer that answered and then
@@ -781,6 +829,9 @@ func (s *Stream) readErr() error {
 }
 
 func (s *Stream) Write(p []byte) (int, error) {
+	if s.wroteEOF.Load() {
+		return 0, ErrStreamClosed
+	}
 	select {
 	case <-s.closed:
 		return 0, ErrStreamClosed
@@ -823,6 +874,44 @@ func (s *Stream) writeWindowed(p []byte) (int, error) {
 	}
 	return written, nil
 }
+
+// CloseWrite tells the peer that this side writes no more, and keeps the
+// stream open for the peer's bytes, as TCP's half-close does. Use it only on
+// a stream opened with StreamOpen.HalfClose: a peer that predates frameEOF
+// ignores it and sees the end only at Close.
+func (s *Stream) CloseWrite() error {
+	if !s.halfOK.Load() {
+		return ErrNoHalfClose
+	}
+	if s.wroteEOF.Swap(true) {
+		return nil
+	}
+	select {
+	case <-s.closed:
+		return nil
+	default:
+	}
+	if s.win != nil {
+		// The same lane as the data frames, so the end comes after them.
+		return s.m.writeFrameLane(frameEOF, s.id, nil, !s.bulk)
+	}
+	return s.m.writeFrame(frameEOF, s.id, nil)
+}
+
+// PeerWriteClosed reports whether the peer sent frameEOF: it writes no more,
+// and the stream is still open for this side's bytes.
+func (s *Stream) PeerWriteClosed() bool {
+	select {
+	case <-s.eof:
+		return true
+	default:
+		return false
+	}
+}
+
+// ErrNoHalfClose reports a stream whose peer did not say it reads frameEOF.
+// The caller closes the whole stream instead.
+var ErrNoHalfClose = errors.New("federation: the peer does not take a half-close on this stream")
 
 // Close ends this side of the stream and tells the peer.
 func (s *Stream) Close() error {

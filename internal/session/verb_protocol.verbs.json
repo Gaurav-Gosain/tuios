@@ -2766,6 +2766,10 @@
       {
         "name": "ssh_auth_sock",
         "description": "The caller's SSH_AUTH_SOCK. With [daemon] ssh_agent = \"follow\", the agent link the link's ssh forwards points at it while this caller is the newest person attached."
+      },
+      {
+        "name": "half_close",
+        "description": "For a connection that will carry a TCP connection (port-connect): pass on a half-close in each direction instead of closing the whole connection, so a client that shuts its write side still reads the answer."
       }
     ],
     "returns": [

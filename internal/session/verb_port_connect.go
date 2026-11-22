@@ -4,9 +4,10 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"io"
+	"errors"
 	"net"
 	"strconv"
+	"syscall"
 	"time"
 )
 
@@ -27,6 +28,10 @@ import (
 // ErrVerbPortClosed reports a port that nothing on this machine's loopback
 // answers on.
 const ErrVerbPortClosed = "port_closed"
+
+// ErrVerbPortUnreachable reports a port that did not answer for another
+// reason: the dial timed out, or a firewall or a security policy refused it.
+const ErrVerbPortUnreachable = "port_unreachable"
 
 const portConnectDialTimeout = 5 * time.Second
 
@@ -62,12 +67,17 @@ func (d *Daemon) verbPortConnect(cs *connState, params json.RawMessage) (any, *v
 	}
 	tcp, addr, err := dialLoopback(d.ctx, p.Port)
 	if err != nil {
-		return nil, newVerbError(ErrVerbPortClosed, "Nothing listens on port "+strconv.Itoa(p.Port)+" on this machine.")
+		if errors.Is(err, syscall.ECONNREFUSED) {
+			return nil, newVerbError(ErrVerbPortClosed, "Nothing listens on port "+strconv.Itoa(p.Port)+" on this machine.")
+		}
+		return nil, newVerbError(ErrVerbPortUnreachable, "Port "+strconv.Itoa(p.Port)+" on this machine did not answer: "+err.Error())
 	}
 	LogBasic("Client %s connected to port %d on this machine", cs.clientID, p.Port)
 	cs.takeover = func(br *bufio.Reader) {
 		d.relayPort(cs, br, tcp)
 	}
+	// The reply can fail to go out, and then the takeover never runs.
+	cs.abandon = func() { _ = tcp.Close() }
 	return map[string]any{"type": "port", "port": p.Port, "address": addr}, nil
 }
 
@@ -89,32 +99,25 @@ func dialLoopback(ctx context.Context, port int) (net.Conn, string, error) {
 }
 
 // relayPort copies bytes between the caller's connection and the TCP
-// connection until either side ends, then ends the other. As in
+// connection, and passes on a half-close in each direction, as ssh -L does:
+// a client that shuts its write side still gets the answer. As in
 // relayHostConnection, neither direction has a deadline: a connection can be
 // silent for hours and still be healthy.
 func (d *Daemon) relayPort(cs *connState, br *bufio.Reader, tcp net.Conn) {
 	conn := cs.conn
 	_ = conn.SetReadDeadline(time.Time{})
 	_ = conn.SetWriteDeadline(time.Time{})
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		// br, not the bare connection, so a byte it buffered is not lost.
-		_, _ = io.Copy(tcp, br)
-		_ = tcp.Close()
-	}()
+	stop := make(chan struct{})
 	go func() {
 		select {
 		case <-d.ctx.Done():
 		case <-cs.done:
-		case <-done:
+		case <-stop:
 			return
 		}
 		_ = tcp.Close()
 		_ = conn.Close()
 	}()
-	_, _ = io.Copy(conn, tcp)
-	_ = conn.Close()
-	_ = tcp.Close()
-	<-done
+	spliceHalfClose(conn, br, tcp)
+	close(stop)
 }

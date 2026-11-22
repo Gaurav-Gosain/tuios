@@ -6442,16 +6442,21 @@ connection to it reaches port 8080 on the loopback of build (127.0.0.1, then
 which the `[hosts]` options refuse.
 
 The first line on stdout is the local address, for example `127.0.0.1:8080`.
-Without `--local`, the forward uses the same port when it is free on this
-machine, and any free port when it is not. `--local 0` always takes any free
-port. The forward runs until you stop it with Ctrl+C.
+The forward keeps running after it, so a script reads the address from
+`--addr-file` and not from a pipe. Without `--local`, the forward uses the
+same port when it is free on this machine, and any free port when it is not.
+`--local 0` always takes any free port. The forward runs until you stop it
+with Ctrl+C.
 
 - The forward listens only on this machine's loopback. When the same port is
   free on `::1`, it listens there too.
 - On Linux, the forward closes a connection from another user at once. On
   macOS, every local user can connect, as with `ssh -L`.
-- At its start, the forward makes one connection to the far port. A host
-  that is down, a policy without `open` or a closed port fails there.
+- At its start, the forward makes one test connection to the far port and
+  closes it at once. A host that is down, a policy without `open` or a
+  closed port fails there. A program on that port sees one short connection.
+- A half-close passes through in both directions, as with `ssh -L`. A client
+  that shuts its write side after its request still gets the answer.
 - One forward keeps at most 64 connections open.
 - The policy of the far machine for this machine must allow `open`, as for
   `tuios run --host`. The far daemon makes each TCP connection with the
@@ -6459,12 +6464,16 @@ port. The forward runs until you stop it with Ctrl+C.
 
 **Flags:**
 - `--local PORT`: the port to listen on here. `0` takes any free port.
+- `--addr-file FILE`: also write the local address to FILE once the forward
+  listens. The file is written whole, so a reader never sees half of it.
 
 **Examples:**
 ```bash
 tuios forward build:8080
 tuios forward build:5173 --local 3000
-addr=$(tuios forward build:8081 --local 0 | head -n 1)
+tuios forward build:8081 --local 0 --addr-file /tmp/fwd.addr &
+until [ -s /tmp/fwd.addr ]; do sleep 0.1; done
+addr=$(cat /tmp/fwd.addr)
 ```
 
 ### `tuios transfers`

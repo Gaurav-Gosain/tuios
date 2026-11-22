@@ -119,6 +119,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbPaneEnded, "The window's pane ran on another machine and cannot come back: that machine's daemon no longer has it, or the link stayed down past the time it was kept for. Nothing was sent. list-windows shows it as ended with the reason; close the window, or open a new one there."},
 	{ErrVerbHostRefused, "The host's link is up and cannot take another connection. Close one of the connections to it and try again."},
 	{ErrVerbPortClosed, "port-connect found nothing that listens on the port on this machine's loopback. Start the program that serves the port, or check the port number."},
+	{ErrVerbPortUnreachable, "port-connect could not reach the port for another reason: the connection timed out, or a firewall or security policy refused it. The message has the system's error."},
 	{ErrVerbUnknownPane, "This daemon is not running a pane with that id. The pane was real and is gone, so drop it rather than correct it."},
 	{ErrVerbNotWorktree, "The session is not in a git worktree, so there is nothing to remove or diff."},
 	{ErrVerbWorktreeDirty, "remove-worktree refused: the worktree holds uncommitted changes and neither stash nor force was passed. Nothing was removed."},

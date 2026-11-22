@@ -826,6 +826,10 @@ type connState struct {
 	// when it does. open-host-connection sets it to relay the connection to
 	// another machine's daemon.
 	takeover func(br *bufio.Reader)
+	// abandon, when set with takeover, undoes what the verb prepared for the
+	// takeover when the reply could not be written and the takeover will not
+	// run, such as a TCP connection port-connect dialed.
+	abandon func()
 
 	// replyFailed, when a verb sets it, runs if writing that verb's reply
 	// fails, which is how a call that waited learns its caller is gone.

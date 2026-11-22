@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -47,6 +48,10 @@ func (d *Daemon) verbOpenHostConnection(cs *connState, params json.RawMessage) (
 		// to the host, not here, so this is how this daemon's link follows a
 		// person who attached a session on a host. See ssh_agent_follow.go.
 		SSHAuthSock string `json:"ssh_auth_sock"`
+		// HalfClose asks for a connection that passes on a half-close in
+		// each direction, for a TCP connection (port-connect). See
+		// federation.StreamOpen.HalfClose.
+		HalfClose bool `json:"half_close"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -73,7 +78,7 @@ func (d *Daemon) verbOpenHostConnection(cs *connState, params json.RawMessage) (
 	// the relayed bytes and not this daemon's view of who sent them, so this
 	// is the only way a check made here reaches it. It rides in the stream's
 	// open frame, which the caller cannot write. See human_origin.go.
-	conn, err := d.federation.OpenConnectionAs(ctx, p.Host, federation.StreamOpen{Human: d.mayActAsHuman(cs) && !d.rig})
+	conn, err := d.federation.OpenConnectionAs(ctx, p.Host, federation.StreamOpen{Human: d.mayActAsHuman(cs) && !d.rig, HalfClose: p.HalfClose})
 	if err != nil {
 		return nil, hostConnectionError(p.Host, err)
 	}
@@ -87,6 +92,18 @@ func (d *Daemon) verbOpenHostConnection(cs *connState, params json.RawMessage) (
 	}
 
 	LogBasic("Client %s connected through to host %s", cs.clientID, p.Host)
+	if p.HalfClose {
+		cs.takeover = func(br *bufio.Reader) {
+			d.relayHalfClose(cs, br, conn)
+			LogBasic("Client %s left host %s", cs.clientID, p.Host)
+		}
+		return map[string]any{
+			"type":           "host_connection",
+			"host":           p.Host,
+			"daemon_version": report.DaemonVersion,
+			"protocol":       report.Protocol,
+		}, nil
+	}
 	cs.takeover = func(br *bufio.Reader) {
 		// agentNote checks for a closed connection itself, so a note from
 		// the relay's timer after the close does nothing.
@@ -279,4 +296,68 @@ func (u *usedReader) scan(p []byte) bool {
 		}
 	}
 	return found
+}
+
+// relayHalfClose is relayHostConnection for a connection that carries a TCP
+// connection. The end of the client's bytes becomes CloseWrite on the stream,
+// and the end of the far bytes becomes CloseWrite on the client's connection,
+// so a client that shuts its write side still reads the answer. Both close
+// when both directions have ended, when either fails, or when the daemon or
+// the connection stops.
+func (d *Daemon) relayHalfClose(cs *connState, br *bufio.Reader, remote io.ReadWriteCloser) {
+	conn := cs.conn
+	_ = conn.SetReadDeadline(time.Time{})
+	_ = conn.SetWriteDeadline(time.Time{})
+	stop := make(chan struct{})
+	go func() {
+		select {
+		case <-d.ctx.Done():
+		case <-cs.done:
+		case <-stop:
+			return
+		}
+		_ = remote.Close()
+		_ = conn.Close()
+	}()
+	spliceHalfClose(conn, br, remote)
+	close(stop)
+}
+
+// spliceHalfClose copies a and b both ways and passes on a half-close: when
+// one side's bytes end cleanly, the other side gets CloseWrite, if it has
+// one. ar reads a (a's buffered reader, or a itself). Both are closed when
+// both directions have ended, and at once when a copy fails.
+func spliceHalfClose(a io.ReadWriteCloser, ar io.Reader, b io.ReadWriteCloser) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+	half := func(dst io.ReadWriteCloser, src io.Reader, srcConn io.ReadWriteCloser) {
+		defer wg.Done()
+		_, err := io.Copy(dst, src)
+		if err == nil && endedOnPurpose(srcConn) {
+			if cw, ok := dst.(interface{ CloseWrite() error }); ok && cw.CloseWrite() == nil {
+				return
+			}
+		}
+		_ = a.Close()
+		_ = b.Close()
+	}
+	go half(b, ar, a)
+	go half(a, b, b)
+	wg.Wait()
+	_ = a.Close()
+	_ = b.Close()
+}
+
+// SpliceHalfClose copies a and b both ways until both directions end, and
+// passes on a half-close from one to the other.
+func SpliceHalfClose(a, b io.ReadWriteCloser) { spliceHalfClose(a, a, b) }
+
+// endedOnPurpose reports whether a read end came from a half-close of the
+// other side rather than a whole close. A link stream says so itself. Any
+// other connection's clean end of file is taken as a half-close.
+func endedOnPurpose(c io.ReadWriteCloser) bool {
+	if s, ok := c.(interface{ PeerWriteClosed() bool }); ok {
+		return s.PeerWriteClosed()
+	}
+	return true
 }
