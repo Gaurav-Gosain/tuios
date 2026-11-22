@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -39,10 +40,15 @@ echo SENDER-DONE
 //   - The wake could carry the mail into the agent's prompt, or not come at
 //     all for a sender that cannot type there. The agent at rest must get
 //     the one fixed line and no marker text.
+//   - The sender could lose sight of its mail once it left its session. Its
+//     receipts must list the mail to the other session.
+//   - The grant could override a restriction the connection chose. tuios mcp
+//     at its default scope (own) must still be refused the other session,
+//     and with --scope all must list it cut and mail it.
 //
 // The artifact is mail-grant.log in the test's artifact directory: what the
-// sender printed, the listing it got, what the agent was typed, and the mail
-// as the person reads it.
+// sender printed, the listing it got, what the agent was typed, the mail as
+// the person reads it, the sender's receipts and both MCP sessions.
 //
 // Negative controls (NEGATIVE_CONTROLS.md): with the mail case cut from
 // checkGrants, MAIL is non-zero. With mailWakeRefusal not consulted in
@@ -123,4 +129,125 @@ func TestMailGrantReachesAnotherSessionByMailOnly(t *testing.T) {
 	if err != nil || !strings.Contains(mail, `"from": "`+sender+`"`) || !strings.Contains(mail, "body-marker-0b7") {
 		t.Fatalf("ASSERTION: the mail is not in the agent's inbox from the sender's pane: %v\n%s", err, mail)
 	}
+
+	// The same pane, after the wake: it sees the receipt of the mail it sent
+	// to the other session, and over MCP the connection's own restriction
+	// still wins, so the default scope keeps it in its own session and
+	// --scope all lets the mail grant through.
+	sentOut := filepath.Join(base, "sent.json")
+	mcpOwn := filepath.Join(base, "mcp-own.jsonl")
+	mcpAll := filepath.Join(base, "mcp-all.jsonl")
+	follow := filepath.Join(base, "mail-follow.sh")
+	if err := os.WriteFile(follow, []byte(mailFollowScript), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run = fmt.Sprintf("sh '%s' '%s' '%s' '%s' '%s' '%s' '%s'\n", follow, tuiosBin, infra, agent, sentOut, mcpOwn, mcpAll)
+	if out, err := tuiosCLI(t, base, "send-text", "-s", app, "-w", sender, run); err != nil {
+		t.Fatalf("start the follow-up: %v\n%s", err, out)
+	}
+	waitCapture(t, base, app, sender, "FOLLOW-DONE")
+	shown = capture(t, base, app, sender)
+	fmt.Fprintf(&log, "== the sender pane, after the follow-up:\n%s\n", shown)
+	for _, want := range []string{"SENT=0", "MCPOWN=0", "MCPALL=0"} {
+		if !strings.Contains(shown, want) {
+			t.Fatalf("ASSERTION: the follow-up did not print %s:\n%s", want, shown)
+		}
+	}
+
+	receipts, err := os.ReadFile(sentOut)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Fprintf(&log, "== read-agent-messages --sent from the sender:\n%s\n", receipts)
+	if !strings.Contains(string(receipts), `"session": "`+infra+`"`) || !strings.Contains(string(receipts), agent) {
+		t.Fatalf("ASSERTION: the sender has no receipt for its mail to the other session:\n%s", receipts)
+	}
+
+	own := mcpResults(t, mcpOwn)
+	fmt.Fprintf(&log, "== tuios mcp (default scope own) from the sender:\n%v\n", own)
+	// Scope own narrows the selector to the pane's own sessions, so the
+	// listing answers with no row of the other session rather than refusing.
+	if r := own[2]; r.isErr || len(agentRows(t, r)) != 0 {
+		t.Errorf("ASSERTION: under scope own the mail grant widened list_agents to the other session: %+v", r)
+	}
+	if r := own[3]; !r.isErr || !strings.Contains(r.text, "forbidden") {
+		t.Errorf("ASSERTION: under scope own the mail grant widened send_agent_message to the other session: %+v", r)
+	}
+	all := mcpResults(t, mcpAll)
+	fmt.Fprintf(&log, "== tuios mcp --scope all from the sender:\n%v\n", all)
+	if r := all[2]; r.isErr {
+		t.Errorf("ASSERTION: under scope all list_agents of the other session failed: %+v", r)
+	} else if rows := agentRows(t, r); len(rows) != 1 || rows[0]["window_id"] != agent || rows[0]["limited"] != true || rows[0]["cwd"] != nil {
+		t.Errorf("ASSERTION: under scope all list_agents of the other session is not the cut listing: %+v", r)
+	}
+	if r := all[3]; r.isErr {
+		t.Errorf("ASSERTION: under scope all send_agent_message to the other session failed: %+v", r)
+	}
+	mail, err = tuiosCLI(t, base, "read-agent-messages", "-s", infra, "-w", agent, "--json")
+	fmt.Fprintf(&log, "== the agent's inbox after the MCP send:\n%s\n", mail)
+	if err != nil || !strings.Contains(mail, "mcp-marker-4d1") || strings.Count(mail, `"from": "`+sender+`"`) < 1 {
+		t.Fatalf("ASSERTION: the MCP mail is not in the agent's inbox from the sender's pane: %v\n%s", err, mail)
+	}
+}
+
+// mailFollowScript runs in the sender pane after the first mail was read: the
+// pane's receipts, then tuios mcp twice with TUIOS_PANE_TOKEN taken out, so
+// only the kernel places it, first at the default scope and then with
+// --scope all. Each MCP session lists the other session's agents by selector
+// and mails the agent there.
+const mailFollowScript = `T="$1"; S="$2"; W="$3"; SENT="$4"; OWN="$5"; ALL="$6"
+"$T" read-agent-messages --sent --json >"$SENT" 2>&1; echo "SENT=$?"
+reqs() {
+  printf '%s\n' \
+    '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' \
+    '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"tuios_list_agents","arguments":{"select":"session:'"$S"'"}}}' \
+    '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"tuios_send_agent_message","arguments":{"session":"'"$S"'","to":"'"$W"'","text":"mcp-marker-4d1 over mcp"}}}'
+}
+reqs | env -u TUIOS_PANE_TOKEN "$T" mcp >"$OWN"; echo "MCPOWN=$?"
+reqs | env -u TUIOS_PANE_TOKEN "$T" mcp --scope all >"$ALL"; echo "MCPALL=$?"
+echo FOLLOW-DONE
+`
+
+// mcpResult is one tools/call answer: the last text block and isError.
+type mcpResult struct {
+	text  string
+	isErr bool
+}
+
+// agentRows decodes the agents of a tuios_list_agents answer.
+func agentRows(t *testing.T, r mcpResult) []map[string]any {
+	t.Helper()
+	var list struct {
+		Agents []map[string]any `json:"agents"`
+	}
+	if err := json.Unmarshal([]byte(r.text), &list); err != nil {
+		t.Fatalf("list_agents answered with no agent list: %v\n%s", err, r.text)
+	}
+	return list.Agents
+}
+
+// mcpResults reads a tuios mcp output file into its tools/call answers by id.
+func mcpResults(t *testing.T, path string) map[float64]mcpResult {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := map[float64]mcpResult{}
+	for line := range strings.Lines(string(raw)) {
+		var m map[string]any
+		if err := json.Unmarshal([]byte(line), &m); err != nil {
+			t.Fatalf("tuios mcp wrote a line that is not JSON: %q", line)
+		}
+		id, _ := m["id"].(float64)
+		res, _ := m["result"].(map[string]any)
+		content, _ := res["content"].([]any)
+		if len(content) == 0 {
+			continue
+		}
+		text, _ := content[len(content)-1].(map[string]any)["text"].(string)
+		isErr, _ := res["isError"].(bool)
+		out[id] = mcpResult{text: text, isErr: isErr}
+	}
+	return out
 }

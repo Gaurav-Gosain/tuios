@@ -5904,6 +5904,14 @@ tuios send-agent-message -s infra -w claude 'The app needs a queue in the stagin
   types only its fixed line, with the count and the read command, so a pane
   with `mail` may wake a pane it could not type into. The wake is still never
   typed into a pane on a prompt.
+- The sender sees what became of its mail with
+  `tuios read-agent-messages --sent`, other sessions included.
+- `tuios mcp` restricts its connections to the pane's own session unless it
+  was started with `--scope all` (see [The MCP server](#the-mcp-server)), and
+  that restriction wins over `mail`. An agent that mails other sessions over
+  MCP needs its server started with `--scope all`; under the default scope a
+  selector across sessions lists nothing outside the pane's own sessions, and
+  a send to another session is refused.
 
 `write` does not include `mail`, so no existing setup reaches further. A
 prompt-injected agent with `mail` can write to every agent's inbox, which

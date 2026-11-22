@@ -158,7 +158,9 @@ tuios set-pane-grants --grants read,write && exec claude
 With `mail` added, the agent still reaches the agents of other sessions, by
 mail only. A row of a session you may not read shows only who is there
 (`limited: true`), and mail you attach a file to for another session takes
-only files in your own folder or your session's stash:
+only files in your own folder or your session's stash. `tuios mcp` keeps to
+your own session unless it was started with `--scope all`, and `mail` does not
+widen that:
 
 ```sh
 tuios set-pane-grants --grants read,write,mail,task && exec claude

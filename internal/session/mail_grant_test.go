@@ -26,12 +26,12 @@ func mailFixture(t *testing.T, grants ...string) (d *Daemon, sp, a1, a2, b1 stri
 // still leave mail in another one with mail, always as itself. Without mail
 // the same send stays refused, so write alone reaches no further than before.
 func TestMailGrantSendsToAnySessionAsThePane(t *testing.T) {
-	_, sp, a1, _, b1 := mailFixture(t, "read", "write", "task")
+	_, sp, _, _, b1 := mailFixture(t, "read", "write", "task")
 	c := dialVerb(t, sp)
 	wantForbidden(t, "mail to b without the mail grant", callP(c, t, "send-agent-message", map[string]any{"session": "b", "to": b1, "text": "hi"}))
 	wantForbidden(t, "list-agents across sessions without the mail grant", callP(c, t, "list-agents", map[string]any{"all_sessions": true}))
 
-	d, sp, a1, _, b1 := mailFixture(t, "read", "write", "mail", "task")
+	_, sp, a1, _, b1 := mailFixture(t, "read", "write", "mail", "task")
 	c = dialVerb(t, sp)
 	sent := result(t, callP(c, t, "send-agent-message", map[string]any{"session": "b", "to": b1, "text": "the app needs a queue"}))
 	if sent["from"] != a1 || sent["session"] != "b" || sent["to"] != b1 {
@@ -57,8 +57,6 @@ func TestMailGrantSendsToAnySessionAsThePane(t *testing.T) {
 	wantForbidden(t, "read-agent-messages of b", callP(c, t, "read-agent-messages", map[string]any{"session": "b"}))
 	wantForbidden(t, "stash-put into b", callP(c, t, "stash-put", map[string]any{"session": "b", "path": "/etc/hosts"}))
 	wantForbidden(t, "start-agent", callP(c, t, "start-agent", map[string]any{"session": "b", "agent": "true"}))
-
-	_ = d
 }
 
 // TestMailGrantListsOnlyWhatAddressingNeeds: a listing across sessions gives

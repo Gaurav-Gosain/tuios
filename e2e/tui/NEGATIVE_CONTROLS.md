@@ -19030,9 +19030,13 @@ another session. `send-text` and `capture-pane` into that session must be
 refused. `list-agents --select session:...` must give the agent's row cut to
 what addressing needs (`limited`, no `cwd`). The mail must arrive from the
 sender's own pane, and the agent must be woken with the fixed line and no
-marker text from the mail. The artifact is `mail-grant.log`: what the sender
-printed, the listing it got, what the agent was typed, and the mail as the
-person reads it.
+marker text from the mail. The same pane must then see the mail among its
+own receipts (`read-agent-messages --sent`). Over `tuios mcp` at the default
+scope (`own`) the connection's restriction must still win: the listing of the
+other session is empty and the send is refused. With `--scope all` the listing
+is cut and the send arrives. The artifact is `mail-grant.log`: what the sender
+printed, the listing it got, what the agent was typed, the mail as the person
+reads it, the sender's receipts and both MCP sessions.
 
 Run on Linux on 2026-11-21. The branch passes it. On main `set-pane-grants
 --grants ...,mail,...` is refused as an unknown grant, so each control is this
@@ -19042,6 +19046,7 @@ branch with one change.
 | --- | --- | --- | --- |
 | The send is held to the write reach | the mail case cut from `checkGrants` (`if false`) | "ASSERTION: the sender did not print MAIL=0" | **caught** |
 | The wake takes no authority from mail | `mailWakeRefusal` not consulted in `queueOriginRefusal` | "ASSERTION: the agent in the other session was not woken for its mail" | **caught** |
+| The connection's restriction wins over mail | `checkScope`'s answer dropped in `admitVerb` for a pane holding mail (run on 2026-11-22) | "ASSERTION: under scope own the mail grant widened list_agents to the other session", and the same for send_agent_message | **caught** |
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
