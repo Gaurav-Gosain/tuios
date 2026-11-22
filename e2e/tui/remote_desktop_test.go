@@ -103,6 +103,12 @@ func TestRemoteDesktopSetsUpAHostAndReadsAFrame(t *testing.T) {
 		if fi.Mode().Perm() != 0o600 {
 			t.Fatalf("ASSERTION: the token file is %v, want 0600", fi.Mode().Perm())
 		}
+		// The engine can be stopped by its pid: the pid file names it.
+		b, _ := os.ReadFile(filepath.Join(state, "engine.pid"))
+		pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+		if err != nil || pid <= 1 || syscall.Kill(pid, 0) != nil {
+			t.Fatalf("ASSERTION: engine.pid holds %q, not the pid of the running engine", b)
+		}
 	})
 
 	t.Run("again", func(t *testing.T) {
