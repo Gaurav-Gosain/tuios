@@ -70,13 +70,31 @@ func connector(tool string) string {
 	return ""
 }
 
+// commandGuard is the sh that leaves the command alone when the program is not
+// on the PATH of the host running it. The settings file travels: a dotfiles
+// repository is read on machines without tuios, and launchd or cron jobs run
+// with a minimal PATH. Without the guard every hook exits 127 there.
+func commandGuard(program string) string {
+	return "command -v " + shellWord(program) + " >/dev/null 2>&1 || exit 0; "
+}
+
 // command is the hook command run installs for a harness: the forwarder line,
 // or tuios agent-hook itself when there is no socket tool.
 func (run Runner) command(harnessID string, version int) string {
 	plain := HookCommand(run.Program, harnessID, version)
 	conn := connector(run.Socket)
-	if conn == "" || runtime.GOOS == "windows" {
+	if runtime.GOOS == "windows" {
 		return plain
+	}
+	if conn == "" {
+		if harnessID != ClaudeCode {
+			return plain
+		}
+		return "sh -c " + shellWord(commandGuard(run.Program)+`printf "%s" "$(cat)" | exec `+plain)
+	}
+	guard := ""
+	if harnessID == ClaudeCode {
+		guard = commandGuard(run.Program)
 	}
 	// The script is one sh -c argument, quoted by shellWord. The payload goes
 	// into the JSON line as JSON (payload_json), as the harness wrote it: on
@@ -87,7 +105,7 @@ func (run Runner) command(harnessID string, version int) string {
 	// the daemon reads it from the process when it can. The reply's trailing
 	// newlines are kept by the dot after it. Every case pattern opens with
 	// its own parenthesis, so a pattern inside $(...) does not end it.
-	script := `p=$(cat); if [ -n "$TUIOS_SOCKET" ] && [ -n "$p" ]; then ` +
+	script := guard + `p=$(cat); if [ -n "$TUIOS_SOCKET" ] && [ -n "$p" ]; then ` +
 		`case $p in (*PermissionRequest*) w=` + strconv.Itoa(forwarderHoldWait) + `;; (*) w=` + strconv.Itoa(forwarderShortWait) + `;; esac; ` +
 		`o=$({ printf "{\"id\":1,\"verb\":\"agent-hook-event\",\"params\":{\"harness\":\"%s\",\"forwarder\":true,\"env\":{" ` + harnessID + `; ` +
 		forwardEnvLoop() +
@@ -101,6 +119,14 @@ func (run Runner) command(harnessID string, version int) string {
 // managedStatusLine knows the line is one tuios wrote.
 const statusLineArg0 = "tuios-statusline"
 
+// statusLineGuard is the sh that runs the person's own command alone when the
+// program is missing, so the chained line keeps working on a host without
+// tuios. It is the status line half of commandGuard: a hook that exits 0 is
+// done, a status line has one more thing to run.
+func statusLineGuard(program string) string {
+	return `if ! command -v ` + shellWord(program) + ` >/dev/null 2>&1; then if [ -n "$1" ]; then cat | sh -c "$1"; exit $?; fi; exit 0; fi; `
+}
+
 // statusLineCommand is the status line command run installs: the forwarder
 // line, or tuios agent-statusline itself when there is no socket tool. The
 // person's own command (then) is the line's $1, run after the forward with
@@ -109,11 +135,20 @@ const statusLineArg0 = "tuios-statusline"
 // socket the line runs tuios agent-statusline --then as it always did.
 func (run Runner) statusLineCommand(then string) string {
 	conn := connector(run.Socket)
-	if conn == "" || runtime.GOOS == "windows" {
+	if runtime.GOOS == "windows" {
 		return StatusLineCommand(run.Program, then)
 	}
 	plain := shellWord(run.Program) + " " + statusLineVerb + " " + ClaudeCode + " " + managedMarker + " " + strconv.Itoa(StatusLineVersion)
-	script := `p=$(cat); if [ -n "$TUIOS_SOCKET" ] && [ -n "$p" ]; then w=` + strconv.Itoa(forwarderShortWait) + `; ` +
+	guard := statusLineGuard(run.Program)
+	if conn == "" {
+		script := guard + `p=$(cat); if [ -n "$1" ]; then printf "%s" "$p" | ` + plain + ` --then "$1"; exit $?; fi; printf "%s" "$p" | exec ` + plain
+		cmd := "sh -c " + shquote.Word(script) + " " + statusLineArg0
+		if then != "" {
+			cmd += " " + shquote.Word(then)
+		}
+		return cmd
+	}
+	script := guard + `p=$(cat); if [ -n "$TUIOS_SOCKET" ] && [ -n "$p" ]; then w=` + strconv.Itoa(forwarderShortWait) + `; ` +
 		`o=$({ printf "{\"id\":1,\"verb\":\"agent-statusline-event\",\"params\":{\"harness\":\"%s\",\"forwarder\":true,\"env\":{" ` + ClaudeCode + `; ` +
 		forwardEnvLoop() +
 		`printf "},\"payload_json\":"; printf "%s" "$p"; printf "}}\n"; } | ` + conn + ` 2>/dev/null; echo .); ` +

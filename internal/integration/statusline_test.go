@@ -135,8 +135,9 @@ func TestStatusLineChainRoundTrip(t *testing.T) {
 	}
 	doc := settingsDoc(t, readFile(t, path))
 	sl := doc["statusLine"].(map[string]any)
-	if sl["command"] != StatusLineCommand("tuios", "~/.claude/statusline.sh") || sl["padding"] != float64(0) {
-		t.Errorf("statusLine = %v", sl)
+	want := tg.runner(env, "tuios").statusLineCommand("~/.claude/statusline.sh")
+	if sl["command"] != want || sl["padding"] != float64(0) {
+		t.Errorf("statusLine = %v, want %q", sl["command"], want)
 	}
 	st := tg.StatusLineState(env, "tuios")
 	if !st.Installed || st.Then != "~/.claude/statusline.sh" {
