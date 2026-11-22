@@ -76,6 +76,9 @@ var exampleOutcomes = map[string]exampleOutcome{
 	// line to exec, which is a daemon inside another program. The upgrade is
 	// proved in e2e/tui/live_upgrade_test.go.
 	"daemon-upgrade#0": {errCode: ErrVerbUpgradeRefused, why: "the fixture daemon has no tuios command line to exec"},
+	// Nothing listens on the example's port in the fixture. The verb is
+	// proved in e2e/tui/forward_test.go.
+	"port-connect#0": {errCode: ErrVerbPortClosed, why: "nothing listens on port 8080 in the fixture"},
 	// The fixture daemon reads no config file. The verb is proved in
 	// pane_grants_hold_test.go.
 	"apply-config#0":         {errCode: ErrVerbCommandFailed, why: "the fixture daemon reads no config file"},

@@ -6917,5 +6917,27 @@
     "examples": [
       "{\"id\":1,\"verb\":\"zoom-window\",\"params\":{\"session\":\"work\",\"window\":\"build\",\"zoom\":true}}"
     ]
+  },
+  "port-connect": {
+    "description": "Connect to a TCP port on this machine's loopback (127.0.0.1, then ::1) and turn this connection into that TCP connection. After the reply, every byte written here reaches the port and every byte the port sends comes back. Send nothing until the reply has arrived. Over a link it needs open, as exec does. tuios forward sends it.",
+    "params": [
+      {
+        "name": "port",
+        "description": "The TCP port, 1 to 65535."
+      }
+    ],
+    "returns": [
+      {
+        "name": "port",
+        "description": "The port that answered."
+      },
+      {
+        "name": "address",
+        "description": "The loopback address that answered: 127.0.0.1 or ::1."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"port-connect\",\"params\":{\"port\":8080}}"
+    ]
   }
 }

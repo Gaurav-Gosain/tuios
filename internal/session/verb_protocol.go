@@ -3005,6 +3005,7 @@ func buildVerbRegistry() map[string]verbEntry {
 	maps.Copy(table, taskVerbs())
 	// exec, what tuios run --host sends. See verb_exec.go.
 	maps.Copy(table, execVerbs())
+	maps.Copy(table, portVerbs())
 	// The sender's view of its mail. See verb_receipts.go.
 	maps.Copy(table, receiptVerbs())
 	maps.Copy(table, holdVerbs())
