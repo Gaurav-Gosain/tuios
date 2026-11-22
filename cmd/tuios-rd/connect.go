@@ -52,10 +52,16 @@ type connectCfg struct {
 	check     bool
 	engineBin string
 	engineSrc string
-	service   string // auto, launchd, systemd or process
-	tuios     string
-	viewArgs  []string
-	out       io.Writer
+	// enginePath is a binary already on the host that the service runs, at
+	// its own path, so a macOS permission given to it still holds.
+	enginePath string
+	service    string // auto, launchd, systemd or process
+	// adopt is a running tiles engine LaunchAgent that is not ours, used as
+	// it is: its binary, port, token and log.
+	adopt    *agentInfo
+	tuios    string
+	viewArgs []string
+	out      io.Writer
 }
 
 // hostState is what the probe found.
@@ -69,6 +75,13 @@ type hostState struct {
 	systemd     bool
 	setsid      bool
 	logTail     string
+	agents      []agentInfo
+	signID      string // a local code signing identity on a Mac
+}
+
+// agentInfo is a LaunchAgent on the Mac that runs a tiles engine.
+type agentInfo struct {
+	label, program, port, tokenFile, log string
 }
 
 func connectUsage() {
@@ -84,6 +97,11 @@ Flags:
   --engine-bin FILE  install this engine binary on HOST (built for HOST)
   --engine-src DIR   build the engine on HOST from this source folder
                      (default: $TUIOS_RD_ENGINE_SRC)
+  --engine-path FILE run this engine binary that is already on HOST, at its
+                     own path, so a macOS permission it has still holds
+
+On a Mac where a tiles engine already runs as a LaunchAgent, tuios-rd uses
+that engine as it is, so its permissions still hold.
   --service KIND     auto, launchd, systemd or process (default: auto)
 
 The other flags go to the viewer. Run tuios-rd --help to see them.
@@ -123,6 +141,8 @@ func connectMain(args []string) int {
 			c.engineBin = val()
 		case "--engine-src":
 			c.engineSrc = val()
+		case "--engine-path":
+			c.enginePath = val()
 		case "--service":
 			c.service = val()
 		case "-h", "--help":
@@ -165,6 +185,21 @@ func (c *connectCfg) run(ctx context.Context) (int, error) {
 	}
 	fmt.Fprintf(c.out, "%s %s\n", systemName(st.os), st.arch)
 
+	if !st.engine && c.enginePath == "" {
+		// A tiles engine that already runs as a LaunchAgent has its macOS
+		// permissions. Use it as it is, so nothing asks for them again.
+		if a := pickAgent(st.agents); a != nil {
+			c.adopt = a
+			c.step("Using the engine of LaunchAgent %s\n", a.label)
+			if st, err = c.probe(ctx); err != nil {
+				return 1, err
+			}
+		}
+	}
+	if c.enginePath != "" && !st.engine {
+		return 1, fmt.Errorf("there is no engine that can run at %s on %s", c.enginePath, c.host)
+	}
+
 	if !st.engine {
 		c.step("Installing the engine ... ")
 		if err := c.install(ctx, st); err != nil {
@@ -172,6 +207,9 @@ func (c *connectCfg) run(ctx context.Context) (int, error) {
 			return 1, err
 		}
 		fmt.Fprintln(c.out, "done")
+		if st.os == "Darwin" {
+			c.sign(ctx, st)
+		}
 	}
 
 	if !st.up {
@@ -257,34 +295,68 @@ func (c *connectCfg) hostRun(ctx context.Context, timeout time.Duration, script 
 const hostDirs = `D="${XDG_STATE_HOME:-$HOME/.local/state}/tuios-rd"
 E="${XDG_DATA_HOME:-$HOME/.local/share}/tuios-rd/engine"
 mkdir -p "$D" "$E" && chmod 700 "$D"
+BIN=${BIN:-$E/relay-engine}
+LOG=${LOG:-$D/engine.log}
+TOK=${TOK:-$D/token}
+if [ -z "$PORTV" ]; then
+  [ -s "$D/port" ] || echo $(( $(od -An -N2 -tu2 /dev/urandom) % 30000 + 20000 )) > "$D/port"
+  PORTV=$(cat "$D/port")
+fi
 `
 
-const probeScript = hostDirs + `echo "os=$(uname -s)"
+// hostVars are the shell assignments that point a host script at an
+// adopted engine or at --engine-path.
+func (c *connectCfg) hostVars() string {
+	var b strings.Builder
+	if a := c.adopt; a != nil {
+		fmt.Fprintf(&b, "BIN=%s LOG=%s TOK=%s PORTV=%s\n", shq(a.program), shq(a.log), shq(a.tokenFile), shq(a.port))
+	} else if c.enginePath != "" {
+		fmt.Fprintf(&b, "BIN=%s\n", shq(c.enginePath))
+	}
+	return b.String()
+}
+
+const probeScript = `echo "os=$(uname -s)"
 echo "arch=$(uname -m)"
-[ -x "$E/relay-engine" ] && echo engine=yes
-if [ ! -s "$D/token" ]; then (umask 077; od -An -N24 -tx1 /dev/urandom | tr -d ' \n' > "$D/token"); fi
-echo "token=$(cat "$D/token")"
-if [ ! -s "$D/port" ]; then echo $(( $(od -An -N2 -tu2 /dev/urandom) % 30000 + 20000 )) > "$D/port"; fi
-echo "port=$(cat "$D/port")"
+[ -x "$BIN" ] && echo engine=yes
+if [ "$TOK" = "$D/token" ] && [ ! -s "$TOK" ]; then (umask 077; od -An -N24 -tx1 /dev/urandom | tr -d ' \n' > "$TOK"); fi
+echo "token=$(cat "$TOK" 2>/dev/null)"
+echo "port=$PORTV"
 if command -v curl >/dev/null 2>&1; then
-  curl -fsS -m 2 -o /dev/null -H "Authorization: Bearer $(cat "$D/token")" "http://127.0.0.1:$(cat "$D/port")/capabilities" 2>/dev/null && echo up=yes
+  curl -fsS -m 2 -o /dev/null -H "Authorization: Bearer $(cat "$TOK" 2>/dev/null)" "http://127.0.0.1:$PORTV/capabilities" 2>/dev/null && echo up=yes
 else
   echo nocurl=yes
 fi
-if [ -f "$D/engine.log" ]; then
-  n=$(awk '/^--- tuios-rd start/{n=NR} END{print n+0}' "$D/engine.log")
-  t=$(tail -n +"$n" "$D/engine.log")
+if [ -f "$LOG" ]; then
+  n=$(awk '/^--- tuios-rd start/{n=NR} END{print n+0}' "$LOG")
+  t=$(tail -n +"$n" "$LOG" | tail -n 40)
   case $t in *"Screen capture permission is missing"*) echo need_screen=yes;; esac
   case $t in *"Accessibility permission is missing"*) echo need_input=yes;; esac
   printf 'tail=%s\n' "$(printf '%s' "$t" | tail -n 3 | tr '\n' ' ')"
 fi
 command -v systemctl >/dev/null 2>&1 && systemctl --user show-environment >/dev/null 2>&1 && echo systemd=yes
 command -v setsid >/dev/null 2>&1 && echo setsid=yes
+if [ "$(uname -s)" = Darwin ]; then
+  u=$(id -u)
+  for l in $(launchctl list | awk 'NR > 1 && $3 !~ /^com\.apple\./ {print $3}'); do
+    p=$(launchctl print "gui/$u/$l" 2>/dev/null) || continue
+    prog=$(printf '%s\n' "$p" | sed -n 's/^[[:space:]]*program = //p' | head -n 1)
+    case $prog in */relay-engine) ;; *) continue;; esac
+    args=$(printf '%s\n' "$p" | sed -n '/arguments = {/,/}/p')
+    case $args in *--tiles*) ;; *) continue;; esac
+    port=$(printf '%s\n' "$args" | awk 'f {print $1; exit} $1 == "--port" {f = 1}')
+    tf=$(printf '%s\n' "$args" | awk 'f {print $1; exit} $1 == "--token-file" {f = 1}')
+    lg=$(printf '%s\n' "$p" | sed -n 's/^[[:space:]]*stderr path = //p' | head -n 1)
+    echo "agent=$l|$prog|$port|$tf|$lg"
+  done
+  id=$(security find-identity -p codesigning "$HOME/Library/Keychains/login.keychain-db" 2>/dev/null | awk '/local signing"/ {print $2; exit}')
+  [ -n "$id" ] && echo "sign_id=$id"
+fi
 true
 `
 
 func (c *connectCfg) probe(ctx context.Context) (hostState, error) {
-	out, err := c.hostRun(ctx, 20*time.Second, probeScript)
+	out, err := c.hostRun(ctx, 30*time.Second, c.hostVars()+hostDirs+probeScript)
 	if err != nil {
 		return hostState{}, err
 	}
@@ -321,6 +393,13 @@ func parseProbe(out string) hostState {
 			st.setsid = true
 		case "tail":
 			st.logTail = strings.TrimSpace(v)
+		case "agent":
+			f := strings.Split(v, "|")
+			if len(f) == 5 && f[2] != "" && f[3] != "" {
+				st.agents = append(st.agents, agentInfo{label: f[0], program: f[1], port: f[2], tokenFile: f[3], log: f[4]})
+			}
+		case "sign_id":
+			st.signID = v
 		}
 	}
 	return st
@@ -377,7 +456,7 @@ func (c *connectCfg) install(ctx context.Context, st hostState) error {
 		if err != nil {
 			return err
 		}
-		script := hostDirs + viewerFiles + "f=" + shq(dst) + `
+		script := c.hostVars() + hostDirs + viewerFiles + "f=" + shq(dst) + `
 chmod 755 "$f" && mv -f "$f" "$E/relay-engine"
 `
 		_, err = c.hostRun(ctx, time.Minute, script)
@@ -412,7 +491,7 @@ func (c *connectCfg) build(ctx context.Context, st hostState) error {
 	if err != nil {
 		return err
 	}
-	script := hostDirs + viewerFiles + "f=" + shq(dst) + `
+	script := c.hostVars() + hostDirs + viewerFiles + "f=" + shq(dst) + `
 missing=""
 for t in make c++ pkg-config; do command -v $t >/dev/null 2>&1 || missing="$missing $t"; done
 for p in libwebsockets libzstd; do pkg-config --exists $p 2>/dev/null || missing="$missing $p"; done
@@ -439,6 +518,50 @@ func installHint(goos string) string {
 	return "on Debian or Ubuntu: sudo apt install build-essential pkg-config libwebsockets-dev libzstd-dev libx11-dev libxext-dev libxdamage-dev libxfixes-dev libxtst-dev\n  on Arch: sudo pacman -S base-devel libwebsockets zstd libx11 libxext libxdamage libxfixes libxtst"
 }
 
+// pickAgent is the first tiles engine LaunchAgent that is not ours.
+func pickAgent(agents []agentInfo) *agentInfo {
+	for i := range agents {
+		if agents[i].label != launchdLabel {
+			return &agents[i]
+		}
+	}
+	return nil
+}
+
+// enginePathOnHost is where the engine binary is on the host, for the
+// messages.
+func (c *connectCfg) enginePathOnHost() string {
+	switch {
+	case c.adopt != nil:
+		return c.adopt.program
+	case c.enginePath != "":
+		return c.enginePath
+	}
+	return "~/.local/share/tuios-rd/engine/relay-engine"
+}
+
+// sign signs a newly installed engine on a Mac with the local code signing
+// identity, when there is one. A signed engine keeps its macOS permissions
+// across updates at the same path. Over the link the login keychain is
+// locked, so codesign fails there; then the step says what to run in
+// Terminal.app on the Mac.
+func (c *connectCfg) sign(ctx context.Context, st hostState) {
+	if st.signID == "" {
+		return
+	}
+	c.step("Signing the engine ... ")
+	line := "codesign --force --keychain ~/Library/Keychains/login.keychain-db -s " + st.signID + " " + c.enginePathOnHost()
+	if _, err := c.hostRun(ctx, time.Minute, strings.Replace(line, "~", "$HOME", 2)); err == nil {
+		fmt.Fprintln(c.out, "done")
+		return
+	}
+	fmt.Fprintf(c.out, "needs Terminal.app\n"+
+		"  Signing needs the login keychain, which only a Terminal.app window on the\n"+
+		"  Mac can use. Run this line there, then run tuios remote-desktop again:\n"+
+		"    %s\n"+
+		"  Without it the engine works, and each update asks for the permissions again.\n", line)
+}
+
 // shq quotes s for sh.
 func shq(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 
@@ -458,7 +581,7 @@ func (c *connectCfg) serviceKind(st hostState) string {
 
 // engineArgs are the engine's flags, as words for a shell line.
 func engineArgs(st hostState) string {
-	a := `--bind 127.0.0.1 --port "$(cat "$D/port")" --tiles --viewer-dir "$E/viewer" --token-file "$D/token"`
+	a := `--bind 127.0.0.1 --port "$PORTV" --tiles --viewer-dir "$E/viewer" --token-file "$TOK"`
 	if st.os == "Darwin" {
 		a = "--backend macos " + a + " --scale gpu"
 	}
@@ -468,10 +591,17 @@ func engineArgs(st hostState) string {
 // start starts the engine as a user service and marks the log, so the probe
 // reads only what this start wrote.
 func (c *connectCfg) start(ctx context.Context, st hostState) error {
-	mark := `echo "--- tuios-rd start $(date)" >> "$D/engine.log"
+	mark := `echo "--- tuios-rd start $(date)" >> "$LOG"
 `
 	var script string
-	switch c.serviceKind(st) {
+	kind := c.serviceKind(st)
+	if c.adopt != nil {
+		kind = "adopted"
+	}
+	switch kind {
+	case "adopted":
+		script = hostDirs + mark + `launchctl kickstart -k "gui/$(id -u)/` + c.adopt.label + `"
+`
 	case "launchd":
 		script = hostDirs + mark + `p="$HOME/Library/LaunchAgents/` + launchdLabel + `.plist"
 mkdir -p "$HOME/Library/LaunchAgents"
@@ -481,16 +611,16 @@ cat > "$p" <<EOF
 <plist version="1.0"><dict>
 <key>Label</key><string>` + launchdLabel + `</string>
 <key>ProgramArguments</key><array>
-<string>$E/relay-engine</string><string>--backend</string><string>macos</string>
-<string>--bind</string><string>127.0.0.1</string><string>--port</string><string>$(cat "$D/port")</string>
+<string>$BIN</string><string>--backend</string><string>macos</string>
+<string>--bind</string><string>127.0.0.1</string><string>--port</string><string>$PORTV</string>
 <string>--tiles</string><string>--scale</string><string>gpu</string>
-<string>--viewer-dir</string><string>$E/viewer</string><string>--token-file</string><string>$D/token</string>
+<string>--viewer-dir</string><string>$E/viewer</string><string>--token-file</string><string>$TOK</string>
 </array>
 <key>RunAtLoad</key><true/>
 <key>KeepAlive</key><false/>
 <key>ProcessType</key><string>Interactive</string>
-<key>StandardOutPath</key><string>$D/engine.log</string>
-<key>StandardErrorPath</key><string>$D/engine.log</string>
+<key>StandardOutPath</key><string>$LOG</string>
+<key>StandardErrorPath</key><string>$LOG</string>
 </dict></plist>
 EOF
 u=$(id -u)
@@ -508,9 +638,9 @@ cat > "$u/` + systemdUnit + `" <<EOF
 Description=tuios remote desktop engine
 
 [Service]
-ExecStart=$E/relay-engine ` + engineArgs(st) + `
-StandardOutput=append:$D/engine.log
-StandardError=append:$D/engine.log
+ExecStart=$BIN ` + engineArgs(st) + `
+StandardOutput=append:$LOG
+StandardError=append:$LOG
 Restart=no
 
 [Install]
@@ -523,10 +653,10 @@ systemctl --user daemon-reload && systemctl --user restart ` + systemdUnit + `
 			return errors.New(c.host + " has no service manager tuios-rd can use and no setsid. Use --service launchd or systemd")
 		}
 		script = hostDirs + mark + `if [ -s "$D/engine.pid" ] && kill -0 "$(cat "$D/engine.pid")" 2>/dev/null; then kill "$(cat "$D/engine.pid")"; fi
-setsid sh -c 'echo $$ > "$1/engine.pid"; shift; exec "$@"' sh "$D" "$E/relay-engine" ` + engineArgs(st) + ` >> "$D/engine.log" 2>&1 < /dev/null &
+setsid sh -c 'echo $ > "$1/engine.pid"; shift; exec "$@"' sh "$D" "$BIN" ` + engineArgs(st) + ` >> "$LOG" 2>&1 < /dev/null &
 `
 	}
-	_, err := c.hostRun(ctx, time.Minute, script)
+	_, err := c.hostRun(ctx, time.Minute, c.hostVars()+script)
 	return err
 }
 
@@ -561,7 +691,7 @@ func (c *connectCfg) notUp(st hostState) error {
 // Mac and waits until the engine runs. tuios-rd opens the right pane on the
 // Mac. It never turns a switch on itself.
 func (c *connectCfg) permissions(ctx context.Context, st hostState) (hostState, error) {
-	engine := "~/.local/share/tuios-rd/engine/relay-engine"
+	engine := c.enginePathOnHost()
 	fmt.Fprintf(c.out, `
   The Mac needs two permissions for the remote desktop engine.
   System Settings is open on %[1]s at Privacy & Security. On %[1]s:
@@ -612,7 +742,7 @@ func (c *connectCfg) permissions(ctx context.Context, st hostState) (hostState, 
 // whyCommand is the --why line for the viewer: one line on why the engine
 // does not answer, read from its log on the host.
 func (c *connectCfg) whyCommand() string {
-	script := hostDirs + `t=$(tail -n 20 "$D/engine.log" 2>/dev/null)
+	script := c.hostVars() + hostDirs + `t=$(tail -n 20 "$LOG" 2>/dev/null)
 case $t in
 *"permission is missing"*) echo "The engine on this host needs permissions. Run tuios remote-desktop again to see the steps.";;
 *"display changed"*|*"no display"*) echo "The display of this host went away. Open the lid or connect a screen.";;
