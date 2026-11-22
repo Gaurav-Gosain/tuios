@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"net"
 	"time"
-
-	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
 
 // DialHostPort opens a connection to a TCP port on host's loopback. It goes
@@ -13,26 +11,10 @@ import (
 // makes the TCP connection. The returned connection carries raw bytes, and
 // its CloseWrite passes a half-close on to the far TCP connection.
 func DialHostPort(host, clientVersion string, port int) (net.Conn, error) {
-	socketPath, err := GetSocketPath()
+	c, _, err := dialVerbClientThroughHost(host, clientVersion, map[string]any{"host": host, "half_close": true})
 	if err != nil {
-		return nil, errfmt.Errorf("failed to get socket path: %w", err)
-	}
-	conn, err := net.DialTimeout("unix", socketPath, 5*time.Second)
-	if err != nil {
-		return nil, errfmt.Errorf("failed to connect to daemon: %w", err)
-	}
-	c := &VerbClient{conn: conn, r: bufio.NewReader(conn)}
-	if _, err := openHostConnectionHalf(conn, c.r, host); err != nil {
-		_ = c.Close()
 		return nil, err
 	}
-	hs, err := c.handshake(clientVersion)
-	if err != nil {
-		_ = c.Close()
-		return nil, errfmt.Errorf("tuios on %s did not accept this client: %w", host, err)
-	}
-	c.daemon = hs
-	c.host = host
 	if _, err := c.Call("port-connect", map[string]int{"port": port}); err != nil {
 		_ = c.Close()
 		return nil, err

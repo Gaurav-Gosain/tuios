@@ -104,20 +104,5 @@ func dialLoopback(ctx context.Context, port int) (net.Conn, string, error) {
 // relayHostConnection, neither direction has a deadline: a connection can be
 // silent for hours and still be healthy.
 func (d *Daemon) relayPort(cs *connState, br *bufio.Reader, tcp net.Conn) {
-	conn := cs.conn
-	_ = conn.SetReadDeadline(time.Time{})
-	_ = conn.SetWriteDeadline(time.Time{})
-	stop := make(chan struct{})
-	go func() {
-		select {
-		case <-d.ctx.Done():
-		case <-cs.done:
-		case <-stop:
-			return
-		}
-		_ = tcp.Close()
-		_ = conn.Close()
-	}()
-	spliceHalfClose(conn, br, tcp)
-	close(stop)
+	d.relayHalfClose(cs, br, tcp)
 }

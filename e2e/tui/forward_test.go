@@ -319,3 +319,58 @@ func TestForwardReachesAPortOnAHost(t *testing.T) {
 		}
 	})
 }
+
+// TestForwardToAnOlderHost runs tuios forward against a far machine on the
+// previous minor release (TUIOS_E2E_OLD_BIN, as scripts/e2e-mixed-versions.sh
+// passes it): its daemon and its stdio-proxy have no port-connect and cannot
+// read the link's EOF frame.
+//
+// How this could fail: the forward hangs, or prints a raw protocol error, or
+// a frame the old proxy cannot read takes the link down for everything
+// else. The forward must fail at once with a message that names the older
+// host, and a command on the host must still run over the same link.
+func TestForwardToAnOlderHost(t *testing.T) {
+	old := os.Getenv("TUIOS_E2E_OLD_BIN")
+	if old == "" {
+		t.Skip("set TUIOS_E2E_OLD_BIN to a tuios of the previous minor release")
+	}
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	ssh := writeFakeSSHTo(t, base, remote)
+	writeOneHostConfig(t, base, old) // the link's far side runs the old build
+	env := []string{"TUIOS_SSH=" + ssh}
+	killDaemon(t, remote)
+	farStart := exec.Command(old, "new", "far", "--detach")
+	farStart.Env = append(os.Environ(), "SHELL=/bin/sh")
+	for _, key := range xdgKeys {
+		farStart.Env = append(farStart.Env, key+"="+xdgDir(remote, key))
+	}
+	if out, err := farStart.CombinedOutput(); err != nil {
+		t.Fatalf("start build's old daemon: %v\n%s", err, out)
+	}
+	killDaemon(t, base)
+	if out, err := tuiosCLIEnv(t, base, env, "new", "home", "--detach"); err != nil {
+		t.Fatalf("start this machine's daemon: %v\n%s", err, out)
+	}
+	waitForHostListing(t, base, func(s string) bool { return containsAll(s, "build", "up") }, "the daemon never reported build up")
+	port := farEcho(t)
+
+	start := time.Now()
+	_, errs, code := runSplit(t, base, env, "forward", "build:"+strconv.Itoa(port))
+	t.Logf("forward to the older host: exit %d, stderr %q", code, errs)
+	if code == 0 || time.Since(start) > 30*time.Second {
+		t.Fatalf("ASSERTION: a forward to an older host exited %d after %v; want a failure at once", code, time.Since(start))
+	}
+	if strings.Contains(errs, "panic") || strings.Contains(errs, "frame") || !strings.Contains(errs, "build") {
+		t.Fatalf("ASSERTION: the error is not a plain message that names the host: %q", errs)
+	}
+
+	// v0.12.1 has no exec verb either, so the listing proves the link: the
+	// far session must still be listed through it.
+	out, errs2, code2 := runSplit(t, base, env, "ls", "--host", "build")
+	if code2 != 0 || !strings.Contains(out, "far") {
+		dumpLinkLogs(t, base, remote)
+		t.Fatalf("ASSERTION: after the forward, the older host's session is not listed: exit %d, stdout %q, stderr %q", code2, out, errs2)
+	}
+	waitForHostListing(t, base, func(s string) bool { return containsAll(s, "build", "up") }, "build is not up after the forward")
+}

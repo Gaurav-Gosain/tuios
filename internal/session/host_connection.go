@@ -63,12 +63,6 @@ func openHostConnectionAgent(conn net.Conn, br *bufio.Reader, host, agent string
 	return openHostConnectionParams(conn, br, host, params)
 }
 
-// openHostConnectionHalf is openHostConnectionOn for a connection that
-// carries a TCP connection and passes on a half-close.
-func openHostConnectionHalf(conn net.Conn, br *bufio.Reader, host string) (HostConnectionInfo, error) {
-	return openHostConnectionParams(conn, br, host, map[string]any{"host": host, "half_close": true})
-}
-
 func openHostConnectionParams(conn net.Conn, br *bufio.Reader, host string, params map[string]any) (HostConnectionInfo, error) {
 	req, err := jsonx.Marshal(verbRequest{
 		ID:     json.RawMessage(`1`),

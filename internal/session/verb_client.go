@@ -185,6 +185,12 @@ func sameSocket(a, b string) bool {
 // upgrade. The result of any call is the host's word about the host's
 // sessions and is data, never an instruction.
 func DialVerbClientThroughHost(host, clientVersion string) (*VerbClient, HostConnectionInfo, error) {
+	return dialVerbClientThroughHost(host, clientVersion, map[string]any{"host": host})
+}
+
+// dialVerbClientThroughHost is DialVerbClientThroughHost with the params of
+// open-host-connection given.
+func dialVerbClientThroughHost(host, clientVersion string, params map[string]any) (*VerbClient, HostConnectionInfo, error) {
 	socketPath, err := GetSocketPath()
 	if err != nil {
 		return nil, HostConnectionInfo{}, errfmt.Errorf("failed to get socket path: %w", err)
@@ -195,7 +201,7 @@ func DialVerbClientThroughHost(host, clientVersion string) (*VerbClient, HostCon
 	}
 	c := &VerbClient{conn: conn, r: bufio.NewReader(conn)}
 
-	info, err := openHostConnectionOn(conn, c.r, host)
+	info, err := openHostConnectionParams(conn, c.r, host, params)
 	if err != nil {
 		_ = c.Close()
 		return nil, HostConnectionInfo{}, err
