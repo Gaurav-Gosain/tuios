@@ -506,16 +506,24 @@ func TestAgentsOffDropsTheQueue(t *testing.T) {
 // Negative control: with the watcher started only when the switch moves, the
 // client that started off never starts it, and the Inbox stays empty.
 func TestAgentsOnAfterStartingOffStartsTheInbox(t *testing.T) {
+	const cols, rows, width = 120, 32, 24
 	base := agentsOffFixture(t, true)
 	if out, err := tuiosCLI(t, base, "new", "other", "--detach"); err != nil {
 		t.Fatalf("create the other session: %v\n%s", err, out)
 	}
-	term := attachIn(t, base, "rail", startOpts{cols: 120, rows: 32, shippedLooks: true})
+	term := attachIn(t, base, "rail", startOpts{cols: cols, rows: rows, shippedLooks: true})
 
 	writeAgentsConfig(t, base, false)
 	waitAgentsSwitch(t, base, false)
 	if out, err := tuiosCLI(t, base, "set-agent-state", "needs_input", "-s", "other", "-m", "PICKME-31b"); err != nil {
 		t.Fatalf("set-agent-state on the other session: %v\n%s", err, out)
+	}
+	// The daemon and the client each read the file with a watcher of their
+	// own, so the daemon having the switch on says nothing about the
+	// client. Until the client reads it, the Inbox key only shows the off
+	// notice. The rail's agents section is drawn once the client has it on.
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return railAgentRows(s, cols-width) != nil }, uiTimeout); err != nil {
+		t.Fatalf("the client never turned the features on after the file did: %v\n%s", err, term.Snapshot())
 	}
 	if err := term.SendKeys(tuitest.Ctrl('b'), "i"); err != nil {
 		t.Fatal(err)
