@@ -1893,6 +1893,7 @@ in the middle row, set `appearance.selection.copy_entry` to `center`.
 | `?` | Search backward, up into the scrollback |
 | `n` | Go to the next match in the direction of the last search |
 | `N` | Go to the next match in the opposite direction |
+| `/` `?` `n` `N` in a selection | Search, and move the end of the selection to the match. See [Search in copy mode](#search-in-copy-mode) |
 | `Esc` in the search prompt | Cancel the search and move the cursor back |
 | `v` | Start a character selection |
 | `V` | Start a line selection |
@@ -3371,6 +3372,8 @@ The key hints at the foot of a panel stay on one row. When they do not fit, they
 ## Search in copy mode
 
 The prompt shows `/` or `?` for the direction. The search starts at the copy cursor. When no match is found in that direction, the search continues from the other end of the buffer. <kbd>n</kbd> and <kbd>N</kbd> also start at the copy cursor. After you move the cursor, they find the nearest match. When a search finds more than 1000 matches, the prompt shows `1000+`.
+
+In a selection, <kbd>/</kbd> and <kbd>?</kbd> open the same prompt. The selection stays on the screen. Each match moves the copy cursor, and the end of the selection moves with it, as in tmux. <kbd>Enter</kbd> keeps the selection with its new end. <kbd>Esc</kbd> puts the cursor and the end back. <kbd>n</kbd> and <kbd>N</kbd> also move the end of the selection to the next match. Then <kbd>y</kbd> copies the selection.
 
 Two actions start copy mode and open the search prompt with one key. They have no default key.
 
