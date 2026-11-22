@@ -67,7 +67,7 @@ func (d *Daemon) verbPortConnect(cs *connState, params json.RawMessage) (any, *v
 	}
 	tcp, addr, err := dialLoopback(d.ctx, p.Port)
 	if err != nil {
-		if errors.Is(err, syscall.ECONNREFUSED) {
+		if connRefused(err) {
 			return nil, newVerbError(ErrVerbPortClosed, "Nothing listens on port "+strconv.Itoa(p.Port)+" on this machine.")
 		}
 		return nil, newVerbError(ErrVerbPortUnreachable, "Port "+strconv.Itoa(p.Port)+" on this machine did not answer: "+err.Error())
@@ -79,6 +79,15 @@ func (d *Daemon) verbPortConnect(cs *connState, params json.RawMessage) (any, *v
 	// The reply can fail to go out, and then the takeover never runs.
 	cs.abandon = func() { _ = tcp.Close() }
 	return map[string]any{"type": "port", "port": p.Port, "address": addr}, nil
+}
+
+// connRefused reports a dial that nothing answered: ECONNREFUSED, or
+// WSAECONNREFUSED (10061) on Windows, which errors.Is does not map.
+func connRefused(err error) bool {
+	if errno, ok := errors.AsType[syscall.Errno](err); ok {
+		return errno == syscall.ECONNREFUSED || errno == 10061
+	}
+	return false
 }
 
 // dialLoopback connects to port on 127.0.0.1, or on ::1 when nothing answers

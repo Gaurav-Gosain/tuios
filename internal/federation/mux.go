@@ -388,8 +388,11 @@ func (m *mux) handleOpen(id uint32, payload []byte) {
 		_ = m.writeFrame(frameCredit, id, encodeCredit(0))
 	}
 	if open.HalfClose {
-		// Only an opener that reads frameEOF asks for HalfClose, and it waits
-		// for this answer before it sends one.
+		// Only an opener that reads frameEOF asks for HalfClose. It sends one
+		// only after this answer arrives: until then its CloseWrite returns
+		// ErrNoHalfClose and the caller closes the whole stream. The answer
+		// goes before any data, so a caller that reads a reply first (as
+		// DialHostPort reads the port-connect reply) always has it.
 		s.halfOK.Store(true)
 		_ = m.writeFrame(frameHalfOK, id, nil)
 	}
