@@ -65,6 +65,10 @@ type tapeDetectState struct {
 	pendingD  string
 	gen       uint64
 	indicator tapeIndicator
+	// seenWin and seenDir are the focused pane and its folder as detection
+	// last looked at them. See tapeFollowFocus.
+	seenWin string
+	seenDir string
 }
 
 // listenCwdChangeUntil waits for the next message on its channel and returns nil once
@@ -169,12 +173,49 @@ func (m *OS) onCwdChange(msg CwdChangedMsg) tea.Cmd {
 		return nil
 	}
 
+	m.tapeDetect.seenWin, m.tapeDetect.seenDir = msg.WindowID, dir
+	return m.scheduleTapeDetect(dir)
+}
+
+// scheduleTapeDetect evaluates dir once it has held still for the debounce.
+func (m *OS) scheduleTapeDetect(dir string) tea.Cmd {
 	m.tapeDetect.gen++
 	m.tapeDetect.pendingD = dir
 	gen := m.tapeDetect.gen
 	return tea.Tick(tapeDetectDebounce, func(time.Time) tea.Msg {
 		return tapeDebounceMsg{gen: gen}
 	})
+}
+
+// tapeFollowFocus looks for a project tape in the focused pane's folder when
+// the focused pane, or what this client knows of its folder, changed without
+// an OSC 7 that onCwdChange took. It runs after every message, and on an idle
+// client it is one comparison.
+//
+// An OSC 7 this client parses is not the only way it learns a folder. A daemon
+// pane is primed from the daemon's copy of the screen, which holds cells and
+// no OSC 7. A shell that printed its first prompt before that copy was taken
+// told the daemon its folder and never told this client, so its project tape
+// went unnoticed until its next prompt. The daemon's record of the folder
+// comes with the pane's state, and that is what this reads. The other way is
+// focus: onCwdChange takes reports from the focused pane only, so a shell that
+// spoke while another pane had focus is looked at when it gets the focus.
+func (m *OS) tapeFollowFocus() tea.Cmd {
+	id, dir := "", ""
+	if w := m.GetFocusedWindow(); w != nil {
+		id = w.ID
+		if w.CwdHost == "" && m.paneIsLocal(w) {
+			dir = w.Cwd
+		}
+	}
+	if id == m.tapeDetect.seenWin && dir == m.tapeDetect.seenDir {
+		return nil
+	}
+	m.tapeDetect.seenWin, m.tapeDetect.seenDir = id, dir
+	if dir == "" || m.ScriptMode || !m.tapeAutorunEnabled() {
+		return nil
+	}
+	return m.scheduleTapeDetect(dir)
 }
 
 // handleTapeDebounce evaluates the pending directory once the cwd has been
