@@ -3313,8 +3313,9 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 
 	// Theme. An empty name follows Omarchy on a machine with Omarchy, so it
 	// is applied there too: a reload that removed the theme puts that
-	// default back. Elsewhere an empty name is the startup state and the
-	// initialize is skipped. A live reload does not run ApplyOverrides, so
+	// default back. Elsewhere an empty name is the startup state, so the
+	// initialize runs only to leave a theme that is still on: a reload that
+	// removed the theme turns it off. A live reload does not run ApplyOverrides, so
 	// the --theme flag's name stands in for an empty one here, or a save of
 	// any setting would drop the flag's theme.
 	name := cfg.Appearance.Theme
@@ -3326,7 +3327,7 @@ func ApplyAppearanceConfig(cfg *UserConfig, s *Settings) {
 	if cfg.Appearance.ThemeLight != "" && theme.SchemeLight() && flagTheme() == "" {
 		name = cfg.Appearance.ThemeLight
 	}
-	if name != "" || theme.OmarchyInstalled() {
+	if name != "" || theme.OmarchyInstalled() || theme.IsEnabled() {
 		if err := theme.Initialize(name); err != nil {
 			log.Printf("Warning: Failed to load theme '%s': %v", name, err)
 		}
