@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"os/exec"
+	"slices"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -20,7 +21,7 @@ import (
 //
 // The command is started from the client, detached, and not waited on by the
 // UI: it is expected to hand the program over and return.
-func (m *OS) runGUIProgram(e applist.Entry) (tea.Cmd, bool) {
+func (m *OS) runGUIProgram(e applist.Entry, args ...string) (tea.Cmd, bool) {
 	if m.UserConfig == nil || e.Source != applist.SourceDesktop || e.Terminal {
 		return nil, false
 	}
@@ -28,7 +29,7 @@ func (m *OS) runGUIProgram(e applist.Entry) (tea.Cmd, bool) {
 	if len(prefix) == 0 {
 		return nil, false
 	}
-	argv := append(prefix, e.Argv()...)
+	argv := slices.Concat(prefix, e.Argv(), args)
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = e.Cwd
 	detachProcess(cmd)

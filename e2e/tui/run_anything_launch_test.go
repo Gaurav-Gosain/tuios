@@ -166,6 +166,118 @@ func TestLauncherTypesTheCommandOut(t *testing.T) {
 	requireTypedThenRuns(t, term)
 }
 
+// argsProbeName is a program that prints each argument it got, between bars,
+// so a test can tell "two words" as one argument from two.
+const argsProbeName = "zzargs"
+
+// writeArgsProbe puts the argument probe in a directory of its own and
+// returns the directory.
+func writeArgsProbe(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	script := "#!/bin/sh\nprintf ARGS\nfor a in \"$@\"; do printf '|%s' \"$a\"; done\necho\nexec sleep 30\n"
+	if err := os.WriteFile(filepath.Join(dir, argsProbeName), []byte(script), 0o755); err != nil {
+		t.Fatalf("args probe script: %v", err)
+	}
+	return dir
+}
+
+// TestLauncherRunsWithArguments is #2430: text after the program's name is
+// its arguments. The query "zzargs hello 'two words'" keeps the program's row
+// on screen, and the hint line says that space adds arguments. Enter runs the
+// line in the pane's shell, so the quotes group two words into one argument.
+// Tab with arguments types the whole line out and runs nothing until Enter.
+// It runs standalone and in a daemon session, which types the line through
+// the queued seed.
+//
+// Negative control: with LauncherRun ignoring the arguments, the pane prints
+// ARGS with no arguments and ARGS|hello|two words never appears.
+func TestLauncherRunsWithArguments(t *testing.T) {
+	for _, daemon := range []bool{false, true} {
+		name := "standalone"
+		if daemon {
+			name = "daemon"
+		}
+		t.Run(name, func(t *testing.T) {
+			dir := writeArgsProbe(t)
+			env := []string{"PATH=" + dir + string(os.PathListSeparator) + agentFreePath("/usr/bin", "/bin"), "PS1=" + typeOutPrompt + " ", "SHELL=/bin/sh"}
+			var term *tuitest.Terminal
+			if daemon {
+				base := t.TempDir()
+				killDaemon(t, base)
+				if out, err := tuiosCLIEnv(t, base, env, "new", "e2e-args", "--detach"); err != nil {
+					t.Fatalf("create detached session: %v: %s", err, out)
+				}
+				term = startIn(t, base, startOpts{args: []string{"attach", "e2e-args"}, env: env})
+				if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+					t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+				}
+				if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
+					t.Fatalf("switch to window mode: %v", err)
+				}
+				if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
+					t.Fatalf("client never reached window management mode: %v\n%s", err, term.Snapshot())
+				}
+			} else {
+				term, _ = start(t, startOpts{args: []string{"--standalone"}, env: env})
+				waitBoot(t, term)
+			}
+
+			// Enter runs the line with its arguments.
+			openLauncher(t, term)
+			if err := term.SendKeys(argsProbeName + " hello 'two words'"); err != nil {
+				t.Fatalf("type the line: %v", err)
+			}
+			// The search box holds the line, so a second copy of the name is
+			// the program's row, still listed with the arguments typed.
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				text := s.Text()
+				return strings.Count(text, argsProbeName) >= 2 && strings.Contains(text, "space arguments") && strings.Contains(text, "type it out")
+			}, uiTimeout); err != nil {
+				t.Fatalf("the program's row or the arguments hint is not on screen: %v\n%s", err, term.Snapshot())
+			}
+			saveFrame(t, term, "launcher-arguments-"+name)
+			if err := term.SendKeys(tuitest.Enter); err != nil {
+				t.Fatalf("run the line: %v", err)
+			}
+			if err := term.WaitForText("ARGS|hello|two words", shellTimeout); err != nil {
+				t.Fatalf("the program did not run with its arguments: %v\n%s", err, term.Snapshot())
+			}
+			saveFrame(t, term, "launcher-arguments-ran-"+name)
+
+			// Tab types the whole line out, and nothing runs until Enter.
+			if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
+				t.Fatalf("switch to window mode: %v", err)
+			}
+			if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
+				t.Fatalf("client never reached window management mode: %v\n%s", err, term.Snapshot())
+			}
+			openLauncher(t, term)
+			if err := term.SendKeys(argsProbeName + " typed"); err != nil {
+				t.Fatalf("type the line: %v", err)
+			}
+			if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Count(s.Text(), argsProbeName) >= 2 }, uiTimeout); err != nil {
+				t.Fatalf("the program's row is not on screen: %v\n%s", err, term.Snapshot())
+			}
+			if err := term.SendKeys(tuitest.Tab); err != nil {
+				t.Fatalf("type the line out: %v", err)
+			}
+			if err := term.WaitForText(typeOutPrompt+" "+argsProbeName+" typed", shellTimeout); err != nil {
+				t.Fatalf("the line was not typed out at the prompt: %v\n%s", err, term.Snapshot())
+			}
+			if strings.Contains(term.Screen().Text(), "ARGS|typed") {
+				t.Fatalf("the typed-out line ran before Enter:\n%s", term.Snapshot())
+			}
+			if err := term.SendKeys(tuitest.Enter); err != nil {
+				t.Fatalf("run the typed line: %v", err)
+			}
+			if err := term.WaitForText("ARGS|typed", shellTimeout); err != nil {
+				t.Fatalf("the typed-out line did not run on Enter: %v\n%s", err, term.Snapshot())
+			}
+		})
+	}
+}
+
 // TestRunAnythingExecsLocalPane pins the local half of the launch semantics: a
 // program picked in the palette becomes a pane whose process is that program,
 // exec'd from a path containing a space, with no shell in between to re-parse

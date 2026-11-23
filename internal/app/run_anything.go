@@ -2,6 +2,7 @@ package app
 
 import (
 	"slices"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -148,10 +149,35 @@ func (m *OS) RunProgram(e applist.Entry) tea.Cmd {
 // the name the shell resolves is the file that was listed. A name that would
 // need quoting falls back to the quoted path, which is unambiguous if uglier.
 func (m *OS) TypeProgram(e applist.Entry) tea.Cmd {
-	save := m.noteLaunch(e.Name)
 	// A trailing space so the first thing typed is an argument, not the rest of
 	// a word.
-	line := e.CommandLine() + " "
+	return m.typeCommandLine(e.Name, e.CommandLine()+" ")
+}
+
+// RunCommandLine runs e with the arguments typed after its name in the
+// launcher, as one command line: "sleep 5", or "git log --oneline | head".
+//
+// A program with no arguments is exec'd (RunProgram). A line with arguments
+// goes to a shell instead, because only the shell can read it as the person
+// wrote it: quotes, pipes, globs and variables. The pane opens a shell with
+// the line typed and entered, the way TypeProgram types a line and leaves it
+// for the person to enter. The program's name is written as CommandLine
+// writes it, so the shell runs the listed file. The pane keeps the shell
+// after the program ends, so its output stays on screen.
+//
+// A desktop entry that runs as a window of its own (runGUIProgram) gets the
+// arguments split at spaces, since no shell reads them.
+func (m *OS) RunCommandLine(e applist.Entry, args string) tea.Cmd {
+	if cmd, ok := m.runGUIProgram(e, strings.Fields(args)...); ok {
+		return cmd
+	}
+	return m.typeCommandLine(e.Name, e.CommandLine()+" "+args+"\r")
+}
+
+// typeCommandLine opens a shell pane named name and types line into it. A
+// line that ends in a carriage return runs at once.
+func (m *OS) typeCommandLine(name, line string) tea.Cmd {
+	save := m.noteLaunch(name)
 
 	// Which half this is has to be asked directly rather than inferred from
 	// whether a pane appeared. AddWindow also returns without one when the PTY
@@ -160,30 +186,31 @@ func (m *OS) TypeProgram(e applist.Entry) tea.Cmd {
 	daemon := m.IsDaemonSession && m.DaemonClient != nil
 
 	before := len(m.Windows)
-	m.AddWindow(e.Name)
+	m.AddWindow(name)
 
 	if daemon {
 		// The pane is created by the daemon and arrives with a later state
 		// sync, so the line waits for it there. Waiting on the pane's arrival is
 		// an event rather than a poll, which is the whole difference from the
 		// version this replaces.
-		m.queueSeed(e.Name, line)
+		m.queueSeed(name, line)
 		m.EnterTerminalMode()
 		return save
 	}
 
 	if len(m.Windows) == before {
-		m.ShowNotification("Could not open a pane for "+e.Name, "error", m.Settings.NotificationDuration*2)
+		m.ShowNotification("Could not open a pane for "+name, "error", m.Settings.NotificationDuration*2)
 		return save
 	}
 	// Typing it out means the user is about to keep typing, so the pane is
-	// handed over ready for that. Run does not do this and should not: the two
-	// keys differ in exactly this intent, and landing in window management mode
-	// with a half-written command on the prompt would send the arguments to the
-	// window manager instead of the shell.
+	// handed over ready for that. A line run here with its arguments goes to
+	// terminal mode too: the program it started reads what the person types
+	// next. Run with no arguments does not do this: landing in window
+	// management mode with a half-written command on the prompt would send the
+	// arguments to the window manager instead of the shell.
 	m.EnterTerminalMode()
 	if err := m.SendToWindow(m.Windows[before].ID, []byte(line)); err != nil {
-		m.ShowNotification("Could not type "+e.Name+": "+err.Error(),
+		m.ShowNotification("Could not type "+name+": "+err.Error(),
 			"error", m.Settings.NotificationDuration*2)
 	}
 	return save

@@ -3206,7 +3206,9 @@ The default keys of this section are in [Default keys: Global](keybindings-defau
 
 The **command palette** searches commands, sessions and windows. Start the query with `@` to filter panes by agent state (`@n` for needs input), or with `#` to search actions to rebind. Each row shows the key you bound to its action, such as `prefix+a`, and no key when the action has none. A change to the config shows the next time you open the palette.
 
-The **app launcher** lists every executable on `$PATH`, ranked by use. <kbd>Enter</kbd> runs the selection in a new pane with no shell in between. <kbd>Tab</kbd> types the command into the focused shell instead, so you can add arguments.
+The **app launcher** lists every executable on `$PATH`, ranked by use. <kbd>Enter</kbd> runs the selection in a new pane with no shell in between. <kbd>Tab</kbd> types the command into a new shell pane instead, so you can add arguments there.
+
+Type the arguments after the program's name, such as `sleep 5` or `git log --oneline | head`. The list keeps the program that the first word picks. <kbd>Enter</kbd> then runs the whole line in a new shell pane, so quotes, pipes and variables work as in your shell. The pane keeps the shell after the program ends. <kbd>Tab</kbd> types the whole line and does not run it. The footer shows `space arguments`.
 
 These two keys take <kbd>Ctrl</kbd>+<kbd>P</kbd> from fish and vim and <kbd>Alt</kbd>+<kbd>Space</kbd> from readline. Set an action to `[]` to give its key back. On macOS, <kbd>Option</kbd>+<kbd>Space</kbd> types a non-breaking space, so use <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>a</kbd> for the launcher.
 

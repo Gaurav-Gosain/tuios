@@ -30,9 +30,13 @@ const (
 // Run and type sit side by side because they are one choice made per launch.
 // Naming both in the footer is the only place the second one can be
 // discovered, and it is the reason it does not need to be a setting.
+//
+// The space hint says that text after the name is its arguments, which is
+// the one part of the launcher that nothing else on screen shows.
 var launcherHints = []overlay.Hint{
 	{Key: hintListMove, Label: "move"},
 	{Key: overlay.EnterGlyph, Label: "run"},
+	{Key: "space", Label: "arguments"},
 	{Key: "⇥", Label: "type it out"},
 	{Key: "esc", Label: "close"},
 }
@@ -68,7 +72,8 @@ func (m *OS) launcherIconWidth() int {
 // cells blank and flushLauncherIcons fills them in after the frame.
 func (m *OS) renderLauncher() (string, overlay.Geometry, []overlayRowHit) {
 	items := m.launcherItems()
-	filtered := FilterLauncherItems(items, m.launcherList.Query.String(), m.launchHistory)
+	filter, _ := m.launcherQuery()
+	filtered := FilterLauncherItems(items, filter, m.launchHistory)
 
 	pal := m.overlayUI()
 	bg := pal.Surface

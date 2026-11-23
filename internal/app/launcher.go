@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -214,7 +215,29 @@ func orderByHistory(items []LauncherItem, hist *applist.Frecency) []LauncherItem
 
 // filteredLauncherItems returns the rows matching the current query.
 func (m *OS) filteredLauncherItems() []LauncherItem {
-	return FilterLauncherItems(m.launcherItems(), m.launcherList.Query.String(), m.launchHistory)
+	filter, _ := m.launcherQuery()
+	return FilterLauncherItems(m.launcherItems(), filter, m.launchHistory)
+}
+
+// launcherQuery splits what is typed in the launcher into the part that picks
+// the program and the arguments that follow it.
+//
+// The whole query is the filter while it matches a row, so a name with a
+// space, such as "Visual Studio Code", still finds its row as it is typed.
+// Once the whole query matches nothing, the first word picks the program and
+// the rest is its arguments: "sleep 5" keeps sleep selected, and Enter runs
+// "sleep 5". A query of one word has no arguments.
+func (m *OS) launcherQuery() (filter, args string) {
+	return splitLauncherQuery(m.launcherItems(), m.launcherList.Query.String())
+}
+
+// splitLauncherQuery is launcherQuery over items.
+func splitLauncherQuery(items []LauncherItem, query string) (filter, args string) {
+	name, rest, found := strings.Cut(strings.TrimLeft(query, " \t"), " ")
+	if !found || len(FilterLauncherItems(items, query, nil)) > 0 {
+		return query, ""
+	}
+	return name, strings.TrimSpace(rest)
 }
 
 // LauncherPageRows is how many rows a page key moves the launcher by.
@@ -308,9 +331,14 @@ func (m *OS) launcherEmptyReason() string {
 // LauncherRun starts the selected program in a new pane and closes the
 // launcher. This is Enter, and the mouse click.
 func (m *OS) LauncherRun(idx int) tea.Cmd {
+	// Read before launcherTarget closes the launcher and clears the query.
+	_, args := m.launcherQuery()
 	e, ok := m.launcherTarget(idx)
 	if !ok {
 		return nil
+	}
+	if args != "" {
+		return m.RunCommandLine(e, args)
 	}
 	return m.RunProgram(e)
 }
@@ -327,9 +355,13 @@ func (m *OS) LauncherRun(idx int) tea.Cmd {
 // for a command line to finish is what completion means, and unlike a modifier
 // on Enter it is expressible under every terminal keyboard encoding.
 func (m *OS) LauncherType(idx int) tea.Cmd {
+	_, args := m.launcherQuery()
 	e, ok := m.launcherTarget(idx)
 	if !ok {
 		return nil
+	}
+	if args != "" {
+		return m.typeCommandLine(e.Name, e.CommandLine()+" "+args)
 	}
 	return m.TypeProgram(e)
 }

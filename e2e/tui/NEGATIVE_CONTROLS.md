@@ -28,6 +28,19 @@ Run on 2026-11-23 on Linux. Three controls, each this branch with one change:
 Each step and its answer is in `handoff.json` under `TUIOS_E2E_FRAMES`, in the
 test's folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAFanPaneClosesAndWaitsForItsOwnTree$' -v .`.
+## The launcher runs a program with its arguments
+
+`TestLauncherRunsWithArguments` types `zzargs hello 'two words'` into the
+launcher, standalone and in a daemon session. The program's row and the
+`space arguments` hint must be on screen. Enter must print
+`ARGS|hello|two words`, so the shell read the quotes. Tab with arguments must
+type the line out and run it only on Enter.
+
+Run on 2026-11-23 on Linux. The control is this branch with `LauncherRun`
+ignoring the arguments: both subtests fail with
+`the program did not run with its arguments`, and the pane prints `ARGS`
+alone. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestLauncherRunsWithArguments$' -v .`.
 
 ## Shell integration by default
 
