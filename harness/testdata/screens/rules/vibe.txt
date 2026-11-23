@@ -1,0 +1,112 @@
+# harness: vibe
+# want: idle
+# box: empty
+# how: measured, Vibe 3.x on 2026-11-21. At rest after a finished turn,
+# the box empty, the plan panel open on the right.
+---
+  architectural/algorithmic/interface decisions), with already-accepted DRs left as       │                                          │
+  they are.                                                                               │                                          │
+                                                                                          │                                          │
+  Committed as 73ccd87 on main (doc-only, tree clean); gates re-verified green (lint,     │                                          │
+  audit 5/5 DRs + 8/8 features exit 0, behave 8/30/145, ty 0 errors, graft 290 nodes in   │                                          │
+  sync), and Argon got the ack (msg #154). All future munrug DRs will follow the atomic   │                                          │
+  rule.                                                                                   │                                          │
+                                                                                          │                                          │
+                                                                                          │                                          │
+☑ 7/7 · All todos complete                                                  Cmd/Alt+\ plan│                                          │
+─────────────────────────────────────────────────── Mistral Large 4[high] · auto approve ─│                                          │
+>                                                                                         │                                          │
+                                                                                          │                                          │
+                                                                                          │                                          │
+──────────────────────────────────────────────────────────────────────────────────────────│                                Esc close │
+/var/home/martinix/coding/airesearch/munrug        usage █▋     26% · ctx ████▎  281k/400k╰──────────────────────────────────────────╯
+=====
+# harness: vibe
+# want: working
+# box: empty
+# how: measured, Vibe 3.x on 2026-11-21. A turn just started: the
+# spinner line above the box, the box open and empty.
+---
+  That unblocks the ADR 0010 unified text+image path on chriek (signal-fft's 62 media images, munrug's vulkan_igpu profile). Recorded in REPORT.md (commit 1710b77 + follow-up),        ▂│                                              │
+  chriek_embeddings.png regenerated with the new model, Argon pinged on the toolings thread (msg 182), and chriek is back to its production pair loaded (qwen2.5:3b-instruct +           │                                              │
+  bge-m3).                                                                                                                                                                               │                                              │
+                                                                                                                                                                                         │                                              │
+                                                                                                                                                                                         │                                              │
+> can you check if theaRead-only, make no changes and send no messages: list the embedding models benchmarked in REPORT.md with their warm embed latency, as a short tabl                │                                              │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │                                              │
+                                                                                                                                                                                         │                                              │
+ ⣠ Generating… (2s Esc/Ctrl+C to interrupt)                                                                                                                                              │                                              │
+☑ 7/7 · All todos complete                                                                                                                                                 Cmd/Alt+\ plan│                                              │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── Mistral Large 4[high] · auto approve ─│                                              │
+>                                                                                                                                                                                        │                                              │
+                                                                                                                                                                                         │                                              │
+                                                                                                                                                                                         │                                              │
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│                                    Esc close │
+/var/home/martinix/02_projects/02_infra/homelab/servicecluster/subprojects/chriek-benchmark                                                       usage █▊     29% · ctx ████▊  313k/400k╰──────────────────────────────────────────────╯
+=====
+# harness: vibe
+# want: working
+# box: draft
+# how: measured, Vibe 3.x on 2026-11-21. A turn running while the person
+# types the next prompt into the box.
+---
+  That unblocks the ADR 0010 unified text+image path on chriek (signal-fft's 62 media images, munrug's vulkan_igpu profile). Recorded in REPORT.md (commit 1710b77 + follow-up),        ▂│                                              │
+  chriek_embeddings.png regenerated with the new model, Argon pinged on the toolings thread (msg 182), and chriek is back to its production pair loaded (qwen2.5:3b-instruct +           │                                              │
+  bge-m3).                                                                                                                                                                               │                                              │
+                                                                                                                                                                                         │                                              │
+                                                                                                                                                                                         │                                              │
+> can you check if theaRead-only, make no changes and send no messages: list the embedding models benchmarked in REPORT.md with their warm embed latency, as a short tabl                │                                              │
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │                                              │
+                                                                                                                                                                                         │                                              │
+ ⠲ Generating… (4s Esc/Ctrl+C to interrupt)                                                                                                                                              │                                              │
+☑ 7/7 · All todos complete                                                                                                                                                 Cmd/Alt+\ plan│                                              │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── Mistral Large 4[high] · auto approve ─│                                              │
+> can you che                                                                                                                                                                            │                                              │
+                                                                                                                                                                                         │                                              │
+                                                                                                                                                                                         │                                              │
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────│                                    Esc close │
+/var/home/martinix/02_projects/02_infra/homelab/servicecluster/subprojects/chriek-benchmark                                                       usage █▊     29% · ctx ████▊  313k/400k╰──────────────────────────────────────────────╯
+=====
+# harness: vibe
+# want: needs_input
+# how: measured, Vibe 3.x on 2026-11-21. The question dialog of the ask
+# tool, drawn in place of the box.
+---
+⠘⠉ User input required… (7s Esc/Ctrl+C to interrupt)                                                                                                                                     │                                              │
+☑ 7/7 · All todos complete                                                                                                                                                 Cmd/Alt+\ plan│                                              │
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐│                                              │
+│ The chriek benchmark is done and committed (gemma3:4b = GO for remote summarize_hits; bge-m3 stays for retrieval; embeddinggemma-2 works cross-modal after the 0.40.17 upgrade). What ││                                              │
+│ should I do next?                                                                                                                                                                     ││                                              │
+│                                                                                                                                                                                       ││                                              │
+│   1. Build summarize_hits tool - Implement the optional chriek-backed summarize_hits MCP tool on tycho-01 (gemma3:4b, circuit breaker, citation check) in uuam_librarian per BDD Chem ││                                              │
+│   2. Swap/extend embedding model - Evaluate embeddinggemma-2:latest as an additional remote embedding path on chriek (cross-modal for signal-fft media), keep bge-m3 default          ││                                              │
+│   3. Make bench repeatable - Add a cron/quadlet or script so the chriek-benchmark reruns on model/ollama upgrades and posts results to the toolings session                           ││                                              │
+│   4. Write handoff doc - Drop a handoff markdown (like the one I picked up) summarizing findings for the next session                                                                 ││                                              │
+│   5. Park it - Nothing further for now; current state is committed and chriek is back to production                                                                                   ││                                              │
+│   6. Type your answer...                                                                                                                                                              ││                                              │
+│                                                                                                                                                                                       ││                                              │
+│ ↑↓/jk navigate  Enter select  Esc cancel                                                                                                                                              ││                                              │
+└───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘│                                    Esc close │
+/var/home/martinix/02_projects/02_infra/homelab/servicecluster/subprojects/chriek-benchmark                                                       usage █▊     30% · ctx ████▊  315k/400k╰──────────────────────────────────────────────╯
+=====
+# harness: vibe
+# want: needs_input
+# how: measured, Vibe 3.x on 2026-11-21. The tool permission dialog for a
+# bash command, drawn in place of the box, the spinner still above it.
+---
+□ Running rm -f /tmp/red.png /tmp/blue.png /tmp/pull_new.sh && echo cleaned
+
+ ⣠ Running command… (6s Esc/Ctrl+C to interrupt)
+☑ 7/7 · All todos complete                                                                                                                                                                                                 Cmd/Alt+\ plan
+┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Permission for the file_system.bash tool (rm *, outside workdir (/tmp/blue.png), outside workdir (/tmp/pull_new.sh), outside workdir (/tmp/red.png))                                                                                  │
+│ rm -f /tmp/red.png /tmp/blue.png /tmp/pull_new.sh && echo cleaned                                                                                                                                                                     │
+│                                                                                                                                                                                                                                       │
+│   1. Allow once                                                                                                                                                                                                                       │
+│   2. Allow for remainder of this session                                                                                                                                                                                              │
+│   3. Always allow                                                                                                                                                                                                                     │
+│   4. Deny                                                                                                                                                                                                                             │
+│                                                                                                                                                                                                                                       │
+│ ↑↓/jk navigate  Enter select  Esc reject                                                                                                                                                                                              │
+└───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+/var/home/martinix/02_projects/02_infra/homelab/servicecluster/subprojects/chriek-benchmark                                                                                                       usage █▊     30% · ctx ████▊  316k/400k

@@ -36,3 +36,81 @@ keep_options = ["--model", "--agent", "--workdir", "--add-dir"]
 keep_flags   = ["--auto-approve", "--yolo", "--smart-approve", "--trust"]
 keep_risky   = ["--auto-approve", "--yolo", "--agent=auto-approve"]
 source       = "vibe --help"
+
+# The screen. Vibe 3.x reports its state through the integration hooks when
+# they are installed; these rules are for a pane without them, where the
+# foreground detector is otherwise the only thing that knows an agent is
+# there. Measured on Vibe 3.x (vibe-rs) against Mistral Large 4, in an 187
+# column pane, on 2026-11-21: testdata/screens/rules/vibe.txt holds the
+# captures.
+#
+# The input box sits between two rules, the top one titled with the model and
+# the permission mode:
+#
+#   ─────────────────────── Mistral Large 4[high] · auto approve ─
+#   >
+#   ──────────────────────────────────────────────────────────────
+#
+# A dialog replaces the box, framed by ┌ and └ with a key-hint footer. The
+# plan panel (Cmd/Alt+\) draws a second column to the right of every line,
+# after a │, so no rule anchors at the end of a line.
+[screen]
+enabled   = true
+fold_case = true
+lines     = 12
+
+# The tool permission dialog.
+#
+#   │ Permission for the file_system.bash tool (rm *, outside workdir ...)
+#   │   1. Allow once
+#   │   4. Deny
+#   │ ↑↓/jk navigate  Enter select  Esc reject
+[[screen.rule]]
+state    = "needs_input"
+priority = 300
+kind     = "approval"
+message  = "Waits for permission."
+region   = "bottom_non_empty_lines(3)"
+all      = ["navigate", "enter select", "esc reject"]
+
+# The question dialog the ask tool draws.
+#
+#   │   6. Type your answer...
+#   │ ↑↓/jk navigate  Enter select  Esc cancel
+[[screen.rule]]
+state    = "needs_input"
+priority = 290
+kind     = "question"
+message  = "Asks you a question."
+region   = "bottom_non_empty_lines(3)"
+all      = ["navigate", "enter select", "esc cancel"]
+
+# A turn in progress: the spinner line above the box, with the seconds and
+# the interrupt hint. The words before the parenthesis change with the step
+# ("Generating…", "Running command…").
+#
+#   ⠋  Generating… (12s Esc/Ctrl+C to interrupt)
+[[screen.rule]]
+state    = "working"
+priority = 8
+message  = "Works on a turn."
+region   = "above_prompt_box"
+regex    = ['(?im)^\s*\S{1,2}\s+\S[^\n]*…\s*\(\d+[smh][^)\n]*esc/ctrl\+c to interrupt\)']
+
+# At rest: the box's first line is the prompt character, and no dialog is
+# drawn in its place. The working rule above outranks this one, because the
+# box stays open while a turn runs.
+[[screen.rule]]
+state     = "idle"
+priority  = 5
+message   = "Waits at its prompt."
+region    = "prompt_box"
+regex     = ['^\s*>(?:\s|$)']
+not_regex = ['(?i)navigate|enter select|esc (?:cancel|reject)']
+
+# The input box with nothing typed in it: the prompt character alone, and
+# whatever the plan panel draws after its │.
+[prompt_box]
+region = "prompt_box"
+empty  = ['\A[\s\x{00A0}]*(?:>[\s\x{00A0}]*)?(?:│[^\n]*)?(?:\n[\s\x{00A0}]*(?:│[^\n]*)?)*\z']
+source = "measured on Vibe 3.x (vibe-rs), 2026-11-21: an empty box, with and without the plan panel"

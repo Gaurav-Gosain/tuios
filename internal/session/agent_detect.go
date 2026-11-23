@@ -1099,6 +1099,13 @@ func (s *Session) reconcileAgentOnOutput(
 				if !quiet || claim.source.Rank() > AgentSourceDetect.Rank() {
 					return errNoAgentDetectChange
 				}
+				// Spoke, and not only repainted: a cursor the agent blinks
+				// for itself is output with no text in it, and taking that
+				// for work undid every demotion within half a second. See
+				// textClock.
+				if s.textChangedAt(ptyID) <= w.AgentStateAt {
+					return errNoAgentDetectChange
+				}
 				w.AgentState = AgentStateWorking
 				clearAgentNote(w)
 				// Re-stated rather than cleared: the process just identified is the

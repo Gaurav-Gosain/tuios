@@ -353,7 +353,8 @@ func TestAgentResumesAfterStall(t *testing.T) {
 
 	// The pane goes quiet and the silence timer demotes it to idle.
 	const stall = 30 * time.Second
-	if n := sess.applyStallHeuristic(time.Now().Add(stall+time.Second), stall, func(string) int64 { return 0 }, nil); n != 1 {
+	backdateAgentClaim(t, sess, id, stall+time.Second)
+	if n := sess.applyStallHeuristic(time.Now(), stall, func(string) int64 { return 0 }, nil); n != 1 {
 		t.Fatalf("stall heuristic demoted %d windows, want 1", n)
 	}
 	if got := agentStateOf(t, sess, id); got != AgentStateIdle {
@@ -361,7 +362,9 @@ func TestAgentResumesAfterStall(t *testing.T) {
 	}
 
 	// The user sends a prompt: the agent produces output again while still in the
-	// foreground. The pane has to go back to working.
+	// foreground. The pane has to go back to working. The output has text in it:
+	// a repaint that changes no text (a cursor the agent blinks) is not work.
+	paintPane(t, sess.GetPTY(ptyID), "Thinking...\r\n")
 	if !sess.reconcileAgentOnOutput(ptyID, running, agent.identifyDetail) {
 		t.Fatal("output from a resumed agent did not change the pane's state")
 	}

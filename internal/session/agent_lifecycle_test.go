@@ -75,6 +75,7 @@ func TestUnhookedAgentLifecycleAnswersBlockedOrThinking(t *testing.T) {
 
 	// 5. The person types a new prompt and the agent works again. Output from
 	// the agent's own process takes the pane back from the silence timer.
+	paintPane(t, sess.GetPTY(ptyID), "Running tests...\r\n")
 	if !sess.reconcileAgentOnOutput(ptyID, running, agent.identifyDetail) {
 		t.Fatal("resume: output from the agent did not move the pane back to working")
 	}
