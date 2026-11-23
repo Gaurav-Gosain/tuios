@@ -4,7 +4,6 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 )
 
@@ -28,20 +27,6 @@ import (
 // from the JSON verb protocol; Cwd is captured daemon-side from the live shell
 // process; ResurrectionVersion is stamped when state is written to disk.
 func retainDaemonExclusive(incoming, canonical *SessionState) {
-	// When a window was minimized is the daemon's to stamp
-	// (stampMinimizedLocked): a client knows it only from a push, so its
-	// copy is never newer.
-	if len(canonical.Windows) > 0 {
-		at := make(map[string]int64, len(canonical.Windows))
-		for _, w := range canonical.Windows {
-			if w.MinimizedAt != 0 {
-				at[w.ID] = w.MinimizedAt
-			}
-		}
-		for i := range incoming.Windows {
-			incoming.Windows[i].MinimizedAt = at[incoming.Windows[i].ID]
-		}
-	}
 	if incoming.Options == nil {
 		incoming.Options = canonical.Options
 	}
@@ -214,310 +199,144 @@ func retainDaemonExclusive(incoming, canonical *SessionState) {
 		}
 	}
 
-	cwds := make(map[string]string, len(canonical.Windows))
-	// The foreground command is read daemon-side on the detector's poll and no
-	// client ever sends it, so canonical is always the truth: carrying it over by
-	// id both preserves a live command and lets one that exited clear.
-	fgCmds := make(map[string]string, len(canonical.Windows))
-	var offers map[string]*SSHOffer
-	// The shell pid is daemon-owned for the same reason and carried the same way:
-	// only the daemon holds the process, and a client sync never reports one.
-	// Without this every client push would strip the pid the corroboration needs.
-	shellPIDs := make(map[string]int, len(canonical.Windows))
-	// Agent state is daemon-owned and clients never set it, so canonical wins
-	// unconditionally, like the agent meta below. Without this a client sync
-	// (which omits it) would wipe every pane's reported state.
-	//
-	// It used to be carried only when the push left every agent field empty,
-	// which let any push that did carry them win: a snapshot echoing a state
-	// the daemon has since moved on from put the old state back, and a client
-	// could set a pane's state around the precedence set-agent-state enforces.
-	// The TUI never sends these fields, so nothing relied on that.
-	type agent struct {
-		state   AgentState
-		message string
-		harness string
-		at      int64
-		reason  string
-	}
-	agents := make(map[string]agent, len(canonical.Windows))
-	// The kind of a block and the harness's session id are daemon-owned too,
-	// and taken from canonical unconditionally on the same terms.
-	type agentIdentity struct {
-		kind           string
-		sessionID      string
-		sessionHarness string
-		flags          *KeptFlags
-	}
-	agentIDs := make(map[string]agentIdentity, len(canonical.Windows))
-	// Agent metadata is daemon-owned for the same reason, and carried on its
-	// own because it is set by its own verb: a pane can have metadata and no
-	// state at all.
-	metas := make(map[string][]AgentMetaToken)
-	// The delivery queue's length is the daemon's count of what it holds for
-	// a pane, and no client sets it, so canonical wins like the meta. So does
-	// the subagent count, which only the pane's hooks move.
-	queued := make(map[string]int)
-	var draftHeld map[string]bool // set only while a draft holds a queue
-	var subagents map[string]int  // most sessions have none
-	// Only mark-attention and the daemon's own wake move the settle, so
-	// canonical wins like the queue.
-	var settled map[string]bool
-	var quiet map[string]bool
-	var subagentLists map[string][]SubagentInfo
-	// The popup mark, requested size and dim override are stamped once, when
-	// the daemon creates the window, and nothing ever changes them. So canonical
-	// is always the truth and they are carried over by id the way Cwd is.
-	// Without this one client sync that omits them turns a popup back into an
-	// ordinary floating pane on every screen, which tiles it away.
-	type popup struct {
-		width   string
-		height  string
-		dim     *config.PopupDim
-		scratch bool
-		name    string
-	}
-	popups := make(map[string]popup, len(canonical.Windows))
-	// The scratch mark, its name and its workspace are the daemon's too. A
-	// scratch pane is a tiled window on its group's workspace (see
-	// scratch_workspace.go), so a push can neither move one off that
-	// workspace nor put an ordinary window on one.
-	type scratchMark struct {
-		name      string
-		workspace int
-	}
-	scratches := make(map[string]scratchMark)
-	// The rail pane's mark, the daemon's like the scratch one.
-	var rails map[string]string
-	workspaces := make(map[string]int, len(canonical.Windows))
-	// The machine a window's process runs on is stamped once, when the daemon
-	// creates the window, and nothing moves a process between machines
-	// afterwards. So canonical is always the truth and it is carried by id the
-	// way the popup mark is.
-	//
-	// Without this the first client sync wiped it, and everything downstream
-	// read the pane as local: the rail stopped naming the machine, and the
-	// file section asked this machine for a directory that is on another one.
-	// The field is daemon-owned like every other one in this block, and it was
-	// added without being put here.
-	hosts := make(map[string]string, len(canonical.Windows))
-	// What draws a window and what it shows are set when it is made and only
-	// the daemon sets them, so canonical wins the way the host does.
-	type viewMark struct{ kind, uri string }
-	views := make(map[string]viewMark)
-	// The turn count is daemon-owned and only ever goes up. A client echoes the
-	// value it was last sent, which can be behind, and an older client sends
-	// none, so canonical wins whenever it is ahead.
-	completions := make(map[string]uint64, len(canonical.Windows))
-	// A pane's grants are set by the daemon alone, so canonical wins
-	// unconditionally, like the agent meta: a client can neither give a pane
-	// grants nor take them away by syncing. The daemon enforces them from its
-	// own table anyway; this is the copy that is shown and saved.
-	paneGrants := make(map[string][]string)
-	// A pane's OSC 7501 records are the daemon's alone, like the agent meta:
-	// only the pane's emulator writes them.
-	programStatus := make(map[string][]ProgramStatusRecord)
-	// Which pane started a pane is the daemon's record of a call, so
-	// canonical wins unconditionally, like the grants.
-	startedBy := make(map[string]*PaneRef)
-	// The agent link goes with it, for the same reason.
-	agentLinks := make(map[string]*AgentLink)
-	// And so does a delegation record (verb_delegate.go).
-	delegations := make(map[string]*Delegation)
-	// A window's start folder is fixed by the daemon when it makes the
-	// window, and a grant is held to it, so canonical wins unconditionally:
-	// a push can neither set one nor move it, even where canonical has none.
-	startDirs := make(map[string]string, len(canonical.Windows))
-	// A pane's return note is written only by set-note, so canonical wins
-	// unconditionally, like the start folder.
-	var notes map[string]string // most panes have none
-	for i := range canonical.Windows {
-		w := &canonical.Windows[i]
-		if w.StartDir != "" {
-			startDirs[w.ID] = w.StartDir
-		}
-		if w.Note != "" {
-			if notes == nil {
-				notes = make(map[string]string)
-			}
-			notes[w.ID] = w.Note
-		}
-		if w.StartedBy != nil {
-			startedBy[w.ID] = w.StartedBy
-		}
-		if w.AgentLink != nil {
-			agentLinks[w.ID] = w.AgentLink
-		}
-		if w.Delegation != nil {
-			delegations[w.ID] = w.Delegation
-		}
-		if w.Grants != nil {
-			paneGrants[w.ID] = w.Grants
-		}
-		if w.ProgramStatus != nil {
-			programStatus[w.ID] = w.ProgramStatus
-		}
-		if w.CompletionSeq != 0 {
-			completions[w.ID] = w.CompletionSeq
-		}
-		if cwd := w.Cwd; cwd != "" {
-			cwds[w.ID] = cwd
-		}
-		if w.Popup {
-			popups[w.ID] = popup{w.PopupWidth, w.PopupHeight, w.PopupDim, w.Scratch, w.ScratchName}
-		}
-		if w.Scratch {
-			scratches[w.ID] = scratchMark{w.ScratchName, w.Workspace}
-		}
-		if w.Rail != "" {
-			if rails == nil {
-				rails = make(map[string]string)
-			}
-			rails[w.ID] = w.Rail
-		}
-		if w.Kind != "" || w.URI != "" {
-			views[w.ID] = viewMark{w.Kind, w.URI}
-		}
-		workspaces[w.ID] = w.Workspace
-		if w.Host != "" {
-			hosts[w.ID] = w.Host
-		}
-		if cmd := w.ForegroundCmd; cmd != "" {
-			fgCmds[w.ID] = cmd
-		}
-		if o := w.SSHOffer; o != nil {
-			if offers == nil {
-				offers = make(map[string]*SSHOffer)
-			}
-			offers[w.ID] = o
-		}
-		if pid := w.ShellPID; pid != 0 {
-			shellPIDs[w.ID] = pid
-		}
-		if w.AgentState != AgentStateNone || w.AgentMessage != "" || w.AgentHarness != "" || w.AgentStateAt != 0 {
-			agents[w.ID] = agent{w.AgentState, w.AgentMessage, w.AgentHarness, w.AgentStateAt, w.AgentReason}
-		}
-		if w.AgentKind != "" || w.AgentSessionID != "" || w.AgentSessionHarness != "" || w.AgentFlags != nil {
-			agentIDs[w.ID] = agentIdentity{w.AgentKind, w.AgentSessionID, w.AgentSessionHarness, w.AgentFlags}
-		}
-		if len(w.AgentMeta) > 0 {
-			metas[w.ID] = w.AgentMeta
-		}
-		if w.AgentQueued != 0 {
-			queued[w.ID] = w.AgentQueued
-		}
-		if w.AgentDraftHeld {
-			if draftHeld == nil {
-				draftHeld = make(map[string]bool)
-			}
-			draftHeld[w.ID] = true
-		}
-		if w.AgentQuiet {
-			if quiet == nil {
-				quiet = make(map[string]bool)
-			}
-			quiet[w.ID] = true
-		}
-		if w.AgentSettled {
-			if settled == nil {
-				settled = make(map[string]bool)
-			}
-			settled[w.ID] = true
-		}
-		if w.AgentSubagents != 0 {
-			if subagents == nil {
-				subagents = make(map[string]int)
-			}
-			subagents[w.ID] = w.AgentSubagents
-		}
-		if len(w.AgentSubagentList) != 0 {
-			if subagentLists == nil {
-				subagentLists = make(map[string][]SubagentInfo)
-			}
-			subagentLists[w.ID] = w.AgentSubagentList
-		}
-	}
+	// A push lists the windows in the session's order, so the window at the same
+	// position is the match; the index by ID is built only at the first miss.
+	// With two windows of one ID the last one the index holds is taken.
+	var index map[string]int
+	var absent WindowState
 	for i := range incoming.Windows {
 		w := &incoming.Windows[i]
-		// Where the daemon holds a value, it wins over whatever the push says:
-		// no client reads these from anything but the daemon, so a different
-		// value in a push is an older copy. Where it holds none, the push's
-		// value stands, which is how a restore hands in the directory and the
-		// pid of the shell it just respawned to a session created empty.
-		if cwd, ok := cwds[w.ID]; ok || w.Cwd == "" {
-			w.Cwd = cwd
-		}
-		w.StartDir = startDirs[w.ID]
-		w.Note = notes[w.ID]
-		if pid, ok := shellPIDs[w.ID]; ok || w.ShellPID == 0 {
-			w.ShellPID = pid
-		}
-		if host, ok := hosts[w.ID]; ok || w.Host == "" {
-			w.Host = host
-		}
-		// The foreground command is canonical's whatever the push says, empty
-		// included: a command that exited has to be able to clear.
-		w.ForegroundCmd = fgCmds[w.ID]
-		w.SSHOffer = offers[w.ID]
-		if c := completions[w.ID]; c > w.CompletionSeq {
-			w.CompletionSeq = c
-		}
-		v := views[w.ID]
-		w.Kind, w.URI = v.kind, v.uri
-		// Only the daemon marks the scratch popup, so a push can neither set
-		// the mark on another pane nor clear it.
-		p, ok := popups[w.ID]
-		sm, isScratch := scratches[w.ID]
-		w.Scratch, w.ScratchName = isScratch, sm.name
-		w.Rail = rails[w.ID]
-		switch {
-		case isScratch && IsScratchWorkspace(sm.workspace):
-			w.Workspace = sm.workspace
-		case IsScratchWorkspace(w.Workspace):
-			if ws, known := workspaces[w.ID]; known {
-				w.Workspace = ws
+		cw, held := &absent, false
+		if i < len(canonical.Windows) && canonical.Windows[i].ID == w.ID {
+			cw, held = &canonical.Windows[i], true
+		} else if len(canonical.Windows) > 0 {
+			if index == nil {
+				index = make(map[string]int, len(canonical.Windows))
+				for j := range canonical.Windows {
+					index[canonical.Windows[j].ID] = j
+				}
+			}
+			if j, ok := index[w.ID]; ok {
+				cw, held = &canonical.Windows[j], true
 			}
 		}
-		w.PopupDim = p.dim // A client cannot set, clear or replace the override.
-		if ok {
-			w.Popup = true
-			w.IsFloating = true
-			// The scratch terminal takes its size from [scratch] on each
-			// show, so the client that shows it may change the size. Any
-			// other popup keeps the size its caller asked for.
-			if !p.scratch || w.PopupWidth == "" {
-				w.PopupWidth = p.width
-			}
-			if !p.scratch || w.PopupHeight == "" {
-				w.PopupHeight = p.height
-			}
-		}
-		ids := agentIDs[w.ID]
-		w.AgentKind = ids.kind
-		w.AgentSessionID = ids.sessionID
-		w.AgentSessionHarness = ids.sessionHarness
-		w.AgentFlags = ids.flags
-		a := agents[w.ID]
-		w.AgentState = a.state
-		w.AgentMessage = a.message
-		w.AgentHarness = a.harness
-		w.AgentStateAt = a.at
-		w.AgentReason = a.reason
-		// Taken from canonical whatever the client sent: no client sets it, so
-		// a value in a client push is an echo of an older state at best.
-		w.AgentMeta = metas[w.ID]
-		w.AgentQueued = queued[w.ID]
-		w.AgentDraftHeld = draftHeld[w.ID]
-		w.AgentSettled = settled[w.ID]
-		w.AgentQuiet = quiet[w.ID]
-		w.AgentSubagents = subagents[w.ID]
-		w.AgentSubagentList = subagentLists[w.ID]
-		w.ProgramStatus = programStatus[w.ID]
-		w.Grants = paneGrants[w.ID]
-		w.StartedBy = startedBy[w.ID]
-		w.AgentLink = agentLinks[w.ID]
-		w.Delegation = delegations[w.ID]
+		carryDaemonOwned(w, cw, held, len(canonical.Windows) > 0)
 	}
+}
+
+// carryDaemonOwned sets the fields of w that only the daemon writes from cw,
+// the session's copy of the same window. Where the daemon holds a value it wins
+// over whatever the push says: no client reads these from anywhere but the
+// daemon, so a different value in a push is an older copy. Where it holds none,
+// the push's value stands for the fields that say so (Cwd, ShellPID, Host).
+// held is false for a window the session does not hold, and cw is then the zero
+// window. sessionHasWindows is false for a session that holds no window.
+func carryDaemonOwned(w, cw *WindowState, held, sessionHasWindows bool) {
+	// When a window was minimized is the daemon's stamp (stampMinimizedLocked):
+	// a client knows it only from a push, so its copy is never newer.
+	if sessionHasWindows {
+		w.MinimizedAt = cw.MinimizedAt
+	}
+	// Where the session holds none, the push's value stands: a restore hands in
+	// the directory and the pid of the shell it just respawned to a session
+	// created empty.
+	if cw.Cwd != "" || w.Cwd == "" {
+		w.Cwd = cw.Cwd
+	}
+	// Only the daemon holds the process and a push never reports one, and the
+	// corroboration reads the pid, so a push must not strip it.
+	if cw.ShellPID != 0 || w.ShellPID == 0 {
+		w.ShellPID = cw.ShellPID
+	}
+	// The machine is stamped once, when the daemon creates the window, and
+	// nothing moves a process between machines. The rail reads it to name the
+	// machine and the file section to ask the right one for a directory.
+	if cw.Host != "" || w.Host == "" {
+		w.Host = cw.Host
+	}
+	// A window's start folder is fixed by the daemon, and a grant is held to it,
+	// so a push can neither set one nor move it, even where the session has none.
+	w.StartDir = cw.StartDir
+	// The return note is written only by set-note.
+	w.Note = cw.Note
+	// The foreground command is read daemon-side on the detector's poll, and a
+	// command that exited has to be able to clear, so the session's wins, empty
+	// included.
+	w.ForegroundCmd = cw.ForegroundCmd
+	w.SSHOffer = cw.SSHOffer
+	// The turn count only goes up: a client echoes the value it was last sent,
+	// which can be behind, and an older client sends none.
+	if cw.CompletionSeq > w.CompletionSeq {
+		w.CompletionSeq = cw.CompletionSeq
+	}
+	// What draws a window and what it shows are set when it is made.
+	w.Kind, w.URI = cw.Kind, cw.URI
+	// The rail pane's mark is the daemon's, like the scratch one.
+	w.Rail = cw.Rail
+	// Only the daemon marks the scratch popup and a scratch pane's workspace
+	// (a tiled window on its group's workspace), so a push can neither set the
+	// mark on another pane, nor clear it, nor move a scratch pane off that
+	// workspace or put an ordinary window on one.
+	w.Scratch, w.ScratchName = cw.Scratch, ""
+	if cw.Scratch {
+		w.ScratchName = cw.ScratchName
+	}
+	switch {
+	case cw.Scratch && IsScratchWorkspace(cw.Workspace):
+		w.Workspace = cw.Workspace
+	case IsScratchWorkspace(w.Workspace) && held:
+		w.Workspace = cw.Workspace
+	}
+	// The popup mark, its requested size and the dim override are stamped once,
+	// when the daemon creates the window. A sync that omits them would turn a
+	// popup back into a floating pane, which tiles it away.
+	w.PopupDim = nil // A client cannot set, clear or replace the override.
+	if cw.Popup {
+		w.PopupDim = cw.PopupDim
+		w.Popup = true
+		w.IsFloating = true
+		// The scratch terminal takes its size from [scratch] on each show, so
+		// the client that shows it may change the size. Any other popup keeps
+		// the size its caller asked for.
+		if !cw.Scratch || w.PopupWidth == "" {
+			w.PopupWidth = cw.PopupWidth
+		}
+		if !cw.Scratch || w.PopupHeight == "" {
+			w.PopupHeight = cw.PopupHeight
+		}
+	}
+	// The kind of a block and the harness's session id are the daemon's too.
+	w.AgentKind, w.AgentSessionID, w.AgentSessionHarness, w.AgentFlags = cw.AgentKind, cw.AgentSessionID, cw.AgentSessionHarness, cw.AgentFlags
+	// Agent state is taken whatever the push says: the TUI never sends it, so a
+	// value in a push is an echo of an older state, and taking it would let a
+	// client put an old state back or set one around the precedence
+	// set-agent-state enforces.
+	w.AgentState, w.AgentMessage, w.AgentHarness, w.AgentStateAt = cw.AgentState, cw.AgentMessage, cw.AgentHarness, cw.AgentStateAt
+	w.AgentReason = ""
+	if cw.AgentState != AgentStateNone || cw.AgentMessage != "" || cw.AgentHarness != "" || cw.AgentStateAt != 0 {
+		w.AgentReason = cw.AgentReason
+	}
+	// Agent metadata has its own verb: a pane can have metadata and no state.
+	w.AgentMeta = nil
+	if len(cw.AgentMeta) > 0 {
+		w.AgentMeta = cw.AgentMeta
+	}
+	// The queue length and the subagent count are the daemon's counts (only the
+	// pane's hooks move the latter), and only mark-attention and the daemon's own
+	// wake move the settle.
+	w.AgentQueued, w.AgentDraftHeld, w.AgentSettled, w.AgentQuiet = cw.AgentQueued, cw.AgentDraftHeld, cw.AgentSettled, cw.AgentQuiet
+	w.AgentSubagents = cw.AgentSubagents
+	w.AgentSubagentList = nil
+	if len(cw.AgentSubagentList) != 0 {
+		w.AgentSubagentList = cw.AgentSubagentList
+	}
+	// A pane's OSC 7501 records are written only by its emulator. Grants are set
+	// by the daemon alone: this copy is shown and saved, and they are enforced
+	// from the daemon's own table.
+	w.ProgramStatus, w.Grants = cw.ProgramStatus, cw.Grants
+	// Which pane started a pane, the agent link and a delegation record
+	// (verb_delegate.go) are the daemon's records of a call.
+	w.StartedBy, w.AgentLink, w.Delegation = cw.StartedBy, cw.AgentLink, cw.Delegation
 }
 
 // reconcileStale rewrites a client snapshot that was built before a daemon-side

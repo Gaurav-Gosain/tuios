@@ -6283,6 +6283,50 @@ alone is 99,104 B, 5 allocations and 33.3 us at this size, and the rest of
 the change (about 104 KB of the 204 KB). A session with a client pays what it
 paid before plus one walk of the clients.
 
+## 2026-11 a state push is merged with one look per window
+
+Every client state push is merged into the session's state by
+`retainDaemonExclusive`, which keeps the fields only the daemon writes. It
+built one table keyed by window ID for each of those fields (eleven of them at the
+full size of the session's window list, whatever the windows held), filled them
+from the session's windows and read each back for every pushed window, so a
+drag step or a focus move paid for all of it. It now looks at each pushed window once: the
+session's window at the same position when its ID matches, else one index by ID
+built at the first miss, and one function sets every daemon-owned field from
+that window. A push that lists the windows in the session's order builds
+nothing. With two windows of one ID in the session (the daemon never makes
+two, a client push can carry them) the window at the same position is taken,
+else the last with that ID, where the tables merged the two field by field.
+TestMergingAPushBuildsNoTablePerField holds the allocation budget (none in the
+session's order and for one window, at most 8 in another order) and
+TestAClientPushCannotMoveWhatTheDaemonWrites holds what a push cannot move.
+
+Numbers, on a Ryzen 5 5600 (Linux x86_64, go1.27.4), one core, n=10
+interleaved, benchstat medians, per call: `retainDaemonExclusive` alone, the
+push listing the windows in the session's order and every session window
+holding a directory, a shell pid, a note, an agent state and a message. With
+windows 0 and n-1 swapped the branch builds its one index: 7.44 us, 4
+allocations and 3.46 KiB at 100 windows, and 79.7 us, 6 allocations and
+53.4 KiB at 1000, where main pays what it pays in order.
+
+| Windows | Merge time main | Merge time branch | Allocations main | Allocations branch | Bytes main | Bytes branch |
+|---------|-----------------|-------------------|------------------|--------------------|------------|--------------|
+| 1 | 609.2 ns | 32.8 ns (-95%) | 2 | 0 | 336 B | 0 |
+| 10 | 6.42 us | 0.17 us (-97%) | 38 | 0 | 9.36 KiB | 0 |
+| 100 | 50.05 us | 1.88 us (-96%) | 44 | 0 | 73.95 KiB | 0 |
+| 1000 | 620.5 us | 22.8 us (-96%) | 77 | 0 | 1.19 MiB | 0 |
+
+Whole push through `Session.UpdateState`: at 10 windows 15.53 us, 23.06 KiB
+and 80 allocations on main against 11.58 us (-25%), 14.63 KiB (-37%) and 47
+(-41%) on the branch; at 100 windows 88.36 us, 169.1 KiB and 93 against
+65.09 us (-26%), 104.3 KiB (-38%) and 60 (-35%); at 1000 windows 928.6 us,
+2079.4 KiB and 139 against 639.4 us (-31%), 1017.5 KiB (-51%) and 84 (-40%).
+
+What remains: the merge walks every pushed window once, and a push in another
+order than the session's pays one index of the session's windows. The rest of
+what a push costs (the lifecycle snapshot and the workspace notes) is not
+changed here.
+
 ## 2026-11 a typed key costs a row, not the screen
 
 The case: a 200x60 terminal, one pane, the rail on the left and the dock at
