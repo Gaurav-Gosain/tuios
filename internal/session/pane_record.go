@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io/fs"
 	"os"
-	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/guestenv"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // record-pane: one pane written to an asciicast v2 file.
@@ -362,7 +362,7 @@ func (d *Daemon) verbListRecordings(_ *connState, params json.RawMessage) (any, 
 		list = append(list, r.summary())
 	}
 	d.recordings.mu.Unlock()
-	slices.SortFunc(list, func(a, b map[string]any) int {
+	sortx.SortFunc(list, func(a, b map[string]any) int {
 		return cmp.Compare(a["path"].(string), b["path"].(string))
 	})
 	return map[string]any{"type": "recordings", "recordings": list}, nil

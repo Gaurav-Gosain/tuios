@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"slices"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // Read receipts: the sender's view of its own mail.
@@ -157,7 +157,7 @@ func (d *Daemon) verbAgentMessageReceipts(cs *connState, params json.RawMessage)
 				})
 			}
 		}
-		slices.SortStableFunc(res.Receipts, func(a, b mailReceipt) int { return cmp.Compare(a.SentAt, b.SentAt) })
+		sortx.SortStableFunc(res.Receipts, func(a, b mailReceipt) int { return cmp.Compare(a.SentAt, b.SentAt) })
 		if len(res.Receipts) > limit {
 			res.Receipts = res.Receipts[len(res.Receipts)-limit:]
 		}
@@ -186,7 +186,7 @@ func (b *agentBus) receipts(match func(*AgentMessage) bool, live map[string]bool
 			rows = append(rows, r)
 		}
 	}
-	slices.SortStableFunc(rows, func(a, b mailReceipt) int { return cmp.Compare(a.SentAt, b.SentAt) })
+	sortx.SortStableFunc(rows, func(a, b mailReceipt) int { return cmp.Compare(a.SentAt, b.SentAt) })
 	if len(rows) > limit {
 		rows = rows[len(rows)-limit:]
 	}

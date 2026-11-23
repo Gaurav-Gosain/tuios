@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/invisible"
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 )
 
 // Menus: one table for every menu a person declares, [menus.NAME].
@@ -235,7 +236,7 @@ func keyedRows(keys map[string][]string) []MenuEntry {
 		}
 		return menu + strings.ToLower(first[a]) + "\x00" + a
 	}
-	slices.SortFunc(actions, func(a, b string) int { return strings.Compare(rank(a), rank(b)) })
+	sortx.SortFunc(actions, func(a, b string) int { return strings.Compare(rank(a), rank(b)) })
 	rows := make([]MenuEntry, 0, len(actions))
 	for _, action := range actions {
 		e := MenuEntry{Action: action, Keys: keys[action]}

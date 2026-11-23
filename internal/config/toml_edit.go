@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Gaurav-Gosain/tuios/internal/sortx"
 	"github.com/pelletier/go-toml/v2"
 )
 
@@ -630,7 +631,7 @@ func renderEntryBody(m map[string]any) []string {
 		}
 		return 2
 	}
-	slices.SortStableFunc(keys, func(a, b string) int { return order(a) - order(b) })
+	sortx.SortStableFunc(keys, func(a, b string) int { return order(a) - order(b) })
 	out := make([]string, 0, len(keys))
 	for _, k := range keys {
 		out = append(out, tomlKey(k)+" = "+encodeValue(m[k]))

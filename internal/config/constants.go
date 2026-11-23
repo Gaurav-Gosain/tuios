@@ -3,6 +3,7 @@ package config
 
 import (
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -843,7 +844,7 @@ func ScrollColumnPresetFractions(percents []int) []float64 {
 			out = append(out, float64(p)/100)
 		}
 	}
-	slices.Sort(out)
+	sort.Float64s(out)
 	return slices.Compact(out)
 }
 
