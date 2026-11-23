@@ -19094,3 +19094,21 @@ Run on 2026-11-24 on Linux (amd64).
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAHeldVerifyResultAppliesWhenTheBlockLifts$' -v .`.
+## agents.max_depth refuses a deeper start
+
+`TestAgentsMaxDepthRefusesADeeperStart` sets `agents.max_depth = 1` and runs
+the chain of fake agents of the parent link tests. A start at depth 2 from an
+agent pane, from the person with `--parent`, and from a shell that a depth 0
+pane opened must be refused, with no pane made. After the file says 2, the
+same start from the person must pass.
+
+Run on 2026-11-23 on Linux. The control is this branch with `depthRefusal`
+returning nil.
+
+| Change | Failure |
+| --- | --- |
+| `depthRefusal` returns nil | `gen1's start of gen0 at depth 2 was not refused`, `the refused start at depth 2 still opened gen0`, `a start under gen1 from outside every pane was not refused`, `the shell at depth 1 was not refused both starts at depth 2` |
+
+The calls and their answers are in `handoff.json` under `TUIOS_E2E_FRAMES`, in
+the test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAgentsMaxDepthRefusesADeeperStart$' -v .`.

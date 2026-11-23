@@ -46,6 +46,9 @@ const agentLinkMaxDepth = 8
 type agentParent struct {
 	ref  PaneRef
 	link AgentLink
+	// chainDepth is the depth the child gets: one more than the parent's,
+	// or than the caller's when the caller is deeper (agent_depth.go).
+	chainDepth int
 }
 
 // resolveAgentParent decides the parent of an agent pane the caller on cs
@@ -67,7 +70,7 @@ func (d *Daemon) resolveAgentParent(cs *connState, verb, named string) (*agentPa
 		if !ok || !isAgentWindow(w) {
 			return nil, nil
 		}
-		return d.agentParentOf(verb, sess, w)
+		return d.agentParentOf(cs, verb, sess, w)
 	}
 	if cs != nil && cs.viaLink {
 		return nil, invalidParam("parent", "parent names an agent pane on this machine, and a call over a link cannot name one")
@@ -88,7 +91,7 @@ func (d *Daemon) resolveAgentParent(cs *connState, verb, named string) (*agentPa
 	if !isAgentWindow(w) {
 		return nil, invalidParam("parent", "window "+shortWindowID(w.ID)+" runs no agent. A parent is an agent pane that list-agents shows")
 	}
-	return d.agentParentOf(verb, sess, w)
+	return d.agentParentOf(cs, verb, sess, w)
 }
 
 // parentRefusal is why the pane pa may not name w as a parent, "" when it
@@ -137,8 +140,8 @@ func (d *Daemon) findParentWindow(id string) (*Session, WindowState, *verbError)
 }
 
 // agentParentOf is the link a child of w in sess gets, refused when the child
-// would be deeper than agentLinkMaxDepth.
-func (d *Daemon) agentParentOf(verb string, sess *Session, w WindowState) (*agentParent, *verbError) {
+// would be deeper than agentLinkMaxDepth. The caller on cs starts it.
+func (d *Daemon) agentParentOf(cs *connState, verb string, sess *Session, w WindowState) (*agentParent, *verbError) {
 	ref := PaneRef{Session: sess.Name(), Window: w.ID}
 	link := AgentLink{
 		Harness:        firstNonEmpty(w.AgentHarness, sess.agentClaimFor(w.ID).harness),
@@ -155,7 +158,8 @@ func (d *Daemon) agentParentOf(verb string, sess *Session, w WindowState) (*agen
 			Detail: "The chain is at its limit, so nothing was started. Start the agent from a pane higher in the chain, or from outside every pane.",
 		})
 	}
-	return &agentParent{ref: ref, link: link}, nil
+	chain := max(windowChainDepth(w), d.callerChainDepth(cs)) + 1
+	return &agentParent{ref: ref, link: link, chainDepth: chain}, nil
 }
 
 // setAgentParent records p as the parent of window: the pane as StartedBy,
@@ -169,6 +173,7 @@ func (s *Session) setAgentParent(window string, p *agentParent) {
 		}
 		state.Windows[idx].StartedBy = &ref
 		state.Windows[idx].AgentLink = &link
+		state.Windows[idx].ChainDepth = p.chainDepth
 		return nil
 	})
 }

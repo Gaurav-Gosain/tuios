@@ -877,14 +877,16 @@ func (s *Session) CycleDaemonFocus(delta int) error {
 	})
 }
 
-// setStartedBy records ref as the pane that started window.
-func (s *Session) setStartedBy(window string, ref *PaneRef) {
+// setStartedBy records ref as the pane that started window, and depth as
+// window's depth (agent_depth.go).
+func (s *Session) setStartedBy(window string, ref *PaneRef, depth int) {
 	_ = s.mutateState(func(state *SessionState) error {
 		idx, err := findWindowStateIndex(state.Windows, window)
 		if err != nil {
 			return err
 		}
 		state.Windows[idx].StartedBy = ref
+		state.Windows[idx].ChainDepth = depth
 		return nil
 	})
 }

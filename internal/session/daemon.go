@@ -523,6 +523,8 @@ type Daemon struct {
 	// verifyPeers maps the name a far holder's machine gives itself to its
 	// [hosts] name here, as verifyHost found it.
 	verifyPeers sync.Map
+	// agentMaxDepth is agents.max_depth, 0 for no cap (agent_depth.go).
+	agentMaxDepth atomic.Int32
 	// machineCap is [tasks] machine_cap, and pool the placement state:
 	// picks reserved and agents started that are not working yet. See
 	// pool_place.go.
@@ -1194,6 +1196,9 @@ type DaemonConfig struct {
 	// AgentPresets is [agents.presets]: named start-agent params. See
 	// agent_presets.go.
 	AgentPresets map[string]config.AgentPreset
+	// AgentMaxDepth is agents.max_depth: the deepest pane an agent start
+	// may make. Zero or less sets no cap. See agent_depth.go.
+	AgentMaxDepth int
 	// ReplyMarkers is [agents] reply_markers. See reply_markers.go.
 	ReplyMarkers bool
 	// AgentsOff is [agents] enabled = false: the daemon starts with every
@@ -1274,6 +1279,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.openedKeep = cfg.OpenedCopyKeep
 	d.SetCheckpoints(cfg.Checkpoints)
 	d.SetAgentPresets(cfg.AgentPresets)
+	d.setAgentMaxDepth(cfg.AgentMaxDepth)
 	d.replyMarkers.Store(cfg.ReplyMarkers)
 	d.outbox = newHostOutbox(d)
 	// The socket path is read through a closure rather than copied, because the

@@ -1260,6 +1260,11 @@ var optionSpecs = []Option{
 		Min:         1, Max: 2,
 	},
 	{
+		Path: "agents.max_depth", Type: OptionInt, Section: "agents",
+		Description: "The deepest pane that a chain of agents may start. A pane that you open is at depth 0, and an agent that it starts is at depth 1. The daemon refuses a start past this depth, whatever grants the caller holds. 0 sets no cap. The daemon reads it when it starts and when the file changes.",
+		Min:         0, Max: 8, Zero: ZeroIsDefault,
+	},
+	{
 		Path: "agents.fold_working", Type: OptionBool, Section: "agents",
 		Description: "Fold the Working group of the agents view. F folds or opens a group, and the view keeps that choice.",
 		Default:     "false",

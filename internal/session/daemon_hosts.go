@@ -199,6 +199,9 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	d.SetChildQuestionsToParent(toParent)
 	d.SetCheckpoints(cfg.Agents.Checkpoints)
 	d.SetAgentPresets(cfg.Agents.Presets)
+	// A cap limits what agents may do, so a file change applies at once,
+	// either way: the file is the person's.
+	d.setAgentMaxDepth(cfg.Agents.MaxDepth)
 	d.replyMarkers.Store(cfg.Agents.ReplyMarkersOn())
 	// Moving cards types nothing and runs nothing, so a file change applies
 	// either way.

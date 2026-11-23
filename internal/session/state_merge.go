@@ -337,6 +337,9 @@ func carryDaemonOwned(w, cw *WindowState, held, sessionHasWindows bool) {
 	// Which pane started a pane, the agent link and a delegation record
 	// (verb_delegate.go) are the daemon's records of a call.
 	w.StartedBy, w.AgentLink, w.Delegation = cw.StartedBy, cw.AgentLink, cw.Delegation
+	// The chain depth is stamped when the daemon starts the pane, and the depth
+	// cap reads it.
+	w.ChainDepth = cw.ChainDepth
 }
 
 // reconcileStale rewrites a client snapshot that was built before a daemon-side

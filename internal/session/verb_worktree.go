@@ -467,6 +467,13 @@ func (d *Daemon) verbNewWorktree(cs *connState, params json.RawMessage) (any, *v
 	if verr != nil {
 		return nil, verr
 	}
+	// A command is an agent, or may be one: agents.max_depth holds it
+	// (agent_depth.go).
+	if len(command) > 0 {
+		if verr := d.depthRefusal(cs, "new-worktree", nil); verr != nil {
+			return nil, verr
+		}
+	}
 	root, cloned, verr := d.resolveRepoSource(cs, "new-worktree", p.repoSource, nil)
 	if verr != nil {
 		return nil, verr
@@ -1037,6 +1044,10 @@ func (d *Daemon) verbFan(cs *connState, params json.RawMessage) (any, *verbError
 	// made. See pane_grants.go.
 	grants, verr := d.launchGrants(cs, p.Grants)
 	if verr != nil {
+		return nil, verr
+	}
+	// agents.max_depth, whatever the caller holds (agent_depth.go).
+	if verr := d.depthRefusal(cs, "fan", nil); verr != nil {
 		return nil, verr
 	}
 	// The card the fan works on, checked before anything is made, so a

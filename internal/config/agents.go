@@ -65,6 +65,12 @@ type AgentsConfig struct {
 	// final. An agent that speaks only version 1 still works when 2 is
 	// asked for: the pane falls back to 1. See ACPVersionOr.
 	ACPVersion int `toml:"acp_version,omitempty"`
+	// MaxDepth is the deepest pane a chain of started panes may reach: a
+	// pane the person opened is at depth 0, a pane it starts at 1. The
+	// daemon refuses an agent start past it, whatever grants the caller
+	// holds. Zero means no cap beyond the chain limit of 8 agents, and
+	// the option allows at most 8.
+	MaxDepth int `toml:"max_depth,omitempty"`
 	// Presets are the [agents.presets.NAME] tables: a named start-agent,
 	// for start-agent --preset NAME. See AgentPreset.
 	Presets map[string]AgentPreset `toml:"presets,omitempty"`

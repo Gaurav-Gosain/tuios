@@ -101,6 +101,10 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 	if verr != nil {
 		return nil, verr
 	}
+	// agents.max_depth, whatever the caller holds (agent_depth.go).
+	if verr := d.depthRefusal(cs, "start-agent", parent); verr != nil {
+		return nil, verr
+	}
 	if strings.TrimSpace(p.Agent) == "" {
 		return nil, invalidParam("agent", "agent is required: the harness or program to start, with its arguments, such as claude or \"codex --model o5\"")
 	}

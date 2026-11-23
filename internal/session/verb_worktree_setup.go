@@ -738,12 +738,18 @@ func (s *Session) setWorktreeSetupAgent(stage string) {
 // a sync setup opens the agent's window after the call has returned.
 func (d *Daemon) startedByLater(cs *connState) func(window string) {
 	ref := d.callerPaneRef(cs)
+	// The depth is read at the call, so it holds when the caller closes
+	// before a window that opens later.
+	depth := 0
+	if ref != nil {
+		depth = d.paneChainDepth(ref.Window) + 1
+	}
 	return func(window string) {
 		if ref == nil || window == "" || ref.Window == window {
 			return
 		}
 		if sess := d.sessionHoldingWindow(window); sess != nil {
-			sess.setStartedBy(window, ref)
+			sess.setStartedBy(window, ref, depth)
 		}
 	}
 }

@@ -303,6 +303,12 @@ A pane may name itself or a pane it could type into. The person may name any
 agent pane. A chain stops at 8 agents, and a deeper start is refused. When a
 parent closes, its children keep the link, marked `gone`.
 
+The person can set a lower cap with `agents.max_depth` in `config.toml`. A
+pane that the person opens is at depth 0, and each pane that a pane opens is
+one deeper. A shell pane counts too. A start past the cap is refused, whatever
+grants you hold. Then do the work in your own pane, or tell your parent what
+you need.
+
 ### Headless, over a protocol
 
 With `--protocol`, `start-agent` runs the agent headless and the pane shows the

@@ -217,6 +217,7 @@ func StateFingerprint(s *SessionState) uint64 {
 			str(l.Root.Window)
 			num(l.Depth)
 		}
+		num(w.ChainDepth)
 		flag(w.Delegation != nil)
 		if dl := w.Delegation; dl != nil {
 			str(dl.Role)

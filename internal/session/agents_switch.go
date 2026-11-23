@@ -284,7 +284,7 @@ func (d *Daemon) noteStartedBy(cs *connState, window string) {
 		return
 	}
 	if sess := d.sessionHoldingWindow(window); sess != nil {
-		sess.setStartedBy(window, ref)
+		sess.setStartedBy(window, ref, d.paneChainDepth(ref.Window)+1)
 	}
 }
 

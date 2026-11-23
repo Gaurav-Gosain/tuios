@@ -122,6 +122,8 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	// The daemon takes every checkpoint, so it reads whether to.
 	cfg.Checkpoints = uc.Agents.Checkpoints
 	cfg.AgentPresets = uc.Agents.Presets
+	// The daemon makes every pane, so it holds the depth cap.
+	cfg.AgentMaxDepth = uc.Agents.MaxDepth
 	// The daemon starts the agents start-agent names, so it reads whether
 	// to pass them the reply marker guidance.
 	cfg.ReplyMarkers = uc.Agents.ReplyMarkersOn()

@@ -74,7 +74,8 @@ Started from an agent pane, the new agent is that agent's child: list-agents
 shows its parent and the root of the chain, and the rail draws it under its
 parent. --parent names the parent for a script that runs outside the parent's
 pane, by its window id. A pane may name itself or a pane it could type into.
-You may name any agent pane. A chain stops at 8 agents.
+You may name any agent pane. A chain stops at 8 agents, or earlier when
+agents.max_depth sets a lower cap.
 
 --model, --effort and --permission-mode pass the harness's own flags for
 them, as its manifest names them ([launch]): for Claude Code, --model,

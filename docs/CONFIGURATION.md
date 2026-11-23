@@ -3197,6 +3197,28 @@ when it starts and again when the file changes. A change applies to the next
 pane. [AGENT_STATE.md](AGENT_STATE.md#herdrs-pane-state-protocol) says what is
 accepted.
 
+## Limit how deep agents start agents
+
+An agent with the `fan` grant can start agents, and each of those can hold
+`fan` too. `max_depth` in `[agents]` sets how deep such a chain may go.
+
+```toml
+[agents]
+max_depth = 2
+```
+
+- A pane that you open is at depth 0. A pane that a pane opens is one deeper.
+- A shell pane counts like an agent pane. An agent cannot open a shell and
+  start the count again from there.
+- The daemon refuses `start-agent`, a preset, `delegate`, `fan` and
+  `new-worktree` with a command when the new pane would be deeper than the
+  cap. The grants of the caller do not change this. Nothing is started, and
+  the error names the depth and the cap.
+- `0`, the default, sets no cap. A chain still stops at 8 agents.
+- The daemon reads the value when it starts and when the file changes.
+- Each machine holds its own cap. A start over a link to another machine
+  starts at depth 0 there.
+
 ## Show a hooked agent that stops reporting
 
 A hooked agent reports at each prompt and each tool call. When it sends no

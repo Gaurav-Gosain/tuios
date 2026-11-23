@@ -445,6 +445,13 @@ type WindowState struct {
 	// pane. Daemon-owned like StartedBy, and saved, so a restored or handed
 	// over pane keeps it. See agent_parent.go.
 	AgentLink *AgentLink `json:"agent_link,omitempty"`
+	// ChainDepth is how many panes lead from a pane nobody started to this
+	// one, along StartedBy: 1 for a pane that such a pane started. Every
+	// pane a pane made counts, a shell too, so a shell in between does not
+	// start the count again. Zero for a pane with no StartedBy. Daemon-owned
+	// like StartedBy, and saved, so the depth holds after the panes above
+	// close. agents.max_depth is held to it (agent_depth.go).
+	ChainDepth int `json:"chain_depth,omitempty"`
 	// Delegation is set on an agent pane the delegate verb started: the
 	// task's role, how it runs, and where it is. Nil for every other pane.
 	// Daemon-owned like AgentLink, and saved, so a handed over pane keeps
