@@ -950,6 +950,8 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	model, cmd := m.update(msg)
 	// The pane of a person step of the add sheet may have ended.
 	m.machineSheetAfter()
+	// The person may have focused a pane whose program asks for a secret.
+	m.syncAskpass()
 	// Whatever this message did may have moved the box of quick look's picture,
 	// or the position in its text.
 	if qc := m.quickLookPicture(); qc != nil {

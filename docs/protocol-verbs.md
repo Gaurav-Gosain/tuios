@@ -24,6 +24,7 @@ It also has more about the verbs that need it.
 - [`artifact-list`](#artifact-list)
 - [`ask-agent`](#ask-agent)
 - [`ask-human`](#ask-human)
+- [`askpass`](#askpass)
 - [`attach-presence`](#attach-presence)
 - [`attach-task`](#attach-task)
 - [`block-task`](#block-task)
@@ -505,6 +506,8 @@ Answer an ask-human question for the person. Only a client attached right now ca
 | `human_nonce` | string |  |  | The nonce the daemon issued in an attach reply, for a client attached now over the same kind of connection. The TUI sends its own. |
 | `question` | string |  |  | The question the answer was picked from. When given and it is not the item's, nothing is answered: applied is false with reason changed. The TUI always sends it. |
 | `upgrade_dialog` | bool |  |  | The answer is a key pressed in a client's live upgrade dialog. A live upgrade's ask takes only an answer that carries it. The TUI sends it from that dialog alone, and gui-bridge drops it. |
+| `secret` | string |  |  | The answer to a secret prompt (see askpass), base64, at most 4096 bytes. A secret prompt takes secret or cancel in place of answer, and only on this machine. |
+| `cancel` | bool |  |  | End a secret prompt with no answer. |
 
 | Result field | Type | Description |
 |---|---|---|
@@ -654,6 +657,25 @@ Ask the person a question with a fixed set of answers, and wait for the answer. 
 
 ```json
 {"id":1,"verb":"ask-human","params":{"request_id":"9f86d081884c7d65","wait":false}}
+```
+
+### `askpass`
+
+Ask the person for a secret on behalf of a program in the caller's pane, such as an ssh key's passphrase, and wait for the answer. tuios's askpass program calls it: ssh, git and gpg run that program when they have no terminal to ask on. The prompt goes in the Inbox as an ask marked secret, and a client opens it as a dialog with a hidden field. Only the person answers, with answer-ask. The daemon finds the pane and the program that asks from the kernel. The secret is held in memory for this one answer and is never saved, logged or sent in an event. Only from inside a pane. Refused over a link.
+
+| Param | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `prompt` | string |  |  | The program's prompt as it wrote it, such as Enter passphrase for key '/home/u/.ssh/id_ed25519':. Printable text, at most 1024 bytes. |
+| `timeout` | int |  | `300000` | Milliseconds to wait for the answer, at most one hour. The prompt closes when the wait ends. |
+
+| Result field | Type | Description |
+|---|---|---|
+| `request_id` | string | The prompt's id. |
+| `status` | string | answered, cancelled (the person cancelled, or the program went away), timeout, dismissed, window_closed, session_closed or shutdown. |
+| `secret` | string | The answer, base64, when answered. |
+
+```json
+{"id":1,"verb":"askpass","params":{"prompt":"Enter passphrase for key '/home/u/.ssh/id_ed25519': "}}
 ```
 
 ### `attach-presence`

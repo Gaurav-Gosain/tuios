@@ -108,7 +108,7 @@ func (m *OS) upgradeConfirmAnswer(idx int) tea.Cmd {
 		return nil
 	}
 	st.sent, st.selected = true, idx
-	return m.inboxAnswerAskCmd(*st.open, upgradeConfirmRows[idx], true)
+	return m.inboxAnswerAskCmd(*st.open, upgradeConfirmRows[idx], map[string]any{"upgrade_dialog": true})
 }
 
 // renderUpgradeConfirm draws the dialog. The binary's path is never cut: it
@@ -127,8 +127,7 @@ func (m *OS) renderUpgradeConfirm() (string, overlay.Geometry, []overlayRowHit) 
 			body = append(body, dialogBodyLine(l, width, ink, bg))
 		}
 	}
-	body = append(body, overlay.Fill(overlay.Style(bg).Render(" ")+
-		overlay.Style(bg).Foreground(pal.Fg).Bold(true).Render(overlay.Truncate("Upgrade the daemon?", inner)), width, bg))
+	body = append(body, dialogTitleLine("Upgrade the daemon?", inner, width, pal.Fg, bg))
 	body = append(body, dialogBodyLine("", width, pal.FgDim, bg))
 	// The title is the pane's own, and says whatever the pane set, so the
 	// pane id and session name the daemon placed it by stand beside it.

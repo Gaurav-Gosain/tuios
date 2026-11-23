@@ -66,6 +66,9 @@ type InboxState struct {
 	Unsupported bool
 	// Gen counts changes, for the rail's render cache.
 	Gen uint64
+	// anySecret is true while Items holds a secret prompt, so the check
+	// after every message (syncAskpass) costs nothing while none is open.
+	anySecret bool
 	// Filter narrows the overlay to one kind, empty for every kind.
 	Filter string
 	// Select narrows the overlay to the items a selector matches, empty for
@@ -731,6 +734,11 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 			if it.Upgrade != nil {
 				continue
 			}
+			// A secret prompt about the pane in front of the person opens
+			// its dialog (syncAskpass), which is alert enough.
+			if w := m.GetFocusedWindow(); it.Secret != nil && w != nil && w.ID == it.Window && !m.ShowInbox {
+				continue
+			}
 			// A question about the pane in front of the person opens the
 			// Inbox on it, which is the popup: it needs no alert.
 			if ev.Action == session.AttentionOpened && m.inboxPopAsk(*it) {
@@ -773,6 +781,7 @@ func (m *OS) inboxItem(id string) (session.AttentionItem, bool) {
 // redraw.
 func (m *OS) inboxChanged() {
 	m.Inbox.Gen++
+	m.Inbox.anySecret = slices.ContainsFunc(m.Inbox.Items, func(it session.AttentionItem) bool { return it.Secret != nil })
 	m.clampInboxSelection()
 	m.sidebarCache.invalidate()
 	m.syncUpgradeConfirm()
@@ -1562,6 +1571,10 @@ func (m *OS) InboxAnswerAsk(n int) tea.Cmd {
 		m.ShowNotification("A live upgrade is answered in its own dialog, which every client attached here shows", "info", m.Settings.NotificationDuration)
 		return nil
 	}
+	if it.Secret != nil {
+		m.ShowNotification("A program asks for a secret. Go to its pane to answer in the dialog", "info", m.Settings.NotificationDuration)
+		return nil
+	}
 	if n < 1 || n > len(it.Options) {
 		m.ShowNotification("This question takes 1 to "+strconv.Itoa(len(it.Options)), "warning", m.Settings.NotificationDuration)
 		return nil
@@ -1581,7 +1594,7 @@ func (m *OS) InboxAnswerAsk(n int) tea.Cmd {
 		m.ShowNotification("This question just appeared. Read it, then answer", "warning", m.Settings.NotificationDuration)
 		return nil
 	}
-	return m.inboxAnswerAskCmd(it, it.Options[n-1], false)
+	return m.inboxAnswerAskCmd(it, it.Options[n-1], nil)
 }
 
 // InboxAskAnsweredMsg is the answer to an answer-ask.
@@ -1600,7 +1613,11 @@ type InboxAskAnsweredMsg struct {
 
 // inboxAnswerAskCmd is the answer-ask call, with this client's attach nonce,
 // which is what lets the daemon take the answer as the person's.
-func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, upgradeDialog bool) tea.Cmd {
+//
+// extra are params the call carries besides: upgrade_dialog from the upgrade
+// dialog, secret or cancel from the secret dialog. A secret is zeroed once the
+// call is sent.
+func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, extra map[string]any) tea.Cmd {
 	if !m.inboxCanAct("Answering") || m.inboxElsewhere(it, "The answer") {
 		return nil
 	}
@@ -1625,10 +1642,13 @@ func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, upgradeD
 			// it is not the one asked.
 			"question": it.Summary,
 		}
-		if upgradeDialog {
-			params["upgrade_dialog"] = true
+		for k, v := range extra {
+			params[k] = v
 		}
 		raw, err := call("answer-ask", params, 5*time.Second)
+		if b, ok := extra["secret"].([]byte); ok {
+			clear(b)
+		}
 		if err != nil {
 			return InboxAskAnsweredMsg{Name: name, Answer: answer, From: from, Err: err}
 		}
@@ -1646,6 +1666,7 @@ func (m *OS) inboxAnswerAskCmd(it session.AttentionItem, answer string, upgradeD
 
 // applyInboxAskAnswered says what became of an answer.
 func (m *OS) applyInboxAskAnswered(msg InboxAskAnsweredMsg) {
+	m.askpassAnswered(msg)
 	switch {
 	case msg.Err != nil:
 		m.ShowNotification("The answer did not go through: "+inboxActErr(msg.Err, m.AttachedHost), "error", m.Settings.NotificationDuration*2)

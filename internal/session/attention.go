@@ -247,21 +247,21 @@ type AttentionItem struct {
 	// nanoseconds. Both are empty for an item of this machine.
 	Stale  bool  `json:"stale,omitempty"`
 	SeenAt int64 `json:"seen_at,omitempty"`
+	// MarkedUnread is set on a finished item the person reopened with mark
+	// unread after looking at the pane.
+	MarkedUnread bool `json:"marked_unread,omitempty"`
+	// DenyMessage is set when the harness takes a reason with a deny, so the
+	// Inbox can offer to type one.
+	DenyMessage bool `json:"deny_message,omitempty"`
 
 	// SnoozedUntil is when a snoozed item opens again, in unix nanoseconds,
 	// set on an item listed with include_snoozed. -1 means it waits until its
 	// fact changes. Zero on an item that is not snoozed.
 	SnoozedUntil int64 `json:"snoozed_until,omitempty"`
-	// MarkedUnread is set on a finished item the person reopened with mark
-	// unread after looking at the pane.
-	MarkedUnread bool `json:"marked_unread,omitempty"`
 	// Risk names the risk rules an approval's command matched, set on an
 	// approval or plan item whose request did. An allow from the Inbox then
 	// needs risk_ack naming exactly these. See internal/risk.
 	Risk []string `json:"risk,omitempty"`
-	// DenyMessage is set when the harness takes a reason with a deny, so the
-	// Inbox can offer to type one.
-	DenyMessage bool `json:"deny_message,omitempty"`
 	// PlanLines and PlanSHA describe a plan item's text, which is served by
 	// get-approval rather than carried here: how many lines it has, and the
 	// digest an answer names so it applies only to the plan that was shown.
@@ -271,6 +271,10 @@ type AttentionItem struct {
 	// (upgrade_confirm.go). A client shows it as a dialog of its own, not as
 	// an Inbox question.
 	Upgrade *UpgradeAsk `json:"upgrade,omitempty"`
+	// Secret is set on an ask that is a program's prompt for a secret, such
+	// as an ssh key's passphrase (askpass.go). A client shows it as a dialog
+	// with a hidden field. It is never saved, and never holds the answer.
+	Secret *SecretAsk `json:"secret,omitempty"`
 
 	// Parent and Root are set on an item about a child agent, a pane another
 	// agent started (agent_parent.go): the agent that started it and the
@@ -1231,8 +1235,9 @@ func (a *attentionStore) changedLocked() {
 func (a *attentionStore) encodeLocked() []byte {
 	f := attentionFile{Version: 1, NextID: a.nextID, Rev: a.rev, Items: make([]AttentionItem, 0, len(a.items)+len(a.snoozed))}
 	for _, id := range a.sortedIDsLocked() {
-		// An upgrade's confirm never outlives the call that waits on it.
-		if a.items[id].Upgrade == nil {
+		// An upgrade's confirm and a secret prompt never outlive the call
+		// that waits on them.
+		if a.items[id].Upgrade == nil && a.items[id].Secret == nil {
 			f.Items = append(f.Items, *a.items[id])
 		}
 	}
@@ -1240,7 +1245,9 @@ func (a *attentionStore) encodeLocked() []byte {
 	// sleep. An older daemon reading the file lists it as open, which is
 	// what the item was before the snooze.
 	for _, id := range a.snoozedIDsLocked() {
-		f.Items = append(f.Items, *a.snoozed[id])
+		if a.snoozed[id].Secret == nil {
+			f.Items = append(f.Items, *a.snoozed[id])
+		}
 	}
 	data, err := jsonx.Marshal(f)
 	if err != nil {

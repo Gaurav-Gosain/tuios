@@ -106,6 +106,7 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"ask-human#0":  {blocks: true, why: "nobody in the fixture answers the question"},
 	"ask-human#1":  {errCode: ErrVerbInvalidParams, why: "the example's request id is a placeholder"},
 	"answer-ask#0": {errCode: ErrVerbNotHuman, why: "only a client attached right now may answer, and none is"},
+	"askpass#0":    {errCode: ErrVerbForbidden, why: "a secret is asked for only from inside a pane, and the fixture's caller is in none"},
 	// The same for a prompt. The round trip is proved in prompt_test.go.
 	"answer-prompt#0": {errCode: ErrVerbNotHuman, why: "only a client attached right now may answer, and none is"},
 	"resolve-pane#0":  {errCode: ErrVerbWindowNotFound, why: "the example's pids are not the fixture's shells"},

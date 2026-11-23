@@ -66,6 +66,8 @@ const (
 	askMaxOption  = 60
 	// askMaxOutside bounds the open questions with no pane, per session.
 	askMaxOutside = 16
+	// askMaxSecrets bounds the open secret prompts of one pane.
+	askMaxSecrets = 4
 	// askSettledMax bounds how many ended asks are remembered for a caller
 	// that comes back for the answer.
 	askSettledMax = 256
@@ -113,6 +115,9 @@ type askHold struct {
 	// answer then goes down done; with nobody waiting it is mailed.
 	waiting bool
 	done    chan askOutcome
+	// secret carries the answer to a secret prompt (askpass.go), handed over
+	// before done says answered. nil for any other question.
+	secret chan []byte
 }
 
 var (
@@ -126,20 +131,27 @@ var (
 func (a *attentionStore) openAsk(it AttentionItem, waiting bool) (*askHold, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	outside := 0
+	outside, secrets := 0, 0
 	for _, id := range a.sortedIDsLocked() {
 		cur := a.items[id]
 		if cur.Kind != AttentionAsk || cur.Session != it.Session {
 			continue
 		}
 		switch {
-		case it.Window != "" && cur.Window == it.Window:
+		case it.Window != "" && cur.Window == it.Window && it.Secret != nil && cur.Secret != nil:
+			// Programs in one pane can ask at once, such as git fetch --all
+			// over ssh, so a secret prompt replaces none. A pane holds a
+			// few at most.
+			secrets++
+		case it.Window != "" && cur.Window == it.Window && cur.Secret == nil && it.Secret == nil:
+			// A secret prompt and a question are two things a pane can wait
+			// on at once: an agent's ssh asks while its question stands.
 			a.closeLocked(id, AttentionClosedSuperseded)
 		case cur.Window == "":
 			outside++
 		}
 	}
-	if it.Window == "" && outside >= askMaxOutside {
+	if (it.Window == "" && outside >= askMaxOutside) || secrets >= askMaxSecrets {
 		return nil, errAskTooMany
 	}
 	if len(a.items) >= attentionMaxItems {
@@ -156,6 +168,9 @@ func (a *attentionStore) openAsk(it AttentionItem, waiting bool) (*askHold, erro
 		options:  slices.Clone(it.Options),
 		waiting:  waiting,
 		done:     make(chan askOutcome, 1),
+	}
+	if it.Secret != nil {
+		h.secret = make(chan []byte, 1)
 	}
 	a.nextID++
 	a.rev++
@@ -537,14 +552,26 @@ func (d *Daemon) verbAnswerAsk(cs *connState, params json.RawMessage) (any, *ver
 		// dialog. Only that dialog sends it, and the GUI bridge drops it from
 		// what a renderer sends.
 		UpgradeDialog bool `json:"upgrade_dialog"`
+		// Secret answers a secret prompt (askpass.go), base64 in JSON, so it
+		// is decoded straight into a buffer that is zeroed. Cancel ends one
+		// with no answer.
+		Secret []byte `json:"secret"`
+		Cancel bool   `json:"cancel"`
 	}
-	if verr := decodeParams(params, &p); verr != nil {
+	verr := decodeParams(params, &p)
+	defer clear(p.Secret)
+	if verr != nil {
 		return nil, verr
 	}
 	if p.RequestID == "" {
 		return nil, invalidParam("request_id", "request_id is required: the question's, from its Inbox item")
 	}
-	if p.Answer == "" {
+	// A secret prompt's answer is secret or cancel (askpass.go).
+	secret := len(p.Secret) > 0 || p.Cancel
+	if len(p.Secret) > askpassMaxSecret {
+		return nil, invalidParam("secret", "secret is at most 4096 bytes")
+	}
+	if !secret && p.Answer == "" {
 		return nil, invalidParam("answer", "answer is required: one of the question's options")
 	}
 	if !d.humanNonceHeld(p.HumanNonce, cs) {
@@ -576,6 +603,18 @@ func (d *Daemon) verbAnswerAsk(cs *connState, params json.RawMessage) (any, *ver
 	by, ok := d.humanNonceFor(p.HumanNonce, d.sessionIDOf(askSession), cs)
 	if !ok {
 		return nil, nonceScopeError("answer-ask")
+	}
+	if secret {
+		// A secret never leaves the machine it is typed on.
+		if cs != nil && cs.viaLink {
+			return nil, hintedVerbError(ErrVerbForbidden, "a secret prompt is answered only at a client attached on this machine", nil)
+		}
+		applied, reason, ok := d.attention.answerSecret(p.RequestID, p.Secret, p.Cancel, by)
+		if !ok {
+			return nil, invalidParam("request_id", "no secret prompt is open under request "+echoName(p.RequestID))
+		}
+		LogBasic("Secret prompt %s %s by %s", p.RequestID, reason, by)
+		return map[string]any{"type": "ask_answered", "request_id": p.RequestID, "applied": applied, "reason": reason}, nil
 	}
 	out, hold, applied, mail, err := d.attention.answerAsk(p.RequestID, p.Answer, by, p.Question)
 	switch {
