@@ -2637,7 +2637,9 @@ func LoadUserConfig() (*UserConfig, error) {
 	// A key tuios cannot read on this platform costs that key, not the file.
 	// The lines reach the TUI through ConfigWarnings.
 	cfg.LoadWarnings = append(cfg.LoadWarnings, DroppedWarnings(DropUnreadableKeys(cfg, lc))...)
-	cfg.FirstRun = wroteFirstConfig.Load()
+	if p := firstConfigPath.Load(); p != nil && *p == configPath {
+		cfg.FirstRun = true
+	}
 
 	// Loading is pure: it never mutates package globals. Callers apply the
 	// appearance globals exactly once, on the Bubble Tea goroutine, via
@@ -2802,10 +2804,12 @@ func seedDefaults(data []byte, parsed *UserConfig) ([]byte, bool) {
 // a config.d directory or an include from a dotfiles repo applies in full. A
 // config.toml that cannot be written is not an error: the config loads
 // without it.
-// wroteFirstConfig is set once this process wrote the first-start
-// config.toml. A later load in the same process, such as the attach path
-// after the client loaded, is still the first start.
-var wroteFirstConfig atomic.Bool
+// firstConfigPath is the config.toml this process wrote as the first-start
+// file. A later load of that file in the same process, such as the attach
+// path after the client loaded, is still the first start. A load of another
+// file is not: a process that holds more than one client and daemon, as the
+// e2e suite's sim backend does, reads many config folders in turn.
+var firstConfigPath atomic.Pointer[string]
 
 func createDefaultConfig() (*UserConfig, error) {
 	configPath, err := xdg.ConfigFile("tuios/config.toml")
@@ -2836,7 +2840,7 @@ func createDefaultConfig() (*UserConfig, error) {
 	// first start too.
 	cfg.LoadWarnings = append(cfg.LoadWarnings, DroppedWarnings(DropUnreadableKeys(cfg, lc))...)
 	cfg.FirstRun = true
-	wroteFirstConfig.Store(true)
+	firstConfigPath.Store(&configPath)
 	return cfg, nil
 }
 
