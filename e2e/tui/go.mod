@@ -9,7 +9,7 @@ require (
 	github.com/Gaurav-Gosain/tuitest v0.3.2
 	github.com/adrg/xdg v0.5.3
 	github.com/spf13/pflag v1.1.0
-	tuios.dev/vt v0.3.4-0.20261120215113-0f1cffa25ec1
+	tuios.dev/vt v0.3.4-0.20261123165406-6c3a6aeb09c0
 )
 
 require (

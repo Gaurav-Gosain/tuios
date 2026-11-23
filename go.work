@@ -36,4 +36,4 @@ replace tuios.dev/shot v0.2.2-0.20261120215113-0f1cffa25ec1 => ./shot
 
 replace tuios.dev/swatch v0.1.2-0.20261120215113-0f1cffa25ec1 => ./swatch
 
-replace tuios.dev/vt v0.3.4-0.20261120215113-0f1cffa25ec1 => ./vt
+replace tuios.dev/vt v0.3.4-0.20261123165406-6c3a6aeb09c0 => ./vt
