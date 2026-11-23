@@ -58,25 +58,37 @@ type dndRegistrationFact struct {
 }
 
 // note takes the body of one OSC 72 the program wrote. It returns the reply
-// the program is owed, which only a query gets. foreground reads the pane's
-// foreground process group, which a registration is bound to.
-func (r *dndRegistration) note(body []byte, foreground func() int) []byte {
+// the program is owed, which only a query gets, and whether the registration
+// changed. foreground reads the pane's foreground process group, which a
+// registration is bound to.
+//
+// A changed registration has to be pushed to the clients. A client that
+// started to stream the pane after the program wrote it never sees the
+// bytes, and the window state it got before then says nothing yet. With no
+// push it would learn of the registration only from some later change to
+// the session, and a drag from the pane until then reaches the program as
+// plain mouse reports.
+func (r *dndRegistration) note(body []byte, foreground func() int) (reply []byte, changed bool) {
 	cmd, ok := dnd.Parse(body)
 	if !ok {
-		return nil
+		return nil, false
 	}
 	cmd, ok = r.asm.Add(cmd)
 	if !ok {
-		return nil
+		return nil, false
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	before := dndRegistrationFact{accepts: r.accepts, offers: r.offers, id: r.id}
+	defer func() {
+		changed = before != dndRegistrationFact{accepts: r.accepts, offers: r.offers, id: r.id}
+	}()
 	if cmd.ID != 0 {
 		r.id = cmd.ID
 	}
 	switch cmd.Type {
 	case 'q':
-		return dnd.Command{Type: 'q', ID: r.id}.Encode()
+		return dnd.Command{Type: 'q', ID: r.id}.Encode(), false
 	case 'a':
 		// x=1 carries a machine id. Every pane is local to the daemon that
 		// runs it.
@@ -98,7 +110,7 @@ func (r *dndRegistration) note(body []byte, foreground func() int) []byte {
 	if !r.accepts && !r.offers {
 		r.owner = 0
 	}
-	return nil
+	return nil, false
 }
 
 // fact copies the registration, and ends it first when the process group it

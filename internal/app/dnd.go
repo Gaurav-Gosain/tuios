@@ -157,6 +157,12 @@ type dndPane struct {
 	// id is the multiplexer id (i key) the program used, echoed back on
 	// everything sent to it.
 	id int
+	// heard says this client read a registration message from the program
+	// itself (t=a, t=A, t=o:x=1 or t=o:x=2). Until then the daemon's record
+	// is the one to go on: a client that started to stream the pane in the
+	// middle of the program's first messages can have read its query and
+	// missed the registration before it.
+	heard bool
 	// owner is the process group the registration is bound to, 0 while it
 	// is not known: the pane's own when this client runs its PTY, the
 	// daemon's word for a daemon's pane. See dndSweep.
@@ -252,10 +258,12 @@ func dndFmt(cmd dnd.Command) string {
 }
 
 // takeDaemonDnD takes the drag and drop registration the daemon kept for a
-// pane, for a pane this client has heard nothing from itself: it attached
-// after the program registered, which a program does once, when it starts.
-// Once the client has a record of its own, the stream it reads is fresher
-// than any state push. See session/dnd_registration.go.
+// pane, for a pane this client has heard no registration from itself: it
+// attached after the program registered, which a program does once, when it
+// starts, or it started to stream the pane after the program wrote it. The
+// daemon pushes the state when a registration changes. Once the client has
+// heard one itself, the stream it reads is fresher than any state push. See
+// session/dnd_registration.go.
 func (m *OS) takeDaemonDnD(w *terminal.Window, ws *session.WindowState) {
 	if w == nil || ws == nil || !m.dndPaneLocal(w) {
 		return
@@ -267,16 +275,19 @@ func (m *OS) takeDaemonDnD(w *terminal.Window, ws *session.WindowState) {
 	if ws.DnDOwner > 0 && session.ProcessGroupAlive(ws.DnDOwner) {
 		owner = ws.DnDOwner
 	}
-	if p, seen := m.dndPanes[w.ID]; seen {
+	if p, seen := m.dndPanes[w.ID]; seen && p.heard {
 		if owner != 0 {
 			p.owner = owner
 		}
 		return
 	}
-	if !ws.DnDAccepts && !ws.DnDOffers {
+	if _, seen := m.dndPanes[w.ID]; !seen && !ws.DnDAccepts && !ws.DnDOffers {
 		return
 	}
 	p := m.dndPaneFor(w.ID)
+	if p.accepts == ws.DnDAccepts && p.offers == ws.DnDOffers && p.id == ws.DnDID && p.owner == owner {
+		return
+	}
 	p.accepts, p.offers, p.id, p.owner = ws.DnDAccepts, ws.DnDOffers, ws.DnDID, owner
 	dndLog("took registration of %s from the daemon: accepts=%v offers=%v", shortID(w.ID), p.accepts, p.offers)
 }
@@ -371,10 +382,12 @@ func (m *OS) onDnD(msg DnDMsg) {
 	case 'a':
 		// x=1 carries a machine id. Every pane of this client is local.
 		if cmd.X != 1 {
+			p.heard = true
 			p.accepts = true
 			p.owner = dndForeground(m.windowByID(id))
 		}
 	case 'A':
+		p.heard = true
 		p.accepts = false
 		if d := m.dndDrag; d != nil && d.dropTarget == id {
 			m.dndCancel("the drop target stopped taking drops")

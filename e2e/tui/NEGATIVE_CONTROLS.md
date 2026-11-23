@@ -11984,6 +11984,28 @@ The subtests each control leaves passing are its positive half: under every
 control the other subtests of the same fixture pass, and on the build with
 the code in place every test above passes.
 
+### A registration the client did not read
+
+`TestDnDSourceThatRegisteredOnAHiddenWorkspace` starts a drag source in a pane
+on workspace 2, waits for the daemon's capture to show the program is up,
+and then shows workspace 2. The client restores the pane from a snapshot,
+which has no OSC 72 in it, so it has only the daemon's record to go on. A
+client that starts to stream a new pane can miss the registration the same
+way. That is how `TestDnDRefusesAPaneHostedElsewhere` failed in CI now and
+then: the press went to the program as a mouse report.
+
+Run on 2026-11-23 on Linux, based on 7e661e2a0.
+
+| Control | Runs | Failures |
+| --- | --- | --- |
+| Main, with no state push for a registration | 10 | 10: "the source never got the drag gesture" |
+| `internal/session/session.go`, the `publishLiveFactsSoon` call after `pty.dnd.note` removed | 5 | 4, the same message. In the run that passed, an unrelated state push carried the registration |
+| The fix | 10 | 0 |
+
+`TestDnDRefusesAPaneHostedElsewhere` on two cores with a CPU hog on each:
+main failed 1 of 30 runs and passed 120 of 120 in a second set. The fix
+passed 120 of 120.
+
 Repeat with `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run
 'TestDnD' -v .` from `e2e/tui`. `TUIOS_E2E_YAZI` and `TUIOS_E2E_KITTEN` add
 the runs with the real programs.

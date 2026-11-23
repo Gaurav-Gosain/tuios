@@ -614,10 +614,12 @@ func (m *OS) dndCancel(why string) {
 func (m *OS) onDnDOffer(id string, p *dndPane, cmd dnd.Command) {
 	switch cmd.X {
 	case 1:
+		p.heard = true
 		p.offers = true
 		p.owner = dndForeground(m.windowByID(id))
 		return
 	case 2:
+		p.heard = true
 		p.offers = false
 		if d := m.dndDrag; d != nil && d.source == id {
 			m.dndCancel("the source stopped offering drags")

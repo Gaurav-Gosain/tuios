@@ -843,8 +843,11 @@ func TestDnDRefusesAPaneHostedElsewhere(t *testing.T) {
 		t.Fatalf("the far pane is not marked as on build:\n%s", term.Snapshot())
 	}
 	// Which rectangle is the far pane: the one whose title carries the host.
-	farRow := strings.Split(term.Screen().Text(), "\n")[far.Y+far.Height-1]
-	if !strings.Contains(farRow, "build:faraway") {
+	// The screen row holds both panes' borders, so only the far pane's own
+	// columns are read.
+	farRow := []rune(strings.Split(term.Screen().Text(), "\n")[far.Y+far.Height-1])
+	farRow = farRow[min(far.X, len(farRow)):min(far.X+far.Width, len(farRow))]
+	if !strings.Contains(string(farRow), "build:faraway") {
 		near, far = far, near
 	}
 	enterTerminalMode(t, term)
@@ -977,4 +980,73 @@ func TestDnDRegistrationEndsWithItsProgram(t *testing.T) {
 			t.Errorf("the pane the dead program held got %q, want the paste %q", got, want)
 		}
 	})
+}
+
+// TestDnDSourceThatRegisteredOnAHiddenWorkspace: a program that offers drags
+// starts in a pane on a workspace the client does not show. The client
+// streams only the panes it shows, so it never reads the program's
+// registration. When the person shows that workspace, the client restores
+// the pane from a snapshot of its screen, which has no OSC 72 in it. The
+// client then has to know the pane offers drags from the daemon's record,
+// and a drag from the pane has to reach the program as a gesture.
+//
+// A client streaming a new pane can miss the registration the same way, in
+// the moment between its snapshot of the pane and the first bytes it reads.
+// That is how TestDnDRefusesAPaneHostedElsewhere failed now and then on a
+// loaded machine: the press went to the program as a mouse report.
+//
+// How this could pass wrongly, written down first:
+//   - the client could have read the registration from the stream. The pane
+//     is on workspace 2 until the daemon's own capture shows the program is
+//     up, so the registration was written before the client streamed it.
+//   - the press could miss the pane. The pane is the only one on its
+//     workspace, and the press is inside its rectangle as the daemon lists it.
+//
+// Negative control: with the daemon sending no state when a registration
+// changes, the source never gets the gesture. See NEGATIVE_CONTROLS.md.
+func TestDnDSourceThatRegisteredOnAHiddenWorkspace(t *testing.T) {
+	requireReal(t, "perf or external program, env-gated")
+	bin := buildDnDPeer(t)
+	base := t.TempDir()
+	writeConfig(t, base, dndConfig)
+	const session = "e2e-dnd-hidden"
+	term := dndClient(t, base, nil, "new", session)
+	killDaemon(t, base)
+	waitBoot(t, term)
+	newWindow(t, term)
+	waitWindowCount(t, term, 1, "the shell on workspace 1")
+
+	dir := t.TempDir()
+	one := filepath.Join(dir, "one.txt")
+	if err := os.WriteFile(one, []byte("1"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	srcLog := filepath.Join(dir, "source.log")
+	id := newHiddenPane(t, base, session, "src", "sh", "-c", peerSource(bin, srcLog, "", one))
+	waitCapture(t, base, session, id, "DNDPEER-READY")
+
+	if err := term.SendKeys(tuitest.Alt("2")); err != nil {
+		t.Fatalf("send alt+2: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "DNDPEER-READY")
+	}, uiTimeout); err != nil {
+		t.Fatalf("workspace 2 never showed the source: %v\n%s", err, term.Snapshot())
+	}
+	var src winRect
+	for _, r := range waitForSettledGeometryIn(t, base, session, 2) {
+		if r.ID == id {
+			src = r
+		}
+	}
+	if src.ID == "" {
+		t.Fatalf("the daemon does not list the source pane %s", id)
+	}
+	enterTerminalMode(t, term)
+
+	art := artifactDir(t)
+	dragAcross(t, term, src.X+4, src.Y+5, src.X+src.Width/2, src.Y+src.Height/2, art)
+	got := waitFile(t, srcLog, func(s string) bool { return strings.Contains(s, "sent offer+start") }, "the source never got the drag gesture")
+	dropAt(t, term, src.X+src.Width/2, src.Y+src.Height/2)
+	_ = os.WriteFile(filepath.Join(art, "source.log"), []byte(got), 0o644)
 }

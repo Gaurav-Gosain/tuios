@@ -5763,8 +5763,14 @@ func (s *Session) setUpPaneTerminal(pty *PTY, terminal vt.Terminal) {
 			if cmd != dnd.Code || pty.host != "" || !s.dragAndDrop() {
 				return
 			}
-			if reply := pty.dnd.note(data, func() int { return ForegroundGroup(pty.ShellPID()) }); reply != nil {
+			reply, changed := pty.dnd.note(data, func() int { return ForegroundGroup(pty.ShellPID()) })
+			if reply != nil {
 				terminal.WriteResponse(reply)
+			}
+			// Pushed off this goroutine, which holds the terminal lock. A
+			// program registers once when it starts, so this is rare.
+			if changed {
+				pty.owner().publishLiveFactsSoon()
 			}
 		},
 	})
