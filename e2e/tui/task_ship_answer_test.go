@@ -67,6 +67,9 @@ func TestReadyToMergeAnswerStaysWithItsCard(t *testing.T) {
 	term := attachIn(t, base, "home", startOpts{cols: 160, rows: 45, shippedLooks: true})
 	sendKeys(t, term, tuitest.Ctrl('b'), "i")
 	waitText(t, term, "the agents view", "b board")
+	// The daemon ships a card only once its agent is at rest, which the
+	// view says a moment after the agents finished.
+	waitText(t, term, "both agents at rest", "2 idle")
 	sendKeys(t, term, "b")
 	waitText(t, term, "the board", "Verify passed")
 	sendKeys(t, term, "B")

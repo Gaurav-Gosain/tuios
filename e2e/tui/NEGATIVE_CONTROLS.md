@@ -18752,6 +18752,19 @@ Run on 2026-11-21 on Linux. Each control is one change to the branch, run alone 
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestKeysLostWithALinkAreDroppedAndThePersonIsTold$' .
+## A notice without its burn-down still goes on time
+
+`TestANoticeGoesOnTimeWithoutItsBurn` raises "Tiling on" with `notifications.duration = 2`, under the knob `notice_burn=off` that the harness sets for every client. Once the block is drawn the dock must hold still while the notice shows, and the notice must go between 1.5 s and 3 s after it showed.
+
+Run on 2026-11-21 on Linux, real backend.
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| The burn on for the client (`notice_burn=on`) | `TestANoticeGoesOnTimeWithoutItsBurn` | 2 of 2 runs: "the dock holds still while the notice shows" fails | **caught** |
+| This change | `TestANoticeGoesOnTimeWithoutItsBurn` | 8 of 8 runs pass | fixed |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestANoticeGoesOnTimeWithoutItsBurn$' .
 ```
 
 ## A launcher scan that found nothing

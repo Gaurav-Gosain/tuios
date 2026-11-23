@@ -496,8 +496,10 @@ func TestWindowModeOffKeepsTheClientInThePane(t *testing.T) {
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("the leader menu never settled: %v\n%s", err, term.Snapshot())
 	}
-	if snap := term.Snapshot(); strings.Contains(snap, "Window mode") || strings.Contains(snap, "Window/nest") {
-		t.Fatalf("ASSERTION: the leader menu lists window mode\n%s", snap)
+	// The dock row is left out: the notice of step 1, "Window mode is off",
+	// can still be on it.
+	if menu := strings.Replace(term.Screen().Text(), dockRow(term.Screen()), "", 1); strings.Contains(menu, "Window mode") || strings.Contains(menu, "Window/nest") {
+		t.Fatalf("ASSERTION: the leader menu lists window mode\n%s", term.Snapshot())
 	}
 	railShot(t, term, "window-mode-off-leader")
 	send(tuitest.Esc)

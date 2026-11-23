@@ -52,7 +52,8 @@ func TestNotificationLandsInTheDockNotOverAPane(t *testing.T) {
 		t.Run(style, func(t *testing.T) {
 			base := t.TempDir()
 			writeConfig(t, base, "[notifications]\nstyle = \""+style+"\"\nduration = 30\n")
-			term := startIn(t, base, startOpts{cols: 120, rows: 40})
+			// The rule above the message is the countdown this checks.
+			term := startIn(t, base, startOpts{cols: 120, rows: 40, env: []string{knob("notice_burn=on")}})
 			waitBoot(t, term)
 			newWindow(t, term)
 

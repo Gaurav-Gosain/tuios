@@ -200,6 +200,12 @@ func runE2E(m *testing.M) (code int) {
 	// rule (internal/session/task_move.go); killDaemon fails the test that
 	// left such a line.
 	_ = os.Setenv(testknob.Env, testknob.Merge(os.Getenv(testknob.Env), "card_check=1"))
+	// A notice draws its rule full and goes on time, with no burn-down: the
+	// burn redraws the dock on each frame for the notice's whole time, and
+	// every wait for a still screen waited it out (2036 waits took 1068 s,
+	// 856 s of it in waits over 0.4 s). The tests of the burn set
+	// notice_burn=on. TestANoticeGoesOnTimeWithoutItsBurn holds the expiry.
+	_ = os.Setenv(testknob.Env, testknob.Merge(os.Getenv(testknob.Env), "notice_burn=off"))
 	// No test reaches a real agent CLI (agent_stubs_test.go).
 	unstub, err := installAgentStubs()
 	if err != nil {
@@ -477,6 +483,9 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 		}
 	})
 	env = append(env, o.env...)
+	// The client's knobs: notice_burn=off (see TestMain) under any the test
+	// gives, which win.
+	env = withKnobs(append([]string{testknob.Env + "=notice_burn=off"}, env...))
 
 	cols, rows := o.cols, o.rows
 	if cols == 0 {

@@ -96,6 +96,11 @@ func TestQuickLookTakesTheMouse(t *testing.T) {
 	runInShell(t, term, "cd ~/proj && clear && echo CD''DONE", "CDDONE", uiTimeout)
 	runInShell(t, term, "printf 'at %s:%s\\nmd %s\\nlog %s\\n' "+pathsFile+" 120 ./notes.md ./big.log", "log ./big.log", uiTimeout)
 	leaveTerminalMode(t, term)
+	// The path resolves against the pane's folder, which the client learns
+	// from the shell after the cd: the pane's title shows it.
+	if err := term.WaitForText("~/proj", uiTimeout); err != nil {
+		t.Fatalf("the pane never showed its folder: %v\n%s", err, term.Snapshot())
+	}
 	_ = term.WaitStable(uiTimeout)
 	col, row := mustFind(t, term, pathsFile+":120")
 	mouseClick(t, term, col+5, row, tuitest.MouseLeft, tuitest.ModCtrl)
