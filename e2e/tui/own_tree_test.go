@@ -24,7 +24,8 @@ import (
 // too: the answer must list gen1, gen0 and far, and no stranger. It closes
 // gen0, its grandchild, by name. A stranger renamed to gen0 is then refused,
 // as are the strangers by id in both sessions, so each needs admin as before.
-// It closes far, in the other session. With the fan grant taken away, the
+// It closes far, in the other session, by its id with no -s. A stranger
+// there named by its id with no -s is refused too. With the fan grant taken away, the
 // close of gen1 and the wait are refused. With fan back, gen1 closes.
 //
 // Negative controls: with holdToOwnTree's ok always false, the pane's
@@ -136,13 +137,13 @@ func TestAFanPaneClosesAndWaitsForItsOwnTree(t *testing.T) {
 	if out, err := handoffCLI(t, base, 30*time.Second, "set-window", "-s", sess, "-w", stranger, "--name", "gen0"); err != nil {
 		t.Fatalf("rename the stranger: %v\n%s", err, out)
 	}
-	for _, target := range []string{"-s " + sess + " gen0", "-s " + sess + " " + stranger, "-s " + other + " " + farStranger} {
+	for _, target := range []string{"-s " + sess + " gen0", "-s " + sess + " " + stranger, "-s " + other + " " + farStranger, farStranger} {
 		if out := run(T + " close-window " + target); served(out) || !strings.Contains(out, "admin grant") {
 			t.Errorf("ASSERTION: close-window %s outside the tree was not refused for the admin grant:\n%s", target, out)
 		}
 	}
-	// A child in another session closes.
-	if out := run(T + " close-window -s " + other + " " + ids["far"]); !served(out) {
+	// A child in another session closes by its id, with no session named.
+	if out := run(T + " close-window " + ids["far"]); !served(out) {
 		t.Errorf("ASSERTION: lead could not close far in the other session:\n%s", out)
 	}
 

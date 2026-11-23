@@ -54,7 +54,9 @@ started it, whatever the pane holds. A refusal is `forbidden`, and
 `tuios cp` exits 4.
 
 With `fan` and without `admin`, `close-window` reaches only the panes that
-you started and their own children. Name the window by its id or its name. A
+you started and their own children. Name the window by its id, or by its name.
+A child in another session closes by its id. To use its name, add `-s` with
+its session. A
 pane outside that tree needs `admin`. A pane whose parent is closed is outside
 the tree, unless you are the root of its agent chain, so close the deepest
 panes first. `wait-for agent-state --select` watches only the panes of your

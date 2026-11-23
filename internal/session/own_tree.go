@@ -1,7 +1,6 @@
 package session
 
 import (
-	"cmp"
 	"encoding/json"
 	"strings"
 
@@ -47,38 +46,75 @@ import (
 //   - A pane on a link, a hosted pane or a plugin. The rule is not for them:
 //     checkGrants holds them before it reaches the rule.
 
-// inOwnTree reports whether w is in the tree of the pane root: root started
-// it, or started a pane that did, down the chain. root itself is not in its
-// tree.
-func (d *Daemon) inOwnTree(w WindowState, root string) bool {
-	if root == "" || w.ID == root {
+// treeLink is what the own tree reads of one window: the pane that started
+// it, and the root of its agent link.
+type treeLink struct {
+	startedBy string
+	root      string
+}
+
+// ownTreeLinks reads the tree links of every window of every session. Each
+// session's windows are read in place under its state lock, as holdsWindowID
+// reads them: no state is copied and no process is read. A wait builds it
+// once per check, so the cost of a check is one pass over the windows.
+func (d *Daemon) ownTreeLinks() map[string]treeLink {
+	links := make(map[string]treeLink)
+	for _, sess := range d.manager.AllSessions() {
+		sess.addTreeLinks(links)
+	}
+	return links
+}
+
+// addTreeLinks adds the tree links of the session's windows to links.
+func (s *Session) addTreeLinks(links map[string]treeLink) {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	if s.state == nil {
+		return
+	}
+	for i := range s.state.Windows {
+		w := &s.state.Windows[i]
+		var l treeLink
+		if w.StartedBy != nil {
+			l.startedBy = w.StartedBy.Window
+		}
+		if w.AgentLink != nil {
+			l.root = w.AgentLink.Root.Window
+		}
+		links[w.ID] = l
+	}
+}
+
+// inOwnTree reports whether the window id is in the tree of the pane root:
+// root started it, or started a pane that did, down the chain. root itself is
+// not in its tree. links is ownTreeLinks.
+func inOwnTree(links map[string]treeLink, id, root string) bool {
+	if root == "" || id == root {
 		return false
 	}
-	if w.AgentLink != nil && w.AgentLink.Root.Window == root {
+	link, ok := links[id]
+	if !ok {
+		return false
+	}
+	if link.root == root {
 		return true
 	}
-	seen := map[string]bool{w.ID: true}
+	seen := map[string]bool{id: true}
 	for range paneOriginMaxDepth {
-		ref := w.StartedBy
-		if ref == nil {
+		up := link.startedBy
+		if up == "" {
 			return false
 		}
-		if ref.Window == root {
+		if up == root {
 			return true
 		}
-		if seen[ref.Window] {
+		if seen[up] {
 			return false
 		}
-		seen[ref.Window] = true
-		sess := d.sessionHoldingWindow(ref.Window)
-		if sess == nil {
+		seen[up] = true
+		if link, ok = links[up]; !ok {
 			return false
 		}
-		up, ok := findWindowState(sess.GetState(), ref.Window)
-		if !ok {
-			return false
-		}
-		w = up
 	}
 	return false
 }
@@ -118,18 +154,34 @@ func (d *Daemon) holdToOwnTree(verb string, pa *paneAuth, params json.RawMessage
 			// No window is the focused one, which is not the pane's to pick.
 			return nil, nil, false
 		}
-		name := cmp.Or(strings.TrimSpace(str("session")), pa.session)
-		sess := d.manager.GetSession(name)
-		if sess == nil {
-			return nil, nil, false
+		name := strings.TrimSpace(str("session"))
+		if name == "" {
+			name = pa.session
 		}
-		st := sess.GetState()
-		idx, err := findWindowStateIndex(st.Windows, window)
-		if err != nil {
-			return nil, nil, false
+		sess := d.manager.GetSession(name)
+		var (
+			st  *SessionState
+			idx = -1
+		)
+		if sess != nil {
+			st = sess.GetState()
+			idx, _ = findWindowStateIndex(st.Windows, window)
+		}
+		// A window id that the session does not hold is found in whichever
+		// session holds it. The CLI fills in the pane's own session, so a
+		// child in another session closes by its id without -s. The tree
+		// check below holds it like any other window.
+		if idx < 0 {
+			if sess = d.sessionHoldingWindow(window); sess == nil {
+				return nil, nil, false
+			}
+			st = sess.GetState()
+			if idx, _ = findWindowStateIndex(st.Windows, window); idx < 0 {
+				return nil, nil, false
+			}
 		}
 		w := st.Windows[idx]
-		if !d.inOwnTree(w, pa.window) {
+		if !inOwnTree(d.ownTreeLinks(), w.ID, pa.window) {
 			return nil, deny(verb + " needs the admin grant for window " + shortWindowID(w.ID) +
 				". Without it, a pane with the fan grant closes only the panes it started and the panes they started"), true
 		}

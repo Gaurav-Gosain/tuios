@@ -5927,7 +5927,8 @@ tuios wait-for agent-state --select "parent:$TUIOS_PANE_ID" --until idle,done --
   outside the tree needs `admin`, also when you rename it to the name of a
   pane in the tree.
 - A child in another session is in the tree. `start-agent` and `fan` can
-  put a child there.
+  put a child there. Name it by its id, or by its name with `-s` and its
+  session.
 - `wait-for agent-state --select` watches only the panes of the tree. A pane
   that the selector matches outside the tree does not end the wait and is not
   in the answer. The `under` param of `wait-for` holds this, and the daemon

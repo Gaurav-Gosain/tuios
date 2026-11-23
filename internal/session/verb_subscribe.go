@@ -752,8 +752,9 @@ func (d *Daemon) waitAgentStateSelect(sel *Selector, until string, every bool, u
 
 	check := func() (map[string]any, bool) {
 		panes := d.selectPanes(sel, false)
-		if under != "" {
-			panes = slices.DeleteFunc(panes, func(p selectedPane) bool { return !d.inOwnTree(p.window, under) })
+		if under != "" && len(panes) > 0 {
+			links := d.ownTreeLinks()
+			panes = slices.DeleteFunc(panes, func(p selectedPane) bool { return !inOwnTree(links, p.window.ID, under) })
 		}
 		if every {
 			if len(panes) == 0 {
