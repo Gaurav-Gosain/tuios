@@ -35,7 +35,10 @@ exec sleep 600
 //     the new sheet, leaves that sheet open with its text;
 //   - a notice on the sheet goes with the next key, so a sheet with text
 //     never says to write the task;
-//   - enter on the new sheet then files its own card.
+//   - enter on the new sheet then files its own card;
+//   - the open is not lost when it comes while add-task is still out, which
+//     a loaded machine does: tuios holds it and opens the sheet with the
+//     answer.
 //
 // How this could pass wrongly, written down first:
 //   - The answer could come before the second sheet is open, and then it has

@@ -15276,8 +15276,19 @@ Run on 2026-11-08 on macOS (arm64). The branch passes.
 | Main (95b2da88d), where the reopened sheet is the filed draft and the answer closes whatever sheet is up | "the second sheet offers the filed draft again", "the first card's answer closed the sheet the person types in", "home holds the cards [\"t1 First task\" \"t2 First task\"]" | **caught** |
 | The branch without the notice clearing in TaskCaptureKey | "the sheet still says \"Write the task first.\" after the task was typed" | **caught** |
 
+On a loaded machine the second open can come while add-task is still out.
+tuios refused that open with a toast, and the test failed waiting for the
+second sheet. tuios now holds the open and makes it when the add-task answer
+comes. Run on 2026-11-23 on Linux, on two cores with a CPU hog on each.
+
+| Binary | Runs | Failures |
+|--------|------|----------|
+| Main (7e661e2a0), which refuses the open | 30 | 9: "waiting for the second sheet: WaitForDesc timed out" |
+| The branch, which holds the open | 30 | 0 |
+
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskCaptureLateAnswerKeepsTheNextSheet$' -v .`.
+For the load runs, add `-count=30` and run under `taskset -c 0,1` beside a busy loop on each core.
 
 ## TestALinkCopyRevokedBeforeItsVerifyStaysFailed
 

@@ -877,11 +877,14 @@ type OS struct {
 	// taskCapture is the task capture sheet, open or kept as the draft,
 	// taskCaptureClosed says it is kept and not shown, and tcCanvas the
 	// grid it is drawn on. tcFiling is a draft whose add-task call is out,
-	// and tcOpenGen counts the openings, so a read for an earlier one is
+	// tcPending an open of the sheet held until its answer comes, tcPendingGen
+	// counts the held opens, and tcOpenGen counts the openings, so a read for an earlier one is
 	// dropped. See task_capture.go.
 	taskCapture       *taskCapture
 	taskCaptureClosed bool
 	tcFiling          *taskCapture
+	tcPending         *tcPendingOpen
+	tcPendingGen      uint64
 	tcOpenGen         uint64
 	tcCanvas          *ckCanvas
 

@@ -37,7 +37,8 @@ import (
 //
 // A file is two calls. While add-task is out the draft waits in tcFiling and
 // the sheet does not open, so a refusal can give the draft back and the
-// draft cannot file twice. Once the card is added the draft is done: the
+// draft cannot file twice. An open asked for meanwhile is held (tcPending)
+// and made when the answer comes, so the key is not lost. Once the card is added the draft is done: the
 // next open is a new sheet, and the start-agent answer, which can take
 // minutes, is a toast that touches no sheet.
 //
@@ -146,8 +147,7 @@ func (m *OS) OpenTaskCapture() tea.Cmd {
 		return nil
 	}
 	if m.tcFiling != nil {
-		m.ShowNotification("The last card is still being added. Open the sheet again in a moment.", "info", m.Settings.NotificationDuration)
-		return nil
+		return m.holdTaskCaptureOpen()
 	}
 	if m.SessionName == "" {
 		m.ShowNotification("A task card needs a session. Start tuios with a daemon.", "warning", m.Settings.NotificationDuration)
@@ -465,7 +465,7 @@ func (m *OS) taskCaptureFile(start bool) tea.Cmd {
 		if machine != "" {
 			params["machine"] = machine
 		}
-		raw, err := call("add-task", params, 10*time.Second)
+		raw, err := call("add-task", params, tcAddTaskTimeout)
 		if err != nil {
 			return tcFiledMsg{s: s, err: err}
 		}
@@ -558,6 +558,8 @@ func (m *OS) applyTCFiled(msg tcFiledMsg) tea.Cmd {
 		return nil
 	}
 	m.tcFiling = nil
+	pending := m.tcPending
+	m.tcPending = nil
 	if msg.err != nil {
 		// The sheet stays shut while add-task is out, so no other draft
 		// is open to replace.
@@ -566,11 +568,60 @@ func (m *OS) applyTCFiled(msg tcFiledMsg) tea.Cmd {
 		msg.s.gen, msg.s.notice = m.tcOpenGen, "The card was not added: "+msg.err.Error()
 		return nil
 	}
+	var open tea.Cmd
+	if pending != nil && m.tcPendingHolds(pending) {
+		open = m.OpenTaskCapture()
+	}
 	if msg.next != nil {
-		return msg.next
+		return tea.Batch(open, msg.next)
 	}
 	m.ShowNotification(msg.text, "success", m.Settings.NotificationDuration)
-	return nil
+	return open
+}
+
+// tcAddTaskTimeout is how long a file waits for the add-task answer, and so
+// how long an open of the sheet is held for it.
+const tcAddTaskTimeout = 10 * time.Second
+
+// tcPendingOpen is an open of the sheet asked for while a filed draft's
+// add-task call was out: where the person was when they asked. gen tells
+// its timeout from the timeout of an earlier one.
+type tcPendingOpen struct {
+	gen     uint64
+	session string
+	window  string
+}
+
+// tcPendingTimeoutMsg ends the held open of gen when no answer came.
+type tcPendingTimeoutMsg struct{ gen uint64 }
+
+// holdTaskCaptureOpen holds an open of the sheet until the add-task answer
+// comes. One open is held at most: a second press while one waits adds
+// nothing.
+func (m *OS) holdTaskCaptureOpen() tea.Cmd {
+	if m.tcPending != nil {
+		return nil
+	}
+	m.tcPendingGen++
+	gen := m.tcPendingGen
+	m.tcPending = &tcPendingOpen{gen: gen, session: m.SessionName, window: m.GetFocusedWindowID()}
+	return tea.Tick(tcAddTaskTimeout, func(time.Time) tea.Msg { return tcPendingTimeoutMsg{gen: gen} })
+}
+
+// tcPendingHolds reports whether a held open is still what the person wants:
+// no other overlay opened since, and the focus is on the same pane of the same
+// session.
+func (m *OS) tcPendingHolds(p *tcPendingOpen) bool {
+	return !m.AnyOverlayOpen() && m.SessionName == p.session && m.GetFocusedWindowID() == p.window
+}
+
+// applyTCPendingTimeout drops a held open whose answer did not come in time.
+func (m *OS) applyTCPendingTimeout(msg tcPendingTimeoutMsg) {
+	if m.tcPending == nil || m.tcPending.gen != msg.gen {
+		return
+	}
+	m.tcPending = nil
+	m.ShowNotification("The last card is still being added. Open the sheet again in a moment.", "info", m.Settings.NotificationDuration)
 }
 
 // applyTCStarted says what start-agent did on a filed card.
