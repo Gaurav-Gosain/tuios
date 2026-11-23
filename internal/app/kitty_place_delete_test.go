@@ -14,7 +14,7 @@ func newTestKittyPassthrough(t *testing.T) *KittyPassthrough {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = devnull.Close() })
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{
+	kp := newTestKitty(t, KittyPassthroughOptions{
 		ForceEnable: true,
 		Output:      devnull,
 	})

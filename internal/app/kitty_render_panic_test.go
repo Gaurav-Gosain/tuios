@@ -70,7 +70,7 @@ func TestAsyncFrameWriterSurvivesPanic(t *testing.T) {
 	withClientCaps(t, &HostCapabilities{
 		KittyGraphics: true, TerminalName: "kitty", CellWidth: 10, CellHeight: 20,
 	})
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{
+	kp := newTestKitty(t, KittyPassthroughOptions{
 		Output:       panicWriter{},
 		RemoteClient: true,
 	})

@@ -35,7 +35,7 @@ func TestKittyMediumReleaseChecksTheFrame(t *testing.T) {
 		return err == nil
 	}
 	remote := func() *KittyPassthrough {
-		return NewKittyPassthroughWithOptions(KittyPassthroughOptions{
+		return newTestKitty(t, KittyPassthroughOptions{
 			Output:       &bytes.Buffer{},
 			RemoteClient: true,
 			Caps:         &HostCapabilities{KittyGraphics: true, TerminalName: "kitty", CellWidth: 10, CellHeight: 20},
@@ -63,7 +63,7 @@ func TestKittyMediumReleaseChecksTheFrame(t *testing.T) {
 	t.Run("graphics-off", func(t *testing.T) {
 		name, path := object(t, w*h*4)
 		cmd, raw := synthShmTransmitPlace(name, w, h)
-		kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{
+		kp := newTestKitty(t, KittyPassthroughOptions{
 			Output: &bytes.Buffer{},
 			Caps:   &HostCapabilities{TerminalName: "xterm"},
 		})

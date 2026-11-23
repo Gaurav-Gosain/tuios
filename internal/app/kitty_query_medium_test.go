@@ -28,7 +28,7 @@ func newQueryTestPassthrough(t *testing.T, hostReadsFiles bool) *KittyPassthroug
 	})
 	t.Cleanup(func() { clientCapabilities.Store(previous) })
 
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: devnull})
+	kp := newTestKitty(t, KittyPassthroughOptions{Output: devnull})
 	kp.enabled = true
 	// ForceEnable would also pin inlineGraphics; leave it off so the test
 	// exercises the capability rather than the tuios-web override.

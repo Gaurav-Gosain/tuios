@@ -31,7 +31,7 @@ func withAnimatingHost(t *testing.T) {
 
 func newDamagePassthrough(t *testing.T) *KittyPassthrough {
 	t.Helper()
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: io.Discard})
+	kp := newTestKitty(t, KittyPassthroughOptions{Output: io.Discard})
 	if !kp.IsEnabled() {
 		t.Fatal("passthrough not enabled for a kitty host")
 	}

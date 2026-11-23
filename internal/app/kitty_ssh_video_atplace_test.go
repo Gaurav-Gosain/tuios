@@ -56,7 +56,7 @@ func TestRemoteVideoSelfPlacesWithAT(t *testing.T) {
 	cmd, raw := synthShmTransmitPlace(shmName, 400, 300)
 
 	host := &recWriter{}
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
+	kp := newTestKitty(t, KittyPassthroughOptions{Output: host, RemoteClient: true})
 
 	const winID = "window-0000-0000-0000-000000000000"
 	send := func() {
@@ -104,7 +104,7 @@ func TestInlineOverlayVideoStaysTransmitOnly(t *testing.T) {
 	cmd, raw := synthShmTransmitPlace(shmName, 400, 300)
 
 	host := &recWriter{}
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, ForceEnable: true})
+	kp := newTestKitty(t, KittyPassthroughOptions{Output: host, ForceEnable: true})
 
 	const winID = "window-0000-0000-0000-000000000000"
 	for range 2 {
@@ -160,7 +160,7 @@ func TestRemoteVideoFrameIsCompressed(t *testing.T) {
 	shmName := makeShmFrame(t, 400, 300)
 	cmd, raw := synthShmTransmitPlace(shmName, 400, 300)
 	host := &recWriter{}
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
+	kp := newTestKitty(t, KittyPassthroughOptions{Output: host, RemoteClient: true})
 	const winID = "window-0000-0000-0000-000000000000"
 	resendShm(t, shmName)
 	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, false, func([]byte) {})
@@ -181,7 +181,7 @@ func TestRemoteVideoClearedOnLeavingAltScreen(t *testing.T) {
 	shmName := makeShmFrame(t, 400, 300)
 	cmd, raw := synthShmTransmitPlace(shmName, 400, 300)
 	host := &recWriter{}
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
+	kp := newTestKitty(t, KittyPassthroughOptions{Output: host, RemoteClient: true})
 
 	const winID = "window-0000-0000-0000-000000000000"
 	// Two frames on the alt screen (isAltScreen=true): the second self-places.
@@ -263,7 +263,7 @@ func TestRemoteVideoSkipsUnchangedFrames(t *testing.T) {
 	shmName := makeShmFrame(t, 400, 300)
 	cmd, raw := synthShmTransmitPlace(shmName, 400, 300)
 	host := &recWriter{}
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
+	kp := newTestKitty(t, KittyPassthroughOptions{Output: host, RemoteClient: true})
 	const winID = "window-0000-0000-0000-000000000000"
 	send := func() {
 		resendShm(t, shmName)
@@ -300,7 +300,7 @@ func TestRemoteVideoCountsInHasPlacements(t *testing.T) {
 	shmName := makeShmFrame(t, 400, 300)
 	cmd, raw := synthShmTransmitPlace(shmName, 400, 300)
 	host := &recWriter{}
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
+	kp := newTestKitty(t, KittyPassthroughOptions{Output: host, RemoteClient: true})
 	const winID = "window-0000-0000-0000-000000000000"
 	resendShm(t, shmName)
 	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
@@ -324,7 +324,7 @@ func TestOverlayHidesAndRestoresRemoteVideo(t *testing.T) {
 	shmName := makeShmFrame(t, 400, 300)
 	cmd, raw := synthShmTransmitPlace(shmName, 400, 300)
 	host := &recWriter{}
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
+	kp := newTestKitty(t, KittyPassthroughOptions{Output: host, RemoteClient: true})
 	const winID = "window-0000-0000-0000-000000000000"
 	send := func() {
 		resendShm(t, shmName)
@@ -368,7 +368,7 @@ func TestOverlayCloseReshowsWithoutNewFrame(t *testing.T) {
 	shmName := makeShmFrame(t, 400, 300)
 	cmd, raw := synthShmTransmitPlace(shmName, 400, 300)
 	host := &recWriter{}
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
+	kp := newTestKitty(t, KittyPassthroughOptions{Output: host, RemoteClient: true})
 	const winID = "window-0000-0000-0000-000000000000"
 	resendShm(t, shmName)
 	kp.ForwardCommand(cmd, raw, winID, 0, 0, 181, 40, 1, 1, 0, 0, 0, true, func([]byte) {})
@@ -407,7 +407,7 @@ func TestRemoteVideoCropsRatherThanSqueezes(t *testing.T) {
 	cmd, raw := synthShmTransmitPlace(shmName, imgW, imgH)
 
 	host := &recWriter{}
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, RemoteClient: true})
+	kp := newTestKitty(t, KittyPassthroughOptions{Output: host, RemoteClient: true})
 
 	const winID = "window-0000-0000-0000-000000000000"
 	for range 2 { // the second frame reuses the id and self-places

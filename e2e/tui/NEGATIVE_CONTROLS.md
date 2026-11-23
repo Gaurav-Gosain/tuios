@@ -18802,3 +18802,20 @@ Run on 2026-11-21 on Linux, real backend.
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestALayoutSavedThenLeftHoldsItsWorkspace$' .
 ```
+
+## Pane goroutines end when a window closes
+
+`TestClientClosesWindowGoroutines` runs a client with `--pprof` and opens and closes 50 windows through the CLI. The client must then run as many output writers, render coalescers and video frame writers as before, and at most 10 more goroutines in all. `TestMain` in `internal/app` fails the package when a test leaves an output writer, a render coalescer or a video frame writer running after the last test.
+
+Run on 2026-11-21 on Linux. Each control is one change to the branch, run alone and then restored.
+
+| Control | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| The client does not close a window the daemon removed (`w.Close()` cut from the end of the sync removal in `internal/app/session.go`) | `TestClientClosesWindowGoroutines` | "the client let go of the goroutines of the 50 windows it closed": "total 201, map[outputWriter:51 renderCoalescer:51] (before: total 62, map[outputWriter:1 renderCoalescer:1])" | **caught** |
+| `closeWindowsAtEnd` cut from `tileDaemonWindowsMode` | `TestSidebarTilingPartitionsContentWidth` and the `internal/app` `TestMain` | "tests left pane goroutines running after the last test: 24 terminal.(*Window).outputWriter, 24 terminal.(*Window).renderCoalescer" | **caught** |
+| The video frame writer started in `NewKittyPassthroughWithOptions` again | `TestSidebarFitsNarrowScreens` and the `internal/app` `TestMain` | "tests left pane goroutines running after the last test: 10 app.(*KittyPassthrough).asyncFrameWriter" | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestClientClosesWindowGoroutines$' .
+go test -count=1 -run '^TestSidebarTilingPartitionsContentWidth$' ./internal/app/
+```

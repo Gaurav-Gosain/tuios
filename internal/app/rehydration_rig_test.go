@@ -231,6 +231,10 @@ func attachClientOS(t *testing.T, name string, cols, rows int, keepExits bool) (
 		Width:           cols,
 		Height:          rows,
 	})
+	// The teardown a real client runs on exit. It closes the windows, whose
+	// writer and coalescer goroutines otherwise outlive the test. It runs
+	// before the c.Close registered above.
+	t.Cleanup(m.Cleanup)
 	if m.KeybindRegistry == nil {
 		m.KeybindRegistry = config.NewKeybindRegistry(config.DefaultConfig())
 	}

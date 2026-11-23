@@ -40,7 +40,7 @@ func (h *hostCapture) Write(p []byte) (int, error) { return h.b.Write(p) }
 func captureHost(t *testing.T, m *OS) *hostCapture {
 	t.Helper()
 	h := &hostCapture{}
-	m.KittyPassthrough = NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: h})
+	m.KittyPassthrough = newTestKitty(t, KittyPassthroughOptions{Output: h})
 	return h
 }
 

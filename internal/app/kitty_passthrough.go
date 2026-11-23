@@ -172,6 +172,9 @@ type KittyPassthrough struct {
 	// because the render path may still be sending to it.
 	asyncStop     chan struct{}
 	asyncStopOnce sync.Once
+	// asyncStartOnce starts asyncFrameWriter on the first video frame. Most
+	// clients never play video, so most never pay for the goroutine.
+	asyncStartOnce sync.Once
 
 	// frozenThisPass is scratch space for RefreshAllPlacements: the set of
 	// windows whose placements are held untouched this pass because an
@@ -557,7 +560,6 @@ func NewKittyPassthroughWithOptions(opts KittyPassthroughOptions) *KittyPassthro
 		asyncStop:         make(chan struct{}),
 		resizeFreezeSize:  make(map[string][2]int),
 	}
-	go kp.asyncFrameWriter()
 	return kp
 }
 
@@ -700,6 +702,22 @@ func (kp *KittyPassthrough) chargePacing(cost time.Duration) {
 		if prev >= until || kp.pacedUntilNanos.CompareAndSwap(prev, until) {
 			return
 		}
+	}
+}
+
+// queueAsyncFrame hands a video frame to asyncFrameWriter, starting the writer
+// on the first one. It reports false when a frame is already waiting, and the
+// caller drops this one.
+//
+// A writer started after stopAsyncWriter returns at once, because asyncStop is
+// already closed.
+func (kp *KittyPassthrough) queueAsyncFrame(frame asyncFrame) bool {
+	kp.asyncStartOnce.Do(func() { go kp.asyncFrameWriter() })
+	select {
+	case kp.asyncFrameCh <- frame:
+		return true
+	default:
+		return false
 	}
 }
 

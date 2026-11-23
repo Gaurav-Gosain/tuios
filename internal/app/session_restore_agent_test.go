@@ -37,6 +37,7 @@ func agentRestoreState() *session.SessionState {
 // agents and never your own.
 func TestRestoreKeepsDaemonOwnedAgentFields(t *testing.T) {
 	m := &OS{Settings: config.Global}
+	closeWindowsAtEnd(t, m)
 	if err := m.RestoreFromState(agentRestoreState()); err != nil {
 		t.Fatalf("RestoreFromState: %v", err)
 	}

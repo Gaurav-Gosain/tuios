@@ -159,7 +159,7 @@ func TestOpeningAPaneWhileZoomedGivesItTheZoom(t *testing.T) {
 			config.Global.Motion = config.MotionNone
 			defer func() { config.Global.Motion = prev }()
 
-			h := newOpenAnimHarness(120, 40)
+			h := newOpenAnimHarness(t, 120, 40)
 			h.m.Settings.ZoomSize = size
 			h.m.Settings.Aspects[config.AspectZoom].Off = true
 			h.createWindow(t)
@@ -285,7 +285,7 @@ func TestAnEchoDoesNotStampTheRegionOnACameraZoom(t *testing.T) {
 	config.Global.Motion = config.MotionNone
 	defer func() { config.Global.Motion = prev }()
 
-	h := newOpenAnimHarness(120, 40)
+	h := newOpenAnimHarness(t, 120, 40)
 	h.m.Settings.ZoomSize = 95
 	h.m.Settings.Aspects[config.AspectZoom].Off = true
 	h.createWindow(t)
@@ -346,7 +346,7 @@ func TestTheHandoverOnACreationReachesTheDaemon(t *testing.T) {
 			config.Global.Motion = config.MotionNone
 			defer func() { config.Global.Motion = prev }()
 
-			h := newOpenAnimHarness(120, 40)
+			h := newOpenAnimHarness(t, 120, 40)
 			h.m.Settings.ZoomSize = size
 			h.m.Settings.Aspects[config.AspectZoom].Off = true
 			h.createWindow(t)

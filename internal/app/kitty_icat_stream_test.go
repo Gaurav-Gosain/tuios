@@ -26,7 +26,7 @@ func icatHarness(t *testing.T) (*vt.Emulator, func() string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: hostFile})
+	kp := newTestKitty(t, KittyPassthroughOptions{Output: hostFile})
 	const winID = "win"
 	em := vt.NewEmulator(80, 24)
 	t.Cleanup(func() { _ = em.Close() })

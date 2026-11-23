@@ -33,7 +33,7 @@ func (h *hostRecorder) String() string {
 func notifyHarness(t *testing.T) (*OS, *terminal.Window, *hostRecorder) {
 	t.Helper()
 	host := &hostRecorder{}
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{Output: host, Caps: &HostCapabilities{}})
+	kp := newTestKitty(t, KittyPassthroughOptions{Output: host, Caps: &HostCapabilities{}})
 	m := &OS{Settings: config.DefaultSettings(), KittyPassthrough: kp}
 	win := terminal.NewDaemonWindow("notify-win", "t", 0, 0, 40, 10, 0, "pty-notify", make(chan struct{}, 1), 100)
 	t.Cleanup(win.Close)

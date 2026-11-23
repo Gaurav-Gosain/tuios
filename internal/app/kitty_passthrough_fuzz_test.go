@@ -204,7 +204,7 @@ func FuzzKittyPassthrough(f *testing.F) {
 			return
 		}
 		host := &lockedBuffer{}
-		kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{
+		kp := newTestKitty(t, KittyPassthroughOptions{
 			Output: host,
 			Caps:   &HostCapabilities{KittyGraphics: true, KittyAnimation: true, TrueColor: true, TerminalName: "kitty"},
 		})

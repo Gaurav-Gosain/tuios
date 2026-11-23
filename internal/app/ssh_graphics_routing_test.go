@@ -22,7 +22,7 @@ func withClientCaps(t *testing.T, caps *HostCapabilities) {
 func TestKittyPassthrough_RemoteClientNeverReadsFiles(t *testing.T) {
 	withClientCaps(t, &HostCapabilities{KittyGraphics: true, KittyFileTransfer: true, TerminalName: "kitty"})
 
-	remote := NewKittyPassthroughWithOptions(KittyPassthroughOptions{
+	remote := newTestKitty(t, KittyPassthroughOptions{
 		Output:       &bytes.Buffer{},
 		RemoteClient: true,
 	})
@@ -32,7 +32,7 @@ func TestKittyPassthrough_RemoteClientNeverReadsFiles(t *testing.T) {
 
 	// A local passthrough with the same host caps should still honor file
 	// transfer, proving the difference is the RemoteClient flag, not the caps.
-	local := NewKittyPassthroughWithOptions(KittyPassthroughOptions{
+	local := newTestKitty(t, KittyPassthroughOptions{
 		Output: &bytes.Buffer{},
 	})
 	if !local.hostReadsFiles() {
@@ -49,7 +49,7 @@ func TestKittyPassthrough_EnabledForKittyClient(t *testing.T) {
 	withClientCaps(t, &HostCapabilities{KittyGraphics: true, TerminalName: "kitty"})
 
 	var out bytes.Buffer
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{
+	kp := newTestKitty(t, KittyPassthroughOptions{
 		Output:       &out,
 		RemoteClient: true,
 	})
@@ -70,7 +70,7 @@ func TestKittyPassthrough_DisabledForPlainClient(t *testing.T) {
 	withClientCaps(t, &HostCapabilities{KittyGraphics: false, TerminalName: "xterm"})
 
 	var out bytes.Buffer
-	kp := NewKittyPassthroughWithOptions(KittyPassthroughOptions{
+	kp := newTestKitty(t, KittyPassthroughOptions{
 		Output:       &out,
 		RemoteClient: true,
 	})
