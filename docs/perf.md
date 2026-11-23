@@ -2445,6 +2445,9 @@ package) and against what links them:
 | internal/capture, internal/explore, internal/release, internal/restartplan, internal/pushnotify, internal/mermaid | a screenshot, an explorer, a release lookup, a restart, a phone notification, a diagram |
 | `tuios.dev/swatch/omarchy`, `swatch/termconfig`, internal/tape/trust, internal/sound, internal/diffview/lexers | read once per theme load, tape, alert cue or reviewed file |
 | `go-toml/v2/...`, go-proxyproto | the config and plugin TOML, read once per load; the PROXY header of an ssh connection, read once when it opens |
+| crypto/rsa, crypto/ecdsa, crypto/elliptic, crypto/ecdh, math/big, encoding/asn1, cryptobyte, and the FIPS rsa, bigmod, ecdsa, nistec, edwards25519 and mldsa packages | key exchange, signatures and key parsing, once per ssh or TLS handshake, key load or rekey; the per-packet ciphers and MACs stay off the list |
+| `charm.land/log/v2`, logfmt, log/slog, mime, image/gif | the ssh server log, once per connection event; a MIME type lookup and a GIF decode, once per file preview |
+| internal/hooks, internal/openedcopy, `google/uuid`, fsnotify | the hooks setup and its events, a copy of a file from another machine, a new id, a watch added to or removed from a transcript |
 
 | Left off | Hot path that calls into it |
 |---|---|
@@ -2463,6 +2466,23 @@ Release flags, Go 1.27.4, main at 086c63330 and the list:
 |---|---:|---:|---:|
 | linux/amd64 | 49,819,808 | 48,971,936 | -847,872 (-828.0 KiB) |
 | darwin/arm64 | 46,435,282 | 45,648,050 | -787,232 (-768.8 KiB) |
+
+On 2026-11-23, 22 more cold packages joined the list: the key exchange and
+signature code, the ssh server log, MIME and GIF, and four packages that run on
+request. Release flags, Go 1.27.4, main at 7e661e2a0:
+
+| target | main | with the 22 packages | delta |
+|---|---:|---:|---:|
+| linux/amd64 | 49,553,568 | 49,279,136 | -274,432 |
+| darwin/arm64 | 46,172,114 | 45,890,402 | -281,712 |
+| windows/amd64 | 49,994,752 | 49,723,904 | -270,848 |
+
+A per-function size diff of internal/app, internal/session, internal/input,
+internal/terminal, internal/server, internal/served, internal/config, loom, vt,
+ultraviolet, bubbletea, lipgloss, the ssh package and the per-packet ciphers
+changes 69 functions. All are on cold paths: verbs, hook setup, pane and window
+creation, the transcript watch, and the ssh handshake and key parse. No render,
+input, pty read or stream function changes.
 
 The hot paths are the same speed. On arch-btw (i7-10700, cores 0-7, Go
 1.27.4), with base and the list built alternately for 8 rounds: 26 benchmarks
@@ -2496,7 +2516,7 @@ The Nix package does not read the list yet: setting `GOFLAGS` in `tuios.nix`
 broke its build in CI, so it is the larger binary too.
 
 `go install github.com/Gaurav-Gosain/tuios/cmd/tuios@vX` cannot read the list,
-so a binary installed that way is about 0.8 MB larger than the release, and
+so a binary installed that way is about 1.1 MB larger than the release, and
 the same speed on every hot path. The ceiling is about the release. A plain
 `go build ./cmd/tuios` in a checkout is the same larger binary; use
 `GOFLAGS="$(scripts/goflags.sh)"` or `just build` to build the one that ships.

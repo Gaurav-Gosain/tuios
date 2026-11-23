@@ -2,7 +2,7 @@
 # cmd/tuios that ships or is measured. Inlining copies a callee into each
 # caller and adds an inlining tree to the function table for each copy; in
 # these packages that buys no speed anyone sees, and turning it off takes
-# about 1 MB off the release binary. See docs/perf.md, "Binary size budget".
+# about 1.1 MB off the release binary. See docs/perf.md, "Binary size budget".
 #
 # A package is listed only when no hot path calls into it: drawing a frame,
 # key and mouse input, the pty read loop, and the daemon's pane streams.
@@ -105,3 +105,34 @@ net/http/...
 crypto/tls
 crypto/x509
 github.com/Gaurav-Gosain/tuios/internal/panescope
+
+# Key exchange, signatures and certificates: run once per ssh or TLS
+# handshake, key load or rekey. The per-packet ciphers and MACs (aes, gcm,
+# chacha20poly1305, sha256, hmac) stay off the list.
+crypto/rsa
+crypto/internal/fips140/rsa
+crypto/internal/fips140/bigmod
+math/big
+crypto/ecdsa
+crypto/internal/fips140/ecdsa
+crypto/elliptic
+crypto/ecdh
+crypto/internal/fips140/nistec/...
+crypto/internal/fips140/edwards25519/...
+crypto/internal/fips140/mldsa
+encoding/asn1
+vendor/golang.org/x/crypto/cryptobyte
+# The ssh server's log, once per connection event; a MIME type lookup and a
+# GIF decode, once per file preview.
+charm.land/log/v2
+github.com/go-logfmt/logfmt
+log/slog
+mime
+image/gif
+# Run on request: the hooks setup and its events, the copy of a file opened
+# from another machine, a new id, and a watch added to or removed from a
+# transcript.
+github.com/Gaurav-Gosain/tuios/internal/hooks
+github.com/Gaurav-Gosain/tuios/internal/openedcopy
+github.com/google/uuid
+github.com/fsnotify/fsnotify/...

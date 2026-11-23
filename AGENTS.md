@@ -180,7 +180,7 @@ Raise the ceiling only on purpose, in its own commit, with `docs/perf.md`
 ("Binary size budget").
 
 A shipped tuios is built with inlining off in the packages
-`scripts/noinline-packages.txt` lists, which saves about 0.8 MB. Every build
+`scripts/noinline-packages.txt` lists, which saves about 1.1 MB. Every build
 of `./cmd/tuios` reads that list: a shell line as
 `GOFLAGS="$(scripts/goflags.sh)" go build ...`, GoReleaser through
 `TUIOS_GOFLAGS`, Go code through the file, the e2e suite
