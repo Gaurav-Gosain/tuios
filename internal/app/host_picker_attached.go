@@ -140,6 +140,12 @@ func (m *OS) applyAttachedHosts(msg AttachedHostsMsg) {
 	}
 	m.attachedHosts = msg.View
 	m.attachedHostsLoaded = true
+	m.fillWaitingHostPicker()
+}
+
+// fillWaitingHostPicker rebuilds the rows of an open window picker that was
+// still waiting for the list of machines.
+func (m *OS) fillWaitingHostPicker() {
 	if !m.ShowHostPicker || m.HostPickerPurpose != HostPickerNewWindow || !hostPickerWaiting(m.HostPickerItems) {
 		return
 	}

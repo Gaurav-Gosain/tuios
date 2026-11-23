@@ -315,6 +315,11 @@ func (m *OS) applyFederationSnapshot(msg FederationHostsMsg) {
 	m.FederationHosts = msg.Snapshot.Hosts
 	m.LocalLoad = msg.Local
 	m.federationGen++
+	// A window picker opened before the first snapshot waits for this one.
+	// While attached to another machine its rows come from that machine.
+	if m.AttachedHost == "" {
+		m.fillWaitingHostPicker()
+	}
 }
 
 // attachedMachine is the machine whose sessions the tree's main group holds:

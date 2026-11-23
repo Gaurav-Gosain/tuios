@@ -80,6 +80,13 @@ func (m *OS) buildHostPickerItems() []HostPickerItem {
 			Up:     true,
 		})
 	}
+	if m.HostPickerPurpose == HostPickerNewWindow && !m.federationLoaded() {
+		return append(items, HostPickerItem{
+			Label:   "other machines",
+			Detail:  "loading",
+			Pending: true,
+		})
+	}
 	for _, h := range m.FederationHosts {
 		if h.Name == federation.LocalHostName {
 			continue
@@ -496,10 +503,21 @@ func (m *OS) newWindowShouldPickHost() bool {
 		}
 		return n > 1
 	}
+	// Until the first host snapshot is in, nothing says how many machines
+	// there are. The picker is shown and fills in when the snapshot lands, as
+	// it does for an attached machine. Without this, prefix c pressed soon
+	// after an attach made a pane here without asking.
+	if !m.federationLoaded() {
+		return true
+	}
 	// A global session with nothing to reach but this machine has no choice in
 	// it, and a picker with one row is a question with one answer.
 	return m.reachableMachines() > 1
 }
+
+// federationLoaded reports whether a host snapshot has landed since the
+// client started.
+func (m *OS) federationLoaded() bool { return m.federationGen > 0 }
 
 // GlobalSessionOffered reports whether the rail should list the global session.
 //
