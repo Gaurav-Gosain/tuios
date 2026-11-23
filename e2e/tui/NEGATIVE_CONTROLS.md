@@ -18707,6 +18707,8 @@ Run on 2026-11-21 on Linux, real backend, against main at 16ae1ca77.
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestAModeNoticeStaysAboveANoticeItDidNotAsk$' .
+```
+
 ## Coming home from a host asks for no retry
 
 `TestComingHomeFromAHostAsksForNoRetry` (`host_home_retry_test.go`) clicks from a session on a linked machine back to a session of this machine on the rail. The switch must land, and this machine's daemon log must hold no `Verb retry-host refused` line: this machine has no link to dial. A refusal made on purpose after the click home (`ls --host no-such-box`) must be in the same log first, so the check cannot pass on a log nothing reaches.

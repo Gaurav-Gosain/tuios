@@ -96,9 +96,7 @@ func TestDockWorkspacePillsDragIntoANewOrder(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("normalise to window mode: %v", err)
 	}
-	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
-		t.Fatalf("client never settled in window management mode: %v\n%s", err, term.Snapshot())
-	}
+	waitWindowMode(t, term)
 
 	// Three occupied workspaces, named so the pills can be told apart on screen.
 	//

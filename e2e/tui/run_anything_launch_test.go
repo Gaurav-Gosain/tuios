@@ -234,9 +234,7 @@ func TestRunAnythingExecsDaemonPane(t *testing.T) {
 			if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 				t.Fatalf("switch to window mode: %v", err)
 			}
-			if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
-				t.Fatalf("client never reached window management mode: %v\n%s", err, term.Snapshot())
-			}
+			waitWindowMode(t, term)
 			if !r.exits {
 				launchProbe(t, term)
 				return

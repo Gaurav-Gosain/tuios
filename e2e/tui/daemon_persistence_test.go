@@ -59,9 +59,7 @@ func TestDetachAndReattachKeepsLayoutAndPaneContent(t *testing.T) {
 	if err := first.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("to window mode: %v", err)
 	}
-	if err := first.WaitForText("Window management mode", uiTimeout); err != nil {
-		t.Fatalf("never entered window management mode: %v\n%s", err, first.Snapshot())
-	}
+	waitWindowMode(t, first)
 	newWindow(t, first)
 
 	if err := first.SendKeys(tuitest.Ctrl('b'), "d"); err != nil {
@@ -141,9 +139,7 @@ func TestDetachAndReattachKeepsScrollback(t *testing.T) {
 	if err := second.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("to window mode: %v", err)
 	}
-	if err := second.WaitForText("Window management mode", uiTimeout); err != nil {
-		t.Fatalf("never entered window management mode: %v\n%s", err, second.Snapshot())
-	}
+	waitWindowMode(t, second)
 
 	if err := second.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
 		t.Fatalf("enter copy mode: %v", err)
@@ -184,9 +180,7 @@ func TestSessionSurvivesTheDaemonAndSaysItWasRestored(t *testing.T) {
 	if err := first.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("to window mode: %v", err)
 	}
-	if err := first.WaitForText("Window management mode", uiTimeout); err != nil {
-		t.Fatalf("never entered window management mode: %v\n%s", err, first.Snapshot())
-	}
+	waitWindowMode(t, first)
 	newWindow(t, first)
 
 	// kill-server is synchronous and saves every session on the way out.

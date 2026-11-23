@@ -255,7 +255,5 @@ func TestHoldKeyIsIgnoredInWindowMode(t *testing.T) {
 	if err := term.SendKeys(tuitest.Key(kittyLeftAltRelease)); err != nil {
 		t.Fatalf("release the held key: %v", err)
 	}
-	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
-		t.Fatalf("releasing the key left window mode: %v\n%s", err, term.Snapshot())
-	}
+	waitWindowMode(t, term)
 }

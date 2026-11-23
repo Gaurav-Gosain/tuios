@@ -64,9 +64,7 @@ func TestOpenMenuInTheInboxAndTheRail(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatal(err)
 	}
-	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
-		t.Fatalf("not in window mode: %v\n%s", err, term.Snapshot())
-	}
+	waitWindowMode(t, term)
 	if out, err := tuiosCLI(t, base, "set-agent-state", "-s", session, "needs_input",
 		"--kind", "approval", "--harness", "claude-code", "-m", "approve Bash: go test ./..."); err != nil {
 		t.Fatalf("set-agent-state: %v\n%s", err, out)

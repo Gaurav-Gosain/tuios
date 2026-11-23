@@ -60,9 +60,7 @@ func TestFocusOnlyHidesTheOtherPanes(t *testing.T) {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}
 	sendKeys(t, term, tuitest.Alt(tuitest.Esc))
-	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
-		t.Fatalf("never in window mode: %v\n%s", err, term.Snapshot())
-	}
+	waitWindowMode(t, term)
 	for i, name := range []string{"ONE", "TWO", "THREE", "FOUR"} {
 		if name != "ONE" {
 			newWindow(t, term)

@@ -552,7 +552,72 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	}
 	traceClient(t, term)
 	clientStarts.Store(term, clientStart{at: time.Now(), events: eventsLog})
+	clientBases.Store(term, base)
 	return term
+}
+
+// clientBases is the isolation root each client was started under, so a
+// helper can ask that client's daemon about it.
+var clientBases sync.Map // *tuitest.Terminal -> string
+
+// soleClientMode is the input mode of term's client, "terminal" or
+// "window_management", as GetSessionInfo reports it. The daemon asks the one
+// client attached to the session, so the answer is term's only when term's
+// client is the only one attached. It is empty when there is no daemon (a
+// local session), when another client is attached, or when term's client is
+// not attached yet.
+func soleClientMode(term *tuitest.Terminal) string {
+	v, ok := clientBases.Load(term)
+	if !ok {
+		return ""
+	}
+	base := v.(string)
+	out, err := tuiosOut(base, "list-clients", "--json")
+	if err != nil {
+		return ""
+	}
+	var clients []struct {
+		PID     int    `json:"pid"`
+		Session string `json:"session"`
+	}
+	if json.Unmarshal([]byte(out), &clients) != nil {
+		return ""
+	}
+	attached, mine := 0, false
+	for _, c := range clients {
+		if c.Session != "" {
+			attached++
+			mine = mine || c.PID == term.Pid()
+		}
+	}
+	if attached != 1 || !mine {
+		return ""
+	}
+	return daemonClientMode(base)
+}
+
+// waitMode waits until term's client is in mode, "terminal" or
+// "window_management". It asks the client when it can (soleClientMode). When
+// it cannot, it reads the dock for the notice the change raises, which
+// another notice can cover.
+func waitMode(t *testing.T, term *tuitest.Terminal, mode, notice string) {
+	t.Helper()
+	if soleClientMode(term) == "" {
+		if err := term.WaitForText(notice, uiTimeout); err != nil {
+			t.Fatalf("the client never showed %q: %v\n%s", notice, err, term.Snapshot())
+		}
+		return
+	}
+	waitUntil(t, "the client reaches "+mode+" mode", uiTimeout, func() (bool, string) {
+		got := soleClientMode(term)
+		return got == mode, "the client is in mode " + got + "\n" + term.Snapshot()
+	})
+}
+
+// waitWindowMode waits for term's client to be in window management mode.
+func waitWindowMode(t *testing.T, term *tuitest.Terminal) {
+	t.Helper()
+	waitMode(t, term, "window_management", "Window management mode")
 }
 
 // hostCellSize is the cell, in pixels, of the terminal the client runs in. A
@@ -759,16 +824,23 @@ func attachIn(t *testing.T, base, session string, o startOpts) *tuitest.Terminal
 // back out of a shell, and the failure looks like the binding not working.
 //
 // Nothing on screen announces which mode a fresh client is in, so this is not
-// something a reader can be expected to notice.
+// something a reader can be expected to notice. The client says its mode to
+// GetSessionInfo, which this asks when it can (soleClientMode).
 func windowManagementMode(t *testing.T, term *tuitest.Terminal) {
 	t.Helper()
 	sentAt := time.Now()
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("normalise to window management mode: %v", err)
 	}
-	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
-		// No retry: a key that is lost is a bug, so the failure says where
-		// it went instead of hiding it.
+	// No retry: a key that is lost is a bug, so the failure says where it
+	// went instead of hiding it.
+	if mode := soleClientMode(term); mode != "" {
+		waitUntil(t, "never settled in window management mode", uiTimeout, func() (bool, string) {
+			got := soleClientMode(term)
+			return got == "window_management", "the client is in mode " + got + "\n" +
+				keyEvidence(term, "Alt+Esc (bytes \\x1b\\x1b)", sentAt) + "\n" + term.Snapshot()
+		})
+	} else if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
 		t.Fatalf("never settled in window management mode: %v\n%s\n%s", err,
 			keyEvidence(term, "Alt+Esc (bytes \\x1b\\x1b)", sentAt), term.Snapshot())
 	}
@@ -942,9 +1014,7 @@ func leaveTerminalMode(t *testing.T, term *tuitest.Terminal) {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("send alt+esc: %v", err)
 	}
-	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
-		t.Fatalf("did not return to window management mode: %v", err)
-	}
+	waitWindowMode(t, term)
 }
 
 // runInShell types a command into the focused pane's shell and waits for a

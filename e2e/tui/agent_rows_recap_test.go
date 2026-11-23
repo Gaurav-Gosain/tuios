@@ -59,7 +59,7 @@ func TestRichRowReplyAndRecap(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "window management mode", "Window management mode")
+	waitWindowMode(t, term)
 
 	hook := func(payload string) {
 		t.Helper()
@@ -283,7 +283,7 @@ func TestReplyWithALargePasteGoesAsAFile(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "window management mode", "Window management mode")
+	waitWindowMode(t, term)
 	hook := func(payload string) {
 		t.Helper()
 		cmd := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", "e2e-big", "--window", "0", "--timeout", "10s")
@@ -385,7 +385,7 @@ func TestReplyWithAnImageGoesAsAFile(t *testing.T) {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatal(err)
 	}
-	waitText(t, term, "window management mode", "Window management mode")
+	waitWindowMode(t, term)
 	hook := func(payload string) {
 		t.Helper()
 		cmd := exec.Command(tuiosBin, "agent-hook", "claude-code", "--session", "e2e-img", "--window", "0", "--timeout", "10s")

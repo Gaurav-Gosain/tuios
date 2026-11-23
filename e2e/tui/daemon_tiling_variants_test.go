@@ -111,9 +111,7 @@ func TestDaemonVariantD_Interactive(t *testing.T) {
 	if err := c.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("to window mode: %v", err)
 	}
-	if err := c.WaitForText("Window management mode", uiTimeout); err != nil {
-		t.Fatalf("never entered window management mode: %v\n%s", err, c.Snapshot())
-	}
+	waitWindowMode(t, c)
 	enableTiling(t, c)
 	rects := waitForSettledGeometry(t, base, 3)
 	assertTiled(t, rects, 120)

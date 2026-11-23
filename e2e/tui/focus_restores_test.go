@@ -105,9 +105,7 @@ func TestFocusRestoresAMinimizedPane(t *testing.T) {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}
 	sendKeys(t, term, tuitest.Alt(tuitest.Esc))
-	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
-		t.Fatalf("never in window mode: %v\n%s", err, term.Snapshot())
-	}
+	waitWindowMode(t, term)
 	newWindow(t, term)
 	if out, err := tuiosCLI(t, base, "set-window", "-s", "nav", "--name", "PLAINPANE"); err != nil {
 		t.Fatalf("name: %v\n%s", err, out)

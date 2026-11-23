@@ -430,9 +430,7 @@ func TestTwoClientsSeeConsistentState(t *testing.T) {
 	if err := c1.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("c1 to window mode: %v", err)
 	}
-	if err := c1.WaitForText("Window management mode", uiTimeout); err != nil {
-		t.Fatalf("c1 never entered window management mode: %v\n%s", err, c1.Snapshot())
-	}
+	waitWindowMode(t, c1)
 
 	// A window created on client one must show up on client two.
 	if err := c1.SendKeys("n"); err != nil {

@@ -87,9 +87,7 @@ func buildTiledSessionSwitch(t *testing.T, side string) *tuitest.Terminal {
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("wm mode: %v", err)
 	}
-	if err := term.WaitForText("Window management mode", uiTimeout); err != nil {
-		t.Fatalf("no wm: %v\n%s", err, term.Snapshot())
-	}
+	waitWindowMode(t, term)
 
 	waitForAll(t, term, uiTimeout, "sidebar", sidebarHeader, "bravo")
 	enableTiling(t, term)
