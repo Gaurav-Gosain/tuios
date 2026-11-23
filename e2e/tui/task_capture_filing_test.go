@@ -141,3 +141,65 @@ func TestTaskCaptureLateAnswerKeepsTheNextSheet(t *testing.T) {
 	}
 	t.Logf("frames in %s", dir)
 }
+
+// TestTaskCaptureHeldOpenGivesWayToAnotherOverlay: the person files a card
+// with enter and asks for the sheet again while add-task is still out, so
+// tuios holds the open. Before the answer comes, the person opens the help
+// overlay. The held open is then not what the person wants any more: when
+// the answer comes, the sheet stays shut and the help overlay stays up.
+//
+// How this could pass wrongly, written down first:
+//   - The answer could come before the help overlay opens, and the sheet
+//     would open first. The daemon holds the add-task answer three seconds
+//     (knob add_task_hold_ms), and the test checks the answer's toast is not
+//     up when the help overlay opens.
+//   - The sheet could fail to open for another reason, so the shut sheet
+//     says nothing. TestTaskCaptureLateAnswerKeepsTheNextSheet shows a held
+//     open with no overlay opens the sheet.
+//
+// Negative control, recorded in NEGATIVE_CONTROLS.md: with tcPendingHolds
+// not asking about other overlays, the sheet opens over the help overlay.
+func TestTaskCaptureHeldOpenGivesWayToAnotherOverlay(t *testing.T) {
+	requireReal(t, "the daemon reads add_task_hold_ms once per process")
+	base := t.TempDir()
+	setKnobs(t, "add_task_hold_ms=3000")
+	killDaemon(t, base)
+	useShippedLooks(base)
+	if out, err := tuiosCLI(t, base, "new", "home", "--detach"); err != nil {
+		t.Fatalf("create session home: %v\n%s", err, out)
+	}
+	term := startIn(t, base, startOpts{args: []string{"attach", "home"}, cols: 120, rows: 36, shippedLooks: true})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	const sheet = "the first line is its title"
+	const added = "Added t1 to home."
+	has := func(s string) bool { return strings.Contains(term.Screen().Text(), s) }
+
+	sendKeys(t, term, tuitest.Ctrl('b'), "+")
+	waitText(t, term, "the sheet", "New task", sheet)
+	sendKeys(t, term, "Held task")
+	waitText(t, term, "the title", "Held task")
+	sendKeys(t, term, tuitest.Enter)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), sheet) }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the sheet did not close on enter: %v\n%s", err, term.Snapshot())
+	}
+
+	// The open is held while add-task is out. Then the help overlay opens.
+	sendKeys(t, term, tuitest.Ctrl('b'), "+")
+	sendKeys(t, term, tuitest.Ctrl('b'), "?")
+	waitText(t, term, "the help overlay", helpTitle)
+	if has(added) {
+		t.Fatalf("the add-task answer came before the help overlay opened; the test proves nothing\n%s", term.Snapshot())
+	}
+
+	waitText(t, term, "the add-task answer", added)
+	_ = term.WaitStable(uiTimeout)
+	saveArtifact(t, term, artifactDir(t), "after-the-answer")
+	if has(sheet) {
+		t.Errorf("ASSERTION: the held open opened the sheet after the help overlay opened\n%s", term.Snapshot())
+	}
+	if !has(helpTitle) {
+		t.Errorf("ASSERTION: the help overlay closed when the answer came\n%s", term.Snapshot())
+	}
+}

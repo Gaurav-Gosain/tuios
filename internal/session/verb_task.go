@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // The task verbs: add-task, list-tasks, get-task, claim-task, finish-task,
@@ -378,6 +379,11 @@ func (d *Daemon) verbAddTask(cs *connState, params json.RawMessage) (any, *verbE
 	}
 	if err != nil {
 		return nil, newVerbError(ErrVerbInternal, "could not add the card: "+err.Error())
+	}
+	// The add_task_hold_ms knob holds the answer of a card that is added, at
+	// most a minute, so an e2e test can act while a client waits for it.
+	if hold := min(testknob.Millis("add_task_hold_ms"), time.Minute); hold > 0 {
+		time.Sleep(hold)
 	}
 	LogBasic("Added task %s in session %s", row.ID, sess.Name())
 	d.afterTaskEvent(sess, TaskActionAdded, "", "", row)

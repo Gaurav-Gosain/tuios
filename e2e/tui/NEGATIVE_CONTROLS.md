@@ -15290,6 +15290,23 @@ Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskCaptureLateAnswerKeepsTheNextSheet$' -v .`.
 For the load runs, add `-count=30` and run under `taskset -c 0,1` beside a busy loop on each core.
 
+## TestTaskCaptureHeldOpenGivesWayToAnotherOverlay
+
+The daemon holds the add-task answer three seconds (knob `add_task_hold_ms`).
+The test files a card with enter, asks for the sheet again, and opens the
+help overlay before the answer comes. When the answer comes, the sheet must
+stay shut and the help overlay must stay up.
+
+Run on 2026-11-23 on Linux.
+
+| Binary | Runs | Failures |
+|--------|------|----------|
+| `tcPendingHolds` without the `AnyOverlayOpen` check | 5 | 5: "the held open opened the sheet after the help overlay opened" |
+| The branch | 10 | 0 |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTaskCaptureHeldOpenGivesWayToAnotherOverlay$' -v .`.
+
 ## TestALinkCopyRevokedBeforeItsVerifyStaysFailed
 
 State machine plan M16. A linked machine's copy on build is held between its
