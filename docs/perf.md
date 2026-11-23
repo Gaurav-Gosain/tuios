@@ -2424,6 +2424,27 @@ tuios's own packages alone gives 46,411,936, 3.0 MB less. Most of that is on
 hot paths: internal/app alone is 1,052,672 bytes, and it holds the render path
 and Update.
 
+#### The verb docs
+
+The text of the JSON verb docs was about 320 KB of strings, and the code that
+built it into the registry was about 190 KB of machine code. Since 2026-11-23
+the text is in a `.verbs.json` file beside each Go file that registers verbs,
+and `go generate` packs the files into `internal/session/verbdocs.tar.gz`
+(96 KB). Only list-verbs, `tuios list-verbs` and the `tuios mcp` tool list
+decode it, once, on first use. The daemon dispatches from the registry alone,
+and `TestVerbDocsAreDecodedOnlyWhenAsked` holds a daemon start and an
+ordinary verb to that. Release flags, Go 1.27.4, main at 7e661e2a0:
+
+| target | main | with the verb docs packed | delta |
+|---|---:|---:|---:|
+| linux/amd64 | 49,553,568 | 49,336,480 | -217,088 |
+| darwin/arm64 | 46,172,114 | 45,948,002 | -224,112 |
+| windows/amd64 | 49,994,752 | 49,771,520 | -223,232 |
+
+The output of `tuios list-verbs --json`, `tuios list-verbs`, `tuios
+list-verbs VERB` for eight verbs, with and without `--json`, and the
+`tuios mcp` tools/list reply is byte for byte the same as main's.
+
 #### Inlining off in the cold packages
 
 Since 2026-11-12 every shipped build turns inlining off in the packages

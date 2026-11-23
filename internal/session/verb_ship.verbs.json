@@ -1,0 +1,329 @@
+{
+  "ship-commit": {
+    "description": "Stage every change in a pane's git work tree, untracked files included and ignored ones not, and commit it on the branch checked out there. git runs with the person's own identity, signing and hooks, and the message is used as given. Refused while the pane's agent is working or waiting on a prompt, unless force is given.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "Window id or name. Omit to target the focused window."
+      },
+      {
+        "name": "message",
+        "description": "The commit message. Omit to use the pane's last prompt or turn summary. The call is refused when there is none."
+      },
+      {
+        "name": "force",
+        "description": "Commit while the agent is mid-turn."
+      }
+    ],
+    "returns": [
+      {
+        "name": "session",
+        "description": "The session of the pane."
+      },
+      {
+        "name": "window",
+        "description": "The pane, by id."
+      },
+      {
+        "name": "worktree",
+        "description": "The root of the work tree."
+      },
+      {
+        "name": "branch",
+        "description": "The branch the commit is on."
+      },
+      {
+        "name": "commit",
+        "description": "The new commit."
+      },
+      {
+        "name": "message",
+        "description": "The message the commit has."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"ship-commit\",\"params\":{\"session\":\"work\",\"window\":\"build\",\"message\":\"Add a retry to the client\"}}"
+    ]
+  },
+  "ship-merge": {
+    "description": "Merge a worktree pane's branch into its base branch in the repository's main checkout. The main checkout must have that branch checked out and no uncommitted change. A merge that conflicts is aborted, the main checkout is left as it was, and the conflicting files are reported. Uncommitted changes in the worktree are not merged. Nothing is forced.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "Window id or name. Omit to target the focused window."
+      },
+      {
+        "name": "into",
+        "description": "The branch to merge into. Omit for the base the worktree was made from, else the branch the main checkout is on."
+      },
+      {
+        "name": "mode",
+        "description": "merge fast-forwards when it can and makes a merge commit when it cannot. squash makes one commit. ff-only refuses a branch that cannot be fast-forwarded."
+      },
+      {
+        "name": "message",
+        "description": "The message of the merge or squash commit. Omit for git's own."
+      }
+    ],
+    "returns": [
+      {
+        "name": "session",
+        "description": "The session of the worktree."
+      },
+      {
+        "name": "worktree",
+        "description": "The root of the worktree."
+      },
+      {
+        "name": "repo_root",
+        "description": "The main checkout merged in."
+      },
+      {
+        "name": "branch",
+        "description": "The branch merged."
+      },
+      {
+        "name": "into",
+        "description": "The branch merged into."
+      },
+      {
+        "name": "mode",
+        "description": "merge, squash or ff-only."
+      },
+      {
+        "name": "before",
+        "description": "The commit into was on before."
+      },
+      {
+        "name": "after",
+        "description": "The commit into is on now."
+      },
+      {
+        "name": "commits",
+        "description": "How many commits of the branch into did not have."
+      },
+      {
+        "name": "fast_forward",
+        "description": "Whether into only moved forward."
+      },
+      {
+        "name": "up_to_date",
+        "description": "Whether into already had every commit, so nothing changed."
+      },
+      {
+        "name": "uncommitted",
+        "description": "How many uncommitted changes the worktree holds, which the merge did not take."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"ship-merge\",\"params\":{\"session\":\"work\",\"window\":\"build\"}}",
+      "{\"id\":1,\"verb\":\"ship-merge\",\"params\":{\"session\":\"work\",\"window\":\"build\",\"into\":\"main\",\"mode\":\"squash\"}}"
+    ]
+  },
+  "ship-pr": {
+    "description": "Push a pane's branch and open a pull request for it with the gh CLI, as the person is logged in to gh. tuios holds no GitHub token. When the branch already has an open pull request, the push updates it and no new one is opened. The first call answers confirm_required with what would happen and a token. Call again with that token. A caller inside a pane, or on a restricted connection, also needs the person to allow it in the Inbox.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "Window id or name. Omit to target the focused window."
+      },
+      {
+        "name": "remote",
+        "description": "The remote to push to. Omit for the one the branch follows, else the only one, else origin."
+      },
+      {
+        "name": "confirm",
+        "description": "The token from the confirm_required answer to a call without it. The call goes ahead only with the token of what it would send now."
+      },
+      {
+        "name": "request_id",
+        "description": "Come back for the person's answer to a question an earlier call put in the Inbox."
+      },
+      {
+        "name": "wait",
+        "description": "How long to wait for the person's answer in the Inbox, in milliseconds, at most 3600000."
+      },
+      {
+        "name": "base",
+        "description": "The branch the pull request merges into. Omit for the base the worktree was made from, else the repository's default branch."
+      },
+      {
+        "name": "title",
+        "description": "The title. With title and body both omitted, gh fills them from the commits."
+      },
+      {
+        "name": "body",
+        "description": "The body. Needs title."
+      },
+      {
+        "name": "draft",
+        "description": "Open it as a draft."
+      }
+    ],
+    "returns": [
+      {
+        "name": "session",
+        "description": "The session of the pane."
+      },
+      {
+        "name": "window",
+        "description": "The pane, by id."
+      },
+      {
+        "name": "worktree",
+        "description": "The root of the work tree."
+      },
+      {
+        "name": "branch",
+        "description": "The branch pushed."
+      },
+      {
+        "name": "commit",
+        "description": "The commit pushed."
+      },
+      {
+        "name": "remote",
+        "description": "The remote pushed to."
+      },
+      {
+        "name": "created",
+        "description": "Whether a new pull request was opened. False when one was already open."
+      },
+      {
+        "name": "pr",
+        "description": "The pull request: number, url, state (open, merged or closed), checks (pass, fail or pending, omitted when there are none), passed, failed, pending, branch and checked_at (Unix nanoseconds)."
+      },
+      {
+        "name": "approved_by",
+        "description": "human when the person allowed it in the Inbox, omitted when the caller is the person."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"ship-pr\",\"params\":{\"session\":\"work\",\"window\":\"build\",\"draft\":true}}"
+    ]
+  },
+  "ship-push": {
+    "description": "Push a pane's branch to a remote and set it as the branch's upstream. Never forced. The first call answers confirm_required with what would be pushed and a token. Call again with that token to push. A caller inside a pane, or on a restricted connection, also needs the person to allow it in the Inbox, and the call waits for that answer.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "Window id or name. Omit to target the focused window."
+      },
+      {
+        "name": "remote",
+        "description": "The remote to push to. Omit for the one the branch follows, else the only one, else origin."
+      },
+      {
+        "name": "confirm",
+        "description": "The token from the confirm_required answer to a call without it. The call goes ahead only with the token of what it would send now."
+      },
+      {
+        "name": "request_id",
+        "description": "Come back for the person's answer to a question an earlier call put in the Inbox."
+      },
+      {
+        "name": "wait",
+        "description": "How long to wait for the person's answer in the Inbox, in milliseconds, at most 3600000."
+      }
+    ],
+    "returns": [
+      {
+        "name": "session",
+        "description": "The session of the pane."
+      },
+      {
+        "name": "window",
+        "description": "The pane, by id."
+      },
+      {
+        "name": "worktree",
+        "description": "The root of the work tree."
+      },
+      {
+        "name": "branch",
+        "description": "The branch pushed."
+      },
+      {
+        "name": "commit",
+        "description": "The commit pushed."
+      },
+      {
+        "name": "remote",
+        "description": "The remote pushed to."
+      },
+      {
+        "name": "url",
+        "description": "Where the push went: the push URL's host and path, without user name, password or token."
+      },
+      {
+        "name": "approved_by",
+        "description": "human when the person allowed it in the Inbox, omitted when the caller is the person."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"ship-push\",\"params\":{\"session\":\"work\",\"window\":\"build\"}}"
+    ]
+  },
+  "ship-status": {
+    "description": "Read the pull request of a pane's branch as tuios last saw it, and with refresh ask gh now. A worktree session with an open pull request is polled in the background while a client is attached. Off when gh is not installed.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "Window id or name. Omit to target the focused window."
+      },
+      {
+        "name": "refresh",
+        "description": "Ask gh now instead of reading what tuios last saw."
+      }
+    ],
+    "returns": [
+      {
+        "name": "session",
+        "description": "The session of the pane."
+      },
+      {
+        "name": "window",
+        "description": "The pane, by id."
+      },
+      {
+        "name": "worktree",
+        "description": "The root of the work tree."
+      },
+      {
+        "name": "branch",
+        "description": "The branch checked out there, empty on a detached HEAD."
+      },
+      {
+        "name": "gh",
+        "description": "Whether the gh CLI is installed."
+      },
+      {
+        "name": "pr",
+        "description": "The pull request: number, url, state (open, merged or closed), checks (pass, fail or pending, omitted when there are none), passed, failed, pending, branch and checked_at (Unix nanoseconds). Null when tuios knows of none."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"ship-status\",\"params\":{\"session\":\"work\",\"window\":\"build\"}}"
+    ]
+  }
+}

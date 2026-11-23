@@ -129,7 +129,7 @@ func runCall(out io.Writer, in io.Reader, verb, rawParams string, o callOptions)
 		}
 	}
 
-	if doc, ok := session.LookupVerbDoc(verb); ok && doc.HoldsConnection(params) {
+	if session.VerbHoldsConnection(verb, params) {
 		how := "Write JSON to $TUIOS_SOCKET for it (tuios --skill events)"
 		if use := streamCommands[verb]; use != "" {
 			how = "Use " + use

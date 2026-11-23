@@ -361,11 +361,12 @@ func TestEveryVerbExampleReachesItsHandler(t *testing.T) {
 	seen := map[string]bool{}
 	for _, name := range names {
 		entry := verbRegistry()[name]
-		if len(entry.examples) == 0 {
+		examples := describeVerb(name, entry).Examples
+		if len(examples) == 0 {
 			t.Errorf("verb %q documents no example, so nothing here can call it", name)
 			continue
 		}
-		for i, example := range entry.examples {
+		for i, example := range examples {
 			key := exampleKey(name, i)
 			seen[key] = true
 			t.Run(key, func(t *testing.T) {

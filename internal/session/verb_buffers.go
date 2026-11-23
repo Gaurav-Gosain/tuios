@@ -512,114 +512,95 @@ func (d *Daemon) verbPasteBuffer(cs *connState, params json.RawMessage) (any, *v
 // bufferVerbs are the paste buffer verbs, for the registry.
 func bufferVerbs() map[string]verbEntry {
 	nameParam := func(what string) verbParam {
-		return verbParam{Name: "name", Type: "string", Description: "The buffer to " + what + ". Omit for the newest buffer tuios named, as tmux does: for the person, the newest of the person's own, and for a pane without admin, the newest of its own."}
+		return verbParam{Name: "name", Type: "string"}
 	}
 	rowReturns := []verbParam{
-		{Name: "name", Type: "string", Description: "The buffer's name: bufferN for one tuios named, or the name set-buffer gave it."},
-		{Name: "bytes", Type: "int", Description: "How many bytes the buffer holds."},
-		{Name: "created", Type: "int", Description: "Unix-nano time the content was last set."},
-		{Name: "version", Type: "int", Description: "A number that changes each time the content is set. Pass it back as version to act only on this content."},
-		{Name: "automatic", Type: "bool", Description: "True when tuios named the buffer."},
-		{Name: "sample", Type: "string", Description: "The start of the content on one line, with control characters and bytes that are not UTF-8 shown as escapes. It never cuts a character. Print it as it is."},
-		{Name: "pane", Type: "string", Description: "The pane that owns the buffer, by its window name, or its short id once it is gone. Absent for the person's buffers."},
+		{Name: "name", Type: "string"},
+		{Name: "bytes", Type: "int"},
+		{Name: "created", Type: "int"},
+		{Name: "version", Type: "int"},
+		{Name: "automatic", Type: "bool"},
+		{Name: "sample", Type: "string"},
+		{Name: "pane", Type: "string"},
 	}
-	version := verbParam{Name: "version", Type: "int", Description: "Act only while the buffer holds the content of this version, as list-buffers or show-buffer gave it. Otherwise the call answers no_buffer."}
-	sampleWidth := verbParam{Name: "sample_width", Type: "int", Description: "How many characters each sample shows, at most 200.", Default: "60"}
+	version := verbParam{Name: "version", Type: "int"}
+	sampleWidth := verbParam{Name: "sample_width", Type: "int", Default: "60"}
 	return map[string]verbEntry{
 		"list-buffers": {
 			// The paste buffers (verb_buffers.go). They are shared by every session,
 			// so a caller restricted to its own session reaches none of them.
 			// paste-buffer types into a pane, and it also reads a buffer: see
 			// readsBuffers.
-			scope:       scopeBufferRead,
-			link:        needList,
-			description: "List the paste buffers, newest first. A yank in copy mode adds one, and so does set-buffer. From a pane this needs the read grant, and a pane without admin sees only the buffers it set. Every total counts only the buffers listed.",
-			params:      []verbParam{sampleWidth},
+			scope:  scopeBufferRead,
+			link:   needList,
+			params: []verbParam{sampleWidth},
 			returns: []verbParam{
-				{Name: "buffers", Type: "[]object", Description: "One entry per buffer, newest first: name, bytes, created, automatic, sample, session, pane."},
-				{Name: "total", Type: "int", Description: "How many buffers there are."},
-				{Name: "bytes", Type: "int", Description: "How many bytes they hold together."},
-				{Name: "limit", Type: "int", Description: "How many buffers the daemon keeps, from [paste_buffers] limit."},
-				{Name: "max_bytes", Type: "int", Description: "How many bytes the buffers may hold together, from [paste_buffers] max_kb."},
+				{Name: "buffers", Type: "[]object"},
+				{Name: "total", Type: "int"},
+				{Name: "bytes", Type: "int"},
+				{Name: "limit", Type: "int"},
+				{Name: "max_bytes", Type: "int"},
 			},
-			examples: []string{`{"id":1,"verb":"list-buffers"}`},
-			handler:  (*Daemon).verbListBuffers,
+			handler: (*Daemon).verbListBuffers,
 		},
 		"show-buffer": {
-			scope:       scopeBufferRead,
-			link:        needList,
-			description: "Return the content of one paste buffer. A buffer can hold any bytes: data_b64 carries them all, and data carries them as text. From a pane this needs the read grant, and reaches only the buffers of the sessions the pane may read.",
+			scope: scopeBufferRead,
+			link:  needList,
 			params: []verbParam{nameParam("show"), version,
-				{Name: "encoding", Type: "string", Description: "base64 to get data_b64 alone, without the text in data.", Accepted: []string{"base64"}},
+				{Name: "encoding", Type: "string", Accepted: []string{"base64"}},
 			},
 			returns: append(append([]verbParam{}, rowReturns...),
-				verbParam{Name: "data", Type: "string", Description: "The whole content as text. A byte that is not UTF-8 reads as U+FFFD here."},
-				verbParam{Name: "data_b64", Type: "string", Description: "The whole content, every byte, as base64."}),
-			examples: []string{
-				`{"id":1,"verb":"show-buffer"}`,
-				`{"id":1,"verb":"show-buffer","params":{"name":"buffer3"}}`,
-			},
+				verbParam{Name: "data", Type: "string"},
+				verbParam{Name: "data_b64", Type: "string"}),
 			handler: (*Daemon).verbShowBuffer,
 		},
 		"set-buffer": {
-			scope:       scopeBufferWrite,
-			link:        needWrite,
-			description: "Store content in a paste buffer and put it on top. With no name a new buffer is made, append or not, as tmux does; a name makes the buffer a named one. Empty content stores nothing and is no error. When the buffers tuios named pass the limit, the oldest of them go; past the byte cap the oldest go whatever their name. A set from outside every pane, or from a pane with admin, makes the person's buffer; a set from a pane without admin makes that pane's own. From a pane this needs the write grant, and a pane without admin may set only its own buffers, or make a new one with no name.",
+			scope: scopeBufferWrite,
+			link:  needWrite,
 			params: []verbParam{
-				{Name: "data", Type: "string", Description: "The content as text. Give data or data_b64. It may not be empty or larger than the byte cap."},
-				{Name: "data_b64", Type: "string", Description: "The content as base64, for any bytes. It wins over data."},
-				{Name: "upload", Type: "string", Description: "An id that sends the content in parts, each in its own call on one connection. The buffer is set once, when the part without more arrives."},
-				{Name: "more", Type: "bool", Description: "More parts of this upload follow.", Default: "false"},
-				{Name: "name", Type: "string", Description: "The buffer to set: 1 to 64 printable characters. Omit for a new buffer."},
-				{Name: "append", Type: "bool", Description: "Add the text to the end of the buffer instead of replacing it.", Default: "false"},
+				{Name: "data", Type: "string"},
+				{Name: "data_b64", Type: "string"},
+				{Name: "upload", Type: "string"},
+				{Name: "more", Type: "bool", Default: "false"},
+				{Name: "name", Type: "string"},
+				{Name: "append", Type: "bool", Default: "false"},
 			},
 			returns: append(append([]verbParam{}, rowReturns...),
-				verbParam{Name: "stored", Type: "bool", Description: "False when the content was empty and nothing was stored. The other fields are then absent."}),
-			examples: []string{
-				`{"id":1,"verb":"set-buffer","params":{"data":"make test"}}`,
-				`{"id":1,"verb":"set-buffer","params":{"name":"deploy","data":"kubectl rollout restart deploy/api"}}`,
-			},
+				verbParam{Name: "stored", Type: "bool"}),
 			handler: (*Daemon).verbSetBuffer,
 		},
 		"delete-buffer": {
-			scope:       scopeBufferWrite,
-			link:        needWrite,
-			description: "Delete a paste buffer. From a pane this needs the write grant, and a pane without admin may delete only its own buffers.",
+			scope: scopeBufferWrite,
+			link:  needWrite,
 			params: []verbParam{
 				nameParam("delete"),
 				version,
 			},
 			returns: []verbParam{
-				{Name: "name", Type: "string", Description: "The buffer that was deleted."},
+				{Name: "name", Type: "string"},
 			},
-			examples: []string{`{"id":1,"verb":"delete-buffer","params":{"name":"buffer1"}}`},
-			handler:  (*Daemon).verbDeleteBuffer,
+			handler: (*Daemon).verbDeleteBuffer,
 		},
 		"paste-buffer": {
 			scope: scopeWrite,
 			// The paste buffers hold what the person copied on this machine. A
 			// link reads them only where it may also capture a pane, and changes
 			// or pastes them only where it may type.
-			link:        needWrite,
-			description: "Type a paste buffer into a window's PTY as a paste. Each line feed becomes a carriage return unless raw, as in tmux. Control characters other than tab, line feed and carriage return are removed, and the text is wrapped in the bracketed paste delimiters when the program in the pane turned bracketed paste on. From a pane this needs the read and write grants.",
+			link: needWrite,
 			params: []verbParam{
 				sessionParam,
 				windowParam,
 				nameParam("paste"),
-				{Name: "delete", Type: "bool", Description: "Delete the buffer after the paste, unless its content was set again meanwhile.", Default: "false"},
-				{Name: "raw", Type: "bool", Description: "Keep each line feed instead of turning it into a carriage return.", Default: "false"},
+				{Name: "delete", Type: "bool", Default: "false"},
+				{Name: "raw", Type: "bool", Default: "false"},
 				version,
 				typingAllowBlockedParam,
 			},
 			returns: []verbParam{
-				{Name: "name", Type: "string", Description: "The buffer that was pasted."},
-				{Name: "bytes", Type: "int", Description: "How many bytes the buffer holds."},
-				{Name: "bracketed", Type: "bool", Description: "True when the paste went in the bracketed paste delimiters."},
-				{Name: "deleted", Type: "bool", Description: "True when the buffer was deleted after the paste."},
-			},
-			examples: []string{
-				`{"id":1,"verb":"paste-buffer","params":{"session":"work","window":"build"}}`,
-				`{"id":1,"verb":"paste-buffer","params":{"session":"work","name":"deploy","delete":true}}`,
+				{Name: "name", Type: "string"},
+				{Name: "bytes", Type: "int"},
+				{Name: "bracketed", Type: "bool"},
+				{Name: "deleted", Type: "bool"},
 			},
 			handler: (*Daemon).verbPasteBuffer,
 		},

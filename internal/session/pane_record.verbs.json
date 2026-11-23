@@ -1,0 +1,152 @@
+{
+  "list-recordings": {
+    "description": "List the recordings that run now, across every session.",
+    "returns": [
+      {
+        "name": "recordings",
+        "description": "One entry per recording: path, window, started_at."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"list-recordings\",\"params\":{}}"
+    ]
+  },
+  "mark-recording": {
+    "description": "Write a marker (an m event) into a pane's recording at the current time, so a player can jump to the moment.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "Window id or name. Omit to target the focused window."
+      },
+      {
+        "name": "label",
+        "description": "The marker's label, one line of at most 200 bytes."
+      }
+    ],
+    "returns": [
+      {
+        "name": "path",
+        "description": "The file being written."
+      },
+      {
+        "name": "window",
+        "description": "The id of the pane recorded."
+      },
+      {
+        "name": "label",
+        "description": "The label written."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"mark-recording\",\"params\":{\"session\":\"work\",\"window\":\"build\",\"label\":\"tests start\"}}"
+    ]
+  },
+  "record-pane": {
+    "description": "Record a pane to an asciicast v2 file (.cast) that asciinema, agg and reel play. The first event paints the screen the pane shows now, its history included; then every output chunk and resize is an event at its real time. Input is not recorded. The recording runs until stop-recording, duration_ms, max_bytes or the pane's end. The file holds everything the pane prints while it runs.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "Window id or name. Omit to target the focused window."
+      },
+      {
+        "name": "out",
+        "description": "The path of the file to write, absolute or starting with ~, made with mode 0600. Over a link, held to the file verbs' write rules."
+      },
+      {
+        "name": "overwrite",
+        "description": "Replace out when it exists. Without it, an existing file is refused with file_exists."
+      },
+      {
+        "name": "duration_ms",
+        "description": "Stop after this long. 0 records until stopped."
+      },
+      {
+        "name": "max_bytes",
+        "description": "Stop when the file reaches this size, with a size limit marker. Between 4096 and 1073741824."
+      },
+      {
+        "name": "title",
+        "description": "The title the header carries, which players show."
+      }
+    ],
+    "returns": [
+      {
+        "name": "path",
+        "description": "The file being written."
+      },
+      {
+        "name": "window",
+        "description": "The id of the pane recorded."
+      },
+      {
+        "name": "width",
+        "description": "The pane's width when the recording started, the header's width."
+      },
+      {
+        "name": "height",
+        "description": "The pane's height when the recording started, the header's height."
+      },
+      {
+        "name": "started_at",
+        "description": "When the recording started, RFC 3339 in UTC."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"record-pane\",\"params\":{\"session\":\"work\",\"window\":\"build\",\"out\":\"~/build.cast\"}}"
+    ]
+  },
+  "stop-recording": {
+    "description": "Stop a pane's recording. Answers once the file is closed.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "Window id or name. Omit to target the focused window."
+      }
+    ],
+    "returns": [
+      {
+        "name": "path",
+        "description": "The file written."
+      },
+      {
+        "name": "window",
+        "description": "The id of the pane recorded."
+      },
+      {
+        "name": "events",
+        "description": "How many events the file holds, the snapshot included."
+      },
+      {
+        "name": "bytes",
+        "description": "The size of the file."
+      },
+      {
+        "name": "seconds",
+        "description": "The time of the last event."
+      },
+      {
+        "name": "reason",
+        "description": "Why the recording ended: stopped here, or what ended it first."
+      },
+      {
+        "name": "started_at",
+        "description": "When the recording started, RFC 3339 in UTC."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"stop-recording\",\"params\":{\"session\":\"work\",\"window\":\"build\"}}"
+    ]
+  }
+}

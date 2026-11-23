@@ -233,34 +233,30 @@ func dropName(base string, used map[string]bool) string {
 func dropVerbs() map[string]verbEntry {
 	return map[string]verbEntry{
 		"file-drop-dir": {
-			scope:       scopeDeny,
-			link:        needFiles,
-			description: "Make a private folder on this machine for files dropped on a pane, and answer its path. Drops are kept for 24 hours and 256 MiB together, oldest removed first.",
-			params:      []verbParam{{Name: "bytes", Type: "int", Description: "The size of the drop, so older drops make room for it."}},
+			scope:  scopeDeny,
+			link:   needFiles,
+			params: []verbParam{{Name: "bytes", Type: "int"}},
 			returns: []verbParam{
-				{Name: "dir", Type: "string", Description: "The new folder, owner only."},
-				{Name: "keep_bytes", Type: "int", Description: "How many bytes the drops together may hold."},
-				{Name: "keep_hours", Type: "int", Description: "How long a drop is kept."},
+				{Name: "dir", Type: "string"},
+				{Name: "keep_bytes", Type: "int"},
+				{Name: "keep_hours", Type: "int"},
 			},
-			examples: []string{`{"id":1,"verb":"file-drop-dir","params":{"bytes":1048576}}`},
-			handler:  (*Daemon).verbFileDropDir,
+			handler: (*Daemon).verbFileDropDir,
 		},
 		"drop-files": {
-			scope:       scopeDeny,
-			link:        needRelay | needFiles,
-			description: "Give a pane on a machine the paths of files on this machine. For this machine the answer is the paths. For a host, the files are copied into a new private drop folder there, and the answer has their paths there and the transfers that copy them. Paste a path once its transfer is done.",
+			scope: scopeDeny,
+			link:  needRelay | needFiles,
 			params: []verbParam{
-				{Name: "host", Type: "string", Description: "The machine the pane is on. Omit for this machine."},
-				{Name: "paths", Type: "[]string", Required: true, Description: "The files on this machine."},
-				{Name: "dir", Type: "string", Description: "A folder on the host to copy into instead of a drop folder, such as the pane's own folder."},
+				{Name: "host", Type: "string"},
+				{Name: "paths", Type: "[]string", Required: true},
+				{Name: "dir", Type: "string"},
 			},
 			returns: []verbParam{
-				{Name: "paths", Type: "[]string", Description: "The files' paths on the pane's machine, in order."},
-				{Name: "dir", Type: "string", Description: "The folder they go into on the host."},
-				{Name: "transfers", Type: "[]object", Description: "One transfer row per file, as transfer-list. Empty for this machine."},
+				{Name: "paths", Type: "[]string"},
+				{Name: "dir", Type: "string"},
+				{Name: "transfers", Type: "[]object"},
 			},
-			examples: []string{`{"id":1,"verb":"drop-files","params":{"host":"build","paths":["~/Desktop/screenshot.png"]}}`},
-			handler:  (*Daemon).verbDropFiles,
+			handler: (*Daemon).verbDropFiles,
 		},
 	}
 }

@@ -1,0 +1,448 @@
+{
+  "transfer-answer": {
+    "description": "Answer a copy in state conflict: what to do with files that are there and differ. Answer one file, several, or every file with all. The copy goes on when every file it waits on has an answer.",
+    "params": [
+      {
+        "name": "id",
+        "description": "The transfer's id."
+      },
+      {
+        "name": "choice",
+        "description": "replace the file there, keep both (the copy gets a new name), or skip the file."
+      },
+      {
+        "name": "rel",
+        "description": "The file, as the row's conflicts name it."
+      },
+      {
+        "name": "rels",
+        "description": "Several files."
+      },
+      {
+        "name": "all",
+        "description": "This answer for every file of the copy, now and later."
+      }
+    ],
+    "returns": [
+      {
+        "name": "id",
+        "description": "The transfer's id."
+      },
+      {
+        "name": "state",
+        "description": "queued, running, verifying, waiting (for a machine that went away), paused, conflict (waits for transfer-answer), done, failed or cancelled."
+      },
+      {
+        "name": "size",
+        "description": "Bytes to copy in all."
+      },
+      {
+        "name": "done",
+        "description": "Bytes copied, or found to be there already."
+      },
+      {
+        "name": "wire",
+        "description": "Bytes that crossed a link, fewer than done when they were compressed."
+      },
+      {
+        "name": "rate",
+        "description": "Bytes per second over the last five seconds."
+      },
+      {
+        "name": "eta_ms",
+        "description": "Time left, once two seconds of data came."
+      },
+      {
+        "name": "resumed_from",
+        "description": "Where the copy went on from after a machine came back. Absent when it never had to."
+      },
+      {
+        "name": "verified",
+        "description": "The copy's sha256 matched the original's."
+      },
+      {
+        "name": "final",
+        "description": "Where the file is now, which keep-both can change."
+      },
+      {
+        "name": "same",
+        "description": "Files that were there with the same bytes, which were not copied again."
+      },
+      {
+        "name": "conflicts_skipped",
+        "description": "Files that were there and differed, left as they were."
+      },
+      {
+        "name": "conflicts",
+        "description": "In state conflict: the files that wait for an answer, rel, path, src_size, src_mtime, dst_size, dst_mtime."
+      },
+      {
+        "name": "error",
+        "description": "What happened and what to do, for failed and waiting."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"transfer-answer\",\"params\":{\"id\":\"3f9a1c2b7d00\",\"choice\":\"keep-both\",\"all\":true}}"
+    ]
+  },
+  "transfer-cancel": {
+    "description": "Stop a transfer and remove what it copied so far of the file in flight.",
+    "params": [
+      {
+        "name": "id",
+        "description": "The transfer's id."
+      }
+    ],
+    "returns": [
+      {
+        "name": "id",
+        "description": "The transfer's id."
+      },
+      {
+        "name": "state",
+        "description": "queued, running, verifying, waiting (for a machine that went away), paused, conflict (waits for transfer-answer), done, failed or cancelled."
+      },
+      {
+        "name": "size",
+        "description": "Bytes to copy in all."
+      },
+      {
+        "name": "done",
+        "description": "Bytes copied, or found to be there already."
+      },
+      {
+        "name": "wire",
+        "description": "Bytes that crossed a link, fewer than done when they were compressed."
+      },
+      {
+        "name": "rate",
+        "description": "Bytes per second over the last five seconds."
+      },
+      {
+        "name": "eta_ms",
+        "description": "Time left, once two seconds of data came."
+      },
+      {
+        "name": "resumed_from",
+        "description": "Where the copy went on from after a machine came back. Absent when it never had to."
+      },
+      {
+        "name": "verified",
+        "description": "The copy's sha256 matched the original's."
+      },
+      {
+        "name": "final",
+        "description": "Where the file is now, which keep-both can change."
+      },
+      {
+        "name": "same",
+        "description": "Files that were there with the same bytes, which were not copied again."
+      },
+      {
+        "name": "conflicts_skipped",
+        "description": "Files that were there and differed, left as they were."
+      },
+      {
+        "name": "conflicts",
+        "description": "In state conflict: the files that wait for an answer, rel, path, src_size, src_mtime, dst_size, dst_mtime."
+      },
+      {
+        "name": "error",
+        "description": "What happened and what to do, for failed and waiting."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"transfer-cancel\",\"params\":{\"id\":\"3f9a1c2b7d00\"}}"
+    ]
+  },
+  "transfer-clear": {
+    "description": "Remove the transfers that ended (done, failed, cancelled) from the list. A failed one takes its parts with it.",
+    "params": [
+      {
+        "name": "ids",
+        "description": "Only these transfers. Omit for every one that ended."
+      }
+    ],
+    "returns": [
+      {
+        "name": "cleared",
+        "description": "How many left the list."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"transfer-clear\"}"
+    ]
+  },
+  "transfer-list": {
+    "description": "List the transfers, newest first, with byte progress, rate and time left. Finished ones stay for 30 minutes. A pane with the files grant sees only the copies it started.",
+    "params": [
+      {
+        "name": "id",
+        "description": "Only this transfer."
+      }
+    ],
+    "returns": [
+      {
+        "name": "transfers",
+        "description": "One row per transfer: id, name, src, dst, target, kind, move, state, size, done, wire, rate, eta_ms, files, files_done, current, current_done, current_size, error, code, resumed_from, resumes, sha256, verified, created, started, ended, retry_in_ms, skipped, skipped_items, same, conflicts_skipped, conflicts_left, conflicts, conflict_count, failed_files, pane, pane_session."
+      },
+      {
+        "name": "active",
+        "description": "Transfers that are not finished."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"transfer-list\"}"
+    ]
+  },
+  "transfer-pause": {
+    "description": "Pause a transfer. What it copied stays, and transfer-resume goes on from there.",
+    "params": [
+      {
+        "name": "id",
+        "description": "The transfer's id."
+      }
+    ],
+    "returns": [
+      {
+        "name": "id",
+        "description": "The transfer's id."
+      },
+      {
+        "name": "state",
+        "description": "queued, running, verifying, waiting (for a machine that went away), paused, conflict (waits for transfer-answer), done, failed or cancelled."
+      },
+      {
+        "name": "size",
+        "description": "Bytes to copy in all."
+      },
+      {
+        "name": "done",
+        "description": "Bytes copied, or found to be there already."
+      },
+      {
+        "name": "wire",
+        "description": "Bytes that crossed a link, fewer than done when they were compressed."
+      },
+      {
+        "name": "rate",
+        "description": "Bytes per second over the last five seconds."
+      },
+      {
+        "name": "eta_ms",
+        "description": "Time left, once two seconds of data came."
+      },
+      {
+        "name": "resumed_from",
+        "description": "Where the copy went on from after a machine came back. Absent when it never had to."
+      },
+      {
+        "name": "verified",
+        "description": "The copy's sha256 matched the original's."
+      },
+      {
+        "name": "final",
+        "description": "Where the file is now, which keep-both can change."
+      },
+      {
+        "name": "same",
+        "description": "Files that were there with the same bytes, which were not copied again."
+      },
+      {
+        "name": "conflicts_skipped",
+        "description": "Files that were there and differed, left as they were."
+      },
+      {
+        "name": "conflicts",
+        "description": "In state conflict: the files that wait for an answer, rel, path, src_size, src_mtime, dst_size, dst_mtime."
+      },
+      {
+        "name": "error",
+        "description": "What happened and what to do, for failed and waiting."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"transfer-pause\",\"params\":{\"id\":\"3f9a1c2b7d00\"}}"
+    ]
+  },
+  "transfer-resume": {
+    "description": "Go on with a paused transfer, try a waiting one now, or try a failed one again from where it stopped.",
+    "params": [
+      {
+        "name": "id",
+        "description": "The transfer's id."
+      }
+    ],
+    "returns": [
+      {
+        "name": "id",
+        "description": "The transfer's id."
+      },
+      {
+        "name": "state",
+        "description": "queued, running, verifying, waiting (for a machine that went away), paused, conflict (waits for transfer-answer), done, failed or cancelled."
+      },
+      {
+        "name": "size",
+        "description": "Bytes to copy in all."
+      },
+      {
+        "name": "done",
+        "description": "Bytes copied, or found to be there already."
+      },
+      {
+        "name": "wire",
+        "description": "Bytes that crossed a link, fewer than done when they were compressed."
+      },
+      {
+        "name": "rate",
+        "description": "Bytes per second over the last five seconds."
+      },
+      {
+        "name": "eta_ms",
+        "description": "Time left, once two seconds of data came."
+      },
+      {
+        "name": "resumed_from",
+        "description": "Where the copy went on from after a machine came back. Absent when it never had to."
+      },
+      {
+        "name": "verified",
+        "description": "The copy's sha256 matched the original's."
+      },
+      {
+        "name": "final",
+        "description": "Where the file is now, which keep-both can change."
+      },
+      {
+        "name": "same",
+        "description": "Files that were there with the same bytes, which were not copied again."
+      },
+      {
+        "name": "conflicts_skipped",
+        "description": "Files that were there and differed, left as they were."
+      },
+      {
+        "name": "conflicts",
+        "description": "In state conflict: the files that wait for an answer, rel, path, src_size, src_mtime, dst_size, dst_mtime."
+      },
+      {
+        "name": "error",
+        "description": "What happened and what to do, for failed and waiting."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"transfer-resume\",\"params\":{\"id\":\"3f9a1c2b7d00\"}}"
+    ]
+  },
+  "transfer-start": {
+    "description": "Copy a file or a folder between this machine and a host, or between two hosts. The daemon runs the copy, so a client may quit, and a daemon restart goes on with it. A machine that goes away pauses it, and it goes on from where it stopped when the machine is back. Every file's sha256 is checked before it is put in place, and it keeps the original's permission bits and modification time. A file that arrives over a link gets the receiving machine's umask and never group or world write. A file that is there with the same sha256 is not copied again. A destination that exists answers file_exists unless conflict says what to do. A destination another copy writes now answers busy. Each change is a transfer event on the event stream.",
+    "params": [
+      {
+        "name": "src",
+        "description": "What to copy: {host, path}. host is a name from [hosts], or empty for this machine. path is absolute or starts with ~."
+      },
+      {
+        "name": "dst",
+        "description": "Where it goes: the full path of the copy, or with place a folder: {host, path}. host is a name from [hosts], or empty for this machine. path is absolute or starts with ~."
+      },
+      {
+        "name": "move",
+        "description": "Remove the original once the copy is checked."
+      },
+      {
+        "name": "conflict",
+        "description": "When dst exists: replace it, keep both (the copy gets a new name), merge a folder into the folder there, skip a file that differs, ask (the copy waits in state conflict for transfer-answer), or fail."
+      },
+      {
+        "name": "each",
+        "description": "In a folder copy into a folder that is there: what to do with each file that is there and differs. Omit to follow conflict, which for merge and replace is replace."
+      },
+      {
+        "name": "place",
+        "description": "auto reads dst as cp does: a folder that is there gets the copy inside it, and anything else is the new name. into needs dst to be a folder that is there. A dst that ends in / with auto is into. contents copies what a folder holds into dst, and a file as auto does."
+      },
+      {
+        "name": "perms",
+        "description": "Give each file the original's permission bits."
+      },
+      {
+        "name": "times",
+        "description": "Give each file the original's modification time."
+      },
+      {
+        "name": "compress",
+        "description": "Compress the bytes on a link when they compress well."
+      },
+      {
+        "name": "rate_limit",
+        "description": "At most this many bytes a second. 0 for no limit."
+      },
+      {
+        "name": "keep_from",
+        "description": "keep-both names a copy from another machine \"name (from HOST).ext\". false numbers it, \"name 2.ext\"."
+      }
+    ],
+    "returns": [
+      {
+        "name": "id",
+        "description": "The transfer's id."
+      },
+      {
+        "name": "state",
+        "description": "queued, running, verifying, waiting (for a machine that went away), paused, conflict (waits for transfer-answer), done, failed or cancelled."
+      },
+      {
+        "name": "size",
+        "description": "Bytes to copy in all."
+      },
+      {
+        "name": "done",
+        "description": "Bytes copied, or found to be there already."
+      },
+      {
+        "name": "wire",
+        "description": "Bytes that crossed a link, fewer than done when they were compressed."
+      },
+      {
+        "name": "rate",
+        "description": "Bytes per second over the last five seconds."
+      },
+      {
+        "name": "eta_ms",
+        "description": "Time left, once two seconds of data came."
+      },
+      {
+        "name": "resumed_from",
+        "description": "Where the copy went on from after a machine came back. Absent when it never had to."
+      },
+      {
+        "name": "verified",
+        "description": "The copy's sha256 matched the original's."
+      },
+      {
+        "name": "final",
+        "description": "Where the file is now, which keep-both can change."
+      },
+      {
+        "name": "same",
+        "description": "Files that were there with the same bytes, which were not copied again."
+      },
+      {
+        "name": "conflicts_skipped",
+        "description": "Files that were there and differed, left as they were."
+      },
+      {
+        "name": "conflicts",
+        "description": "In state conflict: the files that wait for an answer, rel, path, src_size, src_mtime, dst_size, dst_mtime."
+      },
+      {
+        "name": "error",
+        "description": "What happened and what to do, for failed and waiting."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"transfer-start\",\"params\":{\"src\":{\"host\":\"build\",\"path\":\"~/out/image.iso\"},\"dst\":{\"path\":\"~/Downloads/image.iso\"}}}"
+    ]
+  }
+}

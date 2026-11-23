@@ -284,12 +284,21 @@ them all.
 
 Some packages embed an archive that `go generate` packs from the files beside
 it: `skills/` (`skills/tuios.tar.gz`), `internal/learn/lessons`,
-`harness/` (the bundled manifests, in the library) and
-`internal/integration`. Run `go generate` in the
+`harness/` (the bundled manifests, in the library), `internal/integration`
+and `internal/session` (the verb docs). Run `go generate` in the
 package after you edit those files. A test in each package fails when the
 archive and the files differ. Rebase with `scripts/rebase.sh origin/main`. It
 regenerates `skills/tuios.tar.gz` at each stop where that archive is the only
 conflict.
+
+A JSON verb has two parts. The Go registry entry holds the handler, the scope,
+the link need, the stream, and each parameter and result field with its name,
+type, accepted values and default. The text is in the `.verbs.json` file
+beside the Go file that registers the verb: the description, the description
+of each parameter and result field, and the examples. For example,
+`internal/session/verb_files.go` registers the file verbs, and
+`internal/session/verb_files.verbs.json` holds their text. Edit both in one
+change, then run `go generate ./internal/session`.
 
 ## Code Organization
 
@@ -531,6 +540,7 @@ the ones a change trips most often. Each test's doc comment gives the reason.
 | No emoji in a string or rune literal under `internal/` and `cmd/` | `internal/app` `TestNoEmojiInSourceStrings` | `emojiSourceAllowed` |
 | A new overlay kind has a place in `overlayKindOrder` | `internal/app` `TestEveryOverlayKindHasAPlaceInTheStack` | none |
 | An `ErrVerb*` code is in the `list-verbs` catalogue | `internal/session` `TestErrorCodeCatalogHasEveryErrVerbConstant` | none |
+| Every verb has a doc in the `.verbs.json` file beside the Go file that registers it, with the same parameter and result names | `internal/session` `TestVerbDocsMatchTheRegistry` | none |
 | A package with tests has `func TestMain(m *testing.M) { os.Exit(testutil.RunIsolated(m)) }` | `internal/testutil` `TestEveryTestPackageIsolatesTheXDGTree` | none |
 
 Only the `internal/lint` rows run in the check gate. The others run with

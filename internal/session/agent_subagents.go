@@ -803,4 +803,4 @@ func subagentListOut(list []SubagentInfo) []SubagentInfo {
 }
 
 // subagentListReturn documents subagent_list in list-verbs.
-var subagentListReturn = verbParam{Name: "subagent_list", Type: "[]object", Description: "The pane's subagents in start order, at most 16, each kept for a minute after it ends (five for a failed one): id, type, description (what it was asked to do), state (running, done, failed or stopped), started_at and ended_at (Unix nanoseconds, ended_at 0 while it runs), now (the tool it runs, such as \"Bash: go test ./...\"), last (the tool it ran last), tools (how many tool calls it made) and result (the first line it ended with, or the error). The strings are the agent's, cut to one line with likely secrets masked. Empty while there are none."}
+var subagentListReturn = verbParam{Name: "subagent_list", Type: "[]object"}

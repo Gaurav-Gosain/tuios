@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"maps"
 	"os"
 	"os/exec"
 	"sync"
@@ -35,32 +36,34 @@ func registerHandoffTestVerbs() {
 
 var handoffTestOnce sync.Once
 
-func addHandoffTestVerbs() {
-	reg := verbRegistry()
-	reg["test-handoff"] = verbEntry{
-		description: "Test only: hand every pane to a new image of this binary, in place.",
-		params: []verbParam{
-			{Name: "binary", Type: "string", Description: "The binary to exec. Omit for this one."},
-			{Name: "hold_ms", Type: "int", Description: "Wait this long after the manifest is written, before the clients are closed."},
-			{Name: "fork_in_window", Type: "bool", Description: "Start a long-lived child while the descriptors are exposed."},
-			{Name: "swap_in_window", Type: "[]string", Description: "Two folders to swap by renames while the descriptors are exposed."},
-			{Name: "swap_after_check", Type: "[]string", Description: "Two folders to swap by renames between the preflight's checks and its run."},
-			{Name: "copy", Type: "bool", Description: "Run a private copy of the binary, as systems without /proc/self/fd do, on Linux too."},
+func addHandoffTestVerbs() { maps.Copy(verbRegistry(), handoffTestVerbs()) }
+
+// handoffTestVerbs are the test-only verbs. Their docs are in
+// handoff_testhooks.verbs.json.
+func handoffTestVerbs() map[string]verbEntry {
+	return map[string]verbEntry{
+		"test-handoff": {
+			params: []verbParam{
+				{Name: "binary", Type: "string"},
+				{Name: "hold_ms", Type: "int"},
+				{Name: "fork_in_window", Type: "bool"},
+				{Name: "swap_in_window", Type: "[]string"},
+				{Name: "swap_after_check", Type: "[]string"},
+				{Name: "copy", Type: "bool"},
+			},
+			handler: (*Daemon).verbTestHandoff,
 		},
-		handler: (*Daemon).verbTestHandoff,
-	}
-	reg["test-handoff-stats"] = verbEntry{
-		description: "Test only: what the handoff that made this image measured.",
-		handler:     (*Daemon).verbTestHandoffStats,
-	}
-	reg["test-quiesce"] = verbEntry{
-		description: "Test only: quiesce one pane and resume it, cycles times.",
-		params: []verbParam{
-			sessionParam, windowParam,
-			{Name: "cycles", Type: "int", Description: "How many times."},
-			{Name: "hold_ms", Type: "int", Description: "How long each quiesce lasts."},
+		"test-handoff-stats": {
+			handler: (*Daemon).verbTestHandoffStats,
 		},
-		handler: (*Daemon).verbTestQuiesce,
+		"test-quiesce": {
+			params: []verbParam{
+				sessionParam, windowParam,
+				{Name: "cycles", Type: "int"},
+				{Name: "hold_ms", Type: "int"},
+			},
+			handler: (*Daemon).verbTestQuiesce,
+		},
 	}
 }
 

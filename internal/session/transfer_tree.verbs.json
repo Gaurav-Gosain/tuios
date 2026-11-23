@@ -1,0 +1,58 @@
+{
+  "file-check": {
+    "description": "Describe many files under a folder on this machine at once, for a copy that leaves out what is there already: whether each is there, its kind, size and time, and with hash its sha256. At most 2000 files, and 512 MiB hashed, in one call.",
+    "params": [
+      {
+        "name": "root",
+        "description": "The folder. An absolute path, or one that starts with ~."
+      },
+      {
+        "name": "rels",
+        "description": "The files, as paths under the folder, slash separated."
+      },
+      {
+        "name": "hash",
+        "description": "Hash each regular file."
+      }
+    ],
+    "returns": [
+      {
+        "name": "entries",
+        "description": "One per file, in order: rel, exists, kind (file, dir, symlink, other), size, mtime (Unix ms), sha256 when hashed."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"file-check\",\"params\":{\"root\":\"~/src\",\"rels\":[\"a.go\",\"b/c.go\"],\"hash\":true}}"
+    ]
+  },
+  "open-tree-stream": {
+    "description": "Turn this connection into a tree stream: many files of a folder in one stream. mode read: the caller writes one line {rel, size, mtime} per file and {end}, and gets one record per file and {end}. mode write: the caller writes records, and gets one ack {rel, path, sha256, skipped} or {rel, code, error} per file and {end}. A record is a header line {rel, kind, size, perm, mtime, z, conflict, label}, the bytes (one flate stream when z), and a trailer line {sha256}. docs/protocol.md has the whole format.",
+    "params": [
+      {
+        "name": "root",
+        "description": "The folder the paths are under. An absolute path, or one that starts with ~."
+      },
+      {
+        "name": "mode",
+        "description": "read or write."
+      },
+      {
+        "name": "part_id",
+        "description": "write: the copy's part id, which names the parts."
+      },
+      {
+        "name": "compress",
+        "description": "read: send a file as flate when a sample of it compresses well."
+      }
+    ],
+    "returns": [
+      {
+        "name": "root",
+        "description": "The folder, made absolute."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"open-tree-stream\",\"params\":{\"root\":\"~/src\",\"mode\":\"read\",\"compress\":true}}"
+    ]
+  }
+}

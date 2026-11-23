@@ -212,33 +212,29 @@ func speedVerbs() map[string]verbEntry {
 			scope:  scopeDeny,
 			// A speed test moves bytes that are no file's, and it is how a person
 			// learns what a copy would get.
-			link:        needFiles,
-			description: "The far end of a link speed test. ping answers at once. sink takes bytes after the reply and drops them, then answers one line {bytes, ms}. source sends bytes of random data after the reply, then closes.",
+			link: needFiles,
 			params: []verbParam{
-				{Name: "mode", Type: "string", Required: true, Description: "ping, sink or source.", Accepted: []string{"ping", "sink", "source"}},
-				{Name: "bytes", Type: "int", Description: "How many bytes sink takes or source sends, at most 1 GiB."},
+				{Name: "mode", Type: "string", Required: true, Accepted: []string{"ping", "sink", "source"}},
+				{Name: "bytes", Type: "int"},
 			},
-			returns:  []verbParam{{Name: "mode", Type: "string", Description: "The mode."}},
-			examples: []string{`{"id":1,"verb":"speed-test","params":{"mode":"ping"}}`},
-			handler:  (*Daemon).verbSpeedTest,
+			returns: []verbParam{{Name: "mode", Type: "string"}},
+			handler: (*Daemon).verbSpeedTest,
 		},
 		"host-speed-test": {
-			scope:       scopeDeny,
-			link:        needRelay | needFiles,
-			description: "Measure the link to a host the way a copy uses it: the round trip of a small call, then bytes up and down on bulk streams. The bytes are random, so compression does not help them.",
+			scope: scopeDeny,
+			link:  needRelay | needFiles,
 			params: []verbParam{
-				{Name: "host", Type: "string", Required: true, Description: "A name from [hosts]."},
-				{Name: "bytes", Type: "int", Description: "How many bytes each way.", Default: "67108864"},
+				{Name: "host", Type: "string", Required: true},
+				{Name: "bytes", Type: "int", Default: "67108864"},
 			},
 			returns: []verbParam{
-				{Name: "rtt_ms", Type: "float", Description: "The middle of five round trips, ms."},
-				{Name: "up", Type: "float", Description: "Bytes a second from this machine to the host."},
-				{Name: "down", Type: "float", Description: "Bytes a second from the host to this machine."},
-				{Name: "up_ms", Type: "int", Description: "How long the bytes up took."},
-				{Name: "down_ms", Type: "int", Description: "How long the bytes down took."},
+				{Name: "rtt_ms", Type: "float"},
+				{Name: "up", Type: "float"},
+				{Name: "down", Type: "float"},
+				{Name: "up_ms", Type: "int"},
+				{Name: "down_ms", Type: "int"},
 			},
-			examples: []string{`{"id":1,"verb":"host-speed-test","params":{"host":"build","bytes":16777216}}`},
-			handler:  (*Daemon).verbHostSpeedTest,
+			handler: (*Daemon).verbHostSpeedTest,
 		},
 	}
 }

@@ -1,0 +1,239 @@
+{
+  "delete-buffer": {
+    "description": "Delete a paste buffer. From a pane this needs the write grant, and a pane without admin may delete only its own buffers.",
+    "params": [
+      {
+        "name": "name",
+        "description": "The buffer to delete. Omit for the newest buffer tuios named, as tmux does: for the person, the newest of the person's own, and for a pane without admin, the newest of its own."
+      },
+      {
+        "name": "version",
+        "description": "Act only while the buffer holds the content of this version, as list-buffers or show-buffer gave it. Otherwise the call answers no_buffer."
+      }
+    ],
+    "returns": [
+      {
+        "name": "name",
+        "description": "The buffer that was deleted."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"delete-buffer\",\"params\":{\"name\":\"buffer1\"}}"
+    ]
+  },
+  "list-buffers": {
+    "description": "List the paste buffers, newest first. A yank in copy mode adds one, and so does set-buffer. From a pane this needs the read grant, and a pane without admin sees only the buffers it set. Every total counts only the buffers listed.",
+    "params": [
+      {
+        "name": "sample_width",
+        "description": "How many characters each sample shows, at most 200."
+      }
+    ],
+    "returns": [
+      {
+        "name": "buffers",
+        "description": "One entry per buffer, newest first: name, bytes, created, automatic, sample, session, pane."
+      },
+      {
+        "name": "total",
+        "description": "How many buffers there are."
+      },
+      {
+        "name": "bytes",
+        "description": "How many bytes they hold together."
+      },
+      {
+        "name": "limit",
+        "description": "How many buffers the daemon keeps, from [paste_buffers] limit."
+      },
+      {
+        "name": "max_bytes",
+        "description": "How many bytes the buffers may hold together, from [paste_buffers] max_kb."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"list-buffers\"}"
+    ]
+  },
+  "paste-buffer": {
+    "description": "Type a paste buffer into a window's PTY as a paste. Each line feed becomes a carriage return unless raw, as in tmux. Control characters other than tab, line feed and carriage return are removed, and the text is wrapped in the bracketed paste delimiters when the program in the pane turned bracketed paste on. From a pane this needs the read and write grants.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "Window id or name. Omit to target the focused window."
+      },
+      {
+        "name": "name",
+        "description": "The buffer to paste. Omit for the newest buffer tuios named, as tmux does: for the person, the newest of the person's own, and for a pane without admin, the newest of its own."
+      },
+      {
+        "name": "delete",
+        "description": "Delete the buffer after the paste, unless its content was set again meanwhile."
+      },
+      {
+        "name": "raw",
+        "description": "Keep each line feed instead of turning it into a carriage return."
+      },
+      {
+        "name": "version",
+        "description": "Act only while the buffer holds the content of this version, as list-buffers or show-buffer gave it. Otherwise the call answers no_buffer."
+      },
+      {
+        "name": "allow_blocked",
+        "description": "From a pane, type into a pane on needs_input instead of refusing with agent_blocked. What is typed then answers its prompt, which also needs the respond grant. The person, outside every pane, is not held."
+      }
+    ],
+    "returns": [
+      {
+        "name": "name",
+        "description": "The buffer that was pasted."
+      },
+      {
+        "name": "bytes",
+        "description": "How many bytes the buffer holds."
+      },
+      {
+        "name": "bracketed",
+        "description": "True when the paste went in the bracketed paste delimiters."
+      },
+      {
+        "name": "deleted",
+        "description": "True when the buffer was deleted after the paste."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"paste-buffer\",\"params\":{\"session\":\"work\",\"window\":\"build\"}}",
+      "{\"id\":1,\"verb\":\"paste-buffer\",\"params\":{\"session\":\"work\",\"name\":\"deploy\",\"delete\":true}}"
+    ]
+  },
+  "set-buffer": {
+    "description": "Store content in a paste buffer and put it on top. With no name a new buffer is made, append or not, as tmux does; a name makes the buffer a named one. Empty content stores nothing and is no error. When the buffers tuios named pass the limit, the oldest of them go; past the byte cap the oldest go whatever their name. A set from outside every pane, or from a pane with admin, makes the person's buffer; a set from a pane without admin makes that pane's own. From a pane this needs the write grant, and a pane without admin may set only its own buffers, or make a new one with no name.",
+    "params": [
+      {
+        "name": "data",
+        "description": "The content as text. Give data or data_b64. It may not be empty or larger than the byte cap."
+      },
+      {
+        "name": "data_b64",
+        "description": "The content as base64, for any bytes. It wins over data."
+      },
+      {
+        "name": "upload",
+        "description": "An id that sends the content in parts, each in its own call on one connection. The buffer is set once, when the part without more arrives."
+      },
+      {
+        "name": "more",
+        "description": "More parts of this upload follow."
+      },
+      {
+        "name": "name",
+        "description": "The buffer to set: 1 to 64 printable characters. Omit for a new buffer."
+      },
+      {
+        "name": "append",
+        "description": "Add the text to the end of the buffer instead of replacing it."
+      }
+    ],
+    "returns": [
+      {
+        "name": "name",
+        "description": "The buffer's name: bufferN for one tuios named, or the name set-buffer gave it."
+      },
+      {
+        "name": "bytes",
+        "description": "How many bytes the buffer holds."
+      },
+      {
+        "name": "created",
+        "description": "Unix-nano time the content was last set."
+      },
+      {
+        "name": "version",
+        "description": "A number that changes each time the content is set. Pass it back as version to act only on this content."
+      },
+      {
+        "name": "automatic",
+        "description": "True when tuios named the buffer."
+      },
+      {
+        "name": "sample",
+        "description": "The start of the content on one line, with control characters and bytes that are not UTF-8 shown as escapes. It never cuts a character. Print it as it is."
+      },
+      {
+        "name": "pane",
+        "description": "The pane that owns the buffer, by its window name, or its short id once it is gone. Absent for the person's buffers."
+      },
+      {
+        "name": "stored",
+        "description": "False when the content was empty and nothing was stored. The other fields are then absent."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"set-buffer\",\"params\":{\"data\":\"make test\"}}",
+      "{\"id\":1,\"verb\":\"set-buffer\",\"params\":{\"name\":\"deploy\",\"data\":\"kubectl rollout restart deploy/api\"}}"
+    ]
+  },
+  "show-buffer": {
+    "description": "Return the content of one paste buffer. A buffer can hold any bytes: data_b64 carries them all, and data carries them as text. From a pane this needs the read grant, and reaches only the buffers of the sessions the pane may read.",
+    "params": [
+      {
+        "name": "name",
+        "description": "The buffer to show. Omit for the newest buffer tuios named, as tmux does: for the person, the newest of the person's own, and for a pane without admin, the newest of its own."
+      },
+      {
+        "name": "version",
+        "description": "Act only while the buffer holds the content of this version, as list-buffers or show-buffer gave it. Otherwise the call answers no_buffer."
+      },
+      {
+        "name": "encoding",
+        "description": "base64 to get data_b64 alone, without the text in data."
+      }
+    ],
+    "returns": [
+      {
+        "name": "name",
+        "description": "The buffer's name: bufferN for one tuios named, or the name set-buffer gave it."
+      },
+      {
+        "name": "bytes",
+        "description": "How many bytes the buffer holds."
+      },
+      {
+        "name": "created",
+        "description": "Unix-nano time the content was last set."
+      },
+      {
+        "name": "version",
+        "description": "A number that changes each time the content is set. Pass it back as version to act only on this content."
+      },
+      {
+        "name": "automatic",
+        "description": "True when tuios named the buffer."
+      },
+      {
+        "name": "sample",
+        "description": "The start of the content on one line, with control characters and bytes that are not UTF-8 shown as escapes. It never cuts a character. Print it as it is."
+      },
+      {
+        "name": "pane",
+        "description": "The pane that owns the buffer, by its window name, or its short id once it is gone. Absent for the person's buffers."
+      },
+      {
+        "name": "data",
+        "description": "The whole content as text. A byte that is not UTF-8 reads as U+FFFD here."
+      },
+      {
+        "name": "data_b64",
+        "description": "The whole content, every byte, as base64."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"show-buffer\"}",
+      "{\"id\":1,\"verb\":\"show-buffer\",\"params\":{\"name\":\"buffer3\"}}"
+    ]
+  }
+}

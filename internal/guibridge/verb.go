@@ -126,7 +126,7 @@ func runVerb(out *frameWriter, version, nonce string, c Command) {
 		res.Error = "name the verb"
 		return
 	}
-	if doc, ok := session.LookupVerbDoc(c.Verb); ok && doc.HoldsConnection(c.Params) {
+	if session.VerbHoldsConnection(c.Verb, c.Params) {
 		res.Code, res.Error = "unsupported", fmt.Sprintf("%s keeps the connection after its reply; the bridge proxies only verbs with one reply", c.Verb)
 		return
 	}

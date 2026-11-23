@@ -1191,10 +1191,9 @@ func (d *Daemon) typingRefusal(pa *paneAuth, target WindowState, blockedChecked 
 // typingAllowBlockedParam is the allow_blocked parameter of the verbs in
 // paneTypingVerbs.
 var typingAllowBlockedParam = verbParam{
-	Name:        "allow_blocked",
-	Type:        "bool",
-	Description: "From a pane, type into a pane on needs_input instead of refusing with agent_blocked. What is typed then answers its prompt, which also needs the respond grant. The person, outside every pane, is not held.",
-	Default:     "false",
+	Name:    "allow_blocked",
+	Type:    "bool",
+	Default: "false",
 }
 
 // paneTypingVerbs are the typing verbs that type into a pane on needs_input
@@ -1513,10 +1512,9 @@ func (d *Daemon) launchGrants(cs *connState, requested []string) (*Grants, *verb
 
 // grantsParam is the grants parameter of the verbs that start a pane.
 var grantsParam = verbParam{
-	Name:        "grants",
-	Type:        "[]string",
-	Description: "What the new pane may do through tuios: read, write, fan, respond, admin, or none. Omit for the default of [agents.permissions], or, from a pane without admin, the calling pane's own grants. A pane may give only what it holds, and admin does not include respond. A window on another machine holds what that machine gives it.",
-	Accepted:    grantAccepted,
+	Name:     "grants",
+	Type:     "[]string",
+	Accepted: grantAccepted,
 }
 
 // permissionMode names the permission mode.

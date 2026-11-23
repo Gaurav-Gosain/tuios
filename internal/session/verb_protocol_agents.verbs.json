@@ -1,0 +1,1163 @@
+{
+  "add-reply-history": {
+    "description": "Keep a message the person sent to an agent in the reply history. The same message again moves to the end. A message keeps at most 256 KiB of pastes and images: past that the largest are dropped and named. Only the person adds to it, with a live human_nonce.",
+    "params": [
+      {
+        "name": "target",
+        "description": "The key the client keeps the history under."
+      },
+      {
+        "name": "parts",
+        "description": "The message, as queue-prompt takes it."
+      },
+      {
+        "name": "human_nonce",
+        "description": "The nonce from the attach reply of a client attached now. The TUI sends its own. Without a live one the call is not the person's."
+      }
+    ],
+    "returns": [
+      {
+        "name": "dropped",
+        "description": "The blocks too large to keep."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"add-reply-history\",\"params\":{\"target\":\"claude-code:/work/api\",\"parts\":[{\"kind\":\"text\",\"text\":\"rerun with -count=1\"}],\"human_nonce\":\"<from the attach reply>\"}}"
+    ]
+  },
+  "agent-activity": {
+    "description": "Read what the agent in a pane has been doing, from the ring of hook events the daemon keeps for it: prompts, tool calls and their results, finished turns, subagents starting and stopping, conversations starting, and the commands its shell ran, the newest 256 of them. A pane gets a ring on the first hook report that carries activity, and loses it when it closes; the ring is daemon memory only. With recap, a summary of it since a time. The text is the agent's, cleaned and masked, and marked untrusted.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "Window id or name. Omit to target the focused window."
+      },
+      {
+        "name": "since",
+        "description": "Only entries after this time, in unix nanoseconds."
+      },
+      {
+        "name": "since_seq",
+        "description": "Only entries after this seq."
+      },
+      {
+        "name": "limit",
+        "description": "At most this many entries, newest last, up to 256."
+      },
+      {
+        "name": "recap",
+        "description": "Also summarise the entries: turns, files, commands, the last test run and what the agent last said."
+      }
+    ],
+    "returns": [
+      {
+        "name": "entries",
+        "description": "Oldest first: seq, at (unix nanoseconds), kind (prompt, tool, tool_done, tool_failed, turn_end, subagent_start, subagent_stop, session_start, command or state), tool, target, files, ok, exit and text per entry. Empty for a pane with no ring."
+      },
+      {
+        "name": "window",
+        "description": "The window id the entries are of."
+      },
+      {
+        "name": "last_seq",
+        "description": "The seq of the newest entry the ring holds."
+      },
+      {
+        "name": "recap",
+        "description": "With recap, over every entry after since and since_seq whatever the limit: since (where it starts), turns, files (the first 20), files_total, commands, tests (the newest test run: cmdline, ok or null when unknown, at), last_said and state (the pane's state now)."
+      },
+      {
+        "name": "untrusted",
+        "description": "Always true: the text is the agent's."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"agent-activity\",\"params\":{\"session\":\"work\",\"window\":\"build\",\"recap\":true}}"
+    ]
+  },
+  "agent-hook-event": {
+    "description": "Run one harness hook event in the daemon, as tuios agent-hook runs it in a process of its own: the payload is read, the event mapped to the state it reports, and the report made for the pane the caller runs in. The pane is found from the process that sent the call (its TUIOS_PANE_ID, or its terminal session and ancestors), never from a param. The result holds what the hook would print for the harness to read. A call that waits on the Inbox for a permission prompt answers when the person does, or when the hold ends.",
+    "params": [
+      {
+        "name": "harness",
+        "description": "The harness whose hook fired, by id or alias, as tuios agent-hook takes it: claude-code, codex, gemini-cli and so on."
+      },
+      {
+        "name": "event",
+        "description": "The event, for a harness whose payload does not name it. Omit it when the payload does."
+      },
+      {
+        "name": "payload",
+        "description": "The hook's JSON payload as the harness wrote it, as a string. Omit it for an event with none."
+      },
+      {
+        "name": "payload_json",
+        "description": "The payload as JSON rather than a string, for a caller that cannot quote it. Pass payload or payload_json, not both."
+      },
+      {
+        "name": "env",
+        "description": "The variables of the hook process the mapping reads, by name. Only these are taken: TUIOS_AGENT, CODEX_THREAD_ID, CURSOR_VERSION, GROK_SESSION_ID, CRUSH_SESSION_ID. The pane's own variables are always read from the calling process."
+      },
+      {
+        "name": "explain",
+        "description": "Also return what was decided and why, as tuios agent-hook --explain prints it."
+      },
+      {
+        "name": "forwarder",
+        "description": "The call comes from the shell line tuios integration installs, which closes its sending half once the call is sent and cannot read JSON. The reply is then the line TUIOS-HOOK-OK and the hook's stdout as it is, with no JSON response, and the connection ends. A hold for the Inbox ends when the caller's process does, not at the end of its input."
+      }
+    ],
+    "returns": [
+      {
+        "name": "stdout",
+        "description": "What the hook prints for the harness to read: an empty object for a harness that parses its hook's output as JSON, the lines a session start adds to the agent's context, the line about unread mail, or a permission decision. Empty for most events."
+      },
+      {
+        "name": "explain",
+        "description": "With explain: the decision, the pane it went to and how it was found, what the daemon answered, and any error."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"agent-hook-event\",\"params\":{\"harness\":\"claude-code\",\"payload\":\"{\\\"hook_event_name\\\":\\\"UserPromptSubmit\\\",\\\"session_id\\\":\\\"s1\\\",\\\"prompt\\\":\\\"fix the build\\\"}\"}}"
+    ]
+  },
+  "agent-statusline-event": {
+    "description": "Run one status line payload in the daemon, as tuios agent-statusline runs it without --then: the model, context use and cost it names go to the pane the caller runs in, as agent metadata, at most once every 15 seconds while they change. The pane is found from the process that sent the call, never from a param. It prints nothing; a caller with a status line of its own runs that itself.",
+    "params": [
+      {
+        "name": "harness",
+        "description": "The harness whose status line ran, such as claude-code."
+      },
+      {
+        "name": "payload",
+        "description": "The status line payload as the harness wrote it, as a string."
+      },
+      {
+        "name": "payload_json",
+        "description": "The payload as JSON rather than a string. Pass payload or payload_json, not both."
+      },
+      {
+        "name": "env",
+        "description": "The variables of the calling process the mapping reads, by name. Only these are taken: TUIOS_AGENT, CODEX_THREAD_ID, CURSOR_VERSION, GROK_SESSION_ID, CRUSH_SESSION_ID."
+      },
+      {
+        "name": "turn_end",
+        "description": "The harness's turn just ended: changed values go now, whatever the interval, as tuios agent-statusline --turn-end."
+      },
+      {
+        "name": "explain",
+        "description": "Also return what was decided and why."
+      },
+      {
+        "name": "forwarder",
+        "description": "The call comes from the shell line tuios integration installs. The reply is then the line TUIOS-HOOK-OK, with no JSON response, and the connection ends."
+      }
+    ],
+    "returns": [
+      {
+        "name": "sent",
+        "description": "Whether the values went to the pane."
+      },
+      {
+        "name": "skip",
+        "description": "Why nothing was sent, such as unchanged values or the interval. Empty when sent."
+      },
+      {
+        "name": "error",
+        "description": "What went wrong finding the pane or writing to it. Absent when nothing did."
+      },
+      {
+        "name": "explain",
+        "description": "With explain: the values read, the pane and how it was found."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"agent-statusline-event\",\"params\":{\"harness\":\"claude-code\",\"payload_json\":{\"model\":{\"display_name\":\"Opus\"},\"context_window\":{\"used_percentage\":42}}}}"
+    ]
+  },
+  "agent-transcript": {
+    "description": "Read the conversation of the agent in a pane, for a client that shows it to the person: prompts, answers, thinking, tool calls with their status, diffs of edits, plans and todo lists, decoded from the transcript the pane is joined to. Readers include Claude Code, Codex, Gemini CLI, Qwen Code, Copilot CLI, Amp, OpenCode, Cursor Agent and Pi. Only the person can read it, with a live human_nonce, as reply-approval checks it. Every string is the agent's or its tools', with control characters removed and likely secrets masked, so the reply is marked untrusted.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "The pane: a window id or name."
+      },
+      {
+        "name": "human_nonce",
+        "description": "The nonce of a client attached now, or of attach-presence on this connection. Without a live one the call is refused with not_human. A presence made for one session reads only that session's panes."
+      },
+      {
+        "name": "after",
+        "description": "The cursor of an earlier reply. The reply then holds the entries after it. Omit it to read the newest limit entries."
+      },
+      {
+        "name": "before",
+        "description": "The older cursor of an earlier reply. The reply then holds the newest limit entries before it. Do not give it with after."
+      },
+      {
+        "name": "limit",
+        "description": "The most entries to return, 1 to 1000. Leave it out for the default. 0 is refused."
+      },
+      {
+        "name": "image",
+        "description": "The id of an entry that has an image. The reply then holds that image's media_type and data (base64) in place of a page. after, before and limit are ignored."
+      }
+    ],
+    "returns": [
+      {
+        "name": "session",
+        "description": "The pane's session."
+      },
+      {
+        "name": "window",
+        "description": "The pane's window id."
+      },
+      {
+        "name": "harness",
+        "description": "The harness whose transcript was read."
+      },
+      {
+        "name": "cursor",
+        "description": "Send it as after to read what comes next. It is opaque."
+      },
+      {
+        "name": "reset",
+        "description": "True when after was not a cursor into the file as it is now. The entries are then the newest limit, and the client starts its list again."
+      },
+      {
+        "name": "more",
+        "description": "True when a read after a cursor stopped before the end. Read again with the new cursor."
+      },
+      {
+        "name": "older",
+        "description": "Send it as before to read the entries before this page. Empty when the page starts at the first entry."
+      },
+      {
+        "name": "entries",
+        "description": "id, at (unix ms), role (user, assistant, tool), kind (text, thinking, tool_call, tool_result, plan, todos), text, truncated, tool, target, status (ok, error, running), tool_id, diff, plan, todos and image. An image's entry has the text [image] and an image object with its media_type. Read its data with image set to the entry's id. Each diff line carries spans (syntax tokens with chroma CSS classes) and words (the changed part), in UTF-16 offsets. A diff with whole_replace true was not matched line by line: each hunk shows the changed old lines removed, then the changed new lines added. An entry with an id the client holds replaces it."
+      },
+      {
+        "name": "media_type",
+        "description": "With image: image/png, image/jpeg, image/gif or image/webp."
+      },
+      {
+        "name": "data",
+        "description": "With image: the image, base64, at most 10 MiB decoded."
+      },
+      {
+        "name": "untrusted",
+        "description": "Always true: the text is the agent's."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"agent-transcript\",\"params\":{\"session\":\"work\",\"window\":\"api\",\"human_nonce\":\"<from attach-presence>\"}}",
+      "{\"id\":2,\"verb\":\"agent-transcript\",\"params\":{\"session\":\"work\",\"window\":\"api\",\"human_nonce\":\"<from attach-presence>\",\"after\":\"<the cursor of the last reply>\"}}",
+      "{\"id\":3,\"verb\":\"agent-transcript\",\"params\":{\"session\":\"work\",\"window\":\"api\",\"human_nonce\":\"<from attach-presence>\",\"before\":\"<the older cursor of the first reply>\"}}",
+      "{\"id\":4,\"verb\":\"agent-transcript\",\"params\":{\"session\":\"work\",\"window\":\"api\",\"human_nonce\":\"<from attach-presence>\",\"image\":\"<an entry id>\"}}"
+    ]
+  },
+  "cancel-queued": {
+    "description": "Drop messages from a pane's delivery queue before they are typed. The person, with a live human_nonce, may drop any entry; a pane only the entries it queued; a linked machine only the entries it queued; a caller outside every pane every entry but the person's. An entry being typed cannot be dropped. Dropping a stalled entry closes its Inbox question; the entries behind it are typed at the pane's next rest, one reached after the stalled entry was typed. A linked machine that gave no name drops only what it queued on the same connection.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "Window id or name. With all, omit it to target the focused window. With id, omit it to find the entry in any pane of the session."
+      },
+      {
+        "name": "id",
+        "description": "The entry to drop."
+      },
+      {
+        "name": "all",
+        "description": "Drop every entry of the window the caller may drop."
+      },
+      {
+        "name": "human_nonce",
+        "description": "The attached client's nonce, to drop as the person. One that does not verify is refused with not_human."
+      },
+      {
+        "name": "host",
+        "description": "A machine from [hosts]: drop from a pane's queue there, over the link. The link drops only the entries this machine queued there. Only a caller outside every pane may ask; the far machine's policy for this one must allow write."
+      }
+    ],
+    "returns": [
+      {
+        "name": "cancelled",
+        "description": "The entries dropped."
+      },
+      {
+        "name": "queued",
+        "description": "How many entries the pane's queue holds now."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"cancel-queued\",\"params\":{\"session\":\"work\",\"window\":\"build\",\"all\":true}}",
+      "{\"id\":1,\"verb\":\"cancel-queued\",\"params\":{\"session\":\"work\",\"id\":\"q3\"}}"
+    ]
+  },
+  "compare-fan": {
+    "description": "Compare the attempts of a fan: one row per sibling session with its branch, agent, state, changed files and lines against the base (committed and uncommitted work, untracked files included), the last verify-fan check and the last command its shells finished. A sibling the caller could not name itself is left out.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Any session of the fan. Omit for the most recently active session."
+      },
+      {
+        "name": "changes",
+        "description": "Count the changed files and lines of each attempt, a few git calls per sibling."
+      },
+      {
+        "name": "detail",
+        "description": "With changes, also list each attempt's files (file_list, at most 8, most changed first) and its first changed lines (lines, at most 6). Two more git calls per sibling. From a linked machine, detail needs write in its policy."
+      }
+    ],
+    "returns": [
+      {
+        "name": "group",
+        "description": "The fan's group."
+      },
+      {
+        "name": "repo",
+        "description": "The repository the fan is of."
+      },
+      {
+        "name": "repo_root",
+        "description": "The repository's main checkout."
+      },
+      {
+        "name": "base",
+        "description": "The base the attempts were made from: the fan's base, or the main checkout's branch for a fan made from HEAD."
+      },
+      {
+        "name": "rows",
+        "description": "One per sibling: session, branch, path, agent, harness, state, files, added, removed, ahead, dirty, base_sha, prompt_status, verify, last_command (cmdline, exit, at, window), gone, and note when git could not count. Also cost, the cost its agent reported, started_at and done_at, notes from the verdict, and file_list and lines with detail."
+      },
+      {
+        "name": "prompt",
+        "description": "The task the fan gave the attempts."
+      },
+      {
+        "name": "verdict",
+        "description": "The judge's pick, when set-fan-verdict recorded one: pick, summary, reasons, judge and at."
+      },
+      {
+        "name": "total",
+        "description": "How many rows."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"compare-fan\",\"params\":{\"session\":\"api-fan-retry-1\"}}"
+    ]
+  },
+  "get-approval": {
+    "description": "Read a held approval or plan whole: the summary, the tool and its target, the answers it takes, the plan text of a plan, and the risk rules its command matched with why. Served only while the hook holds it. The text is the agent's, so it is marked untrusted.",
+    "params": [
+      {
+        "name": "request_id",
+        "description": "The request_id of the Inbox item."
+      },
+      {
+        "name": "session",
+        "description": "The session the approval is in. When given, an approval in another session is not found. From a pane without the admin grant it is the pane's own unless named."
+      }
+    ],
+    "returns": [
+      {
+        "name": "request_id",
+        "description": "The hold."
+      },
+      {
+        "name": "kind",
+        "description": "approval or plan."
+      },
+      {
+        "name": "session",
+        "description": "The session of the pane whose prompt is held."
+      },
+      {
+        "name": "window",
+        "description": "The pane whose prompt is held."
+      },
+      {
+        "name": "summary",
+        "description": "The line the person answers from."
+      },
+      {
+        "name": "tool",
+        "description": "The tool the call is for, when the hook named it."
+      },
+      {
+        "name": "target",
+        "description": "What the tool acts on: the command, or the path."
+      },
+      {
+        "name": "options",
+        "description": "The answers it takes."
+      },
+      {
+        "name": "always_scope",
+        "description": "What always allows from now on."
+      },
+      {
+        "name": "plan",
+        "description": "A plan's text, at most 32 KiB."
+      },
+      {
+        "name": "plan_sha",
+        "description": "The digest reply-approval takes for a plan."
+      },
+      {
+        "name": "risk",
+        "description": "The risk rules matched, each with rule and why."
+      },
+      {
+        "name": "deny_message",
+        "description": "Whether a deny may carry a reason."
+      },
+      {
+        "name": "untrusted",
+        "description": "Always true: the text is the agent's."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"get-approval\",\"params\":{\"request_id\":\"9f86d081884c7d65\"}}"
+    ]
+  },
+  "judge-fan": {
+    "description": "Start an agent that judges the attempts of a fan. It runs in a new session of its own, named after the fan with -judge, in the repository's main checkout, with the read grant alone. Once its pane exists, the attempts name that pane, and that pane alone reads them: it cannot type into them, run commands in their sessions or start agents there. Its first prompt, typed then, asks it to read the attempts and report its pick with set-fan-verdict. Only the person or a pane with admin starts a judge. The record is cleared when the judge's session ends. It answers once the agent is ready, as start-agent does.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Any session of the fan."
+      },
+      {
+        "name": "agent",
+        "description": "The judge's agent, as start-agent takes it. Omit for the agent the first attempt ran."
+      },
+      {
+        "name": "env",
+        "description": "Environment variables for the judge, as start-agent takes them."
+      },
+      {
+        "name": "ready_timeout",
+        "description": "Milliseconds to wait for the judge to be ready."
+      }
+    ],
+    "returns": [
+      {
+        "name": "judge_session",
+        "description": "The judge's session."
+      },
+      {
+        "name": "group",
+        "description": "The fan's group."
+      },
+      {
+        "name": "window_id",
+        "description": "The judge's pane, with the rest of what start-agent returns."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"judge-fan\",\"params\":{\"session\":\"api-fan-retry\"}}"
+    ]
+  },
+  "keep-fan": {
+    "description": "Keep one attempt of a fan and remove the others: each sibling's worktree and session go, the way remove-worktree removes them, each on its own. A sibling with uncommitted changes is left in place unless stash or force says what to do with them. Files git ignores are deleted with a worktree and never stashed: compare-fan with detail lists them. Branches are never deleted. With merge, the kept attempt's branch is first merged into its base, as ship-merge does.",
+    "params": [
+      {
+        "name": "session",
+        "description": "The attempt to keep."
+      },
+      {
+        "name": "stash",
+        "description": "Stash a sibling's uncommitted changes before removing it."
+      },
+      {
+        "name": "force",
+        "description": "Discard a sibling's uncommitted changes."
+      },
+      {
+        "name": "merge",
+        "description": "First merge the kept attempt's branch into its base in the main checkout, as ship-merge does. A merge that conflicts or is refused stops the call before any sibling is removed."
+      },
+      {
+        "name": "merge_mode",
+        "description": "With merge: merge, squash or ff-only, as ship-merge takes mode."
+      },
+      {
+        "name": "into",
+        "description": "With merge: the branch to merge into. Omit for the base the attempt was made from."
+      },
+      {
+        "name": "group",
+        "description": "The fan's group, as compare-fan gave it. When given, a session of another fan is refused."
+      },
+      {
+        "name": "repo_root",
+        "description": "The fan's repository, as compare-fan gave it. When given, a session of another repository is refused."
+      },
+      {
+        "name": "fan_id",
+        "description": "The fan's ID, as compare-fan gave it. When given, a session of another fan of the same name is refused."
+      },
+      {
+        "name": "siblings",
+        "description": "The attempts the caller showed it would remove. When given, a fan whose other attempts differ is refused whole."
+      },
+      {
+        "name": "ignored",
+        "description": "Per attempt to remove, the ignored_hash compare-fan gave for the list the caller showed. When given, an attempt whose ignored files changed, or that has no entry, is refused, and nothing is removed."
+      }
+    ],
+    "returns": [
+      {
+        "name": "kept",
+        "description": "The session kept."
+      },
+      {
+        "name": "branch",
+        "description": "The kept session's branch."
+      },
+      {
+        "name": "group",
+        "description": "The fan's group."
+      },
+      {
+        "name": "removed",
+        "description": "One per sibling: session and removed, with remove-worktree's result when it was removed, or note and code when it was not."
+      },
+      {
+        "name": "left",
+        "description": "How many siblings were not removed."
+      },
+      {
+        "name": "merge",
+        "description": "With merge: what ship-merge returns for the kept attempt. Omitted without merge."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"keep-fan\",\"params\":{\"session\":\"api-fan-retry-1\"}}",
+      "{\"id\":1,\"verb\":\"keep-fan\",\"params\":{\"session\":\"api-fan-retry-1\",\"stash\":true}}",
+      "{\"id\":1,\"verb\":\"keep-fan\",\"params\":{\"session\":\"api-fan-retry-1\",\"merge\":true,\"merge_mode\":\"squash\"}}"
+    ]
+  },
+  "list-queued": {
+    "description": "List the messages waiting in a pane's delivery queue, or in every pane of the session.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "Window id or name. Omit to list every pane of the session."
+      },
+      {
+        "name": "host",
+        "description": "A machine from [hosts]: list a pane's queue there, over the link. Session and window name the pane there. The person's replies queued from this machine are by link:THIS-MACHINE there. Only a caller outside every pane may ask; the far machine's policy for this one must allow list."
+      }
+    ],
+    "returns": [
+      {
+        "name": "session",
+        "description": "The session listed."
+      },
+      {
+        "name": "entries",
+        "description": "id, session, window, name, at (Unix nanoseconds), by (human, shell, the queueing pane's window id, or link:HOST), from when given, preview (the first line, at most 80 characters) and state (waiting, delivering or stalled) per entry, next first within each pane."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"list-queued\",\"params\":{\"session\":\"work\",\"window\":\"build\"}}"
+    ]
+  },
+  "mark-attention": {
+    "description": "Snooze an Inbox item, wake it, mark a finished pane unread, restore an item closed a moment ago, or settle an agent, for the person. Only a client attached right now can, with the nonce from its attach reply: an agent cannot hide or reorder what the person reads.",
+    "params": [
+      {
+        "name": "id",
+        "description": "The item. Or name it with session, window and kind. With unsettle: the id settle returned, to put that item back in the Inbox."
+      },
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "Window id or name. Omit to target the focused window."
+      },
+      {
+        "name": "kind",
+        "description": "The item's kind, with session and window."
+      },
+      {
+        "name": "action",
+        "description": "snooze hides it until a time or until its fact changes, wake shows it again, unread reopens a finished pane's item, restore reopens an item dismissed or snoozed in the last 10 seconds. settle puts the agent in the pane named by session and window on the Settled shelf until it needs the person again, and closes its finished turn. unsettle takes it off the shelf."
+      },
+      {
+        "name": "until",
+        "description": "With snooze: when it opens again, in unix milliseconds."
+      },
+      {
+        "name": "for_ms",
+        "description": "With snooze: how long, in milliseconds."
+      },
+      {
+        "name": "until_change",
+        "description": "With snooze: until the pane's state changes."
+      },
+      {
+        "name": "human_nonce",
+        "description": "The nonce the daemon issued in an attach reply, for a client attached now over the same kind of connection. The TUI sends its own."
+      }
+    ],
+    "returns": [
+      {
+        "name": "id",
+        "description": "The item. With settle: the finished turn it closed, empty for none. With unsettle: the item put back, empty for none."
+      },
+      {
+        "name": "action",
+        "description": "What was done."
+      },
+      {
+        "name": "window",
+        "description": "With settle and unsettle: the pane's window id."
+      },
+      {
+        "name": "snoozed_until",
+        "description": "With snooze: when it opens again, in unix nanoseconds, -1 for until it changes."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"mark-attention\",\"params\":{\"id\":\"17\",\"action\":\"snooze\",\"for_ms\":900000,\"human_nonce\":\"<from the attach reply>\"}}",
+      "{\"id\":2,\"verb\":\"mark-attention\",\"params\":{\"session\":\"work\",\"window\":\"review\",\"action\":\"settle\",\"human_nonce\":\"<from the attach reply>\"}}"
+    ]
+  },
+  "queue-prompt": {
+    "description": "Queue a message for the agent in a pane, typed as a prompt once the agent has been at rest for a second, and never over a prompt it is waiting on. One entry is typed per rest, and the prompt gate waits for the agent to show it took it; an entry it did not take is marked stalled, never typed again, and opens an Inbox question. A queue holds at most [agents.queue] max messages, and dies with the daemon, the pane, or the agent leaving the pane. It types into the pane, so a pane may queue only for a pane that holds nothing it does not, and its entry is checked against its grants again when it is typed. Who queued it (by) comes from the connection: human only with a live human_nonce, the pane's id for a pane, link:HOST over a link, shell otherwise.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "The agent's window, by id or name. Omit to target the focused window. It must run an agent tuios knows of; human is refused with no_keyboard."
+      },
+      {
+        "name": "text",
+        "description": "The message, at most 16 KiB. Required without parts. With parts it is ignored, so a client can send the message both ways and a daemon older than parts types the text."
+      },
+      {
+        "name": "parts",
+        "description": "The message as ordered parts, at most 64 and 8 MiB in all: {kind: text, text} for typed text, {kind: paste, text, n} for a pasted block, and {kind: image, data, n} for an image, data being the file in base64 (at most 8 MiB, 8 images a message), where n is the block's number as the person saw it. When the message is typed, its blocks go in their place if it is 12 KiB or less and the pane takes a bracketed paste. Otherwise each block is written to a file in the paste folder on the pane's machine, kept for 24 hours, and the typed text names it: [Pasted text #1: PATH, 42 lines]. Each image is written to a file there too; the harness's [input] images says whether its path goes in a paste of its own (path_paste), in the text (path_text), or is refused (none). The text parts with the labels must fit 16 KiB. Over a link, blocks need files in the link's policy."
+      },
+      {
+        "name": "human_nonce",
+        "description": "The attached client's nonce, to queue as the person (by human). One that does not verify is refused with not_human."
+      },
+      {
+        "name": "from",
+        "description": "The window the message is from. From a pane, its own; omit it there. human needs human_nonce."
+      },
+      {
+        "name": "client_id",
+        "description": "The client's own name for this message, at most 128 bytes. Use a random id. A second call from the same sender with the same client_id for the same pane queues nothing and answers as the first did, with duplicate true. The daemon keeps the last 256 for 7 days, in memory, and forgets them when it restarts. It does not go with host."
+      },
+      {
+        "name": "host",
+        "description": "A machine from [hosts]: queue for a pane there. This daemon passes the message to that machine's daemon over the link, where it is queued by link:THIS-MACHINE and typed. Session and window name the pane there. Only a caller outside every pane may send one; the far machine's policy for this one must allow write, and files for a block or an image."
+      }
+    ],
+    "returns": [
+      {
+        "name": "id",
+        "description": "The entry, which cancel-queued takes."
+      },
+      {
+        "name": "position",
+        "description": "Its place in the queue, 1 for next."
+      },
+      {
+        "name": "queued",
+        "description": "How many entries the queue holds now."
+      },
+      {
+        "name": "delivering",
+        "description": "True when it is next and the agent is at rest now, so it is typed within about a second rather than after the agent's turn."
+      },
+      {
+        "name": "parts",
+        "description": "With parts, how many were read. A daemon older than parts leaves it out."
+      },
+      {
+        "name": "duplicate",
+        "description": "True when client_id was seen: nothing was queued, and the rest is the first answer."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"queue-prompt\",\"params\":{\"session\":\"work\",\"window\":\"build\",\"text\":\"make the backoff jitter configurable\"}}",
+      "{\"id\":1,\"verb\":\"queue-prompt\",\"params\":{\"session\":\"work\",\"window\":\"build\",\"parts\":[{\"kind\":\"text\",\"text\":\"this test fails: \"},{\"kind\":\"paste\",\"text\":\"--- FAIL: TestJitter\\n...\",\"n\":1}]}}"
+    ]
+  },
+  "reply-history": {
+    "description": "Read what the person sent to an agent, oldest first, for the reply editor's up and ctrl+r. It is kept in the daemon's memory only and ends with it: 100 messages a target, 64 targets, the least used going first. Only the person reads it, with a live human_nonce.",
+    "params": [
+      {
+        "name": "target",
+        "description": "The key the client keeps the history under, such as the agent's harness and folder. At most 512 bytes."
+      },
+      {
+        "name": "human_nonce",
+        "description": "The nonce from the attach reply of a client attached now. The TUI sends its own. Without a live one the call is not the person's."
+      }
+    ],
+    "returns": [
+      {
+        "name": "target",
+        "description": "The target read."
+      },
+      {
+        "name": "entries",
+        "description": "parts (as queue-prompt takes them), at (unix ms), and dropped: the blocks too large to keep, such as \"Pasted text #1\"."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"reply-history\",\"params\":{\"target\":\"claude-code:/work/api\",\"human_nonce\":\"<from the attach reply>\"}}"
+    ]
+  },
+  "review-diff": {
+    "description": "Read what the agent in a pane changed: the diff of its worktree against the base it was made from, or for a plain repository against the upstream merge base, untracked files included (one larger than max_untracked_mb is listed as skipped and not read) and ignored files left out. Nothing in the repository, its index or its working tree is changed. The text is the repository's, so it is marked untrusted.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "Window id or name. Omit to target the focused window."
+      },
+      {
+        "name": "base",
+        "description": "The ref to diff against. Omit for the worktree's base, else the upstream merge base, else HEAD (uncommitted changes only)."
+      },
+      {
+        "name": "against",
+        "description": "A fan sibling session to diff against instead of a base: the two attempts compared with each other."
+      },
+      {
+        "name": "uncommitted",
+        "description": "Only what is not committed yet, against HEAD."
+      },
+      {
+        "name": "paths",
+        "description": "Only these paths, relative to the repository root. Omit for every changed file."
+      },
+      {
+        "name": "context",
+        "description": "Lines of context around each change, 0 to 20."
+      },
+      {
+        "name": "index",
+        "description": "Read the worktree's index instead of the base. unstaged is the index against the working files, untracked files included. staged is HEAD against the index. Omit for the diff against the base. Not with base, against or uncommitted."
+      },
+      {
+        "name": "highlight",
+        "description": "Add the syntax colour and the changed part to each line: hl and changed. classes names the colour classes."
+      }
+    ],
+    "returns": [
+      {
+        "name": "session",
+        "description": "The session of the pane reviewed."
+      },
+      {
+        "name": "window",
+        "description": "The pane reviewed, by id: the one its notes are kept for."
+      },
+      {
+        "name": "repo_root",
+        "description": "The repository's main checkout."
+      },
+      {
+        "name": "worktree",
+        "description": "The worktree the diff was read from, symbolic links resolved."
+      },
+      {
+        "name": "base",
+        "description": "The base as named (the ref given, the worktree's base, the upstream branch, or HEAD), empty with against. With index unstaged it is index, with index staged it is HEAD."
+      },
+      {
+        "name": "base_sha",
+        "description": "The commit the diff runs from: the merge base of HEAD and the base, or HEAD for uncommitted changes only. With index it is a tree: the index, or HEAD's tree."
+      },
+      {
+        "name": "index",
+        "description": "The index mode read, unstaged or staged. Absent without index."
+      },
+      {
+        "name": "classes",
+        "description": "With highlight: the names of the colour classes, in the order of their numbers in hl. Absent without highlight."
+      },
+      {
+        "name": "uncommitted",
+        "description": "The diff shows only what is not committed: asked for, or no base was found."
+      },
+      {
+        "name": "tree_sha",
+        "description": "The tree the working state was written to, for a later diff of the same state."
+      },
+      {
+        "name": "against",
+        "description": "The sibling session, when one was given."
+      },
+      {
+        "name": "against_tree",
+        "description": "The tree the sibling's working state was written to, with against."
+      },
+      {
+        "name": "files",
+        "description": "One entry per changed file: path, old_path, status (A, M, D, R, or U for untracked), added, removed, binary, truncated, and hunks, each with header, old_start, old_lines, new_start, new_lines and lines of op (context, add or delete), old, new, text and no_newline. With highlight a line also has hl, its colour as [start, end, class] runs in bytes of text, and changed, the [start, end] bytes that changed against its paired line. Each is absent when empty."
+      },
+      {
+        "name": "totals",
+        "description": "files, added and removed over the whole diff."
+      },
+      {
+        "name": "truncated",
+        "description": "The diff passed a cap (400 files, 2 MiB, 5000 lines in a file) and the files past it carry counts only."
+      },
+      {
+        "name": "notes",
+        "description": "The pane's review notes, found again in this diff, as review-note lists them."
+      },
+      {
+        "name": "untrusted",
+        "description": "Always true: the text is the repository's, not the daemon's."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"review-diff\",\"params\":{\"session\":\"api-fan-retry-2\"}}",
+      "{\"id\":1,\"verb\":\"review-diff\",\"params\":{\"session\":\"work\",\"window\":\"build\",\"uncommitted\":true}}",
+      "{\"id\":1,\"verb\":\"review-diff\",\"params\":{\"session\":\"work\",\"window\":\"build\",\"index\":\"unstaged\"}}"
+    ]
+  },
+  "review-note": {
+    "description": "Keep the review notes on a pane's changes: add one on a line or a hunk, edit, remove, list or clear them. Notes are held by the daemon per worktree, so every client and the CLI see the same ones, and follow their line as the diff moves. A note is the person's only with a live human_nonce, and a pane without admin adds or edits notes only on panes it could type into.",
+    "params": [
+      {
+        "name": "action",
+        "description": "What to do."
+      },
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "Window id or name. Omit to target the focused window."
+      },
+      {
+        "name": "path",
+        "description": "The file the note is on, relative to the repository root. Needed to add."
+      },
+      {
+        "name": "line",
+        "description": "The line the note is on, on side. Omit with hunk for a note on the whole hunk."
+      },
+      {
+        "name": "side",
+        "description": "Which side of the diff line counts on."
+      },
+      {
+        "name": "quote",
+        "description": "The text of the line, which finds the line again when the diff moves."
+      },
+      {
+        "name": "hunk",
+        "description": "The hunk header the note is on."
+      },
+      {
+        "name": "text",
+        "description": "The note, at most 1000 bytes. Needed to add and edit."
+      },
+      {
+        "name": "id",
+        "description": "The note to edit or remove."
+      },
+      {
+        "name": "human_nonce",
+        "description": "The nonce from the attach reply of a client attached now. The TUI sends its own. Without a live one the call is not the person's."
+      }
+    ],
+    "returns": [
+      {
+        "name": "session",
+        "description": "The session of the pane."
+      },
+      {
+        "name": "window",
+        "description": "The pane the notes are for, by id."
+      },
+      {
+        "name": "worktree",
+        "description": "The worktree the notes are kept on."
+      },
+      {
+        "name": "id",
+        "description": "The note added or edited."
+      },
+      {
+        "name": "removed",
+        "description": "How many notes remove or clear dropped."
+      },
+      {
+        "name": "kept",
+        "description": "clear only: how many of the pane's notes were left because this caller may not change them (the person's, or another pane's or machine's)."
+      },
+      {
+        "name": "notes",
+        "description": "The pane's notes after the call, by path then line: id, path, side, line, quote, hunk_header, text, by, at, sent_at and outdated."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"review-note\",\"params\":{\"action\":\"add\",\"session\":\"work\",\"window\":\"build\",\"path\":\"api/retry.go\",\"line\":42,\"quote\":\"if err == nil {\",\"text\":\"log the attempt number here too\"}}",
+      "{\"id\":1,\"verb\":\"review-note\",\"params\":{\"action\":\"list\",\"session\":\"work\",\"window\":\"build\"}}"
+    ]
+  },
+  "review-stage": {
+    "description": "Stage or unstage a change in the worktree of a pane. Name a whole file, one hunk, or some lines of a hunk. Only the index changes. The working files do not change. Every result carries an undo object. Send it back with action undo to undo the call. The undo result carries its own undo object, which redoes the call.",
+    "params": [
+      {
+        "name": "action",
+        "description": "What to do."
+      },
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "Window id or name. Omit to target the focused window."
+      },
+      {
+        "name": "path",
+        "description": "The file, relative to the repository root. Needed to stage and unstage."
+      },
+      {
+        "name": "hunk",
+        "description": "The hunk header, exactly as review-diff returned it. Stage reads it from index unstaged, unstage from index staged. Omit for the whole file."
+      },
+      {
+        "name": "lines",
+        "description": "Indices into the lines of the hunk. Only added and removed lines count. Context lines are ignored. Omit for the whole hunk."
+      },
+      {
+        "name": "context",
+        "description": "The context of the diff the hunk came from, 0 to 20. It must match that diff."
+      },
+      {
+        "name": "undo",
+        "description": "For action undo: the undo object of the result to undo, with entries and after."
+      },
+      {
+        "name": "human_nonce",
+        "description": "The nonce from the attach reply of a client attached now. The TUI sends its own. Without a live one the call is not the person's."
+      }
+    ],
+    "returns": [
+      {
+        "name": "session",
+        "description": "The session of the pane."
+      },
+      {
+        "name": "window",
+        "description": "The pane, by id."
+      },
+      {
+        "name": "worktree",
+        "description": "The worktree whose index changed."
+      },
+      {
+        "name": "path",
+        "description": "The file named."
+      },
+      {
+        "name": "action",
+        "description": "The action done: stage, unstage or undo."
+      },
+      {
+        "name": "undo",
+        "description": "entries: the index entries of the paths touched before the call, each path with mode and sha, or absent. after: the same paths after the call. Send it with action undo to undo the call."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"review-stage\",\"params\":{\"action\":\"stage\",\"session\":\"work\",\"window\":\"build\",\"path\":\"api/retry.go\",\"hunk\":\"@@ -40,7 +40,9 @@ func Do(ctx context.Context\",\"lines\":[3,4]}}",
+      "{\"id\":1,\"verb\":\"review-stage\",\"params\":{\"action\":\"unstage\",\"session\":\"work\",\"window\":\"build\",\"path\":\"api/retry.go\"}}",
+      "{\"id\":1,\"verb\":\"review-stage\",\"params\":{\"action\":\"undo\",\"session\":\"work\",\"window\":\"build\",\"undo\":{\"entries\":[{\"path\":\"api/retry.go\",\"mode\":\"100644\",\"sha\":\"<sha>\"}],\"after\":[{\"path\":\"api/retry.go\",\"mode\":\"100644\",\"sha\":\"<sha>\"}]}}}"
+    ]
+  },
+  "send-review": {
+    "description": "Send a pane's unsent review notes to its agent as one message, through the delivery queue: typed now when the agent is at rest, else when it next comes to rest. The message says it is from the person only with a live human_nonce, and labels each note written by someone other than the sender with its author. It types into the pane, so a pane may send only to a pane that holds nothing it does not, and a note whose author may not type there now is withheld.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "Window id or name. Omit to target the focused window."
+      },
+      {
+        "name": "ids",
+        "description": "Only these notes. Omit for every unsent one."
+      },
+      {
+        "name": "now",
+        "description": "Type it now or not at all: refuse with agent_blocked or not_ready instead of queueing."
+      },
+      {
+        "name": "human_nonce",
+        "description": "The nonce from the attach reply of a client attached now. The TUI sends its own. Without a live one the call is not the person's."
+      }
+    ],
+    "returns": [
+      {
+        "name": "notes",
+        "description": "How many notes the message carries."
+      },
+      {
+        "name": "ids",
+        "description": "The notes sent, now marked with sent_at."
+      },
+      {
+        "name": "queued_id",
+        "description": "The queue entry, which cancel-queued takes."
+      },
+      {
+        "name": "position",
+        "description": "Its place in the pane's queue, 1 for next."
+      },
+      {
+        "name": "queued",
+        "description": "How many messages the pane's queue holds now."
+      },
+      {
+        "name": "delivering",
+        "description": "The message is next and the agent is at rest, so it is typed within about a second."
+      },
+      {
+        "name": "withheld",
+        "description": "Notes left out, not sent and not marked: their author (a pane, or a linked machine) may not type into this pane now, or the pane that wrote them is gone. Absent when none."
+      },
+      {
+        "name": "withheld_reason",
+        "description": "Why the first withheld note was left out. Absent when none."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"send-review\",\"params\":{\"session\":\"work\",\"window\":\"build\",\"human_nonce\":\"<from the attach reply>\"}}"
+    ]
+  },
+  "set-fan-verdict": {
+    "description": "Record a judge's pick among the attempts of a fan: the attempt it recommends, the verdict, its reasons and notes on each attempt. Only the judge pane judge-fan started for the fan, or a call from outside every pane, records one: a pane of an attempt is refused. The daemon records which of the two it was as by. It is written on every attempt, and compare-fan and the agents view show it. A later call replaces it. Nothing is kept or removed: keep-fan does that.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Any session of the fan."
+      },
+      {
+        "name": "pick",
+        "description": "The session of the attempt the judge recommends."
+      },
+      {
+        "name": "summary",
+        "description": "The verdict in a sentence or two, at most 400 bytes."
+      },
+      {
+        "name": "reasons",
+        "description": "The reasons, one sentence each, at most 6."
+      },
+      {
+        "name": "notes",
+        "description": "Notes per attempt: session name to a list of sentences, at most 4 each."
+      }
+    ],
+    "returns": [
+      {
+        "name": "group",
+        "description": "The fan's group."
+      },
+      {
+        "name": "pick",
+        "description": "The attempt picked."
+      },
+      {
+        "name": "by",
+        "description": "judge for the judge's pane, you for a call from outside every pane."
+      },
+      {
+        "name": "attempts",
+        "description": "Every attempt the verdict was written on."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"set-fan-verdict\",\"params\":{\"session\":\"api-fan-retry\",\"pick\":\"api-fan-retry-2\",\"summary\":\"Keep B. It is the smallest change and passes the tests.\",\"reasons\":[\"A reads hits without the lock.\"],\"notes\":{\"api-fan-retry\":[\"Adds a test for eviction.\"]}}}"
+    ]
+  },
+  "verify-fan": {
+    "description": "Run one check in every attempt of a fan: a window named verify in each sibling session runs the command with sh -c and records whether it passed. The window holds no grants, so the check cannot call tuios. It closes when the check passes and stays open, so the output can be read, when it fails. The command is always the caller's; none is read from the repository. A check still running in a sibling is stopped first.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Any session of the fan. Omit for the most recently active session."
+      },
+      {
+        "name": "command",
+        "description": "The command to run, as a shell line, at most 4096 bytes."
+      },
+      {
+        "name": "timeout_ms",
+        "description": "How long a check may run before it counts as failed and its window is closed, in milliseconds. Omit for no limit."
+      },
+      {
+        "name": "env",
+        "description": "Environment variables for the check, name to value, on top of the daemon's, with the rules of fan's env. The tuios CLI sends its PATH. A call from another machine may not pass env."
+      }
+    ],
+    "returns": [
+      {
+        "name": "group",
+        "description": "The fan's group."
+      },
+      {
+        "name": "command",
+        "description": "The command as it runs."
+      },
+      {
+        "name": "sessions",
+        "description": "The sessions a check was started in. Results reach clients as the verify field of each session's worktree, and compare-fan reports them."
+      },
+      {
+        "name": "skipped",
+        "description": "Siblings no check was started in: session and reason. Omitted when none."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"verify-fan\",\"params\":{\"session\":\"api-fan-retry-1\",\"command\":\"go test ./...\"}}"
+    ]
+  }
+}

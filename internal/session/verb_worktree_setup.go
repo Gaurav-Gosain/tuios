@@ -750,14 +750,14 @@ func (d *Daemon) startedByLater(cs *connState) func(window string) {
 
 // setupParams are the parameters new-worktree and fan take for a setup.
 var setupParams = []verbParam{
-	{Name: "setup", Type: "string", Description: "A shell line to run with sh -c in each new worktree, in a window named setup, before the agent or shell starts. It holds no grants. Omit for [worktree] setup in config.toml. An empty string runs none."},
-	{Name: "setup_async", Type: "bool", Description: "Start the agent at once beside the setup. Omit for [worktree] setup_async. Without it the agent waits for the setup to pass, and a failed setup removes the new worktree and the branch it made when nothing in them is anyone's work. A failed async setup keeps both."},
+	{Name: "setup", Type: "string"},
+	{Name: "setup_async", Type: "bool"},
 }
 
 // setupReturns are what new-worktree returns about a setup.
 var setupReturns = []verbParam{
-	{Name: "setup", Type: "object", Description: "The setup's record as list-worktrees reports it. Absent when no setup runs."},
-	{Name: "setup_window_id", Type: "string", Description: "Id of the setup's window. Absent when no setup runs."},
-	{Name: "setup_error", Type: "string", Description: "Why the setup's window could not start. The worktree and the session are kept. Absent otherwise."},
-	{Name: "agent_pending", Type: "bool", Description: "True while a sync setup holds the agent. There is then no window_id: the agent's window opens when the setup passes."},
+	{Name: "setup", Type: "object"},
+	{Name: "setup_window_id", Type: "string"},
+	{Name: "setup_error", Type: "string"},
+	{Name: "agent_pending", Type: "bool"},
 }

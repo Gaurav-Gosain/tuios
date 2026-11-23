@@ -1,0 +1,44 @@
+{
+  "run-task-verify": {
+    "description": "Run a board's verify command in the worktree of a pane here, for the card's owner. Only over a link.",
+    "params": [
+      {
+        "name": "window",
+        "description": "The pane."
+      },
+      {
+        "name": "command",
+        "description": "The shell line."
+      },
+      {
+        "name": "probe",
+        "description": "Only say if the pane is here."
+      },
+      {
+        "name": "timeout_ms",
+        "description": "The limit."
+      }
+    ],
+    "returns": [
+      {
+        "name": "here",
+        "description": "With probe: the pane is here."
+      },
+      {
+        "name": "exit",
+        "description": "The exit status."
+      },
+      {
+        "name": "note",
+        "description": "Why it did not end."
+      },
+      {
+        "name": "tail",
+        "description": "The end of the output."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"run-task-verify\",\"params\":{\"window\":\"a1b2c3d4\",\"command\":\"go test ./...\",\"timeout_ms\":600000}}"
+    ]
+  }
+}

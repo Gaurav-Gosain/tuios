@@ -1,0 +1,208 @@
+{
+  "file-preview": {
+    "description": "Make the preview of a file on this machine. An image comes scaled to max_px on its long side, a PDF page and a film frame as an image (with pdftoppm and ffmpeg there), text as its first 256 KiB, and anything else as its type and size.",
+    "params": [
+      {
+        "name": "path",
+        "description": "The file. An absolute path, or one that starts with ~."
+      },
+      {
+        "name": "max_px",
+        "description": "The longest side of an image, at most 4096."
+      },
+      {
+        "name": "page",
+        "description": "The PDF page."
+      },
+      {
+        "name": "pages_known",
+        "description": "The caller knows the page count, so pdfinfo does not run."
+      },
+      {
+        "name": "words",
+        "description": "Send the PDF page's words from pdftotext in place of its picture."
+      },
+      {
+        "name": "at_ms",
+        "description": "The position in a film of the frame to send. Without it the frame is 5 % in."
+      },
+      {
+        "name": "duration_known",
+        "description": "The caller knows the film's facts, so ffprobe does not run."
+      },
+      {
+        "name": "no_frame",
+        "description": "Send only the film's facts."
+      },
+      {
+        "name": "format",
+        "description": "Lay out a JSON file for reading."
+      },
+      {
+        "name": "details",
+        "description": "Send the file's permissions, what git says of it, its diff and a PDF page's words, in place of the preview."
+      },
+      {
+        "name": "offset",
+        "description": "Send a window of a text file from this byte, whole lines only, in place of the preview."
+      },
+      {
+        "name": "limit",
+        "description": "The most bytes in that window, at most 1 MiB."
+      },
+      {
+        "name": "find",
+        "description": "Look for this text in a text file, in place of the preview. Lower case ignores case."
+      },
+      {
+        "name": "from",
+        "description": "The byte find starts at."
+      },
+      {
+        "name": "back",
+        "description": "Find goes toward the start of the file."
+      },
+      {
+        "name": "line",
+        "description": "Find the start of this line number, in place of the preview."
+      }
+    ],
+    "returns": [
+      {
+        "name": "kind",
+        "description": "image, svg, pdf, video, text, dir or binary."
+      },
+      {
+        "name": "image",
+        "description": "The picture, base64, as mime says: the image, the page or the frame."
+      },
+      {
+        "name": "mime",
+        "description": "The picture's type for image, pdf and video, and the file's type otherwise."
+      },
+      {
+        "name": "width",
+        "description": "An image's own width."
+      },
+      {
+        "name": "height",
+        "description": "An image's own height."
+      },
+      {
+        "name": "text",
+        "description": "text and svg: the content."
+      },
+      {
+        "name": "truncated",
+        "description": "text: the file is longer than what was sent."
+      },
+      {
+        "name": "offset",
+        "description": "A window: the byte it starts at. find and line: the start of the line found, or -1."
+      },
+      {
+        "name": "reached",
+        "description": "find and line: how far the read went. Call again from there when the search ran out of time."
+      },
+      {
+        "name": "counted",
+        "description": "line: the lines passed."
+      },
+      {
+        "name": "next_offset",
+        "description": "A window: the byte the next window starts at."
+      },
+      {
+        "name": "pdf",
+        "description": "pdf, when this machine cannot draw the page: the file, base64, at most 8 MiB."
+      },
+      {
+        "name": "pages",
+        "description": "pdf: the page count, when pdfinfo is there."
+      },
+      {
+        "name": "words",
+        "description": "pdf, when asked for: the page's words."
+      },
+      {
+        "name": "no_tool",
+        "description": "pdf: the tool this machine needs and does not have."
+      },
+      {
+        "name": "at_ms",
+        "description": "video: the position of the frame sent."
+      },
+      {
+        "name": "formatted",
+        "description": "text: the JSON was laid out."
+      },
+      {
+        "name": "entries",
+        "description": "archive: the listing, with name, size and dir."
+      },
+      {
+        "name": "capped",
+        "description": "archive: the listing stopped at a bound."
+      },
+      {
+        "name": "head",
+        "description": "binary: the first 16 KiB, base64."
+      },
+      {
+        "name": "details",
+        "description": "The reply holds the details asked for."
+      },
+      {
+        "name": "mode",
+        "description": "details: the permissions."
+      },
+      {
+        "name": "owner",
+        "description": "details: the file's owner."
+      },
+      {
+        "name": "group",
+        "description": "details: the file's group."
+      },
+      {
+        "name": "git",
+        "description": "details: what git says of the file."
+      },
+      {
+        "name": "diff",
+        "description": "details: the diff of a changed file."
+      },
+      {
+        "name": "video_codec",
+        "description": "video: the codec, from ffprobe."
+      },
+      {
+        "name": "audio_codec",
+        "description": "video: the codec of the sound, from ffprobe, when it has sound."
+      },
+      {
+        "name": "fps",
+        "description": "video: the frames each second, from ffprobe."
+      },
+      {
+        "name": "duration_ms",
+        "description": "video: the length."
+      },
+      {
+        "name": "note",
+        "description": "Why there is no picture, in words a person can act on."
+      },
+      {
+        "name": "size",
+        "description": "The file's size."
+      },
+      {
+        "name": "mtime",
+        "description": "The file's modification time, Unix ms."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"file-preview\",\"params\":{\"path\":\"~/Pictures/cat.jpg\",\"max_px\":1200}}"
+    ]
+  }
+}

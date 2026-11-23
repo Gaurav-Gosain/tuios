@@ -1,0 +1,58 @@
+{
+  "test-handoff": {
+    "description": "Test only: hand every pane to a new image of this binary, in place.",
+    "params": [
+      {
+        "name": "binary",
+        "description": "The binary to exec. Omit for this one."
+      },
+      {
+        "name": "hold_ms",
+        "description": "Wait this long after the manifest is written, before the clients are closed."
+      },
+      {
+        "name": "fork_in_window",
+        "description": "Start a long-lived child while the descriptors are exposed."
+      },
+      {
+        "name": "swap_in_window",
+        "description": "Two folders to swap by renames while the descriptors are exposed."
+      },
+      {
+        "name": "swap_after_check",
+        "description": "Two folders to swap by renames between the preflight's checks and its run."
+      },
+      {
+        "name": "copy",
+        "description": "Run a private copy of the binary, as systems without /proc/self/fd do, on Linux too."
+      }
+    ],
+    "examples": []
+  },
+  "test-handoff-stats": {
+    "description": "Test only: what the handoff that made this image measured.",
+    "examples": []
+  },
+  "test-quiesce": {
+    "description": "Test only: quiesce one pane and resume it, cycles times.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "Window id or name. Omit to target the focused window."
+      },
+      {
+        "name": "cycles",
+        "description": "How many times."
+      },
+      {
+        "name": "hold_ms",
+        "description": "How long each quiesce lasts."
+      }
+    ],
+    "examples": []
+  }
+}

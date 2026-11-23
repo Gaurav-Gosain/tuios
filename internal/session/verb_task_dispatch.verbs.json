@@ -1,0 +1,171 @@
+{
+  "get-task-dispatch": {
+    "description": "Read the task dispatch settings: each board's mode (manual or pull) and the switches that stop dispatch (pause, quiet hours, a board stopped after 3 failures in a row, a usage limit).",
+    "params": [
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "project",
+        "description": "The project board, by origin URL. Omit for the session's own cards."
+      }
+    ],
+    "returns": [
+      {
+        "name": "paused",
+        "description": "True while dispatch is paused."
+      },
+      {
+        "name": "paused_by",
+        "description": "Who paused it."
+      },
+      {
+        "name": "stopped",
+        "description": "Why all dispatch stopped on its own, such as usage limit. Empty when it did not."
+      },
+      {
+        "name": "quiet",
+        "description": "The quiet hours, local time, such as 22:00-07:00."
+      },
+      {
+        "name": "quiet_now",
+        "description": "True inside the quiet hours."
+      },
+      {
+        "name": "boards",
+        "description": "The boards with a mode or a stop: board, project or session, mode, failures (dispatched cards in a row that did not finish), stopped, verify and verify_timeout."
+      },
+      {
+        "name": "cap",
+        "description": "Auto's agents at once, in total."
+      },
+      {
+        "name": "machine_cap",
+        "description": "Auto's agents at once on one machine."
+      },
+      {
+        "name": "running",
+        "description": "Auto's agents now."
+      },
+      {
+        "name": "board",
+        "description": "The board the call named, also when it is manual. An auto board adds preset, running, waiting and note."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"get-task-dispatch\",\"params\":{\"project\":\"git@github.com:acme/api.git\"}}"
+    ]
+  },
+  "set-task-dispatch": {
+    "description": "Change task dispatch. mode sets a board to manual, pull or auto: in pull, an agent that finishes its card is given the board's next open card, as mail from tuios; in auto, the daemon starts the board's preset agent for each open card, in a new worktree, and mails it the card. preset sets that agent; auto needs one. cap bounds the agents at once. verify sets the command run in a card's worktree when its agent is done: a pass moves the card to review, a fail to todo. pause stops all dispatch at once, and any pane may pause. resume lifts the pause and every stop. quiet sets the hours when dispatch gives no card. A pane needs admin for every action but pause, and verify is refused from every pane. Refused over a link.",
+    "params": [
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "project",
+        "description": "The project board, by origin URL. Omit for the session's own cards."
+      },
+      {
+        "name": "action",
+        "description": "What to change."
+      },
+      {
+        "name": "mode",
+        "description": "With mode: the board's new mode."
+      },
+      {
+        "name": "quiet",
+        "description": "With quiet: a span of local time such as 22:00-07:00, or off."
+      },
+      {
+        "name": "agent",
+        "description": "With preset or mode auto: the agent auto starts. A card's own agent comes first."
+      },
+      {
+        "name": "model",
+        "description": "With preset: as start-agent takes it."
+      },
+      {
+        "name": "effort",
+        "description": "With preset: as start-agent takes it."
+      },
+      {
+        "name": "permission_mode",
+        "description": "With preset: as start-agent takes it. Omit for the agent's own default."
+      },
+      {
+        "name": "machine",
+        "description": "With preset: here (the default), any, or a linked machine."
+      },
+      {
+        "name": "cap",
+        "description": "With cap: agents at once in total, 0 for 3."
+      },
+      {
+        "name": "machine_cap",
+        "description": "With cap: on one machine, 0 for 2."
+      },
+      {
+        "name": "verify",
+        "description": "With verify: a shell line, or off."
+      },
+      {
+        "name": "verify_timeout",
+        "description": "With verify: seconds, 0 for 600."
+      },
+      {
+        "name": "human_nonce",
+        "description": "The attached client's nonce, to act as the person (by human). One that does not verify is refused with not_human."
+      }
+    ],
+    "returns": [
+      {
+        "name": "paused",
+        "description": "True while dispatch is paused."
+      },
+      {
+        "name": "paused_by",
+        "description": "Who paused it."
+      },
+      {
+        "name": "stopped",
+        "description": "Why all dispatch stopped on its own, such as usage limit. Empty when it did not."
+      },
+      {
+        "name": "quiet",
+        "description": "The quiet hours, local time, such as 22:00-07:00."
+      },
+      {
+        "name": "quiet_now",
+        "description": "True inside the quiet hours."
+      },
+      {
+        "name": "boards",
+        "description": "The boards with a mode or a stop: board, project or session, mode, failures (dispatched cards in a row that did not finish), stopped, verify and verify_timeout."
+      },
+      {
+        "name": "cap",
+        "description": "Auto's agents at once, in total."
+      },
+      {
+        "name": "machine_cap",
+        "description": "Auto's agents at once on one machine."
+      },
+      {
+        "name": "running",
+        "description": "Auto's agents now."
+      },
+      {
+        "name": "board",
+        "description": "The board the call named, also when it is manual. An auto board adds preset, running, waiting and note."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"set-task-dispatch\",\"params\":{\"action\":\"mode\",\"mode\":\"pull\",\"project\":\"git@github.com:acme/api.git\"}}",
+      "{\"id\":1,\"verb\":\"set-task-dispatch\",\"params\":{\"action\":\"pause\"}}"
+    ]
+  }
+}

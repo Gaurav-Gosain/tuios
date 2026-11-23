@@ -40,20 +40,16 @@ const (
 func receiptVerbs() map[string]verbEntry {
 	return map[string]verbEntry{
 		"agent-message-receipts": {
-			scope:       scopeRead,
-			link:        needMail,
-			description: "The mail one window sent and its state, newest last: delivered, seen (the recipient looked at its inbox without reading) or read, with the times, and undeliverable when the recipient window is gone. Marks nothing. On this machine it reads every session's ring and asks each linked machine for the mail this window sent there; over a link it answers only for mail that arrived on that link from that window, with ids, recipients and times. A message a ring no longer holds is not listed.",
+			scope: scopeRead,
+			link:  needMail,
 			params: []verbParam{
-				{Name: "window", Type: "string", Required: true, Description: "The sending window's id, normally $TUIOS_PANE_ID. A restricted connection may name only its own window."},
-				{Name: "limit", Type: "int", Description: "At most this many rows, newest last, at most 200.", Default: "20"},
+				{Name: "window", Type: "string", Required: true},
+				{Name: "limit", Type: "int", Default: "20"},
 			},
 			returns: []verbParam{
-				{Name: "receipts", Type: "[]object", Description: "One per message: id, host (empty for this machine), session, to, to_label, thread_id, sent_at, seen_at, read_at (Unix nanoseconds, 0 when not yet), undeliverable, and on this machine preview, the first line of the text."},
-				{Name: "waiting", Type: "[]object", Description: "Mail this window sent to a machine whose link is down, kept here until it is back: queue_id, host, session, to, queued_at."},
-				{Name: "unreachable", Type: "[]object", Description: "Linked machines that could not be asked now: host and reason. Mail sent there is not listed."},
-			},
-			examples: []string{
-				`{"id":1,"verb":"agent-message-receipts","params":{"window":"3f2a91c0-5b1e-4d7a-9c2f-0e8b6a4d1c3e"}}`,
+				{Name: "receipts", Type: "[]object"},
+				{Name: "waiting", Type: "[]object"},
+				{Name: "unreachable", Type: "[]object"},
 			},
 			handler: (*Daemon).verbAgentMessageReceipts,
 		},

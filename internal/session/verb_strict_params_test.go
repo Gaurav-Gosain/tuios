@@ -62,13 +62,14 @@ func TestDeclaredParamsAreAllAccepted(t *testing.T) {
 // that can only be used by reading the source.
 func TestEveryVerbIsDocumentedWellEnoughToCall(t *testing.T) {
 	for name, entry := range verbRegistry() {
-		if strings.TrimSpace(entry.description) == "" {
+		doc := describeVerb(name, entry)
+		if strings.TrimSpace(doc.Description) == "" {
 			t.Errorf("verb %s has no description", name)
 		}
-		if len(entry.examples) == 0 {
+		if len(doc.Examples) == 0 {
 			t.Errorf("verb %s has no example call", name)
 		}
-		for _, group := range [][]verbParam{entry.params, entry.returns} {
+		for _, group := range [][]verbParam{doc.Params, doc.Returns} {
 			for _, p := range group {
 				if p.Name == "" || p.Type == "" || strings.TrimSpace(p.Description) == "" {
 					t.Errorf("verb %s documents a field incompletely: %+v", name, p)

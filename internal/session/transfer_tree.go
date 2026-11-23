@@ -1101,34 +1101,30 @@ func (m *transferManager) relayTreeFile(ctx context.Context, j *transferJob, in 
 func treeVerbs() map[string]verbEntry {
 	return map[string]verbEntry{
 		"file-check": {
-			scope:       scopeDeny,
-			link:        needFiles,
-			description: "Describe many files under a folder on this machine at once, for a copy that leaves out what is there already: whether each is there, its kind, size and time, and with hash its sha256. At most 2000 files, and 512 MiB hashed, in one call.",
+			scope: scopeDeny,
+			link:  needFiles,
 			params: []verbParam{
-				{Name: "root", Type: "string", Required: true, Description: "The folder. An absolute path, or one that starts with ~."},
-				{Name: "rels", Type: "[]string", Required: true, Description: "The files, as paths under the folder, slash separated."},
-				{Name: "hash", Type: "bool", Description: "Hash each regular file."},
+				{Name: "root", Type: "string", Required: true},
+				{Name: "rels", Type: "[]string", Required: true},
+				{Name: "hash", Type: "bool"},
 			},
 			returns: []verbParam{
-				{Name: "entries", Type: "[]object", Description: "One per file, in order: rel, exists, kind (file, dir, symlink, other), size, mtime (Unix ms), sha256 when hashed."},
+				{Name: "entries", Type: "[]object"},
 			},
-			examples: []string{`{"id":1,"verb":"file-check","params":{"root":"~/src","rels":["a.go","b/c.go"],"hash":true}}`},
-			handler:  (*Daemon).verbFileCheck,
+			handler: (*Daemon).verbFileCheck,
 		},
 		"open-tree-stream": {
-			stream:      &verbStream{},
-			scope:       scopeDeny,
-			link:        needFiles,
-			description: "Turn this connection into a tree stream: many files of a folder in one stream. mode read: the caller writes one line {rel, size, mtime} per file and {end}, and gets one record per file and {end}. mode write: the caller writes records, and gets one ack {rel, path, sha256, skipped} or {rel, code, error} per file and {end}. A record is a header line {rel, kind, size, perm, mtime, z, conflict, label}, the bytes (one flate stream when z), and a trailer line {sha256}. docs/protocol.md has the whole format.",
+			stream: &verbStream{},
+			scope:  scopeDeny,
+			link:   needFiles,
 			params: []verbParam{
-				{Name: "root", Type: "string", Required: true, Description: "The folder the paths are under. An absolute path, or one that starts with ~."},
-				{Name: "mode", Type: "string", Required: true, Description: "read or write.", Accepted: []string{"read", "write"}},
-				{Name: "part_id", Type: "string", Description: "write: the copy's part id, which names the parts."},
-				{Name: "compress", Type: "bool", Description: "read: send a file as flate when a sample of it compresses well."},
+				{Name: "root", Type: "string", Required: true},
+				{Name: "mode", Type: "string", Required: true, Accepted: []string{"read", "write"}},
+				{Name: "part_id", Type: "string"},
+				{Name: "compress", Type: "bool"},
 			},
-			returns:  []verbParam{{Name: "root", Type: "string", Description: "The folder, made absolute."}},
-			examples: []string{`{"id":1,"verb":"open-tree-stream","params":{"root":"~/src","mode":"read","compress":true}}`},
-			handler:  (*Daemon).verbOpenTreeStream,
+			returns: []verbParam{{Name: "root", Type: "string"}},
+			handler: (*Daemon).verbOpenTreeStream,
 		},
 	}
 }

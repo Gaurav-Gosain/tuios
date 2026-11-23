@@ -1,0 +1,61 @@
+{
+  "exec": {
+    "description": "Run one shell line on this machine and return its stdout, its stderr and how it ended. No window is opened. The line runs under sh -c (cmd /c on Windows) in a process group of its own, with no stdin and the daemon's environment less the pane, session and agent variables of the command that started the daemon, as a pane gets it. The group is stopped at the timeout, when the caller goes away, and when the daemon stops. Each stream keeps its last 1 MiB. At most 8 run at once. Over a link it needs open, as new-window does.",
+    "params": [
+      {
+        "name": "line",
+        "description": "The command line, parsed by the shell, at most 16384 bytes."
+      },
+      {
+        "name": "cwd",
+        "description": "Directory to run in. It must exist. Omit for the daemon's home directory."
+      },
+      {
+        "name": "timeout_ms",
+        "description": "How long the line may run, in milliseconds, at most one hour. Omit for 30000."
+      }
+    ],
+    "returns": [
+      {
+        "name": "stdout",
+        "description": "What the line wrote to stdout, base64 in JSON."
+      },
+      {
+        "name": "stderr",
+        "description": "What the line wrote to stderr, base64 in JSON."
+      },
+      {
+        "name": "stdout_dropped",
+        "description": "Bytes cut from the start of stdout to keep the last 1 MiB."
+      },
+      {
+        "name": "stderr_dropped",
+        "description": "Bytes cut from the start of stderr to keep the last 1 MiB."
+      },
+      {
+        "name": "exit",
+        "description": "The exit status. Absent when the line was stopped by a signal, the timeout or the caller leaving."
+      },
+      {
+        "name": "signal",
+        "description": "The signal that stopped the line, such as killed. Absent when it exited."
+      },
+      {
+        "name": "signal_number",
+        "description": "The number of that signal, such as 9."
+      },
+      {
+        "name": "timed_out",
+        "description": "The timeout stopped the line."
+      },
+      {
+        "name": "duration_ms",
+        "description": "How long the line ran."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"exec\",\"params\":{\"line\":\"uname -a\"}}",
+      "{\"id\":1,\"verb\":\"exec\",\"params\":{\"line\":\"ls -la\",\"cwd\":\"/tmp\",\"timeout_ms\":60000}}"
+    ]
+  }
+}

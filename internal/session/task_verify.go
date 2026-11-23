@@ -560,23 +560,21 @@ func (d *Daemon) verbRunTaskVerify(cs *connState, params json.RawMessage) (any, 
 func taskVerifyVerbs() map[string]verbEntry {
 	return map[string]verbEntry{
 		"run-task-verify": {
-			scope:       scopeLaunch,
-			link:        needOpen,
-			description: "Run a board's verify command in the worktree of a pane here, for the card's owner. Only over a link.",
+			scope: scopeLaunch,
+			link:  needOpen,
 			params: []verbParam{
-				{Name: "window", Type: "string", Required: true, Description: "The pane."},
-				{Name: "command", Type: "string", Description: "The shell line."},
-				{Name: "probe", Type: "bool", Description: "Only say if the pane is here.", Default: "false"},
-				{Name: "timeout_ms", Type: "int", Description: "The limit.", Default: "600000"},
+				{Name: "window", Type: "string", Required: true},
+				{Name: "command", Type: "string"},
+				{Name: "probe", Type: "bool", Default: "false"},
+				{Name: "timeout_ms", Type: "int", Default: "600000"},
 			},
 			returns: []verbParam{
-				{Name: "here", Type: "bool", Description: "With probe: the pane is here."},
-				{Name: "exit", Type: "int", Description: "The exit status."},
-				{Name: "note", Type: "string", Description: "Why it did not end."},
-				{Name: "tail", Type: "string", Description: "The end of the output."},
+				{Name: "here", Type: "bool"},
+				{Name: "exit", Type: "int"},
+				{Name: "note", Type: "string"},
+				{Name: "tail", Type: "string"},
 			},
-			examples: []string{`{"id":1,"verb":"run-task-verify","params":{"window":"a1b2c3d4","command":"go test ./...","timeout_ms":600000}}`},
-			handler:  (*Daemon).verbRunTaskVerify,
+			handler: (*Daemon).verbRunTaskVerify,
 		},
 	}
 }

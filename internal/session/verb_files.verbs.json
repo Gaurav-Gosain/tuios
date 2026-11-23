@@ -1,0 +1,422 @@
+{
+  "file-abort": {
+    "description": "Remove the part a copy to a path left on this machine.",
+    "params": [
+      {
+        "name": "path",
+        "description": "The file the copy was for. An absolute path, or one that starts with ~."
+      },
+      {
+        "name": "part_id",
+        "description": "The copy's part id, up to 32 hex digits: the part is .NAME.tuios-part-ID, so two copies to one path write two parts. Omit for .NAME.tuios-part."
+      }
+    ],
+    "returns": [
+      {
+        "name": "path",
+        "description": "The path."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"file-abort\",\"params\":{\"path\":\"~/big.iso\"}}"
+    ]
+  },
+  "file-commit": {
+    "description": "Finish a copy written with open-file-stream: check the part's sha256 against the sender's, then rename it into place. A part that does not match is removed.",
+    "params": [
+      {
+        "name": "path",
+        "description": "The file the copy is for. An absolute path, or one that starts with ~."
+      },
+      {
+        "name": "sha256",
+        "description": "The sender's hash, hex. Omit to skip the check."
+      },
+      {
+        "name": "conflict",
+        "description": "When the path exists: replace it, keep both (the copy gets a new name), skip (the part is removed and the file there stays), or fail."
+      },
+      {
+        "name": "label",
+        "description": "keep-both names the copy \"name (LABEL).ext\", such as \"report (from build).pdf\". Omit to name it \"name 2.ext\"."
+      },
+      {
+        "name": "perm",
+        "description": "The original's permission bits, which the finished file gets. Omit to keep it owner only."
+      },
+      {
+        "name": "mtime",
+        "description": "The original's modification time, Unix ms, which the finished file gets. Omit to keep the time of the copy."
+      },
+      {
+        "name": "part_id",
+        "description": "The copy's part id, up to 32 hex digits: the part is .NAME.tuios-part-ID, so two copies to one path write two parts. Omit for .NAME.tuios-part."
+      }
+    ],
+    "returns": [
+      {
+        "name": "path",
+        "description": "Where the file is now."
+      },
+      {
+        "name": "sha256",
+        "description": "The part's hash."
+      },
+      {
+        "name": "skipped",
+        "description": "conflict skip found a file at path, so the copy was removed and the file there stays."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"file-commit\",\"params\":{\"path\":\"~/big.iso\",\"sha256\":\"9f86d0...\",\"conflict\":\"keep-both\"}}"
+    ]
+  },
+  "file-hash": {
+    "description": "The sha256 of a file on this machine, of a range of it, or of the part a copy to it is writing.",
+    "params": [
+      {
+        "name": "path",
+        "description": "The file. An absolute path, or one that starts with ~."
+      },
+      {
+        "name": "offset",
+        "description": "Where the range starts."
+      },
+      {
+        "name": "length",
+        "description": "How many bytes. Omit for the rest of the file."
+      },
+      {
+        "name": "part",
+        "description": "Hash the part file of a copy to this path."
+      },
+      {
+        "name": "part_id",
+        "description": "The copy's part id, up to 32 hex digits: the part is .NAME.tuios-part-ID, so two copies to one path write two parts. Omit for .NAME.tuios-part."
+      }
+    ],
+    "returns": [
+      {
+        "name": "sha256",
+        "description": "The hash, hex."
+      },
+      {
+        "name": "bytes",
+        "description": "How many bytes were hashed."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"file-hash\",\"params\":{\"path\":\"~/big.iso\"}}"
+    ]
+  },
+  "file-list": {
+    "description": "List a folder on this machine a page at a time, folders first, then names in natural order (file2 before file10), with size, time and mode.",
+    "params": [
+      {
+        "name": "dir",
+        "description": "The folder. Omit for the home folder."
+      },
+      {
+        "name": "offset",
+        "description": "The first entry of the page."
+      },
+      {
+        "name": "limit",
+        "description": "Entries in the page, at most 5000."
+      },
+      {
+        "name": "hidden",
+        "description": "Include names that start with a dot."
+      }
+    ],
+    "returns": [
+      {
+        "name": "dir",
+        "description": "The folder, made absolute."
+      },
+      {
+        "name": "entries",
+        "description": "One info object per entry, as file-stat's info."
+      },
+      {
+        "name": "total",
+        "description": "Entries in the folder."
+      },
+      {
+        "name": "next",
+        "description": "The offset of the next page. Absent on the last page."
+      },
+      {
+        "name": "parent",
+        "description": "The folder above. Absent at the root."
+      },
+      {
+        "name": "home",
+        "description": "This machine's home folder."
+      },
+      {
+        "name": "capped",
+        "description": "The folder holds more than 50000 names, and only those were read."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"file-list\",\"params\":{\"dir\":\"~/src\",\"limit\":200}}"
+    ]
+  },
+  "file-mkdir": {
+    "description": "Make a folder on this machine, with its parents.",
+    "params": [
+      {
+        "name": "path",
+        "description": "The folder. An absolute path, or one that starts with ~."
+      },
+      {
+        "name": "receive",
+        "description": "Make the receive folder instead, and ignore path: where a copy from the caller lands when it names no folder. For a linked machine it is the first folder of its files_roots, else ~/Downloads/tuios."
+      }
+    ],
+    "returns": [
+      {
+        "name": "path",
+        "description": "The folder, made absolute."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"file-mkdir\",\"params\":{\"path\":\"~/new\"}}",
+      "{\"id\":2,\"verb\":\"file-mkdir\",\"params\":{\"path\":\"~\",\"receive\":true}}"
+    ]
+  },
+  "file-read": {
+    "description": "Read up to 4 MiB of a file on this machine, base64.",
+    "params": [
+      {
+        "name": "path",
+        "description": "The file. An absolute path, or one that starts with ~."
+      },
+      {
+        "name": "offset",
+        "description": "Where to start."
+      },
+      {
+        "name": "length",
+        "description": "How many bytes, at most 4 MiB."
+      }
+    ],
+    "returns": [
+      {
+        "name": "content",
+        "description": "The bytes, base64."
+      },
+      {
+        "name": "size",
+        "description": "The file's size."
+      },
+      {
+        "name": "eof",
+        "description": "The read reached the end of the file."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"file-read\",\"params\":{\"path\":\"~/notes.md\",\"length\":65536}}"
+    ]
+  },
+  "file-remove": {
+    "description": "Delete a path on this machine. A folder that holds files needs recursive. The home folder and / are refused.",
+    "params": [
+      {
+        "name": "path",
+        "description": "The path. An absolute path, or one that starts with ~."
+      },
+      {
+        "name": "recursive",
+        "description": "Delete a folder and all it holds."
+      }
+    ],
+    "returns": [
+      {
+        "name": "path",
+        "description": "The path deleted."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"file-remove\",\"params\":{\"path\":\"~/old\",\"recursive\":true}}"
+    ]
+  },
+  "file-rename": {
+    "description": "Move or rename a path on this machine. It does not replace a path that is there unless replace is set. A move to another disk answers cross_device: copy it with transfer-start and move set.",
+    "params": [
+      {
+        "name": "from",
+        "description": "The path to move."
+      },
+      {
+        "name": "to",
+        "description": "The new path."
+      },
+      {
+        "name": "replace",
+        "description": "Replace what is at to."
+      }
+    ],
+    "returns": [
+      {
+        "name": "from",
+        "description": "The old path."
+      },
+      {
+        "name": "to",
+        "description": "The new path."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"file-rename\",\"params\":{\"from\":\"~/a.txt\",\"to\":\"~/b.txt\"}}"
+    ]
+  },
+  "file-stat": {
+    "description": "Describe one path on this machine. With part, describe the part file a copy to the path is writing.",
+    "params": [
+      {
+        "name": "path",
+        "description": "The path. An absolute path, or one that starts with ~."
+      },
+      {
+        "name": "part",
+        "description": "Describe the part file of a copy to this path instead."
+      },
+      {
+        "name": "part_id",
+        "description": "The copy's part id, up to 32 hex digits: the part is .NAME.tuios-part-ID, so two copies to one path write two parts. Omit for .NAME.tuios-part."
+      },
+      {
+        "name": "relation_to",
+        "description": "Another path on this machine. The reply says how path stands to it, with links followed."
+      }
+    ],
+    "returns": [
+      {
+        "name": "path",
+        "description": "The path, made absolute."
+      },
+      {
+        "name": "exists",
+        "description": "False when nothing is there."
+      },
+      {
+        "name": "size",
+        "description": "The size in bytes. 0 for a part that is not there."
+      },
+      {
+        "name": "info",
+        "description": "name, path, kind (file, dir, symlink, other), link_kind and link for a link, size, mtime (Unix ms), mode (drwxr-xr-x), perm (the permission bits as a number), hidden."
+      },
+      {
+        "name": "relation",
+        "description": "With relation_to: same when the two paths are one file, inside when path is in the folder relation_to, apart otherwise."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"file-stat\",\"params\":{\"path\":\"~/notes.md\"}}"
+    ]
+  },
+  "file-walk": {
+    "description": "List every file and folder under a folder on this machine, for a folder copy. At most 20000 entries in one reply; with stream, up to 1000000 entries, one JSON line each after the reply, and a last line {end, bytes, skipped, skipped_count, denied} or {end, code, error}. Links are not followed: a link, a named pipe, a socket and a device are not copied, and skipped names them. Over a link, an entry in the read deny list is left out and not named, and denied counts it.",
+    "params": [
+      {
+        "name": "path",
+        "description": "The folder. An absolute path, or one that starts with ~."
+      },
+      {
+        "name": "stream",
+        "description": "Send the entries after the reply, one JSON line each, for a folder of more than 20000 entries."
+      }
+    ],
+    "returns": [
+      {
+        "name": "entries",
+        "description": "rel (the path under the folder, slash separated), size, dir, perm, mtime (Unix ms). A folder comes before what it holds."
+      },
+      {
+        "name": "bytes",
+        "description": "The bytes of every file together."
+      },
+      {
+        "name": "skipped",
+        "description": "The first 200 items a copy does not carry: rel and kind (symlink, pipe, socket, device)."
+      },
+      {
+        "name": "skipped_count",
+        "description": "How many items a copy does not carry, all of them."
+      },
+      {
+        "name": "denied",
+        "description": "Over a link, how many entries were left out because a linked machine may not read them. A folder counts once. They are not named."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"file-walk\",\"params\":{\"path\":\"~/photos\"}}"
+    ]
+  },
+  "open-file-stream": {
+    "description": "Turn this connection into the bytes of one file. mode read: after the reply the connection carries the file from offset to size, then closes. mode write: the part file beside path is cut to offset, then the connection takes length bytes into it, answers one line {part_size, written, error} and closes. file-commit puts the part in place.",
+    "params": [
+      {
+        "name": "path",
+        "description": "The file to read, or the file a write is for. An absolute path, or one that starts with ~."
+      },
+      {
+        "name": "mode",
+        "description": "read or write."
+      },
+      {
+        "name": "offset",
+        "description": "Where the bytes start. A write's offset cannot be past the part's end."
+      },
+      {
+        "name": "length",
+        "description": "write only: how many bytes the caller sends."
+      },
+      {
+        "name": "part_id",
+        "description": "The copy's part id, up to 32 hex digits: the part is .NAME.tuios-part-ID, so two copies to one path write two parts. Omit for .NAME.tuios-part."
+      },
+      {
+        "name": "sum",
+        "description": "read: after the last byte, one line {sha256} with the hash of the bytes sent, or {error} when the file changed while it was read."
+      },
+      {
+        "name": "progress",
+        "description": "write: while the bytes land, one line {written} at most every 250 ms with the bytes written so far, before the last line."
+      },
+      {
+        "name": "compress",
+        "description": "read: \"auto\" lets this machine compress the bytes with flate when a sample of the file compresses well, and the reply says compressed. write: true when the caller sends the bytes as one flate stream."
+      }
+    ],
+    "returns": [
+      {
+        "name": "size",
+        "description": "read: the file's size. The connection carries size minus offset bytes."
+      },
+      {
+        "name": "mtime",
+        "description": "read: the file's modification time, Unix ms."
+      },
+      {
+        "name": "compressed",
+        "description": "read: the bytes come as one flate stream."
+      },
+      {
+        "name": "sum",
+        "description": "read: a {sha256} line follows the bytes."
+      },
+      {
+        "name": "part_size",
+        "description": "write: the part's size before it was cut to offset."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"open-file-stream\",\"params\":{\"path\":\"~/big.iso\",\"mode\":\"read\",\"offset\":0}}",
+      "{\"id\":1,\"verb\":\"open-file-stream\",\"params\":{\"path\":\"~/big.iso\",\"mode\":\"write\",\"offset\":1048576,\"length\":2097152}}"
+    ]
+  }
+}

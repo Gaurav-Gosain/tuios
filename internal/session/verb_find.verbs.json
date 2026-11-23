@@ -1,0 +1,103 @@
+{
+  "command-history": {
+    "description": "List the commands that shells in panes on this machine ran, newest first. Only a shell that sends OSC 133 marks reports its commands. A pane keeps its last 200 commands. A command that ran again in the same pane is listed once, at its newest run.",
+    "params": [
+      {
+        "name": "session",
+        "description": "List only this session's panes. Omit to list every session."
+      },
+      {
+        "name": "window",
+        "description": "List only this pane. Without session, the window is looked for in the most recently active session."
+      },
+      {
+        "name": "limit",
+        "description": "The most commands to return, at most 2000."
+      },
+      {
+        "name": "query",
+        "description": "List only the commands whose text holds this. Case does not count unless the query has a capital letter."
+      }
+    ],
+    "returns": [
+      {
+        "name": "commands",
+        "description": "One entry per command: session, window (the window id), name, seq (the pane's command_seq when it finished), cmdline (at most 512 bytes, with likely secrets masked), exit (null when the shell sent no status), at (when it started, Unix ms), duration_ms, cwd (the folder the shell last reported over OSC 7 when it started, empty when it never reported one) and row (the history row of its prompt, -1 when the prompt has left the history)."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"command-history\"}",
+      "{\"id\":1,\"verb\":\"command-history\",\"params\":{\"session\":\"work\",\"window\":\"build\",\"limit\":20,\"query\":\"go test\"}}"
+    ]
+  },
+  "list-ports": {
+    "description": "List the TCP ports that processes in panes on this machine listen on. A pane's processes are its program and every process under it. A process that left the pane's process tree is not listed. Linux and macOS only. The answer can be up to 1 second old.",
+    "params": [
+      {
+        "name": "session",
+        "description": "List only this session's panes. Omit to list every session."
+      }
+    ],
+    "returns": [
+      {
+        "name": "supported",
+        "description": "False on a system where tuios cannot read listening ports. ports is then empty."
+      },
+      {
+        "name": "ports",
+        "description": "One entry per listening socket: session, window (the window id), port, addr (the address it listens on, such as 127.0.0.1, 0.0.0.0 or ::), pid, comm (the process name) and worktree (the folder of the session's worktree, empty for a session that is not a worktree session)."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"list-ports\"}",
+      "{\"id\":1,\"verb\":\"list-ports\",\"params\":{\"session\":\"work\"}}"
+    ]
+  },
+  "search-panes": {
+    "description": "Find text in the history and the screen of panes on this machine. The newest match in a pane comes first, and the pane with the newest output comes first. Each pane gets 50 ms. A pane that takes longer is cut off, and truncated is then true.",
+    "params": [
+      {
+        "name": "query",
+        "description": "The text to find, at most 512 bytes. It is literal text unless regex is true."
+      },
+      {
+        "name": "regex",
+        "description": "Read query as a Go regular expression. A pattern that matches an empty line is refused."
+      },
+      {
+        "name": "case",
+        "description": "How letter case counts. smart ignores case unless the query has a capital letter."
+      },
+      {
+        "name": "sessions",
+        "description": "The sessions to search. Omit to search every session."
+      },
+      {
+        "name": "max",
+        "description": "The most matches to return, at most 1000."
+      },
+      {
+        "name": "per_pane",
+        "description": "The most matches to return from one pane, at most 200."
+      }
+    ],
+    "returns": [
+      {
+        "name": "matches",
+        "description": "One entry per matched row: session, window (the window id), name, workspace, row, text, start, end and age_rows. row counts history rows from the top, then screen rows. text is the row, cut to 400 characters around the match. start and end are the first match's character offsets in text. age_rows is how many rows the row is above the bottom of the screen."
+      },
+      {
+        "name": "panes_searched",
+        "description": "How many panes were read."
+      },
+      {
+        "name": "truncated",
+        "description": "True when more matches exist than came back: max or per_pane was reached, or a pane took longer than 50 ms."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"search-panes\",\"params\":{\"query\":\"error\"}}",
+      "{\"id\":1,\"verb\":\"search-panes\",\"params\":{\"query\":\"panic: .*nil\",\"regex\":true,\"sessions\":[\"work\"],\"max\":50}}"
+    ]
+  }
+}

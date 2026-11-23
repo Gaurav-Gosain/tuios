@@ -5,7 +5,8 @@
 //
 //	go run ../tarpack/gen.go OUT.tar.gz PATH...
 //
-// A path that is a folder adds every file under it. Each file is stored under
+// A path may be a pattern such as *.json. A path that is a folder adds every
+// file under it. Each file is stored under
 // its path relative to the current folder, with forward slashes. The archive
 // is deterministic: names in order, no times, no owners, so the same files give
 // the same bytes on the same Go version.
@@ -27,7 +28,17 @@ func main() {
 		log.Fatal("usage: gen.go OUT.tar.gz PATH...")
 	}
 	var paths []string
-	for _, root := range os.Args[2:] {
+	var roots []string
+	for _, arg := range os.Args[2:] {
+		// go generate runs no shell, so a pattern such as *.json is expanded
+		// here.
+		matches, err := filepath.Glob(arg)
+		if err != nil || len(matches) == 0 {
+			matches = []string{arg}
+		}
+		roots = append(roots, matches...)
+	}
+	for _, root := range roots {
 		err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err

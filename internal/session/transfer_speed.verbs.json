@@ -1,0 +1,62 @@
+{
+  "host-speed-test": {
+    "description": "Measure the link to a host the way a copy uses it: the round trip of a small call, then bytes up and down on bulk streams. The bytes are random, so compression does not help them.",
+    "params": [
+      {
+        "name": "host",
+        "description": "A name from [hosts]."
+      },
+      {
+        "name": "bytes",
+        "description": "How many bytes each way."
+      }
+    ],
+    "returns": [
+      {
+        "name": "rtt_ms",
+        "description": "The middle of five round trips, ms."
+      },
+      {
+        "name": "up",
+        "description": "Bytes a second from this machine to the host."
+      },
+      {
+        "name": "down",
+        "description": "Bytes a second from the host to this machine."
+      },
+      {
+        "name": "up_ms",
+        "description": "How long the bytes up took."
+      },
+      {
+        "name": "down_ms",
+        "description": "How long the bytes down took."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"host-speed-test\",\"params\":{\"host\":\"build\",\"bytes\":16777216}}"
+    ]
+  },
+  "speed-test": {
+    "description": "The far end of a link speed test. ping answers at once. sink takes bytes after the reply and drops them, then answers one line {bytes, ms}. source sends bytes of random data after the reply, then closes.",
+    "params": [
+      {
+        "name": "mode",
+        "description": "ping, sink or source."
+      },
+      {
+        "name": "bytes",
+        "description": "How many bytes sink takes or source sends, at most 1 GiB."
+      }
+    ],
+    "returns": [
+      {
+        "name": "mode",
+        "description": "The mode."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"speed-test\",\"params\":{\"mode\":\"ping\"}}"
+    ]
+  }
+}
