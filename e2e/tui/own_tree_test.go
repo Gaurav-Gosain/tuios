@@ -164,9 +164,7 @@ func TestAFanPaneClosesAndWaitsForItsOwnTree(t *testing.T) {
 	}
 
 	left := linkRows(t, base, map[string]any{"session": sess, "all": true})
-	for name, r := range linkRows(t, base, map[string]any{"session": other, "all": true}) {
-		left[name] = r
-	}
+	maps.Copy(left, linkRows(t, base, map[string]any{"session": other, "all": true}))
 	evidence["left"] = left
 	for _, name := range []string{"gen1", farName} {
 		if _, ok := left[name]; ok {
