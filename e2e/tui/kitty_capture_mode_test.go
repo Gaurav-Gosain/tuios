@@ -366,17 +366,8 @@ func TestLauncherIconsInScreenCapture(t *testing.T) {
 	waitBoot(t, term)
 	f := &launcherFixture{term: term, stream: stream, base: base}
 	f.openWithQuery(t, "zzapp", apps)
-	// A decode that lands on a still panel waits for the next frame to be
-	// placed (see requirePlaced), so the selection is moved until every row
-	// has its icon.
-	f.requirePlaced(t)
-	deadline := time.Now().Add(uiTimeout)
-	for len(f.live()) < apps {
-		if !time.Now().Before(deadline) {
-			t.Fatalf("only %d of %d icons were placed on the host\n%s", len(f.live()), apps, f.term.Snapshot())
-		}
-		f.nudgeSelection()
-		f.waitPlacements(func(p []string) bool { return len(p) >= apps }, nudgeBudget)
+	if got := f.waitPlacements(func(p []string) bool { return len(p) >= apps }, uiTimeout); len(got) < apps {
+		t.Fatalf("only %d of %d icons reached the host without further input\n%s", len(got), apps, f.term.Snapshot())
 	}
 
 	before := len(shotFiles(t, dir))

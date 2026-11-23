@@ -7824,6 +7824,14 @@ Run on 2026-10-17.
 The fixed build passes both, `TestKittyImageSurvivesCaptureMode`, every
 `TestLauncher*`, every `TestScreenshot*` and `TestRichRowReplyAndRecap`.
 
+## Launcher icons arrive while the panel is still (#2394)
+
+With the real PTY backend and `TUIOS_CELL_FRAME=0`, `TestLauncherIconsInScreenCapture`
+waits for all six placements without moving the selection. The pre-fix binary
+at `7e661e2a` failed with "only 0 of 6 icons reached the host without further
+input". The fixed binary passed, and the capture contained the six fixture
+icons. The 22 launcher tests passed on both frame paths.
+
 ## The mail editor has the image previews and the @ list
 
 `TestMailNewMessageFromThePersonReachesTheAgent` opens a new message to an

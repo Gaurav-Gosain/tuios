@@ -3236,12 +3236,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case launcherIconsMsg:
-		// Icons decoded off the Update goroutine, filed away here so the store
-		// is only ever written on this one.
+		// A decode changes graphics only. Keep the last text frame so View
+		// can flush the new placements when Bubble Tea has no text to write.
 		m.applyLauncherIcons(msg)
-		if m.ShowLauncher {
-			m.MarkAllDirty()
-		}
 		return m, nil
 
 	case PathAppsMsg:

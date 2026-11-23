@@ -111,22 +111,8 @@ func (f *launcherFixture) openWithQuery(t *testing.T, query string, wantRows int
 	}
 }
 
-// nudgeSelection moves the selection down and back, so the icon placements an
-// action queued go out behind a frame whose text actually changed.
-//
-// Icon placements are queued to go out behind the next frame bubbletea writes,
-// and a frame whose text is byte for byte the frame before it is not written at
-// all: the icon cells are blanks, so the frame that first carries a decoded icon
-// is exactly such a frame. Moving the selection changes a row's colours, which
-// is a text change, so it is what gets the queued graphics onto the wire. See
-// the launcher-icon findings.
-//
-// The wait between the two keys is for the first key's frame to have been
-// written, because the second one undoes the first and a pair that never
-// reaches a frame changes no text at all. It waits on the screen changing
-// rather than on a constant, so a loaded machine takes the time it needs. A
-// list with no rows has no selection to move and nothing queued behind it, so
-// the budget running out there is not a failure and is not treated as one.
+// nudgeSelection moves down and waits for its frame before moving back.
+// A list with no rows may have no selection to move.
 func (f *launcherFixture) nudgeSelection() {
 	before := f.term.Screen().Text()
 	_ = f.term.SendKeys(tuitest.Down)
@@ -166,34 +152,10 @@ func (f *launcherFixture) waitPlacements(want func([]string) bool, timeout time.
 
 // requirePlaced fails when the run never drew an icon, which would make every
 // leak assertion after it vacuous.
-//
-// Two things have to happen before an icon is on the host, in this order, and
-// the test can only wait on the first. The icon has to be decoded, which is
-// filesystem and CPU work in a command with no bound on it. Then a frame whose
-// text differs from the frame before it has to be written, because that is what
-// carries the queued placement out; see nudgeSelection. A decode that lands
-// after the last text change leaves its placement queued behind a frame that
-// never comes, so the selection is moved again while waiting rather than once
-// before it.
-//
-// That is driving the panel, not retrying the assertion. The assertion is
-// unchanged: an icon has to reach the host, and this still fails when none
-// ever does. It is also a workaround for tuios, not a property of it: a decode
-// that lands on an otherwise still panel leaves the icons invisible until the
-// user moves the selection, which is a real defect and is written up with these
-// findings rather than hidden by this loop.
 func (f *launcherFixture) requirePlaced(t *testing.T) {
 	t.Helper()
-	deadline := time.Now().Add(uiTimeout)
-	for {
-		if got := f.waitPlacements(func(p []string) bool { return len(p) > 0 }, nudgeBudget); len(got) > 0 {
-			return
-		}
-		if !time.Now().Before(deadline) {
-			t.Fatalf("no launcher icon was ever placed, so the leak check proves nothing\n%s",
-				f.term.Snapshot())
-		}
-		f.nudgeSelection()
+	if got := f.waitPlacements(func(p []string) bool { return len(p) > 0 }, uiTimeout); len(got) == 0 {
+		t.Fatalf("no launcher icon reached the host without further input\n%s", f.term.Snapshot())
 	}
 }
 
@@ -239,7 +201,6 @@ func TestLauncherIconsCloseByEscape(t *testing.T) {
 	requireReal(t, "real kitty under Xvfb")
 	f := newLauncherFixture(t, 20)
 	f.openWithQuery(t, "zzapp", 3)
-	f.nudgeSelection()
 	f.requirePlaced(t)
 
 	if err := f.term.SendKeys(tuitest.Esc); err != nil {
