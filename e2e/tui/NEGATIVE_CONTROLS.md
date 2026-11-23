@@ -17201,8 +17201,25 @@ Run on 2026-11-12 on macOS. The branch passes.
 |---------|---------------------|--------|
 | The R7 6b tip (14494abc8), where a tab change puts the cursor back on the top row | "the Conflicts tab did not keep its place: it names select_window_1, it left on select_window_3" | **caught** |
 
+The test once sent both down keys and then waited for any row but the top
+one. The frame drawn after the first key names the second row, so the test
+could take that row as the place it left. Then the test failed on a correct
+binary. The test now sends one key at a time and waits for each row.
+
+Run on 2026-11-23 on Linux, with a binary of main (7e661e2a0) and
+`TUIOS_CELL_FRAME=0`.
+
+| Test | Runs | Failures |
+|------|------|----------|
+| The old wait, real backend | 200 | 8: "it names select_window_3, it left on select_window_2" |
+| The old wait, sim backend | 100 | 4, the same message |
+| The new wait, real backend | 200 | 0 |
+| The new wait, sim backend | 200 | 0 |
+| The new wait, cell frames | 100 | 0 |
+
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestKeybindManagerTabsKeepTheirPlace$' -v .`.
+Add `TUIOS_CELL_FRAME=0` and `-count=200` to repeat the runs above.
 
 ## Older action names
 

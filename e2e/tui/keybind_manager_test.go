@@ -246,8 +246,11 @@ func TestKeybindManagerReadsTheLivePane(t *testing.T) {
 //
 // How this could pass wrongly, written down first:
 //   - The detail box could name the same binding on every row, so "the same
-//     after" says nothing. The test first checks that two rows down names a
-//     different binding than the top row.
+//     after" says nothing. The test checks that each row down names a
+//     binding the rows above it did not.
+//   - The read two rows down could be taken from the frame drawn after the
+//     first key, which names the second row. Each key is sent alone, and
+//     the test waits for the row it moves to before it sends the next.
 //   - The keys could fail to leave the tab, so the cursor never had a chance
 //     to reset. The test waits for the detail box to leave before it
 //     goes back.
@@ -277,8 +280,13 @@ func TestKeybindManagerTabsKeepTheirPlace(t *testing.T) {
 	sendKeys(t, term, tuitest.Tab)
 	top := waitNeverRuns(t, term, "", "the Conflicts tab")
 
-	sendKeys(t, term, tuitest.Down, tuitest.Down)
-	third := waitNeverRuns(t, term, top, "two rows down on the Conflicts tab")
+	sendKeys(t, term, tuitest.Down)
+	second := waitNeverRuns(t, term, top, "one row down on the Conflicts tab")
+	sendKeys(t, term, tuitest.Down)
+	third := waitNeverRuns(t, term, second, "two rows down on the Conflicts tab")
+	if third == top {
+		t.Fatalf("two rows down names the top row %q again\n%s", top, term.Snapshot())
+	}
 
 	sendKeys(t, term, tuitest.Key("\x1b[Z"))
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
