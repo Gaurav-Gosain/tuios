@@ -545,6 +545,7 @@ type linkRow struct {
 	Parent *linkRef `json:"parent"`
 	Root   *linkRef `json:"root"`
 	Depth  int      `json:"depth"`
+	State  string   `json:"state"`
 }
 
 // linkRows lists the windows of session, agent or not, by name.

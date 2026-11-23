@@ -7,6 +7,28 @@ below. Two of them are **not** caught here; that is written down rather than
 papered over, because a suite whose real coverage is unknown is worse than no
 suite.
 
+## A pane with fan closes and waits for its own tree
+
+`TestAFanPaneClosesAndWaitsForItsOwnTree` gives a shell pane `read,write,fan`
+and lets it start a child, a grandchild and a fan attempt in a session of its
+own. Its `wait-for --select` must answer with the tree and no stranger. It
+must close the grandchild by name and the fan attempt in the other session.
+Its close of a stranger by id in each session, and of a stranger renamed to a
+closed child's name, must be refused for the admin grant. Without `fan` its
+close and its wait must be refused.
+
+Run on 2026-11-23 on Linux. Three controls, each this branch with one change:
+
+| Change | Failure |
+| --- | --- |
+| `holdToOwnTree` never applies | `lead's wait-for --select was not served` |
+| `inOwnTree` always true | `the wait answered panes [...]` with the strangers, `close-window ... outside the tree was not refused` (2), `stranger ... closed, and lead does not hold admin` (2) |
+| No `under` filter in `waitAgentStateSelect` | `the wait answered panes [...]` with the strangers |
+
+Each step and its answer is in `handoff.json` under `TUIOS_E2E_FRAMES`, in the
+test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAFanPaneClosesAndWaitsForItsOwnTree$' -v .`.
+
 ## Shell integration by default
 
 `shell_integration_test.go` runs real bash 5.3 and zsh 5.9 in a daemon pane,

@@ -5863,7 +5863,7 @@ every pane, are held to nothing new.
 | --- | --- |
 | `read` | Read its own session and its fan group: list, capture, agent state, waits, the event stream, mail |
 | `write` | Type into the panes of its own session (`send-text`, `send-keys`, `ask-agent`, `run`) that hold nothing it does not, and leave mail and stashed files there |
-| `fan` | Do what `write` does in its fan group and the sessions it launched, and start agents with `fan` and `start-agent` |
+| `fan` | Do what `write` does in its fan group and the sessions it launched, and start agents with `fan` and `start-agent`. Close its own tree with `close-window`, and wait for it with `wait-for agent-state --select` (see [A pane's own tree](#a-panes-own-tree)) |
 | `respond` | Answer another pane's prompt with `respond`, without the person (see [Who may answer](#who-may-answer)), and type into a pane waiting on a prompt |
 | `files` | Copy files with `tuios cp`, inside the pane's own folder, and see and control its own copies |
 | `task` | Add, claim, finish, stage, block and release the task cards of its own session (`tuios task`). It claims only for itself and changes only the card it holds |
@@ -5911,6 +5911,31 @@ checked again right before the text is written. A pane's own pane is always
 its own to type into. A pane without `admin` that sends keys always has them
 written to the target's terminal, never through an attached client, where
 the prefix key would drive the window manager.
+
+### A pane's own tree
+
+A pane's own tree is the panes that it started and the panes that they
+started, down the chain. A pane with `fan` and without `admin` can close
+its tree and wait for it:
+
+```sh
+tuios close-window -s work leaf-2
+tuios wait-for agent-state --select "parent:$TUIOS_PANE_ID" --until idle,done --every
+```
+
+- `close-window` must name the window, by its id, index or name. A pane
+  outside the tree needs `admin`, also when you rename it to the name of a
+  pane in the tree.
+- A child in another session is in the tree. `start-agent` and `fan` can
+  put a child there.
+- `wait-for agent-state --select` watches only the panes of the tree. A pane
+  that the selector matches outside the tree does not end the wait and is not
+  in the answer. The `under` param of `wait-for` holds this, and the daemon
+  sets it to the caller's own window.
+- The tree follows `started_by` and the root of the agent link. The daemon
+  writes both when it makes the pane, and nothing can change them later.
+- A pane whose parent is closed is outside the tree, unless the caller is the
+  root of its agent chain. Close the deepest panes first.
 
 ### Where a pane's grants come from
 

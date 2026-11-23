@@ -772,6 +772,10 @@ func (d *Daemon) checkGrants(cs *connState, verb string, params json.RawMessage)
 		}
 		return nil, deny("the pane runs here for another machine and has no session on this one; its reports go to that machine")
 	}
+	// A pane with fan closes and waits for the panes it started (own_tree.go).
+	if out, verr, ok := d.holdToOwnTree(verb, pa, params, deny); ok {
+		return out, verr
+	}
 	if readsBuffers(verb) && !pa.grants.Has(GrantRead) {
 		return nil, deny(verb + " reads the paste buffers, which needs the read grant")
 	}

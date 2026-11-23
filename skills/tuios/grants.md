@@ -14,7 +14,7 @@ tuios pane-grants --json | jq -r '.grants | join(",")'
 | --- | --- |
 | `read` | Read your own session and your fan group: list, `get-window`, capture, agent state, waits, the event stream, mail |
 | `write` | Type into the panes of your own session that hold nothing you do not, and leave mail and stashed files there |
-| `fan` | Write in your fan group and the sessions you launched, and start agents with `fan` and `start-agent` |
+| `fan` | Write in your fan group and the sessions you launched, and start agents with `fan` and `start-agent`. Close the panes that you started, and the panes that they started, with `close-window`, and wait for them with `wait-for agent-state --select` |
 | `respond` | Answer another pane's prompt with `respond`, for the person, and type into a pane waiting on a prompt |
 | `files` | Copy files with `tuios cp`, and see and control your own copies with `tuios transfers` |
 | `task` | Add, claim, finish, stage, block and release the task cards of your own session (`tuios task`). You claim only for yourself and change only the card you hold |
@@ -52,6 +52,13 @@ cancels, answers and clears only the copies your pane started, never the
 person's or another pane's. Every copy carries the name of the pane that
 started it, whatever the pane holds. A refusal is `forbidden`, and
 `tuios cp` exits 4.
+
+With `fan` and without `admin`, `close-window` reaches only the panes that
+you started and their own children. Name the window by its id or its name. A
+pane outside that tree needs `admin`. A pane whose parent is closed is outside
+the tree, unless you are the root of its agent chain, so close the deepest
+panes first. `wait-for agent-state --select` watches only the panes of your
+tree, also when the selector matches more.
 
 `TUIOS_PANE_GRANTS` is what the pane held when its process started;
 `tuios pane-grants` is what it holds now.

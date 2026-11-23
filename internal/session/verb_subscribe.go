@@ -347,6 +347,8 @@ func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbE
 		// every session. Every waits for all of them rather than any one.
 		Select string `json:"select"`
 		Every  bool   `json:"every"`
+		// Under narrows select to the own tree of one pane (own_tree.go).
+		Under string `json:"under"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -356,6 +358,9 @@ func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbE
 	}
 	if p.Every && p.Select == "" {
 		return nil, invalidParam("every", "every applies to a wait with select: it waits for every pane the selector matches")
+	}
+	if p.Under != "" && p.Select == "" {
+		return nil, invalidParam("under", "under applies to a wait with select: it keeps the panes the selector matches to the ones that window started")
 	}
 	if p.Select != "" {
 		if verr := refuseSelectFromHostedPane(cs); verr != nil {
@@ -384,7 +389,7 @@ func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbE
 		if verr != nil {
 			return nil, verr
 		}
-		return d.waitAgentStateSelect(sel, p.Until, p.Every, deadline)
+		return d.waitAgentStateSelect(sel, p.Until, p.Every, strings.TrimSpace(p.Under), deadline)
 	}
 
 	if p.AnySession {
@@ -730,7 +735,11 @@ func (d *Daemon) waitAgentStateAnySession(until string, deadline <-chan time.Tim
 // the wait and matches is watched, and one that closes stops counting. A state
 // term in the selector narrows which panes are watched at the moment of each
 // check, so the state to wait for belongs in until, not in the selector.
-func (d *Daemon) waitAgentStateSelect(sel *Selector, until string, every bool, deadline <-chan time.Time) (any, *verbError) {
+//
+// With under set, only the panes in the own tree of that window count
+// (own_tree.go), so a pane outside it neither ends the wait nor shows in the
+// answer.
+func (d *Daemon) waitAgentStateSelect(sel *Selector, until string, every bool, under string, deadline <-chan time.Time) (any, *verbError) {
 	states, verr := parseUntilStates(until)
 	if verr != nil {
 		return nil, verr
@@ -743,6 +752,9 @@ func (d *Daemon) waitAgentStateSelect(sel *Selector, until string, every bool, d
 
 	check := func() (map[string]any, bool) {
 		panes := d.selectPanes(sel, false)
+		if under != "" {
+			panes = slices.DeleteFunc(panes, func(p selectedPane) bool { return !d.inOwnTree(p.window, under) })
+		}
 		if every {
 			if len(panes) == 0 {
 				return nil, false

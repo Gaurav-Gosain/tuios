@@ -6773,6 +6773,10 @@
         "description": "A selector: space-separated key:value terms, all of which must match, each with comma-separated alternatives. Keys: harness (id or program name), state, needs:you, session (glob), group (fan-out group, glob), host (local or a host name, glob), name (window name, glob), cwd (the directory or under it; ~ is home), task (a task card the pane holds, by id, glob), stage (the stage of a card the pane holds), parent and root (the parent agent pane, or the first of its chain, by window id or a start of it). For agent-state only: watch the agent panes it matches, in every session, including panes that open during the wait. Takes no session, window or any_session. Put the state to wait for in until, not in the selector."
       },
       {
+        "name": "under",
+        "description": "With select: watch only the panes that this window started, and the panes they started, by window id. A pane with the fan grant and without admin always waits under its own window."
+      },
+      {
         "name": "every",
         "description": "With select: match only when at least one pane matches and every matched pane is in one of the until states, and answer with all of them in panes. Without it, the first matched pane to reach one matches."
       }

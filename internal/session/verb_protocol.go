@@ -2507,6 +2507,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "command_seq", Type: "int"},
 				{Name: "timeout", Type: "int", Default: "30000"},
 				{Name: "select", Type: "string"},
+				{Name: "under", Type: "string"},
 				{Name: "every", Type: "bool", Default: "false"},
 			},
 			returns: []verbParam{
