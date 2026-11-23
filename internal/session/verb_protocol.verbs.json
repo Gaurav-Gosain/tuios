@@ -4475,7 +4475,7 @@
     "params": [
       {
         "name": "host",
-        "description": "A host by name from the [hosts] config table."
+        "description": "A host by name from the [hosts] config table, or \"local\" for this machine, which has no link and is reported up."
       }
     ],
     "returns": [

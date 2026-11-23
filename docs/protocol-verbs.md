@@ -4072,7 +4072,7 @@ Dial the link to one host again now. The backoff starts again from one second. I
 
 | Param | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `host` | string |  |  | A host by name from the [hosts] config table. |
+| `host` | string |  |  | A host by name from the [hosts] config table, or "local" for this machine, which has no link and is reported up. |
 
 | Result field | Type | Description |
 |---|---|---|

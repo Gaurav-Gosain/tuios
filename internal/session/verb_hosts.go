@@ -353,6 +353,10 @@ func (d *Daemon) verbRetryHost(_ *connState, params json.RawMessage) (any, *verb
 	if p.Host == "" {
 		return nil, newVerbError(ErrVerbInvalidParams, "retry-host needs a host")
 	}
+	// This machine has no link to dial.
+	if p.Host == federation.LocalHostName {
+		return map[string]any{"type": "host_retry", "host": federation.LocalHostName, "status": federation.StatusUp}, nil
+	}
 	if verr := d.checkHostParam(p.Host); verr != nil {
 		return nil, verr
 	}

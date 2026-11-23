@@ -18791,15 +18791,22 @@ Run on 2026-11-21 on Linux, real backend, against main at 16ae1ca77.
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestAModeNoticeStaysAboveANoticeItDidNotAsk$' .
+```
+
 ## Coming home from a host asks for no retry
 
-`TestComingHomeFromAHostAsksForNoRetry` (`host_home_retry_test.go`) clicks from a session on a linked machine back to a session of this machine on the rail. The switch must land, and this machine's daemon log must hold no `Verb retry-host refused` line: this machine has no link to dial. A refusal made on purpose after the click home (`ls --host no-such-box`) must be in the same log first, so the check cannot pass on a log nothing reaches.
+`TestComingHomeFromAHostAsksForNoRetry` (`host_home_retry_test.go`) clicks from a session on a linked machine back to a session of this machine on the rail. The switch must land, and the client must send this machine's daemon no `retry-host` for `local`: this machine has no link to dial. The client gets a runtime folder of its own, and a recorder listens on the socket there. It passes every connection on to the daemon's socket and keeps what the client wrote, one record per connection. After the rail marks home and the test's own `tuios call list-keys`, sent from a new process through the recorder, is in the record, no recorded line may hold `"verb":"retry-host"` with `"host":"local"` for one second.
 
-Run on Linux on 2026-11-20. The branch passes it three times in one process (`-count=3`). The fix is one guard in `retryHostCmd`, so cutting it is the same build as main.
+Two positive halves keep the check honest. The rail's `list-host-sessions` must be in the record, so the recorder is in the client's path. The click out to build must leave its `retry-host` for `build` in the record, so the recorder sees this very verb when the client sends it.
+
+The test used to read the daemon's log for a `Verb retry-host refused` line. Once the daemon answers `retry-host` for `local` it logs nothing, and that check passed with the guard cut.
+
+Run on Linux on 2026-11-23, real backend, against main at 7e661e2a0. The test passes on main three times in one process (`-count=3`) and in three separate runs.
 
 | Control | How | Failure | Verdict |
 | --- | --- | --- | --- |
-| Main, no fix | `internal/app/host_signin.go` of main | "ASSERTION: this machine's daemon was asked for no retry of a link on the way home", the state was "Verb retry-host refused for client client-1795155023981241240: unknown_host" | **caught** |
+| The guard in `retryHostCmd` cut | `internal/app/host_signin.go` without `if host == federation.LocalHostName { return nil }`, on main | 3 of 3 runs: "ASSERTION: this machine's daemon was asked for no retry of a link on the way home", the state was `{"id":2,"verb":"retry-host","params":{"host":"local"}}` | **caught** |
+| The guard cut, with the daemon answering for this machine | the same cut on the change | 2 of 2 runs: "ASSERTION: this machine's daemon was asked for no retry of a link on the way home", the state was `{"id":2,"verb":"retry-host","params":{"host":"local"}}` | **caught** |
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
@@ -18912,4 +18919,24 @@ TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=5 -v -run '^TestHeldPane
 
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestHerdrProtocolReportsACrushPane$' .
+## retry-host answers for this machine
+
+`TestRetryHostAnswersForThisMachine` (`retry_host_local_test.go`) sends `retry-host` on raw connections to this machine's daemon, first with no hosts configured and then with host build, whose ssh stand-in counts its runs and refuses. `local` must be answered with a result of type `host_retry`, host `local`, status `up`, both times. A name nobody configured, `Local` and `local ` must stay unknown hosts, an empty host and no host must stay invalid params, and a connection restricted to scope own or scope all must be refused with forbidden. After the stand-in's fourth run the count must hold for 2.5 s, still hold 3 s after two retries for `local`, and move within 5 s of a retry for build. Each request and reply line is in the artifact `retry-host-local.txt`.
+
+Run on Linux on 2026-11-23, real backend, against main at 7e661e2a0. The first half also runs on the sim backend. Each control below Main is one change to the branch, run alone and then restored.
+
+| Control | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| Main | `TestRetryHostAnswersForThisMachine` | 3 subtests: "ASSERTION: {"id":1,"verb":"retry-host","params":{"host":"local"}} was answered with an error, want a result of type host_retry, host local, status up", the reply `"code":"unknown_host","message":"unknown host local. No hosts are configured."` with no hosts and `"message":"unknown host \"local\". Configured hosts: build"` with build; the count test fails there after its 2.5 s hold | **caught** |
+| The answer for this machine cut | `TestRetryHostAnswersForThisMachine` | the same 3 subtests as on main: "ASSERTION: {"id":1,"verb":"retry-host","params":{"host":"local"}} was answered with an error, want a result of type host_retry, host local, status up", the reply `"code":"unknown_host"` | **caught** |
+| The answer for this machine placed after the host check | `TestRetryHostAnswersForThisMachine` | the same 3 subtests: "was answered with an error, want a result of type host_retry, host local, status up", the reply `"code":"unknown_host"` | **caught** |
+| The status, the type or the host of the answer another word | `TestRetryHostAnswersForThisMachine` | status down: "answered status down, want "up""; type host_retried: "answered type host_retried, want "host_retry""; host empty: "answered host , want "local"" | **caught** |
+| The answer for this machine also makes every configured host's link dial | `TestRetryHostAnswersForThisMachine` | "ASSERTION: two retries for local made no link dial", "it stopped holding after 250.727844ms, the state was: the ssh stand-in ran 5 times, at [0.02s 2.03s 3.04s 5.05s 7.62s] after start-server" | **caught** |
+| Every name answered as up | `TestRetryHostAnswersForThisMachine` | "ASSERTION: {"id":1,"verb":"retry-host","params":{"host":"no-such-box"}} was answered {"id":1,"result":{"host":"local","status":"up","type":"host_retry"}}, want the error code unknown_host"; also for `Local` and `local `, and "a retry for build makes its link dial" | **caught** |
+| The empty name taken for this machine | `TestRetryHostAnswersForThisMachine` | "ASSERTION: {"id":1,"verb":"retry-host","params":{"host":""}} was answered {"id":1,"result":{"host":"local","status":"up","type":"host_retry"}}, want the error code invalid_params"; also for params `{}` | **caught** |
+| The match made case-blind or trimmed | `TestRetryHostAnswersForThisMachine` | case-blind: "ASSERTION: {"id":1,"verb":"retry-host","params":{"host":"Local"}} was answered {"id":1,"result":{"host":"local","status":"up","type":"host_retry"}}, want the error code unknown_host"; trimmed: the same for `"host":"local "` | **caught** |
+| retry-host open to a restricted connection | `TestRetryHostAnswersForThisMachine` | "ASSERTION: {"id":2,"verb":"retry-host","params":{"host":"local"}} was answered {"id":2,"result":{"host":"local","status":"up","type":"host_retry"}}, want the error code forbidden", for scope own and scope all with the verb open, for scope all with the verb global | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestRetryHostAnswersForThisMachine$' .
 ```
