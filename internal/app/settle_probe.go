@@ -91,13 +91,16 @@ func (m *OS) takeSettleProbe(msg tea.Msg) bool {
 }
 
 // settleBusy reports whether the frame is still changing on its own toward
-// an end: a window animation, an overlay fade, the copy sweep, a celebration,
-// a theme transition or a workspace slide. The screen saver and the shimmer
-// run for as long as their cause lasts, so they do not count: a client that
-// shows one would never settle.
+// an end: a live effect that is not held (see effect.held). A held effect,
+// such as the screen saver, lasts as long as its cause, so a client that shows
+// one would never settle.
 func (m *OS) settleBusy() bool {
-	return m.HasActiveAnimations() || m.motion.fading > 0 || m.copyFlash != nil ||
-		m.celebration.active() || m.themeFx.running() || m.wsSlide.running()
+	for i := range effects {
+		if !effects[i].held && effects[i].live(m) {
+			return true
+		}
+	}
+	return false
 }
 
 // answerSettleProbes writes the answer to each probe taken since the last

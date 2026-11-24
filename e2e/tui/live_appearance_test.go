@@ -256,8 +256,9 @@ func waitPanesDrawn(t *testing.T, term *tuitest.Terminal, noDock bool, when stri
 	}
 }
 
-// stableText is the screen's text once it has settled, with the dock's
-// notification area blanked, since a set-config raises a notice there.
+// stableText is the screen's text once it has settled. A set-config raises a
+// notice on the dock's line, so callers compare with sameFrame, which leaves
+// the first line out.
 //
 // set-config returns once the attached client has applied the value (the
 // daemon routes it and waits for the answer), so a client that answers settle

@@ -29,6 +29,11 @@ import (
 // pane's own text, which both draw, and the shimmer runs on the rail's rows,
 // which the fast path does not draw and the direct pane does not cover. A
 // frame with the shimmer on still composes the canvas in full (composeLayers).
+//
+// An effect that lasts as long as its cause (held) never ends on its own: the
+// screen saver, the shimmer, the spotlight, hints mode and the pane labels. A
+// settle probe counts every other live effect as busy (settleBusy), so a new
+// effect that ends on its own counts without a change there.
 type effect struct {
 	name       string
 	live       func(m *OS) bool
@@ -36,12 +41,13 @@ type effect struct {
 	every      func(m *OS) time.Duration
 	step       func(m *OS, now time.Time) (redraw bool, cmd tea.Cmd)
 	besidePane bool
+	held       bool
 }
 
 var effects = [...]effect{
 	{name: "window animation", live: func(m *OS) bool { return len(m.Animations) > 0 }},
 	{
-		name: "screen saver", live: func(m *OS) bool { return m.screensaver.active },
+		name: "screen saver", live: func(m *OS) bool { return m.screensaver.active }, held: true,
 		every: (*OS).saverFrameEvery, step: (*OS).stepScreensaver,
 	},
 	{
@@ -60,14 +66,14 @@ var effects = [...]effect{
 		step:  func(m *OS, _ time.Time) (bool, tea.Cmd) { return m.markCopyFlashPane(), nil },
 	},
 	{
-		name: "shimmer", live: (*OS).shimmerActive, besidePane: true,
+		name: "shimmer", live: (*OS).shimmerActive, besidePane: true, held: true,
 		every: func(*OS) time.Duration { return config.ShimmerFrame },
 		// A shimmer frame is cheap to compute and dear to send: when another
 		// frame went out within the last interval it carried the band already.
 		step: func(m *OS, now time.Time) (bool, tea.Cmd) { return !m.shimmerCovered(now), nil },
 	},
 	{
-		name: "spotlight", live: func(m *OS) bool { return m.spotlight.on },
+		name: "spotlight", live: func(m *OS) bool { return m.spotlight.on }, held: true,
 		// The saver owns the whole screen while it runs and suspends the beam.
 		draw: func(m *OS, c *frameCanvas, _ time.Time) {
 			if !m.screensaver.active {
@@ -75,8 +81,8 @@ var effects = [...]effect{
 			}
 		},
 	},
-	{name: "hints", live: func(m *OS) bool { return m.hints != nil }},
-	{name: "pane labels", live: func(m *OS) bool { return m.paneLabels != nil }},
+	{name: "hints", live: func(m *OS) bool { return m.hints != nil }, held: true},
+	{name: "pane labels", live: func(m *OS) bool { return m.paneLabels != nil }, held: true},
 	{
 		name: "celebration", live: func(m *OS) bool { return m.celebration.active() },
 		draw:  func(m *OS, c *frameCanvas, _ time.Time) { m.celebration.draw(c) },
