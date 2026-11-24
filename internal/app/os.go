@@ -408,9 +408,13 @@ type OS struct {
 	RenameKind         RenameKind     // What the open rename editor targets (RenameNone when closed)
 	rename             textedit.Line  // the rename editor's text and caret
 	RenameTargetID     string         // Window the rename in flight applies to
-	renameHit          overlay.Rect   // Where the dialog was drawn, in screen cells
-	renameClearHit     overlay.Rect   // Where its clear hint was drawn, in screen cells
-	PrefixActive       bool           // True when prefix key was pressed (tmux-style)
+	// renameMachine is the machine of a session rename on a machine other
+	// than the attached one, and renameSeed the name it opened with. Both are
+	// empty for every other rename.
+	renameMachine, renameSeed string
+	renameHit                 overlay.Rect // Where the dialog was drawn, in screen cells
+	renameClearHit            overlay.Rect // Where its clear hint was drawn, in screen cells
+	PrefixActive              bool         // True when prefix key was pressed (tmux-style)
 	// SubMenu is the leader sub-menu open now (leader, then w, m, t, D, T, L
 	// or the tuios menu key), SubMenuNone when none is.
 	SubMenu        SubMenu

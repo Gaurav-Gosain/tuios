@@ -253,9 +253,13 @@ func gotoPickerKeys(m *OS, key string) (tea.Cmd, bool) {
 	if g.killing.node.ID != "" {
 		switch key {
 		case "y", "Y", "enter":
-			id := g.killing.node.ID
+			r := g.killing
 			g.killing = gotoRow{}
-			m.KillOtherSession(id)
+			if r.host == "" {
+				m.KillOtherSession(r.node.ID)
+			} else {
+				m.KillSessionOn(m.itemMachine(r.host), r.session, gotoRowLabel(r))
+			}
 		case "n", "N", "esc":
 			g.killing = gotoRow{}
 		}
@@ -273,15 +277,13 @@ func gotoPickerKeys(m *OS, key string) (tea.Cmd, bool) {
 	note := func(s string) { m.ShowNotification(s, "info", m.Settings.NotificationDuration) }
 	switch {
 	case key == "ctrl+r" && r.kind == gotoSession:
-		if r.host != "" {
-			// Renames go to the daemon this client is connected to, which
-			// does not hold another machine's session.
-			note("Switch to " + r.host + " to rename this session")
-			return nil, true
-		}
 		// The picker stays open under the rename dialog, and its row reads
 		// the new name once the daemon's push lands.
-		m.BeginRenameSession(r.node.ID)
+		if r.host == "" {
+			m.BeginRenameSession(r.node.ID)
+		} else {
+			m.BeginRenameSessionOn(m.itemMachine(r.host), r.session, r.sessionLabel)
+		}
 	case key == "ctrl+r" && r.kind == gotoWorkspace:
 		if r.session != m.sidebarCurrentSessionID() {
 			note("Switch to the session to rename its workspace")
@@ -290,8 +292,6 @@ func gotoPickerKeys(m *OS, key string) (tea.Cmd, bool) {
 		m.BeginRenameWorkspace(r.ws)
 	case key == "ctrl+d" && r.kind == gotoSession:
 		switch {
-		case r.host != "":
-			note("Switch to " + r.host + " to delete this session")
 		case r.current:
 			m.ShowNotification("Cannot delete the current session", "warning", m.Settings.NotificationDuration)
 		default:

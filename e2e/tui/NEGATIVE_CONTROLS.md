@@ -19390,3 +19390,20 @@ Run on 2026-11-24 on Linux. The control is main without the fix.
 The frame is `attached-review-open` under `TUIOS_E2E_FRAMES`, in the test's
 folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestReviewWhileAttachedThroughAHost$' -v .`.
+
+## Go to deletes and renames a session on a host
+
+`TestGotoActsOnASessionOnAHost` opens go to (prefix S) on a client attached
+to a session on this machine. Ctrl+d on session `spare` of the linked machine
+alpha must ask, and y must remove it from alpha. Ctrl+r on `old` must open
+the rename, and the new name must reach alpha.
+
+Run on 2026-11-24 on Linux. The control is main without the fix.
+
+| Change | Failure |
+| --- | --- |
+| ctrl+d and ctrl+r refuse a row on another machine | `ctrl+d on alpha's session asked nothing` |
+
+The frames are `goto-delete-ask` and `goto-delete-done` under
+`TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestGotoActsOnASessionOnAHost$' -v .`.

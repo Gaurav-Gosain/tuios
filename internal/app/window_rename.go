@@ -60,6 +60,24 @@ func (m *OS) BeginRenameSession(name string) {
 	m.rename.Set(m.SessionLabel(name))
 }
 
+// BeginRenameSessionOn starts a rename of the session name on machine, as
+// attachedMachine names machines, seeded with label. On the attached machine
+// it is BeginRenameSession. On another machine the rename goes to that
+// machine's daemon through the link.
+func (m *OS) BeginRenameSessionOn(machine, name, label string) {
+	if machine == m.attachedMachine() {
+		m.BeginRenameSession(name)
+		return
+	}
+	if name == "" {
+		return
+	}
+	m.RenameKind = RenameSession
+	m.RenameTargetID = name
+	m.renameMachine, m.renameSeed = machine, label
+	m.rename.Set(label)
+}
+
 // BeginEditNote opens the one-line editor on a session's return note, seeded
 // with the note it has now.
 func (m *OS) BeginEditNote(name string) {
@@ -200,6 +218,9 @@ func (m *OS) RenameTarget() *terminal.Window {
 func (m *OS) RenameDialogTitle() string {
 	switch m.RenameKind {
 	case RenameSession:
+		if m.renameMachine != "" {
+			return "rename session " + m.renameSeed + " on " + printableTitle(m.renameMachine)
+		}
 		if label := m.SessionLabel(m.RenameTargetID); label != "" {
 			return "rename session " + label
 		}
@@ -223,7 +244,19 @@ func (m *OS) RenameDialogTitle() string {
 func (m *OS) CommitRename() tea.Cmd {
 	kind, target := m.RenameKind, m.RenameTargetID
 	label := strings.TrimSpace(m.rename.String())
+	machine, seed := m.renameMachine, m.renameSeed
 	defer m.EndRename()
+
+	if kind == RenameSession && machine != "" {
+		if label == seed {
+			return nil
+		}
+		verb, params, ok := renameVerb(kind, target, "", label)
+		if !ok {
+			return nil
+		}
+		return labelVerbCmd(agentMailDial(m.machineDialer(machine)), "Rename", verb, params)
+	}
 
 	if kind == RenameWindow {
 		if w := m.RenameTarget(); w != nil {
@@ -279,6 +312,7 @@ func renameVerb(kind RenameKind, target, sessionName, label string) (string, map
 func (m *OS) EndRename() {
 	m.RenameKind = RenameNone
 	m.RenameTargetID = ""
+	m.renameMachine, m.renameSeed = "", ""
 	m.rename.Set("")
 	m.renameHit = overlay.Rect{}
 	m.renameClearHit = overlay.Rect{}

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -390,6 +391,32 @@ func (m *OS) KillOtherSession(sessionID string) {
 		ch <- SessionKilledMsg{Label: label, Err: client.KillSessionByName(sessionID)}
 	}()
 }
+
+// KillSessionOn ends the session name on machine, as attachedMachine names
+// machines. On the attached machine it is KillOtherSession. On another
+// machine the kill goes to that machine's daemon through the link, where its
+// link policy for this machine applies. label is the name the result shows.
+func (m *OS) KillSessionOn(machine, name, label string) {
+	if machine == m.attachedMachine() {
+		m.KillOtherSession(name)
+		return
+	}
+	if name == "" || m.DaemonClient == nil {
+		return
+	}
+	call, ch := m.machineCaller(machine), m.sessionKillChan()
+	go func() {
+		_, err := call("kill-session", map[string]any{"session": name}, sessionKillTimeout)
+		if refusal := linkRefusal(machine, err); refusal != "" {
+			err = errors.New(refusal)
+		}
+		ch <- SessionKilledMsg{Label: label, Err: err}
+	}()
+}
+
+// sessionKillTimeout covers a kill on another machine: the link's own budget
+// for a call, and the far daemon ending the session's processes.
+const sessionKillTimeout = 30 * time.Second
 
 // sessionKillChan is the buffered channel carrying kill results back to Update,
 // made on first use so a client that never kills another session pays nothing.
