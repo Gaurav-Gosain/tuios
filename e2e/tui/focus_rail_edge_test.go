@@ -53,7 +53,7 @@ func TestFocusKeysWalkIntoAndOutOfRail(t *testing.T) {
 		t.Fatalf("alt+left from the rightmost pane did not move focus\n%s", term.Snapshot())
 	}
 	// The leftmost pane runs into the screen edge, and no rail is there.
-	send(t, term, tuitest.Alt(tuitest.Left))
+	sendNoFrame(t, term, tuitest.Alt(tuitest.Left))
 	railStaysOut(t, term, "alt+left on the leftmost pane entered the rail on the right edge")
 	send(t, term, tuitest.Alt(tuitest.Right))
 	if cur = waitFocusChange(t, base, session, left); cur != rightmost.ID {

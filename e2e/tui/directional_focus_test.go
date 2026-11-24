@@ -362,8 +362,8 @@ func TestDirectionalFocusWrapBSP(t *testing.T) {
 			// still has: wait for the client.
 			waitClientFocus(t, term, layout, from.ID)
 			want := farSide(from.winRect, layout, k.name)
-			send(t, term, k.keys...)
 			if len(want) == 0 {
+				sendNoFrame(t, term, k.keys...)
 				time.Sleep(time.Second)
 				if _, got := focusedLayout(t, base, session); got != from.ID {
 					t.Fatalf("pressed %s on pane %s at %+v with nothing on the far side: focus went to %s\n%s",
@@ -371,6 +371,7 @@ func TestDirectionalFocusWrapBSP(t *testing.T) {
 				}
 				continue
 			}
+			send(t, term, k.keys...)
 			got := waitFocusChange(t, base, session, from.ID)
 			if got == from.ID {
 				t.Fatalf("pressed %s on pane %s at %+v: focus stayed, want one of %v\n%s",

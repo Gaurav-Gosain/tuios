@@ -83,10 +83,12 @@ func runPreselectCase(t *testing.T, tc preselectCase) {
 		}
 	}
 	for range 4 {
-		if _, f := focusedLayout(t, base, session); f == target.ID {
+		_, f := focusedLayout(t, base, session)
+		if f == target.ID {
 			break
 		}
 		send(t, term, "h")
+		waitFocusChange(t, base, session, f)
 	}
 	if _, f := focusedLayout(t, base, session); f != target.ID {
 		t.Fatalf("could not focus the leftmost pane %s\n%s", target.ID[:8], term.Snapshot())
@@ -233,8 +235,9 @@ func TestBSPNewWindowSplitsTheFocusedPaneStandalone(t *testing.T) {
 				}
 			}
 			// From any of the three panes, two presses of h reach the leftmost.
-			send(t, term, "h")
-			send(t, term, "h")
+			// A press on the leftmost pane moves nothing.
+			sendNoFrame(t, term, "h")
+			sendNoFrame(t, term, "h")
 			dir := artifactDir(t)
 			if tc.key != nil {
 				send(t, term, tc.key)

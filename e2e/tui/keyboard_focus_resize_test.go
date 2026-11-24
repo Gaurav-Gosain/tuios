@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -121,13 +122,31 @@ func markerColumn(s tuitest.Screen, marker string) int {
 	return -1
 }
 
-// send types keys and gives the client a beat to act on them.
+// send types keys and waits for the frame that answers them: output from
+// tuios after the keys went in. tuios reads keys in order, so a later key
+// acts on the state this one left. A key that changes nothing on screen draws
+// no frame, and goes through sendNoFrame.
 func send(t *testing.T, term *tuitest.Terminal, keys ...any) {
+	t.Helper()
+	before, _ := term.Progress()
+	if err := term.SendKeys(keys...); err != nil {
+		t.Fatal(err)
+	}
+	waitUntil(t, fmt.Sprintf("tuios draws a frame after %q", keys), uiTimeout, func() (bool, string) {
+		n, _ := term.Progress()
+		return n > before, fmt.Sprintf("%d output bytes before the keys, %d now", before, n)
+	})
+}
+
+// sendNoFrame types keys whose effect, when they work, is that nothing
+// changes, so there is no frame to wait for. It gives tuios the beat send used
+// to give every key.
+func sendNoFrame(t *testing.T, term *tuitest.Terminal, keys ...any) {
 	t.Helper()
 	if err := term.SendKeys(keys...); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(700 * time.Millisecond)
+	pause(t, "a key that changes nothing draws nothing to wait for", 700*time.Millisecond)
 }
 
 // altArrowRoundTrips moves focus to the left pane and back three times with
@@ -147,13 +166,13 @@ func TestAltArrowsMoveFocus(t *testing.T) {
 	term := focusPanes(t, focusFixture{config: sharedBordersConfig})
 	send(t, term, tuitest.Alt(tuitest.Left))
 	send(t, term, `printf "LM%sK\n" AR`, tuitest.Enter)
-	time.Sleep(time.Second)
+	waitText(t, term, "the marker after alt+left", "LMARK")
 	if col := markerColumn(term.Screen(), "LMARK"); col < 0 || col >= 80 {
 		t.Fatalf("after alt+left the marker landed at column %d, want the left pane\n%s", col, term.Snapshot())
 	}
 	send(t, term, tuitest.Alt(tuitest.Right))
 	send(t, term, `printf "RM%sK\n" AR`, tuitest.Enter)
-	time.Sleep(time.Second)
+	waitText(t, term, "the marker after alt+right", "RMARK")
 	if col := markerColumn(term.Screen(), "RMARK"); col < 80 {
 		t.Fatalf("after alt+right the marker landed at column %d, want the right pane\n%s", col, term.Snapshot())
 	}
