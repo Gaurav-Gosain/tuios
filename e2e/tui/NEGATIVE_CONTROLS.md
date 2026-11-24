@@ -19183,3 +19183,24 @@ Run on 2026-11-24 on Linux (amd64).
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestIdleDaemonEventRingIsSmall$' -v .`.
+## The picture-in-picture view in a local session waits for its exit
+
+`TestPiPInALocalSession` pins a pane in a session with no daemon and waits
+20 s for the dock to say the pinned pane closed. The pane ran a fixed loop of
+45 steps of `sleep 0.2`, then exited. On a loaded host each step took longer,
+and the loop outlasted the wait. The loop now runs until the test makes a stop
+file, after it has checked the view. The wait then covers one step and the
+shell's exit.
+
+Run on 2026-11-24 on Linux, on all cores. The control slows each step to
+`sleep 0.5`, as a loaded host does: 45 steps then take 22.5 s.
+
+| Build of the test | Steps | Result |
+| --- | --- | --- |
+| Fixed loop of 45 steps (before) | `sleep 0.5` | 0 of 3 pass: `no dock note when the pinned pane's shell exited` |
+| Loop until the stop file (after) | `sleep 0.5` | 3 of 3 pass |
+| Loop until the stop file (after) | `sleep 0.2`, `taskset -c 0-1` | 10 of 10 pass |
+| Loop until the stop file (after) | `sleep 0.2`, all cores | 10 of 10 pass |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPiPInALocalSession$' -v .`.

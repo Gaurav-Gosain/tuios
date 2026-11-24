@@ -3,6 +3,8 @@ package tuie2e
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -434,10 +436,15 @@ func TestPiPWatchesAPaneFromTheCorner(t *testing.T) {
 
 // TestPiPInALocalSession is the view without a daemon: pin, watch from the
 // other pane, and the pinned pane's shell exits while the view is up.
+//
+// A local session has no daemon to send the pane keys, so the loop ends when
+// the test makes the stop file. It ran a fixed 45 steps, and on a loaded host
+// the steps took longer than the wait for the exit.
 func TestPiPInALocalSession(t *testing.T) {
 	base := t.TempDir()
+	stop := filepath.Join(base, "stop-loop")
 	term := startPiPPanes(t, base, nil,
-		`i=0; while [ $i -lt 45 ]; do i=$((i+1)); echo PIPTICK-$i; sleep 0.2; done; exit`)
+		`i=0; while [ ! -e '`+stop+`' ]; do i=$((i+1)); echo PIPTICK-$i; sleep 0.2; done; exit`)
 
 	pinWithKey(t, term, base, "Pinned agent")
 	mouseClick(t, term, 20, 10, tuitest.MouseLeft, 0)
@@ -445,6 +452,9 @@ func TestPiPInALocalSession(t *testing.T) {
 	assertLive(t, term, base, false)
 	t.Logf("the view in a local session:\n%s", term.Snapshot())
 
+	if err := os.WriteFile(stop, nil, 0o600); err != nil {
+		t.Fatalf("stop the loop: %v", err)
+	}
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "agent closed")
 	}, 20*time.Second); err != nil {
