@@ -176,8 +176,15 @@ func settleScreen(term *tuitest.Terminal, timeout time.Duration) error {
 // first waits insertGuard, so the client reads it as esc and not as alt with
 // what follows, which the settle probe would be, since it starts with ESC. A
 // client that does not answer probes gets the beat the callers used to give
-// every key.
+// every key, 150 ms.
 func sendSettled(t *testing.T, term *tuitest.Terminal, keys ...any) {
+	t.Helper()
+	sendSettledBeat(t, term, 150*time.Millisecond, keys...)
+}
+
+// sendSettledBeat is sendSettled with the beat a client that does not answer
+// probes gets after each key.
+func sendSettledBeat(t *testing.T, term *tuitest.Terminal, beat time.Duration, keys ...any) {
 	t.Helper()
 	for _, k := range keys {
 		if err := term.SendKeys(k); err != nil {
@@ -186,7 +193,7 @@ func sendSettled(t *testing.T, term *tuitest.Terminal, keys ...any) {
 		if loneEsc(k) {
 			pause(t, "a lone esc is read as esc only once the escape timeout ends", insertGuard)
 		}
-		settled(t, term, "the client draws the key", 150*time.Millisecond)
+		settled(t, term, "the client draws the key", beat)
 	}
 }
 

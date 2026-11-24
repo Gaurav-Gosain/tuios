@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -80,7 +81,7 @@ func ckBarNames(bar, region string) bool {
 // ckPress sends keys and waits for the client to draw them.
 func ckPress(t *testing.T, term *tuitest.Terminal, keys ...any) {
 	t.Helper()
-	sendSettled(t, term, keys...)
+	sendSettledBeat(t, term, 250*time.Millisecond, keys...)
 }
 
 // TestCockpitRegions walks the regions at 200x50, where the side column
