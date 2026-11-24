@@ -2636,7 +2636,9 @@ Each group's row ends in a fold mark. These controls fold and open the group:
 
 A click on a main checkout's row opens its session. A folded row shows `+N` for
 the sessions that it holds, the loudest agent state of the group, and the mark
-of the attached session when that session is in the group.
+of the attached session when that session is in the group. The rail's cursor
+and the `next_session` and `prev_session` keys skip the sessions of a folded
+group (see [Next and previous session](KEYBINDINGS.md#next-and-previous-session)).
 
 Drag a group's row to move the whole group. Drag a worktree row to move it inside
 its group. The reorder keys follow the same rule.

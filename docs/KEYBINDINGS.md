@@ -3284,6 +3284,14 @@ The default keys of this section are in [Default keys: Sidebar agents](keybindin
 
 <kbd>Enter</kbd> on the `+N at rest` line shows the agent rows folded there.
 
+### Next and previous session
+
+`next_session` and `prev_session` go to the next or previous session on this machine, in the order the rail's sessions section draws them. They wrap at the ends. They skip the sessions that a folded repository group hides, as the rail's cursor does. A main checkout's session that is the group's row stays in the cycle. From a session inside a folded group, they go to the row above or below the group.
+
+The default keys are <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd> and <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>, and <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>)</kbd> and <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>(</kbd>.
+
+`switch_session_1` to `switch_session_9` open the session with that number in the rail. A fold does not change the numbers, so the number of a hidden session still opens it.
+
 ## Inbox and mailbox
 
 The [agents view](https://tuios.dev/docs/agent-inbox#the-agents-view) shows every agent, and the Inbox items are its Needs you group. Open it with <kbd>Ctrl</kbd>+<kbd>B</kbd> <kbd>i</kbd>. Its keys are in `[keybindings.inbox]`:

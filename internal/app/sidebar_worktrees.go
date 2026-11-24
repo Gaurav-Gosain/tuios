@@ -111,12 +111,18 @@ func (m *OS) sidebarGroupedRows(sessions []sessiontree.Node) []sessiontree.Node 
 	}
 	out := make([]sessiontree.Node, 0, len(rows))
 	for _, n := range rows {
-		if n.Kind == sessiontree.KindSession && !n.GroupHead && n.Worktree != nil && m.SidebarCollapsedRepos[n.Worktree.Repo] {
+		if m.sidebarFoldHides(n) {
 			continue
 		}
 		out = append(out, n)
 	}
 	return out
+}
+
+// sidebarFoldHides reports whether a folded repository hides n's row: n is a
+// member of the group, not the main checkout's row that stands in for it.
+func (m *OS) sidebarFoldHides(n sessiontree.Node) bool {
+	return n.Kind == sessiontree.KindSession && !n.GroupHead && n.Worktree != nil && m.SidebarCollapsedRepos[n.Worktree.Repo]
 }
 
 // sidebarRepoGrouping is how the rail gathers a repository's sessions. By

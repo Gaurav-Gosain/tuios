@@ -19,6 +19,18 @@ import (
 // real client drawing the rail. Nothing here touches any repository but the
 // one testutil.GitRepo makes under the test.
 
+// railCycle presses a session cycle or number key on the session from and
+// waits for the client to land on want, naming where it went otherwise.
+func railCycle(t *testing.T, term *tuitest.Terminal, base, from string, key tuitest.Key, want string) {
+	t.Helper()
+	if err := term.SendKeys(key); err != nil {
+		t.Fatalf("press %v on %s: %v", key, from, err)
+	}
+	if got := attachedSession(base, from); got != want {
+		t.Fatalf("the key on %s went to %s, want %s\n%s", from, got, want, term.Snapshot())
+	}
+}
+
 // tuiosCLIIn is tuiosCLI with a working directory of its own. It exists for
 // the one command whose directory decides what the daemon records: this suite
 // runs inside a git worktree of tuios itself, so a session created from here
@@ -68,7 +80,8 @@ func railCellColumn(s tuitest.Screen, needle string) int {
 // TestSidebarGroupsWorktrees drives the whole promise the way a person meets
 // it: two worktree sessions of one repository appear under one row named after
 // the repository, labelled by their branches, and a click on that row folds
-// them away and says how many it is holding.
+// them away and says how many it is holding. The session cycle keys then skip
+// the folded sessions and step out of the fold from one of them.
 //
 // The name is short on purpose. The harness roots XDG_RUNTIME_DIR at
 // t.TempDir(), whose path carries the test's name, and the daemon's unix
@@ -96,6 +109,10 @@ func TestSidebarGroupsWorktrees(t *testing.T) {
 		if !strings.Contains(out, "Created session '") {
 			t.Fatalf("worktree new %s did not report a session:\n%s", branch, out)
 		}
+	}
+	// A second plain session, after the group, for the cycle keys to reach.
+	if out, err := tuiosCLIIn(t, base, t.TempDir(), "new", "solo", "--detach"); err != nil {
+		t.Fatalf("create the solo session: %v: %s", err, out)
 	}
 
 	term := startIn(t, base, startOpts{args: []string{"attach", "plain"}})
@@ -174,6 +191,11 @@ func TestSidebarGroupsWorktrees(t *testing.T) {
 	}
 	railShot(t, term, "rail-worktree-display-name")
 
+	// Open, the group's sessions are in the cycle. The folded cycle below skips
+	// them.
+	railCycle(t, term, base, "plain", tuitest.Alt('N'), "repo-feat-one")
+	railCycle(t, term, base, "repo-feat-one", tuitest.Alt('P'), "plain")
+
 	// A click on the repository row folds the group.
 	col, row := findOnScreen(t, term, "· repo")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
@@ -188,6 +210,28 @@ func TestSidebarGroupsWorktrees(t *testing.T) {
 		t.Fatalf("the click did not fold the group into a row carrying its count: %v\n%s", err, term.Snapshot())
 	}
 	saveFrame(t, term, "rail-worktrees-collapsed")
+
+	// The cycle keys go where the rail shows (#2474): plain and solo, never a
+	// session the fold hides, and out of the fold to the rows on either side
+	// of it when the attached session is one of those.
+	railCycle(t, term, base, "plain", tuitest.Alt('N'), "solo")
+	railCycle(t, term, base, "solo", tuitest.Alt('N'), "plain")
+	railCycle(t, term, base, "plain", tuitest.Alt('P'), "solo")
+	railCycle(t, term, base, "solo", tuitest.Alt('P'), "plain")
+	for _, step := range []struct {
+		from string
+		key  tuitest.Key
+		want string
+	}{{"plain", tuitest.Alt('N'), "solo"}, {"solo", tuitest.Alt('P'), "plain"}} {
+		if out, err := tuiosCLI(t, base, "switch-session", "-s", step.from, "repo-feat-two"); err != nil {
+			t.Fatalf("switch-session repo-feat-two: %v\n%s", err, out)
+		}
+		if got := attachedSession(base, step.from); got != "repo-feat-two" {
+			t.Fatalf("switch-session left the client on %s\n%s", got, term.Snapshot())
+		}
+		railCycle(t, term, base, "repo-feat-two", step.key, step.want)
+	}
+	saveFrame(t, term, "rail-worktrees-collapsed-cycle")
 
 	alive(t, term, "after folding a worktree group")
 }
@@ -239,8 +283,9 @@ func TestSidebarPillKeepsTreeBars(t *testing.T) {
 // row, the worktree hangs off it, and the number beside each row is the key that
 // opens it. A click on the name opens the session, and the fold mark folds the
 // group by click, by keyboard and from the row's menu. A folded row shows what it
-// holds, the attached session's mark included. An agent in the main checkout
-// keeps its message in the Inbox.
+// holds, the attached session's mark included. The session cycle keys skip the
+// folded worktree, keep the main checkout's row and step out of the fold from
+// the worktree. An agent in the main checkout keeps its message in the Inbox.
 //
 // The worktree is made first, so the row order is not the creation order. The
 // controls are in NEGATIVE_CONTROLS.md.
@@ -313,6 +358,9 @@ switch_session_3 = ["alt+shift+z"]
 	if err := term.WaitForText("Session: repo-f-one", uiTimeout); err != nil {
 		t.Fatalf("the key numbered 3 did not open the row numbered 3: %v\n%s", err, term.Snapshot())
 	}
+	// Open, the group's worktree is in the cycle. The folded cycle below skips it.
+	railCycle(t, term, base, "repo-f-one", tuitest.Alt('P'), "mainsess")
+	railCycle(t, term, base, "mainsess", tuitest.Alt('N'), "repo-f-one")
 
 	// A folded row holding the attached session wears that session's mark. Open,
 	// the same row wears none, so the mark says where the session went.
@@ -335,6 +383,19 @@ switch_session_3 = ["alt+shift+z"]
 	if !strings.Contains(term.Screen().Text(), "Session: repo-f-one") {
 		t.Errorf("the fold mark changed the session\n%s", term.Snapshot())
 	}
+
+	// The cycle keys go where the rail shows (#2474). From the hidden session
+	// they step out of the fold, the main checkout's row stays in the cycle,
+	// and from a visible row they never land on the hidden session. Its number
+	// still reaches it: a fold hides a row and does not renumber the rail.
+	railCycle(t, term, base, "repo-f-one", tuitest.Alt('P'), "mainsess")
+	railCycle(t, term, base, "mainsess", tuitest.Alt('N'), "plain")
+	railCycle(t, term, base, "plain", tuitest.Alt('P'), "mainsess")
+	railCycle(t, term, base, "mainsess", tuitest.Alt('P'), "plain")
+	railCycle(t, term, base, "plain", tuitest.Alt('Z'), "repo-f-one")
+	railCycle(t, term, base, "repo-f-one", tuitest.Alt('N'), "plain")
+	railShot(t, term, "rail-compact-folded-cycle-"+strconv.Itoa(width))
+
 	col, row = foldMark("▸")
 	mouseClick(t, term, col, row, tuitest.MouseLeft, 0)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return railLineWith(s, "f/one") >= 0 }, uiTimeout); err != nil {

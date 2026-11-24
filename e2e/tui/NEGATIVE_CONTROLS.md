@@ -7,6 +7,35 @@ below. Two of them are **not** caught here; that is written down rather than
 papered over, because a suite whose real coverage is unknown is worse than no
 suite.
 
+## The session cycle skips a folded repository group
+
+`TestSidebarGroupsWorktrees` folds a repository group with no main checkout
+session, between the plain sessions `plain` and `solo`.
+`TestRailMainCheckoutIsRepoRow` folds the group whose row is the main
+checkout's session `mainsess`, after `plain`, with the attached session
+`repo-f-one` inside it. While the group is open, `next_session` and
+`prev_session` must reach its worktree sessions. Once it is folded they must
+walk only the rows the rail draws, keep `mainsess` in the cycle, and step out
+of the fold from a hidden attached session to the row on either side of the
+group (#2474). `switch_session_3` must still open the hidden `repo-f-one`.
+
+Run on 2026-11-24 on Linux. Three controls, each this branch with one change
+to `railNeighbourSession`:
+
+| Change | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| The `slices.DeleteFunc` call is cut, so the cycle skips no session | `TestSidebarGroupsWorktrees` | `the key on plain went to repo-feat-one, want solo` | caught |
+| | `TestRailMainCheckoutIsRepoRow/30`, `/18` | `the key on mainsess went to repo-f-one, want plain` | caught |
+| The hidden current session is skipped too | `TestSidebarGroupsWorktrees` | `the key on repo-feat-two went to repo-feat-two, want solo` | caught |
+| | `TestRailMainCheckoutIsRepoRow/30`, `/18` | `the key on repo-f-one went to repo-f-one, want mainsess` | caught |
+| Every worktree member is skipped, folded or not | `TestSidebarGroupsWorktrees` | `the key on plain went to solo, want repo-feat-one` | caught |
+| | `TestRailMainCheckoutIsRepoRow/30`, `/18` | `the key on mainsess went to plain, want repo-f-one` | caught |
+
+The rail after the cycle is the frame `rail-worktrees-collapsed-cycle` and
+`rail-compact-folded-cycle-30` and `-18` under `TUIOS_E2E_FRAMES`. Repeat from
+`e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestSidebarGroupsWorktrees|TestRailMainCheckoutIsRepoRow)$' -v .`.
+
 ## A pane with fan closes and waits for its own tree
 
 `TestAFanPaneClosesAndWaitsForItsOwnTree` gives a shell pane `read,write,fan`

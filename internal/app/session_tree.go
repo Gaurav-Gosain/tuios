@@ -295,8 +295,17 @@ func clearAgentMarks(nodes []sessiontree.Node) {
 // dragged the rail into a different order. Only the attached machine's
 // sessions are cycled: a row on another machine is a different connection,
 // which a cycle key must not open by surprise.
+//
+// The cycle goes where the rail shows, as the rail's cursor does: the sessions
+// a folded repository hides are skipped, and the main checkout's row that
+// stands in for the repository is not. The current session stays in even when
+// a fold hides it, so a cycle from inside a folded group steps out to the rows
+// drawn on either side of the group.
 func (m *OS) railNeighbourSession(delta int) string {
-	return railNeighbourIn(m.railSessionOrder(m.BuildSessionTree().Sessions), delta)
+	sessions := slices.DeleteFunc(m.railSessionOrder(m.BuildSessionTree().Sessions), func(s sessiontree.Node) bool {
+		return !s.IsCurrent && m.sidebarFoldHides(s)
+	})
+	return railNeighbourIn(sessions, delta)
 }
 
 // railSessionOrder is the attached machine's sessions in the order the rail's
@@ -304,9 +313,10 @@ func (m *OS) railNeighbourSession(delta int) string {
 // repository's worktree sessions pulled up under the repository, as
 // sidebarGroupedRows lays them out. Only the session rows are kept, not the
 // space and repository headings. A folded repository's sessions stay in, at
-// the place they would be drawn, so a cycle key can still reach them and the
-// current session is never missing from the list. With no space and no
-// worktree record the grouping changes nothing and this is the tree's order.
+// the place they would be drawn, because this is the order switch_session_N
+// numbers: a fold hides rows and does not renumber the ones it leaves. The
+// cycle keys skip those sessions (see railNeighbourSession). With no space and
+// no worktree record the grouping changes nothing and this is the tree's order.
 func (m *OS) railSessionOrder(nodes []sessiontree.Node) []sessiontree.Node {
 	rows := sessiontree.GroupBySpace(localSessionNodes(nodes), m.sidebarRepoGrouping())
 	sessions := make([]sessiontree.Node, 0, len(rows))
