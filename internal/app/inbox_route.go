@@ -1,10 +1,8 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"strings"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -32,20 +30,7 @@ func (m *OS) inboxDialer() inboxDial { return m.attachedDialer() }
 
 // inboxActCaller is how an act on the Inbox, or a read of an agent's pane,
 // reaches the daemon that holds it. Tests set InboxState.call.
-func (m *OS) inboxActCaller() inboxVerbCall {
-	if m.Inbox.call != nil || m.AttachedHost == "" {
-		return m.inboxCaller()
-	}
-	dial := m.inboxDialer()
-	return func(verb string, params map[string]any, timeout time.Duration) (json.RawMessage, error) {
-		client, err := dial()
-		if err != nil {
-			return nil, err
-		}
-		defer func() { _ = client.Close() }()
-		return client.CallWithTimeout(verb, params, timeout)
-	}
-}
+func (m *OS) inboxActCaller() inboxVerbCall { return m.machineCaller(m.attachedMachine()) }
 
 // inboxCanAct reports whether this client has a daemon to send the person's
 // acts to, and says why not when it has none.

@@ -86,7 +86,7 @@ func (m *OS) reviewIndexCmd() tea.Cmd {
 	if !r.reviewIndexable() {
 		return nil
 	}
-	call := m.inboxCaller()
+	call := m.reviewCaller()
 	gen, sess, win := r.gen, r.diff.Session, r.diff.Window
 	return func() tea.Msg {
 		u, err := reviewIndexFiles(call, sess, win, review.IndexUnstaged, "")
@@ -299,7 +299,7 @@ func (m *OS) reviewStageCmd(params map[string]any, hunk *review.Hunk, done strin
 	if params["session"] == nil {
 		params["session"], params["window"] = r.diff.Session, r.diff.Window
 	}
-	call := m.inboxCaller()
+	call := m.reviewCaller()
 	gen := r.gen
 	r.staging = true
 	return func() tea.Msg {

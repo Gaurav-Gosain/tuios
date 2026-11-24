@@ -75,7 +75,7 @@ func (m *OS) reviewCompareCmd(changes bool, tickGen uint64) tea.Cmd {
 	if changes {
 		r.compare.loading = true
 	}
-	call := m.inboxCaller()
+	call := m.reviewCaller()
 	gen := r.gen
 	return func() tea.Msg {
 		msg := ReviewCompareMsg{Gen: gen, TickGen: tickGen, Changes: changes}
@@ -322,7 +322,7 @@ func (m *OS) reviewVerifyCmd(command string) tea.Cmd {
 	if c == nil || !ok {
 		return nil
 	}
-	call := m.inboxCaller()
+	call := m.reviewCaller()
 	gen := r.gen
 	name := row.Session
 	return func() tea.Msg {
@@ -409,7 +409,7 @@ func (m *OS) ReviewCompareConfirm(yes bool) tea.Cmd {
 		m.reviewNotify(reviewRemoteRefusal, "error", m.Settings.NotificationDuration)
 		return nil
 	}
-	call := m.inboxCaller()
+	call := m.reviewCaller()
 	gen := r.gen
 	return func() tea.Msg {
 		msg := ReviewKeptMsg{Gen: gen, Kept: name}

@@ -1,6 +1,9 @@
 package app
 
 import (
+	"encoding/json"
+	"time"
+
 	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
@@ -39,6 +42,23 @@ func (m *OS) machineDialer(machine string) inboxDial {
 // attachedDialer opens a verb connection to the daemon that holds the attached
 // session.
 func (m *OS) attachedDialer() inboxDial { return m.machineDialer(m.attachedMachine()) }
+
+// machineCaller makes one verb call to machine's daemon. A test that set
+// InboxState.call gets that instead.
+func (m *OS) machineCaller(machine string) inboxVerbCall {
+	if m.Inbox.call != nil {
+		return m.Inbox.call
+	}
+	dial := m.machineDialer(machine)
+	return func(verb string, params map[string]any, timeout time.Duration) (json.RawMessage, error) {
+		client, err := dial()
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = client.Close() }()
+		return client.CallWithTimeout(verb, params, timeout)
+	}
+}
 
 // dialMachine opens a verb connection to machine's daemon: this machine's for
 // "" or federation.LocalHostName, else machine's through the link, where that

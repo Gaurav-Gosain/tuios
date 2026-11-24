@@ -437,8 +437,8 @@ func (m *OS) InboxReview() (tea.Cmd, bool) {
 		}
 		it = session.AttentionItem{Session: e.SessionID, Window: e.WindowID, Host: e.Host, Name: e.Title}
 	}
-	if it.Host != "" {
-		m.reviewNotify(inboxWho(it)+" is on "+printableTitle(it.Host)+". Attach there to review it", "info", m.Settings.NotificationDuration)
+	if machine := m.itemMachine(it.Host); machine != m.attachedMachine() {
+		m.reviewNotify(inboxWho(it)+" is on "+printableTitle(machine)+". Attach there to review it", "info", m.Settings.NotificationDuration)
 		return nil, true
 	}
 	if it.Window == "" {
@@ -473,10 +473,6 @@ func (m *OS) openReview(sessionName, windowID, who string) tea.Cmd {
 		m.reviewNotify("Review needs the daemon. Start a daemon session with: tuios new", "info", m.Settings.NotificationDuration)
 		return nil
 	}
-	if m.AttachedHost != "" {
-		m.reviewNotify("This session runs on "+printableTitle(m.AttachedHost)+", and its repository is there. Review it on that machine", "info", m.Settings.NotificationDuration)
-		return nil
-	}
 	r := &m.review
 	if r.pending {
 		return nil
@@ -486,6 +482,11 @@ func (m *OS) openReview(sessionName, windowID, who string) tea.Cmd {
 	return m.reviewLoadCmd(r.query, true)
 }
 
+// reviewCaller makes the review's verb calls. They go to the daemon of the
+// attached session, which holds the pane and its repository: this machine's,
+// or the attached host's through the link.
+func (m *OS) reviewCaller() inboxVerbCall { return m.machineCaller(m.attachedMachine()) }
+
 // CloseReview closes the overlay and forgets what it read.
 func (m *OS) CloseReview() {
 	m.review = reviewState{gen: m.review.gen + 1, split: m.review.split}
@@ -494,7 +495,7 @@ func (m *OS) CloseReview() {
 // reviewLoadCmd reads a diff, and with probeFan also whether the pane is in a
 // fan, without counting anything in it.
 func (m *OS) reviewLoadCmd(q reviewQuery, probeFan bool) tea.Cmd {
-	call := m.inboxCaller()
+	call := m.reviewCaller()
 	gen := m.review.gen
 	params := map[string]any{}
 	if q.Session != "" {
@@ -964,7 +965,7 @@ func (m *OS) reviewNonce() (string, bool) {
 // reviewNoteCmd sends one review-note action on the reviewed pane.
 func (m *OS) reviewNoteCmd(action string, params map[string]any) tea.Cmd {
 	r := &m.review
-	call := m.inboxCaller()
+	call := m.reviewCaller()
 	gen := r.gen
 	params["action"] = action
 	params["session"] = r.diff.Session
@@ -1031,7 +1032,7 @@ func (m *OS) ReviewSend() tea.Cmd {
 	if !ok {
 		return nil
 	}
-	call := m.inboxCaller()
+	call := m.reviewCaller()
 	gen, who := r.gen, r.who
 	params := map[string]any{"session": r.diff.Session, "window": r.diff.Window, "human_nonce": nonce}
 	return func() tea.Msg {

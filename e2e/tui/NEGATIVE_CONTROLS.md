@@ -19374,3 +19374,19 @@ empty host on a row reads as this machine.
 The frames are `attached-jump-before` and `attached-jump-landed` under
 `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAgentsViewJumpWhileAttachedThroughAHost$' -v .`.
+
+## The review reads a pane on the attached host
+
+`TestReviewWhileAttachedThroughAHost` attaches a client to session `far` on
+the linked machine alpha and focuses a pane in a repository there, with one
+untracked file. Prefix v must open the review with that file and its line.
+
+Run on 2026-11-24 on Linux. The control is main without the fix.
+
+| Change | Failure |
+| --- | --- |
+| `openReview` refuses when the client is attached to a host, and the review calls this machine's daemon | `the review of the pane on alpha did not show its change` |
+
+The frame is `attached-review-open` under `TUIOS_E2E_FRAMES`, in the test's
+folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestReviewWhileAttachedThroughAHost$' -v .`.
