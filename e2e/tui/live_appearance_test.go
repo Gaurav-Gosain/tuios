@@ -200,7 +200,13 @@ func TestSetConfigWithNoClientAppliesOnAttach(t *testing.T) {
 	if strings.Contains(string(data), "sidebar_enabled") {
 		t.Fatalf("ASSERTION: a save of border_style wrote sidebar_enabled:\n%s", data)
 	}
-	text := stableText(t, term)
+	// Held, not settled: a reload of the file the save wrote would bring the
+	// rail back some time after the save, and nothing on screen says when.
+	pause(t, "a reload of the saved file would show only after the save", 500*time.Millisecond)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("the screen never settled: %v", err)
+	}
+	text := term.Screen().Text()
 	if strings.Contains(text, shows) {
 		t.Fatalf("ASSERTION: the rail came back after the save:\n%s", term.Snapshot())
 	}
@@ -252,9 +258,20 @@ func waitPanesDrawn(t *testing.T, term *tuitest.Terminal, noDock bool, when stri
 
 // stableText is the screen's text once it has settled, with the dock's
 // notification area blanked, since a set-config raises a notice there.
+//
+// set-config returns once the attached client has applied the value (the
+// daemon routes it and waits for the answer), so a client that answers settle
+// probes has the new look in its model by then, and settling draws it. A
+// client that does not answer probes gets the old guess: a pause, then quiet.
 func stableText(t *testing.T, term *tuitest.Terminal) string {
 	t.Helper()
-	time.Sleep(500 * time.Millisecond)
+	if settleMarksOf(term) != "" {
+		if err := settleScreen(term, uiTimeout); err != nil {
+			t.Fatalf("the screen never settled: %v", err)
+		}
+		return term.Screen().Text()
+	}
+	pause(t, "a client that does not answer settle probes may still be applying the value", 500*time.Millisecond)
 	if err := term.WaitStable(uiTimeout); err != nil {
 		t.Fatalf("the screen never settled: %v", err)
 	}

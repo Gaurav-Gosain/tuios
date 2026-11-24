@@ -28,7 +28,8 @@ import (
 //
 // SENT is the number of bytes the client had written to its terminal by
 // then, so the test can wait until it has read as many. BUSY is true while
-// an animation runs, and the test probes again. Pane output that arrives
+// the frame still moves toward an end (see settleBusy), and the test probes
+// again. Pane output that arrives
 // after the probe does not make the client busy: a pane that prints without
 // end would keep it busy for good. SCREEN is false for a client without its own screen, whose frames
 // Bubble Tea's renderer writes later, on its own goroutine.
@@ -89,13 +90,23 @@ func (m *OS) takeSettleProbe(msg tea.Msg) bool {
 	return true
 }
 
+// settleBusy reports whether the frame is still changing on its own toward
+// an end: a window animation, an overlay fade, the copy sweep, a celebration,
+// a theme transition or a workspace slide. The screen saver and the shimmer
+// run for as long as their cause lasts, so they do not count: a client that
+// shows one would never settle.
+func (m *OS) settleBusy() bool {
+	return m.HasActiveAnimations() || m.motion.fading > 0 || m.copyFlash != nil ||
+		m.celebration.active() || m.themeFx.running() || m.wsSlide.running()
+}
+
 // answerSettleProbes writes the answer to each probe taken since the last
 // flush. handleFlush calls it after the frame is written.
 func (m *OS) answerSettleProbes() {
 	if len(m.settleOwed) == 0 {
 		return
 	}
-	busy := m.HasActiveAnimations()
+	busy := m.settleBusy()
 	sent := testknob.Written()
 	var b []byte
 	for _, id := range m.settleOwed {
