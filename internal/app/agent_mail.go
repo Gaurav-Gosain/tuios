@@ -492,26 +492,7 @@ func (m *OS) verbDialer() agentMailDial { return m.agentMailDialer() }
 // ring: this machine's daemon directly, or, while this client is attached to
 // a session on another machine, that machine's daemon through the link. The
 // ring is the session's, so it lives where the session does.
-func (m *OS) agentMailDialer() agentMailDial {
-	host, build := m.AttachedHost, ""
-	if m.DaemonClient != nil {
-		build = m.DaemonClient.ClientVersion()
-	}
-	return func() (*session.VerbClient, error) {
-		if host == "" {
-			return dialVerbLocal()
-		}
-		c, _, err := dialVerbThroughHost(host, build)
-		return c, err
-	}
-}
-
-// dialVerbThroughHost and dialVerbLocal are the two ways verbDialer reaches a
-// daemon, as variables so a test can see which one a command used.
-var (
-	dialVerbThroughHost = session.DialVerbClientThroughHost
-	dialVerbLocal       = session.DialVerbClient
-)
+func (m *OS) agentMailDialer() agentMailDial { return agentMailDial(m.attachedDialer()) }
 
 // agentMailDial opens a verb connection to the daemon that holds the ring.
 type agentMailDial func() (*session.VerbClient, error)

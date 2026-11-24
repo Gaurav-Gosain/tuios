@@ -28,19 +28,7 @@ import (
 // inboxActCaller.
 
 // inboxDialer opens a verb connection to the daemon that holds the Inbox.
-func (m *OS) inboxDialer() inboxDial {
-	host, build := m.AttachedHost, ""
-	if m.DaemonClient != nil {
-		build = m.DaemonClient.ClientVersion()
-	}
-	return func() (*session.VerbClient, error) {
-		if host == "" {
-			return session.DialVerbClientAs(build)
-		}
-		c, _, err := dialVerbThroughHost(host, build)
-		return c, err
-	}
-}
+func (m *OS) inboxDialer() inboxDial { return m.attachedDialer() }
 
 // inboxActCaller is how an act on the Inbox, or a read of an agent's pane,
 // reaches the daemon that holds it. Tests set InboxState.call.

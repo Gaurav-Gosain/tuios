@@ -426,11 +426,7 @@ func openCommandPopup(req commandPopupRequest) error {
 // session: this machine's for host "", else host's through the link, where
 // host's allow list for this machine applies. Nothing runs on this machine.
 func dialSessionDaemon(host, build string) (*session.VerbClient, error) {
-	if host == "" {
-		return session.DialVerbClient()
-	}
-	c, _, err := session.DialVerbClientThroughHost(host, build)
-	return c, err
+	return dialMachine(host, build)
 }
 
 // linkRefusal is the message for a call that the session's machine refused

@@ -333,11 +333,7 @@ func (m *OS) newWindowOnHostCmd(host string) tea.Cmd {
 // attached session: this machine's directly, or another machine's through the
 // link. It is read on the UI goroutine and called off it.
 func (m *OS) sessionDaemonDialer() func() (*session.VerbClient, error) {
-	host, build := m.AttachedHost, ""
-	if m.DaemonClient != nil {
-		build = m.DaemonClient.ClientVersion()
-	}
-	return func() (*session.VerbClient, error) { return dialSessionDaemon(host, build) }
+	return m.attachedDialer()
 }
 
 // newWindowOnHostTimeout covers the far daemon spawning a process over a link

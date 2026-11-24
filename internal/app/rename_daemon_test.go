@@ -191,7 +191,7 @@ func TestSessionRenameThroughHostDialsTheHost(t *testing.T) {
 		hosts = append(hosts, host)
 		return nil, session.HostConnectionInfo{}, errors.New("no link in this test")
 	}
-	dialVerbLocal = func() (*session.VerbClient, error) {
+	dialVerbLocal = func(string) (*session.VerbClient, error) {
 		local++
 		return nil, errors.New("no daemon in this test")
 	}

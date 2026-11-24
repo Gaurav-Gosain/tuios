@@ -18,7 +18,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/crashexit"
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/sessiontree"
@@ -966,7 +965,7 @@ func (m *OS) fireInboxAlerts(ids []string) {
 			shown[i] = it.ID
 		}
 		m.showAgentNotification(text, sev, inboxAlertMarkState(items, sev), m.Settings.NotificationDuration,
-			NotifTarget{Host: inboxItemMachine(first), SessionID: first.Session, WindowID: first.Window, InboxItems: strings.Join(shown, " ")})
+			NotifTarget{Host: m.itemMachine(first.Host), SessionID: first.Session, WindowID: first.Window, InboxItems: strings.Join(shown, " ")})
 	}
 	var seq []byte
 	if policy.Notify && !m.BrowserClient {
@@ -1891,20 +1890,12 @@ func inboxDecisionWords(decision string) string {
 	return decision
 }
 
-// inboxItemMachine is the machine an item is on, as attachedMachine names it.
-func inboxItemMachine(it session.AttentionItem) string {
-	if it.Host == "" {
-		return federation.LocalHostName
-	}
-	return it.Host
-}
-
 // inboxReach attaches the machine and the session an item is on, when the
 // client is on another machine, and reports whether the client is now on the
 // item's machine. A machine that cannot be reached says so, with when it was
 // last heard from, and nothing is given up.
 func (m *OS) inboxReach(it session.AttentionItem) bool {
-	target := inboxItemMachine(it)
+	target := m.itemMachine(it.Host)
 	if target == m.attachedMachine() {
 		return true
 	}
@@ -1977,7 +1968,7 @@ func (m *OS) InboxReply() tea.Cmd {
 // line when reply is set. A thread in another session waits for that
 // session's mail to load.
 func (m *OS) inboxOpenMail(it session.AttentionItem, reply bool) tea.Cmd {
-	if inboxItemMachine(it) != m.attachedMachine() {
+	if m.itemMachine(it.Host) != m.attachedMachine() {
 		// Attaching the machine lands on the session and loads its mail, so
 		// the thread opens once that has arrived.
 		if !m.inboxReach(it) {

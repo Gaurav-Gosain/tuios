@@ -19353,3 +19353,20 @@ Run on 2026-11-24 and 2026-11-25 on Linux (amd64), on 2 cores and on 1.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestIdleGivesHeapBack$' -v .`.
+## The agents view goes to a pane while attached through a host
+
+`TestAgentsViewJumpWhileAttachedThroughAHost` attaches a client to session
+`far` on the linked machine alpha, with an agent in a pane that is not
+focused. Enter on the agent in the agents view must move the focus to that
+pane on alpha, with no "could not attach" message.
+
+Run on 2026-11-24 on Linux. The control is main without the fix, where an
+empty host on a row reads as this machine.
+
+| Change | Failure |
+| --- | --- |
+| `itemMachine` maps "" to this machine | `enter on the agent did not focus its pane on alpha`, with `could not attach "far" on this machine` on the dock |
+
+The frames are `attached-jump-before` and `attached-jump-landed` under
+`TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAgentsViewJumpWhileAttachedThroughAHost$' -v .`.
