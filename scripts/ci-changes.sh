@@ -35,7 +35,7 @@
 #                 "true" or "false", one per job. spec is the Lean models of
 #                 the task cards (spec/tasks) and of the pane grants
 #                 (spec/grants), and their differential tests
-#   lib_alone     JSON list of the "alone" library jobs: vt, sketch, nitpick, small
+#   lib_alone     JSON list of the "alone" library jobs: vt, sketch, small
 set -uo pipefail
 
 ALL=(./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/... ./nitpick/...)
@@ -59,7 +59,7 @@ everything() {
 	echo "ci-changes: everything runs: $1" >&2
 	local k
 	for k in "${order[@]}"; do out[$k]=true; done
-	out[pkgs]=all out[ghostty_pkgs]=all out[lint_libs]=all out[lib_alone]='["vt","sketch","nitpick","small"]'
+	out[pkgs]=all out[ghostty_pkgs]=all out[lint_libs]=all out[lib_alone]='["vt","sketch","small"]'
 	emit
 }
 
@@ -282,11 +282,10 @@ out[lint_libs]=$(list "${lint[*]:-}")
 [ -z "${f[lint_all]:-}" ] || out[lint_libs]=all
 [ -z "${f[lib_vt]:-}" ] || alone+=('"vt"')
 [ -z "${f[lib_sketch]:-}" ] || alone+=('"sketch"')
-[ -z "${f[lib_nitpick]:-}" ] || alone+=('"nitpick"')
-for l in progstatus swatch shot tml plot loom acp harness; do
+for l in progstatus swatch shot tml plot loom acp harness nitpick; do
 	if [ -n "${f[lib_$l]:-}" ]; then alone+=('"small"'); break; fi
 done
-if $modfiles; then alone=('"vt"' '"sketch"' '"nitpick"' '"small"'); fi
+if $modfiles; then alone=('"vt"' '"sketch"' '"small"'); fi
 out[lib_alone]="[$(
 	IFS=,
 	echo "${alone[*]:-}"
@@ -299,7 +298,7 @@ if $push; then
 		case " ${pathgated[*]} " in *" $k "*) continue ;; esac
 		out[$k]=true
 	done
-	out[pkgs]=all out[lint_libs]=all out[lib_alone]='["vt","sketch","nitpick","small"]'
+	out[pkgs]=all out[lint_libs]=all out[lib_alone]='["vt","sketch","small"]'
 	[ "${out[ghostty]}" = false ] || out[ghostty_pkgs]=all
 fi
 emit

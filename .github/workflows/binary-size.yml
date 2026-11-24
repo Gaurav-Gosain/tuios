@@ -22,19 +22,18 @@ permissions:
 
 jobs:
   size:
-    name: binary size (${{ matrix.target }})
+    # One job builds the three targets one after another and compares them.
+    # A job per target spent about as long on setup and on the wait for a
+    # runner as on its build, and the report waited for all three.
+    name: binary size
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: linux/amd64
-            id: linux-amd64
-          - target: darwin/arm64
-            id: darwin-arm64
-          - target: windows/amd64
-            id: windows-amd64
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # Read main's size artifacts.
+      actions: read
+      # Post or update the one size comment on the pull request.
+      pull-requests: write
     steps:
       - uses: actions/checkout@v7
 
@@ -43,51 +42,33 @@ jobs:
       - uses: ./.github/actions/setup-go
         with:
           go-version-file: go.mod
-          cache-id: size-${{ matrix.target }}
+          cache-id: size
 
       - name: Build and check the size
         env:
-          SIZE_OUT: ${{ runner.temp }}/size/${{ matrix.id }}.txt
+          SIZE_OUT: ${{ runner.temp }}/size/sizes.txt
         run: |
           mkdir -p "$(dirname "$SIZE_OUT")"
-          scripts/binary-size.sh ${{ matrix.target }} | tee -a "$GITHUB_STEP_SUMMARY"
+          scripts/binary-size.sh linux/amd64 darwin/arm64 windows/amd64 | tee -a "$GITHUB_STEP_SUMMARY"
         shell: bash
 
-      # Main's artifacts are the sizes a pull request is compared with.
+      # Main's artifacts are the sizes a pull request is compared with. The
+      # report reads every file under binary-size-*, so this one artifact and
+      # the older one per target compare the same way.
       - name: Keep the size
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v7
         with:
-          name: binary-size-${{ matrix.id }}
+          name: binary-size-all
           path: ${{ runner.temp }}/size/
           if-no-files-found: ignore
           retention-days: 90
-
-  report:
-    name: binary size report
-    needs: size
-    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      # Read main's size artifacts.
-      actions: read
-      # Post or update the one size comment on this pull request.
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Sizes of this change
-        uses: actions/download-artifact@v8
-        with:
-          pattern: binary-size-*
-          path: ${{ runner.temp }}/now
 
       # The newest green push run on main that still has its artifacts. Any
       # failure here leaves the main column as "not measured" and the job goes
       # on: the comparison is information, the ceiling is the gate.
       - name: Sizes of main
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         id: main
         env:
           GH_TOKEN: ${{ github.token }}
@@ -114,12 +95,13 @@ jobs:
           echo "label=no run of main" >> "$GITHUB_OUTPUT"
 
       - name: Compare
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         run: |
           {
             echo "<!-- tuios-binary-size -->"
             echo "### Binary size"
             echo
-            scripts/binary-size-report.sh "$RUNNER_TEMP/now" "$RUNNER_TEMP/main" "$LABEL"
+            scripts/binary-size-report.sh "$RUNNER_TEMP/size" "$RUNNER_TEMP/main" "$LABEL"
             echo
             echo "State the size cost in the pull request body. CI fails only above the ceiling."
           } > "$RUNNER_TEMP/report.md"
@@ -131,6 +113,7 @@ jobs:
       # a fork gets a read-only token, so this step may fail there. The summary
       # above still holds the table.
       - name: Post or update the size comment
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}

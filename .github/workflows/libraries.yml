@@ -15,9 +15,9 @@ on:
         type: string
         default: "true"
       lib_alone:
-        description: A JSON list of the alone jobs to run, of "vt", "sketch", "nitpick" and "small".
+        description: A JSON list of the alone jobs to run, of "vt", "sketch" and "small".
         type: string
-        default: '["vt","sketch","nitpick","small"]'
+        default: '["vt","sketch","small"]'
   workflow_dispatch:
 
 permissions:
@@ -52,7 +52,7 @@ jobs:
         run: scripts/library-pins.sh check
 
   module:
-    name: ${{ matrix.id == 'small' && 'progstatus, swatch, shot, tml, plot, loom, acp and harness' || matrix.id }} alone
+    name: ${{ matrix.id == 'small' && 'progstatus, swatch, shot, tml, plot, loom, acp, harness and nitpick' || matrix.id }} alone
     if: inputs.lib_alone != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -61,9 +61,10 @@ jobs:
       matrix:
         # vt and sketch take a minute or more each and get a job of their own.
         # The small libraries share one, since each tests in seconds and a job
-        # of its own spent longer on setup than on the library. ci.yml passes
-        # only the jobs whose library changed.
-        id: ${{ fromJSON(inputs.lib_alone || '["vt","sketch","nitpick","small"]') }}
+        # of its own spent longer on setup than on the library. nitpick joined
+        # them: its job took 25 s, most of it setup. ci.yml passes only the
+        # jobs whose library changed.
+        id: ${{ fromJSON(inputs.lib_alone || '["vt","sketch","small"]') }}
     env:
       # The module as an importer builds it: no workspace, and the oldest Go
       # its go.mod allows.
@@ -74,14 +75,14 @@ jobs:
 
       - uses: ./.github/actions/setup-go
         with:
-          # All seven small libraries ask for go 1.25, and swatch/go.mod names
-          # 1.25.0, the oldest Go any of them allows.
+          # The small libraries ask for go 1.25 or 1.26.0. swatch/go.mod names
+          # 1.26.0, the oldest Go that every one of them allows.
           go-version-file: ${{ matrix.id == 'small' && 'swatch/go.mod' || format('{0}/go.mod', matrix.id) }}
           cache-id: lib-${{ matrix.id }}
 
       - name: Tidy, vet and test
         env:
-          DIRS: ${{ matrix.id == 'small' && 'progstatus swatch shot tml plot loom acp harness' || matrix.id }}
+          DIRS: ${{ matrix.id == 'small' && 'progstatus swatch shot tml plot loom acp harness nitpick' || matrix.id }}
         run: |
           status=0
           for dir in $DIRS; do
