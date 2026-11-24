@@ -8038,6 +8038,35 @@ The fixed build passes them, every `TestInbox*`, `TestAskHuman*`,
 `TestChromeLooksAndFooters`, `TestEveryOverlayOwnsItsGround` and the other
 tests that open the Inbox (137 tests).
 
+### The approval row keeps its command
+
+Every agent of the fleet runs in one folder, so once the daemon has read the
+panes' folders each active row wears the "shared folder" mark. The daemon reads
+a folder from the pane's process on a later state sync, so the first frame of
+the cockpit can come before or after it. On two cores it came after, and the
+mark cut the approval's command to `go test ./internal/au…`.
+`TestCockpitGroupsTheFleet` now waits for the mark on `cache-1` before it
+reads the approval row, so it reads the row with its marks in place every run.
+
+On all cores a second race showed: 2 of 10 runs failed with "viewing the
+thread of docs-cli did not clear its mark". The test reports `release-notes`
+errored, and the row moves from Idle to Needs you. The cockpit holds a row in
+its old place for `ckHold` (400 ms) before it moves. The test waited for the
+row's unseen mark only, which shows at once in the old place, so a click found
+before the move landed on another row after it. The test now also waits for
+`release-notes` to be in Needs you.
+
+Run on 2026-11-24 on Linux. The first control is pinned to two cores
+(`taskset -c 0-1`). The second runs on all cores with a 600 ms pause between
+`findText` and the click in `cockpitUnseenMarks`, which makes the window of
+the race wider than the hold. The pause is in the control build of the test
+only.
+
+| Bug | Fix removed | How | Tests that fail | Verdict |
+|---|---|---|---|---|
+| A mark at the end of an approval's line cuts its command | The whole-command rule in `drawRowLine2` | The marks need room for the verb and 16 cells of the command, as on other rows | `TestCockpitGroupsTheFleet` ("the approval's second line does not say what it asks: \"▌    Allow Bash  go test ./internal/au…  shared folder\""), 3 of 3 runs | **caught** |
+| A click lands on a row that moves under it | The wait for `release-notes` in Needs you | The wait for the unseen marks only, with the pause | `TestCockpitGroupsTheFleet` ("viewing the thread of docs-cli did not clear its mark"), 3 of 3 runs. With the wait and the pause: 3 of 3 pass | **caught** |
+
 ### Settle (`D`, `u`, the Settled shelf)
 
 `TestCockpitGroupsTheFleet` also settles the idle agent `scratch` with `D`,

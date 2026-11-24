@@ -1280,8 +1280,13 @@ func (m *OS) drawRowLine2(c *ckCanvas, l ckLook, r ckRow, e sidebarAgentEntry, x
 	// What the row asks or does comes first. The marks at the right end
 	// ("shared folder", the chain's waits) go in only when the verb and a
 	// readable part of the rest still fit, so at 80 columns the row keeps
-	// its words and the focus header says the rest.
-	if rightSegs != nil && right-ckWidth(rightSegs...)-2-x >= ckLine2Need(verb, rest) {
+	// its words and the focus header says the rest. An approval keeps its
+	// whole command: it is what the person reads to answer it.
+	need := ckLine2Need(verb, rest)
+	if r.hasItem && r.group != ckReview && r.item.Kind == session.AttentionApproval {
+		need = ckLine2Need(verb, "") + 2 + ansi.StringWidth(rest)
+	}
+	if rightSegs != nil && right-ckWidth(rightSegs...)-2-x >= need {
 		rx2 = c.textR(right, y, rightSegs...) - 2
 	}
 	lx := c.text(x, y, rx2, ckSeg{t: verb, fg: ink(verbInk), attrs: ckBold})

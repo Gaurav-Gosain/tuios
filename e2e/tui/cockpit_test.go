@@ -155,7 +155,11 @@ func openCockpitClient(t *testing.T, base string, cols, rows int, env []string) 
 // to the pane (the agents view's old rule) the click check fails; with the
 // daemon's wake of a settled agent cut, the agent goes back on the shelf;
 // with the settle's carry across a client push cut, the push clears it;
-// with markAgentViewed doing nothing, the unseen mark stays after a view.
+// with markAgentViewed doing nothing, the unseen mark stays after a view;
+// with the marks on an approval's line needing room for only the start of
+// the command, "shared folder" cuts the command; with the clicks of
+// cockpitUnseenMarks not waiting for the failed agent's move, a click lands
+// on another row.
 func TestCockpitGroupsTheFleet(t *testing.T) {
 	term, base, hookOut, exited := startCockpitFleet(t, 200, 55, nil)
 	s := term.Screen()
@@ -169,6 +173,16 @@ func TestCockpitGroupsTheFleet(t *testing.T) {
 		last = row
 	}
 	// The approval is the Needs you group's one row: its verb and command.
+	// The daemon reads the panes' folders from their processes on a later
+	// state sync, and then every agent of the fleet shares one folder. The
+	// check waits for that, so the row is read with its marks in place.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		r := fleetRowWith(s, "cache-1")
+		return r >= 0 && strings.Contains(s.Line(r+1), "shared folder")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the fleet never wore the shared folder mark: %v\n%s", err, term.Snapshot())
+	}
+	s = term.Screen()
 	need := fleetRowWith(s, "api-auth")
 	if need < 0 || need <= rowWith(s, "Needs you") || need >= rowWith(s, "Ready for review") {
 		t.Fatalf("ASSERTION: api-auth is not in the Needs you group\n%s", term.Snapshot())
@@ -251,8 +265,12 @@ func cockpitUnseenMarks(t *testing.T, term *tuitest.Terminal, base string) {
 	if out, err := tuiosCLI(t, base, "set-agent-state", "errored", "-s", "misc", "-w", "release-notes", "--harness", "goose", "-m", "the build failed"); err != nil {
 		t.Fatalf("report release-notes errored: %v\n%s", err, out)
 	}
+	// The failed agent moves from Idle to Needs you. The cockpit holds a row
+	// in its old place for a moment (ckHold) before it moves, so the clicks
+	// below wait for the move: a click found before it lands on another row.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return unseenOn(s, "docs-cli") && unseenOn(s, "vt-sixel") && unseenOn(s, "release-not")
+		return unseenOn(s, "docs-cli") && unseenOn(s, "vt-sixel") && unseenOn(s, "release-not") &&
+			fleetGroupOf(s, "release-not") == "Needs you"
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the finished and failed agents do not wear the unseen mark: %v\n%s", err, term.Snapshot())
 	}
