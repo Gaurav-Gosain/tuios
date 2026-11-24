@@ -19340,6 +19340,7 @@ this branch with the reason of the cross-session release put back.
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAPaneOfAnotherSessionHoldsAProjectCard$' -v .`.
 | minExcess back at 32 MB (a build of main before the change) | "the idle client never gave 2 MiB of its heap back after the burst" | **caught** |
+| minExcess back at 32 MB (a build of main before the change) | "the idle client and daemon did not both give 2 MiB of their heap back after the burst" | **caught** |
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestIdleGivesHeapBack$' -v .`.

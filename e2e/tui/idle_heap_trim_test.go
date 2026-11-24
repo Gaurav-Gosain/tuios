@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -23,9 +24,9 @@ import (
 // collection and the profile is read without gc=1. After the trim the free
 // pages not yet returned must be under 1 MB.
 //
-// NEGATIVE CONTROL (e2e/tui/NEGATIVE_CONTROLS.md, "Idle heap trim"): with
-// minExcess back at 32 MB, the test fails at "the idle client never gave
-// 2 MiB of its heap back".
+// NEGATIVE CONTROL (e2e/tui/NEGATIVE_CONTROLS.md, TestIdleGivesHeapBack):
+// with minExcess back at 32 MB, the test fails at "did not both give 2 MiB of
+// their heap back".
 func TestIdleGivesHeapBack(t *testing.T) {
 	requireReal(t, "reads the heap of the real client and daemon")
 	// The daemon looks for a trim at the end of its cleanup pass, which
@@ -49,12 +50,6 @@ func TestIdleGivesHeapBack(t *testing.T) {
 	}
 	waitWindowCount(t, term, 3, "opening three shells")
 
-	ids := windowIDs(t, base, "mem")
-	if out, err := tuiosCLI(t, base, "send-text", "-s", "mem", "-w", ids[0], "seq 1 30000; echo BURST$((1+1))DONE\n"); err != nil {
-		t.Fatalf("send-text: %v: %s", err, out)
-	}
-	waitForCapture(t, base, nil, []string{"-s", "mem", "-w", ids[0], "--lines", "3"}, "BURST2DONE")
-
 	raw, err := os.ReadFile(filepath.Join(base, "XDG_RUNTIME_DIR", "tuios", "tuios.sock.pid"))
 	if err != nil {
 		t.Fatalf("read the daemon pid: %v", err)
@@ -63,19 +58,53 @@ func TestIdleGivesHeapBack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse the daemon pid %q: %v", raw, err)
 	}
-	for _, p := range []struct {
-		name, addr string
-		pid        int
-	}{{"client", clientAddr, term.Pid()}, {"daemon", daemonAddr, daemonPid}} {
-		// The trim is watched in /proc, which costs the process nothing. A
-		// heap profile allocates in the process it reads, and read in a
-		// loop it keeps the process from counting as quiet.
-		var peak uint64
-		waitUntil(t, fmt.Sprintf("the idle %s never gave 2 MiB of its heap back after the burst", p.name), 30*time.Second, func() (bool, string) {
-			now := privateDirty(p.pid)
-			peak = max(peak, now)
-			return now+2<<20 <= peak, fmt.Sprintf("private dirty %d KiB, peak %d KiB", now/1024, peak/1024)
-		})
+	procs := []*trimWatch{
+		{name: "client", addr: clientAddr, pid: term.Pid()},
+		{name: "daemon", addr: daemonAddr, pid: daemonPid},
+	}
+	// Both processes are watched in /proc from before the burst, which costs
+	// them nothing, so each peak is seen whichever process trims first. A
+	// heap profile allocates in the process it reads, and read in a loop it
+	// keeps the process from counting as quiet.
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		tick := time.NewTicker(50 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			for _, p := range procs {
+				p.sample()
+			}
+			select {
+			case <-stop:
+				return
+			case <-tick.C:
+			}
+		}
+	}()
+	defer func() {
+		close(stop)
+		<-done
+	}()
+
+	ids := windowIDs(t, base, "mem")
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "mem", "-w", ids[0], "seq 1 30000; echo BURST$((1+1))DONE\n"); err != nil {
+		t.Fatalf("send-text: %v: %s", err, out)
+	}
+	waitForCapture(t, base, nil, []string{"-s", "mem", "-w", ids[0], "--lines", "3"}, "BURST2DONE")
+
+	waitUntil(t, "the idle client and daemon did not both give 2 MiB of their heap back after the burst", 30*time.Second, func() (bool, string) {
+		all := true
+		var state []string
+		for _, p := range procs {
+			gave := p.gaveBack()
+			all = all && gave
+			state = append(state, p.String())
+		}
+		return all, strings.Join(state, "\n")
+	})
+	for _, p := range procs {
 		ms, err := memStats(p.addr)
 		if err != nil {
 			t.Fatalf("read the %s heap: %v", p.name, err)
@@ -90,6 +119,39 @@ func TestIdleGivesHeapBack(t *testing.T) {
 			t.Fatalf("ASSERTION: the %s trimmed but kept %d KiB of free pages, want under 1024 KiB", p.name, kept/1024)
 		}
 	}
+}
+
+// trimWatch follows one process's private memory: the highest it reached and
+// the lowest it fell to after that.
+type trimWatch struct {
+	name, addr string
+	pid        int
+
+	mu        sync.Mutex
+	peak, low uint64
+}
+
+func (w *trimWatch) sample() {
+	now := privateDirty(w.pid)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if now > w.peak {
+		w.peak, w.low = now, now
+	}
+	w.low = min(w.low, now)
+}
+
+// gaveBack reports whether the process fell 2 MiB or more below its peak.
+func (w *trimWatch) gaveBack() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.low+2<<20 <= w.peak
+}
+
+func (w *trimWatch) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return fmt.Sprintf("%s: private dirty peak %d KiB, lowest after it %d KiB", w.name, w.peak/1024, w.low/1024)
 }
 
 // privateDirty is the process's private dirty memory in bytes, from

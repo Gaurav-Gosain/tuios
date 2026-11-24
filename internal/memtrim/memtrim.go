@@ -27,9 +27,12 @@ const (
 	// minExcess is the least a trim must be able to give back to be worth a
 	// forced collection. An idle client with three shells holds 5 to 9 MB of
 	// garbage and free pages past its live heap, and a daemon about as much:
-	// at 32 MB the trim never ran outside a pane flood. A collection of a heap
-	// this size costs a few milliseconds, once per settle at most.
+	// at 32 MB the trim never ran outside a pane flood.
 	minExcess = 4 << 20
+	// liveShare is the part of the live heap a trim must also give back: the
+	// collection marks the whole live heap, so a large heap trims only for
+	// garbage in proportion to it, and not for the noise of a few panes.
+	liveShare = 8
 	// maxBusyAlloc is the most a process may allocate during the settle
 	// window and still count as quiet. A process allocating faster is in the
 	// middle of a burst, and what it gave back it would take again at once.
@@ -79,7 +82,7 @@ func check(g uint64) {
 		return
 	}
 	s := read()
-	if s.allocs-since > maxBusyAlloc || s.excess() < minExcess {
+	if s.allocs-since > maxBusyAlloc || s.excess() < max(minExcess, s.live/liveShare) {
 		return
 	}
 	debug.FreeOSMemory()
