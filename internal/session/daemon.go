@@ -660,9 +660,9 @@ type connState struct {
 	hello    *HelloPayload
 	done     chan struct{}
 	doneOnce sync.Once // gates close(done) so shutdown is safe to call twice
-	sendMu   sync.Mutex
-	// sendWaiting counts the writers waiting in lockSend for sendMu.
-	sendWaiting atomic.Int32
+	// sendMu is taken by every write to the connection, in the order it
+	// was asked for. See send_lock.go.
+	sendMu sendLock
 
 	// Broadcasts to this client are written in the order they were made.
 	// broadcastToSession hands each one a ticket while it still holds the

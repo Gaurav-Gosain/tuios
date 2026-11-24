@@ -33,14 +33,6 @@ var (
 // another writer waits for it. See streamPTYOutput.
 const contendedPiece = 64 * 1024
 
-// lockSend takes sendMu, counted in sendWaiting while it waits, so a stream
-// holding the lock can tell that someone is waiting.
-func (cs *connState) lockSend() {
-	cs.sendWaiting.Add(1)
-	cs.sendMu.Lock()
-	cs.sendWaiting.Add(-1)
-}
-
 // streamBatchKeep is the batch capacity a stream keeps across an idle spell.
 // A larger batch is let go once the stream has stayed idle for queueTrimAfter,
 // and the next output grows a new one. It is the batch's counterpart to
@@ -192,15 +184,17 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 		// A frame can make the batch larger than maxBatch, so it goes out
 		// in pieces of at most maxBatch, each with its own deadline.
 		//
-		// All of a client's panes write through sendMu. While another
-		// stream waits for it, the piece is cut to contendedPiece and the
-		// lock let go after it, so a quiet pane's echo waits behind 64 KiB
-		// of a flood and not 256 KiB. With nobody waiting the pieces are
-		// what they were, so an uncontended stream makes no more writes.
+		// All of a client's panes write through sendMu, which serves its
+		// writers in turn. A writer waiting when a piece starts cuts that
+		// piece to contendedPiece, and the stream asks for the lock again
+		// behind it, so a quiet pane's echo waits behind 64 KiB of a flood.
+		// One that arrives while a whole piece is being written waits for
+		// that piece, up to maxBatch. With nobody waiting the pieces are what
+		// they were, so an uncontended stream makes no more writes.
 		for out := batch; len(out) > 0; {
-			cs.lockSend()
+			cs.sendMu.Lock()
 			n := min(len(out), maxBatch)
-			if cs.sendWaiting.Load() > 0 {
+			if cs.sendMu.Waiting() > 0 {
 				n = min(n, contendedPiece)
 			}
 			piece := out[:n]
@@ -325,7 +319,7 @@ func (d *Daemon) sendMessage(cs *connState, msgType MessageType, payload any) er
 // sendEncoded writes an already encoded message to one client, dropping the
 // client if the write fails.
 func (d *Daemon) sendEncoded(cs *connState, msg *Message) error {
-	cs.lockSend()
+	cs.sendMu.Lock()
 	_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	err := WriteMessage(cs.conn, msg)
 	cs.sendMu.Unlock()
