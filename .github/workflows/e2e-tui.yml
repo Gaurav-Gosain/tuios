@@ -22,6 +22,10 @@ on:
   # on every frame path and backend (see "Choose the frame paths").
   merge_group:
     types: [checks_requested]
+  # Every night, main runs the string frame path and the sim backend. The
+  # real cells shards skip when main's head already passed them.
+  schedule:
+    - cron: "23 2 * * *"
   workflow_dispatch:
     inputs:
       skip_if_tested:
@@ -65,7 +69,7 @@ jobs:
   # it. When it finds none, or the API fails, the shards run in full.
   tested:
     name: e2e-tui already tested
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.skip_if_tested)
+    if: github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.skip_if_tested)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -142,31 +146,21 @@ jobs:
           go run ./shardplan -shards "$E2E_SHARDS" -lanes "$E2E_LANES" -max "$E2E_LANE_LIMIT" < "$RUNNER_TEMP/all.txt"
 
       # The frame paths (appearance.cell_frames) and the backends the shards
-      # run on. A pull request runs the default path, cells, on the real
-      # binary. A pull request with the full-suite label, the merge queue and
-      # a run by hand also run every shard on Bubble Tea's renderer, the other
-      # path, and on the sim backend, so neither breaks unseen while both
-      # exist. Such a run leaves the notice "full" titled "e2e-tui frames".
-      # A push to main of a commit that passed such a run runs cells on the
-      # real binary only, and the tested job finds that run for those. Any
-      # other push runs all of them.
+      # run on. A pull request, with or without the full-suite label, and a
+      # push to main run the default path, cells, on the real binary. The
+      # string path (Bubble Tea's renderer) and the sim backend each cost as
+      # much runner time as the cells path again, and the account runs 20
+      # jobs at once, so they ran a landing at a third of the speed. They run
+      # every night on main instead, and in the merge queue and a run by hand,
+      # so neither breaks unseen for more than a day while both exist. Such a
+      # run leaves the notice "full" titled "e2e-tui frames".
       - name: Choose the frame paths
         id: frames
-        env:
-          GH_TOKEN: ${{ github.token }}
-          LABELED: ${{ contains(github.event.pull_request.labels.*.name, 'full-suite') }}
         run: |
           set -euo pipefail
           full=true
           case $GITHUB_EVENT_NAME in
-          pull_request) [ "$LABELED" = true ] || full=false ;;
-          push)
-            url=$(scripts/e2e-tested.sh "$GITHUB_REPOSITORY" "$GITHUB_SHA" full || true)
-            if [ -n "$url" ]; then
-              full=false
-              echo "This commit passed every frame path and backend in $url" | tee -a "$GITHUB_STEP_SUMMARY"
-            fi
-            ;;
+          pull_request | push) full=false ;;
           esac
           if $full; then
             echo "::notice title=e2e-tui frames::full"
@@ -390,10 +384,10 @@ jobs:
         # real runs the built binary. sim runs the client and the daemon in
         # the test process (e2e/tui/backend_test.go), on the cells path only,
         # and only the tests in e2e/tui/shardplan/sim.txt: the ones that pass
-        # there. A pull request runs real only: a red sim shard would block
-        # every landing. The merge queue and a run by hand add sim, as a check
-        # that is not required, so the queue builds the record of three green
-        # days that makes sim a check.
+        # there. A pull request and a push run real only. The nightly run, the
+        # merge queue and a run by hand add sim, as a check that is not
+        # required, so the nights build the record of three green days that
+        # makes sim a check.
         backend: ${{ fromJSON(needs.shard-plan.outputs.backends) }}
         exclude:
           - frame: string
@@ -410,7 +404,7 @@ jobs:
     env:
       # Only the real cells shards are skipped for a commit that passed them
       # before. The string and sim shards run wherever the frame step put
-      # them.
+      # them: the nightly run, the merge queue and a run by hand.
       TESTED_URL: ${{ matrix.frame == 'cells' && matrix.backend == 'real' && needs.tested.outputs.url || '' }}
 
     steps:

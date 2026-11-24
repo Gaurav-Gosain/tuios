@@ -3,8 +3,8 @@
 #
 # Exits 0 when commit SHA passed the whole suite: a run of ci.yml that ran
 # every job ("CI selection" notice "all") and passed "CI result", and a run of
-# e2e-tui.yml that ran every test on every frame path and backend (see
-# e2e-tested.sh full). It prints the two run URLs. It exits 1 when either is
+# e2e-tui.yml that ran every test on the cells path on the real binary (see
+# e2e-tested.sh). It prints the two run URLs. It exits 1 when either is
 # missing or not done yet, and prints what it did not find. Landing on main
 # calls it after the full-suite label's runs end.
 #
@@ -13,7 +13,7 @@ set -uo pipefail
 
 repo=$1
 sha=$2
-e2e=$("$(dirname "$0")/e2e-tested.sh" "$repo" "$sha" full)
+e2e=$("$(dirname "$0")/e2e-tested.sh" "$repo" "$sha")
 
 ci=""
 runs=$(gh api "repos/$repo/actions/workflows/ci.yml/runs?head_sha=$sha&status=completed&per_page=20" \
@@ -33,7 +33,7 @@ while read -r id url; do
 done <<<"$runs"
 
 [ -n "$ci" ] || echo "full-suite-passed: no ci.yml run that ran every job passed on $sha" >&2
-[ -n "$e2e" ] || echo "full-suite-passed: no e2e-tui.yml run on every frame path and backend passed on $sha" >&2
+[ -n "$e2e" ] || echo "full-suite-passed: no e2e-tui.yml run of every test passed on $sha" >&2
 [ -n "$ci" ] && [ -n "$e2e" ] || exit 1
 echo "ci: $ci"
 echo "e2e: $e2e"
