@@ -369,9 +369,16 @@ func (m *OS) threadCardLines(e sidebarAgentEntry, t *agentThread, width int, cha
 		c := (*ckCanvas)(nil).reset(width, 1, l.canvas)
 		return []string{ckRender(c, width, ckLine{indent: 2, segs: []ckSeg{{t: "No edits in the last turn.", fg: pal.FgDim}}})}, []string{""}
 	}
+	// The join knows its size, so the slices are made once and not grown by
+	// doubling as the lines are appended.
+	total := 0
+	for _, it := range items {
+		total += len(it.lines)
+	}
+	out, hits := make([]string, 0, total), make([]string, 0, total)
+	t.lines, t.lineIDs = slices.Grow(t.lines, total), slices.Grow(t.lineIDs, total)
 	// Every item, oldest first. The thread keeps the lines until it, the
 	// width or a fold changes; scrolling picks from them.
-	var out, hits []string
 	for i, it := range items {
 		if len(prompts) > 0 && prompts[0] == i {
 			prompts = prompts[1:]

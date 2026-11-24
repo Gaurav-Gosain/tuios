@@ -5870,6 +5870,49 @@ The diff highlighting of the drawn edits is most of what is left in the first
 frame. `TestCockpitThreadOpenBudget` holds the allocations of the first frame
 under 600,000 and of a frame after one new answer under 7,500.
 
+## 2026-11 a thread rebuild sizes its line slices before the join
+
+When a thread's cards changed, the rebuild joined the cards' lines into four
+slices (the drawn lines, their hits, and the thread's lines and line ids) that
+grew from nothing by append, doubling and copying as they went, though the
+count of lines is known before the join starts. The rebuild now sums the
+count first and makes each slice once. The lines, their order and what is
+drawn are the same; only the capacity differs.
+
+Measured on a Ryzen 5 5600 (Linux x86_64, go1.27.4), base and branch test
+binaries built with `go test -c`, alternated for 10 rounds, `-test.cpu 1`, 300
+iterations, benchstat, on the 200 entry thread of `CockpitThreadAppend`
+(one new answer a frame):
+
+| Frame after one new answer | base | branch |
+|---|---|---|
+| time | 2.038 ms | 1.753 ms (-13.96%) |
+| bytes | 1288.1 KiB | 643.1 KiB (-50.08%) |
+| allocations | 4,874 | 4,839 (-0.72%) |
+
+The first frame of the thread (`CockpitThreadOpen`) goes from 50.98 ms to
+50.70 ms (~), from 20.15 MiB to 19.70 MiB (-2.25%), with 312.5k allocations
+on both (-0.01%). One line of scroll (`CockpitThreadScroll`) shows no
+difference: 1.440 ms against 1.443 ms (~), 227.1 KiB on both (~), 6,863
+allocations on both (~).
+
+Read through `runtime.MemStats` (the lowest of 5 runs of 100 appends), the
+frame takes 582,263 bytes, from 1,051,248. Most of the gain is the thread's
+lines: 83% of it, measured before the change with each slice left unsized in
+turn (a `ckLine` is 224 bytes). The other three slices are about 25 KB of the
+frame each. Allocations barely move: the gain is bytes and the time of
+copying them.
+`TestAThreadRebuildSizesItsLinesBeforeTheJoin` holds the bytes of that frame
+under 800,000.
+
+Still paid: with a reply echo pending, the caller appends the echo's lines to
+slices that are exactly full, so they grow once more (the gain there is
+smaller: 706,101 bytes a frame, from 1,081,242), and the cards themselves,
+which are most of the frame.
+
+Binary size: +0 B on linux/amd64 (49,062,048 B) and darwin/arm64
+(45,681,858 B), +1,024 B on windows/amd64 (49,499,136 B to 49,500,160 B).
+
 ## 2026-11 quick look lights search matches in one walk
 
 With wrap on and a search active, every drawn row lit its matches by measuring
