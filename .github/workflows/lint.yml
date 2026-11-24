@@ -222,9 +222,9 @@ jobs:
     timeout-minutes: 20
     # The release targets besides linux, which golangci-lint vets. A test file
     # that uses a unix-only syscall without a build tag breaks these and
-    # nothing else. One job vets all four: each vet takes under half a minute,
-    # and a job of its own spent as long again on setup and held a runner
-    # that other pull requests wait for.
+    # nothing else. One job vets all four, side by side: each vet takes under
+    # half a minute, and a job of its own spent as long again on setup and
+    # held a runner that other pull requests wait for.
     steps:
       - uses: actions/checkout@v7
 
@@ -234,14 +234,31 @@ jobs:
           cache-id: vet-cross
 
       - name: Vet
+        # The four vets run side by side. Each one type-checks the tree for
+        # its GOOS, and one after another they took 130 to 225 s with a warm
+        # cache. Each output is printed in a group of its own when all end.
         run: |
+          pkgs="./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/... ./nitpick/..."
+          goos_list=$(grep -v '^#' scripts/platforms.txt | grep -vx linux)
+          pids=()
+          for goos in $goos_list; do
+            # $pkgs is split on purpose: one argument per pattern.
+            # shellcheck disable=SC2086
+            GOOS=$goos go vet $pkgs > "$RUNNER_TEMP/vet-$goos.log" 2>&1 &
+            pids+=("$!")
+          done
           status=0
-          for goos in $(grep -v '^#' scripts/platforms.txt | grep -vx linux); do
+          i=0
+          for goos in $goos_list; do
+            rc=0
+            wait "${pids[$i]}" || rc=$?
+            i=$((i + 1))
             echo "::group::go vet (GOOS=$goos)"
-            if ! GOOS=$goos go vet ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/... ./nitpick/...; then
+            cat "$RUNNER_TEMP/vet-$goos.log"
+            echo "::endgroup::"
+            if [ "$rc" -ne 0 ]; then
               status=1
               echo "::error title=go vet failed::go vet failed for GOOS=$goos"
             fi
-            echo "::endgroup::"
           done
           exit $status
