@@ -64,7 +64,6 @@ func refFolder(base, ref string) string {
 	return base
 }
 
-
 // ForgetMiss drops the memory that dir is in no repository, so the next Read
 // looks again. A caller that saw a ".git" or ".jj" made in dir calls it.
 func ForgetMiss(dir string) {
