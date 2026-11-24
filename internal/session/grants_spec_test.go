@@ -37,6 +37,10 @@ import (
 var (
 	grantCases = flag.Int("grantspec.n", 50000, "number of random states, each with grantCalls calls")
 	grantBin   = flag.String("grantspec.bin", "", "the Lean model's executable; empty is spec/grants/.lake/build/bin/grantspec")
+	// grantApplyOnly puts each state on the daemon and calls nothing, for
+	// spec/grants/go-files.sh: what this run covers is the setup, not the
+	// checks.
+	grantApplyOnly = flag.Bool("grantspec.apply-only", false, "put each state on the daemon and run no call")
 )
 
 const (
@@ -521,6 +525,9 @@ func TestGrantsMatchLeanModel(t *testing.T) {
 			t.Fatalf("case %d: the model answered %d calls of %d", i, len(reply.Answers), len(c.Calls))
 		}
 		u.apply(t, c.State)
+		if *grantApplyOnly {
+			continue
+		}
 		for j, call := range c.Calls {
 			got := u.run(t, c.State, call)
 			if seen[call.Verb] == nil {

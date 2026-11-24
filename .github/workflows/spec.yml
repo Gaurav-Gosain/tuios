@@ -84,3 +84,8 @@ jobs:
 
       - name: Compare the models with the Go code
         run: go test -tags spec -count=1 -run 'TestTaskMoveMatchesLeanModel|TestGrantsMatchLeanModel' -v ./internal/session/
+
+      # scripts/ci-changes.sh starts this job for a change to a file in the
+      # list, so the list must name every file the grant checks reach.
+      - name: The Go files of the grants model are listed
+        run: spec/grants/go-files.sh check

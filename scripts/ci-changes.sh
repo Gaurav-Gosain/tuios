@@ -107,6 +107,11 @@ in_pkg() {
 	done
 	return 1
 }
+# The Go files the grants model describes (spec/grants/go-files.txt).
+declare -A grantfiles=()
+while IFS= read -r g; do
+	case $g in '' | '#'*) ;; *) grantfiles[$g]=1 ;; esac
+done <"$SELF/../spec/grants/go-files.txt"
 while IFS= read -r p; do
 	# pkg: "must" when the path has to sit in a Go package, "may" when it
 	# counts only if it does, "no" when the rule above said all it changes.
@@ -116,9 +121,9 @@ while IFS= read -r p; do
 	# differential test.
 	case $p in internal/session/task_move.go | internal/session/task.go | internal/session/task_auto.go | internal/session/task_move_spec_test.go) f[spec]=1 ;; esac
 	# The Lean model of the pane grants and verb scopes, and the Go code it
-	# describes: the checks a verb passes before its handler, the own tree,
-	# the depth cap, the grants a start gives, and the differential test.
-	case $p in internal/session/pane_grants.go | internal/session/conn_scope.go | internal/session/own_tree.go | internal/session/agent_depth.go | internal/session/child_clamp.go | internal/session/fan_judge.go | internal/session/grants_spec_test.go) f[spec]=1 ;; esac
+	# describes. spec/grants/go-files.sh derives the list from what the
+	# differential test reaches, and the spec job checks it is current.
+	[ -n "${grantfiles[$p]:-}" ] && f[spec]=1
 	case $p in
 	# Files no job reads.
 	.github/ISSUE_TEMPLATE/* | .github/PULL_REQUEST_TEMPLATE/* | .github/contributors-exclude | .github/dependabot.yml) pkg=no ;;

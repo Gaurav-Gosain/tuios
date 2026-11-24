@@ -50,6 +50,15 @@ On a difference, the test prints the seed, the state, the call and the answer
 of each side. To run that case on the model alone, give the case line to
 `.lake/build/bin/grantspec` on stdin.
 
+## The Go files the model describes
+
+`go-files.txt` lists the Go files of `internal/session` that hold the grant
+checks. `scripts/ci-changes.sh` starts the spec job when a pull request
+changes one of them. `go-files.sh` writes the list, and the spec job runs
+`go-files.sh check`, which fails when the checks reach a file the list does
+not name. After a change that moves the checks, run `spec/grants/go-files.sh`
+and commit the list.
+
 ## The model executable
 
 `grantspec` reads one JSON object per line. Each object has a state
@@ -115,3 +124,9 @@ a window or `any_session`, so such a wait reaches no other session.
   parent's depth.
 - How a caller is placed in a pane (`paneAuthority`). The model takes the
   pane as given.
+- What `admitVerb` (`verb_protocol.go`) does before `checkGrants`: it checks
+  the parameter names, refuses some verbs with the agent features off or over
+  a link, and rewrites the session and window with `followOwnPane`,
+  `followRenamedSession` and `followMovedWindow`. The model and the test
+  start from the parameters after these rewrites. The checks hold for any
+  target they get.
