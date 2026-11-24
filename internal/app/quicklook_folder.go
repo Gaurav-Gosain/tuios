@@ -3,15 +3,13 @@ package app
 import (
 	"encoding/json"
 	"maps"
-	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
-	"github.com/Gaurav-Gosain/tuios/internal/theme"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
@@ -24,7 +22,7 @@ import (
 // The walk keeps no history: up is the parent of what is shown, read again,
 // so a folder that changed while you were in a file shows as it is now.
 //
-// Size and age come from a stat of the rows on screen and the screen after
+// The age is the rail's elapsed time format (agentElapsed). Size and age come from a stat of the rows on screen and the screen after
 // them, never of the whole folder: one read per screen the selection reaches,
 // one at a time, and none while the panel is too narrow for the columns.
 
@@ -133,20 +131,14 @@ func (m *OS) QuickLookRevealInRail() tea.Cmd {
 		}
 	}
 	if ql.free {
-		if t.host != "" || m.filesView.Host != "" || m.AttachedHost != "" {
-			m.ShowNotification("The rail shows another machine. Open the folder from the rail there.", "info", m.Settings.NotificationDuration)
-			return nil
-		}
-		if !m.OpenFileView(dir) {
-			m.ShowNotification("Show the rail first. Then press the key again.", "info", m.Settings.NotificationDuration)
+		// A path from a pane is on this machine. The rail shows it when it
+		// is on screen and lists this machine.
+		if m.filesView.Host != "" || m.AttachedHost != "" || !m.OpenFileView(dir) {
+			m.ShowNotification("The rail cannot show this folder now.", "info", m.Settings.NotificationDuration)
 			return nil
 		}
 		m.followFileRow(name)
 		m.CloseQuickLook()
-		if !m.SidebarFocused || m.SidebarFocusOnSecondary() {
-			m.EnterSidebarFocus()
-			m.sidebarFollowSession = ""
-		}
 		return nil
 	}
 	if !m.filesOn() {
@@ -216,47 +208,27 @@ func (m *OS) drawQuickLookDir(c *ckCanvas, pal overlay.Palette, r *quickLookResu
 	cols := w >= quickLookDirColsMin
 	ql.dirCols = cols
 	now := time.Now()
-	s := &m.Settings
 	for i := 0; i < rows && ql.scroll+i < n; i++ {
 		at := ql.scroll + i
 		e := r.entries[at]
 		y := top + i
-		var bg = pal.Canvas
-		ink := pal.FgDim
-		if e.Dir {
-			ink = pal.Fg
-		}
-		sel := ql.inside && at == ql.dirSel
-		if sel {
-			bg = pal.RowSel
-			ink = pal.Fg
-			c.fill(0, y, w-1, 1, bg)
-		}
-		mark := fileRowMark(e.Icon, e.Dir, false, s)
-		glyphInk := ink
-		if mark.Hex != "" {
-			glyphInk = theme.FileIconInkOn(mark.Hex, bg)
-		}
-		name := printableTitle(e.Name)
-		if name == "" {
-			name = e.Name
-		}
-		if e.Dir {
-			name += "/"
-		}
 		right := w - 1
 		if cols {
-			if st, ok := ql.dirStats[e.Name]; ok && st.known {
-				age := quickLookAge(st.mtime, now)
-				c.textR(right, y, ckSeg{t: age, fg: pal.FgMute})
-				if !st.dir {
-					c.textR(right-quickLookDirAgeW-1, y, ckSeg{t: units.Bytes(st.size), fg: pal.FgMute})
-				}
-			}
 			right -= quickLookDirSizeW + quickLookDirAgeW + 2
 		}
-		c.text(1, y, 0, ckSeg{t: mark.Glyph, fg: glyphInk})
-		c.text(3, y, right, ckSeg{t: overlay.Truncate(name, max(right-3, 1)), fg: ink})
+		// The rail's own row, so the two lists look the same. The selection
+		// is the rail's row under the pointer.
+		st := sidebarRowState{Cursor: ql.inside && at == ql.dirSel}
+		if st.Cursor {
+			c.fill(0, y, w-1, 1, sidebarRowBg(st, pal))
+		}
+		c.draw(0, y, right, m.sidebarFileRow(fileRowSpec{Kind: sidebarRowFileEntry, Name: e.Name, Dir: e.Dir, Icon: e.Icon}, right, pal, st))
+		if st, ok := ql.dirStats[e.Name]; cols && ok && st.known {
+			c.textR(w-1, y, ckSeg{t: agentElapsed("file", st.mtime*int64(time.Millisecond), now), fg: pal.FgMute})
+			if !st.dir {
+				c.textR(w-2-quickLookDirAgeW, y, ckSeg{t: units.Bytes(st.size), fg: pal.FgMute})
+			}
+		}
 	}
 }
 
@@ -268,28 +240,6 @@ func quickLookDirPlace(t quickLookTarget, w int) string {
 		where = shortenHome(where)
 	}
 	return truncPathLeft(where, max(w, 1))
-}
-
-// quickLookAge is how long ago a file changed, in at most three cells: "<1m",
-// "7m", "3h", "2d", "5mo", "2y".
-func quickLookAge(mtime int64, now time.Time) string {
-	if mtime <= 0 {
-		return ""
-	}
-	d := now.Sub(time.UnixMilli(mtime))
-	switch {
-	case d < time.Minute:
-		return "<1m"
-	case d < time.Hour:
-		return strconv.Itoa(int(d.Minutes())) + "m"
-	case d < 24*time.Hour:
-		return strconv.Itoa(int(d.Hours())) + "h"
-	case d < 60*24*time.Hour:
-		return strconv.Itoa(int(d.Hours())/24) + "d"
-	case d < 365*24*time.Hour:
-		return strconv.Itoa(int(d.Hours())/(24*30)) + "mo"
-	}
-	return strconv.Itoa(int(d.Hours())/(24*365)) + "y"
 }
 
 // QuickLookFolderClick acts on a press on a folder's row at x, y on the
@@ -347,50 +297,33 @@ func (m *OS) quickLookDirStatsRead() tea.Cmd {
 	}
 	ql.dirStatOut = true
 	t := r.target
-	if t.host == "" {
-		return func() tea.Msg {
-			out := make(map[string]quickLookStat, len(names))
-			for _, name := range names {
-				full := filepath.Join(t.path, name)
-				fi, err := os.Stat(full)
-				if err != nil {
-					if fi, err = os.Lstat(full); err != nil {
-						out[name] = quickLookStat{}
-						continue
-					}
-				}
-				out[name] = quickLookStat{size: fi.Size(), mtime: fi.ModTime().UnixMilli(), dir: fi.IsDir(), known: true}
-			}
-			return quickLookStatsMsg{res: r, stats: out}
-		}
+	var call func(host, verb string, params map[string]any) (json.RawMessage, error)
+	if t.host != "" {
+		call = m.verbOnHostCaller()
 	}
-	call := m.verbOnHostCaller()
 	return func() tea.Msg {
+		if call == nil {
+			return quickLookStatsOf(r, names, session.StatNames(t.path, names, nil))
+		}
 		raw, err := call(t.host, "file-stat", map[string]any{"path": t.path, "names": names})
-		return quickLookDecodeStats(r, names, raw, err)
+		var reply struct {
+			Infos []session.FileInfo `json:"infos"`
+		}
+		if err != nil || jsonx.Unmarshal(raw, &reply) != nil || reply.Infos == nil {
+			return quickLookStatsMsg{res: r, failed: true}
+		}
+		return quickLookStatsOf(r, names, reply.Infos)
 	}
 }
 
-// quickLookDecodeStats reads a file-stat answer for names. A machine with no
-// names parameter refuses the call, and the folder then shows no columns.
-func quickLookDecodeStats(r *quickLookResult, names []string, raw json.RawMessage, err error) quickLookStatsMsg {
-	var reply struct {
-		Infos []struct {
-			Name     string `json:"name"`
-			Kind     string `json:"kind"`
-			LinkKind string `json:"link_kind"`
-			Size     int64  `json:"size"`
-			MTime    int64  `json:"mtime"`
-		} `json:"infos"`
-	}
-	if err != nil || jsonx.Unmarshal(raw, &reply) != nil || reply.Infos == nil {
-		return quickLookStatsMsg{res: r, failed: true}
-	}
+// quickLookStatsOf holds the stats of names from what the stat said. A name
+// it did not describe is held as asked, with no size and no age.
+func quickLookStatsOf(r *quickLookResult, names []string, infos []session.FileInfo) quickLookStatsMsg {
 	out := make(map[string]quickLookStat, len(names))
 	for _, name := range names {
 		out[name] = quickLookStat{}
 	}
-	for _, in := range reply.Infos {
+	for _, in := range infos {
 		out[in.Name] = quickLookStat{size: in.Size, mtime: in.MTime, dir: in.Kind == "dir" || in.LinkKind == "dir", known: true}
 	}
 	return quickLookStatsMsg{res: r, stats: out}

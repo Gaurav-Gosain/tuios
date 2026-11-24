@@ -374,13 +374,21 @@ func (d *Daemon) fileStatNames(cs *connState, dir string, names []string) (any, 
 	if len(names) > fileStatNamesMax {
 		return nil, newVerbError(ErrVerbInvalidParams, "names holds more than 256 names.")
 	}
+	infos := StatNames(dir, names, func(full string) bool { return d.checkLinkRead(cs, full) == nil })
+	return map[string]any{"path": dir, "infos": infos}, nil
+}
+
+// StatNames describes names in the folder dir, as file-stat with names does.
+// A name that is not there, is not one name, or that allow refuses is left
+// out. Quick look calls it for a folder on this machine.
+func StatNames(dir string, names []string, allow func(full string) bool) []FileInfo {
 	infos := make([]FileInfo, 0, len(names))
 	for _, name := range names {
 		if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\") {
 			continue
 		}
 		full := filepath.Join(dir, name)
-		if d.checkLinkRead(cs, full) != nil {
+		if allow != nil && !allow(full) {
 			continue
 		}
 		fi, err := os.Lstat(full)
@@ -389,7 +397,7 @@ func (d *Daemon) fileStatNames(cs *connState, dir string, names []string) (any, 
 		}
 		infos = append(infos, describe(full, fi))
 	}
-	return map[string]any{"path": dir, "infos": infos}, nil
+	return infos
 }
 
 // verbFileList lists a folder a page at a time: folders first, then names in

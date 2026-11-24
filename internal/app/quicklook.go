@@ -1560,12 +1560,11 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 			return add(h, closeKey, "close")
 		}
 		if ql.quickLookOnFolder() {
-			h = add(h, first(in("open_details")), "open")
-			h = add(h, first(in("parent")), "up")
-			h = add(h, first(in("reveal_in_rail")), "show in rail")
-			h = add(h, pair(in, "line_down", "line_up"), "move")
-			h = add(h, pair(in, "start", "end"), "first, last")
-			h = add(h, first(in("full_size")), "full size")
+			// Action and label pairs. The footer drops from the end what does
+			// not fit.
+			for _, a := range [...][2]string{{"open_details", "open"}, {"parent", "up"}, {"reveal_in_rail", "show in rail"}, {"line_down", "move"}} {
+				h = add(h, first(in(a[0])), a[1])
+			}
 			return add(h, closeKey, "close")
 		}
 		if ql.walked || ql.free {
