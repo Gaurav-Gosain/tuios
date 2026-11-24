@@ -171,6 +171,25 @@ func settleScreen(term *tuitest.Terminal, timeout time.Duration) error {
 	return nil
 }
 
+// sendSettled sends keys one at a time and waits after each for the client
+// to settle: it has read the key and drawn what the key changed. A lone esc
+// first waits insertGuard, so the client reads it as esc and not as alt with
+// what follows, which the settle probe would be, since it starts with ESC. A
+// client that does not answer probes gets the beat the callers used to give
+// every key.
+func sendSettled(t *testing.T, term *tuitest.Terminal, keys ...any) {
+	t.Helper()
+	for _, k := range keys {
+		if err := term.SendKeys(k); err != nil {
+			t.Fatalf("send %q: %v", k, err)
+		}
+		if loneEsc(k) {
+			pause(t, "a lone esc is read as esc only once the escape timeout ends", insertGuard)
+		}
+		settled(t, term, "the client draws the key", 150*time.Millisecond)
+	}
+}
+
 // settleMarksOf is the marks file of a client startIn started, "" for a
 // client that does not answer settle probes. A client that answers them
 // creates the file when it starts. An older tuios does not, so a test that

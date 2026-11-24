@@ -130,7 +130,9 @@ func carry(t *testing.T, term *tuitest.Terminal, p dropPanes, x, y int) *drag {
 	t.Helper()
 	// Past the buttons at the left end of the title bar.
 	d := &drag{pane: p.c, col: p.c.X + 10, x: x, y: y, board: p, term: term, artifactAt: artifactDir(t)}
-	time.Sleep(500 * time.Millisecond)
+	if err := settleScreen(term, uiTimeout); err != nil {
+		t.Fatalf("the screen never settled before the press: %v", err)
+	}
 	d.pre = readCells(term.Screen())
 	saveArtifact(t, term, d.artifactAt, "1-before")
 
@@ -139,6 +141,8 @@ func carry(t *testing.T, term *tuitest.Terminal, p dropPanes, x, y int) *drag {
 	for i := 1; i <= steps; i++ {
 		mouseMotion(t, term, d.col+(x-d.col)*i/steps, p.c.Y+(y-p.c.Y)*i/steps, tuitest.MouseLeft, 0)
 	}
+	// The landing zone is drawn only after the drop preview's delay, and
+	// nothing on screen says when the delay is over.
 	time.Sleep(500 * time.Millisecond)
 	d.mid = readCells(term.Screen())
 	saveArtifact(t, term, d.artifactAt, "2-mid-drag")
@@ -168,7 +172,9 @@ func (d *drag) checkHeld(t *testing.T) {
 func (d *drag) drop(t *testing.T, base string) map[string]winRect {
 	t.Helper()
 	mouseRelease(t, d.term, d.x, d.y, tuitest.MouseLeft, 0)
-	time.Sleep(time.Second)
+	if err := settleScreen(d.term, uiTimeout); err != nil {
+		t.Fatalf("the screen never settled after the drop: %v", err)
+	}
 	after := waitForSettledGeometry(t, base, 3)
 	saveArtifact(t, d.term, d.artifactAt, "3-after-drop")
 	byID := map[string]winRect{}

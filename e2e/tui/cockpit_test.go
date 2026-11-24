@@ -496,10 +496,7 @@ func cursorTo(t *testing.T, term *tuitest.Terminal, want func(line string) bool)
 				return
 			}
 		}
-		if err := term.SendKeys("j"); err != nil {
-			t.Fatalf("press j: %v", err)
-		}
-		time.Sleep(150 * time.Millisecond)
+		sendSettled(t, term, "j")
 	}
 	t.Fatalf("the cursor never reached the row\n%s", term.Snapshot())
 }

@@ -60,15 +60,11 @@ func rawWrite(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, from int,
 	return writes[0]
 }
 
-// sendEach sends keys one at a time, with a beat between, as a person types.
+// sendEach sends keys one at a time, as a person types, and lets the client
+// draw each before the next. See sendSettled.
 func sendEach(t *testing.T, term *tuitest.Terminal, keys ...any) {
 	t.Helper()
-	for _, k := range keys {
-		if err := term.SendKeys(k); err != nil {
-			t.Fatalf("send %q: %v", k, err)
-		}
-		time.Sleep(150 * time.Millisecond)
-	}
+	sendSettled(t, term, keys...)
 }
 
 // copySearch enters copy mode and searches backwards for needle, then waits
