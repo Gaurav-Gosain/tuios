@@ -579,9 +579,13 @@ func (f *Fixture) Click(x, y int) {
 // Hover moves the pointer to a cell with no button held. Motion draws at
 // most once a frame period, and the frame it held back comes on the next
 // tick, so Hover sends that tick too: the screen after it shows the hover.
+//
+// Hover asks for the view after the motion, as the program does after every
+// message, so a motion that is not held back is drawn before the tick.
 func (f *Fixture) Hover(x, y int) {
 	f.t.Helper()
 	f.Send(tea.MouseMotionMsg(tea.Mouse{X: x, Y: y, Button: tea.MouseNone}))
+	f.frame()
 	f.Send(app.TickerMsg(time.Now()))
 }
 
