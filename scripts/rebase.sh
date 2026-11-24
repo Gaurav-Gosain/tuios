@@ -5,7 +5,7 @@
 #   scripts/rebase.sh origin/main
 #
 # Some packages embed a gzip archive that `go generate` packs from the files
-# beside it (AGENTS.md, Generated files). Two pull requests that edit those
+# beside it (docs/agents/generated-files.md). Two pull requests that edit those
 # files always conflict on the archive, and git cannot merge a gzip file. The
 # archive holds nothing the source files do not, so the fix is to run the
 # generator again on the merged files. This script does that at each stop

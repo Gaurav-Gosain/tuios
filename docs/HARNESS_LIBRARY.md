@@ -33,8 +33,8 @@ that (the risk rules, the approval gate, the hooks, the Inbox) is in
 
 ## Changing the library
 
-The rules for every library in this repository apply: see "Go libraries in
-this repository" in AGENTS.md. In short:
+The rules for every library in this repository apply: see
+[docs/agents/libraries.md](agents/libraries.md). In short:
 
 - The workspace (`go.work`) builds tuios against the `harness/` folder, so a
   change to a manifest or to the library and to tuios lands in one pull

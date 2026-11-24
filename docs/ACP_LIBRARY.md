@@ -22,7 +22,7 @@ prompt. The API is in the godoc comments, on
 | `Process`, a stdio transport with `os/exec`, and `Pipe` | `[agents] acp_version` and `--acp-version` |
 
 tuios does not use `acp.Process`. A daemon-reachable package starts a process
-only through `internal/childproc` (see the Source checks in AGENTS.md), and a
+only through `internal/childproc` (see [docs/agents/source-checks.md](agents/source-checks.md)), and a
 protocol pane's agent must not get the pane's terminal, so tuios keeps its own
 transport.
 
@@ -36,8 +36,8 @@ library, and tuios follows.
 
 ## Changing the library
 
-The rules for every library in this repository apply: see "Go libraries in
-this repository" in AGENTS.md. In short:
+The rules for every library in this repository apply: see
+[docs/agents/libraries.md](agents/libraries.md). In short:
 
 - The workspace (`go.work`) builds tuios against the `acp/` folder, so a
   change to the library and to `internal/agentproto` lands in one pull

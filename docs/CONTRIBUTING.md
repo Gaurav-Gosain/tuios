@@ -2,7 +2,7 @@
 
 The full guide (setup, PR process, code style, testing) lives on the docs site: https://tuios.dev/docs/contributing
 
-For working in this tree, [AGENTS.md](../AGENTS.md) is the orientation document: package map, build and test commands, and the testing infrastructure.
+For working in this tree, [AGENTS.md](../AGENTS.md) is the orientation document: build and test commands, the check gate and the hard rules. It names the topic files under [docs/agents](agents/), which hold the package map and the testing infrastructure.
 
 The short version:
 
