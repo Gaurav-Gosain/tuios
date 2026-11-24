@@ -10,7 +10,9 @@ visible consumer, idle CPU under ~0.5%.
 - `go test ./internal/app/ -run '^$' -bench BenchmarkIdleTick -benchmem`: work,
   allocations, and ns per maintenance tick at idle. `work/tick` is the fraction
   of ticks that ran the full-window maintenance scans; at idle it must trend to
-  zero.
+  zero. An idle client arms no tick, so this is the cost of one that fires for
+  a due job. `armed/tick` is the ticks such a tick arms again, and the
+  benchmark fails when it is not 0.
 - `go test ./internal/app/ -run TestIdleTickSkipsScans`: asserts idle ticks
   take the skip path (no scan work), read from the `tickStats` counter.
 - `TUIOS_PERF=1 go test ./internal/{terminal,input,app}/ -run TestLatency -v`:
@@ -18,8 +20,12 @@ visible consumer, idle CPU under ~0.5%.
   latency" below for what each one includes and excludes.
 - `TUIOS_E2E=1 go test ./e2e/tui/ -run TestIdleCostStaysLow`: boots the real
   binary, opens three idle shells, idles 10s, and asserts the app writes
-  ~nothing to the wire (render count bounded). `TUIOS_STATS_FILE` makes the
-  process dump its tick counters on clean exit.
+  ~nothing to the wire, handles 0 maintenance ticks and wakes the frame ticker
+  0 times. Its context switch budget is the Go runtime's floor (see "2026-11
+  zero wakeups at idle"). The clock-off and git-section cases also take a
+  runtime trace of a second idle window and fail on any goroutine of tuios
+  code that woke in it. `TUIOS_STATS_FILE` makes the process dump its tick
+  counters on clean exit and on SIGUSR1.
 - `scripts/binary-size.sh`: builds the stripped release binary for
   linux/amd64 and darwin/arm64 and fails over the 50 MB ceiling. See "Binary
   size budget" below.
@@ -33,6 +39,10 @@ visible consumer, idle CPU under ~0.5%.
 | M2 baseline (48c9c51) | 470 | 568 | 9 | 1.00 | 0 |
 | M2 idle diet          | 260 | 296 | 5 | 0.00 | 0 |
 | M3 dock components    | 260 | 296 | 5 | 0.00 | 0 |
+| 2026-11 no idle tick  | 1120 | 24 | 1 | 0.00 | 0 |
+
+The 2026-11 row was taken at load 22 and its time is directional. It also
+reports `0 armed/tick`.
 
 `TestIdleCostStaysLow`: boot + 3 windows + 10s idle:
 
@@ -41,6 +51,10 @@ visible consumer, idle CPU under ~0.5%.
 | M2 baseline (48c9c51) | 0 | 104 | 104 | 0 |
 | M2 idle diet          | 0 | 104 | 1   | 0 |
 | M3 dock components    | 0 | 104 | 1   | 0 |
+| 2026-11 no idle tick  | 0 | 0   | 0   | 0 |
+
+The 104 ticks were the idle ticker at `IdleFPS`. The tick has been armed
+only for a due job since "2026-10 the maintenance tick runs only when a job is due", so these rows describe a client that no longer exists.
 
 Frame-skip already held at baseline (zero idle renders). The diet's win is
 per-tick work: baseline ran the full-window scans on every one of the ~100 idle
@@ -6470,3 +6484,108 @@ What remains: a column over 24 rows pays for its keys and a second slice of
 rows, so it allocates 20% to 52% more bytes a build (1.5 MiB more at 2000 rows
 in Done) and two more allocations at 25 rows, in exchange for 18% to 97% less
 time. A column of 24 rows or under pays nothing.
+
+## 2026-11 zero wakeups at idle
+
+The question: what wakes an idle client and an idle daemon, and can each
+source go. The setup: a scratch daemon and one client on a 200x50 tuitest pty,
+each with its own XDG dirs, three idle `/bin/sh` panes, the default config with
+the rail on. Counts are the voluntary context switches of every thread
+(`/proc/PID/task/*/status`) and utime plus stime over the window. Traces are
+`--pprof`'s `/debug/pprof/trace` parsed with golang.org/x/exp/trace: every
+goroutine that went from waiting to runnable, grouped by the stack it waited
+on.
+
+Ryzen 5 5600 (Linux x86_64, go1.27.4), load 20 to 28 from other work:
+
+| 60 s idle | Voluntary switches | CPU ticks | Maintenance ticks | Frame ticker wakes | Wire bytes |
+|---|---|---|---|---|---|
+| client, main | 74 to 79 | 0 | 0 to 1 | 0 | 0 |
+| client, branch | 75 to 122 | 0 | 0 to 1 | 0 | 0 |
+| daemon, main | 22 to 31 | 0 | - | - | - |
+| daemon, branch | 42 | 0 | - | - | - |
+| each shell | 0 | 0 | - | - | - |
+
+The two builds are the same at default idle. The spread is the Go runtime,
+not tuios: in a 30 s trace of each process, no goroutine of tuios code woke.
+What is left:
+
+- sysmon ends its deep sleep every 60 s (`forcegcperiod/2` in
+  runtime/proc.go), and its delay starts again at 20 us, so it makes about 58
+  short sleeps on one thread before it parks again.
+- A GC is forced every 2 min. It wakes the mark workers, the sweeper and the
+  scavenger: 10 to 60 switches over 4 to 8 threads.
+- The panes' spare emulator buffers are given back once, 30 s
+  (`session.CleanupEvery`) after the last frame that changed. That is the
+  one maintenance tick, and it is the same in a 60 s and a 180 s window.
+
+So a 10 s window counts 0 to about 140 switches with no tuios code waking,
+and TestIdleCostStaysLow's budget for such a window is 200
+(`idleRuntimeSwitches`). The window that matters is the trace: 0 wakeups.
+
+### The git section reads on an event
+
+The rail's git section read its directory again every `git_refresh_ms`
+(2 s), change or no change. Each reading was a maintenance tick, file reads
+and a frame equal to the last one. It now reads again only when something it
+shows can have moved:
+
+- a folder whose entries change when a commit, a checkout, a fetch, a staged
+  path or a jj operation lands (`gitstate.WatchDirs`: the git folder, the
+  shared one, the branch's and the upstream's ref folders, the reftable, jj's
+  operation heads), watched through one `dirwatch.Set`;
+- output in a pane, when the section counts changed paths
+  (`appearance.git_dirty`, on by default). An edit leaves no trace in the git
+  folders, and an edit made in a pane comes with output;
+- the focused pane moving to another folder, as before.
+
+`git_refresh_ms` is now the least time between two readings, so a build that
+keeps printing costs at most one reading per interval. An edit made outside
+every pane, by a program the rail does not see, shows at the next of those
+events. Where no watch can be made, the section reads every interval as
+before.
+
+`TestIdleCostStaysLow/git_section`, a pane in a new repository, 10 s windows:
+
+| | Maintenance ticks | Voluntary switches | tuios goroutine wakeups (trace) |
+|---|---|---|---|
+| main | 5 | 267 | not taken |
+| branch with the 2 s reading put back | 5 | 284 to 321 | 43 |
+| branch | 0 | 70 | 0 |
+
+The 43 are the reading's own goroutines: the command Bubble Tea runs for the
+tick, `gitstate.ReadDirty` waiting on `git status`, and the event loop
+taking their messages. The subtest then checks out a branch from outside
+every pane, with no pane output, and waits for the rail to show it: only the
+watch can bring it. Negative controls: with the 2 s reading put back, the
+window fails on 5 ticks, and with its budgets lifted the trace fails on 43
+wakeups. With the watch never made, the branch never shows.
+
+### What it costs
+
+Input latency and frame pacing, `TUIOS_PERF=1`, main and branch back to back
+on the same machine at load 22 to 24. The e2e rows are the median of three
+interleaved rounds, the in-process rows one round. At this load the e2e
+numbers swing more between rounds than between the builds:
+`frames/text-240guest/max120` showed 42 to 119 fps on either build.
+
+| | main p50 | branch p50 | main p99 | branch p99 |
+|---|---|---|---|---|
+| echo, 1 pane (in-process) | 0.97 ms | 0.99 ms | 1.49 ms | 1.54 ms |
+| echo, 4 panes (in-process) | 1.05 ms | 1.04 ms | 1.69 ms | 2.10 ms |
+| daemon round trip (in-process) | 1.14 ms | 1.14 ms | 1.25 ms | 1.26 ms |
+| input latency, 1 pane (e2e) | 16.31 ms | 16.26 ms | 18.14 ms | 17.78 ms |
+| input latency, 8 panes (e2e) | 14.66 ms | 16.28 ms | 18.25 ms | 17.68 ms |
+| typing, 1 pane flooding (e2e) | 12.66 ms | 9.36 ms | 17.97 ms | 17.61 ms |
+| typing, 3 panes flooding (e2e) | 11.12 ms | 8.99 ms | 19.82 ms | 14.44 ms |
+
+| Frames shown, median of 3 | main | branch |
+|---|---|---|
+| text-240guest/max120 | 90 fps | 89 fps |
+| text-9panes/max120 | 114 fps | 120 fps |
+| shm-240guest/max240 (round 1) | 240 fps | 240 fps |
+
+Each message pays one type switch and one comparison of a small struct for
+the watch. A new reading pays the watch's retarget, off the update goroutine.
+
+Binary size: +20,480 bytes linux/amd64, +544 bytes darwin/arm64.

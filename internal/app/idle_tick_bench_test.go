@@ -29,13 +29,16 @@ func idleOS(t testing.TB, n int) *OS {
 }
 
 // BenchmarkIdleTick measures the work and allocations of one maintenance tick
-// when nothing is animating and no process is exiting. This is the number every
-// future milestone's Gate defends: a regression here means the idle path grew a
-// cost. See docs/perf.md for recorded baselines.
+// when nothing is animating and no process is exiting. An idle client arms no
+// tick at all, so this is the cost of one that fires for a job whose deadline
+// came, and it fails when such a tick arms another: armed/tick must be 0, or
+// the client would wake again on its own. This is the number every future
+// milestone's Gate defends. See docs/perf.md for recorded baselines.
 func BenchmarkIdleTick(b *testing.B) {
 	m := idleOS(b, 3)
 	// Prime the frame-skip state the idle path relies on.
 	m.Update(TickerMsg(time.Now()))
+	gen := m.tick.gen
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -45,8 +48,13 @@ func BenchmarkIdleTick(b *testing.B) {
 	b.StopTimer()
 
 	_, work, render := m.TickStats()
+	armed := m.tick.gen - gen
 	b.ReportMetric(float64(work)/float64(b.N), "work/tick")
 	b.ReportMetric(float64(render)/float64(b.N), "render/tick")
+	b.ReportMetric(float64(armed)/float64(b.N), "armed/tick")
+	if armed > 0 {
+		b.Fatalf("%d idle ticks armed %d more: an idle client must arm none", b.N, armed)
+	}
 }
 
 // TestIdleTickSkipsScans is the idle diet's precise guard: once the model is

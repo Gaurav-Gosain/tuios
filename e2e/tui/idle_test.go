@@ -81,7 +81,22 @@ type idleBudget struct {
 	// noSettle starts the window without waitIdleSettled, for a setup that
 	// times an event to land inside the window.
 	noSettle bool
+	// traced takes a runtime trace of the client for a second idle window
+	// after the counted one, and fails on any goroutine of tuios code that
+	// woke in it. The trace is a window of its own because the tracer wakes
+	// the client to flush its buffers, which the counted window must not see.
+	traced bool
 }
+
+// idleRuntimeSwitches is the context switch budget of a window in which tuios
+// code does not wake at all. Two wakeups of the Go runtime remain, and either
+// can land in a 10 s window: sysmon ends its deep sleep every 60 s
+// (forcegcperiod/2 in runtime/proc.go) and backs off over about 58 short
+// sleeps before it parks again, and a GC is forced every 2 min, which wakes
+// the mark workers, the sweeper and the scavenger. Measured with no tuios
+// goroutine waking: 10 to 140 in a window, plus about 10 for the SIGUSR1 that
+// reads the counters. See docs/perf.md.
+const idleRuntimeSwitches = 200
 
 // TestIdleCostStaysLow is the idle-cost regression guard for the whole program:
 // one client, three idle shells. Over a 10s idle window the client must write
@@ -99,10 +114,10 @@ func TestIdleCostStaysLow(t *testing.T) {
 	t.Run("clock off", func(t *testing.T) {
 		runIdleWindow(t, "[appearance.selection]\nosc52_write = \"on\"\n", idleBudget{
 			wire: idleWireBudget,
-			// The tick is armed only for a job that is due, and none is.
-			ticks: 2, work: 1,
-			tickerWakes: 1,
-			ctxsw:       400,
+			// No job is due, so no tick is armed and the frame ticker stays
+			// stopped. Only the runtime wakes the client.
+			ctxsw:  idleRuntimeSwitches,
+			traced: true,
 		}, nil, clipboardAtIdle)
 	})
 	t.Run("clock on", func(t *testing.T) {
@@ -111,10 +126,10 @@ func TestIdleCostStaysLow(t *testing.T) {
 		runIdleWindow(t, "[appearance]\nshow_clock = true\nclock_format = \"15:04:05\"\n", idleBudget{
 			// Ten clock frames, and they must go out.
 			wire: 4 * idleWireBudget, minWire: 100,
-			ticks: 2, work: 1,
-			// Was 10, one per clock frame.
-			tickerWakes: 1,
-			ctxsw:       400,
+			// The clock's frames go out through kickFlush and wake neither
+			// the tick nor the frame ticker. Was 10 ticker wakes, one per
+			// clock frame.
+			ctxsw: 400,
 		}, nil, nil)
 	})
 	t.Run("one late output", func(t *testing.T) {
@@ -140,12 +155,9 @@ func TestIdleCostStaysLow(t *testing.T) {
 		// A TML surface in a pane arms no timer and draws nothing while
 		// nothing changes it: the pane serves its cached content.
 		runIdleWindowOpts(t, "", startOpts{daemonDefault: true}, idleBudget{
-			wire:        idleWireBudget,
-			ticks:       2,
-			work:        1,
-			tickerWakes: 1,
+			wire: idleWireBudget,
 			// About 70 measured.
-			ctxsw: 400,
+			ctxsw: idleRuntimeSwitches,
 		}, tmlPaneAtIdle, nil)
 	})
 	t.Run("tml surface after motion", func(t *testing.T) {
@@ -153,11 +165,8 @@ func TestIdleCostStaysLow(t *testing.T) {
 		// end of its ttl: the frame timer ran while they played, and the
 		// window holds no timer at all.
 		runIdleWindowOpts(t, "[startup]\ndaemon = true\n\n[appearance]\nmotion = \"full\"\n", startOpts{daemonDefault: true}, idleBudget{
-			wire:        idleWireBudget,
-			ticks:       2,
-			work:        1,
-			tickerWakes: 1,
-			ctxsw:       400,
+			wire:  idleWireBudget,
+			ctxsw: idleRuntimeSwitches,
 		}, tmlMotionSettled, nil)
 	})
 	t.Run("minimized tml surface", func(t *testing.T) {
@@ -166,11 +175,9 @@ func TestIdleCostStaysLow(t *testing.T) {
 		// Before, each of the 20 patches composed a whole frame: 20 ticks,
 		// 20 ticker wakes and about 4000 context switches.
 		runIdleWindowOpts(t, "", startOpts{daemonDefault: true}, idleBudget{
-			wire:  idleWireBudget,
-			ticks: 2, work: 1,
-			tickerWakes: 1,
-			// About 400 measured, for the 20 patches.
-			ctxsw: 1200,
+			wire: idleWireBudget,
+			// About 400 measured, for the 20 patches, and 1300 at load 28.
+			ctxsw: 2000,
 		}, minimizedTMLPatched, nil)
 	})
 	t.Run("agent title on a hidden workspace", func(t *testing.T) {
@@ -178,11 +185,8 @@ func TestIdleCostStaysLow(t *testing.T) {
 		// than the one the client froze at. The rail follows the daemon's
 		// listing, and the difference between the two is not work to do.
 		runIdleWindowOpts(t, idleAgentTitleConfig, startOpts{daemonDefault: true}, idleBudget{
-			wire: idleWireBudget,
-			// Two or three measured. The setup's agent report leaves a due time.
-			ticks: 5, work: 1,
-			tickerWakes: 1,
-			ctxsw:       600,
+			wire:  idleWireBudget,
+			ctxsw: idleRuntimeSwitches,
 		}, hiddenAgentTitled, nil)
 	})
 	t.Run("agent spinner in a watched pane", func(t *testing.T) {
@@ -191,24 +195,23 @@ func TestIdleCostStaysLow(t *testing.T) {
 		// the same on a build without the agent's title on the row.
 		runIdleWindowOpts(t, idleAgentTitleConfig, startOpts{daemonDefault: true}, idleBudget{
 			wire:  idleWireBudget,
-			ticks: 2, work: 1,
-			tickerWakes: 1,
-			ctxsw:       2000,
+			ctxsw: 2000,
 		}, watchedAgentSpinning, nil)
 	})
 	t.Run("git section", func(t *testing.T) {
-		// The rail's git section reads the focused pane's repository every
-		// 2 s, and each reading composes a frame equal to the last one. That
-		// frame must not wake the frame ticker: it has nothing to write.
+		// The rail's git section reads the focused pane's repository again
+		// only when its git folders change, or a pane prints. It used to read
+		// every 2 s: five ticks and 260 to 300 context switches a window.
+		var repo string
 		runIdleWindowOpts(t, idleGitConfig, startOpts{daemonDefault: true}, idleBudget{
-			wire: idleWireBudget,
-			// One tick for each reading's due time, about five.
-			ticks: 8, work: 1,
-			// Five, one per reading, when an equal frame woke it.
-			tickerWakes: 1,
-			// 260 to 300, and 1186 with an equal frame waking the ticker.
-			ctxsw: 600,
-		}, gitRepoPane, nil)
+			wire:   idleWireBudget,
+			ctxsw:  idleRuntimeSwitches,
+			traced: true,
+		}, func(t *testing.T, term *tuitest.Terminal, base string) {
+			repo = gitRepoPane(t, term, base)
+		}, func(t *testing.T, term *tuitest.Terminal, _ *wireRecorder) {
+			gitBranchMovedOutside(t, term, repo)
+		})
 	})
 }
 
@@ -224,9 +227,9 @@ width = 28
 sections = "sessions,git"
 `
 
-// gitRepoPane puts the focused pane in a new repository and waits for the
-// rail's git section to show it.
-func gitRepoPane(t *testing.T, term *tuitest.Terminal, base string) {
+// gitRepoPane puts the focused pane in a new repository, waits for the
+// rail's git section to show it, and returns the repository's path.
+func gitRepoPane(t *testing.T, term *tuitest.Terminal, base string) string {
 	t.Helper()
 	dir := filepath.Join(base, "repo")
 	if err := os.Mkdir(dir, 0o700); err != nil {
@@ -242,6 +245,20 @@ func gitRepoPane(t *testing.T, term *tuitest.Terminal, base string) {
 		return railHeaderRow(s, "git") >= 0 && !strings.Contains(s.Text(), "Window management mode")
 	}, uiTimeout); err != nil {
 		t.Fatalf("the git section never showed the repository: %v\n%s", err, term.Snapshot())
+	}
+	return dir
+}
+
+// gitBranchMovedOutside checks out a new branch in repo from outside every
+// pane, so no pane prints, and waits for the rail to show it. With no poll,
+// the watch on the git folder is what can bring it.
+func gitBranchMovedOutside(t *testing.T, term *tuitest.Terminal, repo string) {
+	t.Helper()
+	if out, err := exec.Command("git", "-C", repo, "checkout", "-q", "-b", "moved-outside").CombinedOutput(); err != nil {
+		t.Fatalf("git checkout: %v: %s", err, out)
+	}
+	if err := term.WaitForText("moved-outside", uiTimeout); err != nil {
+		t.Fatalf("the git section never showed a branch checked out outside the panes: %v\n%s", err, term.Snapshot())
 	}
 }
 
@@ -462,6 +479,11 @@ func runIdleWindowOpts(t *testing.T, config string, o startOpts, budget idleBudg
 	statsPath := filepath.Join(base, "tickstats")
 	o.out = wire
 	o.env = append(o.env, "TUIOS_STATS_FILE="+statsPath)
+	pprofPort := 0
+	if budget.traced {
+		pprofPort = freePort(t)
+		o.args = append(o.args, "--pprof", fmt.Sprintf("127.0.0.1:%d", pprofPort))
+	}
 	term := startIn(t, base, o)
 	waitBoot(t, term)
 
@@ -525,6 +547,13 @@ func runIdleWindowOpts(t *testing.T, config string, o startOpts, budget idleBudg
 	}
 	if len(over) > 0 {
 		t.Fatalf("idle window over budget:\n  %s\n%s", strings.Join(over, "\n  "), term.Snapshot())
+	}
+	if budget.traced {
+		woke, sites := tuiosWakeups(t, pprofPort, idleWindow)
+		t.Logf("traced idle window %v: %d goroutine wakeups in tuios code", idleWindow, woke)
+		if woke > 0 {
+			t.Fatalf("goroutines of tuios code woke %d times in an idle window:\n  %s", woke, strings.Join(sites, "\n  "))
+		}
 	}
 	if after != nil {
 		after(t, term, wire)

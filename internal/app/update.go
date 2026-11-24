@@ -424,6 +424,7 @@ func (m *OS) Init() tea.Cmd {
 		listenNotificationUntil(m.stopSignal(), m.ensureNotificationChan()),
 		listenCwdChangeUntil(m.stopSignal(), m.ensureCwdChangeChan()),
 		listenForFileChange(m.stopSignal(), m.fileWatchChan(), time.Time{}),
+		listenForGitChange(m.stopSignal(), m.gitWatchChan()),
 		listenNvimNavigationUntil(m.stopSignal(), m.ensureNvimNavigationChan()),
 		listenDnDUntil(m.stopSignal(), m.ensureDnDInbox()),
 	}
@@ -1064,6 +1065,8 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// The git section asks on the same beat and for the same reason: the focused
 	// pane's directory is what both are about, and every handler that can move
 	// it is covered by one comparison here rather than by a hook in each.
+	m.noteGitStale(msg)
+	m.gitShown = false
 	gitSync := m.GitSyncCmd()
 	// The opposite edge may be the only rail that names files or git. Its
 	// presentation state is scoped to that edge; the directory and repository
@@ -1075,6 +1078,8 @@ func (m *OS) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return true
 		})
 	}
+	// The watch follows the reading either rail shows. See sidebar_git_watch.go.
+	m.syncGitWatch(m.gitShown)
 	// A live meter toggle changes which dock components need to poll.
 	dockSync := m.DockMetersSyncCmd()
 	// The rail's custom section on the same beat: the focused pane and the
@@ -1261,6 +1266,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// reading for a directory the focus has already left is dropped inside.
 		m.ApplyGitState(msg)
 		return m, nil
+
+	case gitDirChangedMsg:
+		// A folder of the git section's repository changed. The sync after
+		// this handler reads it again. See sidebar_git_watch.go.
+		return m, listenForGitChange(m.stopSignal(), m.gitWatchChan())
 
 	case PendingCopyMsg:
 		return m, m.HandlePendingCopy(msg.Seq)

@@ -208,7 +208,7 @@ func (m *OS) nextWake(now time.Time) (time.Time, bool) {
 // state and retries its file listing. GitSyncCmd and FilesSyncCmd ask on the
 // message after that moment.
 func (m *OS) railReadsDue(at func(time.Time)) {
-	if m.gitView.asked != "" && m.gitSectionEnabled() {
+	if m.gitView.asked != "" && m.gitSectionEnabled() && (m.gitView.stale || m.gitSectionPolls()) {
 		at(m.gitView.at.Add(m.gitRefreshInterval()))
 	}
 	if v := m.filesView; v.Err != "" && !v.Loading && m.filesSectionEnabled() && v.Want == m.filesWantDir() {

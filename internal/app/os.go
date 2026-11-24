@@ -1868,6 +1868,10 @@ type OS struct {
 	// and how far its branch has drifted. Derived state, never persisted and
 	// never synced, refreshed off the render path. See sidebar_git.go.
 	gitView gitView
+	// gitWatch is the watch on gitView's repository, and gitShown says a rail
+	// drew the section on this message. See sidebar_git_watch.go.
+	gitWatch gitWatcher
+	gitShown bool
 	// railCustom is the rail's custom section: whether its command is loaded
 	// in the dock engine, a generation the render cache keys on, and the
 	// per-run context last handed to the engine. See sidebar_custom.go.
@@ -2659,6 +2663,7 @@ func (m *OS) Cleanup() {
 	m.endInboxWatch()
 	m.endTransfersWatch()
 	m.stopFileWatch()
+	m.stopGitWatch()
 	m.stopThreadWatch()
 	// Ends every listener command the model armed, and the video frame writer.
 	// Without it an SSH or web session that ended would stay reachable from the

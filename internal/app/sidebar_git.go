@@ -24,10 +24,9 @@ import (
 // something. See internal/gitstate for the cost model.
 
 // The refresh interval is appearance.sidebar.git_refresh_ms (default 2000 ms),
-// read through gitRefreshInterval. It is how often the section asks again about a directory it
-// is already showing. The reading itself is nearly free, because gitstate only
-// spends a subprocess when the commits have moved, so this is about how soon a
-// commit shows up on the rail rather than about cost.
+// read through gitRefreshInterval. It is the least time between two readings
+// of a directory the section is already showing. A reading is asked for only
+// when something it shows can have moved: see sidebar_git_watch.go.
 
 // gitView is what the section is showing.
 type gitView struct {
@@ -45,6 +44,12 @@ type gitView struct {
 	// has already left can be dropped.
 	asked string
 	at    time.Time
+
+	// stale says the reading on screen may be out of date: a watched folder
+	// changed, or a pane printed output while changed paths are counted.
+	// fresh says a folder that was in no repository changed, so the next
+	// reading looks again at once. See sidebar_git_watch.go.
+	stale, fresh bool
 
 	// gen counts the readings taken in, for the rail's cache key: a reading
 	// changes what the section draws with nothing else moving.
@@ -85,6 +90,7 @@ func (m *OS) GitSyncCmd() tea.Cmd {
 	if !m.gitSectionEnabled() {
 		return nil
 	}
+	m.gitShown = true
 	want := m.gitWantDir()
 	if want == "" {
 		// No pane, or a pane that has never said where it is. The section has
@@ -95,12 +101,23 @@ func (m *OS) GitSyncCmd() tea.Cmd {
 		}
 		return nil
 	}
-	if want == m.gitView.asked && time.Since(m.gitView.at) < m.gitRefreshInterval() {
-		return nil
+	if want == m.gitView.asked {
+		if !m.gitView.stale && !m.gitSectionPolls() {
+			return nil
+		}
+		if time.Since(m.gitView.at) < m.gitRefreshInterval() {
+			// railReadsDue arms the tick for the end of the interval.
+			return nil
+		}
 	}
+	fresh := m.gitView.fresh
 	m.gitView.asked, m.gitView.at = want, time.Now()
+	m.gitView.stale, m.gitView.fresh = false, false
 	dirty := m.Settings.SidebarGitDirty
 	return func() tea.Msg {
+		if fresh {
+			gitstate.ForgetMiss(want)
+		}
 		state, found := gitstate.Read(want)
 		msg := GitStateMsg{Dir: want, State: state, Found: found}
 		if found && dirty {

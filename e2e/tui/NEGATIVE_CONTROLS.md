@@ -7162,6 +7162,22 @@ goes out with the ticker stopped. Run on 2026-10-16 on Linux.
 | No flush while the ticker is stopped | `Update`: `\|\| m.flushWhileIdle(msg)` cut | none. The hidden pane's output drew a frame anyway (the counters showed 4 renders and a ticker wake around the write), and the running ticker carried the clipboard write at 3.06 s | **not caught** |
 | The positive half | this branch | none: the clipboard write reached the terminal 3.05 s after the command `sleep 3; printf ...` was typed | **guard** |
 
+### Zero ticks, and the git section on an event
+
+The idle windows of `TestIdleCostStaysLow` budget 0 maintenance ticks and 0
+frame ticker wakes, except the one with a late output. The clock-off and
+git-section windows also take a runtime trace of a second idle window and fail
+on any goroutine of tuios code that woke in it. The git-section window then
+checks out a branch from outside every pane and waits for the rail to show it.
+Run on 2026-11-24 on Linux at load 22 to 24.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| The git section reads every 2 s again | `GitSyncCmd`: `false &&` before `!m.gitView.stale && !m.gitSectionPolls()`, and `railReadsDue` arms the reading always | `TestIdleCostStaysLow/git_section`: "handled 5 maintenance ticks (budget 0)" | **caught** |
+| The same, with the tick and switch budgets lifted | as above, the subtest's `ticks` at 100 and `ctxsw` at 5000 | `TestIdleCostStaysLow/git_section`: "goroutines of tuios code woke 43 times in an idle window", with the wait sites: Bubble Tea's command goroutine and event loop, and `gitstate.ReadDirty` | **caught** |
+| No watch on the git folders | `gitWatcher.retarget` returns before it makes the set | `TestIdleCostStaysLow/git_section`: "the git section never showed a branch checked out outside the panes" | **caught** |
+| The positive half | this branch | none: every window 0 ticks and 0 ticker wakes but the late output's 1 and 1, the traces 0 wakeups, and the outside branch shown | **guard** |
+
 `TestKickFlushWritesTheFrame` (`internal/app`) is the in-process check of the
 mechanism: with the ticker stopped at 100 frames a second, nothing is written
 in 200 ms, and one value on the channel writes the frame.

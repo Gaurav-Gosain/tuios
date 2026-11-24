@@ -1053,7 +1053,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.sidebar.git_refresh_ms", Type: OptionInt, Section: "sidebar",
-		Description: "Milliseconds between the git section's looks at a directory it is showing. git runs only when the commits have moved. Raise it for a very large repository.",
+		Description: "Least milliseconds between two looks of the git section at a directory it is showing. It looks when the repository's git folder changes, and with git_dirty on, after output in a pane. git runs only when the commits have moved. Raise it for a very large repository.",
 		Min:         SidebarGitRefreshMSMin, Max: SidebarGitRefreshMSMax,
 		Zero: ZeroIsDefault,
 	},
