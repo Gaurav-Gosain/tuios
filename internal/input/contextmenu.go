@@ -39,7 +39,15 @@ func runContextMenuAction(action string, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ClearMenuTarget()
 		return o, nil
 	}
-	next, cmd := dispatcher.Dispatch(action, tea.KeyPressMsg{}, o)
+	next := o
+	var cmd tea.Cmd
+	if o.MenuTargetOnSecondary() {
+		o.WithSecondarySidebar(func() {
+			next, cmd = dispatcher.Dispatch(action, tea.KeyPressMsg{}, o)
+		})
+	} else {
+		next, cmd = dispatcher.Dispatch(action, tea.KeyPressMsg{}, o)
+	}
 	// What a menu row carried (a workspace, a session) lives for exactly this one
 	// dispatch, so the same action reached later by key acts on what is in view.
 	next.ClearMenuTarget()

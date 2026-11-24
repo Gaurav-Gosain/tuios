@@ -140,6 +140,8 @@ type ContextMenu struct {
 	// SidebarFileOpen) live here, so there is no getter for the input layer the
 	// way TakeMenuSession is one.
 	File fileMenuTarget
+	// secondaryRail records that this menu was opened from the secondary rail.
+	secondaryRail bool
 
 	AnchorX int
 	AnchorY int
@@ -158,6 +160,12 @@ type ContextMenu struct {
 
 	// depth counts the submenus opened in a row to reach this menu.
 	depth int
+}
+
+// MenuTargetOnSecondary reports whether the selected menu row came from the
+// secondary rail, even after the menu has closed.
+func (m *OS) MenuTargetOnSecondary() bool {
+	return m.menuFrom != nil && m.menuFrom.secondaryRail
 }
 
 // selectable reports whether row i can be highlighted and run.

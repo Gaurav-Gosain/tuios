@@ -1114,12 +1114,13 @@ func (m *OS) openSidebarContextMenu(hit sidebarRowHit, x, y int) {
 // menu carries it.
 func (m *OS) openFilesSectionMenu(x, y int, t fileMenuTarget) {
 	cm := &ContextMenu{
-		AnchorX:     x,
-		AnchorY:     y,
-		ItemH:       1,
-		Target:      CtxTargetFileRow,
-		WindowIndex: -1,
-		File:        t,
+		AnchorX:       x,
+		AnchorY:       y,
+		ItemH:         1,
+		Target:        CtxTargetFileRow,
+		WindowIndex:   -1,
+		File:          t,
+		secondaryRail: m.sidebarDrawing,
 	}
 	cm.Title, cm.Items = m.fileRowMenu(t)
 	cm.Items = append(cm.Items, separator(), m.railSettingsItem())
