@@ -90,7 +90,7 @@ type outputChunk struct {
 	// wrapping every line where the daemon wrapped it.
 	width, height int
 	// drained, when set, is closed once everything queued in front of it has
-	// been applied to the emulator. See DrainPendingOutput.
+	// been applied to the emulator and noted. See DrainPendingOutput.
 	drained chan struct{}
 }
 
@@ -362,9 +362,6 @@ func (w *Window) outputWriter() {
 		if resize.isResize() {
 			w.applyStreamResize(resize)
 		}
-		if drained != nil {
-			close(drained)
-		}
 
 		if t != nil {
 			// HasNewOutput drives the UI goroutine's dirty-marking;
@@ -380,6 +377,13 @@ func (w *Window) outputWriter() {
 			w.noteWrite(!resize.isResize() && graphicsOnly(ground, batch) && w.cursorHidden())
 		} else {
 			w.writesNoted.Add(1)
+		}
+		// After the write is noted, so DrainPendingOutput returns with the
+		// output flag already set: a pass on the UI goroutine right after it
+		// takes the output in. Closed before the note, a pass in between
+		// found no flag and drew the pane from before the write.
+		if drained != nil {
+			close(drained)
 		}
 	}
 }
@@ -780,7 +784,8 @@ func (w *Window) waitForQueueRoom(n int64) bool {
 }
 
 // DrainPendingOutput blocks until everything queued for the emulator ahead of
-// this call has been applied to it. A pane about to be primed is unsubscribed,
+// this call has been applied to it and noted, so any write it waited for has
+// set its output flag. A pane about to be primed is unsubscribed,
 // so the queue is finite and this returns once the writer works through it.
 //
 // It exists because throwing the queue away instead loses history: the
