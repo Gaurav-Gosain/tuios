@@ -6907,3 +6907,47 @@ second, p99 21 ms, scroll p95 17.4 ms.
 
 `TestIdleCostStaysLow` passes: 0 wire bytes and 0 renders in the clock-off
 window.
+
+## 2026-11 a flooding pane lets other writes in between its pieces
+
+All of a client's panes write to its connection through one lock
+(`connState.sendMu`). A flooding pane wrote up to 256 KiB in one hold, and a
+quiet pane's echo waited behind it.
+
+### What changed
+
+- A writer that waits for the lock is counted (`connState.lockSend`,
+  `sendWaiting`). While another writer waits, a stream writes at most 64 KiB
+  (`contendedPiece`) and lets go of the lock. With nobody waiting it writes
+  as before.
+
+### Numbers
+
+`TestPerfSmooth` and `TestPerfSmoothDrain`, 207x55, max_fps 120, three
+rounds of each build interleaved in a quiet window. All three rounds are
+kept: drain speed and CPU varied by under 3% between rounds. Medians.
+
+| | before | after |
+|---|---|---|
+| 9 busy panes: key p50 / p99 | 33.3 / 66.5 ms | 30.8 / 60.1 ms |
+| 4 busy panes: key p99 | 28.6 ms | 29.4 ms |
+| 9 busy panes: frame p99 | 50.1 ms | 50.0 ms |
+| 9 busy panes: 60 Hz frames shown | 50% | 52% |
+| daemon write calls per MB: yes / seq / 4 panes | 36 / 42 / 33 | 36 / 43 / 33 |
+
+Client and daemon CPU are the same within 1%. The total time the stream
+goroutines waited for the lock in a 3 s trace is about the same (6.8 s and
+7.7 s): there are more waits, and each one waits behind at most 64 KiB.
+
+### Measured and deliberately not changed
+
+- **Pausing one pane's stream at the daemon when the client falls behind
+  it.** Built and tested: the client asks the daemon to hold one pane's stream
+  above 4 MiB queued, through a new message and a feature list in the
+  handshake. It showed no latency gain. With 9 busy panes the key p99 was
+  the same (66.5 ms both). With a client slowed to about 4 MB/s by a test
+  knob, a key in a quiet pane echoed in 11 to 41 ms without it and 7 to 43 ms
+  with it. What it changed: the paused stream is cut sooner, so the flooded
+  pane reached its last line in 1.3 s instead of 6.4 s, and the client skipped
+  the cut bytes and lost that history. That trade waits for the history to
+  be read from the daemon.
