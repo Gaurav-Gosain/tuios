@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/worktree"
 )
 
 // The differential test of pane grants and verb scopes against their Lean
@@ -161,6 +162,10 @@ func newGrantUniverse(t *testing.T) *gsUniverse {
 				t.Fatal(err)
 			}
 		}
+		// A save re-detects the session's worktree from its shell's
+		// directory and replaces the record a case wrote, after the case
+		// was applied. The model holds the record as written.
+		stopSessionSaver(sess)
 		u.sess = append(u.sess, sess)
 		u.ids[fmt.Sprintf("i%d", i)] = sess.ID
 		for _, w := range sess.GetState().Windows {
@@ -478,15 +483,99 @@ func gsSame(a, b gsAnswer) bool {
 	return bytes.Equal(x, y)
 }
 
-func TestGrantsMatchLeanModel(t *testing.T) {
-	bin := *grantBin
-	if bin == "" {
-		wd, err := os.Getwd()
-		if err != nil {
-			t.Fatal(err)
-		}
-		bin = filepath.Join(filepath.Dir(filepath.Dir(wd)), "spec", "grants", ".lake", "build", "bin", "grantspec")
+// gsModelBin is the Lean model's executable.
+func gsModelBin(t *testing.T) string {
+	if *grantBin != "" {
+		return *grantBin
 	}
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Join(filepath.Dir(filepath.Dir(wd)), "spec", "grants", ".lake", "build", "bin", "grantspec")
+}
+
+// gsRegressions are cases a random run found, each with the decision both
+// sides must give.
+var gsRegressions = []struct {
+	name string
+	want string
+	edit func(*gsCase)
+	json string
+}{
+	{
+		// s0 was launched from s1, so p3 in s1 reads s0 with the read grant.
+		// A save that re-detected s0's directory replaced its managed record
+		// with a detected one, and the Go side refused.
+		name: "a pane reads the session its own session launched",
+		want: "allow",
+		json: gsLaunchedFromCase,
+	},
+	{
+		// The negative control: without the launcher, s0 is out of reach.
+		name: "a pane reads a session its own session did not launch",
+		want: "forbidden",
+		edit: func(c *gsCase) { c.State.Sessions[0].Worktree.LaunchedFrom = "" },
+		json: gsLaunchedFromCase,
+	},
+}
+
+// gsLaunchedFromCase is seed 1795541135002539675, case 20400, call 5.
+const gsLaunchedFromCase = `{"state":{"sessions":[{"name":"s0","id":"i0","focused":"p2","worktree":{"launched_from":"i1","group":"g","managed":true,"repo_root":"r2","fan_id":"","judge_session":"ix","judge_window":"p5"}},{"name":"s1","id":"i1","focused":"p4","worktree":null},{"name":"s2","id":"i2","focused":"p7","worktree":{"launched_from":"i0","group":"","managed":true,"repo_root":"r1","fan_id":"f","judge_session":"","judge_window":""}},{"name":"s3","id":"i3","focused":"p9","worktree":{"launched_from":"","group":"g","managed":false,"repo_root":"r2","fan_id":"","judge_session":"","judge_window":""}}],"panes":[{"id":"p0","session":"s0","started_by":"p2","link":null,"depth":0,"grants":["read"],"needs_input":false,"approval":true},{"id":"p1","session":"s0","started_by":"p8","link":null,"depth":1,"grants":null,"needs_input":false,"approval":false},{"id":"p2","session":"s0","started_by":"p6","link":{"root":"p5","depth":0},"depth":3,"grants":["task"],"needs_input":false,"approval":false},{"id":"p3","session":"s1","started_by":"","link":null,"depth":3,"grants":["read","write","task"],"needs_input":false,"approval":false},{"id":"p4","session":"s1","started_by":"p11","link":{"root":"p6","depth":3},"depth":2,"grants":null,"needs_input":false,"approval":false},{"id":"p5","session":"s1","started_by":"","link":null,"depth":3,"grants":null,"needs_input":false,"approval":false},{"id":"p6","session":"s2","started_by":"px","link":null,"depth":3,"grants":null,"needs_input":true,"approval":false},{"id":"p7","session":"s2","started_by":"p5","link":null,"depth":4,"grants":null,"needs_input":false,"approval":false},{"id":"p8","session":"s2","started_by":"px","link":null,"depth":2,"grants":["respond","task"],"needs_input":false,"approval":false},{"id":"p9","session":"s3","started_by":"","link":null,"depth":1,"grants":["fan","respond","files"],"needs_input":true,"approval":true},{"id":"p10","session":"s3","started_by":"p5","link":{"root":"","depth":0},"depth":2,"grants":null,"needs_input":false,"approval":false},{"id":"p11","session":"s3","started_by":"px","link":null,"depth":3,"grants":null,"needs_input":false,"approval":true}],"config":{"strict":true,"grants":["read","respond","files","task"],"max_depth":1}},"calls":[{"caller":{"pane":"p3","restriction":null},"verb":"capture-pane","target":{"session":"s0","window":"px","from":"","select":false,"all_sessions":false,"allow_blocked":true,"grants":["files"]}}]}`
+
+func TestGrantsLeanRegressions(t *testing.T) {
+	u := newGrantUniverse(t)
+	model := startLeanModel(t, gsModelBin(t))
+	for _, rc := range gsRegressions {
+		t.Run(rc.name, func(t *testing.T) {
+			var c gsCase
+			if err := json.Unmarshal([]byte(rc.json), &c); err != nil {
+				t.Fatal(err)
+			}
+			if rc.edit != nil {
+				rc.edit(&c)
+			}
+			if _, err := model.in.Write(gsEncode(c)); err != nil {
+				t.Fatal(err)
+			}
+			reply, err := gsRead(model)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(reply.Answers) != len(c.Calls) {
+				t.Fatalf("the model answered %d calls of %d", len(reply.Answers), len(c.Calls))
+			}
+			// The order CI ran in: a save starts on a state where s0 has no
+			// record, and the case is applied while it detects s0's
+			// directory.
+			before := c.State
+			before.Sessions = slices.Clone(c.State.Sessions)
+			before.Sessions[0].Worktree = nil
+			u.apply(t, before)
+			wd, err := os.Getwd()
+			if err != nil {
+				t.Fatal(err)
+			}
+			detect := detectWorktree
+			defer func() { detectWorktree = detect }()
+			detectWorktree = func(dir string) (worktree.Info, bool, bool) {
+				detectWorktree = detect
+				u.apply(t, c.State)
+				return detect(dir)
+			}
+			u.sess[0].refreshWorktree(wd)
+			for j, call := range c.Calls {
+				got, lean := u.run(t, c.State, call), reply.Answers[j]
+				if got.Decision != rc.want || lean.Decision != rc.want {
+					t.Errorf("call %d: go %+v, lean %+v, want %s", j, got, lean, rc.want)
+				}
+			}
+		})
+	}
+}
+
+func TestGrantsMatchLeanModel(t *testing.T) {
+	bin := gsModelBin(t)
 	seed := *specSeed
 	if seed == 0 {
 		seed = uint64(time.Now().UnixNano())

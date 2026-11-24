@@ -128,6 +128,25 @@ func TestADetectedRecordFollowsTheDirectoryAndAManagedOneStays(t *testing.T) {
 		t.Error("moving back into the worktree did not restore the record")
 	}
 
+	// A fan marks the session managed while a save detects its directory.
+	// The fan's record is the newer one and stays.
+	stopSessionSaver(plain)
+	outside := t.TempDir()
+	fan := &WorktreeInfo{Managed: true, Group: "g", LaunchedFromID: "launcher-id", JudgeSession: "judge-id"}
+	detect := detectWorktree
+	t.Cleanup(func() { detectWorktree = detect })
+	detectWorktree = func(dir string) (worktree.Info, bool, bool) {
+		if err := plain.SetWorktree(fan); err != nil {
+			t.Fatal(err)
+		}
+		return detect(dir)
+	}
+	plain.refreshWorktree(outside)
+	detectWorktree = detect
+	if info := plain.Worktree(); info == nil || !info.Managed || info.LaunchedFromID != "launcher-id" || info.Group != "g" || info.JudgeSession != "judge-id" {
+		t.Errorf("a save that detected while a fan wrote the record replaced it: %+v", info)
+	}
+
 	newWorktreeCall(t, c, repo, "managed", nil)
 	managed := d.manager.GetSession("repo-managed")
 	managed.refreshWorktree(t.TempDir())

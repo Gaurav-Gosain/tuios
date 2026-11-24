@@ -1,6 +1,7 @@
 package session
 
 import (
+	"errors"
 	"os"
 
 	"github.com/Gaurav-Gosain/tuios/internal/ghpr"
@@ -247,10 +248,11 @@ func (s *Session) worktreeListing() *WorktreeInfo {
 // means read the first window's process directory.
 func (s *Session) refreshWorktree(cwd string) {
 	s.stateMu.RLock()
-	managed := s.state.Worktree != nil && s.state.Worktree.Managed
+	read := s.state.Worktree
+	managed := read != nil && read.Managed
 	var current *WorktreeInfo
-	if s.state.Worktree != nil {
-		cp := *s.state.Worktree
+	if read != nil {
+		cp := *read
 		current = &cp
 	}
 	var firstPTY string
@@ -269,15 +271,33 @@ func (s *Session) refreshWorktree(cwd string) {
 	if cwd == "" {
 		return
 	}
-	detected, main, ok := worktree.DetectEither(cwd)
+	detected, main, ok := detectWorktree(cwd)
+	var next *WorktreeInfo
 	switch {
 	case !ok && current == nil:
 		return
 	case !ok:
-		_ = s.SetWorktree(nil)
 	case current != nil && current.Info == detected && current.Main == main:
 		return
 	default:
-		_ = s.SetWorktree(&WorktreeInfo{Info: detected, Main: main})
+		next = &WorktreeInfo{Info: detected, Main: main}
 	}
+	// The detection ran without the lock. A verb that wrote the record in
+	// the meantime, such as a fan marking its session managed, wrote the
+	// newer record: replacing it would drop its launcher, group and judge.
+	_ = s.mutateState(func(st *SessionState) error {
+		if st.Worktree != read || st.Worktree != nil && st.Worktree.Managed {
+			return errWorktreeMoved
+		}
+		st.Worktree = next
+		return nil
+	})
 }
+
+// detectWorktree is worktree.DetectEither. A test replaces it to write the
+// record while a detection runs.
+var detectWorktree = worktree.DetectEither
+
+// errWorktreeMoved stops a refresh whose record changed while it detected.
+// mutateState publishes nothing for it.
+var errWorktreeMoved = errors.New("worktree record changed during detection")

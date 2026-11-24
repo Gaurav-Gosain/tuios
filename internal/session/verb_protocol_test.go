@@ -146,6 +146,15 @@ func makeSessionWithWindow(t *testing.T, d *Daemon, name string) *Session {
 	return sess
 }
 
+// stopSessionSaver stops the session's periodic save, which re-detects its
+// worktree in the background. Session.Stop still writes the final save.
+func stopSessionSaver(sess *Session) {
+	if stop := sess.stopResurrection; stop != nil {
+		sess.stopResurrection = nil
+		stop()
+	}
+}
+
 func TestVerbErrorCases(t *testing.T) {
 	_, sp := startTestDaemon(t)
 	c := dialVerb(t, sp)
