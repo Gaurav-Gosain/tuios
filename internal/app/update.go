@@ -931,6 +931,13 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.renderSkipped = true
 		return m, m.frameIdleTickCmd()
 	}
+	// A test's settle probe changes nothing, and is answered after the flush
+	// it asks for. See settle_probe.go.
+	if m.takeSettleProbe(msg) {
+		m.kickFlush()
+		m.renderSkipped = true
+		return m, flushCmd
+	}
 	// A test's request for the counters changes nothing either.
 	if _, ok := msg.(tickStatsDumpMsg); ok {
 		m.DumpTickStats()

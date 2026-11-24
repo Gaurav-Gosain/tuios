@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // The nesting probe.
@@ -78,7 +80,9 @@ type NestProbe struct{ nonce string }
 // has reached any pane it is going to reach by the time the client attaches.
 func WriteNestProbe(w io.Writer) NestProbe {
 	nonce, seq := NewNestProbe()
-	if _, err := w.Write(seq); err != nil {
+	n, err := w.Write(seq)
+	testknob.Wrote(n)
+	if err != nil {
 		return NestProbe{}
 	}
 	return NestProbe{nonce: nonce}

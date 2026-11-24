@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -102,3 +103,23 @@ func Millis(name string) time.Duration {
 	}
 	return time.Duration(n) * time.Millisecond
 }
+
+// written counts the bytes this process wrote to its terminal, for the answer
+// to a settle probe (internal/app/settle_probe.go). Only a process with the
+// settle_marks knob set counts.
+var written atomic.Int64
+
+// counting reports whether the settle_marks knob is set.
+var counting = sync.OnceValue(func() bool { return String("settle_marks") != "" })
+
+// Wrote adds n to the bytes this process wrote to its terminal, when the
+// settle_marks knob is set. Every write to the terminal calls it: the
+// client's writer, and the few lines a client writes before it starts.
+func Wrote(n int) {
+	if counting() {
+		written.Add(int64(n))
+	}
+}
+
+// Written is the number of bytes Wrote counted.
+func Written() int64 { return written.Load() }

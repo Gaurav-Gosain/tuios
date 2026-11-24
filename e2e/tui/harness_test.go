@@ -270,6 +270,10 @@ func runE2E(m *testing.M) (code int) {
 type startOpts struct {
 	// cols and rows size the PTY. Zero means 120x40.
 	cols, rows int
+	// noSettleProbe starts the client without the settle_marks knob, so it
+	// runs as it ships: the idle-cost tests measure that client. settled
+	// pauses for such a client.
+	noSettleProbe bool
 	// dir is the calling client's directory. Empty uses the harness workdir.
 	dir string
 	// args are extra tuios command-line flags, e.g. "--shared-borders".
@@ -477,6 +481,14 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 		}
 	})
 	env = append(env, o.env...)
+	// The client answers settle probes in a file of its own, so a test can
+	// wait for it to catch up rather than pause (see settled). A client in the
+	// test process shares the process's knobs, so it does not answer.
+	marks := ""
+	if !simOn && !o.noSettleProbe {
+		marks = filepath.Join(t.TempDir(), "settle-marks")
+		env = withKnobs(append(env, testknob.Env+"=settle_marks="+marks))
+	}
 
 	cols, rows := o.cols, o.rows
 	if cols == 0 {
@@ -551,7 +563,7 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 		term = tuitest.StartT(t, argv, opts...)
 	}
 	traceClient(t, term)
-	clientStarts.Store(term, clientStart{at: time.Now(), events: eventsLog})
+	clientStarts.Store(term, clientStart{at: time.Now(), events: eventsLog, marks: marks})
 	return term
 }
 
@@ -579,6 +591,9 @@ func hostCellSize(env []string) (int, int) {
 type clientStart struct {
 	at     time.Time
 	events string
+	// marks is the file the client answers settle probes in, "" for a client
+	// that does not answer them. See settled.
+	marks string
 }
 
 // clientStarts maps each client startIn started to its clientStart.
@@ -773,9 +788,9 @@ func windowManagementMode(t *testing.T, term *tuitest.Terminal) {
 			keyEvidence(term, "Alt+Esc (bytes \\x1b\\x1b)", sentAt), term.Snapshot())
 	}
 	// A client that just booted can still lose the next keys, and nothing on
-	// screen says when it is ready for them. Phase 2 replaces this with a
-	// readiness signal or an exact settle under the in-process backend.
-	pause(t, "no sign on screen says a client that just booted is ready for keys", insertGuard)
+	// screen says when it is ready for them. A client that answers settle
+	// probes has read every key before the probe when it answers.
+	settled(t, term, "no sign on screen says a client that just booted is ready for keys", insertGuard)
 }
 
 // killDaemonNow shuts the daemon under base down immediately rather than at the
@@ -924,9 +939,9 @@ func enterTerminalMode(t *testing.T, term *tuitest.Terminal) {
 		}
 		if err := term.WaitForText("Terminal mode", terminalModeProbe); err == nil {
 			// A tiling animation can still be resizing the pane, and nothing
-			// on screen says when it is done. Phase 2 replaces this with an
-			// exact settle under the in-process backend.
-			pause(t, "no sign on screen says the tiling animation is done", insertGuard+150*time.Millisecond)
+			// on screen says when it is done. A client that answers settle
+			// probes says when no animation runs.
+			settled(t, term, "no sign on screen says the tiling animation is done", insertGuard+150*time.Millisecond)
 			return
 		}
 		if _, exited := term.ExitCode(); exited {

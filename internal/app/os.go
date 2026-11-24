@@ -1373,6 +1373,9 @@ type OS struct {
 	blockGen         int
 	blockView        int
 	PostRenderWriter *PostRenderWriter
+	// settleOwed holds the IDs of the settle probes read since the last
+	// flush. See settle_probe.go.
+	settleOwed []string
 	// cursorPark keeps the host cursor hidden where tuios parks it for
 	// input methods, nil when the writer has no frame hook. See
 	// cursor_park.go.

@@ -6,8 +6,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuitest"
 )
 
 // The waits every test uses. A test waits on the thing it needs, never on a
@@ -101,6 +104,104 @@ func pause(t *testing.T, why string, d time.Duration) {
 	t.Helper()
 	t.Logf("pause %s: %s", d, why)
 	time.Sleep(scaled(d))
+}
+
+// settleSeq numbers the settle probes of the run, so each answer names the
+// probe it is for.
+var settleSeq atomic.Int64
+
+// settled waits for the client to catch up: it has read every key sent to it
+// so far, the frame for them is on the screen, and no animation runs and no
+// pane output waits for a frame. It sends a settle probe, an APC the client
+// reads in order with the keys before it (internal/app/settle_probe.go), and
+// reads the answer from the client's marks file. The answer says how many
+// bytes the client had written, and settled waits until the terminal has read
+// as many. A busy client is probed again.
+//
+// A client that does not answer probes gets pause(t, why, d) as before: one
+// startIn did not start, one in the test process, one started with
+// noSettleProbe, or one whose frames Bubble Tea's renderer writes
+// (appearance.cell_frames off), since that renderer writes after the answer.
+func settled(t *testing.T, term *tuitest.Terminal, why string, d time.Duration) {
+	t.Helper()
+	marks := settleMarksOf(term)
+	if marks == "" {
+		pause(t, why, d)
+		return
+	}
+	start, probes := time.Now(), 0
+	var a settleAnswer
+	waitUntil(t, "the client settles: "+why, uiTimeout, func() (bool, string) {
+		probes++
+		a = settleProbe(t, term, marks)
+		return !a.screen || !a.busy, "an animation runs or pane output waits for its frame"
+	})
+	if !a.screen {
+		pause(t, why, d)
+		return
+	}
+	t.Logf("settled in %s, %d probes, read %d of %d bytes: %s", time.Since(start).Round(time.Millisecond), probes, a.read, a.sent, why)
+}
+
+// settleMarksOf is the marks file of a client startIn started, "" for a
+// client that does not answer settle probes.
+func settleMarksOf(term *tuitest.Terminal) string {
+	if v, ok := clientStarts.Load(term); ok {
+		return v.(clientStart).marks
+	}
+	return ""
+}
+
+// settleProbe sends one settle probe and waits for its answer, and then, for
+// a client with its own screen, until the terminal has read every byte the
+// answer counts.
+func settleProbe(t *testing.T, term *tuitest.Terminal, marks string) settleAnswer {
+	t.Helper()
+	id := strconv.FormatInt(settleSeq.Add(1), 10)
+	if err := term.Type("\x1b_tuios-settle;" + id + "\x1b\\"); err != nil {
+		t.Fatalf("send settle probe %s: %v", id, err)
+	}
+	var a settleAnswer
+	waitUntil(t, "the client answers settle probe "+id, uiTimeout, func() (bool, string) {
+		var ok bool
+		a, ok = readSettleAnswer(marks, id)
+		return ok, "no answer for probe " + id + " in " + marks
+	})
+	if !a.screen {
+		return a
+	}
+	waitUntil(t, "the terminal reads the frame before settle probe "+id, uiTimeout, func() (bool, string) {
+		a.read, _ = term.Progress()
+		return a.read >= a.sent, fmt.Sprintf("read %d of the %d bytes the client wrote", a.read, a.sent)
+	})
+	return a
+}
+
+// settleAnswer is one line of a marks file (internal/app/settle_probe.go),
+// and read, the bytes the terminal had read when settleProbe returned.
+type settleAnswer struct {
+	sent, read   int64
+	busy, screen bool
+}
+
+// readSettleAnswer finds the answer to probe id in the marks file.
+func readSettleAnswer(marks, id string) (settleAnswer, bool) {
+	b, err := os.ReadFile(marks)
+	if err != nil {
+		return settleAnswer{}, false
+	}
+	for line := range strings.Lines(string(b)) {
+		f := strings.Fields(line)
+		if len(f) != 4 || f[0] != id {
+			continue
+		}
+		sent, err := strconv.ParseInt(f[1], 10, 64)
+		if err != nil {
+			return settleAnswer{}, false
+		}
+		return settleAnswer{sent: sent, busy: f[2] == "true", screen: f[3] == "true"}, true
+	}
+	return settleAnswer{}, false
 }
 
 // fakeT records the first failure and stops the wait, as t.Fatalf does.

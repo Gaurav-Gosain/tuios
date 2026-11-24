@@ -6,6 +6,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // PostRenderWriter wraps the client's terminal (stdout) to intercept bubbletea's
@@ -51,6 +53,10 @@ type PostRenderWriter struct {
 	erased []func(kept bool) []byte
 	// repaint follows a kitty picture with a second write. See pictureRepaint.
 	repaint pictureRepaint
+	// count says the bytes written to the terminal are counted, for the
+	// answer to a settle probe. It is false unless the settle_marks knob is
+	// set. See settle_probe.go.
+	count bool
 }
 
 // FrameHook runs on each frame the renderer writes. out is the frame to send
@@ -85,7 +91,9 @@ func (w *PostRenderWriter) AddEraseHook(fn func(kept bool) []byte) {
 // NewPostRenderWriter wraps out, the terminal the client draws on.
 func NewPostRenderWriter(out io.Writer) *PostRenderWriter {
 	f, _ := out.(*os.File)
-	return &PostRenderWriter{out: out, file: f}
+	w := &PostRenderWriter{out: out, file: f}
+	w.count = settleMarks() != ""
+	return w
 }
 
 // File is the terminal file under the writer, or nil when it is not a file.
@@ -116,11 +124,16 @@ func (f *postRenderFile) Close() error                { return f.f.Close() }
 func (f *postRenderFile) Fd() uintptr                 { return f.f.Fd() }
 
 // writeOut writes buf to the terminal, straight to the file when it is one.
-func (w *PostRenderWriter) writeOut(buf []byte) (int, error) {
+func (w *PostRenderWriter) writeOut(buf []byte) (n int, err error) {
 	if w.file != nil {
-		return w.file.Write(buf)
+		n, err = w.file.Write(buf)
+	} else {
+		n, err = w.out.Write(buf)
 	}
-	return w.out.Write(buf)
+	if w.count {
+		testknob.Wrote(n)
+	}
+	return n, err
 }
 
 // frameSyncBegin and frameSyncEnd bracket a synchronized update (DEC private

@@ -20,6 +20,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/lazyre"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 	"tuios.dev/vt"
 )
 
@@ -411,7 +412,8 @@ func ProbeTerminal(caps *HostCapabilities, out io.Writer, read func(timeout time
 	// placeholders are drawn or dropped.
 	q.WriteString(xtversionQuery)
 	q.WriteString("\x1b[c") // DA1 last, so its reply closes the whole batch
-	_, _ = io.WriteString(out, q.String())
+	n, _ := io.WriteString(out, q.String())
+	testknob.Wrote(n)
 
 	response := read(probeTimeout, da1Response().MatchString)
 	caps.DA1Late = !da1Response().MatchString(response)

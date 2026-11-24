@@ -405,6 +405,7 @@ func (m *OS) handleFlush() {
 	if m.screen != nil {
 		m.screen.Commit()
 	}
+	m.answerSettleProbes()
 	if !m.frameRate.kickWanted && !m.frameRate.idle {
 		return
 	}

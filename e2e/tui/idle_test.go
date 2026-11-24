@@ -533,6 +533,8 @@ func runIdleWindowOpts(t *testing.T, config string, o startOpts, budget idleBudg
 		pprofPort = freePort(t)
 		o.args = append(o.args, "--pprof", fmt.Sprintf("127.0.0.1:%d", pprofPort))
 	}
+	// The client as it ships, with no test knob that counts its writes.
+	o.noSettleProbe = true
 	term := startIn(t, base, o)
 	waitBoot(t, term)
 
@@ -801,7 +803,7 @@ func TestAgentsViewOpenAddsNoIdleCost(t *testing.T) {
 	base := t.TempDir()
 	wire := &wireRecorder{}
 	statsPath := filepath.Join(base, "tickstats")
-	term := startIn(t, base, startOpts{daemonDefault: true, out: wire, env: []string{"TUIOS_STATS_FILE=" + statsPath}})
+	term := startIn(t, base, startOpts{daemonDefault: true, out: wire, env: []string{"TUIOS_STATS_FILE=" + statsPath}, noSettleProbe: true})
 	waitBoot(t, term)
 	newWindow(t, term)
 	newWindow(t, term)

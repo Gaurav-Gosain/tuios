@@ -10,6 +10,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // daemonStartTimeout is how long a client waits for a spawned daemon to be
@@ -36,7 +37,9 @@ func ensureDaemon() error {
 		return nil
 	}
 
-	fmt.Println("Starting TUIOS daemon...")
+	n, _ := fmt.Println("Starting TUIOS daemon...")
+	// The terminal is not in raw mode yet, so it writes a CR before the LF.
+	testknob.Wrote(n + 1)
 	if err := spawnDaemon(); err != nil {
 		return &diagnosticError{
 			What:  fmt.Sprintf("The TUIOS daemon could not be started: %v.", err),
