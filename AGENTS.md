@@ -290,8 +290,7 @@ it: `skills/` (`skills/tuios.tar.gz`), `internal/learn/lessons`,
 and `internal/session` (the verb docs). Run `go generate` in the
 package after you edit those files. A test in each package fails when the
 archive and the files differ. Rebase with `scripts/rebase.sh origin/main`. It
-regenerates `skills/tuios.tar.gz` at each stop where that archive is the only
-conflict.
+regenerates every packed archive at each stop where only archives conflict.
 
 A JSON verb has two parts. The Go registry entry holds the handler, the scope,
 the link need, the stream, and each parameter and result field with its name,
