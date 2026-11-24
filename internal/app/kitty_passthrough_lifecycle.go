@@ -225,7 +225,7 @@ func (m *OS) setupKittyPassthrough(window *terminal.Window) {
 		}
 
 		cursorPos := win.Terminal.CursorPosition()
-		scrollbackLen := win.Terminal.ScrollbackLen()
+		scrollbackLen := win.Terminal.ScrollbackLen() //tuios:allow-history the kitty and text sizing placements count rows in the client emulator
 		// This callback runs on the PTY-reader goroutine while the update loop
 		// may be mutating the live geometry fields; read the published
 		// snapshot instead. It is at most a frame stale, and the placement is

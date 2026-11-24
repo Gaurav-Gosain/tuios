@@ -68,7 +68,7 @@ func (m *OS) setupTextSizingPassthrough(window *terminal.Window) {
 		now := time.Now()
 		scrollbackLen := 0
 		if win.Terminal != nil {
-			scrollbackLen = win.Terminal.ScrollbackLen()
+			scrollbackLen = win.Terminal.ScrollbackLen() //tuios:allow-history the kitty and text sizing placements count rows in the client emulator
 		}
 		if len(rawOSC) == lastLen && cursorX == lastX && cursorY == lastY &&
 			scrollbackLen == lastScroll && now.Sub(lastTime) < 100*time.Millisecond {
@@ -170,7 +170,7 @@ func (m *OS) RefreshTextSizing() {
 
 		scrollbackLen := 0
 		if w.Terminal != nil {
-			scrollbackLen = w.Terminal.ScrollbackLen()
+			scrollbackLen = w.Terminal.ScrollbackLen() //tuios:allow-history the kitty and text sizing placements count rows in the client emulator
 		}
 		borderOff := w.BorderOffset()
 		contentHeight := w.Height - 2*borderOff

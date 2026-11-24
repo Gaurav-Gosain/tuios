@@ -130,7 +130,7 @@ func scrollToThumbRow(win *terminal.Window, row int, s *config.Settings) {
 		return
 	}
 	win.RLockIO()
-	scrollbackLen := win.Terminal.ScrollbackLen()
+	scrollbackLen := win.ScrollbackLen()
 	win.RUnlockIO()
 	if scrollbackLen <= 0 {
 		return

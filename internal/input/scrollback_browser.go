@@ -181,7 +181,7 @@ func OpenScrollbackBrowser(o *app.OS) {
 	scrollback.DebugLogFunc = func(format string, args ...any) {
 		o.Log("debug", "[scrollback] "+format, args...)
 	}
-	blocks := scrollback.ParseBlocks(term)
+	blocks := scrollback.ParseBlocks(focusedWindow.PaneText())
 	scrollback.DebugLogFunc = nil
 	if len(blocks) == 0 {
 		o.ShowNotification("No commands found in scrollback", "info", 2*time.Second)

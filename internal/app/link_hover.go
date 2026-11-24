@@ -318,7 +318,7 @@ func paneRowWraps(window *terminal.Window, y int) bool {
 	}
 	var wrapped, known bool
 	if sbIdx >= 0 {
-		wrapped, known = window.Terminal.ScrollbackSoftWrapped(sbIdx)
+		wrapped, known = window.ScrollbackSoftWrapped(sbIdx)
 	} else {
 		wrapped, known = window.Terminal.RowSoftWrapped(screenY)
 	}

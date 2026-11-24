@@ -149,6 +149,10 @@ var (
 // Each window maintains its own virtual terminal, PTY, and rendering cache.
 // Scrollback buffer support is provided by the vendored vt library.
 type Window struct {
+	// paneText is the emulator with its history read through the window
+	// (Text, PaneText), kept while the emulator is the same.
+	paneText atomic.Pointer[paneText]
+
 	// modesOnly, when set, filters the stream before the emulator sees it
 	// (window_modes_only.go).
 	modesOnly modesFilter

@@ -156,7 +156,7 @@ func (m *OS) UpdateAnimations() {
 		// If animation is complete, handle post-animation logic
 		if isComplete {
 			if m.KittyPassthrough != nil && anim.Window != nil && anim.Window.Terminal != nil {
-				scrollbackLen := anim.Window.Terminal.ScrollbackLen()
+				scrollbackLen := anim.Window.Terminal.ScrollbackLen() //tuios:allow-history the kitty and text sizing placements count rows in the client emulator
 				viewportHeight := anim.Window.ContentHeight()
 				m.KittyPassthrough.OnWindowMove(
 					anim.Window.ID,

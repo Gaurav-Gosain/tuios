@@ -138,7 +138,7 @@ func (m *OS) EditScrollbackInEditor() tea.Cmd {
 
 // scrollbackViewOf reads where w's view is. The caller holds w's I/O lock.
 func scrollbackViewOf(w *terminal.Window) scrollbackView {
-	history := w.Terminal.ScrollbackLen()
+	history := w.ScrollbackLen()
 	v := scrollbackView{history: history, line: history}
 	if cm := w.CopyMode; cm != nil && cm.Active {
 		v.line = history - cm.ScrollOffset + cm.CursorY
@@ -316,9 +316,9 @@ func (lc *lineCounter) lines() int {
 // screen, as plain text. It never holds the whole history as one string. It
 // returns the number of scrollback lines. The caller holds w's I/O lock.
 func streamWindowText(w *terminal.Window, out io.Writer) (int, error) {
-	history := w.Terminal.ScrollbackLen()
+	history := w.ScrollbackLen()
 	var err error
-	w.Terminal.ScrollbackRows(0, history, func(_ int, line uv.Line) bool {
+	w.ScrollbackRows(0, history, func(_ int, line uv.Line) bool {
 		text := vt.StripKittyPlaceholders(vt.StripSixelMarkers(line.String()))
 		if _, err = io.WriteString(out, text); err == nil {
 			_, err = io.WriteString(out, "\n")

@@ -2,6 +2,7 @@ package terminal
 
 import (
 	uv "github.com/charmbracelet/ultraviolet"
+	"tuios.dev/vt"
 )
 
 // ScrollbackLenSync returns the scrollback length without blocking on the
@@ -46,6 +47,53 @@ func (w *Window) ScrollbackLine(index int) uv.Line {
 		return nil
 	}
 	return w.Terminal.ScrollbackLine(index)
+}
+
+// ScrollbackRows calls fn with the history lines from to end-1, oldest
+// first, decoded into one buffer it reuses. fn must not keep a line past its
+// call. It stops when fn returns false. It takes no lock: a caller that needs
+// a steady history holds RLockIO.
+func (w *Window) ScrollbackRows(from, end int, fn func(index int, line uv.Line) bool) {
+	if w.Terminal == nil {
+		return
+	}
+	w.Terminal.ScrollbackRows(from, end, fn)
+}
+
+// ScrollbackText calls fn with the history lines from to end-1 as text cells,
+// which builds no cell. It takes no lock, as ScrollbackRows.
+func (w *Window) ScrollbackText(from, end int, fn func(index, width int, cells []vt.TextCell) bool) {
+	if w.Terminal == nil {
+		return
+	}
+	w.Terminal.ScrollbackText(from, end, fn)
+}
+
+// ScrollbackSoftWrapped reports whether history line index carries on to the
+// next line by autowrap. known is false when the backend cannot tell.
+func (w *Window) ScrollbackSoftWrapped(index int) (wrapped, known bool) {
+	if w.Terminal == nil {
+		return false, false
+	}
+	return w.Terminal.ScrollbackSoftWrapped(index)
+}
+
+// ScrollbackPadded reports whether the last column of history line index is
+// padding left by a wide character that wrapped, and not text.
+func (w *Window) ScrollbackPadded(index int) bool {
+	if w.Terminal == nil {
+		return false
+	}
+	return w.Terminal.ScrollbackPadded(index)
+}
+
+// ScrollbackGeneration changes whenever the history changes, for a reader
+// that caches what it found in it.
+func (w *Window) ScrollbackGeneration() uint64 {
+	if w.Terminal == nil {
+		return 0
+	}
+	return w.Terminal.ScrollbackGeneration()
 }
 
 // ClearScrollback clears the scrollback buffer.

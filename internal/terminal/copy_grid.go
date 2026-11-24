@@ -40,12 +40,68 @@ type CopyGrid interface {
 	LastContentCol() int
 }
 
-// Text is the window's emulator, or nil.
+// Text is the window's emulator, or nil. Its history is read through the
+// window (see PaneText).
 func (w *Window) Text() CopyText {
 	if w.Terminal == nil {
 		return nil
 	}
-	return w.Terminal
+	return w.paneTextOf()
+}
+
+// PaneText is the window's emulator for a reader of its screen, history and
+// marks, such as the scrollback browser, or nil. The screen and the marks are
+// the emulator's. The history lines are read through the window.
+func (w *Window) PaneText() PaneText {
+	if w.Terminal == nil {
+		return nil
+	}
+	return w.paneTextOf()
+}
+
+// PaneText is CopyText with the emulator's OSC 133 marks.
+type PaneText interface {
+	CopyText
+	SemanticMarkers() *vt.SemanticMarkerList
+}
+
+// paneTextOf is the window's paneText, kept while the emulator is the same,
+// so a reader that asks for it per key or per row does not allocate.
+func (w *Window) paneTextOf() *paneText {
+	t := w.Terminal
+	if p := w.paneText.Load(); p != nil && p.t == t {
+		return p
+	}
+	p := &paneText{t: t, w: w}
+	w.paneText.Store(p)
+	return p
+}
+
+// paneText is a pane's emulator with its history read through the window.
+// It forwards only the methods PaneText names: a type that embeds vt.Terminal
+// gets a wrapper for each of its many methods, tens of KB of binary.
+type paneText struct {
+	t vt.Terminal
+	w *Window
+}
+
+func (p *paneText) CellAt(x, y int) *uv.Cell                   { return p.t.CellAt(x, y) }
+func (p *paneText) Width() int                                 { return p.t.Width() }
+func (p *paneText) Height() int                                { return p.t.Height() }
+func (p *paneText) RowSoftWrapped(y int) (wrapped, known bool) { return p.t.RowSoftWrapped(y) }
+func (p *paneText) RowPadded(y int) bool                       { return p.t.RowPadded(y) }
+func (p *paneText) SemanticMarkers() *vt.SemanticMarkerList    { return p.t.SemanticMarkers() }
+func (p *paneText) ScrollbackLen() int                         { return p.w.ScrollbackLen() }
+func (p *paneText) ScrollbackLine(index int) uv.Line           { return p.w.ScrollbackLine(index) }
+func (p *paneText) ScrollbackPadded(index int) bool            { return p.w.ScrollbackPadded(index) }
+func (p *paneText) ScrollbackGeneration() uint64               { return p.w.ScrollbackGeneration() }
+
+func (p *paneText) ScrollbackSoftWrapped(index int) (wrapped, known bool) {
+	return p.w.ScrollbackSoftWrapped(index)
+}
+
+func (p *paneText) ScrollbackText(from, end int, fn func(index, width int, cells []vt.TextCell) bool) {
+	p.w.ScrollbackText(from, end, fn)
 }
 
 // ScrollOffset is how many lines the window is scrolled back.

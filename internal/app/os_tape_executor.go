@@ -296,7 +296,7 @@ func (m *OS) getWindowInfo(w *terminal.Window, isFocused bool) map[string]any {
 		info["cursor_y"] = cursorPos.Y
 		info["cursor_visible"] = !w.Terminal.IsCursorHidden()
 		// Get scrollback info from the terminal's screen
-		info["scrollback_lines"] = w.Terminal.ScrollbackLen()
+		info["scrollback_lines"] = w.ScrollbackLen()
 	}
 
 	// Get process info (Unix only, will be 0 on Windows)

@@ -33,9 +33,20 @@ func debugLog(format string, args ...any) {
 	}
 }
 
+// Source is the part of a pane that ParseBlocks reads: its screen, its
+// history and its OSC 133 marks.
+type Source interface {
+	CellAt(x, y int) *uv.Cell
+	Width() int
+	Height() int
+	ScrollbackLen() int
+	ScrollbackLine(index int) uv.Line
+	SemanticMarkers() *vt.SemanticMarkerList
+}
+
 // ParseBlocks extracts command blocks from the terminal's scrollback and screen.
 // It uses OSC 133 markers when available, falling back to regex prompt detection.
-func ParseBlocks(term vt.Terminal) []CommandBlock {
+func ParseBlocks(term Source) []CommandBlock {
 	if term == nil {
 		return nil
 	}
@@ -65,7 +76,7 @@ func ParseBlocks(term vt.Terminal) []CommandBlock {
 
 // parseWithMarkers uses OSC 133 markers to precisely segment commands.
 // Marker sequence: A (prompt start) -> B (command start) -> C (output start) -> D (command done)
-func parseWithMarkers(term vt.Terminal, markers []vt.SemanticMarker) []CommandBlock {
+func parseWithMarkers(term Source, markers []vt.SemanticMarker) []CommandBlock {
 	var blocks []CommandBlock
 
 	for i := range len(markers) {
@@ -233,7 +244,7 @@ func cmdEndLine(c, d, b *vt.SemanticMarker) int {
 	return b.AbsLine + 1
 }
 
-func endLineForBlock(d, c, b *vt.SemanticMarker, term vt.Terminal) int {
+func endLineForBlock(d, c, b *vt.SemanticMarker, term Source) int {
 	if d != nil {
 		return d.AbsLine
 	}
@@ -276,7 +287,7 @@ var looksLikeFileEntry = lazyre.New(
 )
 
 // parseWithRegex uses prompt pattern matching as a fallback.
-func parseWithRegex(term vt.Terminal) []CommandBlock {
+func parseWithRegex(term Source) []CommandBlock {
 	totalLines := term.ScrollbackLen() + term.Height()
 	if totalLines == 0 {
 		return nil
@@ -358,7 +369,7 @@ func parseWithRegex(term vt.Terminal) []CommandBlock {
 }
 
 // extractTextFromCol extracts plain text from a line starting at the given column.
-func extractTextFromCol(term vt.Terminal, absLine, col int) string {
+func extractTextFromCol(term Source, absLine, col int) string {
 	full := extractAbsLineText(term, absLine)
 	// Convert column (cell position) to rune offset
 	runes := []rune(full)
@@ -369,7 +380,7 @@ func extractTextFromCol(term vt.Terminal, absLine, col int) string {
 }
 
 // extractAbsLineText extracts plain text from an absolute line index.
-func extractAbsLineText(term vt.Terminal, absLine int) string {
+func extractAbsLineText(term Source, absLine int) string {
 	sbLen := term.ScrollbackLen()
 	if absLine < sbLen {
 		return lineToText(term.ScrollbackLine(absLine))
@@ -392,7 +403,7 @@ func extractAbsLineText(term vt.Terminal, absLine int) string {
 }
 
 // extractAbsLineStyledText extracts ANSI-styled text from an absolute line index.
-func extractAbsLineStyledText(term vt.Terminal, absLine int) string {
+func extractAbsLineStyledText(term Source, absLine int) string {
 	sbLen := term.ScrollbackLen()
 	if absLine < sbLen {
 		return lineToStyledText(term.ScrollbackLine(absLine))
@@ -412,7 +423,7 @@ func extractAbsLineStyledText(term vt.Terminal, absLine int) string {
 	return cellsToStyledText(cells)
 }
 
-func extractLinesText(term vt.Terminal, from, to int) string {
+func extractLinesText(term Source, from, to int) string {
 	var lines []string
 	for i := from; i <= to; i++ {
 		lines = append(lines, extractAbsLineText(term, i))
@@ -420,7 +431,7 @@ func extractLinesText(term vt.Terminal, from, to int) string {
 	return strings.Join(lines, "\n")
 }
 
-func extractLinesStyledText(term vt.Terminal, from, to int) string {
+func extractLinesStyledText(term Source, from, to int) string {
 	var lines []string
 	for i := from; i <= to; i++ {
 		lines = append(lines, extractAbsLineStyledText(term, i))

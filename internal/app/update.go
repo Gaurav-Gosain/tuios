@@ -1449,7 +1449,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 					midPoint := w.Height / 2
 					if cm.CursorY > midPoint {
 						cm.CursorY--
-					} else if w.Terminal != nil && cm.ScrollOffset < w.Terminal.ScrollbackLen() {
+					} else if cm.ScrollOffset < w.ScrollbackLen() {
 						cm.ScrollOffset++
 						w.ScrollbackOffset = cm.ScrollOffset
 					} else if cm.CursorY > 0 {
@@ -1470,11 +1470,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			}
 			// Update visual selection end
 			if cm.State.InVisual() {
-				scrollbackLen := 0
-				if w.Terminal != nil {
-					scrollbackLen = w.Terminal.ScrollbackLen()
-				}
-				absY := scrollbackLen - cm.ScrollOffset + cm.CursorY
+				absY := w.ScrollbackLen() - cm.ScrollOffset + cm.CursorY
 				cm.VisualEnd = terminal.Position{X: cm.CursorX, Y: absY}
 			}
 			w.Dirty = true

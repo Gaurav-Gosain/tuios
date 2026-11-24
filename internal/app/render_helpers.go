@@ -465,11 +465,7 @@ func (m *OS) windowBorderRows(width int, color color.Color, window *terminal.Win
 	scrollIndicator := ""
 	// Show scroll position when in copy mode with scroll offset
 	if window.CopyMode != nil && window.CopyMode.Active && window.CopyMode.ScrollOffset > 0 {
-		scrollbackLen := 0
-		if window.Terminal != nil {
-			scrollbackLen = window.Terminal.ScrollbackLen()
-		}
-		if scrollbackLen > 0 {
+		if scrollbackLen := window.ScrollbackLen(); scrollbackLen > 0 {
 			scrollIndicator = fmt.Sprintf(" %d/%d ", window.CopyMode.ScrollOffset, scrollbackLen)
 		}
 	}
