@@ -676,6 +676,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("agents.reply_rows"),
 			opt("agents.ask_wait_seconds"),
 			opt("agents.undo_window_seconds"),
+			opt("agents.max_depth"),
 			opt("review.focus"),
 			opt("review.scope"),
 			opt("pip.width"),

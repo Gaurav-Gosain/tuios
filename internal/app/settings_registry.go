@@ -50,6 +50,7 @@ var settingLabels = map[string]string{
 	"agents.card_preview":                 "Task card preview",
 	"agents.card_preview_width":           "Task card preview width",
 	"agents.reply_rows":                   "Reply rows",
+	"agents.max_depth":                    "Deepest started pane",
 	"tasks.auto_stage":                    "Move task cards",
 	"tasks.machine_cap":                   "Agents before Any machine looks elsewhere",
 	"tasks.attachment_max_mib":            "Largest file on a card (MiB)",
