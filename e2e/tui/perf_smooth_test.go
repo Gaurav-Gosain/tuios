@@ -430,6 +430,7 @@ func runDrainCase(t *testing.T, name string, writers []string, keys bool) drainR
 		total += drainBytes(w, logPath)
 	}
 	c0, d0 := cpuTicks(term.Pid()), cpuTicks(daemonPid)
+	w0 := writeSyscalls(daemonPid)
 	clock.mu.Lock()
 	ends0 := len(clock.ends)
 	clock.mu.Unlock()
@@ -525,6 +526,7 @@ func runDrainCase(t *testing.T, name string, writers []string, keys bool) drainR
 	})
 	took := changed.Sub(t0)
 	c1, d1 := cpuTicks(term.Pid()), cpuTicks(daemonPid)
+	w1 := writeSyscalls(daemonPid)
 	clock.mu.Lock()
 	ends := append([]int64(nil), clock.ends[ends0:]...)
 	clock.mu.Unlock()
@@ -551,9 +553,25 @@ func runDrainCase(t *testing.T, name string, writers []string, keys bool) drainR
 	}
 	mb := float64(total) / 1e6
 	cms, dms := float64(c1-c0)*10, float64(d1-d0)*10
-	t.Logf("PERF smooth-drain/%s: %.1f MB in %v (%.1f MB/s)  cpu client %.1f daemon %.1f ms/MB  frames %d (peak %d in 1 s), min %.2f p50 %.2f p99 %.2f max %.2f ms  key to frame p50 %.2f p99 %.2f ms",
-		name, mb, took.Round(time.Millisecond), mb/took.Seconds(), cms/mb, dms/mb,
+	t.Logf("PERF smooth-drain/%s: %.1f MB in %v (%.1f MB/s)  cpu client %.1f daemon %.1f ms/MB  daemon writes %.0f/MB  frames %d (peak %d in 1 s), min %.2f p50 %.2f p99 %.2f max %.2f ms  key to frame p50 %.2f p99 %.2f ms",
+		name, mb, took.Round(time.Millisecond), mb/took.Seconds(), cms/mb, dms/mb, float64(w1-w0)/mb,
 		len(ends), peak, float64(st.Min)/1e6, float64(st.P50)/1e6, float64(st.P99)/1e6, float64(st.Max)/1e6,
 		float64(keyLat.Stats().P50)/1e6, float64(keyLat.Stats().P99)/1e6)
 	return drainReport{key: keyLat.Stats(), took: took, frames: len(ends), frame: st, clientMB: cms / mb, daemonMB: dms / mb}
+}
+
+// writeSyscalls is the count of write system calls a process has made, from
+// /proc/PID/io (syscw), or 0 where that file cannot be read.
+func writeSyscalls(pid int) int64 {
+	b, err := os.ReadFile(fmt.Sprintf("/proc/%d/io", pid))
+	if err != nil {
+		return 0
+	}
+	for line := range strings.SplitSeq(string(b), "\n") {
+		if v, ok := strings.CutPrefix(line, "syscw: "); ok {
+			n, _ := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+			return n
+		}
+	}
+	return 0
 }

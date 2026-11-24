@@ -29,6 +29,18 @@ var (
 	streamFloodBytes    = 4096
 )
 
+// contendedPiece is the most a stream writes in one hold of sendMu while
+// another writer waits for it. See streamPTYOutput.
+const contendedPiece = 64 * 1024
+
+// lockSend takes sendMu, counted in sendWaiting while it waits, so a stream
+// holding the lock can tell that someone is waiting.
+func (cs *connState) lockSend() {
+	cs.sendWaiting.Add(1)
+	cs.sendMu.Lock()
+	cs.sendWaiting.Add(-1)
+}
+
 // streamBatchKeep is the batch capacity a stream keeps across an idle spell.
 // A larger batch is let go once the stream has stayed idle for queueTrimAfter,
 // and the next output grows a new one. It is the batch's counterpart to
@@ -179,10 +191,20 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 	send:
 		// A frame can make the batch larger than maxBatch, so it goes out
 		// in pieces of at most maxBatch, each with its own deadline.
+		//
+		// All of a client's panes write through sendMu. While another
+		// stream waits for it, the piece is cut to contendedPiece and the
+		// lock let go after it, so a quiet pane's echo waits behind 64 KiB
+		// of a flood and not 256 KiB. With nobody waiting the pieces are
+		// what they were, so an uncontended stream makes no more writes.
 		for out := batch; len(out) > 0; {
-			piece := out[:min(len(out), maxBatch)]
-			out = out[len(piece):]
-			cs.sendMu.Lock()
+			cs.lockSend()
+			n := min(len(out), maxBatch)
+			if cs.sendWaiting.Load() > 0 {
+				n = min(n, contendedPiece)
+			}
+			piece := out[:n]
+			out = out[n:]
 			_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 			err := WritePTYOutput(cs.conn, pty.ID, piece)
 			cs.sendMu.Unlock()
@@ -303,7 +325,7 @@ func (d *Daemon) sendMessage(cs *connState, msgType MessageType, payload any) er
 // sendEncoded writes an already encoded message to one client, dropping the
 // client if the write fails.
 func (d *Daemon) sendEncoded(cs *connState, msg *Message) error {
-	cs.sendMu.Lock()
+	cs.lockSend()
 	_ = cs.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 	err := WriteMessage(cs.conn, msg)
 	cs.sendMu.Unlock()

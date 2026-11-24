@@ -661,6 +661,8 @@ type connState struct {
 	done     chan struct{}
 	doneOnce sync.Once // gates close(done) so shutdown is safe to call twice
 	sendMu   sync.Mutex
+	// sendWaiting counts the writers waiting in lockSend for sendMu.
+	sendWaiting atomic.Int32
 
 	// Broadcasts to this client are written in the order they were made.
 	// broadcastToSession hands each one a ticket while it still holds the
