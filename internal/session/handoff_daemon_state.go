@@ -72,7 +72,7 @@ func (h *eventHub) handoffState() handoffEvents {
 		LastFileSeq: h.lastFileSeq, LastLayoutSeq: h.lastLayoutSeq,
 		LastTMLSeq: h.lastTMLSeq, LastTMLSurfaceSeq: h.lastTMLSurfaceSeq,
 	}
-	for i := range h.ringLen {
+	for i := range len(h.ring) {
 		e := h.ring[(h.ringStart+i)%len(h.ring)]
 		ev.Ring = append(ev.Ring, e)
 		if e.relayed {
@@ -103,8 +103,8 @@ func (h *eventHub) restore(ev handoffEvents) {
 		ring = ring[len(ring)-h.ringCap:]
 	}
 	h.ring = append(make([]streamEvent, 0, len(ring)), ring...)
-	h.ringStart, h.ringLen = 0, len(ring)
-	for i := range h.ring[:h.ringLen] {
+	h.ringStart = 0
+	for i := range h.ring {
 		h.ring[i].relayed = slices.Contains(ev.RelayedSeqs, h.ring[i].Seq)
 	}
 }

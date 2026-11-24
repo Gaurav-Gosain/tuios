@@ -89,8 +89,8 @@ func TestEventHubRingIsBounded(t *testing.T) {
 	h := newEventHubSize(4)
 	publishBells(h, 10)
 
-	if h.ringLen != 4 {
-		t.Fatalf("ring holds %d events, want 4", h.ringLen)
+	if len(h.ring) != 4 {
+		t.Fatalf("ring holds %d events, want 4", len(h.ring))
 	}
 	if h.evictedSeq != 6 {
 		t.Fatalf("evictedSeq = %d, want 6", h.evictedSeq)
@@ -171,8 +171,8 @@ func TestEventHubOutputNotRetained(t *testing.T) {
 	h.publish(streamEvent{Type: EventOutput}) // 3
 	h.publish(streamEvent{Type: EventBell})   // 4
 
-	if h.ringLen != 2 {
-		t.Fatalf("ring holds %d events, want 2 (output is not kept)", h.ringLen)
+	if len(h.ring) != 2 {
+		t.Fatalf("ring holds %d events, want 2 (output is not kept)", len(h.ring))
 	}
 
 	all, _, _ := h.subscribeFrom(eventFilter{}, 16, &resumePoint{afterSeq: 0, bootID: h.bootID})
