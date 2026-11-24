@@ -1575,6 +1575,22 @@ func (e *Emulator) Write(p []byte) (n int, err error) {
 			i = j - 1
 			continue
 		}
+		if b := p[i]; (b == ansi.LF || b == ansi.CR) && e.parser.State() == parser.GroundState &&
+			len(e.grapheme) == 0 && len(e.ccHandlers[b]) == 1 {
+			// A line feed or carriage return in the ground state with only the
+			// built-in handler for it: what the parser would do, without the
+			// table step and the handler dispatch, which a flood of short
+			// lines pays for twice a line.
+			e.parser.cmd = int(b)
+			e.flushGrapheme()
+			if b == ansi.LF {
+				e.linefeed()
+			} else {
+				e.carriageReturn()
+			}
+			e.lastState = parser.GroundState
+			continue
+		}
 		if st := e.parser.State(); (st == parser.ApcStringState || st == parser.DcsStringState) &&
 			isStringPayload(p[i]) && len(e.grapheme) == 0 {
 			// The payload of an APC or DCS string: a kitty graphics

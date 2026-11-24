@@ -218,7 +218,7 @@ func (sb *Scrollback) PushLine(line uv.Line) {
 // pushTrimmed is PushLine for a grid row whose cells from column ext on are
 // known to be blank, so the search for the trailing blanks starts there
 // instead of at the end of the row.
-func (sb *Scrollback) pushTrimmed(line uv.Line, ext int) {
+func (sb *Scrollback) pushTrimmed(line uv.Line, ext int, f rowFlag) {
 	if len(line) == 0 {
 		return
 	}
@@ -226,7 +226,7 @@ func (sb *Scrollback) pushTrimmed(line uv.Line, ext int) {
 	for n > 0 && isBlankCell(&line[n-1]) {
 		n--
 	}
-	sb.push(line[:n], len(line))
+	sb.pushFlagged(line[:n], len(line), f)
 }
 
 // PushBlankLine stores a blank line of the given width as the newest
@@ -251,6 +251,12 @@ func (sb *Scrollback) Discard() {
 // push stores cells, the non-blank prefix of a line of the given width, as
 // the newest line.
 func (sb *Scrollback) push(cells uv.Line, width int) {
+	sb.pushFlagged(cells, width, 0)
+}
+
+// pushFlagged is push that also stores the line's row flags, which a push
+// and then markNewest would write with two more look-ups of the newest slot.
+func (sb *Scrollback) pushFlagged(cells uv.Line, width int, f rowFlag) {
 	if sb.discard {
 		// A ring that holds nothing drops each line as it lands, and says
 		// so, so the semantic marks move as they would for a full ring.
@@ -297,7 +303,7 @@ func (sb *Scrollback) push(cells uv.Line, width int) {
 
 	if inPlace {
 		sb.lines[sb.tail] = buf
-		sb.wraps[sb.tail] = 0
+		sb.wraps[sb.tail] = f
 	} else {
 		if len(sb.lines) == cap(sb.lines) {
 			grown := make([][]byte, len(sb.lines), min(sb.maxLines, max(2*cap(sb.lines), 64)))
@@ -305,7 +311,7 @@ func (sb *Scrollback) push(cells uv.Line, width int) {
 			sb.lines = grown
 		}
 		sb.lines = append(sb.lines, buf)
-		sb.wraps = append(sb.wraps, 0)
+		sb.wraps = append(sb.wraps, f)
 	}
 
 	sb.tail = (sb.tail + 1) % sb.maxLines

@@ -555,6 +555,12 @@ func (s *screen) ScrollUp(n int) {
 	// (not a limited scroll region) and the scroll region starts at Y=0
 	save := s.scrollback != nil && scroll.Min.Y == 0 && scroll.Min.X == 0 && scroll.Dx() == width
 
+	// The rotation reads no cursor, so with nobody watching the cursor it
+	// runs without the move to the top margin and back. A flood scrolls
+	// once a line, and the two moves were a tenth of the scroll.
+	if s.cb.CursorPosition == nil && s.rotateWholeScreenUp(n, save) {
+		return
+	}
 	x, y := s.CursorPosition()
 	s.setCursor(s.cur.X, 0, true)
 	if !s.rotateWholeScreenUp(n, save) {
@@ -625,7 +631,10 @@ func (s *screen) rotateWholeScreenUp(n int, save bool) bool {
 				if t := s.buf.rowTail(i); len(t) > 0 {
 					s.scrollback.PushLine(s.buf.withTail(i, row))
 				} else {
-					s.scrollback.pushTrimmed(row, s.buf.ext[i])
+					// The row flags go in with the line: a row of the
+					// screen that pushTrimmed takes is never empty.
+					s.scrollback.pushTrimmed(row, s.buf.ext[i], s.buf.wrap[i])
+					continue
 				}
 			}
 			s.scrollback.markNewest(s.buf.wrap[i])

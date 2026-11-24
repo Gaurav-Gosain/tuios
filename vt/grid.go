@@ -114,6 +114,14 @@ func (w *rowWindow[T]) scroll(cur []T, n int) []T {
 		w.base = make([]T, 2*h)
 		copy(w.base, cur)
 		w.off = 0
+	} else if n == 1 && w.off+h < len(w.base) {
+		// One row, the scroll of every line feed at the bottom: two stores
+		// in place of a copy and a clear of one entry each.
+		var zero T
+		w.base[w.off+h] = w.base[w.off]
+		w.base[w.off] = zero
+		w.off++
+		return w.base[w.off : w.off+h : w.off+h]
 	} else if w.off+h+n > len(w.base) {
 		// No room past the end: move the window back to the start, and
 		// clear what it leaves behind so no row header is held twice.

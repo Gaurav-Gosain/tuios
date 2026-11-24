@@ -6757,3 +6757,100 @@ What remains: a change that opens, closes or moves a pane, or changes a pane's
 PTY or agent mark, builds the table as before, after one extra walk of the
 windows that allocates nothing: the "pane closed" rows, 6% slower at 10 panes
 and 12% to 13% slower at 100 and 1000, with the same allocations and bytes.
+
+## 2026-11 a line feed at the bottom costs less
+
+A pane that prints short lines as fast as it can (`yes`, `seq`, a build
+log) scrolls once a line. The daemon and the client both parse every byte,
+and in a profile of nine busy panes the scroll on each line feed was half of
+the parse in both processes.
+
+### The harness
+
+`e2e/tui/perf_smooth_test.go` runs the real binary and daemon on a headless
+PTY host at 207x55. It skips unless `TUIOS_E2E` and `TUIOS_PERF` are set.
+
+- `TestPerfSmooth` opens one pane to type in and 1, 4 or 9 busy panes, at
+  max_fps 60, 120 and 240. The busy panes run `yes`, `seq`, `cat` of a
+  64 MB log, and a full-screen redraw at 60 Hz. It types 200 keys 60 ms apart
+  and reports the frame interval, late and missing frames, the share of the
+  60 Hz frames that reach the host, the key echo latency, and the CPU of the
+  client and the daemon. `TUIOS_PERF_PPROF` and `TUIOS_PERF_TRACE` take CPU
+  profiles and execution traces of both.
+- `TestPerfSmoothDrain` sends a finite flood to each busy pane and reports
+  the time until the client has taken in the last byte, and the CPU of each
+  process per MB. Both processes stay busy in `TestPerfSmooth`, so a cheaper
+  parse shows there as more bytes taken in, and here as less CPU per MB.
+
+```
+cd e2e/tui && TUIOS_E2E=1 TUIOS_PERF=1 go test -count=1 -v -run 'TestPerfSmooth' .
+```
+
+### What changed
+
+- `Emulator.Write` handles a line feed or a carriage return in the ground
+  state itself when only the built-in handler is registered for it. The
+  parser step and the handler dispatch went twice a line.
+- `screen.ScrollUp` rotates the whole screen without the cursor move to the
+  top margin and back when no cursor callback is set. The rotation reads no
+  cursor.
+- `rowWindow.scroll` moves one row with two stores. The scroll of a line
+  feed is always one row, and the copy and clear of one entry were runtime
+  calls.
+- `Scrollback.pushFlagged` stores the row flags with the line, in place of
+  a push and a second look-up of the newest slot.
+
+### Numbers
+
+`go test -bench 'BenchmarkEmulator(ShortLineScroll|ScrollThroughput|WriteHeavyOutput)'`,
+GOMAXPROCS=4, nice 19, six runs of each tree interleaved, benchstat:
+
+| | base | after | |
+|---|---|---|---|
+| ShortLineScroll, with scrollback | 264 ns | 198 ns | -25% |
+| ShortLineScroll, alternate screen | 180 ns | 125 ns | -31% |
+| WriteHeavyOutput, plain log | 18.4 us | 16.5 us | -11% |
+| WriteHeavyOutput, coloured log | 27.3 us | 25.3 us | -8% |
+| ScrollThroughput, with scrollback | 1.34 us | 1.26 us | -6% |
+| WriteHeavyOutput, full-screen repaint | 110.7 us | 112.6 us | +2% (p=0.04) |
+
+Allocations stay at zero on every case.
+
+`TestPerfSmoothDrain`, max_fps 120, three runs of each binary interleaved,
+through `heavy.sh` (cores 0-7, nice 10) on a machine in use. Medians, CPU in
+ms per MB of pane output:
+
+| case | MB | drain base / after | client base / after | daemon base / after |
+|---|---|---|---|---|
+| 1 pane, yes | 165 | 5.71 / 4.34 s | 38.3 / 30.2 | 48.1 / 50.8 |
+| 1 pane, seq | 79 | 3.33 / 2.56 s | 47.9 / 37.0 | 61.1 / 66.7 |
+| 1 pane, cat | 153 | 1.61 / 1.62 s | 12.6 / 12.3 | 15.4 / 15.6 |
+| 4 panes, mix | 562 | 9.86 / 9.12 s | 42.3 / 36.6 | 50.0 / 45.6 |
+| 9 panes, mix | 1190 | 18.8 / 20.8 s | 31.6 / 30.3 | 48.4 / 42.4 |
+
+A `cat` of long lines wraps, and pays for the print, not the scroll, so it
+does not move. With one pane the client takes in the flood a quarter faster,
+and the daemon sends it in more, smaller writes: its CPU per MB rises by 5 to
+9% while the two processes together take 5 to 6% less. The 9-pane drain time
+spread from 17.7 to 23.9 s after and 18.5 to 19.5 s before, on a machine with
+a load average of 5 to 11.
+
+### Measured and deliberately not changed
+
+- **A flag for a row of plain cells.** After this change the per-cell checks
+  are the largest part of the scroll: `isPlainASCIICell` when the scrollback
+  packs the row, and `plainPen` when the row is blanked, about a third of a
+  short-line flood. A row flag would skip both. It must be cleared by every
+  write to a row, and there are about 40 such paths. A missed one drops the
+  colours of that line from the history with no error, so it waits for a
+  design that makes the flag hard to miss.
+- **A batch of line feeds.** Each line is printed on the bottom row before
+  the next scroll, so the scrolls of one write cannot be done together
+  without holding the prints back.
+
+### Invariants held
+
+The vt suite, the vtgen seeds and the libghostty-vt differential
+(`-tags ghostty`, libghostty-vt 1.0.1) pass. `TestIdleCostStaysLow` passes:
+0 wire bytes and 0 renders in the clock-off window. The stripped
+linux/amd64 binary is the same size, 49,053,856 bytes.
