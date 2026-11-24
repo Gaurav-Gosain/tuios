@@ -32,8 +32,9 @@
 #   lint_libs     library folders to lint, "all", or "none"
 #   unit app_session isolation windows macos sketch_fma pins ghostty
 #   learn_web clienttests docker nix binary_size mixed_versions spec
-#                 "true" or "false", one per job. spec is the Lean model of
-#                 the task cards (spec/tasks) and its differential test
+#                 "true" or "false", one per job. spec is the Lean models of
+#                 the task cards (spec/tasks) and of the pane grants
+#                 (spec/grants), and their differential tests
 #   lib_alone     JSON list of the "alone" library jobs: vt, sketch, nitpick, small
 set -uo pipefail
 
@@ -114,6 +115,10 @@ while IFS= read -r p; do
 	# card's move, its types and refusals, the automatic moves, and the
 	# differential test.
 	case $p in internal/session/task_move.go | internal/session/task.go | internal/session/task_auto.go | internal/session/task_move_spec_test.go) f[spec]=1 ;; esac
+	# The Lean model of the pane grants and verb scopes, and the Go code it
+	# describes: the checks a verb passes before its handler, the own tree,
+	# the depth cap, the grants a start gives, and the differential test.
+	case $p in internal/session/pane_grants.go | internal/session/conn_scope.go | internal/session/own_tree.go | internal/session/agent_depth.go | internal/session/child_clamp.go | internal/session/fan_judge.go | internal/session/grants_spec_test.go) f[spec]=1 ;; esac
 	case $p in
 	# Files no job reads.
 	.github/ISSUE_TEMPLATE/* | .github/PULL_REQUEST_TEMPLATE/* | .github/contributors-exclude | .github/dependabot.yml) pkg=no ;;

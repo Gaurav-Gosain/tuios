@@ -1,0 +1,14 @@
+name = "grantspec"
+version = "0.1.0"
+defaultTargets = ["GrantSpec", "grantspec"]
+
+# A warning fails the build, so a proof left as sorry cannot pass.
+[leanOptions]
+warningAsError = true
+
+[[lean_lib]]
+name = "GrantSpec"
+
+[[lean_exe]]
+name = "grantspec"
+root = "Main"

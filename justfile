@@ -331,15 +331,16 @@ differential:
     {{ NICE }} {{ TASKSET }} go test -tags differential ./vt/ -run TestDifferential -v
 
 # Needs the Lean toolchain: elan in ~/.elan/bin (spec/tasks/README.md).
-# Check the Lean model of the task cards and compare it with the Go code
+# Check the Lean models of the task cards and the pane grants, and compare them with the Go code
 [group('test')]
 spec *args:
     #!/usr/bin/env bash
     set -euo pipefail
-    cd {{ quote(root / "spec/tasks") }}
-    PATH="$HOME/.elan/bin:$PATH" {{ NICE }} {{ TASKSET }} lake build
+    for model in tasks grants; do
+        (cd {{ quote(root / "spec") }}/"$model" && PATH="$HOME/.elan/bin:$PATH" {{ NICE }} {{ TASKSET }} lake build)
+    done
     cd {{ quote(root) }}
-    {{ NICE }} {{ TASKSET }} go test -tags spec -count=1 -run TestTaskMoveMatchesLeanModel ./internal/session/ "$@"
+    {{ NICE }} {{ TASKSET }} go test -tags spec -count=1 -run 'TestTaskMoveMatchesLeanModel|TestGrantsMatchLeanModel' ./internal/session/ "$@"
 
 # Example: just fuzz FuzzEmulatorScript 10m
 # Run one fuzz target

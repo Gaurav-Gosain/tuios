@@ -1,7 +1,10 @@
-# Checks the Lean model of the task card lifecycle in spec/tasks. The job
-# builds the model, which checks its proofs, and runs the differential test.
-# That test runs random move streams through the model and through
-# internal/session/task_move.go, and fails on the first difference.
+# Checks the Lean models in spec/: the task card lifecycle (spec/tasks) and
+# the pane grants and verb scopes (spec/grants). The job builds each model,
+# which checks its proofs, and runs its differential test. The task test runs
+# random move streams through the model and through
+# internal/session/task_move.go. The grants test runs random states and calls
+# through the model and through the checks in internal/session that decide
+# which pane may call which verb. Each fails on the first difference.
 name: spec
 
 # ci.yml calls this workflow for a change to spec/ or to the Go code the model
@@ -33,6 +36,7 @@ jobs:
           cache-id: spec
 
       # The toolchain that spec/tasks/lean-toolchain names, cached by that file.
+      # spec/grants names the same one.
       - name: Cache the Lean toolchain
         id: elan-cache
         uses: actions/cache@v6
@@ -58,16 +62,25 @@ jobs:
 
       # Lake rebuilds what changed, so a restored build checks only the
       # changed proofs.
-      - name: Cache the model build
+      - name: The toolchains of the models are the same
+        run: cmp spec/tasks/lean-toolchain spec/grants/lean-toolchain
+
+      - name: Cache the model builds
         uses: actions/cache@v6
         with:
-          path: spec/tasks/.lake
-          key: lake-${{ runner.os }}-${{ hashFiles('spec/tasks/lean-toolchain', 'spec/tasks/lakefile.toml', 'spec/tasks/**/*.lean') }}
+          path: |
+            spec/tasks/.lake
+            spec/grants/.lake
+          key: lake-${{ runner.os }}-${{ hashFiles('spec/*/lean-toolchain', 'spec/*/lakefile.toml', 'spec/**/*.lean') }}
           restore-keys: lake-${{ runner.os }}-
 
-      - name: Build the model and check the proofs
+      - name: Build the task model and check the proofs
         working-directory: spec/tasks
         run: lake build
 
-      - name: Compare the model with the Go code
-        run: go test -tags spec -count=1 -run TestTaskMoveMatchesLeanModel -v ./internal/session/
+      - name: Build the grants model and check the proofs
+        working-directory: spec/grants
+        run: lake build
+
+      - name: Compare the models with the Go code
+        run: go test -tags spec -count=1 -run 'TestTaskMoveMatchesLeanModel|TestGrantsMatchLeanModel' -v ./internal/session/
