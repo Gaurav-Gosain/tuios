@@ -27,7 +27,20 @@ const childMarker = "TUIOS_ISOLATION_CHILD"
 // own session state while the tests run, and the check reports the daemon's
 // writes as the suite's. A guard that fails for reasons the suite did not cause
 // gets switched off, and then it guards nothing.
+//
+// CI runs the guard in two halves instead, so the suite runs once. With
+// TUIOS_ISOLATION_SEED=DIR the test seeds DIR and records its checksums. The
+// CI test steps then run with DIR as their home. With TUIOS_ISOLATION_VERIFY
+// set to the same DIR, the test fails when the tree differs from the record.
 func TestTheSuiteWritesNothingOutsideItsOwnTree(t *testing.T) {
+	if dir := os.Getenv(seedEnv); dir != "" {
+		seedAndRecord(t, dir)
+		return
+	}
+	if dir := os.Getenv(verifyEnv); dir != "" {
+		verifyRecord(t, dir)
+		return
+	}
 	if os.Getenv(childMarker) != "" {
 		t.Skip("this is the child suite")
 	}
@@ -40,10 +53,7 @@ func TestTheSuiteWritesNothingOutsideItsOwnTree(t *testing.T) {
 
 	home := t.TempDir()
 	seedUsedHome(t, home)
-	watched := []string{
-		filepath.Join(home, "state"), filepath.Join(home, "config"),
-		filepath.Join(home, "cache"), filepath.Join(home, "data"),
-	}
+	watched := watchedDirs(home)
 
 	before, err := checksum(watched)
 	if err != nil {
@@ -63,6 +73,67 @@ func TestTheSuiteWritesNothingOutsideItsOwnTree(t *testing.T) {
 	}
 	if diff := diffDirs(before, after); diff != nil {
 		t.Fatalf("the suite reached outside its own directories:\n%v\n\nsuite output:\n%s", diff, tail(out))
+	}
+}
+
+// seedEnv and verifyEnv name the two halves of the guard that CI runs around
+// its own test steps.
+const (
+	seedEnv   = "TUIOS_ISOLATION_SEED"
+	verifyEnv = "TUIOS_ISOLATION_VERIFY"
+)
+
+// recordName is the file in the seeded home that holds the checksums. It sits
+// outside the watched folders, so the record is not part of what it checks.
+const recordName = "isolation-sums.txt"
+
+// watchedDirs are the folders of home that the suite must leave as they are.
+func watchedDirs(home string) []string {
+	return []string{
+		filepath.Join(home, "state"), filepath.Join(home, "config"),
+		filepath.Join(home, "cache"), filepath.Join(home, "data"),
+	}
+}
+
+// seedAndRecord seeds home as the guard does and writes the checksums of the
+// watched folders to the record, one "sum path" line each.
+func seedAndRecord(t *testing.T, home string) {
+	t.Helper()
+	seedUsedHome(t, home)
+	sums, err := checksum(watchedDirs(home))
+	if err != nil {
+		t.Fatalf("checksum the seeded tree: %v", err)
+	}
+	var b strings.Builder
+	for path, sum := range sums {
+		b.WriteString(sum + " " + path + "\n")
+	}
+	if err := os.WriteFile(filepath.Join(home, recordName), []byte(b.String()), 0o600); err != nil {
+		t.Fatalf("write the record: %v", err)
+	}
+}
+
+// verifyRecord fails when the watched folders of home differ from the record
+// seedAndRecord wrote.
+func verifyRecord(t *testing.T, home string) {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join(home, recordName))
+	if err != nil {
+		t.Fatalf("read the record of the seeded tree: %v", err)
+	}
+	before := map[string]string{}
+	for line := range strings.Lines(string(raw)) {
+		sum, path, ok := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
+		if ok {
+			before[path] = sum
+		}
+	}
+	after, err := checksum(watchedDirs(home))
+	if err != nil {
+		t.Fatalf("checksum the seeded tree: %v", err)
+	}
+	if diff := diffDirs(before, after); diff != nil {
+		t.Fatalf("the suite reached outside its own directories:\n%v", diff)
 	}
 }
 

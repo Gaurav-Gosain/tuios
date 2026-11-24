@@ -30,7 +30,7 @@
 #   vet           "true" when one changed outside e2e/: vet, golangci-lint
 #                 and govulncheck too. They do not read the e2e module.
 #   lint_libs     library folders to lint, "all", or "none"
-#   unit app_session isolation windows macos sketch_fma pins ghostty
+#   unit app_session windows macos sketch_fma pins ghostty
 #   learn_web clienttests docker nix binary_size mixed_versions spec
 #                 "true" or "false", one per job. spec is the Lean models of
 #                 the task cards (spec/tasks) and of the pane grants
@@ -46,7 +46,7 @@ WASM=(./cmd/tuios-wasm/... ./internal/webshell/ ./internal/learn/)
 SELF=$(dirname "$0")
 
 declare -A out=()
-order=(pkgs ghostty_pkgs go vet lint_libs unit app_session isolation windows macos sketch_fma pins lib_alone ghostty learn_web clienttests docker nix binary_size mixed_versions spec)
+order=(pkgs ghostty_pkgs go vet lint_libs unit app_session windows macos sketch_fma pins lib_alone ghostty learn_web clienttests docker nix binary_size mixed_versions spec)
 emit() {
 	local k
 	for k in "${order[@]}"; do
@@ -249,7 +249,6 @@ out[vet]=$(tf "${f[vet]:-}")
 rest=$(grep -vE '/internal/(app|session)$' <<<"$pkgs")
 out[unit]=$(tf "${f[go]:-}${f[unit]:-}$rest")
 out[app_session]=$(tf "$(grep -E '/internal/(app|session)$' <<<"$pkgs")")
-out[isolation]=$(tf "$(grep -E '^github.com/Gaurav-Gosain/tuios/(internal|cmd|pkg)/' <<<"$pkgs")")
 out[windows]=$(tf "$win")
 out[macos]=$(tf "$mac")
 out[sketch_fma]=$(tf "$(grep -E '^tuios.dev/sketch(/|$)' <<<"$pkgs")")

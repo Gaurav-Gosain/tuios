@@ -22,9 +22,6 @@ on:
       app_session:
         type: string
         default: "true"
-      isolation:
-        type: string
-        default: "true"
       windows:
         type: string
         default: "true"
@@ -135,6 +132,19 @@ jobs:
         # under CI rather than skip.
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
+      # The isolation guard, in two halves around the test steps, so the suite
+      # runs once. This seeds a home that looks used and records its
+      # checksums. The test steps run with that home and its XDG folders, and
+      # the last step fails when a test wrote into them. The build and module
+      # caches stay where they are.
+      - name: Seed a home for the isolation guard
+        run: |
+          {
+            echo "GOCACHE=$(go env GOCACHE)"
+            echo "GOMODCACHE=$(go env GOMODCACHE)"
+          } >> "$GITHUB_ENV"
+          TUIOS_ISOLATION_SEED="$RUNNER_TEMP/home" go test -count=1 -run '^TestTheSuiteWritesNothingOutsideItsOwnTree$' ./internal/testutil/
+
       # A pull request tests only the packages its change can affect, as the
       # changes job of ci.yml chose them (scripts/ci-changes.sh). Main, the
       # nightly and a manual run test every package.
@@ -159,6 +169,13 @@ jobs:
 
       - name: Test the affected packages
         if: steps.affected.outputs.pkgs == 'some'
+        env:
+          HOME: ${{ runner.temp }}/home
+          XDG_CONFIG_HOME: ${{ runner.temp }}/home/config
+          XDG_DATA_HOME: ${{ runner.temp }}/home/data
+          XDG_STATE_HOME: ${{ runner.temp }}/home/state
+          XDG_CACHE_HOME: ${{ runner.temp }}/home/cache
+          XDG_RUNTIME_DIR: ${{ runner.temp }}/home/run
         run: |
           set -o pipefail
           # shellcheck disable=SC2046
@@ -170,9 +187,8 @@ jobs:
         # for over three minutes each. They run in the app-session job below,
         # split into lanes, and this job runs every other package.
         #
-        # TestTheSuiteWritesNothingOutsideItsOwnTree runs the whole suite a
-        # second time, at the same time as this one. It runs in the isolation
-        # job below instead, on a runner of its own.
+        # TestTheSuiteWritesNothingOutsideItsOwnTree would run the whole suite
+        # a second time. The seed and check steps around this one do its work.
         #
         # No -race here. internal/app takes over ten minutes under the detector
         # on a developer machine and longer on a runner, and a job that times
@@ -189,6 +205,19 @@ jobs:
           # shellcheck disable=SC2086
           SPLIT="./internal/app ./internal/session" ONLY=rest LOG="$RUNNER_TEMP/unit.log" \
             scripts/go-test-lanes.sh -count=1 -timeout 20m -skip '^TestTheSuiteWritesNothingOutsideItsOwnTree$' -- $pkgs
+        env:
+          HOME: ${{ runner.temp }}/home
+          XDG_CONFIG_HOME: ${{ runner.temp }}/home/config
+          XDG_DATA_HOME: ${{ runner.temp }}/home/data
+          XDG_STATE_HOME: ${{ runner.temp }}/home/state
+          XDG_CACHE_HOME: ${{ runner.temp }}/home/cache
+          XDG_RUNTIME_DIR: ${{ runner.temp }}/home/run
+
+      - name: The tests wrote nothing outside their own tree
+        if: ${{ !cancelled() }}
+        env:
+          TUIOS_ISOLATION_VERIFY: ${{ runner.temp }}/home
+        run: go test -count=1 -run '^TestTheSuiteWritesNothingOutsideItsOwnTree$' ./internal/testutil/
 
   app-session:
     name: go test (internal/app and internal/session)
@@ -216,6 +245,15 @@ jobs:
         # machine they saw there.
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
+      # The isolation guard, as in the unit job.
+      - name: Seed a home for the isolation guard
+        run: |
+          {
+            echo "GOCACHE=$(go env GOCACHE)"
+            echo "GOMODCACHE=$(go env GOMODCACHE)"
+          } >> "$GITHUB_ENV"
+          TUIOS_ISOLATION_SEED="$RUNNER_TEMP/home" go test -count=1 -run '^TestTheSuiteWritesNothingOutsideItsOwnTree$' ./internal/testutil/
+
       - name: Choose the packages this change can affect
         id: affected
         env:
@@ -237,62 +275,23 @@ jobs:
         if: steps.affected.outputs.pkgs != ''
         env:
           PKGS: ${{ steps.affected.outputs.pkgs }}
+          HOME: ${{ runner.temp }}/home
+          XDG_CONFIG_HOME: ${{ runner.temp }}/home/config
+          XDG_DATA_HOME: ${{ runner.temp }}/home/data
+          XDG_STATE_HOME: ${{ runner.temp }}/home/state
+          XDG_CACHE_HOME: ${{ runner.temp }}/home/cache
+          XDG_RUNTIME_DIR: ${{ runner.temp }}/home/run
         run: |
           set -o pipefail
           # shellcheck disable=SC2086
           SPLIT="$PKGS" ONLY=split LOG="$RUNNER_TEMP/unit.log" \
             scripts/go-test-lanes.sh -count=1 -timeout 20m -- $PKGS
 
-  isolation:
-    name: go test isolation guard
-    if: github.event_name != 'schedule' && inputs.isolation != 'false'
-    runs-on: ubuntu-latest
-    # TestTheSuiteWritesNothingOutsideItsOwnTree runs the suite of
-    # ./internal/... ./cmd/... ./pkg/... in a seeded home and fails when a test
-    # wrote to that home. It took about as long as the rest of the unit job
-    # together, so it has a runner of its own.
-    timeout-minutes: 30
-
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: ./.github/actions/setup-go
-        with:
-          go-version-file: go.mod
-          cache-id: unit
-
-      - name: Allow user namespaces
-        # The child suite holds TestOwnerForgetsAnEmptiedGroup, as the unit job
-        # does.
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-
-      # The guard's child suite is ./internal/... ./cmd/... ./pkg/... On a
-      # pull request it is only the packages the change can affect, and a
-      # change that affects none of them skips the guard.
-      - name: Choose the packages the guard runs
-        id: affected
+      - name: The tests wrote nothing outside their own tree
+        if: ${{ !cancelled() }}
         env:
-          PKGS: ${{ inputs.pkgs }}
-        run: |
-          case ${PKGS:-all} in
-          all) list=all ;;
-          *) list=$(tr ' ' '\n' <<<"$PKGS" | grep -E '^github.com/Gaurav-Gosain/tuios/(internal|cmd|pkg)/' || true) ;;
-          esac
-          if [ "$list" = all ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          elif [ -n "$list" ]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-            echo "packages=$(tr '\n' ' ' <<<"$list")" >> "$GITHUB_OUTPUT"
-            echo "The guard runs $(grep -c . <<<"$list") packages." | tee -a "$GITHUB_STEP_SUMMARY"
-          else
-            echo "This change affects no package of the guard's suite." | tee -a "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: The suite writes nothing outside its own tree
-        if: steps.affected.outputs.run == 'true'
-        env:
-          TUIOS_ISOLATION_PACKAGES: ${{ steps.affected.outputs.packages }}
-        run: go test -count=1 -timeout 20m -v -run '^TestTheSuiteWritesNothingOutsideItsOwnTree$' ./internal/testutil/
+          TUIOS_ISOLATION_VERIFY: ${{ runner.temp }}/home
+        run: go test -count=1 -run '^TestTheSuiteWritesNothingOutsideItsOwnTree$' ./internal/testutil/
 
   windows:
     name: go test (windows)

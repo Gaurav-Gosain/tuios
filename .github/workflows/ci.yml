@@ -49,7 +49,6 @@ jobs:
       lint_libs: ${{ steps.changes.outputs.lint_libs }}
       unit: ${{ steps.changes.outputs.unit }}
       app_session: ${{ steps.changes.outputs.app_session }}
-      isolation: ${{ steps.changes.outputs.isolation }}
       windows: ${{ steps.changes.outputs.windows }}
       macos: ${{ steps.changes.outputs.macos }}
       sketch_fma: ${{ steps.changes.outputs.sketch_fma }}
@@ -99,13 +98,12 @@ jobs:
   go-test:
     name: go-test
     needs: changes
-    if: needs.changes.outputs.unit == 'true' || needs.changes.outputs.app_session == 'true' || needs.changes.outputs.isolation == 'true' || needs.changes.outputs.windows == 'true' || needs.changes.outputs.macos == 'true' || needs.changes.outputs.sketch_fma == 'true'
+    if: needs.changes.outputs.unit == 'true' || needs.changes.outputs.app_session == 'true' || needs.changes.outputs.windows == 'true' || needs.changes.outputs.macos == 'true' || needs.changes.outputs.sketch_fma == 'true'
     uses: ./.github/workflows/go-test.yml
     with:
       pkgs: ${{ needs.changes.outputs.pkgs }}
       unit: ${{ needs.changes.outputs.unit }}
       app_session: ${{ needs.changes.outputs.app_session }}
-      isolation: ${{ needs.changes.outputs.isolation }}
       windows: ${{ needs.changes.outputs.windows }}
       macos: ${{ needs.changes.outputs.macos }}
       sketch_fma: ${{ needs.changes.outputs.sketch_fma }}
