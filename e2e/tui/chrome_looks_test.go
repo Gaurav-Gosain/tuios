@@ -476,11 +476,12 @@ func checkScrim(t *testing.T, term *tuitest.Terminal, base string, look chromeLo
 	t.Helper()
 	// The client takes the dim a moment after set-config returns. The wait
 	// below for the rail's text to change behind the palette covers that:
-	// with the dim at 0 the palette changes nothing there.
+	// with the dim at 0 the palette changes nothing there. set-config returns
+	// once the client has applied the value, so settling draws it.
 	if o, err := tuiosCLI(t, base, "set-config", "appearance.modal_dim", "30"); err != nil {
 		t.Fatalf("set the modal dim: %v\n%s", err, o)
 	}
-	if err := term.WaitStable(uiTimeout); err != nil {
+	if err := settleScreen(term, uiTimeout); err != nil {
 		t.Fatalf("the screen never settled: %v", err)
 	}
 	s := term.Screen()
