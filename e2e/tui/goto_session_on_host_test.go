@@ -91,6 +91,75 @@ func TestGotoActsOnASessionOnAHost(t *testing.T) {
 	alive(t, term, "after the delete and rename on alpha")
 }
 
+// TestGotoNamesTheGrantAHostRefuses renames and deletes a session on alpha
+// from go to when alpha's link policy for this machine allows only list. The
+// session stays as it was, and each refusal names the grant and where to add
+// it.
+//
+// The ways it can go wrong, each an assertion: the refusal is the bare error
+// of the call, which names no grant; the rename or the delete went through.
+func TestGotoNamesTheGrantAHostRefuses(t *testing.T) {
+	f := startGlobalFleetWith(t, map[string]string{"beta": "someone@betabox"}, "[hosts.\"*\"]\nallow = [\"list\"]\n")
+	if out, err := cliWithin(t, f.alpha, f.env, "new", "old", "--detach"); err != nil {
+		t.Fatalf("start old on alpha: %v\n%s", err, out)
+	}
+	term := startIn(t, f.here, startOpts{args: []string{"attach", "home"}, cols: 160, rows: 44,
+		env: append([]string{"TERM=xterm-256color", "COLORTERM=truecolor", "TUIOS_KITTY_GRAPHICS=0"}, f.env...)})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("the client never attached home: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	openOld := func() {
+		t.Helper()
+		if err := term.SendKeys(tuitest.Ctrl('b'), "S"); err != nil {
+			t.Fatalf("open go to: %v", err)
+		}
+		waitText(t, term, "the go to list", "Go to")
+		if err := term.SendKeys("old"); err != nil {
+			t.Fatal(err)
+		}
+		waitText(t, term, "alpha's session old", "old @ alpha")
+	}
+
+	openOld()
+	if err := term.SendKeys(tuitest.Ctrl('r')); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the rename", "rename session old on alpha")
+	if err := term.SendKeys("-two", tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText("Rename failed: Host alpha does not allow", uiTimeout); err != nil {
+		saveCockpitFrames(t, term, "goto-rename-refusal-bare")
+		t.Fatalf("ASSERTION: the refused rename does not name the grant: %v\n%s", err, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "goto-rename-refused")
+	if !slices.Contains(alphaSessions(t, f), "old") {
+		t.Fatalf("ASSERTION: alpha renamed old though its policy refuses: %v", alphaSessions(t, f))
+	}
+	if err := term.SendKeys(tuitest.Esc); err != nil {
+		t.Fatal(err)
+	}
+	_ = term.WaitStable(uiTimeout)
+
+	openOld()
+	if err := term.SendKeys(tuitest.Ctrl('d')); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the delete question", "Delete session old @ alpha? y yes, n no")
+	if err := term.SendKeys("y"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitForText("Kill failed: Host alpha does not allow", uiTimeout); err != nil {
+		saveCockpitFrames(t, term, "goto-delete-refusal-bare")
+		t.Fatalf("ASSERTION: the refused delete does not name the grant: %v\n%s", err, term.Snapshot())
+	}
+	if !slices.Contains(alphaSessions(t, f), "old") {
+		t.Fatalf("ASSERTION: alpha deleted old though its policy refuses: %v", alphaSessions(t, f))
+	}
+	alive(t, term, "after the refused rename and delete")
+}
+
 // alphaSessions is the names of alpha's sessions, nil when they cannot be read.
 func alphaSessions(t *testing.T, f *globalFleet) []string {
 	t.Helper()

@@ -19397,12 +19397,16 @@ folder. Repeat from `e2e/tui` with
 to a session on this machine. Ctrl+d on session `spare` of the linked machine
 alpha must ask, and y must remove it from alpha. Ctrl+r on `old` must open
 the rename, and the new name must reach alpha.
+`TestGotoNamesTheGrantAHostRefuses` gives alpha a link policy that allows
+only list. The rename and the delete must each say which grant is missing,
+and the session must stay.
 
 Run on 2026-11-24 on Linux. The control is main without the fix.
 
 | Change | Failure |
 | --- | --- |
 | ctrl+d and ctrl+r refuse a row on another machine | `ctrl+d on alpha's session asked nothing` |
+| The rename on another machine shows the bare error of the call | `TestGotoNamesTheGrantAHostRefuses`: `the refused rename does not name the grant` |
 
 The frames are `goto-delete-ask` and `goto-delete-done` under
 `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with

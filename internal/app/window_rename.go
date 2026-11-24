@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"unicode"
@@ -255,7 +256,19 @@ func (m *OS) CommitRename() tea.Cmd {
 		if !ok {
 			return nil
 		}
-		return labelVerbCmd(agentMailDial(m.machineDialer(machine)), "Rename", verb, params)
+		send := labelVerbCmd(agentMailDial(m.machineDialer(machine)), "Rename", verb, params)
+		return func() tea.Msg {
+			msg := send()
+			// A refusal by the other machine's link policy says which grant
+			// is missing and where to add it.
+			if applied, ok := msg.(RenameAppliedMsg); ok {
+				if refusal := linkRefusal(machine, applied.Err); refusal != "" {
+					applied.Err = errors.New(refusal)
+					return applied
+				}
+			}
+			return msg
+		}
 	}
 
 	if kind == RenameWindow {
