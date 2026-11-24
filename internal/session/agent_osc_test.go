@@ -132,7 +132,7 @@ func TestPlainPaneProgressIsNotAnAgent(t *testing.T) {
 // reaches both, so the gate is about the pane and not about the sequence.
 func TestPlainPaneProgressReachesNoInbox(t *testing.T) {
 	d, sp := startTestDaemon(t)
-	sess, plain, agent := twoWindowSession(t, d, "bars")
+	sess, plain, agent := quietTwoWindowSession(t, d, "bars")
 	c := dialVerb(t, sp)
 	attributeHarness(t, sess, agent, "claude-code")
 
@@ -170,6 +170,30 @@ func TestPlainPaneProgressReachesNoInbox(t *testing.T) {
 	if got := sess.GetPTY(ptyIDOfWindow(t, sess, plain)).ProgressText(); got != "4;4;30" {
 		t.Fatalf("the plain pane's progress text = %q, want 4;4;30", got)
 	}
+}
+
+// quietTwoWindowSession is twoWindowSession with panes that print nothing.
+//
+// A test that feeds the emulator itself and then takes the report it parked
+// shares that one slot with the daemon. Every output event a pane raises makes
+// the daemon's handler take whatever is parked, so a shell prompt that arrives
+// between the feed and the take leaves the test nothing to take. cat with no
+// input never writes, so the test is the only one feeding the emulator.
+func quietTwoWindowSession(t *testing.T, d *Daemon, name string) (*Session, string, string) {
+	t.Helper()
+	sess, err := d.manager.CreateSession(name, &SessionConfig{}, 80, 24)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	var ids [2]string
+	for i := range ids {
+		w, err := sess.AddDaemonWindowWith(NewWindowOptions{Command: []string{"cat"}, Focus: true}, nil)
+		if err != nil {
+			t.Fatalf("AddDaemonWindowWith: %v", err)
+		}
+		ids[i] = w.ID
+	}
+	return sess, ids[0], ids[1]
 }
 
 // hasItemFor holds when any Inbox item is about the window.
