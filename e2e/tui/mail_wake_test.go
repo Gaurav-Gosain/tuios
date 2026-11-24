@@ -193,6 +193,7 @@ func TestMailWakesAnIdleAgentOnce(t *testing.T) {
 		t.Fatalf("set-agent-state idle: %v\n%s", err, out)
 	}
 	deadline = time.Now().Add(mailWakeWait + uiTimeout)
+	pace := newPollPace(250 * time.Millisecond)
 	for {
 		n, out := check(blocked, "agent after needs_input")
 		if n == 1 && strings.Contains(out, `GOT[You have 1 unread tuios message. Read it with:`) {
@@ -201,7 +202,7 @@ func TestMailWakesAnIdleAgentOnce(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("the agent was not told about its mail once at rest:\n%s", out)
 		}
-		time.Sleep(250 * time.Millisecond)
+		pace.wait()
 	}
 }
 
@@ -261,6 +262,7 @@ func TestMailWakeTurnsOff(t *testing.T) {
 		t.Fatalf("send-agent-message: %v\n%s", err, out)
 	}
 	deadline := time.Now().Add(mailWakeWait + uiTimeout)
+	pace := newPollPace(250 * time.Millisecond)
 	for {
 		n, out := gotLines(t, base, session, agent)
 		if n == 1 && strings.Contains(out, "GOT[You have 3 unread tuios messages") {
@@ -269,7 +271,7 @@ func TestMailWakeTurnsOff(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("with wake = true again the agent was not told about its mail:\n%s", out)
 		}
-		time.Sleep(250 * time.Millisecond)
+		pace.wait()
 	}
 }
 
@@ -305,6 +307,7 @@ func TestMailWakeTakesNoAuthorityFromAReadOnlyCaller(t *testing.T) {
 		t.Fatalf("send-agent-message: %v\n%s", err, out)
 	}
 	deadline := time.Now().Add(mailWakeWait + uiTimeout)
+	pace := newPollPace(250 * time.Millisecond)
 	for {
 		n, out := gotLines(t, base, session, agent)
 		if n == 1 && strings.Contains(out, "GOT[You have 2 unread tuios messages") {
@@ -313,7 +316,7 @@ func TestMailWakeTakesNoAuthorityFromAReadOnlyCaller(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("mail from the shell did not wake the agent:\n%s", out)
 		}
-		time.Sleep(250 * time.Millisecond)
+		pace.wait()
 	}
 }
 
@@ -361,6 +364,7 @@ func TestMailWakeTakesNoAuthorityFromAPaneOnAnotherMachine(t *testing.T) {
 		t.Fatalf("send-agent-message: %v\n%s", err, out)
 	}
 	deadline := time.Now().Add(mailWakeWait + uiTimeout)
+	pace := newPollPace(250 * time.Millisecond)
 	for {
 		n, out := gotLines(t, base, "home", agent)
 		if n == 1 && strings.Contains(out, "GOT[You have 2 unread tuios messages") {
@@ -369,7 +373,7 @@ func TestMailWakeTakesNoAuthorityFromAPaneOnAnotherMachine(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("mail from the shell did not wake the agent:\n%s", out)
 		}
-		time.Sleep(250 * time.Millisecond)
+		pace.wait()
 	}
 	alive(t, term, "after mail from a hosted pane")
 }
@@ -567,6 +571,7 @@ func TestDelegateMailsTheAnswerAndWakesTheParentOnce(t *testing.T) {
 
 	// The parent is woken once, with no text of the child.
 	deadline = time.Now().Add(mailWakeWait + uiTimeout)
+	pace := newPollPace(250 * time.Millisecond)
 	for {
 		n, got := gotLines(t, base, session, parent)
 		if n > 0 {
@@ -579,7 +584,7 @@ func TestDelegateMailsTheAnswerAndWakesTheParentOnce(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("ASSERTION: the parent was never woken for the answer:\n%s", got)
 		}
-		time.Sleep(250 * time.Millisecond)
+		pace.wait()
 	}
 	time.Sleep(mailWakeWait)
 	n, got := gotLines(t, base, session, parent)
@@ -982,6 +987,7 @@ func TestDelegatedChildrenRouteTheirAttention(t *testing.T) {
 		}
 	}
 	deadline = asked.Add(childHold + uiTimeout)
+	pace := newPollPace(250 * time.Millisecond)
 	for {
 		l = attentionList(t, base)
 		if q := l.itemOf(reader.Window, "question"); q != nil && q.WithParentUntil == 0 {
@@ -990,7 +996,7 @@ func TestDelegatedChildrenRouteTheirAttention(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("ASSERTION: the question was never released to the person: %+v", l)
 		}
-		time.Sleep(250 * time.Millisecond)
+		pace.wait()
 	}
 	fmt.Fprintf(&log, "-- released after %v: %+v\n", time.Since(asked).Round(time.Millisecond), l)
 	if took := time.Since(asked); took < childHold-2*time.Second {
@@ -1058,6 +1064,7 @@ func TestChildrenThatFinishTogetherWakeTheParentOnce(t *testing.T) {
 	}
 
 	deadline := time.Now().Add(mailWakeWait + uiTimeout)
+	pace := newPollPace(250 * time.Millisecond)
 	for {
 		if n, _ := gotLines(t, base, session, parent); n > 0 {
 			break
@@ -1066,7 +1073,7 @@ func TestChildrenThatFinishTogetherWakeTheParentOnce(t *testing.T) {
 			_, got := gotLines(t, base, session, parent)
 			t.Fatalf("ASSERTION: the parent was never woken:\n%s", got)
 		}
-		time.Sleep(250 * time.Millisecond)
+		pace.wait()
 	}
 	time.Sleep(mailWakeWait)
 	n, got := gotLines(t, base, session, parent)

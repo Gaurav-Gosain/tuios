@@ -646,6 +646,7 @@ func TestCodexRolloutJoinsWithoutAHook(t *testing.T) {
 	// The search runs on a backoff, 10 s after the first and then 30 s, so a file
 	// written just after the first search waits for the next.
 	deadline := time.Now().Add(45 * time.Second)
+	pace := newPollPace(200 * time.Millisecond)
 	for {
 		res, verr := r.ctl.call(t, "agent-transcript", map[string]any{"session": transcriptSession, "window": win, "human_nonce": r.nonce})
 		if verr == nil && len(atEntries(t, res)) > 0 {
@@ -654,7 +655,7 @@ func TestCodexRolloutJoinsWithoutAHook(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("the pane never joined the matching rollout: %v %v", verr, res)
 		}
-		time.Sleep(200 * time.Millisecond)
+		pace.wait()
 	}
 
 	// hook runs Codex's real hook with the environment of the shared server.

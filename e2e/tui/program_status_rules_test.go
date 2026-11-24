@@ -190,6 +190,7 @@ func TestProgramStatusAlertAfterTheGap(t *testing.T) {
 	waitNotice := func(what, word string, within time.Duration) time.Time {
 		t.Helper()
 		deadline := time.Now().Add(within)
+		pace := newPollPace(200 * time.Millisecond)
 		for {
 			for _, l := range notices() {
 				if strings.Contains(l, word) {
@@ -199,7 +200,7 @@ func TestProgramStatusAlertAfterTheGap(t *testing.T) {
 			if time.Now().After(deadline) {
 				t.Fatalf("%s: no notification with %q reached the terminal; notifications: %q", what, word, notices())
 			}
-			time.Sleep(200 * time.Millisecond)
+			pace.wait()
 		}
 	}
 	report := func(body string) {

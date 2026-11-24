@@ -258,6 +258,7 @@ func startFrameA(t *testing.T, cols, rows int) (*tuitest.Terminal, frameARig) {
 		report(base, a.session, a.name, a.harness, "idle", "", nil)
 	}
 	deadline := time.Now().Add(20 * time.Second)
+	pace := newPollPace(200 * time.Millisecond)
 	for {
 		rows := worktreeRows(t, base, "--group", "cache")
 		sent := 0
@@ -272,7 +273,7 @@ func startFrameA(t *testing.T, cols, rows int) (*tuitest.Terminal, frameARig) {
 		if time.Now().After(deadline) {
 			t.Fatalf("the fan never typed its task: %v", rows)
 		}
-		time.Sleep(200 * time.Millisecond)
+		pace.wait()
 	}
 	for _, a := range frameAFan {
 		report(base, a.session, a.name, a.harness, "working", a.message, []string{"diff=" + a.diff})

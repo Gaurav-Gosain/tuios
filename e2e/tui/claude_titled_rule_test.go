@@ -83,6 +83,7 @@ func peekClaude(t *testing.T, base, session string, screen []string) (peekReply,
 	var reply peekReply
 	var out string
 	deadline := time.Now().Add(uiTimeout)
+	pace := newPollPace(200 * time.Millisecond)
 	for {
 		out, _ = tuiosCLI(t, base, "peek-prompt", "--json", "-s", session, "-w", "0")
 		reply = peekReply{}
@@ -90,7 +91,7 @@ func peekClaude(t *testing.T, base, session string, screen []string) (peekReply,
 		if reply.Answerable || time.Now().After(deadline) {
 			return reply, out
 		}
-		time.Sleep(200 * time.Millisecond)
+		pace.wait()
 	}
 }
 

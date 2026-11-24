@@ -65,7 +65,7 @@ func waitUntil(t failer, what string, timeout time.Duration, probe func() (done 
 	timeout = scaled(timeout)
 	start := time.Now()
 	deadline := start.Add(timeout)
-	gap := pollFirst
+	pace := newPollPace(pollMax)
 	var state string
 	for {
 		var done bool
@@ -75,9 +75,32 @@ func waitUntil(t failer, what string, timeout time.Duration, probe func() (done 
 		if !time.Now().Before(deadline) {
 			t.Fatalf("ASSERTION: %s\nwaited %s, the last state was:\n%s", what, time.Since(start).Round(time.Millisecond), state)
 		}
-		time.Sleep(min(gap, time.Until(deadline)))
-		gap = min(gap*2, pollMax)
+		pace.waitUntil(deadline)
 	}
+}
+
+// pollPace paces a poll the way waitUntil does: the first gap is pollFirst,
+// and each gap doubles, up to most. A condition that already holds is seen
+// almost at once, and a slow one is not polled harder than most allows. A
+// hand-written poll loop uses it in place of a fixed sleep, and keeps its own
+// condition, deadline and failure message.
+type pollPace struct{ gap, most time.Duration }
+
+func newPollPace(most time.Duration) *pollPace {
+	return &pollPace{gap: min(pollFirst, most), most: most}
+}
+
+// wait sleeps the next gap.
+func (p *pollPace) wait() { p.waitUntil(time.Time{}) }
+
+// waitUntil sleeps the next gap, but not past deadline, when one is set.
+func (p *pollPace) waitUntil(deadline time.Time) {
+	d := p.gap
+	if !deadline.IsZero() {
+		d = min(d, time.Until(deadline))
+	}
+	time.Sleep(d)
+	p.gap = min(p.gap*2, p.most)
 }
 
 // stayTrue checks probe at every poll for d, and fails at the first look that

@@ -432,11 +432,12 @@ func TestSubagentListFromHooks(t *testing.T) {
 		return len(s.List) == 1 && s.List[0].ID == saCI && s.List[0].State == "failed"
 	})
 	deadline := time.Now().Add(15 * time.Second)
+	pace := newPollPace(200 * time.Millisecond)
 	for len(readSubagents(t, base, "e2e-sub").List) != 0 {
 		if time.Now().After(deadline) {
 			t.Fatalf("the failed subagent never faded:\n%s", readSubagents(t, base, "e2e-sub").raw)
 		}
-		time.Sleep(200 * time.Millisecond)
+		pace.wait()
 	}
 	log.add("the failed subagent faded")
 	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-sub", "-w", "0", "\n"); err != nil {

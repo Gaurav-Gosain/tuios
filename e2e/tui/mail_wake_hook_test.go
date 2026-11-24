@@ -47,6 +47,7 @@ unset TUIOS_PANE_ID TUIOS_PANE_TOKEN
 	wake := `GOT[You have 1 unread tuios message. Read it with: tuios read-agent-messages -s ` + session + ` -w ` + idle[:8] + ` --unread]`
 	deadline := time.Now().Add(mailWakeWait + uiTimeout)
 	var out string
+	pace := newPollPace(250 * time.Millisecond)
 	for {
 		_, out = gotLines(t, base, session, idle)
 		if strings.Contains(out, "GOT[queued-from-hook]") && strings.Contains(out, wake) {
@@ -56,7 +57,7 @@ unset TUIOS_PANE_ID TUIOS_PANE_TOKEN
 			hooks, _ := tuiosCLI(t, base, "list-hooks")
 			t.Fatalf("the hook's queued prompt and wake did not both reach the agent:\n%s\nhooks:\n%s", out, hooks)
 		}
-		time.Sleep(250 * time.Millisecond)
+		pace.wait()
 	}
 	// Room for a second wake to show, if there were one.
 	time.Sleep(mailWakeWait)

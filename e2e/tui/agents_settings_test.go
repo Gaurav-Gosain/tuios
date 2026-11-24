@@ -342,6 +342,7 @@ func paneHarness(t *testing.T, base, session string) map[string]string {
 func waitClaudePanes(t *testing.T, base string, n int) {
 	t.Helper()
 	deadline := time.Now().Add(uiTimeout)
+	pace := newPollPace(200 * time.Millisecond)
 	for {
 		count := 0
 		for _, h := range paneHarness(t, base, "agents") {
@@ -355,7 +356,7 @@ func waitClaudePanes(t *testing.T, base string, n int) {
 		if time.Now().After(deadline) {
 			t.Fatalf("the daemon took %d panes for Claude Code, want %d", count, n)
 		}
-		time.Sleep(200 * time.Millisecond)
+		pace.wait()
 	}
 }
 

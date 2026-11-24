@@ -45,6 +45,7 @@ func reviewFanAt(t *testing.T, base, repo, name string) (string, string) {
 	second := "repo-try-" + name + "-2"
 	var path string
 	deadline := time.Now().Add(30 * time.Second)
+	pace := newPollPace(500 * time.Millisecond)
 	for {
 		sent := 0
 		for _, r := range worktreeRows(t, base, "--group", "try/"+name) {
@@ -61,7 +62,7 @@ func reviewFanAt(t *testing.T, base, repo, name string) (string, string) {
 		if time.Now().After(deadline) {
 			t.Fatalf("the first prompts were never sent")
 		}
-		time.Sleep(500 * time.Millisecond)
+		pace.wait()
 	}
 	return second, path
 }

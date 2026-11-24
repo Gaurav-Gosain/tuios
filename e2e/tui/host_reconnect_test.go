@@ -529,11 +529,12 @@ func TestASilentLinkIsFoundAndTheRailStillOpensItsSessions(t *testing.T) {
 	start = time.Now()
 	clickRailSessionUnder(t, term, "spare", "far-other")
 	deadline := time.Now().Add(45 * time.Second)
+	pace := newPollPace(500 * time.Millisecond)
 	for hostDrops(t, base, "build") == drops {
 		if time.Now().After(deadline) {
 			t.Fatalf("the link to build never dropped under the waiting click\n%s", term.Snapshot())
 		}
-		time.Sleep(500 * time.Millisecond)
+		pace.wait()
 	}
 	t.Logf("the attached link dropped %v after the freeze, with the click waiting", time.Since(start).Round(100*time.Millisecond))
 	time.Sleep(3 * time.Second)

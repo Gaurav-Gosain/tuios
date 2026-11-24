@@ -207,6 +207,7 @@ func (s *stallStage) queueState() string {
 func (s *stallStage) waitQuestion(step string, want bool, within time.Duration) {
 	s.t.Helper()
 	deadline := time.Now().Add(within)
+	pace := newPollPace(200 * time.Millisecond)
 	for {
 		open := len(s.stalledQuestions()) > 0
 		if open == want {
@@ -217,7 +218,7 @@ func (s *stallStage) waitQuestion(step string, want bool, within time.Duration) 
 			s.log.add("%-44s question open=%v queue=%q", step, open, strings.TrimSpace(s.queueState()))
 			s.t.Fatalf("ASSERTION: %s: the stalled question is open=%v after %s, want %v\nqueue: %s\nscreen:\n%s", step, open, within, want, s.queueState(), s.screen())
 		}
-		time.Sleep(200 * time.Millisecond)
+		pace.wait()
 	}
 }
 

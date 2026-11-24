@@ -175,6 +175,7 @@ func TestMailHeldForASignInIsToldOnBothMachines(t *testing.T) {
 	// nothing of the mail itself.
 	var farText string
 	deadline = time.Now().Add(45 * time.Second)
+	pace := newPollPace(500 * time.Millisecond)
 	for {
 		farText = ""
 		for _, it := range attentionItems(t, remote, envFar) {
@@ -189,7 +190,7 @@ func TestMailHeldForASignInIsToldOnBothMachines(t *testing.T) {
 			dumpLinkLogs(t, base, remote)
 			t.Fatalf("ASSERTION: build's Inbox does not say mail waits for it")
 		}
-		time.Sleep(500 * time.Millisecond)
+		pace.wait()
 	}
 	saveSyncArtifact(t, "held-mail-item-far.txt", farText)
 	if !strings.Contains(farText, "1 message") || !strings.Contains(farText, "sign in") {
@@ -204,6 +205,7 @@ func TestMailHeldForASignInIsToldOnBothMachines(t *testing.T) {
 	// The person signs in. The mail goes, and both items close.
 	g.signIn(t)
 	deadline = time.Now().Add(60 * time.Second)
+	pace = newPollPace(500 * time.Millisecond)
 	for {
 		ring, _ := tuiosCLI(t, remote, "read-agent-messages", "-s", "far", "--peek")
 		openHere, openFar := false, false
@@ -221,6 +223,6 @@ func TestMailHeldForASignInIsToldOnBothMachines(t *testing.T) {
 			t.Fatalf("ASSERTION: after the sign-in: delivered %v, item here open %v, item on build open %v",
 				strings.Contains(ring, "SECRET-BODY"), openHere, openFar)
 		}
-		time.Sleep(500 * time.Millisecond)
+		pace.wait()
 	}
 }

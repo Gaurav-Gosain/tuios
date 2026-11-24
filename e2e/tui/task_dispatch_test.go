@@ -440,6 +440,7 @@ func TestPullDispatchOffersAgainWhenTheSwitchesLift(t *testing.T) {
 	mustCLI(t, base, "send-text", "-s", sess, "-w", b, "You have 1 unread tuios message.")
 	finish(b, "t2", "quiet hours")
 	deadline := time.Now().Add(90 * time.Second)
+	pace := newPollPace(500 * time.Millisecond)
 	for {
 		holder, _, raw := cardsOf(t, base, sess)
 		if holder["t4"] == b {
@@ -449,7 +450,7 @@ func TestPullDispatchOffersAgainWhenTheSwitchesLift(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("ASSERTION: agent b's offer held by the quiet hours %s was not made when they ended:\n%s", span, raw)
 		}
-		time.Sleep(500 * time.Millisecond)
+		pace.wait()
 	}
 
 	// A card that comes free is offered to an agent at rest. a takes t5 on

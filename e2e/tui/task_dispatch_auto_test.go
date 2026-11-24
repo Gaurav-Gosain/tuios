@@ -84,6 +84,7 @@ func held(cards map[string]autoCard, id string) bool { return cards[id].Holder !
 func waitDispatchText(t *testing.T, base, want, why string) string {
 	t.Helper()
 	deadline := time.Now().Add(60 * time.Second)
+	pace := newPollPace(200 * time.Millisecond)
 	for {
 		out := mustCLI(t, base, "task", "dispatch")
 		if strings.Contains(out, want) {
@@ -92,7 +93,7 @@ func waitDispatchText(t *testing.T, base, want, why string) string {
 		if time.Now().After(deadline) {
 			t.Fatalf("ASSERTION: %s: tuios task dispatch never said %q:\n%s", why, want, out)
 		}
-		time.Sleep(200 * time.Millisecond)
+		pace.wait()
 	}
 }
 
