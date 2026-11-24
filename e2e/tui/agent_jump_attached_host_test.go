@@ -72,8 +72,9 @@ func TestAgentsViewJumpWhileAttachedThroughAHost(t *testing.T) {
 
 // TestDockAlertJumpComesBackFromAHost raises a dock alert for an agent in a
 // session on this machine, switches the client to a session on alpha, and
-// presses the jump key (prefix j). The alert names this machine, so the jump
-// must attach this machine again and land on the agent's session.
+// opens the alert from the message view (prefix N, then enter). The alert
+// names this machine, so the jump must attach this machine again and land on
+// the agent's session.
 //
 // The ways it can go wrong, each an assertion: the alert's machine is read as
 // the attached one, so the client stays on alpha and says the session closed;
@@ -110,14 +111,22 @@ func TestDockAlertJumpComesBackFromAHost(t *testing.T) {
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "alert-on-alpha")
 
-	if err := term.SendKeys(tuitest.Ctrl('b'), "j"); err != nil {
-		t.Fatalf("press the jump key: %v", err)
+	// The dock may have let the alert go by now, so it is taken from the
+	// message view (prefix N), which keeps the newest message.
+	if err := term.SendKeys(tuitest.Ctrl('b'), "N"); err != nil {
+		t.Fatalf("open the last message: %v", err)
+	}
+	waitText(t, term, "the alert in the message view", "approve the build")
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatalf("press enter on the alert: %v", err)
 	}
 	if err := term.WaitFor(func(_ tuitest.Screen) bool {
 		return slices.Contains(attachedSessions(f.here), "work")
 	}, uiTimeout); err != nil {
 		saveCockpitFrames(t, term, "alert-jump-stayed")
-		t.Fatalf("ASSERTION: the jump from alpha did not bring the client back to work on this machine: %v\n%s", err, term.Snapshot())
+		here, _ := cliWithin(t, f.here, f.env, "ls")
+		far, _ := cliWithin(t, f.alpha, f.env, "list-clients")
+		t.Fatalf("ASSERTION: the jump from alpha did not bring the client back to work on this machine: %v\nhere:\n%s\nalpha clients:\n%s\n%s", err, here, far, term.Snapshot())
 	}
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "alert-jump-home")
