@@ -20,7 +20,11 @@ type lifeCard struct {
 	Stage    string `json:"stage"`
 	Attempts int    `json:"attempts"`
 	Note     string `json:"note"`
-	Holder   *struct {
+	Blocked  *struct {
+		Reason string `json:"reason"`
+		By     string `json:"by"`
+	} `json:"blocked"`
+	Holder *struct {
 		Window string `json:"window"`
 		Host   string `json:"host"`
 	} `json:"holder"`
@@ -550,4 +554,66 @@ func TestAMoveToVerifyLetsTheHolderGo(t *testing.T) {
 	if c := cards["t1"]; c.Holder != nil || c.Verify == nil || c.Verify.State != "passed" {
 		t.Errorf("ASSERTION: t1 in review is held by %+v with verify %+v, want no holder and passed", c.Holder, c.Verify)
 	}
+}
+
+// TestAMoveToVerifyLiftsTheErroredBlock: on a pull board with a verify
+// command, dispatch gives the agent a card, and the agent errors. The card
+// stays with the agent, blocked. The person moves the card to verify. The
+// card is let go at once, and the block on the errored agent goes with the
+// holder. The verify then moves the card to review.
+//
+// How it could pass wrongly: the card might never be blocked, or not be
+// dispatched, so the test waits for the errored block on the held card
+// before the move, and reads the card right after the move.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with the block left on in letGo,
+// the card is in verify with no holder and the errored block, and the daemon
+// reports "a card blocked on its errored agent has no holder".
+func TestAMoveToVerifyLiftsTheErroredBlock(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	t.Cleanup(func() { dumpDaemonLogOnFail(t, base) })
+	const sess = "e2e-errored-verify"
+	mustCLI(t, base, "new", sess, "--detach")
+	waitForSessionInfo(t, base, sess)
+	var report strings.Builder
+	note := func(format string, args ...any) { fmt.Fprintf(&report, format+"\n", args...) }
+	defer func() { saveText(t, "task-errored-verify", report.String()) }()
+
+	repo := filepath.Join(base, "demo")
+	lifeRepo(t, repo)
+	a := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", sess, "agent-a", "--no-focus", "--print-id", "--cwd", repo))
+	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", a, "working", "--harness", "claude-code", "-m", "on it")
+	mustCLI(t, base, "task", "add", "-s", sess, "-p", "do one", "one") // t1
+	mustCLI(t, base, "task", "add", "-s", sess, "-p", "do two", "two") // t2
+	note("%s", mustCLI(t, base, "task", "dispatch", "mode", "pull", "-s", sess))
+	// The verify takes a second, so the card is read in verify first.
+	note("%s", mustCLI(t, base, "task", "dispatch", "verify", "-s", sess, "sleep 1"))
+
+	// The agent is done with t1, claimed by hand; pull gives it t2.
+	mustCLI(t, base, "task", "claim", "t1", "-s", sess, "-w", a)
+	if out := inPane(t, base, sess, a, "task done t1"); !strings.Contains(out, "EXIT=0") {
+		t.Fatalf("tuios task done t1: %s", out)
+	}
+	waitLife(t, base, sess, uiTimeout, "pull did not give the agent t2",
+		func(c map[string]lifeCard) bool { return c["t2"].Holder != nil && c["t2"].Holder.Window == a })
+
+	// The agent errors: t2 stays with it, blocked.
+	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", a, "errored", "--harness", "claude-code", "-m", "the API said no")
+	_, raw := waitLife(t, base, sess, uiTimeout, "t2 was not blocked on its errored agent",
+		func(c map[string]lifeCard) bool {
+			return c["t2"].Blocked != nil && c["t2"].Holder != nil && c["t2"].Holder.Window == a
+		})
+	note("after the agent errored:\n%s", raw)
+
+	// The person moves t2 to verify: no holder, and no block.
+	note("%s", mustCLI(t, base, "task", "stage", "t2", "verify", "-s", sess))
+	cards, raw := lifeCards(t, base, sess)
+	note("right after the move to verify:\n%s", raw)
+	if c := cards["t2"]; c.Stage != "verify" || c.Holder != nil || c.Blocked != nil {
+		t.Fatalf("ASSERTION: t2 after the move to verify is %s, held by %+v, blocked %+v; want verify, no holder, no block", c.Stage, c.Holder, c.Blocked)
+	}
+	_, raw = waitLife(t, base, sess, 20*time.Second, "t2 did not reach review after its verify",
+		func(c map[string]lifeCard) bool { return c["t2"].Stage == "review" })
+	note("after the verify:\n%s", raw)
 }

@@ -24,6 +24,16 @@ def Card.erroredHeld (c : Card) : Prop :=
 
 /-! ## How step and apply relate -/
 
+@[simp] theorem erroredBlock_none : erroredBlock none = false := rfl
+
+@[simp] theorem erroredBlock_some (b : Block) :
+    erroredBlock (some b) = (b.by_ == byDaemon && b.reason.startsWith blockErroredReason) := rfl
+
+/-- Letting the holder go leaves no errored block. -/
+@[simp] theorem erroredBlock_lift (o : Option Block) :
+    erroredBlock (if erroredBlock o = true then none else o) = false := by
+  cases h : erroredBlock o <;> simp [h]
+
 /-- c' with the fields a refresh claim writes taken from c. -/
 def Card.sansRefresh (c' c : Card) : Card :=
   { c' with dispatched := c.dispatched, holderName := c.holderName, holderHarness := c.holderHarness }
@@ -213,22 +223,17 @@ theorem holderClean_preserved (hc : c.holderClean) (hw : m.kind = .claim → m.w
   · rw [apply_moved hs]; simp only
     (unfold step autoApplies at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all [Card.letGo]
 
-/-- The moves that keep "a card blocked on its errored agent has a holder".
-The Go code holds none of them. -/
+/-- What "a card blocked on its errored agent has a holder" needs from the
+verbs: block-task never blocks as tuios a card no pane holds. Its by is the
+caller's, and no caller is tuios. -/
 structure KeepsErroredHeld (c : Card) (m : Move) : Prop where
-  /-- A verify result lets the holder go and keeps the block. -/
-  verified : m.kind = .verified → c.blockedOnErrored = false
-  /-- A move to verify that runs the command lets the holder go and keeps
-  the block. -/
-  stageRun : m.kind = .stage → m.verifyRun = true → c.blockedOnErrored = false
-  /-- A block-task by tuios on a card no pane holds would look like one. -/
   block : m.kind = .block → m.by_ = byDaemon → c.holder ≠ ""
 
 /-- "A card blocked on its errored agent has no holder": never, for moves
 that keep KeepsErroredHeld. -/
 theorem erroredHeld_preserved (hc : c.erroredHeld) (ha : KeepsErroredHeld c m) :
     (apply c m now).card.erroredHeld := by
-  have h1 := ha.verified; have h2 := ha.stageRun; have h3 := ha.block
+  have h3 := ha.block
   unfold Card.erroredHeld Card.blockedOnErrored at *
   cases hs : step c m now
   · rw [apply_none hs]
@@ -315,34 +320,6 @@ def blank : Card :=
     dispatched := false, blocked := none, attempts := 0, note := "", work := none, verify := none,
     attachments := [], history := [] }
 
-/-- The errored block, as dispatch writes it. -/
-def erroredBlock : Block := ⟨"agent errored: exit 1", byDaemon, 0⟩
-
-/-- A card in verify, held by w1 after the errored block, with the run of
-token 5 still on it. -/
-def erroredInVerify : Card :=
-  { blank with stage := .verify, holder := "w1", heldAt := 3, dispatched := true,
-               blocked := some erroredBlock, verify := some (running 5) }
-
-theorem erroredInVerify_holds : erroredInVerify.erroredHeld := by
-  unfold Card.erroredHeld erroredInVerify; simp
-
-/-- A verify result on that card lets w1 go and keeps the errored block. -/
-theorem verified_breaks_erroredHeld :
-    ¬ (apply erroredInVerify { kind := .verified, stage := .review, token := 5 } 9).card.erroredHeld := by
-  unfold Card.erroredHeld apply step erroredInVerify Card.letGo Card.blockedOnErrored erroredBlock byDaemon
-    blockErroredReason running
-  simp
-
-/-- So does a person's move to verify that runs the board's command, on a
-held card in doing. -/
-theorem stageRun_breaks_erroredHeld :
-    ¬ (apply { erroredInVerify with stage := .doing }
-        { kind := .stage, stage := .verify, verifyRun := true } 9).card.erroredHeld := by
-  unfold Card.erroredHeld apply step erroredInVerify Card.letGo Card.blockedOnErrored erroredBlock byDaemon
-    blockErroredReason running
-  simp
-
 /-- The docs say a blocked card never moves on its own. A verify result moves
 one: a card handed in to verify and then blocked by the person goes to
 review with the block still on. -/
@@ -351,6 +328,6 @@ theorem verified_moves_a_blocked_card :
                                  verify := some (running 5) }
     let r := apply c { kind := .verified, by_ := byDaemon, stage := .review, token := 5 } 9
     r.card.stage = .review ∧ r.card.blocked = c.blocked := by
-  simp [apply, step, Card.letGo, running]
+  simp [apply, step, Card.letGo, byDaemon, running]
 
 end TaskSpec

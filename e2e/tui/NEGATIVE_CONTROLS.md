@@ -19014,3 +19014,21 @@ Run on 2026-11-24 on Linux (amd64).
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestADoneCardCannotBeBlocked$' -v .`.
+
+## TestAMoveToVerifyLiftsTheErroredBlock
+
+On a pull board with a verify command, dispatch gives the agent a card and the
+agent errors, so the card is blocked and still held. The person moves the card
+to verify. The card must have no holder and no block at once, and reach review.
+The Lean model states the rule as `letting_go_lifts_errored_block`
+(spec/tasks). `TestAVerifyResultLiftsTheErroredBlock` in internal/session
+checks the verify result, which the e2e suite cannot reach.
+
+Run on 2026-11-24 on Linux (amd64).
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The errored block kept in letGo | "t2 after the move to verify is verify, held by <nil>, blocked &{Reason:agent errored: the API said no By:tuios}", and "the daemon broke a task card rule: ... a card blocked on its errored agent has no holder". `TestCardLifecycleCountsOnAPullBoard` fails on the same rule after the release. `TestAVerifyResultLiftsTheErroredBlock` fails too | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAMoveToVerifyLiftsTheErroredBlock$' -v .`.

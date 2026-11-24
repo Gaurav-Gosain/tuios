@@ -65,7 +65,9 @@ one and its `note` is the last line of the output (`tuios task get ID` shows
 the end of the output). If your agent errors while it holds a card that
 dispatch gave it, you keep the card, blocked, with its `attempts` one higher
 and your last message as the note. Work on it again and the block lifts; let
-it go (`tuios task release ID`) and it goes back to `todo`. The person
+it go (`tuios task release ID`) and it goes back to `todo`. The block belongs to
+you as the holder: any move that lets you go lifts it, such as a move to
+`verify` or a verify result. The person
 closes a card (`done`), or its pull request merging moves it to `shipped`.
 
 The verify command is the person's: `tuios task dispatch verify CMD` is

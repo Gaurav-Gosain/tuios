@@ -26,7 +26,8 @@ const (
 	// moveClaim gives the card to window: todo and plan go to doing.
 	moveClaim cardMoveKind = iota + 1
 	// moveRelease lets the card go. A card blocked on its errored agent
-	// goes back to todo with the block lifted.
+	// goes back to todo with the block lifted. Every move that lets the
+	// holder go lifts that block.
 	moveRelease
 	// moveBlock marks the card stuck, keeping its holder.
 	moveBlock
@@ -87,8 +88,13 @@ type cardMove struct {
 func (tk *TaskState) apply(m cardMove, now int64) (action, holder string, verr *verbError) {
 	holder = tk.Holder
 	to := tk.Stage
+	// letGo lets the holder go. A block dispatch put on the holder's errored
+	// agent goes with it: the block belongs to the holder.
 	letGo := func() {
 		tk.Holder, tk.HeldAt, tk.HolderName, tk.HolderHarness = "", 0, "", ""
+		if tk.blockedOnErrored() {
+			tk.Blocked = nil
+		}
 	}
 	evHolder := holder
 	switch m.kind {
@@ -115,9 +121,10 @@ func (tk *TaskState) apply(m cardMove, now int64) (action, holder string, verr *
 		action, evHolder = TaskActionClaimed, m.window
 
 	case moveRelease:
+		errored := tk.blockedOnErrored()
 		letGo()
-		if tk.blockedOnErrored() {
-			tk.Blocked, to = nil, TaskStageTodo
+		if errored {
+			to = TaskStageTodo
 		}
 		action = TaskActionReleased
 

@@ -144,16 +144,20 @@ def blockErroredReason : String := "agent errored"
 /-- taskMaxHistory. -/
 def maxHistory : Nat := 100
 
-/-- blockedOnErrored: the block is the one dispatch put on the card when its
-agent errored. -/
-def Card.blockedOnErrored (c : Card) : Bool :=
-  match c.blocked with
+/-- The block is the one dispatch puts on a card when its agent errored. -/
+def erroredBlock : Option Block → Bool
   | some b => b.by_ == byDaemon && b.reason.startsWith blockErroredReason
   | none => false
 
-/-- letGo: no holder, and none of the holder's fields. -/
+/-- blockedOnErrored: the card's block is the one dispatch put on it when its
+agent errored. -/
+def Card.blockedOnErrored (c : Card) : Bool := erroredBlock c.blocked
+
+/-- letGo: no holder, and none of the holder's fields. A block dispatch put
+on the holder's errored agent goes with the holder. -/
 def Card.letGo (c : Card) : Card :=
-  { c with holder := "", heldAt := 0, holderName := "", holderHarness := "" }
+  { c with holder := "", heldAt := 0, holderName := "", holderHarness := "",
+           blocked := if erroredBlock c.blocked then none else c.blocked }
 
 /-- workable: the refusal of a claim by window. -/
 def Card.workable (c : Card) (window : String) : Option Refusal :=
@@ -212,9 +216,8 @@ def step (c : Card) (m : Move) (now : Int) : Step :=
         let to := if c.stage = .todo ∨ c.stage = .plan then Stage.doing else c.stage
         .moved .claimed to m.window c2
   | .release =>
-    let c1 := c.letGo
-    if c1.blockedOnErrored then .moved .released .todo c.holder { c1 with blocked := none }
-    else .moved .released c.stage c.holder c1
+    if c.blockedOnErrored then .moved .released .todo c.holder c.letGo
+    else .moved .released c.stage c.holder c.letGo
   | .block =>
     -- A done card is closed: no block waits on it (task_done).
     if c.stage = .done then .refused .done
