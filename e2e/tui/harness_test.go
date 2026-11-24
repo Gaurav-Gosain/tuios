@@ -486,7 +486,17 @@ func startIn(t *testing.T, base string, o startOpts) *tuitest.Terminal {
 	// test process shares the process's knobs, so it does not answer.
 	marks := ""
 	if !simOn && !o.noSettleProbe {
-		marks = filepath.Join(t.TempDir(), "settle-marks")
+		// A folder of its own, not t.TempDir: the knobs are a comma-separated
+		// list, and a subtest name with a comma in it would cut the path.
+		dir, err := os.MkdirTemp("", "settle")
+		if err != nil {
+			t.Fatalf("start: make the settle marks folder: %v", err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(dir) })
+		marks = filepath.Join(dir, "marks")
+		if strings.ContainsAny(marks, ",=") {
+			t.Fatalf("start: the settle marks path %q holds a comma or an equals sign, which the knob list cannot carry", marks)
+		}
 		env = withKnobs(append(env, testknob.Env+"=settle_marks="+marks))
 	}
 
