@@ -135,7 +135,7 @@ func TestScrollingGuestPresentsWholeFrames(t *testing.T) {
 			if err := term.WaitStable(uiTimeout); err != nil {
 				t.Fatal(err)
 			}
-			from := tape.len()
+			from := tape.mark(t, term)
 			k := 0
 			for range scrollRounds {
 				var burst strings.Builder
@@ -233,7 +233,7 @@ func TestHeldPaneIsNotTheOverlayAboveIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	openGotoPicker(t, term)
-	from := tape.len()
+	from := tape.mark(t, term)
 	sendKeys(t, term, tuitest.Esc)
 	waitUntil(t, "a frame after the picker closed", uiTimeout, func() (bool, string) {
 		b, _ := tape.bytes()

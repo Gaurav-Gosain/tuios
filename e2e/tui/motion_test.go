@@ -410,6 +410,23 @@ func (h *hostTape) len() int {
 	return h.b.Len()
 }
 
+// mark is the tape position after every byte term has read so far. A tape
+// position taken after a wait on the screen must come from here, not from
+// len: tuitest feeds a chunk to its screen and wakes the waiters before it
+// copies the chunk to the tape, so for a moment the screen shows bytes the
+// tape does not hold yet. A position read in that moment falls inside the
+// frame the wait saw, and that frame then counts as the first one after it.
+func (h *hostTape) mark(t failer, term *tuitest.Terminal) int {
+	t.Helper()
+	read, _ := term.Progress()
+	waitUntil(t, "the host tape holds what the screen shows", uiTimeout, func() (bool, string) {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		return h.full || int64(h.b.Len()) >= read, fmt.Sprintf("%d of %d bytes on the tape", h.b.Len(), read)
+	})
+	return int(read)
+}
+
 func (h *hostTape) bytes() ([]byte, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -650,7 +667,7 @@ func TestTiledPanesMoveOneWay(t *testing.T) {
 	left := func(r drawnRect) int { return r.X }
 
 	// Open: the first pane narrows from the full box to its half.
-	tapeMark := tape.len()
+	tapeMark := tape.mark(t, term)
 	opened := step("open", func() { newWindow(t, term) })
 	half := opened[len(opened)-1].panes[first]
 	widths := firstPane(opened, width)
@@ -938,7 +955,7 @@ func runSlide(t *testing.T, term *tuitest.Terminal, tape *hostTape, key rune, ne
 // runSlideBy is runSlide with the switch made by switchFn.
 func runSlideBy(t *testing.T, term *tuitest.Terminal, tape *hostTape, switchFn func(), newMark rune, during func()) slideResult {
 	t.Helper()
-	mark := tape.len()
+	mark := tape.mark(t, term)
 	switchFn()
 	probe := slideRows / 2
 	oldMark := slideOldMark
@@ -1094,7 +1111,7 @@ func switchOnce(t *testing.T, extra string) switchResult {
 	// is not enough: wait for the ink of workspace 2 itself, and a little
 	// longer for the last frame.
 	inkB := tuitest.Color{Kind: tuitest.ColorRGB, R: 40, G: 80, B: 230}
-	from := tape.len()
+	from := tape.mark(t, term)
 	if err := term.SendKeys(tuitest.Alt('2')); err != nil {
 		t.Fatalf("press alt+2: %v", err)
 	}
@@ -1368,7 +1385,7 @@ func zoomFrames(t *testing.T, extra string) (zoomMid, slideMid int) {
 		return b.String()
 	}
 	split := body(term.Screen())
-	from := tape.len()
+	from := tape.mark(t, term)
 	if err := term.SendKeys(tuitest.Ctrl('b'), "z"); err != nil {
 		t.Fatalf("zoom: %v", err)
 	}

@@ -18869,3 +18869,20 @@ Run on 2026-11-21 on Linux, real backend.
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestALayoutSavedThenLeftHoldsItsWorkspace$' .
 ```
+
+## A tape position taken after a wait on the screen
+
+tuitest gives a chunk of output to its screen and wakes the waiters. Then it copies the chunk to the output mirror, which is the host tape. A test can see a frame on the screen and read the tape length before the tape holds the end of that frame. `TestHeldPaneIsNotTheOverlayAboveIt` then read the go-to picker's frame as the first frame after the picker closed. `hostTape.mark` waits until the tape holds every byte the screen read, and every tape position after a wait comes from it.
+
+The control puts a delay of 30 ms in `hostTape.Write`, so the tape is always behind the screen.
+
+Run on 2026-11-24 on Linux, real backend.
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| The delay, with the tape length read at once (main) | `TestHeldPaneIsNotTheOverlayAboveIt` | 5 of 5 runs: "the first frame after the picker closed does not show the pane's own cells", the CI failure | **caught** |
+| The delay, with `hostTape.mark` | `TestHeldPaneIsNotTheOverlayAboveIt` | 5 of 5 runs pass | fixed |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=5 -v -run '^TestHeldPaneIsNotTheOverlayAboveIt$' .
+```
