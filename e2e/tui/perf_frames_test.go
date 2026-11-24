@@ -720,6 +720,18 @@ func TestFloodStaysSmooth(t *testing.T) {
 	if p95 > 30 {
 		t.Errorf("the p95 gap between two frames of the flood was %.1f ms, want at most 30", p95)
 	}
+
+	// A lone pane that fills the screen is drawn straight from its emulator.
+	// A frame that found the pane's output writer holding its lock drew the
+	// last cells again, and a flood keeps that lock almost all the time: seq
+	// showed 5 to 17 frames a second, with gaps of up to 1.9 s.
+	d := runDrainCase(t, "flood-smooth-lone-seq", []string{"seq"}, false)
+	if lone := float64(d.frames) / d.took.Seconds(); lone < 45 {
+		t.Errorf("a lone pane flooding was drawn at %.0f frames a second, want at least 45", lone)
+	}
+	if d.frame.P99 > 60*time.Millisecond {
+		t.Errorf("the p99 gap between two frames of a lone pane flooding was %v, want at most 60ms", d.frame.P99)
+	}
 }
 
 // TestKittyStreamCostsLittle asserts the two kitty stream paths that skip the

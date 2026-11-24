@@ -347,11 +347,13 @@ func TestPerfSmoothDrain(t *testing.T) {
 	type drainCase struct {
 		name    string
 		writers []string
+		keys    bool
 	}
 	cases := []drainCase{
-		{"1-yes", []string{"yes"}}, {"1-seq", []string{"seq"}}, {"1-cat", []string{"cat"}},
-		{"4-mix", []string{"yes", "cat", "seq", "yes"}},
-		{"9-mix", append(append(append([]string{}, mix...), mix...), mix...)},
+		{"1-yes", []string{"yes"}, false}, {"1-seq", []string{"seq"}, false}, {"1-cat", []string{"cat"}, false},
+		{"1-seq-keys", []string{"seq"}, true}, {"1-cat-keys", []string{"cat"}, true},
+		{"4-mix", []string{"yes", "cat", "seq", "yes"}, false},
+		{"9-mix", append(append(append([]string{}, mix...), mix...), mix...), false},
 	}
 	want := os.Getenv("TUIOS_PERF_CASES")
 	for _, dc := range cases {
@@ -359,92 +361,199 @@ func TestPerfSmoothDrain(t *testing.T) {
 			continue
 		}
 		t.Run(dc.name, func(t *testing.T) {
-			base := t.TempDir()
-			killDaemon(t, base)
-			writeConfig(t, base, "[appearance]\nmax_fps = 120\n[startup]\ntiled = true\n")
-			if out, err := tuiosCLI(t, base, "new", "fp", "--detach"); err != nil {
-				t.Fatalf("create the session: %v: %s", err, out)
-			}
-			clock := newFrameClock()
-			term := startIn(t, base, startOpts{
-				cols: perfCols, rows: perfRows,
-				args: []string{"attach", "fp"},
-				env:  append(perfEnvVars(), "COLORTERM=truecolor"),
-				out:  clock,
-			})
-			if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
-				t.Fatalf("the client never attached: %v\n%s", err, term.Snapshot())
-			}
-			ids := windowIDs(t, base, "fp")
-			for len(ids) < len(dc.writers) {
-				newWindowIn(t, base, "fp")
-				ids = windowIDs(t, base, "fp")
-			}
-			// Every pane's shell has printed its prompt, so no typed command
-			// reaches a shell that is not reading yet.
-			if err := term.WaitFor(func(s tuitest.Screen) bool {
-				return countWindows(s) >= len(dc.writers) && strings.Count(s.Text(), "$") >= len(dc.writers)
-			}, shellTimeout); err != nil {
-				t.Fatalf("the panes never showed a prompt: %v\n%s", err, term.Snapshot())
-			}
-			logPath := smoothLog(t, t.TempDir())
-			daemonPid := 0
-			if raw, err := os.ReadFile(filepath.Join(base, "XDG_RUNTIME_DIR", "tuios", "tuios.sock.pid")); err == nil {
-				daemonPid, _ = strconv.Atoi(strings.TrimSpace(string(raw)))
-			}
-			var total int64
-			for _, w := range dc.writers {
-				total += drainBytes(w, logPath)
-			}
-			c0, d0 := cpuTicks(term.Pid()), cpuTicks(daemonPid)
-			clock.mu.Lock()
-			ends0 := len(clock.ends)
-			clock.mu.Unlock()
-			t0 := time.Now()
-			doneDir := t.TempDir()
-			for i, w := range dc.writers {
-				if err := paneSend(base, "fp", ids[i], drainCmd(w, logPath, filepath.Join(doneDir, strconv.Itoa(i)))); err != nil {
-					t.Fatalf("start the flood: %v", err)
-				}
-			}
-			// Done when every program has finished and the client has taken
-			// in what it was sent: its CPU time stays the same over three
-			// samples in a row. A tiled pane can be one row tall, so a marker
-			// on screen would scroll out of sight.
-			waitUntil(t, "every flood finishes", 5*time.Minute, func() (bool, string) {
-				left := 0
-				for i := range dc.writers {
-					if _, err := os.Stat(filepath.Join(doneDir, strconv.Itoa(i))); err != nil {
-						left++
-					}
-				}
-				return left == 0, fmt.Sprintf("%d floods still running", left)
-			})
-			// The drain ends when the client last took CPU time, once it has
-			// stayed the same for quietFor.
-			const quietFor = 300 * time.Millisecond
-			last, changed := cpuTicks(term.Pid()), time.Now()
-			waitUntil(t, "the client goes quiet", time.Minute, func() (bool, string) {
-				if now := cpuTicks(term.Pid()); now != last {
-					last, changed = now, time.Now()
-				}
-				return time.Since(changed) >= quietFor, fmt.Sprintf("client CPU still moving: %d ticks", last)
-			})
-			took := changed.Sub(t0)
-			c1, d1 := cpuTicks(term.Pid()), cpuTicks(daemonPid)
-			clock.mu.Lock()
-			ends := append([]int64(nil), clock.ends[ends0:]...)
-			clock.mu.Unlock()
-			var frames perf.Dist
-			for i := 1; i < len(ends); i++ {
-				frames = append(frames, time.Duration(ends[i]-ends[i-1]))
-			}
-			st := frames.Stats()
-			mb := float64(total) / 1e6
-			cms, dms := float64(c1-c0)*10, float64(d1-d0)*10
-			t.Logf("PERF smooth-drain/%s: %.1f MB in %v (%.1f MB/s)  cpu client %.1f daemon %.1f ms/MB  frames %d, p50 %.2f p99 %.2f max %.2f ms",
-				dc.name, mb, took.Round(time.Millisecond), mb/took.Seconds(), cms/mb, dms/mb,
-				len(ends), float64(st.P50)/1e6, float64(st.P99)/1e6, float64(st.Max)/1e6)
+			runDrainCase(t, dc.name, dc.writers, dc.keys)
 		})
 	}
+}
+
+// drainReport is one finite flood: how long the client took to take it in,
+// the frames the host got meanwhile, and the CPU per MB of each process.
+type drainReport struct {
+	// key is from a key typed into the first pane to the next frame the
+	// host gets, for runDrainCase with keys.
+	key                perf.Stats
+	took               time.Duration
+	frames             int
+	frame              perf.Stats
+	clientMB, daemonMB float64
+}
+
+// runDrainCase sends a finite flood of each writer's kind to a pane of its
+// own, tiled, at max_fps 120, and waits until the client has taken it in.
+func runDrainCase(t *testing.T, name string, writers []string, keys bool) drainReport {
+	t.Helper()
+	base := t.TempDir()
+	killDaemon(t, base)
+	writeConfig(t, base, "[appearance]\nmax_fps = 120\n[startup]\ntiled = true\n")
+	profDir := os.Getenv("TUIOS_PERF_PPROF")
+	var daemonAddr, clientAddr string
+	if profDir != "" {
+		daemonAddr = startDaemonWithPprof(t, base)
+		clientAddr = fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	}
+	if out, err := tuiosCLI(t, base, "new", "fp", "--detach"); err != nil {
+		t.Fatalf("create the session: %v: %s", err, out)
+	}
+	clock := newFrameClock()
+	if dir := os.Getenv("TUIOS_PERF_DUMP"); dir != "" {
+		_ = os.MkdirAll(dir, 0o755)
+		clock.dump, _ = os.Create(filepath.Join(dir, "drain_"+name+".dump"))
+	}
+	term := startIn(t, base, startOpts{
+		cols: perfCols, rows: perfRows,
+		args: attachArgs(clientAddr),
+		env:  append(perfEnvVars(), "COLORTERM=truecolor"),
+		out:  clock,
+	})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) >= 1 }, bootTimeout); err != nil {
+		t.Fatalf("the client never attached: %v\n%s", err, term.Snapshot())
+	}
+	ids := windowIDs(t, base, "fp")
+	for len(ids) < len(writers) {
+		newWindowIn(t, base, "fp")
+		ids = windowIDs(t, base, "fp")
+	}
+	// Every pane's shell has printed its prompt, so no typed command
+	// reaches a shell that is not reading yet.
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return countWindows(s) >= len(writers) && strings.Count(s.Text(), "$") >= len(writers)
+	}, shellTimeout); err != nil {
+		t.Fatalf("the panes never showed a prompt: %v\n%s", err, term.Snapshot())
+	}
+	logPath := smoothLog(t, t.TempDir())
+	daemonPid := 0
+	if raw, err := os.ReadFile(filepath.Join(base, "XDG_RUNTIME_DIR", "tuios", "tuios.sock.pid")); err == nil {
+		daemonPid, _ = strconv.Atoi(strings.TrimSpace(string(raw)))
+	}
+	var total int64
+	for _, w := range writers {
+		total += drainBytes(w, logPath)
+	}
+	c0, d0 := cpuTicks(term.Pid()), cpuTicks(daemonPid)
+	clock.mu.Lock()
+	ends0 := len(clock.ends)
+	clock.mu.Unlock()
+	t0 := time.Now()
+	// TUIOS_PERF_PPROF takes a CPU profile and an execution trace of
+	// both processes over the first seconds of the flood.
+	var profWG sync.WaitGroup
+	if profDir != "" {
+		_ = os.MkdirAll(profDir, 0o755)
+		for who, addr := range map[string]string{"client": clientAddr, "daemon": daemonAddr} {
+			profWG.Go(func() {
+				name := filepath.Join(profDir, "drain_"+name+"."+who)
+				if body, err := httpGet(fmt.Sprintf("http://%s/debug/pprof/profile?seconds=3", addr)); err == nil {
+					_ = os.WriteFile(name+".pprof", []byte(body), 0o644)
+				}
+				if os.Getenv("TUIOS_PERF_TRACE") == "" {
+					return
+				}
+				if body, err := httpGet(fmt.Sprintf("http://%s/debug/pprof/trace?seconds=3", addr)); err == nil {
+					_ = os.WriteFile(name+".trace", []byte(body), 0o644)
+				}
+			})
+		}
+	}
+	defer profWG.Wait()
+	doneDir := t.TempDir()
+	for i, w := range writers {
+		if err := paneSend(base, "fp", ids[i], drainCmd(w, logPath, filepath.Join(doneDir, strconv.Itoa(i)))); err != nil {
+			t.Fatalf("start the flood: %v", err)
+		}
+	}
+	// With keys, a letter is typed into the first pane every typingGap while
+	// the floods run, and timed to the next frame the host gets.
+	var keyLat perf.Dist
+	stopKeys := make(chan struct{})
+	var keysWG sync.WaitGroup
+	if keys {
+		keysWG.Go(func() {
+			gap := time.NewTicker(typingGap)
+			defer gap.Stop()
+			look := time.NewTicker(200 * time.Microsecond)
+			defer look.Stop()
+			for {
+				select {
+				case <-stopKeys:
+					return
+				case <-gap.C:
+				}
+				sent := time.Now()
+				if err := term.SendKeys("k"); err != nil {
+					return
+				}
+				for time.Since(sent) < time.Second {
+					clock.mu.Lock()
+					var at int64
+					if n := len(clock.ends); n > 0 {
+						at = clock.ends[n-1]
+					}
+					clock.mu.Unlock()
+					if at > sent.UnixNano() {
+						keyLat = append(keyLat, time.Duration(at-sent.UnixNano()))
+						break
+					}
+					<-look.C // a poll of the frame clock, not a fixed wait
+				}
+			}
+		})
+	}
+	// Done when every program has finished and the client has taken
+	// in what it was sent: its CPU time stays the same over three
+	// samples in a row. A tiled pane can be one row tall, so a marker
+	// on screen would scroll out of sight.
+	waitUntil(t, "every flood finishes", 5*time.Minute, func() (bool, string) {
+		left := 0
+		for i := range writers {
+			if _, err := os.Stat(filepath.Join(doneDir, strconv.Itoa(i))); err != nil {
+				left++
+			}
+		}
+		return left == 0, fmt.Sprintf("%d floods still running", left)
+	})
+	close(stopKeys)
+	keysWG.Wait()
+	// The drain ends when the client last took CPU time, once it has
+	// stayed the same for quietFor.
+	const quietFor = 300 * time.Millisecond
+	last, changed := cpuTicks(term.Pid()), time.Now()
+	waitUntil(t, "the client goes quiet", time.Minute, func() (bool, string) {
+		if now := cpuTicks(term.Pid()); now != last {
+			last, changed = now, time.Now()
+		}
+		return time.Since(changed) >= quietFor, fmt.Sprintf("client CPU still moving: %d ticks", last)
+	})
+	took := changed.Sub(t0)
+	c1, d1 := cpuTicks(term.Pid()), cpuTicks(daemonPid)
+	clock.mu.Lock()
+	ends := append([]int64(nil), clock.ends[ends0:]...)
+	clock.mu.Unlock()
+	var frames perf.Dist
+	for i := 1; i < len(ends); i++ {
+		frames = append(frames, time.Duration(ends[i]-ends[i-1]))
+	}
+	st := frames.Stats()
+	// peak is the most frames the host got inside any one second.
+	peak := 0
+	for i, j := 0, 0; j < len(ends); j++ {
+		for ends[j]-ends[i] >= int64(time.Second) {
+			i++
+		}
+		peak = max(peak, j-i+1)
+	}
+	if dir := os.Getenv("TUIOS_PERF_DUMP"); dir != "" {
+		_ = os.MkdirAll(dir, 0o755)
+		var b strings.Builder
+		for _, e := range ends {
+			fmt.Fprintf(&b, "%d\n", e)
+		}
+		_ = os.WriteFile(filepath.Join(dir, "drain_"+name+".ends"), []byte(b.String()), 0o644)
+	}
+	mb := float64(total) / 1e6
+	cms, dms := float64(c1-c0)*10, float64(d1-d0)*10
+	t.Logf("PERF smooth-drain/%s: %.1f MB in %v (%.1f MB/s)  cpu client %.1f daemon %.1f ms/MB  frames %d (peak %d in 1 s), min %.2f p50 %.2f p99 %.2f max %.2f ms  key to frame p50 %.2f p99 %.2f ms",
+		name, mb, took.Round(time.Millisecond), mb/took.Seconds(), cms/mb, dms/mb,
+		len(ends), peak, float64(st.Min)/1e6, float64(st.P50)/1e6, float64(st.P99)/1e6, float64(st.Max)/1e6,
+		float64(keyLat.Stats().P50)/1e6, float64(keyLat.Stats().P99)/1e6)
+	return drainReport{key: keyLat.Stats(), took: took, frames: len(ends), frame: st, clientMB: cms / mb, daemonMB: dms / mb}
 }

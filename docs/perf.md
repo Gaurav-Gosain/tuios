@@ -6854,3 +6854,56 @@ The vt suite, the vtgen seeds and the libghostty-vt differential
 (`-tags ghostty`, libghostty-vt 1.0.1) pass. `TestIdleCostStaysLow` passes:
 0 wire bytes and 0 renders in the clock-off window. The stripped
 linux/amd64 binary is the same size, 49,053,856 bytes.
+
+## 2026-11 a lone pane is drawn while it floods
+
+A pane that fills the screen is drawn straight from its emulator's cells
+(`internal/app/pane_cells.go`). The frame took the pane's read lock with a
+try. When the pane's output writer held the lock, the frame drew the cells of
+the last frame again. During a flood the writer takes the lock again as soon
+as it lets go of an 8 KiB chunk, so the try failed frame after frame. The
+frame was then equal to the last one and was not written: the screen stood
+still for up to 2.6 s. In one `seq` flood, 354 of 456 composed frames were
+equal to the frame before. Panes in a tiled layout take the read lock and
+wait for it, so they were not affected.
+
+### What changed
+
+- `chooseDirectPane` still draws the last cells when the try fails. When the
+  pane has not been drawn from its emulator for one frame period, the frame
+  waits for the read lock. A waiting reader gets the lock at the end of the
+  writer's chunk.
+
+### Numbers
+
+`TestPerfSmoothDrain`, max_fps 120, 207x55, three rounds of each build
+interleaved in a quiet window. Medians. The `-keys` cases type a key into
+the flooded pane every 60 ms and time it to the next frame the host gets.
+
+| case | frames before / after | longest gap before / after | client ms/MB before / after |
+|---|---|---|---|
+| 1 pane, yes, 165 MB | 18 / 227 | 1750 / 67 ms | 29.4 / 29.2 |
+| 1 pane, seq, 79 MB | 19 / 157 | 668 / 18 ms | 32.8 / 34.1 |
+| 1 pane, cat, 153 MB | 9 / 92 | 475 / 23 ms | 11.1 / 11.1 |
+| 4 panes, mix, 562 MB | 902 / 903 | 39 / 34 ms | 32.4 / 31.9 |
+
+| key to frame on the flooded pane | p50 before / after | p99 before / after |
+|---|---|---|
+| seq | 21.5 / 2.9 ms | 476 / 16.5 ms |
+| cat | 13.8 / 3.6 ms | 317 / 15.9 ms |
+
+The daemon's CPU per MB is the same or lower. The most frames the host got
+in any one second was 55 to 74 for a lone pane, and 119 to 120 for four
+panes, at max_fps 120. The wait for the read lock, timed in a probe build
+over 547 waits under a flood: p50 85 us, p99 306 us, max 0.7 ms.
+
+`TestFloodStaysSmooth` (under `TUIOS_E2E_PERF`) now also drains a `seq`
+flood in a lone pane and wants at least 45 frames a second and a p99 gap of
+at most 60 ms. Before: 14 frames a second, p99 375 ms, and the existing
+`framepace scroll` case failed its p95 too (42.7 ms). After: 80 frames a
+second, p99 21 ms, scroll p95 17.4 ms.
+
+### Invariants held
+
+`TestIdleCostStaysLow` passes: 0 wire bytes and 0 renders in the clock-off
+window.

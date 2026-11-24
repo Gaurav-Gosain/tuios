@@ -3,6 +3,7 @@ package app
 import (
 	"image"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 
@@ -59,6 +60,9 @@ type paneHold struct {
 
 	box      string
 	boxLayer *lipgloss.Layer
+
+	// fresh is when the pane was last drawn from its emulator.
+	fresh time.Time
 }
 
 // directBoxLayer is the layer of the direct pane's blank box, kept while the
@@ -108,10 +112,18 @@ func (m *OS) chooseDirectPane() directPane {
 		// the usual way has no text of its own to shed to (copyDirectPane
 		// dropped it), so it would wait for the lock, or show the text it
 		// had before this path drew it.
-		if m.directHeld(w) {
+		if !m.directHeld(w) {
+			return directPane{}
+		}
+		// Under a flood the writer takes the lock again as soon as it lets
+		// go of a chunk, so the try fails frame after frame and the screen
+		// stood still for up to seconds. Once the pane has not been drawn
+		// fresh for a frame period, the frame waits for the read lock, which
+		// a blocked reader gets at the end of the writer's chunk.
+		if time.Since(m.directHold.fresh) < m.framePeriod() {
 			return directPane{w: w, held: true}
 		}
-		return directPane{}
+		w.RLockIO()
 	}
 	d := directPane{w: w, locked: true}
 	screen := w.Terminal
@@ -231,6 +243,7 @@ func (m *OS) copyDirectPane(canvas *frameCanvas, d *directPane, kept bool) {
 	}
 	w := d.w
 	m.directHold.id, m.directHold.rect, m.directHold.drawn = w.ID, paneContentRect(w), true
+	m.directHold.fresh = time.Now()
 	w.RenderedCols, w.RenderedRows = w.ContentWidth(), w.ContentHeight()
 	w.CachedContent = ""
 	w.CachedContentCols, w.CachedContentRows = 0, 0
