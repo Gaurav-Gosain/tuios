@@ -9,9 +9,9 @@ name: CI
 #
 # A pull request runs what its change can reach. The merge queue runs every
 # job on the commit it is about to land. A push to main runs every job,
-# except ghostty-vt, learn-web, clienttests, the image build and the Nix
-# vendor hash, which run on main only when the push touched their paths, as
-# they did before. A manual run runs everything.
+# except ghostty-vt, learn-web, clienttests, the image build, the Nix vendor
+# hash and the Lean spec, which run on main only when the push touched their
+# paths. A manual run runs everything.
 
 on:
   push:
@@ -62,6 +62,7 @@ jobs:
       nix: ${{ steps.changes.outputs.nix }}
       binary_size: ${{ steps.changes.outputs.binary_size }}
       mixed_versions: ${{ steps.changes.outputs.mixed_versions }}
+      spec: ${{ steps.changes.outputs.spec }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -177,6 +178,12 @@ jobs:
     if: needs.changes.outputs.nix == 'true'
     uses: ./.github/workflows/nix-vendor-hash.yml
 
+  spec:
+    name: spec
+    needs: changes
+    if: needs.changes.outputs.spec == 'true'
+    uses: ./.github/workflows/spec.yml
+
   # The one check of this workflow that the main ruleset and the merge queue
   # require. A job the change did not need is skipped and counts as passed. A
   # job that failed, or was cancelled, fails this one. Requiring each job by
@@ -185,7 +192,7 @@ jobs:
   ci-result:
     name: CI result
     if: ${{ !cancelled() && (github.event.action != 'labeled' || github.event.label.name == 'full-suite') }}
-    needs: [changes, go-test, lint, libraries, binary-size, ghostty-vt, learn-web, clienttests, docker-build, mixed-versions, nix-vendor-hash]
+    needs: [changes, go-test, lint, libraries, binary-size, ghostty-vt, learn-web, clienttests, docker-build, mixed-versions, nix-vendor-hash, spec]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

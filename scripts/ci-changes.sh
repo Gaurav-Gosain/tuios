@@ -9,9 +9,9 @@
 #   - $CHANGES_BASE when set (a local run, or the replay of an old change);
 #   - on a pull_request event, HEAD^1, because the checkout is the merge of
 #     the head into the base;
-#   - on a push, $CHANGES_BEFORE (github.event.before), but only for the five
-#     jobs that a push to main always filtered by path: ghostty, learn_web,
-#     clienttests, docker and nix. Every other job runs in full on main;
+#   - on a push, $CHANGES_BEFORE (github.event.before), but only for the six
+#     jobs that a push to main filters by path: ghostty, learn_web,
+#     clienttests, docker, nix and spec. Every other job runs in full on main;
 #   - every other event runs everything, and so does CHANGES_FULL=true (a
 #     pull request with the full-suite label).
 #
@@ -31,8 +31,9 @@
 #                 and govulncheck too. They do not read the e2e module.
 #   lint_libs     library folders to lint, "all", or "none"
 #   unit app_session isolation windows macos sketch_fma pins ghostty
-#   learn_web clienttests docker nix binary_size mixed_versions
-#                 "true" or "false", one per job
+#   learn_web clienttests docker nix binary_size mixed_versions spec
+#                 "true" or "false", one per job. spec is the Lean model of
+#                 the task cards (spec/tasks) and its differential test
 #   lib_alone     JSON list of the "alone" library jobs: vt, sketch, nitpick, small
 set -uo pipefail
 
@@ -44,7 +45,7 @@ WASM=(./cmd/tuios-wasm/... ./internal/webshell/ ./internal/learn/)
 SELF=$(dirname "$0")
 
 declare -A out=()
-order=(pkgs ghostty_pkgs go vet lint_libs unit app_session isolation windows macos sketch_fma pins lib_alone ghostty learn_web clienttests docker nix binary_size mixed_versions)
+order=(pkgs ghostty_pkgs go vet lint_libs unit app_session isolation windows macos sketch_fma pins lib_alone ghostty learn_web clienttests docker nix binary_size mixed_versions spec)
 emit() {
 	local k
 	for k in "${order[@]}"; do
@@ -63,8 +64,8 @@ everything() {
 
 [ "${CHANGES_FULL:-}" != true ] || everything "the pull request has the full-suite label"
 
-# The five jobs a push to main ran only on a path match keep that rule.
-pathgated=(ghostty learn_web clienttests docker nix)
+# The jobs a push to main runs only on a path match. spec also runs nightly.
+pathgated=(ghostty learn_web clienttests docker nix spec)
 push=false
 base=${CHANGES_BASE:-}
 if [ -z "$base" ]; then
@@ -109,6 +110,10 @@ while IFS= read -r p; do
 	# pkg: "must" when the path has to sit in a Go package, "may" when it
 	# counts only if it does, "no" when the rule above said all it changes.
 	pkg=must
+	# The Lean model of the task cards, and the Go code it describes: the
+	# card's move, its types and refusals, the automatic moves, and the
+	# differential test.
+	case $p in internal/session/task_move.go | internal/session/task.go | internal/session/task_auto.go | internal/session/task_move_spec_test.go) f[spec]=1 ;; esac
 	case $p in
 	# Files no job reads.
 	.github/ISSUE_TEMPLATE/* | .github/PULL_REQUEST_TEMPLATE/* | .github/contributors-exclude | .github/dependabot.yml) pkg=no ;;
@@ -133,6 +138,7 @@ while IFS= read -r p; do
 	flake.nix | flake.lock | tuios.nix | nix/*) f[nix]=1 pkg=no ;;
 	.golangci.yml) f[go]=1 f[vet]=1 f[lint_all]=1 pkg=no ;;
 	clienttests/*) f[clienttests]=1 pkg=no ;;
+	spec/*) f[spec]=1 pkg=no ;;
 	go.mod | */go.mod | go.sum | */go.sum | go.work | go.work.sum)
 		# A change beyond the pins runs everything (go-test-affected.sh
 		# prints "all"). Every module file is part of the Nix vendor hash and
@@ -253,6 +259,7 @@ if [ -n "$dirs" ]; then
 	wire=$(comm -12 <(grep . <<<"$chpk") <(grep . <<<"$wdeps"))
 fi
 out[mixed_versions]=$(tf "${f[mixed]:-}$wire")
+out[spec]=$(tf "${f[spec]:-}")
 out[binary_size]=$(tf "${f[binary_size]:-}${f[bin_src]:+$bin$bindarwin}$($modfiles && echo y)")
 
 # A library is linted, and tested alone, when one of its packages changed or
@@ -277,7 +284,7 @@ out[lib_alone]="[$(
 )]"
 out[pins]=$(tf "${f[pins]:-}")
 
-# A push to main runs every job but the five that filtered by path there.
+# A push to main runs every job but the ones that filter by path there.
 if $push; then
 	for k in "${order[@]}"; do
 		case " ${pathgated[*]} " in *" $k "*) continue ;; esac

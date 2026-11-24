@@ -1,0 +1,14 @@
+name = "taskspec"
+version = "0.1.0"
+defaultTargets = ["TaskSpec", "taskspec"]
+
+# A warning fails the build, so a proof left as sorry cannot pass.
+[leanOptions]
+warningAsError = true
+
+[[lean_lib]]
+name = "TaskSpec"
+
+[[lean_exe]]
+name = "taskspec"
+root = "Main"
