@@ -262,7 +262,20 @@ func TestLauncherRunsWithArguments(t *testing.T) {
 			if err := term.SendKeys(tuitest.Tab); err != nil {
 				t.Fatalf("type the line out: %v", err)
 			}
-			if err := term.WaitForText(typeOutPrompt+" "+argsProbeName+" typed", shellTimeout); err != nil {
+			// Wait for the line and for the new pane's prompt, not for the two
+			// side by side. Standalone writes the line into the PTY before the
+			// shell starts, so the tty echoes it first and the prompt lands after
+			// it. A shell with a line editor (bash, zsh) redraws pending input
+			// after its prompt, and dash does not: "zzargs typedzzsh$ " is the
+			// right screen there, and Enter still runs the line. The first pane
+			// carries one prompt, so a second one is the new pane's shell
+			// reading, which is also what makes the Enter below safe.
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				text := s.Text()
+				return !strings.Contains(text, launcherTitle) &&
+					strings.Contains(text, argsProbeName+" typed") &&
+					strings.Count(text, typeOutPrompt) >= 2
+			}, shellTimeout); err != nil {
 				t.Fatalf("the line was not typed out at the prompt: %v\n%s", err, term.Snapshot())
 			}
 			if strings.Contains(term.Screen().Text(), "ARGS|typed") {
