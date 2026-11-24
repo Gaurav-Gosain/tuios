@@ -15,6 +15,8 @@
 #
 # Needs the model built (cd spec/grants && lake build).
 set -euo pipefail
+# sort and comm must agree on one order, whatever the runner's locale.
+export LC_ALL=C
 root=$(git rev-parse --show-toplevel)
 cd "$root"
 list=spec/grants/go-files.txt

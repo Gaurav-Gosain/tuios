@@ -2,8 +2,8 @@
 # describes. spec/grants/go-files.sh writes this list. Do not edit it.
 internal/session/agent_depth.go
 internal/session/agent_parent.go
-internal/session/agents_switch.go
 internal/session/agent_state.go
+internal/session/agents_switch.go
 internal/session/approvals.go
 internal/session/attention_children.go
 internal/session/child_clamp.go
@@ -36,8 +36,8 @@ internal/session/verb_find.go
 internal/session/verb_handlers.go
 internal/session/verb_hints.go
 internal/session/verb_preview.go
-internal/session/verb_protocol_agents.go
 internal/session/verb_protocol.go
+internal/session/verb_protocol_agents.go
 internal/session/verb_protocol_task.go
 internal/session/verb_receipts.go
 internal/session/verb_ship.go
