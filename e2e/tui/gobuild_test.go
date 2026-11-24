@@ -17,6 +17,12 @@ var shippedGoFlags = sync.OnceValues(func() (string, error) {
 // ./cmd/tuios here goes through it, so the suite tests the code the release
 // ships. The internal/lint test TestEveryTuiosBuildReadsTheNoinlineList
 // holds the e2e files to it.
+//
+// A build of another version sets it with -ldflags -X, which only the link
+// step reads, so the compiled packages come from the build cache. Leave out
+// -trimpath: it changes the cache key of every package, and on a CI runner,
+// whose cache holds the plain build, each such build compiles all of tuios
+// again (40 to 80 s).
 func goBuild(args ...string) *exec.Cmd {
 	flags, err := shippedGoFlags()
 	if err != nil {

@@ -295,7 +295,7 @@ func restartMidBinary(t *testing.T) string {
 			return
 		}
 		restartMidBin = filepath.Join(dir, "tuios")
-		build := goBuild("-trimpath", "-ldflags", "-X main.version="+restartMidVersion, "-o", restartMidBin, "./cmd/tuios")
+		build := goBuild("-ldflags", "-X main.version="+restartMidVersion, "-o", restartMidBin, "./cmd/tuios")
 		build.Dir = "../.."
 		if out, err := build.CombinedOutput(); err != nil {
 			restartMidErr = fmt.Errorf("%v: %s", err, out)
