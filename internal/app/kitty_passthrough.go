@@ -536,6 +536,9 @@ func NewKittyPassthroughWithOptions(opts KittyPassthroughOptions) *KittyPassthro
 		if tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0); err == nil {
 			hostOut = tty
 		}
+		// Not through the PostRenderWriter, which counts its own writes for
+		// a settle probe: count these here.
+		hostOut = countWrites(hostOut)
 	}
 
 	kp := &KittyPassthrough{

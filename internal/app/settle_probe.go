@@ -1,6 +1,7 @@
 package app
 
 import (
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -40,6 +41,26 @@ const settleProbeTag = "tuios-settle;"
 
 // settleMarks is the file the answers go to, "" when the knob is not set.
 var settleMarks = sync.OnceValue(func() string { return testknob.String("settle_marks") })
+
+// countedWriter counts what it writes to the terminal, for a writer that
+// does not go through the PostRenderWriter. Only a client with the knob set
+// wraps one.
+type countedWriter struct{ w io.Writer }
+
+func (c countedWriter) Write(p []byte) (int, error) {
+	n, err := c.w.Write(p)
+	testknob.Wrote(n)
+	return n, err
+}
+
+// countWrites returns w counted when the settle_marks knob is set, and w
+// itself otherwise.
+func countWrites(w io.Writer) io.Writer {
+	if settleMarks() == "" {
+		return w
+	}
+	return countedWriter{w}
+}
 
 // announceSettleProbes creates the marks file, which tells a test that this
 // client answers probes. An older client never creates it, and the test

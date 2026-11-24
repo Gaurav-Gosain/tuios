@@ -53,10 +53,6 @@ type PostRenderWriter struct {
 	erased []func(kept bool) []byte
 	// repaint follows a kitty picture with a second write. See pictureRepaint.
 	repaint pictureRepaint
-	// count says the bytes written to the terminal are counted, for the
-	// answer to a settle probe. It is false unless the settle_marks knob is
-	// set. See settle_probe.go.
-	count bool
 }
 
 // FrameHook runs on each frame the renderer writes. out is the frame to send
@@ -91,9 +87,7 @@ func (w *PostRenderWriter) AddEraseHook(fn func(kept bool) []byte) {
 // NewPostRenderWriter wraps out, the terminal the client draws on.
 func NewPostRenderWriter(out io.Writer) *PostRenderWriter {
 	f, _ := out.(*os.File)
-	w := &PostRenderWriter{out: out, file: f}
-	w.count = settleMarks() != ""
-	return w
+	return &PostRenderWriter{out: out, file: f}
 }
 
 // File is the terminal file under the writer, or nil when it is not a file.
@@ -130,9 +124,9 @@ func (w *PostRenderWriter) writeOut(buf []byte) (n int, err error) {
 	} else {
 		n, err = w.out.Write(buf)
 	}
-	if w.count {
-		testknob.Wrote(n)
-	}
+	// The bytes a settle probe answers with. Nothing counts without the
+	// settle_marks knob. See settle_probe.go.
+	testknob.Wrote(n)
 	return n, err
 }
 
