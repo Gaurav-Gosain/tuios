@@ -3,7 +3,6 @@ package gitstate
 import (
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 )
 
@@ -28,32 +27,28 @@ func WatchDirs(dir string) (dirs []string, found bool) {
 	}
 	gitdir, commondir, root, ok := Locate(dir)
 	if jroot, repoDir, jok := locateJJ(dir); jok && jjWins(jroot, root, ok) {
-		return uniqueDirs(filepath.Join(repoDir, "op_heads", "heads")), true
+		return []string{filepath.Join(repoDir, "op_heads", "heads")}, true
 	}
 	if !ok {
 		return []string{filepath.Clean(dir)}, false
 	}
+	// A folder named twice is watched once: dirwatch.Set.Add of a folder it
+	// holds does nothing.
 	dirs = []string{gitdir, commondir}
 	if usesReftable(commondir) {
-		return uniqueDirs(append(dirs, filepath.Join(gitdir, "reftable"), filepath.Join(commondir, "reftable"))...), true
+		return append(dirs, filepath.Join(gitdir, "reftable"), filepath.Join(commondir, "reftable")), true
 	}
 	line, err := readFirstLine(filepath.Join(gitdir, "HEAD"))
-	if err != nil {
-		return uniqueDirs(dirs...), true
-	}
 	ref, symbolic := strings.CutPrefix(line, "ref:")
-	if !symbolic {
-		return uniqueDirs(dirs...), true
+	if err != nil || !symbolic {
+		return dirs, true
 	}
 	ref = strings.TrimSpace(ref)
-	dirs = append(dirs, refFolder(commondir, ref))
-	if gitdir != commondir {
-		dirs = append(dirs, refFolder(gitdir, ref))
-	}
+	dirs = append(dirs, refFolder(commondir, ref), refFolder(gitdir, ref))
 	if up := upstreamOf(commondir, strings.TrimPrefix(ref, "refs/heads/")); up != "" {
 		dirs = append(dirs, refFolder(commondir, up))
 	}
-	return uniqueDirs(dirs...), true
+	return dirs, true
 }
 
 // refFolder is the folder a loose ref's file is in under base, or the
@@ -69,16 +64,6 @@ func refFolder(base, ref string) string {
 	return base
 }
 
-// uniqueDirs is dirs cleaned, in order, with each named once.
-func uniqueDirs(dirs ...string) []string {
-	out := make([]string, 0, len(dirs))
-	for _, d := range dirs {
-		if d = filepath.Clean(d); !slices.Contains(out, d) {
-			out = append(out, d)
-		}
-	}
-	return out
-}
 
 // ForgetMiss drops the memory that dir is in no repository, so the next Read
 // looks again. A caller that saw a ".git" or ".jj" made in dir calls it.

@@ -2662,8 +2662,10 @@ func (m *OS) Cleanup() {
 	m.endOmarchyFollow()
 	m.endInboxWatch()
 	m.endTransfersWatch()
-	m.stopFileWatch()
+	// The git watch first: it nudges the files watch's channel, which
+	// stopFileWatch closes.
 	m.stopGitWatch()
+	m.stopFileWatch()
 	m.stopThreadWatch()
 	// Ends every listener command the model armed, and the video frame writer.
 	// Without it an SSH or web session that ended would stay reachable from the

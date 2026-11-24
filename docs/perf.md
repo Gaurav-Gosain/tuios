@@ -6585,7 +6585,11 @@ numbers swing more between rounds than between the builds:
 | text-9panes/max120 | 114 fps | 120 fps |
 | shm-240guest/max240 (round 1) | 240 fps | 240 fps |
 
-Each message pays one type switch and one comparison of a small struct for
-the watch. A new reading pays the watch's retarget, off the update goroutine.
+Each message pays one type switch and two comparisons for the watch. A new
+reading pays the watch's retarget, off the update goroutine. The watch shares
+the files section's channel and listener, so it adds no goroutine.
 
-Binary size: +20,480 bytes linux/amd64, +544 bytes darwin/arm64.
+Binary size: +12,288 bytes linux/amd64, +368 bytes darwin/arm64. The code and
+its tables grow by about 9 KB (`go tool nm -size`: `gitstate.WatchDirs` 1.8 KB,
+the retarget 1.1 KB, the sync 0.5 KB). The linux file grows in whole 4 KiB
+pages.

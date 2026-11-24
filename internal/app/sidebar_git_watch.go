@@ -1,9 +1,9 @@
 package app
 
 import (
+	"slices"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -39,63 +39,25 @@ import (
 
 // gitWatcher holds the watch on the git section's repository. Setting it up
 // and tearing it down are syscalls on a path that can be a hung mount, so both
-// run off the update goroutine; the update goroutine only records what it
-// wants.
+// run off the update goroutine. A change nudges the files section's channel,
+// so one listener serves both sections; changed says the nudge was this
+// watch's.
 type gitWatcher struct {
-	// want is the reading the watch was last asked for, read and written only
-	// on the update goroutine, so a sync that changes nothing costs one
-	// comparison.
-	want gitWatchSpec
+	// gen and shown are the reading and the rail state the watch was last
+	// asked for, read and written only on the update goroutine, so a sync that
+	// changes nothing costs two comparisons.
+	gen   uint64
+	shown bool
 
-	ch chan struct{}
-
-	// polling is set while the section has no working watch for want, and
-	// cleared when one is made.
-	polling atomic.Bool
+	// polling is set while the section has no working watch, and changed by
+	// the watch goroutine when a folder changed.
+	polling, changed atomic.Bool
 
 	mu      sync.Mutex // guards the fields below and serialises retargeting
-	latest  gitWatchSpec
+	seq     uint64
+	dirs    []string
 	set     *dirwatch.Set
 	stopped bool
-	// changed is set by the watch goroutine and taken by the update goroutine.
-	changed atomic.Bool
-}
-
-// gitWatchSpec is what the watch follows: one reading of the section.
-type gitWatchSpec struct {
-	dir              string
-	found            bool
-	branch, upstream string
-	live             bool
-}
-
-// gitDirChangedMsg says a watched folder of the section's repository changed.
-type gitDirChangedMsg struct{ at time.Time }
-
-func (m *OS) gitWatchChan() chan struct{} {
-	if m.gitWatch.ch == nil {
-		m.gitWatch.ch = make(chan struct{}, 1)
-	}
-	return m.gitWatch.ch
-}
-
-// listenForGitChange waits for a watched folder to change, lets the burst
-// settle, and hands one message to the loop.
-func listenForGitChange(stop <-chan struct{}, ch chan struct{}) tea.Cmd {
-	return func() tea.Msg {
-		select {
-		case _, ok := <-ch:
-			if !ok {
-				return nil
-			}
-		case <-stop:
-			return nil
-		}
-		if !dirwatch.AfterBurst(ch, stop) {
-			return nil
-		}
-		return gitDirChangedMsg{at: time.Now()}
-	}
 }
 
 // gitSectionPolls reports whether the section reads every interval, because
@@ -104,96 +66,89 @@ func (m *OS) gitSectionPolls() bool {
 	return m.Client == ClientUnknown || m.gitWatch.polling.Load()
 }
 
-// gitWatchTarget is what the watch should follow: the reading on screen, or
-// nothing when no rail draws the section.
-func (m *OS) gitWatchTarget(shown bool) gitWatchSpec {
-	v := m.gitView
-	if !shown || v.Dir == "" || m.Client == ClientUnknown {
-		return gitWatchSpec{}
-	}
-	return gitWatchSpec{dir: v.Dir, found: v.Found, branch: v.State.Branch, upstream: v.State.Upstream, live: true}
-}
-
-// syncGitWatch points the watch at gitWatchTarget. Update calls it after the
-// rails' git syncs, with shown set when either rail draws the section.
+// syncGitWatch points the watch at the folders of the reading on screen, or
+// at none when no rail draws the section. Update calls it after the rails'
+// git syncs, with shown set when either rail draws the section. A model
+// nobody named watches nothing, for the reason fileWatchTarget gives.
 func (m *OS) syncGitWatch(shown bool) {
-	target := m.gitWatchTarget(shown)
 	gw := &m.gitWatch
-	if target == gw.want {
+	if m.Client == ClientUnknown || (gw.gen == m.gitView.gen && gw.shown == shown) {
 		return
 	}
-	gw.want = target
-	ch := m.gitWatchChan()
+	gw.gen, gw.shown = m.gitView.gen, shown
+	dir := ""
+	if shown {
+		dir = m.gitView.Dir
+	}
+	ch := m.fileWatchChan()
 	gw.mu.Lock()
-	gw.latest = target
+	gw.seq++
+	seq := gw.seq
 	gw.mu.Unlock()
-	go gw.retarget(target, ch)
+	go gw.retarget(dir, seq, ch)
 }
 
-func (gw *gitWatcher) retarget(target gitWatchSpec, ch chan struct{}) {
+func (gw *gitWatcher) retarget(dir string, seq uint64, ch chan struct{}) {
 	gw.mu.Lock()
 	defer gw.mu.Unlock()
-	if gw.stopped || target != gw.latest {
+	if gw.stopped || seq != gw.seq {
+		return
+	}
+	var dirs []string
+	if dir != "" {
+		dirs, _ = gitstate.WatchDirs(dir)
+	}
+	if gw.set != nil && slices.Equal(dirs, gw.dirs) {
 		return
 	}
 	if gw.set != nil {
 		gw.set.Close()
-		gw.set = nil
+		gw.set, gw.dirs = nil, nil
 	}
-	if !target.live {
-		gw.polling.Store(false)
+	gw.polling.Store(false)
+	if len(dirs) == 0 {
 		return
 	}
-	dirs, _ := gitstate.WatchDirs(target.dir)
 	set, err := dirwatch.NewSet(func(string) {
 		gw.changed.Store(true)
 		dirwatch.Nudge(ch)
 	})
+	if err == nil {
+		for _, d := range dirs {
+			if err = set.Add(d); err != nil {
+				set.Close()
+				break
+			}
+		}
+	}
 	if err != nil {
 		gw.polling.Store(true)
 		return
 	}
-	for _, d := range dirs {
-		if err := set.Add(d); err != nil {
-			set.Close()
-			gw.polling.Store(true)
-			return
-		}
-	}
-	gw.set = set
-	gw.polling.Store(false)
+	gw.set, gw.dirs = set, dirs
 }
 
-// stopGitWatch closes the watch for good, when the client exits. Closing the
-// channel ends the listener.
+// stopGitWatch closes the watch for good, when the client exits.
 func (m *OS) stopGitWatch() {
 	gw := &m.gitWatch
 	gw.mu.Lock()
-	defer gw.mu.Unlock()
-	if gw.stopped {
-		return
-	}
 	gw.stopped = true
 	if gw.set != nil {
 		gw.set.Close()
 		gw.set = nil
 	}
-	if gw.ch != nil {
-		close(gw.ch)
-	}
+	gw.mu.Unlock()
 }
 
 // noteGitStale marks the section's reading out of date after msg: a watched
 // folder changed, or, with changed paths counted, a pane printed output.
 func (m *OS) noteGitStale(msg tea.Msg) {
 	switch msg.(type) {
-	case gitDirChangedMsg:
+	case fileDirChangedMsg:
 		if m.gitWatch.changed.Swap(false) {
 			m.gitView.stale = true
-			if !m.gitView.Found {
-				// A ".git" made in a folder that was in no repository.
-				m.gitView.fresh = true
-			}
+			// A ".git" made in a folder that was in no repository.
+			m.gitView.fresh = !m.gitView.Found
 		}
 	case PTYDataMsg:
 		if m.Settings.SidebarGitDirty && m.gitView.Found {

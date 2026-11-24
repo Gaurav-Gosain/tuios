@@ -424,7 +424,6 @@ func (m *OS) Init() tea.Cmd {
 		listenNotificationUntil(m.stopSignal(), m.ensureNotificationChan()),
 		listenCwdChangeUntil(m.stopSignal(), m.ensureCwdChangeChan()),
 		listenForFileChange(m.stopSignal(), m.fileWatchChan(), time.Time{}),
-		listenForGitChange(m.stopSignal(), m.gitWatchChan()),
 		listenNvimNavigationUntil(m.stopSignal(), m.ensureNvimNavigationChan()),
 		listenDnDUntil(m.stopSignal(), m.ensureDnDInbox()),
 	}
@@ -1267,11 +1266,6 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		m.ApplyGitState(msg)
 		return m, nil
 
-	case gitDirChangedMsg:
-		// A folder of the git section's repository changed. The sync after
-		// this handler reads it again. See sidebar_git_watch.go.
-		return m, listenForGitChange(m.stopSignal(), m.gitWatchChan())
-
 	case PendingCopyMsg:
 		return m, m.HandlePendingCopy(msg.Seq)
 
@@ -1823,9 +1817,12 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// The listed folder, or a folder open in the tree, changed on disk.
 		// See sidebar_files_watch.go. A change that names nothing is the
 		// root's: a daemon push and an older watch say only that.
+		// A nudge from the git section's watch names nothing either, and
+		// the sync after this handler reads the repository again. See
+		// sidebar_git_watch.go.
 		root, dirs := m.fileWatch.takeDirty()
 		cmd := m.refreshChangedTree(dirs, root)
-		if root || len(dirs) == 0 {
+		if root || (len(dirs) == 0 && !m.gitWatch.changed.Load()) {
 			cmd = tea.Batch(m.refreshChangedFolder(), cmd)
 		}
 		return m, tea.Batch(cmd, listenForFileChange(m.stopSignal(), m.fileWatchChan(), msg.at))
