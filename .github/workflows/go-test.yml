@@ -162,7 +162,9 @@ jobs:
             echo "Every package runs." | tee -a "$GITHUB_STEP_SUMMARY"
             echo "pkgs=all" >> "$GITHUB_OUTPUT"
           else
-            grep -vE '/internal/(app|session)$' "$RUNNER_TEMP/affected.txt" > "$RUNNER_TEMP/rest.txt" || true
+            # The libraries (tuios.dev/...) test in the libraries workflow
+            # instead, on their own, whenever their folder changes.
+            grep -vE '/internal/(app|session)$|^tuios\.dev/' "$RUNNER_TEMP/affected.txt" > "$RUNNER_TEMP/rest.txt" || true
             echo "This change can affect $(grep -c . "$RUNNER_TEMP/affected.txt") packages; $(grep -c . "$RUNNER_TEMP/rest.txt") run in this job." | tee -a "$GITHUB_STEP_SUMMARY"
             if [ -s "$RUNNER_TEMP/rest.txt" ]; then echo "pkgs=some" >> "$GITHUB_OUTPUT"; else echo "pkgs=none" >> "$GITHUB_OUTPUT"; fi
           fi
@@ -185,7 +187,17 @@ jobs:
         if: steps.affected.outputs.pkgs == 'all'
         # internal/app and internal/session run their tests one after another
         # for over three minutes each. They run in the app-session job below,
-        # split into lanes, and this job runs every other package.
+        # split into lanes, and this job runs every other package of the root
+        # module.
+        #
+        # The Go libraries of this repository (progstatus, vt, swatch, shot,
+        # tml, plot, loom, sketch, acp, harness, nitpick) do not run here.
+        # They took 257 of the 429 package-seconds of this step, sketch alone
+        # 158. A library imports no tuios package, so only a change to its own
+        # folder or to another library's can change its tests. That change
+        # runs the libraries workflow's alone job for the library, and sketch
+        # goldens for sketch. The nightly race job tests every module on the
+        # root toolchain.
         #
         # TestTheSuiteWritesNothingOutsideItsOwnTree would run the whole suite
         # a second time. The seed and check steps around this one do its work.
@@ -200,11 +212,8 @@ jobs:
         # green on code that no longer exists.
         run: |
           set -o pipefail
-          pkgs="./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/... ./nitpick/..."
-          # $pkgs is split on purpose: one argument per pattern.
-          # shellcheck disable=SC2086
           SPLIT="./internal/app ./internal/session" ONLY=rest LOG="$RUNNER_TEMP/unit.log" \
-            scripts/go-test-lanes.sh -count=1 -timeout 20m -skip '^TestTheSuiteWritesNothingOutsideItsOwnTree$' -- $pkgs
+            scripts/go-test-lanes.sh -count=1 -timeout 20m -skip '^TestTheSuiteWritesNothingOutsideItsOwnTree$' -- ./...
         env:
           HOME: ${{ runner.temp }}/home
           XDG_CONFIG_HOME: ${{ runner.temp }}/home/config
@@ -472,8 +481,8 @@ jobs:
     if: github.event_name != 'schedule' && inputs.sketch_fma != 'false'
     # tuios.dev/sketch promises pele's SVG byte for byte. The Go spec lets the
     # compiler fuse x*y+z into one FMA, which rounds once where JavaScript
-    # rounds twice. arm64 fuses, and so does amd64 at GOAMD64=v3. The unit job
-    # runs on amd64 at v1, which never fuses, so these two run the goldens
+    # rounds twice. arm64 fuses, and so does amd64 at GOAMD64=v3. The sketch
+    # alone job of libraries.yml runs on amd64 at v1, which never fuses, so these two run the goldens
     # where the compiler does. If one fails, wrap the product in float64(),
     # which the spec says rounds it on its own.
     strategy:
