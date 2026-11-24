@@ -152,17 +152,52 @@ theorem gate_of_sessionKind {s : State} {pa : PaneAuth} {v : String}
   intro h
   split at h <;> simp_all [sessionKind] <;> (repeat' split at h) <;> simp_all
 
+/-- The mail rule (holdMail) holds only send-agent-message and list-agents. -/
+theorem holdMail_verb {s : State} {pa : PaneAuth} {v : String} {t : Target}
+    (h : s.holdMail pa v t ≠ none) : v = "send-agent-message" ∨ v = "list-agents" := by
+  by_cases h1 : v = "send-agent-message"
+  · exact Or.inl h1
+  · by_cases h2 : v = "list-agents"
+    · exact Or.inr h2
+    · exfalso; apply h; unfold State.holdMail; simp [h1, h2]
+
+theorem holdMail_none {s : State} {pa : PaneAuth} {v : String} {t : Target}
+    (h1 : v ≠ "send-agent-message") (h2 : v ≠ "list-agents") : s.holdMail pa v t = none := by
+  unfold State.holdMail; simp [h1, h2]
+
+/-- A verb whose kind is neither mail nor read is never held by the mail
+rule. -/
+theorem holdMail_none_of_kind {s : State} {pa : PaneAuth} {v : String} {t : Target}
+    (hk : (verbInfo v).grant ≠ .mail ∧ (verbInfo v).grant ≠ .read) : s.holdMail pa v t = none :=
+  holdMail_none (by intro e; subst e; simp [verbInfo] at hk) (by intro e; subst e; simp [verbInfo] at hk)
+
+/-- Mail is sent as the pane itself: the mail rule passes a send only with
+from set to the caller's own window. -/
+theorem mail_sent_as_itself {s : State} {pa : PaneAuth} {t t' : Target}
+    (h : s.holdMail pa "send-agent-message" t = some (.ok t')) : t'.from_ = pa.window := by
+  unfold State.holdMail at h
+  repeat' split at h
+  all_goals (first | (cases h; rfl) | simp_all)
+
+/-- The mail rule passes a pane only when it holds mail. -/
+theorem holdMail_needs_mail {s : State} {pa : PaneAuth} {v : String} {t : Target} {r : Except Refusal Target}
+    (h : s.holdMail pa v t = some r) : pa.grants.expand.mail = true := by
+  unfold State.holdMail at h
+  split at h
+  · cases h
+  · rename_i hc; simp_all
+
 /-- The path of checkGrants for a pane without admin when the own tree rule
 does not apply: the call either passes the gate untouched or is held to the
 gate's reach. -/
 theorem checkGrants_reach {s : State} {c : Caller} {pa : PaneAuth} {v : String} {t t' : Target}
     (ha : s.auth c = some pa) (hn : pa.grants.admin = false) (ht : s.holdToOwnTree pa v t = none)
-    (h : s.checkGrants c v t = .ok t') :
+    (hm : s.holdMail pa v t = none) (h : s.checkGrants c v t = .ok t') :
     (s.grantGate pa v = .ok .pass ∧ t' = t) ∨
       ∃ f, s.grantGate pa v = .ok (.reach f) ∧ (t'.session = "" ∨ f t'.session = true) := by
   unfold State.checkGrants at h
   rw [ha] at h
-  simp only [hn, Bool.false_eq_true, ↓reduceIte, ht] at h
+  simp only [hn, Bool.false_eq_true, ↓reduceIte, ht, hm] at h
   split at h
   · cases h
   · split at h
@@ -180,17 +215,18 @@ theorem checkGrants_reach {s : State} {c : Caller} {pa : PaneAuth} {v : String} 
           · rw [holdTyping_keeps h]; exact r
           · cases h; exact r
 
-/-- The session boundary. A pane without admin, outside its own tree rule,
-reaches through a verb that names a session only its own session, a session
+/-- The session boundary. A pane without admin, outside its own tree rule
+and the mail rule, reaches through a verb that names a session only its own session, a session
 of its fan group (with read for a read, with fan otherwise), or the attempts
 it judges. -/
 theorem pane_stays_in_scope {s : State} {c : Caller} {pa : PaneAuth} {v : String} {t t' : Target}
     (ha : s.auth c = some pa) (hn : pa.grants.admin = false) (ht : s.holdToOwnTree pa v t = none)
+    (hm : s.holdMail pa v t = none)
     (hk : sessionKind (verbInfo v).grant = true) (h : s.checkGrants c v t = .ok t') :
     t'.session = "" ∨ t'.session = pa.session ∨
       (s.inScope pa.session t'.session = true ∧ ((verbInfo v).grant = .read ∨ pa.grants.expand.fan = true)) ∨
       s.judgeReaches pa t'.session = true := by
-  rcases checkGrants_reach ha hn ht h with ⟨hp, _⟩ | ⟨f, hg, hr⟩
+  rcases checkGrants_reach ha hn ht hm h with ⟨hp, _⟩ | ⟨f, hg, hr⟩
   · exact absurd hp (gate_of_sessionKind hk)
   · rcases hr with hr | hr
     · exact Or.inl hr
@@ -198,16 +234,18 @@ theorem pane_stays_in_scope {s : State} {c : Caller} {pa : PaneAuth} {v : String
 
 /-- Writing outside the pane's own session needs fan: a pane without admin
 types into, or leaves mail in, another session only with fan, and only in
-its fan group. respond is a write verb, so this is also the reach of
+its fan group, unless the mail rule holds the call (holdMail_verb,
+holdMail_needs_mail: a send-agent-message from a pane with mail). respond is a write verb, so this is also the reach of
 respond that the respond row of skills/tuios/grants.md, the grant table of
 docs/protocol.md and the respond verb doc state. -/
 theorem write_outside_needs_fan {s : State} {c : Caller} {pa : PaneAuth} {v : String} {t t' : Target}
     (ha : s.auth c = some pa) (hn : pa.grants.admin = false) (ht : s.holdToOwnTree pa v t = none)
+    (hm : s.holdMail pa v t = none)
     (hk : (verbInfo v).grant = .mail ∨ (verbInfo v).grant = .write) (h : s.checkGrants c v t = .ok t')
     (hs : t'.session ≠ "") (ho : t'.session ≠ pa.session) :
     pa.grants.expand.fan = true ∧ s.inScope pa.session t'.session = true := by
   have hk' : sessionKind (verbInfo v).grant = true := by rcases hk with hk | hk <;> simp [hk, sessionKind]
-  rcases checkGrants_reach ha hn ht h with ⟨hp, _⟩ | ⟨f, hg, hr⟩
+  rcases checkGrants_reach ha hn ht hm h with ⟨hp, _⟩ | ⟨f, hg, hr⟩
   · exact absurd hp (gate_of_sessionKind hk')
   · rcases hr with hr | hr
     · exact absurd hr hs
@@ -222,7 +260,8 @@ theorem tasks_and_reports_stay_home {s : State} {c : Caller} {pa : PaneAuth} {v 
     (hk : (verbInfo v).grant = .task ∨ (verbInfo v).grant = .self) (h : s.checkGrants c v t = .ok t') :
     t'.session = "" ∨ t'.session = pa.session := by
   have hk' : sessionKind (verbInfo v).grant = true := by rcases hk with hk | hk <;> simp [hk, sessionKind]
-  rcases checkGrants_reach ha hn ht h with ⟨hp, _⟩ | ⟨f, hg, hr⟩
+  have hm : s.holdMail pa v t = none := holdMail_none_of_kind (by rcases hk with hk | hk <;> simp [hk])
+  rcases checkGrants_reach ha hn ht hm h with ⟨hp, _⟩ | ⟨f, hg, hr⟩
   · exact absurd hp (gate_of_sessionKind hk')
   · rcases hr with hr | hr
     · exact Or.inl hr
@@ -238,7 +277,8 @@ theorem admin_verbs_need_admin {s : State} {c : Caller} {pa : PaneAuth} {v : Str
   | some r => right; simp
   | none =>
     left
-    rcases checkGrants_reach ha hn ht h with ⟨hp, _⟩ | ⟨f, hg, _⟩
+    have hm : s.holdMail pa v t = none := holdMail_none_of_kind (by rcases hk with hk | hk <;> simp [hk])
+    rcases checkGrants_reach ha hn ht hm h with ⟨hp, _⟩ | ⟨f, hg, _⟩
     · unfold State.grantGate at hp
       rcases hk with hk | hk <;> simp only [hk] at hp <;> split at hp <;> simp_all
     · unfold State.grantGate at hg
@@ -332,7 +372,7 @@ theorem fan_closes_only_its_tree {s : State} {c : Caller} {pa : PaneAuth} {t t' 
     ∃ w, s.closeTarget pa t = some w ∧ t'.window = w.id ∧ w.id ≠ pa.window ∧ Desc s pa.window w.id := by
   cases ht : s.holdToOwnTree pa "close-window" t with
   | none =>
-    rcases checkGrants_reach ha hn ht h with ⟨hp, _⟩ | ⟨f, hg, _⟩
+    rcases checkGrants_reach ha hn ht (holdMail_none (by simp) (by simp)) h with ⟨hp, _⟩ | ⟨f, hg, _⟩
     · simp [State.grantGate, verbInfo, transferVerb] at hp
     · simp [State.grantGate, verbInfo, transferVerb] at hg
   | some r =>
@@ -600,9 +640,11 @@ theorem types_only_into_no_more {s : State} {c : Caller} {pa : PaneAuth} {v : St
     rcases hv with rfl | rfl | rfl | rfl <;> simp
   have htv : typingVerb v = true := by rcases hv with rfl | rfl | rfl | rfl <;> decide
   have hd : (verbInfo v).session = true := by rcases hv with rfl | rfl | rfl | rfl <;> rfl
+  have hm : s.holdMail pa v t = none :=
+    holdMail_none (by rcases hv with rfl | rfl | rfl | rfl <;> simp) (by rcases hv with rfl | rfl | rfl | rfl <;> simp)
   unfold State.checkGrants at h
   rw [ha] at h
-  simp only [hn, Bool.false_eq_true, ↓reduceIte, hnt] at h
+  simp only [hn, Bool.false_eq_true, ↓reduceIte, hnt, hm] at h
   split at h
   · cases h
   · split at h
@@ -658,8 +700,9 @@ theorem reports_only_for_own_pane {s : State} {c : Caller} {pa : PaneAuth} {v : 
   split at h
   · simp only [htv, Bool.false_eq_true, ↓reduceIte] at h
     exact holdOwnRecord_window hr h
-  · rw [hnt] at h
-    simp only at h
+  · have hm : s.holdMail pa v t = none := holdMail_none_of_kind (by simp [hk])
+    rw [hnt] at h
+    simp only [hm] at h
     split at h
     · cases h
     · split at h

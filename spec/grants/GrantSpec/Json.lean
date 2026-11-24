@@ -22,6 +22,7 @@ private def opt [FromJson α] (j : Json) (k : String) : Except String (Option α
 /-- The grant names in documented order (config.PaneGrantNames). -/
 def Grants.names (g : Grants) : List String :=
   (if g.read then ["read"] else []) ++ (if g.write then ["write"] else []) ++
+  (if g.mail then ["mail"] else []) ++
   (if g.fan then ["fan"] else []) ++ (if g.respond then ["respond"] else []) ++
   (if g.files then ["files"] else []) ++ (if g.task then ["task"] else []) ++
   (if g.admin then ["admin"] else [])
@@ -29,6 +30,7 @@ def Grants.names (g : Grants) : List String :=
 def Grants.ofNames (l : List String) : Except String Grants :=
   l.foldlM (fun g n => match n with
     | "read" => pure { g with read := true } | "write" => pure { g with write := true }
+    | "mail" => pure { g with mail := true }
     | "fan" => pure { g with fan := true } | "respond" => pure { g with respond := true }
     | "files" => pure { g with files := true } | "task" => pure { g with task := true }
     | "admin" => pure { g with admin := true }

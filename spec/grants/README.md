@@ -82,8 +82,10 @@ the tested ones.
 | `expand_respond` | Admin does not give respond |
 | `covers_respond`, `covers_admin` | A pane gives respond or admin only when it holds it |
 | `covers_trans`, `covers_refl`, `covers_meet` | What a pane holds covers what it gives on |
-| `pane_stays_in_scope` | A pane without admin reaches through a verb that names a session only its own session, a session of its fan group (with read for a read, with fan for the rest), or the attempts it judges |
-| `write_outside_needs_fan` | A pane without admin types into, or leaves mail in, another session only with fan, and only in its fan group. This is also the reach of respond |
+| `pane_stays_in_scope` | Outside the mail rule, a pane without admin reaches through a verb that names a session only its own session, a session of its fan group (with read for a read, with fan for the rest), or the attempts it judges |
+| `write_outside_needs_fan` | Outside the mail rule, a pane without admin types into, or leaves mail in, another session only with fan, and only in its fan group. This is also the reach of respond |
+| `holdMail_verb`, `holdMail_needs_mail` | The mail rule holds only `send-agent-message` and `list-agents`, and only for a pane that holds mail. It types into nothing |
+| `mail_sent_as_itself` | Mail the mail rule passes is sent as the caller's own pane |
 | `tasks_and_reports_stay_home` | A task write and a report of a pane without admin stay in its own session |
 | `reports_only_for_own_pane` | A pane reports only about its own pane unless it holds respond, with admin too |
 | `admin_verbs_need_admin` | A pane without admin calls a verb that needs admin only as a copy with files, or as a close of a pane of its own tree |
@@ -98,7 +100,9 @@ the tested ones.
 | `set_grants_gives_no_more` | set-pane-grants from a pane gives no more than the pane holds, and a pane without admin sets only its own grants |
 | `types_only_into_no_more` | A pane without admin types into another pane only when that pane holds nothing the caller does not, and is not on a prompt unless the caller holds respond |
 
-`pane_stays_in_scope` leaves out the own tree rule. That rule lets a pane
+`pane_stays_in_scope` leaves out the mail rule, which lets a pane with mail
+leave mail in any session and list the agents of every session. It leaves
+out the own tree rule too. That rule lets a pane
 with fan close a pane of its tree in any session, and wait on its tree with
 `wait-for --select`. The `wait-for` handler refuses `select` with a session,
 a window or `any_session`, so such a wait reaches no other session.
@@ -124,6 +128,8 @@ a window or `any_session`, so such a wait reaches no other session.
   parent's depth.
 - How a caller is placed in a pane (`paneAuthority`). The model takes the
   pane as given.
+- The `host` and `all` parameters of the mail rule, and the check of a mail
+  attachment for a session out of write reach (`mailAttachmentRefusal`).
 - What `admitVerb` (`verb_protocol.go`) does before `checkGrants`: it checks
   the parameter names, refuses some verbs with the agent features off or over
   a link, and rewrites the session and window with `followOwnPane`,

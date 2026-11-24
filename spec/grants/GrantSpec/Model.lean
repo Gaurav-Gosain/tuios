@@ -32,6 +32,7 @@ namespace GrantSpec
 structure Grants where
   read : Bool := false
   write : Bool := false
+  mail : Bool := false
   fan : Bool := false
   respond : Bool := false
   files : Bool := false
@@ -41,16 +42,17 @@ structure Grants where
 
 /-- expand: admin implies every grant but respond. -/
 def Grants.expand (g : Grants) : Grants :=
-  if g.admin then { g with read := true, write := true, fan := true, files := true, task := true } else g
+  if g.admin then { g with read := true, write := true, mail := true, fan := true, files := true, task := true }
+  else g
 
 /-- Every flag of a is in b. -/
 def Grants.le (a b : Grants) : Bool :=
-  (!a.read || b.read) && (!a.write || b.write) && (!a.fan || b.fan) && (!a.respond || b.respond) &&
+  (!a.read || b.read) && (!a.write || b.write) && (!a.mail || b.mail) && (!a.fan || b.fan) && (!a.respond || b.respond) &&
   (!a.files || b.files) && (!a.task || b.task) && (!a.admin || b.admin)
 
 /-- The flags both hold. -/
 def Grants.meet (a b : Grants) : Grants :=
-  ⟨a.read && b.read, a.write && b.write, a.fan && b.fan, a.respond && b.respond,
+  ⟨a.read && b.read, a.write && b.write, a.mail && b.mail, a.fan && b.fan, a.respond && b.respond,
    a.files && b.files, a.task && b.task, a.admin && b.admin⟩
 
 /-- Covers: g holds everything o holds, so a holder of g may give o. -/
@@ -439,6 +441,26 @@ def State.writeReach (s : State) (pa : PaneAuth) (target : String) : Bool :=
   else if s.inScope pa.session target then pa.grants.expand.fan
   else false
 
+/-- holdMailSend and holdMailListing (mail_grant.go): a pane holding mail
+leaves mail in any session as itself, and lists the agent panes of every
+session to address it. A listing inside its read reach is left to the read
+rule. none when the rule does not apply. The host and all parameters are out
+of the model. -/
+def State.holdMail (s : State) (pa : PaneAuth) (verb : String) (t : Target) :
+    Option (Except Refusal Target) :=
+  if !pa.grants.expand.mail || pa.session = "" then none
+  else if verb = "send-agent-message" then
+    if t.from_ ≠ "" ∧ t.from_ ≠ pa.window then some (.error .forbidden)
+    else if !t.select ∧ t.session = "" then some (.ok { t with from_ := pa.window, session := pa.session })
+    else some (.ok { t with from_ := pa.window })
+  else if verb = "list-agents" then
+    let wide := t.allSessions || (t.select && t.session == "")
+    let target := if t.session = "" then pa.session else t.session
+    if !wide && pa.grants.expand.read && s.inScope pa.session target then none
+    else if wide then some (.ok t)
+    else some (.ok { t with session := target })
+  else none
+
 /-- What the grants of a pane without admin let a verb do: pass with no
 session check, or reach the sessions the function allows. -/
 inductive Gate where
@@ -483,7 +505,10 @@ def State.checkGrants (s : State) (c : Caller) (verb : String) (t : Target) : Ex
       | some r => r
       | none =>
         if readsBuffers verb && !pa.grants.expand.read then .error .forbidden
-        else match s.grantGate pa verb with
+        else match s.holdMail pa verb t with
+        | some r => r
+        | none =>
+          match s.grantGate pa verb with
           | .error d => .error d
           | .ok .pass => .ok t
           | .ok (.reach f) =>
