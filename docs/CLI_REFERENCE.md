@@ -213,7 +213,7 @@ it if it is gone. `startup.window` also focuses one pane in it. See
 - `--debug`: Enable debug logging
 - `--server <name>`: Use the daemon named `<name>`. It has its own socket and saved sessions. See [Running a separate daemon](SESSIONS.md#running-a-separate-daemon)
 - `--cpuprofile <file>`: Write a CPU profile to file. The profile is written by the interface (`tuios`, `attach`, `new`) and by the commands that keep running: `daemon`, `ssh`, `mcp`, `stdio-proxy`, `pair`, `agent-proto`, `tape play`, `mermaid --watch` and `--demo`, and `gui-bridge`. It is complete when the command ends, by its signal or the end of its input. `gui-bridge` writes one only when you run it by hand, as the renderer starts it with a fixed command line. `start-server` does not pass `--cpuprofile` to the daemon it starts. While a CPU profile is being written, `/debug/pprof/profile` answers 500
-- `--pprof <addr>`: Serve /debug/pprof profiles on this address for live profiling, such as `:6060`. With no host, the server listens on 127.0.0.1 only. The profiles have no password. Name `0.0.0.0` only on a network you trust. Delta profiles (`?seconds=` on heap and the like) are not served. Take two and compare them with `go tool pprof -diff_base`. With `start-server`, the daemon that the command starts serves the profiles. With `ssh`, the SSH server serves the profiles. The commands that keep running serve them too: `daemon`, `gui-bridge`, `mcp`, `stdio-proxy`, `pair`, `subscribe`, `agent-proto`, `tape play` and `mermaid --watch` and `--demo`
+- `--pprof <addr>`: Serve /debug/pprof profiles on this address for live profiling, such as `:6060`. With no host, the server listens on 127.0.0.1 only. The profiles have no password. Name `0.0.0.0` only on a network you trust. Delta profiles (`?seconds=` on heap and the like) are not served. Take two and compare them with `go tool pprof -diff_base`. With `start-server`, the daemon that the command starts serves the profiles. With `ssh`, the SSH server serves the profiles. The commands that keep running serve them too: `daemon`, `gui-bridge`, `mcp`, `stdio-proxy`, `pair`, `subscribe`, `bar-status --follow`, `agent-proto`, `tape play` and `mermaid --watch` and `--demo`
 - `-h, --help`: Show help for tuios
 - `-v, --version`: Show version information
 
@@ -2763,6 +2763,27 @@ says when the start was left out. Stopping tuios stops the command there too.
 needs `open` in the host's policy, as `new-window --host` does. `--host` takes
 no `-s` or `-w`. With `--json`, the result carries `host`, `stdout`, `stderr`,
 `exit`, `signal`, `timed_out` and `duration_ms`.
+
+### `tuios bar-status`
+
+Print what your agents need from you as one JSON line, for a status bar. The
+line has the fields a Waybar custom module reads: `text`, `alt`, `tooltip`
+and `class`. See [STATUS_BAR.md](STATUS_BAR.md) for Waybar and the Omarchy bar.
+
+`class` and `alt` are the same word: `needs-you` (an approval, a question or
+a plan waits, or an agent failed), `mail`, `working`, `review` (a finished
+turn nobody looked at), `idle` or `off` (the daemon does not run). `text` is
+the count of that class, and empty for `idle` and `off`. The line also has
+`needs_you`, `mail`, `review` and `working` as numbers, and `rows`: the
+items that need you, oldest first, at most 8.
+
+**Usage:**
+```bash
+tuios bar-status [flags]
+```
+
+**Flags:**
+- `--follow`: Print a line at the start and a new line each time the line changes. It waits on the event stream and does no work while nothing changes. When the daemon stops, it prints an `off` line and waits for a daemon to start
 
 ### `tuios subscribe`
 
