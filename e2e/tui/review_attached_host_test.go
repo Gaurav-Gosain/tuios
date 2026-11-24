@@ -1,10 +1,12 @@
 package tuie2e
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 )
@@ -55,5 +57,71 @@ func TestReviewWhileAttachedThroughAHost(t *testing.T) {
 		t.Fatalf("ASSERTION: the review was refused or read on this machine:\n%s", term.Snapshot())
 	}
 	saveCockpitFrames(t, term, "attached-review-open")
+
+	// A note goes to alpha's daemon too, as the person, over the link.
+	if err := term.SendKeys("j", "c"); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the note line", "save", "drop")
+	if err := term.SendKeys("say where it runs"); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.SendKeys(tuitest.Enter); err != nil {
+		t.Fatal(err)
+	}
+	waitText(t, term, "the note under its line", "note: say where it runs", "1 note")
+	if out, _ := cliWithin(t, f.alpha, f.env, "review", "-s", "far", "-w", "far-repo"); !strings.Contains(out, "say where it runs") {
+		t.Fatalf("ASSERTION: alpha's daemon has no note from the review:\n%s", out)
+	}
+	saveCockpitFrames(t, term, "attached-review-note")
+
+	// The open review keeps one connection to alpha and calls nothing while
+	// nothing changes: no new client comes over the link while it sits open.
+	// A call over the link is a client of the link's process on alpha. The
+	// CLI that lists the clients is one too, of its own process, so only the
+	// link's processes count.
+	before := alphaClients(t, f)
+	link := map[int]bool{}
+	for _, pid := range before {
+		link[pid] = true
+	}
+	stayTrue(t, "the open review dials alpha again while nothing changes", 3*time.Second, func() (bool, string) {
+		for id, pid := range alphaClients(t, f) {
+			if _, seen := before[id]; !seen && link[pid] {
+				return false, "new client over the link: " + id
+			}
+		}
+		return true, ""
+	})
 	alive(t, term, "after the review on alpha")
+}
+
+// alphaClients is alpha's clients, each id with its process id.
+func alphaClients(t *testing.T, f *globalFleet) map[string]int {
+	t.Helper()
+	out, err := cliWithin(t, f.alpha, f.env, "list-clients", "--json")
+	if err != nil {
+		t.Fatalf("list-clients on alpha: %v\n%s", err, out)
+	}
+	var list []struct {
+		ID  string `json:"client_id"`
+		PID int    `json:"pid"`
+	}
+	if err := json.Unmarshal([]byte(out), &list); err != nil {
+		var wrapped struct {
+			Clients []struct {
+				ID  string `json:"client_id"`
+				PID int    `json:"pid"`
+			} `json:"clients"`
+		}
+		if json.Unmarshal([]byte(out), &wrapped) != nil {
+			t.Fatalf("list-clients --json on alpha printed %q", out)
+		}
+		list = wrapped.Clients
+	}
+	clients := map[string]int{}
+	for _, c := range list {
+		clients[c.ID] = c.PID
+	}
+	return clients
 }

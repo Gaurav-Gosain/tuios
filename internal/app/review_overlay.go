@@ -454,6 +454,12 @@ func (m *OS) InboxReview() (tea.Cmd, bool) {
 func (m *OS) SidebarAgentReview(sessionID, windowID string) (tea.Cmd, bool) {
 	_, _, label, ok := m.railPane(sessionID, windowID)
 	if !ok {
+		// railPane knows only the attached session's panes on a client
+		// attached through a host. A row of another session there is on the
+		// same machine, so its review goes to the same daemon.
+		label, ok = m.attachedHostPane(sessionID, windowID)
+	}
+	if !ok {
 		m.reviewNotify("That pane is on another machine. Attach there to review it", "info", m.Settings.NotificationDuration)
 		return nil, true
 	}
@@ -465,6 +471,21 @@ func (m *OS) SidebarAgentReview(sessionID, windowID string) (tea.Cmd, bool) {
 		sessionID = m.SessionName
 	}
 	return m.openReview(sessionID, windowID, who), true
+}
+
+// attachedHostPane is the label of the pane windowID of sessionID on the
+// host this client is attached through, as that host's daemon listed it. ok
+// is false on this machine, or for a pane the listing does not have.
+func (m *OS) attachedHostPane(sessionID, windowID string) (label string, ok bool) {
+	if m.AttachedHost == "" || m.DaemonClient == nil {
+		return "", false
+	}
+	for _, w := range m.DaemonClient.SessionWindows(sessionID) {
+		if w.ID == windowID {
+			return railWindowLabel("", w.AgentHarness, w.ForegroundCmd, w.Title), true
+		}
+	}
+	return "", false
 }
 
 // openReview starts reading a pane's diff. The overlay opens when it arrives.
@@ -484,11 +505,17 @@ func (m *OS) openReview(sessionName, windowID, who string) tea.Cmd {
 
 // reviewCaller makes the review's verb calls. They go to the daemon of the
 // attached session, which holds the pane and its repository: this machine's,
-// or the attached host's through the link.
-func (m *OS) reviewCaller() inboxVerbCall { return m.machineCaller(m.attachedMachine()) }
+// or the attached host's on the connection reviewFar keeps over the link.
+func (m *OS) reviewCaller() inboxVerbCall {
+	if m.Inbox.call == nil && m.AttachedHost != "" && m.DaemonClient != nil {
+		return m.reviewFar.caller(m.DaemonClient, m.verbDialer())
+	}
+	return m.machineCaller(m.attachedMachine())
+}
 
 // CloseReview closes the overlay and forgets what it read.
 func (m *OS) CloseReview() {
+	m.reviewFar.drop()
 	m.review = reviewState{gen: m.review.gen + 1, split: m.review.split}
 }
 
