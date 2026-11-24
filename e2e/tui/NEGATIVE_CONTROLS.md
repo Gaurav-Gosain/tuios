@@ -11767,13 +11767,22 @@ The positive half is in the same run: the copy pipe key `p` is still warned abou
 
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
-| `quoteDropPath` answers `pastePathText` (POSIX single quotes) for every shell | `fish`: "after dropping \"it's a file.txt\" the command line is not ...". The subtests after it fail too, because fish is still running in the pane | **caught** |
+| `quoteDropPath` answers `pastePathText` (POSIX single quotes) for every shell | `fish`: "after dropping \"it's a file.txt\" the command line is not ...". Until 2026-11-24 the subtests after it failed too, because fish still ran in the pane. Now the test stops after the failed round | **caught** |
 
 The sh round later failed in CI, where sh is dash, and passed on the machine above, where sh is bash. Both clears in the round waited for `CLEARED`, and the first clear left it on screen. The second wait ended at once, so the printf keys reached sh while `clear` still ran. dash has no line editor: the terminal echoed the first key, `clear` erased it, and the screen showed `rintf` where the test waited for `printf`. bash reads typed-ahead keys through readline and shows them again, so it hid the race. Each clear now waits for a marker of its own, `CLEARED1`, `CLEARED2` and so on.
 
 | Control: what was cut | Where it fails | Verdict |
 | --- | --- | --- |
 | Each clear waits for the same `CLEARED`, run with sh as dash and a `clear` on `PATH` that sleeps 0.3 s first | `sh`: "the path picker did not type printf '[%s]\n' 'back\slash.txt' in sh", with `$ 'back\slash.txt'` on screen. 3 of 3 runs with a Go 1.27.3 binary and 3 of 3 with Go 1.26.10. The test with a marker per clear passed 3 of 3 with each | **caught** |
+
+The fish round failed once in CI, and the key, ssh refused and esc subtests failed with it. The test typed `exit` into fish and then typed the next command at once. The CI log shows that sh ran `cho BACK""sh`: fish read the first key before it ended, and the key was lost. Now the round waits for the prompt of sh before it types the next command. A failed round now stops the test. The rounds after it would fail only because the shell still runs and the pane stays in terminal mode. Run on 2026-11-24 on Linux amd64 with a build of main and fish 4.9.3.
+
+| Control: what was changed | Test before the fix | Test after the fix | Verdict |
+| --- | --- | --- | --- |
+| fish reads one key as it ends, as fish did in CI: a `fish_exit` handler runs `stty -icanon min 0 time 5; dd bs=1 count=1` | 2 runs of 2 fail: `fish`: "never produced \"BACKsh\"", with `sh: cho: command not found` on screen. Then nu, key, ssh refused and esc fail with "did not enter terminal mode after 4 attempts" | 2 runs of 2 pass | **caught** |
+| The same handler, and the test after the fix without its wait for the prompt of sh | not run | 1 run of 1: `fish` fails as above, then "the fish round failed, so the rounds after it do not run", and no other subtest runs | **caught** |
+
+Without a control, the test after the fix passed 10 runs of 10 on 2 cores with 2 CPU hogs.
 
 ## Reports after a session alias is reused
 

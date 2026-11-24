@@ -856,6 +856,21 @@ func runsAs(t *testing.T, shell string) string {
 	return strings.TrimPrefix(filepath.Base(strings.TrimSpace(string(out))), "-")
 }
 
+// shPrompt matches a pane row that holds only sh's prompt, "$ ", as the
+// harness sets PS1.
+var shPrompt = regexp.MustCompile(`│\$ *│`)
+
+// shPromptBack reports whether sh's prompt is on a row of the pane.
+func shPromptBack(s tuitest.Screen) bool {
+	_, rows := s.Size()
+	for r := range rows {
+		if shPrompt.MatchString(s.Line(r)) {
+			return true
+		}
+	}
+	return false
+}
+
 func dropShells() []dropShell {
 	return []dropShell{
 		{name: "sh", printf: `printf '[%s]\n' `, quote: posixQuote},
@@ -1029,7 +1044,7 @@ func TestRailFileDragIntoPane(t *testing.T) {
 				continue
 			}
 		}
-		t.Run(sh.name, func(t *testing.T) {
+		ok := t.Run(sh.name, func(t *testing.T) {
 			enterTerminalMode(t, term)
 			if sh.start != "" {
 				if err := term.SendKeys(sh.start, tuitest.Enter); err != nil {
@@ -1113,10 +1128,21 @@ func TestRailFileDragIntoPane(t *testing.T) {
 				if err := term.SendKeys("exit", tuitest.Enter); err != nil {
 					t.Fatal(err)
 				}
+				// fish reads keys typed after exit with the exit, and drops
+				// them when it ends. Type the next command only once sh shows
+				// its prompt again.
+				if err := term.WaitFor(shPromptBack, uiTimeout); err != nil {
+					t.Fatalf("sh did not show its prompt after %s ended: %v\n%s", sh.name, err, term.Snapshot())
+				}
 				runInShell(t, term, "echo BACK\"\"sh", "BACKsh", uiTimeout)
 			}
 			leaveTerminalMode(t, term)
 		})
+		// A failed round can leave its shell running and the pane in terminal
+		// mode. The rounds after it would fail for that reason alone.
+		if !ok {
+			t.Fatalf("the %s round failed, so the rounds after it do not run", sh.name)
+		}
 	}
 
 	// I on a row is the same drop, from the keyboard, on the focused pane.
