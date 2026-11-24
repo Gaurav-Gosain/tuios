@@ -106,7 +106,10 @@ func seedAndRecord(t *testing.T, home string) {
 	}
 	var b strings.Builder
 	for path, sum := range sums {
-		b.WriteString(sum + " " + path + "\n")
+		b.WriteString(sum)
+		b.WriteByte(' ')
+		b.WriteString(path)
+		b.WriteByte('\n')
 	}
 	if err := os.WriteFile(filepath.Join(home, recordName), []byte(b.String()), 0o600); err != nil {
 		t.Fatalf("write the record: %v", err)
