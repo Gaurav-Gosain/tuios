@@ -476,7 +476,15 @@ func TestDaemonUpgradeFallsBackToPreviousBinary(t *testing.T) {
 // exec. The listening socket is never closed, so every call made meanwhile
 // waits in the kernel's backlog and is answered by the new image: none may
 // fail. The positive half: some calls were answered by each image, and some
-// started while the daemon was stopped.
+// waited in the backlog while the daemon was stopped.
+//
+// The loop makes one call at a time, so at most one call is in flight when
+// the old image stops accepting, and that call waits through the whole hold.
+// It can have started before the upgrade was asked for: the old image stops
+// accepting while the test-handoff call runs, and a call whose process was
+// still starting then connects to a daemon that is stopped. A call counts as
+// waited when the new image answered it, it started before the hold ended,
+// and it took longer than an unhindered call does.
 func TestDaemonUpgradeQueuesCLICallsDuringSwap(t *testing.T) {
 	requireReal(t, "runs an older tuios binary")
 	base := t.TempDir()
@@ -521,8 +529,9 @@ func TestDaemonUpgradeQueuesCLICallsDuringSwap(t *testing.T) {
 		}
 	}()
 	time.Sleep(300 * time.Millisecond)
-	upgradeAt := time.Now()
-	_ = mustCall(t, base, "test-handoff", map[string]any{"binary": second, "hold_ms": 1000})
+	const hold = time.Second
+	_ = mustCall(t, base, "test-handoff", map[string]any{"binary": second, "hold_ms": hold.Milliseconds()})
+	holdEnds := time.Now().Add(hold)
 	after := awaitNewImage(t, base, img, 30*time.Second)
 	time.Sleep(300 * time.Millisecond)
 	close(stop)
@@ -537,7 +546,7 @@ func TestDaemonUpgradeQueuesCLICallsDuringSwap(t *testing.T) {
 			oldImage++
 		case c.Instance == after.Instance:
 			newImage++
-			if c.Start.After(upgradeAt) && c.Took > 300 {
+			if c.Start.Before(holdEnds) && c.Took > 300 {
 				waited++
 			}
 		}

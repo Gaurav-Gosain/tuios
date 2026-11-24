@@ -9703,6 +9703,14 @@ Run on 2026-10-17 on macOS arm64, one build per control; the rows dated 2026-10-
 
 The rebind control was run four times and failed every time, with one or two failed calls in 49 to 72; three of the runs also had no call wait through the swap, since with the socket gone a caller fails fast instead of waiting.
 
+`TestDaemonUpgradeQueuesCLICallsDuringSwap` failed once in CI with "the calls do not span the swap: 7 answered by the old image, 11 by the new, 0 waited through it". The loop makes one call at a time, so only the call in flight when the old image stops accepting can wait through the hold. In that run this call started about 15 ms before the test asked for the upgrade, and it took 1207 ms. The count of waited calls kept only calls that started after the request, so it found none. Now a call counts as waited when the new image answered it, it started before the hold ended, and it took more than 300 ms. Run on 2026-11-24 on Linux amd64 with a build of main, on 2 cores with 2 CPU hogs.
+
+| Control: what was changed | Test before the fix | Test after the fix | Verdict |
+| --- | --- | --- | --- |
+| The call in flight when the test asks for the upgrade waits 400 ms between its start time and its connect, as a slow CLI start under load does | 5 runs of 5 fail: "the calls do not span the swap: 6 answered by the old image, 8 by the new, 0 waited through it" | 5 runs of 5 pass | **caught** |
+
+Without the control, the test after the fix passed 30 runs of 30 on the same 2 cores with the hogs.
+
 ```sh
 TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_BASELINE_BIN=/path/to/older/tuios \
   go test -count=1 -run '^TestDaemonUpgrade' .
