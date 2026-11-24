@@ -43,6 +43,9 @@ type quickLookStat struct {
 	size  int64
 	mtime int64
 	dir   bool
+	// known says the stat answered. A name it did not describe is held as
+	// asked, and its row shows no size and no age.
+	known bool
 }
 
 // quickLookStatsMsg carries the stats of rows of a folder back to the loop.
@@ -66,11 +69,21 @@ func (m *OS) QuickLookOnFolder() bool { return m.quickLook.quickLookOnFolder() }
 // inside it. want is the row to select once a folder is read.
 func (m *OS) quickLookWalk(t quickLookTarget, want string) tea.Cmd {
 	ql := &m.quickLook
-	ql.walked = true
+	m.quickLookStartWalk()
 	cmd := m.quickLookShow(t)
 	ql.inside = true
 	ql.dirWant = want
 	return cmd
+}
+
+// quickLookStartWalk notes the rail's row when a walk begins, so a move of the
+// rail's cursor away from it ends the walk (QuickLookSync).
+func (m *OS) quickLookStartWalk() {
+	ql := &m.quickLook
+	if !ql.walked {
+		ql.walkFrom, _ = m.quickLookCursorTarget()
+	}
+	ql.walked = true
 }
 
 // QuickLookOpenEntry opens the selected row of a folder in place.
@@ -144,7 +157,8 @@ func (m *OS) QuickLookRevealInRail() tea.Cmd {
 	// The rail's cursor lands on the row when the listing is drawn, and the
 	// preview follows the rail again from then (quickLookRejoin). Until then
 	// it shows the row itself, and a key on the rail does not move it.
-	ql.walked, ql.rejoin, ql.inside, ql.dirWant = true, true, false, ""
+	m.quickLookStartWalk()
+	ql.rejoin, ql.inside, ql.dirWant = true, false, ""
 	if ql.quickLookOnFolder() && name != "" {
 		e := ql.res.entries[ql.dirSel]
 		t.path, t.name, t.dir = filepath.Join(dir, e.Name), e.Name, e.Dir
@@ -232,7 +246,7 @@ func (m *OS) drawQuickLookDir(c *ckCanvas, pal overlay.Palette, r *quickLookResu
 		}
 		right := w - 1
 		if cols {
-			if st, ok := ql.dirStats[e.Name]; ok {
+			if st, ok := ql.dirStats[e.Name]; ok && st.known {
 				age := quickLookAge(st.mtime, now)
 				c.textR(right, y, ckSeg{t: age, fg: pal.FgMute})
 				if !st.dir {
@@ -345,7 +359,7 @@ func (m *OS) quickLookDirStatsRead() tea.Cmd {
 						continue
 					}
 				}
-				out[name] = quickLookStat{size: fi.Size(), mtime: fi.ModTime().UnixMilli(), dir: fi.IsDir()}
+				out[name] = quickLookStat{size: fi.Size(), mtime: fi.ModTime().UnixMilli(), dir: fi.IsDir(), known: true}
 			}
 			return quickLookStatsMsg{res: r, stats: out}
 		}
@@ -377,7 +391,7 @@ func quickLookDecodeStats(r *quickLookResult, names []string, raw json.RawMessag
 		out[name] = quickLookStat{}
 	}
 	for _, in := range reply.Infos {
-		out[in.Name] = quickLookStat{size: in.Size, mtime: in.MTime, dir: in.Kind == "dir" || in.LinkKind == "dir"}
+		out[in.Name] = quickLookStat{size: in.Size, mtime: in.MTime, dir: in.Kind == "dir" || in.LinkKind == "dir", known: true}
 	}
 	return quickLookStatsMsg{res: r, stats: out}
 }

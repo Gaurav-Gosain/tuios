@@ -301,13 +301,15 @@ type quickLookState struct {
 	framed quickLookFrame
 	// walked says the keys or a click walked the panel away from the rail's
 	// row, so it does not follow the rail's cursor until the keyboard goes
-	// back. rejoin says r moved the rail to the panel's folder, and the walk
+	// back, or the rail's cursor leaves walkFrom, the row it was on when the
+	// walk began. rejoin says r moved the rail to the panel's folder, and the walk
 	// ends when the rail's cursor lands there. dirSel is the selected row of a folder, dirWant the row to select
 	// once a folder is read, dirTop and dirRows where its rows were in the last
 	// frame, and dirCols that the frame had the size and age columns. dirStats
 	// holds those of dirStatsFor's rows, dirStatsGen counts the answers, and
 	// dirStatOut says a read is out. See quicklook_folder.go.
 	walked        bool
+	walkFrom      quickLookTarget
 	rejoin        bool
 	dirSel        int
 	dirWant       string
@@ -485,7 +487,7 @@ func (m *OS) dropQuickLook() {
 	ql.framed = quickLookFrame{}
 	m.quickLookDropPages()
 	ql.view, ql.viewScroll, ql.details, ql.column, ql.mdOpen = "", 0, nil, 0, false
-	ql.walked, ql.rejoin, ql.dirSel, ql.dirWant = false, false, 0, ""
+	ql.walked, ql.rejoin, ql.dirSel, ql.dirWant, ql.walkFrom = false, false, 0, "", quickLookTarget{}
 	ql.dirStats, ql.dirStatsFor, ql.dirStatFailed = nil, nil, false
 }
 
@@ -501,10 +503,15 @@ func (m *OS) QuickLookSync() tea.Cmd {
 		m.dropQuickLook()
 		return nil
 	}
-	if ql.walked {
-		return nil
-	}
 	t, ok := m.quickLookCursorTarget()
+	if ql.walked {
+		// The rail's cursor moved to another row, by a click or a key: the
+		// preview follows it again.
+		if !ok || t == ql.walkFrom {
+			return nil
+		}
+		ql.walked, ql.rejoin, ql.inside, ql.dirWant = false, false, false, ""
+	}
 	if !ok {
 		m.dropQuickLook()
 		return nil
@@ -565,7 +572,11 @@ func (m *OS) quickLookShow(t quickLookTarget) tea.Cmd {
 	ql.target = t
 	ql.scroll = 0
 	ql.jump = quickLookNoMove
-	ql.inside = false
+	// A walk keeps the keyboard inside. The reply to a read that was out when
+	// the walk moved on shows the walk's target again through here.
+	if !ql.walked {
+		ql.inside = false
+	}
 	ql.prompt, ql.query, ql.status = quickLookNoPrompt, "", ""
 	ql.input.Set("")
 	if !ql.wrapSet {

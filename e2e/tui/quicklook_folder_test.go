@@ -56,7 +56,7 @@ func quickLookFolderTree(t *testing.T, dir string) {
 func quickLookSelected(t *testing.T, term *tuitest.Terminal, why, name string) {
 	t.Helper()
 	lit := func(s tuitest.Screen) bool {
-		col, row, ok := findOnGrid(s, name)
+		col, row, ok := quickLookPanelFind(s, name)
 		if !ok {
 			return false
 		}
@@ -68,9 +68,29 @@ func quickLookSelected(t *testing.T, term *tuitest.Terminal, why, name string) {
 		return true
 	}
 	if err := term.WaitFor(lit, uiTimeout); err != nil {
-		t.Fatalf("ASSERTION: %s: the row %s is not selected: %v\n%s", why, name, err, term.Snapshot())
+		s := term.Screen()
+		col, row, ok := quickLookPanelFind(s, name)
+		t.Fatalf("ASSERTION: %s: the row %s is not selected (found %v at %d,%d: ground %v, under it %v): %v\n%s", why, name, ok, col, row,
+			s.Cell(col, row).Bg, s.Cell(col, row+1).Bg, err, term.Snapshot())
 	}
 }
+
+// quickLookPanelFind finds want on screen right of the rail, where quick look
+// draws, so a row of the rail with the same name does not count.
+func quickLookPanelFind(s tuitest.Screen, want string) (col, row int, ok bool) {
+	cols, rows := s.Size()
+	for y := range rows {
+		for x := quickLookPanelLeft; x < cols; x++ {
+			if gridMatchesAt(s, x, y, want) {
+				return x, y, true
+			}
+		}
+	}
+	return 0, 0, false
+}
+
+// quickLookPanelLeft is the first column right of the rail at 140 columns.
+const quickLookPanelLeft = 28
 
 // TestQuickLookWalksAFolder opens quick look on a folder of the rail's files
 // section and walks it. The rows show each file's size and age. Tab goes
@@ -78,7 +98,9 @@ func quickLookSelected(t *testing.T, term *tuitest.Terminal, why, name string) {
 // in place. Backspace goes back to deep with leaf.txt selected, and h goes up
 // to walkdir with deep selected. A click on alpha.txt selects it, and a
 // second click opens it. r shows walkdir in the rail's files section, and
-// the preview follows the rail's cursor again. The
+// the preview follows the rail's cursor again. Two backspaces in one write
+// keep the keyboard inside, and a click on the rail while walked ends the
+// walk. The
 // artifacts are the frames quick-look-folder-open, quick-look-folder-inside,
 // quick-look-folder-file and quick-look-folder-rail.
 //
@@ -89,7 +111,9 @@ func quickLookSelected(t *testing.T, term *tuitest.Terminal, why, name string) {
 //   - with quickLookDirPick not called from applyQuickLook, the test fails
 //     at "backspace from alpha.txt".
 //   - with quickLookFolderClick not called from QuickLookMouseClick, the
-//     test fails at "a click on the selected row".
+//     test fails at "a click on alpha.txt".
+//   - with quickLookShow setting inside to false during a walk, the test
+//     fails at "two backspaces".
 func TestQuickLookWalksAFolder(t *testing.T) {
 	term := quickLookFolderStart(t)
 	quickLookFocusRail(t, term, "walkdir")
@@ -108,6 +132,18 @@ func TestQuickLookWalksAFolder(t *testing.T) {
 	railLists(t, term, "tab did not go inside walkdir", []string{"Inside the folder"}, nil)
 	quickLookSelected(t, term, "tab", "deep/")
 	saveCockpitFrames(t, term, "quick-look-folder-inside")
+
+	// Two backspaces in one write: the second walk starts while the read of
+	// ~/proj is out. The keyboard stays inside, on the folder ~/proj left.
+	sendKeys(t, term, "\x7f\x7f")
+	railLists(t, term, "two backspaces did not keep the keyboard inside the home folder", []string{"~ · 1 item", "Inside the folder"}, nil)
+	quickLookSelected(t, term, "two backspaces", "proj/ ")
+	sendKeys(t, term, tuitest.Enter)
+	railLists(t, term, "enter on proj", []string{"~/proj · 2 items"}, nil)
+	quickLookSelected(t, term, "enter on proj", "walkdir/ ")
+	sendKeys(t, term, tuitest.Enter)
+	railLists(t, term, "enter on walkdir", []string{"walkdir/ ", "3 items", "Inside the folder"}, nil)
+	quickLookSelected(t, term, "enter on walkdir", "deep/")
 
 	sendKeys(t, term, tuitest.Enter)
 	railLists(t, term, "enter did not open deep", []string{"deep/ ", "leaf.txt", "1 item"}, []string{"alpha.txt"})
@@ -141,4 +177,16 @@ func TestQuickLookWalksAFolder(t *testing.T) {
 	// The preview follows the rail's cursor again: j moves it to beta.txt.
 	sendKeys(t, term, "j")
 	railLists(t, term, "j on the rail after r", []string{"the beta text line"}, []string{"the alpha text line"})
+
+	// Walk again, then click a row of the rail: the walked preview does not
+	// stay on screen.
+	sendKeys(t, term, tuitest.Tab)
+	sendKeys(t, term, tuitest.Backspace)
+	railLists(t, term, "backspace from beta.txt", []string{"3 items", "Inside the folder"}, []string{"the beta text line"})
+	bc, br, ok := findOnGrid(term.Screen(), "back to pane folder")
+	if !ok {
+		t.Fatalf("no back row in the rail:\n%s", term.Snapshot())
+	}
+	mouseClick(t, term, bc+2, br, tuitest.MouseLeft, 0)
+	railLists(t, term, "a click on the rail while walked", []string{"top.txt"}, []string{"Inside the folder", "3 items"})
 }

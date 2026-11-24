@@ -19590,7 +19590,7 @@ rail's cursor again.
 `TestFilePreviewKeepsToTheReadRules` asks a linked machine for the stat of
 names in a folder. A name that leaves the folder must not come back.
 
-Run on 2026-11-24 on Linux (amd64). Five controls:
+Run on 2026-11-24 on Linux (amd64). Six controls:
 
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
@@ -19599,6 +19599,7 @@ Run on 2026-11-24 on Linux (amd64). Five controls:
 | `quickLookDirPick` not called from `applyQuickLook` | "backspace from alpha.txt: the row alpha.txt is not selected" | **caught** |
 | `quickLookFolderClick` not called from `QuickLookMouseClick` | "a click on alpha.txt: the row alpha.txt is not selected" | **caught** |
 | No separator check in `fileStatNames` | "a stat of names in the folder answered [... outside.txt ...]" | **caught** |
+| `quickLookShow` sets `inside` to false during a walk | "two backspaces did not keep the keyboard inside the home folder" | **caught** |
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestQuickLookWalksAFolder|TestFilePreviewKeepsToTheReadRules)$' -v .`.
