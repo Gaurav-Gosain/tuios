@@ -289,3 +289,59 @@ func TestClaimNextLeavesAskFirstCards(t *testing.T) {
 	raw, _ := json.MarshalIndent(listTasks(t, base, sess), "", "  ")
 	saveText(t, "claim-next-ask-first", string(raw))
 }
+
+// TestADoneCardCannotBeBlocked: the person blocks an open card and then a
+// done card. The open card is blocked. The block of the done card is refused
+// with task_done, and the card stays done with no block.
+//
+// How it could pass wrongly: the block could fail for another reason, so the
+// same command blocks an open card first, and the refusal must name
+// task_done.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with the done check in moveBlock
+// cut, the block of t2 exits 0 and the card is done and blocked.
+func TestADoneCardCannotBeBlocked(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	t.Cleanup(func() { dumpDaemonLogOnFail(t, base) })
+	const sess = "e2e-block-done"
+	mustCLI(t, base, "new", sess, "--detach")
+	waitForSessionInfo(t, base, sess)
+	mustCLI(t, base, "task", "add", "-s", sess, "-p", "do it", "open card") // t1
+	mustCLI(t, base, "task", "add", "-s", sess, "-p", "do it", "done card") // t2
+	mustCLI(t, base, "task", "done", "t2", "-s", sess)
+
+	mustCLI(t, base, "task", "block", "t1", "-s", sess, "waiting on the key")
+	out, err := tuiosCLI(t, base, "call", "block-task", `{"session":"`+sess+`","id":"t2","reason":"waiting on the key"}`)
+	saveText(t, "task-block-done", out)
+	var verr struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err == nil || json.Unmarshal([]byte(out), &verr) != nil || verr.Error.Code != "task_done" {
+		t.Fatalf("ASSERTION: block-task of the done card t2 gave err %v, want a task_done refusal:\n%s", err, out)
+	}
+	cards, raw := lifeCards(t, base, sess)
+	var blocked struct {
+		Tasks []struct {
+			ID      string          `json:"id"`
+			Blocked json.RawMessage `json:"blocked"`
+		} `json:"tasks"`
+	}
+	if err := json.Unmarshal([]byte(raw), &blocked); err != nil {
+		t.Fatalf("task ls --json: %v\n%s", err, raw)
+	}
+	for _, c := range blocked.Tasks {
+		isBlocked := len(c.Blocked) > 0 && string(c.Blocked) != "null"
+		if c.ID == "t1" && !isBlocked {
+			t.Fatalf("ASSERTION: the open card t1 is not blocked:\n%s", raw)
+		}
+		if c.ID == "t2" && isBlocked {
+			t.Fatalf("ASSERTION: the done card t2 is blocked after the refusal:\n%s", raw)
+		}
+	}
+	if cards["t2"].Stage != "done" {
+		t.Fatalf("ASSERTION: t2 is %s after the refused block, want done", cards["t2"].Stage)
+	}
+}

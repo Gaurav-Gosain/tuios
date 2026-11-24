@@ -76,6 +76,8 @@ const taskByDaemon = "tuios"
 const (
 	// ErrVerbTaskHeld reports a claim of a card another pane holds.
 	ErrVerbTaskHeld = "task_held"
+	// ErrVerbTaskDone refuses block-task on a done card.
+	ErrVerbTaskDone = "task_done"
 	// ErrVerbNoTask reports a card id the session does not hold, or a
 	// claim-task next that found nothing to take.
 	ErrVerbNoTask = "no_task"

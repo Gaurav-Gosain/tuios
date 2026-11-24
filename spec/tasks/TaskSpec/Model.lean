@@ -128,7 +128,8 @@ def Action.name : Action → String
   | .unblocked => "unblocked" | .finished => "finished" | .staged => "staged"
   | .verified => "verified" | .attached => "attached" | .detached => "detached"
 
-/-- Why workable refuses a claim: the verbError apply returns. -/
+/-- Why apply refuses a move: the verbError it returns. A claim is refused
+by workable; a block of a done card is refused with done. -/
 inductive Refusal where
   | held | done | blocked
   deriving DecidableEq, Repr
@@ -215,7 +216,9 @@ def step (c : Card) (m : Move) (now : Int) : Step :=
     if c1.blockedOnErrored then .moved .released .todo c.holder { c1 with blocked := none }
     else .moved .released c.stage c.holder c1
   | .block =>
-    .moved .blocked c.stage c.holder { c with blocked := some ⟨m.reason, m.by_, now⟩ }
+    -- A done card is closed: no block waits on it (task_done).
+    if c.stage = .done then .refused .done
+    else .moved .blocked c.stage c.holder { c with blocked := some ⟨m.reason, m.by_, now⟩ }
   | .blockErrored =>
     if c.holder = "" ∨ c.dispatched = false ∨ c.blocked.isSome then .none c
     else .moved .blocked c.stage c.holder

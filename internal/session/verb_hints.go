@@ -141,6 +141,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbNoRecording, "stop-recording or mark-recording named a pane that is not being recorded, or whose recording ended. Nothing changed. list-recordings shows the recordings that run."},
 	{ErrVerbNoBuffer, "No paste buffer has the name given, or there are no paste buffers when none was named. Nothing was read, pasted or deleted. list-buffers shows the names."},
 	{ErrVerbTaskHeld, "claim-task named a card another pane holds. Nothing changed. Claim another with next, or wait for task-changed released."},
+	{ErrVerbTaskDone, "block-task named a card that is done. Nothing changed. Move the card to another stage first."},
 	{ErrVerbAttachmentTooLarge, "attach-task refused a file over [tasks] attachment_max_mib, or one that would take the session's card files over attachment_session_mib. Nothing was attached. The message names the size and the limit."},
 	{ErrVerbAttachmentLimit, "attach-task refused: the card holds [tasks] attachments_per_card attachments already. Nothing was attached. Detach one with detach-task first."},
 	{ErrVerbNoAttachment, "The task card has no attachment by the name given. Nothing was read or changed. get-task lists the card's attachments."},

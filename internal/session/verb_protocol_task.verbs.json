@@ -181,7 +181,7 @@
     ]
   },
   "block-task": {
-    "description": "Mark a task card stuck, saying what it waits on, or with clear lift the mark. A blocked card keeps its holder and its stage, and claim-task next skips it. To let a card go, use release-task. A pane changes only the card it holds unless it holds admin; the person, a shell, a link and a plugin change any card.",
+    "description": "Mark a task card stuck, saying what it waits on, or with clear lift the mark. A blocked card keeps its holder and its stage, and claim-task next skips it. A done card cannot be blocked: task_done. To let a card go, use release-task. A pane changes only the card it holds unless it holds admin; the person, a shell, a link and a plugin change any card.",
     "params": [
       {
         "name": "session",

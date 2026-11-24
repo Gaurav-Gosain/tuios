@@ -56,8 +56,10 @@ theorem step_moved (h : step c m now = .moved a to e c') :
 theorem step_moved_attempts (h : step c m now = .moved a to e c') : c.attempts ≤ c'.attempts := by
   (unfold step autoApplies at h; cases hk : m.kind <;> simp only [hk] at h <;> (repeat' split at h) <;> (try cases h)) <;> simp_all [Card.letGo] <;> omega
 
-/-- Only a claim is refused, and only by workable. -/
-theorem step_refused (h : step c m now = .refused r) : m.kind = .claim ∧ c.workable m.window = some r := by
+/-- Only a claim is refused by workable, and only a block of a done card
+otherwise. -/
+theorem step_refused (h : step c m now = .refused r) :
+    (m.kind = .claim ∧ c.workable m.window = some r) ∨ (m.kind = .block ∧ c.stage = .done ∧ r = .done) := by
   unfold step at h
   cases hk : m.kind <;> simp only [hk] at h <;> (repeat' split at h) <;> simp_all [Card.workable]
 
@@ -82,10 +84,11 @@ theorem step_none_history (h : step c m now = .none c') : c'.history = c.history
 
 /-! ## What every move keeps -/
 
-/-- A refused claim changes nothing. -/
+/-- A refused move changes nothing. It is a claim workable refuses, or a
+block of a done card. -/
 theorem refused_changes_nothing (h : (apply c m now).refusal = some r) :
-    (apply c m now).card = c ∧ (apply c m now).action = "" ∧ m.kind = .claim ∧
-      c.workable m.window = some r := by
+    (apply c m now).card = c ∧ (apply c m now).action = "" ∧
+      ((m.kind = .claim ∧ c.workable m.window = some r) ∨ (m.kind = .block ∧ c.stage = .done ∧ r = .done)) := by
   cases hs : step c m now
   · rw [apply_none hs] at h; simp at h
   · rw [apply_refused hs] at h ⊢; simp at h; subst h; exact ⟨rfl, rfl, step_refused hs⟩
@@ -182,13 +185,10 @@ structure Admissible (c : Card) (m : Move) : Prop where
   verifiedNotDone : m.kind = .verified → m.stage ≠ .done
   /-- Every taskMove goes to a stage other than done (task_auto.go). -/
   autoNotDone : m.kind = .auto → m.autoTo ≠ .done
-  /-- Nothing holds this one: block-task blocks a done card. -/
-  blockNotDone : m.kind = .block → c.stage ≠ .done
 
 /-- "A done card is held or blocked": never, for the moves the verbs make. -/
 theorem doneFree_preserved (hc : c.doneFree) (ha : Admissible c m) : (apply c m now).card.doneFree := by
   have h1 := ha.stageNotDone; have h2 := ha.verifiedNotDone; have h3 := ha.autoNotDone
-  have h4 := ha.blockNotDone
   unfold Card.doneFree at *
   cases hs : step c m now
   · rw [apply_none hs]
@@ -240,14 +240,21 @@ theorem erroredHeld_preserved (hc : c.erroredHeld) (ha : KeepsErroredHeld c m) :
 
 /-! ## What the docs promise (tuios --skill tasks) -/
 
+/-- "A done card cannot be blocked": block-task of a done card is refused
+with task_done and changes nothing. -/
+theorem block_of_done_refused (hk : m.kind = .block) (hd : c.stage = .done) :
+    (apply c m now).refusal = some .done ∧ (apply c m now).card = c := by
+  have hs : step c m now = .refused .done := by unfold step; simp [hk, hd]
+  rw [apply_refused hs]; exact ⟨rfl, rfl⟩
+
 /-- "Mark it stuck. It keeps its holder and stage." -/
-theorem block_keeps_holder_and_stage (hk : m.kind = .block) :
+theorem block_keeps_holder_and_stage (hk : m.kind = .block) (hd : c.stage ≠ .done) :
     (apply c m now).card.holder = c.holder ∧ (apply c m now).card.stage = c.stage ∧
     (apply c m now).card.blocked = some ⟨m.reason, m.by_, now⟩ := by
   cases hs : step c m now
   all_goals first
     | (rw [apply_moved hs]; simp only; (unfold step autoApplies at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all)
-    | (unfold step at hs; simp [hk] at hs)
+    | (unfold step at hs; simp [hk, hd] at hs)
 
 /-- "Let it go without finishing. It keeps its stage": a release keeps the
 stage, except that a card blocked on its errored agent goes back to todo with
@@ -307,12 +314,6 @@ def blank : Card :=
   { stage := .todo, stageAt := 0, holder := "", heldAt := 0, holderName := "", holderHarness := "",
     dispatched := false, blocked := none, attempts := 0, note := "", work := none, verify := none,
     attachments := [], history := [] }
-
-/-- block-task on a done card: a done card that is blocked. -/
-theorem block_on_done_breaks_doneFree :
-    (({ blank with stage := .done } : Card).doneFree) ∧
-    ¬ (apply { blank with stage := .done } { kind := .block, by_ := "person", reason := "waiting" } 1).card.doneFree := by
-  unfold Card.doneFree apply step blank; simp
 
 /-- The errored block, as dispatch writes it. -/
 def erroredBlock : Block := ⟨"agent errored: exit 1", byDaemon, 0⟩

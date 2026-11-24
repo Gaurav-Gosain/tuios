@@ -713,7 +713,7 @@ Put a file or a link on a task card. The caller sends the file's bytes; the daem
 
 ### `block-task`
 
-Mark a task card stuck, saying what it waits on, or with clear lift the mark. A blocked card keeps its holder and its stage, and claim-task next skips it. To let a card go, use release-task. A pane changes only the card it holds unless it holds admin; the person, a shell, a link and a plugin change any card.
+Mark a task card stuck, saying what it waits on, or with clear lift the mark. A blocked card keeps its holder and its stage, and claim-task next skips it. A done card cannot be blocked: task_done. To let a card go, use release-task. A pane changes only the card it holds unless it holds admin; the person, a shell, a link and a plugin change any card.
 
 | Param | Type | Required | Default | Description |
 |---|---|---|---|---|

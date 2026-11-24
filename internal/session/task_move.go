@@ -81,7 +81,7 @@ type cardMove struct {
 
 // apply makes m on the card at now. It returns the action the history and
 // the event name, "" when nothing changed, the holder the card had before,
-// and the refusal of a claim. Each move that changes the card notes one
+// and the refusal of a claim or of a block on a done card. Each move that changes the card notes one
 // history entry: the action, m.by, the stage after, the holder (the new one
 // for a claim, none for a verify result, else the one before) and m.reason.
 func (tk *TaskState) apply(m cardMove, now int64) (action, holder string, verr *verbError) {
@@ -122,6 +122,14 @@ func (tk *TaskState) apply(m cardMove, now int64) (action, holder string, verr *
 		action = TaskActionReleased
 
 	case moveBlock, moveBlockErrored:
+		// A done card is closed: no block waits on it.
+		if m.kind == moveBlock && to == TaskStageDone {
+			return "", holder, hintedVerbError(ErrVerbTaskDone, "task card "+tk.ID+" is done, so it cannot be blocked", &VerbHint{
+				Param:   "id",
+				Command: "tuios task stage " + tk.ID + " doing",
+				Detail:  "Nothing changed. Move the card out of done first.",
+			})
+		}
 		if m.kind == moveBlockErrored {
 			if tk.Holder == "" || !tk.Dispatched || tk.Blocked != nil {
 				return "", holder, nil

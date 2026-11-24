@@ -227,6 +227,8 @@ func leanRefusal(verr *verbError) *string {
 	switch {
 	case verr.Code == ErrVerbTaskHeld:
 		name = "held"
+	case verr.Code == ErrVerbTaskDone:
+		name = "done"
 	case verr.Hint != nil && verr.Hint.Command != "":
 		name = "blocked"
 	}

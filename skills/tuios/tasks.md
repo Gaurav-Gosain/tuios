@@ -44,7 +44,7 @@ person or a shell outside every pane. Outside a pane, name the pane:
 | Command | What it does |
 | --- | --- |
 | `tuios task stage t1 review` | Move the card to a stage: `todo`, `plan`, `doing`, `verify`, `review`, `shipped`, `done` |
-| `tuios task block t1 waiting on the staging key` | Mark it stuck. It keeps its holder and stage, and `claim --next` skips it |
+| `tuios task block t1 waiting on the staging key` | Mark it stuck. It keeps its holder and stage, and `claim --next` skips it. A done card cannot be blocked: `task_done` |
 | `tuios task block t1 --clear` | Lift the block |
 | `tuios task release t1` | Let it go without finishing. It keeps its stage, and another pane can claim it |
 | `tuios task done t1` | Say your work on it is done and let it go: it goes on to `verify` or `review` (see below) |
@@ -212,4 +212,5 @@ includes it. Reading the cards needs `read`. The cards are your own session's:
 ## Errors
 
 - `task_held`: another pane holds the card. Take another with `--next`.
+- `task_done`: you blocked a card that is done. Move it to another stage first.
 - `no_task`: no card has that id, or nothing is open to take.

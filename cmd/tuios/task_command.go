@@ -654,8 +654,8 @@ func newTaskBlockCommand() *cobra.Command {
 		Use:   "block ID [REASON...] [--clear]",
 		Short: "Mark a task card stuck, or lift the mark",
 		Long: `Mark a task card stuck, with what it waits on, or with --clear lift the mark. A
-blocked card keeps its holder and its stage, and claim --next skips it. To let
-a card go, use 'tuios task release'. From inside a pane, only the card the pane
+blocked card keeps its holder and its stage, and claim --next skips it. A done
+card cannot be blocked. To let a card go, use 'tuios task release'. From inside a pane, only the card the pane
 holds.`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {

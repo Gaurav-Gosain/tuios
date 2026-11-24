@@ -18999,3 +18999,18 @@ Run on 2026-11-23 on Linux (amd64), go1.27.4, against main at 7e661e2a0.
 
 Repeat with
 `go test -count=3 -run '^(TestMergingAPushBuildsNoTablePerField|TestAClientPushCannotMoveWhatTheDaemonWrites)$' -v ./internal/session/`.
+## TestADoneCardCannotBeBlocked
+
+The person blocks an open card and then a done card. The block of the done
+card must be refused with `task_done`, and the card must stay done with no
+block. The Lean model states the rule as `block_of_done_refused`
+(spec/tasks).
+
+Run on 2026-11-24 on Linux (amd64).
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The done check in moveBlock cut | "block-task of the done card t2 gave err <nil>, want a task_done refusal", and "the daemon broke a task card rule: ... a done card is held or blocked" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestADoneCardCannotBeBlocked$' -v .`.

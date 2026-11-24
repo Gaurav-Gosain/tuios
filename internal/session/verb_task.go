@@ -840,8 +840,8 @@ func (d *Daemon) verbBlockTask(cs *connState, params json.RawMessage) (any, *ver
 		if p.Clear {
 			move = cardMove{kind: moveUnblock, by: caller.by}
 		}
-		action, _, _ := sess.moveCard(tk, move, now)
-		return action, nil
+		action, _, verr := sess.moveCard(tk, move, now)
+		return action, verr
 	}, func(action string) taskEventSpec {
 		if action == "" {
 			return taskEventSpec{}

@@ -64,7 +64,8 @@ The proofs hold for every card and every move, not only for the tested ones.
 | `doneFree_preserved` | A done card has no holder and no block, for the moves in `Admissible` |
 | `holderClean_preserved` | A card with no holder has no holder time or names, when every claim names a pane |
 | `erroredHeld_preserved` | A card blocked on its errored agent has a holder, for the moves in `KeepsErroredHeld` |
-| `block_keeps_holder_and_stage` | A block keeps the holder and the stage |
+| `block_of_done_refused` | A block of a done card is refused with `task_done` and changes nothing |
+| `block_keeps_holder_and_stage` | A block of an open card keeps the holder and the stage |
 | `release_keeps_stage` | A release keeps the stage, except for an errored card, which goes back to todo with no block |
 | `claim_starts_work` | A claim moves a card in todo or plan to doing |
 | `claim_by_holder_succeeds` | A claim by the pane that holds the card is never refused |
@@ -78,7 +79,6 @@ Each of these theorems is a concrete card and move that break a rule.
 
 | Theorem | The card and the move |
 | --- | --- |
-| `block_on_done_breaks_doneFree` | `tuios task block` on a done card gives a done card that is blocked |
 | `verified_breaks_erroredHeld` | A verify result on a held card blocked on its errored agent lets the holder go and keeps the block |
 | `stageRun_breaks_erroredHeld` | A move to verify that runs the command does the same to such a card |
 | `verified_moves_a_blocked_card` | A verify result moves a blocked card. The docs say that a blocked card never moves on its own |
