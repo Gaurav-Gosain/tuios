@@ -163,6 +163,7 @@ and the session keeps it after a detach.
 | `Ctrl+B L m` | `focus_master` | Focus the master |
 | `Ctrl+B L i` | `add_master` | Make one more pane a master |
 | `Ctrl+B L d` | `remove_master` | Make one pane fewer a master |
+| `Ctrl+B R` | `rotate_split` | Turn the side the masters are drawn on: left and top swap, right and bottom swap. Masters in the center with one stack pane are drawn on the left, so they go to the top. With the masters drawn in the center, or two panes on a tall screen, nothing changes and the dock says why |
 
 `set_master_position_left`, `_right`, `_top`, `_bottom` and `_center` set one
 side directly. They have no default key. The command palette has an entry for

@@ -19411,3 +19411,25 @@ Run on 2026-11-24 on Linux. The control is main without the fix.
 The frames are `goto-delete-ask` and `goto-delete-done` under
 `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestGotoActsOnASessionOnAHost$' -v .`.
+## Rotate split in the master-stack layout
+
+`TestRotateSplitInMasterStack` is issue #2417. On a wide screen it opens two
+panes in the master-stack layout and presses `Ctrl+B R`. The masters must go
+from the left to the top, and back on a second press. From the right they must
+go to the bottom. Center with one stack pane is drawn on the left, so rotate
+must take the masters to the top. With two stack panes the masters are drawn
+in the center: the dock must say that rotate split does not apply, and the
+layout must stay. On a tall screen two panes are drawn one above the other
+whatever the side: the dock must say so, and the layout must stay. Each shape
+is read from the daemon's rectangles.
+
+Run on 2026-11-24 on Linux.
+
+| Change | Failure |
+| --- | --- |
+| The `inMasterStack` branch cut from `RotateFocusedSplit` (main's behaviour: it rotates the BSP tree, which master-stack does not draw) | `after the first rotate: master 0 is not top of stack pane 0` and `the dock message on a tall screen`, 3 of 3 runs |
+| `rotateMasterStack` reads the stored side, not the drawn one | `center with one stack pane, after a rotate: master 0 is not top of stack pane 0` and `the dock message on a tall screen`, 3 of 3 runs |
+
+With the fix: 10 of 10 pass at `taskset -c 0-1` and 10 of 10 on all cores.
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestRotateSplitInMasterStack$' -v .`.

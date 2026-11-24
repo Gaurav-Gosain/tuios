@@ -896,8 +896,9 @@ func handleSplitSSHVertical(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 
 func handleRotateSplit(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	if o.AutoTiling {
-		o.RotateFocusedSplit()
-		o.ShowNotification("Split rotated", "info", o.Settings.NotificationDuration)
+		if msg, level := o.RotateFocusedSplit(); msg != "" {
+			o.ShowNotification(msg, level, o.Settings.NotificationDuration)
+		}
 	}
 	return o, nil
 }

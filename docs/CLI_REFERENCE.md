@@ -5019,7 +5019,10 @@ master-stack layout. It needs an attached client.
 - `--equalize`: reset the splits of the layout on screen. In BSP, every split
   goes back to half. In master-stack, the master ratio goes back to its
   configured value, and the other panes share the rest evenly.
-- `--rotate`: flip the axis of the split that holds the focused pane.
+- `--rotate`: flip the axis of the split that holds the focused pane. In
+  master-stack, it moves the masters from the left to the top and back, and
+  from the right to the bottom and back. With the masters in the center it
+  does nothing.
 - `--master-position left|right|top|bottom|center`: the side the master panes
   take.
 - `--masters N`: how many panes are master panes, from 1 to 9.

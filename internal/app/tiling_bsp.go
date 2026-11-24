@@ -721,23 +721,34 @@ func (m *OS) ClearPreselection() {
 	m.PreselectionDir = layout.PreselectionNone
 }
 
-// RotateFocusedSplit toggles the split direction at the focused window's parent
-func (m *OS) RotateFocusedSplit() {
+// RotateFocusedSplit turns the split of the layout on screen and returns the
+// dock message for it and its level, or "" when it does nothing worth saying.
+// In the BSP layout it toggles the split direction at the focused window's
+// parent. In the master-stack layout it turns the line between the masters
+// and the stack. Master-stack does not draw the BSP tree, so rotating the tree
+// there changed nothing on screen (issue #2417).
+func (m *OS) RotateFocusedSplit() (msg, level string) {
 	if !m.AutoTiling {
 		m.LogInfo("BSP: RotateSplit ignored, tiling not active")
-		return
+		return "", ""
+	}
+	if m.inMasterStack() {
+		return m.rotateMasterStack()
+	}
+	if !m.UseBSPLayout {
+		return rotateMsgScroll, "warning"
 	}
 
 	tree := m.WorkspaceTrees[m.CurrentWorkspace]
 	if tree == nil {
 		m.LogInfo("BSP: RotateSplit ignored, no tree for workspace %d", m.CurrentWorkspace)
-		return
+		return "", ""
 	}
 
 	focusedWin := m.GetFocusedWindow()
 	if focusedWin == nil {
 		m.LogInfo("BSP: RotateSplit ignored, no focused window")
-		return
+		return "", ""
 	}
 
 	windowIntID := m.GetWindowIntID(focusedWin.ID)
@@ -749,14 +760,13 @@ func (m *OS) RotateFocusedSplit() {
 		// but the tree wasn't properly built. Let's rebuild it.
 		m.LogInfo("BSP: Rebuilding tree to include all windows")
 		m.TileAllWindows()
-		return
+		return "", ""
 	}
 
 	node := tree.FindNode(windowIntID)
 	if node == nil || node.Parent == nil {
 		m.LogInfo("BSP: RotateSplit: window has no parent (is root), cannot rotate")
-		m.ShowNotification("Cannot rotate: window has no parent split", "warning", 2000000000)
-		return
+		return rotateMsgRoot, "warning"
 	}
 
 	tree.RotateSplit(windowIntID)
@@ -764,7 +774,56 @@ func (m *OS) RotateFocusedSplit() {
 
 	// Reapply layout
 	m.ApplyBSPLayout()
+	return rotateMsgDone, "info"
 }
+
+// rotateMasterStack is RotateFocusedSplit for the master-stack layout. It
+// turns the side the masters are drawn on, which the fallbacks of the tiler
+// can make differ from the stored side: masters on the left go to the top and
+// back, masters on the right go to the bottom and back. Masters drawn in the
+// center have no turned form. Two panes on a tall screen are drawn one above
+// the other whatever the side, so there rotate changes nothing and says so.
+func (m *OS) rotateMasterStack() (msg, level string) {
+	n := len(m.tilablePanes(m.CurrentWorkspace))
+	if n < 2 {
+		return rotateMsgOnePane, "warning"
+	}
+	p := m.masterParams()
+	w, h := m.PaneWidth(), m.PaneHeight()
+	drawn := layout.DrawnMasterPosition(n, w, h, p)
+	var next string
+	switch drawn {
+	case layout.MasterPositionLeft:
+		next = layout.MasterPositionTop
+	case layout.MasterPositionTop:
+		next = layout.MasterPositionLeft
+	case layout.MasterPositionRight:
+		next = layout.MasterPositionBottom
+	case layout.MasterPositionBottom:
+		next = layout.MasterPositionRight
+	default:
+		return rotateMsgCenter, "warning"
+	}
+	p.Position = next
+	if layout.DrawnMasterPosition(n, w, h, p) == drawn {
+		return rotateMsgTall, "warning"
+	}
+	st := m.masterLayoutFor(m.CurrentWorkspace)
+	st.Position = next
+	m.setMasterLayout(st)
+	return rotateMsgDone, "info"
+}
+
+// The dock messages of RotateFocusedSplit. A "warning" one says that nothing
+// changed.
+const (
+	rotateMsgDone    = "Split rotated"
+	rotateMsgRoot    = "Cannot rotate: window has no parent split"
+	rotateMsgScroll  = "Rotate split does not apply in the scrolling layout"
+	rotateMsgCenter  = "Rotate split does not apply with the masters in the center"
+	rotateMsgTall    = "Two panes on a tall screen stay one above the other"
+	rotateMsgOnePane = "Rotate split needs two panes or more"
+)
 
 // EqualizeSplits resets the splits of the layout on screen: every BSP split
 // ratio to 0.5, or the master-stack splits to the configured master ratio and

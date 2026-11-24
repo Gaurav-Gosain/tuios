@@ -818,13 +818,18 @@ func (m *OS) SplitToward(side string) error {
 	return nil
 }
 
-// RotateSplit rotates the split direction at the focused window.
+// RotateSplit rotates the split direction at the focused window. When the
+// layout on screen cannot rotate, it reports why, so set-layout --rotate and
+// run-command RotateSplit say what the dock says.
 func (m *OS) RotateSplit() error {
 	if !m.AutoTiling {
 		return errTilingOff
 	}
-	m.RotateFocusedSplit()
+	msg, level := m.RotateFocusedSplit()
 	m.MarkAllDirty()
+	if level == "warning" {
+		return errors.New(msg)
+	}
 	return nil
 }
 

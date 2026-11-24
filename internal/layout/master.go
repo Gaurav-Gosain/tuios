@@ -127,6 +127,14 @@ func resolveMasterShape(n, w, h int, p MasterParams) masterShape {
 	return s
 }
 
+// DrawnMasterPosition is the side the masters are drawn on for n panes in a
+// region w by h, after the fallbacks of resolveMasterShape. It can differ from
+// p.Position: center with one stack pane is drawn as left, and two panes on a
+// tall region are drawn as top or bottom.
+func DrawnMasterPosition(n, w, h int, p MasterParams) string {
+	return resolveMasterShape(n, w, h, p).position
+}
+
 // along reports whether a position separates the masters from the stack along
 // the X axis.
 func alongX(pos string) bool {
