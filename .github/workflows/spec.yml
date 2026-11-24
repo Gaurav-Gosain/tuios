@@ -40,11 +40,17 @@ jobs:
           path: ~/.elan
           key: elan-4.2.4-${{ runner.os }}-${{ hashFiles('spec/tasks/lean-toolchain') }}
 
+      # elan-init.sh of elan v4.2.4, pinned by commit and checked by its
+      # sha256, since a tag can move.
       - name: Install the Lean toolchain
         if: steps.elan-cache.outputs.cache-hit != 'true'
+        env:
+          ELAN_COMMIT: 227caca133724d5516bee25c2aeb3e609478f2d8
+          ELAN_INIT_SHA256: a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53
         run: |
           set -euo pipefail
-          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/v4.2.4/elan-init.sh -o "$RUNNER_TEMP/elan-init.sh"
+          curl -sSfL "https://raw.githubusercontent.com/leanprover/elan/$ELAN_COMMIT/elan-init.sh" -o "$RUNNER_TEMP/elan-init.sh"
+          echo "$ELAN_INIT_SHA256  $RUNNER_TEMP/elan-init.sh" | sha256sum -c -
           sh "$RUNNER_TEMP/elan-init.sh" -y --no-modify-path --default-toolchain none
           cd spec/tasks && "$HOME/.elan/bin/elan" toolchain install "$(cat lean-toolchain)"
 

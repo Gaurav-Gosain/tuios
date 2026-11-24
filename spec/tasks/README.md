@@ -16,10 +16,14 @@ the binary does not change.
 
 ## Run it
 
-Install elan, then run the recipe from the repository root:
+Install elan, then run the recipe from the repository root. The install script
+is the one of elan v4.2.4, pinned by commit and checked by its sha256, as CI
+does:
 
 ```sh
-curl -sSfL https://raw.githubusercontent.com/leanprover/elan/v4.2.4/elan-init.sh | sh -s -- -y --default-toolchain none
+curl -sSfL https://raw.githubusercontent.com/leanprover/elan/227caca133724d5516bee25c2aeb3e609478f2d8/elan-init.sh -o elan-init.sh
+echo 'a620ff1641616222c8d37c54845492004bb84d6877cdbc944dd65c1aa685bf53  elan-init.sh' | sha256sum -c -
+sh elan-init.sh -y --default-toolchain none
 just spec
 ```
 
