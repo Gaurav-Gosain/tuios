@@ -259,8 +259,14 @@ def step (c : Card) (m : Move) (now : Int) : Step :=
       | none => false
     if c.stage ≠ .verify ∨ tokenOk = false then .none c
     else
-      let c1 := if m.stage = .todo then { c with attempts := c.attempts + 1, note := m.note } else c
-      .moved .verified m.stage "" { c1.letGo with verify := m.verify }
+      -- A pane that took the card in verify lets it go with the result.
+      let c1 := { c.letGo with verify := m.verify }
+      -- A blocked card never moves on its own: it keeps its stage, and its
+      -- note says what the verify found.
+      if c1.blocked.isSome then .moved .verified c.stage "" { c1 with note := m.reason }
+      else
+        let c2 := if m.stage = .todo then { c1 with attempts := c1.attempts + 1, note := m.note } else c1
+        .moved .verified m.stage "" c2
   | .attach =>
     .moved .attached c.stage c.holder { c with attachments := attachAll c.attachments m.attachments }
   | .detach =>

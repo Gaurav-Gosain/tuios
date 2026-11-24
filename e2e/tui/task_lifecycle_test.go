@@ -617,3 +617,51 @@ func TestAMoveToVerifyLiftsTheErroredBlock(t *testing.T) {
 		func(c map[string]lifeCard) bool { return c["t2"].Stage == "review" })
 	note("after the verify:\n%s", raw)
 }
+
+// TestAVerifyResultKeepsABlockedCard: on a board with a verify command, the
+// agent is done with its card and the verify starts. The person blocks the
+// card while the verify runs. The verify passes. The card stays in verify,
+// still blocked, with the result in its verify record and its note, since a
+// blocked card never moves on its own.
+//
+// How it could pass wrongly: the verify could never end, so the test waits for
+// the passed record before it reads the stage. The verify command waits for a
+// file the test makes only after the block, so the block lands first.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with the block check in
+// moveVerified cut, the card goes to review with the block still on.
+func TestAVerifyResultKeepsABlockedCard(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	t.Cleanup(func() { dumpDaemonLogOnFail(t, base) })
+	const sess = "e2e-verify-blocked"
+	mustCLI(t, base, "new", sess, "--detach")
+	waitForSessionInfo(t, base, sess)
+	var report strings.Builder
+	note := func(format string, args ...any) { fmt.Fprintf(&report, format+"\n", args...) }
+	defer func() { saveText(t, "task-verify-blocked", report.String()) }()
+
+	repo := filepath.Join(base, "demo")
+	lifeRepo(t, repo)
+	gate := filepath.Join(base, "verify-may-end")
+	a := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", sess, "agent-a", "--no-focus", "--print-id", "--cwd", repo))
+	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", a, "working", "--harness", "claude-code", "-m", "on it")
+	note("%s", mustCLI(t, base, "task", "dispatch", "verify", "-s", sess, "while [ ! -f "+gate+" ]; do sleep 0.1; done"))
+	mustCLI(t, base, "task", "add", "-s", sess, "-p", "do it", "the work") // t1
+	mustCLI(t, base, "task", "claim", "t1", "-s", sess, "-w", a)
+	if out := inPane(t, base, sess, a, "task done t1"); !strings.Contains(out, "EXIT=0") {
+		t.Fatalf("tuios task done t1: %s", out)
+	}
+	waitLife(t, base, sess, uiTimeout, "t1 did not go to verify",
+		func(c map[string]lifeCard) bool { return c["t1"].Stage == "verify" })
+	mustCLI(t, base, "task", "block", "t1", "-s", sess, "waiting on the review")
+	if err := os.WriteFile(gate, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cards, raw := waitLife(t, base, sess, 20*time.Second, "the verify of t1 did not pass",
+		func(c map[string]lifeCard) bool { return c["t1"].Verify != nil && c["t1"].Verify.State == "passed" })
+	note("after the verify passed on the blocked card:\n%s", raw)
+	if c := cards["t1"]; c.Stage != "verify" || c.Blocked == nil || c.Blocked.Reason != "waiting on the review" || c.Note != "verify passed" {
+		t.Fatalf("ASSERTION: t1 after the verify is %s, blocked %+v, note %q; want verify, the person's block, note \"verify passed\"", c.Stage, c.Blocked, c.Note)
+	}
+}

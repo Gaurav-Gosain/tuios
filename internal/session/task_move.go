@@ -50,7 +50,7 @@ const (
 	// moveAuto is an automatic move (task_auto.go) when it applies.
 	moveAuto
 	// moveVerified lands a verify result on a card still in verify with
-	// the run's token.
+	// the run's token. A blocked card keeps its stage.
 	moveVerified
 	// moveAttach puts attachments on the card, each in the place of one
 	// with its name.
@@ -196,13 +196,20 @@ func (tk *TaskState) apply(m cardMove, now int64) (action, holder string, verr *
 		if to != TaskStageVerify || tk.Verify == nil || tk.Verify.StartedAt != m.token {
 			return "", holder, nil
 		}
-		if m.stage == TaskStageTodo {
-			tk.Attempts++
-			tk.Note = m.note
-		}
 		// A pane that took the card in verify lets it go with the result.
 		letGo()
-		tk.Verify, to = m.verify, m.stage
+		tk.Verify = m.verify
+		if tk.Blocked != nil {
+			// A blocked card never moves on its own: it keeps its stage,
+			// and its note says what the verify found.
+			tk.Note = m.reason
+		} else {
+			if m.stage == TaskStageTodo {
+				tk.Attempts++
+				tk.Note = m.note
+			}
+			to = m.stage
+		}
 		action, evHolder = TaskActionVerified, ""
 
 	case moveAttach:

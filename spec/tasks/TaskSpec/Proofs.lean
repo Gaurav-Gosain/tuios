@@ -312,22 +312,32 @@ theorem auto_leaves_blocked_and_done (hk : m.kind = .auto) (h : c.blocked.isSome
   · rw [apply_refused hs]
   · (unfold step autoApplies at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all
 
-/-! ## Counterexamples: the Go code lets these through -/
+/-- "A blocked card never moves on its own": a verify result on a card with
+a block that is not the errored agent's keeps the stage and the block, and
+the note says what the verify found. -/
+theorem verified_keeps_a_blocked_card (hk : m.kind = .verified) (h : (apply c m now).action ≠ "")
+    (hb : c.blocked = some b) (he : erroredBlock c.blocked = false) :
+    (apply c m now).card.stage = c.stage ∧ (apply c m now).card.blocked = some b ∧
+    (apply c m now).card.note = m.reason ∧ (apply c m now).card.verify = m.verify := by
+  cases hs : step c m now
+  · rw [apply_none hs] at h; simp at h
+  · rw [apply_refused hs] at h; simp at h
+  · rw [apply_moved hs]; simp only
+    (unfold step autoApplies at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all [Card.letGo]
 
-/-- The empty card: todo, no holder, no block. -/
-def blank : Card :=
-  { stage := .todo, stageAt := 0, holder := "", heldAt := 0, holderName := "", holderHarness := "",
-    dispatched := false, blocked := none, attempts := 0, note := "", work := none, verify := none,
-    attachments := [], history := [] }
-
-/-- The docs say a blocked card never moves on its own. A verify result moves
-one: a card handed in to verify and then blocked by the person goes to
-review with the block still on. -/
-theorem verified_moves_a_blocked_card :
-    let c : Card := { blank with stage := .verify, blocked := some ⟨"waiting", "person", 4⟩,
-                                 verify := some (running 5) }
-    let r := apply c { kind := .verified, by_ := byDaemon, stage := .review, token := 5 } 9
-    r.card.stage = .review ∧ r.card.blocked = c.blocked := by
-  simp [apply, step, Card.letGo, byDaemon, running]
+/-- An automatic move and a verify result are the moves the daemon makes on
+its own. Neither changes the stage of a card with a block that is not the
+errored agent's. -/
+theorem blocked_card_never_moves_on_its_own (hk : m.kind = .auto ∨ m.kind = .verified)
+    (hb : c.blocked.isSome) (he : erroredBlock c.blocked = false) :
+    (apply c m now).card.stage = c.stage := by
+  rcases hk with hk | hk
+  · rw [auto_leaves_blocked_and_done hk (Or.inl hb)]
+  · by_cases h : (apply c m now).action = ""
+    · rcases noop_changes_nothing h with e | ⟨hk', -⟩
+      · rw [e]
+      · simp [hk] at hk'
+    · obtain ⟨b, hb'⟩ := Option.isSome_iff_exists.mp hb
+      exact (verified_keeps_a_blocked_card hk h hb' he).1
 
 end TaskSpec

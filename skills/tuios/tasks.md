@@ -62,7 +62,8 @@ to `verify` when the board has a verify command. tuios then runs that command
 in your worktree (your pane's repository, on your machine). A pass moves the
 card to `review`. A fail sends it back to `todo`: its `attempts` goes up by
 one and its `note` is the last line of the output (`tuios task get ID` shows
-the end of the output). If your agent errors while it holds a card that
+the end of the output). A verify result does not move a blocked card: the
+card stays in `verify`, and its `note` says what the verify found. If your agent errors while it holds a card that
 dispatch gave it, you keep the card, blocked, with its `attempts` one higher
 and your last message as the note. Work on it again and the block lifts; let
 it go (`tuios task release ID`) and it goes back to `todo`. The block belongs to
@@ -90,7 +91,8 @@ out of `plan` too, since the pull request shows the plan went through. Closed
 without a merge, it moves them from `review` back to `doing`.
 
 Each move fires only from those stages, so a card you put somewhere else by
-hand stays there. A blocked card and a done card never move on their own.
+hand stays there. A blocked card and a done card never move on their own, and
+a verify result does not move a blocked card either.
 Done is set by a finish, or by the person. The history entry is by `tuios` and names the
 reason. The person can turn this off with `[tasks] auto_stage = false`.
 

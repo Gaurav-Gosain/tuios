@@ -19032,3 +19032,20 @@ Run on 2026-11-24 on Linux (amd64).
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAMoveToVerifyLiftsTheErroredBlock$' -v .`.
+
+## TestAVerifyResultKeepsABlockedCard
+
+The agent is done with its card and the verify starts. The person blocks the
+card while the verify runs, and the verify passes. The card must stay in
+verify with the person's block and the note "verify passed". The Lean model
+states the rule as `verified_keeps_a_blocked_card` and
+`blocked_card_never_moves_on_its_own` (spec/tasks).
+
+Run on 2026-11-24 on Linux (amd64).
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The block check in moveVerified cut | "t1 after the verify is review, blocked &{Reason:waiting on the review By:shell}, note \"\"" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAVerifyResultKeepsABlockedCard$' -v .`.

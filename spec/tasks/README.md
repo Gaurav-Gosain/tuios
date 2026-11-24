@@ -72,15 +72,10 @@ The proofs hold for every card and every move, not only for the tested ones.
 | `claim_by_holder_succeeds` | A claim by the pane that holds the card is never refused |
 | `claim_refusals` | A claim refuses a card another pane holds, then a done card, then a blocked card |
 | `auto_leaves_blocked_and_done` | An automatic move does not change a blocked card or a done card |
+| `verified_keeps_a_blocked_card` | A verify result on a blocked card keeps its stage and its block. The note says what the verify found |
+| `blocked_card_never_moves_on_its_own` | Neither an automatic move nor a verify result changes the stage of a blocked card |
 
 ## Rules the Go code does not hold
-
-Each of these theorems is a concrete card and move that break a rule.
-`cardRulesBroken` reports each one in Go too.
-
-| Theorem | The card and the move |
-| --- | --- |
-| `verified_moves_a_blocked_card` | A verify result moves a blocked card. The docs say that a blocked card never moves on its own |
 
 `holderClean_preserved` also needs every claim to name a pane. The Go code
 does not check that. A refresh claim with an empty window writes the names on
