@@ -116,9 +116,9 @@ func openTextThreadTuned(t *testing.T, text, extra string, tune func(*startOpts)
 		t.Fatalf("open the agents view: %v", err)
 	}
 	waitText(t, term, "the thread", want...)
-	_ = term.WaitStable(uiTimeout)
+	_ = settleScreen(term, uiTimeout)
 	ckPress(t, term, tuitest.Tab)
-	_ = term.WaitStable(uiTimeout)
+	_ = settleScreen(term, uiTimeout)
 	return base, term
 }
 
@@ -215,7 +215,7 @@ func TestCockpitThreadCodeBlockScroll(t *testing.T) {
 	}
 	for i := 0; i < 120 && !strings.Contains(term.Screen().Line(row), "var table"); i++ {
 		wheel(tuitest.MouseWheelUp, tuitest.ModShift)
-		_ = term.WaitStable(uiTimeout)
+		_ = settleScreen(term, uiTimeout)
 	}
 	s = term.Screen()
 	if !strings.Contains(s.Line(row), "var table") || strings.Index(s.Line(row), "var table") != col {

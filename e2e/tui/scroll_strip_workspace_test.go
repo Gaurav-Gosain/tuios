@@ -70,7 +70,7 @@ func stripClient(t *testing.T, base string) *tuitest.Terminal {
 	}, uiTimeout); err != nil {
 		t.Fatalf("the strip never settled on the first column: %v\n%s", err, a.Snapshot())
 	}
-	if err := a.WaitStable(uiTimeout); err != nil {
+	if err := settleScreen(a, uiTimeout); err != nil {
 		t.Fatalf("the frame never settled: %v", err)
 	}
 	return a

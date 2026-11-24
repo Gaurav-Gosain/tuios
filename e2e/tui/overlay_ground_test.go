@@ -461,7 +461,7 @@ func TestEveryOverlayOwnsItsGround(t *testing.T) {
 					var closed groundCells
 					for _, st := range groundSteps() {
 						if st.fresh {
-							if err := term.WaitStable(uiTimeout); err != nil {
+							if err := settleScreen(term, uiTimeout); err != nil {
 								t.Fatalf("%s: the screen never settled before opening: %v", st.name, err)
 							}
 							closed = readCells(term.Screen())
@@ -472,7 +472,7 @@ func TestEveryOverlayOwnsItsGround(t *testing.T) {
 							st.do(t, term)
 						}
 						waitScreen(t, term, st.name+" never drew", st.want...)
-						if err := term.WaitStable(uiTimeout); err != nil {
+						if err := settleScreen(term, uiTimeout); err != nil {
 							t.Fatalf("%s: the screen never settled: %v", st.name, err)
 						}
 						s := term.Screen()

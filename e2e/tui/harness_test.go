@@ -867,6 +867,13 @@ func waitDockWorkspace(t *testing.T, term *tuitest.Terminal, ws int) {
 // transient misread does not self-correct, it poisons the assertion.
 func settledWindowCount(t *testing.T, term *tuitest.Terminal) int {
 	t.Helper()
+	// A client that answers settle probes has the whole dock on screen once
+	// it settles, so one read is the count.
+	if settleMarksOf(term) != "" && settleScreen(term, uiTimeout) == nil {
+		if n := countWindows(term.Screen()); n >= 0 {
+			return n
+		}
+	}
 	prev := -2
 	deadline := time.Now().Add(uiTimeout)
 	for time.Now().Before(deadline) {
@@ -1458,6 +1465,10 @@ func tilingIsOn(s tuitest.Screen) bool {
 // itself, it toggles the session the wrong way.
 func settledTiling(t *testing.T, term *tuitest.Terminal) bool {
 	t.Helper()
+	// As settledWindowCount: once the client settles, one read is the state.
+	if settleMarksOf(term) != "" && settleScreen(term, uiTimeout) == nil {
+		return tilingIsOn(term.Screen())
+	}
 	prev, seen := false, false
 	deadline := time.Now().Add(uiTimeout)
 	for time.Now().Before(deadline) {

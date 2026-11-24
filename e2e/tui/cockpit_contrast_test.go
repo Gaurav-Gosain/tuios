@@ -84,7 +84,7 @@ func agentsViewContrast(t *testing.T, run chromeRun) {
 	windowManagementMode(t, term)
 	sendKeys(t, term, tuitest.Ctrl('b'), "i")
 	waitText(t, term, "the closed reply area", "Reply to docs-cli", "Write a reply.", "Send")
-	_ = term.WaitStable(uiTimeout)
+	_ = settleScreen(term, uiTimeout)
 
 	host := hostPalette(t, run.look.theme)
 	dir := artifactDir(t)

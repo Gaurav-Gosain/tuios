@@ -123,7 +123,7 @@ func TestOverlayLayouts(t *testing.T) {
 			host := hostPalette(t, run.theme)
 			shot := func(name string) {
 				t.Helper()
-				if err := term.WaitStable(uiTimeout); err != nil {
+				if err := settleScreen(term, uiTimeout); err != nil {
 					t.Fatalf("%s: the screen never settled: %v", name, err)
 				}
 				saveArtifact(t, term, dir, name)

@@ -853,7 +853,7 @@ func TestCockpitThreadCards(t *testing.T) {
 				if err := term.SendKeys(key); err != nil {
 					t.Fatal(err)
 				}
-				_ = term.WaitStable(uiTimeout)
+				_ = settleScreen(term, uiTimeout)
 			}
 		}
 		scrollTo("K", "2 of 5 done")
@@ -1311,7 +1311,7 @@ func cockpitTurnFolds(t *testing.T, base, path string) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: the thread never showed the live last turn: %v\n%s", err, term.Snapshot())
 	}
-	_ = term.WaitStable(uiTimeout)
+	_ = settleScreen(term, uiTimeout)
 	saveCockpitFrames(t, term, "turns-140x45")
 	// Four actions: two are named, and the rest are counted. The span runs
 	// from the prompt to the answer, 13 s a record.
@@ -1331,7 +1331,7 @@ func cockpitTurnFolds(t *testing.T, base, path string) {
 			if err := term.SendKeys(key); err != nil {
 				t.Fatal(err)
 			}
-			_ = term.WaitStable(uiTimeout)
+			_ = settleScreen(term, uiTimeout)
 		}
 	}
 	// find scrolls down, then up, until want shows.
@@ -1342,7 +1342,7 @@ func cockpitTurnFolds(t *testing.T, base, path string) {
 	}
 	for k := 28; k <= 29; k++ {
 		find(fmt.Sprintf("Task %d: make", k))
-		_ = term.WaitStable(uiTimeout)
+		_ = settleScreen(term, uiTimeout)
 		if k == 28 {
 			saveCockpitFrames(t, term, "turns-folded-140x45")
 		}
@@ -1381,7 +1381,7 @@ func cockpitTurnFolds(t *testing.T, base, path string) {
 		if err := term.SendKeys("J"); err != nil {
 			t.Fatal(err)
 		}
-		_ = term.WaitStable(uiTimeout)
+		_ = settleScreen(term, uiTimeout)
 	}
 	hr, hc := findText(t, term, summary(27))
 	mouseClick(t, term, hc, hr, tuitest.MouseLeft, 0)
@@ -1392,7 +1392,7 @@ func cockpitTurnFolds(t *testing.T, base, path string) {
 	}, uiTimeout); err != nil {
 		t.Fatalf("ASSERTION: a click on the summary line did not open the turn: %v\n%s", err, term.Snapshot())
 	}
-	_ = term.WaitStable(uiTimeout)
+	_ = settleScreen(term, uiTimeout)
 	saveCockpitFrames(t, term, "turn-opened-140x45")
 	find("go test ./pkg27/...")
 	find(summary(27))

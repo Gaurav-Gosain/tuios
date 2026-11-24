@@ -256,7 +256,7 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 				if err := term.SendKeys("K"); err != nil {
 					t.Fatal(err)
 				}
-				_ = term.WaitStable(uiTimeout)
+				_ = settleScreen(term, uiTimeout)
 			}
 			for _, w := range want {
 				if !seen[w] {

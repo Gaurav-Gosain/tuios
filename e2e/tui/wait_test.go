@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -144,6 +145,32 @@ func settled(t *testing.T, term *tuitest.Terminal, why string, d time.Duration) 
 	t.Logf("settled in %s, %d probes, read %d of %d bytes: %s", time.Since(start).Round(time.Millisecond), probes, a.read, a.sent, why)
 }
 
+// settleScreen is WaitStable for a client that answers settle probes: it
+// returns once the client has drawn the frame for everything sent to it and
+// is not busy, or with an error once timeout runs out. A client that does not
+// answer probes gets WaitStable. Use it where a test waits for the client's
+// own reaction to a key. It does not wait for output a pane has not sent the
+// client yet, which WaitStable's quiet window can catch.
+func settleScreen(term *tuitest.Terminal, timeout time.Duration) error {
+	marks := settleMarksOf(term)
+	if marks == "" {
+		return term.WaitStable(timeout)
+	}
+	var a settleAnswer
+	if msg := failureOf(func(f failer) {
+		waitUntil(f, "the client settles", timeout, func() (bool, string) {
+			a = settleProbe(f, term, marks)
+			return !a.screen || !a.busy, "an animation runs"
+		})
+	}); msg != "" {
+		return errors.New(msg)
+	}
+	if !a.screen {
+		return term.WaitStable(timeout)
+	}
+	return nil
+}
+
 // settleMarksOf is the marks file of a client startIn started, "" for a
 // client that does not answer settle probes. A client that answers them
 // creates the file when it starts. An older tuios does not, so a test that
@@ -166,7 +193,7 @@ func settleMarksOf(term *tuitest.Terminal) string {
 // settleProbe sends one settle probe and waits for its answer, and then, for
 // a client with its own screen, until the terminal has read every byte the
 // answer counts.
-func settleProbe(t *testing.T, term *tuitest.Terminal, marks string) settleAnswer {
+func settleProbe(t failer, term *tuitest.Terminal, marks string) settleAnswer {
 	t.Helper()
 	id := strconv.FormatInt(settleSeq.Add(1), 10)
 	if err := term.Type("\x1b_tuios-settle;" + id + "\x1b\\"); err != nil {

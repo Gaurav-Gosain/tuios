@@ -502,7 +502,7 @@ func TestPaneLabelsLooks(t *testing.T) {
 				term, base, ids := paneLabelsSession(t, cfg, startOpts{shippedLooks: true, env: depth.env})
 				focusPaneByCLI(t, base, ids[0])
 				openPaneLabels(t, term, "1", "alpha")
-				if err := term.WaitStable(uiTimeout); err != nil {
+				if err := settleScreen(term, uiTimeout); err != nil {
 					t.Fatalf("the screen never settled: %v", err)
 				}
 				s := term.Screen()

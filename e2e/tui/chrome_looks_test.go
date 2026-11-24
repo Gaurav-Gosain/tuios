@@ -210,13 +210,13 @@ func TestChromeLooksAndFooters(t *testing.T) {
 			host := hostPalette(t, run.look.theme)
 			colour := run.depth.name != "16"
 			for _, st := range chromeSteps() {
-				if err := term.WaitStable(uiTimeout); err != nil {
+				if err := settleScreen(term, uiTimeout); err != nil {
 					t.Fatalf("%s: the screen never settled before opening: %v", st.name, err)
 				}
 				closed := readCells(term.Screen())
 				sendKeys(t, term, st.open...)
 				waitScreen(t, term, st.name+" never drew", st.want...)
-				if err := term.WaitStable(uiTimeout); err != nil {
+				if err := settleScreen(term, uiTimeout); err != nil {
 					t.Fatalf("%s: the screen never settled: %v", st.name, err)
 				}
 				s := term.Screen()
