@@ -394,11 +394,16 @@ def State.holdTyping (s : State) (pa : PaneAuth) (verb : String) (t : Target) : 
         else if pa.grants.admin then .ok t
         else .ok { t with window := target.id }
 
+/-- A session the call names that is not the pane's own, or that does not
+resolve. -/
+def State.otherSession (s : State) (pa : PaneAuth) (name : String) : Bool :=
+  name ≠ "" && (match s.session? name with | some x => x.name != pa.session | none => true)
+
 /-- holdOwnRecord: a report from a pane with admin is about its own pane,
 unless it holds respond. -/
 def State.holdOwnRecord (s : State) (pa : PaneAuth) (t : Target) : Except Refusal Target :=
   if pa.grants.respond then .ok t
-  else if t.session ≠ "" && (match s.session? t.session with | some x => x.name != pa.session | none => true) then
+  else if s.otherSession pa t.session then
     .error .forbidden
   else if t.window ≠ "" ∧ t.window ≠ pa.window then .error .forbidden
   else .ok { t with session := pa.session, window := pa.window }

@@ -621,4 +621,64 @@ theorem types_only_into_no_more {s : State} {c : Caller} {pa : PaneAuth} {v : St
           rw [holdTyping_keeps hT] at hss
           exact holdTyping_target hn hT hs1 hss hw hne ho
 
+/-! ## Reports -/
+
+theorem holdOwnRecord_window {s : State} {pa : PaneAuth} {t t' : Target} (hr : pa.grants.respond = false)
+    (h : s.holdOwnRecord pa t = .ok t') : t'.window = pa.window := by
+  unfold State.holdOwnRecord at h
+  simp only [hr, Bool.false_eq_true, ↓reduceIte] at h
+  cases hb : s.otherSession pa t.session <;> simp only [hb, Bool.false_eq_true, ↓reduceIte] at h
+  · by_cases hw : t.window ≠ "" ∧ t.window ≠ pa.window
+    · rw [ite_eq_left_of_eq_true _ _ (eq_true hw)] at h; cases h
+    · rw [ite_eq_right_of_eq_false _ _ (eq_false hw)] at h; cases h; rfl
+  · cases h
+
+/-- A pane reports only about its own pane unless it holds respond, with
+admin too: a report the checks let through names the caller's window. -/
+theorem reports_only_for_own_pane {s : State} {c : Caller} {pa : PaneAuth} {v : String} {t t' : Target}
+    (ha : s.auth c = some pa) (hk : (verbInfo v).grant = .self) (hr : pa.grants.respond = false)
+    (h : s.checkGrants c v t = .ok t') : t'.window = pa.window := by
+  have hnt : s.holdToOwnTree pa v t = none := by
+    unfold State.holdToOwnTree
+    split
+    · rfl
+    · have h1 : v ≠ "close-window" := by intro e; subst e; simp [verbInfo] at hk
+      have h2 : v ≠ "wait-for" := by intro e; subst e; simp [verbInfo] at hk
+      simp [h1, h2]
+  have htv : typingVerb v = false := by
+    unfold typingVerb
+    simp only [List.mem_cons, List.not_mem_nil, or_false, decide_eq_false_iff_not]
+    intro e
+    rcases e with e | e | e | e | e | e | e <;> subst e <;> simp [verbInfo] at hk
+  unfold State.checkGrants at h
+  rw [ha] at h
+  simp only at h
+  split at h
+  · simp only [htv, Bool.false_eq_true, ↓reduceIte] at h
+    exact holdOwnRecord_window hr h
+  · rw [hnt] at h
+    simp only at h
+    split at h
+    · cases h
+    · split at h
+      · cases h
+      · rename_i hp
+        exfalso
+        unfold State.grantGate at hp
+        simp [hk] at hp
+      · split at h
+        · cases h
+        · split at h
+          · cases h
+          · rename_i t1 h1
+            simp only [htv, Bool.false_eq_true, ↓reduceIte] at h
+            cases h
+            rw [hk] at h1
+            unfold holdToPane at h1
+            split at h1
+            · cases h1
+            · simp only at h1
+              repeat' split at h1
+              all_goals (cases h1 <;> first | rfl | (rename_i hw; simp_all) | skip)
+
 end GrantSpec
