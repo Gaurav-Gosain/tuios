@@ -221,8 +221,8 @@ Run `tuios keybinds list` to see the keys that your config sets.
 
 | Keys | Action | Description |
 |---|---|---|
-| `h`, `left` | `column_left` | Preview: move a column left, or 1 second back in a film |
-| `l`, `right` | `column_right` | Preview: move a column right, or 1 second on in a film |
+| `h`, `left` | `column_left` | Preview: move a column left, 1 second back in a film, or up from a folder |
+| `l`, `right` | `column_right` | Preview: move a column right, 1 second on in a film, or into a folder row |
 | `[` | `copy_mode` | Preview: copy mode on the text, to select and copy it |
 | `G`, `end` | `end` | Preview: go to the end of the file |
 | `t` | `filmstrip` | Preview: show the filmstrip of a film, or hide it |
@@ -237,8 +237,10 @@ Run `tuios keybinds list` to see the keys that your config sets.
 | `j`, `down` | `line_down` | Preview: move one line forward |
 | `k`, `up` | `line_up` | Preview: move one line back |
 | `v` | `next_view` | Preview: show the next view of the file |
-| `enter` | `open_details` | Preview: open the closed sections of a Markdown file |
+| `enter` | `open_details` | Preview: open the closed sections of a Markdown file, or the selected row of a folder |
 | `e` | `open_editor` | Preview: open the file in your editor, in a new pane |
+| `backspace` | `parent` | Preview: show the folder above, or the folder of the file |
+| `r` | `reveal_in_rail` | Preview: show this folder in the rail's files section |
 | `g`, `home` | `start` | Preview: go to the start of the file |
 | `w` | `wrap` | Preview: wrap long lines, or cut them |
 

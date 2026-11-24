@@ -299,6 +299,26 @@ type quickLookState struct {
 	// framed is the last panel drawn, with what it was drawn from, so a frame
 	// composed for another reason reuses it.
 	framed quickLookFrame
+	// walked says the keys or a click walked the panel away from the rail's
+	// row, so it does not follow the rail's cursor until the keyboard goes
+	// back. rejoin says r moved the rail to the panel's folder, and the walk
+	// ends when the rail's cursor lands there. dirSel is the selected row of a folder, dirWant the row to select
+	// once a folder is read, dirTop and dirRows where its rows were in the last
+	// frame, and dirCols that the frame had the size and age columns. dirStats
+	// holds those of dirStatsFor's rows, dirStatsGen counts the answers, and
+	// dirStatOut says a read is out. See quicklook_folder.go.
+	walked        bool
+	rejoin        bool
+	dirSel        int
+	dirWant       string
+	dirTop        int
+	dirRows       int
+	dirCols       bool
+	dirStats      map[string]quickLookStat
+	dirStatsFor   *quickLookResult
+	dirStatsGen   int
+	dirStatOut    bool
+	dirStatFailed bool
 }
 
 // quickLookFrame is a drawn panel and its key. Where the panel is placed is
@@ -306,6 +326,7 @@ type quickLookState struct {
 type quickLookFrame struct {
 	mdGen              int
 	mdOpen             bool
+	dirSel, dirStats   int
 	ok                 bool
 	look               ckLookKey
 	res                *quickLookResult
@@ -464,6 +485,8 @@ func (m *OS) dropQuickLook() {
 	ql.framed = quickLookFrame{}
 	m.quickLookDropPages()
 	ql.view, ql.viewScroll, ql.details, ql.column, ql.mdOpen = "", 0, nil, 0, false
+	ql.walked, ql.rejoin, ql.dirSel, ql.dirWant = false, false, 0, ""
+	ql.dirStats, ql.dirStatsFor, ql.dirStatFailed = nil, nil, false
 }
 
 // QuickLookSync keeps the preview on the row under the cursor. The input
@@ -476,6 +499,9 @@ func (m *OS) QuickLookSync() tea.Cmd {
 	}
 	if !m.SidebarFocused || m.SidebarFocusOnSecondary() || !m.filesOn() {
 		m.dropQuickLook()
+		return nil
+	}
+	if ql.walked {
 		return nil
 	}
 	t, ok := m.quickLookCursorTarget()
@@ -532,6 +558,7 @@ func (m *OS) quickLookShow(t quickLookTarget) tea.Cmd {
 	if ql.target != t {
 		m.quickLookDropPages()
 		ql.view, ql.viewScroll, ql.details, ql.column, ql.mdOpen = "", 0, nil, 0, false
+		ql.dirSel = 0
 		// The hints and keys ask what the file is, and this is not that file.
 		ql.res = nil
 	}
@@ -770,6 +797,10 @@ func (m *OS) applyQuickLook(msg quickLookMsg) tea.Cmd {
 			ql.quickLookHoldPage(msg.res)
 		}
 		ql.filmWant = msg.res.atMs
+		if msg.res.kind == "dir" {
+			_, bodyH := m.quickLookSize()
+			ql.quickLookDirPick(msg.res, bodyH-1)
+		}
 		if n := ql.wantLine; n > 0 {
 			ql.wantLine = 0
 			m.quickLookGoToLine(int64(n))
@@ -922,6 +953,10 @@ func (m *OS) QuickLookMouseClick(x, y int) bool {
 		if q := ql.copy; q != nil && q.cm.Implicit && !m.QuickLookCopyOnText(x, y) {
 			m.QuickLookCopyEnd()
 		}
+		if cmd, ok := m.quickLookFolderClick(x, y); ok {
+			m.queueSidebarCmd(cmd)
+			return true
+		}
 		if !m.quickLookRulerClick(x, y) {
 			m.quickLookBarClick(x, y)
 			m.quickLookBlockClick(x, y)
@@ -1022,7 +1057,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 	}
 	// The border is in the key: the frame glyphs are a package global set from
 	// border_style every frame, outside the palette.
-	f := quickLookFrame{mdGen: ql.mdGen, mdOpen: ql.mdOpen, view: ql.view, viewScroll: ql.viewScroll, column: ql.column, details: ql.details, ok: true, look: ql.lookKey, res: ql.res, target: ql.target, scroll: ql.scroll, inside: ql.inside,
+	f := quickLookFrame{mdGen: ql.mdGen, mdOpen: ql.mdOpen, dirSel: ql.dirSel, dirStats: ql.dirStatsGen, view: ql.view, viewScroll: ql.viewScroll, column: ql.column, details: ql.details, ok: true, look: ql.lookKey, res: ql.res, target: ql.target, scroll: ql.scroll, inside: ql.inside,
 		prompt: ql.prompt, input: ql.input.String(), inputAt: ql.inputAt(), query: ql.query, status: ql.status, wrap: ql.wrap,
 		innerW: innerW, bodyH: bodyH, key: key, seekKey: seekKey, insideKey: insideKey, border: m.Settings.OverlayBorder(),
 		canvas: pal.Canvas, fgMute: pal.FgMute, frame: pal.Frame, accent: pal.Accent,
@@ -1032,7 +1067,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 	var pic quickLookPic
 	// Copy mode moves something on every key, so its frames are not kept.
 	if k := &ql.framed; ql.copy == nil && k.ok && k.look == f.look && k.res == f.res && k.target == f.target && k.scroll == f.scroll && k.inside == f.inside &&
-		k.prompt == f.prompt && k.input == f.input && k.query == f.query && k.status == f.status && k.wrap == f.wrap && k.view == f.view && k.mdOpen == f.mdOpen && k.mdGen == f.mdGen && k.viewScroll == f.viewScroll && k.column == f.column && k.details == f.details &&
+		k.prompt == f.prompt && k.input == f.input && k.query == f.query && k.status == f.status && k.wrap == f.wrap && k.view == f.view && k.mdOpen == f.mdOpen && k.mdGen == f.mdGen && k.dirSel == f.dirSel && k.dirStats == f.dirStats && k.viewScroll == f.viewScroll && k.column == f.column && k.details == f.details &&
 		k.innerW == f.innerW && k.bodyH == f.bodyH && k.key == f.key && k.seekKey == f.seekKey && k.insideKey == f.insideKey && k.border == f.border &&
 		k.canvas == f.canvas && k.fgMute == f.fgMute && k.frame == f.frame && k.accent == f.accent &&
 		k.accentBright == f.accentBright && k.fgDim == f.fgDim {
@@ -1042,7 +1077,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 		c := (*ckCanvas)(nil).reset(innerW, bodyH, ckColor(pal.Canvas))
 		pic = m.drawQuickLook(c, l, dv, innerW, bodyH)
 		title := ql.target.name
-		if ql.target.dir {
+		if ql.target.dir && !strings.HasSuffix(title, "/") {
 			title += "/"
 		}
 		hints := m.quickLookHints(key)
@@ -1119,7 +1154,11 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 	meta := quickLookMeta(r)
 	right := []ckSeg{}
 	if ql.inside {
-		right = append(right, ckSeg{t: "Inside the file", fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " "})
+		inside := "Inside the file"
+		if r := ql.res; r != nil && r.kind == "dir" {
+			inside = "Inside the folder"
+		}
+		right = append(right, ckSeg{t: inside, fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " "})
 	}
 	ql.pageBar = quickLookBarBox{}
 	if len(m.quickLookViews()) > 1 {
@@ -1165,6 +1204,9 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 		right = append(right, ckSeg{t: "on " + t.host, fg: pal.FgMute}, ckSeg{t: " "})
 	}
 	rx := c.textR(w, 0, right...)
+	if r.kind == "dir" {
+		meta = quickLookDirPlace(r.target, rx-2-len(meta)-3) + " · " + meta
+	}
 	c.text(1, 0, rx-1, ckSeg{t: meta, fg: pal.FgMute})
 
 	scrollTo := func(n int) int {
@@ -1277,15 +1319,7 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 			center(mid, "This folder is empty.", false)
 			break
 		}
-		from := scrollTo(len(r.entries))
-		for i := 0; i < bodyRows && from+i < len(r.entries); i++ {
-			e := r.entries[from+i]
-			name, ink := e.Name, pal.Fg
-			if e.Dir {
-				name, ink = name+"/", pal.AccentBright
-			}
-			c.text(2, bodyTop+i, w-1, ckSeg{t: name, fg: ink})
-		}
+		m.drawQuickLookDir(c, pal, r, bodyTop, bodyRows, w)
 	case "image", "pdf", "video":
 		if r.img == nil && r.lines != nil {
 			quickLookDrawPageWords(c, pal, r.lines, bodyTop, bodyRows, w)
@@ -1375,7 +1409,7 @@ func quickLookMeta(r *quickLookResult) string {
 		if r.capped {
 			n = "More than " + n
 		}
-		parts = append(parts, "Folder", n)
+		parts = append(parts, n)
 	case "image":
 		parts = append(parts, "Image")
 		if r.width > 0 && r.height > 0 {
@@ -1514,6 +1548,18 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 			h = add(h, pair(in, "line_down", "line_up"), "line")
 			return add(h, closeKey, "close")
 		}
+		if ql.quickLookOnFolder() {
+			h = add(h, first(in("open_details")), "open")
+			h = add(h, first(in("parent")), "up")
+			h = add(h, first(in("reveal_in_rail")), "show in rail")
+			h = add(h, pair(in, "line_down", "line_up"), "move")
+			h = add(h, pair(in, "start", "end"), "first, last")
+			h = add(h, first(in("full_size")), "full size")
+			return add(h, closeKey, "close")
+		}
+		if ql.walked || ql.free {
+			h = add(h, first(in("parent")), "folder")
+		}
 		if ql.res != nil && ql.res.table != nil {
 			h = add(h, pair(in, "column_left", "column_right"), "columns")
 		}
@@ -1597,8 +1643,12 @@ func (m *OS) QuickLookGoInside() bool {
 	return true
 }
 
-// QuickLookGoBack moves the keyboard back to the list.
-func (m *OS) QuickLookGoBack() { m.quickLook.inside = false }
+// QuickLookGoBack moves the keyboard back to the list. A panel the keys walked
+// away from the rail's row follows the rail's cursor again.
+func (m *OS) QuickLookGoBack() {
+	ql := &m.quickLook
+	ql.inside, ql.walked, ql.rejoin, ql.dirWant = false, false, false, ""
+}
 
 // QuickLookFullSize fills the area of the panes, or goes back.
 func (m *OS) QuickLookFullSize() { m.quickLook.full = !m.quickLook.full }

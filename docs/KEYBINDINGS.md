@@ -428,8 +428,29 @@ Inside the file, every key acts on the preview:
 | `[` | Start copy mode on the text |
 | `e` | Open the file in your editor in a new pane, at the line at the top of the preview |
 | `f` | Fill the area of the panes, or go back |
+| `Backspace` | Show the folder of the file, with the file selected |
 | `Esc` or `Tab` | Move the keyboard back to the list |
 | `Space` | Close the preview |
+
+A folder in the preview is a list that you can walk. The rows look like the
+rows of the files section. A row shows the size and the age of the file when
+the preview is 60 columns wide or more. Inside a folder, these keys act on the
+list:
+
+| Key | Action |
+| --- | --- |
+| `j` `k` | Select the next row or the row before |
+| `d` `u` | Move the selection half a page |
+| `g` `G` | Select the first or the last row |
+| `Enter` or `l` | Open the selected row. A folder shows its rows, and a file shows its preview |
+| `Backspace` or `h` | Show the folder above, with the folder that you left selected |
+| `r` | Show this folder in the files section, with the cursor on the selected row |
+| `Esc` or `Tab` | Move the keyboard back to the list |
+
+Click a row to select it. Click the selected row to open it. The mouse wheel
+moves the selection. While you walk the folders, the preview does not follow
+the cursor of the files section. Press `Esc` to go back to the files section.
+Then the preview follows the cursor again.
 
 Change these keys in `[keybindings.quick_look]` and
 `[keybindings.quick_look_inside]`.

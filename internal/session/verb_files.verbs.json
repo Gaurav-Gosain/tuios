@@ -273,7 +273,7 @@
     ]
   },
   "file-stat": {
-    "description": "Describe one path on this machine. With part, describe the part file a copy to the path is writing.",
+    "description": "Describe one path on this machine. With part, describe the part file a copy to the path is writing. With names, describe up to 256 names in the folder path.",
     "params": [
       {
         "name": "path",
@@ -290,6 +290,10 @@
       {
         "name": "relation_to",
         "description": "Another path on this machine. The reply says how path stands to it, with links followed."
+      },
+      {
+        "name": "names",
+        "description": "Names in the folder path, at most 256. The reply has infos for them in place of exists, size and info."
       }
     ],
     "returns": [
@@ -312,10 +316,15 @@
       {
         "name": "relation",
         "description": "With relation_to: same when the two paths are one file, inside when path is in the folder relation_to, apart otherwise."
+      },
+      {
+        "name": "infos",
+        "description": "With names: an info for each name that is there and that you may read, in the order of names."
       }
     ],
     "examples": [
-      "{\"id\":1,\"verb\":\"file-stat\",\"params\":{\"path\":\"~/notes.md\"}}"
+      "{\"id\":1,\"verb\":\"file-stat\",\"params\":{\"path\":\"~/notes.md\"}}",
+      "{\"id\":2,\"verb\":\"file-stat\",\"params\":{\"path\":\"~/proj\",\"names\":[\"main.go\",\"docs\"]}}"
     ]
   },
   "file-walk": {

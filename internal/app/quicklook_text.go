@@ -178,6 +178,10 @@ func (m *OS) QuickLookScroll(lines int) bool {
 		ql.viewScroll = max(ql.viewScroll+lines, 0)
 		return true
 	}
+	if ql.quickLookOnFolder() {
+		ql.quickLookSelect(lines)
+		return true
+	}
 	if quickLookPaged(ql.res) {
 		if lines < 0 {
 			return m.quickLookPageTo(ql.pageWant - 1)
@@ -234,6 +238,13 @@ func (m *OS) QuickLookEdge(end bool) bool {
 		ql.viewScroll = 0
 		if end {
 			ql.viewScroll = 1 << 30
+		}
+		return true
+	}
+	if ql.quickLookOnFolder() {
+		ql.dirSel = 0
+		if end {
+			ql.dirSel = len(r.entries) - 1
 		}
 		return true
 	}

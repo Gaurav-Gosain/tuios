@@ -268,7 +268,13 @@ func TestFilePreviewOnAHost(t *testing.T) {
 // may not have: a dummy key under ~/.ssh, the same key through a symlink and
 // through a hard link in the receive folder, and the ~/.ssh folder. Each must
 // be refused as forbidden and the marker must never come back. The positive
-// half previews an ordinary file in the same folder.
+// half previews an ordinary file in the same folder. A stat of names in the
+// receive folder describes only names in it, and a stat of names in ~/.ssh is
+// refused.
+//
+// NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md):
+//   - with the separator check cut from fileStatNames, the test fails at
+//     "a stat of names in the folder": ../outside.txt comes back.
 func TestFilePreviewKeepsToTheReadRules(t *testing.T) {
 	base := t.TempDir()
 	remote := remoteMachine(t)
@@ -277,6 +283,7 @@ func TestFilePreviewKeepsToTheReadRules(t *testing.T) {
 	key := dummyKey(t, farHome)
 	recv := filepath.Join(farHome, "Downloads", "tuios")
 	writeFarFile(t, filepath.Join(recv, "notes.txt"), "ordinary\n", 0o644)
+	writeFarFile(t, filepath.Join(farHome, "Downloads", "outside.txt"), "outside\n", 0o644)
 	if err := os.Symlink(key, filepath.Join(recv, "keyref.txt")); err != nil {
 		t.Fatal(err)
 	}
@@ -305,6 +312,29 @@ func TestFilePreviewKeepsToTheReadRules(t *testing.T) {
 	if text.Kind != "text" || text.Text != "ordinary\n" {
 		t.Errorf("ASSERTION: an ordinary file did not preview: %+v", text)
 	}
+
+	// The stat of a folder's rows that quick look asks for: a name in the
+	// folder comes back, and a name that leaves the folder or is not there
+	// does not. A folder the link may not read is refused whole.
+	var stats struct {
+		Infos []struct {
+			Name string `json:"name"`
+			Size int64  `json:"size"`
+		} `json:"infos"`
+	}
+	dialHostVerbs(t, base).must("file-stat", map[string]any{"path": "~/Downloads/tuios",
+		"names": []string{"notes.txt", "../outside.txt", "../../.ssh/id_ed25519", "missing.txt"}}, &stats)
+	record["file-stat names"] = stats
+	if len(stats.Infos) != 1 || stats.Infos[0].Name != "notes.txt" || stats.Infos[0].Size != int64(len("ordinary\n")) {
+		t.Errorf("ASSERTION: a stat of names in the folder answered %+v, want notes.txt of 9 bytes only", stats.Infos)
+	}
+	c := dialHostVerbs(t, base)
+	raw, err := c.call("file-stat", map[string]any{"path": "~/.ssh", "names": []string{"id_ed25519"}})
+	record["file-stat ~/.ssh"] = map[string]any{"error": errString(err), "answer": string(raw)}
+	if !forbidden(err) {
+		t.Errorf("ASSERTION: a stat of names in ~/.ssh over the link was not refused as forbidden: %v %s", err, raw)
+	}
+	_ = c.conn.Close()
 	if b, _ := os.ReadFile(key); string(b) != dummyKeyMarker {
 		t.Errorf("ASSERTION: the dummy key changed: %q", b)
 	}

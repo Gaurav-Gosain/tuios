@@ -1653,7 +1653,7 @@ Move or rename a path on this machine. It does not replace a path that is there 
 
 ### `file-stat`
 
-Describe one path on this machine. With part, describe the part file a copy to the path is writing.
+Describe one path on this machine. With part, describe the part file a copy to the path is writing. With names, describe up to 256 names in the folder path.
 
 | Param | Type | Required | Default | Description |
 |---|---|---|---|---|
@@ -1661,6 +1661,7 @@ Describe one path on this machine. With part, describe the part file a copy to t
 | `part` | bool |  |  | Describe the part file of a copy to this path instead. |
 | `part_id` | string |  |  | The copy's part id, up to 32 hex digits: the part is .NAME.tuios-part-ID, so two copies to one path write two parts. Omit for .NAME.tuios-part. |
 | `relation_to` | string |  |  | Another path on this machine. The reply says how path stands to it, with links followed. |
+| `names` | []string |  |  | Names in the folder path, at most 256. The reply has infos for them in place of exists, size and info. |
 
 | Result field | Type | Description |
 |---|---|---|
@@ -1669,9 +1670,14 @@ Describe one path on this machine. With part, describe the part file a copy to t
 | `size` | int | The size in bytes. 0 for a part that is not there. |
 | `info` | object | name, path, kind (file, dir, symlink, other), link_kind and link for a link, size, mtime (Unix ms), mode (drwxr-xr-x), perm (the permission bits as a number), hidden. |
 | `relation` | string | With relation_to: same when the two paths are one file, inside when path is in the folder relation_to, apart otherwise. |
+| `infos` | []object | With names: an info for each name that is there and that you may read, in the order of names. |
 
 ```json
 {"id":1,"verb":"file-stat","params":{"path":"~/notes.md"}}
+```
+
+```json
+{"id":2,"verb":"file-stat","params":{"path":"~/proj","names":["main.go","docs"]}}
 ```
 
 ### `file-walk`

@@ -19579,3 +19579,26 @@ the lock 38% to 50% of the time and failed 1 of 5. This branch held it 30% to
 
 Repeat with
 `go test -tags ghostty -count=10 -run '^TestWaitForOutputDoesNotSlowFlood$' -v ./internal/session/`.
+## Quick look walks a folder
+
+`TestQuickLookWalksAFolder` opens quick look on a folder of the files section.
+The rows must show size and age. Tab, enter and enter again must open a
+subfolder and then a file in place. Backspace and h must go up with the row
+just left selected. A click must select a row, and a second click must open
+it. r must show the folder in the rail, and the preview must follow the
+rail's cursor again.
+`TestFilePreviewKeepsToTheReadRules` asks a linked machine for the stat of
+names in a folder. A name that leaves the folder must not come back.
+
+Run on 2026-11-24 on Linux (amd64). Five controls:
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| A build of main | "the folder rows show no size and age" | **caught** |
+| No `walked` check in `QuickLookSync` | "enter did not open deep" | **caught** |
+| `quickLookDirPick` not called from `applyQuickLook` | "backspace from alpha.txt: the row alpha.txt is not selected" | **caught** |
+| `quickLookFolderClick` not called from `QuickLookMouseClick` | "a click on alpha.txt: the row alpha.txt is not selected" | **caught** |
+| No separator check in `fileStatNames` | "a stat of names in the folder answered [... outside.txt ...]" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestQuickLookWalksAFolder|TestFilePreviewKeepsToTheReadRules)$' -v .`.

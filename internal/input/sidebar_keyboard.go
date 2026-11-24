@@ -371,9 +371,23 @@ func handleSidebarFileAction(action string, o *app.OS) tea.Cmd {
 	return nil
 }
 
-// quickLookInsideAction runs an action of the preview's inside table.
+// quickLookInsideAction runs an action of the preview's inside table. On a
+// folder, enter and l open the selected row and h goes up, where on a file
+// they open sections and move columns.
 func quickLookInsideAction(o *app.OS, act string) tea.Cmd {
+	if o.QuickLookOnFolder() {
+		switch act {
+		case "open_details", "column_right":
+			return o.QuickLookOpenEntry()
+		case "column_left":
+			return o.QuickLookParent()
+		}
+	}
 	switch act {
+	case "parent":
+		return o.QuickLookParent()
+	case "reveal_in_rail":
+		return o.QuickLookRevealInRail()
 	case "line_down":
 		o.QuickLookLine(true)
 	case "line_up":

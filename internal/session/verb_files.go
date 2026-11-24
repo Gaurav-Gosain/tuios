@@ -302,10 +302,11 @@ func partPath(dst, id string) string {
 // verbFileStat describes one path.
 func (d *Daemon) verbFileStat(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
-		Path       string `json:"path"`
-		Part       bool   `json:"part"`
-		PartID     string `json:"part_id"`
-		RelationTo string `json:"relation_to"`
+		Path       string   `json:"path"`
+		Part       bool     `json:"part"`
+		PartID     string   `json:"part_id"`
+		RelationTo string   `json:"relation_to"`
+		Names      []string `json:"names"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -321,6 +322,9 @@ func (d *Daemon) verbFileStat(cs *connState, params json.RawMessage) (any, *verb
 	// may not look inside the folders it may not read.
 	if verr := d.checkLinkRead(cs, path); verr != nil {
 		return nil, verr
+	}
+	if p.Names != nil {
+		return d.fileStatNames(cs, path, p.Names)
 	}
 	out := map[string]any{"path": path}
 	if p.RelationTo != "" {
@@ -357,6 +361,35 @@ func (d *Daemon) verbFileStat(cs *connState, params json.RawMessage) (any, *verb
 	info := describe(target, fi)
 	out["exists"], out["info"], out["size"] = true, info, info.Size
 	return out, nil
+}
+
+// fileStatNamesMax bounds the names one file-stat call describes.
+const fileStatNamesMax = 256
+
+// fileStatNames describes names in the folder dir, for the rows of a folder a
+// preview shows: one call for a screen of rows, where file-list would stat the
+// whole folder. A name that is not there, is not one name, or that a link may
+// not read is left out.
+func (d *Daemon) fileStatNames(cs *connState, dir string, names []string) (any, *verbError) {
+	if len(names) > fileStatNamesMax {
+		return nil, newVerbError(ErrVerbInvalidParams, "names holds more than 256 names.")
+	}
+	infos := make([]FileInfo, 0, len(names))
+	for _, name := range names {
+		if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\\") {
+			continue
+		}
+		full := filepath.Join(dir, name)
+		if d.checkLinkRead(cs, full) != nil {
+			continue
+		}
+		fi, err := os.Lstat(full)
+		if err != nil {
+			continue
+		}
+		infos = append(infos, describe(full, fi))
+	}
+	return map[string]any{"path": dir, "infos": infos}, nil
 }
 
 // verbFileList lists a folder a page at a time: folders first, then names in
@@ -1518,6 +1551,7 @@ func fileVerbs() map[string]verbEntry {
 				{Name: "part", Type: "bool"},
 				partIDParam,
 				{Name: "relation_to", Type: "string"},
+				{Name: "names", Type: "[]string"},
 			},
 			returns: []verbParam{
 				{Name: "path", Type: "string"},
@@ -1525,6 +1559,7 @@ func fileVerbs() map[string]verbEntry {
 				{Name: "size", Type: "int"},
 				infoReturn,
 				{Name: "relation", Type: "string"},
+				{Name: "infos", Type: "[]object"},
 			},
 			handler: (*Daemon).verbFileStat,
 		},

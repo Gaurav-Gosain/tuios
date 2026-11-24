@@ -2656,6 +2656,7 @@ func (m *OS) sidebarPublishNav(nav []sidebarNavRow, target sidebarNavRow, haveTa
 	// the tracked row is a name from the listing that was just replaced.
 	if m.sidebarFollowFile && !m.filesView.Loading && m.filesView.Gen == m.sidebarFollowFileGen {
 		m.sidebarFollowFile = false
+		m.quickLook.quickLookRejoin()
 		if i, ok := sidebarFileRowIndex(nav, m.sidebarFollowFileName); ok {
 			m.SidebarCursor = i
 			return

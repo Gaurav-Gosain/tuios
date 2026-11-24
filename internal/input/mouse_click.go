@@ -73,7 +73,7 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	// may start a selection, or in copy mode moves the cursor.
 	if o.QuickLookMouseClick(X, Y) {
 		quickLookCopyPress(msg, o)
-		return o, nil
+		return o, o.TakeSidebarCmd()
 	}
 
 	// A press in the agents view's thread may start a selection. A plain

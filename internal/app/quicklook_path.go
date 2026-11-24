@@ -12,8 +12,8 @@ import (
 //
 // It is the rail's preview with no rail row under it. It does not follow the
 // rail's cursor, it opens over whatever is on screen (a pane, the agents
-// view), and the keyboard goes inside the file at once, since there is no list
-// for keys to walk. esc closes it.
+// view), and the keyboard goes inside the file or the folder at once, since
+// there is no list for keys to walk. esc closes it.
 func (m *OS) OpenQuickLookPath(path string, line int, dir bool) tea.Cmd {
 	if m.quickLook.open {
 		m.CloseQuickLook()
@@ -25,7 +25,7 @@ func (m *OS) OpenQuickLookPath(path string, line int, dir bool) tea.Cmd {
 	ql := &m.quickLook
 	ql.open, ql.free = true, true
 	cmd := m.quickLookShow(t)
-	ql.inside = !dir
+	ql.inside = true
 	ql.wantLine = line
 	return cmd
 }
