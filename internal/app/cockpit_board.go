@@ -662,6 +662,8 @@ func (m *OS) drawCardRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x, 
 		default:
 			if words, lInk := ckLifeLine(pal, card); words != "" {
 				who, whoInk = words, lInk
+			} else if !ckFreeStage(card.Stage) {
+				who = ckUnheldLine(card)
 			}
 		}
 		if card.Host != "" {
@@ -708,14 +710,7 @@ func (m *OS) drawCardRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x, 
 			c.text(nx, y+1, rx2, ckSeg{t: ckTrunc(words, rx2-nx), fg: ink(lInk)})
 			return
 		}
-		free := "free"
-		if card.AskFirst {
-			free = "free, ask first"
-		}
-		if card.Host != "" {
-			free = "free on " + printableTitle(card.Host)
-		}
-		c.text(nx, y+1, rx2, ckSeg{t: ckTrunc(free, rx2-nx), fg: ink(pal.FgMute)})
+		c.text(nx, y+1, rx2, ckSeg{t: ckTrunc(ckUnheldLine(card), rx2-nx), fg: ink(pal.FgMute)})
 	}
 }
 

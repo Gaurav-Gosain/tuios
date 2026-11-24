@@ -909,8 +909,45 @@ func (m *OS) drawKanbanAdd(c *ckCanvas, l ckLook, a *kbNewCard, x, y, w int) int
 	return y + 4
 }
 
+// ckUnheldLine is what the second line of a card with no holder says of its
+// stage when the lifecycle has nothing to say. Only a card in Todo or Plan is
+// free to take: in Doing the pane that held it is gone, and in Verify or
+// Shipped no pane is meant to hold it.
+func ckUnheldLine(card session.TaskRow) string {
+	switch card.Stage {
+	case session.TaskStageDoing:
+		return "No pane holds it"
+	case session.TaskStageVerify:
+		return "Waits for verify"
+	case session.TaskStageShipped:
+		return "Shipped"
+	}
+	return ckFreeLine(card)
+}
+
+// ckFreeStage reports whether a card with no holder in stage s is free to
+// take.
+func ckFreeStage(s string) bool {
+	return s != session.TaskStageDoing && s != session.TaskStageVerify && s != session.TaskStageShipped
+}
+
+// ckFreeLine is the word for a card free to take: free, ask first when a
+// person starts it, and on which machine.
+func ckFreeLine(card session.TaskRow) string {
+	free := "free"
+	if card.AskFirst {
+		// Dispatch never gives it to an agent: a person starts it.
+		free = "free, ask first"
+	}
+	if card.Host != "" {
+		free += " on " + printableTitle(card.Host)
+	}
+	return free
+}
+
 // drawKanbanCard draws one card: its title, then its holder's mark and name,
-// or Blocked and why, or free, with its id and age on the right.
+// or Blocked and why, or what its stage waits for, with its id and age on
+// the right.
 func (m *OS) drawKanbanCard(c *ckCanvas, l ckLook, r ckRow, title []string, x, y, w, h int, cursor, hover bool, top int) {
 	ck := &m.Inbox.ck
 	pal := l.pal
@@ -956,14 +993,6 @@ func (m *OS) drawKanbanCard(c *ckCanvas, l ckLook, r ckRow, title []string, x, y
 			holder = t
 		}
 	}
-	free := "free"
-	if card.AskFirst {
-		// Dispatch never gives it to an agent: a person starts it.
-		free = "free, ask first"
-	}
-	if card.Host != "" {
-		free += " on " + printableTitle(card.Host)
-	}
 	lx := x + 2
 	switch {
 	case card.Blocked != nil:
@@ -984,7 +1013,7 @@ func (m *OS) drawKanbanCard(c *ckCanvas, l ckLook, r ckRow, title []string, x, y
 	default:
 		words, wInk := ckLifeLine(pal, card)
 		if words == "" {
-			words, wInk = free, pal.FgMute
+			words, wInk = ckUnheldLine(card), pal.FgMute
 		}
 		c.text(lx, my, rx, ckSeg{t: l.ckStateMark("idle", ckGlyphIdle) + " ", fg: ink(wInk)}, ckSeg{t: ckTrunc(words, max(rx-lx-2, 0)), fg: ink(wInk)})
 	}

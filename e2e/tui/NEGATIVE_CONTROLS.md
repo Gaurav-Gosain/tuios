@@ -19125,3 +19125,20 @@ returning nil.
 The calls and their answers are in `handoff.json` under `TUIOS_E2E_FRAMES`, in
 the test's folder. Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAgentsMaxDepthRefusesADeeperStart$' -v .`.
+
+## A card with no holder says what its stage waits for
+
+`TestTheBoardSaysWhatAnUnheldCardWaitsFor` adds one card with no holder in
+each of Todo, Plan, Doing, Verify and Shipped. Only the Todo and the Plan
+card may say free. The Doing card must say "No pane holds it", the Verify
+card "Waits for verify", and the Shipped card "Shipped".
+
+Run on 2026-11-24 on Linux (amd64). The control is a build of main, where
+every card with no holder says free.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Every card with no holder says free (`ckUnheldLine` returns `ckFreeLine`) | "waiting for the unheld cards" times out | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTheBoardSaysWhatAnUnheldCardWaitsFor$' -v .`.
