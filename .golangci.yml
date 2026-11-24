@@ -86,6 +86,10 @@ linters:
       #      guarded indexes, and env vars the user sets for themselves).
 
   exclusions:
+    # Lint generated files too. go vet checks them, and this config's govet
+    # is the only vet of the linux build, so skipping them would leave three
+    # files unchecked.
+    generated: disable
     presets:
       - std-error-handling
     rules:

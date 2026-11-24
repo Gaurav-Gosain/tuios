@@ -136,8 +136,8 @@ while IFS= read -r p; do
 	scripts/binary-size.sh | scripts/binary-size-report.sh) f[binary_size]=1 pkg=no ;;
 	scripts/check.sh | scripts/platforms.txt) f[go]=1 pkg=no ;;
 	# The noinline list sets the GOFLAGS of every shipped or measured build of
-	# cmd/tuios: binary size, the image, the mixed-version build and the
-	# example tape build of go test ./.... The internal/lint tests check the
+	# cmd/tuios: binary size, the image and the mixed-version build. The
+	# internal/lint tests check the
 	# list and every build path that reads it.
 	scripts/noinline-packages.txt | scripts/goflags.sh) f[binary_size]=1 f[docker]=1 f[mixed]=1 f[go]=1 f[lint_tests]=1 pkg=no ;;
 	scripts/ghostty-lib.sh | scripts/minisign/*) f[ghostty]=1 pkg=no ;;

@@ -5,7 +5,8 @@ name: Lint
 # go vet on the platforms the release builds for but no test job runs on, and
 # goimports, gopls and the go fix modernizers on the files a pull request
 # changed (scripts/check.sh, which `just check` runs locally).
-# The unit test workflow covers gofmt, tidy and vet on linux.
+# The unit test workflow covers gofmt and tidy. golangci-lint's govet is the
+# vet of the linux build.
 
 # A pull request and a push to main call this workflow from ci.yml, which
 # runs it when a Go file, an embedded file or a module file changed.
@@ -219,7 +220,7 @@ jobs:
     if: inputs.vet != 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # The release targets besides linux, which go-test.yml vets. A test file
+    # The release targets besides linux, which golangci-lint vets. A test file
     # that uses a unix-only syscall without a build tag breaks these and
     # nothing else. One job vets all four: each vet takes under half a minute,
     # and a job of its own spent as long again on setup and held a runner

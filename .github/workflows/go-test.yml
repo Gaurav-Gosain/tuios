@@ -103,9 +103,8 @@ jobs:
             fi
           done
 
-      # ./... stops at a nested module, so the libraries are named too.
-      - name: Vet
-        run: go vet ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/... ./nitpick/...
+      # No go vet here. golangci-lint in lint.yml runs govet with every
+      # analyzer on the same modules, test files and generated files.
 
       - name: Build
         run: go build ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/... ./nitpick/...
@@ -114,8 +113,10 @@ jobs:
         # Every example under examples/ is held to the parser the release
         # ships. A tape the parser grew stricter about fails here, in the
         # change that made it stricter, instead of on a reader's machine.
+        # The Build step above compiled every package of cmd/tuios, so this
+        # build only links. The noinline flags would compile them all again.
         run: |
-          GOFLAGS="$(scripts/goflags.sh)" go build -o "$RUNNER_TEMP/tuios" ./cmd/tuios
+          go build -o "$RUNNER_TEMP/tuios" ./cmd/tuios # tuios:allow-build validates the example tapes; ships nothing
           status=0
           for f in examples/*.tape; do
             "$RUNNER_TEMP/tuios" tape validate "$f" > /dev/null || status=1
