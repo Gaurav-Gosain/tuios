@@ -39,6 +39,17 @@ const settleProbeTag = "tuios-settle;"
 // settleMarks is the file the answers go to, "" when the knob is not set.
 var settleMarks = sync.OnceValue(func() string { return testknob.String("settle_marks") })
 
+// announceSettleProbes creates the marks file, which tells a test that this
+// client answers probes. An older client never creates it, and the test
+// pauses for it as it always did. BindProgram calls it.
+func announceSettleProbes() {
+	if p := settleMarks(); p != "" {
+		if f, err := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
+			_ = f.Close()
+		}
+	}
+}
+
 // takeSettleProbe reports whether msg is a settle probe, and keeps its ID to
 // answer after the next flush.
 func (m *OS) takeSettleProbe(msg tea.Msg) bool {

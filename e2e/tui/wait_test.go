@@ -120,8 +120,9 @@ var settleSeq atomic.Int64
 //
 // A client that does not answer probes gets pause(t, why, d) as before: one
 // startIn did not start, one in the test process, one started with
-// noSettleProbe, or one whose frames Bubble Tea's renderer writes
-// (appearance.cell_frames off), since that renderer writes after the answer.
+// noSettleProbe, an older tuios, or one whose frames Bubble Tea's renderer
+// writes (appearance.cell_frames off), since that renderer writes after the
+// answer.
 func settled(t *testing.T, term *tuitest.Terminal, why string, d time.Duration) {
 	t.Helper()
 	marks := settleMarksOf(term)
@@ -144,12 +145,22 @@ func settled(t *testing.T, term *tuitest.Terminal, why string, d time.Duration) 
 }
 
 // settleMarksOf is the marks file of a client startIn started, "" for a
-// client that does not answer settle probes.
+// client that does not answer settle probes. A client that answers them
+// creates the file when it starts. An older tuios does not, so a test that
+// attaches one beside the build under test pauses for it.
 func settleMarksOf(term *tuitest.Terminal) string {
-	if v, ok := clientStarts.Load(term); ok {
-		return v.(clientStart).marks
+	v, ok := clientStarts.Load(term)
+	if !ok {
+		return ""
 	}
-	return ""
+	marks := v.(clientStart).marks
+	if marks == "" {
+		return ""
+	}
+	if _, err := os.Stat(marks); err != nil {
+		return ""
+	}
+	return marks
 }
 
 // settleProbe sends one settle probe and waits for its answer, and then, for

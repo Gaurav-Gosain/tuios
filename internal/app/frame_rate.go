@@ -102,6 +102,7 @@ type displayRateMsg struct{ hz int }
 // rate arriving for "auto". Before this, raising max_fps took effect only at
 // the next start.
 func (m *OS) BindProgram(p *tea.Program) {
+	announceSettleProbes()
 	m.frameRate.program = p
 	m.applyFrameRate()
 	m.detectDisplayRate(false)
