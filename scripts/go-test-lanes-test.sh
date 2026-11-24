@@ -78,4 +78,33 @@ check "session only, ONLY=split" 2 "$split" ONLY=split -- ./session
 check "other only, ONLY=split" 0 "$split" ONLY=split -- ./other
 check "a SPLIT name that is no package" error 'SPLIT=./app ./nope' -- ./app
 
+# lanes NAME WANT ENV...: the -run pattern of each lane of example.test/app,
+# one per line, must equal WANT.
+lanes() {
+	local name=$1 want=$2
+	shift 2
+	: >"$work/runs"
+	if ! PATH="$work/bin:$PATH" FAKE_GO_RUNS="$work/runs" LOG="$work/log" LANES=2 SPLIT=./app \
+		env "$@" "$here/go-test-lanes.sh" -count=1 -- ./app >/dev/null 2>"$work/err"; then
+		echo "FAIL $name: $(cat "$work/err")"
+		fail=1
+		return
+	fi
+	local got
+	got=$(grep -o -- '-run [^ ]*' "$work/runs" | sort)
+	if [ "$got" != "$want" ]; then
+		printf 'FAIL %s: lanes\n%s\nwant\n%s\n' "$name" "$got" "$want"
+		fail=1
+		return
+	fi
+	echo "ok   $name"
+}
+
+printf 'example.test/app TestA 9\nexample.test/app TestB 1\nexample.test/app TestC 1\n# a comment\nexample.test/other TestD 50\n' >"$work/durations"
+# Without times the four tests split two and two.
+lanes "lanes by count" "$(printf -- '-run ^(TestA|TestB)$\n-run ^(TestC|TestD)$')" DURATIONS="$work/none"
+# TestA takes most of the time, so it runs alone. TestD has no time for this
+# package and counts at the mean of the others.
+lanes "lanes by time" "$(printf -- '-run ^(TestA)$\n-run ^(TestB|TestC|TestD)$')" DURATIONS="$work/durations"
+
 exit $fail
