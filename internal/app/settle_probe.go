@@ -19,15 +19,17 @@ import (
 //	ESC _ tuios-settle;ID ESC \
 //
 // which the client reads in order with the keys sent before it. With the
-// settle_marks knob set to a file, the client answers the probe once the
-// frame for everything before it is written: it appends one line,
+// settle_marks knob set to a file, the client draws the output its panes
+// have read so far, outside the frame pacing, and answers the probe once that
+// frame is written: it appends one line,
 //
 //	ID SENT BUSY SCREEN
 //
 // SENT is the number of bytes the client had written to its terminal by
 // then, so the test can wait until it has read as many. BUSY is true while
-// an animation runs or pane output waits for its frame, and the test probes
-// again. SCREEN is false for a client without its own screen, whose frames
+// an animation runs, and the test probes again. Pane output that arrives
+// after the probe does not make the client busy: a pane that prints without
+// end would keep it busy for good. SCREEN is false for a client without its own screen, whose frames
 // Bubble Tea's renderer writes later, on its own goroutine.
 //
 // Without the knob the probe is an unknown APC like any other, and the
@@ -72,7 +74,7 @@ func (m *OS) answerSettleProbes() {
 	if len(m.settleOwed) == 0 {
 		return
 	}
-	busy := m.HasActiveAnimations() || m.frameRate.dueArmed || m.anyPaneOutput()
+	busy := m.HasActiveAnimations()
 	sent := testknob.Written()
 	var b []byte
 	for _, id := range m.settleOwed {

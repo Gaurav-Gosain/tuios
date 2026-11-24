@@ -111,8 +111,8 @@ func pause(t *testing.T, why string, d time.Duration) {
 var settleSeq atomic.Int64
 
 // settled waits for the client to catch up: it has read every key sent to it
-// so far, the frame for them is on the screen, and no animation runs and no
-// pane output waits for a frame. It sends a settle probe, an APC the client
+// so far, the frame for them and for the output its panes had read is on the
+// screen, and no animation runs. It sends a settle probe, an APC the client
 // reads in order with the keys before it (internal/app/settle_probe.go), and
 // reads the answer from the client's marks file. The answer says how many
 // bytes the client had written, and settled waits until the terminal has read
@@ -135,7 +135,7 @@ func settled(t *testing.T, term *tuitest.Terminal, why string, d time.Duration) 
 	waitUntil(t, "the client settles: "+why, uiTimeout, func() (bool, string) {
 		probes++
 		a = settleProbe(t, term, marks)
-		return !a.screen || !a.busy, "an animation runs or pane output waits for its frame"
+		return !a.screen || !a.busy, "an animation runs"
 	})
 	if !a.screen {
 		pause(t, why, d)
