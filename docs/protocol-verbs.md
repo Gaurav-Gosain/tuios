@@ -274,7 +274,7 @@ Add a task card to a session: one unit of work, with a title, the prompt for the
 | `preview` | string | The first line of its prompt, at most 80 characters. |
 | `stage` | string | Its stage. One of `todo`, `plan`, `doing`, `verify`, `review`, `shipped` or `done`. |
 | `stage_at` | int | When it entered the stage, Unix nanoseconds. |
-| `holder` | object | The pane that holds it: window, name, harness, state (read from the pane now) and held_at. Null when no pane holds it. |
+| `holder` | object | The pane that holds it: window, name, harness, state (read from the pane now) and held_at. host names its machine when it is another one, and session names its session when it is another session of this daemon. Null when no pane holds it. |
 | `by` | string | Who added it: human, shell, the adding pane's window id, link:HOST or plugin:ID. |
 | `at` | int | When it was added, Unix nanoseconds. |
 | `blocked` | object | reason, by and at when the card is blocked, else null. |
@@ -731,7 +731,7 @@ Mark a task card stuck, saying what it waits on, or with clear lift the mark. A 
 | `preview` | string | The first line of its prompt, at most 80 characters. |
 | `stage` | string | Its stage. One of `todo`, `plan`, `doing`, `verify`, `review`, `shipped` or `done`. |
 | `stage_at` | int | When it entered the stage, Unix nanoseconds. |
-| `holder` | object | The pane that holds it: window, name, harness, state (read from the pane now) and held_at. Null when no pane holds it. |
+| `holder` | object | The pane that holds it: window, name, harness, state (read from the pane now) and held_at. host names its machine when it is another one, and session names its session when it is another session of this daemon. Null when no pane holds it. |
 | `by` | string | Who added it: human, shell, the adding pane's window id, link:HOST or plugin:ID. |
 | `at` | int | When it was added, Unix nanoseconds. |
 | `blocked` | object | reason, by and at when the card is blocked, else null. |
@@ -888,14 +888,14 @@ Read what one turn changed: the diff of a checkpoint against the pane's checkpoi
 
 ### `claim-task`
 
-Take a task card for a pane: the card id, or with next the oldest card no pane holds that is not blocked or done, and that no fan of another session works on (fan with task). A card in todo or plan moves to doing. The pick and the take are one step, so two panes claiming next at once take two cards. A pane claims only for itself unless it holds admin; outside a pane, name the window. The card is released when its pane closes, its agent leaves the pane, or the daemon restarts.
+Take a task card for a pane: the card id, or with next the oldest card no pane holds that is not blocked or done, and that no fan of another session works on (fan with task). A card in todo or plan moves to doing. The pick and the take are one step, so two panes claiming next at once take two cards. A pane claims only for itself unless it holds admin; outside a pane, name the window. A pane of another session of this daemon takes only a card with a project; next then takes the oldest such card. The card is released when its pane closes, its agent leaves the pane, or the daemon restarts.
 
 | Param | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `session` | string |  |  | Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one. |
 | `id` | string |  |  | The card to take. Not with next. |
 | `next` | bool |  | `false` | Take the oldest open card no pane holds and that is not ask_first. Not with id. With none to take, the call fails with no_task. |
-| `window` | string |  |  | The pane that takes the card, by id or name. From a pane, omit it to claim for that pane. Required outside a pane. |
+| `window` | string |  |  | The pane that takes the card, by id or name. From a pane, omit it to claim for that pane. Required outside a pane. A pane of another session of this daemon is named by its window id, or an id prefix of at least eight characters. |
 | `human_nonce` | string |  |  | The attached client's nonce, to act as the person (by human). One that does not verify is refused with not_human. |
 | `host` | string |  |  | The machine that owns the card, for a project card claimed, released or finished from the pane that works on it here. The call is passed on over the link for this pane. |
 | `remote_window` | string |  |  | Over the link only: the window on the calling machine that holds the card. Its daemon sends it; the holder's machine is the link's peer. |
@@ -910,7 +910,7 @@ Take a task card for a pane: the card id, or with next the oldest card no pane h
 | `preview` | string | The first line of its prompt, at most 80 characters. |
 | `stage` | string | Its stage. One of `todo`, `plan`, `doing`, `verify`, `review`, `shipped` or `done`. |
 | `stage_at` | int | When it entered the stage, Unix nanoseconds. |
-| `holder` | object | The pane that holds it: window, name, harness, state (read from the pane now) and held_at. Null when no pane holds it. |
+| `holder` | object | The pane that holds it: window, name, harness, state (read from the pane now) and held_at. host names its machine when it is another one, and session names its session when it is another session of this daemon. Null when no pane holds it. |
 | `by` | string | Who added it: human, shell, the adding pane's window id, link:HOST or plugin:ID. |
 | `at` | int | When it was added, Unix nanoseconds. |
 | `blocked` | object | reason, by and at when the card is blocked, else null. |
@@ -1176,7 +1176,7 @@ Take an attachment off a task card. Its file goes when no card names it. A pane 
 | `preview` | string | The first line of its prompt, at most 80 characters. |
 | `stage` | string | Its stage. One of `todo`, `plan`, `doing`, `verify`, `review`, `shipped` or `done`. |
 | `stage_at` | int | When it entered the stage, Unix nanoseconds. |
-| `holder` | object | The pane that holds it: window, name, harness, state (read from the pane now) and held_at. Null when no pane holds it. |
+| `holder` | object | The pane that holds it: window, name, harness, state (read from the pane now) and held_at. host names its machine when it is another one, and session names its session when it is another session of this daemon. Null when no pane holds it. |
 | `by` | string | Who added it: human, shell, the adding pane's window id, link:HOST or plugin:ID. |
 | `at` | int | When it was added, Unix nanoseconds. |
 | `blocked` | object | reason, by and at when the card is blocked, else null. |
@@ -1719,7 +1719,7 @@ Mark a task card done. Its holder lets it go and its block, if any, is lifted. F
 | `preview` | string | The first line of its prompt, at most 80 characters. |
 | `stage` | string | Its stage. One of `todo`, `plan`, `doing`, `verify`, `review`, `shipped` or `done`. |
 | `stage_at` | int | When it entered the stage, Unix nanoseconds. |
-| `holder` | object | The pane that holds it: window, name, harness, state (read from the pane now) and held_at. Null when no pane holds it. |
+| `holder` | object | The pane that holds it: window, name, harness, state (read from the pane now) and held_at. host names its machine when it is another one, and session names its session when it is another session of this daemon. Null when no pane holds it. |
 | `by` | string | Who added it: human, shell, the adding pane's window id, link:HOST or plugin:ID. |
 | `at` | int | When it was added, Unix nanoseconds. |
 | `blocked` | object | reason, by and at when the card is blocked, else null. |
@@ -1898,7 +1898,7 @@ Read one task card whole: its row, its prompt and its history.
 | `preview` | string | The first line of its prompt, at most 80 characters. |
 | `stage` | string | Its stage. One of `todo`, `plan`, `doing`, `verify`, `review`, `shipped` or `done`. |
 | `stage_at` | int | When it entered the stage, Unix nanoseconds. |
-| `holder` | object | The pane that holds it: window, name, harness, state (read from the pane now) and held_at. Null when no pane holds it. |
+| `holder` | object | The pane that holds it: window, name, harness, state (read from the pane now) and held_at. host names its machine when it is another one, and session names its session when it is another session of this daemon. Null when no pane holds it. |
 | `by` | string | Who added it: human, shell, the adding pane's window id, link:HOST or plugin:ID. |
 | `at` | int | When it was added, Unix nanoseconds. |
 | `blocked` | object | reason, by and at when the card is blocked, else null. |
@@ -3657,7 +3657,7 @@ Let a task card go without finishing it. It keeps its stage, and another pane ca
 | `preview` | string | The first line of its prompt, at most 80 characters. |
 | `stage` | string | Its stage. One of `todo`, `plan`, `doing`, `verify`, `review`, `shipped` or `done`. |
 | `stage_at` | int | When it entered the stage, Unix nanoseconds. |
-| `holder` | object | The pane that holds it: window, name, harness, state (read from the pane now) and held_at. Null when no pane holds it. |
+| `holder` | object | The pane that holds it: window, name, harness, state (read from the pane now) and held_at. host names its machine when it is another one, and session names its session when it is another session of this daemon. Null when no pane holds it. |
 | `by` | string | Who added it: human, shell, the adding pane's window id, link:HOST or plugin:ID. |
 | `at` | int | When it was added, Unix nanoseconds. |
 | `blocked` | object | reason, by and at when the card is blocked, else null. |
@@ -4971,7 +4971,7 @@ Move a task card to a stage by hand. The daemon also moves cards on its own ([ta
 | `preview` | string | The first line of its prompt, at most 80 characters. |
 | `stage` | string | Its stage. One of `todo`, `plan`, `doing`, `verify`, `review`, `shipped` or `done`. |
 | `stage_at` | int | When it entered the stage, Unix nanoseconds. |
-| `holder` | object | The pane that holds it: window, name, harness, state (read from the pane now) and held_at. Null when no pane holds it. |
+| `holder` | object | The pane that holds it: window, name, harness, state (read from the pane now) and held_at. host names its machine when it is another one, and session names its session when it is another session of this daemon. Null when no pane holds it. |
 | `by` | string | Who added it: human, shell, the adding pane's window id, link:HOST or plugin:ID. |
 | `at` | int | When it was added, Unix nanoseconds. |
 | `blocked` | object | reason, by and at when the card is blocked, else null. |

@@ -19313,3 +19313,22 @@ Run on 2026-11-24 on Linux (amd64), go1.27.4, against main at b7a1dad3d. On main
 
 Repeat with
 `go test -count=3 -run '^TestAThreadRebuildSizesItsLinesBeforeTheJoin$' -v ./internal/app/`.
+## A pane of another session holds a project card
+
+`TestAPaneOfAnotherSessionHoldsAProjectCard` adds a card with a project in
+session lead and claims it from inside a pane of session crew on the same
+daemon. The row must name the pane and crew, the board of lead must show the
+holder in crew, and the card must be let go with reason pane closed when the
+pane closes, and with reason agent left when the agent of a second holder
+leaves.
+
+Run on 2026-11-24 on Linux (amd64). The controls are a build of main and
+this branch with the reason of the cross-session release put back.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| claim-task finds the window only in the card's session (main) | "a pane of crew claimed t2, a card without a project, or the refusal does not say why": main refuses with "no window found" | **caught** |
+| The cross-session release always says pane closed | "t1 was let go with reason \"pane closed\", want agent left" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAPaneOfAnotherSessionHoldsAProjectCard$' -v .`.

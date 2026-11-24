@@ -1001,8 +1001,8 @@ func (m *OS) drawKanbanCard(c *ckCanvas, l ckLook, r ckRow, title []string, x, y
 		switch {
 		case card.Host != "":
 			holder += " on " + printableTitle(card.Host)
-		case card.Session != m.SessionName:
-			holder += " in " + printableTitle(card.Session)
+		case ckHolderSession(card) != m.SessionName:
+			holder += " in " + printableTitle(ckHolderSession(card))
 		}
 		c.text(lx, my, rx, ckSeg{t: ckTrunc(holder, rx-lx), fg: ink(pal.Fg)})
 	case card.Stage == session.TaskStageDone:

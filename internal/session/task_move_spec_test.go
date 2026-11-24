@@ -85,6 +85,7 @@ type (
 		HeldAt        int64            `json:"held_at"`
 		HolderName    string           `json:"holder_name"`
 		HolderHarness string           `json:"holder_harness"`
+		HolderSession string           `json:"holder_session"`
 		Dispatched    bool             `json:"dispatched"`
 		Blocked       *specBlock       `json:"blocked"`
 		Attempts      int              `json:"attempts"`
@@ -103,6 +104,7 @@ type (
 		Names       bool             `json:"names"`
 		Name        string           `json:"name"`
 		Harness     string           `json:"harness"`
+		Session     string           `json:"session"`
 		Refresh     bool             `json:"refresh"`
 		Stage       *string          `json:"stage"`
 		Work        *specWork        `json:"work"`
@@ -170,7 +172,7 @@ func leanAttachments(in []specAttachment) []TaskAttachment {
 
 func (c specCard) task() TaskState {
 	tk := TaskState{ID: "t1", Stage: c.Stage, StageAt: c.StageAt, Holder: c.Holder, HeldAt: c.HeldAt,
-		HolderName: c.HolderName, HolderHarness: c.HolderHarness, Dispatched: c.Dispatched,
+		HolderName: c.HolderName, HolderHarness: c.HolderHarness, HolderSession: c.HolderSession, Dispatched: c.Dispatched,
 		Attempts: c.Attempts, Note: c.Note, Work: c.Work.task(), Verify: c.Verify.task(),
 		Attachments: leanAttachments(c.Attachments)}
 	if c.Blocked != nil {
@@ -185,7 +187,7 @@ func (c specCard) task() TaskState {
 // leanCardOf is the card's lifecycle fields as the model writes them.
 func leanCardOf(tk *TaskState) specCard {
 	c := specCard{Stage: tk.Stage, StageAt: tk.StageAt, Holder: tk.Holder, HeldAt: tk.HeldAt,
-		HolderName: tk.HolderName, HolderHarness: tk.HolderHarness, Dispatched: tk.Dispatched,
+		HolderName: tk.HolderName, HolderHarness: tk.HolderHarness, HolderSession: tk.HolderSession, Dispatched: tk.Dispatched,
 		Attempts: tk.Attempts, Note: tk.Note, Attachments: []specAttachment{}, History: []specEvent{}}
 	if b := tk.Blocked; b != nil {
 		c.Blocked = &specBlock{Reason: b.Reason, By: b.By, At: b.At}
@@ -211,7 +213,7 @@ func leanCardOf(tk *TaskState) specCard {
 
 func (m specMove) card() cardMove {
 	out := cardMove{kind: specKinds[m.Kind], by: m.By, reason: m.Reason, window: m.Window,
-		dispatched: m.Dispatched, names: m.Names, name: m.Name, harness: m.Harness, refresh: m.Refresh,
+		dispatched: m.Dispatched, names: m.Names, name: m.Name, harness: m.Harness, session: m.Session, refresh: m.Refresh,
 		work: m.Work.task(), verifyRun: m.VerifyRun, token: m.Token, verify: m.Verify.task(),
 		note: m.Note, attachments: leanAttachments(m.Attachments)}
 	if m.Stage != nil {
@@ -304,7 +306,7 @@ func leanGen(r *rand.Rand) cardStream {
 	}
 
 	c := specCard{Stage: leanPick(r, TaskStages), StageAt: pickTime(), Holder: leanPick(r, specWindows), HeldAt: pickTime(),
-		HolderName: str("", "n"), HolderHarness: str("", "claude"), Dispatched: r.IntN(2) == 0,
+		HolderName: str("", "n"), HolderHarness: str("", "claude"), HolderSession: str("", "crew"), Dispatched: r.IntN(2) == 0,
 		Attempts: r.IntN(3), Note: str("", "x"), Work: work(), Verify: verify(),
 		Attachments: attachments(r.IntN(3)), History: []specEvent{}}
 	if r.IntN(2) == 0 {
@@ -326,7 +328,7 @@ func leanGen(r *rand.Rand) cardStream {
 		t += r.Int64N(3)
 		m := specMove{Kind: leanPick(r, specKindList), By: leanPick(r, specBys), Reason: leanPick(r, specReasons),
 			Window: leanPick(r, specWindows), Dispatched: r.IntN(2) == 0, Names: r.IntN(2) == 0,
-			Name: str("", "far"), Harness: str("", "codex"), Refresh: r.IntN(2) == 0,
+			Name: str("", "far"), Harness: str("", "codex"), Session: str("", "crew"), Refresh: r.IntN(2) == 0,
 			AutoFrom: []string{}, Attachments: []specAttachment{}, Now: t}
 		switch m.Kind {
 		case "hand_in":

@@ -359,13 +359,15 @@ func (d *Daemon) stampFan(tp *taskParam, stem, fanID string) (TaskRow, bool) {
 }
 
 // claimForPane gives the card to window, the pane start-agent opened for it.
-// A pane of another session is named by name and harness, since the card's
-// session cannot read it, and its close lets the card go (remoteHolds).
-func (d *Daemon) claimForPane(tp *taskParam, window, name, harness string, cross bool) (TaskRow, *verbError) {
+// A pane of another session, paneSession, is named by name and harness,
+// since the card's session cannot read it, and its close lets the card go
+// (remoteHolds). paneSession is empty for a pane of the card's session.
+func (d *Daemon) claimForPane(tp *taskParam, window, name, harness, paneSession string) (TaskRow, *verbError) {
+	cross := paneSession != ""
 	auto := d.auto.expects(tp.sess.Name(), tp.id, false)
 	row, action, spec, verr := d.changeTask(tp.sess, tp.id, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
 		action, _, verr := tp.sess.moveCard(tk, cardMove{kind: moveClaim, by: cmp.Or(auto, tp.caller.by), window: window,
-			dispatched: auto != "", names: cross, name: name, harness: harness}, now)
+			dispatched: auto != "", names: cross, name: name, harness: harness, session: paneSession}, now)
 		return action, verr
 	}, func(action string) taskEventSpec {
 		if action == "" {

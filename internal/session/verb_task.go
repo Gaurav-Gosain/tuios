@@ -139,7 +139,10 @@ type TaskRow struct {
 type TaskHolder struct {
 	Window string `json:"window"`
 	// Host is the machine the holding pane is on, empty for this one.
-	Host    string `json:"host,omitempty"`
+	Host string `json:"host,omitempty"`
+	// Session is the session of the holding pane when it is another session
+	// of this daemon than the card's, empty otherwise.
+	Session string `json:"session,omitempty"`
 	Name    string `json:"name,omitempty"`
 	Harness string `json:"harness,omitempty"`
 	State   string `json:"state,omitempty"`
@@ -186,8 +189,9 @@ func taskRow(sess *Session, st *SessionState, tk *TaskState) TaskRow {
 		if w, ok := findWindowState(st, tk.Holder); ok {
 			row.Holder.Name, row.Holder.Harness, row.Holder.State = windowLabelOf(w), w.AgentHarness, w.AgentState.Name()
 		} else {
-			// A pane of another session (start-agent task_session).
-			row.Holder.Name, row.Holder.Harness = tk.HolderName, tk.HolderHarness
+			// A pane of another session: start-agent task_session, or a
+			// claim of a project card from there.
+			row.Holder.Name, row.Holder.Harness, row.Holder.Session = tk.HolderName, tk.HolderHarness, tk.HolderSession
 		}
 	}
 	if tk.Fan != "" {
@@ -473,11 +477,14 @@ func (d *Daemon) verbListTasks(cs *connState, params json.RawMessage) (any, *ver
 	st := sess.GetState()
 	holder := ""
 	if p.Holder != "" {
-		idx, err := findWindowStateIndex(st.Windows, p.Holder)
-		if err != nil {
+		if idx, err := findWindowStateIndex(st.Windows, p.Holder); err == nil {
+			holder = st.Windows[idx].ID
+		} else if cross := d.crossSessionPane(sess, p.Holder); cross != nil {
+			// A pane of another session holds a project card by its id.
+			holder = cross.window
+		} else {
 			return nil, mapResolveErr(err, sess)
 		}
-		holder = st.Windows[idx].ID
 	}
 	return map[string]any{
 		"type":    "task_list",
@@ -615,9 +622,18 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 	if p.Next {
 		live = d.liveFans()
 	}
+	// A pane of another session of this daemon takes only a project's card.
+	// It is looked up before the state lock: the lookup reads the other
+	// sessions' state.
+	cross := d.crossSessionPane(sess, name)
 	err := sess.mutateState(func(st *SessionState) error {
 		idx, err := findWindowStateIndex(st.Windows, name)
-		if err != nil {
+		switch {
+		case err == nil:
+			window = st.Windows[idx].ID
+		case cross != nil:
+			window = cross.window
+		default:
 			// Mapped once mutateState returns: mapResolveErr reads the
 			// session's state for its hint, and this function holds the state
 			// lock for writing. Mapped here, the daemon waited on itself and
@@ -625,7 +641,10 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 			missing = err
 			return errTaskRefused
 		}
-		if window = st.Windows[idx].ID; window != caller.window && !caller.any {
+		if err == nil {
+			cross = nil
+		}
+		if window != caller.window && !caller.any {
 			verr = hintedVerbError(ErrVerbForbidden, "claim-task for window "+shortWindowID(window)+" is refused: a pane claims only for itself", &VerbHint{
 				Param:  "window",
 				Detail: "Nothing was claimed. Leave window out, or pass $TUIOS_PANE_ID.",
@@ -634,7 +653,7 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 		}
 		var i int
 		if p.Next {
-			if i = nextFreeTask(st, live); i < 0 {
+			if i = nextFreeTask(st, live, cross != nil); i < 0 {
 				verr = hintedVerbError(ErrVerbNoTask, "no open task card to take in session "+echoName(sess.Name()), &VerbHint{
 					Verb:    "list-tasks",
 					Command: "tuios task ls --open",
@@ -647,7 +666,19 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 			return errTaskRefused
 		}
 		tk := &st.Tasks[i]
-		if _, _, verr = sess.moveCard(tk, cardMove{kind: moveClaim, by: caller.by, window: window}, time.Now().UnixNano()); verr != nil {
+		move := cardMove{kind: moveClaim, by: caller.by, window: window}
+		if cross != nil {
+			if tk.Project == "" {
+				verr = hintedVerbError(ErrVerbForbidden, "task card "+tk.ID+" belongs to session "+echoName(sess.Name())+" only, and a pane of session "+echoName(cross.session)+" takes only a project's cards", &VerbHint{
+					Command: "tuios task add --project . TITLE",
+					Detail:  "Nothing was claimed. Add the card with a project for a pane of another session to take it.",
+				})
+				return errTaskRefused
+			}
+			move.names, move.refresh = true, true
+			move.name, move.harness, move.session = cross.name, cross.harness, cross.session
+		}
+		if _, _, verr = sess.moveCard(tk, move, time.Now().UnixNano()); verr != nil {
 			return errTaskRefused
 		}
 		row = taskRow(sess, st, tk)
@@ -665,6 +696,16 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 	}
 	LogBasic("Window %s claimed task %s in session %s", shortWindowID(window), row.ID, sess.Name())
 	d.afterTaskEvent(sess, TaskActionClaimed, window, "", row)
+	if cross != nil {
+		// The pane's own session does not let the card go when the pane
+		// closes, so the daemon notes the hold. A pane that closed before
+		// the note lets the card go now: its close found nothing to let go.
+		d.remoteHolds.note(window, remoteHold{session: sess.Name(), id: row.ID}, true)
+		if d.sessionOfWindow(window) == "" {
+			d.remoteHolds.take(window)
+			d.releaseHeld(sess, window, taskReleasePaneClosed)
+		}
+	}
 	return row.typed("task_claimed"), nil
 }
 
@@ -693,7 +734,7 @@ func (d *Daemon) verbFinishTask(cs *connState, params json.RawMessage) (any, *ve
 	if caller.window != "" && !d.lifecycleOff.Load() {
 		work = d.workOf(caller.window)
 	}
-	var holder string
+	var holder, crossHolder string
 	row, action, spec, verr := d.changeTask(sess, p.ID, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
 		if verr := caller.mayTouch("finish-task", tk); verr != nil {
 			return "", verr
@@ -703,6 +744,9 @@ func (d *Daemon) verbFinishTask(cs *connState, params json.RawMessage) (any, *ve
 			if stage := d.handInStage(dispatchBoardKey(sess.Name(), tk.Project)); stage != "" {
 				move = cardMove{kind: moveHandIn, by: caller.by, stage: stage, work: work}
 			}
+		}
+		if tk.HolderSession != "" {
+			crossHolder = tk.Holder
 		}
 		var action string
 		action, holder, _ = sess.moveCard(tk, move, now)
@@ -716,6 +760,7 @@ func (d *Daemon) verbFinishTask(cs *connState, params json.RawMessage) (any, *ve
 	if verr != nil {
 		return nil, verr
 	}
+	d.forgetCrossHold(sess, crossHolder, p.ID)
 	if action != "" {
 		d.afterTaskSpec(sess, spec, row)
 		d.startTaskVerify(sess, row.ID)
@@ -873,12 +918,16 @@ func (d *Daemon) verbReleaseTask(cs *connState, params json.RawMessage) (any, *v
 	if verr != nil {
 		return nil, verr
 	}
+	var crossHolder string
 	row, _, spec, verr := d.changeTask(sess, p.ID, func(_ *SessionState, tk *TaskState, now int64) (string, *verbError) {
 		if verr := caller.mayTouch("release-task", tk); verr != nil {
 			return "", verr
 		}
 		if tk.Holder == "" {
 			return "", invalidParam("id", "task card "+tk.ID+" is held by no pane, so there is nothing to release")
+		}
+		if tk.HolderSession != "" {
+			crossHolder = tk.Holder
 		}
 		action, _, _ := sess.moveCard(tk, cardMove{kind: moveRelease, by: caller.by}, now)
 		return action, nil
@@ -888,6 +937,7 @@ func (d *Daemon) verbReleaseTask(cs *connState, params json.RawMessage) (any, *v
 	if verr != nil {
 		return nil, verr
 	}
+	d.forgetCrossHold(sess, crossHolder, p.ID)
 	d.afterTaskSpec(sess, spec, row)
 	return row.typed("task_changed"), nil
 }

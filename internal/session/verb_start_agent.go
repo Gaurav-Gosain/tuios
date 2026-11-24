@@ -305,7 +305,11 @@ func (d *Daemon) verbStartAgent(cs *connState, params json.RawMessage) (any, *ve
 				holderName = m.DisplayName
 			}
 		}
-		if row, verr := d.claimForPane(task, win.ID, holderName, launch.harness, task.sess != sess); verr != nil {
+		paneSession := ""
+		if task.sess != sess {
+			paneSession = sess.Name()
+		}
+		if row, verr := d.claimForPane(task, win.ID, holderName, launch.harness, paneSession); verr != nil {
 			taskNote = "Task card " + task.id + " was not claimed: " + verr.Message
 		} else {
 			taskRow = &row

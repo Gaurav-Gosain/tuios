@@ -7939,7 +7939,11 @@ The TUI's target is `harness:HARNESS:FOLDER` when it knows both, and
 
 A task card is one unit of work in a session: a title, the prompt for the
 pane that takes it, a stage, and at most one holder, the window id of the pane
-working on it. The daemon keeps the cards on the session's state, so they are
+working on it. A window id is unique on the daemon, so the holder of a card
+with a project can be a pane of another session of the same daemon. The
+holder in a row then names that session in `session`, with the `name` and
+`harness` the pane had when it claimed the card. A card without a project
+takes a holder of its own session only. The daemon keeps the cards on the session's state, so they are
 saved with it. After a restart they come back with every holder released and a
 `released` history entry with reason `restart`, since no agent comes back from
 a restart. A card is also released when its pane closes (reason `pane closed`)

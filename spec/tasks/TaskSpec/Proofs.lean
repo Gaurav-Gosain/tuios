@@ -14,7 +14,7 @@ def Card.doneFree (c : Card) : Prop :=
 
 /-- cardRulesBroken: "a card with no holder keeps its holder's time or name". -/
 def Card.holderClean (c : Card) : Prop :=
-  c.holder = "" → c.heldAt = 0 ∧ c.holderName = "" ∧ c.holderHarness = ""
+  c.holder = "" → c.heldAt = 0 ∧ c.holderName = "" ∧ c.holderHarness = "" ∧ c.holderSession = ""
 
 /-- cardRulesBroken: "a card blocked on its errored agent has no holder". -/
 def Card.erroredHeld (c : Card) : Prop :=
@@ -34,7 +34,8 @@ def Card.erroredHeld (c : Card) : Prop :=
 
 /-- c' with the fields a refresh claim writes taken from c. -/
 def Card.sansRefresh (c' c : Card) : Card :=
-  { c' with dispatched := c.dispatched, holderName := c.holderName, holderHarness := c.holderHarness }
+  { c' with dispatched := c.dispatched, holderName := c.holderName, holderHarness := c.holderHarness,
+             holderSession := c.holderSession }
 
 theorem Action.name_ne_empty (a : Action) : a.name ≠ "" := by
   cases a <;> decide

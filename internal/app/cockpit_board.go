@@ -181,15 +181,24 @@ func (m *OS) ckStagesShown() string {
 	return ck.stages
 }
 
-// ckHeldCards indexes the cards by holder, session and window id, built once
-// per change of the cards.
+// ckHolderSession is the session of the pane that holds card c: the card's
+// own session, or the holder's when it is a pane of another session.
+func ckHolderSession(c session.TaskRow) string {
+	if c.Holder != nil && c.Holder.Session != "" {
+		return c.Holder.Session
+	}
+	return c.Session
+}
+
+// ckHeldCards indexes the cards by holder, the holder's session and window
+// id, built once per change of the cards.
 func (m *OS) ckHeldCards() map[string][]session.TaskRow {
 	ck := &m.Inbox.ck
 	if ck.held == nil || ck.heldGen != ck.cardsGen {
 		ck.held, ck.heldGen = map[string][]session.TaskRow{}, ck.cardsGen
 		for _, c := range ck.cards {
 			if c.Holder != nil && c.Host == "" {
-				k := c.Session + "\x00" + c.Holder.Window
+				k := ckHolderSession(c) + "\x00" + c.Holder.Window
 				ck.held[k] = append(ck.held[k], c)
 			}
 		}
@@ -253,7 +262,7 @@ func (m *OS) boardStageItems(list []sidebarAgentEntry) [][]ckRow {
 		}
 		idx := -1
 		if c.Holder != nil && c.Host == "" {
-			if j, ok := byKey[c.Session+"\x00"+c.Holder.Window]; ok {
+			if j, ok := byKey[ckHolderSession(c)+"\x00"+c.Holder.Window]; ok {
 				idx = j
 			}
 		}
@@ -577,7 +586,7 @@ func (m *OS) cockpitCardGo(r ckRow, c session.TaskRow) tea.Cmd {
 		return m.InboxAgentsGo()
 	case c.Holder != nil:
 		m.CloseInbox()
-		m.inboxJump(session.AttentionItem{Session: c.Session, Window: c.Holder.Window})
+		m.inboxJump(session.AttentionItem{Session: ckHolderSession(c), Window: c.Holder.Window})
 		return nil
 	case m.kanbanOn():
 		// The columns have no focus area: a free card starts an agent on
@@ -688,9 +697,9 @@ func (m *OS) drawCardRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x, 
 		case card.Host != "":
 			// A card another machine owns says which.
 			harness = "on " + ckTrunc(printableTitle(card.Host), 6)
-		case card.Session != m.SessionName:
-			// A card of another session says where its holder is.
-			harness = ckTrunc(printableTitle(card.Session), 9)
+		case ckHolderSession(card) != m.SessionName:
+			// A holder in another session says which.
+			harness = ckTrunc(printableTitle(ckHolderSession(card)), 9)
 		}
 		lx = c.text(lx, y+1, rx2, ckSeg{t: ckPad(harness, 9), fg: ink(pal.FgDim)})
 		if r.agent >= 0 {

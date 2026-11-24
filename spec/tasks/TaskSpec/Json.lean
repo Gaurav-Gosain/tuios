@@ -58,12 +58,13 @@ instance : FromJson Event := ⟨fun j =>
 instance : ToJson Card := ⟨fun c => Json.mkObj
   [("stage", toJson c.stage), ("stage_at", c.stageAt), ("holder", c.holder), ("held_at", c.heldAt),
    ("holder_name", c.holderName), ("holder_harness", c.holderHarness),
+   ("holder_session", c.holderSession),
    ("dispatched", c.dispatched), ("blocked", toJson c.blocked), ("attempts", c.attempts),
    ("note", c.note), ("work", toJson c.work), ("verify", toJson c.verify),
    ("attachments", toJson c.attachments), ("history", toJson c.history)]⟩
 instance : FromJson Card := ⟨fun j =>
   return ⟨← field j "stage", ← field j "stage_at", ← field j "holder", ← field j "held_at",
-    ← field j "holder_name", ← field j "holder_harness", ← field j "dispatched",
+    ← field j "holder_name", ← field j "holder_harness", ← field j "holder_session", ← field j "dispatched",
     ← opt j "blocked", ← field j "attempts", ← field j "note", ← opt j "work",
     ← opt j "verify", ← field j "attachments", ← field j "history"⟩⟩
 
@@ -82,7 +83,7 @@ def parseMove (j : Json) : Except String (Move × Int) := do
   let m : Move := {
     kind, by_ := ← field j "by", reason := ← field j "reason", window := ← field j "window",
     dispatched := ← field j "dispatched", names := ← field j "names", name := ← field j "name",
-    harness := ← field j "harness", refresh := ← field j "refresh",
+    harness := ← field j "harness", session := ← field j "session", refresh := ← field j "refresh",
     stage := (← opt j "stage").getD .todo, work := ← opt j "work",
     verifyRun := ← field j "verify_run", autoFrom := ← field j "auto_from",
     autoTo := (← opt j "auto_to").getD .todo, token := ← field j "token",

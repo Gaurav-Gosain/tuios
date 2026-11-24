@@ -66,7 +66,7 @@
       },
       {
         "name": "holder",
-        "description": "The pane that holds it: window, name, harness, state (read from the pane now) and held_at. Null when no pane holds it."
+        "description": "The pane that holds it: window, name, harness, state (read from the pane now) and held_at. host names its machine when it is another one, and session names its session when it is another session of this daemon. Null when no pane holds it."
       },
       {
         "name": "by",
@@ -231,7 +231,7 @@
       },
       {
         "name": "holder",
-        "description": "The pane that holds it: window, name, harness, state (read from the pane now) and held_at. Null when no pane holds it."
+        "description": "The pane that holds it: window, name, harness, state (read from the pane now) and held_at. host names its machine when it is another one, and session names its session when it is another session of this daemon. Null when no pane holds it."
       },
       {
         "name": "by",
@@ -260,7 +260,7 @@
     ]
   },
   "claim-task": {
-    "description": "Take a task card for a pane: the card id, or with next the oldest card no pane holds that is not blocked or done, and that no fan of another session works on (fan with task). A card in todo or plan moves to doing. The pick and the take are one step, so two panes claiming next at once take two cards. A pane claims only for itself unless it holds admin; outside a pane, name the window. The card is released when its pane closes, its agent leaves the pane, or the daemon restarts.",
+    "description": "Take a task card for a pane: the card id, or with next the oldest card no pane holds that is not blocked or done, and that no fan of another session works on (fan with task). A card in todo or plan moves to doing. The pick and the take are one step, so two panes claiming next at once take two cards. A pane claims only for itself unless it holds admin; outside a pane, name the window. A pane of another session of this daemon takes only a card with a project; next then takes the oldest such card. The card is released when its pane closes, its agent leaves the pane, or the daemon restarts.",
     "params": [
       {
         "name": "session",
@@ -276,7 +276,7 @@
       },
       {
         "name": "window",
-        "description": "The pane that takes the card, by id or name. From a pane, omit it to claim for that pane. Required outside a pane."
+        "description": "The pane that takes the card, by id or name. From a pane, omit it to claim for that pane. Required outside a pane. A pane of another session of this daemon is named by its window id, or an id prefix of at least eight characters."
       },
       {
         "name": "human_nonce",
@@ -326,7 +326,7 @@
       },
       {
         "name": "holder",
-        "description": "The pane that holds it: window, name, harness, state (read from the pane now) and held_at. Null when no pane holds it."
+        "description": "The pane that holds it: window, name, harness, state (read from the pane now) and held_at. host names its machine when it is another one, and session names its session when it is another session of this daemon. Null when no pane holds it."
       },
       {
         "name": "by",
@@ -413,7 +413,7 @@
       },
       {
         "name": "holder",
-        "description": "The pane that holds it: window, name, harness, state (read from the pane now) and held_at. Null when no pane holds it."
+        "description": "The pane that holds it: window, name, harness, state (read from the pane now) and held_at. host names its machine when it is another one, and session names its session when it is another session of this daemon. Null when no pane holds it."
       },
       {
         "name": "by",
@@ -499,7 +499,7 @@
       },
       {
         "name": "holder",
-        "description": "The pane that holds it: window, name, harness, state (read from the pane now) and held_at. Null when no pane holds it."
+        "description": "The pane that holds it: window, name, harness, state (read from the pane now) and held_at. host names its machine when it is another one, and session names its session when it is another session of this daemon. Null when no pane holds it."
       },
       {
         "name": "by",
@@ -565,7 +565,7 @@
       },
       {
         "name": "holder",
-        "description": "The pane that holds it: window, name, harness, state (read from the pane now) and held_at. Null when no pane holds it."
+        "description": "The pane that holds it: window, name, harness, state (read from the pane now) and held_at. host names its machine when it is another one, and session names its session when it is another session of this daemon. Null when no pane holds it."
       },
       {
         "name": "by",
@@ -752,7 +752,7 @@
       },
       {
         "name": "holder",
-        "description": "The pane that holds it: window, name, harness, state (read from the pane now) and held_at. Null when no pane holds it."
+        "description": "The pane that holds it: window, name, harness, state (read from the pane now) and held_at. host names its machine when it is another one, and session names its session when it is another session of this daemon. Null when no pane holds it."
       },
       {
         "name": "by",
@@ -852,7 +852,7 @@
       },
       {
         "name": "holder",
-        "description": "The pane that holds it: window, name, harness, state (read from the pane now) and held_at. Null when no pane holds it."
+        "description": "The pane that holds it: window, name, harness, state (read from the pane now) and held_at. host names its machine when it is another one, and session names its session when it is another session of this daemon. Null when no pane holds it."
       },
       {
         "name": "by",

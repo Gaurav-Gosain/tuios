@@ -177,11 +177,18 @@ there by key or by drag, and the move is a `task-changed` event with action
 | `tuios task ls --project . --hosts` | Every card of the repository, here and on each linked machine. HOST names the owner |
 | `tuios task claim t3 -s build:api` | From your pane, take card t3 of session api, which machine build owns |
 | `tuios task done t3 -s build:api` | Finish it there. `release` the same way |
+| `tuios task claim t3 -s api` | From your pane in another session of this daemon, take card t3 of session api. `done` and `release` the same way |
 
 The machine that added a card owns it. Run the claim in your own pane: your
 daemon passes it to the owner and lets the card go there when your pane
 closes. If a claim fails with a lost answer, run it again: a claim by the pane
 that holds the card succeeds. A card without a project stays on its machine.
+
+A pane in another session of the same daemon takes a project card the same
+way, with `-s SESSION` and no machine. The board shows the holder as NAME in
+SESSION. The card is let go when your pane closes or your agent leaves it. A
+card without a project stays in its session: a pane of another session cannot
+claim it. Like every `-s` to another session, this needs `admin` (see Grants).
 
 ## Dispatch: work that comes to you
 

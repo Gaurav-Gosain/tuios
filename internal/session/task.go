@@ -104,11 +104,17 @@ type TaskState struct {
 	// when it took it. Empty when no pane holds it.
 	Holder string `json:"holder,omitempty"`
 	HeldAt int64  `json:"held_at,omitempty"`
-	// HolderName and HolderHarness are how a holder on another machine
-	// reads there, as its daemon said when it claimed the card. A local
-	// holder is read from the pane instead.
+	// HolderName and HolderHarness are how a holder on another machine, or
+	// in another session of this daemon, reads there, as it was when it
+	// claimed the card. A holder of the card's own session is read from the
+	// pane instead.
 	HolderName    string `json:"holder_name,omitempty"`
 	HolderHarness string `json:"holder_harness,omitempty"`
+	// HolderSession is the session of a holder that is a pane of another
+	// session of this daemon, as it was named when the pane claimed the
+	// card. Empty for a pane of the card's own session and for a pane on
+	// another machine.
+	HolderSession string `json:"holder_session,omitempty"`
 	// Project is the repository the card is for, its normalised origin URL
 	// (task_project.go). Empty for a card of its session only.
 	Project string `json:"project,omitempty"`
@@ -210,16 +216,20 @@ func taskIndex(tasks []TaskState, id string) int {
 // nextFreeTask is the index of the card claim-task next takes: the oldest
 // one no pane holds, not blocked, not done and not ask_first. A card a live
 // fan works on from outside it (fan task=) is skipped too: its attempts hold
-// it, though no one pane does. liveFans names the fans that still have a session. Cards are
-// appended as they are added, so the first free one is the oldest. -1 when
-// there is none.
-func nextFreeTask(st *SessionState, liveFans map[string]bool) int {
+// it, though no one pane does. liveFans names the fans that still have a session. With
+// projectOnly it takes only a card with a project, which is all a pane of
+// another session may take. Cards are appended as they are added, so the
+// first free one is the oldest. -1 when there is none.
+func nextFreeTask(st *SessionState, liveFans map[string]bool, projectOnly bool) int {
 	own := ""
 	if st.Worktree != nil {
 		own = st.Worktree.FanID
 	}
 	return slices.IndexFunc(st.Tasks, func(tk TaskState) bool {
 		if tk.FanID != "" && tk.FanID != own && liveFans[tk.FanID] {
+			return false
+		}
+		if projectOnly && tk.Project == "" {
 			return false
 		}
 		// A card added with ask_first waits for someone to start it by its

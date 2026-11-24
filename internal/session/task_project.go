@@ -224,15 +224,16 @@ func (rs *remoteHoldSet) take(window string) []remoteHold {
 	return list
 }
 
-// releaseRemoteHolds lets go, on their owners, the cards window held on other
-// machines. It is best effort: a link that is down leaves the card held,
-// and tuios task release on either machine frees it.
-func (d *Daemon) releaseRemoteHolds(window string) {
+// releaseRemoteHolds lets go, for reason, the cards window held in other
+// sessions of this daemon and, on their owners, on other machines. It is
+// best effort: a link that is down leaves the card held, and tuios task
+// release on either machine frees it.
+func (d *Daemon) releaseRemoteHolds(window, reason string) {
 	list := d.remoteHolds.take(window)
 	for _, h := range list {
 		if h.host == "" {
 			if sess := d.manager.GetSession(h.session); sess != nil {
-				d.releaseHeld(sess, window, taskReleasePaneClosed)
+				d.releaseHeld(sess, window, reason)
 			}
 			continue
 		}
@@ -270,6 +271,56 @@ func (d *Daemon) releaseHeld(sess *Session, window, reason string) {
 		return nil
 	})
 	d.afterReleased(sess, rows, reason)
+}
+
+// crossPane is a pane of another session of this daemon that a claim names,
+// with how the card's session shows it.
+type crossPane struct {
+	session, window, name, harness string
+}
+
+// crossSessionPane is the pane target names when it is no window of sess but
+// a window of exactly one other session of this daemon, nil otherwise. Only
+// a window id, or an id prefix of at least eight characters, reaches another
+// session: a name or an index is the session's own, and two sessions can
+// both have one. It reads the sessions' state, so it runs outside their
+// locks.
+func (d *Daemon) crossSessionPane(sess *Session, target string) *crossPane {
+	if target == "" {
+		return nil
+	}
+	if _, err := findWindowStateIndex(sess.GetState().Windows, target); err == nil {
+		return nil
+	}
+	var found *crossPane
+	for _, other := range d.manager.AllSessions() {
+		if other == sess {
+			continue
+		}
+		st := other.GetState()
+		if st == nil {
+			continue
+		}
+		for i := range st.Windows {
+			w := &st.Windows[i]
+			if w.ID != target && (len(target) < 8 || !strings.HasPrefix(w.ID, target)) {
+				continue
+			}
+			if found != nil {
+				return nil
+			}
+			found = &crossPane{session: other.Name(), window: w.ID, name: windowLabelOf(*w), harness: w.AgentHarness}
+		}
+	}
+	return found
+}
+
+// forgetCrossHold drops the note that window, a pane of another session,
+// holds card id of sess, once a release or a finish let it go.
+func (d *Daemon) forgetCrossHold(sess *Session, window, id string) {
+	if window != "" {
+		d.remoteHolds.note(window, remoteHold{session: sess.Name(), id: id}, false)
+	}
 }
 
 // cardSessions are the sessions whose cards window may hold: its own, and

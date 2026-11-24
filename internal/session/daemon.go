@@ -1586,8 +1586,11 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		}
 		// A pane that closed, or whose agent left, lets go of the cards it
 		// held on other machines (task_project.go).
-		if ev.Type == EventWindowClosed || (ev.Type == EventAgentState && ev.State == AgentStateNone.Name()) {
-			d.releaseRemoteHolds(ev.Window)
+		switch {
+		case ev.Type == EventWindowClosed:
+			d.releaseRemoteHolds(ev.Window, taskReleasePaneClosed)
+		case ev.Type == EventAgentState && ev.State == AgentStateNone.Name():
+			d.releaseRemoteHolds(ev.Window, taskReleaseAgentLeft)
 		}
 		// A pane with an activity ring gets its shell's commands and its
 		// state changes added to it. A pane without one costs a map lookup.

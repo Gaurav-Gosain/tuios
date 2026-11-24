@@ -10,7 +10,7 @@ import (
 
 // The task card lifecycle as one transition function. A card's lifecycle
 // fields (Stage, StageAt, Holder, HeldAt, HolderName, HolderHarness,
-// Dispatched, Blocked, Attempts, Note, Work, Verify and Attachments) are
+// HolderSession, Dispatched, Blocked, Attempts, Note, Work, Verify and Attachments) are
 // written here and
 // nowhere else: internal/lint TestOnlyTaskMoveWritesACardsLifecycle holds it.
 // A verb keeps its own checks (who may touch the card, the pane refusals, the
@@ -64,21 +64,22 @@ const (
 type cardMove struct {
 	kind       cardMoveKind
 	by, reason string
-	// Claim: the pane, whether dispatch made the claim, and the name and
-	// harness of a holder the card's session cannot read (names). refresh
-	// updates dispatched and the names on a claim the same holder makes again.
-	window            string
-	dispatched, names bool
-	name, harness     string
-	refresh           bool
-	stage             string    // HandIn, Stage, Verified: where the card goes
-	work              *TaskWork // HandIn, Stage
-	verifyRun         bool      // Stage: run the board's verify command
-	auto              taskMove  // Auto
-	token             int64     // Verified
-	verify            *TaskVerify
-	note              string           // BlockErrored, Verified: the card's note
-	attachments       []TaskAttachment // Attach
+	// Claim: the pane, whether dispatch made the claim, and the name,
+	// harness and session of a holder the card's session cannot read
+	// (names). refresh updates dispatched and the names on a claim the same
+	// holder makes again.
+	window                 string
+	dispatched, names      bool
+	name, harness, session string
+	refresh                bool
+	stage                  string    // HandIn, Stage, Verified: where the card goes
+	work                   *TaskWork // HandIn, Stage
+	verifyRun              bool      // Stage: run the board's verify command
+	auto                   taskMove  // Auto
+	token                  int64     // Verified
+	verify                 *TaskVerify
+	note                   string           // BlockErrored, Verified: the card's note
+	attachments            []TaskAttachment // Attach
 }
 
 // apply makes m on the card at now. It returns the action the history and
@@ -92,7 +93,7 @@ func (tk *TaskState) apply(m cardMove, now int64) (action, holder string, verr *
 	// letGo lets the holder go. A block dispatch put on the holder's errored
 	// agent goes with it: the block belongs to the holder.
 	letGo := func() {
-		tk.Holder, tk.HeldAt, tk.HolderName, tk.HolderHarness = "", 0, "", ""
+		tk.Holder, tk.HeldAt, tk.HolderName, tk.HolderHarness, tk.HolderSession = "", 0, "", "", ""
 		if tk.blockedOnErrored() {
 			tk.Blocked = nil
 		}
@@ -108,7 +109,7 @@ func (tk *TaskState) apply(m cardMove, now int64) (action, holder string, verr *
 			if m.refresh {
 				tk.Dispatched = m.dispatched
 				if m.names {
-					tk.HolderName, tk.HolderHarness = m.name, m.harness
+					tk.HolderName, tk.HolderHarness, tk.HolderSession = m.name, m.harness, m.session
 				}
 			}
 			return "", holder, nil
@@ -118,7 +119,7 @@ func (tk *TaskState) apply(m cardMove, now int64) (action, holder string, verr *
 		}
 		tk.Holder, tk.HeldAt, tk.Dispatched = m.window, now, m.dispatched
 		if m.names {
-			tk.HolderName, tk.HolderHarness = m.name, m.harness
+			tk.HolderName, tk.HolderHarness, tk.HolderSession = m.name, m.harness, m.session
 		}
 		if to == TaskStageTodo || to == TaskStagePlan {
 			to = TaskStageDoing
@@ -338,7 +339,7 @@ func cardRulesBroken(tk *TaskState, m cardMove) []string {
 	if tk.Holder != "" && (m.kind == moveHandIn || m.kind == moveVerified || m.kind == moveStage && m.verifyRun) {
 		out = append(out, "the card is still held after a move that lets it go")
 	}
-	if tk.Holder == "" && (tk.HeldAt != 0 || tk.HolderName != "" || tk.HolderHarness != "") {
+	if tk.Holder == "" && (tk.HeldAt != 0 || tk.HolderName != "" || tk.HolderHarness != "" || tk.HolderSession != "") {
 		out = append(out, "a card with no holder keeps its holder's time or name")
 	}
 	if tk.blockedOnErrored() && tk.Holder == "" {

@@ -82,6 +82,7 @@ structure Card where
   heldAt : Int
   holderName : String
   holderHarness : String
+  holderSession : String
   dispatched : Bool
   blocked : Option Block
   attempts : Int
@@ -109,6 +110,7 @@ structure Move where
   names : Bool := false
   name : String := ""
   harness : String := ""
+  session : String := ""
   refresh : Bool := false
   stage : Stage := .todo
   work : Option Work := none
@@ -160,7 +162,7 @@ def Card.blockedOnErrored (c : Card) : Bool := erroredBlock c.blocked
 /-- letGo: no holder, and none of the holder's fields. A block dispatch put
 on the holder's errored agent goes with the holder. -/
 def Card.letGo (c : Card) : Card :=
-  { c with holder := "", heldAt := 0, holderName := "", holderHarness := "",
+  { c with holder := "", heldAt := 0, holderName := "", holderHarness := "", holderSession := "",
            blocked := if erroredBlock c.blocked then none else c.blocked }
 
 /-- workable: the refusal of a claim by window. -/
@@ -228,7 +230,7 @@ def step (c : Card) (m : Move) (now : Int) : Step :=
     else if c.holder = m.window then
       if m.refresh then
         let c1 := { c with dispatched := m.dispatched }
-        .none (if m.names then { c1 with holderName := m.name, holderHarness := m.harness } else c1)
+        .none (if m.names then { c1 with holderName := m.name, holderHarness := m.harness, holderSession := m.session } else c1)
       else .none c
     -- workable, written out so each refusal is one branch.
     else if c.holder ≠ "" ∧ c.holder ≠ m.window then .refused .held
@@ -236,7 +238,7 @@ def step (c : Card) (m : Move) (now : Int) : Step :=
     else if c.blocked.isSome then .refused .blocked
     else
         let c1 := { c with holder := m.window, heldAt := now, dispatched := m.dispatched }
-        let c2 := if m.names then { c1 with holderName := m.name, holderHarness := m.harness } else c1
+        let c2 := if m.names then { c1 with holderName := m.name, holderHarness := m.harness, holderSession := m.session } else c1
         let to := if c.stage = .todo ∨ c.stage = .plan then Stage.doing else c.stage
         .moved .claimed to m.window c2
   | .release =>
