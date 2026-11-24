@@ -364,6 +364,19 @@ func (s *Screen) diff(buf *uv.Buffer) {
 	}
 }
 
+// ForgetFrame drops the Screen's pointers to the buffer of the frame passed
+// last, so a caller that frees that buffer gives its memory back. It reports
+// false, and keeps them, while that frame waits for Commit. The next frame is
+// then compared in full with the frame shown, as a frame in a new buffer is.
+func (s *Screen) ForgetFrame() bool {
+	if s.staged != nil {
+		return false
+	}
+	s.passed = nil
+	s.rb.Buffer = nil
+	return true
+}
+
 // DiffedRows is how many rows the last diff found changed and passed to the
 // terminal renderer, for the frame cost benchmarks and budgets.
 func (s *Screen) DiffedRows() int { return s.diffed }

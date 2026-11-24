@@ -19635,3 +19635,20 @@ Run on 2026-11-25 on Linux (amd64). Ten controls:
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestQuickLookRunsPreviewers|TestQuickLookRunsAPluginPreviewer|TestFilePreviewRunOnAHost) -v .`.
  -v .`.
+## TestIdleClientFreesItsFrameBuffers
+
+Once the client has been idle for the cleanup interval, it must hold under
+512 KiB of compositor canvas and parsed layers in its heap profile
+(GODEBUG=memprofilerate=1), and draw the next typed line with the text drawn
+before it.
+
+Run on 2026-11-25 on Linux (amd64).
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The `releaseFrameBuffers` call in View made `if false && ...` | "the idle client never freed its canvas and its parsed layers" (3705 KiB held) | **caught** |
+| The release marked due only while the frame ticker was stopped (the first head of this branch) | "the idle client still holds 2777 KiB of canvas and parsed layers" | **caught** |
+| A canvas built again by a quiet frame arms no release (the second head of this branch) | "the idle client still holds 2777 KiB of canvas and parsed layers" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestIdleClientFreesItsFrameBuffers$' -v .`.

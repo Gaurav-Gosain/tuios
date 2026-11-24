@@ -598,6 +598,9 @@ type OS struct {
 	// the panes may hold buffers again. The release is armed only while it is
 	// set, so an idle client releases once and then sleeps.
 	emulatorReleasePending bool
+	// frameBuffersReleaseDue says the next frame served from the cache drops
+	// the canvas and the parsed layers. See releaseFrameBuffers.
+	frameBuffersReleaseDue bool
 	// tick is the maintenance tick armed for the next job that is due. See
 	// tick_deadline.go.
 	tick tickTimer

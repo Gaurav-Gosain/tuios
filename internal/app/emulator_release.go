@@ -42,7 +42,32 @@ func (m *OS) releaseEmulatorScratch(now time.Time) {
 		}
 	}
 	m.emulatorReleasePending = pending
+	m.frameBuffersReleaseDue = true
 	memtrim.Request()
+}
+
+// releaseFrameBuffers drops the compositor's canvas and the layers parsed to
+// cells, which the next frame builds again. Each is a cell buffer of the
+// screen's size (118 bytes a cell, 1.35 MB at 207x55), and an idle client
+// held them for as long as nothing moved. releaseEmulatorScratch marks it
+// due, and View runs it on a frame it serves from the cache once the frame
+// ticker has stopped, so no compose follows it at once. The mark does not
+// wait for the ticker: the emulator release runs once after the last frame
+// change, often before the ticker stops 500 ms after that frame. A compose
+// that builds them again arms another release (GetCanvas). A busy screen
+// keeps the buffers: the cost is one full compose for the first frame after
+// an idle period.
+func (m *OS) releaseFrameBuffers() {
+	if m.screen != nil && !m.screen.ForgetFrame() {
+		return
+	}
+	m.frameBuffersReleaseDue = false
+	m.renderCanvas = nil
+	m.canvasIsFrame = false
+	m.layerCells = nil
+	m.kept = keptCanvas{}
+	m.directHold.drawn = false
+	m.directHold.saved = nil
 }
 
 // emulatorReleaseDue is when releaseEmulatorScratch next has work, and false

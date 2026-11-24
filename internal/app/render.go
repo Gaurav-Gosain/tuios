@@ -38,6 +38,10 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 	rw, rh := m.GetRenderWidth(), m.GetRenderHeight()
 	desktop := m.surfaceGround(surfaceDesktop)
 	if m.renderCanvas == nil {
+		// Built again after releaseFrameBuffers, perhaps by a quiet frame
+		// that arms no release of its own: arm one, so the buffers go
+		// again once the client settles.
+		m.emulatorReleasePending = true
 		m.renderCanvas = &frameCanvas{Buffer: *uv.NewBuffer(rw, rh)}
 	} else {
 		m.renderCanvas.Resize(rw, rh)
@@ -1316,6 +1320,9 @@ func (m *OS) View() tea.View {
 	// must never cover the cursor the same frame shows.
 	if cur, _ := m.viewCursor(); m.renderSkipped && m.cachedViewContent != "" && !m.pipCoversCursor(cur) {
 		view.SetContent(string(m.cachedViewContent))
+		if m.frameBuffersReleaseDue && m.frameRate.idle {
+			m.releaseFrameBuffers()
+		}
 	} else if !compose() {
 		return m.crashView()
 	}
