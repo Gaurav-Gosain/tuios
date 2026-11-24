@@ -157,6 +157,7 @@ func TestMailWakesAnIdleAgentOnce(t *testing.T) {
 		t.Fatalf("set-agent-state idle: %v\n%s", err, out)
 	}
 	deadline := sent.Add(mailWakeWait + uiTimeout)
+	pace := newPollPace(250 * time.Millisecond)
 	for {
 		n, out := check(idle, "idle agent after the burst")
 		if n > 0 {
@@ -171,7 +172,7 @@ func TestMailWakesAnIdleAgentOnce(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("the idle agent was never told about its mail:\n%s", out)
 		}
-		time.Sleep(250 * time.Millisecond)
+		pace.wait()
 	}
 	// Room for a second wake to show, if there were one.
 	time.Sleep(mailWakeWait)
@@ -193,7 +194,7 @@ func TestMailWakesAnIdleAgentOnce(t *testing.T) {
 		t.Fatalf("set-agent-state idle: %v\n%s", err, out)
 	}
 	deadline = time.Now().Add(mailWakeWait + uiTimeout)
-	pace := newPollPace(250 * time.Millisecond)
+	pace = newPollPace(250 * time.Millisecond)
 	for {
 		n, out := check(blocked, "agent after needs_input")
 		if n == 1 && strings.Contains(out, `GOT[You have 1 unread tuios message. Read it with:`) {
