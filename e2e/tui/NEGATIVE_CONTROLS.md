@@ -19224,3 +19224,38 @@ Run on 2026-11-24 on Linux (amd64), go1.27.4, against main at 89fa86639. Each co
 
 Repeat with
 `go test -count=3 -run '^TestAChangeThatMovesNoPaneBuildsNoPaneTable$' -v ./internal/session/`.
+## A state change looks a window up at its own place
+
+`TestAStateChangeLooksAWindowUpAtItsOwnPlace` (internal/session) is an
+allocation budget with six rows; every count is the least of three
+`testing.AllocsPerRun(50, f)` readings. "the snapshot, 100 windows" holds
+snapshotLifecycle to 2 allocations. "a change that keeps the windows fills no
+index" runs the snapshot, the five agent rules, the second snapshot and the diff
+on two states of the same 100 windows and wants neither index filled, with the
+events and what each rule wrote checked. "a window closed in the middle fills it
+once" wants one close and no create, then the diff to report a window taken out
+of the filled index as created. "windows in another order keep their own past"
+puts five windows in another order, four at other places and one at its own,
+beside a new one, and checks what each rule wrote on each. "a
+daemon-side change, 100 windows" (a rename) and "a focus move, 100 windows" hold
+a whole change on a daemon's session to 36 and read the state back.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main | "ASSERTION: a lifecycle snapshot of 100 windows took 12 allocations (least of 3), want at most 2: the snapshot builds its window index" (`the_snapshot,_100_windows`); "ASSERTION: a change that keeps every window in its place filled 100 entries of the index before and 100 after, want none: a window is looked up in a map built for it" (`a_change_that_keeps_the_windows_fills_no_index`); "ASSERTION: a daemon-side rename of a session with 100 windows took 50 allocations (least of 3), want at most 36: each snapshot builds its window index" (`a_daemon-side_change,_100_windows`); "ASSERTION: a focus move in a session with 100 windows took 50 allocations (least of 3), want at most 36: a snapshot builds its window index" (`a_focus_move,_100_windows`). The other two rows pass. | **caught** |
+| The window at the caller's place taken without comparing its ID | `a_window_closed_in_the_middle_fills_it_once` and `windows_in_another_order_keep_their_own_past`: "ASSERTION: closing window-0040-abcdef reported closed [] and created [], want only it closed: a window was taken by its place without its ID"; "ASSERTION: a, working since the same moment, has reason "", settled true, CompletionSeq 0, want silent, true, 0" | **caught** |
+| The place never tried | `a_change_that_keeps_the_windows_fills_no_index`, `a_daemon-side_change,_100_windows`, `a_focus_move,_100_windows`: "ASSERTION: a change that keeps every window in its place filled 100 entries of the index before and 100 after, want none: a window is looked up in a map built for it"; the daemon rows read 50 and 50 | **caught** |
+| The index written in the snapshot's loop | `the_snapshot,_100_windows`, `a_change_that_keeps_the_windows_fills_no_index`, `a_daemon-side_change,_100_windows`, `a_focus_move,_100_windows`: "ASSERTION: a lifecycle snapshot of 100 windows took 12 allocations (least of 3), want at most 2: the snapshot builds its window index"; then 100 and 100, 50 and 50, as on main | **caught** |
+| The focused window looked up through the index from the first place | `a_change_that_keeps_the_windows_fills_no_index`, `a_focus_move,_100_windows`: "ASSERTION: a change that keeps every window in its place filled 0 entries of the index before and 100 after, want none: a window is looked up in a map built for it"; "ASSERTION: a focus move in a session with 100 windows took 40 allocations (least of 3), want at most 36: a snapshot builds its window index" | **caught** |
+| The index filled again at every miss | `a_window_closed_in_the_middle_fills_it_once` (its last check): "ASSERTION: with window-0070-abcdef taken out of the filled index the diff reported created [], want only it: the index is filled again at every miss" | **caught** |
+| The index never filled | `a_window_closed_in_the_middle_fills_it_once`, `windows_in_another_order_keep_their_own_past`: "ASSERTION: after a close the index holds 0 entries before and 0 after, want 100 and 99"; "ASSERTION: a, working since the same moment, has reason "", settled true, CompletionSeq 0, want silent, true, 0" | **caught** |
+| The focus event without its pane | `a_change_that_keeps_the_windows_fills_no_index`: "ASSERTION: no window-focused event for window-0050-abcdef with its pane pty-0050; events: [...]" | **caught** |
+| The focus walk taking a window that is not the focused one | `a_change_that_keeps_the_windows_fills_no_index`: "ASSERTION: no window-focused event for window-0050-abcdef with its pane pty-0050; events: [...]" | **caught** |
+| Each of the ten lookups in turn trying place 0 instead of its own | `a_change_that_keeps_the_windows_fills_no_index`, in each of the ten builds; the first, the closed-window loop: "ASSERTION: a change that keeps every window in its place filled 0 entries of the index before and 100 after, want none: a window is looked up in a map built for it" (the two lookups in the list after the change read 0 and 100, the eight in the list before it 100 and 0; the five in the diff and the turns rule also take both daemon rows to 40) | **caught** (10 of 10) |
+| The index made at full size and filled in the snapshot | `the_snapshot,_100_windows` (5 allocations), `a_change_that_keeps_the_windows_fills_no_index` (100 and 100); the two daemon rows read 36, at their budget: "ASSERTION: a lifecycle snapshot of 100 windows took 5 allocations (least of 3), want at most 2: the snapshot builds its window index" | **caught** |
+| The focus walk from the first window | Not caught: it differs from the walk from the last only when two windows share one ID, which no test asserts | not tested |
+
+Run on 2026-11-24 on Linux (amd64), go1.27.4, on main at 9a7d898c5, each cut built alone into this change: main fails the same four rows in 3 of 3 runs in one process (`-count=3`) and once under `-race`.
+
+Repeat with
+`go test -count=3 -run '^TestAStateChangeLooksAWindowUpAtItsOwnPlace$' -v ./internal/session/`.

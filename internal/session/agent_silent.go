@@ -135,7 +135,7 @@ func clearStaleSilenceLocked(before lifecycleSnapshot, st *SessionState) {
 		if w.AgentReason == "" {
 			continue
 		}
-		idx, ok := before.index[w.ID]
+		idx, ok := before.find(i, w.ID)
 		if w.AgentState != AgentStateWorking || !ok ||
 			before.windows[idx].agentStateAt != w.AgentStateAt {
 			w.AgentReason = ""

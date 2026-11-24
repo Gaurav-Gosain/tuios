@@ -43,7 +43,7 @@ func wakeSettledLocked(before lifecycleSnapshot, st *SessionState) {
 		if !w.AgentSettled {
 			continue
 		}
-		idx, ok := before.index[w.ID]
+		idx, ok := before.find(i, w.ID)
 		if !ok {
 			continue
 		}

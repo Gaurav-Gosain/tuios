@@ -44,7 +44,7 @@ func clearQuietOfLeftAgentLocked(before lifecycleSnapshot, st *SessionState) {
 		if !w.AgentQuiet || w.AgentState != AgentStateNone {
 			continue
 		}
-		if idx, ok := before.index[w.ID]; ok && before.windows[idx].agentState != AgentStateNone {
+		if idx, ok := before.find(i, w.ID); ok && before.windows[idx].agentState != AgentStateNone {
 			w.AgentQuiet = false
 		}
 	}

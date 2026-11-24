@@ -49,7 +49,7 @@ func agentStateFinishes(state AgentState) bool {
 func (s *Session) noteAgentTurnsLocked(before lifecycleSnapshot, now int64) {
 	for i := range s.state.Windows {
 		w := &s.state.Windows[i]
-		idx, ok := before.index[w.ID]
+		idx, ok := before.find(i, w.ID)
 		if !ok {
 			continue
 		}

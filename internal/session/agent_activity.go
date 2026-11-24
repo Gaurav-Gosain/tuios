@@ -593,7 +593,7 @@ func clearNowAtRestLocked(before lifecycleSnapshot, st *SessionState) {
 		if agentStateBusy(w.AgentState) || len(w.AgentMeta) == 0 {
 			continue
 		}
-		idx, ok := before.index[w.ID]
+		idx, ok := before.find(i, w.ID)
 		if !ok || before.windows[idx].agentState == w.AgentState {
 			continue
 		}

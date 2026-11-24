@@ -73,8 +73,10 @@ type lifecycleWindow struct {
 // It is a copy, not a reference, because the headless ops mutate the state in
 // place and the "before" snapshot has to survive that.
 type lifecycleSnapshot struct {
-	windows   []lifecycleWindow // in state order
-	index     map[string]int    // window ID -> index into windows
+	windows []lifecycleWindow // in state order
+	// index maps a window ID to its place in windows. It stays empty until a
+	// window is not where a caller looked. See find.
+	index     map[string]int
 	focused   string
 	workspace int
 	// wsNames is a copy of the workspace names, for workspace-renamed.
@@ -84,6 +86,23 @@ type lifecycleSnapshot struct {
 	// width and height are the session's size in cells, the box the
 	// windows' rectangles are laid out in. For layout-changed.
 	width, height int
+}
+
+// find returns the place of the window id in the snapshot. hint is the
+// window's place in the list the caller walks. Unless a window opened, closed
+// or moved, the two snapshots hold the same windows in the same order, so the
+// index is filled only when a window is not at its hint.
+func (s lifecycleSnapshot) find(hint int, id string) (int, bool) {
+	if hint < len(s.windows) && s.windows[hint].id == id {
+		return hint, true
+	}
+	if len(s.index) == 0 {
+		for i := range s.windows {
+			s.index[s.windows[i].id] = i
+		}
+	}
+	i, ok := s.index[id]
+	return i, ok
 }
 
 // snapshotLifecycle captures the lifecycle-relevant parts of state. The caller
@@ -108,7 +127,6 @@ func snapshotLifecycle(state *SessionState) lifecycleSnapshot {
 	worktree := managedWorktreePath(state.Worktree)
 	for i := range state.Windows {
 		w := &state.Windows[i]
-		snap.index[w.ID] = len(snap.windows)
 		snap.windows = append(snap.windows, lifecycleWindow{
 			id:            w.ID,
 			ptyID:         w.PTYID,
@@ -152,7 +170,7 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 
 	for i := range before.windows {
 		w := &before.windows[i]
-		if _, ok := after.index[w.id]; !ok {
+		if _, ok := after.find(i, w.id); !ok {
 			events = append(events, SessionEvent{
 				Type:          EventWindowClosed,
 				Window:        w.id,
@@ -165,7 +183,7 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 
 	for i := range after.windows {
 		w := &after.windows[i]
-		if _, ok := before.index[w.id]; !ok {
+		if _, ok := before.find(i, w.id); !ok {
 			events = append(events, SessionEvent{
 				Type:          EventWindowCreated,
 				Window:        w.id,
@@ -179,7 +197,7 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 
 	for i := range after.windows {
 		w := &after.windows[i]
-		prevIdx, ok := before.index[w.id]
+		prevIdx, ok := before.find(i, w.id)
 		if !ok {
 			continue // already reported as created
 		}
@@ -310,10 +328,16 @@ func diffLifecycle(before, after lifecycleSnapshot) []SessionEvent {
 	// window-closed, and an empty focus target has nothing to report.
 	if after.focused != before.focused && after.focused != "" {
 		ev := SessionEvent{Type: EventWindowFocused, Window: after.focused}
-		if idx, ok := after.index[after.focused]; ok {
+		// No place to try, so walk from the end: two windows with one ID
+		// answer as the index would.
+		for idx := len(after.windows) - 1; idx >= 0; idx-- {
+			if after.windows[idx].id != after.focused {
+				continue
+			}
 			ev.PTYID = after.windows[idx].ptyID
 			ev.hookTitle = after.windows[idx].displayTitle()
 			ev.hookWorkspace = after.windows[idx].workspace
+			break
 		}
 		events = append(events, ev)
 	}
@@ -342,7 +366,7 @@ func layoutChanges(before, after lifecycleSnapshot) []SessionEvent {
 	}
 	for i := range before.windows {
 		w := &before.windows[i]
-		j, ok := after.index[w.id]
+		j, ok := after.find(i, w.id)
 		if !ok {
 			mark(w.workspace)
 			continue
@@ -359,7 +383,7 @@ func layoutChanges(before, after lifecycleSnapshot) []SessionEvent {
 		}
 	}
 	for i := range after.windows {
-		if _, ok := before.index[after.windows[i].id]; !ok {
+		if _, ok := before.find(i, after.windows[i].id); !ok {
 			mark(after.windows[i].workspace)
 		}
 	}

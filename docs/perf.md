@@ -6341,6 +6341,77 @@ order than the session's pays one index of the session's windows. The rest of
 what a push costs (the lifecycle snapshot and the workspace notes) is not
 changed here.
 
+## 2026-11 a state change looks a window up at its own place
+
+Every state change takes two snapshots of the lifecycle, one before the
+change and one after it, and each built a map from window ID to place with no
+size, one entry per window, grown by rehash as it filled. Eleven lookups read
+those maps (the diff that makes the lifecycle events, the layout diff, and the
+five rules that read the "before" snapshot inside a daemon-side change).
+Unless a window opened, closed or moved, the two snapshots hold the same
+windows in the same order (a drag, a focus move, an agent state, a title), so
+each lookup found the window at the place its own loop was already at, and the
+map was built and read for nothing.
+
+The snapshot now makes its index empty and writes nothing to it. A lookup
+tries the window at its own place first and takes it when the ID matches; only
+when a window is not there does the lookup fill the index from the windows, in
+order, and answer from it. The snapshot is passed by value and a map is a
+reference, so one fill serves every reader of that snapshot. The focus event
+walks the windows from the end for the focused one, because it has no place to
+try. TestAStateChangeLooksAWindowUpAtItsOwnPlace holds it: the snapshot takes
+at most 2 allocations, a change that keeps the windows fills neither index, a
+daemon-side change and a focus move at 100 windows stay within 36 allocations,
+and a window closed in the middle fills each index once and reports the right
+events.
+
+Numbers, on a Ryzen 5 5600 (Linux x86_64, go1.27.4), one core, two test
+binaries run interleaved, n=10, benchstat medians; every difference in these
+tables is significant (p=0.000).
+
+The snapshot alone:
+
+| Windows | Time main | Time branch | Allocations main | Allocations branch | Bytes main | Bytes branch |
+|---------|-----------|-------------|------------------|--------------------|------------|--------------|
+| 10 | 2.11 us | 1.49 us (-29%) | 6 | 2 (-67%) | 4.70 KiB | 4.05 KiB (-14%) |
+| 100 | 20.1 us | 13.1 us (-35%) | 12 | 2 (-83%) | 46.8 KiB | 40.1 KiB (-14%) |
+| 1000 | 212.8 us | 106.5 us (-50%) | 23 | 2 (-91%) | 450.5 KiB | 344.0 KiB (-24%) |
+
+A daemon-side change (a rename):
+
+| Windows | Time main | Time branch | Allocations main | Allocations branch | Bytes main | Bytes branch |
+|---------|-----------|-------------|------------------|--------------------|------------|--------------|
+| 10 | 13.9 us | 12.3 us (-11%) | 39 | 31 (-21%) | 22.4 KiB | 21.1 KiB (-6%) |
+| 100 | 88.9 us | 71.4 us (-20%) | 52 | 32 (-38%) | 190.8 KiB | 177.3 KiB (-7%) |
+| 1000 | 869.6 us | 632.2 us (-27%) | 76 | 34 (-55%) | 1.80 MiB | 1.59 MiB (-12%) |
+
+A client push of the whole state:
+
+| Windows | Time main | Time branch | Allocations main | Allocations branch | Bytes main | Bytes branch |
+|---------|-----------|-------------|------------------|--------------------|------------|--------------|
+| 10 | 15.5 us | 14.1 us (-9%) | 80 | 72 (-10%) | 23.1 KiB | 21.8 KiB (-6%) |
+| 100 | 88.1 us | 72.1 us (-18%) | 93 | 73 (-22%) | 169.1 KiB | 155.7 KiB (-8%) |
+| 1000 | 921.3 us | 702.0 us (-24%) | 139 | 97 (-30%) | 2.03 MiB | 1.82 MiB (-10%) |
+
+A focus move:
+
+| Windows | Time main | Time branch | Allocations main | Allocations branch | Bytes main | Bytes branch |
+|---------|-----------|-------------|------------------|--------------------|------------|--------------|
+| 10 | 13.7 us | 12.2 us (-11%) | 38 | 30 (-21%) | 22.4 KiB | 21.1 KiB (-6%) |
+| 100 | 89.1 us | 71.3 us (-20%) | 51 | 30 (-41%) | 190.8 KiB | 177.3 KiB (-7%) |
+| 1000 | 879.8 us | 633.1 us (-28%) | 75 | 33 (-56%) | 1.80 MiB | 1.59 MiB (-12%) |
+
+What is still paid: a change that opens, closes or moves a window between the
+two snapshots fills the index of the snapshot its first miss reads, both of
+them for a close in the middle (the windows after it are one place off in both
+directions). The fill is not presized, so that change gains nothing: at 100
+windows a close in the middle takes 49.5 us on main and 50.7 us on the branch
+(+2.3%, p=0.002), with 33 allocations and 95.8 KiB on both.
+
+The binary grows by 8,192 B on linux/amd64 (49,066,144 to 49,074,336), 0 B on
+darwin/arm64 (45,699,554) and 7,680 B on windows/amd64 (49,505,792 to
+49,513,472), by scripts/binary-size.sh.
+
 ## 2026-11 a typed key costs a row, not the screen
 
 The case: a 200x60 terminal, one pane, the rail on the left and the dock at
