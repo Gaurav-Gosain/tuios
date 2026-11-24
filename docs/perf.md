@@ -6593,3 +6593,51 @@ Binary size: +12,288 bytes linux/amd64, +368 bytes darwin/arm64. The code and
 its tables grow by about 9 KB (`go tool nm -size`: `gitstate.WatchDirs` 1.8 KB,
 the retarget 1.1 KB, the sync 0.5 KB). The linux file grows in whole 4 KiB
 pages.
+
+## 2026-11 a state change that moves no pane builds no pane table
+
+Every state change, a client push or a daemon-side change, reaches
+`notePaneMovesLocked`, which built a map with one entry per pane that is not a
+scratch pane, two more maps for the held and the left workspaces and replaced
+the previous table with the new one, whatever the change was. A drag step, a
+rename or a focus move moves no pane, so every one of those tables was equal to
+the one it replaced. At 100 panes that was 7 allocations a call. A short walk
+of the windows now checks, with no allocation, that every pane is in the table
+with the same workspace, PTY and live-agent mark and that the table holds no
+other entry; when it does, the function returns the table it has and the change
+goes on. TestAChangeThatMovesNoPaneBuildsNoPaneTable holds the allocation
+budget (none for a change that moves nothing at 100 panes) and the rows that
+guard it: a pane that left, moved or came is seen, and a PTY or an agent mark
+that changed without a move is remembered when that pane later leaves.
+
+Numbers, on a Ryzen 5 5600 (Linux x86_64, go1.27.4), main and branch as two
+test binaries, `-test.cpu 1 -test.benchtime 1s`, alternated ten times (n=10),
+benchstat medians, per call. "Unmoved" and "pane closed" are
+`notePaneMovesLocked` alone; the other rows are a whole state change. `~` is
+benchstat's "no difference".
+
+| Windows | Change | Time main | Time branch | Allocations main | Allocations branch | Bytes main | Bytes branch |
+|---------|--------|-----------|-------------|------------------|--------------------|------------|--------------|
+| 10 | unmoved | 1437.5 ns | 101.6 ns (-92.93%) | 7 | 0 (-100%) | 1.281 KiB | 0 (-100%) |
+| 100 | unmoved | 7.764 µs | 1.120 µs (-85.58%) | 7 | 0 (-100%) | 6.781 KiB | 0 (-100%) |
+| 1000 | unmoved | 87.40 µs | 15.17 µs (-82.64%) | 9 | 0 (-100%) | 112.4 KiB | 0 (-100%) |
+| 10 | client push | 11.55 µs | 10.17 µs (-11.90%) | 47 | 40 (-14.89%) | 14.63 KiB | 13.35 KiB (-8.76%) |
+| 100 | client push | 64.78 µs | 58.17 µs (-10.20%) | 60 | 53 (-11.67%) | 104.34 KiB | 97.56 KiB (-6.50%) |
+| 1000 | client push | 638.2 µs | 566.5 µs (-11.22%) | 84 | 74.5 (-11.31%) | 1017.5 KiB | 905.1 KiB (-11.05%) |
+| 10 | rename | 13.90 µs | 12.43 µs (-10.57%) | 39 | 32 (-17.95%) | 22.38 KiB | 21.10 KiB (-5.73%) |
+| 100 | rename | 88.95 µs | 81.75 µs (-8.09%) | 52 | 45 (-13.46%) | 190.8 KiB | 184.1 KiB (-3.55%) |
+| 1000 | rename | 875.8 µs | 808.2 µs (-7.72%) | 76 | 67 (-11.84%) | 1.797 MiB | 1.687 MiB (-6.11%) |
+| 10 | focus move | 13.70 µs | 12.27 µs (-10.44%) | 38 | 31 (-18.42%) | 22.37 KiB | 21.09 KiB (-5.73%) |
+| 100 | focus move | 89.05 µs | 82.42 µs (-7.44%) | 50 | 43 (-14.00%) | 190.8 KiB | 184.0 KiB (-3.55%) |
+| 1000 | focus move | 880.0 µs | 804.5 µs (-8.58%) | 75 | 66 (-12.00%) | 1.797 MiB | 1.687 MiB (-6.11%) |
+| 10 | pane closed | 1.365 µs | 1.446 µs (+5.97%) | 5 | 5 (~) | 1.121 KiB | 1.121 KiB (~) |
+| 100 | pane closed | 7.793 µs | 8.783 µs (+12.69%) | 7 | 7 (~) | 6.781 KiB | 6.781 KiB (~) |
+| 1000 | pane closed | 84.62 µs | 95.12 µs (+12.42%) | 9 | 9 (~) | 112.4 KiB | 112.4 KiB (~) |
+
+Binary size, by `scripts/binary-size.sh`: +0 bytes linux/amd64, +0 bytes
+darwin/arm64, +512 bytes windows/amd64.
+
+What remains: a change that opens, closes or moves a pane, or changes a pane's
+PTY or agent mark, builds the table as before, after one extra walk of the
+windows that allocates nothing: the "pane closed" rows, 6% slower at 10 panes
+and 12% to 13% slower at 100 and 1000, with the same allocations and bytes.

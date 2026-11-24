@@ -391,6 +391,27 @@ type paneAt struct {
 	agent bool
 }
 
+// panesUnmovedLocked reports whether the panes are where panesAt has them: the
+// same panes, scratch panes aside, each on the same workspace, with the same
+// PTY, and with an agent live in it or not as before. Such a change moves
+// nothing, so the table it has is the one a new pass would build. The caller
+// holds stateMu.
+func (s *Session) panesUnmovedLocked() bool {
+	st := s.state
+	n := 0
+	for i := range st.Windows {
+		w := &st.Windows[i]
+		if w.Scratch {
+			continue
+		}
+		n++
+		if was, ok := s.panesAt[w.ID]; !ok || was != (paneAt{ws: max(w.Workspace, 1), pty: w.PTYID, agent: agentWasLive(*w)}) {
+			return false
+		}
+	}
+	return n == len(s.panesAt)
+}
+
 // notePaneMovesLocked compares the panes with where they were at the last
 // change, records each workspace that lost its last pane as emptied on its own
 // or by a person, and reports whether a person took a pane off a workspace: a
@@ -401,6 +422,9 @@ type paneAt struct {
 // where the panes are now. The caller holds stateMu.
 func (s *Session) notePaneMovesLocked() (map[string]paneAt, bool) {
 	st := s.state
+	if s.panesUnmovedLocked() {
+		return s.panesAt, false
+	}
 	now := make(map[string]paneAt, len(st.Windows))
 	held := make(map[int]bool)
 	for i := range st.Windows {
