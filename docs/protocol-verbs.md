@@ -58,6 +58,7 @@ It also has more about the verbs that need it.
 - [`file-list`](#file-list)
 - [`file-mkdir`](#file-mkdir)
 - [`file-preview`](#file-preview)
+- [`file-preview-run`](#file-preview-run)
 - [`file-read`](#file-read)
 - [`file-remove`](#file-remove)
 - [`file-rename`](#file-rename)
@@ -1590,9 +1591,34 @@ Make the preview of a file on this machine. An image comes scaled to max_px on i
 | `note` | string | Why there is no picture, in words a person can act on. |
 | `size` | int | The file's size. |
 | `mtime` | int | The file's modification time, Unix ms. |
+| `previewers` | []string | The names of this machine's quick look previewers that match the file, in order. Absent when none does. file-preview-run runs one. |
 
 ```json
 {"id":1,"verb":"file-preview","params":{"path":"~/Pictures/cat.jpg","max_px":1200}}
+```
+
+### `file-preview-run`
+
+Run a quick look previewer of this machine for one file or folder here, and return what it printed. The previewers come from [[quick_look.previewer]] in this machine's config.toml and from its enabled plugins. The caller sends only the path and the size: never a command. Over a link it needs files and open.
+
+| Param | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `path` | string | yes |  | The file or folder. An absolute path, or one that starts with ~. |
+| `name` | string |  |  | The previewer to run. Omit it to run the first one that matches. |
+| `width` | int |  | `80` | The width in cells, for {width}. |
+| `height` | int |  | `24` | The height in cells, for {height}. |
+| `line` | int |  | `1` | The line for {line}. |
+
+| Result field | Type | Description |
+|---|---|---|
+| `path` | string | The path, made absolute. |
+| `previewers` | []string | The names of the previewers that match, in order. Empty when none does. |
+| `run` | object | The run: name, output (ansi, text or image), data (base64), cut, exit, stderr, timed_out, missing. Absent when no previewer matches. |
+| `size` | int | The size of the file in bytes. |
+| `mtime` | int | When the file changed, in Unix milliseconds. |
+
+```json
+{"id":1,"verb":"file-preview-run","params":{"path":"~/notes.md","width":100,"height":40}}
 ```
 
 ### `file-read`

@@ -44,6 +44,7 @@ var optionWalkSkips = map[string]string{
 	"links.rules":                      "a list of tables, each a regex and a url, which a value arriving as one string cannot spell",
 	"tasks.stages":                     "a list of stages, which a value arriving as one string cannot spell",
 	"files.open":                       "commands tuios starts outside every pane with the person's rights, which set-option, a verb any pane can call, must not be able to change",
+	"quick_look.previewer":             "commands tuios starts outside every pane with the person's rights, which set-option, a verb any pane can call, must not be able to change",
 	"scratch.session":                  "no longer used: read only so a config from the first scratch design loads and validation can say to remove it",
 	// [agents] is file-plane config the daemon reads from the file, like
 	// [hosts], apart from agents.enabled, which is a plain switch.

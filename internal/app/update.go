@@ -976,6 +976,9 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if qc := m.quickLookDirStatsRead(); qc != nil {
 		cmd = tea.Batch(cmd, qc)
 	}
+	if qc := m.quickLookRunRead(); qc != nil {
+		cmd = tea.Batch(cmd, qc)
+	}
 	if qc := m.quickLookFilmRead(); qc != nil {
 		cmd = tea.Batch(cmd, qc)
 	}
@@ -1376,6 +1379,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case quickLookStatsMsg:
 		m.applyQuickLookStats(msg)
+		m.renderSkipped = false
+		return m, nil
+
+	case quickLookRunMsg:
+		m.applyQuickLookRun(msg)
 		m.renderSkipped = false
 		return m, nil
 

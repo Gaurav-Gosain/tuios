@@ -19603,3 +19603,26 @@ Run on 2026-11-24 on Linux (amd64). Six controls:
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestQuickLookWalksAFolder|TestFilePreviewKeepsToTheReadRules)$' -v .`.
+
+## Quick look runs previewers
+
+`TestQuickLookRunsPreviewers` sets previewers in config.toml and opens quick
+look on the files they match. The colour previewer must be the first view,
+with its red text in red. An escape other than a colour must not reach the
+terminal. A resize must run a previewer that names `{width}` again. The test
+also covers an exit code, a timeout, a picture and a folder.
+`TestFilePreviewRunOnAHost` runs a previewer on a linked machine. The
+machine must run its own previewer, refuse a command from the caller, and
+refuse a link without `open`.
+
+Run on 2026-11-25 on Linux (amd64). Four controls:
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| A build of main | "space did not show the colour previewer" and "file-preview on build names the previewers [], want [far]" | **caught** |
+| `quickLookSGROnly` keeps every escape | "an escape of the previewer other than a colour reached the terminal" | **caught** |
+| No size check in `quickLookRunRead` | "a resize did not run the colour previewer again with a new width" | **caught** |
+| `file-preview-run` needs only `files` on a link | "a link without open ran a previewer" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestQuickLookRunsPreviewers|TestFilePreviewRunOnAHost)$' -v .`.

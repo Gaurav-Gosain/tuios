@@ -62,6 +62,9 @@ func RunsLines(p *Plugin) []string {
 	for _, s := range p.Startup {
 		out = append(out, "startup  "+ShownArgv(s.Command...))
 	}
+	for _, x := range p.Previewers {
+		out = append(out, "preview  "+ShownArgv(x.Command...)+", in quick look")
+	}
 	if p.PluginID == SketchID {
 		out = append(out, "mermaid  bin/sketch, for the diagrams tuios does not draw, in tuios mermaid, TML panels, the agents view and quick look")
 	}

@@ -290,6 +290,9 @@ func previewOpened(ctx context.Context, f *os.File, fi fs.FileInfo, openErr erro
 		return out
 	}
 	defer func() { _ = f.Close() }()
+	if list := PreviewersFor(path, false, f); len(list) > 0 {
+		out["previewers"] = previewerNames(list)
+	}
 	ext := strings.ToLower(filepath.Ext(path))
 	if pdf.Details {
 		previewDetails(ctx, f, fi, path, pdf, out)
@@ -1089,6 +1092,7 @@ func previewVerbs() map[string]verbEntry {
 				{Name: "note", Type: "string"},
 				{Name: "size", Type: "int"},
 				{Name: "mtime", Type: "int"},
+				{Name: "previewers", Type: "[]string"},
 			},
 			handler: (*Daemon).verbFilePreview,
 		},

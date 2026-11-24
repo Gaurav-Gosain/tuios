@@ -34,6 +34,7 @@ func verbDocGroups() []struct {
 		{"verb_ship.verbs.json", shipVerbs()},
 		{"verb_checkpoint.verbs.json", checkpointVerbs()},
 		{"verb_preview.verbs.json", previewVerbs()},
+		{"verb_preview_run.verbs.json", previewRunVerbs()},
 		{"verb_files.verbs.json", fileVerbs()},
 		{"verb_find.verbs.json", findVerbs()},
 		{"verb_protocol_task.verbs.json", taskVerbs()},

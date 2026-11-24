@@ -169,6 +169,10 @@ type quickLookResult struct {
 	// entries is a folder's listing.
 	entries []fileEntry
 	capped  bool
+	// previewers names the previewers of the file's machine that match it,
+	// and mtime is when the file changed. See quicklook_run.go.
+	previewers []string
+	mtime      int64
 }
 
 // quickLookMsg carries a finished read back to the loop.
@@ -321,6 +325,17 @@ type quickLookState struct {
 	dirStatsGen   int
 	dirStatOut    bool
 	dirStatFailed bool
+	// run is the output of the previewer on the panel, runKept the runs
+	// kept for files seen before, runOut that a run is out, runGen the
+	// run's number, runCancel what ends a run here, and runProbed that a
+	// folder of another machine was asked for its previewers. See
+	// quicklook_run.go.
+	run       *quickLookRun
+	runKept   []*quickLookRun
+	runOut    bool
+	runGen    int
+	runCancel context.CancelFunc
+	runProbed bool
 }
 
 // quickLookFrame is a drawn panel and its key. Where the panel is placed is
@@ -329,6 +344,7 @@ type quickLookFrame struct {
 	mdGen              int
 	mdOpen             bool
 	dirSel, dirStats   int
+	run                *quickLookRun
 	ok                 bool
 	look               ckLookKey
 	res                *quickLookResult
@@ -489,6 +505,8 @@ func (m *OS) dropQuickLook() {
 	ql.view, ql.viewScroll, ql.details, ql.column, ql.mdOpen = "", 0, nil, 0, false
 	ql.walked, ql.rejoin, ql.dirSel, ql.dirWant, ql.walkFrom = false, false, 0, "", quickLookTarget{}
 	ql.dirStats, ql.dirStatsFor, ql.dirStatFailed = nil, nil, false
+	ql.quickLookRunEnd()
+	ql.run, ql.runKept, ql.runProbed = nil, nil, false
 }
 
 // QuickLookSync keeps the preview on the row under the cursor. The input
@@ -566,6 +584,8 @@ func (m *OS) quickLookShow(t quickLookTarget) tea.Cmd {
 		m.quickLookDropPages()
 		ql.view, ql.viewScroll, ql.details, ql.column, ql.mdOpen = "", 0, nil, 0, false
 		ql.dirSel = 0
+		ql.quickLookRunEnd()
+		ql.runProbed = false
 		// The hints and keys ask what the file is, and this is not that file.
 		ql.res = nil
 	}
@@ -604,6 +624,11 @@ func (m *OS) quickLookFetch(t quickLookTarget) tea.Cmd {
 			res := &quickLookResult{target: t, kind: "dir", entries: l.Entries, capped: l.Capped}
 			if l.Err != "" {
 				res.kind, res.note = "error", l.Err
+			}
+			if t.host == "" {
+				for _, p := range session.PreviewersFor(t.path, true, nil) {
+					res.previewers = append(res.previewers, p.Name)
+				}
 			}
 			return quickLookMsg{res: res}
 		}
@@ -671,6 +696,8 @@ type quickLookReply struct {
 	VideoCodec string                        `json:"video_codec"`
 	AudioCodec string                        `json:"audio_codec"`
 	FPS        float64                       `json:"fps"`
+	Previewers []string                      `json:"previewers"`
+	MTime      int64                         `json:"mtime"`
 }
 
 // quickLookDecode turns a file-preview answer into what the panel draws. It
@@ -687,6 +714,7 @@ func quickLookDecode(t quickLookTarget, raw json.RawMessage, err error, ascii bo
 		return res
 	}
 	res.size, res.mime, res.note = r.Size, r.Mime, r.Note
+	res.previewers, res.mtime = r.Previewers, r.MTime
 	res.width, res.height, res.pages, res.durationMs = r.Width, r.Height, r.Pages, r.DurationMs
 	res.page = max(r.Page, 1)
 	if r.Kind == "video" {
@@ -803,6 +831,9 @@ func (m *OS) applyQuickLook(msg quickLookMsg) tea.Cmd {
 	}
 	if msg.res.target == ql.target {
 		ql.res = msg.res
+		if ql.view == "" && len(msg.res.previewers) > 0 {
+			ql.view = quickLookViewRun + msg.res.previewers[0]
+		}
 		if quickLookPaged(msg.res) || msg.res.kind == "pdf" {
 			ql.pageWant = msg.res.page
 			ql.quickLookHoldPage(msg.res)
@@ -903,6 +934,11 @@ func (m *OS) quickLookPicture() tea.Cmd {
 		return nil
 	}
 	r := ql.res
+	if pr := ql.quickLookRunPictureRes(); pr != nil {
+		r = pr
+	} else if ql.quickLookOffMain() {
+		return nil
+	}
 	if r != nil && r.kind == "markdown" && !m.previewResizing() {
 		return m.quickLookMDImagesCmd()
 	}
@@ -1068,7 +1104,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 	}
 	// The border is in the key: the frame glyphs are a package global set from
 	// border_style every frame, outside the palette.
-	f := quickLookFrame{mdGen: ql.mdGen, mdOpen: ql.mdOpen, dirSel: ql.dirSel, dirStats: ql.dirStatsGen, view: ql.view, viewScroll: ql.viewScroll, column: ql.column, details: ql.details, ok: true, look: ql.lookKey, res: ql.res, target: ql.target, scroll: ql.scroll, inside: ql.inside,
+	f := quickLookFrame{mdGen: ql.mdGen, mdOpen: ql.mdOpen, dirSel: ql.dirSel, dirStats: ql.dirStatsGen, run: ql.run, view: ql.view, viewScroll: ql.viewScroll, column: ql.column, details: ql.details, ok: true, look: ql.lookKey, res: ql.res, target: ql.target, scroll: ql.scroll, inside: ql.inside,
 		prompt: ql.prompt, input: ql.input.String(), inputAt: ql.inputAt(), query: ql.query, status: ql.status, wrap: ql.wrap,
 		innerW: innerW, bodyH: bodyH, key: key, seekKey: seekKey, insideKey: insideKey, border: m.Settings.OverlayBorder(),
 		canvas: pal.Canvas, fgMute: pal.FgMute, frame: pal.Frame, accent: pal.Accent,
@@ -1078,7 +1114,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 	var pic quickLookPic
 	// Copy mode moves something on every key, so its frames are not kept.
 	if k := &ql.framed; ql.copy == nil && k.ok && k.look == f.look && k.res == f.res && k.target == f.target && k.scroll == f.scroll && k.inside == f.inside &&
-		k.prompt == f.prompt && k.input == f.input && k.query == f.query && k.status == f.status && k.wrap == f.wrap && k.view == f.view && k.mdOpen == f.mdOpen && k.mdGen == f.mdGen && k.dirSel == f.dirSel && k.dirStats == f.dirStats && k.viewScroll == f.viewScroll && k.column == f.column && k.details == f.details &&
+		k.prompt == f.prompt && k.input == f.input && k.query == f.query && k.status == f.status && k.wrap == f.wrap && k.view == f.view && k.mdOpen == f.mdOpen && k.mdGen == f.mdGen && k.dirSel == f.dirSel && k.dirStats == f.dirStats && k.run == f.run && k.viewScroll == f.viewScroll && k.column == f.column && k.details == f.details &&
 		k.innerW == f.innerW && k.bodyH == f.bodyH && k.key == f.key && k.seekKey == f.seekKey && k.insideKey == f.insideKey && k.border == f.border &&
 		k.canvas == f.canvas && k.fgMute == f.fgMute && k.frame == f.frame && k.accent == f.accent &&
 		k.accentBright == f.accentBright && k.fgDim == f.fgDim {
@@ -1096,7 +1132,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 		// Only a finished text, markdown, folder, binary or error body is kept;
 		// a picture's cells arrive later.
 		ql.framed = quickLookFrame{}
-		if r := ql.res; ql.copy == nil && r != nil && r.target == ql.target && r.kind != "image" && r.kind != "pdf" && r.kind != "video" {
+		if r := ql.res; ql.copy == nil && r != nil && r.target == ql.target && r.kind != "image" && r.kind != "pdf" && r.kind != "video" && ql.quickLookRunPictureRes() == nil {
 			f.scroll = ql.scroll // after the draw clamped it
 			f.viewScroll = ql.viewScroll
 			f.content, f.geo = content, geo
@@ -1182,7 +1218,13 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 			bodyRows = max(bodyRows-1, 1)
 		}
 		rx := c.textR(w, 0, right...)
+		if r.kind == "dir" {
+			meta = quickLookDirPlace(r.target, rx-2-len(meta)-3) + " · " + meta
+		}
 		c.text(1, 0, rx-1, ckSeg{t: meta, fg: pal.FgMute})
+		if pr := ql.quickLookRunPictureRes(); pr != nil {
+			return m.drawQuickLookPicture(c, l, pr, w, h, center, mid)
+		}
 		m.quickLookDrawView(c, pal, r, bodyTop, bodyRows, w)
 		return quickLookPic{}
 	}
@@ -1633,7 +1675,7 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 	}
 	h = append(h, overlay.Hint{Key: "↑↓", Label: "other files"})
 	h = add(h, first(out("full_size")), "full size")
-	if ql.res != nil && ql.res.kind != "dir" && ql.res.kind != "error" {
+	if ql.res != nil && ql.res.kind != "error" && (ql.res.kind != "dir" || len(ql.res.previewers) > 0) {
 		h = add(h, first(out("next_view")), "next view")
 	}
 	return h
@@ -1646,7 +1688,7 @@ func (m *OS) QuickLookInside() bool { return m.quickLook.open && m.quickLook.ins
 // file with nothing to move through.
 func (m *OS) QuickLookGoInside() bool {
 	ql := &m.quickLook
-	if !ql.open || !quickLookMoves(ql.res) {
+	if !ql.open || !quickLookMoves(ql.res) && !ql.quickLookOffMain() {
 		return false
 	}
 	ql.inside = true

@@ -318,6 +318,9 @@ func TrustHash(source string, p *Plugin, grants []string) string {
 	for _, s := range p.Savers {
 		put('v', s.ID, filepath.Base(s.File))
 	}
+	for _, x := range p.Previewers {
+		put('q', append([]string{x.ID, x.Output}, x.Command...)...)
+	}
 	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
 

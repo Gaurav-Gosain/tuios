@@ -2995,6 +2995,7 @@ func buildVerbRegistry() map[string]verbEntry {
 	maps.Copy(table, transferVerbs())
 	maps.Copy(table, dropVerbs())
 	maps.Copy(table, previewVerbs())
+	maps.Copy(table, previewRunVerbs())
 	// The tree stream, the check-ahead and the link speed test. See
 	// transfer_tree.go and transfer_speed.go.
 	maps.Copy(table, treeVerbs())

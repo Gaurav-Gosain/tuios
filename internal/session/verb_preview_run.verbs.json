@@ -1,0 +1,52 @@
+{
+  "file-preview-run": {
+    "description": "Run a quick look previewer of this machine for one file or folder here, and return what it printed. The previewers come from [[quick_look.previewer]] in this machine's config.toml and from its enabled plugins. The caller sends only the path and the size: never a command. Over a link it needs files and open.",
+    "params": [
+      {
+        "name": "path",
+        "description": "The file or folder. An absolute path, or one that starts with ~."
+      },
+      {
+        "name": "name",
+        "description": "The previewer to run. Omit it to run the first one that matches."
+      },
+      {
+        "name": "width",
+        "description": "The width in cells, for {width}."
+      },
+      {
+        "name": "height",
+        "description": "The height in cells, for {height}."
+      },
+      {
+        "name": "line",
+        "description": "The line for {line}."
+      }
+    ],
+    "returns": [
+      {
+        "name": "path",
+        "description": "The path, made absolute."
+      },
+      {
+        "name": "previewers",
+        "description": "The names of the previewers that match, in order. Empty when none does."
+      },
+      {
+        "name": "run",
+        "description": "The run: name, output (ansi, text or image), data (base64), cut, exit, stderr, timed_out, missing. Absent when no previewer matches."
+      },
+      {
+        "name": "size",
+        "description": "The size of the file in bytes."
+      },
+      {
+        "name": "mtime",
+        "description": "When the file changed, in Unix milliseconds."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"file-preview-run\",\"params\":{\"path\":\"~/notes.md\",\"width\":100,\"height\":40}}"
+    ]
+  }
+}

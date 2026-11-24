@@ -66,6 +66,9 @@ type UserConfig struct {
 	// PiP is the [pip] table: the size and corner of the picture-in-picture
 	// view that toggle_pip pins. Client-local, like the spotlight. See pip.go.
 	PiP PiPConfig `toml:"pip"`
+	// QuickLook is the [quick_look] table: the previewers quick look runs.
+	// See quicklook.go.
+	QuickLook QuickLookConfig `toml:"quick_look"`
 
 	// Profile is a set of defaults: "simple" or "keyboard", the default. See
 	// profile.go.

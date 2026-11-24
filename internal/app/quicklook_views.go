@@ -183,6 +183,13 @@ func quickLookArchiveRows(entries []session.PreviewArchiveEntry, ascii bool) (ro
 func (m *OS) quickLookViews() []string {
 	ql := &m.quickLook
 	views := []string{quickLookViewMain}
+	if names := ql.quickLookRunNames(); len(names) > 0 {
+		views = views[:0]
+		for _, n := range names {
+			views = append(views, quickLookViewRun+n)
+		}
+		views = append(views, quickLookViewMain)
+	}
 	if ql.res != nil && ql.res.table != nil {
 		views = append(views, quickLookViewText)
 	}
@@ -200,6 +207,9 @@ func (m *OS) quickLookViews() []string {
 
 // quickLookViewName is a view's name on the row of tabs.
 func quickLookViewName(r *quickLookResult, v string) string {
+	if name := quickLookRunName(v); name != "" {
+		return name
+	}
 	switch v {
 	case quickLookViewText:
 		return "Text"
@@ -211,6 +221,8 @@ func quickLookViewName(r *quickLookResult, v string) string {
 		return "Details"
 	}
 	switch r.kind {
+	case "dir":
+		return "Folder"
 	case "pdf":
 		return "Page"
 	case "image":
@@ -231,10 +243,24 @@ func quickLookViewName(r *quickLookResult, v string) string {
 func (m *OS) QuickLookNextView() tea.Cmd {
 	ql := &m.quickLook
 	r := ql.res
-	if !ql.open || r == nil || r.target != ql.target || r.kind == "dir" || r.kind == "error" || ql.target.dir {
+	if !ql.open || r == nil || r.target != ql.target || r.kind == "error" {
 		return nil
 	}
 	ql.prompt, ql.status = quickLookNoPrompt, ""
+	// From a previewer's view, or to the file's own view, v steps along the
+	// tabs. The details are read only from the file's own view.
+	if views := m.quickLookViews(); len(ql.quickLookRunNames()) > 0 && (quickLookRunName(ql.view) != "" || r.kind == "dir") {
+		i := max(slices.Index(views, ql.view), 0)
+		if ql.view == "" {
+			i = slices.Index(views, quickLookViewMain)
+		}
+		ql.view = views[(i+1)%len(views)]
+		ql.viewScroll = 0
+		return nil
+	}
+	if r.kind == "dir" || ql.target.dir {
+		return nil
+	}
 	// The details are read once for each file. A read that failed is kept
 	// too, so the next press goes on to the next view and does not start
 	// the same read again.
@@ -375,6 +401,10 @@ func (m *OS) quickLookDrawView(c *ckCanvas, pal overlay.Palette, r *quickLookRes
 	ql := &m.quickLook
 	d := ql.details
 	var lines []string
+	if quickLookRunName(ql.view) != "" {
+		m.quickLookDrawRun(c, pal, top, rows, w)
+		return
+	}
 	switch ql.view {
 	case quickLookViewText:
 		lines = r.lines

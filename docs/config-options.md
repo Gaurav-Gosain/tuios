@@ -704,6 +704,12 @@ The description of a table names its keys.
 |---|---|---|---|
 | <a id="files.open"></a>`files.open` | tables | none | The program that opens a file from the rail: a match glob and a command (a list). The first rule that matches wins. With no match, the system opener runs. |
 
+### quick_look
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| <a id="quick_look.previewer"></a>`quick_look.previewer` | tables | none | Your own previewers: a name, a match glob, a mime glob or folder, and a command (a list). The first match is the first view of the file, and v shows the next view. |
+
 ### tasks
 
 | Key | Type | Default | Description |

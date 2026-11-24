@@ -36,6 +36,7 @@ tells more about the options that need it.
 | [`[mouse]`](#the-mouse-table) | Double-click and drag thresholds |
 | [`[links]`](#the-links-table) | Rules that turn text in a pane into a link |
 | [`[path_picker]`](#the-path_picker-table) | The path picker |
+| [`[quick_look]`](#the-quick_look-table) | The previewers of quick look: your own commands for a type of file |
 | [`[ssh]`](#ssh-server-limits-the-ssh-table) | Limits of the SSH server |
 | [`[mermaid]`](#the-mermaid-table) | The colours of `tuios mermaid` |
 | [`[paste_buffers]`](#the-paste_buffers-table) | How many paste buffers tuios keeps |
@@ -723,6 +724,87 @@ open_copy_ask_mb = 200      # ask first above this size, in MiB
 open_copy_max_mb = 4096     # do not copy above this size, in MiB
 open_copy_keep_days = 7     # -1 keeps every copy
 ```
+
+## Previewers in quick look
+
+A previewer is a command that quick look runs for a type of file. Quick look
+shows what the command prints. Use it for a type of file that tuios does not
+show, or to show a type in your own way.
+
+```toml
+[[quick_look.previewer]]
+name = "glow"
+match = ["*.md"]
+command = ["glow", "-s", "dark", "-w", "{width}", "{path}"]
+
+[[quick_look.previewer]]
+name = "chafa"
+mime = ["image/*"]
+command = ["chafa", "-f", "symbols", "-s", "{width}x{height}", "{path}"]
+
+[[quick_look.previewer]]
+name = "exif"
+match = ["*.jpg", "*.jpeg"]
+command = ["exiftool", "{path}"]
+output = "text"
+
+[[quick_look.previewer]]
+name = "tree"
+folder = true
+command = ["eza", "--tree", "--level=2", "--color=always", "{path}"]
+```
+
+| Key | Meaning |
+| --- | --- |
+| `name` | The name on the row of tabs. Required. |
+| `match` | Globs on the file name, such as `*.md`. A glob with a `/` matches the whole path. |
+| `mime` | Globs on the MIME type that tuios reads from the start of the file, such as `image/*`. |
+| `folder` | `true` runs the previewer for a folder. |
+| `command` | The program and its arguments, as a list. Required. |
+| `output` | `ansi` (the default) is text with colours. `text` is plain text. `image` is a PNG, JPEG or GIF picture. |
+| `timeout` | The longest time the command may run, from `1s` to `30s`. The default is `5s`. |
+
+A previewer needs `match`, `mime` or `folder`. Each previewer that matches a
+file is a tab in quick look, in the order of the config. The first one is the
+view that the file opens on. Press `v` to show the next view. The views of
+tuios itself come after your previewers.
+
+These words in an argument become the values of the file:
+
+| Word | Value |
+| --- | --- |
+| `{path}` | The full path of the file |
+| `{name}` | The name of the file |
+| `{dir}` | The folder of the file |
+| `{width}` `{height}` | The size of the preview in cells |
+| `{line}` | The line at the top of a text, or 1 |
+
+A command that uses `{width}` or `{height}` runs again when the preview
+changes size. The command also gets `COLUMNS`, `LINES`,
+`TUIOS_PREVIEW_WIDTH`, `TUIOS_PREVIEW_HEIGHT` and `TUIOS_PREVIEW_PATH`. For
+`ansi`, it gets `CLICOLOR_FORCE=1` and `FORCE_COLOR=1`, because its output
+is not a terminal.
+
+How a previewer runs:
+
+- No shell reads the command. Each argument is one argument, also when the
+  path holds spaces or quotes.
+- The command runs in the folder of the file, with no input.
+- Quick look keeps the first 1 MiB of text, or 16 MiB of a picture. Then it
+  stops the command and says that the output is cut.
+- Quick look stops the command when you move to another file or close the
+  preview.
+- Quick look keeps only the colours and styles of `ansi` output. It drops
+  every other escape sequence.
+- When the command fails, the preview shows its exit code and the end of
+  its error output.
+
+A file on another machine shows the previewers of that machine: its own
+`config.toml` and its own plugins. Your machine sends only the path and the
+size. It never sends a command. The link must allow `files` and `open`.
+See [the `[hosts]` table](#the-hosts-table).
+
+A plugin can add a previewer. See [PLUGINS.md](PLUGINS.md#quick-look-previewers).
 
 ## Drag a file into a pane
 
@@ -5554,6 +5636,11 @@ See [Push Notifications](https://tuios.dev/docs/push-notifications#web-push-to-a
 expression in Go syntax, and `url` is the address a match opens. `$0` is the
 whole match, and `$1`, `$2` or `${name}` are its groups. A real URL wins over a
 rule, and an earlier rule wins over a later one. See [Link rules](#link-rules).
+
+## The `[quick_look]` table
+
+`[[quick_look.previewer]]` runs a command of your own for a type of file, and
+quick look shows what it prints. See [Previewers in quick look](#previewers-in-quick-look).
 
 ## The `[mermaid]` table
 

@@ -56,7 +56,7 @@ type quickLookStatsMsg struct {
 // quickLookOnFolder reports whether the panel shows a folder's rows.
 func (ql *quickLookState) quickLookOnFolder() bool {
 	r := ql.res
-	return ql.open && r != nil && r.kind == "dir" && r.target == ql.target
+	return ql.open && r != nil && r.kind == "dir" && r.target == ql.target && !ql.quickLookOffMain()
 }
 
 // QuickLookOnFolder reports whether quick look shows a folder's rows, so

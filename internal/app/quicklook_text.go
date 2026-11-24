@@ -171,12 +171,12 @@ func (m *OS) quickLookPage() int {
 // Update reads the next window.
 func (m *OS) QuickLookScroll(lines int) bool {
 	ql := &m.quickLook
-	if !ql.open || !quickLookMoves(ql.res) {
-		return false
-	}
-	if ql.quickLookOffMain() {
+	if ql.open && ql.quickLookOffMain() {
 		ql.viewScroll = max(ql.viewScroll+lines, 0)
 		return true
+	}
+	if !ql.open || !quickLookMoves(ql.res) {
+		return false
 	}
 	if ql.quickLookOnFolder() {
 		ql.quickLookSelect(lines)

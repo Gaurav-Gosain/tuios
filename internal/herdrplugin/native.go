@@ -73,6 +73,7 @@ type rawNative struct {
 	Cell    []rawCell    `toml:"cell"`
 	Theme   []rawTheme   `toml:"theme"`
 	Saver   []rawSaver   `toml:"saver"`
+	Preview []Previewer  `toml:"previewer"`
 	Wasm    []any        `toml:"wasm"`
 	Herdr   *struct {
 		Manifest string `toml:"manifest"`
@@ -286,6 +287,17 @@ func parseNative(data []byte, root string) (*Plugin, *Error) {
 	}
 	if p.Savers, perr = parseSavers(n.Saver, root); perr != nil {
 		return nil, perr
+	}
+	for _, x := range n.Preview {
+		id, ok := NormalizeLocalID(x.ID)
+		if !ok {
+			return nil, errf("plugin_manifest_parse_failed", "invalid [[previewer]] id %q", x.ID)
+		}
+		if msg := x.Check(id); msg != "" {
+			return nil, errf("plugin_manifest_parse_failed", "%s", msg)
+		}
+		x.ID = id
+		p.Previewers = append(p.Previewers, x)
 	}
 	p.Warnings = append(append(p.Warnings, warnings...), warn...)
 	if n.MinTuios != nil {

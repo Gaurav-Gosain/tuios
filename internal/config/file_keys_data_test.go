@@ -324,6 +324,8 @@ var fileKeys = []FileKey{
 		Description: "Your own links: a regex in Go syntax, and the url a match opens. $0 is the whole match, and $1 or ${name} is a group."},
 	{Path: "files.open", Type: FileKeyTables, Section: "files", Default: "none",
 		Description: "The program that opens a file from the rail: a match glob and a command (a list). The first rule that matches wins. With no match, the system opener runs."},
+	{Path: "quick_look.previewer", Type: FileKeyTables, Section: "quick_look", Default: "none",
+		Description: "Your own previewers: a name, a match glob, a mime glob or folder, and a command (a list). The first match is the first view of the file, and v shows the next view."},
 	{Path: "tasks.stages", Type: FileKeyList, Section: "tasks", Default: "every stage",
 		Description: "The stages that the task board shows. The order stays " + strings.Join(TaskStages, ", ") + "."},
 	{Path: "ssh.handshake_timeout", Type: OptionString, Section: "ssh",

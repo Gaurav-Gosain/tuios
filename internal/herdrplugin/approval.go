@@ -220,6 +220,9 @@ func CodeHash(p *Plugin) string {
 	for _, x := range p.Panes {
 		argvs = append(argvs, x.Command)
 	}
+	for _, x := range p.Previewers {
+		argvs = append(argvs, x.Command)
+	}
 	var names []string
 	for _, argv := range argvs {
 		for _, arg := range argv {

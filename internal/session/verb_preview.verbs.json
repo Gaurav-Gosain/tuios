@@ -199,6 +199,10 @@
       {
         "name": "mtime",
         "description": "The file's modification time, Unix ms."
+      },
+      {
+        "name": "previewers",
+        "description": "The names of this machine's quick look previewers that match the file, in order. Absent when none does. file-preview-run runs one."
       }
     ],
     "examples": [

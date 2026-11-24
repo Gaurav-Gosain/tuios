@@ -360,6 +360,77 @@ func TestFilePreviewNeedsTheFilesCapability(t *testing.T) {
 	}
 }
 
+// TestFilePreviewRunOnAHost sets a previewer in build's own config.toml.
+// file-preview on build names it for a.note, and file-preview-run runs it
+// there with the width the hub asked for. The hub sends no command: a name
+// build does not have runs nothing. A link that allows files but not open
+// may preview the file and may not run its previewer.
+//
+// NEGATIVE CONTROLS (e2e/tui/NEGATIVE_CONTROLS.md):
+//   - with needOpenBit cut from file-preview-run's link need, the test fails
+//     at "a link without open ran a previewer".
+func TestFilePreviewRunOnAHost(t *testing.T) {
+	for _, open := range []bool{true, false} {
+		base := t.TempDir()
+		remote := remoteMachine(t)
+		farHome := xdgDir(remote, "HOME")
+		script := writeScript(t, filepath.Join(remote, "bin"), "far.sh", "printf 'FAR %s %s\\n' \"$1\" \"$2\"\n")
+		policy := relayFilesPolicy
+		if !open {
+			policy = "[hosts.\"*\"]\nallow = [\"list\", \"files\"]\n"
+		}
+		writeRemoteConfig(t, remote, policy+"\n[[quick_look.previewer]]\nname = \"far\"\nmatch = [\"*.note\"]\ncommand = [\""+script+"\", \"{name}\", \"{width}\"]\n")
+		writeFarFile(t, filepath.Join(farHome, "work", "a.note"), "far note\n", 0o644)
+		hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
+		far := dialHostVerbs(t, base)
+		record := map[string]any{"open": open}
+
+		var pre struct {
+			Kind       string   `json:"kind"`
+			Previewers []string `json:"previewers"`
+		}
+		far.must("file-preview", map[string]any{"path": "~/work/a.note"}, &pre)
+		record["file-preview"] = pre
+		if len(pre.Previewers) != 1 || pre.Previewers[0] != "far" {
+			t.Fatalf("ASSERTION: file-preview on build names the previewers %v, want [far]", pre.Previewers)
+		}
+		if !open {
+			raw, err := far.call("file-preview-run", map[string]any{"path": "~/work/a.note", "width": 50})
+			record["run"] = map[string]any{"error": errString(err), "answer": string(raw)}
+			if !forbidden(err) || strings.Contains(string(raw), "FAR") {
+				t.Fatalf("ASSERTION: a link without open ran a previewer: %v %s", err, raw)
+			}
+			saveTransferArtifact(t, "file-preview-run-no-open", record)
+			continue
+		}
+		var got struct {
+			Previewers []string `json:"previewers"`
+			Run        *struct {
+				Name string `json:"name"`
+				Data []byte `json:"data"`
+				Exit int    `json:"exit"`
+			} `json:"run"`
+		}
+		far.must("file-preview-run", map[string]any{"path": "~/work/a.note", "width": 50}, &got)
+		record["run"] = got
+		if got.Run == nil || got.Run.Name != "far" || string(got.Run.Data) != "FAR a.note 50\n" {
+			t.Fatalf("ASSERTION: the previewer did not run on build with the width asked: %+v", got.Run)
+		}
+		var none struct {
+			Run *struct{} `json:"run"`
+		}
+		far.must("file-preview-run", map[string]any{"path": "~/work/a.note", "name": "not-there"}, &none)
+		if none.Run != nil {
+			t.Fatalf("ASSERTION: a previewer name build does not have ran something")
+		}
+		// The verb takes no command: a caller cannot name one.
+		if raw, err := far.call("file-preview-run", map[string]any{"path": "~/work/a.note", "command": []string{"touch", "x"}}); err == nil {
+			t.Fatalf("ASSERTION: file-preview-run took a command from the caller: %s", raw)
+		}
+		saveTransferArtifact(t, "file-preview-run-on-a-host", record)
+	}
+}
+
 // daemonPeakKB is the most memory the daemon of base has held, from /proc.
 func daemonPeakKB(t *testing.T, base string) int64 {
 	t.Helper()

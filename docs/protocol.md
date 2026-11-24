@@ -1918,7 +1918,7 @@ A pane attaches to the card it holds, and to the card it finished while that car
 
 ### Files and worktrees
 
-[`stash-put`](protocol-verbs.md#stash-put), [`stash-get`](protocol-verbs.md#stash-get), [`stash-list`](protocol-verbs.md#stash-list), [`file-preview`](protocol-verbs.md#file-preview), [`new-worktree`](protocol-verbs.md#new-worktree), [`list-worktrees`](protocol-verbs.md#list-worktrees), [`remove-worktree`](protocol-verbs.md#remove-worktree), [`fan`](protocol-verbs.md#fan), [`compare-fan`](protocol-verbs.md#compare-fan), [`verify-fan`](protocol-verbs.md#verify-fan), [`keep-fan`](protocol-verbs.md#keep-fan), [`bundle-worktree`](protocol-verbs.md#bundle-worktree), [`ship-commit`](protocol-verbs.md#ship-commit), [`ship-merge`](protocol-verbs.md#ship-merge), [`ship-push`](protocol-verbs.md#ship-push), [`ship-pr`](protocol-verbs.md#ship-pr), [`ship-status`](protocol-verbs.md#ship-status).
+[`stash-put`](protocol-verbs.md#stash-put), [`stash-get`](protocol-verbs.md#stash-get), [`stash-list`](protocol-verbs.md#stash-list), [`file-preview`](protocol-verbs.md#file-preview), [`file-preview-run`](protocol-verbs.md#file-preview-run), [`new-worktree`](protocol-verbs.md#new-worktree), [`list-worktrees`](protocol-verbs.md#list-worktrees), [`remove-worktree`](protocol-verbs.md#remove-worktree), [`fan`](protocol-verbs.md#fan), [`compare-fan`](protocol-verbs.md#compare-fan), [`verify-fan`](protocol-verbs.md#verify-fan), [`keep-fan`](protocol-verbs.md#keep-fan), [`bundle-worktree`](protocol-verbs.md#bundle-worktree), [`ship-commit`](protocol-verbs.md#ship-commit), [`ship-merge`](protocol-verbs.md#ship-merge), [`ship-push`](protocol-verbs.md#ship-push), [`ship-pr`](protocol-verbs.md#ship-pr), [`ship-status`](protocol-verbs.md#ship-status).
 
 `ship-push` and `ship-pr` send nothing on the first call. They answer `confirm_required`: the hint's `available` lists what would be sent, and `confirm` carries a token. Call again with that token. A caller inside a pane or on a restricted connection also needs the person's `allow` in the Inbox, and the call waits for it (`wait`, default 120000 ms). See [Ship](https://tuios.dev/docs/ship) and [Checkpoints](https://tuios.dev/docs/checkpoints).
 
@@ -6969,6 +6969,7 @@ this section is the contract around them.
 | `file-list` | Lists a folder a page at a time (`offset`, `limit` up to 5000, `hidden`): folders first, then names in natural order (`file2` before `file10`). It reads at most 50000 names (`capped`). Part files are not listed. |
 | `file-read` | Up to 4 MiB of a regular file, base64, from `offset`. |
 | `file-preview` | What Quick Look in the GUI shows of one file, made on the machine the file is on. An image comes back scaled to `max_px` (default 1600, at most 4096) on its long side, a PDF page (`page`, with `pages_known` to skip the count) and a film frame as an image when that machine has `pdftoppm` and `ffmpeg`, the words of a PDF page from `pdftotext` when `words` is set, the film frame at `at_ms` (with `duration_known` to skip `ffprobe`, and `no_frame` for only the facts), a JSON file laid out when `format` is set, the listing of a tar, tar.gz or zip file (`kind` `archive`), one GIF frame by `page`, permissions, git state, diff and PDF words when `details` is set, text as its first 256 KiB, and anything else as its type and size (`kind` `binary`). Without `pdftoppm` a PDF up to 8 MiB is sent as it is. A WebP or a BMP, and a picture whose decode would take more than 256 MB here (a large progressive JPEG), is sent as it is, up to 16 MiB, with its own `mime`, for the client to decode. The file is opened once, with the read rules of `file-read`, and the tools read that open file, not the path. ffmpeg and ffprobe open only the file and only the MP4, QuickTime, Matroska, WebM and AVI containers. A pipe or a device is described, not read. Names in an archive listing are cut at 4096 bytes with "...", a JSON layout over 16 MiB comes back unformatted, and a GIF whose frames with the canvas would pass the decode cap comes back with its first frame only. |
+| `file-preview-run` | Runs a quick look previewer of the machine the file is on, and returns what it printed. The previewers come from that machine's own config and plugins. The caller sends only the path and the size, never a command. |
 | `file-hash` | The sha256 of a file, of a range of it (`offset`, `length`), or of a copy's part (`part`, `part_id`). |
 | `file-walk` | Every file and folder under a folder, for a folder copy, at most 20000 entries. With `stream`, up to 1000000 entries, one JSON line each after the reply, then a last line `{end, bytes, skipped, skipped_count, denied}`, or `{end, code, error}`. Each entry has `rel` (slash separated), `size`, `dir`, `perm` and `mtime`. Links are not followed. A link, a named pipe, a socket and a device are not copied: `skipped` names the first 200 with `rel` and `kind`, and `skipped_count` counts all of them. Over a link, an entry in the read deny list is left out and not named. `denied` counts those entries, and a denied folder counts once. |
 | `file-mkdir` | Makes a folder and its parents. With `receive`, it ignores `path` and makes the receive folder: where a copy from the caller lands when it names no folder. For a linked machine that is the first folder of its `files_roots`, else `~/Downloads/tuios`. The reply's `path` names it. |
@@ -7174,7 +7175,7 @@ profiles), the crontab spools, `/proc`, tuios's own config, state
 and data folders, and the daemon's socket folder (the mail stash) apart from
 its drop folder.
 
-**Reads over a link.** A read (`file-read`, `file-preview`, `file-hash`, `file-walk`,
+**Reads over a link.** A read (`file-read`, `file-preview`, `file-preview-run`, `file-hash`, `file-walk`,
 `open-file-stream` read), and a look at a path's name and size (`file-stat`,
 `file-list`), from one of these is `forbidden` too, so a linked
 machine cannot read keys or credentials out: every place in the write deny
@@ -7285,7 +7286,7 @@ the one before. The configuration is in
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
 | `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `zoom-window`, `swap-window`, `resize-window`, `resize`, `set-option`, `set-keep-awake`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `prompt` (whose handler refuses a link caller too), `review-diff` (it returns file contents), `review-note`, `review-stage`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task`, `attach-task`, `detach-task` |
 | `open` and `write` | `verify-fan` |
-| `open` and `files` | `paste-pane-image` |
+| `open` and `files` | `paste-pane-image`, `file-preview-run` |
 | `write` and `files` | `paste-image` |
 | `respond` | `respond`, `reply-approval`, `dismiss-attention`, `release-agent-message`, `answer-ask`, `answer-prompt`, `mark-attention`, `register-push`, `list-push`, `remove-push`, `reply-history`, `add-reply-history` |
 | `transcripts` (or `respond`, which includes it) | `agent-transcript`. The call also needs the nonce of a person's attach. |
@@ -8443,3 +8444,4 @@ The tuios CLI speaks this protocol directly. `tuios ls`, `tuios list-clients`,
 `tuios kill-session`, `tuios send-keys`, `tuios capture-pane`,
 `tuios list-windows`, `tuios session-info`, `tuios set-config`, and
 `tuios get-config` are all verb protocol clients.
+

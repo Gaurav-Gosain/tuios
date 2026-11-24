@@ -77,6 +77,34 @@ A plugin of files only runs no program and asks for no grant. It needs no
 approval beyond the install. `tuios plugins install themes` installs the themes
 that ship with tuios.
 
+## Quick look previewers
+
+A `[[previewer]]` is a command that quick look runs for a type of file. Quick
+look shows what it prints.
+
+```toml
+[[previewer]]
+id = "docx"
+match = ["*.docx"]
+command = ["./bin/docx-preview", "{path}", "{width}"]
+output = "ansi"
+```
+
+It has `id` and the keys of `[[quick_look.previewer]]` in the config:
+`match`, `mime`, `folder`, `command`, `output` and `timeout`. See
+[Previewers in quick look](CONFIGURATION.md#previewers-in-quick-look). The tab
+in quick look shows `PLUGIN/ID`, such as `yourname.docs/docx`.
+
+- A program with a `/` in its name is found from the plugin folder. A program
+  without one is found on `PATH`.
+- A previewer runs a program, so the plugin waits for your approval. The
+  approval lists each previewer.
+- It runs only while the plugin is enabled and approved.
+- The previewers of your config come first. So a previewer of your own wins
+  over the one of a plugin.
+- A previewer gets no `TUIOS_` variable, such as `TUIOS_PLUGIN_TOKEN`. It
+  cannot call tuios as the plugin or as a pane.
+
 ## Screen savers
 
 A plugin can bring a screen saver as a frames file: text frames with times and
@@ -189,6 +217,7 @@ does not know, so a typo fails at once.
 | `[[build]] command` | no | A command that `install` runs in the plugin folder. |
 | `[[process]]` | no | A program that tuios runs. See below. |
 | `[[theme]] file` | no | A theme file in the plugin folder, such as `themes/dusk.json`. See below. |
+| `[[previewer]]` | no | A command that quick look runs for a type of file. See [Quick look previewers](#quick-look-previewers). |
 | `[herdr] manifest` | no | Take the commands from a `herdr-plugin.toml`. |
 
 A `[[process]]` has `id`, `run` and `command`. `run` says when it runs:

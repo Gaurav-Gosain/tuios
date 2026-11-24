@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/previewspec"
 	"github.com/Gaurav-Gosain/tuios/internal/winpath"
 	"github.com/pelletier/go-toml/v2"
 
@@ -171,7 +172,14 @@ type Command struct {
 // plugin of files only, such as themes. It needs no approval to load.
 func (p *Plugin) RunsNothing() bool {
 	return len(p.Build) == 0 && len(p.Startup) == 0 && len(p.Actions) == 0 && len(p.Panes) == 0 &&
-		len(p.Events) == 0 && len(p.LinkHandlers) == 0 && len(p.Grants) == 0
+		len(p.Events) == 0 && len(p.LinkHandlers) == 0 && len(p.Grants) == 0 && len(p.Previewers) == 0
+}
+
+// Previewer is one [[previewer]] entry: a command quick look runs for the
+// files it matches. See internal/previewspec.
+type Previewer struct {
+	ID string `json:"id" toml:"id"`
+	previewspec.Spec
 }
 
 // Saver is one [[saver]] entry: a frames file tuios plays as a screen saver.
@@ -263,6 +271,8 @@ type Plugin struct {
 	Themes []string `json:"themes,omitempty"`
 	// Savers are the screen savers of a native plugin, as frames files.
 	Savers []Saver `json:"savers,omitempty"`
+	// Previewers are the quick look previewers of a native plugin.
+	Previewers []Previewer `json:"previewers,omitempty"`
 	// Format is FormatTuios for a tuios-plugin.toml and "" for a herdr
 	// manifest.
 	Format string `json:"format,omitempty"`
