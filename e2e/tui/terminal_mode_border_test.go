@@ -261,12 +261,12 @@ func focusedBorderOn(t *testing.T, scheme hostScheme, sessionBorder bool) {
 	term := startHostPanes(t, scheme, fmt.Sprintf("theme = \"none\"\nsession_border = %v\n", sessionBorder), false, "start")
 	dir := artifactDir(t)
 	// An attached client starts in terminal mode. The dock of the shipped
-	// looks names no mode, so each switch is given a beat rather than waited
-	// on by text.
+	// looks names no mode, so no text says a switch is done: the client
+	// settles instead, and a client with no settle probe gets a beat.
 	if err := term.SendKeys(tuitest.Alt(tuitest.Esc)); err != nil {
 		t.Fatalf("send alt+esc: %v", err)
 	}
-	time.Sleep(800 * time.Millisecond)
+	settled(t, term, "the dock names no mode, so no text says the switch is drawn", 800*time.Millisecond)
 	saveArtifact(t, term, dir, "window")
 	savePNG(t, term.Screen(), scheme.palette(), dir, "window")
 	read := func(marker string) (color.Color, tuitest.Color) {
@@ -291,7 +291,7 @@ func focusedBorderOn(t *testing.T, scheme hostScheme, sessionBorder bool) {
 	if err := term.SendKeys("i"); err != nil {
 		t.Fatalf("send i: %v", err)
 	}
-	time.Sleep(800 * time.Millisecond)
+	settled(t, term, "the dock names no mode, so no text says the switch is drawn", 800*time.Millisecond)
 	saveArtifact(t, term, dir, "terminal")
 	savePNG(t, term.Screen(), scheme.palette(), dir, "terminal")
 	ct, _ := read("PLAINBX")
