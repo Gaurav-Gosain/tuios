@@ -19329,6 +19329,7 @@ this branch with the reason of the cross-session release put back.
 |---------|---------------------|--------|
 | claim-task finds the window only in the card's session (main) | "a pane of crew claimed t2, a card without a project, or the refusal does not say why": main refuses with "no window found" | **caught** |
 | The cross-session release always says pane closed | "t1 was let go with reason \"pane closed\", want agent left" | **caught** |
+| A rename of the holder's session leaves the old name on the card (the first head of this branch) | "t1's holder does not name the renamed session crew2" | **caught** |
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAPaneOfAnotherSessionHoldsAProjectCard$' -v .`.

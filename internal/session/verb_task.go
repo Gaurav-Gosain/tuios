@@ -675,7 +675,9 @@ func (d *Daemon) verbClaimTask(cs *connState, params json.RawMessage) (any, *ver
 				})
 				return errTaskRefused
 			}
-			move.names, move.refresh = true, true
+			// No refresh: a claim the holding pane makes again keeps the
+			// card as it is, its dispatched flag included.
+			move.names = true
 			move.name, move.harness, move.session = cross.name, cross.harness, cross.session
 		}
 		if _, _, verr = sess.moveCard(tk, move, time.Now().UnixNano()); verr != nil {

@@ -315,6 +315,30 @@ func (d *Daemon) crossSessionPane(sess *Session, target string) *crossPane {
 	return found
 }
 
+// renameHolderSessions follows a rename of session old to newName on the
+// cards of every other session that a pane of it holds, so the row names
+// the holder's session by the name it has now. Each session changes in its
+// own state change, so no state lock is held while another is taken.
+func (d *Daemon) renameHolderSessions(old, newName string) {
+	for _, sess := range d.manager.AllSessions() {
+		if sess.Name() == newName {
+			continue
+		}
+		_ = sess.mutateState(func(st *SessionState) error {
+			changed := false
+			for i := range st.Tasks {
+				if st.Tasks[i].renameHolderSession(old, newName) {
+					changed = true
+				}
+			}
+			if !changed {
+				return errNoTaskMove
+			}
+			return nil
+		})
+	}
+}
+
 // forgetCrossHold drops the note that window, a pane of another session,
 // holds card id of sess, once a release or a finish let it go.
 func (d *Daemon) forgetCrossHold(sess *Session, window, id string) {

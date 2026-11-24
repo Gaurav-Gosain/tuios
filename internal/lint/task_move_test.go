@@ -16,7 +16,7 @@ const cardWriter = "task_move.go"
 
 // cardFields are the lifecycle fields of a TaskState.
 var cardFields = map[string]bool{
-	"Stage": true, "StageAt": true, "Holder": true, "HeldAt": true, "HolderName": true, "HolderHarness": true,
+	"Stage": true, "StageAt": true, "Holder": true, "HeldAt": true, "HolderName": true, "HolderHarness": true, "HolderSession": true,
 	"Dispatched": true, "Blocked": true, "Attempts": true, "Note": true, "Work": true, "Verify": true,
 	"Attachments": true,
 }

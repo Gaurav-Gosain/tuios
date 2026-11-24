@@ -72,6 +72,9 @@ func (d *Daemon) verbRenameSession(cs *connState, params json.RawMessage) (any, 
 	if _, err := d.manager.RenameSession(old, name); err != nil {
 		return nil, hintedVerbError(ErrVerbInvalidParams, err.Error(), &VerbHint{Param: "name"})
 	}
+	if name != old {
+		d.renameHolderSessions(old, name)
+	}
 	return map[string]any{"type": "session_renamed", "session": name, "old_name": old}, nil
 }
 

@@ -374,3 +374,15 @@ func (tk TaskState) pushCopy() TaskState {
 	}
 	return tk
 }
+
+// renameHolderSession names the holder's session newName when the card is
+// held by a pane of session old, another session of this daemon. It reports
+// whether the card changed. Only the name changes: the holder, the stage and
+// the history stay as they are.
+func (tk *TaskState) renameHolderSession(old, newName string) bool {
+	if tk.Holder == "" || tk.HolderSession == "" || tk.HolderSession != old {
+		return false
+	}
+	tk.HolderSession = newName
+	return true
+}

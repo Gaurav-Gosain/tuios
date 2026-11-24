@@ -494,7 +494,7 @@ func (m *OS) ckCardBody(l ckLook, r ckRow, card session.TaskRow, width int, now 
 		if who == "" {
 			who = shortWindowLabel(card.Holder.Window)
 		}
-		if hs := ckHolderSession(card); hs != card.Session && card.Host == "" {
+		if hs := ckHolderSession(card); hs != m.SessionName && card.Host == "" {
 			who += " in " + printableTitle(hs)
 		}
 		line(ckSeg{t: "Held by ", fg: pal.FgDim}, ckSeg{t: who, fg: pal.Fg, attrs: ckBold},

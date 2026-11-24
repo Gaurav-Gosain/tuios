@@ -62,7 +62,8 @@ func lastRelease(t *testing.T, base, session, id string) string {
 // TestAPaneOfAnotherSessionHoldsAProjectCard: a card with a project is added
 // in session lead, and a pane of session crew on the same daemon claims it
 // from inside the pane. The card's holder is that pane, and the row names
-// crew. The board of lead shows the holder as worker in crew. When the pane
+// crew. The board of lead shows the holder as worker in crew. When crew is
+// renamed crew2, the row and the board follow the new name. When the pane
 // closes, the card is let go with reason pane closed. A second pane of crew
 // claims it again, and when its agent leaves, the card is let go with reason
 // agent left. A card without a project refuses a pane of crew.
@@ -110,8 +111,17 @@ func TestAPaneOfAnotherSessionHoldsAProjectCard(t *testing.T) {
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "board-cross-session-160x45")
 
+	// The holder's session is renamed: the row and the board follow.
+	mustCLI(t, base, "rename-session", "crew", "crew2")
+	waitUntil(t, "t1's holder does not name the renamed session crew2", uiTimeout, func() (bool, string) {
+		cards, raw := crossCards(t, base, "lead")
+		h := cards["t1"].Holder
+		return h != nil && h.Session == "crew2", raw
+	})
+	waitText(t, term, "the holder in the renamed session", "in crew2")
+
 	// The pane closes: the card is let go.
-	mustCLI(t, base, "close-window", "-s", "crew", worker)
+	mustCLI(t, base, "close-window", "-s", "crew2", worker)
 	waitUntil(t, "t1 was not let go when its pane in crew closed", uiTimeout, func() (bool, string) {
 		cards, raw := crossCards(t, base, "lead")
 		return cards["t1"].Holder == nil, raw
@@ -119,19 +129,23 @@ func TestAPaneOfAnotherSessionHoldsAProjectCard(t *testing.T) {
 	if got := lastRelease(t, base, "lead", "t1"); got != "pane closed" {
 		t.Errorf("ASSERTION: t1 was let go with reason %q, want pane closed", got)
 	}
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "in crew") }, uiTimeout); err != nil {
-		t.Errorf("ASSERTION: the board still shows the holder in crew after its pane closed: %v\n%s", err, term.Snapshot())
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !strings.Contains(s.Text(), "in crew2") }, uiTimeout); err != nil {
+		t.Errorf("ASSERTION: the board still shows the holder in crew2 after its pane closed: %v\n%s", err, term.Snapshot())
 	}
 	_ = term.WaitStable(uiTimeout)
 	saveCockpitFrames(t, term, "board-cross-session-let-go-160x45")
 
 	// A second pane of crew takes it, and its agent leaves.
-	other := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", "crew", "other", "--no-focus", "--print-id"))
-	mustCLI(t, base, "set-agent-state", "-s", "crew", "-w", other, "working", "--harness", "claude-code")
-	if out := inPane(t, base, "crew", other, "task claim t1 -s lead"); !strings.Contains(out, "EXIT=0") {
-		t.Fatalf("ASSERTION: the second pane of crew could not claim t1:\n%s", out)
+	other := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", "crew2", "other", "--no-focus", "--print-id"))
+	mustCLI(t, base, "set-agent-state", "-s", "crew2", "-w", other, "working", "--harness", "claude-code")
+	if out := inPane(t, base, "crew2", other, "task claim t1 -s lead"); !strings.Contains(out, "EXIT=0") {
+		t.Fatalf("ASSERTION: the second pane of crew2 could not claim t1:\n%s", out)
 	}
-	mustCLI(t, base, "set-agent-state", "-s", "crew", "-w", other, "none")
+	// A claim the holding pane makes again, as after a lost answer, holds.
+	if out := inPane(t, base, "crew2", other, "task claim t1 -s lead"); !strings.Contains(out, "EXIT=0") {
+		t.Fatalf("ASSERTION: the second claim of t1 by its holder failed:\n%s", out)
+	}
+	mustCLI(t, base, "set-agent-state", "-s", "crew2", "-w", other, "none")
 	waitUntil(t, "t1 was not let go when the agent left its pane in crew", 10*time.Second, func() (bool, string) {
 		cards, raw := crossCards(t, base, "lead")
 		return cards["t1"].Holder == nil, raw
