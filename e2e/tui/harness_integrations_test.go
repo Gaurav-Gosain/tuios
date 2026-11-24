@@ -1029,7 +1029,7 @@ func buildFakeCrush(t *testing.T) string {
 // does, only because the pane told it where: tuios's own socket, never
 // herdr's. Its reports move the pane through idle, working, needs_input and
 // done, a stale seq is dropped, a report for another pane and a method tuios
-// does not answer are refused, and release clears the pane. A shell pane in
+// does not answer are refused, and release gives the pane back to detection. A shell pane in
 // the same session is told it is one, as every pane is by default.
 //
 // Negative control: with the HerdrEnv call taken out of buildEnvFor, the
@@ -1089,7 +1089,17 @@ func TestHerdrProtocolReportsACrushPane(t *testing.T) {
 	log.add("unsupported method: %s", firstLineWith(out, `"unsupported"`))
 
 	send("release")
-	waitAgentState(t, base, "e2e-agent", win, "none", "", log, "release, none")
+	// A release gives the pane back to detection, as in herdr. The stand-in
+	// still runs after it, which Crush does not: Crush releases as it quits.
+	// So the detector's next pass, every two seconds, can name the crush
+	// process again and mark the pane working. Either way no report holds
+	// the pane after the release.
+	var released agentStateJSON
+	waitUntil(t, "the release gave the pane back to detection", uiTimeout, func() (bool, string) {
+		released = readAgentState(t, base, "e2e-agent", win)
+		return released.State == "none" || released.Source == "detect", fmt.Sprintf("%+v", released)
+	})
+	log.add("%-44s state=%s source=%s harness=%s", "release, back to detection", released.State, released.Source, released.Harness)
 
 	// A shell pane is a herdr pane too by default, as in herdr, so a Crush
 	// started from a prompt reports.
