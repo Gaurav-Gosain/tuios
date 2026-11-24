@@ -41,9 +41,8 @@ func TestHandoffCarriesEveryEventCounter(t *testing.T) {
 // JSON the manifest writes, and checks what JSON alone would lose.
 func TestHandoffKeepsRelayedEventsAndNotices(t *testing.T) {
 	old := newEventHubSize(4)
-	old.ring[0] = streamEvent{Seq: 5, Type: EventAgentState, relayed: true}
-	old.ring[1] = streamEvent{Seq: 6, Type: EventAgentState}
-	old.ringLen = 2
+	old.retain(streamEvent{Seq: 5, Type: EventAgentState, relayed: true})
+	old.retain(streamEvent{Seq: 6, Type: EventAgentState})
 	old.seq, old.lastTMLSeq = 6, 4
 
 	var events handoffEvents

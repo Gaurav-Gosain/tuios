@@ -19142,3 +19142,15 @@ every card with no holder says free.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestTheBoardSaysWhatAnUnheldCardWaitsFor$' -v .`.
+## TestIdleDaemonEventRingIsSmall
+
+An idle daemon's event replay ring must hold under 512 KiB in the heap profile.
+
+Run on 2026-11-24 on Linux (amd64).
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The ring made whole at start (a build of main before the change) | "the idle daemon's event ring holds 1792 KiB, want under 512 KiB" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestIdleDaemonEventRingIsSmall$' -v .`.

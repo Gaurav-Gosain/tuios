@@ -512,8 +512,12 @@ type eventHub struct {
 	// ringStart. evictedSeq is the seq of the newest event pushed out of it, so
 	// the ring holds every retained event after evictedSeq. lastOutputSeq is
 	// the seq of the newest output event, which the ring does not keep, and
-	// lastActivitySeq the same for agent-activity events.
+	// lastActivitySeq the same for agent-activity events. The ring grows to
+	// ringCap as events arrive: lifecycle events come at human speed, and an
+	// idle daemon kept 1.8 MB of empty slots allocated up front. While it
+	// grows, ringStart is 0 and ringLen is len(ring).
 	ring            []streamEvent
+	ringCap         int
 	ringStart       int
 	ringLen         int
 	evictedSeq      uint64
@@ -549,9 +553,9 @@ func newEventHubSize(ringSize int) *eventHub {
 		ringSize = 1
 	}
 	return &eventHub{
-		subs:   make(map[*eventSub]struct{}),
-		bootID: newBootID(),
-		ring:   make([]streamEvent, ringSize),
+		subs:    make(map[*eventSub]struct{}),
+		bootID:  newBootID(),
+		ringCap: ringSize,
 	}
 }
 
@@ -691,13 +695,18 @@ func (h *eventHub) retain(ev streamEvent) {
 		h.lastTMLSurfaceSeq = ev.Seq
 		return
 	}
-	if h.ringLen == len(h.ring) {
+	if h.ringLen == h.ringCap {
 		h.evictedSeq = h.ring[h.ringStart].Seq
 		h.ring[h.ringStart] = ev
 		h.ringStart = (h.ringStart + 1) % len(h.ring)
 		return
 	}
-	h.ring[(h.ringStart+h.ringLen)%len(h.ring)] = ev
+	if len(h.ring) == cap(h.ring) {
+		grown := make([]streamEvent, len(h.ring), min(max(2*cap(h.ring), 16), h.ringCap))
+		copy(grown, h.ring)
+		h.ring = grown
+	}
+	h.ring = append(h.ring, ev)
 	h.ringLen++
 }
 

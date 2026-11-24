@@ -96,13 +96,14 @@ func (h *eventHub) restore(ev handoffEvents) {
 	h.lastFileSeq, h.lastLayoutSeq = ev.LastFileSeq, ev.LastLayoutSeq
 	h.lastTMLSeq, h.lastTMLSurfaceSeq = ev.LastTMLSeq, ev.LastTMLSurfaceSeq
 	ring := ev.Ring
-	if len(ring) > len(h.ring) {
+	if len(ring) > h.ringCap {
 		// A smaller ring than the old image's: the oldest go, as they would
 		// have there.
-		h.evictedSeq = ring[len(ring)-len(h.ring)-1].Seq
-		ring = ring[len(ring)-len(h.ring):]
+		h.evictedSeq = ring[len(ring)-h.ringCap-1].Seq
+		ring = ring[len(ring)-h.ringCap:]
 	}
-	h.ringStart, h.ringLen = 0, copy(h.ring, ring)
+	h.ring = append(make([]streamEvent, 0, len(ring)), ring...)
+	h.ringStart, h.ringLen = 0, len(ring)
 	for i := range h.ring[:h.ringLen] {
 		h.ring[i].relayed = slices.Contains(ev.RelayedSeqs, h.ring[i].Seq)
 	}
