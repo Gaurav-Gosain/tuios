@@ -2772,7 +2772,8 @@ and `class`. See [STATUS_BAR.md](STATUS_BAR.md) for Waybar and the Omarchy bar.
 
 `class` and `alt` are the same word: `needs-you` (an approval, a question or
 a plan waits, or an agent failed), `mail`, `working`, `review` (a finished
-turn nobody looked at), `idle` or `off` (the daemon does not run). `text` is
+turn nobody looked at), `idle`, `error` (the daemon refused a call; the
+tooltip says why) or `off` (the daemon does not run). `text` is
 the count of that class, and empty for `idle` and `off`. The line also has
 `needs_you`, `mail`, `review` and `working` as numbers, and `rows`: the
 items that need you, oldest first, at most 8.
@@ -2783,7 +2784,7 @@ tuios bar-status [flags]
 ```
 
 **Flags:**
-- `--follow`: Print a line at the start and a new line each time the line changes. It waits on the event stream and does no work while nothing changes. When the daemon stops, it prints an `off` line and waits for a daemon to start
+- `--follow`: Print a line at the start and a new line each time the line changes. It waits on the event stream and does no work while nothing changes. When the daemon stops, it prints an `off` line and waits for a daemon to start. When the daemon refuses a call, it prints an `error` line and tries again after a pause that grows to a minute
 
 ### `tuios subscribe`
 

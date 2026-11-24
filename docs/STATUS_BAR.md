@@ -22,6 +22,7 @@ tuios bar-status
 | `working` | An agent works | The number of agents that work |
 | `review` | An agent finished a turn that nobody looked at | The number of turns |
 | `idle` | Nothing of the above | Empty |
+| `error` | The daemon runs but refused a call of `bar-status`. The tooltip says why | Empty |
 | `off` | The tuios daemon does not run | Empty |
 
 The line covers every session on this machine. The items of linked hosts
@@ -37,7 +38,9 @@ as Pango markup, so tuios escapes `&`, `<` and `>` in the words of an agent.
 `tuios bar-status --follow` prints a line at the start, then a new line each
 time the line changes. It waits on the daemon's event stream, so it does no
 work while nothing changes. When the daemon stops, it prints an `off` line
-and waits for a daemon to start. It does not exit until it is stopped.
+and waits for a daemon to start. When the daemon refuses a call, it prints an
+`error` line and tries again after a pause that grows to a minute. It does not
+exit until it is stopped.
 
 ## Waybar
 

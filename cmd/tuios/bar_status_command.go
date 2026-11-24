@@ -1,11 +1,13 @@
 package main
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -66,6 +68,7 @@ class are the same word:
   working    an agent works
   review     an agent finished a turn that nobody has looked at
   idle       nothing of the above
+  error      the daemon runs but refused a call; the tooltip says why
   off        the tuios daemon does not run
 
 The line also has needs_you, mail, review and working as numbers, and rows: the
@@ -75,7 +78,8 @@ this machine and the items of every linked host.
 --follow prints a line at the start and a new line each time the line changes.
 It waits on the daemon's event stream and does no work while nothing changes.
 When the daemon stops, it prints an off line and waits for the daemon to start
-again.`,
+again. When the daemon refuses a call, it prints an error line and tries again
+after a pause that grows to a minute.`,
 		Example: `  # One line, for a bar that runs the command at an interval
   tuios bar-status
 
@@ -152,18 +156,20 @@ func foldBarStatus(items []attentionRow, agents []agentRow) barStatus {
 		case session.AttentionApproval, session.AttentionQuestion, session.AttentionAsk,
 			session.AttentionPlan, session.AttentionErrored:
 			st.NeedsYou++
-			if len(st.Rows) < barStatusMaxRows {
-				st.Rows = append(st.Rows, barStatusRow{
-					Kind: it.Kind, Host: plainLine(it.Host), Session: plainLine(it.Session), Window: it.Window,
-					Name: plainLine(it.Name), Summary: plainLine(it.Summary), Since: it.Since,
-				})
-			}
+			st.Rows = append(st.Rows, barStatusRow{
+				Kind: it.Kind, Host: plainLine(it.Host), Session: plainLine(it.Session), Window: it.Window,
+				Name: plainLine(it.Name), Summary: plainLine(it.Summary), Since: it.Since,
+			})
 		case session.AttentionMail, session.AttentionHeldMail:
 			st.Mail++
 		case session.AttentionFinished:
 			st.Review++
 		}
 	}
+	// list-attention sorts by kind first. The bar lists the oldest first,
+	// whatever the kind.
+	slices.SortStableFunc(st.Rows, func(a, b barStatusRow) int { return cmp.Compare(a.Since, b.Since) })
+	st.Rows = st.Rows[:min(len(st.Rows), barStatusMaxRows)]
 	for _, a := range agents {
 		if a.State == "working" {
 			st.Working++
@@ -268,7 +274,9 @@ func writeBarStatus(w io.Writer, st barStatus) error {
 // followBarStatus prints a line, then a new one each time it changes. It
 // holds two connections: one reads the event stream and one asks for the
 // state after a burst of events. While the daemon is down it watches the
-// socket's folder, so it does no work until a daemon starts.
+// socket's folder, so it does no work until a daemon starts. A daemon that
+// answers but refuses a call gives an error line, and the next try waits
+// longer each time, up to barStatusMaxBackoff, so a refusal never spins.
 func followBarStatus(w io.Writer) error {
 	var last []byte
 	emit := func(st barStatus) error {
@@ -283,10 +291,24 @@ func followBarStatus(w io.Writer) error {
 		_, err = fmt.Fprintln(w, string(b))
 		return err
 	}
+	backoff := barStatusMinBackoff
 	for {
+		started := time.Now()
 		err := followBarStatusOnce(emit)
 		if werr, ok := errors.AsType[writeError](err); ok {
 			return werr.err
+		}
+		if time.Since(started) < barStatusHealthy {
+			time.Sleep(backoff)
+			backoff = min(backoff*2, barStatusMaxBackoff)
+		} else {
+			backoff = barStatusMinBackoff
+		}
+		if cerr, ok := errors.AsType[barCallError](err); ok {
+			if err := emit(barStatusError(cerr.err)); err != nil {
+				return err
+			}
+			continue
 		}
 		if err := emit(barStatusOff()); err != nil {
 			return err
@@ -295,11 +317,30 @@ func followBarStatus(w io.Writer) error {
 	}
 }
 
+// The waits between tries when a follow ends soon after it started.
+const (
+	barStatusMinBackoff = time.Second
+	barStatusMaxBackoff = time.Minute
+	barStatusHealthy    = 5 * time.Second
+)
+
 // writeError marks an error from writing a line, which ends --follow: the
 // bar that read the lines has gone.
 type writeError struct{ err error }
 
 func (e writeError) Error() string { return e.err.Error() }
+
+// barCallError marks a call the daemon answered with an error, as opposed to a
+// daemon that is not there.
+type barCallError struct{ err error }
+
+func (e barCallError) Error() string { return e.err.Error() }
+
+// barStatusError is the line for a daemon that runs but refuses a call.
+func barStatusError(err error) barStatus {
+	return barStatus{Alt: "error", Class: "error", Rows: []barStatusRow{},
+		Tooltip: markupEscape("tuios cannot read the agents: " + plainLine(err.Error()))}
+}
 
 // followBarStatusOnce follows one daemon until its event stream ends.
 func followBarStatusOnce(emit func(barStatus) error) error {
@@ -309,9 +350,9 @@ func followBarStatusOnce(emit func(barStatus) error) error {
 	}
 	defer func() { _ = events.Close() }()
 	if _, err := events.Call("subscribe", map[string]any{
-		"types": []string{session.EventAttention, session.EventAgentState, session.EventSessionClosed},
+		"types": []string{session.EventAttention, session.EventAgentState, session.EventSessionClosed, session.EventWindowClosed},
 	}); err != nil {
-		return err
+		return barCallError{err}
 	}
 	query, err := dialVerb()
 	if err != nil {
@@ -333,7 +374,7 @@ func followBarStatusOnce(emit func(barStatus) error) error {
 	refresh := func() error {
 		st, err := queryBarStatus(query)
 		if err != nil {
-			return err
+			return barCallError{err}
 		}
 		if err := emit(st); err != nil {
 			return writeError{err}
