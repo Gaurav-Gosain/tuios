@@ -11,11 +11,11 @@ import (
 // the rail's rows) comes from the daemon of the session it is attached to. So
 // an empty host on a row or an item means that machine: this one, or the host
 // the client is attached through. A non-empty host names another machine, as
-// attachedMachine names machines. itemMachine reads a host that way, and
-// machineDialer reaches the daemon of the machine it returns. Every surface
-// that resolves a row to a machine, or picks the daemon to call, goes
-// through these two, so a client attached to another machine does not send
-// a call about that machine's session to this machine's daemon.
+// attachedMachine names machines, and federation.LocalHostName names this
+// one. itemMachine reads a host that way, and machineDialer reaches the
+// daemon of the machine it returns. A value that already names a machine,
+// such as NotifTarget.Host, is passed on as it is: it must not be mapped back
+// to "", which would then read as the attached machine.
 
 // itemMachine is the machine a row or an item with host is on, as
 // attachedMachine names it.

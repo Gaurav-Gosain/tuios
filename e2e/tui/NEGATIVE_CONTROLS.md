@@ -19359,6 +19359,9 @@ Repeat from `e2e/tui` with
 `far` on the linked machine alpha, with an agent in a pane that is not
 focused. Enter on the agent in the agents view must move the focus to that
 pane on alpha, with no "could not attach" message.
+`TestDockAlertJumpComesBackFromAHost` raises a dock alert for an agent in a
+session on this machine and moves the client to alpha. The jump key must
+bring the client back to that session on this machine.
 
 Run on 2026-11-24 on Linux. The control is main without the fix, where an
 empty host on a row reads as this machine.
@@ -19366,6 +19369,7 @@ empty host on a row reads as this machine.
 | Change | Failure |
 | --- | --- |
 | `itemMachine` maps "" to this machine | `enter on the agent did not focus its pane on alpha`, with `could not attach "far" on this machine` on the dock |
+| `jumpToNotifTarget` maps this machine's name to "" | `TestDockAlertJumpComesBackFromAHost`: `the jump from alpha did not bring the client back to work on this machine` |
 
 The frames are `attached-jump-before` and `attached-jump-landed` under
 `TUIOS_E2E_FRAMES`, in the test's folder. Repeat from `e2e/tui` with

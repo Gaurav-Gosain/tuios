@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -67,6 +68,60 @@ func TestAgentsViewJumpWhileAttachedThroughAHost(t *testing.T) {
 		t.Fatalf("ASSERTION: the client left alpha's session far:\n%s", out)
 	}
 	alive(t, term, "after the jump on alpha")
+}
+
+// TestDockAlertJumpComesBackFromAHost raises a dock alert for an agent in a
+// session on this machine, switches the client to a session on alpha, and
+// presses the jump key (prefix j). The alert names this machine, so the jump
+// must attach this machine again and land on the agent's session.
+//
+// The ways it can go wrong, each an assertion: the alert's machine is read as
+// the attached one, so the client stays on alpha and says the session closed;
+// the jump leaves alpha for another session.
+func TestDockAlertJumpComesBackFromAHost(t *testing.T) {
+	f := startGlobalFleet(t)
+	if out, err := cliWithin(t, f.here, f.env, "new", "work", "--detach"); err != nil {
+		t.Fatalf("start the session work here: %v\n%s", err, out)
+	}
+	term := startIn(t, f.here, startOpts{args: []string{"attach", "home"}, cols: 140, rows: 44,
+		env: append([]string{"TERM=xterm-256color", "COLORTERM=truecolor", "TUIOS_KITTY_GRAPHICS=0"}, f.env...)})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("the client never attached home: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	for _, args := range [][]string{
+		{"set-window", "-s", "work", "-w", "0", "--name", "work-fix"},
+		{"set-agent-state", "needs_input", "-s", "work", "-w", "work-fix", "--harness", "claude-code", "-m", "approve the build"},
+	} {
+		if out, err := cliWithin(t, f.here, f.env, args...); err != nil {
+			t.Fatalf("%v here: %v\n%s", args, err, out)
+		}
+	}
+	waitText(t, term, "the dock alert for work", "work")
+	if out, err := cliWithin(t, f.here, f.env, "switch-session", "alpha:far"); err != nil {
+		t.Fatalf("switch the client to far on alpha: %v\n%s", err, out)
+	}
+	// The client is on alpha once this machine's daemon has no session
+	// attached. alpha's list-clients is no proof: the link from this machine
+	// is a client there too.
+	if err := term.WaitFor(func(_ tuitest.Screen) bool { return len(attachedSessions(f.here)) == 0 }, uiTimeout); err != nil {
+		t.Fatalf("the client never left this machine for alpha: %v\n%s", err, term.Snapshot())
+	}
+	_ = term.WaitStable(uiTimeout)
+	saveCockpitFrames(t, term, "alert-on-alpha")
+
+	if err := term.SendKeys(tuitest.Ctrl('b'), "j"); err != nil {
+		t.Fatalf("press the jump key: %v", err)
+	}
+	if err := term.WaitFor(func(_ tuitest.Screen) bool {
+		return slices.Contains(attachedSessions(f.here), "work")
+	}, uiTimeout); err != nil {
+		saveCockpitFrames(t, term, "alert-jump-stayed")
+		t.Fatalf("ASSERTION: the jump from alpha did not bring the client back to work on this machine: %v\n%s", err, term.Snapshot())
+	}
+	_ = term.WaitStable(uiTimeout)
+	saveCockpitFrames(t, term, "alert-jump-home")
+	alive(t, term, "after the jump back from alpha")
 }
 
 // alphaWindowID is the id of the window named name in alpha's session far.

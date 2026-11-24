@@ -4,7 +4,6 @@ import (
 	"slices"
 	"time"
 
-	"github.com/Gaurav-Gosain/tuios/internal/federation"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -113,11 +112,7 @@ func (m *OS) jumpToNotifTarget(t NotifTarget) {
 	// A message about another machine attaches that machine first, landing on
 	// the session, the way the Inbox does.
 	if t.Host != "" && t.Host != m.attachedMachine() {
-		it := session.AttentionItem{Session: t.SessionID, Window: t.WindowID}
-		if t.Host != federation.LocalHostName {
-			it.Host = t.Host
-		}
-		if !m.inboxReach(it) {
+		if !m.inboxReach(session.AttentionItem{Session: t.SessionID, Window: t.WindowID, Host: t.Host}) {
 			return
 		}
 	}
