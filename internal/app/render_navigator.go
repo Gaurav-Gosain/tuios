@@ -525,9 +525,9 @@ func (m *OS) navSessionSpans(s *navSession, k navInks) (left, right string) {
 	case s.Note != "":
 		right = k.ink(k.mute).Italic(true).Render(s.Note)
 	case s.Current:
-		right = k.ink(k.current).Render("current") + k.ink(k.mute).Render("  "+strconv.Itoa(s.Count))
+		right = k.ink(k.current).Render("current") + k.ink(k.mute).Render("  "+navCountText(s))
 	default:
-		right = k.ink(k.mute).Render(strconv.Itoa(s.Count))
+		right = k.ink(k.mute).Render(navCountText(s))
 	}
 	return left, right
 }
@@ -538,7 +538,28 @@ func (m *OS) navSessionFacts(s *navSession) string {
 	if s.Note != "" {
 		return "  " + s.Note
 	}
-	return "  " + plural.Count(s.Count, "pane")
+	return "  " + navPaneWords(s)
+}
+
+// navCountText is a session row's count: its panes, and its scratch panes
+// when it has any, as in "0 + 1 scratch".
+func navCountText(s *navSession) string {
+	if s.Scratch == 0 {
+		return strconv.Itoa(s.Count)
+	}
+	return strconv.Itoa(s.Count) + " + " + strconv.Itoa(s.Scratch) + " scratch"
+}
+
+// navPaneWords is how many panes a session has, in words, with its scratch
+// panes named apart: "2 panes", "1 pane + 1 scratch", "1 scratch pane".
+func navPaneWords(s *navSession) string {
+	switch {
+	case s.Scratch == 0:
+		return plural.Count(s.Count, "pane")
+	case s.Count == 0:
+		return plural.Count(s.Scratch, "scratch pane")
+	}
+	return plural.Count(s.Count, "pane") + " + " + strconv.Itoa(s.Scratch) + " scratch"
 }
 
 // navWorkspaceLabel is "workspace 2" and the workspace's name, if it has one.
@@ -695,7 +716,7 @@ func (m *OS) navigatorPreview(r navRow, width, height int, bg color.Color, pal o
 			if m.navigator.loading {
 				out = append(out, line("Reading its panes…", pal.FgMute))
 			} else {
-				out = append(out, line(plural.Count(s.Count, "pane")+".", pal.FgDim))
+				out = append(out, line(navPaneWords(s)+".", pal.FgDim))
 			}
 		}
 		// The session's panes as the tree draws them, under their

@@ -125,6 +125,10 @@ type navSession struct {
 	// Count is how many panes the session has, from the listing, for a
 	// session whose panes are not known yet.
 	Count int
+	// Scratch is how many scratch panes the session holds. They are not in
+	// Panes or Count, since no list shows them, but closing the session ends
+	// them, and tuios ls counts them.
+	Scratch int
 	// Shell is the base name of the shell the session's panes run, so a
 	// pane at its prompt can say what it is running. Empty when the daemon
 	// did not say.
@@ -408,6 +412,9 @@ func (m *OS) navigatorCurrentSession() navSession {
 	s := navSession{Name: name, Title: name, Current: true, WorkspaceNames: map[int]string{}, Shell: m.navClientShell()}
 	maps.Copy(s.WorkspaceNames, m.WorkspaceNames)
 	for i, w := range m.Windows {
+		if w != nil && w.IsScratch {
+			s.Scratch++
+		}
 		if w == nil || hiddenFromLists(w) {
 			continue
 		}
@@ -732,6 +739,7 @@ func navLoadSession(ctx context.Context, c *session.VerbClient, host, name strin
 	s = navSession{Host: host, Name: name, WorkspaceNames: map[int]string{}, Shell: list.Shell}
 	for _, w := range list.Windows {
 		if w.Scratch {
+			s.Scratch++
 			continue
 		}
 		state := w.AgentState
