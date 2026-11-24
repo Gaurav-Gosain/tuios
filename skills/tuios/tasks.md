@@ -63,7 +63,10 @@ in your worktree (your pane's repository, on your machine). A pass moves the
 card to `review`. A fail sends it back to `todo`: its `attempts` goes up by
 one and its `note` is the last line of the output (`tuios task get ID` shows
 the end of the output). A verify result does not move a blocked card: the
-card stays in `verify`, and its `note` says what the verify found. If your agent errors while it holds a card that
+card stays in `verify`, and its `note` says what the verify found. When the
+block lifts, the result applies: a pass moves the card to `review`, and a fail
+moves it to `todo` with its `attempts` one higher. A move by hand drops the
+result. If your agent errors while it holds a card that
 dispatch gave it, you keep the card, blocked, with its `attempts` one higher
 and your last message as the note. Work on it again and the block lifts; let
 it go (`tuios task release ID`) and it goes back to `todo`. The block belongs to

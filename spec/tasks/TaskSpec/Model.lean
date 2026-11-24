@@ -46,6 +46,9 @@ structure Verify where
   tail : String
   startedAt : Int
   finishedAt : Int
+  /-- The stage a result that ended on a blocked card moves the card to
+  when the block lifts. -/
+  held : Option Stage
   deriving DecidableEq, Repr, Inhabited
 
 /-- TaskAttachment. -/
@@ -179,7 +182,7 @@ def autoApplies (c : Card) (fromStages : List Stage) (to : Stage) : Bool :=
 
 /-- A verify record that runs from now. -/
 def running (now : Int) : Verify :=
-  { state := "running", exit := none, note := "", tail := "", startedAt := now, finishedAt := 0 }
+  { state := "running", exit := none, note := "", tail := "", startedAt := now, finishedAt := 0, held := none }
 
 /-- moveAttach: each attachment takes the place of the ones with its name. -/
 def attachAll (list new : List Attachment) : List Attachment :=
@@ -198,6 +201,24 @@ inductive Step where
   | none (c : Card)
   | refused (r : Refusal)
   | moved (a : Action) (to : Stage) (evHolder : String) (c : Card)
+
+/-- An unblock: the block lifts, and a verify result held while the card was
+blocked moves it now, a pass to review and a fail to todo with one attempt
+more. -/
+def unblockStep (c : Card) : Step :=
+  let c1 := { c with blocked := none }
+  match c.verify with
+  | some { held := some s, .. } =>
+    if c.stage = .verify then
+      .moved .unblocked s c.holder (if s = .todo then { c1 with attempts := c1.attempts + 1 } else c1)
+    else .moved .unblocked c.stage c.holder c1
+  | _ => .moved .unblocked c.stage c.holder c1
+
+/-- A held result waits only on a blocked card in verify: any other card
+drops it. -/
+def dropHeld (blocked : Option Block) (to : Stage) : Option Verify → Option Verify
+  | some v => if v.held.isSome ∧ (blocked.isNone ∨ to ≠ .verify) then some { v with held := none } else some v
+  | none => none
 
 def step (c : Card) (m : Move) (now : Int) : Step :=
   match m.kind with
@@ -231,10 +252,10 @@ def step (c : Card) (m : Move) (now : Int) : Step :=
       { c with attempts := c.attempts + 1, note := m.note, blocked := some ⟨m.reason, m.by_, now⟩ }
   | .unblock =>
     if c.blocked.isNone then .none c
-    else .moved .unblocked c.stage c.holder { c with blocked := none }
+    else unblockStep c
   | .unblockErrored =>
     if c.blocked.isNone ∨ c.blockedOnErrored = false then .none c
-    else .moved .unblocked c.stage c.holder { c with blocked := none }
+    else unblockStep c
   | .handIn =>
     let c1 := { c.letGo with blocked := none }
     let c2 := match m.work with
@@ -266,7 +287,11 @@ def step (c : Card) (m : Move) (now : Int) : Step :=
       let c1 := { c.letGo with verify := m.verify }
       -- A blocked card never moves on its own: it keeps its stage, and its
       -- note says what the verify found.
-      if c1.blocked.isSome then .moved .verified c.stage "" { c1 with note := m.reason }
+      -- The record holds the stage the result moves the card to when the
+      -- block lifts.
+      if c1.blocked.isSome then
+        let v := if m.stage ≠ c.stage then m.verify.map ({ · with held := some m.stage }) else m.verify
+        .moved .verified c.stage "" { c1 with note := m.reason, verify := v }
       else
         let c2 := if m.stage = .todo then { c1 with attempts := c1.attempts + 1, note := m.note } else c1
         .moved .verified m.stage "" c2
@@ -293,6 +318,7 @@ def apply (c : Card) (m : Move) (now : Int) : Result :=
   | .moved a to evHolder c' =>
     let c'' := if c'.stage ≠ to then { c' with stage := to, stageAt := now } else c'
     ⟨a.name, c.holder, none,
-      { c'' with history := noteEvent c''.history ⟨a.name, m.by_, now, to, evHolder, m.reason⟩ }⟩
+      { c'' with verify := dropHeld c''.blocked to c''.verify,
+                 history := noteEvent c''.history ⟨a.name, m.by_, now, to, evHolder, m.reason⟩ }⟩
 
 end TaskSpec

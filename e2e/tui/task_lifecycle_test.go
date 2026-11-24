@@ -665,3 +665,85 @@ func TestAVerifyResultKeepsABlockedCard(t *testing.T) {
 		t.Fatalf("ASSERTION: t1 after the verify is %s, blocked %+v, note %q; want verify, the person's block, note \"verify passed\"", c.Stage, c.Blocked, c.Note)
 	}
 }
+
+// TestAHeldVerifyResultAppliesWhenTheBlockLifts: the person blocks a card
+// while its verify runs, so the result is held on the blocked card in
+// verify. When the person lifts the block, the result applies: a pass moves
+// the card to review, and a fail moves it to todo with one attempt more.
+//
+// How it could pass wrongly: the card could move before the block lifts, so
+// the test reads the card in verify with the held result first, and only
+// then lifts the block.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with the held stage not applied in
+// moveUnblock, both cards stay in verify after the block lifts.
+func TestAHeldVerifyResultAppliesWhenTheBlockLifts(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	t.Cleanup(func() { dumpDaemonLogOnFail(t, base) })
+	const sess = "e2e-verify-held"
+	mustCLI(t, base, "new", sess, "--detach")
+	waitForSessionInfo(t, base, sess)
+	var report strings.Builder
+	note := func(format string, args ...any) { fmt.Fprintf(&report, format+"\n", args...) }
+	defer func() { saveText(t, "task-verify-held", report.String()) }()
+
+	repo := filepath.Join(base, "demo")
+	lifeRepo(t, repo)
+	gate := filepath.Join(base, "verify-may-end")
+	pass := filepath.Join(base, "verify-passes")
+	a := strings.TrimSpace(mustCLI(t, base, "new-window", "-s", sess, "agent-a", "--no-focus", "--print-id", "--cwd", repo))
+	mustCLI(t, base, "set-agent-state", "-s", sess, "-w", a, "working", "--harness", "claude-code", "-m", "on it")
+	note("%s", mustCLI(t, base, "task", "dispatch", "verify", "-s", sess,
+		"while [ ! -f "+gate+" ]; do sleep 0.1; done; test -f "+pass+" || { echo no pass file; exit 2; }"))
+
+	// held runs card id through a verify that ends while the card is
+	// blocked, with the given result, and returns the card in verify.
+	held := func(id, title string, passes bool) lifeCard {
+		t.Helper()
+		_ = os.Remove(gate)
+		if passes {
+			if err := os.WriteFile(pass, nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			_ = os.Remove(pass)
+		}
+		mustCLI(t, base, "task", "add", "-s", sess, "-p", "do "+title, title)
+		mustCLI(t, base, "task", "claim", id, "-s", sess, "-w", a)
+		if out := inPane(t, base, sess, a, "task done "+id); !strings.Contains(out, "EXIT=0") {
+			t.Fatalf("tuios task done %s: %s", id, out)
+		}
+		waitLife(t, base, sess, uiTimeout, id+" did not go to verify",
+			func(c map[string]lifeCard) bool { return c[id].Stage == "verify" })
+		mustCLI(t, base, "task", "block", id, "-s", sess, "waiting on the review")
+		if err := os.WriteFile(gate, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cards, raw := waitLife(t, base, sess, 20*time.Second, "the verify of "+id+" did not end",
+			func(c map[string]lifeCard) bool { return c[id].Verify != nil && c[id].Verify.State != "running" })
+		note("%s with its verify ended while blocked:\n%s", id, raw)
+		if c := cards[id]; c.Stage != "verify" || c.Blocked == nil {
+			t.Fatalf("ASSERTION: %s after its verify is %s, blocked %+v; want verify and blocked", id, c.Stage, c.Blocked)
+		}
+		return cards[id]
+	}
+
+	held("t1", "passes", true)
+	mustCLI(t, base, "task", "block", "t1", "-s", sess, "--clear")
+	cards, raw := waitLife(t, base, sess, uiTimeout, "t1 did not go to review when its block lifted",
+		func(c map[string]lifeCard) bool { return c["t1"].Stage != "verify" })
+	note("t1 after the block lifted:\n%s", raw)
+	if c := cards["t1"]; c.Stage != "review" || c.Blocked != nil || c.Attempts != 0 {
+		t.Fatalf("ASSERTION: t1 after the block lifted is %s, blocked %+v, attempts %d; want review, no block, 0", c.Stage, c.Blocked, c.Attempts)
+	}
+
+	before := held("t2", "fails", false)
+	mustCLI(t, base, "task", "block", "t2", "-s", sess, "--clear")
+	cards, raw = waitLife(t, base, sess, uiTimeout, "t2 did not go to todo when its block lifted",
+		func(c map[string]lifeCard) bool { return c["t2"].Stage != "verify" })
+	note("t2 after the block lifted:\n%s", raw)
+	if c := cards["t2"]; c.Stage != "todo" || c.Blocked != nil || c.Attempts != before.Attempts+1 {
+		t.Fatalf("ASSERTION: t2 after the block lifted is %s, blocked %+v, attempts %d; want todo, no block, %d", c.Stage, c.Blocked, c.Attempts, before.Attempts+1)
+	}
+}

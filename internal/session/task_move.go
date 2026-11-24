@@ -31,7 +31,8 @@ const (
 	moveRelease
 	// moveBlock marks the card stuck, keeping its holder.
 	moveBlock
-	// moveUnblock lifts any block.
+	// moveUnblock lifts any block. A card in verify with a held verify
+	// result moves as the result says.
 	moveUnblock
 	// moveBlockErrored blocks a dispatched card whose agent errored: one
 	// attempt more, the agent's line as the note.
@@ -156,6 +157,14 @@ func (tk *TaskState) apply(m cardMove, now int64) (action, holder string, verr *
 			return "", holder, nil
 		}
 		tk.Blocked = nil
+		// A verify result that ended while the card was blocked moves it
+		// now: a pass to review, a fail to todo with one attempt more.
+		if v := tk.Verify; to == TaskStageVerify && v != nil && v.Held != "" {
+			if v.Held == TaskStageTodo {
+				tk.Attempts++
+			}
+			to = v.Held
+		}
 		action = TaskActionUnblocked
 
 	case moveHandIn:
@@ -205,8 +214,14 @@ func (tk *TaskState) apply(m cardMove, now int64) (action, holder string, verr *
 		tk.Verify = m.verify
 		if tk.Blocked != nil {
 			// A blocked card never moves on its own: it keeps its stage,
-			// and its note says what the verify found.
+			// and its note says what the verify found. The record holds
+			// the stage the result moves the card to when the block lifts.
 			tk.Note = m.reason
+			if m.verify != nil && m.stage != to {
+				v := *m.verify
+				v.Held = m.stage
+				tk.Verify = &v
+			}
 		} else {
 			if m.stage == TaskStageTodo {
 				tk.Attempts++
@@ -237,6 +252,14 @@ func (tk *TaskState) apply(m cardMove, now int64) (action, holder string, verr *
 
 	default:
 		return "", holder, nil
+	}
+	// A held result waits only on a blocked card in verify. A move that
+	// lifts the block or takes the card out of verify drops it. The record
+	// is replaced, never changed in place.
+	if v := tk.Verify; v != nil && v.Held != "" && (tk.Blocked == nil || to != TaskStageVerify) {
+		c := *v
+		c.Held = ""
+		tk.Verify = &c
 	}
 	if tk.Stage != to {
 		tk.Stage, tk.StageAt = to, now

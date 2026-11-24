@@ -36,10 +36,10 @@ instance : FromJson Work := ⟨fun j =>
 
 instance : ToJson Verify := ⟨fun v => Json.mkObj
   [("state", v.state), ("exit", toJson v.exit), ("note", v.note), ("tail", v.tail),
-   ("started_at", v.startedAt), ("finished_at", v.finishedAt)]⟩
+   ("started_at", v.startedAt), ("finished_at", v.finishedAt), ("held", toJson v.held)]⟩
 instance : FromJson Verify := ⟨fun j =>
   return ⟨← field j "state", ← opt j "exit", ← field j "note", ← field j "tail",
-    ← field j "started_at", ← field j "finished_at"⟩⟩
+    ← field j "started_at", ← field j "finished_at", ← opt j "held"⟩⟩
 
 instance : ToJson Attachment := ⟨fun a => Json.mkObj
   [("name", a.name), ("kind", a.kind), ("media_type", a.mediaType), ("size", a.size),

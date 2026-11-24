@@ -91,6 +91,10 @@ type TaskVerify struct {
 	Tail       string `json:"tail,omitempty"`
 	StartedAt  int64  `json:"started_at"`
 	FinishedAt int64  `json:"finished_at,omitempty"`
+	// Held is the stage a result that ended on a blocked card moves the
+	// card to when the block lifts: review for a pass, todo for a fail.
+	// Empty for any other record.
+	Held string `json:"held,omitempty"`
 }
 
 // verifyResult is how one run ended. Unreached says the command did not run

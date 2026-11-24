@@ -19049,3 +19049,20 @@ Run on 2026-11-24 on Linux (amd64).
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAVerifyResultKeepsABlockedCard$' -v .`.
+
+## TestAHeldVerifyResultAppliesWhenTheBlockLifts
+
+The person blocks a card while its verify runs, so the result is held on the
+blocked card in verify. When the block lifts, the result must apply: a pass
+moves the card to review, and a fail moves it to todo with one attempt more.
+The Lean model states the rule as `unblock_applies_held`, `verified_holds_result`
+and `heldOk_preserved` (spec/tasks).
+
+Run on 2026-11-24 on Linux (amd64).
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| The held stage not applied in moveUnblock | "t1 did not go to review when its block lifted" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAHeldVerifyResultAppliesWhenTheBlockLifts$' -v .`.

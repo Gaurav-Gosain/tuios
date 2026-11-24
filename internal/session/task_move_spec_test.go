@@ -51,12 +51,13 @@ type (
 		Dir     string `json:"dir"`
 	}
 	specVerify struct {
-		State      string `json:"state"`
-		Exit       *int   `json:"exit"`
-		Note       string `json:"note"`
-		Tail       string `json:"tail"`
-		StartedAt  int64  `json:"started_at"`
-		FinishedAt int64  `json:"finished_at"`
+		State      string  `json:"state"`
+		Exit       *int    `json:"exit"`
+		Note       string  `json:"note"`
+		Tail       string  `json:"tail"`
+		StartedAt  int64   `json:"started_at"`
+		FinishedAt int64   `json:"finished_at"`
+		Held       *string `json:"held"`
 	}
 	specAttachment struct {
 		Name      string `json:"name"`
@@ -149,6 +150,9 @@ func (v *specVerify) task() *TaskVerify {
 		return nil
 	}
 	out := &TaskVerify{State: v.State, Note: v.Note, Tail: v.Tail, StartedAt: v.StartedAt, FinishedAt: v.FinishedAt}
+	if v.Held != nil {
+		out.Held = *v.Held
+	}
 	if v.Exit != nil {
 		e := *v.Exit
 		out.Exit = &e
@@ -191,6 +195,10 @@ func leanCardOf(tk *TaskState) specCard {
 	}
 	if v := tk.Verify; v != nil {
 		c.Verify = &specVerify{State: v.State, Exit: v.Exit, Note: v.Note, Tail: v.Tail, StartedAt: v.StartedAt, FinishedAt: v.FinishedAt}
+		if v.Held != "" {
+			held := v.Held
+			c.Verify.Held = &held
+		}
 	}
 	for _, a := range tk.Attachments {
 		c.Attachments = append(c.Attachments, specAttachment(a))
@@ -266,6 +274,7 @@ func leanGen(r *rand.Rand) cardStream {
 	times := []int64{0, t}
 	pickTime := func() int64 { return leanPick(r, times) }
 	str := func(xs ...string) string { return leanPick(r, xs) }
+	stage := func() *string { s := leanPick(r, TaskStages); return &s }
 	work := func() *specWork {
 		if r.IntN(2) == 0 {
 			return nil
@@ -281,6 +290,9 @@ func leanGen(r *rand.Rand) cardStream {
 			e := r.IntN(2)
 			v.Exit = &e
 		}
+		if r.IntN(4) == 0 {
+			v.Held = stage()
+		}
 		return v
 	}
 	attachments := func(n int) []specAttachment {
@@ -290,7 +302,6 @@ func leanGen(r *rand.Rand) cardStream {
 		}
 		return out
 	}
-	stage := func() *string { s := leanPick(r, TaskStages); return &s }
 
 	c := specCard{Stage: leanPick(r, TaskStages), StageAt: pickTime(), Holder: leanPick(r, specWindows), HeldAt: pickTime(),
 		HolderName: str("", "n"), HolderHarness: str("", "claude"), Dispatched: r.IntN(2) == 0,

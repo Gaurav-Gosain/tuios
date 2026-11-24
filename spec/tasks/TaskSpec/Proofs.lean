@@ -50,6 +50,7 @@ theorem apply_refused (h : step c m now = .refused r) : apply c m now = ⟨"", c
 theorem apply_moved (h : step c m now = .moved a to e c') :
     apply c m now = ⟨a.name, c.holder, none,
       { c' with stage := to, stageAt := if c'.stage = to then c'.stageAt else now,
+                verify := dropHeld c'.blocked to c'.verify,
                 history := noteEvent c'.history ⟨a.name, m.by_, now, to, e, m.reason⟩ }⟩ := by
   unfold apply; rw [h]; simp only
   split <;> rename_i hst <;> simp [hst]
@@ -59,17 +60,17 @@ theorem apply_moved (h : step c m now = .moved a to e c') :
 apply. -/
 theorem step_moved (h : step c m now = .moved a to e c') :
     c'.history = c.history ∧ c'.stage = c.stage ∧ c'.stageAt = c.stageAt := by
-  (unfold step autoApplies at h; cases hk : m.kind <;> simp only [hk] at h <;> (repeat' split at h) <;> (try cases h)) <;> simp_all [Card.letGo]
+  (unfold step autoApplies unblockStep at h; cases hk : m.kind <;> simp only [hk] at h <;> (repeat' split at h) <;> (try cases h)) <;> simp_all [Card.letGo]
 
 theorem step_moved_attempts (h : step c m now = .moved a to e c') : c.attempts ≤ c'.attempts := by
-  (unfold step autoApplies at h; cases hk : m.kind <;> simp only [hk] at h <;> (repeat' split at h) <;> (try cases h)) <;> simp_all [Card.letGo] <;> omega
+  (unfold step autoApplies unblockStep at h; cases hk : m.kind <;> simp only [hk] at h <;> (repeat' split at h) <;> (try cases h)) <;> simp_all [Card.letGo] <;> omega
 
 /-- A claim is refused when it names no pane or workable refuses it, and a
 block when the card is done. Nothing else is refused. -/
 theorem step_refused (h : step c m now = .refused r) :
     (m.kind = .claim ∧ ((m.window = "" ∧ r = .noWindow) ∨ c.workable m.window = some r)) ∨
       (m.kind = .block ∧ c.stage = .done ∧ r = .done) := by
-  unfold step at h
+  unfold step unblockStep at h
   cases hk : m.kind <;> simp only [hk] at h <;> (repeat' split at h) <;> simp_all [Card.workable]
 
 /-- A move that changes nothing returns the card as it was, except a claim
@@ -77,7 +78,7 @@ the holder makes again with refresh, which writes dispatched and the
 holder's names and nothing else. -/
 theorem step_none (h : step c m now = .none c') :
     c' = c ∨ (m.kind = .claim ∧ m.refresh = true ∧ c.holder = m.window ∧ c'.sansRefresh c = c) := by
-  unfold step at h
+  unfold step unblockStep at h
   cases hk : m.kind <;> simp only [hk] at h <;> (repeat' split at h) <;> (try cases h) <;>
     (try (left; rfl)) <;> (right; cases c; simp_all [Card.sansRefresh])
 
@@ -85,11 +86,11 @@ theorem step_none (h : step c m now = .none c') :
 holder's names. -/
 theorem step_none_keeps (h : step c m now = .none c') :
     c'.stage = c.stage ∧ c'.stageAt = c.stageAt ∧ c'.holder = c.holder ∧ c'.heldAt = c.heldAt ∧
-    c'.blocked = c.blocked ∧ c'.attempts = c.attempts ∧ c'.history = c.history := by
-  (unfold step autoApplies at h; cases hk : m.kind <;> simp only [hk] at h <;> (repeat' split at h) <;> (try cases h)) <;> simp_all
+    c'.blocked = c.blocked ∧ c'.attempts = c.attempts ∧ c'.history = c.history ∧ c'.verify = c.verify := by
+  (unfold step autoApplies unblockStep at h; cases hk : m.kind <;> simp only [hk] at h <;> (repeat' split at h) <;> (try cases h)) <;> simp_all
 
 theorem step_none_history (h : step c m now = .none c') : c'.history = c.history ∧ c'.attempts = c.attempts :=
-  ⟨(step_none_keeps h).2.2.2.2.2.2, (step_none_keeps h).2.2.2.2.2.1⟩
+  ⟨(step_none_keeps h).2.2.2.2.2.2.1, (step_none_keeps h).2.2.2.2.2.1⟩
 
 /-! ## What every move keeps -/
 
@@ -184,7 +185,7 @@ theorem letting_go_moves_let_go (h : (apply c m now).action ≠ "")
   · rw [apply_none hs] at h; simp at h
   · rw [apply_refused hs] at h; simp at h
   · rw [apply_moved hs]; simp only
-    (unfold step autoApplies at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all [Card.letGo]
+    (unfold step autoApplies unblockStep at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all [Card.letGo]
 
 /-- The moves the verbs make. Each condition is one the Go code relies on;
 the comment says where it holds, or that nothing holds it. -/
@@ -195,10 +196,13 @@ structure Admissible (c : Card) (m : Move) : Prop where
   verifiedNotDone : m.kind = .verified → m.stage ≠ .done
   /-- Every taskMove goes to a stage other than done (task_auto.go). -/
   autoNotDone : m.kind = .auto → m.autoTo ≠ .done
+  /-- A held verify result is one applyVerify sent: todo or review. -/
+  heldNotDone : ∀ v, c.verify = some v → v.held ≠ some .done
 
 /-- "A done card is held or blocked": never, for the moves the verbs make. -/
 theorem doneFree_preserved (hc : c.doneFree) (ha : Admissible c m) : (apply c m now).card.doneFree := by
   have h1 := ha.stageNotDone; have h2 := ha.verifiedNotDone; have h3 := ha.autoNotDone
+  have h4 := ha.heldNotDone
   unfold Card.doneFree at *
   cases hs : step c m now
   · rw [apply_none hs]
@@ -206,19 +210,19 @@ theorem doneFree_preserved (hc : c.doneFree) (ha : Admissible c m) : (apply c m 
     simp only [e1, e3, e5]; exact hc
   · rw [apply_refused hs]; exact hc
   · rw [apply_moved hs]; simp only
-    (unfold step autoApplies at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all [Card.letGo]
+    (unfold step autoApplies unblockStep at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all [Card.letGo]
 
 /-- "A card with no holder keeps its holder's time or name": never. -/
 theorem holderClean_preserved (hc : c.holderClean) : (apply c m now).card.holderClean := by
   unfold Card.holderClean at *
   cases hs : step c m now
   · rw [apply_none hs]
-    unfold step at hs
+    unfold step unblockStep at hs
     cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs) <;>
       simp_all
   · rw [apply_refused hs]; exact hc
   · rw [apply_moved hs]; simp only
-    (unfold step autoApplies at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all [Card.letGo]
+    (unfold step autoApplies unblockStep at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all [Card.letGo]
 
 /-- What "a card blocked on its errored agent has a holder" needs from the
 verbs: block-task never blocks as tuios a card no pane holds. Its by is the
@@ -238,7 +242,7 @@ theorem erroredHeld_preserved (hc : c.erroredHeld) (ha : KeepsErroredHeld c m) :
     simp only [e3, e5]; exact hc
   · rw [apply_refused hs]; exact hc
   · rw [apply_moved hs]; simp only
-    (unfold step autoApplies at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all [Card.letGo, Card.blockedOnErrored]
+    (unfold step autoApplies unblockStep at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all [Card.letGo, Card.blockedOnErrored]
 
 /-! ## What the docs promise (tuios --skill tasks) -/
 
@@ -246,7 +250,7 @@ theorem erroredHeld_preserved (hc : c.erroredHeld) (ha : KeepsErroredHeld c m) :
 with task_done and changes nothing. -/
 theorem block_of_done_refused (hk : m.kind = .block) (hd : c.stage = .done) :
     (apply c m now).refusal = some .done ∧ (apply c m now).card = c := by
-  have hs : step c m now = .refused .done := by unfold step; simp [hk, hd]
+  have hs : step c m now = .refused .done := by unfold step unblockStep; simp [hk, hd]
   rw [apply_refused hs]; exact ⟨rfl, rfl⟩
 
 /-- "Mark it stuck. It keeps its holder and stage." -/
@@ -255,8 +259,8 @@ theorem block_keeps_holder_and_stage (hk : m.kind = .block) (hd : c.stage ≠ .d
     (apply c m now).card.blocked = some ⟨m.reason, m.by_, now⟩ := by
   cases hs : step c m now
   all_goals first
-    | (rw [apply_moved hs]; simp only; (unfold step autoApplies at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all)
-    | (unfold step at hs; simp [hk, hd] at hs)
+    | (rw [apply_moved hs]; simp only; (unfold step autoApplies unblockStep at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all)
+    | (unfold step unblockStep at hs; simp [hk, hd] at hs)
 
 /-- "Let it go without finishing. It keeps its stage": a release keeps the
 stage, except that a card blocked on its errored agent goes back to todo with
@@ -267,8 +271,8 @@ theorem release_keeps_stage (hk : m.kind = .release) :
     (c.blockedOnErrored = true → (apply c m now).card.stage = .todo ∧ (apply c m now).card.blocked = none) := by
   cases hs : step c m now
   all_goals first
-    | (rw [apply_moved hs]; simp only; (unfold step autoApplies at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all [Card.letGo, Card.blockedOnErrored])
-    | (unfold step at hs; simp [hk] at hs; split at hs <;> simp at hs)
+    | (rw [apply_moved hs]; simp only; (unfold step autoApplies unblockStep at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all [Card.letGo, Card.blockedOnErrored])
+    | (unfold step unblockStep at hs; simp [hk] at hs; split at hs <;> simp at hs)
 
 /-- "A card in todo or plan moves to doing when you claim it." -/
 theorem claim_starts_work (hk : m.kind = .claim) (h : (apply c m now).action ≠ "") :
@@ -278,13 +282,13 @@ theorem claim_starts_work (hk : m.kind = .claim) (h : (apply c m now).action ≠
   · rw [apply_none hs] at h; simp at h
   · rw [apply_refused hs] at h; simp at h
   · rw [apply_moved hs]; simp only
-    (unfold step autoApplies at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all
+    (unfold step autoApplies unblockStep at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all
 
 /-- "A claim names a pane": a claim with no window is refused and changes
 nothing. -/
 theorem claim_names_a_pane (hk : m.kind = .claim) (hw : m.window = "") :
     (apply c m now).refusal = some .noWindow ∧ (apply c m now).card = c := by
-  have hs : step c m now = .refused .noWindow := by unfold step; simp [hk, hw]
+  have hs : step c m now = .refused .noWindow := by unfold step unblockStep; simp [hk, hw]
   rw [apply_refused hs]; exact ⟨rfl, rfl⟩
 
 /-- "A claim by the pane that holds the card succeeds." -/
@@ -292,7 +296,7 @@ theorem claim_by_holder_succeeds (hk : m.kind = .claim) (hh : c.holder = m.windo
     (apply c m now).refusal = none := by
   cases hs : step c m now
   · rw [apply_none hs]
-  · unfold step at hs; simp only [hk, hh, hw, ite_true, ite_false] at hs; (repeat' split at hs) <;> nomatch hs
+  · unfold step unblockStep at hs; simp only [hk, hh, hw, ite_true, ite_false] at hs; (repeat' split at hs) <;> nomatch hs
   · rw [apply_moved hs]
 
 /-- A claim refuses a card another pane holds, a done card and a blocked
@@ -303,18 +307,18 @@ theorem claim_refusals (hk : m.kind = .claim) (hh : c.holder ≠ m.window) (hw :
     (c.holder = "" → c.stage ≠ .done → c.blocked.isSome → (apply c m now).refusal = some .blocked) := by
   cases hs : step c m now
   all_goals first
-    | (rw [apply_refused hs]; (unfold step autoApplies at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all)
-    | (rw [apply_none hs]; (unfold step autoApplies at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all)
-    | (rw [apply_moved hs]; (unfold step autoApplies at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all)
+    | (rw [apply_refused hs]; (unfold step autoApplies unblockStep at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all)
+    | (rw [apply_none hs]; (unfold step autoApplies unblockStep at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all)
+    | (rw [apply_moved hs]; (unfold step autoApplies unblockStep at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all)
 
 /-- "A blocked card and a done card never move on their own": an automatic
 move leaves them as they are. -/
 theorem auto_leaves_blocked_and_done (hk : m.kind = .auto) (h : c.blocked.isSome ∨ c.stage = .done) :
     (apply c m now).card = c := by
   cases hs : step c m now
-  · rw [apply_none hs]; (unfold step autoApplies at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all
+  · rw [apply_none hs]; (unfold step autoApplies unblockStep at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all
   · rw [apply_refused hs]
-  · (unfold step autoApplies at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all
+  · (unfold step autoApplies unblockStep at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all
 
 /-- "A blocked card never moves on its own": a verify result on a card with
 a block that is not the errored agent's keeps the stage and the block, and
@@ -322,12 +326,69 @@ the note says what the verify found. -/
 theorem verified_keeps_a_blocked_card (hk : m.kind = .verified) (h : (apply c m now).action ≠ "")
     (hb : c.blocked = some b) (he : erroredBlock c.blocked = false) :
     (apply c m now).card.stage = c.stage ∧ (apply c m now).card.blocked = some b ∧
-    (apply c m now).card.note = m.reason ∧ (apply c m now).card.verify = m.verify := by
+    (apply c m now).card.note = m.reason := by
   cases hs : step c m now
   · rw [apply_none hs] at h; simp at h
   · rw [apply_refused hs] at h; simp at h
   · rw [apply_moved hs]; simp only
-    (unfold step autoApplies at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all [Card.letGo]
+    (unfold step autoApplies unblockStep at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all [Card.letGo]
+
+/-- A verify result that ends on a blocked card is held in the record: the
+stage it moves the card to when the block lifts. -/
+theorem verified_holds_result (hk : m.kind = .verified) (h : (apply c m now).action ≠ "")
+    (hb : c.blocked = some b) (he : erroredBlock c.blocked = false) (hv : m.verify = some v)
+    (hs' : m.stage ≠ .verify) :
+    (apply c m now).card.verify = some { v with held := some m.stage } := by
+  cases hs : step c m now
+  · rw [apply_none hs] at h; simp at h
+  · rw [apply_refused hs] at h; simp at h
+  · rw [apply_moved hs]; simp only
+    (unfold step autoApplies unblockStep at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all [Card.letGo, dropHeld]
+
+/-- A held result waits only on a blocked card in verify. -/
+def Card.heldOk (c : Card) : Prop :=
+  ∀ v, c.verify = some v → v.held.isSome → c.blocked.isSome ∧ c.stage = .verify
+
+/-- Every move keeps heldOk. A move that changes the card keeps it with no
+condition: it drops a held result the card no longer waits on. -/
+theorem heldOk_preserved (hc : c.heldOk) : (apply c m now).card.heldOk := by
+  unfold Card.heldOk at *
+  cases hs : step c m now
+  · rw [apply_none hs]
+    obtain ⟨e1, -, -, -, e5, -, -, e8⟩ := step_none_keeps hs
+    simp only [e1, e5, e8]; exact hc
+  · rw [apply_refused hs]; exact hc
+  · rename_i a to e c'
+    rw [apply_moved hs]; simp only
+    intro v hv hh
+    cases hcv : c'.verify with
+    | none => simp [dropHeld, hcv] at hv
+    | some x =>
+      simp only [dropHeld, hcv] at hv
+      by_cases hc1 : x.held.isSome = true ∧ (c'.blocked.isNone = true ∨ to ≠ .verify)
+      · simp only [hc1] at hv; cases hv; simp at hh
+      · simp only [hc1, ite_false] at hv; cases hv
+        constructor
+        · cases hb' : c'.blocked <;> simp_all
+        · by_cases hto : to = .verify
+          · exact hto
+          · exact absurd ⟨hh, Or.inr hto⟩ hc1
+
+/-- "When the block lifts, the result applies": an unblock of a card in
+verify with a held result moves the card to the held stage, with one attempt
+more for todo, and drops the held result. -/
+theorem unblock_applies_held (hk : m.kind = .unblock) (hb : c.blocked.isSome) (hst : c.stage = .verify)
+    (hv : c.verify = some v) (hh : v.held = some s) :
+    (apply c m now).card.stage = s ∧ (apply c m now).card.blocked = none ∧
+    (apply c m now).card.attempts = (if s = .todo then c.attempts + 1 else c.attempts) := by
+  have hs : step c m now = .moved .unblocked s c.holder
+      (if s = .todo then { c with blocked := none, attempts := c.attempts + 1 } else { c with blocked := none }) := by
+    unfold step unblockStep
+    obtain ⟨st, ex, no, ta, sa, fa, he⟩ := v
+    simp at hh; subst hh
+    simp [hk, hst, hv, Option.isSome_iff_ne_none.mp hb]
+  rw [apply_moved hs]; simp only
+  split <;> simp
 
 /-- An automatic move and a verify result are the moves the daemon makes on
 its own. Neither changes the stage of a card with a block that is not the
