@@ -662,8 +662,8 @@ func (m *OS) drawCardRow(c *ckCanvas, l ckLook, r ckRow, cursor, hover bool, x, 
 		default:
 			if words, lInk := ckLifeLine(pal, card); words != "" {
 				who, whoInk = words, lInk
-			} else if !ckFreeStage(card.Stage) {
-				who = ckUnheldLine(card)
+			} else if words := ckStageWords(card.Stage); words != "" {
+				who = words
 			}
 		}
 		if card.Host != "" {

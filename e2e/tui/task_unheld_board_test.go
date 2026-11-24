@@ -19,8 +19,8 @@ import (
 // Negative control, in NEGATIVE_CONTROLS.md: on a build where every card
 // with no holder says free, "No pane holds it" is not on the board.
 //
-// The test saves the board at 79x30 (the list), 120x40 and 200x55 as frames,
-// the widest last, so a build without the change still saves all three.
+// The test reads the list at 79x30 and the columns at 200x55, and saves the
+// board at 79x30, 120x40 and 200x55 as frames.
 func TestTheBoardSaysWhatAnUnheldCardWaitsFor(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -50,13 +50,18 @@ func TestTheBoardSaysWhatAnUnheldCardWaitsFor(t *testing.T) {
 		waitText(t, term, "the board", "write the changelog")
 		_ = term.WaitStable(uiTimeout)
 		saveCockpitFrames(t, term, "board-unheld-"+size.name)
-		if size.cols == 200 {
-			waitText(t, term, "the unheld cards", "No pane holds it", "Waits for verify", "Shipped  1")
-			if err := term.WaitFor(func(s tuitest.Screen) bool {
-				return strings.Count(s.Text(), "free") == 2
-			}, uiTimeout); err != nil {
-				t.Errorf("ASSERTION: the board does not say free for only the Todo and Plan cards: %v\n%s", err, term.Snapshot())
-			}
+		if size.cols == 120 {
+			// The columns at this width show Todo to Verify only.
+			continue
+		}
+		// The columns at 200 and the list at 79 each show every card.
+		waitText(t, term, "the unheld cards", "No pane holds it", "Waits for verify", "Shipped  1")
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			// free for the Todo and the Plan card only, and Shipped for the
+			// Shipped card as well as its head.
+			return strings.Count(s.Text(), "free") == 2 && strings.Count(s.Text(), "Shipped") == 2
+		}, uiTimeout); err != nil {
+			t.Errorf("ASSERTION: the board at %s does not say free for only the Todo and Plan cards and Shipped on the Shipped card: %v\n%s", size.name, err, term.Snapshot())
 		}
 	}
 }

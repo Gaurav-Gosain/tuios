@@ -910,11 +910,28 @@ func (m *OS) drawKanbanAdd(c *ckCanvas, l ckLook, a *kbNewCard, x, y, w int) int
 }
 
 // ckUnheldLine is what the second line of a card with no holder says of its
-// stage when the lifecycle has nothing to say. Only a card in Todo or Plan is
-// free to take: in Doing the pane that held it is gone, and in Verify or
-// Shipped no pane is meant to hold it.
+// stage when the lifecycle has nothing to say, and on which machine. Only a
+// card in Todo or Plan is free to take: in Doing the pane that held it is
+// gone, and in Verify or Shipped no pane is meant to hold it.
 func ckUnheldLine(card session.TaskRow) string {
-	switch card.Stage {
+	words := ckStageWords(card.Stage)
+	if words == "" {
+		words = "free"
+		if card.AskFirst {
+			// Dispatch never gives it to an agent: a person starts it.
+			words = "free, ask first"
+		}
+	}
+	if card.Host != "" {
+		words += " on " + printableTitle(card.Host)
+	}
+	return words
+}
+
+// ckStageWords is what a card with no holder says in stage s, where no pane
+// is meant to take it, and "" in a stage where it is free to take.
+func ckStageWords(s string) string {
+	switch s {
 	case session.TaskStageDoing:
 		return "No pane holds it"
 	case session.TaskStageVerify:
@@ -922,27 +939,7 @@ func ckUnheldLine(card session.TaskRow) string {
 	case session.TaskStageShipped:
 		return "Shipped"
 	}
-	return ckFreeLine(card)
-}
-
-// ckFreeStage reports whether a card with no holder in stage s is free to
-// take.
-func ckFreeStage(s string) bool {
-	return s != session.TaskStageDoing && s != session.TaskStageVerify && s != session.TaskStageShipped
-}
-
-// ckFreeLine is the word for a card free to take: free, ask first when a
-// person starts it, and on which machine.
-func ckFreeLine(card session.TaskRow) string {
-	free := "free"
-	if card.AskFirst {
-		// Dispatch never gives it to an agent: a person starts it.
-		free = "free, ask first"
-	}
-	if card.Host != "" {
-		free += " on " + printableTitle(card.Host)
-	}
-	return free
+	return ""
 }
 
 // drawKanbanCard draws one card: its title, then its holder's mark and name,
