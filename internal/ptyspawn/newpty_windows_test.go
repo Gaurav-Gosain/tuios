@@ -9,10 +9,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/charmbracelet/x/xpty"
+	"golang.org/x/sys/windows"
 )
 
 // These tests pin the choice between conpty.dll and the inbox ConPTY: only
@@ -67,7 +69,9 @@ func printed(marker string) func([]byte) bool {
 // spawnUntil opens a pane running newCmd's command and reads it until done
 // says the output so far holds what the test waits for, named by what. It
 // returns the pty, the log lines Spawn wrote and the output. It answers the
-// DA1 query OpenConsole sends when it starts, as tuios's emulator would.
+// DA1 query OpenConsole sends when it starts, as tuios's emulator would, also
+// when the query comes split over two reads. When the wait fails, the
+// message holds what the pane printed.
 func spawnUntil(t *testing.T, what string, newCmd func() *exec.Cmd, done func([]byte) bool) (xpty.Pty, []string, []byte) {
 	t.Helper()
 	var logged []string
@@ -81,18 +85,25 @@ func spawnUntil(t *testing.T, what string, newCmd func() *exec.Cmd, done func([]
 		_ = pty.Close()
 	})
 
+	var (
+		mu  sync.Mutex
+		out []byte
+	)
 	got := make(chan []byte, 1)
 	go func() {
-		var out []byte
 		buf := make([]byte, 4096)
+		answered := 0
 		for {
 			n, err := pty.Read(buf)
+			mu.Lock()
 			out = append(out, buf[:n]...)
-			if bytes.Contains(buf[:n], []byte("\x1b[c")) {
+			seen := append([]byte(nil), out...)
+			mu.Unlock()
+			for ; bytes.Count(seen, []byte("\x1b[c")) > answered; answered++ {
 				_, _ = pty.Write([]byte("\x1b[?62;4;22c"))
 			}
-			if done(out) || err != nil {
-				got <- out
+			if done(seen) || err != nil {
+				got <- seen
 				return
 			}
 		}
@@ -104,7 +115,9 @@ func spawnUntil(t *testing.T, what string, newCmd func() *exec.Cmd, done func([]
 		}
 		return pty, logged, out
 	case <-time.After(15 * time.Second):
-		t.Fatalf("the pane never printed %s", what)
+		mu.Lock()
+		defer mu.Unlock()
+		t.Fatalf("the pane never printed %s; it printed %q", what, out)
 	}
 	return nil, nil, nil
 }
@@ -135,6 +148,10 @@ const conptyTestDirEnv = "TUIOS_E2E_CONPTY_DIR"
 // tests: with the real DLL in the folder, the pane opens on it, the log names
 // it, and a sixel image the guest draws reaches tuios, which the inbox ConPTY
 // drops.
+//
+// The guest is this test binary (TestPaneSixelGuest). It was powershell.exe,
+// whose first start on a fresh runner loads the .NET runtime and can take
+// longer than the wait, so the test failed when nothing was wrong.
 func TestPaneUsesConPTYDLLWhenPresent(t *testing.T) {
 	dir := os.Getenv(conptyTestDirEnv)
 	if dir == "" {
@@ -142,9 +159,12 @@ func TestPaneUsesConPTYDLLWhenPresent(t *testing.T) {
 	}
 	useConPTYDLL(t, dir)
 
-	// One sixel pixel column, six rows high, in colour 0.
-	draw := `[Console]::Out.Write([char]27 + 'Pq#0;2;100;0;0#0~~~~' + [char]27 + '\'); [Console]::Out.Flush(); Start-Sleep -Seconds 2`
-	pty, logged, out := spawnUntil(t, "a sixel image", command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", draw), hasSixel)
+	guest := func() *exec.Cmd {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestPaneSixelGuest$", "-test.count=1")
+		cmd.Env = append(os.Environ(), sixelGuestEnv+"=1")
+		return cmd
+	}
+	pty, logged, out := spawnUntil(t, "a sixel image", guest, hasSixel)
 	if _, ok := pty.(*dllPty); !ok {
 		t.Fatalf("pane pty is %T, want *dllPty on %s", pty, dir)
 	}
@@ -153,6 +173,51 @@ func TestPaneUsesConPTYDLLWhenPresent(t *testing.T) {
 	}
 	sixel := out[bytes.Index(out, []byte("\x1bP")):]
 	t.Logf("sixel reached the master side: %q", sixel[:min(len(sixel), 32)])
+}
+
+// sixelGuestEnv makes TestPaneSixelGuest draw.
+const sixelGuestEnv = "TUIOS_PTYSPAWN_SIXEL_GUEST"
+
+// sixelImage is one sixel pixel column, six rows high, in colour 0.
+const sixelImage = "\x1bPq#0;2;100;0;0#0~~~~\x1b\\"
+
+// TestPaneSixelGuest is the guest TestPaneUsesConPTYDLLWhenPresent starts in
+// its pane. It turns on VT output on the pane's console, as a program that
+// draws images does, writes sixelImage, and stays until the test ends the
+// pane.
+func TestPaneSixelGuest(t *testing.T) {
+	if os.Getenv(sixelGuestEnv) != "1" {
+		t.Skip("run by TestPaneUsesConPTYDLLWhenPresent")
+	}
+	open := func(name string) windows.Handle {
+		p, err := windows.UTF16PtrFromString(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h, err := windows.CreateFile(p, windows.GENERIC_READ|windows.GENERIC_WRITE, windows.FILE_SHARE_READ|windows.FILE_SHARE_WRITE, nil, windows.OPEN_EXISTING, 0, 0)
+		if err != nil {
+			t.Fatalf("open %s: %v", name, err)
+		}
+		return h
+	}
+	conout, conin := open("CONOUT$"), open("CONIN$")
+	var mode uint32
+	if err := windows.GetConsoleMode(conout, &mode); err != nil {
+		t.Fatalf("GetConsoleMode: %v", err)
+	}
+	if err := windows.SetConsoleMode(conout, mode|windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING); err != nil {
+		t.Fatalf("SetConsoleMode: %v", err)
+	}
+	if err := windows.WriteFile(conout, []byte(sixelImage), nil, nil); err != nil {
+		t.Fatalf("write the image: %v", err)
+	}
+	buf := make([]byte, 64)
+	for {
+		var n uint32
+		if err := windows.ReadFile(conin, buf, &n, nil); err != nil || n == 0 {
+			return
+		}
+	}
 }
 
 // TestPaneOnConPTYDLLFindsProgramLikeInbox starts a program given relative
