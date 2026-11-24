@@ -44,10 +44,10 @@ require (
 	golang.org/x/text v0.44.0 // indirect
 	tuios.dev/acp v0.0.0-20261120180431-437c5b45ae51 // indirect
 	tuios.dev/harness v0.0.0-20261120215113-0f1cffa25ec1 // indirect
-	tuios.dev/loom v0.2.3-0.20261120122552-107c1a5ef7e3 // indirect
+	tuios.dev/loom v0.2.3-0.20261124190846-268d3f908bd5 // indirect
 	tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8 // indirect
 	tuios.dev/progstatus v0.1.2-0.20261030111253-c0f512aa3148 // indirect
-	tuios.dev/sketch v0.4.1-0.20261119182137-67b7911dffff // indirect
+	tuios.dev/sketch v0.4.1-0.20261124185855-9f712ffb4bd2 // indirect
 	tuios.dev/swatch v0.1.2-0.20261120215113-0f1cffa25ec1 // indirect
 	tuios.dev/tml v0.1.2-0.20261112200225-e5512e40c8da // indirect
 )
