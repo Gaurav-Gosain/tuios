@@ -19204,6 +19204,12 @@ Repeat from `e2e/tui` with
 
 An idle daemon's event replay ring must hold under 512 KiB in the heap profile.
 
+## TestIdleGivesHeapBack
+
+After a burst of output, an idle client and its daemon must each trim once
+(internal/memtrim) and give at least 2 MiB of private memory back, with under
+1 MB of free heap pages kept.
+
 Run on 2026-11-24 on Linux (amd64).
 
 | Control | The test fails with | Result |
@@ -19333,3 +19339,7 @@ this branch with the reason of the cross-session release put back.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAPaneOfAnotherSessionHoldsAProjectCard$' -v .`.
+| minExcess back at 32 MB (a build of main before the change) | "the idle client never gave 2 MiB of its heap back after the burst" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestIdleGivesHeapBack$' -v .`.

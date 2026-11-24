@@ -2771,7 +2771,7 @@ func (d *Daemon) cleanupLoop() {
 		case <-timer.C:
 			d.wakes.cleanupTicks.Add(1)
 			active := d.wakes.cleanup.Take()
-			if !d.cleanupOnce() && !active {
+			if !d.cleanupOnce(!active) && !active {
 				asleep = true
 				continue
 			}
@@ -2781,8 +2781,9 @@ func (d *Daemon) cleanupLoop() {
 }
 
 // cleanupOnce is one run of cleanupLoop. It reports whether a routed request
-// is still waiting, which needs another run to expire it.
-func (d *Daemon) cleanupOnce() bool {
+// is still waiting, which needs another run to expire it. quiet says no pane
+// printed or changed since the last run.
+func (d *Daemon) cleanupOnce(quiet bool) bool {
 	const pendingRequestTTL = 2 * time.Minute
 
 	d.releaseEmulatorBuffers()
@@ -2803,8 +2804,11 @@ func (d *Daemon) cleanupOnce() bool {
 	d.pendingRequestsMu.Unlock()
 	// A flood of output that has ended leaves its garbage and its
 	// peak heap goal behind, and an idle daemon runs no collection to
-	// lower either. memtrim trims only when the daemon is quiet.
-	memtrim.Request()
+	// lower either. A daemon streaming output allocates little, so it can
+	// pass memtrim's quiet test: only a run after a quiet interval asks.
+	if quiet {
+		memtrim.Request()
+	}
 	return waiting
 }
 

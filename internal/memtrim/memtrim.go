@@ -24,13 +24,18 @@ const (
 	// settle is how long Request waits after the last call before it looks.
 	// A burst of closes is one trim at its end.
 	settle = 2 * time.Second
-	// minExcess is the least heap held beyond the live data that is worth a
-	// forced collection to give back.
-	minExcess = 32 << 20
+	// minExcess is the least a trim must be able to give back to be worth a
+	// forced collection. An idle client with three shells holds 5 to 9 MB of
+	// garbage and free pages past its live heap, and a daemon about as much:
+	// at 32 MB the trim never ran outside a pane flood. A collection of a heap
+	// this size costs a few milliseconds, once per settle at most.
+	minExcess = 4 << 20
 	// maxBusyAlloc is the most a process may allocate during the settle
 	// window and still count as quiet. A process allocating faster is in the
 	// middle of a burst, and what it gave back it would take again at once.
-	maxBusyAlloc = 16 << 20
+	// An idle client allocates about 15 KB in the window, and a client
+	// drawing a pane that prints 300 lines ten times a second about 1.2 MB.
+	maxBusyAlloc = 512 << 10
 	// minInterval is the least time between two trims.
 	minInterval = 30 * time.Second
 )
@@ -86,17 +91,20 @@ func check(g uint64) {
 // sample is the part of the runtime's memory statistics a trim decision
 // reads.
 type sample struct {
-	allocs, held, live uint64
+	allocs, alloc, live, free uint64
 }
 
-// excess is the heap the process holds beyond its live data: objects that
-// are garbage since the last collection, unused span space, and free pages
-// not yet returned.
+// excess is what a trim can give back: the objects allocated since the last
+// collection that are not part of the live data, and the free pages not yet
+// returned. Free space inside spans that still hold live objects is left
+// out. A collection keeps those spans, so counting them would trim again at
+// every settle and give back nothing.
 func (s sample) excess() uint64 {
-	if s.held <= s.live {
-		return 0
+	var garbage uint64
+	if s.alloc > s.live {
+		garbage = s.alloc - s.live
 	}
-	return s.held - s.live
+	return garbage + s.free
 }
 
 // read takes the statistics. runtime/metrics would avoid the brief stop of
@@ -109,7 +117,8 @@ func read() sample {
 	runtime.ReadMemStats(&ms)
 	return sample{
 		allocs: ms.TotalAlloc,
-		held:   ms.HeapInuse + ms.HeapIdle - ms.HeapReleased,
+		alloc:  ms.HeapAlloc,
 		live:   ms.NextGC / 2,
+		free:   ms.HeapIdle - ms.HeapReleased,
 	}
 }
