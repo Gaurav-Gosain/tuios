@@ -34,9 +34,12 @@ type Transcript struct {
 	// a harness's ledgers, backups and temporary files.
 	Exclude []string `toml:"exclude"`
 	// SessionFile names the file of a session from the session id the
-	// harness's hook reports, under Dir: "{session_id}.json". It is for a
-	// harness whose hook names its session but not its file. Empty means the
-	// session id finds no file.
+	// harness's hook reports, under Dir: "{session_id}.json", or a fixed path
+	// below a folder per session, "{session_id}/logs/transcript.jsonl". It is
+	// for a harness whose hook names its session but not its file. The id is
+	// a folder name of its own or part of the file name, the rest is literal,
+	// and the path must have the shape Glob matches (checkSessionFile). Empty
+	// means the session id finds no file.
 	SessionFile string `toml:"session_file"`
 	// BySession says the file is the harness's whole store, Dir/Glob with no
 	// wildcard, and the session id its hook or plugin reports names the
@@ -130,8 +133,8 @@ func checkTranscript(file, id string, t *Transcript) error {
 		return errorf("%s: manifest %q transcript glob %q spans folders, so dir may name no placeholder but {home}", file, id, t.Glob)
 	}
 	if t.SessionFile != "" {
-		if strings.Count(t.SessionFile, "{session_id}") != 1 || strings.ContainsAny(strings.ReplaceAll(t.SessionFile, "{session_id}", ""), `/\{}`) {
-			return errorf("%s: manifest %q transcript session_file %q must be a file name with {session_id} once", file, id, t.SessionFile)
+		if err := checkSessionFile(t.SessionFile, t.Glob, t.Exclude); err != nil {
+			return errorf("%s: manifest %q transcript session_file %q %w", file, id, t.SessionFile, err)
 		}
 		if strings.Contains(baseless(t.Dir), "{") {
 			return errorf("%s: manifest %q transcript session_file needs a dir with no placeholder but {home}", file, id)
@@ -140,22 +143,108 @@ func checkTranscript(file, id string, t *Transcript) error {
 	return nil
 }
 
+// checkSessionFile holds a session_file to a fixed path under Dir that only
+// the session id varies, so a hook can name no file but one of the
+// harness's: {session_id} once and no other placeholder, no "\" and no "..",
+// and "/" only between path elements that are not empty or ".". The id may
+// share the file name with literal text, as Amp's "{session_id}.json" does,
+// and is a folder name of its own anywhere else.
+//
+// It also refuses a path whose shape glob cannot match, which would join
+// nothing and say nothing: a file in a folder when glob does not span
+// folders, another number of folders than glob has, a literal name glob
+// does not match at its place, or a literal file name exclude leaves out.
+// The part holding the id is left to the join, which matches the whole path
+// against glob, since no stand-in id could be checked here without refusing
+// a glob that fixes how ids look. A glob with "/" in a character class is
+// refused: filepath.Match lets such a class match the separator, so the
+// glob's path elements are not the parts between its "/"s.
+func checkSessionFile(sessionFile, glob string, exclude []string) error {
+	if strings.Count(sessionFile, "{session_id}") != 1 || strings.ContainsAny(strings.ReplaceAll(sessionFile, "{session_id}", ""), "{}") {
+		return errorf("must name {session_id} once and no other placeholder")
+	}
+	if strings.ContainsRune(sessionFile, '\\') || strings.Contains(sessionFile, "..") {
+		return errorf(`may hold no "\" and no ".."`)
+	}
+	parts := strings.Split(sessionFile, "/")
+	for i, part := range parts {
+		if part == "" || part == "." {
+			return errorf(`has an empty or "." path element`)
+		}
+		if strings.Contains(part, "{session_id}") && part != "{session_id}" && i != len(parts)-1 {
+			return errorf("must have {session_id} as a whole folder name, or in the file name")
+		}
+	}
+	if classHoldsSlash(glob) {
+		return errorf(`needs a glob with no "/" in a character class, and glob %q has one`, glob)
+	}
+	globParts := []string{glob}
+	if strings.ContainsRune(glob, '/') {
+		globParts = strings.Split(glob, "/")
+	}
+	if len(parts) != len(globParts) {
+		return errorf("has %d path elements and glob %q has %d", len(parts), glob, len(globParts))
+	}
+	for i, part := range parts {
+		if strings.Contains(part, "{session_id}") {
+			continue
+		}
+		if ok, _ := filepath.Match(globParts[i], part); !ok {
+			return errorf("names %q where glob %q has %q", part, glob, globParts[i])
+		}
+	}
+	if name := parts[len(parts)-1]; !strings.Contains(name, "{session_id}") {
+		for _, ex := range exclude {
+			if ok, _ := filepath.Match(ex, name); ok {
+				return errorf("names %q, which exclude %q leaves out", name, ex)
+			}
+		}
+	}
+	return nil
+}
+
+// classHoldsSlash reports a character class in glob with "/" in it, such as
+// "[^/]". A "\" escapes the next character, as filepath.Match reads it
+// outside Windows, and an escaped "/" in a class counts too.
+func classHoldsSlash(glob string) bool {
+	in := false
+	for i := 0; i < len(glob); i++ {
+		c := glob[i]
+		if c == '\\' && i+1 < len(glob) {
+			i++
+			if in && glob[i] == '/' {
+				return true
+			}
+			continue
+		}
+		switch {
+		case !in:
+			in = c == '['
+		case c == '/':
+			return true
+		case c == ']':
+			in = false
+		}
+	}
+	return false
+}
+
 // SessionPath is the file of the session a hook names by its id, under
 // Root, or "" when the manifest has no session_file or the id could name
-// anything but one file in that folder. The id is the harness's own, so it
-// is held to the characters session ids are made of.
+// anything but the one file session_file gives it. The id is the harness's
+// own, so it is held to the characters session ids are made of, with no
+// "/" or "\" and no "..", so a hook cannot point the daemon outside Dir. An
+// id that ends in "." names no file either: Windows drops a trailing dot
+// from a path element, so "X." would name X's file, another conversation's.
 func (t Transcript) SessionPath(sessionID string) string {
 	root := t.Root()
-	if t.SessionFile == "" || root == "" || sessionID == "" || len(sessionID) > 128 {
+	if t.SessionFile == "" || root == "" || sessionID == "" || len(sessionID) > 128 || strings.Contains(sessionID, "..") || strings.HasSuffix(sessionID, ".") {
 		return ""
 	}
 	for _, r := range sessionID {
 		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' || r == '.') {
 			return ""
 		}
-	}
-	if strings.Trim(sessionID, ".") == "" {
-		return ""
 	}
 	return filepath.Join(root, strings.ReplaceAll(t.SessionFile, "{session_id}", sessionID))
 }

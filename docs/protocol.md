@@ -231,6 +231,27 @@ old behaviour. None of them bumps the protocol integer: every field keeps its
 name and type, and a caller that sends nothing new keeps working. What changes
 is an answer, and each entry says which.
 
+**`set-agent-session` joins the transcript its session id names.** A harness
+whose manifest has a `session_file` names its transcript by the session id,
+and only `set-agent-state` used to join it. What changes for a caller:
+
+- `set-agent-session` with no `transcript_path` joins the window to the file
+  the id names, once the harness has written it, and to that session of the
+  store for a `by_session` harness. Amp's plugin sends it from
+  `session.start`, so an Amp pane is joined from that report on, where it
+  waited for the first `set-agent-state`. The answer carries
+  `transcript_refused` when the file was refused.
+- A report on either verb that changes the id of a pane of such a harness,
+  and joins no file, drops the previous conversation's join and raises
+  `transcript`. The pane used to keep showing the last conversation until
+  the new file existed. Only a tree transcript (Pi's) was dropped before. A
+  report that moves the join to the new conversation's file raises
+  `transcript` too, even before that file holds a whole record.
+- A `set-agent-state` with no `harness` joins and drops for the pane's
+  harness, as it already did for a `transcript_path`.
+- A session id with `..` in it, or that ends in `.`, names no file, as one
+  with `/` or `\` already did.
+
 **A pane's OSC 1 name labels an unnamed workspace.** The name a pane's program
 gives with OSC 1 is the label of its workspace while the workspace has no name
 of its own and the pane is its active one. OSC 0 sets the icon name too, but
@@ -5594,7 +5615,18 @@ The optional hook fields:
   guessed from `message`, as described under Changes to existing verbs.
 - `agent_session_id`: the harness's own conversation id. Stored as the window's
   `agent_session_id`, persisted, and kept when the agent exits. It also turns
-  on the nested-session guard below.
+  on the nested-session guard below. Without `transcript_path` it names the
+  transcript of a harness whose manifest has a `session_file` (Amp): the
+  window is joined to the file `session_file` makes of the id, once that file
+  exists, so a later report of the same id joins a file the harness wrote
+  after the first. For a `by_session` harness (opencode) it joins that session
+  of the harness's store. The id names a file only when it is letters,
+  digits, `.`, `_` or `-`, at most 128 bytes, with no `..` and not ending in
+  `.`, so it cannot name one outside the transcript folder or, on Windows,
+  another conversation's, and only from a report over a connection: herdr's
+  socket names no file. A report that changes the id of such a pane, or of a
+  tree transcript's (Pi's), and joins no file drops the previous
+  conversation's join.
 - `transcript_path`: the transcript file the harness writes. For a harness whose
   manifest has a transcript reader, the window is joined to exactly that file.
   It is held in daemon memory and never synced.
@@ -5735,6 +5767,15 @@ even when the file did not change. It does not change the state, its time, its
 source, the prompt or the completion count. A rejected path is explained in
 `transcript_refused`, and a refusal for the same conversation keeps the previous
 join.
+
+Without `transcript_path`, `agent_session_id` names the transcript as it does
+for `set-agent-state`: a harness whose manifest has a `session_file` is joined
+to the file the id names once the harness has written it. A report that comes
+first joins nothing, and the next report of the same id, which is applied and
+changes nothing else, joins it. A report that changes the id and joins no
+file drops the previous conversation's join, so a new conversation never
+shows the last one. A file the transcript rules refuse is explained in
+`transcript_refused`.
 
 ```json
 {"verb": "set-agent-session", "params": {"session": "work", "window": "build", "harness": "qwen", "agent_session_id": "5f1c", "harness_pid": 4100}}

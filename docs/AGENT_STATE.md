@@ -4595,6 +4595,14 @@ to the transcript source: for a harness whose manifest has a transcript reader
 search that refuses whenever two files in one directory could both be the
 pane's.
 
+A harness whose hook names only the conversation id (Amp) is joined from the
+id. Its manifest's `session_file` names the file the id stands for under the
+transcript folder, such as `{session_id}.json` or a fixed path in a folder per
+session. Either verb joins it, but only once the file exists, so a report sent
+before the harness writes the file joins nothing and the next one joins it. A
+new id whose file is not there yet drops the previous conversation's join, so
+a new conversation does not show the last one.
+
 ### Failure behaviour
 
 Harnesses run some hooks synchronously, `PreToolUse` and `PermissionRequest`

@@ -19654,3 +19654,53 @@ Run on 2026-11-25 on Linux (amd64).
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestIdleClientFreesItsFrameBuffers$' -v .`.
+
+## A session id joins the file its session_file names
+
+`TestSessionFolderJoin` (internal/session) loads a test harness whose
+`session_file` is `{session_id}/logs/transcript.json` and reports its session
+through `set-agent-session`. A report before the file exists must join
+nothing, and the same report once the file is written must join it. A new id
+whose file is not there yet, or whose file the glob refuses, must drop the
+previous join, on `set-agent-session` and on `set-agent-state`, and a
+`set-agent-state` with no `harness` must join and drop for the pane's harness.
+`TestStoreSessionDrop` drops a `by_session` join the same way,
+`TestNewSessionDropsJoin` checks which bundled harnesses drop, and
+`TestSessionChangeRaisesTranscript` must read a `transcript` event when the
+join moves to an empty file and when it drops. `TestSessionFileJoin` holds
+that a report with no connection joins nothing. `TestTranscriptValidation` and
+`TestSessionPath` (harness) hold the `session_file` rules and the session id
+rules.
+
+Run on 2026-11-25 on Linux, on `2b5bffecf` with this change. Each control is
+one change:
+
+| Control | Failure |
+| --- | --- |
+| `SessionPath` takes an id with `..` | `TestSessionPath`: `session id "a..b" named ".../x/a..b/logs/transcript.jsonl"` |
+| `SessionPath` takes an id ending in `.` | `TestSessionPath`: `session id "." named ".../x/logs/transcript.jsonl"` |
+| `{session_id}` may share a folder name | `TestTranscriptValidation`: `want error containing "whole folder name", got none` |
+| `session_file` may hold `\` | `TestTranscriptValidation`: `want error containing "no \"\\\"", got none` |
+| `session_file` may hold `..` | `TestTranscriptValidation`: `want error containing "no \"..\"", got none` |
+| `session_file` may name another placeholder | `TestTranscriptValidation`: `want error containing "no other placeholder", got none` |
+| `session_file` may have an empty path element | `TestTranscriptValidation`: `want error containing "empty", got none` |
+| `session_file` may have a `.` path element | `TestTranscriptValidation`: `want error containing "\".\" path element", got none` |
+| No path element count check | `TestTranscriptValidation` panics: `index out of range [1] with length 1` |
+| No literal element match against the glob | `TestTranscriptValidation`: `want error containing "where glob", got none` |
+| `checkSessionFile` never calls `classHoldsSlash` | `TestTranscriptValidation`: the `[^/]/t.jsonl` case is refused only as `has 2 path elements and glob "[^/]/t.jsonl" has 3`, not for its character class |
+| `checkTranscript` passes no `exclude` to `checkSessionFile` | `TestTranscriptValidation`: `want error containing "exclude", got none` |
+| `set-agent-session` never calls `joinSessionTranscript` | `TestSessionFolderJoin`: `a report after the file was written joined "", want ".../s-1/logs/transcript.json"`; `TestStoreSessionDrop`: `session ses_1 joined "" (joined false)` |
+| `newSessionDropsJoin` drops only a tree transcript's join | `TestSessionFolderJoin`: `a new session id kept the previous conversation's transcript .../s-1/logs/transcript.json`; `TestNewSessionDropsJoin`: `newSessionDropsJoin("amp") = false, want true`, and the same for opencode; `TestStoreSessionDrop`: `a refused new session id kept the previous session "ses_1"`; `TestSessionChangeRaisesTranscript`: `read event: ... i/o timeout` |
+| `newSessionDropsJoin` leaves out `by_session` | `TestNewSessionDropsJoin`: `newSessionDropsJoin("opencode") = false, want true`; `TestStoreSessionDrop`: `a refused new session id kept the previous session "ses_1"` |
+| `newSessionDropsJoin` leaves out a tree transcript | `TestNewSessionDropsJoin`: `newSessionDropsJoin("pi") = false, want true` |
+| A report with no connection joins from the id | `TestSessionFileJoin`: `a report with no connection joined .../T-00000000-0000-7000-8000-000000000001.json` |
+| `set-agent-state` with no `harness` does not take the pane's | `TestSessionFolderJoin`: `set-agent-state with no harness joined "", want ".../s-5/logs/transcript.json"` |
+| `leaveConversation` raises nothing for a moved join | `TestSessionChangeRaisesTranscript`: `read event: ... i/o timeout` after the move to the empty file |
+| `leaveConversation` raises nothing for a drop | `TestSessionChangeRaisesTranscript`: `read event: ... i/o timeout` after the id with no file |
+
+With the change whole every one of these tests passes: `TestSessionFolderJoin`
+joins `.../s-1/logs/transcript.json` once it is written, and
+`TestSessionChangeRaisesTranscript` reads all three `transcript` events.
+Repeat with `go test ./harness/ -run 'TestTranscriptValidation|TestSessionPath'`
+and
+`go test ./internal/session/ -run 'TestSessionFileJoin|TestSessionFolderJoin|TestStoreSessionDrop|TestNewSessionDropsJoin|TestSessionChangeRaisesTranscript'`.
