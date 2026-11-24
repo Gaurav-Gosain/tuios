@@ -349,7 +349,9 @@ func (w *Window) outputWriter() {
 				break
 			}
 			if t != nil && end > off {
+				w.streamChunk.Store(true)
 				_, _ = t.Write(data[off:end])
+				w.streamChunk.Store(false)
 			}
 			w.ioMu.Unlock()
 			if t == nil {

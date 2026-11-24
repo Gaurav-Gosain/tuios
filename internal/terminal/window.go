@@ -70,7 +70,17 @@ func (w *Window) RUnlockIO() { w.ioMu.RUnlock() }
 // pane repaints as soon as the lock is free. Dropping an intermediate frame
 // from a pane producing thousands of lines a second loses nothing a user could
 // have read; stalling the frame that carries their keystroke does.
+//
+// One caller may then block: the lone pane drawn from its cells
+// (chooseDirectPane) waits with RLockIO once it has served its last frame for
+// a frame period, and only while StreamChunkHeld says the holder is the output
+// writer with one chunk. Without that wait a flood kept it on its old cells.
 func (w *Window) TryRLockIO() bool { return w.ioMu.TryRLock() }
+
+// StreamChunkHeld reports whether the output writer holds ioMu for one chunk
+// of pane output, a hold of at most maxVTChunk bytes of parse. A longer
+// exclusive hold, such as a resize reflow, reports false.
+func (w *Window) StreamChunkHeld() bool { return w.streamChunk.Load() }
 
 // SetTiled updates the tiled flag and re-syncs the emulator/PTY size. Resize
 // deducts border cells based on Tiled (0 when tiled/borderless, 2 when
@@ -450,6 +460,10 @@ type Window struct {
 	// emulator: begun before each one, noted once its output flag is set. See
 	// EmulatorWrites.
 	writesBegun, writesNoted atomic.Uint64
+
+	// streamChunk is set while the output writer holds ioMu for one chunk of
+	// pane output (at most maxVTChunk bytes). See StreamChunkHeld.
+	streamChunk atomic.Bool
 
 	// streamOwnsSize is set while a daemon subscription feeds this emulator,
 	// which is when the stream is what resizes it. See SetStreamOwnsSize.

@@ -118,9 +118,15 @@ func (m *OS) chooseDirectPane() directPane {
 		// Under a flood the writer takes the lock again as soon as it lets
 		// go of a chunk, so the try fails frame after frame and the screen
 		// stood still for up to seconds. Once the pane has not been drawn
-		// fresh for a frame period, the frame waits for the read lock, which
-		// a blocked reader gets at the end of the writer's chunk.
-		if time.Since(m.directHold.fresh) < m.framePeriod() {
+		// fresh for a frame period, and the holder is the writer with one
+		// chunk, the frame waits for the read lock: a blocked reader gets it
+		// at the end of that chunk. Any other holder, such as a resize
+		// reflow, can hold it far longer on another goroutine, and the frame
+		// serves the last cells rather than stall keys on this one. The
+		// writer may let go of its chunk between the check and the wait and
+		// take the lock for something longer; that gap is a few instructions
+		// wide.
+		if time.Since(m.directHold.fresh) < m.framePeriod() || !w.StreamChunkHeld() {
 			return directPane{w: w, held: true}
 		}
 		w.RLockIO()
