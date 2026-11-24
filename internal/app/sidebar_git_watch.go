@@ -1,14 +1,17 @@
 package app
 
 import (
+	"errors"
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/Gaurav-Gosain/tuios/internal/dirwatch"
 	"github.com/Gaurav-Gosain/tuios/internal/gitstate"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // # When the git section reads again
@@ -33,7 +36,9 @@ import (
 //
 // Where no watch can be made (no inotify, kqueue or Windows watch on this
 // platform, or a folder that refuses one), the section reads every interval as
-// it did before. A model nobody named (ClientUnknown: the tests and the
+// it did before. The watch fails on its own goroutine, after the message that
+// asked for it, so it nudges the update loop once: an idle client gets no
+// other message, and nextWake would never see polling to arm the tick. A model nobody named (ClientUnknown: the tests and the
 // benchmarks) watches nothing and reads every interval too, for the reason
 // fileWatchTarget gives.
 
@@ -53,8 +58,12 @@ type gitWatcher struct {
 	// the watch goroutine when a folder changed.
 	polling, changed atomic.Bool
 
+	// seq numbers the retargets, so a late one is dropped. It is an atomic
+	// and not under mu, because a retarget holds mu across the watch's
+	// syscalls, and the update goroutine must not wait on a hung mount.
+	seq atomic.Uint64
+
 	mu      sync.Mutex // guards the fields below and serialises retargeting
-	seq     uint64
 	dirs    []string
 	set     *dirwatch.Set
 	stopped bool
@@ -80,18 +89,13 @@ func (m *OS) syncGitWatch(shown bool) {
 	if shown {
 		dir = m.gitView.Dir
 	}
-	ch := m.fileWatchChan()
-	gw.mu.Lock()
-	gw.seq++
-	seq := gw.seq
-	gw.mu.Unlock()
-	go gw.retarget(dir, seq, ch)
+	go gw.retarget(dir, gw.seq.Add(1), m.fileWatchChan())
 }
 
 func (gw *gitWatcher) retarget(dir string, seq uint64, ch chan struct{}) {
 	gw.mu.Lock()
 	defer gw.mu.Unlock()
-	if gw.stopped || seq != gw.seq {
+	if gw.stopped || seq != gw.seq.Load() {
 		return
 	}
 	var dirs []string
@@ -105,14 +109,18 @@ func (gw *gitWatcher) retarget(dir string, seq uint64, ch chan struct{}) {
 		gw.set.Close()
 		gw.set, gw.dirs = nil, nil
 	}
-	gw.polling.Store(false)
 	if len(dirs) == 0 {
+		gw.polling.Store(false)
 		return
 	}
-	set, err := dirwatch.NewSet(func(string) {
-		gw.changed.Store(true)
-		dirwatch.Nudge(ch)
-	})
+	var set *dirwatch.Set
+	err := gitWatchFault()
+	if err == nil {
+		set, err = dirwatch.NewSet(func(string) {
+			gw.changed.Store(true)
+			dirwatch.Nudge(ch)
+		})
+	}
 	if err == nil {
 		for _, d := range dirs {
 			if err = set.Add(d); err != nil {
@@ -122,10 +130,33 @@ func (gw *gitWatcher) retarget(dir string, seq uint64, ch chan struct{}) {
 		}
 	}
 	if err != nil {
-		gw.polling.Store(true)
+		// polling is never cleared on the way here, so a client that was
+		// polling already has its tick armed and needs no nudge. changed
+		// makes the nudge the git section's: the files section does not read
+		// again for it, and noteGitStale marks the reading stale.
+		if !gw.polling.Swap(true) {
+			gw.changed.Store(true)
+			dirwatch.Nudge(ch)
+		}
 		return
 	}
+	gw.polling.Store(false)
 	gw.set, gw.dirs = set, dirs
+}
+
+var errGitWatchFault = errors.New("git watch failed by test knob")
+
+// gitWatchFault fails the watch on purpose, as a platform with no watch or a
+// full inotify table does. The knob git_watch_fail names a file, and the
+// failure lands when the test removes it, so the e2e suite can fail the watch
+// on a client that has gone quiet.
+func gitWatchFault() error {
+	path := testknob.String("git_watch_fail")
+	if path == "" {
+		return nil
+	}
+	testknob.WaitWhile(path, 10*time.Millisecond, time.Minute)
+	return errGitWatchFault
 }
 
 // stopGitWatch closes the watch for good, when the client exits.

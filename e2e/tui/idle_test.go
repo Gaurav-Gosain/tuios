@@ -262,6 +262,55 @@ func gitBranchMovedOutside(t *testing.T, term *tuitest.Terminal, repo string) {
 	}
 }
 
+// gitPollInterval is the git_refresh_ms of TestGitSectionPollsWithoutAWatch.
+const gitPollInterval = time.Second
+
+// TestGitSectionPollsWithoutAWatch checks the fallback of the rail's git
+// section. Where the watch on the git folders cannot start (no watch on the
+// platform, the inotify limit, a folder that refuses one), the section reads
+// every git_refresh_ms. The watch fails on its own goroutine, after the
+// message that asked for it. Before the fix nothing woke the update loop
+// then, so a client that got no other message armed no tick, and a commit
+// made outside the panes never reached the rail.
+//
+// The knob git_watch_fail holds the failure until the test removes its file,
+// so it lands after the client has gone quiet. Negative control in
+// NEGATIVE_CONTROLS.md.
+func TestGitSectionPollsWithoutAWatch(t *testing.T) {
+	requireReal(t, "signals the client for its counters")
+	base := t.TempDir()
+	writeConfig(t, base, idleGitConfig+fmt.Sprintf("git_refresh_ms = %d\n", gitPollInterval.Milliseconds()))
+	hold := filepath.Join(base, "git-watch-hold")
+	if err := os.WriteFile(hold, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	statsPath := filepath.Join(base, "tickstats")
+	term := startIn(t, base, startOpts{daemonDefault: true, env: []string{
+		knob("git_watch_fail=" + hold),
+		"TUIOS_STATS_FILE=" + statsPath,
+	}})
+	waitBoot(t, term)
+	newWindow(t, term)
+	waitWindowCount(t, term, 1, "opening a shell")
+	repo := gitRepoPane(t, term, base)
+	if err := term.WaitStable(uiTimeout); err != nil {
+		t.Fatalf("screen never settled: %v\n%s", err, term.Snapshot())
+	}
+	waitIdleSettled(t, term.Pid(), statsPath)
+
+	// From here the client gets no message but what the fix sends.
+	if err := os.Remove(hold); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("git", "-C", repo, "checkout", "-q", "-b", "moved-outside").CombinedOutput(); err != nil {
+		t.Fatalf("git checkout: %v: %s", err, out)
+	}
+	// One interval to the next reading, and slack for a loaded machine.
+	if err := term.WaitForText("moved-outside", gitPollInterval+4*time.Second); err != nil {
+		t.Fatalf("with no watch, the git section never showed a branch checked out outside the panes: %v\n%s", err, term.Snapshot())
+	}
+}
+
 // idleAgentTitleConfig is the rail in a daemon session with a quick detector.
 const idleAgentTitleConfig = `[startup]
 daemon = true

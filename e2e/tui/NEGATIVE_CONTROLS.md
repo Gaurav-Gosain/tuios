@@ -7178,6 +7178,18 @@ Run on 2026-11-24 on Linux at load 22 to 24.
 | No watch on the git folders | `gitWatcher.retarget` returns before it makes the set | `TestIdleCostStaysLow/git_section`: "the git section never showed a branch checked out outside the panes" | **caught** |
 | The positive half | this branch | none: every window 0 ticks and 0 ticker wakes but the late output's 1 and 1, the traces 0 wakeups, and the outside branch shown | **guard** |
 
+`TestGitSectionPollsWithoutAWatch` covers the fallback. The knob
+`git_watch_fail` makes the watch fail as a full inotify table does, and holds
+the failure until the test removes its file. So the failure lands after the
+client has gone quiet, and the client gets no other message. The test then
+checks out a branch from outside every pane, and waits one interval (1 s) and
+4 s of slack for the rail to show it. Run on 2026-11-24 on Linux, 3 runs each.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A failed watch does not wake the update loop | `gitWatcher.retarget`: `gw.polling.Store(true)` in place of the swap and the nudge | `TestGitSectionPollsWithoutAWatch`, 3 of 3: "with no watch, the git section never showed a branch checked out outside the panes" | **caught** |
+| The positive half | this branch | none, 3 of 3: the outside branch shown | **guard** |
+
 `TestKickFlushWritesTheFrame` (`internal/app`) is the in-process check of the
 mechanism: with the ticker stopped at 100 frames a second, nothing is written
 in 200 ms, and one value on the channel writes the frame.
