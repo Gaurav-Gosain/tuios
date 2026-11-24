@@ -229,6 +229,8 @@ func leanRefusal(verr *verbError) *string {
 		name = "held"
 	case verr.Code == ErrVerbTaskDone:
 		name = "done"
+	case verr.Hint != nil && verr.Hint.Param == "window":
+		name = "no_window"
 	case verr.Hint != nil && verr.Hint.Command != "":
 		name = "blocked"
 	}

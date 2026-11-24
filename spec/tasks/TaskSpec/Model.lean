@@ -129,13 +129,14 @@ def Action.name : Action → String
   | .verified => "verified" | .attached => "attached" | .detached => "detached"
 
 /-- Why apply refuses a move: the verbError it returns. A claim is refused
-by workable; a block of a done card is refused with done. -/
+by workable, or with noWindow when it names no pane; a block of a done card
+is refused with done. -/
 inductive Refusal where
-  | held | done | blocked
+  | held | done | blocked | noWindow
   deriving DecidableEq, Repr
 
 def Refusal.name : Refusal → String
-  | .held => "held" | .done => "done" | .blocked => "blocked"
+  | .held => "held" | .done => "done" | .blocked => "blocked" | .noWindow => "no_window"
 
 /-- taskByDaemon. -/
 def byDaemon : String := "tuios"
@@ -201,7 +202,9 @@ inductive Step where
 def step (c : Card) (m : Move) (now : Int) : Step :=
   match m.kind with
   | .claim =>
-    if c.holder = m.window then
+    -- A claim names the pane that takes the card.
+    if m.window = "" then .refused .noWindow
+    else if c.holder = m.window then
       if m.refresh then
         let c1 := { c with dispatched := m.dispatched }
         .none (if m.names then { c1 with holderName := m.name, holderHarness := m.harness } else c1)

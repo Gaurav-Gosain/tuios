@@ -1,9 +1,7 @@
 /-
 The invariants of the task card lifecycle, proved of the model in
 TaskSpec.Model. The rules cardRulesBroken checks in Go come first, then the
-rules the docs (tuios --skill tasks) promise, then counterexamples: a
-concrete card and move that break a rule, where the Go code does not stop
-them.
+rules the docs (tuios --skill tasks) promise.
 -/
 import TaskSpec.Model
 namespace TaskSpec
@@ -66,10 +64,11 @@ theorem step_moved (h : step c m now = .moved a to e c') :
 theorem step_moved_attempts (h : step c m now = .moved a to e c') : c.attempts ≤ c'.attempts := by
   (unfold step autoApplies at h; cases hk : m.kind <;> simp only [hk] at h <;> (repeat' split at h) <;> (try cases h)) <;> simp_all [Card.letGo] <;> omega
 
-/-- Only a claim is refused by workable, and only a block of a done card
-otherwise. -/
+/-- A claim is refused when it names no pane or workable refuses it, and a
+block when the card is done. Nothing else is refused. -/
 theorem step_refused (h : step c m now = .refused r) :
-    (m.kind = .claim ∧ c.workable m.window = some r) ∨ (m.kind = .block ∧ c.stage = .done ∧ r = .done) := by
+    (m.kind = .claim ∧ ((m.window = "" ∧ r = .noWindow) ∨ c.workable m.window = some r)) ∨
+      (m.kind = .block ∧ c.stage = .done ∧ r = .done) := by
   unfold step at h
   cases hk : m.kind <;> simp only [hk] at h <;> (repeat' split at h) <;> simp_all [Card.workable]
 
@@ -94,11 +93,12 @@ theorem step_none_history (h : step c m now = .none c') : c'.history = c.history
 
 /-! ## What every move keeps -/
 
-/-- A refused move changes nothing. It is a claim workable refuses, or a
-block of a done card. -/
+/-- A refused move changes nothing. It is a claim that names no pane or that
+workable refuses, or a block of a done card. -/
 theorem refused_changes_nothing (h : (apply c m now).refusal = some r) :
     (apply c m now).card = c ∧ (apply c m now).action = "" ∧
-      ((m.kind = .claim ∧ c.workable m.window = some r) ∨ (m.kind = .block ∧ c.stage = .done ∧ r = .done)) := by
+      ((m.kind = .claim ∧ ((m.window = "" ∧ r = .noWindow) ∨ c.workable m.window = some r)) ∨
+        (m.kind = .block ∧ c.stage = .done ∧ r = .done)) := by
   cases hs : step c m now
   · rw [apply_none hs] at h; simp at h
   · rw [apply_refused hs] at h ⊢; simp at h; subst h; exact ⟨rfl, rfl, step_refused hs⟩
@@ -208,16 +208,13 @@ theorem doneFree_preserved (hc : c.doneFree) (ha : Admissible c m) : (apply c m 
   · rw [apply_moved hs]; simp only
     (unfold step autoApplies at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all [Card.letGo]
 
-/-- "A card with no holder keeps its holder's time or name": never, when
-every claim names a pane. Nothing in the Go code holds that: a claim with
-window "" and refresh on a card no pane holds writes the names. -/
-theorem holderClean_preserved (hc : c.holderClean) (hw : m.kind = .claim → m.window ≠ "") :
-    (apply c m now).card.holderClean := by
+/-- "A card with no holder keeps its holder's time or name": never. -/
+theorem holderClean_preserved (hc : c.holderClean) : (apply c m now).card.holderClean := by
   unfold Card.holderClean at *
   cases hs : step c m now
   · rw [apply_none hs]
     unfold step at hs
-    cases hk : m.kind <;> simp only [hk] at hs hw <;> (repeat' split at hs) <;> (try cases hs) <;>
+    cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs) <;>
       simp_all
   · rw [apply_refused hs]; exact hc
   · rw [apply_moved hs]; simp only
@@ -283,17 +280,24 @@ theorem claim_starts_work (hk : m.kind = .claim) (h : (apply c m now).action ≠
   · rw [apply_moved hs]; simp only
     (unfold step autoApplies at hs; cases hk : m.kind <;> simp only [hk] at hs <;> (repeat' split at hs) <;> (try cases hs)) <;> simp_all
 
+/-- "A claim names a pane": a claim with no window is refused and changes
+nothing. -/
+theorem claim_names_a_pane (hk : m.kind = .claim) (hw : m.window = "") :
+    (apply c m now).refusal = some .noWindow ∧ (apply c m now).card = c := by
+  have hs : step c m now = .refused .noWindow := by unfold step; simp [hk, hw]
+  rw [apply_refused hs]; exact ⟨rfl, rfl⟩
+
 /-- "A claim by the pane that holds the card succeeds." -/
-theorem claim_by_holder_succeeds (hk : m.kind = .claim) (hh : c.holder = m.window) :
+theorem claim_by_holder_succeeds (hk : m.kind = .claim) (hh : c.holder = m.window) (hw : m.window ≠ "") :
     (apply c m now).refusal = none := by
   cases hs : step c m now
   · rw [apply_none hs]
-  · unfold step at hs; simp only [hk, hh, ite_true] at hs; (repeat' split at hs) <;> nomatch hs
+  · unfold step at hs; simp only [hk, hh, hw, ite_true, ite_false] at hs; (repeat' split at hs) <;> nomatch hs
   · rw [apply_moved hs]
 
 /-- A claim refuses a card another pane holds, a done card and a blocked
 card, in that order: task_held, then invalid_params. -/
-theorem claim_refusals (hk : m.kind = .claim) (hh : c.holder ≠ m.window) :
+theorem claim_refusals (hk : m.kind = .claim) (hh : c.holder ≠ m.window) (hw : m.window ≠ "") :
     (c.holder ≠ "" → (apply c m now).refusal = some .held) ∧
     (c.holder = "" → c.stage = .done → (apply c m now).refusal = some .done) ∧
     (c.holder = "" → c.stage ≠ .done → c.blocked.isSome → (apply c m now).refusal = some .blocked) := by

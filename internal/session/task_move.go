@@ -99,6 +99,10 @@ func (tk *TaskState) apply(m cardMove, now int64) (action, holder string, verr *
 	evHolder := holder
 	switch m.kind {
 	case moveClaim:
+		// A claim names the pane that takes the card.
+		if m.window == "" {
+			return "", holder, invalidParam("window", "a claim of task card "+tk.ID+" names no pane")
+		}
 		if tk.Holder == m.window {
 			if m.refresh {
 				tk.Dispatched = m.dispatched

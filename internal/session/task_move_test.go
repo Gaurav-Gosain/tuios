@@ -29,3 +29,22 @@ func TestAVerifyResultLiftsTheErroredBlock(t *testing.T) {
 		t.Fatalf("the card breaks its rules: %q", broken)
 	}
 }
+
+// TestAClaimNamesAPane: a claim with no window is refused and changes
+// nothing, also as a refresh of the names of a card no pane holds. Before,
+// that refresh wrote holder names on a card with no holder.
+//
+// Every verb names the claiming pane before it asks for the move, so the e2e
+// suite cannot send such a claim. The Lean model proves the rule for every
+// card (claim_names_a_pane and holderClean_preserved in spec/tasks).
+func TestAClaimNamesAPane(t *testing.T) {
+	tk := TaskState{ID: "t1", Stage: TaskStageTodo}
+	m := cardMove{kind: moveClaim, by: "far", window: "", refresh: true, names: true, name: "far", harness: "codex"}
+	action, _, verr := tk.apply(m, 9)
+	if action != "" || verr == nil || verr.Code != ErrVerbInvalidParams || verr.Hint == nil || verr.Hint.Param != "window" {
+		t.Fatalf("a claim with no window gave action %q and refusal %+v, want an invalid_params refusal on window", action, verr)
+	}
+	if tk.Holder != "" || tk.HolderName != "" || tk.HolderHarness != "" || tk.Stage != TaskStageTodo || len(tk.History) != 0 {
+		t.Fatalf("the refused claim changed the card: %+v", tk)
+	}
+}

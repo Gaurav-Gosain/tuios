@@ -54,7 +54,7 @@ The proofs hold for every card and every move, not only for the tested ones.
 
 | Theorem | What it says |
 | --- | --- |
-| `refused_changes_nothing` | Only a claim is refused, and a refused claim changes nothing |
+| `refused_changes_nothing` | Only a claim and a block of a done card are refused, and a refused move changes nothing |
 | `noop_changes_nothing` | A move with no action changes nothing. A refresh claim by the holder is the one exception: it writes `dispatched` and the holder's names |
 | `change_notes_one` | A move that changes the card adds one history entry with its action, `by`, time, stage and reason |
 | `history_bounded` | The history never grows past 100 entries |
@@ -62,7 +62,8 @@ The proofs hold for every card and every move, not only for the tested ones.
 | `attempts_monotone` | `attempts` never goes down |
 | `letting_go_moves_let_go` | A hand in, a verify result, and a move to verify that runs the command leave the card with no holder |
 | `doneFree_preserved` | A done card has no holder and no block, for the moves in `Admissible` |
-| `holderClean_preserved` | A card with no holder has no holder time or names, when every claim names a pane |
+| `holderClean_preserved` | A card with no holder has no holder time or names |
+| `claim_names_a_pane` | A claim with no window is refused and changes nothing |
 | `erroredHeld_preserved` | A card blocked on its errored agent has a holder, when block-task never blocks as tuios (`KeepsErroredHeld`) |
 | `letting_go_lifts_errored_block` | A move that lets the holder go lifts the block on its errored agent: the block belongs to the holder |
 | `block_of_done_refused` | A block of a done card is refused with `task_done` and changes nothing |
@@ -74,12 +75,6 @@ The proofs hold for every card and every move, not only for the tested ones.
 | `auto_leaves_blocked_and_done` | An automatic move does not change a blocked card or a done card |
 | `verified_keeps_a_blocked_card` | A verify result on a blocked card keeps its stage and its block. The note says what the verify found |
 | `blocked_card_never_moves_on_its_own` | Neither an automatic move nor a verify result changes the stage of a blocked card |
-
-## Rules the Go code does not hold
-
-`holderClean_preserved` also needs every claim to name a pane. The Go code
-does not check that. A refresh claim with an empty window writes the names on
-a card that no pane holds.
 
 ## What is only tested
 

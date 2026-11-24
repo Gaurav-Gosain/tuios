@@ -8068,7 +8068,8 @@ A refusal from the owner keeps its code, with the message prefixed `on HOST:`.
 
 `claim-task` of a card another pane holds is `task_held`. An unknown `id`, or
 `next` with nothing open to take, is `no_task`. Claiming a card that is done
-or blocked is `invalid_params`. `block-task` of a done card is `task_done`.
+or blocked is `invalid_params`, and so is a claim that names no pane.
+`block-task` of a done card is `task_done`.
 
 `attach-task` sends the file's bytes in `content`; the daemon never reads a
 path. A file over `[tasks] attachment_max_mib`, or one that takes the
