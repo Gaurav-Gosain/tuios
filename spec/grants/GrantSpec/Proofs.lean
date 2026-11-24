@@ -198,7 +198,9 @@ theorem pane_stays_in_scope {s : State} {c : Caller} {pa : PaneAuth} {v : String
 
 /-- Writing outside the pane's own session needs fan: a pane without admin
 types into, or leaves mail in, another session only with fan, and only in
-its fan group. -/
+its fan group. respond is a write verb, so this is also the reach of
+respond that the respond row of skills/tuios/grants.md, the grant table of
+docs/protocol.md and the respond verb doc state. -/
 theorem write_outside_needs_fan {s : State} {c : Caller} {pa : PaneAuth} {v : String} {t t' : Target}
     (ha : s.auth c = some pa) (hn : pa.grants.admin = false) (ht : s.holdToOwnTree pa v t = none)
     (hk : (verbInfo v).grant = .mail ∨ (verbInfo v).grant = .write) (h : s.checkGrants c v t = .ok t')

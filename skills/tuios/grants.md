@@ -15,7 +15,7 @@ tuios pane-grants --json | jq -r '.grants | join(",")'
 | `read` | Read your own session and your fan group: list, `get-window`, capture, agent state, waits, the event stream, mail |
 | `write` | Type into the panes of your own session that hold nothing you do not, and leave mail and stashed files there |
 | `fan` | Write in your fan group and the sessions you launched, and start agents with `fan` and `start-agent`. Close the panes that you started, and the panes that they started, with `close-window`, and wait for them with `wait-for agent-state --select` |
-| `respond` | Answer another pane's prompt with `respond`, for the person, and type into a pane waiting on a prompt |
+| `respond` | Answer another pane's prompt with `respond`, for the person, and type into a pane waiting on a prompt. You answer for the panes of your own session. With `fan` you also answer in your fan group, and with `admin` in every session |
 | `files` | Copy files with `tuios cp`, and see and control your own copies with `tuios transfers` |
 | `task` | Add, claim, finish, stage, block and release the task cards of your own session (`tuios task`). You claim only for yourself and change only the card you hold |
 | `admin` | Everything else: other sessions, listings across sessions, windows, layouts, options, `kill-session`, `run-command`, `switch-session`, `detach-client`, attach, any task card and `tuios task rm`. Includes `read`, `write`, `fan`, `files` and `task`, never `respond` |

@@ -83,7 +83,7 @@ the tested ones.
 | `covers_respond`, `covers_admin` | A pane gives respond or admin only when it holds it |
 | `covers_trans`, `covers_refl`, `covers_meet` | What a pane holds covers what it gives on |
 | `pane_stays_in_scope` | A pane without admin reaches through a verb that names a session only its own session, a session of its fan group (with read for a read, with fan for the rest), or the attempts it judges |
-| `write_outside_needs_fan` | A pane without admin types into, or leaves mail in, another session only with fan, and only in its fan group |
+| `write_outside_needs_fan` | A pane without admin types into, or leaves mail in, another session only with fan, and only in its fan group. This is also the reach of respond |
 | `tasks_and_reports_stay_home` | A task write and a report of a pane without admin stay in its own session |
 | `reports_only_for_own_pane` | A pane reports only about its own pane unless it holds respond, with admin too |
 | `admin_verbs_need_admin` | A pane without admin calls a verb that needs admin only as a copy with files, or as a close of a pane of its own tree |
