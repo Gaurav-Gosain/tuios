@@ -186,6 +186,16 @@ func codexInjected(s string) bool {
 	if strings.HasPrefix(s, "# AGENTS.md instructions") {
 		return true
 	}
+	return oneTag(s, func(r rune) bool {
+		return r >= 'a' && r <= 'z' || r == '_' || r == '-' || r == ' '
+	})
+}
+
+// oneTag reports text that is all one tag, <name ...>...</name>, whose
+// opening tag holds only what inTag allows. A harness writes the context it
+// adds to a prompt this way, each in its own spelling of tag names, so the
+// spelling is what keeps a person's own tagged text from being taken for it.
+func oneTag(s string, inTag func(rune) bool) bool {
 	if len(s) < 3 || s[0] != '<' {
 		return false
 	}
@@ -195,7 +205,7 @@ func codexInjected(s string) bool {
 	}
 	tag := s[1:end]
 	for _, r := range tag {
-		if !(r >= 'a' && r <= 'z' || r == '_' || r == '-' || r == ' ') {
+		if !inTag(r) {
 			return false
 		}
 	}

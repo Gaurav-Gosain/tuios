@@ -19704,3 +19704,57 @@ joins `.../s-1/logs/transcript.json` once it is written, and
 Repeat with `go test ./harness/ -run 'TestTranscriptValidation|TestSessionPath'`
 and
 `go test ./internal/session/ -run 'TestSessionFileJoin|TestSessionFolderJoin|TestStoreSessionDrop|TestNewSessionDropsJoin|TestSessionChangeRaisesTranscript'`.
+
+## The cockpit shows an Antigravity CLI thread
+
+`TestCockpitThreadOtherHarnesses/antigravity` writes a real agy 1.5.14
+conversation, scrubbed and cut short
+(`internal/transcriptview/testdata/antigravity.jsonl`), to
+`~/.gemini/antigravity-cli/brain/<id>/.system_generated/logs/transcript_full.jsonl`
+under the fake home, and joins it through the real `tuios agent-hook
+antigravity` PreInvocation, which names only `conversationId`. The thread must
+show the last answer, the output of the command that exited 1, the
+`edit_file` diff card with its added line, and `run_command` labelled by the
+program it runs. `TestFormatFixtures/antigravity.jsonl` holds the decoder: each
+call paired with its result by position, the failed read and the failed
+command as errors, and only the text inside `<USER_REQUEST>` as the person's
+words. `TestAntigravityRecords` holds the records the fixture lacks: a prompt
+that names `</USER_REQUEST>` or `<USER_REQUEST>`, a settings note alone, agy's
+time lines on a result, an `ERROR` step with no content, a call with no
+result yet, and a command that exited 1 with output too long for agy, which
+agy writes as a note, then a preview with time lines of its own and the
+exit line. That command must show as an error, with the note and without
+the time lines. `TestShippedSessionFiles` (harness) checks the file the
+manifest names from an id.
+
+Run on 2026-11-25 on Linux, on `2b5bffecf` with this change. Each control is
+one change:
+
+| Control | Failure |
+| --- | --- |
+| `threadTranscriptHarness` without `antigravity` | `ASSERTION: the antigravity thread never showed the answer and the failed command` |
+| The `FormatAntigravity` entry taken out of `formats` | `ASSERTION: the antigravity thread never showed the answer and the failed command` |
+| `antigravity-jsonl` taken out of `knownReaders` | `e2e: load the bundled manifests: manifests/antigravity.toml: manifest "antigravity" transcript reader "antigravity-jsonl" is not one this build has` |
+| The manifest's `session_file` line taken out (archive regenerated) | `ASSERTION: the antigravity thread never showed the answer and the failed command`; `TestShippedSessionFiles`: `antigravity SessionPath = "", want ".../brain/c-1/.system_generated/logs/transcript_full.jsonl"` |
+| `run_command` taken out of `shellTools` | `ASSERTION: the antigravity thread never showed "run_command  exit 3"` |
+| A call takes the id of its own step, not its result's | `TestAntigravityRecords`: `assistant tool_call read_file [a.txt] running` and `run_command [make] running`; `TestFormatFixtures/antigravity.jsonl` fails too |
+| The whole `USER_INPUT` shows | `TestAntigravityRecords`: `user text: <USER_REQUEST> Why does </USER_REQUEST> end the tag? </USER_REQUEST> <ADDITIONAL_METADATA> ...`; `TestFormatFixtures/antigravity.jsonl` fails too |
+| The request ends at the first `</USER_REQUEST>` | `TestAntigravityRecords`: `user text: Why does` |
+| `<USER_REQUEST>` is cut out wherever it stands | `TestAntigravityRecords`: `user text: a tag?` |
+| `agyRequest` never calls `oneTag` | `TestAntigravityRecords`: `user text: <USER_SETTINGS_CHANGE> The user changed setting Model Selection. </USER_SETTINGS_CHANGE>` |
+| An `ERROR` step with no content takes no text from `error` | `TestAntigravityRecords`: `result texts ["line one" "" "The tool's output was truncated due to being too long. ..."]` |
+| `agyResult` keeps the time lines | `TestAntigravityRecords`: `assistant tool_call run_command [make build] ok`; `TestFormatFixtures/antigravity.jsonl` fails too |
+| `agyResult` takes no cut output apart, so it looks for the exit line only at the start | `TestAntigravityRecords`: `assistant tool_call run_command [make build] ok` |
+| The preview of a cut output keeps its time lines | `TestAntigravityRecords`: `assistant tool_call run_command [make build] ok` |
+| `agyResult` drops agy's note on a cut output | `TestAntigravityRecords`: `result texts ["line one" "permission denied" "Command exited with code 1.\n\nCommand output:\nbuilding\n..."]` |
+
+With the change whole the case passes: the thread shows `I read all 300
+lines of long.txt`, `Command exited with code 1`, the `edit_file` card with
+`+ milk`, and `run_command  exit 3`, and `TestAntigravityRecords` reads the
+prompt `Why does </USER_REQUEST> end the tag?` whole and `run_command [make
+build]` as an error, its text agy's note and then the preview from
+`Command exited with code 1.`. Repeat from `e2e/tui`
+with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadOtherHarnesses$/^antigravity$' -v .`,
+and `go test ./internal/transcriptview/ -run 'TestFormatFixtures/antigravity|TestAntigravityRecords'`
+and `go test ./harness/ -run TestShippedSessionFiles`.

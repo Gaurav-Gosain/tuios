@@ -33,6 +33,10 @@ const (
 	// FormatAmp is an Amp thread, one JSON document Amp rewrites whole
 	// (amp.go).
 	FormatAmp = "amp-thread"
+	// FormatAntigravity is an Antigravity CLI conversation, ~/.gemini/
+	// antigravity-cli/brain/<conversation>/.system_generated/logs/
+	// transcript_full.jsonl (antigravity.go).
+	FormatAntigravity = "antigravity-jsonl"
 )
 
 // decoded is what one record gave.
@@ -80,14 +84,15 @@ func (f format) isDoc(path string) bool {
 }
 
 var formats = map[string]format{
-	FormatClaude:  {line: claudeLine},
-	FormatCodex:   {line: codexLine, identity: codexIdentity},
-	FormatGemini:  {line: geminiLine, doc: geminiDoc, docExt: ".json", identity: geminiIdentity},
-	FormatQwen:    {line: qwenLine, identity: qwenIdentity},
-	FormatCopilot: {line: copilotLine, identity: copilotIdentity},
-	FormatAmp:     {line: ampLine, doc: ampDoc},
-	FormatCursor:  {line: cursorLine},
-	FormatPi:      {line: piLine, tree: true},
+	FormatClaude:      {line: claudeLine},
+	FormatCodex:       {line: codexLine, identity: codexIdentity},
+	FormatGemini:      {line: geminiLine, doc: geminiDoc, docExt: ".json", identity: geminiIdentity},
+	FormatQwen:        {line: qwenLine, identity: qwenIdentity},
+	FormatCopilot:     {line: copilotLine, identity: copilotIdentity},
+	FormatAmp:         {line: ampLine, doc: ampDoc},
+	FormatCursor:      {line: cursorLine},
+	FormatPi:          {line: piLine, tree: true},
+	FormatAntigravity: {line: agyLine},
 }
 
 // lookupFormat returns the format a name names, FormatClaude for "".
@@ -325,7 +330,7 @@ func args(v any) jobj {
 //
 //go:noinline
 func command(a jobj) string {
-	for _, k := range []string{"command", "cmd"} {
+	for _, k := range []string{"command", "cmd", "CommandLine"} {
 		switch v := a[k].(type) {
 		case string:
 			if v != "" {
@@ -382,7 +387,7 @@ func commandLine(a jobj) string {
 //
 //go:noinline
 func fileOf(a jobj) string {
-	return a.str("file_path", "absolute_path", "filePath", "path", "dir_path", "target_file", "relative_workspace_path")
+	return a.str("file_path", "absolute_path", "filePath", "path", "dir_path", "target_file", "relative_workspace_path", "Path")
 }
 
 // targetOf is the one line that says what a call acts on.
@@ -421,10 +426,10 @@ func callEntry(name, id string, class toolClass, a jobj) []Entry {
 		raw.plan, raw.textCut = cutString(plan, rawTextMax)
 		return []Entry{e}
 	case classEdit:
-		old, nw := a.str("old_string", "old_str", "oldString"), a.str("new_string", "new_str", "newString")
+		old, nw := a.str("old_string", "old_str", "oldString", "Target"), a.str("new_string", "new_str", "newString", "Replacement")
 		raw.diff = &diffSrc{file: fileOf(a), pairs: [][2]string{{old, nw}}}
 	case classWrite:
-		raw.diff = &diffSrc{file: fileOf(a), pairs: [][2]string{{"", a.str("content", "file_text")}}}
+		raw.diff = &diffSrc{file: fileOf(a), pairs: [][2]string{{"", a.str("content", "file_text", "Content")}}}
 	case classPatch:
 		patch := a.str("input")
 		if patch == "" {

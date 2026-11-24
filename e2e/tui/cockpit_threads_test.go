@@ -16,28 +16,33 @@ import (
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
-// TestCockpitThreadOtherHarnesses reads a Codex rollout, a Gemini CLI chat, a
-// Copilot CLI session and an Amp thread in the agent thread, the way the
-// Claude Code transcript is read in TestCockpitThreadCards: the real hook of
-// each harness names its file, and the cockpit draws the conversation. Amp's
-// plugin names only the thread id, and the manifest's session_file turns it
-// into the file. Each thread has to show a tool card
-// with a failed command's output, a diff card with its added line, and the
-// harness's error. The Codex thread shows each shell command by its program,
-// with bash -lc and cd dir && taken off, and an ESC byte in one as ␛. Gemini writes a message again when a tool call finishes,
-// and the thread has to show that edit once. A Gemini message written again
-// with new text while the thread is open shows the new text.
+// TestCockpitThreadOtherHarnesses reads the transcript of each harness with a
+// reader other than Claude Code's (Pi, Codex, Gemini CLI, Copilot CLI, Amp,
+// opencode, Cursor Agent and Antigravity CLI) in the agent thread, the way
+// the Claude Code transcript is read in TestCockpitThreadCards: the real hook
+// of each harness names its file, and the cockpit draws the conversation.
+// Amp's plugin and Antigravity CLI's hook name only the session id, and the
+// manifest's session_file turns it into the file. Each thread has to show a
+// tool card with a failed command's output, a diff card with its added line,
+// and the harness's error. The Codex thread shows each shell command by its
+// program, with bash -lc and cd dir && taken off, and an ESC byte in one as
+// ␛. Gemini writes a message again when a tool call finishes, and the thread
+// has to show that edit once. A Gemini message written again with new text
+// while the thread is open shows the new text.
 //
 // Negative controls, recorded in NEGATIVE_CONTROLS.md: with the cockpit
-// reading transcripts of Claude Code alone (threadTranscriptHarness), both
-// threads show the recap and the card checks fail. With the decoder's drop of
+// reading transcripts of Claude Code alone (threadTranscriptHarness), the
+// card checks of each case fail. With the decoder's drop of
 // a message written again removed, this test still passes, because the client
 // replaces an entry by its id; TestFormatFixtures in internal/transcriptview
 // catches that one. With CommandLabel returning its input, the Codex thread
 // shows "exec_command  bash -lc 'cd /work/project && go test ./...'" and
 // fails both the label and the wrapper checks. With the decoder's
 // ControlPictures removed, the daemon strips the ESC sequence and the
-// printf line check fails.
+// printf line check fails. The antigravity case fails with
+// FormatAntigravity taken out of formats, antigravity-jsonl out of
+// knownReaders, the manifest's session_file line out, or run_command out of
+// shellTools.
 func TestCockpitThreadOtherHarnesses(t *testing.T) {
 	cases := []struct {
 		name, harness, fixture, sessionID string
@@ -122,6 +127,16 @@ func TestCockpitThreadOtherHarnesses(t *testing.T) {
 			file: filepath.Join(".cursor", "projects", "work-project", "agent-transcripts", "c0ffee00-0000-4000-8000-000000000001.jsonl"),
 			want: []string{"b is three. One test fails.", "1 failing", "edit_file", "const b = 3;", "run_terminal_cmd"},
 			once: "Set b to three.",
+		},
+		{
+			// agy's hook names only the conversation id, and the
+			// manifest's session_file turns it into the file in the
+			// conversation's folder.
+			name: "antigravity", harness: "antigravity", fixture: "antigravity.jsonl", sessionID: "0a9e0000-0000-4000-8000-000000000001",
+			file:    filepath.Join(".gemini", "antigravity-cli", "brain", "0a9e0000-0000-4000-8000-000000000001", ".system_generated", "logs", "transcript_full.jsonl"),
+			want:    []string{"I read all 300 lines of long.txt", "Command exited with code 1", "edit_file", "+ milk", "run_command  exit 3"},
+			once:    "Second part of the test.",
+			payload: `{"hook_event_name":"PreInvocation","conversationId":"0a9e0000-0000-4000-8000-000000000001"}`,
 		},
 	}
 	for _, c := range cases {

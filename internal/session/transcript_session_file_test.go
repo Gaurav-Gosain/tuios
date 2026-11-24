@@ -232,11 +232,12 @@ func TestSessionFolderJoin(t *testing.T) {
 
 // TestNewSessionDropsJoin checks which bundled harnesses lose a pane's join
 // when a report changes the session id and joins nothing: a tree transcript
-// (Pi), a session_file (Amp) and a by_session store (opencode), each joined
-// only by what a hook names, and not one the daemon can find by search.
+// (Pi), a session_file (Amp, Antigravity CLI) and a by_session store
+// (opencode), each joined only by what a hook names, and not one the daemon
+// can find by search.
 func TestNewSessionDropsJoin(t *testing.T) {
 	d, _ := startTestDaemon(t)
-	for id, want := range map[string]bool{"pi": true, "amp": true, "opencode": true, "claude-code": false, "codex": false, "": false} {
+	for id, want := range map[string]bool{"pi": true, "amp": true, "antigravity": true, "opencode": true, "claude-code": false, "codex": false, "": false} {
 		if got := d.newSessionDropsJoin(id); got != want {
 			t.Errorf("newSessionDropsJoin(%q) = %v, want %v", id, got, want)
 		}

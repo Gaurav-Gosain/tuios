@@ -2115,11 +2115,11 @@ func (s *Session) leaveConversation(windowID, previousPath string, joined bool) 
 // It returns whether the pane is joined to that file now, and the refusal for
 // the reply when the file was not joined.
 //
-// A harness whose hook names its session and not its file (Amp): the
-// manifest's session_file names the file, and it is held to the same rules
-// as a path a hook reports, joinReportedTranscript's pane checks among them.
-// A report with no connection (herdr's socket, which any client may write
-// to) names no file, the same as it can name no transcript_path.
+// A harness whose hook names its session and not its file (Amp, Antigravity
+// CLI): the manifest's session_file names the file, and it is held to the
+// same rules as a path a hook reports, joinReportedTranscript's pane checks
+// among them. A report with no connection (herdr's socket, which any client
+// may write to) names no file, the same as it can name no transcript_path.
 //
 // The file must exist before it is joined, so a report that comes before the
 // harness writes it joins nothing. A later report of the same id is still

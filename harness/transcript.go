@@ -64,15 +64,16 @@ const ReaderJSONL = "claude-code-jsonl"
 // internal/transcriptview, which this package does not import, so the names
 // are kept in step by hand.
 var knownReaders = map[string]struct{}{
-	ReaderJSONL:        {},
-	"codex-rollout":    {},
-	"gemini-chat":      {},
-	"qwen-chat":        {},
-	"copilot-events":   {},
-	"amp-thread":       {},
-	"opencode-service": {},
-	"cursor-jsonl":     {},
-	"pi-jsonl":         {},
+	ReaderJSONL:         {},
+	"codex-rollout":     {},
+	"gemini-chat":       {},
+	"qwen-chat":         {},
+	"copilot-events":    {},
+	"amp-thread":        {},
+	"opencode-service":  {},
+	"cursor-jsonl":      {},
+	"pi-jsonl":          {},
+	"antigravity-jsonl": {},
 }
 
 // verifiableFields are the record fields Verify may name. They are the agent's

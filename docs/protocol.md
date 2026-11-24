@@ -5616,17 +5616,17 @@ The optional hook fields:
 - `agent_session_id`: the harness's own conversation id. Stored as the window's
   `agent_session_id`, persisted, and kept when the agent exits. It also turns
   on the nested-session guard below. Without `transcript_path` it names the
-  transcript of a harness whose manifest has a `session_file` (Amp): the
-  window is joined to the file `session_file` makes of the id, once that file
-  exists, so a later report of the same id joins a file the harness wrote
-  after the first. For a `by_session` harness (opencode) it joins that session
-  of the harness's store. The id names a file only when it is letters,
-  digits, `.`, `_` or `-`, at most 128 bytes, with no `..` and not ending in
-  `.`, so it cannot name one outside the transcript folder or, on Windows,
-  another conversation's, and only from a report over a connection: herdr's
-  socket names no file. A report that changes the id of such a pane, or of a
-  tree transcript's (Pi's), and joins no file drops the previous
-  conversation's join.
+  transcript of a harness whose manifest has a `session_file` (Amp,
+  Antigravity CLI): the window is joined to the file `session_file` makes of
+  the id, once that file exists, so a later report of the same id joins a file
+  the harness wrote after the first. For a `by_session` harness (opencode) it
+  joins that session of the harness's store. The id names a file only when
+  it is letters, digits, `.`, `_` or `-`, at most 128 bytes, with no `..` and
+  not ending in `.`, so it cannot name one outside the transcript folder or,
+  on Windows, another conversation's, and only from a report over a
+  connection: herdr's socket names no file. A report that changes the id of
+  such a pane, or of a tree transcript's (Pi's), and joins no file drops the
+  previous conversation's join.
 - `transcript_path`: the transcript file the harness writes. For a harness whose
   manifest has a transcript reader, the window is joined to exactly that file.
   It is held in daemon memory and never synced.
@@ -7535,10 +7535,30 @@ show the conversation in its own view, for example a phone app: prompts,
 answers, thinking, tool calls, diffs of edits, plans and todo lists.
 
 The daemon reads the transcript file that the pane is joined to. The pane is
-joined when the agent's hooks report `transcript_path`, or when the daemon
-finds the one file that belongs to the pane. The path stays in the daemon.
+joined when the agent's hooks report `transcript_path` or a session id that
+names the file, or when the daemon finds the one file that belongs to the
+pane. The path stays in the daemon.
 The caller names a window, never a file. The daemon reads Claude Code, Codex, Gemini CLI, Qwen Code, Copilot CLI, Amp,
-OpenCode, Cursor Agent and Pi transcripts.
+OpenCode, Cursor Agent, Pi and Antigravity CLI transcripts.
+
+#### Antigravity CLI conversations
+
+Antigravity CLI's `antigravity-jsonl` reader reads `transcript_full.jsonl` in
+the conversation's folder,
+`~/.gemini/antigravity-cli/brain/<conversation id>/.system_generated/logs/`,
+checked against agy 1.5.14. The records do not name the folder agy ran in,
+so the daemon finds no file by search: the pane is joined only from the
+conversation id that agy's hook reports on `PreInvocation`
+(`tuios integration install antigravity`). `transcript.jsonl` beside it cuts
+long values, so it is not read. A tool call carries no id and its result
+names no tool, so a result is paired with its call by position: a reply with
+N calls is followed by their N results, in call order. A command whose exit
+line (`Command exited with code N.`) names a code other than 0 is an error,
+though agy marks its step `DONE`. When the output is too long, agy saves it
+to a file and writes a note and a preview with the exit line in it; the
+note shows above the preview, and the exit line there counts the same. The
+context agy adds to the person's message and the reminders it injects do
+not show.
 
 #### Pi sessions
 

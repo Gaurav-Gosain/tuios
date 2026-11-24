@@ -4413,6 +4413,9 @@ nothing else: Droid, Qoder and Grok `SessionStart` (Grok's id from
 `GROK_SESSION_ID` first), Devin `SessionStart` and `UserPromptSubmit`, Antigravity `PreInvocation` (`conversationId`), Crush
 `PreToolUse` (`CRUSH_SESSION_ID` first; it is the only event Crush has), and
 Hermes `on_session_start` and `on_session_reset` for an interactive session.
+Antigravity's id also joins the pane to the conversation's transcript, which
+its manifest's `session_file` names, so its agent thread shows the
+conversation.
 
 `idle_prompt` does not report `done`: `Stop` already did, and `done` has to stay
 so the person still sees that the turn finished. It only corrects a pane still
@@ -4595,13 +4598,14 @@ to the transcript source: for a harness whose manifest has a transcript reader
 search that refuses whenever two files in one directory could both be the
 pane's.
 
-A harness whose hook names only the conversation id (Amp) is joined from the
-id. Its manifest's `session_file` names the file the id stands for under the
-transcript folder, such as `{session_id}.json` or a fixed path in a folder per
-session. Either verb joins it, but only once the file exists, so a report sent
-before the harness writes the file joins nothing and the next one joins it. A
-new id whose file is not there yet drops the previous conversation's join, so
-a new conversation does not show the last one.
+A harness whose hook names the conversation id and not the file (Amp,
+Antigravity CLI) is joined from the id. Its manifest's `session_file` names
+the file the id stands for under the transcript folder, such as
+`{session_id}.json` or a fixed path in a folder per session. Either verb joins
+it, but only once the file exists, so a report sent before the harness writes
+the file joins nothing and the next one joins it. A new id whose file is not
+there yet drops the previous conversation's join, so a new conversation does
+not show the last one.
 
 ### Failure behaviour
 

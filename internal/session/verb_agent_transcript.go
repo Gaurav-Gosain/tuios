@@ -202,7 +202,7 @@ func (d *Daemon) pasteDir() string {
 // daemon can read.
 func unsupportedHarnessError(harnessID string) *verbError {
 	return hintedVerbError(ErrVerbUnsupportedHarness, "the transcript of "+echoName(harnessID)+" cannot be read", &VerbHint{
-		Detail: "agent-transcript reads the transcripts of Claude Code, Codex, Gemini CLI, Qwen Code, Copilot CLI and Amp. Read the pane with capture-pane or stream-pane instead.",
+		Detail: "agent-transcript reads the transcripts of Claude Code, Codex, Gemini CLI, Qwen Code, Copilot CLI, Amp, OpenCode, Cursor Agent, Pi and Antigravity CLI. Read the pane with capture-pane or stream-pane instead.",
 	})
 }
 

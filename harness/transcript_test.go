@@ -283,8 +283,9 @@ func TestSessionPath(t *testing.T) {
 	}
 }
 
-// Every bundled manifest loads under the session_file rules, and Amp's, whose
-// id shares the file name with its extension, still names its thread file.
+// Every bundled manifest loads under the session_file rules, Amp's, whose
+// id shares the file name with its extension, still names its thread file,
+// and Antigravity CLI's names the file in the conversation's folder.
 func TestShippedSessionFiles(t *testing.T) {
 	reg, errs := Load()
 	if len(errs) != 0 {
@@ -296,6 +297,13 @@ func TestShippedSessionFiles(t *testing.T) {
 	}
 	if got, want := tr.SessionPath("T-1"), filepath.Join(tr.Root(), "T-1.json"); got != want {
 		t.Fatalf("amp SessionPath = %q, want %q", got, want)
+	}
+	tr = reg.TranscriptFor("antigravity")
+	if tr == nil {
+		t.Fatal("antigravity has no transcript block")
+	}
+	if got, want := tr.SessionPath("c-1"), filepath.Join(tr.Root(), "c-1", ".system_generated", "logs", "transcript_full.jsonl"); got != want {
+		t.Fatalf("antigravity SessionPath = %q, want %q", got, want)
 	}
 }
 
