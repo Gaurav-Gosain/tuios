@@ -5,7 +5,8 @@
 #
 #   cd e2e/tui
 #   for id in $(gh run list -w e2e-tui.yml -b main -s success -L 10 --json databaseId -q '.[].databaseId'); do
-#     gh run view "$id" --log > "/tmp/e2e-$id.log"
+#     tested=$(gh run view "$id" --log | grep -om1 'TESTED_URL: .*/runs/[0-9]*' | grep -o '[0-9]*$')
+#     gh run view "${tested:-$id}" --log > "/tmp/e2e-${tested:-$id}.log"
 #   done
 #   go run ./shardplan -update /tmp/e2e-*.log
 TestABareTuiosInAPaneIsTheBuildUnderTest 0.2
