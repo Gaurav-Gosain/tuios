@@ -25,6 +25,15 @@ pkgs.buildGo127Module rec {
   # branch names.
   nativeCheckInputs = [ pkgs.git ];
 
+  nativeBuildInputs = [ pkgs.installShellFiles ];
+
+  postInstall = pkgs.lib.optionalString (pkgs.stdenv.buildPlatform.canExecute pkgs.stdenv.hostPlatform) ''
+    installShellCompletion --cmd tuios \
+      --bash <($out/bin/tuios completion bash) \
+      --zsh <($out/bin/tuios completion zsh) \
+      --fish <($out/bin/tuios completion fish)
+  '';
+
   # tuios --version reports the release rather than "dev". Release archives
   # spell the version without the v, and so does this.
   ldflags = [
