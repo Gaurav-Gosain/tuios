@@ -469,14 +469,15 @@ func (m *OS) DockComponents() []DockComponentInfo {
 }
 
 // renderDockRightCells draws the right block's cells in plan order and reports
-// where each custom one landed inside the block.
+// where each custom one landed inside the block, and where every named cell
+// landed, which is what hover help walks.
 //
 // The degradation order is the design's, and it is not arbitrary. The meters
 // are readouts nobody can act on, so they already yielded their columns to the
 // minimized entries; a custom cell yields before either, because it is the one
 // thing on the bar tuios cannot reason about the value of. What is left when
 // nothing fits is the same thing that was left before components existed.
-func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, []dockCustomHit) {
+func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, []dockCustomHit, []dockCustomHit) {
 	// One pass over the plan builds the segments in draw order. The two meters
 	// are one segment, emitted where the first of them is named, so a plan of
 	// ["cpu", "custom/x"] draws the readouts and then the cell.
@@ -491,14 +492,14 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 		buttons bool
 	}
 
-	meters := m.dockMeterParts()
+	meters, meterNames := m.dockMeterParts(), m.dockMeterNames()
 	var segs []segment
 	placedMeters := false
 	fit := dockButtonsFit{shown: len(m.dockButtonRow())}
 	for _, name := range m.dockPlan.Right {
 		switch name {
 		case config.DockComponentButtons:
-			segs = append(segs, segment{buttons: true})
+			segs = append(segs, segment{buttons: true, name: name})
 		case config.DockComponentCPU, config.DockComponentRAM:
 			if placedMeters || len(meters) == 0 {
 				continue
@@ -525,13 +526,21 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 
 	for {
 		var b strings.Builder
-		var hits []dockCustomHit
+		var hits, helpHits []dockCustomHit
 		x := 0
 		for _, seg := range segs {
 			text, width := seg.text, seg.width
 			if seg.meters {
 				text = meterStyle.Render(strings.Join(meters, " "))
 				width = lipgloss.Width(text)
+				// The readouts share one segment but are separate parts, so
+				// each one records the columns it alone occupies.
+				px := x
+				for i, part := range meters {
+					pw := lipgloss.Width(part) // the style adds only its margin, once, after the last
+					helpHits = append(helpHits, dockCustomHit{X0: px, X1: px + pw, Name: meterNames[i]})
+					px += pw + 1 // the space joining the readouts
+				}
 			}
 			if seg.buttons {
 				var bh []dockCustomHit
@@ -545,11 +554,14 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 			if seg.hit {
 				hits = append(hits, dockCustomHit{X0: x, X1: x + width, Name: seg.name})
 			}
+			if seg.name != "" && width > 0 {
+				helpHits = append(helpHits, dockCustomHit{X0: x, X1: x + width, Name: seg.name})
+			}
 			b.WriteString(text)
 			x += width
 		}
 		if x <= room {
-			return b.String(), hits
+			return b.String(), hits, helpHits
 		}
 
 		// A custom cell yields before a meter does, because it is the one thing
@@ -561,11 +573,11 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 			continue
 		}
 		if len(meters) > 1 {
-			meters = meters[1:]
+			meters, meterNames = meters[1:], meterNames[1:]
 			continue
 		}
 		if len(meters) == 1 {
-			meters = nil
+			meters, meterNames = nil, nil
 			if i := lastSegmentMatching(len(segs), func(i int) bool { return segs[i].meters }); i >= 0 {
 				segs = append(segs[:i], segs[i+1:]...)
 			}
@@ -587,7 +599,7 @@ func (m *OS) renderDockRightCells(room int, meterStyle lipgloss.Style) (string, 
 		}
 		// Nothing left to give up. Whatever remains is drawn and the bar's own
 		// backstop truncates it.
-		return b.String(), hits
+		return b.String(), hits, helpHits
 	}
 }
 

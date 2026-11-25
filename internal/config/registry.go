@@ -421,7 +421,7 @@ func buildPressesByAction(r *KeybindRegistry) map[string][]string {
 // no chord that would say so.
 func contextOnlyScope(scope string) bool {
 	switch scope {
-	case ScopeSidebar, ScopeSidebarFiles, ScopeSidebarAgents, ScopeQuickLook, ScopeQuickLookIn, ScopeScript, ScopeLists, ScopeInbox, ScopeInboxPeek, ScopeMail, ScopeTransfers, ScopeCopyMode, ScopeReview:
+	case ScopeSidebar, ScopeSidebarFiles, ScopeSidebarAgents, ScopeQuickLook, ScopeQuickLookIn, ScopeScript, ScopeLists, ScopeInbox, ScopeInboxPeek, ScopeMail, ScopeTransfers, ScopeCopyMode, ScopeReview, ScopeHelp:
 		return true
 	case ScopeGUI:
 		// Only the GUI reads these keys. A terminal's help that listed
