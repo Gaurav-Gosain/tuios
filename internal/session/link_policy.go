@@ -142,6 +142,7 @@ var msgCapabilities = map[MessageType]linkCaps{
 	MsgSubscribePTY:      {config.LinkAllowList},
 	MsgUnsubscribePTY:    {config.LinkAllowList},
 	MsgGetTerminalState:  {config.LinkAllowList},
+	MsgReadHistory:       {config.LinkAllowList},
 	MsgReadDir:           {config.LinkAllowList},
 	MsgWatchDir:          {config.LinkAllowList},
 	MsgGetLogs:           {config.LinkAllowList},

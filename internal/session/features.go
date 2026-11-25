@@ -17,14 +17,34 @@ import "slices"
 // TestFeatureNamesAreDeclaredInFeaturesGo holds every Has call to them.
 type Feature string
 
-// knownFeatures is every feature this build has.
-var knownFeatures []Feature
+const (
+	// FeatureRemoteHistory: the client reads history lines of a pane it does
+	// not hold from the daemon by number, with MsgReadHistory. Listed only by
+	// a build whose emulator numbers its history. See pty_history.go.
+	FeatureRemoteHistory Feature = "remote-history"
+)
 
-// featureNames is knownFeatures as the handshake sends them.
+// knownFeatures is every feature this build has.
+var knownFeatures = []Feature{FeatureRemoteHistory}
+
+// featureOn reports whether this build can do f. A feature that depends on
+// the emulator backend is off where the backend lacks it.
+func featureOn(f Feature) bool {
+	switch f {
+	case FeatureRemoteHistory:
+		return numbersHistory()
+	}
+	return true
+}
+
+// featureNames is the features of knownFeatures this build can do, as the
+// handshake sends them.
 func featureNames() []string {
-	names := make([]string, len(knownFeatures))
-	for i, f := range knownFeatures {
-		names[i] = string(f)
+	var names []string
+	for _, f := range knownFeatures {
+		if featureOn(f) {
+			names = append(names, string(f))
+		}
 	}
 	return names
 }
@@ -39,7 +59,7 @@ type FeatureSet struct {
 func negotiateFeatures(peer []string) FeatureSet {
 	var set FeatureSet
 	for _, f := range knownFeatures {
-		if slices.Contains(peer, string(f)) {
+		if featureOn(f) && slices.Contains(peer, string(f)) {
 			set.on = append(set.on, f)
 		}
 	}

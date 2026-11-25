@@ -2703,6 +2703,8 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 		return d.handleUnsubscribePTY(cs, msg)
 	case MsgGetTerminalState:
 		return d.handleGetTerminalState(cs, msg)
+	case MsgReadHistory:
+		return d.handleReadHistory(cs, msg)
 	case MsgExecuteCommand:
 		return d.handleExecuteCommand(cs, msg)
 	case MsgCommandResult:

@@ -208,6 +208,11 @@ const (
 	// theme event. A client sends it only to a daemon whose welcome set
 	// ThemeEvents. See theme_event.go.
 	MsgClientTheme
+	// MsgReadHistory asks for history lines of a pane by number
+	// (ReadHistoryPayload), and MsgHistoryPage answers it. A client sends it
+	// only when both sides listed FeatureRemoteHistory. See pty_history.go.
+	MsgReadHistory
+	MsgHistoryPage
 
 	// msgTypeEnd is one past the last message type. It stays last: a type
 	// added above it is walked by the tests that sweep every type.
