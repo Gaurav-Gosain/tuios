@@ -48,6 +48,7 @@ type barLine struct {
 // followBarStatusOnce, the wait for the needs-you line fails.
 func TestBarStatusFollowsTheAgents(t *testing.T) {
 	base := t.TempDir()
+	killDaemon(t, base)
 	if out, err := tuiosCLI(t, base, "new", "work", "--detach"); err != nil {
 		t.Fatalf("create the session: %v\n%s", err, out)
 	}
@@ -196,6 +197,7 @@ func TestBarStatusFollowsTheAgents(t *testing.T) {
 func TestBarStatusBacksOffWhenACallFails(t *testing.T) {
 	requireReal(t, "it reads the pid and the CPU time of a process in a pane")
 	base := t.TempDir()
+	killDaemon(t, base)
 	if out, err := tuiosCLI(t, base, "new", "work", "--detach"); err != nil {
 		t.Fatalf("create the session: %v\n%s", err, out)
 	}
