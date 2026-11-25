@@ -31,9 +31,9 @@ set -eu
 # ZIG_SERIES from minimum_zig_version in the tarball's build.zig.zon. The
 # script checks both minisign signatures on every download, so a sum copied
 # from a tampered SHA256SUMS fails the build.
-GHOSTTY_VT_VERSION=1.0.1
-GHOSTTY_VT_SHA256=333dfce97641ef9b536bb9e08907ad86abaaada50e8f7417b70d9284adef37aa
-GHOSTTY_VT_DEPS_SHA256=91a4e10960a52bf5bf4b15aa2a2cddaff8a89d6cd903d3055bda4fd17de3356d
+GHOSTTY_VT_VERSION=1.0.2
+GHOSTTY_VT_SHA256=1dcafa8a3357f3a6bbf4f2696e61de611400c5469518716793dfffd35f008b3e
+GHOSTTY_VT_DEPS_SHA256=c56156dbea82fdf71f13bf0d704cdf4393b6a04208d7f9691e0d7f60c7f9ca4d
 
 # The key that signs Ghostty and libghostty-vt releases, from
 # PACKAGING-LIBGHOSTTY.md in the release tarball.

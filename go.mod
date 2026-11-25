@@ -27,7 +27,7 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.10
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.1.0
-	go.mitchellh.com/libghostty v0.0.0-20261107144202-b13f277ddcb2
+	go.mitchellh.com/libghostty v0.0.0-20261123035439-5bbe1d0d0990
 	golang.org/x/image v0.48.0
 	golang.org/x/sys v0.50.0
 	golang.org/x/term v0.48.0
