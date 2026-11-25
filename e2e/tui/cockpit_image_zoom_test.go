@@ -178,13 +178,39 @@ func TestCockpitImageViewZooms(t *testing.T) {
 		}
 		alive(t, term, "after the zoom of the image view")
 	})
+
+	t.Run("placeholders on a wide screen", func(t *testing.T) {
+		// 400 by 120 cells fits the 16:9 picture 380 cells wide, more than
+		// placeholder cells can name: the fit box stops at 297.
+		term, host := openThreadImageViewAt(t, 400, 120, "[appearance]\nkitty_placeholders = \"on\"\n")
+		var c, r int
+		if err := term.WaitFor(func(tuitest.Screen) bool {
+			for _, m := range virtualAPC.FindAllStringSubmatch(host.String(), -1) {
+				if n := atoiInt(m[3]); n > 40 {
+					c, r = n, atoiInt(m[4])
+				}
+			}
+			return c > 0
+		}, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: the image view made no virtual placement\n%s", term.Snapshot())
+		}
+		if c > 297 || r > 297 {
+			t.Fatalf("ASSERTION: the fit box is %dx%d cells, more than the 297 placeholder cells can name", c, r)
+		}
+	})
 }
 
 // openThreadImageView starts a client on the cards thread with cfg, opens
 // the agents view and a click on the image card opens the image view.
 func openThreadImageView(t *testing.T, cfg string) (*tuitest.Terminal, *lockedBuffer) {
 	t.Helper()
-	term, host := startCardsThread(t, 160, 52, cfg)
+	return openThreadImageViewAt(t, 160, 52, cfg)
+}
+
+// openThreadImageViewAt is openThreadImageView on a client cols by rows.
+func openThreadImageViewAt(t *testing.T, cols, rows int, cfg string) (*tuitest.Terminal, *lockedBuffer) {
+	t.Helper()
+	term, host := startCardsThread(t, cols, rows, cfg)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
 		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
 	}

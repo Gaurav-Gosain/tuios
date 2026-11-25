@@ -392,10 +392,16 @@ func (m *OS) cockpitImageLayout(w, h, top int) {
 	ay, ah := 3, max(h-7, 3)
 	cw, ch := m.quickLookCell()
 	img := v.imgs[v.idx]
-	cols, rows := ckFitBox(img, w-2*margin-4, ah-2, float64(ch)/float64(cw), 1)
-	px, py := margin+(w-2*margin-cols)/2, ay+(ah-rows)/2
 	v.mode = m.replyPreviewer().Mode()
 	v.ph = v.mode == composer.PreviewPixels && m.threadPlaceholders()
+	maxCols, maxRows := w-2*margin-4, ah-2
+	if v.ph {
+		// Placeholder cells name at most placeholderMaxCells rows and
+		// columns, on a very wide screen too.
+		maxCols, maxRows = min(maxCols, placeholderMaxCells), min(maxRows, placeholderMaxCells)
+	}
+	cols, rows := ckFitBox(img, maxCols, maxRows, float64(ch)/float64(cw), 1)
+	px, py := margin+(w-2*margin-cols)/2, ay+(ah-rows)/2
 	v.fitCols, v.fitRows = cols, rows
 	v.key, v.crop = pixelsKey(img, cols, rows), image.Rectangle{}
 	v.phCols, v.phRows, v.phCol, v.phRow = cols, rows, 0, 0

@@ -19705,6 +19705,7 @@ placeholders, and zooms, drags and fits the picture.
 | Control | Fails at | Result |
 |---------|----------|--------|
 | A build of main, where + and - only shrank the picture from the fit | placements: "the wheel over the picture did not zoom it"; placeholders: "the image view made no virtual placement" | **caught** |
+| The placeholder fit box not capped at 297 cells | placeholders on a wide screen: "the fit box is 380x107 cells, more than the 297 placeholder cells can name" | **caught** |
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitImageViewZooms$' -v .`.
