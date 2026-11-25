@@ -19523,3 +19523,21 @@ Run on 2026-11-25 on Linux (amd64).
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestATiledDragFollowsTheDragThreshold$' -v .`.
+
+## The resize keys size a floating pane
+
+`e2e/tui/scratch_mouse_test.go` `TestFloatKeyResizeKeepsTheTiles` tiles two
+panes, floats one with the leader, t, f, and presses resize_height_50,
+resize_width_70, resize_height_shrink and resize_height_grow. After each key
+it wants the float at the new size, inside the pane region, and the tiled pane
+where it was.
+
+Run on 2026-11-25 on Linux (amd64).
+
+| Control | The run fails with | Result |
+|---------|--------------------|--------|
+| main 55162e6cc | "resize_height_50 took the float from x=68 y=2 w=68 h=43 to x=68 y=2 w=68 h=43, want w=68 h=21", the same for the shrink and grow keys | **caught** |
+| this branch | 3 of 3 runs pass | passes |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestFloatKeyResizeKeepsTheTiles$' .`.

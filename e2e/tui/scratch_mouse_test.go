@@ -344,6 +344,70 @@ func TestFloatMouseResizeKeepsTheTiles(t *testing.T) {
 	alive(t, term, "after the float resizes")
 }
 
+// The report: in tiling mode, a pane floated with the leader, t, f. The
+// resize_height_N keys and the height keys did nothing to the float until the
+// mouse had resized it once. The keys ran the tiling resize, which holds an
+// edge on the screen boundary still, and a float starts in the slot it was
+// tiled in, so its top and bottom both sit on the boundary. A float owns no
+// split line, so each key sizes it alone and leaves the tiled pane where it is.
+func TestFloatKeyResizeKeepsTheTiles(t *testing.T) {
+	term, base := scratchOverTiles(t, 2)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "t", "f"); err != nil {
+		t.Fatalf("float the pane: %v", err)
+	}
+	if err := term.WaitForText("Window: floating", uiTimeout); err != nil {
+		t.Fatalf("the pane never floated: %v\n%s", err, term.Snapshot())
+	}
+	time.Sleep(500 * time.Millisecond)
+	float, tile := floatAndTile(t, base, "after the float")
+	t.Logf("after the float: float %v, tile %v", float, tile)
+	saveCockpitFrames(t, term, "float-keys-0-floated")
+	top, bottom := min(float.Y, tile.Y), max(float.Y+float.H, tile.Y+tile.H)
+	left, right := min(float.X, tile.X), max(float.X+float.W, tile.X+tile.W)
+	if float.Y != top || float.Y+float.H != bottom {
+		t.Fatalf("the float %v does not fill the pane height %d-%d; the test needs it in its tiled slot", float, top, bottom)
+	}
+
+	for i, k := range []struct {
+		name string
+		keys []string
+		want func(before floatRect) (w, h int)
+	}{
+		{name: "resize_height_50", keys: []string{"L", "%"}, want: func(b floatRect) (int, int) { return b.W, (bottom - top) * 50 / 100 }},
+		{name: "resize_width_70", keys: []string{"L", "7"}, want: func(b floatRect) (int, int) { return (right - left) * 70 / 100, b.H }},
+		{name: "resize_height_shrink", keys: []string{"t", "{"}, want: func(b floatRect) (int, int) { return b.W, b.H - 2 }},
+		{name: "resize_height_grow", keys: []string{"t", "}"}, want: func(b floatRect) (int, int) { return b.W, b.H + 2 }},
+	} {
+		before := float
+		wantW, wantH := k.want(before)
+		if err := term.SendKeys(tuitest.Ctrl('b'), k.keys); err != nil {
+			t.Fatalf("%s: %v", k.name, err)
+		}
+		var gotTile floatRect
+		deadline := time.Now().Add(uiTimeout)
+		for {
+			float, gotTile = floatAndTile(t, base, "after "+k.name)
+			if (abs(float.W-wantW) <= 1 && abs(float.H-wantH) <= 1) || time.Now().After(deadline) {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		t.Logf("after %s: float %v, tile %v", k.name, float, gotTile)
+		saveCockpitFrames(t, term, fmt.Sprintf("float-keys-%d-%s", i+1, k.name))
+		if abs(float.W-wantW) > 1 || abs(float.H-wantH) > 1 {
+			t.Errorf("%s took the float from %v to %v, want w=%d h=%d\n%s",
+				k.name, before, float, wantW, wantH, term.Snapshot())
+		}
+		if float.Y < top || float.Y+float.H > bottom || float.X < left || float.X+float.W > right {
+			t.Errorf("%s left the float at %v, outside the pane region x %d-%d y %d-%d", k.name, float, left, right, top, bottom)
+		}
+		if gotTile != tile {
+			t.Fatalf("%s on the float moved the tiled pane from %v to %v\n%s", k.name, tile, gotTile, term.Snapshot())
+		}
+	}
+	alive(t, term, "after the float key resizes")
+}
+
 // The state the report ended in: the tiled pane at the float's row and
 // height. It takes a float with an edge on a tiled pane's line, or within the
 // one row the line match allows without shared borders, and a drag of that

@@ -20,6 +20,10 @@ func (m *OS) ResizeFocusedWindowHeight(deltaPixels int) {
 	if focusedWindow.Workspace != m.CurrentWorkspace || focusedWindow.Minimized {
 		return
 	}
+	if !m.ResizesWithTiling(focusedWindow) {
+		m.resizeFloatingPane(focusedWindow, focusedWindow.X, focusedWindow.Y, focusedWindow.Width, focusedWindow.Height+deltaPixels)
+		return
+	}
 
 	// The bottom edge is the screen boundary, not a divider, so move the TOP
 	// edge instead: the primary height keys resize the bottommost pane too, and
@@ -56,6 +60,10 @@ func (m *OS) ResizeFocusedWindowWidth(deltaPixels int) {
 
 	focusedWindow := m.Windows[m.FocusedWindow]
 	if focusedWindow.Workspace != m.CurrentWorkspace || focusedWindow.Minimized {
+		return
+	}
+	if !m.ResizesWithTiling(focusedWindow) {
+		m.resizeFloatingPane(focusedWindow, focusedWindow.X, focusedWindow.Y, focusedWindow.Width+deltaPixels, focusedWindow.Height)
 		return
 	}
 
@@ -101,6 +109,10 @@ func (m *OS) ResizeFocusedWindowWidthLeft(deltaPixels int) {
 	if focusedWindow.Workspace != m.CurrentWorkspace || focusedWindow.Minimized {
 		return
 	}
+	if !m.ResizesWithTiling(focusedWindow) {
+		m.resizeFloatingPane(focusedWindow, focusedWindow.X+deltaPixels, focusedWindow.Y, focusedWindow.Width-deltaPixels, focusedWindow.Height)
+		return
+	}
 
 	// In scrolling mode, change the column's fixed width
 	if m.UseScrollingLayout {
@@ -134,6 +146,10 @@ func (m *OS) ResizeFocusedWindowHeightTop(deltaPixels int) {
 
 	focusedWindow := m.Windows[m.FocusedWindow]
 	if focusedWindow.Workspace != m.CurrentWorkspace || focusedWindow.Minimized {
+		return
+	}
+	if !m.ResizesWithTiling(focusedWindow) {
+		m.resizeFloatingPane(focusedWindow, focusedWindow.X, focusedWindow.Y+deltaPixels, focusedWindow.Width, focusedWindow.Height-deltaPixels)
 		return
 	}
 
@@ -192,6 +208,31 @@ func (m *OS) SetFocusedWindowHeightPercent(pct int) {
 	if delta := target - w.Height; delta != 0 {
 		m.ResizeFocusedWindowHeight(delta)
 	}
+}
+
+// resizeFloatingPane gives a pane that owns no split line the rectangle a
+// resize key asked for. The edge the key names moves alone and no other pane
+// moves. The pane stays in the content region and is at least the smallest
+// pane. An edge pushed past the region moves the opposite edge instead, so a
+// float that fills the height still shrinks and one at the bottom still grows.
+// The tiling path held both edges still, and a float starts in the slot it
+// was tiled in, where both edges are on the boundary.
+func (m *OS) resizeFloatingPane(w *terminal.Window, x, y, width, height int) {
+	top, left := m.PaneTop(), m.PaneLeft()
+	bottom, right := top+m.PaneHeight(), left+m.PaneWidth()
+	width = max(config.DefaultWindowWidth, min(width, right-left))
+	height = max(config.DefaultWindowHeight, min(height, bottom-top))
+	x = max(left, min(x, right-width))
+	y = max(top, min(y, bottom-height))
+	if x == w.X && y == w.Y && width == w.Width && height == w.Height {
+		return
+	}
+	m.CancelAnimationsForWindow(w)
+	w.X, w.Y = x, y
+	m.resizeNow(w, width, height)
+	w.MarkPositionDirty()
+	w.InvalidateCache()
+	m.FireResized(w)
 }
 
 // ResizesWithTiling reports whether a resize of w moves the tiling's split
