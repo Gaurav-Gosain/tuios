@@ -37,6 +37,7 @@ internal/session/verb_find.go
 internal/session/verb_handlers.go
 internal/session/verb_hints.go
 internal/session/verb_preview.go
+internal/session/verb_preview_run.go
 internal/session/verb_protocol.go
 internal/session/verb_protocol_agents.go
 internal/session/verb_protocol_task.go
