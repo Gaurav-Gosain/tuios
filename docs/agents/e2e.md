@@ -18,6 +18,17 @@ under Xvfb. It skips unless `TUIOS_E2E_KITTY` names a kitty binary, and
 needs `Xvfb`, `xdotool` and `xclip`; `TUIOS_E2E_YAZI` adds yazi as a source.
 The e2e-kitty workflow runs it on request and once a week.
 
+The tests that run a real Rex server (`TestRexPane*`, `TestRexShowsTuiosPanes`)
+skip in CI. Rex is closed source and has no package the workflow can
+install. Before a pull request that changes the Rex bridge, `tuios.lua` or
+`internal/rexclient` lands, run them on a machine with `rex` on PATH:
+
+```bash
+just e2e-rex
+```
+
+The recipe stops when `rex` is missing, so a skip cannot pass for a run.
+
 A test that claims to cover a bug must fail on a build with the fix removed.
 `e2e/tui/NEGATIVE_CONTROLS.md` records those runs and the rules for them.
 

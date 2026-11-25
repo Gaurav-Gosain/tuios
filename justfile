@@ -273,6 +273,12 @@ e2e pattern="" *args:
     TUIOS_E2E=1 TUIOS_E2E_BIN={{ quote(out / "e2e/tuios") }} \
         {{ NICE }} {{ TASKSET }} go test -count=1 -timeout 40m ${pattern:+-run "$pattern"} "$@" .
 
+# Run the e2e tests that need a real Rex server, which skip in CI
+[group('test')]
+e2e-rex:
+    @command -v rex >/dev/null || { echo "rex is not on PATH: the Rex tests would skip." >&2; exit 1; }
+    @{{ just_executable() }} --justfile {{ quote(justfile()) }} e2e '^TestRex' -v
+
 # Logs of failed runs go to .dev/flake.
 # Run one e2e test N times and count the failures
 [group('test')]
