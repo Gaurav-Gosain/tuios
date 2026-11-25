@@ -19,6 +19,8 @@ type colors struct {
 	known bool
 	// SGR parameters of the backgrounds.
 	surface, raised, chip, redTint, accentTint string
+	// Under the pointer: a row, a chip, a chip that is on, a failure.
+	hoverRow, hot, accentHot, redHot string
 	// SGR parameters of the inks.
 	text, dim, faint, line, accent, green, red, yellow, other, doneGreen, doneRed string
 	// Ghosts: the part of a bar that is only expected.
@@ -41,6 +43,10 @@ func newColors(p palette) colors {
 		chip:        bg.mix(fg, .14).bg(),
 		redTint:     bg.mix(p.ansi[1], .14).bg(),
 		accentTint:  bg.mix(acc, .22).bg(),
+		hoverRow:    bg.mix(fg, .075).bg(),
+		hot:         bg.mix(fg, .22).bg(),
+		accentHot:   bg.mix(acc, .34).bg(),
+		redHot:      bg.mix(p.ansi[1], .26).bg(),
 		text:        fg.fg(),
 		dim:         fg.mix(bg, .42).fg(),
 		faint:       fg.mix(bg, .62).fg(),
@@ -186,9 +192,53 @@ func (m *model) chip(text, bg, back string) string {
 // label is a section label: uppercase and dim.
 func (m *model) label(name string) string { return ink(m.pal.faint, bold(name)) }
 
+// button is a chip that a click runs as the key, lit up under the pointer.
+// id names it, as one key can have a button in two places.
+func (m *model) button(id, key, text, bg, back string) string {
+	if m.hover == id {
+		if bg != "" && bg == m.pal.accentTint {
+			bg = m.pal.accentHot
+		} else {
+			bg = m.pal.hot
+		}
+	}
+	return m.zoned(zone{hover: id, key: key}, m.chip(text, bg, back))
+}
+
+// anchor is text that a click runs as the key, underlined under the
+// pointer.
+func (m *model) anchor(id, key, text string) string {
+	if m.hover == id {
+		text = "\x1b[4m" + text + "\x1b[24m"
+	}
+	return m.zoned(zone{hover: id, key: key}, text)
+}
+
+// lit marks a row of a panel for surface: \x00 when it is selected, \x01
+// when it is under the pointer.
+func (m *model) lit(line string, selected bool, id string) string {
+	switch {
+	case selected:
+		return "\x00" + line
+	case id != "" && m.hover == id:
+		return "\x01" + line
+	}
+	return line
+}
+
+// area wraps each line of a panel in zone z.
+func (m *model) area(z zone, lines []string) []string {
+	n := m.addZone(z)
+	for i := range lines {
+		lines[i] = inZone(n, lines[i])
+	}
+	return lines
+}
+
 // surface draws lines on a filled surface of w cells, with a margin of two
 // cells inside. A line that starts with \x00 is the selected row: it has
-// the raised background and a bar in the accent at the left edge.
+// the raised background and a bar in the accent at the left edge. A line
+// that starts with \x01 is the row under the pointer, on a lighter shade.
 func (m *model) surface(lines []string, w, h int) []string {
 	out := make([]string, 0, h)
 	bg := m.pal.surface
@@ -200,6 +250,10 @@ func (m *model) surface(lines []string, w, h int) []string {
 		if rest, ok := strings.CutPrefix(line, "\x00"); ok {
 			row := on(m.pal.raised, bg, ink(m.pal.accent, "▌")+" "+fit(rest, w-3)+" ")
 			out = append(out, on(bg, "", row))
+			continue
+		}
+		if rest, ok := strings.CutPrefix(line, "\x01"); ok {
+			out = append(out, on(bg, "", on(m.pal.hoverRow, bg, "  "+fit(rest, w-4)+"  ")))
 			continue
 		}
 		out = append(out, on(bg, "", "  "+fit(line, w-4)+"  "))
@@ -259,6 +313,10 @@ func (m *model) layout() layout {
 	// The jobs take the rows they need, and leave the steps and the log at
 	// least eight.
 	l.jobsH = min(rows+4, max(5, l.body-l.buildH-2-8))
+	if m.jobsWant > 0 {
+		// The height a drag of the divider set, with room for the log.
+		l.jobsH = max(4, min(m.jobsWant, l.body-l.buildH-2-6))
+	}
 	l.lowH = max(0, l.body-l.buildH-l.jobsH-2)
 	need := 24
 	if j, ok := m.selectedJob(); ok {
@@ -310,6 +368,7 @@ func (m *model) render() string {
 	var body []string
 	switch {
 	case m.help:
+		// A click anywhere closes the help.
 		body = m.surface(m.helpLines(), m.width-2, l.body)
 	default:
 		var right []string
@@ -322,8 +381,8 @@ func (m *model) render() string {
 			fc, like := m.estimate(b)
 			right = append(right, m.surface(m.buildLines(b, fc, like, l.rightW-4), l.rightW, l.buildH)...)
 			right = append(right, gap...)
-			right = append(right, m.surface(m.jobLines(b, fc, l.rightW-4), l.rightW, l.jobsH)...)
-			right = append(right, gap...)
+			right = append(right, m.area(zone{area: "jobs"}, m.surface(m.jobLines(b, fc, l.rightW-4), l.rightW, l.jobsH))...)
+			right = append(right, m.divider(l.rightW))
 			right = append(right, beside(1, m.stepsPanel(l.stepsW, l.lowH), m.logPanel(l.logW, l.lowH))...)
 		default:
 			msg := "No builds yet."
@@ -357,6 +416,19 @@ func (m *model) render() string {
 		lines[i] = fit(" "+lines[i], m.width)
 	}
 	return strings.Join(lines, "\n")
+}
+
+// divider is the row between the jobs and the log. A drag on it moves it,
+// and so sets the height of the jobs. Under the pointer it shows a line.
+func (m *model) divider(w int) string {
+	c := m.pal
+	line := strings.Repeat(" ", w)
+	if m.hover == "divider" || m.dragging != nil {
+		hint := " drag to resize "
+		side := max(0, w-len(hint)) / 2
+		line = ink(c.line, strings.Repeat("─", side)) + ink(c.faint, hint) + ink(c.line, strings.Repeat("─", max(0, w-side-len(hint))))
+	}
+	return m.zoned(zone{hover: "divider", drag: m.dragSplit}, line)
 }
 
 func (m *model) header() []string {
@@ -427,11 +499,11 @@ func (m *model) header() []string {
 		if on {
 			box, bg = ink(c.accent, "■"), c.accentTint
 		}
-		return m.chip(ink(c.accent, key)+" "+box+" "+word, bg, "")
+		return m.button("head:"+key, key, ink(c.accent, key)+" "+box+" "+word, bg, "")
 	}
 	filters := ink(c.faint, "filter ") + filter(mainOn, "m", main) + " " + filter(m.f.branch != "" && !mainOn, "f", branch) + " " +
 		filter(m.f.activeOnly, "a", "running") + " " + filter(m.f.showSkipped, "s", "skipped")
-	keys := m.chip(ink(c.accent, "r")+" "+ink(c.dim, "refresh"), c.raised, "") + " " + m.chip(ink(c.accent, "?")+" "+ink(c.dim, "keys"), c.raised, "")
+	keys := m.button("head:r", "r", ink(c.accent, "r")+" "+ink(c.dim, "refresh"), c.raised, "") + " " + m.button("head:?", "?", ink(c.accent, "?")+" "+ink(c.dim, "keys"), c.raised, "")
 	return []string{"", rows[0], rows[1], rows[2], spread2(chips+"   "+filters, keys, w), ""}
 }
 
@@ -505,13 +577,28 @@ func (m *model) resultInk(b Build) string {
 func (m *model) footer() string {
 	c := m.pal
 	if m.toast != "" {
+		if m.confirm != "" {
+			// A click on the question is the second press.
+			return m.zoned(zone{key: m.confirm}, ink(c.accent, m.toast))
+		}
 		return ink(c.accent, m.toast)
 	}
+	// The keys with one key are buttons: a click on the chip or its word
+	// runs it.
 	keys := [][2]string{{"j k", "build"}, {"h l", "job"}, {"/", "search"}, {"R", "run again"}, {"o", "open"},
 		{"G", "repository"}, {"q", "quit"}}
 	var parts []string
 	for _, k := range keys {
-		parts = append(parts, m.chip(ink(c.text, bold(k[0])), c.raised, "")+" "+ink(c.dim, k[1]))
+		if strings.Contains(k[0], " ") {
+			parts = append(parts, m.chip(ink(c.text, bold(k[0])), c.raised, "")+" "+ink(c.dim, k[1]))
+			continue
+		}
+		id := "foot:" + k[0]
+		word := ink(c.dim, k[1])
+		if m.hover == id {
+			word = ink(c.text, k[1])
+		}
+		parts = append(parts, m.zoned(zone{hover: id, key: k[0]}, m.button(id, k[0], ink(c.text, bold(k[0])), c.raised, "")+" "+word))
 	}
 	pos := ""
 	if b, ok := m.selected(); ok {
@@ -558,6 +645,9 @@ func (m *model) helpLines() []string {
 		{"home  end", "Go to the top of the log, or follow its end"},
 		{"r  space", "Read the builds now"},
 		{"G", "Watch another repository"},
+		{"click", "Select a build, a job or a step, or run a button"},
+		{"wheel", "Scroll the builds, the steps or the log under the pointer"},
+		{"drag", "Drag the row above the log to resize the jobs"},
 		{"?  esc", "Close this help"},
 		{"q", "Quit"},
 	}
@@ -588,6 +678,9 @@ func (m *model) listPanel(w, h int) []string {
 		}
 		sha := b.SHA[:min(7, len(b.SHA))]
 		start := len(lines)
+		key := b.Key
+		id := "build:" + key
+		n := m.addZone(zone{hover: id, click: func(mouseMsg) Cmd { return m.selectBuild(key) }})
 		row := []string{
 			spread2(indent+m.mark(b.State)+" "+title, ink(c.faint, ago(m.now().Sub(b.Started))), inner),
 			spread2(indent+"  "+branch+ink(c.faint, " · "+sha), m.rowTime(b), inner),
@@ -598,24 +691,28 @@ func (m *model) listPanel(w, h int) []string {
 		}
 		if b.Key == m.key {
 			selStart, selEnd = start, start+len(row)
-			for i := range row {
-				row[i] = "\x00" + row[i]
-			}
+		}
+		for i := range row {
+			row[i] = m.lit(inZone(n, row[i]), b.Key == m.key, id)
 		}
 		lines = append(lines, row...)
 		lines = append(lines, "")
 	}
 	head := []string{"", spread2(m.label("BUILDS")+" "+m.chip(itoa(len(m.list)), "", c.surface), ink(c.faint, "newest first"), inner), ""}
 	rows := h - len(head)
-	// Keep the selected build in view.
+	// Keep the selected build in view, unless the wheel moved the list.
 	start := 0
-	if selEnd > rows {
+	switch {
+	case m.listScrolled:
+		start = min(m.listTop, max(0, len(lines)-rows))
+	case selEnd > rows:
 		start = min(selStart, selEnd-rows)
 	}
+	m.listTop = start
 	if start > 0 && start < len(lines) {
 		lines = lines[start:]
 	}
-	return m.surface(append(head, lines...), w, h)
+	return m.area(zone{wheel: m.wheelList}, m.surface(append(head, lines...), w, h))
 }
 
 // rowTime is the time in the list: how long a finished build took, and for
@@ -751,11 +848,19 @@ func (m *model) pill(b Build) string {
 	case "closed":
 		word, code = "Closed", c.red
 	}
+	// A click on the pill opens the pull request, as O does.
+	if m.hover == "pill" {
+		bg = m.pal.hot
+	}
 	if pr.State == "" {
 		word = "#" + itoa(pr.Number)
-		return "   " + m.chip(ink(c.dim, word), bg, c.surface)
+		return "   " + m.zoned(zone{hover: "pill", key: "O"}, m.chip(ink(c.dim, word), bg, c.surface))
 	}
-	return "   " + m.chip(ink(code, bold(word)), bg, c.surface) + ink(c.text, "#"+itoa(pr.Number)+" ") + ink(c.dim, pr.Title)
+	title := ink(c.text, "#"+itoa(pr.Number)+" ") + ink(c.dim, pr.Title)
+	if m.hover == "pill" {
+		title = "\x1b[4m" + title + "\x1b[24m"
+	}
+	return "   " + m.zoned(zone{hover: "pill", key: "O"}, m.chip(ink(code, bold(word)), bg, c.surface)+title)
 }
 
 func (m *model) headlineWord(o Build) string {
@@ -1012,8 +1117,10 @@ func (m *model) jobLines(b Build, fc forecast, w int) []string {
 			name += ink(c.faint, " "+r.job.Workflow)
 		}
 		line := m.mark(st) + " " + fit(name, nameW) + " " + strings.Join(cells, "") + " " + lpad(time, durW) + lpad(pcol, prevW)
-		if r.job.ID != 0 && r.job.ID == m.jobID {
-			line = "\x00" + line
+		if id := r.job.ID; id != 0 {
+			// A click on the row, its bar too, selects the job.
+			hover := "job:" + strconv.FormatInt(id, 10)
+			line = m.lit(m.zoned(zone{hover: hover, click: func(mouseMsg) Cmd { return m.selectJob(id) }}, line), id == m.jobID, hover)
 		}
 		lines = append(lines, line)
 	}
@@ -1122,17 +1229,32 @@ func (m *model) stepsPanel(w, h int) []string {
 			name = ink(c.accent, s.Name)
 		}
 		line := spread2(m.mark(s.State)+" "+name, right, inner-1)
-		if i == m.step || (m.step < 0 && (s.State == "running" || (s.State == "failure" && sel < 0))) {
-			line = "\x00" + line
+		hover := ""
+		if i < len(m.starts) && m.starts[i] >= 0 {
+			// A step that wrote to the log: a click shows where it ends,
+			// as n and p do.
+			hover = "step:" + itoa(i)
+			line = m.zoned(zone{hover: hover, click: func(mouseMsg) Cmd { m.showStep(i); return nil }}, line)
+		}
+		picked := i == m.step || (m.step < 0 && (s.State == "running" || (s.State == "failure" && sel < 0)))
+		if picked {
 			sel = i
 		}
-		lines = append(lines, line)
+		lines = append(lines, m.lit(line, picked, hover))
 	}
-	if over := len(lines) - h; over > 0 && sel >= 0 {
-		k := min(over, max(0, sel-(h-6)/2), len(lines)-3)
+	// Keep the selected step in view, unless the wheel moved the steps.
+	k, over := 0, len(lines)-h
+	switch {
+	case m.stepsScrolled:
+		k = min(m.stepsTop, max(0, over), max(0, len(lines)-3))
+	case over > 0 && sel >= 0:
+		k = min(over, max(0, sel-(h-6)/2), len(lines)-3)
+	}
+	m.stepsTop = k
+	if k > 0 {
 		lines = append(lines[:3], lines[3+k:]...)
 	}
-	return m.surface(lines, w, h)
+	return m.area(zone{wheel: m.wheelSteps}, m.surface(lines, w, h))
 }
 
 // failureRows is how many rows the failures take above the log.
@@ -1176,7 +1298,7 @@ func (m *model) logPanel(w, h int) []string {
 		}
 	}
 	action := func(key, word string) string {
-		return m.chip(ink(c.accent, key)+" "+ink(c.dim, word), c.raised, c.surface)
+		return m.button("log:"+key, key, ink(c.accent, key)+" "+ink(c.dim, word), c.raised, c.surface)
 	}
 	// The second row: the search while there is one, else the actions.
 	var second string
@@ -1190,6 +1312,10 @@ func (m *model) logPanel(w, h int) []string {
 			cursor = "▏"
 		}
 		field := m.chip(ink(c.accent, "/")+" "+ink(c.text, fit(s.query+cursor, 24)), c.raised, c.surface)
+		if !s.editing {
+			// A click on the field types a new search.
+			field = m.button("log:/", "/", ink(c.accent, "/")+" "+ink(c.text, fit(s.query, 24)), c.raised, c.surface)
+		}
 		second = field + "  " + found
 		if hint := ink(c.faint, "ctrl+n ctrl+p step · esc closes"); ansi.StringWidth(second)+ansi.StringWidth(hint)+2 <= inner {
 			second = spread2(second, hint, inner)
@@ -1208,9 +1334,15 @@ func (m *model) logPanel(w, h int) []string {
 		}
 		second = acts
 	}
-	lines := []string{"", spread2(m.label("LOG")+ink(c.faint, "  "+note), count, inner), second}
+	// The name of the job is a link to it on GitHub, as o is.
+	title := m.label("LOG")
+	if ok {
+		name, rest := j.Name, strings.TrimPrefix(note, j.Name)
+		title += "  " + m.anchor("log:job", "o", ink(c.dim, name)) + ink(c.faint, rest)
+	}
+	lines := []string{"", spread2(title, count, inner), second}
 	if len(m.found) > 0 && m.search.query == "" {
-		box := []string{ink(c.red, bold("✗ "+itoa(len(m.found))+" in "+m.failedStepName(j)))}
+		lines = append(lines, on(c.redTint, c.surface, fit(" "+ink(c.red, bold("✗ "+itoa(len(m.found))+" in "+m.failedStepName(j))), inner)))
 		for i, f := range m.found {
 			if i == 3 {
 				break
@@ -1222,16 +1354,19 @@ func (m *model) logPanel(w, h int) []string {
 			if f.detail != "" {
 				row += ink(c.dim, " · "+f.detail)
 			}
-			box = append(box, row)
-		}
-		for _, b := range box {
-			lines = append(lines, on(c.redTint, c.surface, fit(" "+b, inner)))
+			// A click on a failure shows it in the log, as e does.
+			hover, tint := "failure:"+itoa(i), c.redTint
+			if m.hover == hover {
+				tint = c.redHot
+			}
+			lines = append(lines, m.zoned(zone{hover: hover, click: func(mouseMsg) Cmd { m.showFailure(i); return nil }}, on(tint, c.surface, fit(" "+row, inner))))
 		}
 		lines = append(lines, "")
 	}
+	logArea := zone{wheel: m.wheelLog}
 	if len(m.log) == 0 {
 		lines = append(lines, m.emptyLog(j, ok, inner, h-len(lines))...)
-		return m.surface(lines, w, h)
+		return m.area(logArea, m.surface(lines, w, h))
 	}
 	rows := max(1, h-len(lines))
 	top := min(max(0, m.top), max(0, len(m.log)-rows))
@@ -1293,7 +1428,7 @@ func (m *model) logPanel(w, h int) []string {
 		}
 		lines = append(lines, row+" "+bar)
 	}
-	return m.surface(lines, w, h)
+	return m.area(logArea, m.surface(lines, w, h))
 }
 
 // logText is a line of the log as it shows: its own colours, else the
@@ -1349,7 +1484,7 @@ func (m *model) emptyLog(j Job, ok bool, w, h int) []string {
 	case ok && active(j.State) && len(j.Steps) > 0:
 		out = append(out, center(m.mark("running")+" "+ink(c.accent, bold("This job is still in progress."))), "",
 			center(ink(c.dim, "GitHub publishes its log once the runner sends the first part.")),
-			center(ink(c.dim, "Press ")+m.chip(ink(c.accent, "o"), c.raised, c.surface)+ink(c.dim, " to open the job on GitHub.")))
+			center(ink(c.dim, "Press ")+m.button("empty:o", "o", ink(c.accent, "o"), c.raised, c.surface)+ink(c.dim, " to open the job on GitHub.")))
 	case m.logNote != "":
 		out = append(out, center(ink(c.dim, m.logNote)))
 	}
@@ -1376,7 +1511,8 @@ func (m *model) overlay(base []string) []string {
 	}
 	bh := min(max(9, rows), m.height-6)
 	x, y := (m.width-bw)/2, (m.height-bh)/2
-	box := m.pickerView(bw, bh)
+	// The menu is one area: a click outside it closes it.
+	box := m.area(zone{area: "picker"}, m.pickerView(bw, bh))
 	out := make([]string, len(base))
 	for i, line := range base {
 		plain := ansi.Strip(line)
@@ -1420,10 +1556,10 @@ func (m *model) pickerView(w, h int) []string {
 			tag = ink(c.faint, "archived")
 		}
 		line := spread2(fit(ink(c.text, r.Name), min(36, inner/3))+" "+ink(c.dim, r.Description), tag, inner-1)
-		if i == p.at {
-			line = "\x00" + line
-		}
-		lines = append(lines, line)
+		// A click on a row opens the repository, as enter does.
+		hover := "repo:" + r.Name
+		line = m.zoned(zone{hover: hover, click: func(mouseMsg) Cmd { p.at = i; _, cmd := m.pickerKey(keyMsg{name: "enter"}); return cmd }}, line)
+		lines = append(lines, m.lit(line, i == p.at, hover))
 	}
 	return m.surface(lines, w, h)
 }

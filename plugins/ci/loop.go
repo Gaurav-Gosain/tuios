@@ -190,6 +190,12 @@ func decode(b []byte) ([]Msg, []byte) {
 			switch {
 			case seq == "I":
 				out = append(out, focusMsg{})
+			case seq == "O":
+				out = append(out, blurMsg{})
+			case strings.HasPrefix(seq, "<") && (seq[len(seq)-1] == 'M' || seq[len(seq)-1] == 'm'):
+				if ev, ok := parseMouse(seq[1:len(seq)-1], seq[len(seq)-1]); ok {
+					out = append(out, ev)
+				}
 			case strings.HasPrefix(seq, "?997;"):
 				out = append(out, schemeMsg{})
 			case strings.HasPrefix(seq, "?") && strings.HasSuffix(seq, "c"):

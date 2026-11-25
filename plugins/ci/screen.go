@@ -19,13 +19,14 @@ type screen struct {
 }
 
 func (s *screen) start() {
-	// The alternate screen, no cursor, no wrap at the right edge, and focus
-	// events.
-	_, _ = io.WriteString(s.out, "\x1b[?1049h\x1b[?25l\x1b[?7l\x1b[?1004h\x1b[?2031h\x1b[2J")
+	// The alternate screen, no cursor, no wrap at the right edge, focus
+	// events, and the mouse: presses, drags and motion, in SGR reports.
+	// Motion comes only while the pointer moves over the pane.
+	_, _ = io.WriteString(s.out, "\x1b[?1049h\x1b[?25l\x1b[?7l\x1b[?1004h\x1b[?2031h\x1b[?1000h\x1b[?1002h\x1b[?1003h\x1b[?1006h\x1b[2J")
 }
 
 func (s *screen) stop() {
-	_, _ = io.WriteString(s.out, "\x1b[?2031l\x1b[?1004l\x1b[?7h\x1b[?25h\x1b[?1049l")
+	_, _ = io.WriteString(s.out, "\x1b[?1006l\x1b[?1003l\x1b[?1002l\x1b[?1000l\x1b[?2031l\x1b[?1004l\x1b[?7h\x1b[?25h\x1b[?1049l")
 }
 
 // askColors asks the terminal for its colours again.

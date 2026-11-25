@@ -64,6 +64,25 @@ With fewer than three earlier builds, the text shows how long the build runs.
 
 `c` copies through the terminal (OSC 52), so it works over SSH too. A rerun costs runner time, so it waits for a second press.
 
+## Mouse
+
+| Action | Result |
+| --- | --- |
+| Click a build | Select the build |
+| Click a job, its name or its bar | Select the job |
+| Click a step | Show where the step ends in the log |
+| Click a failure above the log | Show the failure in the log |
+| Click a filter, an action or a key at the bottom | Run it, as its key does. A rerun waits for a second click. |
+| Click the pull request pill | Open the pull request on GitHub |
+| Click the name of the job above the log | Open the job on GitHub |
+| Turn the wheel | Scroll the builds, the steps or the log under the pointer |
+| Drag the row above the log | Change the height of the jobs |
+| Click a repository in the menu | Watch that repository. A click outside the menu closes it. |
+
+The row under the pointer shows in a lighter shade. The plugin gets mouse motion only while the pointer moves over its pane.
+
+The plugin takes the mouse, so a drag in the log does not select text. To copy text from the log, use the copy mode of tuios. In most terminals, you can also hold `shift` while you drag.
+
 ## What it costs
 
 - While a build runs, the plugin asks GitHub every 6 seconds. When an answer does not change, it waits twice as long, up to 48 seconds.

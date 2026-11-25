@@ -99,9 +99,9 @@ func (m *model) key_(k keyMsg) (*model, Cmd) {
 		m.f.showSkipped = !m.f.showSkipped
 		return m, m.refiltered()
 	case "R":
-		return m, m.ask("R", "Press R again to run the failed jobs of this build again.")
+		return m, m.ask("R", "Press R again, or click again, to run the failed jobs of this build again.")
 	case "ctrl+r":
-		return m, m.ask("ctrl+r", "Press ctrl+r again to run all the jobs of this build again.")
+		return m, m.ask("ctrl+r", "Press ctrl+r again, or click again, to run all the jobs of this build again.")
 	case "o":
 		return m, m.openJob()
 	case "O":
@@ -136,6 +136,7 @@ func (m *model) key_(k keyMsg) (*model, Cmd) {
 }
 
 func (m *model) refiltered() Cmd {
+	m.listScrolled = false
 	m.refilter()
 	return m.want()
 }
@@ -146,7 +147,7 @@ func (m *model) moveBuild(d int) Cmd {
 	if n < 0 || n >= len(m.list) {
 		return nil
 	}
-	m.key, m.jobPinned = m.list[n].Key, false
+	m.key, m.jobPinned, m.listScrolled = m.list[n].Key, false, false
 	m.setJob(0)
 	return m.want()
 }
@@ -176,12 +177,17 @@ func (m *model) moveStep(d int) {
 	}
 	for n := m.step + d; n >= 0 && n < len(m.starts); n += d {
 		if m.starts[n] >= 0 {
-			m.step, m.follow = n, false
-			m.top = m.stepEnd(n) - m.logRows() + 1
-			m.clampLog()
+			m.showStep(n)
 			return
 		}
 	}
+}
+
+// showStep selects step n and shows where it ends in the log.
+func (m *model) showStep(n int) {
+	m.step, m.follow, m.stepsScrolled = n, false, false
+	m.top = m.stepEnd(n) - m.logRows() + 1
+	m.clampLog()
 }
 
 func (m *model) moveFailure(d int) {

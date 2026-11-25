@@ -92,6 +92,22 @@ type model struct {
 	tall, help bool
 	picker     *picker
 
+	// The mouse. zones gather while a frame draws; drawn and rects are the
+	// zones of the frame on the screen and where they are.
+	zones    []zone
+	drawn    []zone
+	rects    []rect
+	hover    string // The part under the pointer.
+	still    bool   // The last message changed nothing on the screen.
+	dragging func(mouseMsg)
+	// The wheel scrolls the builds and the steps away from the selection:
+	// listTop and stepsTop are the first rows in view while listScrolled
+	// and stepsScrolled are set. A key that moves the selection clears them.
+	listTop, stepsTop           int
+	listScrolled, stepsScrolled bool
+	// jobsWant is the height of the jobs that a drag of the divider set.
+	jobsWant int
+
 	err      string
 	toast    string
 	toastGen int
@@ -415,6 +431,7 @@ func (m *model) setJob(id int64) {
 		return
 	}
 	m.jobID, m.step, m.jumped = id, -1, 0
+	m.stepsScrolled = false
 	m.logGap, m.logNext, m.logCut = 0, time.Time{}, false
 	m.search = search{}
 	m.log, m.logJob, m.logFinal, m.logNote = nil, 0, false, ""
@@ -567,8 +584,12 @@ func timeOf(j Job, key string, origin time.Time) jobTime {
 // Update handles a message, then draws the frame.
 func (m *model) Update(msg Msg) (*model, Cmd) {
 	next, cmd := m.update(msg)
+	if m.still {
+		m.still = false
+		return next, cmd
+	}
 	if m.scr != nil && m.width > 0 {
-		m.scr.draw(m.render(), m.width, m.height, m.windowTitle())
+		m.scr.draw(m.frame(), m.width, m.height, m.windowTitle())
 	}
 	return next, cmd
 }
@@ -605,6 +626,11 @@ func (m *model) update(msg Msg) (*model, Cmd) {
 		return m, nil
 	case keyMsg:
 		return m.key_(msg)
+	case mouseMsg:
+		return m.mouse(msg)
+	case blurMsg:
+		m.hover, m.dragging = "", nil
+		return m, nil
 	case repoMsg:
 		if msg.repo != m.repo {
 			return m, nil

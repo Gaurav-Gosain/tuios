@@ -12977,6 +12977,13 @@ Run on 2026-11-01 on macOS arm64, on `upstream/main` at `4c95caa50` plus the bra
 | A run that waits for approval does not poll or tick | `action_required` read as queued | `TestApprovalIsNotRunning`: "a build that waits for approval counts as running" | **caught** |
 | The log keeps only its tail | the bound cut | `TestLogIsBounded`: "the log kept 12582927 bytes" | **caught** |
 | A log that did not grow is not read again at once | the wait cut | `TestLogRefetchBacksOff`: "a log that did not grow is read again at once" | **caught** |
+| A click on a job row selects the job | `selectJob` does nothing | "the build job after a click on its row" | **caught** |
+| A click on a build row selects the build | `selectBuild` does nothing | "the failed build after a click on its row" | **caught** |
+| The wheel over the log scrolls the log | `wheelLog` does nothing | "the log after the wheel" | **caught** |
+| A click on a filter chip runs its key | `press` drops the key of a zone | "the running builds after a click on the filter" | **caught** |
+| A click on a row of the menu opens the repository | the click on a menu row does nothing | "acme/quiet after a click on its row" | **caught** |
+
+The mouse controls were run on 2026-11-26 on Linux.
 
 ## The host title follows the focused pane (#1064)
 

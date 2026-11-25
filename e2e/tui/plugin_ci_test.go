@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuitest"
 )
 
 // ciFixtures writes the GitHub API answers that fakeGH serves, with times
@@ -544,6 +546,96 @@ func TestPluginCI(t *testing.T) {
 	// The clock after the switches: TestOldTickStartsNoSecondClock in the
 	// plugin's module covers the tick of the repository before, which a
 	// count of wakeups here cannot tell from the GC's.
+
+	// The mouse, through the tuios client as a person uses it: a click on a
+	// job, on a build, on a filter and on a repository, and the wheel over
+	// the log. Each place comes from the screen, not from the layout.
+	// A window that new-window opens can already have the keyboard, and
+	// then an i would go to the plugin, so the client says its mode first.
+	if out, err := tuiosOut(base, "run-command", "-s", "ci", "--json", "GetSessionInfo"); err != nil {
+		t.Fatalf("GetSessionInfo: %v\n%s", err, out)
+	} else if mode, _ := sessionInfoMode(out); mode != "terminal" {
+		enterTerminalMode(t, term)
+	}
+	// leftmost finds text on the attached screen in the first cols cells,
+	// so a click lands on the list of builds and not on the same words in
+	// the build panel.
+	leftmost := func(want string, cols int) (int, int) {
+		t.Helper()
+		if err := term.WaitForText(want, uiTimeout); err != nil {
+			t.Fatalf("%q never appeared: %v\n%s", want, err, term.Snapshot())
+		}
+		s := term.Screen()
+		_, rows := s.Size()
+		for r := range rows {
+			if before, _, ok := strings.Cut(s.Line(r), want); ok && len([]rune(before)) < cols {
+				return r, len([]rune(before))
+			}
+		}
+		t.Fatalf("%q is not in the first %d columns:\n%s", want, cols, term.Snapshot())
+		return 0, 0
+	}
+	click := func(want string, cols int) {
+		t.Helper()
+		row, col := leftmost(want, cols)
+		mouseClick(t, term, col+1, row, tuitest.MouseLeft, 0)
+	}
+	steps := regexp.MustCompile(`STEPS\s+(\w+)`)
+	stepsOf := func(s string) string {
+		if m := steps.FindStringSubmatch(s); m != nil {
+			return m[1]
+		}
+		return ""
+	}
+	s = waitFor("the running build before the clicks", func(s string) bool { return stepsOf(s) == "test" })
+	click("✓ build", 240)
+	s = waitFor("the build job after a click on its row", func(s string) bool { return stepsOf(s) == "build" })
+	saveText(t, "ci-mouse-job", s)
+
+	click("Add gift cards", 60)
+	s = waitFor("the failed build after a click on its row", func(s string) bool {
+		return strings.Contains(s, "Failed after") && strings.Contains(s, "order_test.go")
+	})
+	// The top line of the log: the smallest line number in front of a test
+	// line. Two notches of the wheel move it up. tuios can send more than
+	// one report for a notch, so the check is the way, not the distance.
+	logLine := regexp.MustCompile(`(?m)\s(\d+) (?:---|===) `)
+	topLine := func(s string) int {
+		top := 0
+		for _, m := range logLine.FindAllStringSubmatch(s, -1) {
+			if n, _ := strconv.Atoi(m[1]); top == 0 || n < top {
+				top = n
+			}
+		}
+		return top
+	}
+	top0 := topLine(s)
+	if top0 <= 6 {
+		t.Fatalf("the log starts at line %d, so the wheel has no room to scroll:\n%s", top0, s)
+	}
+	row, col := leftmost("--- FAIL: TestOrderTotal", 240)
+	wheelAt(t, term, col+4, row, tuitest.MouseWheelUp, 2)
+	s = waitFor("the log after the wheel", func(s string) bool { n := topLine(s); return n > 0 && n < top0 })
+	saveText(t, "ci-mouse-wheel", s)
+
+	click("□ running", 240)
+	s = waitFor("the running builds after a click on the filter", count(1))
+	if !strings.Contains(s, "Change the checkout") {
+		t.Errorf("ASSERTION: the running filter does not keep the running build:\n%s", s)
+	}
+	click("■ running", 240)
+	waitFor("all builds after a second click on the filter", count(8))
+
+	click("repository", 240)
+	waitFor("the menu of repositories after a click on G", func(s string) bool { return strings.Contains(s, "acme/storefront-api") })
+	click("Nothing runs here", 240)
+	waitTextOf(t, "acme/quiet after a click on its row", uiTimeout*3, screenOf(pane), func(s string) bool {
+		return strings.Contains(s, "Quiet change") && strings.Contains(s, "Passed in 5m 0s")
+	})
+	click("repository", 240)
+	waitFor("the menu of repositories again", func(s string) bool { return strings.Contains(s, "acme/storefront-api") })
+	click("The shop", 240)
+	waitFor("acme/shop after a click on its row", func(s string) bool { return strings.Contains(s, "Change the checkout") && count(8)(s) })
 
 	// The build ends while you watch it: the log is read again to its end,
 	// and it opens at the failing test.
