@@ -94,6 +94,9 @@ func lines(from, to int, width int) string {
 }
 
 func TestConform_HistoryNumbers(t *testing.T) {
+	if _, ok := vt.NewWithScrollback(1, 1, 1).ScrollbackBase(); !ok {
+		t.Skip("this backend does not number its history")
+	}
 	t.Run("emulators with different limits number lines alike", func(t *testing.T) {
 		small, big := vt.NewWithScrollback(30, 4, 5), vt.NewWithScrollback(30, 4, 500)
 		both := []vt.Terminal{small, big}

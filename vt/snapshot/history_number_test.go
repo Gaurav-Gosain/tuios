@@ -20,6 +20,9 @@ import (
 //   - a snapshot from a backend that does not count, or from an older
 //     daemon, overwrites the emulator's numbering with zero.
 func TestSnapshotCarriesHistoryNumbers(t *testing.T) {
+	if _, ok := vt.NewWithScrollback(1, 1, 1).ScrollbackBase(); !ok {
+		t.Skip("this backend does not number its history")
+	}
 	src := vt.NewWithScrollback(30, 4, 500)
 	write := func(from, to int) {
 		var b strings.Builder
