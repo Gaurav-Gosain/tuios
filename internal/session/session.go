@@ -1221,6 +1221,9 @@ type PTY struct {
 	framesSkipped atomic.Int64
 	// streamsCut counts the client streams gapped because their queue filled.
 	streamsCut atomic.Int64
+	// framed counts the client streams turned to frames, and framedLogAt is
+	// when the daemon log last said so. See pty_frames.go.
+	framed, framedLogAt atomic.Int64
 	// The pacing state. See graphics_backpressure.go.
 	paceWake    chan struct{}
 	holding     atomic.Bool
@@ -4621,6 +4624,9 @@ type ptySubscriber struct {
 	// noPace marks a client that never holds the pane: a read-only viewer or
 	// a client on another machine. See holdForSlowSubscribers.
 	noPace atomic.Bool
+	// frames says the client takes frames of the pane when it floods, and
+	// lagged that the client reported it is behind. See pty_frames.go.
+	frames, lagged atomic.Bool
 
 	// Read and written by broadcast only, under streamMu. seen is the stream
 	// position this client has been handed or skipped up to. open is the
@@ -4752,6 +4758,7 @@ func (p *PTY) resumeAfterGap(clientID string, cur *ptySubscriber) (*ptyQueue, *p
 	q := p.subscribeLocked(clientID, sub.sent.Load(), false)
 	next := p.subscribers[clientID]
 	next.noPace.Store(sub.noPace.Load())
+	next.frames.Store(sub.frames.Load())
 	p.wakePacer()
 	return q, next
 }

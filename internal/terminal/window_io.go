@@ -245,6 +245,8 @@ func (w *Window) outputWriter() {
 			if closed {
 				return
 			}
+			// Caught up: the next backlog is reported again.
+			w.lagSent.Store(false)
 			// Wait only after a pop found the queue empty: the next push
 			// leaves a token on wake.
 			var trimC <-chan time.Time
@@ -756,7 +758,9 @@ func (w *Window) WriteOutputAsync(data []byte) {
 	// slot bound before the byte bound holds the sender, and are dropped
 	// there.
 	if w.outputQ.push(chunk) {
-		w.queuedBytes.Add(int64(len(data)))
+		if w.queuedBytes.Add(int64(len(data))) > lagMark() {
+			w.reportLag()
+		}
 	}
 }
 

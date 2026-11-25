@@ -2724,6 +2724,8 @@ func (d *Daemon) handleMessage(cs *connState, msg *Message) error {
 		return d.handleGetTerminalState(cs, msg)
 	case MsgReadHistory:
 		return d.handleReadHistory(cs, msg)
+	case MsgPTYLag:
+		return d.handlePTYLag(cs, msg)
 	case MsgExecuteCommand:
 		return d.handleExecuteCommand(cs, msg)
 	case MsgCommandResult:

@@ -201,6 +201,10 @@ type TUIClient struct {
 	// handler because the two are one stream and their order is the contract.
 	ptyResizeHandlers   map[string]func(width, height int)
 	ptyResizeHandlersMu sync.RWMutex
+	// ptyFrameHandlers is handed the frames of a pane the daemon sends in
+	// place of its bytes. See pty_frames.go.
+	ptyFrameHandlers   map[string]func(*TerminalState)
+	ptyFrameHandlersMu sync.RWMutex
 
 	// Remote command handler, called when a remote command is received
 	remoteCommandHandler RemoteCommandHandler
@@ -369,6 +373,7 @@ func NewTUIClient() *TUIClient {
 		ptyHandlers:       make(map[string]func([]byte)),
 		ptyClosedHandlers: make(map[string]func()),
 		ptyResizeHandlers: make(map[string]func(int, int)),
+		ptyFrameHandlers:  make(map[string]func(*TerminalState)),
 		pendingResponses:  make(map[MessageType]*pendingReply),
 		pendingByID:       make(map[uint64]*pendingReply),
 		done:              make(chan struct{}),
@@ -1069,7 +1074,7 @@ func (c *TUIClient) SubscribePTY(ptyID string, fromSeq int64, fromSnapshot bool,
 	c.ptyHandlers[ptyID] = handler
 	c.ptyHandlersMu.Unlock()
 
-	msg, err := NewMessage(MsgSubscribePTY, &SubscribePTYPayload{PTYID: ptyID, FromSeq: fromSeq, FromSnapshot: fromSnapshot})
+	msg, err := NewMessage(MsgSubscribePTY, &SubscribePTYPayload{PTYID: ptyID, FromSeq: fromSeq, FromSnapshot: fromSnapshot, Frames: c.framesFor(ptyID)})
 	if err != nil {
 		return err
 	}
@@ -1085,6 +1090,7 @@ func (c *TUIClient) UnsubscribePTY(ptyID string) {
 	c.ptyResizeHandlersMu.Lock()
 	delete(c.ptyResizeHandlers, ptyID)
 	c.ptyResizeHandlersMu.Unlock()
+	c.OnPTYFrame(ptyID, nil)
 
 	// Send unsubscribe message to daemon to stop streaming
 	msg, err := NewMessage(MsgUnsubscribePTY, &UnsubscribePTYPayload{PTYID: ptyID})
@@ -1977,6 +1983,9 @@ func (c *TUIClient) handleMessage(msg *Message) {
 			handler(data)
 		}
 
+	case MsgPTYFrame:
+		c.handlePTYFrame(msg)
+
 	case MsgPTYResized:
 		var payload PTYResizedPayload
 		if err := msg.ParsePayload(&payload); err != nil {
@@ -2027,6 +2036,7 @@ func (c *TUIClient) handleMessage(msg *Message) {
 		c.ptyResizeHandlersMu.Lock()
 		delete(c.ptyResizeHandlers, payload.PTYID)
 		c.ptyResizeHandlersMu.Unlock()
+		c.OnPTYFrame(payload.PTYID, nil)
 
 		// Call the closed handler to notify window
 		if closedHandler != nil {

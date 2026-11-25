@@ -1103,6 +1103,7 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 	// A read-only viewer and a client on another machine never hold a pane
 	// that streams graphics. See holdForSlowSubscribers.
 	paces := !cs.viewOnly && !cs.viaLink
+	frames := payload.Frames && cs.features.Has(FeaturePTYFrames) && cs.features.Has(FeatureRemoteHistory)
 	cs.mu.Unlock()
 
 	debugLog("[DEBUG] Starting PTY output stream for %s", payload.PTYID)
@@ -1115,6 +1116,7 @@ func (d *Daemon) handleSubscribePTY(cs *connState, msg *Message) error {
 	// authoritative copy of the pane's state at resume, so a rolled catch-up
 	// must replay the tail on top of it rather than clear it (issue #123).
 	sub := pty.subscribeSub(cs.clientID, resume, payload.FromSnapshot)
+	sub.frames.Store(frames)
 	cs.mu.Lock()
 	// Only this connection's own goroutine claims or releases an entry, and a
 	// stream goroutine clears only an entry naming its own subscriber, so the

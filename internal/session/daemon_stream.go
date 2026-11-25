@@ -98,6 +98,9 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 	// resize is a value, not a pointer: taking the address of the receive
 	// variables made them escape, one allocation per chunk.
 	var resize ptyChunk
+	// flood counts what went out in the current frame window. See
+	// pty_frames.go.
+	var flood floodMeter
 
 	for {
 		// A client that went away stops the stream even while chunks are
@@ -196,6 +199,7 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 		// One that arrives while a whole piece is being written waits for
 		// that piece, up to maxBatch. With nobody waiting the pieces are what
 		// they were, so an uncontended stream makes no more writes.
+		flooding := sub.frames.Load() && flood.add(len(batch), time.Now())
 		for out := batch; len(out) > 0; {
 			if len(out) <= smallWrite {
 				cs.sendMu.LockSmall()
@@ -233,6 +237,22 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 			}); err != nil {
 				return
 			}
+		}
+		// A pane that outruns the client goes to it as frames until it is
+		// quiet again.
+		if sub.frames.Load() && pty.framesWanted(sub, flooding) {
+			next := d.streamFrames(cs, pty, sub)
+			if next == nil {
+				return
+			}
+			cs.mu.Lock()
+			if cs.ptySubscriptions[pty.ID] == sub {
+				cs.ptySubscriptions[pty.ID] = next
+			}
+			cs.mu.Unlock()
+			queue, sub = &next.out, next
+			flood = floodMeter{}
+			continue
 		}
 		// A stream that was gapped while this client was slow has drained
 		// by the time the queue is empty. Rebuild it from where it got

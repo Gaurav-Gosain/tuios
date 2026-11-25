@@ -65,6 +65,9 @@ type remoteHistory struct {
 	daemonBase  int64
 	epoch       uint64
 	localEpoch  uint64
+	// notedBase is the emulator's oldest number when the daemon's was noted.
+	// A frame leaves the emulator with no history at that number on purpose.
+	notedBase int64
 
 	pages  map[int64]*historyPage
 	used   []int64
@@ -118,10 +121,12 @@ func (w *Window) NoteDaemonHistory(base int64, epoch uint64, numbered bool) {
 		return
 	}
 	local := w.Terminal.ScrollbackEpoch()
+	localBase, _ := w.Terminal.ScrollbackBase()
 	r := w.remoteState()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.gen++
+	r.notedBase = localBase
 	if !numbered {
 		r.known, r.lost = false, false
 		r.dropPages()
@@ -181,9 +186,9 @@ func (w *Window) remoteLines() remoteSpan {
 		}
 		return remoteSpan{}
 	}
-	if local == 0 {
+	if local == 0 && base != r.notedBase {
 		// The emulator holds no history: none was sent, or a clear dropped
-		// it on both sides.
+		// it on both sides. A frame empties it too, and leaves the daemon's.
 		r.daemonBase = max(r.daemonBase, base)
 	}
 	if base <= r.daemonBase {
@@ -275,14 +280,14 @@ func (w *Window) readHistoryPage(r *remoteHistory, fetch HistoryFetch, want want
 	page, err := fetch((want.idx+1)*historyPageLines, historyPageLines)
 	var p *historyPage
 	var local uint64
-	stale := true
+	held := false
 	// The colours resolve against the emulator's palette, and its epoch says
 	// whether it renumbered since the ask. Both change under the lock.
 	w.RLockIO()
 	if w.Terminal != nil {
+		held = true
 		local = w.Terminal.ScrollbackEpoch()
-		stale = local != want.local
-		if err == nil && page != nil && !stale {
+		if err == nil && page != nil {
 			p = &historyPage{first: page.First}
 			_ = page.Lines(w.Terminal, func(_ int64, line uv.Line, wrapped, padded bool) {
 				p.lines = append(p.lines, line)
@@ -291,9 +296,12 @@ func (w *Window) readHistoryPage(r *remoteHistory, fetch HistoryFetch, want want
 			})
 		}
 	}
-	w.RUnlockIO()
-
 	r.mu.Lock()
+	w.RUnlockIO()
+	// A page asked in another numbering is stale, unless the emulator's
+	// numbering is noted as the daemon's again since: a frame renumbers the
+	// emulator and notes the daemon's in the same step.
+	stale := !held || (local != want.local && !(r.known && local == r.localEpoch))
 	switch {
 	case err != nil:
 		if r.failed == nil {

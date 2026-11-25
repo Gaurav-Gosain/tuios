@@ -26,10 +26,16 @@ const (
 	// not hold from the daemon by number, with MsgReadHistory. Listed only by
 	// a build whose emulator numbers its history. See pty_history.go.
 	FeatureRemoteHistory Feature = "remote-history"
+	// FeaturePTYFrames: the daemon sends a pane the client is behind on as
+	// frames of its screen (MsgPTYFrame) instead of bytes, and the client
+	// reports that it is behind with MsgPTYLag. On only with
+	// FeatureRemoteHistory, which brings back the lines a frame does not
+	// carry. See pty_frames.go.
+	FeaturePTYFrames Feature = "pty-frames"
 )
 
 // knownFeatures is every feature this build has.
-var knownFeatures = []Feature{FeatureRemoteHistory}
+var knownFeatures = []Feature{FeatureRemoteHistory, FeaturePTYFrames}
 
 // featureOn reports whether this build can do f. A feature that depends on
 // the emulator backend is off where the backend lacks it.
@@ -38,6 +44,9 @@ func featureOn(f Feature) bool {
 	case FeatureRemoteHistory:
 		// remote_history=off stands for a peer that does not list it.
 		return numbersHistory() && testknob.String("remote_history") != "off"
+	case FeaturePTYFrames:
+		// pty_frames=off stands for a peer that does not list it.
+		return numbersHistory() && testknob.String("pty_frames") != "off"
 	}
 	return true
 }

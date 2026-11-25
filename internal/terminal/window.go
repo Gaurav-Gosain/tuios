@@ -455,6 +455,11 @@ type Window struct {
 	// whether the frame it is about to ask for has already been superseded;
 	// see coalesceInterval.
 	queuedBytes atomic.Int64
+	// lagReport tells the daemon this pane's output is more than lagMark
+	// ahead of the emulator, and lagSent says it was told since the queue
+	// last ran empty. See window_frames.go.
+	lagReport atomic.Pointer[func()]
+	lagSent   atomic.Bool
 
 	// outputEpoch stamps every chunk queued for the emulator. DiscardPendingOutput
 	// bumps it, and outputWriter throws away anything stamped with an older one,

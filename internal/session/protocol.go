@@ -213,6 +213,12 @@ const (
 	// only when both sides listed FeatureRemoteHistory. See pty_history.go.
 	MsgReadHistory
 	MsgHistoryPage
+	// MsgPTYFrame is one frame of a pane the client is behind on
+	// (PTYFramePayload), sent in place of its bytes. MsgPTYLag is the
+	// client's report that it is behind on a pane (PTYLagPayload). Both only
+	// when both sides listed FeaturePTYFrames. See pty_frames.go.
+	MsgPTYFrame
+	MsgPTYLag
 
 	// msgTypeEnd is one past the last message type. It stays last: a type
 	// added above it is walked by the tests that sweep every type.
@@ -899,6 +905,9 @@ type SubscribePTYPayload struct {
 	PTYID        string `json:"pty_id"`
 	FromSeq      int64  `json:"from_seq,omitempty"`
 	FromSnapshot bool   `json:"from_snapshot,omitempty"`
+	// Frames says the client takes frames for this pane when it floods
+	// (FeaturePTYFrames). A client that records the stream needs its bytes.
+	Frames bool `json:"frames,omitempty"`
 }
 
 // PTYResizedPayload announces the size the daemon's emulator took, delivered in

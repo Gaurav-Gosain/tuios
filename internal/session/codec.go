@@ -118,6 +118,8 @@ func init() {
 	gob.Register(TerminalStatePayload{})
 	gob.Register(ReadHistoryPayload{})
 	gob.Register(HistoryPagePayload{})
+	gob.Register(PTYFramePayload{})
+	gob.Register(PTYLagPayload{})
 
 	// Session state types
 	gob.Register(SessionState{})
