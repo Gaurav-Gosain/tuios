@@ -72,9 +72,11 @@ type remoteHistory struct {
 	gen    uint64
 
 	// wanted is the pages to read, the newest last, each with the emulator's
-	// epoch it was asked in. reading says a read is on its way.
-	wanted  []wantedPage
-	reading bool
+	// epoch it was asked in. reading says a read is on its way, and inFlight
+	// is the page it reads.
+	wanted   []wantedPage
+	reading  bool
+	inFlight wantedPage
 }
 
 // wantedPage is a page to read, and the emulator's epoch it was asked in.
@@ -229,6 +231,9 @@ func (r *remoteHistory) requestLocked(w *Window, idx int64, local uint64) {
 	if r.fetch == nil || time.Since(r.failed[idx]) < historyRetry {
 		return
 	}
+	if r.reading && r.inFlight == (wantedPage{idx: idx, local: local}) {
+		return
+	}
 	for i, want := range r.wanted {
 		if want.idx == idx {
 			r.wanted = append(r.wanted[:i], r.wanted[i+1:]...)
@@ -257,6 +262,7 @@ func (w *Window) readHistoryPages(r *remoteHistory) {
 		}
 		want := r.wanted[len(r.wanted)-1]
 		r.wanted = r.wanted[:len(r.wanted)-1]
+		r.inFlight = want
 		fetch := r.fetch
 		r.mu.Unlock()
 		w.readHistoryPage(r, fetch, want)
@@ -319,8 +325,11 @@ func (w *Window) readHistoryPage(r *remoteHistory, fetch HistoryFetch, want want
 	}
 }
 
-// wakeRenderer asks for a frame, as new output does.
+// wakeRenderer asks for a frame that draws the pane again, as new output
+// does. The signal alone redraws the screen from the pane's cached content:
+// HasNewOutput is what makes the frame read the history again.
 func (w *Window) wakeRenderer() {
+	w.HasNewOutput.Store(true)
 	select {
 	case w.PTYDataChan <- struct{}{}:
 	default:
