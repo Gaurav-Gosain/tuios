@@ -36,7 +36,9 @@ var historyMethods = map[string]bool{
 // emulator directly would miss those lines.
 //
 // Rejected in internal/app and internal/input: a history method called on a
-// window's Terminal field, as in w.Terminal.ScrollbackLen(). A reader that
+// window's Terminal field, as in w.Terminal.ScrollbackLen(), or in the same
+// function on a name that holds it (term := w.Terminal) or on a vt.Terminal
+// parameter. A reader that
 // must count the client emulator's own rows, such as an image placement that
 // is anchored to them, carries a comment on its line or the line above:
 //
@@ -89,9 +91,23 @@ func h(w *Window) int {
 	//tuios:allow-history the line above counts too
 	return w.Terminal.ScrollbackLen()
 }
+func i(w *Window) int {
+	term := w.Terminal
+	return term.ScrollbackLen()
+}
+func j(t vt.Terminal) int { return t.ScrollbackLen() }
+func k(w *Window) int {
+	var term = w.Terminal
+	return term.ScrollbackLen()
+}
+func l(g CopyGrid) int    { return g.ScrollbackLen() }
+func m(w *Window) int {
+	t := w.Text()
+	return t.ScrollbackLen()
+}
 `
-	if got := directHistoryReads(t, "x.go", []byte(src)); len(got) != 3 {
-		t.Fatalf("the lint found %d reads, want the 3 direct ones (a, b and c):\n%s", len(got), strings.Join(got, "\n"))
+	if got := directHistoryReads(t, "x.go", []byte(src)); len(got) != 6 {
+		t.Fatalf("the lint found %d reads, want the 6 direct ones (a, b, c, i, j and k):\n%s", len(got), strings.Join(got, "\n"))
 	}
 }
 
@@ -114,21 +130,75 @@ func directHistoryReads(t *testing.T, name string, src []byte) []string {
 		}
 	}
 	var out []string
-	ast.Inspect(f, func(n ast.Node) bool {
-		call, ok := n.(*ast.CallExpr)
-		if !ok {
-			return true
+	for _, decl := range f.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Body == nil {
+			continue
 		}
-		method, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok || !historyMethods[method.Sel.Name] {
-			return true
-		}
-		if field, ok := method.X.(*ast.SelectorExpr); ok && field.Sel.Name == "Terminal" {
+		aliases := emulatorNames(fn)
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			method, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok || !historyMethods[method.Sel.Name] || !isEmulator(method.X, aliases) {
+				return true
+			}
 			if line := fset.Position(call.Pos()).Line; !allowed[line] {
 				out = append(out, fmt.Sprintf("%s:%d: Terminal.%s", name, line, method.Sel.Name))
 			}
+			return true
+		})
+	}
+	return out
+}
+
+// emulatorNames returns the names in fn that hold a window's emulator: a
+// vt.Terminal parameter, and a variable set from a Terminal field. It does not
+// follow scopes: a name is counted in the whole function.
+func emulatorNames(fn *ast.FuncDecl) map[string]bool {
+	names := map[string]bool{}
+	for _, field := range fn.Type.Params.List {
+		if pkg, sel := selector(field.Type); pkg == "vt" && sel == "Terminal" {
+			for _, n := range field.Names {
+				names[n.Name] = true
+			}
+		}
+	}
+	bind := func(lhs []ast.Expr, rhs []ast.Expr) {
+		if len(lhs) != len(rhs) {
+			return
+		}
+		for i, r := range rhs {
+			if id, ok := lhs[i].(*ast.Ident); ok && isEmulator(r, nil) {
+				names[id.Name] = true
+			}
+		}
+	}
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		switch s := n.(type) {
+		case *ast.AssignStmt:
+			bind(s.Lhs, s.Rhs)
+		case *ast.ValueSpec:
+			lhs := make([]ast.Expr, len(s.Names))
+			for i, n := range s.Names {
+				lhs[i] = n
+			}
+			bind(lhs, s.Values)
 		}
 		return true
 	})
-	return out
+	return names
+}
+
+// isEmulator reports whether e is a Terminal field or one of names.
+func isEmulator(e ast.Expr, names map[string]bool) bool {
+	switch x := e.(type) {
+	case *ast.SelectorExpr:
+		return x.Sel.Name == "Terminal"
+	case *ast.Ident:
+		return names[x.Name]
+	}
+	return false
 }

@@ -105,6 +105,7 @@ func sixelRefs(w *terminal.Window) map[uint32]bool {
 	// The history is read as text cells, which builds no cell and allocates
 	// nothing for a cell that is not a marker.
 	lead := []byte(vt.SixelMarkerLead)
+	//tuios:allow-history the image markers are cells of the client emulator itself
 	term.ScrollbackText(0, term.ScrollbackLen(), func(_, _ int, cells []vt.TextCell) bool {
 		for _, c := range cells {
 			if bytes.HasPrefix(c.Content, lead) {

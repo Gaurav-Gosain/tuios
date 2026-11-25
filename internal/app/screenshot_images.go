@@ -544,7 +544,7 @@ func (m *OS) windowShotPieces(windowID string, alt bool, t vt.Terminal, g *shot.
 	sixelIDs, kittyIDs := hitIDs(hits)
 	placements, kept, boxes, cellW, cellH := m.KittyPassthrough.captureKitty(windowID, alt, kittyIDs)
 	var pieces []shotPiece
-	top := t.ScrollbackLen()
+	top := t.ScrollbackLen() //tuios:allow-history the kitty placements count rows in the client emulator
 	for _, p := range placements {
 		pieces = append(pieces, kittyPiece(p, p.guestX, p.absoluteLine-top, cellW, cellH))
 	}
