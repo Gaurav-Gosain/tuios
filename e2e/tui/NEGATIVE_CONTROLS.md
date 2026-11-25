@@ -19906,3 +19906,20 @@ editor, as dash does.
 | The `spPrompt` calls left out (the tree before the fix) | `TestPhoneStreamsAPaneAndAnswersTheInbox`, `TestStreamPaneHeldToTheLinkPolicy`, `TestStreamPaneLeaseChurn`, `TestStreamPaneFromAPane` | `no SZ- line showed`, with `sh-3.2$ SZ-22x78` on the screen | **caught** |
 | With the fix, the same forced runs | the 8 tests that use `limitsDaemon` or `spSize` | 8 of 8 pass | n/a |
 | With the fix, no forced start, `-count=3` | the same 8 tests | 24 of 24 pass | n/a |
+
+## The sign-in checks of agent-readiness write their own row
+
+`Daemon.readiness` (`internal/session/verb_agent_readiness.go`) starts each harness's sign-in check on a goroutine, and the loop goes on appending the next harness's row to `out`. The goroutine wrote its answer with `out[i].SignedIn`, so it read `out` while the loop wrote it: a data race. No answer was lost, since `out` is made with room for every harness and never moves, but the race detector reported it in the e2e suite under `-race` (the New agent sheet's readiness check). The goroutine now holds a pointer to its row, taken in the loop.
+
+`TestReadinessSignInChecksDoNotRaceTheList` asks about claude-code, whose check runs (a stub `claude` answers `"loggedIn": true`), and then codex, so the loop appends while the check is out.
+
+Run on 2026-11-25 on macOS, against main at 694cfcdbe, each run a process of its own (the race detector reports a race once per process).
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| Main | `TestReadinessSignInChecksDoNotRaceTheList` under `-race` | 10 of 10 runs: "race detected during execution of test", `readiness.func1` reading what `readiness` wrote | **caught** |
+| This change | `TestReadinessSignInChecksDoNotRaceTheList` under `-race` | 10 of 10 runs pass, and 20 of 20 in one process | fixed |
+
+```sh
+go test -race -count=1 -run '^TestReadinessSignInChecksDoNotRaceTheList$' ./internal/session/
+```
