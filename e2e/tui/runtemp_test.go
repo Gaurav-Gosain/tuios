@@ -111,7 +111,8 @@ func finishRunTemp(code int) int {
 }
 
 // leftInRunTemp lists what is in root and not a once-per-run folder, as "name
-// (size)" lines, largest first.
+// (size)" lines, largest first. A .DS_Store is not listed: macOS's Finder
+// writes one into a folder it shows, and no test made it.
 func leftInRunTemp(root string) []string {
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -126,7 +127,7 @@ func leftInRunTemp(root string) []string {
 	var items []item
 	for _, e := range entries {
 		path := filepath.Join(root, e.Name())
-		if runScratchPaths[path] || e.Name() == runTempMark {
+		if runScratchPaths[path] || e.Name() == runTempMark || e.Name() == ".DS_Store" {
 			continue
 		}
 		size := folderBytes(path)
