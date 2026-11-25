@@ -71,6 +71,9 @@ type PreviewRun struct {
 	TimedOut bool   `json:"timed_out,omitempty"`
 	// Missing says the program is not on this machine.
 	Missing bool `json:"missing,omitempty"`
+	// Sized says the command names {width} or {height}, so a new size
+	// runs it again.
+	Sized bool `json:"sized,omitempty"`
 }
 
 var previewerCache struct {
@@ -156,7 +159,7 @@ func previewerNames(list []Previewer) []string {
 // RunPreviewer runs p for the file at path and reads what it prints.
 func RunPreviewer(ctx context.Context, p Previewer, path string, dir bool, size previewspec.Size) PreviewRun {
 	output := cmp.Or(p.Output, previewspec.OutputANSI)
-	run := PreviewRun{Name: p.Name, Output: output}
+	run := PreviewRun{Name: p.Name, Output: output, Sized: previewspec.UsesSize(p.Command)}
 	argv := previewspec.Expand(p.Command, path, dir, size)
 	prog := argv[0]
 	if p.Root != "" && strings.ContainsRune(prog, '/') && !filepath.IsAbs(prog) {
@@ -293,16 +296,39 @@ func (d *Daemon) verbFilePreviewRun(cs *connState, params json.RawMessage) (any,
 		case <-ctx.Done():
 		}
 	}()
+	return previewRunIn(ctx, path, fi, f, p.Name, previewspec.Size{Width: p.Width, Height: p.Height, Line: p.Line}), nil
+}
+
+// PreviewRunHere is file-preview-run in this process, for a client that
+// runs with no daemon.
+func PreviewRunHere(ctx context.Context, path, name string, size previewspec.Size) (PreviewRunReply, error) {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return PreviewRunReply{}, err
+	}
+	var f *os.File
+	if !fi.IsDir() {
+		if f, err = os.Open(path); err != nil {
+			return PreviewRunReply{}, err
+		}
+		defer func() { _ = f.Close() }()
+	}
+	return previewRunIn(ctx, path, fi, f, name, size), nil
+}
+
+// previewRunIn runs the previewer name, or the first one, of the file at
+// path, which f holds open.
+func previewRunIn(ctx context.Context, path string, fi os.FileInfo, f *os.File, name string, size previewspec.Size) PreviewRunReply {
 	list := PreviewersFor(path, fi.IsDir(), f)
 	out := PreviewRunReply{Path: path, Previewers: previewerNames(list), Size: fi.Size(), MTime: fi.ModTime().UnixMilli()}
 	for _, x := range list {
-		if p.Name == "" || x.Name == p.Name {
-			run := RunPreviewer(ctx, x, path, fi.IsDir(), previewspec.Size{Width: p.Width, Height: p.Height, Line: p.Line})
+		if name == "" || x.Name == name {
+			run := RunPreviewer(ctx, x, path, fi.IsDir(), size)
 			out.Run = &run
 			break
 		}
 	}
-	return out, nil
+	return out
 }
 
 func previewRunVerbs() map[string]verbEntry {

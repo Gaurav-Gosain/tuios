@@ -133,52 +133,50 @@ func (m *OS) quickLookRunRead() tea.Cmd {
 	gen := ql.runGen
 	ql.runOut = true
 	ascii := overlay.UseASCII()
-	// Moving to another file ends the run: here its process group, and on
-	// another machine the call, which ends the run there.
+	// Each run goes through file-preview-run on the machine that has the
+	// file, this one too. Moving to another file closes the call, and the
+	// daemon then ends the run.
 	ctx, cancel := context.WithCancel(context.Background())
 	ql.runCancel = cancel
-	if t.host == "" {
-		mtime, fsize := r.mtime, r.size
-		return func() tea.Msg {
-			defer cancel()
-			// The fetch matched the file, MIME type and all, so the name is
-			// enough. The list is read here, off the render loop.
-			for _, p := range session.MachinePreviewers() {
-				if p.Name == name {
-					run := session.RunPreviewer(ctx, p, t.path, t.dir, size)
-					out := quickLookRunFrom(t, &run, ascii)
-					out.w, out.h, out.sized = w, h, previewspec.UsesSize(p.Command)
-					out.mtime, out.size = mtime, fsize
-					return quickLookRunMsg{gen: gen, run: out}
-				}
-			}
-			return quickLookRunMsg{gen: gen, run: &quickLookRun{target: t, name: name, note: name + " is not set up on this machine.", warn: true}}
-		}
-	}
 	call := m.verbOnHostCallerFor(ctx.Done(), previewspec.TimeoutMax+transferCallTimeout)
+	// A client with no daemon runs the same code in its own process.
+	here := t.host == "" && m.DaemonClient == nil
+	mtime, fsize := r.mtime, r.size
 	return func() tea.Msg {
 		defer cancel()
-		raw, err := call(t.host, "file-preview-run", map[string]any{"path": t.path, "name": name, "width": size.Width, "height": size.Height, "line": size.Line})
-		return quickLookRunDecode(t, gen, raw, err, ascii, w, h)
+		var reply session.PreviewRunReply
+		var err error
+		if here {
+			reply, err = session.PreviewRunHere(ctx, t.path, name, size)
+		} else {
+			var raw json.RawMessage
+			if raw, err = call(t.host, "file-preview-run", map[string]any{"path": t.path, "name": name, "width": size.Width, "height": size.Height, "line": size.Line}); err == nil {
+				err = jsonx.Unmarshal(raw, &reply)
+			}
+		}
+		msg := quickLookRunReply(t, name, gen, reply, err, ascii)
+		if run := msg.run; run != nil {
+			run.w, run.h, run.mtime, run.size = w, h, mtime, fsize
+		}
+		return msg
 	}
 }
 
-// quickLookRunDecode reads a file-preview-run answer from another machine.
-func quickLookRunDecode(t quickLookTarget, gen int, raw json.RawMessage, err error, ascii bool, w, h int) quickLookRunMsg {
+// quickLookRunReply turns a file-preview-run answer for the previewer
+// name, or for a probe when name is "", into the message for the panel.
+func quickLookRunReply(t quickLookTarget, name string, gen int, reply session.PreviewRunReply, err error, ascii bool) quickLookRunMsg {
 	msg := quickLookRunMsg{gen: gen}
-	var reply session.PreviewRunReply
 	if err != nil {
 		msg.run = &quickLookRun{target: t, note: quickLookErrorText(t, err), warn: true}
 		return msg
 	}
-	if jsonx.Unmarshal(raw, &reply) != nil {
-		msg.run = &quickLookRun{target: t, note: "The answer could not be read.", warn: true}
-		return msg
-	}
 	msg.names, msg.named = reply.Previewers, true
-	if reply.Run != nil {
+	switch {
+	case reply.Run != nil:
 		msg.run = quickLookRunFrom(t, reply.Run, ascii)
-		msg.run.w, msg.run.h, msg.run.sized = w, h, true
+		msg.run.sized = reply.Run.Sized
+	case name != "":
+		msg.run = &quickLookRun{target: t, name: name, note: name + " is not set up on this machine.", warn: true}
 	}
 	return msg
 }
