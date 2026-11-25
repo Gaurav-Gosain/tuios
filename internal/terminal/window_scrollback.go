@@ -27,8 +27,7 @@ func (w *Window) ScrollbackLenSync() int {
 	if w.Terminal == nil {
 		return 0
 	}
-	extra, _ := w.remoteLines()
-	n := extra + w.Terminal.ScrollbackLen()
+	n := w.remoteLines().n + w.Terminal.ScrollbackLen()
 	w.lastScrollbackLen.Store(int64(n))
 	return n
 }
@@ -42,8 +41,7 @@ func (w *Window) ScrollbackLen() int {
 	if w.Terminal == nil {
 		return 0
 	}
-	extra, _ := w.remoteLines()
-	return extra + w.Terminal.ScrollbackLen()
+	return w.remoteLines().n + w.Terminal.ScrollbackLen()
 }
 
 // ScrollbackLine returns a line from the scrollback buffer at the given index.
@@ -53,14 +51,14 @@ func (w *Window) ScrollbackLine(index int) uv.Line {
 	if w.Terminal == nil {
 		return nil
 	}
-	if extra, first := w.remoteLines(); index < extra {
+	if span := w.remoteLines(); index < span.n {
 		if index < 0 {
 			return nil
 		}
-		line, _, _, _ := w.remote.Load().line(w, first+int64(index))
+		line, _, _, _ := w.remote.Load().line(w, span.first+int64(index), span.local, true)
 		return line
 	} else {
-		index -= extra
+		index -= span.n
 	}
 	return w.Terminal.ScrollbackLine(index)
 }
@@ -73,9 +71,11 @@ func (w *Window) ScrollbackRows(from, end int, fn func(index int, line uv.Line) 
 	if w.Terminal == nil {
 		return
 	}
-	extra, first := w.remoteLines()
+	span := w.remoteLines()
+	extra := span.n
+	// A range is read from the pages already read: see UnreadHistory.
 	for i := max(from, 0); i < min(end, extra); i++ {
-		line, _, _, _ := w.remote.Load().line(w, first+int64(i))
+		line, _, _, _ := w.remote.Load().line(w, span.first+int64(i), span.local, false)
 		if !fn(i, line) {
 			return
 		}
@@ -94,10 +94,11 @@ func (w *Window) ScrollbackText(from, end int, fn func(index, width int, cells [
 	if w.Terminal == nil {
 		return
 	}
-	extra, first := w.remoteLines()
+	span := w.remoteLines()
+	extra := span.n
 	var buf []vt.TextCell
 	for i := max(from, 0); i < min(end, extra); i++ {
-		line, _, _, _ := w.remote.Load().line(w, first+int64(i))
+		line, _, _, _ := w.remote.Load().line(w, span.first+int64(i), span.local, false)
 		buf = remoteText(line, buf)
 		if !fn(i, len(line), buf) {
 			return
@@ -117,11 +118,11 @@ func (w *Window) ScrollbackSoftWrapped(index int) (wrapped, known bool) {
 	if w.Terminal == nil {
 		return false, false
 	}
-	if extra, first := w.remoteLines(); index < extra {
-		_, wrapped, _, ok := w.remote.Load().line(w, first+int64(index))
+	if span := w.remoteLines(); index < span.n {
+		_, wrapped, _, ok := w.remote.Load().line(w, span.first+int64(index), span.local, true)
 		return wrapped, ok
 	} else {
-		index -= extra
+		index -= span.n
 	}
 	return w.Terminal.ScrollbackSoftWrapped(index)
 }
@@ -132,11 +133,11 @@ func (w *Window) ScrollbackPadded(index int) bool {
 	if w.Terminal == nil {
 		return false
 	}
-	if extra, first := w.remoteLines(); index < extra {
-		_, _, padded, _ := w.remote.Load().line(w, first+int64(index))
+	if span := w.remoteLines(); index < span.n {
+		_, _, padded, _ := w.remote.Load().line(w, span.first+int64(index), span.local, true)
 		return padded
 	} else {
-		index -= extra
+		index -= span.n
 	}
 	return w.Terminal.ScrollbackPadded(index)
 }

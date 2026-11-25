@@ -20,6 +20,8 @@ import (
 //     still look right. The top row must be HIST1, the first line printed.
 //   - The fetched lines could be the wrong ones: off by a page, or the
 //     client's own lines again. The rows under HIST1 must be HIST2 to HIST5.
+//   - A search could miss old lines without a word. A search for a line no
+//     page brought must say how many older lines it did not search.
 //   - The fallback could show blank rows for lines it cannot read, or hang.
 //     With the feature off, the top must be a line the snapshot carried, and
 //     no line older than it.
@@ -67,6 +69,15 @@ func TestCopyModeReadsOldHistoryFromTheDaemon(t *testing.T) {
 					return hasHistRun(s.Text(), 1, 5)
 				}, uiTimeout); err != nil {
 					t.Fatalf("ASSERTION: the top of the history is not HIST1 to HIST5\n%s", term.Snapshot())
+				}
+				// HIST1500 is in a page no reader asked for: the search does
+				// not find it, and says what it did not search.
+				sendKeys(t, term, "/")
+				sendKeys(t, term, "HIST1500", tuitest.Enter)
+				if err := term.WaitFor(func(s tuitest.Screen) bool {
+					return strings.Contains(s.Text(), "older lines are not searched")
+				}, uiTimeout); err != nil {
+					t.Fatalf("ASSERTION: a search that skipped old lines did not say so\n%s", term.Snapshot())
 				}
 				return
 			}

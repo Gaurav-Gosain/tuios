@@ -13,14 +13,28 @@ import (
 // attach carries the newest thousand lines, and the daemon can keep many
 // more. The window adds the lines only the daemon holds above the ones the
 // emulator holds, and reads them from the daemon by number
-// (vt.Terminal.ScrollbackBase), a page at a time, when a reader asks for one.
-// A line not read yet reads as blank, and the page that brings it wakes the
-// renderer.
+// (vt.Terminal.ScrollbackBase), a page at a time.
 //
-// The daemon's oldest number is what the last snapshot or page said. The
-// daemon drops lines and renumbers on its own, so it can be stale: a page
-// carries the daemon's current oldest number and epoch, and pages of an older
-// epoch are dropped.
+// Only a reader of one line asks for its page: the renderer and copy mode's
+// cursor. A line not read yet reads as blank, and the page that brings it
+// wakes the renderer. A reader of a whole range, such as search, gets the
+// pages already read and blank lines for the rest, and asks for nothing:
+// walking a long history a page at a time would hold up every other request
+// of the client. UnreadHistory says how many lines such a reader missed.
+//
+// One page is read at a time. The pages asked for while one is on its way
+// wait, newest first, up to maxWantedPages: the screen moved past the older
+// ones.
+//
+// The daemon's oldest number is what the last snapshot or page said. A page
+// carries the daemon's current oldest number and numbering epoch, and pages of
+// an older epoch are dropped. A request carries the emulator's own epoch: a
+// reply that comes back after the emulator renumbered its history is dropped,
+// and the page is asked for again in the new numbering.
+//
+// Locks: the emulator's numbers are read under the window's I/O lock, which
+// the readers hold, and then remoteHistory.mu is taken. Nothing takes the I/O
+// lock while it holds mu.
 
 // HistoryFetch reads up to max history lines before line number before from
 // the daemon. A nil page says the daemon does not number the pane's history.
@@ -32,6 +46,8 @@ const (
 	historyPageLines = 256
 	// maxHistoryPages bounds the pages kept: 16,384 lines.
 	maxHistoryPages = 64
+	// maxWantedPages bounds the pages waiting to be read.
+	maxWantedPages = 4
 	// historyRetry is how long a page that failed to come is not asked again.
 	historyRetry = 2 * time.Second
 )
@@ -41,20 +57,30 @@ type remoteHistory struct {
 	mu    sync.Mutex
 	fetch HistoryFetch
 
-	// known says daemonBase and epoch came from the daemon.
-	known      bool
-	daemonBase int64
-	epoch      uint64
-	// localEpoch is the emulator's own epoch when daemonBase was set. A
-	// resize of the emulator renumbers its history, and the daemon's numbers
-	// then are not known until the next page.
-	localEpoch uint64
+	// known says daemonBase and epoch came from the daemon, for the
+	// emulator's numbering localEpoch. lost says they were known and a
+	// renumbering of the emulator made them unknown: the window asks for a
+	// page to learn them again.
+	known, lost bool
+	daemonBase  int64
+	epoch       uint64
+	localEpoch  uint64
 
-	pages    map[int64]*historyPage
-	used     []int64
-	fetching map[int64]bool
-	failed   map[int64]time.Time
-	gen      uint64
+	pages  map[int64]*historyPage
+	used   []int64
+	failed map[int64]time.Time
+	gen    uint64
+
+	// wanted is the pages to read, the newest last, each with the emulator's
+	// epoch it was asked in. reading says a read is on its way.
+	wanted  []wantedPage
+	reading bool
+}
+
+// wantedPage is a page to read, and the emulator's epoch it was asked in.
+type wantedPage struct {
+	idx   int64
+	local uint64
 }
 
 // historyPage is one page of lines read from the daemon.
@@ -83,25 +109,26 @@ func (w *Window) SetHistorySource(fetch HistoryFetch) {
 
 // NoteDaemonHistory records the daemon's oldest line number and epoch from a
 // snapshot the window's emulator was built from. It is not numbered when the
-// daemon does not number its history.
+// daemon does not number its history. The caller holds the I/O lock it
+// applied the snapshot under.
 func (w *Window) NoteDaemonHistory(base int64, epoch uint64, numbered bool) {
-	r := w.remoteState()
-	var local uint64
-	if w.Terminal != nil {
-		local = w.Terminal.ScrollbackEpoch()
+	if w.Terminal == nil {
+		return
 	}
+	local := w.Terminal.ScrollbackEpoch()
+	r := w.remoteState()
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.gen++
 	if !numbered {
-		r.known = false
+		r.known, r.lost = false, false
 		r.dropPages()
 		return
 	}
 	if epoch != r.epoch {
 		r.dropPages()
 	}
-	r.known, r.daemonBase, r.epoch, r.localEpoch = true, base, epoch, local
-	r.gen++
+	r.known, r.lost, r.daemonBase, r.epoch, r.localEpoch = true, false, base, epoch, local
 }
 
 // remoteState is the window's remoteHistory, made on first use.
@@ -113,32 +140,44 @@ func (w *Window) remoteState() *remoteHistory {
 	return w.remote.Load()
 }
 
-// remoteLines is how many lines the daemon holds above the oldest the
-// emulator holds, and the number of the first of them.
-func (w *Window) remoteLines() (n int, first int64) {
+// remoteSpan is the lines the daemon holds above the oldest the emulator
+// holds: how many, the number of the first, and the emulator's epoch.
+type remoteSpan struct {
+	n     int
+	first int64
+	local uint64
+}
+
+// remoteLines is the window's remoteSpan. The caller holds the I/O lock, or
+// reads the emulator without one as the other history readers do.
+func (w *Window) remoteLines() remoteSpan {
 	r := w.remote.Load()
 	if r == nil || w.Terminal == nil {
-		return 0, 0
+		return remoteSpan{}
 	}
 	base, ok := w.Terminal.ScrollbackBase()
 	if !ok {
-		return 0, 0
+		return remoteSpan{}
 	}
 	local := w.Terminal.ScrollbackLen()
 	epoch := w.Terminal.ScrollbackEpoch()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if !r.known || r.fetch == nil {
-		return 0, 0
+	if r.fetch == nil {
+		return remoteSpan{}
 	}
-	if epoch != r.localEpoch {
+	if r.known && epoch != r.localEpoch {
 		// The emulator renumbered its history. The daemon renumbers too, but
 		// by how much is not known here until a page says.
-		r.known = false
+		r.known, r.lost = false, true
 		r.dropPages()
 		r.gen++
-		r.requestLocked(w, base)
-		return 0, 0
+	}
+	if !r.known {
+		if r.lost {
+			r.requestLocked(w, pageIndex(base-1), epoch)
+		}
+		return remoteSpan{}
 	}
 	if local == 0 {
 		// The emulator holds no history: none was sent, or a clear dropped
@@ -146,20 +185,22 @@ func (w *Window) remoteLines() (n int, first int64) {
 		r.daemonBase = max(r.daemonBase, base)
 	}
 	if base <= r.daemonBase {
-		return 0, 0
+		return remoteSpan{}
 	}
-	return int(base - r.daemonBase), r.daemonBase
+	return remoteSpan{n: int(base - r.daemonBase), first: r.daemonBase, local: epoch}
 }
 
-// line is line number n, and its flags, if a page holds it. Otherwise it asks
-// for the page.
-func (r *remoteHistory) line(w *Window, n int64) (line uv.Line, wrapped, padded, ok bool) {
+// line is line number n, and its flags, if a page holds it. Otherwise, with
+// ask, it asks for the page.
+func (r *remoteHistory) line(w *Window, n int64, local uint64, ask bool) (line uv.Line, wrapped, padded, ok bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	idx := pageIndex(n)
 	p := r.pages[idx]
 	if p == nil {
-		r.requestLocked(w, (idx+1)*historyPageLines)
+		if ask {
+			r.requestLocked(w, idx, local)
+		}
 		return nil, false, false, false
 	}
 	r.touchLocked(idx)
@@ -170,63 +211,102 @@ func (r *remoteHistory) line(w *Window, n int64) (line uv.Line, wrapped, padded,
 	return p.lines[i], p.wraps[i], p.pads[i], true
 }
 
-// requestLocked asks the daemon for the page of lines before number before,
-// once, off the caller's goroutine.
-func (r *remoteHistory) requestLocked(w *Window, before int64) {
-	idx := pageIndex(before - 1)
-	if r.fetch == nil || r.fetching[idx] || time.Since(r.failed[idx]) < historyRetry {
-		return
+// held is how many of the lines numbered first to first+n-1 a page holds.
+func (r *remoteHistory) held(first int64, n int) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	held := 0
+	for _, p := range r.pages {
+		lo, hi := max(p.first, first), min(p.first+int64(len(p.lines)), first+int64(n))
+		held += int(max(hi-lo, 0))
 	}
-	if r.fetching == nil {
-		r.fetching = map[int64]bool{}
-	}
-	r.fetching[idx] = true
-	fetch, epoch := r.fetch, r.epoch
-	go w.readHistoryPage(r, fetch, idx, epoch)
+	return held
 }
 
-// readHistoryPage reads page idx from the daemon and keeps it.
-func (w *Window) readHistoryPage(r *remoteHistory, fetch HistoryFetch, idx int64, epoch uint64) {
-	page, err := fetch((idx+1)*historyPageLines, historyPageLines)
+// requestLocked asks for page idx, read off the caller's goroutine. A page
+// already asked for moves to the front of the wait.
+func (r *remoteHistory) requestLocked(w *Window, idx int64, local uint64) {
+	if r.fetch == nil || time.Since(r.failed[idx]) < historyRetry {
+		return
+	}
+	for i, want := range r.wanted {
+		if want.idx == idx {
+			r.wanted = append(r.wanted[:i], r.wanted[i+1:]...)
+			break
+		}
+	}
+	r.wanted = append(r.wanted, wantedPage{idx: idx, local: local})
+	if len(r.wanted) > maxWantedPages {
+		r.wanted = r.wanted[len(r.wanted)-maxWantedPages:]
+	}
+	if !r.reading {
+		r.reading = true
+		go w.readHistoryPages(r)
+	}
+}
+
+// readHistoryPages reads the wanted pages one at a time, the newest first,
+// until none is left.
+func (w *Window) readHistoryPages(r *remoteHistory) {
+	for {
+		r.mu.Lock()
+		if len(r.wanted) == 0 || r.fetch == nil {
+			r.wanted, r.reading = nil, false
+			r.mu.Unlock()
+			return
+		}
+		want := r.wanted[len(r.wanted)-1]
+		r.wanted = r.wanted[:len(r.wanted)-1]
+		fetch := r.fetch
+		r.mu.Unlock()
+		w.readHistoryPage(r, fetch, want)
+	}
+}
+
+// readHistoryPage reads one page and keeps it, if the emulator's numbering
+// is still the one it was asked in.
+func (w *Window) readHistoryPage(r *remoteHistory, fetch HistoryFetch, want wantedPage) {
+	page, err := fetch((want.idx+1)*historyPageLines, historyPageLines)
 	var p *historyPage
-	if err == nil && page != nil {
-		p = &historyPage{first: page.First}
-		// The colours resolve against the emulator's palette, which the
-		// output writer changes under the lock.
-		w.RLockIO()
-		if w.Terminal != nil {
+	var local uint64
+	stale := true
+	// The colours resolve against the emulator's palette, and its epoch says
+	// whether it renumbered since the ask. Both change under the lock.
+	w.RLockIO()
+	if w.Terminal != nil {
+		local = w.Terminal.ScrollbackEpoch()
+		stale = local != want.local
+		if err == nil && page != nil && !stale {
+			p = &historyPage{first: page.First}
 			_ = page.Lines(w.Terminal, func(_ int64, line uv.Line, wrapped, padded bool) {
 				p.lines = append(p.lines, line)
 				p.wraps = append(p.wraps, wrapped)
 				p.pads = append(p.pads, padded)
 			})
 		}
-		w.RUnlockIO()
 	}
-	var local uint64
-	if w.Terminal != nil {
-		local = w.Terminal.ScrollbackEpoch()
-	}
+	w.RUnlockIO()
 
 	r.mu.Lock()
-	delete(r.fetching, idx)
 	switch {
 	case err != nil:
 		if r.failed == nil {
 			r.failed = map[int64]time.Time{}
 		}
-		r.failed[idx] = time.Now()
+		r.failed[want.idx] = time.Now()
+	case stale:
+		// Asked in another numbering. The next reader asks again.
 	case page == nil:
-		r.known = false
+		r.known, r.lost = false, false
 		r.dropPages()
 	default:
 		if page.Epoch != r.epoch {
 			r.dropPages()
 			r.epoch = page.Epoch
 		}
-		r.daemonBase, r.known, r.localEpoch = page.Base, true, local
-		if page.Epoch == epoch {
-			r.keepLocked(idx, p)
+		r.daemonBase, r.known, r.lost, r.localEpoch = page.Base, true, false, local
+		if len(p.lines) > 0 {
+			r.keepLocked(want.idx, p)
 		}
 	}
 	r.gen++
@@ -272,9 +352,9 @@ func (r *remoteHistory) touchLocked(idx int64) {
 	r.used = append(r.used, idx)
 }
 
-// dropPages forgets every page.
+// dropPages forgets every page and every page asked for.
 func (r *remoteHistory) dropPages() {
-	r.pages, r.used, r.failed = nil, nil, nil
+	r.pages, r.used, r.failed, r.wanted = nil, nil, nil, nil
 }
 
 // remoteGeneration changes whenever the lines only the daemon holds do.
@@ -286,6 +366,16 @@ func (w *Window) remoteGeneration() uint64 {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.gen
+}
+
+// UnreadHistory is how many lines of the history only the daemon holds and
+// no page has brought yet: lines a search of the whole history did not see.
+func (w *Window) UnreadHistory() int {
+	span := w.remoteLines()
+	if span.n == 0 {
+		return 0
+	}
+	return span.n - w.remote.Load().held(span.first, span.n)
 }
 
 // remoteText is line as text cells, for ScrollbackText.

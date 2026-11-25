@@ -2041,8 +2041,9 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 	w.LockIO()
 	// Re-check under the lock; Close() nils Terminal while holding it.
 	session.ApplyTerminalState(w.Terminal, state)
-	w.UnlockIO()
+	// Under the lock: it reads the emulator's numbering the apply just set.
 	w.NoteDaemonHistory(state.ScrollbackBase, state.ScrollbackEpoch, state.ScrollbackNumbered)
+	w.UnlockIO()
 
 	if state.IsAltScreen {
 		m.LogInfo("Restored alt screen mode for window %s", shortID(w.ID))

@@ -322,6 +322,13 @@ func handleSearchInput(msg tea.KeyPressMsg, cm *terminal.CopyMode, grid terminal
 		if len(cm.SearchMatches) > 0 {
 			matchInfo = fmt.Sprintf(" (%s matches)", terminal.SearchMatchCount(len(cm.SearchMatches), s.SearchMaxMatches))
 		}
+		// A search reads the lines this client holds, and the older lines it
+		// read from the daemon so far. It does not ask for the rest.
+		if u, ok := grid.(interface{ UnreadHistory() int }); ok {
+			if n := u.UnreadHistory(); n > 0 {
+				matchInfo += fmt.Sprintf(". %d older lines are not searched", n)
+			}
+		}
 		fx.ShowNotification(fmt.Sprintf("%s%s%s", searchPrefix, cm.SearchQuery(), matchInfo), "info", s.NotificationDuration)
 	case tea.KeyEscape:
 		// Esc gives up the search: the cursor goes back to where the prompt
