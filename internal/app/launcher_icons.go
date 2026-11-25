@@ -538,10 +538,16 @@ func appendKittyPlaceRows(buf []byte, id, placement uint32, x, y, cols, rows, sk
 		return appendKittyPlaceBox(buf, id, placement, x, y, cols, rows)
 	}
 	rowPx := ph / allRows
+	return appendKittyPlaceSrc(buf, id, placement, x, y, cols, rows, image.Rect(0, skip*rowPx, pw, (skip+rows)*rowPx))
+}
+
+// appendKittyPlaceSrc places the part src of a picture, in its pixels, in a
+// cell box.
+func appendKittyPlaceSrc(buf []byte, id, placement uint32, x, y, cols, rows int, src image.Rectangle) []byte {
 	buf = append(buf, "\x1b7"...)
 	buf = append(buf, fmt.Sprintf("\x1b[%d;%dH", y+1, x+1)...)
-	buf = append(buf, fmt.Sprintf("\x1b_Ga=p,i=%d,p=%d,c=%d,r=%d,x=0,y=%d,w=%d,h=%d,q=2,C=1;\x1b\\",
-		id, placement, cols, rows, skip*rowPx, pw, rows*rowPx)...)
+	buf = append(buf, fmt.Sprintf("\x1b_Ga=p,i=%d,p=%d,c=%d,r=%d,x=%d,y=%d,w=%d,h=%d,q=2,C=1;\x1b\\",
+		id, placement, cols, rows, src.Min.X, src.Min.Y, src.Dx(), src.Dy())...)
 	buf = append(buf, "\x1b8"...)
 	return buf
 }
