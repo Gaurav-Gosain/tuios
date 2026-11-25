@@ -19906,3 +19906,20 @@ editor, as dash does.
 | The `spPrompt` calls left out (the tree before the fix) | `TestPhoneStreamsAPaneAndAnswersTheInbox`, `TestStreamPaneHeldToTheLinkPolicy`, `TestStreamPaneLeaseChurn`, `TestStreamPaneFromAPane` | `no SZ- line showed`, with `sh-3.2$ SZ-22x78` on the screen | **caught** |
 | With the fix, the same forced runs | the 8 tests that use `limitsDaemon` or `spSize` | 8 of 8 pass | n/a |
 | With the fix, no forced start, `-count=3` | the same 8 tests | 24 of 24 pass | n/a |
+
+## A sim client stopped before its program exists still quits
+
+Under `TUIOS_E2E_BACKEND=sim`, `bareAttachLandsOn` closes the bare client once `tuios list-clients` shows it attached. On a slow runner that Stop came after the attach and before `simClient.Run` had stored its program, so Run found the quit flag and called `lc.Program.Quit()` before `lc.Run()`. Bubble Tea's Quit sends on a channel that only the event loop reads, so it never returned, the client stayed attached, and the next round failed. Every nightly sim run on main from 2026-11-17 to 2026-11-25 had this in one shard or more: 173 sim jobs in 59 runs, 25 tests, each goroutine dump stopped on that line. Run now sends the quit from a goroutine, which the event loop takes once it starts.
+
+Run on 2026-11-25 on macOS, sim backend, against main at 694cfcdbe. The two controls sleep one second in `simClient.Run` after `localclient.New` and before the program is stored, as a slow runner does.
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| Main, one-second sleep | `TestBareAttachLandsOnTheSessionTypedInLast` | 5 of 5 runs: "close the bare client: the program did not return from Run within 2s of Stop", then "recent-c still has a client", with `simClient.Run` blocked on `lc.Program.Quit()`, the CI failure | **caught** |
+| This change, one-second sleep | `TestBareAttachLandsOnTheSessionTypedInLast` | 5 of 5 runs pass | fixed |
+| This change | `TestBareAttachLandsOnTheSessionTypedInLast` | 10 of 10 runs pass | fixed |
+| This change | the 25 tests of the CI failures, in one process | 24 pass, `TestMacConfigWorksOnLinux` skips on macOS | fixed |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_BACKEND=sim go test -count=1 -v -run '^TestBareAttachLandsOnTheSessionTypedInLast$' .
+```

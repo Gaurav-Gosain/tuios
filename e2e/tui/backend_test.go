@@ -583,6 +583,11 @@ func (c *simClient) connect(out io.Writer, settings *config.Settings, caps *app.
 
 // Run is runLocal or runDaemonSessionOn of cmd/tuios on a Pipe. It does not
 // print the notices the binary prints after the TUI has ended.
+//
+// A Stop that comes before the program exists leaves the quit to Run. Run
+// sends it from a goroutine: Quit waits for the event loop of lc.Run to take
+// the message, whatever Bubble Tea's doc says of a program that has not
+// started, so a Quit before lc.Run never returns.
 func (c *simClient) Run(in io.Reader, out io.Writer, cols, rows int) int {
 	defer close(c.ended)
 	_, _ = io.WriteString(out, strings.ReplaceAll(c.notice, "\n", "\r\n"))
@@ -677,7 +682,7 @@ func (c *simClient) Run(in io.Reader, out io.Writer, cols, rows int) int {
 	stop := c.quit
 	c.mu.Unlock()
 	if stop {
-		lc.Program.Quit()
+		go lc.Program.Quit()
 	}
 	final, err := lc.Run()
 	lc.Close()
