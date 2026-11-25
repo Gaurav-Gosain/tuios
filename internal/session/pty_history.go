@@ -90,22 +90,9 @@ func (c *TUIClient) ReadHistory(ptyID string, before int64, max int) (*snapshot.
 	if err != nil {
 		return nil, err
 	}
-	var page *HistoryPagePayload
-	forThisPane := func(m *Message) bool {
-		if m.Type != MsgHistoryPage {
-			return true
-		}
-		var p HistoryPagePayload
-		if err := m.ParsePayload(&p); err != nil {
-			return true
-		}
-		if p.PTYID != ptyID {
-			return false
-		}
-		page = &p
-		return true
-	}
-	resp, err := c.sendAndWaitMatching(msg, forThisPane, MsgHistoryPage, MsgError)
+	// The feature is newer than tagged replies, so the reply is matched by
+	// the request's id.
+	resp, err := c.sendAndWaitResponse(msg, MsgHistoryPage, MsgError)
 	if err != nil {
 		return nil, err
 	}
@@ -114,13 +101,9 @@ func (c *TUIClient) ReadHistory(ptyID string, before int64, max int) (*snapshot.
 		_ = resp.ParsePayload(&e)
 		return nil, refusalOf(e)
 	}
-	if page == nil {
-		// A reply tagged with the request's id is not passed through the
-		// filter.
-		page = &HistoryPagePayload{}
-		if err := resp.ParsePayload(page); err != nil {
-			return nil, errfmt.Errorf("read history: %w", err)
-		}
+	var page HistoryPagePayload
+	if err := resp.ParsePayload(&page); err != nil {
+		return nil, errfmt.Errorf("read history: %w", err)
 	}
 	return page.Page, nil
 }
