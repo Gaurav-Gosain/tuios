@@ -16,6 +16,7 @@ package memtrim
 import (
 	"runtime"
 	"runtime/debug"
+	"runtime/metrics"
 	"sync"
 	"time"
 )
@@ -27,9 +28,10 @@ const (
 	// minExcess is the least a trim must be able to give back to be worth a
 	// forced collection. An idle client with three shells holds 5 to 9 MB of
 	// garbage and free pages past its live heap, and a daemon about as much:
-	// at 32 MB the trim never ran outside a pane flood.
-	// After a trim the excess is under 0.3 MB, so 2 MB does not trim twice
-	// for the same garbage.
+	// at 32 MB the trim never ran outside a pane flood. At 4 MB the trim of
+	// what the start leaves sat at the threshold: the daemon holds 4.1 to
+	// 4.7 MB then. After a trim the excess is under 0.3 MB, so 2 MB does not
+	// trim twice for the same garbage.
 	minExcess = 2 << 20
 	// liveShare is the part of the live heap a trim must also give back: the
 	// collection marks the whole live heap, so a large heap trims only for
@@ -57,9 +59,6 @@ var (
 	gen      uint64
 	armAlloc uint64
 	lastTrim time.Time
-	// trimmed is the resident heap the last trim left: what a collection
-	// could not give back then.
-	trimmed uint64
 )
 
 // Request asks for a trim once the process has been quiet for a moment.
@@ -84,7 +83,6 @@ func check(g uint64) {
 		return
 	}
 	since := armAlloc
-	base := trimmed
 	var wait time.Duration
 	if !lastTrim.IsZero() {
 		wait = minInterval - time.Since(lastTrim)
@@ -95,14 +93,12 @@ func check(g uint64) {
 		return
 	}
 	s := read()
-	if s.allocs-since > maxBusyAlloc || s.excess(base) < max(minExcess, s.live/liveShare) {
+	if s.allocs-since > maxBusyAlloc || s.excess() < max(minExcess, s.live/liveShare) {
 		return
 	}
 	debug.FreeOSMemory()
-	after := read().resident
 	mu.Lock()
 	lastTrim = time.Now()
-	trimmed = after
 	mu.Unlock()
 }
 
@@ -124,48 +120,34 @@ func rearm(g uint64) {
 // sample is the part of the runtime's memory statistics a trim decision
 // reads.
 type sample struct {
-	allocs, alloc, live, free, resident uint64
+	allocs, alloc, live, free uint64
 }
 
-// excess is what a trim can give back, the larger of two counts.
-//
-// The first is the objects allocated since the last collection that are not
-// part of the live data, and the free pages not yet returned. Free space
-// inside spans that still hold live objects is left out. A collection keeps
-// those spans, so counting them would trim again at every settle and give
-// back nothing. The live data is read from the heap goal, and a collection
-// that ran during a burst set the goal while the burst still held its output
-// in flight. After a burst this count can miss most of the garbage: a daemon
-// that printed 30,000 lines counted 2.0 to 4.8 MB and gave back 4.7 to 5.8 MB.
-//
-// The second is how far the resident heap grew since the last trim left it.
-// It needs no estimate of the live data. Right after a trim it is zero, so it
-// cannot trim twice for the same garbage. Before the first trim it is the
-// whole resident heap, so a process trims once when it first settles.
-func (s sample) excess(trimmed uint64) uint64 {
-	var garbage, grown uint64
+// excess is what a trim can give back: the objects allocated since the last
+// collection that are not part of the live data, and the free pages not yet
+// returned. Free space inside spans that still hold live objects is left
+// out. A collection keeps those spans, so counting them would trim again at
+// every settle and give back nothing.
+func (s sample) excess() uint64 {
+	var garbage uint64
 	if s.alloc > s.live {
 		garbage = s.alloc - s.live
 	}
-	if s.resident > trimmed {
-		grown = s.resident - trimmed
-	}
-	return max(garbage+s.free, grown)
+	return garbage + s.free
 }
 
-// read takes the statistics. runtime/metrics would avoid the brief stop of
-// ReadMemStats but costs about 28 KB of binary, and this runs only at the
-// edges of a burst. The live heap is not in MemStats: the last collection
-// set the next goal GOGC percent above it, and tuios leaves GOGC at 100, so
-// it is about half the goal.
+// read takes the statistics. The live heap is the one the last collection
+// marked. Half the heap goal is above it by half the stacks and globals,
+// about 0.45 MB in an idle daemon, and with GOGC=off the goal says nothing.
 func read() sample {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
+	live := []metrics.Sample{{Name: "/gc/heap/live:bytes"}}
+	metrics.Read(live)
 	return sample{
-		allocs:   ms.TotalAlloc,
-		alloc:    ms.HeapAlloc,
-		live:     ms.NextGC / 2,
-		free:     ms.HeapIdle - ms.HeapReleased,
-		resident: ms.HeapInuse + ms.HeapIdle - ms.HeapReleased,
+		allocs: ms.TotalAlloc,
+		alloc:  ms.HeapAlloc,
+		live:   live[0].Value.Uint64(),
+		free:   ms.HeapIdle - ms.HeapReleased,
 	}
 }

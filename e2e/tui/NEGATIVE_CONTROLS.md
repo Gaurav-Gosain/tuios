@@ -19335,19 +19335,21 @@ Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAPaneOfAnotherSessionHoldsAProjectCard$' -v .`.
 ## TestIdleGivesHeapBack
 
-After a burst of output, an idle client and its daemon must each trim once
-(internal/memtrim) and give at least 2 MiB of private memory back, with under
-1 MB of free heap pages kept.
+An idle client and its daemon run with GOGC=off, so a trim is their only
+collection. Each must trim what the start of three shells left, and then trim
+again after a burst of 30,000 lines. The second trim comes inside memtrim's
+30 s minimum interval, so it must wait for the interval to end. After the
+burst each process must fall 1 MiB below its peak and count a new trim.
 
-Run on 2026-11-24 on Linux (amd64).
+Run on 2026-11-24 and 2026-11-25 on Linux (amd64), on 2 cores and on 1.
 
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
 | minExcess back at 32 MB (a build of main before the change) | "the idle client never gave 2 MiB of its heap back after the burst" | **caught** |
 | minExcess back at 32 MB (a build of main before the change) | "the idle client and daemon did not both give 2 MiB of their heap back after the burst" | **caught** |
-| minExcess back at 32 MB, test watching from the start (2026-11-25) | "the idle client and daemon did not both give 1 MiB of their heap back" | **caught** |
-| The test before this change, on main, with the burst sent after a 6 s wait (a scratch copy) | "did not both give 2 MiB of their heap back after the burst", with "daemon: private dirty peak 21980 KiB, lowest after it 21980 KiB", as on the CI runner | **reproduced** |
-| This change, same 6 s wait (a scratch copy) | passes, 5 of 5, on 2 cores and on 1 | **fixed** |
+| The test before the 2026-11-25 change, on main, with the burst sent 6 s after the setup (a scratch copy) | "did not both give 2 MiB of their heap back after the burst", with "daemon: private dirty peak 21980 KiB, lowest after it 21980 KiB", as on the CI runner | **reproduced** |
+| minExcess back at 32 MB, the 2026-11-25 test | "the idle client and daemon did not trim after the start" | **caught** |
+| A look inside the interval returns (`if wait > 0 { return }`), the 2026-11-25 test | "the idle client and daemon did not both trim again after the burst", with 0 trims seen and no fall | **caught** |
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestIdleGivesHeapBack$' -v .`.

@@ -4114,8 +4114,9 @@ over 20 s after 10 s of settling.
 - `internal/memtrim` calls `debug.FreeOSMemory` 2 s after a burst of pane
   closes, after the client goes idle, and from the daemon's 30 s sweep. It
   trims only when the process is quiet and holds 2 MB or more of heap past
-  its live data (an eighth of the live data on a large heap). It trims at
-  most once in 30 s. A look that comes sooner waits for the 30 s to end.
+  the live heap the last collection marked (an eighth of the live heap on a
+  large heap). It trims at most once in 30 s. A look that comes sooner waits
+  for the 30 s to end.
 
 ### Numbers
 
