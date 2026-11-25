@@ -99,7 +99,8 @@ after a pause that grows to a minute.`,
 }
 
 // readBarStatus dials the daemon and works out the line. A daemon that does
-// not answer gives the off line.
+// not answer gives the off line, and one that refuses the call the error
+// line.
 func readBarStatus() barStatus {
 	client, err := dialVerb()
 	if err != nil {
@@ -108,7 +109,7 @@ func readBarStatus() barStatus {
 	defer func() { _ = client.Close() }()
 	st, err := queryBarStatus(client)
 	if err != nil {
-		return barStatusOff()
+		return barStatusError(err)
 	}
 	return st
 }
@@ -298,22 +299,25 @@ func followBarStatus(w io.Writer) error {
 		if werr, ok := errors.AsType[writeError](err); ok {
 			return werr.err
 		}
+		// The line goes out before the pause, so a bar that starts with no
+		// daemon shows off at once.
+		line := barStatusOff()
+		cerr, refused := errors.AsType[barCallError](err)
+		if refused {
+			line = barStatusError(cerr.err)
+		}
+		if err := emit(line); err != nil {
+			return err
+		}
 		if time.Since(started) < barStatusHealthy {
 			time.Sleep(backoff)
 			backoff = min(backoff*2, barStatusMaxBackoff)
 		} else {
 			backoff = barStatusMinBackoff
 		}
-		if cerr, ok := errors.AsType[barCallError](err); ok {
-			if err := emit(barStatusError(cerr.err)); err != nil {
-				return err
-			}
-			continue
+		if !refused {
+			waitForDaemonSocket()
 		}
-		if err := emit(barStatusOff()); err != nil {
-			return err
-		}
-		waitForDaemonSocket()
 	}
 }
 
