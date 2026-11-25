@@ -1,6 +1,8 @@
 package tuie2e
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuitest"
@@ -59,5 +61,54 @@ func TestNavigatorCountsAHiddenScratchPane(t *testing.T) {
 	waitScreen(t, term, "the navigator never showed", "Panes", "work", "other")
 	wantRow("from other", "0 + 1 scratch")
 	saveCockpitFrames(t, term, "navigator-scratch-other")
+	alive(t, term, "after the navigator")
+}
+
+// TestNavigatorCountsAScratchPaneOnAHost leaves session work on the linked
+// machine alpha with only its hidden scratch pane. The navigator of a client
+// on this machine must count it apart and name it from the host listing,
+// before its detail load reads the session. The test holds that load, so the
+// row on screen is the one the listing built.
+//
+// The way it can go wrong, an assertion: the row counts the scratch pane as
+// a plain pane and says 1 until the load lands.
+func TestNavigatorCountsAScratchPaneOnAHost(t *testing.T) {
+	f := startGlobalFleet(t)
+	far := startIn(t, f.alpha, startOpts{cols: 120, rows: 40, args: []string{"new", "work"}})
+	waitBoot(t, far)
+	newWindow(t, far)
+	normal := paneIDs(t, f.alpha, "work")
+	if len(normal) != 1 {
+		t.Fatalf("ordinary panes of work = %v, want one", normal)
+	}
+	toggleScratch(t, far)
+	scratch := waitScratch(t, far, f.alpha, false, false, "shown on alpha")
+	toggleScratch(t, far)
+	assertHiddenEverywhere(t, far, f.alpha, scratch.ID)
+	if out, err := tuiosCLI(t, f.alpha, "close-window", "--session", "work", normal[0]); err != nil {
+		t.Fatalf("close the ordinary pane on alpha: %v\n%s", err, out)
+	}
+	waitCount(t, far, 0, "with only the hidden scratch terminal left on alpha")
+
+	hold := filepath.Join(f.here, "hold-nav")
+	if err := os.WriteFile(hold, []byte("1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(hold) })
+	term := startIn(t, f.here, startOpts{args: []string{"attach", "home"}, cols: 140, rows: 44,
+		env: append([]string{"TERM=xterm-256color", "COLORTERM=truecolor", "TUIOS_KITTY_GRAPHICS=0", knob("hold_nav=" + hold)}, f.env...)})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("the client never attached home: %v\n%s", err, term.Snapshot())
+	}
+	windowManagementMode(t, term)
+	sendKeys(t, term, tuitest.Ctrl('b'), "/")
+	waitScreen(t, term, "the navigator never showed alpha's work", "Panes", "work")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return containsAll(s.Text(), "work @ alpha", "0 + 1 scratch", "Reading the other sessions")
+	}, uiTimeout); err != nil {
+		saveFrame(t, term, "navigator-host-scratch-missing")
+		t.Fatalf("ASSERTION: the navigator does not count work's scratch pane on alpha: %v\n%s", err, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "navigator-host-scratch")
 	alive(t, term, "after the navigator")
 }

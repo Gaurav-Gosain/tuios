@@ -93,7 +93,10 @@ type FederationSession struct {
 	Name        string
 	DisplayName string
 	WindowCount int
-	Attached    bool
+	// ScratchCount is how many of the WindowCount windows are scratch panes.
+	// 0 from a daemon that does not count them.
+	ScratchCount int
+	Attached     bool
 	// Global marks a session meant to hold panes from more than one machine.
 	// The rail files it in the global group rather than under this machine.
 	Global bool
@@ -220,13 +223,14 @@ func refreshFederationCmd() tea.Cmd {
 				Status   string `json:"status"`
 				Reason   string `json:"reason"`
 				Sessions []struct {
-					Name        string            `json:"name"`
-					DisplayName string            `json:"display_name"`
-					WindowCount int               `json:"window_count"`
-					Attached    bool              `json:"attached"`
-					Global      bool              `json:"global"`
-					AgentState  string            `json:"agent_state"`
-					Agents      []FederationAgent `json:"agents"`
+					Name         string            `json:"name"`
+					DisplayName  string            `json:"display_name"`
+					WindowCount  int               `json:"window_count"`
+					ScratchCount int               `json:"scratch_count"`
+					Attached     bool              `json:"attached"`
+					Global       bool              `json:"global"`
+					AgentState   string            `json:"agent_state"`
+					Agents       []FederationAgent `json:"agents"`
 				} `json:"sessions"`
 			} `json:"hosts"`
 		}
@@ -268,13 +272,14 @@ func refreshFederationCmd() tea.Cmd {
 			}
 			for _, s := range h.Sessions {
 				fh.Sessions = append(fh.Sessions, FederationSession{
-					Name:        s.Name,
-					DisplayName: s.DisplayName,
-					WindowCount: s.WindowCount,
-					Attached:    s.Attached,
-					Global:      s.Global,
-					AgentState:  s.AgentState,
-					Agents:      s.Agents,
+					Name:         s.Name,
+					DisplayName:  s.DisplayName,
+					WindowCount:  s.WindowCount,
+					ScratchCount: s.ScratchCount,
+					Attached:     s.Attached,
+					Global:       s.Global,
+					AgentState:   s.AgentState,
+					Agents:       s.Agents,
 				})
 			}
 			msg.Snapshot.Hosts = append(msg.Snapshot.Hosts, fh)

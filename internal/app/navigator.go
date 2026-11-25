@@ -378,6 +378,14 @@ func (m *OS) navigatorSessions() []navSession {
 		if len(s.Panes) > 0 {
 			s.Count = len(s.Panes)
 		}
+		// The cached listing has the scratch panes the tree leaves out, so
+		// the row counts them apart before the detail load lands.
+		if m.DaemonClient != nil {
+			if summaries := m.DaemonClient.SessionWindows(n.ID); summaries != nil {
+				s.Scratch = session.ScratchPanes(summaries)
+				s.Count = len(s.Panes)
+			}
+		}
 		out = append(out, s)
 	}
 	if !seen {
@@ -392,7 +400,7 @@ func (m *OS) navigatorSessions() []navSession {
 			if fs.DisplayName != "" {
 				title = fs.DisplayName
 			}
-			s := navSession{Host: h.Name, Name: fs.Name, Title: title, Count: fs.WindowCount}
+			s := navSession{Host: h.Name, Name: fs.Name, Title: title, Count: fs.WindowCount - fs.ScratchCount, Scratch: fs.ScratchCount}
 			if h.Status != string(federation.StatusUp) {
 				s.Note = h.Name + " is not reachable"
 			}
