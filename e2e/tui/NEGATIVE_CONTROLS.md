@@ -19539,8 +19539,10 @@ smallest pane and resize_height_grow_top once, and wants the bottom edge kept.
 `e2e/tui/pip_test.go` `TestPiPFollowsTheCursor` pins a pane that fills its
 screen to the last row, as an editor does, and puts its cursor on the fourth
 row, past the columns the view is wide. The view must show the text at the
-cursor. Then the cursor moves near the bottom and to the left edge, and the
-view must show the line there from its first column.
+cursor. Then the pane hides its cursor and writes near it, as an editor does
+while it redraws, and the view must stay there. Then the cursor moves near
+the bottom and to the left edge, and the view must show the line there from
+its first column.
 
 Run on 2026-11-25 on Linux (amd64).
 
@@ -19663,6 +19665,7 @@ Run on 2026-11-25 on Linux (amd64).
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestIdleClientFreesItsFrameBuffers$' -v .`.
 | main 55162e6cc | "the view does not show the text at the cursor", the view shows PIPROW-51 to PIPROW-60 | **caught** |
+| The first commit of this branch, 48698ffab, where a hidden cursor puts the view back on the bottom rows | "with the cursor hidden the view left the place the cursor set", the view shows PIPROW-51 to PIPROW-60 | **caught** |
 | this branch | 3 of 3 runs pass | passes |
 
 Repeat from `e2e/tui` with

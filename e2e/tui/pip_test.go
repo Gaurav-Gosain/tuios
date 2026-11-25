@@ -438,8 +438,9 @@ func TestPiPWatchesAPaneFromTheCorner(t *testing.T) {
 // the bottom rows of the pane, and not the part where the cursor was. The
 // agent pane fills its screen to the last row, as an editor does, and puts
 // its cursor near the top, past the columns the view is wide. The view must
-// show the text at the cursor. Then the cursor moves near the bottom and to
-// the left edge, and the view must follow it there.
+// show the text at the cursor. Then the pane hides its cursor and writes
+// near it, and the view must stay there. Then the cursor moves near the
+// bottom and to the left edge, and the view must follow it there.
 //
 // How this could pass wrongly: the text could be in the view because the
 // view shows the bottom rows. The text at the cursor is on the fourth row of
@@ -447,11 +448,13 @@ func TestPiPWatchesAPaneFromTheCorner(t *testing.T) {
 // only after the test saw the first one in the view.
 func TestPiPFollowsTheCursor(t *testing.T) {
 	base := t.TempDir()
+	hide := filepath.Join(base, "hide-cursor")
 	stop := filepath.Join(base, "move-cursor")
 	term := startPiPPanes(t, base, []string{"new", "work"}, fmt.Sprintf(
 		`printf '\033[H\033[2J'; i=0; while [ $i -lt 60 ]; do i=$((i+1)); echo "PIPROW-$i the quick brown fox jumps over the dog"; done; `+
 			`printf '\033[4;45HPIPTICK-%%d' 2; while [ ! -f %q ]; do sleep 0.1; done; `+
-			`printf '\033[30;2HPIP%%s' LOW; sleep 600`, stop))
+			`printf '\033[?25l\033[6;30HPIP%%s' HIDDEN; while [ ! -f %q ]; do sleep 0.1; done; `+
+			`printf '\033[?25h\033[30;2HPIP%%s' LOW; sleep 600`, hide, stop))
 
 	pinWithKey(t, term, base, "Pinned agent")
 	mouseClick(t, term, 20, 10, tuitest.MouseLeft, 0)
@@ -464,6 +467,22 @@ func TestPiPFollowsTheCursor(t *testing.T) {
 	}
 	saveCockpitFrames(t, term, "pip-cursor-top")
 	t.Logf("the view at the cursor near the top:\n%s", pipBoxText(term.Screen(), box))
+
+	// The pane hides its cursor and writes two rows under it, as an editor
+	// does while it redraws. The view must stay where it was and show the
+	// new text, not go back to the bottom rows.
+	if err := os.WriteFile(hide, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		b, ok := findPiPBox(s, "agent")
+		text := pipBoxText(s, b)
+		return ok && strings.Contains(text, "PIPHIDDEN") && strings.Contains(text, "PIPTICK-2")
+	}, uiTimeout); err != nil {
+		b, _ := findPiPBox(term.Screen(), "agent")
+		t.Fatalf("with the cursor hidden the view left the place the cursor set:\n%s\n%s", pipBoxText(term.Screen(), b), term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "pip-cursor-hidden")
 
 	if err := os.WriteFile(stop, nil, 0o600); err != nil {
 		t.Fatal(err)

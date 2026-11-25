@@ -287,7 +287,7 @@ func (m *OS) PinPiP(windowID string) error {
 	w := m.Windows[i]
 	m.pip.windowID = w.ID
 	m.pip.dirty = true
-	m.pip.viewSet = false
+	m.pip.view, m.pip.viewSet = image.Point{}, false
 	m.pip.box, m.pip.boxKey = "", ""
 	// In a daemon session a pane on another workspace is not streamed to
 	// this client, so its emulator would stop at whatever it held when the
@@ -514,6 +514,7 @@ type pipScreen interface {
 	Height() int
 	CellAt(x, y int) *uv.Cell
 	CursorPosition() uv.Position
+	IsCursorHidden() bool
 }
 
 // pipCells renders the part of the screen the view shows: the last rows rows
@@ -563,14 +564,19 @@ func pipTail(scr pipScreen, rows int) (start, end int) {
 // whole view. With no last read it centres the cursor. The columns start at
 // the left edge while the cursor is in the first cols columns, and past them
 // move the fewest columns that bring the cursor in, from the last read or
-// from the left edge. A hidden cursor marks no place, so the view
-// shows the rows pipCells shows.
+// from the left edge.
+// A hidden cursor marks no place: the view stays where the last read put it,
+// since a full-screen program hides the cursor while it redraws. With no
+// last read it shows the rows pipCells shows.
 func pipFollow(scr pipScreen, cols, rows int, last image.Point, placed bool) (top, left int) {
 	start, _ := pipTail(scr, rows)
-	if h, ok := scr.(interface{ IsCursorHidden() bool }); ok && h.IsCursorHidden() {
-		return start, 0
-	}
 	sw, sh := scr.Width(), scr.Height()
+	if scr.IsCursorHidden() {
+		if !placed {
+			return start, 0
+		}
+		return max(0, min(last.Y, sh-rows)), max(0, min(last.X, sw-cols))
+	}
 	cur := scr.CursorPosition()
 	cy, cx := max(0, min(cur.Y, sh-1)), max(0, min(cur.X, sw-1))
 	in := func(pos, first, n int) bool { return pos >= first && pos < first+n }

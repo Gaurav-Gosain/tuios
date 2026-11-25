@@ -124,6 +124,7 @@ type fakePiPScreen struct {
 func (s fakePiPScreen) Width() int                  { return s.w }
 func (s fakePiPScreen) Height() int                 { return s.h }
 func (s fakePiPScreen) CursorPosition() uv.Position { return s.cursor }
+func (fakePiPScreen) IsCursorHidden() bool          { return false }
 func (s fakePiPScreen) CellAt(x, y int) *uv.Cell {
 	if x < 0 || y < 0 || x >= s.w || y >= s.h {
 		return nil
@@ -192,6 +193,7 @@ type wideEdgeScreen struct{}
 func (wideEdgeScreen) Width() int                  { return 8 }
 func (wideEdgeScreen) Height() int                 { return 1 }
 func (wideEdgeScreen) CursorPosition() uv.Position { return uv.Position{} }
+func (wideEdgeScreen) IsCursorHidden() bool        { return false }
 func (wideEdgeScreen) CellAt(x, y int) *uv.Cell {
 	c := uv.EmptyCell
 	switch {
