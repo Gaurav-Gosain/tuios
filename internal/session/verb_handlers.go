@@ -1722,15 +1722,25 @@ func (d *Daemon) setAgentState(cs *connState, params json.RawMessage, ownPane bo
 	if verr != nil {
 		return nil, verr
 	}
-	// An accepted new identity must never retain the previous conversation's
-	// history if its replacement is absent or refused by the path allowlist.
-	// A tree of entries is joined only by the file the hook names, so nothing
-	// else would replace it.
-	var treeWindow, previousSession string
-	if p.AgentSessionID != "" && d.transcriptIsTree(p.Harness) {
+	// A report that names no harness keeps the pane's, so the transcript the
+	// session id names is the pane's harness's, as joinReportedTranscript
+	// takes it for a reported path.
+	harnessID := p.Harness
+	var dropWindow, previousSession, previousPath string
+	if p.AgentSessionID != "" {
 		st := sess.GetState()
 		if idx, err := findWindowStateIndex(st.Windows, target); err == nil {
-			treeWindow, previousSession = st.Windows[idx].ID, st.Windows[idx].AgentSessionID
+			w := st.Windows[idx]
+			if harnessID == "" {
+				harnessID = w.AgentHarness
+			}
+			// An accepted new identity must never retain the previous
+			// conversation's history if its replacement is absent or refused
+			// by the path allowlist. See newSessionDropsJoin.
+			if d.newSessionDropsJoin(harnessID) {
+				dropWindow, previousSession = w.ID, w.AgentSessionID
+				previousPath, _, _, _, _ = sess.transcriptJoinOf(w.ID)
+			}
 		}
 	}
 
@@ -1809,32 +1819,16 @@ func (d *Daemon) setAgentState(cs *connState, params json.RawMessage, ownPane bo
 	if applied && p.AgentSessionID != "" && report.State != AgentStateNone {
 		d.attention.closeResumesOf(p.Harness, p.AgentSessionID)
 	}
-	transcriptRefused := ""
+	transcriptRefused, joined := "", false
 	switch {
 	case applied && p.TranscriptPath != "":
 		transcriptRefused = d.joinReportedTranscript(cs, sess, target, p.Harness, p.TranscriptPath, "", p.TranscriptLeaf)
-	case applied && cs != nil && p.TranscriptPath == "" && p.AgentSessionID != "":
-		// A harness whose hook names its session and not its file (Amp):
-		// the manifest's session_file names the file, and it is held to the
-		// same rules as a path a hook reports, joinReportedTranscript's pane
-		// checks among them. A report with no connection (herdr's socket,
-		// which any client may write to) names no file, the same as it can
-		// name no transcript_path.
-		//
-		// A by_session harness (opencode) keeps every session in one store:
-		// the session id joins the pane to that session in it, and each
-		// report raises the transcript event, since the store does not grow
-		// as a file the daemon can watch.
-		sid := strings.TrimSpace(p.AgentSessionID)
-		if path := d.storeTranscriptPath(p.Harness); path != "" {
-			transcriptRefused = d.joinReportedTranscript(cs, sess, target, p.Harness, path, sid, nil)
-		} else if path := d.sessionTranscriptPath(p.Harness, sid); path != "" {
-			transcriptRefused = d.joinReportedTranscript(cs, sess, target, p.Harness, path, "", nil)
-		}
+		joined = transcriptRefused == ""
+	case applied && p.AgentSessionID != "":
+		joined, transcriptRefused = d.joinSessionTranscript(cs, sess, target, harnessID, p.AgentSessionID)
 	}
-	if applied && treeWindow != "" && previousSession != p.AgentSessionID && (p.TranscriptPath == "" || transcriptRefused != "") {
-		sess.DropAgentTranscript(treeWindow)
-		sess.emit(SessionEvent{Type: EventTranscript, Window: treeWindow})
+	if applied && dropWindow != "" && previousSession != p.AgentSessionID {
+		sess.leaveConversation(dropWindow, previousPath, joined)
 	}
 	// state is the effective state, so a report a higher-ranked source outranked
 	// reports what the pane actually shows rather than what was asked for.
@@ -2049,12 +2043,13 @@ func (d *Daemon) verbSetAgentSession(cs *connState, params json.RawMessage) (any
 		target = id
 	}
 	// An accepted new identity must never retain the previous conversation's
-	// history, and this verb names no file to replace it with.
-	var treeWindow, previousSession string
-	if d.transcriptIsTree(harnessID) {
+	// history if nothing replaces it. See newSessionDropsJoin.
+	var dropWindow, previousSession, previousPath string
+	if d.newSessionDropsJoin(harnessID) {
 		st := sess.GetState()
 		if idx, err := findWindowStateIndex(st.Windows, target); err == nil {
-			treeWindow, previousSession = st.Windows[idx].ID, st.Windows[idx].AgentSessionID
+			dropWindow, previousSession = st.Windows[idx].ID, st.Windows[idx].AgentSessionID
+			previousPath, _, _, _, _ = sess.transcriptJoinOf(dropWindow)
 		}
 	}
 	stored, applied, reason, err := sess.applyAgentSession(target, AgentSessionReport{
@@ -2082,18 +2077,88 @@ func (d *Daemon) verbSetAgentSession(cs *connState, params json.RawMessage) (any
 	if reason != "" {
 		out["reason"] = reason
 	}
-	transcriptRefused := ""
-	if applied && p.TranscriptPath != "" {
+	transcriptRefused, joined := "", false
+	switch {
+	case applied && p.TranscriptPath != "":
 		transcriptRefused = d.joinReportedTranscript(cs, sess, target, harnessID, p.TranscriptPath, "", p.TranscriptLeaf)
-		if transcriptRefused != "" {
-			out["transcript_refused"] = transcriptRefused
-		}
+		joined = transcriptRefused == ""
+	case applied:
+		joined, transcriptRefused = d.joinSessionTranscript(cs, sess, target, harnessID, sid)
 	}
-	if applied && treeWindow != "" && previousSession != stored && (p.TranscriptPath == "" || transcriptRefused != "") {
-		sess.DropAgentTranscript(treeWindow)
-		sess.emit(SessionEvent{Type: EventTranscript, Window: treeWindow})
+	if transcriptRefused != "" {
+		out["transcript_refused"] = transcriptRefused
+	}
+	if applied && dropWindow != "" && previousSession != stored {
+		sess.leaveConversation(dropWindow, previousPath, joined)
 	}
 	return out, nil
+}
+
+// leaveConversation follows a report that changed a pane's session id. A
+// pane the report joined to no file drops the previous conversation's join.
+// A pane it moved from one file to another gets the transcript event as
+// well: the new file may hold no whole record yet, and then reading it
+// raises none, so a client would keep showing the previous conversation.
+func (s *Session) leaveConversation(windowID, previousPath string, joined bool) {
+	if joined {
+		if path, _, _, _, ok := s.transcriptJoinOf(windowID); !ok || previousPath == "" || path == previousPath {
+			return
+		}
+	} else {
+		s.DropAgentTranscript(windowID)
+	}
+	s.emit(SessionEvent{Type: EventTranscript, Window: windowID})
+}
+
+// joinSessionTranscript joins a pane to the transcript its harness keeps for
+// the session id a report names, for a report that names no transcript_path.
+// It returns whether the pane is joined to that file now, and the refusal for
+// the reply when the file was not joined.
+//
+// A harness whose hook names its session and not its file (Amp, Antigravity
+// CLI): the manifest's session_file names the file, and it is held to the
+// same rules as a path a hook reports, joinReportedTranscript's pane checks
+// among them. A report with no connection (herdr's socket, which any client
+// may write to) names no file, the same as it can name no transcript_path.
+//
+// The file must exist before it is joined, so a report that comes before the
+// harness writes it joins nothing. A later report of the same id is still
+// applied and tries again, which is what joins a new conversation once its
+// file is there. For a pane already on the file the join is a no-op.
+//
+// A by_session harness (opencode) keeps every session in one store: the
+// session id joins the pane to that session in it, and each report raises
+// the transcript event, since the store does not grow as a file the daemon
+// can watch.
+func (d *Daemon) joinSessionTranscript(cs *connState, sess *Session, target, harnessID, sessionID string) (bool, string) {
+	if cs == nil {
+		return false, ""
+	}
+	sid := strings.TrimSpace(sessionID)
+	refused := ""
+	if path := d.storeTranscriptPath(harnessID); path != "" {
+		refused = d.joinReportedTranscript(cs, sess, target, harnessID, path, sid, nil)
+	} else if path := d.sessionTranscriptPath(harnessID, sid); path != "" {
+		refused = d.joinReportedTranscript(cs, sess, target, harnessID, path, "", nil)
+	} else {
+		return false, ""
+	}
+	return refused == "", refused
+}
+
+// newSessionDropsJoin says whether a pane of the harness loses its transcript
+// join when a report changes its session id and joins no other file. A tree
+// of entries is joined only by the file a hook names, and a file the session
+// id names (session_file, by_session) only by that id, so nothing else would
+// replace the previous conversation's: a new conversation whose file is not
+// written yet would keep showing the last one.
+func (d *Daemon) newSessionDropsJoin(harnessID string) bool {
+	reg := d.agentMatcher.registry
+	if harnessID == "" || reg == nil {
+		return false
+	}
+	tr := reg.TranscriptFor(harnessID)
+	return tr != nil && (transcriptview.IsTree(tr.Reader) || tr.SessionFile != "" || tr.BySession)
 }
 
 // checkTranscriptSelection bounds metadata before a report can change state.

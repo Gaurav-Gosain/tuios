@@ -19654,3 +19654,107 @@ Run on 2026-11-25 on Linux (amd64).
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestIdleClientFreesItsFrameBuffers$' -v .`.
+
+## A session id joins the file its session_file names
+
+`TestSessionFolderJoin` (internal/session) loads a test harness whose
+`session_file` is `{session_id}/logs/transcript.json` and reports its session
+through `set-agent-session`. A report before the file exists must join
+nothing, and the same report once the file is written must join it. A new id
+whose file is not there yet, or whose file the glob refuses, must drop the
+previous join, on `set-agent-session` and on `set-agent-state`, and a
+`set-agent-state` with no `harness` must join and drop for the pane's harness.
+`TestStoreSessionDrop` drops a `by_session` join the same way,
+`TestNewSessionDropsJoin` checks which bundled harnesses drop, and
+`TestSessionChangeRaisesTranscript` must read a `transcript` event when the
+join moves to an empty file and when it drops. `TestSessionFileJoin` holds
+that a report with no connection joins nothing. `TestTranscriptValidation` and
+`TestSessionPath` (harness) hold the `session_file` rules and the session id
+rules.
+
+Run on 2026-11-25 on Linux, on `2b5bffecf` with this change. Each control is
+one change:
+
+| Control | Failure |
+| --- | --- |
+| `SessionPath` takes an id with `..` | `TestSessionPath`: `session id "a..b" named ".../x/a..b/logs/transcript.jsonl"` |
+| `SessionPath` takes an id ending in `.` | `TestSessionPath`: `session id "." named ".../x/logs/transcript.jsonl"` |
+| `{session_id}` may share a folder name | `TestTranscriptValidation`: `want error containing "whole folder name", got none` |
+| `session_file` may hold `\` | `TestTranscriptValidation`: `want error containing "no \"\\\"", got none` |
+| `session_file` may hold `..` | `TestTranscriptValidation`: `want error containing "no \"..\"", got none` |
+| `session_file` may name another placeholder | `TestTranscriptValidation`: `want error containing "no other placeholder", got none` |
+| `session_file` may have an empty path element | `TestTranscriptValidation`: `want error containing "empty", got none` |
+| `session_file` may have a `.` path element | `TestTranscriptValidation`: `want error containing "\".\" path element", got none` |
+| No path element count check | `TestTranscriptValidation` panics: `index out of range [1] with length 1` |
+| No literal element match against the glob | `TestTranscriptValidation`: `want error containing "where glob", got none` |
+| `checkSessionFile` never calls `classHoldsSlash` | `TestTranscriptValidation`: the `[^/]/t.jsonl` case is refused only as `has 2 path elements and glob "[^/]/t.jsonl" has 3`, not for its character class |
+| `checkTranscript` passes no `exclude` to `checkSessionFile` | `TestTranscriptValidation`: `want error containing "exclude", got none` |
+| `set-agent-session` never calls `joinSessionTranscript` | `TestSessionFolderJoin`: `a report after the file was written joined "", want ".../s-1/logs/transcript.json"`; `TestStoreSessionDrop`: `session ses_1 joined "" (joined false)` |
+| `newSessionDropsJoin` drops only a tree transcript's join | `TestSessionFolderJoin`: `a new session id kept the previous conversation's transcript .../s-1/logs/transcript.json`; `TestNewSessionDropsJoin`: `newSessionDropsJoin("amp") = false, want true`, and the same for opencode; `TestStoreSessionDrop`: `a refused new session id kept the previous session "ses_1"`; `TestSessionChangeRaisesTranscript`: `read event: ... i/o timeout` |
+| `newSessionDropsJoin` leaves out `by_session` | `TestNewSessionDropsJoin`: `newSessionDropsJoin("opencode") = false, want true`; `TestStoreSessionDrop`: `a refused new session id kept the previous session "ses_1"` |
+| `newSessionDropsJoin` leaves out a tree transcript | `TestNewSessionDropsJoin`: `newSessionDropsJoin("pi") = false, want true` |
+| A report with no connection joins from the id | `TestSessionFileJoin`: `a report with no connection joined .../T-00000000-0000-7000-8000-000000000001.json` |
+| `set-agent-state` with no `harness` does not take the pane's | `TestSessionFolderJoin`: `set-agent-state with no harness joined "", want ".../s-5/logs/transcript.json"` |
+| `leaveConversation` raises nothing for a moved join | `TestSessionChangeRaisesTranscript`: `read event: ... i/o timeout` after the move to the empty file |
+| `leaveConversation` raises nothing for a drop | `TestSessionChangeRaisesTranscript`: `read event: ... i/o timeout` after the id with no file |
+
+With the change whole every one of these tests passes: `TestSessionFolderJoin`
+joins `.../s-1/logs/transcript.json` once it is written, and
+`TestSessionChangeRaisesTranscript` reads all three `transcript` events.
+Repeat with `go test ./harness/ -run 'TestTranscriptValidation|TestSessionPath'`
+and
+`go test ./internal/session/ -run 'TestSessionFileJoin|TestSessionFolderJoin|TestStoreSessionDrop|TestNewSessionDropsJoin|TestSessionChangeRaisesTranscript'`.
+
+## The cockpit shows an Antigravity CLI thread
+
+`TestCockpitThreadOtherHarnesses/antigravity` writes a real agy 1.5.14
+conversation, scrubbed and cut short
+(`internal/transcriptview/testdata/antigravity.jsonl`), to
+`~/.gemini/antigravity-cli/brain/<id>/.system_generated/logs/transcript_full.jsonl`
+under the fake home, and joins it through the real `tuios agent-hook
+antigravity` PreInvocation, which names only `conversationId`. The thread must
+show the last answer, the output of the command that exited 1, the
+`edit_file` diff card with its added line, and `run_command` labelled by the
+program it runs. `TestFormatFixtures/antigravity.jsonl` holds the decoder: each
+call paired with its result by position, the failed read and the failed
+command as errors, and only the text inside `<USER_REQUEST>` as the person's
+words. `TestAntigravityRecords` holds the records the fixture lacks: a prompt
+that names `</USER_REQUEST>` or `<USER_REQUEST>`, a settings note alone, agy's
+time lines on a result, an `ERROR` step with no content, a call with no
+result yet, and a command that exited 1 with output too long for agy, which
+agy writes as a note, then a preview with time lines of its own and the
+exit line. That command must show as an error, with the note and without
+the time lines. `TestShippedSessionFiles` (harness) checks the file the
+manifest names from an id.
+
+Run on 2026-11-25 on Linux, on `2b5bffecf` with this change. Each control is
+one change:
+
+| Control | Failure |
+| --- | --- |
+| `threadTranscriptHarness` without `antigravity` | `ASSERTION: the antigravity thread never showed the answer and the failed command` |
+| The `FormatAntigravity` entry taken out of `formats` | `ASSERTION: the antigravity thread never showed the answer and the failed command` |
+| `antigravity-jsonl` taken out of `knownReaders` | `e2e: load the bundled manifests: manifests/antigravity.toml: manifest "antigravity" transcript reader "antigravity-jsonl" is not one this build has` |
+| The manifest's `session_file` line taken out (archive regenerated) | `ASSERTION: the antigravity thread never showed the answer and the failed command`; `TestShippedSessionFiles`: `antigravity SessionPath = "", want ".../brain/c-1/.system_generated/logs/transcript_full.jsonl"` |
+| `run_command` taken out of `shellTools` | `ASSERTION: the antigravity thread never showed "run_command  exit 3"` |
+| A call takes the id of its own step, not its result's | `TestAntigravityRecords`: `assistant tool_call read_file [a.txt] running` and `run_command [make] running`; `TestFormatFixtures/antigravity.jsonl` fails too |
+| The whole `USER_INPUT` shows | `TestAntigravityRecords`: `user text: <USER_REQUEST> Why does </USER_REQUEST> end the tag? </USER_REQUEST> <ADDITIONAL_METADATA> ...`; `TestFormatFixtures/antigravity.jsonl` fails too |
+| The request ends at the first `</USER_REQUEST>` | `TestAntigravityRecords`: `user text: Why does` |
+| `<USER_REQUEST>` is cut out wherever it stands | `TestAntigravityRecords`: `user text: a tag?` |
+| `agyRequest` never calls `oneTag` | `TestAntigravityRecords`: `user text: <USER_SETTINGS_CHANGE> The user changed setting Model Selection. </USER_SETTINGS_CHANGE>` |
+| An `ERROR` step with no content takes no text from `error` | `TestAntigravityRecords`: `result texts ["line one" "" "The tool's output was truncated due to being too long. ..."]` |
+| `agyResult` keeps the time lines | `TestAntigravityRecords`: `assistant tool_call run_command [make build] ok`; `TestFormatFixtures/antigravity.jsonl` fails too |
+| `agyResult` takes no cut output apart, so it looks for the exit line only at the start | `TestAntigravityRecords`: `assistant tool_call run_command [make build] ok` |
+| The preview of a cut output keeps its time lines | `TestAntigravityRecords`: `assistant tool_call run_command [make build] ok` |
+| `agyResult` drops agy's note on a cut output | `TestAntigravityRecords`: `result texts ["line one" "permission denied" "Command exited with code 1.\n\nCommand output:\nbuilding\n..."]` |
+
+With the change whole the case passes: the thread shows `I read all 300
+lines of long.txt`, `Command exited with code 1`, the `edit_file` card with
+`+ milk`, and `run_command  exit 3`, and `TestAntigravityRecords` reads the
+prompt `Why does </USER_REQUEST> end the tag?` whole and `run_command [make
+build]` as an error, its text agy's note and then the preview from
+`Command exited with code 1.`. Repeat from `e2e/tui`
+with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitThreadOtherHarnesses$/^antigravity$' -v .`,
+and `go test ./internal/transcriptview/ -run 'TestFormatFixtures/antigravity|TestAntigravityRecords'`
+and `go test ./harness/ -run TestShippedSessionFiles`.

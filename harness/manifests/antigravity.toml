@@ -113,6 +113,23 @@ submit          = "cr"
 bracketed_paste = true
 source          = "default: Enter sends CR in raw mode; not measured"
 
+# Antigravity CLI writes a conversation as JSONL steps in
+# ~/.gemini/antigravity-cli/brain/<conversation id>/.system_generated/logs/
+# transcript_full.jsonl. The hook (tuios integration install antigravity)
+# reports the conversation id on PreInvocation, and session_file names the
+# file from it. That id is the only join: the steps name no folder, so there
+# is no search and nothing to verify. transcript.jsonl beside it cuts long
+# values and lists the cuts in truncated_fields, and writes each tool
+# argument as a JSON string, so the full file is the one read. Read at agy
+# 1.5.14. Not measured: whether an environment variable moves brain/ the way
+# ANTIGRAVITY_CLI_CONFIG_DIR moves hooks.json. The file is read only to show
+# the conversation in the agent thread.
+[transcript]
+reader       = "antigravity-jsonl"
+dir          = "{home}/.gemini/antigravity-cli/brain"
+glob         = "*/.system_generated/logs/transcript_full.jsonl"
+session_file = "{session_id}/.system_generated/logs/transcript_full.jsonl"
+
 [resume]
 argv   = ["agy", "--conversation", "{session_id}"]
 source = "herdr src/agent_resume.rs; not measured"

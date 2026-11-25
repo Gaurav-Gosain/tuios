@@ -166,6 +166,32 @@ func TestFormatFixtures(t *testing.T) {
 			"tool tool_result ok",
 			"assistant text: b is three. One test fails.",
 		}},
+		{"antigravity.jsonl", FormatAntigravity, []string{
+			"user text: Read notes.txt, run `echo hello`, add milk to it, then read missing.txt.",
+			"assistant thinking: Reading notes.txt first.",
+			"assistant tool_call read_file [/work/project/notes.txt] ok",
+			"tool tool_result ok",
+			"assistant tool_call run_command [echo hello] ok",
+			"tool tool_result ok",
+			"assistant thinking: Adding milk, then reading missing.txt.   The lines end in CRLF, so the edit targets \"bread\" alone.",
+			"assistant tool_call edit_file [/work/project/notes.txt] ok diff /work/project/notes.txt +1 -0",
+			"assistant tool_call read_file [/work/project/missing.txt] error",
+			"tool tool_result ok",
+			"tool tool_result error",
+			"assistant thinking: The edit worked and the read failed.",
+			"assistant text: I read [notes.txt](file:///work/project/notes.txt), ran `echo hello`, added `milk`, and [missing.txt](file:///work/project/missing.txt) does not exist.",
+			"user text: Second part of the test. Read long.txt, write done to summary.txt, and run `cmd /c exit 3`.",
+			"assistant thinking: I'm thinking through how to approach this.",
+			"assistant text: I am about to read [long.txt](file:///work/project/long.txt), write summary.txt and run `cmd /c exit 3`.",
+			"assistant tool_call read_file [/work/project/long.txt] ok",
+			"assistant tool_call write_file [/work/project/summary.txt] ok diff /work/project/summary.txt +1 -0",
+			"assistant tool_call run_command [cmd /c exit 3] error",
+			"tool tool_result ok",
+			"tool tool_result ok",
+			"tool tool_result error",
+			"assistant thinking: The command exited with code 1.",
+			"assistant text: I read all 300 lines of [long.txt](file:///work/project/long.txt), created summary.txt and ran `cmd /c exit 3`, which exited with code 1.",
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.file, func(t *testing.T) {
@@ -202,7 +228,7 @@ func TestFormatPaging(t *testing.T) {
 		{"codex-rollout.jsonl", FormatCodex}, {"gemini-chat.jsonl", FormatGemini},
 		{"gemini-legacy.json", FormatGemini}, {"qwen-chat.jsonl", FormatQwen},
 		{"copilot-events.jsonl", FormatCopilot}, {"amp-thread.json", FormatAmp},
-		{"cursor-agent.jsonl", FormatCursor},
+		{"cursor-agent.jsonl", FormatCursor}, {"antigravity.jsonl", FormatAntigravity},
 	} {
 		t.Run(c.file, func(t *testing.T) {
 			path := filepath.Join("testdata", c.file)
@@ -291,6 +317,14 @@ func hostile(format string) []string {
 			`{"role":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":`+s(esc)+`,"is_error":true}]}}`,
 			`{"role":"assistant","message":{"content":7}}`,
 		)
+	case FormatAntigravity:
+		return append(common,
+			`{"step_index":0,"type":"USER_INPUT","content":`+s("<USER_REQUEST>"+esc+"</USER_REQUEST>")+`}`,
+			`{"step_index":1,"type":"PLANNER_RESPONSE","content":`+s(esc)+`,"thinking":`+s(esc)+`,"tool_calls":[{"name":`+s(esc)+`,"args":{"CommandLine":`+s(esc)+`}},{"name":"edit_file","args":{"Path":`+s(esc)+`,"Target":`+s(esc)+`,"Replacement":7}},"x"]}`,
+			`{"step_index":2,"type":"GENERIC","status":"ERROR","error":`+s(esc)+`,"content":`+s("Created At: x\n"+esc)+`}`,
+			`{"step_index":"3","type":"GENERIC","content":`+s("Command exited with code "+esc)+`}`,
+			`{"step_index":1e300,"type":"PLANNER_RESPONSE","tool_calls":{"name":"x"},"thinking":7}`,
+		)
 	case FormatAmp:
 		return []string{`{"messages": [` +
 			`{"role":"user","content":[{"type":"text","text":` + s(esc) + `}]},` +
@@ -311,7 +345,7 @@ func TestFormatHostile(t *testing.T) {
 			return r
 		}, s)
 	}
-	for _, format := range []string{FormatCodex, FormatGemini, FormatQwen, FormatCopilot, FormatAmp, FormatCursor} {
+	for _, format := range []string{FormatCodex, FormatGemini, FormatQwen, FormatCopilot, FormatAmp, FormatCursor, FormatAntigravity} {
 		t.Run(format, func(t *testing.T) {
 			name := "hostile.jsonl"
 			if format == FormatAmp {
@@ -505,6 +539,61 @@ func TestGeminiRewrites(t *testing.T) {
 	}
 	if strings.Contains(strings.Join(got, "\n"), "second") || !strings.Contains(strings.Join(got, "\n"), "again") {
 		t.Errorf("after the rewind:\n%s\nwant the message taken back gone and the new one there", strings.Join(got, "\n"))
+	}
+}
+
+// TestAntigravityRecords checks the Antigravity CLI records the fixture does
+// not hold. Ways it can fail: a prompt that names </USER_REQUEST> is cut
+// there, or one that names <USER_REQUEST> loses what comes before it; a
+// USER_INPUT that is only agy's settings note shows as the person's words;
+// a result keeps agy's Created At and Completed At lines; an ERROR step with
+// no content shows no text; a call whose result is not written yet gets
+// another call's status; a command whose output agy cut shows ok though it
+// exited 1, or shows the time lines of its preview.
+func TestAntigravityRecords(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "transcript_full.jsonl")
+	lines := []string{
+		`{"step_index":0,"type":"USER_INPUT","content":"<USER_REQUEST>\nWhy does </USER_REQUEST> end the tag?\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nThe current local time is: 2026-11-24T14:44:51Z.\n</ADDITIONAL_METADATA>"}`,
+		`{"step_index":1,"type":"USER_INPUT","content":"Is <USER_REQUEST> a tag?"}`,
+		`{"step_index":2,"type":"USER_INPUT","content":"<USER_SETTINGS_CHANGE>\nThe user changed setting Model Selection.\n</USER_SETTINGS_CHANGE>"}`,
+		`{"step_index":3,"type":"PLANNER_RESPONSE","tool_calls":[{"name":"read_file","args":{"Path":"a.txt"}},{"name":"run_command","args":{"CommandLine":"make"}}]}`,
+		`{"step_index":4,"type":"GENERIC","status":"DONE","content":"Created At: 2026-11-24T14:45:00Z\nCompleted At: 2026-11-24T14:45:01Z\nCreated At: 2026-11-24T14:45:00Z\nCompleted At: 2026-11-24T14:45:01Z\nline one"}`,
+		`{"step_index":5,"type":"GENERIC","status":"ERROR","content":"","error":"permission denied"}`,
+		`{"step_index":6,"type":"PLANNER_RESPONSE","tool_calls":[{"name":"run_command","args":{"CommandLine":"make test"}}]}`,
+		`{"step_index":7,"type":"PLANNER_RESPONSE","tool_calls":[{"name":"run_command","args":{"CommandLine":"make build"}}]}`,
+		`{"step_index":8,"type":"GENERIC","status":"DONE","content":"Created At: 2026-11-24T14:46:00Z\nCompleted At: 2026-11-24T14:46:09Z\nThe tool's output was truncated due to being too long. You can find the full output in a file at file:///home/user/.gemini/antigravity-cli/brain/c-1/.system_generated/steps/8/output.txt.\n\nHere is a preview with the middle of the output truncated:\nCreated At: 2026-11-24T14:46:00Z\nCompleted At: 2026-11-24T14:46:09Z\nCommand exited with code 1.\n\nCommand output:\nbuilding\n<truncated 4096 of 8192 bytes from the middle of the output>\nbuild failed"}`,
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	page, err := Read(path, Options{Format: FormatAntigravity})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got, results []string
+	for _, e := range page.Entries {
+		got = append(got, summary(e))
+		if e.Kind == KindToolResult {
+			results = append(results, e.Text)
+		}
+	}
+	want := []string{
+		"user text: Why does </USER_REQUEST> end the tag?",
+		"user text: Is <USER_REQUEST> a tag?",
+		"assistant tool_call read_file [a.txt] ok",
+		"assistant tool_call run_command [make] error",
+		"tool tool_result ok",
+		"tool tool_result error",
+		"assistant tool_call run_command [make test] running",
+		"assistant tool_call run_command [make build] error",
+		"tool tool_result error",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("entries:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	build := "The tool's output was truncated due to being too long. You can find the full output in a file at file:///home/user/.gemini/antigravity-cli/brain/c-1/.system_generated/steps/8/output.txt.\n\nHere is a preview with the middle of the output truncated:\nCommand exited with code 1.\n\nCommand output:\nbuilding\n<truncated 4096 of 8192 bytes from the middle of the output>\nbuild failed"
+	if len(results) != 3 || results[0] != "line one" || results[1] != "permission denied" || results[2] != build {
+		t.Errorf("result texts %q, want the read's output without agy's times, the error step's error, and the cut command's note and preview without the times", results)
 	}
 }
 

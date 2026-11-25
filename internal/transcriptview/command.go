@@ -19,11 +19,12 @@ const labelSteps = 32
 
 // shellTools are the tool names harnesses give a shell command: Claude Code
 // and Amp Bash, pi bash, Codex shell, shell_command, exec_command and
-// local_shell, Gemini CLI run_shell_command, Cursor run_terminal_cmd, and
-// Copilot on Windows powershell.
+// local_shell, Gemini CLI run_shell_command, Cursor run_terminal_cmd,
+// Copilot on Windows powershell, and Antigravity CLI run_command.
 var shellTools = map[string]bool{
 	"Bash": true, "bash": true, "shell": true, "shell_command": true, "exec_command": true,
 	"local_shell": true, "run_shell_command": true, "run_terminal_cmd": true, "powershell": true,
+	"run_command": true,
 }
 
 // ShellTool reports whether a tool call's name is one harnesses give a

@@ -3511,7 +3511,7 @@ tuios set-agent-state <state> [flags]
 - `--source <source>`: Where the state came from: `report`, `osc`, `screen`, `stall` (default: `report`)
 - `--harness <id>`: Id of the harness the state is about, e.g. `claude-code`
 - `--kind <kind>`: What a `needs_input` state waits for: `approval`, `question` or `auth`. Only valid with `needs_input`
-- `--agent-session-id <id>`: The harness's own conversation id. Stored on the pane, and turns on the nested-session guard (below)
+- `--agent-session-id <id>`: The harness's own conversation id. Stored on the pane, and turns on the nested-session guard (below). For a harness whose manifest has a `session_file`, it also joins the pane to the transcript the id names once that file exists (see [the protocol](protocol.md))
 - `--transcript-path <path>`: The transcript file the harness writes. For a harness whose manifest has a transcript reader, the pane is joined to this exact file
 - `--if-state <states>`: Apply only when the pane is in one of these comma-separated states
 
@@ -3720,6 +3720,13 @@ and `list-agents`. It is refused, with the reason on stderr, when the pane is
 attributed to a different harness, or when the pane is mid-turn in another
 conversation of the same harness: both are a nested run. The id is at most 256
 bytes.
+
+For a harness whose manifest has a `session_file`, the id also joins the pane
+to the transcript file it names, so the agent thread shows the conversation.
+A report sent before the harness writes the file joins nothing, and the next
+report of the same id joins it. A new id whose file is not there yet drops the
+previous conversation's join. The rules an id must meet to name a file are in
+[the protocol](protocol.md).
 
 **Flags:**
 - `--harness <id>`: Id of the harness the conversation belongs to (required)

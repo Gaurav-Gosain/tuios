@@ -5056,7 +5056,7 @@
       },
       {
         "name": "agent_session_id",
-        "description": "The harness's own id for the conversation, at most 256 bytes."
+        "description": "The harness's own id for the conversation, at most 256 bytes. Without transcript_path it names the transcript as set-agent-state's agent_session_id does: a harness whose manifest has a session_file is joined to the file the id names once that file exists, so a later report of the same id joins a file written after the first. A report that changes the id and joins no file drops the previous conversation's join."
       },
       {
         "name": "transcript_path",
@@ -5078,7 +5078,7 @@
       },
       {
         "name": "transcript_refused",
-        "description": "Why the transcript update was refused. Absent when accepted or not provided."
+        "description": "Why the transcript update, or the file the session id names, was refused. Absent when accepted or when nothing named a file."
       },
       {
         "name": "applied",
@@ -5126,7 +5126,7 @@
       },
       {
         "name": "agent_session_id",
-        "description": "The harness's own id for the conversation, as a hook reports it. It is stored on the window for a later resume. It also turns on the nested-session guard: while the pane's harness is working or needs_input by its own report, a report for a different conversation or from a different harness is refused with reason foreign_session or foreign_harness."
+        "description": "The harness's own id for the conversation, as a hook reports it. It is stored on the window for a later resume. It also turns on the nested-session guard: while the pane's harness is working or needs_input by its own report, a report for a different conversation or from a different harness is refused with reason foreign_session or foreign_harness. Without transcript_path it names the transcript of a harness whose manifest has a session_file: the window is joined to the file the id names once that file exists. An id names no file unless it is letters, digits, '.', '_' or '-', at most 128 bytes, with no '..' and not ending in '.', and a report with no connection names none. A report with no harness names the file of the pane's harness. A report that changes the id and joins no file drops the previous conversation's join."
       },
       {
         "name": "transcript_path",
@@ -5188,7 +5188,7 @@
       },
       {
         "name": "transcript_refused",
-        "description": "Why the window was not joined to transcript_path. Absent when it was, or when no path was given."
+        "description": "Why the window was not joined to transcript_path, or to the file the session id names. Absent when it was, or when nothing named a file."
       },
       {
         "name": "session",
