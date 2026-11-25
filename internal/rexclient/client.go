@@ -212,9 +212,11 @@ type Size struct {
 	Rows    int `json:"rows"`
 }
 
-// Resize sets the block's terminal size.
+// Resize sets the block's terminal size. It waits for the reply, so a
+// screen read after it has the new size.
 func (c *Control) Resize(b Block, s Size) error {
-	return c.Send("com.superlogical.terminal.resize", blockArgs{b.SessionID, b.BlockID, s})
+	_, err := c.BlockCall(b, "com.superlogical.terminal.resize", s)
+	return err
 }
 
 // Write types text into the block. client.action keeps it in order with
