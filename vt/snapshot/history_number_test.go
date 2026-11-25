@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	uv "github.com/charmbracelet/ultraviolet"
+
 	"tuios.dev/vt"
 )
 
@@ -72,6 +74,39 @@ func TestSnapshotCarriesHistoryNumbers(t *testing.T) {
 	_, _ = src.Write([]byte(b.String()))
 	_, _ = dst.Write([]byte(b.String()))
 	check("the same output to both", dst)
+
+	// The lines the emulator does not hold come from the source by number,
+	// a page at a time, up to the source's oldest.
+	for before := dst.ScrollbackBase(); ; {
+		page, finish := CaptureHistoryPage(src, before, 64)
+		finish()
+		if page.Len() == 0 {
+			if before != src.ScrollbackBase() {
+				t.Fatalf("an empty page before line %d, and the source's oldest is %d", before, src.ScrollbackBase())
+			}
+			break
+		}
+		if got := page.First + int64(page.Len()); got != before {
+			t.Fatalf("a page asked for lines before %d ends before %d", before, got)
+		}
+		next := page.First
+		if err := page.Lines(dst, func(n int64, line uv.Line, _, _ bool) {
+			var b strings.Builder
+			for _, c := range line {
+				b.WriteString(c.Content)
+			}
+			if got, want := strings.TrimRight(b.String(), " "), text(src, n); got != want {
+				t.Fatalf("line %d of a page is %q, the source holds %q", n, got, want)
+			}
+			if n != next {
+				t.Fatalf("a page gave line %d where %d was next", n, next)
+			}
+			next++
+		}); err != nil {
+			t.Fatal(err)
+		}
+		before = page.First
+	}
 
 	unnumbered := Capture(src, 30, 4, 0, 0)
 	unnumbered.ScrollbackNumbered, unnumbered.ScrollbackBase = false, 0
