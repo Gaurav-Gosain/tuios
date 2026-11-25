@@ -79,7 +79,13 @@ func rexServerWithEnv(t *testing.T, env []string) func(args ...string) string {
 // block, the mirror shows PANE-42 twice and the test fails.
 func TestRexShowsTuiosPanes(t *testing.T) {
 	requireReal(t, "it runs tuios pane-view in the blocks of a Rex server")
+	// The skip comes before the daemon starts, so a skipped run leaves
+	// nothing behind.
+	if _, err := exec.LookPath("rex"); err != nil {
+		t.Skip("rex is not on PATH")
+	}
 	base := t.TempDir()
+	killDaemon(t, base)
 	if out, err := tuiosCLI(t, base, "new", "work", "--detach"); err != nil {
 		t.Fatalf("new work: %v\n%s", err, out)
 	}
