@@ -19731,3 +19731,18 @@ placeholders, and zooms, drags and fits the picture.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitImageViewZooms$' -v .`.
+## Hover help: the meters and the pane on top
+
+Two fixes from the review of the hover help pull requests. The CPU and RAM readouts share one dock segment, and each recorded its columns with the segment's two-column margin counted in, so the first two columns of the RAM readout explained the CPU. The pointer picked the part with the smallest rectangle under it, so a pane hidden under a larger floating pane or popup was explained through it.
+
+Run on 2026-11-25 on Linux, real backend. Each control is a local build of the branch with the one fix taken out. It is not committed.
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| Meter width measured with `meterStyle.Render(part)` again, in `renderDockRightCells` | `TestHoverHelpExplainsEachMeter` | "the RAM page at the readout's first column" times out on "Dock › CPU" | **caught** |
+| `helpSmallestAt` ranks by size alone, with no `layer` | `TestHoverHelpExplainsThePaneOnTop` | "the page of the popup drawn over the pane" times out on "Terminal: Terminal 34df0690", the pane under the popup | **caught** |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios \
+  go test -count=1 -v -run '^TestHoverHelpExplains(EachMeter|ThePaneOnTop)$' .
+```

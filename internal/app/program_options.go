@@ -280,6 +280,12 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 
+	// Hover help explains what the pointer is over, so it needs every cell the
+	// pointer crosses. See hover_help.go.
+	if m.hoverHelp.on && movedCell {
+		return msg
+	}
+
 	// A shake of the pointer toggles the spotlight, and the detector reads it
 	// off bare motion. This filter is a whitelist, so the gesture is dead until
 	// it has a clause here however well the detector works.
