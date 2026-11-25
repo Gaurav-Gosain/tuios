@@ -162,6 +162,10 @@ func decodeHistorySnapshot(data []byte, alt bool) *gh.Terminal {
 // not report the lines its page list drops, so the history has no numbers.
 func (t *GhosttyTerminal) ScrollbackBase() (int64, bool) { return 0, false }
 
+// ScrollbackEpoch implements [Terminal.ScrollbackEpoch]. See
+// ScrollbackBase.
+func (t *GhosttyTerminal) ScrollbackEpoch() uint64 { return 0 }
+
 // SetScrollbackBase implements [Terminal.SetScrollbackBase]. See
 // ScrollbackBase.
 func (t *GhosttyTerminal) SetScrollbackBase(int64) {}

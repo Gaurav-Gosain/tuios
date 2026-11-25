@@ -300,6 +300,14 @@ func (e *Emulator) ScrollbackBase() (base int64, ok bool) {
 	return 0, false
 }
 
+// ScrollbackEpoch implements [Terminal.ScrollbackEpoch].
+func (e *Emulator) ScrollbackEpoch() uint64 {
+	if sb := e.scrs[0].scrollback; sb != nil {
+		return sb.Epoch()
+	}
+	return 0
+}
+
 // SetScrollbackBase implements [Terminal.SetScrollbackBase].
 func (e *Emulator) SetScrollbackBase(base int64) {
 	if sb := e.scrs[0].scrollback; sb != nil {

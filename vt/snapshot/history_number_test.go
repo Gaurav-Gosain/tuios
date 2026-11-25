@@ -2,6 +2,7 @@ package snapshot
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 
@@ -115,6 +116,29 @@ func TestSnapshotCarriesHistoryNumbers(t *testing.T) {
 		before = page.First
 	}
 
+	// A page and a snapshot carry the source's epoch, and a resize of the
+	// source that moves the numbers changes it.
+	if st := Capture(src, 30, 4, 0, 0); st.ScrollbackEpoch != src.ScrollbackEpoch() {
+		t.Fatalf("the snapshot carries epoch %d, the source is in %d", st.ScrollbackEpoch, src.ScrollbackEpoch())
+	}
+	page, finish := CaptureHistoryPage(src, end(src), 8)
+	finish()
+	if page.Epoch != src.ScrollbackEpoch() {
+		t.Fatalf("the page carries epoch %d, the source is in %d", page.Epoch, src.ScrollbackEpoch())
+	}
+	// A number far outside the history does not overflow: the page holds
+	// the newest lines, or none.
+	for _, before := range []int64{math.MaxInt64, math.MinInt64} {
+		p, finish := CaptureHistoryPage(src, before, 8)
+		finish()
+		if before == math.MaxInt64 && (p.Len() != 8 || p.First+8 != end(src)) {
+			t.Fatalf("a page before line %d holds %d lines from %d, want the newest 8", before, p.Len(), p.First)
+		}
+		if before == math.MinInt64 && p.Len() != 0 {
+			t.Fatalf("a page before line %d holds %d lines", before, p.Len())
+		}
+	}
+
 	unnumbered := Capture(src, 30, 4, 0, 0)
 	unnumbered.ScrollbackNumbered, unnumbered.ScrollbackBase = false, 0
 	keep := vt.NewWithScrollback(30, 4, 10)
@@ -168,7 +192,7 @@ func TestSnapshotCarriesHistoryNumbers(t *testing.T) {
 	if b := baseOf(big); b >= 0 {
 		t.Fatalf("a client that holds more history than its source numbered has base %d, want below zero", b)
 	}
-	page, finish := CaptureHistoryPage(fresh, baseOf(big)+10, 64)
+	page, finish = CaptureHistoryPage(fresh, baseOf(big)+10, 64)
 	finish()
 	if page.Len() != 0 {
 		t.Fatalf("a page of lines the source never held has %d lines", page.Len())

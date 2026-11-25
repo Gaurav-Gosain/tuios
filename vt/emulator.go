@@ -1440,7 +1440,10 @@ func (e *Emulator) Resize(width int, height int) {
 		main.Resize(width, height)
 	}
 	if sb != nil && main.scrollback == sb {
-		sb.base = cursorNumber - int64(sb.Len()+main.cur.Y)
+		if base := cursorNumber - int64(sb.Len()+main.cur.Y); base != sb.base {
+			sb.base = base
+			sb.epoch++
+		}
 	}
 	if e.altSized {
 		e.scrs[1].Resize(width, height)

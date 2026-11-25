@@ -16,6 +16,9 @@ type HistoryPage struct {
 	// its newest, when the page was read. A line below Base is gone.
 	Base int64 `json:"base"`
 	End  int64 `json:"end"`
+	// Epoch is the source's vt.Terminal.ScrollbackEpoch when the page was
+	// read. Lines read in another epoch have other numbers.
+	Epoch uint64 `json:"epoch,omitempty"`
 	// Packed holds the lines, oldest first, as State.PackedScrollback holds
 	// them, with their style table, soft-wrap flags and padding flags.
 	Packed []byte       `json:"packed,omitempty"`
@@ -30,20 +33,22 @@ func (p *HistoryPage) Len() int { return packedRowCount(p.Packed) }
 // CaptureHistoryPage reads up to limit history lines of t that come before
 // line number before, the newest of them last. It copies the lines while the
 // caller holds t's lock, and returns finish, which packs them without reading
-// t. A terminal that does not number its history returns a nil page.
-// Lines before the oldest the terminal holds are gone, and a page for them
-// is empty.
+// t. The page holds no lines until finish has run. A terminal that does not
+// number its history returns a nil page. Lines before the oldest the terminal
+// holds are gone, and a page for them is empty. The caller bounds limit: the
+// page is as long as the history allows.
 func CaptureHistoryPage(t vt.Terminal, before int64, limit int) (page *HistoryPage, finish func()) {
 	base, ok := t.ScrollbackBase()
 	if !ok {
 		return nil, func() {}
 	}
 	n := t.ScrollbackLen()
-	end := min(before-base, int64(n))
-	from := end - int64(max(limit, 0))
-	from, end = min(max(from, 0), int64(n)), max(end, 0)
-	from = min(from, end)
-	page = &HistoryPage{First: base + from, Base: base, End: base + int64(n)}
+	// Clamped first, so a number from the wire cannot overflow the
+	// subtraction.
+	before = min(max(before, base), base+int64(n))
+	end := before - base
+	from := max(end-int64(max(limit, 0)), 0)
+	page = &HistoryPage{First: base + from, Base: base, End: base + int64(n), Epoch: t.ScrollbackEpoch()}
 	history := t.CopyScrollback(int(from), int(end))
 	return page, func() {
 		colors := colorWireCache{}

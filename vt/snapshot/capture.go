@@ -61,6 +61,7 @@ func capture(t vt.Terminal, width, height, maxScrollback, have int, packed bool)
 	}
 	if base, ok := t.ScrollbackBase(); ok {
 		state.ScrollbackBase, state.ScrollbackNumbered = base, true
+		state.ScrollbackEpoch = t.ScrollbackEpoch()
 	}
 
 	// None of these is recoverable from the cells. They are what the guest set

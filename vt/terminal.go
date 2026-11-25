@@ -282,6 +282,13 @@ type Terminal interface {
 	// pushed (Discard) counts them, but a reflow takes nothing back from it,
 	// so its numbers do not follow another emulator's after a resize.
 	ScrollbackBase() (base int64, ok bool)
+	// ScrollbackEpoch changes whenever the history is numbered anew: a resize
+	// that moved the numbers, or a SetScrollbackBase that changed them. A
+	// drop does not change it. A reader that keeps lines by number, such as
+	// a client that keeps pages it read from its daemon, drops them when the
+	// epoch changes. A daemon can resize a pane for another client, so the
+	// reader cannot know of a renumber from its own resizes.
+	ScrollbackEpoch() uint64
 	// SetScrollbackBase sets the number of the oldest history line. A
 	// backend that does not number its history ignores it.
 	SetScrollbackBase(base int64)

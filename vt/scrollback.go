@@ -67,6 +67,8 @@ type Scrollback struct {
 	// dropped from its old end, by trim, clear or a smaller limit, plus what
 	// SetBase set. See Base.
 	base int64
+	// epoch changes whenever the lines are numbered anew. See Epoch.
+	epoch uint64
 
 	// Intern table for colour values of a type the packer does not know. It
 	// is capped at internCap entries; past the cap a colour is reduced to RGB
@@ -954,8 +956,20 @@ func (sb *Scrollback) Base() int64 {
 // SetBase sets the number of the oldest line, to carry over the numbering
 // of another ring.
 func (sb *Scrollback) SetBase(base int64) {
+	if base == sb.base {
+		return
+	}
 	sb.base = base
+	sb.epoch++
 	sb.gen++
+}
+
+// Epoch changes whenever the lines are numbered anew: a resize that moved
+// the numbers, or a SetBase that changed them. A drop from the old end does
+// not change it, since it moves no number. A reader that keeps lines by
+// number drops them when the epoch changes.
+func (sb *Scrollback) Epoch() uint64 {
+	return sb.epoch
 }
 
 // MaxLines returns the ring's capacity.

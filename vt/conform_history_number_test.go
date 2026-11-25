@@ -183,4 +183,38 @@ func TestConform_HistoryNumbers(t *testing.T) {
 		feedAll(both, lines(30, 50, 0))
 		sameNumbers(t, "after a resize to 20x12 and 20 lines", small, big)
 	})
+
+	t.Run("the epoch changes when a resize moves the numbers", func(t *testing.T) {
+		e := vt.NewWithScrollback(20, 4, 10)
+		feedAll([]vt.Terminal{e}, lines(0, 30, 12))
+		epoch, gen := e.ScrollbackEpoch(), e.ScrollbackGeneration()
+		// A full ring drops a line for each it takes: no number moves.
+		feedAll([]vt.Terminal{e}, lines(30, 40, 12))
+		if e.ScrollbackEpoch() != epoch {
+			t.Fatal("drops from the old end changed the epoch")
+		}
+		// The same base again renumbers nothing, and changes nothing.
+		base, _ := e.ScrollbackBase()
+		gen = e.ScrollbackGeneration()
+		e.SetScrollbackBase(base)
+		if e.ScrollbackEpoch() != epoch || e.ScrollbackGeneration() != gen {
+			t.Fatal("setting the base it already has changed the epoch or the generation")
+		}
+		// A taller screen takes rows back from the history: the numbers stay.
+		e.Resize(20, 8)
+		if e.ScrollbackEpoch() != epoch {
+			t.Fatal("a taller screen that only took rows back changed the epoch")
+		}
+		// A narrower screen wraps the screen's lines into more rows, and the
+		// history is numbered back from the cursor row.
+		before, _ := e.ScrollbackBase()
+		e.Resize(10, 8)
+		after, _ := e.ScrollbackBase()
+		if after == before {
+			t.Fatal("the narrowing did not move the numbers, so the case tests nothing")
+		}
+		if e.ScrollbackEpoch() == epoch {
+			t.Fatal("a resize moved the numbers and kept the epoch")
+		}
+	})
 }

@@ -54,10 +54,13 @@ type State struct {
 	// history line has the number the source's has. Absent from an older
 	// daemon and from a backend that does not count, and the emulator then
 	// keeps its own numbering.
-	ScrollbackBase     int64       `json:"scrollback_base,omitempty"`
-	ScrollbackNumbered bool        `json:"scrollback_numbered,omitempty"`
-	IsAltScreen        bool        `json:"is_alt_screen,omitempty"` // Alternate screen buffer active (for mouse event forwarding)
-	Pen                *StyleState `json:"pen,omitempty"`           // Graphic rendition in force: what the guest's next output is painted with
+	ScrollbackBase     int64 `json:"scrollback_base,omitempty"`
+	ScrollbackNumbered bool  `json:"scrollback_numbered,omitempty"`
+	// ScrollbackEpoch is the source's vt.Terminal.ScrollbackEpoch: a client
+	// that keeps lines it read by number drops them when it changes.
+	ScrollbackEpoch uint64      `json:"scrollback_epoch,omitempty"`
+	IsAltScreen     bool        `json:"is_alt_screen,omitempty"` // Alternate screen buffer active (for mouse event forwarding)
+	Pen             *StyleState `json:"pen,omitempty"`           // Graphic rendition in force: what the guest's next output is painted with
 	// Margins is the scroll region, as x, y, width, height. A guest sets it
 	// once to hold a header or a status line out of the scrolling part of the
 	// screen.
