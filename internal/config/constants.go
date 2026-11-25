@@ -973,7 +973,8 @@ const (
 	MouseDoubleClickDefault = 300
 
 	// MouseDragThreshold is the summed cell movement that turns a press and
-	// release into a drag, for the right button, click-to-type and Ctrl-drag.
+	// release into a drag, for the right button, click-to-type, Ctrl-drag, the
+	// drop of a dragged pane and a file dragged from the sidebar.
 	MouseDragThresholdMin     = 1
 	MouseDragThresholdMax     = 50
 	MouseDragThresholdDefault = 5

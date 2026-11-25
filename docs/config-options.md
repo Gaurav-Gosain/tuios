@@ -350,7 +350,7 @@ The defaults are the ones on Linux. Some defaults are different on macOS.
 | Option | Type | Default | Description |
 |---|---|---|---|
 | <a id="mouse.double_click_ms"></a>`mouse.double_click_ms` | int | `300` | Milliseconds after a click in which a second one counts as a double click: in a pane, on the rail divider, in the Agents list and in the draft editor Range: 100 to 1000. |
-| <a id="mouse.drag_threshold"></a>`mouse.drag_threshold` | int | `5` | Cells the pointer moves before a press is a drag and not a click. It applies to the right button, to click-to-type and to Ctrl drag Range: 1 to 50. |
+| <a id="mouse.drag_threshold"></a>`mouse.drag_threshold` | int | `5` | Cells the pointer moves before a press is a drag and not a click: the right button, click-to-type, Ctrl drag, a pane's drop and a file drag Range: 1 to 50. |
 
 ## notifications
 

@@ -19502,3 +19502,24 @@ Run on 2026-11-25 on Linux (amd64), `-race`, `-run '^TestCtrlP'`.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_BACKEND=sim go test -race -count=10 -run '^TestCtrlP' .`.
+## A tiled drag follows the drag threshold
+
+`TestATiledDragFollowsTheDragThreshold` drags a tiled pane by its title bar
+with `mouse.drag_threshold` at 12 and at 4, in bsp, master-stack and
+scrolling. At 12 a drag of 11 cells must put the pane back and one of 12 must
+drop it; at 4 a drag of 3 cells must put it back and one of 4 must drop it. In
+bsp the drop-zone highlight is read mid-drag too: none on a drag that is put
+back, and on the rectangle the pane lands in on one that drops.
+
+Run on 2026-11-25 on Linux (amd64).
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| Main (rows 12/11 and 4/4 of every layout) | "cell (60,0), outside the landing rectangle, changed mid-drag: ..." (bsp/12/11); "a drag of 4 cells at drag_threshold 4 left C at {X:60 Y:19 Width:60 Height:19}, want {X:60 Y:0 Width:30 Height:38}" (bsp/4/4); "master-stack: a drag of 11 cells at drag_threshold 12 left the dragged pane at {X:60 Y:0 Width:60 Height:38}, want {X:0 Y:0 Width:60 Height:38} (drops: false)", and the same in master-stack/4/4, scrolling/12/11 and scrolling/4/4 | **caught**, 6 of 6: bsp, master-stack and scrolling 12/11 and 4/4 |
+| The bsp and master-stack release back at 5 | "a drag of 11 cells at drag_threshold 12 moved a pane: {X:90 Y:0 Width:30 Height:38}, was {X:60 Y:0 Width:60 Height:19}" | **caught**: bsp and master-stack 12/11 and 4/4 |
+| The scrolling release back at 5 | "scrolling: a drag of 11 cells at drag_threshold 12 left the dragged pane at {X:54 Y:0 Width:66 Height:38}, want {X:-12 Y:0 Width:66 Height:38} (drops: false)" | **caught**: scrolling 12/11 and 4/4 |
+| The highlight back at 5 | "cell (60,0), outside the landing rectangle, changed mid-drag: ..." (bsp/12/11); "the inside of the landing rectangle {X:60 Y:0 Width:30 Height:38} is on the terminal's own ground mid-drag: no tint" (bsp/4/4) | **caught**: bsp 12/11 and 4/4 |
+| `>` in place of `>=` at the release | "a drag of 12 cells at drag_threshold 12 left C at {X:60 Y:19 Width:60 Height:19}, want {X:60 Y:0 Width:30 Height:38}" | **caught**: bsp, master-stack and scrolling 12/12 and 4/4 |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestATiledDragFollowsTheDragThreshold$' -v .`.

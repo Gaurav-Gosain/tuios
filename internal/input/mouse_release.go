@@ -274,7 +274,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			// branch below does; the strip is only re-laid when the columns
 			// really changed, so a dropped pane never scrolls the strip.
 			swapped := false
-			if dragDistance >= tiledDragThreshold {
+			if dragDistance >= o.DragThreshold() {
 				if target := o.DropTargetAt(mouse.X, mouse.Y); target >= 0 {
 					sl := o.GetOrCreateScrollingLayout()
 					draggedIntID := o.GetWindowIntID(draggedWindow.ID)
@@ -308,7 +308,7 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				snapBack(o, draggedWindow)
 			}
 			o.DraggedWindowIndex = -1
-		} else if dragDistance >= tiledDragThreshold {
+		} else if dragDistance >= o.DragThreshold() {
 			// This was an actual drag. In BSP a drop on a pane's edge splits
 			// it (see app.TiledDropAt); anywhere else on a pane swaps the two.
 			// An edge drop that would leave the tree as it is snaps back
@@ -476,14 +476,10 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, settleCmd
 }
 
-// tiledDragThreshold is how far, in cells, a tiled pane must move from where
-// the press was before its release counts as a drop rather than a click. The
-// drop-zone highlight uses it too, so it never shows a drop the release would
-// not make.
-const tiledDragThreshold = 5
-
 // tiledDragDistance is how far the pointer at x, y is from where the drag
-// started, the distance tiledDragThreshold is measured in.
+// started. A tiled pane released at least mouse.drag_threshold from there is
+// dropped, and one released nearer is put back. The drop-zone highlight asks
+// the same question, so it never shows a drop the release would not make.
 func tiledDragDistance(o *app.OS, x, y int) int {
 	return abs(x-o.DragStartX) + abs(y-o.DragStartY)
 }

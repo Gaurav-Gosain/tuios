@@ -1705,7 +1705,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "mouse.drag_threshold", Type: OptionInt, Section: "mouse",
-		Description: "Cells the pointer moves before a press is a drag and not a click. It applies to the right button, to click-to-type and to Ctrl drag",
+		Description: "Cells the pointer moves before a press is a drag and not a click: the right button, click-to-type, Ctrl drag, a pane's drop and a file drag",
 		Min:         MouseDragThresholdMin, Max: MouseDragThresholdMax,
 		Zero: ZeroIsDefault,
 	},
