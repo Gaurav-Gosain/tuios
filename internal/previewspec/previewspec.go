@@ -7,6 +7,7 @@ package previewspec
 
 import (
 	"path"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -123,11 +124,11 @@ func Timeout(s string) (time.Duration, bool) {
 // argument stays one argument, whatever the path holds, and no shell reads
 // it.
 func Expand(command []string, file string, dir bool, size Size) []string {
-	folder := path.Dir(file)
+	folder := filepath.Dir(file)
 	if dir {
 		folder = file
 	}
-	name := path.Base(file)
+	name := filepath.Base(file)
 	if strings.HasPrefix(name, "-") {
 		// A name is never read as a flag.
 		name = "./" + name
@@ -159,11 +160,11 @@ func (s Spec) Matches(file string, dir bool, mime func() string) bool {
 	if dir {
 		return s.Folder
 	}
-	name := path.Base(file)
+	name := filepath.Base(file)
 	for _, g := range s.Match {
 		target := name
 		if strings.Contains(g, "/") {
-			target = file
+			target = filepath.ToSlash(file)
 		}
 		if ok, _ := path.Match(g, target); ok {
 			return true

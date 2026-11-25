@@ -298,7 +298,7 @@ func (m *OS) quickLookDirStatsRead() tea.Cmd {
 	ql.dirStatOut = true
 	t := r.target
 	var call func(host, verb string, params map[string]any) (json.RawMessage, error)
-	if t.host != "" {
+	if !m.quickLookHere(t) {
 		call = m.verbOnHostCaller()
 	}
 	return func() tea.Msg {

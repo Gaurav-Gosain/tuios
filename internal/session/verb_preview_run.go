@@ -164,6 +164,10 @@ func RunPreviewer(ctx context.Context, p Previewer, path string, dir bool, size 
 	prog := argv[0]
 	if p.Root != "" && strings.ContainsRune(prog, '/') && !filepath.IsAbs(prog) {
 		prog = filepath.Join(p.Root, prog)
+		if _, err := os.Stat(prog); err != nil {
+			run.Missing = true
+			return run
+		}
 	} else if found, err := exec.LookPath(prog); err == nil {
 		prog = found
 	} else {

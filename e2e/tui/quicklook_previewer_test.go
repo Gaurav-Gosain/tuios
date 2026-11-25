@@ -61,10 +61,12 @@ func writeScript(t *testing.T, dir, name, body string) string {
 // The artifact is the frame quick-look-previewer-plugin.
 func TestQuickLookRunsAPluginPreviewer(t *testing.T) {
 	base := t.TempDir()
-	writeConfig(t, base, "")
+	// A folder previewer of this machine's config. With a daemon, quick look
+	// asks the daemon for it and for the stats of the rows.
+	writeConfig(t, base, "[[quick_look.previewer]]\nname = \"tree\"\nfolder = true\ncommand = [\"sh\", \"-c\", \"ls -1 \\\"$1\\\" | sed 's/^/TREE /'\", \"sh\", \"{path}\"]\noutput = \"text\"\n")
 	plug := filepath.Join(t.TempDir(), "plug")
 	writeScript(t, filepath.Join(plug, "bin"), "notes.sh", "printf 'PLUGIN %s\\n' \"$1\"\n")
-	manifest := "api = 1\nid = \"e2e.notes\"\nname = \"Notes preview\"\nversion = \"1.0.0\"\n\n[[previewer]]\nid = \"notes\"\nmatch = [\"*.note\"]\ncommand = [\"./bin/notes.sh\", \"{name}\"]\n"
+	manifest := "api = 1\nid = \"e2e.notes\"\nname = \"Notes preview\"\nversion = \"1.0.0\"\n\n[[previewer]]\nid = \"notes\"\nmatch = [\"*.note\"]\ncommand = [\"./bin/notes.sh\", \"{name}\"]\n\n[[previewer]]\nid = \"none\"\nmatch = [\"*.note\"]\ncommand = [\"./bin/none.sh\"]\n"
 	if err := os.WriteFile(filepath.Join(plug, "tuios-plugin.toml"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -79,12 +81,21 @@ func TestQuickLookRunsAPluginPreviewer(t *testing.T) {
 	if out, err := tuiosCLI(t, base, "plugins", "approve", "e2e.notes", "--yes"); err != nil || !strings.Contains(out, "in quick look") {
 		t.Fatalf("ASSERTION: tuios plugins approve does not say that the previewer runs in quick look: %v\n%s", err, out)
 	}
-	term := quickLookProjStart(t, base, "", map[string]string{"a.note": "plain note body\n"}, nil)
+	term := quickLookProjStart(t, base, "", map[string]string{"a.note": "plain note body\n", "box/one.txt": "one\n"}, nil)
 	waitForAll(t, term, uiTimeout, "the listing", "a.note")
 	quickLookFocusRail(t, term, "a.note")
 	sendKeys(t, term, " ")
 	railLists(t, term, "space did not show the plugin's previewer", []string{" e2e.notes/notes ", "PLUGIN a.note"}, nil)
 	saveCockpitFrames(t, term, "quick-look-previewer-plugin")
+	sendKeys(t, term, "v")
+	railLists(t, term, "v did not show the plugin previewer whose program is missing", []string{"The program of e2e.notes/none is not on this machine."}, nil)
+
+	// k: box/, where the daemon runs the folder previewer and reads the
+	// stats of the rows.
+	sendKeys(t, term, "k")
+	railLists(t, term, "the daemon did not run the folder previewer", []string{" tree ", "TREE one.txt"}, nil)
+	sendKeys(t, term, "v")
+	railLists(t, term, "the folder rows show no size from the daemon", []string{"one.txt", "4 B"}, []string{"TREE one.txt"})
 
 	// The approval holds the previewer's match too: a plugin that widens it
 	// is not the plugin you approved.

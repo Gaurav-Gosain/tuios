@@ -19617,7 +19617,7 @@ refuse a link without `open`. The run must stop when the caller leaves.
 `TestQuickLookRunsAPluginPreviewer` must see that a wider match is not the
 plugin you approved.
 
-Run on 2026-11-25 on Linux (amd64). Nine controls:
+Run on 2026-11-25 on Linux (amd64). Ten controls:
 
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
@@ -19630,6 +19630,7 @@ Run on 2026-11-25 on Linux (amd64). Nine controls:
 | Runs of a folder kept in `applyQuickLookRun` | "the folder previewer showed the folder as it was" | **caught** |
 | No `askCancel` in `file-preview-run` | "the previewer on build still runs after the caller left" | **caught** |
 | No match in the previewer's part of `TrustHash` | "a plugin that widened its previewer's match kept its approval" | **caught** |
+| No check that a plugin's program is there | "v did not show the plugin previewer whose program is missing" | **caught** |
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestQuickLookRunsPreviewers|TestQuickLookRunsAPluginPreviewer|TestFilePreviewRunOnAHost) -v .`.

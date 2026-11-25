@@ -107,7 +107,7 @@ func (m *OS) quickLookRunRead() tea.Cmd {
 	}
 	t := ql.target
 	name := quickLookRunName(ql.view)
-	probe := name == "" && t.dir && t.host != "" && !ql.runProbed && r.kind == "dir"
+	probe := name == "" && t.dir && !m.quickLookHere(t) && !ql.runProbed && r.kind == "dir"
 	if name == "" && !probe {
 		return nil
 	}
@@ -139,8 +139,7 @@ func (m *OS) quickLookRunRead() tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	ql.runCancel = cancel
 	call := m.verbOnHostCallerFor(ctx.Done(), previewspec.TimeoutMax+transferCallTimeout)
-	// A client with no daemon runs the same code in its own process.
-	here := t.host == "" && m.DaemonClient == nil
+	here := m.quickLookHere(t)
 	mtime, fsize := r.mtime, r.size
 	return func() tea.Msg {
 		defer cancel()
@@ -162,12 +161,19 @@ func (m *OS) quickLookRunRead() tea.Cmd {
 	}
 }
 
+// quickLookHere reports whether quick look reads t in its own process: a
+// file of this machine, with no daemon to ask. With a daemon, the daemon
+// reads it, on the machine it runs on.
+func (m *OS) quickLookHere(t quickLookTarget) bool {
+	return t.host == "" && m.DaemonClient == nil
+}
+
 // quickLookRunReply turns a file-preview-run answer for the previewer
 // name, or for a probe when name is "", into the message for the panel.
 func quickLookRunReply(t quickLookTarget, name string, gen int, reply session.PreviewRunReply, err error, ascii bool) quickLookRunMsg {
 	msg := quickLookRunMsg{gen: gen}
 	if err != nil {
-		msg.run = &quickLookRun{target: t, note: quickLookErrorText(t, err), warn: true}
+		msg.run = &quickLookRun{target: t, name: name, note: quickLookErrorText(t, err), warn: true}
 		return msg
 	}
 	msg.names, msg.named = reply.Previewers, true

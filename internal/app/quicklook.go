@@ -619,13 +619,15 @@ func (m *OS) quickLookShow(t quickLookTarget) tea.Cmd {
 func (m *OS) quickLookFetch(t quickLookTarget) tea.Cmd {
 	if t.dir {
 		client, attached, origin := m.DaemonClient, m.AttachedHost, m.filesView.Origin
+		here := m.quickLookHere(t)
 		return func() tea.Msg {
 			l := readListing(client, attached, origin, t.path, true, 0, false)
 			res := &quickLookResult{target: t, kind: "dir", entries: l.Entries, capped: l.Capped}
 			if l.Err != "" {
 				res.kind, res.note = "error", l.Err
 			}
-			if t.host == "" {
+			// With a daemon, the run's probe asks it for the previewers.
+			if here {
 				for _, p := range session.PreviewersFor(t.path, true, nil) {
 					res.previewers = append(res.previewers, p.Name)
 				}
