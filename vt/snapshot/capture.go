@@ -327,31 +327,7 @@ func packStateCells(t vt.Terminal, state *State, colors colorWireCache, first, e
 	}
 
 	return func() {
-		n := history.Len()
-		b := newPackedRows(n * 32)
-		flags := make([]rowFlags, n)
-		history.Rows(0, n, func(i int, line uv.Line) bool {
-			flags[i] = newRowFlags(history.Wrapped(i), history.Padded(i))
-			if cap(row) < len(line) {
-				row = make([]CellState, len(line))
-			}
-			r := row[:len(line)]
-			// A history row is mostly blank tail, and the packer drops that
-			// tail anyway, so only the cells before it are converted. The
-			// rest are written as the blank the packer compares against,
-			// which keeps the bytes identical to Pack's.
-			used := usedCells(line)
-			for x := range used {
-				r[x] = colors.cellState(&line[x])
-			}
-			for x := used; x < len(r); x++ {
-				r[x] = blankCellState
-			}
-			b.add(p, r)
-			return true
-		})
-		state.PackedScrollback = b.blob()
-		state.ScrollbackWraps, state.ScrollbackPads = rowFlagBits(flags)
+		state.PackedScrollback, state.ScrollbackWraps, state.ScrollbackPads, row = packHistory(p, colors, history, row)
 
 		if main != nil {
 			b := newPackedRows(height * 32)
@@ -362,6 +338,36 @@ func packStateCells(t vt.Terminal, state *State, colors colorWireCache, first, e
 		}
 		state.Styles = p.styles
 	}
+}
+
+// packHistory packs the rows of a history copy through p, with their
+// soft-wrap and padding flags. row is scratch, returned for reuse.
+func packHistory(p *rowPacker, colors colorWireCache, history *vt.ScrollbackCopy, row []CellState) (blob, wraps, pads []byte, scratch []CellState) {
+	n := history.Len()
+	b := newPackedRows(n * 32)
+	flags := make([]rowFlags, n)
+	history.Rows(0, n, func(i int, line uv.Line) bool {
+		flags[i] = newRowFlags(history.Wrapped(i), history.Padded(i))
+		if cap(row) < len(line) {
+			row = make([]CellState, len(line))
+		}
+		r := row[:len(line)]
+		// A history row is mostly blank tail, and the packer drops that
+		// tail anyway, so only the cells before it are converted. The rest
+		// are written as the blank the packer compares against, which keeps
+		// the bytes identical to Pack's.
+		used := usedCells(line)
+		for x := range used {
+			r[x] = colors.cellState(&line[x])
+		}
+		for x := used; x < len(r); x++ {
+			r[x] = blankCellState
+		}
+		b.add(p, r)
+		return true
+	})
+	wraps, pads = rowFlagBits(flags)
+	return b.blob(), wraps, pads, row
 }
 
 // blankCellState is a never-written cell as the wire holds it: the cell the

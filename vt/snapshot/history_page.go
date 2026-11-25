@@ -51,30 +51,8 @@ func CaptureHistoryPage(t vt.Terminal, before int64, limit int) (page *HistoryPa
 	page = &HistoryPage{First: base + from, Base: base, End: base + int64(n), Epoch: t.ScrollbackEpoch()}
 	history := t.CopyScrollback(int(from), int(end))
 	return page, func() {
-		colors := colorWireCache{}
 		p := newRowPacker()
-		k := history.Len()
-		b := newPackedRows(k * 32)
-		flags := make([]rowFlags, k)
-		var row []CellState
-		history.Rows(0, k, func(i int, line uv.Line) bool {
-			flags[i] = newRowFlags(history.Wrapped(i), history.Padded(i))
-			if cap(row) < len(line) {
-				row = make([]CellState, len(line))
-			}
-			r := row[:len(line)]
-			used := usedCells(line)
-			for x := range used {
-				r[x] = colors.cellState(&line[x])
-			}
-			for x := used; x < len(r); x++ {
-				r[x] = blankCellState
-			}
-			b.add(p, r)
-			return true
-		})
-		page.Packed = b.blob()
-		page.Wraps, page.Pads = rowFlagBits(flags)
+		page.Packed, page.Wraps, page.Pads, _ = packHistory(p, colorWireCache{}, history, nil)
 		page.Styles = p.styles
 	}
 }
