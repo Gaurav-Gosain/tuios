@@ -312,7 +312,7 @@ func TestFindPortsAndStartedBy(t *testing.T) {
 	if !ports.Supported {
 		t.Errorf("list-ports says unsupported on linux")
 	}
-	if hit.Window != srvID || hit.Session != session || hit.Addr != "127.0.0.1" || !strings.HasPrefix(hit.Comm, "python") || hit.PID <= 0 || hit.Worktree != "" {
+	if hit.Window != srvID || hit.Session != session || hit.Addr != "127.0.0.1" || !strings.HasPrefix(strings.ToLower(hit.Comm), "python") || hit.PID <= 0 || hit.Worktree != "" {
 		t.Errorf("python's port row is %+v, want window %s, addr 127.0.0.1, a python pid and no worktree", *hit, srvID)
 	}
 	for _, p := range ports.Ports {
