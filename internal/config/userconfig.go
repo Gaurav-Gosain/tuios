@@ -2366,6 +2366,12 @@ func getDefaultQuickLookKeybinds() map[string][]string {
 		"full_size": {"f"},
 		"filmstrip": {"t"},
 		"next_view": {"v"},
+		// A picture zooms with the keys image viewers use, free on the
+		// rail. A zoom moves the keyboard inside the file, where 1 shows
+		// 100%: here 1 stays the rail's jump.
+		"zoom_in":  {"+", "="},
+		"zoom_out": {"-"},
+		"zoom_fit": {"0"},
 	}
 }
 
@@ -2396,6 +2402,10 @@ func getDefaultQuickLookInsideKeybinds() map[string][]string {
 		"open_editor":    {"e"},
 		"parent":         {"backspace"},
 		"reveal_in_rail": {"r"},
+		"zoom_in":        {"+", "="},
+		"zoom_out":       {"-"},
+		"zoom_fit":       {"0"},
+		"zoom_actual":    {"1"},
 	}
 }
 

@@ -1844,6 +1844,36 @@ func hostPictures(t *testing.T, stream []byte) []shot.Image {
 	return out
 }
 
+// pictureSize is the size of the last picture uploaded under id in stream, 0
+// by 0 when there is none.
+func pictureSize(stream []byte, id string) (w, h int) {
+	var data []byte
+	sending := ""
+	for _, m := range placedAPC.FindAllSubmatch(stream, -1) {
+		p := kittyParams(string(m[3]))
+		switch p["a"] {
+		case "t", "T":
+			sending = p["i"]
+			if sending == id {
+				data = append([]byte(nil), m[4]...)
+			}
+		case "":
+			if sending == id {
+				data = append(data, m[4]...)
+			}
+		}
+	}
+	raw, err := base64.StdEncoding.DecodeString(string(data))
+	if err != nil {
+		return 0, 0
+	}
+	cfg, err := png.DecodeConfig(bytes.NewReader(raw))
+	if err != nil {
+		return 0, 0
+	}
+	return cfg.Width, cfg.Height
+}
+
 // TestCockpitReplyMentions works the reply editor's @ list as a person does.
 // The selected entry carries a marker and the lit ground, and the draft line
 // gives up its own ground while the list is open. The arrows move the

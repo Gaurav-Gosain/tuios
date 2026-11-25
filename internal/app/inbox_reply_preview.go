@@ -69,6 +69,9 @@ type previewKey struct {
 	sum        [sha256.Size]byte
 	cols, rows int
 	mode       composer.PreviewMode
+	// zoom is a sharper copy for quick look's zoom: the picture at zoom times
+	// the box's pixels, up to its own (see quickLookZoomKey). 0 is the box's.
+	zoom int
 	// For block glyphs: the colours and glyphs, and the ground a
 	// transparent pixel is laid on.
 	colors mosaic.Colors
@@ -154,6 +157,9 @@ type previewPlacement struct {
 	// virtual says the frame drew the picture as placeholder cells: the host
 	// gets the picture and a virtual placement, and the cells place it.
 	virtual bool
+	// crop is the part of the picture shown in the box, in quickLookCropUnit
+	// of each side, empty for the whole picture: quick look's zoom.
+	crop image.Rectangle
 }
 
 // replyPreviewMsg carries prepared pictures back to the Update goroutine.
@@ -362,7 +368,15 @@ func preparePicture(img *composer.Image, k previewKey, cellW, cellH int, ground 
 		return nil
 	}
 	if k.mode == composer.PreviewPixels {
-		dst := boxScale(src, k.cols*cellW, k.rows*cellH)
+		w, h := k.cols*cellW, k.rows*cellH
+		if k.zoom > 1 {
+			// A sharper copy keeps the picture's own shape: a crop of it
+			// maps to the same part of every copy.
+			f := min(float64(w*k.zoom)/float64(img.Width), 1)
+			f = min(f, math.Sqrt(float64(quickLookZoomUploadPx)/float64(img.Width*img.Height)))
+			w, h = max(int(float64(img.Width)*f+0.5), 1), max(int(float64(img.Height)*f+0.5), 1)
+		}
+		dst := boxScale(src, w, h)
 		var b bytes.Buffer
 		if png.Encode(&b, dst) != nil {
 			return nil
@@ -556,7 +570,7 @@ func (p *replyPreview) shotPieces() []shotPiece {
 			continue
 		}
 		data := pic.png
-		out = append(out, shotPiece{
+		piece := shotPiece{
 			key: pl.key,
 			decode: func(maxPixels int) (image.Image, error) {
 				cfg, err := png.DecodeConfig(bytes.NewReader(data))
@@ -573,7 +587,16 @@ func (p *replyPreview) shotPieces() []shotPiece {
 			col: pl.x, row: pl.y - pl.skip, cols: pl.cols, rows: max(pl.key.rows, pl.skip+pl.rows),
 			sub: image.Rect(0, pl.skip, pl.cols, pl.skip+pl.rows),
 			z:   math.MaxInt32,
-		})
+		}
+		if c := pl.crop; !c.Empty() {
+			// Quick look's zoom: the part of the picture in the whole box.
+			piece.source = func(pix image.Image) image.Rectangle {
+				return quickLookCropRect(c, pix.Bounds().Dx(), pix.Bounds().Dy()).Add(pix.Bounds().Min)
+			}
+			piece.row, piece.rows = pl.y, pl.rows
+			piece.sub = image.Rect(0, 0, pl.cols, pl.rows)
+		}
+		out = append(out, piece)
 	}
 	return out
 }

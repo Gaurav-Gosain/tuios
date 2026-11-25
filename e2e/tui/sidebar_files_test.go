@@ -1803,6 +1803,16 @@ func TestRailQuickLook(t *testing.T) {
 		t.Errorf("ASSERTION: the picture has %d quadrant glyphs; the preview draws half blocks", q)
 	}
 	copiesFrame(t, term, "quick-look-png")
+	// This host has no kitty graphics, so the picture does not zoom: + and
+	// the wheel over it change nothing, and the footer names no zoom.
+	sendKeys(t, term, "+")
+	if px, py, ok := findOnGrid(term.Screen(), "64 x 32"); ok {
+		wheelAt(t, term, px, py+4, tuitest.MouseWheelUp, 2)
+	}
+	stayTrue(t, "a host with no kitty graphics zoomed the picture", 500*time.Millisecond, func() (bool, string) {
+		s := term.Screen()
+		return !strings.Contains(s.Text(), "zoom") && strings.Contains(s.Text(), "64 x 32") && pictureColours(s) >= 8, term.Snapshot()
+	})
 
 	// k three times: past notes.md and main.go to the file that is not text.
 	sendKeys(t, term, "k", "k", "k")
@@ -2338,8 +2348,14 @@ func quickLookOnHost(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, ma
 // one is due, so the picture from before the resize cannot answer for the one
 // after it.
 //
+// The wheel over the larger picture zooms in around the pointer, a drag pans
+// it, and 0 and the keys + and - work the zoom. A zoom or a pan step places
+// the picture again with a source rect: the test reads that rect in the host
+// bytes, and checks that a drag sends no picture and takes none down.
+//
 // NEGATIVE CONTROL: with quickLookPlacement answering false, no placement is
-// sent and the wait times out.
+// sent and the wait times out. With quickLookZoomWheel answering false, the
+// test fails at "the wheel over tall.png did not show the zoom".
 func TestRailQuickLookKittyPicture(t *testing.T) {
 	out := &lockedBuffer{}
 	term, _ := quickLookStart(t, "pic.png", nil, out)
@@ -2419,6 +2435,7 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 	quickLookOnHost(t, term, out, mark, erase, "a return to 40 rows took tall.png off the host", func(p shot.Image) bool {
 		return p.Rows == short.Rows
 	})
+	quickLookZoomSteps(t, term, out, short)
 
 	// A drag of the window's edge: the picture waits for it to settle, and is
 	// not sent to the host at every step.
@@ -2481,6 +2498,25 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 		quickLookOnHost(t, term, out, mark, erase, "a return to 140 columns took the PDF page off the host", func(p shot.Image) bool {
 			return p.Col == page.Col && p.Cols == page.Cols
 		})
+		// Zoomed past the pixels the page was read at, the long side of the
+		// panes' area (140 by 40 cells of 8 by 16), the page is read again
+		// sharper and placed with a source rect.
+		const readPx = 140 * 8
+		mark = len(out.String())
+		wheelAt(t, term, page.Col+page.Cols/2, page.Row+page.Rows/2, tuitest.MouseWheelUp, 8)
+		var sharp quickLookCrop
+		var w, h int
+		if err := term.WaitFor(func(tuitest.Screen) bool {
+			s := out.String()
+			if sharp = lastQuickLookCrop(s[mark:]); !sharp.ok {
+				return false
+			}
+			w, h = pictureSize([]byte(s), sharp.id)
+			return max(w, h) > readPx*9/8
+		}, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: a zoom past the page's pixels did not place a sharper read: the last crop %+v is of a %dx%d picture: %v", sharp, w, h, err)
+		}
+		saveCockpitFrames(t, term, "quick-look-zoom-pdf", hostPictures(t, []byte(out.String()))...)
 	}
 
 	sendKeys(t, term, " ")
@@ -2490,6 +2526,115 @@ func TestRailQuickLookKittyPicture(t *testing.T) {
 		t.Fatalf("ASSERTION: closing the preview did not take the picture down: %v", err)
 	}
 	alive(t, term, "after the kitty picture")
+}
+
+// kittyCropRe is a placement with a source rect: the picture's id, its cell
+// box, and the rect x, y, w and h.
+var kittyCropRe = regexp.MustCompile(`\x1b_Ga=p,i=(\d+),p=\d+,c=(\d+),r=(\d+),x=(\d+),y=(\d+),w=(\d+),h=(\d+),`)
+
+// quickLookZoomLabel is the zoom in quick look's footer.
+var quickLookZoomLabel = regexp.MustCompile(`zoom \d+%`)
+
+// quickLookCrop is the last placement with a source rect in s.
+type quickLookCrop struct {
+	id         string
+	x, y, w, h int
+	ok         bool
+}
+
+func lastQuickLookCrop(s string) quickLookCrop {
+	all := kittyCropRe.FindAllStringSubmatch(s, -1)
+	if len(all) == 0 {
+		return quickLookCrop{}
+	}
+	m := all[len(all)-1]
+	n := func(i int) int { v, _ := strconv.Atoi(m[i]); return v }
+	return quickLookCrop{id: m[1], x: n(4), y: n(5), w: n(6), h: n(7), ok: true}
+}
+
+// quickLookZoomSteps zooms and pans tall.png, shown at the fit in box fit, and
+// leaves it at the fit again. The frames are quick-look-zoom-fit,
+// quick-look-zoom-in and quick-look-zoom-drag.
+func quickLookZoomSteps(t *testing.T, term *tuitest.Terminal, out *lockedBuffer, fit shot.Image) {
+	t.Helper()
+	saveCockpitFrames(t, term, "quick-look-zoom-fit", fit)
+	cx, cy := fit.Col+fit.Cols/2, fit.Row+fit.Rows/2
+	mark := len(out.String())
+	// Five notches make the picture wider than the panel, so it is cut on
+	// all four sides.
+	wheelAt(t, term, cx, cy, tuitest.MouseWheelUp, 5)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return quickLookZoomLabel.MatchString(s.Text()) }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the wheel over tall.png did not show the zoom in the footer: %v\n%s", err, term.Snapshot())
+	}
+	// The zoom wants more pixels than the fit picture has, so a sharper copy
+	// goes up once, and the placement moves to it.
+	var crop quickLookCrop
+	var pics []shot.Image
+	if err := term.WaitFor(func(tuitest.Screen) bool {
+		s := out.String()
+		crop = lastQuickLookCrop(s[mark:])
+		pics = hostPictures(t, []byte(s))
+		return crop.ok && strings.Contains(s[mark:], "a=t,f=100,i="+crop.id+",") && len(pics) == 1 && pics[0].Cols > fit.Cols
+	}, uiTimeout); err != nil {
+		saveCockpitFrames(t, term, "quick-look-zoom-missing", pics...)
+		t.Fatalf("ASSERTION: the wheel did not place a sharper copy of tall.png with a source rect: last %+v: %v\n%s", crop, err, term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "quick-look-zoom-in", pics[0])
+	pw, ph := pictureSize([]byte(out.String()), crop.id)
+	if pw == 0 || crop.w >= pw || crop.h >= ph {
+		t.Fatalf("ASSERTION: the zoomed source rect %+v is not a part of the %dx%d picture", crop, pw, ph)
+	}
+	// The wheel turned over the middle of the picture, so the middle stays.
+	if mx, my := crop.x+crop.w/2, crop.y+crop.h/2; abs(mx-pw/2) > pw/20 || abs(my-ph/2) > ph/20 {
+		t.Errorf("ASSERTION: the zoom moved the point under the pointer: the rect %+v has its middle at %d,%d, want about %d,%d", crop, mx, my, pw/2, ph/2)
+	}
+
+	// A drag to the left and up shows more of the right and the bottom.
+	mark = len(out.String())
+	const dx, dy = 8, 4
+	mouseDrag(t, term, cx, cy, cx-dx, cy-dy, tuitest.MouseLeft, 0)
+	var moved quickLookCrop
+	if err := term.WaitFor(func(tuitest.Screen) bool {
+		moved = lastQuickLookCrop(out.String()[mark:])
+		return moved.ok && moved.id == crop.id && moved.x > crop.x && moved.y > crop.y
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the drag did not pan tall.png: before %+v, after %+v: %v", crop, moved, err)
+	}
+	pics = hostPictures(t, []byte(out.String()))
+	if len(pics) != 1 {
+		t.Fatalf("ASSERTION: after the drag the host shows %d pictures, want 1", len(pics))
+	}
+	saveCockpitFrames(t, term, "quick-look-zoom-drag", pics[0])
+	s := out.String()[mark:]
+	if strings.Contains(s, "a=t,") {
+		t.Error("ASSERTION: the drag sent a picture: a pan step must only place it again")
+	}
+	if strings.Contains(s, "a=d,d=i,i="+crop.id+",") {
+		t.Error("ASSERTION: the drag took the placement down: a pan step replaces it")
+	}
+	// One motion report a cell: dx motion reports, each one placement at most.
+	if n := len(kittyCropRe.FindAllString(s, -1)); n > dx {
+		t.Errorf("ASSERTION: a drag of %d cells placed the picture %d times", dx, n)
+	}
+
+	// 0 fits the picture again, and + and - zoom in and back out.
+	mark = len(out.String())
+	sendKeys(t, term, "0")
+	quickLookOnHost(t, term, out, mark, "a=p,", "0 did not fit tall.png", func(p shot.Image) bool {
+		return p.Cols == fit.Cols && p.Rows == fit.Rows
+	})
+	sendKeys(t, term, "+")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return quickLookZoomLabel.MatchString(s.Text()) }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: + did not zoom in: %v\n%s", err, term.Snapshot())
+	}
+	mark = len(out.String())
+	sendKeys(t, term, "-")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return !quickLookZoomLabel.MatchString(s.Text()) }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: - after + did not go back to the fit: %v\n%s", err, term.Snapshot())
+	}
+	quickLookOnHost(t, term, out, mark, "a=p,", "- did not fit tall.png", func(p shot.Image) bool {
+		return p.Cols == fit.Cols && p.Rows == fit.Rows
+	})
 }
 
 // quickLookWrapStart lists two texts in the rail, with the keyboard on the
@@ -2579,9 +2724,11 @@ func TestQuickLookTurnsPDFPages(t *testing.T) {
 	if !ok {
 		t.Fatalf("no panel:\n%s", term.Snapshot())
 	}
-	wheelAt(t, term, col+20, row+10, tuitest.MouseWheelDown, 1)
+	// The wheel over the picture zooms, so the wheel that turns the page is
+	// over the line that names the file, under the title.
+	wheelAt(t, term, col+20, row+1, tuitest.MouseWheelDown, 1)
 	shows(2, "the wheel did not turn the page")
-	wheelAt(t, term, col+20, row+10, tuitest.MouseWheelUp, 1)
+	wheelAt(t, term, col+20, row+1, tuitest.MouseWheelUp, 1)
 	shows(1, "the wheel did not turn the page back")
 
 	// A click on the bar goes to the page under it, and the preview stays open.
@@ -2750,9 +2897,10 @@ func TestQuickLookMovesInAFilm(t *testing.T) {
 	if !ok {
 		t.Fatalf("no panel:\n%s", term.Snapshot())
 	}
-	wheelAt(t, term, col+20, row+10, tuitest.MouseWheelDown, 5)
+	// Over the line that names the file: over the frame the wheel zooms.
+	wheelAt(t, term, col+20, row+1, tuitest.MouseWheelDown, 5)
 	at(2, "the wheel did not move 1 percent a turn")
-	wheelAt(t, term, col+20, row+10, tuitest.MouseWheelUp, 5)
+	wheelAt(t, term, col+20, row+1, tuitest.MouseWheelUp, 5)
 	at(1, "the wheel did not move back")
 
 	// A click on the bar, then a drag. The drag goes on outside the track.

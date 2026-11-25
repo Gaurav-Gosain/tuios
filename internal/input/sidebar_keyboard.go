@@ -109,6 +109,11 @@ func handleSidebarKey(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		case "next_view":
 			noteRailAction(o, act)
 			return o, o.QuickLookNextView()
+		case "zoom_in", "zoom_out", "zoom_fit":
+			// Taken on any file, as the filmstrip key is: the rail has no
+			// use for them. Only a picture that zooms does anything.
+			o.QuickLookZoom(act)
+			handled = true
 		}
 		if handled {
 			noteRailAction(o, act)
@@ -375,6 +380,10 @@ func handleSidebarFileAction(action string, o *app.OS) tea.Cmd {
 // folder, enter and l open the selected row and h goes up, where on a file
 // they open sections and move columns.
 func quickLookInsideAction(o *app.OS, act string) tea.Cmd {
+	// A zoomed picture: the line and column keys move the view.
+	if o.QuickLookPan(act) {
+		return nil
+	}
 	if o.QuickLookOnFolder() {
 		switch act {
 		case "open_details", "column_right":
@@ -388,6 +397,8 @@ func quickLookInsideAction(o *app.OS, act string) tea.Cmd {
 		return o.QuickLookParent()
 	case "reveal_in_rail":
 		return o.QuickLookRevealInRail()
+	case "zoom_in", "zoom_out", "zoom_fit", "zoom_actual":
+		o.QuickLookZoom(act)
 	case "line_down":
 		o.QuickLookLine(true)
 	case "line_up":
