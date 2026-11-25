@@ -28,7 +28,9 @@ const (
 	// forced collection. An idle client with three shells holds 5 to 9 MB of
 	// garbage and free pages past its live heap, and a daemon about as much:
 	// at 32 MB the trim never ran outside a pane flood.
-	minExcess = 4 << 20
+	// After a trim the excess is under 0.3 MB, so 2 MB does not trim twice
+	// for the same garbage.
+	minExcess = 2 << 20
 	// liveShare is the part of the live heap a trim must also give back: the
 	// collection marks the whole live heap, so a large heap trims only for
 	// garbage in proportion to it, and not for the noise of a few panes.
@@ -39,7 +41,10 @@ const (
 	// An idle client allocates about 15 KB in the window, and a client
 	// drawing a pane that prints 300 lines ten times a second about 1.2 MB.
 	maxBusyAlloc = 512 << 10
-	// minInterval is the least time between two trims.
+	// minInterval is the least time between two trims. A look that comes
+	// sooner waits for the interval to end. A daemon asks only while its
+	// cleanup runs, and those stop soon after the output does, so a look
+	// that gave up would leave the burst untrimmed.
 	minInterval = 30 * time.Second
 )
 
@@ -52,6 +57,9 @@ var (
 	gen      uint64
 	armAlloc uint64
 	lastTrim time.Time
+	// trimmed is the resident heap the last trim left: what a collection
+	// could not give back then.
+	trimmed uint64
 )
 
 // Request asks for a trim once the process has been quiet for a moment.
@@ -76,38 +84,73 @@ func check(g uint64) {
 		return
 	}
 	since := armAlloc
-	recent := !lastTrim.IsZero() && time.Since(lastTrim) < minInterval
+	base := trimmed
+	var wait time.Duration
+	if !lastTrim.IsZero() {
+		wait = minInterval - time.Since(lastTrim)
+	}
 	mu.Unlock()
-	if recent {
+	if wait > 0 {
+		time.AfterFunc(wait, func() { rearm(g) })
 		return
 	}
 	s := read()
-	if s.allocs-since > maxBusyAlloc || s.excess() < max(minExcess, s.live/liveShare) {
+	if s.allocs-since > maxBusyAlloc || s.excess(base) < max(minExcess, s.live/liveShare) {
 		return
 	}
 	debug.FreeOSMemory()
+	after := read().resident
 	mu.Lock()
 	lastTrim = time.Now()
+	trimmed = after
 	mu.Unlock()
+}
+
+// rearm starts the settle again once the minimum interval has passed, as a
+// new Request would, so the process must be quiet over the settle before the
+// trim and not over the whole interval.
+func rearm(g uint64) {
+	allocs := read().allocs
+	mu.Lock()
+	if g != gen {
+		mu.Unlock()
+		return
+	}
+	armAlloc = allocs
+	mu.Unlock()
+	time.AfterFunc(settle, func() { check(g) })
 }
 
 // sample is the part of the runtime's memory statistics a trim decision
 // reads.
 type sample struct {
-	allocs, alloc, live, free uint64
+	allocs, alloc, live, free, resident uint64
 }
 
-// excess is what a trim can give back: the objects allocated since the last
-// collection that are not part of the live data, and the free pages not yet
-// returned. Free space inside spans that still hold live objects is left
-// out. A collection keeps those spans, so counting them would trim again at
-// every settle and give back nothing.
-func (s sample) excess() uint64 {
-	var garbage uint64
+// excess is what a trim can give back, the larger of two counts.
+//
+// The first is the objects allocated since the last collection that are not
+// part of the live data, and the free pages not yet returned. Free space
+// inside spans that still hold live objects is left out. A collection keeps
+// those spans, so counting them would trim again at every settle and give
+// back nothing. The live data is read from the heap goal, and a collection
+// that ran during a burst set the goal while the burst still held its output
+// in flight. After a burst this count can miss most of the garbage: a daemon
+// that printed 30,000 lines counted 2.0 to 4.8 MB and gave back 4.7 to 5.8 MB.
+//
+// The second is how far the resident heap grew since the last trim left it.
+// It needs no estimate of the live data. Right after a trim it is zero, so it
+// cannot trim twice for the same garbage. Before the first trim it is the
+// whole resident heap, so a process trims once when it first settles.
+func (s sample) excess(trimmed uint64) uint64 {
+	var garbage, grown uint64
 	if s.alloc > s.live {
 		garbage = s.alloc - s.live
 	}
-	return garbage + s.free
+	if s.resident > trimmed {
+		grown = s.resident - trimmed
+	}
+	return max(garbage+s.free, grown)
 }
 
 // read takes the statistics. runtime/metrics would avoid the brief stop of
@@ -119,9 +162,10 @@ func read() sample {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
 	return sample{
-		allocs: ms.TotalAlloc,
-		alloc:  ms.HeapAlloc,
-		live:   ms.NextGC / 2,
-		free:   ms.HeapIdle - ms.HeapReleased,
+		allocs:   ms.TotalAlloc,
+		alloc:    ms.HeapAlloc,
+		live:     ms.NextGC / 2,
+		free:     ms.HeapIdle - ms.HeapReleased,
+		resident: ms.HeapInuse + ms.HeapIdle - ms.HeapReleased,
 	}
 }

@@ -19204,12 +19204,6 @@ Repeat from `e2e/tui` with
 
 An idle daemon's event replay ring must hold under 512 KiB in the heap profile.
 
-## TestIdleGivesHeapBack
-
-After a burst of output, an idle client and its daemon must each trim once
-(internal/memtrim) and give at least 2 MiB of private memory back, with under
-1 MB of free heap pages kept.
-
 Run on 2026-11-24 on Linux (amd64).
 
 | Control | The test fails with | Result |
@@ -19339,8 +19333,21 @@ this branch with the reason of the cross-session release put back.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAPaneOfAnotherSessionHoldsAProjectCard$' -v .`.
+## TestIdleGivesHeapBack
+
+After a burst of output, an idle client and its daemon must each trim once
+(internal/memtrim) and give at least 2 MiB of private memory back, with under
+1 MB of free heap pages kept.
+
+Run on 2026-11-24 on Linux (amd64).
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
 | minExcess back at 32 MB (a build of main before the change) | "the idle client never gave 2 MiB of its heap back after the burst" | **caught** |
 | minExcess back at 32 MB (a build of main before the change) | "the idle client and daemon did not both give 2 MiB of their heap back after the burst" | **caught** |
+| minExcess back at 32 MB, test watching from the start (2026-11-25) | "the idle client and daemon did not both give 1 MiB of their heap back" | **caught** |
+| The test before this change, on main, with the burst sent after a 6 s wait (a scratch copy) | "did not both give 2 MiB of their heap back after the burst", with "daemon: private dirty peak 21980 KiB, lowest after it 21980 KiB", as on the CI runner | **reproduced** |
+| This change, same 6 s wait (a scratch copy) | passes, 5 of 5, on 2 cores and on 1 | **fixed** |
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestIdleGivesHeapBack$' -v .`.

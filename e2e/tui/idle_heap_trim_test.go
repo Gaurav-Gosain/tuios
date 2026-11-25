@@ -12,20 +12,27 @@ import (
 	"time"
 )
 
-// TestIdleGivesHeapBack: after a burst of output, an idle client and its
-// daemon each run one trim (internal/memtrim) and give their free heap pages
-// back to the system. At 207x55 with three shells the client keeps 5 to 9 MB
-// of garbage and free pages past its live heap, and the daemon about as much.
-// A threshold above that never trims, and both processes keep the memory for
-// as long as they live.
+// TestIdleGivesHeapBack: an idle client and its daemon each run a trim
+// (internal/memtrim) and give their free heap pages back to the system. At
+// 207x55 with three shells the client keeps 5 to 9 MB of garbage and free
+// pages past its live heap, and the daemon about as much. A threshold above
+// that never trims, and both processes keep the memory for as long as they
+// live.
 //
-// Each process must give at least 2 MiB of private memory back, through a
-// trim: NumForcedGC counts the trims, since nothing else in tuios forces a
-// collection and the profile is read without gc=1. After the trim the free
-// pages not yet returned must be under 1 MB.
+// Each process must fall at least 1 MiB below a peak of its private memory,
+// through a trim: NumForcedGC counts the trims, since nothing else in tuios
+// forces a collection and the profile is read without gc=1.
+//
+// Most of what a trim gives back here is left by the start of the shells: 4.1
+// to 6.4 MB past the live heap. The burst alone leaves 1.7 to 2.3 MB, around
+// memtrim's floor, and where the last collection fell decides the amount. A
+// process can trim after the setup and before the burst, as a slow runner's
+// daemon does, or once after both. So the test watches both processes from
+// their start and counts the largest fall below the highest point so far, at
+// any time.
 //
 // NEGATIVE CONTROL (e2e/tui/NEGATIVE_CONTROLS.md, TestIdleGivesHeapBack):
-// with minExcess back at 32 MB, the test fails at "did not both give 2 MiB of
+// with minExcess back at 32 MB, the test fails at "did not both give 1 MiB of
 // their heap back".
 func TestIdleGivesHeapBack(t *testing.T) {
 	requireReal(t, "reads the heap of the real client and daemon")
@@ -35,37 +42,24 @@ func TestIdleGivesHeapBack(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
 	daemonAddr := startDaemonWithPprof(t, base)
-	clientAddr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	term := startIn(t, base, startOpts{
-		cols: perfCols, rows: perfRows,
-		args: []string{"new", "mem", "--pprof", clientAddr},
-		env:  []string{"TUIOS_CLEANUP_SECONDS=2"},
-	})
-	waitBoot(t, term)
-	for i := 1; i <= 3; i++ {
-		newWindow(t, term)
-		if i == 1 {
-			enableTiling(t, term)
+	pidFile := filepath.Join(base, "XDG_RUNTIME_DIR", "tuios", "tuios.sock.pid")
+	daemonPid := 0
+	waitUntil(t, "the daemon wrote no pid file", 10*time.Second, func() (bool, string) {
+		raw, err := os.ReadFile(pidFile)
+		if err != nil {
+			return false, err.Error()
 		}
-	}
-	waitWindowCount(t, term, 3, "opening three shells")
-
-	raw, err := os.ReadFile(filepath.Join(base, "XDG_RUNTIME_DIR", "tuios", "tuios.sock.pid"))
-	if err != nil {
-		t.Fatalf("read the daemon pid: %v", err)
-	}
-	daemonPid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
-	if err != nil {
-		t.Fatalf("parse the daemon pid %q: %v", raw, err)
-	}
-	procs := []*trimWatch{
-		{name: "client", addr: clientAddr, pid: term.Pid()},
-		{name: "daemon", addr: daemonAddr, pid: daemonPid},
-	}
-	// Both processes are watched in /proc from before the burst, which costs
-	// them nothing, so each peak is seen whichever process trims first. A
-	// heap profile allocates in the process it reads, and read in a loop it
-	// keeps the process from counting as quiet.
+		daemonPid, err = strconv.Atoi(strings.TrimSpace(string(raw)))
+		return err == nil, string(raw)
+	})
+	clientAddr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
+	client := &trimWatch{name: "client", addr: clientAddr}
+	procs := []*trimWatch{client, {name: "daemon", addr: daemonAddr, pid: daemonPid}}
+	// Both processes are watched in /proc from their start, which costs them
+	// nothing, so each peak is seen whichever process trims first, and
+	// whether it trims before the burst or after it. A heap profile
+	// allocates in the process it reads, and read in a loop it keeps the
+	// process from counting as quiet.
 	stop := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
@@ -88,13 +82,28 @@ func TestIdleGivesHeapBack(t *testing.T) {
 		<-done
 	}()
 
+	term := startIn(t, base, startOpts{
+		cols: perfCols, rows: perfRows,
+		args: []string{"new", "mem", "--pprof", clientAddr},
+		env:  []string{"TUIOS_CLEANUP_SECONDS=2"},
+	})
+	client.setPid(term.Pid())
+	waitBoot(t, term)
+	for i := 1; i <= 3; i++ {
+		newWindow(t, term)
+		if i == 1 {
+			enableTiling(t, term)
+		}
+	}
+	waitWindowCount(t, term, 3, "opening three shells")
+
 	ids := windowIDs(t, base, "mem")
 	if out, err := tuiosCLI(t, base, "send-text", "-s", "mem", "-w", ids[0], "seq 1 30000; echo BURST$((1+1))DONE\n"); err != nil {
 		t.Fatalf("send-text: %v: %s", err, out)
 	}
 	waitForCapture(t, base, nil, []string{"-s", "mem", "-w", ids[0], "--lines", "3"}, "BURST2DONE")
 
-	waitUntil(t, "the idle client and daemon did not both give 2 MiB of their heap back after the burst", 30*time.Second, func() (bool, string) {
+	waitUntil(t, "the idle client and daemon did not both give 1 MiB of their heap back", 30*time.Second, func() (bool, string) {
 		all := true
 		var state []string
 		for _, p := range procs {
@@ -104,54 +113,63 @@ func TestIdleGivesHeapBack(t *testing.T) {
 		}
 		return all, strings.Join(state, "\n")
 	})
+	// The free pages kept are not checked: a burst after a trim can leave
+	// up to memtrim's floor behind, which it keeps by design.
 	for _, p := range procs {
 		ms, err := memStats(p.addr)
 		if err != nil {
 			t.Fatalf("read the %s heap: %v", p.name, err)
 		}
-		kept := ms["HeapIdle"] - ms["HeapReleased"]
 		t.Logf("%s after %d trim(s): live %d KiB, allocated %d KiB, in use %d KiB, free pages kept %d KiB, returned %d KiB",
-			p.name, ms["NumForcedGC"], ms["NextGC"]/2/1024, ms["HeapAlloc"]/1024, ms["HeapInuse"]/1024, kept/1024, ms["HeapReleased"]/1024)
+			p.name, ms["NumForcedGC"], ms["NextGC"]/2/1024, ms["HeapAlloc"]/1024, ms["HeapInuse"]/1024, (ms["HeapIdle"]-ms["HeapReleased"])/1024, ms["HeapReleased"]/1024)
 		if ms["NumForcedGC"] == 0 {
 			t.Fatalf("ASSERTION: the %s gave memory back with no trim", p.name)
-		}
-		if kept >= 1<<20 {
-			t.Fatalf("ASSERTION: the %s trimmed but kept %d KiB of free pages, want under 1024 KiB", p.name, kept/1024)
 		}
 	}
 }
 
-// trimWatch follows one process's private memory: the highest it reached and
-// the lowest it fell to after that.
+// trimWatch follows one process's private memory: the highest it has reached
+// so far, and the largest fall below that.
 type trimWatch struct {
 	name, addr string
 	pid        int
 
-	mu        sync.Mutex
-	peak, low uint64
+	mu         sync.Mutex
+	peak, fell uint64
+}
+
+// setPid starts the watch of a process that started after the sampling.
+func (w *trimWatch) setPid(pid int) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.pid = pid
 }
 
 func (w *trimWatch) sample() {
-	now := privateDirty(w.pid)
+	w.mu.Lock()
+	pid := w.pid
+	w.mu.Unlock()
+	if pid == 0 {
+		return
+	}
+	now := privateDirty(pid)
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if now > w.peak {
-		w.peak, w.low = now, now
-	}
-	w.low = min(w.low, now)
+	w.peak = max(w.peak, now)
+	w.fell = max(w.fell, w.peak-now)
 }
 
-// gaveBack reports whether the process fell 2 MiB or more below its peak.
+// gaveBack reports whether the process fell 1 MiB or more below a peak.
 func (w *trimWatch) gaveBack() bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.low+2<<20 <= w.peak
+	return w.fell >= 1<<20
 }
 
 func (w *trimWatch) String() string {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return fmt.Sprintf("%s: private dirty peak %d KiB, lowest after it %d KiB", w.name, w.peak/1024, w.low/1024)
+	return fmt.Sprintf("%s: private dirty peak %d KiB, largest fall below a peak %d KiB", w.name, w.peak/1024, w.fell/1024)
 }
 
 // privateDirty is the process's private dirty memory in bytes, from
