@@ -254,8 +254,7 @@ func (m *OS) QuickLookNextView() tea.Cmd {
 		if ql.view == "" {
 			i = slices.Index(views, quickLookViewMain)
 		}
-		ql.view = views[(i+1)%len(views)]
-		ql.viewScroll = 0
+		ql.quickLookSetView(views[(i+1)%len(views)])
 		return nil
 	}
 	if r.kind == "dir" || ql.target.dir {
@@ -279,8 +278,7 @@ func (m *OS) QuickLookNextView() tea.Cmd {
 	}
 	views := m.quickLookViews()
 	i := max(slices.Index(views, ql.view), 0)
-	ql.view = views[(i+1)%len(views)]
-	ql.viewScroll = 0
+	ql.quickLookSetView(views[(i+1)%len(views)])
 	return nil
 }
 
@@ -353,11 +351,19 @@ func (m *OS) applyQuickLookDetails(msg quickLookDetailsMsg) {
 	}
 	views := m.quickLookViews()
 	i := max(slices.Index(views, ql.view), 0)
-	ql.view = views[min(i+1, len(views)-1)]
-	ql.viewScroll = 0
+	ql.quickLookSetView(views[min(i+1, len(views)-1)])
 }
 
 // quickLookOffMain reports whether the panel shows a view other than the file's own.
+// quickLookSetView shows view v from its top. A zoom is of the file's own
+// picture, so it ends when the view changes.
+func (ql *quickLookState) quickLookSetView(v string) {
+	if v != ql.view && ql.zoom.scale > 0 {
+		ql.quickLookZoomEnd()
+	}
+	ql.view, ql.viewScroll = v, 0
+}
+
 func (ql *quickLookState) quickLookOffMain() bool {
 	return ql.view != "" && ql.view != quickLookViewMain
 }

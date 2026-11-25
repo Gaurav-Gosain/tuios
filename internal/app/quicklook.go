@@ -845,7 +845,7 @@ func (m *OS) applyQuickLook(msg quickLookMsg) tea.Cmd {
 	if msg.res.target == ql.target {
 		ql.res = msg.res
 		if ql.view == "" && len(msg.res.previewers) > 0 {
-			ql.view = quickLookViewRun + msg.res.previewers[0]
+			ql.quickLookSetView(quickLookViewRun + msg.res.previewers[0])
 		}
 		if quickLookPaged(msg.res) || msg.res.kind == "pdf" {
 			ql.pageWant = msg.res.page

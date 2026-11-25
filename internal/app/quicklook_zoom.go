@@ -99,12 +99,14 @@ func (ql *quickLookState) quickLookZoomReset() {
 // QuickLookZoomed reports whether the picture is zoomed in.
 func (m *OS) QuickLookZoomed() bool { return m.quickLook.open && m.quickLook.zoom.scale > 0 }
 
-// quickLookZoomable reports whether the picture on the panel can zoom: a
-// picture the host draws with kitty graphics.
+// quickLookZoomable reports whether the picture on the panel can zoom: the
+// file's own picture, drawn with kitty graphics.
 func (m *OS) quickLookZoomable() bool {
 	ql := &m.quickLook
 	r := ql.res
-	return ql.open && r != nil && r.img != nil && r.target == ql.target && ql.copy == nil &&
+	// Only the file's own view: a previewer's picture or a text view has
+	// a zoom of its own, or none.
+	return ql.open && r != nil && r.img != nil && r.target == ql.target && ql.copy == nil && !ql.quickLookOffMain() &&
 		(r.kind == "image" || r.kind == "pdf" || r.kind == "video") &&
 		m.replyPreviewer().Mode() == composer.PreviewPixels
 }
@@ -247,7 +249,13 @@ func (m *OS) quickLookZoomTo(g quickLookZoomGeom, s, ax, ay float64) {
 // quickLookZoomFit goes back to the fit. A picture with nothing else to move
 // through gives the keyboard back to the list.
 func (m *OS) quickLookZoomFit() {
-	ql := &m.quickLook
+	m.quickLook.quickLookZoomEnd()
+}
+
+// quickLookZoomEnd goes back to the fit. The zoom took the keyboard inside
+// the file, so a picture with nothing else to move through gives it back to
+// the list.
+func (ql *quickLookState) quickLookZoomEnd() {
 	ql.quickLookZoomReset()
 	if !ql.free && !quickLookMoves(ql.res) {
 		ql.inside = false
@@ -412,7 +420,9 @@ func quickLookZoomKey(g quickLookZoomGeom, s float64, img *composer.Image, cols,
 func (m *OS) quickLookZoomPic(img *composer.Image, cols, rows int, v quickLookZoomView) quickLookPic {
 	z := &m.quickLook.zoom
 	k := pixelsKey(img, cols, rows)
-	if z.heldOK {
+	// A copy of another picture, such as the film's frame before this one,
+	// gives way to the fit picture of this one until its own copy is ready.
+	if z.heldOK && z.held.sum == k.sum {
 		k = z.held
 	}
 	return quickLookPic{ok: true, key: k, x: v.x, y: v.y, cols: v.cols, rows: v.rows, crop: v.crop}

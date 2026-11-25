@@ -231,7 +231,7 @@ func (m *OS) applyQuickLookRun(msg quickLookRunMsg) {
 		// A folder of another machine: its previewers came with the run.
 		r.previewers = msg.names
 		if ql.view == "" && len(msg.names) > 0 {
-			ql.view = quickLookViewRun + msg.names[0]
+			ql.quickLookSetView(quickLookViewRun + msg.names[0])
 		}
 	}
 	run := msg.run

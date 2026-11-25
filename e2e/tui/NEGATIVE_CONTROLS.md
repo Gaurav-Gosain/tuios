@@ -302,6 +302,7 @@ main (7aaaed819) fails the first two. Each control was built into its own binary
 | `trimHost` not called, so only the 64 of the previewer are freed | `TestRailQuickLookKittyPicture` ("after the walk the host holds 10 pictures, the bound is 8") | **caught** |
 | `quickLookZoomWheel` answers false | `TestRailQuickLookKittyPicture` ("the wheel over tall.png did not show the zoom in the footer") | **caught** |
 | `quickLookSharpRead` reads nothing | `TestRailQuickLookKittyPicture` ("a zoom past the page's pixels did not place a sharper read: ... a 1120x560 picture") | **caught** |
+| The zoom kept across a change of view (the code before `quickLookSetView`) | `TestRailQuickLookKittyPicture` ("the zoom stayed on after v showed another view") | **caught** |
 
 The frames are `quick-look-kitty-taller`, `quick-look-kitty-pdf-resized` and, on a
 failure, `quick-look-picture-missing` under `TUIOS_E2E_FRAMES`.

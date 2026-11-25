@@ -2653,6 +2653,25 @@ func quickLookZoomSteps(t *testing.T, term *tuitest.Terminal, out *lockedBuffer,
 	quickLookOnHost(t, term, out, mark, "a=p,", "- did not fit tall.png", func(p shot.Image) bool {
 		return p.Cols == fit.Cols && p.Rows == fit.Rows
 	})
+
+	// v shows the details. The zoom is of the file's own picture, so it ends
+	// there: the keys move the details, and v back shows the picture at the
+	// fit.
+	sendKeys(t, term, "+")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return quickLookZoomLabel.MatchString(s.Text()) }, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: + did not zoom in before v: %v\n%s", err, term.Snapshot())
+	}
+	sendKeys(t, term, "v")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "Details") && !quickLookZoomLabel.MatchString(s.Text())
+	}, uiTimeout); err != nil {
+		t.Fatalf("ASSERTION: the zoom stayed on after v showed another view: %v\n%s", err, term.Snapshot())
+	}
+	mark = len(out.String())
+	sendKeys(t, term, "v")
+	quickLookOnHost(t, term, out, mark, "a=p,", "v back to the picture did not show it at the fit", func(p shot.Image) bool {
+		return p.Cols == fit.Cols && p.Rows == fit.Rows
+	})
 }
 
 // quickLookWrapStart lists two texts in the rail, with the keyboard on the
