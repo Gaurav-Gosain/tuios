@@ -66,6 +66,7 @@ func omarchyFiles(env Env, tuios string) map[string][]byte {
 	a := assets()
 	word := func(s string) []byte { b, _ := jsonx.Marshal(s); return b }
 	manifest := bytes.Replace(a[omarchyAssets+"manifest.json"], []byte(`"command": "tuios"`), append([]byte(`"command": `), word(tuios)...), 1)
+	manifest = bytes.Replace(manifest, []byte(`"defaultValue": "tuios"`), append([]byte(`"defaultValue": `), word(tuios)...), 1)
 	manifest = bytes.Replace(manifest, []byte(`"menu": "tuios-menu"`), append([]byte(`"menu": `), word(omarchyMenuPath(env))...), 1)
 	return map[string][]byte{
 		"manifest.json":   manifest,
@@ -172,7 +173,7 @@ func withoutOmarchyRow(data []byte) []byte {
 // file it cannot read.
 func withOmarchyRow(data []byte, env Env) ([]byte, error) {
 	row := "  " + omarchyMenuMarker + "\n  " + omarchyMenuRow(env) + "\n"
-	if strings.TrimSpace(string(data)) == "" {
+	if strings.TrimSpace(string(data)) == "" || omarchyEmptyMenu(data) {
 		return []byte("{\n" + row + "}\n"), nil
 	}
 	lines := strings.SplitAfter(string(data), "\n")
@@ -234,6 +235,19 @@ func OmarchyInstall(env Env, tuios string, run OmarchyRunner, force bool) (Omarc
 		res.Notes = append(res.Notes, "The tuios agents widget in "+dir+" is current.")
 	}
 
+	// The widget goes on before the menu row, so a menu file install cannot
+	// read still leaves a working widget.
+	note := "Turned on the tuios agents widget in the Omarchy bar."
+	if run == nil {
+		err = errors.New("omarchy-shell is not on PATH")
+	} else if _, err = run("omarchy-shell", "shell", "rescanPlugins"); err == nil {
+		_, err = run("omarchy", "plugin", "enable", OmarchyPluginID, "--yes")
+	}
+	if err != nil {
+		note = "The widget is not on yet" + rexErr(err) + ". Run omarchy-shell shell rescanPlugins, then omarchy plugin enable " + OmarchyPluginID + "."
+	}
+	res.Notes = append(res.Notes, note)
+
 	menu := OmarchyMenuPath(env)
 	have, err := readOptional(menu)
 	if err != nil {
@@ -257,16 +271,6 @@ func OmarchyInstall(env Env, tuios string, run OmarchyRunner, force bool) (Omarc
 		}
 	}
 
-	note := "Turned on the tuios agents widget in the Omarchy bar."
-	if run == nil {
-		err = errors.New("omarchy-shell is not on PATH")
-	} else if _, err = run("omarchy-shell", "shell", "rescanPlugins"); err == nil {
-		_, err = run("omarchy", "plugin", "enable", OmarchyPluginID, "--yes")
-	}
-	if err != nil {
-		note = "The widget is not on yet" + rexErr(err) + ". Run omarchy-shell shell rescanPlugins, then omarchy plugin enable " + OmarchyPluginID + "."
-	}
-	res.Notes = append(res.Notes, note)
 	return res, nil
 }
 
@@ -301,12 +305,31 @@ func OmarchyUninstall(env Env, tuios string, run OmarchyRunner) (OmarchyResult, 
 		return res, err
 	}
 	if out := withoutOmarchyRow(have); have != nil && !bytes.Equal(out, have) {
-		if err := writeAtomic(menu, have, out); err != nil {
+		// install's first write kept the file as it was: with no row left,
+		// that copy comes back, and a file install made goes.
+		backup, _ := readOptional(menu + BackupSuffix)
+		if backup != nil && omarchyEmptyMenu(out) && omarchyEmptyMenu(backup) {
+			out = backup
+		}
+		if backup == nil && omarchyEmptyMenu(out) {
+			err = os.Remove(menu)
+		} else {
+			err = writeAtomic(menu, have, out)
+		}
+		if err != nil {
 			return res, err
+		}
+		if backup != nil && bytes.Equal(out, backup) {
+			_ = os.Remove(menu + BackupSuffix)
 		}
 		res.Notes = append(res.Notes, "Removed the tuios row from "+menu+".")
 	}
 	return res, nil
+}
+
+// omarchyEmptyMenu says the menu file holds an empty object and nothing else.
+func omarchyEmptyMenu(data []byte) bool {
+	return strings.Join(strings.Fields(string(data)), "") == "{}"
 }
 
 // OmarchyStatusOf reports the plugin folder and the menu row.

@@ -5,7 +5,8 @@
 #
 # The rows show in omarchy-menu-select, the picker of the Omarchy menu.
 # tuios opens in a terminal through omarchy-launch-tui, as Omarchy's own rows
-# do. The menu reads tuios only through commands with JSON output.
+# do. The menu reads tuios only through commands with JSON output. It lists
+# the items that need you from tuios bar-status, as the bar counts them.
 #
 #   tuios-menu            what needs you, the inbox and the sessions
 #   tuios-menu sessions   the sessions of this machine
@@ -113,22 +114,33 @@ inbox() {
   launch attach
 }
 
+# root lists what bar-status lists, so the menu and the bar count the same
+# items, then the inbox and the sessions.
 root() {
-  local label sub n i=0 inbox="Nothing needs you"
-  if ! items=$("$tuios" list-attention --json 2>/dev/null |
-    jq -c '[.items[]? | select(.kind | IN("approval", "question", "ask", "plan", "errored"))]'); then
+  local st label sub n i=0 inbox="Nothing needs you"
+  st=$("$tuios" bar-status 2>/dev/null) || st='{"class": "off"}'
+  case $(jq -r '.class' <<<"$st") in
+  off)
     row $'\uf067' "Start tuios" "tuios is not running" start
     pick tuios
     return
-  fi
+    ;;
+  error)
+    row $'\uf071' "tuios refused the call" "Run tuios bar-status to see why" none
+    pick tuios
+    return
+    ;;
+  esac
+  items=$(jq -c '.rows // []' <<<"$st")
   while read -r label && read -r sub; do
     row $'\uf0f3' "$label" "$sub" goto $((i++))
-  done < <(jq -r '.[:8][] |
+  done < <(jq -r '.[] |
     ({approval: "Approval", plan: "Plan", errored: "Error"}[.kind] // "Question") as $kind |
     (.summary // "" | if length > 60 then .[:57] + "..." else . end) as $sum |
-    ((.name // .session), "\($kind) · \(if .host then .host + ":" else "" end)\(.session)\(if $sum != "" then " · " + $sum else "" end)") |
+    ((if (.name // "") != "" then .name else .session end),
+      "\($kind) · \(if (.host // "") != "" then .host + ":" else "" end)\(.session)\(if $sum != "" then " · " + $sum else "" end)") |
     gsub("[\t\n]"; " ")' <<<"$items")
-  n=$(jq length <<<"$items")
+  n=$(jq '.needs_you // 0' <<<"$st")
   [ "$n" -gt 0 ] && inbox="$n items need you"
   [ "$n" -eq 1 ] && inbox="1 item needs you"
   row $'\uf01c' "Open the inbox" "$inbox" inbox

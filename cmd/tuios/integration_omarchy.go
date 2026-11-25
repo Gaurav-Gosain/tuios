@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"slices"
 	"strings"
@@ -36,10 +35,10 @@ func omarchyRunner() integration.OmarchyRunner {
 	}
 }
 
-// selfPath is the path of this tuios binary, for the commands the widget and
-// the menu row run.
+// selfPath is the path of this tuios for the widget and the menu to run: the
+// one on PATH when it is this binary, so an upgrade does not break them.
 func selfPath() string {
-	if p, err := os.Executable(); err == nil {
+	if p, _, err := stableSelfPath(); err == nil {
 		return p
 	}
 	return "tuios"
@@ -50,6 +49,9 @@ func runOmarchyInstall(force bool) error {
 	res, err := integration.OmarchyInstall(integration.SystemEnv(), selfPath(), omarchyRunner(), force)
 	for _, n := range res.Notes {
 		fmt.Println(n)
+	}
+	if p, onPath, perr := stableSelfPath(); perr == nil && !onPath {
+		fmt.Println("Warning: the tuios on PATH is not this binary, so the widget runs " + p + ". If an upgrade moves that file, put tuios on PATH and run this again.")
 	}
 	return err
 }

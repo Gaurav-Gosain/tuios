@@ -676,6 +676,26 @@ func loadPairHostKey(path string) (pairHostKey, error) {
 		"Do not give it a user key such as ~/.ssh/id_ed25519.pub")
 }
 
+// stableSelfPath is the path of this tuios that a package manager keeps
+// current: the tuios on PATH, as PATH names it, when it is this binary.
+// os.Executable resolves links, so on Nix or Homebrew it names the file the
+// next upgrade replaces. onPath is false when no tuios on PATH is this
+// binary, and the path is then os.Executable's.
+func stableSelfPath() (path string, onPath bool, err error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", false, err
+	}
+	found, err := exec.LookPath("tuios")
+	if err == nil {
+		found, err = filepath.Abs(found)
+	}
+	if err == nil && pairSameFile(found, exe) {
+		return found, true, nil
+	}
+	return exe, false, nil
+}
+
 // pairTuiosPath is the tuios path for the forced command, written so the
 // shell sshd runs it with reads it as one word.
 //
@@ -691,18 +711,12 @@ func loadPairHostKey(path string) (pairHostKey, error) {
 func pairTuiosPath(given string, stderr io.Writer) (string, error) {
 	p := given
 	if p == "" {
-		exe, err := os.Executable()
+		exe, onPath, err := stableSelfPath()
 		if err != nil {
 			return "", errfmt.Errorf("cannot find the path of tuios: %w. Use --command", err)
 		}
 		p = exe
-		onPath, err := exec.LookPath("tuios")
-		if err == nil {
-			onPath, err = filepath.Abs(onPath)
-		}
-		if err == nil && pairSameFile(onPath, exe) {
-			p = onPath
-		} else {
+		if !onPath {
 			fmt.Fprintf(stderr, "Warning: tuios is not on PATH, or the tuios on PATH is another binary. The key runs %s. When that file moves, for example after an upgrade, the phone cannot connect. Use --command to give a path that stays the same.\n", exe)
 		}
 		if strings.Contains(p, "/nix/store/") || strings.Contains(p, "/Cellar/") {

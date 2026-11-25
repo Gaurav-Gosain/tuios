@@ -148,13 +148,24 @@ func TestOmarchyIntegration(t *testing.T) {
 	if _, err := exec.LookPath("jq"); err != nil {
 		t.Skip("the tuios menu needs jq, as Omarchy has it")
 	}
+	// Install writes the tuios on PATH when it is this binary, as PATH names
+	// it, not the file a link resolves to, which an upgrade replaces.
+	stable := tuiosBin
+	if p, err := exec.LookPath("tuios"); err == nil {
+		a, aerr := os.Stat(p)
+		b, berr := os.Stat(tuiosBin)
+		if aerr == nil && berr == nil && os.SameFile(a, b) {
+			stable, _ = filepath.Abs(p)
+		}
+	}
 	quote := func(s string) string { b, _ := json.Marshal(s); return string(b) }
 	pluginOf := func(home string) string { return filepath.Join(home, ".config", "omarchy", "plugins", "tuios.agents") }
 	wantManifest := func(home string) string {
-		m := strings.Replace(string(manifest), `"command": "tuios"`, `"command": `+quote(tuiosBin), 1)
+		m := strings.Replace(string(manifest), `"command": "tuios"`, `"command": `+quote(stable), 1)
+		m = strings.Replace(m, `"defaultValue": "tuios"`, `"defaultValue": `+quote(stable), 1)
 		return strings.Replace(m, `"menu": "tuios-menu"`, `"menu": `+quote(filepath.Join(pluginOf(home), "tuios-menu")), 1)
 	}
-	wantScript := strings.Replace(string(script), "\ntuios=tuios\n", "\ntuios="+tuiosBin+"\n", 1)
+	wantScript := strings.Replace(string(script), "\ntuios=tuios\n", "\ntuios="+stable+"\n", 1)
 
 	t.Run("install, again and uninstall", func(t *testing.T) {
 		r := newOmarchyRig(t)
@@ -207,11 +218,27 @@ func TestOmarchyIntegration(t *testing.T) {
 		if back, _ := os.ReadFile(menu); string(back) != own {
 			t.Errorf("ASSERTION: uninstall did not give the menu file back as it was:\n%s", back)
 		}
+		if _, err := os.Stat(menu + ".tuios.bak"); !os.IsNotExist(err) {
+			t.Errorf("ASSERTION: uninstall left the copy install made of the menu file: %v", err)
+		}
 		if _, err := os.Stat(plugin); !os.IsNotExist(err) {
 			t.Errorf("ASSERTION: uninstall left %s", plugin)
 		}
 		if log := r.takeLog(t); !strings.HasPrefix(log, "omarchy plugin disable tuios.agents --yes\n") {
 			t.Errorf("ASSERTION: uninstall did not turn the widget off first: %q", log)
+		}
+	})
+
+	t.Run("a menu file install made goes with uninstall", func(t *testing.T) {
+		r := newOmarchyRig(t)
+		menu := filepath.Join(r.home, ".config", "omarchy", "extensions", "omarchy-menu.jsonc")
+		r.run(t, "integration", "install", "omarchy")
+		if rows := omarchyJSONC(t, readOr(menu)); rows["tuios"]["label"] != "tuios" {
+			t.Errorf("ASSERTION: install made no menu file with the tuios row: %+v", rows)
+		}
+		r.run(t, "integration", "uninstall", "omarchy")
+		if _, err := os.Stat(menu); !os.IsNotExist(err) {
+			t.Errorf("ASSERTION: uninstall left the menu file install made: %s", readOr(menu))
 		}
 	})
 
@@ -255,7 +282,7 @@ func TestOmarchyIntegration(t *testing.T) {
 			"Approval · work · Allow Bash: make deploy",
 			"\tOpen the inbox\t1 item needs you",
 			"\tSessions\tThis machine",
-			"omarchy-launch-tui --app-id=org.omarchy.tuios " + tuiosBin + " attach work",
+			"omarchy-launch-tui --app-id=org.omarchy.tuios " + stable + " attach work",
 		} {
 			if !strings.Contains(log, want) {
 				t.Errorf("ASSERTION: the menu log has no %q:\n%s", want, log)
@@ -267,7 +294,7 @@ func TestOmarchyIntegration(t *testing.T) {
 		log = r.waitLog(t, "omarchy-launch-tui ")
 		saveText(t, "menu-sessions", log)
 		for _, want := range []string{"select Sessions", "\tdocs\t1 pane", "\twork\t1 pane", "\tNew session",
-			"omarchy-launch-tui --app-id=org.omarchy.tuios " + tuiosBin + " attach docs"} {
+			"omarchy-launch-tui --app-id=org.omarchy.tuios " + stable + " attach docs"} {
 			if !strings.Contains(log, want) {
 				t.Errorf("ASSERTION: the sessions menu log has no %q:\n%s", want, log)
 			}
@@ -280,4 +307,10 @@ func TestOmarchyIntegration(t *testing.T) {
 			t.Errorf("ASSERTION: with no daemon the menu does not offer Start tuios only, or ran a row nobody chose:\n%s", log)
 		}
 	})
+}
+
+// readOr is the file's text, or "" when it cannot be read.
+func readOr(path string) string {
+	b, _ := os.ReadFile(path)
+	return string(b)
 }
