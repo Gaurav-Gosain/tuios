@@ -56,7 +56,7 @@ func TestPlainCaptureMatchesLineByLine(t *testing.T) {
 			if got := p.CaptureContent(true, false); got != want {
 				t.Fatalf("plain capture differs from the line by line one:\n got %q\nwant %q", got, want)
 			}
-			got, _ := p.capturePlainAt(true)
+			got, _, _ := p.capturePlainAt(true)
 			if got != want {
 				t.Fatalf("capturePlainAt differs from the line by line one:\n got %q\nwant %q", got, want)
 			}

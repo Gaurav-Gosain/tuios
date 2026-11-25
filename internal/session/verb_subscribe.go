@@ -94,7 +94,20 @@ const defaultIdleWindow = 500 * time.Millisecond
 // pane's emulator lock, so re-checking on every event made the pane several
 // times slower. Events that arrive inside the gap arm one deferred re-check at
 // its end instead, so output that matches is still seen within the gap.
+//
+// The gap grows to waitOutputCostGaps times how long the last capture held
+// the lock, up to waitOutputMaxGap. While one capture costs about what the
+// one before it did, a waiter then holds the lock about a third of the time:
+// on a loaded machine, or a backend that reads its scrollback more slowly.
 const waitOutputMinGap = 50 * time.Millisecond
+
+// waitOutputCostGaps is how many times the last capture's cost the gap after
+// it is at least.
+const waitOutputCostGaps = 2
+
+// waitOutputMaxGap is the longest gap, so one slow capture cannot hold back
+// the next check for long.
+const waitOutputMaxGap = 500 * time.Millisecond
 
 // waitOutputCaptured, when set, is told how long each capture a
 // wait-for-output takes held the pane's emulator lock. Test-only.
@@ -878,15 +891,21 @@ func (d *Daemon) waitWindowOutput(cs *connState, sessionName, window, pattern, s
 	// there, so on a pane whose capture is slow the waiter still leaves the
 	// emulator lock alone for most of the time.
 	var lastCheck time.Time
+	// lastCost is how long the last capture held the emulator lock.
+	var lastCost time.Duration
 	matches := func() bool {
 		var content string
-		start := time.Now()
-		content, checked = pty.capturePlainAt(scrollback)
+		content, checked, lastCost = pty.capturePlainAt(scrollback)
 		lastCheck = time.Now()
 		if hook := waitOutputCaptured.Load(); hook != nil {
-			(*hook)(lastCheck.Sub(start))
+			(*hook)(lastCost)
 		}
 		return re.MatchString(content)
+	}
+	// gapLeft is how long until the gap after the last capture ends.
+	gapLeft := func() time.Duration {
+		gap := min(max(waitOutputMinGap, waitOutputCostGaps*lastCost), waitOutputMaxGap)
+		return gap - time.Since(lastCheck)
 	}
 	// moved says whether a re-check could read something new.
 	moved := func() bool { return pty.currentCaptureState() != checked }
@@ -944,9 +963,26 @@ func (d *Daemon) waitWindowOutput(cs *connState, sessionName, window, pattern, s
 	gapTimer := time.NewTimer(time.Hour)
 	gapTimer.Stop()
 	defer gapTimer.Stop()
+	// inGap arms the deferred re-check when the gap has not ended, and says
+	// whether it has not.
+	inGap := func() bool {
+		wait := gapLeft()
+		if wait <= 0 {
+			return false
+		}
+		if deferred == nil {
+			gapTimer.Reset(wait)
+			deferred = gapTimer.C
+		}
+		return true
+	}
 	for {
 		select {
 		case <-deadline:
+			// Output inside the last gap has not been checked yet.
+			if moved() && matches() {
+				return waitMatched("window-output", matched), nil
+			}
 			return nil, hintedVerbError(ErrVerbTimeout, "timed out waiting for output matching "+pattern, &VerbHint{
 				Param:  "pattern",
 				Verb:   "capture-pane",
@@ -955,12 +991,7 @@ func (d *Daemon) waitWindowOutput(cs *connState, sessionName, window, pattern, s
 		case <-d.ctx.Done():
 			return nil, newVerbError(ErrVerbInternal, "daemon is shutting down")
 		case <-sub.ch:
-			if deferred != nil {
-				continue
-			}
-			if wait := waitOutputMinGap - time.Since(lastCheck); wait > 0 {
-				gapTimer.Reset(wait)
-				deferred = gapTimer.C
+			if deferred != nil || inGap() {
 				continue
 			}
 			if matches() {
@@ -975,7 +1006,7 @@ func (d *Daemon) waitWindowOutput(cs *connState, sessionName, window, pattern, s
 				return waitMatched("window-output", matched), nil
 			}
 		case <-backstop.C:
-			if !moved() {
+			if !moved() || inGap() {
 				continue
 			}
 			if matches() {

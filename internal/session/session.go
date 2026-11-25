@@ -5382,11 +5382,14 @@ func (p *PTY) currentCaptureState() captureState {
 }
 
 // capturePlainAt is CaptureContent without styling, plus the captureState the
-// capture was taken at, read under the same lock.
-func (p *PTY) capturePlainAt(scrollback bool) (string, captureState) {
+// capture was taken at, read under the same lock, and how long it held the
+// lock. The time spent waiting for the lock is not in held.
+func (p *PTY) capturePlainAt(scrollback bool) (content string, state captureState, held time.Duration) {
 	p.terminalMu.RLock()
 	defer p.terminalMu.RUnlock()
-	return p.captureContent(scrollback, false), p.captureStateLocked()
+	start := time.Now()
+	content, state = p.captureContent(scrollback, false), p.captureStateLocked()
+	return content, state, time.Since(start)
 }
 
 // Close terminates the PTY.

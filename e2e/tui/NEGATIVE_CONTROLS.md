@@ -19545,3 +19545,37 @@ Run on 2026-11-25 on Linux (amd64).
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestFloatKeyResizeKeepsTheTiles
  .`.
+
+## A wait-for window-output leaves the emulator lock to a flooding pane
+
+`TestWaitForOutputDoesNotSlowFlood` failed on the ghostty-vt job: the
+waiter held the emulator lock 1.295s of the 2.297s the floods ran, in 34
+captures of about 38 ms. A capture under the ghostty backend costs about five
+times one under the pure emulator, and a loaded runner multiplies it again.
+Two things let the waiter take more than half the lock. The gap after a
+capture was a fixed 50 ms, so the share grew with the cost of a capture. The
+200 ms backstop re-check ignored the gap and took a capture straight after
+another one. The gap is now at least twice the last capture's cost, and the
+backstop waits for the gap's end too.
+
+Run on 2026-11-25 on Linux (amd64), pure emulator, cores 0-7, 3 runs each.
+The control build sleeps inside the capture, under the lock, to give each
+capture a fixed cost.
+
+| Control | Capture cost | Lock share | Result |
+|---------|--------------|------------|--------|
+| main | 40 ms | 59% to 60%: "the waiter held the emulator lock ... of the ... the floods ran" | **caught**, 3 of 3 |
+| main | 60 ms | 73% to 76% | **caught**, 3 of 3 |
+| The gap fixed at 50 ms, the backstop waits for it | 60 ms | 54% to 55% | **caught**, 3 of 3 |
+| The gap scales, the backstop ignores it | 60 ms | 58% to 61% | **caught**, 3 of 3 |
+| The gap fixed at 50 ms, the backstop waits for it | 40 ms | 44% to 46% | not caught: under half |
+| The gap scales, the backstop ignores it | 40 ms | 46% to 49% | not caught: under half |
+| This branch | 40 ms | 34% to 36% | passes |
+| This branch | 60 ms | 34% to 39% | passes |
+
+Under the ghostty backend on one core with two busy loops beside it, main held
+the lock 38% to 50% of the time and failed 1 of 5. This branch held it 30% to
+34% and passed 10 of 10.
+
+Repeat with
+`go test -tags ghostty -count=10 -run '^TestWaitForOutputDoesNotSlowFlood$' -v ./internal/session/`.

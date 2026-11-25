@@ -103,8 +103,9 @@ func TestWaitForOutputDoesNotSlowFlood(t *testing.T) {
 		t.Errorf("the waiter took %d captures in %v, more than the %d its gap allows", gotCaptures, ran, limit)
 	}
 	// A capture per event held the lock for most of the flood. With the gap,
-	// the share is a capture's cost against the gap after it, which stays
-	// under half until one capture takes as long as the gap.
+	// the share is a capture's cost against the gap after it. The gap is at
+	// least twice the last capture's cost, so the share stays about a third
+	// while captures cost about the same.
 	if gotHeld > ran/2 {
 		t.Errorf("the waiter held the emulator lock %v of the %v the floods ran", gotHeld, ran)
 	}
