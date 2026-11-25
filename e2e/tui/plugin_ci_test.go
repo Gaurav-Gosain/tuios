@@ -530,10 +530,7 @@ func TestPluginCI(t *testing.T) {
 	}
 	waitFor("the builds after esc", count(8))
 
-	// Opening the same repository again, twice, while its build runs,
-	// leaves one clock: a tick of the repository before must not start a
-	// second one.
-	shopPID := pidOf(t, ci, "acme/shop")
+	// Opening the same repository again, twice, while its build runs.
 	for range 2 {
 		press("G")
 		waitFor("the menu of repositories", func(s string) bool { return strings.Contains(s, "acme/storefront-api") })
@@ -544,18 +541,9 @@ func TestPluginCI(t *testing.T) {
 		}
 		waitFor("acme/shop again", func(s string) bool { return estimate.MatchString(s) && count(8)(s) })
 	}
-	// The first poll after a switch is at once and the next one 6 s later,
-	// so the 3 s from second 2 hold only the clock.
-	pause(t, "let the reads after the switch settle", 2*time.Second)
-	w0, _ := procCost(shopPID)
-	pause(t, "count the wakeups of the running build's clock", 3*time.Second)
-	w1, _ := procCost(shopPID)
-	t.Logf("a running build after two switches: %d context switches in 3 s", w1-w0)
-	// One clock is 81 to 103 in these 3 s. With the tick of each repository
-	// before arming one more clock it was 153 to 184.
-	if w1-w0 > 130 {
-		t.Errorf("ASSERTION: after two switches the clock wakes the plugin %d times in 3 s, as if it ran more than once", w1-w0)
-	}
+	// The clock after the switches: TestOldTickStartsNoSecondClock in the
+	// plugin's module covers the tick of the repository before, which a
+	// count of wakeups here cannot tell from the GC's.
 
 	// The build ends while you watch it: the log is read again to its end,
 	// and it opens at the failing test.
@@ -578,6 +566,8 @@ func TestPluginCI(t *testing.T) {
 	s = waitTextOf(t, "the quiet repository", uiTimeout*3, screenOf(quiet), func(s string) bool { return strings.Contains(s, "Passed in 5m 0s") })
 	saveText(t, "ci-quiet", s)
 	pid := pidOf(t, ci, "acme/quiet")
+	// The first reads and the start of the Go runtime settle first.
+	pause(t, "let the quiet pane settle after its first read", 3*time.Second)
 	before := strings.Count(calls(), "acme/quiet")
 	s0, c0 := procCost(pid)
 	pause(t, "watch the plugin with nothing running", 10*time.Second)
