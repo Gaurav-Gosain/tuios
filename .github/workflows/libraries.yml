@@ -52,7 +52,7 @@ jobs:
         run: scripts/library-pins.sh check
 
   module:
-    name: ${{ matrix.id == 'small' && 'progstatus, swatch, shot, tml, plot, loom, acp, harness and nitpick' || matrix.id }} alone
+    name: ${{ matrix.id == 'small' && 'progstatus, swatch, shot, tml, plot, loom, acp, harness, nitpick and plugins/ci' || matrix.id }} alone
     if: inputs.lib_alone != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -62,7 +62,8 @@ jobs:
         # vt and sketch take a minute or more each and get a job of their own.
         # The small libraries share one, since each tests in seconds and a job
         # of its own spent longer on setup than on the library. nitpick joined
-        # them: its job took 25 s, most of it setup. ci.yml passes only the
+        # them: its job took 25 s, most of it setup. plugins/ci, the CI
+        # plugin, is a module of its own too and tests in seconds. ci.yml passes only the
         # jobs whose library changed.
         id: ${{ fromJSON(inputs.lib_alone || '["vt","sketch","small"]') }}
     env:
@@ -82,7 +83,7 @@ jobs:
 
       - name: Tidy, vet and test
         env:
-          DIRS: ${{ matrix.id == 'small' && 'progstatus swatch shot tml plot loom acp harness nitpick' || matrix.id }}
+          DIRS: ${{ matrix.id == 'small' && 'progstatus swatch shot tml plot loom acp harness nitpick plugins/ci' || matrix.id }}
         run: |
           status=0
           for dir in $DIRS; do

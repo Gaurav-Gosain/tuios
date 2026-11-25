@@ -186,6 +186,9 @@ while IFS= read -r p; do
 		[ "$top" != "$l" ] || f[lib_$l]=1
 	done
 	[ "$top" != cmd ] || f[docker]=1
+	# The CI plugin is a module of its own that tuios does not import. The
+	# small library job tests it.
+	case $p in plugins/ci/*) f[plugin_ci]=1 ;; esac
 	case $p in cmd/tuios-web/* | internal/app/* | internal/input/* | internal/config/*) f[clienttests]=1 ;; esac
 	[ "$top" != vt ] || f[ghostty]=1
 	# Test files and test data never reach the binary.
@@ -282,9 +285,11 @@ out[lint_libs]=$(list "${lint[*]:-}")
 [ -z "${f[lint_all]:-}" ] || out[lint_libs]=all
 [ -z "${f[lib_vt]:-}" ] || alone+=('"vt"')
 [ -z "${f[lib_sketch]:-}" ] || alone+=('"sketch"')
+small=${f[plugin_ci]:-}
 for l in progstatus swatch shot tml plot loom acp harness nitpick; do
-	if [ -n "${f[lib_$l]:-}" ]; then alone+=('"small"'); break; fi
+	[ -z "${f[lib_$l]:-}" ] || small=1
 done
+[ -z "$small" ] || alone+=('"small"')
 if $modfiles; then alone=('"vt"' '"sketch"' '"small"'); fi
 out[lib_alone]="[$(
 	IFS=,

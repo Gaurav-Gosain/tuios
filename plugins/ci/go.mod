@@ -1,6 +1,6 @@
 module github.com/Gaurav-Gosain/tuios/plugins/ci
 
-go 1.26.8
+go 1.26.0
 
 require (
 	github.com/charmbracelet/x/ansi v0.11.10
