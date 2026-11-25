@@ -1421,6 +1421,16 @@ func (e *Emulator) Resize(width int, height int) {
 	// text, moving rows into the scrollback where it has one
 	// (Screen.shrinkRows), so the cursor row comes out in view and so does
 	// the main screen's prompt under an alternate screen.
+	// The main screen's cursor row keeps its number (ScrollbackBase) through
+	// the resize, and the history is numbered back from it. A reflow lays out
+	// again only the newest rows a ring holds, so an emulator that keeps less
+	// history than another one lays out fewer, and numbering from the old end
+	// made the two disagree on every line after.
+	sb := main.scrollback
+	var cursorNumber int64
+	if sb != nil {
+		cursorNumber = sb.base + int64(sb.Len()+main.cur.Y)
+	}
 	if reflowMain {
 		e.reflowMain(width, height)
 		if e.scr == main {
@@ -1428,6 +1438,9 @@ func (e *Emulator) Resize(width int, height int) {
 		}
 	} else {
 		main.Resize(width, height)
+	}
+	if sb != nil && main.scrollback == sb {
+		sb.base = cursorNumber - int64(sb.Len()+main.cur.Y)
 	}
 	if e.altSized {
 		e.scrs[1].Resize(width, height)

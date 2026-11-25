@@ -31,9 +31,11 @@ func (p *HistoryPage) Len() int { return packedRowCount(p.Packed) }
 // line number before, the newest of them last. It copies the lines while the
 // caller holds t's lock, and returns finish, which packs them without reading
 // t. A terminal that does not number its history returns a nil page.
+// Lines before the oldest the terminal holds are gone, and a page for them
+// is empty.
 func CaptureHistoryPage(t vt.Terminal, before int64, limit int) (page *HistoryPage, finish func()) {
-	base := t.ScrollbackBase()
-	if base < 0 {
+	base, ok := t.ScrollbackBase()
+	if !ok {
 		return nil, func() {}
 	}
 	n := t.ScrollbackLen()

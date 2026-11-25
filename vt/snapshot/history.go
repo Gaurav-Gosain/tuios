@@ -22,6 +22,10 @@ type History struct {
 	screen      []uv.Line
 	screenFlags []rowFlags
 	history     *vt.ScrollbackCopy
+	// first is the number of the history copy's first line, valid when
+	// numbered is set (vt.Terminal.ScrollbackBase).
+	first    int64
+	numbered bool
 }
 
 // CaptureHistory reads the main screen and up to lines history rows, for a
@@ -72,7 +76,11 @@ func CaptureHistory(t vt.Terminal, lines int) *History {
 		r.screen[y] = row[:usedCells(row)]
 	}
 	n := t.ScrollbackLen()
-	r.history = t.CopyScrollback(max(n-max(lines, 0), 0), n)
+	from := max(n-max(lines, 0), 0)
+	r.history = t.CopyScrollback(from, n)
+	if base, ok := t.ScrollbackBase(); ok {
+		r.first, r.numbered = base+int64(from), true
+	}
 	return r
 }
 
@@ -91,6 +99,11 @@ func (r *History) State(lines int) *State {
 		Height:        r.height,
 		CursorY:       r.cursorY,
 		ScrollbackLen: lines,
+	}
+	// The numbers carry over a restart, so a client that held lines before
+	// it gives them the numbers the restored pane gives them.
+	if r.numbered {
+		st.ScrollbackBase, st.ScrollbackNumbered = r.first+int64(first), true
 	}
 	st.ScreenWraps, st.ScreenPads = rowFlagBits(r.screenFlags)
 	flags := make([]rowFlags, lines)
@@ -193,6 +206,10 @@ func ApplyHistory(t vt.Terminal, st *State) error {
 		ScrollbackLen: split,
 		Scrollback:    rows[:split],
 		Screen:        rows[split:],
+		// The saved screen's rows follow its history in the numbering, so
+		// the rows laid out here keep the numbers they had.
+		ScrollbackBase:     st.ScrollbackBase,
+		ScrollbackNumbered: st.ScrollbackNumbered,
 	}
 	out.ScrollbackWraps = wrapBits(wraps[:split])
 	out.ScreenWraps = wrapBits(wraps[split:])

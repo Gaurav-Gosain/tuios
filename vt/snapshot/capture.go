@@ -59,7 +59,7 @@ func capture(t vt.Terminal, width, height, maxScrollback, have int, packed bool)
 		ModifyOtherKeys:      t.ModifyOtherKeys(),
 		ModifyOtherKeysKnown: true,
 	}
-	if base := t.ScrollbackBase(); base >= 0 {
+	if base, ok := t.ScrollbackBase(); ok {
 		state.ScrollbackBase, state.ScrollbackNumbered = base, true
 	}
 

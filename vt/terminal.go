@@ -259,17 +259,31 @@ type Terminal interface {
 	// derived something from the history can keep it while the number
 	// stays the same.
 	ScrollbackGeneration() uint64
-	// ScrollbackBase is the number of the oldest history line, counted over
-	// the emulator's life: every line the history dropped from its old end,
-	// by trim, clear or a smaller limit. History line index is number
-	// ScrollbackBase()+index, and a line keeps its number until it is
-	// dropped. Two emulators fed the same output number its lines alike,
-	// whatever history each keeps. A snapshot carries the number, so an
-	// emulator built from one numbers lines as its source does. It is -1
-	// when the backend does not count.
-	ScrollbackBase() int64
+	// ScrollbackBase is the number of the oldest history line. History line
+	// index is number base+index, and the main screen's row y is number
+	// base+ScrollbackLen()+y. A drop from the old end of the history, by
+	// trim, clear or a smaller limit, moves the base, so a line keeps its
+	// number until it is dropped. A resize keeps the number of the main
+	// screen's cursor row and numbers the history back from it, because a
+	// reflow lays the newest rows out again and can change how many there
+	// are.
+	//
+	// Two emulators fed the same output and resized alike give the same
+	// number to each row both hold, whatever history each keeps. The one
+	// exception is the oldest line of the smaller history when the larger
+	// one holds the start of its wrapped line: a reflow joins them in one and
+	// not in the other. A snapshot carries the number, so an emulator built
+	// from one numbers its rows as the source does. The base can be negative:
+	// an emulator that holds more history than its source numbered gives the
+	// extra lines numbers the source never had.
+	//
+	// ok is false when the backend does not number its history, and for a
+	// main screen with no history. A history that drops every line it is
+	// pushed (Discard) counts them, but a reflow takes nothing back from it,
+	// so its numbers do not follow another emulator's after a resize.
+	ScrollbackBase() (base int64, ok bool)
 	// SetScrollbackBase sets the number of the oldest history line. A
-	// backend that does not count ignores it.
+	// backend that does not number its history ignores it.
 	SetScrollbackBase(base int64)
 	// ScrollbackLine returns history line index, oldest first, or nil when
 	// index is out of range.

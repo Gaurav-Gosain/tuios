@@ -293,11 +293,11 @@ func (e *Emulator) CopyScrollback(from, end int) *ScrollbackCopy {
 }
 
 // ScrollbackBase implements [Terminal.ScrollbackBase].
-func (e *Emulator) ScrollbackBase() int64 {
+func (e *Emulator) ScrollbackBase() (base int64, ok bool) {
 	if sb := e.scrs[0].scrollback; sb != nil {
-		return sb.Base()
+		return sb.Base(), true
 	}
-	return 0
+	return 0, false
 }
 
 // SetScrollbackBase implements [Terminal.SetScrollbackBase].

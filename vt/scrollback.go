@@ -943,12 +943,10 @@ func ClipHistoryRow(line uv.Line, width int) uv.Line {
 	return out
 }
 
-// Base is the number of the oldest line, counted over the ring's life. Line
-// index is number Base()+index. A line keeps its number until the ring drops
-// it, since lines only leave the old end by a drop, which moves Base, and
-// the new end by truncate, which leaves the older numbers alone. Two rings
-// fed the same lines number them alike whatever their limits: the smaller
-// one drops more, and its Base is higher by as much as its Len is lower.
+// Base is the number of the oldest line. Line index is number Base()+index.
+// A drop from the old end, by trim, clear or a smaller limit, moves it, so a
+// line keeps its number until it is dropped. A resize renumbers the history
+// back from the main screen's cursor row (Emulator.Resize).
 func (sb *Scrollback) Base() int64 {
 	return sb.base
 }

@@ -160,7 +160,7 @@ func decodeHistorySnapshot(data []byte, alt bool) *gh.Terminal {
 
 // ScrollbackBase implements [Terminal.ScrollbackBase]. libghostty-vt does
 // not report the lines its page list drops, so the history has no numbers.
-func (t *GhosttyTerminal) ScrollbackBase() int64 { return -1 }
+func (t *GhosttyTerminal) ScrollbackBase() (int64, bool) { return 0, false }
 
 // SetScrollbackBase implements [Terminal.SetScrollbackBase]. See
 // ScrollbackBase.
