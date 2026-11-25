@@ -35,6 +35,7 @@ const (
 	TableTransfers
 	TableCopyMode
 	TableReview
+	TableHelp
 	TableGUI
 	TableGlobal
 	TableScript
@@ -83,6 +84,7 @@ var keybindTables = [tableCount]keybindTable{
 	TableTransfers:        {SectionTransfers, func(k *KeybindingsConfig) *map[string][]string { return &k.Transfers }},
 	TableCopyMode:         {SectionCopyMode, func(k *KeybindingsConfig) *map[string][]string { return &k.CopyMode }},
 	TableReview:           {SectionReview, func(k *KeybindingsConfig) *map[string][]string { return &k.Review }},
+	TableHelp:             {SectionHelp, func(k *KeybindingsConfig) *map[string][]string { return &k.Help }},
 	TableGUI:              {SectionGUI, func(k *KeybindingsConfig) *map[string][]string { return &k.GUI }},
 	TableGlobal:           {SectionGlobal, func(k *KeybindingsConfig) *map[string][]string { return &k.Global }},
 	TableScript:           {SectionScript, func(k *KeybindingsConfig) *map[string][]string { return &k.Script }},

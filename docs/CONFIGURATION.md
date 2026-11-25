@@ -2276,6 +2276,8 @@ exists. One copy is a bar and a percent, `[####--] 61%`. More copies are a
 count and a percent, `3 copies 42%`. `waiting` means a link is down, and
 `1 failed` stays until you open the Copies panel. A click opens the panel. Add
 `transfers` to your own `right` list to see it there.
+`help` shows `?`, which is in no default list. A click turns hover help on or
+off, and it is lit while hover help is on.
 `session` shows the session name, workspace and pane, `main 2:1`, and is in no
 default list. `[dock.session]` takes `format` (`{session}`, `{workspace}`,
 `{pane}`) and the cell style keys `fg`, `bg`, `bold`, `cap_left` and
@@ -5356,13 +5358,15 @@ on-click = "tuios new-window log -- git log --oneline -20"
 
 These lists are the default. A missing list uses the default. An empty list (`left = []`) draws nothing on that side.
 
-The built-in components are `mode`, `workspaces`, `trail`, `tape`, `windows`, `transfers`, `notifications`, `copy-help`, `cpu`, `ram`, `clock`, `session-controls`, `session` and `buttons`. Listing one lets it draw. It still needs its own condition, so `cpu` still needs `show_cpu`. `copy-help` shows the keys of copy mode, multi copy mode and hints mode while the mode is open. See [Mode keys in the dock](KEYBINDINGS.md#mode-keys-in-the-dock).
+The built-in components are `mode`, `workspaces`, `trail`, `tape`, `windows`, `transfers`, `notifications`, `copy-help`, `cpu`, `ram`, `clock`, `session-controls`, `session`, `buttons` and `help`. Listing one lets it draw. It still needs its own condition, so `cpu` still needs `show_cpu`. `copy-help` shows the keys of copy mode, multi copy mode and hints mode while the mode is open. See [Mode keys in the dock](KEYBINDINGS.md#mode-keys-in-the-dock).
 
 `session-controls` shows an agents button when the session has an agent pane. The button opens the agents view, the same as `Ctrl+B i`. When agents wait for you, the button shows how many in the attention colour.
 
 `buttons` shows five buttons: New, Split, Close, Help and Settings. Click a button to run its action. New opens a terminal. Split divides the pane side by side. Close closes the pane. Help shows the help. Settings opens the settings. Point at a button to read what it does. The buttons are always on the right. On a narrow dock, the buttons show icons instead of words. When the icons do not fit, the last buttons go into a more button at the end of the row. Click it to see them.
 
 `transfers` shows the copies between machines. It shows nothing while no copy exists. One copy is a bar and a percent, `[####--] 61%`. More copies are a count and a percent, `3 copies 42%`. `waiting` means a link is down. `1 failed` stays until you open the Copies panel. A click opens the [Copies panel](KEYBINDINGS.md#copies-between-machines).
+
+`help` shows `?`, which is in no default list. A click turns [hover help](KEYBINDINGS.md#hover-help) on or off, the same as `Ctrl+B h`. It is lit while hover help is on.
 
 `[dock.clock]` takes `format`, a Go time layout. A layout without seconds refreshes once a minute. `session` shows the session name, the workspace and the pane, such as `main 2:1`. It is in no default list. `[dock.session]` takes `format`, with `{session}`, `{workspace}` and `{pane}`. It also takes the cell style keys `fg`, `bg`, `bold`, `cap_left` and `cap_right`. `[dock.custom.NAME]` takes the same style keys. Colours are `#rrggbb`. When the `center` list has a clock or a custom cell, the centre is at the middle of the terminal. A notification does not move it, and it does not shorten the minimized pane labels. On a crowded bar, the centre moves left to keep the cells on the right on the screen. Click a cut notification to read the full message.
 

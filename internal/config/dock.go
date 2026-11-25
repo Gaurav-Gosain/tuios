@@ -36,6 +36,10 @@ const (
 	// DockComponentButtons is a row of buttons that run actions: New, Split,
 	// Close, Help and Settings. It is drawn on the right.
 	DockComponentButtons = "buttons"
+	// DockComponentHelp is the "?" control. A click turns hover help on or
+	// off, as Ctrl+b h does, and the cell is lit while hover help is on. It
+	// is in no default list.
+	DockComponentHelp = "help"
 )
 
 // DockCustomPrefix marks a name in one of the dock lists as referring to a
@@ -65,6 +69,7 @@ var dockBuiltins = []string{
 	DockComponentTransfers,
 	DockComponentSession,
 	DockComponentButtons,
+	DockComponentHelp,
 }
 
 // DockBuiltinComponents returns the built-in component names, sorted. Used by

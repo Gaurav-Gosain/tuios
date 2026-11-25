@@ -946,6 +946,61 @@ the text into the focused pane. This action has no default key. Bind it, or
 run it from the command palette. Set `hints.all_panes = true` to make
 `Ctrl+B F` do the same.
 
+## Hover help
+
+`Ctrl+B h` turns on hover help, and `Ctrl+B h` again turns it off. Hover help
+explains one part of the screen at a time. The explanation shows next to that
+part, above or below it, with no border. It says what the part is for, what it
+can show, the keys that act on it and the `tuios` commands that change it. A
+key that cannot act now is greyed out. The action is `toggle_hover_help`.
+
+Move the pointer over a part to explain it. The explanation follows the
+pointer, and starts on the part under the pointer. The help keys walk without
+the mouse:
+
+| Key | Action | What it does |
+|-----|--------|--------------|
+| `Ctrl+Alt+Right` | `help_next` | Explain the next component |
+| `Ctrl+Alt+Left` | `help_prev` | Explain the previous component |
+| `Ctrl+Alt+Down` | `help_deeper` | Go into the component's parts, then to the next part |
+| `Ctrl+Alt+Up` | `help_shallower` | Go to the previous part, then out to the component |
+| `Ctrl+Alt+PgUp` | `help_scroll_up` | Scroll a long explanation up |
+| `Ctrl+Alt+PgDown` | `help_scroll_down` | Scroll a long explanation down |
+| `Alt+Shift+H` | `help_keys` | Show every key of the part, and back |
+
+Hover help does not take the keyboard. Every other key, `esc` included, goes
+to the pane or to the open panel as usual, and so does a help key while a panel,
+hints mode or the leader has the keyboard. While hover help is up, its keys
+come before every other binding, so no default help key is one that another
+table binds: the shifted arrows still scroll the pane, move by word in copy
+mode and reorder the rail. Some host terminals and desktops keep `Ctrl+Alt`
+with the arrows for themselves, Ghostty on Linux among them; bind other keys
+there. A click goes to what it lands on. A
+click on the explanation does nothing. The wheel scrolls the explanation when
+the pointer is over it. The explanation hides while the leader or one of its
+menus waits for a key, and comes back on the same part when the menu closes:
+moving the pointer under the menu does not change it.
+
+Bind the help keys in `[keybindings.help]`. The explanation's last line shows
+the keys you bound.
+
+```toml
+[keybindings.help]
+help_next = ["ctrl+alt+right", "ctrl+n"]
+help_keys = ["alt+shift+k"]
+```
+
+`?` still shows the list of all keys.
+
+The dock can carry a `?` control. It is in no default list: add `help` to a
+`[dock]` list to draw it. A click on it turns hover help on or off, and it is
+lit while hover help is on.
+
+```toml
+[dock]
+left = ["mode", "workspaces", "trail", "tape", "help"]
+```
+
 ## Links
 
 `Ctrl+click` on a link opens it. `Shift+click` also opens it, but most

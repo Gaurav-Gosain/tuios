@@ -421,6 +421,12 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			layers = append(layers, dockLayer)
 		}
 
+		// The explainer places itself against the cells the dock just
+		// recorded, so it is composed after the dock. See hover_help.go.
+		if explainer := m.renderHoverHelp(); explainer != nil {
+			layers = append(layers, explainer)
+		}
+
 		// The hover label rides above the panes and the dock both. It is composed
 		// last so it reads the rectangles this pass recorded rather than the
 		// previous frame's: the rail anchors it by row and the dock's session
