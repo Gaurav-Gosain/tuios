@@ -233,14 +233,25 @@ func (p *probeInput) Read(b []byte) (int, error) {
 }
 
 // simEnv makes env the process environment for the rest of the test, as the
-// environment of a spawned tuios would hold it, and reloads the XDG paths.
-// The test knobs in env go to testknob.Set instead, merged over the ones the
-// suite runs with.
+// environment of a spawned tuios would hold it. The test knobs in env go to
+// testknob.Set instead, merged over the ones the suite runs with.
+//
+// It reloads the XDG paths only when env changes a variable they are read
+// from. The paths are package variables of the xdg package, one copy for the
+// process. The in-process daemon reads them on its own goroutines from the
+// moment it starts, so they belong to the daemon while it runs. A client of
+// the same isolation root has the same XDG variables, and a reload for it
+// would rewrite the paths under the daemon's readers.
 func simEnv(t *testing.T, env []string) {
 	t.Helper()
+	reload := false
 	// Registered first, so it runs after t.Setenv has put the old values
 	// back.
-	t.Cleanup(xdg.Reload)
+	t.Cleanup(func() {
+		if reload {
+			xdg.Reload()
+		}
+	})
 	for _, kv := range env {
 		k, v, ok := strings.Cut(kv, "=")
 		if !ok {
@@ -253,9 +264,21 @@ func simEnv(t *testing.T, env []string) {
 		}
 		if got, set := os.LookupEnv(k); !set || got != v {
 			t.Setenv(k, v)
+			reload = reload || xdgInput(k)
 		}
 	}
-	xdg.Reload()
+	if reload {
+		xdg.Reload()
+	}
+}
+
+// xdgInput reports whether xdg.Reload reads the environment variable k.
+func xdgInput(k string) bool {
+	switch k {
+	case "HOME", "home", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "ProgramData", "SystemDrive", "SystemRoot", "PUBLIC", "windir":
+		return true
+	}
+	return strings.HasPrefix(k, "XDG_")
 }
 
 // simDaemon is the in-process daemon of one isolation root.

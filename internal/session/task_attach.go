@@ -816,9 +816,10 @@ func (s *attachSweeper) drop(hash string) {
 }
 
 // sweepAttachments removes the stored files of hashes that no card names,
-// off the caller's goroutine.
+// off the caller's goroutine. Shutdown waits for it, and a daemon that is
+// stopping drops it.
 func (d *Daemon) sweepAttachments(hashes ...string) {
-	go d.sweepAttachmentsNow(hashes)
+	d.goTracked(func() { d.sweepAttachmentsNow(hashes) })
 }
 
 // sweepAttachmentsNow removes the stored files of hashes, or with none every

@@ -19449,3 +19449,26 @@ Run on 2026-11-25 on Linux (amd64). The control is a build of main.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestScratchTerminalShowsOneShell$' -v .`.
+
+## The sim backend reloads the XDG paths under the in-process daemon
+
+Under the sim backend, `TestCtrlPOpensPaletteTerminalModeNumLock` and the
+other `TestCtrlP` tests reported data races with `-race`. The xdg paths are
+package variables, one copy for the process. The daemon reads them on its own
+goroutines (the attachment sweep, the sweep of opened copies, the periodic
+history save). `simEnv` reloaded them for each client, and again in the
+client's cleanup, while the daemon ran. The fix reloads only when the
+environment changes a variable that xdg reads, and the daemon waits for its
+two sweeps when it stops.
+
+Run on 2026-11-25 on Linux (amd64), `-race`, `-run '^TestCtrlP'`.
+
+| Control | The run fails with | Result |
+|---------|--------------------|--------|
+| main | 13 "WARNING: DATA RACE" reports: `xdg.Reload` from `simEnv` against `getResurrectionDir`, `openedcopy.Root` and `historyRoot` | **caught** |
+| The daemon change only (`simEnv` reloads for each client) | 15 race reports, 7 tests fail | **caught** |
+| A 300 ms pause at the start of `sweepOpenedCopies`, the sweep not tracked | 1 race report: `openedcopy.Root` against the reload in the test's cleanup, after the daemon stopped | **caught** |
+| The same pause, the sweep tracked (this branch) | no race report | passes |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios TUIOS_E2E_BACKEND=sim go test -race -count=10 -run '^TestCtrlP' .`.

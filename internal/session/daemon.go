@@ -1965,7 +1965,7 @@ func (d *Daemon) serve() {
 	// The copies o made of far files that nobody opened for a while go,
 	// once per start. The client sweeps too, each time it makes one. No
 	// timer: a daemon that sits idle does no work for them.
-	go sweepOpenedCopies(d.openedKeep)
+	d.goTracked(func() { sweepOpenedCopies(d.openedKeep) })
 }
 
 // sweepOpenedCopies removes the old copies of far files under the user cache.
