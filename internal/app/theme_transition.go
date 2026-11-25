@@ -191,6 +191,13 @@ func (m *OS) keepThemeFrame() {
 		for y := range h {
 			copy(old.Lines[y], src.Lines[y])
 		}
+	} else if sh := m.shownFrame(); t.lastText == "" && sh != nil && sh.Width() == w && sh.Height() == h {
+		// The canvas drew the last frame, and an idle client freed it since
+		// (releaseFrameBuffers). The terminal's copy of it is the same cells.
+		old.Resize(w, h)
+		for y := range h {
+			copy(old.Lines[y], sh.Lines[y])
+		}
 	} else {
 		// The fast path or the saver drew the last frame, and left no canvas
 		// behind. The frame string is the same cells.

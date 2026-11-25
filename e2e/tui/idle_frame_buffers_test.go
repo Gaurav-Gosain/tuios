@@ -10,24 +10,32 @@ import (
 )
 
 // TestIdleClientFreesItsFrameBuffers: once the client has been idle for the
-// cleanup interval, it frees the compositor's canvas and the layers it parsed
-// to cells. Each is a cell buffer the size of the screen, 1.35 MB at 207x55,
-// and an idle client held them for as long as nothing moved. The next key
-// builds them again and draws the pane as before.
+// cleanup interval, it frees the compositor's canvas. It is a cell buffer the
+// size of the screen, 1.35 MB at 207x55, and an idle client held it for as
+// long as nothing moved. The next key builds it again and draws the pane as
+// before.
 //
 // The client records every allocation in its heap profile
 // (GODEBUG=memprofilerate=1), so a held buffer always shows.
 //
 // NEGATIVE CONTROL (e2e/tui/NEGATIVE_CONTROLS.md,
 // TestIdleClientFreesItsFrameBuffers): with the releaseFrameBuffers call cut
-// from View, the test fails at "the idle client still holds".
+// from View, the test fails at "the idle client still holds". With the old
+// frame of a theme transition drawn from the frame text alone, it fails at
+// "started from a blank frame".
 func TestIdleClientFreesItsFrameBuffers(t *testing.T) {
 	requireReal(t, "reads the heap of the real client")
 	addr := fmt.Sprintf("127.0.0.1:%d", freePort(t))
-	term, _ := start(t, startOpts{
+	base := t.TempDir()
+	// A long circle, so its first frames still show nearly all of the old
+	// frame.
+	writeConfig(t, base, "[appearance]\ntheme = \"tokyonight\"\ntheme_transition = \"circle\"\ntheme_transition_duration = 2000\n")
+	term := startIn(t, base, startOpts{
 		cols: perfCols, rows: perfRows,
-		args: []string{"new", "frames", "--pprof", addr},
-		env:  append(perfEnvVars(), "TUIOS_CLEANUP_SECONDS=2", "GODEBUG=memprofilerate=1"),
+		// The theme transition is an animation.
+		animations: true,
+		args:       []string{"new", "frames", "--pprof", addr},
+		env:        append(perfEnvVars(), "TUIOS_CLEANUP_SECONDS=2", "GODEBUG=memprofilerate=1"),
 	})
 	waitBoot(t, term)
 	for range 3 {
@@ -46,19 +54,36 @@ func TestIdleClientFreesItsFrameBuffers(t *testing.T) {
 		t.Fatalf("read the client heap profile: %v", err)
 	}
 	if busy := heapBytesFrom(body, frameBufferAllocs...); busy < 1<<20 {
-		t.Fatalf("the busy client holds %d KiB of canvas and parsed layers, want at least 1 MiB: the profile does not see them", busy/1024)
+		t.Fatalf("the busy client holds %d KiB of canvas, want at least 1 MiB: the profile does not see them", busy/1024)
 	}
 
 	var held uint64
-	waitUntil(t, "the idle client never freed its canvas and its parsed layers", 30*time.Second, func() (bool, string) {
+	waitUntil(t, "the idle client never freed its canvas", 30*time.Second, func() (bool, string) {
 		body, err := httpGet(fmt.Sprintf("http://%s/debug/pprof/heap?gc=1&debug=1", addr))
 		if err != nil {
 			return false, err.Error()
 		}
 		held = heapBytesFrom(body, frameBufferAllocs...)
-		return held < 512<<10, fmt.Sprintf("the idle client still holds %d KiB of canvas and parsed layers", held/1024)
+		return held < 512<<10, fmt.Sprintf("the idle client still holds %d KiB of canvas", held/1024)
 	})
-	t.Logf("the idle client holds %d KiB of canvas and parsed layers", held/1024)
+	t.Logf("the idle client holds %d KiB of canvas", held/1024)
+
+	// A theme transition starts from the frame the terminal shows. The
+	// canvas that held it is gone, so the frame comes from the copy the
+	// terminal writer keeps. Taken from nothing, the circle would start on a
+	// blank screen, and the first line would be gone outside it.
+	shown := term.Snapshot()
+	if out, err := tuiosCLI(t, base, "set-config", "--no-save", "-s", "frames", "appearance.theme", "catppuccin_mocha"); err != nil {
+		t.Fatalf("set the theme: %v: %s", err, out)
+	}
+	var first string
+	waitUntil(t, "the theme change drew no frame", uiTimeout, func() (bool, string) {
+		first = term.Snapshot()
+		return first != shown, first
+	})
+	if !strings.Contains(first, "BEFORE2IDLE") {
+		t.Fatalf("ASSERTION: the theme transition after the release started from a blank frame:\n%s", first)
+	}
 
 	typeLine(t, term, "echo AFTER$((1+1))IDLE")
 	if err := term.WaitForText("AFTER2IDLE", uiTimeout); err != nil {
@@ -104,10 +129,9 @@ func heapBytesFrom(profile string, pairs ...[2]string) uint64 {
 	return total
 }
 
-// frameBufferAllocs are where the canvas and the parsed layers are allocated.
+// frameBufferAllocs are where the canvas is allocated.
 var frameBufferAllocs = [][2]string{
 	{"ultraviolet.NewBuffer", "(*OS).GetCanvas"},
-	{"ultraviolet.(*Buffer).Resize", "(*cellLayer).update"},
 }
 
 var heapRecordLine = regexp.MustCompile(`^\d+: (\d+) \[\d+: \d+\] @`)

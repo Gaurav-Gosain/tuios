@@ -19638,17 +19638,19 @@ Repeat from `e2e/tui` with
 ## TestIdleClientFreesItsFrameBuffers
 
 Once the client has been idle for the cleanup interval, it must hold under
-512 KiB of compositor canvas and parsed layers in its heap profile
-(GODEBUG=memprofilerate=1), and draw the next typed line with the text drawn
-before it.
+512 KiB of compositor canvas in its heap profile (GODEBUG=memprofilerate=1).
+A theme change with a circle transition must then start from the frame on
+the terminal, and the next typed line must show with the text drawn before
+it.
 
 Run on 2026-11-25 on Linux (amd64).
 
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
-| The `releaseFrameBuffers` call in View made `if false && ...` | "the idle client never freed its canvas and its parsed layers" (3705 KiB held) | **caught** |
-| The release marked due only while the frame ticker was stopped (the first head of this branch) | "the idle client still holds 2777 KiB of canvas and parsed layers" | **caught** |
+| The `releaseFrameBuffers` call in View made `if false && ...` | "the idle client never freed its canvas" (1321 KiB held) | **caught** |
+| The release marked due only while the frame ticker was stopped (the first head of this branch) | "the idle client still holds 2777 KiB of canvas and parsed layers" (that head counted the layers too) | **caught** |
 | A canvas built again by a quiet frame arms no release (the second head of this branch) | "the idle client still holds 2777 KiB of canvas and parsed layers" | **caught** |
+| The old frame of a theme transition drawn from the frame text alone, with no canvas (the third head) | "the theme transition after the release started from a blank frame" | **caught** |
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestIdleClientFreesItsFrameBuffers$' -v .`.
