@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -42,6 +43,9 @@ import (
 // both trim again after the burst".
 func TestIdleGivesHeapBack(t *testing.T) {
 	requireReal(t, "reads the heap of the real client and daemon")
+	if runtime.GOOS != "linux" {
+		t.Skip("the trim watch reads /proc/PID/smaps_rollup, a Linux file")
+	}
 	// The daemon looks for a trim at the end of its cleanup pass, which
 	// runs this long after the last activity.
 	t.Setenv("TUIOS_CLEANUP_SECONDS", "2")
