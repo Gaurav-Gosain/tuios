@@ -239,6 +239,25 @@ builds:
   # package of its library's module, so it builds in the library's folder
   # with that module's own requirements, as `go install
   # tuios.dev/<library>/cmd/<tool>@latest` does. tuios does not import them.
+  # The program of the CI plugin. tuios plugins install ci takes it from the
+  # release, so the person needs no Go.
+  - id: tuios-ci
+    dir: plugins/ci
+    main: .
+    binary: tuios-ci
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+    flags:
+      - -trimpath
+
   - id: sketch
     dir: sketch
     main: ./cmd/sketch
@@ -378,6 +397,24 @@ archives:
       - src: sketch/raster/fonts/NOTICE
         dst: licenses/sketch/NOTICE
 
+
+  - id: tuios-ci-archive
+    name_template: >-
+      tuios-ci_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+    ids:
+      - tuios-ci
+    files:
+      - src: plugins/ci/README.md
+        dst: README.md
+      # The design follows omaci (MIT). Its notice travels with the binary.
+      - src: LICENSE
+        dst: LICENSE
+      - src: plugins/ci/NOTICE
+        dst: NOTICE
 
   - id: sketch-archive
     name_template: >-

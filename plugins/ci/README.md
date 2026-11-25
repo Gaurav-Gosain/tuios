@@ -2,7 +2,13 @@
 
 Shows the GitHub Actions builds of a repository in a tuios pane: how long a running build has left, its jobs on a timeline, the steps of a job and its log. A failed build opens on the failed job, with the log at the test that failed.
 
-You need [gh](https://cli.github.com), logged in. Every request goes through `gh`, so the plugin never reads or stores a token. You also need Go to build the plugin.
+You need [gh](https://cli.github.com), logged in. Every request goes through `gh`, so the plugin never reads or stores a token.
+
+```sh
+tuios plugins install ci
+```
+
+The plugin comes from the release of the tuios that runs, with its program already built. A tuios that you built yourself has no release. Install the plugin from its folder, which needs Go:
 
 ```sh
 tuios plugins install Gaurav-Gosain/tuios/plugins/ci

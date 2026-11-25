@@ -385,6 +385,7 @@ a plugin does nothing. `tuios --skill tml` has the components.
 | next | New: `run = "event"` with `on`, `TUIOS_PLUGIN_EVENT` and `TUIOS_PLUGIN_EVENT_JSON`. | Move hooks out of a `herdr-plugin.toml`. |
 | next | New: `tuios plugins install NAME` for the plugins of the tuios release. | Nothing. |
 | next | The sketch plugin draws in the agents thread and in quick look, as text and as a picture. An install from its folder or from GitHub builds its program. A plugin of the tuios release runs no build command. | Nothing. |
+| next | `tuios plugins install ci` installs the CI plugin with its program from the release. | Nothing. |
 | next | tuios draws eight Mermaid types itself. `tuios plugins install sketch` brings the rest to `tuios mermaid` and to TML panels. | Nothing. |
 | next | New: the `ui` grant, `[[cell]]`, `tuios plugin-cell` and `tuios plugin-notify`. | A plugin that uses them sets `min_tuios`. A plugin that held `write` only to open a panel can ask for `ui`. |
 | next | `api` replaces `schema`. `schema = 1` still works and `tuios plugins info` warns. | Write `api = 1`. |
@@ -447,6 +448,10 @@ no build. tuios checks each file against the `checksums.txt` of the release, and
 `tuios plugins install` gets the same files or nothing. On a release build the
 name means the release plugin, also when a folder of that name is in the folder
 you run it in; give that folder as `./pr-status`.
+
+The release carries these plugins: `ci`, `ovnfs`, `pr-status`, `sketch` and
+`themes`. The `ci` and `sketch` plugins come with their programs from the
+release, so they need no Go.
 
 `tuios plugins update` moves these plugins to the release of the tuios that
 runs. `tuios update` does that after it installs a new tuios. A failure keeps
