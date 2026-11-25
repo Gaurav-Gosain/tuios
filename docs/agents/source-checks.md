@@ -11,6 +11,7 @@ the ones a change trips most often. Each test's doc comment gives the reason.
 | Every build of `./cmd/tuios` reads `scripts/noinline-packages.txt` | `internal/lint` `TestEveryTuiosBuildReadsTheNoinlineList` | `tuios:allow-build <reason>` |
 | A client quits through `OS.QuitCmd`, never a bare `tea.Quit` | `internal/lint` `TestEveryClientQuitGoesThroughQuitCmd` | `//tuios:allow-quit <reason>` |
 | A pane's history is read through the window, never from `w.Terminal` directly | `internal/lint` `TestPaneHistoryIsReadThroughTheWindow` | `//tuios:allow-history <reason>` |
+| A handshake feature check names a constant from `internal/session/features.go` | `internal/lint` `TestFeatureNamesAreDeclaredInFeaturesGo` | none |
 | Lessons name real actions, overlays, events and keys | `internal/lint` `TestLessonsMatchTheApp` | none |
 | The Dockerfile's Go version equals go.mod's toolchain line | `internal/lint` `TestDockerfileGoMatchesToolchain` | none |
 | A task card's lifecycle fields are written only in `internal/session/task_move.go` (`Session.moveCard`) | `internal/lint` `TestOnlyTaskMoveWritesACardsLifecycle` | none |

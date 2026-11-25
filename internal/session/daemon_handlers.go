@@ -52,6 +52,7 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 	cs.kittyAnimation = payload.KittyAnimation
 	cs.symbolImages = payload.SymbolImages
 	cs.terminalName = payload.TerminalName
+	cs.features = negotiateFeatures(payload.Features)
 
 	if payload.CellWidth > 0 && payload.CellHeight > 0 {
 		LogBasic("Client %s capabilities: cell=%dx%d pixels, kitty=%v, sixel=%v, term=%s",
@@ -68,6 +69,7 @@ func (d *Daemon) handleHello(cs *connState, msg *Message) error {
 		Version:      d.version,
 		SessionNames: names,
 		Protocol:     ProtocolVersion,
+		Features:     featureNames(),
 		ClientFocus:  true,
 		// See client_graphics.go.
 		ClientGraphics: true,

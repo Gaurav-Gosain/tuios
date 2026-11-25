@@ -354,6 +354,10 @@ type TUIClient struct {
 	done            chan struct{}
 	doneOnce        sync.Once  // gates close(done) so Close is idempotent
 	switchMu        sync.Mutex // prevents concurrent SwitchSession calls
+
+	// features is what this client and the daemon both listed in the
+	// handshake. See features.go.
+	features FeatureSet
 }
 
 // NewTUIClient creates a new TUI client for daemon communication.
@@ -444,6 +448,7 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 		Height:  height,
 
 		Protocol:   ProtocolVersion,
+		Features:   featureNames(),
 		Machine:    localHostLabel(),
 		ClientKind: c.Kind,
 		// Every daemon reads these two fields, so an older one gives a
@@ -560,6 +565,8 @@ func (c *TUIClient) handshake(version string, width, height int, caps *ClientCap
 	// ThemeEvents is newer than the oldest daemon this build talks to. See
 	// theme_event.go.
 	c.themeEvents = welcome.ThemeEvents
+	// What both sides listed. See features.go.
+	c.features = negotiateFeatures(welcome.Features)
 
 	// Seed the cache name-only; window summaries fill in on the first refresh.
 	infos := make([]SessionInfo, 0, len(welcome.SessionNames))

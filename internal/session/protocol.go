@@ -290,6 +290,9 @@ type HelloPayload struct {
 	// glyphs when its terminal has neither sixel nor kitty graphics. Such a
 	// client shows the image, so the panes are told they can draw sixel.
 	SymbolImages bool `json:"symbol_images,omitempty"`
+	// Features is what the client can do beyond the protocol version. See
+	// features.go.
+	Features []string `json:"features,omitempty"`
 	// Protocol is the wire protocol version the client speaks. Zero means a
 	// client that predates the field, which is read as LegacyProtocolVersion:
 	// gob ignores a field the peer does not know, so silence here is age, not
@@ -368,6 +371,9 @@ type WelcomePayload struct {
 	// Protocol is the wire protocol version the daemon speaks. Zero means a
 	// daemon that predates the field; see HelloPayload.Protocol.
 	Protocol int `json:"protocol,omitempty"`
+	// Features is what the daemon can do beyond the protocol version. See
+	// features.go.
+	Features []string `json:"features,omitempty"`
 	// ClientFocus says the daemon reads MsgClientFocus. gob leaves it false
 	// from a daemon that predates it, and the client then sends none.
 	ClientFocus bool `json:"client_focus,omitempty"`
