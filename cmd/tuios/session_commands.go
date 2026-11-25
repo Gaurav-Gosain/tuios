@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -835,7 +836,7 @@ func runListSessions(jsonOutput bool) error {
 		}
 		rowsBySpace[s.Space] = append(rowsBySpace[s.Space], []string{
 			name,
-			fmt.Sprintf("%d", s.WindowCount),
+			lsWindowsText(s.WindowCount, session.ScratchPanes(s.Windows)),
 			status,
 			formatTimeAgo(s.Created),
 			formatTimeAgo(s.LastActive),
@@ -888,7 +889,7 @@ func listSavedSessions(diag session.DaemonDiagnosis, jsonOutput bool) error {
 		for _, info := range infos {
 			rowsBySpace[info.Space] = append(rowsBySpace[info.Space], []string{
 				info.Name,
-				fmt.Sprintf("%d", info.WindowCount),
+				lsWindowsText(info.WindowCount, info.Scratch),
 				session.SavedTag,
 				"-",
 				formatTimeAgo(savedUnix(info.SavedAt)),
@@ -944,6 +945,21 @@ func renderSpaceGroups(rowsBySpace map[string][][]string) string {
 		groups = append(groups, renderSessionTable(loose))
 	}
 	return strings.Join(groups, "\n\n")
+}
+
+// lsWindowsText is a session's WINDOWS cell, with its scratch panes named
+// apart: "2", "1 pane + 1 scratch", "1 scratch pane". The navigator uses the
+// same words for a session's panes.
+// A plain count is unchanged, so a session with no scratch pane reads as it
+// always did.
+func lsWindowsText(total, scratch int) string {
+	switch {
+	case scratch <= 0:
+		return strconv.Itoa(total)
+	case scratch >= total:
+		return plural.Count(scratch, "scratch pane")
+	}
+	return plural.Count(total-scratch, "pane") + " + " + strconv.Itoa(scratch) + " scratch"
 }
 
 // renderSessionTable draws the session listing. Both listings use it so a

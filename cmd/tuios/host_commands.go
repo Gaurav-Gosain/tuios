@@ -231,14 +231,15 @@ type hostSessionsEntry struct {
 	Stale     bool  `json:"stale"`
 	FetchedAt int64 `json:"fetched_at"`
 	Sessions  []struct {
-		Name        string `json:"name"`
-		DisplayName string `json:"display_name"`
-		WindowCount int    `json:"window_count"`
-		Attached    bool   `json:"attached"`
-		Restored    bool   `json:"restored"`
-		Space       string `json:"space"`
-		LastActive  int64  `json:"last_active"`
-		Created     int64  `json:"created"`
+		Name         string `json:"name"`
+		DisplayName  string `json:"display_name"`
+		WindowCount  int    `json:"window_count"`
+		ScratchCount int    `json:"scratch_count"`
+		Attached     bool   `json:"attached"`
+		Restored     bool   `json:"restored"`
+		Space        string `json:"space"`
+		LastActive   int64  `json:"last_active"`
+		Created      int64  `json:"created"`
 	} `json:"sessions"`
 }
 
@@ -304,7 +305,7 @@ func runListSessionsAllHosts(host string, jsonOutput bool) error {
 			}
 			rowsBySpace[s.Space] = append(rowsBySpace[s.Space], []string{
 				name,
-				strconv.Itoa(s.WindowCount),
+				lsWindowsText(s.WindowCount, s.ScratchCount),
 				status,
 				formatTimeAgo(s.Created),
 				formatTimeAgo(s.LastActive),

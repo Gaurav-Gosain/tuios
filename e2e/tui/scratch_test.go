@@ -179,6 +179,11 @@ func TestScratchTerminalShowsOneShell(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &sessions); err != nil || len(sessions) != 1 || sessions[0].Name != "work" {
 		t.Fatalf("sessions = %s, want only work", out)
 	}
+	// tuios ls counts the scratch pane apart from work's one pane, and names
+	// it, in the navigator's words.
+	if ls, err := tuiosCLI(t, base, "ls"); err != nil || !strings.Contains(ls, "1 pane + 1 scratch") {
+		t.Fatalf("ASSERTION: tuios ls does not name the scratch pane: %v\n%s", err, ls)
+	}
 	pane, err := tuiosCLI(t, base, "capture-pane", "-s", "work", "-w", first.ID)
 	if err != nil {
 		t.Fatalf("capture the scratch pane: %v\n%s", err, pane)

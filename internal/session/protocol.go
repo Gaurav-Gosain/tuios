@@ -588,6 +588,19 @@ type NewPayload struct {
 	Cwd string `json:"cwd,omitempty"`
 }
 
+// ScratchPanes is how many of windows are scratch panes, shown or hidden.
+// The rail pane also carries Scratch and is not one. A daemon from before
+// Rail marks it as a scratch pane only.
+func ScratchPanes(windows []WindowSummary) int {
+	n := 0
+	for _, w := range windows {
+		if w.Scratch && !w.Rail {
+			n++
+		}
+	}
+	return n
+}
+
 // WindowSummary is a lightweight per-window entry in a session listing: enough
 // for a session-management surface to draw and expand a non-attached session's
 // window tree without querying that session's PTYs.
@@ -671,6 +684,10 @@ type WindowSummary struct {
 	// leaves the row out, as the attached client does. Additive and omitted
 	// when false.
 	Scratch bool `json:"scratch,omitempty"`
+	// Rail marks the client's rail pane, which also carries Scratch so an
+	// older reader leaves it out. A count of scratch panes skips it.
+	// Additive and omitted when false.
+	Rail bool `json:"rail,omitempty"`
 	// Note is the pane's return note (WindowState.Note). Additive and omitted
 	// when empty, which is what an older peer sends.
 	Note string `json:"note,omitempty"`

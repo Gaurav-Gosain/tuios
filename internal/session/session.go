@@ -4378,6 +4378,7 @@ func (s *Session) windowSummaries() []WindowSummary {
 			// The rail pane is left out of a rail's rows as the scratch
 			// terminal is, and an older reader knows only this mark.
 			Scratch:     w.Scratch || w.Rail != "",
+			Rail:        w.Rail != "",
 			Note:        w.Note,
 			AgentParent: agentParentRef(*w),
 			Cwd:         firstNonEmpty(cwds[w.PTYID], w.Cwd),

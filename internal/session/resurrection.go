@@ -321,7 +321,8 @@ func LoadResurrectionState(sessionName string) (*SessionState, error) {
 // ResurrectableInfo summarizes a resurrectable session for listing.
 type ResurrectableInfo struct {
 	Name        string    // Session name
-	WindowCount int       // Number of windows saved
+	WindowCount int       // Number of saved windows a restore brings back
+	Scratch     int       // How many of them are scratch panes
 	SavedAt     time.Time // Modification time of the state file
 	Space       string    // The space the session was filed under, or empty
 }
@@ -340,7 +341,15 @@ func ListResurrectableInfos() ([]ResurrectableInfo, error) {
 		if err != nil {
 			continue
 		}
-		info := ResurrectableInfo{Name: name, WindowCount: len(state.Windows), Space: state.Space}
+		info := ResurrectableInfo{Name: name, Space: state.Space}
+		for i := range state.Windows {
+			if w := &state.Windows[i]; w.restores() {
+				info.WindowCount++
+				if w.Scratch {
+					info.Scratch++
+				}
+			}
+		}
 		if path, err := getResurrectionPath(name); err == nil {
 			if fi, statErr := os.Stat(path); statErr == nil {
 				info.SavedAt = fi.ModTime()

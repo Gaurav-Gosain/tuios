@@ -83,8 +83,12 @@ type remoteSessionRow struct {
 	Name        string `json:"name"`
 	DisplayName string `json:"display_name,omitempty"`
 	WindowCount int    `json:"window_count"`
-	Attached    bool   `json:"attached,omitempty"`
-	Restored    bool   `json:"restored,omitempty"`
+	// ScratchCount is how many of the WindowCount windows are scratch panes,
+	// so a listing can name them apart. This daemon counts them from the
+	// host's window summaries. Omitted when zero.
+	ScratchCount int  `json:"scratch_count,omitempty"`
+	Attached     bool `json:"attached,omitempty"`
+	Restored     bool `json:"restored,omitempty"`
 	// Global marks a session meant to hold panes from more than one machine.
 	// It is carried across the link so every machine files the session the
 	// same way: a global session is in the rail's global group whichever
@@ -458,6 +462,7 @@ func sessionRowsOut(in []remoteSessionListRow) []remoteSessionRow {
 	left := remoteAgentHostMax
 	for _, r := range in {
 		r.remoteSessionRow.AgentState = rollUpAgentState(r.Windows)
+		r.remoteSessionRow.ScratchCount = ScratchPanes(r.Windows)
 		agents := agentPanes(r.Windows)
 		if len(agents) > left {
 			agents = agents[:left]
@@ -740,16 +745,17 @@ func localSessionRows(infos []SessionInfo) []remoteSessionRow {
 	out := make([]remoteSessionRow, 0, len(infos))
 	for _, s := range infos {
 		out = append(out, remoteSessionRow{
-			Name:        s.Name,
-			DisplayName: s.DisplayName,
-			WindowCount: s.WindowCount,
-			Attached:    s.Attached,
-			Restored:    s.Restored,
-			Global:      s.Global,
-			Space:       s.Space,
-			LastActive:  s.LastActive,
-			Created:     s.Created,
-			AgentState:  rollUpAgentState(s.Windows),
+			Name:         s.Name,
+			DisplayName:  s.DisplayName,
+			WindowCount:  s.WindowCount,
+			ScratchCount: ScratchPanes(s.Windows),
+			Attached:     s.Attached,
+			Restored:     s.Restored,
+			Global:       s.Global,
+			Space:        s.Space,
+			LastActive:   s.LastActive,
+			Created:      s.Created,
+			AgentState:   rollUpAgentState(s.Windows),
 		})
 	}
 	return out

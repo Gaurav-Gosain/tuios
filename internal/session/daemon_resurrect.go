@@ -232,21 +232,8 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		// folder, on its group's workspace. So the group is hidden until its
 		// key shows it, with the layout it had. A scratch pane saved as a
 		// popup, before groups had a workspace, moves to one here.
-		if w.Popup && !w.Scratch {
-			debugLog("[DEBUG] dropping restored popup %s, a popup lives only as long as its command", shortID(w.ID))
-			continue
-		}
-		// The rail pane is a client's, started from its config on attach.
-		// Restored, it would be a shell under a mark that says it runs the
-		// command, and the client would keep it.
-		if w.Rail != "" {
-			debugLog("[DEBUG] dropping restored rail pane %s, the client starts it again", shortID(w.ID))
-			continue
-		}
-		// A TML surface lives in the daemon, so the daemon that held it took
-		// it along. Its window would come back empty.
-		if w.Kind == WindowKindTML {
-			debugLog("[DEBUG] dropping restored TML window %s, its surface ended with the daemon", shortID(w.ID))
+		if !w.restores() {
+			debugLog("[DEBUG] dropping restored window %s: a popup, a rail pane or a TML surface does not come back", shortID(w.ID))
 			continue
 		}
 		if w.Scratch {
@@ -539,4 +526,16 @@ func legacyScratchWorkspace(state *SessionState, key string) int {
 		}
 	}
 	return freeScratchWorkspace(state)
+}
+
+// restores reports whether a restore brings the saved window back. A popup
+// lives only as long as its command, and a restore respawns a shell, so it
+// would be a floating box that nothing asked for. A scratch pane is not a
+// popup and comes back. The rail pane is a client's, started from its config
+// on attach: restored, it would be a shell under a mark that says it runs the
+// command. A TML surface lives in the daemon, so its window would come back
+// empty. The saved listing counts with the same test, so its count is what a
+// restore gives.
+func (w *WindowState) restores() bool {
+	return (!w.Popup || w.Scratch) && w.Rail == "" && w.Kind != WindowKindTML
 }

@@ -112,6 +112,11 @@ func TestRailPaneSection(t *testing.T) {
 	waitRailShows(t, term, "SZ 8 27", "the program sized to the rail")
 	snap("rail-pane")
 
+	// tuios ls does not call the rail pane a scratch pane.
+	if ls, err := tuiosCLI(t, base, "ls"); err != nil || strings.Contains(ls, "scratch") {
+		t.Fatalf("ASSERTION: tuios ls names the rail pane a scratch pane: %v\n%s", err, ls)
+	}
+
 	// One pane in the layout, and the rail pane only when asked for. Tiling
 	// is on, so a rail pane the tiler counted would halve the main pane.
 	if out, err := tuiosCLI(t, base, "set-layout", "-s", "e2e", "--tiling", "true"); err != nil {
