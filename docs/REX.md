@@ -70,6 +70,8 @@ Four more are written in `tuios.lua`:
 | --- | --- | --- |
 | `tuios_start_agent` | tuios: Start an Agent | Asks for the agent, the machine, the folder and the first prompt, then starts the agent in a new tuios pane and focuses it. See "Start an agent" |
 | `tuios_switch_session` | tuios: Switch or Attach a Session | Lists the tuios sessions. The tuios client in the focused pane switches to the session you pick. From a pane with no tuios client, a new Rex window attaches it |
+| `tuios_open_pane` | tuios: Show a Pane Here | Lists the tuios panes on this machine, and shows the one you pick in a new Rex split, with `tuios pane-view`. See "Show tuios panes in Rex" |
+| `tuios_mirror_session` | tuios: Mirror a Session | Opens a new Rex window with one split for each pane of a tuios session, each shown with `tuios pane-view` |
 | `tuios_answer` | tuios: Answer an Agent | Lists the agents that wait on an approval or a question, shows the answers of the one you pick, and sends the answer you pick. See "Answer an agent" |
 | `tuios_check` | tuios: Check the Rex Integration | Says which tuios the actions run, its version, the focused pane's session, whether the default agent is found, and whether Rex has the actions this tuios lists |
 
@@ -121,6 +123,24 @@ rex do tuios_switch_session session=api
 
 The go-to picker (`tuios_goto_picker`) is tuios's own, drawn in the focused
 pane. It also lists the agents, the workspaces and the panes.
+
+
+### Show tuios panes in Rex
+
+`tuios_open_pane` lists the tuios panes on this machine. The pane you pick
+shows in a new Rex split beside the focused block. The split runs
+`tuios pane-view`, so the pane gets Rex's scrollback and selection, and its
+agent state shows in Rex. Close the split, and the pane keeps running in
+tuios.
+
+`tuios_mirror_session` opens a new Rex window with one split for each pane
+of a tuios session, up to 8. It takes the session of the focused pane. When
+the focused pane shows no tuios session, Rex asks which one.
+
+```sh
+rex do tuios_open_pane session=work window=build
+rex do tuios_mirror_session session=work
+```
 
 ### Answer an agent
 

@@ -15,7 +15,7 @@ local M = {}
 
 -- M.version is the version of this file. tuios integration status compares it
 -- with the one the installed tuios ships.
-M.version = 7
+M.version = 8
 
 -- The Rex block kind that runs a terminal.
 local TERMINAL = "com.superlogical.terminal"
@@ -912,6 +912,131 @@ local function switch_session(ctx, args)
   return { session = name, window_id = w.window_id }
 end
 
+-- pane_block is a Rex terminal block that shows one tuios pane with tuios
+-- pane-view. The pane and its session keep running when the block closes.
+local function pane_block(session, window)
+  return rex.layout.block{
+    flavor = "com.superlogical.terminal.shell",
+    options = { command = { M.program(), "pane-view", "-s", session, "-w", window } },
+  }
+end
+
+-- M.pane_items are the rex.ui.pick items for the panes of this machine that
+-- tuios list-windows --all --json gives. Each id is the session, a tab, and
+-- the window id.
+function M.pane_items(listing)
+  local items = {}
+  for _, p in ipairs(type(listing) == "table" and type(listing.panes) == "table" and listing.panes or {}) do
+    if type(p) == "table" and filled(p.session) and filled(p.window_id) and not filled(p.host) then
+      local title = filled(p.name) and p.name or filled(p.title) and p.title or p.window_id:sub(1, 8)
+      local sub = p.session
+      if filled(p.agent_state) then
+        sub = sub .. ", " .. p.agent_state
+      end
+      items[#items + 1] = { id = p.session .. "\t" .. p.window_id, title = one_line(title, 80), subtitle = sub, icon = "terminal" }
+    end
+  end
+  return items
+end
+
+-- open_pane is tuios_open_pane: pick a tuios pane of this machine and show
+-- it in a new Rex split beside the focused block. args.session and
+-- args.window skip the question.
+local function open_pane(ctx, args)
+  args = args or {}
+  local session, window = args.session, args.window
+  if not (filled(session) and filled(window)) then
+    local items = M.pane_items(json_call({ "list-windows", "--all", "--json" }))
+    if #items == 0 then
+      error("tuios has no pane on this machine. Start tuios, then run this again.", 0)
+    end
+    local v, why, detail = rex.ui.pick{ title = "Show a tuios pane", placeholder = "Filter panes", items = items, confirm = "Show it here" }
+    if v == nil then
+      if why == "cancelled" then
+        return { cancelled = true }
+      end
+      unanswered(why, detail, "Give the pane as args: session and window.")
+    end
+    session, window = v:match("^(.-)\t(.*)$")
+  end
+  local r, err = rex.session.new_split{
+    anchor_id = ctx.block_id, direction = "horizontal", side = "after", focus = true,
+    layout = pane_block(session, window),
+  }
+  if r == nil then
+    error("Rex could not open a split: " .. tostring(err), 0)
+  end
+  return { session = session, window = window, block_ids = r.block_ids }
+end
+
+-- M.mirror_max is the most panes tuios_mirror_session shows in one window.
+M.mirror_max = 8
+
+-- M.mirror_layout is a layout with one pane-view block for each window of
+-- the session: halves side by side, then halves one above the other.
+function M.mirror_layout(session, windows, side_by_side)
+  if #windows == 1 then
+    return pane_block(session, windows[1])
+  end
+  local a, b = {}, {}
+  for i, w in ipairs(windows) do
+    if i <= math.ceil(#windows / 2) then
+      a[#a + 1] = w
+    else
+      b[#b + 1] = w
+    end
+  end
+  local split = side_by_side and rex.layout.horizontal or rex.layout.vertical
+  return split(#a / #windows, M.mirror_layout(session, a, not side_by_side), M.mirror_layout(session, b, not side_by_side))
+end
+
+-- mirror_session is tuios_mirror_session: a new Rex window with one split
+-- for each pane of a tuios session, each shown with tuios pane-view. The
+-- session is args.session, else the one the focused pane shows, else Rex
+-- asks.
+local function mirror_session(ctx, args)
+  args = args or {}
+  local session = args.session
+  if not filled(session) then
+    local ok, s = pcall(M.session_of, ctx)
+    session = ok and s or nil
+  end
+  if not filled(session) then
+    local items = {}
+    for _, x in ipairs(json_call({ "ls", "--json" })) do
+      if type(x) == "table" and filled(x.name) then
+        local n = tonumber(x.window_count) or 0
+        items[#items + 1] = { id = x.name, title = x.name, subtitle = n .. (n == 1 and " pane" or " panes"), icon = "terminal" }
+      end
+    end
+    if #items == 0 then
+      error("tuios has no session on this machine. Start tuios, then run this again.", 0)
+    end
+    local v, why, detail = rex.ui.pick{ title = "Mirror a tuios session", placeholder = "Filter sessions", items = items }
+    if v == nil then
+      if why == "cancelled" then
+        return { cancelled = true }
+      end
+      unanswered(why, detail, "Give the session as an arg: session.")
+    end
+    session = v
+  end
+  local windows = {}
+  for _, w in ipairs(json_call({ "list-windows", "-s", session, "--json" }).windows or {}) do
+    if type(w) == "table" and filled(w.window_id) and w.minimized ~= true and #windows < M.mirror_max then
+      windows[#windows + 1] = w.window_id
+    end
+  end
+  if #windows == 0 then
+    error("The tuios session " .. session .. " has no pane to show.", 0)
+  end
+  local w, err = rex.session.new_window{ layout = M.mirror_layout(session, windows, true) }
+  if w == nil then
+    error("Rex could not open a window: " .. tostring(err), 0)
+  end
+  return { session = session, window_id = w.window_id, block_ids = w.block_ids }
+end
+
 -- check is tuios_check: which tuios the actions run, its version, the
 -- focused pane's session, whether Start an Agent finds its agent, and
 -- whether the actions Rex loaded are the ones that tuios lists now.
@@ -987,7 +1112,10 @@ function M.actions(list)
   if list ~= nil then
     rows = list.actions
   end
-  local out, seen, clash = {}, { tuios_start_agent = true, tuios_switch_session = true, tuios_answer = true, tuios_check = true }, {}
+  local out, seen, clash = {}, {
+    tuios_start_agent = true, tuios_switch_session = true, tuios_open_pane = true,
+    tuios_mirror_session = true, tuios_answer = true, tuios_check = true,
+  }, {}
   for _, a in ipairs(rows) do
     local name = type(a) == "table" and type(a.name) == "string" and a.name or ""
     local rexname = name ~= "" and M.rex_name(name) or nil
@@ -1031,6 +1159,33 @@ function M.actions(list)
       },
     },
     run = switch_session,
+  }
+  out[#out + 1] = {
+    name = "tuios_open_pane",
+    title = "tuios: Show a Pane Here",
+    description = "Pick a tuios pane on this machine and show it in a new Rex split, with tuios pane-view. The pane keeps running when the split closes.",
+    keywords = "tuios pane show view split open",
+    args = {
+      type = "object",
+      properties = {
+        session = { type = "string", description = "The pane's session. Needs window." },
+        window = { type = "string", description = "The pane: its id or its name. Needs session." },
+      },
+    },
+    run = open_pane,
+  }
+  out[#out + 1] = {
+    name = "tuios_mirror_session",
+    title = "tuios: Mirror a Session",
+    description = "Open a new Rex window with one split for each pane of a tuios session, each shown with tuios pane-view.",
+    keywords = "tuios session mirror panes window view",
+    args = {
+      type = "object",
+      properties = {
+        session = { type = "string", description = "The session. Without it: the one in the focused pane, else Rex asks." },
+      },
+    },
+    run = mirror_session,
   }
   out[#out + 1] = {
     name = "tuios_answer",

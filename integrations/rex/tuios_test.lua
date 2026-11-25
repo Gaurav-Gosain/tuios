@@ -44,6 +44,8 @@ local att_tbl, peek_tbl, respond_mode = { items = {} }, {}, "ok"
 -- What hosts, list-windows and ls give, for Start an Agent and the session
 -- picker, and the Rex windows switch_session opens.
 local hosts_tbl, windows_tbl, ls_tbl, rex_windows = { hosts = {} }, { windows = {} }, {}, {}
+-- What list-windows --all gives, and the Rex splits tuios_open_pane opens.
+local panes_tbl, rex_splits = { panes = {} }, {}
 -- ui_answers is the queue of what the person answers to each rex.ui call,
 -- as { value, reason, detail }. ui_asked records each call.
 local ui_answers, ui_asked = {}, {}
@@ -168,6 +170,9 @@ rex = {
     if argv[2] == "hosts" then
       return { ok = true, code = 0, stdout = "HOSTS", stderr = "" }
     end
+    if argv[2] == "list-windows" and argv[3] == "--all" then
+      return { ok = true, code = 0, stdout = "PANES", stderr = "" }
+    end
     if argv[2] == "list-windows" then
       return { ok = true, code = 0, stdout = "WINDOWS", stderr = "" }
     end
@@ -199,13 +204,29 @@ rex = {
     new_window = function(spec)
       assert(type(spec) == "table" and type(spec.layout) == "table", "new_window without a layout")
       rex_windows[#rex_windows + 1] = spec
-      return { window_id = "window:" .. #rex_windows }
+      return { window_id = "window:" .. #rex_windows, block_ids = { "block:w" .. #rex_windows } }
+    end,
+    -- new_split holds to session.new_split: a direction, a side and a layout.
+    new_split = function(spec)
+      assert(type(spec) == "table" and type(spec.layout) == "table", "new_split without a layout")
+      assert(spec.direction == "horizontal" or spec.direction == "vertical", "new_split without a direction")
+      assert(spec.side == "before" or spec.side == "after", "new_split without a side")
+      rex_splits[#rex_splits + 1] = spec
+      return { anchor_id = spec.anchor_id, block_ids = { "block:s" .. #rex_splits }, split_ids = {}, revision = 1 }
     end,
   },
   layout = {
     block = function(b)
       assert(type(b.flavor) == "string", "a block without a flavor")
       return { block = b }
+    end,
+    horizontal = function(ratio, a, b)
+      assert(ratio > 0 and ratio < 1 and type(a) == "table" and type(b) == "table", "a bad horizontal split")
+      return { split = { direction = "horizontal", ratio = ratio, before = a, after = b } }
+    end,
+    vertical = function(ratio, a, b)
+      assert(ratio > 0 and ratio < 1 and type(a) == "table" and type(b) == "table", "a bad vertical split")
+      return { split = { direction = "vertical", ratio = ratio, before = a, after = b } }
     end,
   },
   block = {
@@ -227,6 +248,9 @@ rex = {
       end
       if text == "WINDOWS" then
         return windows_tbl
+      end
+      if text == "PANES" then
+        return panes_tbl
       end
       if text == "LS" then
         return ls_tbl
@@ -293,7 +317,7 @@ clients = {
 tuios.setup{ bin = "/opt/bin/tuios", keys = { tuios_prefix_inbox = "cmd+shift+a", tuios_mail = "cmd+shift+m" } }
 argv_is(execs[1], { "/opt/bin/tuios", "actions", "--json" }, "setup asks tuios for its actions")
 argv_is(order, { "tuios_new_window", "tuios_prefix_inbox", "tuios_prefix_mail", "tuios_prefix_next_attention", "tuios_goto_picker",
-  "tuios_prefix_selection", "tuios_start_agent", "tuios_switch_session", "tuios_answer", "tuios_check" }, "one action per entry, in its order, once, without new_agent or a bad name")
+  "tuios_prefix_selection", "tuios_start_agent", "tuios_switch_session", "tuios_open_pane", "tuios_mirror_session", "tuios_answer", "tuios_check" }, "one action per entry, in its order, once, without new_agent or a bad name")
 check(actions.tuios_prefix_inbox.title == "tuios: Agents: What Needs You", "title in Rex's style: " .. tostring(actions.tuios_prefix_inbox.title))
 check(actions.tuios_goto_picker.title == "tuios: Go To: An Agent, Session, Workspace or Pane", "go-to title: " .. tostring(actions.tuios_goto_picker.title))
 check(actions.tuios_new_window.description == "desc of new_window" and actions.tuios_new_window.category == "tuios", "description and category")
@@ -347,7 +371,7 @@ start_fail = false
 local c = actions.tuios_check.run(ctx, {})
 check(c.tuios == "/opt/bin/tuios" and c.version == "tuios version 9.9.9" and c.session == "work", "tuios_check reports the program, version and session")
 check(c.agent == "claude" and c.agent_installed == true, "tuios_check says the default agent is found")
-check(c.actions == 11 and c.actions_current == true and c.actions_note == nil, "tuios_check says Rex has the list tuios gives: " .. tostring(c.actions))
+check(c.actions == 13 and c.actions_current == true and c.actions_note == nil, "tuios_check says Rex has the list tuios gives: " .. tostring(c.actions))
 list_tbl.actions[#list_tbl.actions + 1] = row("layout_off", "Layout: off", "Layout")
 c = actions.tuios_check.run(ctx, {})
 check(c.actions_current == false, "tuios_check sees a list that changed since Rex loaded it")
@@ -366,7 +390,7 @@ c = actions.tuios_check.run(ctx, {})
 check(tostring(c.keys_note):find("tuios_nope", 1, true), "tuios_check names the unbound key: " .. tostring(c.keys_note))
 
 -- Each way the list can fail: no error, the fallback, and a note.
-local fallback = { "tuios_goto_picker", "tuios_prefix_inbox", "tuios_prefix_mail", "tuios_prefix_next_attention", "tuios_start_agent", "tuios_switch_session", "tuios_answer", "tuios_check" }
+local fallback = { "tuios_goto_picker", "tuios_prefix_inbox", "tuios_prefix_mail", "tuios_prefix_next_attention", "tuios_start_agent", "tuios_switch_session", "tuios_open_pane", "tuios_mirror_session", "tuios_answer", "tuios_check" }
 for _, case in ipairs({
   { mode = "old", note = "older than this tuios.lua" },
   { mode = "garbage", note = "gave no list" },
@@ -780,6 +804,45 @@ reset_rex()
 ok = pcall(tuios.setup, { bin = "/opt/bin/tuios", keys = "suggested" })
 check(ok and binds["tuios/a"] == "tuios_prefix_inbox" and binds["ctrl+cmd+t"] == "client.mode.enter", "a Rex without rex.mode still loads and binds")
 rex.mode = rex_mode
+
+-- Show a Pane Here: the pick lists this machine's panes, and the split runs
+-- pane-view on the one picked, beside the focused block.
+reset_rex()
+tuios.setup{ bin = "/opt/bin/tuios" }
+panes_tbl = { panes = {
+  { session = "work", window_id = "w1", name = "build" },
+  { session = "docs", window_id = "w2", title = "vim", agent_state = "working" },
+  { host = "box", session = "far", window_id = "w3", name = "remote" },
+} }
+ui_asked, ui_answers, ui_strict = {}, { { "docs\tw2" } }, true
+local _, shown = try(actions.tuios_open_pane.run, ctx, {})
+local split = rex_splits[#rex_splits] or {}
+local pick = ui_asked[1] and ui_asked[1].spec or { items = {} }
+check(#pick.items == 2 and pick.items[2].title == "vim" and pick.items[2].subtitle == "docs, working", "the pick lists this machine's panes only")
+check(split.anchor_id == "b1" and split.direction == "horizontal" and split.side == "after" and split.focus == true, "the split goes beside the focused block")
+argv_is(split.layout and split.layout.block.options.command, { "/opt/bin/tuios", "pane-view", "-s", "docs", "-w", "w2" }, "the split runs pane-view on the picked pane")
+check(type(shown) == "table" and shown.session == "docs" and shown.block_ids[1] == "block:s1", "the action names the pane and the new block")
+ui_asked, ui_answers = {}, {}
+try(actions.tuios_open_pane.run, ctx, { session = "work", window = "build" })
+check(#ui_asked == 0, "args skip the pick")
+argv_is(rex_splits[#rex_splits].layout.block.options.command, { "/opt/bin/tuios", "pane-view", "-s", "work", "-w", "build" }, "args name the pane")
+ui_strict = false
+
+-- Mirror a Session: the focused pane's session, one block per pane that is
+-- not minimized, halves side by side, then one above the other.
+windows_tbl = { windows = { { window_id = "a" }, { window_id = "b" }, { window_id = "c", minimized = true }, { window_id = "d" } } }
+execs = {}
+local _, mirrored = try(actions.tuios_mirror_session.run, ctx, {})
+local layout = rex_windows[#rex_windows].layout
+local function cmd_of(node)
+  return node and node.block and node.block.options.command[6]
+end
+check(type(mirrored) == "table" and mirrored.session == "work", "the mirror shows the focused pane's session")
+argv_is(execs[#execs], { "/opt/bin/tuios", "list-windows", "-s", "work", "--json" }, "the mirror lists the session's panes")
+check(layout.split and layout.split.direction == "horizontal" and math.abs(layout.split.ratio - 2 / 3) < 1e-9, "the panes split side by side first: " .. tostring(layout.split and layout.split.ratio))
+local left = layout.split and layout.split.before.split
+check(left and left.direction == "vertical" and cmd_of(left.before) == "a" and cmd_of(left.after) == "b", "then one above the other")
+check(cmd_of(layout.split and layout.split.after) == "d", "a minimized pane is left out")
 
 if failed > 0 then
   io.stderr:write(failed .. " checks failed\n")

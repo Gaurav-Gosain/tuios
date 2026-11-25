@@ -318,7 +318,7 @@ func TestRexActionsComeFromTuios(t *testing.T) {
 		}
 		return home
 	}
-	fallback := []string{"tuios_goto_picker", "tuios_prefix_inbox", "tuios_prefix_mail", "tuios_prefix_next_attention", "tuios_start_agent", "tuios_switch_session", "tuios_answer", "tuios_check"}
+	fallback := []string{"tuios_goto_picker", "tuios_prefix_inbox", "tuios_prefix_mail", "tuios_prefix_next_attention", "tuios_start_agent", "tuios_switch_session", "tuios_open_pane", "tuios_mirror_session", "tuios_answer", "tuios_check"}
 
 	t.Run("from the binary", func(t *testing.T) {
 		home := newHome(t, tuiosBin)
@@ -344,7 +344,7 @@ func TestRexActionsComeFromTuios(t *testing.T) {
 				want = append(want, "tuios_"+a.Name)
 			}
 		}
-		want = append(want, "tuios_start_agent", "tuios_switch_session", "tuios_answer", "tuios_check")
+		want = append(want, "tuios_start_agent", "tuios_switch_session", "tuios_open_pane", "tuios_mirror_session", "tuios_answer", "tuios_check")
 		for _, h := range list.Harnesses {
 			enum = append(enum, h.Command)
 		}

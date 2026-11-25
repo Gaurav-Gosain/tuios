@@ -5,7 +5,8 @@
 asks `tuios actions --json` for the actions and defines one Rex action per
 row, named `tuios_` and the tuios action, and one per action of your own
 config.toml, `tuios_user_NAME`. It adds Start an Agent, which asks for the
-harness, machine, folder and prompt in Rex's palette, Switch or Attach a
+harness, machine, folder and prompt in Rex's palette, Show a Pane Here and
+Mirror a Session, which show tuios panes in Rex splits, Switch or Attach a
 Session, Answer an Agent, which answers an agent that waits on an approval
 or a question, and a check. Keys are off until you choose some; `keys = "suggested"` binds
 `ctrl+cmd+t`, which enters a `tuios` key mode that holds the tuios keys. Each action works on the tuios session
