@@ -506,7 +506,7 @@ func (m *model) footer() string {
 		return ink(c.accent, m.toast)
 	}
 	keys := [][2]string{{"j k", "build"}, {"h l", "job"}, {"/", "search"}, {"R", "run again"}, {"o", "open"},
-		{"c", "copy link"}, {"G", "repository"}, {"q", "quit"}}
+		{"G", "repository"}, {"q", "quit"}}
 	var parts []string
 	for _, k := range keys {
 		parts = append(parts, m.chip(ink(c.text, bold(k[0])), c.raised, "")+" "+ink(c.dim, k[1]))
@@ -893,7 +893,7 @@ func (m *model) jobLines(b Build, fc forecast, w int) []string {
 	}
 	prev := m.beforeJobs(b)
 	nameW := min(30, max(14, w/4))
-	durW, prevW := 18, 22
+	durW, prevW := 17, 21
 	if prev == nil {
 		prevW = 0
 	}
@@ -1177,9 +1177,12 @@ func (m *model) logPanel(w, h int) []string {
 			cursor = "▏"
 		}
 		field := m.chip(ink(c.accent, "/")+" "+ink(c.text, fit(s.query+cursor, 24)), c.raised, c.surface)
-		second = spread2(field+"  "+found, ink(c.faint, "ctrl+n ctrl+p step · esc closes"), inner)
+		second = field + "  " + found
+		if hint := ink(c.faint, "ctrl+n ctrl+p step · esc closes"); ansi.StringWidth(second)+ansi.StringWidth(hint)+2 <= inner {
+			second = spread2(second, hint, inner)
+		}
 	} else {
-		acts := action("c", "copy link") + " " + action("o", "open")
+		acts := action("c", "copy link")
 		if b, ok := m.selected(); ok && (b.State == "failure" || b.State == "cancelled") {
 			acts += " " + action("R", "run again")
 		}
