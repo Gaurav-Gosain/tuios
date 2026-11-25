@@ -393,7 +393,7 @@ func TestSSHServerIdleTimeout(t *testing.T) {
 	home := xdgDir(base, "HOME")
 
 	idle := startSSHLogin(t, key, home, srv.port, false)
-	alive := startSSHLogin(t, key, home, srv.port, true)
+	keepalive := startSSHLogin(t, key, home, srv.port, true)
 	loginOf := func(name string, l *sshLogin) time.Time {
 		select {
 		case at := <-l.loggedIn:
@@ -406,7 +406,7 @@ func TestSSHServerIdleTimeout(t *testing.T) {
 		return time.Time{}
 	}
 	idleAt := loginOf("idle", idle)
-	aliveAt := loginOf("keepalive", alive)
+	keepaliveAt := loginOf("keepalive", keepalive)
 
 	// 1. The connection with no traffic is closed after the idle timeout.
 	select {
@@ -427,9 +427,9 @@ func TestSSHServerIdleTimeout(t *testing.T) {
 
 	// 2. The connection with traffic outlives two idle timeouts.
 	select {
-	case <-alive.exited:
+	case <-keepalive.exited:
 		t.Fatalf("ASSERTION: a connection that sends a keepalive every second was closed %s after its login, with idle_timeout = %s:\n%s",
-			alive.endedAt.Sub(aliveAt).Round(10*time.Millisecond), sshLimitIdle, alive.stderr)
-	case <-time.After(time.Until(aliveAt.Add(2 * sshLimitIdle))):
+			keepalive.endedAt.Sub(keepaliveAt).Round(10*time.Millisecond), sshLimitIdle, keepalive.stderr)
+	case <-time.After(time.Until(keepaliveAt.Add(2 * sshLimitIdle))):
 	}
 }
