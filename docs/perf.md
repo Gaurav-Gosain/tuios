@@ -6951,3 +6951,60 @@ goroutines waited for the lock in a 3 s trace is about the same (6.8 s and
   pane reached its last line in 1.3 s instead of 6.4 s, and the client skipped
   the cut bytes and lost that history. That trade waits for the history to
   be read from the daemon.
+
+## 2026-11 a flooding pane is sent as frames
+
+Each pane's bytes were parsed twice: by the daemon's emulator and by the
+client's. Under a flood the client parsed bytes it never showed, and the panes
+it did show waited behind them.
+
+### What changed
+
+- A client that lists the `pty-frames` feature asks for frames when it
+  subscribes to a pane. A stream that sends more than 512 KiB in 50 ms, or
+  whose client reports that it is 512 KiB behind (`MsgPTYLag`), takes no
+  more bytes. The daemon sends a frame of the pane's screen 120 times a
+  second instead (`MsgPTYFrame`), when the screen moved.
+- The pane goes back to bytes once it makes less than 32 KiB in each of three
+  turns. The stream is rebuilt from the last frame's position, as a client
+  that restored a snapshot subscribes.
+- A frame carries no history. The client drops its own and reads the lines
+  above the screen from the daemon by number (`remote-history`).
+- A pane that drew a picture in the last two seconds is not sent as frames,
+  and a picture ends them. A client that records the stream gets bytes only.
+
+### Numbers
+
+`TestPerfSmoothDrain` and `TestPerfSmooth`, 207x55, max_fps 120, three
+rounds of each build interleaved. Medians.
+
+| | before | after |
+|---|---|---|
+| client CPU per MB: yes / seq / cat | 29.0 / 38.3 / 12.7 ms | 6.1 / 11.4 / 3.9 ms |
+| client CPU per MB: 4 / 9 busy panes | 34.6 / 32.5 ms | 8.1 / 17.1 ms |
+| daemon CPU per MB: yes / seq / cat | 50.6 / 61.5 / 15.5 ms | 50.7 / 65.0 / 14.5 ms |
+| daemon CPU per MB: 4 / 9 busy panes | 46.8 / 43.2 ms | 51.4 / 46.2 ms |
+| frames written while one pane floods: yes / seq | 223 / 176 | 294 / 313 |
+| frame p99 while one pane floods: seq | 18.9 ms | 10.1 ms |
+| key in the flooded pane: p50 / p99 | 3.0 / 17.0 ms | 2.9 / 8.6 ms |
+| key with 4 busy panes: p50 / p99 | 20.8 / 47.6 ms | 12.6 / 27.4 ms |
+| key with 9 busy panes: p50 / p99 | 44.1 / 78.8 ms | 27.8 / 61.6 ms |
+| client CPU with 9 busy panes | 2454 ms/s | 1053 ms/s |
+
+The idle test passes unchanged. The binary is 24 KiB larger.
+
+### Measured and deliberately not changed
+
+- **60 frames a second.** The first build sent 60. A lone flooded pane then
+  got fewer frames than with bytes (193 against 286 in a drain of `yes`),
+  because a frame waits for the emulator lock while a large batch is parsed.
+  At 120 the client CPU per MB is about twice the 60 figure and still a
+  third to a half of what bytes cost.
+- **The daemon's CPU per MB with 4 and 9 busy panes** is 7 to 10% higher. It
+  is the same at 60 and 120 frames a second, and frames are under 2% of the
+  daemon's samples in a profile of 9 busy panes, so it is not the capture.
+  Not explained yet.
+- **A lone `yes` pane in the timed case** writes 79 frames a second
+  against 103. The drain of the same pane writes more frames than before. The
+  timed case keeps the daemon parsing all the time, and a frame waits for the
+  emulator lock.

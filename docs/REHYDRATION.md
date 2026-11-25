@@ -720,7 +720,28 @@ it holds asks the daemon for a page of rows above a given position. The packed
 form is what makes such a page cheap, and the `have` field is already the
 client telling the daemon how much it holds; the missing piece is a request
 that names a row range instead of a count, and a scrollback anchor the client
-can hold across a page arriving. Nothing here is built yet.
+can hold across a page arriving.
+
+The request is built: a client reads the lines it does not hold by number
+(`MsgReadHistory`, the `remote-history` feature). The client still keeps
+`scrollback_lines` of its own.
+
+## A pane sent as frames
+
+A pane that floods can be sent to a client as frames of its screen instead of
+bytes (`MsgPTYFrame`, the `pty-frames` feature,
+`internal/session/pty_frames.go`). Each frame is a snapshot without history,
+with the stream position it ends at in `Seq`. The client applies it as a
+route applies a snapshot: it drops the output it has queued, takes the
+emulator to the frame's size and applies the state. It also drops its own
+history, because the frame does not say which lines scrolled off since the
+last bytes. The lines above the screen are then read from the daemon by
+number.
+
+When the pane is quiet again, the daemon rebuilds the stream from the last
+frame's `Seq` as `SubscribeFromSnapshot` does. So the invariant holds: the
+client holds the stream up to `Seq` by the frame, and gets the bytes after
+it.
 
 ## The ring's size
 
