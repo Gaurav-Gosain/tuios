@@ -316,6 +316,10 @@ func NewEmulator(w, h int) *Emulator {
 	t.registerModifyOtherKeysHandlers()
 
 	t.semanticMarkers = NewSemanticMarkerList(10000)
+	// A mark moves with the rows a line shift moves on the main screen.
+	t.scrs[0].lineShift = func(y, n int, area uv.Rectangle) {
+		t.semanticMarkers.moveRows(t.ScrollbackLen(), y, n, area)
+	}
 
 	// Wire scrollback trim to semantic markers adjustment
 	if sb := t.scrs[0].Scrollback(); sb != nil {

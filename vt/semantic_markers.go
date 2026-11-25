@@ -4,6 +4,8 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+
+	uv "github.com/charmbracelet/ultraviolet"
 )
 
 // SemanticMarkerType represents an OSC 133 semantic zone marker type.
@@ -193,6 +195,34 @@ func (l *SemanticMarkerList) RemoveOnScreen(scrollbackLen int) {
 		}
 	}
 	l.setMarkersLocked(l.markers[:n])
+}
+
+// moveRows follows a line shift on the screen: n blank rows inserted at
+// screen row y when n > 0, or n rows deleted there when n < 0, inside area,
+// the scroll region and its margins. base is the scrollback length, which
+// turns a marker's line into a screen row.
+//
+// A marker on a row that moves goes with it when its column is inside the
+// margins, as the cells it marks do. A marker on a row that the shift deletes
+// or pushes out of the region is removed with the row.
+func (l *SemanticMarkerList) moveRows(base, y, n int, area uv.Rectangle) {
+	if n == 0 || !l.nonEmpty.Load() {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	kept := l.markers[:0]
+	for _, m := range l.markers {
+		row := m.AbsLine - l.trimmed - base
+		if row >= y && row < area.Max.Y && m.Col >= area.Min.X && m.Col < area.Max.X {
+			if row+n >= area.Max.Y || row < y-n {
+				continue
+			}
+			m.AbsLine += n
+		}
+		kept = append(kept, m)
+	}
+	l.setMarkersLocked(kept)
 }
 
 // AdjustForScrollbackTrim moves the list's origin when scrollback lines are
