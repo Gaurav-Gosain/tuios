@@ -45,7 +45,7 @@ func report(t *testing.T, bugs backendBugs, problems []string) {
 // Known bugs, by what causes them.
 var (
 	reprintArmsWrap = backendBugs{ghostty: "libghostty-vt arms a wrap only at the right margin, and the restore cannot set the margins after that without DECRC, which would overwrite the guest's saved cursor"}
-	pureSkinTone    = backendBugs{pure: "the pure emulator takes the width of x/ansi, which keeps a narrow base one cell wide"}
+	pureSkinTone    = backendBugs{pure: "the pure emulator measures a cluster with x/ansi, as the compositor does, and x/ansi keeps a narrow base one cell wide; the two must agree, so this waits for a width both use"}
 )
 
 func newBackend(t *testing.T, cols, rows int, in string) vt.Terminal {
