@@ -51,10 +51,12 @@ pkgs.buildGo127Module rec {
   # go.work makes the app and the Go libraries in this repository (such as
   # progstatus/) one workspace, so this build uses the library folders, as CI
   # does. go mod vendor refuses a workspace, so the module derivation runs go
-  # work vendor. The e2e suite leaves the workspace first, so its test
-  # dependencies stay out of the vendor directory and out of vendorHash.
+  # work vendor. The e2e suite and the CI plugin leave the workspace first,
+  # so their dependencies stay out of the vendor directory and out of
+  # vendorHash.
   postPatch = ''
     go work edit -dropuse=./e2e/tui
+    go work edit -dropuse=./plugins/ci
   '';
   modBuildPhase = ''
     runHook preBuild

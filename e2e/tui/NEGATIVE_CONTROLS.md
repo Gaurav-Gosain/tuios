@@ -12956,6 +12956,19 @@ Run on 2026-11-01 on macOS arm64, on `upstream/main` at `4c95caa50` plus the bra
 ## plugins/pr-status
 
 `TestPluginPRStatus` runs the shipped folder against a fake `gh`. Control, run on 2026-11-02: the saved text is never reused. It fails with "gh ran 2 times for two focuses in a minute". **caught**
+## plugins/ci
+
+`TestPluginCI` builds the CI plugin and runs it in a tuios pane against a fake `gh` (`fakeGH`) that serves recorded API answers, with an ETag. Run on 2026-11-25 on Linux, each control against the branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| The runs of one commit are one build | `builds` keys each run by its id | "the running build with its estimate" | **caught** |
+| The estimate comes from the jobs of earlier builds | `forecastOf` gets no earlier builds | "the running build with its estimate" (it says about 6m left) | **caught** |
+| A failed build opens on the failed job | `pickJob` without the rule for a failed job | "the failed build at its failing test" | **caught** |
+| The log opens at the failing test, not at the exit line | `findFailures` gives only the exit line | "the failed build at its failing test" | **caught** |
+| A keeps only the builds that run | `shown` ignores `activeOnly` | "the running builds with A" | **caught** |
+| Nothing polls while no build runs | `schedule` polls with nothing running | "the plugin called gh 1 times in 10 s with nothing running" | **caught** |
+
 ## The host title follows the focused pane (#1064)
 
 `TestHostTitleFollowsFocusedPane` sets `appearance.host_title` on an attached

@@ -1,0 +1,21 @@
+api = 1
+id = "tuios.ci"
+name = "CI"
+version = "0.1.0"
+description = "Shows the GitHub Actions builds of the focused pane's repository, with the time left and the failing test"
+platforms = ["linux", "macos"]
+
+# An install from this folder or from GitHub builds bin/tuios-ci, so it
+# needs Go.
+[[build]]
+command = ["go", "build", "-trimpath", "-ldflags=-s -w", "-o", "bin/tuios-ci", "."]
+
+# A pane runs only when you open it, and it asks GitHub only while a build
+# runs.
+[[process]]
+id = "builds"
+run = "pane"
+title = "Builds"
+description = "The builds of the focused pane's repository"
+placement = "split"
+command = ["bin/tuios-ci"]

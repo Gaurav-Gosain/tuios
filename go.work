@@ -10,6 +10,7 @@ use (
 	./loom
 	./nitpick
 	./plot
+	./plugins/ci
 	./progstatus
 	./shot
 	./sketch
