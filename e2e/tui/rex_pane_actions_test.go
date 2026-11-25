@@ -16,7 +16,12 @@ import (
 // runs the rex CLI against it.
 func rexServerWithEnv(t *testing.T, env []string) func(args ...string) string {
 	t.Helper()
-	rex := needTool(t, "rex")
+	// Rex has no package the e2e workflow can install. The tests that run
+	// it skip where it is missing, as TestRexPaneDetachAndReattach does.
+	rex, err := exec.LookPath("rex")
+	if err != nil {
+		t.Skip("rex is not on PATH")
+	}
 	dir, err := os.MkdirTemp("", "rx")
 	if err != nil {
 		t.Fatal(err)
