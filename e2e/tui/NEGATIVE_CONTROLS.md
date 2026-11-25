@@ -9731,13 +9731,14 @@ from `e2e/tui`.
 
 ### The link half (GHSA-78rj-pghh-vh42)
 
-The tests above are the pane half. A report over a link is about a pane on this machine, and the state it sets is what the typing rule reads, so it needs `respond` in the link's policy. A build with the branch below cut passes the two tests above and `TestAPaneOverALinkCannotAnswerAPrompt`. `TestALinkCannotMarkAPaneOffItsPrompt` in `internal/session/link_policy_test.go` is a kept unit test of that boundary. It puts a pane on `needs_input`, then reports `working` for it with `set-agent-state` over a link with the default policy, which allows everything but `respond`. The report must be refused, naming answering prompts, and the pane must stay on `needs_input`. The positive half is in the same fixture: a link whose policy adds `respond` reports `working` and the pane reads it, and the person on this machine reports `idle`.
+The tests above are the pane half. A report over a link is about a pane on this machine, and the state it sets is what the typing rule reads, so it needs `respond` in the link's policy. A build with the branch below cut passes the two tests above and `TestAPaneOverALinkCannotAnswerAPrompt`. `TestALinkCannotMarkAPaneOffItsPrompt` in `internal/session/link_policy_test.go` is a kept unit test of that boundary. It puts a pane on `needs_input`, then reports `working` for it with `set-agent-state` over a link with the default policy, which allows everything but `respond`. The report must be refused, naming answering prompts, and the pane must stay on `needs_input`. The positive half is in the same fixture: a link whose policy adds `respond` reports `working` and the pane reads it, and the person on this machine puts the second pane on `needs_input` and reports `working` for it, and that pane reads it. The person starts from a pane of its own, so its move off the prompt does not follow one a link made.
 
-Run on 2026-11-20 on macOS (arm64), based on upstream/main at 079302be4. The branch passes it.
+Run on 2026-11-20 on macOS (arm64), based on upstream/main at 079302be4. The branch passes it. After the person was given its own pane, both rows were run on 2026-11-25 on macOS (arm64), on the same base. The first row gives the same result as before.
 
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
 | The `cs.viaLink && grantKind(verb) == scopeSelf` branch of `checkGrants` (`internal/session/pane_grants.go`) made `if false && ...` | `a_link_without_respond`: "ASSERTION: a link without respond moved the pane on a prompt to working", "ASSERTION: set-agent-state over a link without respond: map[id:1 result:map[applied:true message: source:report state:working type:agent_state_set]]". `a_link_that_may_respond` and `the_person` pass | **caught** |
+| A fix that reaches too far: `setAgentState` (`internal/session/verb_handlers.go`) refuses a report from a caller not over a link that moves a pane off `needs_input` | `the_person`: "expected result, got error: map[code:forbidden message:...]". The two link subtests pass. The earlier form of `the_person`, which reported `idle` for the pane the link had moved to `working`, passes this control | **caught** |
 
 Repeat from the repository root with `go test -count=1 -run '^TestALinkCannotMarkAPaneOffItsPrompt$' -v ./internal/session/`.
 
