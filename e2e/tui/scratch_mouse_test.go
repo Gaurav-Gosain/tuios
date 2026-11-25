@@ -358,8 +358,21 @@ func TestFloatKeyResizeKeepsTheTiles(t *testing.T) {
 	if err := term.WaitForText("Window: floating", uiTimeout); err != nil {
 		t.Fatalf("the pane never floated: %v\n%s", err, term.Snapshot())
 	}
-	time.Sleep(500 * time.Millisecond)
-	float, tile := floatAndTile(t, base, "after the float")
+	// waitFloat waits until the daemon's floating and tiled panes are as
+	// done wants them, and returns them.
+	waitFloat := func(what string, done func(f, tl floatRect) bool) (f, tl floatRect) {
+		t.Helper()
+		waitUntil(t, what, uiTimeout, func() (bool, string) {
+			f, tl = floatAndTile(t, base, what)
+			return done(f, tl), fmt.Sprintf("float %v, tile %v", f, tl)
+		})
+		return f, tl
+	}
+	// The float starts in the slot it was tiled in, and the tiled pane takes
+	// the whole width once the float is out of the layout.
+	float, tile := waitFloat("the float in its tiled slot over the whole-width tile", func(f, tl floatRect) bool {
+		return f.Y == tl.Y && f.H == tl.H && tl.W > f.W
+	})
 	t.Logf("after the float: float %v, tile %v", float, tile)
 	saveCockpitFrames(t, term, "float-keys-0-floated")
 	top, bottom := min(float.Y, tile.Y), max(float.Y+float.H, tile.Y+tile.H)
@@ -384,14 +397,9 @@ func TestFloatKeyResizeKeepsTheTiles(t *testing.T) {
 			t.Fatalf("%s: %v", k.name, err)
 		}
 		var gotTile floatRect
-		deadline := time.Now().Add(uiTimeout)
-		for {
-			float, gotTile = floatAndTile(t, base, "after "+k.name)
-			if (abs(float.W-wantW) <= 1 && abs(float.H-wantH) <= 1) || time.Now().After(deadline) {
-				break
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
+		float, gotTile = waitFloat(fmt.Sprintf("%s sizes the float to w=%d h=%d", k.name, wantW, wantH), func(f, _ floatRect) bool {
+			return abs(f.W-wantW) <= 1 && abs(f.H-wantH) <= 1
+		})
 		t.Logf("after %s: float %v, tile %v", k.name, float, gotTile)
 		saveCockpitFrames(t, term, fmt.Sprintf("float-keys-%d-%s", i+1, k.name))
 		if abs(float.W-wantW) > 1 || abs(float.H-wantH) > 1 {
@@ -411,23 +419,12 @@ func TestFloatKeyResizeKeepsTheTiles(t *testing.T) {
 	// keys shrink it to the smallest pane and past it, then grow it once: the
 	// bottom edge must stay where it was, so the float did not slide down
 	// while it was at the smallest size.
-	waitFloat := func(what string, done func(floatRect) bool) (floatRect, floatRect) {
-		t.Helper()
-		deadline := time.Now().Add(uiTimeout)
-		for {
-			f, tl := floatAndTile(t, base, what)
-			if done(f) || time.Now().After(deadline) {
-				return f, tl
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
-	}
 	toWindowMode(t, term, base)
 	before := float
 	if err := term.SendKeys("."); err != nil {
 		t.Fatalf("resize_master_grow_left: %v", err)
 	}
-	float, gotTile := waitFloat("after resize_master_grow_left", func(f floatRect) bool { return f.W != before.W })
+	float, gotTile := waitFloat("after resize_master_grow_left", func(f, _ floatRect) bool { return f.W != before.W })
 	t.Logf("after resize_master_grow_left: float %v, tile %v", float, gotTile)
 	saveCockpitFrames(t, term, "float-keys-5-resize_master_grow_left")
 	if float.X != before.X-4 || float.W != before.W+4 {
@@ -443,7 +440,7 @@ func TestFloatKeyResizeKeepsTheTiles(t *testing.T) {
 	if err := term.SendKeys(strings.Repeat("[", presses), "]"); err != nil {
 		t.Fatalf("resize_height_shrink_top: %v", err)
 	}
-	float, gotTile = waitFloat("after the top keys", func(f floatRect) bool { return f.H == minHeight+2 })
+	float, gotTile = waitFloat("after the top keys", func(f, _ floatRect) bool { return f.H == minHeight+2 })
 	t.Logf("after %d presses of resize_height_shrink_top and one of resize_height_grow_top: float %v, tile %v", presses, float, gotTile)
 	saveCockpitFrames(t, term, "float-keys-6-top-edge")
 	if float.H != minHeight+2 || float.Y+float.H != before.Y+before.H {
