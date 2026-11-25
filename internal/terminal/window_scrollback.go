@@ -27,24 +27,40 @@ func (w *Window) ScrollbackLenSync() int {
 	if w.Terminal == nil {
 		return 0
 	}
-	n := w.Terminal.ScrollbackLen()
+	extra, _ := w.remoteLines()
+	n := extra + w.Terminal.ScrollbackLen()
 	w.lastScrollbackLen.Store(int64(n))
 	return n
 }
+
+// The history methods below count the lines only the daemon holds
+// (window_history_remote.go) above the ones the emulator holds: index 0 is
+// the oldest line either holds.
 
 // ScrollbackLen returns the number of lines in the scrollback buffer.
 func (w *Window) ScrollbackLen() int {
 	if w.Terminal == nil {
 		return 0
 	}
-	return w.Terminal.ScrollbackLen()
+	extra, _ := w.remoteLines()
+	return extra + w.Terminal.ScrollbackLen()
 }
 
 // ScrollbackLine returns a line from the scrollback buffer at the given index.
-// Index 0 is the oldest line. Returns nil if index is out of bounds.
+// Index 0 is the oldest line. Returns nil if index is out of bounds, and for a
+// line only the daemon holds that has not been read yet.
 func (w *Window) ScrollbackLine(index int) uv.Line {
 	if w.Terminal == nil {
 		return nil
+	}
+	if extra, first := w.remoteLines(); index < extra {
+		if index < 0 {
+			return nil
+		}
+		line, _, _, _ := w.remote.Load().line(w, first+int64(index))
+		return line
+	} else {
+		index -= extra
 	}
 	return w.Terminal.ScrollbackLine(index)
 }
@@ -57,7 +73,19 @@ func (w *Window) ScrollbackRows(from, end int, fn func(index int, line uv.Line) 
 	if w.Terminal == nil {
 		return
 	}
-	w.Terminal.ScrollbackRows(from, end, fn)
+	extra, first := w.remoteLines()
+	for i := max(from, 0); i < min(end, extra); i++ {
+		line, _, _, _ := w.remote.Load().line(w, first+int64(i))
+		if !fn(i, line) {
+			return
+		}
+	}
+	if end <= extra {
+		return
+	}
+	w.Terminal.ScrollbackRows(max(from-extra, 0), end-extra, func(i int, line uv.Line) bool {
+		return fn(i+extra, line)
+	})
 }
 
 // ScrollbackText calls fn with the history lines from to end-1 as text cells,
@@ -66,7 +94,21 @@ func (w *Window) ScrollbackText(from, end int, fn func(index, width int, cells [
 	if w.Terminal == nil {
 		return
 	}
-	w.Terminal.ScrollbackText(from, end, fn)
+	extra, first := w.remoteLines()
+	var buf []vt.TextCell
+	for i := max(from, 0); i < min(end, extra); i++ {
+		line, _, _, _ := w.remote.Load().line(w, first+int64(i))
+		buf = remoteText(line, buf)
+		if !fn(i, len(line), buf) {
+			return
+		}
+	}
+	if end <= extra {
+		return
+	}
+	w.Terminal.ScrollbackText(max(from-extra, 0), end-extra, func(i, width int, cells []vt.TextCell) bool {
+		return fn(i+extra, width, cells)
+	})
 }
 
 // ScrollbackSoftWrapped reports whether history line index carries on to the
@@ -74,6 +116,12 @@ func (w *Window) ScrollbackText(from, end int, fn func(index, width int, cells [
 func (w *Window) ScrollbackSoftWrapped(index int) (wrapped, known bool) {
 	if w.Terminal == nil {
 		return false, false
+	}
+	if extra, first := w.remoteLines(); index < extra {
+		_, wrapped, _, ok := w.remote.Load().line(w, first+int64(index))
+		return wrapped, ok
+	} else {
+		index -= extra
 	}
 	return w.Terminal.ScrollbackSoftWrapped(index)
 }
@@ -84,6 +132,12 @@ func (w *Window) ScrollbackPadded(index int) bool {
 	if w.Terminal == nil {
 		return false
 	}
+	if extra, first := w.remoteLines(); index < extra {
+		_, _, padded, _ := w.remote.Load().line(w, first+int64(index))
+		return padded
+	} else {
+		index -= extra
+	}
 	return w.Terminal.ScrollbackPadded(index)
 }
 
@@ -93,7 +147,7 @@ func (w *Window) ScrollbackGeneration() uint64 {
 	if w.Terminal == nil {
 		return 0
 	}
-	return w.Terminal.ScrollbackGeneration()
+	return w.Terminal.ScrollbackGeneration() + w.remoteGeneration()
 }
 
 // ClearScrollback clears the scrollback buffer.

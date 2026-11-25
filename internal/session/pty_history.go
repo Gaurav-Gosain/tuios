@@ -115,7 +115,12 @@ func (c *TUIClient) ReadHistory(ptyID string, before int64, max int) (*snapshot.
 		return nil, refusalOf(e)
 	}
 	if page == nil {
-		return nil, errfmt.Errorf("read history: no page in the reply")
+		// A reply tagged with the request's id is not passed through the
+		// filter.
+		page = &HistoryPagePayload{}
+		if err := resp.ParsePayload(page); err != nil {
+			return nil, errfmt.Errorf("read history: %w", err)
+		}
 	}
 	return page.Page, nil
 }

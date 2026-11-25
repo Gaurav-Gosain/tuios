@@ -116,6 +116,8 @@ func init() {
 	gob.Register(SubscribePTYPayload{})
 	gob.Register(GetTerminalStatePayload{})
 	gob.Register(TerminalStatePayload{})
+	gob.Register(ReadHistoryPayload{})
+	gob.Register(HistoryPagePayload{})
 
 	// Session state types
 	gob.Register(SessionState{})

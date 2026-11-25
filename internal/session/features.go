@@ -1,6 +1,10 @@
 package session
 
-import "slices"
+import (
+	"slices"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
+)
 
 // Feature names one thing a client and a daemon can do on the wire beyond
 // what the protocol version promises. Each side lists the features it has in
@@ -32,7 +36,8 @@ var knownFeatures = []Feature{FeatureRemoteHistory}
 func featureOn(f Feature) bool {
 	switch f {
 	case FeatureRemoteHistory:
-		return numbersHistory()
+		// remote_history=off stands for a peer that does not list it.
+		return numbersHistory() && testknob.String("remote_history") != "off"
 	}
 	return true
 }

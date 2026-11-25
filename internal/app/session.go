@@ -11,6 +11,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/terminal"
 	"github.com/Gaurav-Gosain/tuios/internal/ui"
+	"tuios.dev/vt/snapshot"
 )
 
 // BuildSessionState creates a serializable SessionState from the current OS state.
@@ -2041,6 +2042,7 @@ func (m *OS) restoreTerminalContent(w *terminal.Window, state *session.TerminalS
 	// Re-check under the lock; Close() nils Terminal while holding it.
 	session.ApplyTerminalState(w.Terminal, state)
 	w.UnlockIO()
+	w.NoteDaemonHistory(state.ScrollbackBase, state.ScrollbackEpoch, state.ScrollbackNumbered)
 
 	if state.IsAltScreen {
 		m.LogInfo("Restored alt screen mode for window %s", shortID(w.ID))
@@ -2240,6 +2242,16 @@ func (m *OS) subscribeToPTY(window *terminal.Window, fromSeq int64) {
 		if at := r.ResumeFrom(ptyID, fromSeq); at > 0 && at < fromSeq {
 			from, skip = at, fromSeq-at
 		}
+	}
+	// Lines of the pane's history this client does not hold are read from
+	// the daemon by number. See terminal.Window.SetHistorySource.
+	if m.DaemonClient.HasFeature(session.FeatureRemoteHistory) {
+		client := m.DaemonClient
+		window.SetHistorySource(func(before int64, max int) (*snapshot.HistoryPage, error) {
+			return client.ReadHistory(ptyID, before, max)
+		})
+	} else {
+		window.SetHistorySource(nil)
 	}
 	err := m.DaemonClient.SubscribePTY(ptyID, from, from > 0, func(data []byte) {
 		if tap != nil {

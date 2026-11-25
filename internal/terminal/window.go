@@ -152,6 +152,8 @@ type Window struct {
 	// paneText is the emulator with its history read through the window
 	// (Text, PaneText), kept while the emulator is the same.
 	paneText atomic.Pointer[paneText]
+	// remote is the history only the daemon holds (window_history_remote.go).
+	remote atomic.Pointer[remoteHistory]
 
 	// modesOnly, when set, filters the stream before the emulator sees it
 	// (window_modes_only.go).
