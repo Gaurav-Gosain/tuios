@@ -48,7 +48,7 @@ var (
 		pure:    "a prompt mark keeps the row it was printed on, so it does not move with the cells",
 		ghostty: "a prompt mark keeps the row it was printed on, so it does not move with the cells",
 	}
-	reprintArmsWrap = backendBugs{ghostty: "the restore prints the cursor cell again to arm the wrap, which arms it only at the last column or the right margin"}
+	reprintArmsWrap = backendBugs{ghostty: "libghostty-vt arms a wrap only at the right margin, and the restore cannot set the margins after that without DECRC, which would overwrite the guest's saved cursor"}
 	pureSkinTone    = backendBugs{pure: "the pure emulator takes the width of x/ansi, which keeps a narrow base one cell wide"}
 )
 
@@ -227,7 +227,7 @@ func TestBackendSnapshotKeepsPendingWrap(t *testing.T) {
 	}{
 		{"at the right margin", margin, "X", true, nil},
 		{"saved with DECSC", margin + "\x1b7\r\n", "\x1b8X", false, nil},
-		{"margins turned off", margin + "\x1b[?69l", "X", true, reprintArmsWrap},
+		{"margins turned off", margin + "\x1b[?69l", "X", true, nil},
 		{"inside wider margins", margin + "\x1b7\x1b[1;20s\x1b8", "X", true, reprintArmsWrap},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
