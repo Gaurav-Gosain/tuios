@@ -212,6 +212,7 @@ func (d *ActionDispatcher) registerHandlers() {
 	d.Register("enter_terminal_mode", handleEnterTerminalMode)
 	d.Register("enter_window_mode", handleEnterWindowMode)
 	d.Register("toggle_help", handleToggleHelp)
+	d.Register(config.ActionToggleHoverHelp, handleToggleHoverHelp)
 	d.Register("open_settings", handleOpenSettings)
 	d.Register("open_keybind_presets", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.OpenKeybindPresets()

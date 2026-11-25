@@ -1306,6 +1306,10 @@ type KeybindingsConfig struct {
 	// Review binds are live while the review overlay is open and no note is
 	// being typed: its hunk and file motions. See getDefaultReviewKeybinds.
 	Review map[string][]string `toml:"review"`
+	// Help binds are live while hover help is up and nothing else owns the
+	// keyboard: the walk between components and parts, the scroll, and the
+	// whole key set. See getDefaultHelpKeybinds.
+	Help map[string][]string `toml:"help"`
 	// GUI binds are read only by a native GUI client (tuios-gpui), through
 	// the GUI bridge's keybinds event. They are desktop chords that need no
 	// leader, such as ctrl+shift+t. The terminal client never looks them up,
@@ -1752,6 +1756,9 @@ func DefaultConfig() *UserConfig {
 				// makes a window and t is the window prefix. y is the key the
 				// multifocus docs tell people to bind, so it stays free.
 				"prefix_transfers": {"u"},
+				// h explains the part of the screen under the pointer, and
+				// closes the explanation again.
+				ActionToggleHoverHelp: {"h"},
 				// E opens the scrollback in the editor, one shift from the e
 				// that focuses the rail. Copy mode has it on ctrl+g.
 				ActionEditScrollback: {"E"},
@@ -1877,6 +1884,7 @@ func DefaultConfig() *UserConfig {
 			Transfers:       getDefaultTransfersKeybinds(),
 			CopyMode:        getDefaultCopyModeKeybinds(),
 			Review:          getDefaultReviewKeybinds(),
+			Help:            getDefaultHelpKeybinds(),
 			GUI:             getDefaultGUIKeybinds(),
 			Global: map[string][]string{
 				// ctrl+p is fish's history-back and vim's keyword completion, and
@@ -3890,6 +3898,8 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	fillMapDefaults(cfg.Keybindings.CopyMode, defaultCfg.Keybindings.CopyMode)
 	// The review overlay's section is newer than every config written before it.
 	fillMapDefaults(cfg.Keybindings.Review, defaultCfg.Keybindings.Review)
+	// Hover help's section is newer than every config written before it.
+	fillMapDefaults(cfg.Keybindings.Help, defaultCfg.Keybindings.Help)
 	// The GUI section is newer than every config written before it.
 	fillMapDefaults(cfg.Keybindings.GUI, defaultCfg.Keybindings.GUI)
 
@@ -3953,6 +3963,8 @@ var yieldingDefaults = map[string]bool{
 	// between machines.
 	"prefix_transfers": true,
 	"file_send":        true,
+	// h after the prefix, new with hover help.
+	ActionToggleHoverHelp: true,
 	// E after the prefix and ctrl+g in copy mode, new with the scrollback
 	// editor keys.
 	ActionEditScrollback: true,

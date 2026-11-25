@@ -412,6 +412,18 @@ Run `tuios keybinds list` to see the keys that your config sets.
 | `D` | `review_unstage_file` | Review: unstage the whole file |
 | `d` | `review_unstage_hunk` | Review: unstage the hunk under the cursor |
 
+## Hover help
+
+| Keys | Action | Description |
+|---|---|---|
+| `ctrl+alt+down` | `help_deeper` | Hover help: explain the next part of the component |
+| `alt+shift+h` | `help_keys` | Hover help: show every key of the target, or its main keys |
+| `ctrl+alt+right` | `help_next` | Hover help: explain the next component |
+| `ctrl+alt+left` | `help_prev` | Hover help: explain the previous component |
+| `ctrl+alt+pgdown` | `help_scroll_down` | Hover help: scroll the explanation down |
+| `ctrl+alt+pgup` | `help_scroll_up` | Hover help: scroll the explanation up |
+| `ctrl+alt+up` | `help_shallower` | Hover help: explain the previous part, or the whole component |
+
 ## Prefix (ctrl+b)
 
 | Keys | Action | Description |
@@ -492,6 +504,7 @@ Run `tuios keybinds list` to see the keys that your config sets.
 | `ctrl+b right` | `terminal_focus_right` | Focus the pane to the right |
 | `ctrl+b Z` | `toggle_calm` | Calm mode |
 | `ctrl+b ?` | `toggle_help` | Toggle help |
+| `ctrl+b h` | `toggle_hover_help` | Explain the part of the screen under the pointer, or stop |
 | `ctrl+b g` | `toggle_scratch` | Show or hide the scratch terminal |
 | `ctrl+b B` | `toggle_spotlight` | Toggle spotlight |
 

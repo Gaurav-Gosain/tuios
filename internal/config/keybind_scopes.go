@@ -79,6 +79,7 @@ const (
 	SectionTransfers        = "transfers"
 	SectionCopyMode         = "copy_mode"
 	SectionReview           = "review"
+	SectionHelp             = "help"
 	SectionGlobal           = "global"
 	SectionScript           = "script"
 	SectionLists            = "lists"
@@ -101,6 +102,7 @@ const (
 	ScopeTransfers      = "transfers"
 	ScopeCopyMode       = "copy"
 	ScopeReview         = "review"
+	ScopeHelp           = "help"
 	ScopePrefix         = "prefix"
 	ScopePrefixWindow   = "prefix.window"
 	ScopePrefixMinimize = "prefix.minimize"
@@ -225,6 +227,16 @@ func Scopes(leader string) []Scope {
 			ID: ScopeReview, Name: "Review",
 			Sections: []string{SectionReview},
 			Reaches:  ReachModal,
+		},
+		{
+			// Live only while hover help is up, and read ahead of every
+			// other scope. Help is a view and not a mode: the pane keeps every
+			// other key, so the keys here are taken from it and from whatever
+			// else is live, which is why the defaults are ctrl+alt arrows and
+			// pages that no other table binds and a shell rarely needs.
+			ID: ScopeHelp, Name: "Hover help",
+			Sections: []string{SectionHelp},
+			Reaches:  ReachSteals,
 		},
 		{
 			ID: ScopePrefix, Name: "Prefix", Chord: leader,

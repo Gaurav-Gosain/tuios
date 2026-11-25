@@ -127,6 +127,15 @@ var actionTable = [...]ActionSpec{
 	{Name: "transfers_clear", Desc: "Copies: remove the copies that ended", Run: RunView},
 	{Name: "transfers_answer", Desc: "Copies: answer a copy that waits for an answer", Run: RunView},
 	{Name: "transfers_close", Desc: "Copies: close the panel", Run: RunView},
+	// Hover help: the explainer's keys, read while it is up and no panel,
+	// prefix or menu owns the keyboard.
+	{Name: "help_next", Desc: "Hover help: explain the next component", Run: RunView},
+	{Name: "help_prev", Desc: "Hover help: explain the previous component", Run: RunView},
+	{Name: "help_deeper", Desc: "Hover help: explain the next part of the component", Run: RunView},
+	{Name: "help_shallower", Desc: "Hover help: explain the previous part, or the whole component", Run: RunView},
+	{Name: "help_scroll_up", Desc: "Hover help: scroll the explanation up", Run: RunView},
+	{Name: "help_scroll_down", Desc: "Hover help: scroll the explanation down", Run: RunView},
+	{Name: "help_keys", Desc: "Hover help: show every key of the target, or its main keys", Run: RunView},
 
 	{Name: "list_up", Desc: "Lists: up one row", Run: RunView},
 	{Name: "list_down", Desc: "Lists: down one row", Run: RunView},
@@ -356,6 +365,7 @@ var actionTable = [...]ActionSpec{
 	{Name: "enter_window_mode", Desc: "Enter window management mode"},
 	{Name: "hold_window_mode", Desc: "Hold for window management mode", Run: RunView},
 	{Name: "toggle_help", Desc: "Toggle help", Mobile: MobileButton{Label: "help", Order: 11}, Aliases: []Action{"prefix_help"}},
+	{Name: "toggle_hover_help", Desc: "Explain the part of the screen under the pointer, or stop"},
 	{Name: "open_settings", Desc: "Open settings", Mobile: MobileButton{Label: "config", Order: 10}, Aliases: []Action{"prefix_settings"}},
 	{Name: "quit", Desc: "Quit"},
 	{Name: "focus_sidebar", Desc: "Focus sidebar"},
