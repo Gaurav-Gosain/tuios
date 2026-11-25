@@ -59,6 +59,9 @@ func capture(t vt.Terminal, width, height, maxScrollback, have int, packed bool)
 		ModifyOtherKeys:      t.ModifyOtherKeys(),
 		ModifyOtherKeysKnown: true,
 	}
+	if base := t.ScrollbackBase(); base >= 0 {
+		state.ScrollbackBase, state.ScrollbackNumbered = base, true
+	}
 
 	// None of these is recoverable from the cells. They are what the guest set
 	// and has not reset, and they decide how the output that has not arrived

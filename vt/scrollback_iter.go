@@ -292,6 +292,21 @@ func (e *Emulator) CopyScrollback(from, end int) *ScrollbackCopy {
 	return sb.copyLines(from, end)
 }
 
+// ScrollbackBase implements [Terminal.ScrollbackBase].
+func (e *Emulator) ScrollbackBase() int64 {
+	if sb := e.scrs[0].scrollback; sb != nil {
+		return sb.Base()
+	}
+	return 0
+}
+
+// SetScrollbackBase implements [Terminal.SetScrollbackBase].
+func (e *Emulator) SetScrollbackBase(base int64) {
+	if sb := e.scrs[0].scrollback; sb != nil {
+		sb.SetBase(base)
+	}
+}
+
 // ScrollbackGeneration is a number that changes whenever the main screen's
 // history does: a line pushed, the ring trimmed, cleared or resized. A reader
 // that derived something from the history can keep it for as long as the

@@ -186,6 +186,11 @@ func Apply(t vt.Terminal, state *State) error {
 	}); err != nil {
 		dropped = append(dropped, fmt.Errorf("snapshot scrollback dropped: %w", err))
 	}
+	// The history is numbered as the source's: its newest line here has the
+	// number the source's newest has, whatever either keeps.
+	if state.ScrollbackNumbered {
+		t.SetScrollbackBase(state.ScrollbackBase + int64(state.ScrollbackLen-t.ScrollbackLen()))
+	}
 
 	// The alternate screen is restored the same way as the normal one. It used
 	// to be skipped, on the grounds that a resize would make vim or htop

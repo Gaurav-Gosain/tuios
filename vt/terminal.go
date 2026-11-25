@@ -259,6 +259,18 @@ type Terminal interface {
 	// derived something from the history can keep it while the number
 	// stays the same.
 	ScrollbackGeneration() uint64
+	// ScrollbackBase is the number of the oldest history line, counted over
+	// the emulator's life: every line the history dropped from its old end,
+	// by trim, clear or a smaller limit. History line index is number
+	// ScrollbackBase()+index, and a line keeps its number until it is
+	// dropped. Two emulators fed the same output number its lines alike,
+	// whatever history each keeps. A snapshot carries the number, so an
+	// emulator built from one numbers lines as its source does. It is -1
+	// when the backend does not count.
+	ScrollbackBase() int64
+	// SetScrollbackBase sets the number of the oldest history line. A
+	// backend that does not count ignores it.
+	SetScrollbackBase(base int64)
 	// ScrollbackLine returns history line index, oldest first, or nil when
 	// index is out of range.
 	ScrollbackLine(index int) uv.Line

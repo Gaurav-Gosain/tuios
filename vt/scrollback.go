@@ -63,6 +63,10 @@ type Scrollback struct {
 	heldTrims int
 	// discard drops every line pushed, before it is encoded. See Discard.
 	discard bool
+	// base is the number of the oldest line: how many lines the ring ever
+	// dropped from its old end, by trim, clear or a smaller limit, plus what
+	// SetBase set. See Base.
+	base int64
 
 	// Intern table for colour values of a type the packer does not know. It
 	// is capped at internCap entries; past the cap a colour is reduced to RGB
@@ -260,6 +264,7 @@ func (sb *Scrollback) pushFlagged(cells uv.Line, width int, f rowFlag) {
 	if sb.discard {
 		// A ring that holds nothing drops each line as it lands, and says
 		// so, so the semantic marks move as they would for a full ring.
+		sb.base++
 		if sb.holdTrims {
 			sb.heldTrims++
 		} else if sb.onTrim != nil {
@@ -317,6 +322,7 @@ func (sb *Scrollback) pushFlagged(cells uv.Line, width int, f rowFlag) {
 	sb.tail = (sb.tail + 1) % sb.maxLines
 	if sb.full {
 		sb.head = (sb.head + 1) % sb.maxLines
+		sb.base++
 		if sb.holdTrims {
 			sb.heldTrims++
 		} else if sb.onTrim != nil {
@@ -893,6 +899,7 @@ func (sb *Scrollback) Clear() {
 	sb.full = false
 	sb.lines = nil
 	sb.wraps = nil
+	sb.base += int64(count)
 	sb.gen++
 	if sb.onTrim != nil && count > 0 {
 		sb.onTrim(count)
@@ -936,6 +943,23 @@ func ClipHistoryRow(line uv.Line, width int) uv.Line {
 	return out
 }
 
+// Base is the number of the oldest line, counted over the ring's life. Line
+// index is number Base()+index. A line keeps its number until the ring drops
+// it, since lines only leave the old end by a drop, which moves Base, and
+// the new end by truncate, which leaves the older numbers alone. Two rings
+// fed the same lines number them alike whatever their limits: the smaller
+// one drops more, and its Base is higher by as much as its Len is lower.
+func (sb *Scrollback) Base() int64 {
+	return sb.base
+}
+
+// SetBase sets the number of the oldest line, to carry over the numbering
+// of another ring.
+func (sb *Scrollback) SetBase(base int64) {
+	sb.base = base
+	sb.gen++
+}
+
 // MaxLines returns the ring's capacity.
 func (sb *Scrollback) MaxLines() int {
 	return sb.maxLines
@@ -970,6 +994,7 @@ func (sb *Scrollback) SetMaxLines(maxLines int) {
 	sb.head = 0
 	sb.tail = newLen % maxLines
 	sb.full = newLen == maxLines
+	sb.base += int64(oldLen - newLen)
 	sb.gen++
 
 	if oldLen > newLen && sb.onTrim != nil {

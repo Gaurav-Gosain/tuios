@@ -158,6 +158,14 @@ func decodeHistorySnapshot(data []byte, alt bool) *gh.Terminal {
 	return src
 }
 
+// ScrollbackBase implements [Terminal.ScrollbackBase]. libghostty-vt does
+// not report the lines its page list drops, so the history has no numbers.
+func (t *GhosttyTerminal) ScrollbackBase() int64 { return -1 }
+
+// SetScrollbackBase implements [Terminal.SetScrollbackBase]. See
+// ScrollbackBase.
+func (t *GhosttyTerminal) SetScrollbackBase(int64) {}
+
 // ScrollbackGeneration is a number that changes whenever the history may
 // have. The library does not say when its history changes, so this is the
 // count of writes, which changes more often than it has to.
