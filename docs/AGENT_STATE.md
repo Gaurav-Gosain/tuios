@@ -2746,10 +2746,11 @@ as a chip with its name and size. A click on the chip opens the image view:
 the picture at the largest size the screen holds, its name, size in pixels
 and bytes, and who it is for. `o` opens it in the desktop's viewer, `c` saves
 a copy to the screenshot folder and copies its path, `s` saves a copy, `left`
-and `right` step through the draft's images, `+` and `-` zoom, and `esc` or a
-click outside the picture closes the view. The picture is drawn with kitty
-graphics where the terminal has them, and with block glyphs where it does
-not.
+and `right` step through the draft's images, and `esc` or a click outside
+the picture closes the view. The picture is drawn with kitty graphics where
+the terminal has them, and with block glyphs where it does not. With kitty
+graphics the picture zooms: `+` and `-` or the wheel zoom, `0` fits it, and
+a drag or the arrow keys move a zoomed picture. See docs/KEYBINDINGS.md.
 
 The thread shows what the agent said and did. For Claude Code it is the
 conversation, read from its transcript and drawn as cards:

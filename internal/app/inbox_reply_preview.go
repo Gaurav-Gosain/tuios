@@ -155,8 +155,10 @@ type previewPlacement struct {
 	// key.rows.
 	skip int
 	// virtual says the frame drew the picture as placeholder cells: the host
-	// gets the picture and a virtual placement, and the cells place it.
+	// gets the picture and a virtual placement, and the cells place it. box
+	// is the virtual placement's cell box when it is not the key's.
 	virtual bool
+	box     image.Point
 	// crop is the part of the picture shown in the box, in quickLookCropUnit
 	// of each side, empty for the whole picture: quick look's zoom.
 	crop image.Rectangle

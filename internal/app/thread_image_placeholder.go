@@ -33,9 +33,26 @@ import (
 type placeholderPic struct {
 	id uint32
 	// up says the host holds the picture, placed that it holds the virtual
-	// placement.
+	// placement, and placedAt that placement's cell box.
 	up, placed bool
+	placedAt   image.Point
+	// box is the cell box the frame wants, when it is not the key's: the
+	// image view's zoom makes the picture larger than the screen, and its
+	// cells show a part of it.
+	box image.Point
 }
+
+// cells is the cell box of ph's virtual placement, for the picture of k.
+func (ph *placeholderPic) cells(k previewKey) (cols, rows int) {
+	if ph.box.X > 0 && ph.box.Y > 0 {
+		return ph.box.X, ph.box.Y
+	}
+	return k.cols, k.rows
+}
+
+// placeholderMaxCells is the most rows or columns placeholder cells can name:
+// the kitty specification's table of row and column marks.
+const placeholderMaxCells = 297
 
 // placeholderVirtual is the placement id of a placeholder picture's virtual
 // placement.
@@ -68,6 +85,12 @@ func (p *replyPreview) placeholderID(k previewKey) uint32 {
 // that name image id: the low 24 bits of the id in the foreground colour, the
 // row and the column in the first two marks, and the top 8 bits in a third.
 func placeholderLine(id uint32, row, cols int) string {
+	return placeholderLineAt(id, row, 0, cols)
+}
+
+// placeholderLineAt is placeholderLine for the cells of columns col to
+// col+cols of the picture.
+func placeholderLineAt(id uint32, row, col, cols int) string {
 	var b strings.Builder
 	b.WriteString("\x1b[38;2;")
 	b.WriteString(strconv.Itoa(int(id >> 16 & 0xff)))
@@ -77,7 +100,7 @@ func placeholderLine(id uint32, row, cols int) string {
 	b.WriteString(strconv.Itoa(int(id & 0xff)))
 	b.WriteByte('m')
 	hi := id >> 24
-	for c := range cols {
+	for c := col; c < col+cols; c++ {
 		b.WriteRune(kitty.Placeholder)
 		b.WriteRune(kitty.Diacritic(row))
 		b.WriteRune(kitty.Diacritic(c))
@@ -109,11 +132,12 @@ func (p *replyPreview) placeholderShotPieces(rects []shotHitRect) []shotPiece {
 				break
 			}
 			data := pic.png
+			cols, rows := ph.cells(k)
 			out = append(out, shotPiece{
 				key:    k,
 				decode: func(int) (image.Image, error) { return png.Decode(bytes.NewReader(data)) },
 				source: func(pix image.Image) image.Rectangle { return pix.Bounds() },
-				col:    r.x - r.c, row: r.y - r.r, cols: k.cols, rows: k.rows,
+				col:    r.x - r.c, row: r.y - r.r, cols: cols, rows: rows,
 				sub: image.Rect(r.c, r.r, r.c+r.w, r.r+r.h),
 				z:   math.MaxInt32,
 			})

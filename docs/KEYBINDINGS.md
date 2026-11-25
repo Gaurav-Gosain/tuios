@@ -2551,8 +2551,17 @@ A TML popup and the agents view do not show at the same time:
 
 In the image view, which a click on an image chip in the reply opens: `o`
 opens the image in the desktop's viewer, `c` saves a copy and copies its
-path, `s` saves a copy, `left` and `right` step through the images, `+` and
-`-` zoom, and `esc` or a click outside the picture closes it.
+path, `s` saves a copy, `left` and `right` step through the images, and
+`esc` or a click outside the picture closes it.
+
+On a terminal with kitty graphics, the picture zooms as it does in quick look:
+
+- `+` or `=` zooms in, and `-` zooms out. The wheel over the picture zooms
+  around the pointer.
+- `0` fits the picture in the view. `1` shows it at 100%.
+- Drag a zoomed picture to move it. The arrow keys and `h`, `j`, `k`, `l`
+  move it too.
+- The footer shows the zoom, for example "zoom 250%".
 
 The mouse works too. A click on a row selects it, and a double-click goes to
 its pane. A click on a group heading folds the group, as `F` does. The buttons on an

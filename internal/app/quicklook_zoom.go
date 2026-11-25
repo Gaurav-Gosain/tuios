@@ -55,8 +55,9 @@ const (
 	quickLookZoomTier = 4
 )
 
-// quickLookZoom is the zoom of quick look's picture. A zero scale is the fit.
-type quickLookZoom struct {
+// picZoom is the zoom of a picture the host holds: quick look's, and the
+// agents view's image view (cockpit_image.go). A zero scale is the fit.
+type picZoom struct {
 	// scale is screen pixels per base pixel, and ox, oy the base pixel at the
 	// top left of the view.
 	scale  float64
@@ -70,6 +71,11 @@ type quickLookZoom struct {
 	// sharper one is ready.
 	held   previewKey
 	heldOK bool
+}
+
+// quickLookZoom is the zoom of quick look's picture.
+type quickLookZoom struct {
+	picZoom
 	// sharpOut says a sharper read is out, sharpSeq which one, sharpPx the
 	// long side it asks for, and sharpCancel stops it.
 	sharpOut    bool
@@ -155,10 +161,11 @@ func (m *OS) quickLookCell() (cw, ch int) {
 }
 
 // quickLookZoomGeom is what a zoomed view is laid out from: the room for the
-// picture in cells, the cell size, the base size and the fit's scale.
+// picture in cells, the cell size, the base size, the fit's scale and the
+// largest scale.
 type quickLookZoomGeom struct {
 	availW, availH, cw, ch int
-	bw, bh, fit            float64
+	bw, bh, fit, top       float64
 }
 
 // quickLookZoomView is a zoomed view: its cell box in the body, and the part
@@ -180,6 +187,7 @@ func (m *OS) quickLookZoomGeomAt(innerW, bodyH int) (quickLookZoomGeom, bool) {
 	g.bw, g.bh = quickLookBase(r)
 	_, _, cols, rows := m.quickLookPicBox(r.img, innerW, bodyH)
 	g.fit = min(float64(cols*g.cw)/g.bw, float64(rows*g.ch)/g.bh)
+	g.top = quickLookZoomMax
 	return g, g.fit > 0
 }
 
@@ -213,25 +221,23 @@ func (g quickLookZoomGeom) view(s, ox, oy float64) (v quickLookZoomView, cx, cy 
 	return v, cx, cy
 }
 
-// quickLookZoomNow is the scale and the corner now, the fit's when not zoomed.
-func (ql *quickLookState) quickLookZoomNow(g quickLookZoomGeom) (s, ox, oy float64) {
-	if ql.zoom.scale <= 0 {
+// now is the scale and the corner of z, the fit's when it is not zoomed.
+func (g quickLookZoomGeom) now(z *picZoom) (s, ox, oy float64) {
+	if z.scale <= 0 {
 		return g.fit, 0, 0
 	}
-	return ql.zoom.scale, ql.zoom.ox, ql.zoom.oy
+	return z.scale, z.ox, z.oy
 }
 
-// quickLookZoomTo zooms to scale s and keeps the picture's point at ax, ay
-// where it is. ax and ay are pixels from the view's top left corner. A scale
-// at the fit or below it goes back to the fit.
-func (m *OS) quickLookZoomTo(g quickLookZoomGeom, s, ax, ay float64) {
-	ql := &m.quickLook
-	s = min(s, quickLookZoomMax)
+// zoomTo zooms z to scale s and keeps the picture's point at ax, ay where it
+// is. ax and ay are pixels from the view's top left corner. It reports false
+// for a scale at the fit or below it, which is the fit: the caller resets z.
+func (g quickLookZoomGeom) zoomTo(z *picZoom, s, ax, ay float64) bool {
+	s = min(s, g.top)
 	if s <= g.fit*1.001 {
-		m.quickLookZoomFit()
-		return
+		return false
 	}
-	old, ox, oy := ql.quickLookZoomNow(g)
+	old, ox, oy := g.now(z)
 	was, ox, oy := g.view(old, ox, oy)
 	bx, by := ox+ax/old, oy+ay/old
 	next, _, _ := g.view(s, 0, 0)
@@ -239,11 +245,77 @@ func (m *OS) quickLookZoomTo(g quickLookZoomGeom, s, ax, ay float64) {
 	// screen pixel.
 	ax += float64((was.x - next.x) * g.cw)
 	ay += float64((was.y - next.y) * g.ch)
-	z := &ql.zoom
 	z.scale = s
 	_, z.ox, z.oy = g.view(s, bx-ax/s, by-ay/s)
-	// The keys move the view now, so they act inside the file.
-	ql.inside = true
+	return true
+}
+
+// act runs a zoom key on z: zoom_in, zoom_out, zoom_fit or zoom_actual,
+// around the middle of the view, or a line or column key, which moves a
+// zoomed view by an eighth of it. ok is false for a key it does not run, and
+// fit says the key goes back to the fit: the caller resets z.
+func (g quickLookZoomGeom) act(z *picZoom, act string) (ok, fit bool) {
+	s, ox, oy := g.now(z)
+	v, _, _ := g.view(s, ox, oy)
+	ax, ay := float64(v.cols*g.cw)/2, float64(v.rows*g.ch)/2
+	dx, dy := 0.0, 0.0
+	switch act {
+	case "line_down":
+		dy = ay / 4
+	case "line_up":
+		dy = -ay / 4
+	case "column_left":
+		dx = -ax / 4
+	case "column_right":
+		dx = ax / 4
+	case "zoom_in":
+		return true, !g.zoomTo(z, s*quickLookZoomStep, ax, ay)
+	case "zoom_out":
+		return true, !g.zoomTo(z, s/quickLookZoomStep, ax, ay)
+	case "zoom_fit":
+		return true, true
+	case "zoom_actual":
+		return true, !g.zoomTo(z, 1, ax, ay)
+	default:
+		return false, false
+	}
+	if z.scale <= 0 {
+		return false, false
+	}
+	_, z.ox, z.oy = g.view(s, ox+dx/s, oy+dy/s)
+	return true, false
+}
+
+// wheel zooms z one notch around ax, ay, pixels from the view's top left
+// corner. It reports false when the notch goes back to the fit.
+func (g quickLookZoomGeom) wheel(z *picZoom, ax, ay float64, up bool) bool {
+	s, _, _ := g.now(z)
+	if up {
+		s *= quickLookZoomWheel
+	} else {
+		s /= quickLookZoomWheel
+	}
+	return g.zoomTo(z, s, ax, ay)
+}
+
+// press starts a drag of z at screen cell x, y.
+func (z *picZoom) press(x, y int) {
+	z.drag, z.dragX, z.dragY, z.dragOX, z.dragOY = true, x, y, z.ox, z.oy
+}
+
+// dragTo moves the view of z with the pointer, at screen cell x, y.
+func (g quickLookZoomGeom) dragTo(z *picZoom, x, y int) {
+	dx, dy := float64((x-z.dragX)*g.cw)/z.scale, float64((y-z.dragY)*g.ch)/z.scale
+	_, z.ox, z.oy = g.view(z.scale, z.dragOX-dx, z.dragOY-dy)
+}
+
+// zoomLabel is the label of the zoom keys: "zoom", and once zoomed the
+// scale, as "zoom 250%".
+func zoomLabel(s float64) string {
+	if s <= 0 {
+		return "zoom"
+	}
+	return "zoom " + strconv.Itoa(int(math.Round(s*100))) + "%"
 }
 
 // quickLookZoomFit goes back to the fit. A picture with nothing else to move
@@ -272,37 +344,14 @@ func (m *OS) QuickLookZoom(act string) bool {
 		return false
 	}
 	ql := &m.quickLook
-	s, ox, oy := ql.quickLookZoomNow(g)
-	v, _, _ := g.view(s, ox, oy)
-	ax, ay := float64(v.cols*g.cw)/2, float64(v.rows*g.ch)/2
-	// The line and column keys move a zoomed view by an eighth of it.
-	dx, dy := 0.0, 0.0
-	switch act {
-	case "line_down":
-		dy = ay / 4
-	case "line_up":
-		dy = -ay / 4
-	case "column_left":
-		dx = -ax / 4
-	case "column_right":
-		dx = ax / 4
-	case "zoom_in":
-		m.quickLookZoomTo(g, s*quickLookZoomStep, ax, ay)
-	case "zoom_out":
-		m.quickLookZoomTo(g, s/quickLookZoomStep, ax, ay)
-	case "zoom_fit":
-		m.quickLookZoomFit()
-	case "zoom_actual":
-		m.quickLookZoomTo(g, 1, ax, ay)
-	default:
+	ok, fit := g.act(&ql.zoom.picZoom, act)
+	switch {
+	case !ok:
 		return false
-	}
-	if dx != 0 || dy != 0 {
-		if ql.zoom.scale <= 0 {
-			return false
-		}
-		z := &ql.zoom
-		_, z.ox, z.oy = g.view(s, ox+dx/s, oy+dy/s)
+	case fit:
+		m.quickLookZoomFit()
+	default:
+		ql.inside = true
 	}
 	return true
 }
@@ -334,13 +383,12 @@ func (m *OS) quickLookZoomWheel(x, y int, up bool) bool {
 	if !on {
 		return false
 	}
-	s, _, _ := m.quickLook.quickLookZoomNow(g)
-	if up {
-		s *= quickLookZoomWheel
-	} else {
-		s /= quickLookZoomWheel
+	ql := &m.quickLook
+	if !g.wheel(&ql.zoom.picZoom, ax, ay, up) {
+		m.quickLookZoomFit()
+		return true
 	}
-	m.quickLookZoomTo(g, s, ax, ay)
+	ql.inside = true
 	return true
 }
 
@@ -354,8 +402,7 @@ func (m *OS) quickLookPanPress(x, y int) bool {
 	if _, _, on := m.quickLookOnPicture(g, x, y); !on {
 		return false
 	}
-	z := &ql.zoom
-	z.drag, z.dragX, z.dragY, z.dragOX, z.dragOY = true, x, y, z.ox, z.oy
+	ql.zoom.press(x, y)
 	return true
 }
 
@@ -372,8 +419,7 @@ func (m *OS) quickLookPanDrag(x, y int) bool {
 		z.drag = false
 		return false
 	}
-	dx, dy := float64((x-z.dragX)*g.cw)/z.scale, float64((y-z.dragY)*g.ch)/z.scale
-	_, z.ox, z.oy = g.view(z.scale, z.dragOX-dx, z.dragOY-dy)
+	g.dragTo(&z.picZoom, x, y)
 	return true
 }
 
@@ -386,10 +432,10 @@ func (m *OS) quickLookZoomHints(h []overlay.Hint, t config.Table) []overlay.Hint
 		return h
 	}
 	s := m.quickLook.zoom.scale
+	h = append(h, overlay.Hint{Key: in[0] + " " + out[0], Label: zoomLabel(s)})
 	if s <= 0 {
-		return append(h, overlay.Hint{Key: in[0] + " " + out[0], Label: "zoom"})
+		return h
 	}
-	h = append(h, overlay.Hint{Key: in[0] + " " + out[0], Label: "zoom " + strconv.Itoa(int(math.Round(s*100))) + "%"})
 	if k := reg.Keys(t, "zoom_fit"); len(k) > 0 {
 		h = append(h, overlay.Hint{Key: k[0], Label: "fit"})
 	}
@@ -451,7 +497,7 @@ func (m *OS) quickLookZoomPrepare(innerW, bodyH int) tea.Cmd {
 		ql.zoom.held, ql.zoom.heldOK = want, true
 	}
 	p.mu.Unlock()
-	return tea.Batch(m.quickLookPrepareKey(r.img, want), m.quickLookSharpRead(g))
+	return tea.Batch(m.prepareKey(r.img, want, m.overlayUI().Canvas), m.quickLookSharpRead(g))
 }
 
 // quickLookSharpRead reads an image or a PDF page again at the size the zoom

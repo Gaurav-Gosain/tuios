@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"image"
 	"io/fs"
 	"math"
 	"os"
@@ -21,22 +22,25 @@ import (
 // holds, over the whole agents view (DESIGN.md 3.10, frame f). It names the
 // image, its size in pixels and bytes and where it came from. o opens it in
 // the desktop's viewer, c saves a copy and copies its path, s saves a copy,
-// left and right step through the draft's images, + and - zoom, and esc or a
-// click outside the picture closes it.
+// left and right step through the draft's images, and esc or a click outside
+// the picture closes it.
+//
+// On a kitty host the picture zooms as quick look's does (quicklook_zoom.go):
+// + and - zoom, the wheel zooms around the pointer, 0 fits and 1 shows 100%.
+// A zoomed picture moves with a drag and with the arrows and h, j, k and l. A
+// zoom or a move step sends no picture: a placement shows the part in view
+// with a source rect, and placeholder cells show it by the cells they name,
+// of one virtual placement the size of the whole zoomed picture.
 //
 // The picture goes through the reply previews' pipeline: kitty graphics
 // placed after the frame where the host has them, block glyphs from
 // shot/mosaic where it does not, and a line of words at 16 colours. It is
 // prepared once per image and size, off the update loop.
 
-// ckZoomSteps are the zoom levels, as shares of the largest fit.
-var ckZoomSteps = [...]float64{1, 0.75, 0.5, 0.35}
-
 // ckImageView is the open image view.
 type ckImageView struct {
 	imgs []*composer.Image
 	idx  int
-	zoom int
 	who  string
 	// from says where an image of the conversation came from, in place of
 	// who for a draft's.
@@ -49,6 +53,18 @@ type ckImageView struct {
 	cols, rows   int
 	mode         composer.PreviewMode
 	placeX, plcY int
+	// zoom is the picture's zoom, and fitCols and fitRows the box at the
+	// fit, which its pictures are prepared for. key is the picture placed.
+	zoom             picZoom
+	fitCols, fitRows int
+	key              previewKey
+	// crop is the part of the picture in the box, for a placement. ph says
+	// the picture is drawn as placeholder cells: phCols and phRows are the
+	// whole picture's cell box at the zoom, and phCol and phRow the first
+	// cell in view.
+	crop                         image.Rectangle
+	ph                           bool
+	phCols, phRows, phCol, phRow int
 }
 
 // CockpitImageOpen reports whether the image view is up.
@@ -81,13 +97,26 @@ func (m *OS) CockpitImageKey(key string) tea.Cmd {
 	case "esc", "q":
 		m.cockpitCloseImage()
 	case "left", "h":
-		v.idx = (v.idx - 1 + len(v.imgs)) % len(v.imgs)
+		// A zoomed picture moves. At the fit the key shows the image before.
+		if !m.cockpitImageZoom("column_left") {
+			v.idx, v.zoom = (v.idx-1+len(v.imgs))%len(v.imgs), picZoom{}
+		}
 	case "right", "l":
-		v.idx = (v.idx + 1) % len(v.imgs)
+		if !m.cockpitImageZoom("column_right") {
+			v.idx, v.zoom = (v.idx+1)%len(v.imgs), picZoom{}
+		}
+	case "up", "k":
+		m.cockpitImageZoom("line_up")
+	case "down", "j":
+		m.cockpitImageZoom("line_down")
 	case "+", "=":
-		v.zoom = max(v.zoom-1, 0)
+		m.cockpitImageZoom("zoom_in")
 	case "-", "_":
-		v.zoom = min(v.zoom+1, len(ckZoomSteps)-1)
+		m.cockpitImageZoom("zoom_out")
+	case "0":
+		m.cockpitImageZoom("zoom_fit")
+	case "1":
+		m.cockpitImageZoom("zoom_actual")
 	case "o":
 		return m.replyOpenImage(v.imgs[v.idx])
 	case "s":
@@ -111,12 +140,110 @@ func (m *OS) cockpitCloseImage() {
 }
 
 // cockpitImageClick handles a click while the view is up: one outside the
-// picture closes it.
+// picture closes it, and one on the zoomed picture starts a drag.
 func (m *OS) cockpitImageClick(x, y int) {
 	v := m.Inbox.ck.img
-	if !v.box.Contains(x, y) {
+	switch {
+	case !v.box.Contains(x, y):
 		m.cockpitCloseImage()
+	case v.zoom.scale > 0:
+		v.zoom.press(x, y)
 	}
+}
+
+// cockpitImageGeom is the layout of the zoom in a canvas w by h cells, from
+// the last layout. ok is false where the picture does not zoom: a host with
+// no kitty graphics, or a picture tuios cannot decode.
+func (m *OS) cockpitImageGeom(w, h int) (quickLookZoomGeom, bool) {
+	v := m.Inbox.ck.img
+	img := v.imgs[v.idx]
+	if v.mode != composer.PreviewPixels || img.Width <= 0 || img.Height <= 0 || v.fitCols <= 0 {
+		return quickLookZoomGeom{}, false
+	}
+	margin := ckImageMargin(w)
+	g := quickLookZoomGeom{availW: max(w-2*margin-4, 1), availH: max(h-7, 3) - 2}
+	g.cw, g.ch = m.quickLookCell()
+	// The base is the image's own pixels: the view has all of them.
+	g.bw, g.bh = float64(img.Width), float64(img.Height)
+	g.fit = min(float64(v.fitCols*g.cw)/g.bw, float64(v.fitRows*g.ch)/g.bh)
+	// A small image fits above 100%: it still zooms a few steps.
+	g.top = max(quickLookZoomMax, g.fit*quickLookZoomStep*quickLookZoomStep)
+	if v.ph {
+		// Placeholder cells name at most placeholderMaxCells rows and
+		// columns of the zoomed picture.
+		g.top = min(g.top, float64(placeholderMaxCells*g.cw)/g.bw, float64(placeholderMaxCells*g.ch)/g.bh)
+	}
+	return g, g.fit > 0 && g.top > g.fit*1.001
+}
+
+// cockpitImageGeomNow is the layout of the zoom on the screen as it is now.
+func (m *OS) cockpitImageGeomNow() (quickLookZoomGeom, bool) {
+	res := m.viewReserve()
+	return m.cockpitImageGeom(m.GetRenderWidth(), m.GetRenderHeight()-res.Top-res.Bottom)
+}
+
+// cockpitImageZoom runs a zoom key, or a line or column key that moves the
+// zoomed picture (see quickLookZoomGeom.act). It reports false where the
+// key does nothing, so a column key steps through the images.
+func (m *OS) cockpitImageZoom(act string) bool {
+	v := m.Inbox.ck.img
+	g, ok := m.cockpitImageGeomNow()
+	if !ok {
+		return false
+	}
+	ok, fit := g.act(&v.zoom, act)
+	if fit {
+		v.zoom = picZoom{}
+	}
+	return ok
+}
+
+// cockpitImageWheel zooms one notch around the pointer while it is over the
+// picture. The view shows one picture and has nothing to scroll, so the
+// wheel zooms there as it does over quick look's picture.
+func (m *OS) cockpitImageWheel(x, y int, up bool) {
+	v := m.Inbox.ck.img
+	g, ok := m.cockpitImageGeomNow()
+	if !ok || !v.box.Contains(x, y) {
+		return
+	}
+	ax, ay := (float64(x-v.placeX)+0.5)*float64(g.cw), (float64(y-v.plcY)+0.5)*float64(g.ch)
+	if !g.wheel(&v.zoom, ax, ay, up) {
+		v.zoom = picZoom{}
+	}
+	m.cockpitTouch()
+}
+
+// CockpitImageDrag moves the zoomed picture with the pointer while a press
+// on it is held. It reports whether one is.
+func (m *OS) CockpitImageDrag(x, y int) bool {
+	if !m.CockpitImageOpen() || !m.Inbox.ck.img.zoom.drag {
+		return false
+	}
+	v := m.Inbox.ck.img
+	g, ok := m.cockpitImageGeomNow()
+	if !ok || v.zoom.scale <= 0 {
+		v.zoom.drag = false
+		return false
+	}
+	g.dragTo(&v.zoom, x, y)
+	m.cockpitTouch()
+	return true
+}
+
+// CockpitImageDragging reports whether a press on the zoomed picture is held.
+func (m *OS) CockpitImageDragging() bool {
+	return m.CockpitImageOpen() && m.Inbox.ck.img.zoom.drag
+}
+
+// CockpitImageRelease ends a drag of the picture. It reports whether one was
+// going on.
+func (m *OS) CockpitImageRelease() bool {
+	if !m.CockpitImageDragging() {
+		return false
+	}
+	m.Inbox.ck.img.zoom.drag = false
+	return true
 }
 
 // cockpitSaveImage writes the image to the screenshot folder, once, and
@@ -177,10 +304,7 @@ func (m *OS) drawImageView(c *ckCanvas, l ckLook, top int) {
 	v := m.Inbox.ck.img
 	pal := l.pal
 	img := v.imgs[v.idx]
-	margin := 2
-	if c.w >= 120 {
-		margin = 8
-	}
+	margin := ckImageMargin(c.w)
 	x0, x1 := margin, c.w-margin
 	y := 1
 	head := []ckSeg{{t: l.g(ckGlyphImage) + " ", fg: pal.FgMute}, {t: ckImageName(img, v.idx), fg: pal.Fg, attrs: ckBold},
@@ -207,6 +331,11 @@ func (m *OS) drawImageView(c *ckCanvas, l ckLook, top int) {
 			msg += " o opens it in the viewer."
 		}
 		c.text(max(x0+2, (c.w-len(msg))/2), ay+ah/2, x1-2, ckSeg{t: msg, fg: pal.FgDim})
+	case v.ph:
+		id := p.placeholderID(v.key)
+		for i := range rows {
+			c.draw(px, py+i, cols, placeholderLineAt(id, v.phRow+i, v.phCol, cols))
+		}
 	case v.mode == composer.PreviewCells:
 		k := p.cellsKey(img, cols, rows)
 		p.mu.Lock()
@@ -235,10 +364,17 @@ func (m *OS) drawImageView(c *ckCanvas, l ckLook, top int) {
 	}
 	key("c", "copy path")
 	key("s", "save")
-	if len(v.imgs) > 1 {
+	zoomed := v.zoom.scale > 0
+	if len(v.imgs) > 1 && !zoomed {
 		key(overlay.ArrowLeft()+" "+overlay.ArrowRight(), "other images")
 	}
-	key("+ -", "zoom")
+	if _, ok := m.cockpitImageGeom(c.w, c.h); ok {
+		key("+ -", zoomLabel(v.zoom.scale))
+	}
+	if zoomed {
+		key("0", "fit")
+		key("h j k l", "move")
+	}
 	rx = c.textR(x1, fy, ckSeg{t: "Click outside the picture to close it.", fg: pal.FgMute})
 	c.text(x0, fy, rx-2, hints...)
 }
@@ -246,23 +382,52 @@ func (m *OS) drawImageView(c *ckCanvas, l ckLook, top int) {
 // cockpitImageLayout places the view's picture for a canvas of w by h cells
 // whose first row is screen row top: the largest box that holds its shape,
 // zoomed, centred in the area under the header.
+//
+// A zoomed picture takes the box its zoom gives, and shows the part in view:
+// a source rect of the picture for a placement, or the cells of that part of
+// the whole zoomed picture for placeholder cells.
 func (m *OS) cockpitImageLayout(w, h, top int) {
 	v := m.Inbox.ck.img
-	margin := 2
-	if w >= 120 {
-		margin = 8
-	}
+	margin := ckImageMargin(w)
 	ay, ah := 3, max(h-7, 3)
-	cw, ch := m.hostCellSize()
-	if cw <= 0 || ch <= 0 {
-		cw, ch = 8, 16
-	}
+	cw, ch := m.quickLookCell()
 	img := v.imgs[v.idx]
-	cols, rows := ckFitBox(img, w-2*margin-4, ah-2, float64(ch)/float64(cw), ckZoomSteps[v.zoom])
+	cols, rows := ckFitBox(img, w-2*margin-4, ah-2, float64(ch)/float64(cw), 1)
 	px, py := margin+(w-2*margin-cols)/2, ay+(ah-rows)/2
+	v.mode = m.replyPreviewer().Mode()
+	v.ph = v.mode == composer.PreviewPixels && m.threadPlaceholders()
+	v.fitCols, v.fitRows = cols, rows
+	v.key, v.crop = pixelsKey(img, cols, rows), image.Rectangle{}
+	v.phCols, v.phRows, v.phCol, v.phRow = cols, rows, 0, 0
+	if g, ok := m.cockpitImageGeom(w, h); ok && v.zoom.scale > 0 {
+		s := v.zoom.scale
+		zv, cx, cy := g.view(s, v.zoom.ox, v.zoom.oy)
+		px, py, cols, rows = margin+1+zv.x, ay+zv.y, zv.cols, zv.rows
+		if v.zoom.heldOK && v.zoom.held.sum == v.key.sum {
+			v.key = v.zoom.held
+		}
+		if v.ph {
+			v.phCols, v.phRows = max(int(g.bw*s/float64(cw)+0.5), cols), max(int(g.bh*s/float64(ch)+0.5), rows)
+			v.phCol = max(min(int(cx*s/float64(cw)+0.5), v.phCols-cols), 0)
+			v.phRow = max(min(int(cy*s/float64(ch)+0.5), v.phRows-rows), 0)
+		} else {
+			v.crop = zv.crop
+		}
+	} else if v.zoom.scale > 0 {
+		// The host lost its graphics, or the screen changed: the fit.
+		v.zoom = picZoom{}
+	}
 	v.box = overlay.Rect{X0: px, Y0: top + py, X1: px + cols, Y1: top + py + rows}
-	v.cols, v.rows, v.mode = cols, rows, m.replyPreviewer().Mode()
+	v.cols, v.rows = cols, rows
 	v.placeX, v.plcY = px, top+py
+}
+
+// ckImageMargin is the image view's margin on each side of a canvas w wide.
+func ckImageMargin(w int) int {
+	if w >= 120 {
+		return 8
+	}
+	return 2
 }
 
 // CockpitImagePicture lays the view out for the screen and prepares its
@@ -274,7 +439,37 @@ func (m *OS) CockpitImagePicture() tea.Cmd {
 	}
 	res := m.viewReserve()
 	m.cockpitImageLayout(m.GetRenderWidth(), m.GetRenderHeight()-res.Top-res.Bottom, res.Top)
-	return m.cockpitImagePicture()
+	return tea.Batch(m.cockpitImagePicture(), m.cockpitImageSharp())
+}
+
+// cockpitImageSharp prepares the sharper copy the zoom wants, and places it
+// once it is ready: a copy at a power of quickLookZoomTier of the fit's
+// size, up to the image's own pixels (see quickLookZoomKey). Until then the
+// last picture placed stays. It is nil at the fit.
+func (m *OS) cockpitImageSharp() tea.Cmd {
+	v := m.Inbox.ck.img
+	if v == nil || v.zoom.scale <= 0 {
+		return nil
+	}
+	g, ok := m.cockpitImageGeomNow()
+	if !ok {
+		return nil
+	}
+	img := v.imgs[v.idx]
+	want := quickLookZoomKey(g, v.zoom.scale, img, v.fitCols, v.fitRows)
+	if want == v.zoom.held && v.zoom.heldOK {
+		return nil
+	}
+	p := m.replyPreviewer()
+	p.mu.Lock()
+	pic := p.pics[want]
+	p.mu.Unlock()
+	if pic != nil && len(pic.png) > 0 {
+		v.zoom.held, v.zoom.heldOK = want, true
+		m.cockpitTouch()
+		return nil
+	}
+	return m.prepareKey(img, want, m.cockpitPalette().Panel)
 }
 
 // ckFitBox is the largest box of at most maxCols by maxRows cells that holds
@@ -301,33 +496,23 @@ func (m *OS) cockpitImagePicture() tea.Cmd {
 	}
 	p := m.replyPreviewer()
 	img := v.imgs[v.idx]
-	k := pixelsKey(img, v.cols, v.rows)
+	k := pixelsKey(img, v.fitCols, v.fitRows)
 	if v.mode == composer.PreviewCells {
 		k = p.cellsKey(img, v.cols, v.rows)
 	}
-	p.mu.Lock()
-	if p.asked[k] {
-		p.mu.Unlock()
-		return nil
-	}
-	p.asked[k] = true
-	p.mu.Unlock()
-	cw, ch := m.hostCellSize()
-	if cw <= 0 || ch <= 0 {
-		cw, ch = 8, 16
-	}
-	ground := m.cockpitPalette().Panel
-	return func() tea.Msg {
-		return replyPreviewMsg{pics: map[previewKey]*previewPicture{k: preparePicture(img, k, cw, ch, ground)}}
-	}
+	return m.prepareKey(img, k, m.cockpitPalette().Panel)
 }
 
 // cockpitImagePlacement is the view's picture as a kitty placement, when the
-// view is up in pixel mode.
+// view is up in pixel mode: the part in view, or for placeholder cells the
+// virtual placement of the whole zoomed picture.
 func (m *OS) cockpitImagePlacement() (previewPlacement, bool) {
 	v := m.Inbox.ck.img
 	if !m.CockpitImageOpen() || v.mode != composer.PreviewPixels || v.cols <= 0 {
 		return previewPlacement{}, false
 	}
-	return previewPlacement{key: pixelsKey(v.imgs[v.idx], v.cols, v.rows), x: v.placeX, y: v.plcY, cols: v.cols, rows: v.rows}, true
+	if v.ph {
+		return previewPlacement{key: v.key, cols: v.phCols, rows: v.phRows, virtual: true, box: image.Pt(v.phCols, v.phRows)}, true
+	}
+	return previewPlacement{key: v.key, x: v.placeX, y: v.plcY, cols: v.cols, rows: v.rows, crop: v.crop}, true
 }

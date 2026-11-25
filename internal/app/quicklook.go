@@ -989,11 +989,11 @@ func (m *OS) quickLookPrepare(img *composer.Image, cols, rows int) tea.Cmd {
 	if p.Mode() == composer.PreviewCells {
 		k = quickLookCellsKey(p, img, cols, rows)
 	}
-	return m.quickLookPrepareKey(img, k)
+	return m.prepareKey(img, k, m.overlayUI().Canvas)
 }
 
-// quickLookPrepareKey prepares the picture of k, when it is not ready.
-func (m *OS) quickLookPrepareKey(img *composer.Image, k previewKey) tea.Cmd {
+// prepareKey prepares the picture of k off the loop, once, on ground.
+func (m *OS) prepareKey(img *composer.Image, k previewKey, ground color.Color) tea.Cmd {
 	p := m.replyPreviewer()
 	p.mu.Lock()
 	if p.asked[k] {
@@ -1003,7 +1003,6 @@ func (m *OS) quickLookPrepareKey(img *composer.Image, k previewKey) tea.Cmd {
 	p.asked[k] = true
 	p.mu.Unlock()
 	cw, ch := m.quickLookCell()
-	ground := m.overlayUI().Canvas
 	return func() tea.Msg {
 		return replyPreviewMsg{pics: map[previewKey]*previewPicture{k: preparePicture(img, k, cw, ch, ground)}}
 	}

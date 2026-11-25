@@ -19695,3 +19695,16 @@ change, so the row takes the window count of the listing.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestNavigatorCountsAScratchPaneOnAHost$' -v .`.
+
+## The image view zooms and pans
+
+`TestCockpitImageViewZooms` opens the agents view's image view on a thread's
+image card on a kitty host, once with kitty placements and once with Unicode
+placeholders, and zooms, drags and fits the picture.
+
+| Control | Fails at | Result |
+|---------|----------|--------|
+| A build of main, where + and - only shrank the picture from the fit | placements: "the wheel over the picture did not zoom it"; placeholders: "the image view made no virtual placement" | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitImageViewZooms$' -v .`.

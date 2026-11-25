@@ -1826,9 +1826,14 @@ func (m *OS) CockpitHover(x, y int) {
 // detail when it is over the focus area.
 func (m *OS) CockpitWheel(x, y int, up bool) {
 	ck := &m.Inbox.ck
-	if ck.img != nil || ck.spawn != nil {
-		// The image view and the spawn sheet cover everything behind
-		// them.
+	if ck.img != nil {
+		// The image view covers everything behind it, and the wheel zooms
+		// its picture.
+		m.cockpitImageWheel(x, y, up)
+		return
+	}
+	if ck.spawn != nil {
+		// The spawn sheet covers everything behind it.
 		return
 	}
 	button := loom.WheelDown

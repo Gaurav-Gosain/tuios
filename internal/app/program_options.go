@@ -311,8 +311,8 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 	}
 
 	// A press on quick look's bar seeks as the pointer moves, and a press on
-	// its zoomed picture pans it.
-	if (m.quickLook.barDrag || m.quickLook.zoom.drag) && movedCell {
+	// its zoomed picture or the image view's pans it.
+	if (m.quickLook.barDrag || m.quickLook.zoom.drag || m.CockpitImageDragging()) && movedCell {
 		return msg
 	}
 

@@ -48,8 +48,9 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.EndPointerGrabs()
 		o.QuickLookBarRelease()
 		o.QuickLookLetGo()
+		o.CockpitImageRelease()
 	}
-	if o.QuickLookBarDrag(o.LastMouseX, o.LastMouseY) {
+	if o.QuickLookBarDrag(o.LastMouseX, o.LastMouseY) || o.CockpitImageDrag(o.LastMouseX, o.LastMouseY) {
 		return o, nil
 	}
 

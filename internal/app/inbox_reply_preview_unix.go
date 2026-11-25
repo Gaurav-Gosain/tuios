@@ -4,6 +4,7 @@ package app
 
 import (
 	"fmt"
+	"image"
 	"slices"
 )
 
@@ -150,6 +151,7 @@ func (p *replyPreview) flushPlaceholders(buf []byte, want []previewPlacement) []
 		}
 		drawn[pl.key] = true
 		if ph := p.ph[pl.key]; ph != nil {
+			ph.box = pl.box
 			buf = p.sendPlaceholder(buf, pl.key, ph)
 		}
 	}
@@ -166,8 +168,10 @@ func (p *replyPreview) flushPlaceholders(buf []byte, want []previewPlacement) []
 }
 
 // sendPlaceholder uploads a placeholder picture and makes its virtual
-// placement, each once. A picture still being prepared waits for the next
-// frame. Call it with p.mu held.
+// placement, each once. A new cell box places it again under the same id,
+// which replaces the virtual placement: the picture is not sent again. A
+// picture still being prepared waits for the next frame. Call it with p.mu
+// held.
 func (p *replyPreview) sendPlaceholder(buf []byte, k previewKey, ph *placeholderPic) []byte {
 	pic := p.pics[k]
 	if pic == nil || len(pic.png) == 0 {
@@ -177,9 +181,10 @@ func (p *replyPreview) sendPlaceholder(buf []byte, k previewKey, ph *placeholder
 		buf = appendKittyTransmitPNG(buf, ph.id, pic.png)
 		ph.up, ph.placed = true, false
 	}
-	if !ph.placed {
-		buf = fmt.Appendf(buf, "\x1b_Ga=p,U=1,i=%d,p=%d,c=%d,r=%d,q=2\x1b\\", ph.id, placeholderVirtual, k.cols, k.rows)
-		ph.placed = true
+	cols, rows := ph.cells(k)
+	if !ph.placed || ph.placedAt != image.Pt(cols, rows) {
+		buf = fmt.Appendf(buf, "\x1b_Ga=p,U=1,i=%d,p=%d,c=%d,r=%d,q=2\x1b\\", ph.id, placeholderVirtual, cols, rows)
+		ph.placed, ph.placedAt = true, image.Pt(cols, rows)
 	}
 	return buf
 }

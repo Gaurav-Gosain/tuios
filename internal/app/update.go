@@ -1348,7 +1348,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// until the board changes: a picture that came in is a change.
 			m.cockpitTouch()
 		}
-		return m, nil
+		// A sharper copy for the image view's zoom takes over once it is
+		// ready.
+		return m, m.cockpitImageSharp()
 
 	case kbFileMsg:
 		return m, m.applyKBFile(msg)
