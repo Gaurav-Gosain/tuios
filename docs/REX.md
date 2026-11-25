@@ -413,4 +413,9 @@ Close the pane any other way, and the shell ends, as in monstar.
   shell that waits at its prompt loses nothing. A program that draws its
   screen again on the next resize or key shows the whole screen.
 - Keys reach the shell as tuios encodes them for the program's modes.
+- Rex takes typed input as text. A click in a program that asks for the
+  legacy mouse form goes to Rex as a mouse event, and Rex encodes it for the
+  program. Other input bytes that are not UTF-8 reach the shell as U+FFFD.
+- tuios waits 10 seconds for a Rex server to answer, and then shows an
+  error in the pane.
 - tuios does not offer Rex panes on Windows.

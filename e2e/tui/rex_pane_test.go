@@ -5,8 +5,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/Gaurav-Gosain/tuitest"
 )
 
 // rexScratch runs a Rex server of the test's own, on a socket in a temporary
@@ -199,4 +202,80 @@ func TestRexPaneDetachAndReattach(t *testing.T) {
 		return strings.Join(rexTuiosBlocks(t, rex), ",")
 	}, func(s string) bool { return s == "" })
 	alive(t, term, "after the Rex pane round trip")
+}
+
+// TestRexPaneLegacyMouse: a program in a Rex shell that asks for legacy
+// mouse reports (DECSET 1000, no SGR) reads a click past column 95 as the
+// raw bytes it asked for. Rex takes typed input as text, so the bridge sends
+// such a report as a Rex mouse event, and Rex encodes it again.
+//
+// How it could pass wrongly, written down first:
+//   - The click could land in a column under 96, where every byte is text
+//     anyway: the column byte must be over 0x7f.
+//   - The bridge could send U+FFFD, whose UTF-8 form starts with 0xef: that
+//     column byte is refused, and the row byte must be the report's last.
+//
+// NEGATIVE CONTROL: with rexSend writing every report as text, the column
+// byte arrives as ef bf bd and the test fails.
+func TestRexPaneLegacyMouse(t *testing.T) {
+	requireReal(t, "it runs a Rex server and a bridge process in a pane")
+	addr, _ := rexScratch(t)
+	base := t.TempDir()
+	term := startIn(t, base, startOpts{cols: 260, rows: 30, args: []string{"new", "work"}})
+	waitBoot(t, term)
+	if out, err := tuiosCLI(t, base, "new-window", "rx", "-s", "work", "--rex", addr); err != nil {
+		t.Fatalf("new-window --rex: %v\n%s", err, out)
+	}
+	enableTiling(t, term)
+	if out, err := tuiosCLI(t, base, "focus-window", "-s", "work", "rx"); err != nil {
+		t.Fatalf("focus rx: %v\n%s", err, out)
+	}
+	enterTerminalMode(t, term)
+	capture := func() string {
+		out, _ := tuiosCLI(t, base, "capture-pane", "-s", "work", "-w", "rx")
+		return out
+	}
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "work", "-w", "rx",
+		"sh -c 'x=MOUSE; printf \"\\033[?1000h\"; stty raw -echo; echo ready-$x-now; "+
+			"b=$(dd bs=1 count=6 2>/dev/null | od -An -tx1 | tr -d \" \\n\"); printf \"\\033[?1000l\"; stty sane; echo got-$b'\n"); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, out)
+	}
+	waitTextOf(t, "the mouse reader ready in the Rex shell", uiTimeout*3, capture,
+		func(s string) bool { return strings.Contains(s, "ready-MOUSE-now") })
+
+	var list struct {
+		Windows []struct {
+			Name string `json:"display_name"`
+			X    int    `json:"x"`
+			Y    int    `json:"y"`
+			W    int    `json:"width"`
+		} `json:"windows"`
+	}
+	out, err := tuiosCLI(t, base, "list-windows", "-s", "work", "--json")
+	if err != nil || json.Unmarshal([]byte(out), &list) != nil {
+		t.Fatalf("list-windows: %v\n%s", err, out)
+	}
+	col, row := -1, 0
+	for _, w := range list.Windows {
+		if w.Name == "rx" && w.W > 112 {
+			col, row = w.X+110, w.Y+4
+		}
+	}
+	if col < 0 {
+		t.Fatalf("no rx pane over 112 columns wide to click past column 95:\n%s", out)
+	}
+	mousePress(t, term, col, row, tuitest.MouseLeft, 0)
+	got := waitTextOf(t, "the click read by the program in the Rex shell", uiTimeout*3, capture,
+		func(s string) bool { return strings.Contains(s, "got-1b5b4d20") })
+	mouseRelease(t, term, col, row, tuitest.MouseLeft, 0)
+	saveText(t, "rex-legacy-mouse", got)
+	hex := got[strings.Index(got, "got-1b5b4d20")+len("got-"):]
+	if len(hex) < 12 {
+		t.Fatalf("ASSERTION: the report is short: %q", hex)
+	}
+	x, _ := strconv.ParseUint(hex[8:10], 16, 8)
+	y, _ := strconv.ParseUint(hex[10:12], 16, 8)
+	if x < 0x80 || x == 0xef || y < 0x21 || y >= 0x80 {
+		t.Fatalf("ASSERTION: the click past column 95 arrived as %s, want the raw column byte over 0x7f and then the row", hex[:12])
+	}
 }

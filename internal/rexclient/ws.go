@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 )
@@ -170,6 +171,9 @@ func (w *conn) read() (op byte, msg []byte, err error) {
 	}
 }
 
+// ready ends the handshake deadline.
+func (w *conn) ready() { _ = w.c.SetDeadline(time.Time{}) }
+
 // close sends a normal close and closes the connection.
 func (w *conn) close() error {
 	_ = w.write(opClose, []byte{0x03, 0xe8})
@@ -182,11 +186,18 @@ type Endpoint struct {
 	Addr    string
 }
 
+// handshakeTimeout bounds the connect, the upgrade and the first message, so
+// a host that is down or a server that does not answer fails with a message.
+const handshakeTimeout = 10 * time.Second
+
+// dial connects with a deadline that conn.ready clears after the first
+// message.
 func (e Endpoint) dial() (net.Conn, error) {
-	c, err := net.Dial(e.Network, e.Addr)
+	c, err := net.DialTimeout(e.Network, e.Addr, handshakeTimeout)
 	if err != nil {
 		return nil, errfmt.Errorf("failed to reach the Rex server at %s: %w", e, err)
 	}
+	_ = c.SetDeadline(time.Now().Add(handshakeTimeout))
 	return c, nil
 }
 

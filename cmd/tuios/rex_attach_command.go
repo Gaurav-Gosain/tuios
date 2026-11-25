@@ -280,7 +280,7 @@ func rexForwardInput(ctl *rexclient.Control, b rexclient.Block, detach chan<- st
 		held = nil
 		if i := bytes.Index(data, []byte(rexclient.DetachSequence)); i >= 0 {
 			if i > 0 {
-				rexWrite(ctl, b, data[:i])
+				rexSend(ctl, b, data[:i])
 			}
 			mu.Unlock()
 			detach <- struct{}{}
@@ -294,13 +294,13 @@ func rexForwardInput(ctl *rexclient.Control, b rexclient.Block, detach chan<- st
 				mu.Lock()
 				defer mu.Unlock()
 				if g == gen && len(held) > 0 {
-					rexWrite(ctl, b, held)
+					rexSend(ctl, b, held)
 					held = nil
 				}
 			})
 		}
 		if len(data) > 0 {
-			rexWrite(ctl, b, data)
+			rexSend(ctl, b, data)
 		}
 		mu.Unlock()
 	}
@@ -317,6 +317,19 @@ func rexTail(data []byte) int {
 			return k
 		}
 	}
+	// A legacy mouse report is six bytes, ESC [ M and three raw bytes. A
+	// whole one at the end is complete. The start of one waits.
+	x10 := []byte("\x1b[M")
+	if len(data) >= 6 && bytes.Equal(data[len(data)-6:len(data)-3], x10) {
+		return 0
+	}
+	if bytes.HasSuffix(data, x10[:2]) {
+		return 2
+	}
+	off := max(0, len(data)-5)
+	if i := bytes.LastIndex(data[off:], x10); i >= 0 {
+		return len(data) - off - i
+	}
 	for k := 1; k <= min(len(data), utf8.UTFMax-1); k++ {
 		if c := data[len(data)-k]; utf8.RuneStart(c) {
 			if c >= utf8.RuneSelf && !utf8.FullRune(data[len(data)-k:]) {
@@ -328,7 +341,60 @@ func rexTail(data []byte) int {
 	return 0
 }
 
-// rexWrite types bytes into the block.
-func rexWrite(ctl *rexclient.Control, b rexclient.Block, data []byte) {
-	_ = ctl.Write(b, strings.ToValidUTF8(string(data), "\uFFFD"))
+// rexSend types data into the block. Rex takes typed input as text, so a
+// legacy mouse report whose raw bytes are not text, past column 95, goes as a
+// mouse event, which the block encodes again for its program.
+func rexSend(ctl *rexclient.Control, b rexclient.Block, data []byte) {
+	start := 0
+	for i := 0; ; i += 3 {
+		j := bytes.Index(data[i:], []byte("\x1b[M"))
+		if j < 0 || len(data) < i+j+6 {
+			break
+		}
+		i += j
+		if r := data[i+3 : i+6]; r[0]|r[1]|r[2] >= utf8.RuneSelf {
+			if i > start {
+				_ = ctl.Write(b, string(data[start:i]))
+			}
+			rexMouse(ctl, b, int(r[0])-32, int(r[1])-33, int(r[2])-33)
+			start = i + 6
+		}
+	}
+	if start < len(data) {
+		_ = ctl.Write(b, string(data[start:]))
+	}
+}
+
+// rexMouse sends a legacy mouse report's button code cb at cell x, y as a
+// Rex mouse or wheel event.
+func rexMouse(ctl *rexclient.Control, b rexclient.Block, cb, x, y int) {
+	var mods []string
+	for bit, name := range []string{"shift", "alt", "ctrl"} {
+		if cb&(4<<bit) != 0 {
+			mods = append(mods, name)
+		}
+	}
+	if cb&64 != 0 {
+		d := [4][2]int{{0, -1}, {0, 1}, {-1, 0}, {1, 0}}[cb&3]
+		_ = ctl.Event(b, "wheel", struct {
+			X      int `json:"x"`
+			Y      int `json:"y"`
+			DeltaX int `json:"delta_x"`
+			DeltaY int `json:"delta_y"`
+		}{x, y, d[0], d[1]})
+		return
+	}
+	action := "press"
+	if cb&32 != 0 {
+		action = "motion"
+	} else if cb&3 == 3 {
+		action = "release"
+	}
+	_ = ctl.Event(b, "mouse", struct {
+		Action string `json:"action"`
+		Button string `json:"button,omitempty"`
+		X      int    `json:"x"`
+		Y      int    `json:"y"`
+		Mods   string `json:"mods,omitempty"`
+	}{action, [4]string{"left", "middle", "right", ""}[cb&3], x, y, strings.Join(mods, "+")})
 }

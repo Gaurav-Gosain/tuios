@@ -93,6 +93,7 @@ func Dial(ep Endpoint) (*Control, error) {
 		_ = ws.close()
 		return nil, errfmt.Errorf("the Rex server refused hello: %s", oneLine(string(msg)))
 	}
+	ws.ready()
 	c := &Control{ws: ws, ep: ep, waiting: map[string]chan reply{}, done: make(chan struct{})}
 	go c.readLoop()
 	return c, nil
@@ -242,6 +243,19 @@ func (c *Control) Own(b Block, own bool) error {
 	return err
 }
 
+// Event sends an input event, such as a mouse press, which the block's own
+// terminal encodes in the form its program asked for.
+func (c *Control) Event(b Block, kind string, payload any) error {
+	type event struct {
+		Type    string `json:"type"`
+		Payload any    `json:"payload"`
+	}
+	return c.Send("block.event", struct {
+		Block
+		Event event `json:"event"`
+	}{b, event{kind, payload}})
+}
+
 // sessionRef names a session in a request.
 type sessionRef struct {
 	SessionID string `json:"session_id"`
@@ -328,7 +342,10 @@ func (c *Control) NewShell(label, cwd string, s Size) (Block, error) {
 func (c *Control) FindBlock(blockID string, labels ...string) (Block, error) {
 	for _, label := range labels {
 		id, err := c.SessionNamed(label)
-		if err != nil || id == "" {
+		if err != nil {
+			return Block{}, err
+		}
+		if id == "" {
 			continue
 		}
 		raw, err := c.Call("session.list_blocks", sessionRef{id})
@@ -401,6 +418,7 @@ func (c *Control) OpenData(b Block) (*Data, error) {
 		_ = ws.close()
 		return nil, errors.New("the Rex server answered the data stream in a form this client does not read")
 	}
+	ws.ready()
 	return &Data{ws: ws, inSnap: true}, nil
 }
 
