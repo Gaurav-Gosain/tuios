@@ -83,8 +83,10 @@ func queryPalette(out io.Writer, chunks <-chan []byte, wait time.Duration) (pale
 				return p, got[loc[1]:]
 			}
 		case <-timer.C:
+			// The rest of an answer may still come: the decoder takes what
+			// came, so the tail of an answer is not read as keys.
 			parse(&p, got)
-			return p, nil
+			return p, got
 		}
 	}
 }

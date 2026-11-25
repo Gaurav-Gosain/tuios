@@ -106,6 +106,8 @@ func (m *model) mark(s string) string {
 		return ink(c.faint, "–")
 	case "skipped":
 		return ink(c.faint, "⊘")
+	case "approval":
+		return ink(c.yellow, "◷")
 	}
 	return ink(c.faint, "·")
 }
@@ -521,6 +523,7 @@ func (m *model) footer() string {
 		var parts []string
 		for _, p := range []struct{ st, word, code string }{
 			{"failure", "failing", c.red}, {"running", "running", c.accent}, {"queued", "waiting", c.dim},
+			{"approval", "waiting for approval", c.yellow},
 			{"success", "successful", c.green}, {"skipped", "skipped", c.faint}} {
 			if n[p.st] > 0 {
 				parts = append(parts, ink(p.code, itoa(n[p.st])+" "+p.word))
@@ -637,6 +640,8 @@ func (m *model) headline(b Build, fc forecast) (string, string) {
 	switch b.State {
 	case "queued":
 		return "Waits for a runner", c.accent
+	case "approval":
+		return "Waits for a maintainer to approve it", c.yellow
 	case "running":
 		switch {
 		case !fc.known:
@@ -859,7 +864,12 @@ func (m *model) timeline(b Build, fc forecast) []jobRow {
 	if active(b.State) {
 		for _, f := range fc.jobs {
 			if f.expected {
+				// The key joins the workflow and the name with a slash, and
+				// either can hold one, so the names come from the jobs.
 				wf, name, _ := strings.Cut(f.key, "/")
+				if n, ok := m.names[f.key]; ok {
+					wf, name = n[0], n[1]
+				}
 				rows = append(rows, jobRow{key: f.key, job: Job{Name: name, Workflow: wf, State: "pending"}, fc: f})
 			}
 		}
@@ -1161,6 +1171,9 @@ func (m *model) logPanel(w, h int) []string {
 	count := ""
 	if len(m.log) > 0 {
 		count = ink(c.faint, itoa(len(m.log))+" lines")
+		if m.logCut {
+			count = ink(c.faint, "the last "+itoa(maxLogBytes>>20)+" MB, "+itoa(len(m.log))+" lines")
+		}
 	}
 	action := func(key, word string) string {
 		return m.chip(ink(c.accent, key)+" "+ink(c.dim, word), c.raised, c.surface)
@@ -1288,20 +1301,14 @@ func (m *model) logPanel(w, h int) []string {
 func (m *model) logText(l LogLine, match bool) string {
 	c := m.pal
 	if match && m.search.query != "" {
-		lo := strings.ToLower(l.Text)
-		q := strings.ToLower(m.search.query)
 		var sb strings.Builder
-		rest := l.Text
-		for {
-			i := strings.Index(lo, q)
-			if i < 0 {
-				sb.WriteString(rest)
-				break
-			}
-			sb.WriteString(rest[:i])
-			sb.WriteString(ink(c.accent, bold(rest[i:i+len(q)])))
-			rest, lo = rest[i+len(q):], lo[i+len(q):]
+		last := 0
+		for _, r := range foldMatches(l.Text, m.search.query) {
+			sb.WriteString(l.Text[last:r[0]])
+			sb.WriteString(ink(c.accent, bold(l.Text[r[0]:r[1]])))
+			last = r[1]
 		}
+		sb.WriteString(l.Text[last:])
 		return sb.String()
 	}
 	switch l.Kind {

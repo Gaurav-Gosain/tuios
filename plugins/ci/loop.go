@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"os"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"time"
@@ -22,6 +24,9 @@ type Cmd func() Msg
 type batchMsg []Cmd
 
 type quitMsg struct{}
+
+// panicMsg carries a panic of a command to the loop.
+type panicMsg struct{ text string }
 
 func quit() Msg { return quitMsg{} }
 
@@ -72,7 +77,16 @@ func (k keyMsg) String() string { return k.name }
 func run(m *model, msgs chan Msg) *model {
 	exec := func(c Cmd) {
 		if c != nil {
-			go func() { msgs <- c() }()
+			go func() {
+				// A panic in a command ends the program as one in the loop
+				// does, so the terminal is put back.
+				defer func() {
+					if r := recover(); r != nil {
+						msgs <- panicMsg{fmt.Sprintf("%v\n%s", r, debug.Stack())}
+					}
+				}()
+				msgs <- c()
+			}()
 		}
 	}
 	exec(m.Init())
@@ -82,6 +96,8 @@ func run(m *model, msgs chan Msg) *model {
 			continue
 		case quitMsg:
 			return m
+		case panicMsg:
+			panic(msg.text)
 		case batchMsg:
 			for _, c := range msg {
 				exec(c)
@@ -117,7 +133,21 @@ func readKeys(msgs chan<- Msg, chunks <-chan []byte, rest []byte) {
 		for _, k := range keys {
 			msgs <- k
 		}
-		c, ok := <-chunks
+		var c []byte
+		ok := true
+		if len(rest) == 1 && rest[0] == 0x1b {
+			// A lone escape is the escape key, unless the rest of a
+			// sequence comes within a moment. The timer runs only then.
+			select {
+			case c, ok = <-chunks:
+			case <-time.After(25 * time.Millisecond):
+				msgs <- keyMsg{name: "esc"}
+				rest = nil
+				continue
+			}
+		} else {
+			c, ok = <-chunks
+		}
 		if !ok {
 			msgs <- quitMsg{}
 			return
@@ -143,8 +173,9 @@ func decode(b []byte) ([]Msg, []byte) {
 		c := b[0]
 		switch {
 		case c == 0x1b && len(b) == 1:
-			// A lone escape at the end of a read is the escape key.
-			return append(out, keyMsg{name: "esc"}), nil
+			// A lone escape at the end of a read may be the start of a
+			// sequence that the next read ends: readKeys waits a moment.
+			return out, []byte{0x1b}
 		case c == 0x1b && (b[1] == '[' || b[1] == 'O'):
 			// A CSI or SS3 sequence: parameters, then a final byte.
 			i := 2

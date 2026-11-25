@@ -48,7 +48,7 @@ type Job struct {
 }
 
 // state is one word for a run, a job or a step: running, queued, success,
-// failure, cancelled, skipped or neutral.
+// failure, cancelled, skipped, approval or neutral.
 func state(status, conclusion string) string {
 	switch {
 	case status == "in_progress":
@@ -66,7 +66,9 @@ func state(status, conclusion string) string {
 	case "skipped":
 		return "skipped"
 	case "action_required":
-		return "queued"
+		// A pull request from a fork waits for a maintainer to approve
+		// its workflows. Nothing runs until a person does.
+		return "approval"
 	}
 	return "neutral"
 }

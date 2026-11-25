@@ -69,6 +69,18 @@ type model struct {
 	// search is the search in the log.
 	search  search
 	numbers bool // The line numbers of the log.
+	// logGap is the wait before the log of a running job is read again,
+	// and logNext the time it ends. A read that finds the log the same
+	// doubles the wait.
+	logGap  time.Duration
+	logNext time.Time
+	logCut  bool // Only the tail of the log is kept.
+	// errGap is the wait before the builds are read again after an error
+	// with nothing running.
+	errGap time.Duration
+	// names are the workflow and the name of the job of each key, from the
+	// jobs of earlier builds.
+	names   map[string][2]string
 	logNote string
 	starts  []int
 	step    int // The step the person moved to with n and p, or -1.
@@ -108,6 +120,7 @@ func (m *model) setRepo(repo string) {
 	m.jobsOf = map[int64]*runJobs{}
 	m.asked = map[int64]bool{}
 	m.pulls = map[int]PullRequest{}
+	m.names = map[string][2]string{}
 	m.numbers = true
 }
 
@@ -137,6 +150,7 @@ type (
 		job   int64
 		lines []LogLine
 		final bool
+		cut   bool // Only the tail of the log came, within maxLogBytes.
 		err   error
 	}
 	pollMsg struct{ gen int }
@@ -247,17 +261,22 @@ func (m *model) fetchLog() Cmd {
 	if m.logJob == j.ID && m.logFinal {
 		return nil
 	}
+	// The log of a running job that did not grow waits before it is read
+	// again: each read costs the whole log.
+	if m.logJob == j.ID && active(j.State) && m.now().Before(m.logNext) {
+		return nil
+	}
 	if m.logJob != j.ID {
 		m.logNote = "Loading the log."
 	}
 	m.logBusy = true
 	repo, g, id, final := m.repo, m.gh, j.ID, !active(j.State)
 	return func() Msg {
-		raw, err := g.log(repo, id)
+		raw, cut, err := g.log(repo, id)
 		if err != nil {
 			return logMsg{repo: repo, job: id, err: err}
 		}
-		return logMsg{repo: repo, job: id, lines: parseLog(raw), final: final}
+		return logMsg{repo: repo, job: id, lines: parseLog(raw), final: final, cut: cut}
 	}
 }
 
@@ -396,6 +415,7 @@ func (m *model) setJob(id int64) {
 		return
 	}
 	m.jobID, m.step, m.jumped = id, -1, 0
+	m.logGap, m.logNext, m.logCut = 0, time.Time{}, false
 	m.search = search{}
 	m.log, m.logJob, m.logFinal, m.logNote = nil, 0, false, ""
 	m.starts, m.found, m.failAt, m.top, m.follow = nil, nil, 0, 0, true
@@ -520,6 +540,11 @@ func (m *model) estimate(b Build) (forecast, []Build) {
 			for _, j := range k.jobs {
 				key := jobKey(j, r)
 				one[key] = timeOf(j, key, e.Started)
+				w := j.Workflow
+				if w == "" {
+					w = r.Workflow
+				}
+				m.names[key] = [2]string{w, j.Name}
 			}
 		}
 		if whole && len(one) > 0 {
@@ -598,8 +623,8 @@ func (m *model) update(msg Msg) (*model, Cmd) {
 			return m, nil
 		}
 		if msg.err != nil {
-			m.err = "Cannot read the jobs: " + msg.err.Error()
-			return m, nil
+			// A toast: the request may be for an earlier build only.
+			return m, m.say("Cannot read the jobs of a run: " + msg.err.Error())
 		}
 		if msg.changed {
 			m.moved = true
@@ -679,9 +704,17 @@ func (m *model) onRuns(msg runsMsg) (*model, Cmd) {
 	}
 	if msg.err != nil {
 		m.err = "Cannot read the builds of " + m.repo + ": " + msg.err.Error()
-		return m, m.schedule()
+		if m.running() {
+			return m, m.schedule()
+		}
+		// Nothing is known to run, so no poll would come: try again later,
+		// with a longer wait each time.
+		m.errGap = min(max(2*m.errGap, activeInterval), 5*time.Minute)
+		m.pollGen++
+		gen := m.pollGen
+		return m, tick(m.errGap, func(time.Time) Msg { return pollMsg{gen: gen} })
 	}
-	m.err = ""
+	m.err, m.errGap = "", 0
 	m.updated = m.now()
 	if msg.changed {
 		m.moved = true
@@ -744,9 +777,15 @@ func (m *model) onLog(msg logMsg) (*model, Cmd) {
 		}
 		return m, nil
 	}
-	if len(msg.lines) != len(m.log) {
+	switch {
+	case len(msg.lines) != len(m.log) || m.logJob != msg.job:
 		m.moved = true
+		m.logGap = 0
+	default:
+		m.logGap = min(max(2*m.logGap, activeInterval), time.Minute)
 	}
+	m.logNext = m.now().Add(m.logGap)
+	m.logCut = msg.cut
 	m.log, m.logJob, m.logFinal, m.logNote = msg.lines, msg.job, msg.final, ""
 	if j, _ := m.selectedJob(); !active(j.State) && !msg.final {
 		// The read began while the job ran, and the job has ended since.

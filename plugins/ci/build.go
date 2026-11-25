@@ -44,7 +44,7 @@ func buildEvent(e string) bool {
 // rollUp is the state of several runs together. A skipped run says nothing
 // unless every run was skipped.
 func rollUp(runs []Run) (string, bool) {
-	var running, queued, failed, cancelled, done, counted int
+	var running, queued, failed, cancelled, approval, done, counted int
 	for _, r := range runs {
 		if r.State == "skipped" {
 			continue
@@ -59,6 +59,8 @@ func rollUp(runs []Run) (string, bool) {
 			failed++
 		case "cancelled":
 			cancelled++
+		case "approval":
+			approval++
 		}
 		if !active(r.State) {
 			done++
@@ -73,6 +75,8 @@ func rollUp(runs []Run) (string, bool) {
 		return "queued", failed > 0
 	case failed > 0:
 		return "failure", true
+	case approval > 0:
+		return "approval", false
 	case cancelled > 0:
 		return "cancelled", false
 	}

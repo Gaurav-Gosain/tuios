@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // search is a search in the log of the selected job.
@@ -22,13 +23,39 @@ func (m *model) find() {
 	if s.query == "" {
 		return
 	}
-	q := strings.ToLower(s.query)
 	for i, l := range m.log {
-		if strings.Contains(strings.ToLower(l.Text), q) {
+		if len(foldMatches(l.Text, s.query)) > 0 {
 			s.matches = append(s.matches, i)
 		}
 	}
 	s.at = min(s.at, max(0, len(s.matches)-1))
+}
+
+// foldMatches are the byte ranges in text of q, matched with case folding
+// rune by rune. Lowering a rune can change its length in bytes, so offsets
+// in a lowered copy are not offsets in text.
+func foldMatches(text, q string) [][2]int {
+	n := utf8.RuneCountInString(q)
+	if n == 0 {
+		return nil
+	}
+	var out [][2]int
+	for i := 0; i < len(text); {
+		j, k := i, 0
+		for k < n && j < len(text) {
+			_, size := utf8.DecodeRuneInString(text[j:])
+			j += size
+			k++
+		}
+		if k == n && strings.EqualFold(text[i:j], q) {
+			out = append(out, [2]int{i, j})
+			i = j
+			continue
+		}
+		_, size := utf8.DecodeRuneInString(text[i:])
+		i += size
+	}
+	return out
 }
 
 // showMatch puts the match in view, a third of the way down the log.

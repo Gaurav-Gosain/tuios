@@ -112,8 +112,55 @@ func (g *gh) forget(path string) {
 	g.mu.Unlock()
 }
 
-// log gets the log of a job. It is plain text, and GitHub serves it only
-// once the runner has sent the first part.
-func (g *gh) log(repo string, job int64) ([]byte, error) {
-	return g.run("api", fmt.Sprintf("repos/%s/actions/jobs/%d/logs", repo, job))
+// maxLogBytes bounds the log kept of a job. A failure is at the end of a
+// log, so the tail is kept.
+const maxLogBytes = 4 << 20
+
+// tail keeps the last max bytes written to it, with a copy at most every
+// max bytes, so memory stays near twice the bound whatever the log's size.
+type tail struct {
+	buf []byte
+	max int
+	cut bool
+}
+
+func (t *tail) Write(p []byte) (int, error) {
+	t.buf = append(t.buf, p...)
+	if len(t.buf) > 2*t.max {
+		t.buf = append(t.buf[:0], t.buf[len(t.buf)-t.max:]...)
+		t.cut = true
+	}
+	return len(p), nil
+}
+
+// log gets the tail of the log of a job, and whether the bound cut it. It
+// is plain text, and GitHub serves it only once the runner has sent the
+// first part.
+func (g *gh) log(repo string, job int64) ([]byte, bool, error) {
+	g.slots <- struct{}{}
+	defer func() { <-g.slots }()
+	ctx, cancel := context.WithTimeout(context.Background(), ghTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, g.bin, "api", fmt.Sprintf("repos/%s/actions/jobs/%d/logs", repo, job))
+	out := &tail{max: maxLogBytes}
+	var stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = out, &stderr
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		return nil, false, errors.New(clean(firstLine(msg)))
+	}
+	b := out.buf
+	if len(b) > maxLogBytes {
+		b, out.cut = b[len(b)-maxLogBytes:], true
+	}
+	if out.cut {
+		// The bound cut a line in two: drop its end.
+		if i := bytes.IndexByte(b, '\n'); i >= 0 {
+			b = b[i+1:]
+		}
+	}
+	return b, out.cut, nil
 }

@@ -12973,6 +12973,10 @@ Run on 2026-11-01 on macOS arm64, on `upstream/main` at `4c95caa50` plus the bra
 | R runs the failed jobs again only on its second press | R runs at once | "the question before a rerun" | **caught** |
 | The second R reaches gh with --failed | `rerun` without `--failed` | "the second R did not run the failed jobs of run 201 again" | **caught** |
 | / finds the lines of the query | `find` matches nothing | "the matches of the search" | **caught** |
+| A search marks a match where lowering a rune changes its length | the offsets of `strings.ToLower` used on the line | `TestSearchFoldsCaseByRune`: "slice bounds out of range [:9] with length 7" | **caught** |
+| A run that waits for approval does not poll or tick | `action_required` read as queued | `TestApprovalIsNotRunning`: "a build that waits for approval counts as running" | **caught** |
+| The log keeps only its tail | the bound cut | `TestLogIsBounded`: "the log kept 12582927 bytes" | **caught** |
+| A log that did not grow is not read again at once | the wait cut | `TestLogRefetchBacksOff`: "a log that did not grow is read again at once" | **caught** |
 
 ## The host title follows the focused pane (#1064)
 
