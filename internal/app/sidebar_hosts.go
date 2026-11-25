@@ -96,7 +96,10 @@ type FederationSession struct {
 	// ScratchCount is how many of the WindowCount windows are scratch panes.
 	// 0 from a daemon that does not count them.
 	ScratchCount int
-	Attached     bool
+	// RailCount is how many of the WindowCount windows are the rail pane.
+	// 0 from a daemon that does not count it.
+	RailCount int
+	Attached  bool
 	// Global marks a session meant to hold panes from more than one machine.
 	// The rail files it in the global group rather than under this machine.
 	Global bool
@@ -227,6 +230,7 @@ func refreshFederationCmd() tea.Cmd {
 					DisplayName  string            `json:"display_name"`
 					WindowCount  int               `json:"window_count"`
 					ScratchCount int               `json:"scratch_count"`
+					RailCount    int               `json:"rail_count"`
 					Attached     bool              `json:"attached"`
 					Global       bool              `json:"global"`
 					AgentState   string            `json:"agent_state"`
@@ -276,6 +280,7 @@ func refreshFederationCmd() tea.Cmd {
 					DisplayName:  s.DisplayName,
 					WindowCount:  s.WindowCount,
 					ScratchCount: s.ScratchCount,
+					RailCount:    s.RailCount,
 					Attached:     s.Attached,
 					Global:       s.Global,
 					AgentState:   s.AgentState,

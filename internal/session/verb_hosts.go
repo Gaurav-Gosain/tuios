@@ -86,9 +86,12 @@ type remoteSessionRow struct {
 	// ScratchCount is how many of the WindowCount windows are scratch panes,
 	// so a listing can name them apart. This daemon counts them from the
 	// host's window summaries. Omitted when zero.
-	ScratchCount int  `json:"scratch_count,omitempty"`
-	Attached     bool `json:"attached,omitempty"`
-	Restored     bool `json:"restored,omitempty"`
+	ScratchCount int `json:"scratch_count,omitempty"`
+	// RailCount is how many of the WindowCount windows are the rail pane,
+	// which is in no layout. Counted the same way. Omitted when zero.
+	RailCount int  `json:"rail_count,omitempty"`
+	Attached  bool `json:"attached,omitempty"`
+	Restored  bool `json:"restored,omitempty"`
 	// Global marks a session meant to hold panes from more than one machine.
 	// It is carried across the link so every machine files the session the
 	// same way: a global session is in the rail's global group whichever
@@ -463,6 +466,7 @@ func sessionRowsOut(in []remoteSessionListRow) []remoteSessionRow {
 	for _, r := range in {
 		r.remoteSessionRow.AgentState = rollUpAgentState(r.Windows)
 		r.remoteSessionRow.ScratchCount = ScratchPanes(r.Windows)
+		r.remoteSessionRow.RailCount = RailPanes(r.Windows)
 		agents := agentPanes(r.Windows)
 		if len(agents) > left {
 			agents = agents[:left]
@@ -749,6 +753,7 @@ func localSessionRows(infos []SessionInfo) []remoteSessionRow {
 			DisplayName:  s.DisplayName,
 			WindowCount:  s.WindowCount,
 			ScratchCount: ScratchPanes(s.Windows),
+			RailCount:    RailPanes(s.Windows),
 			Attached:     s.Attached,
 			Restored:     s.Restored,
 			Global:       s.Global,

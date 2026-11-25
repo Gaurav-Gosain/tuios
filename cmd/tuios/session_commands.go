@@ -836,7 +836,7 @@ func runListSessions(jsonOutput bool) error {
 		}
 		rowsBySpace[s.Space] = append(rowsBySpace[s.Space], []string{
 			name,
-			lsWindowsText(s.WindowCount, session.ScratchPanes(s.Windows)),
+			lsWindowsText(max(0, s.WindowCount-session.RailPanes(s.Windows)), session.ScratchPanes(s.Windows)),
 			status,
 			formatTimeAgo(s.Created),
 			formatTimeAgo(s.LastActive),

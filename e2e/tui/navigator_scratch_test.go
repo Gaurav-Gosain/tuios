@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuitest"
@@ -73,7 +74,11 @@ func TestNavigatorCountsAHiddenScratchPane(t *testing.T) {
 // The way it can go wrong, an assertion: the row counts the scratch pane as
 // a plain pane and says 1 until the load lands.
 func TestNavigatorCountsAScratchPaneOnAHost(t *testing.T) {
-	f := startGlobalFleet(t)
+	// alpha's client draws the rail pane, so work also holds the rail pane.
+	// It is in the session's window count and is no pane of the layout.
+	f := startGlobalFleetWith(t, map[string]string{"beta": "someone@betabox"},
+		"\n[appearance.sidebar]\nenabled = true\nsections = \"sessions,terminals,pane\"\n\n"+
+			"[appearance.sidebar.pane]\ntitle = \"railtv\"\nheight = 6\ncommand = \"sleep 600\"\n")
 	far := startIn(t, f.alpha, startOpts{cols: 120, rows: 40, args: []string{"new", "work"}})
 	waitBoot(t, far)
 	newWindow(t, far)
@@ -89,6 +94,10 @@ func TestNavigatorCountsAScratchPaneOnAHost(t *testing.T) {
 		t.Fatalf("close the ordinary pane on alpha: %v\n%s", err, out)
 	}
 	waitCount(t, far, 0, "with only the hidden scratch terminal left on alpha")
+	waitUntil(t, "work on alpha holds the rail pane", uiTimeout, func() (bool, string) {
+		out, err := tuiosCLI(t, f.alpha, "list-windows", "--json", "--rail", "--session", "work")
+		return err == nil && strings.Contains(out, `"rail": "sleep 600"`), out
+	})
 
 	hold := filepath.Join(f.here, "hold-nav")
 	if err := os.WriteFile(hold, []byte("1"), 0o644); err != nil {
@@ -110,5 +119,24 @@ func TestNavigatorCountsAScratchPaneOnAHost(t *testing.T) {
 		t.Fatalf("ASSERTION: the navigator does not count work's scratch pane on alpha: %v\n%s", err, term.Snapshot())
 	}
 	saveCockpitFrames(t, term, "navigator-host-scratch")
+
+	// tuios ls counts the same panes: on alpha, and from here across the link.
+	if ls, err := tuiosCLI(t, f.alpha, "ls"); err != nil || !strings.Contains(ls, "1 scratch pane") {
+		t.Errorf("ASSERTION: tuios ls on alpha does not count work as 1 scratch pane: %v\n%s", err, ls)
+	}
+	all, err := tuiosCLIEnv(t, f.here, f.env, "ls", "--all-hosts")
+	// Each host is a header line and then its own table.
+	workRow, host := "", ""
+	for line := range strings.SplitSeq(all, "\n") {
+		if name := strings.TrimSpace(line); name == "local" || name == "alpha" || name == "beta" {
+			host = name
+		}
+		if host == "alpha" && strings.Contains(line, "work") {
+			workRow = line
+		}
+	}
+	if err != nil || !strings.Contains(workRow, "1 scratch pane") {
+		t.Errorf("ASSERTION: tuios ls --all-hosts does not count work on alpha as 1 scratch pane: %v\n%s", err, all)
+	}
 	alive(t, term, "after the navigator")
 }

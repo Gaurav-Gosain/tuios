@@ -400,7 +400,7 @@ func (m *OS) navigatorSessions() []navSession {
 			if fs.DisplayName != "" {
 				title = fs.DisplayName
 			}
-			s := navSession{Host: h.Name, Name: fs.Name, Title: title, Count: fs.WindowCount - fs.ScratchCount, Scratch: fs.ScratchCount}
+			s := navSession{Host: h.Name, Name: fs.Name, Title: title, Count: max(0, fs.WindowCount-fs.ScratchCount-fs.RailCount), Scratch: fs.ScratchCount}
 			if h.Status != string(federation.StatusUp) {
 				s.Note = h.Name + " is not reachable"
 			}

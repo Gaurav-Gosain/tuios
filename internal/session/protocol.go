@@ -612,6 +612,18 @@ func ScratchPanes(windows []WindowSummary) int {
 	return n
 }
 
+// RailPanes is how many of windows are the rail pane. It is in a session's
+// window count and is not a pane of the session's layout.
+func RailPanes(windows []WindowSummary) int {
+	n := 0
+	for _, w := range windows {
+		if w.Rail {
+			n++
+		}
+	}
+	return n
+}
+
 // WindowSummary is a lightweight per-window entry in a session listing: enough
 // for a session-management surface to draw and expand a non-attached session's
 // window tree without querying that session's PTYs.

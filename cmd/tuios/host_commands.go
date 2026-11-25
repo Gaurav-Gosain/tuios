@@ -235,6 +235,7 @@ type hostSessionsEntry struct {
 		DisplayName  string `json:"display_name"`
 		WindowCount  int    `json:"window_count"`
 		ScratchCount int    `json:"scratch_count"`
+		RailCount    int    `json:"rail_count"`
 		Attached     bool   `json:"attached"`
 		Restored     bool   `json:"restored"`
 		Space        string `json:"space"`
@@ -305,7 +306,7 @@ func runListSessionsAllHosts(host string, jsonOutput bool) error {
 			}
 			rowsBySpace[s.Space] = append(rowsBySpace[s.Space], []string{
 				name,
-				lsWindowsText(s.WindowCount, s.ScratchCount),
+				lsWindowsText(max(0, s.WindowCount-s.RailCount), s.ScratchCount),
 				status,
 				formatTimeAgo(s.Created),
 				formatTimeAgo(s.LastActive),

@@ -19670,12 +19670,15 @@ Repeat from `e2e/tui` with
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestPiPFollowsTheCursor$' .`.
+
 ## The navigator counts a scratch pane on a host before its load
 
 `TestNavigatorCountsAScratchPaneOnAHost` leaves session work on the linked
-machine alpha with only its hidden scratch pane. A client on this machine
-opens the navigator with its detail load held. The row of work @ alpha must
-say "0 + 1 scratch" while the load waits.
+machine alpha with only its hidden scratch pane and the rail pane, which
+alpha's client draws. A client on this machine opens the navigator with its
+detail load held. The row of work @ alpha must say "0 + 1 scratch" while the
+load waits. Then `tuios ls` on alpha and `tuios ls --all-hosts` here must
+count work as "1 scratch pane".
 
 Run on 2026-11-25 on Linux (amd64). The control is this branch without the
 change, so the row takes the window count of the listing.
@@ -19683,6 +19686,9 @@ change, so the row takes the window count of the listing.
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
 | The row counts the scratch pane as a plain pane (2 runs) | "the navigator does not count work's scratch pane on alpha" | **caught** |
+| The first commit of this branch, 199b24836, where the row counts the rail pane as a plain pane | "the navigator does not count work's scratch pane on alpha" | **caught** |
+| main | "the navigator does not count work's scratch pane on alpha" | **caught** |
+| this branch | 3 of 3 runs pass | passes |
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestNavigatorCountsAScratchPaneOnAHost$' -v .`.
