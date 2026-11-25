@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"slices"
 	"time"
 	"unicode/utf8"
 )
@@ -89,13 +90,17 @@ func run(m *model, msgs chan Msg) *model {
 // no keyboard protocol, so the keys come as the legacy sequences.
 func readKeys(msgs chan<- Msg) {
 	buf := make([]byte, 4096)
+	var rest []byte
 	for {
 		n, err := os.Stdin.Read(buf)
 		if err != nil {
 			msgs <- quitMsg{}
 			return
 		}
-		for _, k := range decode(buf[:n]) {
+		// A sequence that a read cut in two waits for the next read.
+		var keys []Msg
+		keys, rest = decode(append(rest, buf[:n]...))
+		for _, k := range keys {
 			msgs <- k
 		}
 	}
@@ -111,14 +116,15 @@ var ctrlKeys = map[byte]string{
 	14: "ctrl+n", 16: "ctrl+p", 18: "ctrl+r",
 }
 
-func decode(b []byte) []Msg {
+// decode gives the keys in b, and the start of a sequence that b cuts off.
+func decode(b []byte) ([]Msg, []byte) {
 	var out []Msg
 	for len(b) > 0 {
 		c := b[0]
 		switch {
 		case c == 0x1b && len(b) == 1:
 			// A lone escape at the end of a read is the escape key.
-			return append(out, keyMsg{name: "esc"})
+			return append(out, keyMsg{name: "esc"}), nil
 		case c == 0x1b && (b[1] == '[' || b[1] == 'O'):
 			// A CSI or SS3 sequence: parameters, then a final byte.
 			i := 2
@@ -126,7 +132,7 @@ func decode(b []byte) []Msg {
 				i++
 			}
 			if i == len(b) {
-				return out
+				return out, slices.Clone(b)
 			}
 			seq := string(b[2 : i+1])
 			b = b[i+1:]
@@ -140,9 +146,9 @@ func decode(b []byte) []Msg {
 			}
 			continue
 		case c == 0x1b:
-			// Alt and a key, which the plugin does not use.
-			b = b[2:]
-			continue
+			// Escape and then a key in the same read: both are keys. The
+			// plugin has no Alt keys.
+			out = append(out, keyMsg{name: "esc"})
 		case c == ' ':
 			out = append(out, keyMsg{name: "space", text: " "})
 		case c < 0x20 || c == 0x7f:
@@ -158,5 +164,5 @@ func decode(b []byte) []Msg {
 		}
 		b = b[1:]
 	}
-	return out
+	return out, nil
 }

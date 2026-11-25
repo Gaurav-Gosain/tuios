@@ -52,13 +52,18 @@ type model struct {
 	logJob   int64
 	logFinal bool
 	logBusy  bool
-	logNote  string
-	starts   []int
-	step     int // The step the person moved to with n and p, or -1.
-	found    []failure
-	failAt   int
-	top      int  // The first log line in view.
-	follow   bool // Keep the end of the log in view.
+	// logAgain asks for the log once more when the read on its way ends:
+	// the job changed while it ran.
+	logAgain bool
+	// jumped is the job whose log opened at its first failure.
+	jumped  int64
+	logNote string
+	starts  []int
+	step    int // The step the person moved to with n and p, or -1.
+	found   []failure
+	failAt  int
+	top     int  // The first log line in view.
+	follow  bool // Keep the end of the log in view.
 
 	tall, help bool
 	picker     *picker
@@ -73,6 +78,7 @@ type model struct {
 	pollGen  int
 	polling  bool // A poll is on its way.
 	ticking  bool
+	tickGen  int
 }
 
 func newModel(g *gh, repo, sha string) *model {
@@ -82,7 +88,10 @@ func newModel(g *gh, repo, sha string) *model {
 }
 
 func (m *model) setRepo(repo string) {
-	*m = model{gh: m.gh, scr: m.scr, now: m.now, sha: m.sha, width: m.width, height: m.height, step: -1, follow: true, interval: activeInterval}
+	// The counters go on, so a tick, a poll or a toast end of the repository
+	// before matches nothing here.
+	*m = model{gh: m.gh, scr: m.scr, now: m.now, sha: m.sha, width: m.width, height: m.height, step: -1, follow: true, interval: activeInterval,
+		pollGen: m.pollGen + 1, tickGen: m.tickGen + 1, toastGen: m.toastGen + 1}
 	m.repo = repo
 	m.jobsOf = map[int64]*runJobs{}
 	m.asked = map[int64]bool{}
@@ -117,7 +126,7 @@ type (
 		err   error
 	}
 	pollMsg  struct{ gen int }
-	tickMsg  struct{}
+	tickMsg  struct{ gen int }
 	toastEnd struct{ gen int }
 )
 
@@ -195,7 +204,11 @@ func (m *model) fetchJobs(r Run) Cmd {
 
 func (m *model) fetchLog() Cmd {
 	j, ok := m.selectedJob()
-	if !ok || m.logBusy {
+	if !ok {
+		return nil
+	}
+	if m.logBusy {
+		m.logAgain = true
 		return nil
 	}
 	if j.State == "skipped" {
@@ -252,7 +265,9 @@ func (m *model) tick() Cmd {
 		return nil
 	}
 	m.ticking = true
-	return tick(time.Second, func(time.Time) Msg { return tickMsg{} })
+	m.tickGen++
+	gen := m.tickGen
+	return tick(time.Second, func(time.Time) Msg { return tickMsg{gen: gen} })
 }
 
 func (m *model) selected() (Build, bool) {
@@ -355,7 +370,7 @@ func (m *model) setJob(id int64) {
 	if id == m.jobID {
 		return
 	}
-	m.jobID, m.step = id, -1
+	m.jobID, m.step, m.jumped = id, -1, 0
 	m.log, m.logJob, m.logFinal, m.logNote = nil, 0, false, ""
 	m.starts, m.found, m.failAt, m.top, m.follow = nil, nil, 0, 0, true
 }
@@ -515,12 +530,23 @@ func (m *model) update(msg Msg) (*model, Cmd) {
 		if msg.changed {
 			m.moved = true
 		}
+		was, _ := m.selectedJob()
 		m.jobsOf[msg.run] = &runJobs{jobs: msg.jobs, final: msg.final}
 		before := m.jobID
 		m.pickJob()
+		now, _ := m.selectedJob()
 		var cmd Cmd
-		if m.jobID != before || m.logJob != m.jobID {
+		switch {
+		case m.jobID != before || m.logJob != m.jobID:
 			cmd = m.fetchLog()
+		case !active(now.State) && (active(was.State) || !m.logFinal):
+			// The job ended since its log was read: read it to its end.
+			m.logFinal = false
+			cmd = m.fetchLog()
+		}
+		if m.logJob == m.jobID {
+			// The steps may have moved on: place them and the failures again.
+			m.annotate()
 		}
 		return m, batch(cmd, m.tick())
 	case logMsg:
@@ -531,6 +557,9 @@ func (m *model) update(msg Msg) (*model, Cmd) {
 		}
 		return m, m.poll()
 	case tickMsg:
+		if msg.gen != m.tickGen {
+			return m, nil
+		}
 		m.ticking = false
 		return m, m.tick()
 	case toastEnd:
@@ -581,6 +610,13 @@ func (m *model) onRuns(msg runsMsg) (*model, Cmd) {
 		m.runs = append(slices.Clone(msg.runs), kept...)
 	}
 	slices.SortStableFunc(m.runs, func(a, b Run) int { return b.Started.Compare(a.Started) })
+	// The jobs of a run that left the list are not needed again.
+	for id := range m.jobsOf {
+		if !slices.ContainsFunc(m.runs, func(r Run) bool { return r.ID == id }) {
+			delete(m.jobsOf, id)
+			m.gh.forget(fmt.Sprintf("repos/%s/actions/runs/%d/jobs?per_page=100", m.repo, id))
+		}
+	}
 	m.all = builds(m.runs)
 	m.refilter()
 	var cmds []Cmd
@@ -600,9 +636,12 @@ func (m *model) onLog(msg logMsg) (*model, Cmd) {
 		return m, nil
 	}
 	m.logBusy = false
+	again := m.logAgain
+	m.logAgain = false
 	if msg.job != m.jobID {
 		return m, m.fetchLog()
 	}
+
 	if msg.err != nil {
 		j, _ := m.selectedJob()
 		if active(j.State) {
@@ -615,19 +654,27 @@ func (m *model) onLog(msg logMsg) (*model, Cmd) {
 	if len(msg.lines) != len(m.log) {
 		m.moved = true
 	}
-	first := m.logJob != msg.job
 	m.log, m.logJob, m.logFinal, m.logNote = msg.lines, msg.job, msg.final, ""
+	if j, _ := m.selectedJob(); !active(j.State) && !msg.final {
+		// The read began while the job ran, and the job has ended since.
+		m.logFinal = false
+		again = true
+	}
 	m.annotate()
 	switch {
-	case first && len(m.found) > 0:
+	case len(m.found) > 0 && m.jumped != msg.job:
 		// Open on the first failure, two lines below the top, so its whole
-		// block is in view.
+		// block is in view. Also when the job failed while you watched it.
+		m.jumped = msg.job
 		m.follow = false
 		m.top = max(0, m.found[0].first-2)
 	case m.follow:
 		m.top = len(m.log)
 	}
 	m.clampLog()
+	if again {
+		return m, m.fetchLog()
+	}
 	return m, nil
 }
 

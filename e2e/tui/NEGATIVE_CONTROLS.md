@@ -12968,6 +12968,8 @@ Run on 2026-11-01 on macOS arm64, on `upstream/main` at `4c95caa50` plus the bra
 | The log opens at the failing test, not at the exit line | `findFailures` gives only the exit line | "the failed build at its failing test" | **caught** |
 | A keeps only the builds that run | `shown` ignores `activeOnly` | "the running builds with A" | **caught** |
 | Nothing polls while no build runs | `schedule` polls with nothing running | "the plugin called gh 1 times in 10 s with nothing running" | **caught** |
+| A build that ends while you watch it opens at its failing test | the code before the fix: no new read of the log when the selected job ends | "the ended build at its failing test" | **caught** |
+| A switch of repository leaves one clock | the code before the fix: the counters start again and the old tick arms a second clock | "the clock wakes the plugin 219 times in 6 s" (54 and 42 after the fix) | **caught** |
 
 ## The host title follows the focused pane (#1064)
 

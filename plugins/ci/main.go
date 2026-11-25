@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/x/term"
@@ -63,9 +65,20 @@ func main() {
 	msgs := make(chan Msg, 64)
 	watchSize(msgs)
 	go readKeys(msgs)
+	restore := func() {
+		m.scr.stop()
+		_ = term.Restore(os.Stdin.Fd(), state)
+	}
+	defer func() {
+		// A panic leaves the terminal as it found it, then says what broke.
+		if r := recover(); r != nil {
+			restore()
+			fmt.Fprintf(os.Stderr, "tuios-ci stopped on an error: %v\n%s", r, debug.Stack())
+			os.Exit(1)
+		}
+	}()
 	final := run(m, msgs)
-	m.scr.stop()
-	_ = term.Restore(os.Stdin.Fd(), state)
+	restore()
 	if final.repo != "" {
 		saveRepo(final.repo)
 	}
@@ -84,10 +97,8 @@ func repoOfFolder() string {
 	}
 	remotes := strings.Fields(string(out))
 	// origin first, then the others in the order git lists them.
-	for i, r := range remotes {
-		if r == "origin" {
-			remotes[0], remotes[i] = remotes[i], remotes[0]
-		}
+	if i := slices.Index(remotes, "origin"); i > 0 {
+		remotes = append([]string{"origin"}, slices.Delete(remotes, i, i+1)...)
 	}
 	for _, r := range remotes {
 		url, err := exec.Command("git", "-C", dir, "remote", "get-url", r).Output()

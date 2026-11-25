@@ -99,6 +99,13 @@ func (g *gh) list(path string) (body []byte, changed bool, err error) {
 	return rest, true, nil
 }
 
+// forget drops the kept answer of path.
+func (g *gh) forget(path string) {
+	g.mu.Lock()
+	delete(g.kept, path)
+	g.mu.Unlock()
+}
+
 // log gets the log of a job. It is plain text, and GitHub serves it only
 // once the runner has sent the first part.
 func (g *gh) log(repo string, job int64) ([]byte, error) {

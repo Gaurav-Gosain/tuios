@@ -156,6 +156,69 @@ func ciFixtures(t *testing.T, dir string, now time.Time) {
 	})
 }
 
+// ciFinish rewrites the answers of acme/shop as if its running build had
+// just failed in its test job, with the failing test a hundred lines above
+// the runner's exit line.
+func ciFinish(t *testing.T, dir string, now time.Time) {
+	t.Helper()
+	at := func(ago float64) string {
+		return now.Add(-time.Duration(ago * float64(time.Second))).UTC().Format(time.RFC3339)
+	}
+	put := func(path string, b []byte) {
+		t.Helper()
+		name := strings.NewReplacer("/", "_", "?", "_", "&", "_", "=", "_", ",", "_").Replace(path)
+		if err := os.WriteFile(filepath.Join(dir, name), b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	runsPath := filepath.Join(dir, "repos_acme_shop_actions_runs_per_page_100")
+	raw, err := os.ReadFile(runsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var runs struct {
+		Runs []map[string]any `json:"workflow_runs"`
+	}
+	if err := json.Unmarshal(raw, &runs); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range runs.Runs {
+		if r["id"] == float64(101) {
+			r["status"], r["conclusion"], r["updated_at"] = "completed", "failure", at(5)
+		}
+	}
+	b, _ := json.Marshal(runs)
+	put("repos/acme/shop/actions/runs?per_page=100", b)
+	step := func(n int, name string, start, end float64, conclusion string) map[string]any {
+		return map[string]any{"number": n, "name": name, "status": "completed", "conclusion": conclusion, "started_at": at(start), "completed_at": at(end)}
+	}
+	jobs := map[string]any{"jobs": []map[string]any{
+		{"id": 1001, "run_id": 101, "name": "build", "workflow_name": "Tests", "status": "completed", "conclusion": "success",
+			"html_url": "https://github.com/acme/shop/actions/runs/101/job/1001", "started_at": at(260), "completed_at": at(140),
+			"steps": []map[string]any{step(1, "Set up job", 260, 259, "success")}},
+		{"id": 1002, "run_id": 101, "name": "test", "workflow_name": "Tests", "status": "completed", "conclusion": "failure",
+			"html_url": "https://github.com/acme/shop/actions/runs/101/job/1002", "started_at": at(260), "completed_at": at(8),
+			"steps": []map[string]any{step(1, "Set up job", 260, 259, "success"), step(2, "Run go test", 259, 10, "failure"), step(3, "Complete job", 9, 8, "success")}},
+	}}
+	b, _ = json.Marshal(jobs)
+	put("repos/acme/shop/actions/runs/101/jobs?per_page=100", b)
+	var log strings.Builder
+	line := func(ago float64, s string) { fmt.Fprintf(&log, "%s %s\n", at(ago), s) }
+	line(260, "Set up job")
+	line(259, "##[group]Run go test ./...")
+	for i := range 80 {
+		line(200, fmt.Sprintf("--- PASS: TestCart%03d (0.00s)", i))
+	}
+	line(150, "--- FAIL: TestCheckout (0.01s)")
+	line(150, "    checkout_test.go:31: paid twice")
+	for i := range 120 {
+		line(100, fmt.Sprintf("--- PASS: TestShip%03d (0.00s)", i))
+	}
+	line(11, "##[error]Process completed with exit code 1.")
+	line(9, "Cleaning up orphan processes")
+	put("repos/acme/shop/actions/jobs/1002/logs", []byte(log.String()))
+}
+
 // fakeGH is a gh that answers gh api from the files in $CI_FAKE_DIR/answers,
 // with an ETag, and "not modified" for the ETag of the file. It writes each
 // call to $CI_FAKE_DIR/calls.
@@ -407,6 +470,46 @@ func TestPluginCI(t *testing.T) {
 		t.Fatalf("send-keys Escape: %v\n%s", err, out)
 	}
 	waitFor("the builds after esc", count(8))
+
+	// Opening the same repository again, twice, while its build runs,
+	// leaves one clock: a tick of the repository before must not start a
+	// second one.
+	shopPID := pidOf(t, ci, "acme/shop")
+	for range 2 {
+		press("G")
+		waitFor("the menu of repositories", func(s string) bool { return strings.Contains(s, "acme/storefront-api") })
+		press("s", "h", "o", "p")
+		waitFor("the menu narrowed to shop", func(s string) bool { return !strings.Contains(s, "storefront-api") })
+		if out, err := tuiosCLI(t, base, "send-keys", "-s", "ci", "-w", pane, "Enter"); err != nil {
+			t.Fatalf("send-keys Enter: %v\n%s", err, out)
+		}
+		waitFor("acme/shop again", func(s string) bool { return estimate.MatchString(s) && count(8)(s) })
+	}
+	pause(t, "let the last poll and log read settle", 2*time.Second)
+	w0, _ := procCost(shopPID)
+	pause(t, "count the wakeups of the running build's clock", 6*time.Second)
+	w1, _ := procCost(shopPID)
+	t.Logf("a running build after two switches: %d context switches in 6 s", w1-w0)
+	// One clock is some 60 in 6 s. The tick of each repository before
+	// added one more: 219 after two switches.
+	if w1-w0 > 120 {
+		t.Errorf("ASSERTION: after two switches the clock wakes the plugin %d times in 6 s, as if it ran more than once", w1-w0)
+	}
+
+	// The build ends while you watch it: the log is read again to its end,
+	// and it opens at the failing test.
+	ciFinish(t, answers, time.Now())
+	// A focus report starts a poll at once, as a poll on the timer would.
+	if out, err := tuiosCLI(t, base, "send-keys", "-s", "ci", "-w", pane, "\\e[I"); err != nil {
+		t.Fatalf("send-keys focus: %v\n%s", err, out)
+	}
+	s = waitFor("the ended build at its failing test", func(s string) bool {
+		return strings.Contains(s, "Change the checkout") && strings.Contains(s, "Failed after") && strings.Contains(s, "checkout_test.go")
+	})
+	saveText(t, "ci-ended", s)
+	if !strings.Contains(s, "--- FAIL: TestCheckout") || strings.Contains(s, "Process completed with exit code") {
+		t.Errorf("ASSERTION: the build that ended while watched does not open at its failing test:\n%s", s)
+	}
 
 	// Nothing runs in acme/quiet: after the first read, no gh call and
 	// almost no CPU.
