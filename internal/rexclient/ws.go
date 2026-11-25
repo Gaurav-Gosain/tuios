@@ -16,6 +16,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -175,19 +176,14 @@ func (w *conn) close() error {
 	return w.c.Close()
 }
 
-// Endpoint is where a Rex server listens: a Unix socket, or TCP.
+// Endpoint is where a Rex server listens: a Unix socket or a TCP address.
 type Endpoint struct {
-	Unix string
-	Host string
-	Port string
+	Network string // "unix" or "tcp"
+	Addr    string
 }
 
 func (e Endpoint) dial() (net.Conn, error) {
-	network, addr := "tcp", net.JoinHostPort(e.Host, e.Port)
-	if e.Unix != "" {
-		network, addr = "unix", e.Unix
-	}
-	c, err := net.Dial(network, addr)
+	c, err := net.Dial(e.Network, e.Addr)
 	if err != nil {
 		return nil, errfmt.Errorf("failed to reach the Rex server at %s: %w", e, err)
 	}
@@ -195,18 +191,18 @@ func (e Endpoint) dial() (net.Conn, error) {
 }
 
 func (e Endpoint) hostHeader() string {
-	if e.Unix != "" {
+	if e.Network == "unix" {
 		return "localhost"
 	}
-	return e.Host
+	return e.Addr
 }
 
 // String names the endpoint for a message.
 func (e Endpoint) String() string {
-	if e.Unix != "" {
-		return "unix://" + e.Unix
+	if e.Network == "unix" {
+		return "unix://" + e.Addr
 	}
-	return "http://" + net.JoinHostPort(e.Host, e.Port)
+	return "http://" + e.Addr
 }
 
 // DefaultPort is the port of a Rex listener on a machine's tailnet address.
@@ -222,51 +218,28 @@ func ParseEndpoint(target, rexServer, runtimeDir string, uid int) (Endpoint, err
 			return ParseEndpoint(rexServer, "", runtimeDir, uid)
 		}
 		if runtimeDir == "" {
-			runtimeDir = "/run/user/" + itoa(uid)
+			runtimeDir = "/run/user/" + strconv.Itoa(uid)
 		}
-		return Endpoint{Unix: runtimeDir + "/rex/server.sock"}, nil
+		return Endpoint{"unix", runtimeDir + "/rex/server.sock"}, nil
 	}
-	switch {
-	case strings.HasPrefix(target, "unix://"):
-		return Endpoint{Unix: strings.TrimPrefix(target, "unix://")}, nil
-	case strings.HasPrefix(target, "/"):
-		return Endpoint{Unix: target}, nil
-	case strings.HasPrefix(target, "https://"):
-		return Endpoint{}, errors.New("tuios cannot reach a Rex server over https yet. Use its http:// or tailnet address")
-	case strings.HasPrefix(target, "http://"):
-		rest := strings.TrimPrefix(target, "http://")
-		if i := strings.IndexByte(rest, '/'); i >= 0 {
-			rest = rest[:i]
-		}
-		return hostPort(rest, "80")
-	case strings.Contains(target, "://"):
-		return Endpoint{}, errfmt.Errorf("%q is not a Rex server address", target)
+	if path, ok := strings.CutPrefix(target, "unix://"); ok {
+		return Endpoint{"unix", path}, nil
 	}
-	return hostPort(target, DefaultPort)
-}
-
-func hostPort(s, port string) (Endpoint, error) {
-	if s == "" {
+	if strings.HasPrefix(target, "/") {
+		return Endpoint{"unix", target}, nil
+	}
+	port := DefaultPort
+	if rest, ok := strings.CutPrefix(target, "http://"); ok {
+		target, _, _ = strings.Cut(rest, "/")
+		port = "80"
+	} else if strings.Contains(target, "://") {
+		return Endpoint{}, errfmt.Errorf("tuios reaches a Rex server at unix:// or http:// only, not at %q", target)
+	}
+	if target == "" {
 		return Endpoint{}, errors.New("the Rex server address has no host")
 	}
-	if h, p, err := net.SplitHostPort(s); err == nil {
-		if p == "" || p == "0" {
-			return Endpoint{}, errfmt.Errorf("%q has no port", s)
-		}
-		return Endpoint{Host: h, Port: p}, nil
+	if _, _, err := net.SplitHostPort(target); err != nil {
+		target = net.JoinHostPort(strings.Trim(target, "[]"), port)
 	}
-	return Endpoint{Host: strings.Trim(s, "[]"), Port: port}, nil
-}
-
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b [20]byte
-	i := len(b)
-	for ; n > 0; n /= 10 {
-		i--
-		b[i] = byte('0' + n%10)
-	}
-	return string(b[i:])
+	return Endpoint{"tcp", target}, nil
 }

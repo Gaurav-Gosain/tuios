@@ -139,6 +139,21 @@ func TestRexPaneDetachAndReattach(t *testing.T) {
 		func(s string) bool { return strings.Contains(s, "REX-42") })
 	saveFrame(t, term, "rex-pane")
 
+	// A lone Esc reaches the program in the Rex shell at once. The bridge
+	// holds back a tail that may start the detach sequence, and an Esc alone
+	// must not count as one: vim, less and fzf act on it.
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "work", "-w", "rx",
+		"sh -c 'x=ESC; stty raw -echo; echo ready-$x-now; b=$(dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d \" \"); stty sane; echo got-$b'\n"); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, out)
+	}
+	waitTextOf(t, "the Esc reader ready in the Rex shell", uiTimeout*3, func() string { return capture("rx") },
+		func(s string) bool { return strings.Contains(s, "ready-ESC-now") })
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "work", "-w", "rx", "\x1b"); err != nil {
+		t.Fatalf("send-text Esc: %v\n%s", err, out)
+	}
+	waitTextOf(t, "a lone Esc read by the program in the Rex shell", uiTimeout*3, func() string { return capture("rx") },
+		func(s string) bool { return strings.Contains(s, "got-1b") })
+
 	// rex_detach acts only on a pane whose program is tuios rex-attach, as
 	// the daemon's poll of the pane's foreground reports it.
 	waitTextOf(t, "the Rex pane's program in the window list", uiTimeout*3, func() string {

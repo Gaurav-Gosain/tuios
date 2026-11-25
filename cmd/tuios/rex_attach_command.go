@@ -4,12 +4,16 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
+	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -19,11 +23,6 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/rexclient"
 )
-
-// rexDetachSequence is what the rex_detach action types into a Rex pane. The
-// bridge reads it from its input, lets the shell go and exits. It is an APC
-// string, which a terminal never sends for a key.
-const rexDetachSequence = "\x1b_tuios-rex-detach\x1b\\"
 
 // rexSession is the label of the Rex session tuios opens shells in.
 const rexSession = "tuios"
@@ -35,13 +34,8 @@ func newRexAttachCommand() *cobra.Command {
 		Use:    "rex-attach [TARGET]",
 		Short:  "Run a Rex shell as the program of this pane",
 		Hidden: true,
-		Long: `Run a shell of a Rex server as the program of this pane.
-
-tuios new-window --rex starts it. TARGET is local (the default), a host of
-rex hosts, host[:port] for a tailnet listener, http://host:port or
-unix:///path. With --block, the pane opens a running shell of the tuios or
-monstar Rex session, with its screen and scrollback.`,
-		Args: cobra.MaximumNArgs(1),
+		Long:   `Run a shell of a Rex server as the program of this pane. tuios new-window --rex starts it.`,
+		Args:   cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			target := ""
 			if len(args) == 1 {
@@ -93,17 +87,29 @@ func runRexKeeper() error {
 }
 
 func runRexAttach(target, blockID string) error {
+	// Caught from the start, so a pane closed while the shell starts still
+	// closes it. No signal.Stop: the process ends when this returns, and
+	// SIGHUP must not end it before the block is closed.
+	sigs := make(chan os.Signal, 4)
+	signal.Notify(sigs, syscall.SIGWINCH, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINT)
+	// A closed pane leaves this process in a background group of a terminal
+	// with no session leader, where restoring the terminal mode would stop it
+	// with SIGTTOU. So that is ignored, and the block closes before the
+	// terminal is restored.
+	signal.Ignore(syscall.SIGTTOU)
+
 	ep, err := rexEndpoint(target)
 	if err != nil {
 		return err
 	}
-	ctl, err := rexclient.Dial(ep, "tuios")
+	ctl, err := rexclient.Dial(ep)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = ctl.Close() }()
 
-	cols, rows, err := term.GetSize(int(os.Stdin.Fd()))
+	fd := int(os.Stdin.Fd())
+	cols, rows, err := term.GetSize(fd)
 	if err != nil || cols <= 0 || rows <= 0 {
 		cols, rows = 80, 24
 	}
@@ -112,20 +118,17 @@ func runRexAttach(target, blockID string) error {
 		b, err = ctl.FindBlock(blockID, rexSession, "monstar")
 	} else {
 		cwd, _ := os.Getwd()
-		b, err = ctl.NewShell(rexSession, map[string]any{"cwd": cwd, "size": map[string]int{"columns": cols, "rows": rows}})
+		b, err = ctl.NewShell(rexSession, cwd, rexclient.Size{Columns: cols, Rows: rows})
 	}
 	if err != nil {
 		return err
 	}
-	// A closed pane leaves this process in a background group of a terminal
-	// with no session leader, where restoring the terminal mode would stop it
-	// with SIGTTOU. So that is ignored, and the block closes before the
-	// terminal is restored.
-	signal.Ignore(syscall.SIGTTOU)
-	if old, err := term.MakeRaw(int(os.Stdin.Fd())); err == nil {
-		defer func() { _ = term.Restore(int(os.Stdin.Fd()), old) }()
+	if old, err := term.MakeRaw(fd); err == nil {
+		defer func() { _ = term.Restore(fd, old) }()
 	}
-	closeBlock := true
+	// A new shell belongs to this pane from the start. A running shell
+	// belongs to it once it shows here, so a failed reattach leaves it be.
+	closeBlock := blockID == ""
 	defer func() {
 		if closeBlock {
 			// A closing pane sends SIGHUP again when its terminal goes.
@@ -133,11 +136,14 @@ func runRexAttach(target, blockID string) error {
 			_, _ = ctl.Call("block.close", b)
 		}
 	}()
-	if _, err := ctl.Call("session.own_block", map[string]any{"session_id": b.SessionID, "block_ids": []string{b.BlockID}}); err != nil {
+	disown := func() error {
+		closeBlock = false
+		return ctl.Own(b, false)
+	}
+	if err := ctl.Own(b, true); err != nil {
 		return err
 	}
-	_ = ctl.Send("com.superlogical.terminal.resize", map[string]any{"session_id": b.SessionID, "block_id": b.BlockID, "args": map[string]int{"columns": cols, "rows": rows}})
-
+	_ = ctl.Resize(b, rexclient.Size{Columns: cols, Rows: rows})
 	if blockID != "" {
 		if err := rexSeed(ctl, b); err != nil {
 			return err
@@ -148,15 +154,10 @@ func runRexAttach(target, blockID string) error {
 		return err
 	}
 	defer func() { _ = data.Close() }()
+	closeBlock = true
 
 	detach := make(chan struct{}, 1)
 	go rexForwardInput(ctl, b, detach)
-
-	sigs := make(chan os.Signal, 4)
-	signal.Notify(sigs, syscall.SIGWINCH, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINT)
-	// No signal.Stop: the process ends when this returns, and SIGHUP must not
-	// end it before the block is closed.
-
 	out := make(chan []byte, 16)
 	ended := make(chan error, 1)
 	go func() {
@@ -180,17 +181,18 @@ func runRexAttach(target, blockID string) error {
 				closeBlock = false
 				return nil
 			}
-			return errfmt.Errorf("the Rex data stream ended: %w", err)
+			// A lost stream is not a closed pane: the shell stays for
+			// --rex-block.
+			_ = disown()
+			return errfmt.Errorf("lost the Rex data stream, and the shell %s keeps running: %w", b.BlockID, err)
 		case <-detach:
-			closeBlock = false
-			_, err := ctl.Call("session.disown_block", map[string]any{"session_id": b.SessionID, "block_ids": []string{b.BlockID}})
-			return err
+			return disown()
 		case sig := <-sigs:
 			if sig != syscall.SIGWINCH {
 				return nil
 			}
-			if c, r, err := term.GetSize(int(os.Stdin.Fd())); err == nil {
-				_ = ctl.Send("com.superlogical.terminal.resize", map[string]any{"session_id": b.SessionID, "block_id": b.BlockID, "args": map[string]int{"columns": c, "rows": r}})
+			if c, r, err := term.GetSize(fd); err == nil {
+				_ = ctl.Resize(b, rexclient.Size{Columns: c, Rows: r})
 			}
 		case <-ctl.Done():
 			return errors.New("the Rex server closed the control connection")
@@ -198,57 +200,10 @@ func runRexAttach(target, blockID string) error {
 	}
 }
 
-// rexEndpoint reads a target the way monstar and rex do. A label of rex
-// hosts is looked up with the rex CLI when it is on PATH.
+// rexEndpoint reads a target the way monstar does. A bare name is a host
+// on the tailnet, at Rex's port.
 func rexEndpoint(target string) (rexclient.Endpoint, error) {
-	if target != "" && target != "local" && !strings.Contains(target, "/") && !strings.Contains(target, ":") {
-		if ep, ok := rexHostEndpoint(target); ok {
-			return ep, nil
-		}
-	}
 	return rexclient.ParseEndpoint(target, os.Getenv("REX_SERVER"), os.Getenv("XDG_RUNTIME_DIR"), os.Getuid())
-}
-
-// rexHostEndpoint looks up a label of rex hosts and takes its first endpoint
-// this client can reach.
-func rexHostEndpoint(label string) (rexclient.Endpoint, bool) {
-	path, err := exec.LookPath("rex")
-	if err != nil {
-		return rexclient.Endpoint{}, false
-	}
-	out, err := childproc.Command(path, "hosts", "--json").Output()
-	if err != nil {
-		return rexclient.Endpoint{}, false
-	}
-	var res struct {
-		Hosts []struct {
-			Host struct {
-				Label     string   `json:"label"`
-				Endpoints []string `json:"endpoints"`
-			} `json:"host"`
-		} `json:"hosts"`
-	}
-	if jsonx.Unmarshal(out, &res) != nil {
-		return rexclient.Endpoint{}, false
-	}
-	for _, h := range res.Hosts {
-		if h.Host.Label != label {
-			continue
-		}
-		for _, e := range h.Host.Endpoints {
-			ep, err := rexclient.ParseEndpoint(e, "", os.Getenv("XDG_RUNTIME_DIR"), os.Getuid())
-			if err != nil {
-				continue
-			}
-			if ep.Unix != "" {
-				if _, err := os.Stat(ep.Unix); err != nil {
-					continue
-				}
-			}
-			return ep, true
-		}
-	}
-	return rexclient.Endpoint{}, false
 }
 
 // rexSeed writes the block's screen and scrollback to this pane, as escape
@@ -257,86 +212,123 @@ func rexHostEndpoint(label string) (rexclient.Endpoint, bool) {
 // not shown. It is taken first, so nothing is drawn twice.
 func rexSeed(ctl *rexclient.Control, b rexclient.Block) error {
 	const chunk = 960 << 10
-	raw, err := ctl.BlockCall(b, "com.superlogical.terminal.format", map[string]any{
-		"format": "vt", "max_bytes": chunk,
-		"extra_cursor": true, "extra_modes": true, "extra_kitty_keyboard": true, "extra_keyboard": true,
-		"extra_palette": true, "extra_scrolling_region": true, "extra_tabstops": true, "extra_charsets": true,
-		"extra_style": true, "extra_hyperlink": true, "extra_protection": true, "extra_pwd": true,
-	})
-	if err != nil {
-		return err
-	}
-	var res struct {
+	const format = `{"format":"vt","max_bytes":983040,"extra_cursor":true,"extra_modes":true,` +
+		`"extra_kitty_keyboard":true,"extra_keyboard":true,"extra_palette":true,"extra_scrolling_region":true,` +
+		`"extra_tabstops":true,"extra_charsets":true,"extra_style":true,"extra_hyperlink":true,` +
+		`"extra_protection":true,"extra_pwd":true}`
+	type part struct {
 		Content string `json:"content"`
 		ID      uint64 `json:"id"`
 		EOF     bool   `json:"eof"`
 	}
-	if err := jsonx.Unmarshal(raw, &res); err != nil {
-		return err
+	type read struct {
+		ID       uint64 `json:"id"`
+		Offset   int    `json:"offset"`
+		MaxBytes int    `json:"max_bytes"`
 	}
-	var buf bytes.Buffer
-	buf.WriteString("\x1b[H\x1b[2J\x1b[3J")
-	buf.WriteString(res.Content)
-	for res.ID != 0 && !res.EOF {
-		raw, err := ctl.BlockCall(b, "com.superlogical.terminal.blob_read", map[string]any{"id": res.ID, "offset": buf.Len() - len("\x1b[H\x1b[2J\x1b[3J"), "max_bytes": chunk})
-		if err != nil {
-			return err
-		}
-		var next struct {
-			Content string `json:"content"`
-			EOF     bool   `json:"eof"`
-		}
-		if err := jsonx.Unmarshal(raw, &next); err != nil {
-			return err
-		}
-		if next.Content == "" {
+	raw, err := ctl.BlockCall(b, "com.superlogical.terminal.format", json.RawMessage(format))
+	var p part
+	if err == nil {
+		err = jsonx.Unmarshal(raw, &p)
+	}
+	id, n := p.ID, 0
+	buf := []byte("\x1b[H\x1b[2J\x1b[3J")
+	for err == nil {
+		buf = append(buf, p.Content...)
+		n += len(p.Content)
+		if id == 0 || p.EOF || p.Content == "" {
 			break
 		}
-		buf.WriteString(next.Content)
-		res.EOF = next.EOF
+		if raw, err = ctl.BlockCall(b, "com.superlogical.terminal.blob_read", read{id, n, chunk}); err == nil {
+			p = part{}
+			err = jsonx.Unmarshal(raw, &p)
+		}
 	}
-	_, err = os.Stdout.Write(buf.Bytes())
+	if err != nil {
+		return err
+	}
+	_, err = os.Stdout.Write(buf)
 	return err
 }
 
 // rexForwardInput sends what is typed in the pane to the shell, as typed. It
 // signals detach on the detach sequence and stops there.
+//
+// A tail of a read waits for the next one when it may start the detach
+// sequence (two bytes or more: a lone ESC is a key and goes at once), or
+// when it cuts a UTF-8 character. A tail that no read completes goes after
+// rexTailWait, on a timer that exists only while a tail waits.
 func rexForwardInput(ctl *rexclient.Control, b rexclient.Block, detach chan<- struct{}) {
+	var (
+		mu    sync.Mutex
+		held  []byte
+		timer *time.Timer
+		gen   int
+	)
 	buf := make([]byte, 32<<10)
-	var held []byte
 	for {
 		n, err := os.Stdin.Read(buf)
 		if err != nil {
 			return
 		}
+		mu.Lock()
+		if timer != nil {
+			timer.Stop()
+		}
+		gen++
 		data := append(held, buf[:n]...)
 		held = nil
-		if i := bytes.Index(data, []byte(rexDetachSequence)); i >= 0 {
+		if i := bytes.Index(data, []byte(rexclient.DetachSequence)); i >= 0 {
 			if i > 0 {
 				rexWrite(ctl, b, data[:i])
 			}
+			mu.Unlock()
 			detach <- struct{}{}
 			return
 		}
-		// Hold a tail that may start the detach sequence.
-		for k := min(len(data), len(rexDetachSequence)-1); k > 0; k-- {
-			if bytes.HasPrefix([]byte(rexDetachSequence), data[len(data)-k:]) {
-				held = append([]byte(nil), data[len(data)-k:]...)
-				data = data[:len(data)-k]
-				break
-			}
+		if k := rexTail(data); k > 0 {
+			held = append([]byte(nil), data[len(data)-k:]...)
+			data = data[:len(data)-k]
+			g := gen
+			timer = time.AfterFunc(rexTailWait, func() {
+				mu.Lock()
+				defer mu.Unlock()
+				if g == gen && len(held) > 0 {
+					rexWrite(ctl, b, held)
+					held = nil
+				}
+			})
 		}
 		if len(data) > 0 {
 			rexWrite(ctl, b, data)
 		}
+		mu.Unlock()
 	}
 }
 
-// rexWrite types bytes into the block. client.action keeps them in order
-// with the other input of this connection.
+// rexTailWait is how long a tail waits for the read that completes it.
+const rexTailWait = 50 * time.Millisecond
+
+// rexTail is how many bytes at the end of data wait for the next read.
+func rexTail(data []byte) int {
+	seq := rexclient.DetachSequence
+	for k := min(len(data), len(seq)-1); k >= 2; k-- {
+		if strings.HasPrefix(seq, string(data[len(data)-k:])) {
+			return k
+		}
+	}
+	for k := 1; k <= min(len(data), utf8.UTFMax-1); k++ {
+		if c := data[len(data)-k]; utf8.RuneStart(c) {
+			if c >= utf8.RuneSelf && !utf8.FullRune(data[len(data)-k:]) {
+				return k
+			}
+			return 0
+		}
+	}
+	return 0
+}
+
+// rexWrite types bytes into the block.
 func rexWrite(ctl *rexclient.Control, b rexclient.Block, data []byte) {
-	_ = ctl.Send("client.action", map[string]any{
-		"action": "com.superlogical.terminal.write", "session_id": b.SessionID, "block_id": b.BlockID,
-		"args": map[string]string{"data": strings.ToValidUTF8(string(data), "\uFFFD")},
-	})
+	_ = ctl.Write(b, strings.ToValidUTF8(string(data), "\uFFFD"))
 }

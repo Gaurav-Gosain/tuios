@@ -1,22 +1,19 @@
 package rexclient
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 )
-
-// APIRevision is the Rex control API revision this client was built
-// against.
-const APIRevision = 19
 
 // The subprotocols and paths of the two connections.
 const (
@@ -30,18 +27,29 @@ const CloseBlockEnded = 4000
 // ShellFlavor is the terminal creator's shell flavor.
 const ShellFlavor = "com.superlogical.terminal.shell"
 
+// DetachSequence is what tuios's rex_detach action types into a Rex pane.
+// tuios rex-attach reads it from its input, lets the shell go and exits. It
+// is an APC string, which a terminal never sends for a key.
+const DetachSequence = "\x1b_tuios-rex-detach\x1b\\"
+
 // Control is a control connection. Call sends a request and waits for its
-// reply. Events that arrive are passed to the Events channel, and dropped
-// when nobody reads it.
+// reply. Events from the server are dropped.
 type Control struct {
 	ws      *conn
 	ep      Endpoint
 	next    atomic.Uint64
 	mu      sync.Mutex
 	waiting map[string]chan reply
-	Events  chan []byte
 	done    chan struct{}
 	err     error
+}
+
+// request is a request on the control connection.
+type request struct {
+	Type    string `json:"type"`
+	ID      string `json:"id"`
+	Method  string `json:"method"`
+	Payload any    `json:"payload"`
 }
 
 type reply struct {
@@ -61,19 +69,17 @@ type envelope struct {
 	} `json:"error,omitempty"`
 }
 
-// Dial opens the control connection and says hello as a client named name.
-func Dial(ep Endpoint, name string) (*Control, error) {
+// hello introduces this client as an app named tuios.
+const hello = `{"type":"hello","api_revision":19,"api_min_revision":19,"client":{"kind":"app","platform":"` +
+	runtime.GOOS + `","name":"tuios","label":"tuios"}}`
+
+// Dial opens the control connection and says hello.
+func Dial(ep Endpoint) (*Control, error) {
 	ws, err := dialWS(ep, "/api/control", controlProtocol)
 	if err != nil {
 		return nil, err
 	}
-	hello, _ := jsonx.Marshal(map[string]any{
-		"type":             "hello",
-		"api_revision":     APIRevision,
-		"api_min_revision": APIRevision,
-		"client":           map[string]string{"kind": "app", "platform": "linux", "name": name, "label": name},
-	})
-	if err := ws.write(opText, hello); err != nil {
+	if err := ws.write(opText, []byte(hello)); err != nil {
 		_ = ws.close()
 		return nil, err
 	}
@@ -87,7 +93,7 @@ func Dial(ep Endpoint, name string) (*Control, error) {
 		_ = ws.close()
 		return nil, errfmt.Errorf("the Rex server refused hello: %s", oneLine(string(msg)))
 	}
-	c := &Control{ws: ws, ep: ep, waiting: map[string]chan reply{}, Events: make(chan []byte, 64), done: make(chan struct{})}
+	c := &Control{ws: ws, ep: ep, waiting: map[string]chan reply{}, done: make(chan struct{})}
 	go c.readLoop()
 	return c, nil
 }
@@ -122,11 +128,6 @@ func (c *Control) readLoop() {
 				}
 				ch <- r
 			}
-			continue
-		}
-		select {
-		case c.Events <- msg:
-		default:
 		}
 	}
 }
@@ -162,7 +163,7 @@ func (c *Control) send(method string, payload any, wait bool) (chan reply, error
 		payload = struct{}{}
 	}
 	id := strconv.FormatUint(c.next.Add(1), 10)
-	msg, err := jsonx.Marshal(map[string]any{"type": "request", "id": id, "method": method, "payload": payload})
+	msg, err := jsonx.Marshal(request{"request", id, method, payload})
 	if err != nil {
 		return nil, err
 	}
@@ -192,137 +193,156 @@ type Block struct {
 	BlockID   string `json:"block_id"`
 }
 
+// blockArgs is the payload of a block method.
+type blockArgs struct {
+	SessionID string `json:"session_id"`
+	BlockID   string `json:"block_id"`
+	Args      any    `json:"args"`
+}
+
 // BlockCall calls a block method, such as com.superlogical.terminal.format.
 func (c *Control) BlockCall(b Block, method string, args any) ([]byte, error) {
-	return c.Call(method, map[string]any{"session_id": b.SessionID, "block_id": b.BlockID, "args": args})
+	return c.Call(method, blockArgs{b.SessionID, b.BlockID, args})
 }
 
-// Session is one row of session.list.
-type Session struct {
-	ID    string `json:"session_id"`
-	Label string `json:"label"`
+// Size is a terminal size in cells.
+type Size struct {
+	Columns int `json:"columns"`
+	Rows    int `json:"rows"`
 }
 
-// Sessions lists the server's sessions.
-func (c *Control) Sessions() ([]Session, error) {
-	raw, err := c.Call("session.list", nil)
-	if err != nil {
-		return nil, err
+// Resize sets the block's terminal size.
+func (c *Control) Resize(b Block, s Size) error {
+	return c.Send("com.superlogical.terminal.resize", blockArgs{b.SessionID, b.BlockID, s})
+}
+
+// Write types text into the block. client.action keeps it in order with
+// the other input of this connection.
+func (c *Control) Write(b Block, text string) error {
+	type data struct {
+		Data string `json:"data"`
 	}
-	var res struct {
-		Sessions []Session `json:"sessions"`
-	}
-	return res.Sessions, jsonx.Unmarshal(raw, &res)
+	return c.Send("client.action", struct {
+		Action string `json:"action"`
+		blockArgs
+	}{"com.superlogical.terminal.write", blockArgs{b.SessionID, b.BlockID, data{text}}})
 }
 
-// SessionNamed is the id of the session with the label, "" for none.
+// Own makes this connection's size and theme the block's, or with own
+// false lets the block go, running, for another client to show.
+func (c *Control) Own(b Block, own bool) error {
+	method := "session.disown_block"
+	if own {
+		method = "session.own_block"
+	}
+	_, err := c.Call(method, struct {
+		SessionID string   `json:"session_id"`
+		BlockIDs  []string `json:"block_ids"`
+	}{b.SessionID, []string{b.BlockID}})
+	return err
+}
+
+// sessionRef names a session in a request.
+type sessionRef struct {
+	SessionID string `json:"session_id"`
+}
+
+// SessionNamed attaches to the session with the label and returns its id,
+// "" when there is none.
 func (c *Control) SessionNamed(label string) (string, error) {
-	list, err := c.Sessions()
+	raw, err := c.Call("session.list", nil)
 	if err != nil {
 		return "", err
 	}
-	for _, s := range list {
+	var res struct {
+		Sessions []struct {
+			ID    string `json:"session_id"`
+			Label string `json:"label"`
+		} `json:"sessions"`
+	}
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return "", err
+	}
+	for _, s := range res.Sessions {
 		if s.Label == label {
-			return s.ID, nil
+			_, err := c.Call("session.attach", sessionRef{s.ID})
+			return s.ID, err
 		}
 	}
 	return "", nil
 }
 
-// BlockInfo is one row of session.list_blocks.
-type BlockInfo struct {
-	BlockID string `json:"block_id"`
-	Owner   string `json:"owner"`
-	Label   string `json:"label"`
-}
-
-// Blocks lists every block of a session, detached ones too. The connection
-// must be attached to it.
-func (c *Control) Blocks(sessionID string) ([]BlockInfo, error) {
-	raw, err := c.Call("session.list_blocks", map[string]string{"session_id": sessionID})
-	if err != nil {
-		return nil, err
-	}
-	var res struct {
-		Blocks []BlockInfo `json:"blocks"`
-	}
-	return res.Blocks, jsonx.Unmarshal(raw, &res)
-}
-
-// NewShell starts a shell block in the session with the label, and creates
-// the session when it has none. The connection ends up attached to it.
-func (c *Control) NewShell(label string, options map[string]any) (Block, error) {
-	layout := map[string]any{"block": map[string]any{"flavor": ShellFlavor, "options": options}}
+// NewShell starts a shell block in a new window of the session with the
+// label, in the folder cwd and at size s, and creates the session when there
+// is none.
+func (c *Control) NewShell(label, cwd string, s Size) (Block, error) {
 	id, err := c.SessionNamed(label)
 	if err != nil {
 		return Block{}, err
 	}
-	if id != "" {
-		if _, err := c.Call("session.attach", map[string]string{"session_id": id}); err == nil {
-			raw, err := c.Call("session.new_window", map[string]any{"session_id": id, "layout": layout})
-			if err != nil {
-				return Block{}, err
-			}
-			b := firstBlock(raw)
-			if b == "" {
-				return Block{}, errors.New("session.new_window gave no block")
-			}
-			return Block{SessionID: id, BlockID: b}, nil
+	if id == "" {
+		raw, err := c.Call("session.create", struct {
+			Label string `json:"label"`
+		}{label})
+		if err != nil {
+			return Block{}, err
 		}
+		var ref sessionRef
+		if jsonx.Unmarshal(raw, &ref) != nil || ref.SessionID == "" {
+			return Block{}, errors.New("session.create gave no session")
+		}
+		if _, err := c.Call("session.attach", ref); err != nil {
+			return Block{}, err
+		}
+		id = ref.SessionID
 	}
-	raw, err := c.Call("session.create", map[string]any{"label": label, "initial_windows": []any{map[string]any{"layout": layout}}})
+	type options struct {
+		Cwd  string `json:"cwd"`
+		Size Size   `json:"size"`
+	}
+	type block struct {
+		Flavor  string  `json:"flavor"`
+		Options options `json:"options"`
+	}
+	type layout struct {
+		Block block `json:"block"`
+	}
+	raw, err := c.Call("session.new_window", struct {
+		SessionID string `json:"session_id"`
+		Layout    layout `json:"layout"`
+	}{id, layout{block{ShellFlavor, options{cwd, s}}}})
 	if err != nil {
 		return Block{}, err
 	}
-	var res struct {
-		SessionID string            `json:"session_id"`
-		Windows   []json.RawMessage `json:"initial_windows"`
-	}
-	if err := jsonx.Unmarshal(raw, &res); err != nil || res.SessionID == "" || len(res.Windows) == 0 {
-		return Block{}, errors.New("session.create gave no session or window")
-	}
-	b := firstBlock(res.Windows[0])
-	if b == "" {
-		return Block{}, errors.New("session.create gave no block")
-	}
-	if _, err := c.Call("session.attach", map[string]string{"session_id": res.SessionID}); err != nil {
-		return Block{}, err
-	}
-	return Block{SessionID: res.SessionID, BlockID: b}, nil
-}
-
-// firstBlock reads the first block of a window, as session.create and
-// session.new_window give it.
-func firstBlock(raw []byte) string {
 	var w struct {
 		BlockIDs []string `json:"block_ids"`
 	}
 	if jsonx.Unmarshal(raw, &w) != nil || len(w.BlockIDs) == 0 {
-		return ""
+		return Block{}, errors.New("session.new_window gave no block")
 	}
-	return w.BlockIDs[0]
+	return Block{SessionID: id, BlockID: w.BlockIDs[0]}, nil
 }
 
-// FindBlock attaches to the first session of labels that holds the block,
-// and returns it.
+// FindBlock returns the block from the first session of labels that holds
+// it, and attaches to that session.
 func (c *Control) FindBlock(blockID string, labels ...string) (Block, error) {
 	for _, label := range labels {
 		id, err := c.SessionNamed(label)
+		if err != nil || id == "" {
+			continue
+		}
+		raw, err := c.Call("session.list_blocks", sessionRef{id})
 		if err != nil {
 			return Block{}, err
 		}
-		if id == "" {
-			continue
+		var res struct {
+			Blocks []Block `json:"blocks"`
 		}
-		if _, err := c.Call("session.attach", map[string]string{"session_id": id}); err != nil {
-			continue
-		}
-		blocks, err := c.Blocks(id)
-		if err != nil {
+		if err := jsonx.Unmarshal(raw, &res); err != nil {
 			return Block{}, err
 		}
-		for _, b := range blocks {
-			if b.BlockID == blockID || shortID(b.BlockID) == blockID {
+		for _, b := range res.Blocks {
+			if b.BlockID == blockID {
 				return Block{SessionID: id, BlockID: b.BlockID}, nil
 			}
 		}
@@ -330,26 +350,23 @@ func (c *Control) FindBlock(blockID string, labels ...string) (Block, error) {
 	return Block{}, errfmt.Errorf("no running shell %s in the Rex sessions %v", blockID, labels)
 }
 
-func shortID(id string) string {
-	if len(id) > 6 {
-		return id[len(id)-6:]
-	}
-	return id
-}
-
 // Data is a block's terminal data stream, its Ghostty snapshot left out.
+// Rex's metadata in the stream, ESC _ rex1;... ESC \, stays in: it is an APC
+// string, which a terminal ignores.
 type Data struct {
 	ws     *conn
-	prefix []byte
 	snap   []byte
 	inSnap bool
-	held   []byte
 }
 
 // OpenData opens the block's terminal stream. The connection must be
 // attached to the block's session.
 func (c *Control) OpenData(b Block) (*Data, error) {
-	raw, err := c.Call("data.connect", map[string]string{"session_id": b.SessionID, "block_id": b.BlockID, "data_ref_id": "terminal", "subprotocol": dataProtocol})
+	raw, err := c.Call("data.connect", struct {
+		Block
+		DataRef     string `json:"data_ref_id"`
+		Subprotocol string `json:"subprotocol"`
+	}{b, "terminal", dataProtocol})
 	if err != nil {
 		return nil, err
 	}
@@ -384,13 +401,11 @@ func (c *Control) OpenData(b Block) (*Data, error) {
 		_ = ws.close()
 		return nil, errors.New("the Rex server answered the data stream in a form this client does not read")
 	}
-	nonce := binary.LittleEndian.Uint64(welcome[24:32])
-	return &Data{ws: ws, prefix: []byte("\x1b_rex1;" + strconv.FormatUint(nonce, 10) + ";"), inSnap: true}, nil
+	return &Data{ws: ws, inSnap: true}, nil
 }
 
-// Read returns the next live output: the bytes the block's program wrote,
-// with Rex's metadata taken out. The snapshot at the start is skipped. A
-// block that ended returns ErrBlockEnded.
+// Read returns the next live output. The snapshot at the start is skipped.
+// A block that ended returns ErrBlockEnded.
 func (d *Data) Read() ([]byte, error) {
 	for {
 		_, msg, err := d.ws.read()
@@ -412,8 +427,8 @@ func (d *Data) Read() ([]byte, error) {
 			msg = d.snap[end:]
 			d.snap, d.inSnap = nil, false
 		}
-		if out := d.filter(msg); len(out) > 0 {
-			return out, nil
+		if len(msg) > 0 {
+			return msg, nil
 		}
 	}
 }
@@ -450,44 +465,6 @@ func snapshotEnd(b []byte) (int, error) {
 	return -1, nil
 }
 
-// filter takes Rex's ESC _ rex1;<nonce>;... ESC \ metadata out of live
-// output. A sequence split across messages is held until it ends.
-func (d *Data) filter(in []byte) []byte {
-	data := append(d.held, in...)
-	d.held = nil
-	var out []byte
-	for {
-		i := bytes.IndexByte(data, 0x1b)
-		if i < 0 {
-			return append(out, data...)
-		}
-		out = append(out, data[:i]...)
-		rest := data[i:]
-		switch {
-		case bytes.HasPrefix(rest, d.prefix):
-			end := bytes.Index(rest[len(d.prefix):], []byte("\x1b\\"))
-			if end < 0 {
-				if len(rest) > 1<<20 {
-					return append(out, rest...)
-				}
-				d.held = append([]byte(nil), rest...)
-				return out
-			}
-			data = rest[len(d.prefix)+end+2:]
-		case len(rest) < len(d.prefix) && bytes.HasPrefix(d.prefix, rest):
-			d.held = append([]byte(nil), rest...)
-			return out
-		default:
-			out = append(out, 0x1b)
-			data = rest[1:]
-		}
-	}
-}
-
 func oneLine(s string) string {
-	s = string(bytes.Join(bytes.Fields([]byte(s)), []byte(" ")))
-	if len(s) > 200 {
-		s = s[:200]
-	}
-	return s
+	return strings.ReplaceAll(s[:min(len(s), 200)], "\n", " ")
 }

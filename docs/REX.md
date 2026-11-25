@@ -372,11 +372,11 @@ again later, in tuios or in another Rex app.
 
 ```sh
 tuios new-window --rex local          # a new shell of this machine's Rex server
-tuios new-window --rex studio         # a host of rex hosts
+tuios new-window --rex studio         # a host on the tailnet, at port 7297
 tuios new-window --rex box:7297       # a Rex tailnet listener
 ```
 
-`--rex` takes `local`, a label of `rex hosts`, `host[:port]`,
+`--rex` takes `local`, a host name, `host[:port]`,
 `http://host:port` or `unix:///path`. tuios does not reach a Rex server
 over `https://` yet.
 

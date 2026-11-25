@@ -7,6 +7,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
+	"github.com/Gaurav-Gosain/tuios/internal/rexclient"
 )
 
 // registerPrefixTreeHandlers registers the actions tuios had no equivalent of
@@ -65,7 +66,7 @@ func (d *ActionDispatcher) registerPrefixTreeHandlers() {
 			o.ShowNotification("The focused pane does not run a Rex shell.", "info", o.Settings.NotificationDuration)
 			return o, nil
 		}
-		_ = focused.SendInput([]byte(rexDetachSequence))
+		_ = focused.SendInput([]byte(rexclient.DetachSequence))
 		return o, nil
 	})
 	// Nest mode: every key to the pane, the leader too, until
@@ -145,7 +146,3 @@ func handleNewWorkspace(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	return handleNewWindow(msg, o)
 }
-
-// rexDetachSequence asks tuios rex-attach to detach. It is an APC string,
-// which no key sends.
-const rexDetachSequence = "\x1b_tuios-rex-detach\x1b\\"
