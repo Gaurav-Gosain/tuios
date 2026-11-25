@@ -44,8 +44,7 @@ func report(t *testing.T, bugs backendBugs, problems []string) {
 
 // Known bugs, by what causes them.
 var (
-	pureWrapsStay = backendBugs{pure: "the pure emulator keeps a soft wrap on its row number, so the wrap does not move with the row"}
-	marksStay     = backendBugs{
+	marksStay = backendBugs{
 		pure:    "a prompt mark keeps the row it was printed on, so it does not move with the cells",
 		ghostty: "a prompt mark keeps the row it was printed on, so it does not move with the cells",
 	}
@@ -121,24 +120,24 @@ func TestBackendLineMovesKeepSoftWraps(t *testing.T) {
 		bugs            backendBugs
 	}{
 		{"no operation", "", "w.w.w.w.", nil},
-		{"IL above a pair", "\x1b[3;1H\x1b[L", "w..w.w..", pureWrapsStay},
-		{"IL 3 above a pair", "\x1b[3;1H\x1b[3L", "w....w..", pureWrapsStay},
+		{"IL above a pair", "\x1b[3;1H\x1b[L", "w..w.w..", nil},
+		{"IL 3 above a pair", "\x1b[3;1H\x1b[3L", "w....w..", nil},
 		{"IL past the bottom", "\x1b[3;1H\x1b[99L", "w.......", nil},
 		{"DL 2 at a pair", "\x1b[3;1H\x1b[2M", "w.w.w...", nil},
 		{"DL past the bottom", "\x1b[3;1H\x1b[99M", "w.......", nil},
-		{"IL inside a pair", "\x1b[2;1H\x1b[L", "...w.w..", pureWrapsStay},
-		{"IL inside a pair, region", "\x1b[3;6r\x1b[4;1H\x1b[L", "w.....w.", pureWrapsStay},
+		{"IL inside a pair", "\x1b[2;1H\x1b[L", "...w.w..", nil},
+		{"IL inside a pair, region", "\x1b[3;6r\x1b[4;1H\x1b[L", "w.....w.", nil},
 		{"DL the top of a pair", "\x1b[3;1H\x1b[M", "w..w.w..", nil},
-		{"DL the bottom of a pair", "\x1b[2;1H\x1b[M", ".w.w.w..", pureWrapsStay},
-		{"DL 2 across two pairs", "\x1b[4;1H\x1b[2M", "w...w...", pureWrapsStay},
-		{"DL inside a pair, region", "\x1b[3;6r\x1b[4;1H\x1b[M", "w..w..w.", pureWrapsStay},
-		{"IL, region holds whole pairs", "\x1b[3;6r\x1b[3;1H\x1b[L", "w..w..w.", pureWrapsStay},
+		{"DL the bottom of a pair", "\x1b[2;1H\x1b[M", ".w.w.w..", nil},
+		{"DL 2 across two pairs", "\x1b[4;1H\x1b[2M", "w...w...", nil},
+		{"DL inside a pair, region", "\x1b[3;6r\x1b[4;1H\x1b[M", "w..w..w.", nil},
+		{"IL, region holds whole pairs", "\x1b[3;6r\x1b[3;1H\x1b[L", "w..w..w.", nil},
 		{"DL, region holds whole pairs", "\x1b[3;6r\x1b[3;1H\x1b[M", "w..w..w.", nil},
-		{"IL, region edges split pairs", "\x1b[2;5r\x1b[2;1H\x1b[L", "...w..w.", pureWrapsStay},
-		{"DL, region edges split pairs", "\x1b[2;5r\x1b[2;1H\x1b[M", ".w....w.", pureWrapsStay},
-		{"SU, region edges split pairs", "\x1b[2;5r\x1b[S", ".w....w.", pureWrapsStay},
-		{"SD, region edges split pairs", "\x1b[2;5r\x1b[T", "...w..w.", pureWrapsStay},
-		{"RI, region edges split pairs", "\x1b[2;5r\x1b[2;1H\x1bM", "...w..w.", pureWrapsStay},
+		{"IL, region edges split pairs", "\x1b[2;5r\x1b[2;1H\x1b[L", "...w..w.", nil},
+		{"DL, region edges split pairs", "\x1b[2;5r\x1b[2;1H\x1b[M", ".w....w.", nil},
+		{"SU, region edges split pairs", "\x1b[2;5r\x1b[S", ".w....w.", nil},
+		{"SD, region edges split pairs", "\x1b[2;5r\x1b[T", "...w..w.", nil},
+		{"RI, region edges split pairs", "\x1b[2;5r\x1b[2;1H\x1bM", "...w..w.", nil},
 		// Left and right margins move cells, not rows, so every row keeps
 		// its state. This is what xterm does.
 		{"IL inside left and right margins", "\x1b[?69h\x1b[3;8s\x1b[3;3H\x1b[L", "w.w.w.w.", nil},
@@ -170,7 +169,7 @@ func TestBackendLineMovesClearSpacerHead(t *testing.T) {
 			if c := term.CellAt(4, 0); c == nil || c.Width != 1 || (c.Content != "" && c.Content != " ") {
 				problems = append(problems, fmt.Sprintf("cell (4,0) = %+v, want a blank of width 1", c))
 			}
-			report(t, pureWrapsStay, problems)
+			report(t, nil, problems)
 		})
 	}
 }

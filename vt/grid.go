@@ -501,6 +501,15 @@ func (g *grid) setSoftWrapped(y int, wrapped bool) {
 	}
 }
 
+// endWrap records that row y no longer carries on to the next row, because
+// a line shift took that row away. The padding flag goes with the wrap: the
+// blank a wide character left in the last column is a plain blank now.
+func (g *grid) endWrap(y int) {
+	if y >= 0 && y < len(g.wrap) {
+		g.wrap[y] = 0
+	}
+}
+
 // setPadded records that row y, which has just wrapped, wrapped early
 // because a wide character did not fit in its last column.
 func (g *grid) setPadded(y int) {
@@ -670,6 +679,10 @@ func (g *grid) InsertLineArea(y, n int, c *uv.Cell, area uv.Rectangle) {
 		copy(g.rows[y:y+n], dropped)
 		g.rotateExt(y, end, end-n)
 		g.blankRows(y, y+n, c)
+		// The row above now runs into a blank row, and the last row of the
+		// area lost the row it wrapped into off the bottom.
+		g.endWrap(y - 1)
+		g.endWrap(end - 1)
 		return
 	}
 
@@ -718,6 +731,10 @@ func (g *grid) DeleteLineArea(y, n int, c *uv.Cell, area uv.Rectangle) {
 		copy(g.rows[end-n:end], dropped)
 		g.rotateExt(y, end, y+n)
 		g.blankRows(end-n, end, c)
+		// The row above lost the row it wrapped into, and the last row that
+		// moved up now runs into the blanks.
+		g.endWrap(y - 1)
+		g.endWrap(end - n - 1)
 		return
 	}
 
