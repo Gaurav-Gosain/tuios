@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -366,12 +367,18 @@ func (m *OS) startSendCmd(src session.Endpoint, name, host, dir string) tea.Cmd 
 // verbOnHostCaller calls a verb on a machine's daemon: this one for "", and a
 // host's through this daemon's link.
 func (m *OS) verbOnHostCaller() func(host, verb string, params map[string]any) (json.RawMessage, error) {
+	return m.verbOnHostCallerFor(nil, transferCallTimeout)
+}
+
+// verbOnHostCallerFor is verbOnHostCaller with a call timeout, and a stop
+// that closes the call: the daemon then ends what the verb started.
+func (m *OS) verbOnHostCallerFor(stop <-chan struct{}, timeout time.Duration) func(host, verb string, params map[string]any) (json.RawMessage, error) {
 	if m.transfers.call != nil {
 		call := m.transfers.call
 		return func(host, verb string, params map[string]any) (json.RawMessage, error) {
 			p := map[string]any{"host": host}
 			maps.Copy(p, params)
-			return call(verb, p, transferCallTimeout)
+			return call(verb, p, timeout)
 		}
 	}
 	build := ""
@@ -384,12 +391,23 @@ func (m *OS) verbOnHostCaller() func(host, verb string, params map[string]any) (
 			return nil, err
 		}
 		defer func() { _ = client.Close() }()
+		if stop != nil {
+			done := make(chan struct{})
+			defer close(done)
+			go func() {
+				select {
+				case <-stop:
+					_ = client.Close()
+				case <-done:
+				}
+			}()
+		}
 		if host != "" {
 			if _, err := client.CallWithTimeout("open-host-connection", map[string]any{"host": host}, transferCallTimeout); err != nil {
 				return nil, err
 			}
 		}
-		return client.CallWithTimeout(verb, params, transferCallTimeout)
+		return client.CallWithTimeout(verb, params, timeout)
 	}
 }
 

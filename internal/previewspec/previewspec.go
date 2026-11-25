@@ -7,6 +7,7 @@ package previewspec
 
 import (
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -49,23 +50,24 @@ var placeholders = [...]string{"path", "name", "dir", "width", "height", "line"}
 
 // Check returns what is wrong with a previewer, in a sentence, or "".
 func (s Spec) Check(name string) string {
-	command, output := s.Command, s.Output
-	switch {
-	case strings.TrimSpace(name) == "":
+	if strings.TrimSpace(name) == "" {
 		return "A previewer needs a name."
+	}
+	why := ""
+	switch command, output := s.Command, s.Output; {
 	case len(command) == 0 || strings.TrimSpace(command[0]) == "":
-		return "The previewer " + name + " needs a command."
+		why = "needs a command."
 	case len(s.Match) == 0 && len(s.Mime) == 0 && !s.Folder:
-		return "The previewer " + name + " needs match, mime or folder."
+		why = "needs match, mime or folder."
 	case output != "" && output != OutputANSI && output != OutputText && output != OutputImage:
-		return "The output of the previewer " + name + " must be ansi, text or image."
+		why = "needs an output of ansi, text or image."
 	}
 	for _, g := range append(append([]string(nil), s.Match...), s.Mime...) {
-		if _, err := path.Match(g, ""); err != nil {
-			return "The previewer " + name + " has a bad pattern: " + g + "."
+		if _, err := path.Match(g, ""); err != nil && why == "" {
+			why = "has a bad pattern: " + g + "."
 		}
 	}
-	for _, arg := range command {
+	for _, arg := range s.Command {
 		for rest := arg; ; {
 			i := strings.IndexByte(rest, '{')
 			if i < 0 {
@@ -75,25 +77,34 @@ func (s Spec) Check(name string) string {
 			if j < 0 {
 				break
 			}
-			if key := rest[i+1 : i+j]; !known(key) {
-				return "The previewer " + name + " names {" + key + "}. Use {path}, {name}, {dir}, {width}, {height} or {line}."
+			// Only a lowercase word is read as a placeholder, so a command
+			// can hold {} or a jq filter such as {a: .b}.
+			if key := rest[i+1 : i+j]; placeholderWord(key) && !slices.Contains(placeholders[:], key) {
+				if why == "" {
+					why = "names {" + key + "}. Use {path}, {name}, {dir}, {width}, {height} or {line}."
+				}
 			}
 			rest = rest[i+j+1:]
 		}
 	}
-	if _, ok := Timeout(s.Timeout); !ok {
-		return "The timeout of the previewer " + name + " must be a time from 1s to 30s, such as 5s."
+	if _, ok := Timeout(s.Timeout); !ok && why == "" {
+		why = "needs a timeout from 1s to 30s, such as 5s."
 	}
-	return ""
+	if why == "" {
+		return ""
+	}
+	return "The previewer " + name + " " + why
 }
 
-func known(key string) bool {
-	for _, p := range placeholders {
-		if p == key {
-			return true
+// placeholderWord reports whether key is a lowercase word of two letters
+// or more, as a placeholder is.
+func placeholderWord(key string) bool {
+	for _, c := range key {
+		if (c < 'a' || c > 'z') && c != '_' {
+			return false
 		}
 	}
-	return false
+	return len(key) > 1
 }
 
 // Timeout reads a previewer's timeout. The empty timeout is TimeoutDefault.

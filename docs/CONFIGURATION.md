@@ -779,10 +779,12 @@ These words in an argument become the values of the file:
 | `{width}` `{height}` | The size of the preview in cells |
 | `{line}` | The line at the top of a text, or 1 |
 
+Other text in braces stays as it is, such as `{}` or a jq filter. A
+lowercase word in braces that is not in this table is an error.
+
 A command that uses `{width}` or `{height}` runs again when the preview
-changes size. The command also gets `COLUMNS`, `LINES`,
-`TUIOS_PREVIEW_WIDTH`, `TUIOS_PREVIEW_HEIGHT` and `TUIOS_PREVIEW_PATH`. For
-`ansi`, it gets `CLICOLOR_FORCE=1` and `FORCE_COLOR=1`, because its output
+changes size. The command also gets `COLUMNS`, `LINES` and
+`TUIOS_PREVIEW_PATH`. For `ansi`, it gets `CLICOLOR_FORCE=1` and `FORCE_COLOR=1`, because its output
 is not a terminal.
 
 How a previewer runs:
@@ -790,10 +792,10 @@ How a previewer runs:
 - No shell reads the command. Each argument is one argument, also when the
   path holds spaces or quotes.
 - The command runs in the folder of the file, with no input.
-- Quick look keeps the first 1 MiB of text, or 16 MiB of a picture. Then it
-  stops the command and says that the output is cut.
+- Quick look keeps the first 1 MiB of text. Then it stops the command and
+  says that the output is cut. A picture can be 8 MiB at most.
 - Quick look stops the command when you move to another file or close the
-  preview.
+  preview. This is also true for a file on another machine.
 - Quick look keeps only the colours and styles of `ansi` output. It drops
   every other escape sequence.
 - When the command fails, the preview shows its exit code and the end of

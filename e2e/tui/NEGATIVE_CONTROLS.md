@@ -19613,9 +19613,11 @@ terminal. A resize must run a previewer that names `{width}` again. The test
 also covers an exit code, a timeout, a picture and a folder.
 `TestFilePreviewRunOnAHost` runs a previewer on a linked machine. The
 machine must run its own previewer, refuse a command from the caller, and
-refuse a link without `open`.
+refuse a link without `open`. The run must stop when the caller leaves.
+`TestQuickLookRunsAPluginPreviewer` must see that a wider match is not the
+plugin you approved.
 
-Run on 2026-11-25 on Linux (amd64). Four controls:
+Run on 2026-11-25 on Linux (amd64). Nine controls:
 
 | Control | The test fails with | Result |
 |---------|---------------------|--------|
@@ -19623,6 +19625,12 @@ Run on 2026-11-25 on Linux (amd64). Four controls:
 | `quickLookSGROnly` keeps every escape | "an escape of the previewer other than a colour reached the terminal" | **caught** |
 | No size check in `quickLookRunRead` | "a resize did not run the colour previewer again with a new width" | **caught** |
 | `file-preview-run` needs only `files` on a link | "a link without open ran a previewer" | **caught** |
+| No `WaitDelay` in `RunPreviewer` | "a previewer whose child holds the output does not finish" | **caught** |
+| The picture cap at twice `composer.MaxImageBytes` | "a picture that is too large" | **caught** |
+| Runs of a folder kept in `applyQuickLookRun` | "the folder previewer showed the folder as it was" | **caught** |
+| No `askCancel` in `file-preview-run` | "the previewer on build still runs after the caller left" | **caught** |
+| No match in the previewer's part of `TrustHash` | "a plugin that widened its previewer's match kept its approval" | **caught** |
 
 Repeat from `e2e/tui` with
-`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestQuickLookRunsPreviewers|TestFilePreviewRunOnAHost)$' -v .`.
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestQuickLookRunsPreviewers|TestQuickLookRunsAPluginPreviewer|TestFilePreviewRunOnAHost) -v .`.
+ -v .`.

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/childproc"
+	"github.com/Gaurav-Gosain/tuios/internal/composer"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/previewspec"
@@ -33,9 +34,14 @@ import (
 // output is capped: past the cap the group is killed and the output is cut.
 
 const (
-	previewRunTextMax   = 1 << 20
-	previewRunImageMax  = 16 << 20
+	previewRunTextMax = 1 << 20
+	// previewRunImageMax is the largest picture quick look can draw. Its
+	// base64 still fits in one frame over a link.
+	previewRunImageMax  = composer.MaxImageBytes
 	previewRunStderrMax = 4 << 10
+	// previewRunWaitDelay bounds the wait for the output once the run ended:
+	// a child that left the process group may hold it open.
+	previewRunWaitDelay = 2 * time.Second
 	// previewersFor is how long a list read from the config and the plugins
 	// is kept while config.toml does not change, so a newly approved plugin
 	// shows within that time.
@@ -166,6 +172,7 @@ func RunPreviewer(ctx context.Context, p Previewer, path string, dir bool, size 
 	defer cancel()
 	cmd := childproc.CommandContext(ctx, prog, argv[1:]...)
 	childproc.OwnGroup(cmd)
+	cmd.WaitDelay = previewRunWaitDelay
 	cmd.Dir = filepath.Dir(path)
 	if dir {
 		cmd.Dir = path
@@ -174,7 +181,7 @@ func RunPreviewer(ctx context.Context, p Previewer, path string, dir bool, size 
 	// The run gets no TUIOS_ variable of the process that runs it: a
 	// previewer cannot call tuios as a pane or as a plugin.
 	env := slices.DeleteFunc(os.Environ(), func(kv string) bool { return strings.HasPrefix(kv, "TUIOS_") })
-	cmd.Env = append(env, "COLUMNS="+w, "LINES="+h, "TUIOS_PREVIEW_WIDTH="+w, "TUIOS_PREVIEW_HEIGHT="+h, "TUIOS_PREVIEW_PATH="+path)
+	cmd.Env = append(env, "COLUMNS="+w, "LINES="+h, "TUIOS_PREVIEW_PATH="+path)
 	if output == previewspec.OutputANSI {
 		cmd.Env = append(cmd.Env, "CLICOLOR_FORCE=1", "FORCE_COLOR=1")
 	}
@@ -193,6 +200,8 @@ func RunPreviewer(ctx context.Context, p Previewer, path string, dir bool, size 
 	case out.cut:
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
 		run.TimedOut = true
+	case errors.Is(err, exec.ErrWaitDelay):
+		// The program ended well, and a child it left held the output.
 	case errors.As(err, &exit):
 		run.Exit = exit.ExitCode()
 	case err != nil:
@@ -230,6 +239,15 @@ func (w *capWriter) Write(p []byte) (int, error) {
 	return w.buf.Write(p)
 }
 
+// PreviewRunReply is the answer of file-preview-run.
+type PreviewRunReply struct {
+	Path       string      `json:"path"`
+	Previewers []string    `json:"previewers"`
+	Run        *PreviewRun `json:"run,omitempty"`
+	Size       int64       `json:"size"`
+	MTime      int64       `json:"mtime"`
+}
+
 // verbFilePreviewRun runs a previewer of this machine for one file here.
 func (d *Daemon) verbFilePreviewRun(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
@@ -263,11 +281,24 @@ func (d *Daemon) verbFilePreviewRun(cs *connState, params json.RawMessage) (any,
 		}
 		defer func() { _ = f.Close() }()
 	}
+	// The run ends when the caller leaves, as exec does.
+	ctx, cancel := context.WithCancel(d.ctx)
+	defer cancel()
+	gone, stopGone := askCancel(cs)
+	defer stopGone()
+	go func() {
+		select {
+		case <-gone:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
 	list := PreviewersFor(path, fi.IsDir(), f)
-	out := map[string]any{"path": path, "previewers": previewerNames(list), "size": fi.Size(), "mtime": fi.ModTime().UnixMilli()}
+	out := PreviewRunReply{Path: path, Previewers: previewerNames(list), Size: fi.Size(), MTime: fi.ModTime().UnixMilli()}
 	for _, x := range list {
 		if p.Name == "" || x.Name == p.Name {
-			out["run"] = RunPreviewer(d.ctx, x, path, fi.IsDir(), previewspec.Size{Width: p.Width, Height: p.Height, Line: p.Line})
+			run := RunPreviewer(ctx, x, path, fi.IsDir(), previewspec.Size{Width: p.Width, Height: p.Height, Line: p.Line})
+			out.Run = &run
 			break
 		}
 	}

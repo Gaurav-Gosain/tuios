@@ -4,7 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/Gaurav-Gosain/tuitest"
@@ -83,6 +85,15 @@ func TestQuickLookRunsAPluginPreviewer(t *testing.T) {
 	sendKeys(t, term, " ")
 	railLists(t, term, "space did not show the plugin's previewer", []string{" e2e.notes/notes ", "PLUGIN a.note"}, nil)
 	saveCockpitFrames(t, term, "quick-look-previewer-plugin")
+
+	// The approval holds the previewer's match too: a plugin that widens it
+	// is not the plugin you approved.
+	if err := os.WriteFile(filepath.Join(plug, "tuios-plugin.toml"), []byte(strings.Replace(manifest, `["*.note"]`, `["*"]`, 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if listed, _ := tuiosCLI(t, base, "plugins", "list"); !strings.Contains(listed, "different from the approved") {
+		t.Fatalf("ASSERTION: a plugin that widened its previewer's match kept its approval:\n%s", listed)
+	}
 }
 
 // quickLookWidthRe is the width the colour previewer printed.
@@ -112,6 +123,10 @@ func TestQuickLookRunsPreviewers(t *testing.T) {
 	bin := filepath.Join(base, "bin")
 	colour := writeScript(t, bin, "colour.sh", "printf '\\033[31mRED %s\\033[0m w=%s\\n' \"$1\" \"$2\"\nprintf '\\033]2;ZZTITLE\\007\\033_ZZAPC\\033\\\\after the title\\n'\n")
 	broken := writeScript(t, bin, "broken.sh", "echo 'bad input on line 4' >&2\nexit 3\n")
+	// lone leaves a child in a session of its own, which keeps the output
+	// open for 30 seconds after lone ends. The child writes its pid.
+	lonePID := filepath.Join(base, "lone.pid")
+	lone := writeScript(t, bin, "lone.sh", "setsid sh -c 'echo $$ > \"$1\"; exec sleep 30' sh \"$1\" &\necho 'LONE done'\n")
 	cfg := `[[quick_look.previewer]]
 name = "colour"
 match = ["*.note"]
@@ -135,6 +150,17 @@ command = ["cat", "{path}"]
 output = "image"
 
 [[quick_look.previewer]]
+name = "lone"
+match = ["*.lone"]
+command = ["` + lone + `", "` + lonePID + `"]
+
+[[quick_look.previewer]]
+name = "big"
+match = ["*.huge"]
+command = ["cat", "{path}"]
+output = "image"
+
+[[quick_look.previewer]]
 name = "tree"
 folder = true
 command = ["sh", "-c", "ls -1 \"$1\" | sed 's/^/TREE /'", "sh", "{path}"]
@@ -143,7 +169,18 @@ output = "text"
 	term := quickLookProjStart(t, base, cfg, map[string]string{
 		"a.note": "plain note body\n", "z.slow": "slow file\n", "box/one.txt": "one\n", "box/two.txt": "two\n",
 		"b.pict": string(gradientPNG(t, 64, 32)),
+		"c.lone": "lone\n", "d.huge": strings.Repeat("x", 9<<20),
 	}, &ptyLog)
+	t.Cleanup(func() {
+		// The child of lone, by the pid it wrote, while it still sleeps.
+		if b, err := os.ReadFile(lonePID); err == nil {
+			if pid, err := strconv.Atoi(strings.TrimSpace(string(b))); err == nil {
+				if cmd, _ := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/cmdline"); strings.HasPrefix(string(cmd), "sleep\x0030") {
+					_ = syscall.Kill(pid, syscall.SIGKILL)
+				}
+			}
+		}
+	})
 	waitForAll(t, term, uiTimeout, "the listing", "a.note", "b.pict", "z.slow", "box/")
 
 	quickLookFocusRail(t, term, "a.note")
@@ -209,6 +246,19 @@ output = "text"
 	}
 	saveCockpitFrames(t, term, "quick-look-previewer-image")
 
+	// c.lone: lone ends at once, and its child holds the output. The run
+	// still ends, a short time after lone.
+	sendKeys(t, term, " ")
+	sendKeys(t, term, "j")
+	sendKeys(t, term, " ")
+	railLists(t, term, "a previewer whose child holds the output does not finish", []string{"LONE done"}, nil)
+
+	// d.huge: a picture past the size quick look can draw.
+	sendKeys(t, term, " ")
+	sendKeys(t, term, "j")
+	sendKeys(t, term, " ")
+	railLists(t, term, "a picture that is too large", []string{"The picture that big made is too large."}, nil)
+
 	// j again: z.slow.
 	sendKeys(t, term, " ")
 	sendKeys(t, term, "j")
@@ -216,12 +266,22 @@ output = "text"
 	railLists(t, term, "a previewer past its timeout", []string{"slow did not finish in time."}, nil)
 
 	sendKeys(t, term, " ")
-	sendKeys(t, term, "k")
-	sendKeys(t, term, "k")
-	sendKeys(t, term, "k")
+	for range 5 {
+		sendKeys(t, term, "k")
+	}
 	sendKeys(t, term, " ")
 	railLists(t, term, "space did not show the folder previewer", []string{" tree ", "TREE one.txt", "TREE two.txt"}, nil)
 	saveCockpitFrames(t, term, "quick-look-previewer-folder")
 	sendKeys(t, term, "v")
 	railLists(t, term, "v did not show the folder's rows", []string{"2 items", "one.txt"}, []string{"TREE one.txt"})
+
+	// The folder changes while the panel stays open. Back on box/, the
+	// folder previewer runs again.
+	if err := os.WriteFile(filepath.Join(xdgDir(base, "HOME"), "proj", "box", "three.txt"), []byte("three\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sendKeys(t, term, "j")
+	railLists(t, term, "j did not show a.note", []string{"RED a.note"}, nil)
+	sendKeys(t, term, "k")
+	railLists(t, term, "the folder previewer showed the folder as it was", []string{"TREE three.txt"}, nil)
 }

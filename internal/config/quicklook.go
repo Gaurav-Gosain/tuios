@@ -1,7 +1,7 @@
 package config
 
 import (
-	"fmt"
+	"strconv"
 
 	"github.com/pelletier/go-toml/v2"
 
@@ -49,7 +49,7 @@ func validateQuickLook(cfg *UserConfig, result *ValidationResult) {
 		if msg := p.Problem(); msg != "" {
 			result.Warnings = append(result.Warnings, ValidationError{
 				Field:   "quick_look",
-				Key:     fmt.Sprintf("previewer[%d]", i),
+				Key:     "previewer[" + strconv.Itoa(i) + "]",
 				Message: msg + " tuios skips it.",
 			})
 		}

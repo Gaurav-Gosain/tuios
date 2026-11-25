@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -134,33 +133,31 @@ func (m *OS) quickLookRunRead() tea.Cmd {
 	gen := ql.runGen
 	ql.runOut = true
 	ascii := overlay.UseASCII()
+	// Moving to another file ends the run: here its process group, and on
+	// another machine the call, which ends the run there.
+	ctx, cancel := context.WithCancel(context.Background())
+	ql.runCancel = cancel
 	if t.host == "" {
-		var p session.Previewer
-		found := false
-		// The fetch matched the file, MIME type and all, so the name is enough.
-		for _, x := range session.MachinePreviewers() {
-			if x.Name == name {
-				p, found = x, true
-				break
-			}
-		}
-		if !found {
-			ql.runOut = false
-			return nil
-		}
-		ctx, cancel := context.WithCancel(context.Background())
-		ql.runCancel = cancel
+		mtime, fsize := r.mtime, r.size
 		return func() tea.Msg {
-			run := session.RunPreviewer(ctx, p, t.path, t.dir, size)
-			cancel()
-			out := quickLookRunFrom(t, &run, ascii)
-			out.w, out.h, out.sized = w, h, previewspec.UsesSize(p.Command)
-			out.mtime, out.size = r.mtime, r.size
-			return quickLookRunMsg{gen: gen, run: out}
+			defer cancel()
+			// The fetch matched the file, MIME type and all, so the name is
+			// enough. The list is read here, off the render loop.
+			for _, p := range session.MachinePreviewers() {
+				if p.Name == name {
+					run := session.RunPreviewer(ctx, p, t.path, t.dir, size)
+					out := quickLookRunFrom(t, &run, ascii)
+					out.w, out.h, out.sized = w, h, previewspec.UsesSize(p.Command)
+					out.mtime, out.size = mtime, fsize
+					return quickLookRunMsg{gen: gen, run: out}
+				}
+			}
+			return quickLookRunMsg{gen: gen, run: &quickLookRun{target: t, name: name, note: name + " is not set up on this machine.", warn: true}}
 		}
 	}
-	call := m.verbOnHostCaller()
+	call := m.verbOnHostCallerFor(ctx.Done(), previewspec.TimeoutMax+transferCallTimeout)
 	return func() tea.Msg {
+		defer cancel()
 		raw, err := call(t.host, "file-preview-run", map[string]any{"path": t.path, "name": name, "width": size.Width, "height": size.Height, "line": size.Line})
 		return quickLookRunDecode(t, gen, raw, err, ascii, w, h)
 	}
@@ -169,10 +166,7 @@ func (m *OS) quickLookRunRead() tea.Cmd {
 // quickLookRunDecode reads a file-preview-run answer from another machine.
 func quickLookRunDecode(t quickLookTarget, gen int, raw json.RawMessage, err error, ascii bool, w, h int) quickLookRunMsg {
 	msg := quickLookRunMsg{gen: gen}
-	var reply struct {
-		Previewers []string            `json:"previewers"`
-		Run        *session.PreviewRun `json:"run"`
-	}
+	var reply session.PreviewRunReply
 	if err != nil {
 		msg.run = &quickLookRun{target: t, note: quickLookErrorText(t, err), warn: true}
 		return msg
@@ -202,6 +196,8 @@ func quickLookRunFrom(t quickLookTarget, run *session.PreviewRun, ascii bool) *q
 		if run.Stderr != "" {
 			out.lines = strings.Split(run.Stderr, "\n")
 		}
+	case run.Cut && run.Output == previewspec.OutputImage:
+		out.note, out.warn = "The picture that "+run.Name+" made is too large.", true
 	case len(run.Data) == 0:
 		out.note = run.Name + " printed nothing."
 	case run.Output == previewspec.OutputImage:
@@ -242,11 +238,16 @@ func (m *OS) applyQuickLookRun(msg quickLookRunMsg) {
 		run.name = quickLookRunName(ql.view)
 	}
 	ql.run = run
-	if run.target.host == "" && !run.warn {
-		ql.runKept = append(slices.DeleteFunc(ql.runKept, func(k *quickLookRun) bool { return k.target == run.target && k.name == run.name }), run)
-		if len(ql.runKept) > quickLookRunKeep {
-			ql.runKept = ql.runKept[1:]
+	// A folder has no mtime and size here to tell a stale run, so its runs
+	// are not kept.
+	if run.target.host == "" && !run.target.dir && !run.warn {
+		kept := ql.runKept[:0]
+		for _, k := range ql.runKept {
+			if k.target != run.target || k.name != run.name {
+				kept = append(kept, k)
+			}
 		}
+		ql.runKept = append(kept[max(len(kept)+1-quickLookRunKeep, 0):], run)
 	}
 }
 

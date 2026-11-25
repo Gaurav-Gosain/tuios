@@ -375,11 +375,14 @@ func TestFilePreviewRunOnAHost(t *testing.T) {
 		remote := remoteMachine(t)
 		farHome := xdgDir(remote, "HOME")
 		script := writeScript(t, filepath.Join(remote, "bin"), "far.sh", "printf 'FAR %s %s\\n' \"$1\" \"$2\"\n")
+		hold := writeScript(t, filepath.Join(remote, "bin"), "hold.sh", "echo $$ > \"$1\"\nexec sleep 25\n")
+		holdPID := filepath.Join(remote, "hold.pid")
 		policy := relayFilesPolicy
 		if !open {
 			policy = "[hosts.\"*\"]\nallow = [\"list\", \"files\"]\n"
 		}
-		writeRemoteConfig(t, remote, policy+"\n[[quick_look.previewer]]\nname = \"far\"\nmatch = [\"*.note\"]\ncommand = [\""+script+"\", \"{name}\", \"{width}\"]\n")
+		writeRemoteConfig(t, remote, policy+"\n[[quick_look.previewer]]\nname = \"far\"\nmatch = [\"*.note\"]\ncommand = [\""+script+"\", \"{name}\", \"{width}\"]\n\n[[quick_look.previewer]]\nname = \"hold\"\nmatch = [\"*.hold\"]\ncommand = [\""+hold+"\", \""+holdPID+"\"]\ntimeout = \"30s\"\n")
+		writeFarFile(t, filepath.Join(farHome, "work", "a.hold"), "hold\n", 0o644)
 		writeFarFile(t, filepath.Join(farHome, "work", "a.note"), "far note\n", 0o644)
 		hubWithFileHost(t, base, remote, writeFakeSSHTo(t, base, remote))
 		far := dialHostVerbs(t, base)
@@ -427,6 +430,21 @@ func TestFilePreviewRunOnAHost(t *testing.T) {
 		if raw, err := far.call("file-preview-run", map[string]any{"path": "~/work/a.note", "command": []string{"touch", "x"}}); err == nil {
 			t.Fatalf("ASSERTION: file-preview-run took a command from the caller: %s", raw)
 		}
+		// A caller that leaves ends the run on build: quick look leaves when
+		// you move to another file.
+		gone := dialHostVerbs(t, base)
+		line, _ := json.Marshal(map[string]any{"id": 1, "verb": "file-preview-run", "params": map[string]any{"path": "~/work/a.hold"}})
+		if _, err := gone.conn.Write(append(line, '\n')); err != nil {
+			t.Fatal(err)
+		}
+		pid, _ := strconv.Atoi(strings.TrimSpace(waitFileHas(t, holdPID, "the hold previewer started on build", uiTimeout, func(s string) bool { return strings.HasSuffix(s, "\n") })))
+		_ = gone.conn.Close()
+		waitTextOf(t, "the previewer on build still runs after the caller left", uiTimeout, func() string {
+			if syscall.Kill(pid, 0) != nil {
+				return "gone"
+			}
+			return "running"
+		}, func(s string) bool { return s == "gone" })
 		saveTransferArtifact(t, "file-preview-run-on-a-host", record)
 	}
 }

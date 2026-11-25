@@ -319,7 +319,11 @@ func TrustHash(source string, p *Plugin, grants []string) string {
 		put('v', s.ID, filepath.Base(s.File))
 	}
 	for _, x := range p.Previewers {
-		put('q', append([]string{x.ID, x.Output}, x.Command...)...)
+		// Every key: a wider match runs the approved command on more files.
+		put('q', x.ID, x.Output, x.Timeout, strconv.FormatBool(x.Folder))
+		put('Q', x.Match...)
+		put('w', x.Mime...)
+		put('x', x.Command...)
 	}
 	return "sha256:" + hex.EncodeToString(h.Sum(nil))
 }
