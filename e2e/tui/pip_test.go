@@ -434,6 +434,62 @@ func TestPiPWatchesAPaneFromTheCorner(t *testing.T) {
 	t.Logf("after the pinned pane closed:\n%s", term.Snapshot())
 }
 
+// TestPiPFollowsTheCursor is the report of a pane in vim: the view showed
+// the bottom rows of the pane, and not the part where the cursor was. The
+// agent pane fills its screen to the last row, as an editor does, and puts
+// its cursor near the top, past the columns the view is wide. The view must
+// show the text at the cursor. Then the cursor moves near the bottom and to
+// the left edge, and the view must follow it there.
+//
+// How this could pass wrongly: the text could be in the view because the
+// view shows the bottom rows. The text at the cursor is on the fourth row of
+// a full screen, and the view is ten rows high. The second text is printed
+// only after the test saw the first one in the view.
+func TestPiPFollowsTheCursor(t *testing.T) {
+	base := t.TempDir()
+	stop := filepath.Join(base, "move-cursor")
+	term := startPiPPanes(t, base, []string{"new", "work"}, fmt.Sprintf(
+		`printf '\033[H\033[2J'; i=0; while [ $i -lt 60 ]; do i=$((i+1)); echo "PIPROW-$i the quick brown fox jumps over the dog"; done; `+
+			`printf '\033[4;45HPIPTICK-%%d' 2; while [ ! -f %q ]; do sleep 0.1; done; `+
+			`printf '\033[30;2HPIP%%s' LOW; sleep 600`, stop))
+
+	pinWithKey(t, term, base, "Pinned agent")
+	mouseClick(t, term, 20, 10, tuitest.MouseLeft, 0)
+	box := waitPiP(t, term, "agent", "after focusing the other pane")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		b, ok := findPiPBox(s, "agent")
+		return ok && strings.Contains(pipBoxText(s, b), "PIPTICK-2")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the view does not show the text at the cursor:\n%s\n%s", pipBoxText(term.Screen(), box), term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "pip-cursor-top")
+	t.Logf("the view at the cursor near the top:\n%s", pipBoxText(term.Screen(), box))
+
+	if err := os.WriteFile(stop, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		b, ok := findPiPBox(s, "agent")
+		if !ok {
+			return false
+		}
+		// PIPLOW is printed from the second column over a PIPROW line, so
+		// a view from the left edge shows the line as PPIPLOW.
+		for line := range strings.SplitSeq(pipBoxText(s, b), "\n") {
+			if strings.HasPrefix(line, "PPIPLOW") {
+				return true
+			}
+		}
+		return false
+	}, uiTimeout); err != nil {
+		b, _ := findPiPBox(term.Screen(), "agent")
+		t.Fatalf("the view did not follow the cursor near the bottom and the left edge:\n%s\n%s", pipBoxText(term.Screen(), b), term.Snapshot())
+	}
+	saveCockpitFrames(t, term, "pip-cursor-bottom")
+	b, _ := findPiPBox(term.Screen(), "agent")
+	t.Logf("the view at the cursor near the bottom:\n%s", pipBoxText(term.Screen(), b))
+}
+
 // TestPiPInALocalSession is the view without a daemon: pin, watch from the
 // other pane, and the pinned pane's shell exits while the view is up.
 //

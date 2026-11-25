@@ -166,6 +166,11 @@ type pipState struct {
 	// body is the source's cells as the view last read them, cols by rows.
 	body       string
 	cols, rows int
+	// view is the first column and row of the source screen that body
+	// shows, and viewSet says body was read with the cursor in it. See
+	// pipFollow.
+	view    image.Point
+	viewSet bool
 	// box is the finished frame, and boxKey what it was built from, so a
 	// frame that changes none of it reuses the string and the compositor
 	// reuses the cells it parsed from it.
@@ -282,6 +287,7 @@ func (m *OS) PinPiP(windowID string) error {
 	w := m.Windows[i]
 	m.pip.windowID = w.ID
 	m.pip.dirty = true
+	m.pip.viewSet = false
 	m.pip.box, m.pip.boxKey = "", ""
 	// In a daemon session a pane on another workspace is not streamed to
 	// this client, so its emulator would stop at whatever it held when the
@@ -487,7 +493,10 @@ func (m *OS) pipReadBody(src *terminal.Window, cols, rows int) {
 	}
 	body := ""
 	if src.Terminal != nil {
-		body = pipCells(src.Terminal, cols, rows)
+		top, left := pipFollow(src.Terminal, cols, rows, m.pip.view, m.pip.viewSet)
+		_, end := pipTail(src.Terminal, rows)
+		body = pipCellsAt(src.Terminal, cols, rows, top, max(end, top+rows-1), left)
+		m.pip.view, m.pip.viewSet = image.Pt(left, top), true
 	}
 	src.RUnlockIO()
 	if body != m.pip.body {
@@ -522,11 +531,18 @@ type pipScreen interface {
 // the view is text only. Links are dropped: the view is for looking at, and a
 // click on it goes to the pane.
 func pipCells(scr pipScreen, cols, rows int) string {
+	start, end := pipTail(scr, rows)
+	return pipCellsAt(scr, cols, rows, start, end, 0)
+}
+
+// pipTail is the rows pipCells shows: they end at the lower of the last row
+// with text and the cursor's row, and start rows before that.
+func pipTail(scr pipScreen, rows int) (start, end int) {
 	sw, sh := scr.Width(), scr.Height()
-	if cols <= 0 || rows <= 0 || sw <= 0 || sh <= 0 {
-		return ""
+	if rows <= 0 || sw <= 0 || sh <= 0 {
+		return 0, -1
 	}
-	end := min(scr.CursorPosition().Y, sh-1)
+	end = min(scr.CursorPosition().Y, sh-1)
 	for y := sh - 1; y > end; y-- {
 		if pipRowHasText(scr, y, sw) {
 			end = y
@@ -534,7 +550,66 @@ func pipCells(scr pipScreen, cols, rows int) string {
 		}
 	}
 	end = max(end, min(rows, sh)-1)
-	start := max(0, end-rows+1)
+	return max(0, end-rows+1), end
+}
+
+// pipFollow is the first row and column the view shows, so that the cursor
+// is in the view. A full-screen program such as an editor fills the screen
+// to its last row, so the rows pipCells shows were the bottom ones however
+// far up the cursor was. The view shows those rows whenever the cursor is in
+// them, which keeps a shell's view as it was. Otherwise it keeps the rows of
+// the last read while the cursor is in them, and moves the fewest rows that
+// bring the cursor back in, so a cursor that moves one row does not move the
+// whole view. With no last read it centres the cursor. The columns start at
+// the left edge while the cursor is in the first cols columns, and past them
+// move the fewest columns that bring the cursor in, from the last read or
+// from the left edge. A hidden cursor marks no place, so the view
+// shows the rows pipCells shows.
+func pipFollow(scr pipScreen, cols, rows int, last image.Point, placed bool) (top, left int) {
+	start, _ := pipTail(scr, rows)
+	if h, ok := scr.(interface{ IsCursorHidden() bool }); ok && h.IsCursorHidden() {
+		return start, 0
+	}
+	sw, sh := scr.Width(), scr.Height()
+	cur := scr.CursorPosition()
+	cy, cx := max(0, min(cur.Y, sh-1)), max(0, min(cur.X, sw-1))
+	in := func(pos, first, n int) bool { return pos >= first && pos < first+n }
+	follow := func(pos, n, total, last int) int {
+		first := pos - n/2
+		if placed {
+			first = last
+			if pos < last {
+				first = pos
+			} else if pos >= last+n {
+				first = pos - n + 1
+			}
+		}
+		return max(0, min(first, total-n))
+	}
+	switch {
+	case placed && in(cy, last.Y, rows) && last.Y+rows <= max(sh, rows):
+		top = last.Y
+	case in(cy, start, rows):
+		top = start
+	default:
+		top = follow(cy, rows, sh, last.Y)
+	}
+	if !in(cx, 0, cols) {
+		// From the left edge when there is no last read, so the view
+		// shows as much of the line left of the cursor as it can.
+		placed = true
+		left = follow(cx, cols, sw, last.X)
+	}
+	return top, left
+}
+
+// pipCellsAt renders rows rows of the screen from row start and cols columns
+// from column left, with the rows after end left blank.
+func pipCellsAt(scr pipScreen, cols, rows, start, end, left int) string {
+	sw, sh := scr.Width(), scr.Height()
+	if cols <= 0 || rows <= 0 || sw <= 0 || sh <= 0 {
+		return ""
+	}
 
 	var b strings.Builder
 	line := make(uv.Line, cols)
@@ -545,10 +620,10 @@ func pipCells(scr pipScreen, cols, rows int) string {
 		y := start + i
 		for x := range cols {
 			line[x] = uv.EmptyCell
-			if y > end || x >= sw {
+			if y > end || y >= sh || left+x >= sw {
 				continue
 			}
-			c := scr.CellAt(x, y)
+			c := scr.CellAt(left+x, y)
 			if c == nil {
 				continue
 			}
@@ -558,6 +633,9 @@ func pipCells(scr pipScreen, cols, rows int) string {
 			case cell.Width > 1 && x+cell.Width > cols:
 				cell = uv.EmptyCell
 			case vt.IsKittyPlaceholder(cell.Content):
+				cell = uv.EmptyCell
+			case x == 0 && left > 0 && cell.Width == 0:
+				// The tail of a wide glyph cut by the left edge.
 				cell = uv.EmptyCell
 			}
 			line[x] = cell

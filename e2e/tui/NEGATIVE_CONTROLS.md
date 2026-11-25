@@ -19534,6 +19534,14 @@ where it was. Then, in window mode, it presses resize_master_grow_left and
 wants the right edge kept, and presses resize_height_shrink_top past the
 smallest pane and resize_height_grow_top once, and wants the bottom edge kept.
 
+## The picture-in-picture view follows the cursor
+
+`e2e/tui/pip_test.go` `TestPiPFollowsTheCursor` pins a pane that fills its
+screen to the last row, as an editor does, and puts its cursor on the fourth
+row, past the columns the view is wide. The view must show the text at the
+cursor. Then the cursor moves near the bottom and to the left edge, and the
+view must show the line there from its first column.
+
 Run on 2026-11-25 on Linux (amd64).
 
 | Control | The run fails with | Result |
@@ -19654,3 +19662,8 @@ Run on 2026-11-25 on Linux (amd64).
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestIdleClientFreesItsFrameBuffers$' -v .`.
+| main 55162e6cc | "the view does not show the text at the cursor", the view shows PIPROW-51 to PIPROW-60 | **caught** |
+| this branch | 3 of 3 runs pass | passes |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestPiPFollowsTheCursor$' .`.
