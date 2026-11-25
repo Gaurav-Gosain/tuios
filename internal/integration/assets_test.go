@@ -32,6 +32,21 @@ func TestAssetArchiveMatchesFiles(t *testing.T) {
 	}
 }
 
+// TestOmarchyPluginMatchesItsSource: the widget install writes into
+// Omarchy's plugin folder is the one in integrations/omarchy, which the e2e
+// test reads.
+func TestOmarchyPluginMatchesItsSource(t *testing.T) {
+	for _, name := range []string{"manifest.json", "Widget.qml", "tuios-menu"} {
+		src, err := os.ReadFile(filepath.Join("..", "..", "integrations", "omarchy", OmarchyPluginID, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(src, assets()["assets/omarchy/"+OmarchyPluginID+"/"+name]) {
+			t.Errorf("integrations/omarchy/%s/%s differs from its copy in assets/omarchy; copy it there and run go generate ./internal/integration", OmarchyPluginID, name)
+		}
+	}
+}
+
 // TestRexLuaMatchesItsSource: the tuios.lua install writes into Rex's config
 // folder is the one in integrations/rex, where its stub tests run. A change
 // there that is not copied here would install a file the tests never saw.

@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+# The tuios menu for Omarchy: what needs you, the inbox, and the sessions of
+# each machine. 'tuios integration install omarchy' writes this file into the
+# tuios agents plugin, and sets the tuios line below to the tuios it ran.
+#
+# The rows show in omarchy-menu-select, the picker of the Omarchy menu.
+# tuios opens in a terminal through omarchy-launch-tui, as Omarchy's own rows
+# do. The menu reads tuios only through commands with JSON output.
+#
+#   tuios-menu            what needs you, the inbox and the sessions
+#   tuios-menu sessions   the sessions of this machine
+set -uo pipefail
+tuios=tuios
+
+if ! command -v omarchy-menu-select >/dev/null; then
+  echo "The tuios menu needs Omarchy 4: omarchy-menu-select is not on PATH." >&2
+  exit 1
+fi
+
+opts=() acts=() args=() items='[]'
+
+# row adds a row: glyph, label, subtext, then the action and its argument.
+row() {
+  local value=$2
+  [ -n "$3" ] && value+=$'\t'$3
+  opts+=("$1"$'\t'"$value")
+  acts+=("$4")
+  args+=("${5-}")
+}
+
+# pick shows the rows and runs the chosen one. Closing the menu runs nothing.
+pick() {
+  local chosen i
+  chosen=$(omarchy-menu-select "$1" "${opts[@]}") || return 0
+  for i in "${!opts[@]}"; do
+    if [ "${opts[i]#*$'\t'}" = "$chosen" ]; then
+      run "${acts[i]}" "${args[i]}"
+      return
+    fi
+  done
+}
+
+run() {
+  local host=${2%%$'\t'*} where=()
+  [ -n "$host" ] && where=(--host "$host")
+  case $1 in
+  start) launch ;;
+  goto) goto "$2" ;;
+  inbox) inbox ;;
+  sessions) sessions "$2" ;;
+  attach) launch attach "${where[@]}" "${2#*$'\t'}" ;;
+  new) launch new "${where[@]}" ;;
+  esac
+}
+
+# launch opens tuios with the arguments in a new terminal, and does not wait.
+launch() {
+  if command -v omarchy-launch-tui >/dev/null; then
+    setsid -f omarchy-launch-tui --app-id=org.omarchy.tuios "$tuios" "$@" >/dev/null 2>&1
+  else
+    setsid -f xdg-terminal-exec "$tuios" "$@" >/dev/null 2>&1
+  fi
+}
+
+# raise focuses the Hyprland window of process $1 or of one of its parents:
+# the terminal of a tuios client.
+raise() {
+  local pid=$1 clients addr _
+  clients=$(hyprctl clients -j 2>/dev/null) || return 1
+  for _ in {1..32}; do
+    addr=$(jq -r --argjson p "$pid" 'first(.[] | select(.pid == $p) | .address) // empty' <<<"$clients")
+    if [ -n "$addr" ]; then
+      hyprctl dispatch "hl.dsp.focus({ window = \"address:$addr\" })" >/dev/null 2>&1 ||
+        hyprctl dispatch focuswindow "address:$addr" >/dev/null 2>&1
+      return
+    fi
+    pid=$(awk '/^PPid:/ { print $2 }' "/proc/$pid/status" 2>/dev/null)
+    [ "${pid:-0}" -gt 1 ] || return 1
+  done
+  return 1
+}
+
+# clients prints the pid and the session of each client, newest first.
+clients() {
+  "$tuios" list-clients --json 2>/dev/null | jq -r 'reverse | .[] | select((.session // "") != "") | "\(.pid) \(.session)"'
+}
+
+# goto moves the focus to item $1 and brings its pane on screen: the terminal
+# of a client that shows the session, else a new terminal that attaches it.
+goto() {
+  local host session window pid s
+  { read -r host; read -r session; read -r window; } < <(jq -r --argjson i "$1" '.[$i] | (.host // ""), .session, (.window // "")' <<<"$items")
+  if [ -n "$host" ]; then
+    launch attach --host "$host" "$session"
+    return
+  fi
+  [ -n "$window" ] && "$tuios" focus-window -s "$session" "$window" >/dev/null 2>&1
+  while read -r pid s; do
+    [ "$s" = "$session" ] && raise "$pid" && return
+  done < <(clients)
+  launch attach "$session"
+}
+
+# inbox opens the inbox in the newest client and brings its terminal up.
+inbox() {
+  local pid s
+  while read -r pid s; do
+    if "$tuios" run-command -s "$s" Action prefix_inbox >/dev/null 2>&1; then
+      raise "$pid"
+      return
+    fi
+  done < <(clients)
+  launch attach
+}
+
+root() {
+  local label sub n i=0 inbox="Nothing needs you"
+  if ! items=$("$tuios" list-attention --json 2>/dev/null |
+    jq -c '[.items[]? | select(.kind | IN("approval", "question", "ask", "plan", "errored"))]'); then
+    row $'\uf067' "Start tuios" "tuios is not running" start
+    pick tuios
+    return
+  fi
+  while read -r label && read -r sub; do
+    row $'\uf0f3' "$label" "$sub" goto $((i++))
+  done < <(jq -r '.[:8][] |
+    ({approval: "Approval", plan: "Plan", errored: "Error"}[.kind] // "Question") as $kind |
+    (.summary // "" | if length > 60 then .[:57] + "..." else . end) as $sum |
+    ((.name // .session), "\($kind) · \(if .host then .host + ":" else "" end)\(.session)\(if $sum != "" then " · " + $sum else "" end)") |
+    gsub("[\t\n]"; " ")' <<<"$items")
+  n=$(jq length <<<"$items")
+  [ "$n" -gt 0 ] && inbox="$n items need you"
+  [ "$n" -eq 1 ] && inbox="1 item needs you"
+  row $'\uf01c' "Open the inbox" "$inbox" inbox
+  row $'\uf108' Sessions "This machine" sessions
+  while read -r label; do
+    row $'\uf233' Sessions "$label" sessions "$label"
+  done < <("$tuios" hosts --json 2>/dev/null | jq -r '.hosts[]? | select(.status == "up") | .host')
+  pick tuios
+}
+
+# sessions lists the sessions of host $1, this machine when empty, and
+# attaches the chosen one in a new terminal.
+sessions() {
+  local host=$1 name sub where=()
+  [ -n "$host" ] && where=(--host "$host")
+  while read -r name && read -r sub; do
+    row $'\uf120' "$name" "$sub" attach "$host"$'\t'"$name"
+  done < <("$tuios" ls --json "${where[@]}" 2>/dev/null | jq -r '.[]? |
+    (.name | gsub("[\t\n]"; " ")),
+    (if .window_count == 1 then "1 pane" else "\(.window_count) panes" end) +
+      (if .attached then " · attached" elif .saved then " · saved" else "" end)')
+  row $'\uf067' "New session" "" new "$host"
+  pick "Sessions${host:+ on $host}"
+}
+
+case ${1-} in
+"") root ;;
+sessions) sessions "" ;;
+*)
+  echo "Usage: tuios-menu [sessions]" >&2
+  exit 2
+  ;;
+esac

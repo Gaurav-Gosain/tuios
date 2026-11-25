@@ -57,6 +57,7 @@ Add a custom module to the Waybar config. The icons are Nerd Font glyphs:
     "working": "",
     "review": "",
     "idle": "",
+    "error": "",
     "off": ""
   },
   "on-click": "tuios attach"
@@ -74,7 +75,12 @@ class in `style.css`:
 
 ## The Omarchy bar
 
-The Omarchy bar runs a command module at an interval. Add an entry to
+On Omarchy 4, `tuios integration install omarchy` puts the tuios agents widget
+in the bar. It follows the state as `--follow` does. See
+[OMARCHY.md](OMARCHY.md).
+
+For a module of your own, the Omarchy bar runs a command at an interval. Add
+an entry to
 `bar.layout` in `~/.config/omarchy/shell.json`:
 
 ```json

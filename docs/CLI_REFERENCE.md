@@ -5309,6 +5309,11 @@ beside it with a `.tuios.bak` suffix.
 `rex` is not a harness. `tuios integration install rex` adds the tuios actions
 to the command palette of the Rex terminal. See [REX.md](REX.md).
 
+`omarchy` is not a harness either. `tuios integration install omarchy` adds the
+tuios agents widget to the Omarchy bar and a tuios row to the Omarchy menu.
+`--force` replaces a `tuios.agents` plugin that tuios did not write. See
+[OMARCHY.md](OMARCHY.md).
+
 ### `tuios doctor`
 
 Check that parts of tuios are set up and work. `tuios keybinds doctor` checks

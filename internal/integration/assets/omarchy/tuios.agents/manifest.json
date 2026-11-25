@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "tuios.agents",
+  "name": "tuios agents",
+  "version": "1.0.0",
+  "author": "tuios",
+  "license": "MIT",
+  "description": "What your tuios agents need from you, in the Omarchy bar.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "Widget.qml"
+  },
+  "barWidget": {
+    "displayName": "tuios agents",
+    "description": "A count of the tuios agents that need you. Click it to open the tuios menu.",
+    "category": "AI",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "command": "tuios",
+      "menu": "tuios-menu",
+      "showIdle": false
+    },
+    "schema": [
+      { "key": "command", "type": "string", "label": "tuios command", "defaultValue": "tuios", "description": "The tuios binary the widget runs." },
+      { "key": "showIdle", "type": "boolean", "label": "Show when idle", "defaultValue": false, "description": "Show the icon when no agent works or needs you." }
+    ]
+  }
+}
