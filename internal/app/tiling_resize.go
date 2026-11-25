@@ -213,8 +213,9 @@ func (m *OS) SetFocusedWindowHeightPercent(pct int) {
 // resizeFloatingPane gives a pane that owns no split line the rectangle a
 // resize key asked for. The edge the key names moves alone and no other pane
 // moves. The pane stays in the content region and is at least the smallest
-// pane. An edge pushed past the region moves the opposite edge instead, so a
-// float that fills the height still shrinks and one at the bottom still grows.
+// pane. A shrink at the smallest size does nothing. An edge pushed past the
+// region moves the opposite edge instead, so a float that fills the height
+// still shrinks and one at the bottom still grows.
 // The tiling path held both edges still, and a float starts in the slot it
 // was tiled in, where both edges are on the boundary.
 func (m *OS) resizeFloatingPane(w *terminal.Window, x, y, width, height int) {
@@ -222,6 +223,15 @@ func (m *OS) resizeFloatingPane(w *terminal.Window, x, y, width, height int) {
 	bottom, right := top+m.PaneHeight(), left+m.PaneWidth()
 	width = max(config.DefaultWindowWidth, min(width, right-left))
 	height = max(config.DefaultWindowHeight, min(height, bottom-top))
+	// A key that moves the left or the top edge keeps the opposite edge
+	// where it was, also when the size was held to the smallest pane:
+	// otherwise a shrink at the smallest size slides the pane.
+	if x != w.X {
+		x = w.X + w.Width - width
+	}
+	if y != w.Y {
+		y = w.Y + w.Height - height
+	}
 	x = max(left, min(x, right-width))
 	y = max(top, min(y, bottom-height))
 	if x == w.X && y == w.Y && width == w.Width && height == w.Height {

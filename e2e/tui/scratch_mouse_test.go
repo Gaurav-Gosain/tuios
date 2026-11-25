@@ -405,6 +405,54 @@ func TestFloatKeyResizeKeepsTheTiles(t *testing.T) {
 			t.Fatalf("%s on the float moved the tiled pane from %v to %v\n%s", k.name, tile, gotTile, term.Snapshot())
 		}
 	}
+
+	// The keys of window mode that move the left and the top edge. The left
+	// key grows the float to the left and leaves its right edge. The top
+	// keys shrink it to the smallest pane and past it, then grow it once: the
+	// bottom edge must stay where it was, so the float did not slide down
+	// while it was at the smallest size.
+	waitFloat := func(what string, done func(floatRect) bool) (floatRect, floatRect) {
+		t.Helper()
+		deadline := time.Now().Add(uiTimeout)
+		for {
+			f, tl := floatAndTile(t, base, what)
+			if done(f) || time.Now().After(deadline) {
+				return f, tl
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	toWindowMode(t, term, base)
+	before := float
+	if err := term.SendKeys("."); err != nil {
+		t.Fatalf("resize_master_grow_left: %v", err)
+	}
+	float, gotTile := waitFloat("after resize_master_grow_left", func(f floatRect) bool { return f.W != before.W })
+	t.Logf("after resize_master_grow_left: float %v, tile %v", float, gotTile)
+	saveCockpitFrames(t, term, "float-keys-5-resize_master_grow_left")
+	if float.X != before.X-4 || float.W != before.W+4 {
+		t.Errorf("resize_master_grow_left took the float from %v to %v, want x=%d w=%d", before, float, before.X-4, before.W+4)
+	}
+	if gotTile != tile {
+		t.Fatalf("resize_master_grow_left on the float moved the tiled pane from %v to %v", tile, gotTile)
+	}
+
+	const minHeight = 5 // the smallest pane
+	before = float
+	presses := (before.H-minHeight)/2 + 3
+	if err := term.SendKeys(strings.Repeat("[", presses), "]"); err != nil {
+		t.Fatalf("resize_height_shrink_top: %v", err)
+	}
+	float, gotTile = waitFloat("after the top keys", func(f floatRect) bool { return f.H == minHeight+2 })
+	t.Logf("after %d presses of resize_height_shrink_top and one of resize_height_grow_top: float %v, tile %v", presses, float, gotTile)
+	saveCockpitFrames(t, term, "float-keys-6-top-edge")
+	if float.H != minHeight+2 || float.Y+float.H != before.Y+before.H {
+		t.Errorf("the top keys took the float from %v to %v, want h=%d with the bottom edge at %d\n%s",
+			before, float, minHeight+2, before.Y+before.H, term.Snapshot())
+	}
+	if gotTile != tile {
+		t.Fatalf("the top keys on the float moved the tiled pane from %v to %v", tile, gotTile)
+	}
 	alive(t, term, "after the float key resizes")
 }
 

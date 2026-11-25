@@ -19530,14 +19530,18 @@ Repeat from `e2e/tui` with
 panes, floats one with the leader, t, f, and presses resize_height_50,
 resize_width_70, resize_height_shrink and resize_height_grow. After each key
 it wants the float at the new size, inside the pane region, and the tiled pane
-where it was.
+where it was. Then, in window mode, it presses resize_master_grow_left and
+wants the right edge kept, and presses resize_height_shrink_top past the
+smallest pane and resize_height_grow_top once, and wants the bottom edge kept.
 
 Run on 2026-11-25 on Linux (amd64).
 
 | Control | The run fails with | Result |
 |---------|--------------------|--------|
 | main 55162e6cc | "resize_height_50 took the float from x=68 y=2 w=68 h=43 to x=68 y=2 w=68 h=43, want w=68 h=21", the same for the shrink and grow keys | **caught** |
+| The first commit of this branch, ab13d912e, where a shrink from the top at the smallest size moves the pane | "the top keys took the float from x=37 y=2 w=99 h=21 to x=37 y=22 w=99 h=7, want h=7 with the bottom edge at 23" | **caught** |
 | this branch | 3 of 3 runs pass | passes |
 
 Repeat from `e2e/tui` with
-`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestFloatKeyResizeKeepsTheTiles$' .`.
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run 'TestFloatKeyResizeKeepsTheTiles
+ .`.
