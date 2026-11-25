@@ -56,6 +56,18 @@ func (d *ActionDispatcher) registerPrefixTreeHandlers() {
 		forwardKeyToFocusedWindow(o.LeaderKeyPress(), o)
 		return o, nil
 	})
+	// A Rex pane runs tuios rex-attach, which lets its Rex shell go and exits
+	// when it reads this sequence (cmd/tuios/rex_attach_command.go). The pane
+	// then closes, and the shell keeps running on the Rex server.
+	d.Register("rex_detach", func(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
+		focused := o.GetFocusedWindow()
+		if focused == nil || focused.ForegroundCmd != "tuios" {
+			o.ShowNotification("The focused pane does not run a Rex shell.", "info", o.Settings.NotificationDuration)
+			return o, nil
+		}
+		_ = focused.SendInput([]byte(rexDetachSequence))
+		return o, nil
+	})
 	// Nest mode: every key to the pane, the leader too, until
 	// keybindings.nest_exit_key. tmux-matryoshka's prefix Enter, for a tmux
 	// or a tuios in the pane with the same leader. Unlike the actions above,
@@ -133,3 +145,7 @@ func handleNewWorkspace(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	}
 	return handleNewWindow(msg, o)
 }
+
+// rexDetachSequence asks tuios rex-attach to detach. It is an APC string,
+// which no key sends.
+const rexDetachSequence = "\x1b_tuios-rex-detach\x1b\\"

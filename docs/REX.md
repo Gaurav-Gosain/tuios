@@ -362,3 +362,55 @@ message. The prompt is typed once the agent is ready.
 - Rex's palette lists the agent actions before any agent has run, while
   tuios's own palette waits for one.
 - `install` talks to the local Rex server, or the one `REX_SERVER` names.
+
+
+## Rex shells in tuios panes
+
+A tuios pane can run a shell of a Rex server. The shell lives on the Rex
+server, so it keeps running when you detach the pane, and you can open it
+again later, in tuios or in another Rex app.
+
+```sh
+tuios new-window --rex local          # a new shell of this machine's Rex server
+tuios new-window --rex studio         # a host of rex hosts
+tuios new-window --rex box:7297       # a Rex tailnet listener
+```
+
+`--rex` takes `local`, a label of `rex hosts`, `host[:port]`,
+`http://host:port` or `unix:///path`. tuios does not reach a Rex server
+over `https://` yet.
+
+The shell opens in the Rex session named `tuios`, in the folder of the new
+pane, at the size of the pane.
+
+### Detach and open again
+
+Run the `rex_detach` action ("Rex: detach the pane and keep its shell
+running on the Rex server") from the command palette, or bind a key to it. The
+pane closes, and the shell keeps running on the Rex server.
+
+To open it again, give its block id:
+
+```sh
+tuios new-window --rex local --rex-block BLOCK
+```
+
+The pane comes back with the screen and the scrollback of the shell.
+`--rex-block` also opens a shell of the `monstar` Rex session, such as one a
+monstar window left running with Super+D. `rex api call session.list_blocks`
+lists the block ids.
+
+Close the pane any other way, and the shell ends, as in monstar.
+
+### What to know
+
+- The pane runs `tuios rex-attach`, which connects to the Rex server. Its
+  output reaches tuios as the output of any program, so the pane keeps its
+  scrollback, and a tuios client that attaches later sees it.
+- When you open a running shell again, tuios reads its screen and scrollback
+  first, and then follows its new output. Rex gives no position for the two,
+  so output that the shell writes in the moment between them is not shown. A
+  shell that waits at its prompt loses nothing. A program that draws its
+  screen again on the next resize or key shows the whole screen.
+- Keys reach the shell as tuios encodes them for the program's modes.
+- tuios does not offer Rex panes on Windows.

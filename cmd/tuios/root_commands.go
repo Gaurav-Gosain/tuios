@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strconv"
 	"time"
 
@@ -628,6 +629,7 @@ func newNewWindowCommand() *cobra.Command {
 	var newWindowKeepOpen, newWindowWait bool
 	var newWindowTimeout int
 	var newWindowShellIntegration string
+	var newWindowRex, newWindowRexBlock string
 	newWindowCmd := &cobra.Command{
 		Use:   "new-window [name] [command...]",
 		Short: "Open a new window in a session",
@@ -673,6 +675,11 @@ fan, respond, admin, or none. Without it the window holds the default of
 tuios adds, and auto adds them when [shell] integration is off. It has no effect
 on a window that runs a command.
 
+--rex runs a shell of a Rex server as the window's program: local, a host of
+rex hosts, host:port or unix:///path. The shell keeps running on the server
+when you detach the pane (the rex_detach action), and --rex-block opens it
+again with its screen and scrollback. See docs/REX.md.
+
 --kind makes a window that a native renderer (tuios-gpui) draws itself: view,
 web or app, with --uri naming what it shows. A terminal client shows such a
 window as one line with its uri.`,
@@ -702,7 +709,10 @@ window as one line with its uri.`,
     tuios capture-pane -w tests --scrollback
 
   # Open a window whose shell runs on another machine
-  tuios new-window deploy --host build`,
+  tuios new-window deploy --host build
+
+  # Open a window on a shell of this machine's Rex server
+  tuios new-window --rex local`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := ""
@@ -710,6 +720,22 @@ window as one line with its uri.`,
 			if len(args) > 0 {
 				name = args[0]
 				command = args[1:]
+			}
+			if newWindowRexBlock != "" && newWindowRex == "" {
+				newWindowRex = "local"
+			}
+			if newWindowRex != "" {
+				if len(command) > 0 || newWindowHost != "" {
+					return errors.New("--rex runs a Rex shell, so it takes no command and no --host")
+				}
+				self, err := os.Executable()
+				if err != nil {
+					self = "tuios"
+				}
+				command = []string{self, "rex-attach", newWindowRex}
+				if newWindowRexBlock != "" {
+					command = append(command, "--block", newWindowRexBlock)
+				}
 			}
 			return runNewWindow(newWindowOptions{
 				session: newWindowSession, name: name, workspace: newWindowWorkspace, cwd: newWindowCwd,
@@ -732,6 +758,8 @@ window as one line with its uri.`,
 	newWindowCmd.Flags().StringVar(&newWindowURI, "uri", "", "What a view, web or app window shows, such as tuios://review/<pane>")
 	newWindowCmd.Flags().BoolVar(&newWindowKeepOpen, "keep-open", false, "Keep the window after its program exits, with a line that shows the exit status")
 	newWindowCmd.Flags().BoolVar(&newWindowWait, "wait", false, "Wait for the program to exit, and exit with its status")
+	newWindowCmd.Flags().StringVar(&newWindowRex, "rex", "", "Run a shell of this Rex server as the window's program: local, a rex hosts label, host:port or unix:///path")
+	newWindowCmd.Flags().StringVar(&newWindowRexBlock, "rex-block", "", "With --rex: open this running Rex shell, with its screen and scrollback")
 	newWindowCmd.Flags().IntVar(&newWindowTimeout, "timeout", 0, "With --wait: milliseconds to wait before failing (default: no limit)")
 	newWindowCmd.Flags().StringVar(&newWindowShellIntegration, "shell-integration", "", "Prompt marks in this pane's shell: auto or off (default: [shell] integration)")
 	newWindowCmd.MarkFlagsMutuallyExclusive("json", "print-id")

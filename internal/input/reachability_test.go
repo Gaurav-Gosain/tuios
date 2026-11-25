@@ -553,6 +553,7 @@ var actionsWithNoDefaultBinding = map[string]string{
 	"break_pane":           "user binding",
 	"last_session":         "user binding",
 	"send_prefix":          "user binding",
+	"rex_detach":           "user binding",
 	"move_workspace_left":  "user binding",
 	"move_workspace_right": "user binding",
 	"reload_config":        "user binding",

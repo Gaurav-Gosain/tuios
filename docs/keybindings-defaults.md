@@ -854,6 +854,7 @@ Run `tuios keybinds list` to see the keys that your config sets.
 |  | `resize_width_30` | Set focused window width to 30% |
 |  | `resize_width_40` | Set focused window width to 40% |
 |  | `restart_daemon` | Restart the daemon with the newest tuios installed |
+|  | `rex_detach` | Rex: detach the pane and keep its shell running on the Rex server |
 |  | `screenshot` | Pick what to screenshot |
 |  | `screenshot_screen` | Screenshot the whole screen |
 |  | `screenshot_window` | Screenshot this window |

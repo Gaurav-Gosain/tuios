@@ -1929,6 +1929,8 @@ command that has flags of its own, or tuios reads them as its own flags:
 - `--wait`: Wait for the program to exit, print nothing, and exit with its status. A program that a signal stopped gives 128 plus the signal number
 - `--timeout <ms>`: With `--wait`: milliseconds to wait before failing (default: no limit)
 - `--shell-integration <auto|off>`: Prompt marks in this pane's bash or zsh (default: `[shell] integration`). No effect on a window that runs a command. See [Shell integration](CONFIGURATION.md#shell-integration)
+- `--rex <target>`: Run a shell of a Rex server in the window: `local`, a host of `rex hosts`, `host[:port]`, `http://host:port` or `unix:///path`. Not on Windows. See [Rex shells in tuios panes](REX.md#rex-shells-in-tuios-panes)
+- `--rex-block <id>`: With `--rex`: open this running Rex shell again, with its screen and scrollback
 
 **Output:**
 The 8-character window id and the window's name, separated by two spaces:
@@ -1964,6 +1966,10 @@ tuios new-window --json build
 
 # Target a specific session
 tuios new-window -s mysession dev
+
+# Run a shell of the local Rex server, and open it again after rex_detach
+tuios new-window --rex local
+tuios new-window --rex local --rex-block block:01a2...
 ```
 
 ### `tuios popup`

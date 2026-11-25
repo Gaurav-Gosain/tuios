@@ -483,6 +483,7 @@ var actionTable = [...]ActionSpec{
 	{Name: "last_session", Desc: "Go back to the last session"},
 	{Name: "send_prefix", Desc: "Send the leader key to the focused pane"},
 	{Name: "nest", Desc: "Send every key to the pane, the leader too, until nest_exit_key"},
+	{Name: "rex_detach", Desc: "Rex: detach the pane and keep its shell running on the Rex server"},
 	{Name: "move_workspace_left", Desc: "Swap this workspace with the one before it"},
 	{Name: "move_workspace_right", Desc: "Swap this workspace with the one after it"},
 	{Name: "send_to_workspace_", Desc: "Send the focused pane to workspace %d", Count: 9, GUI: true},
