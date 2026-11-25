@@ -10,6 +10,7 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/spf13/cobra"
 )
 
@@ -55,7 +56,10 @@ func runAskHuman(o askHumanOptions) error {
 		return reportVerbError(err, o.jsonOut)
 	}
 	defer func() { _ = client.Close() }()
-	wait := 120 * time.Second
+	// Without --timeout the daemon waits agents.ask_wait_seconds, which this
+	// command cannot read and which is never more than MaxAskWait, so the call
+	// must not give up before that.
+	wait := session.MaxAskWait
 	if o.timeout > 0 {
 		wait = time.Duration(o.timeout) * time.Millisecond
 	}
@@ -142,7 +146,7 @@ without one (dismissed, superseded, or its pane closed).`,
 	addSessionFlag(cmd, &o.session)
 	addWindowFlag(cmd, &o.window, "The pane asking, where a late answer is mailed (default: your own pane)")
 	cmd.Flags().StringArrayVarP(&o.options, "option", "o", nil, "An answer the person can pick. Give 1 to 9")
-	cmd.Flags().IntVar(&o.timeout, "timeout", 0, "Milliseconds to wait for the answer (default: 120000, at most one hour)")
+	cmd.Flags().IntVar(&o.timeout, "timeout", 0, "Milliseconds to wait for the answer (default: agents.ask_wait_seconds, at most one hour)")
 	cmd.Flags().BoolVar(&o.noWait, "no-wait", false, "Ask and return at once. The answer arrives as mail")
 	cmd.Flags().StringVar(&o.requestID, "request-id", "", "Come back for a question already asked")
 	addJSONFlag(cmd, &o.jsonOut)

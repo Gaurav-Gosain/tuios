@@ -19906,3 +19906,27 @@ editor, as dash does.
 | The `spPrompt` calls left out (the tree before the fix) | `TestPhoneStreamsAPaneAndAnswersTheInbox`, `TestStreamPaneHeldToTheLinkPolicy`, `TestStreamPaneLeaseChurn`, `TestStreamPaneFromAPane` | `no SZ- line showed`, with `sh-3.2$ SZ-22x78` on the screen | **caught** |
 | With the fix, the same forced runs | the 8 tests that use `limitsDaemon` or `spSize` | 8 of 8 pass | n/a |
 | With the fix, no forced start, `-count=3` | the same 8 tests | 24 of 24 pass | n/a |
+
+## ask-human waits as long as the option says
+
+`TestAskHumanWaitsAsLongAsTheOptionSays` asks a question nobody answers, with
+`agents.ask_wait_seconds` set, from a session nobody is attached to, and
+waits for the real `tuios ask-human` to exit. Row S sets the option at 3 and must end pending (exit 2, the "No
+answer yet" line with a request id) after 3 to 20 seconds. Row T sets it at
+138 and passes `--timeout 3000`: the same, 3 to 20 seconds. Row L sets it at
+138 and must end pending no sooner than 138 seconds and within 168, with no
+"i/o timeout" or "failed to read response" on stderr. The test takes about
+150 seconds.
+
+Run on 2026-11-25 on Linux (amd64). The control for main is a build of main
+with this test file.
+
+| Control | The test fails with | Result |
+|---------|---------------------|--------|
+| main (row L) | L: "ask-human exited 1 after 2m15.038675343s, want 2 for no answer yet", stderr "failed to read response: read unix @->.../tuios.sock: i/o timeout"; S and T pass | **caught** |
+| The command's wait at one minute (row L) | L: "ask-human exited 1 after 1m15.105981539s, want 2 for no answer yet", stderr "failed to read response: read unix @->.../tuios.sock: i/o timeout"; S and T pass | **caught** |
+| The daemon's cap at two minutes (row L) | L: "ask-human ended after 2m0.106098341s, sooner than 2m18s (exit 2)"; S and T pass | **caught** |
+| The command sends the cap as its own timeout (rows S and L) | S: "ask-human (ask-human-wait-option-s) still running after 30s, killed"; L: "ask-human (ask-human-wait-option-l) still running after 2m58s, killed"; T passes | **caught** |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestAskHumanWaitsAsLongAsTheOptionSays$' -v .`.

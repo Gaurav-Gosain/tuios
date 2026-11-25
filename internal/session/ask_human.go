@@ -72,11 +72,11 @@ const (
 )
 
 // defaultAskWait is how long ask-human blocks when the caller names no
-// timeout, and maxAskWait the most it will. The question outlives either.
-var (
-	defaultAskWait = 120 * time.Second
-	maxAskWait     = time.Hour
-)
+// timeout. The question outlives it.
+var defaultAskWait = 120 * time.Second
+
+// MaxAskWait is the most ask-human, prompt and ship wait for the person.
+const MaxAskWait = time.Hour
 
 // Ask statuses. They are wire values: the status ask-human returns. The
 // attention close reasons (dismissed, window_closed, session_closed, evicted)
@@ -358,7 +358,7 @@ func (d *Daemon) verbAskHuman(cs *connState, params json.RawMessage) (any, *verb
 	wait := p.Wait == nil || *p.Wait
 	timeout := d.askWait
 	if p.Timeout > 0 {
-		timeout = min(time.Duration(p.Timeout)*time.Millisecond, maxAskWait)
+		timeout = min(time.Duration(p.Timeout)*time.Millisecond, MaxAskWait)
 	}
 	fromPane, own := d.peerPane(cs)
 

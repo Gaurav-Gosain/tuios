@@ -2371,7 +2371,7 @@ asks with `--no-wait` and waits with `tuios wait-for agent-message`.
 - `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <id-or-name>`: The pane asking, where a late answer is mailed (default: your own pane; none from outside every pane)
 - `-o, --option <answer>`: An answer the person can pick; give 1 to 9, each one line of at most 60 bytes
-- `--timeout <ms>`: Milliseconds to wait for the answer (default: 120000, at most one hour)
+- `--timeout <ms>`: Milliseconds to wait for the answer (default: agents.ask_wait_seconds, at most one hour)
 - `--no-wait`: Ask and return at once, exit `2`; the answer arrives as mail
 - `--request-id <id>`: Come back for a question already asked
 - `--json`: Output the result as JSON: `request_id`, `status`, `answer`, `answer_index`, `answered_by`, `verified_human`
