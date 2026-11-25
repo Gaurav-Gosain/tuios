@@ -170,10 +170,14 @@ func runRexAttach(target, blockID string) error {
 			out <- chunk
 		}
 	}()
+	// The block's own terminal on the Rex server answers the shell's
+	// requests. The filter keeps them from this pane's terminal too, which
+	// would answer again, and the bridge would type that answer in.
+	var filter queryFilter
 	for {
 		select {
 		case chunk := <-out:
-			if _, err := os.Stdout.Write(chunk); err != nil {
+			if _, err := os.Stdout.Write(filter.Write(chunk)); err != nil {
 				return err
 			}
 		case err := <-ended:

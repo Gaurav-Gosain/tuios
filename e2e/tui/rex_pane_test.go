@@ -110,9 +110,14 @@ return ids`
 //     one block, the same one.
 //   - Closing the pane could leave the shell running: the block list must
 //     be empty after close-window.
+//   - The pane's terminal could answer the shell's requests a second time,
+//     through the bridge: a cursor request must get one answer.
 //
 // NEGATIVE CONTROL: with the seed (rexSeed) cut from rex-attach, the
 // reattached pane does not hold the earlier output and the test fails.
+// Without the query filter in rex-attach, fish's colour request gets a
+// second answer typed at its prompt ("fish: Unknown command: ']11'"), and
+// the cursor request check fails.
 func TestRexPaneDetachAndReattach(t *testing.T) {
 	requireReal(t, "it runs a Rex server and a bridge process in a pane")
 	addr, rex := rexScratch(t)
@@ -156,6 +161,21 @@ func TestRexPaneDetachAndReattach(t *testing.T) {
 	}
 	waitTextOf(t, "a lone Esc read by the program in the Rex shell", uiTimeout*3, func() string { return capture("rx") },
 		func(s string) bool { return strings.Contains(s, "got-1b") })
+
+	// A request the program makes gets one answer. The Rex server answers
+	// it, and the pane's terminal must not answer it again through the
+	// bridge, where the answer arrives as typed input.
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "work", "-w", "rx",
+		"sh -c 'x=CPR; stty raw -echo min 0 time 5; printf \"\\033[6n\"; sleep 1; b=$(dd bs=256 count=1 2>/dev/null | od -An -tx1 | tr -d \" \\n\"); stty sane; echo got-$x-$b-end'\n"); err != nil {
+		t.Fatalf("send-text: %v\n%s", err, out)
+	}
+	answers := waitTextOf(t, "the answers to a cursor request in the Rex shell", uiTimeout*3, func() string { return capture("rx") },
+		func(s string) bool { return strings.Contains(s, "got-CPR-") && strings.Contains(s, "-end") })
+	answers = answers[strings.Index(answers, "got-CPR-"):]
+	answers = answers[:strings.Index(answers, "-end")]
+	if n := strings.Count(answers, "1b5b"); n != 1 {
+		t.Errorf("ASSERTION: a cursor request got %d answers, want 1: %s", n, answers)
+	}
 
 	// rex_detach acts only on a pane whose program is tuios rex-attach, as
 	// the daemon's poll of the pane's foreground reports it.
