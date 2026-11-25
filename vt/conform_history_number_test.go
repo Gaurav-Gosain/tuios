@@ -187,7 +187,7 @@ func TestConform_HistoryNumbers(t *testing.T) {
 	t.Run("the epoch changes when a resize moves the numbers", func(t *testing.T) {
 		e := vt.NewWithScrollback(20, 4, 10)
 		feedAll([]vt.Terminal{e}, lines(0, 30, 12))
-		epoch, gen := e.ScrollbackEpoch(), e.ScrollbackGeneration()
+		epoch := e.ScrollbackEpoch()
 		// A full ring drops a line for each it takes: no number moves.
 		feedAll([]vt.Terminal{e}, lines(30, 40, 12))
 		if e.ScrollbackEpoch() != epoch {
@@ -195,7 +195,7 @@ func TestConform_HistoryNumbers(t *testing.T) {
 		}
 		// The same base again renumbers nothing, and changes nothing.
 		base, _ := e.ScrollbackBase()
-		gen = e.ScrollbackGeneration()
+		gen := e.ScrollbackGeneration()
 		e.SetScrollbackBase(base)
 		if e.ScrollbackEpoch() != epoch || e.ScrollbackGeneration() != gen {
 			t.Fatal("setting the base it already has changed the epoch or the generation")
