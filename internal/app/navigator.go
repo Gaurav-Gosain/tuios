@@ -375,17 +375,8 @@ func (m *OS) navigatorSessions() []navSession {
 				Subagents:  w.Subagents,
 			})
 		}
-		// The cached listing has the scratch panes the tree leaves out, so
-		// the row counts them apart before the detail load lands.
-		if m.DaemonClient != nil {
-			if summaries := m.DaemonClient.SessionWindows(n.ID); summaries != nil {
-				for _, w := range summaries {
-					if w.Scratch {
-						s.Scratch++
-					}
-				}
-				s.Count = len(s.Panes)
-			}
+		if len(s.Panes) > 0 {
+			s.Count = len(s.Panes)
 		}
 		out = append(out, s)
 	}
