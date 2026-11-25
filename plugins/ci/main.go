@@ -12,6 +12,7 @@ import (
 	"runtime/debug"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/x/term"
 )
@@ -62,9 +63,13 @@ func main() {
 	m := newModel(g, repo, strings.ToLower(sha))
 	m.scr = &screen{out: os.Stdout}
 	m.scr.start()
+	chunks := make(chan []byte, 16)
+	go readInput(chunks)
+	pal, rest := queryPalette(os.Stdout, chunks, 500*time.Millisecond)
+	m.pal = newColors(pal)
 	msgs := make(chan Msg, 64)
 	watchSize(msgs)
-	go readKeys(msgs)
+	go readKeys(msgs, chunks, rest)
 	restore := func() {
 		m.scr.stop()
 		_ = term.Restore(os.Stdin.Fd(), state)

@@ -99,6 +99,12 @@ func (g *gh) list(path string) (body []byte, changed bool, err error) {
 	return rest, true, nil
 }
 
+// act runs a gh command that changes or opens something, such as a rerun.
+func (g *gh) act(args ...string) error {
+	_, err := g.run(args...)
+	return err
+}
+
 // forget drops the kept answer of path.
 func (g *gh) forget(path string) {
 	g.mu.Lock()

@@ -22,6 +22,7 @@ var (
 	pytestRE       = regexp.MustCompile(`^FAILED (\S+)(?: - (.*))?$`)
 	jestRE         = regexp.MustCompile(`^\s*● (.+ › .+)$`)
 	goTestRE       = regexp.MustCompile(`^\s*--- FAIL: (\S+)`)
+	goWhereRE      = regexp.MustCompile(`^\s+(\S+\.go:\d+): (.+)$`)
 	annotationRE   = regexp.MustCompile(`^(\S+?)#L(\d+)(?:C\d+)?: (.+)$`)
 	exitLinePrefix = "Process completed with exit code"
 )
@@ -167,11 +168,20 @@ func findFailures(lines []LogLine, from, to int) []failure {
 			found = append(found, failure{line: i, first: i, last: i, title: strings.TrimSpace(m[1]), location: loc, detail: m[2]})
 			continue
 		}
-		for _, re := range []*regexp.Regexp{jestRE, goTestRE} {
-			if m := re.FindStringSubmatch(text); m != nil {
-				found = append(found, failure{line: i, first: i, last: i, title: strings.TrimSpace(m[1])})
-				break
+		if m := goTestRE.FindStringSubmatch(text); m != nil {
+			// go test names the file and the line on the next line, with
+			// what it expected.
+			f := failure{line: i, first: i, last: i, title: strings.TrimSpace(m[1])}
+			if i < to {
+				if w := goWhereRE.FindStringSubmatch(lines[i+1].Text); w != nil {
+					f.location, f.detail, f.last = w[1], w[2], i+1
+				}
 			}
+			found = append(found, f)
+			continue
+		}
+		if m := jestRE.FindStringSubmatch(text); m != nil {
+			found = append(found, failure{line: i, first: i, last: i, title: strings.TrimSpace(m[1])})
 		}
 	}
 	closeCurrent(to)

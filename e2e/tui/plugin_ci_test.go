@@ -69,6 +69,10 @@ func ciFixtures(t *testing.T, dir string, now time.Time) {
 		}
 		return j
 	}
+	withPR := func(r obj, n int) obj {
+		r["pull_requests"] = []obj{{"number": n}}
+		return r
+	}
 	jobs := func(repo string, run int, js ...obj) {
 		put(fmt.Sprintf("repos/%s/actions/runs/%d/jobs?per_page=100", repo, run), obj{"jobs": js})
 	}
@@ -79,7 +83,7 @@ func ciFixtures(t *testing.T, dir string, now time.Time) {
 		run(shop, 101, "Tests", "push", "main", strings.Repeat("a", 40), "Change the checkout", 200, 0, ""),
 		run(shop, 102, "Lint", "push", "main", strings.Repeat("a", 40), "Change the checkout", 200, 140, "success"),
 		run(shop, 301, "Labeler", "issues", "main", strings.Repeat("c", 40), "Label the issue", 300, 299, "skipped"),
-		run(shop, 201, "Tests", "pull_request", "gift-cards", strings.Repeat("b", 40), "Add gift cards", 900, 780, "failure"),
+		withPR(run(shop, 201, "Tests", "pull_request", "gift-cards", strings.Repeat("b", 40), "Add gift cards", 900, 780, "failure"), 7),
 		run(shop, 401, "Nightly", "schedule", "main", strings.Repeat("d", 40), "Nightly", 1500, 1300, "success"),
 	}
 	jobs(shop, 101,
@@ -115,10 +119,11 @@ func ciFixtures(t *testing.T, dir string, now time.Time) {
 	for i := range 60 {
 		line(t0-60, fmt.Sprintf("--- PASS: TestShip%03d (0.00s)", i))
 	}
-	line(t0-108, "FAIL acme/shop/order 0.2s")
+	line(t0-108, "\x1b[31mFAIL\x1b[0m acme/shop/order 0.2s")
 	line(t0-109, "##[error]Process completed with exit code 1.")
 	line(t0-111, "Cleaning up orphan processes")
 	put(fmt.Sprintf("repos/%s/actions/jobs/%d/logs", shop, 2002), log.String())
+	put("repos/"+shop+"/pulls/7", obj{"number": 7, "title": "Add gift cards to the checkout", "state": "open"})
 	put(fmt.Sprintf("repos/%s/actions/jobs/%d/logs", shop, 2001), at(t0)+" Set up job\n"+at(t0-60)+" built\n")
 	jobs(shop, 301)
 	jobs(shop, 401, job(shop, 401, 4001, "Nightly", "nightly", 1500, 1300, "success"))
@@ -131,7 +136,7 @@ func ciFixtures(t *testing.T, dir string, now time.Time) {
 		sha := fmt.Sprintf("%040d", k+1)
 		tid, lid := 500+10*k, 501+10*k
 		runs = append(runs,
-			run(shop, tid, "Tests", "push", "main", sha, "Change "+strconv.Itoa(k+1), start, start-600, "success"),
+			run(shop, tid, "Tests", "push", "main", sha, "Change "+strconv.Itoa(k+1), start, start-560-float64(k%3)*45, "success"),
 			run(shop, lid, "Lint", "push", "main", sha, "Change "+strconv.Itoa(k+1), start, start-60, "success"))
 		jobs(shop, tid,
 			job(shop, tid, 9000+10*k, "Tests", "build", start-5, start-125, "success"),
@@ -150,9 +155,10 @@ func ciFixtures(t *testing.T, dir string, now time.Time) {
 	put(fmt.Sprintf("repos/%s/actions/jobs/%d/logs", quiet, 7001), at(4000)+" Set up job\n")
 
 	put("user/repos?per_page=100&sort=pushed&affiliation=owner,collaborator,organization_member&page=1", []obj{
-		{"full_name": shop, "description": "The shop"},
-		{"full_name": "acme/storefront-api", "description": "The API of the storefront"},
-		{"full_name": quiet, "description": "Nothing runs here"},
+		{"full_name": shop, "description": "The shop", "pushed_at": at(200)},
+		{"full_name": "acme/storefront-api", "description": "The API of the storefront", "pushed_at": at(7200)},
+		{"full_name": quiet, "description": "Nothing runs here", "pushed_at": at(90000)},
+		{"full_name": "acme/checkout-v1", "description": "The old checkout", "archived": true, "pushed_at": at(9000000)},
 	})
 }
 
@@ -224,6 +230,8 @@ func ciFinish(t *testing.T, dir string, now time.Time) {
 // call to $CI_FAKE_DIR/calls.
 const fakeGH = `#!/bin/sh
 echo "$*" >> "$CI_FAKE_DIR/calls"
+# A rerun or a browser: only the call counts.
+[ "$1" = api ] || exit 0
 inc=0 etag=
 while [ $# -gt 1 ]; do
 	case "$1" in
@@ -264,6 +272,10 @@ cat "$f"
 //     view and the exit line, a hundred lines lower, out of view.
 //   - A filter could change the boxes and not the list: each one is checked
 //     by the count of builds it leaves.
+//   - A rerun could run on one key press, or not reach gh: one press of R
+//     must call nothing, the second must call gh run rerun --failed.
+//   - A search could count lines and not show them: the count, the first
+//     match in view, and ctrl+n to the next.
 //   - The plugin could poll with nothing running: a pane on a repository
 //     where every build ended must make no gh call for ten seconds.
 //
@@ -364,6 +376,10 @@ func TestPluginCI(t *testing.T) {
 		return window(name)
 	}
 	pane := open("shop", "acme/shop")
+	// The plugin fills the screen, as it does for a person who zooms it.
+	if out, err := tuiosCLI(t, base, "run-command", "-s", "ci", "Action", "toggle_zoom"); err != nil {
+		t.Fatalf("zoom: %v\n%s", err, out)
+	}
 	screenOf := func(id string) func() string {
 		return func() string {
 			out, _ := tuiosCLI(t, base, "capture-pane", "-s", "ci", "-w", id)
@@ -383,7 +399,8 @@ func TestPluginCI(t *testing.T) {
 		}
 	}
 	count := func(n int) func(string) bool {
-		return func(s string) bool { return strings.Contains(s, "builds "+strconv.Itoa(n)+" ") }
+		re := regexp.MustCompile(`BUILDS\s+\[?` + strconv.Itoa(n) + `\]?\s`)
+		return func(s string) bool { return re.MatchString(s) }
 	}
 
 	// The running build: one row for both workflows, and the estimate from
@@ -431,6 +448,48 @@ func TestPluginCI(t *testing.T) {
 	waitFor("the copied link", func(s string) bool {
 		return strings.Contains(s, "Copied https://github.com/acme/shop/actions/runs/201/job/2002")
 	})
+
+	// The pull request of the build shows as a pill, and O opens it.
+	waitFor("the pill of the pull request", func(s string) bool { return strings.Contains(s, "Open #7 Add gift cards to the checkout") })
+	press("O")
+	waitFor("the pull request opened", func(s string) bool { return strings.Contains(calls(), "pr view 7 --web -R acme/shop") })
+	press("o")
+	waitFor("the job opened", func(s string) bool { return strings.Contains(calls(), "run view 201 --job 2002 --web -R acme/shop") })
+
+	// R runs the failed jobs again, but only on its second press: a rerun
+	// costs runner time.
+	press("R")
+	waitFor("the question before a rerun", func(s string) bool { return strings.Contains(s, "Press R again") })
+	if strings.Contains(calls(), "run rerun") {
+		t.Errorf("ASSERTION: one press of R ran the jobs again:\n%s", calls())
+	}
+	press("R")
+	waitFor("the rerun", func(s string) bool { return strings.Contains(s, "GitHub runs the failed jobs of 1 run(s) again") })
+	if !strings.Contains(calls(), "run rerun 201 -R acme/shop --failed") {
+		t.Errorf("ASSERTION: the second R did not run the failed jobs of run 201 again:\n%s", calls())
+	}
+
+	// / searches the log: the count of matches, the first one in view, and
+	// ctrl+n steps to the next.
+	press("/")
+	for k := range strings.SplitSeq("TestShip01", "") {
+		press(k)
+	}
+	s = waitFor("the matches of the search", func(s string) bool { return strings.Contains(s, "1 of 10 matches") })
+	if !strings.Contains(s, "TestShip010") {
+		t.Errorf("ASSERTION: the first match is not in view:\n%s", s)
+	}
+	if out, err := tuiosCLI(t, base, "send-keys", "-s", "ci", "-w", pane, "Enter"); err != nil {
+		t.Fatalf("send-keys Enter: %v\n%s", err, out)
+	}
+	if out, err := tuiosCLI(t, base, "send-keys", "-s", "ci", "-w", pane, "ctrl+n"); err != nil {
+		t.Fatalf("send-keys ctrl+n: %v\n%s", err, out)
+	}
+	waitFor("the next match", func(s string) bool { return strings.Contains(s, "2 of 10 matches") })
+	if out, err := tuiosCLI(t, base, "send-keys", "-s", "ci", "-w", pane, "Escape"); err != nil {
+		t.Fatalf("send-keys Escape: %v\n%s", err, out)
+	}
+	waitFor("the search closed", func(s string) bool { return !strings.Contains(s, "matches") })
 
 	// The filters, each by the builds it leaves.
 	press("S")
@@ -485,15 +544,17 @@ func TestPluginCI(t *testing.T) {
 		}
 		waitFor("acme/shop again", func(s string) bool { return estimate.MatchString(s) && count(8)(s) })
 	}
-	pause(t, "let the last poll and log read settle", 2*time.Second)
+	// The first poll after a switch is at once and the next one 6 s later,
+	// so the 3 s from second 2 hold only the clock.
+	pause(t, "let the reads after the switch settle", 2*time.Second)
 	w0, _ := procCost(shopPID)
-	pause(t, "count the wakeups of the running build's clock", 6*time.Second)
+	pause(t, "count the wakeups of the running build's clock", 3*time.Second)
 	w1, _ := procCost(shopPID)
-	t.Logf("a running build after two switches: %d context switches in 6 s", w1-w0)
-	// One clock is some 60 in 6 s. The tick of each repository before
-	// added one more: 219 after two switches.
-	if w1-w0 > 120 {
-		t.Errorf("ASSERTION: after two switches the clock wakes the plugin %d times in 6 s, as if it ran more than once", w1-w0)
+	t.Logf("a running build after two switches: %d context switches in 3 s", w1-w0)
+	// One clock is 81 to 103 in these 3 s. With the tick of each repository
+	// before arming one more clock it was 153 to 184.
+	if w1-w0 > 130 {
+		t.Errorf("ASSERTION: after two switches the clock wakes the plugin %d times in 3 s, as if it ran more than once", w1-w0)
 	}
 
 	// The build ends while you watch it: the log is read again to its end,

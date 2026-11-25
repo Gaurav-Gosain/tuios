@@ -25,8 +25,11 @@ type runJobs struct {
 }
 
 type model struct {
-	gh   *gh
-	scr  *screen
+	gh  *gh
+	scr *screen
+	pal colors
+	// next gathers the answers to the colour queries on their way.
+	next []byte
 	now  func() time.Time
 	repo string
 	sha  string // From --sha: select the build of this commit when it comes.
@@ -56,7 +59,16 @@ type model struct {
 	// the job changed while it ran.
 	logAgain bool
 	// jumped is the job whose log opened at its first failure.
-	jumped  int64
+	jumped int64
+	// confirm is an action that waits for its key a second time, such as a
+	// rerun, which costs runner time.
+	confirm    string
+	confirmGen int
+	// pulls are the pull requests of builds, by number.
+	pulls map[int]PullRequest
+	// search is the search in the log.
+	search  search
+	numbers bool // The line numbers of the log.
 	logNote string
 	starts  []int
 	step    int // The step the person moved to with n and p, or -1.
@@ -90,11 +102,13 @@ func newModel(g *gh, repo, sha string) *model {
 func (m *model) setRepo(repo string) {
 	// The counters go on, so a tick, a poll or a toast end of the repository
 	// before matches nothing here.
-	*m = model{gh: m.gh, scr: m.scr, now: m.now, sha: m.sha, width: m.width, height: m.height, step: -1, follow: true, interval: activeInterval,
+	*m = model{gh: m.gh, scr: m.scr, pal: m.pal, now: m.now, sha: m.sha, width: m.width, height: m.height, step: -1, follow: true, interval: activeInterval,
 		pollGen: m.pollGen + 1, tickGen: m.tickGen + 1, toastGen: m.toastGen + 1}
 	m.repo = repo
 	m.jobsOf = map[int64]*runJobs{}
 	m.asked = map[int64]bool{}
+	m.pulls = map[int]PullRequest{}
+	m.numbers = true
 }
 
 // Messages from the commands that run gh.
@@ -125,9 +139,20 @@ type (
 		final bool
 		err   error
 	}
-	pollMsg  struct{ gen int }
-	tickMsg  struct{ gen int }
-	toastEnd struct{ gen int }
+	pollMsg struct{ gen int }
+	pullMsg struct {
+		repo string
+		pr   PullRequest
+	}
+	// actedMsg is the end of an action: what to say, and whether to read
+	// the builds again.
+	actedMsg struct {
+		say  string
+		read bool
+	}
+	confirmEnd struct{ gen int }
+	tickMsg    struct{ gen int }
+	toastEnd   struct{ gen int }
 )
 
 func (m *model) Init() Cmd {
@@ -371,6 +396,7 @@ func (m *model) setJob(id int64) {
 		return
 	}
 	m.jobID, m.step, m.jumped = id, -1, 0
+	m.search = search{}
 	m.log, m.logJob, m.logFinal, m.logNote = nil, 0, false, ""
 	m.starts, m.found, m.failAt, m.top, m.follow = nil, nil, 0, 0, true
 }
@@ -410,6 +436,33 @@ func (m *model) want() Cmd {
 	for _, r := range b.Runs {
 		if r.State != "skipped" || b.State == "skipped" {
 			cmds = append(cmds, m.fetchJobs(r))
+		}
+	}
+	// The pull request of the build, for the pill. Asked once.
+	if b.PR > 0 {
+		if _, ok := m.pulls[b.PR]; !ok {
+			m.pulls[b.PR] = PullRequest{Number: b.PR}
+			repo, g, n := m.repo, m.gh, b.PR
+			cmds = append(cmds, func() Msg {
+				body, _, err := g.list(fmt.Sprintf("repos/%s/pulls/%d", repo, n))
+				if err != nil {
+					return nil
+				}
+				pr, err := parsePull(body)
+				if err != nil {
+					return nil
+				}
+				return pullMsg{repo: repo, pr: pr}
+			})
+		}
+	}
+	// The jobs of the build the default branch had before, for the column
+	// that compares with it. They ended, so this asks once.
+	if o, ok := m.before(b); ok {
+		for _, r := range o.Runs {
+			if r.State != "skipped" {
+				cmds = append(cmds, m.fetchJobs(r))
+			}
 		}
 	}
 	if active(b.State) {
@@ -502,8 +555,29 @@ func (m *model) update(msg Msg) (*model, Cmd) {
 		m.clampLog()
 		return m, nil
 	case focusMsg:
-		// Back in view: read now, also when nothing ran a moment ago.
+		// Back in view: read now, also when nothing ran a moment ago. Ask
+		// for the colours too, in case the theme changed while away.
+		if m.scr != nil {
+			m.scr.askColors()
+		}
 		return m, m.poll()
+	case schemeMsg:
+		// The theme changed: ask for its colours.
+		if m.scr != nil {
+			m.scr.askColors()
+		}
+		return m, nil
+	case colorMsg:
+		m.next = append(m.next, msg.body...)
+		return m, nil
+	case colorsDone:
+		var p palette
+		parse(&p, m.next)
+		m.next = nil
+		if p.known {
+			m.pal = newColors(p)
+		}
+		return m, nil
 	case keyMsg:
 		return m.key_(msg)
 	case repoMsg:
@@ -562,6 +636,25 @@ func (m *model) update(msg Msg) (*model, Cmd) {
 		}
 		m.ticking = false
 		return m, m.tick()
+	case pullMsg:
+		if msg.repo == m.repo {
+			m.pulls[msg.pr.Number] = msg.pr
+		}
+		return m, nil
+	case actedMsg:
+		cmd := m.say(msg.say)
+		if msg.read {
+			m.pollGen++
+			m.polling = false
+			cmd = batch(cmd, m.poll())
+		}
+		return m, cmd
+	case confirmEnd:
+		if msg.gen == m.confirmGen {
+			m.confirm = ""
+			m.toast = ""
+		}
+		return m, nil
 	case toastEnd:
 		if msg.gen == m.toastGen {
 			m.toast = ""
@@ -661,6 +754,7 @@ func (m *model) onLog(msg logMsg) (*model, Cmd) {
 		again = true
 	}
 	m.annotate()
+	m.find()
 	switch {
 	case len(m.found) > 0 && m.jumped != msg.job:
 		// Open on the first failure, two lines below the top, so its whole

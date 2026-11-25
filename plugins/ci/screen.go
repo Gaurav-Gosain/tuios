@@ -21,12 +21,15 @@ type screen struct {
 func (s *screen) start() {
 	// The alternate screen, no cursor, no wrap at the right edge, and focus
 	// events.
-	_, _ = io.WriteString(s.out, "\x1b[?1049h\x1b[?25l\x1b[?7l\x1b[?1004h\x1b[2J")
+	_, _ = io.WriteString(s.out, "\x1b[?1049h\x1b[?25l\x1b[?7l\x1b[?1004h\x1b[?2031h\x1b[2J")
 }
 
 func (s *screen) stop() {
-	_, _ = io.WriteString(s.out, "\x1b[?1004l\x1b[?7h\x1b[?25h\x1b[?1049l")
+	_, _ = io.WriteString(s.out, "\x1b[?2031l\x1b[?1004l\x1b[?7h\x1b[?25h\x1b[?1049l")
 }
+
+// askColors asks the terminal for its colours again.
+func (s *screen) askColors() { _, _ = s.out.Write(colorQueries()) }
 
 // copy puts text on the clipboard of the terminal with OSC 52. tuios passes
 // it on to the terminal it runs in.

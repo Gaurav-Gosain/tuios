@@ -21,6 +21,8 @@ type Run struct {
 	State    string
 	Started  time.Time
 	Updated  time.Time
+	// PR is the number of the pull request the run belongs to, or 0.
+	PR int
 }
 
 // Step is one step of a job.
@@ -118,7 +120,10 @@ func parseRuns(body []byte) ([]Run, error) {
 			Started    string `json:"run_started_at"`
 			Created    string `json:"created_at"`
 			Updated    string `json:"updated_at"`
-			Actor      struct {
+			PRs        []struct {
+				Number int `json:"number"`
+			} `json:"pull_requests"`
+			Actor struct {
 				Login string `json:"login"`
 			} `json:"actor"`
 		} `json:"workflow_runs"`
@@ -132,7 +137,11 @@ func parseRuns(body []byte) ([]Run, error) {
 		if started == "" {
 			started = r.Created
 		}
-		out = append(out, Run{
+		pr := 0
+		if len(r.PRs) > 0 {
+			pr = r.PRs[0].Number
+		}
+		out = append(out, Run{PR: pr,
 			ID: r.ID, Workflow: clean(r.Name), Title: clean(r.Title), Branch: clean(r.Branch),
 			Event: r.Event, Actor: clean(r.Actor.Login), SHA: r.SHA, URL: r.URL,
 			State: state(r.Status, r.Conclusion), Started: when(started), Updated: when(r.Updated),
@@ -188,6 +197,7 @@ type Repo struct {
 	Name        string
 	Description string
 	Archived    bool
+	Pushed      time.Time
 }
 
 func parseRepos(body []byte) ([]Repo, error) {
@@ -195,13 +205,14 @@ func parseRepos(body []byte) ([]Repo, error) {
 		Name        string `json:"full_name"`
 		Description string `json:"description"`
 		Archived    bool   `json:"archived"`
+		Pushed      string `json:"pushed_at"`
 	}
 	if err := json.Unmarshal(body, &in); err != nil {
 		return nil, fmt.Errorf("GitHub sent a list of repositories that is not JSON: %w", err)
 	}
 	out := make([]Repo, 0, len(in))
 	for _, r := range in {
-		out = append(out, Repo{Name: clean(r.Name), Description: clean(r.Description), Archived: r.Archived})
+		out = append(out, Repo{Name: clean(r.Name), Description: clean(r.Description), Archived: r.Archived, Pushed: when(r.Pushed)})
 	}
 	return out, nil
 }
@@ -231,11 +242,54 @@ const (
 // LogLine is one line of a job's log.
 type LogLine struct {
 	Text string
-	Kind int
+	// Styled is the line with its own SGR colours, or "" when it has none.
+	Styled string
+	Kind   int
 	// At is when the runner wrote the line, or zero for a line with no
 	// timestamp. The log's clock is finer than the one the jobs API gives a
 	// step.
 	At time.Time
+}
+
+var sgrRE = regexp.MustCompile("\x1b\\[[0-9;:]*m")
+
+// keepSGR is s with its SGR colours and nothing else that could drive the
+// terminal.
+func keepSGR(s string) string {
+	var b strings.Builder
+	last := 0
+	for _, loc := range sgrRE.FindAllStringIndex(s, -1) {
+		b.WriteString(clean(s[last:loc[0]]))
+		b.WriteString(s[loc[0]:loc[1]])
+		last = loc[1]
+	}
+	b.WriteString(clean(s[last:]))
+	return b.String()
+}
+
+// PullRequest is what the pill in the build shows.
+type PullRequest struct {
+	Number int
+	Title  string
+	State  string // open, merged or closed.
+}
+
+func parsePull(body []byte) (PullRequest, error) {
+	var in struct {
+		Number int    `json:"number"`
+		Title  string `json:"title"`
+		State  string `json:"state"`
+		Merged bool   `json:"merged"`
+		At     string `json:"merged_at"`
+	}
+	if err := json.Unmarshal(body, &in); err != nil {
+		return PullRequest{}, fmt.Errorf("GitHub sent a pull request that is not JSON: %w", err)
+	}
+	st := in.State
+	if in.Merged || in.At != "" {
+		st = "merged"
+	}
+	return PullRequest{Number: in.Number, Title: clean(in.Title), State: st}, nil
 }
 
 var stampRE = regexp.MustCompile(`^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z) ?`)
@@ -271,6 +325,9 @@ func parseLog(raw []byte) []LogLine {
 			}
 		}
 		line.Text = clean(part)
+		if strings.Contains(part, "\x1b[") {
+			line.Styled = keepSGR(part)
+		}
 		lines = append(lines, line)
 	}
 	// The log ends in a newline, which Split turns into one empty line.

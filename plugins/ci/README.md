@@ -38,11 +38,17 @@ With fewer than three earlier builds, the text shows how long the build runs.
 | `h` `l` `tab` | Previous or next job |
 | `n` `p` | Next or previous step. The log shows where the step ends. |
 | `e` `E` | Next or previous failure |
+| `/` | Search the log. `ctrl+n` and `ctrl+p` go to the next and previous match. `esc` closes the search. |
 | `c` | Copy the link of the job |
-| `M` | Show only the builds of the default branch |
-| `F` | Show only the branch of the selected build |
-| `A` | Show only the builds that run or wait for a runner |
-| `S` | Show the builds in which every run was skipped |
+| `o` | Open the job on GitHub |
+| `O` | Open the pull request of the build on GitHub |
+| `R` | Run the failed jobs of the build again. Press it twice. |
+| `ctrl+r` | Run all the jobs of the build again. Press it twice. |
+| `m` `M` | Show only the builds of the default branch |
+| `f` `F` | Show only the branch of the selected build |
+| `a` `A` | Show only the builds that run or wait for a runner |
+| `s` `S` | Show the builds in which every run was skipped |
+| `#` | Show or hide the line numbers of the log |
 | `z` | Give the whole height to the log |
 | `pgup` `pgdown` `home` `end` | Scroll the log. `end` follows the end again. |
 | `r` `space` | Read the builds now |
@@ -50,7 +56,7 @@ With fewer than three earlier builds, the text shows how long the build runs.
 | `?` | Show the keys |
 | `q` | Quit |
 
-`c` copies through the terminal (OSC 52), so it works over SSH too.
+`c` copies through the terminal (OSC 52), so it works over SSH too. A rerun costs runner time, so it waits for a second press.
 
 ## What it costs
 
@@ -58,7 +64,7 @@ With fewer than three earlier builds, the text shows how long the build runs.
 - When no build runs, the plugin asks nothing. It reads the builds again when you press `r` or come back to its pane.
 - The lists ask with the ETag of the last answer. GitHub does not count a "not modified" answer against your hourly limit.
 - The log of a running job is one request each time. The jobs of a run that ended are read once.
-- The colours are the 16 colours of the terminal, so the plugin follows the tuios theme.
+- The colours come from the palette of the terminal, which a tuios pane takes from the tuios theme. The plugin asks again when the theme changes, so it follows an Omarchy theme switch at once.
 
 The one file the plugin writes is `last-repo` in its state folder. It holds the name of the last repository, so the next pane opens on it outside a checkout.
 

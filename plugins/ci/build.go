@@ -30,6 +30,7 @@ type Build struct {
 	Seconds   float64   // Zero while the build runs.
 	Workflows []string
 	Runs      []Run
+	PR        int // The pull request of the build, or 0.
 }
 
 func buildEvent(e string) bool {
@@ -125,6 +126,12 @@ func builds(runs []Run) []Build {
 			lead = &members[0]
 		}
 		b.Title, b.Branch, b.Event, b.Actor, b.URL = lead.Title, lead.Branch, lead.Event, lead.Actor, lead.URL
+		for _, r := range members {
+			if r.PR > 0 {
+				b.PR = r.PR
+				break
+			}
+		}
 		if active(st) {
 			b.Ended = time.Time{}
 			b.Failing = failing

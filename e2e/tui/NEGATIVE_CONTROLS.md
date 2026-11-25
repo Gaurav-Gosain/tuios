@@ -12969,7 +12969,10 @@ Run on 2026-11-01 on macOS arm64, on `upstream/main` at `4c95caa50` plus the bra
 | A keeps only the builds that run | `shown` ignores `activeOnly` | "the running builds with A" | **caught** |
 | Nothing polls while no build runs | `schedule` polls with nothing running | "the plugin called gh 1 times in 10 s with nothing running" | **caught** |
 | A build that ends while you watch it opens at its failing test | the code before the fix: no new read of the log when the selected job ends | "the ended build at its failing test" | **caught** |
-| A switch of repository leaves one clock | the code before the fix: the counters start again and the old tick arms a second clock | "the clock wakes the plugin 219 times in 6 s" (54 and 42 after the fix) | **caught** |
+| A switch of repository leaves one clock | the tick without its generation check | 153 and 184 context switches in 3 s (81 to 112 with it), limit 130 | **caught** |
+| R runs the failed jobs again only on its second press | R runs at once | "the question before a rerun" | **caught** |
+| The second R reaches gh with --failed | `rerun` without `--failed` | "the second R did not run the failed jobs of run 201 again" | **caught** |
+| / finds the lines of the query | `find` matches nothing | "the matches of the search" | **caught** |
 
 ## The host title follows the focused pane (#1064)
 

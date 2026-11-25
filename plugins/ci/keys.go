@@ -13,6 +13,23 @@ func (m *model) key_(k keyMsg) (*model, Cmd) {
 	if m.picker != nil {
 		return m.pickerKey(k)
 	}
+	if m.search.editing {
+		m.searchKey(k)
+		return m, nil
+	}
+	// The second press of an armed action runs it.
+	if m.confirm != "" {
+		action := m.confirm
+		m.confirm, m.toast = "", ""
+		if s == action {
+			switch action {
+			case "R":
+				return m, m.rerun(false)
+			case "ctrl+r":
+				return m, m.rerun(true)
+			}
+		}
+	}
 	if m.help {
 		if s == "?" || s == "esc" || s == "q" {
 			m.help = false
@@ -25,7 +42,11 @@ func (m *model) key_(k keyMsg) (*model, Cmd) {
 	case "?":
 		m.help = true
 	case "esc":
-		m.tall = false
+		if m.search.query != "" {
+			m.search = search{}
+		} else {
+			m.tall = false
+		}
 	case "j", "down":
 		return m, m.moveBuild(1)
 	case "k", "up":
@@ -53,31 +74,47 @@ func (m *model) key_(k keyMsg) (*model, Cmd) {
 		return m, m.say("Copied " + link)
 	case "z":
 		m.tall = !m.tall
-	case "M":
+	case "M", "m":
 		if m.f.branch != "" && m.f.branch == m.defaultBranch {
 			m.f.branch = ""
 		} else {
 			m.f.branch = m.defaultBranch
 		}
 		return m, m.refiltered()
-	case "F":
+	case "F", "f":
 		if m.f.branch != "" {
 			m.f.branch = ""
 		} else if b, ok := m.selected(); ok {
 			m.f.branch = b.Branch
 		}
 		return m, m.refiltered()
-	case "A":
+	case "A", "a":
 		m.f.activeOnly = !m.f.activeOnly
 		// Turned on, it shows what runs, not the build you were on.
 		if b, ok := m.selected(); m.f.activeOnly && ok && !active(b.State) {
 			m.key = ""
 		}
 		return m, m.refiltered()
-	case "S":
+	case "S", "s":
 		m.f.showSkipped = !m.f.showSkipped
 		return m, m.refiltered()
-	case "r", "space", "ctrl+r":
+	case "R":
+		return m, m.ask("R", "Press R again to run the failed jobs of this build again.")
+	case "ctrl+r":
+		return m, m.ask("ctrl+r", "Press ctrl+r again to run all the jobs of this build again.")
+	case "o":
+		return m, m.openJob()
+	case "O":
+		return m, m.openPR()
+	case "/":
+		m.search = search{editing: true}
+	case "ctrl+n":
+		m.stepMatch(1)
+	case "ctrl+p":
+		m.stepMatch(-1)
+	case "#":
+		m.numbers = !m.numbers
+	case "r", "space":
 		m.pollGen++
 		if j, ok := m.selectedJob(); ok && active(j.State) {
 			m.logFinal = false
