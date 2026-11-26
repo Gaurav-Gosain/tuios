@@ -39,3 +39,5 @@ replace tuios.dev/loom v0.2.3-0.20261124190846-268d3f908bd5 => ./loom
 replace tuios.dev/sketch v0.4.1-0.20261124185855-9f712ffb4bd2 => ./sketch
 
 replace tuios.dev/vt v0.3.4-0.20261125144012-dd363a3684fc => ./vt
+
+replace tuios.dev/progresume v0.0.0-20261126063237-25ad02f09e1b => ./progresume

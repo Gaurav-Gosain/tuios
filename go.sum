@@ -173,6 +173,8 @@ tuios.dev/loom v0.2.3-0.20261124190846-268d3f908bd5 h1:OroKmdUN0ff8f9eB8j3CzX3hO
 tuios.dev/loom v0.2.3-0.20261124190846-268d3f908bd5/go.mod h1:iV4B48WJOICPObHSh0Awva3ib1UZ49EB17PiXFccMxk=
 tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8 h1:zx+RE1mRYo4Mrlx85nMAurWev07ys/iGO46NYCVz3ec=
 tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8/go.mod h1:YNjGUvsZUCEfRcs27dMp8Y09OYHMj7ahPdXN8jzXiKc=
+tuios.dev/progresume v0.0.0-20261126063237-25ad02f09e1b h1:ZKPD6i5p/UmwieIX3vgq9fNHXz7i7XeiLwHtRGBgM28=
+tuios.dev/progresume v0.0.0-20261126063237-25ad02f09e1b/go.mod h1:vO5H3cT8ARr3mx0ruc+0WzjVZJUuoBU7DrjYiXAZq0o=
 tuios.dev/progstatus v0.1.2-0.20261030111253-c0f512aa3148 h1:QViiX2hALI5Eq0mBQgaDcp6FHOH+kmtFJwHY6CYyHW8=
 tuios.dev/progstatus v0.1.2-0.20261030111253-c0f512aa3148/go.mod h1:T1xSzlBLLLwdTzerZcAq/SroDkLLCigxjxrxxy7U0Y0=
 tuios.dev/shot v0.2.2-0.20261120215113-0f1cffa25ec1 h1:TeObB8dqNNcD0Mxk32P9mY8dspGbHXk4ttUlGK3WUFU=
