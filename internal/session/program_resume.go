@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/procinfo"
-	"github.com/Gaurav-Gosain/tuios/internal/progresume"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
+	"tuios.dev/progresume"
 	"tuios.dev/vt"
 )
 
@@ -137,7 +137,7 @@ func (r *paneResume) note(p *PTY, payload []byte, now time.Time) {
 		debugLog("[DEBUG] OSC 7577 in %s ignored: %s", shortID(p.windowID), res.Reason)
 		return
 	}
-	rep := res.Report
+	rep := res.Message
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if rep.PID > 0 && rep.Time < r.last[rep.PID] {

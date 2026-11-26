@@ -4,7 +4,7 @@ import (
 	"os"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
-	"github.com/Gaurav-Gosain/tuios/internal/progresume"
+	"tuios.dev/progresume"
 )
 
 // outerResumeToken is the OSC 7577 token of the terminal this client runs in,

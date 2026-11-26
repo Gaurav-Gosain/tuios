@@ -38,8 +38,8 @@
 #   lib_alone     JSON list of the "alone" library jobs: vt, sketch, small
 set -uo pipefail
 
-ALL=(./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/... ./nitpick/...)
-LIBS=(progstatus vt swatch shot tml plot loom sketch acp harness nitpick)
+ALL=(./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/... ./nitpick/... ./progresume/...)
+LIBS=(progstatus vt swatch shot tml plot loom sketch acp harness nitpick progresume)
 WINDOWS=(./internal/shimlink/ ./internal/herdrplugin/ ./internal/stopevent/ ./internal/herdrcli/ ./cmd/tuios-web/ ./internal/transcriptview/ ./internal/winacl/ ./internal/ptyspawn/ ./cmd/tuios/ ./internal/app/)
 MACOS=(./internal/transcriptview/ ./internal/herdrplugin/ ./internal/session/)
 WASM=(./cmd/tuios-wasm/... ./internal/webshell/ ./internal/learn/)
@@ -286,7 +286,7 @@ out[lint_libs]=$(list "${lint[*]:-}")
 [ -z "${f[lib_vt]:-}" ] || alone+=('"vt"')
 [ -z "${f[lib_sketch]:-}" ] || alone+=('"sketch"')
 small=${f[plugin_ci]:-}
-for l in progstatus swatch shot tml plot loom acp harness nitpick; do
+for l in progstatus swatch shot tml plot loom acp harness nitpick progresume; do
 	[ -z "${f[lib_$l]:-}" ] || small=1
 done
 [ -z "$small" ] || alone+=('"small"')

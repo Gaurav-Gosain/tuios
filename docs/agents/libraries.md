@@ -9,7 +9,8 @@ that points the go command at the folder in this repository. They are
 (`tuios.dev/swatch`), `shot/` (`tuios.dev/shot`), `tml/` (`tuios.dev/tml`),
 `plot/` (`tuios.dev/plot`), `loom/` (`tuios.dev/loom`), `sketch/`
 (`tuios.dev/sketch`), `acp/` (`tuios.dev/acp`), `harness/`
-(`tuios.dev/harness`) and `nitpick/` (`tuios.dev/nitpick`). `go.work` lists
+(`tuios.dev/harness`), `nitpick/` (`tuios.dev/nitpick`) and `progresume/`
+(`tuios.dev/progresume`). `go.work` lists
 them all.
 
 - `go.work` makes the app, `e2e/tui` and each library one workspace, so a

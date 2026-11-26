@@ -91,6 +91,8 @@ jobs:
             targets: FuzzParse
           - pkg: progstatus
             targets: FuzzParse
+          - pkg: progresume
+            targets: FuzzParse
           - pkg: swatch/omarchy
             targets: FuzzResolve
           - pkg: swatch/teaswatch

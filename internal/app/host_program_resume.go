@@ -6,8 +6,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/Gaurav-Gosain/tuios/internal/progresume"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
+	"tuios.dev/progresume"
 )
 
 // tuios as a program that tells the terminal it runs in how to bring it back
@@ -88,7 +88,7 @@ func (m *OS) hostResumeAfter() tea.Cmd {
 		return nil
 	}
 	h.reported, h.session, h.onMachine = true, m.SessionName, m.AttachedHost
-	return tea.Raw(progresume.Sequence(progresume.Report{PID: os.Getpid(), Time: time.Now().Unix(), Argv: argv}, m.hostResume.token))
+	return tea.Raw(progresume.Sequence(progresume.Message{PID: os.Getpid(), Time: time.Now().Unix(), Argv: argv}, m.hostResume.token))
 }
 
 // HostResumeClear is the clear report for a client the person ended on
@@ -103,7 +103,7 @@ func (m *OS) HostResumeClear() string {
 		return ""
 	}
 	m.hostResume.reported = false
-	return progresume.Sequence(progresume.Report{PID: os.Getpid(), Time: time.Now().Unix(), Clear: true}, m.hostResume.token)
+	return progresume.Sequence(progresume.Message{PID: os.Getpid(), Time: time.Now().Unix(), Clear: true}, m.hostResume.token)
 }
 
 // TakeHostResumeToken returns the OSC 7577 token the terminal gave this

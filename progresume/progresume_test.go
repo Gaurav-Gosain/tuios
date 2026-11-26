@@ -19,16 +19,16 @@ var specNow = time.Unix(1795543200, 0)
 func TestSpecExamples(t *testing.T) {
 	valid := []struct {
 		name, payload string
-		want          Report
+		want          Message
 	}{
 		{"neovim", "7577;pid=74877:time=1795543200:argv=bnZpbQ==,LVM=,L2hvbWUvdXNlci8ubG9jYWwvc3RhdGUvbnZpbS9zZXNzaW9ucy84ZjJjMWQudmlt:mac=9dbb99bfb856749a87563839d7ce9062818d78cf25909db93f309e0cd3b1909b",
-			Report{PID: 74877, Time: 1795543200, Argv: []string{"nvim", "-S", "/home/user/.local/state/nvim/sessions/8f2c1d.vim"}}},
+			Message{PID: 74877, Time: 1795543200, Argv: []string{"nvim", "-S", "/home/user/.local/state/nvim/sessions/8f2c1d.vim"}}},
 		{"neovim clear", "7577;pid=74877:time=1795543200:clear=1:mac=c30603369f98fef581a4098be889175b0c74f0641e49f8b25f4326cb38f97c93",
-			Report{PID: 74877, Time: 1795543200, Clear: true}},
+			Message{PID: 74877, Time: 1795543200, Clear: true}},
 		{"lazygit", "7577;pid=74877:time=1795543200:argv=bGF6eWdpdA==:cwd=L2hvbWUvdXNlci9zcmMvcHJvamVjdA==:mac=35cb909805c380336efd3689a125acc774a9dec8422a1d21492ebec06ca758e1",
-			Report{PID: 74877, Time: 1795543200, Argv: []string{"lazygit"}, Cwd: "/home/user/src/project"}},
+			Message{PID: 74877, Time: 1795543200, Argv: []string{"lazygit"}, Cwd: "/home/user/src/project"}},
 		{"resume-wrap", "7577;pid=90412:time=1795543200:argv=cmVzdW1lLXdyYXA=,c3No,ZGV2Ym94:mac=e76149d0ba54a83570ffab0583867dacdfa23928ba9d18604f0badea88b62b65",
-			Report{PID: 90412, Time: 1795543200, Argv: []string{"resume-wrap", "ssh", "devbox"}}},
+			Message{PID: 90412, Time: 1795543200, Argv: []string{"resume-wrap", "ssh", "devbox"}}},
 	}
 	for _, c := range valid {
 		res := Parse([]byte(c.payload), specToken, specNow)
@@ -36,8 +36,8 @@ func TestSpecExamples(t *testing.T) {
 			t.Errorf("%s: outcome %d (%s), want accepted", c.name, res.Outcome, res.Reason)
 			continue
 		}
-		if !sameReport(res.Report, c.want) {
-			t.Errorf("%s: report %+v, want %+v", c.name, res.Report, c.want)
+		if !sameReport(res.Message, c.want) {
+			t.Errorf("%s: report %+v, want %+v", c.name, res.Message, c.want)
 		}
 	}
 
@@ -75,19 +75,19 @@ func TestSpecExamples(t *testing.T) {
 		if res.Outcome != c.want {
 			t.Errorf("%s: outcome %d (%s), want %d", c.name, res.Outcome, res.Reason, c.want)
 		}
-		if c.want == Rejected && c.name != "no pid" && c.name != "huge pid" && res.Report.PID != 74877 {
-			t.Errorf("%s: a rejected report names owner %d, want 74877", c.name, res.Report.PID)
+		if c.want == Rejected && c.name != "no pid" && c.name != "huge pid" && res.Message.PID != 74877 {
+			t.Errorf("%s: a rejected report names owner %d, want 74877", c.name, res.Message.PID)
 		}
 	}
 
 	// The limits: a report at the limit is read, one argv element more or a
 	// byte more is not.
 	argv := slices.Repeat([]string{"x"}, MaxArgv)
-	payload := []byte(trimSeq(Sequence(Report{PID: 1, Time: specNow.Unix(), Argv: argv}, specToken)))
+	payload := []byte(trimSeq(Sequence(Message{PID: 1, Time: specNow.Unix(), Argv: argv}, specToken)))
 	if res := Parse(payload, specToken, specNow); res.Outcome != Accepted {
 		t.Errorf("%d argv elements: outcome %d (%s), want accepted", MaxArgv, res.Outcome, res.Reason)
 	}
-	payload = []byte(trimSeq(Sequence(Report{PID: 1, Time: specNow.Unix(), Argv: append(argv, "x")}, specToken)))
+	payload = []byte(trimSeq(Sequence(Message{PID: 1, Time: specNow.Unix(), Argv: append(argv, "x")}, specToken)))
 	if res := Parse(payload, specToken, specNow); res.Outcome != Rejected {
 		t.Errorf("%d argv elements: outcome %d, want rejected", MaxArgv+1, res.Outcome)
 	}
@@ -116,7 +116,7 @@ func trimSeq(seq string) string {
 	return strings.TrimSuffix(strings.TrimPrefix(seq, "\x1b]"), "\x1b\\")
 }
 
-func sameReport(a, b Report) bool {
+func sameReport(a, b Message) bool {
 	return a.PID == b.PID && a.Time == b.Time && slices.Equal(a.Argv, b.Argv) && a.Cwd == b.Cwd && a.Clear == b.Clear
 }
 
@@ -149,11 +149,11 @@ func FuzzParse(f *testing.F) {
 	f.Fuzz(func(t *testing.T, payload []byte, arg, cwd string, clear bool) {
 		res := Parse(payload, specToken, specNow)
 		if res.Outcome == Accepted {
-			checkAccepted(t, payload, res.Report)
+			checkAccepted(t, payload, res.Message)
 		}
 		// A report this package writes reads back as written, when its
 		// values are ones a report can carry.
-		r := Report{PID: 4242, Time: specNow.Unix(), Argv: []string{"prog", arg, ""}, Cwd: cwd, Clear: clear}
+		r := Message{PID: 4242, Time: specNow.Unix(), Argv: []string{"prog", arg, ""}, Cwd: cwd, Clear: clear}
 		if clear {
 			r.Argv, r.Cwd = nil, ""
 		}
@@ -165,14 +165,14 @@ func FuzzParse(f *testing.F) {
 			return
 		}
 		back := Parse([]byte(trimSeq(seq)), specToken, specNow)
-		if back.Outcome != Accepted || !sameReport(back.Report, r) {
-			t.Fatalf("Sequence(%+v) reads back as %d %+v (%s)", r, back.Outcome, back.Report, back.Reason)
+		if back.Outcome != Accepted || !sameReport(back.Message, r) {
+			t.Fatalf("Sequence(%+v) reads back as %d %+v (%s)", r, back.Outcome, back.Message, back.Reason)
 		}
 	})
 }
 
 // checkAccepted holds an accepted report to the rules a resume relies on.
-func checkAccepted(t *testing.T, payload []byte, r Report) {
+func checkAccepted(t *testing.T, payload []byte, r Message) {
 	t.Helper()
 	body := strings.TrimPrefix(string(payload), "7577;")
 	i := strings.LastIndex(body, ":mac=")

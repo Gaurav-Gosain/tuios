@@ -251,7 +251,7 @@ gui *args:
 # Run the unit tests of every module
 [group('test')]
 test *args:
-    {{ NICE }} {{ TASKSET }} go test ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/... ./nitpick/... -timeout 20m "$@"
+    {{ NICE }} {{ TASKSET }} go test ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/... ./nitpick/... ./progresume/... -timeout 20m "$@"
 
 # Example: just test-pkg ./vt/ -run TestX
 # Run the unit tests of one package
@@ -314,7 +314,7 @@ e2e-flake test n="20":
 # Run the unit tests with the race detector
 [group('test')]
 race *args:
-    {{ NICE }} {{ TASKSET }} go test -race ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/... ./nitpick/... -timeout 80m "$@"
+    {{ NICE }} {{ TASKSET }} go test -race ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/... ./nitpick/... ./progresume/... -timeout 80m "$@"
 
 # Builds libghostty-vt on first use. Needs zig.
 # Run the tests of the ghostty backend
@@ -395,10 +395,10 @@ lint:
     set -euo pipefail
     cd {{ quote(root) }}
     {{ NICE }} {{ TASKSET }} {{ GOLANGCI_LINT }} run --timeout 20m
-    for dir in progstatus vt swatch shot tml plot loom sketch acp harness nitpick; do (cd "$dir" && {{ NICE }} {{ TASKSET }} {{ GOLANGCI_LINT }} run --timeout 10m); done
+    for dir in progstatus vt swatch shot tml plot loom sketch acp harness nitpick progresume; do (cd "$dir" && {{ NICE }} {{ TASKSET }} {{ GOLANGCI_LINT }} run --timeout 10m); done
     for goos in $(grep -v '^#' scripts/platforms.txt); do
         echo "go vet ($goos)"
-        GOOS=$goos {{ NICE }} {{ TASKSET }} go vet ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/... ./nitpick/...
+        GOOS=$goos {{ NICE }} {{ TASKSET }} go vet ./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/... ./nitpick/... ./progresume/...
     done
     {{ NICE }} {{ TASKSET }} go test -count=1 ./internal/lint/
 
@@ -438,7 +438,7 @@ _tidy mode:
     rm -rf "$proxy"
     scripts/library-pins.sh proxy "$proxy" >/dev/null
     export GOPROXY="file://$proxy,$(go env GOPROXY)" GONOSUMDB=tuios.dev
-    for dir in . e2e/tui progstatus vt swatch shot tml plot loom sketch acp harness nitpick; do
+    for dir in . e2e/tui progstatus vt swatch shot tml plot loom sketch acp harness nitpick progresume; do
         echo "go mod tidy $1 ($dir)"
         (cd "$dir" && GOWORK=off go mod tidy $1)
     done

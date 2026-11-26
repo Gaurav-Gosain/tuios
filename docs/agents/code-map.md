@@ -102,6 +102,7 @@ tuios/
 ├── loom/                   # tuios.dev/loom, a Go module of its own: draws TML into cells; flex layout, retained tree, palettes per depth, keys and mouse
 ├── nitpick/                # tuios.dev/nitpick, a Go module of its own: go/analysis hygiene rules with a measured precision; cmd/nitpick checks changed lines
 ├── plot/                   # tuios.dev/plot, a Go module of its own: eleven chart kinds (bar, line, area, heatmap, pie, world map and more) as cells with theme roles
+├── progresume/             # tuios.dev/progresume, a Go module of its own: OSC 7577 parser and signer, Report and Clear, cmd/resume-wrap
 ├── progstatus/             # tuios.dev/progstatus, a Go module of its own: OSC 7501 parser, record store, encoder
 ├── shot/                   # tuios.dev/shot, a Go module of its own: a cell grid to PNG, SVG, HTML, ANSI or text; mosaic turns pictures into cells
 ├── sketch/                 # tuios.dev/sketch, a Go module of its own: Mermaid diagrams to SVG in pure Go, a port of pele; raster/ and text/ outputs

@@ -8,9 +8,11 @@
 // time before anything else, so text that only passes through a pane (a file
 // shown with cat, the output of a remote host) cannot make a record.
 //
-// Parse is the terminal side, Sequence the program side. Neither keeps any
-// state: the record store, the owner check and the order of reports for one
-// pid are the caller's.
+// Parse is the terminal side. Report and Clear are the program side: they
+// read the token once, take it out of the environment, sign the report and
+// write it to the controlling terminal. Sequence builds a signed report for a
+// caller that writes it itself. Parse keeps no state: the record store, the
+// owner check and the order of reports for one pid are the terminal's.
 package progresume
 
 import (
@@ -79,8 +81,8 @@ func ValidToken(tok string) bool {
 	return true
 }
 
-// Report is one report, decoded.
-type Report struct {
+// Message is one report, decoded.
+type Message struct {
 	// PID is the owning process. 0 when the report named no usable pid.
 	PID int
 	// Time is when the report was made, in seconds since the Unix epoch.
@@ -107,11 +109,11 @@ const (
 	Accepted
 )
 
-// Result is a parsed report and what to do with it. Report.PID and
-// Report.Time are set for a rejected report when it named them.
+// Result is a parsed report and what to do with it. Message.PID and
+// Message.Time are set for a rejected report when it named them.
 type Result struct {
 	Outcome Outcome
-	Report  Report
+	Message Message
 	// Reason says why a report was ignored or rejected, for a debug log. It
 	// never holds a value of the report.
 	Reason string
@@ -176,10 +178,10 @@ func Parse(payload []byte, token string, now time.Time) Result {
 		return ignored("the time is outside the window")
 	}
 
-	res := Result{Outcome: Rejected, Report: Report{Time: t}}
+	res := Result{Outcome: Rejected, Message: Message{Time: t}}
 	if pv, found := firstValue(pairs, "pid"); found && count(pairs, "pid") == 1 {
 		if pid, ok := positive(pv); ok && pid <= int64(maxPID) {
-			res.Report.PID = int(pid)
+			res.Message.PID = int(pid)
 		}
 	}
 	if 2+len(payload)+1 > MaxSequence {
@@ -202,7 +204,7 @@ func Parse(payload []byte, token string, now time.Time) Result {
 		seen[k] = true
 		switch k {
 		case "pid":
-			if res.Report.PID == 0 {
+			if res.Message.PID == 0 {
 				res.Reason = "the pid cannot be read"
 				return res
 			}
@@ -216,7 +218,7 @@ func Parse(payload []byte, token string, now time.Time) Result {
 				res.Reason = why
 				return res
 			}
-			res.Report.Argv, hasArgv = argv, true
+			res.Message.Argv, hasArgv = argv, true
 		case "cwd":
 			cwd, ok := decodeText(v)
 			if !ok || cwd == "" {
@@ -227,13 +229,13 @@ func Parse(payload []byte, token string, now time.Time) Result {
 				res.Reason = "the cwd is not an absolute path"
 				return res
 			}
-			res.Report.Cwd = cwd
+			res.Message.Cwd = cwd
 		case "clear":
 			if v != "1" {
 				res.Reason = "clear is not 1"
 				return res
 			}
-			res.Report.Clear = true
+			res.Message.Clear = true
 		case "need":
 			if why := checkNeed(v); why != "" {
 				res.Reason = why
@@ -245,13 +247,13 @@ func Parse(payload []byte, token string, now time.Time) Result {
 	case !seen["pid"]:
 		res.Reason = "no pid"
 		return res
-	case hasArgv == res.Report.Clear:
+	case hasArgv == res.Message.Clear:
 		res.Reason = "not exactly one of argv and clear"
 		return res
-	case res.Report.Clear && res.Report.Cwd != "":
+	case res.Message.Clear && res.Message.Cwd != "":
 		// A clear carries nothing else that means anything. The cwd is
 		// dropped rather than refused: the rules name no conflict for it.
-		res.Report.Cwd = ""
+		res.Message.Cwd = ""
 	}
 	res.Outcome, res.Reason = Accepted, ""
 	return res
@@ -405,7 +407,7 @@ func lowerHex(b []byte) bool {
 
 // Sequence is the whole OSC 7577 sequence for r, signed with token, ended
 // with ST. A report with Clear set carries no argv or cwd.
-func Sequence(r Report, token string) string {
+func Sequence(r Message, token string) string {
 	var b strings.Builder
 	b.WriteString("pid=")
 	b.WriteString(strconv.Itoa(r.PID))

@@ -137,6 +137,14 @@ jobs:
           working-directory: harness
           args: --timeout 10m
 
+      - name: golangci-lint (progresume)
+        if: inputs.lint_libs == '' || inputs.lint_libs == 'all' || contains(format(' {0} ', inputs.lint_libs), ' progresume ')
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.14.0
+          working-directory: progresume
+          args: --timeout 10m
+
       - name: golangci-lint (nitpick)
         if: inputs.lint_libs == '' || inputs.lint_libs == 'all' || contains(format(' {0} ', inputs.lint_libs), ' nitpick ')
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
@@ -238,7 +246,7 @@ jobs:
         # its GOOS, and one after another they took 130 to 225 s with a warm
         # cache. Each output is printed in a group of its own when all end.
         run: |
-          pkgs="./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/... ./nitpick/..."
+          pkgs="./... ./progstatus/... ./vt/... ./swatch/... ./shot/... ./tml/... ./plot/... ./loom/... ./sketch/... ./acp/... ./harness/... ./nitpick/... ./progresume/..."
           goos_list=$(grep -v '^#' scripts/platforms.txt | grep -vx linux)
           pids=()
           for goos in $goos_list; do
