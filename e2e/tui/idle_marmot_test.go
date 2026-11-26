@@ -29,7 +29,7 @@ func marmotWakeups(t *testing.T, pid int, dir string, d time.Duration) (int, []s
 	t.Helper()
 	path := filepath.Join(dir, "wakeups."+strconv.Itoa(pid))
 	from := monotonicNow(t)
-	time.Sleep(d)
+	pause(t, "the idle window the wakeup trace is read for", d)
 	to := monotonicNow(t)
 
 	data, err := os.ReadFile(path)
