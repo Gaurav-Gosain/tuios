@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -190,18 +191,12 @@ func TestPluginCIDock(t *testing.T) {
 	dock := func() string { return dockRows(term.Screen()) }
 	waitDock := func(what string, ok func(string) bool) string {
 		t.Helper()
-		deadline := time.Now().Add(3 * uiTimeout)
-		for {
-			s := dock()
-			if ok(s) {
-				return s
-			}
-			if time.Now().After(deadline) {
-				log, _ := tuiosCLI(t, base, "plugins", "log", "tuios.ci", "--limit", "10")
-				t.Fatalf("ASSERTION: %s:\n%s\n%s", what, log, term.Snapshot())
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
+		var s string
+		waitUntil(t, what, 3*uiTimeout, func() (bool, string) {
+			s = dock()
+			return ok(s), term.Snapshot()
+		})
+		return s
 	}
 	has := func(text string) func(string) bool { return func(s string) bool { return strings.Contains(s, text) } }
 	noCell := func(s string) bool { return !strings.Contains(s, "CI ") }
@@ -229,13 +224,10 @@ func TestPluginCIDock(t *testing.T) {
 	watchers := func() int { return len(procs("watch")) }
 	waitGone := func(what string) {
 		t.Helper()
-		deadline := time.Now().Add(3 * uiTimeout)
-		for len(procs()) > 0 {
-			if time.Now().After(deadline) {
-				t.Fatalf("ASSERTION: %s: tuios-ci processes %v are alive", what, procs())
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
+		waitUntil(t, what+": no tuios-ci process", 3*uiTimeout, func() (bool, string) {
+			p := procs()
+			return len(p) == 0, fmt.Sprintf("tuios-ci processes %v are alive", p)
+		})
 	}
 	left := regexp.MustCompile(`CI \d+m \d+s left`)
 
@@ -295,13 +287,10 @@ func TestPluginCIDock(t *testing.T) {
 	before := windows()
 	mouseClick(t, term, x+1, y, tuitest.MouseLeft, 0)
 	pane := regexp.MustCompile(`BUILD\s+gift-cards · not on main · ` + giftSHA[:7])
-	deadline := time.Now().Add(3 * uiTimeout)
-	for !pane.MatchString(term.Snapshot()) {
-		if time.Now().After(deadline) {
-			t.Fatalf("ASSERTION: the click did not open the builds on %s:\n%s", giftSHA[:7], term.Snapshot())
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	waitUntil(t, "the click opens the builds on "+giftSHA[:7], 3*uiTimeout, func() (bool, string) {
+		s := term.Snapshot()
+		return pane.MatchString(s), s
+	})
 	saveText(t, "ci-dock-click", term.Snapshot())
 	// The pane of the builds is a tuios-ci too. Close it, so the idle
 	// check below counts only what the dock started.
@@ -331,13 +320,10 @@ func TestPluginCIDock(t *testing.T) {
 	if err := term.SendKeys("\x1b"); err != nil {
 		t.Fatal(err)
 	}
-	deadline = time.Now().Add(30 * time.Second)
-	for strings.Contains(term.Snapshot(), "CI: Build failed") {
-		if time.Now().After(deadline) {
-			t.Fatalf("the message stays:\n%s", term.Snapshot())
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
+	waitUntil(t, "the message goes after esc", 30*time.Second, func() (bool, string) {
+		s := term.Snapshot()
+		return !strings.Contains(s, "CI: Build failed"), s
+	})
 	waitDock("the cell of the build that failed", has("CI failed: TestCheckout"))
 	focusOn("plain")
 	waitGone("the build ended and the focus moved")
@@ -374,13 +360,9 @@ func TestPluginCIDock(t *testing.T) {
 	// The message hides the cell for a moment, and CI ok stays for 30
 	// seconds, so the cell shows after the message.
 	waitDock("CI ok after the pass", has("CI ok"))
-	deadline = time.Now().Add(45 * time.Second)
-	for strings.Contains(dock(), "CI ok") {
-		if time.Now().After(deadline) {
-			t.Fatalf("ASSERTION: CI ok stays:\n%s", term.Snapshot())
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
+	waitUntil(t, "CI ok goes after 30 seconds", 45*time.Second, func() (bool, string) {
+		return !strings.Contains(dock(), "CI ok"), term.Snapshot()
+	})
 	focusOn("plain")
 	waitGone("the passed build ended and the focus moved")
 	saveText(t, "ci-dock-idle", "no tuios-ci process after the builds ended and the focus moved\n")
