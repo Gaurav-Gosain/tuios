@@ -47,7 +47,7 @@ require (
 	tuios.dev/harness v0.0.0-20261120215113-0f1cffa25ec1 // indirect
 	tuios.dev/loom v0.2.3-0.20261124190846-268d3f908bd5 // indirect
 	tuios.dev/plot v0.2.3-0.20261101044251-193bbd706cd8 // indirect
-	tuios.dev/progresume v0.0.0-20261126072016-17f49379654b // indirect
+	tuios.dev/progresume v0.0.0-20261126085303-cf36e248c838 // indirect
 	tuios.dev/progstatus v0.1.2-0.20261030111253-c0f512aa3148 // indirect
 	tuios.dev/sketch v0.4.1-0.20261124185855-9f712ffb4bd2 // indirect
 	tuios.dev/swatch v0.1.2-0.20261120215113-0f1cffa25ec1 // indirect
