@@ -73,6 +73,13 @@ const (
 	filesNoPrompt filesPrompt = iota
 	filesPromptFilter
 	filesPromptGoTo
+	// filesPromptRename edits the cursor row's name in its row, and
+	// filesPromptNew asks for a new name. filesPromptCopy and
+	// filesPromptMove ask where to send the marks with one side on screen.
+	filesPromptRename
+	filesPromptNew
+	filesPromptCopy
+	filesPromptMove
 )
 
 // filesSide is one machine and one folder.
@@ -107,6 +114,8 @@ type filesSide struct {
 	reverse bool
 	hidden  bool
 	filter  string
+	// marks is the marked rows, by name.
+	marks map[string]bool
 	// rowsTop is the screen row of the first listing row, rowsN the rows
 	// that fit, box the side on the screen, crumbsY the crumbs row and
 	// crumbs their click targets, all as last drawn.
@@ -168,9 +177,15 @@ type explorerState struct {
 	sort    filesSort
 	reverse bool
 	hidden  bool
-	// prompt is the line being typed, and input its text.
-	prompt filesPrompt
-	input  string
+	// prompt is the line being typed, and input its text. renaming is the
+	// name a rename started from.
+	prompt   filesPrompt
+	input    string
+	renaming string
+	// clip is what y took, and undo the changes u can take back, newest
+	// last. See files_view_ops.go.
+	clip *filesClip
+	undo []filesUndo
 	// look says quick look is beside the list.
 	look bool
 	// gen moves when anything the view draws changes, for its frame cache.
@@ -273,7 +288,7 @@ func (m *OS) OpenFilesViewFind() tea.Cmd {
 func (m *OS) openFilesViewAt(host, dir, origin string) tea.Cmd {
 	e := &m.explorer
 	m.filesGitStop()
-	*e = explorerState{open: true, origin: origin, sort: e.sort, reverse: e.reverse, hidden: e.hidden, gen: e.gen + 1, ids: e.ids, divX: -1}
+	*e = explorerState{open: true, origin: origin, sort: e.sort, reverse: e.reverse, hidden: e.hidden, gen: e.gen + 1, ids: e.ids, divX: -1, undo: e.undo, clip: e.clip}
 	t := &filesTab{ratio: filesRatioDefault}
 	t.sides[0] = m.newFilesSide(host)
 	e.tabs = []*filesTab{t}
@@ -295,7 +310,7 @@ func (m *OS) CloseFilesView() {
 		m.dropQuickLook()
 	}
 	m.filesGitStop()
-	*e = explorerState{sort: e.sort, reverse: e.reverse, hidden: e.hidden, gen: e.gen + 1, ids: e.ids, divX: -1}
+	*e = explorerState{sort: e.sort, reverse: e.reverse, hidden: e.hidden, gen: e.gen + 1, ids: e.ids, divX: -1, undo: e.undo, clip: e.clip}
 }
 
 // filesCaller is how the view asks a machine for a listing, or nil for a
@@ -363,6 +378,7 @@ func (m *OS) HandleFilesList(msg filesListMsg) {
 	if moved {
 		s.cursor, s.scroll = 0, 0
 		s.filter = ""
+		s.marks = nil
 	} else if pick == "" {
 		pick = keep
 	}
@@ -646,7 +662,7 @@ func (m *OS) FilesPromptCancel() {
 			m.filesPick(en.Name)
 		}
 	}
-	e.prompt, e.input = filesNoPrompt, ""
+	e.prompt, e.input, e.renaming = filesNoPrompt, "", ""
 	e.gen++
 }
 
@@ -656,6 +672,9 @@ func (m *OS) FilesPromptSubmit() tea.Cmd {
 	p, text := e.prompt, strings.TrimSpace(e.input)
 	e.prompt, e.input = filesNoPrompt, ""
 	e.gen++
+	if p != filesPromptGoTo && p != filesPromptFilter {
+		return m.filesSubmitChange(p, text)
+	}
 	if p != filesPromptGoTo || text == "" {
 		return nil
 	}
@@ -691,6 +710,7 @@ func (m *OS) FilesEscape() {
 	switch {
 	case e.prompt != filesNoPrompt:
 		m.FilesPromptCancel()
+	case m.filesClearMarks(m.filesCur()):
 	case m.filesCur().filter != "":
 		en, _, ok := m.filesCursorEntry()
 		m.filesCur().filter = ""

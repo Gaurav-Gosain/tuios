@@ -261,7 +261,7 @@ func pastePaths(cwd string, clip fileClipboard) (done, renamed int, err error) {
 	}
 	var firstErr error
 	for _, src := range clip.Paths {
-		if perr := pasteOne(cwd, src, clip.Move, &renamed); perr != nil {
+		if _, perr := pasteOne(cwd, src, clip.Move, &renamed); perr != nil {
 			if firstErr == nil {
 				firstErr = perr
 			}
@@ -272,37 +272,37 @@ func pastePaths(cwd string, clip fileClipboard) (done, renamed int, err error) {
 	return done, renamed, firstErr
 }
 
-// pasteOne places one source path into cwd.
-func pasteOne(cwd, src string, move bool, renamed *int) error {
+// pasteOne places one source path into cwd, and answers where it went.
+func pasteOne(cwd, src string, move bool, renamed *int) (string, error) {
 	// A folder cannot be moved or copied into itself or into its own subtree:
 	// the move fails halfway on some kernels and the copy recurses for as long
 	// as the disk lasts. Refused by name rather than discovered.
 	if withinTree(src, cwd) {
-		return errfmt.Errorf("%s: cannot paste a folder into itself", filepath.Base(src))
+		return "", errfmt.Errorf("%s: cannot paste a folder into itself", filepath.Base(src))
 	}
 	dst := filepath.Join(cwd, filepath.Base(src))
 	unique, err := uniqueLocalDst(dst)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if unique != dst {
 		*renamed++
 		dst = unique
 	}
 	if !move {
-		return copyTree(src, dst)
+		return dst, copyTree(src, dst)
 	}
 	if err := os.Rename(src, dst); err == nil {
-		return nil
+		return dst, nil
 	} else if !errors.Is(err, syscall.EXDEV) {
-		return err
+		return "", err
 	}
 	// Another filesystem. Rename cannot cross one, so the move is a copy and
 	// then a remove, and the remove happens only once the copy has finished.
 	if err := copyTree(src, dst); err != nil {
-		return err
+		return "", err
 	}
-	return os.RemoveAll(src)
+	return dst, os.RemoveAll(src)
 }
 
 // withinTree reports whether dir is src itself or anywhere under it.

@@ -372,6 +372,7 @@ Run `tuios keybinds list` to see the keys that your config sets.
 | `G`, `end` | `files_bottom` | Files: last row |
 | `q` | `files_close` | Files: close the view |
 | `ctrl+w` | `files_close_tab` | Files: close the tab |
+| `c` | `files_copy` | Files: copy the marked rows to the other side |
 | `Y` | `files_copy_path` | Files: copy the path |
 | `j`, `down` | `files_down` | Files: next row |
 | `e` | `files_edit` | Files: edit the file in a new pane on its machine |
@@ -382,7 +383,11 @@ Run `tuios keybinds list` to see the keys that your config sets.
 | `.` | `files_hidden` | Files: show or hide hidden files |
 | `~` | `files_home` | Files: go to the home folder |
 | `I` | `files_insert_path` | Files: type the path into the pane the view came from |
+| `x` | `files_mark` | Files: mark the row and go to the next |
+| `*` | `files_mark_all` | Files: mark every row, or none |
+| `m` | `files_move` | Files: move the marked rows to the other side |
 | `<` | `files_narrow` | Files: move the divider left |
+| `a` | `files_new` | Files: new file, or a folder with a name that ends in / |
 | `+` | `files_new_tab` | Files: open a tab on this folder |
 | `]` | `files_next_tab` | Files: next tab |
 | `l`, `enter`, `right` | `files_open` | Files: go into the folder, or show the file |
@@ -391,9 +396,12 @@ Run `tuios keybinds list` to see the keys that your config sets.
 | `pgdown`, `ctrl+d` | `files_page_down` | Files: down a page |
 | `pgup`, `ctrl+u` | `files_page_up` | Files: up a page |
 | `h`, `backspace`, `left` | `files_parent` | Files: go to the folder above |
+| `p` | `files_paste` | Files: paste a copy here |
+| `P` | `files_paste_move` | Files: move what was taken to here |
 | `[` | `files_prev_tab` | Files: previous tab |
 | `space` | `files_quick_look` | Files: show or hide quick look beside the list |
 | `v` | `files_review` | Files: review the changed file under the cursor |
+| `r` | `files_rename` | Files: rename the row |
 | `s` | `files_sort` | Files: sort by name, size or time |
 | `S` | `files_sort_reverse` | Files: reverse the sort |
 | `1` | `files_tab_1` | Files: go to tab 1 |
@@ -406,9 +414,12 @@ Run `tuios keybinds list` to see the keys that your config sets.
 | `8` | `files_tab_8` | Files: go to tab 8 |
 | `9` | `files_tab_9` | Files: go to tab 9 |
 | `g`, `home` | `files_top` | Files: first row |
+| `d` | `files_trash` | Files: move to the trash |
 | `\` | `files_two_sides` | Files: one side or two |
+| `u` | `files_undo` | Files: undo the last rename, move, trash or new folder |
 | `k`, `up` | `files_up` | Files: previous row |
 | `>` | `files_widen` | Files: move the divider right |
+| `y` | `files_yank` | Files: take the marked rows for a paste |
 | `Z` | `files_zoom` | Files: show the side with the keys alone, or both |
 
 ## Copy mode

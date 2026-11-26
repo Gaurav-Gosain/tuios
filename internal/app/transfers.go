@@ -505,18 +505,23 @@ func (m *OS) applyTransferRow(row session.TransferRow, progress bool) tea.Cmd {
 	if row.State == "failed" && m.transfers.open {
 		m.markTransferSeen(row.ID)
 	}
+	if m.explorer.open {
+		// The Files view draws the arriving rows and its Copies list.
+		m.explorer.gen++
+	}
 	if !ended {
 		return nil
 	}
 	m.transfers.lastEnd = time.Now()
+	landed := m.filesTransferLanded(row)
 	if cmd, taken := m.farOpenCopyEnded(row); taken {
-		return cmd
+		return tea.Batch(cmd, landed)
 	}
 	if cmd, taken := m.dropCopyEnded(row); taken {
-		return cmd
+		return tea.Batch(cmd, landed)
 	}
 	m.transferEndNotice(row)
-	return nil
+	return landed
 }
 
 // transfersLingerCmd starts the linger once no copy is moving and one ended,
@@ -547,6 +552,9 @@ func (m *OS) applyTransfersLinger(msg transfersLingerMsg) {
 // transfersChanged records that the mirror moved, so the dock, the rail and
 // the panel draw again.
 func (m *OS) transfersChanged() {
+	if m.explorer.open {
+		m.explorer.gen++
+	}
 	m.clampTransfersSelection()
 	m.sidebarCache.invalidate()
 	m.secondarySidebarCache.invalidate()

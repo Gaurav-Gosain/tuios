@@ -2293,6 +2293,17 @@ const (
 	ActionFilesInsertPath  = "files_insert_path"
 	ActionFilesCopyPath    = "files_copy_path"
 	ActionFilesClose       = "files_close"
+	ActionFilesMark        = "files_mark"
+	ActionFilesMarkAll     = "files_mark_all"
+	ActionFilesCopy        = "files_copy"
+	ActionFilesMove        = "files_move"
+	ActionFilesYank        = "files_yank"
+	ActionFilesPaste       = "files_paste"
+	ActionFilesPasteMove   = "files_paste_move"
+	ActionFilesRename      = "files_rename"
+	ActionFilesNew         = "files_new"
+	ActionFilesTrash       = "files_trash"
+	ActionFilesUndo        = "files_undo"
 	ActionFilesTwoSides    = "files_two_sides"
 	ActionFilesOtherSide   = "files_other_side"
 	ActionFilesPrevTab     = "files_prev_tab"
@@ -2342,6 +2353,17 @@ func getDefaultFilesKeybinds() map[string][]string {
 		ActionFilesInsertPath:  {"I"},
 		ActionFilesCopyPath:    {"Y"},
 		ActionFilesClose:       {"q"},
+		ActionFilesMark:        {"x"},
+		ActionFilesMarkAll:     {"*"},
+		ActionFilesCopy:        {"c"},
+		ActionFilesMove:        {"m"},
+		ActionFilesYank:        {"y"},
+		ActionFilesPaste:       {"p"},
+		ActionFilesPasteMove:   {"P"},
+		ActionFilesRename:      {"r"},
+		ActionFilesNew:         {"a"},
+		ActionFilesTrash:       {"d"},
+		ActionFilesUndo:        {"u"},
 		ActionFilesTwoSides:    {"\\"},
 		ActionFilesOtherSide:   {"tab"},
 		ActionFilesPrevTab:     {"["},

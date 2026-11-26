@@ -1883,6 +1883,10 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case filesReadingMsg:
 		m.HandleFilesReading(msg)
 		return m, nil
+	case filesOpMsg:
+		cmd := m.HandleFilesOp(msg)
+		m.renderSkipped = false
+		return m, cmd
 	case filesEditMsg:
 		cmd := m.HandleFilesEdit(msg)
 		m.renderSkipped = false

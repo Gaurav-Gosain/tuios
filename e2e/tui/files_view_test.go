@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -447,4 +448,167 @@ func TestFilesViewTwoSides(t *testing.T) {
 	}
 	mouseClick(t, term, col, 0, tuitest.MouseLeft, 0)
 	railLists(t, term, "a click on the tab's other name did not flip", []string{"far.go", "linked"}, []string{"main.go"})
+}
+
+// TestFilesViewCopies copies three marked files from this machine to a
+// linked host, with a rate limit so a frame catches them on their way, and
+// moves a fourth. The copies show in the far side before they land and in
+// the Copies list, and each far file has the sha256 of its source. A move
+// takes its source away only after the copy is checked. On this machine, a
+// rename in the row, a new folder and the trash each come back with u.
+//
+// Negative control: with filesArrivals answering nil, the wait for the
+// arriving rows times out.
+func TestFilesViewCopies(t *testing.T) {
+	requireReal(t, "links a second daemon as a host")
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	// build lets this machine write in its home folder, so a copy can land
+	// in ~/out.
+	writeRemoteConfig(t, remote, relayFilesPolicy+`files_roots = ["~"]`+"\n")
+	ssh := writeFakeSSHTo(t, base, remote)
+	writeOneHostConfig(t, base, tuiosBin)
+	far := filepath.Join(remote, "HOME", "out")
+	if err := os.MkdirAll(far, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {
+		t.Fatalf("create the far session: %v\n%s", err, out)
+	}
+	local := filesViewFixtureIn(t, filepath.Join(base, "HOME", "project"))
+	big := filepath.Join(local, "big")
+	if err := os.MkdirAll(big, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	blob := make([]byte, 2<<20)
+	for i, name := range []string{"part1.bin", "part2.bin", "part3.bin", "whole.bin"} {
+		for j := range blob {
+			blob[j] = byte(i*31 + j*7)
+		}
+		if err := os.WriteFile(filepath.Join(big, name), blob, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	env := []string{"TUIOS_SSH=" + ssh, "TUIOS_TEST_KNOBS=files_rate=131072"}
+	term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env, cols: 160, rows: 44})
+	t.Cleanup(func() {
+		if t.Failed() {
+			out, _ := tuiosCLI(t, base, "transfers")
+			t.Logf("copies at the end:\n%s\nscreen:\n%s", out, term.Snapshot())
+		}
+	})
+	waitBoot(t, term)
+	waitForHostListing(t, base, func(s string) bool { return containsAll(s, "build", "up") }, "the daemon never reported build up")
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	runInShell(t, term, "cd ~/project/big && clear && printf '\\033]7;file://%s\\033\\\\%s\\n' \"$PWD\" lis\"\"ted", "listed", uiTimeout)
+	sendKeys(t, term, tuitest.Ctrl('b'), "f")
+	railLists(t, term, "Ctrl+B f did not open the view", []string{"Search files"}, nil)
+	sendKeys(t, term, tuitest.Esc)
+	railLists(t, term, "the view did not list big", []string{"part1.bin", "whole.bin"}, []string{"Search files"})
+	sendKeys(t, term, "\\", ":", "build:~/out", tuitest.Enter)
+	railLists(t, term, "the second side did not go to build", []string{"build", "linked", "part1.bin"}, nil)
+	sendKeys(t, term, tuitest.Tab)
+
+	// x marks three rows; the footer counts them.
+	sendKeys(t, term, "x", "x", "x")
+	railLists(t, term, "x did not mark three rows", []string{"3 marked", "6 MiB"}, nil)
+	copiesFrame(t, term, "files-copy-marked")
+
+	// c copies them to build. They show in build's side before they land.
+	sendKeys(t, term, "c")
+	moving := regexp.MustCompile(` [1-9][0-9]?%`)
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return containsAll(s.Text(), "Copies", "3 copies", "part3.bin") && moving.MatchString(s.Text()) && strings.Count(s.Text(), "part2.bin") >= 3
+	}, 30*time.Second); err != nil {
+		t.Fatalf("the copies did not show on their way: %v\n%s", err, term.Snapshot())
+	}
+	copiesFrame(t, term, "files-copy-mid")
+	for _, name := range []string{"part1.bin", "part2.bin", "part3.bin"} {
+		filesWaitDisk(t, 120*time.Second, "the copy of "+name+" to land", func() bool {
+			_, err := os.Stat(filepath.Join(far, name))
+			return err == nil
+		})
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Count(s.Text(), "2 MiB") >= 7 && !strings.Contains(s.Text(), "%")
+	}, 120*time.Second); err != nil {
+		t.Fatalf("the far side never listed the three files: %v\n%s", err, term.Snapshot())
+	}
+	copiesFrame(t, term, "files-copy-done")
+	for _, name := range []string{"part1.bin", "part2.bin", "part3.bin"} {
+		if a, b := fileSHA(t, filepath.Join(big, name)), fileSHA(t, filepath.Join(far, name)); a != b {
+			t.Fatalf("%s on build has sha256 %s, its source %s", name, b, a)
+		}
+	}
+
+	// m moves whole.bin: the source stays while the copy runs, and goes once
+	// the copy is checked.
+	sendKeys(t, term, "/", "whole", tuitest.Enter, "m")
+	filesWaitDisk(t, 30*time.Second, "the move to start", func() bool {
+		return strings.Contains(term.Screen().Text(), "%")
+	})
+	if _, err := os.Stat(filepath.Join(big, "whole.bin")); err != nil {
+		t.Fatalf("the move took the source away before the copy ended: %v", err)
+	}
+	filesWaitDisk(t, 120*time.Second, "the move to end", func() bool {
+		_, errSrc := os.Stat(filepath.Join(big, "whole.bin"))
+		_, errDst := os.Stat(filepath.Join(far, "whole.bin"))
+		return os.IsNotExist(errSrc) && errDst == nil
+	})
+	sendKeys(t, term, tuitest.Esc)
+
+	// On this machine: a rename in the row, undone; a new folder, undone; a
+	// file to the trash, brought back.
+	sendKeys(t, term, "/", "part1", tuitest.Enter, "r")
+	for range len("part1.bin") {
+		sendKeys(t, term, tuitest.Backspace)
+	}
+	sendKeys(t, term, "renamed.bin", tuitest.Enter)
+	filesWaitDisk(t, uiTimeout, "the rename", func() bool {
+		_, err := os.Stat(filepath.Join(big, "renamed.bin"))
+		return err == nil
+	})
+	sendKeys(t, term, tuitest.Esc, "u")
+	filesWaitDisk(t, uiTimeout, "the undo of the rename", func() bool {
+		_, errOld := os.Stat(filepath.Join(big, "part1.bin"))
+		_, errNew := os.Stat(filepath.Join(big, "renamed.bin"))
+		return errOld == nil && os.IsNotExist(errNew)
+	})
+	sendKeys(t, term, "a", "fresh/", tuitest.Enter)
+	filesWaitDisk(t, uiTimeout, "the new folder", func() bool {
+		fi, err := os.Stat(filepath.Join(big, "fresh"))
+		return err == nil && fi.IsDir()
+	})
+	sendKeys(t, term, "u")
+	filesWaitDisk(t, uiTimeout, "the undo of the new folder", func() bool {
+		_, err := os.Stat(filepath.Join(big, "fresh"))
+		return os.IsNotExist(err)
+	})
+	sendKeys(t, term, "/", "part2", tuitest.Enter, "d")
+	filesWaitDisk(t, uiTimeout, "the trash", func() bool {
+		_, err := os.Stat(filepath.Join(big, "part2.bin"))
+		return os.IsNotExist(err)
+	})
+	sendKeys(t, term, tuitest.Esc, "u")
+	filesWaitDisk(t, uiTimeout, "the undo of the trash", func() bool {
+		_, err := os.Stat(filepath.Join(big, "part2.bin"))
+		return err == nil
+	})
+	if a, b := fileSHA(t, filepath.Join(big, "part2.bin")), fileSHA(t, filepath.Join(far, "part2.bin")); a != b {
+		t.Fatalf("part2.bin came back from the trash with other bytes")
+	}
+}
+
+// filesWaitDisk waits for cond, a fact of a disk or of the screen, polled
+// every 50 ms, up to within.
+func filesWaitDisk(t *testing.T, within time.Duration, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(within)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("waited %v for %s", within, what)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }

@@ -98,7 +98,7 @@ func trashPaths(paths []string, now time.Time) (int, error) {
 	ok := 0
 	var firstErr error
 	for _, p := range paths {
-		if err := trashOne(files, info, p, now); err != nil {
+		if _, err := trashOne(files, info, p, now); err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}
@@ -107,6 +107,42 @@ func trashPaths(paths []string, now time.Time) (int, error) {
 		ok++
 	}
 	return ok, firstErr
+}
+
+// trashedPath is one path the trash took: where it was, and where it is in
+// the trash, for an undo.
+type trashedPath struct {
+	from, file, info string
+}
+
+// trashPathsUndoable is trashPaths that answers where each path went.
+func trashPathsUndoable(paths []string, now time.Time) ([]trashedPath, error) {
+	dir, err := trashDirFunc()
+	if err != nil {
+		return nil, err
+	}
+	files := filepath.Join(dir, "files")
+	info := filepath.Join(dir, "info")
+	if err := os.MkdirAll(files, 0o700); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(info, 0o700); err != nil {
+		return nil, err
+	}
+	var out []trashedPath
+	var firstErr error
+	for _, p := range paths {
+		name, err := trashOne(files, info, p, now)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		abs, _ := filepath.Abs(p)
+		out = append(out, trashedPath{from: abs, file: filepath.Join(files, name), info: filepath.Join(info, name+".trashinfo")})
+	}
+	return out, firstErr
 }
 
 // trashOne puts one path in the trash.
@@ -119,42 +155,42 @@ func trashPaths(paths []string, now time.Time) (int, error) {
 // The move itself is a rename, so it is atomic and costs nothing for a large
 // tree. A rename across filesystems cannot work, and that is the one case this
 // hands back to the caller with EXDEV intact so the message can name the fix.
-func trashOne(filesDir, infoDir, path string, now time.Time) error {
+func trashOne(filesDir, infoDir, path string, now time.Time) (string, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if _, err := os.Lstat(abs); err != nil {
-		return err
+		return "", err
 	}
 	base := filepath.Base(abs)
 	if base == "" || base == "." || base == string(os.PathSeparator) {
-		return errfmt.Errorf("cannot trash %s", path)
+		return "", errfmt.Errorf("cannot trash %s", path)
 	}
 
 	name, infoFile, err := claimTrashName(infoDir, base)
 	if err != nil {
-		return err
+		return "", err
 	}
 	body := "[Trash Info]\nPath=" + trashInfoPath(abs) +
 		"\nDeletionDate=" + now.Format("2006-01-02T15:04:05") + "\n"
 	if _, err := infoFile.WriteString(body); err != nil {
 		_ = infoFile.Close()
 		_ = os.Remove(filepath.Join(infoDir, name+".trashinfo"))
-		return err
+		return "", err
 	}
 	if err := infoFile.Close(); err != nil {
 		_ = os.Remove(filepath.Join(infoDir, name+".trashinfo"))
-		return err
+		return "", err
 	}
 
 	if err := os.Rename(abs, filepath.Join(filesDir, name)); err != nil {
 		// The claim is given back, or the trash keeps an entry for a file that
 		// is still where it was and a restore would fail on it later.
 		_ = os.Remove(filepath.Join(infoDir, name+".trashinfo"))
-		return err
+		return "", err
 	}
-	return nil
+	return name, nil
 }
 
 // claimTrashName exclusively creates info/NAME.trashinfo for the first free

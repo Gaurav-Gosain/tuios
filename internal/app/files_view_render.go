@@ -3,6 +3,7 @@ package app
 import (
 	"cmp"
 	"image/color"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
 	"github.com/Gaurav-Gosain/tuios/internal/units"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -108,7 +110,11 @@ func (m *OS) drawFilesView(c *ckCanvas, pal overlay.Palette, w, h, top int) {
 	e.tabsY = top
 	m.drawFilesTopBar(c, pal, g, w, top)
 	hintsY := h - 1
-	body := filesBox{x: 0, y: 2, w: w, h: max(hintsY-2, 0)}
+	copies := m.filesCopiesRows(h)
+	body := filesBox{x: 0, y: 2, w: w, h: max(hintsY-2-copies, 0)}
+	if copies > 0 {
+		m.drawFilesCopies(c, pal, hintsY-copies, w, copies)
+	}
 	look := e.look && m.quickLook.open && m.quickLook.files
 	for _, s := range t.sides {
 		if s != nil {
@@ -357,8 +363,9 @@ func (m *OS) drawFilesCrumbs(c *ckCanvas, pal overlay.Palette, g filesGlyphs, s 
 	}
 }
 
-// drawFilesRows draws the rows of the listing, or the one row that says why
-// there are none.
+// drawFilesRows draws the rows of the listing and, after them, the copies
+// on their way into the folder; or the one row that says why there are no
+// rows.
 func (m *OS) drawFilesRows(c *ckCanvas, pal overlay.Palette, s *filesSide, b filesBox, y, rows, nameX, nameW, sizeR, modR int, showSize, showMod, keys bool) {
 	note := func(text string, warn bool) {
 		ink := pal.FgMute
@@ -367,6 +374,7 @@ func (m *OS) drawFilesRows(c *ckCanvas, pal overlay.Palette, s *filesSide, b fil
 		}
 		c.text(nameX, y, b.x+b.w-1, ckSeg{t: text, fg: ink})
 	}
+	arriving := m.filesArrivals(s)
 	switch {
 	case s.Err != "" && len(s.Entries) == 0:
 		note(s.Err, true)
@@ -378,7 +386,7 @@ func (m *OS) drawFilesRows(c *ckCanvas, pal overlay.Palette, s *filesSide, b fil
 	case len(s.rows) == 0 && s.filter != "":
 		note("No name has "+s.filter+" in it.", false)
 		return
-	case len(s.rows) == 0:
+	case len(s.rows) == 0 && len(arriving) == 0:
 		note("Nothing here", false)
 		return
 	}
@@ -391,11 +399,15 @@ func (m *OS) drawFilesRows(c *ckCanvas, pal overlay.Palette, s *filesSide, b fil
 	}
 	s.scroll = max(min(s.scroll, n-rows), 0)
 	now := time.Now()
+	e := &m.explorer
+	renaming := keys && e.prompt == filesPromptRename
+	drawn := 0
 	for i := 0; i < rows && s.scroll+i < n; i++ {
 		at := s.scroll + i
 		idx := s.rows[at]
 		en := s.Entries[idx]
 		ry := y + i
+		drawn++
 		// The side without the keys keeps its cursor in the quieter ground,
 		// drawn here under a row that draws none of its own.
 		st := sidebarRowState{Cursor: at == s.cursor && keys}
@@ -405,8 +417,19 @@ func (m *OS) drawFilesRows(c *ckCanvas, pal overlay.Palette, s *filesSide, b fil
 		case at == s.cursor:
 			c.fill(b.x, ry, b.w, 1, ckColor(cmp.Or[color.Color](pal.RowSelQuiet, pal.RowSel)))
 		}
-		c.draw(nameX-1, ry, nameW+1, m.sidebarFileRow(fileRowSpec{Kind: sidebarRowFileEntry, Name: en.Name, Dir: en.Dir, Icon: en.Icon}, nameW+1, pal, st))
+		if renaming && at == s.cursor {
+			// The name is edited in its row.
+			c.text(nameX+1, ry, nameX+nameW, ckSeg{t: e.input, fg: pal.Fg, attrs: ckBold}, ckSeg{t: "▏", fg: pal.Accent})
+		} else {
+			c.draw(nameX-1, ry, nameW+1, m.sidebarFileRow(fileRowSpec{Kind: sidebarRowFileEntry, Name: en.Name, Dir: en.Dir, Icon: en.Icon}, nameW+1, pal, st))
+		}
 		m.filesGitDrawMark(c, pal, s, en, nameX+nameW, ry)
+		if s.marked(en.Name) {
+			// A marked row has the accent bar in the gutter and its name in
+			// the accent.
+			c.text(b.x, ry, b.x+1, ckSeg{t: "▌", fg: pal.Accent})
+			c.restyle(nameX+1, ry, nameW, 1, func(cell *uv.Cell) { cell.Style.Fg = ckColor(pal.AccentBright) })
+		}
 		if idx >= len(s.infos) {
 			continue
 		}
@@ -418,31 +441,136 @@ func (m *OS) drawFilesRows(c *ckCanvas, pal overlay.Palette, s *filesSide, b fil
 			c.textR(modR, ry, ckSeg{t: agentElapsed("file", in.MTime*int64(time.Millisecond), now) + " ago", fg: pal.FgMute})
 		}
 	}
+	// The copies on their way here, in the dim italic ink, with their bar
+	// where the size goes and their rate where the time goes.
+	for i, r := range arriving {
+		ry := y + drawn + i
+		if drawn+i >= rows {
+			break
+		}
+		name := printableTitle(r.Name)
+		if r.Kind == "dir" {
+			name += "/"
+		}
+		c.text(nameX+1, ry, nameX+nameW, ckSeg{t: name, fg: pal.FgDim, attrs: ckItalic})
+		pct := transferPercent(r.Done, r.Size)
+		switch {
+		case r.State == "done":
+			c.textR(sizeR, ry, ckSeg{t: "checked", fg: pal.Success})
+		case showSize:
+			bar := filesBar(pct, 6)
+			c.textR(sizeR, ry, ckSeg{t: bar, fg: pal.Accent}, ckSeg{t: " " + strconv.Itoa(pct) + "%", fg: pal.FgDim})
+		}
+		if showMod && r.State == "running" && r.Rate > 0 {
+			c.textR(modR, ry, ckSeg{t: units.Bytes(int64(r.Rate)) + "/s", fg: pal.FgMute})
+		} else if showMod && r.State != "running" && r.State != "done" {
+			c.textR(modR, ry, ckSeg{t: r.State, fg: pal.Warning})
+		}
+	}
 }
 
-// drawFilesFooter draws the count, the filter or the line being typed.
+// filesBar is a bar of cells cells for pct percent, in shapes rather than
+// colour, so it reads at 16 colours: ━ for the part done and ╺ for the rest.
+func filesBar(pct, cells int) string {
+	n := min(max(pct*cells/100, 0), cells)
+	done, rest := "━", "╺"
+	if overlay.UseASCII() {
+		done, rest = "#", "-"
+	}
+	return strings.Repeat(done, n) + strings.Repeat(rest, cells-n)
+}
+
+// drawFilesFooter draws the count, the marks, the filter or the line being
+// typed.
 func (m *OS) drawFilesFooter(c *ckCanvas, pal overlay.Palette, s *filesSide, x0, right, y int, keys bool) {
 	e := &m.explorer
 	prompt := e.prompt
 	if !keys {
 		prompt = filesNoPrompt
 	}
+	line := func(label, hint string) {
+		c.text(x0, y, right, ckSeg{t: label + " ", fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: e.input, fg: pal.Fg}, ckSeg{t: "▏", fg: pal.Accent})
+		if hint != "" {
+			c.textR(right, y, ckSeg{t: hint, fg: pal.FgMute})
+		}
+	}
 	switch prompt {
 	case filesPromptFilter:
-		c.text(x0, y, right, ckSeg{t: "/ ", fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: e.input, fg: pal.Fg}, ckSeg{t: "▏", fg: pal.Accent})
+		line("/", "")
 		return
 	case filesPromptGoTo:
-		c.text(x0, y, right, ckSeg{t: "go to ", fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: e.input, fg: pal.Fg}, ckSeg{t: "▏", fg: pal.Accent})
-		c.textR(right, y, ckSeg{t: "host:path or a path", fg: pal.FgMute})
+		line("go to", "host:path or a path")
+		return
+	case filesPromptNew:
+		line("new", "a name that ends in / makes a folder")
+		return
+	case filesPromptCopy:
+		line("copy to", "host:path or a path")
+		return
+	case filesPromptMove:
+		line("move to", "host:path or a path")
+		return
+	case filesPromptRename:
+		c.text(x0, y, right, ckSeg{t: "rename", fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: "  enter keeps it, esc drops it", fg: pal.FgMute})
 		return
 	}
-	left := plural.Count(len(s.rows), "item")
-	if s.filter != "" {
-		left += " · filter " + s.filter
+	if n, size := filesMarkedSize(s); n > 0 {
+		x := c.text(x0, y, right, ckSeg{t: strconv.Itoa(n) + " marked", fg: pal.AccentBright, attrs: ckBold})
+		c.text(x, y, right, ckSeg{t: " · " + filesSizeText(size) + " · " + plural.Count(len(s.rows), "item"), fg: pal.FgDim})
+	} else {
+		left := plural.Count(len(s.rows), "item")
+		if s.filter != "" {
+			left += " · filter " + s.filter
+		}
+		c.text(x0, y, right, ckSeg{t: left, fg: pal.FgDim})
 	}
-	c.text(x0, y, right, ckSeg{t: left, fg: pal.FgDim})
 	if s.Capped {
 		c.textR(right, y, ckSeg{t: "first " + plural.Count(len(s.Entries), "name") + " of a large folder: / narrows it", fg: pal.FgMute})
+	}
+}
+
+// filesCopiesRows is how many rows the Copies list takes under the sides:
+// none while no copy is to be shown, a header and up to three copies, or
+// one copy and a count when the view is short.
+func (m *OS) filesCopiesRows(h int) int {
+	if !m.transfersShown() || len(m.transfers.rows) == 0 {
+		return 0
+	}
+	n := min(len(m.transfers.rows), 3)
+	if h < 30 {
+		n = 1
+	}
+	return n + 1
+}
+
+// drawFilesCopies draws the Copies list from row y: the copies the dock
+// shows, newest first, each with its route, its bar and its state. It is
+// the Copies panel's mirror, drawn in place.
+func (m *OS) drawFilesCopies(c *ckCanvas, pal overlay.Palette, y, w, rows int) {
+	c.fill(0, y, w, rows, ckColor(pal.Panel))
+	c.text(1, y, w-1, ckSeg{t: "Copies", fg: pal.Fg, attrs: ckBold})
+	list := m.transfers.rows
+	count := "1 copy"
+	if len(list) != 1 {
+		count = strconv.Itoa(len(list)) + " copies"
+	}
+	c.textR(w-1, y, ckSeg{t: count, fg: pal.FgDim})
+	shown := rows - 1
+	for i := 0; i < shown && i < len(list); i++ {
+		r := list[i]
+		ry := y + 1 + i
+		name := printableTitle(r.Name)
+		if r.Kind == "dir" {
+			name += "/"
+		}
+		route := transferArrow() + " " + transferPlaceShort(r.Dst.Host) + " " + m.filesShortOn(r.Dst.Host, path.Dir(r.Dst.Path))
+		status := transferStatus(r, pal, pal.Panel)
+		sw := ansi.StringWidth(status)
+		c.text(2, ry, w-sw-3, ckSeg{t: name, fg: pal.Fg}, ckSeg{t: "  " + route, fg: pal.FgMute})
+		c.draw(w-1-sw, ry, sw, status)
+	}
+	if more := len(list) - shown; more > 0 {
+		c.textR(w-1-ansi.StringWidth(transferStatus(list[0], pal, pal.Panel))-2, y+1, ckSeg{t: "+" + strconv.Itoa(more) + " more", fg: pal.FgMute})
 	}
 }
 
@@ -472,11 +600,12 @@ func (m *OS) filesHints() []filesHint {
 			out = append(out, filesHint{key: keys[0], label: label, run: run})
 		}
 	}
+	// The footer holds what fits at 160 columns, in the order of the mock.
+	// Every other key is in the keys list (?), which-key and keybinds.
 	if e.look {
 		act(config.ActionFilesQuickLook, "close look")
 		look(config.TableQuickLook, "go_inside", "read inside", func(m *OS) tea.Cmd { m.QuickLookGoInside(); return nil })
 		act(config.ActionFilesFill, "fill")
-		look(config.TableQuickLook, "next_view", "next view", func(m *OS) tea.Cmd { return m.QuickLookNextView() })
 	} else {
 		act(config.ActionFilesQuickLook, "look")
 	}
@@ -486,20 +615,26 @@ func (m *OS) filesHints() []filesHint {
 		act(config.ActionFilesReview, "review")
 	}
 	act(config.ActionFilesEdit, "edit in a pane")
-	act(config.ActionFilesOpenSystem, "open with system")
-	act(config.ActionFilesInsertPath, "type path")
-	act(config.ActionFilesCopyPath, "copy path")
+	act(config.ActionFilesMark, "mark")
+	if m.filesTabCur().two {
+		act(config.ActionFilesCopy, "copy")
+		act(config.ActionFilesMove, "move")
+	} else {
+		act(config.ActionFilesCopy, "copy to")
+	}
+	act(config.ActionFilesRename, "rename")
+	act(config.ActionFilesTrash, "trash")
+	if len(e.undo) > 0 {
+		act(config.ActionFilesUndo, "undo")
+	}
 	act(config.ActionFilesFilter, "filter")
-	act(config.ActionFilesFind, "find")
-	act(config.ActionFilesGoTo, "go to")
 	act(config.ActionFilesHidden, "hidden")
-	act(config.ActionFilesSort, "sort")
 	if m.filesTabCur().two {
 		act(config.ActionFilesOtherSide, "other side")
-		act(config.ActionFilesTwoSides, "one side")
 	} else {
 		act(config.ActionFilesTwoSides, "two sides")
 	}
+	act(config.ActionFilesGoTo, "go to")
 	act(config.ActionFilesClose, "close")
 	return out
 }

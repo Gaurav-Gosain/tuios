@@ -79,6 +79,28 @@ func (m *OS) FilesAction(act string) tea.Cmd {
 		m.FilesZoom()
 	case config.ActionFilesReview:
 		return m.FilesReview()
+	case config.ActionFilesMark:
+		m.FilesMark()
+	case config.ActionFilesMarkAll:
+		m.FilesMarkAll()
+	case config.ActionFilesCopy:
+		return m.FilesCopy(false)
+	case config.ActionFilesMove:
+		return m.FilesCopy(true)
+	case config.ActionFilesYank:
+		m.FilesYank()
+	case config.ActionFilesPaste:
+		return m.FilesPaste(false)
+	case config.ActionFilesPasteMove:
+		return m.FilesPaste(true)
+	case config.ActionFilesRename:
+		m.FilesRename()
+	case config.ActionFilesNew:
+		m.FilesNew()
+	case config.ActionFilesTrash:
+		return m.FilesTrash()
+	case config.ActionFilesUndo:
+		return m.FilesUndo()
 	default:
 		if n, ok := strings.CutPrefix(act, "files_tab_"); ok && len(n) == 1 && n[0] >= '1' && n[0] <= '9' {
 			m.FilesGoTab(int(n[0] - '1'))
