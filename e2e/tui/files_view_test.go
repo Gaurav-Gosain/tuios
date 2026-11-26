@@ -519,11 +519,29 @@ func TestFilesViewCopies(t *testing.T) {
 	sendKeys(t, term, "c")
 	moving := regexp.MustCompile(` [1-9][0-9]?%`)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return containsAll(s.Text(), "Copies", "3 copies", "part3.bin") && moving.MatchString(s.Text()) && strings.Count(s.Text(), "part2.bin") >= 3
+		return containsAll(s.Text(), "Copies", "1 running", "~/project/big", "~/out", "left") && moving.MatchString(s.Text()) && strings.Count(s.Text(), "part2.bin") >= 3
 	}, 30*time.Second); err != nil {
-		t.Fatalf("the copies did not show on their way: %v\n%s", err, term.Snapshot())
+		t.Fatalf("the copies did not show on their way as one job: %v\n%s", err, term.Snapshot())
 	}
 	copiesFrame(t, term, "files-copy-mid")
+	// The job's pause and go on are clickable.
+	clickWord := func(word string) {
+		t.Helper()
+		s := term.Screen()
+		_, rows := s.Size()
+		for r := rows - 1; r > 0; r-- {
+			if i := strings.LastIndex(s.Line(r), word); i >= 0 {
+				mouseClick(t, term, len([]rune(s.Line(r)[:i]))+1, r, tuitest.MouseLeft, 0)
+				return
+			}
+		}
+		t.Fatalf("no %q on screen:\n%s", word, term.Snapshot())
+	}
+	clickWord("pause")
+	railLists(t, term, "a click on pause did not pause the job", []string{"1 paused", "go on"}, []string{"1 running"})
+	copiesFrame(t, term, "files-copy-paused")
+	clickWord("go on")
+	railLists(t, term, "a click on go on did not go on", []string{"1 running"}, []string{"1 paused"})
 	for _, name := range []string{"part1.bin", "part2.bin", "part3.bin"} {
 		filesWaitDisk(t, 120*time.Second, "the copy of "+name+" to land", func() bool {
 			_, err := os.Stat(filepath.Join(far, name))
@@ -536,6 +554,8 @@ func TestFilesViewCopies(t *testing.T) {
 		t.Fatalf("the far side never listed the three files: %v\n%s", err, term.Snapshot())
 	}
 	copiesFrame(t, term, "files-copy-done")
+	// One notice for the job, not one per file.
+	railLists(t, term, "the job did not tell its end once", []string{"Copied 3 files to build."}, []string{"Copied part1.bin"})
 	for _, name := range []string{"part1.bin", "part2.bin", "part3.bin"} {
 		if a, b := fileSHA(t, filepath.Join(big, name)), fileSHA(t, filepath.Join(far, name)); a != b {
 			t.Fatalf("%s on build has sha256 %s, its source %s", name, b, a)

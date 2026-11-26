@@ -41,6 +41,9 @@ func (m *OS) FilesClick(x, y int) tea.Cmd {
 		}
 		return nil
 	}
+	if cmd, ok := m.FilesCopiesClick(x, y); ok {
+		return cmd
+	}
 	if y == e.tabsY {
 		for i, h := range e.segHits {
 			if h.x1 > h.x0 && x >= h.x0 && x < h.x1 {

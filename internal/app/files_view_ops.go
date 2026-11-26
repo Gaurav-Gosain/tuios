@@ -237,6 +237,8 @@ func (m *OS) filesSend(srcHost, srcDir string, srcLocal bool, names []string, ds
 		m.ShowNotification("tuios cannot copy inside another machine yet. m moves there.", "info", m.Settings.NotificationDuration)
 		return nil
 	}
+	job := m.filesNewJob(srcHost, srcDir, names, dstHost, dstDir, move)
+	jobID := job.id
 	cmds := make([]tea.Cmd, 0, len(names))
 	rate := 0
 	if v, err := strconv.Atoi(testknob.String("files_rate")); err == nil {
@@ -266,7 +268,7 @@ func (m *OS) filesSend(srcHost, srcDir string, srcLocal bool, names []string, ds
 					msg.Row = &row
 				}
 			}
-			return msg
+			return filesJobCallMsg{job: jobID, call: msg}
 		})
 	}
 	// One after another: the calls share the client's connection to its

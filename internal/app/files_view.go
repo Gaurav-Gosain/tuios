@@ -186,6 +186,15 @@ type explorerState struct {
 	// last. See files_view_ops.go.
 	clip *filesClip
 	undo []filesUndo
+	// jobs is the copies the view started, a job per action, jobSeq the last
+	// job id, and jobOpen the jobs whose files the Copies list shows. They
+	// outlive the view, so a job that ends after it closed still tells its
+	// end once. copyHits is the Copies list's click targets as last drawn.
+	// See files_view_copies.go.
+	jobs     []*filesJob
+	jobSeq   int
+	jobOpen  map[int]bool
+	copyHits []filesCopyHit
 	// look says quick look is beside the list.
 	look bool
 	// gen moves when anything the view draws changes, for its frame cache.
@@ -288,7 +297,7 @@ func (m *OS) OpenFilesViewFind() tea.Cmd {
 func (m *OS) openFilesViewAt(host, dir, origin string) tea.Cmd {
 	e := &m.explorer
 	m.filesGitStop()
-	*e = explorerState{open: true, origin: origin, sort: e.sort, reverse: e.reverse, hidden: e.hidden, gen: e.gen + 1, ids: e.ids, divX: -1, undo: e.undo, clip: e.clip}
+	*e = explorerState{open: true, origin: origin, sort: e.sort, reverse: e.reverse, hidden: e.hidden, gen: e.gen + 1, ids: e.ids, divX: -1, undo: e.undo, clip: e.clip, jobs: e.jobs, jobSeq: e.jobSeq, jobOpen: e.jobOpen}
 	t := &filesTab{ratio: filesRatioDefault}
 	t.sides[0] = m.newFilesSide(host)
 	e.tabs = []*filesTab{t}
@@ -310,7 +319,7 @@ func (m *OS) CloseFilesView() {
 		m.dropQuickLook()
 	}
 	m.filesGitStop()
-	*e = explorerState{sort: e.sort, reverse: e.reverse, hidden: e.hidden, gen: e.gen + 1, ids: e.ids, divX: -1, undo: e.undo, clip: e.clip}
+	*e = explorerState{sort: e.sort, reverse: e.reverse, hidden: e.hidden, gen: e.gen + 1, ids: e.ids, divX: -1, undo: e.undo, clip: e.clip, jobs: e.jobs, jobSeq: e.jobSeq, jobOpen: e.jobOpen}
 }
 
 // filesCaller is how the view asks a machine for a listing, or nil for a

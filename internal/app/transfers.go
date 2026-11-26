@@ -132,6 +132,9 @@ type transferCallMsg struct {
 	Name string
 	Row  *session.TransferRow
 	Err  error
+	// Quiet says the start of the copy says nothing: it is a file of a
+	// Files view job, which tells its end once.
+	Quiet bool
 }
 
 // transfersClearedMsg is the answer to a clear.
@@ -520,6 +523,10 @@ func (m *OS) applyTransferRow(row session.TransferRow, progress bool) tea.Cmd {
 	if cmd, taken := m.dropCopyEnded(row); taken {
 		return tea.Batch(cmd, landed)
 	}
+	if j := m.filesJobOfCopy(row.ID); j != nil {
+		// A file of a Files view job: the job tells its end, once.
+		return tea.Batch(landed, m.filesJobMaybeEnded(j))
+	}
 	m.transferEndNotice(row)
 	return landed
 }
@@ -705,7 +712,7 @@ func (m *OS) applyTransferCall(msg transferCallMsg) tea.Cmd {
 	}
 	cmd := m.applyTransferRow(*msg.Row, false)
 	m.transfersChanged()
-	if msg.Verb == "transfer-start" {
+	if msg.Verb == "transfer-start" && !msg.Quiet {
 		m.ShowNotification("The copy of "+printableTitle(msg.Row.Name)+" to "+transferPlace(msg.Row.Dst.Host)+" started.", "info", m.Settings.NotificationDuration)
 	}
 	return tea.Batch(cmd, m.transfersLingerCmd())

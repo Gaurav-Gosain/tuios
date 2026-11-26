@@ -3,7 +3,6 @@ package app
 import (
 	"cmp"
 	"image/color"
-	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -113,7 +112,7 @@ func (m *OS) drawFilesView(c *ckCanvas, pal overlay.Palette, w, h, top int) {
 	copies := m.filesCopiesRows(h)
 	body := filesBox{x: 0, y: 2, w: w, h: max(hintsY-2-copies, 0)}
 	if copies > 0 {
-		m.drawFilesCopies(c, pal, hintsY-copies, w, copies)
+		m.drawFilesCopies(c, pal, hintsY-copies, w, copies, top)
 	}
 	look := e.look && m.quickLook.open && m.quickLook.files
 	for _, s := range t.sides {
@@ -176,8 +175,13 @@ func (m *OS) drawFilesTopBar(c *ckCanvas, pal overlay.Palette, g filesGlyphs, w,
 	} else {
 		right += " · hidden off"
 	}
+	ink := pal.FgDim
+	if sum := m.filesCopiesSummary(); sum != "" {
+		// While copies move, the top bar says how many and how fast.
+		right, ink = transferArrow()+" "+sum, pal.AccentBright
+	}
 	rx := w - 1 - ansi.StringWidth(right)
-	c.textR(w-1, 0, ckSeg{t: right, fg: pal.FgDim})
+	c.textR(w-1, 0, ckSeg{t: right, fg: ink})
 	x += 3
 	e.tabHits = e.tabHits[:0]
 	e.segHits = [2]filesTabHit{}
@@ -452,14 +456,21 @@ func (m *OS) drawFilesRows(c *ckCanvas, pal overlay.Palette, s *filesSide, b fil
 		if r.Kind == "dir" {
 			name += "/"
 		}
-		c.text(nameX+1, ry, nameX+nameW, ckSeg{t: name, fg: pal.FgDim, attrs: ckItalic})
-		pct := transferPercent(r.Done, r.Size)
+		// The file's own mark, muted: it is not here yet.
+		x := nameX - 1
+		if icon := fileIconFor(r.Name, r.Kind == "dir"); icon.Glyph != "" && !m.Settings.NoNerdFont && !overlay.UseASCII() {
+			c.text(x+1, ry, nameX+nameW, ckSeg{t: icon.Glyph, fg: pal.FgMute})
+		}
+		c.text(nameX+2, ry, nameX+nameW, ckSeg{t: name, fg: pal.FgDim, attrs: ckItalic})
+		pct := float64(transferPercent(r.Done, r.Size))
 		switch {
 		case r.State == "done":
-			c.textR(sizeR, ry, ckSeg{t: "checked", fg: pal.Success})
+			c.textR(sizeR, ry, ckSeg{t: "✓ checked", fg: pal.Success})
 		case showSize:
-			bar := filesBar(pct, 6)
-			c.textR(sizeR, ry, ckSeg{t: bar, fg: pal.Accent}, ckSeg{t: " " + strconv.Itoa(pct) + "%", fg: pal.FgDim})
+			pctText := " " + strconv.Itoa(int(pct)) + "%"
+			bx := sizeR - 10 - len(pctText)
+			filesBar(c, pal, bx, ry, 10, pct, pal.Accent)
+			c.textR(sizeR, ry, ckSeg{t: pctText, fg: pal.FgDim})
 		}
 		if showMod && r.State == "running" && r.Rate > 0 {
 			c.textR(modR, ry, ckSeg{t: units.Bytes(int64(r.Rate)) + "/s", fg: pal.FgMute})
@@ -467,17 +478,6 @@ func (m *OS) drawFilesRows(c *ckCanvas, pal overlay.Palette, s *filesSide, b fil
 			c.textR(modR, ry, ckSeg{t: r.State, fg: pal.Warning})
 		}
 	}
-}
-
-// filesBar is a bar of cells cells for pct percent, in shapes rather than
-// colour, so it reads at 16 colours: ━ for the part done and ╺ for the rest.
-func filesBar(pct, cells int) string {
-	n := min(max(pct*cells/100, 0), cells)
-	done, rest := "━", "╺"
-	if overlay.UseASCII() {
-		done, rest = "#", "-"
-	}
-	return strings.Repeat(done, n) + strings.Repeat(rest, cells-n)
 }
 
 // drawFilesFooter draws the count, the marks, the filter or the line being
@@ -522,55 +522,13 @@ func (m *OS) drawFilesFooter(c *ckCanvas, pal overlay.Palette, s *filesSide, x0,
 		if s.filter != "" {
 			left += " · filter " + s.filter
 		}
-		c.text(x0, y, right, ckSeg{t: left, fg: pal.FgDim})
+		x := c.text(x0, y, right, ckSeg{t: left, fg: pal.FgDim})
+		if n := len(m.filesArrivals(s)); n > 0 {
+			c.text(x, y, right, ckSeg{t: " · ", fg: pal.FgMute}, ckSeg{t: strconv.Itoa(n) + " arriving", fg: pal.AccentBright})
+		}
 	}
 	if s.Capped {
 		c.textR(right, y, ckSeg{t: "first " + plural.Count(len(s.Entries), "name") + " of a large folder: / narrows it", fg: pal.FgMute})
-	}
-}
-
-// filesCopiesRows is how many rows the Copies list takes under the sides:
-// none while no copy is to be shown, a header and up to three copies, or
-// one copy and a count when the view is short.
-func (m *OS) filesCopiesRows(h int) int {
-	if !m.transfersShown() || len(m.transfers.rows) == 0 {
-		return 0
-	}
-	n := min(len(m.transfers.rows), 3)
-	if h < 30 {
-		n = 1
-	}
-	return n + 1
-}
-
-// drawFilesCopies draws the Copies list from row y: the copies the dock
-// shows, newest first, each with its route, its bar and its state. It is
-// the Copies panel's mirror, drawn in place.
-func (m *OS) drawFilesCopies(c *ckCanvas, pal overlay.Palette, y, w, rows int) {
-	c.fill(0, y, w, rows, ckColor(pal.Panel))
-	c.text(1, y, w-1, ckSeg{t: "Copies", fg: pal.Fg, attrs: ckBold})
-	list := m.transfers.rows
-	count := "1 copy"
-	if len(list) != 1 {
-		count = strconv.Itoa(len(list)) + " copies"
-	}
-	c.textR(w-1, y, ckSeg{t: count, fg: pal.FgDim})
-	shown := rows - 1
-	for i := 0; i < shown && i < len(list); i++ {
-		r := list[i]
-		ry := y + 1 + i
-		name := printableTitle(r.Name)
-		if r.Kind == "dir" {
-			name += "/"
-		}
-		route := transferArrow() + " " + transferPlaceShort(r.Dst.Host) + " " + m.filesShortOn(r.Dst.Host, path.Dir(r.Dst.Path))
-		status := transferStatus(r, pal, pal.Panel)
-		sw := ansi.StringWidth(status)
-		c.text(2, ry, w-sw-3, ckSeg{t: name, fg: pal.Fg}, ckSeg{t: "  " + route, fg: pal.FgMute})
-		c.draw(w-1-sw, ry, sw, status)
-	}
-	if more := len(list) - shown; more > 0 {
-		c.textR(w-1-ansi.StringWidth(transferStatus(list[0], pal, pal.Panel))-2, y+1, ckSeg{t: "+" + strconv.Itoa(more) + " more", fg: pal.FgMute})
 	}
 }
 
