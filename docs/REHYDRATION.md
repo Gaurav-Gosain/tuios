@@ -743,6 +743,18 @@ frame's `Seq` as `SubscribeFromSnapshot` does. So the invariant holds: the
 client holds the stream up to `Seq` by the frame, and gets the bytes after
 it.
 
+A kitty graphics command is the exception to "the daemon's screen is the
+client's screen". Only the client moves the cursor past an image it places,
+and only the client draws it. So a frame never passes over a graphics command
+the client has not got. The stream is rebuilt where the command starts, and
+the frame goes again with that position when only graphics commands come
+between.
+
+A client that lists `pty-frame-acks` reports each frame once it draws it
+(`MsgPTYFrameDrawn`). The daemon sends the next frame only after that
+report, or 100 ms after the last frame when no report comes. The report does
+not change the invariant: it only decides when the next frame goes.
+
 ## The ring's size
 
 64KB, unchanged, but it is now sized for a different job. It used to have to

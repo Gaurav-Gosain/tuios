@@ -7000,11 +7000,43 @@ The idle test passes unchanged. The binary is 24 KiB larger.
   because a frame waits for the emulator lock while a large batch is parsed.
   At 120 the client CPU per MB is about twice the 60 figure and still a
   third to a half of what bytes cost.
-- **The daemon's CPU per MB with 4 and 9 busy panes** is 7 to 10% higher. It
-  is the same at 60 and 120 frames a second, and frames are under 2% of the
-  daemon's samples in a profile of 9 busy panes, so it is not the capture.
-  Not explained yet.
+- **The daemon's CPU per MB with 4 and 9 busy panes** was 7 to 10% higher.
+  The frames caused it: with `pty_frames=off` the same build used the same
+  daemon CPU as before. The daemon sent frames that the client never drew.
+  The next section fixes it.
 - **A lone `yes` pane in the timed case** writes 79 frames a second
   against 103. The drain of the same pane writes more frames than before. The
   timed case keeps the daemon parsing all the time, and a frame waits for the
   emulator lock.
+### The frames follow the client's drawing
+
+A client that lists the `pty-frame-acks` feature reports each frame of a
+pane once it draws it (`MsgPTYFrameDrawn`). The report goes from the pass
+that picks the panes to draw, for a pane out of view as well. The daemon then
+holds one frame in flight for each stream. It sends the next frame when the
+screen moved and the client reported the last one. When no report comes in
+100 ms, it sends the frame anyway, so a lost report never freezes the pane.
+The last frame before the stream goes back to bytes waits in the same way.
+
+The same benchmarks, three rounds of each build interleaved, medians. "Bytes"
+is the build before frames.
+
+| | bytes | frames | frames after a report |
+|---|---|---|---|
+| daemon CPU per MB: 4 / 9 busy panes | 45.7 / 44.0 ms | 48.6 / 44.9 ms | 45.6 / 42.5 ms |
+| client CPU per MB: 4 / 9 busy panes | 35.5 / 35.4 ms | 7.9 / 17.4 ms | 6.5 / 16.1 ms |
+| daemon CPU per MB: yes / seq / cat | 51.3 / 64.3 / 16.0 ms | 46.4 / 64.6 / 15.4 ms | 48.5 / 65.9 / 15.4 ms |
+| client CPU per MB: yes / seq / cat | 28.9 / 38.0 / 13.3 ms | 6.5 / 12.0 / 4.5 ms | 6.1 / 11.0 / 4.4 ms |
+| key in the flooded pane: p50 / p99 | 3.6 / 16.1 ms | 3.5 / 8.3 ms | 4.0 / 8.0 ms |
+| frames a second, 4 / 9 busy panes | 111 / 90 | 169 / 141 | 195 / 165 |
+| key with 4 busy panes: p50 / p99 | 17.9 / 42.3 ms | 11.1 / 21.9 ms | 9.9 / 18.4 ms |
+| key with 9 busy panes: p50 / p99 | 42.9 / 85.3 ms | 19.2 / 33.7 ms | 15.7 / 29.8 ms |
+| client CPU with 4 / 9 busy panes | 2264 / 2537 ms/s | 584 / 680 ms/s | 555 / 555 ms/s |
+| frames a second, a lone `yes` pane | 86.5 | 79.3 | 79.5 |
+
+With 4 and 9 busy panes the daemon now uses no more CPU per MB than with
+bytes. The client draws more frames a second, and a key waits less. A lone
+`yes` pane still gets fewer frames a second than with bytes: the report does
+not change the wait for the emulator lock. The idle test passes. The binary
+is 7,680 bytes larger on windows/amd64.
+
