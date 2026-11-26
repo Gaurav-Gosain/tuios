@@ -4155,6 +4155,7 @@ Read what the agent in a pane changed: the diff of its worktree against the base
 | `context` | int |  | `3` | Lines of context around each change, 0 to 20. |
 | `index` | string |  |  | Read the worktree's index instead of the base. unstaged is the index against the working files, untracked files included. staged is HEAD against the index. Omit for the diff against the base. Not with base, against or uncommitted. One of `unstaged` or `staged`. |
 | `highlight` | bool |  | `false` | Add the syntax colour and the changed part to each line: hl and changed. classes names the colour classes. |
+| `origins` | bool |  | `false` | Say who made each changed line: the person or an agent, and in which turn. Each line gets origin, and the answer gets authors. |
 
 | Result field | Type | Description |
 |---|---|---|
@@ -4174,6 +4175,7 @@ Read what the agent in a pane changed: the diff of its worktree against the base
 | `totals` | object | files, added and removed over the whole diff. |
 | `truncated` | bool | The diff passed a cap (400 files, 2 MiB, 5000 lines in a file) and the files past it carry counts only. |
 | `notes` | []object | The pane's review notes, found again in this diff, as review-note lists them. |
+| `authors` | []object | With origins: who made the lines. The first is the person. Each other is an agent turn: kind, agent, pane, session, turn, working and at. A line's origin is its place in this list, from 1. |
 | `untrusted` | bool | Always true: the text is the repository's, not the daemon's. |
 
 ```json

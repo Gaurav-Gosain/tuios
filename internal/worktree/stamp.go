@@ -47,11 +47,12 @@ func SnapshotStamp(ctx context.Context, path string, maxUntracked int64) (*Stamp
 	if err != nil {
 		return nil, nil, err
 	}
-	tree, err := snapshotInto(tctx, path, skipped, filepath.Join(tmp.path, "index"))
+	tree, late, err := snapshotInto(tctx, path, skipped, maxUntracked, filepath.Join(tmp.path, "index"))
 	if err != nil {
 		tmp.remove()
 		return nil, nil, err
 	}
+	skipped = mergeSkipped(skipped, late)
 	s := &Stamp{Tree: tree, tmp: tmp, skipped: map[string]bool{}, dirs: map[string]time.Time{}}
 	for _, p := range skipped {
 		s.skipped[p] = true

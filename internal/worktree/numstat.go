@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -73,11 +74,11 @@ func SnapshotTree(ctx context.Context, path string, maxUntracked int64) (string,
 	if err != nil {
 		return "", nil, err
 	}
-	tree, err := snapshotTreeExcluding(ctx, path, skipped)
+	tree, late, err := snapshotTreeExcluding(ctx, path, skipped, maxUntracked)
 	if err != nil {
 		return "", nil, err
 	}
-	return tree, skipped, nil
+	return tree, mergeSkipped(skipped, late), nil
 }
 
 // jjMaterialize returns tree, jj's tree of the working-copy commit in the
@@ -129,26 +130,40 @@ func jjMaterialize(ctx context.Context, root, tree string) (string, error) {
 	return strings.TrimSpace(out), err
 }
 
+// mergeSkipped is the large files a caller listed first and the ones stageAll
+// found after it, sorted.
+func mergeSkipped(skipped, late []string) []string {
+	if len(late) == 0 {
+		return skipped
+	}
+	all := append(slices.Clone(skipped), late...)
+	slices.Sort(all)
+	return slices.Compact(all)
+}
+
 // snapshotTreeExcluding is SnapshotTree with the paths in exclude, relative
-// to path, left out. They are never read, so a large file costs nothing.
-func snapshotTreeExcluding(ctx context.Context, path string, exclude []string) (string, error) {
+// to path, left out. They are never read, so a large file costs nothing. An
+// untracked file larger than limit bytes that was not in exclude, because it
+// was made or grew after the caller listed them, is left out too and
+// returned.
+func snapshotTreeExcluding(ctx context.Context, path string, exclude []string, limit int64) (string, []string, error) {
 	tmp, ctx, err := newTemp(ctx, "index")
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	defer tmp.remove()
-	return snapshotInto(ctx, path, exclude, filepath.Join(tmp.path, "index"))
+	return snapshotInto(ctx, path, exclude, limit, filepath.Join(tmp.path, "index"))
 }
 
 // snapshotInto is snapshotTreeExcluding with the index it writes at index, a
 // file in a folder the caller owns.
-func snapshotInto(ctx context.Context, path string, exclude []string, index string) (string, error) {
+func snapshotInto(ctx context.Context, path string, exclude []string, limit int64, index string) (string, []string, error) {
 	env := []string{"GIT_INDEX_FILE=" + index}
 	if copyIndex(ctx, path, index) {
-		if tree, err := addAndWriteTree(ctx, path, env, exclude); err == nil {
-			return tree, nil
+		if tree, late, err := addAndWriteTree(ctx, path, env, exclude, limit); err == nil {
+			return tree, late, nil
 		} else if ctx.Err() != nil {
-			return "", err
+			return "", nil, err
 		}
 	}
 	// git refuses an empty file as an index, so it starts from nothing.
@@ -157,10 +172,10 @@ func snapshotInto(ctx context.Context, path string, exclude []string, index stri
 	// file is new, so the index starts empty.
 	if _, err := runCtx(ctx, path, env, "rev-parse", "--verify", "--quiet", "HEAD^{commit}"); err == nil {
 		if _, err := runCtx(ctx, path, env, "read-tree", "HEAD"); err != nil {
-			return "", err
+			return "", nil, err
 		}
 	}
-	return addAndWriteTree(ctx, path, env, exclude)
+	return addAndWriteTree(ctx, path, env, exclude, limit)
 }
 
 // copyIndex copies the index of the worktree at path over dest, and reports
@@ -197,15 +212,16 @@ func copyIndex(ctx context.Context, path, dest string) bool {
 
 // addAndWriteTree stages every file of the worktree at path into the index env
 // names and writes it as a tree.
-func addAndWriteTree(ctx context.Context, path string, env []string, exclude []string) (string, error) {
-	if err := StageAll(ctx, path, env, nil, exclude); err != nil {
-		return "", err
+func addAndWriteTree(ctx context.Context, path string, env []string, exclude []string, limit int64) (string, []string, error) {
+	late, err := stageAll(ctx, path, env, nil, exclude, limit)
+	if err != nil {
+		return "", nil, err
 	}
 	out, err := runCtx(ctx, path, env, "write-tree")
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	return strings.TrimSpace(out), nil
+	return strings.TrimSpace(out), late, nil
 }
 
 // StageAll stages in the worktree at dir what git add --all would: each
@@ -220,19 +236,44 @@ func addAndWriteTree(ctx context.Context, path string, env []string, exclude []s
 // childproc.Git gives. ls-files and update-index read only a submodule's
 // commit.
 func StageAll(ctx context.Context, dir string, env, specs, exclude []string) error {
+	_, err := stageAll(ctx, dir, env, specs, exclude, 0)
+	return err
+}
+
+// stageAll is StageAll that also leaves out each untracked file larger than
+// limit bytes (none when limit is zero or less), and returns those paths.
+//
+// The size is read from the list stageAll stages, just before it stages it.
+// A caller's own list of large files is older: an agent that writes while a
+// snapshot runs can make a file after it, which git would then read whole.
+// What is left is a file that grows in the moment between the size check
+// and git's read of it.
+func stageAll(ctx context.Context, dir string, env, specs, exclude []string, limit int64) ([]string, error) {
 	if len(specs) == 0 {
 		specs = []string{"."}
 	}
 	args := append([]string{"ls-files", "-z", "--modified", "--deleted", "--others", "--exclude-standard", "--"}, specs...)
 	out, err := runCtx(ctx, dir, env, args...)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	var untracked map[string]bool
+	if limit > 0 {
+		others, err := runCtx(ctx, dir, env, append([]string{"ls-files", "-z", "--others", "--exclude-standard", "--"}, specs...)...)
+		if err != nil {
+			return nil, err
+		}
+		untracked = map[string]bool{}
+		for p := range strings.SplitSeq(others, "\x00") {
+			untracked[p] = p != ""
+		}
 	}
 	skip := make(map[string]bool, len(exclude))
 	for _, p := range exclude {
 		skip[filepath.ToSlash(p)] = true
 	}
 	var in strings.Builder
+	var late []string
 	seen := map[string]bool{}
 	for p := range strings.SplitSeq(out, "\x00") {
 		// A path that ends in a slash is a repository inside the work tree
@@ -241,14 +282,21 @@ func StageAll(ctx context.Context, dir string, env, specs, exclude []string) err
 			continue
 		}
 		seen[p] = true
+		if untracked[p] {
+			info, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(p)))
+			if err == nil && info.Mode().IsRegular() && info.Size() > limit {
+				late = append(late, p)
+				continue
+			}
+		}
 		in.WriteString(p)
 		in.WriteByte(0)
 	}
 	if in.Len() == 0 {
-		return nil
+		return late, nil
 	}
 	_, err = runStdin(ctx, dir, env, in.String(), "update-index", "--add", "--remove", "-z", "--stdin")
-	return err
+	return late, err
 }
 
 // WorkingNumstat counts what the worktree at path changed against base, a
