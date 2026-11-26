@@ -240,8 +240,10 @@ func checkProgramResumeRules(t *testing.T, base string) {
 		mustCLI(t, base, "send-text", "-s", s, "rep "+mode+" $$ "+strings.Join(args, " ")+"\n")
 	}
 	sync := func(mark string) {
-		mustCLI(t, base, "send-text", "-s", s, "echo SYNC-"+mark+"\n")
-		waitUnwrapped(t, base, s, "\nSYNC-"+mark)
+		// The typed line holds SYNC-%s, never SYNC-mark, so only the output
+		// matches, wherever typeahead put it.
+		mustCLI(t, base, "send-text", "-s", s, "printf 'SYNC-%s\\n' "+mark+"\n")
+		waitUnwrapped(t, base, s, "SYNC-"+mark)
 	}
 
 	rep("good", "cat", "good")
