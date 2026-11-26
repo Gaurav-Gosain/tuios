@@ -2775,7 +2775,7 @@ except the hunk and file motions and the stage keys, which are in
 | `s` | One column, or the old and new sides next to each other where the diff column is wide enough (about 120 columns of screen) |
 | `h` / `l`, `left` / `right` | Scroll the focused panel sideways. In the diff, scroll the code. In the file list, scroll the paths to show the start of a long path |
 | `tab` | Focus the file list or the diff. A review opens on the diff, or on the list with `[review] focus = "files"` (see [CONFIGURATION.md](CONFIGURATION.md#where-a-review-opens)) |
-| `enter` | In the file list: open that file |
+| `enter` | In the file list: open that file. On a hunk's header: fold the hunk to its header, or unfold it |
 | `c` | A note on the line under the cursor |
 | `C` | A note on the whole hunk |
 | `e` | Edit the note under the cursor |
@@ -2793,6 +2793,9 @@ hunk, and `partly staged` when it holds some of it. `a` stages only the lines of
 the hunk you see. When git splits those lines into two hunks of the index, the
 first `a` stages one part and the hunk shows `partly staged`. Press `a` again
 to stage the rest. The keys do nothing in a comparison of two attempts.
+
+The review also works with the mouse only. See
+[Reviewing in the client](AGENT_STATE.md#reviewing-in-the-client).
 
 In the note line and the other one-line prompts every printable key is text,
 a paste is typed as one line, `enter` saves and `esc` drops.

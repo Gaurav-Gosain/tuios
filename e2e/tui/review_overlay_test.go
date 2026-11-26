@@ -490,8 +490,10 @@ func TestReviewFooterKeepsItsRightMargin(t *testing.T) {
 	waitScreen(t, term, "s did not switch to the split view", "s unified", "esc close")
 	saveArtifact(t, term, artifactDir(t), "review-split-footer")
 	s := term.Screen()
-	line := strings.TrimRight(s.Line(rowWith(s, "esc close")), " ")
-	if !strings.HasSuffix(line, "esc close │") {
+	// The last hint is esc close, and at least one cell of margin is left
+	// before the frame. How many more depends on which hints fit.
+	line := strings.TrimSuffix(strings.TrimRight(s.Line(rowWith(s, "esc close")), " "), "│")
+	if !strings.HasSuffix(strings.TrimRight(line, " "), "esc close") || !strings.HasSuffix(line, " ") {
 		t.Fatalf("the footer does not end in a cell of margin before the frame: %q\n%s", line, term.Snapshot())
 	}
 }

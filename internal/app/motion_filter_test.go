@@ -182,6 +182,24 @@ func TestMotionFilterPassesACtrlDragGrab(t *testing.T) {
 	}
 }
 
+// TestMotionFilterPassesAReviewDrag: a press on the review's rule or scroll
+// bar drags it, so the motion after it must reach Update.
+//
+// Negative control: remove the review clause and this fails.
+func TestMotionFilterPassesAReviewDrag(t *testing.T) {
+	o := filterOS(t)
+	o.Settings.Links = config.LinksOff
+	o.review.open = true
+	over := tea.MouseMotionMsg{X: 50, Y: 10, Button: tea.MouseLeft}
+	if FilterMouseMotion(o, over) != nil {
+		t.Fatal("motion over the review passed with nothing held")
+	}
+	o.review.drag = reviewDragBar
+	if FilterMouseMotion(o, over) == nil {
+		t.Error("motion was dropped while the review's scroll bar is held; the drag can never move it")
+	}
+}
+
 // TestMotionFilterFeedsZenMouseMode. The mouse variant of zen mode reveals the
 // borders while the pointer moves and reads the clock of the last motion that
 // reached Update, so it has to see motion, over chrome as much as over a pane.

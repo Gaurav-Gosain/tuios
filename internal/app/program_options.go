@@ -316,6 +316,12 @@ func FilterMouseMotion(model tea.Model, msg tea.Msg) tea.Msg {
 		return msg
 	}
 
+	// A press on the review's rule or its scroll bar drags it as the pointer
+	// moves. See review_mouse.go.
+	if m.review.open && m.review.drag != reviewDragNone && movedCell {
+		return msg
+	}
+
 	// Allow motion events while a floating overlay panel is being dragged.
 	// Overlay drags don't set m.Dragging, so without this the motion events
 	// that move the panel are filtered out and the drag never tracks.

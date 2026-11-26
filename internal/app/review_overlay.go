@@ -253,6 +253,23 @@ type reviewState struct {
 	staging bool
 	// undo is what z takes back, newest last.
 	undo []reviewUndoStep
+	// listWidth is the file list's width a drag on the rule set, 0 for the
+	// width the list's paths ask for. Like split it outlives the review.
+	listWidth int
+	// listShown is the file the list last scrolled to. The list follows the
+	// file when it changes, and the wheel scrolls it freely otherwise.
+	listShown int
+	// folds are the hunks folded to their header. See review_mouse.go.
+	folds map[reviewFold]bool
+	// hintHits and hintRow are where the last frame drew the footer's key
+	// hints, and bar where it drew the diff's scroll bar, for the mouse.
+	hintHits []reviewHintSpan
+	hintRow  int
+	bar      reviewScrollBar
+	// drag is what a held press moves, and barGrab the row of the thumb the
+	// press took it by.
+	drag    reviewDrag
+	barGrab int
 	// statusID is the dock message the review itself raised last. The
 	// overlay covers the dock, so it shows that one on its status line. It
 	// shows no other: a pane closing or a client resizing is the dock's news,
@@ -811,13 +828,16 @@ func (m *OS) ReviewEdge(end bool) {
 	}
 }
 
-// ReviewEnter jumps to the file under the list's cursor.
+// ReviewEnter jumps to the file under the list's cursor. In the diff it
+// folds or unfolds the hunk whose header the cursor is on.
 func (m *OS) ReviewEnter() {
 	r := &m.review
 	if r.listFocus {
 		r.listFocus = false
 		r.cursor, r.scroll = 0, 0
+		return
 	}
+	m.ReviewFoldHunk()
 }
 
 // ReviewFile moves to the next file, or the previous for dir < 0.

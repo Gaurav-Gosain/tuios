@@ -190,6 +190,9 @@ func (m *OS) reviewLayout() (w, h, listW, diffW, paneH int) {
 		}
 	}
 	listW = min(max(widest, reviewListMin), inner*reviewListShare/100)
+	if lw := m.review.listWidth; lw > 0 {
+		listW = min(max(lw, reviewListMin), max(inner-5-reviewDiffMin, reviewListMin))
+	}
 	// A space either side of the list and of the diff, and the rule between.
 	diffW = inner - listW - 5
 	paneH = h - 6
@@ -410,7 +413,12 @@ func (m *OS) reviewRows(width int) []reviewRow {
 	}
 	for h, hunk := range e.file.Hunks {
 		rows = append(rows, reviewRow{kind: reviewRowHunk, hunk: h, line: -1, other: -1, note: -1})
-		if split {
+		// A folded hunk is its header only, with the notes on the whole
+		// hunk and the editor of a new one.
+		switch {
+		case r.reviewFolded(e.path, hunk.Header):
+			// Nothing of the hunk but its header.
+		case split:
 			for _, p := range r.reviewHunk(e.file, h, -1).pairs {
 				switch {
 				case p.Right < 0:
@@ -421,7 +429,7 @@ func (m *OS) reviewRows(width int) []reviewRow {
 					line(h, p.Right, -1)
 				}
 			}
-		} else {
+		default:
 			for l := range hunk.Lines {
 				line(h, l, -1)
 			}
@@ -548,15 +556,17 @@ func reviewHintStrip(hints []overlay.Hint, pal overlay.Palette) string {
 	return strings.Join(reviewHintParts(hints, pal), reviewSpaces(2, pal.Surface))
 }
 
-// reviewHints draws key hints in width cells: as many as fit, in order, with
+// reviewHintsSpans draws key hints in width cells: as many as fit, in order, with
 // the last one always shown. A cell of margin is kept on both sides; with it
 // on the left only, a strip that fitted to the cell ran into the frame's
 // right edge. Each hint is rendered once and fitted by the width of its own
 // render, so the strip is the one reviewHintStrip would draw for the hints
 // that fit.
-func reviewHints(hints []overlay.Hint, width int, pal overlay.Palette) string {
+//
+// It also says where each hint it kept is, in cells from the strip's start.
+func reviewHintsSpans(hints []overlay.Hint, width int, pal overlay.Palette) (string, []reviewHintSpan) {
 	if len(hints) == 0 {
-		return reviewSpaces(width, pal.Surface)
+		return reviewSpaces(width, pal.Surface), nil
 	}
 	parts := reviewHintParts(hints, pal)
 	n := len(parts) - 1
@@ -564,7 +574,9 @@ func reviewHints(hints []overlay.Hint, width int, pal overlay.Palette) string {
 	// used is the width of the hints kept so far with their joins.
 	used := 0
 	keep := make([]string, 0, len(parts))
-	for _, p := range parts[:n] {
+	var spans []reviewHintSpan
+	at := 1
+	for i, p := range parts[:n] {
 		w := ansi.StringWidth(p)
 		next := w
 		if len(keep) > 0 {
@@ -575,10 +587,46 @@ func reviewHints(hints []overlay.Hint, width int, pal overlay.Palette) string {
 		}
 		used = next
 		keep = append(keep, p)
+		spans = append(spans, reviewHintSpan{x0: at, x1: at + w, key: reviewHintKey(hints[i])})
+		at += w + 2
 	}
 	keep = append(keep, parts[n])
+	spans = append(spans, reviewHintSpan{x0: at, x1: at + ansi.StringWidth(parts[n]), key: reviewHintKey(hints[n])})
 	strip := reviewSpaces(1, pal.Surface) + strings.Join(keep, reviewSpaces(2, pal.Surface))
-	return strip + reviewSpaces(width-ansi.StringWidth(strip), pal.Surface)
+	return strip + reviewSpaces(width-ansi.StringWidth(strip), pal.Surface), spans
+}
+
+// reviewFoldOpen and reviewFoldShut mark an open and a folded hunk.
+func reviewFoldOpen() string {
+	if overlay.UseASCII() {
+		return "v"
+	}
+	return "▾"
+}
+
+func reviewFoldShut() string {
+	if overlay.UseASCII() {
+		return ">"
+	}
+	return "▸"
+}
+
+// reviewFooterHints draws hints as the footer of a frame h rows high, and
+// records where each one is for the mouse.
+func (m *OS) reviewFooterHints(hints []overlay.Hint, width int, pal overlay.Palette) string {
+	s, spans := reviewHintsSpans(hints, width, pal)
+	m.reviewRecordHints(spans, 1)
+	return s
+}
+
+// reviewRecordHints records spans, in cells from x, as the footer's.
+func (m *OS) reviewRecordHints(spans []reviewHintSpan, x int) {
+	r := &m.review
+	r.hintHits = r.hintHits[:0]
+	for _, s := range spans {
+		r.hintHits = append(r.hintHits, reviewHintSpan{x0: s.x0 + x, x1: s.x1 + x, key: s.key})
+	}
+	r.hintRow = m.GetRenderHeight() - 2
 }
 
 // renderReview draws the review overlay over the whole screen, or the
@@ -588,6 +636,7 @@ func (m *OS) renderReview() string {
 	if !r.open {
 		return ""
 	}
+	r.hintHits, r.bar = r.hintHits[:0], reviewScrollBar{}
 	look := m.reviewLook()
 	pal := look.pal
 	w, h, listW, diffW, paneH := m.reviewLayout()
@@ -607,10 +656,11 @@ func (m *OS) renderReview() string {
 	listLines := m.reviewListLines(listW, paneH, pal)
 	defer func() { r.frameRows, r.frameRowsSet = nil, false }()
 	diffLines := m.reviewDiffLines(diffW, paneH, look)
+	bar := m.reviewBarCells(w-2, len(r.frameRows), paneH, pal)
 	sp := reviewSpaces(1, pal.Surface)
 	sep := sp + reviewInk(vtGlyph(), pal.FgMute, pal.Surface) + sp
 	for i := range paneH {
-		body = append(body, sp+listLines[i]+sep+diffLines[i]+sp)
+		body = append(body, sp+listLines[i]+sep+diffLines[i]+bar[i])
 	}
 	body = append(body, m.reviewStatusRule(inner, pal), m.reviewFooter(inner, pal))
 	return reviewFrame(w, h, "", body, pal.Accent, pal.Surface)
@@ -704,12 +754,18 @@ func (m *OS) reviewHeader(pal overlay.Palette) []reviewSeg {
 func (m *OS) reviewListLines(width, paneH int, pal overlay.Palette) []string {
 	r := &m.review
 	out := make([]string, paneH)
-	if r.file < r.listScroll {
-		r.listScroll = r.file
+	// The list follows the file when it changes. The wheel scrolls it
+	// freely in between.
+	if r.file != r.listShown {
+		r.listShown = r.file
+		if r.file < r.listScroll {
+			r.listScroll = r.file
+		}
+		if r.file >= r.listScroll+paneH {
+			r.listScroll = r.file - paneH + 1
+		}
 	}
-	if r.file >= r.listScroll+paneH {
-		r.listScroll = r.file - paneH + 1
-	}
+	r.listScroll = min(max(r.listScroll, 0), max(len(r.files)-paneH, 0))
 	for i := range paneH {
 		idx := r.listScroll + i
 		if idx >= len(r.files) {
@@ -947,7 +1003,15 @@ func (d reviewDraw) rowBody(row reviewRow, st overlay.RowState) string {
 		if cursor {
 			bg = reviewCursorTint(bg, pal, st)
 		}
-		head, ctx := reviewSplitHeader(reviewText(d.file.Hunks[row.hunk].Header))
+		header := d.file.Hunks[row.hunk].Header
+		head, ctx := reviewSplitHeader(reviewText(header))
+		// The fold mark, which a click on the row or enter on it turns. A
+		// folded hunk says how many lines it hides.
+		fold, folded := reviewFoldOpen(), false
+		if e := d.m.review.currentFile(); e != nil && d.m.review.reviewFolded(e.path, header) {
+			fold, folded = reviewFoldShut(), true
+			ctx += "  " + reviewCount(len(d.file.Hunks[row.hunk].Lines), "line") + " folded"
+		}
 		// How much of the hunk is in the index, from the index diffs read
 		// while the overlay is open, at the right end of the row. Words, so
 		// it reads at every depth.
@@ -963,6 +1027,7 @@ func (d reviewDraw) rowBody(row reviewRow, st overlay.RowState) string {
 			left = max(rest-ansi.StringWidth(stage.text)-2, 0)
 		}
 		line := reviewPaint([]reviewSeg{
+			{overlay.Readable(pal.FgDim, bg), " " + fold, folded},
 			{overlay.Readable(pal.Info, bg), " " + head, false},
 			{overlay.Readable(pal.FgDim, bg), ctx, false},
 		}, left, bg)
@@ -1140,14 +1205,23 @@ func (m *OS) reviewFooter(width int, pal overlay.Palette) string {
 		case reviewEditVerify:
 			return m.reviewPromptLine("Run in every attempt: ", ed.draft, []overlay.Hint{{Key: overlay.EnterGlyph, Label: "run"}, {Key: "esc", Label: "cancel"}}, width, pal)
 		}
-		return reviewHints([]overlay.Hint{{Key: overlay.EnterGlyph, Label: "save"}, {Key: "esc", Label: "drop"}}, width, pal)
+		return m.reviewFooterHints([]overlay.Hint{{Key: overlay.EnterGlyph, Label: "save"}, {Key: "esc", Label: "drop"}}, width, pal)
 	}
-	return reviewHints(m.reviewKeyHints(), width, pal)
+	return m.reviewFooterHints(m.reviewKeyHints(), width, pal)
 }
 
 // reviewPromptLine draws a one-line prompt with its keys after it.
 func (m *OS) reviewPromptLine(label, draft string, hints []overlay.Hint, width int, pal overlay.Palette) string {
 	keys := reviewHintStrip(hints, pal)
+	// The keys end a cell short of the right edge, joined by two spaces.
+	at := width - ansi.StringWidth(keys) - 1
+	spans := make([]reviewHintSpan, 0, len(hints))
+	for i, p := range reviewHintParts(hints, pal) {
+		w := ansi.StringWidth(p)
+		spans = append(spans, reviewHintSpan{x0: at, x1: at + w, key: reviewHintKey(hints[i])})
+		at += w + 2
+	}
+	m.reviewRecordHints(spans, 1)
 	room := max(width-2-ansi.StringWidth(label)-1-2-ansi.StringWidth(keys), 4)
 	text := reviewText(draft)
 	if ansi.StringWidth(text) > room {
@@ -1226,6 +1300,15 @@ func (m *OS) reviewKeyHints() []overlay.Hint {
 		add("tab", "files")
 	}
 	add("r", "reload")
+	// Last before esc, so it is the first to go where the footer is short:
+	// a click on the hunk's header folds it too.
+	if row, ok := m.reviewRowUnderCursor(); ok && row.kind == reviewRowHunk {
+		if e := r.currentFile(); e != nil && e.file != nil && r.reviewFolded(e.path, e.file.Hunks[row.hunk].Header) {
+			add(overlay.EnterGlyph, "unfold")
+		} else {
+			add(overlay.EnterGlyph, "fold")
+		}
+	}
 	if r.backToCompare {
 		add("esc", "back")
 	} else {

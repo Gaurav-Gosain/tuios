@@ -657,7 +657,7 @@ func (m *OS) renderReviewCompare(w, h int, pal overlay.Palette) string {
 	var footer string
 	switch {
 	case c.confirmKeep != "":
-		footer = reviewHints([]overlay.Hint{{Key: "y", Label: "keep it, remove the others"}, {Key: "n", Label: "cancel"}}, inner, pal)
+		footer = m.reviewFooterHints([]overlay.Hint{{Key: "y", Label: "keep it, remove the others"}, {Key: "n", Label: "cancel"}}, inner, pal)
 	case m.review.editor != nil && m.review.editor.kind == reviewEditVerify:
 		footer = m.reviewPromptLine("Run in every attempt: ", m.review.editor.draft, []overlay.Hint{{Key: overlay.EnterGlyph, Label: "run"}, {Key: "esc", Label: "cancel"}}, inner, pal)
 	default:
@@ -666,7 +666,7 @@ func (m *OS) renderReviewCompare(w, h int, pal overlay.Palette) string {
 			hints = append(hints, overlay.Hint{Key: "d", Label: "diff marked"})
 		}
 		hints = append(hints, overlay.Hint{Key: "V", Label: "verify"}, overlay.Hint{Key: "K", Label: "keep"}, overlay.Hint{Key: "esc", Label: "back"})
-		footer = reviewHints(hints, inner, pal)
+		footer = m.reviewFooterHints(hints, inner, pal)
 	}
 	body = append(body, footer)
 	return reviewFrame(w, h, "", body, pal.Accent, pal.Surface)

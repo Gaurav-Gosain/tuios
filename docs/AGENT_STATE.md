@@ -5375,6 +5375,20 @@ from a note has its control characters left out. The keys are listed in
 dock, so the dock's newest message since it opened (a note refused, notes
 queued, an attempt kept) is shown above its keys as well.
 
+You can use the review with the mouse only:
+
+- Click a file in the list to show its diff.
+- Click a line of the diff to put the cursor on it.
+- Click a hunk's header to fold the hunk to its header, and click it again
+  to unfold it. `enter` on the header does the same.
+- The wheel scrolls the side under the pointer. A sideways wheel scrolls the
+  code.
+- Drag the scroll bar at the right edge of the diff, or click its track.
+- Drag the rule between the list and the diff to set the width of the list.
+  The width stays for later reviews.
+- Click a key in the footer to do what that key does. In the compare view,
+  click an attempt to select it.
+
 You can keep the good hunks of a change and leave the rest. `a` stages the hunk
 under the cursor and `d` unstages it. `A` and `D` do the same for the whole
 file, and `z` undoes the last of them. Each key is a `review-stage` call with

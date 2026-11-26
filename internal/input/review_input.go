@@ -23,7 +23,8 @@ import (
 //	A D              stage or unstage the file (review_stage_file, review_unstage_file)
 //	z                undo the last stage or unstage (review_undo_stage)
 //	tab              the file list or the diff
-//	enter            in the file list: open that file
+//	enter            in the file list: open that file; on a hunk's header:
+//	                 fold or unfold the hunk
 //	c, C             a note on the line, or on the whole hunk
 //	e, x             edit or resolve the note under the cursor
 //	S                send the unsent notes to the pane's agent

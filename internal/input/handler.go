@@ -77,9 +77,9 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			break
 		}
 		// The review covers the screen: a click must not land on a pane or
-		// a panel under it.
+		// a panel under it. See review_mouse.go.
 		if o.ReviewOpen() {
-			return o, nil
+			return handleReviewMouseClick(msg, o)
 		}
 		if o.ShowScrollbackBrowser {
 			result, cmd = handleScrollbackBrowserMouseClick(msg, o)
@@ -96,6 +96,7 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 			return handleCaptureMouseMotion(msg, o)
 		}
 		if o.ReviewOpen() {
+			o.ReviewMouseDrag(msg.X, msg.Y)
 			return o, nil
 		}
 		if o.ShowScrollbackBrowser {
@@ -127,6 +128,10 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		}
 		return moved, cmd
 	case tea.MouseReleaseMsg:
+		if o.ReviewOpen() && !o.CaptureActive() {
+			o.ReviewMouseRelease()
+			return o, nil
+		}
 		if o.CaptureActive() {
 			result, cmd = handleCaptureMouseRelease(o)
 		} else if o.ShowScrollbackBrowser {
@@ -148,9 +153,13 @@ func HandleInput(msg tea.Msg, o *app.OS) (tea.Model, tea.Cmd) {
 		if o.ReviewOpen() {
 			switch msg.Button {
 			case tea.MouseWheelUp:
-				o.ReviewWheel(-3)
+				o.ReviewMouseWheel(msg.X, msg.Y, -3)
 			case tea.MouseWheelDown:
-				o.ReviewWheel(3)
+				o.ReviewMouseWheel(msg.X, msg.Y, 3)
+			case tea.MouseWheelLeft:
+				o.ReviewMouseWheelX(-1)
+			case tea.MouseWheelRight:
+				o.ReviewMouseWheelX(1)
 			}
 			return o, nil
 		}
