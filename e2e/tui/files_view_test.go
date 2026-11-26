@@ -237,11 +237,11 @@ func TestFilesViewOpenAddsNoIdleCost(t *testing.T) {
 		if err := term.WaitStable(uiTimeout); err != nil {
 			t.Fatalf("%s: screen never settled: %v", name, err)
 		}
-		time.Sleep(time.Second)
+		pause(t, "let the screen's last frame land before the idle window starts", time.Second)
 		pid := term.Pid()
 		start := sampleIdle(t, pid, statsPath)
 		before := wire.n.Load()
-		time.Sleep(idleWindow)
+		pause(t, "the idle window: count what the client does while nothing happens", idleWindow)
 		end := sampleIdle(t, pid, statsPath)
 		got := idleBudget{
 			wire:        wire.n.Load() - before,
