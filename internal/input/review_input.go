@@ -30,6 +30,8 @@ import (
 //	S                send the unsent notes to the pane's agent
 //	s                one column, or the two sides next to each other
 //	f                follow the agent that writes, or stop
+//	@                show the hunks of some authors only: a menu on the footer
+//	                 line, where j k move, space shows or hides, esc closes
 //	h l, left right  scroll the focused panel sideways: the code, or the paths
 //	u                since the base, or the uncommitted changes only
 //	b                change the base
@@ -68,6 +70,27 @@ func handleReviewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	key = commandKey(msg)
 	if o.ReviewConfirming() {
 		return o, o.ReviewCompareConfirm(key == "y" || key == "Y")
+	}
+	if o.ReviewWhoMenuOpen() {
+		switch o.ListKeys.Keys(key, true) {
+		case listnav.Up:
+			o.ReviewWhoMove(-1)
+			return o, nil
+		case listnav.Down:
+			o.ReviewWhoMove(1)
+			return o, nil
+		}
+		switch key {
+		case "left", "h", "shift+tab":
+			o.ReviewWhoMove(-1)
+		case "right", "l", "tab":
+			o.ReviewWhoMove(1)
+		case "space", "enter":
+			o.ReviewWhoToggle()
+		case "esc", "q", "@":
+			o.ReviewWhoMenu()
+		}
+		return o, nil
 	}
 	if o.ReviewCompareShown() {
 		// The attempts list moves on the list keys, letters included. Its
@@ -164,6 +187,8 @@ func handleReviewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ReviewToggleSplit()
 	case "f":
 		o.ReviewToggleFollow()
+	case "@":
+		o.ReviewWhoMenu()
 	case "h", "left":
 		o.ReviewScrollX(-1)
 	case "l", "right":

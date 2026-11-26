@@ -195,6 +195,8 @@ type reviewState struct {
 	live reviewLiveState
 	// follow follows the agent that writes. See review_follow.go.
 	follow reviewFollow
+	// filter shows the hunks of some authors only. See review_filter.go.
+	filter reviewFilter
 	open   bool
 	// loading is set while a diff is read again inside an open overlay, and
 	// loadingSince is when that read went out: the header says "reading"
@@ -705,6 +707,9 @@ func (r *reviewState) rebuildFiles() {
 	}
 	for i := range r.diff.Files {
 		f := &r.diff.Files[i]
+		if !r.reviewFileShown(f) {
+			continue
+		}
 		r.files = append(r.files, reviewFileEntry{file: f, path: f.Path})
 	}
 	if r.query.Against != "" {

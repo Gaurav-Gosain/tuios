@@ -100,6 +100,10 @@ func (m *OS) ReviewMouseClick(x, y int) {
 		m.reviewCompareClick(y)
 		return
 	}
+	// The authors in the header and in the @ menu.
+	if m.reviewWhoClick(x, y) {
+		return
+	}
 	if r.editor != nil {
 		// The line being typed keeps the keys. Its footer hints save or drop it.
 		return
@@ -117,7 +121,7 @@ func (m *OS) ReviewMouseClick(x, y int) {
 	case x >= g.listX && x < g.listX+g.listW:
 		m.reviewListClick(row)
 	case x >= g.diffX && x < g.diffX+g.diffW:
-		m.reviewDiffClick(row)
+		m.reviewDiffClick(row, x-g.diffX)
 	}
 }
 
@@ -135,8 +139,9 @@ func (m *OS) reviewListClick(row int) {
 }
 
 // reviewDiffClick puts the cursor on diff row row, and folds or unfolds the
-// hunk when it is a hunk's header.
-func (m *OS) reviewDiffClick(row int) {
+// hunk when it is a hunk's header. On the author of a hunk's header, at x
+// from the column's first cell, it shows that author only.
+func (m *OS) reviewDiffClick(row, x int) {
 	r := &m.review
 	rows := m.reviewRows(m.reviewRowsWidth())
 	idx := r.scroll + row
@@ -145,7 +150,7 @@ func (m *OS) reviewDiffClick(row int) {
 	}
 	r.listFocus = false
 	r.cursor = reviewNoteStart(rows, idx)
-	if rows[idx].kind == reviewRowHunk {
+	if rows[idx].kind == reviewRowHunk && !m.reviewChipClick(rows[idx].hunk, x) {
 		m.reviewToggleFold(rows[idx].hunk)
 	}
 }

@@ -412,6 +412,10 @@ func (m *OS) reviewRows(width int) []reviewRow {
 		}
 	}
 	for h, hunk := range e.file.Hunks {
+		// A hunk of the authors the filter hides is left out whole.
+		if !r.reviewHunkShown(hunk) {
+			continue
+		}
 		rows = append(rows, reviewRow{kind: reviewRowHunk, hunk: h, line: -1, other: -1, note: -1})
 		// A folded hunk is its header only, with the notes on the whole
 		// hunk and the editor of a new one.
@@ -731,7 +735,11 @@ func (m *OS) reviewHeader(pal overlay.Palette) []reviewSeg {
 		dim("reading the changes")
 		return segs
 	}
-	dim(reviewCount(d.Totals.Files, "file"))
+	if r.reviewFiltered() {
+		dim(strconv.Itoa(len(r.files)) + " of " + reviewCount(d.Totals.Files, "file"))
+	} else {
+		dim(reviewCount(d.Totals.Files, "file"))
+	}
 	segs = append(segs, reviewSeg{pal.Success, "  +" + strconv.Itoa(d.Totals.Added), false}, reviewSeg{pal.Warn, " -" + strconv.Itoa(d.Totals.Removed), false})
 	switch {
 	case d.Against != "":
@@ -770,7 +778,12 @@ func (m *OS) reviewHeader(pal overlay.Palette) []reviewSeg {
 		r.follow.x0, r.follow.x1 = at+2, at+2+ansi.StringWidth(words)
 		segs = append(segs, reviewSeg{pal.AccentBright, "  " + words, true})
 	}
-	return segs
+	// Who the filter shows and hides, last (review_filter.go).
+	at := 1
+	for _, s := range segs {
+		at += ansi.StringWidth(s.text)
+	}
+	return append(segs, m.reviewWhoWords(at, pal)...)
 }
 
 // reviewListLines draws the file list, paneH rows of width cells.
@@ -1063,8 +1076,15 @@ func (d reviewDraw) rowBody(row reviewRow, st overlay.RowState) string {
 		if e := d.m.review.currentFile(); e != nil && d.m.review.reviewHunkFresh(e.path, d.file.Hunks[row.hunk]) {
 			right = append(right, reviewSeg{overlay.Readable(pal.AccentBright, bg), "  new", true})
 		}
+		chipAt, chipW := 0, 0
 		if chip := d.m.review.reviewHunkChip(d.file.Hunks[row.hunk], pal, bg, time.Now()); chip != nil {
 			right = append(right, reviewSeg{nil, "  ", false})
+			for _, s := range right {
+				chipAt += ansi.StringWidth(s.text)
+			}
+			for _, s := range chip {
+				chipW += ansi.StringWidth(s.text)
+			}
 			right = append(right, chip...)
 			right = append(right, reviewSeg{nil, " ", false})
 		}
@@ -1076,12 +1096,22 @@ func (d reviewDraw) rowBody(row reviewRow, st overlay.RowState) string {
 			rightW += ansi.StringWidth(s.text)
 		}
 		if rightW > rest/2 {
-			right, rightW = nil, 0
+			right, rightW, chipW = nil, 0, 0
 			if stage.text != "" {
 				right, rightW = []reviewSeg{{nil, "  ", false}, stage}, ansi.StringWidth(stage.text)+2
 			}
 		}
 		left := max(rest-rightW, 0)
+		// Where the author is, for a click on it (review_filter.go): after
+		// the mark's cell and the header's left part.
+		if f := &d.m.review.filter; chipW > 0 {
+			if f.chips == nil {
+				f.chips = map[int][2]int{}
+			}
+			f.chips[row.hunk] = [2]int{1 + left + chipAt, 1 + left + chipAt + chipW}
+		} else {
+			delete(f.chips, row.hunk)
+		}
 		line := reviewPaint([]reviewSeg{
 			{overlay.Readable(pal.FgDim, bg), " " + fold, folded},
 			{overlay.Readable(pal.Info, bg), " " + head, false},
@@ -1157,6 +1187,15 @@ func reviewSplitHeader(h string) (string, string) {
 	return h, ""
 }
 
+// shownKind is how a line is drawn: as its kind, or as context when the
+// filter hides its author, so the line is dim and keeps only its sign.
+func (d reviewDraw) shownKind(ln review.Line) diffview.Kind {
+	if d.m.review.reviewLineHidden(ln) {
+		return diffview.Context
+	}
+	return lineKind(ln)
+}
+
 // lineKind is the diff kind of a line.
 func lineKind(ln review.Line) diffview.Kind {
 	switch ln.Op {
@@ -1198,11 +1237,11 @@ func (d reviewDraw) unifiedLine(row reviewRow, st overlay.RowState, markCell fun
 	dv, pal := d.look.dv, d.look.pal
 	cursor := st.Cursor
 	ln := d.file.Hunks[row.hunk].Lines[row.line]
-	kind := lineKind(ln)
+	kind, shown := lineKind(ln), d.shownKind(ln)
 	gw := d.numW + 1
 	codeW := d.width - 1 - 2*gw - diffview.SignWidth
-	lead, oldNum, newNum := markCell(dv.GutterBg(kind, cursor)), dv.Gutter(ln.Old, gw, kind, cursor), dv.Gutter(ln.New, gw, kind, cursor)
-	sign, code := dv.Sign(kind, cursor, d.scrolled(row.hunk, row.line)), d.code(row.hunk, row.line, kind, cursor, codeW)
+	lead, oldNum, newNum := markCell(dv.GutterBg(shown, cursor)), dv.Gutter(ln.Old, gw, shown, cursor), dv.Gutter(ln.New, gw, shown, cursor)
+	sign, code := dv.Sign(kind, cursor, d.scrolled(row.hunk, row.line)), d.code(row.hunk, row.line, shown, cursor, codeW)
 	if pal.Depth == overlay.Depth16 {
 		return pal.Mark(lead+oldNum+newNum, st) + sign + code
 	}
@@ -1237,9 +1276,9 @@ func (d reviewDraw) splitLine(row reviewRow, st overlay.RowState, markCell func(
 			sign, code = dv.Sign(diffview.Missing, cursor, false), dv.Blank(diffview.Missing, cursor, w)
 		} else {
 			ln := lines[l]
-			kind := lineKind(ln)
-			gutter = dv.Gutter(num(ln), gw, kind, cursor)
-			sign, code = dv.Sign(kind, cursor, d.scrolled(row.hunk, l)), d.code(row.hunk, l, kind, cursor, w)
+			kind, shown := lineKind(ln), d.shownKind(ln)
+			gutter = dv.Gutter(num(ln), gw, shown, cursor)
+			sign, code = dv.Sign(kind, cursor, d.scrolled(row.hunk, l)), d.code(row.hunk, l, shown, cursor, w)
 		}
 		if pal.Depth == overlay.Depth16 {
 			return pal.Mark(lead+gutter, st) + sign + code
@@ -1248,7 +1287,7 @@ func (d reviewDraw) splitLine(row reviewRow, st overlay.RowState, markCell func(
 	}
 	first := diffview.Missing
 	if left >= 0 {
-		first = lineKind(lines[left])
+		first = d.shownKind(lines[left])
 	}
 	rule := reviewInk(vtGlyph(), overlay.Structure(pal.Surface), pal.Surface)
 	return side(markCell(dv.GutterBg(first, cursor)), left, func(ln review.Line) int { return ln.Old }, leftW) + rule +
@@ -1267,6 +1306,9 @@ func (m *OS) reviewFooter(width int, pal overlay.Palette) string {
 			return m.reviewPromptLine("Run in every attempt: ", ed.draft, []overlay.Hint{{Key: overlay.EnterGlyph, Label: "run"}, {Key: "esc", Label: "cancel"}}, width, pal)
 		}
 		return m.reviewFooterHints([]overlay.Hint{{Key: overlay.EnterGlyph, Label: "save"}, {Key: "esc", Label: "drop"}}, width, pal)
+	}
+	if r.filter.menu {
+		return m.reviewWhoMenuLine(width, pal)
 	}
 	return m.reviewFooterHints(m.reviewKeyHints(), width, pal)
 }
@@ -1339,6 +1381,9 @@ func (m *OS) reviewKeyHints() []overlay.Hint {
 		} else {
 			add("f", "follow")
 		}
+	}
+	if !against && len(r.reviewWhoCounts()) > 1 {
+		add("@", "who")
 	}
 	if key := m.reviewKey(config.ActionReviewNextFile); key != "" {
 		add(key, "next file")

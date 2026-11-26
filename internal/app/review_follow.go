@@ -89,6 +89,10 @@ func (m *OS) reviewFollowRead() {
 				continue
 			}
 			r.follow.seen[k] = true
+			// A hunk the filter hides is not new to the person.
+			if !r.reviewHunkShown(h) {
+				continue
+			}
 			r.follow.fresh[k] = true
 			main, _ := reviewMainOrigin(h.Lines)
 			a, ok := r.reviewAuthorOf(main)
@@ -178,7 +182,7 @@ func (m *OS) ReviewNextNew() bool {
 			if step == 0 && hi <= row.hunk {
 				continue
 			}
-			if r.follow.fresh[reviewHunkKey(e.path, h)] {
+			if r.follow.fresh[reviewHunkKey(e.path, h)] && r.reviewHunkShown(h) {
 				m.reviewGoToHunk(fi, hi)
 				m.reviewSeenUnderCursor()
 				return true
