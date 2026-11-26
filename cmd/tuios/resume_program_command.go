@@ -24,10 +24,10 @@ func newResumeProgramCommand() *cobra.Command {
 		Use:    "resume-program FILE",
 		Short:  "Start the program a restore resumes, from its one-use file",
 		Hidden: true,
-		Args:   cobra.ExactArgs(1),
 		// The shell's environment is the program's: nothing here may read
-		// a config or reach the daemon.
-		DisableFlagParsing: true,
+		// a config or reach the daemon. The daemon names FILE by an absolute
+		// path, so it never reads as a flag.
+		Args: cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			return runResumeProgram(args[0])
 		},

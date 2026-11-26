@@ -165,7 +165,7 @@ func (d *Daemon) programResumeLine(sess *Session, sp *SavedProgram) (string, fun
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", nil, err
 	}
-	if err := os.Chmod(dir, 0o700); err != nil {
+	if err := os.Chmod(dir, 0o700); err != nil { //nolint:gosec // a folder needs the x bit, and 0700 is owner only
 		return "", nil, err
 	}
 	data, err := jsonx.Marshal(programResumeFile{Argv: sp.Argv, Cwd: sp.Cwd, Dir: sp.Dir})
