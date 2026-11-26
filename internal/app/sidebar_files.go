@@ -5,12 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
-	"sort"
-	"strings"
 	"time"
-
-	"github.com/Gaurav-Gosain/tuios/internal/pathroot"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
@@ -79,15 +74,16 @@ type fileEntry struct {
 // has navigated to, not a preference, so it is not saved and a fresh client
 // starts on the focused pane's own directory.
 type fileViewState struct {
+	// fileListing is the listing on screen: the folder, its rows, and why it
+	// is empty when it is. Dir is empty until the first reply lands. See
+	// file_listing.go.
+	fileListing
 	// Show is positive while a link or a file search shows the section for
 	// this client, and zero otherwise, when the layout alone decides. The
 	// files switch writes the layout instead, so a section the person hid
 	// stays hidden after a reattach and a daemon restart. A link or a search
 	// shows the section for the moment and never turns the saved layout on.
 	Show int8
-	// Dir is the directory the entries below belong to, absolute and cleaned.
-	// Empty until the first reply lands.
-	Dir string
 	// Want is the directory that has been asked for. It leads Dir while a read
 	// is in flight, and it is what the sync compares against so one directory
 	// is never asked for twice.
@@ -114,24 +110,13 @@ type fileViewState struct {
 	// stops following the origin pane's cwd. Cleared when the focus moves to
 	// another pane, because the listing is then about a different pane.
 	Pinned bool
-	// Entries is the listing, directories first and then files, each group
-	// sorted the way a person reads a name rather than the way a byte sorts.
-	Entries []fileEntry
-	// Err is why the listing is empty, when that is the reason.
-	Err string
-	// ErrAt is when that failure came back, so a retry is paced rather than run
+	// ErrAt is when the failure in Err came back, so a retry is paced rather than run
 	// on every message. See FilesSyncCmd.
 	ErrAt time.Time
 	// Gen stamps the outstanding request. The reply carries it back and is
 	// dropped when it does not match, and the rail's render cache folds it in
 	// so a listing that changed under an unchanged path still repaints.
 	Gen uint64
-	// Capped says the directory held more names than were read, so the listing
-	// is the first fileViewMaxEntries of it and not the whole thing.
-	Capped bool
-	// Spoofed says the pane named this folder over OSC 7 and /proc disagreed.
-	// The listing stays; the file actions do not. See cwdIsSpoofed.
-	Spoofed bool
 	// Elsewhere names the machine the origin pane's shell is on when it is not
 	// the machine the pane runs on: the pane is running ssh. Nothing is listed
 	// then, because the folder is on a disk no daemon here can read, and a
@@ -159,15 +144,8 @@ type fileListMsg struct {
 	Gen uint64
 	// Quiet is the QuietReq of a quiet read, zero for a read the user asked
 	// for.
-	Quiet   uint64
-	Dir     string
-	Entries []fileEntry
-	Capped  bool
-	Err     string
-	// Spoofed is the corroboration verdict for a listing the pane steered. It
-	// is worked out in the command, beside the read, because it costs a /proc
-	// readlink and two stats and neither belongs on the update goroutine.
-	Spoofed bool
+	Quiet uint64
+	fileListing
 }
 
 // readDirFunc is the reader the file command calls. It is a variable so a test
@@ -527,77 +505,10 @@ func (m *OS) fileListCmd(dir, origin string, pinned bool, quiet uint64) tea.Cmd 
 	// also the only side that can say whether the pane announced a directory its
 	// shell is not in.
 	client, host := m.DaemonClient, m.AttachedHost
-	read := func() fileListMsg {
-		return readListing(client, host, origin, dir, pinned, pgid, wasSpoofed)
-	}
 	return func() tea.Msg {
-		msg := read()
-		msg.Gen, msg.Quiet = gen, quiet
-		return msg
+		l := readListing(client, host, origin, dir, pinned, pgid, wasSpoofed)
+		return fileListMsg{Gen: gen, Quiet: quiet, fileListing: l}
 	}
-}
-
-// readListing reads dir for the files section, through the daemon when there
-// is one, and answers with an unstamped fileListMsg. It runs off the update
-// goroutine: the list view's reads and the tree's reads of open folders both
-// call it, so the two cannot disagree about where a folder is read from.
-func readListing(client *session.TUIClient, host, origin, dir string, pinned bool, pgid int, wasSpoofed bool) fileListMsg {
-	if client != nil {
-		listing, err := client.ReadDir(origin, dir, fileViewMaxEntries, pinned)
-		switch {
-		case err == nil && listing.Err != "":
-			return fileListMsg{Dir: dir, Err: listing.Err, Spoofed: wasSpoofed || listing.Spoofed}
-		case err == nil:
-			entries := make([]fileEntry, 0, len(listing.Entries))
-			for _, e := range listing.Entries {
-				// Already in the daemon's order: directories first, then
-				// names. Sorting again here would be sorting a capped
-				// listing, which is an arbitrary subset of the directory.
-				entries = append(entries, fileEntry{
-					Name: e.Name, Dir: e.IsDir, Icon: fileIconFor(e.Name, e.IsDir),
-				})
-			}
-			return fileListMsg{
-				Dir: dir, Entries: entries,
-				Capped: listing.Capped, Spoofed: wasSpoofed || listing.Spoofed,
-			}
-		case host != "":
-			// A daemon on another machine that cannot answer is the end of
-			// it. Falling through to read this machine's disk would list a
-			// directory with nothing to do with the pane, which is the bug
-			// this replaced rather than a fallback.
-			return fileListMsg{Dir: dir, Err: "That machine could not list it."}
-		}
-		// A local daemon that could not answer falls through: a build older
-		// than this message answers with an error, and reading the disk here
-		// is the same disk it would have read.
-	}
-	spoofed := wasSpoofed || cwdIsSpoofed(pgid, dir)
-	items, capped, err := readDirFunc(pathroot.ExpandHome(dir), fileViewMaxEntries)
-	if err != nil {
-		return fileListMsg{Dir: dir, Err: session.DirReadError(err), Spoofed: spoofed}
-	}
-	entries := make([]fileEntry, 0, len(items))
-	for _, it := range items {
-		// Type() is what the directory read already returned, so this costs
-		// no stat. A symlink to a directory therefore reads as a file, which
-		// is the price of not stat'ing every name in a large tree. The icon
-		// is looked up off the same two facts and for the same reason.
-		dir := it.IsDir()
-		entries = append(entries, fileEntry{
-			Name: it.Name(),
-			Dir:  dir,
-			Icon: fileIconFor(it.Name(), dir),
-		})
-	}
-	sort.Slice(entries, func(i, j int) bool {
-		a, b := entries[i], entries[j]
-		if a.Dir != b.Dir {
-			return a.Dir
-		}
-		return strings.ToLower(a.Name) < strings.ToLower(b.Name)
-	})
-	return fileListMsg{Dir: dir, Entries: entries, Capped: capped, Spoofed: spoofed}
 }
 
 // spoofCheckApplies reports whether this client can honestly run the spoof
@@ -711,8 +622,7 @@ func (m *OS) HandleFileList(msg fileListMsg) {
 			// A newer quiet read, or a read the user asked for, is in flight.
 			return
 		}
-		if msg.Dir == v.Dir && msg.Err == v.Err && msg.Capped == v.Capped &&
-			msg.Spoofed == v.Spoofed && slices.Equal(msg.Entries, v.Entries) {
+		if msg.fileListing.sameAs(&v.fileListing) {
 			// The folder changed and changed back, or changed in a way the
 			// listing does not show: nothing to draw again.
 			return
@@ -722,11 +632,7 @@ func (m *OS) HandleFileList(msg fileListMsg) {
 		v.Gen++
 	}
 	m.filesView.Loading = false
-	m.filesView.Dir = msg.Dir
-	m.filesView.Err = msg.Err
-	m.filesView.Entries = msg.Entries
-	m.filesView.Capped = msg.Capped
-	m.filesView.Spoofed = msg.Spoofed
+	m.filesView.fileListing = msg.fileListing
 	// Stamped only on a failure, and only when it is a new one. FilesSyncCmd
 	// paces the retry off this, so leaving it unset would make every retry
 	// immediate and turn a directory that stays unreadable into a request per

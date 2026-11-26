@@ -158,9 +158,11 @@ func TestAFinishedOperationReReadsThroughTheGeneration(t *testing.T) {
 	// rail. The marker name is one the folder never held, so finding it can only
 	// mean the stale reply was applied.
 	m.HandleFileList(fileListMsg{
-		Gen:     stale,
-		Dir:     dir,
-		Entries: []fileEntry{{Name: "report.txt"}, {Name: "from-the-stale-read.txt"}},
+		Gen: stale,
+		fileListing: fileListing{
+			Dir:     dir,
+			Entries: []fileEntry{{Name: "report.txt"}, {Name: "from-the-stale-read.txt"}},
+		},
 	})
 	for _, e := range m.filesView.Entries {
 		if e.Name == "from-the-stale-read.txt" {

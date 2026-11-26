@@ -40,7 +40,7 @@ func TestQuickLookFolderFrameBudget(t *testing.T) {
 			entries[i] = fileEntry{Name: name, Icon: fileIconFor(name, false)}
 		}
 		target := quickLookTarget{path: "/src", name: "src", dir: true}
-		res := &quickLookResult{target: target, kind: "dir", entries: entries}
+		res := &quickLookResult{target: target, kind: "dir", folder: fileListing{Entries: entries}}
 		m.quickLook = quickLookState{open: true, target: target, res: res, inside: true}
 		return entries
 	}

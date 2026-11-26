@@ -169,9 +169,10 @@ type quickLookResult struct {
 	formatted    bool
 	// facts says what the film is, for a host that cannot draw a frame.
 	facts string
-	// entries is a folder's listing.
-	entries []fileEntry
-	capped  bool
+	// folder is a folder's listing, read as the rail reads it.
+	folder fileListing
+	// capped says an archive held more rows than were read.
+	capped bool
 	// previewers names the previewers of the file's machine that match it,
 	// and mtime is when the file changed. See quicklook_run.go.
 	previewers []string
@@ -632,7 +633,7 @@ func (m *OS) quickLookFetch(t quickLookTarget) tea.Cmd {
 		here := m.quickLookHere(t)
 		return func() tea.Msg {
 			l := readListing(client, attached, origin, t.path, true, 0, false)
-			res := &quickLookResult{target: t, kind: "dir", entries: l.Entries, capped: l.Capped}
+			res := &quickLookResult{target: t, kind: "dir", folder: l}
 			if l.Err != "" {
 				res.kind, res.note = "error", l.Err
 			}
@@ -1398,7 +1399,7 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 	case "hex":
 		quickLookDrawHex(c, pal, ql, r, bodyTop, bodyRows, w)
 	case "dir":
-		if len(r.entries) == 0 {
+		if len(r.folder.Entries) == 0 {
 			center(mid, "This folder is empty.", false)
 			break
 		}
@@ -1495,8 +1496,8 @@ func quickLookMeta(r *quickLookResult) string {
 	case "table", "archive", "hex":
 		parts = quickLookViewMeta(r)
 	case "dir":
-		n := plural.Count(len(r.entries), "item")
-		if r.capped {
+		n := plural.Count(len(r.folder.Entries), "item")
+		if r.folder.Capped {
 			n = "More than " + n
 		}
 		parts = append(parts, n)

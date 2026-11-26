@@ -244,7 +244,7 @@ func (m *OS) QuickLookEdge(end bool) bool {
 	if ql.quickLookOnFolder() {
 		ql.dirSel = 0
 		if end {
-			ql.dirSel = len(r.entries) - 1
+			ql.dirSel = len(r.folder.Entries) - 1
 		}
 		return true
 	}

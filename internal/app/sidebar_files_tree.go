@@ -51,9 +51,7 @@ const (
 
 // fileTreeDir is one open folder's listing.
 type fileTreeDir struct {
-	Entries []fileEntry
-	Capped  bool
-	Err     string
+	fileListing
 	Loading bool
 	// Req stamps the read in flight. A reply that does not carry it is for a
 	// read a newer one replaced, or for a folder that closed and opened again.
@@ -94,12 +92,9 @@ type fileTreeSync struct {
 
 // fileTreeListMsg is one open folder's finished read.
 type fileTreeListMsg struct {
-	Dir     string
-	Req     uint64
-	Quiet   bool
-	Entries []fileEntry
-	Capped  bool
-	Err     string
+	Req   uint64
+	Quiet bool
+	fileListing
 }
 
 // filesTreeOn reports whether the files section draws as a tree.
@@ -270,8 +265,7 @@ func (m *OS) fileTreeRead(dir string, quiet bool) tea.Cmd {
 	// as one they named, the same way a list walk into it is.
 	client, host, origin := m.DaemonClient, m.AttachedHost, m.filesView.Origin
 	return func() tea.Msg {
-		l := readListing(client, host, origin, dir, true, 0, false)
-		return fileTreeListMsg{Dir: dir, Req: req, Quiet: quiet, Entries: l.Entries, Capped: l.Capped, Err: l.Err}
+		return fileTreeListMsg{Req: req, Quiet: quiet, fileListing: readListing(client, host, origin, dir, true, 0, false)}
 	}
 }
 
@@ -291,11 +285,11 @@ func (m *OS) HandleFileTreeList(msg fileTreeListMsg) tea.Cmd {
 		d.Again = false
 		again = m.fileTreeRead(msg.Dir, true)
 	}
-	if msg.Quiet && !d.Loading && d.Err == msg.Err && d.Capped == msg.Capped && slices.Equal(d.Entries, msg.Entries) {
+	if msg.Quiet && !d.Loading && d.sameAs(&msg.fileListing) {
 		return again
 	}
 	d.Loading = false
-	d.Entries, d.Capped, d.Err = msg.Entries, msg.Capped, msg.Err
+	d.fileListing = msg.fileListing
 	m.filesTree.gen++
 	// The new names can hold folders the person opened before: they come into
 	// view now, and are read now.

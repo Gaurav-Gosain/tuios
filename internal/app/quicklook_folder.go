@@ -87,10 +87,10 @@ func (m *OS) quickLookStartWalk() {
 // QuickLookOpenEntry opens the selected row of a folder in place.
 func (m *OS) QuickLookOpenEntry() tea.Cmd {
 	ql := &m.quickLook
-	if !ql.quickLookOnFolder() || ql.dirSel < 0 || ql.dirSel >= len(ql.res.entries) {
+	if !ql.quickLookOnFolder() || ql.dirSel < 0 || ql.dirSel >= len(ql.res.folder.Entries) {
 		return nil
 	}
-	e := ql.res.entries[ql.dirSel]
+	e := ql.res.folder.Entries[ql.dirSel]
 	t := ql.target
 	t.path, t.name, t.dir = filepath.Join(t.path, e.Name), e.Name, e.Dir
 	return m.quickLookWalk(t, "")
@@ -126,8 +126,8 @@ func (m *OS) QuickLookRevealInRail() tea.Cmd {
 	dir, name := filepath.Dir(t.path), t.name
 	if ql.quickLookOnFolder() {
 		dir, name = t.path, ""
-		if ql.dirSel >= 0 && ql.dirSel < len(ql.res.entries) {
-			name = ql.res.entries[ql.dirSel].Name
+		if ql.dirSel >= 0 && ql.dirSel < len(ql.res.folder.Entries) {
+			name = ql.res.folder.Entries[ql.dirSel].Name
 		}
 	}
 	if ql.free {
@@ -152,7 +152,7 @@ func (m *OS) QuickLookRevealInRail() tea.Cmd {
 	m.quickLookStartWalk()
 	ql.rejoin, ql.inside, ql.dirWant = true, false, ""
 	if ql.quickLookOnFolder() && name != "" {
-		e := ql.res.entries[ql.dirSel]
+		e := ql.res.folder.Entries[ql.dirSel]
 		t.path, t.name, t.dir = filepath.Join(dir, e.Name), e.Name, e.Dir
 		return tea.Batch(cmd, m.quickLookShow(t))
 	}
@@ -170,7 +170,7 @@ func (ql *quickLookState) quickLookRejoin() {
 
 // quickLookSelect moves the selection of a folder by n rows, held to the rows.
 func (ql *quickLookState) quickLookSelect(n int) {
-	last := len(ql.res.entries) - 1
+	last := len(ql.res.folder.Entries) - 1
 	ql.dirSel = max(min(ql.dirSel+n, last), 0)
 }
 
@@ -179,7 +179,7 @@ func (ql *quickLookState) quickLookSelect(n int) {
 func (ql *quickLookState) quickLookDirPick(r *quickLookResult, rows int) {
 	ql.dirSel = 0
 	if ql.dirWant != "" {
-		for i, e := range r.entries {
+		for i, e := range r.folder.Entries {
 			if e.Name == ql.dirWant {
 				ql.dirSel = i
 				break
@@ -195,7 +195,7 @@ func (ql *quickLookState) quickLookDirPick(r *quickLookResult, rows int) {
 // drawQuickLookDir draws a folder's rows from the top of the body.
 func (m *OS) drawQuickLookDir(c *ckCanvas, pal overlay.Palette, r *quickLookResult, top, rows, w int) {
 	ql := &m.quickLook
-	n := len(r.entries)
+	n := len(r.folder.Entries)
 	ql.dirSel = max(min(ql.dirSel, n-1), 0)
 	if ql.dirSel < ql.scroll {
 		ql.scroll = ql.dirSel
@@ -210,7 +210,7 @@ func (m *OS) drawQuickLookDir(c *ckCanvas, pal overlay.Palette, r *quickLookResu
 	now := time.Now()
 	for i := 0; i < rows && ql.scroll+i < n; i++ {
 		at := ql.scroll + i
-		e := r.entries[at]
+		e := r.folder.Entries[at]
 		y := top + i
 		right := w - 1
 		if cols {
@@ -255,7 +255,7 @@ func (m *OS) quickLookFolderClick(x, y int) (tea.Cmd, bool) {
 		return nil, false
 	}
 	at := ql.scroll + row
-	if at >= len(ql.res.entries) {
+	if at >= len(ql.res.folder.Entries) {
 		return nil, false
 	}
 	if ql.inside && at == ql.dirSel {
@@ -282,9 +282,9 @@ func (m *OS) quickLookDirStatsRead() tea.Cmd {
 		return nil
 	}
 	from := max(ql.scroll, 0)
-	to := min(from+2*bodyH, len(r.entries))
+	to := min(from+2*bodyH, len(r.folder.Entries))
 	var names []string
-	for _, e := range r.entries[from:to] {
+	for _, e := range r.folder.Entries[from:to] {
 		if _, ok := ql.dirStats[e.Name]; !ok {
 			names = append(names, e.Name)
 		}

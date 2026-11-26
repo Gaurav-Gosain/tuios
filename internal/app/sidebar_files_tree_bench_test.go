@@ -22,10 +22,10 @@ func bigFileTree() *OS {
 		}
 		return out
 	}
-	m.filesView = fileViewState{Dir: root, Want: root, Entries: names(fileTreeMaxOpen), Gen: 1}
+	m.filesView = fileViewState{fileListing: fileListing{Dir: root, Entries: names(fileTreeMaxOpen)}, Want: root, Gen: 1}
 	m.filesTree.dirs = map[string]*fileTreeDir{}
 	for _, e := range m.filesView.Entries[:fileTreeMaxOpen] {
-		m.filesTree.dirs[filepath.Join(root, e.Name)] = &fileTreeDir{Entries: names(0)}
+		m.filesTree.dirs[filepath.Join(root, e.Name)] = &fileTreeDir{fileListing: fileListing{Entries: names(0)}}
 	}
 	m.filesTree.gen = 1
 	return m
