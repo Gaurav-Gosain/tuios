@@ -10522,6 +10522,20 @@ Run on 2026-10-24 on Linux amd64 (Go 1.27.1).
 | The agent row keeps the compact-rail rule | `focusMark` set to `e.Focused && width <= sidebarCompactWidth && terminals in the layout`, which is the old rule | both cases: "the focused agent row carries no focus mark" | **caught** |
 
 Not covered end to end: the terminals row scrolled out of a short rail, and a peek of another session. The same `focusDrawn` check covers them.
+
+### The agents row follows the row style
+
+Issue 2526. The test gains `row_style` cases: `bar` at 16 colours and at truecolor, `pill` at 16 colours and at truecolor, and `underline` at truecolor. With `pill` the focused agent row must show its name in the pill caps, the other row must show none, and both gutters must be blank. With `underline` every cell of the focused row's name must be underlined, no cell of the other row's, and both gutters must be blank.
+
+Run on 2026-11-26 on Linux amd64 (Go 1.27.4) against the branch on main at 28f4a57df.
+
+| Control | How | Cases that fail | Verdict |
+| --- | --- | --- | --- |
+| The change removed | upstream main at 28f4a57df | `pill-16`, `pill-truecolor`, `underline-truecolor`: "the focused agent row carries no pill focus mark" and "... no underline focus mark". `bar-*` pass | **caught** |
+| The name is never marked | `nameMarked` forced false in `sidebarAgentRow` | the same three cases, same messages | **caught** |
+| The bar stays beside the marked name | the `sidebarGutterNameMarked` call for the marked name cut | the same three cases, same messages | **caught** |
+
+Not covered end to end: the shimmer skips a pill-marked row (`sidebarAgentRow` returns a width of 0), since a still frame cannot tell the band from no band.
 | The fix removed | upstream main at 43649994b | `dark-truecolor` and `light-truecolor`: "the cursor row on P1 differs from its neighbours only by its ground". `dark-16` passes, since main already draws reverse video there | **caught** |
 | The mark skips every cell | `CursorText` returns its span unchanged | `dark-truecolor` and `light-truecolor`, same message | **caught** |
 ## Kitty images named by path in a window on another machine
