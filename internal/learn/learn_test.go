@@ -521,4 +521,3 @@ func TestCockpitAllowIsAskThenEnter(t *testing.T) {
 	tr.press(key("enter"))
 	tr.waitFor("agent", func(e Event) bool { return data(e, "harness") == "claude-code" && data(e, "to") == "working" })
 }
-
