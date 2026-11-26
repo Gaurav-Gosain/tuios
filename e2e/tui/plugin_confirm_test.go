@@ -187,6 +187,32 @@ func TestPanePluginChangedAfterTheYesIsRefused(t *testing.T) {
 	}
 }
 
+// TestPanePluginNewSourceAfterTheYesIsRefused: a new file outside the
+// build outputs, here a Go file the build would compile, appears after the
+// dialog showed the plugin. The Yes does not cover it: the install is
+// refused and the plugin does not run.
+func TestPanePluginNewSourceAfterTheYesIsRefused(t *testing.T) {
+	r := newConfirmRig(t, "e2e-trust-newfile")
+	term := r.attach(t)
+	dir := trustPlugin(t)
+	done := r.paneInstall(t, dir)
+	r.waitTrustDialog(t, term, "newfile")
+	if err := os.WriteFile(filepath.Join(dir, "extra.go"), []byte("package main\n\nfunc init() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pressKeys(t, term, keyDown, keyEnter)
+	_, _ = done()
+	waitNoTrustDialog(t, term, "Yes")
+	said, lines := paneSaid(t, r)
+	if !strings.Contains(said, "changedafterthepersonsaidyes") || !strings.Contains(said, "extra.go") {
+		t.Errorf("ASSERTION: a new source file after the Yes was not refused:\n%s", strings.Join(lines, "\n"))
+	}
+	if _, on := trustInstalled(t, r.base); on {
+		out, _ := tuiosCLI(t, r.base, "plugins", "list")
+		t.Errorf("ASSERTION: a plugin with a new source file after the Yes runs:\n%s", out)
+	}
+}
+
 // TestPanePluginInstallRefusedWithoutYes: Enter on the default row and Esc
 // each refuse the install with a message that says the person answered No,
 // and nothing is installed.

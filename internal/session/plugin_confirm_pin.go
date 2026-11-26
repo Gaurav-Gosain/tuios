@@ -21,8 +21,10 @@ import (
 // manifest's trust hash, which covers what the plugin runs and its grants,
 // and a digest of every file in the folder at the moment the dialog opened.
 // Each trust verb that takes the token reads the folder again and refuses
-// on any difference. A file the folder did not hold is not a difference,
-// since a build writes its outputs after the Yes.
+// on any difference. A build writes its outputs after the Yes, so a new
+// file is allowed only under an output path: bin/, or a path a build
+// command names after -o or --output. Any other new file, such as a source
+// file the build would compile, is a difference.
 
 // The bounds of a folder the daemon reads for a pin.
 const (
@@ -34,6 +36,8 @@ const (
 type pluginPin struct {
 	manifest string
 	files    map[string]string
+	// outputs are the paths, in the folder, a build may write.
+	outputs []string
 }
 
 // errPinTooLarge is a folder too large to read for a pin.
@@ -46,7 +50,7 @@ func pinPlugin(root string) (pluginPin, error) {
 	if perr != nil {
 		return pluginPin{}, errors.New(perr.Msg)
 	}
-	pin := pluginPin{manifest: herdrplugin.TrustHash("", p, p.Grants), files: map[string]string{}}
+	pin := pluginPin{manifest: herdrplugin.TrustHash("", p, p.Grants), files: map[string]string{}, outputs: buildOutputs(p)}
 	var total int64
 	err := filepath.WalkDir(p.PluginRoot, func(path string, de fs.DirEntry, err error) error {
 		if err != nil {
@@ -94,6 +98,46 @@ func pinPlugin(root string) (pluginPin, error) {
 	return pin, nil
 }
 
+// buildOutputs are the paths in the plugin folder that its build may
+// write: bin/, and each path a build command names after -o or --output.
+// A path outside the folder is left out.
+func buildOutputs(p *herdrplugin.Plugin) []string {
+	out := []string{"bin"}
+	for _, b := range p.Build {
+		args := b.Command
+		for i, a := range args {
+			var path string
+			switch {
+			case (a == "-o" || a == "--output") && i+1 < len(args):
+				path = args[i+1]
+			case strings.HasPrefix(a, "-o="):
+				path = strings.TrimPrefix(a, "-o=")
+			case strings.HasPrefix(a, "--output="):
+				path = strings.TrimPrefix(a, "--output=")
+			default:
+				continue
+			}
+			if filepath.IsAbs(path) {
+				continue
+			}
+			if c := filepath.Clean(path); c != "." && c != ".." && !strings.HasPrefix(c, ".."+string(filepath.Separator)) {
+				out = append(out, c)
+			}
+		}
+	}
+	return out
+}
+
+// output reports whether rel is a build output, or inside one.
+func (pin *pluginPin) output(rel string) bool {
+	for _, o := range pin.outputs {
+		if rel == o || strings.HasPrefix(rel, o+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
+}
+
 func fileDigest(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -120,6 +164,11 @@ func (pin *pluginPin) changedIn(root string) string {
 	var changed []string
 	for rel, sum := range pin.files {
 		if now.files[rel] != sum {
+			changed = append(changed, rel)
+		}
+	}
+	for rel := range now.files {
+		if _, had := pin.files[rel]; !had && !pin.output(rel) {
 			changed = append(changed, rel)
 		}
 	}
