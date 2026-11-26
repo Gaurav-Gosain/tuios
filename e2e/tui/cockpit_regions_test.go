@@ -180,10 +180,20 @@ func TestCockpitRegions(t *testing.T) {
 
 	// N: each agent that needs the person, then the first again.
 	var seen []string
-	for range 3 {
+	prev := ckCursorRow(term.Screen())
+	for i := range 3 {
 		ckPress(t, term, "N")
-		got := ckCursorRow(term.Screen())
+		// The row is read once the cursor has left the row it was on, not
+		// from the frame before the redraw.
+		var got string
+		if err := term.WaitFor(func(s tuitest.Screen) bool {
+			got = ckCursorRow(s)
+			return got != "" && got != prev
+		}, uiTimeout); err != nil {
+			t.Fatalf("ASSERTION: N %d did not move the cursor from %q: %v\n%s", i+1, prev, err, term.Snapshot())
+		}
 		seen = append(seen, got)
+		prev = got
 	}
 	needs := func(s string) bool { return strings.Contains(s, "api-auth") || strings.Contains(s, "scratch") }
 	if !needs(seen[0]) || !needs(seen[1]) || seen[0] == seen[1] || seen[2] != seen[0] {
