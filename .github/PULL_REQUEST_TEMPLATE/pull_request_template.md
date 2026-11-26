@@ -46,7 +46,7 @@ Include steps to test this on different platforms/install methods:
 
 The change in bytes for linux/amd64 and darwin/arm64. Copy it from the
 binary size comment CI posts, or measure with `scripts/binary-size.sh` on main
-and on this branch. CI fails only above the 50 MB ceiling.
+and on this branch. CI fails only above the 60 MB ceiling.
 
 - linux/amd64: `<+N bytes>`
 - darwin/arm64: `<+N bytes>`

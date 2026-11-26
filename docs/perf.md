@@ -27,7 +27,7 @@ visible consumer, idle CPU under ~0.5%.
   code that woke in it. `TUIOS_STATS_FILE` makes the process dump its tick
   counters on clean exit and on SIGUSR1.
 - `scripts/binary-size.sh`: builds the stripped release binary for
-  linux/amd64 and darwin/arm64 and fails over the 50 MB ceiling. See "Binary
+  linux/amd64 and darwin/arm64 and fails over the 60 MB ceiling. See "Binary
   size budget" below.
 
 ## Numbers
@@ -2376,7 +2376,10 @@ the cuts below brought it under the ceiling.
 
 Since 2026-10-22 the ceiling is the only limit. On 2026-11-02 it went down to
 47,000,000 bytes after the rare diagram types moved to the sketch plugin. Since
-2026-11-04 it is 50,000,000 bytes for each target again. The headroom is not a
+2026-11-04 it was 50,000,000 bytes for each target again. Since 2026-11-26 it is
+60,000,000 bytes, to make room for the Files view and the live diff view, with
+windows/amd64 at 49,956,352 bytes then. The plan is to bring the size down
+again with marmot builds. The headroom is not a
 budget to spend: each pull request still reports its size delta and trims what
 it can. There are no per-target budgets to raise. On a pull request, the job
 compares each size with main's last measured size. It writes the size, the

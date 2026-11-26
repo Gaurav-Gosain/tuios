@@ -15,8 +15,8 @@
 # to that file, for the CI job that compares against main.
 set -euo pipefail
 
-# 50 MB. Raise it only on purpose, in its own commit, with docs/perf.md.
-ceiling=50000000
+# 60 MB. Raise it only on purpose, in its own commit, with docs/perf.md.
+ceiling=60000000
 
 cd "$(dirname "$0")/.."
 targets=("$@")
