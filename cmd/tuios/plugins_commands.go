@@ -102,6 +102,12 @@ func paneConfirm(change, id, path, source string) error {
 	defer func() { _ = client.Close() }()
 	fmt.Fprintln(os.Stderr, "This command runs inside a tuios pane. tuios asks the person in a dialog at an attached client. Waiting for the answer.")
 	raw, err := client.CallWithTimeout("plugin-confirm", params, session.PluginConfirmWait+15*time.Second)
+	var refused *session.VerbCallError
+	if errors.As(err, &refused) && refused.Code == session.ErrVerbForbidden {
+		// The daemon's refusal says what happened and what to do.
+		// The error printer adds the full stop.
+		return errors.New(strings.TrimSuffix(refused.Message, "."))
+	}
 	if err != nil {
 		return explainVerbError("plugin-confirm", err)
 	}
