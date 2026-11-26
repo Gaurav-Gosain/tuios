@@ -19803,3 +19803,13 @@ Repeat from `e2e/tui` with
 | A new file outside the build outputs after the Yes is refused | `changedIn` lets every new file pass | `TestPanePluginNewSourceAfterTheYesIsRefused`: "a new source file after the Yes was not refused" | **caught** |
 
 Not covered by an e2e test: a pane that calls `plugin.enable` on the herdr socket with a token of a Yes to another plugin or from another pane. `pluginConfirmed` checks the pane, the plugin and the verb of the change, and the tuios CLI never sends such a call.
+
+## kill-server ends every pane process
+
+`TestKillServerEndsEveryPaneProcess` starts, from a pane, a child in a process group of its own that ignores SIGHUP, and a child that left the pane's session with setsid. After kill-server, the first must be gone and the second must still run. Run on 2026-11-26 on Linux, against the branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| kill-server ends a pane's process that ignores the hangup | `reapPaneProcs` given no process | "still running after kill-server: ignores SIGHUP [pid]" | **caught** |
+
+The scope part needs `TUIOS_E2E_OWN_USER_MANAGER=1` and did not run here.

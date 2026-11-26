@@ -2251,10 +2251,19 @@ func (d *Daemon) shutdown() error {
 			log.Println("Warning: goroutine shutdown timed out after 5s, forcing shutdown")
 		}
 
+		// Every process of the panes is read before they close: a job that
+		// ignores the hangup would run on with no daemon. See
+		// pane_reap_unix.go.
+		paneProcs := d.paneProcs()
+
 		// Stopping the manager stops every session, and each session's Stop
 		// writes its final resurrection state synchronously. When this returns,
 		// everything that will be persisted has been persisted.
 		d.manager.Shutdown()
+
+		if n := reapPaneProcs(paneProcs, paneReapGrace); n > 0 {
+			LogBasic("Killed %d pane processes that ran on after their panes closed", n)
+		}
 
 		// Every stashed file goes now. Sessions are stopped above, so nothing is
 		// still writing, and the promise the stash makes is that its files do not
