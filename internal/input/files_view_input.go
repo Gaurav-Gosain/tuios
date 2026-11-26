@@ -113,53 +113,6 @@ func filesPromptKey(msg tea.KeyPressMsg, o *app.OS) tea.Cmd {
 	return nil
 }
 
-// filesAction runs one action of [keybindings.files].
-func filesAction(act string, o *app.OS) tea.Cmd {
-	switch act {
-	case config.ActionFilesDown:
-		o.FilesMove(1)
-	case config.ActionFilesUp:
-		o.FilesMove(-1)
-	case config.ActionFilesPageDown:
-		o.FilesPage(true)
-	case config.ActionFilesPageUp:
-		o.FilesPage(false)
-	case config.ActionFilesTop:
-		o.FilesEdge(false)
-	case config.ActionFilesBottom:
-		o.FilesEdge(true)
-	case config.ActionFilesOpen:
-		return o.FilesOpen()
-	case config.ActionFilesParent:
-		return o.FilesParent()
-	case config.ActionFilesHome:
-		return o.FilesHome()
-	case config.ActionFilesGoTo:
-		o.FilesStartPrompt(true)
-	case config.ActionFilesFilter:
-		o.FilesStartPrompt(false)
-	case config.ActionFilesFind:
-		return o.FilesFind()
-	case config.ActionFilesFill:
-		if o.QuickLookOpen() {
-			o.QuickLookFullSize()
-		}
-	case config.ActionFilesHidden:
-		o.FilesToggleHidden()
-	case config.ActionFilesSort:
-		o.FilesSort(false)
-	case config.ActionFilesSortReverse:
-		o.FilesSort(true)
-	case config.ActionFilesEdit:
-		return o.FilesEdit()
-	case config.ActionFilesOpenSystem:
-		return o.FilesOpenSystem()
-	case config.ActionFilesInsertPath:
-		o.FilesInsertPath()
-	case config.ActionFilesCopyPath:
-		return o.FilesCopyPath()
-	case config.ActionFilesClose:
-		o.CloseFilesView()
-	}
-	return nil
-}
+// filesAction runs one action of [keybindings.files]. The switch is the
+// app's, so a click on a footer hint runs the same code as its key.
+func filesAction(act string, o *app.OS) tea.Cmd { return o.FilesAction(act) }

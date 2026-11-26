@@ -20,6 +20,14 @@ func (m *OS) filesCovered() bool {
 // opens it.
 func (m *OS) FilesClick(x, y int) tea.Cmd {
 	e := &m.explorer
+	if y == e.hintsY {
+		for _, h := range e.hints {
+			if x >= h.x0 && x < h.x1 {
+				return h.run(m)
+			}
+		}
+		return nil
+	}
 	if y == e.crumbsY {
 		for _, c := range e.crumbs {
 			if x >= c.x0 && x < c.x1 {
@@ -50,11 +58,21 @@ func (m *OS) FilesClick(x, y int) tea.Cmd {
 	return nil
 }
 
-// FilesWheel moves the cursor three rows.
+// filesWheelRows is how far one notch of the wheel scrolls a side.
+const filesWheelRows = 3
+
+// FilesWheel scrolls the rows three at a time. The cursor stays on its row
+// while that row is on screen, and moves onto the screen when it is not.
 func (m *OS) FilesWheel(up bool) {
+	e := &m.explorer
+	s := &e.side
+	n := filesWheelRows
 	if up {
-		m.FilesMove(-3)
-		return
+		n = -n
 	}
-	m.FilesMove(3)
+	last := max(len(s.rows)-e.rowsN, 0)
+	s.scroll = max(min(s.scroll+n, last), 0)
+	s.cursor = max(min(s.cursor, s.scroll+e.rowsN-1), s.scroll)
+	s.cursor = max(min(s.cursor, len(s.rows)-1), 0)
+	e.gen++
 }

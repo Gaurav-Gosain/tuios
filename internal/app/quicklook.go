@@ -371,6 +371,7 @@ type quickLookFrame struct {
 	viewScroll, column int
 	details            *quickLookDetails
 	innerW, bodyH      int
+	files              bool
 	key                string
 	seekKey            string
 	insideKey          string
@@ -896,8 +897,9 @@ func (m *OS) quickLookSize() (innerW, bodyH int) {
 	usable := max(rh-r.Top-r.Bottom, 1)
 	ql := &m.quickLook
 	if b := m.explorer.lookBox; ql.files && !ql.full && b.w > 0 {
-		// Beside the Files view's list, in the box the view keeps for it.
-		return max(b.w-2, overlay.MinDialogWidth), max(b.h-2, 1)
+		// Beside the Files view's list, in the box the view keeps for it,
+		// under a header row and with no frame.
+		return max(b.w, overlay.MinDialogWidth), max(b.h-filesLookHeader, 1)
 	}
 	switch {
 	case ql.full:
@@ -1052,6 +1054,10 @@ func (m *OS) QuickLookMouseClick(x, y int) bool {
 		}
 		return true
 	}
+	if ql.files {
+		// Beside the Files view's list: a click on the list is the list's.
+		return false
+	}
 	m.CloseQuickLook()
 	return false
 }
@@ -1152,7 +1158,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 	// border_style every frame, outside the palette.
 	f := quickLookFrame{mdGen: ql.mdGen, mdOpen: ql.mdOpen, dirSel: ql.dirSel, dirStats: ql.dirStatsGen, run: ql.run, view: ql.view, viewScroll: ql.viewScroll, column: ql.column, details: ql.details, ok: true, look: ql.lookKey, res: ql.res, target: ql.target, scroll: ql.scroll, inside: ql.inside,
 		prompt: ql.prompt, input: ql.input.String(), inputAt: ql.inputAt(), query: ql.query, status: ql.status, wrap: ql.wrap,
-		innerW: innerW, bodyH: bodyH, key: key, seekKey: seekKey, insideKey: insideKey, border: m.Settings.OverlayBorder(),
+		innerW: innerW, bodyH: bodyH, files: ql.files, key: key, seekKey: seekKey, insideKey: insideKey, border: m.Settings.OverlayBorder(),
 		canvas: pal.Canvas, fgMute: pal.FgMute, frame: pal.Frame, accent: pal.Accent,
 		accentBright: pal.AccentBright, fgDim: pal.FgDim}
 	var content string
@@ -1161,7 +1167,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 	// Copy mode moves something on every key, so its frames are not kept.
 	if k := &ql.framed; ql.copy == nil && k.ok && k.look == f.look && k.res == f.res && k.target == f.target && k.scroll == f.scroll && k.inside == f.inside &&
 		k.prompt == f.prompt && k.input == f.input && k.query == f.query && k.status == f.status && k.wrap == f.wrap && k.view == f.view && k.mdOpen == f.mdOpen && k.mdGen == f.mdGen && k.dirSel == f.dirSel && k.dirStats == f.dirStats && k.run == f.run && k.viewScroll == f.viewScroll && k.column == f.column && k.details == f.details &&
-		k.innerW == f.innerW && k.bodyH == f.bodyH && k.key == f.key && k.seekKey == f.seekKey && k.insideKey == f.insideKey && k.border == f.border &&
+		k.innerW == f.innerW && k.bodyH == f.bodyH && k.files == f.files && k.key == f.key && k.seekKey == f.seekKey && k.insideKey == f.insideKey && k.border == f.border &&
 		k.canvas == f.canvas && k.fgMute == f.fgMute && k.frame == f.frame && k.accent == f.accent &&
 		k.accentBright == f.accentBright && k.fgDim == f.fgDim {
 		content, geo = k.content, k.geo
@@ -1173,8 +1179,15 @@ func (m *OS) renderQuickLook() (string, int, int) {
 		if ql.target.dir && !strings.HasSuffix(title, "/") {
 			title += "/"
 		}
-		hints := m.quickLookHints(key)
-		content, geo = overlay.Dialog{Title: title, Width: innerW, Body: c.render(), Hints: hints}.Render(pal)
+		if ql.files && !ql.full {
+			// Beside the Files view's list: a header row in place of the
+			// frame, and the keys in the view's one footer.
+			content = m.filesLookHeader(pal, innerW) + "\n" + c.render()
+			geo = overlay.Geometry{Width: innerW, Height: bodyH + filesLookHeader}
+		} else {
+			hints := m.quickLookHints(key)
+			content, geo = overlay.Dialog{Title: title, Width: innerW, Body: c.render(), Hints: hints}.Render(pal)
+		}
 		// Only a finished text, markdown, folder, binary or error body is kept;
 		// a picture's cells arrive later.
 		ql.framed = quickLookFrame{}
@@ -1186,19 +1199,25 @@ func (m *OS) renderQuickLook() (string, int, int) {
 		}
 	}
 	x, y := m.overlayOrigin(overlayKindQuickLook, geo)
+	// bx, by is the body's first cell. box is the panel with its frame, so
+	// that the body is one cell in from it: beside the Files view the panel
+	// has no frame, and box is the body with a cell round it.
+	bx, by := x+1, y+1
+	ql.box = overlay.Rect{X0: x, Y0: y, X1: x + geo.Width, Y1: y + geo.Height}
 	if b := m.explorer.lookBox; ql.files && !ql.full && b.w > 0 {
 		x, y = b.x, b.y
+		bx, by = x, y+filesLookHeader
+		ql.box = overlay.Rect{X0: bx - 1, Y0: by - 1, X1: bx + innerW + 1, Y1: by + bodyH + 1}
 	}
-	ql.box = overlay.Rect{X0: x, Y0: y, X1: x + geo.Width, Y1: y + geo.Height}
 	ql.pic = quickLookPic{}
 	if pic.ok {
-		pic.x += x + 1
-		pic.y += y + 1
+		pic.x += bx
+		pic.y += by
 		ql.pic = pic
 	}
 	for i := range ql.stripPics {
-		ql.stripPics[i].x += x + 1
-		ql.stripPics[i].y += y + 1
+		ql.stripPics[i].x += bx
+		ql.stripPics[i].y += by
 	}
 	return content, x, y
 }

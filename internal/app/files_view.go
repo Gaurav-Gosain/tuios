@@ -101,6 +101,21 @@ type filesSide struct {
 	scroll int
 }
 
+// short is dir with the side's home folder written as ~, the way a shell
+// prompt writes it.
+func (s *filesSide) short(dir string) string {
+	h := s.home
+	switch {
+	case h == "" || h == "/":
+		return dir
+	case dir == h:
+		return "~"
+	case strings.HasPrefix(dir, h+"/"):
+		return "~" + dir[len(h):]
+	}
+	return dir
+}
+
 // explorerState is the Files view.
 type explorerState struct {
 	open bool
@@ -133,6 +148,10 @@ type explorerState struct {
 	lookBox        filesBox
 	// clickAt is when the cursor row was last clicked, for a double click.
 	clickAt time.Time
+	// hints is the footer's key hints as last drawn, on the screen row
+	// hintsY. A click on one runs it.
+	hints  []filesHint
+	hintsY int
 }
 
 // filesBox is a rectangle on the screen.

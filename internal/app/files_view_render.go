@@ -4,6 +4,8 @@ import (
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
@@ -110,7 +112,7 @@ func (m *OS) drawFilesView(c *ckCanvas, pal overlay.Palette, w, h, top int, read
 	if list.h > 0 {
 		m.drawFilesSide(c, pal, g, list, top, reading)
 	}
-	m.drawFilesHints(c, pal, hintsY, w)
+	m.drawFilesHints(c, pal, hintsY, w, top)
 }
 
 // drawFilesTopBar draws the Files mark, the side's tab and the switches.
@@ -119,10 +121,7 @@ func (m *OS) drawFilesTopBar(c *ckCanvas, pal overlay.Palette, g filesGlyphs, w 
 	c.fill(0, 0, w, 1, ckColor(pal.Panel))
 	x := c.text(1, 0, 0, ckSeg{t: g.files + " ", fg: pal.AccentBright}, ckSeg{t: "Files", fg: pal.Fg, attrs: ckBold})
 	name, _ := m.filesSideMachine()
-	tab := " " + name + " " + shortenHome(e.side.Dir) + " "
-	if e.side.host != "" || m.AttachedHost != "" {
-		tab = " " + name + ":" + e.side.Dir + " "
-	}
+	tab := " " + name + " " + e.side.short(e.side.Dir) + " "
 	x += 3
 	right := "sort " + e.sort.String()
 	if e.reverse {
@@ -170,7 +169,7 @@ func (m *OS) drawFilesSide(c *ckCanvas, pal overlay.Palette, g filesGlyphs, b fi
 	// The rule: the side with the keys.
 	y++
 	c.hline(b.x, y, b.w, g.rule, pal.Accent)
-	y += 2
+	y++
 	// The columns.
 	nameX := x0 + 1
 	sizeR, modR := right, right
@@ -343,38 +342,71 @@ func (m *OS) drawFilesFooter(c *ckCanvas, pal overlay.Palette, x0, right, y int)
 	}
 }
 
-// drawFilesHints draws the keys of the view on its last row.
-func (m *OS) drawFilesHints(c *ckCanvas, pal overlay.Palette, y, w int) {
+// filesHint is one key hint of the footer: the key, its word, and what a
+// click on it runs.
+type filesHint struct {
+	key, label string
+	run        func(m *OS) tea.Cmd
+	x0, x1     int
+}
+
+// filesHints is the footer's hints: quick look's keys first while it is
+// beside the list, then the view's.
+func (m *OS) filesHints() []filesHint {
+	e := &m.explorer
+	var out []filesHint
+	act := func(action, label string) {
+		if k := m.filesKey(action); k != "" {
+			out = append(out, filesHint{key: k, label: label, run: func(m *OS) tea.Cmd { return m.FilesAction(action) }})
+		}
+	}
+	look := func(table config.Table, action, label string, run func(m *OS) tea.Cmd) {
+		if m.KeybindRegistry == nil {
+			return
+		}
+		if keys := m.KeybindRegistry.Keys(table, action); len(keys) > 0 {
+			out = append(out, filesHint{key: keys[0], label: label, run: run})
+		}
+	}
+	if e.look {
+		act(config.ActionFilesQuickLook, "close look")
+		look(config.TableQuickLook, "go_inside", "read inside", func(m *OS) tea.Cmd { m.QuickLookGoInside(); return nil })
+		act(config.ActionFilesFill, "fill")
+		look(config.TableQuickLook, "next_view", "next view", func(m *OS) tea.Cmd { return m.QuickLookNextView() })
+	} else {
+		act(config.ActionFilesQuickLook, "look")
+	}
+	act(config.ActionFilesOpen, "open")
+	act(config.ActionFilesEdit, "edit in a pane")
+	act(config.ActionFilesOpenSystem, "open with system")
+	act(config.ActionFilesInsertPath, "type path")
+	act(config.ActionFilesCopyPath, "copy path")
+	act(config.ActionFilesFilter, "filter")
+	act(config.ActionFilesFind, "find")
+	act(config.ActionFilesGoTo, "go to")
+	act(config.ActionFilesHidden, "hidden")
+	act(config.ActionFilesSort, "sort")
+	act(config.ActionFilesClose, "close")
+	return out
+}
+
+// drawFilesHints draws the keys of the view on its last row, and keeps
+// where each went: a click on a hint runs it.
+func (m *OS) drawFilesHints(c *ckCanvas, pal overlay.Palette, y, w, top int) {
 	c.fill(0, y, w, 1, ckColor(pal.Panel))
 	e := &m.explorer
-	look := "look"
-	if e.look {
-		look = "close look"
-	}
-	pairs := [][2]string{
-		{config.ActionFilesQuickLook, look},
-		{config.ActionFilesOpen, "open"},
-		{config.ActionFilesEdit, "edit in a pane"},
-		{config.ActionFilesOpenSystem, "open with system"},
-		{config.ActionFilesInsertPath, "type path"},
-		{config.ActionFilesCopyPath, "copy path"},
-		{config.ActionFilesFilter, "filter"},
-		{config.ActionFilesGoTo, "go to"},
-		{config.ActionFilesHidden, "hidden"},
-		{config.ActionFilesSort, "sort"},
-		{config.ActionFilesClose, "close"},
-	}
+	e.hints = e.hints[:0]
+	e.hintsY = top + y
 	x := 1
-	for _, p := range pairs {
-		k := m.filesKey(p[0])
-		if k == "" {
-			continue
-		}
-		need := ansi.StringWidth(k) + 1 + ansi.StringWidth(p[1])
+	for _, h := range m.filesHints() {
+		need := ansi.StringWidth(h.key) + 1 + ansi.StringWidth(h.label)
 		if x+need > w-1 {
 			break
 		}
-		x = c.text(x, y, w-1, ckSeg{t: k, fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " " + p[1], fg: pal.FgDim})
+		h.x0 = x
+		x = c.text(x, y, w-1, ckSeg{t: h.key, fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " " + h.label, fg: pal.FgDim})
+		h.x1 = x
+		e.hints = append(e.hints, h)
 		x += 3
 	}
 }

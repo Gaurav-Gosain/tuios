@@ -1,6 +1,14 @@
 package app
 
-import tea "charm.land/bubbletea/v2"
+import (
+	tea "charm.land/bubbletea/v2"
+	"github.com/Gaurav-Gosain/tuios/internal/config"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
+)
+
+// filesLookHeader is the rows quick look draws above its body beside the
+// Files view's list, in place of its frame.
+const filesLookHeader = 1
 
 // quickLookFilesSync is QuickLookSync while the Files view owns the preview:
 // it follows the view's cursor, and goes when the view or its look goes.
@@ -32,4 +40,47 @@ func (m *OS) quickLookCovered() bool {
 		return false
 	}
 	return !m.quickLook.files || m.topmostOverlayKind() != overlayKindFiles
+}
+
+// filesLookHeader draws quick look's header beside the Files view's list:
+// the file's mark and name, and on the right the keys that go into it. It
+// sits on the row of the list's machine row, on the same ground.
+func (m *OS) filesLookHeader(pal overlay.Palette, w int) string {
+	ql := &m.quickLook
+	c := (*ckCanvas)(nil).reset(w, 1, ckColor(pal.Panel))
+	t := ql.target
+	icon := fileIconFor(t.name, t.dir)
+	name := t.name
+	if t.dir {
+		name += "/"
+	}
+	x := 1
+	if icon.Glyph != "" && !m.Settings.NoNerdFont && !overlay.UseASCII() {
+		x = c.text(x, 0, w-1, ckSeg{t: icon.Glyph + " ", fg: pal.AccentBright})
+	}
+	c.text(x, 0, w-1, ckSeg{t: name, fg: pal.Fg, attrs: ckBold})
+	var segs []ckSeg
+	add := func(table config.Table, action, label string) {
+		if m.KeybindRegistry == nil {
+			return
+		}
+		keys := m.KeybindRegistry.Keys(table, action)
+		if len(keys) == 0 {
+			return
+		}
+		if len(segs) > 0 {
+			segs = append(segs, ckSeg{t: "   "})
+		}
+		segs = append(segs, ckSeg{t: keys[0], fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " " + label, fg: pal.FgDim})
+	}
+	if ql.inside {
+		add(config.TableQuickLookInside, "go_back", "back to the list")
+	} else {
+		add(config.TableQuickLook, "go_inside", "read inside")
+	}
+	add(config.TableFiles, config.ActionFilesFill, "fill")
+	if ckWidth(segs...)+ckWidth(ckSeg{t: name})+6 < w {
+		c.textR(w-1, 0, segs...)
+	}
+	return c.render()
 }
