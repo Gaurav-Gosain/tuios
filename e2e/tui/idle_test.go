@@ -574,9 +574,17 @@ func runIdleWindowOpts(t *testing.T, config string, o startOpts, budget idleBudg
 	o.out = wire
 	o.env = append(o.env, "TUIOS_STATS_FILE="+statsPath)
 	pprofPort := 0
+	wakeDir := ""
 	if budget.traced {
 		pprofPort = freePort(t)
 		o.args = append(o.args, "--pprof", fmt.Sprintf("127.0.0.1:%d", pprofPort))
+		// A marmot build has no runtime trace. Its runtime writes a wakeup
+		// trace per process into this folder instead. gc ignores it.
+		wakeDir = filepath.Join(base, "wakeups")
+		if err := os.Mkdir(wakeDir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		o.env = append(o.env, "MARMOT_TRACE=wakeups="+wakeDir+string(filepath.Separator))
 	}
 	// The client as it ships, with no test knob that counts its writes.
 	o.noSettleProbe = true
@@ -645,7 +653,10 @@ func runIdleWindowOpts(t *testing.T, config string, o startOpts, budget idleBudg
 		t.Fatalf("idle window over budget:\n  %s\n%s", strings.Join(over, "\n  "), term.Snapshot())
 	}
 	if budget.traced {
-		woke, sites := tuiosWakeups(t, pprofPort, idleWindow)
+		woke, sites, traced := tuiosWakeups(t, pprofPort, idleWindow)
+		if !traced {
+			woke, sites = marmotWakeups(t, pid, wakeDir, idleWindow)
+		}
 		t.Logf("traced idle window %v: %d goroutine wakeups in tuios code", idleWindow, woke)
 		if woke > 0 {
 			t.Fatalf("goroutines of tuios code woke %d times in an idle window:\n  %s", woke, strings.Join(sites, "\n  "))

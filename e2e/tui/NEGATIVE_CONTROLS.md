@@ -7223,6 +7223,17 @@ Run on 2026-11-24 on Linux at load 22 to 24.
 | No watch on the git folders | `gitWatcher.retarget` returns before it makes the set | `TestIdleCostStaysLow/git_section`: "the git section never showed a branch checked out outside the panes" | **caught** |
 | The positive half | this branch | none: every window 0 ticks and 0 ticker wakes but the late output's 1 and 1, the traces 0 wakeups, and the outside branch shown | **guard** |
 
+A marmot build has no runtime trace: its trace endpoint answers "tracing is
+not supported by marmot". The traced windows then read the marmot wakeup
+trace (`MARMOT_TRACE=wakeups=DIR/`, read with `marmot prof -wakeups -json`)
+and fail on any wakeup whose site is tuios code. Run on 2026-11-26 on Linux,
+on a `marmot build -release` of the client, through the marmot queue.
+
+| Control | How | Tests that fail | Verdict |
+| --- | --- | --- | --- |
+| A tuios timer fires each second in the traced window | the clock-on subtest with `traced: true` and `ctxsw` at 100000 | `TestIdleCostStaysLow/clock_on`: "goroutines of tuios code woke 42 times in an idle window", with the sites: the dock engine's schedule timer, Bubble Tea's event loop and command goroutine, and `termio.(*Screen).Commit` | **caught** |
+| The positive half | this branch | none: clock off and git section read the marmot trace, 0 wakeups in the window, 0 in tuios code | **guard** |
+
 `TestGitSectionPollsWithoutAWatch` covers the fallback. The knob
 `git_watch_fail` makes the watch fail as a full inotify table does, and holds
 the failure until the test removes its file. So the failure lands after the

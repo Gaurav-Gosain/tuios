@@ -20,7 +20,9 @@ import (
 // on the stack it was waiting on. The runtime's own goroutines (GC, the
 // scavenger, the tracer) and the pprof server answering this request are not
 // counted. It answers the count and the wait sites, most frequent first.
-func tuiosWakeups(t *testing.T, port int, d time.Duration) (int, []string) {
+// traced is false, with nothing read, when the binary has no runtime trace
+// (a marmot build): read its wakeup trace instead (marmotWakeups).
+func tuiosWakeups(t *testing.T, port int, d time.Duration) (woke int, sites []string, traced bool) {
 	t.Helper()
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 5*time.Second)
 	if err != nil {
@@ -39,6 +41,9 @@ func tuiosWakeups(t *testing.T, port int, d time.Duration) (int, []string) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusInternalServerError && strings.Contains(string(body), traceUnsupported) {
+			return 0, nil, false
+		}
 		t.Fatalf("trace: %s: %s", resp.Status, body)
 	}
 	r, err := trace.NewReader(resp.Body)
@@ -75,13 +80,16 @@ func tuiosWakeups(t *testing.T, port int, d time.Duration) (int, []string) {
 			}
 		}
 	}
-	sites := make([]string, 0, len(counts))
+	sites = make([]string, 0, len(counts))
 	for site, n := range counts {
 		sites = append(sites, fmt.Sprintf("%d at %s", n, site))
 	}
 	slices.Sort(sites)
-	return total, sites
+	return total, sites, true
 }
+
+// traceUnsupported is what the trace endpoint of a marmot build answers.
+const traceUnsupported = "tracing is not supported by marmot"
 
 // tuiosWaitSite is the first frame of tuios, Bubble Tea or ultraviolet code
 // on a wait stack, empty when there is none or the stack is the pprof
@@ -90,13 +98,24 @@ func tuiosWaitSite(s trace.Stack) string {
 	site := ""
 	for f := range s.Frames() {
 		fn := f.Func
-		if strings.HasPrefix(fn, "main.servePprof") || strings.HasPrefix(fn, "main.pprof") {
+		if pprofFunc(fn) {
 			return ""
 		}
-		if site == "" && (strings.HasPrefix(fn, "github.com/Gaurav-Gosain/tuios/") || strings.HasPrefix(fn, "main.") ||
-			strings.HasPrefix(fn, "charm.land/") || strings.HasPrefix(fn, "github.com/charmbracelet/")) {
+		if site == "" && tuiosFunc(fn) {
 			site = fmt.Sprintf("%s (%s:%d)", fn, f.File, f.Line)
 		}
 	}
 	return site
+}
+
+// tuiosFunc reports whether fn is tuios, Bubble Tea or ultraviolet code.
+func tuiosFunc(fn string) bool {
+	return strings.HasPrefix(fn, "github.com/Gaurav-Gosain/tuios/") || strings.HasPrefix(fn, "main.") ||
+		strings.HasPrefix(fn, "charm.land/") || strings.HasPrefix(fn, "github.com/charmbracelet/")
+}
+
+// pprofFunc reports whether fn is the pprof server, which answers the trace
+// request.
+func pprofFunc(fn string) bool {
+	return strings.HasPrefix(fn, "main.servePprof") || strings.HasPrefix(fn, "main.pprof")
 }
