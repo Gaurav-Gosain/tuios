@@ -131,6 +131,22 @@ func (d *Daemon) editsOf(sess *Session, pane string, from int64) ([]reviewEdit, 
 // reviewJudge is the judge of the lines a pane's turn added between from and
 // to (Unix nanoseconds), nil when the pane has no transcript to judge by.
 func (d *Daemon) reviewJudge(sess *Session, pane, root string, from, to int64) func(path, text string) review.Verdict {
+	return d.reviewEditJudge(sess, pane, root, from, to, 0)
+}
+
+// reviewClaim is the judge of the lines that changed before a turn start:
+// Made for a line an edit of the pane between from and to holds. Every other
+// line is the person's: PersonUnsure when a tool that can write started
+// between from and snapped, when the snapshot of the turn start ended, since
+// a command a hook or the agent ran may have made it, and NotMade otherwise.
+// nil when the pane has no transcript.
+func (d *Daemon) reviewClaim(sess *Session, pane, root string, from, to, snapped int64) func(path, text string) review.Verdict {
+	return d.reviewEditJudge(sess, pane, root, from, to, snapped)
+}
+
+// reviewEditJudge is reviewJudge, or reviewClaim when snapped is set.
+func (d *Daemon) reviewEditJudge(sess *Session, pane, root string, from, to, snapped int64) func(path, text string) review.Verdict {
+	claim := snapped != 0
 	if sess == nil {
 		return nil
 	}
@@ -146,7 +162,10 @@ func (d *Daemon) reviewJudge(sess *Session, pane, root string, from, to int64) f
 			continue
 		}
 		if e.writes {
-			writes = true
+			// A tool a claim counts started before the snapshot ended.
+			if !claim || e.at == 0 || e.at <= snapped/1e6 {
+				writes = true
+			}
 			continue
 		}
 		in = append(in, e)
@@ -163,7 +182,10 @@ func (d *Daemon) reviewJudge(sess *Session, pane, root string, from, to int64) f
 				return review.Made
 			}
 		}
-		if writes {
+		switch {
+		case writes && claim:
+			return review.PersonUnsure
+		case writes:
 			return review.Unsure
 		}
 		return review.NotMade

@@ -111,16 +111,17 @@ func (d *Daemon) reviewOrigins(ctx context.Context, repo reviewRepo, diff *revie
 	// it, and each turn start credits the person with what changed before
 	// it (turn_starts.go).
 	type mark struct {
-		tree string
-		at   int64
-		cp   *worktree.Checkpoint
+		tree  string
+		at    int64
+		cp    *worktree.Checkpoint
+		start *turnStart
 	}
 	var marks []mark
 	for i := range turns {
 		marks = append(marks, mark{tree: turns[i].Tree, at: turns[i].At, cp: &turns[i]})
 	}
 	for _, s := range d.turnMarks.startsOf(repo.root) {
-		marks = append(marks, mark{tree: s.tree, at: s.at})
+		marks = append(marks, mark{tree: s.tree, at: s.at, start: &s})
 	}
 	slices.SortStableFunc(marks, func(a, b mark) int {
 		switch {
@@ -131,31 +132,33 @@ func (d *Daemon) reviewOrigins(ctx context.Context, repo reviewRepo, diff *revie
 		}
 		return 0
 	})
-	var steps []review.OriginStep
-	from := diff.BaseSHA
-	var prevAt int64
-	for _, mk := range marks {
-		step := review.OriginStep{From: from, To: mk.tree}
-		if cp := mk.cp; cp != nil {
-			a := reviewOrigin{Kind: "agent", Pane: cp.Pane, Session: cp.Session, Turn: cp.Turn, At: cp.At, Agent: "agent"}
-			if p, ok := panes[cp.Pane]; ok {
-				a.Agent = reviewAgentName(p.WindowState)
-				// The agent's own edits judge the lines of its turn
-				// (review_edits.go).
-				step.Judge = d.reviewJudge(p.sess, cp.Pane, repo.root, prevAt, cp.At)
-			}
-			authors = append(authors, a)
-			step.Author = len(authors) - 1
-			if step.Judge != nil {
-				authors = append(authors, reviewOrigin{Kind: "person", Pane: cp.Pane, Session: cp.Session, Turn: cp.Turn})
-				step.Person = len(authors) - 1
-			}
-		}
-		steps = append(steps, step)
-		from, prevAt = mk.tree, mk.at
+
+	// The authors first: each checkpoint's turn, then the turn running now
+	// when one agent works in the tree. A turn start looks up the turn it
+	// starts among them.
+	type turnKey struct {
+		pane string
+		turn uint64
 	}
-	// Lines made since the last checkpoint: the agent working in the tree
-	// now when there is one, the person otherwise.
+	type turnEnd struct {
+		author int
+		at     int64
+	}
+	ends := map[turnKey]turnEnd{}
+	cpAuthor := map[*worktree.Checkpoint]int{}
+	for _, mk := range marks {
+		cp := mk.cp
+		if cp == nil {
+			continue
+		}
+		a := reviewOrigin{Kind: "agent", Pane: cp.Pane, Session: cp.Session, Turn: cp.Turn, At: cp.At, Agent: "agent"}
+		if p, ok := panes[cp.Pane]; ok {
+			a.Agent = reviewAgentName(p.WindowState)
+		}
+		authors = append(authors, a)
+		cpAuthor[cp] = len(authors) - 1
+		ends[turnKey{cp.Pane, cp.Turn}] = turnEnd{len(authors) - 1, cp.At}
+	}
 	last := 0
 	var working []agentPane
 	for _, p := range panes {
@@ -163,18 +166,58 @@ func (d *Daemon) reviewOrigins(ctx context.Context, repo reviewRepo, diff *revie
 			working = append(working, p)
 		}
 	}
-	final := review.OriginStep{From: from, To: diff.TreeSHA}
+	now := time.Now().UnixNano()
 	if len(working) == 1 {
 		w := working[0]
 		authors = append(authors, reviewOrigin{Kind: "agent", Agent: reviewAgentName(w.WindowState), Pane: w.ID, Turn: w.CompletionSeq + 1, Working: true})
 		last = len(authors) - 1
-		final.Judge = d.reviewJudge(w.sess, w.ID, repo.root, prevAt, time.Now().UnixNano())
+		ends[turnKey{w.ID, w.CompletionSeq + 1}] = turnEnd{last, now}
+	}
+
+	var steps []review.OriginStep
+	from := diff.BaseSHA
+	var prevAt int64
+	for _, mk := range marks {
+		step := review.OriginStep{From: from, To: mk.tree}
+		switch {
+		case mk.cp != nil:
+			cp := mk.cp
+			step.Author = cpAuthor[cp]
+			if p, ok := panes[cp.Pane]; ok {
+				// The agent's own edits judge the lines of its turn
+				// (review_edits.go).
+				step.Judge = d.reviewJudge(p.sess, cp.Pane, repo.root, prevAt, cp.At)
+			}
+			if step.Judge != nil {
+				authors = append(authors, reviewOrigin{Kind: "person", Pane: cp.Pane, Session: cp.Session, Turn: cp.Turn})
+				step.Person = len(authors) - 1
+			}
+		case mk.start != nil:
+			// What changed before a turn start is the person's, except an
+			// edit of the turn that started: the agent can write before
+			// the snapshot is taken, and its edits say which lines it made.
+			s := mk.start
+			end, ok := ends[turnKey{s.pane, s.turn}]
+			if p, live := panes[s.pane]; ok && live {
+				if step.Judge = d.reviewClaim(p.sess, s.pane, repo.root, prevAt, end.at, s.snapped); step.Judge != nil {
+					step.Author = end.author
+				}
+			}
+		}
+		steps = append(steps, step)
+		from, prevAt = mk.tree, mk.at
+	}
+	// Lines made since the last mark: the agent working in the tree now
+	// when there is one, the person otherwise.
+	final := review.OriginStep{From: from, To: diff.TreeSHA, Author: last}
+	if len(working) == 1 {
+		w := working[0]
+		final.Judge = d.reviewJudge(w.sess, w.ID, repo.root, prevAt, now)
 		if final.Judge != nil {
 			authors = append(authors, reviewOrigin{Kind: "person", Pane: w.ID, Session: w.sess.Name(), Turn: w.CompletionSeq + 1})
 			final.Person = len(authors) - 1
 		}
 	}
-	final.Author = last
 	steps = append(steps, final)
 	if err := review.Origins(ctx, diff.Files, steps, d.reviewOriginCache.read(repo.root), last); err != nil {
 		return nil, err

@@ -44,6 +44,9 @@ const (
 	// NotMade: the line is the person's, not the step's author's: the
 	// step's Person.
 	NotMade
+	// PersonUnsure: the line is credited to the step's Person, marked as
+	// one the step's author may have made with a tool.
+	PersonUnsure
 )
 
 // owner is who a line is credited to, and whether that is unsure.
@@ -145,6 +148,8 @@ func applyStep(owners map[string]map[int]owner, diff string, s OriginStep) {
 			return owner{author: s.Author, unsure: true}
 		case NotMade:
 			return owner{author: s.Person}
+		case PersonUnsure:
+			return owner{author: s.Person, unsure: true}
 		}
 		return owner{author: s.Author}
 	}

@@ -28,7 +28,7 @@ func TestOriginsAskTheJudge(t *testing.T) {
 	}
 	commit("a\n")
 	baseSHA := testutil.Git(t, dir, "rev-parse", "HEAD")
-	t1 := commit("a\nMADE\nMAYBE\nYOURS\n")
+	t1 := commit("a\nMADE\nMAYBE\nYOURS\nYOURS-MAYBE\n")
 	d, err := Build(ctx, Options{Dir: dir, Base: Base{Name: "base", SHA: baseSHA}, Tree: t1, Context: 3})
 	if err != nil {
 		t.Fatal(err)
@@ -39,6 +39,8 @@ func TestOriginsAskTheJudge(t *testing.T) {
 			return Unsure
 		case "YOURS":
 			return NotMade
+		case "YOURS-MAYBE":
+			return PersonUnsure
 		}
 		return Made
 	}
@@ -53,7 +55,7 @@ func TestOriginsAskTheJudge(t *testing.T) {
 		origin int
 		unsure bool
 	}
-	want := map[string]got{"MADE": {2, false}, "MAYBE": {2, true}, "YOURS": {3, false}}
+	want := map[string]got{"MADE": {2, false}, "MAYBE": {2, true}, "YOURS": {3, false}, "YOURS-MAYBE": {3, true}}
 	for _, l := range d.Files[0].Hunks[0].Lines {
 		if w, ok := want[l.Text]; ok && (l.Origin != w.origin || l.Unsure != w.unsure) {
 			t.Errorf("line %q: origin %d unsure %v, want %d %v", l.Text, l.Origin, l.Unsure, w.origin, w.unsure)

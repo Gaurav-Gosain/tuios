@@ -25,14 +25,18 @@ import (
 //   - Between the turns the person writes a line, which says "you · not in a
 //     turn".
 //   - In turn 2 the agent runs a shell command, and a line no edit of its
-//     shows up. It may be the command's, so the hunk says "turn 2 ?", and the
-//     status line says why when the cursor is on it.
+//     shows up. It may be the command's, so the hunk says "turn 2 ?", or "you
+//     ?" when the command started before the turn start's snapshot ended, and
+//     the status line says why when the cursor is on it.
 //
 // How it could pass wrongly, written down first:
 //   - Every line of turn 1 could say "you" because the transcript is not
 //     read at all. The agent's own line must say "turn 1".
 //   - The "?" could be on every hunk of turn 2. The line the agent's Edit
 //     made in turn 2 must say "turn 2" with no "?".
+//   - Each turn's Edit follows its start at once, so the turn start's
+//     snapshot may already hold the edit. The edit must still say its turn,
+//     and not "you".
 func TestReviewAsksTheAgentsOwnEdits(t *testing.T) {
 	base := t.TempDir()
 	killDaemon(t, base)
@@ -115,10 +119,17 @@ func TestReviewAsksTheAgentsOwnEdits(t *testing.T) {
 
 	daemonLog := filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "daemon.log")
 	started := 0
+	// begin starts a turn. The agent's edit follows at once, as a fast one
+	// does, so the turn start's snapshot may already hold it.
 	begin := func() {
 		t.Helper()
 		cli("set-agent-state", "working", "-s", "agent", "--harness", "claude-code")
 		started++
+	}
+	// snapped waits for the turn start's snapshot, before a line that must
+	// come after it.
+	snapped := func() {
+		t.Helper()
 		waitUntil(t, fmt.Sprintf("turn start %d is looked at", started), uiTimeout, func() (bool, string) {
 			b, _ := os.ReadFile(daemonLog)
 			return strings.Count(string(b), "Turn start of window") >= started, string(b)
@@ -142,6 +153,7 @@ func TestReviewAsksTheAgentsOwnEdits(t *testing.T) {
 	lines[10] = "line 10 BY-AGENT-EDIT"
 	write()
 	tool("Edit", map[string]any{"file_path": file, "old_string": "line 10", "new_string": "line 10 BY-AGENT-EDIT"})
+	snapped()
 	lines[30] = "line 30 BY-PERSON-IN-TURN"
 	write()
 	end(1)
@@ -172,24 +184,26 @@ func TestReviewAsksTheAgentsOwnEdits(t *testing.T) {
 		}
 		return ""
 	}
+	// The command of turn 2 and its line race the turn start's snapshot,
+	// as a hook's command does. Before the snapshot ends, the command's line
+	// and the person's line between the turns read "you ?". After it, the
+	// command's line reads "turn 2 ?" and the person's "you · not in a turn".
+	unsure := func(ch string) bool { return strings.Contains(ch, "turn 2 ?") || strings.Contains(ch, "you ?") }
 	for _, c := range []struct {
-		line, has, hasNot string
+		line, want string
+		ok         func(chip string) bool
 	}{
-		{"BY-AGENT-EDIT", "turn 1", "?"},
-		{"BY-PERSON-IN-TURN", "you · during turn 1", ""},
-		{"BETWEEN-TURNS", "you · not in a turn", ""},
-		{"TURN2-EDIT", "turn 2", "?"},
-		{"BY-A-COMMAND", "turn 2", ""},
+		{"BY-AGENT-EDIT", "turn 1, no ?", func(ch string) bool { return strings.Contains(ch, "turn 1") && !strings.Contains(ch, "?") }},
+		{"BY-PERSON-IN-TURN", "you · during turn 1", func(ch string) bool { return strings.Contains(ch, "you · during turn 1") }},
+		{"BETWEEN-TURNS", "you · not in a turn, or you ?", func(ch string) bool {
+			return strings.Contains(ch, "you · not in a turn") || strings.Contains(ch, "you ?")
+		}},
+		{"TURN2-EDIT", "turn 2, no ?", func(ch string) bool { return strings.Contains(ch, "turn 2") && !strings.Contains(ch, "?") }},
+		{"BY-A-COMMAND", "turn 2 ? or you ?", unsure},
 	} {
-		if err := term.WaitFor(func(s tuitest.Screen) bool {
-			ch := chipOf(s, c.line)
-			return strings.Contains(ch, c.has) && (c.hasNot == "" || !strings.Contains(ch, c.hasNot))
-		}, uiTimeout); err != nil {
-			t.Errorf("ASSERTION: the hunk of %s does not say %q without %q: %v\n%s", c.line, c.has, c.hasNot, err, term.Snapshot())
+		if err := term.WaitFor(func(s tuitest.Screen) bool { return c.ok(chipOf(s, c.line)) }, uiTimeout); err != nil {
+			t.Errorf("ASSERTION: the hunk of %s does not say %s: %v\n%s", c.line, c.want, err, term.Snapshot())
 		}
-	}
-	if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(chipOf(s, "BY-A-COMMAND"), "turn 2 ?") }, uiTimeout); err != nil {
-		t.Errorf("ASSERTION: the hunk of BY-A-COMMAND is not marked unsure: %v\n%s", err, term.Snapshot())
 	}
 	art := artifactDir(t)
 	saveArtifact(t, term, art, "1-unsure-chip")

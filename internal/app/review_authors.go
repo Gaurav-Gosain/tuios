@@ -110,7 +110,11 @@ func reviewFileOrigin(f *review.File) int {
 func (r *reviewState) reviewAuthorWords(origin int, now time.Time, unsure bool) (name, rest string) {
 	a, ok := r.reviewAuthorOf(origin)
 	if !ok || a.Kind != "agent" {
-		if ok && a.Turn > 0 {
+		switch {
+		case unsure:
+			// A tool of the agent's may have made it (reviewUnsureHint).
+			return "you", " ?"
+		case ok && a.Turn > 0:
 			return "you", " · during turn " + strconv.FormatUint(a.Turn, 10)
 		}
 		return "you", " · not in a turn"

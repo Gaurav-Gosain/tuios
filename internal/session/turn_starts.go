@@ -33,7 +33,9 @@ type turnStart struct {
 	pane, session string
 	turn          uint64
 	tree          string
-	at            int64
+	// at is when the snapshot started, and snapped when it ended, in Unix
+	// nanoseconds.
+	at, snapped int64
 }
 
 // turnMarks holds the stamps and the turn starts, by work tree root.
@@ -154,7 +156,7 @@ func (d *Daemon) takeTurnStart(s *Session, window string, turn uint64) {
 		return
 	}
 	if last == nil || st.Tree != last.Tree {
-		d.turnMarks.addStart(repo.root, turnStart{pane: window, session: s.Name(), turn: turn, tree: st.Tree, at: start.UnixNano()})
+		d.turnMarks.addStart(repo.root, turnStart{pane: window, session: s.Name(), turn: turn, tree: st.Tree, at: start.UnixNano(), snapped: time.Now().UnixNano()})
 	}
 	d.turnMarks.setStamp(repo.root, st)
 	LogBasic("Turn start of window %s in %s: changed, checked in %s, snapshot in %s", shortWindowID(window), repo.root, checked.Round(time.Microsecond), (time.Since(start) - checked).Round(time.Millisecond))
