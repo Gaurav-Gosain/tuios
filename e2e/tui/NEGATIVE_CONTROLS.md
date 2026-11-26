@@ -19798,5 +19798,6 @@ Repeat from `e2e/tui` with
 | Only an attached client's nonce answers the dialog | the nonce check in `verbAnswerAsk` cut, with any nonce taken as the person's | `TestPanePluginConfirmTakesOnlyKeysAtTheClient`: "answer-ask from the other pane installed the plugin" | **caught** |
 | Keys sent through the client do not answer it | the `ProcessingRemoteKeys` and tape checks cut from `UpgradeConfirmKey` | `TestPanePluginConfirmTakesOnlyKeysAtTheClient`: "the dialog took send-keys of Down and Enter as an answer" | **caught** |
 | With no client, the command is refused at once | the `pluginDialogRefusal` check cut | `TestPanePluginConfirmNeedsAClient`: "the refusal took 2m0s, as if it waited for an answer" | **caught** |
+| A Yes holds to the plugin the dialog showed | `pluginConfirmed` takes the token without reading the folder again | `TestPanePluginChangedAfterTheYesIsRefused`: "the change after the Yes was not refused as one" | **caught** |
 
 Not covered by an e2e test: a pane that calls `plugin.enable` on the herdr socket with a token of a Yes to another plugin or from another pane. `pluginConfirmed` checks the pane, the plugin and the verb of the change, and the tuios CLI never sends such a call.

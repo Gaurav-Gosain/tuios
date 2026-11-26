@@ -85,10 +85,17 @@ func fromPluginErr(e *herdrplugin.Error) *herdrError { return herdrErr(e.Code, e
 // person's Yes to that change, in the dialog plugin-confirm showed
 // (plugin_confirm.go).
 func (d *Daemon) herdrPluginTrust(cs *connState, method string, params json.RawMessage) *herdrError {
-	if cs != nil && (cs.viaLink || !d.mayActAsHuman(cs)) && !d.pluginConfirmed(cs, method, params) {
-		return herdrErr("forbidden", method+" is for the person: the caller runs inside a pane or a plugin of this tuios. Nothing was changed. Run tuios plugins from a terminal outside tuios, or from a pane with a tuios that asks the person in a dialog")
+	if cs == nil || (!cs.viaLink && d.mayActAsHuman(cs)) {
+		return nil
 	}
-	return nil
+	ok, why := d.pluginConfirmed(cs, method, params)
+	switch {
+	case ok:
+		return nil
+	case why != "":
+		return herdrErr("forbidden", why)
+	}
+	return herdrErr("forbidden", method+" is for the person: the caller runs inside a pane or a plugin of this tuios. Nothing was changed. Run tuios plugins from a terminal outside tuios, or from a pane with a tuios that asks the person in a dialog")
 }
 
 // herdrPluginMayRun refuses a pane that may not start processes. A plugin

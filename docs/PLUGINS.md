@@ -650,6 +650,8 @@ A command such as `tuios plugins install` that runs in a tuios pane asks the per
 3. The person presses Down, then Enter, to say yes. Any other answer is no.
 4. The command makes the change, and prints the result.
 
+The Yes is for the plugin as the dialog showed it. When its manifest or a file in its folder changes after the Yes, tuios refuses the change. Run the command again, so the person sees the plugin as it is now.
+
 Only a key that the person presses at the client answers the dialog. Keys that a pane types, `send-keys`, a paste, and a pane's own `answer-ask` do not answer it.
 
 The command makes no change when the person says no, presses Esc, or does not answer in two minutes. It also makes no change when no client is attached. The message then says what to do.

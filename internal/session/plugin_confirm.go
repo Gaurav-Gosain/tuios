@@ -85,7 +85,13 @@ type PluginTrustAsk struct {
 type pluginConfirmGrant struct {
 	window, pluginID, root, change string
 	until                          time.Time
+	// pin is what the dialog showed, for a change that lets the plugin
+	// run (plugin_confirm_pin.go). It is nil for one that stops it.
+	pin *pluginPin
 }
+
+// pinnedChanges are the changes whose Yes holds to what the dialog showed.
+var pinnedChanges = map[string]bool{"install": true, "update": true, "approve": true, "enable": true, "link": true}
 
 // pluginConfirms are the grants that have not ended.
 type pluginConfirms struct {
@@ -135,8 +141,9 @@ func pluginConfirmTimeout() time.Duration {
 }
 
 // pluginConfirmed reports whether token is a Yes that lets the pane on cs run
-// method on the plugin params names.
-func (d *Daemon) pluginConfirmed(cs *connState, method string, params json.RawMessage) bool {
+// method on the plugin params names. why, when set, is the refusal to show:
+// the plugin changed after the Yes.
+func (d *Daemon) pluginConfirmed(cs *connState, method string, params json.RawMessage) (ok bool, why string) {
 	var in struct {
 		Token    string `json:"confirm_token"`
 		PluginID string `json:"plugin_id"`
@@ -144,23 +151,45 @@ func (d *Daemon) pluginConfirmed(cs *connState, method string, params json.RawMe
 		Allow    *bool  `json:"allow"`
 	}
 	if cs == nil || cs.viaLink || d.callerIsPlugin(cs) || jsonx.Unmarshal(params, &in) != nil || in.Token == "" {
-		return false
+		return false, ""
 	}
-	g, ok := d.pluginConfirm.get(in.Token)
-	if !ok || !slices.Contains(pluginChanges[g.change], method) {
-		return false
+	g, found := d.pluginConfirm.get(in.Token)
+	if !found || !slices.Contains(pluginChanges[g.change], method) {
+		return false, ""
 	}
 	if _, window := d.peerPane(cs); window == "" || window != g.window {
-		return false
+		return false, ""
 	}
 	if method == "plugin.approve" && (in.Allow == nil || *in.Allow != (g.change == "approve")) {
 		// A Yes to deny a plugin does not allow it, nor the other way.
-		return false
+		return false, ""
 	}
-	if method == "plugin.link" {
-		return in.Path != "" && in.Path == g.root
+	root := ""
+	switch {
+	case method == "plugin.link":
+		if in.Path == "" || in.Path != g.root {
+			return false, ""
+		}
+		root = in.Path
+	case in.PluginID == "" || in.PluginID != g.pluginID:
+		return false, ""
+	default:
+		if e := herdrplugin.Find(d.plugins.entries(true), in.PluginID); e != nil && e.Plugin != nil {
+			root = e.Plugin.PluginRoot
+		}
 	}
-	return in.PluginID != "" && in.PluginID == g.pluginID
+	if g.pin == nil {
+		return true, ""
+	}
+	what := "tuios cannot find its folder"
+	if root != "" {
+		what = g.pin.changedIn(root)
+	}
+	if what == "" {
+		return true, ""
+	}
+	LogBasic("Plugin %s of %s from pane %s refused: it changed after the Yes: %s", g.change, g.pluginID, g.window, what)
+	return false, method + " is refused: the plugin " + g.pluginID + " changed after the person said yes, so " + what + ". Nothing was changed. Run the command again, so the person sees the plugin as it is now"
 }
 
 // verbPluginConfirm asks the person whether the pane on cs may make a
@@ -209,13 +238,22 @@ func (d *Daemon) verbPluginConfirm(cs *connState, params json.RawMessage) (any, 
 	if window == "" {
 		return nil, refuse("tuios cannot tell which pane asks. Run the command from a terminal outside tuios")
 	}
+	var pin *pluginPin
+	if pinnedChanges[p.Change] {
+		// Read before the dialog opens, so the Yes holds to what it shows.
+		got, err := pinPlugin(ask.Folder)
+		if err != nil {
+			return nil, refuse("tuios cannot read the plugin folder to show it (" + strings.TrimSuffix(err.Error(), ".") + "). Run the command from a terminal outside tuios")
+		}
+		pin = &got
+	}
 	if why := d.pluginDialogRefusal(); why != "" {
 		return nil, refuse(why)
 	}
 	if why := d.confirmPluginTrust(window, ask); why != "" {
 		return nil, refuse(why)
 	}
-	token, err := d.pluginConfirm.put(pluginConfirmGrant{window: window, pluginID: ask.ID, root: ask.Folder, change: p.Change, until: time.Now().Add(pluginConfirmLife)})
+	token, err := d.pluginConfirm.put(pluginConfirmGrant{window: window, pluginID: ask.ID, root: ask.Folder, change: p.Change, until: time.Now().Add(pluginConfirmLife), pin: pin})
 	if err != nil {
 		return nil, newVerbError(ErrVerbInternal, "could not make a token: "+err.Error())
 	}

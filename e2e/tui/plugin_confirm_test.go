@@ -154,6 +154,39 @@ func TestPanePluginInstallConfirmedAtTheClient(t *testing.T) {
 	}
 }
 
+// TestPanePluginChangedAfterTheYesIsRefused: the pane owns the plugin's
+// folder, so after the dialog shows the plugin it can change it before the
+// change runs. Here the manifest asks for one more grant while the dialog is
+// open. The Yes then holds to what the dialog showed: the daemon refuses
+// the enable with a message that says the plugin changed after the Yes, and
+// the plugin does not run.
+func TestPanePluginChangedAfterTheYesIsRefused(t *testing.T) {
+	r := newConfirmRig(t, "e2e-trust-changed")
+	term := r.attach(t)
+	dir := trustPlugin(t)
+	done := r.paneInstall(t, dir)
+	r.waitTrustDialog(t, term, "changed")
+	manifest := filepath.Join(dir, "tuios-plugin.toml")
+	more := strings.Replace(trustManifest, `grants = ["ui"]`, `grants = ["ui", "read"]`, 1)
+	if more == trustManifest {
+		t.Fatal("the test manifest has no grants line to change")
+	}
+	if err := os.WriteFile(manifest, []byte(more), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pressKeys(t, term, keyDown, keyEnter)
+	_, _ = done()
+	waitNoTrustDialog(t, term, "Yes")
+	said, lines := paneSaid(t, r)
+	if !strings.Contains(said, "changedafterthepersonsaidyes") {
+		t.Errorf("ASSERTION: the change after the Yes was not refused as one:\n%s", strings.Join(lines, "\n"))
+	}
+	if _, on := trustInstalled(t, r.base); on {
+		out, _ := tuiosCLI(t, r.base, "plugins", "list")
+		t.Errorf("ASSERTION: a plugin that changed after the Yes runs:\n%s", out)
+	}
+}
+
 // TestPanePluginInstallRefusedWithoutYes: Enter on the default row and Esc
 // each refuse the install with a message that says the person answered No,
 // and nothing is installed.

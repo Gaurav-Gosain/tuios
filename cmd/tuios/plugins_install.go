@@ -581,6 +581,10 @@ func (in *installer) restart(id string, enable bool, unless, root, rel string) {
 		}
 		fmt.Fprintf(in.out, "This tuios daemon is older than this command. Restart the tuios daemon to start the plugin %s.\n", id)
 		return
+	case code == "forbidden":
+		// The daemon refused the change, and its message says why.
+		fmt.Fprintf(in.out, "The plugin %s does not run: %v.\n", id, err)
+		return
 	default:
 		fmt.Fprintf(in.out, "tuios could not restart the plugin %s: %v. Restart the tuios daemon, or run this command in a terminal outside tuios.\n", id, err)
 		return
