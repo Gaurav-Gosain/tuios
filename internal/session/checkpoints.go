@@ -190,6 +190,9 @@ func (d *Daemon) takeTurnCheckpoint(s *Session, window string, job checkpointDue
 		State:        job.state,
 		Label:        label,
 		MaxUntracked: d.checkpoints.maxUntracked.Load(),
+		// The snapshot's stamp tells the next turn start whether anything
+		// changed in between (turn_starts.go).
+		KeepStamp: func(st *worktree.Stamp) { d.turnMarks.setStamp(repo.root, st) },
 	}, d.checkpointKeep())
 	if err != nil {
 		LogBasic("Checkpoint of window %s in %s failed: %v", shortWindowID(window), repo.root, err)

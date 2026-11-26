@@ -141,6 +141,7 @@ func agentWorkVerbs() map[string]verbEntry {
 				{Name: "context", Type: "int", Default: "3"},
 				{Name: "index", Type: "string", Accepted: reviewIndexModes},
 				{Name: "highlight", Type: "bool", Default: "false"},
+				{Name: "origins", Type: "bool", Default: "false"},
 			},
 			returns: []verbParam{
 				{Name: "session", Type: "string"},
@@ -159,6 +160,7 @@ func agentWorkVerbs() map[string]verbEntry {
 				{Name: "totals", Type: "object"},
 				{Name: "truncated", Type: "bool"},
 				{Name: "notes", Type: "[]object"},
+				{Name: "authors", Type: "[]object"},
 				{Name: "untrusted", Type: "bool"},
 			},
 			handler: (*Daemon).verbReviewDiff,

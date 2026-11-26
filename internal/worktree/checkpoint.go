@@ -95,6 +95,10 @@ type CheckpointMeta struct {
 	// MaxUntracked is the size in bytes past which an untracked file is left
 	// out of the checkpoint. Zero is no limit.
 	MaxUntracked int64
+	// KeepStamp, when set, is given the stamp of the snapshot the
+	// checkpoint was written from (or that matched the last checkpoint),
+	// and owns it. See Stamp.
+	KeepStamp func(*Stamp)
 	// skipped is what SaveCheckpoint left out, for the message.
 	skipped []string
 }
@@ -317,9 +321,24 @@ func SaveCheckpoint(ctx context.Context, root string, m CheckpointMeta, keep int
 	if err != nil {
 		return Checkpoint{}, false, err
 	}
-	tree, skipped, err := SnapshotTree(ctx, root, m.MaxUntracked)
-	if err != nil {
-		return Checkpoint{}, false, err
+	var tree string
+	var skipped []string
+	if m.KeepStamp != nil {
+		st, sk, err := SnapshotStamp(ctx, root, m.MaxUntracked)
+		switch {
+		case err == nil:
+			tree, skipped = st.Tree, sk
+			defer m.KeepStamp(st)
+		case !errors.Is(err, ErrNoStamp):
+			return Checkpoint{}, false, err
+		}
+	}
+	if tree == "" {
+		t, sk, err := SnapshotTree(ctx, root, m.MaxUntracked)
+		if err != nil {
+			return Checkpoint{}, false, err
+		}
+		tree, skipped = t, sk
 	}
 	m.skipped = skipped
 	n := 1

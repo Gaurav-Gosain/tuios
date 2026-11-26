@@ -1,0 +1,64 @@
+package review
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
+)
+
+// TestOriginsCreditEachLineToItsStep: a chain of three trees, each step
+// adding lines, one moving the lines below it down. Each added line of the
+// whole diff is credited to the step that added it, after the later steps
+// moved it, and a line rewritten by a later step goes to that step.
+//
+// Negative control: crediting every added line to the last step fails this.
+func TestOriginsCreditEachLineToItsStep(t *testing.T) {
+	dir := testutil.GitRepo(t)
+	ctx := context.Background()
+	commit := func(body string) string {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		testutil.Git(t, dir, "add", "f.txt")
+		testutil.Git(t, dir, "commit", "-q", "-m", "x")
+		return testutil.Git(t, dir, "rev-parse", "HEAD^{tree}")
+	}
+	commit("a\nb\nc\nd\n")
+	baseSHA := testutil.Git(t, dir, "rev-parse", "HEAD")
+	t1 := commit("a\nONE\nb\nc\nd\n")            // step 1 adds ONE
+	t2 := commit("TOP\na\nONE\nb\nc\nd\nTWO\n")  // step 2 adds TOP above and TWO below
+	t3 := commit("TOP\na\nONE\nb\nC3\nd\nTWO\n") // after the last step: c becomes C3
+
+	d, err := Build(ctx, Options{Dir: dir, Base: Base{Name: "base", SHA: baseSHA}, Tree: t3, Context: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := []OriginStep{{From: baseSHA, To: t1, Author: 1}, {From: t1, To: t2, Author: 2}, {From: t2, To: t3, Author: 0}}
+	read := func(ctx context.Context, from, to string, paths []string) (string, error) {
+		return StepDiff(ctx, dir, from, to, paths)
+	}
+	if err := Origins(ctx, d.Files, steps, read, 0); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]int{"ONE": 2, "TOP": 3, "TWO": 3, "C3": 1}
+	got := map[string]int{}
+	for _, f := range d.Files {
+		for _, h := range f.Hunks {
+			for _, l := range h.Lines {
+				if l.Op == "add" {
+					got[strings.TrimSpace(l.Text)] = l.Origin
+				}
+			}
+		}
+	}
+	for text, origin := range want {
+		if got[text] != origin {
+			t.Errorf("line %q has origin %d, want %d (all: %v)", text, got[text], origin, got)
+		}
+	}
+}

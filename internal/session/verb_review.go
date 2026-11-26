@@ -193,6 +193,8 @@ type reviewParams struct {
 	Context     *int     `json:"context"`
 	Index       string   `json:"index"`
 	Highlight   bool     `json:"highlight"`
+	// Origins asks who made each line (review_origins.go).
+	Origins bool `json:"origins"`
 }
 
 // verbReviewDiff answers review-diff.
@@ -303,6 +305,13 @@ func (d *Daemon) verbReviewDiff(cs *connState, params json.RawMessage) (any, *ve
 	}
 	if p.Highlight {
 		out["classes"] = diffview.ClassNames
+	}
+	if p.Origins && againstName == "" && p.Index == "" {
+		// Who made each line is a help, not the answer: a chain that cannot
+		// be read leaves the lines unmarked.
+		if authors, err := d.reviewOrigins(ctx, repo, diff); err == nil {
+			out["authors"] = authors
+		}
 	}
 	if againstName != "" {
 		out["against"] = againstName

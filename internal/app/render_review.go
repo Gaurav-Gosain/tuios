@@ -787,13 +787,20 @@ func (m *OS) reviewListLines(width, paneH int, pal overlay.Palette) []string {
 		// The file under the cursor keeps a quiet ground while the diff has
 		// the keyboard, so the list still says which file the diff is.
 		st := overlay.RowState{Cursor: idx == r.file, Focused: r.listFocus}
-		mark := " "
+		mark, markFg := " ", pal.AccentBright
 		bg := pal.Ground(st, pal.Surface)
 		fg := pal.FgDim
 		if st.Cursor {
 			fg = pal.Fg
 			if st.Focused {
 				mark = overlay.SigilMark()
+			}
+		}
+		// The file's main author, where the cursor's mark is not.
+		if o := reviewFileOrigin(e.file); mark == " " && o > 0 {
+			mark, markFg = "●", r.reviewAuthorInk(o, pal)
+			if overlay.UseASCII() {
+				mark = "*"
 			}
 		}
 		back := 0
@@ -803,7 +810,7 @@ func (m *OS) reviewListLines(width, paneH int, pal overlay.Palette) []string {
 		path := reviewListPath(reviewText(e.path), reviewListPathWidth(width, counts), back)
 		pad := max(width-3-ansi.StringWidth(path)-ansi.StringWidth(counts), 1)
 		out[i] = pal.Row(reviewPaint([]reviewSeg{
-			{pal.AccentBright, mark, false},
+			{markFg, mark, false},
 			{reviewStatusColor(status, pal), status + " ", false},
 			{fg, path + strings.Repeat(" ", pad), idx == r.file},
 			{pal.FgMute, counts, false},
@@ -984,14 +991,19 @@ func reviewCursorTint(bg color.Color, pal overlay.Palette, st overlay.RowState) 
 func (d reviewDraw) rowBody(row reviewRow, st overlay.RowState) string {
 	pal, dv := d.look.pal, d.look.dv
 	cursor := st.Cursor
-	mark := " "
+	mark, markInk := " ", pal.AccentBright
 	if cursor && st.Focused && (row.kind != reviewRowNote || row.first) {
 		mark = overlay.SigilMark()
+	} else if row.kind == reviewRowLine && d.file != nil {
+		// A changed line's first cell is a bar in its author's colour.
+		if ln := d.file.Hunks[row.hunk].Lines[row.line]; ln.Op != "context" && ln.Origin > 0 {
+			mark, markInk = reviewAuthorBar(), d.m.review.reviewAuthorInk(ln.Origin, pal)
+		}
 	}
-	// markCell is the first cell, which holds the cursor's mark on the
-	// ground of the column it starts.
+	// markCell is the first cell, which holds the cursor's mark, or the
+	// author's bar, on the ground of the column it starts.
 	markCell := func(bg color.Color) string {
-		return reviewInk(mark, overlay.Readable(pal.AccentBright, bg), bg)
+		return reviewInk(mark, overlay.Readable(markInk, bg), bg)
 	}
 	rowBg := func(bg color.Color) color.Color {
 		if cursor {
@@ -1028,17 +1040,39 @@ func (d reviewDraw) rowBody(row reviewRow, st overlay.RowState) string {
 		case reviewInIndex | reviewInWork:
 			stage = reviewSeg{overlay.Readable(pal.Warning, bg), "partly staged ", true}
 		}
-		left := rest
-		if stage.text != "" {
-			left = max(rest-ansi.StringWidth(stage.text)-2, 0)
+		// Who made it, then how much is staged, at the right end.
+		var right []reviewSeg
+		if chip := d.m.review.reviewHunkChip(d.file.Hunks[row.hunk], pal, bg, time.Now()); chip != nil {
+			right = append(right, reviewSeg{nil, "  ", false})
+			right = append(right, chip...)
+			right = append(right, reviewSeg{nil, " ", false})
 		}
+		if stage.text != "" {
+			right = append(right, reviewSeg{nil, "  ", false}, stage)
+		}
+		rightW := 0
+		for _, s := range right {
+			rightW += ansi.StringWidth(s.text)
+		}
+		if rightW > rest/2 {
+			right, rightW = nil, 0
+			if stage.text != "" {
+				right, rightW = []reviewSeg{{nil, "  ", false}, stage}, ansi.StringWidth(stage.text)+2
+			}
+		}
+		left := max(rest-rightW, 0)
 		line := reviewPaint([]reviewSeg{
 			{overlay.Readable(pal.FgDim, bg), " " + fold, folded},
 			{overlay.Readable(pal.Info, bg), " " + head, false},
 			{overlay.Readable(pal.FgDim, bg), ctx, false},
 		}, left, bg)
-		if stage.text != "" {
-			line += reviewPaint([]reviewSeg{{stage.fg, "  " + stage.text, true}}, rest-left, bg)
+		if rightW > 0 {
+			for i := range right {
+				if right[i].fg == nil {
+					right[i].fg = overlay.Readable(pal.FgDim, bg)
+				}
+			}
+			line += reviewPaint(right, rest-left, bg)
 		}
 		return markCell(bg) + line
 	case reviewRowLine:

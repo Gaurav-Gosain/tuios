@@ -88,6 +88,9 @@ type reviewDiffResult struct {
 	Truncated   bool          `json:"truncated"`
 	Notes       []review.Note `json:"notes"`
 	Against     string        `json:"against"`
+	// Authors are who made the lines, which each line's origin indexes.
+	// See review_authors.go.
+	Authors []reviewAuthorInfo `json:"authors"`
 }
 
 // reviewLastCommand is the newest command a shell in an attempt finished.
@@ -562,6 +565,7 @@ func (m *OS) reviewLoadCmd(q reviewQuery, probeFan bool) tea.Cmd {
 	if q.Against != "" {
 		params["against"] = q.Against
 	} else {
+		params["origins"] = true
 		if q.Base != "" {
 			params["base"] = q.Base
 		}

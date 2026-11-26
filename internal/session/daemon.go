@@ -412,6 +412,10 @@ type Daemon struct {
 	// checkpoints saves a pane's work tree when its agent finishes a turn.
 	// Its zero value is on. See checkpoints.go.
 	checkpoints checkpointer
+	// reviewOriginCache keeps the step diffs review-diff's origins read.
+	reviewOriginCache reviewOriginCache
+	// turnMarks are the work trees' stamps and turn starts (turn_starts.go).
+	turnMarks turnMarks
 
 	// agentPresets is [agents.presets], the named start-agent params, nil
 	// for none. See agent_presets.go.
@@ -1628,6 +1632,9 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		// this path. With the agent features off no turn finishes.
 		if !d.agentsOff.Load() {
 			d.noteCheckpointEvent(s, ev)
+			// A turn that starts after the work tree changed gets a
+			// snapshot too, for who made each line (turn_starts.go).
+			d.noteTurnStart(s, ev)
 		}
 		// A pane that starts or stops working, or closes, can move the
 		// machine's keep awake hold. It only wakes the keeper's goroutine,
@@ -2261,6 +2268,8 @@ func (d *Daemon) shutdown() error {
 		// outlive the daemon that owns them.
 		d.stash.sweep()
 		d.pastes.removeWritten()
+		// The work trees' stamps are temporary folders too (turn_starts.go).
+		d.turnMarks.close()
 
 		// The ssh agent links go once every client has dropped, since a
 		// client leaving moves a link, and no pane outlives the daemon to

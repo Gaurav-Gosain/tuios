@@ -137,7 +137,12 @@ func snapshotTreeExcluding(ctx context.Context, path string, exclude []string) (
 		return "", err
 	}
 	defer tmp.remove()
-	index := filepath.Join(tmp.path, "index")
+	return snapshotInto(ctx, path, exclude, filepath.Join(tmp.path, "index"))
+}
+
+// snapshotInto is snapshotTreeExcluding with the index it writes at index, a
+// file in a folder the caller owns.
+func snapshotInto(ctx context.Context, path string, exclude []string, index string) (string, error) {
 	env := []string{"GIT_INDEX_FILE=" + index}
 	if copyIndex(ctx, path, index) {
 		if tree, err := addAndWriteTree(ctx, path, env, exclude); err == nil {
