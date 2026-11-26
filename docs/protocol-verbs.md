@@ -3350,6 +3350,7 @@ Set or clear one dock cell of the calling plugin. Only a process of a native plu
 | `id` | string | yes |  | The id of the [[cell]] in the manifest. |
 | `text` | string |  |  | One line of at most 512 bytes. SGR colour stays. Other control sequences are dropped. |
 | `action` | string |  |  | The id of an action of the plugin that a click runs. |
+| `pane` | string |  |  | The id of a pane of the plugin that a click on an attached client opens. The pane gets TUIOS_PLUGIN_CELL with the id of the cell. Set action or pane, not both. |
 | `clear` | bool |  |  | Remove the cell. |
 
 | Result field | Type | Description |
