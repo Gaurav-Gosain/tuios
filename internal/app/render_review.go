@@ -756,6 +756,20 @@ func (m *OS) reviewHeader(pal overlay.Palette) []reviewSeg {
 	case r.live.off || d.Against != "":
 		dim(reviewLiveDot(false) + " not live")
 	}
+	r.follow.x0, r.follow.x1 = 0, 0
+	if who := r.reviewFollowing(); who != "" {
+		segs = append(segs, reviewSeg{pal.FgDim, "  following ", false}, reviewSeg{pal.Fg, who, true})
+	} else if n := r.reviewFreshCount(); n > 0 {
+		// A click on the count goes to the next new hunk (review_mouse.go):
+		// its cells are where the segments before it end.
+		at := 1
+		for _, s := range segs {
+			at += ansi.StringWidth(s.text)
+		}
+		words := reviewFreshWords(n)
+		r.follow.x0, r.follow.x1 = at+2, at+2+ansi.StringWidth(words)
+		segs = append(segs, reviewSeg{pal.AccentBright, "  " + words, true})
+	}
 	return segs
 }
 
@@ -1043,8 +1057,12 @@ func (d reviewDraw) rowBody(row reviewRow, st overlay.RowState) string {
 		case reviewInIndex | reviewInWork:
 			stage = reviewSeg{overlay.Readable(pal.Warning, bg), "partly staged ", true}
 		}
-		// Who made it, then how much is staged, at the right end.
+		// New since the person was last on it, then who made it, then how
+		// much is staged, at the right end.
 		var right []reviewSeg
+		if e := d.m.review.currentFile(); e != nil && d.m.review.reviewHunkFresh(e.path, d.file.Hunks[row.hunk]) {
+			right = append(right, reviewSeg{overlay.Readable(pal.AccentBright, bg), "  new", true})
+		}
 		if chip := d.m.review.reviewHunkChip(d.file.Hunks[row.hunk], pal, bg, time.Now()); chip != nil {
 			right = append(right, reviewSeg{nil, "  ", false})
 			right = append(right, chip...)
@@ -1314,6 +1332,13 @@ func (m *OS) reviewKeyHints() []overlay.Hint {
 	}
 	if key := m.reviewKey(config.ActionReviewNextHunk); key != "" {
 		add(key, "next hunk")
+	}
+	if r.live.on && !against {
+		if r.follow.on {
+			add("f", "stop following")
+		} else {
+			add("f", "follow")
+		}
 	}
 	if key := m.reviewKey(config.ActionReviewNextFile); key != "" {
 		add(key, "next file")

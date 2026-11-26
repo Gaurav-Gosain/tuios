@@ -90,6 +90,12 @@ func (m *OS) ReviewMouseClick(x, y int) {
 	if !g.reviewLaidOut() {
 		return
 	}
+	// The header's count of new hunks goes to the next one.
+	if y == 1 && r.follow.x1 > r.follow.x0 && x >= r.follow.x0 && x < r.follow.x1 {
+		m.reviewPersonMoved()
+		m.ReviewNextNew()
+		return
+	}
 	if m.ReviewCompareShown() {
 		m.reviewCompareClick(y)
 		return
@@ -102,6 +108,7 @@ func (m *OS) ReviewMouseClick(x, y int) {
 	if !inPanes {
 		return
 	}
+	defer m.reviewMoved()
 	switch {
 	case r.bar.shown && x == r.bar.x:
 		m.reviewBarPress(row)
@@ -207,6 +214,7 @@ func (r *reviewState) reviewFolded(path, header string) bool {
 
 // ReviewMouseWheel scrolls the side under x, y by delta rows.
 func (m *OS) ReviewMouseWheel(x, y, delta int) {
+	defer m.reviewMoved()
 	r := &m.review
 	g := m.reviewGeometry()
 	if !m.ReviewCompareShown() && g.reviewLaidOut() && r.editor == nil && x < g.ruleX {
@@ -243,6 +251,7 @@ func (m *OS) ReviewMouseDrag(x, y int) bool {
 		return true
 	case reviewDragBar:
 		m.reviewBarMove(y - reviewPaneTop - r.barGrab)
+		m.reviewMoved()
 		return true
 	}
 	return false

@@ -193,7 +193,9 @@ type reviewState struct {
 	pending bool
 	// live is the live review's watch and reads. See review_live.go.
 	live reviewLiveState
-	open bool
+	// follow follows the agent that writes. See review_follow.go.
+	follow reviewFollow
+	open   bool
 	// loading is set while a diff is read again inside an open overlay, and
 	// loadingSince is when that read went out: the header says "reading"
 	// only once it has run past overlay.LoadingDelay.
@@ -664,7 +666,9 @@ func (m *OS) applyReviewDiff(msg ReviewDiffMsg) {
 	if samePlace {
 		r.file = max(slices.IndexFunc(r.files, func(e reviewFileEntry) bool { return e.path == prevPath }), 0)
 		m.reviewLiveKeep(anchor)
+		m.reviewFollowRead()
 	} else {
+		defer m.reviewFollowOpen()
 		// A review with no files opens on the diff, which says why.
 		r.resetPlace(m.reviewOpensOnFiles() && len(r.files) > 0)
 	}
@@ -783,6 +787,7 @@ func (m *OS) ReviewToggleFocus() {
 // ReviewMove moves the cursor by delta: through the files with the list
 // focused, through the diff's rows otherwise.
 func (m *OS) ReviewMove(delta int) {
+	defer m.reviewMoved()
 	r := &m.review
 	if r.listFocus {
 		if len(r.files) == 0 {
@@ -860,6 +865,7 @@ func (m *OS) ReviewEnter() {
 
 // ReviewFile moves to the next file, or the previous for dir < 0.
 func (m *OS) ReviewFile(dir int) {
+	defer m.reviewMoved()
 	r := &m.review
 	if len(r.files) == 0 {
 		return
@@ -874,8 +880,13 @@ func (m *OS) ReviewFile(dir int) {
 // ReviewHunk moves to the next hunk, or the previous for dir < 0, going on
 // into the next or previous file at either end.
 func (m *OS) ReviewHunk(dir int) {
+	defer m.reviewMoved()
 	r := &m.review
 	r.listFocus = false
+	// The next hunk is a new one first, while there is one.
+	if dir > 0 && m.ReviewNextNew() {
+		return
+	}
 	rows := m.reviewRows(m.reviewRowsWidth())
 	if dir > 0 {
 		for i := r.cursor + 1; i < len(rows); i++ {
@@ -1355,6 +1366,7 @@ const reviewScrollStep = 8
 // dir < 0: the code, no further than the longest line of the file needs, or
 // with the file list focused, the list's paths.
 func (m *OS) ReviewScrollX(dir int) {
+	defer m.reviewMoved()
 	r := &m.review
 	if r.listFocus {
 		_, _, listW, _, _ := m.reviewLayout()

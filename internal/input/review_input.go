@@ -29,6 +29,7 @@ import (
 //	e, x             edit or resolve the note under the cursor
 //	S                send the unsent notes to the pane's agent
 //	s                one column, or the two sides next to each other
+//	f                follow the agent that writes, or stop
 //	h l, left right  scroll the focused panel sideways: the code, or the paths
 //	u                since the base, or the uncommitted changes only
 //	b                change the base
@@ -161,6 +162,8 @@ func handleReviewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, o.ReviewSend()
 	case "s":
 		o.ReviewToggleSplit()
+	case "f":
+		o.ReviewToggleFollow()
 	case "h", "left":
 		o.ReviewScrollX(-1)
 	case "l", "right":
