@@ -280,3 +280,171 @@ func TestFilesViewOpenAddsNoIdleCost(t *testing.T) {
 		t.Fatalf("the open Files view costs more at idle than the closed one:\n  %s\n%s", strings.Join(over, "\n  "), term.Snapshot())
 	}
 }
+
+// filesDividerCol is the column of the Files view's divider on screen row
+// row, or -1.
+func filesDividerCol(s tuitest.Screen, row int) int {
+	for i, r := range []rune(s.Line(row)) {
+		if r == '│' {
+			return i
+		}
+	}
+	return -1
+}
+
+// TestFilesViewTwoSides puts this machine and a linked host side by side:
+// \ opens the second side, : takes it to build, tab moves the keys, quick
+// look takes the other side's place, < and > and a drag move the divider,
+// Z shows one side, + [ ] and a click switch tabs, and ctrl+w closes one.
+// Frames at 160, 120 and 80 columns are the artifact; at 80 one side is
+// drawn at a time and tab flips between them.
+//
+// Negative control: with FilesTwoSides leaving two off, the wait for the
+// second side's machine row times out.
+func TestFilesViewTwoSides(t *testing.T) {
+	requireReal(t, "links a second daemon as a host")
+	base := t.TempDir()
+	remote := remoteMachine(t)
+	writeRemoteConfig(t, remote, relayFilesPolicy)
+	ssh := writeFakeSSHTo(t, base, remote)
+	writeOneHostConfig(t, base, tuiosBin)
+	top := filepath.Join(remote, "HOME", "out")
+	if err := os.MkdirAll(top, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(top, "far.go"), []byte("package far\n\nconst Answer = 42\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, remote, "new", "far-shell", "--detach"); err != nil {
+		t.Fatalf("create the far session: %v\n%s", err, out)
+	}
+	filesViewFixtureIn(t, filepath.Join(base, "HOME", "project"))
+	term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: []string{"TUIOS_SSH=" + ssh}, cols: 160, rows: 44})
+	waitBoot(t, term)
+	waitForHostListing(t, base, func(s string) bool { return containsAll(s, "build", "up") }, "the daemon never reported build up")
+	newWindow(t, term)
+	enterTerminalMode(t, term)
+	runInShell(t, term, "cd ~/project && clear && printf '\\033]7;file://%s\\033\\\\%s\\n' \"$PWD\" lis\"\"ted", "listed", uiTimeout)
+	sendKeys(t, term, tuitest.Ctrl('b'), "f")
+	railLists(t, term, "Ctrl+B f did not open the view", []string{"Search files"}, nil)
+	sendKeys(t, term, tuitest.Esc)
+	railLists(t, term, "the view did not list the folder", []string{"main.go", "this machine"}, []string{"Search files"})
+
+	// \ opens the second side on the same folder, and : takes it to build.
+	sendKeys(t, term, "\\")
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Count(s.Text(), "this machine") == 2 && filesDividerCol(s, 4) > 0
+	}, uiTimeout); err != nil {
+		t.Fatalf("\\ did not open a second side: %v\n%s", err, term.Snapshot())
+	}
+	sendKeys(t, term, ":", "build:~/out", tuitest.Enter)
+	railLists(t, term, "the second side did not go to build", []string{"far.go", "build", "linked", "this machine", "main.go", "←→"}, nil)
+	copiesFrame(t, term, "files-two-160x44")
+
+	// tab gives the keys to the left side: space shows its file in the right
+	// side's place.
+	sendKeys(t, term, tuitest.Tab, "/", "main", tuitest.Enter, " ")
+	railLists(t, term, "quick look did not take the other side's place", []string{"Hello says where it is.", "main.go"}, []string{"far.go"})
+	copiesFrame(t, term, "files-two-look-160x44")
+	sendKeys(t, term, " ", tuitest.Esc)
+	railLists(t, term, "space did not give the side back", []string{"far.go", "notes.md"}, []string{"Hello says where it is."})
+
+	// A click in a side gives it the keys: space then shows its file.
+	click := func(text string) {
+		t.Helper()
+		s := term.Screen()
+		_, rows := s.Size()
+		for r := 1; r < rows; r++ {
+			if i := strings.Index(s.Line(r), text); i >= 0 {
+				mouseClick(t, term, len([]rune(s.Line(r)[:i]))+1, r, tuitest.MouseLeft, 0)
+				return
+			}
+		}
+		t.Fatalf("no %q on screen:\n%s", text, term.Snapshot())
+	}
+	click("far.go")
+	sendKeys(t, term, " ")
+	railLists(t, term, "a click did not give the keys to the far side", []string{"const Answer = 42"}, nil)
+	sendKeys(t, term, " ")
+	railLists(t, term, "space did not close the far file", []string{"main.go", "far.go"}, []string{"const Answer = 42"})
+
+	// < moves the divider, a drag moves it, a double click puts it back.
+	half := filesDividerCol(term.Screen(), 4)
+	sendKeys(t, term, "<", "<")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return filesDividerCol(s, 4) < half-8 }, uiTimeout); err != nil {
+		t.Fatalf("< did not move the divider left of %d: %v\n%s", half, err, term.Snapshot())
+	}
+	at := filesDividerCol(term.Screen(), 4)
+	mouseDrag(t, term, at, 10, at+40, 10, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return filesDividerCol(s, 4) > half+20 }, uiTimeout); err != nil {
+		t.Fatalf("a drag did not move the divider right of %d: %v\n%s", half+20, err, term.Snapshot())
+	}
+	at = filesDividerCol(term.Screen(), 4)
+	clickAt(t, term, at, 10, 2)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return filesDividerCol(s, 4) == half }, uiTimeout); err != nil {
+		t.Fatalf("a double click did not put the divider back at %d: %v\n%s", half, err, term.Snapshot())
+	}
+
+	// Z shows the side with the keys alone, and both again.
+	sendKeys(t, term, "Z")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return filesDividerCol(s, 4) < 0 }, uiTimeout); err != nil {
+		t.Fatalf("Z did not show one side: %v\n%s", err, term.Snapshot())
+	}
+	sendKeys(t, term, "Z")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return filesDividerCol(s, 4) == half }, uiTimeout); err != nil {
+		t.Fatalf("Z did not show both sides again: %v\n%s", err, term.Snapshot())
+	}
+
+	// Tabs: + opens one, [ goes back, a click on the top bar switches, and
+	// ctrl+w closes it.
+	sendKeys(t, term, "+")
+	railLists(t, term, "+ did not open a second tab", []string{" 2  build ~/out "}, nil)
+	sendKeys(t, term, "[")
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return filesDividerCol(s, 4) > 0 }, uiTimeout); err != nil {
+		t.Fatalf("[ did not go back to the first tab: %v\n%s", err, term.Snapshot())
+	}
+	col, _, ok := findOnGrid(term.Screen(), " 2  build")
+	if !ok {
+		t.Fatalf("no second tab on the top bar:\n%s", term.Snapshot())
+	}
+	mouseClick(t, term, col+2, 0, tuitest.MouseLeft, 0)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return filesDividerCol(s, 4) < 0 && strings.Contains(s.Text(), "far.go") }, uiTimeout); err != nil {
+		t.Fatalf("a click on the second tab did not go there: %v\n%s", err, term.Snapshot())
+	}
+	sendKeys(t, term, tuitest.Ctrl('w'))
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return filesDividerCol(s, 4) > 0 && !strings.Contains(s.Text(), " 2  build")
+	}, uiTimeout); err != nil {
+		t.Fatalf("ctrl+w did not close the second tab: %v\n%s", err, term.Snapshot())
+	}
+
+	// 120 columns: still side by side. 80: one side at a time.
+	if err := term.Resize(120, 40); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return filesDividerCol(s, 4) > 0 && containsAll(s.Text(), "far.go", "main.go")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the two sides did not draw at 120 columns: %v\n%s", err, term.Snapshot())
+	}
+	copiesFrame(t, term, "files-two-120x40")
+	if err := term.Resize(80, 24); err != nil {
+		t.Fatal(err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return filesDividerCol(s, 4) < 0 && strings.Contains(s.Text(), "far.go") && !strings.Contains(s.Text(), "main.go")
+	}, uiTimeout); err != nil {
+		t.Fatalf("80 columns did not draw one side: %v\n%s", err, term.Snapshot())
+	}
+	copiesFrame(t, term, "files-two-80x24")
+	sendKeys(t, term, tuitest.Tab)
+	railLists(t, term, "tab did not flip to the other side at 80 columns", []string{"main.go", "this machine"}, []string{"far.go"})
+	copiesFrame(t, term, "files-two-80x24-flipped")
+	// A click on the other machine's name in the tab flips back.
+	col, _, ok = findOnGrid(term.Screen(), "build")
+	if !ok {
+		t.Fatalf("no build in the tab:\n%s", term.Snapshot())
+	}
+	mouseClick(t, term, col, 0, tuitest.MouseLeft, 0)
+	railLists(t, term, "a click on the tab's other name did not flip", []string{"far.go", "linked"}, []string{"main.go"})
+}

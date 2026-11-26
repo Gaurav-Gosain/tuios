@@ -2293,6 +2293,24 @@ const (
 	ActionFilesInsertPath  = "files_insert_path"
 	ActionFilesCopyPath    = "files_copy_path"
 	ActionFilesClose       = "files_close"
+	ActionFilesTwoSides    = "files_two_sides"
+	ActionFilesOtherSide   = "files_other_side"
+	ActionFilesPrevTab     = "files_prev_tab"
+	ActionFilesNextTab     = "files_next_tab"
+	ActionFilesNewTab      = "files_new_tab"
+	ActionFilesCloseTab    = "files_close_tab"
+	ActionFilesNarrow      = "files_narrow"
+	ActionFilesWiden       = "files_widen"
+	ActionFilesZoom        = "files_zoom"
+	ActionFilesTab1        = "files_tab_1"
+	ActionFilesTab2        = "files_tab_2"
+	ActionFilesTab3        = "files_tab_3"
+	ActionFilesTab4        = "files_tab_4"
+	ActionFilesTab5        = "files_tab_5"
+	ActionFilesTab6        = "files_tab_6"
+	ActionFilesTab7        = "files_tab_7"
+	ActionFilesTab8        = "files_tab_8"
+	ActionFilesTab9        = "files_tab_9"
 )
 
 // getDefaultFilesKeybinds returns the Files view's keys, live while it is
@@ -2323,6 +2341,24 @@ func getDefaultFilesKeybinds() map[string][]string {
 		ActionFilesInsertPath:  {"I"},
 		ActionFilesCopyPath:    {"Y"},
 		ActionFilesClose:       {"q"},
+		ActionFilesTwoSides:    {"\\"},
+		ActionFilesOtherSide:   {"tab"},
+		ActionFilesPrevTab:     {"["},
+		ActionFilesNextTab:     {"]"},
+		ActionFilesNewTab:      {"+"},
+		ActionFilesCloseTab:    {"ctrl+w"},
+		ActionFilesNarrow:      {"<"},
+		ActionFilesWiden:       {">"},
+		ActionFilesZoom:        {"Z"},
+		ActionFilesTab1:        {"1"},
+		ActionFilesTab2:        {"2"},
+		ActionFilesTab3:        {"3"},
+		ActionFilesTab4:        {"4"},
+		ActionFilesTab5:        {"5"},
+		ActionFilesTab6:        {"6"},
+		ActionFilesTab7:        {"7"},
+		ActionFilesTab8:        {"8"},
+		ActionFilesTab9:        {"9"},
 	}
 }
 

@@ -99,7 +99,44 @@ type filesSide struct {
 	rows   []int
 	cursor int
 	scroll int
+	// id names the side to a read that lands after a tab closed.
+	id uint64
+	// sort, reverse, hidden and filter are the side's own: two sides of
+	// one tab often want different orders.
+	sort    filesSort
+	reverse bool
+	hidden  bool
+	filter  string
+	// rowsTop is the screen row of the first listing row, rowsN the rows
+	// that fit, box the side on the screen, crumbsY the crumbs row and
+	// crumbs their click targets, all as last drawn.
+	rowsTop, rowsN int
+	box            filesBox
+	crumbsY        int
+	crumbs         []filesCrumb
 }
+
+// filesTab is one tab of the view: one side, or two side by side.
+type filesTab struct {
+	sides [2]*filesSide
+	// two says both sides are on screen, and focus is the side with the
+	// keys.
+	two   bool
+	focus int
+	// ratio is the left side's share of the width, in percent. zoom shows
+	// the focused side alone, and keeps the other for the next Z.
+	ratio int
+	zoom  bool
+}
+
+// filesRatioDefault is the divider's place: half way.
+const filesRatioDefault = 50
+
+// cur is the side with the keys.
+func (t *filesTab) cur() *filesSide { return t.sides[t.focus] }
+
+// shown reports whether both sides are drawn.
+func (t *filesTab) shown() bool { return t.two && !t.zoom }
 
 // short is dir with the side's home folder written as ~, the way a shell
 // prompt writes it.
@@ -119,33 +156,41 @@ func (s *filesSide) short(dir string) string {
 // explorerState is the Files view.
 type explorerState struct {
 	open bool
-	side filesSide
+	// tabs is the view's tabs, and tab the one on screen.
+	tabs []*filesTab
+	tab  int
+	// ids hands out side ids.
+	ids uint64
 	// origin is the pane the view was opened from. I types into it.
 	origin string
-	sort   filesSort
-	// reverse turns the sort round. hidden shows the names that start with
-	// a dot.
+	// sort, reverse and hidden are what a new side starts with: the last
+	// a person chose.
+	sort    filesSort
 	reverse bool
 	hidden  bool
-	// prompt is the line being typed, input its text, and filter the filter
-	// in effect.
+	// prompt is the line being typed, and input its text.
 	prompt filesPrompt
 	input  string
-	filter string
 	// look says quick look is beside the list.
 	look bool
 	// gen moves when anything the view draws changes, for its frame cache.
 	gen uint64
 	// frame is the last frame drawn and what it was drawn for.
 	frame filesFrame
-	// rowsTop is the screen row of the first listing row, listX and listW
-	// the listing's columns, lookBox the box quick look is drawn in, and
-	// crumbs the click targets of the crumbs row, all as last drawn.
-	rowsTop, rowsN int
-	listX, listW   int
-	crumbsY        int
-	crumbs         []filesCrumb
-	lookBox        filesBox
+	// lookBox is the box quick look is drawn in, tabHits the tabs' click
+	// targets on the top bar, and divX the divider's column, all as last
+	// drawn. divX is -1 with one side.
+	lookBox filesBox
+	tabHits []filesTabHit
+	divX    int
+	// segHits is the two machine names of the tab on screen when one side
+	// is drawn at a time: a click on one shows it.
+	segHits [2]filesTabHit
+	// dividerDrag says a press on the divider is held: the motion moves it.
+	// clickDiv says the last click was on the divider, for a double click.
+	dividerDrag, clickDiv bool
+	// tabsY is the screen row of the top bar.
+	tabsY int
 	// clickAt is when the cursor row was last clicked, for a double click.
 	clickAt time.Time
 	// hints is the footer's key hints as last drawn, on the screen row
@@ -157,6 +202,14 @@ type explorerState struct {
 // filesBox is a rectangle on the screen.
 type filesBox struct{ x, y, w, h int }
 
+// contains reports whether the cell x, y is in the box.
+func (b filesBox) contains(x, y int) bool {
+	return x >= b.x && x < b.x+b.w && y >= b.y && y < b.y+b.h
+}
+
+// filesTabHit is one tab on the top bar and the columns it was drawn on.
+type filesTabHit struct{ x0, x1 int }
+
 // filesCrumb is one folder of the crumbs row and the columns it was drawn on.
 type filesCrumb struct {
 	dir    string
@@ -165,6 +218,7 @@ type filesCrumb struct {
 
 // filesListMsg is a finished read of a side's folder.
 type filesListMsg struct {
+	id    uint64
 	gen   uint64
 	l     fileListing
 	infos []session.FileInfo
@@ -172,7 +226,7 @@ type filesListMsg struct {
 }
 
 // filesReadingMsg asks for a frame once a read has run filesReadingAfter.
-type filesReadingMsg struct{ gen uint64 }
+type filesReadingMsg struct{ id, gen uint64 }
 
 // FilesViewOpen reports whether the Files view is up.
 func (m *OS) FilesViewOpen() bool { return m.explorer.open }
@@ -218,8 +272,10 @@ func (m *OS) OpenFilesViewFind() tea.Cmd {
 // openFilesViewAt opens the view on dir of host.
 func (m *OS) openFilesViewAt(host, dir, origin string) tea.Cmd {
 	e := &m.explorer
-	*e = explorerState{open: true, origin: origin, sort: e.sort, reverse: e.reverse, hidden: e.hidden, gen: e.gen + 1}
-	e.side.host = host
+	*e = explorerState{open: true, origin: origin, sort: e.sort, reverse: e.reverse, hidden: e.hidden, gen: e.gen + 1, ids: e.ids, divX: -1}
+	t := &filesTab{ratio: filesRatioDefault}
+	t.sides[0] = m.newFilesSide(host)
+	e.tabs = []*filesTab{t}
 	if m.quickLook.open {
 		m.dropQuickLook()
 	}
@@ -237,7 +293,7 @@ func (m *OS) CloseFilesView() {
 	if m.quickLook.open && m.quickLook.files {
 		m.dropQuickLook()
 	}
-	*e = explorerState{sort: e.sort, reverse: e.reverse, hidden: e.hidden, gen: e.gen + 1}
+	*e = explorerState{sort: e.sort, reverse: e.reverse, hidden: e.hidden, gen: e.gen + 1, ids: e.ids, divX: -1}
 }
 
 // filesCaller is how the view asks a machine for a listing, or nil for a
@@ -252,17 +308,21 @@ func (m *OS) filesCaller() func(host, verb string, params map[string]any) (json.
 // filesRead asks for dir on the side's machine. pick is the row to put the
 // cursor on when it lands. The old rows stay up while it runs.
 func (m *OS) filesRead(dir, pick string) tea.Cmd {
-	s := &m.explorer.side
+	return m.filesReadSide(m.filesCur(), dir, pick)
+}
+
+// filesReadSide asks for dir on side s's machine.
+func (m *OS) filesReadSide(s *filesSide, dir, pick string) tea.Cmd {
 	s.gen++
 	s.want, s.pick = dir, pick
 	s.loading, s.loadingAt = true, time.Now()
-	gen, host := s.gen, s.host
+	id, gen, host := s.id, s.gen, s.host
 	call := m.filesCaller()
 	read := func() tea.Msg {
 		l, infos, home := readListingDetails(call, host, dir)
-		return filesListMsg{gen: gen, l: l, infos: infos, home: home}
+		return filesListMsg{id: id, gen: gen, l: l, infos: infos, home: home}
 	}
-	tick := tea.Tick(filesReadingAfter, func(time.Time) tea.Msg { return filesReadingMsg{gen: gen} })
+	tick := tea.Tick(filesReadingAfter, func(time.Time) tea.Msg { return filesReadingMsg{id: id, gen: gen} })
 	return tea.Batch(read, tick)
 }
 
@@ -272,8 +332,8 @@ func (m *OS) filesRead(dir, pick string) tea.Cmd {
 // filter, which was for the folder left.
 func (m *OS) HandleFilesList(msg filesListMsg) {
 	e := &m.explorer
-	s := &e.side
-	if !e.open || msg.gen != s.gen {
+	s := m.filesSideByID(msg.id)
+	if !e.open || s == nil || msg.gen != s.gen {
 		return
 	}
 	s.loading = false
@@ -285,7 +345,7 @@ func (m *OS) HandleFilesList(msg filesListMsg) {
 		return
 	}
 	keep := ""
-	if en, _, ok := m.filesCursorEntry(); ok {
+	if en, _, ok := filesSideEntry(s); ok {
 		keep = en.Name
 	}
 	moved := s.Dir != msg.l.Dir
@@ -300,31 +360,33 @@ func (m *OS) HandleFilesList(msg filesListMsg) {
 	s.pick = ""
 	if moved {
 		s.cursor, s.scroll = 0, 0
-		e.filter = ""
+		s.filter = ""
 	} else if pick == "" {
 		pick = keep
 	}
-	m.filesRebuild()
-	m.filesPick(pick)
+	m.filesRebuildSide(s)
+	filesPickSide(s, pick)
 }
 
 // HandleFilesReading redraws the machine row once a read has run long
 // enough to say so.
 func (m *OS) HandleFilesReading(msg filesReadingMsg) {
-	if m.explorer.open && m.explorer.side.loading && msg.gen == m.explorer.side.gen {
+	if s := m.filesSideByID(msg.id); m.explorer.open && s != nil && s.loading && msg.gen == s.gen {
 		m.explorer.gen++
 	}
 }
 
 // filesRebuild works out the rows on screen from the listing, the hidden
 // switch, the filter and the sort. It runs when one of them changes.
-func (m *OS) filesRebuild() {
+func (m *OS) filesRebuild() { m.filesRebuildSide(m.filesCur()) }
+
+// filesRebuildSide is filesRebuild for side s.
+func (m *OS) filesRebuildSide(s *filesSide) {
 	e := &m.explorer
-	s := &e.side
 	s.rows = s.rows[:0]
-	filter := strings.ToLower(e.filter)
+	filter := strings.ToLower(s.filter)
 	for i, en := range s.Entries {
-		if !e.hidden && strings.HasPrefix(en.Name, ".") {
+		if !s.hidden && strings.HasPrefix(en.Name, ".") {
 			continue
 		}
 		if filter != "" && !strings.Contains(strings.ToLower(en.Name), filter) {
@@ -338,7 +400,7 @@ func (m *OS) filesRebuild() {
 		}
 		return session.FileInfo{}
 	}
-	if e.sort != filesSortName || e.reverse {
+	if s.sort != filesSortName || s.reverse {
 		slices.SortStableFunc(s.rows, func(a, b int) int {
 			ea, eb := s.Entries[a], s.Entries[b]
 			if ea.Dir != eb.Dir {
@@ -348,7 +410,7 @@ func (m *OS) filesRebuild() {
 				return 1
 			}
 			var c int
-			switch e.sort {
+			switch s.sort {
 			case filesSortSize:
 				c = cmp.Compare(info(b).Size, info(a).Size)
 			case filesSortTime:
@@ -358,7 +420,7 @@ func (m *OS) filesRebuild() {
 				// The listing is in name order already.
 				c = cmp.Compare(a, b)
 			}
-			if e.reverse {
+			if s.reverse {
 				c = -c
 			}
 			return c
@@ -369,8 +431,10 @@ func (m *OS) filesRebuild() {
 }
 
 // filesPick puts the cursor on the row named name, when it is on screen.
-func (m *OS) filesPick(name string) {
-	s := &m.explorer.side
+func (m *OS) filesPick(name string) { filesPickSide(m.filesCur(), name) }
+
+// filesPickSide is filesPick for side s.
+func filesPickSide(s *filesSide, name string) {
 	if name == "" {
 		return
 	}
@@ -384,7 +448,11 @@ func (m *OS) filesPick(name string) {
 
 // filesCursorEntry is the entry under the cursor.
 func (m *OS) filesCursorEntry() (fileEntry, session.FileInfo, bool) {
-	s := &m.explorer.side
+	return filesSideEntry(m.filesCur())
+}
+
+// filesSideEntry is the entry under side s's cursor.
+func filesSideEntry(s *filesSide) (fileEntry, session.FileInfo, bool) {
 	if s.cursor < 0 || s.cursor >= len(s.rows) {
 		return fileEntry{}, session.FileInfo{}, false
 	}
@@ -397,8 +465,10 @@ func (m *OS) filesCursorEntry() (fileEntry, session.FileInfo, bool) {
 }
 
 // filesJoin joins a name to the side's folder, in the side's machine's form.
-func (m *OS) filesJoin(name string) string {
-	s := &m.explorer.side
+func (m *OS) filesJoin(name string) string { return m.filesJoinSide(m.filesCur(), name) }
+
+// filesJoinSide is filesJoin for side s.
+func (m *OS) filesJoinSide(s *filesSide, name string) string {
 	if s.host != "" || m.AttachedHost != "" {
 		// A far machine's path is in its own form. Every machine tuios
 		// links to but Windows uses slashes, and path.Join keeps them.
@@ -412,7 +482,7 @@ func (m *OS) filesJoin(name string) string {
 
 // FilesMove moves the cursor by n rows, held to the rows.
 func (m *OS) FilesMove(n int) {
-	s := &m.explorer.side
+	s := m.filesCur()
 	if len(s.rows) == 0 {
 		return
 	}
@@ -422,7 +492,7 @@ func (m *OS) FilesMove(n int) {
 
 // FilesPage moves the cursor by a screen of rows.
 func (m *OS) FilesPage(down bool) {
-	n := max(m.explorer.rowsN-1, 1)
+	n := max(m.filesCur().rowsN-1, 1)
 	if !down {
 		n = -n
 	}
@@ -432,10 +502,10 @@ func (m *OS) FilesPage(down bool) {
 // FilesEdge moves the cursor to the first or the last row.
 func (m *OS) FilesEdge(last bool) {
 	if last {
-		m.FilesMove(len(m.explorer.side.rows))
+		m.FilesMove(len(m.filesCur().rows))
 		return
 	}
-	m.FilesMove(-len(m.explorer.side.rows))
+	m.FilesMove(-len(m.filesCur().rows))
 }
 
 // FilesOpen goes into the folder under the cursor. On a file it opens quick
@@ -457,7 +527,7 @@ func (m *OS) FilesOpen() tea.Cmd {
 
 // FilesParent goes to the folder above, with the cursor on the folder left.
 func (m *OS) FilesParent() tea.Cmd {
-	s := &m.explorer.side
+	s := m.filesCur()
 	dir := s.Dir
 	if dir == "" {
 		return nil
@@ -479,7 +549,7 @@ func (m *OS) FilesHome() tea.Cmd { return m.filesRead("~", "") }
 // The search reads through the pane the view came from, so it finds on that
 // pane's machine only.
 func (m *OS) FilesFind() tea.Cmd {
-	s := &m.explorer.side
+	s := m.filesCur()
 	root := cmp.Or(s.Dir, s.want)
 	paneHost := m.AttachedHost
 	if w := m.windowByID(m.explorer.origin); w != nil && w.Host != "" {
@@ -495,8 +565,10 @@ func (m *OS) FilesFind() tea.Cmd {
 // FilesToggleHidden shows or hides the names that start with a dot.
 func (m *OS) FilesToggleHidden() {
 	e := &m.explorer
+	s := m.filesCur()
 	en, _, ok := m.filesCursorEntry()
-	e.hidden = !e.hidden
+	s.hidden = !s.hidden
+	e.hidden = s.hidden
 	m.filesRebuild()
 	if ok {
 		m.filesPick(en.Name)
@@ -507,12 +579,14 @@ func (m *OS) FilesToggleHidden() {
 // order round instead.
 func (m *OS) FilesSort(reverse bool) {
 	e := &m.explorer
+	s := m.filesCur()
 	en, _, ok := m.filesCursorEntry()
 	if reverse {
-		e.reverse = !e.reverse
+		s.reverse = !s.reverse
 	} else {
-		e.sort = (e.sort + 1) % 3
+		s.sort = (s.sort + 1) % 3
 	}
+	e.sort, e.reverse = s.sort, s.reverse
 	m.filesRebuild()
 	if ok {
 		m.filesPick(en.Name)
@@ -522,7 +596,7 @@ func (m *OS) FilesSort(reverse bool) {
 // FilesStartPrompt opens the filter line or the go to line.
 func (m *OS) FilesStartPrompt(goTo bool) {
 	e := &m.explorer
-	e.prompt, e.input = filesPromptFilter, e.filter
+	e.prompt, e.input = filesPromptFilter, m.filesCur().filter
 	if goTo {
 		e.prompt, e.input = filesPromptGoTo, ""
 	}
@@ -551,8 +625,9 @@ func (m *OS) FilesPromptBackspace() {
 func (m *OS) filesPromptChanged() {
 	e := &m.explorer
 	if e.prompt == filesPromptFilter {
-		e.filter = e.input
-		e.side.cursor = 0
+		s := m.filesCur()
+		s.filter = e.input
+		s.cursor = 0
 		m.filesRebuild()
 	}
 	e.gen++
@@ -563,7 +638,7 @@ func (m *OS) FilesPromptCancel() {
 	e := &m.explorer
 	if e.prompt == filesPromptFilter {
 		en, _, ok := m.filesCursorEntry()
-		e.filter = ""
+		m.filesCur().filter = ""
 		m.filesRebuild()
 		if ok {
 			m.filesPick(en.Name)
@@ -582,9 +657,11 @@ func (m *OS) FilesPromptSubmit() tea.Cmd {
 	if p != filesPromptGoTo || text == "" {
 		return nil
 	}
-	host, dir := filesParseGoTo(text, e.side.host)
-	if host != e.side.host {
-		e.side = filesSide{host: host}
+	t := m.filesTabCur()
+	host, dir := filesParseGoTo(text, t.cur().host)
+	if host != t.cur().host {
+		// Another machine is another side: nothing of the old one holds.
+		t.sides[t.focus] = m.newFilesSide(host)
 	}
 	return m.filesRead(dir, "")
 }
@@ -612,9 +689,9 @@ func (m *OS) FilesEscape() {
 	switch {
 	case e.prompt != filesNoPrompt:
 		m.FilesPromptCancel()
-	case e.filter != "":
+	case m.filesCur().filter != "":
 		en, _, ok := m.filesCursorEntry()
-		e.filter = ""
+		m.filesCur().filter = ""
 		m.filesRebuild()
 		if ok {
 			m.filesPick(en.Name)
@@ -628,8 +705,11 @@ func (m *OS) FilesEscape() {
 
 // filesSideMachine is the machine name the view shows for the side, and
 // whether it is this client's own machine.
-func (m *OS) filesSideMachine() (string, bool) {
-	host := m.explorer.side.host
+func (m *OS) filesSideMachine() (string, bool) { return m.filesMachineOf(m.filesCur()) }
+
+// filesMachineOf is filesSideMachine for side s.
+func (m *OS) filesMachineOf(s *filesSide) (string, bool) {
+	host := s.host
 	if host == "" {
 		host = m.AttachedHost
 	}
@@ -669,7 +749,7 @@ func (m *OS) FilesInsertPath() {
 		return
 	}
 	src := dropSource{Path: m.filesJoin(en.Name), Name: en.Name, Dir: en.Dir}
-	if name, here := m.filesSideMachine(); !here && m.explorer.side.host != "" && m.explorer.side.host != w.Host {
+	if name, here := m.filesSideMachine(); !here && m.filesCur().host != "" && m.filesCur().host != w.Host {
 		src.Host = name
 	}
 	verdict := m.judgeDrop(w, src)
@@ -691,7 +771,7 @@ func (m *OS) FilesEdit() tea.Cmd {
 	}
 	full := m.filesJoin(en.Name)
 	editor := m.Settings.SidebarEditor
-	host := m.explorer.side.host
+	host := m.filesCur().host
 	if host != "" || m.AttachedHost != "" {
 		other := host != "" && host != m.AttachedHost
 		msg := remoteEditTarget(full, editor, false, other)
@@ -769,7 +849,7 @@ func (m *OS) filesLookTarget() (quickLookTarget, bool) {
 		return quickLookTarget{}, false
 	}
 	t := quickLookTarget{path: m.filesJoin(en.Name), name: en.Name, dir: en.Dir}
-	host := m.explorer.side.host
+	host := m.filesCur().host
 	switch {
 	case host != "" && m.AttachedHost != "" && host != m.AttachedHost:
 		t.refuse = "tuios cannot show a file on a host that you reach through another host."

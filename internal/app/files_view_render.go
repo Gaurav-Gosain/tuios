@@ -1,6 +1,9 @@
 package app
 
 import (
+	"cmp"
+	"image/color"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,14 +49,14 @@ type filesFrame struct {
 
 // filesGlyphs are the marks the view draws, in nerd font or plain form.
 type filesGlyphs struct {
-	files, here, host, crumb, rule, div string
+	files, here, host, crumb, rule, div, arrow string
 }
 
 func (m *OS) filesGlyphs() filesGlyphs {
 	if overlay.UseASCII() {
-		return filesGlyphs{files: "#", here: "*", host: "@", crumb: ">", rule: "=", div: "|"}
+		return filesGlyphs{files: "#", here: "*", host: "@", crumb: ">", rule: "=", div: "|", arrow: "<>"}
 	}
-	g := filesGlyphs{files: "", here: "", host: "", crumb: "›", rule: "━", div: "│"}
+	g := filesGlyphs{files: "", here: "", host: "", crumb: "›", rule: "━", div: "│", arrow: "←→"}
 	if m.Settings.NoNerdFont {
 		g.files, g.here, g.host = "■", "■", "■"
 	}
@@ -71,8 +74,12 @@ func (m *OS) renderFilesView() (string, int, int, int) {
 		return "", 0, 0, 0
 	}
 	pal := m.overlayUI()
-	s := &e.side
-	reading := s.loading && time.Since(s.loadingAt) >= filesReadingAfter
+	reading := false
+	for _, s := range m.filesTabCur().sides {
+		if s != nil && s.loading && time.Since(s.loadingAt) >= filesReadingAfter {
+			reading = true
+		}
+	}
 	key := filesFrame{ok: true, gen: e.gen, w: w, h: h, top: top, theme: theme.Generation(), depth: pal.Depth,
 		ascii: overlay.UseASCII(), nerd: !m.Settings.NoNerdFont, look: m.quickLook.open && m.quickLook.files, reading: reading}
 	f := e.frame
@@ -81,73 +88,157 @@ func (m *OS) renderFilesView() (string, int, int, int) {
 		return e.frame.content, top, w, h
 	}
 	c := (*ckCanvas)(nil).reset(w, h, ckColor(pal.Canvas))
-	m.drawFilesView(c, pal, w, h, top, reading)
+	m.drawFilesView(c, pal, w, h, top)
 	key.content = c.render()
 	e.frame = key
 	return key.content, top, w, h
 }
 
-// drawFilesView draws the whole view on c.
-func (m *OS) drawFilesView(c *ckCanvas, pal overlay.Palette, w, h, top int, reading bool) {
+// drawFilesView draws the whole view on c: the top bar, the sides of the
+// tab on screen and quick look, and the footer.
+//
+// Two sides are drawn side by side from filesLookSplitW columns. Below it
+// the side with the keys is drawn alone, and tab flips to the other. Quick
+// look takes the other side's place, or the whole body below
+// filesLookSplitW.
+func (m *OS) drawFilesView(c *ckCanvas, pal overlay.Palette, w, h, top int) {
 	e := &m.explorer
+	t := m.filesTabCur()
 	g := m.filesGlyphs()
-	m.drawFilesTopBar(c, pal, g, w)
+	e.tabsY = top
+	m.drawFilesTopBar(c, pal, g, w, top)
 	hintsY := h - 1
 	body := filesBox{x: 0, y: 2, w: w, h: max(hintsY-2, 0)}
 	look := e.look && m.quickLook.open && m.quickLook.files
-	list := body
-	e.lookBox = filesBox{}
-	if look {
-		if w >= filesLookSplitW {
-			list.w = max(w*2/5, filesSizeMin)
-			e.lookBox = filesBox{x: list.w + 1, y: top + body.y, w: w - list.w - 1, h: body.h}
-			for y := body.y; y < body.y+body.h; y++ {
-				c.text(list.w, y, 0, ckSeg{t: g.div, fg: pal.FgMute})
-			}
-		} else {
-			e.lookBox = filesBox{x: 0, y: top + body.y, w: w, h: body.h}
-			list.h = 0
+	for _, s := range t.sides {
+		if s != nil {
+			s.box = filesBox{}
 		}
 	}
-	if list.h > 0 {
-		m.drawFilesSide(c, pal, g, list, top, reading)
+	e.lookBox, e.divX = filesBox{}, -1
+	split := w >= filesLookSplitW
+	cur := t.cur()
+	switch {
+	case look && !split:
+		e.lookBox = filesBox{x: 0, y: top + body.y, w: w, h: body.h}
+	case look || (t.shown() && split):
+		lw := w * t.ratio / 100
+		if !t.shown() {
+			lw = max(w*2/5, filesSizeMin)
+		}
+		left := filesBox{x: 0, y: body.y, w: lw, h: body.h}
+		right := filesBox{x: lw + 1, y: body.y, w: w - lw - 1, h: body.h}
+		for y := body.y; y < body.y+body.h; y++ {
+			c.text(lw, y, 0, ckSeg{t: g.div, fg: pal.FgMute})
+		}
+		e.divX = lw
+		switch {
+		case look && t.shown():
+			// Quick look takes the other side's place.
+			mine, other := left, right
+			if t.focus == 1 {
+				mine, other = right, left
+			}
+			m.drawFilesSide(c, pal, g, cur, mine, top, true)
+			e.lookBox = filesBox{x: other.x, y: top + other.y, w: other.w, h: other.h}
+		case look:
+			m.drawFilesSide(c, pal, g, cur, left, top, true)
+			e.lookBox = filesBox{x: right.x, y: top + right.y, w: right.w, h: right.h}
+		default:
+			m.drawFilesSide(c, pal, g, t.sides[0], left, top, t.focus == 0)
+			m.drawFilesSide(c, pal, g, t.sides[1], right, top, t.focus == 1)
+		}
+	default:
+		m.drawFilesSide(c, pal, g, cur, body, top, true)
 	}
 	m.drawFilesHints(c, pal, hintsY, w, top)
 }
 
-// drawFilesTopBar draws the Files mark, the side's tab and the switches.
-func (m *OS) drawFilesTopBar(c *ckCanvas, pal overlay.Palette, g filesGlyphs, w int) {
+// drawFilesTopBar draws the Files mark, the tabs and the switches of the
+// side with the keys. It keeps each tab's columns for a click.
+func (m *OS) drawFilesTopBar(c *ckCanvas, pal overlay.Palette, g filesGlyphs, w, top int) {
 	e := &m.explorer
+	s := m.filesCur()
 	c.fill(0, 0, w, 1, ckColor(pal.Panel))
 	x := c.text(1, 0, 0, ckSeg{t: g.files + " ", fg: pal.AccentBright}, ckSeg{t: "Files", fg: pal.Fg, attrs: ckBold})
-	name, _ := m.filesSideMachine()
-	tab := " " + name + " " + e.side.short(e.side.Dir) + " "
-	x += 3
-	right := "sort " + e.sort.String()
-	if e.reverse {
+	right := "sort " + s.sort.String()
+	if s.reverse {
 		right += " reversed"
 	}
-	if e.hidden {
+	if s.hidden {
 		right += " · hidden on"
 	} else {
 		right += " · hidden off"
 	}
 	rx := w - 1 - ansi.StringWidth(right)
-	tab = ckTrunc(tab, max(rx-x-2, 0))
-	c.text(x, 0, rx-1, ckSeg{t: tab, fg: pal.Fg, bg: pal.Surface})
 	c.textR(w-1, 0, ckSeg{t: right, fg: pal.FgDim})
+	x += 3
+	e.tabHits = e.tabHits[:0]
+	e.segHits = [2]filesTabHit{}
+	split := w >= filesLookSplitW
+	for i, t := range e.tabs {
+		if i == e.tab && t.two && !split && t.sides[1] != nil {
+			// One side is drawn at a time: the tab names both machines, and
+			// the one on screen is lit. A click on the other one flips.
+			x0 := x
+			x = c.text(x, 0, rx-1, ckSeg{t: " " + itoaFiles(i+1) + "  ", fg: pal.Fg, bg: pal.Surface})
+			for j := range 2 {
+				if j == 1 {
+					x = c.text(x, 0, rx-1, ckSeg{t: " " + g.arrow + " ", fg: pal.FgMute, bg: pal.Surface})
+				}
+				name, _ := m.filesMachineOf(t.sides[j])
+				ink, attrs := pal.FgDim, uint8(0)
+				if j == t.focus {
+					ink, attrs = pal.Fg, ckBold
+				}
+				s0 := x
+				x = c.text(x, 0, rx-1, ckSeg{t: name, fg: ink, bg: pal.Surface, attrs: attrs})
+				e.segHits[j] = filesTabHit{x0: s0, x1: x}
+			}
+			x = c.text(x, 0, rx-1, ckSeg{t: " ", bg: pal.Surface})
+			e.tabHits = append(e.tabHits, filesTabHit{x0: x0, x1: x})
+			x++
+			continue
+		}
+		label := " " + itoaFiles(i+1) + "  " + m.filesTabName(t, g.arrow) + " "
+		label = ckTrunc(label, max(rx-x-2, 0))
+		if label == "" {
+			break
+		}
+		ink, bg := pal.FgDim, ckColor(nil)
+		if i == e.tab {
+			ink, bg = pal.Fg, pal.Surface
+		}
+		x0 := x
+		x = c.text(x, 0, rx-1, ckSeg{t: label, fg: ink, bg: bg})
+		e.tabHits = append(e.tabHits, filesTabHit{x0: x0, x1: x})
+		x++
+	}
 }
 
-// drawFilesSide draws one side in box b. top is the screen row of the
-// canvas, for the click targets.
-func (m *OS) drawFilesSide(c *ckCanvas, pal overlay.Palette, g filesGlyphs, b filesBox, top int, reading bool) {
-	e := &m.explorer
-	s := &e.side
+// itoaFiles is n in decimal, for the tab numbers.
+func itoaFiles(n int) string {
+	if n >= 0 && n < 10 {
+		return string(rune('0' + n))
+	}
+	return strconv.Itoa(n)
+}
+
+// drawFilesSide draws side s in box b. top is the screen row of the canvas,
+// for the click targets. keys says the side has the keys: its rule is in
+// the accent and its cursor row in the cursor's ground, and the other side
+// keeps its cursor in the quieter ground.
+func (m *OS) drawFilesSide(c *ckCanvas, pal overlay.Palette, g filesGlyphs, s *filesSide, b filesBox, top int, keys bool) {
+	if s == nil {
+		return
+	}
+	s.box = filesBox{x: b.x, y: top + b.y, w: b.w, h: b.h}
 	x0, right := b.x+1, b.x+b.w-1
 	y := b.y
+	reading := s.loading && time.Since(s.loadingAt) >= filesReadingAfter
 	// The machine row.
 	c.fill(b.x, y, b.w, 2, ckColor(pal.Panel))
-	name, here := m.filesSideMachine()
+	name, here := m.filesMachineOf(s)
 	glyph, where := g.host, "linked"
 	if here {
 		glyph, where = g.here, "this machine"
@@ -162,19 +253,25 @@ func (m *OS) drawFilesSide(c *ckCanvas, pal overlay.Palette, g filesGlyphs, b fi
 	}
 	// The crumbs.
 	y++
-	e.crumbsY = top + y
-	e.crumbs = e.crumbs[:0]
-	sortW := c.textR(right, y, ckSeg{t: e.sort.String(), fg: pal.FgDim})
-	m.drawFilesCrumbs(c, pal, g, x0, y, sortW-2)
-	// The rule: the side with the keys.
+	s.crumbsY = top + y
+	s.crumbs = s.crumbs[:0]
+	sortW := c.textR(right, y, ckSeg{t: s.sort.String(), fg: pal.FgDim})
+	m.drawFilesCrumbs(c, pal, g, s, x0, y, sortW-2)
+	// The rule: the side with the keys has the accent.
 	y++
-	c.hline(b.x, y, b.w, g.rule, pal.Accent)
+	rule := pal.Accent
+	if !keys {
+		rule = pal.FgMute
+	}
+	c.hline(b.x, y, b.w, g.rule, rule)
 	y++
-	// The columns.
+	// The columns. Under 80 columns the view draws the names alone, and the
+	// size of the cursor row only.
+	narrow := m.GetRenderWidth() < 80
 	nameX := x0 + 1
 	sizeR, modR := right, right
-	showMod := b.w >= filesModifiedMin
-	showSize := b.w >= filesSizeMin
+	showMod := b.w >= filesModifiedMin && !narrow
+	showSize := b.w >= filesSizeMin && !narrow
 	if showMod {
 		sizeR = right - filesModifiedW - 2
 		c.textR(modR, y, ckSeg{t: "Modified", fg: pal.FgMute})
@@ -186,20 +283,18 @@ func (m *OS) drawFilesSide(c *ckCanvas, pal overlay.Palette, g filesGlyphs, b fi
 	y++
 	footY := b.y + b.h - 1
 	rows := max(footY-1-y, 0)
-	e.rowsTop, e.rowsN, e.listX, e.listW = top+y, rows, b.x, b.w
+	s.rowsTop, s.rowsN = top+y, rows
 	nameW := right - nameX
 	if showSize {
 		nameW = sizeR - filesSizeW - 1 - nameX
 	}
-	m.drawFilesRows(c, pal, b, y, rows, nameX, nameW, sizeR, modR, showSize, showMod)
-	m.drawFilesFooter(c, pal, x0, right, footY)
+	m.drawFilesRows(c, pal, s, b, y, rows, nameX, nameW, sizeR, modR, showSize, showMod, keys)
+	m.drawFilesFooter(c, pal, s, x0, right, footY, keys)
 }
 
 // drawFilesCrumbs draws the folder as crumbs from x, up to limit, and keeps
 // each crumb's columns for a click. A long path loses its first crumbs.
-func (m *OS) drawFilesCrumbs(c *ckCanvas, pal overlay.Palette, g filesGlyphs, x, y, limit int) {
-	e := &m.explorer
-	s := &e.side
+func (m *OS) drawFilesCrumbs(c *ckCanvas, pal overlay.Palette, g filesGlyphs, s *filesSide, x, y, limit int) {
 	dir := s.Dir
 	if dir == "" {
 		dir = s.want
@@ -256,15 +351,13 @@ func (m *OS) drawFilesCrumbs(c *ckCanvas, pal overlay.Palette, g filesGlyphs, x,
 		}
 		x0 := x
 		x = c.text(x, y, limit, ckSeg{t: parts[i].label, fg: ink, attrs: attrs})
-		e.crumbs = append(e.crumbs, filesCrumb{dir: parts[i].dir, x0: x0, x1: x})
+		s.crumbs = append(s.crumbs, filesCrumb{dir: parts[i].dir, x0: x0, x1: x})
 	}
 }
 
 // drawFilesRows draws the rows of the listing, or the one row that says why
 // there are none.
-func (m *OS) drawFilesRows(c *ckCanvas, pal overlay.Palette, b filesBox, y, rows, nameX, nameW, sizeR, modR int, showSize, showMod bool) {
-	e := &m.explorer
-	s := &e.side
+func (m *OS) drawFilesRows(c *ckCanvas, pal overlay.Palette, s *filesSide, b filesBox, y, rows, nameX, nameW, sizeR, modR int, showSize, showMod, keys bool) {
 	note := func(text string, warn bool) {
 		ink := pal.FgMute
 		if warn {
@@ -277,11 +370,11 @@ func (m *OS) drawFilesRows(c *ckCanvas, pal overlay.Palette, b filesBox, y, rows
 		note(s.Err, true)
 		return
 	case s.Dir == "":
-		name, _ := m.filesSideMachine()
-		note("reading "+name+":"+s.want, false)
+		name, _ := m.filesMachineOf(s)
+		note("reading "+name+":"+s.short(s.want), false)
 		return
-	case len(s.rows) == 0 && e.filter != "":
-		note("No name has "+e.filter+" in it.", false)
+	case len(s.rows) == 0 && s.filter != "":
+		note("No name has "+s.filter+" in it.", false)
 		return
 	case len(s.rows) == 0:
 		note("Nothing here", false)
@@ -301,16 +394,21 @@ func (m *OS) drawFilesRows(c *ckCanvas, pal overlay.Palette, b filesBox, y, rows
 		idx := s.rows[at]
 		en := s.Entries[idx]
 		ry := y + i
-		st := sidebarRowState{Cursor: at == s.cursor}
-		if st.Cursor {
+		// The side without the keys keeps its cursor in the quieter ground,
+		// drawn here under a row that draws none of its own.
+		st := sidebarRowState{Cursor: at == s.cursor && keys}
+		switch {
+		case st.Cursor:
 			c.fill(b.x, ry, b.w, 1, ckColor(pal.RowSel))
+		case at == s.cursor:
+			c.fill(b.x, ry, b.w, 1, ckColor(cmp.Or[color.Color](pal.RowSelQuiet, pal.RowSel)))
 		}
 		c.draw(nameX-1, ry, nameW+1, m.sidebarFileRow(fileRowSpec{Kind: sidebarRowFileEntry, Name: en.Name, Dir: en.Dir, Icon: en.Icon}, nameW+1, pal, st))
 		if idx >= len(s.infos) {
 			continue
 		}
 		in := s.infos[idx]
-		if (showSize || st.Cursor) && !en.Dir && in.Kind != "" {
+		if (showSize || at == s.cursor) && !en.Dir && in.Kind != "" {
 			c.textR(sizeR, ry, ckSeg{t: units.Bytes(in.Size), fg: pal.FgDim})
 		}
 		if showMod && in.MTime > 0 {
@@ -320,10 +418,13 @@ func (m *OS) drawFilesRows(c *ckCanvas, pal overlay.Palette, b filesBox, y, rows
 }
 
 // drawFilesFooter draws the count, the filter or the line being typed.
-func (m *OS) drawFilesFooter(c *ckCanvas, pal overlay.Palette, x0, right, y int) {
+func (m *OS) drawFilesFooter(c *ckCanvas, pal overlay.Palette, s *filesSide, x0, right, y int, keys bool) {
 	e := &m.explorer
-	s := &e.side
-	switch e.prompt {
+	prompt := e.prompt
+	if !keys {
+		prompt = filesNoPrompt
+	}
+	switch prompt {
 	case filesPromptFilter:
 		c.text(x0, y, right, ckSeg{t: "/ ", fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: e.input, fg: pal.Fg}, ckSeg{t: "▏", fg: pal.Accent})
 		return
@@ -333,8 +434,8 @@ func (m *OS) drawFilesFooter(c *ckCanvas, pal overlay.Palette, x0, right, y int)
 		return
 	}
 	left := plural.Count(len(s.rows), "item")
-	if e.filter != "" {
-		left += " · filter " + e.filter
+	if s.filter != "" {
+		left += " · filter " + s.filter
 	}
 	c.text(x0, y, right, ckSeg{t: left, fg: pal.FgDim})
 	if s.Capped {
@@ -386,6 +487,12 @@ func (m *OS) filesHints() []filesHint {
 	act(config.ActionFilesGoTo, "go to")
 	act(config.ActionFilesHidden, "hidden")
 	act(config.ActionFilesSort, "sort")
+	if m.filesTabCur().two {
+		act(config.ActionFilesOtherSide, "other side")
+		act(config.ActionFilesTwoSides, "one side")
+	} else {
+		act(config.ActionFilesTwoSides, "two sides")
+	}
 	act(config.ActionFilesClose, "close")
 	return out
 }

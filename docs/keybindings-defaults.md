@@ -371,6 +371,7 @@ Run `tuios keybinds list` to see the keys that your config sets.
 |---|---|---|
 | `G`, `end` | `files_bottom` | Files: last row |
 | `q` | `files_close` | Files: close the view |
+| `ctrl+w` | `files_close_tab` | Files: close the tab |
 | `Y` | `files_copy_path` | Files: copy the path |
 | `j`, `down` | `files_down` | Files: next row |
 | `e` | `files_edit` | Files: edit the file in a new pane on its machine |
@@ -381,16 +382,33 @@ Run `tuios keybinds list` to see the keys that your config sets.
 | `.` | `files_hidden` | Files: show or hide hidden files |
 | `~` | `files_home` | Files: go to the home folder |
 | `I` | `files_insert_path` | Files: type the path into the pane the view came from |
+| `<` | `files_narrow` | Files: move the divider left |
+| `+` | `files_new_tab` | Files: open a tab on this folder |
+| `]` | `files_next_tab` | Files: next tab |
 | `l`, `enter`, `right` | `files_open` | Files: go into the folder, or show the file |
 | `o` | `files_open_system` | Files: open with the system |
+| `tab` | `files_other_side` | Files: the keys go to the other side |
 | `pgdown`, `ctrl+d` | `files_page_down` | Files: down a page |
 | `pgup`, `ctrl+u` | `files_page_up` | Files: up a page |
 | `h`, `backspace`, `left` | `files_parent` | Files: go to the folder above |
+| `[` | `files_prev_tab` | Files: previous tab |
 | `space` | `files_quick_look` | Files: show or hide quick look beside the list |
 | `s` | `files_sort` | Files: sort by name, size or time |
 | `S` | `files_sort_reverse` | Files: reverse the sort |
+| `1` | `files_tab_1` | Files: go to tab 1 |
+| `2` | `files_tab_2` | Files: go to tab 2 |
+| `3` | `files_tab_3` | Files: go to tab 3 |
+| `4` | `files_tab_4` | Files: go to tab 4 |
+| `5` | `files_tab_5` | Files: go to tab 5 |
+| `6` | `files_tab_6` | Files: go to tab 6 |
+| `7` | `files_tab_7` | Files: go to tab 7 |
+| `8` | `files_tab_8` | Files: go to tab 8 |
+| `9` | `files_tab_9` | Files: go to tab 9 |
 | `g`, `home` | `files_top` | Files: first row |
+| `\` | `files_two_sides` | Files: one side or two |
 | `k`, `up` | `files_up` | Files: previous row |
+| `>` | `files_widen` | Files: move the divider right |
+| `Z` | `files_zoom` | Files: show the side with the keys alone, or both |
 
 ## Copy mode
 

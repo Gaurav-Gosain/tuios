@@ -189,6 +189,7 @@ func (m *OS) OverlayMouseMotion(x, y int) bool {
 		return true
 	}
 	if h.Kind == overlayKindFiles {
+		m.FilesMotion(x)
 		return true
 	}
 	lx, ly := x-h.OriginX, y-h.OriginY
@@ -264,6 +265,7 @@ func (m *OS) overlayRowHover(kind string, idx int) {
 
 // OverlayMouseRelease ends any in-progress overlay drag.
 func (m *OS) OverlayMouseRelease() {
+	m.FilesRelease()
 	m.OverlayDrag.Active = false
 	m.accentDragging = false
 	m.accentDrag = accentHitNone
@@ -308,7 +310,7 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 	case "inbox":
 		m.CockpitWheel(x, y, up)
 	case overlayKindFiles:
-		m.FilesWheel(up)
+		m.FilesWheel(x, y, up)
 	case overlayKindBuffers:
 		m.BufferChooserMove(wheelDelta(up))
 	case overlayKindTransfers:
