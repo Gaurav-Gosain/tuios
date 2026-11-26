@@ -23,15 +23,17 @@ import (
 // credited to that turn. Telling those apart needs the agents' own edits,
 // from their transcripts.
 //
-// The answer adds "authors": the first is always the person, each other is a
-// pane's turn. Every line's origin is an index into it, plus one.
+// The answer adds "authors": the first is always the person between turns,
+// each other is a pane's turn, or the person while that turn ran. Every
+// line's origin is an index into it, plus one.
 
 // reviewOriginSteps bounds the checkpoints the chain walks, newest kept.
 const reviewOriginSteps = 64
 
 // reviewOrigin is one entry of review-diff's authors.
 type reviewOrigin struct {
-	// Kind is "person" or "agent".
+	// Kind is "person" or "agent". A person with a turn is the person while
+	// that turn of the pane ran.
 	Kind string `json:"kind"`
 	// Agent names the agent: its harness, or the pane's title.
 	Agent   string `json:"agent,omitempty"`
@@ -144,6 +146,10 @@ func (d *Daemon) reviewOrigins(ctx context.Context, repo reviewRepo, diff *revie
 			}
 			authors = append(authors, a)
 			step.Author = len(authors) - 1
+			if step.Judge != nil {
+				authors = append(authors, reviewOrigin{Kind: "person", Pane: cp.Pane, Session: cp.Session, Turn: cp.Turn})
+				step.Person = len(authors) - 1
+			}
 		}
 		steps = append(steps, step)
 		from, prevAt = mk.tree, mk.at
@@ -163,6 +169,10 @@ func (d *Daemon) reviewOrigins(ctx context.Context, repo reviewRepo, diff *revie
 		authors = append(authors, reviewOrigin{Kind: "agent", Agent: reviewAgentName(w.WindowState), Pane: w.ID, Turn: w.CompletionSeq + 1, Working: true})
 		last = len(authors) - 1
 		final.Judge = d.reviewJudge(w.sess, w.ID, repo.root, prevAt, time.Now().UnixNano())
+		if final.Judge != nil {
+			authors = append(authors, reviewOrigin{Kind: "person", Pane: w.ID, Session: w.sess.Name(), Turn: w.CompletionSeq + 1})
+			final.Person = len(authors) - 1
+		}
 	}
 	final.Author = last
 	steps = append(steps, final)

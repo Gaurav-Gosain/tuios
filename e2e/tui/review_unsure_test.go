@@ -21,7 +21,9 @@ import (
 //
 //   - In turn 1 the agent edits main.go with its Edit tool, and the person
 //     writes another line while the turn runs. The turn runs no tool that can
-//     write, so the person's line says "you".
+//     write, so the person's line says "you · during turn 1".
+//   - Between the turns the person writes a line, which says "you · not in a
+//     turn".
 //   - In turn 2 the agent runs a shell command, and a line no edit of its
 //     shows up. It may be the command's, so the hunk says "turn 2 ?", and the
 //     status line says why when the cursor is on it.
@@ -144,6 +146,10 @@ func TestReviewAsksTheAgentsOwnEdits(t *testing.T) {
 	write()
 	end(1)
 
+	// Between the turns: the person's line.
+	lines[40] = "line 40 BETWEEN-TURNS"
+	write()
+
 	// Turn 2: an Edit, and a command that leaves a line no edit shows.
 	begin()
 	lines[50] = "line 50 TURN2-EDIT"
@@ -170,7 +176,8 @@ func TestReviewAsksTheAgentsOwnEdits(t *testing.T) {
 		line, has, hasNot string
 	}{
 		{"BY-AGENT-EDIT", "turn 1", "?"},
-		{"BY-PERSON-IN-TURN", "you · not in a turn", ""},
+		{"BY-PERSON-IN-TURN", "you · during turn 1", ""},
+		{"BETWEEN-TURNS", "you · not in a turn", ""},
 		{"TURN2-EDIT", "turn 2", "?"},
 		{"BY-A-COMMAND", "turn 2", ""},
 	} {

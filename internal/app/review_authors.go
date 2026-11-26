@@ -104,11 +104,15 @@ func reviewFileOrigin(f *review.File) int {
 }
 
 // reviewAuthorWords is how a hunk's chip names one author: "claude · turn 4 ·
-// 2m ago", "claude · turn 5 · writing", or "you · not in a turn". An unsure
-// turn reads "claude · turn 4 ?".
+// 2m ago", "claude · turn 5 · writing", "you · during turn 4" for a line the
+// person wrote while a turn ran, or "you · not in a turn". An unsure turn
+// reads "claude · turn 4 ?".
 func (r *reviewState) reviewAuthorWords(origin int, now time.Time, unsure bool) (name, rest string) {
 	a, ok := r.reviewAuthorOf(origin)
 	if !ok || a.Kind != "agent" {
+		if ok && a.Turn > 0 {
+			return "you", " · during turn " + strconv.FormatUint(a.Turn, 10)
+		}
 		return "you", " · not in a turn"
 	}
 	rest = " · turn " + strconv.FormatUint(a.Turn, 10)

@@ -23,10 +23,12 @@ import (
 // OriginStep is one step of the chain: the tree before it, the tree after it,
 // and the author it credits, an index the caller gives meaning to. Judge,
 // when set, is asked about each line the step added, by its path and text:
-// whether the author made it, may not have, or did not.
+// whether the author made it, may not have, or did not. A line the author
+// did not make goes to Person: the person while the step ran.
 type OriginStep struct {
 	From, To string
 	Author   int
+	Person   int
 	Judge    func(path, text string) Verdict
 }
 
@@ -39,7 +41,8 @@ const (
 	// Unsure: the line is credited to the step's author, marked as one the
 	// author may not have made.
 	Unsure
-	// NotMade: the line is the person's, not the step's author's.
+	// NotMade: the line is the person's, not the step's author's: the
+	// step's Person.
 	NotMade
 )
 
@@ -141,7 +144,7 @@ func applyStep(owners map[string]map[int]owner, diff string, s OriginStep) {
 		case Unsure:
 			return owner{author: s.Author, unsure: true}
 		case NotMade:
-			return owner{}
+			return owner{author: s.Person}
 		}
 		return owner{author: s.Author}
 	}

@@ -42,7 +42,7 @@ func TestOriginsAskTheJudge(t *testing.T) {
 		}
 		return Made
 	}
-	steps := []OriginStep{{From: baseSHA, To: t1, Author: 1, Judge: judge}}
+	steps := []OriginStep{{From: baseSHA, To: t1, Author: 1, Person: 2, Judge: judge}}
 	read := func(ctx context.Context, from, to string, paths []string) (string, error) {
 		return StepDiff(ctx, dir, from, to, paths)
 	}
@@ -53,7 +53,7 @@ func TestOriginsAskTheJudge(t *testing.T) {
 		origin int
 		unsure bool
 	}
-	want := map[string]got{"MADE": {2, false}, "MAYBE": {2, true}, "YOURS": {1, false}}
+	want := map[string]got{"MADE": {2, false}, "MAYBE": {2, true}, "YOURS": {3, false}}
 	for _, l := range d.Files[0].Hunks[0].Lines {
 		if w, ok := want[l.Text]; ok && (l.Origin != w.origin || l.Unsure != w.unsure) {
 			t.Errorf("line %q: origin %d unsure %v, want %d %v", l.Text, l.Origin, l.Unsure, w.origin, w.unsure)

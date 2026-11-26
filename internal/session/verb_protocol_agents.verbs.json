@@ -850,7 +850,7 @@
       },
       {
         "name": "authors",
-        "description": "With origins: who made the lines. The first is the person. Each other is an agent turn: kind, agent, pane, session, turn, working and at. A line's origin is its place in this list, from 1."
+        "description": "With origins: who made the lines. The first is the person between turns. Each other is an agent turn, or the person while that turn ran: kind, agent, pane, session, turn, working and at. A line's origin is its place in this list, from 1."
       },
       {
         "name": "untrusted",
