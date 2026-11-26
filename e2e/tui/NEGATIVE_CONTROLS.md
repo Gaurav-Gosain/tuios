@@ -7,6 +7,26 @@ below. Two of them are **not** caught here; that is written down rather than
 papered over, because a suite whose real coverage is unknown is worse than no
 suite.
 
+## A pane is refused the read command of its own mail notice
+
+The mail notice tells an agent to run `tuios read-agent-messages -w <short id>
+--unread`. `holdToPane` compared `to` (and `from`, and `window` on a self
+report) with the caller's full window id, so a pane held by its grants was
+refused the command tuios had just printed for it.
+`TestMailNoticeCommandReadsWithShortID` (`mail_read_short_id_test.go`) drops
+a pane to `read,write,mail,task`, runs that command by short id, and checks
+that another pane's short id is still refused.
+
+Run on 2026-11-26 on macOS, with `internal/session/conn_scope.go` reverted to
+main:
+
+| Change | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| `to` compared with the full id as before | `TestMailNoticeCommandReadsWithShortID` | `the reader did not print OWN=0` | caught |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestMailNoticeCommandReadsWithShortID$' -v .`.
+
 ## The session cycle skips a folded repository group
 
 `TestSidebarGroupsWorktrees` folds a repository group with no main checkout

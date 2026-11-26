@@ -554,16 +554,34 @@ func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage,
 		return nil, deny("host " + echoName(h) + " is another machine, and " + bound + " session")
 	}
 
-	mine := func(name string) *verbError {
-		switch v := str(name); v {
-		case "":
-			set(name, window)
-		case window:
-		default:
-			return deny(name + " must be the caller's own window " + shortWindowID(window) + ", or omitted")
+	// names reports whether v, resolved in session in the way the verb's
+	// handler resolves a window, is the caller's own window. tuios shows a
+	// pane by its short id (the mail notice, list-agents), so that form has
+	// to pass as well as the full id. An ambiguous prefix resolves to nothing.
+	names := func(v, in string) bool {
+		if v == window {
+			return true
 		}
+		sess := d.manager.GetSession(in)
+		if sess == nil {
+			return false
+		}
+		st := sess.GetState()
+		i, err := findWindowStateIndex(st.Windows, v)
+		return err == nil && st.Windows[i].ID == window
+	}
+	// ownOr fills in name with the caller's window, and pins a name, short id
+	// or index that resolves to it to the full id, so the handler cannot
+	// resolve it to another window later.
+	ownOr := func(name, in, why string) *verbError {
+		v := str(name)
+		if v != "" && !names(v, in) {
+			return deny(name + " must be the caller's own window " + shortWindowID(window) + why)
+		}
+		set(name, window)
 		return nil
 	}
+	mine := func(name string) *verbError { return ownOr(name, session, ", or omitted") }
 	switch kind {
 	case scopeSelf:
 		if session != own {
@@ -579,8 +597,10 @@ func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage,
 				return nil, verr
 			}
 		}
-		if verb == "read-agent-messages" && str("to") != "" && str("to") != window {
-			return nil, deny("to must be the caller's own window " + shortWindowID(window) + ", or omitted to read the session's ring without marking anything read")
+		if verb == "read-agent-messages" && str("to") != "" {
+			if verr := ownOr("to", session, ", or omitted to read the session's ring without marking anything read"); verr != nil {
+				return nil, verr
+			}
 		}
 	case scopeMail, scopeWrite:
 		// from names a window of the target session. It is filled in only
@@ -591,8 +611,12 @@ func (d *Daemon) holdToPane(verb string, kind scopeKind, params json.RawMessage,
 				if verr := mine("from"); verr != nil {
 					return nil, verr
 				}
-			} else if f := str("from"); f != "" && f != window {
-				return nil, deny("from must be the caller's own window " + shortWindowID(window) + ", or omitted")
+			} else if str("from") != "" {
+				// The handler looks for a sender outside the target session by
+				// its full id, so a short id is resolved in the caller's own.
+				if verr := ownOr("from", own, ", or omitted"); verr != nil {
+					return nil, verr
+				}
 			}
 		}
 	}
