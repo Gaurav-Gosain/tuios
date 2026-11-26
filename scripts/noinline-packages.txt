@@ -120,6 +120,8 @@ crypto/ecdh
 crypto/internal/fips140/nistec/...
 crypto/internal/fips140/edwards25519/...
 crypto/internal/fips140/mldsa
+crypto/internal/fips140/mlkem
+crypto/internal/fips140/sha3
 encoding/asn1
 vendor/golang.org/x/crypto/cryptobyte
 # The ssh server's log, once per connection event; a MIME type lookup and a
@@ -136,3 +138,10 @@ github.com/Gaurav-Gosain/tuios/internal/hooks
 github.com/Gaurav-Gosain/tuios/internal/openedcopy
 github.com/google/uuid
 github.com/fsnotify/fsnotify/...
+# Run on request: a diagram drawn to pixels, the review of a change, the git
+# state of a folder when the sidebar or a verb asks for it, and the tables of
+# the CLI.
+tuios.dev/sketch/raster
+github.com/Gaurav-Gosain/tuios/internal/review
+github.com/Gaurav-Gosain/tuios/internal/gitstate
+charm.land/lipgloss/v2/table
