@@ -1,6 +1,9 @@
 package session
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 // TestSessionResizeLeavesPaneWinsize pins the pane size contract at the daemon:
 // a pane's winsize is only ever a size a client announced for that pane over
@@ -96,5 +99,63 @@ func TestResizeToTheSameSizeIsANoOp(t *testing.T) {
 	pty.outputMu.Unlock()
 	if changed == after {
 		t.Error("a resize that did change the size was swallowed too")
+	}
+}
+
+// TestSubscribeStatesTheStreamSizeNotTheEmulators: a subscribe ends with the
+// size the stream is at where its catch-up ends, which is the last resize
+// mark, even while the daemon's emulator has not reached that resize yet.
+//
+// The emulator parses behind the ring. A subscribe right after a resize used
+// to end with the emulator's size, the old one, pushed behind a catch-up that
+// already held the new one. The client went back to the old width and laid out
+// everything after it at a width the daemon no longer had: its history wrapped
+// at 11 columns where the daemon's wrapped at 38, until the next resize.
+//
+// The test holds the emulator at the old size by hand, which is the state it
+// is in until it parses the resize, so the case is the same on every run.
+//
+// NEGATIVE CONTROL: fails with the emulator's size pushed at the end of
+// subscribeLocked, where the last size the client gets is 65x38.
+func TestSubscribeStatesTheStreamSizeNotTheEmulators(t *testing.T) {
+	_, sess := newTestDaemonSession(t)
+	pty, err := sess.CreatePTY("win-stream-size", 65, 38, func(string) {})
+	if err != nil {
+		t.Fatalf("CreatePTY failed: %v", err)
+	}
+	if err := pty.Resize(80, 20); err != nil {
+		t.Fatalf("resize: %v", err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		pty.terminalMu.RLock()
+		w := pty.terminal.Width()
+		pty.terminalMu.RUnlock()
+		if w == 80 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the daemon's emulator never took the resize")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	// The emulator behind the resize mark.
+	pty.terminalMu.Lock()
+	pty.terminal.Resize(65, 38)
+	pty.terminalMu.Unlock()
+
+	sub := pty.subscribeSub("client-stream-size", 0, false)
+	var last ptyChunk
+	for {
+		c, ok, _ := sub.out.pop()
+		if !ok {
+			break
+		}
+		if c.isResize() {
+			last = c
+		}
+	}
+	if last.width != 80 || last.height != 20 {
+		t.Errorf("the last size the subscribe gave is %dx%d, want the stream's 80x20: the client lays out what follows at a width the daemon no longer has", last.width, last.height)
 	}
 }

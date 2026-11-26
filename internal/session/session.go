@@ -4902,19 +4902,44 @@ func (p *PTY) subscribeLocked(clientID string, fromSeq int64, fromSnapshot bool)
 	sub.seen = endSeq
 	p.outputMu.RUnlock()
 
-	// The size the emulator is at now, behind the catch-up. A resize is only
-	// broadcast to the subscribers of the moment, so one that landed between a
-	// client's snapshot and its subscribe reaches nobody; this states the
-	// answer on every subscribe instead of leaving the pane at whatever width
-	// the client last heard about. It is a no-op whenever nothing was missed.
+	// The size the stream is at where the catch-up ends, behind it. A resize
+	// is only broadcast to the subscribers of the moment, so one that landed
+	// between a client's snapshot and its subscribe reaches nobody; this
+	// states the answer on every subscribe instead of leaving the pane at
+	// whatever width the client last heard about. It is a no-op whenever
+	// nothing was missed.
+	//
+	// It is the last resize mark at or before endSeq, not the emulator's size.
+	// The emulator parses behind the ring, so right after a resize it can
+	// still be at the old size while the catch-up already holds the new one.
+	// Its size pushed here took the client back to the old width after the
+	// catch-up, and the client laid out everything after it at a width the
+	// daemon no longer had, until the next resize. The emulator's size is
+	// only the answer for a pane that was never resized.
+	mw, mh, marked := p.streamSizeAt(endSeq)
 	p.terminalMu.RLock()
 	if p.terminal != nil {
-		w, h := p.terminal.Width(), p.terminal.Height()
-		sub.out.push(ptyChunk{width: w, height: h})
+		if !marked {
+			mw, mh = p.terminal.Width(), p.terminal.Height()
+		}
+		sub.out.push(ptyChunk{width: mw, height: mh})
 	}
 	p.terminalMu.RUnlock()
 
 	return &sub.out
+}
+
+// streamSizeAt is the size of the last resize that took effect at or before
+// stream position seq, and false when the pane has none.
+func (p *PTY) streamSizeAt(seq int64) (width, height int, ok bool) {
+	p.outputMu.RLock()
+	defer p.outputMu.RUnlock()
+	for _, m := range slices.Backward(p.resizeMarks) {
+		if m.seq <= seq {
+			return m.width, m.height, true
+		}
+	}
+	return 0, 0, false
 }
 
 // Unsubscribe removes a subscriber and returns the stream position it reached,
