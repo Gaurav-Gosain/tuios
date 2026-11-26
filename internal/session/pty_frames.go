@@ -30,6 +30,12 @@ import (
 // both features, and only for a pane it asked frames for: a client that
 // records the stream needs every byte.
 //
+// A client that lists FeaturePTYFrameAcks reports each frame once it draws
+// it. Its stream then holds one frame in flight: a turn in which the screen
+// moved sends a frame only once the client reported the last one, or
+// frameDrawnWait after it was sent. So the frames never outrun what the client
+// draws, and a capture the client would never show is not taken.
+//
 // What the client would have done with the bytes it never parses is lost for
 // them: a bell, a notification, a clipboard write, a picture. A pane that
 // drew a picture lately is not sent as frames, and a picture ends them.
@@ -46,6 +52,13 @@ type PTYLagPayload struct {
 	PTYID string `json:"pty_id"`
 }
 
+// PTYFrameDrawnPayload is a client's report that it drew the frame of a pane
+// that ends at stream position Seq.
+type PTYFrameDrawnPayload struct {
+	PTYID string `json:"pty_id"`
+	Seq   int64  `json:"seq"`
+}
+
 // The frame rules. Variables so a test can change them.
 var (
 	frameInterval   = time.Second / 120
@@ -58,6 +71,11 @@ var (
 	// frameGraphicsQuiet is how long after a picture a pane is not sent as
 	// frames.
 	frameGraphicsQuiet = 2 * time.Second
+	// frameDrawnWait is how long a stream whose client reports the frames it
+	// draws (FeaturePTYFrameAcks) waits for that report before it sends the
+	// next frame anyway: a lost report or a stalled client never freezes the
+	// pane.
+	frameDrawnWait = 100 * time.Millisecond
 )
 
 // frameEnterBytes is how much a stream sends inside frameRateWindow before it
@@ -135,9 +153,25 @@ func (d *Daemon) streamFrames(cs *connState, pty *PTY, sub *ptySubscriber) *ptyS
 
 	tick := time.NewTicker(frameInterval)
 	defer tick.Stop()
-	last := int64(-1)
+	// last is the position of the last frame sent, and prev the position of
+	// the screen in the turn before, which the quiet turns count from.
+	last, prev := int64(-1), int64(-1)
 	var sent *TerminalState
+	var sentAt time.Time
 	quiet, held := 0, 0
+	// ending says the pane is quiet or drew a picture, so the stream goes
+	// back to bytes once the client has the screen of this turn.
+	ending := false
+	send := func(state *TerminalState) bool {
+		now := time.Now()
+		if err := d.sendFrame(cs, pty.ID, state); err != nil {
+			return false
+		}
+		pty.countFrame(sub, last, sentAt, now)
+		sub.sent.Store(state.Seq)
+		last, sent, sentAt = state.Seq, state, now
+		return true
+	}
 	for {
 		state, open := pty.frameState()
 		if state == nil {
@@ -149,7 +183,6 @@ func (d *Daemon) streamFrames(cs *connState, pty *PTY, sub *ptySubscriber) *ptyS
 			held++
 		} else {
 			held = 0
-			made := state.Seq - last
 			if resume, done := d.framePassedGraphics(cs, pty, sub, state, sent, last); done {
 				if resume < 0 {
 					return nil
@@ -157,22 +190,27 @@ func (d *Daemon) streamFrames(cs *connState, pty *PTY, sub *ptySubscriber) *ptyS
 				last = resume
 				break
 			}
-			if last < 0 || made > 0 {
-				if err := d.sendFrame(cs, pty.ID, state); err != nil {
+			moved := last < 0 || state.Seq != last
+			if moved && !sub.waitsForDrawn(last, sentAt) {
+				if !send(state) {
 					return nil
 				}
-				sub.sent.Store(state.Seq)
-				sent = state
+				moved = false
 			}
-			if last >= 0 && made < frameExitBytes {
-				quiet++
-			} else {
-				quiet = 0
+			if !ending {
+				if prev >= 0 && state.Seq-prev < frameExitBytes {
+					quiet++
+				} else {
+					quiet = 0
+				}
+				prev = state.Seq
+				// A picture goes to the client as bytes, which the stream
+				// rebuilt from last carries.
+				ending = quiet >= frameQuietTurns || pty.drewPictureLately()
 			}
-			last = state.Seq
-			// A picture goes to the client as bytes, which the stream
-			// rebuilt from last carries.
-			if quiet >= frameQuietTurns || pty.drewPictureLately() {
+			// The stream is rebuilt where the client's screen is, so a
+			// screen that moved goes first, when the client may take it.
+			if ending && !moved {
 				break
 			}
 		}
@@ -187,6 +225,7 @@ func (d *Daemon) streamFrames(cs *connState, pty *PTY, sub *ptySubscriber) *ptyS
 			return nil
 		}
 	}
+	pty.noteFrames()
 	debugLog("[DEBUG] PTY %s: client %s gets bytes from %d", pty.ID[:8], cs.clientID, last)
 	return pty.resumeFromFrame(cs.clientID, sub, last)
 }
@@ -243,6 +282,33 @@ func (p *PTY) graphicsSince(lo, hi int64) (from int64, found, only bool) {
 	p.subscribersMu.Lock()
 	defer p.subscribersMu.Unlock()
 	return p.gfx.spanSince(lo, hi)
+}
+
+// waitsForDrawn reports whether the stream holds its next frame: the client
+// reports the frames it draws, has not reported the last one, at last, and
+// that frame went less than frameDrawnWait ago.
+func (sub *ptySubscriber) waitsForDrawn(last int64, sentAt time.Time) bool {
+	return last >= 0 && sub.acks.Load() && sub.drawn.Load() < last && time.Since(sentAt) < frameDrawnWait
+}
+
+// countFrame counts a frame sent at now. last and sentAt are the frame
+// before it, if any.
+func (p *PTY) countFrame(sub *ptySubscriber, last int64, sentAt, now time.Time) {
+	p.framesSent.Add(1)
+	if last < 0 || !sub.acks.Load() {
+		return
+	}
+	if sub.drawn.Load() >= last {
+		p.framesPaced.Add(1)
+	} else if now.Sub(sentAt) >= frameDrawnWait {
+		p.framesUnpaced.Add(1)
+	}
+}
+
+// noteFrames says in the daemon log how many frames the pane's clients got,
+// when a stream goes back to bytes.
+func (p *PTY) noteFrames() {
+	LogBasic("PTY %s frames: %d streams, %d sent, %d after the client drew the last, %d with no report", shortID(p.ID), p.framed.Load(), p.framesSent.Load(), p.framesPaced.Load(), p.framesUnpaced.Load())
 }
 
 // noteFramed counts a stream turned to frames, and says so in the daemon log
@@ -308,6 +374,7 @@ func (p *PTY) resumeFromFrame(clientID string, cur *ptySubscriber, seq int64) *p
 	next := p.subscribers[clientID]
 	next.noPace.Store(cur.noPace.Load())
 	next.frames.Store(cur.frames.Load())
+	next.acks.Store(cur.acks.Load())
 	p.wakePacer()
 	return next
 }
@@ -326,6 +393,27 @@ func (d *Daemon) handlePTYLag(cs *connState, msg *Message) error {
 		sub.lagged.Store(true)
 	}
 	return nil
+}
+
+// handlePTYFrameDrawn records that the client drew a frame of a pane, so its
+// stream may send the next one.
+func (d *Daemon) handlePTYFrameDrawn(cs *connState, msg *Message) error {
+	var payload PTYFrameDrawnPayload
+	if err := msg.ParsePayload(&payload); err != nil {
+		return errfmt.Errorf("invalid pty frame drawn payload: %w", err)
+	}
+	cs.mu.Lock()
+	sub := cs.ptySubscriptions[payload.PTYID]
+	cs.mu.Unlock()
+	if sub == nil || !sub.acks.Load() {
+		return nil
+	}
+	for {
+		seen := sub.drawn.Load()
+		if payload.Seq <= seen || sub.drawn.CompareAndSwap(seen, payload.Seq) {
+			return nil
+		}
+	}
 }
 
 // OnPTYFrame registers a handler for the frames of a pane. It is called on
@@ -355,6 +443,16 @@ func (c *TUIClient) framesFor(ptyID string) bool {
 // caller's goroutine.
 func (c *TUIClient) ReportPTYLag(ptyID string) {
 	msg, err := NewMessage(MsgPTYLag, &PTYLagPayload{PTYID: ptyID})
+	if err != nil {
+		return
+	}
+	go func() { _ = c.send(msg) }()
+}
+
+// ReportPTYFrameDrawn tells the daemon the client drew the frame of the pane
+// that ends at seq. It sends off the caller's goroutine.
+func (c *TUIClient) ReportPTYFrameDrawn(ptyID string, seq int64) {
+	msg, err := NewMessage(MsgPTYFrameDrawn, &PTYFrameDrawnPayload{PTYID: ptyID, Seq: seq})
 	if err != nil {
 		return
 	}

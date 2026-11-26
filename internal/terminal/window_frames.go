@@ -40,9 +40,35 @@ func (w *Window) reportLag() {
 	}
 }
 
-// FrameApplied records that a frame from the daemon replaced the screen: a
-// later backlog is reported again, and the pane is drawn.
-func (w *Window) FrameApplied() {
+// FrameApplied records that a frame from the daemon, which ends at stream
+// position seq, replaced the screen: a later backlog is reported again, the
+// pane is drawn, and the frame is reported drawn by the next ReportDrawnFrame.
+func (w *Window) FrameApplied(seq int64) {
 	w.lagSent.Store(false)
+	w.drawnSeq.Store(seq + 1)
 	w.NoteRedraw()
+}
+
+// SetDrawnReporter sets how the window tells its daemon it drew a frame
+// (session.FeaturePTYFrameAcks), or with nil, that it does not.
+func (w *Window) SetDrawnReporter(report func(seq int64)) {
+	if report == nil {
+		w.drawnReport.Store(nil)
+		return
+	}
+	w.drawnReport.Store(&report)
+}
+
+// ReportDrawnFrame tells the daemon the window drew the last frame it
+// applied, once a frame. The pass that picks the panes to draw calls it, for
+// a pane out of view as well, so the daemon sends frames no faster than this
+// client draws.
+func (w *Window) ReportDrawnFrame() {
+	report := w.drawnReport.Load()
+	if report == nil {
+		return
+	}
+	if seq := w.drawnSeq.Swap(0); seq > 0 {
+		(*report)(seq - 1)
+	}
 }

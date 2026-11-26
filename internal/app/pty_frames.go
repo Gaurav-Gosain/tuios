@@ -14,12 +14,18 @@ func (m *OS) takeFrames(window *terminal.Window, ptyID string, tapped bool) {
 	if tapped || !client.HasFeature(session.FeaturePTYFrames) || !client.HasFeature(session.FeatureRemoteHistory) {
 		client.OnPTYFrame(ptyID, nil)
 		window.SetLagReporter(nil)
+		window.SetDrawnReporter(nil)
 		return
 	}
 	client.OnPTYFrame(ptyID, func(state *session.TerminalState) {
 		applyPTYFrame(window, state)
 	})
 	window.SetLagReporter(func() { client.ReportPTYLag(ptyID) })
+	if client.HasFeature(session.FeaturePTYFrameAcks) {
+		window.SetDrawnReporter(func(seq int64) { client.ReportPTYFrameDrawn(ptyID, seq) })
+	} else {
+		window.SetDrawnReporter(nil)
+	}
 }
 
 // applyPTYFrame puts a frame of a pane into the window's emulator. It runs
@@ -39,5 +45,5 @@ func applyPTYFrame(w *terminal.Window, state *session.TerminalState) {
 	}
 	w.UnlockIO()
 	w.SetAltScreen(state.IsAltScreen)
-	w.FrameApplied()
+	w.FrameApplied(state.Seq)
 }

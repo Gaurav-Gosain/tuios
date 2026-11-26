@@ -120,6 +120,7 @@ func init() {
 	gob.Register(HistoryPagePayload{})
 	gob.Register(PTYFramePayload{})
 	gob.Register(PTYLagPayload{})
+	gob.Register(PTYFrameDrawnPayload{})
 
 	// Session state types
 	gob.Register(SessionState{})

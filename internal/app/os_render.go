@@ -74,6 +74,9 @@ func (m *OS) MarkTerminalsWithNewContent() bool {
 		}
 
 		activeTerminals++
+		// The daemon sends this pane's next frame once this pass has seen
+		// the last one, so frames come no faster than this client draws.
+		window.ReportDrawnFrame()
 
 		// A write of kitty graphics alone changed no cell (see
 		// terminal.graphicsOnly). The frame is needed only to draw what the

@@ -380,6 +380,7 @@ var messageTypeNames = [...]string{
 	MsgHistoryPage:       "HistoryPage",
 	MsgPTYFrame:          "PTYFrame",
 	MsgPTYLag:            "PTYLag",
+	MsgPTYFrameDrawn:     "PTYFrameDrawn",
 }
 
 // MessageTypeName returns a human-readable name for a message type.

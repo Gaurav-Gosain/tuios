@@ -2302,6 +2302,7 @@ func (m *OS) unsubscribeFromPTY(window *terminal.Window) {
 	m.LogInfo("[UNSUBSCRIBE] Unsubscribing from PTY %s for window %s", shortID(ptyID), shortID(window.ID))
 	m.DaemonClient.UnsubscribePTY(ptyID)
 	window.SetLagReporter(nil)
+	window.SetDrawnReporter(nil)
 	delete(m.SubscribedPTYs, ptyID)
 	// With no stream to be ordered against, the layout sizes the pane again, as
 	// it does for a pane that has never been subscribed.

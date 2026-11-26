@@ -219,6 +219,10 @@ const (
 	// when both sides listed FeaturePTYFrames. See pty_frames.go.
 	MsgPTYFrame
 	MsgPTYLag
+	// MsgPTYFrameDrawn is the client's report that it drew a frame of a pane
+	// (PTYFrameDrawnPayload). Only when both sides listed
+	// FeaturePTYFrameAcks. See pty_frames.go.
+	MsgPTYFrameDrawn
 
 	// msgTypeEnd is one past the last message type. It stays last: a type
 	// added above it is walked by the tests that sweep every type.

@@ -32,10 +32,14 @@ const (
 	// FeatureRemoteHistory, which brings back the lines a frame does not
 	// carry. See pty_frames.go.
 	FeaturePTYFrames Feature = "pty-frames"
+	// FeaturePTYFrameAcks: the client reports each frame of a pane once it
+	// draws it (MsgPTYFrameDrawn), and the daemon sends the next frame only
+	// after that report. On only with FeaturePTYFrames. See pty_frames.go.
+	FeaturePTYFrameAcks Feature = "pty-frame-acks"
 )
 
 // knownFeatures is every feature this build has.
-var knownFeatures = []Feature{FeatureRemoteHistory, FeaturePTYFrames}
+var knownFeatures = []Feature{FeatureRemoteHistory, FeaturePTYFrames, FeaturePTYFrameAcks}
 
 // featureOn reports whether this build can do f. A feature that depends on
 // the emulator backend is off where the backend lacks it.
@@ -47,6 +51,9 @@ func featureOn(f Feature) bool {
 	case FeaturePTYFrames:
 		// pty_frames=off stands for a peer that does not list it.
 		return numbersHistory() && testknob.String("pty_frames") != "off"
+	case FeaturePTYFrameAcks:
+		// pty_frame_acks=off stands for a peer that does not list it.
+		return featureOn(FeaturePTYFrames) && testknob.String("pty_frame_acks") != "off"
 	}
 	return true
 }

@@ -460,6 +460,11 @@ type Window struct {
 	// last ran empty. See window_frames.go.
 	lagReport atomic.Pointer[func()]
 	lagSent   atomic.Bool
+	// drawnReport tells the daemon the window drew a frame of the pane, and
+	// drawnSeq is one past the position of the frame to report, zero for
+	// none. See window_frames.go.
+	drawnReport atomic.Pointer[func(seq int64)]
+	drawnSeq    atomic.Int64
 
 	// outputEpoch stamps every chunk queued for the emulator. DiscardPendingOutput
 	// bumps it, and outputWriter throws away anything stamped with an older one,
