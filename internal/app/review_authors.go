@@ -104,13 +104,17 @@ func reviewFileOrigin(f *review.File) int {
 }
 
 // reviewAuthorWords is how a hunk's chip names one author: "claude · turn 4 ·
-// 2m ago", "claude · turn 5 · writing", or "you · not in a turn".
-func (r *reviewState) reviewAuthorWords(origin int, now time.Time) (name, rest string) {
+// 2m ago", "claude · turn 5 · writing", or "you · not in a turn". An unsure
+// turn reads "claude · turn 4 ?".
+func (r *reviewState) reviewAuthorWords(origin int, now time.Time, unsure bool) (name, rest string) {
 	a, ok := r.reviewAuthorOf(origin)
 	if !ok || a.Kind != "agent" {
 		return "you", " · not in a turn"
 	}
 	rest = " · turn " + strconv.FormatUint(a.Turn, 10)
+	if unsure {
+		rest += " ?"
+	}
 	switch {
 	case a.Working:
 		rest += " · writing"
@@ -120,6 +124,39 @@ func (r *reviewState) reviewAuthorWords(origin int, now time.Time) (name, rest s
 	return reviewText(a.Agent), rest
 }
 
+// reviewUnsureHint is what the status line says with the cursor on a hunk
+// whose author is unsure.
+const reviewUnsureHint = "Not in the agent edits. The agent may have run a tool on it, or you changed it."
+
+// reviewHunkUnsure reports whether a line of h credited to origin is marked
+// unsure.
+func reviewHunkUnsure(h review.Hunk, origin int) bool {
+	for _, l := range h.Lines {
+		if l.Origin == origin && l.Unsure {
+			return true
+		}
+	}
+	return false
+}
+
+// reviewUnsureUnderCursor reports whether the cursor is on a hunk, or a line
+// of one, whose main author is unsure.
+func (m *OS) reviewUnsureUnderCursor() bool {
+	row, ok := m.reviewRowUnderCursor()
+	e := m.review.currentFile()
+	if !ok || e == nil || e.file == nil || row.hunk < 0 || row.hunk >= len(e.file.Hunks) {
+		return false
+	}
+	h := e.file.Hunks[row.hunk]
+	if row.kind == reviewRowLine && row.line >= 0 && row.line < len(h.Lines) {
+		if l := h.Lines[row.line]; l.Op != "context" {
+			return l.Unsure
+		}
+	}
+	main, _ := reviewMainOrigin(h.Lines)
+	return reviewHunkUnsure(h, main)
+}
+
 // reviewHunkChip is the chip at the right of a hunk's header, nil when the
 // review has no origins.
 func (r *reviewState) reviewHunkChip(h review.Hunk, pal overlay.Palette, bg color.Color, now time.Time) []reviewSeg {
@@ -127,10 +164,10 @@ func (r *reviewState) reviewHunkChip(h review.Hunk, pal overlay.Palette, bg colo
 	if main == 0 {
 		return nil
 	}
-	name, rest := r.reviewAuthorWords(main, now)
+	name, rest := r.reviewAuthorWords(main, now, reviewHunkUnsure(h, main))
 	segs := []reviewSeg{{overlay.Readable(r.reviewAuthorInk(main, pal), bg), name, true}, {overlay.Readable(pal.FgDim, bg), rest, false}}
 	if second != 0 {
-		n2, _ := r.reviewAuthorWords(second, now)
+		n2, _ := r.reviewAuthorWords(second, now, false)
 		segs = append(segs, reviewSeg{overlay.Readable(pal.FgDim, bg), " + ", false}, reviewSeg{overlay.Readable(r.reviewAuthorInk(second, pal), bg), n2, true})
 	}
 	return segs

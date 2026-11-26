@@ -78,6 +78,9 @@ type Line struct {
 	// Origin says who made the line: an index into the review's authors,
 	// plus one, so 0 is "not asked". See Origins.
 	Origin int `json:"origin,omitempty"`
+	// Unsure marks an origin that may be wrong: an agent's turn the line is
+	// credited to, that the agent's own edits do not show.
+	Unsure bool `json:"unsure,omitempty"`
 	// raw is the line's text as git printed it, a carriage return kept,
 	// which a patch built from the line has to carry to apply.
 	raw string

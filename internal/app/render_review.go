@@ -684,6 +684,9 @@ func (m *OS) reviewStatusRule(width int, pal overlay.Palette) string {
 			return reviewPaint([]reviewSeg{{fg, " " + reviewText(last.Message), false}}, width, pal.Surface)
 		}
 	}
+	if m.reviewUnsureUnderCursor() {
+		return reviewPaint([]reviewSeg{{pal.FgDim, " " + reviewUnsureHint, false}}, width, pal.Surface)
+	}
 	return reviewInk(strings.Repeat(hzGlyph(), width), pal.FgMute, pal.Surface)
 }
 

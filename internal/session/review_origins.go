@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/review"
 	"github.com/Gaurav-Gosain/tuios/internal/worktree"
@@ -130,51 +131,64 @@ func (d *Daemon) reviewOrigins(ctx context.Context, repo reviewRepo, diff *revie
 	})
 	var steps []review.OriginStep
 	from := diff.BaseSHA
+	var prevAt int64
 	for _, mk := range marks {
-		author := 0
+		step := review.OriginStep{From: from, To: mk.tree}
 		if cp := mk.cp; cp != nil {
 			a := reviewOrigin{Kind: "agent", Pane: cp.Pane, Session: cp.Session, Turn: cp.Turn, At: cp.At, Agent: "agent"}
-			if w, ok := panes[cp.Pane]; ok {
-				a.Agent = reviewAgentName(w)
+			if p, ok := panes[cp.Pane]; ok {
+				a.Agent = reviewAgentName(p.WindowState)
+				// The agent's own edits judge the lines of its turn
+				// (review_edits.go).
+				step.Judge = d.reviewJudge(p.sess, cp.Pane, repo.root, prevAt, cp.At)
 			}
 			authors = append(authors, a)
-			author = len(authors) - 1
+			step.Author = len(authors) - 1
 		}
-		steps = append(steps, review.OriginStep{From: from, To: mk.tree, Author: author})
-		from = mk.tree
+		steps = append(steps, step)
+		from, prevAt = mk.tree, mk.at
 	}
 	// Lines made since the last checkpoint: the agent working in the tree
 	// now when there is one, the person otherwise.
 	last := 0
-	var working []WindowState
-	for _, w := range panes {
-		if w.AgentState == AgentStateWorking {
-			working = append(working, w)
+	var working []agentPane
+	for _, p := range panes {
+		if p.AgentState == AgentStateWorking {
+			working = append(working, p)
 		}
 	}
+	final := review.OriginStep{From: from, To: diff.TreeSHA}
 	if len(working) == 1 {
 		w := working[0]
-		authors = append(authors, reviewOrigin{Kind: "agent", Agent: reviewAgentName(w), Pane: w.ID, Turn: w.CompletionSeq + 1, Working: true})
+		authors = append(authors, reviewOrigin{Kind: "agent", Agent: reviewAgentName(w.WindowState), Pane: w.ID, Turn: w.CompletionSeq + 1, Working: true})
 		last = len(authors) - 1
+		final.Judge = d.reviewJudge(w.sess, w.ID, repo.root, prevAt, time.Now().UnixNano())
 	}
-	steps = append(steps, review.OriginStep{From: from, To: diff.TreeSHA, Author: last})
+	final.Author = last
+	steps = append(steps, final)
 	if err := review.Origins(ctx, diff.Files, steps, d.reviewOriginCache.read(repo.root), last); err != nil {
 		return nil, err
 	}
 	return authors, nil
 }
 
+// agentPane is a pane with an agent, and its session.
+type agentPane struct {
+	WindowState
+	sess *Session
+}
+
 // reviewPanes are the panes with an agent whose directory is in the work tree
 // at root, by window id, across every session.
-func (d *Daemon) reviewPanes(root string) map[string]WindowState {
-	out := map[string]WindowState{}
+func (d *Daemon) reviewPanes(root string) map[string]agentPane {
+	out := map[string]agentPane{}
 	for _, sess := range d.manager.AllSessions() {
 		for _, w := range sess.GetState().Windows {
 			if w.AgentHarness == "" && w.AgentKind == "" {
 				continue
 			}
 			if r, verr := d.paneRepo(sess, w); verr == nil && r.root == root {
-				out[w.ID] = w
+				out[w.ID] = agentPane{WindowState: w, sess: sess}
 			}
 		}
 	}

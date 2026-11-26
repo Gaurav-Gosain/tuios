@@ -416,6 +416,9 @@ type Daemon struct {
 	reviewOriginCache reviewOriginCache
 	// turnMarks are the work trees' stamps and turn starts (turn_starts.go).
 	turnMarks turnMarks
+	// reviewEditCache keeps the agents' tool calls the review reads
+	// (review_edits.go).
+	reviewEditCache reviewEditCache
 
 	// agentPresets is [agents.presets], the named start-agent params, nil
 	// for none. See agent_presets.go.

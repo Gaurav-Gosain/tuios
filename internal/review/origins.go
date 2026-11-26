@@ -21,10 +21,32 @@ import (
 // agents whose turns overlap share the lines of the one that ended first.
 
 // OriginStep is one step of the chain: the tree before it, the tree after it,
-// and the author it credits, an index the caller gives meaning to.
+// and the author it credits, an index the caller gives meaning to. Judge,
+// when set, is asked about each line the step added, by its path and text:
+// whether the author made it, may not have, or did not.
 type OriginStep struct {
 	From, To string
 	Author   int
+	Judge    func(path, text string) Verdict
+}
+
+// Verdict is what a step's judge says of a line it added.
+type Verdict int
+
+const (
+	// Made: the line is the step's author's.
+	Made Verdict = iota
+	// Unsure: the line is credited to the step's author, marked as one the
+	// author may not have made.
+	Unsure
+	// NotMade: the line is the person's, not the step's author's.
+	NotMade
+)
+
+// owner is who a line is credited to, and whether that is unsure.
+type owner struct {
+	author int
+	unsure bool
 }
 
 // OriginDiffs reads the diff of each step, for the paths given. read caches
@@ -52,13 +74,13 @@ func Origins(ctx context.Context, files []File, steps []OriginStep, read OriginD
 	if len(paths) == 0 {
 		return nil
 	}
-	owners := map[string]map[int]int{}
+	owners := map[string]map[int]owner{}
 	for _, s := range steps {
 		out, err := read(ctx, s.From, s.To, paths)
 		if err != nil {
 			return err
 		}
-		applyStep(owners, out, s.Author)
+		applyStep(owners, out, s)
 	}
 	for i := range files {
 		f := &files[i]
@@ -72,7 +94,7 @@ func Origins(ctx context.Context, files []File, steps []OriginStep, read OriginD
 					continue
 				}
 				if a, ok := own[ln.New]; ok {
-					ln.Origin = a + 1
+					ln.Origin, ln.Unsure = a.author+1, a.unsure
 				} else {
 					ln.Origin = last + 1
 				}
@@ -98,17 +120,30 @@ func Origins(ctx context.Context, files []File, steps []OriginStep, read OriginD
 // c to c+d-1.
 type stepHunk struct{ a, b, c, d int }
 
-// applyStep carries owners through one step's diff and credits author with
-// the lines it added.
-func applyStep(owners map[string]map[int]int, diff string, author int) {
+// applyStep carries owners through one step's diff and credits the step's
+// author with the lines it added, as its judge says.
+func applyStep(owners map[string]map[int]owner, diff string, s OriginStep) {
 	path, old := "", ""
 	var hunks []stepHunk
+	var added []owner
 	flush := func() {
 		if path == "" {
 			return
 		}
-		owners[path] = moveOwners(owners[path], hunks, author)
-		path, hunks = "", nil
+		owners[path] = moveOwners(owners[path], hunks, added)
+		path, hunks, added = "", nil, nil
+	}
+	judge := func(text string) owner {
+		if s.Judge == nil {
+			return owner{author: s.Author}
+		}
+		switch s.Judge(path, text) {
+		case Unsure:
+			return owner{author: s.Author, unsure: true}
+		case NotMade:
+			return owner{}
+		}
+		return owner{author: s.Author}
 	}
 	for line := range strings.SplitSeq(diff, "\n") {
 		switch {
@@ -129,6 +164,8 @@ func applyStep(owners map[string]map[int]int, diff string, author int) {
 			if h, ok := parseStepHunk(line); ok {
 				hunks = append(hunks, h)
 			}
+		case path != "" && len(hunks) > 0 && strings.HasPrefix(line, "+"):
+			added = append(added, judge(strings.TrimPrefix(line, "+")))
 		}
 	}
 	flush()
@@ -136,9 +173,9 @@ func applyStep(owners map[string]map[int]int, diff string, author int) {
 
 // moveOwners is own after hunks: an owned line the step left alone moves by
 // the lines added and removed above it, a line it removed is dropped, and the
-// lines it added go to author.
-func moveOwners(own map[int]int, hunks []stepHunk, author int) map[int]int {
-	out := make(map[int]int, len(own))
+// lines it added get added, in order.
+func moveOwners(own map[int]owner, hunks []stepHunk, added []owner) map[int]owner {
+	out := make(map[int]owner, len(own))
 	for l, a := range own {
 		shift, gone := 0, false
 		for _, h := range hunks {
@@ -153,9 +190,13 @@ func moveOwners(own map[int]int, hunks []stepHunk, author int) map[int]int {
 			out[l+shift] = a
 		}
 	}
+	i := 0
 	for _, h := range hunks {
 		for n := h.c; n < h.c+h.d; n++ {
-			out[n] = author
+			if i < len(added) {
+				out[n] = added[i]
+			}
+			i++
 		}
 	}
 	return out

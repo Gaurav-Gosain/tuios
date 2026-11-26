@@ -10,6 +10,57 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
+// TestOriginsAskTheJudge: a step's judge decides each line it added: the
+// step's, the step's but unsure, or the person's.
+//
+// Negative control: ignoring the judge credits all three lines to step 1.
+func TestOriginsAskTheJudge(t *testing.T) {
+	dir := testutil.GitRepo(t)
+	ctx := context.Background()
+	commit := func(body string) string {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, "f.txt"), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		testutil.Git(t, dir, "add", "f.txt")
+		testutil.Git(t, dir, "commit", "-q", "-m", "x")
+		return testutil.Git(t, dir, "rev-parse", "HEAD^{tree}")
+	}
+	commit("a\n")
+	baseSHA := testutil.Git(t, dir, "rev-parse", "HEAD")
+	t1 := commit("a\nMADE\nMAYBE\nYOURS\n")
+	d, err := Build(ctx, Options{Dir: dir, Base: Base{Name: "base", SHA: baseSHA}, Tree: t1, Context: 3})
+	if err != nil {
+		t.Fatal(err)
+	}
+	judge := func(path, text string) Verdict {
+		switch text {
+		case "MAYBE":
+			return Unsure
+		case "YOURS":
+			return NotMade
+		}
+		return Made
+	}
+	steps := []OriginStep{{From: baseSHA, To: t1, Author: 1, Judge: judge}}
+	read := func(ctx context.Context, from, to string, paths []string) (string, error) {
+		return StepDiff(ctx, dir, from, to, paths)
+	}
+	if err := Origins(ctx, d.Files, steps, read, 0); err != nil {
+		t.Fatal(err)
+	}
+	type got struct {
+		origin int
+		unsure bool
+	}
+	want := map[string]got{"MADE": {2, false}, "MAYBE": {2, true}, "YOURS": {1, false}}
+	for _, l := range d.Files[0].Hunks[0].Lines {
+		if w, ok := want[l.Text]; ok && (l.Origin != w.origin || l.Unsure != w.unsure) {
+			t.Errorf("line %q: origin %d unsure %v, want %d %v", l.Text, l.Origin, l.Unsure, w.origin, w.unsure)
+		}
+	}
+}
+
 // TestOriginsCreditEachLineToItsStep: a chain of three trees, each step
 // adding lines, one moving the lines below it down. Each added line of the
 // whole diff is credited to the step that added it, after the later steps
