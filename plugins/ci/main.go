@@ -18,6 +18,7 @@ import (
 )
 
 const usage = `Usage: tuios-ci [OWNER/REPO] [--sha SHA]
+       tuios-ci wait [OWNER/REPO] [--sha SHA] [--start DURATION]
 
 Shows the GitHub Actions builds of a repository. Without OWNER/REPO, it
 shows the repository of the folder you work in. --sha selects the build of
@@ -27,6 +28,20 @@ one commit. You need the gh CLI, logged in.
 func main() {
 	var repo, sha string
 	args := os.Args[1:]
+	if len(args) > 0 {
+		switch args[0] {
+		case "dock":
+			os.Exit(dockRun())
+		case "watch":
+			if len(args) != 2 {
+				fmt.Fprintln(os.Stderr, "tuios-ci watch: tuios starts this from a focus.")
+				os.Exit(2)
+			}
+			os.Exit(watchRun(args[1]))
+		case "wait":
+			os.Exit(waitRun(args[1:]))
+		}
+	}
 	for i := 0; i < len(args); i++ {
 		switch a := args[i]; {
 		case a == "-h" || a == "--help":
@@ -48,6 +63,12 @@ func main() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "tuios-ci: "+err.Error()+".")
 		os.Exit(1)
+	}
+	// A click on the dock cell opens the pane on the build the cell shows.
+	if os.Getenv("TUIOS_PLUGIN_CELL") != "" && repo == "" && sha == "" {
+		if f := readFocus(); f.Repo != "" {
+			repo, sha = f.Repo, f.SHA
+		}
 	}
 	if repo == "" {
 		repo = repoOfFolder()

@@ -1,9 +1,17 @@
 api = 1
 id = "tuios.ci"
 name = "CI"
-version = "0.1.0"
+version = "0.2.0"
 description = "Shows the GitHub Actions builds of the focused pane's repository, with the time left and the failing test"
 platforms = ["linux", "macos"]
+
+[permissions]
+grants = ["ui"]
+
+# The build of the focused pane's commit: the time left, or the failing
+# test. A click opens the builds on it.
+[[cell]]
+id = "build"
 
 # An install from this folder or from GitHub builds bin/tuios-ci, so it
 # needs Go.
@@ -19,3 +27,11 @@ title = "Builds"
 description = "The builds of the focused pane's repository"
 placement = "split"
 command = ["bin/tuios-ci"]
+
+# Runs on each focus and exits. While the build of the focused commit runs,
+# it starts one watcher for the repository, which exits when the build ends.
+[[process]]
+id = "dock"
+run = "event"
+on = ["pane.focused", "tab.focused", "workspace.focused"]
+command = ["bin/tuios-ci", "dock"]

@@ -22,7 +22,49 @@ You can also run the program in any terminal:
 bin/tuios-ci                        # the repository of this folder
 bin/tuios-ci OWNER/REPO             # another repository
 bin/tuios-ci OWNER/REPO --sha SHA   # select the build of one commit
+bin/tuios-ci wait                   # wait for the build of HEAD to end
 ```
+
+## The dock
+
+The dock shows the build of the focused pane's commit:
+
+| Cell | Build |
+| --- | --- |
+| `CI 2m 10s left` | The build runs. The time comes from the earlier builds. |
+| `CI running 3m 5s` | The build runs, and fewer than three earlier builds passed. |
+| `CI failed: TestFoo` | The build failed. The cell names the first failing test. |
+| `CI ok` | The build passed while you worked. The cell goes after 30 seconds. |
+| No cell | The commit has no build, or its build passed earlier. |
+
+Click the cell to open the builds on that commit.
+
+When a build that you watched in the dock ends, a message says so: "Build failed: TestFoo in ci.yml", or "Build passed" with its title. A focus on a build that has ended shows its cell and sends no message.
+
+## Wait for a build
+
+`tuios-ci wait` waits for the build of a commit to end. An agent can run it after a push.
+
+```sh
+bin/tuios-ci wait                       # the build of HEAD in this folder
+bin/tuios-ci wait --sha SHA             # the build of another commit
+bin/tuios-ci wait OWNER/REPO --sha SHA  # a commit of another repository
+```
+
+It prints one line for each failed job, with the test, its file and line, and the link of the job:
+
+```text
+Failed: Add gift cards (bbbbbbb).
+✗ test in ci.yml: TestOrderTotal at order_test.go:18 https://github.com/acme/shop/actions/runs/201/job/2002
+```
+
+| Exit code | Build |
+| --- | --- |
+| 0 | It passed. |
+| 1 | It failed, or it was cancelled. |
+| 2 | The commit has no build. |
+
+After a push, GitHub takes a few seconds to start a build. `wait` looks for one for a minute before it says that there is no build. `--start 10s` changes that time.
 
 ## What a build is
 
@@ -87,11 +129,13 @@ The plugin takes the mouse, so a drag in the log does not select text. To copy t
 
 - While a build runs, the plugin asks GitHub every 6 seconds. When an answer does not change, it waits twice as long, up to 48 seconds.
 - When no build runs, the plugin asks nothing. It reads the builds again when you press `r` or come back to its pane.
+- A focus asks GitHub once for the build of the commit, and twice more for the log of a failed build. Nothing stays in memory after the focus.
+- While the build of the focused commit runs, one process for each repository asks as the pane does. It stops when the builds it watches end.
 - The lists ask with the ETag of the last answer. GitHub does not count a "not modified" answer against your hourly limit.
 - The log of a running job is one request each time. The jobs of a run that ended are read once.
 - The colours come from the palette of the terminal, which a tuios pane takes from the tuios theme. The plugin asks again when the theme changes, so it follows an Omarchy theme switch at once.
 
-The one file the plugin writes is `last-repo` in its state folder. It holds the name of the last repository, so the next pane opens on it outside a checkout.
+The plugin writes three kinds of file in its state folder. `last-repo` holds the name of the last repository, so the next pane opens on it outside a checkout. `focus.json` holds the repository, the branch and the commit of the focused pane. A `watch-OWNER-REPO.lock` file is there while a build of that repository is watched.
 
 ## Credits
 

@@ -12993,6 +12993,14 @@ Run on 2026-11-01 on macOS arm64, on `upstream/main` at `4c95caa50` plus the bra
 
 The mouse controls were run on 2026-11-26 on Linux.
 
+`TestPluginCIDock` runs the dock cell of the installed plugin against the same fake `gh`. Run on 2026-11-26 on Linux, each control against the branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| The watcher ends with the builds it watches | `observe` never quits | "the build ended and the focus moved: tuios-ci processes [...] are alive" | **caught** |
+| Only the end that the watcher saw brings a message | `dockRun` also sends a message for a failed build | "the cell of the ended build": the second message hides the cell on the right of the dock | **caught** |
+| One watcher for each repository | the lock in `watchRun` cut | "3 watchers after three focuses on one build, want 1" | **caught** |
+
 ## The host title follows the focused pane (#1064)
 
 `TestHostTitleFollowsFocusedPane` sets `appearance.host_title` on an attached

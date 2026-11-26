@@ -119,6 +119,11 @@ type model struct {
 	polling  bool // A poll is on its way.
 	ticking  bool
 	tickGen  int
+
+	// headless is the watcher of the dock cell: no screen, no log of a
+	// running job and no clock, and observe runs after each message.
+	headless bool
+	observe  func(*model)
 }
 
 func newModel(g *gh, repo, sha string) *model {
@@ -259,7 +264,7 @@ func (m *model) fetchJobs(r Run) Cmd {
 
 func (m *model) fetchLog() Cmd {
 	j, ok := m.selectedJob()
-	if !ok {
+	if !ok || m.headless {
 		return nil
 	}
 	if m.logBusy {
@@ -321,7 +326,7 @@ func (m *model) schedule() Cmd {
 // tick moves the clock of a running build once a second.
 func (m *model) tick() Cmd {
 	b, ok := m.selected()
-	if m.ticking || !ok || !active(b.State) {
+	if m.ticking || !ok || !active(b.State) || m.headless {
 		return nil
 	}
 	m.ticking = true
@@ -476,7 +481,7 @@ func (m *model) want() Cmd {
 		}
 	}
 	// The pull request of the build, for the pill. Asked once.
-	if b.PR > 0 {
+	if b.PR > 0 && !m.headless {
 		if _, ok := m.pulls[b.PR]; !ok {
 			m.pulls[b.PR] = PullRequest{Number: b.PR}
 			repo, g, n := m.repo, m.gh, b.PR
@@ -591,6 +596,9 @@ func (m *model) Update(msg Msg) (*model, Cmd) {
 	if m.scr != nil && m.width > 0 {
 		m.scr.draw(m.frame(), m.width, m.height, m.windowTitle())
 	}
+	if m.observe != nil {
+		m.observe(m)
+	}
 	return next, cmd
 }
 
@@ -676,6 +684,8 @@ func (m *model) update(msg Msg) (*model, Cmd) {
 		return m, batch(cmd, m.tick())
 	case logMsg:
 		return m.onLog(msg)
+	case watchFocus:
+		return m, m.focusOn()
 	case pollMsg:
 		if msg.gen != m.pollGen {
 			return m, nil

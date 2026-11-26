@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 type Run struct {
 	ID       int64
 	Workflow string
+	File     string // The file of the workflow, such as ci.yml.
 	Title    string
 	Branch   string
 	Event    string
@@ -112,6 +114,7 @@ func parseRuns(body []byte) ([]Run, error) {
 		Runs []struct {
 			ID         int64  `json:"id"`
 			Name       string `json:"name"`
+			Path       string `json:"path"`
 			Title      string `json:"display_title"`
 			Branch     string `json:"head_branch"`
 			Event      string `json:"event"`
@@ -144,12 +147,20 @@ func parseRuns(body []byte) ([]Run, error) {
 			pr = r.PRs[0].Number
 		}
 		out = append(out, Run{PR: pr,
-			ID: r.ID, Workflow: clean(r.Name), Title: clean(r.Title), Branch: clean(r.Branch),
+			ID: r.ID, Workflow: clean(r.Name), File: workflowFile(r.Path), Title: clean(r.Title), Branch: clean(r.Branch),
 			Event: r.Event, Actor: clean(r.Actor.Login), SHA: r.SHA, URL: r.URL,
 			State: state(r.Status, r.Conclusion), Started: when(started), Updated: when(r.Updated),
 		})
 	}
 	return out, nil
+}
+
+// workflowFile is the file name of a workflow's path, or "" for none.
+func workflowFile(p string) string {
+	if p == "" {
+		return ""
+	}
+	return clean(path.Base(p))
 }
 
 func parseJobs(body []byte) ([]Job, error) {
