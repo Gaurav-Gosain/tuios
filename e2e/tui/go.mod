@@ -10,6 +10,7 @@ require (
 	github.com/adrg/xdg v0.5.3
 	github.com/spf13/pflag v1.1.0
 	golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba
+	golang.org/x/term v0.48.0
 	tuios.dev/vt v0.3.4-0.20261125144012-dd363a3684fc
 )
 
@@ -40,7 +41,6 @@ require (
 	go.mitchellh.com/libghostty v0.0.0-20261107144202-b13f277ddcb2 // indirect
 	golang.org/x/crypto v0.59.0 // indirect
 	golang.org/x/image v0.48.0 // indirect
-	golang.org/x/term v0.48.0 // indirect
 	golang.org/x/text v0.44.0 // indirect
 	tuios.dev/acp v0.0.0-20261120180431-437c5b45ae51 // indirect
 	tuios.dev/harness v0.0.0-20261120215113-0f1cffa25ec1 // indirect
@@ -64,7 +64,7 @@ require (
 	github.com/charmbracelet/x/xpty v0.1.4
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
-	github.com/creack/pty v1.1.24 // indirect
+	github.com/creack/pty v1.1.24
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
 	github.com/mattn/go-runewidth v0.0.30 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect

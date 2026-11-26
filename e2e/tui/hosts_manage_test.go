@@ -32,7 +32,7 @@ import (
 func tuiosCLIEnv(t *testing.T, base string, env []string, args ...string) (string, error) {
 	t.Helper()
 	pinPreV080Looks(t, base)
-	if out, done := simBeforeCLI(t, base, args); done {
+	if out, done := simBeforeCLIEnv(t, base, env, args); done {
 		return out, nil
 	}
 	cmd := exec.Command(tuiosBin, args...)

@@ -1209,7 +1209,7 @@ func killDaemon(t *testing.T, base string) {
 	if _, already := registeredKills.LoadOrStore(daemonKey{t, base}, true); already {
 		return
 	}
-	if simOn {
+	if simOn && !simFar(base) {
 		// The in-process daemon stops in its own cleanup, and here for a
 		// daemon started after this was registered. kill-server would find
 		// no pid file: the daemon's process is this one.

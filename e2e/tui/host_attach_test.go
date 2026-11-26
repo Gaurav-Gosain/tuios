@@ -79,6 +79,7 @@ func remoteMachine(t *testing.T) string {
 	for _, key := range xdgKeys {
 		xdgDir(base, key)
 	}
+	simFarRoot(base)
 	killDaemon(t, base)
 	remotesOfTests.add(t, base)
 	return base

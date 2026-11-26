@@ -38,7 +38,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/adrg/xdg"
+	"github.com/creack/pty"
 	"github.com/spf13/pflag"
+	"golang.org/x/term"
 
 	"github.com/Gaurav-Gosain/tuios/internal/app"
 	"github.com/Gaurav-Gosain/tuios/internal/cliflags"
@@ -306,8 +308,10 @@ var (
 
 // simEnsureDaemon starts the in-process daemon of base, once. A test has one
 // isolation root under sim, because the daemon reads the process
-// environment: a second root fails the test.
-func simEnsureDaemon(t *testing.T, base string) {
+// environment: a second root fails the test. env is the environment of the
+// command that starts it: a daemon the binary starts inherits it, so it goes
+// into the process environment, which the in-process daemon reads.
+func simEnsureDaemon(t *testing.T, base string, env ...string) {
 	t.Helper()
 	// CLI calls a test makes at once all ask for the daemon.
 	simDaemonMu.Lock()
@@ -321,10 +325,7 @@ func simEnsureDaemon(t *testing.T, base string) {
 		}
 		return true
 	})
-	env := []string{"SHELL=/bin/sh", "ENV=", "PS1=$ "}
-	for _, key := range xdgKeys {
-		env = append(env, key+"="+xdgDir(base, key))
-	}
+	simRootEnv(t, base)
 	simEnv(t, env)
 	pinPreV080Looks(t, base)
 	// The daemon and the client log with the standard logger, which the
@@ -354,20 +355,31 @@ func simEnsureDaemon(t *testing.T, base string) {
 	}
 	s := &simDaemon{t: t, base: base, d: d}
 	simDaemons.Store(base, s)
-	simKilledRoots.Delete(base)
 	// Registered after the environment, so the daemon stops while the
 	// test's directories are still the ones it writes to.
 	t.Cleanup(s.stop)
 }
 
+// simRootEnv makes the environment of base the process environment, as
+// the daemon and the binary under base have it.
+func simRootEnv(t *testing.T, base string) {
+	t.Helper()
+	env := []string{"SHELL=/bin/sh", "ENV=", "PS1=$ "}
+	for _, key := range xdgKeys {
+		env = append(env, key+"="+xdgDir(base, key))
+	}
+	simEnv(t, env)
+}
+
 // simStartsDaemon names the commands that start a daemon when none runs
 // (ensureDaemon in cmd/tuios). Under sim tuiosCLI starts the in-process
-// daemon before any call, so the binary never starts one of its own. After
-// the test's own kill-server only these start it again, and every other
-// command finds no daemon, as it does with the binary.
+// daemon before one of these, so the binary never starts one of its own.
+// Every other command finds no daemon until one of these ran, as it does with
+// the binary: on a new root, and after the test's own kill-server.
 var simStartsDaemon = map[string]bool{
 	"new": true, "attach": true, "start-server": true, "start-agent": true,
 	"delegate": true, "gui-bridge": true, "cp": true, "worktree": true,
+	"resurrect": true,
 }
 
 // simKillServer is kill-server under sim. The binary would signal the pid
@@ -379,9 +391,27 @@ func simKillServer(base string) string {
 	if !ok {
 		return "TUIOS daemon is not running.\n"
 	}
-	simKilledRoots.Store(base, true)
 	v.(*simDaemon).stop()
 	return fmt.Sprintf("Sent SIGTERM to daemon (PID %d)\n", os.Getpid())
+}
+
+// simFarRoots holds the isolation roots that stand for another machine
+// (remoteMachine). The far machine is another process even under sim: its
+// daemon is the binary's, and only this machine's daemon and clients run in
+// the test process. The in-process daemon reads the process environment, so
+// it can serve one root.
+var simFarRoots sync.Map
+
+// simFarRoot marks base as another machine's root.
+func simFarRoot(base string) {
+	if simOn {
+		simFarRoots.Store(base, true)
+	}
+}
+
+func simFar(base string) bool {
+	_, ok := simFarRoots.Load(base)
+	return ok
 }
 
 // simBeforeCLI is the sim backend's part of a CLI call against base, for
@@ -390,25 +420,22 @@ func simKillServer(base string) string {
 // (done).
 func simBeforeCLI(t *testing.T, base string, args []string) (out string, done bool) {
 	t.Helper()
-	if !simOn {
+	return simBeforeCLIEnv(t, base, nil, args)
+}
+
+// simBeforeCLIEnv is simBeforeCLI for a call with extra environment env.
+func simBeforeCLIEnv(t *testing.T, base string, env, args []string) (out string, done bool) {
+	t.Helper()
+	if !simOn || simFar(base) {
 		return "", false
 	}
 	if len(args) == 1 && args[0] == "kill-server" {
 		return simKillServer(base), true
 	}
-	if len(args) > 0 && (simStartsDaemon[args[0]] || !simKilled(base)) {
-		simEnsureDaemon(t, base)
+	if len(args) > 0 && simStartsDaemon[args[0]] {
+		simEnsureDaemon(t, base, env...)
 	}
 	return "", false
-}
-
-// simKilledRoots holds the roots whose daemon the test stopped with
-// kill-server. simEnsureDaemon clears it.
-var simKilledRoots sync.Map
-
-func simKilled(base string) bool {
-	_, ok := simKilledRoots.Load(base)
-	return ok
 }
 
 // simRealDaemonCheck stops a daemon process that serves base after the
@@ -478,6 +505,8 @@ type simClient struct {
 	env  []string
 	dir  string
 	base string
+	// notice is what the binary prints before its TUI starts.
+	notice string
 
 	resize chan localclient.Size
 	ended  chan struct{}
@@ -485,26 +514,37 @@ type simClient struct {
 	mu   sync.Mutex
 	prog *tea.Program
 	in   *probeInput
+	tty  *os.File
 	quit bool
 }
 
 func (c *simClient) Resize(cols, rows int) {
+	c.mu.Lock()
+	tty := c.tty
+	c.mu.Unlock()
+	if tty != nil {
+		_ = pty.Setsize(tty, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
+	}
 	select {
 	case c.resize <- localclient.Size{Width: cols, Height: rows}:
 	default:
 	}
 }
 
+// Stop asks the client to end and returns at once. Quit blocks while the
+// program runs a command such as the editor, so it is sent on its own
+// goroutine: a client that does not end is then the failure of the 10 s
+// wait in simStart, and not a hang in the test's cleanup.
 func (c *simClient) Stop() {
 	c.mu.Lock()
 	c.quit = true
 	p, in := c.prog, c.in
 	c.mu.Unlock()
-	if p != nil {
-		p.Quit()
-	}
 	if in != nil {
 		in.stop()
+	}
+	if p != nil {
+		go p.Quit()
 	}
 }
 
@@ -545,6 +585,7 @@ func (c *simClient) connect(out io.Writer, settings *config.Settings, caps *app.
 // print the notices the binary prints after the TUI has ended.
 func (c *simClient) Run(in io.Reader, out io.Writer, cols, rows int) int {
 	defer close(c.ended)
+	_, _ = io.WriteString(out, strings.ReplaceAll(c.notice, "\n", "\r\n"))
 	ov := c.args.flags.Overrides()
 	userConfig, settings := localclient.LoadConfig(c.getenv, ov)
 	pin := newProbeInput(in)
@@ -556,6 +597,50 @@ func (c *simClient) Run(in io.Reader, out io.Writer, cols, rows int) int {
 		pin.stop()
 	}
 	caps := simProbe(pin, out, cols, rows)
+	// The program draws to a terminal of its own, a pty in raw mode, as the
+	// binary does: code that needs the terminal file, such as the editor's
+	// stdout, finds one. What the pty shows goes on to out.
+	ptm, tty, err := pty.Open()
+	if err != nil {
+		_, _ = fmt.Fprintf(out, "sim: open a pty: %v\r\n", err)
+		return 1
+	}
+	defer ptm.Close()
+	_ = pty.Setsize(tty, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
+	if _, err := term.MakeRaw(int(tty.Fd())); err != nil {
+		_ = tty.Close()
+		_, _ = fmt.Fprintf(out, "sim: raw pty: %v\r\n", err)
+		return 1
+	}
+	shown := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(out, ptm)
+		close(shown)
+	}()
+	// Everything the program drew reaches out before Run returns.
+	defer func() {
+		_ = tty.Close()
+		<-shown
+	}()
+	c.mu.Lock()
+	c.tty = tty
+	c.mu.Unlock()
+	// The program reads a file, as the binary reads its terminal, and the
+	// rest of the input goes into it. A command the program runs, such as
+	// the editor, gets the file itself. With any other reader os/exec copies
+	// the input to the command on a goroutine, and Wait waits for that copy,
+	// which ends only at the next key: tuios never came back from the editor.
+	// A file also lets Bubble Tea cancel its own read while the command runs.
+	progIn, inW, err := os.Pipe()
+	if err != nil {
+		_, _ = fmt.Fprintf(out, "sim: input pipe: %v\r\n", err)
+		return 1
+	}
+	defer progIn.Close()
+	go func() {
+		_, _ = io.Copy(inW, pin)
+		_ = inW.Close()
+	}()
 	// Code that reads the process's terminal and not the model's finds this
 	// client's.
 	app.SetClientCapabilities(caps)
@@ -584,7 +669,7 @@ func (c *simClient) Run(in io.Reader, out io.Writer, cols, rows int) int {
 		opts.FollowUpgrades = true
 	}
 	lc := localclient.New(localclient.Pipe{
-		In: pin, Out: out, Env: c.env, Width: cols, Height: rows, Resize: c.resize,
+		In: progIn, Out: tty, Env: c.env, Width: cols, Height: rows, Resize: c.resize,
 		Output: termio.Output{Raw: true},
 	}, opts, state)
 	c.mu.Lock()
@@ -630,21 +715,34 @@ func (c *simClient) Run(in io.Reader, out io.Writer, cols, rows int) int {
 // built binary, against the in-process daemon.
 func simStart(t *testing.T, base string, o startOpts, argv, env []string, dir string, opts []tuitest.Option) *tuitest.Terminal {
 	t.Helper()
+	if simFar(base) {
+		t.Logf("sim backend: %v runs the built binary on another machine's root", argv)
+		return nil
+	}
 	args, ok := parseSimArgs(argv)
 	if !ok || len(o.wrap) > 0 || (args.verb == "" && o.daemonDefault) {
 		if args.verb != "" || o.daemonDefault || !ok {
-			simEnsureDaemon(t, base)
+			simEnsureDaemon(t, base, env...)
 		}
 		t.Logf("sim backend: %v runs the built binary", argv)
 		return nil
 	}
+	// An attach with no daemon says what the daemon it starts brings back,
+	// before it starts it (runAttach in cmd/tuios).
+	var notice bytes.Buffer
+	if args.verb == "attach" {
+		if _, running := simDaemons.Load(base); !running {
+			simRootEnv(t, base)
+			session.ReportBeforeStart(&notice, args.name)
+		}
+	}
 	if args.verb != "" {
-		simEnsureDaemon(t, base)
+		simEnsureDaemon(t, base, env...)
 	}
 	env = lastWins(append([]string{"LANG=C.UTF-8", "TERM=xterm-256color"}, env...))
 	simEnv(t, env)
 	t.Chdir(dir)
-	c := &simClient{args: args, env: env, dir: dir, base: base, resize: make(chan localclient.Size, 16), ended: make(chan struct{})}
+	c := &simClient{args: args, env: env, dir: dir, base: base, notice: notice.String(), resize: make(chan localclient.Size, 16), ended: make(chan struct{})}
 	// Registered after the root folder, so it runs before t.TempDir removes
 	// it, and after tuitest's Close has asked the client to stop.
 	t.Cleanup(func() {

@@ -61,13 +61,7 @@ func runAttach(sessionName string, createIfMissing bool) error {
 	if !session.IsDaemonRunning() {
 		// Said before the daemon starts, because afterwards the sessions simply
 		// exist and the user is left to work out where they came from.
-		if reportSavedSessionsBeforeStart() == 0 && sessionName == "" {
-			// An unnamed attach against an empty daemon opens a new session:
-			// that is what the daemon has always done, and it is the only thing
-			// left that gets the user to a terminal. Say so rather than let a
-			// session appear unannounced.
-			fmt.Println("No saved sessions to restore. Opening a new one.")
-		}
+		session.ReportBeforeStart(os.Stdout, sessionName)
 		if err := ensureDaemon(); err != nil {
 			return err
 		}
@@ -101,28 +95,6 @@ func focusBeforeAttach(sessionName, window string) {
 	}); err != nil {
 		log.Printf("startup.window: cannot focus %q in session %q: %v", window, sessionName, err)
 	}
-}
-
-// reportSavedSessionsBeforeStart says what is about to be brought back, and
-// returns how many. It is said before the daemon starts because afterwards the
-// sessions simply exist, and the user is left to guess where they came from.
-func reportSavedSessionsBeforeStart() int {
-	infos, err := session.ListResurrectableInfos()
-	if err != nil || len(infos) == 0 {
-		return 0
-	}
-
-	names := make([]string, 0, len(infos))
-	for _, info := range infos {
-		names = append(names, info.Name)
-	}
-	noun := "sessions"
-	if len(names) == 1 {
-		noun = "session"
-	}
-	fmt.Printf("Restoring %d saved %s: %s.\n", len(names), noun, strings.Join(truncateList(names, 12), ", "))
-	fmt.Printf("%s: %s.\n", session.RestoredTag, session.RestoredNote)
-	return len(names)
 }
 
 // attachNotices are what ensureAttachTarget found to say about the session.
