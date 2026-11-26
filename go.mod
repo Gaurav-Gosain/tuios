@@ -34,7 +34,7 @@ require (
 	rsc.io/qr v0.2.0
 	tuios.dev/acp v0.0.0-20261120180431-437c5b45ae51
 	tuios.dev/harness v0.0.0-20261120215113-0f1cffa25ec1
-	tuios.dev/progresume v0.0.0-20261126064725-78d002652da0
+	tuios.dev/progresume v0.0.0-20261126072016-17f49379654b
 )
 
 require (
