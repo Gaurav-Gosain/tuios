@@ -104,12 +104,22 @@ func (m *OS) pluginCellDrawn(name string) string {
 	return renderDockCell(text, config.DockCellStyle{}, m.groundUI())
 }
 
-// runPluginCellClick runs the action a cell names. The daemon refuses a
-// plugin that is not enabled, as it does for the palette.
+// runPluginCellClick runs the action a cell names, or opens the pane it
+// names as the palette does. The daemon refuses a plugin that is not
+// enabled, as it does for the palette.
 func (m *OS) runPluginCellClick(name string) bool {
 	c, ok := m.pluginCells[name]
-	if !ok || c.Action == "" {
+	if !ok || (c.Action == "" && c.Pane == "") {
 		return false
+	}
+	if c.Pane != "" {
+		params := map[string]any{"plugin_id": c.Plugin, "entrypoint": c.Pane, "focus": true, "env": map[string]string{"TUIOS_PLUGIN_CELL": c.ID}}
+		go func() {
+			if err := pluginCaller("plugin.pane.open", params); err != nil {
+				clientLog("the pane of cell %s failed: %v", name, err)
+			}
+		}()
+		return true
 	}
 	ctx := map[string]any{"invocation_source": "dock"}
 	if w := m.GetFocusedWindow(); w != nil {

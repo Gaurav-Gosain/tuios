@@ -328,6 +328,7 @@ change only, and the same text costs nothing.
 ```
 
 - `--action` names an action of the plugin. A click on the cell runs it.
+- `--pane` names a pane of the plugin. A click on the cell opens it, as the palette does. The pane gets `TUIOS_PLUGIN_CELL` with the id of the cell. Only a click opens it, so the plugin cannot open the pane itself. Set `--action` or `--pane`, not both.
 - A cell is one line of at most 512 bytes. SGR colour stays. tuios drops other
   control sequences, and cuts the cell to 24 cells on the dock.
 - A plugin can name 8 cells. It can change cells and send messages 8 times a
@@ -376,6 +377,7 @@ a plugin does nothing. `tuios --skill tml` has the components.
 
 | tuios | Change | What to do |
 |---|---|---|
+| next | New: `tuios plugin-cell set --pane`. A click on the cell opens a pane of the plugin, with `TUIOS_PLUGIN_CELL`. | A plugin that uses it sets `min_tuios`. |
 | next | tuios sends `worktree.removed`, with `data.path`. | A plugin that needs it sets `min_tuios`. |
 | next | New: `tuios plugins update`. | Nothing. |
 | next | New: `tuios plugins stats`. | Nothing. |

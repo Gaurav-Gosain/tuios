@@ -52,6 +52,33 @@ id = "probe"
 run = "action"
 title = "Probe"
 command = ["sh", "probe.sh"]
+
+[[process]]
+id = "setpane"
+run = "action"
+title = "Set a pane cell"
+command = ["sh", "-c", "\"$TUIOS_BIN\" plugin-cell set status 'Open me' --pane view"]
+
+[[process]]
+id = "view"
+run = "pane"
+title = "View"
+placement = "split"
+command = ["sh", "-c", "echo \"cell=$TUIOS_PLUGIN_CELL\" > \"$TUIOS_PLUGIN_STATE_DIR/opened\"; echo pane of the cell; exec cat"]
+`
+
+// otherManifest is a second plugin, so a cell of e2e.ui can name a pane
+// that only another plugin declares.
+const otherManifest = `api = 1
+id = "e2e.other"
+name = "Other"
+version = "1.0.0"
+
+[[process]]
+id = "elsewhere"
+run = "pane"
+title = "Elsewhere"
+command = ["sh", "-c", "exec cat"]
 `
 
 const uiSet = `"$TUIOS_BIN" plugin-cell set status "$(printf 'CI \033[32mok\033[2J')" --action clicked
@@ -75,6 +102,9 @@ run type "$TUIOS_BIN" send-text -s "$TUIOS_PLUGIN_SESSION" "echo typed"
 run read "$TUIOS_BIN" capture-pane -s "$TUIOS_PLUGIN_SESSION"
 run list "$TUIOS_BIN" list-sessions
 run other "$TUIOS_BIN" plugin-cell set nosuch text
+run otherpane "$TUIOS_BIN" plugin-cell set status text --pane elsewhere
+run both "$TUIOS_BIN" plugin-cell set status text --action clicked --pane view
+run open "$TUIOS_BIN" plugins open e2e.ui view
 run hook "$TUIOS_BIN" tml get "$(cat "$D/hook.id")"
 echo done > "$D/probe.done"
 `
@@ -109,6 +139,11 @@ func TestPluginUIGrant(t *testing.T) {
 	out, err := tuiosCLI(t, base, "plugins", "install", dir, "--yes")
 	if err != nil || !strings.Contains(out, "ui     Shows cells, panels and messages") || !strings.Contains(out, "cells    status") {
 		t.Fatalf("install: %v\n%s", err, out)
+	}
+	other := t.TempDir()
+	writeFiles(t, other, map[string]string{"tuios-plugin.toml": otherManifest})
+	if out, err := tuiosCLI(t, base, "plugins", "install", other, "--yes"); err != nil {
+		t.Fatalf("install of the other plugin: %v\n%s", err, out)
 	}
 	art := artifactDir(t)
 	state := filepath.Join(xdgDir(base, "XDG_STATE_HOME"), "tuios", "plugins", id)
@@ -152,7 +187,7 @@ func TestPluginUIGrant(t *testing.T) {
 
 	// What the grant does not reach.
 	run("probe")
-	for name, want := range map[string]string{"type": "needs the", "read": "needs the", "list": "needs the", "other": "no [[cell]] with the id", "hook": "refused for plugin " + id} {
+	for name, want := range map[string]string{"type": "needs the", "read": "needs the", "list": "needs the", "other": "no [[cell]] with the id", "otherpane": "has no pane with the id", "both": "not both", "open": "needs the admin grant", "hook": "refused for plugin " + id} {
 		code, _ := os.ReadFile(filepath.Join(state, name+".code"))
 		msg, _ := os.ReadFile(filepath.Join(state, name+".out"))
 		if strings.TrimSpace(string(code)) == "0" || !strings.Contains(string(msg), want) {
@@ -214,12 +249,29 @@ func TestPluginUIGrant(t *testing.T) {
 	}
 	savePNG(t, late.Screen(), hostPalette(t, ""), art, "cell-16-colours")
 
+	// A click on a cell that names a pane opens that pane of the plugin,
+	// with the id of the cell. The probe above showed that the plugin
+	// cannot open the pane itself.
+	run("setpane")
+	if err := term.WaitForText("Open me", uiTimeout); err != nil {
+		t.Fatalf("the pane cell did not draw: %v\n%s", err, term.Snapshot())
+	}
+	if _, err := os.Stat(filepath.Join(state, "opened")); err == nil {
+		t.Fatalf("the pane of the cell opened before the click")
+	}
+	x, y, ok = dockCellFind(term.Screen(), "Open me")
+	if !ok {
+		t.Fatalf("the pane cell is not on the dock:\n%s", term.Snapshot())
+	}
+	mouseClick(t, term, x+1, y, tuitest.MouseLeft, 0)
+	waitFile(t, filepath.Join(state, "opened"), func(s string) bool { return strings.Contains(s, "cell=status") }, "the pane of the cell")
+
 	// The cell goes when the plugin stops.
 	if out, err := tuiosCLI(t, base, "plugins", "disable", id); err != nil {
 		t.Fatalf("disable: %v\n%s", err, out)
 	}
 	deadline := time.Now().Add(uiTimeout)
-	for strings.Contains(late.Snapshot(), "CI ok") {
+	for strings.Contains(late.Snapshot(), "Open me") {
 		if time.Now().After(deadline) {
 			t.Fatalf("the cell of a stopped plugin stays:\n%s", late.Snapshot())
 		}

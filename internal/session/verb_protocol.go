@@ -546,6 +546,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "id", Type: "string", Required: true},
 				{Name: "text", Type: "string"},
 				{Name: "action", Type: "string"},
+				{Name: "pane", Type: "string"},
 				{Name: "clear", Type: "bool"},
 			},
 			returns: []verbParam{{Name: "id", Type: "string"}},

@@ -24,16 +24,17 @@ func newPluginCellCommand() *cobra.Command {
 		Short: "Set or clear a dock cell, from a plugin",
 		Long:  "Set or clear a dock cell of the plugin that runs this command. The manifest names the cell in [[cell]], and the plugin needs the ui grant. The daemon keeps the text, so the command can exit.",
 	}
-	var action string
+	var action, pane string
 	set := &cobra.Command{
 		Use:   "set ID TEXT",
 		Short: "Set the text of a cell",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return pluginVerb("plugin-cell", map[string]any{"id": args[0], "text": args[1], "action": action})
+			return pluginVerb("plugin-cell", map[string]any{"id": args[0], "text": args[1], "action": action, "pane": pane})
 		},
 	}
 	set.Flags().StringVar(&action, "action", "", "The action of the plugin that a click runs")
+	set.Flags().StringVar(&pane, "pane", "", "The pane of the plugin that a click opens")
 	clear := &cobra.Command{
 		Use:   "clear ID",
 		Short: "Remove a cell",

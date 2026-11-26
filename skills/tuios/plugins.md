@@ -107,9 +107,13 @@ fails. The daemon keeps the text, so the process can exit.
 
 ```sh
 tuios plugin-cell set status "CI ok" --action open
+tuios plugin-cell set status "CI ok" --pane builds
 tuios plugin-cell clear status
 tuios plugin-notify "The build failed" --level error
 ```
+
+A click on a cell runs its `--action`, or opens its `--pane`, a pane of the
+same plugin. The pane gets `TUIOS_PLUGIN_CELL`. Only a click opens it.
 
 ## Which verbs a plugin can use
 

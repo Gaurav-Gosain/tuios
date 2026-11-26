@@ -48,6 +48,10 @@ type PluginCell struct {
 	Text string `json:"text"`
 	// Action is the plugin's action a click runs, "" for none.
 	Action string `json:"action,omitempty"`
+	// Pane is a pane of the same plugin that a click on an attached
+	// client opens, "" for none. The client opens it as the person, as the
+	// palette does, so the plugin gets no way to open a pane itself.
+	Pane string `json:"pane,omitempty"`
 }
 
 // PluginUIPayload is the body of MsgPluginUI: the whole list of cells, or,
@@ -100,6 +104,7 @@ func (d *Daemon) verbPluginCell(cs *connState, params json.RawMessage) (any, *ve
 		ID     string `json:"id"`
 		Text   string `json:"text"`
 		Action string `json:"action"`
+		Pane   string `json:"pane"`
 		Clear  bool   `json:"clear"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
@@ -115,7 +120,7 @@ func (d *Daemon) verbPluginCell(cs *connState, params json.RawMessage) (any, *ve
 	}
 	switch {
 	case p.Clear:
-		p.Text, p.Action = "", ""
+		p.Text, p.Action, p.Pane = "", "", ""
 	case p.Text == "":
 		return nil, invalidParam("text", "text is empty. To remove the cell, run tuios plugin-cell clear "+p.ID)
 	case len(p.Text) > maxCellBytes || strings.ContainsAny(p.Text, "\r\n"):
@@ -124,10 +129,16 @@ func (d *Daemon) verbPluginCell(cs *connState, params json.RawMessage) (any, *ve
 	if p.Action != "" && !slices.ContainsFunc(plugin.Actions, func(a herdrplugin.Action) bool { return a.ID == p.Action }) {
 		return nil, invalidParam("action", "the manifest of "+plugin.PluginID+" has no action with the id "+echoName(p.Action))
 	}
+	if p.Action != "" && p.Pane != "" {
+		return nil, invalidParam("pane", "a click runs an action or opens a pane, so set --action or --pane, not both")
+	}
+	if _, ok := plugin.Pane(p.Pane); p.Pane != "" && !ok {
+		return nil, invalidParam("pane", "the manifest of "+plugin.PluginID+" has no pane with the id "+echoName(p.Pane))
+	}
 	if verr := d.plugins.admitUI(plugin.PluginID); verr != nil {
 		return nil, verr
 	}
-	cell := PluginCell{Plugin: plugin.PluginID, ID: p.ID, Side: plugin.Cells[i].Side, Text: p.Text, Action: p.Action}
+	cell := PluginCell{Plugin: plugin.PluginID, ID: p.ID, Side: plugin.Cells[i].Side, Text: p.Text, Action: p.Action, Pane: p.Pane}
 	if d.plugins.setCell(cell) {
 		d.pushPluginCells()
 	}
