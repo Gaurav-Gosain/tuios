@@ -2,11 +2,11 @@ package tuie2e
 
 import (
 	"fmt"
-	"regexp"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/google/pprof/profile"
 )
 
 // TestIdleClientFreesItsFrameBuffers: once the client has been idle for the
@@ -16,7 +16,9 @@ import (
 // before.
 //
 // The client records every allocation in its heap profile
-// (GODEBUG=memprofilerate=1), so a held buffer always shows.
+// (GODEBUG=memprofilerate=1), so a held buffer always shows. The test reads
+// the profile in its binary form: the text form of that profile is about
+// 60 MB and took over 10 s on a CI runner.
 //
 // NEGATIVE CONTROL (e2e/tui/NEGATIVE_CONTROLS.md,
 // TestIdleClientFreesItsFrameBuffers): with the releaseFrameBuffers call cut
@@ -49,21 +51,23 @@ func TestIdleClientFreesItsFrameBuffers(t *testing.T) {
 
 	// The buffers are held while the client draws: a reading now that finds
 	// none says the profile does not see them.
-	body, err := httpGet(fmt.Sprintf("http://%s/debug/pprof/heap?gc=1&debug=1", addr))
+	heap, err := readHeapProfile(addr)
 	if err != nil {
 		t.Fatalf("read the client heap profile: %v", err)
 	}
-	if busy := heapBytesFrom(body, frameBufferAllocs...); busy < 1<<20 {
+	busy := heapBytesFrom(heap, frameBufferAllocs...)
+	if busy < 1<<20 {
 		t.Fatalf("the busy client holds %d KiB of canvas, want at least 1 MiB: the profile does not see them", busy/1024)
 	}
+	t.Logf("the busy client holds %d KiB of canvas", busy/1024)
 
 	var held uint64
 	waitUntil(t, "the idle client never freed its canvas", 30*time.Second, func() (bool, string) {
-		body, err := httpGet(fmt.Sprintf("http://%s/debug/pprof/heap?gc=1&debug=1", addr))
+		heap, err := readHeapProfile(addr)
 		if err != nil {
 			return false, err.Error()
 		}
-		held = heapBytesFrom(body, frameBufferAllocs...)
+		held = heapBytesFrom(heap, frameBufferAllocs...)
 		return held < 512<<10, fmt.Sprintf("the idle client still holds %d KiB of canvas", held/1024)
 	})
 	t.Logf("the idle client holds %d KiB of canvas", held/1024)
@@ -94,44 +98,70 @@ func TestIdleClientFreesItsFrameBuffers(t *testing.T) {
 	}
 }
 
-// heapBytesFrom sums the in-use bytes of the records in a debug=1 heap
-// profile allocated directly by one of the given call pairs: the frame that
-// allocates and the function that called it, the runtime's own frames
-// skipped. A buffer some other code allocates on the way through (the frame
-// check's scratch below GetCanvas) is not counted.
-func heapBytesFrom(profile string, pairs ...[2]string) uint64 {
-	var total, bytes uint64
-	var frames []string
-	flush := func() {
-		if len(frames) >= 2 {
-			for _, p := range pairs {
-				if strings.Contains(frames[0], p[0]) && strings.Contains(frames[1], p[1]) {
-					total += bytes
-					break
-				}
+// readHeapProfile reads the heap profile of the process that serves pprof at
+// addr, after a collection (gc=1), in its binary form. The text form
+// (debug=1) writes every frame of every record out again: with
+// memprofilerate=1 it is about 150 times the size and takes about 15 times
+// as long, about 5 s on a fast machine.
+func readHeapProfile(addr string) (*profile.Profile, error) {
+	body, err := httpGet(fmt.Sprintf("http://%s/debug/pprof/heap?gc=1", addr))
+	if err != nil {
+		return nil, err
+	}
+	return profile.Parse(strings.NewReader(body))
+}
+
+// heapBytesFrom sums the in-use bytes of the samples in a heap profile
+// allocated directly by one of the given call pairs: the frame that allocates
+// and the function that called it, the runtime's own frames skipped. A buffer
+// some other code allocates on the way through (the frame check's scratch
+// below GetCanvas) is not counted.
+func heapBytesFrom(p *profile.Profile, pairs ...[2]string) uint64 {
+	inuse := -1
+	for i, st := range p.SampleType {
+		if st.Type == "inuse_space" {
+			inuse = i
+		}
+	}
+	if inuse < 0 {
+		return 0
+	}
+	var total uint64
+	for _, s := range p.Sample {
+		frames := callers(s, 2)
+		if len(frames) < 2 {
+			continue
+		}
+		for _, pair := range pairs {
+			if strings.Contains(frames[0], pair[0]) && strings.Contains(frames[1], pair[1]) {
+				total += uint64(s.Value[inuse])
+				break
 			}
 		}
-		frames = frames[:0]
 	}
-	for line := range strings.SplitSeq(profile, "\n") {
-		if m := heapRecordLine.FindStringSubmatch(line); m != nil {
-			flush()
-			bytes, _ = strconv.ParseUint(m[1], 10, 64)
-			continue
-		}
-		f := strings.Fields(line)
-		if len(f) < 3 || f[0] != "#" || strings.HasPrefix(f[2], "runtime.") {
-			continue
-		}
-		frames = append(frames, f[2])
-	}
-	flush()
 	return total
+}
+
+// callers returns the first n function names of a sample's stack, from the
+// leaf out, with inlined calls as their own frames and the runtime's frames
+// skipped.
+func callers(s *profile.Sample, n int) []string {
+	var names []string
+	for _, loc := range s.Location {
+		for _, line := range loc.Line {
+			if line.Function == nil || strings.HasPrefix(line.Function.Name, "runtime.") {
+				continue
+			}
+			names = append(names, line.Function.Name)
+			if len(names) == n {
+				return names
+			}
+		}
+	}
+	return names
 }
 
 // frameBufferAllocs are where the canvas is allocated.
 var frameBufferAllocs = [][2]string{
 	{"ultraviolet.NewBuffer", "(*OS).GetCanvas"},
 }
-
-var heapRecordLine = regexp.MustCompile(`^\d+: (\d+) \[\d+: \d+\] @`)
