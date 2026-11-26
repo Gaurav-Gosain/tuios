@@ -604,11 +604,5 @@ func TestFilesViewCopies(t *testing.T) {
 // every 50 ms, up to within.
 func filesWaitDisk(t *testing.T, within time.Duration, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(within)
-	for !cond() {
-		if time.Now().After(deadline) {
-			t.Fatalf("waited %v for %s", within, what)
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+	waitUntil(t, what, within, func() (bool, string) { return cond(), "" })
 }
