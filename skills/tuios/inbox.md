@@ -19,7 +19,9 @@ the prompts only the person may answer.
 - a question an agent asked with `ask-human` (kind `ask`)
 - mail to `human`
 - a pane on `errored`
-- a conversation a daemon restart left to resume (kind `resume`)
+- a conversation a daemon restart left to resume (kind `resume`), or a
+  program that reported its own resume command with OSC 7577. A program row
+  has no `agent_session_id`. `tuios resume-agent` types either one
 - a finished turn nobody has looked at
 - mail waiting for another machine's link (kind `outbox`), with why the link
   is down

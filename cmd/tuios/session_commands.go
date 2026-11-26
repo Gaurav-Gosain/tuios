@@ -550,6 +550,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 		AfterUpgrade:        afterUpgradeFor(host),
 		FollowUpgrades:      host == "",
 		AttachedHost:        host,
+		HostResumeToken:     takeOuterResumeToken(),
 	}, state)
 
 	// A quit the event loop cannot carry out still has to end the process: a

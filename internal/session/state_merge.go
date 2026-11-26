@@ -334,6 +334,9 @@ func carryDaemonOwned(w, cw *WindowState, held, sessionHasWindows bool) {
 	// by the daemon alone: this copy is shown and saved, and they are enforced
 	// from the daemon's own table.
 	w.ProgramStatus, w.Grants = cw.ProgramStatus, cw.Grants
+	// The live state never holds an OSC 7577 record (program_resume.go), so
+	// a push cannot put one in.
+	w.ProgramResume = cw.ProgramResume
 	// Which pane started a pane, the agent link and a delegation record
 	// (verb_delegate.go) are the daemon's records of a call.
 	w.StartedBy, w.AgentLink, w.Delegation = cw.StartedBy, cw.AgentLink, cw.Delegation

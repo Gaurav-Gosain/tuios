@@ -49,6 +49,19 @@ func StartTime(pid int) (uint64, bool) {
 	return v, err == nil
 }
 
+// UID returns the real user id process pid runs as: the owner of its
+// /proc/<pid> folder.
+func UID(pid int) (int, bool) {
+	if pid <= 0 {
+		return 0, false
+	}
+	fi, err := os.Stat("/proc/" + strconv.Itoa(pid))
+	if err != nil {
+		return 0, false
+	}
+	return FileOwner(fi)
+}
+
 // ParentPID returns a process's parent pid, field 4 of /proc/<pid>/stat.
 func ParentPID(pid int) (int, bool) {
 	stat, ok := Stat(pid)

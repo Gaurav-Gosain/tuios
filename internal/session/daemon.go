@@ -561,6 +561,9 @@ type Daemon struct {
 	// output instead and nothing else changes.
 	transcriptWatcher *lazyTranscriptWatcher
 
+	// programOffers are the program records a restore offered and nobody
+	// answered yet. See program_resume_restore.go.
+	programOffers programOffers
 	// resumeAgents is the resolved daemon.resume_agents mode: one of the
 	// resumeMode values. See agent_resume.go.
 	resumeAgents string
@@ -1104,6 +1107,11 @@ type DaemonConfig struct {
 	// the resume command into each restored shell; "off" does neither. See
 	// agent_resume.go.
 	ResumeAgents string
+	// ResumePrograms is daemon.resume_programs: each local pane's first
+	// process gets an OSC 7577 token, and a restore offers what a program
+	// reported, as ResumeAgents says. The zero value is off; a real starter
+	// fills it through DaemonConfigFromUser. See program_resume.go.
+	ResumePrograms bool
 	// History is daemon.persist_scrollback and its bounds, resolved: whether
 	// each pane's history is saved with its session and shown again when a
 	// restart restores it. The zero value saves nothing; a real starter fills
@@ -1222,6 +1230,9 @@ type DaemonConfig struct {
 
 // NewDaemon creates a new daemon instance.
 func NewDaemon(cfg *DaemonConfig) *Daemon {
+	// Before anything is started: every process the daemon starts takes its
+	// environment from the daemon's. See program_resume.go.
+	stripInheritedResumeToken()
 	registerHandoffTestVerbs()
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -1307,6 +1318,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 	d.acpVersion.Store(int32(cfg.ACPVersion))
 	d.manager.SetReturnWhenEmpty(!cfg.StayOnEmptyWorkspace)
 	d.manager.SetDragAndDrop(cfg.DragAndDrop)
+	d.manager.SetProgramResume(cfg.ResumePrograms)
 	d.SetWorktreePath(cfg.WorktreePath)
 	d.setups.setConfig(cfg.WorktreeSetup, cfg.WorktreeSetupAsync)
 	d.agentDetectInterval = resolveAgentDetectInterval(cfg.AgentAutoDetect, cfg.AgentDetectInterval)

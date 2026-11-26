@@ -96,6 +96,10 @@ type OSOptions struct {
 	// AttachedHost is the host DaemonClient reaches its daemon through, ""
 	// for this machine.
 	AttachedHost string
+	// HostResumeToken is the OSC 7577 token of the terminal this client runs
+	// in, taken out of the environment by the entry point. See
+	// host_program_resume.go.
+	HostResumeToken string
 	// IsDaemonSession indicates this is a daemon-attached session.
 	IsDaemonSession bool
 
@@ -265,6 +269,7 @@ func NewOS(opts OSOptions) *OS {
 		DaemonClient: opts.DaemonClient,
 		SessionName:  opts.SessionName,
 		AttachedHost: opts.AttachedHost,
+		hostResume:   hostResume{token: opts.HostResumeToken},
 
 		// Pane geometry inputs start at this client's config and are settled
 		// across the session by state sync; see the field comment in os.go.

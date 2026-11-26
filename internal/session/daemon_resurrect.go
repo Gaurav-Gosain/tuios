@@ -46,6 +46,8 @@ func clearLiveAgent(w *WindowState) {
 // Corrupt or incompatible state files are archived and skipped; a failure to
 // restore one session never blocks the others or the daemon.
 func (d *Daemon) restoreAllSessions() {
+	// The shells an earlier daemon typed resume lines into are gone.
+	clearProgramResumeFiles()
 	names, err := ListResurrectableSessions()
 	if err != nil {
 		LogError("Failed to list resurrectable sessions: %v", err)
@@ -275,6 +277,9 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		// The window as it was saved, for the resume offer, which asks whether
 		// an agent was running in it then.
 		saved[w.ID] = *w
+		// The program record is offered below and goes no further: the live
+		// state never holds one. See program_resume.go.
+		w.ProgramResume = nil
 
 		// The pane gets a new shell and no agent, so it must not keep claiming
 		// the one it had. Left alone, the saved state came back as sent: a pane
@@ -360,11 +365,14 @@ func (d *Daemon) restoreSessionOffers(state *SessionState) (*Session, []resumeOf
 		if w.Delegation != nil {
 			delegations[w.ID] = restoredDelegation(w.Delegation)
 		}
-		if w.AgentSessionID == "" {
-			continue
+		if w.AgentSessionID != "" {
+			ids[w.ID] = w
 		}
-		ids[w.ID] = w
+		// One offer per pane. A conversation comes first, so a harness that
+		// also reports OSC 7577 is not started twice.
 		if o, ok := d.resumeOfferFor(state.Name, saved[w.ID]); ok {
+			offers = append(offers, o)
+		} else if o, ok := d.programOfferFor(state.Name, saved[w.ID]); ok {
 			offers = append(offers, o)
 		}
 	}

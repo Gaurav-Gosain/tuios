@@ -57,6 +57,9 @@ type Manager struct {
 	// dragAndDrop is [panes] drag_and_drop. Every session reads it through
 	// DragAndDrop. See dnd_registration.go.
 	dragAndDrop atomic.Bool
+	// programResume is daemon.resume_programs, read by every session
+	// through SessionConfig.ProgramResume.
+	programResume atomic.Bool
 	// subagentFade is daemon.subagent_fade_seconds, stamped on every
 	// session's config. Zero is the default.
 	subagentFade time.Duration
@@ -231,6 +234,13 @@ func (m *Manager) SetSaveEvery(d time.Duration) {
 // SetDragAndDrop sets panes.drag_and_drop for every session.
 func (m *Manager) SetDragAndDrop(on bool) { m.dragAndDrop.Store(on) }
 
+// SetProgramResume records daemon.resume_programs for the panes started from
+// now on.
+func (m *Manager) SetProgramResume(on bool) { m.programResume.Store(on) }
+
+// ProgramResume reports daemon.resume_programs. See SessionConfig.ProgramResume.
+func (m *Manager) ProgramResume() bool { return m.programResume.Load() }
+
 // DragAndDrop is what SetDragAndDrop last set, false when nothing did.
 func (m *Manager) DragAndDrop() bool { return m.dragAndDrop.Load() }
 
@@ -375,6 +385,9 @@ func (m *Manager) CreateSession(name string, cfg *SessionConfig, width, height i
 	}
 	if cfg.ShellLogin == nil {
 		cfg.ShellLogin = m.ShellLogin
+	}
+	if cfg.ProgramResume == nil {
+		cfg.ProgramResume = m.ProgramResume
 	}
 	if cfg.DragAndDrop == nil {
 		cfg.DragAndDrop = m.DragAndDrop

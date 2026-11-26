@@ -993,6 +993,10 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if hc := m.hostProgramStatusAfter(); hc != nil {
 		cmd = tea.Batch(cmd, hc)
 	}
+	// The attach command, when it changed. See host_program_resume.go.
+	if hc := m.hostResumeAfter(); hc != nil {
+		cmd = tea.Batch(cmd, hc)
+	}
 	// The drag and drop bridge follows its switches, and what it has for the
 	// terminal goes out, whichever message put it there. See dnd_host.go.
 	m.dndHostSync()

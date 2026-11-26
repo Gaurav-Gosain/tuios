@@ -30,6 +30,9 @@ type handoffLive struct {
 	Shell handoffShell
 	// ProgStatus is the OSC 7501 store, oldest update first.
 	ProgStatus []progstatus.Record
+	// Resume is the pane's OSC 7577 token and record. The pane's process
+	// keeps its token, so the next image checks its reports with it.
+	Resume *handoffResume
 
 	// The stream. Ring is the last bytes of it, ending at OutputSeq.
 	OutputSeq   int64
@@ -100,7 +103,7 @@ type handoffCommand struct {
 // against an origin of zero, which is where the new emulator's list starts.
 func (p *PTY) handoffCapture() (*TerminalState, handoffLive) {
 	state := p.GetTerminalStatePacked(handoffHistoryRows, 0)
-	live := handoffLive{Title: p.Title(), IconName: p.IconName(), Place: p.place.handoffState(), ProgStatus: p.progStatus.Records()}
+	live := handoffLive{Title: p.Title(), IconName: p.IconName(), Place: p.place.handoffState(), ProgStatus: p.progStatus.Records(), Resume: p.resume.handoffState()}
 	sortx.SortFunc(live.ProgStatus, func(a, b progstatus.Record) int { return cmp.Compare(a.Seq, b.Seq) })
 
 	dropped, origin := 0, 0
@@ -151,6 +154,7 @@ func (p *PTY) restoreLive(live handoffLive) {
 		}
 	}
 	p.shell.restore(live.Shell)
+	p.resume = restoreResume(live.Resume)
 	for _, r := range live.ProgStatus {
 		p.progStatus.ApplyFrom(progstatus.Report{
 			State: r.State, ID: r.ID, Kind: r.Kind, Progress: r.Progress, App: r.App, Title: r.Title, Msg: r.Msg,

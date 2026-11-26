@@ -817,6 +817,7 @@ func (m *OS) settingsCategories() []settingsCategory {
 			opt("daemon.subagent_fade_seconds"),
 			opt("daemon.dispatch_ready_seconds"),
 			opt("daemon.resume_agents"),
+			opt("daemon.resume_programs"),
 			opt("tasks.auto_stage"),
 			opt("tasks.machine_cap"),
 			opt("tasks.attachment_max_mib"),

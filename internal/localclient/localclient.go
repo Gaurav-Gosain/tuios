@@ -239,5 +239,6 @@ func (c *Client) Close() { c.ended() }
 func (c *Client) Finish(final *app.OS) {
 	final.Cleanup()
 	_, _ = io.WriteString(c.out, final.HostProgramStatusClear())
+	_, _ = io.WriteString(c.out, final.HostResumeClear())
 	_, _ = io.WriteString(c.out, final.DnDHostClear())
 }

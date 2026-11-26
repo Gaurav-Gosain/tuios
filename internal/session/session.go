@@ -32,6 +32,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/layout"
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 	"github.com/Gaurav-Gosain/tuios/internal/panescope"
+	"github.com/Gaurav-Gosain/tuios/internal/progresume"
 	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"github.com/Gaurav-Gosain/tuios/internal/scrollclear"
 	"github.com/Gaurav-Gosain/tuios/internal/serverscope"
@@ -318,6 +319,11 @@ type WindowState struct {
 	// an older peer drops it on decode, and nil, which is what an older
 	// daemon sends, means the pane reported nothing. See program_status.go.
 	ProgramStatus []ProgramStatusRecord `json:"program_status,omitempty"`
+	// ProgramResume is the pane's OSC 7577 record, in the state file only.
+	// Session.ResurrectionState reads it from the pane for each save, and a
+	// restore takes it off before the state goes live, so no client and no
+	// other machine ever gets it. See program_resume.go.
+	ProgramResume *SavedProgram `json:"program_resume,omitempty"`
 	// Popup marks a transient floating pane that runs one command and closes
 	// when the command exits. It is session state, not a client's own, for the
 	// two reasons IsFloating and Zoomed are: a peer that does not know the pane
@@ -1409,6 +1415,10 @@ type PTY struct {
 	// the vtWriter last handed it on.
 	progStatus      progstatus.Store
 	progStatusDirty atomic.Bool
+	// resume is the pane's OSC 7577 token and record (program_resume.go),
+	// nil for a pane with no token. Set before the pane's goroutines start
+	// and not replaced after.
+	resume *paneResume
 	// chunkGroup is the foreground process group the PTY reader read for the
 	// chunk the vtWriter is writing now, plus one, and 0 when it read none.
 	// See PTY.reportGroup.
@@ -2068,6 +2078,10 @@ type SessionConfig struct {
 	// time so a reload applies. Off, the daemon neither records what a
 	// pane's program says about drag and drop nor answers its query.
 	DragAndDrop func() bool
+	// ProgramResume reports whether daemon.resume_programs is on, read at
+	// each spawn. Off, a new pane gets no OSC 7577 token, so its programs
+	// cannot report. Nil means off. See program_resume.go.
+	ProgramResume func() bool
 	// SubagentFade is how long a finished subagent that was done or stopped
 	// stays on the list. Zero is defaultSubagentFade. The manager stamps it
 	// from daemon.subagent_fade_seconds.
@@ -2761,6 +2775,10 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 		}()
 	}
 
+	// The pane's own OSC 7577 token, for its first process only. See
+	// program_resume.go.
+	resume := newPaneResume(s.newResumeToken(sp.host))
+
 	shell, missingShell := s.resolveShell()
 	if missingShell != "" {
 		log.Printf("Warning: configured shell %q not found, using %s", missingShell, shell)
@@ -2810,7 +2828,7 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 				//tuios:allow-exec ptyspawn starts the pane program on a pseudo console
 				cmd = exec.Command(shell)
 			}
-			cmd.Env = s.buildEnvFor(sp.windowID, sp.workspace, sp.restored != nil, sp.env, sp.command)
+			cmd.Env = append(s.buildEnvFor(sp.windowID, sp.workspace, sp.restored != nil, sp.env, sp.command), resume.env()...)
 			// The user's own shell starts with the prompt marks on. A command
 			// is the caller's program, run as it was named.
 			if len(sp.command) == 0 && s.shellIntegrationFor(sp.shellIntegration) {
@@ -2881,6 +2899,7 @@ func (s *Session) createPTY(width, height int, sp ptySpawn) (*PTY, error) {
 	if cmd != nil {
 		pty.proc = cmd.Process
 		pty.procStart = processStart(cmd.Process)
+		pty.resume = resume
 	}
 	pty.startPTY()
 	s.TouchActive()
@@ -3657,7 +3676,11 @@ func (s *Session) OptionKeys() []string {
 // send Cwd, so this daemon-side capture is the only source of it.
 func (s *Session) ResurrectionState() *SessionState {
 	state := s.GetState()
+	now := time.Now()
 	for i := range state.Windows {
+		// The program resume record is read from the pane, never taken from
+		// the live state, which a client pushes. See program_resume.go.
+		state.Windows[i].ProgramResume = nil
 		ptyID := state.Windows[i].PTYID
 		if ptyID == "" {
 			continue
@@ -3666,6 +3689,7 @@ func (s *Session) ResurrectionState() *SessionState {
 			if cwd, ok := pty.ProcessCwd(); ok {
 				state.Windows[i].Cwd = cwd
 			}
+			state.Windows[i].ProgramResume = pty.resume.saved(pty, now)
 		}
 	}
 	live := make(map[string]bool, len(state.Windows))
@@ -5761,6 +5785,7 @@ func (s *Session) setUpPaneTerminal(pty *PTY, terminal vt.Terminal) {
 		SemanticMark: func(m vt.SemanticMarker) {
 			pty.noteProgramStatusMark(m)
 			pty.noteShellMark(m)
+			pty.resume.noteMark(pty, m)
 		},
 		// An OSC 7501 report, or a full reset: stored at once, in order with
 		// the prompt marks, and handed on by the vtWriter after the write.
@@ -5771,6 +5796,13 @@ func (s *Session) setUpPaneTerminal(pty *PTY, terminal vt.Terminal) {
 		// and an answer from here would be a second one. See
 		// dnd_registration.go.
 		PrivateOSC: func(cmd int, data []byte) {
+			// A program resume report. Only a local pane has a token, and
+			// the token is what the report is checked against. See
+			// program_resume.go.
+			if cmd == progresume.Command {
+				pty.resume.note(pty, data, time.Now())
+				return
+			}
 			if cmd != dnd.Code || pty.host != "" || !s.dragAndDrop() {
 				return
 			}

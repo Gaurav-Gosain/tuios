@@ -92,6 +92,17 @@ type resumeOffer struct {
 	// risky are the kept flags in argv that turn off approvals or
 	// sandboxing. An offer with any is never typed without the person.
 	risky []string
+	// program is the OSC 7577 record of an offer a program reported, nil
+	// for an agent conversation. See program_resume_restore.go.
+	program *SavedProgram
+}
+
+// what names an offer in the log: its harness, or the program.
+func (o resumeOffer) what() string {
+	if o.program != nil {
+		return "the program"
+	}
+	return o.harness
 }
 
 // ResumeWarning is what a resume command that carries flags turning off
@@ -191,6 +202,16 @@ func (d *Daemon) applyResumeOffers(offers []resumeOffer) {
 // resumeItem is the Inbox item that asks about an offer. The summary is the
 // command itself, so the person sees exactly what y would type.
 func (d *Daemon) resumeItem(o resumeOffer) AttentionItem {
+	if o.program != nil {
+		return AttentionItem{
+			Kind:      AttentionResume,
+			Session:   o.session,
+			Window:    o.window,
+			Workspace: o.workspace,
+			Name:      attentionText(o.name, attentionMaxSummary),
+			Summary:   attentionText(ProgramCommandText(o.argv), attentionMaxSummary),
+		}
+	}
 	return AttentionItem{
 		Kind:       AttentionResume,
 		Session:    o.session,
@@ -244,7 +265,7 @@ func (d *Daemon) autoResume(o resumeOffer, delay time.Duration) {
 	}
 	if d.ctx.Err() == nil && !pty.IsExited() {
 		if err != nil {
-			LogError("Automatic resume of %s in %s failed, asking instead: %v", o.harness, shortID(o.window), err)
+			LogError("Automatic resume of %s in %s failed, asking instead: %v", o.what(), shortID(o.window), err)
 		}
 		d.attention.openResume(d.resumeItem(o))
 	}
@@ -296,6 +317,17 @@ type resumePlan struct {
 	sessionID string
 	argv      []string
 	risky     []string
+	// program is the record of a program a restore offered, nil for an
+	// agent conversation.
+	program *SavedProgram
+}
+
+// command is the plan's command as it is shown.
+func (p resumePlan) command() string {
+	if p.program != nil {
+		return ProgramCommandText(p.argv)
+	}
+	return harness.ResumeCommandLine(p.argv)
 }
 
 // planResume works out the command for a window without typing anything.
@@ -315,6 +347,11 @@ func (d *Daemon) planResume(sess *Session, target string) (resumePlan, error) {
 	w := state.Windows[idx]
 	if w.Host != "" {
 		return resumePlan{window: w}, errResumeRemote
+	}
+	// A program a restore offered. Only a pane with no conversation to
+	// offer has one. See program_resume_restore.go.
+	if sp := d.programOffers.get(w.ID); sp != nil {
+		return resumePlan{window: w, argv: sp.Argv, program: sp}, nil
 	}
 	if w.AgentSessionID == "" {
 		return resumePlan{window: w}, errResumeNothing
@@ -357,6 +394,13 @@ func (d *Daemon) typeResume(sess *Session, target string) (resumePlan, error) {
 	}
 	if !shellHoldsForeground(pty, plan.window) {
 		return plan, errResumeBusy
+	}
+	if plan.program != nil {
+		if err := d.typeProgramResume(sess, pty, plan); err != nil {
+			return plan, err
+		}
+		d.attention.closeResume(sess.Name(), plan.window.ID, AttentionClosedResolved)
+		return plan, nil
 	}
 	line := harness.ResumeCommandLine(plan.argv) + "\r"
 	if _, err := pty.Write([]byte(line)); err != nil {
@@ -405,7 +449,7 @@ func (d *Daemon) verbResumeAgent(cs *connState, params json.RawMessage) (any, *v
 		"harness":          plan.harness,
 		"agent_session_id": plan.sessionID,
 		"argv":             plan.argv,
-		"command":          harness.ResumeCommandLine(plan.argv),
+		"command":          plan.command(),
 		"risky_flags":      plan.risky,
 		"warning":          ResumeWarning(plan.risky),
 		"typed":            !p.DryRun,

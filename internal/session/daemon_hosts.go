@@ -137,6 +137,9 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 	d.acpVersion.Store(int32(cfg.Agents.ACPVersionOr()))
 	d.manager.SetReturnWhenEmpty(cfg.Workspaces.ReturnsWhenEmpty())
 	d.manager.SetDragAndDrop(cfg.Panes.DragAndDrop)
+	// A token goes only to the panes started from now on, and a program can
+	// only ask, through the resume item, so a file change applies both ways.
+	d.manager.SetProgramResume(cfg.Daemon.ProgramResumeOn())
 	// The history depth and where a new pane starts shape only the panes made
 	// from now on, and widen nothing a pane may do, so a file change applies
 	// both ways.

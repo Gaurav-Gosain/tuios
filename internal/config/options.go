@@ -1461,6 +1461,11 @@ var optionSpecs = []Option{
 		Fallback:    "ask",
 	},
 	{
+		Path: "daemon.resume_programs", Type: OptionBool, Section: "daemon",
+		Description: "Let the programs in a pane say how to bring them back after a daemon restart (OSC 7577). A restore offers them as resume_agents says.",
+		Default:     "true",
+	},
+	{
 		Path: "daemon.persist_scrollback", Type: OptionBool, Section: "daemon",
 		Description: "Save each pane's history and show it again after a daemon restart. A change applies when the daemon next starts.",
 		Default:     "true",

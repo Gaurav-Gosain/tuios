@@ -739,6 +739,9 @@ type OS struct {
 	// hostPS is whether this client's terminal takes OSC 7501 reports and
 	// what was last sent to it. See host_program_status.go.
 	hostPS hostProgramStatus
+	// hostResume is what this client reported to its terminal with OSC 7577.
+	// See host_program_resume.go.
+	hostResume hostResume
 	// fastPaint is the buffer the fullscreen fast path paints its frame into
 	// while a background it draws is on. See background_fast.go.
 	fastPaint fastPainter

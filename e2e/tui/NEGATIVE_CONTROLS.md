@@ -19738,3 +19738,37 @@ placeholders, and zooms, drags and fits the picture.
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestCockpitImageViewZooms$' -v .`.
+
+## Program resume (OSC 7577)
+
+`TestProgramResumeBringsTheProgramBack` and `TestClientReportsItsAttachCommand`
+cover the Program Resume Protocol from both sides. Run on 2026-11-26 on macOS
+(the shared pool machine). Each control is this branch with one cut. The
+baseline passes 3 of 3 runs.
+
+| Cut | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| The mac compare in `progresume.Parse` always passes | resume | "a report with a wrong mac, an old time or a replayed time changes nothing" | caught |
+| The 60 s time window always passes | resume | "a report with an old time from a new process changes nothing" | caught |
+| The rule against a time older than the last report of the pid | resume | "a report with a wrong mac, an old time or a replayed time changes nothing" | caught |
+| A relative argv[0] is accepted | resume | "a relative program is rejected and removes the record" | caught |
+| A rejected report leaves the record | resume | "a relative program is rejected and removes the record" | caught |
+| A clear leaves the record | resume | "a clear removes the record" | caught |
+| `checkOwner` never marks the owner gone | resume | "the record goes when its owner exits" | caught |
+| `ResurrectionState` saves no record | resume | "the report is saved with the window" | caught |
+| `stripInheritedResumeToken` does nothing | resume | "a pane gets no token when program resume is off" | caught |
+| A pane takes the inherited token in place of a new one | resume | "the inner pane has a token of its own" | caught |
+| The saved record holds the token | resume | "the saved file ... holds the pane's token" | caught |
+| reswrap does not unset the token | resume | the pane never showed "RUN1 TOKEN:absent" | caught |
+| `resume-program` drops the last argument | resume | the pane never showed "RUN2 ARGS:[$(reboot)][a; b][]" | caught |
+| `resume-program` does not change to the folder | resume | the pane never showed "RUN2 PWD:..." | caught |
+| `hostResumeAfter` never reports | client | "the client reports its attach command" | caught |
+| `hostResumeAfter` ignores a session change | client | "the client reports the session it switched to" | caught |
+| `HostResumeClear` never sends a clear | client | "a detach sends a clear" | caught |
+| `HostResumeClear` sends a clear on any exit | client | "a client that got terminated sent a clear" | caught |
+
+The pane close has no logic of its own to cut: the record is a field of the
+window state, and the close removes the window.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestProgramResumeBringsTheProgramBack|TestClientReportsItsAttachCommand)$' -v .`.

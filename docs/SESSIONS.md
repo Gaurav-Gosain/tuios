@@ -790,6 +790,35 @@ conversation, for example after you resume it by hand in another pane.
 `tuios resume-agent -w <pane>` does it by hand. See
 [Agent state](AGENT_STATE.md#resuming-after-a-restart).
 
+#### Programs that say how to resume
+
+A program can tell tuios how to start it again after a restart, with the
+Program Resume Protocol (OSC 7577). Neovim with a session file, a REPL or a
+wrapper such as `resume-wrap` can do this. Each pane's first process gets its
+own `OSC7577_TOKEN`, and a program that has the token signs its report with
+it. tuios ignores a report with a wrong signature or an old time. So text that
+only passes through a pane, such as a file you show with `cat` or the output
+of `ssh`, cannot add a command.
+
+tuios keeps one command for each pane. It saves the command with the
+session, in a file that only you can read. tuios removes the command when the
+program sends a clear, when the program exits, or when you close the pane.
+
+After a restart, the pane gets the same Resume row as an agent, as
+`daemon.resume_agents` says. The row shows the command. When you press `y`,
+tuios types one fixed line into the new shell at its first prompt. That line
+starts the program with the exact arguments and in its folder, after your
+shell's startup files ran. tuios does not resume a program whose folder is
+gone. It does not try again after a resume fails.
+
+A pane that has an agent conversation to resume gets that offer instead. Set
+`daemon.resume_programs = false` to turn program resume off.
+
+tuios is also a program in your terminal. When the terminal gives tuios a
+token, the client reports `tuios attach` and the session name, so that the
+terminal can attach again after it restarts. The client sends a clear when
+you detach or quit.
+
 Start the daemon with `--no-restore` to skip automatic restoration; saved state
 is left on disk and can still be restored on demand with `tuios resurrect`.
 

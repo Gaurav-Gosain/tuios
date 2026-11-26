@@ -406,6 +406,13 @@ type DaemonConfig struct {
 	// command into its restored shell, and "off" does neither. The processes
 	// themselves never survive a restart; this brings back the conversation.
 	ResumeAgents string `toml:"resume_agents"`
+	// ResumePrograms lets the programs in a pane say how to bring them
+	// back after a daemon restart (OSC 7577, the Program Resume Protocol).
+	// Each pane's first process gets a token of its own, and a restore
+	// offers the command its program reported as resume_agents says. Nil
+	// means on, the default. Off, a new pane gets no token and a restore
+	// offers no program.
+	ResumePrograms *bool `toml:"resume_programs"`
 	// PersistScrollback saves each pane's history with its session, and a
 	// restore after a daemon restart or a reboot shows it again above the new
 	// shell. Nil means on, the default. The files hold whatever the panes
@@ -453,6 +460,12 @@ type DaemonConfig struct {
 	// default, never. The display can still dim and lock. See
 	// internal/session/keep_awake.go.
 	KeepAwake string `toml:"keep_awake"`
+}
+
+// ProgramResumeOn reports whether programs may report how to resume them.
+// See DaemonConfig.ResumePrograms.
+func (d DaemonConfig) ProgramResumeOn() bool {
+	return d.ResumePrograms == nil || *d.ResumePrograms
 }
 
 // FollowsUpgrade reports whether a local client follows a live upgrade of its

@@ -15,6 +15,7 @@ func execClient(bin string, args []string) error {
 	stopCPUProfile()
 	cmd := exec.Command(bin, args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	cmd.Env = clientExecEnv()
 	err := cmd.Run()
 	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 		os.Exit(exitErr.ExitCode())

@@ -44,6 +44,7 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.AgentBinaries = uc.Daemon.AgentBinaries
 	cfg.RespondFromShell = uc.Daemon.RespondFromShell
 	cfg.ResumeAgents = uc.Daemon.ResumeAgents
+	cfg.ResumePrograms = uc.Daemon.ProgramResumeOn()
 	cfg.WindowSize = uc.Daemon.WindowSize
 	cfg.SingleClient = uc.Daemon.SingleClient
 	cfg.SSHAgent = uc.Daemon.SSHAgent

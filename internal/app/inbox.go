@@ -623,6 +623,13 @@ func (m *OS) applyInboxSnapshot(msg InboxSnapshotMsg) {
 	m.pruneResuming(st.Items)
 }
 
+// resumesProgram reports whether a resume item brings back a program that
+// reported its own command (OSC 7577), and not an agent conversation. Only a
+// conversation has an id.
+func resumesProgram(it session.AttentionItem) bool {
+	return it.Kind == session.AttentionResume && it.AgentSessionID == ""
+}
+
 // announceResumes says once, in the dock, that a restart left conversations
 // to resume, and how to answer. A restore happens with nobody attached, so the
 // items are usually already in the first listing a client gets, where no event
@@ -647,6 +654,9 @@ func (m *OS) announceResumes(items []session.AttentionItem) {
 	text := m.inboxWhere(fresh[0]) + ": " + inboxWho(fresh[0]) + " " + inboxKindWords(fresh[0])
 	if len(fresh) > 1 {
 		text = strconv.Itoa(len(fresh)) + " agent conversations can be resumed"
+		if slices.ContainsFunc(fresh, resumesProgram) {
+			text = strconv.Itoa(len(fresh)) + " panes can be resumed"
+		}
 	}
 	text += agentAlertSep() + "open the agents view with " + m.pressFor("prefix_inbox", "the prefix key then i")
 	if len(fresh) > 1 {
@@ -1057,6 +1067,9 @@ func inboxKindWords(it session.AttentionItem) string {
 	case session.AttentionMail:
 		return "wrote to you"
 	case session.AttentionResume:
+		if resumesProgram(it) {
+			return "can resume its program"
+		}
 		if len(it.RiskyFlags) > 0 {
 			return "can resume its conversation with approvals off"
 		}

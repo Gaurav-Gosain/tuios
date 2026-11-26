@@ -44,6 +44,18 @@ func StartTime(pid int) (uint64, bool) {
 	return uint64(tv.Sec)*1_000_000 + uint64(tv.Usec), true
 }
 
+// UID returns the user id process pid runs as, from its kinfo_proc.
+func UID(pid int) (int, bool) {
+	if pid <= 0 {
+		return 0, false
+	}
+	kp, err := unix.SysctlKinfoProc("kern.proc.pid", pid)
+	if err != nil || kp == nil || int(kp.Proc.P_pid) != pid {
+		return 0, false
+	}
+	return int(kp.Eproc.Ucred.Uid), true
+}
+
 // ParentPID returns a process's parent pid from its kinfo_proc.
 func ParentPID(pid int) (int, bool) {
 	if pid <= 0 {
