@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -204,12 +205,26 @@ func TestKeptFrameShowsAFreshCompose(t *testing.T) {
 // parsed, and the screen diffs the one row the key changed. The bytes are the
 // echo and the cursor, and the allocations a ceiling over the measured 376.
 //
-// The time is the fastest of 5 runs of 100 frames, because load only adds
-// time, and it is skipped under -race and -short. On an Apple M3 Pro at -cpu 1
-// the frame took 1.0 to 1.35 ms before it kept the canvas, drew the pane from
-// its emulator and diffed one row, and about 0.2 ms after. The ceiling of
-// 1 ms is 5x above the second, so a shared runner can slow the frame a few
-// times without reaching it, and at the first.
+// The time is the CPU time of the thread that runs the frames, the fastest of
+// 10 runs of 50 frames. It is skipped under -race and -short, and where the
+// thread has no CPU clock (threadCPU). On an Apple M3 Pro at -cpu 1 the frame
+// took 1.0 to 1.35 ms before it kept the canvas, drew the pane from its
+// emulator and diffed one row, and about 0.2 ms after. The ceiling of 1 ms
+// is 5x above the second, and at the first.
+//
+// It was wall time, and failed now and then in CI at 1.03 and 1.05 ms with
+// no change to the frame: the CI job runs eight test processes on four
+// vCPUs, and the wall time of a run counts the time the scheduler gave the
+// other seven. The thread's CPU time does not. With eight busy loops on the
+// test's four CPUs of an i7-10700, the best wall time went from 0.43 to
+// 0.53-0.60 ms and the best thread time stayed at 0.43-0.45 ms. What the
+// frame hands to other goroutines (the screen's writer, the background
+// work of the GC) is not in it. The allocations above hold that.
+//
+// A busy neighbour on the same core still slows the thread itself, through
+// the shared core and its caches. The other test processes in CI mostly wait
+// on a pty or a timer, so they are busy in bursts. Runs of 50 frames, about
+// 25 ms each, are more likely to fall between two bursts than runs of 100.
 func TestKeystrokeFrameBudget(t *testing.T) {
 	// The bytes of n typed keys, from the start to the close of a screen.
 	// The first frame and the close are the same for any n, so the
@@ -261,17 +276,25 @@ func TestKeystrokeFrameBudget(t *testing.T) {
 	if testing.Short() || raceEnabled {
 		return
 	}
+	if _, ok := threadCPU(); !ok {
+		return
+	}
+	// The thread clock reads the thread that runs the goroutine, so the
+	// goroutine stays on one thread for every run.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 	const ceiling = time.Millisecond
 	best := time.Duration(1<<63 - 1)
-	for range 5 {
-		start := time.Now()
-		for range 100 {
+	for range 10 {
+		start, _ := threadCPU()
+		for range 50 {
 			typed()
 		}
-		best = min(best, time.Since(start)/100)
+		end, _ := threadCPU()
+		best = min(best, (end-start)/50)
 	}
-	t.Logf("fastest of 5 runs: %v a frame", best)
+	t.Logf("fastest of 10 runs: %v of CPU time a frame", best)
 	if best > ceiling {
-		t.Errorf("a typed key's frame took %v at best, want at most %v", best, ceiling)
+		t.Errorf("a typed key's frame used %v of CPU time at best, want at most %v", best, ceiling)
 	}
 }

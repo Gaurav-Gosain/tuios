@@ -6517,8 +6517,9 @@ commit that added the benchmark and of the last change, 8 interleaved rounds,
 cells 222 us to 214 us, string 1.09 ms to 1.08 ms.
 
 `TestKeystrokeFrameBudget` holds the frame to 0 cells cleared, copied and
-parsed, one row diffed, 64 bytes, 470 allocations, and 1 ms for the fastest
-of 5 runs of 100 frames (skipped under -race and -short).
+parsed, one row diffed, 64 bytes, 470 allocations, and 1 ms of the thread's
+CPU time for the fastest of 10 runs of 50 frames (skipped under -race and
+-short). The next section says why the time is CPU time.
 
 What is left of the 205 us: the compare of the pane's 10,208 cells with the
 canvas as they are copied (about 40%; the emulator has no row damage to ask),
@@ -7043,3 +7044,32 @@ bytes. The client draws more frames a second, and a key waits less. A lone
 not change the wait for the emulator lock. The idle test passes. The binary
 is 7,680 bytes larger on windows/amd64.
 
+## 2026-11 the keystroke frame budget counts CPU time
+
+`TestKeystrokeFrameBudget` failed now and then in CI with "fastest of 5
+runs: 1.05 ms a frame, want at most 1 ms", on changes that did not touch the
+keystroke path. The frame did not get slower. Test binaries of the commit
+that set the budget and of main, on an i7-10700, 8 interleaved rounds,
+`-test.cpu 1 -test.benchtime 3000x`, benchstat:
+
+| per frame | budget commit | main |
+|---|---|---|
+| time | 523 us | 537 us (no change, p=0.72) |
+| allocations | 389 | 208 |
+| bytes allocated | 12.8 KiB | 8.2 KiB |
+
+The test measured wall time. The CI job runs eight test processes on four
+vCPUs, so a run of 100 frames also counted the time the scheduler gave to
+the other seven. With eight busy loops on the test's four CPUs, the best wall
+time went from 0.43 ms to 0.53-0.60 ms. The best CPU time of the thread
+that runs the frames stayed at 0.43-0.45 ms.
+
+The test now reads the thread's CPU clock (`CLOCK_THREAD_CPUTIME_ID`) with
+the goroutine locked to its thread, and takes the fastest of 10 runs of 50
+frames instead of 5 runs of 100. The ceiling stays at 1 ms. Platforms without
+the clock skip the time check. CI runs this test on Linux only.
+
+A busy neighbour on the same core still slows the thread: with a busy loop on
+each of the test's CPUs and their SMT siblings, the best thread time rose to
+0.59-0.78 ms. The other test processes in CI are busy in bursts, so the
+shorter runs are more likely to see a quiet core.
