@@ -1,6 +1,8 @@
 package testutil
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -121,6 +123,11 @@ func seedAndRecord(t *testing.T, home string) {
 func verifyRecord(t *testing.T, home string) {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join(home, recordName))
+	if errors.Is(err, fs.ErrNotExist) {
+		// CI runs this step even when an earlier step failed. Then the seed
+		// never ran, and the missing record is not the cause of the failure.
+		t.Fatal("The seed step did not run, because an earlier step failed. Fix that step first.")
+	}
 	if err != nil {
 		t.Fatalf("read the record of the seeded tree: %v", err)
 	}
