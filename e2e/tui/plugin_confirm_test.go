@@ -213,6 +213,34 @@ func TestPanePluginNewSourceAfterTheYesIsRefused(t *testing.T) {
 	}
 }
 
+// TestPanePluginNewBinaryWithoutBuildIsRefused: the plugin has no build
+// commands, so nothing may appear in bin/ after the Yes. A program added
+// there, which the manifest could run, refuses the install.
+func TestPanePluginNewBinaryWithoutBuildIsRefused(t *testing.T) {
+	r := newConfirmRig(t, "e2e-trust-newbin")
+	term := r.attach(t)
+	dir := trustPlugin(t)
+	done := r.paneInstall(t, dir)
+	r.waitTrustDialog(t, term, "newbin")
+	if err := os.MkdirAll(filepath.Join(dir, "bin"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "bin", "x"), []byte("#!/bin/sh\necho swapped\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pressKeys(t, term, keyDown, keyEnter)
+	_, _ = done()
+	waitNoTrustDialog(t, term, "Yes")
+	said, lines := paneSaid(t, r)
+	if !strings.Contains(said, "changedafterthepersonsaidyes") || !strings.Contains(said, "bin/x") {
+		t.Errorf("ASSERTION: a new program in bin/ of a plugin with no build was not refused:\n%s", strings.Join(lines, "\n"))
+	}
+	if _, on := trustInstalled(t, r.base); on {
+		out, _ := tuiosCLI(t, r.base, "plugins", "list")
+		t.Errorf("ASSERTION: a plugin with a new program in bin/ after the Yes runs:\n%s", out)
+	}
+}
+
 // TestPanePluginInstallRefusedWithoutYes: Enter on the default row and Esc
 // each refuse the install with a message that says the person answered No,
 // and nothing is installed.

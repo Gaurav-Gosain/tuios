@@ -21,10 +21,12 @@ import (
 // manifest's trust hash, which covers what the plugin runs and its grants,
 // and a digest of every file in the folder at the moment the dialog opened.
 // Each trust verb that takes the token reads the folder again and refuses
-// on any difference. A build writes its outputs after the Yes, so a new
-// file is allowed only under an output path: bin/, or a path a build
-// command names after -o or --output. Any other new file, such as a source
-// file the build would compile, is a difference.
+// on any difference. A build writes its outputs after the Yes, so for a
+// plugin with build commands a file may appear or change under an output
+// path: bin/, or a path a build command names after -o or --output. Any
+// other new or changed file, such as a source file the build would
+// compile, is a difference. A plugin with no build has no output path, so
+// every new or changed file is one.
 
 // The bounds of a folder the daemon reads for a pin.
 const (
@@ -100,8 +102,12 @@ func pinPlugin(root string) (pluginPin, error) {
 
 // buildOutputs are the paths in the plugin folder that its build may
 // write: bin/, and each path a build command names after -o or --output.
-// A path outside the folder is left out.
+// A path outside the folder is left out. A plugin with no build writes
+// nothing, so it has none.
 func buildOutputs(p *herdrplugin.Plugin) []string {
+	if len(p.Build) == 0 {
+		return nil
+	}
 	out := []string{"bin"}
 	for _, b := range p.Build {
 		args := b.Command
@@ -163,7 +169,8 @@ func (pin *pluginPin) changedIn(root string) string {
 	}
 	var changed []string
 	for rel, sum := range pin.files {
-		if now.files[rel] != sum {
+		// A build rewrites its outputs, so a file under one may change.
+		if now.files[rel] != sum && !pin.output(rel) {
 			changed = append(changed, rel)
 		}
 	}
