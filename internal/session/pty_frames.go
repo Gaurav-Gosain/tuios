@@ -136,6 +136,7 @@ func (d *Daemon) streamFrames(cs *connState, pty *PTY, sub *ptySubscriber) *ptyS
 	tick := time.NewTicker(frameInterval)
 	defer tick.Stop()
 	last := int64(-1)
+	var sent *TerminalState
 	quiet, held := 0, 0
 	for {
 		state, open := pty.frameState()
@@ -149,11 +150,19 @@ func (d *Daemon) streamFrames(cs *connState, pty *PTY, sub *ptySubscriber) *ptyS
 		} else {
 			held = 0
 			made := state.Seq - last
+			if resume, done := d.framePassedGraphics(cs, pty, sub, state, sent, last); done {
+				if resume < 0 {
+					return nil
+				}
+				last = resume
+				break
+			}
 			if last < 0 || made > 0 {
 				if err := d.sendFrame(cs, pty.ID, state); err != nil {
 					return nil
 				}
 				sub.sent.Store(state.Seq)
+				sent = state
 			}
 			if last >= 0 && made < frameExitBytes {
 				quiet++
@@ -180,6 +189,60 @@ func (d *Daemon) streamFrames(cs *connState, pty *PTY, sub *ptySubscriber) *ptyS
 	}
 	debugLog("[DEBUG] PTY %s: client %s gets bytes from %d", pty.ID[:8], cs.clientID, last)
 	return pty.resumeFromFrame(cs.clientID, sub, last)
+}
+
+// framePassedGraphics ends the frames of sub when the emulator has parsed a
+// kitty graphics command the client has not got: one after the last frame,
+// or one the last frame was taken inside. state is the next frame, sent the
+// last one, and last its position (-1 before the first).
+//
+// Only the client moves the cursor past an image it places, and only the
+// client draws it. The daemon's emulator does neither, so a frame taken after
+// the command holds neither, and a stream rebuilt there never gives the
+// client the command. The stream is rebuilt where the command starts. The
+// daemon's screen there is the screen of state when only graphics commands
+// come between, and the screen of sent when the command started inside it.
+// Otherwise it starts at last, and its bytes carry the command.
+//
+// It returns where the stream is rebuilt, -1 when the connection ended, and
+// whether the frames end.
+func (d *Daemon) framePassedGraphics(cs *connState, pty *PTY, sub *ptySubscriber, state, sent *TerminalState, last int64) (int64, bool) {
+	if pty.graphicsAt.Load() == 0 {
+		return 0, false
+	}
+	lo := last
+	if lo < 0 {
+		lo = sub.sent.Load()
+	}
+	from, found, only := pty.graphicsSince(lo, state.Seq)
+	if !found {
+		return 0, false
+	}
+	frame, resume := (*TerminalState)(nil), lo
+	switch {
+	case only:
+		frame, resume = state, from
+	case from < lo && sent != nil:
+		frame, resume = sent, from
+	}
+	if frame != nil {
+		frame.Seq = resume
+		frame.PendingInput = nil
+		if err := d.sendFrame(cs, pty.ID, frame); err != nil {
+			return -1, true
+		}
+		sub.sent.Store(resume)
+	}
+	return resume, true
+}
+
+// graphicsSince is gfxScanner.spanSince for the pane's stream.
+func (p *PTY) graphicsSince(lo, hi int64) (from int64, found, only bool) {
+	// broadcast changes gfx under the read lock, one at a time under
+	// streamMu, so reading it takes the write lock, as subscribeLocked does.
+	p.subscribersMu.Lock()
+	defer p.subscribersMu.Unlock()
+	return p.gfx.spanSince(lo, hi)
 }
 
 // noteFramed counts a stream turned to frames, and says so in the daemon log

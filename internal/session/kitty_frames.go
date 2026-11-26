@@ -2,6 +2,7 @@ package session
 
 import (
 	"bytes"
+	"math"
 	"slices"
 	"strconv"
 	"sync/atomic"
@@ -814,6 +815,31 @@ func (s *gfxScanner) spanAt(pos int64) (inside bool, end int64) {
 		}
 	}
 	return false, 0
+}
+
+// spanSince finds the first graphics command or frame that ends after
+// stream position lo and starts before hi: one a client that has the stream
+// to lo has not got whole. from is where it starts. only says that the spans
+// from there on reach hi with no other bytes between them.
+func (s *gfxScanner) spanSince(lo, hi int64) (from int64, found, only bool) {
+	spans := s.spans
+	if s.spanOpen {
+		spans = append(slices.Clip(spans), [2]int64{s.spanFrom, math.MaxInt64})
+	}
+	for i, sp := range spans {
+		if sp[1] <= lo || sp[0] >= hi {
+			continue
+		}
+		end := sp[1]
+		for _, next := range spans[i+1:] {
+			if end >= hi || next[0] != end {
+				break
+			}
+			end = next[1]
+		}
+		return sp[0], true, end >= hi
+	}
+	return 0, false, false
 }
 
 // spanEnd returns where the span that starts at from ends, and false while
