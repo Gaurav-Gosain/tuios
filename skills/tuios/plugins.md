@@ -10,8 +10,11 @@ plugin.
 ## What you cannot do from a pane
 
 Only the person installs, approves, enables or removes a plugin. From a pane,
-or from a plugin's process, these fail and change nothing. Do not try to go
-around that. Give the person the command to run in a terminal outside tuios:
+these commands ask the person in a dialog at an attached client, and wait for
+the answer. The command changes nothing unless the person says yes there. Do
+not try to answer the dialog yourself. From a plugin's process, the commands
+fail. With no client attached, give the person the command to run in a
+terminal outside tuios:
 
 ```sh
 tuios plugins install ./my-plugin

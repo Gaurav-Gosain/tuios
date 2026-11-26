@@ -80,11 +80,13 @@ func (d *Daemon) herdrPluginCall(cs *connState, method string, params json.RawMe
 func fromPluginErr(e *herdrplugin.Error) *herdrError { return herdrErr(e.Code, e.Msg) }
 
 // herdrPluginTrust refuses a change to which plugins run unless the person
-// asks: never from a pane, from a process the daemon started (a plugin's
-// own command included), or over a link.
-func (d *Daemon) herdrPluginTrust(cs *connState, method string) *herdrError {
-	if cs != nil && (cs.viaLink || !d.mayActAsHuman(cs)) {
-		return herdrErr("forbidden", method+" is for the person: the caller runs inside a pane or a plugin of this tuios. Nothing was changed. Run tuios plugins from a terminal outside tuios")
+// asks: never from a process the daemon started (a plugin's own command
+// included), or over a link. From a pane it runs only with the token of the
+// person's Yes to that change, in the dialog plugin-confirm showed
+// (plugin_confirm.go).
+func (d *Daemon) herdrPluginTrust(cs *connState, method string, params json.RawMessage) *herdrError {
+	if cs != nil && (cs.viaLink || !d.mayActAsHuman(cs)) && !d.pluginConfirmed(cs, method, params) {
+		return herdrErr("forbidden", method+" is for the person: the caller runs inside a pane or a plugin of this tuios. Nothing was changed. Run tuios plugins from a terminal outside tuios, or from a pane with a tuios that asks the person in a dialog")
 	}
 	return nil
 }
@@ -206,7 +208,7 @@ func (d *Daemon) herdrPluginSetEnabled(cs *connState, params json.RawMessage, on
 	if on {
 		method = "plugin.enable"
 	}
-	if herr := d.herdrPluginTrust(cs, method); herr != nil {
+	if herr := d.herdrPluginTrust(cs, method, params); herr != nil {
 		return nil, herr
 	}
 	in, herr := decodePluginIn(params, "plugin_id")
@@ -312,7 +314,7 @@ func setPluginEnabled(cfg *config.PluginsConfig, id string, on bool) {
 // herdrPluginLink is plugin.link: list a plugin folder, as [plugins] dirs,
 // and enable it unless enabled is false, as herdr does.
 func (d *Daemon) herdrPluginLink(cs *connState, params json.RawMessage) (any, *herdrError) {
-	if herr := d.herdrPluginTrust(cs, "plugin.link"); herr != nil {
+	if herr := d.herdrPluginTrust(cs, "plugin.link", params); herr != nil {
 		return nil, herr
 	}
 	in, herr := decodePluginIn(params, "path")
@@ -355,7 +357,7 @@ func (d *Daemon) herdrPluginLink(cs *connState, params json.RawMessage) (any, *h
 // dirs and the plugin out of enabled. A plugin found in the tuios plugins
 // folder or in herdr's registry stays listed, disabled.
 func (d *Daemon) herdrPluginUnlink(cs *connState, params json.RawMessage) (any, *herdrError) {
-	if herr := d.herdrPluginTrust(cs, "plugin.unlink"); herr != nil {
+	if herr := d.herdrPluginTrust(cs, "plugin.unlink", params); herr != nil {
 		return nil, herr
 	}
 	in, herr := decodePluginIn(params, "plugin_id")

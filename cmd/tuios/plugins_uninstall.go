@@ -38,9 +38,6 @@ ID is the plugin id. You can also give the source that you installed the plugin 
 In a terminal, tuios asks first. --yes skips the question. tuios keeps the config and state folders of the plugin. A plugin installed from a folder on this machine keeps that folder. tuios does not remove a plugin that it did not install. For a linked folder, use tuios plugins unlink.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if inPane() {
-				return errFromPane("uninstall")
-			}
 			return uninstallPlugin(cmd.OutOrStdout(), args[0], yes)
 		},
 	}
@@ -72,8 +69,12 @@ func uninstallPlugin(out io.Writer, arg string, yes bool) error {
 		return err
 	}
 
+	// From a pane the person answers in the dialog, not in the pane.
+	if err := paneConfirm("uninstall", id, "", ""); err != nil {
+		return err
+	}
 	// A script with no terminal keeps working as it did before --yes existed.
-	if prompt := newLookPrompt(yes, false); prompt.tty {
+	if prompt := newLookPrompt(yes, false); prompt.tty && !inPane() {
 		ok, err := prompt.confirm(out, "Stop "+id+", close its panes and remove it?")
 		if err != nil {
 			return err

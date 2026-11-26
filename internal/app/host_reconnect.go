@@ -199,13 +199,13 @@ func (m *OS) handleHostReconnectTick(msg hostReconnectTickMsg) tea.Cmd {
 	reserve := m.ownLayoutReserveForReconnect()
 	agent, kind := "", ""
 	termType, colorTerm := "", ""
-	served, viewOnly, upgradeDialog := false, false, false
+	served, viewOnly, upgradeDialog, pluginDialog := false, false, false, false
 	if m.DaemonClient != nil {
 		agent = m.DaemonClient.SSHAuthSock
 		termType, colorTerm = m.DaemonClient.Term, m.DaemonClient.ColorTerm
 		// A served or read-only client stays one after the reconnect.
 		kind, served, viewOnly = m.DaemonClient.Kind, m.DaemonClient.Served, m.DaemonClient.ViewOnly
-		upgradeDialog = m.DaemonClient.UpgradeDialog
+		upgradeDialog, pluginDialog = m.DaemonClient.UpgradeDialog, m.DaemonClient.PluginDialog
 	}
 	return func() tea.Msg {
 		client := session.NewTUIClient()
@@ -216,7 +216,7 @@ func (m *OS) handleHostReconnectTick(msg hostReconnectTickMsg) tea.Cmd {
 		client.SSHAuthSock = agent
 		client.Term, client.ColorTerm = termType, colorTerm
 		client.Kind, client.Served, client.ViewOnly = kind, served, viewOnly
-		client.UpgradeDialog = upgradeDialog
+		client.UpgradeDialog, client.PluginDialog = upgradeDialog, pluginDialog
 		if _, err := client.ConnectThroughHost(host, version, width, height, caps); err != nil {
 			_ = client.Close()
 			return hostReconnectResultMsg{gen: gen, err: err}

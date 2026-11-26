@@ -557,7 +557,7 @@ func (d *Daemon) verbAnswerAsk(cs *connState, params json.RawMessage) (any, *ver
 		if cs != nil && cs.viaLink {
 			// A key on another machine is not a key at this one, whoever the
 			// hub says pressed it.
-			return nil, hintedVerbError(ErrVerbNotHuman, "a live upgrade is confirmed only at a client attached on this machine", &VerbHint{
+			return nil, hintedVerbError(ErrVerbNotHuman, "a live upgrade or a plugin change is confirmed only at a client attached on this machine", &VerbHint{
 				Detail: "Nothing was answered. Answer it in the dialog of a client attached to this machine.",
 			})
 		}
@@ -566,7 +566,7 @@ func (d *Daemon) verbAnswerAsk(cs *connState, params json.RawMessage) (any, *ver
 			// bridge holds one, and a client that predates the dialog shows
 			// the ask as an ordinary question. Only the dialog takes nothing
 			// but a key the person pressed.
-			return nil, hintedVerbError(ErrVerbNotHuman, "a live upgrade is confirmed only by a key pressed in the upgrade dialog", &VerbHint{
+			return nil, hintedVerbError(ErrVerbNotHuman, "a live upgrade or a plugin change is confirmed only by a key pressed in its dialog", &VerbHint{
 				Param:  "upgrade_dialog",
 				Detail: "Nothing was answered. Answer it in the dialog that a tuios client attached to this machine shows.",
 			})

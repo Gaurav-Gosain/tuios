@@ -287,6 +287,9 @@ type Daemon struct {
 	// session event sinks and the mailbox, and saved beside the session state.
 	// See attention.go.
 	attention *attentionStore
+	// pluginConfirm holds the Yes answers to plugin changes asked from
+	// panes. See plugin_confirm.go.
+	pluginConfirm pluginConfirms
 	// awake holds the machine awake as [daemon] keep_awake says. See
 	// keep_awake.go.
 	awake *awakeKeeper
@@ -793,6 +796,10 @@ type connState struct {
 	// live upgrade's dialog and answers it only with a key the person
 	// pressed. Guarded by mu. See upgrade_confirm.go.
 	upgradeDialog bool
+	// pluginDialog says the attach marked the client as one that shows a
+	// plugin change's dialog the same way. Guarded by mu. See
+	// plugin_confirm.go.
+	pluginDialog bool
 	// passive is a pane viewer without a full renderer command executor.
 	// It does not size the session, but may write to its subscribed PTY. Guarded by mu.
 	passive bool

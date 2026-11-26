@@ -75,6 +75,9 @@ type TUIClient struct {
 	// answers it only with a key the person pressed. It is sent with every
 	// attach. See AttachPayload.UpgradeDialog.
 	UpgradeDialog bool
+	// PluginDialog says this client shows a plugin change's dialog the same
+	// way. See AttachPayload.PluginDialog.
+	PluginDialog bool
 	// Kind is the hello's ClientKind: ClientKindSSH or ClientKindWeb for a
 	// client a server runs for a remote viewer, "" for a terminal on this
 	// machine. Set it before Connect.
@@ -624,6 +627,7 @@ func (c *TUIClient) AttachSession(name string, createNew bool, width, height int
 		NestProbe:     probe,
 		ViewOnly:      c.viewOnly(),
 		UpgradeDialog: c.UpgradeDialog,
+		PluginDialog:  c.PluginDialog,
 		Passive:       c.Passive,
 		Cwd:           c.StartDir,
 		DetachOthers:  c.DetachOthers,
@@ -938,6 +942,7 @@ func (c *TUIClient) attachWhileReading(name string, createNew bool, width, heigh
 		NestProbe:     probe,
 		ViewOnly:      c.viewOnly(),
 		UpgradeDialog: c.UpgradeDialog,
+		PluginDialog:  c.PluginDialog,
 		Passive:       c.Passive,
 	})
 	if err != nil {

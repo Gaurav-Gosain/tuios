@@ -38,9 +38,6 @@ tuios shows the new commits and what the plugin runs, and asks first. --yes skip
 
 A plugin installed from a folder has no update. A plugin pinned to a commit stays there. To follow another ref, run tuios plugins install SOURCE@REF.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if inPane() {
-				return errFromPane("update")
-			}
 			// An update keeps a plugin as it is: on stays on, off stays off.
 			o.noEnable = true
 			return updatePlugins(cmd, args, o, check)

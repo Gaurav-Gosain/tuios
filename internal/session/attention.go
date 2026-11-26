@@ -271,6 +271,9 @@ type AttentionItem struct {
 	// (upgrade_confirm.go). A client shows it as a dialog of its own, not as
 	// an Inbox question.
 	Upgrade *UpgradeAsk `json:"upgrade,omitempty"`
+	// Plugin is set on the ask a plugin change from a pane puts to the
+	// person (plugin_confirm.go). A client shows it in the same dialog.
+	Plugin *PluginTrustAsk `json:"plugin,omitempty"`
 
 	// Parent and Root are set on an item about a child agent, a pane another
 	// agent started (agent_parent.go): the agent that started it and the
@@ -1231,8 +1234,8 @@ func (a *attentionStore) changedLocked() {
 func (a *attentionStore) encodeLocked() []byte {
 	f := attentionFile{Version: 1, NextID: a.nextID, Rev: a.rev, Items: make([]AttentionItem, 0, len(a.items)+len(a.snoozed))}
 	for _, id := range a.sortedIDsLocked() {
-		// An upgrade's confirm never outlives the call that waits on it.
-		if a.items[id].Upgrade == nil {
+		// A dialog's confirm never outlives the call that waits on it.
+		if a.items[id].Upgrade == nil && a.items[id].Plugin == nil {
 			f.Items = append(f.Items, *a.items[id])
 		}
 	}

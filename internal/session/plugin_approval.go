@@ -63,19 +63,30 @@ func pluginAsksOf(entries []herdrplugin.Entry) []PluginApprovalAsk {
 			// reason: an answer would not make it run.
 			continue
 		}
-		source := "folder " + p.PluginRoot
-		if e.Lock != nil && !e.Lock.Local() {
-			source = strings.TrimSuffix(strings.TrimPrefix(e.Lock.Source, "https://"), ".git")
-			if c := e.Lock.Commit; c != "" {
-				source += " @ " + c[:min(12, len(c))]
-			}
-		}
-		out = append(out, PluginApprovalAsk{
-			ID: p.PluginID, Name: p.Name, Version: p.Version, Source: source, Trust: p.Trust,
-			Grants: slices.Clone(p.Grants), Runs: herdrplugin.RunsLines(p),
-		})
+		out = append(out, pluginAskOf(e))
 	}
 	return out
+}
+
+// pluginAskOf is the question about one plugin: who it is, where it comes
+// from, what runs and its grants. A plugin whose manifest cannot be read
+// gives only its id.
+func pluginAskOf(e herdrplugin.Entry) PluginApprovalAsk {
+	p := e.Plugin
+	if p == nil {
+		return PluginApprovalAsk{ID: e.ID}
+	}
+	source := "folder " + p.PluginRoot
+	if e.Lock != nil && !e.Lock.Local() {
+		source = strings.TrimSuffix(strings.TrimPrefix(e.Lock.Source, "https://"), ".git")
+		if c := e.Lock.Commit; c != "" {
+			source += " @ " + c[:min(12, len(c))]
+		}
+	}
+	return PluginApprovalAsk{
+		ID: p.PluginID, Name: p.Name, Version: p.Version, Source: source, Trust: p.Trust,
+		Grants: slices.Clone(p.Grants), Runs: herdrplugin.RunsLines(p),
+	}
 }
 
 // samePluginAsks reports whether two lists ask the same questions.
@@ -138,7 +149,7 @@ func (d *Daemon) sendPluginAsks(cs *connState) {
 // herdrPluginApprove is plugin.approve: the person's answer for one native
 // plugin at the trust hash they saw.
 func (d *Daemon) herdrPluginApprove(cs *connState, params json.RawMessage) (any, *herdrError) {
-	if herr := d.herdrPluginTrust(cs, "plugin.approve"); herr != nil {
+	if herr := d.herdrPluginTrust(cs, "plugin.approve", params); herr != nil {
 		return nil, herr
 	}
 	var in struct {

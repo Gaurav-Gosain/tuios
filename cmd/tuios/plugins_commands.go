@@ -18,7 +18,9 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrcli"
 	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
+	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/procsetup"
+	"github.com/Gaurav-Gosain/tuios/internal/session"
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 	"github.com/spf13/cobra"
 )
@@ -69,6 +71,51 @@ func inPane() bool {
 	return os.Getenv("TUIOS_PANE_ID") != "" || os.Getenv("TUIOS_WINDOW_ID") != ""
 }
 
+// confirmToken is the token of the person's Yes to this command's change,
+// asked for from a pane by paneConfirm. pluginCall passes it to the daemon.
+var confirmToken string
+
+// paneConfirm asks the person whether this command may make its change,
+// when it runs inside a tuios pane. The daemon shows a dialog at the
+// attached clients, with the plugin as the daemon reads it from id or the
+// folder path, and only a key the person presses there answers it
+// (internal/session/plugin_confirm.go). Outside a pane it asks nothing.
+// The error says what happened and what to do.
+func paneConfirm(change, id, path, source string) error {
+	if !inPane() {
+		return nil
+	}
+	params := map[string]any{"change": change}
+	if id != "" {
+		params["plugin_id"] = id
+	}
+	if path != "" {
+		params["path"] = path
+	}
+	if source != "" {
+		params["source"] = source
+	}
+	client, err := dialVerb()
+	if err != nil {
+		return errfmt.Errorf("tuios plugins %s runs inside a tuios pane, so it asks the person in a dialog, and the daemon cannot be reached: %w. Run the command from a terminal outside tuios", change, err)
+	}
+	defer func() { _ = client.Close() }()
+	fmt.Fprintln(os.Stderr, "This command runs inside a tuios pane. tuios asks the person in a dialog at an attached client. Waiting for the answer.")
+	raw, err := client.CallWithTimeout("plugin-confirm", params, session.PluginConfirmWait+15*time.Second)
+	if err != nil {
+		return explainVerbError("plugin-confirm", err)
+	}
+	var res struct {
+		Token string `json:"token"`
+	}
+	if err := jsonx.Unmarshal(raw, &res); err != nil {
+		return errfmt.Errorf("the daemon's answer cannot be read: %w", err)
+	}
+	confirmToken = res.Token
+	fmt.Fprintln(os.Stderr, "The person said yes.")
+	return nil
+}
+
 // errFromPane is the refusal of a trust change from inside a pane.
 func errFromPane(what string) error {
 	return errfmt.Errorf("tuios plugins %s is for the person, and this command runs inside a tuios pane. Nothing was changed. Run it from a terminal outside tuios", what)
@@ -80,6 +127,9 @@ func pluginCall(method string, params map[string]any, timeout time.Duration) (ma
 	path, err := herdrSocketPath()
 	if err != nil {
 		return nil, false, err
+	}
+	if confirmToken != "" {
+		params["confirm_token"] = confirmToken
 	}
 	resp, err := herdrcli.Request(path, method, params, timeout)
 	if err != nil {
@@ -284,9 +334,6 @@ func newPluginsEnableCommand(on bool) *cobra.Command {
 		Short: short,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if inPane() {
-				return errFromPane(verb)
-			}
 			id := args[0]
 			entries, path, err := discoverPlugins()
 			if err != nil {
@@ -298,6 +345,9 @@ func newPluginsEnableCommand(on bool) *cobra.Command {
 			}
 			if on && e.Plugin == nil {
 				return errfmt.Errorf("the plugin %s cannot be enabled: %s", id, e.Err.Msg)
+			}
+			if err := paneConfirm(verb, id, "", ""); err != nil {
+				return err
 			}
 			_, running, err := pluginCall(method, map[string]any{"plugin_id": id}, 10*time.Second)
 			if err != nil {
@@ -330,12 +380,12 @@ func newPluginsLinkCommand() *cobra.Command {
 		Long:  "Add a plugin folder to [plugins] dirs. The plugin is listed and stays off. Add --enable to enable it too.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if inPane() {
-				return errFromPane("link")
-			}
 			p, perr := herdrplugin.Load(args[0])
 			if perr != nil {
 				return errfmt.Errorf("the plugin cannot be read: %s", perr.Msg)
+			}
+			if err := paneConfirm("link", p.PluginID, p.PluginRoot, ""); err != nil {
+				return err
 			}
 			_, running, err := pluginCall("plugin.link", map[string]any{"path": p.PluginRoot, "enabled": enable}, 10*time.Second)
 			if err != nil {
@@ -373,10 +423,10 @@ func newPluginsUnlinkCommand() *cobra.Command {
 		Short: "Remove a linked plugin folder, disable the plugin and close its panes",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if inPane() {
-				return errFromPane("unlink")
-			}
 			id := args[0]
+			if err := paneConfirm("unlink", id, "", ""); err != nil {
+				return err
+			}
 			res, running, err := pluginCall("plugin.unlink", map[string]any{"plugin_id": id}, 30*time.Second)
 			if err != nil {
 				return err
@@ -418,9 +468,6 @@ func newPluginsBuildCommand() *cobra.Command {
 		Long:  "Run the [[build]] commands of a plugin in its folder, one at a time. Each command is printed before it runs. Nothing else runs build commands.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if inPane() {
-				return errFromPane("build")
-			}
 			entries, _, err := discoverPlugins()
 			if err != nil {
 				return err
@@ -428,6 +475,9 @@ func newPluginsBuildCommand() *cobra.Command {
 			e := herdrplugin.Find(entries, args[0])
 			if e == nil || e.Plugin == nil {
 				return errfmt.Errorf("no plugin with the id %s can be read. Run tuios plugins list to see the ids", args[0])
+			}
+			if err := paneConfirm("build", e.ID, "", ""); err != nil {
+				return err
 			}
 			path, err := pluginsConfigPath()
 			if err != nil {

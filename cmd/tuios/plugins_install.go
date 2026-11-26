@@ -59,9 +59,6 @@ Without SOURCE, tuios installs each plugin in plugins.lock at its commit. It doe
 tuios shows what the plugin runs and asks first. A plugin runs with your rights. Grants are not a sandbox. You need git.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if inPane() {
-				return errFromPane("install")
-			}
 			if len(args) == 0 {
 				return installFromLock(cmd, o)
 			}
@@ -382,7 +379,24 @@ func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetc
 	if err := checkNativeAsks(p, in.o); err != nil {
 		return err
 	}
-	if slices.Contains(e.Grants, "admin") {
+	pane := inPane()
+	if pane {
+		// From a pane the person answers in a dialog at an attached client,
+		// which shows the manifest as the daemon reads it from this folder.
+		// The questions below are for a terminal outside tuios.
+		change := "install"
+		if in.verb == "Updated" {
+			change = "update"
+		}
+		source := shownSource(e.Source)
+		if e.Commit != "" {
+			source += " @ " + e.Commit[:min(12, len(e.Commit))]
+		}
+		if err := paneConfirm(change, p.PluginID, p.PluginRoot, source); err != nil {
+			return err
+		}
+	}
+	if slices.Contains(e.Grants, "admin") && !pane {
 		// Ask before anything is built. It is asked again before the
 		// approval is written.
 		if err := confirmPerson(); err != nil {
@@ -406,11 +420,14 @@ func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetc
 			fmt.Fprintln(out, "\nThe plugin manifest is different from the approved one in plugins.lock.")
 		}
 		fmt.Fprintln(out, "tuios asks again, also with --yes.")
-		if !tty {
+		if !tty && !pane {
 			return errors.New("there is no terminal to ask in. Run the command in a terminal")
 		}
 	}
-	ok, err := lookPrompt{yes: in.o.yes && !changed, tty: tty, in: bufio.NewReader(os.Stdin)}.confirm(out, "Continue?")
+	ok, err := pane, error(nil)
+	if !pane {
+		ok, err = lookPrompt{yes: in.o.yes && !changed, tty: tty, in: bufio.NewReader(os.Stdin)}.confirm(out, "Continue?")
+	}
 	if err != nil {
 		return err
 	}
@@ -482,7 +499,12 @@ func (in *installer) finish(e herdrplugin.LockEntry, p *herdrplugin.Plugin, fetc
 		// plugin is installed and waits: tuios asks on the next attach.
 		// Another machine that gets plugins.lock asks again.
 		admin := slices.Contains(e.Grants, "admin")
-		switch err := confirmPerson(); {
+		personErr := error(nil)
+		if !pane {
+			// From a pane the dialog asked the person already.
+			personErr = confirmPerson()
+		}
+		switch err := personErr; {
 		case err == nil:
 			if err := herdrplugin.Approve(in.dirs.ApprovalsPath(), p, e.Approved, admin); err != nil {
 				return err

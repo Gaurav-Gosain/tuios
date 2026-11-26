@@ -735,9 +735,9 @@ func (m *OS) applyInboxEvents(msg InboxEventsMsg) tea.Cmd {
 				}
 				st.released[it.ID] = true
 			}
-			// An upgrade's confirm is its own dialog (syncUpgradeConfirm),
-			// which is alert enough.
-			if it.Upgrade != nil {
+			// An upgrade's or a plugin change's confirm is its own dialog
+			// (syncUpgradeConfirm), which is alert enough.
+			if it.Upgrade != nil || it.Plugin != nil {
 				continue
 			}
 			// A question about the pane in front of the person opens the
@@ -1570,8 +1570,8 @@ func (m *OS) InboxAnswerAsk(n int) tea.Cmd {
 	if m.refuseRemoteAnswer("An answer") {
 		return nil
 	}
-	if it.Upgrade != nil {
-		m.ShowNotification("A live upgrade is answered in its own dialog, which every client attached here shows", "info", m.Settings.NotificationDuration)
+	if it.Upgrade != nil || it.Plugin != nil {
+		m.ShowNotification("A live upgrade or a plugin change is answered in its own dialog, which every client attached here shows", "info", m.Settings.NotificationDuration)
 		return nil
 	}
 	if n < 1 || n > len(it.Options) {

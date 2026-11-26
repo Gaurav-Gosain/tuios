@@ -422,6 +422,7 @@ func runDaemonSessionOn(host, sessionName string, createNew bool) error {
 	// The person is at this terminal, so the live upgrade dialog shows here
 	// and takes their keys. See internal/app/upgrade_confirm.go.
 	client.UpgradeDialog = true
+	client.PluginDialog = true
 	if host == "" && createNew {
 		// tuios new may supply --cwd. The daemon ignores the directory if
 		// this attach finds a session that already exists.

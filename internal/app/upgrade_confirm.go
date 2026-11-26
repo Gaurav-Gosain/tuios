@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/Gaurav-Gosain/tuios/internal/herdrplugin"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/plural"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
@@ -27,6 +28,10 @@ import (
 //
 // The dialog closes when the ask does: this client's answer, another
 // client's, or the daemon giving up on it.
+//
+// A plugin change asked for from a pane (session/plugin_confirm.go) is
+// asked in this same dialog, with the plugin in the words of the approval
+// dialog, and answered under the same rules.
 
 // overlayKindUpgradeConfirm is the dialog's overlay kind.
 const overlayKindUpgradeConfirm = "upgradeconfirm"
@@ -68,7 +73,7 @@ func (m *OS) syncUpgradeConfirm() {
 		return
 	}
 	for _, it := range m.Inbox.Items {
-		if it.Upgrade != nil && it.Host == "" && it.RequestID != "" {
+		if (it.Upgrade != nil || (it.Plugin != nil && m.DaemonClient.PluginDialog)) && it.Host == "" && it.RequestID != "" {
 			*st = upgradeConfirmState{open: &it, openedAt: time.Now()}
 			return
 		}
@@ -116,6 +121,9 @@ func (m *OS) upgradeConfirmAnswer(idx int) tea.Cmd {
 func (m *OS) renderUpgradeConfirm() (string, overlay.Geometry, []overlayRowHit) {
 	st := &m.upgradeConfirm
 	it := st.open
+	if it.Plugin != nil {
+		return m.renderPluginConfirm()
+	}
 	pal := m.overlayUI()
 	bg := pal.Canvas
 	width := overlay.DialogFitWidth(upgradeConfirmWidth, m.modalRoomWidth())
@@ -162,6 +170,53 @@ func (m *OS) renderUpgradeConfirm() (string, overlay.Geometry, []overlayRowHit) 
 	}
 	hints := []overlay.Hint{{Key: overlay.EnterKey(), Label: "choose"}, {Key: "esc", Label: "no"}}
 	content, geo := overlay.Dialog{Title: "live upgrade", Width: width, Body: strings.Join(body, "\n"), Hints: hints}.Render(pal)
+	return content, geo, nil
+}
+
+// renderPluginConfirm draws the dialog for a plugin change asked for from a
+// pane. Every line about the plugin is the approval dialog's.
+func (m *OS) renderPluginConfirm() (string, overlay.Geometry, []overlayRowHit) {
+	st := &m.upgradeConfirm
+	it := st.open
+	a := it.Plugin
+	pal := m.overlayUI()
+	bg := pal.Canvas
+	width := overlay.DialogFitWidth(pluginApprovalWidth, m.modalRoomWidth())
+	inner := max(width-2, 1)
+
+	var body []string
+	line := func(s string, ink color.Color) { body = append(body, dialogBodyLine(s, width, ink, bg)) }
+	text := func(s string, ink color.Color) {
+		for _, l := range wrapPlain(s, inner) {
+			line(l, ink)
+		}
+	}
+	name := herdrplugin.ShownName(a.Name)
+	if name == "" {
+		name = a.ID
+	}
+	body = append(body, overlay.Fill(overlay.Style(bg).Render(" ")+
+		overlay.Style(bg).Foreground(pal.Fg).Bold(true).Render(overlay.Truncate(session.PluginChangeQuestion(a.Change, name), inner)), width, bg))
+	line("", pal.FgDim)
+	who := inboxWho(*it)
+	if it.Window != "" {
+		who += " (pane " + shortID(it.Window) + " in session " + printableTitle(it.Session) + ")"
+	}
+	text(who+" asks to "+a.Change+" this plugin:", pal.Fg)
+	pluginAskLines(&a.PluginApprovalAsk, inner, pal, line)
+	line("", pal.FgDim)
+	text("Say yes only if you asked for it.", pal.FgDim)
+	note := "Down moves to Yes, any other key back to No. Enter chooses."
+	if st.sent {
+		note = "Sending your answer..."
+	}
+	line(note, pal.FgMute)
+	body = append(body, overlay.Fill(overlay.Style(bg).Render(" ")+overlay.DashRule(max(width-2, 0), bg, pal), width, bg))
+	for i, label := range upgradeConfirmRows {
+		body = append(body, dialogAnswerRow(label, st.selected == i, i == 1, width, pal))
+	}
+	hints := []overlay.Hint{{Key: overlay.EnterKey(), Label: "choose"}, {Key: "esc", Label: "no"}}
+	content, geo := overlay.Dialog{Title: "plugin change", Width: width, Body: strings.Join(body, "\n"), Hints: hints}.Render(pal)
 	return content, geo, nil
 }
 

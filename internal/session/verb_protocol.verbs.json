@@ -465,6 +465,44 @@
       "{\"id\":1,\"verb\":\"ask-human\",\"params\":{\"request_id\":\"9f86d081884c7d65\",\"wait\":false}}"
     ]
   },
+  "plugin-confirm": {
+    "description": "Ask the person whether a process inside a pane may make a change to which plugins run. The daemon shows a dialog on every attached client of this machine, with the plugin as the daemon reads it: where it comes from, what it runs and its grants. Only a key the person presses in that dialog answers it. A Yes gives a token that the trust verbs of that change take, for that plugin, from the same pane, for 10 minutes. No, Esc, two minutes without an answer, or no client that shows the dialog refuse it. A plugin that asks for admin, a plugin's own process and a call over a link are refused without a dialog. A caller outside every pane gets needed false and no token.",
+    "params": [
+      {
+        "name": "change",
+        "description": "install, update, uninstall, approve, deny, enable, disable, link, unlink or build."
+      },
+      {
+        "name": "plugin_id",
+        "description": "The plugin, as the daemon lists it. With path, the id the manifest must have."
+      },
+      {
+        "name": "path",
+        "description": "The plugin folder, for a plugin the daemon does not list yet. The daemon reads the manifest in it."
+      },
+      {
+        "name": "source",
+        "description": "Where an install fetched the folder from, which the dialog shows. The daemon cannot check it."
+      }
+    ],
+    "returns": [
+      {
+        "name": "needed",
+        "description": "Whether a dialog was needed. A caller outside every pane needs none."
+      },
+      {
+        "name": "token",
+        "description": "The token of the Yes. Pass it as confirm_token to the trust verbs of the change."
+      },
+      {
+        "name": "plugin_id",
+        "description": "The plugin the Yes is for."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"plugin-confirm\",\"params\":{\"change\":\"install\",\"path\":\"/home/me/plugins/notes\"}}"
+    ]
+  },
   "attach-presence": {
     "description": "Hold the person's nonce on this connection without a screen. The reply carries human_nonce, which respond, reply-approval, answer-ask and dismiss-attention take as the person's, by the same rules as an attach nonce: only from outside every pane, over a link only on a stream the hub vouched for, and only from the process that holds it. The presence does not attach: it does not change the session size, focus or view a pane, or receive broadcasts. The connection serves other verbs as before, and the presence ends when it closes.",
     "params": [

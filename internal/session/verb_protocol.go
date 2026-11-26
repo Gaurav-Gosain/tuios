@@ -1870,6 +1870,25 @@ func buildVerbRegistry() map[string]verbEntry {
 			},
 			handler: (*Daemon).verbStreamPane,
 		},
+		"plugin-confirm": {
+			// A restricted connection is automation, and gets no dialog.
+			scope: scopeDeny,
+			// The handler refuses it over a link: a change to a machine's
+			// plugins is asked on that machine.
+			link: needRelay,
+			params: []verbParam{
+				{Name: "change", Type: "string", Required: true},
+				{Name: "plugin_id", Type: "string"},
+				{Name: "path", Type: "string"},
+				{Name: "source", Type: "string"},
+			},
+			returns: []verbParam{
+				{Name: "needed", Type: "bool"},
+				{Name: "token", Type: "string"},
+				{Name: "plugin_id", Type: "string"},
+			},
+			handler: (*Daemon).verbPluginConfirm,
+		},
 		"attach-presence": {
 			// A restricted connection is automation, never the person.
 			scope: scopeDeny,

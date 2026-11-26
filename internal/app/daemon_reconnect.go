@@ -141,10 +141,10 @@ func (m *OS) handleDaemonReconnectTick(msg daemonReconnectTickMsg) tea.Cmd {
 	caps := m.clientCapabilities()
 	reserve := m.ownLayoutReserveForReconnect()
 	agent, display := "", session.ClientDisplay{}
-	upgradeDialog := false
+	upgradeDialog, pluginDialog := false, false
 	if m.DaemonClient != nil {
 		agent, display = m.DaemonClient.SSHAuthSock, m.DaemonClient.Display
-		upgradeDialog = m.DaemonClient.UpgradeDialog
+		upgradeDialog, pluginDialog = m.DaemonClient.UpgradeDialog, m.DaemonClient.PluginDialog
 	}
 	return func() tea.Msg {
 		client := session.NewTUIClient()
@@ -155,7 +155,7 @@ func (m *OS) handleDaemonReconnectTick(msg daemonReconnectTickMsg) tea.Cmd {
 		client.HandshakeTimeout = max(min(daemonDialTimeout, time.Until(end)), time.Millisecond)
 		client.AttachDeadline = end
 		client.SSHAuthSock, client.Display = agent, display
-		client.UpgradeDialog = upgradeDialog
+		client.UpgradeDialog, client.PluginDialog = upgradeDialog, pluginDialog
 		client.UseCallerTerm()
 		if err := client.ConnectWithCapabilities(version, width, height, caps); err != nil {
 			_ = client.Close()

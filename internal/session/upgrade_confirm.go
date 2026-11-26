@@ -80,11 +80,17 @@ func (d *Daemon) callerIsPlugin(cs *connState) bool {
 // predates the dialog, whose Inbox offers No and Yes and sends neither as an
 // answer the ask takes.
 func (d *Daemon) personClients() int {
+	return d.dialogClients(func(cs *connState) bool { return cs.upgradeDialog })
+}
+
+// dialogClients is personClients for a dialog that shows says the client
+// shows. shows runs with cs.mu held.
+func (d *Daemon) dialogClients(shows func(*connState) bool) int {
 	var attached []*connState
 	d.clientsMu.RLock()
 	for _, cs := range d.clients {
 		cs.mu.Lock()
-		if cs.attached && cs.isTUIClient && cs.upgradeDialog && !cs.viaLink && !cs.viewOnly {
+		if cs.attached && cs.isTUIClient && shows(cs) && !cs.viaLink && !cs.viewOnly {
 			attached = append(attached, cs)
 		}
 		cs.mu.Unlock()
@@ -202,8 +208,9 @@ func (a *attentionStore) closeAsk(h *askHold, reason string) (askOutcome, bool) 
 	}
 }
 
-// askIsUpgrade reports whether the open question under requestID is a live
-// upgrade's confirm.
+// askIsUpgrade reports whether the open question under requestID is one a
+// client answers only in its dialog: a live upgrade's confirm, or a plugin
+// change's (plugin_confirm.go).
 func (a *attentionStore) askIsUpgrade(requestID string) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -212,5 +219,5 @@ func (a *attentionStore) askIsUpgrade(requestID string) bool {
 		return false
 	}
 	it, ok := a.items[h.itemID]
-	return ok && it.Upgrade != nil
+	return ok && (it.Upgrade != nil || it.Plugin != nil)
 }

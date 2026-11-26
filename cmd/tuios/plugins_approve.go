@@ -30,9 +30,6 @@ A tuios plugin runs only after you allow it on this machine. tuios plugins insta
 The approval is for the plugin as it is now. When its manifest changes, tuios asks again.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if inPane() {
-				return errFromPane("approve")
-			}
 			return approvePlugin(cmd.OutOrStdout(), args[0], !deny, slices.Contains(grants, "admin"), yes)
 		},
 	}
@@ -80,22 +77,34 @@ func approvePlugin(out io.Writer, id string, allow, admin, yes bool) error {
 		}
 		fmt.Fprintf(out, "\n%s", grantsText(p))
 	}
-	question := "Allow it on this machine?"
-	if !allow {
-		question = "Deny " + id + " on this machine?"
-	}
-	ok, err := newLookPrompt(yes, false).confirm(out, question)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return errors.New("nothing was changed")
-	}
-	// Every daemon that runs confirms that the person runs this command,
-	// before any answer is written, also under --server. With no daemon to
-	// ask, nothing proves it, so nothing is written. See approval.go.
-	if err := confirmPerson(); err != nil {
-		return err
+	if inPane() {
+		// From a pane the person answers in the dialog, not here.
+		change := "approve"
+		if !allow {
+			change = "deny"
+		}
+		if err := paneConfirm(change, p.PluginID, "", ""); err != nil {
+			return err
+		}
+	} else {
+		question := "Allow it on this machine?"
+		if !allow {
+			question = "Deny " + id + " on this machine?"
+		}
+		ok, err := newLookPrompt(yes, false).confirm(out, question)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			return errors.New("nothing was changed")
+		}
+		// Every daemon that runs confirms that the person runs this
+		// command, before any answer is written, also under --server. With
+		// no daemon to ask, nothing proves it, so nothing is written. See
+		// approval.go.
+		if err := confirmPerson(); err != nil {
+			return err
+		}
 	}
 	params := map[string]any{"plugin_id": p.PluginID, "trust": p.Trust, "allow": allow, "admin": admin}
 	_, running, err := pluginCall("plugin.approve", params, 30*time.Second)

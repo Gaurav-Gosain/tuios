@@ -129,6 +129,7 @@ It also has more about the verbs that need it.
 - [`pip`](#pip)
 - [`place-agent`](#place-agent)
 - [`plugin-cell`](#plugin-cell)
+- [`plugin-confirm`](#plugin-confirm)
 - [`plugin-notify`](#plugin-notify)
 - [`popup`](#popup)
 - [`prompt`](#prompt)
@@ -3359,6 +3360,27 @@ Set or clear one dock cell of the calling plugin. Only a process of a native plu
 
 ```json
 {"id":1,"verb":"plugin-cell","params":{"id":"status","text":"CI ok","action":"open"}}
+```
+
+### `plugin-confirm`
+
+Ask the person whether a process inside a pane may make a change to which plugins run. The daemon shows a dialog on every attached client of this machine, with the plugin as the daemon reads it: where it comes from, what it runs and its grants. Only a key the person presses in that dialog answers it. A Yes gives a token that the trust verbs of that change take, for that plugin, from the same pane, for 10 minutes. No, Esc, two minutes without an answer, or no client that shows the dialog refuse it. A plugin that asks for admin, a plugin's own process and a call over a link are refused without a dialog. A caller outside every pane gets needed false and no token.
+
+| Param | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `change` | string | yes |  | install, update, uninstall, approve, deny, enable, disable, link, unlink or build. |
+| `plugin_id` | string |  |  | The plugin, as the daemon lists it. With path, the id the manifest must have. |
+| `path` | string |  |  | The plugin folder, for a plugin the daemon does not list yet. The daemon reads the manifest in it. |
+| `source` | string |  |  | Where an install fetched the folder from, which the dialog shows. The daemon cannot check it. |
+
+| Result field | Type | Description |
+|---|---|---|
+| `needed` | bool | Whether a dialog was needed. A caller outside every pane needs none. |
+| `token` | string | The token of the Yes. Pass it as confirm_token to the trust verbs of the change. |
+| `plugin_id` | string | The plugin the Yes is for. |
+
+```json
+{"id":1,"verb":"plugin-confirm","params":{"change":"install","path":"/home/me/plugins/notes"}}
 ```
 
 ### `plugin-notify`

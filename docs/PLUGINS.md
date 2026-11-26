@@ -176,7 +176,7 @@ when you must: a new grant or a new command asks every person again.
 
 ## Commands
 
-Run these from a terminal outside tuios. A pane cannot change which plugins run.
+Run these from a terminal outside tuios. From a tuios pane, `install`, `update`, `uninstall`, `approve`, `enable`, `disable`, `link`, `unlink` and `build` ask the person first, in a dialog at an attached client. See [Changes asked from a pane](#changes-asked-from-a-pane).
 
 | Command | What it does |
 |---|---|
@@ -641,6 +641,21 @@ tuios only reads herdr's files. It does not write to them. When two places
 have the same plugin id, the first one wins. `tuios plugins list` shows the
 other one with the error `plugin_id_shadowed`.
 
+### Changes asked from a pane
+
+A command such as `tuios plugins install` that runs in a tuios pane asks the person first:
+
+1. The command asks the daemon, and waits.
+2. Each attached client of this machine shows a dialog. The dialog shows the plugin, where it comes from, what it runs, its grants and the pane that asks.
+3. The person presses Down, then Enter, to say yes. Any other answer is no.
+4. The command makes the change, and prints the result.
+
+Only a key that the person presses at the client answers the dialog. Keys that a pane types, `send-keys`, a paste, and a pane's own `answer-ask` do not answer it.
+
+The command makes no change when the person says no, presses Esc, or does not answer in two minutes. It also makes no change when no client is attached. The message then says what to do.
+
+A pane cannot install, update, approve, enable or link a plugin that asks for `admin`. Run that command from a terminal outside tuios. `tuios plugins dev` also runs only outside tuios.
+
 ### Nothing runs until you enable it
 
 To find and list a plugin runs none of
@@ -655,10 +670,11 @@ tuios plugins enable example.notes
 tuios plugins disable example.notes
 ```
 
-You must install, enable and disable a plugin from a terminal outside tuios. The
-daemon refuses `plugin.enable`, `plugin.disable`, `plugin.link` and
-`plugin.unlink` from a pane, from a process that a plugin started, and from
-another machine. A change to `config.toml` that removes a plugin from
+Install, enable and disable a plugin from a terminal outside tuios, or from a
+pane after the person says yes in the dialog. The daemon refuses
+`plugin.enable`, `plugin.disable`, `plugin.link` and `plugin.unlink` from a
+pane without that yes, from a process that a plugin started, and from another
+machine. A change to `config.toml` that removes a plugin from
 `enabled` applies at once. A change that adds a plugin, or a folder to
 `dirs`, waits for `tuios config apply` or a daemon restart.
 `tuios plugins enable ID` applies only the plugin that it names.

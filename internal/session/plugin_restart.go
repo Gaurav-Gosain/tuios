@@ -18,7 +18,7 @@ import (
 // ran from that folder. The answer lists the folders that open panes of the
 // plugin run from, so the caller keeps them.
 func (d *Daemon) herdrPluginRestart(cs *connState, params json.RawMessage) (any, *herdrError) {
-	if herr := d.herdrPluginTrust(cs, "plugin.restart"); herr != nil {
+	if herr := d.herdrPluginTrust(cs, "plugin.restart", params); herr != nil {
 		return nil, herr
 	}
 	var in struct {

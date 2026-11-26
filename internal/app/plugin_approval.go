@@ -304,6 +304,47 @@ func (m *OS) renderPluginApproval() (string, overlay.Geometry, []overlayRowHit) 
 	}
 	body = append(body, overlay.Fill(overlay.Style(bg).Render(" ")+
 		overlay.Style(bg).Foreground(pal.Fg).Bold(true).Render(overlay.Truncate("Allow the plugin "+name+"?", inner)), width, bg))
+	pluginAskLines(a, inner, pal, line)
+	line("", pal.FgDim)
+	word := pluginApprovalWord(a)
+	line("To allow it, type "+word+" and press Enter:", pal.Fg)
+	field := fieldTail(printableRunes(st.typed), max(width-4, 1))
+	body = append(body, overlay.Fill(
+		overlay.Style(bg).Render(" ")+
+			overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil())+
+			overlay.Style(bg).Foreground(pal.Fg).Render(field)+
+			overlay.Cursor(" ", bg, pal.Fg), width, bg))
+	note, ink := "Not now leaves it off. You can answer later with tuios plugins approve.", pal.FgMute
+	switch {
+	case st.busy:
+		note = "Sending your answer..."
+	case st.err != "":
+		note, ink = st.err, pal.Warn
+	case len(st.asks) > 1:
+		note = fmt.Sprintf("%d plugins wait for your answer.", len(st.asks))
+	}
+	for _, wrapped := range wrapPlain(note, inner) {
+		line(wrapped, ink)
+	}
+	body = append(body, overlay.Fill(overlay.Style(bg).Render(" ")+overlay.DashRule(max(width-2, 0), bg, pal), width, bg))
+	top := len(body)
+	for i := range pluginApprovalRows {
+		body = append(body, m.pluginApprovalRow(i, width, pal))
+	}
+	hints := []overlay.Hint{{Key: overlay.EnterKey(), Label: "choose"}, {Key: "esc", Label: "not now"}}
+	content, geo := overlay.Dialog{Title: "plugin approval", Width: width, Body: strings.Join(body, "\n"), Hints: hints}.Render(pal)
+	var hits []overlayRowHit
+	for i := range pluginApprovalRows {
+		y := geo.BodyY + top + i
+		hits = append(hits, overlayRowHit{Rect: overlay.Rect{X0: 0, Y0: y, X1: geo.Width, Y1: y + 1}, Idx: i})
+	}
+	return content, geo, hits
+}
+
+// pluginAskLines are the lines about a plugin that the approval dialog and a
+// plugin change's dialog (upgrade_confirm.go) both show: its id and version,
+// where it comes from, what runs on its own and its grants.
+func pluginAskLines(a *session.PluginApprovalAsk, inner int, pal overlay.Palette, line func(string, color.Color)) {
 	line(a.ID+" "+herdrplugin.ShownName(a.Version), pal.FgDim)
 	from, src := "from ", a.Source
 	if p, ok := strings.CutPrefix(src, "folder "); ok {
@@ -344,40 +385,6 @@ func (m *OS) renderPluginApproval() (string, overlay.Geometry, []overlayRowHit) 
 		}
 	}
 	line("Grants are not a sandbox. It can read your files.", pal.FgDim)
-	line("", pal.FgDim)
-	word := pluginApprovalWord(a)
-	line("To allow it, type "+word+" and press Enter:", pal.Fg)
-	field := fieldTail(printableRunes(st.typed), max(width-4, 1))
-	body = append(body, overlay.Fill(
-		overlay.Style(bg).Render(" ")+
-			overlay.Style(bg).Foreground(pal.AccentBright).Bold(true).Render(overlay.Sigil())+
-			overlay.Style(bg).Foreground(pal.Fg).Render(field)+
-			overlay.Cursor(" ", bg, pal.Fg), width, bg))
-	note, ink := "Not now leaves it off. You can answer later with tuios plugins approve.", pal.FgMute
-	switch {
-	case st.busy:
-		note = "Sending your answer..."
-	case st.err != "":
-		note, ink = st.err, pal.Warn
-	case len(st.asks) > 1:
-		note = fmt.Sprintf("%d plugins wait for your answer.", len(st.asks))
-	}
-	for _, wrapped := range wrapPlain(note, inner) {
-		line(wrapped, ink)
-	}
-	body = append(body, overlay.Fill(overlay.Style(bg).Render(" ")+overlay.DashRule(max(width-2, 0), bg, pal), width, bg))
-	top := len(body)
-	for i := range pluginApprovalRows {
-		body = append(body, m.pluginApprovalRow(i, width, pal))
-	}
-	hints := []overlay.Hint{{Key: overlay.EnterKey(), Label: "choose"}, {Key: "esc", Label: "not now"}}
-	content, geo := overlay.Dialog{Title: "plugin approval", Width: width, Body: strings.Join(body, "\n"), Hints: hints}.Render(pal)
-	var hits []overlayRowHit
-	for i := range pluginApprovalRows {
-		y := geo.BodyY + top + i
-		hits = append(hits, overlayRowHit{Rect: overlay.Rect{X0: 0, Y0: y, X1: geo.Width, Y1: y + 1}, Idx: i})
-	}
-	return content, geo, hits
 }
 
 // pluginApprovalRow draws one answer. The cursor row is on the Surface

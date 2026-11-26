@@ -478,6 +478,10 @@ type AttachPayload struct {
 	// client counts as one that could answer a pane's upgrade. A client that
 	// predates it sends none, and does not count. See upgrade_confirm.go.
 	UpgradeDialog bool `json:"upgrade_dialog,omitzero"`
+	// PluginDialog says the client shows a plugin change's dialog, asked for
+	// from a pane, in the same way (plugin_confirm.go). A client that
+	// predates it sends none, and does not count.
+	PluginDialog bool `json:"plugin_dialog,omitzero"`
 	// Passive displays and accepts input for a pane but does not implement
 	// renderer commands (for example a session shown in a sidebar rail).
 	// Command routing skips it; its viewport does not size the shared session.
