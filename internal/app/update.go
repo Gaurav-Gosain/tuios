@@ -2916,11 +2916,30 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, nil
 
 	case ReviewDiffMsg:
-		m.applyReviewDiff(msg)
-		if msg.Err == nil && msg.Gen == m.review.gen && m.review.open {
-			return m, m.reviewIndexCmd()
+		if msg.Live && msg.Gen == m.review.gen && m.review.editor != nil {
+			// A note is being typed: its rows stay as they are, and the
+			// read runs again once it is saved or dropped.
+			m.review.live.reading = false
+			return m, m.reviewLiveRead()
 		}
-		return m, nil
+		m.applyReviewDiff(msg)
+		var done tea.Cmd
+		if msg.Live && msg.Gen == m.review.gen {
+			done = m.reviewLiveDone()
+		}
+		if msg.Err == nil && msg.Gen == m.review.gen && m.review.open {
+			return m, tea.Batch(m.reviewIndexCmd(), m.reviewLiveSync(), done)
+		}
+		return m, done
+
+	case ReviewLiveReadyMsg:
+		return m, m.applyReviewLiveReady(msg)
+
+	case ReviewLiveChangedMsg:
+		return m, m.applyReviewLiveChanged(msg)
+
+	case reviewLiveGoMsg:
+		return m, m.applyReviewLiveGo(msg)
 
 	case ReviewIndexMsg:
 		m.applyReviewIndex(msg)

@@ -37,13 +37,10 @@ const (
 )
 
 // IndexTree writes the index of the worktree at dir as a tree and returns its
-// hash. An index with a conflict cannot be written, and is an error.
+// hash. An index with a conflict cannot be written, and is an error. The
+// repository's index file is not changed (worktree.IndexTree).
 func IndexTree(ctx context.Context, dir string) (string, error) {
-	out, err := git(ctx, dir, nil, "write-tree")
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(out), nil
+	return worktree.IndexTree(ctx, dir)
 }
 
 // HasHead reports whether the repository at dir has a commit.

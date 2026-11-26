@@ -1448,6 +1448,8 @@ type OS struct {
 	// host's daemon, so a read or a note is one round trip over the link, not
 	// a new stream. CloseReview closes it.
 	reviewFar tmlFar
+	// reviewLive is the live review's watch on the disk. See review_live.go.
+	reviewLive reviewLive
 	// OverlayLeader is a leader pressed while an overlay owned the keyboard,
 	// held for one key to see whether it starts the screenshot chord. Nil when
 	// nothing is held. See routeOverlayScreenshot in internal/input.

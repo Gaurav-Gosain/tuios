@@ -25,7 +25,24 @@ type Watcher struct {
 // fires when an entry is added, removed or renamed, and not when a file in it
 // is written to, which is exactly the set the listing cares about.
 func Watch(dir string, notify func()) (*Watcher, error) {
-	dfd, err := unix.Open(dir, openMode|unix.O_CLOEXEC|unix.O_DIRECTORY, 0)
+	return watchVnode(dir, unix.O_DIRECTORY, unix.NOTE_WRITE|unix.NOTE_DELETE|unix.NOTE_RENAME, notify)
+}
+
+// fileByDir is false: a directory's vnode does not fire when a file in it is
+// written, so a content set watches each file it is given.
+const fileByDir = false
+
+// watchContentDir is Watch: the files written in dir are watched one by one.
+func watchContentDir(dir string, notify func()) (*Watcher, error) { return Watch(dir, notify) }
+
+// watchFile watches one file for writes, and for its removal or rename.
+func watchFile(path string, notify func()) (*Watcher, error) {
+	return watchVnode(path, 0, unix.NOTE_WRITE|unix.NOTE_EXTEND|unix.NOTE_ATTRIB|unix.NOTE_DELETE|unix.NOTE_RENAME, notify)
+}
+
+// watchVnode watches the vnode at path, opened with flags, for fflags.
+func watchVnode(path string, flags int, fflags uint32, notify func()) (*Watcher, error) {
+	dfd, err := unix.Open(path, openMode|unix.O_CLOEXEC|flags, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +63,7 @@ func Watch(dir string, notify func()) (*Watcher, error) {
 
 	changes := make([]unix.Kevent_t, 2)
 	unix.SetKevent(&changes[0], dfd, unix.EVFILT_VNODE, unix.EV_ADD|unix.EV_ENABLE|unix.EV_CLEAR)
-	changes[0].Fflags = unix.NOTE_WRITE | unix.NOTE_DELETE | unix.NOTE_RENAME
+	changes[0].Fflags = fflags
 	// The pipe is how Close wakes a goroutine parked in kevent, which closing
 	// the kqueue does not reliably do.
 	unix.SetKevent(&changes[1], wake[0], unix.EVFILT_READ, unix.EV_ADD|unix.EV_ENABLE)

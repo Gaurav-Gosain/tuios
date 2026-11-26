@@ -5375,6 +5375,15 @@ from a note has its control characters left out. The keys are listed in
 dock, so the dock's newest message since it opened (a note refused, notes
 queued, an attempt kept) is shown above its keys as well.
 
+The review is live while it is open, and the header says `● live`. When a
+file in the diff changes on disk, or a file is added next to one, or the
+repository's index or HEAD changes, the review reads the diff again. An
+agent's edit, your editor, a formatter and a commit all show up without a
+key. A read keeps the line under the cursor at the same place on the screen,
+and it waits while you type a note. Nothing is watched while the review is
+closed. Where the system cannot watch files, the header says `○ not live`,
+and `r` reads the diff again.
+
 You can use the review with the mouse only:
 
 - Click a file in the list to show its diff.

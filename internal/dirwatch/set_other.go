@@ -2,12 +2,17 @@
 
 package dirwatch
 
-import "sync"
+import (
+	"path/filepath"
+	"sync"
+)
 
 // Set watches several directories. On this platform it holds one Watcher per
 // directory; see the Linux version for why that one shares an instance.
 type Set struct {
 	notify func(dir string)
+	// content says the set also reports files written (NewContentSet).
+	content bool
 
 	mu     sync.Mutex
 	byDir  map[string]*Watcher
@@ -20,6 +25,37 @@ func NewSet(notify func(dir string)) (*Set, error) {
 	return &Set{notify: notify, byDir: map[string]*Watcher{}}, nil
 }
 
+// NewContentSet is NewSet for a caller that also needs to know when a file
+// is written. A directory's watch reports its entries, and the writes in it
+// where the platform's directory watch can (Windows). AddFile watches one
+// file for writes where it cannot (kqueue), and reports it as a change of its
+// directory.
+func NewContentSet(notify func(dir string)) (*Set, error) {
+	return &Set{notify: notify, content: true, byDir: map[string]*Watcher{}}, nil
+}
+
+// AddFile starts watching the file at path for writes, in a content set.
+func (s *Set) AddFile(path string) error {
+	if fileByDir {
+		return s.Add(filepath.Dir(path))
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return ErrUnsupported
+	}
+	if _, ok := s.byDir[path]; ok {
+		return nil
+	}
+	dir := filepath.Dir(path)
+	w, err := watchFile(path, func() { s.notify(dir) })
+	if err != nil {
+		return err
+	}
+	s.byDir[path] = w
+	return nil
+}
+
 // Add starts watching dir. Adding a directory already in the set does nothing.
 func (s *Set) Add(dir string) error {
 	s.mu.Lock()
@@ -30,7 +66,11 @@ func (s *Set) Add(dir string) error {
 	if _, ok := s.byDir[dir]; ok {
 		return nil
 	}
-	w, err := Watch(dir, func() { s.notify(dir) })
+	watch := Watch
+	if s.content {
+		watch = watchContentDir
+	}
+	w, err := watch(dir, func() { s.notify(dir) })
 	if err != nil {
 		return err
 	}

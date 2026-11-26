@@ -3,6 +3,7 @@ package dirwatch
 import (
 	"encoding/binary"
 	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 
@@ -27,6 +28,9 @@ type Set struct {
 	fd     int
 	done   chan struct{}
 	notify func(dir string)
+	// mask is what a directory's watch reports: its entries, and for a
+	// content set the files written in it too.
+	mask uint32
 
 	mu     sync.Mutex
 	byWD   map[int32]string
@@ -42,6 +46,21 @@ const selfGone = unix.IN_DELETE_SELF | unix.IN_MOVE_SELF | unix.IN_IGNORED
 // NewSet starts an empty set. notify runs on the set's own goroutine with the
 // directory whose entries changed, and must not block.
 func NewSet(notify func(dir string)) (*Set, error) {
+	return newSet(notify, entryMask)
+}
+
+// NewContentSet is NewSet for a caller that also needs to know when a file
+// is written: a file in a watched directory closed after a write is reported
+// as a change of that directory. AddFile watches one file, which here is its
+// directory.
+func NewContentSet(notify func(dir string)) (*Set, error) {
+	return newSet(notify, entryMask|unix.IN_CLOSE_WRITE)
+}
+
+// AddFile starts watching the file at path for writes, in a content set.
+func (s *Set) AddFile(path string) error { return s.Add(filepath.Dir(path)) }
+
+func newSet(notify func(dir string), mask uint32) (*Set, error) {
 	fd, err := unix.InotifyInit1(unix.IN_CLOEXEC | unix.IN_NONBLOCK)
 	if err != nil {
 		return nil, err
@@ -51,6 +70,7 @@ func NewSet(notify func(dir string)) (*Set, error) {
 		fd:     fd,
 		done:   make(chan struct{}),
 		notify: notify,
+		mask:   mask,
 		byWD:   map[int32]string{},
 		byID:   map[string]int32{},
 	}
@@ -68,7 +88,7 @@ func (s *Set) Add(dir string) error {
 	if _, ok := s.byID[dir]; ok {
 		return nil
 	}
-	wd, err := unix.InotifyAddWatch(s.fd, dir, entryMask)
+	wd, err := unix.InotifyAddWatch(s.fd, dir, s.mask)
 	if err != nil {
 		return err
 	}

@@ -747,6 +747,12 @@ func (m *OS) reviewHeader(pal overlay.Palette) []reviewSeg {
 	if r.loading && overlay.ShowLoading(r.loadingSince, time.Now()) {
 		dim("reading")
 	}
+	switch {
+	case r.live.on:
+		segs = append(segs, reviewSeg{pal.Success, "  " + reviewLiveDot(true) + " live", true})
+	case r.live.off || d.Against != "":
+		dim(reviewLiveDot(false) + " not live")
+	}
 	return segs
 }
 

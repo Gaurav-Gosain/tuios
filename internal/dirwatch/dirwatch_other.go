@@ -10,3 +10,10 @@ func Watch(string, func()) (*Watcher, error) { return nil, ErrUnsupported }
 
 // Close does nothing.
 func (*Watcher) Close() {}
+
+// fileByDir is true: there is no watch here at all.
+const fileByDir = true
+
+func watchContentDir(string, func()) (*Watcher, error) { return nil, ErrUnsupported }
+
+func watchFile(string, func()) (*Watcher, error) { return nil, ErrUnsupported }

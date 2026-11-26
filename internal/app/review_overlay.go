@@ -188,7 +188,9 @@ type reviewState struct {
 	// pending is set while the first diff of a review is being read. The
 	// overlay is not shown yet.
 	pending bool
-	open    bool
+	// live is the live review's watch and reads. See review_live.go.
+	live reviewLiveState
+	open bool
 	// loading is set while a diff is read again inside an open overlay, and
 	// loadingSince is when that read went out: the header says "reading"
 	// only once it has run past overlay.LoadingDelay.
@@ -318,6 +320,9 @@ func (m *OS) reviewOpensUncommitted() bool {
 
 // ReviewDiffMsg is a review-diff answer.
 type ReviewDiffMsg struct {
+	// Live marks a read the live review made: it keeps the place, and says
+	// nothing while it runs. See review_live.go.
+	Live  bool
 	Gen   uint64
 	Query reviewQuery
 	Diff  *reviewDiffResult
@@ -432,7 +437,8 @@ func (m *OS) openLearnReview(w *terminal.Window, who string) tea.Cmd {
 	if r.pending {
 		return nil
 	}
-	*r = reviewState{gen: r.gen + 1, pending: true, who: who, openedAt: time.Now(), split: r.split}
+	m.reviewLiveStop()
+	*r = reviewState{gen: r.gen + 1, pending: true, who: who, openedAt: time.Now(), split: r.split, listWidth: r.listWidth}
 	r.query = reviewQuery{Session: m.SessionName, Window: w.ID, Dir: m.paneDir(w), Uncommitted: m.reviewOpensUncommitted()}
 	return m.reviewLoadCmd(r.query, true)
 }
@@ -515,7 +521,8 @@ func (m *OS) openReview(sessionName, windowID, who string) tea.Cmd {
 	if r.pending {
 		return nil
 	}
-	*r = reviewState{gen: r.gen + 1, pending: true, who: who, openedAt: time.Now(), split: r.split}
+	m.reviewLiveStop()
+	*r = reviewState{gen: r.gen + 1, pending: true, who: who, openedAt: time.Now(), split: r.split, listWidth: r.listWidth}
 	r.query = reviewQuery{Session: sessionName, Window: windowID, Uncommitted: m.reviewOpensUncommitted()}
 	return m.reviewLoadCmd(r.query, true)
 }
@@ -533,7 +540,8 @@ func (m *OS) reviewCaller() inboxVerbCall {
 // CloseReview closes the overlay and forgets what it read.
 func (m *OS) CloseReview() {
 	m.reviewFar.drop()
-	m.review = reviewState{gen: m.review.gen + 1, split: m.review.split}
+	m.reviewLiveStop()
+	m.review = reviewState{gen: m.review.gen + 1, split: m.review.split, listWidth: m.review.listWidth}
 }
 
 // reviewLoadCmd reads a diff, and with probeFan also whether the pane is in a
@@ -617,7 +625,7 @@ func (m *OS) applyReviewDiff(msg ReviewDiffMsg) {
 		r.pending = false
 		text := reviewErrorText(msg.Err)
 		if first {
-			m.review = reviewState{gen: r.gen, split: r.split}
+			m.review = reviewState{gen: r.gen, split: r.split, listWidth: r.listWidth}
 		} else if r.diff == nil {
 			r.loadErr = text
 		}
@@ -625,8 +633,13 @@ func (m *OS) applyReviewDiff(msg ReviewDiffMsg) {
 		return
 	}
 	// The same review read again keeps its place and its focus, even with no
-	// file to keep the place in.
+	// file to keep the place in. A live read keeps the row under the cursor
+	// where it is on screen.
 	samePlace := !first && r.diff != nil && r.query == msg.Query
+	var anchor reviewLiveAnchor
+	if samePlace && msg.Live {
+		anchor = m.reviewLiveMark()
+	}
 	prevPath := ""
 	if e := r.currentFile(); samePlace && e != nil {
 		prevPath = e.path
@@ -646,6 +659,7 @@ func (m *OS) applyReviewDiff(msg ReviewDiffMsg) {
 	r.rebuildFiles()
 	if samePlace {
 		r.file = max(slices.IndexFunc(r.files, func(e reviewFileEntry) bool { return e.path == prevPath }), 0)
+		m.reviewLiveKeep(anchor)
 	} else {
 		// A review with no files opens on the diff, which says why.
 		r.resetPlace(m.reviewOpensOnFiles() && len(r.files) > 0)

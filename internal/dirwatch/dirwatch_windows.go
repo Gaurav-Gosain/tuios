@@ -21,6 +21,21 @@ type Watcher struct {
 // Watch starts watching dir. notify runs on the watcher's own goroutine each
 // time an entry of dir is created, removed or renamed, and must not block.
 func Watch(dir string, notify func()) (*Watcher, error) {
+	return watchDir(dir, false, notify)
+}
+
+// fileByDir is true: the directory's watch sees the writes to its files.
+const fileByDir = true
+
+// watchContentDir is Watch that also reports a file in dir written.
+func watchContentDir(dir string, notify func()) (*Watcher, error) {
+	return watchDir(dir, true, notify)
+}
+
+// watchFile is not used here: AddFile watches the file's directory.
+func watchFile(string, func()) (*Watcher, error) { return nil, ErrUnsupported }
+
+func watchDir(dir string, writes bool, notify func()) (*Watcher, error) {
 	fw, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
@@ -38,7 +53,7 @@ func Watch(dir string, notify func()) (*Watcher, error) {
 				if !ok {
 					return
 				}
-				if ev.Has(fsnotify.Create) || ev.Has(fsnotify.Remove) || ev.Has(fsnotify.Rename) {
+				if ev.Has(fsnotify.Create) || ev.Has(fsnotify.Remove) || ev.Has(fsnotify.Rename) || writes && ev.Has(fsnotify.Write) {
 					notify()
 				}
 			case _, ok := <-fw.Errors:

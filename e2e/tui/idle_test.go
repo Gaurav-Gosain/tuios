@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 	"github.com/Gaurav-Gosain/tuitest"
 )
 
@@ -198,6 +199,30 @@ func TestIdleCostStaysLow(t *testing.T) {
 			ctxsw: 2000,
 		}, watchedAgentSpinning, nil)
 	})
+	t.Run("live review", func(t *testing.T) {
+		// An open review watches the disk and reads nothing until a file it
+		// shows changes. Still, it costs what a still client costs.
+		var repo string
+		runIdleWindowOpts(t, "[startup]\ndaemon = true\n", startOpts{daemonDefault: true}, idleBudget{
+			wire:   idleWireBudget,
+			ctxsw:  idleRuntimeSwitches,
+			traced: true,
+		}, func(t *testing.T, term *tuitest.Terminal, base string) {
+			repo = liveReviewOpen(t, term, base)
+		}, func(t *testing.T, term *tuitest.Terminal, _ *wireRecorder) {
+			if err := os.WriteFile(filepath.Join(repo, "README"), []byte("hello\nIDLE-LIVE-EDIT\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := term.WaitForText("IDLE-LIVE-EDIT", uiTimeout); err != nil {
+				t.Fatalf("the open review never showed a write after the idle window: %v\n%s", err, term.Snapshot())
+			}
+			// The review takes every key, the harness's leader d included.
+			sendKeys(t, term, tuitest.Esc)
+			if err := term.WaitFor(func(s tuitest.Screen) bool { return !screenHas(s, "IDLE-LIVE-EDIT") }, uiTimeout); err != nil {
+				t.Fatalf("esc never closed the review: %v\n%s", err, term.Snapshot())
+			}
+		})
+	})
 	t.Run("git section", func(t *testing.T) {
 		// The rail's git section reads the focused pane's repository again
 		// only when its git folders change, or a pane prints. It used to read
@@ -226,6 +251,26 @@ position = "left"
 width = 28
 sections = "sessions,git"
 `
+
+// liveReviewOpen puts the focused pane in a repository with one changed
+// file, opens the review on it, and waits for it to say it is live. It
+// returns the repository's path.
+func liveReviewOpen(t *testing.T, term *tuitest.Terminal, _ string) string {
+	t.Helper()
+	dir := testutil.GitRepo(t)
+	if err := os.WriteFile(filepath.Join(dir, "README"), []byte("hello\nIDLE-LIVE-FIRST\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	enterTerminalMode(t, term)
+	runInShell(t, term, "cd "+dir+` && printf '%s\n' mar""ked`, "marked", uiTimeout)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "v"); err != nil {
+		t.Fatalf("open the review: %v", err)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return screenHas(s, "IDLE-LIVE-FIRST", "live") }, uiTimeout); err != nil {
+		t.Fatalf("the review never opened live: %v\n%s", err, term.Snapshot())
+	}
+	return dir
+}
 
 // gitRepoPane puts the focused pane in a new repository, waits for the
 // rail's git section to show it, and returns the repository's path.

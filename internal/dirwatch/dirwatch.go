@@ -8,7 +8,9 @@
 // to say when the folder changes and the watcher sleeps until it does.
 //
 // It watches the directory and nothing under it, and only for changes to its
-// entries. A write into a file in the folder is not a change to the folder's
+// entries. NewContentSet is the one exception: the live review needs to know
+// when a file it shows is written, and asks for that on the few folders and
+// files it shows, only while it is open. A write into a file in the folder is not a change to the folder's
 // listing, and a log being appended to beside the shell must not wake the
 // client on every line. That is why this is not fsnotify on Linux and the
 // BSDs: fsnotify's inotify mask includes writes, and its kqueue backend opens
