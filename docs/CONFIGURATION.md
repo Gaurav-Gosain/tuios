@@ -2562,6 +2562,11 @@ and the pane that has focus:
 row_style = "pill"
 ```
 
+When the layout has no terminals section, or the focused pane's terminals
+row is out of view, the agents row of that pane carries the mark instead,
+and `underline` and `pill` mark only its name: the prefix (`session/`,
+`harness/`) and the tokens after the name keep their own styles.
+
 A row that waits for a person keeps its attention mark in the gutter. The
 marker glyph is the `marker` role of the glyph set (see [GLYPHS.md](GLYPHS.md)).
 The option is on the settings page, in the Sidebar section.

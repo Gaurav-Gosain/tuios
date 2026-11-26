@@ -452,8 +452,8 @@ func railFocusTint(tint color.Color, pal overlay.Palette) color.Color {
 //
 // appearance.sidebar.row_style picks the current mark: the marker glyph, or
 // the bar. underline and pill mark the name instead, but only on the rows that
-// draw the name for it (the session and terminal rows, see railCurrentName and
-// sidebarGutterNameMarked). Every other caller still needs a mark here, or a
+// draw the name for it (the session, terminal and focus-marked agent rows, see
+// railCurrentName and sidebarGutterNameMarked). Every other caller still needs a mark here, or a
 // focused pane on a compact rail and a folded machine header would show none.
 func sidebarGutterTinted(current bool, state string, tint, bg color.Color, pal overlay.Palette, s *config.Settings) string {
 	switch {
@@ -3783,10 +3783,14 @@ func sidebarNoteSentence(name string) bool {
 // only ever had room for one name.
 //
 // It also returns how many columns the name and the tokens around it take, from
-// sidebarNameCol, which is the span the working shimmer sweeps.
+// sidebarNameCol, which is the span the working shimmer sweeps. A pill-marked
+// name returns 0: the shimmer carries the ink toward the accent, the pill's own
+// fill, and would wash the name out.
 //
-// focusMark puts the focus mark in the row's gutter. The caller sets it on the
-// focused pane's row when no terminals row on the rail marks that pane.
+// focusMark puts the focus mark on the row. The caller sets it on the focused
+// pane's row when no terminals row on the rail marks that pane. It goes in the
+// gutter, or on the name for the underline and pill row styles, as on the
+// session and terminal rows.
 func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.Palette, st sidebarRowState, tall, focusMark bool) (string, int) {
 	var rowBg color.Color
 	fg := pal.FgDim
@@ -3858,11 +3862,16 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	nameW := lipgloss.Width(name)
 	// The mark is the row's own reason for never reaching the Inbox, so it comes
 	// off the budget before the tokens do.
+	nameMarked, capsW := railNameMarked(&m.Settings)
+	nameMarked = nameMarked && focusMark && name != ""
+	if !nameMarked {
+		capsW = 0
+	}
 	quietMark := ""
 	if e.Quiet {
-		quietMark = sidebarQuietMark(sidebarNameAvailIn(cw, 0, nest), nameW, sep)
+		quietMark = sidebarQuietMark(sidebarNameAvailIn(cw, 0, nest)-capsW, nameW, sep)
 	}
-	label, keep, nameRoom := sidebarAgentFit(&m.railFit, plan.Prefix, plan.After, nameW, label, queued, mail, sep, sidebarNameAvailIn(cw, 0, nest)-lipgloss.Width(quietMark))
+	label, keep, nameRoom := sidebarAgentFit(&m.railFit, plan.Prefix, plan.After, nameW, label, queued, mail, sep, sidebarNameAvailIn(cw, 0, nest)-lipgloss.Width(quietMark)-capsW)
 	labelAt, mailAt := len(plan.Prefix)+len(plan.After), len(plan.Prefix)+len(plan.After)+1
 	nameRoom = max(nameRoom, 1)
 	shown := m.sidebarAgentPrefixRun(plan.Prefix, keep[:len(plan.Prefix)], quiet, pal)
@@ -3907,12 +3916,21 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	// When no terminals row marks the focused pane, this row carries the mark
 	// the terminals row would have. The state glyph and the bold name still
 	// say that the pane wants a human.
+	focusTint := m.sessionTint(e.SessionID, m.rowGround(rowBg))
 	if focusMark {
-		gutter = sidebarGutterTinted(true, e.State, m.sessionTint(e.SessionID, m.rowGround(rowBg)), rowBg, pal, &m.Settings)
+		gutter = sidebarGutterTinted(true, e.State, focusTint, rowBg, pal, &m.Settings)
 	}
-	body := shown +
-		m.sidebarTokenStyle(nameStyle, plan.Name, pal).Render(m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name, nameRoom, st.Cursor)) +
-		quiet.Render(quietMark) + after
+	nameText := m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name, nameRoom, st.Cursor)
+	nameCell := m.sidebarTokenStyle(nameStyle, plan.Name, pal).Render(nameText)
+	if nameMarked {
+		nameCell = railCurrentName(nameText, focusTint, rowBg, pal, &m.Settings)
+		gutter = sidebarGutterNameMarked(e.State, rowBg, pal, &m.Settings)
+	}
+	body := shown + nameCell + quiet.Render(quietMark) + after
+	bodyW := lipgloss.Width(body)
+	if nameMarked && m.Settings.GetRailRowStyle() == config.RailRowPill {
+		bodyW = 0
+	}
 	return sidebarComposeGroupRow(nest, gutter,
-		sidebarGlyph(e.State, e.DoneSeen, e.Subagents, rowBg, pal, &m.Settings), body, right, cw, rowBg), lipgloss.Width(body)
+		sidebarGlyph(e.State, e.DoneSeen, e.Subagents, rowBg, pal, &m.Settings), body, right, cw, rowBg), bodyW
 }
