@@ -492,26 +492,17 @@ func TestCockpitAllowIsAskThenEnter(t *testing.T) {
 	tr.update(CommandMsg{Name: "mode", Args: []string{"window"}})
 	tr.press(key("ctrl+b"), key("i"))
 	tr.waitFor("agents.select", func(e Event) bool { return data(e, "harness") == "claude-code" })
-	// An answer key is refused until the prompt has been drawn long enough to
-	// read, so draw frames and press a until it asks.
+	// The held approval reaches the view on its own message, after the agent
+	// event, and a does nothing on the row until it is there. Then a is
+	// refused until the prompt has been drawn long enough to read. So draw
+	// frames and press a until the ask is open.
 	deadline := time.Now().Add(10 * time.Second)
 	asked := false
 	for !asked && time.Now().Before(deadline) {
 		tr.pump()
 		tr.m.View()
-		tr.mu.Lock()
-		before := len(tr.ev)
-		tr.mu.Unlock()
 		tr.press(key("a"))
-		tr.mu.Lock()
-		refused := false
-		for _, e := range tr.ev[before:] {
-			if msg := strings.ToLower(str(data(e, "message"))); e.Type == "notification" && (strings.Contains(msg, "not answered") || strings.Contains(msg, "just changed")) {
-				refused = true
-			}
-		}
-		tr.mu.Unlock()
-		asked = !refused
+		asked = tr.m.OS.InboxConfirmOpen()
 		if !asked {
 			time.Sleep(50 * time.Millisecond)
 		}
@@ -531,4 +522,3 @@ func TestCockpitAllowIsAskThenEnter(t *testing.T) {
 	tr.waitFor("agent", func(e Event) bool { return data(e, "harness") == "claude-code" && data(e, "to") == "working" })
 }
 
-func str(v any) string { s, _ := v.(string); return s }
