@@ -91,20 +91,29 @@ func TestOwnerForgetsAnEmptiedGroup(t *testing.T) {
 		}
 	}
 
-	if err := os.WriteFile("/proc/sys/kernel/ns_last_pid", []byte(strconv.Itoa(sid-1)), 0o644); err != nil {
-		t.Skipf("cannot choose the next pid: %v", err)
+	// Another fork can take pid S between the write and the stranger's
+	// fork, so the test tries a few times before it gives up.
+	var child int
+	for try := 0; ; try++ {
+		if err := os.WriteFile("/proc/sys/kernel/ns_last_pid", []byte(strconv.Itoa(sid-1)), 0o644); err != nil {
+			t.Skipf("cannot choose the next pid: %v", err)
+		}
+		stranger := exec.Command("sh", "-c", "sleep 30 </dev/null >/dev/null 2>&1 & echo $!")
+		stranger.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		out, err := stranger.Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		child, _ = strconv.Atoi(strings.TrimSpace(string(out)))
+		if stranger.Process.Pid == sid {
+			break
+		}
+		_ = syscall.Kill(child, syscall.SIGKILL)
+		if try == 20 {
+			t.Skipf("the stranger got pid %d, not %d, in 20 tries", stranger.Process.Pid, sid)
+		}
 	}
-	stranger := exec.Command("sh", "-c", "sleep 30 </dev/null >/dev/null 2>&1 & echo $!")
-	stranger.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	out, err := stranger.Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	child, _ := strconv.Atoi(strings.TrimSpace(string(out)))
 	defer func() { _ = syscall.Kill(child, syscall.SIGKILL) }()
-	if stranger.Process.Pid != sid {
-		t.Skipf("the stranger got pid %d, not %d", stranger.Process.Pid, sid)
-	}
 	if got := r.Owner(sid); got != nil {
 		t.Errorf("a stranger's daemon (pid %d, session %d) is counted as plugin %s", child, sid, got.PluginID)
 	}
