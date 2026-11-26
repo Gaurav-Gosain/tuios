@@ -263,6 +263,10 @@ type quickLookState struct {
 	// for the top. See OpenQuickLookPath.
 	free     bool
 	wantLine int
+	// files says the Files view opened the preview beside its list: it
+	// follows the view's cursor and is drawn in the view's box. See
+	// files_view.go.
+	files bool
 	// box is the panel on the screen in the last frame, for the mouse.
 	box overlay.Rect
 	// pic is where the picture went in the last frame, and zoom the picture's
@@ -498,6 +502,7 @@ func (m *OS) dropQuickLook() {
 	ql.target = quickLookTarget{}
 	ql.borrowed = false
 	ql.free, ql.wantLine = false, 0
+	ql.files = false
 	ql.res = nil
 	ql.scroll = 0
 	ql.jump = quickLookNoMove
@@ -527,6 +532,9 @@ func (m *OS) QuickLookSync() tea.Cmd {
 	if !ql.open || ql.free {
 		return nil
 	}
+	if ql.files {
+		return m.quickLookFilesSync()
+	}
 	if !m.SidebarFocused || m.SidebarFocusOnSecondary() || !m.filesOn() {
 		m.dropQuickLook()
 		return nil
@@ -553,6 +561,9 @@ func (m *OS) QuickLookSync() tea.Cmd {
 // quickLookCursorTarget is the row under the rail's cursor, when it is a row
 // of the files section.
 func (m *OS) quickLookCursorTarget() (quickLookTarget, bool) {
+	if m.quickLook.files {
+		return m.filesLookTarget()
+	}
 	row, ok := m.sidebarCursorRow()
 	if !ok {
 		return quickLookTarget{}, false
@@ -884,6 +895,10 @@ func (m *OS) quickLookSize() (innerW, bodyH int) {
 	r := m.viewReserve()
 	usable := max(rh-r.Top-r.Bottom, 1)
 	ql := &m.quickLook
+	if b := m.explorer.lookBox; ql.files && !ql.full && b.w > 0 {
+		// Beside the Files view's list, in the box the view keeps for it.
+		return max(b.w-2, overlay.MinDialogWidth), max(b.h-2, 1)
+	}
 	switch {
 	case ql.full:
 		innerW = min(max(cw-4, 24), clear-4, rw-2)
@@ -1068,7 +1083,7 @@ func (m *OS) QuickLookWheel(x, y int, up bool) bool {
 func (m *OS) quickLookPlacement() (previewPlacement, bool) {
 	pic := m.quickLook.pic
 	if !m.quickLook.open || !pic.ok || pic.key.mode != composer.PreviewPixels ||
-		m.AnyOverlayOpen() || m.ContextMenu != nil {
+		m.quickLookCovered() || m.ContextMenu != nil {
 		return previewPlacement{}, false
 	}
 	return previewPlacement{key: pic.key, x: pic.x, y: pic.y, cols: pic.cols, rows: pic.rows, crop: pic.crop}, true
@@ -1078,7 +1093,7 @@ func (m *OS) quickLookPlacement() (previewPlacement, bool) {
 // pictures on the host, when nothing is open over the panel.
 func (m *OS) quickLookMDPlacements(want []previewPlacement) []previewPlacement {
 	ql := &m.quickLook
-	if !ql.open || len(ql.mdPics) == 0 || m.AnyOverlayOpen() || m.ContextMenu != nil {
+	if !ql.open || len(ql.mdPics) == 0 || m.quickLookCovered() || m.ContextMenu != nil {
 		return want
 	}
 	for _, pl := range ql.mdPics {
@@ -1171,6 +1186,9 @@ func (m *OS) renderQuickLook() (string, int, int) {
 		}
 	}
 	x, y := m.overlayOrigin(overlayKindQuickLook, geo)
+	if b := m.explorer.lookBox; ql.files && !ql.full && b.w > 0 {
+		x, y = b.x, b.y
+	}
 	ql.box = overlay.Rect{X0: x, Y0: y, X1: x + geo.Width, Y1: y + geo.Height}
 	ql.pic = quickLookPic{}
 	if pic.ok {

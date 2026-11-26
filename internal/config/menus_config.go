@@ -61,7 +61,7 @@ var shippedMenus = map[string]MenuSpec{
 		map[string]any{"action": "toggle_zoom", "key": "z", "label": "Make this pane full screen"},
 		map[string]any{"action": "close_window", "key": "x", "label": "Close this pane"},
 		MenuSeparator,
-		map[string]any{"action": "prefix_file_search", "key": "f", "label": "Find a file"},
+		map[string]any{"action": "prefix_file_search", "key": "f", "label": "Files"},
 		map[string]any{"action": "prefix_selection", "key": "c", "label": "Select and copy text"},
 		map[string]any{"action": "command_palette", "key": "a", "label": "All commands"},
 		MenuSeparator,

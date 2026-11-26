@@ -66,7 +66,7 @@ func (m *OS) OverlayMouseClick(x, y int, right bool) (bool, tea.Cmd) {
 	}
 
 	h, ok := m.overlayHitAt(x, y)
-	if !ok || h.Kind == "inbox" && m.inboxCovered() {
+	if !ok || h.Kind == "inbox" && m.inboxCovered() || h.Kind == overlayKindFiles && m.filesCovered() {
 		// Clicked outside every panel, or on the agents view outside the
 		// panel over it: dismiss the frontmost. The row under the pointer
 		// is not selected.
@@ -88,6 +88,13 @@ func (m *OS) OverlayMouseClick(x, y int, right bool) (bool, tea.Cmd) {
 		}
 		cmd, _ := m.CockpitClick(x, y)
 		return true, cmd
+	}
+	// The Files view fills the screen the same way. See files_view_mouse.go.
+	if h.Kind == overlayKindFiles {
+		if right {
+			return true, nil
+		}
+		return true, m.FilesClick(x, y)
 	}
 
 	// A click on the open draft of the panel places its cursor or selects.
@@ -181,6 +188,9 @@ func (m *OS) OverlayMouseMotion(x, y int) bool {
 		}
 		return true
 	}
+	if h.Kind == overlayKindFiles {
+		return true
+	}
 	lx, ly := x-h.OriginX, y-h.OriginY
 	if h.Kind == "accent" {
 		// Only a held button paints in the picker. Bare hover must not, or the
@@ -263,7 +273,7 @@ func (m *OS) OverlayMouseRelease() {
 // the topmost panel). Returns whether it was consumed.
 func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 	h, ok := m.overlayHitAt(x, y)
-	if !ok || h.Kind == "inbox" && m.inboxCovered() {
+	if !ok || h.Kind == "inbox" && m.inboxCovered() || h.Kind == overlayKindFiles && m.filesCovered() {
 		// Off every panel, or on the view under a panel: the wheel moves the
 		// panel on top.
 		h, ok = m.overlayHitByKind(m.topmostOverlayKind())
@@ -297,6 +307,8 @@ func (m *OS) OverlayMouseWheel(x, y int, up bool) bool {
 		m.AgentMailMove(wheelDelta(up))
 	case "inbox":
 		m.CockpitWheel(x, y, up)
+	case overlayKindFiles:
+		m.FilesWheel(up)
 	case overlayKindBuffers:
 		m.BufferChooserMove(wheelDelta(up))
 	case overlayKindTransfers:
@@ -552,6 +564,8 @@ func (m *OS) closeOverlay(kind string) {
 		m.CloseAgentMail()
 	case "inbox":
 		m.CloseInbox()
+	case overlayKindFiles:
+		m.CloseFilesView()
 	case overlayKindBuffers:
 		m.CloseBufferChooser()
 	case overlayKindTransfers:

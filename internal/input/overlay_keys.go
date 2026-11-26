@@ -195,6 +195,13 @@ func overlayKey(kind string, msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd, 
 			return o, nil, false
 		}
 		out, cmd = handleInboxInput(msg, o)
+	case "files":
+		// The leader and its chord are the prefix table's, as over the
+		// agents view.
+		if o.PrefixActive || isLeaderKey(msg, &o.Settings, o.HostBaseCode(msg)) {
+			return o, nil, false
+		}
+		out, cmd = handleFilesViewInput(msg, o)
 	case "navigator":
 		out, cmd = handleNavigatorInput(msg, o)
 	case "goto":

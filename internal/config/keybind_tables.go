@@ -39,6 +39,7 @@ const (
 	TableGlobal
 	TableScript
 	TableLists
+	TableFiles
 
 	tableCount
 )
@@ -87,4 +88,5 @@ var keybindTables = [tableCount]keybindTable{
 	TableGlobal:           {SectionGlobal, func(k *KeybindingsConfig) *map[string][]string { return &k.Global }},
 	TableScript:           {SectionScript, func(k *KeybindingsConfig) *map[string][]string { return &k.Script }},
 	TableLists:            {SectionLists, func(k *KeybindingsConfig) *map[string][]string { return &k.Lists }},
+	TableFiles:            {SectionFiles, func(k *KeybindingsConfig) *map[string][]string { return &k.Files }},
 }

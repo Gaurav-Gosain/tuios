@@ -365,6 +365,33 @@ Run `tuios keybinds list` to see the keys that your config sets.
 | `r` | `transfers_retry` | Copies: try a failed copy again |
 | `k`, `up` | `transfers_up` | Copies: previous copy |
 
+## Files
+
+| Keys | Action | Description |
+|---|---|---|
+| `G`, `end` | `files_bottom` | Files: last row |
+| `q` | `files_close` | Files: close the view |
+| `Y` | `files_copy_path` | Files: copy the path |
+| `j`, `down` | `files_down` | Files: next row |
+| `e` | `files_edit` | Files: edit the file in a new pane on its machine |
+| `f` | `files_fill` | Files: quick look fills the view, or gives the room back |
+| `/` | `files_filter` | Files: filter this folder as you type |
+| `ctrl+f` | `files_find` | Files: find a file below this folder |
+| `:` | `files_go_to` | Files: go to a folder on any machine |
+| `.` | `files_hidden` | Files: show or hide hidden files |
+| `~` | `files_home` | Files: go to the home folder |
+| `I` | `files_insert_path` | Files: type the path into the pane the view came from |
+| `l`, `enter`, `right` | `files_open` | Files: go into the folder, or show the file |
+| `o` | `files_open_system` | Files: open with the system |
+| `pgdown`, `ctrl+d` | `files_page_down` | Files: down a page |
+| `pgup`, `ctrl+u` | `files_page_up` | Files: up a page |
+| `h`, `backspace`, `left` | `files_parent` | Files: go to the folder above |
+| `space` | `files_quick_look` | Files: show or hide quick look beside the list |
+| `s` | `files_sort` | Files: sort by name, size or time |
+| `S` | `files_sort_reverse` | Files: reverse the sort |
+| `g`, `home` | `files_top` | Files: first row |
+| `k`, `up` | `files_up` | Files: previous row |
+
 ## Copy mode
 
 | Keys | Action | Description |
@@ -443,7 +470,7 @@ Run `tuios keybinds list` to see the keys that your config sets.
 | `ctrl+b d` | `prefix_detach` | Detach, leave running |
 | `ctrl+b esc` | `prefix_exit_mode` | Leave terminal mode |
 | `ctrl+b e` | `prefix_explore` | Focus/leave sidebar |
-| `ctrl+b f` | `prefix_file_search` | Search files below the focused pane's directory |
+| `ctrl+b f` | `prefix_file_search` | Open the Files view at the focused pane's folder |
 | `ctrl+b z` | `prefix_fullscreen` | Fullscreen current window |
 | `ctrl+b i` | `prefix_inbox` | Open the agents view |
 | `ctrl+b j` | `prefix_jump_notif` | Jump to newest message |

@@ -1468,6 +1468,9 @@ type OS struct {
 	fileSearchScanning  bool
 	fileSearchTruncated bool
 	fileSearchErr       string
+	// fileSearchView says the search was started from the Files view, so a
+	// result goes there. See openFileSearchAt.
+	fileSearchView bool
 	// paletteList is the palette's filter, cursor and window. Its window
 	// counts list rows, headings included. See list_picker.go.
 	paletteList listnav.State
@@ -1524,6 +1527,8 @@ type OS struct {
 	// quickLook is the rail's preview of the file under the files cursor.
 	// See quicklook.go.
 	quickLook quickLookState
+	// explorer is the Files view. See files_view.go.
+	explorer explorerState
 	// paths is what the disk said about the paths the pointer stopped on.
 	// See path_links.go.
 	paths pathCache

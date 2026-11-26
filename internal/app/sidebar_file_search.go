@@ -53,7 +53,15 @@ func (m *OS) OpenFileSearch(fromSidebar bool) tea.Cmd {
 		m.ShowNotification(fileSpoofRefusal, "warning", m.Settings.NotificationDuration)
 		return nil
 	}
+	return m.openFileSearchAt(root, origin, false)
+}
+
+// openFileSearchAt searches below root, read the way origin's folder is. A
+// result goes to the Files view when toView is set, and to the rail's files
+// section when it is not.
+func (m *OS) openFileSearchAt(root, origin string, toView bool) tea.Cmd {
 	client, host := m.DaemonClient, m.AttachedHost
+	m.fileSearchView = toView
 	m.fileSearch = true
 	m.fileSearchGen++
 	m.fileSearchScanning = true
@@ -61,6 +69,9 @@ func (m *OS) OpenFileSearch(fromSidebar bool) tea.Cmd {
 	m.fileSearchErr = ""
 	m.fileSearchCancel = new(atomic.Bool)
 	m.OpenCommandPalette()
+	// Over the Files view, opened in the same key, the palette goes on top.
+	m.reconcileOverlayZOrder()
+	m.raiseOverlay("palette")
 	gen := m.fileSearchGen
 	cancel := m.fileSearchCancel
 	return func() tea.Msg {
@@ -149,6 +160,9 @@ func (m *OS) handleFileSearch(msg fileSearchMsg) {
 		items = append(items, CommandPaletteItem{
 			Name: rel, Category: "Files",
 			Action: func(m *OS) (*OS, tea.Cmd) {
+				if m.fileSearchView && m.explorer.open {
+					return m, m.filesRead(filepath.Dir(path), filepath.Base(path))
+				}
 				m.EnterSidebarFocus()
 				m.filesView.Show = 1
 				cmd := m.requestFileList(filepath.Dir(path), msg.Origin, true)

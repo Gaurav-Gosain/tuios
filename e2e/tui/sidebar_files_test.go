@@ -296,8 +296,9 @@ func TestSidebarFileEditor(t *testing.T) {
 	}
 }
 
-// TestSidebarFileSearch follows a result into its parent folder and leaves the
-// result selected for the existing edit action.
+// TestSidebarFileSearch opens the file search with Ctrl+B f, which opens it
+// over the Files view. A result takes the view into its folder with the
+// cursor on it, ctrl+f searches again from the view, and e edits the result.
 func TestSidebarFileSearch(t *testing.T) {
 	for _, daemon := range []bool{false, true} {
 		t.Run(map[bool]string{false: "standalone", true: "daemon"}[daemon], func(t *testing.T) {
@@ -331,15 +332,15 @@ func TestSidebarFileSearch(t *testing.T) {
 				t.Fatal(err)
 			}
 			if err := term.WaitFor(func(s tuitest.Screen) bool {
-				return strings.Contains(s.Text(), "files") && strings.Contains(s.Text(), "needle.txt") && strings.Contains(s.Text(), "/alpha") && !strings.Contains(s.Text(), "Search files")
+				return strings.Contains(s.Text(), "this machine") && strings.Contains(s.Text(), "needle.txt") && strings.Contains(s.Text(), "alpha") && !strings.Contains(s.Text(), "Search files")
 			}, uiTimeout); err != nil {
-				t.Fatalf("selection did not navigate the sidebar: %v\n%s", err, term.Snapshot())
+				t.Fatalf("selection did not navigate the Files view: %v\n%s", err, term.Snapshot())
 			}
 			if err := term.SendKeys(tuitest.Ctrl('f')); err != nil {
 				t.Fatal(err)
 			}
 			if err := term.WaitForText("Search files", uiTimeout); err != nil {
-				t.Fatalf("sidebar shortcut did not open search: %v\n%s", err, term.Snapshot())
+				t.Fatalf("the view's find key did not open search: %v\n%s", err, term.Snapshot())
 			}
 			if err := term.SendKeys(tuitest.Esc); err != nil {
 				t.Fatal(err)
@@ -349,7 +350,8 @@ func TestSidebarFileSearch(t *testing.T) {
 			}, uiTimeout); err != nil {
 				t.Fatalf("file search did not close: %v\n%s", err, term.Snapshot())
 			}
-			if err := term.SendKeys("\x1b[13;2u"); err != nil {
+			// e edits the row under the view's cursor: the result.
+			if err := term.SendKeys("e"); err != nil {
 				t.Fatal(err)
 			}
 			if err := term.WaitForText("FOUND_FILE:needle.txt", uiTimeout); err != nil {
@@ -3674,9 +3676,12 @@ func TestRailFilesOpenOnDemand(t *testing.T) {
 	}
 	sectionsAre(layout, "the second click did not save the layout without files")
 
-	// File search reaches the section the same way.
+	// The rail's file search reaches the section the same way. Ctrl+B f is
+	// the Files view's, so the search starts from the rail: s focuses it in
+	// window mode, and ctrl+f is the rail's search.
 	enterTerminalMode(t, term)
-	if err := term.SendKeys(tuitest.Ctrl('b'), "f"); err != nil {
+	leaveTerminalMode(t, term)
+	if err := term.SendKeys("s", tuitest.Ctrl('f')); err != nil {
 		t.Fatal(err)
 	}
 	if err := term.WaitForText("Search files", uiTimeout); err != nil {

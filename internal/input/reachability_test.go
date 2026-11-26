@@ -164,6 +164,8 @@ func reachSections(t *testing.T) []bindingSection {
 		{name: "mail", binds: k.Mail, modes: bothModes, newOS: reachMailOS},
 		// The Copies panel owns the keyboard while it is up, in either mode.
 		{name: "transfers", binds: k.Transfers, modes: bothModes, newOS: reachTransfersOS},
+		// The Files view owns the keyboard while it is up, in either mode.
+		{name: "files", binds: k.Files, modes: bothModes, newOS: reachFilesViewOS},
 		// Copy mode owns the keyboard in either mode while a pane is in it.
 		{name: "copy_mode", binds: k.CopyMode, modes: bothModes, newOS: reachCopyModeOS},
 		// The review overlay owns the keyboard in either mode while it is open.
@@ -248,6 +250,17 @@ func reachTransfersOS(t *testing.T) *app.OS {
 	t.Helper()
 	o := reachOS(t)
 	o.OpenTransfers()
+	return o
+}
+
+// reachFilesViewOS is a client with the Files view open.
+func reachFilesViewOS(t *testing.T) *app.OS {
+	t.Helper()
+	o := reachOS(t)
+	o.OpenFilesView()
+	if !o.FilesViewOpen() {
+		t.Fatal("the Files view did not open")
+	}
 	return o
 }
 
@@ -891,7 +904,7 @@ func TestEveryDescribedActionIsHandled(t *testing.T) {
 	// below does not name it; runCopyModeAction runs it through its constant.
 	handled := map[string]bool{app.HoldModeAction: true, config.ActionCopyModeFirstNonBlank: true}
 	k := config.DefaultConfig().Keybindings
-	for _, section := range []map[string][]string{k.Inbox, k.InboxPeek, k.Mail, k.SidebarAgents, k.CopyMode, k.Transfers, k.Lists, k.Review} {
+	for _, section := range []map[string][]string{k.Inbox, k.InboxPeek, k.Mail, k.SidebarAgents, k.CopyMode, k.Transfers, k.Files, k.Lists, k.Review} {
 		for action := range section {
 			handled[action] = true
 		}

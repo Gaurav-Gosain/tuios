@@ -310,7 +310,7 @@ func menuSections(prefixType string, st MenuState) []menuSection {
 		// and a row more pushes it off the bottom.
 		sidebarRow,
 		row("prefix_explore", "Focus sidebar"),
-		row("prefix_file_search", "Search files"),
+		row("prefix_file_search", "Files"),
 		// Calm mode is a row of its own at the end of Modes. A key added to
 		// a shared row widens that row's key column, and the zoom row's
 		// description has to stay "Toggle zoom" for a rebind to read as one

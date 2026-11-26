@@ -38,7 +38,7 @@ func TestShortMenuKeepsItsOrder(t *testing.T) {
 		t.Fatalf("send leader t s: %v", err)
 	}
 	order := []string{"New terminal", "Split side by side", "Split top and bottom", "Make this pane full screen",
-		"Close this pane", "Find a file", "Select and copy text", "All commands", "Settings", "Help"}
+		"Close this pane", "Files", "Select and copy text", "All commands", "Settings", "Help"}
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return screenHas(s, order...) }, uiTimeout); err != nil {
 		t.Fatalf("the short menu never showed its rows: %v\n%s", err, term.Snapshot())
 	}

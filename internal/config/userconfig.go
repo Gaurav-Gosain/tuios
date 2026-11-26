@@ -1312,6 +1312,9 @@ type KeybindingsConfig struct {
 	// Transfers binds are live while the Copies panel is open: the copies
 	// between machines. See getDefaultTransfersKeybinds.
 	Transfers map[string][]string `toml:"transfers"`
+	// Files binds are live while the Files view is open and no line is being
+	// typed in it. See getDefaultFilesKeybinds.
+	Files map[string][]string `toml:"files"`
 	// CopyMode binds are live while a pane is in copy mode, in normal and
 	// visual selection. Copy mode's vim motions are fixed keys and are not
 	// here. See getDefaultCopyModeKeybinds.
@@ -1888,6 +1891,7 @@ func DefaultConfig() *UserConfig {
 			InboxPeek:       getDefaultInboxPeekKeybinds(),
 			Mail:            getDefaultMailKeybinds(),
 			Transfers:       getDefaultTransfersKeybinds(),
+			Files:           getDefaultFilesKeybinds(),
 			CopyMode:        getDefaultCopyModeKeybinds(),
 			Review:          getDefaultReviewKeybinds(),
 			GUI:             getDefaultGUIKeybinds(),
@@ -2261,6 +2265,64 @@ func getDefaultTransfersKeybinds() map[string][]string {
 		ActionTransfersClear:  {"c"},
 		ActionTransfersAnswer: {"enter"},
 		ActionTransfersClose:  {"esc", "q"},
+	}
+}
+
+// The actions of the Files view, named once so the input path, the key
+// hints and the defaults cannot drift apart.
+const (
+	ActionFilesDown        = "files_down"
+	ActionFilesUp          = "files_up"
+	ActionFilesPageDown    = "files_page_down"
+	ActionFilesPageUp      = "files_page_up"
+	ActionFilesTop         = "files_top"
+	ActionFilesBottom      = "files_bottom"
+	ActionFilesOpen        = "files_open"
+	ActionFilesParent      = "files_parent"
+	ActionFilesHome        = "files_home"
+	ActionFilesGoTo        = "files_go_to"
+	ActionFilesFind        = "files_find"
+	ActionFilesFilter      = "files_filter"
+	ActionFilesQuickLook   = "files_quick_look"
+	ActionFilesFill        = "files_fill"
+	ActionFilesHidden      = "files_hidden"
+	ActionFilesSort        = "files_sort"
+	ActionFilesSortReverse = "files_sort_reverse"
+	ActionFilesEdit        = "files_edit"
+	ActionFilesOpenSystem  = "files_open_system"
+	ActionFilesInsertPath  = "files_insert_path"
+	ActionFilesCopyPath    = "files_copy_path"
+	ActionFilesClose       = "files_close"
+)
+
+// getDefaultFilesKeybinds returns the Files view's keys, live while it is
+// open. They follow the rail's files section and quick look where the meaning
+// is the same: space shows quick look, I types the path into a pane, Y copies
+// it, o opens it with the system.
+func getDefaultFilesKeybinds() map[string][]string {
+	return map[string][]string{
+		ActionFilesDown:        {"j", "down"},
+		ActionFilesUp:          {"k", "up"},
+		ActionFilesPageDown:    {"pgdown", "ctrl+d"},
+		ActionFilesPageUp:      {"pgup", "ctrl+u"},
+		ActionFilesTop:         {"g", "home"},
+		ActionFilesBottom:      {"G", "end"},
+		ActionFilesOpen:        {"l", "enter", "right"},
+		ActionFilesParent:      {"h", "backspace", "left"},
+		ActionFilesHome:        {"~"},
+		ActionFilesGoTo:        {":"},
+		ActionFilesFind:        {"ctrl+f"},
+		ActionFilesFilter:      {"/"},
+		ActionFilesQuickLook:   {"space"},
+		ActionFilesFill:        {"f"},
+		ActionFilesHidden:      {"."},
+		ActionFilesSort:        {"s"},
+		ActionFilesSortReverse: {"S"},
+		ActionFilesEdit:        {"e"},
+		ActionFilesOpenSystem:  {"o"},
+		ActionFilesInsertPath:  {"I"},
+		ActionFilesCopyPath:    {"Y"},
+		ActionFilesClose:       {"q"},
 	}
 }
 
@@ -3899,6 +3961,8 @@ func fillMissingKeybinds(cfg, defaultCfg *UserConfig) {
 	fillMapDefaults(cfg.Keybindings.Mail, defaultCfg.Keybindings.Mail)
 	// The Copies panel's section is newer than every config written before it.
 	fillMapDefaults(cfg.Keybindings.Transfers, defaultCfg.Keybindings.Transfers)
+	// The Files view's section is newer than every config written before it.
+	fillMapDefaults(cfg.Keybindings.Files, defaultCfg.Keybindings.Files)
 	// Copy mode's section is newer than every config written before it.
 	fillMapDefaults(cfg.Keybindings.CopyMode, defaultCfg.Keybindings.CopyMode)
 	// The review overlay's section is newer than every config written before it.

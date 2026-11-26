@@ -77,6 +77,7 @@ const (
 	SectionInboxPeek        = "inbox_peek"
 	SectionMail             = "mail"
 	SectionTransfers        = "transfers"
+	SectionFiles            = "files"
 	SectionCopyMode         = "copy_mode"
 	SectionReview           = "review"
 	SectionGlobal           = "global"
@@ -99,6 +100,7 @@ const (
 	ScopeInboxPeek      = "inbox.peek"
 	ScopeMail           = "mail"
 	ScopeTransfers      = "transfers"
+	ScopeFiles          = "files"
 	ScopeCopyMode       = "copy"
 	ScopeReview         = "review"
 	ScopePrefix         = "prefix"
@@ -209,6 +211,13 @@ func Scopes(leader string) []Scope {
 			// r mean the copy under the cursor there and nothing else.
 			ID: ScopeTransfers, Name: "Copies",
 			Sections: []string{SectionTransfers},
+			Reaches:  ReachModal,
+		},
+		{
+			// The Files view covers the screen and owns the keyboard while it
+			// is up, so j, s and e mean its rows and nothing else.
+			ID: ScopeFiles, Name: "Files",
+			Sections: []string{SectionFiles},
 			Reaches:  ReachModal,
 		},
 		{

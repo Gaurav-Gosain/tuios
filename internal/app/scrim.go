@@ -76,6 +76,8 @@ var modalOverlays = [...]modalOverlay{
 	// The agents view covers the pane area and is a view, not a question:
 	// dimmed, the dock and the rail beside it read as muddy, so they stay lit.
 	{id: "inbox", open: func(m *OS) bool { return m.ShowInbox }},
+	// The Files view fills the pane area the same way.
+	{id: overlayKindFiles, open: func(m *OS) bool { return m.explorer.open }},
 	{id: overlayKindBuffers, open: func(m *OS) bool { return m.buffers.open }, scrim: true},
 	{id: overlayKindTransfers, open: func(m *OS) bool { return m.transfers.open }, scrim: true},
 	{id: "navigator", open: func(m *OS) bool { return m.navigator.open }, scrim: true},

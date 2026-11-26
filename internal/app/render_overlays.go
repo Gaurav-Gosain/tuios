@@ -224,6 +224,16 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 		}
 	}
 
+	// The Files view fills the screen between the dock's rows, like the
+	// agents view. See files_view.go.
+	if m.explorer.open {
+		if content, y, w, h := m.renderFilesView(); content != "" {
+			z := m.overlayZ(overlayKindFiles)
+			m.OverlayHits = append(m.OverlayHits, overlayPanelHit{Kind: overlayKindFiles, OriginY: y, Z: z, Geo: overlay.Geometry{Width: w, Height: h}})
+			layers = append(layers, lipgloss.NewLayer(content).X(0).Y(y).Z(z).ID(overlayKindFiles))
+		}
+	}
+
 	if m.gotoPicker.open {
 		content, geo, rows := m.renderGotoPicker()
 		layers = m.placeOverlayPanel(layers, "goto", content, geo, rows)
@@ -382,8 +392,12 @@ func (m *OS) renderOverlays() []*lipgloss.Layer {
 	if m.quickLook.open {
 		content, x, y := m.renderQuickLook()
 		z := config.ZIndexLogs
-		if m.quickLook.free {
+		switch {
+		case m.quickLook.free:
 			z = config.ZIndexOverlayBase + len(m.OverlayZOrder)
+		case m.quickLook.files:
+			// Beside the Files view's list, over the view.
+			z = m.overlayZ(overlayKindFiles) + 1
 		}
 		layers = append(layers, lipgloss.NewLayer(content).X(x).Y(y).Z(z).ID(overlayKindQuickLook))
 	}

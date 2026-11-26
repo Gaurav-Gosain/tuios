@@ -1861,6 +1861,19 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case LearnFilesChangedMsg:
 		// A file of the browser build's fake shell changed. See learn_mode.go.
 		return m, m.learnFilesChanged()
+	case filesListMsg:
+		// A folder of the Files view, read on its own goroutine.
+		m.HandleFilesList(msg)
+		m.renderSkipped = false
+		// Quick look beside the list follows the cursor the read placed.
+		return m, m.QuickLookSync()
+	case filesReadingMsg:
+		m.HandleFilesReading(msg)
+		return m, nil
+	case filesEditMsg:
+		cmd := m.HandleFilesEdit(msg)
+		m.renderSkipped = false
+		return m, cmd
 	case fileTreeListMsg:
 		// A folder open in the tree, read on its own goroutine.
 		cmd := m.HandleFileTreeList(msg)
