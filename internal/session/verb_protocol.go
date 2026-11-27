@@ -2529,6 +2529,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "select", Type: "string"},
 				{Name: "under", Type: "string"},
 				{Name: "every", Type: "bool", Default: "false"},
+				{Name: "name", Type: "string"},
 			},
 			returns: []verbParam{
 				{Name: "condition", Type: "string"},
@@ -2553,6 +2554,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "total", Type: "int"},
 				{Name: "select", Type: "string"},
 				{Name: "confirm", Type: "string"},
+				{Name: "holds", Type: "[]object"},
 			},
 			handler: (*Daemon).verbListAgents,
 		},
@@ -3001,6 +3003,7 @@ func buildVerbRegistry() map[string]verbEntry {
 	maps.Copy(table, execVerbs())
 	// The sender's view of its mail. See verb_receipts.go.
 	maps.Copy(table, receiptVerbs())
+	maps.Copy(table, holdVerbs())
 	maps.Copy(table, taskVerifyVerbs())
 	maps.Copy(table, taskDispatchVerbs(verbParam{Name: "human_nonce", Type: "string"}))
 	// The checkpoint verbs. See verb_checkpoint.go.

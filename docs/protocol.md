@@ -1942,6 +1942,12 @@ With `[agents] enabled = false`, every agent verb fails with `agents_disabled`, 
 
 [`subscribe`](protocol-verbs.md#subscribe), [`unsubscribe`](protocol-verbs.md#unsubscribe), [`wait-for`](protocol-verbs.md#wait-for).
 
+### Holds
+
+Named holds that every session of the daemon sees, such as a quiet window for timing runs. See [Holds](#take-hold-release-hold-check-hold-and-list-holds).
+
+[`take-hold`](protocol-verbs.md#take-hold), [`release-hold`](protocol-verbs.md#release-hold), [`check-hold`](protocol-verbs.md#check-hold), [`list-holds`](protocol-verbs.md#list-holds).
+
 ### Other verbs
 
 [`agent-message-receipts`](protocol-verbs.md#agent-message-receipts), [`agent-preset`](protocol-verbs.md#agent-preset), [`agent-readiness`](protocol-verbs.md#agent-readiness), [`clear-history`](protocol-verbs.md#clear-history), [`close-pane`](protocol-verbs.md#close-pane), [`daemon-upgrade`](protocol-verbs.md#daemon-upgrade), [`delegate`](protocol-verbs.md#delegate), [`delete-buffer`](protocol-verbs.md#delete-buffer), [`drop-files`](protocol-verbs.md#drop-files), [`exec`](protocol-verbs.md#exec), [`file-abort`](protocol-verbs.md#file-abort), [`file-check`](protocol-verbs.md#file-check), [`get-keep-awake`](protocol-verbs.md#get-keep-awake), [`get-note`](protocol-verbs.md#get-note), [`host-speed-test`](protocol-verbs.md#host-speed-test), [`judge-fan`](protocol-verbs.md#judge-fan), [`link-peer`](protocol-verbs.md#link-peer), [`list-buffers`](protocol-verbs.md#list-buffers), [`list-push`](protocol-verbs.md#list-push), [`list-recordings`](protocol-verbs.md#list-recordings), [`list-routes`](protocol-verbs.md#list-routes), [`mark-recording`](protocol-verbs.md#mark-recording), [`open-pane`](protocol-verbs.md#open-pane), [`open-tree-stream`](protocol-verbs.md#open-tree-stream), [`pane-agent`](protocol-verbs.md#pane-agent), [`pane-calls`](protocol-verbs.md#pane-calls), [`pane-cwd`](protocol-verbs.md#pane-cwd), [`pane-kitty-medium`](protocol-verbs.md#pane-kitty-medium), [`paste-buffer`](protocol-verbs.md#paste-buffer), [`paste-pane-image`](protocol-verbs.md#paste-pane-image), [`place-agent`](protocol-verbs.md#place-agent), [`plugin-cell`](protocol-verbs.md#plugin-cell), [`plugin-confirm`](protocol-verbs.md#plugin-confirm), [`plugin-notify`](protocol-verbs.md#plugin-notify), [`rail-pane`](protocol-verbs.md#rail-pane), [`read-dir`](protocol-verbs.md#read-dir), [`record-pane`](protocol-verbs.md#record-pane), [`remove-push`](protocol-verbs.md#remove-push), [`report-program-status`](protocol-verbs.md#report-program-status), [`resize-pane`](protocol-verbs.md#resize-pane), [`resize-window`](protocol-verbs.md#resize-window), [`retry-host`](protocol-verbs.md#retry-host), [`run-task-verify`](protocol-verbs.md#run-task-verify), [`set-agent-quiet`](protocol-verbs.md#set-agent-quiet), [`set-buffer`](protocol-verbs.md#set-buffer), [`set-fan-verdict`](protocol-verbs.md#set-fan-verdict), [`set-keep-awake`](protocol-verbs.md#set-keep-awake), [`set-note`](protocol-verbs.md#set-note), [`set-session-order`](protocol-verbs.md#set-session-order), [`set-task-dispatch`](protocol-verbs.md#set-task-dispatch), [`show-buffer`](protocol-verbs.md#show-buffer), [`speed-test`](protocol-verbs.md#speed-test), [`stop-recording`](protocol-verbs.md#stop-recording), [`swap-window`](protocol-verbs.md#swap-window), [`tml-close`](protocol-verbs.md#tml-close), [`tml-get`](protocol-verbs.md#tml-get), [`tml-input`](protocol-verbs.md#tml-input), [`tml-list`](protocol-verbs.md#tml-list), [`tml-open`](protocol-verbs.md#tml-open), [`tml-patch`](protocol-verbs.md#tml-patch), [`tml-place`](protocol-verbs.md#tml-place), [`tml-replace`](protocol-verbs.md#tml-replace), [`tml-validate`](protocol-verbs.md#tml-validate), [`transfer-answer`](protocol-verbs.md#transfer-answer), [`transfer-cancel`](protocol-verbs.md#transfer-cancel), [`transfer-clear`](protocol-verbs.md#transfer-clear), [`transfer-resume`](protocol-verbs.md#transfer-resume), [`wait-dir`](protocol-verbs.md#wait-dir), [`zoom-window`](protocol-verbs.md#zoom-window).
@@ -2223,11 +2229,11 @@ What a restricted connection may call:
 
 | Class | Verbs | Under `own` | Under `read_only` |
 |---|---|---|---|
-| open | `hello`, `list-verbs`, `unsubscribe`, `restrict-connection`, `artifact-list`, `list-keys`, `pane-grants`, `tml-get`, `tml-validate` | allowed | allowed |
+| open | `hello`, `list-verbs`, `unsubscribe`, `restrict-connection`, `artifact-list`, `list-keys`, `pane-grants`, `tml-get`, `tml-validate`, `check-hold`, `list-holds` | allowed | allowed |
 | across sessions | `list-sessions`, `list-clients`, `list-attention`, `list-worktrees`, `list-hosts`, `list-host-sessions`, `list-host-agents`, `list-themes`, `list-glyphs`, `list-hooks`, `get-keep-awake`, `list-recordings`, `list-routes`, `search-panes` | `forbidden` | allowed |
 | read one session | `session-info`, `list-windows`, `get-window`, `list-workspaces`, `capture-pane`, `get-agent-state`, `list-agents`, `wait-for`, `subscribe`, `peek-prompt`, `read-agent-messages`, `explain-agent-screen`, `list-options`, `get-option`, `stash-list`, `stash-get`, `ssh-agent-path`, `display-env`, `agent-activity`, `agent-message-receipts`, `checkpoint-diff`, `command-history`, `compare-fan`, `get-approval`, `get-note`, `get-task`, `get-task-attachment`, `get-task-dispatch`, `list-checkpoints`, `list-ports`, `list-queued`, `list-tasks`, `review-diff`, `ship-status`, `stream-pane`, `tml-list` | session in reach | allowed |
 | own pane's record | `set-agent-state`, `set-agent-meta`, `set-agent-session`, `report-agent-activity`, `agent-hook-event`, `agent-statusline-event`, `report-program-status`, `agent-mail-notice`, `ask-human`, `prompt`, `mark-recording` | own pane only | allowed |
-| mail and stash | `send-agent-message`, `stash-put` | session in reach, sent as the own pane | allowed |
+| mail and stash | `send-agent-message`, `stash-put`, `take-hold`, `release-hold` | session in reach, sent as the own pane | allowed |
 | type into a pane | `send-text`, `send-keys`, `ask-agent`, `respond`, `run`, `cancel-queued`, `clear-history`, `queue-prompt`, `restore-checkpoint`, `review-note`, `send-review`, `set-note`, `ship-commit`, `ship-merge`, `ship-pr`, `ship-push`, `tml-close`, `tml-open`, `tml-patch`, `tml-replace` | session in reach | `forbidden` |
 | start sessions | `fan`, `start-agent`, `agent-preset`, `agent-readiness`, `delegate`, `judge-fan`, `place-agent`, `run-task-verify`, `set-fan-verdict`, `verify-fan` | needs a pane; `start-agent` opens its pane in a session in reach | `forbidden` |
 | read the paste buffers | `list-buffers`, `show-buffer` | `forbidden` | allowed |
@@ -2665,6 +2671,50 @@ the machine could not be held awake, when it could not: for example, logind
 refused the lock. The daemon does not try again until the mode changes.
 `working` counts the working agent panes in every mode. The verb reads no
 session and is allowed under `read_only`. Over a link it needs `list`.
+
+### take-hold, release-hold, check-hold and list-holds
+
+A hold is a named lock that the daemon keeps for all of its sessions. Use it
+for shared machine state: a quiet window for timing runs, a shared tool that
+must not restart, or a pull request that a landing train owns. A build script
+calls `check-hold` first and stops when it fails. A pane that must wait calls
+`wait-for` with `hold-released`. The wait uses the `hold-changed` event, so
+nothing polls.
+
+A hold ends in three ways: its holder releases it, its `ttl` ends, or the
+holder pane closes. A caller in no pane has no pane that closes, so it must
+pass `ttl`. Every caller in no pane on this machine counts as one holder: a
+hold taken from one shell is released from another. A live upgrade keeps the
+holds. A daemon restart drops them.
+
+Params of `take-hold`: `name` (required: 1 to 64 letters, digits and
+`. _ : -`), `reason` (required, at most 200 characters), `ttl`
+(milliseconds, at most 7 days). A take of a hold the caller has renews it with
+the new reason and ttl. A take of another holder's hold fails with `held`.
+
+```json
+{"verb": "take-hold", "params": {"name": "quiet-window", "reason": "timing gates run", "ttl": 14400000}}
+```
+
+```json
+{"result": {"type": "hold", "renewed": false, "hold": {"name": "quiet-window", "reason": "timing gates run", "holder": "4ebed147-...", "holder_name": "lead", "holder_session": "session-0", "holder_pid": 4242, "label": "pane lead (4ebed147) in session session-0", "taken_at": 1764200000000000000, "expires_at": 1764214400000000000}}}
+```
+
+`release-hold` takes `name` and `force`. A name no one holds answers with
+`released` false. Another holder's hold needs `force` and the admin grant. A
+caller in no pane has admin, unless its connection is restricted.
+
+`check-hold` takes `name`. A free name answers with `held` false. A held
+name fails with `held`, and the message names the holder, the reason, the age
+and the time left on the ttl.
+
+`list-holds` takes nothing and answers with `holds`, oldest first.
+`list-agents` gives the same rows in `holds` when there are any.
+
+A pane needs the grant that `send-agent-message` needs to take or release a
+hold. `check-hold` and `list-holds` read no session, so every pane may call
+them. Over a link, `take-hold` and `release-hold` need `mail`, and
+`check-hold` and `list-holds` need `list`.
 
 ### set-keep-awake
 
@@ -7345,8 +7395,8 @@ the one before. The configuration is in
 | Capability | Verbs |
 | --- | --- |
 | none | `hello`, `list-verbs`, `link-peer`, `restrict-connection`, `pane-grants` (which says no pane grants apply over a link) |
-| `list` | `list-*`, `session-info`, `ssh-agent-path`, `display-env`, `get-keep-awake`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval`, `file-stat`, `file-list`, `list-tasks`, `get-task`, `get-task-attachment` |
-| `mail` | `send-agent-message`, `read-agent-messages`, `agent-mail-notice`, `stash-put`, `stash-list`, `stash-get` |
+| `list` | `list-*`, `session-info`, `ssh-agent-path`, `display-env`, `get-keep-awake`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval`, `file-stat`, `file-list`, `list-tasks`, `get-task`, `get-task-attachment`, `check-hold` |
+| `mail` | `send-agent-message`, `read-agent-messages`, `agent-mail-notice`, `stash-put`, `stash-list`, `stash-get`, `take-hold`, `release-hold` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
 | `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `zoom-window`, `swap-window`, `resize-window`, `resize`, `set-option`, `set-keep-awake`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `prompt` (whose handler refuses a link caller too), `review-diff` (it returns file contents), `review-note`, `review-stage`, `review-revert`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task`, `attach-task`, `detach-task` |
 | `open` and `write` | `verify-fan` |
@@ -8221,6 +8271,7 @@ Event types:
 | `task-changed` | A task card was `added`, `staged`, `blocked`, `unblocked`, `released`, `attached`, `detached` or `removed` (`action`). An attach or a detach carries the attachment's name in `reason`. A release tuios made on its own carries `reason`: `pane closed`, `agent left` or `restart`; a stage move it made on its own carries the fact (see [Task verbs](#task-verbs)); a block carries its reason too. `removed` carries the card's last row. | `session`, `action`, `reason`, `task` |
 | `task-dispatch` | A board's dispatch mode or a switch changed, or dispatch stopped on its own (`action` `stopped`, `reason` such as `3 failures in a row` or `usage limit reported by claude-code`). `dispatch` is the whole status as `get-task-dispatch` gives it. It names no session. | `action`, `reason`, `dispatch` |
 | `keep-awake` | The daemon took or dropped its hold that keeps the machine awake, the number of working agent panes changed while `keep_awake` is `agents`, or `keep_awake` changed. `mode` is `off`, `on` or `agents`, `state` is `held` or `released`, `working` counts the working agent panes on this machine, and `reason` says why the machine could not be held awake, when it could not. See [get-keep-awake](#get-keep-awake). It names no session. | `mode`, `state`, `working`, `reason` |
+| `hold-changed` | A hold was `taken`, `renewed` or `released` (`action`). `hold` is its row as `list-holds` gives it. A release carries `reason`: `released`, `ttl`, `pane_closed` or `forced`. See [Holds](#take-hold-release-hold-check-hold-and-list-holds). It names no session. | `action`, `reason`, `hold` |
 | `theme` | A TUI client shows another theme. `theme` has `id` (`none` when no theme is in force and the terminal's own colours show), `background` (`#rrggbb`, absent when the client does not know it yet), `light` (absent with no `background`) and `preview`. `preview` is `true` for each theme the theme picker or the theme editor shows on the way to a pick. When the picker closes, one event with `preview` `false` gives the theme that stays: the pick, or the theme from before a cancel. Opening the picker sends nothing. `client_id` and `pid` name the client, because each client has its own theme. The `after-theme-change` hook runs for the events with `preview` `false` only. Opt-in: only a subscription whose `types` names it receives it. | `session`, `client_id`, `pid`, `theme` |
 | `tml-event` | What a person did on a TML surface that its owner hears: an `emit` action in the document, or the close, which is the surface's last event. `tml` has `surface`, `name` (the emit's name, or `close`), `value` (absent when null), `reason` (on a close: `closed`, `program` or `dismissed`) and `version`. `window` is the TML window. Opt-in: only a subscription whose `types` names it receives it, and a `tml-open` with `events` gets the events of its own surface. | `tml` |
 | `tml-surface` | A TML surface opened, changed or closed, for a client that draws it from verbs (guios), which gets no attach pushes. `tml_surface` has `surface`, `title`, `version`, `doc_version`, `ops` (the JSON Patch on the state that made `version` from `version` - 1, when a patch did and it is at most 64 KiB) and `closed`. A client that holds `version` - 1 applies `ops`; any other reads the surface with `tml-get`, which a changed `doc_version` also asks for. `window` is the TML window. Opt-in, and not kept for replay: a resume over one is marked with a `gap` |
@@ -8393,7 +8444,8 @@ take no `session` or `window`), `command_seq` (for `command-finished` with a
 watch the agent panes it matches in every session, including panes that open
 during the wait; takes no `session`, `window` or `any_session`), `every` (bool,
 with `select`: match only when at least one pane matches and all of them are in
-an `until` state, and answer with them in `panes`), `timeout` (milliseconds;
+an `until` state, and answer with them in `panes`), `name` (the hold, for
+`hold-released`), `timeout` (milliseconds;
 default 30000, at most 86400000, which is 24 hours).
 
 A wait ends when its caller closes the connection. It does not wait for its
@@ -8437,6 +8489,10 @@ Conditions:
   exits. Without `window` any pane in the session matches, and `command_seq`
   is `invalid_params`. The result carries `window`, `cmdline`, `exit_code`
   (omitted when the shell sent none), `duration_ms` and `command_seq`.
+- `hold-released` resolves when no one holds the hold `name`: at once when it
+  is free, else when its holder releases it, its ttl ends or its holder pane
+  closes. The result carries `name` and `was_held`. A timeout names the holder
+  and the reason.
 
 Request:
 

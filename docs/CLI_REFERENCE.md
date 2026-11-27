@@ -877,6 +877,47 @@ tuios keep-awake agents
 tuios keep-awake
 ```
 
+### `tuios hold`
+
+Take, check and release named holds. A hold is a named lock that the daemon
+keeps for all of its sessions. Use one for shared machine state: a quiet window
+for timing runs, a shared tool that must not restart, or a pull request that a
+landing train owns.
+
+**Usage:**
+```bash
+tuios hold take NAME --reason TEXT [--ttl DURATION] [--json]
+tuios hold release NAME [--force] [--json]
+tuios hold check NAME [--json]
+tuios hold ls [--json]
+```
+
+**Flags:**
+- `--reason <text>`: For `take`: what the hold is for, at most 200 characters. Required
+- `--ttl <duration>`: For `take`: end the hold on its own after this long, such as `4h`. Required outside a pane. At most `168h`
+- `--force`: For `release`: release the hold when another holder has it. Needs the admin grant
+- `--json`: Output as JSON
+
+A hold ends when its holder releases it, when its `--ttl` ends, or when the
+holder pane closes. Every caller outside a pane counts as one holder, so a hold
+taken in one shell is released in another. A live upgrade keeps the holds. A
+daemon restart drops them.
+
+`tuios hold check NAME` exits `0` when no one holds NAME. When it is held, it
+fails with the code `held` and says who holds it, why and for how long. A take
+of a hold another holder has fails the same way. `tuios list-agents` prints the
+holds under its table.
+
+From inside a pane, `take` and `release` need the grant that
+`send-agent-message` needs. Releasing another holder's hold needs `admin`.
+
+```bash
+tuios hold take quiet-window --reason 'timing gates run' --ttl 4h
+tuios hold check quiet-window || exit 1
+tuios wait-for hold-released quiet-window --timeout 14400000
+tuios hold release quiet-window
+```
+
 ### `tuios kill-session`
 
 Kill a specific session.
@@ -2630,6 +2671,7 @@ tuios wait-for <condition> [flags]
 | `agent-state` | An agent reached one of the `--until` states; without `--window`, any agent pane in the session matches; with `--any-session`, any agent pane in any session; with `--select`, any agent pane the selector matches, or with `--every` all of them |
 | `agent-message` | A message arrived. With `--window`, the first unread message in that inbox; without it, any message left in the session after the wait began |
 | `command-finished` | A shell that marks its commands with OSC 133 finished one. With `--window`, that pane's next command, or with `--command-seq N` the first once the pane has finished more than N (already true if it happened before the wait). Without a window, any pane in the session. Prints the exit code |
+| `hold-released` | No one holds the hold named after the condition: `tuios wait-for hold-released NAME`. It matches at once when the hold is free. See [`tuios hold`](#tuios-hold) |
 
 **Flags:**
 - `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)

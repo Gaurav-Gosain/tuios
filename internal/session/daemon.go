@@ -293,6 +293,8 @@ type Daemon struct {
 	// awake holds the machine awake as [daemon] keep_awake says. See
 	// keep_awake.go.
 	awake *awakeKeeper
+	// holds are the named holds panes and scripts take. See holds.go.
+	holds holdTable
 
 	// queueDedup answers a queue-prompt sent again with the same client_id.
 	queueDedup queueDedup
@@ -1623,6 +1625,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 		switch {
 		case ev.Type == EventWindowClosed:
 			d.releaseRemoteHolds(ev.Window, taskReleasePaneClosed)
+			d.noteHoldPaneClosed(ev.Window)
 		case ev.Type == EventAgentState && ev.State == AgentStateNone.Name():
 			d.releaseRemoteHolds(ev.Window, taskReleaseAgentLeft)
 		}

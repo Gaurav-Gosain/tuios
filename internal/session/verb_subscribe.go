@@ -362,12 +362,17 @@ func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbE
 		Every  bool   `json:"every"`
 		// Under narrows select to the own tree of one pane (own_tree.go).
 		Under string `json:"under"`
+		// Name is the hold hold-released waits on (holds.go).
+		Name string `json:"name"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
 	}
 	if p.New && p.Condition != "window-output" {
 		return nil, invalidParam("new", "new only applies to the window-output condition")
+	}
+	if p.Name != "" && p.Condition != "hold-released" {
+		return nil, invalidParam("name", "name only applies to the hold-released condition")
 	}
 	if p.Every && p.Select == "" {
 		return nil, invalidParam("every", "every applies to a wait with select: it waits for every pane the selector matches")
@@ -440,6 +445,8 @@ func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbE
 		return d.waitAgentMessage(cs, p.Session, p.Window, p.Thread, deadline)
 	case waitCommandFinished:
 		return d.waitCommandFinishedFor(cs, p.Session, p.Window, p.CommandSeq, deadline)
+	case "hold-released":
+		return d.waitHoldReleased(p.Name, deadline)
 	default:
 		message := "unknown condition " + p.Condition
 		if p.Condition == "" {

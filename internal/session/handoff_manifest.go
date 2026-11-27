@@ -111,6 +111,9 @@ type handoffDaemon struct {
 	// Only this daemon knows them, and a pane that closes after the
 	// upgrade must still let its card go there (task_project.go).
 	FarHolds []handoffFarHold `json:"far_holds,omitempty"`
+	// Holds are the named holds (holds.go). A quiet window outlives the
+	// upgrade that replaces the daemon.
+	Holds []handoffHold `json:"holds,omitempty"`
 }
 
 // handoffFarHold is one card a local window holds on another machine.

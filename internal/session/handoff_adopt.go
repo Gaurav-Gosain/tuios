@@ -116,6 +116,7 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 	}
 	d.events.restore(m.Daemon.Events)
 	d.agents.restore(m.Daemon.Mail)
+	d.restoreHolds(m.Daemon.Holds)
 	listeners := map[string]net.Listener{}
 	// FileListener works on a copy of each descriptor. The inherited ones
 	// stay open for the fallback, and are closed once the adoption has gone
@@ -210,6 +211,7 @@ func (d *Daemon) adopt(fd int, fb *adoptFallback, kept map[int]int) error {
 	for _, h := range m.Daemon.FarHolds {
 		d.remoteHolds.note(h.Window, remoteHold{host: h.Host, session: h.Session, id: h.ID}, true)
 	}
+	d.checkRestoredHolds()
 	d.loadStores(true)
 	d.serve()
 	// A delegated child that finished while the daemon was handed over is

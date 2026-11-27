@@ -393,6 +393,8 @@ var EventTypes = []string{
 	"task-claimed", "task-finished", "task-changed", "task-dispatch",
 	// The daemon took or dropped its hold that keeps the machine awake.
 	"keep-awake",
+	// A named hold was taken, renewed or released.
+	"hold-changed",
 	// git removed a worktree tuios made.
 	"worktree-removed",
 	// A client shows another theme, previews included. Opt-in.

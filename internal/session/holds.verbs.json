@@ -1,0 +1,96 @@
+{
+  "take-hold": {
+    "description": "Take a named hold that every session of this daemon sees, such as a quiet window for timing runs. A script runs check-hold first, and a pane waits with wait-for hold-released. The hold ends when its holder releases it, when its ttl ends, or when the holder pane closes. Taking a hold the caller already has renews it with the new reason and ttl. A pane needs the grant send-agent-message needs.",
+    "params": [
+      {
+        "name": "name",
+        "description": "The hold's name: 1 to 64 letters, digits and . _ : -, starting with a letter or a digit."
+      },
+      {
+        "name": "reason",
+        "description": "What the hold is for, at most 200 characters. Panes that wait and check-hold show it."
+      },
+      {
+        "name": "ttl",
+        "description": "Milliseconds until the hold ends on its own, at most 604800000 (7 days). A caller in no pane must pass it, because no pane closes to end its hold."
+      }
+    ],
+    "returns": [
+      {
+        "name": "renewed",
+        "description": "True when the caller already had the hold and this call renewed it."
+      },
+      {
+        "name": "hold",
+        "description": "The hold: name, reason, holder (the window id of the holder pane), holder_name, holder_session, holder_host (a linked machine), holder_plugin, holder_pid, label (the holder in words), taken_at and expires_at (Unix nanoseconds, expires_at omitted for no ttl)."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"take-hold\",\"params\":{\"name\":\"quiet-window\",\"reason\":\"timing gates run\",\"ttl\":14400000}}"
+    ]
+  },
+  "release-hold": {
+    "description": "Release a named hold. A name no one holds is not an error: released is false. Releasing another holder's hold needs the admin grant and force. A caller in no pane counts as admin unless its connection is restricted.",
+    "params": [
+      {
+        "name": "name",
+        "description": "The hold's name."
+      },
+      {
+        "name": "force",
+        "description": "Release the hold when another holder has it. Without it the call fails with held and names the holder."
+      }
+    ],
+    "returns": [
+      {
+        "name": "released",
+        "description": "True when the hold was released, false when no one held it."
+      },
+      {
+        "name": "hold",
+        "description": "The hold that was released, as take-hold gives it."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"release-hold\",\"params\":{\"name\":\"quiet-window\"}}"
+    ]
+  },
+  "check-hold": {
+    "description": "Check that no one holds a named hold. A free name answers with held false. A held name fails with the held code, and the message names the holder, the reason, the age and the time left. A build script runs it first and stops on the failure.",
+    "params": [
+      {
+        "name": "name",
+        "description": "The hold's name."
+      }
+    ],
+    "returns": [
+      {
+        "name": "name",
+        "description": "The name that was checked."
+      },
+      {
+        "name": "held",
+        "description": "False: a held name fails with the held code instead."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"check-hold\",\"params\":{\"name\":\"quiet-window\"}}"
+    ]
+  },
+  "list-holds": {
+    "description": "List the holds this daemon keeps, oldest first. list-agents gives the same rows in holds.",
+    "returns": [
+      {
+        "name": "holds",
+        "description": "One row per hold, as take-hold gives it."
+      },
+      {
+        "name": "total",
+        "description": "How many holds there are."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"list-holds\"}"
+    ]
+  }
+}

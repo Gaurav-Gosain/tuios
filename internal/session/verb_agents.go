@@ -168,6 +168,7 @@ func (d *Daemon) verbListAgents(cs *connState, params json.RawMessage) (any, *ve
 		"human_inbox":  AgentInboxHuman,
 		"human_unread": unread[AgentInboxHuman],
 	}
+	d.addHolds(out)
 	// Narrowed to one session, the rows are not what a write by the same
 	// selector reaches, which is every session, so no token is handed out.
 	addSelection(out, sel, agents, true)
@@ -226,6 +227,7 @@ func (d *Daemon) listAgentsAllSessions(all bool, sel *Selector, pa *paneAuth) ma
 		"human_inbox":  AgentInboxHuman,
 		"human_unread": humanUnread,
 	}
+	d.addHolds(out)
 	addSelection(out, sel, agents, all)
 	return out
 }

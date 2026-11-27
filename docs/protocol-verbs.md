@@ -30,6 +30,7 @@ It also has more about the verbs that need it.
 - [`bundle-worktree`](#bundle-worktree)
 - [`cancel-queued`](#cancel-queued)
 - [`capture-pane`](#capture-pane)
+- [`check-hold`](#check-hold)
 - [`checkpoint-diff`](#checkpoint-diff)
 - [`claim-task`](#claim-task)
 - [`clear-history`](#clear-history)
@@ -89,6 +90,7 @@ It also has more about the verbs that need it.
 - [`list-clients`](#list-clients)
 - [`list-dock-components`](#list-dock-components)
 - [`list-glyphs`](#list-glyphs)
+- [`list-holds`](#list-holds)
 - [`list-hooks`](#list-hooks)
 - [`list-host-agents`](#list-host-agents)
 - [`list-host-sessions`](#list-host-sessions)
@@ -141,6 +143,7 @@ It also has more about the verbs that need it.
 - [`refresh-dock`](#refresh-dock)
 - [`register-push`](#register-push)
 - [`release-agent-message`](#release-agent-message)
+- [`release-hold`](#release-hold)
 - [`release-task`](#release-task)
 - [`remove-push`](#remove-push)
 - [`remove-task`](#remove-task)
@@ -213,6 +216,7 @@ It also has more about the verbs that need it.
 - [`subscribe`](#subscribe)
 - [`swap-window`](#swap-window)
 - [`switch-session`](#switch-session)
+- [`take-hold`](#take-hold)
 - [`tml-close`](#tml-close)
 - [`tml-get`](#tml-get)
 - [`tml-input`](#tml-input)
@@ -858,6 +862,23 @@ Capture a pane's content. On a window that shows a TML surface, the content is t
 
 ```json
 {"id":1,"verb":"capture-pane","params":{"session":"work","source":"recent","unwrap":true,"trim":true}}
+```
+
+### `check-hold`
+
+Check that no one holds a named hold. A free name answers with held false. A held name fails with the held code, and the message names the holder, the reason, the age and the time left. A build script runs it first and stops on the failure.
+
+| Param | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | string | yes |  | The hold's name. |
+
+| Result field | Type | Description |
+|---|---|---|
+| `name` | string | The name that was checked. |
+| `held` | bool | False: a held name fails with the held code instead. |
+
+```json
+{"id":1,"verb":"check-hold","params":{"name":"quiet-window"}}
 ```
 
 ### `checkpoint-diff`
@@ -2198,6 +2219,7 @@ List the agent panes in a session with the state each reports, the harness behin
 | `total` | int | How many panes are listed. |
 | `select` | string | The selector as parsed, when one was given. |
 | `confirm` | string | With select, and without all or session: the token for exactly the listed panes, which send-agent-message and ask-agent take as confirm to write to them. |
+| `holds` | []object | The holds the daemon keeps, as list-holds gives them, oldest first. Omitted when there are none. |
 
 ```json
 {"id":1,"verb":"list-agents","params":{"session":"work"}}
@@ -2357,6 +2379,21 @@ List the glyph sets and describe one: the roles it names, and the characters tha
 
 ```json
 {"id":1,"verb":"list-glyphs","params":{"session":"work","glyphs":"heavy"}}
+```
+
+### `list-holds`
+
+List the holds this daemon keeps, oldest first. list-agents gives the same rows in holds.
+
+No params.
+
+| Result field | Type | Description |
+|---|---|---|
+| `holds` | []object | One row per hold, as take-hold gives it. |
+| `total` | int | How many holds there are. |
+
+```json
+{"id":1,"verb":"list-holds"}
 ```
 
 ### `list-hooks`
@@ -3689,6 +3726,24 @@ Pass a message from another machine that this machine held for the person (hold_
 
 ```json
 {"id":1,"verb":"release-agent-message","params":{"session":"work","id":12,"human_nonce":"<from the attach reply>"}}
+```
+
+### `release-hold`
+
+Release a named hold. A name no one holds is not an error: released is false. Releasing another holder's hold needs the admin grant and force. A caller in no pane counts as admin unless its connection is restricted.
+
+| Param | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | string | yes |  | The hold's name. |
+| `force` | bool |  | `false` | Release the hold when another holder has it. Without it the call fails with held and names the holder. |
+
+| Result field | Type | Description |
+|---|---|---|
+| `released` | bool | True when the hold was released, false when no one held it. |
+| `hold` | object | The hold that was released, as take-hold gives it. |
+
+```json
+{"id":1,"verb":"release-hold","params":{"name":"quiet-window"}}
 ```
 
 ### `release-task`
@@ -5605,7 +5660,7 @@ The connection stays open after the reply.
 |---|---|---|---|---|
 | `session` | string |  |  | Only deliver events from this session. Omit for events from every session. Unlike most verbs, an omitted session does not mean the most recently active one. |
 | `window` | string |  |  | Only deliver events about this window id. Omit for every window. |
-| `types` | []string |  |  | Only deliver these event types. Omit for all of them. One of `window-created`, `window-closed`, `window-exit`, `window-retitled`, `window-focused`, `window-moved`, `window-minimized`, `window-restored`, `workspace-switched`, `workspace-renamed`, `layout-changed`, `agent-state`, `agent-seen`, `agent-message`, `output`, `bell`, `notification`, `mode-changed`, `session-created`, `session-closed`, `session-labelled`, `client-session-changed`, `gap`, `attention`, `host-changed`, `prompt`, `command-started`, `command-finished`, `agent-activity`, `transcript`, `transfer`, `transfer-progress`, `transfer-file`, `daemon-upgraded`, `tml-event`, `tml-surface`, `task-claimed`, `task-finished`, `task-changed`, `task-dispatch`, `keep-awake`, `worktree-removed` or `theme`. |
+| `types` | []string |  |  | Only deliver these event types. Omit for all of them. One of `window-created`, `window-closed`, `window-exit`, `window-retitled`, `window-focused`, `window-moved`, `window-minimized`, `window-restored`, `workspace-switched`, `workspace-renamed`, `layout-changed`, `agent-state`, `agent-seen`, `agent-message`, `output`, `bell`, `notification`, `mode-changed`, `session-created`, `session-closed`, `session-labelled`, `client-session-changed`, `gap`, `attention`, `host-changed`, `prompt`, `command-started`, `command-finished`, `agent-activity`, `transcript`, `transfer`, `transfer-progress`, `transfer-file`, `daemon-upgraded`, `tml-event`, `tml-surface`, `task-claimed`, `task-finished`, `task-changed`, `task-dispatch`, `keep-awake`, `worktree-removed`, `theme` or `hold-changed`. |
 | `queue` | int |  | `256` | Buffered events before the stream marks a gap. A size above 4096 is lowered to 4096. |
 | `after_seq` | int |  |  | Resume: replay the retained events with a seq above this one before streaming live. Pass the seq of the last event received. 0 replays everything the daemon still holds. Output events are not retained. |
 | `boot_id` | string |  |  | The boot_id the after_seq came with. If the daemon has restarted since, the stream starts with a gap marker with reason boot_changed instead of a replay. Needs after_seq. |
@@ -5675,6 +5730,25 @@ Switch an attached client to another session in place, as go-to does. The client
 
 ```json
 {"id":1,"verb":"switch-session","params":{"name":"api","host":"build","session":"work"}}
+```
+
+### `take-hold`
+
+Take a named hold that every session of this daemon sees, such as a quiet window for timing runs. A script runs check-hold first, and a pane waits with wait-for hold-released. The hold ends when its holder releases it, when its ttl ends, or when the holder pane closes. Taking a hold the caller already has renews it with the new reason and ttl. A pane needs the grant send-agent-message needs.
+
+| Param | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `name` | string | yes |  | The hold's name: 1 to 64 letters, digits and . _ : -, starting with a letter or a digit. |
+| `reason` | string | yes |  | What the hold is for, at most 200 characters. Panes that wait and check-hold show it. |
+| `ttl` | int |  |  | Milliseconds until the hold ends on its own, at most 604800000 (7 days). A caller in no pane must pass it, because no pane closes to end its hold. |
+
+| Result field | Type | Description |
+|---|---|---|
+| `renewed` | bool | True when the caller already had the hold and this call renewed it. |
+| `hold` | object | The hold: name, reason, holder (the window id of the holder pane), holder_name, holder_session, holder_host (a linked machine), holder_plugin, holder_pid, label (the holder in words), taken_at and expires_at (Unix nanoseconds, expires_at omitted for no ttl). |
+
+```json
+{"id":1,"verb":"take-hold","params":{"name":"quiet-window","reason":"timing gates run","ttl":14400000}}
 ```
 
 ### `tml-close`
@@ -6118,7 +6192,7 @@ Block until a condition matches, or fail with the timeout code.
 
 | Param | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `condition` | string |  |  | Condition to wait for. One of `session-exists`, `window-output`, `window-exit`, `window-idle`, `agent-state`, `agent-message` or `command-finished`. |
+| `condition` | string |  |  | Condition to wait for. One of `session-exists`, `window-output`, `window-exit`, `window-idle`, `agent-state`, `agent-message`, `command-finished` or `hold-released`. |
 | `session` | string |  |  | Session name. session-exists requires it: it is the session to wait for. For the other conditions, omit it from a pane for the pane's own session, and from outside every pane for the most recently active one. |
 | `window` | string |  |  | Window id or name. Omit to target the focused window. |
 | `any_session` | bool |  | `false` | For agent-state only: watch every session on the daemon, including ones created during the wait. Takes no session or window. The result names the session that matched. |
@@ -6133,6 +6207,7 @@ Block until a condition matches, or fail with the timeout code.
 | `select` | string |  |  | A selector: space-separated key:value terms, all of which must match, each with comma-separated alternatives. Keys: harness (id or program name), state, needs:you, session (glob), group (fan-out group, glob), host (local or a host name, glob), name (window name, glob), cwd (the directory or under it; ~ is home), task (a task card the pane holds, by id, glob), stage (the stage of a card the pane holds), parent and root (the parent agent pane, or the first of its chain, by window id or a start of it). For agent-state only: watch the agent panes it matches, in every session, including panes that open during the wait. Takes no session, window or any_session. Put the state to wait for in until, not in the selector. |
 | `under` | string |  |  | With select: watch only the panes that this window started, and the panes they started, by window id. A pane with the fan grant and without admin always waits under its own window. |
 | `every` | bool |  | `false` | With select: match only when at least one pane matches and every matched pane is in one of the until states, and answer with all of them in panes. Without it, the first matched pane to reach one matches. |
+| `name` | string |  |  | The hold to wait for, required by hold-released. It matches at once when no one holds it, and otherwise when its holder releases it, its ttl ends or its holder pane closes. |
 
 | Result field | Type | Description |
 |---|---|---|
@@ -6172,6 +6247,10 @@ Block until a condition matches, or fail with the timeout code.
 
 ```json
 {"id":1,"verb":"wait-for","params":{"condition":"window-output","session":"work","window":"build","pattern":"BUILD OK","new":true}}
+```
+
+```json
+{"id":1,"verb":"wait-for","params":{"condition":"hold-released","name":"nightly-bench","timeout":3600000}}
 ```
 
 ### `zoom-window`

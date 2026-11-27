@@ -40,6 +40,7 @@ func verbDocGroups() []struct {
 		{"verb_protocol_task.verbs.json", taskVerbs()},
 		{"verb_protocol_agents.verbs.json", agentWorkVerbs()},
 		{"verb_receipts.verbs.json", receiptVerbs()},
+		{"holds.verbs.json", holdVerbs()},
 		{"verb_task_dispatch.verbs.json", taskDispatchVerbs(verbParam{})},
 		{"handoff_testhooks.verbs.json", handoffTestVerbs()},
 	}

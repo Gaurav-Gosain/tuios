@@ -161,7 +161,11 @@ func runListAgents(sessionName string, all, allSessions bool, selector string, j
 	if jsonOutput {
 		return printVerbResultOn(t, raw, jsonOutput)
 	}
-	return printAgentList(os.Stdout, raw, all, t.on())
+	if err := printAgentList(os.Stdout, raw, all, t.on()); err != nil {
+		return err
+	}
+	printHoldsUnder(os.Stdout, raw)
+	return nil
 }
 
 func printAgentList(w io.Writer, raw json.RawMessage, all bool, on string) error {

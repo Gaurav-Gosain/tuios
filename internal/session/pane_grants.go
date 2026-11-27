@@ -796,6 +796,10 @@ func (d *Daemon) checkGrants(cs *connState, verb string, params json.RawMessage)
 		switch verb {
 		case "send-agent-message":
 			return d.holdMailSend(pa, params, deny)
+		case "take-hold", "release-hold":
+			// A hold names no session. The handler holds a pane to its
+			// own holds, and another's needs admin (holds.go).
+			return params, nil
 		case "list-agents":
 			if out, verr, held := d.holdMailListing(pa, params, deny); held {
 				return out, verr

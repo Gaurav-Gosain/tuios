@@ -23,7 +23,7 @@ Over the socket every failure carries a stable code in the error envelope:
 `repo_not_found`, `no_machine`, `branch_exists`, `not_repo`, `no_notes`, `hunk_changed`, `index_changed`,
 `whole_file_only`, `agent_writing`, `revert_changed`, `no_checkpoint`, `nothing_to_commit`,
 `merge_conflict`, `checkout_dirty`, `no_remote`, `gh_unavailable`, `queue_full`,
-`task_held`, `task_done`, `no_task`, `attachment_too_large`, `attachment_limit`, `no_attachment`,
+`task_held`, `task_done`, `no_task`, `attachment_too_large`, `attachment_limit`, `no_attachment`, `held`,
 `no_buffer`, `no_recording`, `risk_unacknowledged`, `agents_disabled`, `busy`, `too_many_connections`,
 `no_file`, `file_exists`, `no_permission`, `hash_mismatch`, `source_changed`,
 `cross_device`, `disk_full`, `no_transfer`, `same_session`, `pane_not_movable`,
@@ -64,6 +64,7 @@ A retry without a change fails the same way, except for `busy`, `too_many_connec
 | `no_keyboard` | `human` has no pane. Use `ask-human` or mail to `human`. |
 | `queue_full` | The pane already holds `[agents.queue] max` queued messages. Wait for the agent to take them, or drop one with `tuios queue rm`. |
 | `task_held` | Another pane holds the card you claimed. Nothing changed. Take another with `tuios task claim --next`, or wait for `task-changed` released. |
+| `held` | Another holder has the hold. Nothing changed. The message names the holder, the reason and the age. Wait with `tuios wait-for hold-released NAME`, or ask the holder. Do not release it with `--force` unless the person asks. |
 | `task_done` | You blocked a card that is done. Nothing changed. Move it to another stage first with `tuios task stage ID STAGE`. |
 | `no_task` | No card has that id, or `claim --next` found none open: every card is held, blocked or done. `tuios task ls` lists them. Stop, or wait for `task-changed` added. |
 | `attachment_too_large` | The file is over `[tasks] attachment_max_mib`, or the session's card files would be over `attachment_session_mib`. Nothing was attached. Attach a smaller file, or ask the person to raise the limit. |

@@ -1373,6 +1373,8 @@ Conditions:
                   --command-seq N, the first after N finished commands, which
                   matches at once when it already happened. Without a window,
                   any pane in the session. Prints the exit code
+  hold-released   no one holds the hold NAME, given after the condition. It
+                  matches at once when the hold is free. See 'tuios hold'
 
 The daemon watches its own events, so there is no need to poll with
 capture-pane and sleep. A condition that does not match before --timeout exits
@@ -1405,10 +1407,24 @@ non-zero with the timeout error.`,
   tuios wait-for agent-message -s work -w "$TUIOS_PANE_ID" --thread 12
 
   # Wait for the command after the 4th in the build pane to finish
-  tuios wait-for command-finished -w build --command-seq 4 --timeout 600000`,
-		Args:      cobra.ExactArgs(1),
+  tuios wait-for command-finished -w build --command-seq 4 --timeout 600000
+
+  # Wait for the end of a quiet window, then build
+  tuios wait-for hold-released quiet-window --timeout 14400000`,
+		Args: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 && args[0] == "hold-released" {
+				if len(args) != 2 {
+					return errors.New("hold-released takes the hold's name: tuios wait-for hold-released NAME")
+				}
+				return nil
+			}
+			return cobra.ExactArgs(1)(cmd, args)
+		},
 		ValidArgs: session.WaitConditionNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if args[0] == "hold-released" {
+				return runWaitForHold(args[1], waitForTimeout, waitForJSON)
+			}
 			var commandSeq *uint64
 			if cmd.Flags().Changed("command-seq") {
 				commandSeq = &waitForCommandSeq

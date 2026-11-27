@@ -48,7 +48,7 @@ var (
 	// implemented without guessing at row boundaries.
 	// WaitConditionNames are the conditions wait-for understands. It is exported
 	// so the CLI offers exactly this set and cannot drift from the daemon's.
-	WaitConditionNames = []string{"session-exists", "window-output", "window-exit", "window-idle", "agent-state", "agent-message", waitCommandFinished}
+	WaitConditionNames = []string{"session-exists", "window-output", "window-exit", "window-idle", "agent-state", "agent-message", waitCommandFinished, "hold-released"}
 
 	retiredCaptureSources = map[string]string{
 		"recent-unwrapped": "unwrapped capture is not implemented. It returned the same physical rows as \"recent\" without unwrapping them",
@@ -67,7 +67,7 @@ var (
 		EventAgentActivity, EventTranscript, EventTransfer, EventTransferProgress, EventTransferFile,
 		EventDaemonUpgraded,
 		EventTML, EventTMLSurface, EventTaskClaimed, EventTaskFinished, EventTaskChanged, EventTaskDispatch,
-		EventKeepAwake, EventWorktreeRemoved, EventTheme,
+		EventKeepAwake, EventWorktreeRemoved, EventTheme, EventHoldChanged,
 	}
 	// knownEventTypes are the event types a subscribe filter can name.
 	knownEventTypes = EventTypeNames
@@ -143,6 +143,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbNoRecording, "stop-recording or mark-recording named a pane that is not being recorded, or whose recording ended. Nothing changed. list-recordings shows the recordings that run."},
 	{ErrVerbNoBuffer, "No paste buffer has the name given, or there are no paste buffers when none was named. Nothing was read, pasted or deleted. list-buffers shows the names."},
 	{ErrVerbTaskHeld, "claim-task named a card another pane holds. Nothing changed. Claim another with next, or wait for task-changed released."},
+	{ErrVerbHeld, "Another holder has the hold: take-hold or check-hold named a held hold, or release-hold named another holder's hold without force. Nothing changed. The message names the holder, the reason and the age. Wait with wait-for hold-released, or ask the holder."},
 	{ErrVerbTaskDone, "block-task named a card that is done. Nothing changed. Move the card to another stage first."},
 	{ErrVerbAttachmentTooLarge, "attach-task refused a file over [tasks] attachment_max_mib, or one that would take the session's card files over attachment_session_mib. Nothing was attached. The message names the size and the limit."},
 	{ErrVerbAttachmentLimit, "attach-task refused: the card holds [tasks] attachments_per_card attachments already. Nothing was attached. Detach one with detach-task first."},

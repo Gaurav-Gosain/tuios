@@ -279,6 +279,8 @@ type streamEvent struct {
 	Path string `json:"path,omitempty"`
 	// Theme is a theme event's theme.
 	Theme *ThemeEvent `json:"theme,omitempty"`
+	// Hold is a hold-changed event's hold (holds.go).
+	Hold *HoldRow `json:"hold,omitempty"`
 
 	// relayed marks an event copied from a linked host's own stream. It is
 	// delivered only to a subscriber that asked for other machines' events,

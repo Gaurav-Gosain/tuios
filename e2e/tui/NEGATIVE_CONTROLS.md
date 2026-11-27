@@ -19814,3 +19814,13 @@ Repeat from `e2e/tui` with
 | A new file outside the build outputs after the Yes is refused | `changedIn` lets every new file pass | `TestPanePluginNewSourceAfterTheYesIsRefused`: "a new source file after the Yes was not refused" | **caught** |
 
 Not covered by an e2e test: a pane that calls `plugin.enable` on the herdr socket with a token of a Yes to another plugin or from another pane. `pluginConfirmed` checks the pane, the plugin and the verb of the change, and the tuios CLI never sends such a call.
+
+## Holds end with their holder
+
+`TestHoldsAreMachineWideAndEndWithTheirHolder` takes a hold in one pane, waits on it in a second, and checks it from outside every pane. It then closes the holder pane of a second hold, and lets the ttl of a third run out. Run on 2026-11-27 on macOS, each control against the branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| A hold ends when its holder pane closes | the `noteHoldPaneClosed` call on window-closed cut from `daemon.go` | "the hold of the closed pane ends" | **caught** |
+| A hold ends when its ttl ends | the ttl timer not armed in `verbTakeHold` | "the ttl hold ends" | **caught** |
+| check fails while the hold is held, and names the holder | in the test: `hold check` must fail and name pane `holder` and the reason while the hold is held | checked on every run | **in the test** |

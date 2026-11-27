@@ -1842,6 +1842,10 @@
       {
         "name": "confirm",
         "description": "With select, and without all or session: the token for exactly the listed panes, which send-agent-message and ask-agent take as confirm to write to them."
+      },
+      {
+        "name": "holds",
+        "description": "The holds the daemon keeps, as list-holds gives them, oldest first. Omitted when there are none."
       }
     ],
     "examples": [
@@ -6821,6 +6825,10 @@
       {
         "name": "every",
         "description": "With select: match only when at least one pane matches and every matched pane is in one of the until states, and answer with all of them in panes. Without it, the first matched pane to reach one matches."
+      },
+      {
+        "name": "name",
+        "description": "The hold to wait for, required by hold-released. It matches at once when no one holds it, and otherwise when its holder releases it, its ttl ends or its holder pane closes."
       }
     ],
     "returns": [
@@ -6853,7 +6861,8 @@
       "{\"id\":1,\"verb\":\"wait-for\",\"params\":{\"condition\":\"agent-state\",\"any_session\":true,\"until\":\"needs_input\"}}",
       "{\"id\":1,\"verb\":\"wait-for\",\"params\":{\"condition\":\"command-finished\",\"session\":\"work\",\"window\":\"build\",\"command_seq\":4,\"timeout\":600000}}",
       "{\"id\":1,\"verb\":\"wait-for\",\"params\":{\"condition\":\"agent-state\",\"select\":\"group:fan/add-retry\",\"until\":\"idle,done\",\"every\":true}}",
-      "{\"id\":1,\"verb\":\"wait-for\",\"params\":{\"condition\":\"window-output\",\"session\":\"work\",\"window\":\"build\",\"pattern\":\"BUILD OK\",\"new\":true}}"
+      "{\"id\":1,\"verb\":\"wait-for\",\"params\":{\"condition\":\"window-output\",\"session\":\"work\",\"window\":\"build\",\"pattern\":\"BUILD OK\",\"new\":true}}",
+      "{\"id\":1,\"verb\":\"wait-for\",\"params\":{\"condition\":\"hold-released\",\"name\":\"nightly-bench\",\"timeout\":3600000}}"
     ]
   },
   "zoom-window": {
