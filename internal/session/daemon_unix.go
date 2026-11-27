@@ -9,16 +9,27 @@ import (
 	"syscall"
 )
 
+// catchSignals starts catching the signals handleSignals acts on. Start
+// calls it first, before any pane starts. A daemon started with SIGHUP
+// ignored, as the restart worker starts it, would otherwise pass the ignore
+// on to the panes it starts before the handler is in place: their programs
+// then outlived the close of their pane. A caught signal is set back to its
+// default in a program the daemon starts.
+func (d *Daemon) catchSignals() {
+	d.sigCh = make(chan os.Signal, 1)
+	signal.Notify(d.sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+}
+
 // handleSignals handles Unix signals for daemon shutdown. SIGHUP is caught so
 // it does not kill the daemon, and otherwise ignored: config changes are
 // picked up by the file watcher.
 func (d *Daemon) handleSignals() {
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-
+	if d.sigCh == nil {
+		d.catchSignals()
+	}
 	for {
 		select {
-		case sig := <-sigCh:
+		case sig := <-d.sigCh:
 			switch sig {
 			case syscall.SIGINT, syscall.SIGTERM:
 				LogBasic("Received %s, shutting down...", sig)

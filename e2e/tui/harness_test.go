@@ -652,7 +652,7 @@ func describeProc(pid int) string {
 	var fields []string
 	if status, err := os.ReadFile(filepath.Join(dir, "status")); err == nil {
 		for _, line := range strings.Split(string(status), "\n") {
-			for _, key := range []string{"Name:", "State:", "PPid:", "Threads:"} {
+			for _, key := range []string{"Name:", "State:", "PPid:", "Threads:", "SigIgn:", "SigCgt:"} {
 				if strings.HasPrefix(line, key) {
 					fields = append(fields, strings.Join(strings.Fields(line), " "))
 				}

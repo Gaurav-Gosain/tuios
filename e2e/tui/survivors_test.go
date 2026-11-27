@@ -5,8 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -17,12 +19,14 @@ import (
 const survivorGrace = 5 * time.Second
 
 // failSurvivors fails the test when a process it started still runs after
-// its teardown, and kills that process. killDaemon registers it before the
-// daemon's own stop, so it runs after the daemon, its panes and the clients
-// are gone, and before t.TempDir removes base.
+// its teardown, and kills that process. killDaemon calls it for each
+// isolation root a test stops a daemon in. The first call registers one check
+// for the test, before the daemons' own stops, so it runs after every daemon,
+// its panes and the clients are gone: a link's proxy ends only when both of
+// its daemons have. It looks at every root the test named by then.
 //
-// A process is the test's when its working directory is under base, or its
-// environment points HOME or an XDG folder into base: every process the suite
+// A process is the test's when its working directory is under a root, or its
+// environment points HOME or an XDG folder into one: every process the suite
 // starts gets those (xdgKeys), also one that changed its directory or left
 // its session with setsid. A process that has begun to exit, or that belongs
 // to another user, shows neither, so it is not counted. Linux only: it reads
@@ -36,25 +40,56 @@ func failSurvivors(t *testing.T, base string) {
 	if runtime.GOOS != "linux" {
 		return
 	}
+	v, loaded := survivorRoots.LoadOrStore(t, &rootList{})
+	roots := v.(*rootList)
+	roots.add(base)
+	if loaded {
+		return
+	}
 	t.Cleanup(func() {
+		defer survivorRoots.Delete(t)
+		bases := roots.all()
 		deadline := time.Now().Add(survivorGrace)
-		left := testProcs(base)
+		left := testProcs(bases)
 		for len(left) > 0 && time.Now().Before(deadline) {
 			pause(t, "the test's processes end after its teardown", 100*time.Millisecond)
-			left = testProcs(base)
+			left = testProcs(bases)
 		}
 		for _, pid := range left {
 			t.Errorf("ASSERTION: a process this test started still runs %s after its teardown, so it is killed now: %s", survivorGrace, describeProc(pid))
-			if p, err := os.FindProcess(pid); err == nil && ownedBy(pid, base) {
+			if p, err := os.FindProcess(pid); err == nil && ownedBy(pid, bases) {
 				_ = p.Kill()
 			}
 		}
 	})
 }
 
-// testProcs lists the processes other than this one that belong to the test
-// with the isolation root base (ownedBy).
-func testProcs(base string) []int {
+// survivorRoots maps a test to the isolation roots failSurvivors checks.
+var survivorRoots sync.Map
+
+// rootList is the isolation roots of one test.
+type rootList struct {
+	mu    sync.Mutex
+	bases []string
+}
+
+func (r *rootList) add(base string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if !slices.Contains(r.bases, base) {
+		r.bases = append(r.bases, base)
+	}
+}
+
+func (r *rootList) all() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.bases)
+}
+
+// testProcs lists the processes other than this one that belong to a test
+// with the isolation roots bases (ownedBy).
+func testProcs(bases []string) []int {
 	entries, err := os.ReadDir("/proc")
 	if err != nil {
 		return nil
@@ -66,18 +101,18 @@ func testProcs(base string) []int {
 		if err != nil || pid == self {
 			continue
 		}
-		if ownedBy(pid, base) {
+		if ownedBy(pid, bases) {
 			out = append(out, pid)
 		}
 	}
 	return out
 }
 
-// ownedBy reports whether process pid works under base, or has HOME or an
-// XDG folder in base.
-func ownedBy(pid int, base string) bool {
+// ownedBy reports whether process pid works under one of bases, or has HOME
+// or an XDG folder in one.
+func ownedBy(pid int, bases []string) bool {
 	dir := filepath.Join("/proc", strconv.Itoa(pid))
-	if cwd, err := os.Readlink(filepath.Join(dir, "cwd")); err == nil && under(cwd, base) {
+	if cwd, err := os.Readlink(filepath.Join(dir, "cwd")); err == nil && underAny(cwd, bases) {
 		return true
 	}
 	raw, err := os.ReadFile(filepath.Join(dir, "environ"))
@@ -86,11 +121,16 @@ func ownedBy(pid int, base string) bool {
 	}
 	for kv := range bytes.SplitSeq(raw, []byte{0}) {
 		k, v, ok := strings.Cut(string(kv), "=")
-		if ok && (k == "HOME" || strings.HasPrefix(k, "XDG_")) && under(v, base) {
+		if ok && (k == "HOME" || strings.HasPrefix(k, "XDG_")) && underAny(v, bases) {
 			return true
 		}
 	}
 	return false
+}
+
+// underAny reports whether path is one of bases or in one.
+func underAny(path string, bases []string) bool {
+	return slices.ContainsFunc(bases, func(base string) bool { return under(path, base) })
 }
 
 // under reports whether path is base or in it. A folder removed while a
