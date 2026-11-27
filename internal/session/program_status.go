@@ -299,7 +299,7 @@ var errProgramStatusSame = errors.New("program status unchanged")
 // the agent features are on, sets the pane's agent state from the summary
 // record. It runs on the goroutine that raised eventProgramStatus, never under
 // the terminal lock.
-func (s *Session) applyProgramStatus(windowID, ptyID string, agents bool) (released bool) {
+func (s *Session) applyProgramStatus(windowID, ptyID string, agents bool, isHarness func(app string) bool) (released bool) {
 	pty := s.GetPTY(ptyID)
 	if pty == nil {
 		return false
@@ -327,7 +327,16 @@ func (s *Session) applyProgramStatus(windowID, ptyID string, agents bool) (relea
 		return false
 	}
 	sum, ok := ProgramStatusSummary(wire)
-	if !ok {
+	if !ok || (progstatus.State(sum.State) == progstatus.Idle && !s.paneRunsAgent(windowID) &&
+		(isHarness == nil || !isHarness(sum.App))) {
+		// A program that is no agent and says it is idle is showing a
+		// status line, such as an editor's file and mode. It keeps its
+		// records on the pane, for the rail and the title, and gets no
+		// agent state. An app that names a harness (app=codex) is an
+		// agent that waits, and keeps its state. Working, blocked, done
+		// and error still give a state to any program: a build or a
+		// deploy script that waits for the person belongs in the Inbox,
+		// as the protocol promises.
 		return s.releaseProgramStatusClaim(windowID)
 	}
 	state, _ := programStatusAgentState(sum.State)
@@ -344,6 +353,32 @@ func (s *Session) applyProgramStatus(windowID, ptyID string, agents bool) (relea
 	}
 	s.yieldNoneClaim(windowID)
 	_, _, _ = s.ApplyAgentReport(windowID, r)
+	return false
+}
+
+// paneRunsAgent reports whether something other than the pane's own OSC 7501
+// records says an agent runs in the pane: a harness named by a hook, a report
+// or a screen rule, or the foreground detector having seen an agent process.
+//
+// An idle OSC 7501 report alone does not make a pane an agent: a program that
+// shows a status line is a program. It gets no agent state, so it is not in
+// the Agents view, the Inbox, list-agents, wait-for agent-state or an agent
+// selector, which all read the agent state. A claim the program itself holds
+// is no evidence, or the first report would keep the pane an agent for good.
+func (s *Session) paneRunsAgent(windowID string) bool {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
+	if claim, held := s.agentClaims[windowID]; held {
+		if claim.harness != "" || claim.auto || claim.sawProcess {
+			return true
+		}
+		if claim.source != AgentSourceProgram && claim.source != "" {
+			return true
+		}
+	}
+	if idx, err := findWindowStateIndex(s.state.Windows, windowID); err == nil {
+		return s.state.Windows[idx].AgentHarness != ""
+	}
 	return false
 }
 

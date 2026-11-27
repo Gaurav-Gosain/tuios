@@ -1482,7 +1482,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 			forgetMovedWindow(ev.Window)
 		}
 		if ev.Type == eventProgramStatus {
-			if s.applyProgramStatus(ev.Window, ev.PTYID, !d.agentsOff.Load()) {
+			if s.applyProgramStatus(ev.Window, ev.PTYID, !d.agentsOff.Load(), d.agentMatcher.isHarnessID) {
 				// The program let go of the pane. What is true of it now
 				// comes from a fresh look: the foreground detector, then the
 				// screen tier.

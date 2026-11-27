@@ -112,8 +112,11 @@ tuios status --clear --id tests
 ```
 
 `blocked` reads as `needs_input` with `blocked_by` from `--kind`
-(`permission` is `approval`), `done` as `done`, `error` as `errored`. The
-source is `program`, which ranks just below `report`. Each report replaces its
+(`permission` is `approval`), `done` as `done`, `error` as `errored`. An
+`idle` report alone does not make a pane an agent: the pane keeps the record
+for the rail and gets no agent state, unless `--app` names a harness or the
+pane already runs an agent. The source is `program`, which ranks just below
+`report`. Each report replaces its
 record, so send `--app` every time. A shell prompt ends `working`, `blocked`
 and `idle` records, and so does your exit when you reported from the
 foreground (not from a background job, and not in the same instant you exit). `done` and `error` stay until the person types in

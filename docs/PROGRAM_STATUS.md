@@ -100,7 +100,12 @@ protocol.
 ## What tuios shows
 
 A report makes the pane an agent pane, for any program. The agent state comes
-from the most urgent record of the pane:
+from the most urgent record of the pane. One exception: when the most urgent
+record is `idle` and nothing else says an agent runs in the pane, the pane is
+not an agent pane. Such a program shows a status line, such as an editor's file
+and mode. The rail and the title still show its record. The Agents view, the
+Inbox and `list-agents` leave it out. An `idle` record whose `app` names a
+harness, such as `app=codex`, is an agent that waits, and keeps its state.
 
 | OSC 7501 state | tuios agent state | `blocked_by` |
 | --- | --- | --- |

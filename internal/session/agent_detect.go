@@ -62,6 +62,22 @@ type agentMatcher struct {
 	registry *harness.Registry
 }
 
+// isHarnessID reports whether app names an agent: a harness id the registry
+// knows, or an agent binary name. An OSC 7501 report's app is checked with it,
+// so an agent that says it is idle before the detector sees its process is
+// still an agent.
+func (m agentMatcher) isHarnessID(app string) bool {
+	app = strings.ToLower(strings.TrimSpace(app))
+	if app == "" {
+		return false
+	}
+	if m.registry != nil && m.registry.Lookup(app) != nil {
+		return true
+	}
+	_, ok := m.names[app]
+	return ok
+}
+
 // newAgentMatcher builds a matcher from the manifest registry plus the built-in
 // defaults and any extra names. Extra names are trimmed and lowercased; blanks
 // are ignored.
