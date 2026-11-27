@@ -56,7 +56,8 @@ func fanFixture(t *testing.T) (base, repo string) {
 		"printf '\\033]0;\\342\\234\\263 Claude Code\\007'\necho fake claude starting\n" +
 		hook("SessionStart") + "\n" +
 		"sleep 2\nstty -icanon min 0 time 1\ncat >/dev/null\nstty icanon\nprintf '\\033[?2004h'\necho fake claude ready\n" +
-		"while IFS= read -r line; do printf '\\033]0;\\342\\240\\220 Claude Code\\007'; " + hook("UserPromptSubmit") + "echo \"GOT: $line\"; sleep 1; printf '\\033]0;\\342\\234\\263 Claude Code\\007'; " + hook("Stop") + "done\n"
+		"while IFS= read -r line; do printf '\\033]0;\\342\\240\\220 Claude Code\\007'; " + hook("UserPromptSubmit") + "echo \"GOT: $line\"; sleep 1; " +
+		"while [ -e \"$FAKE_TURN_GATE\" ]; do sleep 0.05; done; printf '\\033]0;\\342\\234\\263 Claude Code\\007'; " + hook("Stop") + "done\n"
 	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -64,8 +65,14 @@ func fanFixture(t *testing.T) (base, repo string) {
 	t.Setenv("TUIOS_AGENT_STALL_SECONDS", "2")
 	t.Setenv("TUIOS_AGENT_DETECT_SECONDS", "1")
 	t.Setenv("TUIOS_WORKTREE_DIR", filepath.Join(base, "worktrees"))
+	// A turn of the fake lasts while this file exists (reviewFan). No
+	// file, no hold.
+	t.Setenv("FAKE_TURN_GATE", fanTurnGate(base))
 	return base, repo
 }
+
+// fanTurnGate is the file that holds the turns of fanFixture's fake agents.
+func fanTurnGate(base string) string { return filepath.Join(base, "turn-gate") }
 
 // worktreeRows reads `tuios worktree ls --json`.
 func worktreeRows(t *testing.T, base string, args ...string) []map[string]any {

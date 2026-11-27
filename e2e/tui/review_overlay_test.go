@@ -21,11 +21,27 @@ import (
 // but the one fanFixture makes.
 
 // reviewFan starts a fan of two fake agents named try/NAME, waits for both
-// prompts to be typed, and changes README in the second attempt. It returns
-// the second attempt's session.
+// prompts to be typed, and changes README in the second attempt during its
+// agent's turn. It returns the second attempt's session.
+//
+// The change has to land inside the turn. A turn's checkpoint is taken when
+// it ends, and a line made after the last checkpoint is the agent's only
+// while the agent works, the person's otherwise. The fake's turn lasts a
+// second, so on a slow runner README was written after that checkpoint, the
+// line was the person's, and the note went to the person. So the fake's turn
+// is held open (fanTurnGate) from before the fan starts until README is
+// written.
 func reviewFan(t *testing.T, base, repo, name string) string {
 	t.Helper()
+	gate := fanTurnGate(base)
+	if err := os.WriteFile(gate, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Remove(gate) }()
 	second, path := reviewFanAt(t, base, repo, name)
+	if out, err := tuiosCLI(t, base, "wait-for", "agent-state", "-s", second, "--until", "working", "--timeout", "30000"); err != nil {
+		t.Fatalf("the second attempt's agent never started its turn: %v: %s", err, out)
+	}
 	if err := os.WriteFile(filepath.Join(path, "README"), []byte("hello\nretry three times\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
