@@ -4401,11 +4401,20 @@ tuios list-windows [flags]
 - `--all`: List the panes of every session on this machine, one row each
 - `--rail`: Also list the pane the rail draws in its pane section
 - `--all-hosts`: Also list the panes of every session on each host in `[hosts]`
+- `--foreground`: Read what holds each pane's terminal: `foreground_state` (`shell`, `program` or `unknown`) and the processes in the foreground, in `--json`
 - `--text <N>`: Add the last N lines of each pane's screen, up to 200
 
 With `--all`, `--all-hosts` or `--text`, each row has `session`, `host` (for a
 pane on another machine, with `untrusted`), `workspace`, `workspace_name`,
-`window_id`, `name`, `title`, `command`, `cwd`, `focused` and `agent_state`.
+`window_id`, `name`, `title`, `command`, `cwd`, `focused` and `agent_state`,
+and `pid` and `tty` for a pane whose process runs on the listed machine.
+
+`--foreground` adds `foreground_state` to each window, with
+`foreground_process_group_id` and `foreground_processes`. `shell` is a pane
+at its prompt, `program` a pane that runs something, and `unknown` a pane the
+kernel did not answer for, which is not an idle pane. It works on a detached
+session and without shell integration. See
+[list-windows](protocol.md#list-windows) for the fields.
 `--text` adds `text`, or `text_error` when the pane's text cannot be read. The
 command reads text with `capture-pane`, so the same grants apply. A pane that
 holds `read` alone lists only its own session, and the JSON has an `errors`

@@ -198,6 +198,9 @@ func (d *Daemon) verbListWindows(cs *connState, params json.RawMessage) (any, *v
 		Session string `json:"session"`
 		// Rail lists the rail pane too. See WindowState.Rail.
 		Rail bool `json:"rail"`
+		// Foreground reads each pane's foreground process group for the
+		// call. See pane_foreground.go.
+		Foreground bool `json:"foreground"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -219,6 +222,15 @@ func (d *Daemon) verbListWindows(cs *connState, params json.RawMessage) (any, *v
 	addResumable(d, state, data)
 	if !p.Rail {
 		dropRailPane(data)
+	}
+	if p.Foreground {
+		// Each entry keeps its index, which is the state's.
+		windows, _ := data["windows"].([]map[string]any)
+		for _, w := range windows {
+			if i, ok := w["index"].(int); ok && i >= 0 && i < len(state.Windows) {
+				d.addForeground(cs, sess, &state.Windows[i], w)
+			}
+		}
 	}
 	return data, nil
 }
@@ -293,6 +305,9 @@ func (d *Daemon) verbGetWindow(cs *connState, params json.RawMessage) (any, *ver
 		if err == nil && res.Success && res.Data != nil {
 			data := maps.Clone(res.Data)
 			data["type"] = "window"
+			// The daemon reads the foreground itself, so these fields are
+			// the same with a client attached and with none.
+			d.addForeground(cs, sess, &state.Windows[idx], data)
 			return data, nil
 		}
 		// A client that does not answer does not stop the read: the
@@ -303,6 +318,7 @@ func (d *Daemon) verbGetWindow(cs *connState, params json.RawMessage) (any, *ver
 		maps.Copy(data, shellFactsData(pty.ShellFacts()))
 		addOnePaneMeta(pty, data)
 	}
+	d.addForeground(cs, sess, &state.Windows[idx], data)
 	data["type"] = "window"
 	return data, nil
 }

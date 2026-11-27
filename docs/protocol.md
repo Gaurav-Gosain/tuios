@@ -2848,6 +2848,31 @@ A window that a process in another pane opened has `started_by`, that pane
 as `{"session", "window"}`. See
 [Which pane started a pane](#which-pane-started-a-pane).
 
+With `foreground: true`, each window also has `foreground_state`, which says
+what holds the pane's terminal:
+
+- `shell`: the pane's own shell does, and it runs nothing in its process
+  group. That is a pane at its prompt. A job the shell runs in the background
+  has a group of its own and is not counted.
+- `program`: another process group does, the shell runs a process in its own
+  group (a script's commands), or the process the pane started is not a shell.
+- `unknown`: the kernel did not say. The pane's process is on another machine
+  or has exited, or the platform does not tell which group holds a terminal.
+  It is not an idle pane.
+
+The state is read from the kernel for the call. It needs no attached client
+and no shell integration, and it is never a value left from an earlier read,
+as an empty `foreground_cmd` can be. The read costs a few process reads a
+pane, so it is made only when asked for.
+
+`foreground_process_group_id` and `foreground_processes` come with it: the
+leader of that group and the members behind it, each with `pid` and `name`.
+A caller that may type into the pane (the person, the pane itself, a pane
+that holds `write` on the pane's session, or `admin`) also gets each
+process's `argv`, `argv0`, `cmdline` and `cwd`. A pane with `read` only does
+not, because arguments can carry secrets that never show on the screen. The
+herdr API's `pane.process_info` gives the same processes under the same rule.
+
 ### get-window
 
 Describe one window, as the client protocol's `GetWindow` command does. With
@@ -2856,6 +2881,11 @@ with none, the daemon answers with the window's `list-windows` entry. The
 window is resolved by the daemon either way, so a target that matches nothing
 is `window_not_found`. A client that does not answer in time is not waited on
 twice: the daemon's entry follows.
+
+Either answer has `foreground_state`, `foreground_process_group_id` and
+`foreground_processes`, as [list-windows](#list-windows) gives them with
+`foreground: true`. The daemon reads them, so they are the same with a client
+attached and with none.
 
 Params: `session` and `window` (both optional; `window` omitted means the
 focused window).

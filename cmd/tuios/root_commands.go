@@ -1710,7 +1710,7 @@ func newListWindowsCommand() *cobra.Command {
 	// Inspection commands for scripting and hackability
 	var listWindowsSession string
 	var listWindowsJSON bool
-	var listWindowsAll, listWindowsAllHosts, listWindowsRail bool
+	var listWindowsAll, listWindowsAllHosts, listWindowsRail, listWindowsForeground bool
 	var listWindowsText int
 	listWindowsCmd := &cobra.Command{
 		Use:   "list-windows",
@@ -1735,12 +1735,15 @@ Use --json for machine-readable output that can be used for scripting.`,
   tuios list-windows --all --all-hosts
 
   # Include the pane the rail draws in its pane section
-  tuios list-windows --rail`,
+  tuios list-windows --rail
+
+  # The panes of every session whose shell sits at its prompt
+  tuios list-windows --all --foreground --json | jq '.panes[] | select(.foreground_state == "shell")'`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if listWindowsAll || listWindowsAllHosts || listWindowsText > 0 {
-				return runListAllWindows(listWindowsSession, listWindowsAll, listWindowsAllHosts, listWindowsText, listWindowsJSON)
+				return runListAllWindows(listWindowsSession, listWindowsAll, listWindowsAllHosts, listWindowsForeground, listWindowsText, listWindowsJSON)
 			}
-			return queryWindows(listWindowsSession, listWindowsJSON, listWindowsRail)
+			return queryWindows(listWindowsSession, listWindowsJSON, listWindowsRail, listWindowsForeground)
 		},
 	}
 	addSessionFlag(listWindowsCmd, &listWindowsSession)
@@ -1748,6 +1751,7 @@ Use --json for machine-readable output that can be used for scripting.`,
 	listWindowsCmd.Flags().BoolVar(&listWindowsAll, "all", false, "List the panes of every session on this machine, one row each")
 	listWindowsCmd.Flags().BoolVar(&listWindowsAllHosts, "all-hosts", false, "Also list the panes of every session on each host in [hosts]")
 	listWindowsCmd.Flags().BoolVar(&listWindowsRail, "rail", false, "Also list the pane the rail draws in its pane section")
+	listWindowsCmd.Flags().BoolVar(&listWindowsForeground, "foreground", false, "Read what holds each pane's terminal: foreground_state (shell, program or unknown) and the processes in the foreground, in --json")
 	listWindowsCmd.Flags().IntVar(&listWindowsText, "text", 0, fmt.Sprintf("Add the last N lines of each pane's screen, up to %d. capture-pane's grants apply", maxListText))
 	return listWindowsCmd
 }

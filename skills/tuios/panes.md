@@ -181,6 +181,12 @@ with its folder, command and last 20 lines. `--all-hosts` adds the other
 machines. It reads with `capture-pane`, under the same grants: without `admin`
 you get your own session and an `errors` entry for the rest.
 
+`--foreground` adds `foreground_state` to each pane: `shell` for a pane at its
+prompt, `program` for one that runs something, `unknown` when the kernel did
+not say. Treat only `shell` as idle. `foreground_processes` names what runs,
+with `argv` and `cwd` when you may type into the pane. `tuios get-window
+--json` has the same fields for one pane.
+
 To read one session's panes in a loop, use `capture-pane`:
 
 ```sh
