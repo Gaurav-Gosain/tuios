@@ -21,14 +21,31 @@ type Watcher struct {
 	once sync.Once
 }
 
+// fileMask is what WatchFile reports: each write, not only the close after
+// the last one, so a log a running program appends to is seen as it grows,
+// and the file itself going away.
+const fileMask = unix.IN_MODIFY | unix.IN_CLOSE_WRITE | unix.IN_ATTRIB | unix.IN_DELETE_SELF | unix.IN_MOVE_SELF
+
 // Watch starts watching dir. notify runs on the watcher's own goroutine each
 // time a batch of changes to dir's entries arrives, and must not block.
 func Watch(dir string, notify func()) (*Watcher, error) {
+	return watchMask(dir, entryMask, notify)
+}
+
+// WatchFile starts watching one file for writes, and for its removal or
+// rename. notify runs on the watcher's own goroutine and must not block. It
+// is for a caller that waits on the file's content, such as wait-for file,
+// and is watched only while it waits.
+func WatchFile(path string, notify func()) (*Watcher, error) {
+	return watchMask(path, fileMask, notify)
+}
+
+func watchMask(path string, mask uint32, notify func()) (*Watcher, error) {
 	fd, err := unix.InotifyInit1(unix.IN_CLOEXEC | unix.IN_NONBLOCK)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := unix.InotifyAddWatch(fd, dir, entryMask); err != nil {
+	if _, err := unix.InotifyAddWatch(fd, path, mask); err != nil {
 		_ = unix.Close(fd)
 		return nil, err
 	}

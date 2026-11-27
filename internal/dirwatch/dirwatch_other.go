@@ -17,3 +17,6 @@ const fileByDir = true
 func watchContentDir(string, func()) (*Watcher, error) { return nil, ErrUnsupported }
 
 func watchFile(string, func()) (*Watcher, error) { return nil, ErrUnsupported }
+
+// WatchFile reports ErrUnsupported.
+func WatchFile(string, func()) (*Watcher, error) { return nil, ErrUnsupported }

@@ -48,7 +48,7 @@ var (
 	// implemented without guessing at row boundaries.
 	// WaitConditionNames are the conditions wait-for understands. It is exported
 	// so the CLI offers exactly this set and cannot drift from the daemon's.
-	WaitConditionNames = []string{"session-exists", "window-output", "window-exit", "window-idle", "agent-state", "agent-message", waitCommandFinished, "hold-released"}
+	WaitConditionNames = []string{"session-exists", "window-output", "window-exit", "window-idle", "agent-state", "agent-message", waitCommandFinished, "hold-released", waitPid, waitFile}
 
 	retiredCaptureSources = map[string]string{
 		"recent-unwrapped": "unwrapped capture is not implemented. It returned the same physical rows as \"recent\" without unwrapping them",

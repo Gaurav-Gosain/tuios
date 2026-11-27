@@ -743,6 +743,7 @@ func TestNoLowClassVerbTakesAPathOrReturnsAFile(t *testing.T) {
 		"file-list.dir":                  "checkLinkRead",
 		"read-dir.dir":                   "checkLinkRead",
 		"wait-dir.dir":                   "checkLinkRead",
+		"wait-for.path":                  "the link must allow files, then checkLinkRead (fileWaitRefusal)",
 		"stash-get.path":                 "opens only an entry of the session's stash",
 		"stash-put.path":                 "over a link only names the stored file: content is required and the path is never opened",
 		"screenshot.out":                 "refused over a link",

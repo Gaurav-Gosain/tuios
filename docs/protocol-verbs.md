@@ -6193,11 +6193,11 @@ Block until a condition matches, or fail with the timeout code.
 
 | Param | Type | Required | Default | Description |
 |---|---|---|---|---|
-| `condition` | string |  |  | Condition to wait for. One of `session-exists`, `window-output`, `window-exit`, `window-idle`, `agent-state`, `agent-message`, `command-finished` or `hold-released`. |
+| `condition` | string |  |  | Condition to wait for. One of `session-exists`, `window-output`, `window-exit`, `window-idle`, `agent-state`, `agent-message`, `command-finished`, `hold-released`, `pid` or `file`. |
 | `session` | string |  |  | Session name. session-exists requires it: it is the session to wait for. For the other conditions, omit it from a pane for the pane's own session, and from outside every pane for the most recently active one. |
 | `window` | string |  |  | Window id or name. Omit to target the focused window. |
 | `any_session` | bool |  | `false` | For agent-state only: watch every session on the daemon, including ones created during the wait. Takes no session or window. The result names the session that matched. |
-| `pattern` | string |  |  | Regular expression, required by window-output. |
+| `pattern` | string |  |  | Regular expression, required by window-output. For file: the file matches when one of its lines matches, the line it ends in so far included. |
 | `source` | string |  | `recent` | Which buffer window-output matches against. The default includes scrollback, so output that has already scrolled past still matches. One of `visible` or `recent`. |
 | `new` | bool |  | `false` | For window-output: match only the output the pane writes after the wait starts. Text already on the screen or in the scrollback does not match. A program that redraws its screen writes its text again, and that text matches. Takes no source. |
 | `idle` | int |  | `500` | Milliseconds of silence that count as idle, for window-idle. |
@@ -6209,6 +6209,8 @@ Block until a condition matches, or fail with the timeout code.
 | `under` | string |  |  | With select: watch only the panes that this window started, and the panes they started, by window id. A pane with the fan grant and without admin always waits under its own window. |
 | `every` | bool |  | `false` | With select: match only when at least one pane matches and every matched pane is in one of the until states, and answer with all of them in panes. Without it, the first matched pane to reach one matches. |
 | `name` | string |  |  | The hold to wait for, required by hold-released. It matches at once when no one holds it, and otherwise when its holder releases it, its ttl ends or its holder pane closes. |
+| `pid` | int |  |  | The process to wait for, required by pid. It matches when the process exits, and at once when no process has the pid. Any process the daemon can see counts, not only its own children. The exit status is not known. |
+| `path` | string |  |  | The file to wait for, an absolute path, required by file. It matches when the file exists, and with pattern when a line of it matches. A folder on the way to it may not exist yet. A pane needs the files grant, a restricted connection may not wait on a file, and over a link the link needs files and the path keeps to its read rules. |
 
 | Result field | Type | Description |
 |---|---|---|
@@ -6252,6 +6254,14 @@ Block until a condition matches, or fail with the timeout code.
 
 ```json
 {"id":1,"verb":"wait-for","params":{"condition":"hold-released","name":"nightly-bench","timeout":3600000}}
+```
+
+```json
+{"id":1,"verb":"wait-for","params":{"condition":"pid","pid":4194304,"timeout":3600000}}
+```
+
+```json
+{"id":1,"verb":"wait-for","params":{"condition":"file","path":"/tmp/tuios-example/build.log","pattern":"^(PASS|FAIL)","timeout":600000}}
 ```
 
 ### `zoom-window`

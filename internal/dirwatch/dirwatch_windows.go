@@ -1,6 +1,7 @@
 package dirwatch
 
 import (
+	"path/filepath"
 	"sync"
 
 	"github.com/fsnotify/fsnotify"
@@ -30,6 +31,13 @@ const fileByDir = true
 // watchContentDir is Watch that also reports a file in dir written.
 func watchContentDir(dir string, notify func()) (*Watcher, error) {
 	return watchDir(dir, true, notify)
+}
+
+// WatchFile starts watching one file for writes, and for its removal or
+// rename. The watch is on its directory, which reports the writes of every
+// file in it, so notify can run for a write to another file there.
+func WatchFile(path string, notify func()) (*Watcher, error) {
+	return watchContentDir(filepath.Dir(path), notify)
 }
 
 // watchFile is not used here: AddFile watches the file's directory.

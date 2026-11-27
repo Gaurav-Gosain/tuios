@@ -8453,7 +8453,8 @@ watch the agent panes it matches in every session, including panes that open
 during the wait; takes no `session`, `window` or `any_session`), `every` (bool,
 with `select`: match only when at least one pane matches and all of them are in
 an `until` state, and answer with them in `panes`), `name` (the hold, for
-`hold-released`), `timeout` (milliseconds;
+`hold-released`), `pid` (the process, for `pid`), `path` (an absolute path,
+for `file`), `timeout` (milliseconds;
 default 30000, at most 86400000, which is 24 hours).
 
 A wait ends when its caller closes the connection. It does not wait for its
@@ -8501,6 +8502,23 @@ Conditions:
   is free, else when its holder releases it, its ttl ends or its holder pane
   closes. The result carries `name` and `was_held`. A timeout names the holder
   and the reason.
+- `pid` resolves when the process `pid` exits, and at once when no process
+  has that pid. Any process the daemon can see counts, not only its own
+  children. The kernel says when the process exits: a pidfd on Linux 5.3 and
+  later, kqueue on macOS and the BSDs, and the process handle on Windows. An
+  older Linux kernel and other platforms check once a second. The result
+  carries `pid` and `was_running`. The exit status is not known, because only
+  the parent of a process can read it.
+- `file` resolves when the file at `path` exists. With `pattern` it resolves
+  when a line of the file matches, the line it ends in so far included. The
+  folder of the file may not exist yet. The daemon watches the nearest folder
+  that exists, and the file's writes once it is there, so nothing polls. A
+  file that is replaced or cut short is read again from its start. The result
+  carries `path`, `existed` (whether the file was there when the wait began)
+  and with `pattern` `line`, the first 200 bytes of the line that matched. A
+  file wait reads the file: a pane needs the `files` grant, a restricted
+  connection may not make it, and over a link the link needs `files` and
+  the path keeps to the link's read roots and deny list.
 
 Request:
 

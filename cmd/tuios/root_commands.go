@@ -1375,6 +1375,12 @@ Conditions:
                   any pane in the session. Prints the exit code
   hold-released   no one holds the hold NAME, given after the condition. It
                   matches at once when the hold is free. See 'tuios hold'
+  pid             the process PID, given after the condition, exited. It
+                  matches at once when no process has the pid. Any process
+                  you can see counts, not only a child of this shell
+  file            the file PATH, given after the condition, exists, and with
+                  --pattern, a line of it matches. A relative path is from
+                  the current folder. From a pane it needs the files grant
 
 The daemon watches its own events, so there is no need to poll with
 capture-pane and sleep. A condition that does not match before --timeout exits
@@ -1410,11 +1416,19 @@ non-zero with the timeout error.`,
   tuios wait-for command-finished -w build --command-seq 4 --timeout 600000
 
   # Wait for the end of a quiet window, then build
-  tuios wait-for hold-released quiet-window --timeout 14400000`,
+  tuios wait-for hold-released quiet-window --timeout 14400000
+
+  # Wait for a background job to end
+  make test > test.log 2>&1 &
+  tuios wait-for pid $! --timeout 3600000
+
+  # Wait for a line in a log that another program writes
+  tuios wait-for file build.log --pattern '^(PASS|FAIL)' --timeout 600000`,
 		Args: func(cmd *cobra.Command, args []string) error {
-			if len(args) > 0 && args[0] == "hold-released" {
+			want := map[string]string{"hold-released": "NAME", "pid": "PID", "file": "PATH"}
+			if len(args) > 0 && want[args[0]] != "" {
 				if len(args) != 2 {
-					return errors.New("hold-released takes the hold's name: tuios wait-for hold-released NAME")
+					return errfmt.Errorf("%s takes one argument: tuios wait-for %s %s", args[0], args[0], want[args[0]])
 				}
 				return nil
 			}
@@ -1422,8 +1436,13 @@ non-zero with the timeout error.`,
 		},
 		ValidArgs: session.WaitConditionNames,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if args[0] == "hold-released" {
+			switch args[0] {
+			case "hold-released":
 				return runWaitForHold(args[1], waitForTimeout, waitForJSON)
+			case "pid":
+				return runWaitForPid(args[1], waitForTimeout, waitForJSON)
+			case "file":
+				return runWaitForFile(args[1], waitForPattern, waitForTimeout, waitForJSON)
 			}
 			var commandSeq *uint64
 			if cmd.Flags().Changed("command-seq") {
@@ -1438,7 +1457,7 @@ non-zero with the timeout error.`,
 	waitForCmd.Flags().BoolVar(&waitForEvery, "every", false, "With --select: wait until every matched pane is in one of the --until states, not only the first")
 	addSessionFlag(waitForCmd, &waitForSession)
 	addWindowFlag(waitForCmd, &waitForWindow, "Target window by name or ID (default: focused, and for agent-state any window)")
-	waitForCmd.Flags().StringVar(&waitForPattern, "pattern", "", "Regular expression to match, required by window-output")
+	waitForCmd.Flags().StringVar(&waitForPattern, "pattern", "", "Regular expression to match, required by window-output. For file: match it against each line")
 	waitForCmd.Flags().BoolVar(&waitForNew, "new", false, "For window-output: match only output written after the wait starts. A screen redraw counts as new output")
 	waitForCmd.Flags().StringVar(&waitForUntil, "until", "", "Agent state(s) to wait for, comma-separated, required by agent-state")
 	waitForCmd.Flags().IntVar(&waitForIdle, "idle", 0, "Milliseconds of silence that count as idle, for window-idle (default: 500)")

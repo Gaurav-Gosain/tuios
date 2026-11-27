@@ -2672,11 +2672,13 @@ tuios wait-for <condition> [flags]
 | `agent-message` | A message arrived. With `--window`, the first unread message in that inbox; without it, any message left in the session after the wait began |
 | `command-finished` | A shell that marks its commands with OSC 133 finished one. With `--window`, that pane's next command, or with `--command-seq N` the first once the pane has finished more than N (already true if it happened before the wait). Without a window, any pane in the session. Prints the exit code |
 | `hold-released` | No one holds the hold named after the condition: `tuios wait-for hold-released NAME`. It matches at once when the hold is free. See [`tuios hold`](#tuios-hold) |
+| `pid` | The process named after the condition exited: `tuios wait-for pid PID`. It matches at once when no process has the pid. Any process you can see counts, not only a child of your shell. Linux, macOS, the BSDs and Windows tell tuios when the process exits. Other platforms check once a second |
+| `file` | The file named after the condition exists: `tuios wait-for file PATH`. With `--pattern`, a line of it matches, the line it ends in so far included. A relative path is from the current folder. The folder of the file may not exist yet. From a pane it needs the `files` grant |
 
 **Flags:**
 - `-s, --session <name>`: Target session (default: this pane's session, else the most recently active)
 - `-w, --window <id-or-name>`: Target window (default: focused; `agent-state`: any window)
-- `--pattern <regexp>`: Go regular expression (RE2), required by `window-output`
+- `--pattern <regexp>`: Go regular expression (RE2), required by `window-output`. For `file`: match it against each line
 - `--new`: For `window-output`: match only output written after the wait starts. Text already on the screen or in the scrollback does not match. A program that redraws its screen writes its text again, and that text matches
 - `--until <states>`: Agent state(s) to wait for, comma-separated, required by `agent-state`
 - `--thread <id>`: Only match a message in this thread, for `agent-message`. Pass any message id in it

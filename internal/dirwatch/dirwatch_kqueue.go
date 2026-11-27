@@ -35,6 +35,10 @@ const fileByDir = false
 // watchContentDir is Watch: the files written in dir are watched one by one.
 func watchContentDir(dir string, notify func()) (*Watcher, error) { return Watch(dir, notify) }
 
+// WatchFile starts watching one file for writes, and for its removal or
+// rename. notify runs on the watcher's own goroutine and must not block.
+func WatchFile(path string, notify func()) (*Watcher, error) { return watchFile(path, notify) }
+
 // watchFile watches one file for writes, and for its removal or rename.
 func watchFile(path string, notify func()) (*Watcher, error) {
 	return watchVnode(path, 0, unix.NOTE_WRITE|unix.NOTE_EXTEND|unix.NOTE_ATTRIB|unix.NOTE_DELETE|unix.NOTE_RENAME, notify)

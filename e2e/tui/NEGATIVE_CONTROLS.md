@@ -19824,3 +19824,14 @@ Not covered by an e2e test: a pane that calls `plugin.enable` on the herdr socke
 | A hold ends when its holder pane closes | the `noteHoldPaneClosed` call on window-closed cut from `daemon.go` | "the hold of the closed pane ends" | **caught** |
 | A hold ends when its ttl ends | the ttl timer not armed in `verbTakeHold` | "the ttl hold ends" | **caught** |
 | check fails while the hold is held, and names the holder | in the test: `hold check` must fail and name pane `holder` and the reason while the hold is held | checked on every run | **in the test** |
+## wait-for pid and wait-for file block until the thing happens
+
+`TestWaitForPidAndFile` waits on a process the test started, so the daemon is not its parent. It then waits on a file in a folder that does not exist yet, and on a line in a log that the test keeps open while it writes. Run on 2026-11-27 on macOS, each control against the branch head with one change:
+
+| Claim | Control | Where it fails | Verdict |
+|---|---|---|---|
+| The pid wait blocks while the process runs | `waitPidExit` answers at once, as if the process had exited | "the pid wait stays blocked while the process runs" | **caught** |
+| A write to an open file wakes the pattern wait | `WatchFile` on kqueue watches a folder, not the file | "pattern wait: the wait did not end" | **caught** |
+| The folder watch moves down as folders appear | the watch stays on the first folder it found | "file wait: the wait did not end" | **caught** |
+
+The file step found a real race on its first run: a folder made while the watch on the folder above it was set up was never seen. The watch now looks again after each new folder watch.

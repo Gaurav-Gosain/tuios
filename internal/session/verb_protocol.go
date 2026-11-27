@@ -2530,6 +2530,8 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "under", Type: "string"},
 				{Name: "every", Type: "bool", Default: "false"},
 				{Name: "name", Type: "string"},
+				{Name: "pid", Type: "int"},
+				{Name: "path", Type: "string"},
 			},
 			returns: []verbParam{
 				{Name: "condition", Type: "string"},

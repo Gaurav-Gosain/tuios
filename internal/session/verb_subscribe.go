@@ -364,6 +364,10 @@ func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbE
 		Under string `json:"under"`
 		// Name is the hold hold-released waits on (holds.go).
 		Name string `json:"name"`
+		// Pid is the process the pid condition waits on, and Path the file
+		// the file condition waits on (wait_pid_file.go).
+		Pid  int    `json:"pid"`
+		Path string `json:"path"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -373,6 +377,12 @@ func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbE
 	}
 	if p.Name != "" && p.Condition != "hold-released" {
 		return nil, invalidParam("name", "name only applies to the hold-released condition")
+	}
+	if p.Pid != 0 && p.Condition != waitPid {
+		return nil, invalidParam("pid", "pid only applies to the pid condition")
+	}
+	if p.Path != "" && p.Condition != waitFile {
+		return nil, invalidParam("path", "path only applies to the file condition")
 	}
 	if p.Every && p.Select == "" {
 		return nil, invalidParam("every", "every applies to a wait with select: it waits for every pane the selector matches")
@@ -447,6 +457,10 @@ func (d *Daemon) verbWaitFor(cs *connState, params json.RawMessage) (any, *verbE
 		return d.waitCommandFinishedFor(cs, p.Session, p.Window, p.CommandSeq, deadline)
 	case "hold-released":
 		return d.waitHoldReleased(p.Name, deadline)
+	case waitPid:
+		return d.waitPidExit(p.Pid, deadline)
+	case waitFile:
+		return d.waitFileMatch(cs, p.Path, p.Pattern, deadline)
 	default:
 		message := "unknown condition " + p.Condition
 		if p.Condition == "" {

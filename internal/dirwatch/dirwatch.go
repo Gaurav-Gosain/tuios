@@ -16,6 +16,9 @@
 // BSDs: fsnotify's inotify mask includes writes, and its kqueue backend opens
 // a descriptor for every file in the folder, which for a folder of two
 // thousand names is two thousand descriptors to answer one question.
+//
+// WatchFile is the other exception: one file, every write to it, for a caller
+// that waits until the file says something, and only while it waits.
 package dirwatch
 
 import "errors"
