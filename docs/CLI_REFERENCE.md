@@ -3378,7 +3378,7 @@ files are not changed. See
 
 **Usage:**
 ```bash
-tuios review [SESSION] [-w <window>] [--base <ref> | --against <session> | --uncommitted] [--stat] [--path <path>]... [--context <n>] [--json]
+tuios review [SESSION] [-w <window>] [--base <ref> | --against <session> | --uncommitted] [--stat] [--origins] [--path <path>]... [--context <n>] [--json]
 tuios review note [-w <window>] FILE:LINE TEXT... [--side old]
 tuios review note [-w <window>] --hunk '<header>' FILE TEXT...
 tuios review note --edit ID TEXT... | --remove ID
@@ -3393,6 +3393,7 @@ tuios review send [-w <window>] [--id ID]... [--now] [--json]
 - `--against <session>`: Diff against another attempt of the same fan
 - `--uncommitted`: Only what is not committed yet
 - `--stat`: The list of changed files with their counts, without the diff
+- `--origins`: Name who made each hunk after its header: an agent and its turn, or you. With `--json`, each hunk has `origin`, `also`, `unsure` and `who`
 - `--path <path>`: Only this path, relative to the repository root. Repeatable
 - `--context <n>`: Lines of context around each change, 0 to 20 (default 3)
 - `--side old` (`note`): `LINE` is a removed line, numbered as in the base

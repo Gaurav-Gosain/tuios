@@ -94,6 +94,17 @@ type Hunk struct {
 	NewStart int    `json:"new_start"`
 	NewLines int    `json:"new_lines"`
 	Lines    []Line `json:"lines"`
+	// Origin is who made most of the hunk's lines, an index into the
+	// review's authors plus one, and Also the next most, 0 for none. Both
+	// are 0 when the review was not asked for origins. See NameHunks.
+	Origin int `json:"origin,omitempty"`
+	Also   int `json:"also,omitempty"`
+	// Unsure marks a main author that may be wrong.
+	Unsure bool `json:"unsure,omitempty"`
+	// Who names the authors in words, as the review view's chip does:
+	// "claude-code · turn 2", "you · not in a turn", "claude-code · turn 2
+	// + aider".
+	Who string `json:"who,omitempty"`
 }
 
 // File is one changed file.

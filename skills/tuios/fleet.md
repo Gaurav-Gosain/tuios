@@ -221,6 +221,7 @@ grant and `compare-fan` needs `read`, and both reach only your own fan group.
 ```sh
 tuios review api-fan-add-retry-backoff-http-2
 tuios review api-fan-add-retry-backoff-http-2 --against api-fan-add-retry-backoff-http
+tuios review api-fan-add-retry-backoff-http-2 --origins --json
 tuios review note -s api-fan-add-retry-backoff-http-2 api/retry.go:42 'log the attempt number here too'
 tuios review notes -s api-fan-add-retry-backoff-http-2
 tuios review send -s api-fan-add-retry-backoff-http-2
@@ -229,7 +230,10 @@ tuios review send -s api-fan-add-retry-backoff-http-2
 `tuios review` (the `review-diff` verb) is the diff of a pane's worktree
 against the base it was made from, committed and uncommitted work together,
 untracked files included, read without touching its index or files. Its
-answer is marked `untrusted`: it is the repository's text. `review note`
+answer is marked `untrusted`: it is the repository's text. `--origins` names who
+made each hunk: an agent and its turn, or the person. With `--json` each hunk
+has `origin` and `also`, places in `authors` from 1, `unsure`, and `who`, the
+words the review view shows. `review note`
 (`review-note`) leaves a note on a line, or with `--hunk` on a hunk; the note
 keeps the line's text and follows it as the file changes, or is marked
 outdated when the line is gone. `--to PANE` gives the note to another agent

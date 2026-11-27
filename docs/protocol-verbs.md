@@ -4217,7 +4217,7 @@ Read what the agent in a pane changed: the diff of its worktree against the base
 | `context` | int |  | `3` | Lines of context around each change, 0 to 20. |
 | `index` | string |  |  | Read the worktree's index instead of the base. unstaged is the index against the working files, untracked files included. staged is HEAD against the index. Omit for the diff against the base. Not with base, against or uncommitted. One of `unstaged` or `staged`. |
 | `highlight` | bool |  | `false` | Add the syntax colour and the changed part to each line: hl and changed. classes names the colour classes. |
-| `origins` | bool |  | `false` | Say who made each changed line: the person or an agent, and in which turn. Each line gets origin, and the answer gets authors. |
+| `origins` | bool |  | `false` | Say who made each changed line: the person or an agent, and in which turn. Each line gets origin, each hunk gets origin, also, unsure and who, and the answer gets authors. |
 | `dir` | string |  |  | A folder on this machine, in place of session and window: the diff is of the repository that holds it, and has no notes. It takes no against and no index. Only a caller on this machine may give it: a link, and a pane without admin, are refused. |
 
 | Result field | Type | Description |
@@ -4234,7 +4234,7 @@ Read what the agent in a pane changed: the diff of its worktree against the base
 | `tree_sha` | string | The tree the working state was written to, for a later diff of the same state. |
 | `against` | string | The sibling session, when one was given. |
 | `against_tree` | string | The tree the sibling's working state was written to, with against. |
-| `files` | []object | One entry per changed file: path, old_path, status (A, M, D, R, or U for untracked), added, removed, binary, truncated, and hunks, each with header, old_start, old_lines, new_start, new_lines and lines of op (context, add or delete), old, new, text and no_newline. With highlight a line also has hl, its colour as [start, end, class] runs in bytes of text, and changed, the [start, end] bytes that changed against its paired line. Each is absent when empty. |
+| `files` | []object | One entry per changed file: path, old_path, status (A, M, D, R, or U for untracked), added, removed, binary, truncated, and hunks, each with header, old_start, old_lines, new_start, new_lines and lines of op (context, add or delete), old, new, text and no_newline. With highlight a line also has hl, its colour as [start, end, class] runs in bytes of text, and changed, the [start, end] bytes that changed against its paired line. With origins a line also has origin and unsure, and a hunk has origin (who made most of its lines), also (who made the next most), unsure, and who, the words the review view shows: "claude-code · turn 2", "you · not in a turn". Each is absent when empty. |
 | `totals` | object | files, added and removed over the whole diff. |
 | `truncated` | bool | The diff passed a cap (400 files, 2 MiB, 5000 lines in a file) and the files past it carry counts only. |
 | `notes` | []object | The pane's review notes, found again in this diff, as review-note lists them. |

@@ -780,7 +780,7 @@
       },
       {
         "name": "origins",
-        "description": "Say who made each changed line: the person or an agent, and in which turn. Each line gets origin, and the answer gets authors."
+        "description": "Say who made each changed line: the person or an agent, and in which turn. Each line gets origin, each hunk gets origin, also, unsure and who, and the answer gets authors."
       },
       {
         "name": "dir",
@@ -838,7 +838,7 @@
       },
       {
         "name": "files",
-        "description": "One entry per changed file: path, old_path, status (A, M, D, R, or U for untracked), added, removed, binary, truncated, and hunks, each with header, old_start, old_lines, new_start, new_lines and lines of op (context, add or delete), old, new, text and no_newline. With highlight a line also has hl, its colour as [start, end, class] runs in bytes of text, and changed, the [start, end] bytes that changed against its paired line. Each is absent when empty."
+        "description": "One entry per changed file: path, old_path, status (A, M, D, R, or U for untracked), added, removed, binary, truncated, and hunks, each with header, old_start, old_lines, new_start, new_lines and lines of op (context, add or delete), old, new, text and no_newline. With highlight a line also has hl, its colour as [start, end, class] runs in bytes of text, and changed, the [start, end] bytes that changed against its paired line. With origins a line also has origin and unsure, and a hunk has origin (who made most of its lines), also (who made the next most), unsure, and who, the words the review view shows: \"claude-code · turn 2\", \"you · not in a turn\". Each is absent when empty."
       },
       {
         "name": "totals",

@@ -21,7 +21,7 @@ import (
 func newReviewCommand() *cobra.Command {
 	var sessionName, window, base, against string
 	var paths []string
-	var uncommitted, stat, jsonOutput bool
+	var uncommitted, stat, origins, jsonOutput bool
 	var context int
 	cmd := &cobra.Command{
 		Use:   "review [SESSION]",
@@ -39,6 +39,10 @@ Name the session as an argument or with -s, and the pane with -w (default the
 focused pane). --against compares the attempt with another attempt of the same
 fan instead of the base.
 
+--origins names who made each hunk after its header: an agent and its turn,
+or you. With --json each line has an origin, an index into authors plus one,
+and each hunk has origin, also, unsure and who.
+
 Notes left with 'tuios review note' are shown under the line they are on, and
 follow it when the file changes. 'tuios review send' sends the unsent ones to
 the agent as one message, typed when it next comes to rest.
@@ -54,7 +58,11 @@ past that are listed with their counts only.`,
 
   # Only what is not committed yet, or only the list of files
   tuios review -w build --uncommitted
-  tuios review --stat`,
+  tuios review --stat
+
+  # Who made each hunk: an agent and its turn, or you
+  tuios review --origins
+  tuios review --origins --json`,
 		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: completeSessionNames,
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -68,7 +76,7 @@ past that are listed with their counts only.`,
 				return errors.New("--context is 0 to 20 lines")
 			}
 			return runReview(os.Stdout, sessionName, window, reviewOptions{
-				base: base, against: against, paths: paths, uncommitted: uncommitted, stat: stat, context: context,
+				base: base, against: against, paths: paths, uncommitted: uncommitted, stat: stat, context: context, origins: origins,
 			}, jsonOutput)
 		},
 	}
@@ -78,6 +86,7 @@ past that are listed with their counts only.`,
 	cmd.Flags().StringVar(&against, "against", "", "Diff against another attempt of the same fan, by session")
 	cmd.Flags().StringArrayVar(&paths, "path", nil, "Only this path, relative to the repository root. Repeatable")
 	cmd.Flags().BoolVar(&uncommitted, "uncommitted", false, "Only what is not committed yet")
+	cmd.Flags().BoolVar(&origins, "origins", false, "Name who made each hunk: an agent and its turn, or you")
 	cmd.Flags().BoolVar(&stat, "stat", false, "List the changed files with their counts, without the diff")
 	cmd.Flags().IntVar(&context, "context", 3, "Lines of context around each change, 0 to 20")
 	addJSONFlag(cmd, &jsonOutput)
@@ -131,6 +140,7 @@ type reviewOptions struct {
 	paths         []string
 	uncommitted   bool
 	stat          bool
+	origins       bool
 	context       int
 }
 
@@ -170,6 +180,9 @@ func runReview(w io.Writer, sessionName, window string, o reviewOptions, jsonOut
 	}
 	if o.uncommitted {
 		params["uncommitted"] = true
+	}
+	if o.origins {
+		params["origins"] = true
 	}
 	raw, err := t.client.Call("review-diff", params)
 	if err != nil {
@@ -261,7 +274,11 @@ func printDiffFiles(w io.Writer, files []review.File, notes []review.Note, stat 
 		fmt.Fprintf(w, "\n%s\n", plainLine(f.Path))
 		onFile := notesOn[f.Path]
 		for _, h := range f.Hunks {
-			fmt.Fprintln(w, plainLine(h.Header))
+			header := plainLine(h.Header)
+			if h.Who != "" {
+				header += "  " + plainLine(h.Who)
+			}
+			fmt.Fprintln(w, header)
 			for _, n := range onFile {
 				if n.IsHunk() && n.HunkHeader == h.Header {
 					fmt.Fprintln(w, noteLine(n))

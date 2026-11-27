@@ -30,22 +30,8 @@ import (
 // reviewOriginSteps bounds the checkpoints the chain walks, newest kept.
 const reviewOriginSteps = 64
 
-// reviewOrigin is one entry of review-diff's authors.
-type reviewOrigin struct {
-	// Kind is "person" or "agent". A person with a turn is the person while
-	// that turn of the pane ran.
-	Kind string `json:"kind"`
-	// Agent names the agent: its harness, or the pane's title.
-	Agent   string `json:"agent,omitempty"`
-	Pane    string `json:"pane,omitempty"`
-	Session string `json:"session,omitempty"`
-	// Turn is the pane's turn the lines came from. Working marks the turn
-	// running now, which has no checkpoint yet.
-	Turn    uint64 `json:"turn,omitempty"`
-	Working bool   `json:"working,omitempty"`
-	// At is when the turn's checkpoint was taken, in Unix nanoseconds.
-	At int64 `json:"at,omitempty"`
-}
+// reviewOrigin is one entry of review-diff's authors (review.Author).
+type reviewOrigin = review.Author
 
 // reviewOriginCache keeps the diffs of steps between two checkpoints, which
 // never change, so a review read again redoes only the step to the work tree.
@@ -222,6 +208,7 @@ func (d *Daemon) reviewOrigins(ctx context.Context, repo reviewRepo, diff *revie
 	if err := review.Origins(ctx, diff.Files, steps, d.reviewOriginCache.read(repo.root), last); err != nil {
 		return nil, err
 	}
+	review.NameHunks(diff.Files, authors)
 	return authors, nil
 }
 

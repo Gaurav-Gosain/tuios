@@ -3,7 +3,6 @@ package app
 import (
 	"image/color"
 	"slices"
-	"strconv"
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -19,15 +18,7 @@ import (
 // the same for all its turns.
 
 // reviewAuthorInfo is one author of review-diff's answer.
-type reviewAuthorInfo struct {
-	Kind    string `json:"kind"`
-	Agent   string `json:"agent"`
-	Pane    string `json:"pane"`
-	Session string `json:"session"`
-	Turn    uint64 `json:"turn"`
-	Working bool   `json:"working"`
-	At      int64  `json:"at"`
-}
+type reviewAuthorInfo = review.Author
 
 // reviewAuthorOf is the author a line's origin names, and whether it names
 // one.
@@ -66,28 +57,7 @@ func reviewAuthorBar() string {
 // reviewMainOrigin is the origin most of lines' added lines have, or of its
 // removed ones when it adds none, and the next most common, 0 for none.
 func reviewMainOrigin(lines []review.Line) (main, second int) {
-	count := map[int]int{}
-	for _, op := range []string{"add", "delete"} {
-		for _, l := range lines {
-			if l.Op == op && l.Origin > 0 {
-				count[l.Origin]++
-			}
-		}
-		if len(count) > 0 {
-			break
-		}
-	}
-	for o, n := range count {
-		if main == 0 || n > count[main] || n == count[main] && o < main {
-			main = o
-		}
-	}
-	for o, n := range count {
-		if o != main && (second == 0 || n > count[second] || n == count[second] && o < second) {
-			second = o
-		}
-	}
-	return main, second
+	return review.MainOrigin(lines)
 }
 
 // reviewFileOrigin is the main author of a file's changes.
@@ -108,20 +78,14 @@ func reviewFileOrigin(f *review.File) int {
 // person wrote while a turn ran, or "you · not in a turn". An unsure turn
 // reads "claude · turn 4 ?".
 func (r *reviewState) reviewAuthorWords(origin int, now time.Time, unsure bool) (name, rest string) {
+	var authors []review.Author
+	if r.diff != nil {
+		authors = r.diff.Authors
+	}
+	name, rest = review.AuthorWords(authors, origin, unsure)
 	a, ok := r.reviewAuthorOf(origin)
 	if !ok || a.Kind != "agent" {
-		switch {
-		case unsure:
-			// A tool of the agent's may have made it (reviewUnsureHint).
-			return "you", " ?"
-		case ok && a.Turn > 0:
-			return "you", " · during turn " + strconv.FormatUint(a.Turn, 10)
-		}
-		return "you", " · not in a turn"
-	}
-	rest = " · turn " + strconv.FormatUint(a.Turn, 10)
-	if unsure {
-		rest += " ?"
+		return name, rest
 	}
 	switch {
 	case a.Working:
@@ -129,7 +93,7 @@ func (r *reviewState) reviewAuthorWords(origin int, now time.Time, unsure bool) 
 	case a.At > 0:
 		rest += " · " + units.Waited(a.At, now) + " ago"
 	}
-	return reviewText(a.Agent), rest
+	return reviewText(name), rest
 }
 
 // reviewUnsureHint is what the status line says with the cursor on a hunk
@@ -139,12 +103,7 @@ const reviewUnsureHint = "Not in the agent edits. The agent may have run a tool 
 // reviewHunkUnsure reports whether a line of h credited to origin is marked
 // unsure.
 func reviewHunkUnsure(h review.Hunk, origin int) bool {
-	for _, l := range h.Lines {
-		if l.Origin == origin && l.Unsure {
-			return true
-		}
-	}
-	return false
+	return review.HunkUnsure(h, origin)
 }
 
 // reviewUnsureUnderCursor reports whether the cursor is on a hunk, or a line
