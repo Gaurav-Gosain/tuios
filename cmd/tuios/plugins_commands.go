@@ -206,13 +206,13 @@ func newPluginsListCommand() *cobra.Command {
 				return nil
 			}
 			tw := tabwriter.NewWriter(out, 0, 2, 2, ' ', 0)
-			fmt.Fprintln(tw, "ID\tSTATE\tFROM\tVERSION\tSOURCE\tNAME\tREASON")
+			fmt.Fprintln(tw, "ID\tSTATE\tFROM\tVERSION\tSOURCE\tCOMMIT\tNAME\tREASON")
 			for _, e := range entries {
-				source := ""
+				source, commit := "", ""
 				if e.Lock != nil {
-					source = shownSource(e.Lock.Source)
-					if e.Lock.Commit != "" {
-						source += "@" + e.Lock.Commit[:min(12, len(e.Lock.Commit))]
+					source = listedSource(e.Lock)
+					if !e.Lock.Release() {
+						commit = e.Lock.Commit[:min(12, len(e.Lock.Commit))]
 					}
 				}
 				name, ver := "", ""
@@ -223,7 +223,7 @@ func newPluginsListCommand() *cobra.Command {
 				if e.Err != nil {
 					reason = e.Err.Msg
 				}
-				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", e.ID, entryState(e), e.Origin, ver, source, name, reason)
+				fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", e.ID, entryState(e), e.Origin, ver, source, commit, name, reason)
 			}
 			return tw.Flush()
 		},

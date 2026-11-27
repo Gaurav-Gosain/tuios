@@ -52,7 +52,7 @@ func newPluginsInstallCommand() *cobra.Command {
 		Short: "Install, build and enable a plugin from git or a folder",
 		Long: `Install a plugin, build it and enable it.
 
-SOURCE is the name of a plugin of the tuios release, such as pr-status (give a folder of that name as ./pr-status), or owner/repo[/dir][@ref] on github.com, a git URL (https, ssh, git@host:path or file) with an optional @ref, or a folder on this machine. Without a ref, tuios uses the default branch. tuios writes the commit to plugins.lock in the config folder.
+SOURCE is the name of a plugin of the tuios release, such as pr-status (give a folder of that name as ./pr-status), or owner/repo[/dir][@ref] on github.com, a git URL (https, ssh, git@host:path or file) with an optional @ref, host/path[@ref] as tuios plugins list shows it, or a folder on this machine. Without a ref, tuios uses the default branch. tuios writes the commit to plugins.lock in the config folder.
 
 Without SOURCE, tuios installs each plugin in plugins.lock at its commit. It does not enable them.
 
@@ -97,6 +97,24 @@ func shownSource(src string) string {
 	return strings.TrimPrefix(src, herdrplugin.LocalPrefix)
 }
 
+// listedSource is the source as tuios plugins list shows it, in a form
+// tuios plugins install reads back: the release plugin's name, a folder, or
+// host/path with the plugin folder on github.com and @ref when one was
+// asked for.
+func listedSource(e *herdrplugin.LockEntry) string {
+	if name, ok := strings.CutPrefix(e.Source, herdrplugin.ReleasePrefix); ok {
+		return name
+	}
+	s := shownSource(e.Source)
+	if e.Subdir != "" && strings.HasPrefix(strings.ToLower(s), "github.com/") {
+		s += "/" + e.Subdir
+	}
+	if e.Ref != "" && !e.Local() {
+		s += "@" + e.Ref
+	}
+	return s
+}
+
 // parsePluginSource reads SOURCE. --ref and --subdir win over the ones in
 // SOURCE.
 func parsePluginSource(arg string, o installOpts) (pluginSource, error) {
@@ -136,10 +154,23 @@ func parsePluginSource(arg string, o installOpts) (pluginSource, error) {
 	if i := strings.IndexByte(arg[pathAt:], '@'); i >= 0 {
 		body, s.ref = arg[:pathAt+i], arg[pathAt+i+1:]
 	}
-	if pathAt > 0 {
+	parts := strings.Split(body, "/")
+	// A first part with a dot is a host: tuios plugins list shows a git URL
+	// as host/path, with no https://. GitHub owners cannot hold a dot.
+	host := pathAt == 0 && strings.Contains(parts[0], ".")
+	gitHub := host && strings.EqualFold(parts[0], "github.com")
+	switch {
+	case pathAt > 0:
 		s.url = body
-	} else {
-		parts := strings.Split(body, "/")
+	case host && !gitHub:
+		s.url = "https://" + body
+	default:
+		if gitHub {
+			parts = parts[1:]
+			if len(parts) < 2 {
+				return s, errfmt.Errorf("%q is not github.com/owner/repo", arg)
+			}
+		}
 		if len(parts) < 2 {
 			if _, ok := firstParty[arg]; ok {
 				s.release = arg
