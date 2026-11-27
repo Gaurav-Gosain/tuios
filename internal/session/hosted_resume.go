@@ -46,6 +46,7 @@ const hostedRingSize = 64 * 1024
 // start runs the output pump and the reaper, once, on the first attach.
 func (hp *hostedPane) start() {
 	hp.startOnce.Do(func() {
+		pumped := make(chan struct{})
 		go func() {
 			// Reap the process. Nothing else on this machine waits for a
 			// hosted pane's command: the local path waits in monitorExit,
@@ -58,11 +59,32 @@ func (hp *hostedPane) start() {
 			if hp.cmd != nil {
 				_ = hp.cmd.Wait()
 			}
+			// The process is gone, but the last of what it wrote may still be
+			// in the pty. close shuts the pty, so the pump reads it first: a
+			// command that printed a line and exited at once lost the line
+			// whenever the pump was slower than this goroutine. The wait is
+			// bounded, because a process the command left in the background
+			// can hold the pty open, and the pane ends with the command.
+			select {
+			case <-pumped:
+			case <-time.After(hostedDrainWait):
+			}
 			hp.close()
 		}()
-		go hp.pump()
+		go func() {
+			defer close(pumped)
+			hp.pump()
+		}()
+		// The parent's copy of the slave goes once the pump is reading. A
+		// process that already exited makes this the last close of the slave,
+		// and on macOS that close throws away what the master has not read.
+		releaseSlave(hp.pty)
 	})
 }
+
+// hostedDrainWait bounds how long a hosted pane whose process has exited waits
+// for the pump to read the pty to its end.
+const hostedDrainWait = time.Second
 
 // pump reads the process's output until the pty closes, which is what the
 // process exiting looks like from here, and then ends the pane.

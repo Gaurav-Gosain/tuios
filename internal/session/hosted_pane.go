@@ -235,8 +235,6 @@ func (d *Daemon) registerHostedPane(spec hostedPaneSpec, grace time.Duration) (*
 	}
 	panescope.Place(cmd.Process.Pid, log.Printf)
 
-	releaseSlave(pty)
-
 	hp.pty, hp.cmd = pty, cmd
 	hp.procStart = processStart(cmd.Process)
 	id := hp.id
