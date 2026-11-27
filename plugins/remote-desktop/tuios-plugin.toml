@@ -1,0 +1,20 @@
+api = 1
+id = "tuios.remote-desktop"
+name = "Remote desktop"
+version = "0.1.0"
+description = "Shows the desktop of a host in a pane, with srterm and screen-relay"
+min_tuios = "0.13.0"
+platforms = ["linux", "macos"]
+
+# ui lets the pane ask which host in the palette. Without it, the pane asks itself.
+[permissions]
+grants = ["ui"]
+
+# Nothing runs until you open the pane. The pane stops the tunnel when it closes.
+[[process]]
+id = "open"
+run = "pane"
+title = "Remote desktop on a host"
+description = "Show and control the desktop of a host from the [hosts] table"
+placement = "zoomed"
+command = ["sh", "remote-desktop.sh"]
