@@ -27,7 +27,7 @@ Over the socket every failure carries a stable code in the error envelope:
 `no_buffer`, `no_recording`, `risk_unacknowledged`, `agents_disabled`, `busy`, `too_many_connections`,
 `no_file`, `file_exists`, `no_permission`, `hash_mismatch`, `source_changed`,
 `cross_device`, `disk_full`, `no_transfer`, `same_session`, `pane_not_movable`,
-`upgrade_refused`, `daemon_upgrading`, `invalid_tml`, `no_surface`, `too_many_surfaces`,
+`upgrade_refused`, `upgrade_not_answered`, `daemon_upgrading`, `invalid_tml`, `no_surface`, `too_many_surfaces`,
 `internal`. `internal` is a failure inside the daemon
 that none of the others names; its message says what went wrong. The CLI folds
 the same information into its messages.
@@ -113,6 +113,7 @@ A retry without a change fails the same way, except for `busy`, `too_many_connec
 | `disk_full` | The disk had no room. What was written stays in the part, and `transfer-resume` goes on from it once there is space. |
 | `no_transfer` | No transfer has that id. A finished transfer leaves the list 30 minutes after it ends. |
 | `upgrade_refused` | From `daemon-upgrade`: the new binary failed its check, the daemon holds something a live upgrade cannot hand over (a pane on another machine, a running fan check, a capturing popup), or the platform has no live upgrade. Nothing was changed. The message says which. Tell the person. |
+| `upgrade_not_answered` | From `daemon-upgrade` in your pane: nobody answered the dialog at an attached client within 60 seconds, or it closed with no answer. Nothing was changed. Ask the person to choose Yes when you run it again, or to run `tuios daemon upgrade` from a terminal outside tuios. |
 | `daemon_upgrading` | A live upgrade replaced the daemon while your call ran or waited, and the connection closed. Your pane and its program are as they were. A call that reads or waits can be made again: the upgraded daemon answers it. A call that changes something, such as `fan` or `send-text`, may have partly run, so check what it did before you make it again. |
 | `same_session`, `pane_not_movable` | From `move-window` with `to_session`: the window is already in that session, or it is a popup, a scratch pane, a TML pane or a pane on another machine. Nothing moved. |
 | `invalid_tml` | A TML document does not parse or validate. The error lists each problem with a JSON Pointer to the node and the fix. Run `tuios tml validate`. |
@@ -159,7 +160,7 @@ agent state died with the old daemon. Treat a restored session as panes to be
 started again, addressed by the ids and names you already know. An agent
 conversation can come back with `resume-agent` (`tuios --skill state`).
 
-A live upgrade is different: `tuios daemon upgrade` swaps the daemon's binary with every pane's program still running, so your process, its pid and its pane id stay as they were and nothing is restored. A call in flight ends with `daemon_upgrading`: call again if it only read or waited, and check what it did first if it changed something. An event stream drops and resumes with `--after-seq` and the same `boot_id`. Run `tuios daemon upgrade` only when the person asks: it restarts what every session runs under. From your pane it waits while tuios asks the person in a dialog at their client, for up to a minute. Anything but their Yes refuses with `forbidden` and `daemon-upgrade is for the person`, followed by why: after "The person answered No", do not ask again unless they do; after no client attached or nobody answering, ask them to attach or to choose Yes, then run it again. Nothing is changed. Do not try to answer the dialog yourself: nothing a pane sends counts. Never add `--or-restart` on your own: when the daemon cannot be upgraded live, it restarts it, which ends every program in every pane, yours included.
+A live upgrade is different: `tuios daemon upgrade` swaps the daemon's binary with every pane's program still running, so your process, its pid and its pane id stay as they were and nothing is restored. A call in flight ends with `daemon_upgrading`: call again if it only read or waited, and check what it did first if it changed something. An event stream drops and resumes with `--after-seq` and the same `boot_id`. Run `tuios daemon upgrade` only when the person asks: it restarts what every session runs under. From your pane it waits while tuios asks the person in a dialog at their client, for up to a minute. Anything but their Yes refuses with `daemon-upgrade is for the person`, followed by why. When nobody answered the dialog in time, the code is `upgrade_not_answered`: ask the person to choose Yes, then run it again. Every other refusal is `forbidden`. After "The person answered No", do not ask again unless they do. After no client attached, ask them to attach, then run it again. Nothing is changed. Do not try to answer the dialog yourself: nothing a pane sends counts. Never add `--or-restart` on your own: when the daemon cannot be upgraded live, it restarts it, which ends every program in every pane, yours included.
 
 ## The person's setup
 

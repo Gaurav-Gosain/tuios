@@ -222,6 +222,9 @@ func TestPaneUpgradeRefusedWithoutYes(t *testing.T) {
 		if said := strings.Join(strings.Fields(strings.Join(lines, "")), ""); !strings.Contains(said, "ThepersonansweredNo") {
 			t.Errorf("ASSERTION: the refusal after %s does not say the person answered No:\n%s", tc.name, strings.Join(lines, "\n"))
 		}
+		if said := strings.Join(strings.Fields(strings.Join(lines, "")), ""); strings.Contains(said, "thedaemonrefusedtheupgrade") || strings.Contains(said, "nobodyansweredthedialog") {
+			t.Errorf("ASSERTION: the refusal after %s gives the cause of another refusal:\n%s", tc.name, strings.Join(lines, "\n"))
+		}
 		if said := strings.Join(strings.Fields(strings.Join(lines, "")), ""); !strings.Contains(said, "...notconfirmed") || strings.Contains(said, "...refused") {
 			t.Errorf("ASSERTION: the check line after %s does not end in not confirmed:\n%s", tc.name, strings.Join(lines, "\n"))
 		}
@@ -287,6 +290,13 @@ func TestPaneUpgradeTimesOut(t *testing.T) {
 	lines := r.refused(t, code, "the wait running out")
 	if said := strings.Join(strings.Fields(strings.Join(lines, "")), ""); !strings.Contains(said, "Nobodyansweredthedialog") {
 		t.Errorf("ASSERTION: the refusal after the wait does not say nobody answered:\n%s", strings.Join(lines, "\n"))
+	}
+	// The cause and the fix are the ones for a dialog nobody answered, not
+	// the ones for a binary the daemon refused.
+	if said := strings.Join(strings.Fields(strings.Join(lines, "")), ""); !strings.Contains(said, "Mostlikelycause:nobodyansweredthedialog") ||
+		!strings.Contains(said, "chooseYesinthedialog,orrunitfromaterminaloutsidetuios") ||
+		strings.Contains(said, "thedaemonrefusedtheupgrade") {
+		t.Errorf("ASSERTION: the refusal after the wait does not give the cause and fix for a dialog nobody answered:\n%s", strings.Join(lines, "\n"))
 	}
 	writeHandoffArtifact(t, map[string]any{"exit": code, "seconds": took.Seconds(), "screen": lines})
 	if took < 3*time.Second {
