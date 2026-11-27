@@ -94,7 +94,8 @@ func (d *Daemon) readDraftGate(sess *Session, target WindowState) draftGate {
 	}
 	g := draftGate{pty: pty, keyAt: pty.humanKeyAt.Load()}
 	reg := d.agentMatcher.registry
-	hid := firstNonEmpty(target.AgentHarness, sess.agentClaimFor(target.ID).harness)
+	// A pane whose agent left is read by the shell rule (boxRuleHarness).
+	hid := d.boxRuleHarness(sess, target, pty)
 	if reg.HasBoxRule(hid) {
 		tail, shown := pty.tailShown(reg.ScreenLines(hid))
 		g.draft, _ = reg.BoxDraft(hid, tail, shown)

@@ -73,6 +73,10 @@ func newGateFixture(t *testing.T, n int) *gateFixture {
 		if w.ID == f.foreign {
 			continue
 		}
+		// An agent runs in its pane's foreground, and the harness's box
+		// rule reads the pane only while one does (boxRuleHarness). A
+		// foreground job stands in for it; the screen is painted below.
+		holdForeground(t, pty)
 		paintPane(t, pty, claudeIdleScreen)
 		if _, _, err := sess.ApplyAgentReport(w.ID, AgentReport{State: AgentStateIdle, Harness: "claude-code"}); err != nil {
 			t.Fatalf("ApplyAgentReport: %v", err)
@@ -382,4 +386,27 @@ func TestAskWaitStillSeesItsPane(t *testing.T) {
 			t.Fatal("the ask did not end on its pane's done report within 10s")
 		}
 	})
+}
+
+// holdForeground starts a job in the foreground of pty's shell, as an agent
+// running in the pane holds it, and waits until the kernel says so. Where the
+// kernel cannot say, it only starts the job.
+func holdForeground(t *testing.T, pty *PTY) {
+	t.Helper()
+	if _, err := pty.Write([]byte("sleep 3600\r")); err != nil {
+		t.Fatalf("start a foreground job: %v", err)
+	}
+	shell := pty.ShellPID()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		pgid, ok := readForegroundPGID(shell)
+		if !ok || pgid != shell {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the job never took the pane's foreground")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	waitForQuiet(t, pty, 300*time.Millisecond, 10*time.Second)
 }

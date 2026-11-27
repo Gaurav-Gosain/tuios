@@ -96,11 +96,14 @@ func (d *Daemon) newPromptGate(sess *Session, windowID string) *promptGate {
 	g.startSeq = w.CompletionSeq
 	g.startState = w.AgentState
 	g.outputCounts = d.outputShowsTaking(sess, w)
-	hid := firstNonEmpty(w.AgentHarness, sess.agentClaimFor(w.ID).harness)
+	pty, err := d.resolvePTYForTarget(sess, windowID)
+	if err != nil {
+		return g
+	}
+	// A pane whose agent left is read by the shell rule (boxRuleHarness).
+	hid := d.boxRuleHarness(sess, w, pty)
 	if reg := d.agentMatcher.registry; reg.HasBoxRule(hid) && reg.CanProveWorking(hid) {
-		if pty, err := d.resolvePTYForTarget(sess, windowID); err == nil {
-			g.pty, g.reg, g.harness = pty, reg, hid
-		}
+		g.pty, g.reg, g.harness = pty, reg, hid
 	}
 	return g
 }
