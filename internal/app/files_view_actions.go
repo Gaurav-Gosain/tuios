@@ -77,6 +77,8 @@ func (m *OS) FilesAction(act string) tea.Cmd {
 		m.FilesDivider(filesDividerStep)
 	case config.ActionFilesZoom:
 		m.FilesZoom()
+	case config.ActionFilesMachine:
+		m.FilesPickMachine()
 	case config.ActionFilesReview:
 		return m.FilesReview()
 	case config.ActionFilesMark:

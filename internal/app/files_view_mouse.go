@@ -29,7 +29,7 @@ func (m *OS) filesSideAt(x, y int) int {
 
 // FilesClick acts on a click at x, y on the screen: a footer hint runs, a
 // tab goes on screen, the divider is held, a click in a side gives it the
-// keys, a crumb goes to its folder, a row takes the cursor, and a second
+// keys, the machine row opens the machine picker, a crumb goes to its folder, a row takes the cursor, and a second
 // click on the cursor row opens it.
 func (m *OS) FilesClick(x, y int) tea.Cmd {
 	e := &m.explorer
@@ -78,6 +78,10 @@ func (m *OS) FilesClick(x, y int) tea.Cmd {
 	}
 	m.filesFocusSide(i)
 	s := m.filesCur()
+	if filesMachineRowHit(s, y) {
+		m.FilesPickMachine()
+		return nil
+	}
 	if y == s.crumbsY {
 		for _, c := range s.crumbs {
 			if x >= c.x0 && x < c.x1 {

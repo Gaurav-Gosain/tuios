@@ -45,6 +45,9 @@ type HostPickerItem struct {
 	// Pending marks the placeholder row shown while the attached machine's
 	// host list is on its way. It is not a machine and cannot be chosen.
 	Pending bool
+	// Add marks an ssh host that is not a tuios host yet: picking it runs
+	// the add sheet. Section marks a heading row, which cannot be chosen.
+	Add, Section bool
 }
 
 // buildHostPickerItems is this machine followed by every configured one, in the
@@ -125,10 +128,21 @@ func FilterHostPickerItems(items []HostPickerItem, query string) []HostPickerIte
 		return items
 	}
 	out := make([]HostPickerItem, 0, len(items))
+	heading := -1
 	for _, it := range items {
+		if it.Section {
+			// A heading stays when a row under it matches.
+			heading = len(out)
+			out = append(out, it)
+			continue
+		}
 		if strings.Contains(strings.ToLower(it.Label), strings.ToLower(query)) {
 			out = append(out, it)
+			heading = -1
 		}
+	}
+	if heading >= 0 && heading == len(out)-1 {
+		out = out[:heading]
 	}
 	return out
 }
@@ -168,6 +182,9 @@ const (
 	// HostPickerNewSession makes a session on the chosen machine and attaches
 	// to it.
 	HostPickerNewSession
+	// HostPickerFilesSide shows the chosen machine on a side of the Files
+	// view.
+	HostPickerFilesSide
 )
 
 // OpenNewSessionPicker asks which machine a new session should be made on.
@@ -230,8 +247,11 @@ func (m *OS) ChooseHostForNewSession(item HostPickerItem) tea.Cmd {
 
 // ChooseHost runs whatever the picker was opened for.
 func (m *OS) ChooseHost(item HostPickerItem) tea.Cmd {
-	if m.HostPickerPurpose == HostPickerNewSession {
+	switch m.HostPickerPurpose {
+	case HostPickerNewSession:
 		return m.ChooseHostForNewSession(item)
+	case HostPickerFilesSide:
+		return m.ChooseHostForFilesSide(item)
 	}
 	return m.ChooseHostForNewWindow(item)
 }

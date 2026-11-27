@@ -2313,6 +2313,7 @@ const (
 	ActionFilesNarrow      = "files_narrow"
 	ActionFilesWiden       = "files_widen"
 	ActionFilesZoom        = "files_zoom"
+	ActionFilesMachine     = "files_machine"
 	ActionFilesReview      = "files_review"
 	ActionFilesTab1        = "files_tab_1"
 	ActionFilesTab2        = "files_tab_2"
@@ -2373,6 +2374,7 @@ func getDefaultFilesKeybinds() map[string][]string {
 		ActionFilesNarrow:      {"<"},
 		ActionFilesWiden:       {">"},
 		ActionFilesZoom:        {"Z"},
+		ActionFilesMachine:     {"M"},
 		ActionFilesReview:      {"v"},
 		ActionFilesTab1:        {"1"},
 		ActionFilesTab2:        {"2"},

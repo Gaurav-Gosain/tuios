@@ -383,6 +383,7 @@ Run `tuios keybinds list` to see the keys that your config sets.
 | `.` | `files_hidden` | Files: show or hide hidden files |
 | `~` | `files_home` | Files: go to the home folder |
 | `I` | `files_insert_path` | Files: type the path into the pane the view came from |
+| `M` | `files_machine` | Files: show this side on another machine |
 | `x` | `files_mark` | Files: mark the row and go to the next |
 | `*` | `files_mark_all` | Files: mark every row, or none |
 | `m` | `files_move` | Files: move the marked rows to the other side |

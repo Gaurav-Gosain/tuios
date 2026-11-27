@@ -31,6 +31,9 @@ func (m *OS) renderHostPicker() (string, overlay.Geometry, []overlayRowHit) {
 		},
 		RenderRow: func(i int, selected bool, rowBg color.Color, pal overlay.Palette, width int) string {
 			item := filtered[i]
+			if item.Section {
+				return listRowLine(width, "  ", item.Label, "", pal.FgMute, pal.FgMute, false, rowBg, pal)
+			}
 			// A machine that cannot be reached is listed and dimmed rather than
 			// hidden: hiding it leaves someone wondering whether they imagined
 			// configuring it, which is the same argument the rail makes for
@@ -52,8 +55,11 @@ func (m *OS) renderHostPicker() (string, overlay.Geometry, []overlayRowHit) {
 // hostPickerTitle says which question is being asked, since the list is the
 // same for both.
 func hostPickerTitle(p HostPickerPurpose) string {
-	if p == HostPickerNewSession {
+	switch p {
+	case HostPickerNewSession:
 		return "New session on"
+	case HostPickerFilesSide:
+		return "Show this side on"
 	}
 	return "New window on"
 }

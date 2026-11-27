@@ -116,6 +116,9 @@ type filesSide struct {
 	filter  string
 	// marks is the marked rows, by name.
 	marks map[string]bool
+	// homeIfMissing reads the home folder when the read out now fails: a
+	// side moved to another machine tries the same folder there first.
+	homeIfMissing bool
 	// landed is the copies that landed here, by name, with the time the
 	// listing first had them: their rows say "checked" for a few seconds.
 	// settle counts the reads again for a copy that ended before its file
@@ -201,6 +204,11 @@ type explorerState struct {
 	jobSeq   int
 	jobOpen  map[int]bool
 	copyHits []filesCopyHit
+	// machineFor is the side the machine picker was opened for, and
+	// waitHost a side that opens on a machine once its link is up. See
+	// files_view_machine.go.
+	machineFor uint64
+	waitHost   filesWaitHost
 	// look says quick look is beside the list.
 	look bool
 	// gen moves when anything the view draws changes, for its frame cache.
@@ -365,6 +373,12 @@ func (m *OS) HandleFilesList(msg filesListMsg) tea.Cmd {
 	s := m.filesSideByID(msg.id)
 	if !e.open || s == nil || msg.gen != s.gen {
 		return nil
+	}
+	if s.homeIfMissing {
+		s.homeIfMissing = false
+		if msg.l.Err != "" {
+			return m.filesReadSide(s, "~", "")
+		}
 	}
 	s.loading = false
 	e.gen++
