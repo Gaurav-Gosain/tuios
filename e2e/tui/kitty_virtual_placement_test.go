@@ -64,7 +64,10 @@ func runPlaceholders(t *testing.T, daemon bool, transport string, extra ...strin
 		requireDevShm(t)
 	}
 	bin := buildPlaceholders(t)
+	// Every check here reads the keys of the commands and the cells, never a
+	// payload, and the guest sends the host a whole bitmap each frame.
 	host := newKittyHost()
+	host.headersOnly = true
 	term, base := start(t, startOpts{
 		cols: 120, rows: 40,
 		// The host draws placeholders and takes the 24-bit foreground that

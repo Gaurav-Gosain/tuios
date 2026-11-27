@@ -42,6 +42,14 @@ type kittyHost struct {
 	mu    sync.Mutex
 	buf   bytes.Buffer
 	probe chan struct{}
+	// headersOnly drops the payload of every graphics command as it arrives
+	// and keeps the rest of the stream, the keys of each command included.
+	// A guest that streams a whole bitmap each frame sends the host megabytes
+	// a second, and a test that reads only the keys has no use for them:
+	// TestKittyVirtualPlacementLeavesThePaneToTheGuest kept every frame and
+	// peaked at 4 GiB. See kittyHeaders.
+	headersOnly bool
+	apc         apcState
 }
 
 func newKittyHost() *kittyHost {
@@ -50,7 +58,11 @@ func newKittyHost() *kittyHost {
 
 func (h *kittyHost) Write(p []byte) (int, error) {
 	h.mu.Lock()
-	h.buf.Write(p)
+	if h.headersOnly {
+		h.apc = kittyHeaders(&h.buf, p, h.apc)
+	} else {
+		h.buf.Write(p)
+	}
 	h.mu.Unlock()
 	if bytes.Contains(p, []byte(da1Query)) {
 		select {
@@ -59,6 +71,59 @@ func (h *kittyHost) Write(p []byte) (int, error) {
 		}
 	}
 	return len(p), nil
+}
+
+// apcState is where kittyHeaders is in the stream between two writes.
+type apcState uint8
+
+const (
+	apcText    apcState = iota // outside a graphics command
+	apcEsc                     // just after an ESC
+	apcOpen                    // after ESC _
+	apcKeys                    // in the keys of ESC _ G
+	apcPayload                 // in the payload, after the ';'
+)
+
+// kittyHeaders writes p to w without the payload of any kitty graphics
+// command, and returns the state to pass with the next write. A command
+// keeps its keys and its ';', so ESC _ G a=T,i=5;AAAA ESC \ is recorded as
+// ESC _ G a=T,i=5; ESC \ and graphicsRE still reads it. A command split
+// across writes is followed from one write to the next.
+func kittyHeaders(w *bytes.Buffer, p []byte, s apcState) apcState {
+	start := 0
+	for i, b := range p {
+		switch s {
+		case apcPayload:
+			if b != '\x1b' {
+				continue
+			}
+			start, s = i, apcEsc
+			continue
+		case apcEsc:
+			s = apcText
+			if b == '_' {
+				s = apcOpen
+			}
+		case apcOpen:
+			s = apcText
+			if b == 'G' {
+				s = apcKeys
+			}
+		case apcKeys:
+			if b == ';' {
+				w.Write(p[start : i+1])
+				s = apcPayload
+				continue
+			}
+		}
+		if b == '\x1b' {
+			s = apcEsc
+		}
+	}
+	if s != apcPayload {
+		w.Write(p[start:])
+	}
+	return s
 }
 
 func (h *kittyHost) mark(name string) {
