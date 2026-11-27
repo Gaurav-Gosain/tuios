@@ -318,6 +318,26 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 		if kp.absorbDirectFrame(cmd, rawData, windowID, hostID) {
 			return nil
 		}
+		// A new upload is dropped whole while the host is this far behind,
+		// as forwardTransmit drops a bitmap below. The render loop drains
+		// pendingOutput, and two panes on another machine streaming images
+		// this way queued them faster than it ran: the client passed 7GB. A
+		// chunk of an upload already passing through is never cut, since the
+		// host would finish a different image with it. The chunks still to
+		// come are dropped up to and including the final one.
+		if !kp.rawChunks[windowID] && kp.pendingGraphicsFull() {
+			if cmd.More {
+				if kp.discardingChunks == nil {
+					kp.discardingChunks = make(map[string]bool)
+				}
+				kp.discardingChunks[windowID] = true
+			}
+			if hostID != 0 {
+				kp.forgetKept(windowID, hostID)
+			}
+			kittyPassthroughLog("forwardTransmit: dropping an upload, %d bytes already queued", len(kp.pendingOutput))
+			return nil
+		}
 		// Kept for a screenshot when it is whole in this one command. The
 		// last chunk of a chunked upload carries only its own part.
 		switch {
@@ -496,6 +516,11 @@ func (kp *KittyPassthrough) forwardTransmit(cmd *vt.KittyCommand, rawData []byte
 			// layout is undisturbed. What the user sees is the frame before
 			// this one, held a moment longer, which is what dropping a frame
 			// means everywhere else in this file.
+			//
+			// emitBitmap kept this frame as the one the host holds. It is not,
+			// so it is forgotten: the next frame goes whole, rather than as
+			// nothing (an equal frame) or a patch of a frame the host never had.
+			kp.forgetBitmaps(windowID, hostID)
 			kittyPassthroughLog("forwardTransmit: dropping a %d byte bitmap, %d bytes already queued",
 				len(pending.Data), len(kp.pendingOutput))
 		} else {

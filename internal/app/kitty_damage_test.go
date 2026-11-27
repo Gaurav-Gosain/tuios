@@ -966,6 +966,58 @@ func TestTheGraphicsQueueStopsGrowing(t *testing.T) {
 	}
 }
 
+// A transmit-only upload passes through as the guest wrote it, and that path
+// had no budget: two panes on another machine streaming images this way took
+// a client past 7GB. While the queue is full a new upload is dropped whole,
+// its chunks with it, and an upload already passing through is not cut.
+func TestATransmitOnlyUploadWaitsOutAFullQueue(t *testing.T) {
+	h := newSyncHoldHarness(t)
+	a := h.pane("a", 0)
+	full := func() int {
+		h.kp.pendingOutput = make([]byte, maxPendingGraphicsBytes+1)
+		return len(h.kp.pendingOutput)
+	}
+
+	// A PNG has no size in its keys, so it passes through as written. A raw
+	// frame is compared with the last one first (absorbDirectFrame).
+	const pngFirst = "\x1b_Ga=t,f=100,i=78,m=1,q=2;AAAAAAAA\x1b\\"
+	const pngLast = "\x1b_Gm=0,q=2;AAAAAAAA\x1b\\"
+	for _, upload := range []struct{ name, first, last string }{
+		{"a PNG", pngFirst, pngLast},
+		{"a raw frame", arenaFirst, arenaLast},
+	} {
+		queued := full()
+		a.write(upload.first + upload.last)
+		if grown := len(h.kp.pendingOutput) - queued; grown != 0 {
+			t.Fatalf("%s behind a full queue added %d bytes to it: %q", upload.name, grown, h.kp.pendingOutput[queued:])
+		}
+
+		// The dropped upload's last chunk ended the drop, so the same upload,
+		// with room for it, reaches the host whole. For the raw frame that
+		// also says the dropped frame was not kept as the one the host holds:
+		// kept, the second would count as unchanged and send nothing.
+		h.kp.pendingOutput = nil
+		a.write(upload.first + upload.last)
+		if got := hostActions(h.tick()); got != "t" {
+			t.Fatalf("%s sent again after the drop reached the host as %q, want its transmit", upload.name, got)
+		}
+	}
+
+	// The queue fills between two chunks of one upload: the rest of it still
+	// goes, or the host would finish a different image with the next chunk.
+	a.write(pngFirst)
+	queued := len(h.kp.pendingOutput)
+	if queued == 0 {
+		t.Fatal("the first chunk of an upload queued nothing")
+	}
+	h.kp.pendingOutput = append(h.kp.pendingOutput, make([]byte, maxPendingGraphicsBytes+1)...)
+	queued = len(h.kp.pendingOutput)
+	a.write(pngLast)
+	if len(h.kp.pendingOutput) == queued {
+		t.Fatal("the last chunk of an upload already passing through was dropped")
+	}
+}
+
 // A reuse buffer that is never given back pins its own peak for the life of the
 // process. One burst of graphics left 107MB of scratch resident with nothing on
 // screen.

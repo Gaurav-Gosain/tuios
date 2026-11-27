@@ -346,6 +346,14 @@ func (kp *KittyPassthrough) absorbDirectFrame(cmd *vt.KittyCommand, rawData []by
 		kittyPassthroughLog("absorbDirectFrame: patched i=%d (%d raw bytes saved)",
 			pending.imageID, len(pending.raw))
 	default:
+		if kp.pendingGraphicsFull() {
+			// A whole bitmap is dropped behind a host this far behind, as
+			// forwardTransmit drops one. A patch never is: see above.
+			kp.forgetBitmaps(windowID, pending.imageID)
+			kittyPassthroughLog("absorbDirectFrame: dropping a %d byte frame, %d bytes already queued",
+				len(pending.raw), len(kp.pendingOutput))
+			break
+		}
 		kp.pendingOutput = append(kp.pendingOutput, pending.raw...)
 	}
 	return true
