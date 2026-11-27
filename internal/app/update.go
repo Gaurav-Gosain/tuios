@@ -1863,11 +1863,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		return m, m.learnFilesChanged()
 	case filesListMsg:
 		// A folder of the Files view, read on its own goroutine.
-		m.HandleFilesList(msg)
+		settle := m.HandleFilesList(msg)
 		m.renderSkipped = false
 		// Quick look beside the list follows the cursor the read placed,
 		// and the git marks look for the folder's repository.
-		return m, tea.Batch(m.QuickLookSync(), m.filesGitSync())
+		return m, tea.Batch(m.QuickLookSync(), m.filesGitSync(), settle)
 	case filesGitRootsMsg:
 		return m, m.applyFilesGitRoots(msg)
 	case filesGitMsg:

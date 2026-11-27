@@ -441,7 +441,9 @@ func (m *OS) drawFilesRows(c *ckCanvas, pal overlay.Palette, s *filesSide, b fil
 		if (showSize || at == s.cursor) && !en.Dir && in.Kind != "" {
 			c.textR(sizeR, ry, ckSeg{t: units.Bytes(in.Size), fg: pal.FgDim})
 		}
-		if showMod && in.MTime > 0 {
+		if _, ok := s.landed[en.Name]; ok && showMod {
+			c.textR(modR, ry, ckSeg{t: filesChecked(), fg: pal.Success})
+		} else if showMod && in.MTime > 0 {
 			c.textR(modR, ry, ckSeg{t: agentElapsed("file", in.MTime*int64(time.Millisecond), now) + " ago", fg: pal.FgMute})
 		}
 	}
@@ -465,7 +467,12 @@ func (m *OS) drawFilesRows(c *ckCanvas, pal overlay.Palette, s *filesSide, b fil
 		pct := float64(transferPercent(r.Done, r.Size))
 		switch {
 		case r.State == "done":
-			c.textR(sizeR, ry, ckSeg{t: "✓ checked", fg: pal.Success})
+			if showSize {
+				c.textR(sizeR, ry, ckSeg{t: units.Bytes(r.Size), fg: pal.FgDim})
+			}
+			if showMod {
+				c.textR(modR, ry, ckSeg{t: filesChecked(), fg: pal.Success})
+			}
 		case showSize:
 			pctText := " " + strconv.Itoa(int(pct)) + "%"
 			bx := sizeR - 10 - len(pctText)
@@ -627,4 +634,13 @@ func (m *OS) filesKey(action string) string {
 		return keys[0]
 	}
 	return ""
+}
+
+// filesChecked is the word a copy that landed and passed its check shows in
+// the Modified column.
+func filesChecked() string {
+	if overlay.UseASCII() {
+		return "+ checked"
+	}
+	return "✓ checked"
 }

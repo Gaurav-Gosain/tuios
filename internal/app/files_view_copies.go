@@ -390,22 +390,7 @@ func (m *OS) drawFilesCopies(c *ckCanvas, pal overlay.Palette, y, w, rows, top i
 func (m *OS) drawFilesCopyGroup(c *ckCanvas, pal overlay.Palette, g filesCopyJob, gi, y, w, barX, barW, top int) {
 	e := &m.explorer
 	state := g.state()
-	glyph, ink := "▸", pal.AccentBright
-	switch state {
-	case "paused":
-		glyph, ink = "‖", pal.Warning
-	case "asks":
-		glyph, ink = "?", pal.Warning
-	case "queued", "waiting":
-		glyph, ink = "·", pal.FgDim
-	case "done":
-		glyph, ink = "✓", pal.Success
-	case "failed":
-		glyph, ink = "✕", pal.Warn
-	}
-	if overlay.UseASCII() {
-		glyph = map[string]string{"‖": "=", "✓": "+", "✕": "x", "▸": ">", "?": "?", "·": "."}[glyph]
-	}
+	glyph, ink := filesStateGlyph(state, pal)
 	srcHost, srcDir, dstHost, dstDir := "", "", "", ""
 	if g.job != nil {
 		srcHost, srcDir, dstHost, dstDir = g.job.srcHost, g.job.srcDir, g.job.dstHost, g.job.dstDir
@@ -497,20 +482,17 @@ func (m *OS) drawFilesCopyGroup(c *ckCanvas, pal overlay.Palette, g filesCopyJob
 
 // drawFilesCopyFile draws one file of an open group.
 func (m *OS) drawFilesCopyFile(c *ckCanvas, pal overlay.Palette, r session.TransferRow, y, w, barX, barW int) {
-	glyph, ink, nameInk := "·", pal.FgMute, pal.FgDim
-	switch r.State {
-	case "done":
-		glyph, ink, nameInk = "✓", pal.Success, pal.Fg
+	state, nameInk := r.State, pal.Fg
+	switch state {
 	case "running", "verifying":
-		glyph, ink, nameInk = "▸", pal.AccentBright, pal.Fg
-	case "paused":
-		glyph, ink, nameInk = "‖", pal.Warning, pal.Fg
+		state = "running"
+	case "done", "paused":
 	case "failed":
-		glyph, ink = "✕", pal.Warn
+		nameInk = pal.FgDim
+	default:
+		state, nameInk = "queued", pal.FgDim
 	}
-	if overlay.UseASCII() {
-		glyph = map[string]string{"✓": "+", "▸": ">", "·": ".", "✕": "x", "‖": "="}[glyph]
-	}
+	glyph, ink := filesStateGlyph(state, pal)
 	c.text(4, y, barX-20, ckSeg{t: glyph + " ", fg: ink}, ckSeg{t: printableTitle(r.Name), fg: nameInk})
 	size := units.Bytes(r.Size)
 	if r.State == "running" || r.State == "paused" {
@@ -561,10 +543,13 @@ func (m *OS) FilesCopiesClick(x, y int) (tea.Cmd, bool) {
 				e.jobOpen[g.job.id] = !e.jobOpen[g.job.id]
 			}
 			return nil, true
-		case "pause":
-			verb := "transfer-pause"
-			if s := g.state(); s == "paused" || s == "waiting" {
-				verb = "transfer-resume"
+		case "pause", "cancel":
+			verb := "transfer-cancel"
+			if h.what == "pause" {
+				verb = "transfer-pause"
+				if s := g.state(); s == "paused" || s == "waiting" {
+					verb = "transfer-resume"
+				}
 			}
 			var cmds []tea.Cmd
 			for _, r := range g.rows {
@@ -573,15 +558,29 @@ func (m *OS) FilesCopiesClick(x, y int) (tea.Cmd, bool) {
 				}
 			}
 			return tea.Sequence(cmds...), true
-		case "cancel":
-			var cmds []tea.Cmd
-			for _, r := range g.rows {
-				if !transferEnded(r.State) {
-					cmds = append(cmds, m.transferCallCmd("transfer-cancel", r.Name, map[string]any{"id": r.ID}))
-				}
-			}
-			return tea.Sequence(cmds...), true
 		}
 	}
 	return nil, false
+}
+
+// filesStateGlyph is the glyph and ink of a copy or a file of one in the
+// Copies list, by its state.
+func filesStateGlyph(state string, pal overlay.Palette) (string, color.Color) {
+	glyph, ascii, ink := "▸", ">", pal.AccentBright
+	switch state {
+	case "paused":
+		glyph, ascii, ink = "‖", "=", pal.Warning
+	case "asks":
+		glyph, ascii, ink = "?", "?", pal.Warning
+	case "queued", "waiting":
+		glyph, ascii, ink = "·", ".", pal.FgDim
+	case "done":
+		glyph, ascii, ink = "✓", "+", pal.Success
+	case "failed":
+		glyph, ascii, ink = "✕", "x", pal.Warn
+	}
+	if overlay.UseASCII() {
+		return ascii, ink
+	}
+	return glyph, ink
 }

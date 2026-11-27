@@ -116,6 +116,12 @@ type filesSide struct {
 	filter  string
 	// marks is the marked rows, by name.
 	marks map[string]bool
+	// landed is the copies that landed here, by name, with the time the
+	// listing first had them: their rows say "checked" for a few seconds.
+	// settle counts the reads again for a copy that ended before its file
+	// was in the listing.
+	landed map[string]time.Time
+	settle int
 	// rowsTop is the screen row of the first listing row, rowsN the rows
 	// that fit, box the side on the screen, crumbsY the crumbs row and
 	// crumbs their click targets, all as last drawn.
@@ -339,6 +345,11 @@ func (m *OS) filesRead(dir, pick string) tea.Cmd {
 
 // filesReadSide asks for dir on side s's machine.
 func (m *OS) filesReadSide(s *filesSide, dir, pick string) tea.Cmd {
+	return m.filesReadSideAfter(s, dir, pick, 0)
+}
+
+// filesReadSideAfter is filesReadSide with the read put off by wait.
+func (m *OS) filesReadSideAfter(s *filesSide, dir, pick string, wait time.Duration) tea.Cmd {
 	s.gen++
 	s.want, s.pick = dir, pick
 	s.loading, s.loadingAt = true, time.Now()
@@ -348,7 +359,10 @@ func (m *OS) filesReadSide(s *filesSide, dir, pick string) tea.Cmd {
 		l, infos, home := readListingDetails(call, host, dir)
 		return filesListMsg{id: id, gen: gen, l: l, infos: infos, home: home}
 	}
-	tick := tea.Tick(filesReadingAfter, func(time.Time) tea.Msg { return filesReadingMsg{id: id, gen: gen} })
+	tick := tea.Tick(wait+filesReadingAfter, func(time.Time) tea.Msg { return filesReadingMsg{id: id, gen: gen} })
+	if wait > 0 {
+		return tea.Batch(tea.Tick(wait, func(time.Time) tea.Msg { return read() }), tick)
+	}
 	return tea.Batch(read, tick)
 }
 
@@ -356,11 +370,11 @@ func (m *OS) filesReadSide(s *filesSide, dir, pick string) tea.Cmd {
 // the folder on screen keeps the cursor on its row. A read of another folder
 // starts at the top, or on the row the read was asked to pick, and drops the
 // filter, which was for the folder left.
-func (m *OS) HandleFilesList(msg filesListMsg) {
+func (m *OS) HandleFilesList(msg filesListMsg) tea.Cmd {
 	e := &m.explorer
 	s := m.filesSideByID(msg.id)
 	if !e.open || s == nil || msg.gen != s.gen {
-		return
+		return nil
 	}
 	s.loading = false
 	e.gen++
@@ -368,7 +382,7 @@ func (m *OS) HandleFilesList(msg filesListMsg) {
 		// A folder that cannot be read leaves the one on screen, and says
 		// why in the machine row.
 		s.Err = msg.l.Err
-		return
+		return nil
 	}
 	keep := ""
 	if en, _, ok := filesSideEntry(s); ok {
@@ -388,11 +402,13 @@ func (m *OS) HandleFilesList(msg filesListMsg) {
 		s.cursor, s.scroll = 0, 0
 		s.filter = ""
 		s.marks = nil
+		s.landed = nil
 	} else if pick == "" {
 		pick = keep
 	}
 	m.filesRebuildSide(s)
 	filesPickSide(s, pick)
+	return m.filesSettleLanded(s)
 }
 
 // HandleFilesReading redraws the machine row once a read has run long

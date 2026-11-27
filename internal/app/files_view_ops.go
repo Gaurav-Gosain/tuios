@@ -321,6 +321,19 @@ func (m *OS) filesLocalPaste(srcDir string, names []string, dstDir string, move 
 	}
 }
 
+// filesFarCall runs one change on another machine's daemon, and reads dir
+// again after it. note is the notice when it worked, and fail starts the
+// warning when it did not.
+func (m *OS) filesFarCall(host, dir, verb string, params map[string]any, note, fail string) tea.Cmd {
+	call := m.verbOnHostCaller()
+	return func() tea.Msg {
+		if _, err := call(host, verb, params); err != nil {
+			return filesOpMsg{warn: fail + verbErrText(err)}
+		}
+		return filesOpMsg{note: note, host: host, dirs: []string{dir}}
+	}
+}
+
 // filesFarMove moves names inside another machine, through its daemon.
 func (m *OS) filesFarMove(host, srcDir string, names []string, dstDir string) tea.Cmd {
 	call := m.verbOnHostCaller()
@@ -416,14 +429,8 @@ func (m *OS) filesSubmitChange(p filesPrompt, text string) tea.Cmd {
 					undo: &filesUndo{kind: "rename", pairs: [][2]string{{from, to}}, at: []fileStamp{stampOf(to)}}}
 			}
 		}
-		host := m.filesHostOf(s)
-		call := m.verbOnHostCaller()
-		return func() tea.Msg {
-			if _, err := call(host, "file-rename", map[string]any{"from": filesJoinOn(dir, old), "to": filesJoinOn(dir, text)}); err != nil {
-				return filesOpMsg{warn: "tuios could not rename " + old + ": " + verbErrText(err)}
-			}
-			return filesOpMsg{note: "Renamed " + old + ".", host: host, dirs: []string{dir}}
-		}
+		return m.filesFarCall(m.filesHostOf(s), dir, "file-rename", map[string]any{"from": filesJoinOn(dir, old), "to": filesJoinOn(dir, text)},
+			"Renamed "+old+".", "tuios could not rename "+old+": ")
 	case filesPromptNew:
 		if text == "" {
 			return nil
@@ -447,14 +454,8 @@ func (m *OS) filesSubmitChange(p filesPrompt, text string) tea.Cmd {
 			m.ShowNotification("tuios can make a folder on another machine, not a file. End the name with /.", "info", m.Settings.NotificationDuration)
 			return nil
 		}
-		host := m.filesHostOf(s)
-		call := m.verbOnHostCaller()
-		return func() tea.Msg {
-			if _, err := call(host, "file-mkdir", map[string]any{"path": filesJoinOn(dir, strings.TrimSuffix(text, "/"))}); err != nil {
-				return filesOpMsg{warn: "tuios could not make " + text + ": " + verbErrText(err)}
-			}
-			return filesOpMsg{note: "Made " + text + ".", host: host, dirs: []string{dir}}
-		}
+		return m.filesFarCall(m.filesHostOf(s), dir, "file-mkdir", map[string]any{"path": filesJoinOn(dir, strings.TrimSuffix(text, "/"))},
+			"Made "+text+".", "tuios could not make "+text+": ")
 	case filesPromptCopy, filesPromptMove:
 		if text == "" {
 			return nil
@@ -657,6 +658,51 @@ func (m *OS) filesArrivals(s *filesSide) []session.TransferRow {
 	}
 	return out
 }
+
+// filesSettleLanded runs after a read of side s. It notes the copies the
+// listing now has, so their rows say "checked" for a few seconds. A copy
+// that ended while its file is not in the listing yet gets the folder read
+// again, a few times at most.
+func (m *OS) filesSettleLanded(s *filesSide) tea.Cmd {
+	now := time.Now()
+	for name, at := range s.landed {
+		if now.Sub(at) > filesLandedFor {
+			delete(s.landed, name)
+		}
+	}
+	host, dir := m.filesHostOf(s), filesSideDir(s)
+	missing := false
+	for _, r := range m.transfers.rows {
+		if r.State != "done" || r.Dst.Host != host || !filesLandsIn(r, dir) {
+			continue
+		}
+		if !filesHasName(s, r.Name) {
+			missing = true
+			continue
+		}
+		if _, ok := s.landed[r.Name]; !ok && now.Sub(time.UnixMilli(r.Ended)) < filesLandedFor {
+			if s.landed == nil {
+				s.landed = map[string]time.Time{}
+			}
+			s.landed[r.Name] = now
+		}
+	}
+	if !missing || s.settle >= filesSettleReads {
+		s.settle = 0
+		return nil
+	}
+	s.settle++
+	return m.filesReadSideAfter(s, dir, "", filesSettleWait)
+}
+
+// filesLandedFor is how long a landed copy's row says "checked".
+// filesSettleReads and filesSettleWait bound the reads again for a copy
+// whose file the listing does not have yet.
+const (
+	filesLandedFor   = 5 * time.Second
+	filesSettleReads = 5
+	filesSettleWait  = 400 * time.Millisecond
+)
 
 // filesLandsIn reports whether copy r lands in the folder dir: its path is
 // the folder, put into it, or a path in the folder.

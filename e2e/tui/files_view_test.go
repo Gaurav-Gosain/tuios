@@ -548,8 +548,11 @@ func TestFilesViewCopies(t *testing.T) {
 			return err == nil
 		})
 	}
+	// The far side reads its folder again once the copy ends: the three
+	// files are its own rows, and none is still on its way.
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return strings.Count(s.Text(), "2 MiB") >= 7 && !strings.Contains(s.Text(), "%")
+		text := s.Text()
+		return strings.Contains(text, "3 items") && !strings.Contains(text, "arriving") && !strings.Contains(text, "%")
 	}, 120*time.Second); err != nil {
 		t.Fatalf("the far side never listed the three files: %v\n%s", err, term.Snapshot())
 	}
