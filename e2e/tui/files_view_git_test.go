@@ -106,7 +106,7 @@ func TestFilesViewMarksChangesAndReviewsThem(t *testing.T) {
 	term := attachIn(t, base, "agent", startOpts{cols: 160, rows: rows})
 	sendKeys(t, term, tuitest.Ctrl('b'), "f")
 	waitScreen(t, term, "the view never opened", "this machine")
-	sendKeys(t, term, tuitest.Esc, ":")
+	sendKeys(t, term, ":")
 	sendKeys(t, term, repo, tuitest.Enter)
 	art := artifactDir(t)
 	frame := func(name string) {
@@ -230,7 +230,7 @@ func TestFilesViewGitMarksAddNoIdleCost(t *testing.T) {
 	closed := window("Files view closed")
 	sendKeys(t, term, tuitest.Ctrl('b'), "f")
 	waitScreen(t, term, "the view never opened", "this machine")
-	sendKeys(t, term, tuitest.Esc, ":")
+	sendKeys(t, term, ":")
 	sendKeys(t, term, repo, tuitest.Enter)
 	if err := term.WaitFor(func(s tuitest.Screen) bool { return screenHas(s, "● M", "● U") }, uiTimeout); err != nil {
 		t.Fatalf("the marks never showed: %v\n%s", err, term.Snapshot())
