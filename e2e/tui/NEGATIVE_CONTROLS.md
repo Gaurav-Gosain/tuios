@@ -19874,3 +19874,16 @@ The two no-placeholder cases are the control for an editor that tuios does not k
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestEditorPlaceholdersOpenAtTheLine$' -v .`.
+
+## An idle status line from a program is not an agent
+
+`TestIdleProgramStatusIsNotAnAgent` runs three panes: a program that reports only an idle record with a status line, a pane whose idle record names `app=codex`, and a program that reports working. The first must keep its record and get no agent state, and list-agents and the Agents view must leave it out. The other two must keep their states.
+
+Run on 2026-11-27 on Linux. One control, this branch with the idle gate in `applyProgramStatus` taken out (`false &&` in its place):
+
+| Change | Failure | Verdict |
+| --- | --- | --- |
+| The idle gate is taken out, so any idle report makes an agent | `the editor pane has no agent state and keeps its idle record` | caught |
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestIdleProgramStatusIsNotAnAgent$' -v .`.
