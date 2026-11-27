@@ -3,7 +3,6 @@ package session
 import (
 	"bytes"
 	"fmt"
-	"runtime"
 	"testing"
 	"time"
 )
@@ -18,48 +17,6 @@ func streamTrimChunk(first int) []byte {
 		b = fmt.Appendf(b, "%06d\r\n", n)
 	}
 	return b
-}
-
-// settledHeap is the heap still reachable after two collections. The second
-// one empties the victim cache of the pool the stream's frame buffers go back
-// to, which keeps them for one collection.
-func settledHeap() int64 {
-	runtime.GC()
-	runtime.GC()
-	var ms runtime.MemStats
-	runtime.ReadMemStats(&ms)
-	return int64(ms.HeapAlloc)
-}
-
-// settledBaseline is settledHeap once the heap has stopped moving. Tests that ran
-// before this one in the package leave garbage behind, and goroutines and
-// timers that still hold memory: a daemon one of them started stays reachable
-// from a timer for seconds after that test ends. A reading taken at once can
-// hold megabytes that come off during the measurement. It takes readings a
-// short while apart until they have stayed within a few KiB of each other for
-// longer than the measurement that follows, for a bounded number of readings.
-func settledBaseline(t *testing.T) int64 {
-	t.Helper()
-	const margin = 16 << 10
-	const quiet = 3 * time.Second
-	const tries = 150
-	const gap = 100 * time.Millisecond
-	anchor := settledHeap()
-	since := time.Now()
-	for range tries {
-		time.Sleep(gap)
-		cur := settledHeap()
-		if d := cur - anchor; d < -margin || d > margin {
-			anchor, since = cur, time.Now()
-			continue
-		}
-		if time.Since(since) >= quiet {
-			return cur
-		}
-	}
-	t.Logf("the heap had not stayed still for %v within %d readings %v apart; the baseline is the last of them",
-		quiet, tries, gap)
-	return settledHeap()
 }
 
 // readStreamBytes reads frames from the rig until n bytes of output have come,
@@ -95,28 +52,29 @@ func readStreamBytes(t *testing.T, r *gateRig, n int, limit time.Duration, keep 
 // that floods in bursts would otherwise grow it again at every burst, and once
 // the stream has stayed idle for a second it is given back. A second burst
 // after that still reaches the client whole and in order.
+//
+// It reads what it means: the batch's capacity, and how long the stream kept
+// it idle, both as the stream records them on its queue (noteBatch). No
+// reading depends on when the test runs, so a loaded runner cannot fail it.
+// The heap is not read: two collections on a loaded runner took longer than
+// the window an earlier version of this test had.
+//
+// Negative controls: a batch let go as soon as the stream is idle, and one let
+// go after 500 ms, each fail the check of how long it was kept.
 func TestAFloodedStreamGivesBackItsBatchAfterASecond(t *testing.T) {
 	const chunks = 16
 	const chunkBytes = 16 << 10
-	// The batch a flood grows is at least 200 KiB; most of it must still be
-	// held right after the flood.
+	// The batch a flood grows is at least 200 KiB; most of it must be held
+	// right after the flood.
 	const kept = 150 << 10
-	const budget = 64 << 10
-	// The early reading must come well inside the second the batch is kept.
-	const earlyBy = 600 * time.Millisecond
-	// It is taken late inside that guard, so a batch let go well before the
-	// second is up fails it, not only one let go at once.
-	const earlyAt = 475 * time.Millisecond
 
 	r := newGateRig(t)
-	before := settledBaseline(t)
-
 	line := 100000
 	for range chunks {
 		r.pty.appendAndBroadcast(streamTrimChunk(line))
 		line += 2048
 	}
-	_, last := readStreamBytes(t, r, chunks*chunkBytes, 10*time.Second, false)
+	readStreamBytes(t, r, chunks*chunkBytes, 10*time.Second, false)
 
 	r.pty.subscribersMu.RLock()
 	sub := r.pty.subscribers["gate-client"]
@@ -130,27 +88,35 @@ func TestAFloodedStreamGivesBackItsBatchAfterASecond(t *testing.T) {
 	if slots > queueKeep {
 		t.Fatalf("the flood grew the queue to %d slots, want it at %d or fewer so only the batch grew", slots, queueKeep)
 	}
-
-	time.Sleep(time.Until(last.Add(earlyAt)))
-	early := settledHeap()
-	if took := time.Since(last); took > earlyBy {
-		t.Fatalf("the first reading came %v after the last frame was read, more than the %v the check needs",
-			took, earlyBy)
+	// The stream records the batch's capacity before it sends the batch, so
+	// the last one is recorded once its bytes have been read.
+	if held, _ := sub.out.heldBatch(); held < kept {
+		t.Fatalf("the stream holds a batch of %d bytes right after the flood, want the grown batch (at least %d bytes) "+
+			"kept until the stream has been idle for a second", held, kept)
 	}
-	time.Sleep(time.Until(last.Add(1500 * time.Millisecond)))
-	late := settledHeap()
 
-	heldEarly := early - before
-	heldLate := late - before
-	t.Logf("a flooded stream holds %d bytes %v after the flood and %d bytes a second and a half later",
-		heldEarly, earlyAt, heldLate)
-	if heldEarly < kept {
-		t.Fatalf("a flooded stream holds %d bytes shortly after the flood, want the grown batch (at least %d bytes) "+
-			"kept until the stream has been idle for a second", heldEarly, kept)
+	// The batch is given back: wait for it, with room for a loaded runner.
+	var held int
+	var idle time.Duration
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if held, idle = sub.out.heldBatch(); held <= streamBatchKeep {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the stream still holds a batch of %d bytes 10s after the flood, want at most %d", held, streamBatchKeep)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
-	if heldLate > budget {
-		t.Fatalf("a flooded stream holds %d bytes of live heap 1.5s after the flood, the budget is %d",
-			heldLate, budget)
+	t.Logf("the stream let its batch go after %v idle", idle)
+	if idle < queueTrimAfter {
+		t.Fatalf("the stream let its batch go after %v idle, want it kept for %v", idle, queueTrimAfter)
+	}
+	sub.out.mu.Lock()
+	slots = len(sub.out.buf)
+	sub.out.mu.Unlock()
+	if slots > queueKeep {
+		t.Fatalf("the queue holds %d slots after the give-back, want at most %d", slots, queueKeep)
 	}
 
 	var want []byte

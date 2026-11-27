@@ -41,6 +41,30 @@ type ptyQueue struct {
 	// wake holds one token when a chunk may be waiting. Made by
 	// newSubscriber; a queue without one never wakes a taker.
 	wake chan struct{}
+	// batchCap is the capacity of the batch the taker holds, and batchKept
+	// how long its last grown batch stayed idle before the taker let it go.
+	// The taker sets them when they change (noteBatch); tests read them.
+	batchCap  int
+	batchKept time.Duration
+}
+
+// noteBatch records the capacity of the taker's batch, and with kept above
+// zero how long the batch it just let go had stayed idle.
+func (q *ptyQueue) noteBatch(capacity int, kept time.Duration) {
+	q.mu.Lock()
+	q.batchCap = capacity
+	if kept > 0 {
+		q.batchKept = kept
+	}
+	q.mu.Unlock()
+}
+
+// heldBatch is the capacity of the taker's batch and how long its last grown
+// batch stayed idle before it was let go, zero until one was.
+func (q *ptyQueue) heldBatch() (capacity int, kept time.Duration) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.batchCap, q.batchKept
 }
 
 // newSubscriber is a stream with an empty queue.

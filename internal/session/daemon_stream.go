@@ -95,6 +95,11 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 	// trim fires once a queue the backlog grew, or a batch a flood grew, has
 	// stayed empty for queueTrimAfter. Made the first time either drains.
 	var trim *time.Timer
+	// armed is when trim was last set, so a batch let go records how long
+	// it stayed idle. noted is the batch capacity last recorded on the queue:
+	// it is recorded only when it changes.
+	var armed time.Time
+	noted := 0
 	// resize is a value, not a pointer: taking the address of the receive
 	// variables made them escape, one allocation per chunk.
 	var resize ptyChunk
@@ -126,6 +131,7 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 				} else {
 					trim.Reset(queueTrimAfter)
 				}
+				armed = time.Now()
 				trimC = trim.C
 			}
 			select {
@@ -138,6 +144,8 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 				queue.trim()
 				if cap(batch) > streamBatchKeep {
 					batch = nil
+					noted = 0
+					queue.noteBatch(0, time.Since(armed))
 				}
 			}
 			continue
@@ -188,6 +196,12 @@ func (d *Daemon) streamPTYOutput(cs *connState, pty *PTY, sub *ptySubscriber) {
 			}
 		}
 	send:
+		// The batch's capacity is on the queue before its bytes go out, so a
+		// reader that has them sees it.
+		if c := cap(batch); c != noted {
+			noted = c
+			queue.noteBatch(c, 0)
+		}
 		// A frame can make the batch larger than maxBatch, so it goes out
 		// in pieces of at most maxBatch, each with its own deadline.
 		//
