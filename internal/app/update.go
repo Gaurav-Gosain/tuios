@@ -2961,6 +2961,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 	case ReviewStagedMsg:
 		return m, m.applyReviewStaged(msg)
 
+	case ReviewRevertedMsg:
+		return m, m.applyReviewReverted(msg)
+
 	case ReviewNotesMsg:
 		m.applyReviewNotes(msg)
 		return m, nil

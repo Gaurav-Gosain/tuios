@@ -357,7 +357,9 @@ func (m *OS) SidebarFileCopyPath() tea.Cmd {
 }
 
 type fileEditMsg struct {
-	Path  string
+	Path string
+	// Line is the line the editor opens at, 0 for its own choice.
+	Line  int
 	Argv  []string
 	IsDir bool
 	Note  string
@@ -489,7 +491,7 @@ func (m *OS) handleFileEdit(msg fileEditMsg) tea.Cmd {
 	}
 	remoteHost := m.AttachedHost
 	before := len(m.Windows)
-	m.AddWindowIn(filepath.Dir(msg.Path), filepath.Base(msg.Path), append(msg.Argv, msg.Path)...)
+	m.AddWindowIn(filepath.Dir(msg.Path), filepath.Base(msg.Path), append(msg.Argv, editorLineArgs(msg.Argv[0], msg.Path, msg.Line)...)...)
 	if !m.daemonWindowIntent && len(m.Windows) == before {
 		m.ShowNotification("tuios could not start the editor.", "error", m.Settings.NotificationDuration)
 		return nil

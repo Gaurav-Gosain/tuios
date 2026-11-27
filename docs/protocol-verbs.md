@@ -162,6 +162,7 @@ It also has more about the verbs that need it.
 - [`retry-host`](#retry-host)
 - [`review-diff`](#review-diff)
 - [`review-note`](#review-note)
+- [`review-revert`](#review-revert)
 - [`review-stage`](#review-stage)
 - [`run`](#run)
 - [`run-command`](#run-command)
@@ -4224,6 +4225,42 @@ Keep the review notes on a pane's changes: add one on a line or a hunk, edit, re
 
 ```json
 {"id":1,"verb":"review-note","params":{"action":"list","session":"work","window":"build"}}
+```
+
+### `review-revert`
+
+Take one hunk of a pane's diff against its base out of the working file, so the file has the base's lines there again, or put it back with action undo. Only the working file changes. The index does not change. The hunk must be in the diff now as it was read. A hunk with a line of an agent that works now is refused. Every revert returns an id. Send it with action undo to put the hunk back.
+
+| Param | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `action` | string | yes |  | What to do. One of `revert` or `undo`. |
+| `session` | string |  |  | Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one. |
+| `window` | string |  |  | Window id or name. Omit to target the focused window. |
+| `path` | string |  |  | The file, relative to the repository root. Needed to revert. |
+| `hunk` | string |  |  | The hunk header, exactly as review-diff returned it. Needed to revert. |
+| `sum` | string |  |  | The digest of the hunk's lines as they were read. Needed to revert. A hunk whose lines are not the same now is not reverted. |
+| `base` | string |  |  | The base of the diff the hunk came from, as review-diff took it. Omit for the worktree's own base. |
+| `uncommitted` | bool |  |  | True when the diff the hunk came from was of the uncommitted changes only. |
+| `context` | int |  | `3` | The context of the diff the hunk came from, 0 to 20. It must match that diff. |
+| `id` | string |  |  | For action undo: the id of the revert to undo. |
+| `human_nonce` | string |  |  | The nonce from the attach reply of a client attached now. The TUI sends its own. Without a live one the call is not the person's. |
+
+| Result field | Type | Description |
+|---|---|---|
+| `session` | string | The session of the pane. |
+| `window` | string | The pane, by id. |
+| `worktree` | string | The worktree whose file changed. |
+| `path` | string | The file that changed. |
+| `action` | string | The action done: revert or undo. |
+| `id` | string | The revert's id. Send it with action undo to put the hunk back. The daemon keeps it while it runs. |
+| `lines` | int | For a revert: how many added and removed lines the hunk had. |
+
+```json
+{"id":1,"verb":"review-revert","params":{"action":"revert","session":"work","window":"build","path":"api/retry.go","hunk":"@@ -40,7 +40,9 @@ func Do(ctx context.Context","sum":"3f2a9c01b7d4e865"}}
+```
+
+```json
+{"id":1,"verb":"review-revert","params":{"action":"undo","session":"work","window":"build","id":"K7QW2M4XR9TB"}}
 ```
 
 ### `review-stage`

@@ -1018,6 +1018,89 @@
       "{\"id\":1,\"verb\":\"review-stage\",\"params\":{\"action\":\"undo\",\"session\":\"work\",\"window\":\"build\",\"undo\":{\"entries\":[{\"path\":\"api/retry.go\",\"mode\":\"100644\",\"sha\":\"<sha>\"}],\"after\":[{\"path\":\"api/retry.go\",\"mode\":\"100644\",\"sha\":\"<sha>\"}]}}}"
     ]
   },
+  "review-revert": {
+    "description": "Take one hunk of a pane's diff against its base out of the working file, so the file has the base's lines there again, or put it back with action undo. Only the working file changes. The index does not change. The hunk must be in the diff now as it was read. A hunk with a line of an agent that works now is refused. Every revert returns an id. Send it with action undo to put the hunk back.",
+    "params": [
+      {
+        "name": "action",
+        "description": "What to do."
+      },
+      {
+        "name": "session",
+        "description": "Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one."
+      },
+      {
+        "name": "window",
+        "description": "Window id or name. Omit to target the focused window."
+      },
+      {
+        "name": "path",
+        "description": "The file, relative to the repository root. Needed to revert."
+      },
+      {
+        "name": "hunk",
+        "description": "The hunk header, exactly as review-diff returned it. Needed to revert."
+      },
+      {
+        "name": "sum",
+        "description": "The digest of the hunk's lines as they were read. Needed to revert. A hunk whose lines are not the same now is not reverted."
+      },
+      {
+        "name": "base",
+        "description": "The base of the diff the hunk came from, as review-diff took it. Omit for the worktree's own base."
+      },
+      {
+        "name": "uncommitted",
+        "description": "True when the diff the hunk came from was of the uncommitted changes only."
+      },
+      {
+        "name": "context",
+        "description": "The context of the diff the hunk came from, 0 to 20. It must match that diff."
+      },
+      {
+        "name": "id",
+        "description": "For action undo: the id of the revert to undo."
+      },
+      {
+        "name": "human_nonce",
+        "description": "The nonce from the attach reply of a client attached now. The TUI sends its own. Without a live one the call is not the person's."
+      }
+    ],
+    "returns": [
+      {
+        "name": "session",
+        "description": "The session of the pane."
+      },
+      {
+        "name": "window",
+        "description": "The pane, by id."
+      },
+      {
+        "name": "worktree",
+        "description": "The worktree whose file changed."
+      },
+      {
+        "name": "path",
+        "description": "The file that changed."
+      },
+      {
+        "name": "action",
+        "description": "The action done: revert or undo."
+      },
+      {
+        "name": "id",
+        "description": "The revert's id. Send it with action undo to put the hunk back. The daemon keeps it while it runs."
+      },
+      {
+        "name": "lines",
+        "description": "For a revert: how many added and removed lines the hunk had."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"review-revert\",\"params\":{\"action\":\"revert\",\"session\":\"work\",\"window\":\"build\",\"path\":\"api/retry.go\",\"hunk\":\"@@ -40,7 +40,9 @@ func Do(ctx context.Context\",\"sum\":\"3f2a9c01b7d4e865\"}}",
+      "{\"id\":1,\"verb\":\"review-revert\",\"params\":{\"action\":\"undo\",\"session\":\"work\",\"window\":\"build\",\"id\":\"K7QW2M4XR9TB\"}}"
+    ]
+  },
   "send-review": {
     "description": "Send a pane's unsent review notes to its agent as one message, through the delivery queue: typed now when the agent is at rest, else when it next comes to rest. The message says it is from the person only with a live human_nonce, and labels each note written by someone other than the sender with its author. It types into the pane, so a pane may send only to a pane that holds nothing it does not, and a note whose author may not type there now is withheld.",
     "params": [

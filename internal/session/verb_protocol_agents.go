@@ -193,6 +193,36 @@ func agentWorkVerbs() map[string]verbEntry {
 			},
 			handler: (*Daemon).verbReviewStage,
 		},
+		// verb_review_revert.go
+		"review-revert": {
+			// review-revert writes the working tree of a pane's worktree. It is
+			// the person's tool, as review-stage is.
+			scope: scopeDeny,
+			link:  needWrite,
+			params: []verbParam{
+				{Name: "action", Type: "string", Required: true, Accepted: reviewRevertActions},
+				sessionParam,
+				windowParam,
+				{Name: "path", Type: "string"},
+				{Name: "hunk", Type: "string"},
+				{Name: "sum", Type: "string"},
+				{Name: "base", Type: "string"},
+				{Name: "uncommitted", Type: "bool"},
+				{Name: "context", Type: "int", Default: "3"},
+				{Name: "id", Type: "string"},
+				humanNonce,
+			},
+			returns: []verbParam{
+				{Name: "session", Type: "string"},
+				{Name: "window", Type: "string"},
+				{Name: "worktree", Type: "string"},
+				{Name: "path", Type: "string"},
+				{Name: "action", Type: "string"},
+				{Name: "id", Type: "string"},
+				{Name: "lines", Type: "int"},
+			},
+			handler: (*Daemon).verbReviewRevert,
+		},
 		"review-note": {
 			scope: scopeWrite,
 			link:  needWrite,

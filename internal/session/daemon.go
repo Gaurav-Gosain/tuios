@@ -408,6 +408,9 @@ type Daemon struct {
 	// value is ready; Start loads what the last daemon saved. See
 	// review_notes.go.
 	reviewNotes reviewNoteStore
+	// reviewReverts keeps the patches of review-revert for undo. Its zero
+	// value is ready. See verb_review_revert.go.
+	reviewReverts reviewRevertStore
 
 	// checkpoints saves a pane's work tree when its agent finishes a turn.
 	// Its zero value is on. See checkpoints.go.

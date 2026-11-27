@@ -56,6 +56,9 @@ const (
 	reviewRowLine
 	reviewRowNote
 	reviewRowEditor
+	// reviewRowReverted marks where the last revert took a hunk out, until
+	// z puts it back (review_actions.go). Its text is its words.
+	reviewRowReverted
 )
 
 // reviewRow is one row of the diff column.
@@ -411,7 +414,12 @@ func (m *OS) reviewRows(width int) []reviewRow {
 			rows = append(rows, reviewRow{kind: reviewRowEditor, hunk: h, line: ed.lineIdx, other: -1, note: -1})
 		}
 	}
+	reverted := r.reviewLastRevert(e.file.Path)
 	for h, hunk := range e.file.Hunks {
+		if reverted != nil && hunk.NewStart > reverted.line {
+			rows = append(rows, reviewRow{kind: reviewRowReverted, hunk: -1, line: -1, other: -1, note: -1, text: m.reviewRevertedWords(reverted)})
+			reverted = nil
+		}
 		// A hunk of the authors the filter hides is left out whole.
 		if !r.reviewHunkShown(hunk) {
 			continue
@@ -444,6 +452,9 @@ func (m *OS) reviewRows(width int) []reviewRow {
 		if ed != nil && ed.noteID == "" && ed.hunk != "" && ed.hunkIdx == h {
 			rows = append(rows, reviewRow{kind: reviewRowEditor, hunk: h, line: -1, other: -1, note: -1})
 		}
+	}
+	if reverted != nil {
+		rows = append(rows, reviewRow{kind: reviewRowReverted, hunk: -1, line: -1, other: -1, note: -1, text: m.reviewRevertedWords(reverted)})
 	}
 	return rows
 }
@@ -1046,6 +1057,9 @@ func (d reviewDraw) rowBody(row reviewRow, st overlay.RowState) string {
 	case reviewRowInfo:
 		bg := rowBg(pal.Surface)
 		return markCell(bg) + reviewPaint([]reviewSeg{{pal.FgDim, " " + row.text, false}}, rest, bg)
+	case reviewRowReverted:
+		bg := rowBg(pal.Surface)
+		return markCell(bg) + reviewPaint([]reviewSeg{{pal.Warning, " " + row.text, false}}, rest, bg)
 	case reviewRowHunk:
 		bg := d.look.hunkBg
 		if cursor {
@@ -1310,6 +1324,9 @@ func (m *OS) reviewFooter(width int, pal overlay.Palette) string {
 	if r.filter.menu {
 		return m.reviewWhoMenuLine(width, pal)
 	}
+	if r.revertAsk != nil {
+		return m.reviewAskLine("Revert your own lines in "+reviewText(r.revertAsk.path)+"? Nothing else keeps a copy.", []overlay.Hint{{Key: "y", Label: "revert"}, {Key: "n", Label: "keep"}}, width, pal)
+	}
 	return m.reviewFooterHints(m.reviewKeyHints(), width, pal)
 }
 
@@ -1331,6 +1348,21 @@ func (m *OS) reviewPromptLine(label, draft string, hints []overlay.Hint, width i
 		text = ansi.TruncateLeft(text, ansi.StringWidth(text)-room, "")
 	}
 	line := reviewPaint([]reviewSeg{{pal.AccentBright, " " + label, true}, {pal.Fg, text + "_", false}}, width-ansi.StringWidth(keys)-1, pal.Surface)
+	return line + keys + reviewSpaces(1, pal.Surface)
+}
+
+// reviewAskLine draws a question with its keys after it.
+func (m *OS) reviewAskLine(question string, hints []overlay.Hint, width int, pal overlay.Palette) string {
+	keys := reviewHintStrip(hints, pal)
+	at := width - ansi.StringWidth(keys) - 1
+	spans := make([]reviewHintSpan, 0, len(hints))
+	for i, p := range reviewHintParts(hints, pal) {
+		w := ansi.StringWidth(p)
+		spans = append(spans, reviewHintSpan{x0: at, x1: at + w, key: reviewHintKey(hints[i])})
+		at += w + 2
+	}
+	m.reviewRecordHints(spans, 1)
+	line := reviewPaint([]reviewSeg{{pal.Warning, " " + question, true}}, width-ansi.StringWidth(keys)-1, pal.Surface)
 	return line + keys + reviewSpaces(1, pal.Surface)
 }
 
@@ -1368,6 +1400,10 @@ func (m *OS) reviewKeyHints() []overlay.Hint {
 			add("c", "note")
 		}
 		m.reviewStageHints(add)
+		if row, ok := m.reviewRowUnderCursor(); ok && row.hunk >= 0 && r.reviewIndexable() {
+			add("X", "revert")
+			add("o", "open")
+		}
 	}
 	if n := r.unsentNotes(); n > 0 && !against {
 		add("S", "send "+reviewCount(n, "note"))

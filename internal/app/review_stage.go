@@ -37,10 +37,12 @@ type reviewUndo struct {
 	After   json.RawMessage `json:"after"`
 }
 
-// reviewUndoStep is one stage or unstage z can take back.
+// reviewUndoStep is one stage, unstage or revert z can take back.
 type reviewUndoStep struct {
 	session, window string
 	undo            reviewUndo
+	// revert is set for a revert (review_actions.go).
+	revert *reviewRevertStep
 }
 
 // reviewIndex is the two index diffs of the reviewed worktree, by path.
@@ -281,6 +283,9 @@ func (m *OS) ReviewUndoStage() tea.Cmd {
 		return nil
 	}
 	step := r.undo[len(r.undo)-1]
+	if step.revert != nil {
+		return m.reviewRevertUndoCmd(step)
+	}
 	return m.reviewStageCmd(map[string]any{"action": "undo", "session": step.session, "window": step.window, "undo": step.undo}, nil, "Undone")
 }
 
@@ -426,7 +431,11 @@ func (m *OS) reviewStageHints(add func(key, label string)) {
 			hint(config.ActionReviewUnstageHunk, "unstage")
 		}
 	}
-	if len(r.undo) > 0 {
-		hint(config.ActionReviewUndoStage, "undo")
+	if n := len(r.undo); n > 0 {
+		if r.undo[n-1].revert != nil {
+			hint(config.ActionReviewUndoStage, "undo revert")
+		} else {
+			hint(config.ActionReviewUndoStage, "undo")
+		}
 	}
 }

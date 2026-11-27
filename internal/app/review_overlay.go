@@ -262,6 +262,8 @@ type reviewState struct {
 	staging bool
 	// undo is what z takes back, newest last.
 	undo []reviewUndoStep
+	// revertAsk is a revert of the person's own lines waiting for y.
+	revertAsk *reviewRevertAsk
 	// listWidth is the file list's width a drag on the rule set, 0 for the
 	// width the list's paths ask for. Like split it outlives the review.
 	listWidth int

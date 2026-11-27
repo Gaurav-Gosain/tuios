@@ -284,6 +284,9 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"review-stage#0": {errCode: ErrVerbHunkChanged, why: "the fixture's repository has no change to api/retry.go"},
 	"review-stage#1": {errCode: ErrVerbHunkChanged, why: "the fixture's repository has no change to api/retry.go"},
 	"review-stage#2": {errCode: ErrVerbInvalidParams, why: "the example's sha is a placeholder"},
+	// review-revert is proved in e2e/tui/review_revert_test.go.
+	"review-revert#0": {errCode: ErrVerbHunkChanged, why: "the fixture's repository has no change to api/retry.go"},
+	"review-revert#1": {errCode: ErrVerbRevertChanged, why: "no revert was made, so none is kept"},
 	// No agent finished a turn in the fixture, so no pane has a checkpoint.
 	// The checkpoints are proved in e2e/tui/checkpoint_test.go.
 	"checkpoint-diff#0":    {errCode: ErrVerbNoCheckpoint, why: "no agent finished a turn, so build has no checkpoint 2"},

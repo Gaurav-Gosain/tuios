@@ -33,6 +33,7 @@ var agentWorkVerbTable = []struct {
 	{"review-note", scopeWrite, []string{config.LinkAllowWrite}, false},
 	{"send-review", scopeWrite, []string{config.LinkAllowWrite}, true},
 	{"review-stage", scopeDeny, []string{config.LinkAllowWrite}, false},
+	{"review-revert", scopeDeny, []string{config.LinkAllowWrite}, false},
 	{"queue-prompt", scopeWrite, []string{config.LinkAllowWrite}, true},
 	{"cancel-queued", scopeWrite, []string{config.LinkAllowWrite}, false},
 	{"verify-fan", scopeLaunch, []string{config.LinkAllowOpen, config.LinkAllowWrite}, false},

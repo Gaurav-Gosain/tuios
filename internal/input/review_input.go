@@ -21,7 +21,10 @@ import (
 //	} {              next and previous file (review_next_file, review_prev_file)
 //	a d              stage or unstage the hunk (review_stage_hunk, review_unstage_hunk)
 //	A D              stage or unstage the file (review_stage_file, review_unstage_file)
-//	z                undo the last stage or unstage (review_undo_stage)
+//	z                undo the last stage, unstage or revert (review_undo_stage)
+//	X                revert the hunk in the working file; your own lines
+//	                 are asked about first (y reverts)
+//	o                open the file in an editor pane at the cursor's line
 //	tab              the file list or the diff
 //	enter            in the file list: open that file; on a hunk's header:
 //	                 fold or unfold the hunk
@@ -70,6 +73,9 @@ func handleReviewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	key = commandKey(msg)
 	if o.ReviewConfirming() {
 		return o, o.ReviewCompareConfirm(key == "y" || key == "Y")
+	}
+	if o.ReviewRevertAsking() {
+		return o, o.ReviewRevertAnswer(key == "y" || key == "Y")
 	}
 	if o.ReviewWhoMenuOpen() {
 		switch o.ListKeys.Keys(key, true) {
@@ -189,6 +195,10 @@ func handleReviewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.ReviewToggleFollow()
 	case "@":
 		o.ReviewWhoMenu()
+	case "X":
+		return o, o.ReviewRevert()
+	case "o":
+		return o, o.ReviewOpenEditor()
 	case "h", "left":
 		o.ReviewScrollX(-1)
 	case "l", "right":

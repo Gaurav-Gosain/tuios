@@ -1904,7 +1904,7 @@ Over a link, these verbs need `list`.
 
 ### The Inbox, the queue and review
 
-[`list-attention`](protocol-verbs.md#list-attention), [`peek-prompt`](protocol-verbs.md#peek-prompt), [`respond`](protocol-verbs.md#respond), [`get-approval`](protocol-verbs.md#get-approval), [`request-approval`](protocol-verbs.md#request-approval), [`reply-approval`](protocol-verbs.md#reply-approval), [`answer-ask`](protocol-verbs.md#answer-ask), [`dismiss-attention`](protocol-verbs.md#dismiss-attention), [`mark-attention`](protocol-verbs.md#mark-attention), [`release-agent-message`](protocol-verbs.md#release-agent-message), [`queue-prompt`](protocol-verbs.md#queue-prompt), [`reply-history`](protocol-verbs.md#reply-history), [`add-reply-history`](protocol-verbs.md#add-reply-history), [`list-queued`](protocol-verbs.md#list-queued), [`cancel-queued`](protocol-verbs.md#cancel-queued), [`review-diff`](protocol-verbs.md#review-diff), [`review-stage`](protocol-verbs.md#review-stage), [`review-note`](protocol-verbs.md#review-note), [`send-review`](protocol-verbs.md#send-review), [`list-checkpoints`](protocol-verbs.md#list-checkpoints), [`checkpoint-diff`](protocol-verbs.md#checkpoint-diff), [`restore-checkpoint`](protocol-verbs.md#restore-checkpoint).
+[`list-attention`](protocol-verbs.md#list-attention), [`peek-prompt`](protocol-verbs.md#peek-prompt), [`respond`](protocol-verbs.md#respond), [`get-approval`](protocol-verbs.md#get-approval), [`request-approval`](protocol-verbs.md#request-approval), [`reply-approval`](protocol-verbs.md#reply-approval), [`answer-ask`](protocol-verbs.md#answer-ask), [`dismiss-attention`](protocol-verbs.md#dismiss-attention), [`mark-attention`](protocol-verbs.md#mark-attention), [`release-agent-message`](protocol-verbs.md#release-agent-message), [`queue-prompt`](protocol-verbs.md#queue-prompt), [`reply-history`](protocol-verbs.md#reply-history), [`add-reply-history`](protocol-verbs.md#add-reply-history), [`list-queued`](protocol-verbs.md#list-queued), [`cancel-queued`](protocol-verbs.md#cancel-queued), [`review-diff`](protocol-verbs.md#review-diff), [`review-stage`](protocol-verbs.md#review-stage), [`review-revert`](protocol-verbs.md#review-revert), [`review-note`](protocol-verbs.md#review-note), [`send-review`](protocol-verbs.md#send-review), [`list-checkpoints`](protocol-verbs.md#list-checkpoints), [`checkpoint-diff`](protocol-verbs.md#checkpoint-diff), [`restore-checkpoint`](protocol-verbs.md#restore-checkpoint).
 
 The verbs that act as the person need the nonce a client receives when it attaches, or the nonce of [`attach-presence`](#attach-presence). They refuse a caller inside a pane even when it has a copy.
 
@@ -2012,9 +2012,11 @@ printf '{"verb":"subscribe","params":{"types":["bell","window-exit"]}}\n' | nc -
 | `repo_not_found` | No checkout on this machine has the origin `repo_url` names, and `clone` was not passed. Pass `clone`, a `repos_root`, or `repo` with the directory. |
 | `not_repo` | No git repository is under the pane or session named, so there is nothing to review. Nothing was read. |
 | `no_notes` | `send-review` found no unsent review notes for the pane. Nothing was typed. |
-| `hunk_changed` | `review-stage` did not find the file or the hunk in the diff now. Nothing was changed. Read the diff again with the same `index` and `context`. |
+| `hunk_changed` | `review-stage` or `review-revert` did not find the file or the hunk in the diff now. Nothing was changed. Read the diff again with the same `index` and `context`. |
 | `index_changed` | `review-stage` did not undo the call: the index changed after it. Nothing was changed. |
-| `whole_file_only` | `review-stage` stages a rename, a binary file or a file past the diff caps only whole. Nothing was changed. Leave `hunk` and `lines` out. |
+| `whole_file_only` | `review-stage` stages a rename, a binary file or a file past the diff caps only whole, and `review-revert` does not revert one. Nothing was changed. Leave `hunk` and `lines` out to stage it. |
+| `agent_writing` | `review-revert` refused: an agent that made a line of the hunk works now. Nothing was changed. Revert it once the agent is at rest, or send it a note. |
+| `revert_changed` | `review-revert` did not undo a revert: the file changed since, or the daemon no longer keeps that revert. Nothing was changed. |
 | `no_checkpoint` | The pane has no checkpoint by that number, or none at all. Nothing was read or changed. The hint lists the numbers it has. |
 | `nothing_to_commit` | `ship-commit` found no change in the work tree. `ship-push` and `ship-pr` raise it for a branch with no commit. Nothing was changed. |
 | `merge_conflict` | `ship-merge` stopped on conflicts and undid the merge. The main checkout is as it was. The hint lists the files in `available`. |
@@ -4903,6 +4905,49 @@ It is the person's tool: refused on a restricted connection, `admin` for a
 pane, `write` over a link. A `human_nonce` that is given must be live. The
 review overlay calls it with the keys `a`, `d`, `A`, `D` and `z`.
 
+### review-revert
+
+Take one hunk of a pane's diff against its base out of the working file, so
+the file has the base's lines there again, and put it back. Only the working
+file changes. The index does not change. One call runs at a time in a
+worktree, as for `review-stage`.
+
+Params: `session`, `window` (as for `review-diff`), `action` (`revert` or
+`undo`), `path` (relative to the repository root), `hunk` (a header exactly
+as `review-diff` returned it), `sum` (the digest of the hunk's lines),
+`base` and `uncommitted` (as the diff was read), `context` (the context of
+that diff, default 3), `id` (for `undo`), `human_nonce`.
+
+- `revert` reads the diff of `path` again. The hunk must be there with the
+  same lines, or the call is `hunk_changed`. `sum` is the first 8 bytes, in
+  hex, of the SHA-256 of one line per hunk line: its `op`, `old`, `new`,
+  `no_newline` and `text`, joined by spaces. The hunk reversed is applied to
+  the working file with `git apply`. The only hunk of a new file deletes the
+  file. A hunk of a deleted file makes it again. A rename, a binary file and
+  a file past the diff caps are `whole_file_only`. A hunk with a line of an
+  agent that works now is `agent_writing`: a revert would race its next
+  edit.
+- The result has `id` and `lines`, the count of added and removed lines.
+  The daemon keeps the patch under `id` while it runs, the newest 64.
+- `undo` takes `id` and applies the patch forward again. It is
+  `revert_changed` when the file changed around the hunk since, or when the
+  daemon no longer keeps the patch. `git apply` writes all of a patch or
+  none of it, so a refusal writes nothing.
+
+```json
+{"verb": "review-revert", "params": {"action": "revert", "session": "work",
+ "path": "list.txt", "hunk": "@@ -8,5 +8,7 @@ seven", "sum": "3f2a9c01b7d4e865"}}
+```
+
+```json
+{"result": {"type": "review_revert", "session": "work", "window": "ee773ef6-...",
+ "worktree": "/src/repo", "path": "list.txt", "action": "revert",
+ "id": "K7QW2M4XR9TB", "lines": 2}}
+```
+
+It is the person's tool, as `review-stage` is. The review overlay calls it
+with the keys `X` and `z`.
+
 ### review-note
 
 Keep the notes on a pane's changes. They are held by the daemon per worktree
@@ -7284,7 +7329,7 @@ the one before. The configuration is in
 | `list` | `list-*`, `session-info`, `ssh-agent-path`, `display-env`, `get-keep-awake`, `get-window`, `capture-pane`, `screenshot`, `get-option`, `get-agent-state`, `resolve-pane`, `explain-agent-*`, `wait-for`, `subscribe`, `unsubscribe`, `peek-prompt`, `read-dir`, `wait-dir`, `compare-fan`, `agent-activity`, `get-approval`, `file-stat`, `file-list`, `list-tasks`, `get-task`, `get-task-attachment` |
 | `mail` | `send-agent-message`, `read-agent-messages`, `agent-mail-notice`, `stash-put`, `stash-list`, `stash-get` |
 | `open` | `new-session`, `new-window`, `split-window`, `popup`, `new-worktree`, `fan`, `start-agent`, `open-pane`, `resize-pane`, `close-pane`, `pane-cwd`, `pane-agent`, `pane-calls` |
-| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `zoom-window`, `swap-window`, `resize-window`, `resize`, `set-option`, `set-keep-awake`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `prompt` (whose handler refuses a link caller too), `review-diff` (it returns file contents), `review-note`, `review-stage`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task`, `attach-task`, `detach-task` |
+| `write` | `send-keys`, `send-text`, `ask-agent`, `run-command`, `switch-session`, `detach-client`, `close-window`, `close-workspace`, `kill-session`, `focus-window`, `move-window`, `set-window`, `select-workspace`, `set-layout`, `zoom-window`, `swap-window`, `resize-window`, `resize`, `set-option`, `set-keep-awake`, `set-session-*`, `set-workspace-*`, `set-agent-*`, `resume-agent`, `request-approval`, `refresh-dock`, `pip`, `remove-worktree`, `bundle-worktree`, `run`, `ask-human` (whose handler refuses a link caller anyway), `prompt` (whose handler refuses a link caller too), `review-diff` (it returns file contents), `review-note`, `review-stage`, `review-revert`, `send-review`, `queue-prompt`, `cancel-queued`, `keep-fan`, `add-task`, `claim-task`, `finish-task`, `set-task-stage`, `block-task`, `release-task`, `remove-task`, `attach-task`, `detach-task` |
 | `open` and `write` | `verify-fan` |
 | `open` and `files` | `paste-pane-image`, `file-preview-run` |
 | `write` and `files` | `paste-image` |
@@ -7772,6 +7817,7 @@ them:
 | `review-diff` | The diff of what the agent in a pane changed, against its base or a fan sibling, marked `untrusted` | `read`, own session and fan group | `write` (file contents) | no |
 | `review-note` | Add, edit, remove, list or clear review notes on a pane's changes | `write`; `add` and `edit` only on a pane the caller could type into | `write` | a note is the person's only with a live `human_nonce` |
 | `review-stage` | Stage or unstage a file, a hunk or lines of a pane's worktree, and undo it; only the index changes | refused | `write` | no; a `human_nonce` that is given must be live |
+| `review-revert` | Revert a hunk of a pane's diff in the working file, and undo it; the index does not change | refused | `write` | no; a `human_nonce` that is given must be live |
 | `send-review` | Send the unsent notes to the agent through the delivery queue | `write`, and a typing verb: the target holds nothing the caller does not, and is not on `needs_input` unless the caller holds `respond` | `write` | "from the person" only with a live `human_nonce`; a note by anyone else is labelled with its author, and withheld when its author may not type there now |
 | `compare-fan` | One row per attempt of a fan: branch, agent, state, changes, last check | `read`, own fan group | `list` | no |
 | `verify-fan` | Run one check with `sh -c` in a window named `verify` in every attempt; the window holds no grants | `fan`, own fan group | `open` and `write` | no |
