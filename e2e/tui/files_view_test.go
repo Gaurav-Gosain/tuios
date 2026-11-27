@@ -87,13 +87,20 @@ func TestFilesViewOneSide(t *testing.T) {
 	enterTerminalMode(t, term)
 	runInShell(t, term, "cd "+local+" && clear && printf '\\033]7;file://%s\\033\\\\%s\\n' \"$PWD\" lis\"\"ted", "listed", uiTimeout)
 
-	// Ctrl+B f: the view, with the finder over it.
+	// Ctrl+B f: the view with the cursor in the list, and no finder over it.
 	sendKeys(t, term, tuitest.Ctrl('b'), "f")
-	railLists(t, term, "Ctrl+B f did not open the view with the finder", []string{"Search files", "this machine"}, nil)
-	sendKeys(t, term, tuitest.Esc)
-	railLists(t, term, "esc did not leave the finder for the list",
+	railLists(t, term, "Ctrl+B f did not open the view on the list, or opened the finder over it",
 		[]string{"Files", "this machine", "alpha/", "zulu/", "main.go", "notes.md", "Name", "Size"}, []string{"Search files", ".hidden"})
+	stayTrue(t, "Ctrl+B f opened the finder over the view", time.Second, func() (bool, string) {
+		s := term.Screen().Text()
+		return !strings.Contains(s, "Search files"), s
+	})
 	copiesFrame(t, term, "files-view-160x44")
+	// ctrl+f in the view opens the finder, and esc goes back to the list.
+	sendKeys(t, term, tuitest.Ctrl('f'))
+	railLists(t, term, "ctrl+f did not open the finder in the view", []string{"Search files", "this machine"}, nil)
+	sendKeys(t, term, tuitest.Esc)
+	railLists(t, term, "esc did not leave the finder for the list", []string{"main.go", "this machine"}, []string{"Search files"})
 
 	// l goes into the folder under the cursor, h comes back with the cursor
 	// on it.
@@ -257,8 +264,8 @@ func TestFilesViewOpenAddsNoIdleCost(t *testing.T) {
 	}
 	closed := window("Files view closed")
 	sendKeys(t, term, tuitest.Ctrl('b'), "f")
-	railLists(t, term, "Ctrl+B f did not open the view", []string{"Search files", "this machine"}, nil)
-	sendKeys(t, term, tuitest.Esc, "/", "main", tuitest.Enter, " ")
+	railLists(t, term, "Ctrl+B f did not open the view", []string{"main.go", "this machine"}, []string{"Search files"})
+	sendKeys(t, term, "/", "main", tuitest.Enter, " ")
 	railLists(t, term, "quick look did not open beside the list", []string{"main.go", "Hello says where it is."}, []string{"Search files"})
 	open := window("Files view open, with quick look")
 	var over []string
@@ -327,9 +334,7 @@ func TestFilesViewTwoSides(t *testing.T) {
 	enterTerminalMode(t, term)
 	runInShell(t, term, "cd ~/project && clear && printf '\\033]7;file://%s\\033\\\\%s\\n' \"$PWD\" lis\"\"ted", "listed", uiTimeout)
 	sendKeys(t, term, tuitest.Ctrl('b'), "f")
-	railLists(t, term, "Ctrl+B f did not open the view", []string{"Search files"}, nil)
-	sendKeys(t, term, tuitest.Esc)
-	railLists(t, term, "the view did not list the folder", []string{"main.go", "this machine"}, []string{"Search files"})
+	railLists(t, term, "Ctrl+B f did not open the view on the folder", []string{"main.go", "this machine"}, []string{"Search files"})
 
 	// \ opens the second side on the same folder, and : takes it to build.
 	sendKeys(t, term, "\\")

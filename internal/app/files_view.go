@@ -289,16 +289,6 @@ func (m *OS) OpenFilesView() tea.Cmd {
 	return m.openFilesViewAt(host, dir, origin)
 }
 
-// OpenFilesViewFind opens the view with the finder over it (Ctrl+B f). esc
-// leaves the finder for the list.
-func (m *OS) OpenFilesViewFind() tea.Cmd {
-	open := m.OpenFilesView()
-	if !m.explorer.open {
-		return open
-	}
-	return tea.Batch(open, m.FilesFind())
-}
-
 // openFilesViewAt opens the view on dir of host.
 func (m *OS) openFilesViewAt(host, dir, origin string) tea.Cmd {
 	e := &m.explorer

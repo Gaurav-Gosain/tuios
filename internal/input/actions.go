@@ -1429,8 +1429,10 @@ func handleOpenCommandPalette(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 	return o, o.OpenCommandPalette()
 }
 
+// handleOpenFileSearch opens the Files view at the focused pane's folder,
+// with the cursor in the list. ctrl+f in the view searches.
 func handleOpenFileSearch(_ tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
-	return o, o.OpenFilesViewFind()
+	return o, o.OpenFilesView()
 }
 
 // handleOpenLauncher opens the app launcher.

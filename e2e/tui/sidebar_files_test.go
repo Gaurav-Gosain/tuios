@@ -296,9 +296,9 @@ func TestSidebarFileEditor(t *testing.T) {
 	}
 }
 
-// TestSidebarFileSearch opens the file search with Ctrl+B f, which opens it
-// over the Files view. A result takes the view into its folder with the
-// cursor on it, ctrl+f searches again from the view, and e edits the result.
+// TestSidebarFileSearch opens the Files view with Ctrl+B f and searches with
+// ctrl+f in it. A result takes the view into its folder with the cursor on
+// it, ctrl+f searches again from the view, and e edits the result.
 func TestSidebarFileSearch(t *testing.T) {
 	for _, daemon := range []bool{false, true} {
 		t.Run(map[bool]string{false: "standalone", true: "daemon"}[daemon], func(t *testing.T) {
@@ -317,6 +317,14 @@ func TestSidebarFileSearch(t *testing.T) {
 			enterTerminalMode(t, term)
 			runInShell(t, term, "cd "+dir+" && printf '\\033]7;file://%s\\033\\\\%s\\n' \"$PWD\" lis\"\"ted", "listed", uiTimeout)
 			if err := term.SendKeys(tuitest.Ctrl('b'), "f"); err != nil {
+				t.Fatal(err)
+			}
+			if err := term.WaitFor(func(s tuitest.Screen) bool {
+				return strings.Contains(s.Text(), "this machine") && !strings.Contains(s.Text(), "Search files")
+			}, uiTimeout); err != nil {
+				t.Fatalf("Ctrl+B f did not open the Files view on its list: %v\n%s", err, term.Snapshot())
+			}
+			if err := term.SendKeys(tuitest.Ctrl('f')); err != nil {
 				t.Fatal(err)
 			}
 			if err := term.WaitForText("Search files", uiTimeout); err != nil {

@@ -503,9 +503,10 @@ A picture uses Kitty graphics when the terminal supports them. Other terminals
 get block characters. At 16 colours the preview names the picture and does not
 draw it.
 
-`Ctrl+B f` searches file names below the directory of the focused pane. It also
-works while you type in a pane. `Ctrl+F` searches below the folder that the
-sidebar shows, while the sidebar has focus.
+`Ctrl+B f` opens the Files view at the directory of the focused pane. It also
+works while you type in a pane. In the Files view, `Ctrl+F` searches file names
+below its folder. `Ctrl+F` also searches below the folder that the sidebar
+shows, while the sidebar has focus.
 Type a name or a relative path and press `Enter`. tuios shows the sidebar, opens
 the folder of that file and selects the file. The search skips `.git`,
 `node_modules`, `.venv` and `target`. It stops after about 2.5 seconds, and its
