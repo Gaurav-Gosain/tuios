@@ -393,6 +393,7 @@ Run `tuios keybinds list` to see the keys that your config sets.
 | `h`, `backspace`, `left` | `files_parent` | Files: go to the folder above |
 | `[` | `files_prev_tab` | Files: previous tab |
 | `space` | `files_quick_look` | Files: show or hide quick look beside the list |
+| `v` | `files_review` | Files: review the changed file under the cursor |
 | `s` | `files_sort` | Files: sort by name, size or time |
 | `S` | `files_sort_reverse` | Files: reverse the sort |
 | `1` | `files_tab_1` | Files: go to tab 1 |
