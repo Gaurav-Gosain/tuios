@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -34,6 +35,32 @@ type exchange struct {
 	mu sync.Mutex
 	q  []func()
 	n  int
+	// trace holds the newest exchangeTraceMax notes of what each client
+	// applied, so a failure that does not reproduce locally still names the
+	// order the states arrived in.
+	trace []string
+}
+
+const exchangeTraceMax = 64
+
+// note adds one line to the trace, dropping the oldest past the cap.
+func (e *exchange) note(format string, args ...any) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.trace = append(e.trace, fmt.Sprintf(format, args...))
+	if over := len(e.trace) - exchangeTraceMax; over > 0 {
+		e.trace = e.trace[over:]
+	}
+}
+
+// traceText is the trace as an indented block for a failure message.
+func (e *exchange) traceText() string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if len(e.trace) == 0 {
+		return " trace: nothing applied"
+	}
+	return " trace, oldest first:\n  " + strings.Join(e.trace, "\n  ")
 }
 
 func (e *exchange) enqueue(f func()) {

@@ -64,7 +64,7 @@ func settleTrees(t *testing.T, r *rig, p *peer, ex *exchange, what string) strin
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("%s: the pair never agreed on one tree:\n local %s\n peer  %s", what, treeShape(r.m), treeShape(p.m))
+			t.Fatalf("%s: the pair never agreed on one tree:\n local %s\n peer  %s\n%s", what, treeShape(r.m), treeShape(p.m), ex.traceText())
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

@@ -42,9 +42,12 @@ func routeSide(ex *exchange, c *session.TUIClient, m *OS, label string, g client
 		ex.enqueue(func() {
 			ex.n++
 			g.install()
+			stale := c.PredatesOwnPush(state)
 			if err := m.ApplyStateSyncFrom(state, sourceID); err != nil {
 				ex.t.Errorf("%s: apply state sync: %v", label, err)
 			}
+			ex.note("%s state from %s: v=%d snap=%d pushes seen=%d tiling=%v predates own push=%v, now tiling=%v %s",
+				label, sourceName(sourceID), state.Version, state.SnapshotSeq, len(state.PushSeen), state.AutoTiling, stale, m.AutoTiling, rects(m))
 		})
 	})
 	c.OnSessionResize(func(width, height, clientCount int, reserve session.LayoutReserve) {
@@ -64,6 +67,7 @@ func routeSide(ex *exchange, c *session.TUIClient, m *OS, label string, g client
 				Reserve:     reserve,
 				Generation:  gen,
 			})
+			ex.note("%s resize %dx%d gen=%d clients=%d, now tiling=%v %s", label, width, height, gen, clientCount, m.AutoTiling, rects(m))
 		})
 	})
 }
@@ -94,6 +98,8 @@ func geometryRig(t *testing.T, localG, peerG clientGlobals) (*rig, *peer, *excha
 	p.m.AutoTiling = true
 
 	ex := &exchange{t: t}
+	ex.note("local start: tiling=%v %s", r.m.AutoTiling, rects(r.m))
+	ex.note("peer start: tiling=%v %s", p.m.AutoTiling, rects(p.m))
 	routeSide(ex, r.client, r.m, "local", localG)
 	routeSide(ex, p.c, p.m, "peer", peerG)
 
@@ -115,6 +121,14 @@ func geometryRig(t *testing.T, localG, peerG clientGlobals) (*rig, *peer, *excha
 	})
 	ex.n = 0
 	return r, p, ex
+}
+
+// sourceName is who a state came from, for the trace.
+func sourceName(sourceID string) string {
+	if sourceID == "" {
+		return "the daemon"
+	}
+	return "a peer"
 }
 
 // settleGeometry waits for the pair to genuinely converge (one agreed
@@ -141,12 +155,12 @@ func settleGeometry(t *testing.T, r *rig, p *peer, ex *exchange) {
 			_, daemon := r.paneSizes()
 			t.Fatalf("the pair never settled on one arithmetic:\n local shared=%v gap=%d %s\n peer  shared=%v gap=%d %s\n"+
 				" local tree %s rects %s tiling=%v ws=%d box=%dx%d reserve=%+v\n"+
-				" peer  tree %s rects %s tiling=%v ws=%d box=%dx%d reserve=%+v\n daemon %v",
+				" peer  tree %s rects %s tiling=%v ws=%d box=%dx%d reserve=%+v\n daemon %v\n%s",
 				r.m.SharedBorders, r.m.PaneGap, contentSizes(r.m),
 				p.m.SharedBorders, p.m.PaneGap, contentSizes(p.m),
 				treeShape(r.m), rects(r.m), r.m.AutoTiling, r.m.CurrentWorkspace, r.m.GetRenderWidth(), r.m.GetRenderHeight(), r.m.SessionReserve,
 				treeShape(p.m), rects(p.m), p.m.AutoTiling, p.m.CurrentWorkspace, p.m.GetRenderWidth(), p.m.GetRenderHeight(), p.m.SessionReserve,
-				daemon)
+				daemon, ex.traceText())
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -165,7 +179,7 @@ func settleUntil(t *testing.T, ex *exchange, what string, cond func() bool) {
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", what)
+			t.Fatalf("timed out waiting for %s\n%s", what, ex.traceText())
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
