@@ -28,7 +28,15 @@ func serviceSlice() (string, bool) {
 	sliceOnce.Do(func() {
 		raw, err := os.ReadFile("/proc/self/cgroup")
 		if err == nil {
-			theSlice, isService = sliceOf(string(raw), testknob.String("pane_scope") != "")
+			// The e2e suite turns scopes off (pane_scope=off): a test run
+			// inside a service, such as a job of a build queue, would put
+			// its panes in scopes that outlive the job when it is stopped.
+			// pane_scope=1 turns them on for a daemon that is no service.
+			switch knob := testknob.String("pane_scope"); knob {
+			case "off":
+			default:
+				theSlice, isService = sliceOf(string(raw), knob != "")
+			}
 		}
 	})
 	return theSlice, isService

@@ -199,7 +199,10 @@ func runE2E(m *testing.M) (code int) {
 	// Every daemon checks each task card after each move and logs a broken
 	// rule (internal/session/task_move.go); killDaemon fails the test that
 	// left such a line.
-	_ = os.Setenv(testknob.Env, testknob.Merge(os.Getenv(testknob.Env), "card_check=1"))
+	// pane_scope=off: a pane of a daemon in a scope of its own outlives the
+	// test when the test runs inside a service, such as a job of a build
+	// queue, and the job is stopped. The scope tests turn it on again.
+	_ = os.Setenv(testknob.Env, testknob.Merge(os.Getenv(testknob.Env), "card_check=1", "pane_scope=off"))
 	// No test reaches a real agent CLI (agent_stubs_test.go).
 	unstub, err := installAgentStubs()
 	if err != nil {
@@ -1209,6 +1212,8 @@ func killDaemon(t *testing.T, base string) {
 	if _, already := registeredKills.LoadOrStore(daemonKey{t, base}, true); already {
 		return
 	}
+	// Registered before the daemon's stop, so it runs after it.
+	failSurvivors(t, base)
 	if simOn && !simFar(base) {
 		// The in-process daemon stops in its own cleanup, and here for a
 		// daemon started after this was registered. kill-server would find

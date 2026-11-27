@@ -14,6 +14,7 @@ import (
 	"github.com/Gaurav-Gosain/tuios/internal/errfmt"
 	"github.com/Gaurav-Gosain/tuios/internal/memtrim"
 	"github.com/Gaurav-Gosain/tuios/internal/pool"
+	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 	"tuios.dev/vt"
 )
 
@@ -1143,6 +1144,13 @@ func (w *Window) Close() {
 	if w.cancelFunc != nil {
 		w.cancelFunc()
 		w.cancelFunc = nil
+	}
+
+	// Hang up the pane's session before the PTY closes and the shell is
+	// killed: the kernel's own hangup reaches only the foreground group, so
+	// a background job of the shell would outlive the pane.
+	if w.Cmd != nil && w.Cmd.Process != nil {
+		ptyspawn.HangUp(w.Cmd.Process.Pid)
 	}
 
 	// Close PTY and Terminal to unblock I/O goroutines
