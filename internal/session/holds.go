@@ -489,17 +489,20 @@ func (h *holdTable) get(name string) (holdEntry, bool) {
 func (d *Daemon) holdRows() []HoldRow {
 	h := &d.holds
 	h.mu.Lock()
-	snaps := make([]holdEntry, 0, len(h.holds))
+	// Pointers, so the sort shares the code every pointer sort in the
+	// binary uses rather than adding one for this struct.
+	snaps := make([]*holdEntry, 0, len(h.holds))
 	for _, e := range h.holds {
-		snaps = append(snaps, *e)
+		c := *e
+		snaps = append(snaps, &c)
 	}
 	h.mu.Unlock()
-	slices.SortFunc(snaps, func(a, b holdEntry) int {
+	slices.SortFunc(snaps, func(a, b *holdEntry) int {
 		return cmp.Or(a.takenAt.Compare(b.takenAt), strings.Compare(a.name, b.name))
 	})
 	rows := make([]HoldRow, 0, len(snaps))
-	for i := range snaps {
-		rows = append(rows, d.holdRow(&snaps[i]))
+	for _, e := range snaps {
+		rows = append(rows, d.holdRow(e))
 	}
 	return rows
 }
