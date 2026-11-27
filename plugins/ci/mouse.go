@@ -277,7 +277,7 @@ func (m *model) selectBuild(k string) Cmd {
 	if k == m.key {
 		return nil
 	}
-	m.key, m.jobPinned = k, false
+	m.key, m.jobPinned, m.jobsScrolled = k, false, false
 	m.setJob(0)
 	return m.want()
 }
@@ -305,6 +305,11 @@ const wheelRows = 3
 func (m *model) wheelList(d int) {
 	m.listScrolled = true
 	m.listTop = max(0, m.listTop+d*wheelRows)
+}
+
+func (m *model) wheelJobs(d int) {
+	m.jobsScrolled = true
+	m.jobsTop = max(0, m.jobsTop+d*wheelRows)
 }
 
 func (m *model) wheelSteps(d int) {

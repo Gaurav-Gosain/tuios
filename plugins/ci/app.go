@@ -100,11 +100,12 @@ type model struct {
 	hover    string // The part under the pointer.
 	still    bool   // The last message changed nothing on the screen.
 	dragging func(mouseMsg)
-	// The wheel scrolls the builds and the steps away from the selection:
-	// listTop and stepsTop are the first rows in view while listScrolled
-	// and stepsScrolled are set. A key that moves the selection clears them.
-	listTop, stepsTop           int
-	listScrolled, stepsScrolled bool
+	// The wheel scrolls the builds, the jobs and the steps away from the
+	// selection: listTop, jobsTop and stepsTop are the first rows in view
+	// while listScrolled, jobsScrolled and stepsScrolled are set. A key that
+	// moves the selection clears them.
+	listTop, jobsTop, stepsTop                int
+	listScrolled, jobsScrolled, stepsScrolled bool
 	// jobsWant is the height of the jobs that a drag of the divider set.
 	jobsWant int
 

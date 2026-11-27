@@ -381,7 +381,7 @@ func (m *model) render() string {
 			fc, like := m.estimate(b)
 			right = append(right, m.surface(m.buildLines(b, fc, like, l.rightW-4), l.rightW, l.buildH)...)
 			right = append(right, gap...)
-			right = append(right, m.area(zone{area: "jobs"}, m.surface(m.jobLines(b, fc, l.rightW-4), l.rightW, l.jobsH))...)
+			right = append(right, m.area(zone{area: "jobs", wheel: m.wheelJobs}, m.surface(m.jobLines(b, fc, l.rightW-4), l.rightW, l.jobsH))...)
 			right = append(right, m.divider(l.rightW))
 			right = append(right, beside(1, m.stepsPanel(l.stepsW, l.lowH), m.logPanel(l.logW, l.lowH))...)
 		default:
@@ -1181,10 +1181,20 @@ func (m *model) jobLines(b Build, fc forecast, w int) []string {
 		strings.Repeat(" ", 2+nameW+1) + axisText,
 	}
 	all := append(head, lines...)
-	// Keep the selected job in view.
-	if over := len(all) - (m.layout().jobsH); over > 0 {
+	// Keep the selected job in view, unless the wheel moved the jobs. The
+	// head stays at the top either way.
+	h := m.layout().jobsH
+	over := len(all) - h
+	start := 0
+	switch {
+	case m.jobsScrolled:
+		start = min(m.jobsTop, max(0, over))
+	case over > 0:
 		sel := slices.IndexFunc(rows, func(r jobRow) bool { return r.job.ID == m.jobID })
-		start := min(over, max(0, sel-(m.layout().jobsH-len(head)-1)))
+		start = min(over, max(0, sel-(h-len(head)-1)))
+	}
+	m.jobsTop = start
+	if start > 0 {
 		all = append(head, lines[start:]...)
 	}
 	return all

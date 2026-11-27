@@ -147,7 +147,7 @@ func (m *model) moveBuild(d int) Cmd {
 	if n < 0 || n >= len(m.list) {
 		return nil
 	}
-	m.key, m.jobPinned, m.listScrolled = m.list[n].Key, false, false
+	m.key, m.jobPinned, m.listScrolled, m.jobsScrolled = m.list[n].Key, false, false, false
 	m.setJob(0)
 	return m.want()
 }
@@ -163,7 +163,7 @@ func (m *model) moveJob(d int) Cmd {
 	}
 	i := slices.IndexFunc(rows, func(r jobRow) bool { return r.job.ID == m.jobID })
 	n := (i + d + len(rows)) % len(rows)
-	m.jobPinned = true
+	m.jobPinned, m.jobsScrolled = true, false
 	m.setJob(rows[n].job.ID)
 	return m.fetchLog()
 }
