@@ -222,6 +222,9 @@ type upgradeOutcome struct {
 	// Unconfirmed is a refusal of the caller rather than of the binary: the
 	// call came from a pane of the daemon, and no Yes came in its dialog.
 	Unconfirmed bool `json:"unconfirmed,omitempty"`
+	// Code is the daemon's error code for a refusal, such as
+	// upgrade_not_answered.
+	Code string `json:"code,omitempty"`
 	// Error is the failure, when the command failed.
 	Error string `json:"error,omitempty"`
 }
@@ -238,10 +241,37 @@ type notLiveError struct {
 	// unconfirmed is the daemon refusing the caller, a pane with no Yes in
 	// the dialog: a restart would end that pane.
 	unconfirmed bool
-	err         error
+	// code is the daemon's error code for the refusal, when it gave one.
+	code string
+	err  error
 }
 
 func (e *notLiveError) Error() string { return e.err.Error() }
+
+// unconfirmedCode reports whether code is the daemon refusing a pane's
+// upgrade that got no Yes in the dialog.
+func unconfirmedCode(code string) bool {
+	return code == session.ErrVerbForbidden || code == session.ErrVerbUpgradeNotAnswered
+}
+
+// upgradeRefusalError is the report for a daemon-upgrade the daemon refused.
+// The message says what happened. The cause and the fix depend on the code,
+// as a dialog nobody answered and a binary that failed its check need
+// different steps.
+func upgradeRefusalError(verr *session.VerbCallError) *diagnosticError {
+	what := strings.TrimSuffix(verr.Message, ".") + "."
+	switch verr.Code {
+	case session.ErrVerbUpgradeNotAnswered:
+		return &diagnosticError{What: what,
+			Cause: "nobody answered the dialog at an attached client in time.",
+			Fix:   "nothing was changed. Run 'tuios daemon upgrade' again and choose Yes in the dialog, or run it from a terminal outside tuios."}
+	case session.ErrVerbForbidden:
+		return &diagnosticError{What: what,
+			Cause: "an upgrade asked for from a pane runs only after the person chooses Yes in the dialog.",
+			Fix:   "nothing was changed. Do what the message says."}
+	}
+	return &diagnosticError{What: what, Cause: "the daemon refused the upgrade.", Fix: "nothing was changed. Fix what the message names and run 'tuios daemon upgrade' again."}
+}
 func (e *notLiveError) Unwrap() error { return e.err }
 
 func runDaemonUpgrade(out io.Writer, binary string, asJSON, orRestart bool) error {
@@ -283,7 +313,7 @@ func upgradeDaemon(say func(string, ...any), binary string, orRestart bool) (upg
 		return o, err
 	}
 	if !orRestart {
-		return upgradeOutcome{Action: upgradeActionRefused, Binary: binary, From: notLive.from, Reason: notLive.reason, Unconfirmed: notLive.unconfirmed}, err
+		return upgradeOutcome{Action: upgradeActionRefused, Binary: binary, From: notLive.from, Reason: notLive.reason, Unconfirmed: notLive.unconfirmed, Code: notLive.code}, err
 	}
 	say("Not upgraded live: %s.\n", notLive.reason)
 	// From a pane, kill-server ends the pane and this command in it before
@@ -291,7 +321,7 @@ func upgradeDaemon(say func(string, ...any), binary string, orRestart bool) (upg
 	// the live upgrade, a running daemon is left as it is.
 	if notLive.unconfirmed || notLive.running && os.Getenv("TUIOS_PANE_ID") != "" {
 		say("The daemon was not restarted, because a restart would end the pane this command runs in. It still runs %s.\n", cmp.Or(notLive.from, "the old version"))
-		return upgradeOutcome{Action: upgradeActionRefused, Binary: binary, From: notLive.from, Reason: notLive.reason, Unconfirmed: notLive.unconfirmed}, err
+		return upgradeOutcome{Action: upgradeActionRefused, Binary: binary, From: notLive.from, Reason: notLive.reason, Unconfirmed: notLive.unconfirmed, Code: notLive.code}, err
 	}
 	return restartDaemonWith(say, binary, notLive)
 }
@@ -368,8 +398,8 @@ func upgradeLive(say func(string, ...any), binary string) (upgradeOutcome, error
 	if err != nil {
 		var verr *session.VerbCallError
 		// A pane's upgrade that nobody said Yes to is refused as forbidden,
-		// and the binary was never what said no.
-		if errors.As(err, &verr) && verr.Code == session.ErrVerbForbidden {
+		// or as not answered, and the binary was never what said no.
+		if errors.As(err, &verr) && unconfirmedCode(verr.Code) {
 			say("not confirmed\n")
 		} else {
 			say("refused\n")
@@ -387,8 +417,8 @@ func upgradeLive(say func(string, ...any), binary string) (upgradeOutcome, error
 		if errors.As(err, &verr) {
 			return o, &notLiveError{
 				reason: "the daemon refused: " + verr.Message, running: true, from: before.Version,
-				unconfirmed: verr.Code == session.ErrVerbForbidden,
-				err:         &diagnosticError{What: strings.TrimSuffix(verr.Message, ".") + ".", Cause: "the daemon refused the upgrade.", Fix: "nothing was changed. Fix what the message names and run 'tuios daemon upgrade' again."},
+				unconfirmed: unconfirmedCode(verr.Code), code: verr.Code,
+				err: upgradeRefusalError(verr),
 			}
 		}
 		return o, err

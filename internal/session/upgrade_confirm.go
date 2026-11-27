@@ -109,11 +109,17 @@ func (d *Daemon) dialogClients(shows func(*connState) bool) int {
 // daemon to bin. It returns "" when they said yes, and otherwise why not, as
 // a sentence that says what to do next, so an agent can tell a No (stop
 // asking) from a dialog that could not be shown (ask the person to attach).
-// It returns at once when no client could answer.
-func (d *Daemon) confirmUpgrade(cs *connState, bin handoffBinary, closeExited []string) string {
-	refuse := func(why string) string {
+// code is the error code of the refusal: ErrVerbUpgradeNotAnswered when the
+// dialog got no answer, and ErrVerbForbidden otherwise. It returns at once
+// when no client could answer.
+func (d *Daemon) confirmUpgrade(cs *connState, bin handoffBinary, closeExited []string) (code, why string) {
+	refuse := func(why string) (string, string) {
 		LogBasic("Live upgrade from a pane refused: %s", why)
-		return why
+		return ErrVerbForbidden, why
+	}
+	notAnswered := func(why string) (string, string) {
+		LogBasic("Live upgrade from a pane refused: %s", why)
+		return ErrVerbUpgradeNotAnswered, why
 	}
 	// Checked again here: the preflight can take seconds, and the last client
 	// can detach while it runs.
@@ -164,15 +170,15 @@ func (d *Daemon) confirmUpgrade(cs *connState, bin handoffBinary, closeExited []
 	LogBasic("Live upgrade to %s: the ask ended %s %s", bin.path, out.Reason, out.Answer)
 	switch {
 	case out.Reason == AskAnswered && out.Answer == upgradeAnswerYes:
-		return ""
+		return "", ""
 	case out.Reason == AskAnswered:
-		return "The person answered No. Do not ask again unless they ask for the upgrade"
+		return ErrVerbForbidden, "The person answered No. Do not ask again unless they ask for the upgrade"
 	case out.Reason == approvalEndTimeout:
-		return fmt.Sprintf("Nobody answered the dialog within %d seconds. Run the command again, and ask the person to choose Yes in the dialog", int(upgradeConfirmTimeout().Round(time.Second)/time.Second))
+		return notAnswered(fmt.Sprintf("Nobody answered the dialog within %d seconds. Run the command again, and ask the person to choose Yes in the dialog", int(upgradeConfirmTimeout().Round(time.Second)/time.Second)))
 	case out.Reason == askEndShutdown:
-		return "The daemon is shutting down"
+		return ErrVerbForbidden, "The daemon is shutting down"
 	}
-	return fmt.Sprintf("The dialog closed without an answer (%s). Run the command again, and ask the person to choose Yes in the dialog", out.Reason)
+	return notAnswered(fmt.Sprintf("The dialog closed without an answer (%s). Run the command again, and ask the person to choose Yes in the dialog", out.Reason))
 }
 
 // upgradeDialogRefusal says why no dialog could be shown for a pane's upgrade

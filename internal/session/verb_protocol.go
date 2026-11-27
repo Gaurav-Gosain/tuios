@@ -71,6 +71,11 @@ const (
 	// cannot be handed over, or this platform cannot hand off. Nothing was
 	// changed. The message says which.
 	ErrVerbUpgradeRefused = "upgrade_refused"
+	// ErrVerbUpgradeNotAnswered reports a daemon-upgrade from a pane that
+	// nobody answered: the dialog at the attached clients timed out, or
+	// closed with no answer. Nothing was changed. Calling again opens the
+	// dialog again.
+	ErrVerbUpgradeNotAnswered = "upgrade_not_answered"
 	// ErrVerbDaemonUpgrading ends a call the daemon was still working on, or
 	// waiting in, when a live upgrade replaced its image. The connection
 	// closes after it. A call that reads or waits can be made again, and the
