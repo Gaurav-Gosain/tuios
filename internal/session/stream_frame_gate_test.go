@@ -25,6 +25,7 @@ type gateFrame struct {
 // reader of its own, and a reader on the other end collecting frames.
 type gateRig struct {
 	pty    *PTY
+	cs     *connState
 	frames chan gateFrame
 }
 
@@ -50,7 +51,7 @@ func newGateRig(t *testing.T) *gateRig {
 	sub := pty.subscribeSub(cs.clientID, 0, false)
 	cs.ptySubscriptions[pty.ID] = sub
 
-	rig := &gateRig{pty: pty, frames: make(chan gateFrame, 64)}
+	rig := &gateRig{pty: pty, cs: cs, frames: make(chan gateFrame, 64)}
 	go func() {
 		for {
 			msg, err := ReadMessage(client)

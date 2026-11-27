@@ -53,6 +53,14 @@ func readStreamBytes(t *testing.T, r *gateRig, n int, limit time.Duration, keep 
 // the stream has stayed idle for a second it is given back. A second burst
 // after that still reaches the client whole and in order.
 //
+// The flood is made to batch on purpose. The test holds the client's send
+// lock, queues one chunk and waits until the stream waits for the lock with
+// it. The other fifteen chunks then queue behind, and once the lock is let go
+// the stream takes them as one batch. How far the batch grows so depends only
+// on what was queued, not on how fast the client reads: an earlier version
+// flooded freely, and on a loaded runner the reader kept up well enough that
+// the batch grew to only 136 KiB.
+//
 // It reads what it means: the batch's capacity, and how long the stream kept
 // it idle, both as the stream records them on its queue (noteBatch). No
 // reading depends on when the test runs, so a loaded runner cannot fail it.
@@ -64,16 +72,28 @@ func readStreamBytes(t *testing.T, r *gateRig, n int, limit time.Duration, keep 
 func TestAFloodedStreamGivesBackItsBatchAfterASecond(t *testing.T) {
 	const chunks = 16
 	const chunkBytes = 16 << 10
-	// The batch a flood grows is at least 200 KiB; most of it must be held
-	// right after the flood.
-	const kept = 150 << 10
+	// The chunks queued behind the held lock go out as one batch, so the
+	// batch grows to at least their size.
+	const kept = (chunks - 1) * chunkBytes
 
 	r := newGateRig(t)
 	line := 100000
-	for range chunks {
+	r.cs.sendMu.Lock()
+	r.pty.appendAndBroadcast(streamTrimChunk(line))
+	line += 2048
+	waitStart := time.Now()
+	for r.cs.sendMu.Waiting() == 0 {
+		if time.Since(waitStart) > 10*time.Second {
+			r.cs.sendMu.Unlock()
+			t.Fatal("the stream never asked for the send lock with the first chunk")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	for range chunks - 1 {
 		r.pty.appendAndBroadcast(streamTrimChunk(line))
 		line += 2048
 	}
+	r.cs.sendMu.Unlock()
 	readStreamBytes(t, r, chunks*chunkBytes, 10*time.Second, false)
 
 	r.pty.subscribersMu.RLock()
@@ -91,8 +111,8 @@ func TestAFloodedStreamGivesBackItsBatchAfterASecond(t *testing.T) {
 	// The stream records the batch's capacity before it sends the batch, so
 	// the last one is recorded once its bytes have been read.
 	if held, _ := sub.out.heldBatch(); held < kept {
-		t.Fatalf("the stream holds a batch of %d bytes right after the flood, want the grown batch (at least %d bytes) "+
-			"kept until the stream has been idle for a second", held, kept)
+		t.Fatalf("the stream holds a batch of %d bytes right after the flood, want the batch of the %d queued chunks "+
+			"(at least %d bytes) kept until the stream has been idle for a second", held, chunks-1, kept)
 	}
 
 	// The batch is given back: wait for it, with room for a loaded runner.
