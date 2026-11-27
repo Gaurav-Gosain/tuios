@@ -303,6 +303,9 @@ func (m *OS) reviewWhoWords(x int, pal overlay.Palette) []reviewSeg {
 
 // reviewWhoInk is the colour of the agent named who.
 func (r *reviewState) reviewWhoInk(who string, pal overlay.Palette) color.Color {
+	if who == "you" {
+		return pal.Warning
+	}
 	for i := range r.diff.Authors {
 		if r.reviewWho(i+1) == who {
 			return r.reviewAuthorInk(i+1, pal)
@@ -323,18 +326,26 @@ func (m *OS) reviewWhoMenuLine(width int, pal overlay.Palette) string {
 	segs := []reviewSeg{{pal.AccentBright, " Who:", true}}
 	x := 1 + ansi.StringWidth(segs[0].text)
 	cur := pal.Ground(overlay.RowState{Cursor: true, Focused: true}, pal.Surface)
-	item := func(i int, text string, ink color.Color, span reviewWhoSpan) {
+	// An item is its dot, in the author's colour as on the gutter bars, and
+	// its words. The dot is the menu's key to the colours.
+	item := func(i int, dot string, dotInk color.Color, text string, ink color.Color, span reviewWhoSpan) {
 		segs = append(segs, reviewSeg{pal.FgDim, "  ", false})
 		x += 2
-		w := ansi.StringWidth(text)
+		if dot != "" {
+			text = " " + text
+		}
+		w := ansi.StringWidth(dot) + ansi.StringWidth(text)
 		span.x0, span.x1 = x, x+w
 		r.filter.items = append(r.filter.items, span)
+		// The cursor's item is in the cursor's ground.
+		bg := pal.Surface
 		if i == r.filter.at {
-			// The cursor's item, in the cursor's ground.
-			segs = append(segs, reviewSeg{overlay.Readable(ink, cur), reviewSGR(overlay.Readable(ink, cur), cur, true, text), false})
-		} else {
-			segs = append(segs, reviewSeg{ink, text, true})
+			bg = cur
 		}
+		if dot != "" {
+			segs = append(segs, reviewSeg{nil, reviewSGR(overlay.Readable(dotInk, bg), bg, true, dot), false})
+		}
+		segs = append(segs, reviewSeg{nil, reviewSGR(overlay.Readable(ink, bg), bg, true, text), false})
 		x += w
 	}
 	counts := r.reviewWhoCounts()
@@ -343,9 +354,9 @@ func (m *OS) reviewWhoMenuLine(width int, pal overlay.Palette) string {
 		if r.filter.hidden[c.who] {
 			mark, ink = hidden, pal.FgDim
 		}
-		item(i, mark+" "+c.who+" "+strconv.Itoa(c.hunks), ink, reviewWhoSpan{who: c.who})
+		item(i, mark, r.reviewWhoInk(c.who, pal), c.who+" "+strconv.Itoa(c.hunks), ink, reviewWhoSpan{who: c.who})
 	}
-	item(len(counts), "everyone", pal.Fg, reviewWhoSpan{all: true})
+	item(len(counts), "", nil, "everyone", pal.Fg, reviewWhoSpan{all: true})
 	hints := []overlay.Hint{{Key: "space", Label: "show or hide"}, {Key: "esc", Label: "done"}}
 	keys := reviewHintStrip(hints, pal)
 	at := width - ansi.StringWidth(keys) - 1
