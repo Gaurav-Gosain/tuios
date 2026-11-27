@@ -6,7 +6,7 @@ toolchain go1.27.4
 
 require (
 	charm.land/bubbletea/v2 v2.1.1
-	github.com/Gaurav-Gosain/tuitest v0.3.3-0.20261127102115-c326261350ff
+	github.com/Gaurav-Gosain/tuitest v0.3.3
 	github.com/adrg/xdg v0.5.3
 	github.com/google/pprof v0.0.0-20260802141513-ef3492d7dac3
 	github.com/spf13/pflag v1.1.0
