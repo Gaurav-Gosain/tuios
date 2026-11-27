@@ -168,11 +168,18 @@ type MailConfig struct {
 	// minutes with no answer. False sends it to the Inbox at once. Unset
 	// means true.
 	QuestionsToParent *bool `toml:"questions_to_parent,omitempty"`
+	// Archive keeps the direct mail a session's ring drops in a file in the
+	// state folder, until the session ends. Unset means true.
+	Archive *bool `toml:"archive,omitempty"`
 }
 
 // WakeOn reports whether an idle agent is told about its mail. It is unless
 // the file says wake = false.
 func (c MailConfig) WakeOn() bool { return c.Wake == nil || *c.Wake }
+
+// ArchiveOn reports whether the mail a ring drops is kept on disk. It is
+// unless the file says archive = false.
+func (c MailConfig) ArchiveOn() bool { return c.Archive == nil || *c.Archive }
 
 // QuestionsToParentOn reports whether a delegated child's question goes to
 // its parent agent first. It does unless the file says

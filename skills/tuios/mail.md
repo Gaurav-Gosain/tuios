@@ -37,8 +37,9 @@ Your own address is `$TUIOS_PANE_ID`. There is no separate agent namespace.
 
 A message for a window that has since closed reads back `undeliverable`. It is
 not re-homed onto a pane that later takes the name, because that is a different
-agent. Nothing here survives a daemon restart: a restored session brings back
-its window ids and names, but no mail and no agent state.
+agent. The ring does not survive a daemon restart: a restored session brings back
+its window ids and names, but no mail in the ring and no agent state. The mail
+archive does survive it (see below).
 
 ### Leaving a message
 
@@ -288,7 +289,12 @@ tell them. The same caution applies to `capture-pane` of an agent's pane and to
 
 - **It cannot verify who you are.** `--from` is a claim, except for `human`.
   The loop guards stop an accident, not an adversary.
-- **Nothing is durable.** Messages live in memory and die with the daemon.
+- **The ring is in memory.** It dies with the daemon. The direct mail the ring
+  drops goes to the mail archive, a file in the state folder that holds the
+  mail text until the session ends. Read it with
+  `tuios read-agent-messages --archive`, which takes `-w` and `--thread` and
+  marks nothing. A reply to a dropped message still joins its thread. The
+  person turns the archive off with `[agents.mail] archive = false`.
 - **The ring is bounded.** 256 messages or 512 KiB per session, 8 KiB per
   message. A full ring drops what nobody waits to read first (read mail, ask
   records and notices, oldest first), and unread mail only when nothing else

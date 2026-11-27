@@ -3604,6 +3604,7 @@ max = 8
 [agents.mail]
 wake = true
 questions_to_parent = true
+archive = true
 
 [agents.checkpoints]
 enabled = true
@@ -3667,6 +3668,15 @@ ready_timeout = 180000
   change turns it off at once. Turning it on again waits for `tuios config
   apply` from outside tuios, or a restart. See
   [AGENT_STATE.md](AGENT_STATE.md#mail-that-wakes-an-agent-at-rest).
+- `[agents.mail]` `archive` keeps the direct mail that a session's ring drops
+  in a file in the state folder, `mail/SESSION.jsonl` under the tuios state
+  folder, with mode 0600. The file holds the mail text, so mail is kept on
+  disk while the session lives. It is cut at 4 MiB, and one older file is
+  kept. Both files are deleted when the session ends. `tuios
+  read-agent-messages --archive` reads them. It is true by default. Set it to
+  false to keep mail only in memory. A file change turns it off at once.
+  Turning it on again waits for `tuios config apply` from outside tuios, or a
+  restart.
 - `[agents.mail]` `questions_to_parent` sends a question from a child agent
   that `tuios delegate` or `tuios start-agent` started to its parent agent by
   mail first, and lets the parent answer it with `tuios respond`. With it off
@@ -5609,7 +5619,7 @@ keep = 50                               # at most 1000
 max_untracked_mb = 50                   # a negative value means no limit
 ```
 
-These options are in the [option reference](config-options.md): [`agents.approvals.enabled`](config-options.md#agents.approvals.enabled), [`agents.approvals.hold_seconds`](config-options.md#agents.approvals.hold_seconds), [`agents.approvals.hold_plans`](config-options.md#agents.approvals.hold_plans), [`agents.approvals.risk.builtin`](config-options.md#agents.approvals.risk.builtin), [`agents.approvals.risk.panes_may_allow`](config-options.md#agents.approvals.risk.panes_may_allow), [`agents.approvals.risk.rule`](config-options.md#agents.approvals.risk.rule), [`agents.permissions.mode`](config-options.md#agents.permissions.mode), [`agents.permissions.grants`](config-options.md#agents.permissions.grants), [`agents.recap.mode`](config-options.md#agents.recap.mode), [`agents.recap.away`](config-options.md#agents.recap.away), [`agents.recap.test_patterns`](config-options.md#agents.recap.test_patterns), [`agents.queue.max`](config-options.md#agents.queue.max), [`agents.mail.wake`](config-options.md#agents.mail.wake), [`agents.mail.questions_to_parent`](config-options.md#agents.mail.questions_to_parent), [`agents.checkpoints.enabled`](config-options.md#agents.checkpoints.enabled), [`agents.checkpoints.keep`](config-options.md#agents.checkpoints.keep), [`agents.checkpoints.max_untracked_mb`](config-options.md#agents.checkpoints.max_untracked_mb), [`agents.presets.NAME`](config-options.md#agents.presets.NAME).
+These options are in the [option reference](config-options.md): [`agents.approvals.enabled`](config-options.md#agents.approvals.enabled), [`agents.approvals.hold_seconds`](config-options.md#agents.approvals.hold_seconds), [`agents.approvals.hold_plans`](config-options.md#agents.approvals.hold_plans), [`agents.approvals.risk.builtin`](config-options.md#agents.approvals.risk.builtin), [`agents.approvals.risk.panes_may_allow`](config-options.md#agents.approvals.risk.panes_may_allow), [`agents.approvals.risk.rule`](config-options.md#agents.approvals.risk.rule), [`agents.permissions.mode`](config-options.md#agents.permissions.mode), [`agents.permissions.grants`](config-options.md#agents.permissions.grants), [`agents.recap.mode`](config-options.md#agents.recap.mode), [`agents.recap.away`](config-options.md#agents.recap.away), [`agents.recap.test_patterns`](config-options.md#agents.recap.test_patterns), [`agents.queue.max`](config-options.md#agents.queue.max), [`agents.mail.wake`](config-options.md#agents.mail.wake), [`agents.mail.questions_to_parent`](config-options.md#agents.mail.questions_to_parent), [`agents.mail.archive`](config-options.md#agents.mail.archive), [`agents.checkpoints.enabled`](config-options.md#agents.checkpoints.enabled), [`agents.checkpoints.keep`](config-options.md#agents.checkpoints.keep), [`agents.checkpoints.max_untracked_mb`](config-options.md#agents.checkpoints.max_untracked_mb), [`agents.presets.NAME`](config-options.md#agents.presets.NAME).
 
 After turning on `approvals.enabled`, run `tuios integration install` for that harness again, so its hook is the version that waits. The grants are `read`, `write`, `fan`, `respond`, `files` and `admin`. See [What a pane may do](AGENT_STATE.md#what-a-pane-may-do).
 

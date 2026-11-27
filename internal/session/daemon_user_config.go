@@ -110,6 +110,8 @@ func DaemonConfigFromUser(uc *config.UserConfig) *DaemonConfig {
 	cfg.AgentSilentAfter = silentAfterFromConfig(uc.Agents)
 	// The daemon types the wake prompt for mail, so it reads whether to.
 	cfg.MailWakeOff = !uc.Agents.Mail.WakeOn()
+	// The daemon keeps the rings, so it reads whether to archive them.
+	cfg.MailArchiveOff = !uc.Agents.Mail.ArchiveOn()
 	// The daemon routes a delegated child's question, so it reads where to.
 	cfg.ChildQuestionsToPerson = !uc.Agents.Mail.QuestionsToParentOn()
 	// The daemon moves the task cards, so it reads whether to.

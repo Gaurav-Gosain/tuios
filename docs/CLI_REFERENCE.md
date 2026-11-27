@@ -5229,6 +5229,10 @@ Read the messages that agents left in this session.
   every linked machine. Each message shows as unread, seen, read with the time,
   or undeliverable, and mail that waits for a link shows too. It marks nothing,
   and names a linked machine it cannot ask now.
+- `--archive`: the direct mail the session's ring dropped, from the mail
+  archive. tuios keeps it in a file in the state folder until the session ends,
+  unless `[agents.mail] archive` is false. It takes `-w`, `--thread` and
+  `--limit`, and marks nothing.
 
 Each body prints inside the untrusted fence, and every line of a body starts
 with `│ `, as in the replies of `ask-agent` and in `peek-prompt`.

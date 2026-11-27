@@ -3587,6 +3587,7 @@ Read a session's agent ring. Naming an inbox marks the directed messages it retu
 | `peek` | bool |  | `false` | Read without marking anything read. A peek by the window of its own inbox marks its unread messages seen: seen_at is set and read_at stays zero. A peek of another window's inbox marks nothing. A read of the human inbox from a process inside a pane of this daemon is always a peek. |
 | `thread` | int |  |  | Return only the messages in one thread. Pass any message id in the thread; the thread it belongs to is the one read. A thread the ring holds nothing from returns no messages rather than an error. |
 | `limit` | int |  | `20` | Return at most this many, newest last. |
+| `archive` | bool |  | `false` | Read the direct mail the session's ring dropped, from the mail archive in the state folder, oldest first. It takes to, thread and limit, marks nothing, and takes no unread. The archive holds mail until the session ends, unless [agents.mail] archive is false. |
 
 | Result field | Type | Description |
 |---|---|---|
@@ -3601,6 +3602,7 @@ Read a session's agent ring. Naming an inbox marks the directed messages it retu
 | `evicted` | int | How many entries of any kind the session's ring has dropped because it was full, read or not. A full ring drops read mail, ask records and notices before unread mail. |
 | `evicted_unread` | int | How many messages the ring dropped before their recipient read them: for the inbox the read names, or for the whole session when it names none. Non-zero means mail was lost unread. |
 | `peek_forced` | bool | True when the read would have marked the person's mail read and was served as a peek, because the caller runs inside a pane of this daemon. |
+| `archive` | bool | True when the messages came from the mail archive. |
 
 ```json
 {"id":1,"verb":"read-agent-messages","params":{"session":"work","to":"$TUIOS_PANE_ID","unread":true}}
@@ -3612,6 +3614,10 @@ Read a session's agent ring. Naming an inbox marks the directed messages it retu
 
 ```json
 {"id":1,"verb":"read-agent-messages","params":{"session":"work","thread":12}}
+```
+
+```json
+{"id":1,"verb":"read-agent-messages","params":{"session":"work","archive":true,"thread":12}}
 ```
 
 ### `read-dir`

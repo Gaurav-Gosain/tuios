@@ -3644,6 +3644,10 @@
       {
         "name": "limit",
         "description": "Return at most this many, newest last."
+      },
+      {
+        "name": "archive",
+        "description": "Read the direct mail the session's ring dropped, from the mail archive in the state folder, oldest first. It takes to, thread and limit, marks nothing, and takes no unread. The archive holds mail until the session ends, unless [agents.mail] archive is false."
       }
     ],
     "returns": [
@@ -3690,12 +3694,17 @@
       {
         "name": "peek_forced",
         "description": "True when the read would have marked the person's mail read and was served as a peek, because the caller runs inside a pane of this daemon."
+      },
+      {
+        "name": "archive",
+        "description": "True when the messages came from the mail archive."
       }
     ],
     "examples": [
       "{\"id\":1,\"verb\":\"read-agent-messages\",\"params\":{\"session\":\"work\",\"to\":\"$TUIOS_PANE_ID\",\"unread\":true}}",
       "{\"id\":1,\"verb\":\"read-agent-messages\",\"params\":{\"session\":\"work\",\"limit\":50}}",
-      "{\"id\":1,\"verb\":\"read-agent-messages\",\"params\":{\"session\":\"work\",\"thread\":12}}"
+      "{\"id\":1,\"verb\":\"read-agent-messages\",\"params\":{\"session\":\"work\",\"thread\":12}}",
+      "{\"id\":1,\"verb\":\"read-agent-messages\",\"params\":{\"session\":\"work\",\"archive\":true,\"thread\":12}}"
     ]
   },
   "read-dir": {

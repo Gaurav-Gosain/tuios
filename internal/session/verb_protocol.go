@@ -2856,6 +2856,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "peek", Type: "bool", Default: "false"},
 				{Name: "thread", Type: "int"},
 				{Name: "limit", Type: "int", Default: "20"},
+				{Name: "archive", Type: "bool", Default: "false"},
 			},
 			returns: []verbParam{
 				{Name: "messages", Type: "[]object"},
@@ -2869,6 +2870,7 @@ func buildVerbRegistry() map[string]verbEntry {
 				{Name: "evicted", Type: "int"},
 				{Name: "evicted_unread", Type: "int"},
 				{Name: "peek_forced", Type: "bool"},
+				{Name: "archive", Type: "bool"},
 			},
 			handler: (*Daemon).verbReadAgentMessages,
 		},

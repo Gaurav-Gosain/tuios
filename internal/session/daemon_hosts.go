@@ -191,6 +191,14 @@ func (d *Daemon) applyUserConfig(cfg *config.UserConfig, byPerson bool) {
 		log.Printf("[agents.mail] wake = true in the file waits for tuios config apply from outside tuios, or a daemon restart. The wake stays off.")
 	}
 	d.SetMailWake(wake)
+	// The archive writes mail to disk, so the same holds for it: a file
+	// change turns it off at once, and turning it on waits for the person.
+	archive := cfg.Agents.Mail.ArchiveOn()
+	if archive && !byPerson && !d.agents.archive.isOn() {
+		archive = false
+		log.Printf("[agents.mail] archive = true in the file waits for tuios config apply from outside tuios, or a daemon restart. The archive stays off.")
+	}
+	d.SetMailArchive(archive)
 	// The same holds for a child's question: sending it to the parent agent
 	// first shows the parent what the child asks, so turning that on waits
 	// for the person too. Turning it off applies at once.

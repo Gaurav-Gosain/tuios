@@ -295,6 +295,8 @@ type agentBus struct {
 	noticed map[string]noticeMark
 	// leaseSeq numbers the leases of takeNotice.
 	leaseSeq uint64
+	// archive keeps the mail the rings drop, on disk (mail_archive.go).
+	archive mailArchive
 }
 
 // agentMailbox is one session's ring.
@@ -307,6 +309,10 @@ type agentMailbox struct {
 	// recipient read it. It is the number an inbox read reports, because it
 	// is the one that says the reader lost something.
 	evictedUnread map[string]uint64
+	// evictedThread is the thread of each message the ring dropped, newest
+	// mailArchiveThreads of them, in evictedOrder (mail_archive.go).
+	evictedThread map[uint64]uint64
+	evictedOrder  []uint64
 	// evictedUnreadGone is the evictedUnread of the panes that closed. A
 	// closed pane's key is dropped, so the map does not grow with every
 	// short-lived pane, and its count moves here, so the session's total
@@ -350,6 +356,7 @@ func (b *agentBus) forget(session string) {
 	delete(b.boxes, session)
 	b.mu.Unlock()
 	b.forgetNotices(session, "")
+	b.archive.forget(session)
 }
 
 // forgetInbox drops the count of unread mail the ring lost for a pane that
@@ -451,12 +458,13 @@ func (mb *agentMailbox) makeBucket(sender string, now time.Time) *sendBucket {
 // inbox it was for. A count for the whole session cannot tell a reader whether
 // it lost anything, and a reader that is told it did when it did not learns to
 // ignore the one line that matters.
-func (mb *agentMailbox) append(m *AgentMessage) {
+func (mb *agentMailbox) append(m *AgentMessage) (evicted []*AgentMessage) {
 	mb.msgs = append(mb.msgs, m)
 	mb.bytes += len(m.Text)
 	for len(mb.msgs) > agentMailboxMaxMessages || (mb.bytes > agentMailboxMaxBytes && len(mb.msgs) > 1) {
 		i := mb.victim()
 		gone := mb.msgs[i]
+		evicted = append(evicted, gone)
 		mb.msgs = slices.Delete(mb.msgs, i, i+1)
 		mb.bytes -= len(gone.Text)
 		mb.evicted++
@@ -467,6 +475,8 @@ func (mb *agentMailbox) append(m *AgentMessage) {
 			mb.evictedUnread[gone.To]++
 		}
 	}
+	mb.noteEvictedThreads(evicted)
+	return evicted
 }
 
 // victim is the index of the entry append evicts next, oldest first within
@@ -528,7 +538,7 @@ func (b *agentBus) send(session string, m AgentMessage) AgentMessage {
 	mb := b.box(session)
 	m.ThreadID, m.ReplyToMissing = mb.threadFor(m.ID, m.ReplyTo)
 	stored := &m
-	mb.append(stored)
+	b.archive.add(session, mb.append(stored))
 	return *stored
 }
 
@@ -854,6 +864,9 @@ func (mb *agentMailbox) threadFor(id, replyTo uint64) (uint64, bool) {
 	if parent := mb.find(replyTo); parent != nil {
 		return parent.ThreadID, false
 	}
+	if thread, ok := mb.evictedThread[replyTo]; ok {
+		return thread, true
+	}
 	return replyTo, true
 }
 
@@ -867,8 +880,12 @@ func (b *agentBus) resolveThread(session string, id uint64) uint64 {
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if m := b.box(session).find(id); m != nil {
+	mb := b.box(session)
+	if m := mb.find(id); m != nil {
 		return m.ThreadID
+	}
+	if thread, ok := mb.evictedThread[id]; ok {
+		return thread
 	}
 	return id
 }
@@ -1021,6 +1038,9 @@ func (b *agentBus) rename(old, newName string) {
 	if b == nil || old == newName {
 		return
 	}
+	// The files move after the lock is dropped: the archive does its own
+	// file work and takes no bus lock.
+	defer b.archive.rename(old, newName)
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if mb := b.boxes[old]; mb != nil {

@@ -480,7 +480,7 @@ type attachmentRow struct {
 }
 
 // runReadAgentMessages reads the ring and prints it with every body fenced.
-func runReadAgentMessages(sessionName, to string, unread, notices, peek bool, thread uint64, limit int, jsonOutput bool) error {
+func runReadAgentMessages(sessionName, to string, unread, notices, peek bool, thread uint64, limit int, jsonOutput, archive bool) error {
 	t, err := dialTarget(sessionName, to)
 	if err != nil {
 		return err
@@ -500,6 +500,9 @@ func runReadAgentMessages(sessionName, to string, unread, notices, peek bool, th
 	}
 	if limit > 0 {
 		params["limit"] = limit
+	}
+	if archive {
+		params["archive"] = true
 	}
 
 	raw, err := t.client.Call("read-agent-messages", params)

@@ -117,7 +117,7 @@ var talkSpecs = map[string]callSpec{
 	"send-agent-message": {CallSend, flagSet("select=", "yes", "confirm=", "session=", "window=", "from=", "subject=", "reply-to=", "attach=", "json"), sw},
 	"ask-agent": {CallAsk, flagSet("select=", "yes", "confirm=", "session=", "window=", "from=", "ready-timeout=", "settle=",
 		"timeout=", "lines=", "stall-timeout=", "force", "allow-blocked", "json"), sw},
-	"read-agent-messages": {CallRead, flagSet("session=", "window=", "unread", "notices", "peek", "thread=", "limit=", "json", "sent"), sw},
+	"read-agent-messages": {CallRead, flagSet("session=", "window=", "unread", "notices", "peek", "thread=", "limit=", "json", "sent", "archive"), sw},
 	"ask-human": {CallAskHuman, flagSet("session=", "window=", "option=", "timeout=", "no-wait", "request-id=", "json"),
 		map[byte]string{'s': "session", 'w': "window", 'o': "option", 'h': "help"}},
 	"start-agent": {CallStart, flagSet("session=", "name=", "cwd=", "repo=", "clone", "workspace=", "focus", "prompt=", "parent=",

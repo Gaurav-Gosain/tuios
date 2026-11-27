@@ -590,6 +590,7 @@ The description of a table names its keys.
 | <a id="agents.queue.max"></a>`agents.queue.max` | int | `8` | The messages that the queue of one pane holds, at most 64. 0 uses the default. |
 | <a id="agents.mail.wake"></a>`agents.mail.wake` | bool | `true` | Type one line into an agent at rest that has unread mail, so that it reads the mail. |
 | <a id="agents.mail.questions_to_parent"></a>`agents.mail.questions_to_parent` | bool | `true` | Send a question from a delegated child agent to its parent by mail first. The Inbox holds it for 10 minutes before it alerts you. |
+| <a id="agents.mail.archive"></a>`agents.mail.archive` | bool | `true` | Keep the mail that a session's ring drops in a file in the state folder, until the session ends. The file holds the mail text. |
 | <a id="agents.checkpoints.enabled"></a>`agents.checkpoints.enabled` | bool | `true` | Save the git work tree of the pane of an agent each time the agent ends a turn that changed a file. |
 | <a id="agents.checkpoints.keep"></a>`agents.checkpoints.keep` | int | `50` | How many checkpoints one pane keeps, at most 1000. 0 uses the default. |
 | <a id="agents.checkpoints.max_untracked_mb"></a>`agents.checkpoints.max_untracked_mb` | int | `50` | Leave an untracked file larger than this many megabytes out of a checkpoint. A negative value sets no limit. |

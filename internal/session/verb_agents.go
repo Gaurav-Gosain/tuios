@@ -899,6 +899,43 @@ func (d *Daemon) verbReleaseAgentMessage(cs *connState, params json.RawMessage) 
 // Reading marks a directed message read; it does not consume it. A consumed
 // message would leave nothing behind for a human, or for the next agent trying
 // to work out what happened, and the ring's cap already bounds what is kept.
+// readMailArchive answers read-agent-messages with archive: the direct mail
+// the session's ring dropped, oldest first, filtered as a ring read is. It
+// marks nothing.
+func (d *Daemon) readMailArchive(sess *Session, state *SessionState, to string, thread uint64, limit int) (any, *verbError) {
+	inbox := ""
+	if to != "" {
+		id, _, err := resolveMailParty(state, to)
+		if err != nil {
+			return nil, mapResolveErr(err, sess)
+		}
+		inbox = id
+	}
+	thread = d.agents.resolveThread(sess.Name(), thread)
+	if limit <= 0 {
+		limit = agentReadDefaultLimit
+	}
+	msgs, total, err := d.agents.archive.read(sess.Name(), limit, func(m *AgentMessage) bool {
+		return (inbox == "" || m.To == inbox) && (thread == 0 || m.ThreadID == thread || m.ID == thread)
+	})
+	if err != nil {
+		return nil, newVerbError(ErrVerbInternal, "cannot read the mail archive: "+err.Error())
+	}
+	if msgs == nil {
+		msgs = []AgentMessage{}
+	}
+	return map[string]any{
+		"type":      "agent_messages",
+		"session":   sess.Name(),
+		"inbox":     inbox,
+		"thread":    thread,
+		"untrusted": true,
+		"archive":   true,
+		"messages":  msgs,
+		"total":     total,
+	}, nil
+}
+
 func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (any, *verbError) {
 	var p struct {
 		Session string `json:"session"`
@@ -908,6 +945,9 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 		Peek    bool   `json:"peek"`
 		Thread  uint64 `json:"thread"`
 		Limit   int    `json:"limit"`
+		// Archive reads the mail the ring dropped, from the mail archive
+		// (mail_archive.go). It marks nothing.
+		Archive bool `json:"archive"`
 	}
 	if verr := decodeParams(params, &p); verr != nil {
 		return nil, verr
@@ -917,6 +957,12 @@ func (d *Daemon) verbReadAgentMessages(cs *connState, params json.RawMessage) (a
 		return nil, verr
 	}
 	state := sess.GetState()
+	if p.Archive {
+		if p.Unread {
+			return nil, invalidParam("unread", "the archive holds mail the ring dropped, and marks nothing, so it takes no unread")
+		}
+		return d.readMailArchive(sess, state, p.To, p.Thread, p.Limit)
+	}
 
 	q := readQuery{unreadOnly: p.Unread, notices: p.Notices, peek: p.Peek, limit: p.Limit}
 	// The filter takes any id in the thread, not only the root's, so a caller

@@ -209,6 +209,8 @@ var fileKeys = []FileKey{
 		Description: "Type one line into an agent at rest that has unread mail, so that it reads the mail."},
 	{Path: "agents.mail.questions_to_parent", Type: OptionBool, Section: "agents", Default: "true",
 		Description: "Send a question from a delegated child agent to its parent by mail first. The Inbox holds it for 10 minutes before it alerts you."},
+	{Path: "agents.mail.archive", Type: OptionBool, Section: "agents", Default: "true",
+		Description: "Keep the mail that a session's ring drops in a file in the state folder, until the session ends. The file holds the mail text."},
 	{Path: "agents.checkpoints.enabled", Type: OptionBool, Section: "agents", Default: "true",
 		Description: "Save the git work tree of the pane of an agent each time the agent ends a turn that changed a file."},
 	{Path: "agents.checkpoints.keep", Type: OptionInt, Section: "agents", Default: strconv.Itoa(DefaultCheckpointKeep),
