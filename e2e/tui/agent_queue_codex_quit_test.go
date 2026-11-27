@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
 	"tuios.dev/shot"
@@ -56,16 +55,12 @@ func TestQueuedMessageReachesAShellCodexLeft(t *testing.T) {
 		t.Fatalf("the draft never reached the box: %v\n%s", err, term.Snapshot())
 	}
 	cli("queue behind the draft", "queue", "-s", sess, "echo", queued)
-	deadline := time.Now().Add(uiTimeout)
-	for !held() {
+	waitUntil(t, "the daemon holds the queue for the running Codex's draft", uiTimeout, func() (bool, string) {
 		if strings.Contains(term.Screen().Text(), queued) {
 			t.Fatalf("ASSERTION: the queued entry was typed into the running Codex's draft\n%s", term.Snapshot())
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("ASSERTION: the daemon never held the queue for the running Codex's draft\n%s", term.Snapshot())
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
+		return held(), term.Snapshot()
+	})
 
 	// Codex quits. Its last frame, draft and all, stays above the shell's
 	// prompt, and the pane still says codex.
