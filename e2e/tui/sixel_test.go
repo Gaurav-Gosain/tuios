@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuitest"
+	uv "github.com/charmbracelet/ultraviolet"
 	"tuios.dev/vt"
 )
 
@@ -139,6 +140,9 @@ type hostView struct {
 	emu    *vt.Emulator
 	images map[uint32]*vt.SixelImage
 	sixels int
+	// frame is the same stream replayed without its sixel images: the cells
+	// as tuios drew them. See checkHostMatchesFrame.
+	frame *vt.Emulator
 }
 
 func replayHost(t *testing.T, stream []byte, cols, rows int) *hostView {
@@ -165,8 +169,26 @@ func replayHost(t *testing.T, stream []byte, cols, rows int) *hostView {
 	if _, err := hv.emu.Write(stream); err != nil {
 		t.Fatalf("replay: %v", err)
 	}
+	hv.frame = vt.NewEmulator(cols, rows)
+	hv.frame.SetCellSize(cellW, cellH)
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			if _, err := hv.frame.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+	t.Cleanup(func() { _ = hv.frame.Close() })
+	if _, err := hv.frame.Write(sixelImage.ReplaceAll(stream, nil)); err != nil {
+		t.Fatalf("replay without images: %v", err)
+	}
 	return hv
 }
+
+// sixelImage matches a whole sixel image, from its DCS to the string
+// terminator. Sixel data holds no ESC.
+var sixelImage = regexp.MustCompile(`\x1bP[0-9;]*q[^\x1b]*\x1b\\`)
 
 // shownColor is the colour of the first image pixel the host shows in cell
 // (x, y), and false where it shows no image. A cell on an image's last row may
@@ -410,6 +432,11 @@ func closeColor(a, b color.RGBA) bool {
 // not know, one a real program drew: the host shows image pixels in exactly
 // the cells tuios drew as image cells (concealed blanks), except the screen's
 // last row, which a sixel is never sent to. It returns the number of cells.
+//
+// The cells tuios drew are read from the host stream replayed without its
+// images (hostView.frame), not from the test terminal. The test terminal is a
+// sixel terminal too: it draws each picture over the concealed blanks under
+// it, and those cells then read as plain blanks with no conceal.
 func checkHostMatchesFrame(t *testing.T, what string, term *tuitest.Terminal, hv *hostView) int {
 	t.Helper()
 	s := term.Screen()
@@ -419,8 +446,11 @@ func checkHostMatchesFrame(t *testing.T, what string, term *tuitest.Terminal, hv
 	for y := range rows {
 		for x := range cols {
 			_, onHost := hv.shownColor(x, y)
-			frame := s.Cell(x, y)
-			image := frame.Conceal && (frame.Content == " " || frame.Content == "")
+			frame := hv.frame.CellAt(x, y)
+			if frame == nil {
+				frame = &uv.Cell{}
+			}
+			image := frame.Style.Attrs&uv.AttrConceal != 0 && (frame.Content == " " || frame.Content == "")
 			switch {
 			case onHost && image:
 				shown++
