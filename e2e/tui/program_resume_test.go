@@ -210,7 +210,11 @@ func TestProgramResumeBringsTheProgramBack(t *testing.T) {
 	}
 	// The restore took the record off the pane: nothing is saved until the
 	// program reports again.
-	mustCLI(t, base, "resume-agent", "-s", session)
+	// It says "program", with single spaces: a program record has no
+	// harness and no conversation id to name.
+	if out := mustCLI(t, base, "resume-agent", "-s", session); !strings.HasPrefix(out, "Resumed the program in ") || strings.Contains(out, "conversation") || strings.Contains(out, "  ") {
+		t.Fatalf("ASSERTION: resume-agent words a program as a conversation: %q", out)
+	}
 	waitUnwrapped(t, base, session, "RUN2 ARGS:[$(reboot)][a; b][]")
 	waitUnwrapped(t, base, session, "RUN2 PWD:"+realWork)
 	waitUnwrapped(t, base, session, "RUN2 TOKEN:absent")

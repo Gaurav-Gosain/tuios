@@ -19811,6 +19811,7 @@ baseline passes 3 of 3 runs.
 | reswrap does not unset the token | resume | the pane never showed "RUN1 TOKEN:absent" | caught |
 | `resume-program` drops the last argument | resume | the pane never showed "RUN2 ARGS:[$(reboot)][a; b][]" | caught |
 | `resume-program` does not change to the folder | resume | the pane never showed "RUN2 PWD:..." | caught |
+| `printResumeAgent` prints a program record in the agent form (run on 2026-11-27 on Linux) | resume | "resume-agent words a program as a conversation" | caught |
 | `hostResumeAfter` never reports | client | "the client reports its attach command" | caught |
 | `hostResumeAfter` ignores a session change | client | "the client reports the session it switched to" | caught |
 | `HostResumeClear` never sends a clear | client | "a detach sends a clear" | caught |

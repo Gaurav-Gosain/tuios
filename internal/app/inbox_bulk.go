@@ -567,7 +567,10 @@ func (m *OS) bulkHints() []overlay.Hint {
 // many resumed, and the agents that did not, each with the reason.
 type InboxBulkResumedMsg struct {
 	Resumed int
-	Failed  []string
+	// Programs is how many of Resumed were programs (OSC 7577), not agent
+	// conversations.
+	Programs int
+	Failed   []string
 	// IDs are the offers that did not resume, whose rows show Resume again.
 	IDs []string
 }
@@ -681,7 +684,8 @@ func (m *OS) resumeOffers(offers []session.AttentionItem) tea.Cmd {
 				continue
 			}
 			var res struct {
-				Command string `json:"command"`
+				Command        string `json:"command"`
+				AgentSessionID string `json:"agent_session_id"`
 			}
 			if err := jsonx.Unmarshal(raw, &res); err != nil {
 				fail(t, errfmt.Errorf("read the resume-agent answer: %w", err))
@@ -689,6 +693,9 @@ func (m *OS) resumeOffers(offers []session.AttentionItem) tea.Cmd {
 			}
 			command = res.Command
 			msg.Resumed++
+			if res.AgentSessionID == "" {
+				msg.Programs++
+			}
 		}
 		if len(targets) == 1 {
 			// One offer says what was typed, as it always did.
@@ -708,11 +715,23 @@ func (m *OS) applyInboxBulkResumed(msg InboxBulkResumedMsg) {
 		m.ShowNotification("Not resumed: "+strings.Join(msg.Failed, ", "), "error", m.Settings.NotificationDuration*2)
 		return
 	}
-	words := "Resumed " + strconv.Itoa(msg.Resumed) + " agents"
-	if msg.Resumed == 1 {
-		words = "Resumed 1 agent"
+	m.ShowNotification(resumedWords(msg.Resumed, msg.Programs), "success", m.Settings.NotificationDuration)
+}
+
+// resumedWords counts what a bulk resume brought back: agents, programs, or
+// panes when it was both.
+func resumedWords(n, programs int) string {
+	noun := "agent"
+	switch {
+	case programs == n:
+		noun = "program"
+	case programs > 0:
+		noun = "pane"
 	}
-	m.ShowNotification(words, "success", m.Settings.NotificationDuration)
+	if n != 1 {
+		noun += "s"
+	}
+	return "Resumed " + strconv.Itoa(n) + " " + noun
 }
 
 // unmarkResuming shows the given offers as Resume again: their resume did

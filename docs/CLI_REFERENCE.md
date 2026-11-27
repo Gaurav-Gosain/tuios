@@ -3788,15 +3788,17 @@ tuios set-agent-session --harness qwen -w "$TUIOS_PANE_ID" "$SESSION_ID"
 
 ### `tuios resume-agent`
 
-Resume the agent conversation a pane ran before a daemon restart: type the
-harness's resume command, from its manifest's `[resume]` block, with the id a
+Resume the agent conversation or the program a pane ran before a daemon
+restart: type the harness's resume command, from its manifest's `[resume]` block, with the id a
 hook recorded for the pane (`claude --resume <id>`, `codex resume <id>`). The
 flags the agent was started with that its manifest keeps come after the id,
 such as `claude --resume <id> --permission-mode plan --model opus`. When a kept
 flag turns approvals off, a second line says so, such as `Resumes with
 approvals off (--dangerously-skip-permissions)`. It brings back the
 conversation, not the process. See
-[Agent state](AGENT_STATE.md#resuming-after-a-restart).
+[Agent state](AGENT_STATE.md#resuming-after-a-restart). For a program that told
+tuios how to start it again (OSC 7577), it types the program's resume line, and
+says `Resumed the program in <pane>: <command>`.
 
 **Usage:**
 ```bash
@@ -3823,7 +3825,7 @@ tuios resume-agent -w build --dry-run
 # claude --resume 5f1c2b7e-9a3d-4c1e-8f00-1234567890ab
 
 tuios resume-agent -w build
-# Resumed claude-code conversation 5f1c2b7e-... in 3f2a9c1e: claude --resume 5f1c2b7e-...
+# Resumed the claude-code conversation 5f1c2b7e-... in 3f2a9c1e: claude --resume 5f1c2b7e-...
 ```
 
 ```json

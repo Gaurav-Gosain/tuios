@@ -50,11 +50,19 @@ func printResumeAgent(w io.Writer, raw json.RawMessage) error {
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return errfmt.Errorf("failed to parse response: %w", err)
 	}
-	if !res.Typed {
+	switch {
+	case !res.Typed:
 		fmt.Fprintln(w, res.Command)
-	} else {
-		fmt.Fprintf(w, "Resumed %s conversation %s in %s: %s\n",
-			plainLine(res.Harness), plainLine(res.AgentSessionID), shortWindowID(res.WindowID), res.Command)
+	case res.AgentSessionID == "":
+		// A program that reported its own command (OSC 7577): no harness,
+		// no conversation.
+		fmt.Fprintf(w, "Resumed the program in %s: %s\n", shortWindowID(res.WindowID), res.Command)
+	default:
+		what := "conversation " + plainLine(res.AgentSessionID)
+		if h := plainLine(res.Harness); h != "" {
+			what = h + " " + what
+		}
+		fmt.Fprintf(w, "Resumed the %s in %s: %s\n", what, shortWindowID(res.WindowID), res.Command)
 	}
 	if res.Warning != "" {
 		fmt.Fprintln(w, plainLine(res.Warning))
@@ -68,7 +76,7 @@ func newResumeAgentCommand() *cobra.Command {
 	var dryRun, jsonOutput bool
 	cmd := &cobra.Command{
 		Use:   "resume-agent",
-		Short: "Resume the agent conversation a pane ran before a daemon restart",
+		Short: "Resume the agent conversation or the program a pane ran before a daemon restart",
 		Long: `Type a pane's resume command into its shell: the harness's command from its
 manifest's [resume] block, with the conversation id a hook recorded for the pane.
 Claude Code's is 'claude --resume <id>', Codex's is 'codex resume <id>'.
@@ -81,7 +89,10 @@ the answer to the ask, and works any time a pane has a recorded conversation.
 
 It types only when the pane's shell is at its prompt, so the command never lands
 in a running program. It brings back the conversation, not the process: whatever
-the agent was doing when the daemon stopped did not finish.`,
+the agent was doing when the daemon stopped did not finish.
+
+A program that told tuios how to start it again (OSC 7577) gets the same Resume
+item. For such a pane, this command types the program's resume line instead.`,
 		Example: `  # Resume the focused pane's conversation
   tuios resume-agent
 
