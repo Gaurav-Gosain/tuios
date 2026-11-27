@@ -1165,7 +1165,7 @@ var optionSpecs = []Option{
 	},
 	{
 		Path: "appearance.sidebar.editor", Type: OptionString, Section: "sidebar",
-		Description: "The terminal editor that opens a text file. If this is empty, tuios uses $EDITOR, then $VISUAL, then vi.",
+		Description: "The terminal editor that opens a text file. If this is empty, tuios uses $EDITOR, then $VISUAL, then vi. {file} and {line} in the command take the file and the line, for example code -g {file}:{line}.",
 	},
 	{
 		Path: "appearance.sidebar.file_actions", Type: OptionBool, Section: "sidebar",

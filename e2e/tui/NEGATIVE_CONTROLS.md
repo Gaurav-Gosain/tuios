@@ -19858,3 +19858,19 @@ Not covered by an e2e test: a pane that calls `plugin.enable` on the herdr socke
 | The folder watch moves down as folders appear | the watch stays on the first folder it found | "file wait: the wait did not end" | **caught** |
 
 The file step found a real race on its first run: a folder made while the watch on the folder above it was set up was never seen. The watch now looks again after each new folder watch.
+## The editor setting's {file} and {line}
+
+`TestEditorPlaceholdersOpenAtTheLine` sets `appearance.sidebar.editor` to a stub editor that tuios does not know, in a folder whose name holds a space. The stub records its arguments. Quick look's `e` opens `internal/app/os.go` at line 120, and review's `o` opens a changed file at line 10. Each case must record exactly the expected arguments, in order.
+
+Run on 2026-11-27 on Linux. Three controls, each this branch with one change to `editorFileCommand`:
+
+| Change | Failing cases | Failure | Verdict |
+| --- | --- | --- | --- |
+| The placeholders are ignored, so the old rules always apply | `quick look e`, `one argument`, `line only`, `review o` | `the editor got ["--line" "{line}" "{file}" ".../os.go"], want ["--line" "120" ".../os.go"]` | caught |
+| The path is added after the placeholders also when `{file}` is there | `quick look e`, `one argument`, `review o` | `the editor got the arguments it should` | caught |
+| The no-placeholder branch adds `+LINE` for any editor | `quick look e, no placeholder`, `review o, no placeholder` | `the editor got the arguments it should` | caught |
+
+The two no-placeholder cases are the control for an editor that tuios does not know: it still gets the file alone.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestEditorPlaceholdersOpenAtTheLine$' -v .`.

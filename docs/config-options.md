@@ -185,7 +185,7 @@ The defaults are the ones on Linux. Some defaults are different on macOS.
 | <a id="appearance.sidebar.background"></a>`appearance.sidebar.background` | string | empty | Background under the rail: off, theme, or a colour (#rrggbb, 0-255, a slot name or a role name); empty follows appearance.background |
 | <a id="appearance.sidebar.cursor_background"></a>`appearance.sidebar.cursor_background` | string | empty | Background of the row under the cursor while the rail has the keyboard: a colour (#rrggbb, 0-255, a slot name or a role name); empty keeps the theme's |
 | <a id="appearance.sidebar.density"></a>`appearance.sidebar.density` | string | `normal` | Space between the rail's sections: normal, or roomy for a blank row in front of each section after the first Values: `normal`, `roomy`. |
-| <a id="appearance.sidebar.editor"></a>`appearance.sidebar.editor` | string | empty | The terminal editor that opens a text file. If this is empty, tuios uses $EDITOR, then $VISUAL, then vi. |
+| <a id="appearance.sidebar.editor"></a>`appearance.sidebar.editor` | string | empty | The terminal editor that opens a text file. If this is empty, tuios uses $EDITOR, then $VISUAL, then vi. {file} and {line} in the command take the file and the line, for example code -g {file}:{line}. |
 | <a id="appearance.sidebar.enabled"></a>`appearance.sidebar.enabled` | bool | `true` | Show the session rail |
 | <a id="appearance.sidebar.file_actions"></a>`appearance.sidebar.file_actions` | bool | `true` | Let the files section create, rename, delete, copy and paste |
 | <a id="appearance.sidebar.file_delete"></a>`appearance.sidebar.file_delete` | string | `trash` | Where a delete sends the file: the trash, or nowhere Values: `trash`, `permanent`. |

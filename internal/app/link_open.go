@@ -364,7 +364,7 @@ func (m *OS) openLocalPath(path string, line int, rawURL string) tea.Cmd {
 }
 
 // openInEditor opens a file in a new pane running the person's editor, at
-// line when it is more than 0 and the editor takes a line (editorLineArgs).
+// line when it is more than 0 and the editor takes a line (editorFileCommand).
 func (m *OS) openInEditor(path string, line int) tea.Cmd {
 	argv, err := editorArgv(m.Settings.SidebarEditor)
 	if err != nil {
@@ -372,7 +372,7 @@ func (m *OS) openInEditor(path string, line int) tea.Cmd {
 		m.ShowNotification(editorCommandNote, "warning", m.Settings.NotificationDuration)
 		return nil
 	}
-	m.AddWindow(filepath.Base(path), append(argv, editorLineArgs(argv[0], path, line)...)...)
+	m.AddWindow(filepath.Base(path), editorFileCommand(argv, path, line)...)
 	m.ShowNotification("Opened the file in a new pane.", "success", m.Settings.NotificationDuration)
 	return nil
 }

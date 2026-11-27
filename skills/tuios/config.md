@@ -244,6 +244,13 @@ current row: `appearance.sidebar.row_style` (`bar`, `marker`, `underline`,
 `plain`, `rule`, `pill`, `icon`). The space between its sections:
 `appearance.sidebar.density` (`normal`, `roomy`).
 
+The editor that opens a file from the rail, review `o` and quick look `e`:
+`appearance.sidebar.editor` (empty means `$EDITOR`, then `$VISUAL`, then vi). Put
+`{file}` and `{line}` in it to open at a line in any editor, for example
+`tuios set-config appearance.sidebar.editor 'code -g {file}:{line}'`. With no line
+known, `{line}` is 1. Without placeholders only vi, vim, nvim, nano, emacs, kak
+and helix get the line.
+
 The dock's workspace tabs take two composition knobs of their own:
 `dock_workspace_tab_format` is the format string each tab prints, and
 `appearance.dock_workspace_label_max` caps the label in cells, so one long

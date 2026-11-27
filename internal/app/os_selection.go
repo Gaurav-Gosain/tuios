@@ -172,8 +172,8 @@ func (m *OS) openScrollbackEditor(msg scrollbackFileMsg) tea.Cmd {
 		m.ShowNotification("tuios cannot write the scrollback to a file: "+msg.err.Error(), "error", m.Settings.NotificationDuration)
 		return nil
 	}
-	args := append(msg.argv[1:len(msg.argv):len(msg.argv)], editorLineArgs(msg.argv[0], msg.path, msg.line)...)
-	c := m.editorCommand(exec.Command(msg.argv[0], args...)) //nolint:gosec // the person's own editor
+	argv := editorFileCommand(msg.argv, msg.path, msg.line)
+	c := m.editorCommand(exec.Command(argv[0], argv[1:]...)) //nolint:gosec // the person's own editor
 	dir := msg.dir
 	// SGR-pixel reports go off first: the editor does not expect them, and
 	// the terminal comes back in SGR cells.
@@ -208,11 +208,45 @@ func (m *OS) removeScrollbackEditorFile() {
 	}
 }
 
-// editorLineArgs are the arguments after the editor's own: the file, and the
-// line to open at when the editor takes one and line is not 0. vi, vim, nvim,
-// nano, emacs and kakoune take +LINE before the file. helix takes FILE:LINE.
-// Any other editor gets the file alone, since an argument it does not know
-// could be read as a second file to open.
+// editorFileCommand is the whole command that opens path in the editor
+// argv (from editorArgv), at line when it is more than 0.
+//
+// An argument after the editor's name may hold {file} and {line}. Then those
+// arguments get the path and the line in their place, and tuios adds nothing
+// of its own: "code -g {file}:{line}" runs code -g PATH:LINE. With no line
+// known, {line} becomes 1, so an editor that needs a number still gets a valid
+// one and opens at the top. A command that names {line} and not {file} gets the
+// path as its last argument.
+//
+// With no placeholder, vi, vim, nvim, nano, emacs and kakoune take +LINE before
+// the file, and helix takes FILE:LINE. Any other editor gets the file alone,
+// since an argument it does not know could be read as a second file to open.
+func editorFileCommand(argv []string, path string, line int) []string {
+	cmd := make([]string, 1, len(argv)+2)
+	cmd[0] = argv[0]
+	n := strconv.Itoa(max(line, 1))
+	sub := strings.NewReplacer("{file}", path, "{line}", n)
+	named, hasFile := false, false
+	for _, a := range argv[1:] {
+		if strings.Contains(a, "{file}") || strings.Contains(a, "{line}") {
+			named = true
+			hasFile = hasFile || strings.Contains(a, "{file}")
+		}
+	}
+	if !named {
+		return append(append(cmd, argv[1:]...), editorLineArgs(argv[0], path, line)...)
+	}
+	for _, a := range argv[1:] {
+		cmd = append(cmd, sub.Replace(a))
+	}
+	if !hasFile {
+		cmd = append(cmd, path)
+	}
+	return cmd
+}
+
+// editorLineArgs are the arguments that open path in an editor tuios knows,
+// at line when line is not 0 (see editorFileCommand).
 func editorLineArgs(editor, path string, line int) []string {
 	if line <= 0 {
 		return []string{path}

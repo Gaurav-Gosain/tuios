@@ -491,7 +491,7 @@ func (m *OS) handleFileEdit(msg fileEditMsg) tea.Cmd {
 	}
 	remoteHost := m.AttachedHost
 	before := len(m.Windows)
-	m.AddWindowIn(filepath.Dir(msg.Path), filepath.Base(msg.Path), append(msg.Argv, editorLineArgs(msg.Argv[0], msg.Path, msg.Line)...)...)
+	m.AddWindowIn(filepath.Dir(msg.Path), filepath.Base(msg.Path), editorFileCommand(msg.Argv, msg.Path, msg.Line)...)
 	if !m.daemonWindowIntent && len(m.Windows) == before {
 		m.ShowNotification("tuios could not start the editor.", "error", m.Settings.NotificationDuration)
 		return nil

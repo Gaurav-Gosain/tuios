@@ -58,6 +58,24 @@ editor command used by `Shift+Enter` on a text file. For example:
 editor = "micro"
 ```
 
+To open a file at a line, put `{file}` and `{line}` in the command. tuios puts
+the path of the file and the line number there, and adds no other argument:
+
+```toml
+[appearance.sidebar]
+editor = "code -g {file}:{line}"
+```
+
+- When tuios knows no line, `{line}` is 1.
+- A command with `{line}` and no `{file}` gets the file as its last argument.
+- A command with no placeholder gets the line only if tuios knows the editor:
+  vi, vim, nvim, nano, emacs and kak get `+LINE`, and helix gets `FILE:LINE`.
+  Any other editor gets the file alone.
+- tuios splits the command into words as a shell does, but it runs no shell.
+
+The same command opens a file from review (`o`), from quick look (`e`), from
+the rail and from the scrollback editor.
+
 Other terminal editors and arguments work too, such as `nano` or `vim -f`.
 Quote a path or an argument that contains spaces. tuios splits the command into
 arguments and runs no shell. It adds the full path of the file at the end. If
