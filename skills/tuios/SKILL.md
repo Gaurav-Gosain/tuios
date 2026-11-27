@@ -54,6 +54,7 @@ command. It opens the window manager.
 | Show the person a form, a table or a dashboard, and wait for the answer | `tuios tml show FILE --wait`. `tuios --skill tml` has the components. |
 | See how a TML surface looks, before and after you show it | `tuios tml render FILE`, then `tuios capture-pane -s "$TUIOS_SESSION" -w WINDOW` on the open surface |
 | Take the next task card, and finish it | `tuios task claim --next` then `tuios task done ID`. `tuios --skill tasks` has the rest. |
+| Run several agents: a work list, a hold on the machine, one message to many | `tuios hold take quiet-window --reason 'timing gates run' --ttl 4h`. `tuios --skill crew` has the rest. |
 | Leave a note for the person who comes back, before you stop or hand back | `tuios note set "next: run the migration"`. Add `-w "$TUIOS_WINDOW_ID"` for a note on your own pane. `tuios note get` reads it. |
 | Show that you work, or wait for approval | `tuios set-agent-state working -m 'refactor payments'` or `tuios set-agent-state needs_input --kind approval -m 'approve make deploy'` |
 
@@ -239,6 +240,7 @@ Agents:
 
 - `fleet`: worktrees, fan-out, delegate, start-agent, selectors, and which one to use
 - `lead`: lead a crew of long-lived agents across sessions and machines
+- `crew`: keep a crew's work list, holds and messages in tuios
 - `mail`: mail and questions between agents
 - `inbox`: the Inbox, questions and approvals for the person
 - `tasks`: task cards: hand out work from the daemon

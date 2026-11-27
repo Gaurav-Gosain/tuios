@@ -4,7 +4,8 @@ You are the lead: one agent that runs several long-lived workers in tuios
 panes, across sessions and machines. This topic is the loop: start a worker,
 watch the crew, read reports, unstick a blocked worker, run work on another
 machine, and clean up. `tuios --skill fleet` has fan-out and `delegate` for
-short tasks.
+short tasks. `tuios --skill crew` keeps the work list, holds on the machine
+and messages to many workers in tuios.
 
 ## Rules
 
