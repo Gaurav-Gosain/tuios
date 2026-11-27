@@ -5,7 +5,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -13,7 +12,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
-	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 	"github.com/Gaurav-Gosain/tuios/internal/units"
 )
 
@@ -240,10 +238,6 @@ func (m *OS) filesSend(srcHost, srcDir string, srcLocal bool, names []string, ds
 	job := m.filesNewJob(srcHost, srcDir, names, dstHost, dstDir, move)
 	jobID := job.id
 	cmds := make([]tea.Cmd, 0, len(names))
-	rate := 0
-	if v, err := strconv.Atoi(testknob.String("files_rate")); err == nil {
-		rate = v
-	}
 	call := m.transferCaller()
 	for _, name := range names {
 		params := map[string]any{
@@ -254,9 +248,6 @@ func (m *OS) filesSend(srcHost, srcDir string, srcLocal bool, names []string, ds
 			"conflict": "ask",
 			"each":     "ask",
 			"move":     move,
-		}
-		if rate > 0 {
-			params["rate_limit"] = rate
 		}
 		name := name
 		cmds = append(cmds, func() tea.Msg {

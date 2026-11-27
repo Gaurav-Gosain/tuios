@@ -489,7 +489,15 @@ func TestFilesViewCopies(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	env := []string{"TUIOS_SSH=" + ssh, "TUIOS_TEST_KNOBS=files_rate=131072"}
+	// Each copy holds once it has moved a quarter of its bytes, for as long
+	// as the hold file is there (transfer_hold), so the test sees the copies
+	// on their way however fast the machine is. The test removes the file
+	// once it has checked them.
+	hold := filepath.Join(base, "hold")
+	if err := os.WriteFile(hold, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env := []string{"TUIOS_SSH=" + ssh, "TUIOS_TEST_KNOBS=transfer_hold=" + hold}
 	term := startIn(t, base, startOpts{args: []string{"new", "home"}, env: env, cols: 160, rows: 44})
 	t.Cleanup(func() {
 		if t.Failed() {
@@ -519,7 +527,7 @@ func TestFilesViewCopies(t *testing.T) {
 	sendKeys(t, term, "c")
 	moving := regexp.MustCompile(` [1-9][0-9]?%`)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
-		return containsAll(s.Text(), "Copies", "1 running", "~/project/big", "~/out", "left") && moving.MatchString(s.Text()) && strings.Count(s.Text(), "part2.bin") >= 3
+		return containsAll(s.Text(), "Copies", "1 running", "~/project/big", "~/out", "of 6 MiB") && moving.MatchString(s.Text()) && strings.Count(s.Text(), "part2.bin") >= 3
 	}, 30*time.Second); err != nil {
 		t.Fatalf("the copies did not show on their way as one job: %v\n%s", err, term.Snapshot())
 	}
@@ -542,6 +550,10 @@ func TestFilesViewCopies(t *testing.T) {
 	copiesFrame(t, term, "files-copy-paused")
 	clickWord("go on")
 	railLists(t, term, "a click on go on did not go on", []string{"1 running"}, []string{"1 paused"})
+	// The copies go on to the end.
+	if err := os.Remove(hold); err != nil {
+		t.Fatal(err)
+	}
 	for _, name := range []string{"part1.bin", "part2.bin", "part3.bin"} {
 		filesWaitDisk(t, 120*time.Second, "the copy of "+name+" to land", func() bool {
 			_, err := os.Stat(filepath.Join(far, name))
@@ -567,12 +579,21 @@ func TestFilesViewCopies(t *testing.T) {
 
 	// m moves whole.bin: the source stays while the copy runs, and goes once
 	// the copy is checked.
+	// The hold keeps the copy of the move on its way while the test looks.
+	if err := os.WriteFile(hold, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	sendKeys(t, term, "/", "whole", tuitest.Enter, "m")
-	filesWaitDisk(t, 30*time.Second, "the move to start", func() bool {
-		return strings.Contains(term.Screen().Text(), "%")
-	})
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return containsAll(s.Text(), "1 running", "whole.bin") && moving.MatchString(s.Text())
+	}, 30*time.Second); err != nil {
+		t.Fatalf("the move did not show on its way: %v\n%s", err, term.Snapshot())
+	}
 	if _, err := os.Stat(filepath.Join(big, "whole.bin")); err != nil {
 		t.Fatalf("the move took the source away before the copy ended: %v", err)
+	}
+	if err := os.Remove(hold); err != nil {
+		t.Fatal(err)
 	}
 	filesWaitDisk(t, 120*time.Second, "the move to end", func() bool {
 		_, errSrc := os.Stat(filepath.Join(big, "whole.bin"))

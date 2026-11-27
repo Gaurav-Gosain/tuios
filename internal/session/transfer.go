@@ -1715,6 +1715,34 @@ func (j *transferJob) moved(ctx context.Context, m *transferManager, n int) {
 	j.sample()
 	m.progress(j)
 	j.limiter.wait(ctx, n)
+	transferTestHoldPart(ctx, j)
+}
+
+// transferTestHoldPart holds a copy that has moved a quarter of its bytes
+// while the file the transfer_hold knob names exists, so an e2e test sees the
+// copy on its way for as long as it needs, and then lets it go on by removing
+// the file. A pause or a cancel ends the hold: the copy's context is done.
+func transferTestHoldPart(ctx context.Context, j *transferJob) {
+	path := testknob.String("transfer_hold")
+	if path == "" {
+		return
+	}
+	j.mu.Lock()
+	size := j.size
+	j.mu.Unlock()
+	if j.done.Load()*4 < size {
+		return
+	}
+	for {
+		if _, err := os.Stat(path); err != nil {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
 }
 
 // ack counts n bytes the writing side said it holds, for the rate.
