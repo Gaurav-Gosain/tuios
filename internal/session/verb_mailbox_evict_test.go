@@ -3,6 +3,7 @@ package session
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // held reports whether the session's ring still holds the message with id.
@@ -19,6 +20,9 @@ func TestFullRingDropsReadEntriesBeforeUnreadMail(t *testing.T) {
 	bus := newAgentBus()
 	read := bus.send("s", AgentMessage{Kind: agentMsgDirect, To: "alice", Text: "read this one"})
 	bus.read("s", readQuery{inbox: "alice"})
+	// Read an hour ago: mail read just now is kept longer
+	// (TestFullRingKeepsMailReadJustNow).
+	age(bus, "s", read.ID, 0, time.Hour)
 	unread := bus.send("s", AgentMessage{Kind: agentMsgDirect, To: "alice", Text: "left unread"})
 	ask := bus.send("s", AgentMessage{Kind: agentMsgAsk, To: "alice", Text: "an answer"})
 	for range agentMailboxMaxMessages {
@@ -50,6 +54,68 @@ func TestFullRingDropsReadEntriesBeforeUnreadMail(t *testing.T) {
 	}
 	if res.EvictedUnread == 0 {
 		t.Error("alice lost unread mail and her inbox read does not say so")
+	}
+}
+
+// age moves the send and read times of the message with id back by sent and
+// read, so a test sets how old an entry is without waiting.
+func age(bus *agentBus, session string, id uint64, sent, read time.Duration) {
+	bus.mu.Lock()
+	defer bus.mu.Unlock()
+	m := bus.box(session).find(id)
+	m.SentAt -= int64(sent)
+	if m.ReadAt != 0 {
+		m.ReadAt -= int64(read)
+	}
+}
+
+// TestFullRingKeepsMailReadJustNow is the drop a lead saw: its reply to a
+// message it had read seconds before said the message was gone. The ring was
+// full of unread mail to other inboxes, and the old order dropped what nobody
+// waited to read first, which was the one message just read. Unread mail a
+// day old now goes before it.
+//
+// Negative control: with victim as it was (the oldest entry nobody waits to
+// read, else the oldest), the message read just now is the first to go and
+// this test fails.
+func TestFullRingKeepsMailReadJustNow(t *testing.T) {
+	bus := newAgentBus()
+	var stale []AgentMessage
+	for range agentMailboxMaxMessages - 1 {
+		m := bus.send("s", AgentMessage{Kind: agentMsgDirect, To: "human", Text: "a report nobody read"})
+		age(bus, "s", m.ID, 48*time.Hour, 0)
+		stale = append(stale, m)
+	}
+	fresh := bus.send("s", AgentMessage{Kind: agentMsgDirect, To: "lead", From: "worker", Text: "may I push?"})
+	bus.read("s", readQuery{inbox: "lead"})
+
+	// The ring is full. The lead answers.
+	reply := bus.send("s", AgentMessage{Kind: agentMsgDirect, To: "worker", From: "lead", Text: "yes", ReplyTo: fresh.ID})
+
+	if !held(bus, "s", fresh.ID) {
+		t.Fatal("the full ring dropped the message read just now while it held day-old unread mail")
+	}
+	if reply.ReplyToMissing {
+		t.Error("the reply to the message read just now says its parent is gone")
+	}
+	if held(bus, "s", stale[0].ID) {
+		t.Error("the oldest day-old unread message is still held, so the ring is over its cap")
+	}
+	if got := bus.read("s", readQuery{inbox: "human", peek: true}).EvictedUnread; got != 1 {
+		t.Errorf("the human inbox reports %d unread messages dropped, want 1", got)
+	}
+
+	// The other side of the order: unread mail younger than a day still
+	// wins over mail read just now.
+	bus2 := newAgentBus()
+	for range agentMailboxMaxMessages - 1 {
+		bus2.send("s", AgentMessage{Kind: agentMsgDirect, To: "human", Text: "a report from this morning"})
+	}
+	fresh2 := bus2.send("s", AgentMessage{Kind: agentMsgDirect, To: "lead", Text: "may I push?"})
+	bus2.read("s", readQuery{inbox: "lead"})
+	bus2.send("s", AgentMessage{Kind: agentMsgDirect, To: "worker", Text: "yes", ReplyTo: fresh2.ID})
+	if held(bus2, "s", fresh2.ID) {
+		t.Error("the ring kept mail read just now over unread mail from the same day")
 	}
 }
 

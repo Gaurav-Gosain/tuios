@@ -68,6 +68,12 @@ const (
 	// agentMailboxMaxBytes bounds the same ring by the text it holds, so a full
 	// ring of maximum-sized messages still cannot cost more than this.
 	agentMailboxMaxBytes = 512 << 10
+	// agentMailRecentRead is how long mail counts as read just now, which a
+	// full ring keeps ahead of stale unread mail (victim).
+	agentMailRecentRead = 10 * time.Minute
+	// agentMailStaleUnread is the age past which unread mail goes before
+	// mail read just now.
+	agentMailStaleUnread = 24 * time.Hour
 	// agentReadDefaultLimit is how many messages a read answers with when the
 	// caller names no limit.
 	agentReadDefaultLimit = 20
@@ -463,13 +469,39 @@ func (mb *agentMailbox) append(m *AgentMessage) {
 	}
 }
 
-// victim is the index of the entry append evicts next: the oldest one nobody
-// is waiting to read, or the oldest of all when every entry before the newest
-// is unread mail. The newest is never the victim while anything is older. It
-// is the message being sent, and dropping it would answer the send with an id
-// the ring no longer holds.
+// victim is the index of the entry append evicts next, oldest first within
+// each step:
+//
+//  1. An entry nobody waits to read and nobody read just now: a notice, an
+//     ask record, or mail read more than agentMailRecentRead ago.
+//  2. Unread mail older than agentMailStaleUnread, which its reader is not
+//     likely to read now.
+//  3. Mail read just now.
+//  4. The oldest of all, when everything before the newest is unread mail.
+//
+// Step 3 comes after step 2 because a reader answers mail it just read: a
+// ring full of day-old unread mail dropped a message read seconds before, and
+// the reply to it found its parent gone. The ages count from the send time of
+// the newest entry, the one that made the ring overflow. The newest is never
+// the victim while anything is older. It is the message being sent, and
+// dropping it would answer the send with an id the ring no longer holds.
 func (mb *agentMailbox) victim() int {
-	for i, m := range mb.msgs[:len(mb.msgs)-1] {
+	last := len(mb.msgs) - 1
+	now := mb.msgs[last].SentAt
+	recent := now - int64(agentMailRecentRead)
+	stale := now - int64(agentMailStaleUnread)
+	readNow := func(m *AgentMessage) bool { return m.Kind == agentMsgDirect && m.ReadAt > recent }
+	for i, m := range mb.msgs[:last] {
+		if !waitsToBeRead(m) && !readNow(m) {
+			return i
+		}
+	}
+	for i, m := range mb.msgs[:last] {
+		if waitsToBeRead(m) && m.SentAt < stale {
+			return i
+		}
+	}
+	for i, m := range mb.msgs[:last] {
 		if !waitsToBeRead(m) {
 			return i
 		}
