@@ -56,10 +56,10 @@ func newRexAttachCommand() *cobra.Command {
 // runRexKeeper runs the bridge as a child and waits for it.
 //
 // A closing pane gets SIGHUP in each of its process groups and then SIGKILL
-// for its own program at once (session.killPaneTree). The program of the pane
-// has no time to close its Rex block, and a block lives on without a client.
-// So the pane's program is this keeper, and the bridge is its child in the
-// same process group: the child gets the SIGHUP, outlives the keeper's
+// for its own program after a short grace (session.killPaneTree). Closing a
+// Rex block can take longer than that grace, and a block lives on without a
+// client. So the pane's program is this keeper, and the bridge is its child in
+// the same process group: the child gets the SIGHUP, outlives the keeper's
 // SIGKILL and closes the block.
 func runRexKeeper() error {
 	self, err := os.Executable()

@@ -619,6 +619,11 @@ func (r *handoffRun) commit() error {
 	// No deferred call survives the exec: a checkpoint that runs now would
 	// leave its temporary index folder in the temp dir.
 	worktree.RemoveTemp(tempRemoveWait)
+	// A pane closed just before this is not in the manifest, so the new image
+	// would never kill its program. Only the graces of panes already closed
+	// are waited for. The panes in the manifest get no signal. See
+	// waitPaneGraces.
+	waitPaneGraces()
 	err := execHandoff(path, argv, withOldCopies(withoutEnv(os.Environ(), handoffFallbackEnv)), r.fds, r.req.inWindow)
 	LogError("Live upgrade: exec %s failed, the daemon carries on: %v", r.bin.path, err)
 	r.bin.close()

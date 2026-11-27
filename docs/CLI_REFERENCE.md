@@ -1501,6 +1501,10 @@ may start a new daemon as soon as it returns:
 tuios kill-server && tuios start-server   # safe: no race
 ```
 
+Each pane closes as with `close-window`. All panes get their second at the
+same time, so a program that ignores SIGHUP makes the command take one second
+more.
+
 The daemon unlinks its socket last, after the final saves, and that unlink is
 what this command waits for. A refused connection is not the same signal: the
 daemon closes its listener at the start of shutdown, while state is still
@@ -2199,6 +2203,12 @@ tuios xpanes -n 2 -c 'diff {}' a.txt b.txt c.txt d.txt
 
 Close one pane and stop its program. Name the pane by its name, its id or the
 number `list-windows` prints. It works with no client attached.
+
+The pane's program and its jobs get SIGHUP, as when a terminal closes. A
+program that saves its state on SIGHUP has one second to do it. After that
+second, tuios sends SIGKILL to the program if it still runs. A job started
+with `nohup` or `setsid` runs on. `kill-session` and `kill-server` close
+each pane the same way.
 
 **Usage:**
 ```bash

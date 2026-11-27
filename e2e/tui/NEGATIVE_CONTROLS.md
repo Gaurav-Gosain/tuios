@@ -14486,6 +14486,28 @@ The steps are in `pane-close-jobs.txt` under the test's artifact folder. Repeat
 from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestPaneCloseEndsItsJobs$' -v .`.
 
+## TestPaneCloseGivesTheProgramTimeToSave and TestDaemonUpgradeWaitsForAClosedPaneOnly
+
+The first test runs two programs as pane commands. One writes a file 300 ms
+after SIGHUP. The other ignores SIGHUP. Each is closed with close-window and
+with kill-server. The saver must write its file, and the deaf program must end
+no sooner than 800 ms after the close. The second test closes a pane whose
+program ignores SIGHUP and then runs a live upgrade. The closed program must
+end, and the pane that the upgrade keeps must keep its pid and get no SIGHUP.
+
+Run on 2026-11-27 on Linux (amd64), each control its own binary:
+
+| Removed | The test fails with | Result |
+|---------|---------------------|--------|
+| The grace: `killPaneTree` sends SIGKILL right after the hangup, as before the fix | "close-window: the program saves on SIGHUP before it is killed" | **caught** |
+| The wait before the exec of a live upgrade (`waitPaneGraces` in the handoff) | "the closed pane's program that ignores SIGHUP is killed across the upgrade" | **caught** |
+
+With the grace removed, the upgrade test passes: a program killed at once also
+ends. The first control covers that case.
+
+Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^(TestPaneCloseGivesTheProgramTimeToSave|TestDaemonUpgradeWaitsForAClosedPaneOnly)$' -v .`.
+
 ## The keycast skips a modifier pressed on its own
 
 `TestShowKeysSkipsModifierPresses` runs with `--show-keys` and sends what a

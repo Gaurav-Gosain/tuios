@@ -2271,6 +2271,10 @@ func (d *Daemon) shutdown() error {
 		// writes its final resurrection state synchronously. When this returns,
 		// everything that will be persisted has been persisted.
 		d.manager.Shutdown()
+		// A pane's program that is still in its grace is killed before the
+		// daemon goes. Every pane closed above at once, so this is one grace
+		// at most. See killPaneTree.
+		waitPaneGraces()
 
 		// Every stashed file goes now. Sessions are stopped above, so nothing is
 		// still writing, and the promise the stash makes is that its files do not

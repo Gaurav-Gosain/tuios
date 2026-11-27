@@ -8,8 +8,11 @@ import "os"
 // not in a job object: closing the pseudo console, which Close does next,
 // ends the processes still attached to the pane's console, and a process
 // that left it (one started with a console or window of its own) runs on.
-func killPaneTree(proc *os.Process) {
+func killPaneTree(proc *os.Process, _ <-chan struct{}) {
 	if proc != nil {
 		_ = proc.Kill()
 	}
 }
+
+// waitPaneGraces returns at once: a pane here gets no grace.
+func waitPaneGraces() {}

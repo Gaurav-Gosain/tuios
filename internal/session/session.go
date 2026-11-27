@@ -1249,6 +1249,8 @@ type PTY struct {
 
 	exited   bool
 	exitedMu sync.RWMutex
+	// exitedCh closes with exited. Made on first use: see exitedChan.
+	exitedCh chan struct{}
 	exitCode int
 	// exitSignal is the signal that ended the process, 0 when it exited on
 	// its own. See ExitSignal.
@@ -5475,8 +5477,8 @@ func (p *PTY) Close() error {
 	p.subscribersMu.Unlock()
 
 	// Hang up the pane's jobs, as a terminal that goes away does, and kill
-	// the shell. See killPaneTree.
-	killPaneTree(p.proc)
+	// its program after a grace. See killPaneTree.
+	killPaneTree(p.proc, p.exitedChan())
 	// A reader waiting for output is in poll, which closing the master does
 	// not end.
 	if p.gate != nil {
@@ -5541,6 +5543,21 @@ func (p *PTY) TTYName() string {
 		return named.SlaveName()
 	}
 	return ""
+}
+
+// exitedChan closes when the pane's process has exited and been reaped. A
+// pane already marked exited, also one a live upgrade brought back exited,
+// gets a closed channel.
+func (p *PTY) exitedChan() <-chan struct{} {
+	p.exitedMu.Lock()
+	defer p.exitedMu.Unlock()
+	if p.exitedCh == nil {
+		p.exitedCh = make(chan struct{})
+		if p.exited {
+			close(p.exitedCh)
+		}
+	}
+	return p.exitedCh
 }
 
 // IsExited returns true if the shell process has exited.
@@ -6056,6 +6073,9 @@ func (p *PTY) noteExit(code int) {
 	}
 	p.exited = true
 	p.exitCode = code
+	if p.exitedCh != nil {
+		close(p.exitedCh)
+	}
 	p.exitedMu.Unlock()
 	p.logExit(code)
 	if p.keepOpen != nil {
