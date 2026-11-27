@@ -110,6 +110,7 @@ func (m *Model) registerReviewVerbs() {
 				ID: "n" + strconv.Itoa(n.next), Path: str(p, "path"), Side: str(p, "side"),
 				Line: line, Quote: str(p, "quote"), HunkHeader: str(p, "hunk"),
 				Text: review.CleanText(str(p, "text")), By: "human", At: time.Now().UnixNano(),
+				To: str(p, "to"),
 			}
 			list = append(list, note)
 			event["path"], event["line"], event["text"] = note.Path, note.Line, note.Text
@@ -119,6 +120,9 @@ func (m *Model) registerReviewVerbs() {
 				return nil, &session.VerbCallError{Code: session.ErrVerbNoNotes, Message: "no such note"}
 			}
 			list[i].Text, list[i].At, list[i].SentAt = review.CleanText(str(p, "text")), time.Now().UnixNano(), 0
+			if to, ok := p["to"].(string); ok {
+				list[i].To = to
+			}
 			event["path"], event["line"], event["text"] = list[i].Path, list[i].Line, list[i].Text
 		case "remove":
 			list = slices.DeleteFunc(list, func(x review.Note) bool { return x.ID == str(p, "id") })
@@ -137,7 +141,7 @@ func (m *Model) registerReviewVerbs() {
 		var ids []string
 		now := time.Now().UnixNano()
 		for i := range n.by[sess] {
-			if note := &n.by[sess][i]; note.SentAt == 0 {
+			if note := &n.by[sess][i]; note.SentAt == 0 && note.To != review.NoteToPerson {
 				note.SentAt = now
 				ids = append(ids, note.ID)
 			}

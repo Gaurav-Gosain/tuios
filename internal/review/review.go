@@ -181,9 +181,17 @@ type Note struct {
 	At int64 `json:"at"`
 	// SentAt is when send-review last handed it to the agent, zero for never.
 	SentAt int64 `json:"sent_at,omitempty"`
+	// To is who the note goes to: the window id of an agent pane, NoteToPerson
+	// for a note that stays with the person, or empty for the pane the notes
+	// are on.
+	To string `json:"to,omitempty"`
 	// Outdated says its line could not be found again.
 	Outdated bool `json:"outdated,omitempty"`
 }
+
+// NoteToPerson is the To of a note that stays with the person: send-review
+// never sends it.
+const NoteToPerson = "person"
 
 // IsHunk reports whether the note is on a whole hunk.
 func (n *Note) IsHunk() bool { return n.HunkHeader != "" }

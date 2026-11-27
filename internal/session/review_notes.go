@@ -152,9 +152,10 @@ const (
 	reviewNoteRefused
 )
 
-// edit replaces the text of note id, when may allows the caller to touch it.
-// The note becomes by's, unsent again, and is stamped now.
-func (s *reviewNoteStore) edit(root, window, id, text, by string, may func(review.Note) bool) int {
+// edit replaces the text of note id, and its receiver when to is not nil,
+// when may allows the caller to touch it. The note becomes by's, unsent
+// again, and is stamped now.
+func (s *reviewNoteStore) edit(root, window, id, text, by string, to *string, may func(review.Note) bool) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p := s.panes[reviewKey(root, window)]
@@ -170,6 +171,9 @@ func (s *reviewNoteStore) edit(root, window, id, text, by string, may func(revie
 		}
 		p.Notes[i].Text = text
 		p.Notes[i].By = by
+		if to != nil {
+			p.Notes[i].To = *to
+		}
 		p.Notes[i].At = time.Now().UnixNano()
 		p.Notes[i].SentAt = 0
 		s.changedLocked()

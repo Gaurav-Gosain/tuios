@@ -28,9 +28,11 @@ import (
 //	tab              the file list or the diff
 //	enter            in the file list: open that file; on a hunk's header:
 //	                 fold or unfold the hunk
-//	c, C             a note on the line, or on the whole hunk
+//	c, C             a note on the line, or on the whole hunk. It goes to the
+//	                 agent that made the line, or the hunk's main author, and
+//	                 @ as the editor's first key gives it to the next one
 //	e, x             edit or resolve the note under the cursor
-//	S                send the unsent notes to the pane's agent
+//	S                send the unsent notes, to each agent its own
 //	s                one column, or the two sides next to each other
 //	f                follow the agent that writes, or stop
 //	@                show the hunks of some authors only: a menu on the footer
@@ -62,6 +64,10 @@ func handleReviewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			o.ReviewEditorBackspace()
 		case "space":
 			o.ReviewEditorType(" ")
+		case "@":
+			if !o.ReviewEditorAt() {
+				o.ReviewEditorType("@")
+			}
 		default:
 			if msg.Text != "" {
 				o.ReviewEditorType(msg.Text)

@@ -105,7 +105,11 @@ func (m *OS) ReviewMouseClick(x, y int) {
 		return
 	}
 	if r.editor != nil {
-		// The line being typed keeps the keys. Its footer hints save or drop it.
+		// The line being typed keeps the keys. Its footer hints save or drop
+		// it, and a click on the receiver's name gives the note to the next.
+		if row, ok := g.reviewPaneRow(y); ok && r.editorAt == row+1 && m.reviewEditorNameAt(x-g.diffX, g.diffW) {
+			m.reviewNextReceiver()
+		}
 		return
 	}
 	row, inPanes := g.reviewPaneRow(y)

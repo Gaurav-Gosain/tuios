@@ -232,9 +232,11 @@ untracked files included, read without touching its index or files. Its
 answer is marked `untrusted`: it is the repository's text. `review note`
 (`review-note`) leaves a note on a line, or with `--hunk` on a hunk; the note
 keeps the line's text and follows it as the file changes, or is marked
-outdated when the line is gone. `review send` (`send-review`) sends the unsent
-notes to the agent as one message through the delivery queue, typed when it
-comes to rest. From a pane, `review-diff` needs `read` in your own session and
+outdated when the line is gone. `--to PANE` gives the note to another agent
+pane of the session in the same worktree, and `--to person` keeps it for the
+person. `review send` (`send-review`) sends the unsent notes through the
+delivery queue, one message to each agent they go to, typed when it comes to
+rest. A note kept for the person is never sent. From a pane, `review-diff` needs `read` in your own session and
 fan group, `review-note` and `send-review` need `write`, and you may change or
 remove only the notes you wrote. You may add notes only on a pane you could
 type into (one that holds nothing you do not). The message says it is from

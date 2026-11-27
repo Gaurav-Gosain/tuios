@@ -907,6 +907,10 @@
         "description": "The note to edit or remove."
       },
       {
+        "name": "to",
+        "description": "Who the note goes to, on add and edit: the name or id of an agent pane of the session in the same worktree, or person to keep the note for the person. send-review never sends a note to the person. Omit on add for the pane the notes are for, and on edit to keep the receiver."
+      },
+      {
         "name": "human_nonce",
         "description": "The nonce from the attach reply of a client attached now. The TUI sends its own. Without a live one the call is not the person's."
       }
@@ -938,7 +942,7 @@
       },
       {
         "name": "notes",
-        "description": "The pane's notes after the call, by path then line: id, path, side, line, quote, hunk_header, text, by, at, sent_at and outdated."
+        "description": "The pane's notes after the call, by path then line: id, path, side, line, quote, hunk_header, text, by, at, sent_at, to and outdated. to is empty for the pane the notes are for."
       }
     ],
     "examples": [
@@ -1102,7 +1106,7 @@
     ]
   },
   "send-review": {
-    "description": "Send a pane's unsent review notes to its agent as one message, through the delivery queue: typed now when the agent is at rest, else when it next comes to rest. The message says it is from the person only with a live human_nonce, and labels each note written by someone other than the sender with its author. It types into the pane, so a pane may send only to a pane that holds nothing it does not, and a note whose author may not type there now is withheld.",
+    "description": "Send a pane's unsent review notes to the agents they go to, one message for each agent, through the delivery queue: typed now when the agent is at rest, else when it next comes to rest. A note goes to the pane's agent, or to the agent pane its to names. A note to the person is never sent. The message says it is from the person only with a live human_nonce, and labels each note written by someone other than the sender with its author. It types into the pane, so a pane may send only to a pane that holds nothing it does not, and a note whose author may not type there now is withheld.",
     "params": [
       {
         "name": "session",
@@ -1117,6 +1121,10 @@
         "description": "Only these notes. Omit for every unsent one."
       },
       {
+        "name": "to",
+        "description": "Only the notes that go to this agent pane, by name or id. Omit for the notes to every agent."
+      },
+      {
         "name": "now",
         "description": "Type it now or not at all: refuse with agent_blocked or not_ready instead of queueing."
       },
@@ -1128,7 +1136,7 @@
     "returns": [
       {
         "name": "notes",
-        "description": "How many notes the message carries."
+        "description": "How many notes the messages carry, together."
       },
       {
         "name": "ids",
@@ -1152,11 +1160,15 @@
       },
       {
         "name": "withheld",
-        "description": "Notes left out, not sent and not marked: their author (a pane, or a linked machine) may not type into this pane now, or the pane that wrote them is gone. Absent when none."
+        "description": "Notes left out, not sent and not marked: their author (a pane, or a linked machine) may not type into the receiver's pane now, the pane that wrote them is gone, or their receiver refused them. Absent when none."
       },
       {
         "name": "withheld_reason",
         "description": "Why the first withheld note was left out. Absent when none."
+      },
+      {
+        "name": "messages",
+        "description": "One object for each message sent: window, agent, notes, ids, queued_id, position, queued and delivering. queued_id, position, queued and delivering at the top are the first message's."
       }
     ],
     "examples": [

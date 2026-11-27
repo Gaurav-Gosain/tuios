@@ -4964,6 +4964,12 @@ Params: `action` (required: `add`, `edit`, `remove`, `list`, `clear`),
   file, new side), or `hunk`, a hunk header, for a note on the whole hunk;
   `text`.
 - `edit`: `id`, `text`. The note becomes the caller's and unsent again.
+- `to`, on `add` and `edit`: who the note goes to. Give the name or id of
+  an agent pane of the same session whose directory is in the same worktree,
+  or `person` to keep the note for the person. Any other value is
+  `invalid_params`. Omit it on `add` for the pane the notes are for, and on
+  `edit` to keep the receiver. A pane without `admin` may name only a
+  receiver it could type into.
 - `remove`: `id`. `clear`: every note the caller may remove; `kept` in the
   result counts the ones left because the caller may not change them.
 - `human_nonce`: with a live nonce the note is the person's (`by: human`). A
@@ -4981,8 +4987,9 @@ Params: `action` (required: `add`, `edit`, `remove`, `list`, `clear`),
 
 A note carries `id`, `path`, `side`, `line`, `quote` or `hunk_header`,
 `text`, `by` (`human`, a pane's window id, `shell`, or `link:HOST`), `at`,
-`sent_at` once sent, and `outdated` when its line could not be found again.
-Notes are listed by path, then line.
+`sent_at` once sent, `to` when it goes to another agent pane (its window
+id) or stays with the person (`person`), and `outdated` when its line could
+not be found again. Notes are listed by path, then line.
 
 Who may change a note: the person any note, a pane or a linked machine only
 the notes it wrote, a caller outside every pane every note but the person's.
@@ -4995,12 +5002,15 @@ report channel is `forbidden`.
 
 ### send-review
 
-Send a pane's unsent notes, or the ones `ids` names (sent or not), to its
-agent as one message through the delivery queue (see
-[The delivery queue](#the-delivery-queue)). The pane must run an agent
-(`invalid_params` otherwise). The notes are marked `sent_at` when queued.
+Send a pane's unsent notes, or the ones `ids` names (sent or not), through the
+delivery queue (see [The delivery queue](#the-delivery-queue)). Each agent
+gets its own notes as one message: the pane's agent, and each agent pane a
+note's `to` names. A note to the person is never sent, and `ids` naming one
+is `invalid_params`. The pane must run an agent (`invalid_params`
+otherwise). The notes are marked `sent_at` when queued.
 
-Params: `session`, `window`, `ids`, `now` (send only when the agent is at
+Params: `session`, `window`, `ids`, `to` (only the notes to this agent pane,
+by name or id), `now` (send only when the agent is at
 rest with nothing queued: `not_ready` for a busy one, `agent_blocked` for one
 on `needs_input`, and nothing is queued), `human_nonce`.
 
@@ -5010,8 +5020,17 @@ on `needs_input`, and nothing is queued), `human_nonce`.
 
 ```json
 {"result": {"type": "review_sent", "session": "work", "window": "4be1c09a-...", "notes": 2, "ids": ["n3", "n4"],
- "queued_id": "q7", "position": 1, "queued": 1, "delivering": true}}
+ "queued_id": "q7", "position": 1, "queued": 1, "delivering": true,
+ "messages": [{"window": "4be1c09a-...", "agent": "claude", "notes": 2, "ids": ["n3", "n4"],
+  "queued_id": "q7", "position": 1, "queued": 1, "delivering": true}]}}
 ```
+
+`messages` has one entry for each agent the notes went to. `queued_id`,
+`position`, `queued` and `delivering` at the top are the first message's.
+A receiver other than `window` is held to the same typing rule as `window`.
+A receiver that is gone, refuses, or is not ready under `now` has its notes
+withheld, and the others are sent. When only one agent was to get notes and
+none were sent, the call fails with that agent's error.
 
 The message reads "Review notes on your changes (vs BASE), from SENDER:",
 then one numbered entry per note (`path:line`, `on "quote"` cut to 120
@@ -7818,7 +7837,7 @@ them:
 | `review-note` | Add, edit, remove, list or clear review notes on a pane's changes | `write`; `add` and `edit` only on a pane the caller could type into | `write` | a note is the person's only with a live `human_nonce` |
 | `review-stage` | Stage or unstage a file, a hunk or lines of a pane's worktree, and undo it; only the index changes | refused | `write` | no; a `human_nonce` that is given must be live |
 | `review-revert` | Revert a hunk of a pane's diff in the working file, and undo it; the index does not change | refused | `write` | no; a `human_nonce` that is given must be live |
-| `send-review` | Send the unsent notes to the agent through the delivery queue | `write`, and a typing verb: the target holds nothing the caller does not, and is not on `needs_input` unless the caller holds `respond` | `write` | "from the person" only with a live `human_nonce`; a note by anyone else is labelled with its author, and withheld when its author may not type there now |
+| `send-review` | Send the unsent notes through the delivery queue, one message for each agent they go to | `write`, and a typing verb: the target and each other receiver hold nothing the caller does not, and is not on `needs_input` unless the caller holds `respond` | `write` | "from the person" only with a live `human_nonce`; a note by anyone else is labelled with its author, and withheld when its author may not type there now |
 | `compare-fan` | One row per attempt of a fan: branch, agent, state, changes, last check | `read`, own fan group | `list` | no |
 | `verify-fan` | Run one check with `sh -c` in a window named `verify` in every attempt; the window holds no grants | `fan`, own fan group | `open` and `write` | no |
 | `keep-fan` | Keep one attempt and remove the others, refusing a dirty one without `stash` or `force` | refused | `write` | admin or the person |

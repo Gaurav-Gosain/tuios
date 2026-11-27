@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"errors"
 	"slices"
 	"strconv"
@@ -159,6 +160,10 @@ type reviewEditor struct {
 	// hunkIdx and lineIdx place the editor row under its line: the hunk,
 	// and the line within it, or -1 for a note on the whole hunk.
 	hunkIdx, lineIdx int
+	// to is who the note goes to, as review.Note.To, and toChanged says @
+	// changed it. See review_route.go.
+	to        string
+	toChanged bool
 }
 
 // reviewCompare is the compare view of a fan's attempts.
@@ -276,6 +281,10 @@ type reviewState struct {
 	// hints, and bar where it drew the diff's scroll bar, for the mouse.
 	hintHits []reviewHintSpan
 	hintRow  int
+	// editorAt is the pane row the last frame drew the note editor on, plus
+	// one, and 0 when it drew none. A click on the receiver's name there
+	// changes it.
+	editorAt int
 	bar      reviewScrollBar
 	// drag is what a held press moves, and barGrab the row of the thumb the
 	// press took it by.
@@ -360,7 +369,16 @@ type ReviewSentMsg struct {
 	Position       int
 	Withheld       []string
 	WithheldReason string
-	Err            error
+	// Messages are the messages the notes went in, one per receiver.
+	Messages []reviewSentMessage
+	Err      error
+}
+
+// reviewSentMessage is one message of a send-review answer.
+type reviewSentMessage struct {
+	Window     string `json:"window"`
+	Notes      int    `json:"notes"`
+	Delivering bool   `json:"delivering"`
 }
 
 // ReviewCompareMsg is a compare-fan answer for the compare view.
@@ -735,11 +753,12 @@ func (r *reviewState) currentFile() *reviewFileEntry {
 	return &r.files[r.file]
 }
 
-// unsentNotes counts the notes S would send.
+// unsentNotes counts the notes S would send. A note kept for the person is
+// never sent.
 func (r *reviewState) unsentNotes() int {
 	n := 0
 	for _, note := range r.notes {
-		if note.SentAt == 0 {
+		if note.SentAt == 0 && note.To != review.NoteToPerson {
 			n++
 		}
 	}
@@ -995,6 +1014,7 @@ func (m *OS) ReviewNote(hunk bool) {
 			ed.side, ed.line = review.SideNew, ln.New
 		}
 	}
+	ed.to = m.reviewDefaultReceiver(h, ed.lineIdx)
 	r.editor = ed
 }
 
@@ -1014,7 +1034,7 @@ func (m *OS) ReviewEditNote() {
 		m.reviewNotify("Move to a note to edit it", "info", m.Settings.NotificationDuration)
 		return
 	}
-	m.review.editor = &reviewEditor{kind: reviewEditNote, noteID: n.ID, draft: n.Text, path: n.Path, automated: m.ProcessingRemoteKeys, hunkIdx: -1, lineIdx: -1}
+	m.review.editor = &reviewEditor{kind: reviewEditNote, noteID: n.ID, draft: n.Text, path: n.Path, automated: m.ProcessingRemoteKeys, hunkIdx: -1, lineIdx: -1, to: n.To}
 }
 
 // ReviewResolveNote removes the note under the cursor.
@@ -1126,12 +1146,13 @@ func (m *OS) ReviewSend() tea.Cmd {
 			return msg
 		}
 		var res struct {
-			Notes          int      `json:"notes"`
-			IDs            []string `json:"ids"`
-			Position       int      `json:"position"`
-			Delivering     bool     `json:"delivering"`
-			Withheld       []string `json:"withheld"`
-			WithheldReason string   `json:"withheld_reason"`
+			Notes          int                 `json:"notes"`
+			IDs            []string            `json:"ids"`
+			Position       int                 `json:"position"`
+			Delivering     bool                `json:"delivering"`
+			Withheld       []string            `json:"withheld"`
+			WithheldReason string              `json:"withheld_reason"`
+			Messages       []reviewSentMessage `json:"messages"`
 		}
 		if err := jsonx.Unmarshal(raw, &res); err != nil {
 			msg.Err = err
@@ -1139,6 +1160,7 @@ func (m *OS) ReviewSend() tea.Cmd {
 		}
 		msg.Notes, msg.IDs, msg.Position, msg.Delivering = res.Notes, res.IDs, res.Position, res.Delivering
 		msg.Withheld, msg.WithheldReason = res.Withheld, res.WithheldReason
+		msg.Messages = res.Messages
 		return msg
 	}
 }
@@ -1158,12 +1180,30 @@ func (m *OS) applyReviewSent(msg ReviewSentMsg) {
 			}
 		}
 	}
+	if len(msg.Messages) == 1 && msg.Gen == r.gen && r.diff != nil && msg.Messages[0].Window != r.diff.Window {
+		msg.Who = m.reviewReceiverName(msg.Messages[0].Window)
+	}
 	notes := reviewCount(msg.Notes, "note")
 	text := notes + " sent to " + msg.Who
 	if m.learnFiles() {
 		// Nothing in the tab reads the notes, so the dock says what S does
 		// on a real machine instead of saying they went somewhere.
 		text = "On your machine, S sends " + notes + " to the agent in the pane " + msg.Who + ". Here, nothing leaves the tab."
+	} else if len(msg.Messages) > 1 {
+		parts := make([]string, len(msg.Messages))
+		for i, s := range msg.Messages {
+			to := s.Window
+			if msg.Gen == r.gen && r.diff != nil && to == r.diff.Window {
+				to = ""
+			}
+			name := m.reviewReceiverName(to)
+			if s.Delivering {
+				parts[i] = reviewCount(s.Notes, "note") + " sent to " + name
+			} else {
+				parts[i] = reviewCount(s.Notes, "note") + " queued for " + name
+			}
+		}
+		text = strings.Join(parts, ". ")
 	} else if !msg.Delivering {
 		text = notes + " queued, sent when " + msg.Who + " is at rest"
 	}
@@ -1300,9 +1340,17 @@ func (m *OS) ReviewEditorSubmit() tea.Cmd {
 	}
 	r.editor = nil
 	if ed.noteID != "" {
-		return m.reviewNoteCmd("edit", map[string]any{"id": ed.noteID, "text": text, "human_nonce": nonce})
+		params := map[string]any{"id": ed.noteID, "text": text, "human_nonce": nonce}
+		if ed.toChanged {
+			// The daemon reads the reviewed pane's own id as "".
+			params["to"] = cmp.Or(ed.to, r.diff.Window)
+		}
+		return m.reviewNoteCmd("edit", params)
 	}
 	params := map[string]any{"path": ed.path, "side": ed.side, "text": text, "human_nonce": nonce}
+	if ed.to != "" {
+		params["to"] = ed.to
+	}
 	if ed.hunk != "" {
 		params["hunk"] = ed.hunk
 	} else {

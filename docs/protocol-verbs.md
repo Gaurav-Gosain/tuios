@@ -4207,6 +4207,7 @@ Keep the review notes on a pane's changes: add one on a line or a hunk, edit, re
 | `hunk` | string |  |  | The hunk header the note is on. |
 | `text` | string |  |  | The note, at most 1000 bytes. Needed to add and edit. |
 | `id` | string |  |  | The note to edit or remove. |
+| `to` | string |  |  | Who the note goes to, on add and edit: the name or id of an agent pane of the session in the same worktree, or person to keep the note for the person. send-review never sends a note to the person. Omit on add for the pane the notes are for, and on edit to keep the receiver. |
 | `human_nonce` | string |  |  | The nonce from the attach reply of a client attached now. The TUI sends its own. Without a live one the call is not the person's. |
 
 | Result field | Type | Description |
@@ -4217,7 +4218,7 @@ Keep the review notes on a pane's changes: add one on a line or a hunk, edit, re
 | `id` | string | The note added or edited. |
 | `removed` | int | How many notes remove or clear dropped. |
 | `kept` | int | clear only: how many of the pane's notes were left because this caller may not change them (the person's, or another pane's or machine's). |
-| `notes` | []object | The pane's notes after the call, by path then line: id, path, side, line, quote, hunk_header, text, by, at, sent_at and outdated. |
+| `notes` | []object | The pane's notes after the call, by path then line: id, path, side, line, quote, hunk_header, text, by, at, sent_at, to and outdated. to is empty for the pane the notes are for. |
 
 ```json
 {"id":1,"verb":"review-note","params":{"action":"add","session":"work","window":"build","path":"api/retry.go","line":42,"quote":"if err == nil {","text":"log the attempt number here too"}}
@@ -4544,26 +4545,28 @@ Send keys to a window's program: Up, PageDown, ctrl+c. With a window they go to 
 
 ### `send-review`
 
-Send a pane's unsent review notes to its agent as one message, through the delivery queue: typed now when the agent is at rest, else when it next comes to rest. The message says it is from the person only with a live human_nonce, and labels each note written by someone other than the sender with its author. It types into the pane, so a pane may send only to a pane that holds nothing it does not, and a note whose author may not type there now is withheld.
+Send a pane's unsent review notes to the agents they go to, one message for each agent, through the delivery queue: typed now when the agent is at rest, else when it next comes to rest. A note goes to the pane's agent, or to the agent pane its to names. A note to the person is never sent. The message says it is from the person only with a live human_nonce, and labels each note written by someone other than the sender with its author. It types into the pane, so a pane may send only to a pane that holds nothing it does not, and a note whose author may not type there now is withheld.
 
 | Param | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `session` | string |  |  | Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one. |
 | `window` | string |  |  | Window id or name. Omit to target the focused window. |
 | `ids` | []string |  |  | Only these notes. Omit for every unsent one. |
+| `to` | string |  |  | Only the notes that go to this agent pane, by name or id. Omit for the notes to every agent. |
 | `now` | bool |  | `false` | Type it now or not at all: refuse with agent_blocked or not_ready instead of queueing. |
 | `human_nonce` | string |  |  | The nonce from the attach reply of a client attached now. The TUI sends its own. Without a live one the call is not the person's. |
 
 | Result field | Type | Description |
 |---|---|---|
-| `notes` | int | How many notes the message carries. |
+| `notes` | int | How many notes the messages carry, together. |
 | `ids` | []string | The notes sent, now marked with sent_at. |
 | `queued_id` | string | The queue entry, which cancel-queued takes. |
 | `position` | int | Its place in the pane's queue, 1 for next. |
 | `queued` | int | How many messages the pane's queue holds now. |
 | `delivering` | bool | The message is next and the agent is at rest, so it is typed within about a second. |
-| `withheld` | []string | Notes left out, not sent and not marked: their author (a pane, or a linked machine) may not type into this pane now, or the pane that wrote them is gone. Absent when none. |
+| `withheld` | []string | Notes left out, not sent and not marked: their author (a pane, or a linked machine) may not type into the receiver's pane now, the pane that wrote them is gone, or their receiver refused them. Absent when none. |
 | `withheld_reason` | string | Why the first withheld note was left out. Absent when none. |
+| `messages` | []object | One object for each message sent: window, agent, notes, ids, queued_id, position, queued and delivering. queued_id, position, queued and delivering at the top are the first message's. |
 
 ```json
 {"id":1,"verb":"send-review","params":{"session":"work","window":"build","human_nonce":"<from the attach reply>"}}

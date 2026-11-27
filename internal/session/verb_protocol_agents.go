@@ -237,6 +237,7 @@ func agentWorkVerbs() map[string]verbEntry {
 				{Name: "hunk", Type: "string"},
 				{Name: "text", Type: "string"},
 				{Name: "id", Type: "string"},
+				{Name: "to", Type: "string"},
 				humanNonce,
 			},
 			returns: []verbParam{
@@ -257,6 +258,7 @@ func agentWorkVerbs() map[string]verbEntry {
 				sessionParam,
 				windowParam,
 				{Name: "ids", Type: "[]string"},
+				{Name: "to", Type: "string"},
 				{Name: "now", Type: "bool", Default: "false"},
 				humanNonce,
 			},
@@ -269,6 +271,7 @@ func agentWorkVerbs() map[string]verbEntry {
 				{Name: "delivering", Type: "bool"},
 				{Name: "withheld", Type: "[]string"},
 				{Name: "withheld_reason", Type: "string"},
+				{Name: "messages", Type: "[]object"},
 			},
 			handler: (*Daemon).verbSendReview,
 		},

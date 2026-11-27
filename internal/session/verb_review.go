@@ -1,6 +1,7 @@
 package session
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -512,6 +513,7 @@ type reviewNoteParams struct {
 	Hunk       string `json:"hunk"`
 	Text       string `json:"text"`
 	ID         string `json:"id"`
+	To         string `json:"to"`
 	HumanNonce string `json:"human_nonce"`
 }
 
@@ -558,9 +560,17 @@ func (d *Daemon) verbReviewNote(cs *connState, params json.RawMessage) (any, *ve
 	if verr != nil {
 		return nil, verr
 	}
+	to, recv := "", target
 	if p.Action == "add" || p.Action == "edit" {
-		if verr := d.reviewNoteTargetRefusal(cs, target); verr != nil {
-			return nil, verr
+		if p.To != "" {
+			if to, recv, verr = d.reviewNoteReceiver(sess, target, repo, p.To); verr != nil {
+				return nil, verr
+			}
+		}
+		if to != review.NoteToPerson {
+			if verr := d.reviewNoteTargetRefusal(cs, recv); verr != nil {
+				return nil, verr
+			}
 		}
 	}
 	out := map[string]any{"type": "review_notes", "session": sess.Name(), "window": target.ID, "worktree": repo.root}
@@ -571,6 +581,7 @@ func (d *Daemon) verbReviewNote(cs *connState, params json.RawMessage) (any, *ve
 		if verr != nil {
 			return nil, verr
 		}
+		n.To = to
 		added, ok := d.reviewNotes.add(repo.root, target.ID, n)
 		if !ok {
 			return nil, hintedVerbError(ErrVerbInvalidParams, "the worktree holds "+strconv.Itoa(reviewNotesMax)+" review notes, as many as it may", &VerbHint{
@@ -580,7 +591,11 @@ func (d *Daemon) verbReviewNote(cs *connState, params json.RawMessage) (any, *ve
 		}
 		out["id"] = added.ID
 	case "edit":
-		switch d.reviewNotes.edit(repo.root, target.ID, p.ID, text, author.by, author.mayTouch) {
+		var newTo *string
+		if p.To != "" {
+			newTo = &to
+		}
+		switch d.reviewNotes.edit(repo.root, target.ID, p.ID, text, author.by, newTo, author.mayTouch) {
 		case reviewNoteMissing:
 			return nil, reviewNoteMissingError(p.ID)
 		case reviewNoteRefused:
@@ -606,6 +621,36 @@ func (d *Daemon) verbReviewNote(cs *connState, params json.RawMessage) (any, *ve
 	notes, _ := d.reviewNotes.list(repo.root, target.ID)
 	out["notes"] = notes
 	return out, nil
+}
+
+// reviewNoteReceiver resolves the to of review-note: the person, the pane the
+// notes are on (returned as ""), or another agent pane of the same session
+// whose directory is in the same worktree. The session is the one the call
+// was already held to, so a note never reaches a pane in another session.
+func (d *Daemon) reviewNoteReceiver(sess *Session, target WindowState, repo reviewRepo, to string) (string, WindowState, *verbError) {
+	switch to {
+	case "", target.ID:
+		return "", target, nil
+	case review.NoteToPerson:
+		return review.NoteToPerson, WindowState{}, nil
+	}
+	state := sess.GetState()
+	if idx, err := findWindowStateIndex(state.Windows, to); err == nil {
+		w := state.Windows[idx]
+		if w.ID == target.ID {
+			return "", target, nil
+		}
+		if isAgentWindow(w) {
+			if r, verr := d.paneRepo(sess, w); verr == nil && r.root == repo.root {
+				return w.ID, w, nil
+			}
+		}
+	}
+	return "", WindowState{}, hintedVerbError(ErrVerbInvalidParams, "to "+echoName(to)+" is not an agent pane of session "+sess.Name()+" in the same worktree", &VerbHint{
+		Param:  "to",
+		Verb:   "list-agents",
+		Detail: "Nothing was changed. Give person to keep the note for the person, or the name or id of an agent pane that works in this worktree.",
+	})
 }
 
 // newReviewNote builds the note review-note add asked for.
@@ -667,6 +712,7 @@ type sendReviewParams struct {
 	Session    string   `json:"session"`
 	Window     string   `json:"window"`
 	IDs        []string `json:"ids"`
+	To         string   `json:"to"`
 	Now        bool     `json:"now"`
 	HumanNonce string   `json:"human_nonce"`
 }
@@ -689,6 +735,21 @@ func (d *Daemon) verbSendReview(cs *connState, params json.RawMessage) (any, *ve
 	}
 
 	all, base := d.reviewNotes.list(repo.root, target.ID)
+	// Each note goes to its receiver: the pane the notes are on, or the
+	// agent pane its To names. A note that stays with the person is never
+	// sent.
+	recvOf := func(n review.Note) string { return cmp.Or(n.To, target.ID) }
+	only := ""
+	if p.To != "" {
+		if p.To == review.NoteToPerson {
+			return nil, invalidParam("to", "to names an agent pane: a note to the person stays in the list and is never sent")
+		}
+		to, _, verr := d.reviewNoteReceiver(sess, target, repo, p.To)
+		if verr != nil {
+			return nil, verr
+		}
+		only = cmp.Or(to, target.ID)
+	}
 	var picked []review.Note
 	if len(p.IDs) > 0 {
 		for _, id := range p.IDs {
@@ -696,38 +757,27 @@ func (d *Daemon) verbSendReview(cs *connState, params json.RawMessage) (any, *ve
 			if i < 0 {
 				return nil, reviewNoteMissingError(id)
 			}
+			n := all[i]
+			if n.To == review.NoteToPerson {
+				return nil, hintedVerbError(ErrVerbInvalidParams, "review note "+echoName(id)+" stays with the person, so it is not sent", &VerbHint{
+					Param:  "ids",
+					Verb:   "review-note",
+					Detail: "Nothing was sent. Edit the note with to set to an agent pane to send it to that agent.",
+				})
+			}
+			if only != "" && recvOf(n) != only {
+				return nil, invalidParam("ids", "review note "+echoName(id)+" goes to window "+shortWindowID(recvOf(n))+", not to the pane to names")
+			}
 			if !slices.ContainsFunc(picked, func(n review.Note) bool { return n.ID == id }) {
-				picked = append(picked, all[i])
+				picked = append(picked, n)
 			}
 		}
 	} else {
 		for _, n := range all {
-			if n.SentAt == 0 {
+			if n.SentAt == 0 && n.To != review.NoteToPerson && (only == "" || recvOf(n) == only) {
 				picked = append(picked, n)
 			}
 		}
-	}
-	// A note is typed with the sender's authority, so each author is held to
-	// what it may type into this pane now. The rest are withheld.
-	var withheld []string
-	withheldWhy := ""
-	allowed := picked[:0:0]
-	for _, n := range picked {
-		if why := d.reviewNoteAuthorRefusal(n.By, sess, target); why != "" {
-			withheld = append(withheld, n.ID)
-			if withheldWhy == "" {
-				withheldWhy = why
-			}
-			continue
-		}
-		allowed = append(allowed, n)
-	}
-	picked = allowed
-	if len(picked) == 0 && len(withheld) > 0 {
-		return nil, hintedVerbError(ErrVerbForbidden, "every note picked was withheld: "+withheldWhy, &VerbHint{
-			Verb:   "review-note",
-			Detail: "Nothing was sent. A note is typed into the pane with the authority of whoever wrote it, and its author may not type into window " + shortWindowID(target.ID) + " now. Edit the note to make it yours, or remove it.",
-		})
 	}
 	if len(picked) == 0 {
 		return nil, hintedVerbError(ErrVerbNoNotes, "window "+shortWindowID(target.ID)+" has no unsent review notes", &VerbHint{
@@ -737,6 +787,116 @@ func (d *Daemon) verbSendReview(cs *connState, params json.RawMessage) (any, *ve
 		})
 	}
 
+	// One message per receiver, in the order the notes are listed.
+	var order []string
+	groups := map[string][]review.Note{}
+	for _, n := range picked {
+		r := recvOf(n)
+		if _, ok := groups[r]; !ok {
+			order = append(order, r)
+		}
+		groups[r] = append(groups[r], n)
+	}
+	var (
+		withheld    []string
+		withheldWhy string
+		firstErr    *verbError
+		messages    []map[string]any
+		sentIDs     []string
+	)
+	withhold := func(notes []review.Note, why string) {
+		for _, n := range notes {
+			withheld = append(withheld, n.ID)
+		}
+		if withheldWhy == "" {
+			withheldWhy = why
+		}
+	}
+	for _, rid := range order {
+		notes := groups[rid]
+		recv, verr := d.reviewSendReceiver(cs, sess, state, target, rid)
+		if verr != nil {
+			firstErr = cmp.Or(firstErr, verr)
+			withhold(notes, verr.Message)
+			continue
+		}
+		// A note is typed with the sender's authority, so each author is
+		// held to what it may type into the receiver now. The rest are
+		// withheld.
+		allowed := notes[:0:0]
+		for _, n := range notes {
+			if why := d.reviewNoteAuthorRefusal(n.By, sess, recv); why != "" {
+				withhold([]review.Note{n}, why)
+				continue
+			}
+			allowed = append(allowed, n)
+		}
+		if len(allowed) == 0 {
+			continue
+		}
+		m, verr := d.sendReviewTo(cs, sess, state, recv, base, allowed, p)
+		if verr != nil {
+			firstErr = cmp.Or(firstErr, verr)
+			withhold(allowed, verr.Message)
+			continue
+		}
+		ids := m["ids"].([]string)
+		d.reviewNotes.markSent(repo.root, target.ID, ids, time.Now().UnixNano())
+		messages = append(messages, m)
+		sentIDs = append(sentIDs, ids...)
+	}
+	if len(messages) == 0 {
+		if firstErr != nil && len(order) == 1 {
+			return nil, firstErr
+		}
+		return nil, hintedVerbError(ErrVerbForbidden, "every note picked was withheld: "+withheldWhy, &VerbHint{
+			Verb:   "review-note",
+			Detail: "Nothing was sent. A note is typed into its receiver's pane with the authority of whoever wrote it. Edit the note to make it yours, or remove it.",
+		})
+	}
+	out := map[string]any{
+		"type":     "review_sent",
+		"session":  sess.Name(),
+		"window":   target.ID,
+		"notes":    len(sentIDs),
+		"ids":      sentIDs,
+		"messages": messages,
+	}
+	// The first message's place in its queue, as the answer gave it when
+	// every note went to one pane.
+	for _, k := range []string{"queued_id", "position", "queued", "delivering"} {
+		out[k] = messages[0][k]
+	}
+	if len(withheld) > 0 {
+		out["withheld"] = withheld
+		out["withheld_reason"] = withheldWhy
+	}
+	return out, nil
+}
+
+// reviewSendReceiver is the pane send-review types a message of notes into:
+// the pane the notes are on, or another agent pane of its session. A pane
+// other than the call's own window was not held by holdTypingTarget, so it is
+// held here to the same rule.
+func (d *Daemon) reviewSendReceiver(cs *connState, sess *Session, state *SessionState, target WindowState, id string) (WindowState, *verbError) {
+	if id == target.ID {
+		return target, nil
+	}
+	recv, verr := queueTarget(sess, state, id)
+	if verr != nil {
+		return WindowState{}, verr
+	}
+	if pa := cs.paneViewOrNil(); pa != nil {
+		if why := d.typingRefusal(pa, recv, true); why != "" {
+			return WindowState{}, grantForbidden("send-review", pa, why)
+		}
+	}
+	return recv, nil
+}
+
+// sendReviewTo composes notes into one message and hands it to the delivery
+// queue of recv. It answers what went where.
+func (d *Daemon) sendReviewTo(cs *connState, sess *Session, state *SessionState, recv WindowState, base string, notes []review.Note, p sendReviewParams) (map[string]any, *verbError) {
 	// The entry decides who the message is from, the way queue-prompt
 	// decides it: from the connection, the nonce checked.
 	e, verr := d.newQueueEntry(cs, sess, state, "", "", p.HumanNonce)
@@ -746,50 +906,43 @@ func (d *Daemon) verbSendReview(cs *connState, params json.RawMessage) (any, *ve
 	e.text = review.Compose(review.Message{
 		From:       d.reviewSender(e),
 		Base:       base,
-		Notes:      picked,
+		Notes:      notes,
 		CleanQuote: func(s string) string { return attentionText(s, 4*review.QuoteMax) },
 		SenderBy:   e.by,
 		Author:     d.reviewAuthorName,
 	})
 	if len(e.text) > queueMaxText {
-		return nil, invalidParam("ids", "the "+strconv.Itoa(len(picked))+" notes make a message longer than "+strconv.Itoa(queueMaxText)+" bytes; send fewer at a time with ids")
+		return nil, invalidParam("ids", "the "+strconv.Itoa(len(notes))+" notes to window "+shortWindowID(recv.ID)+" make a message longer than "+strconv.Itoa(queueMaxText)+" bytes; send fewer at a time with ids")
 	}
 	if p.Now {
-		if target.AgentState == AgentStateNeedsInput {
-			return nil, agentBlockedError(sess, target)
+		if recv.AgentState == AgentStateNeedsInput {
+			return nil, agentBlockedError(sess, recv)
 		}
-		if !d.agentReady(target, fanReadyStates) || d.queue.count(target.ID) > 0 {
-			return nil, hintedVerbError(ErrVerbNotReady, "the agent in window "+shortWindowID(target.ID)+" is not at rest with nothing queued, so the notes were not sent", &VerbHint{
-				Command: "tuios review send " + paneArgs(sess, target.ID),
+		if !d.agentReady(recv, fanReadyStates) || d.queue.count(recv.ID) > 0 {
+			return nil, hintedVerbError(ErrVerbNotReady, "the agent in window "+shortWindowID(recv.ID)+" is not at rest with nothing queued, so the notes were not sent", &VerbHint{
+				Command: "tuios review send " + paneArgs(sess, recv.ID),
 				Detail:  "Nothing was sent. Leave now out to queue the notes: they are typed when the agent next comes to rest.",
 			})
 		}
 	}
-	res, verr := d.queuePrompt(sess, target, e)
+	res, verr := d.queuePrompt(sess, recv, e)
 	if verr != nil {
 		return nil, verr
 	}
-	ids := make([]string, len(picked))
-	for i, n := range picked {
+	ids := make([]string, len(notes))
+	for i, n := range notes {
 		ids[i] = n.ID
 	}
-	d.reviewNotes.markSent(repo.root, target.ID, ids, time.Now().UnixNano())
-	out := map[string]any{
-		"type":       "review_sent",
-		"session":    sess.Name(),
-		"window":     target.ID,
-		"notes":      len(picked),
+	return map[string]any{
+		"window":     recv.ID,
+		"agent":      reviewAgentName(recv),
+		"notes":      len(notes),
 		"ids":        ids,
 		"queued_id":  res.ID,
 		"position":   res.Position,
 		"queued":     res.Queued,
 		"delivering": res.Delivering,
-	}
-	if len(withheld) > 0 {
-		out["withheld"] = withheld
-		out["withheld_reason"] = withheldWhy
-	}
-	return out, nil
+	}, nil
 }
 
 // reviewNoteTargetRefusal holds a pane without admin that adds or edits a note

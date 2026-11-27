@@ -314,6 +314,17 @@ func noteLine(n review.Note) string {
 	return fmt.Sprintf("            > note %s (%s%s): %s", plainLine(n.ID), noteAuthor(n.By), state, plainLine(n.Text))
 }
 
+// noteReceiver names who a note goes to.
+func noteReceiver(to string) string {
+	switch to {
+	case "":
+		return "the pane"
+	case review.NoteToPerson:
+		return "you, not sent"
+	}
+	return "pane " + shortWindowID(to)
+}
+
 // noteAuthor names who wrote a note.
 func noteAuthor(by string) string {
 	switch {
@@ -346,7 +357,7 @@ func parseNoteTarget(spec string, hunk bool) (string, int, error) {
 
 // newReviewNoteCommand builds `tuios review note`.
 func newReviewNoteCommand() *cobra.Command {
-	var sessionName, window, side, hunk, edit, remove string
+	var sessionName, window, side, hunk, edit, remove, to string
 	var jsonOutput bool
 	cmd := &cobra.Command{
 		// FILE:LINE is not bracketed although --edit and --remove go without
@@ -365,12 +376,17 @@ The note keeps the line's text, so it follows the line when the file changes.
 A note whose line is gone is marked outdated. A note is at most 1000 bytes. A
 worktree holds at most 200 notes.
 
+A note goes to the agent in the pane by default. --to names another agent pane
+of the session that works in the same worktree. --to person keeps the note for
+you: 'tuios review send' does not send it.
+
 'tuios review note --edit ID TEXT...' replaces a note's text and 'tuios
 review note --remove ID' drops one. From inside a pane only the notes that
 pane wrote can be changed. From a shell, every note can be changed except
 the ones left from the attached client.`,
 		Example: `  tuios review note api/retry.go:42 'log the attempt number here too'
   tuios review note -w build --hunk '@@ -88,4 +100,6 @@' api/retry.go 'wrap with context'
+  tuios review note --to codex api/retry.go:42 'this retry loop is yours'
   tuios review note --edit n3 'wrap it with the attempt number'
   tuios review note --remove n3`,
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -406,6 +422,12 @@ the ones left from the attached client.`,
 					params["side"] = side
 				}
 			}
+			if to != "" {
+				if remove != "" {
+					return errors.New("--remove takes no --to")
+				}
+				params["to"] = to
+			}
 			return runReviewNote(os.Stdout, sessionName, window, params, jsonOutput)
 		},
 	}
@@ -415,6 +437,7 @@ the ones left from the attached client.`,
 	cmd.Flags().StringVar(&hunk, "hunk", "", "Put the note on the whole hunk with this header")
 	cmd.Flags().StringVar(&edit, "edit", "", "Replace the text of the note with this id")
 	cmd.Flags().StringVar(&remove, "remove", "", "Remove the note with this id")
+	cmd.Flags().StringVar(&to, "to", "", "The agent pane the note goes to, by name or id, or person to keep it (default: the pane)")
 	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }
@@ -501,7 +524,7 @@ func printReviewNotes(w io.Writer, notes []review.Note) error {
 		return err
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tWHERE\tBY\tSTATE\tNOTE")
+	fmt.Fprintln(tw, "ID\tWHERE\tBY\tTO\tSTATE\tNOTE")
 	for _, n := range notes {
 		where := fmt.Sprintf("%s:%d", plainLine(n.Path), n.Line)
 		if n.IsHunk() {
@@ -516,14 +539,14 @@ func printReviewNotes(w io.Writer, notes []review.Note) error {
 		case n.SentAt != 0:
 			state = "sent " + agoOf(n.SentAt)
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", plainLine(n.ID), where, noteAuthor(n.By), state, plainLine(n.Text))
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", plainLine(n.ID), where, noteAuthor(n.By), noteReceiver(n.To), state, plainLine(n.Text))
 	}
 	return tw.Flush()
 }
 
 // newReviewSendCommand builds `tuios review send`.
 func newReviewSendCommand() *cobra.Command {
-	var sessionName, window string
+	var sessionName, window, to string
 	var ids []string
 	var now, jsonOutput bool
 	cmd := &cobra.Command{
@@ -535,25 +558,30 @@ comes to rest, and never over a prompt it is waiting on. --id sends only the
 notes named, sent before or not. --now sends only when the agent is at rest
 with nothing queued, and otherwise sends nothing.
 
+A note that goes to another agent pane is sent to that agent in a message of
+its own. --to sends only the notes to one pane. A note kept for you is not sent.
+
 The message names who sent it: "a script" from a shell, the pane from inside
 one. It says "from the person" only when sent from the attached client.`,
 		Example: `  tuios review send
   tuios review send -w build --id n3 --id n4
+  tuios review send --to codex
   tuios review send --now`,
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runReviewSend(os.Stdout, sessionName, window, ids, now, jsonOutput)
+			return runReviewSend(os.Stdout, sessionName, window, to, ids, now, jsonOutput)
 		},
 	}
 	addSessionFlag(cmd, &sessionName)
 	addWindowFlag(cmd, &window, "The agent's pane, by name or id (default: the focused pane)")
 	cmd.Flags().StringArrayVar(&ids, "id", nil, "Send only this note. Repeatable")
 	cmd.Flags().BoolVar(&now, "now", false, "Send only if the agent is at rest now. Never queue")
+	cmd.Flags().StringVar(&to, "to", "", "Send only the notes that go to this agent pane, by name or id")
 	addJSONFlag(cmd, &jsonOutput)
 	return cmd
 }
 
-func runReviewSend(w io.Writer, sessionName, window string, ids []string, now, jsonOutput bool) error {
+func runReviewSend(w io.Writer, sessionName, window, to string, ids []string, now, jsonOutput bool) error {
 	t, err := dialReviewTarget(sessionName, window)
 	if err != nil {
 		return err
@@ -569,6 +597,9 @@ func runReviewSend(w io.Writer, sessionName, window string, ids []string, now, j
 	if now {
 		params["now"] = true
 	}
+	if to != "" {
+		params["to"] = to
+	}
 	raw, err := t.client.Call("send-review", params)
 	if err != nil {
 		return reportVerbError(t.explain("send-review", err), jsonOutput)
@@ -583,12 +614,31 @@ func runReviewSend(w io.Writer, sessionName, window string, ids []string, now, j
 		Delivering bool     `json:"delivering"`
 		Withheld   []string `json:"withheld"`
 		Reason     string   `json:"withheld_reason"`
+		Messages   []struct {
+			Window     string `json:"window"`
+			Agent      string `json:"agent"`
+			Notes      int    `json:"notes"`
+			QueuedID   string `json:"queued_id"`
+			Position   int    `json:"position"`
+			Delivering bool   `json:"delivering"`
+		} `json:"messages"`
 	}
 	if err := jsonx.Unmarshal(raw, &res); err != nil {
 		return errfmt.Errorf("failed to parse response: %w", err)
 	}
-	fmt.Fprintf(w, "%d review %s in one message. %s\n", res.Notes, plural.Word(res.Notes, "note", "notes"),
-		describeQueued(res.QueuedID, window, res.Position, res.Delivering)+t.on())
+	if len(res.Messages) > 1 {
+		for _, m := range res.Messages {
+			fmt.Fprintf(w, "%d review %s to %s. %s\n", m.Notes, plural.Word(m.Notes, "note", "notes"), plainLine(m.Agent),
+				describeQueued(m.QueuedID, shortWindowID(m.Window), m.Position, m.Delivering)+t.on())
+		}
+	} else {
+		at := window
+		if len(res.Messages) == 1 && to != "" {
+			at = shortWindowID(res.Messages[0].Window)
+		}
+		fmt.Fprintf(w, "%d review %s in one message. %s\n", res.Notes, plural.Word(res.Notes, "note", "notes"),
+			describeQueued(res.QueuedID, at, res.Position, res.Delivering)+t.on())
+	}
 	if len(res.Withheld) > 0 {
 		ids := make([]string, len(res.Withheld))
 		for i, id := range res.Withheld {

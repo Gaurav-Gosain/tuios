@@ -208,6 +208,85 @@ func TestSendReviewWithholdsANoteItsAuthorMayNotType(t *testing.T) {
 	}
 }
 
+// TestSendReviewSendsEachNoteToItsReceiver: a note's to names who it goes
+// to. send-review types each agent's notes into its own pane, one message
+// each, and never sends a note kept for the person. A receiver must be an
+// agent pane of the session in the same worktree, and a pane may name only a
+// receiver it could type into, when it adds the note and when it sends it.
+func TestSendReviewSendsEachNoteToItsReceiver(t *testing.T) {
+	d, sp, _, _, c, a, b := reviewFixture(t)
+	note := func(to, text string, line int) map[string]any {
+		p := map[string]any{"action": "add", "session": "work", "window": b, "path": "api.go", "line": line, "text": text}
+		if to != "" {
+			p["to"] = to
+		}
+		return callP(c, t, "review-note", p)
+	}
+	setAgentState(t, c, "work", b, "working", "", "")
+	mustRefuse(t, note(a, "x", 4), ErrVerbInvalidParams, "a receiver that runs no agent")
+	mustRefuse(t, note("nowhere", "x", 4), ErrVerbInvalidParams, "a receiver that is no pane")
+	setAgentState(t, c, "work", a, "working", "", "")
+
+	result(t, note("", "for b", 4))
+	toA := result(t, note(a, "for a", 5))
+	kept := result(t, note(review.NoteToPerson, "for me", 7))
+	toAID, keptID := toA["id"].(string), kept["id"].(string)
+	for _, n := range notesOf(t, kept) {
+		want := map[string]any{"for b": nil, "for a": a, "for me": review.NoteToPerson}[n["text"].(string)]
+		if n["to"] != want {
+			t.Errorf("note %q has to %v, want %v", n["text"], n["to"], want)
+		}
+	}
+
+	mustRefuse(t, callP(c, t, "send-review", map[string]any{"session": "work", "window": b, "ids": []string{keptID}}), ErrVerbInvalidParams, "sending a note kept for the person")
+	mustRefuse(t, callP(c, t, "send-review", map[string]any{"session": "work", "window": b, "to": review.NoteToPerson}), ErrVerbInvalidParams, "sending to the person")
+
+	res := result(t, callP(c, t, "send-review", map[string]any{"session": "work", "window": b}))
+	if msgs, _ := res["messages"].([]any); res["notes"] != 2.0 || len(msgs) != 2 {
+		t.Fatalf("send-review = %v, want 2 notes in 2 messages", res)
+	}
+	if text := queuedText(d, b); !strings.Contains(text, "for b") || strings.Contains(text, "for a") || strings.Contains(text, "for me") {
+		t.Errorf("b's message =\n%s", text)
+	}
+	if text := queuedText(d, a); !strings.Contains(text, "for a") || strings.Contains(text, "for b") || strings.Contains(text, "for me") {
+		t.Errorf("a's message =\n%s", text)
+	}
+	for _, n := range notesOf(t, result(t, callP(c, t, "review-note", map[string]any{"action": "list", "session": "work", "window": b}))) {
+		if sent := n["sent_at"] != nil; sent == (n["id"] == keptID) {
+			t.Errorf("note %q sent %v", n["text"], sent)
+		}
+	}
+	mustRefuse(t, callP(c, t, "send-review", map[string]any{"session": "work", "window": b}), ErrVerbNoNotes, "a send with only a kept note left")
+
+	// edit with to gives the note to another receiver, unsent again. to
+	// names one receiver for a send.
+	edited := result(t, callP(c, t, "review-note", map[string]any{"action": "edit", "session": "work", "window": b, "id": keptID, "text": "for a now", "to": a}))
+	for _, n := range notesOf(t, edited) {
+		if n["id"] == keptID && (n["to"] != a || n["sent_at"] != nil) {
+			t.Errorf("the edited note = %v, want to %s and unsent", n, a)
+		}
+	}
+	mustRefuse(t, callP(c, t, "send-review", map[string]any{"session": "work", "window": b, "to": b}), ErrVerbNoNotes, "a send to b with only a's note unsent")
+	if res := result(t, callP(c, t, "send-review", map[string]any{"session": "work", "window": b, "to": a, "ids": []string{toAID, keptID}})); res["notes"] != 2.0 {
+		t.Errorf("send-review to a = %v, want 2 notes", res)
+	}
+
+	// Pane b, with write, may not give a note to a while a holds admin, nor
+	// send one there.
+	result(t, callP(c, t, "set-pane-grants", map[string]any{"session": "work", "window": b, "grants": []string{"read", "write"}}))
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, b })
+	pane := dialVerb(t, sp)
+	wantForbidden(t, "a pane giving a note to a pane that holds more", callP(pane, t, "review-note", map[string]any{"action": "add", "session": "work", "window": b, "path": "api.go", "line": 4, "text": "x", "to": a}))
+	result(t, callP(pane, t, "review-note", map[string]any{"action": "add", "session": "work", "window": b, "path": "api.go", "line": 4, "text": "pane to b"}))
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
+	result(t, note(a, "shell to a", 5))
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, b })
+	res = result(t, callP(pane, t, "send-review", map[string]any{"session": "work", "window": b}))
+	if w, _ := res["withheld"].([]any); res["notes"] != 1.0 || len(w) != 1 {
+		t.Errorf("a pane's send = %v, want the note to a withheld and its own sent", res)
+	}
+}
+
 // TestReviewAuthorEncodingsAgree: review.Compose labels notes by comparing
 // their author with the sender in the queue's encoding, so the two must
 // spell the person, a shell and a link the same way.

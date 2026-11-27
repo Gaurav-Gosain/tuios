@@ -2,6 +2,7 @@ package app
 
 import (
 	"image/color"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -243,7 +244,7 @@ func reviewAuthor(by string) string {
 
 // reviewNoteLines is a note laid out in width cells: what it is on and who
 // wrote it, then its text, wrapped.
-func reviewNoteLines(n review.Note, placed bool, width int, now time.Time) []string {
+func reviewNoteLines(n review.Note, to string, placed bool, width int, now time.Time) []string {
 	label := "note"
 	switch {
 	case n.Outdated:
@@ -262,6 +263,7 @@ func reviewNoteLines(n review.Note, placed bool, width int, now time.Time) []str
 	if n.By != "" && n.By != "human" {
 		label += " from " + reviewAuthor(n.By)
 	}
+	label += to
 	text := label + ": " + reviewText(strings.ReplaceAll(n.Text, "\n", " "))
 	if n.SentAt > 0 {
 		text += "  sent " + units.Waited(n.SentAt, now)
@@ -373,7 +375,7 @@ func (m *OS) reviewRows(width int) []reviewRow {
 			rows = append(rows, reviewRow{kind: reviewRowEditor, hunk: hunk, line: -1, other: -1, note: i})
 			return
 		}
-		for j, text := range reviewNoteLines(n, placed, noteW, now) {
+		for j, text := range reviewNoteLines(n, m.reviewNoteTo(n), placed, noteW, now) {
 			rows = append(rows, reviewRow{kind: reviewRowNote, hunk: hunk, line: -1, other: -1, note: i, text: text, first: j == 0})
 		}
 	}
@@ -961,6 +963,7 @@ func (m *OS) reviewDiffLines(width, paneH int, look *reviewLook) []string {
 		}
 	}
 	d := reviewDraw{m: m, look: look, file: file, width: width, numW: reviewNumW(file), split: m.reviewSplitOn(width)}
+	r.editorAt = 0
 	for i := range paneH {
 		idx := r.scroll + i
 		switch {
@@ -988,6 +991,9 @@ func (m *OS) reviewDiffLines(width, paneH int, look *reviewLook) []string {
 		// The diff's cursor stays on a quiet ground while the file list has
 		// the keyboard, so the place the diff will resume is always shown.
 		out[i] = d.row(rows[idx], overlay.RowState{Cursor: sel, Focused: !r.listFocus})
+		if rows[idx].kind == reviewRowEditor {
+			r.editorAt = i + 1
+		}
 	}
 	return out
 }
@@ -1169,23 +1175,21 @@ func (d reviewDraw) rowBody(row reviewRow, st overlay.RowState) string {
 			return lead + reviewPaint([]reviewSeg{{fg, reviewBar() + " ", false}, {fg, row.text, false}}, room, bg)
 		}
 		ed := d.m.review.editor
-		label := "note: "
-		if ed != nil && ed.noteID == "" && ed.hunk != "" {
-			label = "note (hunk): "
+		if ed == nil {
+			return lead + reviewSpaces(room, bg)
 		}
-		draft := ""
-		if ed != nil {
-			draft = reviewText(ed.draft)
+		segs := d.m.reviewEditorLabel(ed, pal, bg)
+		labelW := 0
+		for _, s := range segs {
+			labelW += ansi.StringWidth(s.text)
 		}
+		draft := reviewText(ed.draft)
 		// The end of what is typed stays in view on a long note.
-		space := room - 2 - ansi.StringWidth(label) - 1
+		space := room - labelW - 1
 		if ansi.StringWidth(draft) > space && space > 0 {
 			draft = ansi.TruncateLeft(draft, ansi.StringWidth(draft)-space, "")
 		}
-		return lead + reviewPaint([]reviewSeg{
-			{overlay.Readable(pal.AccentBright, bg), reviewBar() + " " + label, true},
-			{overlay.Readable(pal.Fg, bg), draft + "_", false},
-		}, room, bg)
+		return lead + reviewPaint(append(segs, reviewSeg{overlay.Readable(pal.Fg, bg), draft + "_", false}), room, bg)
 	}
 	return reviewSpaces(d.width, pal.Surface)
 }
@@ -1319,7 +1323,14 @@ func (m *OS) reviewFooter(width int, pal overlay.Palette) string {
 		case reviewEditVerify:
 			return m.reviewPromptLine("Run in every attempt: ", ed.draft, []overlay.Hint{{Key: overlay.EnterGlyph, Label: "run"}, {Key: "esc", Label: "cancel"}}, width, pal)
 		}
-		return m.reviewFooterHints([]overlay.Hint{{Key: overlay.EnterGlyph, Label: "save"}, {Key: "esc", Label: "drop"}}, width, pal)
+		hints := []overlay.Hint{{Key: overlay.EnterGlyph, Label: "save"}, {Key: "esc", Label: "drop"}}
+		if rs := m.reviewReceivers(); ed.draft == "" && len(rs) > 1 {
+			// @ is text once something is typed. A click on the receiver's
+			// name still changes it then.
+			i := slices.IndexFunc(rs, func(x reviewReceiver) bool { return x.to == ed.to })
+			hints = append(hints, overlay.Hint{Key: "@", Label: "to " + rs[(i+1)%len(rs)].name})
+		}
+		return m.reviewFooterHints(hints, width, pal)
 	}
 	if r.filter.menu {
 		return m.reviewWhoMenuLine(width, pal)
@@ -1406,7 +1417,7 @@ func (m *OS) reviewKeyHints() []overlay.Hint {
 		}
 	}
 	if n := r.unsentNotes(); n > 0 && !against {
-		add("S", "send "+reviewCount(n, "note"))
+		add("S", m.reviewSendWords())
 	}
 	if key := m.reviewKey(config.ActionReviewNextHunk); key != "" {
 		add(key, "next hunk")
