@@ -89,6 +89,7 @@ def verbInfo : String → VerbInfo
   | "set-agent-state" | "ask-human" => ⟨.self, .self, true, false⟩
   | "request-approval" => ⟨.deny, .self, true, false⟩
   | "send-agent-message" => ⟨.mail, .mail, true, true⟩
+  | "take-hold" | "release-hold" => ⟨.mail, .mail, false, false⟩
   | "send-text" | "send-keys" | "run" | "respond" | "paste-buffer" => ⟨.write, .write, true, false⟩
   | "start-agent" | "set-fan-verdict" => ⟨.launch, .launch, true, false⟩
   | "fan" => ⟨.launch, .launch, false, false⟩
@@ -106,7 +107,8 @@ def verbs : List String :=
    "set-agent-state", "ask-human", "request-approval", "send-agent-message", "send-text",
    "send-keys", "run", "respond", "paste-buffer", "start-agent", "set-fan-verdict", "fan",
    "list-buffers", "set-buffer", "add-task", "claim-task", "remove-task", "close-window",
-   "kill-session", "set-option", "new-window", "transfer-start", "transfer-list"]
+   "kill-session", "set-option", "new-window", "transfer-start", "transfer-list",
+   "take-hold", "release-hold"]
 
 /-- typingVerbs. -/
 def typingVerb (v : String) : Bool :=
@@ -443,7 +445,8 @@ def State.writeReach (s : State) (pa : PaneAuth) (target : String) : Bool :=
 
 /-- holdMailSend and holdMailListing (mail_grant.go): a pane holding mail
 leaves mail in any session as itself, and lists the agent panes of every
-session to address it. A listing inside its read reach is left to the read
+session to address it. It also takes and releases a hold, which names no
+session (holds.go). A listing inside its read reach is left to the read
 rule. none when the rule does not apply. The host and all parameters are out
 of the model. -/
 def State.holdMail (s : State) (pa : PaneAuth) (verb : String) (t : Target) :
@@ -453,6 +456,10 @@ def State.holdMail (s : State) (pa : PaneAuth) (verb : String) (t : Target) :
     if t.from_ ≠ "" ∧ t.from_ ≠ pa.window then some (.error .forbidden)
     else if !t.select ∧ t.session = "" then some (.ok { t with from_ := pa.window, session := pa.session })
     else some (.ok { t with from_ := pa.window })
+  else if verb = "take-hold" ∨ verb = "release-hold" then
+    -- A hold names no session (holds.go). The handler holds a pane to its
+    -- own holds.
+    some (.ok t)
   else if verb = "list-agents" then
     let wide := t.allSessions || (t.select && t.session == "")
     let target := if t.session = "" then pa.session else t.session

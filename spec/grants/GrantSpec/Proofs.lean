@@ -152,24 +152,32 @@ theorem gate_of_sessionKind {s : State} {pa : PaneAuth} {v : String}
   intro h
   split at h <;> simp_all [sessionKind] <;> (repeat' split at h) <;> simp_all
 
-/-- The mail rule (holdMail) holds only send-agent-message and list-agents. -/
+/-- The mail rule (holdMail) holds only send-agent-message, list-agents and
+the two hold verbs. -/
 theorem holdMail_verb {s : State} {pa : PaneAuth} {v : String} {t : Target}
-    (h : s.holdMail pa v t ≠ none) : v = "send-agent-message" ∨ v = "list-agents" := by
+    (h : s.holdMail pa v t ≠ none) :
+    v = "send-agent-message" ∨ v = "list-agents" ∨ v = "take-hold" ∨ v = "release-hold" := by
   by_cases h1 : v = "send-agent-message"
   · exact Or.inl h1
   · by_cases h2 : v = "list-agents"
-    · exact Or.inr h2
-    · exfalso; apply h; unfold State.holdMail; simp [h1, h2]
+    · exact Or.inr (Or.inl h2)
+    · by_cases h3 : v = "take-hold"
+      · exact Or.inr (Or.inr (Or.inl h3))
+      · by_cases h4 : v = "release-hold"
+        · exact Or.inr (Or.inr (Or.inr h4))
+        · exfalso; apply h; unfold State.holdMail; simp [h1, h2, h3, h4]
 
 theorem holdMail_none {s : State} {pa : PaneAuth} {v : String} {t : Target}
-    (h1 : v ≠ "send-agent-message") (h2 : v ≠ "list-agents") : s.holdMail pa v t = none := by
-  unfold State.holdMail; simp [h1, h2]
+    (h1 : v ≠ "send-agent-message") (h2 : v ≠ "list-agents") (h3 : v ≠ "take-hold")
+    (h4 : v ≠ "release-hold") : s.holdMail pa v t = none := by
+  unfold State.holdMail; simp [h1, h2, h3, h4]
 
 /-- A verb whose kind is neither mail nor read is never held by the mail
 rule. -/
 theorem holdMail_none_of_kind {s : State} {pa : PaneAuth} {v : String} {t : Target}
     (hk : (verbInfo v).grant ≠ .mail ∧ (verbInfo v).grant ≠ .read) : s.holdMail pa v t = none :=
   holdMail_none (by intro e; subst e; simp [verbInfo] at hk) (by intro e; subst e; simp [verbInfo] at hk)
+    (by intro e; subst e; simp [verbInfo] at hk) (by intro e; subst e; simp [verbInfo] at hk)
 
 /-- Mail is sent as the pane itself: the mail rule passes a send only with
 from set to the caller's own window. -/
@@ -372,7 +380,7 @@ theorem fan_closes_only_its_tree {s : State} {c : Caller} {pa : PaneAuth} {t t' 
     ∃ w, s.closeTarget pa t = some w ∧ t'.window = w.id ∧ w.id ≠ pa.window ∧ Desc s pa.window w.id := by
   cases ht : s.holdToOwnTree pa "close-window" t with
   | none =>
-    rcases checkGrants_reach ha hn ht (holdMail_none (by simp) (by simp)) h with ⟨hp, _⟩ | ⟨f, hg, _⟩
+    rcases checkGrants_reach ha hn ht (holdMail_none (by simp) (by simp) (by simp) (by simp)) h with ⟨hp, _⟩ | ⟨f, hg, _⟩
     · simp [State.grantGate, verbInfo, transferVerb] at hp
     · simp [State.grantGate, verbInfo, transferVerb] at hg
   | some r =>
@@ -642,6 +650,7 @@ theorem types_only_into_no_more {s : State} {c : Caller} {pa : PaneAuth} {v : St
   have hd : (verbInfo v).session = true := by rcases hv with rfl | rfl | rfl | rfl <;> rfl
   have hm : s.holdMail pa v t = none :=
     holdMail_none (by rcases hv with rfl | rfl | rfl | rfl <;> simp) (by rcases hv with rfl | rfl | rfl | rfl <;> simp)
+      (by rcases hv with rfl | rfl | rfl | rfl <;> simp) (by rcases hv with rfl | rfl | rfl | rfl <;> simp)
   unfold State.checkGrants at h
   rw [ha] at h
   simp only [hn, Bool.false_eq_true, ↓reduceIte, hnt, hm] at h

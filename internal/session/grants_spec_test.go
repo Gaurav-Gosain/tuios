@@ -135,7 +135,8 @@ var gsVerbs = []string{"hello", "pane-grants", "set-pane-grants", "resolve-pane"
 	"set-agent-state", "ask-human", "request-approval", "send-agent-message", "send-text",
 	"send-keys", "run", "respond", "paste-buffer", "start-agent", "set-fan-verdict", "fan",
 	"list-buffers", "set-buffer", "add-task", "claim-task", "remove-task", "close-window",
-	"kill-session", "set-option", "new-window", "transfer-start", "transfer-list"}
+	"kill-session", "set-option", "new-window", "transfer-start", "transfer-list",
+	"take-hold", "release-hold"}
 
 // gsUniverse is the test daemon and the real names of the model's symbols:
 // pane pN is window pane[N], session sN is named sN with ID id[N].

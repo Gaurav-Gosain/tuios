@@ -13,6 +13,7 @@ internal/session/daemon_native.go
 internal/session/drop_files.go
 internal/session/fan_judge.go
 internal/session/grants_spec_test.go
+internal/session/holds.go
 internal/session/human_origin.go
 internal/session/mail_grant.go
 internal/session/manager.go
