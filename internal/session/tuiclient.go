@@ -1776,9 +1776,11 @@ func stateSeq(state *SessionState) uint64 {
 // with the push counted.
 //
 // A state with no push table is from a daemon that keeps none, and is taken as
-// it always was.
+// it always was. A daemon that keeps one says so with PushTable, also when
+// no client has pushed yet and the table is empty: a state handed out then
+// predates any push this client has made since.
 func (c *TUIClient) PredatesOwnPush(state *SessionState) bool {
-	if state == nil || state.PushSeen == nil {
+	if state == nil || (state.PushSeen == nil && !state.PushTable) {
 		return false
 	}
 	origin := c.pushOrigin.Load()

@@ -892,6 +892,12 @@ type SessionState struct {
 	// TUIClient.PredatesOwnPush. Wire only: it is about connections, which do
 	// not survive a restart, so it is never saved.
 	PushSeen map[string]uint64 `json:"-"`
+	// PushTable says the daemon keeps the push table. The table is empty
+	// until a client of the session pushes, and an empty map does not
+	// survive the wire, so PushSeen alone cannot tell "no push merged yet"
+	// from a daemon that keeps no table. A client that has pushed refuses
+	// a state with the flag and no entry for it. Wire only, like PushSeen.
+	PushTable bool `json:"-"`
 	// LayoutTreeOps says the session's clients send their BSP trees as ops.
 	// Wire only: this daemon always sets it, because a v0.12 client reads it
 	// and sends its trees in its pushes without it.
@@ -3483,7 +3489,7 @@ func (s *Session) snapshotStateLocked() *SessionState {
 	if s.state.WorkspaceLayoutModes != nil {
 		stateCopy.WorkspaceLayoutModes = maps.Clone(s.state.WorkspaceLayoutModes)
 	}
-	stateCopy.PushSeen = maps.Clone(s.pushSeen)
+	stateCopy.PushSeen, stateCopy.PushTable = maps.Clone(s.pushSeen), true
 	// A v0.12 client reads both and falls back to its old paths without
 	// them, so they stay on the wire, always on.
 	stateCopy.LayoutTreeOps = true
@@ -3824,7 +3830,7 @@ func (s *Session) updateStateFrom(state *SessionState, seen bool) (accepted, beh
 	// one client's focus move from another's, below.
 	origin := state.PushOrigin
 	s.notePushLocked(origin, state.PushSeq)
-	state.PushOrigin, state.PushSeq, state.PushSeen, state.SnapshotSeq = "", 0, nil, 0
+	state.PushOrigin, state.PushSeq, state.PushSeen, state.PushTable, state.SnapshotSeq = "", 0, nil, false, 0
 
 	accepted = true
 	unmoved := state.FocusUnmoved
