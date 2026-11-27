@@ -138,8 +138,9 @@ func (a *mailArchive) drain() {
 	}
 }
 
-// write appends lines to the session's file, cutting it first when it would
-// pass the cap. Callers hold wmu.
+// write appends lines to the session's file. Before a line that would pass
+// the cap, the file moves to .1 and a new file starts, so one large batch
+// cannot grow a file past the cap. Callers hold wmu.
 func (a *mailArchive) write(session string, lines [][]byte) error {
 	path, err := a.path(session)
 	if err != nil {
@@ -148,25 +149,43 @@ func (a *mailArchive) write(session string, lines [][]byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
-	size := 0
-	for _, l := range lines {
-		size += len(l) + 1
+	var size int64
+	if st, err := os.Stat(path); err == nil {
+		size = st.Size()
 	}
-	if st, err := os.Stat(path); err == nil && st.Size()+int64(size) > mailArchiveMaxBytes {
-		if err := os.Rename(path, path+".1"); err != nil {
-			return err
+	var buf bytes.Buffer
+	for len(lines) > 0 {
+		buf.Reset()
+		for len(lines) > 0 {
+			next := size + int64(buf.Len()+len(lines[0])+1)
+			if next > mailArchiveMaxBytes && size+int64(buf.Len()) > 0 {
+				break
+			}
+			buf.Write(lines[0])
+			buf.WriteByte('\n')
+			lines = lines[1:]
+		}
+		if buf.Len() > 0 {
+			if err := appendFile(path, buf.Bytes()); err != nil {
+				return err
+			}
+		}
+		if len(lines) > 0 {
+			if err := os.Rename(path, path+".1"); err != nil {
+				return err
+			}
+			size = 0
 		}
 	}
+	return nil
+}
+
+func appendFile(path string, b []byte) error {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return err
 	}
-	var buf bytes.Buffer
-	for _, l := range lines {
-		buf.Write(l)
-		buf.WriteByte('\n')
-	}
-	_, werr := f.Write(buf.Bytes())
+	_, werr := f.Write(b)
 	if cerr := f.Close(); werr == nil {
 		werr = cerr
 	}

@@ -14,6 +14,9 @@ func archivedBus(t *testing.T) *agentBus {
 	bus := newAgentBus()
 	bus.archive.dir = filepath.Join(t.TempDir(), "mail")
 	bus.archive.setOn(true)
+	// Registered after TempDir, so it runs first: a send at the end of a test
+	// can leave a write queued, and the folder must outlive that write.
+	t.Cleanup(func() { settleArchive(t, &bus.archive) })
 	return bus
 }
 
