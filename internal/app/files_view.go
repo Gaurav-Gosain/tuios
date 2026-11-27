@@ -272,6 +272,7 @@ func (m *OS) OpenFilesViewFind() tea.Cmd {
 // openFilesViewAt opens the view on dir of host.
 func (m *OS) openFilesViewAt(host, dir, origin string) tea.Cmd {
 	e := &m.explorer
+	m.filesGitStop()
 	*e = explorerState{open: true, origin: origin, sort: e.sort, reverse: e.reverse, hidden: e.hidden, gen: e.gen + 1, ids: e.ids, divX: -1}
 	t := &filesTab{ratio: filesRatioDefault}
 	t.sides[0] = m.newFilesSide(host)
@@ -293,6 +294,7 @@ func (m *OS) CloseFilesView() {
 	if m.quickLook.open && m.quickLook.files {
 		m.dropQuickLook()
 	}
+	m.filesGitStop()
 	*e = explorerState{sort: e.sort, reverse: e.reverse, hidden: e.hidden, gen: e.gen + 1, ids: e.ids, divX: -1}
 }
 

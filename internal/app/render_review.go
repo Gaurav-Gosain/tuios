@@ -1414,6 +1414,9 @@ func (m *OS) reviewKeyHints() []overlay.Hint {
 		if row, ok := m.reviewRowUnderCursor(); ok && row.hunk >= 0 && r.reviewIndexable() {
 			add("X", "revert")
 			add("o", "open")
+			if m.AttachedHost == "" {
+				add("O", "in files")
+			}
 		}
 	}
 	if n := r.unsentNotes(); n > 0 && !against {

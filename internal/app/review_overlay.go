@@ -196,6 +196,8 @@ type reviewState struct {
 	// pending is set while the first diff of a review is being read. The
 	// overlay is not shown yet.
 	pending bool
+	// openPath is the file the review opens on, from v in the Files view.
+	openPath string
 	// live is the live review's watch and reads. See review_live.go.
 	live reviewLiveState
 	// follow follows the agent that writes. See review_follow.go.
@@ -693,6 +695,11 @@ func (m *OS) applyReviewDiff(msg ReviewDiffMsg) {
 		defer m.reviewFollowOpen()
 		// A review with no files opens on the diff, which says why.
 		r.resetPlace(m.reviewOpensOnFiles() && len(r.files) > 0)
+		// v in the Files view opens the review on one file, in the diff.
+		if i := slices.IndexFunc(r.files, func(e reviewFileEntry) bool { return e.path == r.openPath }); r.openPath != "" && i >= 0 {
+			r.file, r.listFocus = i, false
+		}
+		r.openPath = ""
 	}
 }
 

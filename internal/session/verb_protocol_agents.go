@@ -142,6 +142,7 @@ func agentWorkVerbs() map[string]verbEntry {
 				{Name: "index", Type: "string", Accepted: reviewIndexModes},
 				{Name: "highlight", Type: "bool", Default: "false"},
 				{Name: "origins", Type: "bool", Default: "false"},
+				{Name: "dir", Type: "string"},
 			},
 			returns: []verbParam{
 				{Name: "session", Type: "string"},

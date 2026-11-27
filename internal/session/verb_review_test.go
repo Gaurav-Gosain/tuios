@@ -287,6 +287,30 @@ func TestSendReviewSendsEachNoteToItsReceiver(t *testing.T) {
 	}
 }
 
+// TestReviewDiffOfAFolder: review-diff with dir reads the repository that
+// holds a folder of this machine, with no pane and no notes. A folder in no
+// repository is not_repo, a pane without admin is refused, and dir takes no
+// window.
+func TestReviewDiffOfAFolder(t *testing.T) {
+	d, sp, repo, _, c, a, _ := reviewFixture(t)
+	writeIn(t, repo, "api.go", "package api\n\nfunc Do() error { return nil }\n")
+	res := result(t, callP(c, t, "review-diff", map[string]any{"dir": filepath.Join(repo, "."), "uncommitted": true}))
+	files, _ := res["files"].([]any)
+	if len(files) != 1 || res["window"] != "" || len(notesOf(t, res)) != 0 {
+		t.Errorf("review-diff of the folder = %v, want api.go, no pane and no notes", res)
+	}
+	mustRefuse(t, callP(c, t, "review-diff", map[string]any{"dir": t.TempDir()}), ErrVerbNotRepo, "a folder in no repository")
+	mustRefuse(t, callP(c, t, "review-diff", map[string]any{"dir": repo, "window": a}), ErrVerbInvalidParams, "dir with a window")
+
+	result(t, callP(c, t, "set-pane-grants", map[string]any{"session": "work", "window": a, "grants": []string{"read", "write"}}))
+	d.setApprovalPeer(func(*connState) (bool, string) { return true, a })
+	wantForbidden(t, "a pane without admin naming a folder", callP(dialVerb(t, sp), t, "review-diff", map[string]any{"session": "work", "dir": repo}))
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
+	if _, verr := d.verbReviewDiff(&connState{viaLink: true}, []byte(`{"dir":"`+repo+`"}`)); verr == nil || verr.Code != ErrVerbForbidden {
+		t.Errorf("review-diff with dir over a link = %v, want forbidden", verr)
+	}
+}
+
 // TestReviewAuthorEncodingsAgree: review.Compose labels notes by comparing
 // their author with the sender in the queue's encoding, so the two must
 // spell the person, a shell and a link the same way.

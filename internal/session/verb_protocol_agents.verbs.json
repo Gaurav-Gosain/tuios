@@ -781,6 +781,10 @@
       {
         "name": "origins",
         "description": "Say who made each changed line: the person or an agent, and in which turn. Each line gets origin, and the answer gets authors."
+      },
+      {
+        "name": "dir",
+        "description": "A folder on this machine, in place of session and window: the diff is of the repository that holds it, and has no notes. It takes no against and no index. Only a caller on this machine may give it: a link, and a pane without admin, are refused."
       }
     ],
     "returns": [

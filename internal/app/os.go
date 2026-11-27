@@ -1450,6 +1450,10 @@ type OS struct {
 	reviewFar tmlFar
 	// reviewLive is the live review's watch on the disk. See review_live.go.
 	reviewLive reviewLive
+	// filesGit is the Files view's git marks, and filesGitLive their watch.
+	// See files_view_git.go.
+	filesGit     filesGitState
+	filesGitLive reviewLive
 	// OverlayLeader is a leader pressed while an overlay owned the keyboard,
 	// held for one key to see whether it starts the screenshot chord. Nil when
 	// nothing is held. See routeOverlayScreenshot in internal/input.

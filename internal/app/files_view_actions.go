@@ -77,6 +77,8 @@ func (m *OS) FilesAction(act string) tea.Cmd {
 		m.FilesDivider(filesDividerStep)
 	case config.ActionFilesZoom:
 		m.FilesZoom()
+	case config.ActionFilesReview:
+		return m.FilesReview()
 	default:
 		if n, ok := strings.CutPrefix(act, "files_tab_"); ok && len(n) == 1 && n[0] >= '1' && n[0] <= '9' {
 			m.FilesGoTab(int(n[0] - '1'))

@@ -159,6 +159,7 @@ var actionTable = [...]ActionSpec{
 	{Name: "files_narrow", Desc: "Files: move the divider left", Run: RunView},
 	{Name: "files_widen", Desc: "Files: move the divider right", Run: RunView},
 	{Name: "files_zoom", Desc: "Files: show the side with the keys alone, or both", Run: RunView},
+	{Name: "files_review", Desc: "Files: review the changed file under the cursor", Run: RunView},
 	{Name: "files_tab_1", Desc: "Files: go to tab 1", Run: RunView},
 	{Name: "files_tab_2", Desc: "Files: go to tab 2", Run: RunView},
 	{Name: "files_tab_3", Desc: "Files: go to tab 3", Run: RunView},

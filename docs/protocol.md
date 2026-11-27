@@ -4854,6 +4854,14 @@ to 20, default 3), `index` (`unstaged` or `staged`; see below). A `base` that do
 `invalid_params`, and so is an `against` that is not another attempt of the
 fan. A named or recorded base is taken through its merge base with `HEAD`.
 
+`dir`, a folder on this machine, takes the place of `session` and `window`:
+the diff is of the repository that holds it. It has no `notes`, and its
+`session` and `window` are empty. It takes no `against` and no `index`. The
+Files view reads its git marks this way. Only a caller on this machine may
+give `dir`. A link is `forbidden`, and so is a pane without `admin`, which
+names a pane of its session instead. A folder in no repository is
+`not_repo`.
+
 ```json
 {"verb": "review-diff", "params": {"session": "api-fan-retry-2"}}
 ```

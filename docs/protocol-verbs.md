@@ -4212,6 +4212,7 @@ Read what the agent in a pane changed: the diff of its worktree against the base
 | `index` | string |  |  | Read the worktree's index instead of the base. unstaged is the index against the working files, untracked files included. staged is HEAD against the index. Omit for the diff against the base. Not with base, against or uncommitted. One of `unstaged` or `staged`. |
 | `highlight` | bool |  | `false` | Add the syntax colour and the changed part to each line: hl and changed. classes names the colour classes. |
 | `origins` | bool |  | `false` | Say who made each changed line: the person or an agent, and in which turn. Each line gets origin, and the answer gets authors. |
+| `dir` | string |  |  | A folder on this machine, in place of session and window: the diff is of the repository that holds it, and has no notes. It takes no against and no index. Only a caller on this machine may give it: a link, and a pane without admin, are refused. |
 
 | Result field | Type | Description |
 |---|---|---|

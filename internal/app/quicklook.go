@@ -351,12 +351,14 @@ type quickLookState struct {
 // quickLookFrame is a drawn panel and its key. Where the panel is placed is
 // not kept: the origin follows the screen and the rail on every render.
 type quickLookFrame struct {
-	mdGen              int
-	mdOpen             bool
-	dirSel, dirStats   int
-	run                *quickLookRun
-	ok                 bool
-	look               ckLookKey
+	mdGen            int
+	mdOpen           bool
+	dirSel, dirStats int
+	run              *quickLookRun
+	ok               bool
+	look             ckLookKey
+	// gitDraw is the Files view's git marks, which the Changes view draws.
+	gitDraw            uint64
 	res                *quickLookResult
 	target             quickLookTarget
 	scroll             int
@@ -606,6 +608,10 @@ func (m *OS) quickLookShow(t quickLookTarget) tea.Cmd {
 		m.quickLookDropPages()
 		ql.quickLookZoomReset()
 		ql.view, ql.viewScroll, ql.details, ql.column, ql.mdOpen = "", 0, nil, 0, false
+		if _, f := m.filesGitFileOf(t); f != nil {
+			// A changed file in the Files view opens on its changes.
+			ql.view = quickLookViewChanges
+		}
 		ql.dirSel = 0
 		ql.quickLookRunEnd()
 		ql.runProbed = false
@@ -1160,7 +1166,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 		prompt: ql.prompt, input: ql.input.String(), inputAt: ql.inputAt(), query: ql.query, status: ql.status, wrap: ql.wrap,
 		innerW: innerW, bodyH: bodyH, files: ql.files, key: key, seekKey: seekKey, insideKey: insideKey, border: m.Settings.OverlayBorder(),
 		canvas: pal.Canvas, fgMute: pal.FgMute, frame: pal.Frame, accent: pal.Accent,
-		accentBright: pal.AccentBright, fgDim: pal.FgDim}
+		accentBright: pal.AccentBright, fgDim: pal.FgDim, gitDraw: m.filesGit.draw}
 	var content string
 	var geo overlay.Geometry
 	var pic quickLookPic
@@ -1169,7 +1175,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 		k.prompt == f.prompt && k.input == f.input && k.query == f.query && k.status == f.status && k.wrap == f.wrap && k.view == f.view && k.mdOpen == f.mdOpen && k.mdGen == f.mdGen && k.dirSel == f.dirSel && k.dirStats == f.dirStats && k.run == f.run && k.viewScroll == f.viewScroll && k.column == f.column && k.details == f.details &&
 		k.innerW == f.innerW && k.bodyH == f.bodyH && k.files == f.files && k.key == f.key && k.seekKey == f.seekKey && k.insideKey == f.insideKey && k.border == f.border &&
 		k.canvas == f.canvas && k.fgMute == f.fgMute && k.frame == f.frame && k.accent == f.accent &&
-		k.accentBright == f.accentBright && k.fgDim == f.fgDim {
+		k.accentBright == f.accentBright && k.fgDim == f.fgDim && k.gitDraw == f.gitDraw {
 		content, geo = k.content, k.geo
 	} else {
 		ql.stripPics = ql.stripPics[:0]

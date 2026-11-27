@@ -159,16 +159,8 @@ func (d *Daemon) paneRepo(sess *Session, target WindowState) (reviewRepo, *verbE
 		return reviewRepo{root: canonRoot(wt.Path), repoRoot: wt.RepoRoot, recorded: recorded, info: wt}, nil
 	}
 	if cwd != "" {
-		if _, common, root, ok := gitstate.Locate(cwd); ok {
-			repoRoot := common
-			if filepath.Base(common) == ".git" {
-				repoRoot = filepath.Dir(common)
-			}
-			return reviewRepo{root: canonRoot(root), repoRoot: repoRoot}, nil
-		}
-		// A jj workspace with no ".git" of its own.
-		if r := gitstate.Find(cwd); r.JJ {
-			return reviewRepo{root: canonRoot(r.Root), repoRoot: r.Main}, nil
+		if repo, ok := dirRepo(cwd); ok {
+			return repo, nil
 		}
 	}
 	return reviewRepo{}, hintedVerbError(ErrVerbNotRepo, "no git repository is under window "+shortWindowID(target.ID), &VerbHint{
@@ -196,6 +188,9 @@ type reviewParams struct {
 	Highlight   bool     `json:"highlight"`
 	// Origins asks who made each line (review_origins.go).
 	Origins bool `json:"origins"`
+	// Dir is a folder on this machine, in place of a pane: the diff is of
+	// the repository that holds it. See reviewDirTarget.
+	Dir string `json:"dir"`
 }
 
 // verbReviewDiff answers review-diff.
@@ -233,7 +228,20 @@ func (d *Daemon) verbReviewDiff(cs *connState, params json.RawMessage) (any, *ve
 	if p.Index != "" && (p.Base != "" || p.Against != "" || p.Uncommitted) {
 		return nil, invalidParam("index", "index reads the worktree's own index, so it takes no base, against or uncommitted")
 	}
-	sess, target, repo, verr := d.reviewTarget(cs, p.Session, p.Window)
+	var (
+		sess   *Session
+		target WindowState
+		repo   reviewRepo
+		verr   *verbError
+	)
+	if p.Dir != "" {
+		if p.Window != "" || p.Against != "" || p.Index != "" {
+			return nil, invalidParam("dir", "dir names the folder in place of a pane, so it takes no window, against or index")
+		}
+		repo, verr = d.reviewDirTarget(cs, p.Dir)
+	} else {
+		sess, target, repo, verr = d.reviewTarget(cs, p.Session, p.Window)
+	}
 	if verr != nil {
 		return nil, verr
 	}
@@ -277,17 +285,25 @@ func (d *Daemon) verbReviewDiff(cs *connState, params json.RawMessage) (any, *ve
 
 	// The notes sit on the diff against the base. An index diff is a part of
 	// it, so it neither moves them nor names their base.
-	if againstName == "" && p.Index == "" {
+	// A folder has no pane, so it has no notes.
+	notes := []review.Note{}
+	if againstName == "" && p.Index == "" && p.Dir == "" {
 		d.reanchorReviewNotes(ctx, repo, target.ID, diff, p.Paths)
 		d.reviewNotes.setBase(repo.root, target.ID, diff.Base)
+	}
+	if p.Dir == "" {
+		notes, _ = d.reviewNotes.list(repo.root, target.ID)
 	}
 	if p.Highlight {
 		reviewHighlight(diff.Files)
 	}
-	notes, _ := d.reviewNotes.list(repo.root, target.ID)
+	sessName := ""
+	if sess != nil {
+		sessName = sess.Name()
+	}
 	out := map[string]any{
 		"type":        "review_diff",
-		"session":     sess.Name(),
+		"session":     sessName,
 		"window":      target.ID,
 		"repo_root":   repo.repoRoot,
 		"worktree":    repo.root,
@@ -319,6 +335,47 @@ func (d *Daemon) verbReviewDiff(cs *connState, params json.RawMessage) (any, *ve
 		out["against_tree"] = diff.AgainstTree
 	}
 	return out, nil
+}
+
+// reviewDirTarget resolves review-diff's dir: the repository holding a
+// folder on this machine. It is for the person's client, which shows the
+// git marks of the Files view with it: a pane reaches a repository through
+// its session's panes, so a pane without admin is refused, and so is a link,
+// whose caller is on another machine.
+func (d *Daemon) reviewDirTarget(cs *connState, dir string) (reviewRepo, *verbError) {
+	if cs != nil && (cs.viaLink || cs.paneOnly) {
+		return reviewRepo{}, newVerbError(ErrVerbForbidden, "review-diff with dir is for a client on this machine. Nothing was read")
+	}
+	if pa := d.paneAuthority(cs); pa != nil && !pa.grants.Has(GrantAdmin) {
+		return reviewRepo{}, grantForbidden("review-diff", pa, "dir needs the admin grant: name a pane of your session instead")
+	}
+	full, verr := expandPath(dir)
+	if verr != nil {
+		return reviewRepo{}, verr
+	}
+	if repo, ok := dirRepo(full); ok {
+		return repo, nil
+	}
+	return reviewRepo{}, hintedVerbError(ErrVerbNotRepo, "no git repository holds "+echoName(dir), &VerbHint{
+		Param:  "dir",
+		Detail: "Nothing was read. Name a folder inside a git repository.",
+	})
+}
+
+// dirRepo is the repository that holds dir, a folder on this machine.
+func dirRepo(dir string) (reviewRepo, bool) {
+	if _, common, root, ok := gitstate.Locate(dir); ok {
+		repoRoot := common
+		if filepath.Base(common) == ".git" {
+			repoRoot = filepath.Dir(common)
+		}
+		return reviewRepo{root: canonRoot(root), repoRoot: repoRoot}, true
+	}
+	// A jj workspace with no ".git" of its own.
+	if r := gitstate.Find(dir); r.JJ {
+		return reviewRepo{root: canonRoot(r.Root), repoRoot: r.Main}, true
+	}
+	return reviewRepo{}, false
 }
 
 // reviewGitFailed is the refusal for a git call that failed or ran out of

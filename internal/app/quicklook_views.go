@@ -35,6 +35,9 @@ const (
 	quickLookViewWords   = "words"
 	quickLookViewDiff    = "diff"
 	quickLookViewDetails = "details"
+	// quickLookViewChanges is a changed file's hunks in the Files view. See
+	// files_view_git.go.
+	quickLookViewChanges = "changes"
 	quickLookColGap      = 2
 	quickLookColMax      = 40
 )
@@ -190,6 +193,9 @@ func (m *OS) quickLookViews() []string {
 		}
 		views = append(views, quickLookViewMain)
 	}
+	if _, f := m.filesGitFileOf(ql.target); f != nil {
+		views = append([]string{quickLookViewChanges}, views...)
+	}
 	if ql.res != nil && ql.res.table != nil {
 		views = append(views, quickLookViewText)
 	}
@@ -219,6 +225,8 @@ func quickLookViewName(r *quickLookResult, v string) string {
 		return "Diff"
 	case quickLookViewDetails:
 		return "Details"
+	case quickLookViewChanges:
+		return "Changes"
 	}
 	switch r.kind {
 	case "dir":
@@ -412,6 +420,9 @@ func (m *OS) quickLookDrawView(c *ckCanvas, pal overlay.Palette, r *quickLookRes
 		return
 	}
 	switch ql.view {
+	case quickLookViewChanges:
+		m.filesGitDrawChanges(c, pal, top, rows, w)
+		return
 	case quickLookViewText:
 		lines = r.lines
 	case quickLookViewWords:

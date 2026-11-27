@@ -28,6 +28,9 @@ type tickStats struct {
 	// every frame of it drawn afresh, which an unchanged view never is.
 	AgentsTicks uint64
 	Cockpit     uint64
+	// FilesGitReads is every read of a repository for the Files view's git
+	// marks (files_view_git.go). With nothing changing it stays flat.
+	FilesGitReads uint64
 }
 
 // TickStats returns the maintenance-tick counters (ticks, work, renders). The
@@ -47,8 +50,8 @@ func (m *OS) DumpTickStats() {
 		return
 	}
 	st := m.tickStats
-	_ = os.WriteFile(path, fmt.Appendf(nil, "ticks=%d work=%d render=%d rail=%d motion=%d tickerWakes=%d tickerSleeps=%d agentsTicks=%d cockpit=%d\n",
-		st.Ticks, st.Work, st.Render, st.Rail, st.Motion, st.TickerWakes, st.TickerSleeps, st.AgentsTicks, st.Cockpit), 0o600)
+	_ = os.WriteFile(path, fmt.Appendf(nil, "ticks=%d work=%d render=%d rail=%d motion=%d tickerWakes=%d tickerSleeps=%d agentsTicks=%d cockpit=%d filesGitReads=%d\n",
+		st.Ticks, st.Work, st.Render, st.Rail, st.Motion, st.TickerWakes, st.TickerSleeps, st.AgentsTicks, st.Cockpit, st.FilesGitReads), 0o600)
 }
 
 // tickStatsDumpMsg asks Update to write the tick counters now. See

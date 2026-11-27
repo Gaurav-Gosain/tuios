@@ -1865,8 +1865,21 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 		// A folder of the Files view, read on its own goroutine.
 		m.HandleFilesList(msg)
 		m.renderSkipped = false
-		// Quick look beside the list follows the cursor the read placed.
-		return m, m.QuickLookSync()
+		// Quick look beside the list follows the cursor the read placed,
+		// and the git marks look for the folder's repository.
+		return m, tea.Batch(m.QuickLookSync(), m.filesGitSync())
+	case filesGitRootsMsg:
+		return m, m.applyFilesGitRoots(msg)
+	case filesGitMsg:
+		cmd := m.applyFilesGit(msg)
+		m.renderSkipped = false
+		return m, cmd
+	case filesGitReadyMsg:
+		return m, m.applyFilesGitReady(msg)
+	case filesGitChangedMsg:
+		return m, m.applyFilesGitChanged(msg)
+	case filesGitGoMsg:
+		return m, m.applyFilesGitGo(msg)
 	case filesReadingMsg:
 		m.HandleFilesReading(msg)
 		return m, nil

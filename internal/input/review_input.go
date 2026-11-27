@@ -25,6 +25,7 @@ import (
 //	X                revert the hunk in the working file; your own lines
 //	                 are asked about first (y reverts)
 //	o                open the file in an editor pane at the cursor's line
+//	O                show the file in the Files view
 //	tab              the file list or the diff
 //	enter            in the file list: open that file; on a hunk's header:
 //	                 fold or unfold the hunk
@@ -205,6 +206,8 @@ func handleReviewInput(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		return o, o.ReviewRevert()
 	case "o":
 		return o, o.ReviewOpenEditor()
+	case "O":
+		return o, o.ReviewShowInFiles()
 	case "h", "left":
 		o.ReviewScrollX(-1)
 	case "l", "right":

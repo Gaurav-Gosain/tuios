@@ -288,6 +288,8 @@ func (m *OS) drawFilesSide(c *ckCanvas, pal overlay.Palette, g filesGlyphs, s *f
 	if showSize {
 		nameW = sizeR - filesSizeW - 1 - nameX
 	}
+	// The git marks take the end of the name column. See files_view_git.go.
+	nameW -= m.filesGitMarkW(s)
 	m.drawFilesRows(c, pal, s, b, y, rows, nameX, nameW, sizeR, modR, showSize, showMod, keys)
 	m.drawFilesFooter(c, pal, s, x0, right, footY, keys)
 }
@@ -404,6 +406,7 @@ func (m *OS) drawFilesRows(c *ckCanvas, pal overlay.Palette, s *filesSide, b fil
 			c.fill(b.x, ry, b.w, 1, ckColor(cmp.Or[color.Color](pal.RowSelQuiet, pal.RowSel)))
 		}
 		c.draw(nameX-1, ry, nameW+1, m.sidebarFileRow(fileRowSpec{Kind: sidebarRowFileEntry, Name: en.Name, Dir: en.Dir, Icon: en.Icon}, nameW+1, pal, st))
+		m.filesGitDrawMark(c, pal, s, en, nameX+nameW, ry)
 		if idx >= len(s.infos) {
 			continue
 		}
@@ -478,6 +481,10 @@ func (m *OS) filesHints() []filesHint {
 		act(config.ActionFilesQuickLook, "look")
 	}
 	act(config.ActionFilesOpen, "open")
+	if !e.look && m.filesCursorChanged() {
+		// With quick look beside the list, its own v steps its views.
+		act(config.ActionFilesReview, "review")
+	}
 	act(config.ActionFilesEdit, "edit in a pane")
 	act(config.ActionFilesOpenSystem, "open with system")
 	act(config.ActionFilesInsertPath, "type path")
