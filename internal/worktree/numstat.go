@@ -246,8 +246,10 @@ func StageAll(ctx context.Context, dir string, env, specs, exclude []string) err
 // The size is read from the list stageAll stages, just before it stages it.
 // A caller's own list of large files is older: an agent that writes while a
 // snapshot runs can make a file after it, which git would then read whole.
-// What is left is a file that grows in the moment between the size check
-// and git's read of it.
+// A file can still grow in the moment between the size check and git's read
+// of it. git then stores it whole, so the staged sizes are read back and an
+// entry past the limit is taken out of the index before any tree is written
+// (dropLargeStaged).
 func stageAll(ctx context.Context, dir string, env, specs, exclude []string, limit int64) ([]string, error) {
 	if len(specs) == 0 {
 		specs = []string{"."}
@@ -273,7 +275,7 @@ func stageAll(ctx context.Context, dir string, env, specs, exclude []string, lim
 		skip[filepath.ToSlash(p)] = true
 	}
 	var in strings.Builder
-	var late []string
+	var late, added []string
 	seen := map[string]bool{}
 	for p := range strings.SplitSeq(out, "\x00") {
 		// A path that ends in a slash is a repository inside the work tree
@@ -288,6 +290,7 @@ func stageAll(ctx context.Context, dir string, env, specs, exclude []string, lim
 				late = append(late, p)
 				continue
 			}
+			added = append(added, p)
 		}
 		in.WriteString(p)
 		in.WriteByte(0)
@@ -295,8 +298,69 @@ func stageAll(ctx context.Context, dir string, env, specs, exclude []string, lim
 	if in.Len() == 0 {
 		return late, nil
 	}
-	_, err = runStdin(ctx, dir, env, in.String(), "update-index", "--add", "--remove", "-z", "--stdin")
-	return late, err
+	if stageAllBeforeAdd != nil {
+		stageAllBeforeAdd()
+	}
+	if _, err := runStdin(ctx, dir, env, in.String(), "update-index", "--add", "--remove", "-z", "--stdin"); err != nil {
+		return late, err
+	}
+	grew, err := dropLargeStaged(ctx, dir, env, specs, added, limit)
+	return append(late, grew...), err
+}
+
+// stageAllBeforeAdd, when set, runs between stageAll's size check and its
+// update-index. Tests grow a file there.
+var stageAllBeforeAdd func()
+
+// dropLargeStaged takes each of paths, untracked files stageAll staged into
+// the index env names, out of that index when its staged blob is larger than
+// limit bytes, and returns those paths. Such a file grew after the size
+// check. No tree holds it, so its blob is unreachable and git gc prunes it.
+// It reads the index once (ls-files) and the sizes in one cat-file.
+func dropLargeStaged(ctx context.Context, dir string, env, specs, paths []string, limit int64) ([]string, error) {
+	if len(paths) == 0 || limit <= 0 {
+		return nil, nil
+	}
+	want := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		want[p] = true
+	}
+	out, err := runCtx(ctx, dir, env, append([]string{"ls-files", "-z", "--stage", "--"}, specs...)...)
+	if err != nil {
+		return nil, err
+	}
+	var oids, names []string
+	for e := range strings.SplitSeq(out, "\x00") {
+		// MODE OID STAGE, a tab, then the path.
+		meta, p, ok := strings.Cut(e, "\t")
+		if !ok || !want[p] {
+			continue
+		}
+		if f := strings.Fields(meta); len(f) == 3 && f[0] != "160000" {
+			oids = append(oids, f[1])
+			names = append(names, p)
+		}
+	}
+	if len(oids) == 0 {
+		return nil, nil
+	}
+	sizes, err := runStdin(ctx, dir, env, strings.Join(oids, "\n")+"\n", "cat-file", "--batch-check=%(objectsize)")
+	if err != nil {
+		return nil, err
+	}
+	var drop []string
+	for i, line := range strings.Split(strings.TrimSuffix(sizes, "\n"), "\n") {
+		if n, err := strconv.ParseInt(strings.TrimSpace(line), 10, 64); err == nil && i < len(names) && n > limit {
+			drop = append(drop, names[i])
+		}
+	}
+	if len(drop) == 0 {
+		return nil, nil
+	}
+	if _, err := runStdin(ctx, dir, env, strings.Join(drop, "\x00")+"\x00", "update-index", "--force-remove", "-z", "--stdin"); err != nil {
+		return nil, err
+	}
+	return drop, nil
 }
 
 // WorkingNumstat counts what the worktree at path changed against base, a
