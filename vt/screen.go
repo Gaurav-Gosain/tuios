@@ -17,6 +17,11 @@ type screen struct {
 	scroll uv.Rectangle
 	// scrollback is the scrollback buffer for lines that have scrolled off the top.
 	scrollback *Scrollback
+	// lineShift, when set, is told of every line shift that moves rows
+	// within the screen: n rows inserted at row y when n > 0, or deleted
+	// there when n < 0, inside area. A scroll that moves rows into the
+	// scrollback is not one.
+	lineShift func(y, n int, area uv.Rectangle)
 	// rf holds the reflow's buffers between reflows (reflow.go).
 	rf reflowScratch
 	// wideCol says the cursor stands on a row a reflow left frozen, at
@@ -572,7 +577,9 @@ func (s *screen) ScrollUp(n int) {
 				s.scrollback.markNewest(s.buf.wrap[scroll.Min.Y+i])
 			}
 		}
-		s.DeleteLine(n)
+		// Rows that went to the scrollback keep their lines, so only a
+		// shift that drops them is reported.
+		s.deleteLine(n, !save)
 	}
 	s.setCursor(x, y, false)
 }
@@ -675,6 +682,9 @@ func (s *screen) InsertLine(n int) bool {
 
 	s.buf.InsertLineArea(y, n, s.blankCell(), s.scroll)
 	s.blankWideRunesCutByMargins()
+	if s.lineShift != nil {
+		s.lineShift(y, n, s.scroll)
+	}
 
 	return true
 }
@@ -684,6 +694,11 @@ func (s *screen) InsertLine(n int) bool {
 // are moved up, with blank lines inserted at the bottom of scroll region.
 // It returns true if the operation was successful.
 func (s *screen) DeleteLine(n int) bool {
+	return s.deleteLine(n, true)
+}
+
+// deleteLine is DeleteLine. report says whether to tell lineShift.
+func (s *screen) deleteLine(n int, report bool) bool {
 	if n <= 0 {
 		return false
 	}
@@ -699,6 +714,9 @@ func (s *screen) DeleteLine(n int) bool {
 
 	s.buf.DeleteLineArea(y, n, s.blankCell(), scroll)
 	s.blankWideRunesCutByMargins()
+	if report && s.lineShift != nil {
+		s.lineShift(y, -n, scroll)
+	}
 
 	return true
 }

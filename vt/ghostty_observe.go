@@ -41,6 +41,8 @@ func (t *GhosttyTerminal) callUnlocked(f func()) {
 
 func (t *GhosttyTerminal) observeCtrl(b byte) {
 	switch b {
+	case '\n', '\v', '\f':
+		t.observeLineShift(shiftIndex, 1)
 	case 0x0e: // SO: G1 into GL
 		t.gl = 1
 	case 0x0f: // SI: G0 into GL
@@ -86,6 +88,10 @@ func (t *GhosttyTerminal) observeESC(inter, final byte) {
 					cb.ProgramStatus(progstatus.Event{Reset: true})
 				}
 			})
+		case 'D', 'E': // IND, NEL
+			t.observeLineShift(shiftIndex, 1)
+		case 'M': // RI
+			t.observeLineShift(shiftReverseIndex, 1)
 		case 'H': // HTS
 			t.setTabStopLocked()
 		case '7': // DECSC
@@ -260,6 +266,26 @@ func (t *GhosttyTerminal) observeCSI(prefix, inter, final byte, params []byte) {
 		t.softResetShadowLocked()
 	case final == 'J' && prefix == 0 && inter == 0:
 		t.observeEraseDisplay(params)
+	case (final == 'L' || final == 'M' || final == 'S' || final == 'T') && prefix == 0 && inter == 0:
+		// CSI T with more than one parameter is a mouse tracking request,
+		// which moves no rows.
+		if csiParamCount(params) > 1 {
+			return
+		}
+		n := 1
+		if v, ok := csiFirstParam(params); ok && v > 1 {
+			n = v
+		}
+		kind := shiftInsert
+		switch final {
+		case 'M':
+			kind = shiftDelete
+		case 'S':
+			kind = shiftUp
+		case 'T':
+			kind = shiftDown
+		}
+		t.observeLineShift(kind, n)
 	case (final == 'g' || final == 'W') && inter == 0:
 		t.observeTabControl(prefix, final, params)
 	case final == 't' && prefix == 0 && inter == 0:
@@ -424,6 +450,66 @@ func (t *GhosttyTerminal) observeDecMode(params []byte, set bool) {
 			// 2026h through 2026l, in one chunk. The end-of-write refresh
 			// reads the library's mode and agrees.
 			t.noteSyncOutput(set)
+		}
+	}
+}
+
+// lineShiftKind names the sequences that move rows within the screen.
+type lineShiftKind byte
+
+const (
+	shiftInsert       lineShiftKind = iota // IL
+	shiftDelete                            // DL
+	shiftUp                                // SU
+	shiftDown                              // SD
+	shiftIndex                             // LF, VT, FF, IND and NEL
+	shiftReverseIndex                      // RI
+)
+
+// observeLineShift moves the semantic markers with the rows a line shift
+// moves, as the pure emulator's screen reports them (screen.lineShift). It
+// runs before the library takes the sequence, so it reads the cursor the
+// sequence acts on. It costs one atomic load unless a marker exists.
+func (t *GhosttyTerminal) observeLineShift(kind lineShiftKind, n int) {
+	if t.semanticMarkers == nil || !t.semanticMarkers.nonEmpty.Load() || t.closed.Load() {
+		return
+	}
+	reg := t.scrollRegion
+	// A scroll of a region at the top that spans the width puts the rows in
+	// the scrollback, where they keep their lines.
+	toHistory := reg.Min.Y == 0 && reg.Min.X == 0 && reg.Max.X >= t.width
+	if (kind == shiftIndex || kind == shiftUp) && toHistory {
+		return
+	}
+	t.scanner.flushOut()
+	if t.activeAltLiveLocked() {
+		return
+	}
+	cx, _ := t.term.CursorX()
+	cy, _ := t.term.CursorY()
+	x, y := int(cx), int(cy)
+	inCols := x >= reg.Min.X && x < reg.Max.X
+	base := t.scrollbackLenLocked()
+	switch kind {
+	case shiftInsert, shiftDelete:
+		if !inCols || y < reg.Min.Y || y >= reg.Max.Y {
+			return
+		}
+		if kind == shiftDelete {
+			n = -n
+		}
+		t.semanticMarkers.moveRows(base, y, n, reg)
+	case shiftUp:
+		t.semanticMarkers.moveRows(base, reg.Min.Y, -n, reg)
+	case shiftDown:
+		t.semanticMarkers.moveRows(base, reg.Min.Y, n, reg)
+	case shiftIndex:
+		if inCols && y == reg.Max.Y-1 {
+			t.semanticMarkers.moveRows(base, reg.Min.Y, -1, reg)
+		}
+	case shiftReverseIndex:
+		if inCols && y == reg.Min.Y {
+			t.semanticMarkers.moveRows(base, reg.Min.Y, 1, reg)
 		}
 	}
 }

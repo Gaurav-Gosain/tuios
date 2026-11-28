@@ -375,6 +375,15 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 		if y < 0 {
 			y = 0
 		}
+		// A print arms a wrap only at the right margin or the last column.
+		// A wrap pending at another column, left there by DECRC or by
+		// turning DECLRMM off, is armed under a right margin at the cursor.
+		// Turning the mode off again keeps the wrap pending and puts the
+		// margins back to the full width.
+		armAtMargin := r.pendingWrap && !r.modes[69] && r.cursorX > 0 && r.cursorX < t.width-1
+		if armAtMargin {
+			fmt.Fprintf(&seq, "\x1b[?69h\x1b[1;%ds", r.cursorX+1)
+		}
 		fmt.Fprintf(&seq, "\x1b[%d;%dH", y+1, x+1)
 		if r.pendingWrap {
 			if reprintAs != "" && reprintAs != cursorCell(r.grids[active], r.cursorX, r.cursorY).Content {
@@ -396,6 +405,9 @@ func (t *GhosttyTerminal) flushRestoreLocked() {
 				appendReprint(&seq, r.grids[active], activeProt, r.cursorX, r.cursorY, y, x-r.cursorX)
 				seq.Write(charsets.Bytes())
 			}
+		}
+		if armAtMargin {
+			seq.WriteString("\x1b[?69l")
 		}
 	}
 

@@ -44,13 +44,8 @@ func report(t *testing.T, bugs backendBugs, problems []string) {
 
 // Known bugs, by what causes them.
 var (
-	pureWrapsStay = backendBugs{pure: "the pure emulator keeps a soft wrap on its row number, so the wrap does not move with the row"}
-	marksStay     = backendBugs{
-		pure:    "a prompt mark keeps the row it was printed on, so it does not move with the cells",
-		ghostty: "a prompt mark keeps the row it was printed on, so it does not move with the cells",
-	}
-	reprintArmsWrap = backendBugs{ghostty: "the restore prints the cursor cell again to arm the wrap, which arms it only at the last column or the right margin"}
-	pureSkinTone    = backendBugs{pure: "the pure emulator takes the width of x/ansi, which keeps a narrow base one cell wide"}
+	reprintArmsWrap = backendBugs{ghostty: "libghostty-vt arms a wrap only at the right margin, and the restore cannot set the margins after that without DECRC, which would overwrite the guest's saved cursor"}
+	pureSkinTone    = backendBugs{pure: "the pure emulator measures a cluster with x/ansi, as the compositor does, and x/ansi keeps a narrow base one cell wide; the two must agree, so this waits for a width both use"}
 )
 
 func newBackend(t *testing.T, cols, rows int, in string) vt.Terminal {
@@ -121,24 +116,24 @@ func TestBackendLineMovesKeepSoftWraps(t *testing.T) {
 		bugs            backendBugs
 	}{
 		{"no operation", "", "w.w.w.w.", nil},
-		{"IL above a pair", "\x1b[3;1H\x1b[L", "w..w.w..", pureWrapsStay},
-		{"IL 3 above a pair", "\x1b[3;1H\x1b[3L", "w....w..", pureWrapsStay},
+		{"IL above a pair", "\x1b[3;1H\x1b[L", "w..w.w..", nil},
+		{"IL 3 above a pair", "\x1b[3;1H\x1b[3L", "w....w..", nil},
 		{"IL past the bottom", "\x1b[3;1H\x1b[99L", "w.......", nil},
 		{"DL 2 at a pair", "\x1b[3;1H\x1b[2M", "w.w.w...", nil},
 		{"DL past the bottom", "\x1b[3;1H\x1b[99M", "w.......", nil},
-		{"IL inside a pair", "\x1b[2;1H\x1b[L", "...w.w..", pureWrapsStay},
-		{"IL inside a pair, region", "\x1b[3;6r\x1b[4;1H\x1b[L", "w.....w.", pureWrapsStay},
+		{"IL inside a pair", "\x1b[2;1H\x1b[L", "...w.w..", nil},
+		{"IL inside a pair, region", "\x1b[3;6r\x1b[4;1H\x1b[L", "w.....w.", nil},
 		{"DL the top of a pair", "\x1b[3;1H\x1b[M", "w..w.w..", nil},
-		{"DL the bottom of a pair", "\x1b[2;1H\x1b[M", ".w.w.w..", pureWrapsStay},
-		{"DL 2 across two pairs", "\x1b[4;1H\x1b[2M", "w...w...", pureWrapsStay},
-		{"DL inside a pair, region", "\x1b[3;6r\x1b[4;1H\x1b[M", "w..w..w.", pureWrapsStay},
-		{"IL, region holds whole pairs", "\x1b[3;6r\x1b[3;1H\x1b[L", "w..w..w.", pureWrapsStay},
+		{"DL the bottom of a pair", "\x1b[2;1H\x1b[M", ".w.w.w..", nil},
+		{"DL 2 across two pairs", "\x1b[4;1H\x1b[2M", "w...w...", nil},
+		{"DL inside a pair, region", "\x1b[3;6r\x1b[4;1H\x1b[M", "w..w..w.", nil},
+		{"IL, region holds whole pairs", "\x1b[3;6r\x1b[3;1H\x1b[L", "w..w..w.", nil},
 		{"DL, region holds whole pairs", "\x1b[3;6r\x1b[3;1H\x1b[M", "w..w..w.", nil},
-		{"IL, region edges split pairs", "\x1b[2;5r\x1b[2;1H\x1b[L", "...w..w.", pureWrapsStay},
-		{"DL, region edges split pairs", "\x1b[2;5r\x1b[2;1H\x1b[M", ".w....w.", pureWrapsStay},
-		{"SU, region edges split pairs", "\x1b[2;5r\x1b[S", ".w....w.", pureWrapsStay},
-		{"SD, region edges split pairs", "\x1b[2;5r\x1b[T", "...w..w.", pureWrapsStay},
-		{"RI, region edges split pairs", "\x1b[2;5r\x1b[2;1H\x1bM", "...w..w.", pureWrapsStay},
+		{"IL, region edges split pairs", "\x1b[2;5r\x1b[2;1H\x1b[L", "...w..w.", nil},
+		{"DL, region edges split pairs", "\x1b[2;5r\x1b[2;1H\x1b[M", ".w....w.", nil},
+		{"SU, region edges split pairs", "\x1b[2;5r\x1b[S", ".w....w.", nil},
+		{"SD, region edges split pairs", "\x1b[2;5r\x1b[T", "...w..w.", nil},
+		{"RI, region edges split pairs", "\x1b[2;5r\x1b[2;1H\x1bM", "...w..w.", nil},
 		// Left and right margins move cells, not rows, so every row keeps
 		// its state. This is what xterm does.
 		{"IL inside left and right margins", "\x1b[?69h\x1b[3;8s\x1b[3;3H\x1b[L", "w.w.w.w.", nil},
@@ -170,32 +165,51 @@ func TestBackendLineMovesClearSpacerHead(t *testing.T) {
 			if c := term.CellAt(4, 0); c == nil || c.Width != 1 || (c.Content != "" && c.Content != " ") {
 				problems = append(problems, fmt.Sprintf("cell (4,0) = %+v, want a blank of width 1", c))
 			}
-			report(t, pureWrapsStay, problems)
+			report(t, nil, problems)
 		})
 	}
 }
 
-// TestBackendLineMovesKeepPromptMark prints a prompt with OSC 133 A, then runs
-// IL or DL inside left and right margins. Margins 3;10 leave the prompt where
-// it is. Margins 1;8 hold it, so it moves with the cells. Either way the row
-// the prompt is on afterwards must hold the prompt mark.
+// TestBackendLineMovesKeepPromptMark prints a prompt with OSC 133 A, then
+// moves rows. The mark must stay on the row the prompt is on afterwards, and
+// go with it when the row is deleted or pushed out of the region. Inside left
+// and right margins only the cells between the margins move, so margins 3;10
+// leave the prompt where it is and margins 1;8 move it.
 func TestBackendLineMovesKeepPromptMark(t *testing.T) {
+	const gone = -99
+	prompt := func(row int) string {
+		return fmt.Sprintf("\x1b[%d;1H\x1b]133;A\x07$ \x1b]133;C\x07", row+1)
+	}
 	for _, tc := range []struct {
-		seq, margins    string
-		promptY, checkY int
-		bugs            backendBugs
+		name string
+		in   string
+		// want is the screen row of the mark, negative in the scrollback,
+		// or gone.
+		want int
 	}{
-		{"\x1b[L", "\x1b[3;10s", 3, 3, nil},
-		{"\x1b[L", "\x1b[1;8s", 2, 3, marksStay},
-		{"\x1b[M", "\x1b[3;10s", 2, 2, nil},
-		{"\x1b[M", "\x1b[1;8s", 3, 2, marksStay},
+		{"IL inside margins that leave it", prompt(3) + "\x1b[?69h\x1b[3;10s\x1b[3;3H\x1b[L", 3},
+		{"IL inside margins that hold it", prompt(2) + "\x1b[?69h\x1b[1;8s\x1b[3;3H\x1b[L", 3},
+		{"DL inside margins that leave it", prompt(2) + "\x1b[?69h\x1b[3;10s\x1b[3;3H\x1b[M", 2},
+		{"DL inside margins that hold it", prompt(3) + "\x1b[?69h\x1b[1;8s\x1b[3;3H\x1b[M", 2},
+		{"IL above it", prompt(2) + "\x1b[2;1H\x1b[L", 3},
+		{"IL pushes it off the bottom", prompt(4) + "\x1b[2;1H\x1b[L", gone},
+		{"DL of its row", prompt(2) + "\x1b[3;1H\x1b[M", gone},
+		{"DL above it", prompt(2) + "\x1b[1;1H\x1b[M", 1},
+		{"IL below it", prompt(1) + "\x1b[3;1H\x1b[2L", 1},
+		{"LF at the bottom of a region", prompt(2) + "\x1b[2;4r\x1b[4;1H\n", 1},
+		{"LF at the bottom of a region, its top row", prompt(1) + "\x1b[2;4r\x1b[4;1H\n", gone},
+		{"RI at the top of a region", prompt(2) + "\x1b[2;4r\x1b[2;1H\x1bM", 3},
+		{"SU in a region", prompt(2) + "\x1b[2;4r\x1b[S", 1},
+		{"SD in a region", prompt(2) + "\x1b[2;4r\x1b[T", 3},
+		{"LF into the scrollback", prompt(0) + "\x1b[5;1H\n", -1},
+		{"SU into the scrollback", prompt(1) + "\x1b[2S", -1},
 	} {
-		t.Run(fmt.Sprintf("%q margins %q", tc.seq, tc.margins), func(t *testing.T) {
-			in := fmt.Sprintf("\x1b[%d;1H\x1b]133;A\x07$ \x1b]133;C\x07", tc.promptY+1) +
-				"\x1b[?69h" + tc.margins + "\x1b[3;3H" + tc.seq
-			term := newBackend(t, 10, 5, in)
-			if c := term.CellAt(0, tc.checkY); c == nil || c.Content != "$" {
-				t.Fatalf("the prompt is not on row %d\n%s", tc.checkY, screenText(term))
+		t.Run(tc.name, func(t *testing.T) {
+			term := newBackend(t, 10, 5, tc.in)
+			if tc.want >= 0 {
+				if c := term.CellAt(0, tc.want); c == nil || c.Content != "$" {
+					t.Fatalf("the prompt is not on row %d\n%s", tc.want, screenText(term))
+				}
 			}
 			var rows []int
 			for _, m := range term.SemanticMarkers().Markers() {
@@ -203,11 +217,13 @@ func TestBackendLineMovesKeepPromptMark(t *testing.T) {
 					rows = append(rows, m.AbsLine-term.ScrollbackLen())
 				}
 			}
-			var problems []string
-			if len(rows) != 1 || rows[0] != tc.checkY {
-				problems = append(problems, fmt.Sprintf("prompt marks on rows %v, want [%d]", rows, tc.checkY))
+			want := []int{tc.want}
+			if tc.want == gone {
+				want = nil
 			}
-			report(t, tc.bugs, problems)
+			if fmt.Sprint(rows) != fmt.Sprint(want) {
+				t.Errorf("prompt marks on rows %v, want %v\n%s", rows, want, screenText(term))
+			}
 		})
 	}
 }
@@ -228,7 +244,7 @@ func TestBackendSnapshotKeepsPendingWrap(t *testing.T) {
 	}{
 		{"at the right margin", margin, "X", true, nil},
 		{"saved with DECSC", margin + "\x1b7\r\n", "\x1b8X", false, nil},
-		{"margins turned off", margin + "\x1b[?69l", "X", true, reprintArmsWrap},
+		{"margins turned off", margin + "\x1b[?69l", "X", true, nil},
 		{"inside wider margins", margin + "\x1b7\x1b[1;20s\x1b8", "X", true, reprintArmsWrap},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
