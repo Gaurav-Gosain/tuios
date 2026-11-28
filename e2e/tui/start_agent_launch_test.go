@@ -57,6 +57,12 @@ exec sleep 600
 // Negative control, recorded in NEGATIVE_CONTROLS.md: with withChoice adding
 // no flags, the argv check fails.
 func TestStartAgentLaunchChoiceAndReadiness(t *testing.T) {
+	// The daemon gets a PATH with no agent on it. agent-readiness and
+	// start-agent fall back to the daemon's PATH for a program the caller's
+	// lacks, and the suite's PATH holds a stub of every agent CLI, so the
+	// "not installed" case read the stub as installed.
+	sysPath := agentFreePath("/usr/bin", "/bin")
+	t.Setenv("PATH", sysPath)
 	base := t.TempDir()
 	killDaemon(t, base)
 	if out, err := tuiosCLI(t, base, "new", "work", "--detach"); err != nil {
@@ -86,8 +92,6 @@ func TestStartAgentLaunchChoiceAndReadiness(t *testing.T) {
 		}
 		return folder, argv
 	}
-	sysPath := agentFreePath("/usr/bin", "/bin")
-
 	readiness := func(path string) (installed bool, signedIn string, raw string) {
 		t.Helper()
 		params, _ := json.Marshal(map[string]any{"harnesses": []string{"claude-code"}, "env": map[string]string{"PATH": path}})
@@ -170,13 +174,10 @@ func TestStartAgentLaunchChoiceAndReadiness(t *testing.T) {
 		t.Fatalf("start-agent: %v\n%s", err, out)
 	}
 	var argv []byte
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		if argv, err = os.ReadFile(argvFile); err == nil && len(argv) > 0 {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+	waitUntil(t, "the agent writes its argv", 10*time.Second, func() (bool, string) {
+		argv, _ = os.ReadFile(argvFile)
+		return len(argv) > 0, string(argv)
+	})
 	want := "--model\nopus\n--effort\nhigh\n--permission-mode\nplan\n--verbose\n"
 	if string(argv) != want {
 		t.Errorf("ASSERTION: the agent started with argv %q, want %q\n%s", argv, want, out)
