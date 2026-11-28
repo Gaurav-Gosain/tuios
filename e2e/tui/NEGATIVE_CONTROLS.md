@@ -19906,3 +19906,21 @@ editor, as dash does.
 | The `spPrompt` calls left out (the tree before the fix) | `TestPhoneStreamsAPaneAndAnswersTheInbox`, `TestStreamPaneHeldToTheLinkPolicy`, `TestStreamPaneLeaseChurn`, `TestStreamPaneFromAPane` | `no SZ- line showed`, with `sh-3.2$ SZ-22x78` on the screen | **caught** |
 | With the fix, the same forced runs | the 8 tests that use `limitsDaemon` or `spSize` | 8 of 8 pass | n/a |
 | With the fix, no forced start, `-count=3` | the same 8 tests | 24 of 24 pass | n/a |
+## list-windows and get-window say what holds a pane's terminal
+
+Run on 2026-11-27 on macOS (darwin/arm64). Six controls, each this branch with one change, against the `TestForeground*` tests of `internal/session/pane_foreground_test.go`:
+
+| Change | Failing test | Failure | Verdict |
+| --- | --- | --- | --- |
+| Cuts the wiring: `if p.Foreground {` in `verbListWindows` is `if false {` | all four | `the pane at its prompt: foreground_state <nil>, want shell` | caught |
+| Cuts the gate: `if p.Foreground {` in `verbListWindows` is `if true {` | `TestForegroundStateTellsAPromptFromAProgram` | `list-windows read the foreground without being asked` | caught |
+| Cuts the wiring: both `d.addForeground` calls in `verbGetWindow` are removed | `TestForegroundStateTellsAPromptFromAProgram`, `TestForegroundStateIsUnknownWhenTheKernelDoesNotSay`, `TestForegroundArgumentsNeedMoreThanRead` | `get-window, the pane running sleep: foreground_state <nil>, want program` | caught |
+| The state is the bare group check: `case pgid != fg.shellPID:` in `readPaneForeground` | `TestForegroundStateOfAPaneThatRunsNoShell` | `a pane that runs sleep and no shell: foreground_state shell` | caught |
+| A read that fails starts as `shell`, not `unknown` | `TestForegroundStateIsUnknownWhenTheKernelDoesNotSay` | `list-windows: foreground_state shell, want unknown` | caught |
+| `seesArguments` answers true for every caller | `TestForegroundArgumentsNeedMoreThanRead` | `get-window gave a read-only pane another pane's argv: [sleep 4321]` | caught |
+
+The gate control has its positive half in the same fixture: the test reads `foreground_state` with `foreground: true` before it checks that a plain `list-windows` has none.
+
+Not covered: `get-window` answered by an attached client. The unit tests have no client, so the `addForeground` call on that path is held only by the control that removes both calls.
+
+Repeat with `go test ./internal/session/ -run 'TestForeground' -count=1`.

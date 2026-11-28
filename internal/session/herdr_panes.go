@@ -7,7 +7,6 @@ import (
 
 	"github.com/Gaurav-Gosain/tuios/internal/integration"
 	tlayout "github.com/Gaurav-Gosain/tuios/internal/layout"
-	"github.com/Gaurav-Gosain/tuios/internal/ptyspawn"
 )
 
 // herdr's pane navigation, zoom, process and agent start methods, and
@@ -175,48 +174,8 @@ func (d *Daemon) herdrPaneProcessInfo(cs *connState, in *herdrIn) (*herdrResult,
 	if pty == nil {
 		return nil, herdrErr("pane_not_found", "pane not found")
 	}
-	info := &herdrProcessInfo{PaneID: site.pane.PaneID, ShellPID: pty.ShellPID()}
-	// A command line and a directory can carry what never shows on the
-	// screen: a token passed as an argument, a private path. The read grant
-	// shows the screen, so it gets the pids and names. The arguments and the
-	// directories go to the person, to the pane itself, and to a pane that
-	// may type into this one (write on its session, or admin).
-	full := true
-	if pa := d.paneAuthority(cs); pa != nil && pa.window != site.win.ID {
-		full = (pa.grants.Has(GrantAdmin) || pa.grants.Has(GrantWrite)) && d.paneWriteReach(pa, site.sess.Name()) == ""
-	}
-	if info.ShellPID > 0 {
-		if pgid, ok := readForegroundPGID(info.ShellPID); ok && pgid > 0 {
-			info.ForegroundPGID = pgid
-			leader := readProcessInfo(pgid)
-			leader.pid = pgid
-			procs := []foregroundInfo{leader}
-			if pgid != info.ShellPID {
-				if walk := foregroundGroup(pgid, agentGroupWalkLimit, agentGroupWalkDepth); walk != nil {
-					for p := range walk {
-						procs = append(procs, p)
-					}
-				}
-			}
-			for _, p := range procs {
-				if p.comm == "" && len(p.argv) == 0 {
-					continue
-				}
-				item := herdrProcessItem{PID: p.pid, Name: p.comm}
-				if item.Name == "" && len(p.argv) > 0 {
-					item.Name = agentBaseName(p.argv[0])
-				}
-				if full {
-					item.Argv, item.Cmdline = p.argv, strings.Join(p.argv, " ")
-					if len(p.argv) > 0 {
-						item.Argv0 = p.argv[0]
-					}
-					item.Cwd, _ = ptyspawn.ProcessCwd(p.pid)
-				}
-				info.ForegroundProcesses = append(info.ForegroundProcesses, item)
-			}
-		}
-	}
+	fg := readPaneForeground(pty, agentBaseName(site.sess.getShell()), d.seesArguments(cs, site.sess, site.win.ID))
+	info := &herdrProcessInfo{PaneID: site.pane.PaneID, ShellPID: fg.shellPID, ForegroundPGID: fg.pgid, ForegroundProcesses: fg.procs}
 	return &herdrResult{Type: "pane_process_info", ProcessInfo: info}, nil
 }
 

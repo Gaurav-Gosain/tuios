@@ -1281,6 +1281,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			params: []verbParam{
 				sessionParam,
 				{Name: "rail", Type: "bool", Default: "false"},
+				{Name: "foreground", Type: "bool", Default: "false"},
 			},
 			handler: (*Daemon).verbListWindows,
 		},

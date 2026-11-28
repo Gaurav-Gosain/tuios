@@ -485,7 +485,7 @@ func printCapture(w io.Writer, raw json.RawMessage, host, window string, keepEsc
 }
 
 // queryWindows queries the window list over the verb protocol (no TUI required).
-func queryWindows(sessionName string, jsonOutput, rail bool) error {
+func queryWindows(sessionName string, jsonOutput, rail, foreground bool) error {
 	t, err := dialSessionTarget(sessionName)
 	if err != nil {
 		return err
@@ -495,6 +495,9 @@ func queryWindows(sessionName string, jsonOutput, rail bool) error {
 	params := map[string]any{"session": sessionName}
 	if rail {
 		params["rail"] = true
+	}
+	if foreground {
+		params["foreground"] = true
 	}
 	raw, err := t.client.Call("list-windows", t.params(params))
 	if err != nil {

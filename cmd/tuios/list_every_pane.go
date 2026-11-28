@@ -35,20 +35,29 @@ const listCallTimeout = 5 * time.Second
 
 // listedPane is one row of list-windows --all.
 type listedPane struct {
-	Host        string   `json:"host,omitempty"`
-	Untrusted   bool     `json:"untrusted,omitempty"`
-	Session     string   `json:"session"`
-	Workspace   int      `json:"workspace"`
-	WorkspaceNm string   `json:"workspace_name,omitempty"`
-	WindowID    string   `json:"window_id"`
-	Name        string   `json:"name"`
-	Title       string   `json:"title"`
-	Command     string   `json:"command,omitempty"`
-	Cwd         string   `json:"cwd,omitempty"`
-	Focused     bool     `json:"focused"`
-	AgentState  string   `json:"agent_state,omitempty"`
-	Text        []string `json:"text,omitempty"`
-	TextError   string   `json:"text_error,omitempty"`
+	Host        string `json:"host,omitempty"`
+	Untrusted   bool   `json:"untrusted,omitempty"`
+	Session     string `json:"session"`
+	Workspace   int    `json:"workspace"`
+	WorkspaceNm string `json:"workspace_name,omitempty"`
+	WindowID    string `json:"window_id"`
+	Name        string `json:"name"`
+	Title       string `json:"title"`
+	Command     string `json:"command,omitempty"`
+	Cwd         string `json:"cwd,omitempty"`
+	Focused     bool   `json:"focused"`
+	AgentState  string `json:"agent_state,omitempty"`
+	// PID and TTY are the process the pane started and its terminal device,
+	// for a pane whose process runs on the listed machine.
+	PID int    `json:"pid,omitempty"`
+	TTY string `json:"tty,omitempty"`
+	// The three below are set with --foreground: what holds the pane's
+	// terminal (shell, program or unknown), and the processes that do.
+	ForegroundState     string          `json:"foreground_state,omitempty"`
+	ForegroundPGID      int             `json:"foreground_process_group_id,omitempty"`
+	ForegroundProcesses json.RawMessage `json:"foreground_processes,omitempty"`
+	Text                []string        `json:"text,omitempty"`
+	TextError           string          `json:"text_error,omitempty"`
 }
 
 // listError is a session or a machine the listing could not read.
@@ -60,7 +69,7 @@ type listError struct {
 
 // runListAllWindows is list-windows with --all, --all-hosts or --text.
 // session limits it to one session when --all is not given.
-func runListAllWindows(sessionName string, all, allHosts bool, text int, jsonOutput bool) error {
+func runListAllWindows(sessionName string, all, allHosts, foreground bool, text int, jsonOutput bool) error {
 	if text < 0 || text > maxListText {
 		return errfmt.Errorf("--text takes a number of lines from 0 to %d", maxListText)
 	}
@@ -83,7 +92,7 @@ func runListAllWindows(sessionName string, all, allHosts bool, text int, jsonOut
 			return t.client, nil
 		}}
 		defer conn.Close()
-		p, e := listSessionPanes(conn, t.host, t.session, text)
+		p, e := listSessionPanes(conn, t.host, t.session, foreground, text)
 		panes, errs = append(panes, p...), append(errs, e...)
 		return printListedPanes(panes, errs, text, jsonOutput)
 	}
@@ -102,7 +111,7 @@ func runListAllWindows(sessionName string, all, allHosts bool, text int, jsonOut
 		names = []string{""}
 	}
 	for _, name := range names {
-		p, e := listSessionPanes(conn, "", name, text)
+		p, e := listSessionPanes(conn, "", name, foreground, text)
 		panes, errs = append(panes, p...), append(errs, e...)
 	}
 
@@ -129,7 +138,7 @@ func runListAllWindows(sessionName string, all, allHosts bool, text int, jsonOut
 						return c, err
 					}}
 					for _, s := range h.Sessions {
-						p, e := listSessionPanes(hc, host, s.Name, text)
+						p, e := listSessionPanes(hc, host, s.Name, foreground, text)
 						panes, errs = append(panes, p...), append(errs, e...)
 					}
 					hc.Close()
@@ -197,10 +206,15 @@ func listSessionNames(client *listConn) ([]string, error) {
 	return names, nil
 }
 
-// listSessionPanes lists one session's panes, and with text > 0 reads each
-// one's last lines with capture-pane.
-func listSessionPanes(client *listConn, host, name string, text int) ([]listedPane, []listError) {
-	raw, err := client.CallWithTimeout("list-windows", map[string]any{"session": name}, listCallTimeout)
+// listSessionPanes lists one session's panes. With foreground it asks for
+// each pane's foreground read, and with text > 0 it reads each one's last
+// lines with capture-pane.
+func listSessionPanes(client *listConn, host, name string, foreground bool, text int) ([]listedPane, []listError) {
+	params := map[string]any{"session": name}
+	if foreground {
+		params["foreground"] = true
+	}
+	raw, err := client.CallWithTimeout("list-windows", params, listCallTimeout)
 	if err != nil {
 		return nil, []listError{{Host: host, Session: name, Error: explainVerbError("list-windows", err).Error()}}
 	}
@@ -216,6 +230,12 @@ func listSessionPanes(client *listConn, host, name string, text int) ([]listedPa
 			Workspace  int    `json:"workspace"`
 			Scratch    bool   `json:"scratch"`
 			AgentState string `json:"agent_state"`
+			PID        int    `json:"pid"`
+			TTY        string `json:"tty"`
+
+			ForegroundState     string          `json:"foreground_state"`
+			ForegroundPGID      int             `json:"foreground_process_group_id"`
+			ForegroundProcesses json.RawMessage `json:"foreground_processes"`
 		} `json:"windows"`
 	}
 	if err := jsonx.Unmarshal(raw, &list); err != nil {
@@ -242,6 +262,8 @@ func listSessionPanes(client *listConn, host, name string, text int) ([]listedPa
 			Workspace: w.Workspace, WorkspaceNm: wsNames[w.Workspace],
 			WindowID: w.ID, Name: w.Display, Title: w.Title, Command: w.Command, Cwd: w.Cwd,
 			Focused: w.ID == list.Focused, AgentState: state,
+			PID: w.PID, TTY: w.TTY,
+			ForegroundState: w.ForegroundState, ForegroundPGID: w.ForegroundPGID, ForegroundProcesses: w.ForegroundProcesses,
 		}
 		if text > 0 {
 			p.Text, p.TextError = listPaneText(client, name, w.ID, text)

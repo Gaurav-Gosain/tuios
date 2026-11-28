@@ -2016,7 +2016,7 @@ Read the task dispatch settings: each board's mode (manual or pull) and the swit
 
 ### `get-window`
 
-Describe one window, as the client protocol's GetWindow does: an attached client answers with its cursor and process fields, and with none attached the daemon answers with the window's list-windows entry. It is a read, which a pane holding read may call on its own session.
+Describe one window, as the client protocol's GetWindow does: an attached client answers with its cursor and process fields, and with none attached the daemon answers with the window's list-windows entry. Either way the window carries foreground_state, which says what holds the pane's terminal: shell when the pane's own shell does and runs nothing in its group, which is a pane at its prompt; program when something else does; and unknown when the kernel did not say, which is not an idle pane. It is read from the kernel for the call, so it needs no attached client and no shell integration. foreground_process_group_id and foreground_processes come with it: the processes of that group, each with pid and name, and with argv, argv0, cmdline and cwd for a caller that may type into the pane. It is a read, which a pane holding read may call on its own session.
 
 | Param | Type | Required | Default | Description |
 |---|---|---|---|---|
@@ -2699,12 +2699,13 @@ List every supported verb with its parameter schema and examples, plus the proto
 
 ### `list-windows`
 
-List the windows in a session. The list carries shell, the base name of the shell a new pane in the session runs. Each window carries a host when its process runs on another machine, and omits it when the process is on this one. A window whose shell marks its commands with OSC 133 also carries at_prompt, command_seq, marks_commands (the shell has sent a command-start mark), prompt_marks_only when it ran a command without one, running_cmdline while a command runs, and last_cmdline, last_exit_code and last_duration_ms once one has finished. A pane given grants of its own carries them as grants; a pane on the default of [agents.permissions] omits it. A pane whose process runs on this machine carries pid, the process it started, and tty, its terminal device. A zoomed window carries zoomed, and a floating window carries floating. A window whose program named itself with OSC 1 carries icon_name, the name an unnamed workspace shows while the window is its active one.
+List the windows in a session. The list carries shell, the base name of the shell a new pane in the session runs. Each window carries a host when its process runs on another machine, and omits it when the process is on this one. A window whose shell marks its commands with OSC 133 also carries at_prompt, command_seq, marks_commands (the shell has sent a command-start mark), prompt_marks_only when it ran a command without one, running_cmdline while a command runs, and last_cmdline, last_exit_code and last_duration_ms once one has finished. A pane given grants of its own carries them as grants; a pane on the default of [agents.permissions] omits it. A pane whose process runs on this machine carries pid, the process it started, and tty, its terminal device. A zoomed window carries zoomed, and a floating window carries floating. A window whose program named itself with OSC 1 carries icon_name, the name an unnamed workspace shows while the window is its active one. With foreground set, each window also carries foreground_state, which says what holds the pane's terminal: shell when the pane's own shell does and runs nothing in its group, which is a pane at its prompt; program when something else does; and unknown when the kernel did not say, which is not an idle pane. It is read from the kernel for the call, so it needs no attached client and no shell integration. foreground_process_group_id and foreground_processes come with it: the processes of that group, each with pid and name, and with argv, argv0, cmdline and cwd for a caller that may type into the pane.
 
 | Param | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `session` | string |  |  | Session name. Omit from a pane for the pane's own session, and from outside every pane for the most recently active one. |
 | `rail` | bool |  | `false` | Also list the rail pane, the pane a client draws in its rail's pane section. It carries rail, the command line it runs. |
+| `foreground` | bool |  | `false` | Also read what holds each pane's terminal: foreground_state (shell, program or unknown) and the processes in the foreground. It costs a few process reads a pane, so it is off unless asked for. |
 
 ```json
 {"id":1,"verb":"list-windows","params":{"session":"work"}}
