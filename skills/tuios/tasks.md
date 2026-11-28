@@ -11,6 +11,29 @@ tuios task ls --open
 tuios task get t1
 ```
 
+## Turn a plan into cards
+
+A planning skill, such as grill-with-docs, ends with a list of tasks. Put each
+task on the board as one card, so the person sees the plan and panes can take
+the work.
+
+```sh
+# One card per task: a short title, and the full brief as the prompt.
+printf '%s\n' "$brief" | tuios task add -p - --project . add rate limits to the upload API
+# A task that needs the person's call first.
+tuios task add --ask-first --project . -p 'Pick the limit for each plan tier.' choose the rate limits
+tuios task ls --open
+```
+
+- Write the prompt for a pane that did not see the planning. Name the files,
+  the decision taken, and how to check the work.
+- Add the cards in the order the work must go. `claim --next` takes the
+  oldest open card first.
+- Use `--ask-first` for a card that waits for the person. Use `--project .`
+  when panes of other sessions or machines may take the work.
+- Add the cards once. Run `tuios task ls --open` first, so a second run of the
+  skill does not add the same cards again.
+
 ## Take a card, do it, finish it
 
 From inside a pane:
