@@ -73,14 +73,17 @@ func TestCockpitCopyModeEndsWithItsAgent(t *testing.T) {
 	windowManagementMode(t, term)
 	sendKeys(t, term, tuitest.Ctrl('b'), "i")
 	waitText(t, term, "the agents view", "retry-fix", "docs-fix")
+	// show clicks name's row once and waits for its thread. A second
+	// click within the double-click window is a double click, which leaves
+	// the view for the agent's pane. A slow client draws the first click
+	// after the output has gone quiet, so the test never clicks again.
 	show := func(name, words string) {
 		t.Helper()
-		for i := 0; !strings.Contains(term.Screen().Text(), words); i++ {
-			if i == 3 {
-				t.Fatalf("clicking %s never showed its thread (%q)\n%s", name, words, term.Snapshot())
-			}
+		if !strings.Contains(term.Screen().Text(), words) {
 			clickAgentsRow(t, term, name)
-			_ = term.WaitStable(2 * time.Second)
+			if err := term.WaitFor(func(s tuitest.Screen) bool { return strings.Contains(s.Text(), words) }, uiTimeout); err != nil {
+				t.Fatalf("clicking %s never showed its thread (%q): %v\n%s", name, words, err, term.Snapshot())
+			}
 		}
 		_ = term.WaitStable(uiTimeout)
 	}
