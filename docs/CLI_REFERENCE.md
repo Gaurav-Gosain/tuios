@@ -7093,7 +7093,7 @@ tuios-web [flags]
 - `--random-password`: Make a new password at start and print it
 - `--password-file <path>`: Read the password from the first line of this file. The file must be yours, with mode 600 or 400 (on Windows, only you, SYSTEM and Administrators may read it)
 - `--user <string>`: User name the browser must give with the password (default: "tuios")
-- `--no-auth`: Serve a non-loopback host with no password (trusted networks only). Not with `0.0.0.0` or `::`
+- `--no-auth`: Serve with no password. Anyone who reaches the port gets a shell. On `localhost`, that is every user on this machine. Not with `0.0.0.0` or `::`
 - `--allow-host <name>`: On a loopback `--host`, also accept this host name (no port) in the Host header, for example for a reverse proxy. Needs a password or `--no-auth`. You can give it more than one time
 - `--touch <auto|on|off>`: Touch support and the on-screen key bar (default: auto-detect)
 - `--default-session <string>`: Default session name for all connections (creates shared session)
@@ -7130,9 +7130,10 @@ line arguments in `ps`. A password from a file or from `TUIOS_WEB_PASSWORD`
 that is shorter than 12 characters gets a warning at start, because
 tuios-web does not slow down wrong guesses.
 
-- On `localhost`: the password is optional. With no password, other users on
-  this machine can connect. tuios-web prints one line at start to say so. Use
-  `--random-password` to stop this. tuios-web accepts a session only when the
+- On `localhost`: tuios-web does not start without a password. Every user on
+  this machine can connect to a loopback port. Pass `--no-auth` to serve
+  anyway, when you are the only user on this machine. `tuios ssh` has the
+  same rule. tuios-web accepts a session only when the
   Host header names this machine, such as `localhost` or `127.0.0.1`. This
   stops a web page that points its own name at 127.0.0.1 (DNS rebinding).
 - Behind a reverse proxy on this machine: use `--allow-host <name>` to accept
@@ -7165,11 +7166,12 @@ tuios-web does not slow down wrong guesses.
 
 **Examples:**
 ```bash
-# Start web server on default port (daemon mode)
-tuios-web
+# Start web server on default port (daemon mode), with a password that
+# tuios-web makes and prints
+tuios-web --random-password
 
 # Start on custom port
-tuios-web --port 8080
+tuios-web --port 8080 --random-password
 
 # Reach the server from a phone on the same network, over TLS with a
 # self-signed certificate tuios-web generates and keeps for you, and a
@@ -7187,19 +7189,19 @@ tuios-web --host 0.0.0.0 --port 7681 --cert tuios-cert.pem --key tuios-key.pem \
 tuios-web --host 192.168.1.20 --port 7681 --insecure --no-auth
 
 # Start in read-only mode (view only)
-tuios-web --read-only
+tuios-web --read-only --random-password
 
 # Start with theme and show-keys overlay
-tuios-web --theme dracula --show-keys
+tuios-web --theme dracula --show-keys --random-password
 
 # Limit concurrent connections
-tuios-web --max-connections 10
+tuios-web --max-connections 10 --random-password
 
 # All clients share a single session
-tuios-web --default-session shared
+tuios-web --default-session shared --random-password
 
 # Run in ephemeral mode (no session persistence)
-tuios-web --ephemeral
+tuios-web --ephemeral --random-password
 ```
 
 **Multi-Client Behavior:**
@@ -8036,7 +8038,7 @@ ssh -p 8022 your-server-hostname
 
 ```bash
 # Start web terminal on default port
-tuios-web
+tuios-web --random-password
 
 # Start on custom port with remote access, over TLS with a password
 tuios-web --host 0.0.0.0 --port 8080 --auto-tls --random-password
@@ -8045,10 +8047,10 @@ tuios-web --host 0.0.0.0 --port 8080 --auto-tls --random-password
 open http://localhost:7681
 
 # Start in read-only mode for demonstrations
-tuios-web --read-only
+tuios-web --read-only --random-password
 
 # Start with theme and overlay
-tuios-web --theme dracula --show-keys
+tuios-web --theme dracula --show-keys --random-password
 
 # Limit connections for production use
 tuios-web --max-connections 50 --host 0.0.0.0 --auto-tls --password-file ~/.config/tuios/web-password

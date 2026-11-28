@@ -96,10 +96,10 @@ Server features:
   - HTTPS from a self-signed certificate tuios-web generates and keeps
     (--auto-tls), or from your own (--cert/--key). A bind to a LAN address
     requires one of them unless you opt into clear text with --insecure
-  - A password for every browser that connects. A bind to a LAN address
-    requires one (--random-password, --password-file or TUIOS_WEB_PASSWORD)
-    unless you pass --no-auth. On localhost with no password, other users on
-    this machine can connect. Use --password-file for a fixed password:
+  - A password for every browser that connects. Every bind requires one
+    (--random-password, --password-file or TUIOS_WEB_PASSWORD) unless you
+    pass --no-auth. On localhost, --no-auth lets every user on this machine
+    connect. Use --password-file for a fixed password:
     tuios-web does not pass TUIOS_WEB_PASSWORD to panes, but your own
     processes can read it from /proc
   - Configurable host, port, read-only mode, and connection limits
@@ -114,11 +114,12 @@ Client features:
   - Cell-based mouse event deduplication reducing network traffic by 80-95%
   - requestAnimationFrame batching for efficient screen updates
   - Automatic reconnection with exponential backoff`,
-		Example: `  # Start web server on default port (7681)
-  tuios-web
+		Example: `  # Start web server on default port (7681), with a password that
+  # tuios-web makes and prints
+  tuios-web --random-password
 
   # Start on custom port
-  tuios-web --port 8080
+  tuios-web --port 8080 --random-password
 
   # Reach the server from a phone on the same network, over TLS, with a
   # password that tuios-web makes and prints
@@ -136,7 +137,7 @@ Client features:
   tuios-web --allow-host term.example.com --password-file ~/.config/tuios/web-password
 
   # Start with show-keys overlay
-  tuios-web --show-keys
+  tuios-web --random-password --show-keys
 
   # Start with a specific theme
   tuios-web --theme dracula
@@ -171,7 +172,7 @@ Client features:
 	rootCmd.Flags().StringVar(&webUser, "user", defaultWebUser, "User name the browser must give with the password")
 	rootCmd.Flags().StringVar(&webPasswordFile, "password-file", "", "Read the password from the first line of this file. The file must be yours, with mode 600 or 400 (on Windows, only you, SYSTEM and Administrators may read it)")
 	rootCmd.Flags().BoolVar(&webRandomPassword, "random-password", false, "Make a new password at start and print it")
-	rootCmd.Flags().BoolVar(&webNoAuth, "no-auth", false, "Serve a non-loopback host with no password. Anyone who reaches the port gets a shell (trusted networks only). Not with 0.0.0.0 or ::")
+	rootCmd.Flags().BoolVar(&webNoAuth, "no-auth", false, "Serve with no password. Anyone who reaches the port gets a shell. On localhost, that is every user on this machine. Not with 0.0.0.0 or ::")
 	rootCmd.Flags().StringSliceVar(&webAllowHosts, "allow-host", nil, "On a loopback --host, also accept this host name (no port) in the Host header, for example for a reverse proxy. Needs a password or --no-auth (repeatable)")
 	registerCertFlags(rootCmd)
 	rootCmd.Flags().StringVar(&webTouch, "touch", "auto", "Touch input mode: auto, on, off. Touch widens the gestures aimed at a single cell")

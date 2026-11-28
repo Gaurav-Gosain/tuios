@@ -34,8 +34,12 @@ import (
 //     Host header on that bind when it has no TLS and no password, but that
 //     check lets every IP address through, and TLS turns it off. tuios-web
 //     keeps its own refusal so the rule does not depend on sip's.
-//   - A loopback bind may run with no password, for a browser on this
-//     machine. sip checks the Host header, because a web page whose name the
+//   - A loopback bind needs a password or --no-auth too, as the SSH server
+//     does (internal/server/auth.go, PlanSSHAuth): loopback is not a
+//     boundary on a machine with other users, and every one of them can
+//     open the port. --no-auth is the flag both servers take for "I am the
+//     only user here", so the rule and the opt-out read the same in both.
+//   - On a loopback bind sip also checks the Host header, because a web page whose name the
 //     attacker points at 127.0.0.1 (DNS rebinding) passes the same-origin
 //     check: its Origin and its Host both carry the attacker's name.
 //     --allow-host adds names for a reverse proxy, and needs a password or
@@ -94,13 +98,12 @@ type webAccess struct {
 // errNoAuthWildcard is the refusal for --no-auth on an unspecified bind.
 var errNoAuthWildcard = errors.New("refusing --no-auth on an address that listens on every interface")
 
-// errNoWebAuth is the refusal for a network bind with no password. The menu
-// of answers is printed beside it.
+// errNoWebAuth is the refusal for a bind with no password and no --no-auth.
+// The menu of answers is printed beside it.
 var errNoWebAuth = errors.New("refusing to serve with no password")
 
 // planWebAccess settles the password and the Host allowlist before anything
-// starts, and refuses a network bind that has neither a password nor
-// --no-auth. It prints what the user needs to know to w.
+// starts, and refuses a bind that has neither a password nor --no-auth. It prints what the user needs to know to w.
 func planWebAccess(w io.Writer, f webAccessFlags) (*webAccess, error) {
 	a := &webAccess{user: f.user}
 	if a.user == "" {
@@ -168,8 +171,6 @@ func planWebAccess(w io.Writer, f webAccessFlags) (*webAccess, error) {
 	case f.noAuth:
 		fmt.Fprintf(w, "\nWarning: tuios-web does not ask for a password. %s can open a shell as %s.\n\n",
 			whoCanReach(f.host), netutil.CurrentAccount())
-	case loopback:
-		fmt.Fprintln(w, "Note: other users on this machine can connect. Use --random-password to stop this.")
 	default:
 		printNoAuthMenu(w, f)
 		return nil, fmt.Errorf("%w on %s: pass --random-password, --password-file or --no-auth", errNoWebAuth, f.host)
@@ -292,15 +293,23 @@ func randomPasswordText(f webAccessFlags, a *webAccess) string {
 	return fmt.Sprintf("\nUser: %s\nPassword: %s\nOpen: %s\n\nThe password changes each time tuios-web starts.\n\n", a.user, a.password, u.String())
 }
 
-// printNoAuthMenu answers a network bind with no password. It is printed
+// printNoAuthMenu answers a bind with no password and no --no-auth. It is printed
 // rather than carried in the error because fang reflows an error into one
 // paragraph, which leaves no command to copy.
 func printNoAuthMenu(w io.Writer, f webAccessFlags) {
-	fmt.Fprintf(w, `
+	if isLoopbackHost(f.host) {
+		fmt.Fprintf(w, `
+  Every user on this machine can connect to %s. Every browser that opens
+  tuios-web gets a shell on this machine as %s. Set a password:
+`, f.host, netutil.CurrentAccount())
+	} else {
+		fmt.Fprintf(w, `
   %s is not this machine. Every browser that opens tuios-web gets a shell
   on this machine as %s. TLS encrypts the traffic, but it does not check who
   connects. Set a password:
-
+`, f.host, netutil.CurrentAccount())
+	}
+	fmt.Fprintf(w, `
   1. Make a new password each time tuios-web starts. tuios-web prints it.
 
        tuios-web --host %s --port %s%s --random-password
@@ -312,25 +321,40 @@ func printNoAuthMenu(w io.Writer, f webAccessFlags) {
 
   3. Give the password in the %s environment variable.
 
-  4. Keep tuios-web on this machine and connect through SSH.
-
-       ssh -L %s:localhost:%s <this-machine>
-
 `,
-		f.host, netutil.CurrentAccount(),
 		f.host, f.port, f.tlsArgs,
 		f.host, f.port, f.tlsArgs,
-		webPasswordEnv,
-		f.port, f.port)
-	// planWebAccess refuses --no-auth on 0.0.0.0 and ::, so the menu does not
-	// offer it there.
-	if !isUnspecifiedHost(f.host) {
+		webPasswordEnv)
+	switch {
+	case isLoopbackHost(f.host):
+		fmt.Fprintf(w, `  4. Let every user on this machine in. Only on a machine where you are the
+     only user.
+
+       tuios-web --host %s --port %s%s --no-auth
+
+`, f.host, f.port, f.tlsArgs)
+	case isUnspecifiedHost(f.host):
+		// planWebAccess refuses --no-auth on 0.0.0.0 and ::, so the menu does
+		// not offer it there.
+		printSSHTunnelOption(w, f)
+	default:
+		printSSHTunnelOption(w, f)
 		fmt.Fprintf(w, `  5. Let anyone who reaches the port in. Only on a network you trust.
 
        tuios-web --host %s --port %s%s --no-auth
 
 `, f.host, f.port, f.tlsArgs)
 	}
+}
+
+// printSSHTunnelOption is the menu entry for a bind outside this machine:
+// keep tuios-web on loopback and reach it through SSH.
+func printSSHTunnelOption(w io.Writer, f webAccessFlags) {
+	fmt.Fprintf(w, `  4. Keep tuios-web on this machine and connect through SSH.
+
+       ssh -L %s:localhost:%s <this-machine>
+
+`, f.port, f.port)
 }
 
 // isUnspecifiedHost reports whether host is an unspecified IP address, such

@@ -171,8 +171,8 @@ const chromium = {
 const WEB_BIN = process.env.TUIOS_WEB_BIN;
 const server = (port, url, env) => ({
   command: WEB_BIN
-    ? `"${WEB_BIN}" --host 127.0.0.1 --port ${port}`
-    : `go run ./cmd/tuios-web --host 127.0.0.1 --port ${port}`,
+    ? `"${WEB_BIN}" --host 127.0.0.1 --port ${port} --no-auth`
+    : `go run ./cmd/tuios-web --host 127.0.0.1 --port ${port} --no-auth`,
   cwd: '..',
   url,
   env,
