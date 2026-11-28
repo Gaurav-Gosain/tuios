@@ -37,6 +37,10 @@ type tickTimer struct {
 	gen uint64
 	// due is when the tick armed last fires, zero when none is armed.
 	due time.Time
+	// cancel closes when a newer armTick replaces this tick, so the superseded
+	// command goroutine stops its timer and returns immediately instead of
+	// staying blocked until its deadline.
+	cancel chan struct{}
 }
 
 // deadlineTickMsg is a maintenance tick armed by armTick. Update hands it on
@@ -60,10 +64,15 @@ func (m *OS) tickPollPeriod() time.Duration {
 // before it.
 func (m *OS) armTick(wait time.Duration) tea.Cmd {
 	wait = max(wait, time.Millisecond)
+	if m.tick.cancel != nil {
+		close(m.tick.cancel)
+	}
+	cancel := make(chan struct{})
+	m.tick.cancel = cancel
 	m.tick.gen++
 	m.tick.due = time.Now().Add(wait)
 	gen := m.tick.gen
-	return m.tickUntilStop(wait, func(t time.Time) tea.Msg { return deadlineTickMsg{gen: gen, at: t} })
+	return m.tickUntilStopOrCancel(wait, cancel, func(t time.Time) tea.Msg { return deadlineTickMsg{gen: gen, at: t} })
 }
 
 // tickUntilStop is tea.Tick that also gives up when the session ends. A
@@ -78,6 +87,10 @@ func (m *OS) armTick(wait time.Duration) tea.Cmd {
 // same message at the same time and the command never reads the field from
 // inside itself, where it would race Cleanup.
 func (m *OS) tickUntilStop(d time.Duration, fn func(time.Time) tea.Msg) tea.Cmd {
+	return m.tickUntilStopOrCancel(d, nil, fn)
+}
+
+func (m *OS) tickUntilStopOrCancel(d time.Duration, cancel <-chan struct{}, fn func(time.Time) tea.Msg) tea.Cmd {
 	timer := time.NewTimer(d)
 	stop := m.stopSignal()
 	return func() tea.Msg {
@@ -85,6 +98,9 @@ func (m *OS) tickUntilStop(d time.Duration, fn func(time.Time) tea.Msg) tea.Cmd 
 		case t := <-timer.C:
 			return fn(t)
 		case <-stop:
+			timer.Stop()
+			return nil
+		case <-cancel:
 			timer.Stop()
 			return nil
 		}

@@ -954,6 +954,7 @@ func (m *OS) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.tick.due = time.Time{}
+		m.tick.cancel = nil
 		msg = TickerMsg(dt.at)
 	}
 	model, cmd := m.update(msg)
