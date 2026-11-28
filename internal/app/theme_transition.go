@@ -355,34 +355,27 @@ func (m *OS) themeMix(a, b color.Color, level uint8) color.Color {
 	}
 	pa, pb := packColor8(a), packColor8(b)
 	if pa == pb {
-		if level < themeMixLevels/2 {
-			return a
-		}
 		return b
-	}
-	snapEndpoint := func(c color.Color) color.Color {
-		switch packColor8(c) {
-		case pb:
-			return b
-		case pa:
-			return a
-		default:
-			return c
-		}
 	}
 	k := uint64(pa)<<32 | uint64(pb)<<8 | uint64(level)
 	t := &m.themeFx
-	if c, ok := t.mix[k]; ok {
-		return snapEndpoint(c)
+	c, ok := t.mix[k]
+	if !ok {
+		if t.mix == nil {
+			t.mix = make(map[uint64]color.Color, 256)
+		} else if len(t.mix) >= themeMixMax {
+			clear(t.mix)
+		}
+		c = overlay.MixColors(a, b, float64(level)/themeMixLevels)
+		t.mix[k] = c
 	}
-	if t.mix == nil {
-		t.mix = make(map[uint64]color.Color, 256)
-	} else if len(t.mix) >= themeMixMax {
-		clear(t.mix)
+	// A mix that lands on an endpoint's bytes hands back the endpoint itself.
+	if pc := packColor8(c); pc == pb {
+		return b
+	} else if pc == pa {
+		return a
 	}
-	c := overlay.MixColors(a, b, float64(level)/themeMixLevels)
-	t.mix[k] = c
-	return snapEndpoint(c)
+	return c
 }
 
 // fixWideEdges repairs the wide glyphs the circle's edge cut in half on one
