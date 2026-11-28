@@ -18,6 +18,8 @@ import (
 //   - The notice could be the refresh failure of the cell. The cell's command
 //     succeeds, so only the click can fail.
 //
+// The dock draws notices in its notifications cell, so the list keeps it.
+//
 // Negative control: main before this change. The file says "host=" and no
 // notice appears, so both waits time out.
 func TestDockClickKnowsTheAttachedHost(t *testing.T) {
@@ -26,7 +28,7 @@ func TestDockClickKnowsTheAttachedHost(t *testing.T) {
 	record := filepath.Join(t.TempDir(), "click-host")
 	dock := `
 [dock]
-right = ["custom/clicker", "session-controls"]
+right = ["notifications", "custom/clicker", "session-controls"]
 
 [dock.custom.clicker]
 command = "echo CLICKME"
