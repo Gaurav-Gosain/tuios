@@ -58,6 +58,7 @@ func (m *OS) sessionCloseRowCount() int {
 // sessionToll is what closing the session would take down.
 type sessionToll struct {
 	Panes   int
+	Scratch int // counted in Panes
 	Working int // agents mid-task
 	Blocked int // agents that need the user: needs_input or errored
 }
@@ -69,6 +70,9 @@ func (m *OS) sessionToll() sessionToll {
 	for _, w := range m.Windows {
 		if w == nil {
 			continue
+		}
+		if w.IsScratch {
+			t.Scratch++
 		}
 		t.count(w.AgentState)
 	}
@@ -106,6 +110,9 @@ func (m *OS) SessionTollFor(sessionID string) sessionToll {
 	}
 	for _, w := range m.DaemonClient.SessionWindows(sessionID) {
 		t.Panes++
+		if w.Scratch {
+			t.Scratch++
+		}
 		t.count(w.AgentState)
 	}
 	return t
@@ -113,7 +120,15 @@ func (m *OS) SessionTollFor(sessionID string) sessionToll {
 
 // Line reads the toll back as the sentence the dialog turns on.
 func (t sessionToll) Line() string {
-	parts := []string{countOf(t.Panes, "pane")}
+	panes := countOf(t.Panes, "pane")
+	if t.Scratch > 0 {
+		if ordinary := t.Panes - t.Scratch; ordinary > 0 {
+			panes = fmt.Sprintf("%s + %d scratch", countOf(ordinary, "pane"), t.Scratch)
+		} else {
+			panes = countOf(t.Scratch, "scratch pane")
+		}
+	}
+	parts := []string{panes}
 	if t.Working > 0 {
 		parts = append(parts, countOf(t.Working, "agent")+" still working")
 	}
