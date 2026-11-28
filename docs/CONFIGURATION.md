@@ -371,10 +371,13 @@ look (see [Paths in a pane or the agents view](KEYBINDINGS.md#paths-in-a-pane-or
 links = "all"          # off, marked (OSC 8 only), all
 link_click = "both"    # both, ctrl, shift, off
 link_hover = "safe"    # safe, always
+link_label = "on"      # on, off
 link_opener = ""       # for example "firefox --new-tab" or "open -a Safari %s"
 ```
 
-These options are in the [option reference](config-options.md): [`appearance.links`](config-options.md#appearance.links), [`appearance.link_click`](config-options.md#appearance.link_click), [`appearance.link_hover`](config-options.md#appearance.link_hover), [`appearance.link_opener`](config-options.md#appearance.link_opener).
+These options are in the [option reference](config-options.md): [`appearance.links`](config-options.md#appearance.links), [`appearance.link_click`](config-options.md#appearance.link_click), [`appearance.link_hover`](config-options.md#appearance.link_hover), [`appearance.link_label`](config-options.md#appearance.link_label), [`appearance.link_opener`](config-options.md#appearance.link_opener).
+
+A hover over a link underlines it and shows a label under the pointer. The label shows the address and the click that opens it. Set `link_label = "off"` to hide the label. The underline and the click still work.
 
 The system opener is `open` on macOS, `rundll32` on Windows, `wslview` under
 WSL, and `xdg-open` on other systems. tuios runs no shell. It gives the URL to

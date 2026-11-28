@@ -229,6 +229,11 @@ var optionSpecs = []Option{
 		Accepted:    LinkHoverModes,
 	},
 	{
+		Path: "appearance.link_label", Type: OptionString, Section: "appearance",
+		Description: "The label under a hovered link that shows the address and the click. Off hides the label. The underline and the click still work",
+		Accepted:    LinkLabelModes,
+	},
+	{
 		Path: "appearance.drop_preview", Type: OptionString, Section: "appearance",
 		Description: "What a BSP drag shows where the pane would land: a frame with a tint inside, the frame only, or nothing",
 		Accepted:    DropPreviewModes,

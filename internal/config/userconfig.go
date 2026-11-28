@@ -557,6 +557,7 @@ type AppearanceConfig struct {
 	Links                    string                  `toml:"links"`                        // Links tuios acts on: off, marked, all (default: all)
 	LinkClick                string                  `toml:"link_click"`                   // The click that opens a link: both, ctrl, shift, off (default: both)
 	LinkHover                string                  `toml:"link_hover"`                   // The hover highlight: safe (skips a pane whose guest tracks the mouse) or always (default: safe)
+	LinkLabel                string                  `toml:"link_label"`                   // The label under a hovered link: on or off (default: on)
 	LinkOpener               string                  `toml:"link_opener"`                  // Command that opens a web link; empty uses $BROWSER, then the system opener
 	HideWindowButtons        bool                    `toml:"hide_window_buttons"`          // Hide window control buttons (minimize, maximize, close)
 	WindowButtonStyle        string                  `toml:"window_button_style"`          // Window control style: pill, dots (default: dots)
@@ -898,6 +899,18 @@ const (
 
 // LinkHoverModes lists the valid values for appearance.link_hover.
 var LinkHoverModes = []string{LinkHoverSafe, LinkHoverAlways}
+
+// Link labels. See AppearanceConfig.LinkLabel. Off hides the label that
+// names the address and the click. The underline and the click stay.
+const (
+	// LinkLabelOn shows the label under a hovered link.
+	LinkLabelOn = "on"
+	// LinkLabelOff hides it.
+	LinkLabelOff = "off"
+)
+
+// LinkLabelModes lists the valid values for appearance.link_label.
+var LinkLabelModes = []string{LinkLabelOn, LinkLabelOff}
 
 // Window control styles. See AppearanceConfig.WindowButtonStyle.
 const (
@@ -1348,6 +1361,7 @@ func DefaultConfig() *UserConfig {
 			Links:                    LinksAll,
 			LinkClick:                LinkClickBoth,
 			LinkHover:                LinkHoverSafe,
+			LinkLabel:                LinkLabelOn,
 			DropPreview:              DropPreviewOutline,
 			DropPreviewDelay:         DefaultDropPreviewDelay.String(),
 			HideWindowButtons:        false,
@@ -3044,6 +3058,9 @@ func fillMissingAppearance(cfg, defaultCfg *UserConfig) {
 	}
 	if cfg.Appearance.LinkHover == "" {
 		cfg.Appearance.LinkHover = defaultCfg.Appearance.LinkHover
+	}
+	if cfg.Appearance.LinkLabel == "" {
+		cfg.Appearance.LinkLabel = defaultCfg.Appearance.LinkLabel
 	}
 	if cfg.Appearance.DropPreview == "" {
 		cfg.Appearance.DropPreview = defaultCfg.Appearance.DropPreview
