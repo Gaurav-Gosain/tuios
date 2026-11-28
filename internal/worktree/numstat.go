@@ -496,6 +496,22 @@ func ChangesCtx(ctx context.Context, path string) (int, error) {
 	return n, nil
 }
 
+// ChangedPaths are the paths that differ between the trees, or commits, from
+// and to, relative to root.
+func ChangedPaths(ctx context.Context, root, from, to string) ([]string, error) {
+	out, err := runCtx(ctx, root, nil, "diff-tree", "-r", "-z", "--name-only", "--no-renames", from, to)
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	for p := range strings.SplitSeq(out, "\x00") {
+		if p != "" {
+			paths = append(paths, p)
+		}
+	}
+	return paths, nil
+}
+
 // runCtx is runEnv bounded by ctx: a git that takes longer than the caller
 // can wait is killed.
 //

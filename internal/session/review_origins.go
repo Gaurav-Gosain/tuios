@@ -192,6 +192,11 @@ func (d *Daemon) reviewOrigins(ctx context.Context, repo reviewRepo, diff *revie
 					step.Author = end.author
 				}
 			}
+			// With no edits to tell, a file written after the turn
+			// began and before its snapshot ran is the turn's, unsure.
+			if step.Judge == nil && ok && len(s.late) > 0 {
+				step.Author, step.Judge = end.author, writtenDuring(s.late)
+			}
 		}
 		steps = append(steps, step)
 		from, prevAt = mk.tree, mk.at
@@ -247,4 +252,16 @@ func reviewAgentName(w WindowState) string {
 		}
 	}
 	return "agent"
+}
+
+// writtenDuring is the judge of a turn start's lines with no edits to read:
+// Unsure for a line in one of late, the files written after the turn began,
+// and NotMade for every other line.
+func writtenDuring(late []string) func(path, text string) review.Verdict {
+	return func(path, _ string) review.Verdict {
+		if slices.Contains(late, path) {
+			return review.Unsure
+		}
+		return review.NotMade
+	}
 }

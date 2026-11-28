@@ -3,6 +3,8 @@ package session
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -36,6 +38,10 @@ type turnStart struct {
 	// at is when the snapshot started, and snapped when it ended, in Unix
 	// nanoseconds.
 	at, snapped int64
+	// late are the paths of tree that were written after the turn began:
+	// the snapshot waits for the daemon's git lock, and the agent may write
+	// before it runs.
+	late []string
 }
 
 // turnMarks holds the stamps and the turn starts, by work tree root.
@@ -108,13 +114,14 @@ func (d *Daemon) noteTurnStart(s *Session, ev SessionEvent) {
 	if d.checkpoints.off.Load() || !turnStartWanted(ev) {
 		return
 	}
-	window, turn := ev.Window, ev.completionSeq+1
-	d.goTracked(func() { d.takeTurnStart(s, window, turn) })
+	window, turn, began := ev.Window, ev.completionSeq+1, time.Now().UnixNano()
+	d.goTracked(func() { d.takeTurnStart(s, window, turn, began) })
 }
 
 // takeTurnStart snapshots the window's work tree when it changed since its
-// last stamp, and records the snapshot as the turn's start.
-func (d *Daemon) takeTurnStart(s *Session, window string, turn uint64) {
+// last stamp, and records the snapshot as the turn's start. began is when
+// the turn started.
+func (d *Daemon) takeTurnStart(s *Session, window string, turn uint64, began int64) {
 	if d.ctx.Err() != nil {
 		return
 	}
@@ -156,8 +163,31 @@ func (d *Daemon) takeTurnStart(s *Session, window string, turn uint64) {
 		return
 	}
 	if last == nil || st.Tree != last.Tree {
-		d.turnMarks.addStart(repo.root, turnStart{pane: window, session: s.Name(), turn: turn, tree: st.Tree, at: start.UnixNano(), snapped: time.Now().UnixNano()})
+		from := "HEAD"
+		if last != nil {
+			from = last.Tree
+		}
+		late := writtenSince(ctx, repo.root, from, st.Tree, began)
+		d.turnMarks.addStart(repo.root, turnStart{pane: window, session: s.Name(), turn: turn, tree: st.Tree, at: start.UnixNano(), snapped: time.Now().UnixNano(), late: late})
 	}
 	d.turnMarks.setStamp(repo.root, st)
 	LogBasic("Turn start of window %s in %s: changed, checked in %s, snapshot in %s", shortWindowID(window), repo.root, checked.Round(time.Microsecond), (time.Since(start) - checked).Round(time.Millisecond))
+}
+
+// writtenSince are the paths that differ between from and tree whose file was
+// last modified at or after began, in Unix nanoseconds. A file written before
+// the turn began never reads as later than began.
+func writtenSince(ctx context.Context, root, from, tree string, began int64) []string {
+	paths, err := worktree.ChangedPaths(ctx, root, from, tree)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, p := range paths {
+		fi, err := os.Lstat(filepath.Join(root, filepath.FromSlash(p)))
+		if err == nil && fi.ModTime().UnixNano() >= began {
+			out = append(out, p)
+		}
+	}
+	return out
 }
