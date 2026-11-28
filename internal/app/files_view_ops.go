@@ -609,7 +609,7 @@ func (m *OS) filesRereadDirs(host string, dirs []string) tea.Cmd {
 				continue
 			}
 			for _, d := range dirs {
-				if d != "" && filepath.Clean(d) == filepath.Clean(filesSideDir(s)) {
+				if d != "" && s.isDir(d) {
 					cmds = append(cmds, m.filesReadSide(s, filesSideDir(s), ""))
 					break
 				}
@@ -633,10 +633,10 @@ func (m *OS) filesTransferLanded(row session.TransferRow) tea.Cmd {
 // filesArrivals is the copies on their way into side s's folder that have
 // not landed: they show in the listing before they are there.
 func (m *OS) filesArrivals(s *filesSide) []session.TransferRow {
-	host, dir := m.filesHostOf(s), filesSideDir(s)
+	host := m.filesHostOf(s)
 	var out []session.TransferRow
 	for _, r := range m.transfers.rows {
-		if r.Dst.Host != host || !filesLandsIn(r, dir) || r.State == "cancelled" || r.State == "failed" {
+		if r.Dst.Host != host || !s.landsIn(r) || r.State == "cancelled" || r.State == "failed" {
 			continue
 		}
 		if r.State == "done" {
@@ -664,7 +664,7 @@ func (m *OS) filesSettleLanded(s *filesSide) tea.Cmd {
 	host, dir := m.filesHostOf(s), filesSideDir(s)
 	missing := false
 	for _, r := range m.transfers.rows {
-		if r.State != "done" || r.Dst.Host != host || !filesLandsIn(r, dir) {
+		if r.State != "done" || r.Dst.Host != host || !s.landsIn(r) {
 			continue
 		}
 		if !filesHasName(s, r.Name) {
@@ -695,11 +695,27 @@ const (
 	filesSettleWait  = 400 * time.Millisecond
 )
 
-// filesLandsIn reports whether copy r lands in the folder dir: its path is
+// landsIn reports whether copy r lands in the side's folder: its path is
 // the folder, put into it, or a path in the folder.
-func filesLandsIn(r session.TransferRow, dir string) bool {
-	d := path.Clean(dir)
-	return path.Clean(r.Dst.Path) == d || path.Dir(path.Clean(r.Dst.Path)) == d
+func (s *filesSide) landsIn(r session.TransferRow) bool {
+	p := path.Clean(r.Dst.Path)
+	return s.isDir(p) || s.isDir(path.Dir(p))
+}
+
+// isDir reports whether dir names the side's folder. A copy names its
+// folder as it was asked for: a folder typed as ~/out, or picked before
+// the side's read landed, stays in that form, while the side has the read's
+// full path. Both forms name the folder.
+func (s *filesSide) isDir(dir string) bool {
+	want := filesSideDir(s)
+	if dir == "" || want == "" {
+		return false
+	}
+	if filepath.Clean(dir) == filepath.Clean(want) {
+		return true
+	}
+	d, w := path.Clean(dir), path.Clean(want)
+	return s.home != "" && (d == s.short(w) || s.short(d) == s.short(w))
 }
 
 // filesHasName reports whether side s lists name.

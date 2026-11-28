@@ -462,8 +462,13 @@ func TestFilesViewTwoSides(t *testing.T) {
 // takes its source away only after the copy is checked. On this machine, a
 // rename in the row, a new folder and the trash each come back with u.
 //
+// The copies are asked for with one side, as build:~/out, before build's
+// side is open: that side reads the folder with its full path, and still
+// shows the copies on their way into it.
+//
 // Negative control: with filesArrivals answering nil, the wait for the
-// arriving rows times out.
+// arriving rows times out. So it does with landsIn comparing the paths as
+// written, which never takes ~/out for the side's full path.
 func TestFilesViewCopies(t *testing.T) {
 	requireReal(t, "links a second daemon as a host")
 	base := t.TempDir()
@@ -517,17 +522,18 @@ func TestFilesViewCopies(t *testing.T) {
 	runInShell(t, term, "cd ~/project/big && clear && printf '\\033]7;file://%s\\033\\\\%s\\n' \"$PWD\" lis\"\"ted", "listed", uiTimeout)
 	sendKeys(t, term, tuitest.Ctrl('b'), "f")
 	railLists(t, term, "Ctrl+B f did not open the view on big", []string{"part1.bin", "whole.bin"}, []string{"Search files"})
-	sendKeys(t, term, "\\", ":", "build:~/out", tuitest.Enter)
-	railLists(t, term, "the second side did not go to build", []string{"build", "linked", "part1.bin"}, nil)
-	sendKeys(t, term, tuitest.Tab)
 
 	// x marks three rows; the footer counts them.
 	sendKeys(t, term, "x", "x", "x")
 	railLists(t, term, "x did not mark three rows", []string{"3 marked", "6 MiB"}, nil)
 	copiesFrame(t, term, "files-copy-marked")
 
-	// c copies them to build. They show in build's side before they land.
-	sendKeys(t, term, "c")
+	// With one side, c asks where: build:~/out. Then build's side opens on
+	// that folder. The copies show in it before they land.
+	sendKeys(t, term, "c", "build:~/out", tuitest.Enter)
+	sendKeys(t, term, "\\", ":", "build:~/out", tuitest.Enter)
+	railLists(t, term, "the second side did not go to build", []string{"build", "linked", "~ › out"}, nil)
+	sendKeys(t, term, tuitest.Tab)
 	moving := regexp.MustCompile(` [1-9][0-9]?%`)
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return containsAll(s.Text(), "Copies", "1 running", "~/project/big", "~/out", "of 6 MiB") && moving.MatchString(s.Text()) && strings.Count(s.Text(), "part2.bin") >= 3
