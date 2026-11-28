@@ -134,6 +134,7 @@ It also has more about the verbs that need it.
 - [`plugin-confirm`](#plugin-confirm)
 - [`plugin-notify`](#plugin-notify)
 - [`popup`](#popup)
+- [`port-connect`](#port-connect)
 - [`prompt`](#prompt)
 - [`queue-prompt`](#queue-prompt)
 - [`rail-pane`](#rail-pane)
@@ -3033,6 +3034,7 @@ The connection stays open after the reply.
 |---|---|---|---|---|
 | `host` | string |  |  | A host by name from the [hosts] config table. |
 | `ssh_auth_sock` | string |  |  | The caller's SSH_AUTH_SOCK. With [daemon] ssh_agent = "follow", the agent link the link's ssh forwards points at it while this caller is the newest person attached. |
+| `half_close` | bool |  |  | For a connection that will carry a TCP connection (port-connect): pass on a half-close in each direction instead of closing the whole connection, so a client that shuts its write side still reads the answer. |
 
 | Result field | Type | Description |
 |---|---|---|
@@ -3481,6 +3483,25 @@ Open a popup: a floating pane that runs one command and closes when the command 
 
 ```json
 {"id":1,"verb":"popup","params":{"session":"work","command":["fzf"],"wait":true,"capture_stdout":true}}
+```
+
+### `port-connect`
+
+Connect to a TCP port on this machine's loopback (127.0.0.1, then ::1) and turn this connection into that TCP connection. After the reply, every byte written here reaches the port and every byte the port sends comes back. Send nothing until the reply has arrived. Over a link it needs open, as exec does. tuios forward sends it.
+
+The connection stays open after the reply.
+
+| Param | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `port` | int | yes |  | The TCP port, 1 to 65535. |
+
+| Result field | Type | Description |
+|---|---|---|
+| `port` | int | The port that answered. |
+| `address` | string | The loopback address that answered: 127.0.0.1 or ::1. |
+
+```json
+{"id":1,"verb":"port-connect","params":{"port":8080}}
 ```
 
 ### `prompt`

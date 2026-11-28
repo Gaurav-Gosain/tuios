@@ -1107,6 +1107,14 @@ waits with it. With a window, the far writer waits for the reader instead.
 The near side counts what it holds for the reader in bytes, so many small
 frames cannot fill it either.
 
+A connection that carries a TCP connection (`tuios forward` and the
+`port-connect` verb) opens its stream with `half_close`. Then each end can
+send an EOF frame: it writes no more, and the stream stays open for bytes
+from the other end, as a TCP half-close. A peer that cannot read an EOF frame
+would drop the whole link on it, so the accepting side first answers the open
+with a half-ok frame, and the opener sends an EOF frame only after that
+answer. An older peer sends no answer, and the stream then closes whole.
+
 Each file goes through a part file named by its job, a sha256 of the original
 and of the part, and a rename into place. A job that has not ended is in a
 journal under the state folder, so a daemon restart goes on with it from its

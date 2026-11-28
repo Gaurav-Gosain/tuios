@@ -1028,6 +1028,7 @@ func buildVerbRegistry() map[string]verbEntry {
 			params: []verbParam{
 				{Name: "host", Type: "string"},
 				{Name: "ssh_auth_sock", Type: "string"},
+				{Name: "half_close", Type: "bool"},
 			},
 			returns: []verbParam{
 				{Name: "host", Type: "string"},
@@ -3005,6 +3006,7 @@ func buildVerbRegistry() map[string]verbEntry {
 	maps.Copy(table, taskVerbs())
 	// exec, what tuios run --host sends. See verb_exec.go.
 	maps.Copy(table, execVerbs())
+	maps.Copy(table, portVerbs())
 	// The sender's view of its mail. See verb_receipts.go.
 	maps.Copy(table, receiptVerbs())
 	maps.Copy(table, holdVerbs())
@@ -3118,6 +3120,10 @@ func (d *Daemon) handleJSONConnection(cs *connState, br *bufio.Reader) {
 		err = d.dispatchVerbLine(cs, line, lr.done)
 		if err != nil {
 			// A write failure means the connection is gone; stop.
+			if cs.abandon != nil {
+				cs.abandon()
+			}
+			cs.takeover, cs.abandon = nil, nil
 			return
 		}
 		if cs.takeover != nil {
@@ -3126,7 +3132,7 @@ func (d *Daemon) handleJSONConnection(cs *connState, br *bufio.Reader) {
 			// before it runs, because link-peer's takeover serves the same
 			// connection again, and a stale one would run after every verb.
 			take := cs.takeover
-			cs.takeover = nil
+			cs.takeover, cs.abandon = nil, nil
 			take(br)
 			return
 		}

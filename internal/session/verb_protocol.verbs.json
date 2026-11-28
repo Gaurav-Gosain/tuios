@@ -2766,6 +2766,10 @@
       {
         "name": "ssh_auth_sock",
         "description": "The caller's SSH_AUTH_SOCK. With [daemon] ssh_agent = \"follow\", the agent link the link's ssh forwards points at it while this caller is the newest person attached."
+      },
+      {
+        "name": "half_close",
+        "description": "For a connection that will carry a TCP connection (port-connect): pass on a half-close in each direction instead of closing the whole connection, so a client that shuts its write side still reads the answer."
       }
     ],
     "returns": [
@@ -6916,6 +6920,28 @@
     ],
     "examples": [
       "{\"id\":1,\"verb\":\"zoom-window\",\"params\":{\"session\":\"work\",\"window\":\"build\",\"zoom\":true}}"
+    ]
+  },
+  "port-connect": {
+    "description": "Connect to a TCP port on this machine's loopback (127.0.0.1, then ::1) and turn this connection into that TCP connection. After the reply, every byte written here reaches the port and every byte the port sends comes back. Send nothing until the reply has arrived. Over a link it needs open, as exec does. tuios forward sends it.",
+    "params": [
+      {
+        "name": "port",
+        "description": "The TCP port, 1 to 65535."
+      }
+    ],
+    "returns": [
+      {
+        "name": "port",
+        "description": "The port that answered."
+      },
+      {
+        "name": "address",
+        "description": "The loopback address that answered: 127.0.0.1 or ::1."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"port-connect\",\"params\":{\"port\":8080}}"
     ]
   }
 }

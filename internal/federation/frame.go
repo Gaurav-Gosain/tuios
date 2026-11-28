@@ -64,6 +64,17 @@ const (
 	// in all: eight bytes, big endian. Only a bulk stream carries it, and only
 	// between peers that both opened or accepted one. See bulk.go.
 	frameCredit frameType = 4
+	// frameEOF says the sender writes no more bytes on the stream, and the
+	// stream stays open for bytes from the peer: TCP's half-close. Payload is
+	// empty. A peer that predates it cannot read it and drops the link, so it
+	// goes only on a stream whose peer said it reads it: see frameHalfOK.
+	frameEOF frameType = 5
+	// frameHalfOK is the accepting side's answer to an open with
+	// StreamOpen.HalfClose: it reads frameEOF. It goes before any data, so the
+	// opener knows before its first CloseWrite. Payload is empty. A peer that
+	// predates it ignores HalfClose and sends no answer, and the opener then
+	// closes the whole stream instead of half of it.
+	frameHalfOK frameType = 6
 )
 
 func (t frameType) String() string {
@@ -76,6 +87,10 @@ func (t frameType) String() string {
 		return "close"
 	case frameCredit:
 		return "credit"
+	case frameEOF:
+		return "eof"
+	case frameHalfOK:
+		return "half-ok"
 	default:
 		return fmt.Sprintf("unknown(%d)", uint8(t))
 	}
@@ -129,7 +144,7 @@ func readFrame(r io.Reader) (frame, error) {
 	}
 	t := frameType(hdr[0])
 	switch t {
-	case frameOpen, frameData, frameClose, frameCredit:
+	case frameOpen, frameData, frameClose, frameCredit, frameEOF, frameHalfOK:
 	default:
 		return frame{}, errfmt.Errorf("%w: %d", ErrBadFrameType, hdr[0])
 	}

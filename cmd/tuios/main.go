@@ -1100,6 +1100,7 @@ The template itself is a JSON file in the directory 'tuios layout dir' prints.`,
 	rootCmd.AddCommand(newDisplayEnvCmd())
 	rootCmd.AddCommand(newKeepAwakeCmd())
 	rootCmd.AddCommand(newHoldCommand())
+	rootCmd.AddCommand(newForwardCmd())
 	rootCmd.AddCommand(startDaemonCmd, daemonCmd, killDaemonCmd, newRestartServerCommand(), newDaemonAppCommand())
 	rootCmd.AddCommand(sendKeysCmd, runCommandCmd, setConfigCmd, getConfigCmd, logsCmd, capturePaneCmd, screenshotCmd)
 	rootCmd.AddCommand(setAgentStateCmd, setAgentMetaCmd, setAgentSessionCmd, newResumeAgentCommand(), getAgentStateCmd, explainAgentDetectCmd, explainAgentScreenCmd)

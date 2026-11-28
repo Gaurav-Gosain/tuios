@@ -8,6 +8,8 @@
 #
 #   - TestSubagentListFromHooks and TestPaneUpgradeRunsNoFileWithoutADialog
 #     attach an OLD client beside NEW ones (TUIOS_E2E_OLD_BIN).
+#   - TestForwardToAnOlderHost runs tuios forward against an OLD far machine
+#     (TUIOS_E2E_OLD_BIN), whose link proxy cannot read the newer frames.
 #   - TestMixedVersionsReshapeOneTree runs twice: an OLD daemon with NEW
 #     clients, and a NEW daemon with one OLD client and one NEW one.
 #
@@ -42,6 +44,7 @@ run() { # NAME PATTERN ENV...
 }
 if [ "$group" != tree ]; then
 	run old-client '^(TestSubagentListFromHooks|TestPaneUpgradeRunsNoFileWithoutADialog)$' TUIOS_E2E_OLD_BIN="$old"
+	run old-host '^TestForwardToAnOlderHost$' TUIOS_E2E_OLD_BIN="$old"
 fi
 if [ "$group" != old-client ]; then
 	run old-daemon '^TestMixedVersionsReshapeOneTree$' TUIOS_E2E_MIX_DAEMON="$old" TUIOS_E2E_MIX_A="$new" TUIOS_E2E_MIX_B="$new"
