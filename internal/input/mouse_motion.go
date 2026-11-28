@@ -88,6 +88,10 @@ func handleMouseMotion(msg tea.MouseMotionMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.FileDragMotion(mouse.X, mouse.Y, mouse.Mod.Contains(tea.ModAlt))
 		return o, nil
 	}
+	// Rows of the Files view held by the pointer own it the same way.
+	if o.FilesDragActive() {
+		return o, o.FilesDragMotion(mouse.X, mouse.Y, mouse.Mod.Contains(tea.ModAlt))
+	}
 	if o.SidebarEdgeActive() {
 		o.SidebarEdgeMotion(mouse.X, mouse.Y)
 		return o, nil

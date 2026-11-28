@@ -522,6 +522,14 @@ prefix_file_search = ["f"]
 file_search = ["ctrl+f"]
 ```
 
+In the Files view, drag rows with the mouse. Drag a marked row to carry every marked row.
+
+- Drop the rows on a folder row, on a crumb, or on the empty part of a side.
+- On one machine a drop moves the rows. Between machines a drop copies them. Hold `Alt` to do the other.
+- Hold the rows on a folder or a tab for a moment to open it.
+- While you drag, the footer shows the panes and the agents. Drop on a pane to type the paths there. Drop on an agent to open a reply with the files in it.
+- The label at the pointer tells you what the drop does. `Esc` cancels the drag.
+
 ## Modifier spellings
 
 A key in `config.toml` can spell a modifier in more than one way. tuios reads each spelling as the same key. `tuios send-keys`, herdr keys and a tape take the same spellings.

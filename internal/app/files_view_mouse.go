@@ -107,6 +107,7 @@ func (m *OS) FilesClick(x, y int) tea.Cmd {
 		e.clickAt = time.Time{}
 		return m.FilesOpen()
 	}
+	m.filesArmDrag(s, x, y, at)
 	return nil
 }
 
