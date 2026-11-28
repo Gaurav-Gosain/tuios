@@ -57,7 +57,7 @@ const (
 )
 
 // defaultPromptWait is how long prompt waits when the caller names no
-// timeout. The most it waits is maxAskWait.
+// timeout. The most it waits is MaxAskWait.
 var defaultPromptWait = 120 * time.Second
 
 // PromptItem is one row of a pick. ID is what the answer names, unique in
@@ -331,7 +331,7 @@ func (d *Daemon) verbPrompt(cs *connState, params json.RawMessage) (any, *verbEr
 	}
 	timeout := defaultPromptWait
 	if p.Timeout > 0 {
-		timeout = min(time.Duration(p.Timeout)*time.Millisecond, maxAskWait)
+		timeout = min(time.Duration(p.Timeout)*time.Millisecond, MaxAskWait)
 	}
 	res := PromptResult{Type: "prompt_result", Status: PromptNoClient}
 	if d.pushPrompt(nil) == 0 {

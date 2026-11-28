@@ -1278,7 +1278,7 @@ func NewDaemon(cfg *DaemonConfig) *Daemon {
 		prPollEvery:          positiveOr(cfg.PRPollEvery, prPollInterval),
 		dispatchReady:        min(max(cfg.DispatchReady, 0), dispatchReadyMax),
 		execTimeout:          positiveOr(cfg.ExecTimeout, execDefaultTimeout),
-		askWait:              min(positiveOr(cfg.AskWait, defaultAskWait), maxAskWait),
+		askWait:              min(positiveOr(cfg.AskWait, defaultAskWait), MaxAskWait),
 		dropKeepAge:          positiveOr(cfg.DropKeepAge, dropKeepAge),
 		dropKeepBytes:        cmp.Or(max(cfg.DropKeepBytes, 0), dropKeepBytes),
 		hostHeartbeat:        cfg.HostHeartbeat,

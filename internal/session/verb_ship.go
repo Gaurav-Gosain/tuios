@@ -780,7 +780,7 @@ func (d *Daemon) shipAskPerson(cs *connState, verb string, o shipOutbound, p shi
 	}
 	wait := 120 * time.Second
 	if p.Wait > 0 {
-		wait = min(time.Duration(p.Wait)*time.Millisecond, maxAskWait)
+		wait = min(time.Duration(p.Wait)*time.Millisecond, MaxAskWait)
 	}
 	var hold *askHold
 	if p.RequestID != "" {
