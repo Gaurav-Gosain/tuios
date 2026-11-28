@@ -223,6 +223,10 @@ type quickLookState struct {
 	// textW is 0 when the body holds neither. See quicklook_copy.go.
 	copy                          *quickLookCopy
 	textX, textY, textW, bodyRows int
+	// cur is the cursor inside a text, and drawn the rows of the text the
+	// last frame drew, for a click. See quicklook_cursor.go.
+	cur   quickLookCursor
+	drawn []quickLookDrawnRow
 	// mouse is a press on the text, and held says the left or another
 	// button went down on the panel: the pointer is the panel's until it
 	// comes up. See quicklook_copy_mouse.go.
@@ -362,6 +366,7 @@ type quickLookFrame struct {
 	res                *quickLookResult
 	target             quickLookTarget
 	scroll             int
+	cur                quickLookCursor
 	inside             bool
 	prompt             quickLookPromptKind
 	input              string
@@ -620,6 +625,7 @@ func (m *OS) quickLookShow(t quickLookTarget) tea.Cmd {
 	}
 	ql.target = t
 	ql.scroll = 0
+	ql.cursorTo(0, 0)
 	ql.jump = quickLookNoMove
 	// A walk keeps the keyboard inside. The reply to a read that was out when
 	// the walk moved on shows the walk's target again through here.
@@ -1162,7 +1168,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 	}
 	// The border is in the key: the frame glyphs are a package global set from
 	// border_style every frame, outside the palette.
-	f := quickLookFrame{mdGen: ql.mdGen, mdOpen: ql.mdOpen, dirSel: ql.dirSel, dirStats: ql.dirStatsGen, run: ql.run, view: ql.view, viewScroll: ql.viewScroll, column: ql.column, details: ql.details, ok: true, look: ql.lookKey, res: ql.res, target: ql.target, scroll: ql.scroll, inside: ql.inside,
+	f := quickLookFrame{mdGen: ql.mdGen, mdOpen: ql.mdOpen, dirSel: ql.dirSel, dirStats: ql.dirStatsGen, run: ql.run, view: ql.view, viewScroll: ql.viewScroll, column: ql.column, details: ql.details, ok: true, look: ql.lookKey, res: ql.res, target: ql.target, scroll: ql.scroll, cur: ql.cur, inside: ql.inside,
 		prompt: ql.prompt, input: ql.input.String(), inputAt: ql.inputAt(), query: ql.query, status: ql.status, wrap: ql.wrap,
 		innerW: innerW, bodyH: bodyH, files: ql.files, key: key, seekKey: seekKey, insideKey: insideKey, border: m.Settings.OverlayBorder(),
 		canvas: pal.Canvas, fgMute: pal.FgMute, frame: pal.Frame, accent: pal.Accent,
@@ -1171,7 +1177,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 	var geo overlay.Geometry
 	var pic quickLookPic
 	// Copy mode moves something on every key, so its frames are not kept.
-	if k := &ql.framed; ql.copy == nil && k.ok && k.look == f.look && k.res == f.res && k.target == f.target && k.scroll == f.scroll && k.inside == f.inside &&
+	if k := &ql.framed; ql.copy == nil && k.ok && k.look == f.look && k.res == f.res && k.target == f.target && k.scroll == f.scroll && k.cur == f.cur && k.inside == f.inside &&
 		k.prompt == f.prompt && k.input == f.input && k.query == f.query && k.status == f.status && k.wrap == f.wrap && k.view == f.view && k.mdOpen == f.mdOpen && k.mdGen == f.mdGen && k.dirSel == f.dirSel && k.dirStats == f.dirStats && k.run == f.run && k.viewScroll == f.viewScroll && k.column == f.column && k.details == f.details &&
 		k.innerW == f.innerW && k.bodyH == f.bodyH && k.files == f.files && k.key == f.key && k.seekKey == f.seekKey && k.insideKey == f.insideKey && k.border == f.border &&
 		k.canvas == f.canvas && k.fgMute == f.fgMute && k.frame == f.frame && k.accent == f.accent &&
@@ -1198,7 +1204,7 @@ func (m *OS) renderQuickLook() (string, int, int) {
 		// a picture's cells arrive later.
 		ql.framed = quickLookFrame{}
 		if r := ql.res; ql.copy == nil && r != nil && r.target == ql.target && r.kind != "image" && r.kind != "pdf" && r.kind != "video" && ql.quickLookRunPictureRes() == nil {
-			f.scroll = ql.scroll // after the draw clamped it
+			f.scroll, f.cur = ql.scroll, ql.cur // after the draw clamped them
 			f.viewScroll = ql.viewScroll
 			f.content, f.geo = content, geo
 			ql.framed = f
@@ -1374,11 +1380,22 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 			m.QuickLookCopyEnd()
 		}
 		m.drawQuickLookRuler(c, l, quickLookTextRuler(r, from), w-1, bodyTop, bodyRows)
+		cursor := ql.cursorShown()
+		if cursor {
+			// A move of the view the cursor did not make brings it in.
+			ql.cursorIntoView(from)
+		}
+		ql.drawn = ql.drawn[:0]
 		row := 0
 		for n := from; row < bodyRows && n < len(r.lines); n++ {
+			onCursor := cursor && n == ql.cur.line
 			if r.firstLine > 0 {
 				num := strconv.Itoa(r.firstLine + n)
-				c.text(1+gutter-len(num), bodyTop+row, 0, ckSeg{t: num, fg: pal.FgMute})
+				ink := pal.FgMute
+				if onCursor {
+					ink = pal.Fg
+				}
+				c.text(1+gutter-len(num), bodyTop+row, 0, ckSeg{t: num, fg: ink})
 			}
 			var sp []diffview.Span
 			if n < len(r.spans) {
@@ -1393,7 +1410,11 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 					sp, text = ql.rowSpans, text[:end]
 				}
 				c.draw(codeX, bodyTop+row, codeW, dv.Code(text, sp, diffview.Range{}, diffview.Context, false, 0, codeW))
+				if onCursor {
+					m.drawQuickLookCursorRow(c, pal, codeX, bodyTop+row, codeW, 0, len(r.lines[n]), 0, true)
+				}
 				quickLookLightMatches(c, pal, ql.query, r.lines[n], codeX, bodyTop+row, codeW, 0)
+				ql.drawn = append(ql.drawn, quickLookDrawnRow{line: n})
 				row++
 				continue
 			}
@@ -1404,7 +1425,11 @@ func (m *OS) drawQuickLook(c *ckCanvas, l ckLook, dv *diffview.Theme, w, h int) 
 				end, cells := quickLookWrapNext(r.lines[n], at, codeW)
 				ql.rowSpans = quickLookRowSpans(ql.rowSpans, sp, at, end)
 				c.draw(codeX, bodyTop+row, codeW, dv.Code(r.lines[n][at:end], ql.rowSpans, diffview.Range{}, diffview.Context, false, 0, codeW))
+				if onCursor {
+					m.drawQuickLookCursorRow(c, pal, codeX, bodyTop+row, codeW, at, end, col, end >= len(r.lines[n]))
+				}
 				quickLookLightMatches(c, pal, ql.query, r.lines[n], codeX, bodyTop+row, cells, col)
+				ql.drawn = append(ql.drawn, quickLookDrawnRow{line: n, at: at, col: col})
 				at, col = end, col+cells
 				row++
 			}
@@ -1737,7 +1762,8 @@ func (m *OS) quickLookHints(closeKey string) []overlay.Hint {
 			}
 			h = add(h, first(in("wrap")), wrap)
 			if ql.res.kind == "text" {
-				h = add(h, first(in(config.ActionCopyMode)), "select")
+				h = add(h, first(in("select_text")), "select")
+				h = add(h, first(in(config.ActionCopyMode)), "copy mode")
 			}
 		}
 		h = add(h, pair(in, "line_down", "line_up"), "line")

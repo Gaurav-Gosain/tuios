@@ -19926,3 +19926,22 @@ editor, as dash does.
 | The `spPrompt` calls left out (the tree before the fix) | `TestPhoneStreamsAPaneAndAnswersTheInbox`, `TestStreamPaneHeldToTheLinkPolicy`, `TestStreamPaneLeaseChurn`, `TestStreamPaneFromAPane` | `no SZ- line showed`, with `sh-3.2$ SZ-22x78` on the screen | **caught** |
 | With the fix, the same forced runs | the 8 tests that use `limitsDaemon` or `spSize` | 8 of 8 pass | n/a |
 | With the fix, no forced start, `-count=3` | the same 8 tests | 24 of 24 pass | n/a |
+
+## The Files view shows a cursor inside a text file
+
+`TestFilesViewCursorInsideAFile` goes inside a text file in the Files view,
+moves the cursor with `j` and `l`, selects two words with `v e e`, copies
+them with `y`, leaves copy mode with `esc`, and clicks the text to move the
+cursor. It checks the cursor cell and the line highlight on the frame, the
+header keys, and the clipboard text.
+
+Run on 2026-11-28 on Linux against a build of the branch base, which has no
+cursor:
+
+| Change | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| The branch base (no cursor) | `TestFilesViewCursorInsideAFile` | `j did not show the cursor on the second line` | caught |
+
+The frame `files-cursor-after-j` under `TUIOS_E2E_FRAMES` shows the base
+with no cursor. Repeat from `e2e/tui` with
+`TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestFilesViewCursorInsideAFile$' -v .`.

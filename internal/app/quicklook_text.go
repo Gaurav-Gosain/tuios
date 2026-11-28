@@ -518,6 +518,7 @@ func (m *OS) applyQuickLookWindow(msg quickLookWindowMsg) tea.Cmd {
 		n.parts = append([]quickLookPart{part}, r.parts...)
 		n.startOff = w.Offset
 		ql.scroll += len(msg.lines)
+		ql.cur.line += len(msg.lines)
 		switch {
 		case w.Offset == 0:
 			n.firstLine = 1
@@ -533,13 +534,18 @@ func (m *OS) applyQuickLookWindow(msg quickLookWindowMsg) tea.Cmd {
 			n.firstLine = 1
 		}
 		ql.scroll = 0
+		ql.cursorTo(0, 0)
 		if msg.move == quickLookEnd {
 			ql.scroll = 1 << 30
+			ql.cursorTo(len(n.lines)-1, 0)
 		}
 		if msg.move == quickLookSeek {
 			ql.resume = 0
 			if msg.seek.Line > 0 {
 				n.firstLine = int(msg.seek.Line)
+			}
+			if q := msg.seek.Find; q != "" && len(n.lines) > 0 {
+				ql.cursorTo(0, quickLookMatchCol(n.lines[0], q))
 			}
 		}
 	}
@@ -555,6 +561,7 @@ func (m *OS) applyQuickLookWindow(msg quickLookWindowMsg) tea.Cmd {
 			}
 			n.startOff += p.bytes
 			ql.scroll -= p.lines
+			ql.cur.line -= p.lines
 			if n.firstLine > 0 {
 				n.firstLine += p.lines
 			}
@@ -818,6 +825,7 @@ func (m *OS) QuickLookFindMove(forward bool) {
 		for i := top + 1; i < len(r.lines); i++ {
 			if quickLookMatch(r.lines[i], ql.query) {
 				ql.scroll = i
+				ql.cursorTo(i, quickLookMatchCol(r.lines[i], ql.query))
 				return
 			}
 		}
@@ -833,6 +841,7 @@ func (m *OS) QuickLookFindMove(forward bool) {
 	for i := min(top-1, len(r.lines)-1); i >= 0; i-- {
 		if quickLookMatch(r.lines[i], ql.query) {
 			ql.scroll = i
+			ql.cursorTo(i, quickLookMatchCol(r.lines[i], ql.query))
 			return
 		}
 	}
@@ -875,6 +884,7 @@ func (m *OS) quickLookGoToLine(n int64) {
 	if r.firstLine > 0 {
 		if i := n - int64(r.firstLine); i >= 0 && i < int64(len(r.lines)) {
 			ql.scroll = int(i)
+			ql.cursorTo(int(i), 0)
 			return
 		}
 	}

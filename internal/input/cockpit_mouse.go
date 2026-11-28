@@ -143,7 +143,11 @@ func quickLookCopyPress(msg tea.MouseClickMsg, o *app.OS) bool {
 	}
 	if cm == nil && clicks == 1 {
 		// A plain press, or shift with nothing selected: the first move
-		// starts the selection here.
+		// starts the selection here. A plain press puts the text's cursor
+		// under the pointer.
+		if !shift {
+			o.QuickLookCursorAt(x, y)
+		}
 		g.Armed = !shift
 		return true
 	}

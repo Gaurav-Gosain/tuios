@@ -1,6 +1,8 @@
 package app
 
 import (
+	"slices"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/overlay"
@@ -59,28 +61,47 @@ func (m *OS) filesLookHeader(pal overlay.Palette, w int) string {
 		x = c.text(x, 0, w-1, ckSeg{t: icon.Glyph + " ", fg: pal.AccentBright})
 	}
 	c.text(x, 0, w-1, ckSeg{t: name, fg: pal.Fg, attrs: ckBold})
-	var segs []ckSeg
-	add := func(table config.Table, action, label string) {
-		if m.KeybindRegistry == nil {
-			return
-		}
-		keys := m.KeybindRegistry.Keys(table, action)
-		if len(keys) == 0 {
-			return
-		}
+	seg := func(segs []ckSeg, key, label string) []ckSeg {
 		if len(segs) > 0 {
 			segs = append(segs, ckSeg{t: "   "})
 		}
-		segs = append(segs, ckSeg{t: keys[0], fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " " + label, fg: pal.FgDim})
+		return append(segs, ckSeg{t: key, fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " " + label, fg: pal.FgDim})
 	}
-	if ql.inside {
-		add(config.TableQuickLookInside, "go_back", "back to the list")
-	} else {
-		add(config.TableQuickLook, "go_inside", "read inside")
+	hint := func(segs []ckSeg, table config.Table, action, label string) []ckSeg {
+		if m.KeybindRegistry == nil {
+			return segs
+		}
+		keys := m.KeybindRegistry.Keys(table, action)
+		if len(keys) == 0 {
+			return segs
+		}
+		return seg(segs, keys[0], label)
 	}
-	add(config.TableFiles, config.ActionFilesFill, "fill")
-	if ckWidth(segs...)+ckWidth(ckSeg{t: name})+6 < w {
-		c.textR(w-1, 0, segs...)
+	var lead, full []ckSeg
+	switch q := ql.copy; {
+	case q != nil && !q.cm.Implicit && q.cm.State.InVisual():
+		// Copy mode has its own keys, the ones its legend names.
+		lead = seg(seg(nil, "y", "copy"), "esc", "end the selection")
+	case q != nil && !q.cm.Implicit:
+		lead = seg(seg(nil, "v", "select"), "q", "leave copy mode")
+	case ql.inside:
+		lead = hint(lead, config.TableQuickLookInside, "go_back", "back to the list")
+	default:
+		lead = hint(lead, config.TableQuickLook, "go_inside", "read inside")
+	}
+	full = lead
+	if ql.cursorShown() {
+		full = hint(slices.Clone(lead), config.TableQuickLookInside, "select_text", "select")
+		full = hint(full, config.TableQuickLookInside, config.ActionCopyMode, "copy mode")
+	}
+	lead = hint(lead, config.TableFiles, config.ActionFilesFill, "fill")
+	full = hint(full, config.TableFiles, config.ActionFilesFill, "fill")
+	// A narrow header drops the copy keys first, then every key.
+	for _, segs := range [...][]ckSeg{full, lead} {
+		if ckWidth(segs...)+ckWidth(ckSeg{t: name})+6 < w {
+			c.textR(w-1, 0, segs...)
+			break
+		}
 	}
 	return c.render()
 }

@@ -99,6 +99,8 @@ var actionTable = [...]ActionSpec{
 	{Name: "filmstrip", Desc: "Preview: show the filmstrip of a film, or hide it", Run: RunView},
 	{Name: "copy_mode", Desc: "Preview: copy mode on the text, to select and copy it", Run: RunView},
 	{Name: "next_view", Desc: "Preview: show the next view of the file", Run: RunView},
+	{Name: "select_text", Desc: "Preview: start copy mode at the cursor and select text", Run: RunView},
+	{Name: "select_lines", Desc: "Preview: start copy mode at the cursor and select whole lines", Run: RunView},
 	{Name: "open_details", Desc: "Preview: open the closed sections of a Markdown file, or the selected row of a folder", Run: RunView},
 	{Name: "column_left", Desc: "Preview: move a column left, 1 second back in a film, or up from a folder", Run: RunView},
 	{Name: "column_right", Desc: "Preview: move a column right, 1 second on in a film, or into a folder row", Run: RunView},
