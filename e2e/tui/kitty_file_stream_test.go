@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"testing"
-	"time"
 )
 
 // fileFrameKeys matches the control keys of a kitty command that names a file
@@ -34,13 +33,10 @@ func TestAFileStreamIsPlacedWithEachFrame(t *testing.T) {
 	typeLine(t, term, fmt.Sprintf("%s %s 60 0 file %s", bin, filepath.Join(dir, "geom"), count))
 	waitFrames := func(n int) {
 		t.Helper()
-		deadline := time.Now().Add(shellTimeout)
-		for guestFrames(count) < n {
-			if time.Now().After(deadline) {
-				t.Fatalf("the guest wrote %d frames, want %d\n%s", guestFrames(count), n, term.Snapshot())
-			}
-			time.Sleep(20 * time.Millisecond)
-		}
+		waitUntil(t, fmt.Sprintf("the guest writes %d frames", n), shellTimeout, func() (bool, string) {
+			got := guestFrames(count)
+			return got >= n, fmt.Sprintf("%d frames\n%s", got, term.Snapshot())
+		})
 	}
 	// The first frames are placed by the refresh pass, which is what makes
 	// the placement a later frame can go out with.
@@ -48,8 +44,7 @@ func TestAFileStreamIsPlacedWithEachFrame(t *testing.T) {
 	host.mark("steady")
 	from := guestFrames(count)
 	waitFrames(from + 60)
-	// The client sends the last frames it has.
-	time.Sleep(gestureGap)
+	pause(t, "the client sends the last frames it has, and nothing on screen says when", gestureGap)
 	saveFrame(t, term, "file-stream")
 
 	stream := host.bytes()
