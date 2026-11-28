@@ -229,6 +229,30 @@ func TestHoverLightsEveryRunOfAnIDLink(t *testing.T) {
 	}
 }
 
+// TestLinkLabelOff is #2293: link_label = "off" hides the label under a
+// hovered link. The hover still underlines the run, and ctrl+click still
+// opens it.
+//
+// Negative control: drop the LinkLabelOff check at the top of
+// renderLinkLabel. The label then shows "ctrl+click to open" and stayTrue
+// fails.
+func TestLinkLabelOff(t *testing.T) {
+	term, _, record := linkOpenSetup(t, "link_label = \"off\"\n", "x")
+
+	col, row := mustFind(t, term, linkPlain)
+	mouseHover(t, term, col+5, row)
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return cellUnderlined(s, col+5, row) }, uiTimeout); err != nil {
+		t.Fatalf("the hover did not underline the link: %v\n%s", err, term.Snapshot())
+	}
+	stayTrue(t, "link_label = off shows no label", time.Second, func() (bool, string) {
+		s := term.Screen()
+		return !strings.Contains(s.Text(), "ctrl+click to open") && cellUnderlined(s, col+5, row), term.Snapshot()
+	})
+	saveFrame(t, term, "link-label-off")
+	mouseClick(t, term, col+5, row, tuitest.MouseLeft, tuitest.ModCtrl)
+	waitOpened(t, record, []string{linkPlain}, "ctrl+click with link_label = off")
+}
+
 // TestLinkClickSettingIsHonoured: link_click = "ctrl" turns shift+click off,
 // and ctrl+click still opens.
 func TestLinkClickSettingIsHonoured(t *testing.T) {

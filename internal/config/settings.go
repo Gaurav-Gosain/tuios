@@ -219,6 +219,10 @@ type Settings struct {
 	// constants. Set via appearance.link_hover.
 	LinkHover string `opt:"appearance.link_hover,keep"`
 
+	// LinkLabel shows or hides the label under a hovered link: one of the
+	// LinkLabel* constants. Set via appearance.link_label.
+	LinkLabel string `opt:"appearance.link_label,keep"`
+
 	// LinkRules are the compiled [[links.rules]]: plain text that is turned
 	// into a link with a target built from the match. Nil when there are
 	// none, which is what keeps the frame from scanning lines for them.
@@ -1093,6 +1097,7 @@ func DefaultSettings() Settings {
 		ZenMode:                     ZenModeDisabled,
 		Links:                       LinksAll,
 		LinkClick:                   LinkClickBoth,
+		LinkLabel:                   LinkLabelOn,
 		DropPreview:                 DropPreviewOutline,
 		DropPreviewDelay:            DefaultDropPreviewDelay,
 		DockbarPosition:             DefaultDockbarPosition,
