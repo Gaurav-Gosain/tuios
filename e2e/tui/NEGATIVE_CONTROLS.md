@@ -19908,7 +19908,7 @@ editor, as dash does.
 | With the fix, no forced start, `-count=3` | the same 8 tests | 24 of 24 pass | n/a |
 ## A pane refused more grants is told what works
 
-`TestAPaneRefusedMoreGrantsIsToldWhatWorks` runs under strict with the read grant. The pane runs `tuios set-pane-grants --grants read,write` and is refused. The refusal must say to run set-pane-grants in a terminal outside tuios, that no pane holds respond, and that [agents.permissions] in config.toml is the other way.
+`TestAPaneRefusedMoreGrantsIsToldWhatWorks` runs under strict with the read grant. The pane runs `tuios set-pane-grants --grants read,write` and is refused. The refusal must say to run set-pane-grants in a terminal outside tuios, that no pane holds respond, and that [agents.permissions] in config.toml is the other way. The refusal must stay about as long as before, so the start of it stays on the screen in the narrow panes of `TestHerdrSocketAPI` and `TestStrictModeHoldsEveryPane`.
 
 Run on 2026-11-22 on Linux, real backend, against main at c15ba94b0.
 

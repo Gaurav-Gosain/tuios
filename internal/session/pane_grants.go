@@ -715,9 +715,8 @@ func grantForbidden(verb string, pa *paneAuth, why string) *verbError {
 		Detail: "Pane " + shortWindowID(pa.window) + " holds " + pa.grants.String() + ", " + source + ". Nothing was done. " +
 			"What a pane may do is the person's decision. Do not try another verb or another process to do the same thing. " +
 			"Tell the person what you needed and why. " +
-			"The person can give this pane more. They run tuios set-pane-grants " + target + " --grants <names> in a terminal outside tuios. " +
-			"A pane can give only the grants it holds, and no pane holds respond. " +
-			"Or they set mode and grants under [agents.permissions] in config.toml, for every pane started with none.",
+			"The person runs tuios set-pane-grants " + target + " --grants <names> in a terminal outside tuios, because no pane holds respond. " +
+			"Or they set [agents.permissions] in config.toml.",
 	})
 }
 
