@@ -659,7 +659,7 @@ The description of a table names its keys.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| <a id="profile"></a>`profile` | string | `keyboard` | A set of defaults. simple turns window mode off, puts the dock at the bottom with a row of buttons, and calls a workspace a tab. A key you set wins Values: `keyboard`, `simple`. |
+| <a id="profile"></a>`profile` | string | `keyboard` | A set of defaults. simple turns window mode off, puts the dock at the bottom with a row of buttons, gives the focus to the pane under the mouse, and calls a workspace a tab. A key you set wins Values: `keyboard`, `simple`. |
 
 ### sidebar
 

@@ -316,6 +316,7 @@ profile = "simple"   # simple or keyboard (default)
 - Every key goes to the pane. Window mode is off (`[keybindings] window_mode = false`).
 - The dock is at the bottom. It shows the tabs on the left and a row of buttons on the right: Menu, New, Split, Close, Help and Settings.
 - The Menu button opens the short menu. A right-click on a pane opens the pane menu.
+- The pane under the mouse pointer gets the focus (`[appearance] focus_follows_mouse = true`).
 - The window controls are a pill on the right of the title bar.
 - The UI calls a workspace a "tab".
 
