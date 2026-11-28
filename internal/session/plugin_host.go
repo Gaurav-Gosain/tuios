@@ -555,6 +555,10 @@ type pluginContext struct {
 	CorrelationID     string                  `json:"correlation_id,omitempty"`
 	ClickedURL        string                  `json:"clicked_url,omitempty"`
 	LinkHandlerID     string                  `json:"link_handler_id,omitempty"`
+	// AttachedHost is the [hosts] name of the machine the client that ran
+	// the action is attached to, or "" for this machine. Not in herdr's
+	// context.
+	AttachedHost string `json:"attached_host,omitempty"`
 
 	// sessionName and window name the focused pane as the -s and -w flags of
 	// the tuios command line take it. They are not in herdr's context.
@@ -607,6 +611,7 @@ func (c pluginContext) merge(p *pluginContext) pluginContext {
 	c.CorrelationID = pick(p.CorrelationID, c.CorrelationID)
 	c.ClickedURL = pick(p.ClickedURL, c.ClickedURL)
 	c.LinkHandlerID = pick(p.LinkHandlerID, c.LinkHandlerID)
+	c.AttachedHost = pick(p.AttachedHost, c.AttachedHost)
 	return c
 }
 

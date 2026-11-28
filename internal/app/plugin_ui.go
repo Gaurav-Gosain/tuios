@@ -2,6 +2,7 @@ package app
 
 import (
 	"slices"
+	"strings"
 
 	"github.com/Gaurav-Gosain/tuios/internal/dockengine"
 
@@ -107,31 +108,37 @@ func (m *OS) pluginCellDrawn(name string) string {
 // runPluginCellClick runs the action a cell names, or opens the pane it
 // names as the palette does. The daemon refuses a plugin that is not
 // enabled, as it does for the palette.
-func (m *OS) runPluginCellClick(name string) bool {
+func (m *OS) runPluginCellClick(name string) (bool, tea.Cmd) {
 	c, ok := m.pluginCells[name]
 	if !ok || (c.Action == "" && c.Pane == "") {
-		return false
+		return false, nil
 	}
+	short := strings.TrimPrefix(name, config.DockPluginPrefix)
 	if c.Pane != "" {
 		params := map[string]any{"plugin_id": c.Plugin, "entrypoint": c.Pane, "focus": true, "env": map[string]string{"TUIOS_PLUGIN_CELL": c.ID}}
-		go func() {
+		return true, func() tea.Msg {
 			if err := pluginCaller("plugin.pane.open", params); err != nil {
-				clientLog("the pane of cell %s failed: %v", name, err)
+				return dockClickFailedMsg{Name: short, Detail: err.Error()}
 			}
-		}()
-		return true
+			return nil
+		}
 	}
 	ctx := map[string]any{"invocation_source": "dock"}
 	if w := m.GetFocusedWindow(); w != nil {
 		ctx["focused_pane_id"] = w.ID
 	}
+	// The [hosts] name the client is attached through, so the action can send
+	// its work to the machine the person is looking at.
+	if m.AttachedHost != "" {
+		ctx["attached_host"] = m.AttachedHost
+	}
 	params := map[string]any{"plugin_id": c.Plugin, "action_id": c.Action, "context": ctx}
-	go func() {
+	return true, func() tea.Msg {
 		if err := pluginCaller("plugin.action.invoke", params); err != nil {
-			clientLog("the action of cell %s failed: %v", name, err)
+			return dockClickFailedMsg{Name: short, Detail: err.Error()}
 		}
-	}()
-	return true
+		return nil
+	}
 }
 
 // sortedPluginCells are the names of the cells in a stable order.

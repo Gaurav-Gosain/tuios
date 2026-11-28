@@ -121,9 +121,12 @@ type Engine struct {
 	cancel context.CancelFunc
 
 	// session and socket are handed to every command, the way hooks are given
-	// their context. Guarded by mu because a client may attach elsewhere.
+	// their context. host is the [hosts] name the client is attached through,
+	// or "" for this machine. Guarded by mu because a client may attach
+	// elsewhere.
 	session string
 	socket  string
+	host    string
 
 	// rail is the environment the rail section's command runs with: the
 	// focused pane and the section's size, read fresh by the model for each
@@ -218,13 +221,14 @@ func (e *Engine) Stop() {
 	e.cancel()
 }
 
-// SetContext records the session name and socket path handed to every command.
-func (e *Engine) SetContext(session, socket string) {
+// SetContext records the session name, socket path and attached host handed to
+// every command.
+func (e *Engine) SetContext(session, socket, host string) {
 	if e == nil {
 		return
 	}
 	e.mu.Lock()
-	e.session, e.socket = session, socket
+	e.session, e.socket, e.host = session, socket, host
 	e.mu.Unlock()
 }
 
@@ -614,9 +618,11 @@ func (e *Engine) CommandEnv(name string, extra ...string) []string {
 // which every command the engine runs is given.
 func (e *Engine) baseEnv() []string {
 	e.mu.Lock()
-	session, socket := e.session, e.socket
+	session, socket, host := e.session, e.socket, e.host
 	e.mu.Unlock()
-	return append(os.Environ(), "TUIOS_SESSION="+session, "TUIOS_SOCKET="+socket)
+	// TUIOS_ATTACHED_HOST is set, and empty, on this machine too, so a
+	// script that reads it never picks up the value of an outer client.
+	return append(os.Environ(), "TUIOS_SESSION="+session, "TUIOS_SOCKET="+socket, "TUIOS_ATTACHED_HOST="+host)
 }
 
 // dockKillGrace bounds how long a wait may go on after the kill.

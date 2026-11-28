@@ -2301,9 +2301,16 @@ default list. `[dock.session]` takes `format` (`{session}`, `{workspace}`,
 A custom component's first line of stdout becomes its cell, it is hidden when
 the command fails, and `tuios list-dock-components` says which and why.
 The `command` and the `on-click` command get `TUIOS_SESSION`, `TUIOS_SOCKET`
-and `TUIOS_DOCK_COMPONENT`, the name of the component. The `on-click` command
+and `TUIOS_DOCK_COMPONENT`, the name of the component. They also get
+`TUIOS_ATTACHED_HOST`. It is the `[hosts]` name of the machine that the client
+is attached to, such as `build` after `tuios attach --host build`. It is empty
+for a session on this machine. The `on-click` command
 also gets `TUIOS_CLICK_BUTTON`, the mouse button: `1` for left, `2` for middle
 and `3` for right.
+The commands run on the machine of the client. To act on the attached machine,
+send the work there, for example with `tuios run --host "$TUIOS_ATTACHED_HOST"`.
+When the `on-click` command fails, tuios shows a notice with the exit status
+and the last line that the command wrote to stderr.
 tuios runs one copy of the command at a time. When an event arrives while the
 command runs, tuios runs the command one more time when it ends. An interval
 that comes due while the command runs is skipped.
