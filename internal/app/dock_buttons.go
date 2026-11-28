@@ -131,6 +131,32 @@ func (m *OS) renderDockButtons(fit dockButtonsFit) (string, []dockCustomHit) {
 	return b.String(), hits
 }
 
+// dockNotifMinWidth is the room a message keeps when it shares the right
+// block with the button row: the cap, the mark and a few words.
+const dockNotifMinWidth = 24
+
+// dockButtonsBeside draws the button row beside a message, at the widest fit
+// that leaves the row no more than room columns. It returns "" when not even
+// the more button fits.
+func (m *OS) dockButtonsBeside(room int) (string, []dockCustomHit) {
+	fit := dockButtonsFit{shown: len(m.dockButtonRow())}
+	for {
+		text, hits := m.renderDockButtons(fit)
+		if lipgloss.Width(text) <= room {
+			return text, hits
+		}
+		switch {
+		case !fit.compact:
+			fit.compact = true
+		case fit.shown > 0:
+			fit.shown--
+		default:
+			m.dockButtonsShown = 0
+			return "", nil
+		}
+	}
+}
+
 // dockButtonsWidth is the room the row takes at one fit, or 0 when the dock
 // does not list it.
 func (m *OS) dockButtonsWidth(fit dockButtonsFit) int {

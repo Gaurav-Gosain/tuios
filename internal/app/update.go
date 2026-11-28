@@ -3100,7 +3100,11 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 			// This ensures PTYs match the new window dimensions even if no animation was created
 			// (e.g., when window was already at target position but PTY had stale dimensions)
 			m.SyncDaemonPTYDimensions()
-			if sizeChanged {
+			// A client alone in its session sets the size itself, so the size
+			// it hears back is its own terminal's. That is no news, and on an
+			// attach the message took the dock's right block for two seconds,
+			// where a click on the Simple profile's buttons landed on it.
+			if sizeChanged && msg.ClientCount > 1 {
 				m.showAmbientNotification(fmt.Sprintf("Session size: %dx%d (%d clients)", msg.Width, msg.Height, msg.ClientCount), "info", 2*time.Second)
 			}
 		} else if m.DaemonClient.SessionSizedBySelf() {
