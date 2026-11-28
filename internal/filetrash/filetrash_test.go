@@ -1,4 +1,4 @@
-package app
+package filetrash
 
 import (
 	"errors"
@@ -7,9 +7,39 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/testutil"
 )
 
-// The trash tests point trashDirFunc at a temporary tree. Nothing here goes
+func TestMain(m *testing.M) { testutil.RunIsolated(m) }
+
+// awkwardName holds a space, both quotes, a semicolon, a command substitution,
+// a backtick and a newline, as the app's file tests use it.
+const awkwardName = "-a b\"c';$(touch pwned)`id`\nx.txt"
+
+// mustWrite writes body to path.
+func mustWrite(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// namesIn lists the names in dir.
+func namesIn(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, e.Name())
+	}
+	return out
+}
+
+// The trash tests point DirFunc at a temporary tree. Nothing here goes
 // anywhere near the user's own trash, and the real home trash path is checked
 // separately without writing to it.
 
@@ -17,9 +47,9 @@ import (
 func tempTrash(t *testing.T) string {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), "Trash")
-	prev := trashDirFunc
-	trashDirFunc = func() (string, error) { return dir, nil }
-	t.Cleanup(func() { trashDirFunc = prev })
+	prev := DirFunc
+	DirFunc = func() (string, error) { return dir, nil }
+	t.Cleanup(func() { DirFunc = prev })
 	return dir
 }
 
@@ -40,9 +70,9 @@ func TestTrashMovesTheFileAndRecordsWhereItCameFrom(t *testing.T) {
 	mustWrite(t, path, "body")
 
 	when := time.Date(2026, 8, 27, 9, 30, 0, 0, time.UTC)
-	done, err := trashPaths([]string{path}, when)
+	done, err := Put([]string{path}, when)
 	if err != nil || done != 1 {
-		t.Fatalf("trashPaths returned %d, %v; want 1, nil", done, err)
+		t.Fatalf("Put returned %d, %v; want 1, nil", done, err)
 	}
 	if _, err := os.Lstat(path); err == nil {
 		t.Error("the file is still where it was after a trash")
@@ -73,8 +103,8 @@ func TestTrashEncodesAnAwkwardName(t *testing.T) {
 	path := filepath.Join(dir, awkwardName)
 	mustWrite(t, path, "body")
 
-	if done, err := trashPaths([]string{path}, time.Now()); err != nil || done != 1 {
-		t.Fatalf("trashPaths returned %d, %v", done, err)
+	if done, err := Put([]string{path}, time.Now()); err != nil || done != 1 {
+		t.Fatalf("Put returned %d, %v", done, err)
 	}
 	if _, err := os.Lstat(filepath.Join(trash, "files", awkwardName)); err != nil {
 		t.Fatalf("the file did not land in the trash under its own name: %v", err)
@@ -150,7 +180,7 @@ func TestTwoFilesWithOneNameBothSurviveTheTrash(t *testing.T) {
 	mustWrite(t, filepath.Join(second, "a.txt"), "second")
 
 	for _, p := range []string{filepath.Join(first, "a.txt"), filepath.Join(second, "a.txt")} {
-		if done, err := trashPaths([]string{p}, time.Now()); err != nil || done != 1 {
+		if done, err := Put([]string{p}, time.Now()); err != nil || done != 1 {
 			t.Fatalf("trashing %q returned %d, %v", p, done, err)
 		}
 	}
@@ -194,7 +224,7 @@ func TestTrashLeavesNoInfoBehindWhenTheMoveFails(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(filepath.Join(trash, "files"), 0o700) })
 
-	if done, err := trashPaths([]string{path}, time.Now()); err == nil || done != 0 {
+	if done, err := Put([]string{path}, time.Now()); err == nil || done != 0 {
 		t.Fatalf("the trash reported %d, %v; the move cannot have worked", done, err)
 	}
 	if _, err := os.Lstat(path); err != nil {
@@ -209,7 +239,7 @@ func TestTrashLeavesNoInfoBehindWhenTheMoveFails(t *testing.T) {
 	}
 
 	// And a trash that never claimed a name leaves nothing either.
-	if _, err := trashPaths([]string{filepath.Join(dir, "missing.txt")}, time.Now()); err == nil {
+	if _, err := Put([]string{filepath.Join(dir, "missing.txt")}, time.Now()); err == nil {
 		t.Error("trashing a missing file was allowed")
 	}
 }

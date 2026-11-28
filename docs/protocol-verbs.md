@@ -64,6 +64,8 @@ It also has more about the verbs that need it.
 - [`file-remove`](#file-remove)
 - [`file-rename`](#file-rename)
 - [`file-stat`](#file-stat)
+- [`file-trash`](#file-trash)
+- [`file-untrash`](#file-untrash)
 - [`file-walk`](#file-walk)
 - [`finish-task`](#finish-task)
 - [`focus-window`](#focus-window)
@@ -1530,6 +1532,8 @@ List a folder on this machine a page at a time, folders first, then names in nat
 | `parent` | string | The folder above. Absent at the root. |
 | `home` | string | This machine's home folder. |
 | `capped` | bool | The folder holds more than 50000 names, and only those were read. |
+| `access` | object | Over a link only: what the linked machine may do in the folder. files says the link allows files, write that the machine may write here, and roots the folders it may write in. |
+| `denied` | int | Over a link only: how many names the read deny list leaves out. |
 
 ```json
 {"id":1,"verb":"file-list","params":{"dir":"~/src","limit":200}}
@@ -1727,6 +1731,40 @@ Describe one path on this machine. With part, describe the part file a copy to t
 
 ```json
 {"id":2,"verb":"file-stat","params":{"path":"~/proj","names":["main.go","docs"]}}
+```
+
+### `file-trash`
+
+Move paths to the trash of this machine. A linked machine may trash only paths it may write. A path that fails does not stop the rest.
+
+| Param | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `paths` | []string | yes |  | The paths. |
+
+| Result field | Type | Description |
+|---|---|---|
+| `trashed` | []object | One object per path the trash took: from, the path it was at; file, the path in the trash; info, the trash info file. |
+| `error` | string | Why a path was left, when one was. |
+
+```json
+{"id":1,"verb":"file-trash","params":{"paths":["~/out/old.log"]}}
+```
+
+### `file-untrash`
+
+Put a file the trash took back where it was. The trash must have taken it from to, and to must be free.
+
+| Param | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `file` | string | yes |  | The path in the trash, as file-trash answered it. |
+| `to` | string | yes |  | The path it came from. |
+
+| Result field | Type | Description |
+|---|---|---|
+| `path` | string | The path it is at now. |
+
+```json
+{"id":1,"verb":"file-untrash","params":{"file":"~/.local/share/Trash/files/old.log","to":"~/out/old.log"}}
 ```
 
 ### `file-walk`

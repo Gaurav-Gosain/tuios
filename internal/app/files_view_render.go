@@ -255,11 +255,14 @@ func (m *OS) drawFilesSide(c *ckCanvas, pal overlay.Palette, g filesGlyphs, s *f
 	}
 	x := c.text(x0, y, right, ckSeg{t: glyph + " ", fg: pal.AccentBright}, ckSeg{t: name, fg: pal.Fg, attrs: ckBold})
 	c.text(x+1, y, right, ckSeg{t: where, fg: pal.FgDim})
+	badge, ink := m.filesAccessBadge(s, pal)
 	switch {
 	case reading:
 		c.textR(right, y, ckSeg{t: "reading", fg: pal.FgDim})
 	case s.Err != "" && s.Dir != "" && len(s.Entries) > 0:
 		c.textR(right, y, ckSeg{t: ckTrunc(s.Err, max(b.w/2, 10)), fg: pal.Warning})
+	case badge != "":
+		c.textR(right, y, ckSeg{t: badge, fg: ink})
 	}
 	// The crumbs.
 	y++
@@ -529,13 +532,20 @@ func (m *OS) drawFilesFooter(c *ckCanvas, pal overlay.Palette, s *filesSide, x0,
 		if s.filter != "" {
 			left += " · filter " + s.filter
 		}
+		if s.access.denied > 0 {
+			name, _ := m.filesMachineOf(s)
+			left += " · " + itoaFiles(s.access.denied) + " hidden by " + printableTitle(name) + "'s read rules"
+		}
 		x := c.text(x0, y, right, ckSeg{t: left, fg: pal.FgDim})
 		if n := len(m.filesArrivals(s)); n > 0 {
 			c.text(x, y, right, ckSeg{t: " · ", fg: pal.FgMute}, ckSeg{t: strconv.Itoa(n) + " arriving", fg: pal.AccentBright})
 		}
 	}
-	if s.Capped {
+	switch {
+	case s.Capped:
 		c.textR(right, y, ckSeg{t: "first " + plural.Count(len(s.Entries), "name") + " of a large folder: / narrows it", fg: pal.FgMute})
+	case m.filesWriteRefusal(s) != "":
+		c.textR(right, y, ckSeg{t: ckTrunc(m.filesWriteRefusal(s), max(right-x0-44, 10)), fg: pal.Warning})
 	}
 }
 
@@ -545,6 +555,8 @@ type filesHint struct {
 	key, label string
 	run        func(m *OS) tea.Cmd
 	x0, x1     int
+	// off says the key cannot write where it would: a press says why.
+	off bool
 }
 
 // filesHints is the footer's hints: quick look's keys first while it is
@@ -581,14 +593,22 @@ func (m *OS) filesHints() []filesHint {
 	}
 	act(config.ActionFilesEdit, "edit in a pane")
 	act(config.ActionFilesMark, "mark")
+	// A key that writes where this machine may not is drawn dim.
+	writes := func(action, label string, s *filesSide) {
+		n := len(out)
+		act(action, label)
+		if len(out) > n && s != nil && m.filesWriteRefusal(s) != "" {
+			out[n].off = true
+		}
+	}
 	if m.filesTabCur().two {
-		act(config.ActionFilesCopy, "copy")
-		act(config.ActionFilesMove, "move")
+		writes(config.ActionFilesCopy, "copy", m.filesOther())
+		writes(config.ActionFilesMove, "move", m.filesOther())
 	} else {
 		act(config.ActionFilesCopy, "copy to")
 	}
-	act(config.ActionFilesRename, "rename")
-	act(config.ActionFilesTrash, "trash")
+	writes(config.ActionFilesRename, "rename", m.filesCur())
+	writes(config.ActionFilesTrash, "trash", m.filesCur())
 	if len(e.undo) > 0 {
 		act(config.ActionFilesUndo, "undo")
 	}
@@ -618,7 +638,11 @@ func (m *OS) drawFilesHints(c *ckCanvas, pal overlay.Palette, y, w, top int) {
 			break
 		}
 		h.x0 = x
-		x = c.text(x, y, w-1, ckSeg{t: h.key, fg: pal.AccentBright, attrs: ckBold}, ckSeg{t: " " + h.label, fg: pal.FgDim})
+		keyInk, labelInk := pal.AccentBright, pal.FgDim
+		if h.off {
+			keyInk, labelInk = pal.FgMute, pal.FgMute
+		}
+		x = c.text(x, y, w-1, ckSeg{t: h.key, fg: keyInk, attrs: ckBold}, ckSeg{t: " " + h.label, fg: labelInk})
 		h.x1 = x
 		e.hints = append(e.hints, h)
 		x += 3

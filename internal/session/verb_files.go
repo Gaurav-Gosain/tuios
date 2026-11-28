@@ -440,6 +440,18 @@ func (d *Daemon) verbFileList(cs *connState, params json.RawMessage) (any, *verb
 		names = names[:fileScanMax]
 	}
 	entries := make([]FileInfo, 0, len(names))
+	// Over a link the names the read deny list holds are left out and
+	// counted: the peer learns how many, not which.
+	viaLink := cs != nil && cs.viaLink
+	var home string
+	var lp linkPrivate
+	if viaLink {
+		if h, err := os.UserHomeDir(); err == nil {
+			home = realPath(filepath.Clean(h))
+		}
+		lp = d.linkPrivateDirs()
+	}
+	denied := 0
 	for _, name := range names {
 		if !showHidden && strings.HasPrefix(name, ".") {
 			continue
@@ -449,6 +461,10 @@ func (d *Daemon) verbFileList(cs *connState, params json.RawMessage) (any, *verb
 			continue
 		}
 		full := filepath.Join(dir, name)
+		if viaLink && linkReadDenied(realPath(full), home, lp) {
+			denied++
+			continue
+		}
 		fi, err := os.Lstat(full)
 		if err != nil {
 			continue
@@ -489,6 +505,10 @@ func (d *Daemon) verbFileList(cs *connState, params json.RawMessage) (any, *verb
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		out["home"] = home
+	}
+	if viaLink {
+		out["access"] = d.linkAccessOf(cs, dir)
+		out["denied"] = denied
 	}
 	return out, nil
 }
@@ -1588,6 +1608,8 @@ func fileVerbs() map[string]verbEntry {
 				{Name: "parent", Type: "string"},
 				{Name: "home", Type: "string"},
 				{Name: "capped", Type: "bool"},
+				{Name: "access", Type: "object"},
+				{Name: "denied", Type: "int"},
 			},
 			handler: (*Daemon).verbFileList,
 		},
@@ -1629,6 +1651,28 @@ func fileVerbs() map[string]verbEntry {
 				{Name: "to", Type: "string"},
 			},
 			handler: (*Daemon).verbFileRename,
+		},
+		"file-trash": {
+			scope: scopeDeny,
+			link:  needFiles,
+			params: []verbParam{
+				{Name: "paths", Type: "[]string", Required: true},
+			},
+			returns: []verbParam{
+				{Name: "trashed", Type: "[]object"},
+				{Name: "error", Type: "string"},
+			},
+			handler: (*Daemon).verbFileTrash,
+		},
+		"file-untrash": {
+			scope: scopeDeny,
+			link:  needFiles,
+			params: []verbParam{
+				{Name: "file", Type: "string", Required: true},
+				{Name: "to", Type: "string", Required: true},
+			},
+			returns: []verbParam{{Name: "path", Type: "string"}},
+			handler: (*Daemon).verbFileUntrash,
 		},
 		"file-remove": {
 			scope: scopeDeny,
