@@ -12,7 +12,7 @@ require (
 	github.com/spf13/pflag v1.1.0
 	golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba
 	golang.org/x/term v0.48.0
-	tuios.dev/vt v0.3.4-0.20261125144012-dd363a3684fc
+	tuios.dev/vt v0.3.4-0.20261128073151-5523cbf11ebc
 )
 
 require (
@@ -39,7 +39,7 @@ require (
 	github.com/tklauser/go-sysconf v0.4.0 // indirect
 	github.com/tklauser/numcpus v0.12.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	go.mitchellh.com/libghostty v0.0.0-20261107144202-b13f277ddcb2 // indirect
+	go.mitchellh.com/libghostty v0.0.0-20261123035439-5bbe1d0d0990 // indirect
 	golang.org/x/crypto v0.59.0 // indirect
 	golang.org/x/image v0.48.0 // indirect
 	golang.org/x/text v0.44.0 // indirect
