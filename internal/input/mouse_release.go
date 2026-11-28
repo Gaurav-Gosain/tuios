@@ -80,6 +80,13 @@ func handleMouseRelease(msg tea.MouseReleaseMsg, o *app.OS) (*app.OS, tea.Cmd) {
 			return o, cmd
 		}
 	}
+	// Rows of the Files view held by the pointer drop on the target under
+	// it. See files_view_drag.go.
+	if o.FilesDragActive() {
+		mouse := msg.Mouse()
+		o.OverlayMouseRelease()
+		return o, o.FilesDragRelease(mouse.X, mouse.Y, mouse.Mod.Contains(tea.ModAlt))
+	}
 	panelDrag := o.OverlayDragActive()
 	o.OverlayMouseRelease()
 	if panelDrag {

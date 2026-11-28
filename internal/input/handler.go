@@ -445,6 +445,10 @@ func HandleKeyPress(msg tea.KeyPressMsg, o *app.OS) (*app.OS, tea.Cmd) {
 		o.CancelFileDrag()
 		return o, nil
 	}
+	if o.FilesDragActive() && msg.String() == "esc" {
+		o.CancelFilesDrag()
+		return o, nil
+	}
 
 	// A modifier pressed on its own arrives as a key while tuios asks for every
 	// key as an escape code. Holding Shift for the key after the leader must

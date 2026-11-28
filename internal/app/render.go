@@ -444,6 +444,11 @@ func (m *OS) GetCanvas(render bool) *frameCanvas {
 			layers = append(layers, label)
 		}
 
+		// Rows of the Files view held by the pointer. See files_view_drag.go.
+		if label := m.renderFilesDragLabel(); label != nil {
+			layers = append(layers, label)
+		}
+
 		// The label of a drag between panes, at the pointer. See dnd_drag.go.
 		if label := m.renderDnDLabel(); label != nil {
 			layers = append(layers, label)

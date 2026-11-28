@@ -235,6 +235,10 @@ type explorerState struct {
 	// hintsY. A click on one runs it.
 	hints  []filesHint
 	hintsY int
+	// drag is a press on a row and the drag it may become, and shelf the
+	// drop shelf's panes as last drawn. See files_view_drag.go.
+	drag  filesDrag
+	shelf []filesShelfHit
 }
 
 // filesBox is a rectangle on the screen.

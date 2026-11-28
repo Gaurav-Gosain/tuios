@@ -156,6 +156,11 @@ func (m *OS) drawFilesView(c *ckCanvas, pal overlay.Palette, w, h, top int) {
 	default:
 		m.drawFilesSide(c, pal, g, cur, body, top, true)
 	}
+	m.drawFilesDropMark(c, pal, top)
+	if e.drag.dragging {
+		m.drawFilesShelf(c, pal, hintsY, w, top)
+		return
+	}
 	m.drawFilesHints(c, pal, hintsY, w, top)
 }
 
