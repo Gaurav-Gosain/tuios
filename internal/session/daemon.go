@@ -35,6 +35,8 @@ import (
 // Daemon manages the persistent TUIOS server process.
 // It owns PTYs and stores session state. Clients run the TUI.
 type Daemon struct {
+	// sigCh gets the signals catchSignals caught, for handleSignals.
+	sigCh chan os.Signal
 	// execRunning counts the exec verbs running now, held to execMaxRunning.
 	execRunning atomic.Int32
 
@@ -1776,6 +1778,8 @@ func (d *Daemon) onSessionDeleted(s *Session) {
 
 // Start starts the daemon.
 func (d *Daemon) Start() error {
+	// First, before any pane starts. See catchSignals.
+	d.catchSignals()
 	socketPath := d.manager.SocketPath()
 	d.startRig(socketPath)
 	// Pinned: the path is resolved once. Resolved again at shutdown, it can

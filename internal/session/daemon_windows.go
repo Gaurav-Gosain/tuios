@@ -13,6 +13,10 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// catchSignals does nothing here: a Windows program inherits no ignored
+// signals. handleSignals catches its own.
+func (d *Daemon) catchSignals() {}
+
 // handleSignals handles Windows signals for daemon shutdown.
 // Windows only supports SIGINT and SIGTERM (via Ctrl+C and taskkill).
 // kill-server cannot send either to a detached daemon, so it sets the stop

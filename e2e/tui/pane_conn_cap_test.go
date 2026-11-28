@@ -3,6 +3,7 @@ package tuie2e
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -107,6 +108,9 @@ func TestPanesCannotTakeThePersonsConnections(t *testing.T) {
 	}
 	sock := filepath.Join(xdgDir(base, "XDG_RUNTIME_DIR"), "tuios", "tuios.sock")
 	script := connHolderScript(t, base)
+	// The holders that call setsid leave the pane's session, so no hangup
+	// of the pane reaches them: the test stops every holder itself.
+	t.Cleanup(func() { killRunning(t, script) })
 	// Each holder runs in the background, so the pane takes the next one.
 	run := func(window, out string, n, forks int) {
 		t.Helper()
@@ -183,4 +187,27 @@ func TestPanesCannotTakeThePersonsConnections(t *testing.T) {
 		}
 	}
 	tr.save(t, "pane-conns.txt")
+}
+
+// killRunning kills every process whose command line names path, such as the
+// helper scripts a test runs in its panes. Linux only: it reads /proc.
+func killRunning(t *testing.T, path string) {
+	t.Helper()
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil || pid == os.Getpid() {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join("/proc", e.Name(), "cmdline"))
+		if err != nil || !slices.Contains(strings.Split(string(raw), "\x00"), path) {
+			continue
+		}
+		if p, err := os.FindProcess(pid); err == nil {
+			_ = p.Kill()
+		}
+	}
 }
