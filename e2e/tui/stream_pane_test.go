@@ -778,16 +778,14 @@ func spType(t *testing.T, ctl *linkStream, window, text string) {
 // line.
 func spPrompt(t *testing.T, ctl *linkStream, window string) {
 	t.Helper()
-	deadline := time.Now().Add(uiTimeout)
-	for time.Now().Before(deadline) {
-		if lines := spLines(t, ctl, window); len(lines) > 0 {
-			if last := lines[len(lines)-1]; strings.HasSuffix(last, "$") || strings.HasSuffix(last, "#") {
-				return
-			}
+	waitUntil(t, "the shell in "+window+" printed a prompt", uiTimeout, func() (bool, string) {
+		lines := spLines(t, ctl, window)
+		if len(lines) == 0 {
+			return false, ""
 		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	t.Fatalf("the shell in %s printed no prompt:\n%s", window, strings.Join(spLines(t, ctl, window), "\n"))
+		last := lines[len(lines)-1]
+		return strings.HasSuffix(last, "$") || strings.HasSuffix(last, "#"), strings.Join(lines, "\n")
+	})
 }
 
 func spLines(t *testing.T, ctl *linkStream, window string) []string {
