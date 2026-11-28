@@ -70,6 +70,10 @@ func (c *reviewOriginCache) read(dir string) review.OriginDiffs {
 // authors the marks index.
 func (d *Daemon) reviewOrigins(ctx context.Context, repo reviewRepo, diff *review.Diff) ([]reviewOrigin, error) {
 	authors := []reviewOrigin{{Kind: "person"}}
+	// A turn that just ended has its checkpoint still to come, and without
+	// it the turn's lines read as the person's.
+	panes := d.reviewPanes(repo.root)
+	d.awaitCheckpoints(ctx, panes)
 	all, err := worktree.ListCheckpoints(ctx, repo.root, "")
 	if err != nil {
 		return nil, err
@@ -92,7 +96,6 @@ func (d *Daemon) reviewOrigins(ctx context.Context, repo reviewRepo, diff *revie
 	if len(turns) > reviewOriginSteps {
 		turns = turns[len(turns)-reviewOriginSteps:]
 	}
-	panes := d.reviewPanes(repo.root)
 	// The chain, in time order: each checkpoint ends a turn and credits
 	// it, and each turn start credits the person with what changed before
 	// it (turn_starts.go).
@@ -189,6 +192,11 @@ func (d *Daemon) reviewOrigins(ctx context.Context, repo reviewRepo, diff *revie
 					step.Author = end.author
 				}
 			}
+			// With no edits to tell, a file written after the turn
+			// began and before its snapshot ran is the turn's, unsure.
+			if step.Judge == nil && ok && len(s.late) > 0 {
+				step.Author, step.Judge = end.author, writtenDuring(s.late)
+			}
 		}
 		steps = append(steps, step)
 		from, prevAt = mk.tree, mk.at
@@ -244,4 +252,16 @@ func reviewAgentName(w WindowState) string {
 		}
 	}
 	return "agent"
+}
+
+// writtenDuring is the judge of a turn start's lines with no edits to read:
+// Unsure for a line in one of late, the files written after the turn began,
+// and NotMade for every other line.
+func writtenDuring(late []string) func(path, text string) review.Verdict {
+	return func(path, _ string) review.Verdict {
+		if slices.Contains(late, path) {
+			return review.Unsure
+		}
+		return review.NotMade
+	}
 }

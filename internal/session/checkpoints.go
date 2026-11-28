@@ -66,8 +66,10 @@ type checkpointer struct {
 	due map[string]*checkpointDue
 }
 
-// checkpointDue is a checkpoint a window is waiting for.
+// checkpointDue is a checkpoint a window is waiting for. done is closed
+// when the window has no checkpoint queued or running any more.
 type checkpointDue struct {
+	done  chan struct{}
 	again bool
 	turn  uint64
 	state string
@@ -122,13 +124,43 @@ func (d *Daemon) noteCheckpointEvent(s *Session, ev SessionEvent) {
 	if c.due == nil {
 		c.due = make(map[string]*checkpointDue)
 	}
-	c.due[ev.Window] = &checkpointDue{turn: ev.completionSeq, state: ev.State, text: ev.hookMessage}
+	c.due[ev.Window] = &checkpointDue{done: make(chan struct{}), turn: ev.completionSeq, state: ev.State, text: ev.hookMessage}
 	c.mu.Unlock()
 	window := ev.Window
 	if !d.goTracked(func() { d.runCheckpoints(s, window) }) {
 		c.mu.Lock()
-		delete(c.due, window)
+		c.finish(window)
 		c.mu.Unlock()
+	}
+}
+
+// finish drops the window's due checkpoint and wakes its waiters. c.mu is
+// held.
+func (c *checkpointer) finish(window string) {
+	if job, ok := c.due[window]; ok {
+		close(job.done)
+		delete(c.due, window)
+	}
+}
+
+// awaitCheckpoints waits until none of windows has a checkpoint queued or
+// running, or ctx ends. A turn's end makes its pane idle at once and saves
+// the checkpoint after, so a read of the work tree in between finds neither
+// a working agent nor the turn's checkpoint.
+func (d *Daemon) awaitCheckpoints(ctx context.Context, windows map[string]agentPane) {
+	c := &d.checkpoints
+	for id := range windows {
+		c.mu.Lock()
+		job := c.due[id]
+		c.mu.Unlock()
+		if job == nil {
+			continue
+		}
+		select {
+		case <-job.done:
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 
@@ -151,7 +183,7 @@ func (d *Daemon) runCheckpoints(s *Session, window string) {
 
 		c.mu.Lock()
 		if !job.again || d.ctx.Err() != nil {
-			delete(c.due, window)
+			c.finish(window)
 			c.mu.Unlock()
 			return
 		}
