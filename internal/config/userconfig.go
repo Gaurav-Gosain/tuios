@@ -2517,12 +2517,16 @@ func getDefaultQuickLookKeybinds() map[string][]string {
 // so d here cannot reach the rail's delete.
 func getDefaultQuickLookInsideKeybinds() map[string][]string {
 	return map[string][]string{
-		"line_down":      {"j", "down"},
-		"line_up":        {"k", "up"},
-		"column_left":    {"h", "left"},
-		"column_right":   {"l", "right"},
-		"open_details":   {"enter"},
-		"next_view":      {"v"},
+		"line_down":    {"j", "down"},
+		"line_up":      {"k", "up"},
+		"column_left":  {"h", "left"},
+		"column_right": {"l", "right"},
+		"open_details": {"enter"},
+		// v and V start a selection at the text's cursor, as in vim, so
+		// the next view is o inside the file. Outside it stays v.
+		"select_text":    {"v"},
+		"select_lines":   {"V"},
+		"next_view":      {"o"},
 		"half_down":      {"d", "ctrl+d", "J", "pgdown"},
 		"half_up":        {"u", "ctrl+u", "K", "pgup"},
 		"start":          {"g", "home"},

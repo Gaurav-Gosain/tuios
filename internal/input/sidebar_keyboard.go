@@ -392,6 +392,11 @@ func quickLookInsideAction(o *app.OS, act string) tea.Cmd {
 			return o.QuickLookParent()
 		}
 	}
+	// A text with the cursor: the moves move the cursor, and the view
+	// follows it.
+	if o.QuickLookCursorMove(act) {
+		return nil
+	}
 	switch act {
 	case "parent":
 		return o.QuickLookParent()
@@ -437,6 +442,17 @@ func quickLookInsideAction(o *app.OS, act string) tea.Cmd {
 		return o.QuickLookNextView()
 	case "copy_mode":
 		o.QuickLookCopyStart()
+	case "select_text", "select_lines":
+		// Copy mode at the cursor, with the selection begun.
+		if o.QuickLookCopyStart() {
+			if cm, grid := o.QuickLookCopy(); cm != nil {
+				if act == "select_lines" {
+					enterVisualLine(cm, grid)
+				} else {
+					enterVisualChar(cm, grid)
+				}
+			}
+		}
 	case "open_editor":
 		return o.QuickLookOpenEditor()
 	}

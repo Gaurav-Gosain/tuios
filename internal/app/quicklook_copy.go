@@ -257,9 +257,20 @@ func (m *OS) quickLookCopyBegin(implicit bool) bool {
 	for top < len(q.rows) && q.rows[top].line < line {
 		top++
 	}
+	// The key starts at the text's cursor, with the view moved as little as
+	// it can to show it.
+	at, x := top, 0
+	if !implicit && q.md == nil && ql.cursorShown() {
+		at, x = q.cursorRow(ql)
+		top = min(top, at)
+		if at >= top+q.h {
+			top = at - q.h + 1
+		}
+	}
 	q.SetScrollOffset(q.ScrollbackLen() - top)
 	q.cm = terminal.CopyMode{Active: true, State: terminal.CopyModeNormal, ScrollOffset: q.offset, Implicit: implicit}
-	q.cm.CursorY = max(top-q.top(), 0)
+	q.cm.CursorY = max(at-q.top(), 0)
+	q.cm.CursorX = x
 	ql.copy = q
 	if !implicit {
 		ql.wrap = true
@@ -290,6 +301,26 @@ func (m *OS) QuickLookCopyEnd() {
 	if t := q.top(); t >= 0 && t < len(q.rows) {
 		ql.scroll = q.rows[t].line
 	}
+	// The text's cursor stays where copy mode's cursor ended.
+	if abs := q.top() + q.cm.CursorY; q.md == nil && abs >= 0 && abs < len(q.rows) {
+		row := q.rows[abs]
+		ql.cursorTo(row.line, quickLookColOf(q.lines[row.line], row.at)+q.cm.CursorX)
+		ql.cursorFollow()
+	}
+}
+
+// cursorRow is the row of the laid out text that holds the text's cursor,
+// and the cursor's column in that row.
+func (q *quickLookCopy) cursorRow(ql *quickLookState) (row, x int) {
+	line := min(max(ql.cur.line, 0), len(q.lines)-1)
+	_, at := ql.cursorCell()
+	for i, r := range q.rows {
+		if r.line != line || at >= r.end && r.more {
+			continue
+		}
+		return i, quickLookColOf(q.lines[line][r.at:], at-r.at)
+	}
+	return 0, 0
 }
 
 // drawQuickLookCopy draws the text as copy mode lays it out, with the search

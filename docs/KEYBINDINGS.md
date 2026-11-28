@@ -426,17 +426,19 @@ Inside the file, every key acts on the preview:
 
 | Key | Action |
 | --- | --- |
-| `j` `k` | Move one line, one page of a PDF, or 1 second of a film |
-| `h` `l` | Move 1 second of a film, or one column of a table |
-| `v` | Show the next view: the diff of a changed file, then the details |
+| `j` `k` | Move the cursor one line, or move one page of a PDF, or 1 second of a film |
+| `h` `l` | Move the cursor one character, or move 1 second of a film, or one column of a table |
+| `o` | Show the next view: the diff of a changed file, then the details |
 | `t` | Show the small frames of a film, or hide them |
-| `d` `u` | Move half a page |
+| `d` `u` | Move the view and the cursor half a page |
 | `g` `G` | Go to the start or the end, or the first or last page |
 | `/` | Search in a text. Lower case ignores case |
 | `n` `N` | Go to the next match, or the one before |
 | `:` | Go to a line number, or a page of a PDF |
 | `w` | Wrap long lines, or cut them |
-| `[` | Start copy mode on the text |
+| `v` | Start copy mode at the cursor and select text |
+| `V` | Start copy mode at the cursor and select whole lines |
+| `[` | Start copy mode at the cursor |
 | `e` | Open the file in your editor in a new pane, at the line at the top of the preview |
 | `f` | Fill the area of the panes, or go back |
 | `Backspace` | Show the folder of the file, with the file selected |
@@ -466,13 +468,24 @@ Then the preview follows the cursor again.
 Change these keys in `[keybindings.quick_look]` and
 `[keybindings.quick_look_inside]`.
 
-`[` in a text file starts [copy mode](#copy-mode) on the text, with the cursor
-on the first line in view. All copy mode keys work: move, select with `v`,
+Inside a text file, a cursor shows where you are. The line of the cursor has
+a quiet highlight. The keys above move the cursor. The view scrolls only to
+keep the cursor in view. A search and `:` put the cursor on the line that they
+find. Click the text to put the cursor there. The mouse wheel scrolls the
+view, and the cursor stays in view. Markdown files, pictures, folders, tables
+and archives have no cursor.
+
+Outside the file, `v` shows the next view. Inside the file, `v` and `V`
+select text, so `o` shows the next view.
+
+`[` in a text file starts [copy mode](#copy-mode) on the text, at the cursor.
+`v` and `V` start copy mode with a selection. All copy mode keys work: move, select with `v`,
 `V` or `Ctrl+V`, search with `/`, and copy with `y`. The mouse works as in a
 pane's copy mode: a click moves the cursor, a drag selects and copies on
 release, and the wheel scrolls. Long lines wrap while
 copy mode is on. A selection across a wrapped line copies the line whole. `q`
-or `Esc` goes back to the preview keys.
+or `Esc` goes back to the preview keys. The cursor stays where copy mode left
+it.
 
 ### Paths in a pane or the agents view
 

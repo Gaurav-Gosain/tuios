@@ -239,11 +239,13 @@ Run `tuios keybinds list` to see the keys that your config sets.
 | `u`, `ctrl+u`, `K`, `pgup` | `half_up` | Preview: move half a page back |
 | `j`, `down` | `line_down` | Preview: move one line forward |
 | `k`, `up` | `line_up` | Preview: move one line back |
-| `v` | `next_view` | Preview: show the next view of the file |
+| `o` | `next_view` | Preview: show the next view of the file |
 | `enter` | `open_details` | Preview: open the closed sections of a Markdown file, or the selected row of a folder |
 | `e` | `open_editor` | Preview: open the file in your editor, in a new pane |
 | `backspace` | `parent` | Preview: show the folder above, or the folder of the file |
 | `r` | `reveal_in_rail` | Preview: show this folder in the rail's files section |
+| `V` | `select_lines` | Preview: start copy mode at the cursor and select whole lines |
+| `v` | `select_text` | Preview: start copy mode at the cursor and select text |
 | `g`, `home` | `start` | Preview: go to the start of the file |
 | `w` | `wrap` | Preview: wrap long lines, or cut them |
 | `1` | `zoom_actual` | Preview: show the picture at 100% |
