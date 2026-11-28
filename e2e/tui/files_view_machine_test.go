@@ -58,9 +58,7 @@ func TestFilesViewMachinePicker(t *testing.T) {
 	enterTerminalMode(t, term)
 	runInShell(t, term, "cd ~/project && clear && printf '\\033]7;file://%s\\033\\\\%s\\n' \"$PWD\" lis\"\"ted", "listed", uiTimeout)
 	sendKeys(t, term, tuitest.Ctrl('b'), "f")
-	railLists(t, term, "Ctrl+B f did not open the view", []string{"Search files"}, nil)
-	sendKeys(t, term, tuitest.Esc)
-	railLists(t, term, "the view did not open", []string{"this machine"}, []string{"Search files"})
+	railLists(t, term, "Ctrl+B f did not open the view on its list", []string{"this machine"}, []string{"Search files"})
 
 	// A click on the machine row opens the picker.
 	clickOnText(t, term, "this machine")
