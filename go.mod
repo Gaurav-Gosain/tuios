@@ -21,6 +21,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
+	github.com/klauspost/compress v1.20.3
 	github.com/lrstanley/bubbletint/v2 v2.0.2
 	github.com/lrstanley/go-nf v0.0.0-20261113000353-c3e5e7061bf4
 	github.com/pelletier/go-toml/v2 v2.4.3
@@ -61,8 +62,8 @@ require (
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/coder/websocket v1.8.15
-	github.com/creack/pty v1.1.24 // indirect
-	github.com/ebitengine/purego v0.11.2 // indirect
+	github.com/creack/pty v1.1.24
+	github.com/ebitengine/purego v0.11.2
 	github.com/go-logfmt/logfmt v0.6.1 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

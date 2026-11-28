@@ -94,6 +94,25 @@ builds:
     flags:
       - -trimpath
 
+  # tuios-rd, the remote desktop viewer that tuios remote-desktop runs. It
+  # goes in the tuios archive, next to tuios. Linux and macOS only.
+  - id: tuios-rd
+    main: ./cmd/tuios-rd
+    binary: tuios-rd
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+    flags:
+      - -trimpath
+
   - id: tuios-web
     main: ./cmd/tuios-web
     binary: tuios-web
@@ -330,6 +349,7 @@ archives:
       {{- if .Arm }}v{{ .Arm }}{{ end }}
     ids:
       - tuios
+      - tuios-rd
     files:
       - README.md
       - LICENSE*
@@ -540,6 +560,7 @@ aurs:
     package: |
       # bin
       install -Dm755 "./tuios" "${pkgdir}/usr/bin/tuios"
+      install -Dm755 "./tuios-rd" "${pkgdir}/usr/bin/tuios-rd"
 
       # license
       install -Dm644 "./LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
