@@ -28,8 +28,6 @@ replace tuios.dev/tml v0.1.2-0.20261112200225-e5512e40c8da => ./tml
 
 replace tuios.dev/acp v0.0.0-20261120180431-437c5b45ae51 => ./acp
 
-replace tuios.dev/harness v0.0.0-20261120215113-0f1cffa25ec1 => ./harness
-
 replace tuios.dev/shot v0.2.2-0.20261120215113-0f1cffa25ec1 => ./shot
 
 replace tuios.dev/swatch v0.1.2-0.20261120215113-0f1cffa25ec1 => ./swatch
@@ -41,3 +39,5 @@ replace tuios.dev/sketch v0.4.1-0.20261124185855-9f712ffb4bd2 => ./sketch
 replace tuios.dev/vt v0.3.4-0.20261125144012-dd363a3684fc => ./vt
 
 replace tuios.dev/progresume v0.0.0-20261126085303-cf36e248c838 => ./progresume
+
+replace tuios.dev/harness v0.0.0-20261128074051-31c5ed14c506 => ./harness

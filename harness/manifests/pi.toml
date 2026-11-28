@@ -72,6 +72,15 @@ reader = "pi-jsonl"
 dir    = "{pi_agent}/sessions"
 glob   = "*/*.jsonl"
 
+# What a new agent can be started with: the model, as the New agent sheet and
+# start-agent --model pass it. A model outside any list is passed too, as one
+# word: pi takes a pattern or ID, such as "provider/id". Pi has no effort or
+# permission flag tuios knows; its --thinking names a thinking level, not an
+# effort.
+[launch]
+model_flag = "--model"
+source      = "pi --help, pi 1.6.0"
+
 # The conversation survives a daemon restart on disk: pi's hooks report the
 # session id, and --session reopens it by exact or partial id. A restored pane
 # lands in the same working directory, which is the project the session was

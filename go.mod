@@ -33,7 +33,7 @@ require (
 	golang.org/x/term v0.48.0
 	rsc.io/qr v0.2.0
 	tuios.dev/acp v0.0.0-20261120180431-437c5b45ae51
-	tuios.dev/harness v0.0.0-20261120215113-0f1cffa25ec1
+	tuios.dev/harness v0.0.0-20261128074051-31c5ed14c506
 	tuios.dev/progresume v0.0.0-20261126085303-cf36e248c838
 )
 
