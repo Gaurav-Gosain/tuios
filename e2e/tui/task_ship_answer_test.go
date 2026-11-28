@@ -58,6 +58,9 @@ func TestReadyToMergeAnswerStaysWithItsCard(t *testing.T) {
 		if out := inPane(t, base, "home", w, "task done "+c.id); !strings.Contains(out, "EXIT=0") {
 			t.Fatalf("tuios task done %s: %s", c.id, out)
 		}
+		// The agent ends its turn, as its Stop hook says. ship-commit
+		// refuses while the agent in the pane is working.
+		mustCLI(t, base, "set-agent-state", "-s", "home", "-w", w, "done", "--harness", "claude-code")
 	}
 	waitLife(t, base, "home", uiTimeout, "the two cards did not reach review",
 		func(c map[string]lifeCard) bool { return c["t1"].Stage == "review" && c["t2"].Stage == "review" })
@@ -100,13 +103,10 @@ func TestReadyToMergeAnswerStaysWithItsCard(t *testing.T) {
 		t.Fatalf("the first commit landed before the second sheet opened; the test proves nothing")
 	}
 	dir := artifactDir(t)
-	deadline := time.Now().Add(30 * time.Second)
-	for commits(api) == "1" {
-		if time.Now().After(deadline) {
-			t.Fatalf("ASSERTION: the commit on t1 never landed\n%s", term.Snapshot())
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	waitUntil(t, "ASSERTION: the commit on t1 to land", 30*time.Second, func() (bool, string) {
+		n := commits(api)
+		return n != "1", "commits on t1's branch: " + n + "\n" + term.Snapshot()
+	})
 	if err := term.WaitFor(func(s tuitest.Screen) bool {
 		return strings.Contains(s.Text(), "Commit on t1 done.") || strings.Contains(s.Text(), "Commit done.")
 	}, uiTimeout); err != nil {
