@@ -66,7 +66,10 @@ func limitsDaemon(t *testing.T) (string, *phoneLink, *linkStream, string, string
 	if len(wins) != 2 {
 		t.Fatalf("want 2 windows, got %d", len(wins))
 	}
-	return base, link, ctl, wins[0].(map[string]any)["window_id"].(string), wins[1].(map[string]any)["window_id"].(string)
+	w1, w2 := wins[0].(map[string]any)["window_id"].(string), wins[1].(map[string]any)["window_id"].(string)
+	spPrompt(t, ctl, w1)
+	spPrompt(t, ctl, w2)
+	return base, link, ctl, w1, w2
 }
 
 // frameWithin reads one pane frame, or reports a timeout.

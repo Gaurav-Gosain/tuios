@@ -19887,3 +19887,22 @@ Run on 2026-11-27 on Linux. One control, this branch with the idle gate in `appl
 
 Repeat from `e2e/tui` with
 `TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -run '^TestIdleProgramStatusIsNotAnAgent$' -v .`.
+
+## A stream pane test types before the shell prompt
+
+The stream pane tests type a size probe into a pane right after new-window.
+When the shell has not printed its prompt yet, the tty echoes the probe, and
+a shell with no line editor (dash, the CI `/bin/sh`) prints its output after
+the prompt on one line: `$ SZ-22x78`. `spSize` reads only lines that start
+with `SZ-`, so the test fails with "no SZ- line showed". `spPrompt` now waits
+for the prompt in each pane before the tests type into it.
+
+Run on 2026-11-28 on macOS. The forced runs set `ENV` to a file with
+`sleep 2; set +o emacs; set +o vi`, so the shell starts late with no line
+editor, as dash does.
+
+| Change | Test | Failure | Verdict |
+| --- | --- | --- | --- |
+| The `spPrompt` calls left out (the tree before the fix) | `TestPhoneStreamsAPaneAndAnswersTheInbox`, `TestStreamPaneHeldToTheLinkPolicy`, `TestStreamPaneLeaseChurn`, `TestStreamPaneFromAPane` | `no SZ- line showed`, with `sh-3.2$ SZ-22x78` on the screen | **caught** |
+| With the fix, the same forced runs | the 8 tests that use `limitsDaemon` or `spSize` | 8 of 8 pass | n/a |
+| With the fix, no forced start, `-count=3` | the same 8 tests | 24 of 24 pass | n/a |

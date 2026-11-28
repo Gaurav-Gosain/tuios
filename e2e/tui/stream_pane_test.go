@@ -98,6 +98,8 @@ func TestPhoneStreamsAPaneAndAnswersTheInbox(t *testing.T) {
 	}
 	w1 := wins[0].(map[string]any)["window_id"].(string)
 	w2 := wins[1].(map[string]any)["window_id"].(string)
+	spPrompt(t, ctl, w1)
+	spPrompt(t, ctl, w2)
 	sizeBefore := spSessionSize(t, ctl)
 	spType(t, ctl, w2, "echo SZ-$(stty size | tr ' ' x)\n")
 	w2Size := spSize(t, ctl, w2, "SZ-")
@@ -768,6 +770,24 @@ func spType(t *testing.T, ctl *linkStream, window, text string) {
 	if _, verr := ctl.call(t, "send-text", map[string]any{"session": streamSession, "window": window, "text": text}); verr != nil {
 		t.Fatalf("send-text: %v", verr)
 	}
+}
+
+// spPrompt waits for the pane's shell to print its prompt. Text sent before
+// that is echoed by the tty, and the command's output then follows the
+// prompt on one line ("$ SZ-22x78"), which spSize does not read as a size
+// line.
+func spPrompt(t *testing.T, ctl *linkStream, window string) {
+	t.Helper()
+	deadline := time.Now().Add(uiTimeout)
+	for time.Now().Before(deadline) {
+		if lines := spLines(t, ctl, window); len(lines) > 0 {
+			if last := lines[len(lines)-1]; strings.HasSuffix(last, "$") || strings.HasSuffix(last, "#") {
+				return
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("the shell in %s printed no prompt:\n%s", window, strings.Join(spLines(t, ctl, window), "\n"))
 }
 
 func spLines(t *testing.T, ctl *linkStream, window string) []string {
