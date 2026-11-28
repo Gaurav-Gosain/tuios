@@ -46,6 +46,23 @@ func HandleCopyModeKey(msg tea.KeyPressMsg, o *app.OS, window *terminal.Window) 
 		return handleMultiCopyKey(msg, o, window)
 	}
 
+	// The keys that move between copy mode on this pane and multi copy mode
+	// on its multifocus set. In one pane copy_mode_single_pane has nothing to
+	// do. The search prompt and a pending f/t character take them as text.
+	if cm := window.CopyMode; cm.State != terminal.CopyModeSearch && !waitingForChar(cm) {
+		switch action := copyModeAction(msg, o); action {
+		case config.ActionCopyModeAllPanes:
+			cm.PendingCount = 0
+			o.NoteAction(action)
+			o.AllPanesCopyMode()
+			return o, nil
+		case config.ActionCopyModeSinglePane:
+			cm.PendingCount = 0
+			o.NoteAction(action)
+			return o, nil
+		}
+	}
+
 	// A [[keybindings.copy_pipe]] key. See copymode_pipe.go.
 	if pipe, ok := copyPipeKey(msg, o, window.CopyMode); ok {
 		return copyPipeYank(o, window, pipe)

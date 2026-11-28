@@ -452,6 +452,8 @@ var actionTable = [...]ActionSpec{
 	{Name: ActionCopyModeFirstNonBlank, Desc: "Copy mode: go to the first nonblank character of the line", Run: RunMotion},
 	{Name: ActionCopyModeLineEnd, Desc: "Copy mode: go to the last nonblank character of the line", Run: RunMotion},
 	{Name: ActionCopyModeExit, Desc: "Copy mode: leave copy mode; from a selection, copy it first", Run: RunView},
+	{Name: ActionCopyModeSinglePane, Desc: "Multi copy mode: keep copy mode on the focused pane only", Run: RunView},
+	{Name: ActionCopyModeAllPanes, Desc: "Copy mode: go to multi copy mode on the multifocus set", Run: RunView},
 	{Name: ActionCopyModeWordForward, Desc: "Copy mode: move forward a word", Run: RunMotion},
 	{Name: ActionCopyModeWordBackward, Desc: "Copy mode: move backward a word", Run: RunMotion},
 	{Name: ActionCopyModeWordEnd, Desc: "Copy mode: move to the end of the word", Run: RunMotion},

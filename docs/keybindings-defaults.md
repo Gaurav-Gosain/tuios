@@ -427,6 +427,7 @@ Run `tuios keybinds list` to see the keys that your config sets.
 
 | Keys | Action | Description |
 |---|---|---|
+| `A` | `copy_mode_all_panes` | Copy mode: go to multi copy mode on the multifocus set |
 | `B` | `copy_mode_big_word_backward` | Copy mode: move backward a word, words split only at spaces |
 | `E` | `copy_mode_big_word_end` | Copy mode: move to the end of the word, words split only at spaces |
 | `W` | `copy_mode_big_word_forward` | Copy mode: move forward a word, words split only at spaces |
@@ -449,6 +450,7 @@ Run `tuios keybinds list` to see the keys that your config sets.
 | `L` | `copy_mode_screen_bottom` | Copy mode: go to the last row of the view |
 | `M` | `copy_mode_screen_middle` | Copy mode: go to the middle row of the view |
 | `H` | `copy_mode_screen_top` | Copy mode: go to the top row of the view |
+| `O` | `copy_mode_single_pane` | Multi copy mode: keep copy mode on the focused pane only |
 | `k`, `up` | `copy_mode_up` | Copy mode: move up |
 | `shift+left` | `copy_mode_word_backward` | Copy mode: move backward a word |
 | `e` | `copy_mode_word_end` | Copy mode: move to the end of the word |

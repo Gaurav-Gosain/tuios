@@ -625,6 +625,8 @@ func generateCopyModeBindings(registry *config.KeybindRegistry, s *config.Settin
 	out = slices.Insert(out, at, copyModeMotionBindings(registry)...)
 	for _, row := range []struct{ action, desc string }{
 		{config.ActionCopyModeExit, "Leave copy mode"},
+		{config.ActionCopyModeSinglePane, "Multi copy mode: keep copy mode on this pane only"},
+		{config.ActionCopyModeAllPanes, "Go to multi copy mode on the multifocus set"},
 		{config.ActionEditScrollback, "Open the scrollback in the editor"},
 		{config.ActionHints, "Label the text in view to copy it"},
 	} {

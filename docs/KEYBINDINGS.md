@@ -1934,6 +1934,8 @@ in the middle row, set `appearance.selection.copy_entry` to `center`.
 | `q` or `Esc` | Leave copy mode. In a selection, `Esc` and `q` only end the selection |
 | `Enter` | Leave copy mode. In a selection, copy the selection, then leave. In the search prompt, `Enter` runs the search. The action is `copy_mode_exit` in the `copy_mode` section |
 | `Ctrl+C` | Leave copy mode from normal mode, a selection, the search prompt or `f`/`t`. Nothing is copied |
+| `O` | In multi copy mode, keep copy mode on the focused pane only. The action is `copy_mode_single_pane` |
+| `A` | Go to multi copy mode on the multifocus set of this pane. The action is `copy_mode_all_panes`. See [Multi copy mode](LAYOUT_MODES.md#multi-copy-mode) |
 
 A block selection is a rectangle. The cursor is one corner, and every motion
 moves that corner. `y` writes one line for each row, with a newline between

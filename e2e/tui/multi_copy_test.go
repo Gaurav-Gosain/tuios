@@ -342,6 +342,60 @@ func TestMultiCopyModeYanksEveryPane(t *testing.T) {
 	runMultiCopyE2E(t, term, out, xdgDir(base, "HOME"))
 }
 
+// TestMultiCopyModeOnePaneAndBack is #2402. In multi copy mode, O keeps copy
+// mode on the focused pane only, and A goes back to the whole set. The yank
+// message tells the two apart: one pane says "Yanked N chars", the set says
+// "Copied 3 panes".
+//
+// Negative control: drop the copy_mode_single_pane case in
+// handleMultiCopyKey. O then does nothing, the dock still shows MULTI, and the
+// wait for it to go times out.
+func TestMultiCopyModeOnePaneAndBack(t *testing.T) {
+	out := &lockedBuffer{}
+	term, _ := start(t, startOpts{out: out})
+	waitBoot(t, term)
+	setUpMultiCopyPanes(t, term, false)
+	if err := term.SendKeys(tuitest.Ctrl('b'), "["); err != nil {
+		t.Fatalf("send prefix+[: %v", err)
+	}
+	waitText(t, term, "multi copy mode", "MULTI 3")
+
+	// yank selects the cursor line with V, yanks it with y, and waits for want.
+	yank := func(what, want string) {
+		t.Helper()
+		from := len(clipboardWrites(out))
+		if err := term.SendKeys("V"); err != nil {
+			t.Fatalf("send V: %v", err)
+		}
+		if err := term.SendKeys("y"); err != nil {
+			t.Fatalf("send y: %v", err)
+		}
+		waitUntil(t, what+": the yank writes the clipboard", uiTimeout, func() (bool, string) {
+			return len(clipboardWrites(out)) > from, term.Snapshot()
+		})
+		waitText(t, term, what, want)
+	}
+
+	if err := term.SendKeys("O"); err != nil {
+		t.Fatalf("send O: %v", err)
+	}
+	waitUntil(t, "O leaves multi copy mode", uiTimeout, func() (bool, string) {
+		return !strings.Contains(term.Screen().Text(), "MULTI"), term.Snapshot()
+	})
+	yank("a yank on one pane", "Yanked")
+	if strings.Contains(term.Screen().Text(), "Copied 3 panes") {
+		t.Fatalf("after O the yank still took every pane\n%s", term.Snapshot())
+	}
+	saveFrame(t, term, "multi-copy-one-pane")
+
+	if err := term.SendKeys("A"); err != nil {
+		t.Fatalf("send A: %v", err)
+	}
+	waitText(t, term, "A goes back to the whole set", "MULTI 3")
+	yank("a yank on the whole set", "Copied 3 panes")
+	saveFrame(t, term, "multi-copy-all-panes")
+}
+
 // The same through a daemon session, which is how tuios ships.
 func TestMultiCopyModeYanksEveryPaneDaemon(t *testing.T) {
 	out := &lockedBuffer{}

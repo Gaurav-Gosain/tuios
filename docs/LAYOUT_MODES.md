@@ -411,6 +411,8 @@ shows `MULTI 2/3`: the search found text in 2 of the 3 panes.
 | `Y` | Save the selection of each pane to a file |
 | `Tab` | Change the format: plain, markdown, json |
 | `Shift+Up` / `Shift+Down` | Scroll every pane one line |
+| `O` | Keep copy mode on the focused pane only. The other panes leave copy mode. The focused pane keeps its cursor and selection |
+| `A` | From copy mode on one pane of the set, go back to multi copy mode on the whole set |
 
 A pane where the search finds no text loses the multifocus border color. With
 a theme, the pane is also dimmed. It keeps its cursor. It does not take motions or selections until
