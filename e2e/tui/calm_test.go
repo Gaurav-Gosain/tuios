@@ -112,12 +112,20 @@ settle_seconds = 0
 	}
 
 	// The working window: looks of the name, bytes on the wire, and the
-	// client's own frame counters.
-	before := sampleIdle(t, term.Pid(), statsPath)
+	// client's own frame counters. The sim backend runs the client inside
+	// the test, with no process to ask for its counters, so it checks the
+	// looks and the bytes alone.
+	counters := term.Pid() > 0
+	var before, after idleSample
+	if counters {
+		before = sampleIdle(t, term.Pid(), statsPath)
+	}
 	wroteFrom := wire.n.Load()
 	looks, frames := sampleName(term, row, col, len(name), calmWindow)
 	wrote := wire.n.Load() - wroteFrom
-	after := sampleIdle(t, term.Pid(), statsPath)
+	if counters {
+		after = sampleIdle(t, term.Pid(), statsPath)
+	}
 	for i, f := range frames {
 		savePNG(t, f, host, dir, fmt.Sprintf("working-%d", i))
 	}
@@ -133,7 +141,7 @@ settle_seconds = 0
 
 	dock := calmDockLines(term.Screen())
 	if !calm {
-		if len(looks) < 3 || res.motion == 0 {
+		if len(looks) < 3 || counters && res.motion == 0 {
 			t.Fatalf("with calm off the working name took %d looks and %d motion frames; the baseline shimmer is not running", len(looks), res.motion)
 		}
 		if strings.Contains(dock, " calm") {
@@ -143,7 +151,7 @@ settle_seconds = 0
 		if len(looks) != 1 {
 			t.Fatalf("with calm on the working name took %d looks\n%s", len(looks), term.SnapshotStyled())
 		}
-		if res.motion != 0 {
+		if counters && res.motion != 0 {
 			t.Fatalf("with calm on the motion clock ran %d frames", res.motion)
 		}
 		if wrote > idleWireBudget {

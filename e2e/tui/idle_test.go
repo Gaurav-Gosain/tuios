@@ -772,6 +772,13 @@ type idleSample struct {
 // the file, and reads the client's context switches next to it.
 func sampleIdle(t *testing.T, pid int, statsPath string) idleSample {
 	t.Helper()
+	// kill(0) signals the caller's whole process group and kill(-1) every
+	// process the user owns: the test, go test and the shell that ran it.
+	// tuitest answers pid 0 for a terminal with no process, as under the
+	// sim backend.
+	if pid < 1 {
+		t.Fatalf("no client process to ask for its counters (pid %d)", pid)
+	}
 	_ = os.Remove(statsPath)
 	if err := syscall.Kill(pid, syscall.SIGUSR1); err != nil {
 		t.Fatalf("signal the client for its counters: %v", err)
