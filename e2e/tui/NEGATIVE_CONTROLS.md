@@ -19906,3 +19906,16 @@ editor, as dash does.
 | The `spPrompt` calls left out (the tree before the fix) | `TestPhoneStreamsAPaneAndAnswersTheInbox`, `TestStreamPaneHeldToTheLinkPolicy`, `TestStreamPaneLeaseChurn`, `TestStreamPaneFromAPane` | `no SZ- line showed`, with `sh-3.2$ SZ-22x78` on the screen | **caught** |
 | With the fix, the same forced runs | the 8 tests that use `limitsDaemon` or `spSize` | 8 of 8 pass | n/a |
 | With the fix, no forced start, `-count=3` | the same 8 tests | 24 of 24 pass | n/a |
+## Dock and rail refresh on daemon pane visibility changes
+
+TestRailCustomRefreshesOnDaemonMinimizeAndRestore uses a real attached client
+and changes the second pane with set-window --minimize and --restore. It checks
+the custom rail row with layout-changed and with the specific window events.
+
+Run on 2026-11-22 on Linux amd64 with the real backend, against main at 407f15954.
+
+| Control | Result | Verdict |
+| --- | --- | --- |
+| Main | The layout subtest kept SHOWN after --minimize. | **caught** |
+| Remove the two notifyDockWindowVisibility calls from ApplyStateSyncFrom | Both subtests failed with 'after --minimize: the rail never showed "MINIMIZED"'. | **caught** |
+| This change | Both subtests passed on all three runs, through minimize and restore. | fixed |

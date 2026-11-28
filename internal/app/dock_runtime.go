@@ -269,6 +269,11 @@ func (m *OS) NotifyDockEvent(eventType string) {
 	}
 }
 
+func (m *OS) notifyDockWindowVisibility(event string) {
+	m.NotifyDockEvent(event)
+	m.NotifyDockEvent(string(hooks.AfterLayoutChange))
+}
+
 // dockEventAliases maps a hook event to the name the daemon's event hub gives
 // the same thing. Refresh contracts accept either.
 var dockEventAliases = map[string]string{

@@ -659,13 +659,22 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// zoom box, and nothing else in the sync says what should replace it. See
 	// applyZoomState.
 	var unzoomed []*terminal.Window
+	var minimized, restored bool
 
 	for _, ws := range state.Windows {
 		if existingWindow, exists := existingByID[ws.ID]; exists {
 			// Update existing window
 			wasFloating := existingWindow.IsFloating
 			wasZoomed := existingWindow.Zoomed
+			wasMinimized := existingWindow.Minimized
 			m.updateWindowFromState(existingWindow, &ws)
+			if wasMinimized != existingWindow.Minimized {
+				if existingWindow.Minimized {
+					minimized = true
+				} else {
+					restored = true
+				}
+			}
 			if existingWindow.IsFloating != wasFloating {
 				if existingWindow.IsFloating {
 					floated = append(floated, existingWindow)
@@ -1156,6 +1165,13 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 	// After the sizes settle, so a pane primed here takes its snapshot at
 	// the size it is shown at.
 	m.reconcilePaneStreams()
+
+	if minimized {
+		m.notifyDockWindowVisibility(session.EventWindowMinimized)
+	}
+	if restored {
+		m.notifyDockWindowVisibility(session.EventWindowRestored)
+	}
 
 	// A focus this sync moved was moved somewhere else: by another client, a
 	// verb or the daemon. The daemon fires the hook for it and this client

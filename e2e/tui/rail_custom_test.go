@@ -304,6 +304,46 @@ func TestRailCustomSectionRefreshModes(t *testing.T) {
 	})
 }
 
+func TestRailCustomRefreshesOnDaemonMinimizeAndRestore(t *testing.T) {
+	for _, tc := range []struct{ name, events string }{
+		{"layout", "layout-changed"},
+		{"window", "window-minimized,window-restored"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mark := filepath.Join(t.TempDir(), "status")
+			write := func(value string) {
+				t.Helper()
+				if err := os.WriteFile(mark, []byte(value+"\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			write("SHOWN")
+			term, base := railCustomClient(t, "sessions,terminals,custom:40",
+				"command = \"cat "+mark+"\"\nrefresh = \"event:"+tc.events+"\"")
+			if out, err := tuiosCLI(t, base, "new-window", "SECOND", "-s", "e2e", "--no-focus"); err != nil {
+				t.Fatalf("new-window: %v\n%s", err, out)
+			}
+			waitWindowCount(t, term, 2, "opening the second pane")
+			waitRailShows(t, term, "SHOWN", "the run at attach")
+			id := windowID(t, base, "e2e", "SECOND")
+
+			for _, step := range []struct{ flag, label string }{
+				{"--minimize", "MINIMIZED"},
+				{"--restore", "RESTORED"},
+			} {
+				write(step.label)
+				if out, err := tuiosCLI(t, base, "set-window", "-s", "e2e", "-w", id, step.flag); err != nil {
+					t.Fatalf("set-window %s: %v\n%s", step.flag, err, out)
+				}
+				waitRailShows(t, term, step.label, "after "+step.flag)
+				if dir := os.Getenv("TUIOS_E2E_FRAMES"); dir != "" && tc.name == "window" {
+					savePNG(t, term.Screen(), hostPalette(t, ""), dir, "dock-"+strings.ToLower(step.label))
+				}
+			}
+		})
+	}
+}
+
 // TestRailCustomSectionCutsRowsToSize: forty rows of sixty columns are cut to
 // the section's lines and the rail's width, and a last line with no newline
 // is still a row.
