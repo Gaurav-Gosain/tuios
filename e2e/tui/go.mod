@@ -12,7 +12,7 @@ require (
 	github.com/spf13/pflag v1.1.0
 	golang.org/x/exp v0.0.0-20260908205506-85c1c2202aba
 	golang.org/x/term v0.48.0
-	tuios.dev/vt v0.3.4-0.20261125144012-dd363a3684fc
+	tuios.dev/vt v0.3.4-0.20261128074241-686184cd65b1
 )
 
 require (
