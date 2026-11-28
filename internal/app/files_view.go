@@ -93,6 +93,9 @@ type filesSide struct {
 	infos []session.FileInfo
 	// home is the home folder on the side's machine, for the crumbs.
 	home string
+	// access is what this machine may do in the folder. See
+	// files_view_access.go.
+	access filesAccess
 	// want is the folder asked for, and gen stamps the read out for it.
 	want string
 	gen  uint64
@@ -261,6 +264,8 @@ type filesListMsg struct {
 	l     fileListing
 	infos []session.FileInfo
 	home  string
+	// access is what this machine may do there, as a far daemon says it.
+	access filesAccess
 }
 
 // filesReadingMsg asks for a frame once a read has run filesReadingAfter.
@@ -354,8 +359,8 @@ func (m *OS) filesReadSideAfter(s *filesSide, dir, pick string, wait time.Durati
 	id, gen, host := s.id, s.gen, s.host
 	call := m.filesCaller()
 	read := func() tea.Msg {
-		l, infos, home := readListingDetails(call, host, dir)
-		return filesListMsg{id: id, gen: gen, l: l, infos: infos, home: home}
+		l, infos, home, access := readListingDetails(call, host, dir)
+		return filesListMsg{id: id, gen: gen, l: l, infos: infos, home: home, access: access}
 	}
 	tick := tea.Tick(wait+filesReadingAfter, func(time.Time) tea.Msg { return filesReadingMsg{id: id, gen: gen} })
 	if wait > 0 {
@@ -393,7 +398,7 @@ func (m *OS) HandleFilesList(msg filesListMsg) tea.Cmd {
 		keep = en.Name
 	}
 	moved := s.Dir != msg.l.Dir
-	s.fileListing, s.infos = msg.l, msg.infos
+	s.fileListing, s.infos, s.access = msg.l, msg.infos, msg.access
 	if s.Dir == "" {
 		s.Dir = s.want
 	}
@@ -915,13 +920,14 @@ func (m *OS) filesLookTarget() (quickLookTarget, bool) {
 // readListingDetails reads dir on host with the details of each name, for
 // the Files view. call is nil for a client with no daemon, which reads its
 // own disk. It runs off the update goroutine.
-func readListingDetails(call func(host, verb string, params map[string]any) (json.RawMessage, error), host, dir string) (fileListing, []session.FileInfo, string) {
+func readListingDetails(call func(host, verb string, params map[string]any) (json.RawMessage, error), host, dir string) (fileListing, []session.FileInfo, string, filesAccess) {
 	if call == nil {
-		return readLocalDetails(dir)
+		l, infos, home := readLocalDetails(dir)
+		return l, infos, home, filesAccess{}
 	}
 	raw, err := call(host, "file-list", map[string]any{"dir": dir, "limit": fileListPage, "hidden": true})
 	if err != nil {
-		return fileListing{Dir: dir, Err: filesReadError(host, err)}, nil, ""
+		return fileListing{Dir: dir, Err: filesReadError(host, err)}, nil, "", filesAccess{}
 	}
 	var reply struct {
 		Dir     string             `json:"dir"`
@@ -929,9 +935,10 @@ func readListingDetails(call func(host, verb string, params map[string]any) (jso
 		Total   int                `json:"total"`
 		Capped  bool               `json:"capped"`
 		Home    string             `json:"home"`
+		filesAccessReply
 	}
 	if err := jsonx.Unmarshal(raw, &reply); err != nil {
-		return fileListing{Dir: dir, Err: "tuios could not read the answer."}, nil, ""
+		return fileListing{Dir: dir, Err: "tuios could not read the answer."}, nil, "", filesAccess{}
 	}
 	l := fileListing{Dir: cmp.Or(reply.Dir, dir), Capped: reply.Capped || reply.Total > len(reply.Entries)}
 	l.Entries = make([]fileEntry, len(reply.Entries))
@@ -939,7 +946,7 @@ func readListingDetails(call func(host, verb string, params map[string]any) (jso
 		isDir := in.Kind == "dir"
 		l.Entries[i] = fileEntry{Name: in.Name, Dir: isDir, Icon: fileIconFor(in.Name, isDir)}
 	}
-	return l, reply.Entries, reply.Home
+	return l, reply.Entries, reply.Home, reply.accessOf()
 }
 
 // fileListPage is the most rows one read of a folder asks for. A folder

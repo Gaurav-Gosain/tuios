@@ -53,6 +53,11 @@ type filesUndo struct {
 	// at is each moved path's size and time when the change ended, so undo
 	// can tell that it is still as the change left it.
 	at []fileStamp
+	// far says the change was a trash on another machine, host, which
+	// that machine's daemon undoes. host is "" for the machine this client
+	// is attached to.
+	far  bool
+	host string
 }
 
 // fileStamp is a path's size and change time.
@@ -196,6 +201,9 @@ func (m *OS) FilesCopy(move bool) tea.Cmd {
 		return nil
 	}
 	o := m.filesOther()
+	if o != nil && (m.filesRefuseWrite(o) || move && m.filesRefuseWrite(s)) {
+		return nil
+	}
 	if o == nil || filesSideDir(o) == "" {
 		e := &m.explorer
 		e.prompt, e.input = filesPromptCopy, ""
@@ -373,6 +381,9 @@ func (m *OS) FilesPaste(move bool) tea.Cmd {
 		return nil
 	}
 	s := m.filesCur()
+	if m.filesRefuseWrite(s) {
+		return nil
+	}
 	if move {
 		m.explorer.clip = nil
 	}
@@ -382,7 +393,7 @@ func (m *OS) FilesPaste(move bool) tea.Cmd {
 // FilesRename starts a rename of the row under the cursor, in the row.
 func (m *OS) FilesRename() {
 	en, _, ok := m.filesCursorEntry()
-	if !ok {
+	if !ok || m.filesRefuseWrite(m.filesCur()) {
 		return
 	}
 	e := &m.explorer
@@ -392,6 +403,9 @@ func (m *OS) FilesRename() {
 
 // FilesNew asks for the name of a new file or folder.
 func (m *OS) FilesNew() {
+	if m.filesRefuseWrite(m.filesCur()) {
+		return
+	}
 	e := &m.explorer
 	e.prompt, e.input = filesPromptNew, ""
 	e.gen++
@@ -483,10 +497,18 @@ func (m *OS) FilesTrash() tea.Cmd {
 	if len(targets) == 0 {
 		return nil
 	}
-	if !m.filesLocal(s) {
-		name, _ := m.filesMachineOf(s)
-		m.ShowNotification("tuios cannot move a file on "+name+" to the trash yet.", "info", m.Settings.NotificationDuration)
+	if m.filesRefuseWrite(s) {
 		return nil
+	}
+	if !m.filesLocal(s) {
+		host := m.filesHostOf(s)
+		if s.host == "" {
+			// The machine this client is attached to: its own daemon.
+			host = ""
+		}
+		names := filesNames(targets)
+		m.filesClearMarks(s)
+		return m.filesFarTrash(host, filesSideDir(s), names)
 	}
 	if !trashAvailable() {
 		m.ShowNotification("This machine has no trash tuios can use.", "warning", m.Settings.NotificationDuration)
@@ -504,9 +526,9 @@ func (m *OS) FilesTrash() tea.Cmd {
 		if len(got) > 0 {
 			u := &filesUndo{kind: "trash"}
 			for _, g := range got {
-				u.pairs = append(u.pairs, [2]string{g.from, g.file})
-				u.info = append(u.info, g.info)
-				u.at = append(u.at, stampOf(g.file))
+				u.pairs = append(u.pairs, [2]string{g.From, g.File})
+				u.info = append(u.info, g.Info)
+				u.at = append(u.at, stampOf(g.File))
 			}
 			msg.undo = u
 			msg.note = "Moved " + countOf(len(got), "item") + " to the trash. u brings them back."
@@ -530,6 +552,9 @@ func (m *OS) FilesUndo() tea.Cmd {
 	}
 	u := e.undo[len(e.undo)-1]
 	e.undo = e.undo[:len(e.undo)-1]
+	if u.far {
+		return m.undoFarTrash(u)
+	}
 	return func() tea.Msg { return undoFilesChange(u) }
 }
 

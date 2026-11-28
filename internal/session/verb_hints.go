@@ -160,6 +160,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbHashMismatch, "A copy's bytes did not match the original's sha256, so the copy was removed and nothing was put in place. The transfer starts that file again once by itself."},
 	{ErrVerbCrossDevice, "file-rename cannot move a path to another disk. Nothing was moved. Copy it with transfer-start and move set."},
 	{ErrVerbDiskFull, "The disk had no room for the write. What was written stays in the part file. Free space, then resume the transfer."},
+	{ErrVerbNoTrash, "file-trash on a machine with no trash tuios can use, such as Windows. Nothing was moved. Remove the path with file-remove to delete it for good."},
 	{ErrVerbSourceChanged, "A file changed on its machine while it was copied: its size or time is not what the copy started from. Nothing was put in place for it. Copy it again when it is not being written."},
 	{ErrVerbNoTransfer, "No transfer has that id. Finished transfers leave the list after 30 minutes. transfer-list shows the ids."},
 	{ErrVerbSameSession, "move-window was given to_session, and the window is already in that session. Nothing moved. Name another session, or leave out to_session and give workspace."},

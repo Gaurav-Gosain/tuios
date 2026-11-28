@@ -10,7 +10,19 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuios/internal/filetrash"
 )
+
+// tempTrash points the trash at a folder made for this test.
+func tempTrash(t *testing.T) string {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "Trash")
+	prev := filetrash.DirFunc
+	filetrash.DirFunc = func() (string, error) { return dir, nil }
+	t.Cleanup(func() { filetrash.DirFunc = prev })
+	return dir
+}
 
 // The cross-device case needs a second filesystem at a known place and the
 // device number from a unix stat, so it runs on unix only.

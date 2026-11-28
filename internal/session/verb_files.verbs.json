@@ -157,6 +157,14 @@
       {
         "name": "capped",
         "description": "The folder holds more than 50000 names, and only those were read."
+      },
+      {
+        "name": "access",
+        "description": "Over a link only: what the linked machine may do in the folder. files says the link allows files, write that the machine may write here, and roots the folders it may write in."
+      },
+      {
+        "name": "denied",
+        "description": "Over a link only: how many names the read deny list leaves out."
       }
     ],
     "examples": [
@@ -426,6 +434,50 @@
     "examples": [
       "{\"id\":1,\"verb\":\"open-file-stream\",\"params\":{\"path\":\"~/big.iso\",\"mode\":\"read\",\"offset\":0}}",
       "{\"id\":1,\"verb\":\"open-file-stream\",\"params\":{\"path\":\"~/big.iso\",\"mode\":\"write\",\"offset\":1048576,\"length\":2097152}}"
+    ]
+  },
+  "file-trash": {
+    "description": "Move paths to the trash of this machine. A linked machine may trash only paths it may write. A path that fails does not stop the rest.",
+    "params": [
+      {
+        "name": "paths",
+        "description": "The paths."
+      }
+    ],
+    "returns": [
+      {
+        "name": "trashed",
+        "description": "One object per path the trash took: from, the path it was at; file, the path in the trash; info, the trash info file."
+      },
+      {
+        "name": "error",
+        "description": "Why a path was left, when one was."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"file-trash\",\"params\":{\"paths\":[\"~/out/old.log\"]}}"
+    ]
+  },
+  "file-untrash": {
+    "description": "Put a file the trash took back where it was. The trash must have taken it from to, and to must be free.",
+    "params": [
+      {
+        "name": "file",
+        "description": "The path in the trash, as file-trash answered it."
+      },
+      {
+        "name": "to",
+        "description": "The path it came from."
+      }
+    ],
+    "returns": [
+      {
+        "name": "path",
+        "description": "The path it is at now."
+      }
+    ],
+    "examples": [
+      "{\"id\":1,\"verb\":\"file-untrash\",\"params\":{\"file\":\"~/.local/share/Trash/files/old.log\",\"to\":\"~/out/old.log\"}}"
     ]
   }
 }

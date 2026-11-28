@@ -197,6 +197,8 @@ var exampleOutcomes = map[string]exampleOutcome{
 	"file-read#0":        {errCode: ErrVerbNoFile, why: "~/notes.md does not exist here"},
 	"file-rename#0":      {errCode: ErrVerbNoFile, why: "~/a.txt does not exist here"},
 	"file-hash#0":        {errCode: ErrVerbNoFile, why: "~/big.iso does not exist here"},
+	"file-trash#0":       {errCode: ErrVerbNoFile, why: "~/out/old.log does not exist here"},
+	"file-untrash#0":     {errCode: ErrVerbInternal, why: "the fixture's trash holds no old.log"},
 	"file-preview#0":     {errCode: ErrVerbNoFile, why: "~/Pictures/cat.jpg does not exist here"},
 	"file-preview-run#0": {errCode: ErrVerbNoFile, why: "~/notes.md does not exist here"},
 	"file-walk#0":        {errCode: ErrVerbNoFile, why: "~/photos does not exist here"},
