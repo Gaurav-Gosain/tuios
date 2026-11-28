@@ -452,9 +452,10 @@ func railFocusTint(tint color.Color, pal overlay.Palette) color.Color {
 //
 // appearance.sidebar.row_style picks the current mark: the marker glyph, or
 // the bar. underline and pill mark the name instead, but only on the rows that
-// draw the name for it (the session, terminal and focus-marked agent rows, see
-// railCurrentName and sidebarGutterNameMarked). Every other caller still needs a mark here, or a
-// focused pane on a compact rail and a folded machine header would show none.
+// draw the name for it (the session, terminal and focus-marked agent rows,
+// see railCurrentName and sidebarGutterNameMarked). Every other caller still
+// needs a mark here, or a focused pane on a compact rail and a folded machine
+// header would show none.
 func sidebarGutterTinted(current bool, state string, tint, bg color.Color, pal overlay.Palette, s *config.Settings) string {
 	switch {
 	case current && s.GetRailRowStyle() == config.RailRowMarker:
@@ -3916,15 +3917,15 @@ func (m *OS) sidebarAgentRow(e sidebarAgentEntry, variant, cw int, pal overlay.P
 	// When no terminals row marks the focused pane, this row carries the mark
 	// the terminals row would have. The state glyph and the bold name still
 	// say that the pane wants a human.
-	focusTint := m.sessionTint(e.SessionID, m.rowGround(rowBg))
-	if focusMark {
-		gutter = sidebarGutterTinted(true, e.State, focusTint, rowBg, pal, &m.Settings)
-	}
 	nameText := m.sidebarMarquee("a:"+e.SessionID+"/"+e.WindowID, name, nameRoom, st.Cursor)
 	nameCell := m.sidebarTokenStyle(nameStyle, plan.Name, pal).Render(nameText)
-	if nameMarked {
-		nameCell = railCurrentName(nameText, focusTint, rowBg, pal, &m.Settings)
-		gutter = sidebarGutterNameMarked(e.State, rowBg, pal, &m.Settings)
+	if focusMark {
+		focusTint := m.sessionTint(e.SessionID, m.rowGround(rowBg))
+		gutter = sidebarGutterTinted(true, e.State, focusTint, rowBg, pal, &m.Settings)
+		if nameMarked {
+			nameCell = railCurrentName(nameText, focusTint, rowBg, pal, &m.Settings)
+			gutter = sidebarGutterNameMarked(e.State, rowBg, pal, &m.Settings)
+		}
 	}
 	body := shown + nameCell + quiet.Render(quietMark) + after
 	bodyW := lipgloss.Width(body)
