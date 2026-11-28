@@ -469,6 +469,13 @@ type Settings struct {
 	// letter follows either icon.
 	DockModePill string
 
+	// WindowModeIndicator is what shows window mode beside the dock's mode
+	// pill: "bar" the pill alone, "border" the focused border in the pill's
+	// window mode colour, "tint" every pane's content carried toward its
+	// ground. Discussion 2249: people came back from another window and
+	// typed into the wrong mode, because a pill colour is easy to miss.
+	WindowModeIndicator string
+
 	// BorderFocusedGradient and BorderGradientAngle are
 	// appearance.border_focused_gradient and border_gradient_angle. Read the
 	// stops through BorderGradientStops.
@@ -1130,6 +1137,7 @@ func DefaultSettings() Settings {
 		DockModeSplitLetter:         true,
 		DockPrefixIndicator:         DefaultDockPrefixIndicator,
 		DockModePill:                DefaultDockModePill,
+		WindowModeIndicator:         DefaultWindowModeIndicator,
 		BorderGradientAngle:         DefaultBorderGradientAngle,
 		HideWindowButtons:           false,
 		WindowButtonStyle:           WindowButtonStyleDots,

@@ -94,7 +94,7 @@ func (m *OS) chooseDirectPane() directPane {
 		return directPane{}
 	}
 	focused := m.FocusedWindow >= 0 && m.FocusedWindow < len(m.Windows) && m.Windows[m.FocusedWindow] == w
-	if paneDim(focused || m.MultifocusUndimmed(w.ID), &m.Settings) > 0 || m.MultiCopyParked(w.ID) {
+	if m.paneDimFor(focused || m.MultifocusUndimmed(w.ID)) > 0 || m.MultiCopyParked(w.ID) {
 		return directPane{}
 	}
 	if m.copyFlashFor(w.ID) != nil {

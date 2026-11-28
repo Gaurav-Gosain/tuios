@@ -126,6 +126,7 @@ var settingLabels = map[string]string{
 	"appearance.dock_pill_caps":           "Pill caps",
 	"appearance.dock_mode_split_letter":   "Split letter",
 	"appearance.dock_mode_pill":           "Mode pill",
+	"appearance.window_mode_indicator":    "Window mode indicator",
 	"keybindings.window_mode":             "Window mode",
 	"appearance.dock_prefix_indicator":    "Prefix indicator",
 	"appearance.dock_compact":             "Compact dock",
