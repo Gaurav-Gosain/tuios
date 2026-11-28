@@ -70,6 +70,10 @@ func (c *reviewOriginCache) read(dir string) review.OriginDiffs {
 // authors the marks index.
 func (d *Daemon) reviewOrigins(ctx context.Context, repo reviewRepo, diff *review.Diff) ([]reviewOrigin, error) {
 	authors := []reviewOrigin{{Kind: "person"}}
+	// A turn that just ended has its checkpoint still to come, and without
+	// it the turn's lines read as the person's.
+	panes := d.reviewPanes(repo.root)
+	d.awaitCheckpoints(ctx, panes)
 	all, err := worktree.ListCheckpoints(ctx, repo.root, "")
 	if err != nil {
 		return nil, err
@@ -92,7 +96,6 @@ func (d *Daemon) reviewOrigins(ctx context.Context, repo reviewRepo, diff *revie
 	if len(turns) > reviewOriginSteps {
 		turns = turns[len(turns)-reviewOriginSteps:]
 	}
-	panes := d.reviewPanes(repo.root)
 	// The chain, in time order: each checkpoint ends a turn and credits
 	// it, and each turn start credits the person with what changed before
 	// it (turn_starts.go).
