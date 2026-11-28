@@ -51,6 +51,21 @@ func handleMultiCopyKey(msg tea.KeyPressMsg, o *app.OS, focused *terminal.Window
 	// count typed before them means nothing to them and is dropped in every
 	// pane: "1y" is a yank of every selection, not a count handed to one pane.
 	if leadState != terminal.CopyModeSearch && !waitingForChar(lcm) {
+		switch action := copyModeAction(msg, o); action {
+		case config.ActionCopyModeSinglePane:
+			for _, w := range windows {
+				if w.CopyMode != nil {
+					w.CopyMode.PendingCount = 0
+				}
+			}
+			o.NoteAction(action)
+			o.SingleCopyMode(focused)
+			return o, nil
+		case config.ActionCopyModeAllPanes:
+			// Already on the whole set.
+			o.NoteAction(action)
+			return o, nil
+		}
 		inVisual := leadState.InVisual()
 		pipe, isPipe := copyPipeKey(msg, o, lcm)
 		// copy_mode_exit from a selection is y on the whole set, then a

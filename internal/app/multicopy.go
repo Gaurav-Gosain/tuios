@@ -154,6 +154,54 @@ func (m *OS) EnterMultiCopyMode() bool {
 	return true
 }
 
+// SingleCopyMode ends multi copy mode and keeps copy mode on keep only, with
+// its cursor, search and selection. The other panes of the mode leave copy
+// mode. It does nothing when the mode is off.
+func (m *OS) SingleCopyMode(keep *terminal.Window) {
+	mc := m.MultiCopy
+	if mc == nil {
+		return
+	}
+	m.MultiCopy = nil
+	for _, id := range mc.IDs {
+		w := m.windowByID(id)
+		if w == nil {
+			continue
+		}
+		if w != keep && w.InCopyMode() {
+			w.ExitCopyMode()
+		}
+		w.InvalidateCache()
+	}
+}
+
+// AllPanesCopyMode turns copy mode on the focused pane into multi copy mode on
+// its multifocus set. The focused pane keeps its cursor, search and
+// selection, and a pane of the set already in copy mode keeps its own. It
+// reports false, with a message that says what to do, when the focused pane
+// is not in a set of two or more visible panes.
+func (m *OS) AllPanesCopyMode() bool {
+	fw := m.GetFocusedWindow()
+	panes := m.multiCopyCandidates()
+	if fw == nil || !m.MultifocusSet[fw.ID] || len(panes) < 2 {
+		m.ShowNotification("Multi copy mode needs this pane and one or more other panes in multifocus. Add panes with Ctrl+Shift+Click.", "warning", 2*m.Settings.NotificationDuration)
+		return false
+	}
+	mc := &MultiCopy{Format: m.Settings.MultiCopyFormat}
+	if mc.Format == "" {
+		mc.Format = nextMultiCopyFormat("")
+	}
+	for _, w := range panes {
+		if !w.InCopyMode() {
+			m.enterCopyMode(w)
+		}
+		w.InvalidateCache()
+		mc.IDs = append(mc.IDs, w.ID)
+	}
+	m.MultiCopy = mc
+	return true
+}
+
 // ExitMultiCopyMode takes every pane of the mode out of copy mode and ends the
 // mode. It does nothing when the mode is off.
 func (m *OS) ExitMultiCopyMode() {

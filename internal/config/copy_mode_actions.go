@@ -63,6 +63,16 @@ const (
 // the old behaviour, where enter does nothing in copy mode.
 const ActionCopyModeExit = "copy_mode_exit"
 
+// ActionCopyModeSinglePane leaves multi copy mode and keeps copy mode on the
+// focused pane only, with its cursor and selection. The other panes of the
+// set leave copy mode. ActionCopyModeAllPanes goes the other way: from copy
+// mode on one pane of a multifocus set, it puts the whole set in multi copy
+// mode, and the focused pane keeps its cursor and selection (#2402).
+const (
+	ActionCopyModeSinglePane = "copy_mode_single_pane"
+	ActionCopyModeAllPanes   = "copy_mode_all_panes"
+)
+
 // ActionEditScrollback writes the focused pane's scrollback to a file and
 // opens it in the editor. It is bound after the leader and in copy mode.
 const ActionEditScrollback = "edit_scrollback"
@@ -191,6 +201,8 @@ func getDefaultCopyModeKeybinds() map[string][]string {
 		ActionCopyModeRepeatCharSearch:     {";"},
 		ActionCopyModeRepeatCharSearchBack: {","},
 		ActionCopyModeExit:                 {"enter"},
+		ActionCopyModeSinglePane:           {"O"},
+		ActionCopyModeAllPanes:             {"A"},
 		ActionEditScrollback:               {"ctrl+g"},
 		ActionHints:                        {"s"},
 	}
