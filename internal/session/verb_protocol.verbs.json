@@ -6859,7 +6859,7 @@
       },
       {
         "name": "exit_code",
-        "description": "For window-exit and command-finished: the exit status, -1 when a signal ended the process. Omitted when it is not known, such as for a window on another machine."
+        "description": "For window-exit and command-finished: the exit status, -1 when a signal ended the process. Omitted when it is not known, such as for a window on another machine, or on Linux before 6.15 for a program whose parent died before a live upgrade's keeper brought the daemon back."
       },
       {
         "name": "signal",
