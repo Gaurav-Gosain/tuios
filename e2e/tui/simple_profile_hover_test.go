@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/Gaurav-Gosain/tuitest"
 )
 
 // TestSimpleProfileFocusFollowsMouse is #2595: the simple profile turns on
 // focus_follows_mouse, and a value the file sets still wins. Two tiled panes
-// side by side. With the profile alone, a hover over the pane that does not
+// side by side, the second opened with the leader. With the profile alone, a hover over the pane that does not
 // have the focus moves the focus there. With focus_follows_mouse = false in
 // the file, the same hover leaves the focus where it is.
 //
@@ -30,16 +32,17 @@ func TestSimpleProfileFocusFollowsMouse(t *testing.T) {
 			term := startIn(t, base, startOpts{cols: 160, rows: 30, args: []string{"new", session}})
 			killDaemon(t, base)
 			waitBoot(t, term)
-			// The button row, before the first click.
-			waitUntil(t, "the simple dock draws its buttons", uiTimeout, func() (bool, string) {
-				return screenHas(term.Screen(), "Menu", "New", "Settings"), term.Snapshot()
-			})
-			for n := 1; n <= 2; n++ {
-				clickDockWord(t, term, "New")
-				waitUntil(t, fmt.Sprintf("New click %d opens pane %d", n, n), uiTimeout, func() (bool, string) {
+			// n on the welcome screen opens the first pane. Every key then goes
+			// to the pane, so the second one comes from the leader, which the
+			// simple profile keeps.
+			for n, keys := range [][]any{{"n"}, {tuitest.Ctrl('b'), "c"}} {
+				if err := term.SendKeys(keys...); err != nil {
+					t.Fatalf("send %q: %v", keys, err)
+				}
+				waitUntil(t, fmt.Sprintf("pane %d opens", n+1), uiTimeout, func() (bool, string) {
 					s := term.Screen()
 					// The welcome box has a corner too, so it must be gone.
-					return paneCount(s) == n && !screenHas(s, "Terminal UI Operating System"), term.Snapshot()
+					return paneCount(s) == n+1 && !screenHas(s, "Terminal UI Operating System"), term.Snapshot()
 				})
 			}
 
