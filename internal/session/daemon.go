@@ -1540,7 +1540,7 @@ func (d *Daemon) onSessionCreated(s *Session) {
 				// something may have started or finished.
 				pty.remoteForeground()
 				if d.agentDetectInterval > 0 && pty.probeAgentExitDue(time.Now().UnixNano()) {
-					s.reconcileAgentOnOutput(ev.PTYID, d.foregroundResolver(s), d.agentMatcher.identifyDetail)
+					s.reconcileAgentOnOutput(ev.PTYID, d.foregroundResolver(s), d.agentMatcher.identifyDetail, d.agentStallTimeout)
 				}
 				// The screen tier. Throttled like the probe, and armed to run once
 				// more after the pane goes quiet: a harness waiting on a human

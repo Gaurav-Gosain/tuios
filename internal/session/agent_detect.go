@@ -1072,7 +1072,13 @@ func (s *Session) detectionPass(st *SessionState, readings map[string]detectRead
 //   - The foreground is still the agent: the agent is producing output, so it is
 //     working. This is the only path back out of the idle or unknown the silence
 //     timer assigns, and without it a pane latched there for the rest of its
-//     life however hard the agent then worked.
+//     life however hard the agent then worked. The reclaim is honest about the
+//     "producing output" half: it is taken only when the pane's last output is
+//     inside the same stall window the silence timer demotes on. An agent
+//     process that stays in the foreground while the pane says nothing, which is
+//     what a persistent TUI parked at its own prompt is, is left where the
+//     silence timer put it. With the stall heuristic disabled (stall <= 0) there
+//     is no window to be inside, and the reclaim keeps its old reach.
 //
 // It obeys the same precedence as scanAgentDetection: it only ever touches a
 // window the auto-detector owns, and it only resumes one whose state is the idle
@@ -1082,6 +1088,7 @@ func (s *Session) reconcileAgentOnOutput(
 	ptyID string,
 	resolve func(ptyID string) (foregroundInfo, bool),
 	identify func(foregroundInfo) (detection, bool),
+	stall time.Duration,
 ) bool {
 	// Almost every output event is from a pane the auto-detector never promoted.
 	// Rule those out under the read lock so a busy non-agent pane does not take the
@@ -1090,6 +1097,16 @@ func (s *Session) reconcileAgentOnOutput(
 	// between here and there only makes the mutation a no-op.
 	if !s.ownsAutoAgent(ptyID) {
 		return false
+	}
+
+	// Read before the state lock, the way the stall scan reads it: the stamp
+	// lives on the PTY, not in the session state, and the reclaim below needs
+	// the same silence clock the demotion used.
+	var lastSpoke int64
+	if stall > 0 {
+		if pty := s.GetPTY(ptyID); pty != nil {
+			lastSpoke = pty.LastOutput()
+		}
 	}
 
 	changed := false
@@ -1106,11 +1123,20 @@ func (s *Session) reconcileAgentOnOutput(
 			info, running := resolve(ptyID)
 			det, stillAgent := identify(info)
 			if running && stillAgent {
-				// Still the agent, and it just spoke. Only the idle or unknown
-				// left by the silence timer (or by the detector itself) may be
-				// taken back: anything a stronger source said outranks output
-				// activity, which cannot tell working from a redraw while
-				// waiting for the user.
+				// Still the agent, and it just spoke. The speaking is a
+				// requirement, not an assumption: presence in the foreground
+				// cannot tell a working agent from a persistent TUI waiting at
+				// its own prompt, so the pane is taken back only when its last
+				// output is inside the same stall window the silence timer
+				// demotes on. A quiet foreground TUI decays to idle and stays
+				// there.
+				if stall > 0 && (lastSpoke == 0 || time.Since(time.Unix(0, lastSpoke)) >= stall) {
+					return errNoAgentDetectChange
+				}
+				// Only the idle or unknown left by the silence timer (or by the
+				// detector itself) may be taken back: anything a stronger source
+				// said outranks output activity, which cannot tell working from
+				// a redraw while waiting for the user.
 				quiet := w.AgentState == AgentStateIdle || w.AgentState == AgentStateUnknown
 				if !quiet || claim.source.Rank() > AgentSourceDetect.Rank() {
 					return errNoAgentDetectChange
