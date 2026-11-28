@@ -970,6 +970,25 @@ pane and only a second click closes it.
 
 Drag a tiled pane by its title bar, or `Ctrl+click` anywhere in it and drag. In BSP tiling, dropping it on the middle of another pane swaps the two, and dropping it near an edge of another pane splits that pane and puts the dragged pane in the half toward that edge. While the button is down, the place the pane will land is highlighted. See [LAYOUT_MODES.md](LAYOUT_MODES.md#moving-a-pane-with-the-mouse).
 
+## A drag that leaves the pane
+
+A program in a pane can ask TUIOS to keep the mouse after the pointer leaves the pane. A remote desktop viewer that shows one display in each pane uses this. You can then drag a window from the display in one pane to the display in the next pane.
+
+The program turns pointer capture on and off with these private OSC 7731 messages:
+
+```text
+OSC 7731 ; tuios-pointer-capture ; on BEL
+OSC 7731 ; tuios-pointer-capture ; off BEL
+```
+
+While pointer capture is on:
+
+- A drag that starts in the pane goes to that pane until you release the button. The pane keeps the focus for the whole drag.
+- While the pane has the focus, it also gets pointer motion without a button over the rest of the screen.
+- Outside the pane, the reports use the SGR form (mode 1006), in pixels when the program uses mode 1016. The positions continue past the pane edge, so they can be below 1 or larger than the pane.
+
+Leaving the alternate screen turns pointer capture off. A program that does not send the message gets the same mouse reports as before.
+
 ## Scratch terminal
 
 `Ctrl+B g` shows the scratch terminal, a small layout of panes in a box over

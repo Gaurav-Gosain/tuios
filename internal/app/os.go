@@ -2287,6 +2287,13 @@ type OS struct {
 	// PiPPressed says the button that is down was pressed on the
 	// picture-in-picture view, so its release is the view's as well.
 	PiPPressed bool
+
+	// PointerCaptureOwner is the ID of the pane that owns the drag in
+	// progress, when the press went to a pane whose program asked for pointer
+	// capture. Every motion and the release go to that pane until the button
+	// comes up, wherever the pointer is. Empty when no pane owns a drag. See
+	// internal/input/pointer_capture.go.
+	PointerCaptureOwner string
 	// MiddleBindingPressed says a terminal-mode binding took the middle
 	// button press, so its release is the binding's as well.
 	MiddleBindingPressed bool
