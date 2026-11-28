@@ -11,7 +11,8 @@ import (
 //
 // Simple is for a person new to terminals. Every key goes to the pane
 // (window_mode off), the dock sits at the bottom with a row of buttons, a
-// right-click opens a menu, and the UI calls a workspace a tab. Keyboard is
+// right-click opens a menu, the pane under the mouse takes the focus, and the
+// UI calls a workspace a tab. Keyboard is
 // today's tuios and changes nothing.
 //
 // A profile only fills what the file leaves out, so a key the person sets
@@ -54,6 +55,11 @@ func applyProfile(cfg *UserConfig, data []byte) {
 	}
 	if unset("appearance", "dockbar_position") {
 		cfg.Appearance.DockbarPosition = "bottom"
+	}
+	// The person is mostly on the mouse, so the pane under it takes the focus.
+	if cfg.Appearance.FocusFollowsMouse == nil {
+		on := true
+		cfg.Appearance.FocusFollowsMouse = &on
 	}
 	if cfg.Appearance.RightClickOpensMenu == nil {
 		on := true

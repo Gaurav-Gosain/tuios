@@ -258,7 +258,7 @@ var fileKeys = []FileKey{
 	dockLookKey("dock.center"),
 	dockLookKey("dock.right"),
 	{Path: "profile", Type: OptionString, Section: "profile", Default: ProfileKeyboard, Accepted: Profiles,
-		Description: "A set of defaults. simple turns window mode off, puts the dock at the bottom with a row of buttons, and calls a workspace a tab. A key you set wins"},
+		Description: "A set of defaults. simple turns window mode off, puts the dock at the bottom with a row of buttons, gives the focus to the pane under the mouse, and calls a workspace a tab. A key you set wins"},
 	{Path: "dock.custom.NAME.command", Type: OptionString, Section: "dock", Default: "required",
 		Description: "The command of your own dock cell, run with sh -c. The first line of its output is the text of the cell."},
 	{Path: "dock.custom.NAME.refresh", Type: OptionString, Section: "dock", Default: "once",
