@@ -1,6 +1,7 @@
 package tuie2e
 
 import (
+	"fmt"
 	"testing"
 	"time"
 )
@@ -29,10 +30,18 @@ func TestSimpleProfileFocusFollowsMouse(t *testing.T) {
 			term := startIn(t, base, startOpts{cols: 160, rows: 30, args: []string{"new", session}})
 			killDaemon(t, base)
 			waitBoot(t, term)
-			clickDockWord(t, term, "New")
-			waitWindowCount(t, term, 1, "the first New click")
-			clickDockWord(t, term, "New")
-			waitWindowCount(t, term, 2, "the second New click")
+			// The button row, before the first click.
+			waitUntil(t, "the simple dock draws its buttons", uiTimeout, func() (bool, string) {
+				return screenHas(term.Screen(), "Menu", "New", "Settings"), term.Snapshot()
+			})
+			for n := 1; n <= 2; n++ {
+				clickDockWord(t, term, "New")
+				waitUntil(t, fmt.Sprintf("New click %d opens pane %d", n, n), uiTimeout, func() (bool, string) {
+					s := term.Screen()
+					// The welcome box has a corner too, so it must be gone.
+					return paneCount(s) == n && !screenHas(s, "Terminal UI Operating System"), term.Snapshot()
+				})
+			}
 
 			focused := func() string {
 				wl, err := daemonWindows(base, session)
