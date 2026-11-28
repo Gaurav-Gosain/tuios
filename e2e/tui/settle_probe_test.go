@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -33,6 +34,11 @@ func TestSettleProbeCountsEveryByte(t *testing.T) {
 		t.Helper()
 		waitUntil(t, "the terminal has read exactly the bytes the client counted, "+when, bootTimeout, func() (bool, string) {
 			a := settleProbe(t, term, marks)
+			// A client on string frames answers screen=false. On cell frames
+			// the probe must still see its own screen.
+			if !a.screen && os.Getenv("TUIOS_CELL_FRAME") != "0" {
+				t.Fatal("ASSERTION: a client with its own screen answered screen=false")
+			}
 			n, _ := term.Progress()
 			return n == a.sent, fmt.Sprintf("the terminal read %d bytes and the client counted %d (screen=%v)", n, a.sent, a.screen)
 		})
