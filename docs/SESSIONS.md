@@ -269,6 +269,28 @@ If only viewers are attached, they set the size. A tool
 that uses the verb socket only, such as Collie, is not a client with a size.
 It does not change the size of the session.
 
+### Layout with more than one client
+
+The layout belongs to the session. Every client of a session shows the same
+tiling mode and the same layout: BSP, master-stack or scrolling. The clients
+also show the same floating panes, the same zoom and the same pane sizes. A
+change in one client shows in the other clients at once.
+
+Some things stay with each client:
+
+- The input mode. One client can be in terminal mode while a different client
+  is in window management mode.
+- The size of the screen. Under `window_size = "latest"`, the client with the
+  last input sets the session size. When you type in a different client, the
+  session takes the size of that client, and tuios tiles the panes again.
+  Floating panes keep their positions. A client that is larger than the
+  session shows dots around the panes.
+- The width of the sidebar, a scratch terminal on the screen and a
+  picture-in-picture view.
+
+To show the full session on every client, set `window_size = "smallest"` in
+`[daemon]`.
+
 ### The sidebar with more than one client
 
 The sidebar is part of the session. When you show or hide it on one client,

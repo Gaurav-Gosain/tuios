@@ -932,6 +932,11 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 		if m.UseScrollingLayout {
 			m.ScrollingOnWindowRemoved(intID)
 		}
+		// A floating pane draws its own frame, as liftFromLayout gives it on
+		// the client that floated it. settleBorderMode skips a floating pane,
+		// so without this the peer kept the pane borderless and drew it as
+		// tiled: the two clients disagreed on which pane floats.
+		w.SetTiled(false)
 	}
 	for _, w := range unfloated {
 		if w.Workspace != m.CurrentWorkspace || !m.AutoTiling {
@@ -953,6 +958,11 @@ func (m *OS) ApplyStateSyncFrom(state *session.SessionState, sourceID string) er
 				m.AddWindowToBSPTree(w)
 			}
 		}
+	}
+	// A pane tiled again takes the border the other tiled panes have, as it
+	// does on the client that tiled it.
+	if len(unfloated) > 0 {
+		m.settleBorderMode(m.CurrentWorkspace)
 	}
 
 	// Input mode is not synced: it is per-viewer. Applying another client's mode
