@@ -1,10 +1,12 @@
 package app
 
 import (
+	"image/color"
 	"testing"
 	"time"
 
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/theme"
@@ -137,5 +139,53 @@ func TestASoftThemeCircleFinishesEveryStep(t *testing.T) {
 	case <-done:
 	case <-time.After(10 * time.Second):
 		t.Fatal("a soft theme circle did not finish its frame")
+	}
+}
+
+func TestThemeMixPreservesPaletteColorAtEndpointsAndCollisions(t *testing.T) {
+	m := sidebarTestOS(t, 40, 12, "left")
+
+	cases := []struct {
+		name string
+		a, b color.Color
+	}{
+		{name: "basic blue from white", a: ansi.BasicColor(7), b: ansi.BasicColor(4)},
+		{name: "indexed 256 from black", a: ansi.BasicColor(0), b: ansi.IndexedColor(33)},
+	}
+
+	for _, tc := range cases {
+		// At level == 0 and level >= themeMixLevels (such as late fade ink levels),
+		// themeMix must keep the exact endpoint color value instead of converting to color.RGBA.
+		if got := m.themeMix(tc.a, tc.b, 0); got != tc.a {
+			t.Errorf("%s at level 0: got %T(%v), want %T(%v)", tc.name, got, got, tc.a, tc.a)
+		}
+		if got := m.themeMix(tc.a, tc.b, themeMixLevels); got != tc.b {
+			t.Errorf("%s at level %d: got %T(%v), want %T(%v)", tc.name, themeMixLevels, got, got, tc.b, tc.b)
+		}
+	}
+
+	// Simulate themeBlendCell on the final third of a workspace fade (level = 24),
+	// where ink hits themeMixLevels while old cells vary between nil and non-nil Fg.
+	oldWithText := uv.Cell{Content: "x", Width: 1, Style: uv.Style{Fg: ansi.BasicColor(7)}}
+	oldBlank := uv.Cell{Content: " ", Width: 1}
+	rowFromText := uv.Cell{Content: "d", Width: 1, Style: uv.Style{Fg: ansi.BasicColor(4)}}
+	rowFromBlank := uv.Cell{Content: "d", Width: 1, Style: uv.Style{Fg: ansi.BasicColor(4)}}
+
+	m.themeBlendCell(&rowFromText, &oldWithText, 24)
+	m.themeBlendCell(&rowFromBlank, &oldBlank, 24)
+
+	if rowFromText.Style.Fg != ansi.BasicColor(4) {
+		t.Fatalf("fade row with prior fg got %T(%v), want ansi.BasicColor(4)", rowFromText.Style.Fg, rowFromText.Style.Fg)
+	}
+	if rowFromBlank.Style.Fg != ansi.BasicColor(4) {
+		t.Fatalf("fade row with nil prior fg got %T(%v), want ansi.BasicColor(4)", rowFromBlank.Style.Fg, rowFromBlank.Style.Fg)
+	}
+
+	// Near-end bg fade where MixColors quantizes back to target's 8-bit RGB must also
+	// preserve the original palette color rather than emitting a colliding color.RGBA.
+	nearlyEqual := color.RGBA{R: 0x00, G: 0x00, B: 0x81, A: 0xFF}
+	mixed := m.themeMix(nearlyEqual, ansi.BasicColor(4), themeMixLevels-1)
+	if mixed != ansi.BasicColor(4) {
+		t.Fatalf("quantized collision got %T(%v), want ansi.BasicColor(4)", mixed, mixed)
 	}
 }
