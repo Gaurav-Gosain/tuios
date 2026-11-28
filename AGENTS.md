@@ -245,6 +245,5 @@ Releases are automated via GitHub Actions with GoReleaser:
 - Builds for Linux, macOS, Windows, FreeBSD and OpenBSD
 - GoReleaser publishes to AUR and Homebrew. `docker-publish.yml` pushes the
   image
-- The tag goes on the commit that adds `docs/release-notes/vX.Y.Z.md`.
-  `tuios.nix` takes its version from the newest notes file, and
-  `update-nix.yml` checks that the tag builds as that version
+- Tag the commit that adds `docs/release-notes/vX.Y.Z.md`. `tuios.nix`
+  reads its version from there
