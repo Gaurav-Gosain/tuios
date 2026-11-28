@@ -40,7 +40,13 @@ func TestKittyImageSurvivesCaptureMode(t *testing.T) {
 	for _, daemon := range []bool{false, true} {
 		t.Run(map[bool]string{false: "standalone", true: "daemon"}[daemon], func(t *testing.T) {
 			host := newKittyHost()
-			term, base := start(t, startOpts{
+			// The test is about the image surviving capture mode and being in
+			// the picture, not about the raster's scale. At the default
+			// scale of 2 the save rasters four times the pixels, and on a
+			// loaded machine it ran past the wait for the file.
+			base := t.TempDir()
+			writeConfig(t, base, "[screenshot]\nscale = 1\n")
+			term := startIn(t, base, startOpts{
 				cols: 120, rows: 40,
 				env:           []string{"TUIOS_SIXEL_GRAPHICS=0", "TMPDIR=" + t.TempDir()},
 				out:           host,
@@ -301,8 +307,8 @@ func checkIcatInPicture(t *testing.T, path string) {
 			}
 		}
 	}
-	// A cell is at least 10 by 20 pixels at the default scale, so the image
-	// is at least 100 by 100. Half of that is far more than stray pixels of
+	// A cell is at least 10 by 20 pixels at scale 1, so the image is at
+	// least 100 by 100. Half of that is far more than stray pixels of
 	// antialiased text could make.
 	if n < 5000 {
 		t.Fatalf("the capture %s has %d pixels of the image, want at least 5000: the image is not in the picture", path, n)
