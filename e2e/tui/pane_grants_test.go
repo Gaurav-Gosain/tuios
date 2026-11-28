@@ -211,6 +211,59 @@ func TestAReadPaneRunsGetWindow(t *testing.T) {
 	alive(t, term, "after a read pane ran get-window")
 }
 
+// TestAPaneRefusedMoreGrantsIsToldWhatWorks: under strict, a pane that
+// asks set-pane-grants for more than it holds is refused. The refusal says
+// what works: set-pane-grants in a terminal outside tuios, or
+// [agents.permissions] in config.toml. It does not send the person to run
+// set-pane-grants in a pane, which is refused in every pane.
+//
+// Negative control: with the old hint, the refusal does not say "in a
+// terminal outside tuios" and the test fails.
+func TestAPaneRefusedMoreGrantsIsToldWhatWorks(t *testing.T) {
+	base := t.TempDir()
+	killDaemon(t, base)
+	cfg := configPathIn(base)
+	if err := os.MkdirAll(filepath.Dir(cfg), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfg, []byte("[agents.permissions]\nmode = \"strict\"\ngrants = [\"read\"]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := tuiosCLI(t, base, "new", "e2e-widen", "--detach"); err != nil {
+		t.Fatalf("create detached session: %v: %s", err, out)
+	}
+	term := startIn(t, base, startOpts{args: []string{"attach", "e2e-widen"}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+
+	refusal := filepath.Join(t.TempDir(), "refusal.txt")
+	line := tuiosBin + " set-pane-grants --grants read,write >" + posixQuote(refusal) + " 2>&1; echo SPG_\"EXIT\"=$?\n"
+	if out, err := tuiosCLI(t, base, "send-text", "-s", "e2e-widen", line); err != nil {
+		t.Fatalf("send-text from outside a pane failed: %v\n%s", err, out)
+	}
+	if err := term.WaitFor(func(s tuitest.Screen) bool {
+		return strings.Contains(s.Text(), "SPG_EXIT=")
+	}, uiTimeout); err != nil {
+		t.Fatalf("the pane's set-pane-grants never finished: %v\n%s", err, term.Snapshot())
+	}
+	if strings.Contains(term.Screen().Text(), "SPG_EXIT=0") {
+		t.Fatalf("a read pane gave itself write:\n%s", term.Snapshot())
+	}
+	raw, err := os.ReadFile(refusal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.Join(strings.Fields(string(raw)), " ")
+	t.Logf("the refusal the pane read:\n%s", raw)
+	for _, want := range []string{"in a terminal outside tuios", "no pane holds respond", "[agents.permissions] in config.toml"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("ASSERTION: the refusal does not say %q:\n%s", want, raw)
+		}
+	}
+	alive(t, term, "after a pane was refused more grants")
+}
+
 // TestAChildAgentNeverRunsWiderThanItsParent runs a parent agent in a pane:
 // a script named claude, started with --permission-mode plan, that calls
 // tuios start-agent the way an agent's shell tool does. The daemon reads the

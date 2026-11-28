@@ -715,8 +715,8 @@ func grantForbidden(verb string, pa *paneAuth, why string) *verbError {
 		Detail: "Pane " + shortWindowID(pa.window) + " holds " + pa.grants.String() + ", " + source + ". Nothing was done. " +
 			"What a pane may do is the person's decision. Do not try another verb or another process to do the same thing. " +
 			"Tell the person what you needed and why. " +
-			"The person can give this pane more with tuios set-pane-grants " + target + " --grants <names>, " +
-			"or every pane started with none with mode and grants under [agents.permissions] in config.toml.",
+			"The person runs tuios set-pane-grants " + target + " --grants <names> in a terminal outside tuios, because no pane holds respond. " +
+			"Or they set [agents.permissions] in config.toml.",
 	})
 }
 
@@ -1512,7 +1512,7 @@ func (d *Daemon) launchGrants(cs *connState, requested []string) (*Grants, *verb
 		if want != nil && want.Has(GrantRespond) {
 			return nil, hintedVerbError(ErrVerbForbidden, "grants: respond cannot be given from another machine", &VerbHint{
 				Param:  "grants",
-				Detail: "respond answers prompts for the person, so only the person on this machine gives it, with tuios set-pane-grants. Nothing was started.",
+				Detail: "respond answers prompts for the person. Only the person on this machine gives it, with tuios set-pane-grants in a terminal outside tuios. Nothing was started.",
 			})
 		}
 		return want, nil
