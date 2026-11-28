@@ -19906,3 +19906,18 @@ editor, as dash does.
 | The `spPrompt` calls left out (the tree before the fix) | `TestPhoneStreamsAPaneAndAnswersTheInbox`, `TestStreamPaneHeldToTheLinkPolicy`, `TestStreamPaneLeaseChurn`, `TestStreamPaneFromAPane` | `no SZ- line showed`, with `sh-3.2$ SZ-22x78` on the screen | **caught** |
 | With the fix, the same forced runs | the 8 tests that use `limitsDaemon` or `spSize` | 8 of 8 pass | n/a |
 | With the fix, no forced start, `-count=3` | the same 8 tests | 24 of 24 pass | n/a |
+## A detached stand-in keeps its harness's terminal open
+
+`TestAgentReportOnlyFromTheHarnessInThePane` runs the hook under a stand-in server that gives the harness a pty of its own. Nothing referred to the pty master once the harness had started, so the garbage collector could close it while the harness ran. The kernel then hung up the harness's terminal. SIGHUP ended the harness and the hook before the hook wrote its `--explain` line, and the test read an empty line. The server now closes the master after the harness exits.
+
+Run on 2026-11-22 on Linux, real backend, against main at 202648800. Both controls run the garbage collector every millisecond in the stand-in server, so the collector runs while the harness does.
+
+| Control | Test | Result | Verdict |
+| --- | --- | --- | --- |
+| Main, collector every millisecond | `TestAgentReportOnlyFromTheHarnessInThePane` | 3 of 3 runs: "the hook's --explain line is not JSON: unexpected end of JSON input", the CI failure | **caught** |
+| This change, collector every millisecond | `TestAgentReportOnlyFromTheHarnessInThePane` | 3 of 3 runs pass | fixed |
+| This change | `TestAgentReportOnlyFromTheHarnessInThePane` | 5 of 5 runs pass | fixed |
+
+```sh
+TUIOS_E2E=1 TUIOS_E2E_BIN=/path/to/tuios go test -count=1 -v -run '^TestAgentReportOnlyFromTheHarnessInThePane$' .
+```

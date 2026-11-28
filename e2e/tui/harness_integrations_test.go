@@ -1835,6 +1835,12 @@ func runStandInServer() {
 	harness.ExtraFiles = []*os.File{up.Slave()}
 	harness.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 3}
 	runStandInChild(harness, in, stdout, stderr)
+	// The master is closed here, after the harness has exited, and not
+	// before. Nothing else refers to it once the harness has started, so
+	// without this the garbage collector could close it while the harness
+	// runs. The kernel then hangs up the harness's terminal, and SIGHUP ends
+	// the harness and the hook before the hook writes its --explain line.
+	_ = p.Close()
 	_ = stdout.Close()
 	_ = stderr.Close()
 	_ = os.Rename(out+".stdout.part", out+".stdout")
