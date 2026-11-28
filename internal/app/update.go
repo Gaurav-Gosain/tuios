@@ -1704,6 +1704,7 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 	case dockClickFailedMsg:
 		m.handleDockClickFailed(msg)
+		m.renderSkipped = false
 		return m, nil
 	case dockComponentMsg:
 		// A component said something. The frame is drawn only if what it said

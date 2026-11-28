@@ -43,6 +43,9 @@ on-click = "echo host=$TUIOS_ATTACHED_HOST > '` + record + `'; echo NOPE-$((6*7)
 		b, _ := os.ReadFile(record)
 		return strings.TrimSpace(string(b)) == "host=build", string(b)
 	})
-	waitText(t, term, "the failed click shows a notice", "the click failed: exit 3: NOPE-42")
+	// The notice may wrap, so its parts are looked for one by one.
+	waitUntil(t, "the failed click shows a notice", uiTimeout, func() (bool, string) {
+		return screenHas(term.Screen(), "the click failed", "exit 3", "NOPE-42"), term.Snapshot()
+	})
 	saveFrame(t, term, "dock-click-failed")
 }
