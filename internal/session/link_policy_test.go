@@ -106,6 +106,70 @@ func TestTheDefaultLinkPolicyRefusesRespondAndAllowsTheRest(t *testing.T) {
 	}
 }
 
+// TestALinkCannotMarkAPaneOffItsPrompt: a report a linked machine makes about
+// a pane here is a report about another pane, and the state it sets is what
+// the typing rule reads. So it needs respond, as typing into that pane's
+// prompt does (GHSA-78rj-pghh-vh42). The default policy allows everything but
+// respond.
+//
+// The ways this can fail, written down first:
+//   - set-agent-state over the link moves a pane off needs_input, after which
+//     the typing rule reads working and lets the link's keys answer it;
+//   - the refusal comes from the policy's write class, not from respond, so
+//     the same report from a link that may respond must go through;
+//   - the person on this machine is refused too.
+//
+// Negative control: with the viaLink scopeSelf branch cut from checkGrants,
+// the default link's report is served and the pane reads working.
+func TestALinkCannotMarkAPaneOffItsPrompt(t *testing.T) {
+	d, sp := startTestDaemon(t)
+	_, a, b := twoWindowSession(t, d, "work")
+	d.setApprovalPeer(func(*connState) (bool, string) { return false, "" })
+	d.SetLinkPolicies(map[string]config.HostConfig{
+		"*":        {Allow: config.DefaultLinkAllow},
+		"answerer": {Allow: append(slices.Clone(config.DefaultLinkAllow), config.LinkAllowRespond)},
+	})
+	local := dialVerb(t, sp)
+	state := func(window string) any {
+		return result(t, callP(local, t, "get-agent-state", map[string]any{"session": "work", "window": window}))["state"]
+	}
+	setAgentState(t, local, "work", a, string(AgentStateNeedsInput), "approval", "approve Bash: rm -rf build")
+	working := map[string]any{"session": "work", "window": a, "state": string(AgentStateWorking)}
+
+	t.Run("a link without respond", func(t *testing.T) {
+		resp := callP(dialLink(t, sp), t, "set-agent-state", working)
+		if got := state(a); got != string(AgentStateNeedsInput) {
+			t.Errorf("ASSERTION: a link without respond moved the pane on a prompt to %v", got)
+		}
+		mustRefuse(t, resp, ErrVerbForbidden, "set-agent-state over a link without respond")
+		if msg, _ := resp["error"].(map[string]any)["message"].(string); !strings.Contains(msg, "answer prompts") {
+			t.Errorf("the refusal %q does not say that answering prompts is what it needs", msg)
+		}
+	})
+
+	t.Run("a link that may respond", func(t *testing.T) {
+		answerer := dialLink(t, sp)
+		result(t, linkPeer(t, answerer, "answerer"))
+		result(t, callP(answerer, t, "set-agent-state", working))
+		if got := state(a); got != string(AgentStateWorking) {
+			t.Errorf("a link that may respond reported working and the pane reads %v", got)
+		}
+	})
+
+	// The person starts from a pane of its own on a prompt, so what it shows
+	// is the move off needs_input and not one a link made before it.
+	t.Run("the person", func(t *testing.T) {
+		setAgentState(t, local, "work", b, string(AgentStateNeedsInput), "approval", "approve Bash: rm -rf build")
+		if got := state(b); got != string(AgentStateNeedsInput) {
+			t.Fatalf("the second pane reads %v after a needs_input report, want needs_input", got)
+		}
+		setAgentState(t, local, "work", b, string(AgentStateWorking), "", "")
+		if got := state(b); got != string(AgentStateWorking) {
+			t.Errorf("the person reported working for a pane on a prompt and the pane reads %v", got)
+		}
+	})
+}
+
 // TestALinkIsHeldToItsPeersPolicy resolves the policy by the name the
 // handshake gave: [hosts.laptop] for laptop, [hosts."*"] for anyone else.
 func TestALinkIsHeldToItsPeersPolicy(t *testing.T) {

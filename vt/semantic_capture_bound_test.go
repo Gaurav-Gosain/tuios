@@ -145,6 +145,46 @@ func BenchmarkCommandCaptureCRun(b *testing.B) {
 	}
 }
 
+// TestCommandCaptureRunIsLinear writes one B, a command line and a run of C
+// marks. Each C must stop at the C before it, not walk back over the whole
+// run to the B: a walk copies every marker it passes, so the run's
+// allocations grew with the square of its length. The count of allocations is
+// the bound, not the time. 900 C marks stay under the marker cap of both
+// backends, so the B is still in the list. Every C must still carry the
+// command, so the run did reach the capture.
+func TestCommandCaptureRunIsLinear(t *testing.T) {
+	const cMarks = 900
+	term := vt.NewWithScrollback(80, 24, 1000)
+	writeTerm(t, term, "\x1b]133;A\x07$ \x1b]133;B\x07make test\r\n")
+	tail := strings.Repeat("\x1b]133;C\x07", cMarks)
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	writeTerm(t, term, tail)
+	runtime.ReadMemStats(&after)
+
+	// One C costs a few allocations. A walk back to the B costs one per
+	// marker passed, about cMarks*cMarks/2 for the run.
+	const perMark = 16
+	if mallocs := after.Mallocs - before.Mallocs; mallocs > perMark*cMarks {
+		t.Errorf("writing %d C marks after one B made %d allocations, want at most %d", cMarks, mallocs, perMark*cMarks)
+	}
+	seen := 0
+	for _, m := range term.SemanticMarkers().Markers() {
+		if m.Type != vt.MarkerCommandExecuted {
+			continue
+		}
+		seen++
+		if m.CapturedText != "make test" {
+			t.Fatalf("C mark %d captured %q, want %q", seen, short(m.CapturedText), "make test")
+		}
+	}
+	if seen != cMarks {
+		t.Errorf("saw %d C marks, want %d", seen, cMarks)
+	}
+}
+
 // TestCommandCaptureKeepsShortCommands holds normal shell use to what it was:
 // one B and one C per command, captured whole.
 func TestCommandCaptureKeepsShortCommands(t *testing.T) {

@@ -227,6 +227,157 @@ func TestSpawnSheetIgnoresAReportedFolder(t *testing.T) {
 	alive(t, term, "after the sheet")
 }
 
+// TestRailGitIgnoresAReportedFolder is a security boundary. The rail's git
+// section runs git in the folder it shows. A pane whose shell is in one
+// repository prints an OSC 7 report that names another. The files section
+// follows the report, which shows the client took it. The git section stays
+// on the shell's repository and follows a branch change made there after
+// the report. When the shell itself moves into the other repository, the git
+// section follows it there.
+//
+// How it could pass wrongly, and what stops it: the section could still show
+// the shell's repository only because it had not looked again since the
+// report. It must show the branch the shell's repository moved to after the
+// report was taken, so it did look again.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with GitSyncCmd reading
+// filesWantDir instead of gitWantDir, the section names the reported
+// repository's branch.
+func TestRailGitIgnoresAReportedFolder(t *testing.T) {
+	const config = `[appearance.sidebar]
+enabled = true
+position = "left"
+width = 28
+sections = "sessions,files,git"
+git_refresh_ms = 500
+`
+	term, base := railClient(t, "railgit", config, startOpts{cols: 120, rows: 40})
+	shell := filepath.Join(base, "shellrepo")
+	told := filepath.Join(base, "toldrepo")
+	for dir, branch := range map[string]string{shell: "shell-a", told: "told-c"} {
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		testutil.Git(t, dir, "init", "-q", "-b", branch)
+	}
+	if err := os.WriteFile(filepath.Join(told, "told-only.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(shell, "README.txt"), []byte("\x1b]7;file://localhost"+told+"\x07look\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	railWait := func(what string, cond func(s tuitest.Screen) bool) {
+		t.Helper()
+		if err := term.WaitFor(cond, uiTimeout); err != nil {
+			t.Fatalf("%s: %v\n%s", what, err, term.Snapshot())
+		}
+	}
+	onRail := func(s tuitest.Screen, text string) bool { return railRowOf(s, text) >= 0 }
+
+	enterTerminalMode(t, term)
+	runInShell(t, term, "cd "+shell+` && printf '\033]7;file://%s\033\\%s\n' "$PWD" mar""ked`, "marked", uiTimeout)
+	railWait("the git section never showed the shell's repository", func(s tuitest.Screen) bool { return onRail(s, "shell-a") })
+
+	runInShell(t, term, "cat README.txt", "look", uiTimeout)
+	railWait("the files section never took the report", func(s tuitest.Screen) bool { return onRail(s, "told-only.txt") })
+	testutil.Git(t, shell, "symbolic-ref", "HEAD", "refs/heads/shell-b")
+	railWait("the git section never looked again", func(s tuitest.Screen) bool { return onRail(s, "shell-b") || onRail(s, "told-c") })
+	if s := term.Screen(); onRail(s, "told-c") || !onRail(s, "shell-b") {
+		t.Errorf("ASSERTION: the git section follows the OSC 7 report, not the shell's repository:\n%s", term.Snapshot())
+	}
+
+	// The positive half: a shell that really is in the other repository
+	// moves the section there.
+	runInShell(t, term, "cd "+told+` && printf '\033]7;file://%s\033\\%s\n' "$PWD" mo""ved`, "moved", uiTimeout)
+	railWait("ASSERTION: the git section never followed the shell into the other repository", func(s tuitest.Screen) bool { return onRail(s, "told-c") })
+	alive(t, term, "after the git section")
+}
+
+// TestShipFromAPaneRunsNoRepositoryHook is a security boundary. A ship verb
+// that a pane calls needs no person, so its git runs none of the hooks of the
+// repository the pane can write. ship commit, ship merge and ship push run
+// from a shell inside the worktree session's pane and run no hook, the push
+// too once the person allows it in the Inbox: the person allowed the push,
+// not the repository's programs. The same verbs from the person's CLI run
+// the hooks, as the person's own git would.
+//
+// Negative control (NEGATIVE_CONTROLS.md): with shipContext marking every
+// caller's git as the person's (childproc.AsPerson), the pane's ship commit
+// runs pre-commit and post-commit; with the shipMerge call in verbShipMerge,
+// or the shipPush call in verbShipPush, passing true for the person, the
+// pane's ship merge runs post-merge and its push runs pre-push.
+func TestShipFromAPaneRunsNoRepositoryHook(t *testing.T) {
+	f := newShipFixture(t)
+	marker := filepath.Join(f.base, "ran")
+	for _, hook := range []string{"pre-commit", "post-commit", "post-merge", "pre-push"} {
+		path := filepath.Join(f.repo, ".git", "hooks", hook)
+		if err := os.WriteFile(path, []byte("#!/bin/sh\necho "+hook+" >> '"+marker+"'\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = programsRan(marker)
+	head := func(dir string) string { return testutil.Git(t, dir, "rev-parse", "HEAD") }
+
+	f.write("pane.txt", "from the pane\n")
+	if out := inPane(t, f.base, f.session, "0", "ship commit -s "+f.session+" -m 'From the pane'"); !strings.Contains(out, "EXIT=0") {
+		t.Fatalf("ship commit from the pane: %s", out)
+	}
+	if msg := testutil.Git(t, f.worktree, "log", "-1", "--format=%s"); msg != "From the pane" {
+		t.Fatalf("the pane's ship commit made no commit: the last one is %q", msg)
+	}
+	if ran := programsRan(marker); len(ran) > 0 {
+		t.Errorf("ASSERTION: ship commit from a pane ran the repository's hooks: %v", ran)
+	}
+	if out := inPane(t, f.base, f.session, "0", "ship merge -s "+f.session); !strings.Contains(out, "EXIT=0") {
+		t.Fatalf("ship merge from the pane: %s", out)
+	}
+	if got, want := testutil.Git(t, f.repo, "rev-parse", "main"), head(f.worktree); got != want {
+		t.Fatalf("the pane's ship merge left main at %s, want %s", got, want)
+	}
+	if ran := programsRan(marker); len(ran) > 0 {
+		t.Errorf("ASSERTION: ship merge from a pane ran the repository's hooks: %v", ran)
+	}
+
+	term := startIn(t, f.base, startOpts{args: []string{"attach", f.session}})
+	if err := term.WaitFor(func(s tuitest.Screen) bool { return countWindows(s) == 1 }, bootTimeout); err != nil {
+		t.Fatalf("client never attached: %v\n%s", err, term.Snapshot())
+	}
+	tip := head(f.worktree)
+	pushOut := filepath.Join(f.fakes, "pane-push.txt")
+	f.tr.ok("send-text", "-s", f.session, "-w", "0", tuiosBin+" ship push --yes --wait 60s > "+pushOut+" 2>&1\n")
+	waitText(t, term, "the push question in the Inbox", "Push feat/ship ("+tip[:7]+") to origin")
+	pause(t, "the Inbox takes an answer key only after the question has been on screen for a moment", answerSettle)
+	sendKeys(t, term, "1")
+	waitForFileText(t, pushOut, func(s string) bool { return strings.Contains(s, "Pushed feat/ship") }, "the pane's push never went out after the person allowed it")
+	if got := testutil.Git(t, f.repo, "--git-dir", f.remote, "rev-parse", "refs/heads/feat/ship"); got != tip {
+		t.Fatalf("the pane's push left the origin's feat/ship at %s, want %s", got, tip)
+	}
+	if ran := programsRan(marker); len(ran) > 0 {
+		t.Errorf("ASSERTION: ship push from a pane ran the repository's hooks: %v", ran)
+	}
+
+	// The positive half: the person's own ship verbs run the hooks.
+	f.write("person.txt", "from the person\n")
+	f.tr.ok("ship", "commit", "-s", f.session, "-m", "From the person")
+	if ran := programsRan(marker); !slices.Contains(ran, "pre-commit") || !slices.Contains(ran, "post-commit") {
+		t.Errorf("ASSERTION: the person's ship commit did not run the repository's hooks; it ran %v", ran)
+	}
+	f.tr.ok("ship", "merge", "-s", f.session)
+	if got, want := testutil.Git(t, f.repo, "rev-parse", "main"), head(f.worktree); got != want {
+		t.Fatalf("the person's ship merge left main at %s, want %s", got, want)
+	}
+	if ran := programsRan(marker); !slices.Contains(ran, "post-merge") {
+		t.Errorf("ASSERTION: the person's ship merge did not run the repository's post-merge hook; it ran %v", ran)
+	}
+	f.tr.ok("ship", "push", "-s", f.session, "--yes")
+	if got, want := testutil.Git(t, f.repo, "--git-dir", f.remote, "rev-parse", "refs/heads/feat/ship"), head(f.worktree); got != want {
+		t.Fatalf("the person's ship push left the origin's feat/ship at %s, want %s", got, want)
+	}
+	if ran := programsRan(marker); !slices.Contains(ran, "pre-push") {
+		t.Errorf("ASSERTION: the person's ship push did not run the repository's pre-push hook; it ran %v", ran)
+	}
+}
+
 // TestCheckpointIgnoresAReportedFolderWithoutProcessCwd is a security
 // boundary for a daemon that cannot read a shell's folder, as on native
 // Windows (knob no_process_cwd). The pane starts in one repository and
