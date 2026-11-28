@@ -244,4 +244,7 @@ Releases are automated via GitHub Actions with GoReleaser:
 - Tag format: `v*.*.*` (e.g., `v0.12.1`). Tagging is the maintainer's call
 - Builds for Linux, macOS, Windows, FreeBSD and OpenBSD
 - GoReleaser publishes to AUR and Homebrew. `docker-publish.yml` pushes the
-  image, and `update-nix.yml` moves `tuios.nix` to the release
+  image
+- The tag goes on the commit that adds `docs/release-notes/vX.Y.Z.md`.
+  `tuios.nix` takes its version from the newest notes file, and
+  `update-nix.yml` checks that the tag builds as that version

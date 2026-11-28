@@ -2,7 +2,17 @@
 
 pkgs.buildGo127Module rec {
   pname = "tuios";
-  version = "v0.13.3";
+  # The version is the newest docs/release-notes/vX.Y.Z.md in the tree. Each
+  # release tags the commit that adds its notes, so the tag carries its own
+  # version, and nothing has to be bumped after the tag (#2548).
+  version =
+    let
+      notes = builtins.attrNames (builtins.readDir ./docs/release-notes);
+      tags = builtins.filter (n: builtins.match "v[0-9]+\\.[0-9]+\\.[0-9]+" n != null) (
+        map (pkgs.lib.removeSuffix ".md") notes
+      );
+    in
+    pkgs.lib.last (builtins.sort (a: b: builtins.compareVersions a b < 0) tags);
 
   src = ./.;
 

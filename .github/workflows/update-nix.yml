@@ -13,8 +13,12 @@ on:
         required: true
         type: string
 
-# It pushes the updated tuios.nix straight to main and opens no pull request,
-# so it needs contents: write and nothing more.
+# tuios.nix reads its version from the newest file in docs/release-notes, so a
+# tag carries its own version and this workflow never bumps it (#2548). On a
+# release it checks that the tag builds as that version, and it refreshes the
+# vendor hash on main if the dependencies moved without one. It pushes the
+# updated tuios.nix straight to main and opens no pull request, so it needs
+# contents: write and nothing more.
 permissions:
   contents: write
 
@@ -61,14 +65,20 @@ jobs:
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Update tuios.nix version
+      # The release commit adds docs/release-notes/<tag>.md, and tuios.nix takes
+      # its version from there. A tag without its notes would build as the
+      # release before it.
+      - name: Check the version at the tag
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          # Update version in tuios.nix
-          sed -i "s/version = \"v[0-9]*\.[0-9]*\.[0-9]*\";/version = \"${VERSION}\";/" tuios.nix
-
-          echo "Updated version to ${VERSION}"
+          git fetch --depth=1 origin "refs/tags/${VERSION}:refs/tags/${VERSION}"
+          at_tag=$(nix eval --raw "git+file://$PWD?ref=refs/tags/${VERSION}&shallow=1#tuios.version")
+          if [ "$at_tag" != "$VERSION" ]; then
+            echo "::error file=tuios.nix::The tag ${VERSION} builds as ${at_tag}. Add docs/release-notes/${VERSION}.md to the release commit."
+            exit 1
+          fi
+          echo "The tag ${VERSION} builds as ${at_tag}."
 
       - name: Calculate vendor hash
         id: hash
@@ -123,12 +133,12 @@ jobs:
           # The second of the two runs a release starts finds main already
           # updated, and an empty commit would fail the job.
           if git diff --quiet -- tuios.nix; then
-            echo "tuios.nix is already at ${VERSION}"
+            echo "The vendor hash in tuios.nix is current."
             exit 0
           fi
 
           git add tuios.nix
-          git commit -m "chore: update nix package to ${VERSION}"
+          git commit -m "chore(nix): update the vendor hash after ${VERSION}"
 
           # Push using the GitHub token
           git push "https://x-access-token:${GITHUB_TOKEN}@github.com/Gaurav-Gosain/tuios.git" HEAD:main
