@@ -53,12 +53,13 @@ func windowListed(t *testing.T, base, session, window string) bool {
 // whether it went.
 func waitWindowGone(t *testing.T, base, session, window string, timeout time.Duration) bool {
 	t.Helper()
-	deadline := time.Now().Add(timeout)
+	deadline := time.Now().Add(scaled(timeout))
+	pace := newPollPace(pollMax)
 	for time.Now().Before(deadline) {
 		if !windowListed(t, base, session, window) {
 			return true
 		}
-		time.Sleep(100 * time.Millisecond)
+		pace.waitUntil(deadline)
 	}
 	return false
 }
@@ -124,8 +125,12 @@ func TestSelfExecClosesCloseOnExitWindows(t *testing.T) {
 	}
 	plainCode := windowExitCode(t, base, sess, plain, 10*time.Second)
 	afterClosed := waitWindowGone(t, base, sess, after, 10*time.Second)
-	time.Sleep(500 * time.Millisecond)
 	plainStays := windowListed(t, base, sess, plain)
+	if plainStays {
+		stayTrue(t, "the plain window stays listed after its program exits", 500*time.Millisecond, func() (bool, string) {
+			return windowListed(t, base, sess, plain), "the plain window is gone"
+		})
+	}
 
 	writeHandoffArtifact(t, map[string]any{
 		"panes_carried": int(carried), "during_closed": duringClosed,
@@ -223,7 +228,7 @@ func TestSelfExecKeepsSessionOrder(t *testing.T) {
 	names := []string{"e2e-ord-e", "e2e-ord-d", "e2e-ord-c", "e2e-ord-b", "e2e-ord-a"}
 	for _, name := range names {
 		newCommandWindow(t, base, name, "home", false, "sh", "-c", "exec sleep 600")
-		time.Sleep(20 * time.Millisecond)
+		pause(t, "the next session's creation time comes after this one's", 20*time.Millisecond)
 	}
 	// A new pane is activity in its session.
 	newCommandWindow(t, base, names[1], "used", false, "sh", "-c", "exec sleep 600")
@@ -251,7 +256,7 @@ func TestSelfExecKeepsSessionOrder(t *testing.T) {
 		return name
 	}
 	before, currentBefore := listed(), current()
-	time.Sleep(1100 * time.Millisecond)
+	pause(t, "the clock moves past the sessions' last-active times, so a handoff that reset them would show", 1100*time.Millisecond)
 
 	handOver(t, base, map[string]any{})
 	after, currentAfter := listed(), current()
@@ -305,7 +310,8 @@ func TestSelfExecKeepsPluginPane(t *testing.T) {
 		t.Fatalf("plugin.pane.open answered %v", opened)
 	}
 	var win string
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(scaled(10 * time.Second))
+	pace := newPollPace(pollMax)
 	for win == "" && time.Now().Before(deadline) {
 		out, _ := tuiosOut(base, "list-windows", "-s", sess, "--json")
 		var list struct {
@@ -321,7 +327,9 @@ func TestSelfExecKeepsPluginPane(t *testing.T) {
 				win = w.ID
 			}
 		}
-		time.Sleep(100 * time.Millisecond)
+		if win == "" {
+			pace.waitUntil(deadline)
+		}
 	}
 	if win == "" {
 		t.Fatal("the plugin's pane never listed a process")
@@ -460,10 +468,9 @@ func TestSelfExecKeepsPaneCreator(t *testing.T) {
 	// shell is not at its prompt. The test types it: a caller outside every
 	// pane is not held to the rule.
 	for _, w := range []string{b, c} {
-		_ = mustCall(t, base, "send-text", map[string]any{"session": sess, "window": w, "text": "echo cat-$((6*7)); cat\n"})
+		_ = mustCall(t, base, "send-text", map[string]any{"session": sess, "window": w, "text": "sh -c 'echo cat-$((6*7)); exec cat'\n"})
 		waitHandoffPane(t, base, sess, w, regexp.MustCompile(`^cat-42`), 10*time.Second)
 	}
-	time.Sleep(300 * time.Millisecond)
 	typeInto := func(n int, window, mark string) string {
 		return run(n, `"$T" send-text -s `+sess+` -w `+window+` `+mark)
 	}
@@ -474,10 +481,14 @@ func TestSelfExecKeepsPaneCreator(t *testing.T) {
 	bAfter := typeInto(4, b, "MARK-B-AFTER")
 	cAfter := typeInto(5, c, "MARK-C-AFTER")
 	bTook := false
-	deadline := time.Now().Add(10 * time.Second)
-	for !bTook && time.Now().Before(deadline) {
+	deadline := time.Now().Add(scaled(10 * time.Second))
+	pace := newPollPace(pollMax)
+	for {
 		bTook = strings.Contains(strings.Join(mustScrollback(t, base, sess, b), "\n"), "MARK-B-AFTER")
-		time.Sleep(100 * time.Millisecond)
+		if bTook || !time.Now().Before(deadline) {
+			break
+		}
+		pace.waitUntil(deadline)
 	}
 
 	writeHandoffArtifact(t, map[string]any{
@@ -559,13 +570,9 @@ func TestSelfExecKeepsReportColors(t *testing.T) {
 	want := map[string]string{"11": xrgb(bg), "10": xrgb(fg), "4;1": xrgb(pal[1])}
 	before := askPane(t, base, sess, host, want)
 	_ = term.Close()
-	deadline := time.Now().Add(10 * time.Second)
-	for sessionAttached(t, base, sess) {
-		if time.Now().After(deadline) {
-			t.Fatal("the client stayed attached after it closed")
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	waitUntil(t, "the client is detached once it closed", 10*time.Second, func() (bool, string) {
+		return !sessionAttached(t, base, sess), "the session still has a client attached"
+	})
 
 	handOver(t, base, map[string]any{})
 	after := askPane(t, base, sess, host, want)
@@ -643,8 +650,12 @@ func TestDaemonUpgradeAcrossHandoffVersions(t *testing.T) {
 		newer := awaitNewImage(t, base, older, 20*time.Second)
 		hello := mustCall(t, base, "hello", map[string]any{})
 		pidsAfter := panePIDs(t, base, sess)
-		time.Sleep(300 * time.Millisecond)
-		ticks := counterLines(mustScrollback(t, base, sess, a), "v-")
+		var ticks []int
+		ticksAtHandoff := len(counterLines(mustScrollback(t, base, sess, a), "v-"))
+		waitUntil(t, "the counter runs on after the upgrade", 10*time.Second, func() (bool, string) {
+			ticks = counterLines(mustScrollback(t, base, sess, a), "v-")
+			return len(ticks) >= ticksAtHandoff+10, fmt.Sprintf("%d counter lines, %d at the upgrade", len(ticks), ticksAtHandoff)
+		})
 
 		_, refusal := callVerb(t, base, "test-handoff", map[string]any{"binary": prev})
 		kept := helloImage(t, base)

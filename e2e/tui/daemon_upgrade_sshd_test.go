@@ -2,6 +2,7 @@ package tuie2e
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -150,17 +151,10 @@ func remoteSSHHost(t *testing.T) sshdHost {
 		t.Fatal(err)
 	}
 
-	deadline := time.Now().Add(30 * time.Second)
-	for {
+	waitUntil(t, "ssh to the container works", 30*time.Second, func() (bool, string) {
 		out, err := exec.Command(h.ssh, "-o", "BatchMode=yes", "-o", "ConnectTimeout=5", h.addr, "tuios ls").CombinedOutput()
-		if err == nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("ssh to the container never worked: %v\n%s", err, out)
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
+		return err == nil, fmt.Sprintf("%v\n%s", err, out)
+	})
 	return h
 }
 
@@ -244,15 +238,16 @@ func TestFederationLinkToAnotherMachineAfterUpgrade(t *testing.T) {
 	// nobody waits for stays defunct. So the wait is for the end state, and
 	// a wrong one is reported as it stood at the deadline.
 	var live, defunct, all, proxies []string
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(scaled(10 * time.Second))
+	pace := newPollPace(pollMax)
 	for {
 		live, defunct, all = far.linkChildren(t, img.PID)
 		proxies = far.farProxies(t)
 		settled := len(live) == 1 && len(defunct) == 0 && len(proxies) == 1 && childPID(live[0]) != childPID(liveBefore[0])
-		if settled || time.Now().After(deadline) {
+		if settled || !time.Now().Before(deadline) {
 			break
 		}
-		time.Sleep(250 * time.Millisecond)
+		pace.waitUntil(deadline)
 	}
 	panesAfter := panePIDs(t, base, sess)
 	writeHandoffArtifact(t, map[string]any{
