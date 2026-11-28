@@ -161,8 +161,8 @@ func (d *Daemon) readiness(cs *connState, p readinessParams) (readinessAnswer, *
 		if !r.Installed || len(m.Launch.SignedInArgs) == 0 {
 			continue
 		}
-		i, launch := len(out)-1, &m.Launch
-		wg.Go(func() { out[i].SignedIn = signedIn(d.ctx, m.ID, path, launch) })
+		row, launch := &out[len(out)-1], &m.Launch
+		wg.Go(func() { row.SignedIn = signedIn(d.ctx, m.ID, path, launch) })
 	}
 	wg.Wait()
 	sort.Slice(out, func(a, b int) bool { return out[a].Harness < out[b].Harness })
