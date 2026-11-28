@@ -123,6 +123,7 @@ var errorCodeCatalog = []struct {
 	{ErrVerbWorktreeDirty, "remove-worktree refused: the worktree holds uncommitted changes and neither stash nor force was passed. Nothing was removed."},
 	{ErrVerbWorktreeDetached, "remove-worktree refused: the worktree sits on a detached HEAD holding commits no branch has. Nothing was removed."},
 	{ErrVerbWorktreeNested, "remove-worktree refused: an ignored or untracked path in the worktree holds a nested git repository, whose history no stash can save. Nothing was removed."},
+	{ErrVerbOwnedProcesses, "remove-worktree refused: the worker's processes remain, or their ownership cannot be verified. Nothing was removed."},
 	{ErrVerbGitFailed, "A git command failed. The message is git's own. The repository is as it was."},
 	{ErrVerbBranchExists, "new-worktree with new_branch: the branch, its worktree folder or its session exists already. Nothing was made. Choose another branch."},
 	{ErrVerbNoMachine, "No machine can start the agent now. The message gives each machine's reason. Nothing was started."},
