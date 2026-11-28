@@ -22,4 +22,12 @@
 // that e2e/tui/NEGATIVE_CONTROLS.md uses twice. The file takes merge=union,
 // which keeps both sides of a hunk two branches wrote, so a record that two
 // branches carried came out as two sections. Merge them into one.
+//
+// The comment check (comments_test.go) counts, in each package, the comment
+// lines that are not doc comments on exported API, test doc comments,
+// directives, markers or license headers. CommentsToRemove gives the rules.
+// The counts in testdata/comments can only go down. A change that deletes
+// comments lowers the counts with:
+//
+//	go test ./internal/lint -run TestNoNewInlineComments -update-comments
 package lint

@@ -1,0 +1,4 @@
+cmd/sketch-wasm 15
+cmd/tuios-fuzz 73
+cmd/tuios-wasm 46
+cmd/tuios-web 768

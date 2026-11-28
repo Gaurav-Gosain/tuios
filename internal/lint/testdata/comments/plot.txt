@@ -1,0 +1,3 @@
+plot 261
+plot/cmd/tplot 52
+plot/internal/worldgen 29
