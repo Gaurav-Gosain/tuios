@@ -654,6 +654,18 @@ func (m *OS) renderDockString() (string, int) {
 	// columns below, once the block's own first column is known.
 	var rightCustom []dockCustomHit
 
+	// A message sits in front of the button row and never takes its place.
+	// It used to take the whole right block, and the attach's own notices
+	// came up there just as a person reached for New, so the click landed on
+	// the message and dismissed it instead.
+	var buttons string
+	if hasNotif && m.dockPlan.Has(config.DockComponentButtons) {
+		buttons, rightCustom = m.dockButtonsBeside(rightRoom - dockNotifMinWidth)
+		if bw := lipgloss.Width(buttons); bw > 0 {
+			notif, hasNotif = m.dockNotificationBlock(barWidth, rightRoom-bw)
+		}
+	}
+
 	legend := m.dockModeLegend()
 	switch {
 	case hasNotif:
@@ -665,6 +677,14 @@ func (m *OS) renderDockString() (string, int) {
 		rightInfo = notif.Text
 		notifRule = notif.Rule
 		rightWidth = notif.Width
+		if buttons != "" {
+			for i := range rightCustom {
+				rightCustom[i].X0 += notif.Width
+				rightCustom[i].X1 += notif.Width
+			}
+			rightInfo += buttons
+			rightWidth += lipgloss.Width(buttons)
+		}
 	case len(legend) > 0:
 		// The legend is fitted to the room by dropping whole keys, so the
 		// cut below never reaches it.
@@ -687,11 +707,13 @@ func (m *OS) renderDockString() (string, int) {
 	// the bar, so everything in front of it added up is where it starts, and the
 	// burn rule above it is placed from the same number.
 	notifX0 := actualLeftWidth + leftSpacer + centerWidth + rightSpacer
+	// The message's own columns end where the button row begins.
+	notifW := rightWidth - lipgloss.Width(buttons)
 	m.notifHit = notifHitZones{
 		Active:    hasNotif,
 		X0:        notifX0,
-		X1:        notifX0 + rightWidth,
-		DismissX0: notifX0 + rightWidth - notif.DismissW,
+		X1:        notifX0 + notifW,
+		DismissX0: notifX0 + notifW - notif.DismissW,
 		Y:         m.GetDockbarContentYPosition(),
 		Cut:       hasNotif && notif.Cut,
 	}
