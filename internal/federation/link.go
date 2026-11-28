@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Gaurav-Gosain/tuios/internal/jsonx"
+	"github.com/Gaurav-Gosain/tuios/internal/testknob"
 )
 
 // Status is what the hub currently knows about one host.
@@ -525,6 +526,7 @@ func (l *link) attempt(ctx context.Context) bool {
 	}
 	l.mu.Unlock()
 
+	holdDialForTest()
 	dialCtx, cancelDial := context.WithTimeout(ctx, h.connectTimeout())
 	defer cancelDial()
 
@@ -1219,4 +1221,14 @@ func trimDetail(s string) string {
 		return s[:limit] + "..."
 	}
 	return s
+}
+
+// holdDialForTest waits, before a link dials, while the file named by knob
+// hold_host_dial exists. A test holds the first attempt with it to see what
+// a client shows while it waits for the link. An ordinary run pays one map
+// read per dial.
+func holdDialForTest() {
+	if hold := testknob.String("hold_host_dial"); hold != "" {
+		testknob.WaitWhile(hold, 20*time.Millisecond, time.Minute)
+	}
 }
