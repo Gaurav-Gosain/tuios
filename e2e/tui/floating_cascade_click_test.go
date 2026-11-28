@@ -91,6 +91,9 @@ start_in_terminal_mode = true
 				opts.env = []string{"TUIOS_SSH=" + ssh}
 			}
 			term := startIn(t, clientBase, opts)
+			if tc.host {
+				logHostAttachOnFailure(t, clientBase)
+			}
 			waitForAll(t, term, uiTimeout, "the top surface", "VISIBLE_TOP_PANE", "CLICK_TARGET")
 			saveTMLFrame(t, term, "cascade-before-click")
 
@@ -169,4 +172,27 @@ start_in_terminal_mode = true
 			}
 		})
 	}
+}
+
+// logHostAttachOnFailure logs what the daemon of the client at clientBase
+// knows about its link when the test fails: the hosts listing and the end
+// of its log. A client that attaches on a host draws nothing until the link
+// answers, so the screen alone does not say which step stalled. The cleanup
+// is registered after startIn, so it runs before that daemon is stopped.
+func logHostAttachOnFailure(t *testing.T, clientBase string) {
+	t.Helper()
+	t.Cleanup(func() {
+		if !t.Failed() {
+			return
+		}
+		out, err := tuiosCLI(t, clientBase, "hosts", "--json")
+		t.Logf("hosts --json on the client's machine (err %v):\n%s", err, out)
+		data, err := os.ReadFile(filepath.Join(xdgDir(clientBase, "XDG_STATE_HOME"), "tuios", "daemon.log"))
+		if err != nil {
+			t.Logf("the client's daemon log: %v", err)
+			return
+		}
+		lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+		t.Logf("the last lines of the client's daemon log:\n%s", strings.Join(lines[max(0, len(lines)-60):], "\n"))
+	})
 }
