@@ -67,6 +67,7 @@ done <<<"$changed"
 # own package: tdirs. Any other file reaches what imports the package: dirs.
 declare -A dirs=() tdirs=() readdirs=()
 uptree=$(git grep -lE -e '\.\./|"\.\."' -- '*_test.go' ':!e2e' 2>/dev/null)
+mapfile -t upfiles < <(grep . <<<"$uptree")
 while IFS= read -r f; do
 	d=$(dirname "$f")
 	# A Go file in a folder that is gone: the package went, and what
@@ -93,15 +94,17 @@ while IFS= read -r f; do
 	# AFFECTED_NO_READERS=1 leaves these out: a build that differs only in
 	# compiled code (the ghostty tag) reads the same files.
 	[ -z "${AFFECTED_NO_READERS:-}" ] || continue
+	[ "${#upfiles[@]}" -gt 0 ] || continue
 	parent=$(basename "$(dirname "$f")")
 	top=${f%%/*}
+	# One grep over every reader for each changed file: a grep per reader
+	# and file took longer than the job's timeout on a change of 900 files.
 	while IFS= read -r r; do
-		[ -n "$r" ] || continue
-		if grep -qF -e "$(basename "$f")" "$r" ||
-			{ [ "$top" != "$f" ] && grep -qE -e "[\"/]($top|$parent)[\"/]" "$r"; }; then
-			readdirs[$(dirname "$r")]=1
-		fi
-	done <<<"$uptree"
+		[ -n "$r" ] && readdirs[$(dirname "$r")]=1
+	done < <(
+		grep -lF -e "$(basename "$f")" -- "${upfiles[@]}" 2>/dev/null
+		[ "$top" = "$f" ] || grep -lE -e "[\"/]($top|$parent)[\"/]" -- "${upfiles[@]}" 2>/dev/null
+	)
 done <<<"$changed"
 [ "${#dirs[@]}" -gt 0 ] || [ "${#tdirs[@]}" -gt 0 ] || [ "${#readdirs[@]}" -gt 0 ] || exit 0
 
