@@ -7,9 +7,11 @@ import (
 )
 
 // sessionCloseInnerWidth is the dialog's preferred inner width, sized so the
-// toll line still fits with both agent clauses on it. The blocked call-out is
+// toll line still fits with the scratch clause and both agent clauses on it,
+// as in "1 pane + 1 scratch, 1 agent still working, 1 needs you". The blocked
+// call-out is
 // last and would be the part cut, and it is the one the dialog exists to show.
-const sessionCloseInnerWidth = 54
+const sessionCloseInnerWidth = 56
 
 // renderSessionClose draws the close confirmation: the question, what closing
 // would take down counted as the frame is built, and the answer rows — two, or
