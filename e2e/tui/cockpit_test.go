@@ -2500,6 +2500,12 @@ func TestCockpitSpawnSheet(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitText(t, term, "the kept draft after esc", "Where it works", "Make the LRU cache safe for concurrent reads.", "agent/lru-cache-safe")
+	// The sheet reads the folder and the agents again. The kept draft
+	// keeps its agent once that read lands.
+	_ = term.WaitStable(uiTimeout)
+	if s := term.Screen().Text(); !strings.Contains(s, "claude ready") {
+		t.Fatalf("ASSERTION: the kept draft lost its agent after the sheet read the agents again:\n%s", term.Snapshot())
+	}
 
 	// enter starts the agent in a new worktree and closes the sheet.
 	if err := term.SendKeys(tuitest.Enter); err != nil {

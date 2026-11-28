@@ -778,6 +778,20 @@ func (m *OS) applySpawnInfo(msg spawnInfoMsg) tea.Cmd {
 			agents = append(agents, a)
 		}
 	}
+	// The picked agent and the varied ones are indexes into the old list.
+	// The new list is in manifest order, so carry them over by id before
+	// spawnSortAgents reads them: a kept draft read again kept its index
+	// and picked whichever agent came first in the manifests.
+	moved := func(i int) int {
+		if i >= len(s.agents) {
+			return i
+		}
+		return max(slices.IndexFunc(agents, func(a spawnAgent) bool { return a.id == s.agents[i].id }), 0)
+	}
+	s.agent = moved(s.agent)
+	for i, v := range s.vary {
+		s.vary[i] = moved(v)
+	}
 	s.agents = agents
 	m.spawnSortAgents(s)
 	s.read = true
