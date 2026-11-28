@@ -336,8 +336,17 @@ func (m *OS) themeBlendCell(n, o *uv.Cell, l uint8) {
 }
 
 // themeMix is a toward b at level, from the table when it has been made
-// before.
+// before. Endpoints and quantized matches preserve the original color.Color so
+// terminal palette colors (BasicColor/IndexedColor) are never replaced by a
+// color.RGBA with the same fallback RGBA bytes, which terminal diffing treats
+// as equal even though host palettes render them differently.
 func (m *OS) themeMix(a, b color.Color, level uint8) color.Color {
+	if level == 0 {
+		return a
+	}
+	if level >= themeMixLevels {
+		return b
+	}
 	if isNilColor(a) || isNilColor(b) {
 		if level < themeMixLevels/2 {
 			return a
@@ -350,16 +359,22 @@ func (m *OS) themeMix(a, b color.Color, level uint8) color.Color {
 	}
 	k := uint64(pa)<<32 | uint64(pb)<<8 | uint64(level)
 	t := &m.themeFx
-	if c, ok := t.mix[k]; ok {
-		return c
+	c, ok := t.mix[k]
+	if !ok {
+		if t.mix == nil {
+			t.mix = make(map[uint64]color.Color, 256)
+		} else if len(t.mix) >= themeMixMax {
+			clear(t.mix)
+		}
+		c = overlay.MixColors(a, b, float64(level)/themeMixLevels)
+		t.mix[k] = c
 	}
-	if t.mix == nil {
-		t.mix = make(map[uint64]color.Color, 256)
-	} else if len(t.mix) >= themeMixMax {
-		clear(t.mix)
+	// A mix that lands on an endpoint's bytes hands back the endpoint itself.
+	if pc := packColor8(c); pc == pb {
+		return b
+	} else if pc == pa {
+		return a
 	}
-	c := overlay.MixColors(a, b, float64(level)/themeMixLevels)
-	t.mix[k] = c
 	return c
 }
 
