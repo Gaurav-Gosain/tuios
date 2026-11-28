@@ -1702,6 +1702,9 @@ func (m *OS) handleMsg(msg tea.Msg) (model tea.Model, cmd tea.Cmd) {
 
 		return m, tea.Batch(cmds...)
 
+	case dockClickFailedMsg:
+		m.handleDockClickFailed(msg)
+		return m, nil
 	case dockComponentMsg:
 		// A component said something. The frame is drawn only if what it said
 		// changed the bar: an interval component polling a value that has not

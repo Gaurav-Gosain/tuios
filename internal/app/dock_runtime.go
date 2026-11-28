@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/Gaurav-Gosain/tuios/internal/config"
 	"github.com/Gaurav-Gosain/tuios/internal/hooks"
+	"github.com/Gaurav-Gosain/tuios/internal/overlay"
 	"github.com/Gaurav-Gosain/tuios/internal/session"
 )
 
@@ -45,7 +47,7 @@ func (m *OS) InitDockComponents() tea.Cmd {
 		comps = append(comps, secondary)
 	}
 	m.dockEngine = dockengine.New(comps, railFolder)
-	m.dockEngine.SetContext(m.SessionName, dockSocketPath())
+	m.dockEngine.SetContext(m.SessionName, dockSocketPath(), m.AttachedHost)
 	// Before Start, so the first run is told the focus and the size rather
 	// than running with none.
 	m.railCustom.ctx = m.railContextNow()
@@ -72,13 +74,13 @@ func (m *OS) StopDockComponents() {
 	m.railCustom.on = false
 }
 
-// SyncDockContext re-stamps the session name and socket onto the engine, for
+// SyncDockContext re-stamps the session name, socket and host onto the engine, for
 // the paths that learn which session they are on after Init has run: a daemon
 // attach names the session when the connection lands, and a session switch
 // changes it. Without this a component's TUIOS_SESSION would be whatever was
 // known at boot, which for an attach is nothing.
 func (m *OS) SyncDockContext() {
-	m.dockEngine.SetContext(m.SessionName, dockSocketPath())
+	m.dockEngine.SetContext(m.SessionName, dockSocketPath(), m.AttachedHost)
 }
 
 // ReloadDockComponents rebuilds the plan after the config file changed. Without
@@ -307,31 +309,76 @@ func (m *OS) RefreshDockComponent(name string) error {
 }
 
 // RunDockComponentClick runs a component's on-click command, the way a hook is
-// run: detached, output discarded, and never on the render goroutine. The cell
-// that was clicked is named in the environment along with the button, so one
-// script can serve a left and a right click. It reports whether the component
-// had a command to run, so a cell without one falls through to whatever is
-// under it.
-func (m *OS) RunDockComponentClick(name string, button int) bool {
+// run: off the render goroutine, stdout discarded. The cell that was clicked is
+// named in the environment along with the button, so one script can serve a
+// left and a right click. It reports whether the component had a command to
+// run, so a cell without one falls through to whatever is under it. The cmd
+// runs the command, and a command that fails comes back as a
+// dockClickFailedMsg with the end of its stderr, so the failure is not silent.
+func (m *OS) RunDockComponentClick(name string, button int) (bool, tea.Cmd) {
 	if strings.HasPrefix(name, config.DockPluginPrefix) {
 		return m.runPluginCellClick(name)
 	}
 	c, ok := m.dockEngine.Component(name)
 	if !ok || strings.TrimSpace(c.OnClick) == "" {
-		return false
+		return false, nil
 	}
 	env := m.dockEngine.CommandEnv(name, "TUIOS_CLICK_BUTTON="+strconv.Itoa(button))
 	command := c.OnClick
-	go func() {
+	short := strings.TrimPrefix(name, config.DockCustomPrefix)
+	return true, func() tea.Msg {
 		// #nosec G204 - the user's own config, run as the user, exactly as a
 		// hook's command is.
 		cmd := exec.Command("sh", "-c", command)
 		cmd.Env = env
-		cmd.Stdout, cmd.Stderr = nil, nil
-		_ = cmd.Run()
-	}()
-	return true
+		var stderr tailBuffer
+		cmd.Stdout, cmd.Stderr = nil, &stderr
+		if err := cmd.Run(); err != nil {
+			return dockClickFailedMsg{Name: short, Detail: clickFailureDetail(err, stderr.String())}
+		}
+		return nil
+	}
 }
+
+// dockClickFailedMsg says that the click on a dock cell failed. Detail is the
+// exit status and the last line the command wrote to stderr.
+type dockClickFailedMsg struct{ Name, Detail string }
+
+// handleDockClickFailed puts a failed click in front of the person, once.
+func (m *OS) handleDockClickFailed(msg dockClickFailedMsg) {
+	m.LogWarn("The click on dock component %s failed: %s", msg.Name, msg.Detail)
+	m.ShowNotification("Dock component "+msg.Name+": the click failed: "+msg.Detail, "warning", 2*m.Settings.NotificationDuration)
+}
+
+// clickFailureDetail is "exit N" or the error, then the last line of stderr.
+func clickFailureDetail(err error, stderr string) string {
+	detail := err.Error()
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		detail = "exit " + strconv.Itoa(exit.ExitCode())
+	}
+	lines := strings.Split(strings.TrimSpace(stderr), "\n")
+	if last := strings.TrimSpace(lines[len(lines)-1]); last != "" {
+		detail += ": " + overlay.Truncate(sanitizeLinkText(last), 120)
+	}
+	return detail
+}
+
+// tailBuffer keeps the last tailBufferMax bytes written to it, so a click
+// command that floods stderr costs a bounded amount of memory.
+type tailBuffer struct{ b []byte }
+
+const tailBufferMax = 4096
+
+func (t *tailBuffer) Write(p []byte) (int, error) {
+	t.b = append(t.b, p...)
+	if over := len(t.b) - tailBufferMax; over > 0 {
+		t.b = append(t.b[:0], t.b[over:]...)
+	}
+	return len(p), nil
+}
+
+func (t *tailBuffer) String() string { return string(t.b) }
 
 // dockComponentMsg carries an engine's update into Update. One message per
 // update keeps the render gate simple: the handler compares the new text

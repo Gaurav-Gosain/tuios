@@ -240,8 +240,8 @@ func handleMouseClick(msg tea.MouseClickMsg, o *app.OS) (*app.OS, tea.Cmd) {
 				}
 				return o, nil
 			}
-			if o.RunDockComponentClick(name, int(msg.Button)) {
-				return o, nil
+			if ok, cmd := o.RunDockComponentClick(name, int(msg.Button)); ok {
+				return o, cmd
 			}
 		}
 		// The strip's overflow arrows sit in the strip's own columns and are

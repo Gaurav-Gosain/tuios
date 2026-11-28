@@ -264,7 +264,7 @@ Every process of a tuios plugin gets these variables.
 | `TUIOS_PLUGIN_SESSION` | The session of the focused pane. `-s` takes it. |
 | `TUIOS_PLUGIN_PANE` | The focused pane. `-w` takes it. |
 | `TUIOS_PLUGIN_CWD` | The folder of the focused pane. |
-| `TUIOS_PLUGIN_CONTEXT_JSON` | All of the above context as JSON, with the agent and the selected text. |
+| `TUIOS_PLUGIN_CONTEXT_JSON` | All of the above context as JSON, with the agent and the selected text. A click on a dock cell from a client attached to another machine adds `attached_host`, the `[hosts]` name of that machine. |
 | `TUIOS_PLUGIN_ID`, `TUIOS_PLUGIN_TOKEN` | Who the process is. A pane of the plugin does not get these. Do not print the token. |
 
 A plugin process starts from the daemon's environment less the pane, session
