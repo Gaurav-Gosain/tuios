@@ -19906,3 +19906,11 @@ editor, as dash does.
 | The `spPrompt` calls left out (the tree before the fix) | `TestPhoneStreamsAPaneAndAnswersTheInbox`, `TestStreamPaneHeldToTheLinkPolicy`, `TestStreamPaneLeaseChurn`, `TestStreamPaneFromAPane` | `no SZ- line showed`, with `sh-3.2$ SZ-22x78` on the screen | **caught** |
 | With the fix, the same forced runs | the 8 tests that use `limitsDaemon` or `spSize` | 8 of 8 pass | n/a |
 | With the fix, no forced start, `-count=3` | the same 8 tests | 24 of 24 pass | n/a |
+## pane-view on a host
+
+Run on 2026-11-21 on branch `fix/pane-view-host`. The control cuts one thing
+from the fixed build and runs `TestPaneViewOnAHost`.
+
+| Control: what was cut | Tests that fail | Verdict |
+| --- | --- | --- |
+| `paneView.dial` calling `dialVerb` for every host (the host branch cut) | `TestPaneViewOnAHost` ("pane-view -s build:pv-far did not reach the pane on build") | **caught** |
